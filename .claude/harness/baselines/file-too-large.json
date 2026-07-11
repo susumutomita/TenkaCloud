@@ -17,12 +17,6 @@
       "filePath": "infrastructure/lib/problem-deploy/handlers/generic-scoring-handler/index.ts",
       "line": 1,
       "match": "ge-500-lines"
-    },
-    {
-      "ruleId": "file-too-large",
-      "filePath": "infrastructure/lib/problem-deploy/problem-deploy-backend-stack.ts",
-      "line": 1,
-      "match": "ge-500-lines"
     }
   ]
 }

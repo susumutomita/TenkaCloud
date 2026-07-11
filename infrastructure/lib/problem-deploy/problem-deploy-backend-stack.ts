@@ -3,29 +3,16 @@ import { CfnOutput } from "aws-cdk-lib";
 import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import { EventBus } from "aws-cdk-lib/aws-events";
 import type { IFunction } from "aws-cdk-lib/aws-lambda";
-import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3";
 import type { Construct } from "constructs";
 import type { PackAsset } from "../app-config/types.js";
-import { AdminAuditLogTable } from "./admin-audit-log-table.js";
+import { buildApiLambdas } from "./build-api-lambdas.js";
+import { buildControlDataTables } from "./build-control-data-tables.js";
 import { buildDeployPipeline } from "./build-deploy-pipeline.js";
 import { buildParticipantPortalSubsystem } from "./build-participant-portal-subsystem.js";
-import { CompetitorAccountsApiLambda } from "./competitor-accounts-api-lambda.js";
-import { CompetitorAccountsTable } from "./competitor-accounts-table.js";
+import { buildScoringSubsystem } from "./build-scoring-subsystem.js";
 import { CompetitorBootstrapHosting } from "./competitor-bootstrap-hosting.js";
-import { DeployApiLambda } from "./deploy-api-lambda.js";
-import { DeploymentsTable } from "./deployments-table.js";
-import { DisruptionExecutorLambda } from "./disruption-executor-lambda.js";
-import { DisruptionsTable } from "./disruptions-table.js";
-import { EventApiLambda } from "./event-api-lambda.js";
-import { EventCapacityRunbook } from "./event-capacity-runbook.js";
-import { EventsTable } from "./events-table.js";
-import { ExternalIdAuditLambda } from "./external-id-audit-lambda.js";
-import { GenericScoringLambda } from "./generic-scoring-lambda.js";
-import { OpsMonitoring, type OpsMonitoringConfig } from "./ops-monitoring.js";
+import type { OpsMonitoringConfig } from "./ops-monitoring.js";
 import type { ParticipantPortalRuntimeConfig } from "./participant-portal-hosting.js";
-import { ProblemEndpointsTable } from "./problem-endpoints-table.js";
-import { SystemAuditWriterLambda } from "./system-audit-writer-lambda.js";
-import { TeamsTable } from "./teams-table.js";
 
 export interface ProblemDeployBackendStackProps extends cdk.StackProps {
   /**
@@ -341,78 +328,27 @@ export class ProblemDeployBackendStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: ProblemDeployBackendStackProps) {
     super(scope, id, props);
 
-    // ADR-004 Phase 1: Event / Team の 2 Table を Deployments と並列に持つ。
-    // Phase 2 で Bulk Deploy / Bulk Teardown を State Machine 経由で動かす。
-    //
-    // [Issue #2440 / ADR-049 §5.1 Phase A5] `controlDataBackend` が純 SQL (`turso`/`sql`) の
-    // ときは Events/Teams を **synth しない** — DynamoDB standing cost (Events+Teams+GSI 3本 =
-    // 5 ユニット常時) をゼロにする。`turso-mirror`/`sql-mirror` は DDB が正本のまま (= Mirrored)
-    // なので通常どおりテーブルを作る。
-    //
-    // [Issue #2441 / Phase B PR-6] 同じ条件で Deployments も **synth しない**。GSI3本を持つ単体
-    // 最大のコスト源 (テーブル+GSI=4ユニット常時) をゼロにする本 PR の核心。62 handler サイト +
-    // SFN 書き戻し (Phase B PR-1〜5) が既に repository seam を経由しているため、pure SQL では
-    // 本 table への参照が残らない (壊れる参照は下記で個別に条件化)。
+    // [Issue #2440 / #2441 / #2442 / ADR-049 §5.1] 純 SQL backend (`turso`/`sql`) は control-data
+    // DDB table 群を synth しない (mirror は DDB 正本のまま作る)。詳細は build-control-data-tables.ts。
     const pureSql = props.controlDataBackend === "turso" || props.controlDataBackend === "sql";
     // control-plane data backend selector + Turso executor wiring, spread into every Lambda
-    // construct that "opens the DB" (resolves a repository seam to a SQL executor in
-    // turso/sql/turso-mirror/sql-mirror mode) — same undefined-when-dynamodb shape as the old
-    // three explicit props, so each `...controlDataBackendProps` call site is byte-identical.
-    // [Issue #2560] `deployApi` joined this set: `startDeployment` /
-    // `resolveVerifiedCompetitorAccount` both resolve through the repository seam, so it is a
-    // DB-opening Lambda like the others below, not a scope-out exception.
+    // construct that "opens the DB" (= resolves a repository seam to a SQL executor)。
+    // shape の詳細は build-api-lambdas.ts の ControlDataBackendProps を参照。
     const controlDataBackendProps = {
       controlDataBackend: props.controlDataBackend,
       tursoDatabaseUrl: props.tursoDatabaseUrl,
       tursoAuthTokenParameterName: props.tursoAuthTokenParameterName,
     };
-    const deployments = pureSql ? undefined : new DeploymentsTable(this, "Deployments");
-    const events = pureSql ? undefined : new EventsTable(this, "Events");
-    const teams = pureSql ? undefined : new TeamsTable(this, "Teams");
-    // ADR-012 Phase 3.A: Endpoint registry。per (tenant, team, problem, slot) で override
-    // URL を保管する。default URL は read-through で deployment.stackOutputs から算出。
-    //
-    // [Issue #2442 / Phase C1] `controlDataBackend` が純 SQL (`turso`/`sql`) のときは Events/Teams/
-    // Deployments と同条件で **synth しない**。62 handler サイトが repository seam
-    // (`resolveProblemEndpointsRepository`) 経由で読み書きするため、pure SQL では本 table への
-    // 参照が残らない (壊れる参照は下記で個別に条件化)。
-    const endpoints = pureSql ? undefined : new ProblemEndpointsTable(this, "ProblemEndpoints");
+
+    // [#2527 Slice 5] Subsystem: control-data tables + capacity runbook + table-name outputs。
+    const tables = buildControlDataTables(this, { pureSql });
     // ADR-011 #590: AdminConsoleInsightStack に cross-stack で渡すため expose する。
-    this.deploymentsTable = deployments?.table;
-    this.eventsTable = events?.table;
-    this.teamsTable = teams?.table;
-    // Issue #459 / ADR-002 Phase 2.1: tenant ↔ 競技者 AWS account の許可表。
-    // 1 行 = 1 (tenantId, awsAccountId)。verified=false は deploy 不可。
-    //
-    // [Issue #2442 / Phase C2] `controlDataBackend` が純 SQL (`turso`/`sql`) のときは Events/Teams/
-    // Deployments/ProblemEndpoints と同条件で **synth しない**。7 handler サイトが repository
-    // seam (`resolveCompetitorAccountsRepository` / `resolveSamlConfigRepository`) 経由で読み
-    // 書きするため、pure SQL では本 table への参照が残らない (壊れる参照は下記で個別に条件化)。
-    const competitorAccounts = pureSql
-      ? undefined
-      : new CompetitorAccountsTable(this, "CompetitorAccounts");
-    this.competitorAccountsTable = competitorAccounts?.table;
-    this.problemEndpointsTable = endpoints?.table;
-    // Issue #888: Red Team Disruption Injection の audit log + idempotency
-    //
-    // [Issue #2442 / Phase C3] `controlDataBackend` が純 SQL (`turso`/`sql`) のときは Events/Teams/
-    // Deployments/ProblemEndpoints/CompetitorAccounts と同条件で **synth しない**。4 handler サイト
-    // (disruption-fire.ts / disruption-recurring.ts / executor-store.ts / generic-scoring index.ts)
-    // が repository seam (`resolveDisruptionsRepository`) 経由で読み書きするため、pure SQL では
-    // 本 table への参照が残らない (壊れる参照は下記で個別に条件化)。
-    const disruptions = pureSql ? undefined : new DisruptionsTable(this, "Disruptions");
-    // Issue #950 (ADR-020 Phase D): admin 操作の append-only 監査ログ。 6 handler Lambda +
-    // admin-insight Lambda が read/write する。 TTL 90 日で自動 GC (= env `AUDIT_RETENTION_DAYS`
-    // で 365 / SOC2 enterprise 用に上げる)。
-    //
-    // [Issue #2442 / Phase C4] Disruptions/CompetitorAccounts/ProblemEndpoints/Events/Teams/
-    // Deployments と同条件で pure SQL backend では **synth しない**。 write 元 6 Lambda
-    // (deploy-api / event-api / competitor-accounts-api / system-audit-writer / sign-in-audit /
-    // admin-insight) は全て repository seam (`writeAuditEvent` / `resolveAdminAuditLogRepository`)
-    // 経由で読み書きするため、pure SQL では本 table への参照が残らない (壊れる参照は下記で個別に
-    // 条件化)。
-    const adminAuditLog = pureSql ? undefined : new AdminAuditLogTable(this, "AdminAuditLog");
-    this.adminAuditLogTable = adminAuditLog?.table;
+    this.deploymentsTable = tables.deployments?.table;
+    this.eventsTable = tables.events?.table;
+    this.teamsTable = tables.teams?.table;
+    this.competitorAccountsTable = tables.competitorAccounts?.table;
+    this.problemEndpointsTable = tables.endpoints?.table;
+    this.adminAuditLogTable = tables.adminAuditLog?.table;
 
     // Issue #1053: 競技者向け CFn bootstrap template の S3 hosting を本 stack に持つ。
     // 旧 AdminConsoleHostingStack から移管 (= Lite / SaaS 両モード対応 + 3-phase env-var dance 解消)。
@@ -435,173 +371,39 @@ export class ProblemDeployBackendStack extends cdk.Stack {
           eventBusName: `tenkacloud-problem-deploy-local-${cdk.Stack.of(this).stackName}`,
         });
 
-    // Issue #1034: SBT Control Plane が発する onboarding* / offboarding* event を audit に集約。
-    // SystemAdmin の tenant CRUD は SBT 経由なので App Plane Lambda が走らず、 audit-log page の
-    // SystemAdmin scope が常に空になっていた。 本 listener が SBT bus 上の 6 detailType を catch して
-    // `PK=SYSTEM#<env>` 行を書く。 Lite mode (= ControlPlane 不在) では local bus にぶら下がるが、
-    // SBT events も流れて来ない (= 副作用なし) ため idle で安全。
-    new SystemAuditWriterLambda(this, "SystemAuditWriter", {
+    // [#2527 Slice 5] Subsystem: API Lambda family (SystemAuditWriter / DeployApi / EventApi /
+    // DisruptionExecutor / CompetitorAccountsApi / ExternalIdAudit) + bulk payload bucket。
+    const apiLambdas = buildApiLambdas(this, {
+      tables,
       eventBus,
-      adminAuditLogTable: adminAuditLog?.table,
+      controlDataBackendProps,
       environmentName: props.environmentName,
-      // Issue #2311: 監査ログ feature flag (off で writeAuditEvent が no-op)。
+      defaultTenantId: props.defaultTenantId,
+      problemsCatalog: props.problemsCatalog,
+      problemsVisibility: props.problemsVisibility,
+      problemRuntimes: props.problemRuntimes,
+      challengePayloadBucketName: props.challengePayloadBucketName,
       auditLogEnabled: props.auditLogEnabled,
-      ...controlDataBackendProps, // #2442: SBT tenant onboarding/offboarding 監査の repository seam を開く
-      // Issue #2291: Lambda deploy 経路のとき、失敗 event を拾う DeployFailureRule を有効化
-      // (= CodeBuild path の CodeBuild FAILED audit と parity)。flag OFF では Rule なし = byte 互換。
+      deployQuotaByTier: props.deployQuotaByTier,
+      cloudActionEnforcementMode: props.cloudActionEnforcementMode,
+      problemsDisruptions: props.problemsDisruptions,
+      problemsProvenance: props.problemsProvenance,
+      useBulkDistributedMap: props.useBulkDistributedMap,
+      capacityRunbookDocumentName: tables.capacityRunbookDocumentName,
       deployViaLambda: props.deployViaLambda,
     });
-
-    // tenant API から invoke される Lambda。validation + DDB Put + EventBridge PutEvents のみ。
-    // Phase 2.2 (Issue #459): CompetitorAccounts table + env を渡して verified-only gate を有効化。
-    const deployApi = new DeployApiLambda(this, "DeployApi", {
-      deploymentsTable: deployments?.table,
-      competitorAccountsTable: competitorAccounts?.table,
-      eventBus,
-      defaultTenantId: props.defaultTenantId,
-      problemsCatalog: props.problemsCatalog,
-      // ADR-008 Phase 3 (Issue #642): visibility + bucket、 unset で dormant default。
-      problemsVisibility: props.problemsVisibility ?? {},
-      // [ADR-023 / #2054] 非 AWS 問題を cloud mutation 前に拒否する runtime catalog
-      // (= DeployApiLambda の optional prop。 undefined は env 側 `?? {}` で空 map に正規化)。
-      problemRuntimes: props.problemRuntimes,
-      ...(props.challengePayloadBucketName
-        ? { challengePayloadBucketName: props.challengePayloadBucketName }
-        : {}),
-      environmentName: props.environmentName,
-      // Issue #950 (ADR-020 Phase D): admin audit log を write
-      adminAuditLogTable: adminAuditLog?.table,
-      // Issue #2311: 監査ログ feature flag。
-      auditLogEnabled: props.auditLogEnabled,
-      ...controlDataBackendProps, // #2560: startDeployment / resolveVerifiedCompetitorAccount が SQL executor を acquire
-      // #1766: tier 別の同時デプロイ上限 (env JSON)。
-      deployQuotaByTier: props.deployQuotaByTier,
-      // Issue #2019 / ADR-017: TrustBridge enforcement mode (undefined → lambda
-      // defaults to shadow = no-op)。
-      cloudActionEnforcementMode: props.cloudActionEnforcementMode,
-    });
-    this.deployApiLambda = deployApi.fn;
-
-    // Issue #910 (#895 Phase 2.C.2.b): bulk batch payload S3 bucket。 EventApiLambda の
-    // bulk-deploy handler が PutObject で deployment 配列を書く。 default では feature flag
-    // off で旧 fan-out 維持、 flag flip で Distributed Map 経路 (= 後段 BulkDeployCreateStateMachine)
-    // に切替。 bucket 自体は flag に関係なく作る (= flip だけで切替可能、 段階移行)。
-    const bulkPayloadBucket = new Bucket(this, "BulkDeployPayloadBucket", {
-      encryption: BucketEncryption.S3_MANAGED,
-      enforceSSL: true,
-      blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-      autoDeleteObjects: true,
-      // 旧 batch の object はもう不要なので 7 日で自動削除 (= cost / GC)。
-      lifecycleRules: [
-        {
-          expiration: cdk.Duration.days(7),
-          abortIncompleteMultipartUploadAfter: cdk.Duration.days(1),
-        },
-      ],
-    });
-
-    // Issue #2410 Slice 1: イベント中の DynamoDB キャパシティを運営が明示的に上げ下げする
-    // SSM Automation Runbook。event-hot 5 テーブル (Deployments / Events / Teams /
-    // ProblemEndpoints / Disruptions) に allowedValues + IAM resource の二重で固定し、
-    // ハード上限 ceiling (200) で課金爆死を構造的に防ぐ。オートスケーリングは採用しない。
-    //
-    // この配列が event-hot テーブルの唯一の stack 側 source。handler 側の対応 (capacity.ts
-    // `resolveEventHotTables`) と運用 doc (docs/operations/dynamodb-event-capacity.md) の表は
-    // この並びと揃えること (増減時は 3 箇所同時に更新)。
-    //
-    // Issue #2440 / #2441 / #2442: 純 SQL backend では Events/Teams/Deployments/ProblemEndpoints
-    // が無いので runbook の allowedValues / IAM からも除外する (= filter で undefined を落とす。
-    // 存在しない table を runbook 対象にしない)。
-    const eventHotTables = [
-      deployments?.table,
-      events?.table,
-      teams?.table,
-      endpoints?.table,
-      disruptions?.table,
-    ].filter((t): t is Table => t !== undefined);
-    const capacityRunbook = new EventCapacityRunbook(this, "EventCapacityRunbook", {
-      eventHotTables,
-    });
-    new CfnOutput(this, "EventCapacityRunbookName", {
-      value: capacityRunbook.documentName,
-      description:
-        "Issue #2410 SSM Automation document 名。aws ssm start-automation-execution --document-name に渡してイベント中のキャパを上げ下げする。",
-    });
-
-    // ADR-004 Phase 1+2a: Event / Team CRUD + Bulk Deploy/Teardown Lambda。
-    // Phase 2a で deployment 行の作成 / status 更新 + EventBridge fan-out publish を担う。
-    // Phase 2.2 (Issue #459): CompetitorAccounts table + env を渡して verified-only gate を有効化。
-    const eventApi = new EventApiLambda(this, "EventApi", {
-      eventsTable: events?.table,
-      teamsTable: teams?.table,
-      deploymentsTable: deployments?.table,
-      competitorAccountsTable: competitorAccounts?.table,
-      eventBus,
-      problemsCatalog: props.problemsCatalog,
-      defaultTenantId: props.defaultTenantId,
-      environmentName: props.environmentName,
-      // Issue #888: disruption fire / audit / catalog で参照
-      // Issue #2442: 純 SQL backend では table 自体が無いので undefined を渡す (env/grant を
-      // EventApiLambda 側で条件化。 disruption 読み書きは repository seam 経由)。
-      disruptionsTable: disruptions?.table,
-      // Issue #2410 Slice 2: キャパ監視 (`GET /admin/capacity`) の event-hot 5 テーブル目 +
-      // Slice 1 runbook の document 名 (UI が実行コマンド例を表示する)。
-      // Issue #2442: 純 SQL backend では table 自体が無いので undefined を渡す (env/grant/
-      // DescribeTable IAM を EventApiLambda 側で条件化)。
-      problemEndpointsTable: endpoints?.table,
-      capacityRunbookDocumentName: capacityRunbook.documentName,
-      problemsDisruptions: (props.problemsDisruptions ?? {}) as Readonly<
-        Record<string, readonly unknown[]>
-      >,
-      problemsProvenance: props.problemsProvenance ?? {},
-      // Issue #910 Phase 2.C.2.b: bulk batch payload bucket + feature flag。
-      bulkDeployPayloadBucket: bulkPayloadBucket,
-      useBulkDistributedMap: props.useBulkDistributedMap ?? false,
-      // Issue #950
-      adminAuditLogTable: adminAuditLog?.table,
-      // Issue #2311: 監査ログ feature flag。
-      auditLogEnabled: props.auditLogEnabled,
-      // Issue #2290: control-plane data backend。event-handler の getEventDetail が Events / Teams
-      // repository seam を切替える (= turso/sql 選択時のみ CONTROL_DATA_BACKEND を注入)。
-      ...controlDataBackendProps,
-    });
-    this.eventApiLambda = eventApi.fn;
-
-    // [ADR-031 / Issue #1419] Disruption Phase B: operator fire が publish した `*DisruptionFired` を
-    // 拾い、 team deployment へ AssumeRole して実障害を注入し、 revert を予約する cross-account executor。
-    // action 未宣言の disruption は no-op (= Phase A 監査のみ、 後方互換)。
-    new DisruptionExecutorLambda(this, "DisruptionExecutor", {
-      environmentName: props.environmentName,
-      eventBus,
-      deploymentsTable: deployments?.table,
-      // Issue #2442: 純 SQL backend では table 自体が無いので undefined を渡す (env/grant を
-      // DisruptionExecutorLambda 側で条件化)。
-      disruptionsTable: disruptions?.table,
-      problemsDisruptions: (props.problemsDisruptions ?? {}) as Readonly<Record<string, unknown>>,
-      ...controlDataBackendProps, // #2442: EXEC# 冪等 claim の repository seam を開く
-    });
-
-    // Issue #459 / ADR-002 Phase 2.1: Competitor Accounts CRUD + STS verify Lambda。
-    // 独立 Lambda にする理由: SSM SecureString R/W + STS AssumeRole の IAM scope を最小化するため。
-    const competitorAccountsApi = new CompetitorAccountsApiLambda(this, "CompetitorAccountsApi", {
-      competitorAccountsTable: competitorAccounts?.table,
-      environmentName: props.environmentName,
-      // Issue #950
-      adminAuditLogTable: adminAuditLog?.table,
-      // Issue #2311: 監査ログ feature flag。
-      auditLogEnabled: props.auditLogEnabled,
-      ...controlDataBackendProps, // #2442: CompetitorAccounts CRUD + SAML config の repository seam を開く
-    });
-    this.competitorAccountsApiLambda = competitorAccountsApi.fn;
+    this.deployApiLambda = apiLambdas.deployApiFn;
+    this.eventApiLambda = apiLambdas.eventApiFn;
+    this.competitorAccountsApiLambda = apiLambdas.competitorAccountsApiFn;
+    this.externalIdAuditLambda = apiLambdas.externalIdAuditFn;
 
     // Issue #2220: CodeBuild + DeployCreate/Delete state machines + Bulk Distributed Map
-    // pipeline, extracted to build-deploy-pipeline.ts. `bulkPayloadBucket` stays here (also
-    // used by EventApiLambda above, wired before this pipeline — bucket logical ID unchanged).
+    // pipeline (build-deploy-pipeline.ts)。`bulkPayloadBucket` は API family 側で作られる
+    // (EventApiLambda が PutObject する — bucket logical ID unchanged)。
     const deployPipeline = buildDeployPipeline(this, {
-      deploymentsTable: deployments?.table,
+      deploymentsTable: tables.deployments?.table,
       eventBus,
-      bulkPayloadBucket,
+      bulkPayloadBucket: apiLambdas.bulkPayloadBucket,
       sourceBucketName: props.sourceBucketName,
       sourceObjectKey: props.sourceObjectKey,
       deployConcurrentBuildLimit: props.deployConcurrentBuildLimit,
@@ -626,74 +428,31 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     this.bulkDeployPayloadBucketName = deployPipeline.bulkDeployPayloadBucketName;
     this.bulkDeployCreateStateMachineArn = deployPipeline.bulkDeployCreateStateMachineArn;
 
-    // ADR-012 Phase 3.B: 1 分間隔の Generic Scoring Lambda (= 旧 HealthCheckLambda の後継)。
-    // 2 つの責務を持つ:
-    // - 採点 dispatch (= 5 種 builtin kind の handler に dispatch、`flag` は polling では no-op)
-    // - Event status auto-transition (#557 #539): DEPLOYING→READY / TEARDOWN→ARCHIVED
-    //
-    // uptime 問題が無い tenant でも reconcile は要るので **常に instantiate** (= 旧
-    // `if (problemsScoring.length > 0)` ガードは撤去のまま継続)。
-    const genericScoring = new GenericScoringLambda(this, "GenericScoring", {
-      deploymentsTable: deployments?.table,
-      eventsTable: events?.table,
-      // Issue #2442: 純 SQL backend では table 自体が無いので undefined を渡す (env/grant を
-      // GenericScoringLambda 側で条件化。override 読み取りは repository seam 経由)。
-      endpointsTable: endpoints?.table,
+    // [#2527 Slice 5] Subsystem: generic scoring dispatcher + optional ops monitoring。
+    const scoring = buildScoringSubsystem(this, {
+      tables,
+      eventBus,
+      controlDataBackendProps,
+      environmentName: props.environmentName,
+      problemsCatalog: props.problemsCatalog,
       problemsScoring: props.problemsScoring,
       problemsEndpoints: props.problemsEndpoints,
-      problemsPhases: props.problemsPhases ?? {},
-      // #1422 (ADR-013 Phase 2): condition-triggered disruption の eval + in-account 発火。
-      problemsDisruptions: props.problemsDisruptions ?? {},
-      // [ADR-028 / #2324] scoring-driven coordination tick 用の宣言 config (= どの problemId が
-      // coordination を宣言しているか、 plugin code ではない metadata)。 per-minute pass が tick 対象を
-      // 判定し、 実 runTick は最小 IAM の CoordinationDispatcher Lambda へ Invoke で委ねる (下で配線)。
-      problemsCoordination: props.problemsCoordination ?? {},
-      // [ADR-033 / #1665] operator-fired disruption の active 採点効果を tick で解決する (read-only)。
-      // Issue #2442: 純 SQL backend では table 自体が無いので undefined を渡す (env/grant を
-      // GenericScoringLambda 側で条件化。 disruption 読み取りは repository seam 経由)。
-      disruptionsTable: disruptions?.table,
-      // [ADR-047] scheduled auto-teardown が bulkTeardownEvent で cross-account role を解決する (read-only)。
-      competitorAccountsTable: competitorAccounts?.table,
-      // [ADR-047 follow-up] scheduled auto-deploy が bulkDeployEvent で teams を Query (read-only) +
-      // catalog で problemId→problemDir を解決する。
-      teamsTable: teams?.table,
-      problemsCatalog: props.problemsCatalog,
-      eventBus,
-      // [ADR-026/027/032 / #1410-1412] 非 AWS runtime status reconciler の credential path 構築用。
-      environmentName: props.environmentName,
-      // Issue #2440: control-plane data backend。event status reconcile + manual prune tick が
-      // repository seam 経由でこの env を読む (= turso/sql/turso-mirror/sql-mirror 選択時のみ注入)。
-      ...controlDataBackendProps,
-    });
-    this.genericScoringLambda = genericScoring.fn;
-
-    addOpsMonitoring(this, {
+      problemsPhases: props.problemsPhases,
+      problemsDisruptions: props.problemsDisruptions,
+      problemsCoordination: props.problemsCoordination,
       opsMonitoring: props.opsMonitoring,
-      environmentName: props.environmentName,
-      genericScoringLambda: genericScoring.fn,
     });
-
-    // Phase 3.2 / Issue #603: ExternalId rotation age 監査 Lambda。1 日 1 回起動して
-    // CompetitorAccounts table を Scan し、各 (tenantId, awsAccountId) の rotation age を
-    // CloudWatch メトリクス `TenkaCloud/CompetitorAccounts/RotationAge` に publish する。
-    // SSM Parameter Store は 100 version で auto-drop するため明示的な cleanup Lambda は
-    // 入れない (= 説明は `external-id-audit-lambda.ts` の docblock を参照)。
-    const externalIdAudit = new ExternalIdAuditLambda(this, "ExternalIdAudit", {
-      competitorAccountsTable: competitorAccounts?.table,
-      environmentName: props.environmentName,
-      ...controlDataBackendProps, // #2442: 日次 rotation 監査の repository seam を開く
-    });
-    this.externalIdAuditLambda = externalIdAudit.fn;
+    this.genericScoringLambda = scoring.genericScoringFn;
 
     // Issue #2220: portal Lambda + coordination dispatcher + CloudFront hosting, extracted to
     // build-participant-portal-subsystem.ts. Same `if (props.participantPortal)` guard as before.
     if (props.participantPortal) {
       const portalSubsystem = buildParticipantPortalSubsystem(this, {
-        deploymentsTable: deployments?.table,
-        eventsTable: events?.table,
+        deploymentsTable: tables.deployments?.table,
+        eventsTable: tables.events?.table,
         // Issue #2442: 純 SQL backend では table 自体が無いので undefined を渡す (env/grant/IAM を
         // ParticipantPortalLambda 側で条件化。override 読み書きは repository seam 経由)。
-        endpointsTable: endpoints?.table,
+        endpointsTable: tables.endpoints?.table,
         problemsScoring: props.problemsScoring,
         problemsWriteups: props.problemsWriteups ?? {},
         problemsEndpoints: props.problemsEndpoints,
@@ -724,71 +483,16 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       // dispatcher 内で走らせる (= ADR-028/030 の資格情報分離を保つ)。 採点 role が得る唯一の追加 IAM は
       // dispatcher function ARN に scope された `lambda:InvokeFunction` (= sts/ssm/kms/s3 は付与しない)。
       const dispatcher = portalSubsystem.coordinationDispatcherLambda;
-      dispatcher.grantInvoke(genericScoring.fn);
-      genericScoring.fn.addEnvironment(
+      dispatcher.grantInvoke(scoring.genericScoringFn);
+      scoring.genericScoringFn.addEnvironment(
         "COORDINATION_DISPATCHER_FUNCTION_NAME",
         dispatcher.functionName,
       );
     }
 
-    // Issue #2440 / #2441: 純 SQL backend では table 自体が無いので output も作らない (存在しない
-    // 論理 ID を参照する CfnOutput は synth できない)。
-    if (deployments) {
-      new CfnOutput(this, "DeploymentsTableName", {
-        value: deployments.table.tableName,
-        description: "Deploy ジョブを記録する DynamoDB テーブル名。",
-      });
-    }
-    if (events) {
-      new CfnOutput(this, "EventsTableName", {
-        value: events.table.tableName,
-        description: "ADR-004 Events table 名 (1 競技イベント = 1 行)。",
-      });
-    }
-    if (teams) {
-      new CfnOutput(this, "TeamsTableName", {
-        value: teams.table.tableName,
-        description: "ADR-004 Teams table 名 (1 チーム = 1 行、teamLoginKey は team scope)。",
-      });
-    }
-    // [Issue #2442 / Phase C2] 純 SQL backend では table 自体が無いので output も作らない
-    // (存在しない論理 ID を参照する CfnOutput は synth できない、Events/Teams/Deployments/
-    // ProblemEndpoints と同じ条件)。
-    if (competitorAccounts) {
-      new CfnOutput(this, "CompetitorAccountsTableName", {
-        value: competitorAccounts.table.tableName,
-        description:
-          "Issue #459 / ADR-002 Competitor Accounts table 名 (tenant ↔ 競技者 AWS account 紐付け)。",
-      });
-    }
     new CfnOutput(this, "DeployCreateStateMachineArn", {
       value: this.deployCreateStateMachineArn,
       description: "Deploy 起動を司る Step Functions State Machine の ARN。",
     });
-    // Issue #2442: 純 SQL backend では table 自体が無いので output も作らない (存在しない
-    // 論理 ID を参照する CfnOutput は synth できない、Events/Teams/Deployments と同じ条件)。
-    if (endpoints) {
-      new CfnOutput(this, "ProblemEndpointsTableName", {
-        value: endpoints.table.tableName,
-        description:
-          "ADR-012 Phase 3.A Endpoint registry table 名 (per (tenant, team, problem, slot) の override 行)。",
-      });
-    }
   }
-}
-
-function addOpsMonitoring(
-  scope: Construct,
-  props: {
-    readonly opsMonitoring: OpsMonitoringConfig | undefined;
-    readonly environmentName: string;
-    readonly genericScoringLambda: IFunction;
-  },
-): void {
-  if (!props.opsMonitoring) return;
-  new OpsMonitoring(scope, "OpsMonitoring", {
-    ...props.opsMonitoring,
-    environmentName: props.environmentName,
-    genericScoringLambda: props.genericScoringLambda,
-  });
 }

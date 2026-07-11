@@ -84,8 +84,8 @@ export interface DeployPipelineOutputs {
  * (formerly lines 413-468) to shrink the constructor. `scope` MUST be the stack instance
  * itself (all construct IDs below are unprefixed, exactly as they were inline) — moving this
  * to a nested construct would change every logical ID beneath it (data-loss-class REPLACE on
- * the CodeBuild project / state machines). `bulkPayloadBucket` is created by the caller
- * (it's also used by EventApiLambda, wired before this pipeline in the constructor), not here.
+ * the CodeBuild project / state machines). `bulkPayloadBucket` is created by the API Lambda
+ * family builder (`build-api-lambdas.ts` — EventApiLambda PutObjects into it), not here.
  *
  * CodeBuild Project: source.zip から `scripts/deploy-battles.sh` を実行する。
  * #538: Bulk Deploy 並列度の hard cap は account-wide CodeBuild concurrent build quota
