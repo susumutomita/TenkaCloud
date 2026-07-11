@@ -199,6 +199,19 @@ env-check-lite:
 		echo "       SYSTEM_ADMIN_EMAIL でも代用可能ですが、 Lite mode では TENANT_ADMIN_EMAIL を推奨します"; \
 		exit 1; \
 	fi
+	@case "$${CDK_PARAM_CONTROL_DATA_BACKEND}" in \
+		turso|sql|turso-mirror|sql-mirror) \
+			missing=""; \
+			[ -n "$${CDK_PARAM_TURSO_DATABASE_URL}" ] || missing="$${missing} CDK_PARAM_TURSO_DATABASE_URL"; \
+			[ -n "$${CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME}" ] || missing="$${missing} CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME"; \
+			if [ -n "$${missing}" ]; then \
+				echo "ERROR: CDK_PARAM_CONTROL_DATA_BACKEND=$${CDK_PARAM_CONTROL_DATA_BACKEND} には以下が $(ENV_FILE) に必要です:"; \
+				for v in $${missing}; do echo "       $${v}"; done; \
+				echo "       docs/running-costs.md の \"Opt in to the zero-cost profile\" 手順を参照してください"; \
+				exit 1; \
+			fi \
+			;; \
+	esac
 
 # Issue #1345: Lite mode の first-run UX。 .env.example を読んで対話的に必須 3 vars
 # (TENANT_ADMIN_EMAIL / AWS_REGION / CDK_PARAM_DEPLOY_EXTERNAL_ID) を埋め、

@@ -10,6 +10,7 @@ import { parseSchema } from "../shared/http-parse.js";
 import {
   asCompositeDescriptor,
   type CompositeRuntimeDescriptor,
+  EXECUTABLE_PROVIDER,
   RuntimeNotSupportedError,
 } from "../shared/runtime/index.js";
 import { secureApiHeaders } from "../shared/secure-headers.js";
@@ -25,9 +26,11 @@ import { CompositeAwsInputRequiredError, startCompositeDeployment } from "./comp
 import { buildCompositeDeployDeps } from "./composite-deploy-wiring.js";
 import { requestTeardown } from "./delete.js";
 import {
+  AwsAccountRequiredError,
   buildContext,
   buildSharedResources,
   type DeployContext,
+  NonAwsCredentialUnregisteredError,
   startDeployment,
   UnknownProblemError,
   UnverifiedCompetitorAccountError,
@@ -142,6 +145,30 @@ function mapDeployError(c: Context, problemId: string, err: unknown): Response {
       StatusCodes.UNPROCESSABLE_ENTITY,
     );
   }
+  // [Issue #2561] The resolved runtime is aws/cloudformation but the request
+  // omitted awsAccountId/region. The route's strict DeployRequestSchema
+  // already prevents this for a real HTTP request; 400 mirrors
+  // CompositeAwsInputRequiredError's semantics (well-formed JSON, missing
+  // required input) for the rare direct-caller / test case.
+  if (err instanceof AwsAccountRequiredError) {
+    return c.json({ error: "aws_input_required", message: err.message }, StatusCodes.BAD_REQUEST);
+  }
+  // [Issue #2561] No gcp/azure/sakura credential is registered for this team.
+  // 422: the request is well-formed (a valid non-AWS single-provider deploy),
+  // but the business invariant "the team's provider credential is registered"
+  // is not satisfied — same semantics as UnverifiedCompetitorAccountError's
+  // AWS-side gate above, just keyed on the provider's own credential store.
+  if (err instanceof NonAwsCredentialUnregisteredError) {
+    return c.json(
+      {
+        error: "non_aws_credential_unregistered",
+        provider: err.provider,
+        teamSlug: err.teamSlug,
+        message: `${err.provider} のチームクレデンシャルが未登録です。Competitor Accounts ページで登録してから retry してください。`,
+      },
+      StatusCodes.UNPROCESSABLE_ENTITY,
+    );
+  }
   // [ADR-023 / Issue #1268] Problem metadata declared a runtime we cannot
   // execute today (e.g. azure/bicep). 422: request is well-formed, but the
   // business invariant "platform has an adapter for this provider/engine" is
@@ -226,7 +253,18 @@ app.post("/problems/:problemId/deploy", async (c) => {
     return handleCompositeDeploy(c, ctx, problemId, composite, quotaTier, body);
   }
 
-  const parsed = parseSchema(c, DeployRequestSchema, body);
+  // [Issue #2561] A non-AWS single-provider problem (gcp/azure/sakura) needs
+  // neither awsAccountId nor region — parse with the same relaxed shape the
+  // composite path already uses (`CompositeDeployRequestSchema`) instead of
+  // the strict AWS-only `DeployRequestSchema`, so the request does not 400
+  // before `startDeployment` even gets a chance to skip the AWS-account gate.
+  const runtime = ctx.resolveProblemRuntime?.(problemId);
+  const isNonAwsSingleProvider = runtime !== undefined && runtime.provider !== EXECUTABLE_PROVIDER;
+  const parsed = parseSchema(
+    c,
+    isNonAwsSingleProvider ? CompositeDeployRequestSchema : DeployRequestSchema,
+    body,
+  );
   if (!parsed.ok) return parsed.response;
 
   try {

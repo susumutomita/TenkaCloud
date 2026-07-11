@@ -354,6 +354,18 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     // SFN 書き戻し (Phase B PR-1〜5) が既に repository seam を経由しているため、pure SQL では
     // 本 table への参照が残らない (壊れる参照は下記で個別に条件化)。
     const pureSql = props.controlDataBackend === "turso" || props.controlDataBackend === "sql";
+    // control-plane data backend selector + Turso executor wiring, spread into every Lambda
+    // construct that "opens the DB" (resolves a repository seam to a SQL executor in
+    // turso/sql/turso-mirror/sql-mirror mode) — same undefined-when-dynamodb shape as the old
+    // three explicit props, so each `...controlDataBackendProps` call site is byte-identical.
+    // [Issue #2560] `deployApi` joined this set: `startDeployment` /
+    // `resolveVerifiedCompetitorAccount` both resolve through the repository seam, so it is a
+    // DB-opening Lambda like the others below, not a scope-out exception.
+    const controlDataBackendProps = {
+      controlDataBackend: props.controlDataBackend,
+      tursoDatabaseUrl: props.tursoDatabaseUrl,
+      tursoAuthTokenParameterName: props.tursoAuthTokenParameterName,
+    };
     const deployments = pureSql ? undefined : new DeploymentsTable(this, "Deployments");
     const events = pureSql ? undefined : new EventsTable(this, "Events");
     const teams = pureSql ? undefined : new TeamsTable(this, "Teams");
@@ -434,12 +446,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       environmentName: props.environmentName,
       // Issue #2311: 監査ログ feature flag (off で writeAuditEvent が no-op)。
       auditLogEnabled: props.auditLogEnabled,
-      // Issue #2290: control-plane data backend (default dynamodb は env を足さず byte 互換)。
-      controlDataBackend: props.controlDataBackend,
-      // Issue #2442: 本 Lambda は SBT tenant onboarding/offboarding 監査の repository seam を
-      // 実際に使う「DB を開く Lambda」なので Turso executor 配線を持つ (EventApi と同型)。
-      tursoDatabaseUrl: props.tursoDatabaseUrl,
-      tursoAuthTokenParameterName: props.tursoAuthTokenParameterName,
+      ...controlDataBackendProps, // #2442: SBT tenant onboarding/offboarding 監査の repository seam を開く
       // Issue #2291: Lambda deploy 経路のとき、失敗 event を拾う DeployFailureRule を有効化
       // (= CodeBuild path の CodeBuild FAILED audit と parity)。flag OFF では Rule なし = byte 互換。
       deployViaLambda: props.deployViaLambda,
@@ -466,8 +473,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       adminAuditLogTable: adminAuditLog?.table,
       // Issue #2311: 監査ログ feature flag。
       auditLogEnabled: props.auditLogEnabled,
-      // Issue #2290: control-plane data backend (default dynamodb は env を足さず byte 互換)。
-      controlDataBackend: props.controlDataBackend,
+      ...controlDataBackendProps, // #2560: startDeployment / resolveVerifiedCompetitorAccount が SQL executor を acquire
       // #1766: tier 別の同時デプロイ上限 (env JSON)。
       deployQuotaByTier: props.deployQuotaByTier,
       // Issue #2019 / ADR-017: TrustBridge enforcement mode (undefined → lambda
@@ -558,9 +564,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       auditLogEnabled: props.auditLogEnabled,
       // Issue #2290: control-plane data backend。event-handler の getEventDetail が Events / Teams
       // repository seam を切替える (= turso/sql 選択時のみ CONTROL_DATA_BACKEND を注入)。
-      controlDataBackend: props.controlDataBackend,
-      tursoDatabaseUrl: props.tursoDatabaseUrl,
-      tursoAuthTokenParameterName: props.tursoAuthTokenParameterName,
+      ...controlDataBackendProps,
     });
     this.eventApiLambda = eventApi.fn;
 
@@ -575,11 +579,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       // DisruptionExecutorLambda 側で条件化)。
       disruptionsTable: disruptions?.table,
       problemsDisruptions: (props.problemsDisruptions ?? {}) as Readonly<Record<string, unknown>>,
-      // Issue #2442: 本 Lambda は EXEC# 冪等 claim の repository seam を実際に使う「DB を開く
-      // Lambda」なので Turso executor 配線を持つ (EventApi と同型)。
-      controlDataBackend: props.controlDataBackend,
-      tursoDatabaseUrl: props.tursoDatabaseUrl,
-      tursoAuthTokenParameterName: props.tursoAuthTokenParameterName,
+      ...controlDataBackendProps, // #2442: EXEC# 冪等 claim の repository seam を開く
     });
 
     // Issue #459 / ADR-002 Phase 2.1: Competitor Accounts CRUD + STS verify Lambda。
@@ -591,12 +591,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       adminAuditLogTable: adminAuditLog?.table,
       // Issue #2311: 監査ログ feature flag。
       auditLogEnabled: props.auditLogEnabled,
-      // Issue #2290: control-plane data backend (default dynamodb は env を足さず byte 互換)。
-      controlDataBackend: props.controlDataBackend,
-      // Issue #2442: 本 Lambda は CompetitorAccounts CRUD + SAML config の repository seam を
-      // 実際に使う「DB を開く Lambda」なので Turso executor 配線を持つ (EventApi と同型)。
-      tursoDatabaseUrl: props.tursoDatabaseUrl,
-      tursoAuthTokenParameterName: props.tursoAuthTokenParameterName,
+      ...controlDataBackendProps, // #2442: CompetitorAccounts CRUD + SAML config の repository seam を開く
     });
     this.competitorAccountsApiLambda = competitorAccountsApi.fn;
 
@@ -616,9 +611,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       deployViaLambda: props.deployViaLambda,
       // Issue #2441 Phase B PR-5: pure SQL backend uses a Lambda status-writer for DeployCreate
       // SFN writeback states; dynamodb/mirror keep native DynamoUpdateItem.
-      controlDataBackend: props.controlDataBackend,
-      tursoDatabaseUrl: props.tursoDatabaseUrl,
-      tursoAuthTokenParameterName: props.tursoAuthTokenParameterName,
+      ...controlDataBackendProps,
       // Issue #2462: active pack の実体を core problems/ の隣に materialize する (Lambda 経路のみ)。
       // undefined / 空 → BucketDeployment 追加ゼロ = CFn byte 互換。
       packAssets: props.packAssets,
@@ -670,9 +663,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       environmentName: props.environmentName,
       // Issue #2440: control-plane data backend。event status reconcile + manual prune tick が
       // repository seam 経由でこの env を読む (= turso/sql/turso-mirror/sql-mirror 選択時のみ注入)。
-      controlDataBackend: props.controlDataBackend,
-      tursoDatabaseUrl: props.tursoDatabaseUrl,
-      tursoAuthTokenParameterName: props.tursoAuthTokenParameterName,
+      ...controlDataBackendProps,
     });
     this.genericScoringLambda = genericScoring.fn;
 
@@ -690,11 +681,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     const externalIdAudit = new ExternalIdAuditLambda(this, "ExternalIdAudit", {
       competitorAccountsTable: competitorAccounts?.table,
       environmentName: props.environmentName,
-      // Issue #2442: 本 Lambda 自身が「DB を開く Lambda」(日次 rotation 監査の repository
-      // seam) なので Turso executor 配線を持つ (EventApi/CompetitorAccountsApi と同型)。
-      controlDataBackend: props.controlDataBackend,
-      tursoDatabaseUrl: props.tursoDatabaseUrl,
-      tursoAuthTokenParameterName: props.tursoAuthTokenParameterName,
+      ...controlDataBackendProps, // #2442: 日次 rotation 監査の repository seam を開く
     });
     this.externalIdAuditLambda = externalIdAudit.fn;
 
@@ -727,9 +714,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
           : {}),
         // Issue #2440: control-plane data backend (ParticipantPortalLambda にのみ turso env/IAM
         // を展開。CoordinationDispatcher は ADR-030 S2 の最小 IAM を維持する)。
-        controlDataBackend: props.controlDataBackend,
-        tursoDatabaseUrl: props.tursoDatabaseUrl,
-        tursoAuthTokenParameterName: props.tursoAuthTokenParameterName,
+        ...controlDataBackendProps,
       });
       this.participantPortalLambda = portalSubsystem.participantPortalLambda;
       this.participantPortalUrl = portalSubsystem.participantPortalUrl;

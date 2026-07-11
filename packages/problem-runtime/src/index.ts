@@ -76,13 +76,21 @@ export const MAX_COMPOSITE_TARGETS = 8;
  * that context, the "reserved" classification lets the deploy worker and the
  * validator point authors/operators at the credential setup guide instead of
  * failing generically as a typo.
+ *
+ * [Issue #2562] `as const` (not a widened `string[]`) so {@link ReservedProvider}
+ * can derive a literal union type from this single array — this is the one
+ * place the non-AWS provider set is declared; every other consumer (frontend
+ * picker, backend composite-target resolver) imports the derived value/type
+ * instead of hand-listing `"sakura" | "azure" | "gcp"` again.
  */
-export const RESERVED_RUNTIMES: readonly { readonly provider: string; readonly engine: string }[] =
-  [
-    { provider: "sakura", engine: "apprun" }, // ADR-026
-    { provider: "azure", engine: "bicep" }, // ADR-027
-    { provider: "gcp", engine: "infra-manager" }, // ADR-027
-  ];
+export const RESERVED_RUNTIMES = [
+  { provider: "sakura", engine: "apprun" }, // ADR-026
+  { provider: "azure", engine: "bicep" }, // ADR-027
+  { provider: "gcp", engine: "infra-manager" }, // ADR-027
+] as const;
+
+/** [Issue #2562] The non-AWS provider literal union, derived from {@link RESERVED_RUNTIMES}. */
+export type ReservedProvider = (typeof RESERVED_RUNTIMES)[number]["provider"];
 
 /**
  * [ADR-023 / #2054] Provider/engine pairs delivered as a **local container**

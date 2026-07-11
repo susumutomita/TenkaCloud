@@ -17,6 +17,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   type DeployContext,
   type DeployInvocation,
+  NonAwsCredentialUnregisteredError,
   startDeployment,
 } from "../../lib/problem-deploy/handlers/deploy-handler/deploy";
 import {
@@ -162,8 +163,10 @@ describe("startDeployment with runtime-aware dispatch (ADR-023 / Issue #1268)", 
 /**
  * [ADR-026 / Issue #1412] sakura/apprun dispatch wiring。 SSM (per-team key store) が配線されたときだけ
  * executable になり、 AppRun REST へ deploy する (EventBridge は使わない)。 鍵未登録は loud に throw、
- * SSM 未配線では reserved のまま。 注: 現状の verified-AWS-account gate は provider 非依存なので test では
- * verified account を mock で満たす (= gate の provider 対応は follow-up)。
+ * SSM 未配線では reserved のまま。 [Issue #2561] verified-AWS-account gate は provider-aware になった
+ * (`resolveDeployAuthorization`) ため、 sakura/apprun は AWS competitor account 不要 — test の
+ * `buildContext` が満たす verified account fixture は非 AWS runtime の deploy には使われない
+ * (AWS runtime の他テストのためだけに残る共有 fixture)。
  */
 describe("startDeployment sakura/apprun dispatch (ADR-026 / Issue #1412)", () => {
   const sakuraRuntime: ProblemRuntime = { provider: "sakura", engine: "apprun", entry: "img:1" };
@@ -211,17 +214,22 @@ describe("startDeployment sakura/apprun dispatch (ADR-026 / Issue #1412)", () =>
     expect(putSend.mock.calls.some((c) => c[0] instanceof PutCommand)).toBe(true);
   });
 
-  it("should throw loudly (no silent fallback) when no Sakura API key is registered", async () => {
+  it("[Issue #2561] should throw loudly (no silent fallback, no cloud mutation) when no Sakura API key is registered", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => new Response("{}", { status: 200 })),
     );
     const { ssm } = ssmReturning(undefined); // ParameterNotFound
-    const { ctx } = buildContext({
+    const { ctx, putSend } = buildContext({
       ssm: ssm as unknown as DeployContext["ssm"],
       resolveProblemRuntime: () => sakuraRuntime,
     });
-    await expect(startDeployment(ctx, sampleRequest())).rejects.toThrow(/no Sakura API key/);
+    // Pre-mutation credential gate (Issue #2561) now rejects before the adapter's
+    // own getApiKey closure ever runs — no DDB Put, no fetch.
+    await expect(startDeployment(ctx, sampleRequest())).rejects.toBeInstanceOf(
+      NonAwsCredentialUnregisteredError,
+    );
+    expect(putSend.mock.calls.some((c) => c[0] instanceof PutCommand)).toBe(false);
   });
 
   it("should stay reserved (RuntimeNotSupportedError) for sakura/apprun when SSM is not wired", async () => {
@@ -240,7 +248,8 @@ describe("startDeployment sakura/apprun dispatch (ADR-026 / Issue #1412)", () =>
 /**
  * [ADR-032 / Issue #1410] azure/bicep dispatch wiring。 SSM (per-team Azure credential) + Entra token client
  * が配線されたときだけ executable になり、 ARM Deployment Stacks REST へ deploy する (EventBridge は使わない)。
- * config 未登録は loud throw、 SSM 未配線では reserved のまま。 verified-AWS-account gate は #1412 同様 follow-up。
+ * config 未登録は loud throw、 SSM 未配線では reserved のまま。 [Issue #2561] verified-AWS-account gate は
+ * provider-aware になったため、 azure/bicep も #1412 と同じく AWS competitor account 不要。
  */
 describe("startDeployment azure/bicep dispatch (ADR-032 / Issue #1410)", () => {
   const azureRuntime: ProblemRuntime = { provider: "azure", engine: "bicep", entry: "main.json" };
@@ -288,7 +297,7 @@ describe("startDeployment azure/bicep dispatch (ADR-032 / Issue #1410)", () => {
     expect(putSend.mock.calls.some((c) => c[0] instanceof PutCommand)).toBe(true);
   });
 
-  it("should throw loudly when no Azure credential is registered", async () => {
+  it("[Issue #2561] should throw loudly when no Azure credential is registered", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => new Response("{}", { status: 200 })),
@@ -299,7 +308,11 @@ describe("startDeployment azure/bicep dispatch (ADR-032 / Issue #1410)", () => {
       azureEntraTokenClient: tokenClient as unknown as DeployContext["azureEntraTokenClient"],
       resolveProblemRuntime: () => azureRuntime,
     });
-    await expect(startDeployment(ctx, sampleRequest())).rejects.toThrow(/no Azure credential/);
+    // Pre-mutation credential gate (Issue #2561) rejects before the token client
+    // is ever touched.
+    await expect(startDeployment(ctx, sampleRequest())).rejects.toBeInstanceOf(
+      NonAwsCredentialUnregisteredError,
+    );
     expect(tokenClient.getToken).not.toHaveBeenCalled();
   });
 
@@ -393,7 +406,7 @@ describe("startDeployment gcp/infra-manager dispatch (ADR-032 / Issue #1411)", (
     expect(putSend.mock.calls.some((c) => c[0] instanceof PutCommand)).toBe(true);
   });
 
-  it("should throw loudly when no GCP credential is registered", async () => {
+  it("[Issue #2561] should throw loudly when no GCP credential is registered", async () => {
     vi.stubGlobal("fetch", vi.fn());
     const signer = { sign: vi.fn() };
     const stsClient = { exchangeToken: vi.fn(), generateServiceAccountToken: vi.fn() };
@@ -403,7 +416,11 @@ describe("startDeployment gcp/infra-manager dispatch (ADR-032 / Issue #1411)", (
       gcpSubjectTokenSigner: signer as unknown as DeployContext["gcpSubjectTokenSigner"],
       resolveProblemRuntime: () => gcpRuntime,
     });
-    await expect(startDeployment(ctx, sampleRequest())).rejects.toThrow(/no GCP credential/);
+    // Pre-mutation credential gate (Issue #2561) rejects before the WIF signer
+    // is ever touched.
+    await expect(startDeployment(ctx, sampleRequest())).rejects.toBeInstanceOf(
+      NonAwsCredentialUnregisteredError,
+    );
     expect(signer.sign).not.toHaveBeenCalled();
   });
 

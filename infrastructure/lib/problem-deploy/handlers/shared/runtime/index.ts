@@ -20,6 +20,7 @@ export {
   normalizeRuntime,
   type ProblemRuntimeDescriptor,
   RESERVED_RUNTIMES,
+  type ReservedProvider,
   type RuntimeMetadataInput,
   type RuntimeSupport,
 } from "@tenkacloud/problem-runtime";

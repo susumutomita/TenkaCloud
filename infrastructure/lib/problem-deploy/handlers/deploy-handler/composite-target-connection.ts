@@ -25,6 +25,7 @@ import {
   resolveVerifiedCompetitorAccount,
 } from "../shared/competitor-account-lookup.js";
 import { getGcpCredential } from "../shared/gcp-credential-store.js";
+import type { ReservedProvider } from "../shared/runtime/index.js";
 import { getSakuraCredential } from "../shared/sakura-credential-store.js";
 import type { SecureJsonStoreDeps } from "../shared/secure-json-store.js";
 import { UnverifiedCompetitorAccountError } from "./deploy.js";
@@ -42,7 +43,14 @@ export type TargetConnection =
   | { readonly provider: "azure"; readonly teamSlug: string }
   | { readonly provider: "sakura"; readonly teamSlug: string };
 
-type NonAwsProvider = "gcp" | "azure" | "sakura";
+/**
+ * [Issue #2562] Derived from `@tenkacloud/problem-runtime`'s `RESERVED_RUNTIMES`
+ * (the single source of truth for the non-AWS provider set) instead of a
+ * hand-written literal union — this file previously listed `"gcp" | "azure" |
+ * "sakura"` independently, which could silently drift from the frontend's own
+ * derived `NON_AWS_SELECTABLE_PROVIDERS` (`apps/application-admin-console/src/data/problem-mapping.ts`).
+ */
+type NonAwsProvider = ReservedProvider;
 
 /** Raised when a non-AWS target has no valid per-team connection configured. */
 export class MissingTargetConnectionError extends Error {
