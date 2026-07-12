@@ -134,8 +134,10 @@ export interface EventDetail extends EventSummary {
 
 export interface CreateEventTeamInput {
   internalSlug: string;
-  /** #528: 各 team の deploy 先 AWS Account ID (12 桁数字)。必須。 */
-  awsAccountId: string;
+  /** #528: AWS event deploy target (12 digits); required only for AWS-only events. */
+  awsAccountId?: string;
+  /** #2563: provider credential teamSlug for non-AWS single-provider events. */
+  nonAwsCredentialTeamSlug?: string;
 }
 
 export interface CreateEventRequest {

@@ -69,6 +69,7 @@ export async function createEvent(
     internalSlug: t.internalSlug,
     teamLoginKey: generateTeamLoginKey(),
     awsAccountId: t.awsAccountId,
+    nonAwsCredentialTeamSlug: t.nonAwsCredentialTeamSlug,
     createdAt,
     updatedAt: createdAt,
     expiresAt,

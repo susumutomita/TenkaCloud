@@ -60,6 +60,29 @@ describe("bulkDeployEvent — verification, ExternalId & distributed map path", 
     expect(eventsSend).not.toHaveBeenCalled();
   });
 
+  // [#2563 v1] 非 AWS single-provider 問題は frozen CFn 経路に載せられない。
+  // 黙って skip せず unsupportedRuntime として明示的に返す (AWS 問題は通常通り enqueue)。
+  it("should refuse non-AWS single-provider problems and surface unsupportedRuntime (#2563)", async () => {
+    const { shared, ddbSend, eventsSend } = buildShared({
+      resolveProblemRuntimeDescriptor: (problemId) =>
+        problemId === "hello-world"
+          ? { provider: "gcp", engine: "infra-manager", entry: "template.yaml" }
+          : undefined,
+    });
+    ddbSend.mockResolvedValueOnce({ Item: sampleEvent() }); // hello-world (gcp) + hello-world-battle (aws)
+    ddbSend.mockResolvedValueOnce({ Items: sampleTeams(1) });
+    ddbSend.mockResolvedValueOnce({ Items: [] });
+    ddbSend.mockResolvedValue({});
+    eventsSend.mockResolvedValue({});
+
+    const out = await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS);
+    expect(out.kind).toBe("ok");
+    if (out.kind !== "ok") throw new Error("expected ok");
+    expect(out.result.enqueued).toBe(1);
+    expect(out.result.unsupportedRuntime).toBe(1);
+    expect(out.result.unsupportedRuntimeProblems).toEqual(["hello-world"]);
+  });
+
   // Phase 2.2: DeployCreateRequested の detail に competitorRoleArn / externalIdParameterName を埋めるべき
   it("should include competitorRoleArn and externalIdParameterName for AssumeRole in DeployCreateRequested detail", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();

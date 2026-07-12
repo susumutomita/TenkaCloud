@@ -211,4 +211,42 @@ describe("buildBulkDeployPlan provenance", () => {
       catalogSnapshotId: "snap-original",
     });
   });
+  it("should refuse non-AWS single-provider problems instead of publishing onto the CFn pipeline (#2563 v1)", () => {
+    const plan = buildBulkDeployPlan({
+      shared: buildShared(undefined, {
+        resolveProblemRuntimeDescriptor: (problemId) =>
+          problemId === "core-problem"
+            ? { provider: "gcp", engine: "infra-manager", entry: "template.yaml" }
+            : undefined,
+      }),
+      tenantId: TENANT,
+      eventId: EVENT_ID,
+      nowMs: NOW_MS,
+      event: { startsAt: undefined, endsAt: undefined },
+      selected: {
+        teams: [
+          {
+            eventId: EVENT_ID,
+            teamId: "T1",
+            tenantId: TENANT,
+            internalSlug: "team-1",
+            nonAwsCredentialTeamSlug: "gcp-team-1",
+            teamLoginKey: "key-1",
+          },
+        ],
+        problems: [{ problemId: "core-problem", defaultRegion: "ap-northeast-1" }],
+      },
+      existing: emptyExisting,
+      verified: new Map(),
+      retryFailedOnly: false,
+      forceRedeploy: false,
+    });
+
+    // No entry may reach the frozen DeployCreateRequested bus: its detail could
+    // not satisfy the authoritative schema and the CFn pipeline cannot run it.
+    expect(plan.entries).toHaveLength(0);
+    expect(plan.skipped).toBe(0);
+    expect(plan.unverifiedAccounts.size).toBe(0);
+    expect(Array.from(plan.unsupportedRuntimeProblems)).toEqual(["core-problem"]);
+  });
 });

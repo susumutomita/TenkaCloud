@@ -20,6 +20,14 @@ export interface BulkDeployResult {
   readonly unverified?: number;
   /** Phase 2.2: 上記の補足情報。重複は除く (Set 化)。 */
   readonly unverifiedAccounts?: readonly string[];
+  /**
+   * [#2563 v1] 非 AWS single-provider runtime のため bulk 経路 (frozen CFn pipeline)
+   * では実行できず reject した問題数。single-deploy (adapter dispatch) 経路で
+   * team ごとに deploy する。bulk adapter dispatch 対応までの明示的な拒否。
+   */
+  readonly unsupportedRuntime?: number;
+  /** [#2563 v1] 上記の問題 id 一覧 (sorted、重複除去済み)。 */
+  readonly unsupportedRuntimeProblems?: readonly string[];
 }
 
 export type BulkDeployOutcome = { kind: "ok"; result: BulkDeployResult } | { kind: "not_found" };
@@ -68,6 +76,8 @@ export interface BulkDeployPlan {
   readonly createdAt: string;
   readonly skipped: number;
   readonly unverifiedAccounts: Set<string>;
+  /** [#2563 v1] bulk では実行できない非 AWS single-provider の問題 id 集合。 */
+  readonly unsupportedRuntimeProblems: Set<string>;
 }
 
 export interface PublishFailure {

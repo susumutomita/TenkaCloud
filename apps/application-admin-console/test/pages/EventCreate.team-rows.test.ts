@@ -2,69 +2,123 @@ import { describe, expect, it } from "vitest";
 import {
   parseTeamCountInput,
   resizeTeamRows,
+  resolveEventProviderMode,
   resolveInitialRegion,
   resolveRegionOptions,
   validateTeamRows,
 } from "../../src/pages/EventCreate";
 
+const row = (
+  internalSlug: string,
+  awsAccountId: string,
+  nonAwsCredentialTeamSlug = internalSlug,
+) => ({
+  internalSlug,
+  awsAccountId,
+  nonAwsCredentialTeamSlug,
+});
+
 describe("resizeTeamRows", () => {
   it("should return the same array reference when team count is unchanged", () => {
-    const rows = [{ internalSlug: "team-1", awsAccountId: "111111111111" }];
+    const rows = [row("team-1", "111111111111")];
 
     expect(resizeTeamRows(rows, 1)).toBe(rows);
   });
 
   it("should drop trailing rows when team count is reduced", () => {
     expect(
-      resizeTeamRows(
-        [
-          { internalSlug: "team-1", awsAccountId: "111111111111" },
-          { internalSlug: "team-2", awsAccountId: "222222222222" },
-        ],
-        1,
-      ),
-    ).toEqual([{ internalSlug: "team-1", awsAccountId: "111111111111" }]);
+      resizeTeamRows([row("team-1", "111111111111"), row("team-2", "222222222222")], 1),
+    ).toEqual([row("team-1", "111111111111")]);
   });
 
   it("should keep existing rows and append empty new rows when team count is increased", () => {
-    expect(resizeTeamRows([{ internalSlug: "team-1", awsAccountId: "111111111111" }], 3)).toEqual([
-      { internalSlug: "team-1", awsAccountId: "111111111111" },
-      { internalSlug: "team-2", awsAccountId: "" },
-      { internalSlug: "team-3", awsAccountId: "" },
+    expect(resizeTeamRows([row("team-1", "111111111111")], 3)).toEqual([
+      row("team-1", "111111111111"),
+      { internalSlug: "team-2", awsAccountId: "", nonAwsCredentialTeamSlug: "team-2" },
+      { internalSlug: "team-3", awsAccountId: "", nonAwsCredentialTeamSlug: "team-3" },
     ]);
   });
 
   it("should treat negative count as zero rows", () => {
-    expect(resizeTeamRows([{ internalSlug: "team-1", awsAccountId: "111111111111" }], -1)).toEqual(
-      [],
-    );
+    expect(resizeTeamRows([row("team-1", "111111111111")], -1)).toEqual([]);
   });
 });
 
 describe("validateTeamRows", () => {
   it("should return valid when all slug/account are valid and have no duplicates", () => {
     expect(
-      validateTeamRows([
-        { internalSlug: "team-1", awsAccountId: "111111111111" },
-        { internalSlug: "team-2", awsAccountId: "222222222222" },
-      ]),
+      validateTeamRows([row("team-1", "111111111111"), row("team-2", "222222222222")]),
     ).toEqual({
       allSlugsValid: true,
       allAccountsValid: true,
+      allNonAwsCredentialSlugsValid: true,
       hasDuplicateSlug: false,
+      providerMode: { kind: "aws" },
     });
   });
 
   it("should detect invalid slug/account and duplicate slugs", () => {
-    expect(
-      validateTeamRows([
-        { internalSlug: "Team_1", awsAccountId: "111" },
-        { internalSlug: "Team_1", awsAccountId: "222222222222" },
-      ]),
-    ).toEqual({
+    expect(validateTeamRows([row("Team_1", "111"), row("Team_1", "222222222222")])).toEqual({
       allSlugsValid: false,
       allAccountsValid: false,
+      allNonAwsCredentialSlugsValid: true,
       hasDuplicateSlug: true,
+      providerMode: { kind: "aws" },
+    });
+  });
+
+  it("should validate non-AWS credential team slugs instead of AWS accounts", () => {
+    const providerMode = { kind: "nonAws" as const, provider: "gcp" };
+
+    expect(validateTeamRows([row("team-1", "", "gcp-team-1")], providerMode)).toEqual({
+      allSlugsValid: true,
+      allAccountsValid: true,
+      allNonAwsCredentialSlugsValid: true,
+      hasDuplicateSlug: false,
+      providerMode,
+    });
+  });
+
+  it("should flag an invalid non-AWS credential slug (#2563)", () => {
+    const providerMode = { kind: "nonAws" as const, provider: "gcp" };
+
+    expect(validateTeamRows([row("team-1", "", "Bad_Slug")], providerMode)).toEqual({
+      allSlugsValid: true,
+      allAccountsValid: true,
+      allNonAwsCredentialSlugsValid: false,
+      hasDuplicateSlug: false,
+      providerMode,
+    });
+  });
+});
+
+describe("resolveEventProviderMode", () => {
+  it("should reject mixed AWS and non-AWS provider events for v1", () => {
+    expect(
+      resolveEventProviderMode([{ runtimeProvider: "aws" }, { runtimeProvider: "gcp" }]),
+    ).toEqual({
+      kind: "mixed",
+    });
+  });
+
+  it("should treat an undeclared-runtime (= AWS) row plus a non-AWS row as mixed", () => {
+    // 未宣言 provider は aws 扱い。 [{}, gcp] を nonAws と誤判定すると AWS 問題の
+    // account 束縛が丸ごと落ちるので mixed でなければならない。
+    expect(resolveEventProviderMode([{}, { runtimeProvider: "gcp" }])).toEqual({ kind: "mixed" });
+  });
+
+  it("should treat two different non-AWS providers as mixed (v1)", () => {
+    expect(
+      resolveEventProviderMode([{ runtimeProvider: "gcp" }, { runtimeProvider: "azure" }]),
+    ).toEqual({ kind: "mixed" });
+  });
+
+  it("should return the single non-AWS provider when all selected problems match", () => {
+    expect(
+      resolveEventProviderMode([{ runtimeProvider: "gcp" }, { runtimeProvider: "gcp" }]),
+    ).toEqual({
+      kind: "nonAws",
+      provider: "gcp",
     });
   });
 });

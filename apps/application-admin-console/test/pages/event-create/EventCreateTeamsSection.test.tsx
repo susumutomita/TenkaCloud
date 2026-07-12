@@ -1,7 +1,9 @@
 import createWrapper from "@cloudscape-design/components/test-utils/dom";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ApiClient } from "../../../src/api/client";
 import type { CompetitorAccountSummary } from "../../../src/api/competitor-accounts-client";
+import { getTeamCredentialStatus } from "../../../src/api/team-credentials-client";
 import {
   EventCreateTeamsSection,
   type EventCreateTeamsSectionProps,
@@ -15,6 +17,10 @@ import type { TeamTableItem } from "../../../src/pages/event-create/helpers";
  * formatVerifiedAccountSummary) は実物。 Cloudscape Select は test-utils で駆動。
  */
 vi.mock("../../../src/i18n", () => ({ useT: () => (k: string) => k }));
+vi.mock("../../../src/api/team-credentials-client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../src/api/team-credentials-client")>();
+  return { ...actual, getTeamCredentialStatus: vi.fn() };
+});
 
 const ACCOUNT_ID = "111111111111";
 const account: CompetitorAccountSummary = {
@@ -90,5 +96,107 @@ describe("EventCreateTeamsSection", () => {
   it("should show the duplicate-slug error", () => {
     render(<EventCreateTeamsSection {...props({ teamValidation: validation(true) })} />);
     expect(screen.getByText("event_create.duplicate_slug_error")).toBeInTheDocument();
+  });
+});
+
+const nonAwsValidation = (provider = "gcp") => ({
+  allSlugsValid: true,
+  allAccountsValid: true,
+  allNonAwsCredentialSlugsValid: true,
+  hasDuplicateSlug: false,
+  providerMode: { kind: "nonAws" as const, provider },
+});
+
+const nonAwsProps = (over: Partial<EventCreateTeamsSectionProps> = {}) =>
+  props({
+    teamTableItems: [
+      { idx: 0, internalSlug: "team-1", awsAccountId: "", nonAwsCredentialTeamSlug: "team-1" },
+    ] as TeamTableItem[],
+    teamValidation: nonAwsValidation(),
+    apiClient: {} as ApiClient,
+    ...over,
+  });
+
+const mockStatus = vi.mocked(getTeamCredentialStatus);
+
+describe("EventCreateTeamsSection non-AWS credential column (#2563)", () => {
+  it("should swap the AWS account column for the credential column and emit slug edits", () => {
+    const p = nonAwsProps();
+    const { container } = render(<EventCreateTeamsSection {...p} />);
+    expect(screen.getByText("event_create.col_non_aws_credential")).toBeInTheDocument();
+    expect(createWrapper(container).findSelect()).toBeNull();
+    // inputs = [internalSlug, credential slug] — 両方 "team-1" を表示するので 2 個目を編集。
+    const credentialInput = screen.getAllByDisplayValue("team-1")[1] as HTMLInputElement;
+    fireEvent.change(credentialInput, { target: { value: "gcp-1" } });
+    expect(p.onUpdateTeamRow).toHaveBeenCalledWith(0, { nonAwsCredentialTeamSlug: "gcp-1" });
+  });
+
+  it("should show registered / unregistered from the credential check", async () => {
+    mockStatus.mockResolvedValueOnce({ provider: "gcp", teamSlug: "team-1", registered: true });
+    render(<EventCreateTeamsSection {...nonAwsProps()} />);
+    fireEvent.click(screen.getByRole("button", { name: "event_create.check_credential" }));
+    expect(await screen.findByText("event_create.credential_registered")).toBeInTheDocument();
+    expect(mockStatus).toHaveBeenCalledWith(expect.anything(), "gcp", "team-1");
+  });
+
+  it("should show the unregistered state distinctly", async () => {
+    mockStatus.mockResolvedValueOnce({ provider: "gcp", teamSlug: "team-1", registered: false });
+    render(<EventCreateTeamsSection {...nonAwsProps()} />);
+    fireEvent.click(screen.getByRole("button", { name: "event_create.check_credential" }));
+    expect(await screen.findByText("event_create.credential_unregistered")).toBeInTheDocument();
+  });
+
+  it("should surface a check failure loudly (never as 'unregistered')", async () => {
+    mockStatus.mockRejectedValueOnce(new Error("api boom"));
+    render(<EventCreateTeamsSection {...nonAwsProps()} />);
+    fireEvent.click(screen.getByRole("button", { name: "event_create.check_credential" }));
+    expect(await screen.findByText("event_create.check_credential_failed")).toBeInTheDocument();
+    expect(screen.queryByText("event_create.credential_unregistered")).not.toBeInTheDocument();
+  });
+
+  it("should reset the shown status when the credential slug is edited", async () => {
+    mockStatus.mockResolvedValueOnce({ provider: "gcp", teamSlug: "team-1", registered: true });
+    const p = nonAwsProps();
+    render(<EventCreateTeamsSection {...p} />);
+    fireEvent.click(screen.getByRole("button", { name: "event_create.check_credential" }));
+    expect(await screen.findByText("event_create.credential_registered")).toBeInTheDocument();
+    const credentialInput = screen.getAllByDisplayValue("team-1")[1] as HTMLInputElement;
+    fireEvent.change(credentialInput, { target: { value: "gcp-1" } });
+    expect(screen.queryByText("event_create.credential_registered")).not.toBeInTheDocument();
+  });
+
+  it("should disable the check for an invalid slug, a missing client, or an unknown provider", () => {
+    const invalidSlug = nonAwsProps({
+      teamTableItems: [
+        { idx: 0, internalSlug: "team-1", awsAccountId: "", nonAwsCredentialTeamSlug: "Bad_" },
+      ] as TeamTableItem[],
+    });
+    const { unmount } = render(<EventCreateTeamsSection {...invalidSlug} />);
+    expect(screen.getByRole("button", { name: "event_create.check_credential" })).toBeDisabled();
+    unmount();
+
+    const noClient = nonAwsProps({ apiClient: null });
+    const second = render(<EventCreateTeamsSection {...noClient} />);
+    expect(screen.getByRole("button", { name: "event_create.check_credential" })).toBeDisabled();
+    second.unmount();
+
+    render(
+      <EventCreateTeamsSection
+        {...nonAwsProps({ teamValidation: nonAwsValidation("oraclecloud") })}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "event_create.check_credential" })).toBeDisabled();
+  });
+
+  it("should show the mixed-provider error and keep the AWS column in mixed mode", () => {
+    render(
+      <EventCreateTeamsSection
+        {...props({
+          teamValidation: { ...validation(), providerMode: { kind: "mixed" as const } },
+        })}
+      />,
+    );
+    expect(screen.getByText("event_create.mixed_provider_error")).toBeInTheDocument();
+    expect(screen.getByText("event_create.col_aws_account")).toBeInTheDocument();
   });
 });

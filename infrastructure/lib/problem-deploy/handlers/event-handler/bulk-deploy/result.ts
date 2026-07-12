@@ -15,16 +15,28 @@ export function buildResult(args: {
   readonly enqueued: number;
   readonly skipped: number;
   readonly unverifiedAccounts: Set<string>;
+  readonly unsupportedRuntimeProblems?: Set<string>;
 }): BulkDeployResult {
-  const base: BulkDeployResult = {
+  let result: BulkDeployResult = {
     eventId: args.eventId,
     enqueued: args.enqueued,
     skipped: args.skipped,
   };
-  if (args.unverifiedAccounts.size === 0) return base;
-  return {
-    ...base,
-    unverified: args.unverifiedAccounts.size,
-    unverifiedAccounts: Array.from(args.unverifiedAccounts).sort(),
-  };
+  if (args.unverifiedAccounts.size > 0) {
+    result = {
+      ...result,
+      unverified: args.unverifiedAccounts.size,
+      unverifiedAccounts: Array.from(args.unverifiedAccounts).sort(),
+    };
+  }
+  // [#2563 v1] Surface bulk-refused non-AWS problems so the operator learns to
+  // use the single-deploy path (same backward-compat shape as `unverified`).
+  if (args.unsupportedRuntimeProblems !== undefined && args.unsupportedRuntimeProblems.size > 0) {
+    result = {
+      ...result,
+      unsupportedRuntime: args.unsupportedRuntimeProblems.size,
+      unsupportedRuntimeProblems: Array.from(args.unsupportedRuntimeProblems).sort(),
+    };
+  }
+  return result;
 }

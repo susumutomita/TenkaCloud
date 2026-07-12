@@ -44,6 +44,24 @@ describe("CreateEventRequestSchema teams cap (event 1 row + teams must fit one 1
       false,
     );
   });
+
+  it("should reject a team carrying neither awsAccountId nor nonAwsCredentialTeamSlug (#2563)", () => {
+    expect(
+      CreateEventRequestSchema.safeParse({
+        ...base,
+        teams: [{ internalSlug: "team-1" }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("should accept a non-AWS team bound only by its credential teamSlug (#2563)", () => {
+    expect(
+      CreateEventRequestSchema.safeParse({
+        ...base,
+        teams: [{ internalSlug: "team-1", nonAwsCredentialTeamSlug: "gcp-team-1" }],
+      }).success,
+    ).toBe(true);
+  });
 });
 
 function buildShared(overrides: Partial<EventSharedResources> = {}): {

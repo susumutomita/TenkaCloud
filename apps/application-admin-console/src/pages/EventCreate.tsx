@@ -26,6 +26,7 @@ import {
   NAME_MAX,
   type ProblemRow,
   resizeTeamRows,
+  resolveEventProviderMode,
   TEAMS_MAX,
   TEAMS_MIN,
   type TeamRow,
@@ -40,6 +41,7 @@ export {
   formatVerifiedAccountSummary,
   parseTeamCountInput,
   resizeTeamRows,
+  resolveEventProviderMode,
   resolveInitialRegion,
   resolveRegionOptions,
   validateTeamRows,
@@ -97,6 +99,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
     Array.from({ length: INITIAL_TEAM_COUNT }, (_, i) => ({
       internalSlug: `team-${i + 1}`,
       awsAccountId: "",
+      nonAwsCredentialTeamSlug: `team-${i + 1}`,
     })),
   );
   const [selectedProblems, setSelectedProblems] = useState<readonly MultiselectProps.Option[]>([]);
@@ -136,6 +139,10 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
               // が ap-northeast-1 に集中するのを防ぐ)。 未宣言なら従来通り
               // DEFAULT_AWS_REGION にフォールバック。 operator は wizard で override 可能。
               defaultRegion: meta?.defaultRegion ?? DEFAULT_AWS_REGION.code,
+              // runtime は ProblemSummary 上必須 (未宣言は aws/cloudformation に正規化済み)
+              // なので ?? の右辺は meta 欠落 (上と同じ不到達防御) のみ。
+              /* v8 ignore next */
+              runtimeProvider: meta?.runtime.provider ?? "aws",
               ...(meta?.costEstimate ? { costEstimate: meta.costEstimate } : {}),
               ...(meta?.supportedRegions ? { supportedRegions: meta.supportedRegions } : {}),
             };
@@ -151,7 +158,11 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
 
   // teamRows ベースの validation を 1 pass に集約 (= 4 つ .every() / IIFE を回す代わり)。
   // teamRows 変更時のみ再評価され、render path の負担を減らす。
-  const teamValidation = useMemo(() => validateTeamRows(teamRows), [teamRows]);
+  const providerMode = useMemo(() => resolveEventProviderMode(problemRows), [problemRows]);
+  const teamValidation = useMemo(
+    () => validateTeamRows(teamRows, providerMode),
+    [teamRows, providerMode],
+  );
   // Table の items に渡す配列を teamRows ベースで memo 化。Cloudscape Table は items の
   // shallow identity で再 render 判定するので、毎 render 新 array を渡すと無駄に重い
   // (= 99 行 × 2 column の Input が全部 reconcile される)。
@@ -167,6 +178,8 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
     problemRows.length > 0 &&
     teamValidation.allSlugsValid &&
     teamValidation.allAccountsValid &&
+    teamValidation.allNonAwsCredentialSlugsValid &&
+    teamValidation.providerMode?.kind !== "mixed" &&
     !teamValidation.hasDuplicateSlug;
 
   // Issue #1067: 作成成功後、 EventDetail へ自動遷移する前に 「Deploy する? あとで?」 modal を出す。
@@ -187,7 +200,9 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
         name,
         teams: teamRows.map((tr) => ({
           internalSlug: tr.internalSlug,
-          awsAccountId: tr.awsAccountId,
+          ...(providerMode.kind === "aws"
+            ? { awsAccountId: tr.awsAccountId }
+            : { nonAwsCredentialTeamSlug: tr.nonAwsCredentialTeamSlug }),
         })),
         problems: problemRows.map((r) => ({
           problemId: r.problemId,
@@ -272,6 +287,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
             accountOptions={accountOptions}
             accountById={accountById}
             noVerifiedAccounts={noVerifiedAccounts}
+            apiClient={apiClient}
             onUpdateTeamRow={updateTeamRow}
           />
 
@@ -304,6 +320,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
         visible={deployPromptTarget !== null}
         canMutateTenant={canMutate}
         deployStarting={deployStarting}
+        bulkDeploySupported={providerMode.kind !== "nonAws"}
         onDeployNow={() => void handleDeployNow()}
         onDeployLater={handleDeployLater}
       />

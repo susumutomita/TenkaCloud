@@ -53,6 +53,12 @@ describe("EventCreateDeployPromptModal", () => {
     expect(p.onDeployLater).not.toHaveBeenCalled();
   });
 
+  it("should hide deploy-now and show single-deploy guidance for a non-AWS event (#2563)", () => {
+    render(<EventCreateDeployPromptModal {...props({ bulkDeploySupported: false })} />);
+    expect(screen.queryByTestId("deploy-prompt-now")).not.toBeInTheDocument();
+    expect(screen.getByText("event_create.deploy_modal_alert_body_non_aws")).toBeInTheDocument();
+  });
+
   it("should disable deploy-now for a read-only viewer", () => {
     const p = props({ canMutateTenant: false });
     render(<EventCreateDeployPromptModal {...p} />);
