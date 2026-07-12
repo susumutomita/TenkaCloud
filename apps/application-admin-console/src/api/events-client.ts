@@ -1,4 +1,4 @@
-import type { ApiClient } from "./client";
+import type { ApiClient } from "./client-contract";
 
 export const EVENT_ID_RE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
 

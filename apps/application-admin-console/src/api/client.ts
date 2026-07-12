@@ -1,13 +1,10 @@
-import { type CoreApiClient, createCoreApiClient } from "@tenkacloud/web-kit";
+import { createCoreApiClient } from "@tenkacloud/web-kit";
 import { useMemo } from "react";
 import { useAuth } from "../auth/AuthProvider";
-import {
-  decodeIdToken,
-  resolveTenantConsoleAccess,
-  type TenantConsoleAccess,
-} from "../auth/claims";
+import { decodeIdToken, resolveTenantConsoleAccess } from "../auth/claims";
 import type { AppConfig } from "../config";
-// Issue #1954: demo mode の fixture client。 call-time のみ参照する循環 import (load-time は不使用)。
+import type { ApiClient } from "./client-contract";
+// Issue #1954: demo mode の fixture client (call-time のみ参照)。
 import { createDemoApiClient } from "./demo-client";
 
 // Issue #2226: fetch->ApiError plumbing + the get/post/put/patch/del/delJson method
@@ -15,10 +12,7 @@ import { createDemoApiClient } from "./demo-client";
 // admin-console); re-exported here so existing imports of ApiError from this
 // module are unchanged. This app layers `tenantAccess` (RBAC) on top of the core.
 export { ApiError } from "@tenkacloud/web-kit";
-
-export interface ApiClient extends CoreApiClient {
-  readonly tenantAccess?: TenantConsoleAccess;
-}
+export type { ApiClient } from "./client-contract";
 
 export function createApiClient(baseUrl: string, idToken: string): ApiClient {
   return {
