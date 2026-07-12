@@ -1,11 +1,19 @@
 import Box from "@cloudscape-design/components/box";
+import Button from "@cloudscape-design/components/button";
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import Input from "@cloudscape-design/components/input";
 import Select, { type SelectProps } from "@cloudscape-design/components/select";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Table from "@cloudscape-design/components/table";
+import { useState } from "react";
+import type { ApiClient } from "../../api/client";
 import type { CompetitorAccountSummary } from "../../api/competitor-accounts-client";
+import {
+  getTeamCredentialStatus,
+  TEAM_CREDENTIAL_PROVIDERS,
+  type TeamCredentialProvider,
+} from "../../api/team-credentials-client";
 import { useT } from "../../i18n";
 import {
   ACCOUNT_ID_RE,
@@ -30,6 +38,7 @@ export interface EventCreateTeamsSectionProps {
   accountOptions: readonly SelectProps.Option[];
   accountById: ReadonlyMap<string, CompetitorAccountSummary>;
   noVerifiedAccounts: boolean;
+  apiClient?: ApiClient | null;
   onUpdateTeamRow: (idx: number, patch: Partial<TeamRow>) => void;
 }
 
@@ -40,9 +49,42 @@ export function EventCreateTeamsSection({
   accountOptions,
   accountById,
   noVerifiedAccounts,
+  apiClient,
   onUpdateTeamRow,
 }: EventCreateTeamsSectionProps) {
   const t = useT();
+  // Status keyed by internalSlug (not row index) so a resize/reorder can never
+  // attach a check result to the wrong team.
+  const [credentialStatus, setCredentialStatus] = useState<Record<string, boolean | undefined>>({});
+  const [checkingCredential, setCheckingCredential] = useState<string | null>(null);
+  const [checkFailed, setCheckFailed] = useState<Record<string, boolean | undefined>>({});
+  const providerMode = teamValidation.providerMode;
+  // The credential-check API supports a fixed provider set; an unknown non-AWS
+  // provider still renders the column but cannot offer the check button.
+  const checkableProvider: TeamCredentialProvider | undefined =
+    providerMode?.kind === "nonAws" &&
+    (TEAM_CREDENTIAL_PROVIDERS as readonly string[]).includes(providerMode.provider)
+      ? (providerMode.provider as TeamCredentialProvider)
+      : undefined;
+  const checkCredential = async (
+    slug: string,
+    provider: TeamCredentialProvider,
+    teamSlug: string,
+  ) => {
+    /* v8 ignore next -- defensive: the button is disabled unless apiClient + a valid slug exist */
+    if (!apiClient || !SLUG_RE.test(teamSlug)) return;
+    setCheckingCredential(slug);
+    setCheckFailed((prev) => ({ ...prev, [slug]: undefined }));
+    try {
+      const status = await getTeamCredentialStatus(apiClient, provider, teamSlug);
+      setCredentialStatus((prev) => ({ ...prev, [slug]: status.registered }));
+    } catch {
+      // Loud failure state (never mistaken for "unregistered").
+      setCheckFailed((prev) => ({ ...prev, [slug]: true }));
+    } finally {
+      setCheckingCredential(null);
+    }
+  };
   return (
     <Container
       header={
@@ -72,53 +114,121 @@ export function EventCreateTeamsSection({
                 />
               ),
             },
-            {
-              id: "account",
-              header: t("event_create.col_aws_account"),
-              cell: (tr) => {
-                const selected = accountOptions.find((o) => o.value === tr.awsAccountId) ?? null;
-                const selectedAccount = accountById.get(tr.awsAccountId);
-                return (
-                  <SpaceBetween size="xxs">
-                    <Select
-                      selectedOption={selected}
-                      options={[...accountOptions]}
-                      placeholder={
-                        noVerifiedAccounts
-                          ? t("event_create.no_verified_helper")
-                          : t("event_create.select_verified_placeholder")
-                      }
-                      disabled={accountOptions.length === 0}
-                      empty={t("event_create.select_empty_message")}
-                      onChange={({ detail }) =>
-                        onUpdateTeamRow(tr.idx, {
-                          // Select の onChange は常に選択肢 (value 付き) を伴うので ?? の右辺は不到達 (= 防御)。
-                          /* v8 ignore next */
-                          awsAccountId: detail.selectedOption?.value ?? "",
-                        })
-                      }
-                      invalid={tr.awsAccountId.length > 0 && !ACCOUNT_ID_RE.test(tr.awsAccountId)}
-                      expandToViewport
-                      filteringType="auto"
-                    />
-                    {selectedAccount && (
-                      <Box variant="small" color="text-status-inactive">
-                        <span title={formatVerifiedAccountSummary(selectedAccount)}>
-                          {formatVerifiedAccountSummary(selectedAccount)}
-                        </span>
-                      </Box>
-                    )}
-                    {noVerifiedAccounts && (
-                      <Box variant="small" color="text-status-inactive">
-                        {t("event_create.no_verified_helper")}
-                      </Box>
-                    )}
-                  </SpaceBetween>
-                );
-              },
-            },
+            providerMode?.kind === "nonAws"
+              ? {
+                  id: "nonAwsCredential",
+                  header: t("event_create.col_non_aws_credential", {
+                    provider: providerMode.provider,
+                  }),
+                  cell: (tr) => (
+                    <SpaceBetween size="xxs">
+                      <Input
+                        value={tr.nonAwsCredentialTeamSlug}
+                        placeholder={tr.internalSlug}
+                        invalid={!SLUG_RE.test(tr.nonAwsCredentialTeamSlug)}
+                        onChange={({ detail }) => {
+                          setCredentialStatus((prev) => ({
+                            ...prev,
+                            [tr.internalSlug]: undefined,
+                          }));
+                          onUpdateTeamRow(tr.idx, { nonAwsCredentialTeamSlug: detail.value });
+                        }}
+                      />
+                      <Button
+                        loading={checkingCredential === tr.internalSlug}
+                        disabled={
+                          !apiClient ||
+                          checkableProvider === undefined ||
+                          !SLUG_RE.test(tr.nonAwsCredentialTeamSlug)
+                        }
+                        onClick={() => {
+                          /* v8 ignore next -- defensive: the button is disabled in this state */
+                          if (checkableProvider === undefined) return;
+                          void checkCredential(
+                            tr.internalSlug,
+                            checkableProvider,
+                            tr.nonAwsCredentialTeamSlug,
+                          );
+                        }}
+                      >
+                        {t("event_create.check_credential")}
+                      </Button>
+                      {checkFailed[tr.internalSlug] && (
+                        <Box variant="small" color="text-status-error">
+                          {t("event_create.check_credential_failed")}
+                        </Box>
+                      )}
+                      {credentialStatus[tr.internalSlug] !== undefined && (
+                        <Box
+                          variant="small"
+                          color={
+                            credentialStatus[tr.internalSlug]
+                              ? "text-status-success"
+                              : "text-status-error"
+                          }
+                        >
+                          {credentialStatus[tr.internalSlug]
+                            ? t("event_create.credential_registered")
+                            : t("event_create.credential_unregistered")}
+                        </Box>
+                      )}
+                    </SpaceBetween>
+                  ),
+                }
+              : {
+                  id: "account",
+                  header: t("event_create.col_aws_account"),
+                  cell: (tr) => {
+                    const selected =
+                      accountOptions.find((o) => o.value === tr.awsAccountId) ?? null;
+                    const selectedAccount = accountById.get(tr.awsAccountId);
+                    return (
+                      <SpaceBetween size="xxs">
+                        <Select
+                          selectedOption={selected}
+                          options={[...accountOptions]}
+                          placeholder={
+                            noVerifiedAccounts
+                              ? t("event_create.no_verified_helper")
+                              : t("event_create.select_verified_placeholder")
+                          }
+                          disabled={accountOptions.length === 0}
+                          empty={t("event_create.select_empty_message")}
+                          onChange={({ detail }) =>
+                            onUpdateTeamRow(tr.idx, {
+                              /* v8 ignore next */
+                              awsAccountId: detail.selectedOption?.value ?? "",
+                            })
+                          }
+                          invalid={
+                            tr.awsAccountId.length > 0 && !ACCOUNT_ID_RE.test(tr.awsAccountId)
+                          }
+                          expandToViewport
+                          filteringType="auto"
+                        />
+                        {selectedAccount && (
+                          <Box variant="small" color="text-status-inactive">
+                            <span title={formatVerifiedAccountSummary(selectedAccount)}>
+                              {formatVerifiedAccountSummary(selectedAccount)}
+                            </span>
+                          </Box>
+                        )}
+                        {noVerifiedAccounts && (
+                          <Box variant="small" color="text-status-inactive">
+                            {t("event_create.no_verified_helper")}
+                          </Box>
+                        )}
+                      </SpaceBetween>
+                    );
+                  },
+                },
           ]}
         />
+      )}
+      {providerMode?.kind === "mixed" && (
+        <Box variant="small" color="text-status-error" padding={{ top: "xs" }}>
+          {t("event_create.mixed_provider_error")}
+        </Box>
       )}
       {teamValidation.hasDuplicateSlug && (
         <Box variant="small" color="text-status-error" padding={{ top: "xs" }}>

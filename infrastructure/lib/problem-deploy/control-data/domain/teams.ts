@@ -33,6 +33,8 @@ export type TeamRecord = {
   /** #528: team の deploy 先 AWS Account ID (12 桁数字)。Bulk Deploy で problem.defaultRegion と
    *  組み合わせて使う。旧 Event は持たない (= bulk-deploy で problem.defaultAwsAccountId に fallback)。 */
   awsAccountId?: string;
+  /** #2563: Non-AWS deploy credential teamSlug selected in EventCreate. */
+  nonAwsCredentialTeamSlug?: string;
   createdAt: string;
   updatedAt: string;
   expiresAt: number;

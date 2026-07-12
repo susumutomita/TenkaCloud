@@ -12,6 +12,7 @@ import {
   EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED,
   EVENT_SOURCE,
 } from "../../shared/events.js";
+import { AZURE_PROVIDER, GCP_PROVIDER, SAKURA_PROVIDER } from "../../shared/runtime/index.js";
 import type { EventSharedResources } from "../shared.js";
 import type { EventItem, EventProblemTarget } from "../types.js";
 import {
@@ -39,29 +40,39 @@ export interface BuildBulkDeployPlanArgs {
 /**
  * teams × problems を全 iterate し、 (replace 対象 jobId / problemsCatalog / awsAccountId /
  * verified record) を全て満たした組み合わせだけ PlanEntry を出す。 既存衝突 / problemsCatalog
- * 欠落 / awsAccountId 欠落は skipped に、 verified 欠落は unverifiedAccounts に計上する。
+ * 欠落 / awsAccountId 欠落は skipped に、 verified 欠落は unverifiedAccounts に、 非 AWS
+ * single-provider 問題は unsupportedRuntimeProblems に計上する (#2563 v1: 下の
+ * buildBulkPlanEntry コメント参照)。
  */
 export function buildBulkDeployPlan(args: BuildBulkDeployPlanArgs): BulkDeployPlan {
   const createdAt = new Date(args.nowMs).toISOString();
   const plan: PlanEntry[] = [];
   let skipped = 0;
   const unverifiedAccounts = new Set<string>();
+  const unsupportedRuntimeProblems = new Set<string>();
   for (const team of args.selected.teams) {
     for (const problem of args.selected.problems) {
       const candidate = buildBulkPlanEntry(args, team, problem, createdAt);
       if (candidate.kind === "entry") plan.push(candidate.entry);
       if (candidate.kind === "skip") skipped++;
       if (candidate.kind === "unverified") unverifiedAccounts.add(candidate.accountId);
+      if (candidate.kind === "unsupportedRuntime") {
+        unsupportedRuntimeProblems.add(candidate.problemId);
+      }
     }
   }
-  return { entries: plan, createdAt, skipped, unverifiedAccounts };
+  return { entries: plan, createdAt, skipped, unverifiedAccounts, unsupportedRuntimeProblems };
 }
+
+/** 非 AWS の single-provider cloud runtime (= frozen CFn 経路に載せられない)。 */
+const NON_AWS_CLOUD_PROVIDERS: readonly string[] = [AZURE_PROVIDER, GCP_PROVIDER, SAKURA_PROVIDER];
 
 type BulkPlanCandidate =
   | { readonly kind: "entry"; readonly entry: PlanEntry }
   | { readonly kind: "skip" }
   | { readonly kind: "ignore" }
-  | { readonly kind: "unverified"; readonly accountId: string };
+  | { readonly kind: "unverified"; readonly accountId: string }
+  | { readonly kind: "unsupportedRuntime"; readonly problemId: string };
 
 function buildBulkPlanEntry(
   args: BuildBulkDeployPlanArgs,
@@ -75,6 +86,20 @@ function buildBulkPlanEntry(
   if (shouldSkipExistingPlanTarget(args, key, replacement)) return { kind: "skip" };
   const problemDir = args.shared.problemsCatalog[problem.problemId];
   if (!problemDir) return { kind: "skip" };
+  // [#2563 v1] Bulk deploy rides the frozen DeployCreateRequested -> CFn state
+  // machine, which is AWS-only. A non-AWS single-provider problem must NOT be
+  // published onto that bus (its detail could not satisfy the frozen schema and
+  // the pipeline could not execute it) — refuse loudly instead, and deploy those
+  // problems per team through the adapter-dispatching single-deploy path until
+  // bulk adapter dispatch lands.
+  const runtime = args.shared.resolveProblemRuntimeDescriptor?.(problem.problemId);
+  if (
+    runtime !== undefined &&
+    !("kind" in runtime) &&
+    NON_AWS_CLOUD_PROVIDERS.includes(runtime.provider)
+  ) {
+    return { kind: "unsupportedRuntime", problemId: problem.problemId };
+  }
   const awsAccountId = team.awsAccountId ?? problem.defaultAwsAccountId;
   if (!awsAccountId) return { kind: "skip" };
   const verified = args.verified.get(awsAccountId);
