@@ -1,0 +1,69 @@
+import { MaturityBadge } from "@/components/MaturityBadge";
+
+export const metadata = { title: "プラットフォームアーキテクチャ" };
+
+# プラットフォームアーキテクチャ <MaturityBadge level="stable" />
+
+TenkaCloud は、競技問題を各競技者自身のクラウドアカウントへ直接デプロイする
+マルチテナント SaaS プラットフォームです。システムは、責務境界を厳格に分離した
+4 つのプレーンに分割され、単一の EventBridge バスとデプロイごとの
+`runtime-config.json` によって相互に接続されます。
+
+## 4 つのプレーン
+
+- **コントロールプレーン**（`ControlPlaneStack`）— テナントマネージャーです。
+  `@cdklabs/sbt-aws` の ControlPlane コンストラクトの上に構築され、Cognito
+  ユーザープール、System Admin 向けテナント CRUD API、EventBridge バスで
+  構成されます。`admin-console` SPA がそのフロントエンドです。テナントランタイムを
+  ホストすることは決してありません。
+- **アプリケーションプレーン（pooled）** — 共有される 1 つの
+  `tenkacloud-tenant-template-pooled` スタックです。BASIC と ADVANCED のテナントは、
+  CloudFront 配下の単一の `application-admin-console` URL を共有します。
+- **アプリケーションプレーン（silo）** — PLATINUM テナント専用にのみ
+  プロビジョニングされる `tenkacloud-tenant-template-<tenantId>` スタックです。
+- **問題デプロイバックエンド**（`ProblemDeployBackendStack`）— Deployments テーブル、
+  Cognito 認証付き HTTP API、そして競技者アカウントへロールを引き受け（AssumeRole）、
+  そこで CloudFormation を実行するワーカーで構成されます。Participant Portal の
+  ホスティングも担います。
+
+テナント分離は、`TenantId` パーティションキーまたはスタック分離という形で、
+すべてインフラストラクチャレイヤーに存在します — アプリケーションコードには
+決して置きません。3 つの SPA は 1 つの共有 `dist/` を出荷し、テナントごとの差分は
+`runtime-config.json` のみを通じて流れます。
+
+## プレーン間コントラクト
+
+すべてのプレーンは、コントロールプレーンがプロビジョニングする
+**EventBridge バス**を介して通信します。`bin/infrastructure.ts` がその ARN を
+他のすべてのスタックへ渡します。壊してはならない 3 つのコントラクトは次のとおりです。
+
+- `onboardingRequest` — テナント作成です。SBT のジョブランナーが受け取り、
+  テナントスタック（既定では pooled、PLATINUM の場合は silo スタック）を
+  プロビジョニングします。
+- `DeployCreateRequested` — 問題デプロイです。バックエンドのワーカーが、
+  そのテナントの **ExternalId**（常に必須）を使って競技者アカウントへロールを
+  引き受け、CloudFormation の `CreateStack` を実行します。
+- `DeployDeleteRequested` — デプロイ済み問題の破棄です。
+
+フロントエンドの URL とフィーチャーフラグは、`runtime-config.json`
+（CloudFront 配下で配信され、`apps/*/src/config.ts` の `loadConfig()` が読み取ります）
+を通じて各 SPA に届きます。URL を追加する場合は、ホスティングスタックの環境と
+`config.ts` のインターフェースの両方を更新することになります — ビルド時の
+テナント別分岐は存在しません。
+
+## コストゼロ原則
+
+このプラットフォームは AWS 無料利用枠に収まるように設計されており、以下のルールは
+アーキテクチャハーネスによって機械的にチェックされます。
+
+- **シークレット**は SSM Parameter Store の SecureString を使用します。
+  `@aws-sdk/client-secrets-manager` は禁止です。
+- **DynamoDB** テーブルは、`DynamoDbLowCapacity` CDK アスペクトによって
+  PROVISIONED 1 RCU / 1 WCU に強制されます。オンデマンド（`PAY_PER_REQUEST`）は
+  拒否されます。
+- **SSE / WebSocket は使いません** — フロントエンドはポーリングを行い、これは
+  Lambda の運用モデルに整合します。EventBridge 駆動のリコンサイルにより、
+  ポーリングポリシーを変えることなくポーリング圧力を低減します。
+
+関連: [イベントをエンドツーエンドで運営する](/developers/docs/operate/run-an-event/)、
+および[デプロイモードと起動パス](/developers/docs/operate/deploy-paths/)。

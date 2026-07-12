@@ -50,8 +50,10 @@ describe("docs registry — first pack tutorial", () => {
       "Just want to run an existing pack? → [Use an existing pack](/developers/docs/operate/use-existing-pack/).";
 
     expect(FIRST_PACK_SOURCE).toContain(branchLink);
+    const prerequisitesHeading = "## Prerequisites";
+    expect(FIRST_PACK_SOURCE).toContain(prerequisitesHeading);
     expect(FIRST_PACK_SOURCE.indexOf(branchLink)).toBeLessThan(
-      FIRST_PACK_SOURCE.indexOf("## 前提条件 (prerequisites)"),
+      FIRST_PACK_SOURCE.indexOf(prerequisitesHeading),
     );
   });
 

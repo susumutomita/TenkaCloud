@@ -24,6 +24,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { marked } from "marked";
+import { DOC_PAGES } from "../../apps/developer-portal/src/content/docs-registry";
 import { REFERENCE_DATA } from "../../apps/developer-portal/src/content/reference-data";
 import { MATURITY_LABELS, type Maturity } from "../../apps/developer-portal/src/lib/maturity";
 
@@ -31,6 +32,17 @@ const REPO_ROOT = resolve(import.meta.dirname, "../..");
 const MDX_ROOT = join(REPO_ROOT, "apps/developer-portal/src/app/developers/docs");
 const OUT_ROOT = join(REPO_ROOT, "landing/docs");
 const GITHUB_REPO = "https://github.com/susumutomita/TenkaCloud";
+const SITE_ORIGIN = "https://tenkacloud.com";
+
+/**
+ * Locale model mirrors the hand-built landing: the path root serves Japanese
+ * (`index.html`) and English lives beside it as `index.en.html`. Every docs
+ * page therefore needs BOTH sources: `page.mdx` (en) and `page.ja.mdx` (ja) —
+ * a missing translation fails the build loudly (no silent single-language
+ * fallback).
+ */
+type Locale = "ja" | "en";
+const LOCALES: readonly Locale[] = ["ja", "en"];
 
 interface DocPage {
   readonly slug: string; // path under /docs/, no leading/trailing slash
@@ -39,6 +51,7 @@ interface DocPage {
 
 interface DocSection {
   readonly title: string;
+  readonly jaTitle: string;
   readonly pages: readonly DocPage[];
 }
 
@@ -47,10 +60,12 @@ interface DocSection {
 const SECTIONS: readonly DocSection[] = [
   {
     title: "Getting started",
+    jaTitle: "はじめに",
     pages: [{ slug: "getting-started", mdx: "getting-started/page.mdx" }],
   },
   {
     title: "Concepts",
+    jaTitle: "コンセプト",
     pages: [
       { slug: "concepts/problem-packs", mdx: "concepts/problem-packs/page.mdx" },
       { slug: "concepts/architecture", mdx: "concepts/architecture/page.mdx" },
@@ -58,17 +73,21 @@ const SECTIONS: readonly DocSection[] = [
   },
   {
     title: "Tutorials",
+    jaTitle: "チュートリアル",
     pages: [{ slug: "tutorials/first-pack", mdx: "tutorials/first-pack/page.mdx" }],
   },
   {
     title: "Operate",
+    jaTitle: "運用",
     pages: [
       { slug: "operate/deploy-paths", mdx: "operate/deploy-paths/page.mdx" },
       { slug: "operate/run-an-event", mdx: "operate/run-an-event/page.mdx" },
+      { slug: "operate/use-existing-pack", mdx: "operate/use-existing-pack/page.mdx" },
     ],
   },
   {
     title: "Reference",
+    jaTitle: "リファレンス",
     pages: [
       { slug: "reference/pack-manifest", mdx: "reference/pack-manifest/page.mdx" },
       { slug: "reference/problem-metadata", mdx: "reference/problem-metadata/page.mdx" },
@@ -165,7 +184,11 @@ const COMPONENT_RENDERERS: Record<string, () => string> = {
 
 // --- MDX → markdown-with-inline-HTML ---
 
-function transformMdx(source: string, mdxPath: string): { title: string; markdown: string } {
+function transformMdx(
+  source: string,
+  mdxPath: string,
+  locale: Locale,
+): { title: string; markdown: string } {
   let title = "";
   const kept: string[] = [];
   for (const line of source.split("\n")) {
@@ -197,8 +220,14 @@ function transformMdx(source: string, mdxPath: string): { title: string; markdow
     throw new Error(`${mdxPath}: unhandled JSX remains: ${leftover[0]}`);
   }
 
-  // Internal links: docs stay on the landing; portal-only surfaces go to GitHub.
-  markdown = markdown.replaceAll("](/developers/docs/", "](/docs/");
+  // Internal links: docs stay on the landing (same locale); portal-only
+  // surfaces go to GitHub. English pages must link the .en variants, or one
+  // click would silently switch the reader to Japanese.
+  markdown = markdown.replace(
+    /\]\(\/developers\/docs\/([^)#?]*?)\/?((#|\?)[^)]*)?\)/g,
+    (_m, path: string, hash: string | undefined) =>
+      `](${docsUrl(path.length > 0 ? path : null, locale)}${hash ?? ""})`,
+  );
   markdown = markdown.replaceAll("](/developers/api/", `](${GITHUB_REPO}#readme`);
   markdown = markdown.replaceAll("](/developers/examples/", `](${GITHUB_REPO}#readme`);
   markdown = markdown.replaceAll("](/developers/", `](${GITHUB_REPO}#readme`);
@@ -213,41 +242,100 @@ function transformMdx(source: string, mdxPath: string): { title: string; markdow
 
 const BRAND_MARK = `<svg viewBox="0 0 120 120" width="1.05em" height="1.05em" aria-hidden="true" style="display:block;flex:none"><rect x="26" y="24" width="68" height="12" rx="6" fill="currentColor"></rect><path d="M26 90 L60 48 L94 90" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"></path></svg>`;
 
-function sidebar(currentSlug: string | null): string {
+function docsUrl(slug: string | null, locale: Locale): string {
+  const base = slug ? `/docs/${slug}/` : "/docs/";
+  return locale === "en" ? `${base}index.en.html` : base;
+}
+
+function outPath(slug: string | null, locale: Locale): string {
+  const file = locale === "en" ? "index.en.html" : "index.html";
+  return slug ? join(OUT_ROOT, slug, file) : join(OUT_ROOT, file);
+}
+
+/** Per-locale UI chrome strings (the article body comes from the MDX). */
+const CHROME = {
+  ja: {
+    home: "ホーム",
+    homeHref: "/",
+    backHome: "← ホーム",
+    docsHome: "Docs ホーム",
+    langSwitchLabel: "English",
+    docsSuffix: "TenkaCloud Docs",
+  },
+  en: {
+    home: "Home",
+    homeHref: "/index.en.html",
+    backHome: "← Home",
+    docsHome: "Docs home",
+    langSwitchLabel: "日本語",
+    docsSuffix: "TenkaCloud Docs",
+  },
+} as const;
+
+function sidebar(currentSlug: string | null, locale: Locale): string {
+  const chrome = CHROME[locale];
   const sections = SECTIONS.map((section) => {
     const links = section.pages
       .map((page) => {
         const current = page.slug === currentSlug ? ' aria-current="page"' : "";
-        const label = escapeHtml(pageTitle(page));
-        return `<li><a href="/docs/${page.slug}/"${current}>${label}</a></li>`;
+        const label = escapeHtml(pageTitle(page, locale));
+        return `<li><a href="${docsUrl(page.slug, locale)}"${current}>${label}</a></li>`;
       })
       .join("\n");
-    return `<section><h5>${escapeHtml(section.title)}</h5><ul>\n${links}\n</ul></section>`;
+    const title = locale === "ja" ? section.jaTitle : section.title;
+    return `<section><h5>${escapeHtml(title)}</h5><ul>\n${links}\n</ul></section>`;
   }).join("\n");
-  return `<aside class="docs-nav"><a class="docs-home-link" href="/docs/">Docs home</a>\n${sections}\n</aside>`;
+  return `<aside class="docs-nav"><a class="docs-home-link" href="${docsUrl(null, locale)}">${chrome.docsHome}</a>\n${sections}\n</aside>`;
 }
 
 const titleCache = new Map<string, string>();
 
-function pageTitle(page: DocPage): string {
-  const cached = titleCache.get(page.slug);
+function mdxPathFor(page: DocPage, locale: Locale): string {
+  return locale === "ja" ? page.mdx.replace(/page\.mdx$/, "page.ja.mdx") : page.mdx;
+}
+
+function readMdxSource(page: DocPage, locale: Locale): string {
+  const path = join(MDX_ROOT, mdxPathFor(page, locale));
+  if (!existsSync(path)) {
+    throw new Error(
+      `missing ${locale} source for /docs/${page.slug}/ — expected ${mdxPathFor(page, locale)} (every docs page needs page.mdx AND page.ja.mdx)`,
+    );
+  }
+  return readFileSync(path, "utf8");
+}
+
+function pageTitle(page: DocPage, locale: Locale): string {
+  const key = `${locale}:${page.slug}`;
+  const cached = titleCache.get(key);
   if (cached) return cached;
-  const source = readFileSync(join(MDX_ROOT, page.mdx), "utf8");
+  const source = readMdxSource(page, locale);
   const meta = source.match(/^export const metadata = \{ title: "([^"]+)" \};?$/m);
   const title = meta ? meta[1] : page.slug;
-  titleCache.set(page.slug, title);
+  titleCache.set(key, title);
   return title;
 }
 
-function shell(args: { title: string; slug: string | null; article: string }): string {
+function shell(args: {
+  title: string;
+  slug: string | null;
+  article: string;
+  locale: Locale;
+}): string {
+  const chrome = CHROME[args.locale];
+  const jaUrl = docsUrl(args.slug, "ja");
+  const enUrl = docsUrl(args.slug, "en");
+  const langSwitchHref = args.locale === "ja" ? enUrl : jaUrl;
   return `<!doctype html>
 <!-- Generated by scripts/landing/generate-landing-docs.ts — do not edit by hand.
      Source: apps/developer-portal/src/app/developers/docs/ (single source of truth). -->
-<html lang="ja">
+<html lang="${args.locale}">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>${escapeHtml(args.title)} — TenkaCloud Docs</title>
+<title>${escapeHtml(args.title)} — ${chrome.docsSuffix}</title>
+<link rel="canonical" href="${SITE_ORIGIN}${args.locale === "ja" ? jaUrl : enUrl}" />
+<link rel="alternate" hreflang="ja" href="${SITE_ORIGIN}${jaUrl}" />
+<link rel="alternate" hreflang="en" href="${SITE_ORIGIN}${enUrl}" />
 <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -257,52 +345,89 @@ function shell(args: { title: string; slug: string | null; article: string }): s
 <body>
 <header class="top">
   <div class="wrap top-inner">
-    <a class="brand" href="/">${BRAND_MARK}TenkaCloud <span class="brand-docs">Docs</span></a>
-    <span class="top-links"><a href="/">← ホーム</a> · <a href="${GITHUB_REPO}" target="_blank" rel="noopener noreferrer">GitHub</a></span>
+    <a class="brand" href="${chrome.homeHref}">${BRAND_MARK}TenkaCloud <span class="brand-docs">Docs</span></a>
+    <span class="top-links"><a href="${chrome.homeHref}">${chrome.backHome}</a> · <a href="${GITHUB_REPO}" target="_blank" rel="noopener noreferrer">GitHub</a> · <a href="${langSwitchHref}" hreflang="${args.locale === "ja" ? "en" : "ja"}" rel="alternate">${chrome.langSwitchLabel}</a></span>
   </div>
 </header>
 <div class="wrap docs-grid">
-${sidebar(args.slug)}
+${sidebar(args.slug, args.locale)}
 <main class="doc">
 ${args.article}
 </main>
 </div>
 <footer class="docs-footer">
-  <div class="wrap">© 2026 合同会社BULL · TenkaCloud · Apache License 2.0 · <a href="/docs/">Docs home</a> · <a href="/">ホーム</a></div>
+  <div class="wrap">© 2026 合同会社BULL · TenkaCloud · Apache License 2.0 · <a href="${docsUrl(null, args.locale)}">${chrome.docsHome}</a> · <a href="${chrome.homeHref}">${chrome.home}</a></div>
 </footer>
 </body>
 </html>
 `;
 }
 
-function docsHome(): string {
+const HOME_COPY = {
+  ja: {
+    title: "開発者ドキュメント",
+    lede: `問題パックの作成から、イベント運営、スキーマ / CLI リファレンスまで。ソースは <a href="${GITHUB_REPO}" target="_blank" rel="noopener noreferrer">GitHub</a> のリポジトリと同期しています。API reference と examples は当面 GitHub 側を参照してください。`,
+  },
+  en: {
+    title: "Developer docs",
+    lede: `From authoring problem packs to running events, plus the schema / CLI reference. The source is kept in sync with the <a href="${GITHUB_REPO}" target="_blank" rel="noopener noreferrer">GitHub</a> repository; for the API reference and examples, use GitHub for now.`,
+  },
+} as const;
+
+function docsHome(locale: Locale): string {
   const cards = SECTIONS.map((section) => {
     const links = section.pages
-      .map((page) => `<li><a href="/docs/${page.slug}/">${escapeHtml(pageTitle(page))}</a></li>`)
+      .map(
+        (page) =>
+          `<li><a href="${docsUrl(page.slug, locale)}">${escapeHtml(pageTitle(page, locale))}</a></li>`,
+      )
       .join("\n");
-    return `<section class="docs-card"><h2>${escapeHtml(section.title)}</h2><ul>\n${links}\n</ul></section>`;
+    const title = locale === "ja" ? section.jaTitle : section.title;
+    return `<section class="docs-card"><h2>${escapeHtml(title)}</h2><ul>\n${links}\n</ul></section>`;
   }).join("\n");
-  const article = `<h1>Developer docs</h1>
-<p class="lede">問題パックの作成から、イベント運営、スキーマ / CLI リファレンスまで。ソースは <a href="${GITHUB_REPO}" target="_blank" rel="noopener noreferrer">GitHub</a> のリポジトリと同期しています。API reference と examples は当面 GitHub 側を参照してください。</p>
+  const copy = HOME_COPY[locale];
+  const article = `<h1>${escapeHtml(copy.title)}</h1>
+<p class="lede">${copy.lede}</p>
 <div class="docs-cards">
 ${cards}
 </div>`;
-  return shell({ title: "Developer docs", slug: null, article });
+  return shell({ title: copy.title, slug: null, article, locale });
 }
 
-async function renderPage(page: DocPage): Promise<string> {
-  const source = readFileSync(join(MDX_ROOT, page.mdx), "utf8");
-  const { title, markdown } = transformMdx(source, page.mdx);
+async function renderPage(page: DocPage, locale: Locale): Promise<string> {
+  const source = readMdxSource(page, locale);
+  const { title, markdown } = transformMdx(source, mdxPathFor(page, locale), locale);
   const body = await marked.parse(markdown, { gfm: true, async: true });
-  return shell({ title, slug: page.slug, article: `<article>\n${body}\n</article>` });
+  return shell({ title, slug: page.slug, article: `<article>\n${body}\n</article>`, locale });
+}
+
+/**
+ * The portal's docs-registry (its sidebar/search source of truth) and this
+ * generator's SECTIONS must list the same pages — this is the loud drift guard
+ * that was previously only a comment (operate/use-existing-pack had already
+ * fallen through the gap).
+ */
+function assertRegistryParity(): void {
+  const registry = new Set(DOC_PAGES.map((page) => page.slug));
+  const sections = new Set(SECTIONS.flatMap((section) => section.pages.map((page) => page.slug)));
+  const missing = [...registry].filter((slug) => !sections.has(slug));
+  const extra = [...sections].filter((slug) => !registry.has(slug));
+  if (missing.length > 0 || extra.length > 0) {
+    throw new Error(
+      `docs page drift vs docs-registry.ts — missing from generator: [${missing.join(", ")}], not in registry: [${extra.join(", ")}]`,
+    );
+  }
 }
 
 async function generate(): Promise<Map<string, string>> {
+  assertRegistryParity();
   const files = new Map<string, string>();
-  files.set(join(OUT_ROOT, "index.html"), docsHome());
-  for (const section of SECTIONS) {
-    for (const page of section.pages) {
-      files.set(join(OUT_ROOT, page.slug, "index.html"), await renderPage(page));
+  for (const locale of LOCALES) {
+    files.set(outPath(null, locale), docsHome(locale));
+    for (const section of SECTIONS) {
+      for (const page of section.pages) {
+        files.set(outPath(page.slug, locale), await renderPage(page, locale));
+      }
     }
   }
   return files;

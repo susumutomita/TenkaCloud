@@ -1,0 +1,39 @@
+import { MaturityBadge } from "@/components/MaturityBadge";
+import { ManifestFieldTable } from "@/components/ReferenceTables";
+
+export const metadata = { title: "パックマニフェスト" };
+
+# パックマニフェストリファレンス <MaturityBadge level="stable" />
+
+`tenkacloud-pack.json` マニフェストは、問題パックの唯一のエントリポイントです。
+以下のフィールドは、`@tenkacloud/problem-sdk` の `PackManifestSchema` zod スキーマ
+から生成された**規範的リファレンス**です。スキーマは `.strict()` のため、未知の
+トップレベルフィールドはすべて拒否されます。
+
+## フィールド
+
+<ManifestFieldTable />
+
+マニフェストは意図的に不活性です。v1 には、作者のクレデンシャル、リモート URL、
+スクリプト、実行可能なフックは一切含まれません。[セキュリティとプロベナンスのモデル](/developers/docs/reference/security-provenance/)を参照してください。
+
+## 例
+
+以下の例は説明用であり、規範ではありません — 上記のフィールドルールが正となります。
+
+```json
+{
+  "schemaVersion": 1,
+  "id": "com.example.starter",
+  "version": "1.0.0",
+  "core": ">=1.0.0",
+  "title": "Starter pack",
+  "description": "A minimal validator-passing pack.",
+  "license": "Apache-2.0",
+  "problemsRoot": "problems",
+  "requiredRuntimes": [{ "provider": "aws", "engine": "cloudformation" }]
+}
+```
+
+関連: [問題メタデータリファレンス](/developers/docs/reference/problem-metadata/)、
+および [CLI リファレンス](/developers/docs/reference/cli/)。

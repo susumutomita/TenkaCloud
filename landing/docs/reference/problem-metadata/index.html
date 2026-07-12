@@ -5,7 +5,10 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Problem metadata reference — TenkaCloud Docs</title>
+<title>問題メタデータ — TenkaCloud Docs</title>
+<link rel="canonical" href="https://tenkacloud.com/docs/reference/problem-metadata/" />
+<link rel="alternate" hreflang="ja" href="https://tenkacloud.com/docs/reference/problem-metadata/" />
+<link rel="alternate" hreflang="en" href="https://tenkacloud.com/docs/reference/problem-metadata/index.en.html" />
 <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -16,43 +19,44 @@
 <header class="top">
   <div class="wrap top-inner">
     <a class="brand" href="/"><svg viewBox="0 0 120 120" width="1.05em" height="1.05em" aria-hidden="true" style="display:block;flex:none"><rect x="26" y="24" width="68" height="12" rx="6" fill="currentColor"></rect><path d="M26 90 L60 48 L94 90" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"></path></svg>TenkaCloud <span class="brand-docs">Docs</span></a>
-    <span class="top-links"><a href="/">← ホーム</a> · <a href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer">GitHub</a></span>
+    <span class="top-links"><a href="/">← ホーム</a> · <a href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer">GitHub</a> · <a href="/docs/reference/problem-metadata/index.en.html" hreflang="en" rel="alternate">English</a></span>
   </div>
 </header>
 <div class="wrap docs-grid">
-<aside class="docs-nav"><a class="docs-home-link" href="/docs/">Docs home</a>
-<section><h5>Getting started</h5><ul>
-<li><a href="/docs/getting-started/">Getting started</a></li>
+<aside class="docs-nav"><a class="docs-home-link" href="/docs/">Docs ホーム</a>
+<section><h5>はじめに</h5><ul>
+<li><a href="/docs/getting-started/">はじめに</a></li>
 </ul></section>
-<section><h5>Concepts</h5><ul>
-<li><a href="/docs/concepts/problem-packs/">Problem packs</a></li>
-<li><a href="/docs/concepts/architecture/">Platform architecture</a></li>
+<section><h5>コンセプト</h5><ul>
+<li><a href="/docs/concepts/problem-packs/">問題パック</a></li>
+<li><a href="/docs/concepts/architecture/">プラットフォームアーキテクチャ</a></li>
 </ul></section>
-<section><h5>Tutorials</h5><ul>
-<li><a href="/docs/tutorials/first-pack/">First pack tutorial</a></li>
+<section><h5>チュートリアル</h5><ul>
+<li><a href="/docs/tutorials/first-pack/">はじめての問題パック</a></li>
 </ul></section>
-<section><h5>Operate</h5><ul>
-<li><a href="/docs/operate/deploy-paths/">Deploy modes and launch paths</a></li>
-<li><a href="/docs/operate/run-an-event/">Run an event end to end</a></li>
+<section><h5>運用</h5><ul>
+<li><a href="/docs/operate/deploy-paths/">デプロイモードと起動経路</a></li>
+<li><a href="/docs/operate/run-an-event/">イベントをエンドツーエンドで運営する</a></li>
+<li><a href="/docs/operate/use-existing-pack/">既存パックを使う</a></li>
 </ul></section>
-<section><h5>Reference</h5><ul>
-<li><a href="/docs/reference/pack-manifest/">Pack manifest reference</a></li>
-<li><a href="/docs/reference/problem-metadata/" aria-current="page">Problem metadata reference</a></li>
-<li><a href="/docs/reference/runtime-matrix/">Runtime capability matrix</a></li>
-<li><a href="/docs/reference/cli/">CLI reference</a></li>
-<li><a href="/docs/reference/security-provenance/">Security and provenance model</a></li>
-<li><a href="/docs/reference/validation-errors/">Validation error reference</a></li>
+<section><h5>リファレンス</h5><ul>
+<li><a href="/docs/reference/pack-manifest/">パックマニフェスト</a></li>
+<li><a href="/docs/reference/problem-metadata/" aria-current="page">問題メタデータ</a></li>
+<li><a href="/docs/reference/runtime-matrix/">ランタイム対応マトリクス</a></li>
+<li><a href="/docs/reference/cli/">CLI リファレンス</a></li>
+<li><a href="/docs/reference/security-provenance/">セキュリティと来歴モデル</a></li>
+<li><a href="/docs/reference/validation-errors/">検証エラーリファレンス</a></li>
 </ul></section>
 </aside>
 <main class="doc">
 <article>
-<h1>Problem metadata reference <span class="doc-badge doc-badge--stable">Stable</span></h1>
-<p>Each problem in a pack carries a <code>metadata.json</code>. The fields below are <strong>normative
-reference</strong> derived from the <code>ProblemMetadata</code> contract and the
-<code>validateProblemMetadata</code> validator in <code>@tenkacloud/problem-sdk</code>. The SDK owns the
-<code>id</code>, <code>runtime</code>, and <code>scoring</code> fields and is forward-compatible with extra
-catalog-display fields it does not interpret.</p>
-<h2>Fields</h2>
+<h1>問題メタデータリファレンス <span class="doc-badge doc-badge--stable">Stable</span></h1>
+<p>パック内の各問題は <code>metadata.json</code> を持ちます。以下のフィールドは、
+<code>@tenkacloud/problem-sdk</code> の <code>ProblemMetadata</code> コントラクトと
+<code>validateProblemMetadata</code> バリデーターから導出された<strong>規範的リファレンス</strong>です。
+SDK は <code>id</code>、<code>runtime</code>、<code>scoring</code> フィールドを所有し、SDK 自身が解釈しない追加の
+カタログ表示用フィールドに対しては前方互換です。</p>
+<h2>フィールド</h2>
 <table class="reference-table"><thead><tr><th>Field</th><th>Type</th><th>Presence</th><th>Description</th></tr></thead><tbody>
 <tr><td><code>id</code></td><td><code>string</code></td><td>Required</td><td>Stable, non-empty problem identifier. Validated by the SDK.</td></tr>
 <tr><td><code>runtime</code></td><td><code>object | composite</code></td><td>Optional</td><td>Runtime descriptor ({ provider, engine, entry }) or a composite { kind: 'composite', targets }. Defaults to aws/cloudformation when absent.</td></tr>
@@ -61,27 +65,27 @@ catalog-display fields it does not interpret.</p>
 <tr><td><code>endpoints</code></td><td><code>unknown</code></td><td>Optional</td><td>Optional endpoint declarations validated by the metadata-section validators.</td></tr>
 <tr><td><code>phases</code></td><td><code>unknown</code></td><td>Optional</td><td>Optional phase declarations for phased-polling problems.</td></tr>
 <tr><td><code>disruptions</code></td><td><code>unknown</code></td><td>Optional</td><td>Optional disruption declarations for resilience problems.</td></tr>
-</tbody></table><h2>Runtime declaration</h2>
-<p>A problem&#39;s runtime is either a single <code>{ provider, engine, entry }</code> descriptor or
-a composite <code>{ kind: &quot;composite&quot;, targets }</code>. A composite runtime requires between
-2 and 8 targets. The recognized provider/engine pairs are listed in the
-<a href="/docs/reference/runtime-matrix/">runtime capability matrix</a>.</p>
-<h2>Example</h2>
-<p>The example below is illustrative, not normative.</p>
+</tbody></table><h2>ランタイム宣言</h2>
+<p>問題のランタイムは、単一の <code>{ provider, engine, entry }</code> ディスクリプタか、
+複合の <code>{ kind: &quot;composite&quot;, targets }</code> のいずれかです。複合ランタイムには
+2 個以上 8 個以下のターゲットが必要です。認識される provider/engine の組み合わせは
+<a href="/docs/reference/runtime-matrix/">ランタイム機能マトリクス</a>に記載されています。</p>
+<h2>例</h2>
+<p>以下の例は説明用であり、規範ではありません。</p>
 <pre><code class="language-json">{
   &quot;id&quot;: &quot;com.example.starter.intro&quot;,
   &quot;runtime&quot;: { &quot;provider&quot;: &quot;aws&quot;, &quot;engine&quot;: &quot;cloudformation&quot;, &quot;entry&quot;: &quot;template.yaml&quot; },
   &quot;scoring&quot;: { &quot;kind&quot;: &quot;flag&quot;, &quot;flagOutputKey&quot;: &quot;Flag&quot;, &quot;points&quot;: 100 }
 }
 </code></pre>
-<p>Related: <a href="/docs/reference/pack-manifest/">pack manifest reference</a> and
-the <a href="/docs/reference/validation-errors/">validation error reference</a>.</p>
+<p>関連: <a href="/docs/reference/pack-manifest/">パックマニフェストリファレンス</a>、
+および<a href="/docs/reference/validation-errors/">バリデーションエラーリファレンス</a>。</p>
 
 </article>
 </main>
 </div>
 <footer class="docs-footer">
-  <div class="wrap">© 2026 合同会社BULL · TenkaCloud · Apache License 2.0 · <a href="/docs/">Docs home</a> · <a href="/">ホーム</a></div>
+  <div class="wrap">© 2026 合同会社BULL · TenkaCloud · Apache License 2.0 · <a href="/docs/">Docs ホーム</a> · <a href="/">ホーム</a></div>
 </footer>
 </body>
 </html>

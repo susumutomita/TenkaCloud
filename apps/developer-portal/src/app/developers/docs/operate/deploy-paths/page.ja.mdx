@@ -1,0 +1,42 @@
+import { MaturityBadge } from "@/components/MaturityBadge";
+
+export const metadata = { title: "デプロイモードと起動経路" };
+
+# デプロイモードと起動経路 <MaturityBadge level="preview" />
+
+初めて運用する方がつまずきやすい疑問が 2 つあります。「プラットフォームは実際どうやってデプロイするのか」と「CodePipeline がデフォルトなら、いつ実行されるのか」です。このページはその見取り図です。プラットフォーム自体は**手動の CLI** ステップでデプロイします。CodePipeline は**テナントスタックをロールアウトする**ためのものであり、プラットフォームを立ち上げるためのものではありません。
+
+## 2 つのデプロイモード
+
+- **Lite モード** — `make deploy`。1 人の主催者が 1 つのイベントを運営するためのモードです。SBT コントロールプレーン、テナントパイプライン、System Admin の招待をすべてスキップし、`infrastructure/bin/tenkacloud-lite.ts` 経由で 2 つのスタックだけをデプロイします。AppPlaneCore (`tenantId="local"`) と、problem-deploy バックエンド / Participant Portal です。**Lite モードに CodePipeline はありません。** 破棄は `make destroy` です。
+- **SaaS モード** — `make deploy-saas` (`scripts/install.sh`、3 フェーズ)。プール型の BASIC / ADVANCED ティア、サイロ型の PLATINUM ティア、System Admin の招待を含む、完全なマルチテナント運用です。破棄は `make destroy-saas` です。
+
+どちらのモードもオペレーターがシェルから実行します。CI がデプロイすることはありません。
+
+## 新しいテナントがプロビジョニングされる流れ
+
+新規テナントのプロビジョニングと、パイプラインによるロールアウトは**別々の経路**です。旧ドキュメントが取り違えていたのがこの区別です。
+
+- テナント作成イベント (`onboardingRequest`) を SBT の `BashJobRunner` が受け取り、`provision-tenant.sh` を実行します。デフォルトではテナントは**プール型**（プール型スタックを共有）で、`PLATINUM` ティアのテナントだけが専用のサイロスタックを直接デプロイされます (`bun cdk deploy tenkacloud-tenant-template-<id>`)。
+
+つまり、テナントを 1 つ作成しても CodePipeline は実行されません。実行されるのはプロビジョニングジョブです。
+
+## SaaS パイプラインの役割
+
+`tenkacloud-saas-pipeline` (CodePipeline) は、テナントを作成するためではなく、**既存の全テナントへテナントスタックをロールアウトする**ために存在します。ソースは S3 オブジェクト（`source.zip`。`make deploy-saas` 中に `prepare-source-bundle.sh` がアップロードします）で、パイプラインはこれをポーリングします。変更を検知すると、DynamoDB のテナント一覧をたどり、各テナントスタックをウェーブ単位でデプロイ / 更新します（Step Functions の WaveIterator が CodeBuild を駆動します）。このように、新規テナントの作成と既存テナントへのロールアウトは別のルートを通ります。
+
+## 問題がデプロイされる流れ
+
+主催者がコンソールで **Deploy** をクリックすると、次のように進みます。
+
+1. コンソールが Deploy API を呼び出します。API はリクエストを検証し、Deployments テーブルに行を書き込み、`DeployCreateRequested` イベントをバスに発行します。
+2. Step Functions の実行が CodeBuild ジョブを開始します (`.sync`)。
+3. ワーカーがテナントの **ExternalId**（常に必須です）を使って競技者アカウントのロールを AssumeRole し、そのアカウント内で CloudFormation の `CreateStack` を実行します。
+
+その後、コンソールはスタックが終了状態に達するまでデプロイのステータスをポーリングします。
+
+## 問題パック
+
+問題パック（[最初のパックのチュートリアル](/developers/docs/tutorials/first-pack/)を参照）は Lite 経路だけを通ります。Lite は synth 時に固定のテナント id `local` のアクティベーションを読み取るため、`make deploy` の前に `--tenant local` でアクティベートしてください。一方 SaaS モードは、パックのアクティベーションが 1 つでも存在すると synth 時に明示的に失敗します。プール型カタログから黙って除外することはありません。`CDK_PARAM_SAAS_IGNORE_PACKS=true` を設定するとこれを上書きしてそのまま進められますが、その場合、アクティベーションは単にどのテナントのカタログにも現れなくなります。
+
+関連: [イベントをエンドツーエンドで運営する](/developers/docs/operate/run-an-event/)、[プラットフォームアーキテクチャ](/developers/docs/concepts/architecture/)。

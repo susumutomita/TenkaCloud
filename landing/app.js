@@ -680,17 +680,19 @@
         "./privacy.en.html": "./privacy.html",
         "./terms.en.html": "./terms.html",
         "./legal.en.html": "./legal.html",
+        "./docs/index.en.html": "./docs/",
       },
       en: {
         "./privacy.html": "./privacy.en.html",
         "./terms.html": "./terms.en.html",
         "./legal.html": "./legal.en.html",
+        "./docs/": "./docs/index.en.html",
       },
     };
     var hrefMap = LEGAL_HREF_MAP[lang] || {};
     document
       .querySelectorAll(
-        'footer a[href$="privacy.html"], footer a[href$="terms.html"], footer a[href$="legal.html"], footer a[href$="privacy.en.html"], footer a[href$="terms.en.html"], footer a[href$="legal.en.html"]',
+        'footer a[href$="privacy.html"], footer a[href$="terms.html"], footer a[href$="legal.html"], footer a[href$="privacy.en.html"], footer a[href$="terms.en.html"], footer a[href$="legal.en.html"], a[href="./docs/"], a[href="./docs/index.en.html"]',
       )
       .forEach((a) => {
         var src = a.getAttribute("href");

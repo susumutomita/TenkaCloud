@@ -1,0 +1,38 @@
+import { MaturityBadge } from "@/components/MaturityBadge";
+import { MetadataFieldTable } from "@/components/ReferenceTables";
+
+export const metadata = { title: "問題メタデータ" };
+
+# 問題メタデータリファレンス <MaturityBadge level="stable" />
+
+パック内の各問題は `metadata.json` を持ちます。以下のフィールドは、
+`@tenkacloud/problem-sdk` の `ProblemMetadata` コントラクトと
+`validateProblemMetadata` バリデーターから導出された**規範的リファレンス**です。
+SDK は `id`、`runtime`、`scoring` フィールドを所有し、SDK 自身が解釈しない追加の
+カタログ表示用フィールドに対しては前方互換です。
+
+## フィールド
+
+<MetadataFieldTable />
+
+## ランタイム宣言
+
+問題のランタイムは、単一の `{ provider, engine, entry }` ディスクリプタか、
+複合の `{ kind: "composite", targets }` のいずれかです。複合ランタイムには
+2 個以上 8 個以下のターゲットが必要です。認識される provider/engine の組み合わせは
+[ランタイム機能マトリクス](/developers/docs/reference/runtime-matrix/)に記載されています。
+
+## 例
+
+以下の例は説明用であり、規範ではありません。
+
+```json
+{
+  "id": "com.example.starter.intro",
+  "runtime": { "provider": "aws", "engine": "cloudformation", "entry": "template.yaml" },
+  "scoring": { "kind": "flag", "flagOutputKey": "Flag", "points": 100 }
+}
+```
+
+関連: [パックマニフェストリファレンス](/developers/docs/reference/pack-manifest/)、
+および[バリデーションエラーリファレンス](/developers/docs/reference/validation-errors/)。

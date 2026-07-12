@@ -1,0 +1,30 @@
+import { MaturityBadge } from "@/components/MaturityBadge";
+import { RuntimeMatrixTable } from "@/components/ReferenceTables";
+
+export const metadata = { title: "ランタイム対応マトリクス" };
+
+# ランタイム対応マトリクス <MaturityBadge level="preview" />
+
+パックは、必要とする `(provider, engine)` ランタイムを宣言します。以下のマトリクスは、
+`@tenkacloud/problem-runtime` のランタイム対応宣言（`EXECUTABLE_PROVIDER` /
+`EXECUTABLE_ENGINE`、`RESERVED_RUNTIMES`、`CONTAINER_RUNTIMES`）から導出された
+**規範的リファレンス**です。エンジンが出荷されると reserved セットから外れ、
+この表は自動的に再生成されます。
+
+## マトリクス
+
+<RuntimeMatrixTable />
+
+## サポート区分
+
+- **executable** — 現時点でクラウドにデプロイ可能です。デプロイワーカーが競技者アカウント内で
+  CloudFormation の `CreateStack` を実行します。
+- **reserved** — ロードマップ上で認知されているものの、まだアダプターが存在しない
+  プロバイダー / エンジンです。バリデーターは受理しますが、デプロイワーカーは
+  クラウドデプロイを明示的に拒否します。
+- **container** — ローカルのコンテナランタイム（`make local`）です。認識はされますが、
+  クラウドにデプロイされることはありません。
+
+AWS は `Stable` です。GCP、Azure、Sakura は `Planned` の reserved ロードマップターゲットです。
+
+関連: [問題メタデータリファレンス](/developers/docs/reference/problem-metadata/)。

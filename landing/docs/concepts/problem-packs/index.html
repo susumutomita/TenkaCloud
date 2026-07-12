@@ -5,7 +5,10 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Problem packs — TenkaCloud Docs</title>
+<title>問題パック — TenkaCloud Docs</title>
+<link rel="canonical" href="https://tenkacloud.com/docs/concepts/problem-packs/" />
+<link rel="alternate" hreflang="ja" href="https://tenkacloud.com/docs/concepts/problem-packs/" />
+<link rel="alternate" hreflang="en" href="https://tenkacloud.com/docs/concepts/problem-packs/index.en.html" />
 <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -16,56 +19,57 @@
 <header class="top">
   <div class="wrap top-inner">
     <a class="brand" href="/"><svg viewBox="0 0 120 120" width="1.05em" height="1.05em" aria-hidden="true" style="display:block;flex:none"><rect x="26" y="24" width="68" height="12" rx="6" fill="currentColor"></rect><path d="M26 90 L60 48 L94 90" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"></path></svg>TenkaCloud <span class="brand-docs">Docs</span></a>
-    <span class="top-links"><a href="/">← ホーム</a> · <a href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer">GitHub</a></span>
+    <span class="top-links"><a href="/">← ホーム</a> · <a href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer">GitHub</a> · <a href="/docs/concepts/problem-packs/index.en.html" hreflang="en" rel="alternate">English</a></span>
   </div>
 </header>
 <div class="wrap docs-grid">
-<aside class="docs-nav"><a class="docs-home-link" href="/docs/">Docs home</a>
-<section><h5>Getting started</h5><ul>
-<li><a href="/docs/getting-started/">Getting started</a></li>
+<aside class="docs-nav"><a class="docs-home-link" href="/docs/">Docs ホーム</a>
+<section><h5>はじめに</h5><ul>
+<li><a href="/docs/getting-started/">はじめに</a></li>
 </ul></section>
-<section><h5>Concepts</h5><ul>
-<li><a href="/docs/concepts/problem-packs/" aria-current="page">Problem packs</a></li>
-<li><a href="/docs/concepts/architecture/">Platform architecture</a></li>
+<section><h5>コンセプト</h5><ul>
+<li><a href="/docs/concepts/problem-packs/" aria-current="page">問題パック</a></li>
+<li><a href="/docs/concepts/architecture/">プラットフォームアーキテクチャ</a></li>
 </ul></section>
-<section><h5>Tutorials</h5><ul>
-<li><a href="/docs/tutorials/first-pack/">First pack tutorial</a></li>
+<section><h5>チュートリアル</h5><ul>
+<li><a href="/docs/tutorials/first-pack/">はじめての問題パック</a></li>
 </ul></section>
-<section><h5>Operate</h5><ul>
-<li><a href="/docs/operate/deploy-paths/">Deploy modes and launch paths</a></li>
-<li><a href="/docs/operate/run-an-event/">Run an event end to end</a></li>
+<section><h5>運用</h5><ul>
+<li><a href="/docs/operate/deploy-paths/">デプロイモードと起動経路</a></li>
+<li><a href="/docs/operate/run-an-event/">イベントをエンドツーエンドで運営する</a></li>
+<li><a href="/docs/operate/use-existing-pack/">既存パックを使う</a></li>
 </ul></section>
-<section><h5>Reference</h5><ul>
-<li><a href="/docs/reference/pack-manifest/">Pack manifest reference</a></li>
-<li><a href="/docs/reference/problem-metadata/">Problem metadata reference</a></li>
-<li><a href="/docs/reference/runtime-matrix/">Runtime capability matrix</a></li>
-<li><a href="/docs/reference/cli/">CLI reference</a></li>
-<li><a href="/docs/reference/security-provenance/">Security and provenance model</a></li>
-<li><a href="/docs/reference/validation-errors/">Validation error reference</a></li>
+<section><h5>リファレンス</h5><ul>
+<li><a href="/docs/reference/pack-manifest/">パックマニフェスト</a></li>
+<li><a href="/docs/reference/problem-metadata/">問題メタデータ</a></li>
+<li><a href="/docs/reference/runtime-matrix/">ランタイム対応マトリクス</a></li>
+<li><a href="/docs/reference/cli/">CLI リファレンス</a></li>
+<li><a href="/docs/reference/security-provenance/">セキュリティと来歴モデル</a></li>
+<li><a href="/docs/reference/validation-errors/">検証エラーリファレンス</a></li>
 </ul></section>
 </aside>
 <main class="doc">
 <article>
-<h1>Problem packs <span class="doc-badge doc-badge--stable">Stable</span></h1>
-<p>A <strong>problem pack</strong> is the unit of competition content on TenkaCloud.</p>
-<h2>What is a problem pack</h2>
-<p>Each pack carries metadata, a single-page CloudFormation template deployed
-straight into a competitor account, and an optional portal plugin.</p>
-<h2>Battle versus Challenge</h2>
+<h1>問題パック <span class="doc-badge doc-badge--stable">Stable</span></h1>
+<p><strong>問題パック</strong>は、TenkaCloud における競技コンテンツの単位です。</p>
+<h2>問題パックとは</h2>
+<p>各パックには、メタデータ、競技者アカウントへ直接デプロイされる単一ページの
+CloudFormation テンプレート、およびオプションのポータルプラグインが含まれます。</p>
+<h2>Battle と Challenge</h2>
 <ul>
-<li><strong>Battle</strong> packs are real-time and head-to-head.</li>
-<li><strong>Challenge</strong> packs are self-paced and evergreen.</li>
+<li><strong>Battle</strong> パックは、リアルタイムの対戦形式です。</li>
+<li><strong>Challenge</strong> パックは、自分のペースで取り組める常設形式です。</li>
 </ul>
-<h2>Scoring kinds</h2>
-<p>Scoring uses one of six built-in kinds — <code>flag</code>, <code>multi-flag</code>, <code>uptime-flat</code>,
-<code>uptime-multi</code>, <code>phased-polling</code>, or <code>attack-detection</code> — one per problem.</p>
-<p>Back to <a href="/docs/getting-started/">getting started</a>.</p>
+<h2>スコアリング種別</h2>
+<p>スコアリングは、6 つの組み込み種別 — <code>flag</code>、<code>multi-flag</code>、<code>uptime-flat</code>、
+<code>uptime-multi</code>、<code>phased-polling</code>、<code>attack-detection</code> — のいずれか 1 つを問題ごとに使用します。</p>
+<p><a href="/docs/getting-started/">はじめに</a>に戻る。</p>
 
 </article>
 </main>
 </div>
 <footer class="docs-footer">
-  <div class="wrap">© 2026 合同会社BULL · TenkaCloud · Apache License 2.0 · <a href="/docs/">Docs home</a> · <a href="/">ホーム</a></div>
+  <div class="wrap">© 2026 合同会社BULL · TenkaCloud · Apache License 2.0 · <a href="/docs/">Docs ホーム</a> · <a href="/">ホーム</a></div>
 </footer>
 </body>
 </html>
