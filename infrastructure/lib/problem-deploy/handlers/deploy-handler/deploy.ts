@@ -45,7 +45,12 @@ import { dispatchPreparedDeployment } from "./prepared-dispatch.js";
 import { generateChallengePayloadUrl } from "./presigned-url.js";
 import { resolveDeploymentsRepository } from "./shared.js";
 import { generateTeamLoginKey } from "./team-key.js";
-import type { CompositeDeployRequest, DeploymentItem, DeployResponse } from "./types.js";
+import {
+  type CompositeDeployRequest,
+  type DeploymentItem,
+  type DeployResponse,
+  runtimeItemFields,
+} from "./types.js";
 
 /**
  * deploy worker の実行コンテキスト。 provider 別 adapter 依存の DI surface (env / tenantId / events /
@@ -129,23 +134,6 @@ export type DeployInvocation = CompositeDeployRequest & {
 const DEFAULT_TTL_MS = 8 * 60 * 60 * 1000;
 
 const toEpochSeconds = (ms: number): number => Math.floor(ms / 1000);
-
-/**
- * [ADR-026/027/032 / #1410-1412] 非 AWS runtime のときだけ provider/engine/entry を DeploymentItem に
- * 載せる (= teardown / status の adapter 経路判別)。 AWS/CFn は field を載せず従来行と byte-identical。
- */
-function runtimeItemFields(
-  runtime: ProblemRuntime,
-): Pick<DeploymentItem, "runtimeProvider" | "runtimeEngine" | "runtimeEntry"> {
-  if (runtime.provider === EXECUTABLE_PROVIDER && runtime.engine === EXECUTABLE_ENGINE) {
-    return {};
-  }
-  return {
-    runtimeProvider: runtime.provider,
-    runtimeEngine: runtime.engine,
-    runtimeEntry: runtime.entry,
-  };
-}
 
 /**
  * ADR-008 Phase 3: private 問題なら 15min TTL の presigned URL を返す。 public 問題 /

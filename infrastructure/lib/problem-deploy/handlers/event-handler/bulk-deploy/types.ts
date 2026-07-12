@@ -1,12 +1,7 @@
 import type { PutEventsRequestEntry } from "@aws-sdk/client-eventbridge";
 import type { TeamRecord } from "../../../control-data/teams-repository.js";
 import type { DeploymentItem } from "../../deploy-handler/types.js";
-import {
-  AZURE_PROVIDER,
-  GCP_PROVIDER,
-  type ProblemRuntime,
-  SAKURA_PROVIDER,
-} from "../../shared/runtime/index.js";
+import type { ProblemRuntime } from "../../shared/runtime/index.js";
 import type { EventItem, EventProblemTarget } from "../types.js";
 
 /**
@@ -59,12 +54,18 @@ export const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export const toEpochSeconds = (ms: number): number => Math.floor(ms / 1000);
 
-/** 非 AWS の single-provider cloud runtime (= frozen CFn 経路に載せられない)。 */
-export const NON_AWS_CLOUD_PROVIDERS: readonly string[] = [
-  AZURE_PROVIDER,
-  GCP_PROVIDER,
-  SAKURA_PROVIDER,
-];
+/**
+ * [#2571 review-fix] `${provider}#${teamSlug}` cache-key builder shared by
+ * `verified-accounts.ts`'s `resolveBulkNonAwsCredentials` (the Set builder) and
+ * `plan-builder.ts`'s `buildNonAwsPlanCandidate` (the `.has()` lookup) — a single
+ * definition means the delimiter cannot drift between producer and consumer.
+ * (The `${provider}:${teamSlug}` format used in the *reporting* shape —
+ * `BulkDeployResult.missingCredentials` — is a separate, unrelated convention;
+ * it stays exactly as-is, it is an API contract.)
+ */
+export function nonAwsCredentialKey(provider: string, teamSlug: string): string {
+  return `${provider}#${teamSlug}`;
+}
 
 /**
  * [#2571] Bulk plan entry。 dispatch channel で discriminate する:
@@ -93,6 +94,17 @@ export type PlanEntry =
       /** retry / force redeploy のとき、対応する旧行の jobId (= これを DELETE)。 */
       readonly replacesJobId?: string;
     };
+
+/**
+ * [#2571 review-fix] Narrowed `PlanEntry` aliases, hoisted here so
+ * `orchestrator.ts` can partition `plan.entries` exactly once and hand each
+ * channel (`publishBulkDeployPlan` / `dispatchBulkAdapterEntries`) its own
+ * pre-filtered array — previously `publish.ts` and `adapter-dispatch.ts` each
+ * declared (and re-derived, in `publish.ts`'s case by filtering again inside)
+ * an unexported local copy of the same two types.
+ */
+export type EventBridgePlanEntry = Extract<PlanEntry, { kind: "eventbridge" }>;
+export type AdapterPlanEntry = Extract<PlanEntry, { kind: "adapter" }>;
 
 export interface LoadedBulkDeployTargets {
   readonly event: Partial<EventItem>;

@@ -9,7 +9,12 @@ import { publishBulkDeployPlan } from "./publish.js";
 import { buildResult, emptyBulkDeployResult } from "./result.js";
 import { loadBulkDeployTargets, selectBulkDeployTargets } from "./targets.js";
 import { traceBulkPlan, traceEmptyBulkDeploy, traceEmptyPlan, traceNoFailedRows } from "./trace.js";
-import type { BulkDeployOutcome, PlanEntry } from "./types.js";
+import type {
+  AdapterPlanEntry,
+  BulkDeployOutcome,
+  EventBridgePlanEntry,
+  PlanEntry,
+} from "./types.js";
 import { resolveBulkNonAwsCredentials, resolveBulkVerifiedAccounts } from "./verified-accounts.js";
 
 /**
@@ -86,14 +91,13 @@ export async function bulkDeployEvent(
   // [#2571] Both channels dispatch concurrently — they are independent per-row
   // operations (EventBridge fan-out / adapter REST calls) and every row was
   // already persisted PENDING above, so ordering between the two channels
-  // doesn't matter. `publishBulkDeployPlan` already filters to eventbridge-kind
-  // entries internally; `dispatchBulkAdapterEntries` gets the pre-filtered
-  // adapter-kind subset.
-  const adapterEntries = plan.entries.filter(
-    (entry): entry is Extract<PlanEntry, { kind: "adapter" }> => entry.kind === "adapter",
-  );
+  // doesn't matter.
+  // [#2571 review-fix] Partition `plan.entries` exactly once here (instead of
+  // `publishBulkDeployPlan` re-deriving the eventbridge subset internally via
+  // its own `.filter()`) and hand each channel its own pre-filtered array.
+  const { eventBridgeEntries, adapterEntries } = partitionBulkPlanEntries(plan.entries);
   const [eventBridgeFailures, adapterFailures] = await Promise.all([
-    publishBulkDeployPlan(shared, tenantId, eventId, plan.createdAt, plan.entries),
+    publishBulkDeployPlan(shared, tenantId, eventId, plan.createdAt, eventBridgeEntries),
     dispatchBulkAdapterEntries(shared, tenantId, adapterEntries),
   ]);
   const failures = [...eventBridgeFailures, ...adapterFailures];
@@ -115,4 +119,26 @@ export async function bulkDeployEvent(
     kind: "ok",
     result: buildResult({ eventId, enqueued: plan.entries.length, ...plan }),
   };
+}
+
+/**
+ * [#2571 review-fix] Split a plan into its two dispatch channels exactly once.
+ * `publish.ts`'s `publishBulkDeployPlan` used to receive the full mixed
+ * `plan.entries` and re-derive the eventbridge subset with its own internal
+ * `.filter()` — a second, redundant pass over the same array the caller had
+ * already filtered (for `adapterEntries`) one line above. Partitioning here
+ * means each channel gets exactly the pre-filtered array it needs and there is
+ * only ever one filter pass over `plan.entries`.
+ */
+function partitionBulkPlanEntries(entries: readonly PlanEntry[]): {
+  readonly eventBridgeEntries: readonly EventBridgePlanEntry[];
+  readonly adapterEntries: readonly AdapterPlanEntry[];
+} {
+  const eventBridgeEntries: EventBridgePlanEntry[] = [];
+  const adapterEntries: AdapterPlanEntry[] = [];
+  for (const entry of entries) {
+    if (entry.kind === "eventbridge") eventBridgeEntries.push(entry);
+    else adapterEntries.push(entry);
+  }
+  return { eventBridgeEntries, adapterEntries };
 }

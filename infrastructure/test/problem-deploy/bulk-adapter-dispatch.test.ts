@@ -37,6 +37,11 @@ function adapterEntry(jobId: string): AdapterPlanEntry {
       jobId,
       problemId: "gcp-problem",
       namePrefix: `tc-gcp-problem-team-${jobId}`,
+      // [#2571 review-fix] A real non-AWS row always persists these as "" —
+      // `dispatchOneAdapterEntry` now reads them straight off `entry.item`
+      // instead of hardcoding "", so the fixture needs to actually carry them.
+      region: "",
+      awsAccountId: "",
     } as unknown as DeploymentItem,
     runtime: { provider: "gcp", engine: "infra-manager", entry: "template.yaml" },
     problemDir: "problems/battles/gcp-problem",
@@ -84,6 +89,20 @@ describe("dispatchBulkAdapterEntries", () => {
       awsAccountId: "",
     });
     expect(firstCall?.adapter).toBeDefined();
+  });
+
+  it("should source region/awsAccountId from the persisted row instead of a hardcoded literal (#2571 review-fix)", async () => {
+    vi.mocked(dispatchPreparedDeployment).mockResolvedValue(undefined);
+    const entry = adapterEntry("J1");
+    const withNonEmptyAws = {
+      ...entry,
+      item: { ...entry.item, region: "ap-northeast-1", awsAccountId: "111111111111" },
+    } as AdapterPlanEntry;
+
+    await dispatchBulkAdapterEntries(buildShared(), "tenant-acme", [withNonEmptyAws]);
+
+    const call = vi.mocked(dispatchPreparedDeployment).mock.calls[0]?.[0];
+    expect(call).toMatchObject({ region: "ap-northeast-1", awsAccountId: "111111111111" });
   });
 
   it("should collect a PublishFailure with an 'adapter dispatch failed' prefix when dispatchPreparedDeployment rejects", async () => {

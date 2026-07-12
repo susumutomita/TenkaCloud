@@ -14,8 +14,10 @@ import {
   EXECUTABLE_ENGINE,
   EXECUTABLE_PROVIDER,
   type ProblemRuntime,
+  resolveItemRuntime,
   selectAdapter,
 } from "../shared/runtime/index.js";
+import { logDeployTrace } from "../shared/trace-log.js";
 import {
   type EventSharedResources,
   queryDeploymentsByEvent,
@@ -218,26 +220,26 @@ async function prepareBulkTeardownEntry(
   };
 }
 
-/** deployment 行から runtime を復元する。 runtimeProvider/Engine/Entry が無ければ aws/cloudformation (legacy)。 */
-function resolveItemRuntime(item: Partial<DeploymentItem>): ProblemRuntime {
-  if (item.runtimeProvider && item.runtimeEngine && item.runtimeEntry) {
-    return {
-      provider: item.runtimeProvider,
-      engine: item.runtimeEngine,
-      entry: item.runtimeEntry,
-    };
-  }
-  return { provider: EXECUTABLE_PROVIDER, engine: EXECUTABLE_ENGINE, entry: "template.yaml" };
-}
-
 /**
  * [#2571] Bulk teardown for a non-AWS single-provider row. Mirrors `delete.ts`'s
  * `teardownViaAdapter`: transitions DELETING, resolves the adapter for the
  * row's stored runtime, and calls `adapter.destroy` directly (no EventBridge /
- * CFn — the row never had a stack for CFn to delete). `!shared.ssm` keeps the
- * row dormant-skip (unchanged behavior for a Lambda that hasn't been wired
- * with the per-team credential SSM grants, e.g. staged enablement), matching
- * `plan-builder.ts`'s v1 refusal gate on the deploy side.
+ * CFn — the row never had a stack for CFn to delete).
+ *
+ * [#2571 review-fix] `buildAdapterDependencies` + `selectAdapter` now run
+ * INSIDE the same try as `adapter.destroy` (they used to run before it,
+ * unguarded). `selectAdapter` throws `RuntimeNotSupportedError` synchronously
+ * for a runtime triple it doesn't recognize (e.g. a corrupted / hand-edited
+ * row) — with the old ordering that throw happened AFTER the row had already
+ * transitioned to DELETING, and nothing caught it: the exception propagated
+ * out of `Promise.all` in `bulkTeardownEvent` and turned the whole bulk
+ * teardown into a 500, leaving every row (including ones from other,
+ * unrelated teams) stuck DELETING forever — a retry would just see "already
+ * DELETING" and skip them again. Folding the adapter resolution into the try
+ * means ANY failure here (unsupported runtime, missing dependency, or the
+ * destroy call itself) compensates DELETING -> FAILED and reports
+ * `adapterFailed` for just this one row, exactly like a destroy failure
+ * always did.
  */
 async function prepareBulkAdapterTeardown(
   shared: EventSharedResources,
@@ -246,25 +248,53 @@ async function prepareBulkAdapterTeardown(
   item: Partial<DeploymentItem>,
   runtime: ProblemRuntime,
 ): Promise<UpdateOutcome> {
-  if (!shared.ssm) return { skip: true };
   const jobId = String(item.jobId ?? "");
+  // [#2571 review-fix] `!shared.ssm` keeps the row dormant-skip (unchanged
+  // behavior for a Lambda that hasn't been wired with the per-team credential
+  // SSM grants, e.g. staged enablement), matching `plan-builder.ts`'s v1
+  // refusal gate on the deploy side. This branch is unreachable in production
+  // today — all three `EventSharedResources` builders (`buildEventSharedResources`,
+  // `buildScheduledTeardownResources`, `buildScheduledDeployResources`) wire
+  // `ssm` unconditionally — but a future regression that un-wires it would
+  // otherwise fold live non-AWS rows into `skipped` silently (the exact leak
+  // class #2571 fixes). The loud trace makes that regression diagnosable in
+  // CloudWatch instead of just showing up as inflated `skipped` counts.
+  if (!shared.ssm) {
+    logDeployTrace("bulk-teardown.adapter.unavailable", {
+      jobId,
+      tenantId,
+      provider: runtime.provider,
+      engine: runtime.engine,
+      reason:
+        "EventSharedResources.ssm is unwired; row stays dormant-skip until the Lambda is granted per-team credential SSM access",
+    });
+    return { skip: true };
+  }
   if (!jobId) return { skip: true };
   const transitioned = await transitionBulkTargetToDeleting(shared, tenantId, updatedAt, jobId);
   if (!transitioned) return { skip: true };
 
   const teamSlug = slugify(String(item.teamName ?? ""));
-  const adapter = selectAdapter(
-    runtime,
-    buildAdapterDependencies({ ...shared, tenantId }, runtime, teamSlug),
-  );
   try {
+    const adapter = selectAdapter(
+      runtime,
+      buildAdapterDependencies({ ...shared, tenantId }, runtime, teamSlug),
+    );
     await adapter.destroy({
       jobId,
       namePrefix: String(item.namePrefix ?? ""),
       region: String(item.region ?? ""),
       awsAccountId: String(item.awsAccountId ?? ""),
     });
-  } catch {
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    logDeployTrace("bulk-teardown.adapter.failed", {
+      jobId,
+      tenantId,
+      provider: runtime.provider,
+      engine: runtime.engine,
+      reason,
+    });
     await compensateBulkTeardownPublish(shared, tenantId, jobId, updatedAt);
     return { adapterFailed: jobId };
   }
