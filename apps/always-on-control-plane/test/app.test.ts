@@ -1,12 +1,23 @@
 import { env } from "cloudflare:workers";
 import { createMiddleware } from "hono/factory";
 import { StatusCodes } from "http-status-codes";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
 import { organizerForTest, teamForTest } from "../src/auth.js";
 import type { AppEnvironment } from "../src/types.js";
 
 const ROLES_CLAIM = "https://tenkacloud.dev/roles";
+
+let oidcPrivateJwk: JsonWebKey & { kid?: string };
+
+beforeAll(async () => {
+  const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
+    "sign",
+    "verify",
+  ]);
+  oidcPrivateJwk = await crypto.subtle.exportKey("jwk", pair.privateKey);
+  oidcPrivateJwk.kid = "worker-command-key";
+});
 
 function organizerApp(payload: unknown) {
   return createApp({
@@ -74,6 +85,56 @@ describe("always-on control plane Worker", () => {
         audience: env.AUTH0_AUDIENCE,
         clientId: env.AUTH0_CLIENT_ID,
       },
+    });
+  });
+
+  it("should serve Worker OIDC discovery and JWKS without exposing private key material", async () => {
+    const app = organizerApp(adminPayload());
+    const oidcEnv = { ...env, INTENT_SIGNING_PRIVATE_JWK: JSON.stringify(oidcPrivateJwk) };
+
+    const discovery = await app.request(
+      "https://control.example/.well-known/openid-configuration",
+      undefined,
+      oidcEnv,
+    );
+    expect(discovery.status).toBe(StatusCodes.OK);
+    await expect(discovery.json()).resolves.toMatchObject({
+      issuer: "https://control.example",
+      jwks_uri: "https://control.example/.well-known/jwks.json",
+      id_token_signing_alg_values_supported: ["ES256"],
+    });
+
+    const jwks = await app.request(
+      "https://control.example/.well-known/jwks.json",
+      undefined,
+      oidcEnv,
+    );
+    expect(jwks.status).toBe(StatusCodes.OK);
+    await expect(jwks.json()).resolves.toEqual({
+      keys: [
+        {
+          kty: "EC",
+          crv: "P-256",
+          x: oidcPrivateJwk.x,
+          y: oidcPrivateJwk.y,
+          kid: "worker-command-key",
+          use: "sig",
+          alg: "ES256",
+        },
+      ],
+    });
+  });
+
+  it("should fail closed when the Worker OIDC signing key is not configured", async () => {
+    const response = await organizerApp(adminPayload()).request(
+      "https://control.example/.well-known/jwks.json",
+      undefined,
+      env,
+    );
+
+    expect(response.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
+    await expect(response.json()).resolves.toEqual({
+      error: "INTENT_SIGNING_PRIVATE_JWK is required for the Worker OIDC JWKS",
     });
   });
 

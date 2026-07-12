@@ -20,6 +20,12 @@ import {
 } from "./deploy-intents.js";
 import { type CheckpointInput, ControlStore, type EventInput } from "./store.js";
 import type { AppEnvironment } from "./types.js";
+import {
+  JWKS_PATH,
+  OIDC_DISCOVERY_PATH,
+  publicJwksFromEnvironment,
+  workerOidcDiscovery,
+} from "./worker-oidc.js";
 
 const MUTATING_ROLES = ["TenantAdmin", "TenantOperator"] as const;
 const READING_ROLES = [...MUTATING_ROLES, "TenantViewer"] as const;
@@ -141,6 +147,9 @@ export function createApp(options: AppOptions = {}): Hono<AppEnvironment> {
   app.get("/health", (context) =>
     context.json({ ok: true, service: "tenkacloud-always-on-control-plane" }),
   );
+  app.get(OIDC_DISCOVERY_PATH, (context) => context.json(workerOidcDiscovery(context.req.url)));
+  app.get(JWKS_PATH, (context) => context.json(publicJwksFromEnvironment(context.env)));
+
   app.get("/runtime-config.json", (context) =>
     context.json({
       apiBaseUrl: new URL(context.req.url).origin,
