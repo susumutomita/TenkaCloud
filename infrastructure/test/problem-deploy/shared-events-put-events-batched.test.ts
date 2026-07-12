@@ -64,8 +64,10 @@ describe("putEventsBatched (issue #2210: shared PutEvents batch helper)", () => 
     expect(results).toHaveLength(total);
     expect(results.every((r) => r.success)).toBe(true);
     // chunk sizes: PUT_EVENTS_BATCH_SIZE then the remainder.
-    const firstCallEntries = (send.mock.calls[0]?.[0] as { input: { Entries: unknown[] } }).input
-      .Entries;
+    const firstCall = send.mock.calls[0];
+    expect(firstCall).toBeDefined();
+    if (!firstCall) throw new Error("Expected the first PutEvents call");
+    const firstCallEntries = (firstCall[0] as { input: { Entries: unknown[] } }).input.Entries;
     expect(firstCallEntries).toHaveLength(PUT_EVENTS_BATCH_SIZE);
   });
 

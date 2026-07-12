@@ -118,7 +118,7 @@ describe("requestTeardown", () => {
     // CFn DeleteStack は ARN も name も受け付けるが、削除済みと同名の new stack が
     // 並んだ場合に ARN なら必ず本来の物理リソースを差せるので priority を持たせる。
     const detail = JSON.parse(
-      (eventsSend.mock.calls[0]?.[0] as PutEventsCommand).input.Entries?.[0]?.Detail ?? "{}",
+      (eventsSend.mock.calls[0] as [PutEventsCommand])[0].input.Entries?.[0]?.Detail ?? "{}",
     );
     expect(detail.stackName).toBe(
       "arn:aws:cloudformation:ap-northeast-1:999999999999:stack/tc-p-t/abc-123",
@@ -137,7 +137,7 @@ describe("requestTeardown", () => {
     const out = await requestTeardown(shared, "tenant-acme", "JOB1", NOW_MS);
     expect(out.kind).toBe("accepted");
     const detail = JSON.parse(
-      (eventsSend.mock.calls[0]?.[0] as PutEventsCommand).input.Entries?.[0]?.Detail ?? "{}",
+      (eventsSend.mock.calls[0] as [PutEventsCommand])[0].input.Entries?.[0]?.Detail ?? "{}",
     );
     expect(detail.stackName).toBe("tc-p-t"); // = sampleRow namePrefix
   });
@@ -328,7 +328,7 @@ describe("requestTeardown (AWS/CFn row stays on the DeleteStack EventBridge path
     expect(out).toEqual({ kind: "accepted", previousStatus: "COMPLETE" });
     expect(eventsSend).toHaveBeenCalledOnce();
     const detail = JSON.parse(
-      (eventsSend.mock.calls[0]?.[0] as PutEventsCommand).input.Entries?.[0]?.Detail ?? "{}",
+      (eventsSend.mock.calls[0] as [PutEventsCommand])[0].input.Entries?.[0]?.Detail ?? "{}",
     );
     expect(detail.stackName).toBe("tc-p-t");
   });

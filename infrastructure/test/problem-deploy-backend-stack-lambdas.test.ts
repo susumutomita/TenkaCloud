@@ -591,7 +591,8 @@ describe("ProblemDeployBackendStack — admin API Lambdas memory (OOM/timeout fi
       ([name]) => name.includes(nameFragment) && name.includes("Function"),
     );
     expect(entry, `Lambda matching ${nameFragment} should exist`).toBeDefined();
-    return (entry?.[1] as { Properties?: { MemorySize?: number } }).Properties?.MemorySize ?? 0;
+    const [, resource] = entry as [string, { Properties?: { MemorySize?: number } }];
+    return resource.Properties?.MemorySize ?? 0;
   };
 
   it("DeployApi Lambda should be provisioned at 1024MB (was 256MB → init timeout)", () => {

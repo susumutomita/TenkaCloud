@@ -35,14 +35,17 @@ describe("createCoreApiClient", () => {
     const api = createCoreApiClient("https://api.example.com", "T");
 
     await api.post("x", { a: 1 });
-    expect((fetchMock.mock.calls[0]?.[1] as RequestInit).method).toBe("POST");
-    expect((fetchMock.mock.calls[0]?.[1] as RequestInit).body).toBe(JSON.stringify({ a: 1 }));
+    const [, postInit] = fetchMock.mock.calls[0] as [URL, RequestInit];
+    expect(postInit.method).toBe("POST");
+    expect(postInit.body).toBe(JSON.stringify({ a: 1 }));
 
     await api.put("x", { a: 2 });
-    expect((fetchMock.mock.calls[1]?.[1] as RequestInit).method).toBe("PUT");
+    const [, putInit] = fetchMock.mock.calls[1] as [URL, RequestInit];
+    expect(putInit.method).toBe("PUT");
 
     await api.patch("x", { a: 3 });
-    expect((fetchMock.mock.calls[2]?.[1] as RequestInit).method).toBe("PATCH");
+    const [, patchInit] = fetchMock.mock.calls[2] as [URL, RequestInit];
+    expect(patchInit.method).toBe("PATCH");
   });
 
   it("should issue a DELETE for del() and resolve void", async () => {
@@ -50,7 +53,8 @@ describe("createCoreApiClient", () => {
     vi.stubGlobal("fetch", fetchMock);
     const api = createCoreApiClient("https://api.example.com", "T");
     await expect(api.del("tenants/t-1")).resolves.toBeUndefined();
-    expect((fetchMock.mock.calls[0]?.[1] as RequestInit).method).toBe("DELETE");
+    const [, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
+    expect(init.method).toBe("DELETE");
   });
 
   it("should issue a DELETE for delJson() and resolve the JSON body", async () => {

@@ -126,7 +126,9 @@ describe("fireDisruption (#888)", () => {
     const auditPut = ddbSend.mock.calls.find((c) =>
       String((c[0] as { input?: { Item?: { SK?: string } } }).input?.Item?.SK).startsWith("AUDIT#"),
     );
-    const auditItem = (auditPut?.[0] as { input: { Item: { scheduledFor?: string } } }).input.Item;
+    expect(auditPut).toBeDefined();
+    if (!auditPut) throw new Error("Expected an AUDIT# PutCommand");
+    const auditItem = (auditPut[0] as { input: { Item: { scheduledFor?: string } } }).input.Item;
     expect(auditItem.scheduledFor).toBe(new Date(NOW_MS + 30 * 60_000).toISOString());
   });
 
@@ -152,7 +154,8 @@ describe("fireDisruption (#888)", () => {
       String((c[0] as { input?: { Item?: { SK?: string } } }).input?.Item?.SK).startsWith("RECUR#"),
     );
     expect(recurPut).toBeDefined();
-    const recurItem = (recurPut?.[0] as { input: { Item: Record<string, unknown> } }).input.Item;
+    if (!recurPut) throw new Error("Expected a RECUR# PutCommand");
+    const recurItem = (recurPut[0] as { input: { Item: Record<string, unknown> } }).input.Item;
     expect(recurItem.affectedTeamIds).toEqual(["T1"]);
     expect(recurItem.intervalMinutes).toBe(5);
     expect(recurItem.maxFires).toBe(6);

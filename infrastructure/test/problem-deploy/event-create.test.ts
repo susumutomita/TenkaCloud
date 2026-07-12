@@ -81,6 +81,15 @@ function buildShared(overrides: Partial<EventSharedResources> = {}): {
   return { shared, ddbSend };
 }
 
+function firstTransactWriteCommand(ddbSend: ReturnType<typeof vi.fn>): TransactWriteCommand {
+  const command = ddbSend.mock.calls[0]?.[0];
+  expect(command).toBeInstanceOf(TransactWriteCommand);
+  if (!(command instanceof TransactWriteCommand)) {
+    throw new Error("Expected a TransactWriteCommand");
+  }
+  return command;
+}
+
 const sampleRequest = (over: Partial<CreateEventRequest> = {}): CreateEventRequest => ({
   name: "Tenka Battle Cup 2026",
   // #528: 各 team は自社 AWS account を持つ。test data は別 account を割り当て、
@@ -112,8 +121,7 @@ describe("createEvent", () => {
     );
 
     expect(ddbSend).toHaveBeenCalledTimes(1);
-    const cmd = ddbSend.mock.calls[0]?.[0] as TransactWriteCommand;
-    expect(cmd).toBeInstanceOf(TransactWriteCommand);
+    const cmd = firstTransactWriteCommand(ddbSend);
     const items = cmd.input.TransactItems ?? [];
     // Events 1 + Teams 2 = 3 行
     expect(items).toHaveLength(3);
@@ -131,8 +139,10 @@ describe("createEvent", () => {
       const teamPut = items[i]?.Put;
       expect(teamPut?.TableName).toBe("TestTeams");
       expect(teamPut?.Item?.tenantId).toBe("tenant-acme");
-      expect(typeof teamPut?.Item?.teamLoginKey).toBe("string");
-      expect((teamPut?.Item?.teamLoginKey as string).length).toBeGreaterThan(20);
+      const teamLoginKey = teamPut?.Item?.teamLoginKey;
+      expect(typeof teamLoginKey).toBe("string");
+      if (typeof teamLoginKey !== "string") throw new Error("Expected a team login key");
+      expect(teamLoginKey.length).toBeGreaterThan(20);
     }
 
     // 各 team の teamLoginKey が一意
@@ -194,7 +204,7 @@ describe("createEvent", () => {
 
     await createEvent(shared, { tenantId: "tenant-acme", nowMs: NOW_MS }, sampleRequest());
 
-    const cmd = ddbSend.mock.calls[0]?.[0] as TransactWriteCommand;
+    const cmd = firstTransactWriteCommand(ddbSend);
     const teamItem = cmd.input.TransactItems?.[1]?.Put?.Item;
     expect(teamItem?.GSI1PK).toBe("TENANT#tenant-acme");
     expect(teamItem?.GSI1SK).toMatch(/^EVENT#[0-9A-HJKMNP-TV-Z]{26}#TEAM#[0-9A-HJKMNP-TV-Z]{26}$/);
@@ -208,8 +218,8 @@ describe("createEvent", () => {
 
     await createEvent(shared, { tenantId: "tenant-acme", nowMs: NOW_MS }, sampleRequest());
 
-    const eventItem = (ddbSend.mock.calls[0]?.[0] as TransactWriteCommand).input.TransactItems?.[0]
-      ?.Put?.Item;
+    const command = firstTransactWriteCommand(ddbSend);
+    const eventItem = command.input.TransactItems?.[0]?.Put?.Item;
     expect(eventItem?.GSI1PK).toBe("TENANT#tenant-acme");
     expect(eventItem?.GSI1SK).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
@@ -220,8 +230,8 @@ describe("createEvent", () => {
 
     await createEvent(shared, { tenantId: "tenant-acme", nowMs: NOW_MS }, sampleRequest());
 
-    const eventItem = (ddbSend.mock.calls[0]?.[0] as TransactWriteCommand).input.TransactItems?.[0]
-      ?.Put?.Item;
+    const command = firstTransactWriteCommand(ddbSend);
+    const eventItem = command.input.TransactItems?.[0]?.Put?.Item;
     expect(eventItem).toEqual({
       PK: `EVENT#${eventItem?.eventId}`,
       SK: "META",
@@ -259,8 +269,8 @@ describe("createEvent", () => {
       }),
     );
 
-    const eventItem = (ddbSend.mock.calls[0]?.[0] as TransactWriteCommand).input.TransactItems?.[0]
-      ?.Put?.Item;
+    const command = firstTransactWriteCommand(ddbSend);
+    const eventItem = command.input.TransactItems?.[0]?.Put?.Item;
     expect(eventItem?.packProvenance).toEqual({
       "pack-problem": {
         packId: "com.example.cloud-pack",
@@ -296,7 +306,7 @@ describe("createEvent", () => {
 
     await createEvent(shared, { tenantId: "tenant-acme", nowMs: NOW_MS }, sampleRequest());
 
-    const cmd = ddbSend.mock.calls[0]?.[0] as TransactWriteCommand;
+    const cmd = firstTransactWriteCommand(ddbSend);
     for (const item of cmd.input.TransactItems ?? []) {
       expect(item.Put?.ConditionExpression).toBe("attribute_not_exists(PK)");
     }

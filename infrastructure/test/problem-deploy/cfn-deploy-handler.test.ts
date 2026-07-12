@@ -484,7 +484,7 @@ describe("buildS3ArtifactsResolver (#2291)", () => {
 
     expect(out.templateBody).toContain("AWSTemplateFormatVersion");
     expect(out.cfnParameters).toEqual({ FlagSeed: "seed-value" });
-    expect((s3.send.mock.calls[0]?.[0] as GetObjectCommand).input).toMatchObject({
+    expect((s3.send.mock.calls[0] as [GetObjectCommand])[0].input).toMatchObject({
       Bucket: "src-bucket",
       Key: "problems/challenges/sample-flag/template.yaml",
     });

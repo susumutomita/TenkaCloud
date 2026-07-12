@@ -97,7 +97,7 @@ describe("startDeployment for a non-AWS single-provider problem (Issue #2561)", 
 
     expect(response.status).toBe("PENDING");
     expect(putSend).toHaveBeenCalledOnce();
-    const item = (putSend.mock.calls[0]?.[0] as { input: { Item: Record<string, unknown> } }).input
+    const item = (putSend.mock.calls[0] as [{ input: { Item: Record<string, unknown> } }])[0].input
       .Item;
     expect(item.awsAccountId).toBe("");
     expect(item.competitorRoleArn).toBeUndefined();

@@ -295,14 +295,15 @@ describe("ProblemDeployBackendStack participantPortal subsystem (#2220)", () => 
         name.includes("CoordinationDispatcher"),
       );
       expect(dispatcherRole).toBeDefined();
-      const inlinePolicies =
-        (
-          dispatcherRole?.[1] as {
-            Properties?: {
-              Policies?: Array<{ PolicyDocument?: { Statement?: Array<{ Action?: unknown }> } }>;
-            };
-          }
-        ).Properties?.Policies ?? [];
+      const [, dispatcherResource] = dispatcherRole as [
+        string,
+        {
+          Properties?: {
+            Policies?: Array<{ PolicyDocument?: { Statement?: Array<{ Action?: unknown }> } }>;
+          };
+        },
+      ];
+      const inlinePolicies = dispatcherResource.Properties?.Policies ?? [];
       const dispatcherActions = inlinePolicies
         .flatMap((pol) =>
           (pol.PolicyDocument?.Statement ?? []).flatMap((s) =>
