@@ -170,6 +170,29 @@ delete targets the same deployment identity. A correctable rejection (unknown
 problem, unregistered account) surfaces as `422` with a stable reason code; an
 STS or EventBridge failure surfaces as `502`.
 
+### AWS trust bootstrap (`make deploy-always-on-command`)
+
+The Worker serves an OIDC discovery document and JWKS
+(`/.well-known/openid-configuration`, `/.well-known/jwks.json`), and AWS
+trusts it through IAM web-identity federation — there is no AWS-side verify
+Lambda and no replay table (ADR-050 superseded the ADR-049 §7 signed-intent
+ingress). Register the trust once per account with:
+
+```sh
+make deploy-always-on-command \
+  CDK_PARAM_ALWAYS_ON_ISSUER_URL=https://<worker-origin> \
+  CDK_PARAM_EVENT_BUS_ARN=arn:aws:events:<region>:<account>:event-bus/<deploy-bus>
+```
+
+The stack (`tenkacloud-always-on-command`) registers the Worker origin as an
+IAM OIDC identity provider and creates the federated role
+`tenkacloud-alwayson-command`, whose trust policy pins `aud` to
+`sts.amazonaws.com` and `sub` to `tenkacloud:always-on:command:*`
+(the Worker mints `sub = tenkacloud:always-on:command:<tenantId>:<eventId>`),
+and whose only permission is `events:PutEvents` to that one bus with
+`events:source = tenkacloud.deploy`. Bind the emitted `CommandRoleArnOutput`
+to the Worker var `COMMAND_ROLE_ARN`.
+
 ## Event-month plan runbook
 
 1. At least seven days before an event, enable Workers Paid for the Cloudflare
