@@ -1,5 +1,10 @@
 import { z } from "zod";
 import type { DeploymentRecord, DeploymentStatus } from "../../control-data/domain/deployments.js";
+import {
+  EXECUTABLE_ENGINE,
+  EXECUTABLE_PROVIDER,
+  type ProblemRuntime,
+} from "../shared/runtime/index.js";
 
 // [Issue #2527 Slice 1 step 2] The domain module owns these shapes; this handler
 // re-exports them so the 48 existing importers keep their import path.
@@ -103,6 +108,28 @@ export interface DeploymentItem extends DeploymentRecord {
   /** sparse — `teamLoginKey` を無効化したい場合は属性ごと削除する。 */
   GSI2PK?: string;
   GSI2SK?: string;
+}
+
+/**
+ * [ADR-026/027/032 / #1410-1412, moved from `deploy.ts` in #2571 review-fix] 非 AWS
+ * runtime のときだけ provider/engine/entry を {@link DeploymentItem} に載せる (= teardown /
+ * status の adapter 経路判別)。 AWS/CFn は field を載せず従来行と byte-identical。
+ *
+ * `deploy.ts`'s single-deploy path と `bulk-deploy/plan-builder.ts`'s
+ * `createNonAwsPlanEntry` の両方がこの 1 関数を使うことで、 field 名 / 判定条件が 2 箇所で
+ * drift するのを防ぐ (`DeploymentItem` の定義そばに置くことで import の循環も避ける)。
+ */
+export function runtimeItemFields(
+  runtime: ProblemRuntime,
+): Pick<DeploymentItem, "runtimeProvider" | "runtimeEngine" | "runtimeEntry"> {
+  if (runtime.provider === EXECUTABLE_PROVIDER && runtime.engine === EXECUTABLE_ENGINE) {
+    return {};
+  }
+  return {
+    runtimeProvider: runtime.provider,
+    runtimeEngine: runtime.engine,
+    runtimeEntry: runtime.entry,
+  };
 }
 
 export const DeployResponseSchema = z.object({

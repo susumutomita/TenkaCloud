@@ -2,9 +2,7 @@ import { buildAdapterDependencies } from "../../deploy-handler/adapter-dependenc
 import { dispatchPreparedDeployment } from "../../deploy-handler/prepared-dispatch.js";
 import { selectAdapter } from "../../shared/runtime/index.js";
 import type { EventSharedResources } from "../shared.js";
-import type { PlanEntry, PublishFailure } from "./types.js";
-
-type AdapterPlanEntry = Extract<PlanEntry, { kind: "adapter" }>;
+import type { AdapterPlanEntry, PublishFailure } from "./types.js";
 
 /**
  * [#2571] Bulk deploy's non-AWS single-provider dispatch channel — the bulk
@@ -62,8 +60,13 @@ async function dispatchOneAdapterEntry(
       problemDir: entry.problemDir,
       teamSlug: entry.teamSlug,
       namePrefix: entry.item.namePrefix,
-      region: "",
-      awsAccountId: "",
+      // [#2571 review-fix] Read straight off the persisted row instead of
+      // hardcoding "" — a non-AWS row's `region` / `awsAccountId` are always ""
+      // (`plan-builder.ts`'s `createNonAwsPlanEntry`) so the value is the same
+      // today, but sourcing it from `entry.item` means the dispatched call can
+      // never silently drift from what was actually persisted.
+      region: entry.item.region,
+      awsAccountId: entry.item.awsAccountId,
     });
     return undefined;
   } catch (err) {

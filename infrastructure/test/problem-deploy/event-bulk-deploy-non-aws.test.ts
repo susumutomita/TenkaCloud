@@ -63,6 +63,18 @@ const GCP_RUNTIME_DESCRIPTOR = (problemId: string) =>
     ? { provider: "gcp", engine: "infra-manager", entry: "template.yaml" }
     : undefined;
 
+/**
+ * [#2571 review-fix] Hoisted — the same 4-field GCP credential fixture was
+ * repeated verbatim across 4 tests below (`vi.mocked(getGcpCredential).mock
+ * ResolvedValue({...})`).
+ */
+const VALID_GCP_CREDENTIAL = {
+  wifAudience: "aud",
+  serviceAccountEmail: "sa@example.iam.gserviceaccount.com",
+  projectId: "proj",
+  location: "us-central1",
+} as const;
+
 function buildNonAwsShared(over: Partial<EventSharedResources> = {}) {
   return buildShared({
     ssm: { send: vi.fn() } as unknown as EventSharedResources["ssm"],
@@ -75,12 +87,7 @@ describe("bulkDeployEvent — non-AWS single-provider adapter dispatch (#2571)",
   beforeEach(() => vi.clearAllMocks());
 
   it("should dispatch a non-AWS single-provider problem via adapter when ssm is wired and the team's credential is registered", async () => {
-    vi.mocked(getGcpCredential).mockResolvedValue({
-      wifAudience: "aud",
-      serviceAccountEmail: "sa@example.iam.gserviceaccount.com",
-      projectId: "proj",
-      location: "us-central1",
-    } as never);
+    vi.mocked(getGcpCredential).mockResolvedValue(VALID_GCP_CREDENTIAL as never);
     const { shared, ddbSend, eventsSend } = buildNonAwsShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleEvent() }); // hello-world (gcp) + hello-world-battle (aws)
     ddbSend.mockResolvedValueOnce({ Items: sampleTeams(1) });
@@ -172,12 +179,7 @@ describe("bulkDeployEvent — non-AWS single-provider adapter dispatch (#2571)",
   });
 
   it("should not S3-put or publish EventBridge when the plan has only adapter entries (zero eventbridge rows)", async () => {
-    vi.mocked(getGcpCredential).mockResolvedValue({
-      wifAudience: "aud",
-      serviceAccountEmail: "sa@example.iam.gserviceaccount.com",
-      projectId: "proj",
-      location: "us-central1",
-    } as never);
+    vi.mocked(getGcpCredential).mockResolvedValue(VALID_GCP_CREDENTIAL as never);
     const s3Send = vi.fn();
     const { shared, ddbSend, eventsSend } = buildNonAwsShared({
       s3: { send: s3Send } as unknown as EventSharedResources["s3"],
@@ -202,12 +204,7 @@ describe("bulkDeployEvent — non-AWS single-provider adapter dispatch (#2571)",
   });
 
   it("should pack only eventbridge details into the Distributed Map S3 payload for a mixed plan", async () => {
-    vi.mocked(getGcpCredential).mockResolvedValue({
-      wifAudience: "aud",
-      serviceAccountEmail: "sa@example.iam.gserviceaccount.com",
-      projectId: "proj",
-      location: "us-central1",
-    } as never);
+    vi.mocked(getGcpCredential).mockResolvedValue(VALID_GCP_CREDENTIAL as never);
     const s3Send = vi.fn().mockResolvedValue({});
     const { shared, ddbSend, eventsSend } = buildNonAwsShared({
       s3: { send: s3Send } as unknown as EventSharedResources["s3"],
@@ -222,10 +219,9 @@ describe("bulkDeployEvent — non-AWS single-provider adapter dispatch (#2571)",
 
     await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS);
 
-    const { PutObjectCommand: RealPutObjectCommand } = await import("@aws-sdk/client-s3");
     const s3Calls = s3Send.mock.calls
       .map((c) => c[0])
-      .filter((c): c is InstanceType<typeof RealPutObjectCommand> => c instanceof PutObjectCommand);
+      .filter((c): c is InstanceType<typeof PutObjectCommand> => c instanceof PutObjectCommand);
     expect(s3Calls).toHaveLength(1);
     const body = JSON.parse(String(s3Calls[0]?.input.Body ?? "[]"));
     // Only the aws row rides the Distributed Map payload — the gcp row dispatched
@@ -241,12 +237,7 @@ describe("bulkDeployEvent — non-AWS single-provider adapter dispatch (#2571)",
   });
 
   it("should mark the adapter row FAILED and throw when adapter dispatch fails", async () => {
-    vi.mocked(getGcpCredential).mockResolvedValue({
-      wifAudience: "aud",
-      serviceAccountEmail: "sa@example.iam.gserviceaccount.com",
-      projectId: "proj",
-      location: "us-central1",
-    } as never);
+    vi.mocked(getGcpCredential).mockResolvedValue(VALID_GCP_CREDENTIAL as never);
     vi.mocked(dispatchPreparedDeployment).mockRejectedValueOnce(new Error("apprun REST down"));
     const { shared, ddbSend, eventsSend } = buildNonAwsShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
@@ -329,12 +320,7 @@ describe("resolveBulkNonAwsCredentials (#2571)", () => {
       accessTokenSecret: "sec",
     } as never);
     vi.mocked(getAzureCredential).mockResolvedValue(undefined);
-    vi.mocked(getGcpCredential).mockResolvedValue({
-      wifAudience: "aud",
-      serviceAccountEmail: "sa@example.iam.gserviceaccount.com",
-      projectId: "proj",
-      location: "us-central1",
-    } as never);
+    vi.mocked(getGcpCredential).mockResolvedValue(VALID_GCP_CREDENTIAL as never);
     const shared = buildShared({
       ssm: { send: vi.fn() } as unknown as EventSharedResources["ssm"],
       resolveProblemRuntimeDescriptor: (problemId) => {
@@ -362,5 +348,235 @@ describe("resolveBulkNonAwsCredentials (#2571)", () => {
     expect(result).toEqual(new Set(["sakura#team-1", "gcp#team-1"]));
     expect(getSakuraCredential).toHaveBeenCalledWith(expect.anything(), "tenant-acme", "team-1");
     expect(getAzureCredential).toHaveBeenCalledWith(expect.anything(), "tenant-acme", "team-1");
+  });
+
+  it("should resolve correctly across fan-out chunk boundaries (10 pairs > the 8-pair chunk size)", async () => {
+    vi.mocked(getGcpCredential).mockResolvedValue(VALID_GCP_CREDENTIAL as never);
+    const shared = buildShared({
+      ssm: { send: vi.fn() } as unknown as EventSharedResources["ssm"],
+      resolveProblemRuntimeDescriptor: GCP_RUNTIME_DESCRIPTOR,
+    }).shared;
+    const teams = sampleTeams(10); // 10 teams x 1 provider = 10 pairs, > SSM_FAN_OUT_CHUNK_SIZE (8)
+
+    const result = await resolveBulkNonAwsCredentials(shared, "tenant-acme", teams, [
+      { problemId: "hello-world", defaultRegion: "ap-northeast-1" },
+    ]);
+
+    expect(result.size).toBe(10);
+    expect(getGcpCredential).toHaveBeenCalledTimes(10);
+    for (const team of teams) {
+      expect(result.has(`gcp#${team.internalSlug}`)).toBe(true);
+    }
+  });
+
+  it("should rethrow a genuine credential-store error (e.g. SSM throttling) instead of swallowing it", async () => {
+    // [#2571 review-fix / fix 10] Chunking the SSM fan-out only bounds
+    // concurrency — a real (non-registration) error must still fail the whole
+    // bulk deploy loudly, exactly as an unbounded fan-out did.
+    vi.mocked(getGcpCredential).mockRejectedValueOnce(
+      new Error("ThrottlingException: Rate exceeded"),
+    );
+    const shared = buildShared({
+      ssm: { send: vi.fn() } as unknown as EventSharedResources["ssm"],
+      resolveProblemRuntimeDescriptor: GCP_RUNTIME_DESCRIPTOR,
+    }).shared;
+
+    await expect(
+      resolveBulkNonAwsCredentials(shared, "tenant-acme", sampleTeams(1), [
+        { problemId: "hello-world", defaultRegion: "ap-northeast-1" },
+      ]),
+    ).rejects.toThrow(/ThrottlingException/);
+  });
+
+  it("should fail loud (throw) for an unrecognized provider instead of silently reporting no credential (#2571 review-fix / fix 6)", async () => {
+    const { hasNonAwsCredential } = await import(
+      "../../lib/problem-deploy/handlers/event-handler/bulk-deploy/verified-accounts.js"
+    );
+
+    await expect(
+      hasNonAwsCredential(
+        "digitalocean",
+        { ssm: { send: vi.fn() } as unknown as EventSharedResources["ssm"], env: "development" },
+        "tenant-acme",
+        "team-1",
+      ),
+    ).rejects.toThrow(/unknown non-AWS provider/);
+    expect(getGcpCredential).not.toHaveBeenCalled();
+    expect(getAzureCredential).not.toHaveBeenCalled();
+    expect(getSakuraCredential).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * [#2571 review-fix / fix 3] The pre-fix gate matched
+ * `NON_AWS_CLOUD_PROVIDERS.includes(runtime.provider)` — provider only,
+ * ignoring `engine` — so a provider match with an unregistered engine took the
+ * adapter path (and threw a per-row `RuntimeNotSupportedError` deep inside
+ * `dispatchBulkAdapterEntries` instead of being refused up front), while a
+ * genuinely different runtime (not a non-AWS cloud runtime at all) fell
+ * through to the AWS/CFn path and violated its frozen-schema precondition.
+ * `isReservedRuntime` (exact provider+engine match) closes both gaps.
+ */
+describe("bulkDeployEvent — engine-aware runtime dispatch gate (#2571 review-fix)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("should refuse (not adapter-dispatch) a provider match with an engine the platform doesn't register", async () => {
+    const { shared, ddbSend, eventsSend } = buildNonAwsShared({
+      resolveProblemRuntimeDescriptor: (problemId) =>
+        problemId === "hello-world"
+          ? { provider: "gcp", engine: "terraform", entry: "main.tf" }
+          : undefined,
+    });
+    ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
+    ddbSend.mockResolvedValueOnce({ Items: sampleTeams(1) });
+    ddbSend.mockResolvedValueOnce({ Items: [] });
+    ddbSend.mockResolvedValue({});
+    eventsSend.mockResolvedValue({});
+
+    const out = await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS);
+    expect(out.kind).toBe("ok");
+    if (out.kind !== "ok") throw new Error("expected ok");
+    expect(out.result.enqueued).toBe(1); // only hello-world-battle (aws)
+    expect(out.result.unsupportedRuntime).toBe(1);
+    expect(out.result.unsupportedRuntimeProblems).toEqual(["hello-world"]);
+    expect(out.result.missingCredential).toBeUndefined();
+    expect(dispatchPreparedDeployment).not.toHaveBeenCalled();
+    expect(getGcpCredential).not.toHaveBeenCalled();
+  });
+
+  it("should refuse (not fall through to the AWS path) a genuinely different runtime like docker/compose", async () => {
+    const { shared, ddbSend, eventsSend } = buildNonAwsShared({
+      resolveProblemRuntimeDescriptor: (problemId) =>
+        problemId === "hello-world"
+          ? { provider: "docker", engine: "compose", entry: "docker-compose.yml" }
+          : undefined,
+    });
+    ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
+    ddbSend.mockResolvedValueOnce({ Items: sampleTeams(1) });
+    ddbSend.mockResolvedValueOnce({ Items: [] });
+    ddbSend.mockResolvedValue({});
+    eventsSend.mockResolvedValue({});
+
+    const out = await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS);
+    expect(out.kind).toBe("ok");
+    if (out.kind !== "ok") throw new Error("expected ok");
+    expect(out.result.enqueued).toBe(1);
+    expect(out.result.unsupportedRuntime).toBe(1);
+    expect(out.result.unsupportedRuntimeProblems).toEqual(["hello-world"]);
+    expect(dispatchPreparedDeployment).not.toHaveBeenCalled();
+
+    // Pre-fix, this row rode the AWS/CFn path (it isn't in the old
+    // `NON_AWS_CLOUD_PROVIDERS` list) — confirm exactly 1 DeployCreateRequested
+    // entry (the real AWS problem only), not 2.
+    const putCmd = eventsSend.mock.calls
+      .map((c) => c[0])
+      .find((c): c is PutEventsCommand => c instanceof PutEventsCommand);
+    expect(putCmd?.input.Entries).toHaveLength(1);
+  });
+
+  it("should keep the AWS/CFn path for an explicit aws/cloudformation single descriptor (byte-identical to no resolver)", async () => {
+    // `classifyBulkRuntimeDispatch`'s middle branch: a resolver that returns the
+    // executable pair explicitly (not `undefined`, not a composite descriptor)
+    // must still ride the normal AWS/CFn path exactly like every other AWS row.
+    const { shared, ddbSend, eventsSend } = buildNonAwsShared({
+      resolveProblemRuntimeDescriptor: () => ({
+        provider: "aws",
+        engine: "cloudformation",
+        entry: "template.yaml",
+      }),
+    });
+    ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
+    ddbSend.mockResolvedValueOnce({ Items: sampleTeams(1) });
+    ddbSend.mockResolvedValueOnce({ Items: [] });
+    ddbSend.mockResolvedValue({});
+    eventsSend.mockResolvedValue({});
+
+    const out = await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS);
+    expect(out.kind).toBe("ok");
+    if (out.kind !== "ok") throw new Error("expected ok");
+    expect(out.result.enqueued).toBe(2); // both problems ride EventBridge
+    expect(out.result.unsupportedRuntime).toBeUndefined();
+    expect(out.result.missingCredential).toBeUndefined();
+    expect(dispatchPreparedDeployment).not.toHaveBeenCalled();
+
+    const putCmd = eventsSend.mock.calls
+      .map((c) => c[0])
+      .find((c): c is PutEventsCommand => c instanceof PutEventsCommand);
+    expect(putCmd?.input.Entries).toHaveLength(2);
+  });
+});
+
+/**
+ * [#2571 review-fix / fix 14] `traceEmptyPlan` / `traceBulkPlan` used to log
+ * `unverifiedAccountsCount` but nothing about `missingCredentials` — an
+ * all-non-AWS event where no team has a registered credential produced an
+ * empty plan logged with `skipped:0` / `unverifiedAccountsCount:0`,
+ * indistinguishable in CloudWatch from "nothing to do".
+ */
+describe("bulk-deploy plan trace — missingCredentials observability (#2571 review-fix)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("should log missingCredentialsCount + the sorted list on the empty-plan trace when every row is withheld for a missing credential", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    vi.mocked(getGcpCredential).mockResolvedValue(undefined);
+    const { shared, ddbSend } = buildNonAwsShared({
+      resolveProblemRuntimeDescriptor: () => ({
+        provider: "gcp",
+        engine: "infra-manager",
+        entry: "template.yaml",
+      }),
+    });
+    ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
+    ddbSend.mockResolvedValueOnce({ Items: sampleTeams(1) });
+    ddbSend.mockResolvedValueOnce({ Items: [] });
+    ddbSend.mockResolvedValue({});
+
+    const out = await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS);
+    expect(out.kind).toBe("ok");
+    if (out.kind !== "ok") throw new Error("expected ok");
+    expect(out.result.enqueued).toBe(0);
+    // `missingCredential` counts DISTINCT (provider, team) pairs (Set-deduped,
+    // same convention as `unverifiedAccounts`) — both problems here map to the
+    // same gcp/team-1 pair, so this is 1 even though 2 rows were withheld.
+    expect(out.result.missingCredential).toBe(1);
+
+    const trace = warnSpy.mock.calls
+      .map((c) => String(c[0]))
+      .map((raw) => JSON.parse(raw) as Record<string, unknown>)
+      .find((t) => t.event === "bulk-deploy.skip.plan_empty_after_iteration");
+    expect(trace).toBeDefined();
+    expect(trace?.missingCredentialsCount).toBe(1);
+    expect(trace?.missingCredentials).toEqual(["gcp:team-1"]);
+    warnSpy.mockRestore();
+  });
+
+  it("should log missingCredentialsCount + the sorted list on the non-empty-plan trace alongside a partially-enqueued plan", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    vi.mocked(getGcpCredential).mockImplementation(async (_deps, _tenantId, teamSlug) =>
+      teamSlug === "team-1" ? (VALID_GCP_CREDENTIAL as never) : undefined,
+    );
+    const { shared, ddbSend, eventsSend } = buildNonAwsShared();
+    ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
+    ddbSend.mockResolvedValueOnce({ Items: sampleTeams(2) });
+    ddbSend.mockResolvedValueOnce({ Items: [] });
+    ddbSend.mockResolvedValue({});
+    eventsSend.mockResolvedValue({});
+
+    const out = await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS);
+    expect(out.kind).toBe("ok");
+    if (out.kind !== "ok") throw new Error("expected ok");
+    // team-1: aws + gcp both enqueue; team-2: aws enqueues, gcp is withheld.
+    expect(out.result.enqueued).toBe(3);
+    expect(out.result.missingCredential).toBe(1);
+    expect(out.result.missingCredentials).toEqual(["gcp:team-2"]);
+
+    const trace = logSpy.mock.calls
+      .map((c) => String(c[0]))
+      .map((raw) => JSON.parse(raw) as Record<string, unknown>)
+      .find((t) => t.event === "bulk-deploy.enqueued");
+    expect(trace).toBeDefined();
+    expect(trace?.missingCredentialsCount).toBe(1);
+    expect(trace?.missingCredentials).toEqual(["gcp:team-2"]);
+    logSpy.mockRestore();
   });
 });

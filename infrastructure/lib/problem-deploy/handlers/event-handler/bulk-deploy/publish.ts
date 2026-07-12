@@ -10,9 +10,7 @@ import {
 import { logDeployTrace } from "../../shared/trace-log.js";
 import type { EventSharedResources } from "../shared.js";
 import { markBulkEventDeploying } from "./persistence.js";
-import type { PlanEntry, PublishFailure } from "./types.js";
-
-type EventBridgePlanEntry = Extract<PlanEntry, { kind: "eventbridge" }>;
+import type { EventBridgePlanEntry, PublishFailure } from "./types.js";
 
 /**
  * Event status の DEPLOYING 遷移と、 EventBridge への publish を並列実行する。
@@ -21,9 +19,10 @@ type EventBridgePlanEntry = Extract<PlanEntry, { kind: "eventbridge" }>;
  * - 旧経路: `putEventsBatched` (shared/events.js) が chunk 分割して直接 DeployCreateRequested を
  *   fan-out publish
  *
- * [#2571] `plan` は eventbridge / adapter の混在プランを受け取りうるが、 この module は
- * `kind === "eventbridge"` の行だけを対象にする — adapter 行は `dispatchBulkAdapterEntries`
+ * [#2571] adapter 行 (非 AWS single-provider) は `dispatchBulkAdapterEntries`
  * (`adapter-dispatch.ts`) が別 channel で dispatch する (= CFn state machine には決して乗らない)。
+ * [#2571 review-fix] `eventBridgeEntries` は caller (`orchestrator.ts`) が混在プランから 1 度だけ
+ * 分割した eventbridge-kind の subset — この module 自身は二度目のフィルタをしない。
  * `markBulkEventDeploying` は eventbridge 行が 0 件でも無条件に走らせる (= Event 全体の
  * DEPLOYING 遷移は dispatch channel を問わない)。
  *
@@ -34,11 +33,8 @@ export async function publishBulkDeployPlan(
   tenantId: string,
   eventId: string,
   createdAt: string,
-  plan: readonly PlanEntry[],
+  eventBridgeEntries: readonly EventBridgePlanEntry[],
 ): Promise<PublishFailure[]> {
-  const eventBridgeEntries = plan.filter(
-    (entry): entry is EventBridgePlanEntry => entry.kind === "eventbridge",
-  );
   const publish = Promise.all(
     publishBulkPlanEntries(shared, tenantId, eventId, eventBridgeEntries),
   );

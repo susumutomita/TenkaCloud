@@ -13,6 +13,7 @@ import {
   EXECUTABLE_ENGINE,
   EXECUTABLE_PROVIDER,
   type ProblemRuntime,
+  resolveItemRuntime,
   selectAdapter,
 } from "../shared/runtime/index.js";
 import { logDeployTrace } from "../shared/trace-log.js";
@@ -110,18 +111,6 @@ export async function requestTeardown(
   await publishTeardown(shared, tenantId, nowMs, detail);
 
   return { kind: "accepted", previousStatus: status };
-}
-
-/** deployment 行から runtime を復元する。 runtimeProvider/Engine/Entry が無ければ aws/cloudformation (legacy)。 */
-function resolveItemRuntime(item: Partial<DeploymentItem>): ProblemRuntime {
-  if (item.runtimeProvider && item.runtimeEngine && item.runtimeEntry) {
-    return {
-      provider: item.runtimeProvider,
-      engine: item.runtimeEngine,
-      entry: item.runtimeEntry,
-    };
-  }
-  return { provider: EXECUTABLE_PROVIDER, engine: EXECUTABLE_ENGINE, entry: "template.yaml" };
 }
 
 /**

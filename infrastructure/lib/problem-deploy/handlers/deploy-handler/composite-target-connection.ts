@@ -19,14 +19,12 @@
  *     client secret or a Sakura API key).
  */
 
-import { getAzureCredential } from "../shared/azure-credential-store.js";
 import {
   type CompetitorAccountResolveDeps,
   resolveVerifiedCompetitorAccount,
 } from "../shared/competitor-account-lookup.js";
-import { getGcpCredential } from "../shared/gcp-credential-store.js";
+import { NON_AWS_CONFIG_GETTERS } from "../shared/non-aws-credential-getters.js";
 import type { ReservedProvider } from "../shared/runtime/index.js";
-import { getSakuraCredential } from "../shared/sakura-credential-store.js";
 import type { SecureJsonStoreDeps } from "../shared/secure-json-store.js";
 import { UnverifiedCompetitorAccountError } from "./deploy.js";
 
@@ -80,16 +78,6 @@ export type ResolveCompositeTargetConnectionInput =
       readonly region: string;
     }
   | { readonly provider: NonAwsProvider; readonly tenantId: string; readonly teamSlug: string };
-
-/** Existing per-team config getters, keyed by provider; all fail-closed to undefined. */
-const NON_AWS_CONFIG_GETTERS: Record<
-  NonAwsProvider,
-  (deps: SecureJsonStoreDeps, tenantId: string, teamSlug: string) => Promise<unknown>
-> = {
-  gcp: getGcpCredential,
-  azure: getAzureCredential,
-  sakura: getSakuraCredential,
-};
 
 function nonAwsConnection(provider: NonAwsProvider, teamSlug: string): TargetConnection {
   // Per-provider literal so the result narrows to a single union member (no cast).

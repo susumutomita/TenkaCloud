@@ -1,16 +1,14 @@
 import type { TeamRecord } from "../../../control-data/teams-repository.js";
 import { slugify } from "../../deploy-handler/naming.js";
-import { getAzureCredential } from "../../shared/azure-credential-store.js";
 import {
   resolveVerifiedCompetitorAccount,
   type VerifiedCompetitorAccount,
 } from "../../shared/competitor-account-lookup.js";
-import { getGcpCredential } from "../../shared/gcp-credential-store.js";
-import { AZURE_PROVIDER, GCP_PROVIDER, SAKURA_PROVIDER } from "../../shared/runtime/index.js";
-import { getSakuraCredential } from "../../shared/sakura-credential-store.js";
+import { NON_AWS_CONFIG_GETTERS } from "../../shared/non-aws-credential-getters.js";
+import { isReservedRuntime, type ReservedProvider } from "../../shared/runtime/index.js";
 import type { EventSharedResources } from "../shared.js";
 import type { EventProblemTarget } from "../types.js";
-import { NON_AWS_CLOUD_PROVIDERS } from "./types.js";
+import { nonAwsCredentialKey } from "./types.js";
 
 /**
  * teams × problems から候補 awsAccountId を抽出し、 CompetitorAccounts table を引いて
@@ -57,6 +55,20 @@ function candidateBulkAccountIds(
 }
 
 /**
+ * [#2571 review-fix] Fan-out concurrency cap for the per-(provider, team) SSM
+ * `GetParameter` reads below. SSM's `GetParameter` default quota is roughly
+ * 40 TPS per account/region — a large event (many teams × providers) firing
+ * every pair as one unbounded `Promise.all` could burst well past that and
+ * throw `ThrottlingException`; since that's a genuine (non-`ParameterNotFound`)
+ * SSM error it rethrows and would reject the *whole* bulk deploy over a single
+ * pair. Chunking the fan-out into small sequential batches keeps concurrency
+ * bounded (and stays well inside a Lambda's timeout even for a large event)
+ * without going fully sequential — it only lowers the odds of hitting the
+ * limit, it does not change what a genuine SSM error does (still rethrows).
+ */
+const SSM_FAN_OUT_CHUNK_SIZE = 8;
+
+/**
  * [#2571] non-AWS single-provider (gcp/azure/sakura) の team × provider の credential
  * 登録有無を batch 解決する — `resolveBulkVerifiedAccounts` の非 AWS 版。 `plan-builder` は
  * ここで返った Set の存在有無だけを見る (実 credential 値は adapter dispatch 時に
@@ -79,17 +91,26 @@ export async function resolveBulkNonAwsCredentials(
   if (providers.size === 0) return new Set();
 
   const deps = { ssm, env: shared.env };
+  // [#2571 review-fix] `slugify` is a pure transform of `team.internalSlug`
+  // alone (does not depend on `provider`) — hoisted out of the per-provider
+  // inner closure so it runs once per team instead of once per (team,
+  // provider) pair.
+  const pairs = teams.flatMap((team) => {
+    const teamSlug = slugify(team.internalSlug);
+    return Array.from(providers).map((provider) => ({ provider, teamSlug }));
+  });
+
   const registered = new Set<string>();
-  await Promise.all(
-    teams.flatMap((team) =>
-      Array.from(providers).map(async (provider) => {
-        const teamSlug = slugify(team.internalSlug);
+  for (let i = 0; i < pairs.length; i += SSM_FAN_OUT_CHUNK_SIZE) {
+    const chunk = pairs.slice(i, i + SSM_FAN_OUT_CHUNK_SIZE);
+    await Promise.all(
+      chunk.map(async ({ provider, teamSlug }) => {
         if (await hasNonAwsCredential(provider, deps, tenantId, teamSlug)) {
-          registered.add(`${provider}#${teamSlug}`);
+          registered.add(nonAwsCredentialKey(provider, teamSlug));
         }
       }),
-    ),
-  );
+    );
+  }
   return registered;
 }
 
@@ -100,31 +121,52 @@ function candidateNonAwsProviders(
   const providers = new Set<string>();
   for (const problem of problems) {
     const runtime = shared.resolveProblemRuntimeDescriptor?.(problem.problemId);
-    if (
-      runtime !== undefined &&
-      !("kind" in runtime) &&
-      NON_AWS_CLOUD_PROVIDERS.includes(runtime.provider)
-    ) {
+    // [#2571 review-fix] `isReservedRuntime` checks the exact (provider, engine)
+    // pair — the same predicate `plan-builder.ts`'s `classifyBulkRuntimeDispatch`
+    // gate uses (#2562) — instead of the removed hand-written
+    // `NON_AWS_CLOUD_PROVIDERS.includes(runtime.provider)` (provider-only) check,
+    // so the two call sites cannot drift on what counts as a "non-AWS adapter"
+    // runtime.
+    if (runtime !== undefined && !("kind" in runtime) && isReservedRuntime(runtime)) {
       providers.add(runtime.provider);
     }
   }
   return providers;
 }
 
-function hasNonAwsCredential(
+/**
+ * [#2571 review-fix] Getter dispatch via the shared `NON_AWS_CONFIG_GETTERS`
+ * map (also used by `composite-target-connection.ts`) keyed by
+ * {@link ReservedProvider}, replacing an if-chain that ended in an unreachable
+ * `return Promise.resolve(false)` fallback (`provider` only ever reached that
+ * branch for a value `candidateNonAwsProviders` never produces, since it
+ * already filters through `isReservedRuntime`).
+ *
+ * `provider` arriving here having *not* passed `isReservedRuntime` upstream
+ * would mean a genuine programming error (a provider added to
+ * `RESERVED_RUNTIMES` without a matching `NON_AWS_CONFIG_GETTERS` entry, or a
+ * future caller bypassing the gate) — fail loud instead of silently reporting
+ * "no credential registered" (AGENTS.md "no silent fallbacks via mocks / stubs
+ * / empty-array returns"). Exported (only) so the fail-loud contract itself
+ * can be unit-tested directly — `resolveBulkNonAwsCredentials`'s own
+ * `candidateNonAwsProviders` gate makes the throw unreachable through the
+ * public `resolveBulkNonAwsCredentials` entrypoint.
+ */
+export async function hasNonAwsCredential(
   provider: string,
   deps: { readonly ssm: NonNullable<EventSharedResources["ssm"]>; readonly env: string },
   tenantId: string,
   teamSlug: string,
 ): Promise<boolean> {
-  if (provider === SAKURA_PROVIDER) {
-    return getSakuraCredential(deps, tenantId, teamSlug).then((c) => c !== undefined);
+  if (!isKnownNonAwsProvider(provider)) {
+    throw new Error(
+      `unknown non-AWS provider "${provider}" (expected one of: ${Object.keys(NON_AWS_CONFIG_GETTERS).join(", ")})`,
+    );
   }
-  if (provider === AZURE_PROVIDER) {
-    return getAzureCredential(deps, tenantId, teamSlug).then((c) => c !== undefined);
-  }
-  if (provider === GCP_PROVIDER) {
-    return getGcpCredential(deps, tenantId, teamSlug).then((c) => c !== undefined);
-  }
-  return Promise.resolve(false);
+  const credential = await NON_AWS_CONFIG_GETTERS[provider](deps, tenantId, teamSlug);
+  return credential !== undefined;
+}
+
+function isKnownNonAwsProvider(provider: string): provider is ReservedProvider {
+  return provider in NON_AWS_CONFIG_GETTERS;
 }

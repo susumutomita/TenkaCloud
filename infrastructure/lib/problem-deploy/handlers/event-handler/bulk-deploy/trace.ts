@@ -76,6 +76,15 @@ export function traceEmptyPlan(
     existingKeyCount: existing.existingKey.size,
     skipped: plan.skipped,
     unverifiedAccountsCount: plan.unverifiedAccounts.size,
+    // [#2571 review-fix] Without this, an all-non-AWS event where no team has a
+    // registered credential produces an empty plan logged with
+    // unverifiedAccountsCount:0 / skipped:0 — indistinguishable in CloudWatch
+    // from "nothing to do". Surfacing the count AND the sorted (provider, team)
+    // list (same shape `BulkDeployResult.missingCredentials` already returns to
+    // the operator, see `result.ts`) makes this diagnosable from the trace
+    // alone, without needing the HTTP response.
+    missingCredentialsCount: plan.missingCredentials.size,
+    missingCredentials: Array.from(plan.missingCredentials).sort(),
     failedKeys: Array.from(existing.failedByKey.keys()),
     liveTeamIds: selected.teams.map((team) => team.teamId),
     liveProblemIds: selected.problems.map((problem) => problem.problemId),
@@ -98,5 +107,10 @@ export function traceBulkPlan(
     planCount: plan.entries.length,
     skipped: plan.skipped,
     unverifiedAccountsCount: plan.unverifiedAccounts.size,
+    // [#2571 review-fix] See `traceEmptyPlan`'s comment — same
+    // missing-credential observability gap, mirrored here for the non-empty
+    // (some rows enqueued, some withheld) case.
+    missingCredentialsCount: plan.missingCredentials.size,
+    missingCredentials: Array.from(plan.missingCredentials).sort(),
   });
 }

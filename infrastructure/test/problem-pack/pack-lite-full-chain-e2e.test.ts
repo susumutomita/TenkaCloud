@@ -263,6 +263,11 @@ async function buildFixture() {
         },
       ],
     ]),
+    // [#2571 review-fix] `buildBulkDeployPlan` gained this required arg in #2571
+    // (non-AWS single-provider credential existence gate); this fixture is
+    // AWS-only, so an empty set is the correct "nothing registered, nothing
+    // needed" input.
+    nonAwsCredentials: new Set<string>(),
     retryFailedOnly: false,
     forceRedeploy: false,
   });

@@ -1,7 +1,7 @@
 import { ulid } from "ulid";
 import type { TeamRecord } from "../../../control-data/teams-repository.js";
 import { buildStackPrefix, slugify } from "../../deploy-handler/naming.js";
-import type { DeploymentItem } from "../../deploy-handler/types.js";
+import { type DeploymentItem, runtimeItemFields } from "../../deploy-handler/types.js";
 import type { VerifiedCompetitorAccount } from "../../shared/competitor-account-lookup.js";
 import {
   provenanceItemFields,
@@ -12,14 +12,20 @@ import {
   EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED,
   EVENT_SOURCE,
 } from "../../shared/events.js";
-import type { ProblemRuntime } from "../../shared/runtime/index.js";
+import {
+  EXECUTABLE_ENGINE,
+  EXECUTABLE_PROVIDER,
+  isReservedRuntime,
+  type ProblemRuntime,
+  type ProblemRuntimeDescriptor,
+} from "../../shared/runtime/index.js";
 import type { EventSharedResources } from "../shared.js";
 import type { EventItem, EventProblemTarget } from "../types.js";
 import {
   type BulkDeployPlan,
   DEFAULT_TTL_MS,
   type ExistingDeploymentIndex,
-  NON_AWS_CLOUD_PROVIDERS,
+  nonAwsCredentialKey,
   type PlanEntry,
   type SelectedBulkDeployTargets,
   toEpochSeconds,
@@ -131,20 +137,20 @@ function buildBulkPlanEntry(
   const problemDir = args.shared.problemsCatalog[problem.problemId];
   if (!problemDir) return { kind: "skip" };
   const runtime = args.shared.resolveProblemRuntimeDescriptor?.(problem.problemId);
-  if (
-    runtime !== undefined &&
-    !("kind" in runtime) &&
-    NON_AWS_CLOUD_PROVIDERS.includes(runtime.provider)
-  ) {
+  const dispatch = classifyBulkRuntimeDispatch(runtime);
+  if (dispatch.channel === "adapter") {
     return buildNonAwsPlanCandidate(
       args,
       team,
       problem,
       problemDir,
-      runtime,
+      dispatch.runtime,
       replacement,
       createdAt,
     );
+  }
+  if (dispatch.channel === "unsupported") {
+    return { kind: "unsupportedRuntime", problemId: problem.problemId };
   }
   const awsAccountId = team.awsAccountId ?? problem.defaultAwsAccountId;
   if (!awsAccountId) return { kind: "skip" };
@@ -163,6 +169,45 @@ function buildBulkPlanEntry(
       createdAt,
     ),
   };
+}
+
+type BulkRuntimeDispatch =
+  | { readonly channel: "aws" }
+  | { readonly channel: "adapter"; readonly runtime: ProblemRuntime }
+  | { readonly channel: "unsupported" };
+
+/**
+ * [#2571 review-fix] Engine-aware dispatch gate (single-deploy parity).
+ *
+ * The pre-fix gate matched `NON_AWS_CLOUD_PROVIDERS.includes(runtime.provider)`
+ * — provider only, ignoring `engine` — so a `{provider:"gcp", engine:"terraform"}`
+ * descriptor (a provider match but not a registered engine) took the adapter
+ * path and threw a per-row `RuntimeNotSupportedError` deep inside
+ * `dispatchBulkAdapterEntries` instead of being refused up front, while a
+ * `{provider:"docker", engine:"compose"}` descriptor (not a non-AWS cloud
+ * runtime at all — ADR-023 local-play) fell through to the AWS/CFn path and
+ * violated its frozen-schema precondition (single-deploy rejects the same
+ * runtime pre-mutation).
+ *
+ * `isReservedRuntime` checks the exact `(provider, engine)` pair against
+ * `@tenkacloud/problem-runtime`'s `RESERVED_RUNTIMES` — the same predicate
+ * `verified-accounts.ts`'s `candidateNonAwsProviders` uses (#2562), so the two
+ * call sites cannot drift apart.
+ *
+ * A composite descriptor (`"kind" in runtime`) or an absent resolver result
+ * (`runtime === undefined`) keeps the pre-#2571 AWS-path behavior
+ * byte-identically — this gate only narrows what a *resolved single*
+ * descriptor does.
+ */
+function classifyBulkRuntimeDispatch(
+  runtime: ProblemRuntimeDescriptor | undefined,
+): BulkRuntimeDispatch {
+  if (runtime === undefined || "kind" in runtime) return { channel: "aws" };
+  if (runtime.provider === EXECUTABLE_PROVIDER && runtime.engine === EXECUTABLE_ENGINE) {
+    return { channel: "aws" };
+  }
+  if (isReservedRuntime(runtime)) return { channel: "adapter", runtime };
+  return { channel: "unsupported" };
 }
 
 /**
@@ -191,7 +236,7 @@ function buildNonAwsPlanCandidate(
     return { kind: "unsupportedRuntime", problemId: problem.problemId };
   }
   const teamSlug = slugify(team.internalSlug);
-  if (!args.nonAwsCredentials.has(`${runtime.provider}#${teamSlug}`)) {
+  if (!args.nonAwsCredentials.has(nonAwsCredentialKey(runtime.provider, teamSlug))) {
     return { kind: "missingCredential", provider: runtime.provider, teamSlug };
   }
   return {
@@ -288,6 +333,11 @@ function createNonAwsPlanEntry(
 ): PlanEntry {
   const jobId = ulid();
   const namePrefix = buildStackPrefix(problem.problemId, team.internalSlug);
+  // [#2571 review-fix] `runtimeItemFields` is the same function `deploy.ts` (the
+  // single-deploy path) uses to decide the runtime fields for a DeploymentItem —
+  // reusing it here instead of an inline `{runtimeProvider, runtimeEngine,
+  // runtimeEntry}` literal means the two paths can't drift on which fields get
+  // set or under what condition they're omitted.
   const item = createDeploymentItem(
     args,
     team,
@@ -296,11 +346,7 @@ function createNonAwsPlanEntry(
     namePrefix,
     createdAt,
     { awsAccountId: "", region: "" },
-    {
-      runtimeProvider: runtime.provider,
-      runtimeEngine: runtime.engine,
-      runtimeEntry: runtime.entry,
-    },
+    runtimeItemFields(runtime),
   );
   return {
     kind: "adapter",
