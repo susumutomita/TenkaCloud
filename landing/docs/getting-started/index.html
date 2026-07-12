@@ -47,24 +47,215 @@
 <main class="doc">
 <article>
 <h1>Getting started <span class="doc-badge doc-badge--stable">Stable</span></h1>
-<p>Deploy your <strong>First Pack</strong> and reach the participant portal in a single pass.</p>
-<h2>Prerequisites</h2>
-<ul>
-<li><a href="https://bun.sh">Bun</a> 1.3.11</li>
-<li>An AWS account (for a real deploy; the SPA dev servers run without one)</li>
-</ul>
-<h2>Deploy your First Pack</h2>
-<p>Run Lite mode, register a team, and watch scoring flow through the participant
-portal:</p>
-<pre><code class="language-bash">make deploy        # Lite mode: AppPlaneCore + Participant Portal
+<p>TenkaCloud runs in several modes. Pick the row that matches what you want to do
+today — every section below is a complete, copy-paste path from zero to a
+running platform, in increasing order of commitment.</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Mode</th>
+<th>You need</th>
+<th>You get</th>
+<th>Typical time</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>Local drills</td>
+<td>Docker + Bun, <strong>no AWS account</strong></td>
+<td>Container drill problems with instant local scoring</td>
+<td>~5 min</td>
+</tr>
+<tr>
+<td>2</td>
+<td>GitHub Codespaces</td>
+<td>A GitHub account, <strong>nothing installed</strong></td>
+<td>The same local drills, entirely in your browser</td>
+<td>~3 min</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Lite on AWS — console launcher</td>
+<td>An AWS account, <strong>nothing installed</strong></td>
+<td>Single-organizer platform (Admin Console + Participant Portal)</td>
+<td>~20–30 min</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Lite on AWS — CLI</td>
+<td>An AWS account + local toolchain</td>
+<td>Same as 3, deployed and iterated from your shell</td>
+<td>~20 min</td>
+</tr>
+<tr>
+<td>5</td>
+<td>SaaS on AWS</td>
+<td>An AWS account + local toolchain</td>
+<td>Full multi-tenant platform (pooled + silo tiers, System Admin)</td>
+<td>~45 min</td>
+</tr>
+</tbody></table>
+<p>Conceptual background for modes 4–5 (what each stack is, how tenants provision)
+lives in <a href="/docs/operate/deploy-paths/">deploy modes and launch paths</a>.</p>
+<h2>1. Local drills — Docker, no AWS</h2>
+<p>Cloud-independent drill problems run as self-contained Docker containers with a
+local scoring API. Nothing touches AWS and nothing costs money.</p>
+<p><strong>Prerequisites:</strong> <a href="https://bun.sh">Bun</a> 1.3.11 and a running Docker daemon
+(Docker Desktop, or colima on macOS). <code>make doctor</code> diagnoses your setup without
+installing anything; <code>make local-onboard</code> is the guided installer if you prefer.</p>
+<pre><code class="language-bash">git clone https://github.com/susumutomita/TenkaCloud.git
+cd TenkaCloud
+make install
+git submodule update --init problems   # the drill catalog
+make local
 </code></pre>
-<p>This single-tenant path is the fastest way to see a Challenge pack score
-end to end.</p>
+<p><code>make local</code> starts the local scoring API and opens the Participant Portal
+(port 5175); you pick and start a drill from the portal screen. Useful variants:</p>
+<pre><code class="language-bash">make local-list                # list every drill id
+make local PROBLEM=&lt;drill-id&gt;  # pre-start one drill
+make local-status              # what is running
+make local-down                # stop everything
+</code></pre>
+<p>The full local-play manual — the <code>/verify</code> scoring contract, authoring your own
+container drills — is in
+<a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/local-play.md"><code>docs/local-play.md</code></a>.</p>
+<h2>2. GitHub Codespaces — zero install</h2>
+<p>The same local drills, but the machine is a codespace and setup is automatic
+(the first build installs Bun, initializes the drill catalog, and starts
+Docker).</p>
+<ol>
+<li>Open <a href="https://codespaces.new/susumutomita/TenkaCloud">github.com/codespaces/new for this repo</a>
+→ <strong>Create codespace on main</strong>.</li>
+<li>Run the <strong>&quot;▷ ローカルプレイ開始&quot;</strong> task (Command Palette → <strong>Tasks: Run
+Task</strong>, or <code>Cmd/Ctrl+Shift+B</code>) — it runs <code>make local</code> for you.</li>
+<li>When the Participant Portal is up, open the <strong>PORTS</strong> tab and click the
+preview icon next to port <strong>5175</strong>.</li>
+</ol>
+<p>Two rules keep Codespaces sessions painless:</p>
+<ul>
+<li><strong>Stay inside the codespace.</strong> Drill links only work through the port <code>5175</code>
+preview URL; a raw <code>127.0.0.1</code> URL pasted into a browser tab on your own
+machine will not resolve.</li>
+<li><strong>API-style drills are answered from the codespace terminal</strong> (e.g.
+<code>curl http://localhost:&lt;port&gt;/...</code>), because forwarded ports are private to
+the codespace. The portal shows the drill&#39;s endpoints either way.</li>
+</ul>
+<p>Codespaces plays cloud-independent drills only — AWS-deployed problems need
+mode 3, 4, or 5.</p>
+<h2>3. Lite mode on AWS — console launcher, no local install</h2>
+<p>Lite mode is the single-organizer platform: Admin Console, Participant Portal,
+and the problem-deploy backend, deployed as two CloudFormation stacks with a
+fixed single tenant. This path stands it up <strong>entirely from the AWS Console</strong> —
+a launcher stack creates a CodeBuild project that clones the repo and runs the
+deploy for you.</p>
+<ol>
+<li>Download
+<a href="https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/lite-pipeline.yaml"><code>infrastructure/templates/lite-pipeline.yaml</code></a>.</li>
+<li>Open the CloudFormation <strong>Create stack</strong> page (the catalog defaults target
+<code>ap-northeast-1</code>) → <strong>Upload a template file</strong> → upload it → stack name
+<code>tenkacloud-lite-launcher</code>.</li>
+<li>Set <strong><code>TenantAdminEmail</code></strong> (the only required parameter) to the email that
+should receive the Admin Console invitation.</li>
+<li>Acknowledge the IAM capability checkbox and create the stack.</li>
+<li>Open the CodeBuild project from the stack&#39;s <strong><code>StartBuildConsoleUrl</code></strong>
+output and press <strong>Start build</strong>.</li>
+</ol>
+<p>After ~15–30 minutes, the <strong>Admin Console</strong> and <strong>Participant Portal</strong> URLs
+appear in the <strong>Outputs</strong> of the <code>tenkacloud-lite</code> and
+<code>tenkacloud-lite-problem-deploy</code> stacks the build created. Sign in with the
+temporary password mailed to <code>TenantAdminEmail</code>.</p>
+<p><strong>Tear down:</strong> in the same CodeBuild project, <strong>Start build with overrides</strong>
+with <code>ACTION=destroy</code>, then delete the <code>tenkacloud-lite-launcher</code> stack itself.</p>
+<h2>4. Lite mode on AWS — CLI</h2>
+<p>The same two stacks as mode 3, deployed from your shell — the path you want
+when you also develop on the platform.</p>
+<p><strong>Prerequisites:</strong> Bun 1.3.11 and AWS credentials in your shell (profile or
+SSO) for the target account. <code>cdk bootstrap</code> is <strong>not</strong> a separate step — the
+deploy runs it idempotently, and Lambda bundling uses local esbuild (no Docker
+needed).</p>
+<pre><code class="language-bash">git clone https://github.com/susumutomita/TenkaCloud.git
+cd TenkaCloud
+make install
+git submodule update --init problems
+
+# 1. Create the environment file (interactive wizard)…
+make env-init
+# …or copy the example and fill in AWS_ACCOUNT_ID + TENANT_ADMIN_EMAIL:
+#   cp infrastructure/environments/development/.env.example \
+#      infrastructure/environments/development/.env
+
+# 2. Deploy (builds the SPAs, bootstraps CDK if needed, deploys both stacks)
+make deploy
+</code></pre>
+<p>The command prints the Admin Console and Participant Portal URLs when it
+finishes. Switch environments with <code>make deploy ENV=production</code> (each
+environment has its own <code>infrastructure/environments/&lt;env&gt;/.env</code>), and tear
+down with <code>make destroy</code>.</p>
+<h3>Choosing the control-data backend: DynamoDB or Turso</h3>
+<p>Lite mode stores control data (events, teams, deployments, scores) in one of
+two backends, selected by <code>CDK_PARAM_CONTROL_DATA_BACKEND</code> in your <code>.env</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Backend</th>
+<th>Set it to</th>
+<th>Standing cost</th>
+<th>For</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>DynamoDB</strong> (default)</td>
+<td>unset, or <code>dynamodb</code></td>
+<td>Provisioned 1 RCU/1 WCU on every table — small but nonzero, and new-style AWS Free Tier accounts have no always-free DynamoDB allowance</td>
+<td>Teams that want everything inside AWS</td>
+</tr>
+<tr>
+<td><strong>Turso (libSQL)</strong></td>
+<td><code>turso</code></td>
+<td>None on this path — the Lite synth creates <strong>zero</strong> DynamoDB tables</td>
+<td>Individuals, trials, personal events</td>
+</tr>
+<tr>
+<td>Migration bridge</td>
+<td><code>turso-mirror</code></td>
+<td>Same as DynamoDB (tables remain canonical, writes mirrored to SQL)</td>
+<td>Validating a cutover before switching to <code>turso</code></td>
+</tr>
+</tbody></table>
+<p>Opting in to Turso is four steps: create a Turso database, store its auth token
+in SSM as a <code>SecureString</code>, add three lines to your <code>.env</code>
+(<code>CDK_PARAM_CONTROL_DATA_BACKEND=turso</code> plus <code>CDK_PARAM_TURSO_DATABASE_URL</code> and
+<code>CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME</code>), and <code>make deploy</code> — the first
+Lambda cold start creates the SQL schema for you, and the deploy gate fails
+fast if the backend is set while either Turso value is missing.
+The full walkthrough, the migration path for an existing DynamoDB-backed stack,
+measured monthly costs, and the current live-verification status are in
+<a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/running-costs.md"><code>docs/running-costs.md</code></a>.</p>
+<h2>5. SaaS mode — multi-tenant</h2>
+<p>SaaS mode stands up the full multi-tenant platform: the SBT control plane with
+System Admin invitations, pooled BASIC/ADVANCED tenants, and dedicated PLATINUM
+silo stacks. Choose it when more than one organization runs events on the same
+deployment; otherwise Lite mode is the right default.</p>
+<p><strong>Prerequisites:</strong> the same toolchain as mode 4, plus <code>SYSTEM_ADMIN_EMAIL</code> and
+<code>AWS_ACCOUNT_ID</code> in <code>infrastructure/environments/&lt;env&gt;/.env</code>.</p>
+<pre><code class="language-bash">make deploy-saas
+</code></pre>
+<p>One command runs all three phases: deploy the control plane + pooled
+application plane (phase 1), build and host the Admin Console behind CloudFront
+(phase 2), then re-deploy the control plane with the CloudFront origin wired
+into Cognito callbacks/CORS (phase 3). The System Admin invitation lands in
+<code>SYSTEM_ADMIN_EMAIL</code>; from the Admin Console you create tenants, and tenant
+admins take it from there.</p>
+<p>Tear down with <code>make destroy-saas</code> — it is idempotent from any partial state.
+How tenants provision (pooled vs silo, what the CodePipeline is actually for)
+is covered in <a href="/docs/operate/deploy-paths/">deploy modes and launch paths</a>.</p>
 <h2>Next steps</h2>
 <ul>
-<li>Read about <a href="/docs/concepts/problem-packs/">problem packs</a>.</li>
-<li>Browse the <a href="https://github.com/susumutomita/TenkaCloud#readme">API reference</a>.</li>
-<li>Copy a snippet from <a href="https://github.com/susumutomita/TenkaCloud#readme">examples</a>.</li>
+<li>Ship a problem: the <a href="/docs/tutorials/first-pack/">first pack tutorial</a>
+and the <a href="/docs/concepts/problem-packs/">problem packs concept</a>.</li>
+<li>Run a competition end to end: <a href="/docs/operate/run-an-event/">run an event</a>.</li>
+<li>Understand the stacks: <a href="/docs/concepts/architecture/">platform architecture</a>.</li>
 </ul>
 
 </article>
