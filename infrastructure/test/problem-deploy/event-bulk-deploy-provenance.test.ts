@@ -108,6 +108,7 @@ function buildPlanFor(
         },
       ],
     ]),
+    nonAwsCredentials: new Set(),
     retryFailedOnly: false,
     forceRedeploy: false,
   });
@@ -238,6 +239,7 @@ describe("buildBulkDeployPlan provenance", () => {
       },
       existing: emptyExisting,
       verified: new Map(),
+      nonAwsCredentials: new Set(),
       retryFailedOnly: false,
       forceRedeploy: false,
     });

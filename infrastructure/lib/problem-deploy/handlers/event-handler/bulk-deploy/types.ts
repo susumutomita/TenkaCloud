@@ -1,6 +1,12 @@
 import type { PutEventsRequestEntry } from "@aws-sdk/client-eventbridge";
 import type { TeamRecord } from "../../../control-data/teams-repository.js";
 import type { DeploymentItem } from "../../deploy-handler/types.js";
+import {
+  AZURE_PROVIDER,
+  GCP_PROVIDER,
+  type ProblemRuntime,
+  SAKURA_PROVIDER,
+} from "../../shared/runtime/index.js";
 import type { EventItem, EventProblemTarget } from "../types.js";
 
 /**
@@ -28,6 +34,15 @@ export interface BulkDeployResult {
   readonly unsupportedRuntime?: number;
   /** [#2563 v1] 上記の問題 id 一覧 (sorted、重複除去済み)。 */
   readonly unsupportedRuntimeProblems?: readonly string[];
+  /**
+   * [#2571] 非 AWS single-provider (gcp/azure/sakura) の team に、その provider の
+   * credential が未登録だったため plan から除外された組数。`unverified` (AWS 版) の
+   * 非 AWS 対応物 — bulk 経路自体は adapter dispatch で実行できるが、この team に
+   * 限っては credential 登録が先に必要。
+   */
+  readonly missingCredential?: number;
+  /** [#2571] 上記の `${provider}:${teamSlug}` 一覧 (sorted、重複除去済み)。 */
+  readonly missingCredentials?: readonly string[];
 }
 
 export type BulkDeployOutcome = { kind: "ok"; result: BulkDeployResult } | { kind: "not_found" };
@@ -44,12 +59,40 @@ export const DEFAULT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 export const toEpochSeconds = (ms: number): number => Math.floor(ms / 1000);
 
-export interface PlanEntry {
-  readonly item: DeploymentItem;
-  readonly entry: PutEventsRequestEntry;
-  /** retry / force redeploy のとき、対応する旧行の jobId (= これを DELETE)。 */
-  readonly replacesJobId?: string;
-}
+/** 非 AWS の single-provider cloud runtime (= frozen CFn 経路に載せられない)。 */
+export const NON_AWS_CLOUD_PROVIDERS: readonly string[] = [
+  AZURE_PROVIDER,
+  GCP_PROVIDER,
+  SAKURA_PROVIDER,
+];
+
+/**
+ * [#2571] Bulk plan entry。 dispatch channel で discriminate する:
+ *   - `"eventbridge"`: AWS/CFn 行。 frozen `DeployCreateRequested` -> CFn state machine
+ *     pipeline に乗る (= #2571 以前と byte-identical、`kind` discriminant を足しただけ)。
+ *   - `"adapter"`: 非 AWS single-provider 行 (gcp/azure/sakura)。 `dispatchBulkAdapterEntries`
+ *     (`selectAdapter` + `dispatchPreparedDeployment`、single-deploy と同じ adapter seam)
+ *     で直接 dispatch する — CFn pipeline は非 AWS deploy を表現できないため決して乗らない。
+ * 両方とも `item` (= 永続化する DeploymentItem) + optional `replacesJobId` (retry /
+ * forceRedeploy の置換対象) を持つ — `persistence.ts` はこの共通 2 field だけを読む。
+ */
+export type PlanEntry =
+  | {
+      readonly kind: "eventbridge";
+      readonly item: DeploymentItem;
+      readonly entry: PutEventsRequestEntry;
+      /** retry / force redeploy のとき、対応する旧行の jobId (= これを DELETE)。 */
+      readonly replacesJobId?: string;
+    }
+  | {
+      readonly kind: "adapter";
+      readonly item: DeploymentItem;
+      readonly runtime: ProblemRuntime;
+      readonly problemDir: string;
+      readonly teamSlug: string;
+      /** retry / force redeploy のとき、対応する旧行の jobId (= これを DELETE)。 */
+      readonly replacesJobId?: string;
+    };
 
 export interface LoadedBulkDeployTargets {
   readonly event: Partial<EventItem>;
@@ -78,6 +121,8 @@ export interface BulkDeployPlan {
   readonly unverifiedAccounts: Set<string>;
   /** [#2563 v1] bulk では実行できない非 AWS single-provider の問題 id 集合。 */
   readonly unsupportedRuntimeProblems: Set<string>;
+  /** [#2571] credential 未登録で除外された `${provider}:${teamSlug}` 集合。 */
+  readonly missingCredentials: Set<string>;
 }
 
 export interface PublishFailure {

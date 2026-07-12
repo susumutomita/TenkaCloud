@@ -31,6 +31,7 @@ const OPTIONAL_KEYS = [
   "BATTLE_PROBLEMS_PROVENANCE",
   "BULK_DEPLOY_PAYLOAD_BUCKET",
   "BULK_DEPLOY_VIA_DISTRIBUTED_MAP",
+  "SAKURA_APPRUN_BASE_URL",
 ];
 const ALL_KEYS = [...Object.keys(EVENT_ENV), ...OPTIONAL_KEYS];
 
@@ -53,6 +54,27 @@ describe("buildEventSharedResources", () => {
     expect(s.problemsProvenance).toEqual({}); // BATTLE_PROBLEMS_PROVENANCE absent → {}
     expect(s.ddb).toBeDefined();
     expect(s.events).toBeDefined();
+  });
+
+  // [#2571] Bulk non-AWS single-provider adapter dispatch needs an SSM client +
+  // the Sakura AppRun base URL override wired into EventApiLambda's shared
+  // resources (mirrors deploy-handler's DeploySharedResources wiring exactly).
+  it("should wire an SSM client for non-AWS adapter dispatch (#2571)", () => {
+    const s = buildEventSharedResources(makeTestControlDataRuntime());
+    expect(s.ssm).toBeDefined();
+  });
+
+  it("should default sakuraAppRunBaseUrl to undefined when SAKURA_APPRUN_BASE_URL is unset (#2571)", () => {
+    expect(
+      buildEventSharedResources(makeTestControlDataRuntime()).sakuraAppRunBaseUrl,
+    ).toBeUndefined();
+  });
+
+  it("should honor SAKURA_APPRUN_BASE_URL when present (#2571)", () => {
+    process.env.SAKURA_APPRUN_BASE_URL = "https://apprun.example.test";
+    expect(buildEventSharedResources(makeTestControlDataRuntime()).sakuraAppRunBaseUrl).toBe(
+      "https://apprun.example.test",
+    );
   });
 
   it("should honor the optional env (bucket / distributed-map flag / disruptions catalog)", () => {

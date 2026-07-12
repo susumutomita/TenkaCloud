@@ -12,12 +12,20 @@ import type { EventSharedResources } from "../shared.js";
 import { markBulkEventDeploying } from "./persistence.js";
 import type { PlanEntry, PublishFailure } from "./types.js";
 
+type EventBridgePlanEntry = Extract<PlanEntry, { kind: "eventbridge" }>;
+
 /**
  * Event status の DEPLOYING 遷移と、 EventBridge への publish を並列実行する。
  * - feature flag (`useBulkDistributedMap` + `bulkDeployPayloadBucket` あり) なら
  *   Distributed Map 経路: S3 PutObject (= deployment 配列) + 1 BulkDeployCreateRequested publish
  * - 旧経路: `putEventsBatched` (shared/events.js) が chunk 分割して直接 DeployCreateRequested を
  *   fan-out publish
+ *
+ * [#2571] `plan` は eventbridge / adapter の混在プランを受け取りうるが、 この module は
+ * `kind === "eventbridge"` の行だけを対象にする — adapter 行は `dispatchBulkAdapterEntries`
+ * (`adapter-dispatch.ts`) が別 channel で dispatch する (= CFn state machine には決して乗らない)。
+ * `markBulkEventDeploying` は eventbridge 行が 0 件でも無条件に走らせる (= Event 全体の
+ * DEPLOYING 遷移は dispatch channel を問わない)。
  *
  * 戻り値は publish 失敗一覧。 caller が markPublishFailuresFailed で deployment を FAILED 化する。
  */
@@ -28,7 +36,12 @@ export async function publishBulkDeployPlan(
   createdAt: string,
   plan: readonly PlanEntry[],
 ): Promise<PublishFailure[]> {
-  const publish = Promise.all(publishBulkPlanEntries(shared, tenantId, eventId, plan));
+  const eventBridgeEntries = plan.filter(
+    (entry): entry is EventBridgePlanEntry => entry.kind === "eventbridge",
+  );
+  const publish = Promise.all(
+    publishBulkPlanEntries(shared, tenantId, eventId, eventBridgeEntries),
+  );
   const [, failures] = await Promise.all([
     markBulkEventDeploying(shared, tenantId, eventId, createdAt),
     publish,
@@ -40,8 +53,11 @@ function publishBulkPlanEntries(
   shared: EventSharedResources,
   tenantId: string,
   eventId: string,
-  plan: readonly PlanEntry[],
+  plan: readonly EventBridgePlanEntry[],
 ): Promise<PublishFailure[]>[] {
+  // [#2571] An adapter-only plan (zero eventbridge rows) must not S3-put / publish
+  // an empty batch — there is nothing for the frozen CFn pipeline to do.
+  if (plan.length === 0) return [];
   if (shared.useBulkDistributedMap && shared.bulkDeployPayloadBucket.length > 0) {
     return [
       publishViaDistributedMap(shared, {
@@ -59,7 +75,7 @@ function publishBulkPlanEntries(
 
 async function publishPlan(
   shared: EventSharedResources,
-  plan: readonly PlanEntry[],
+  plan: readonly EventBridgePlanEntry[],
 ): Promise<PublishFailure[]> {
   const results = await putEventsBatched(
     shared.events,

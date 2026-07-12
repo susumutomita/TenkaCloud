@@ -26,7 +26,7 @@ const PROVENANCE: DeploymentProvenance = {
 };
 
 const planEntry = (item: Partial<DeploymentItem>): PlanEntry =>
-  ({ item: item as DeploymentItem, entry: {} }) as PlanEntry;
+  ({ kind: "eventbridge", item: item as DeploymentItem, entry: {} }) as PlanEntry;
 
 describe("writePackProvenanceAudit", () => {
   it("should write an audit event with provenance extra for each pack deployment", async () => {

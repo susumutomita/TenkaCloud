@@ -129,6 +129,16 @@ export interface GenericScoringLambdaProps {
   readonly tursoDatabaseUrl?: string;
   /** SSM SecureString parameter name containing the libSQL auth token. */
   readonly tursoAuthTokenParameterName?: string;
+  /**
+   * [ADR-023 / #2054 / Issue #2571] 非 aws/cloudformation の runtime を宣言した問題のみ
+   * (= `{problemId: {provider,engine,entry}}`)。`discoverProblemsRuntime` の戻り値、
+   * EventApiLambda / DeployApiLambda の同名 prop と同一 source。scheduled auto-deploy
+   * (`buildScheduledDeployResources`) が `makeProblemRuntimeDescriptorResolver` 経由でここから
+   * 注入される `BATTLE_PROBLEMS_RUNTIMES` を読み、非 AWS single-provider 問題を adapter
+   * dispatch する。IAM grant は既存 (sakura/azure/gcp SSM + kms:Decrypt、下記) を流用するので
+   * 本 prop 追加による新規 grant は無い。未配線 (`undefined`) は空 map に正規化する。
+   */
+  readonly problemRuntimes?: Readonly<Record<string, unknown>>;
 }
 
 /**
@@ -234,6 +244,12 @@ export class GenericScoringLambda extends Construct {
         // 宣言 0 件なら `{}` (= tick 対象なし)。 env var は増やさない。
         "process.env.PROBLEM_COORDINATION": JSON.stringify(
           JSON.stringify(props.problemsCoordination ?? {}),
+        ),
+        // [Issue #2571] scheduled auto-deploy (`buildScheduledDeployResources`) の adapter
+        // dispatch 用 runtime catalog。EventApiLambda / DeployApiLambda と同じ esbuild define
+        // channel に載せる (#1308 の 4KB env 上限回避パターンを踏襲)。
+        "process.env.BATTLE_PROBLEMS_RUNTIMES": JSON.stringify(
+          JSON.stringify(props.problemRuntimes ?? {}),
         ),
       },
     });

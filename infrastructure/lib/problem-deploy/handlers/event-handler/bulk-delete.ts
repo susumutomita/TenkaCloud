@@ -1,5 +1,7 @@
 import type { PutEventsRequestEntry } from "@aws-sdk/client-eventbridge";
 import type { DeploymentsLifecyclePort } from "../../control-data/deployments-repository.js";
+import { buildAdapterDependencies } from "../deploy-handler/adapter-dependencies.js";
+import { slugify } from "../deploy-handler/naming.js";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
 import { resolveVerifiedCompetitorAccount } from "../shared/competitor-account-lookup.js";
 import {
@@ -8,6 +10,12 @@ import {
   EVENT_SOURCE,
   putEventsBatched,
 } from "../shared/events.js";
+import {
+  EXECUTABLE_ENGINE,
+  EXECUTABLE_PROVIDER,
+  type ProblemRuntime,
+  selectAdapter,
+} from "../shared/runtime/index.js";
 import {
   type EventSharedResources,
   queryDeploymentsByEvent,
@@ -32,7 +40,20 @@ export type BulkTeardownOutcome =
   | { kind: "ok"; result: BulkTeardownResult }
   | { kind: "not_found" };
 
-type UpdateOutcome = { entry: PutEventsRequestEntry; jobId: string } | { skip: true };
+/**
+ * [#2571] Bulk teardown per-row outcome. The AWS/CFn path (`entry` present)
+ * publishes `DeployDeleteRequested` in a batch, same as before. The non-AWS
+ * adapter path (gcp/azure/sakura) performs its `adapter.destroy` REST call
+ * inline (`prepareBulkAdapterTeardown`) instead of producing a
+ * `PutEventsRequestEntry` — `adapterEnqueued` / `adapterFailed` report the
+ * outcome directly so the caller folds them into `enqueued` / `failed`
+ * without a second (EventBridge) publish round for these rows.
+ */
+type UpdateOutcome =
+  | { entry: PutEventsRequestEntry; jobId: string }
+  | { skip: true }
+  | { adapterEnqueued: string }
+  | { adapterFailed: string };
 
 /**
  * `DELETE /events/{eventId}` の実体。
@@ -80,8 +101,16 @@ export async function bulkTeardownEvent(
 
   const pending: Array<{ entry: PutEventsRequestEntry; jobId: string }> = [];
   let skipped = 0;
+  // [#2571] Non-AWS adapter rows already ran their `adapter.destroy` call (+
+  // compensation on failure) inside `prepareBulkTeardownEntry` — they never
+  // produce a `PutEventsRequestEntry`, so they are tallied here directly
+  // rather than riding the EventBridge publish batch below.
+  let adapterEnqueued = 0;
+  let adapterFailed = 0;
   for (const o of outcomes) {
     if ("skip" in o) skipped++;
+    else if ("adapterEnqueued" in o) adapterEnqueued++;
+    else if ("adapterFailed" in o) adapterFailed++;
     else pending.push(o);
   }
 
@@ -116,9 +145,9 @@ export async function bulkTeardownEvent(
     kind: "ok",
     result: {
       eventId,
-      enqueued: pending.length - failedJobIds.length,
+      enqueued: pending.length - failedJobIds.length + adapterEnqueued,
       skipped,
-      failed: failedJobIds.length,
+      failed: failedJobIds.length + adapterFailed,
     },
   };
 }
@@ -155,6 +184,18 @@ async function prepareBulkTeardownEntry(
 ): Promise<UpdateOutcome> {
   const status = (item.status ?? "PENDING") as DeploymentStatus;
   if (status === "DELETING" || status === "DELETED") return { skip: true };
+
+  // [#2571] Non-AWS runtime (sakura/azure/gcp) rows never carry a region /
+  // awsAccountId CFn can act on (both persisted as "", #2571 plan-builder) —
+  // `getBulkTeardownTarget` below would always fail them and silently `skip`,
+  // which is the exact leak this fixes (cloud resources orphaned on event
+  // teardown). Mirrors `delete.ts`'s `resolveItemRuntime` + `teardownViaAdapter`
+  // branch.
+  const runtime = resolveItemRuntime(item);
+  if (runtime.provider !== EXECUTABLE_PROVIDER || runtime.engine !== EXECUTABLE_ENGINE) {
+    return prepareBulkAdapterTeardown(shared, tenantId, updatedAt, item, runtime);
+  }
+
   const target = getBulkTeardownTarget(item);
   if (!target) return { skip: true };
   const transitioned = await transitionBulkTargetToDeleting(
@@ -175,6 +216,59 @@ async function prepareBulkTeardownEntry(
       Resources: [`tenkacloud:deployment:${target.jobId}`],
     },
   };
+}
+
+/** deployment 行から runtime を復元する。 runtimeProvider/Engine/Entry が無ければ aws/cloudformation (legacy)。 */
+function resolveItemRuntime(item: Partial<DeploymentItem>): ProblemRuntime {
+  if (item.runtimeProvider && item.runtimeEngine && item.runtimeEntry) {
+    return {
+      provider: item.runtimeProvider,
+      engine: item.runtimeEngine,
+      entry: item.runtimeEntry,
+    };
+  }
+  return { provider: EXECUTABLE_PROVIDER, engine: EXECUTABLE_ENGINE, entry: "template.yaml" };
+}
+
+/**
+ * [#2571] Bulk teardown for a non-AWS single-provider row. Mirrors `delete.ts`'s
+ * `teardownViaAdapter`: transitions DELETING, resolves the adapter for the
+ * row's stored runtime, and calls `adapter.destroy` directly (no EventBridge /
+ * CFn — the row never had a stack for CFn to delete). `!shared.ssm` keeps the
+ * row dormant-skip (unchanged behavior for a Lambda that hasn't been wired
+ * with the per-team credential SSM grants, e.g. staged enablement), matching
+ * `plan-builder.ts`'s v1 refusal gate on the deploy side.
+ */
+async function prepareBulkAdapterTeardown(
+  shared: EventSharedResources,
+  tenantId: string,
+  updatedAt: string,
+  item: Partial<DeploymentItem>,
+  runtime: ProblemRuntime,
+): Promise<UpdateOutcome> {
+  if (!shared.ssm) return { skip: true };
+  const jobId = String(item.jobId ?? "");
+  if (!jobId) return { skip: true };
+  const transitioned = await transitionBulkTargetToDeleting(shared, tenantId, updatedAt, jobId);
+  if (!transitioned) return { skip: true };
+
+  const teamSlug = slugify(String(item.teamName ?? ""));
+  const adapter = selectAdapter(
+    runtime,
+    buildAdapterDependencies({ ...shared, tenantId }, runtime, teamSlug),
+  );
+  try {
+    await adapter.destroy({
+      jobId,
+      namePrefix: String(item.namePrefix ?? ""),
+      region: String(item.region ?? ""),
+      awsAccountId: String(item.awsAccountId ?? ""),
+    });
+  } catch {
+    await compensateBulkTeardownPublish(shared, tenantId, jobId, updatedAt);
+    return { adapterFailed: jobId };
+  }
+  return { adapterEnqueued: jobId };
 }
 
 function getBulkTeardownTarget(item: Partial<DeploymentItem>):

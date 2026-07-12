@@ -12,13 +12,14 @@ import {
   EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED,
   EVENT_SOURCE,
 } from "../../shared/events.js";
-import { AZURE_PROVIDER, GCP_PROVIDER, SAKURA_PROVIDER } from "../../shared/runtime/index.js";
+import type { ProblemRuntime } from "../../shared/runtime/index.js";
 import type { EventSharedResources } from "../shared.js";
 import type { EventItem, EventProblemTarget } from "../types.js";
 import {
   type BulkDeployPlan,
   DEFAULT_TTL_MS,
   type ExistingDeploymentIndex,
+  NON_AWS_CLOUD_PROVIDERS,
   type PlanEntry,
   type SelectedBulkDeployTargets,
   toEpochSeconds,
@@ -33,6 +34,8 @@ export interface BuildBulkDeployPlanArgs {
   readonly selected: SelectedBulkDeployTargets;
   readonly existing: ExistingDeploymentIndex;
   readonly verified: Map<string, VerifiedCompetitorAccount>;
+  /** [#2571] non-AWS single-provider の credential 登録有無。`resolveBulkNonAwsCredentials` の戻り値。 */
+  readonly nonAwsCredentials: ReadonlySet<string>;
   readonly retryFailedOnly: boolean;
   readonly forceRedeploy: boolean;
 }
@@ -40,39 +43,80 @@ export interface BuildBulkDeployPlanArgs {
 /**
  * teams × problems を全 iterate し、 (replace 対象 jobId / problemsCatalog / awsAccountId /
  * verified record) を全て満たした組み合わせだけ PlanEntry を出す。 既存衝突 / problemsCatalog
- * 欠落 / awsAccountId 欠落は skipped に、 verified 欠落は unverifiedAccounts に、 非 AWS
- * single-provider 問題は unsupportedRuntimeProblems に計上する (#2563 v1: 下の
- * buildBulkPlanEntry コメント参照)。
+ * 欠落 / awsAccountId 欠落は skipped に、 verified 欠落は unverifiedAccounts に、 credential 未登録の
+ * 非 AWS single-provider 組は missingCredentials に、 ssm 未配線の非 AWS single-provider 問題は
+ * unsupportedRuntimeProblems に計上する (#2571: 下の buildBulkPlanEntry コメント参照)。
  */
 export function buildBulkDeployPlan(args: BuildBulkDeployPlanArgs): BulkDeployPlan {
   const createdAt = new Date(args.nowMs).toISOString();
-  const plan: PlanEntry[] = [];
-  let skipped = 0;
-  const unverifiedAccounts = new Set<string>();
-  const unsupportedRuntimeProblems = new Set<string>();
+  const acc = createBulkPlanAccumulator();
   for (const team of args.selected.teams) {
     for (const problem of args.selected.problems) {
-      const candidate = buildBulkPlanEntry(args, team, problem, createdAt);
-      if (candidate.kind === "entry") plan.push(candidate.entry);
-      if (candidate.kind === "skip") skipped++;
-      if (candidate.kind === "unverified") unverifiedAccounts.add(candidate.accountId);
-      if (candidate.kind === "unsupportedRuntime") {
-        unsupportedRuntimeProblems.add(candidate.problemId);
-      }
+      recordBulkPlanCandidate(acc, buildBulkPlanEntry(args, team, problem, createdAt));
     }
   }
-  return { entries: plan, createdAt, skipped, unverifiedAccounts, unsupportedRuntimeProblems };
+  return {
+    entries: acc.plan,
+    createdAt,
+    skipped: acc.skipped,
+    unverifiedAccounts: acc.unverifiedAccounts,
+    unsupportedRuntimeProblems: acc.unsupportedRuntimeProblems,
+    missingCredentials: acc.missingCredentials,
+  };
 }
-
-/** 非 AWS の single-provider cloud runtime (= frozen CFn 経路に載せられない)。 */
-const NON_AWS_CLOUD_PROVIDERS: readonly string[] = [AZURE_PROVIDER, GCP_PROVIDER, SAKURA_PROVIDER];
 
 type BulkPlanCandidate =
   | { readonly kind: "entry"; readonly entry: PlanEntry }
   | { readonly kind: "skip" }
   | { readonly kind: "ignore" }
   | { readonly kind: "unverified"; readonly accountId: string }
-  | { readonly kind: "unsupportedRuntime"; readonly problemId: string };
+  | { readonly kind: "unsupportedRuntime"; readonly problemId: string }
+  | { readonly kind: "missingCredential"; readonly provider: string; readonly teamSlug: string };
+
+interface BulkPlanAccumulator {
+  readonly plan: PlanEntry[];
+  skipped: number;
+  readonly unverifiedAccounts: Set<string>;
+  readonly unsupportedRuntimeProblems: Set<string>;
+  readonly missingCredentials: Set<string>;
+}
+
+function createBulkPlanAccumulator(): BulkPlanAccumulator {
+  return {
+    plan: [],
+    skipped: 0,
+    unverifiedAccounts: new Set(),
+    unsupportedRuntimeProblems: new Set(),
+    missingCredentials: new Set(),
+  };
+}
+
+/**
+ * [#2571] Extracted out of {@link buildBulkDeployPlan}'s inner loop to keep the
+ * per-candidate branching (5 kinds, up from the pre-#2571 4) from pushing that
+ * loop over the cognitive-complexity budget.
+ */
+function recordBulkPlanCandidate(acc: BulkPlanAccumulator, candidate: BulkPlanCandidate): void {
+  switch (candidate.kind) {
+    case "entry":
+      acc.plan.push(candidate.entry);
+      return;
+    case "skip":
+      acc.skipped++;
+      return;
+    case "unverified":
+      acc.unverifiedAccounts.add(candidate.accountId);
+      return;
+    case "unsupportedRuntime":
+      acc.unsupportedRuntimeProblems.add(candidate.problemId);
+      return;
+    case "missingCredential":
+      acc.missingCredentials.add(`${candidate.provider}:${candidate.teamSlug}`);
+      return;
+    case "ignore":
+      return;
+  }
+}
 
 function buildBulkPlanEntry(
   args: BuildBulkDeployPlanArgs,
@@ -86,19 +130,21 @@ function buildBulkPlanEntry(
   if (shouldSkipExistingPlanTarget(args, key, replacement)) return { kind: "skip" };
   const problemDir = args.shared.problemsCatalog[problem.problemId];
   if (!problemDir) return { kind: "skip" };
-  // [#2563 v1] Bulk deploy rides the frozen DeployCreateRequested -> CFn state
-  // machine, which is AWS-only. A non-AWS single-provider problem must NOT be
-  // published onto that bus (its detail could not satisfy the frozen schema and
-  // the pipeline could not execute it) — refuse loudly instead, and deploy those
-  // problems per team through the adapter-dispatching single-deploy path until
-  // bulk adapter dispatch lands.
   const runtime = args.shared.resolveProblemRuntimeDescriptor?.(problem.problemId);
   if (
     runtime !== undefined &&
     !("kind" in runtime) &&
     NON_AWS_CLOUD_PROVIDERS.includes(runtime.provider)
   ) {
-    return { kind: "unsupportedRuntime", problemId: problem.problemId };
+    return buildNonAwsPlanCandidate(
+      args,
+      team,
+      problem,
+      problemDir,
+      runtime,
+      replacement,
+      createdAt,
+    );
   }
   const awsAccountId = team.awsAccountId ?? problem.defaultAwsAccountId;
   if (!awsAccountId) return { kind: "skip" };
@@ -106,13 +152,57 @@ function buildBulkPlanEntry(
   if (!verified) return { kind: "unverified", accountId: awsAccountId };
   return {
     kind: "entry",
-    entry: createPlanEntry(
+    entry: createAwsPlanEntry(
       args,
       team,
       problem,
       problemDir,
       awsAccountId,
       verified,
+      replacement,
+      createdAt,
+    ),
+  };
+}
+
+/**
+ * [#2571] Bulk deploy rides the frozen DeployCreateRequested -> CFn state
+ * machine, which is AWS-only. A non-AWS single-provider problem (gcp/azure/
+ * sakura) instead dispatches through the same adapter seam the single-deploy
+ * path uses (`selectAdapter` + `dispatchPreparedDeployment`, wired up in
+ * `adapter-dispatch.ts`). `!shared.ssm` preserves the v1 (#2563) loud refusal
+ * for any Lambda that has not been wired with the per-team credential SSM
+ * grants (today: the scheduled reconciler path, staged enablement). A missing
+ * per-team credential registration is reported as its own `missingCredential`
+ * candidate — distinct from `unsupportedRuntime` — so the operator learns
+ * exactly which (provider, team) pair needs registering, rather than being
+ * told the whole bulk path is unsupported.
+ */
+function buildNonAwsPlanCandidate(
+  args: BuildBulkDeployPlanArgs,
+  team: TeamRecord,
+  problem: EventProblemTarget,
+  problemDir: string,
+  runtime: ProblemRuntime,
+  replacement: { jobId: string } | undefined,
+  createdAt: string,
+): BulkPlanCandidate {
+  if (!args.shared.ssm) {
+    return { kind: "unsupportedRuntime", problemId: problem.problemId };
+  }
+  const teamSlug = slugify(team.internalSlug);
+  if (!args.nonAwsCredentials.has(`${runtime.provider}#${teamSlug}`)) {
+    return { kind: "missingCredential", provider: runtime.provider, teamSlug };
+  }
+  return {
+    kind: "entry",
+    entry: createNonAwsPlanEntry(
+      args,
+      team,
+      problem,
+      problemDir,
+      runtime,
+      teamSlug,
       replacement,
       createdAt,
     ),
@@ -136,7 +226,7 @@ function shouldSkipExistingPlanTarget(
   return !(args.forceRedeploy && replacement);
 }
 
-function createPlanEntry(
+function createAwsPlanEntry(
   args: BuildBulkDeployPlanArgs,
   team: TeamRecord,
   problem: EventProblemTarget,
@@ -148,16 +238,11 @@ function createPlanEntry(
 ): PlanEntry {
   const jobId = ulid();
   const namePrefix = buildStackPrefix(problem.problemId, team.internalSlug);
-  const item = createDeploymentItem(
-    args,
-    team,
-    problem,
+  const item = createDeploymentItem(args, team, problem, jobId, namePrefix, createdAt, {
     awsAccountId,
-    verified,
-    jobId,
-    namePrefix,
-    createdAt,
-  );
+    region: problem.defaultRegion,
+    competitorRoleArn: verified.competitorRoleArn,
+  });
   const detail = createDeployDetail(
     args.tenantId,
     team,
@@ -169,6 +254,7 @@ function createPlanEntry(
     namePrefix,
   );
   return {
+    kind: "eventbridge",
     item,
     entry: {
       EventBusName: args.shared.eventBusName,
@@ -181,15 +267,74 @@ function createPlanEntry(
   };
 }
 
+/**
+ * [#2571] The non-AWS single-provider counterpart of {@link createAwsPlanEntry}.
+ * The row mirrors the single-deploy convention (`deploy.ts` / #2561):
+ * `awsAccountId: ""`, `region: ""`, no `competitorRoleArn`, plus the runtime's
+ * provider/engine/entry so `runtime-status-reconciler.ts` and `bulk-delete.ts`
+ * can route the row through its adapter instead of CFn. No
+ * `PutEventsRequestEntry` — the row never rides the frozen CFn pipeline;
+ * `dispatchBulkAdapterEntries` (`adapter-dispatch.ts`) dispatches it directly.
+ */
+function createNonAwsPlanEntry(
+  args: BuildBulkDeployPlanArgs,
+  team: TeamRecord,
+  problem: EventProblemTarget,
+  problemDir: string,
+  runtime: ProblemRuntime,
+  teamSlug: string,
+  replacement: { jobId: string } | undefined,
+  createdAt: string,
+): PlanEntry {
+  const jobId = ulid();
+  const namePrefix = buildStackPrefix(problem.problemId, team.internalSlug);
+  const item = createDeploymentItem(
+    args,
+    team,
+    problem,
+    jobId,
+    namePrefix,
+    createdAt,
+    { awsAccountId: "", region: "" },
+    {
+      runtimeProvider: runtime.provider,
+      runtimeEngine: runtime.engine,
+      runtimeEntry: runtime.entry,
+    },
+  );
+  return {
+    kind: "adapter",
+    item,
+    runtime,
+    problemDir,
+    teamSlug,
+    replacesJobId: replacement?.jobId,
+  };
+}
+
+/**
+ * Shared row builder for both the AWS/CFn and non-AWS/adapter branches.
+ * `aws.competitorRoleArn` is always present (a real ARN string) for an AWS row
+ * — preserving the pre-#2571 byte-identical field order — and omitted
+ * entirely (not even `undefined`) for a non-AWS row, mirroring the
+ * single-deploy convention (`deploy.ts`'s `item` construction, #2561).
+ * `runtimeFields` defaults to `{}` so an AWS row's shape is unaffected.
+ */
 function createDeploymentItem(
   args: BuildBulkDeployPlanArgs,
   team: TeamRecord,
   problem: EventProblemTarget,
-  awsAccountId: string,
-  verified: VerifiedCompetitorAccount,
   jobId: string,
   namePrefix: string,
   createdAt: string,
+  aws: {
+    readonly awsAccountId: string;
+    readonly region: string;
+    readonly competitorRoleArn?: string;
+  },
+  runtimeFields: Partial<
+    Pick<DeploymentItem, "runtimeProvider" | "runtimeEngine" | "runtimeEntry">
+  > = {},
 ): DeploymentItem {
   // TeamRecord は teamLoginKey を型上 optional にする (SQL backend が plaintext bearer を
   // index 列に載せないため) が、 DDB backend の list は非キー属性として実値を保持する
@@ -205,9 +350,9 @@ function createDeploymentItem(
     jobId,
     problemId: problem.problemId,
     tenantId: args.tenantId,
-    awsAccountId,
-    competitorRoleArn: verified.competitorRoleArn,
-    region: problem.defaultRegion,
+    awsAccountId: aws.awsAccountId,
+    ...(aws.competitorRoleArn ? { competitorRoleArn: aws.competitorRoleArn } : {}),
+    region: aws.region,
     teamName: team.internalSlug,
     namePrefix,
     teamLoginKey,
@@ -223,6 +368,9 @@ function createDeploymentItem(
     // event-pinned snapshot (#2095). Core problems / no resolver → no attribute,
     // keeping the row byte-identical.
     ...provenanceItemFields(resolvePlanProvenance(args, problem.problemId)),
+    // [#2571] Non-AWS runtime rows only (empty object for AWS — byte-identical
+    // to the pre-#2571 shape). Mirrors `deploy.ts`'s `runtimeItemFields`.
+    ...runtimeFields,
   };
 }
 
