@@ -5,7 +5,10 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Pack manifest reference — TenkaCloud Docs</title>
+<title>パックマニフェスト — TenkaCloud Docs</title>
+<link rel="canonical" href="https://tenkacloud.com/docs/reference/pack-manifest/" />
+<link rel="alternate" hreflang="ja" href="https://tenkacloud.com/docs/reference/pack-manifest/" />
+<link rel="alternate" hreflang="en" href="https://tenkacloud.com/docs/reference/pack-manifest/index.en.html" />
 <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -16,42 +19,43 @@
 <header class="top">
   <div class="wrap top-inner">
     <a class="brand" href="/"><svg viewBox="0 0 120 120" width="1.05em" height="1.05em" aria-hidden="true" style="display:block;flex:none"><rect x="26" y="24" width="68" height="12" rx="6" fill="currentColor"></rect><path d="M26 90 L60 48 L94 90" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"></path></svg>TenkaCloud <span class="brand-docs">Docs</span></a>
-    <span class="top-links"><a href="/">← ホーム</a> · <a href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer">GitHub</a></span>
+    <span class="top-links"><a href="/">← ホーム</a> · <a href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer">GitHub</a> · <a href="/docs/reference/pack-manifest/index.en.html" hreflang="en" rel="alternate">English</a></span>
   </div>
 </header>
 <div class="wrap docs-grid">
-<aside class="docs-nav"><a class="docs-home-link" href="/docs/">Docs home</a>
-<section><h5>Getting started</h5><ul>
-<li><a href="/docs/getting-started/">Getting started</a></li>
+<aside class="docs-nav"><a class="docs-home-link" href="/docs/">Docs ホーム</a>
+<section><h5>はじめに</h5><ul>
+<li><a href="/docs/getting-started/">はじめに</a></li>
 </ul></section>
-<section><h5>Concepts</h5><ul>
-<li><a href="/docs/concepts/problem-packs/">Problem packs</a></li>
-<li><a href="/docs/concepts/architecture/">Platform architecture</a></li>
+<section><h5>コンセプト</h5><ul>
+<li><a href="/docs/concepts/problem-packs/">問題パック</a></li>
+<li><a href="/docs/concepts/architecture/">プラットフォームアーキテクチャ</a></li>
 </ul></section>
-<section><h5>Tutorials</h5><ul>
-<li><a href="/docs/tutorials/first-pack/">First pack tutorial</a></li>
+<section><h5>チュートリアル</h5><ul>
+<li><a href="/docs/tutorials/first-pack/">はじめての問題パック</a></li>
 </ul></section>
-<section><h5>Operate</h5><ul>
-<li><a href="/docs/operate/deploy-paths/">Deploy modes and launch paths</a></li>
-<li><a href="/docs/operate/run-an-event/">Run an event end to end</a></li>
+<section><h5>運用</h5><ul>
+<li><a href="/docs/operate/deploy-paths/">デプロイモードと起動経路</a></li>
+<li><a href="/docs/operate/run-an-event/">イベントをエンドツーエンドで運営する</a></li>
+<li><a href="/docs/operate/use-existing-pack/">既存パックを使う</a></li>
 </ul></section>
-<section><h5>Reference</h5><ul>
-<li><a href="/docs/reference/pack-manifest/" aria-current="page">Pack manifest reference</a></li>
-<li><a href="/docs/reference/problem-metadata/">Problem metadata reference</a></li>
-<li><a href="/docs/reference/runtime-matrix/">Runtime capability matrix</a></li>
-<li><a href="/docs/reference/cli/">CLI reference</a></li>
-<li><a href="/docs/reference/security-provenance/">Security and provenance model</a></li>
-<li><a href="/docs/reference/validation-errors/">Validation error reference</a></li>
+<section><h5>リファレンス</h5><ul>
+<li><a href="/docs/reference/pack-manifest/" aria-current="page">パックマニフェスト</a></li>
+<li><a href="/docs/reference/problem-metadata/">問題メタデータ</a></li>
+<li><a href="/docs/reference/runtime-matrix/">ランタイム対応マトリクス</a></li>
+<li><a href="/docs/reference/cli/">CLI リファレンス</a></li>
+<li><a href="/docs/reference/security-provenance/">セキュリティと来歴モデル</a></li>
+<li><a href="/docs/reference/validation-errors/">検証エラーリファレンス</a></li>
 </ul></section>
 </aside>
 <main class="doc">
 <article>
-<h1>Pack manifest reference <span class="doc-badge doc-badge--stable">Stable</span></h1>
-<p>The <code>tenkacloud-pack.json</code> manifest is the only entrypoint of a problem pack. The
-fields below are <strong>normative reference</strong> generated from the <code>PackManifestSchema</code>
-zod schema in <code>@tenkacloud/problem-sdk</code>. The schema is <code>.strict()</code>, so any unknown
-top-level field is rejected.</p>
-<h2>Fields</h2>
+<h1>パックマニフェストリファレンス <span class="doc-badge doc-badge--stable">Stable</span></h1>
+<p><code>tenkacloud-pack.json</code> マニフェストは、問題パックの唯一のエントリポイントです。
+以下のフィールドは、<code>@tenkacloud/problem-sdk</code> の <code>PackManifestSchema</code> zod スキーマ
+から生成された<strong>規範的リファレンス</strong>です。スキーマは <code>.strict()</code> のため、未知の
+トップレベルフィールドはすべて拒否されます。</p>
+<h2>フィールド</h2>
 <table class="reference-table"><thead><tr><th>Field</th><th>Type</th><th>Presence</th><th>Constraint</th></tr></thead><tbody>
 <tr><td><code>schemaVersion</code></td><td><code>1 (literal)</code></td><td>Required</td><td>Must equal the current pack schema version (1).</td></tr>
 <tr><td><code>id</code></td><td><code>string</code></td><td>Required</td><td>Reverse-DNS style, lowercase, two or more dot-separated segments.</td></tr>
@@ -63,11 +67,10 @@ top-level field is rejected.</p>
 <tr><td><code>problemsRoot</code></td><td><code>string</code></td><td>Required</td><td>Relative path without '..' traversal; not an absolute root.</td></tr>
 <tr><td><code>requiredRuntimes</code></td><td><code>ProviderEngine[]</code></td><td>Required</td><td>Each entry is { provider, engine }; provider ∈ { aws, gcp, azure, sakura }.</td></tr>
 <tr><td><code>dependencies</code></td><td><code>Dependency[]</code></td><td>Optional</td><td>Optional. Each { id (reverse-DNS), range (SemVer range) }; ids must be unique.</td></tr>
-</tbody></table><p>The manifest is intentionally inert: v1 carries no author credentials, remote
-URLs, scripts, or executable hooks. See the <a href="/docs/reference/security-provenance/">security and provenance model</a>.</p>
-<h2>Example</h2>
-<p>The example below is illustrative, not normative — the field rules above are the
-source of truth.</p>
+</tbody></table><p>マニフェストは意図的に不活性です。v1 には、作者のクレデンシャル、リモート URL、
+スクリプト、実行可能なフックは一切含まれません。<a href="/docs/reference/security-provenance/">セキュリティとプロベナンスのモデル</a>を参照してください。</p>
+<h2>例</h2>
+<p>以下の例は説明用であり、規範ではありません — 上記のフィールドルールが正となります。</p>
 <pre><code class="language-json">{
   &quot;schemaVersion&quot;: 1,
   &quot;id&quot;: &quot;com.example.starter&quot;,
@@ -80,14 +83,14 @@ source of truth.</p>
   &quot;requiredRuntimes&quot;: [{ &quot;provider&quot;: &quot;aws&quot;, &quot;engine&quot;: &quot;cloudformation&quot; }]
 }
 </code></pre>
-<p>Related: <a href="/docs/reference/problem-metadata/">problem metadata reference</a>
-and the <a href="/docs/reference/cli/">CLI reference</a>.</p>
+<p>関連: <a href="/docs/reference/problem-metadata/">問題メタデータリファレンス</a>、
+および <a href="/docs/reference/cli/">CLI リファレンス</a>。</p>
 
 </article>
 </main>
 </div>
 <footer class="docs-footer">
-  <div class="wrap">© 2026 合同会社BULL · TenkaCloud · Apache License 2.0 · <a href="/docs/">Docs home</a> · <a href="/">ホーム</a></div>
+  <div class="wrap">© 2026 合同会社BULL · TenkaCloud · Apache License 2.0 · <a href="/docs/">Docs ホーム</a> · <a href="/">ホーム</a></div>
 </footer>
 </body>
 </html>

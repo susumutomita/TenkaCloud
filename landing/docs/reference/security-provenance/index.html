@@ -5,7 +5,10 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Security and provenance model — TenkaCloud Docs</title>
+<title>セキュリティと来歴モデル — TenkaCloud Docs</title>
+<link rel="canonical" href="https://tenkacloud.com/docs/reference/security-provenance/" />
+<link rel="alternate" hreflang="ja" href="https://tenkacloud.com/docs/reference/security-provenance/" />
+<link rel="alternate" hreflang="en" href="https://tenkacloud.com/docs/reference/security-provenance/index.en.html" />
 <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -16,64 +19,65 @@
 <header class="top">
   <div class="wrap top-inner">
     <a class="brand" href="/"><svg viewBox="0 0 120 120" width="1.05em" height="1.05em" aria-hidden="true" style="display:block;flex:none"><rect x="26" y="24" width="68" height="12" rx="6" fill="currentColor"></rect><path d="M26 90 L60 48 L94 90" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"></path></svg>TenkaCloud <span class="brand-docs">Docs</span></a>
-    <span class="top-links"><a href="/">← ホーム</a> · <a href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer">GitHub</a></span>
+    <span class="top-links"><a href="/">← ホーム</a> · <a href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer">GitHub</a> · <a href="/docs/reference/security-provenance/index.en.html" hreflang="en" rel="alternate">English</a></span>
   </div>
 </header>
 <div class="wrap docs-grid">
-<aside class="docs-nav"><a class="docs-home-link" href="/docs/">Docs home</a>
-<section><h5>Getting started</h5><ul>
-<li><a href="/docs/getting-started/">Getting started</a></li>
+<aside class="docs-nav"><a class="docs-home-link" href="/docs/">Docs ホーム</a>
+<section><h5>はじめに</h5><ul>
+<li><a href="/docs/getting-started/">はじめに</a></li>
 </ul></section>
-<section><h5>Concepts</h5><ul>
-<li><a href="/docs/concepts/problem-packs/">Problem packs</a></li>
-<li><a href="/docs/concepts/architecture/">Platform architecture</a></li>
+<section><h5>コンセプト</h5><ul>
+<li><a href="/docs/concepts/problem-packs/">問題パック</a></li>
+<li><a href="/docs/concepts/architecture/">プラットフォームアーキテクチャ</a></li>
 </ul></section>
-<section><h5>Tutorials</h5><ul>
-<li><a href="/docs/tutorials/first-pack/">First pack tutorial</a></li>
+<section><h5>チュートリアル</h5><ul>
+<li><a href="/docs/tutorials/first-pack/">はじめての問題パック</a></li>
 </ul></section>
-<section><h5>Operate</h5><ul>
-<li><a href="/docs/operate/deploy-paths/">Deploy modes and launch paths</a></li>
-<li><a href="/docs/operate/run-an-event/">Run an event end to end</a></li>
+<section><h5>運用</h5><ul>
+<li><a href="/docs/operate/deploy-paths/">デプロイモードと起動経路</a></li>
+<li><a href="/docs/operate/run-an-event/">イベントをエンドツーエンドで運営する</a></li>
+<li><a href="/docs/operate/use-existing-pack/">既存パックを使う</a></li>
 </ul></section>
-<section><h5>Reference</h5><ul>
-<li><a href="/docs/reference/pack-manifest/">Pack manifest reference</a></li>
-<li><a href="/docs/reference/problem-metadata/">Problem metadata reference</a></li>
-<li><a href="/docs/reference/runtime-matrix/">Runtime capability matrix</a></li>
-<li><a href="/docs/reference/cli/">CLI reference</a></li>
-<li><a href="/docs/reference/security-provenance/" aria-current="page">Security and provenance model</a></li>
-<li><a href="/docs/reference/validation-errors/">Validation error reference</a></li>
+<section><h5>リファレンス</h5><ul>
+<li><a href="/docs/reference/pack-manifest/">パックマニフェスト</a></li>
+<li><a href="/docs/reference/problem-metadata/">問題メタデータ</a></li>
+<li><a href="/docs/reference/runtime-matrix/">ランタイム対応マトリクス</a></li>
+<li><a href="/docs/reference/cli/">CLI リファレンス</a></li>
+<li><a href="/docs/reference/security-provenance/" aria-current="page">セキュリティと来歴モデル</a></li>
+<li><a href="/docs/reference/validation-errors/">検証エラーリファレンス</a></li>
 </ul></section>
 </aside>
 <main class="doc">
 <article>
-<h1>Security and provenance model <span class="doc-badge doc-badge--stable">Stable</span></h1>
-<p>A problem pack must be reproducible and tamper-evident. The facts below are
-<strong>normative reference</strong> derived from the pack manifest&#39;s inert-by-design schema and
-the immutable snapshot / lock model in the pack installer.</p>
-<h2>Guarantees</h2>
+<h1>セキュリティと来歴モデル <span class="doc-badge doc-badge--stable">Stable</span></h1>
+<p>問題パックは、再現可能で、改ざんを検出できるものでなければなりません。以下の事実は、
+パックマニフェストの設計上不活性（inert-by-design）なスキーマと、パックインストーラーの
+不変スナップショット / ロックモデルから導出された<strong>規範的リファレンス</strong>です。</p>
+<h2>保証</h2>
 <dl class="reference-facts">
 <div><dt>Inert manifest (no executable hooks) <span class="doc-badge doc-badge--stable">Stable</span></dt><dd>v1 manifests carry no author credentials, remote URLs, scripts, or executable hooks. The schema is .strict(), so every unknown top-level field is rejected.</dd></div>
 <div><dt>Immutable content-addressed snapshots <span class="doc-badge doc-badge--stable">Stable</span></dt><dd>Installing a pack hashes a canonical, sorted file list and the bytes of each file into a SHA-256 content digest. Re-installing the same id+version with a different digest fails closed.</dd></div>
 <div><dt>Pinned Git provenance <span class="doc-badge doc-badge--stable">Stable</span></dt><dd>A git-sourced pack records the HTTPS repository URL (credentials stripped), the resolved immutable 40-hex commit, and the subdir. Fetch is shallow, hooks-disabled, and resolves only the pinned commit — never a floating ref.</dd></div>
 <div><dt>No remote / mutable sources <span class="doc-badge doc-badge--stable">Stable</span></dt><dd>The only source kinds are 'local' (a directory) and 'git' (a pinned commit). There is no mutable / floating reference path and no runtime code execution during install.</dd></div>
-</dl><h2>How provenance is recorded</h2>
-<p>Every installed revision is recorded in the lock with its content digest and source
-kind. A <code>git</code>-sourced pack additionally records the HTTPS repository URL (with
-credentials stripped), the resolved immutable 40-hex commit, and the subdir. The
-content digest is source-kind-agnostic, so the same bytes always produce the same
-digest regardless of how they were fetched.</p>
-<h2>What a pack cannot do</h2>
-<p>A v1 manifest cannot declare scripts, lifecycle hooks, remote URLs, or credentials.
-Install performs no runtime code execution. The Git fetch is shallow,
-hooks-disabled, and resolves only the pinned commit — it never follows a floating
-branch or tag.</p>
-<p>Related: <a href="/docs/reference/pack-manifest/">pack manifest reference</a>.</p>
+</dl><h2>来歴の記録方法</h2>
+<p>インストールされたすべてのリビジョンは、コンテンツダイジェストとソース種別とともに
+ロックに記録されます。<code>git</code> をソースとするパックはさらに、HTTPS リポジトリ URL
+（認証情報は除去済み）、解決済みの不変な 40 桁 16 進コミット、およびサブディレクトリを
+記録します。コンテンツダイジェストはソース種別に依存しないため、取得方法にかかわらず、
+同じバイト列からは常に同じダイジェストが生成されます。</p>
+<h2>パックにできないこと</h2>
+<p>v1 マニフェストでは、スクリプト、ライフサイクルフック、リモート URL、認証情報を
+宣言できません。インストール時にランタイムのコード実行は一切行われません。Git の
+フェッチは shallow かつフック無効で行われ、ピン留めされたコミットのみを解決します。
+浮動するブランチやタグを追跡することはありません。</p>
+<p>関連: <a href="/docs/reference/pack-manifest/">パックマニフェストリファレンス</a>。</p>
 
 </article>
 </main>
 </div>
 <footer class="docs-footer">
-  <div class="wrap">© 2026 合同会社BULL · TenkaCloud · Apache License 2.0 · <a href="/docs/">Docs home</a> · <a href="/">ホーム</a></div>
+  <div class="wrap">© 2026 合同会社BULL · TenkaCloud · Apache License 2.0 · <a href="/docs/">Docs ホーム</a> · <a href="/">ホーム</a></div>
 </footer>
 </body>
 </html>

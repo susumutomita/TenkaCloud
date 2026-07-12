@@ -4,58 +4,57 @@ export const metadata = { title: "First pack tutorial" };
 
 # First pack tutorial <MaturityBadge level="stable" />
 
-このチュートリアルは、空のディレクトリから問題パック (problem pack) を 1 つ作り、検証し、
-不変な Git リビジョンに固定して公開し、インストールし、テナントに対して有効化し、
-イベントに固定するまでの、開発者の主要な道筋を 1 本でたどります。最小の 1 パック
-(`com.example.starter`、問題 1 個の `hello-world`) だけを使います。
+This tutorial walks the main developer path in a single pass: starting from an
+empty directory, you scaffold one problem pack, validate it, publish it pinned to
+an immutable Git revision, install it, activate it for a tenant, and pin it to an
+event. It uses only one minimal pack (`com.example.starter`, containing a single
+problem, `hello-world`).
 
-パックの概念そのものは [problem packs](/developers/docs/concepts/problem-packs/) を、
-最初のデプロイ全体像は [getting started](/developers/docs/getting-started/) を参照してください。
-このページは契約 (スキーマや診断コードの一覧) を再掲せず、各リファレンスへリンクします。
+For the pack concept itself, see [problem packs](/developers/docs/concepts/problem-packs/);
+for the full first-deploy picture, see [getting started](/developers/docs/getting-started/).
+This page does not restate the contracts (schemas and the diagnostic-code list) —
+it links to each reference instead.
 
 Just want to run an existing pack? → [Use an existing pack](/developers/docs/operate/use-existing-pack/).
 
-The Japanese walkthrough below is the complete source of truth — full manifest and
-metadata examples, exact expected output, the failure-to-diagnostic-code table, and
-the preview event/verification flow. An abridged English summary follows it for
-quick reference; for the full detail, follow the Japanese sections above it.
+## Prerequisites
 
-## 前提条件 (prerequisites)
-
-このチュートリアルの「作成 → 検証 → インストール → 有効化」までは、クラウド資格情報なしの
-完全オフラインで完了します。プラットフォームへの実デプロイに到達する手順 (最後の節) でのみ
-AWS アカウントが必要です。
+Everything in this tutorial up through scaffold → validate → install → activate
+completes fully offline, with no cloud credentials. Only the step that reaches an
+actual platform deploy (the final section) requires an AWS account.
 
 - [Bun](https://bun.sh) 1.3.11
-- リポジトリのチェックアウト (`git clone` 済み)。`pack` CLI は **リポジトリルートから**
-  `make pack-*` ターゲット経由で呼び出します (実体は
-  `./node_modules/.bin/tsx infrastructure/bin/tenkacloud-pack.ts`。CLI の既定 store
-  `./.tenkacloud/pack-store` は CWD 基準で解決されるため、リポジトリルート実行が前提です)。
-- `git` 2.x 以降 (固定リビジョンの SHA を取得する手順で使用)
+- A checkout of the repository (`git clone` done). Invoke the `pack` CLI **from the
+  repository root** via the `make pack-*` targets (under the hood it runs
+  `./node_modules/.bin/tsx infrastructure/bin/tenkacloud-pack.ts`; the CLI's default
+  store `./.tenkacloud/pack-store` resolves against the CWD, so repo-root execution
+  is assumed).
+- `git` 2.x or later (used in the step that obtains the pinned revision's SHA)
 
-CLI は完全にオフラインです。ネットワーク・CDK synth・クラウド資格情報を一切使いません。
+The CLI is fully offline. It uses no network, no CDK synth, and no cloud credentials.
 
-## 1. パックを作成する (scaffold)
+## 1. Scaffold the pack
 
-空の作業ディレクトリから始めます。`pack init <dir>` は、検証を 0 件の診断で通過する
-パック (マニフェスト + 問題 1 個 + プロバイダー成果物のプレースホルダー + README) を生成します。
+Start from an empty working directory. `pack init <dir>` generates a pack that
+passes validation with zero diagnostics (a manifest, one problem, a provider
+artifact placeholder, and a README).
 
 ```bash
 make pack-init ARGS="./my-first-pack"
 ```
 
-期待される出力:
+Expected output:
 
 ```text
 Pack scaffolded at ./my-first-pack (4 files). Run 'pack validate ./my-first-pack' to check it.
 ```
 
-`--runtime <provider/engine>` を付けるとランタイムを選べます (既定は `aws/cloudformation`)。
-対応ランタイムは `aws/cloudformation` / `gcp/infra-manager` / `azure/bicep` / `sakura/apprun` です。
+Pass `--runtime <provider/engine>` to choose the runtime (default: `aws/cloudformation`).
+The supported runtimes are `aws/cloudformation` / `gcp/infra-manager` / `azure/bicep` / `sakura/apprun`.
 
-### 生成されるマニフェスト (`tenkacloud-pack.json`)
+### The generated manifest (`tenkacloud-pack.json`)
 
-パックの唯一のエントリーポイントです。完全な最小例:
+This is the pack's single entry point. Complete minimal example:
 
 ```json
 {
@@ -76,9 +75,9 @@ Pack scaffolded at ./my-first-pack (4 files). Run 'pack validate ./my-first-pack
 }
 ```
 
-### 生成される問題メタデータ (`problems/challenges/hello-world/metadata.json`)
+### The generated problem metadata (`problems/challenges/hello-world/metadata.json`)
 
-完全な最小例:
+Complete minimal example:
 
 ```json
 {
@@ -94,36 +93,38 @@ Pack scaffolded at ./my-first-pack (4 files). Run 'pack validate ./my-first-pack
 }
 ```
 
-マニフェストと metadata.json の各フィールドの意味は
-[problem packs](/developers/docs/concepts/problem-packs/) を参照してください。
+For what each field in the manifest and metadata.json means, see
+[problem packs](/developers/docs/concepts/problem-packs/).
 
-## 2. パックを検証する (validate)
+## 2. Validate the pack
 
-`pack validate <dir>` はオフライン検証器です。スキーマ・問題 ID の一意性・成果物の存在・
-ランタイム整合などを検査します。
+`pack validate <dir>` is the offline validator. It checks the schema, problem-ID
+uniqueness, artifact presence, runtime consistency, and more.
 
 ```bash
 make pack-validate ARGS="./my-first-pack"
 ```
 
-期待される出力:
+Expected output:
 
 ```text
 Pack is valid: 1 problem.
   - hello-world
 ```
 
-機械可読な出力が必要なときは `--json` を付けます。
-終了コードは 0 (成功) / 1 (検証失敗) / 2 (ツール失敗: ディレクトリ欠落・マニフェスト欠落・誤用) です。
+Pass `--json` when you need machine-readable output.
+Exit codes are 0 (success) / 1 (validation failure) / 2 (tool failure: missing directory, missing manifest, misuse).
 
-## 3. 不変な Git リビジョンに固定して公開する (pin)
+## 3. Publish pinned to an immutable Git revision
 
-公開はパックを「不変な Git のコミット」に固定して共有することです。**ブランチ名・タグ・`HEAD`・
-短縮ハッシュは設計上拒否されます。**固定できるのは完全な 40 桁の SHA だけで、これにより
-同じパック内容が将来にわたって絶対に変わらないこと (immutability) を保証します。
+Publishing means pinning the pack to an immutable Git commit and sharing it.
+**Branch names, tags, `HEAD`, and abbreviated hashes are rejected by design.**
+Only a full 40-hex SHA can be pinned, which guarantees the same pack content can
+never change in the future (immutability).
 
-別の Git リポジトリ (このコアリポジトリの `problems/` ツリーの外) にパックをコミット・push し、
-固定したいリビジョンの完全な SHA を取得します:
+Commit and push the pack to a separate Git repository (outside this core
+repository's `problems/` tree), then obtain the full SHA of the revision you want
+to pin:
 
 ```bash
 git -C ./my-first-pack init
@@ -132,26 +133,28 @@ git -C ./my-first-pack commit -m "First pack"
 git -C ./my-first-pack rev-parse HEAD
 ```
 
-期待される出力 (40 桁の 16 進数。値はコミットごとに異なります):
+Expected output (a 40-digit hex string; the value differs per commit):
 
 ```text
 3f1c226be0565fa2c90df44e9b1acd5a90e84be2
 ```
 
-この SHA が公開単位です。リモートに push し、HTTPS URL と SHA を配布します。
-固定リビジョンの実運用手順は
-`infrastructure/lib/problem-pack/README-external-git-pack.md` のランバックに対応します。
+This SHA is the unit of publication. Push to a remote and distribute the HTTPS URL
+plus the SHA. The operational procedure for pinned revisions corresponds to the
+runbook in `infrastructure/lib/problem-pack/README-external-git-pack.md`.
 
-## 4. パックをインストールする (install)
+## 4. Install the pack
 
-ローカルディレクトリからインストールできます。インストールは「検証 → スナップショット →
-ロック → dry-run compose」を原子的に行い、有効化はしません。失敗したインストールは残骸を残しません。
+You can install from a local directory. Install runs validate → snapshot →
+lock → dry-run compose atomically and does not activate. A failed install leaves
+no residue behind.
 
 ```bash
 make pack-install ARGS="./my-first-pack"
 ```
 
-期待される出力 (`digest` はパック内容のハッシュで、ここでは生成物に対する一例):
+Expected output (`digest` is a hash of the pack contents; the value shown here is
+one example for the generated scaffold):
 
 ```text
 Pack installed: com.example.starter@0.1.0
@@ -160,106 +163,113 @@ Pack installed: com.example.starter@0.1.0
   problems: 1
 ```
 
-固定した Git リビジョンからインストールするときは `install git` を使います。HTTPS URL と
-完全な 40 桁 SHA が必須です:
+To install from a pinned Git revision, use `install git`. An HTTPS URL and a full
+40-hex SHA are required:
 
 ```bash
 make pack-install ARGS="git https://github.com/<you>/my-first-pack.git --commit <full-40-hex-sha>"
 ```
 
-ロック (`packs-lock.json`) には `sourceKind: "git"`・解決済みコミット・任意の subdir・
-コンテンツダイジェストが記録されます。インストール済みパックは `list` で確認できます:
+The lock file (`packs-lock.json`) records `sourceKind: "git"`, the resolved commit,
+the optional subdir, and the content digest. Check installed packs with `list`:
 
 ```bash
 make pack-list
 ```
 
-期待される出力:
+Expected output:
 
 ```text
 Installed packs: 1
   - com.example.starter@0.1.0 (local, 1 problem, b1acd5a90e84be2a2e1ca78f77396ee6c447c9c3f1c226be0565fa2c90df44e9)
 ```
 
-## 5. テナントに対して有効化する (activate)
+## 5. Activate for a tenant
 
-インストール済みの不変リビジョンを、1 つのテナントに対して有効化します。重複する問題 ID・
-利用不可なランタイム・ダイジェスト不一致・未インストールは拒否されます (終了コード 1)。
+Activate an installed immutable revision for a single tenant. Duplicate problem
+IDs, unavailable runtimes, digest mismatches, and not-installed packs are rejected
+(exit code 1).
 
 ```bash
 make pack-activate ARGS="com.example.starter@0.1.0 --tenant acme"
 ```
 
-期待される出力:
+Expected output:
 
 ```text
 Pack activated for tenant 'acme': com.example.starter@0.1.0
 ```
 
-別テナントからは見えません (テナント分離)。元に戻すには `deactivate` を使います。
+Other tenants cannot see it (tenant isolation). Use `deactivate` to undo.
 
-## 6. イベントを作成する (create an event) <MaturityBadge level="preview" />
+## 6. Create an event <MaturityBadge level="preview" />
 
-イベント作成は、そのテナントの実効カタログ (core + 有効化済みパックリビジョン) を
-**作成時点で不変なスナップショットに固定**します。一度固定したイベントのカタログは、後から
-`deactivate` / `install` / `activate` をしても書き換わりません。
+Creating an event **pins the tenant's effective catalog (core + activated pack
+revisions) into an immutable snapshot at creation time**. Once pinned, an event's
+catalog is never rewritten by a later `deactivate` / `install` / `activate`.
 
-イベントのスナップショット固定を実際に行うのは、イベント作成 API (`handlers/event-handler/create.ts`
-の Lambda) です。作成時に `catalogSnapshotId` とパック provenance を、そのイベント行へ直接焼き込みます。
-使う provenance は synth 時点で有効化済みのパックから焼き込まれた provenance map
-(環境変数 `BATTLE_PROBLEMS_PROVENANCE` として埋め込み済み) から取り出します。ライブラリ
-`infrastructure/lib/problem-pack/event-pin.ts` の `createEventSnapshot` / `EventSnapshotStore` は、
-この API と同じ契約を CLI やテストからオフラインで再現するための等価実装であり、実際にデプロイされる
-経路そのものではありません。ここまでの CLI 手順 (作成 → 検証 → インストール → 有効化) はすべて
-実装済み (stable) ですが、ブラウザからのイベント作成 UI はプラットフォーム層であり、このページでは
-preview として扱います。
+The component that actually pins the event snapshot is the event-creation API (the
+Lambda in `handlers/event-handler/create.ts`). At creation time it burns the
+`catalogSnapshotId` and the pack provenance directly into that event row. The
+provenance it uses comes from the provenance map burned in at synth time from the
+packs activated at that point (embedded as the `BATTLE_PROBLEMS_PROVENANCE`
+environment variable). `createEventSnapshot` / `EventSnapshotStore` in the library
+`infrastructure/lib/problem-pack/event-pin.ts` are an equivalent implementation
+that reproduces the same contract offline from the CLI and tests — they are not
+the path that actually gets deployed. Every CLI step so far (scaffold → validate →
+install → activate) is implemented (stable), but the browser event-creation UI is
+platform-layer and is treated as preview on this page.
 
-## 7. オーガナイザーコンソールで検証する (verify) <MaturityBadge level="preview" />
+## 7. Verify in the organizer console <MaturityBadge level="preview" />
 
-イベント作成後、オーガナイザーコンソールでイベントが固定スナップショットを参照していること、
-デプロイがそのイベントの固定パック provenance を解決していることを確認します。
-オフラインの等価チェックは `infrastructure/test/problem-pack/external-git-pack-e2e.test.ts` が
-注入したフェイク transport に対して同じ契約を検証します。加えて
-`infrastructure/test/problem-pack/pack-lite-full-chain-e2e.test.ts` は、CLI の作成・検証・
-インストール・有効化から Lite の synth 配線・実際のイベント作成ハンドラ・デプロイ provenance の
-刻印までを、実コードのみで一本の鎖として通す、より広いオフライン E2E です。
+After creating an event, confirm in the organizer console that the event
+references the pinned snapshot and that deployments resolve that event's pinned
+pack provenance. As the offline equivalent check,
+`infrastructure/test/problem-pack/external-git-pack-e2e.test.ts` verifies the same
+contract against an injected fake transport. In addition,
+`infrastructure/test/problem-pack/pack-lite-full-chain-e2e.test.ts` is a broader
+offline E2E that chains everything — from the CLI's scaffold, validate, install,
+and activate through Lite's synth wiring, the real event-creation handler, and the
+stamping of deploy provenance — as one link of real code only.
 
-## 8. 撤去する (teardown / remove)
+## 8. Teardown
 
-不要になったリビジョンは `remove` で取り除けます。**イベントや有効化がそのリビジョンを
-固定している間は拒否されます** (不変カタログの保護)。先に `deactivate` し、固定参照を外してから
-削除します。
+Remove a revision you no longer need with `remove`. **It is refused while an event
+or an activation pins that revision** (protecting the immutable catalog).
+`deactivate` first, release the pinned references, and then remove.
 
 ```bash
 make pack-deactivate ARGS="com.example.starter@0.1.0 --tenant acme"
 ./node_modules/.bin/tsx infrastructure/bin/tenkacloud-pack.ts remove com.example.starter@0.1.0
 ```
 
-期待される出力:
+Expected output:
 
 ```text
 Pack deactivated for tenant 'acme': com.example.starter@0.1.0
 Removed com.example.starter@0.1.0.
 ```
 
-`pack` CLI には `update` がありません。新しいバージョンは別のインストールとして扱います。
+The `pack` CLI has no `update` command. A new version is treated as a separate install.
 
-## よくある失敗 → 診断コード (common failures)
+## Common failures → diagnostic codes
 
-検証失敗のとき CLI は `[CODE] file:path` 形式で診断を表示します。コードが契約であり、
-メッセージ文字列は契約ではありません。診断コードの完全な一覧と公開名前空間付きコードへの対応は
-[problem packs](/developers/docs/concepts/problem-packs/) を参照してください。実際に観測できる例:
+On validation failure the CLI prints diagnostics in the `[CODE] file:path` form.
+The code is the contract; the message string is not. For the complete list of
+diagnostic codes and their mapping to the public namespaced codes, see
+[problem packs](/developers/docs/concepts/problem-packs/). Examples you can
+actually observe:
 
-| 症状 | コード | 意味 |
+| Symptom | Code | Meaning |
 | --- | --- | --- |
-| ディレクトリが存在しない | `PACK_DIR_MISSING` | 渡したパスにパックがない。`tenkacloud-pack.json` を含むディレクトリを渡す。 |
-| `tenkacloud-pack.json` がない | `MANIFEST_MISSING` | ルートにマニフェストがない。すべてのパックは 1 つ宣言する。 |
-| `version` が SemVer でない | `MANIFEST_INVALID` | 例: `version must be a valid SemVer`。`tenkacloud-pack.json:version` を直す。 |
-| 問題 ID が重複している | `DUPLICATE_PROBLEM_ID` | パック内で問題 ID が一意でない。 |
-| 成果物 (template など) が欠落 | `ARTIFACT_MISSING` | metadata の `runtime.entry` が指すファイルがない。 |
-| ランタイムがマニフェストと不一致 | `RUNTIME_MISMATCH` | 問題のランタイムが `requiredRuntimes` にない。 |
+| The directory does not exist | `PACK_DIR_MISSING` | The path you passed contains no pack. Pass a directory that contains `tenkacloud-pack.json`. |
+| No `tenkacloud-pack.json` | `MANIFEST_MISSING` | No manifest at the root. Every pack declares exactly one. |
+| `version` is not SemVer | `MANIFEST_INVALID` | e.g. `version must be a valid SemVer`. Fix `tenkacloud-pack.json:version`. |
+| Duplicate problem IDs | `DUPLICATE_PROBLEM_ID` | Problem IDs are not unique within the pack. |
+| A missing artifact (template etc.) | `ARTIFACT_MISSING` | The file the metadata's `runtime.entry` points to does not exist. |
+| Runtime disagrees with the manifest | `RUNTIME_MISMATCH` | The problem's runtime is not in `requiredRuntimes`. |
 
-例えば `version` を壊して検証すると次のように出ます:
+For example, breaking `version` and validating prints:
 
 ```text
 Pack validation failed: 1 diagnostic(s).
@@ -267,70 +277,23 @@ Pack validation failed: 1 diagnostic(s).
       version must be a valid SemVer
 ```
 
-`PACK_DIR_MISSING` / `MANIFEST_MISSING` / `MANIFEST_UNREADABLE` は終了コード 2 (ツール失敗)、
-それ以外の検証診断は終了コード 1 (検証失敗) です。
+`PACK_DIR_MISSING` / `MANIFEST_MISSING` / `MANIFEST_UNREADABLE` exit with code 2
+(tool failure); every other validation diagnostic exits with code 1 (validation failure).
 
-## プラットフォームへデプロイする (cloud) <MaturityBadge level="preview" />
+## Deploy to the platform <MaturityBadge level="preview" />
 
-ここから先は AWS アカウントが必要です。固定パックをプラットフォームに載せ、参加者ポータルまで
-通すには [getting started](/developers/docs/getting-started/) の Lite モード (`make deploy`) に従います。
+From here on you need an AWS account. To put the pinned pack on the platform and
+take it all the way to the participant portal, follow Lite mode (`make deploy`) in
+[getting started](/developers/docs/getting-started/).
 
-パックは Lite モード専用です。Lite の固定 tenantId は `local` なので、有効化は
-`--tenant local` で行ってください (`make pack-activate ARGS="com.example.starter@0.1.0
---tenant local"`)。ここまでの手順で `--tenant acme` を使った場合はオフライン検証のためで、
-そのままではクラウドデプロイに反映されません。SaaS モード (`make deploy-saas`) はパックを
-サポートしません。有効化が 1 件でも残っていると synth を明示的に拒否します
-(エスケープハッチは `CDK_PARAM_SAAS_IGNORE_PACKS=true` ですが、その場合パック問題は
-デプロイに現れません)。
-
----
-
-## English walkthrough
-
-An abridged English summary of the same developer journey. The complete manifest
-and metadata examples, exact expected output, the failure-to-diagnostic-code table,
-and the preview event/verification flow live in the Japanese sections above; this
-summary covers the command sequence. Run each command in order and compare the
-output.
-
-### Prerequisites
-
-Everything up to activation is fully offline; no cloud credentials are needed
-until the final cloud-deploy step.
-
-- [Bun](https://bun.sh) 1.3.11
-- A checkout of the repository (run the `pack` CLI from the **repo root** via the
-  `make pack-*` targets — under the hood
-  `./node_modules/.bin/tsx infrastructure/bin/tenkacloud-pack.ts`; the CLI's
-  default store `./.tenkacloud/pack-store` resolves against the CWD, so repo-root
-  execution is what the platform reads)
-- `git` 2.x or later (used to obtain the pinned commit SHA)
-
-### Create, validate, install, activate
-
-```bash
-make pack-init ARGS="./my-first-pack"
-make pack-validate ARGS="./my-first-pack"
-make pack-install ARGS="./my-first-pack"
-make pack-activate ARGS="com.example.starter@0.1.0 --tenant acme"
-```
-
-Each command prints a one-line success message (see the Japanese sections above
-for the exact expected output). Pinning a pack means committing it to a separate
-Git repository and recording the full 40-hex commit SHA; a branch, tag, `HEAD`,
-or abbreviated hash is rejected by design, which is what makes a pinned revision
-immutable. Install a pinned revision with `pack install git <https-url> --commit
-<full-40-hex-sha>`.
-
-### Teardown
-
-```bash
-make pack-deactivate ARGS="com.example.starter@0.1.0 --tenant acme"
-./node_modules/.bin/tsx infrastructure/bin/tenkacloud-pack.ts remove com.example.starter@0.1.0
-```
-
-`remove` is refused while an event or activation pins the revision, so deactivate
-first. There is no `update` command: a new version is a separate install.
+Packs are Lite-mode only. Lite's fixed tenantId is `local`, so activate with
+`--tenant local` (`make pack-activate ARGS="com.example.starter@0.1.0
+--tenant local"`). If you used `--tenant acme` in the steps above, that was for
+offline verification and is not reflected in the cloud deploy as-is. SaaS mode
+(`make deploy-saas`) does not support packs. It explicitly refuses to synth while
+even a single activation remains (the escape hatch is
+`CDK_PARAM_SAAS_IGNORE_PACKS=true`, but pack problems then do not appear in the
+deploy).
 
 ## Next steps
 

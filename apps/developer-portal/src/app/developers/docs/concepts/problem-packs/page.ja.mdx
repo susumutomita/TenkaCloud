@@ -1,0 +1,24 @@
+import { MaturityBadge } from "@/components/MaturityBadge";
+
+export const metadata = { title: "問題パック" };
+
+# 問題パック <MaturityBadge level="stable" />
+
+**問題パック**は、TenkaCloud における競技コンテンツの単位です。
+
+## 問題パックとは
+
+各パックには、メタデータ、競技者アカウントへ直接デプロイされる単一ページの
+CloudFormation テンプレート、およびオプションのポータルプラグインが含まれます。
+
+## Battle と Challenge
+
+- **Battle** パックは、リアルタイムの対戦形式です。
+- **Challenge** パックは、自分のペースで取り組める常設形式です。
+
+## スコアリング種別
+
+スコアリングは、6 つの組み込み種別 — `flag`、`multi-flag`、`uptime-flat`、
+`uptime-multi`、`phased-polling`、`attack-detection` — のいずれか 1 つを問題ごとに使用します。
+
+[はじめに](/developers/docs/getting-started/)に戻る。

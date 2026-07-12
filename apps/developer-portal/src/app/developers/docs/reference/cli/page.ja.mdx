@@ -1,0 +1,40 @@
+import { MaturityBadge } from "@/components/MaturityBadge";
+import { CliCommandTable } from "@/components/ReferenceTables";
+
+export const metadata = { title: "CLI リファレンス" };
+
+# CLI リファレンス <MaturityBadge level="stable" />
+
+`tenkacloud pack` CLI はオフラインのパックツールです。すべてのコマンドは、
+クラウドやリモートへの呼び出しを行わずローカルで実行されます。以下のコマンド表は
+CLI 自身の usage 文字列から解析された**規範的リファレンス**であり、ドキュメントに
+記載されたコマンド名とオプションは常にコードと一致します。
+
+## コマンド
+
+<CliCommandTable />
+
+## 終了コード
+
+終了コードの契約は、すべてのサブコマンドで共有されます。
+
+- `0` — 成功（有効なパック / スキャフォールド完了 / インストール完了 / 一覧表示完了 /
+  検査完了 / 削除完了）
+- `1` — 拒否（検証失敗 / ダイジェストまたは compose の競合 / 未インストール /
+  ピン留めされたパックの削除）
+- `2` — ツール障害（ディレクトリの欠落 / マニフェストの欠落 / 誤った使い方 /
+  安全でない init 対象 / 未サポートのランタイム / フラグ値の欠落）
+
+`update` コマンドは意図的に存在しません。新しいバージョンは別個の `install` として扱います。
+
+## 例
+
+以下の例は説明用であり、規範的なものではありません。
+
+```bash
+tenkacloud pack init ./my-pack --runtime aws/cloudformation
+tenkacloud pack validate ./my-pack --json
+tenkacloud pack install ./my-pack
+```
+
+関連: [検証エラーリファレンス](/developers/docs/reference/validation-errors/)。

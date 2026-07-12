@@ -5,7 +5,10 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>CLI reference — TenkaCloud Docs</title>
+<title>CLI リファレンス — TenkaCloud Docs</title>
+<link rel="canonical" href="https://tenkacloud.com/docs/reference/cli/" />
+<link rel="alternate" hreflang="ja" href="https://tenkacloud.com/docs/reference/cli/" />
+<link rel="alternate" hreflang="en" href="https://tenkacloud.com/docs/reference/cli/index.en.html" />
 <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -16,42 +19,43 @@
 <header class="top">
   <div class="wrap top-inner">
     <a class="brand" href="/"><svg viewBox="0 0 120 120" width="1.05em" height="1.05em" aria-hidden="true" style="display:block;flex:none"><rect x="26" y="24" width="68" height="12" rx="6" fill="currentColor"></rect><path d="M26 90 L60 48 L94 90" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"></path></svg>TenkaCloud <span class="brand-docs">Docs</span></a>
-    <span class="top-links"><a href="/">← ホーム</a> · <a href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer">GitHub</a></span>
+    <span class="top-links"><a href="/">← ホーム</a> · <a href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer">GitHub</a> · <a href="/docs/reference/cli/index.en.html" hreflang="en" rel="alternate">English</a></span>
   </div>
 </header>
 <div class="wrap docs-grid">
-<aside class="docs-nav"><a class="docs-home-link" href="/docs/">Docs home</a>
-<section><h5>Getting started</h5><ul>
-<li><a href="/docs/getting-started/">Getting started</a></li>
+<aside class="docs-nav"><a class="docs-home-link" href="/docs/">Docs ホーム</a>
+<section><h5>はじめに</h5><ul>
+<li><a href="/docs/getting-started/">はじめに</a></li>
 </ul></section>
-<section><h5>Concepts</h5><ul>
-<li><a href="/docs/concepts/problem-packs/">Problem packs</a></li>
-<li><a href="/docs/concepts/architecture/">Platform architecture</a></li>
+<section><h5>コンセプト</h5><ul>
+<li><a href="/docs/concepts/problem-packs/">問題パック</a></li>
+<li><a href="/docs/concepts/architecture/">プラットフォームアーキテクチャ</a></li>
 </ul></section>
-<section><h5>Tutorials</h5><ul>
-<li><a href="/docs/tutorials/first-pack/">First pack tutorial</a></li>
+<section><h5>チュートリアル</h5><ul>
+<li><a href="/docs/tutorials/first-pack/">はじめての問題パック</a></li>
 </ul></section>
-<section><h5>Operate</h5><ul>
-<li><a href="/docs/operate/deploy-paths/">Deploy modes and launch paths</a></li>
-<li><a href="/docs/operate/run-an-event/">Run an event end to end</a></li>
+<section><h5>運用</h5><ul>
+<li><a href="/docs/operate/deploy-paths/">デプロイモードと起動経路</a></li>
+<li><a href="/docs/operate/run-an-event/">イベントをエンドツーエンドで運営する</a></li>
+<li><a href="/docs/operate/use-existing-pack/">既存パックを使う</a></li>
 </ul></section>
-<section><h5>Reference</h5><ul>
-<li><a href="/docs/reference/pack-manifest/">Pack manifest reference</a></li>
-<li><a href="/docs/reference/problem-metadata/">Problem metadata reference</a></li>
-<li><a href="/docs/reference/runtime-matrix/">Runtime capability matrix</a></li>
-<li><a href="/docs/reference/cli/" aria-current="page">CLI reference</a></li>
-<li><a href="/docs/reference/security-provenance/">Security and provenance model</a></li>
-<li><a href="/docs/reference/validation-errors/">Validation error reference</a></li>
+<section><h5>リファレンス</h5><ul>
+<li><a href="/docs/reference/pack-manifest/">パックマニフェスト</a></li>
+<li><a href="/docs/reference/problem-metadata/">問題メタデータ</a></li>
+<li><a href="/docs/reference/runtime-matrix/">ランタイム対応マトリクス</a></li>
+<li><a href="/docs/reference/cli/" aria-current="page">CLI リファレンス</a></li>
+<li><a href="/docs/reference/security-provenance/">セキュリティと来歴モデル</a></li>
+<li><a href="/docs/reference/validation-errors/">検証エラーリファレンス</a></li>
 </ul></section>
 </aside>
 <main class="doc">
 <article>
-<h1>CLI reference <span class="doc-badge doc-badge--stable">Stable</span></h1>
-<p>The <code>tenkacloud pack</code> CLI is the offline pack tool. Every command runs locally with
-no cloud or remote calls. The command table below is <strong>normative reference</strong> parsed
-from the CLI&#39;s own usage strings, so the documented command names and options
-always match the code.</p>
-<h2>Commands</h2>
+<h1>CLI リファレンス <span class="doc-badge doc-badge--stable">Stable</span></h1>
+<p><code>tenkacloud pack</code> CLI はオフラインのパックツールです。すべてのコマンドは、
+クラウドやリモートへの呼び出しを行わずローカルで実行されます。以下のコマンド表は
+CLI 自身の usage 文字列から解析された<strong>規範的リファレンス</strong>であり、ドキュメントに
+記載されたコマンド名とオプションは常にコードと一致します。</p>
+<h2>コマンド</h2>
 <table class="reference-table"><thead><tr><th>Command</th><th>Usage</th></tr></thead><tbody>
 <tr><td><code>activate</code></td><td><code>tenkacloud pack activate &lt;id@version&gt; --tenant &lt;t&gt; [--store &lt;dir&gt;]</code></td></tr>
 <tr><td><code>deactivate</code></td><td><code>tenkacloud pack deactivate &lt;id@version&gt; --tenant &lt;t&gt; [--store &lt;dir&gt;]</code></td></tr>
@@ -61,29 +65,30 @@ always match the code.</p>
 <tr><td><code>list</code></td><td><code>tenkacloud pack list [--store &lt;dir&gt;] [--json]</code></td></tr>
 <tr><td><code>remove</code></td><td><code>tenkacloud pack remove &lt;id@version&gt; [--store &lt;dir&gt;] [--pins &lt;file&gt;]</code></td></tr>
 <tr><td><code>validate</code></td><td><code>tenkacloud pack validate &lt;dir&gt; [--json]</code></td></tr>
-</tbody></table><h2>Exit codes</h2>
-<p>The exit-code contract is shared by every subcommand:</p>
+</tbody></table><h2>終了コード</h2>
+<p>終了コードの契約は、すべてのサブコマンドで共有されます。</p>
 <ul>
-<li><code>0</code> — success (valid pack / scaffolded / installed / listed / inspected / removed)</li>
-<li><code>1</code> — refusal (validation failure / digest or compose conflict / not installed /
-pinned removal)</li>
-<li><code>2</code> — tool failure (missing dir / missing manifest / bad usage / unsafe init
-target / unsupported runtime / missing flag value)</li>
+<li><code>0</code> — 成功（有効なパック / スキャフォールド完了 / インストール完了 / 一覧表示完了 /
+検査完了 / 削除完了）</li>
+<li><code>1</code> — 拒否（検証失敗 / ダイジェストまたは compose の競合 / 未インストール /
+ピン留めされたパックの削除）</li>
+<li><code>2</code> — ツール障害（ディレクトリの欠落 / マニフェストの欠落 / 誤った使い方 /
+安全でない init 対象 / 未サポートのランタイム / フラグ値の欠落）</li>
 </ul>
-<p>There is deliberately no <code>update</code> command: a new version is a separate <code>install</code>.</p>
-<h2>Example</h2>
-<p>The example below is illustrative, not normative.</p>
+<p><code>update</code> コマンドは意図的に存在しません。新しいバージョンは別個の <code>install</code> として扱います。</p>
+<h2>例</h2>
+<p>以下の例は説明用であり、規範的なものではありません。</p>
 <pre><code class="language-bash">tenkacloud pack init ./my-pack --runtime aws/cloudformation
 tenkacloud pack validate ./my-pack --json
 tenkacloud pack install ./my-pack
 </code></pre>
-<p>Related: <a href="/docs/reference/validation-errors/">validation error reference</a>.</p>
+<p>関連: <a href="/docs/reference/validation-errors/">検証エラーリファレンス</a>。</p>
 
 </article>
 </main>
 </div>
 <footer class="docs-footer">
-  <div class="wrap">© 2026 合同会社BULL · TenkaCloud · Apache License 2.0 · <a href="/docs/">Docs home</a> · <a href="/">ホーム</a></div>
+  <div class="wrap">© 2026 合同会社BULL · TenkaCloud · Apache License 2.0 · <a href="/docs/">Docs ホーム</a> · <a href="/">ホーム</a></div>
 </footer>
 </body>
 </html>

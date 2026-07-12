@@ -1,0 +1,29 @@
+import { MaturityBadge } from "@/components/MaturityBadge";
+import { ValidationErrorTable } from "@/components/ReferenceTables";
+
+export const metadata = { title: "検証エラーリファレンス" };
+
+# 検証エラーリファレンス <MaturityBadge level="stable" />
+
+パックバリデーターは、安定した名前空間付きの診断コードを発行します。契約となるのは
+`code` です。ツールは `code` で分岐し、メッセージ文字列で分岐することは決してありません。
+以下の表は、`@tenkacloud/problem-sdk` の `ValidationDiagnosticCode` レジストリから
+導出された**規範的リファレンス**です。すべてのコードにはこのページにユーザー向けの
+説明があり、説明のないコードが追加された場合はドリフトチェックがビルドを失敗させます。
+
+## コード
+
+<ValidationErrorTable />
+
+コードは `PACK_*` / `PROBLEM_*` / `RUNTIME_*` の名前空間を持ちます。コードの追加は
+加算的な（マイナー）変更であり、コードの削除や意味の変更はメジャー変更です。
+
+## 診断の読み方
+
+各診断には、安定した `code`、問題のある値の位置を示す `path`
+（`tenkacloud-pack.json:id` や `metadata.json:scoring`）、および修復方法を示す
+`message` が含まれます。機械可読な出力を得るには
+`tenkacloud pack validate <dir> --json` を実行してください。
+
+関連: [CLI リファレンス](/developers/docs/reference/cli/) および
+[パックマニフェストリファレンス](/developers/docs/reference/pack-manifest/)。

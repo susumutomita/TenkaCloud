@@ -5,7 +5,10 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>First pack tutorial — TenkaCloud Docs</title>
+<title>はじめての問題パック — TenkaCloud Docs</title>
+<link rel="canonical" href="https://tenkacloud.com/docs/tutorials/first-pack/" />
+<link rel="alternate" hreflang="ja" href="https://tenkacloud.com/docs/tutorials/first-pack/" />
+<link rel="alternate" hreflang="en" href="https://tenkacloud.com/docs/tutorials/first-pack/index.en.html" />
 <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -16,37 +19,38 @@
 <header class="top">
   <div class="wrap top-inner">
     <a class="brand" href="/"><svg viewBox="0 0 120 120" width="1.05em" height="1.05em" aria-hidden="true" style="display:block;flex:none"><rect x="26" y="24" width="68" height="12" rx="6" fill="currentColor"></rect><path d="M26 90 L60 48 L94 90" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"></path></svg>TenkaCloud <span class="brand-docs">Docs</span></a>
-    <span class="top-links"><a href="/">← ホーム</a> · <a href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer">GitHub</a></span>
+    <span class="top-links"><a href="/">← ホーム</a> · <a href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer">GitHub</a> · <a href="/docs/tutorials/first-pack/index.en.html" hreflang="en" rel="alternate">English</a></span>
   </div>
 </header>
 <div class="wrap docs-grid">
-<aside class="docs-nav"><a class="docs-home-link" href="/docs/">Docs home</a>
-<section><h5>Getting started</h5><ul>
-<li><a href="/docs/getting-started/">Getting started</a></li>
+<aside class="docs-nav"><a class="docs-home-link" href="/docs/">Docs ホーム</a>
+<section><h5>はじめに</h5><ul>
+<li><a href="/docs/getting-started/">はじめに</a></li>
 </ul></section>
-<section><h5>Concepts</h5><ul>
-<li><a href="/docs/concepts/problem-packs/">Problem packs</a></li>
-<li><a href="/docs/concepts/architecture/">Platform architecture</a></li>
+<section><h5>コンセプト</h5><ul>
+<li><a href="/docs/concepts/problem-packs/">問題パック</a></li>
+<li><a href="/docs/concepts/architecture/">プラットフォームアーキテクチャ</a></li>
 </ul></section>
-<section><h5>Tutorials</h5><ul>
-<li><a href="/docs/tutorials/first-pack/" aria-current="page">First pack tutorial</a></li>
+<section><h5>チュートリアル</h5><ul>
+<li><a href="/docs/tutorials/first-pack/" aria-current="page">はじめての問題パック</a></li>
 </ul></section>
-<section><h5>Operate</h5><ul>
-<li><a href="/docs/operate/deploy-paths/">Deploy modes and launch paths</a></li>
-<li><a href="/docs/operate/run-an-event/">Run an event end to end</a></li>
+<section><h5>運用</h5><ul>
+<li><a href="/docs/operate/deploy-paths/">デプロイモードと起動経路</a></li>
+<li><a href="/docs/operate/run-an-event/">イベントをエンドツーエンドで運営する</a></li>
+<li><a href="/docs/operate/use-existing-pack/">既存パックを使う</a></li>
 </ul></section>
-<section><h5>Reference</h5><ul>
-<li><a href="/docs/reference/pack-manifest/">Pack manifest reference</a></li>
-<li><a href="/docs/reference/problem-metadata/">Problem metadata reference</a></li>
-<li><a href="/docs/reference/runtime-matrix/">Runtime capability matrix</a></li>
-<li><a href="/docs/reference/cli/">CLI reference</a></li>
-<li><a href="/docs/reference/security-provenance/">Security and provenance model</a></li>
-<li><a href="/docs/reference/validation-errors/">Validation error reference</a></li>
+<section><h5>リファレンス</h5><ul>
+<li><a href="/docs/reference/pack-manifest/">パックマニフェスト</a></li>
+<li><a href="/docs/reference/problem-metadata/">問題メタデータ</a></li>
+<li><a href="/docs/reference/runtime-matrix/">ランタイム対応マトリクス</a></li>
+<li><a href="/docs/reference/cli/">CLI リファレンス</a></li>
+<li><a href="/docs/reference/security-provenance/">セキュリティと来歴モデル</a></li>
+<li><a href="/docs/reference/validation-errors/">検証エラーリファレンス</a></li>
 </ul></section>
 </aside>
 <main class="doc">
 <article>
-<h1>First pack tutorial <span class="doc-badge doc-badge--stable">Stable</span></h1>
+<h1>はじめての問題パック <span class="doc-badge doc-badge--stable">Stable</span></h1>
 <p>このチュートリアルは、空のディレクトリから問題パック (problem pack) を 1 つ作り、検証し、
 不変な Git リビジョンに固定して公開し、インストールし、テナントに対して有効化し、
 イベントに固定するまでの、開発者の主要な道筋を 1 本でたどります。最小の 1 パック
@@ -54,12 +58,8 @@
 <p>パックの概念そのものは <a href="/docs/concepts/problem-packs/">problem packs</a> を、
 最初のデプロイ全体像は <a href="/docs/getting-started/">getting started</a> を参照してください。
 このページは契約 (スキーマや診断コードの一覧) を再掲せず、各リファレンスへリンクします。</p>
-<p>Just want to run an existing pack? → <a href="/docs/operate/use-existing-pack/">Use an existing pack</a>.</p>
-<p>The Japanese walkthrough below is the complete source of truth — full manifest and
-metadata examples, exact expected output, the failure-to-diagnostic-code table, and
-the preview event/verification flow. An abridged English summary follows it for
-quick reference; for the full detail, follow the Japanese sections above it.</p>
-<h2>前提条件 (prerequisites)</h2>
+<p>既存のパックを動かしたいだけの場合は → <a href="/docs/operate/use-existing-pack/">既存パックを使う</a> を参照してください。</p>
+<h2>前提条件</h2>
 <p>このチュートリアルの「作成 → 検証 → インストール → 有効化」までは、クラウド資格情報なしの
 完全オフラインで完了します。プラットフォームへの実デプロイに到達する手順 (最後の節) でのみ
 AWS アカウントが必要です。</p>
@@ -72,7 +72,7 @@ AWS アカウントが必要です。</p>
 <li><code>git</code> 2.x 以降 (固定リビジョンの SHA を取得する手順で使用)</li>
 </ul>
 <p>CLI は完全にオフラインです。ネットワーク・CDK synth・クラウド資格情報を一切使いません。</p>
-<h2>1. パックを作成する (scaffold)</h2>
+<h2>1. パックを作成する</h2>
 <p>空の作業ディレクトリから始めます。<code>pack init &lt;dir&gt;</code> は、検証を 0 件の診断で通過する
 パック (マニフェスト + 問題 1 個 + プロバイダー成果物のプレースホルダー + README) を生成します。</p>
 <pre><code class="language-bash">make pack-init ARGS=&quot;./my-first-pack&quot;
@@ -117,7 +117,7 @@ AWS アカウントが必要です。</p>
 </code></pre>
 <p>マニフェストと metadata.json の各フィールドの意味は
 <a href="/docs/concepts/problem-packs/">problem packs</a> を参照してください。</p>
-<h2>2. パックを検証する (validate)</h2>
+<h2>2. パックを検証する</h2>
 <p><code>pack validate &lt;dir&gt;</code> はオフライン検証器です。スキーマ・問題 ID の一意性・成果物の存在・
 ランタイム整合などを検査します。</p>
 <pre><code class="language-bash">make pack-validate ARGS=&quot;./my-first-pack&quot;
@@ -128,7 +128,7 @@ AWS アカウントが必要です。</p>
 </code></pre>
 <p>機械可読な出力が必要なときは <code>--json</code> を付けます。
 終了コードは 0 (成功) / 1 (検証失敗) / 2 (ツール失敗: ディレクトリ欠落・マニフェスト欠落・誤用) です。</p>
-<h2>3. 不変な Git リビジョンに固定して公開する (pin)</h2>
+<h2>3. 不変な Git リビジョンに固定して公開する</h2>
 <p>公開はパックを「不変な Git のコミット」に固定して共有することです。**ブランチ名・タグ・<code>HEAD</code>・
 短縮ハッシュは設計上拒否されます。**固定できるのは完全な 40 桁の SHA だけで、これにより
 同じパック内容が将来にわたって絶対に変わらないこと (immutability) を保証します。</p>
@@ -145,7 +145,7 @@ git -C ./my-first-pack rev-parse HEAD
 <p>この SHA が公開単位です。リモートに push し、HTTPS URL と SHA を配布します。
 固定リビジョンの実運用手順は
 <code>infrastructure/lib/problem-pack/README-external-git-pack.md</code> のランバックに対応します。</p>
-<h2>4. パックをインストールする (install)</h2>
+<h2>4. パックをインストールする</h2>
 <p>ローカルディレクトリからインストールできます。インストールは「検証 → スナップショット →
 ロック → dry-run compose」を原子的に行い、有効化はしません。失敗したインストールは残骸を残しません。</p>
 <pre><code class="language-bash">make pack-install ARGS=&quot;./my-first-pack&quot;
@@ -168,7 +168,7 @@ git -C ./my-first-pack rev-parse HEAD
 <pre><code class="language-text">Installed packs: 1
   - com.example.starter@0.1.0 (local, 1 problem, b1acd5a90e84be2a2e1ca78f77396ee6c447c9c3f1c226be0565fa2c90df44e9)
 </code></pre>
-<h2>5. テナントに対して有効化する (activate)</h2>
+<h2>5. テナントに対して有効化する</h2>
 <p>インストール済みの不変リビジョンを、1 つのテナントに対して有効化します。重複する問題 ID・
 利用不可なランタイム・ダイジェスト不一致・未インストールは拒否されます (終了コード 1)。</p>
 <pre><code class="language-bash">make pack-activate ARGS=&quot;com.example.starter@0.1.0 --tenant acme&quot;
@@ -177,7 +177,7 @@ git -C ./my-first-pack rev-parse HEAD
 <pre><code class="language-text">Pack activated for tenant &#39;acme&#39;: com.example.starter@0.1.0
 </code></pre>
 <p>別テナントからは見えません (テナント分離)。元に戻すには <code>deactivate</code> を使います。</p>
-<h2>6. イベントを作成する (create an event) <span class="doc-badge doc-badge--preview">Preview</span></h2>
+<h2>6. イベントを作成する <span class="doc-badge doc-badge--preview">Preview</span></h2>
 <p>イベント作成は、そのテナントの実効カタログ (core + 有効化済みパックリビジョン) を
 <strong>作成時点で不変なスナップショットに固定</strong>します。一度固定したイベントのカタログは、後から
 <code>deactivate</code> / <code>install</code> / <code>activate</code> をしても書き換わりません。</p>
@@ -190,7 +190,7 @@ git -C ./my-first-pack rev-parse HEAD
 経路そのものではありません。ここまでの CLI 手順 (作成 → 検証 → インストール → 有効化) はすべて
 実装済み (stable) ですが、ブラウザからのイベント作成 UI はプラットフォーム層であり、このページでは
 preview として扱います。</p>
-<h2>7. オーガナイザーコンソールで検証する (verify) <span class="doc-badge doc-badge--preview">Preview</span></h2>
+<h2>7. オーガナイザーコンソールで検証する <span class="doc-badge doc-badge--preview">Preview</span></h2>
 <p>イベント作成後、オーガナイザーコンソールでイベントが固定スナップショットを参照していること、
 デプロイがそのイベントの固定パック provenance を解決していることを確認します。
 オフラインの等価チェックは <code>infrastructure/test/problem-pack/external-git-pack-e2e.test.ts</code> が
@@ -198,7 +198,7 @@ preview として扱います。</p>
 <code>infrastructure/test/problem-pack/pack-lite-full-chain-e2e.test.ts</code> は、CLI の作成・検証・
 インストール・有効化から Lite の synth 配線・実際のイベント作成ハンドラ・デプロイ provenance の
 刻印までを、実コードのみで一本の鎖として通す、より広いオフライン E2E です。</p>
-<h2>8. 撤去する (teardown / remove)</h2>
+<h2>8. 撤去する</h2>
 <p>不要になったリビジョンは <code>remove</code> で取り除けます。<strong>イベントや有効化がそのリビジョンを
 固定している間は拒否されます</strong> (不変カタログの保護)。先に <code>deactivate</code> し、固定参照を外してから
 削除します。</p>
@@ -210,7 +210,7 @@ preview として扱います。</p>
 Removed com.example.starter@0.1.0.
 </code></pre>
 <p><code>pack</code> CLI には <code>update</code> がありません。新しいバージョンは別のインストールとして扱います。</p>
-<h2>よくある失敗 → 診断コード (common failures)</h2>
+<h2>よくある失敗 → 診断コード</h2>
 <p>検証失敗のとき CLI は <code>[CODE] file:path</code> 形式で診断を表示します。コードが契約であり、
 メッセージ文字列は契約ではありません。診断コードの完全な一覧と公開名前空間付きコードへの対応は
 <a href="/docs/concepts/problem-packs/">problem packs</a> を参照してください。実際に観測できる例:</p>
@@ -260,7 +260,7 @@ Removed com.example.starter@0.1.0.
 </code></pre>
 <p><code>PACK_DIR_MISSING</code> / <code>MANIFEST_MISSING</code> / <code>MANIFEST_UNREADABLE</code> は終了コード 2 (ツール失敗)、
 それ以外の検証診断は終了コード 1 (検証失敗) です。</p>
-<h2>プラットフォームへデプロイする (cloud) <span class="doc-badge doc-badge--preview">Preview</span></h2>
+<h2>プラットフォームへデプロイする <span class="doc-badge doc-badge--preview">Preview</span></h2>
 <p>ここから先は AWS アカウントが必要です。固定パックをプラットフォームに載せ、参加者ポータルまで
 通すには <a href="/docs/getting-started/">getting started</a> の Lite モード (<code>make deploy</code>) に従います。</p>
 <p>パックは Lite モード専用です。Lite の固定 tenantId は <code>local</code> なので、有効化は
@@ -269,54 +269,18 @@ Removed com.example.starter@0.1.0.
 サポートしません。有効化が 1 件でも残っていると synth を明示的に拒否します
 (エスケープハッチは <code>CDK_PARAM_SAAS_IGNORE_PACKS=true</code> ですが、その場合パック問題は
 デプロイに現れません)。</p>
-<hr>
-<h2>English walkthrough</h2>
-<p>An abridged English summary of the same developer journey. The complete manifest
-and metadata examples, exact expected output, the failure-to-diagnostic-code table,
-and the preview event/verification flow live in the Japanese sections above; this
-summary covers the command sequence. Run each command in order and compare the
-output.</p>
-<h3>Prerequisites</h3>
-<p>Everything up to activation is fully offline; no cloud credentials are needed
-until the final cloud-deploy step.</p>
+<h2>次のステップ</h2>
 <ul>
-<li><a href="https://bun.sh">Bun</a> 1.3.11</li>
-<li>A checkout of the repository (run the <code>pack</code> CLI from the <strong>repo root</strong> via the
-<code>make pack-*</code> targets — under the hood
-<code>./node_modules/.bin/tsx infrastructure/bin/tenkacloud-pack.ts</code>; the CLI&#39;s
-default store <code>./.tenkacloud/pack-store</code> resolves against the CWD, so repo-root
-execution is what the platform reads)</li>
-<li><code>git</code> 2.x or later (used to obtain the pinned commit SHA)</li>
-</ul>
-<h3>Create, validate, install, activate</h3>
-<pre><code class="language-bash">make pack-init ARGS=&quot;./my-first-pack&quot;
-make pack-validate ARGS=&quot;./my-first-pack&quot;
-make pack-install ARGS=&quot;./my-first-pack&quot;
-make pack-activate ARGS=&quot;com.example.starter@0.1.0 --tenant acme&quot;
-</code></pre>
-<p>Each command prints a one-line success message (see the Japanese sections above
-for the exact expected output). Pinning a pack means committing it to a separate
-Git repository and recording the full 40-hex commit SHA; a branch, tag, <code>HEAD</code>,
-or abbreviated hash is rejected by design, which is what makes a pinned revision
-immutable. Install a pinned revision with <code>pack install git &lt;https-url&gt; --commit &lt;full-40-hex-sha&gt;</code>.</p>
-<h3>Teardown</h3>
-<pre><code class="language-bash">make pack-deactivate ARGS=&quot;com.example.starter@0.1.0 --tenant acme&quot;
-./node_modules/.bin/tsx infrastructure/bin/tenkacloud-pack.ts remove com.example.starter@0.1.0
-</code></pre>
-<p><code>remove</code> is refused while an event or activation pins the revision, so deactivate
-first. There is no <code>update</code> command: a new version is a separate install.</p>
-<h2>Next steps</h2>
-<ul>
-<li>Read about <a href="/docs/concepts/problem-packs/">problem packs</a>.</li>
-<li>Start from <a href="/docs/getting-started/">getting started</a>.</li>
-<li>Browse the <a href="https://github.com/susumutomita/TenkaCloud#readme">API reference</a>.</li>
+<li><a href="/docs/concepts/problem-packs/">problem packs</a> でパックの概念を確認します。</li>
+<li><a href="/docs/getting-started/">getting started</a> から始めます。</li>
+<li><a href="https://github.com/susumutomita/TenkaCloud#readme">API リファレンス</a> を参照します。</li>
 </ul>
 
 </article>
 </main>
 </div>
 <footer class="docs-footer">
-  <div class="wrap">© 2026 合同会社BULL · TenkaCloud · Apache License 2.0 · <a href="/docs/">Docs home</a> · <a href="/">ホーム</a></div>
+  <div class="wrap">© 2026 合同会社BULL · TenkaCloud · Apache License 2.0 · <a href="/docs/">Docs ホーム</a> · <a href="/">ホーム</a></div>
 </footer>
 </body>
 </html>
