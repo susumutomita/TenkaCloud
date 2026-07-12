@@ -277,6 +277,55 @@ describe("local play challenge proxy", () => {
     }
   });
 
+  it("should preserve QUERY body and content type through the Codespaces-compatible route", async () => {
+    let observed: Readonly<Record<string, string | undefined>> | undefined;
+    const upstream = createServer(async (req, res) => {
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) chunks.push(Buffer.from(chunk));
+      observed = {
+        method: req.method,
+        path: req.url,
+        contentType: req.headers["content-type"],
+        body: Buffer.concat(chunks).toString("utf8"),
+      };
+      res.writeHead(StatusCodes.OK, { "content-type": "application/json" });
+      res.end('{"ok":true}');
+    });
+    const upstreamPort = await listen(upstream);
+    const middleware = createLocalChallengeProxyMiddleware();
+    const proxy = createServer((req, res) => {
+      middleware(req, res, () => {
+        res.statusCode = StatusCodes.NOT_FOUND;
+        res.end("unhandled");
+      });
+    });
+    const proxyPort = await listen(proxy);
+
+    try {
+      const body = '{"query":{"match":"tenka"}}';
+      const res = await fetch(
+        `http://127.0.0.1:${proxyPort}/__tenkacloud-local-port/${upstreamPort}/search?scope=all`,
+        {
+          method: "QUERY",
+          headers: { "content-type": "application/json" },
+          body,
+        },
+      );
+
+      expect(res.status).toBe(StatusCodes.OK);
+      expect(await res.json()).toEqual({ ok: true });
+      expect(observed).toEqual({
+        method: "QUERY",
+        path: "/search?scope=all",
+        contentType: "application/json",
+        body,
+      });
+    } finally {
+      await close(proxy);
+      await close(upstream);
+    }
+  });
+
   it("should return bad gateway when the local challenge port is unavailable", async () => {
     const closedServer = createServer();
     const unavailablePort = await listen(closedServer);

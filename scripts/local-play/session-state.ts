@@ -47,6 +47,10 @@ export interface LocalPaths {
   readonly unitsPath: string;
   readonly runtimeConfigBackupPath: string;
   readonly logPath: string;
+  readonly simulatorSessionPath: string;
+  readonly simulatorStateDir: string;
+  readonly simulatorLogPath: string;
+  readonly simulatorEnvPath: string;
   readonly runtimeConfigPath: string;
 }
 
@@ -59,6 +63,10 @@ export function resolveLocalPaths(): LocalPaths {
     unitsPath: join(localDir, "units.json"),
     runtimeConfigBackupPath: join(localDir, "runtime-config.backup.json"),
     logPath: join(localDir, "api.log"),
+    simulatorSessionPath: join(localDir, "simulator-session.json"),
+    simulatorStateDir: join(localDir, "simulator-state"),
+    simulatorLogPath: join(localDir, "simulator.log"),
+    simulatorEnvPath: join(localDir, "simulator-native.env"),
     runtimeConfigPath: join(
       REPO_ROOT,
       "apps",
@@ -74,7 +82,11 @@ export function readJson<T>(path: string): T {
 }
 
 export function writePrivateJson(path: string, value: unknown): void {
-  writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  writePrivateText(path, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+export function writePrivateText(path: string, value: string): void {
+  writeFileSync(path, value, "utf8");
   chmodSync(path, 0o600);
 }
 
@@ -121,7 +133,7 @@ export async function reclaimStaleSession<S extends { apiBaseUrl: string }>(
   statePath: string,
   readState: () => S,
   probe: (apiBaseUrl: string) => Promise<boolean>,
-  release: (state: S) => void,
+  release: (state: S) => void | Promise<void>,
   fileExists: (path: string) => boolean = existsSync,
 ): Promise<void> {
   if (!fileExists(statePath)) return;
@@ -132,7 +144,7 @@ export async function reclaimStaleSession<S extends { apiBaseUrl: string }>(
   console.log(
     "A previous local-play session did not shut down cleanly (stopped Codespace or reboot?) — reclaiming it.",
   );
-  release(state);
+  await release(state);
 }
 
 /** Shared by `down` and the stale-session reclaim: kill the API and restore files. */

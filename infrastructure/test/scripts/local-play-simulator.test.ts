@@ -84,21 +84,25 @@ describe("local-play simulator catalog scanner", () => {
 
   it("should create worlds and deployments through the versioned protocol", async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
-    const client = createSimulatorClient("http://127.0.0.1:7777", async (url, init) => {
-      calls.push({ url: String(url), init });
-      if (String(url).endsWith("/v1/worlds")) {
+    const client = createSimulatorClient(
+      "http://127.0.0.1:7777",
+      async (url, init) => {
+        calls.push({ url: String(url), init });
+        if (String(url).endsWith("/v1/worlds")) {
+          return new Response(
+            JSON.stringify({ worldId: "w1", consoleUrl: "http://127.0.0.1:7777/console/w1" }),
+          );
+        }
         return new Response(
-          JSON.stringify({ worldId: "w1", consoleUrl: "http://127.0.0.1:7777/console/w1" }),
+          JSON.stringify({
+            deploymentId: "d1",
+            status: "running",
+            outputs: { Console: "http://127.0.0.1:7777/console/w1" },
+          }),
         );
-      }
-      return new Response(
-        JSON.stringify({
-          deploymentId: "d1",
-          status: "running",
-          outputs: { Console: "http://127.0.0.1:7777/console/w1" },
-        }),
-      );
-    });
+      },
+      "launch-token",
+    );
 
     const world = await client.createWorld({
       tenantId: "local",
@@ -118,6 +122,36 @@ describe("local-play simulator catalog scanner", () => {
       ["http://127.0.0.1:7777/v1/worlds", "POST"],
       ["http://127.0.0.1:7777/v1/worlds/w1/deployments", "POST"],
     ]);
+    expect(new Headers(calls[0]?.init?.headers).get("authorization")).toBe("Bearer launch-token");
+  });
+
+  it("should require authentication and validate the clock advance response contract", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const client = createSimulatorClient(
+      "http://127.0.0.1:7777",
+      async (url, init) => {
+        calls.push({ url: String(url), init });
+        return new Response(
+          JSON.stringify({
+            clock: "2026-07-12T00:00:01.500Z",
+            appliedTransitions: [{ provider: "aws", transitionId: "ssm-command:revert" }],
+          }),
+        );
+      },
+      "clock-token",
+    );
+
+    await expect(client.advanceClock("world/one", 1_500)).resolves.toEqual({
+      clock: "2026-07-12T00:00:01.500Z",
+      appliedTransitions: [{ provider: "aws", transitionId: "ssm-command:revert" }],
+    });
+    expect(calls[0]?.url).toBe("http://127.0.0.1:7777/v1/worlds/world%2Fone/clock/advance");
+    expect(new Headers(calls[0]?.init?.headers).get("authorization")).toBe("Bearer clock-token");
+    expect(calls[0]?.init?.body).toBe(JSON.stringify({ milliseconds: 1_500 }));
+
+    const unauthenticated = createSimulatorClient("http://127.0.0.1:7777", fetch);
+    await expect(unauthenticated.advanceClock("world", 1)).rejects.toThrow("launch token");
+    await expect(client.advanceClock("world", 0)).rejects.toThrow("positive safe integer");
   });
 
   it("should classify simulator-supported runtimes", () => {

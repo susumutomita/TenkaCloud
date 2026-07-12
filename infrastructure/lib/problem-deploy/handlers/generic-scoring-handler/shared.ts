@@ -267,8 +267,7 @@ export function resolveActivePhase(
 
 /**
  * Lambda 内に outbound HTTP を発行する probe helper (ADR-012 Phase 3.B)。`handler-must-not-call-fetch`
- * lint は本 module を generic-scoring-handler/ 配下に置くことで namespace 緩和される
- * (= health-check-handler 同型の "scoring engine は probe 用 fetch を許可する" 例外)。
+ * lint は generic-scoring-handler/ を health-check-handler 同型の probe 用 fetch 例外として扱う。
  *
  * `responseTimeMs` を返すため `phased-polling` の `responsePenalties` 評価が可能。
  */
@@ -279,21 +278,22 @@ export interface ProbeResult {
   readonly body?: string;
 }
 
+export interface ProbeOptions {
+  readonly expectStatus?: readonly number[];
+  readonly timeoutMs?: number;
+  readonly readBody?: boolean;
+  /** [ADR-034 / #1666] attack-probe method. Defaults to GET. */
+  readonly method?: "GET" | "POST";
+  /** JSON POST body used by an attack probe. */
+  readonly body?: string;
+}
+
+export type ProbeFn = (url: string, options?: ProbeOptions) => Promise<ProbeResult>;
+
 const DEFAULT_PROBE_TIMEOUT_MS = 8_000;
 const MAX_BODY_BYTES = 4_096;
 
-export async function probeUrl(
-  url: string,
-  options: {
-    readonly expectStatus?: readonly number[];
-    readonly timeoutMs?: number;
-    readonly readBody?: boolean;
-    /** [ADR-034 / #1666] attack-probe 用。 既定 GET。 */
-    readonly method?: "GET" | "POST";
-    /** POST body (= 攻撃 payload)。 method=POST + body 指定時に content-type: application/json で送る。 */
-    readonly body?: string;
-  } = {},
-): Promise<ProbeResult> {
+export async function probeUrl(url: string, options: ProbeOptions = {}): Promise<ProbeResult> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), options.timeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS);
   const start = Date.now();
@@ -478,6 +478,20 @@ export interface PhaseEntry {
   };
 }
 
+export interface AttackProbeRequest {
+  readonly slot: string;
+  readonly path: string;
+  readonly method?: "GET" | "POST";
+  readonly body?: string;
+}
+
+/**
+ * Optional control-plane attack probe seam. Production leaves this absent and
+ * sends the real HTTP request; Simulator local play uses the authenticated
+ * provider operation so the same core state records the attack observation.
+ */
+export type AttackProbeFn = (request: AttackProbeRequest) => Promise<ProbeResult>;
+
 /** kind handler の uniform input。dispatcher が組み立てる。 */
 export interface KindHandlerInput<S extends ProblemScoringMetadata = ProblemScoringMetadata> {
   readonly deployment: Partial<DeploymentItem>;
@@ -499,4 +513,8 @@ export interface KindHandlerInput<S extends ProblemScoringMetadata = ProblemScor
   readonly nowMs: number;
   readonly nowIso: string;
   readonly prevState: DeploymentScoringState;
+  /** Alternate network boundary for local Simulator loopback workloads; production defaults to probeUrl. */
+  readonly probe?: ProbeFn;
+  /** Simulator-only provider command boundary for attack probes; production defaults to real HTTP. */
+  readonly attackProbe?: AttackProbeFn;
 }

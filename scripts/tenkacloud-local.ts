@@ -1,6 +1,7 @@
 import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { scoreSimulatedProblem } from "./local-play/api-scoring";
 import type { LocalPlayDeployment } from "./local-play/api-state";
 import {
   autoInitProblemsSubmodule,
@@ -32,7 +33,11 @@ import {
   unlinkIfExists,
   writePrivateJson,
 } from "./local-play/session-state";
-import { listSimulatedCloudProblems } from "./local-play/simulator";
+import { listSimulatedCloudProblems, loadSimulatedCloudProblems } from "./local-play/simulator";
+import {
+  cleanupRecordedSimulatorSession,
+  SimulatorLocalRuntime,
+} from "./local-play/simulator-runtime";
 
 /**
  * [#2527 Slice 6] The local-play CLI entrypoint: command routing + composition only.
@@ -84,6 +89,14 @@ async function startProblemViaApi(apiBaseUrl: string, problemId: string): Promis
 }
 
 /** Print the running problems' challenge endpoints as the API sees them (post-remap). */
+function endpointDisplay(label: string, value: string): string {
+  if (/credential|accesskey/i.test(label)) return "[available in Participant Portal]";
+  if (!URL.canParse(value)) return value;
+  const parsed = new URL(value);
+  if (parsed.hash) parsed.hash = "";
+  return parsed.toString();
+}
+
 async function printRunningEndpoints(apiBaseUrl: string): Promise<void> {
   const response = await fetch(`${apiBaseUrl}/portal/me`, {
     headers: { authorization: "Bearer local" },
@@ -98,7 +111,7 @@ async function printRunningEndpoints(apiBaseUrl: string): Promise<void> {
   for (const problem of body.problems ?? []) {
     if (problem.lifecycle?.status !== "running") continue;
     for (const [label, url] of Object.entries(problem.stackOutputs)) {
-      console.log(`Challenge — ${problem.name} (${label}): ${url}`);
+      console.log(`Challenge — ${problem.name} (${label}): ${endpointDisplay(label, url)}`);
     }
   }
 }
@@ -119,9 +132,11 @@ async function up(problemArg: string): Promise<void> {
     p.statePath,
     () => readJson<LocalProcessState>(p.statePath),
     apiIsHealthy,
-    (state) => releaseSessionState(p, state),
+    async (state) => {
+      await cleanupRecordedSimulatorSession(p.simulatorSessionPath);
+      releaseSessionState(p, state);
+    },
   );
-  assertDockerAvailable();
 
   const problemIds = parseProblemIds(problemArg);
   const apiPort = positivePort(process.env.LOCAL_API_PORT, DEFAULT_API_PORT, "LOCAL_API_PORT");
@@ -137,11 +152,16 @@ async function up(problemArg: string): Promise<void> {
   // none means a warm session with zero containers.
   const roots = problemSearchRoots(REPO_ROOT);
   const catalog = loadLocalPlayCatalog(REPO_ROOT, roots);
-  const catalogIds = new Set(catalog.map((problem) => problem.problemId));
+  const simulatedCatalog = loadSimulatedCloudProblems(roots);
+  const catalogIds = new Set([...catalog, ...simulatedCatalog].map((problem) => problem.problemId));
   for (const id of problemIds) {
     if (!catalogIds.has(id)) {
       throw new Error(`problem "${id}" was not found under: ${roots.join(", ")}`);
     }
+  }
+  const containerIds = new Set(catalog.map((problem) => problem.problemId));
+  if (problemIds.length === 0 || problemIds.some((id) => containerIds.has(id))) {
+    assertDockerAvailable();
   }
 
   let runtimeConfigBackedUp = false;
@@ -156,7 +176,10 @@ async function up(problemArg: string): Promise<void> {
 
   let apiPid: number | undefined;
   try {
-    const deployment: LocalPlayDeployment = { problems: catalog };
+    const deployment: LocalPlayDeployment = {
+      problems: catalog,
+      simulatedProblems: simulatedCatalog,
+    };
     writePrivateJson(p.deploymentPath, deployment);
     apiPid = startDetachedServe(p.deploymentPath, apiPort, p.logPath);
     await waitForLocalApi(apiBaseUrl, problemIds, apiPid, p.logPath);
@@ -181,7 +204,7 @@ async function up(problemArg: string): Promise<void> {
     writePrivateJson(p.statePath, state);
 
     console.log(
-      `Local play is ready (catalog: ${catalog.length} problem${catalog.length > 1 ? "s" : ""}, ` +
+      `Local play is ready (catalog: ${catalog.length + simulatedCatalog.length} problem${catalog.length + simulatedCatalog.length > 1 ? "s" : ""}, ` +
         `${problemIds.length} pre-started).`,
     );
     console.log(`Participant API: ${apiBaseUrl}`);
@@ -214,11 +237,26 @@ async function serve(deploymentPath: string): Promise<void> {
   const p = resolveLocalPaths();
   const deployment = readJson<LocalPlayDeployment>(deploymentPath);
   const port = positivePort(process.env.LOCAL_API_PORT, DEFAULT_API_PORT, "LOCAL_API_PORT");
+  const workloadImages = [
+    ...new Set(
+      (deployment.simulatedProblems ?? []).flatMap(
+        (problem) => problem.simulationOverlay?.workloads?.map((workload) => workload.image) ?? [],
+      ),
+    ),
+  ].sort();
 
   // [#2392 Phase 2] On-demand docker: the API's lifecycle drives the real
   // ContainerRunner, and every start/stop is mirrored to units.json so `down`
   // (a separate process) can reclaim the containers even after a crash.
   const runner = createContainerRunner(p.localDir);
+  const simulator = new SimulatorLocalRuntime({
+    sessionPath: p.simulatorSessionPath,
+    stateDir: p.simulatorStateDir,
+    logPath: p.simulatorLogPath,
+    workloadImages,
+    participantEnvPath: p.simulatorEnvPath,
+    nativeProxyBaseUrl: `http://127.0.0.1:${port}`,
+  });
   const units = new Map<string, LocalComposeUnit>();
   const persistUnits = (): void => {
     writePrivateJson(p.unitsPath, { units: [...units.values()] } satisfies RecordedUnits);
@@ -236,15 +274,43 @@ async function serve(deploymentPath: string): Promise<void> {
       units.delete(unit.problemId);
       persistUnits();
     },
+    simulator,
   });
 
   // [#2512] No idle sweeper: a started container keeps running until the
   // participant stops it (portal Stop / `make local-down`) or the running cap
   // evicts the least-recently-played problem to start another one.
   console.log(`Local Participant API listening on http://127.0.0.1:${server.port}`);
+  let scoring = false;
+  const scoringTimer = setInterval(() => {
+    if (scoring) return;
+    scoring = true;
+    void Promise.all(
+      [...server.state.simulatedRuntimes.keys()]
+        .filter((problemId) => server.state.lifecycle.statusOf(problemId) === "running")
+        .map((problemId) => scoreSimulatedProblem(problemId, server.state)),
+    )
+      .catch((error) => {
+        console.error(
+          `Simulator scoring cycle failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      })
+      .finally(() => {
+        scoring = false;
+      });
+  }, 60_000);
   const shutdown = async () => {
+    clearInterval(scoringTimer);
+    let exitCode = 0;
+    try {
+      await server.state.lifecycle.stopAll();
+      await simulator.close();
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : String(error));
+      exitCode = 1;
+    }
     await server.close();
-    process.exit(0);
+    process.exit(exitCode);
   };
   process.once("SIGINT", () => void shutdown());
   process.once("SIGTERM", () => void shutdown());
@@ -261,6 +327,9 @@ async function status(): Promise<void> {
     state.problemIds.length > 0 ? state.problemIds.join(", ") : "on-demand, none pre-started";
   console.log(`Local play is running (${preStarted}).`);
   console.log(`Participant API: ${state.apiBaseUrl}`);
+  if (existsSync(p.simulatorEnvPath)) {
+    console.log(`Simulator CLI environment: source ${p.simulatorEnvPath}`);
+  }
 }
 
 async function evaluate(flag: string): Promise<void> {
@@ -282,11 +351,83 @@ async function evaluate(flag: string): Promise<void> {
   if (!response.ok || outcome.kind === "wrong") process.exitCode = 1;
 }
 
-function down(): void {
+async function reset(problemId: string): Promise<void> {
+  const p = resolveLocalPaths();
+  if (!existsSync(p.statePath)) throw new Error("Local play is not running.");
+  const state = readJson<LocalProcessState>(p.statePath);
+  const response = await fetch(
+    `${state.apiBaseUrl}/portal/me/problems/${encodeURIComponent(problemId)}/reset`,
+    { method: "POST", headers: { authorization: "Bearer local" } },
+  );
+  if (!response.ok) {
+    throw new Error(`reset failed (HTTP ${response.status}): ${await response.text()}`);
+  }
+  console.log(`Local problem reset: ${problemId}`);
+}
+
+async function fireDisruption(problemId: string, disruptionId: string): Promise<void> {
+  const p = resolveLocalPaths();
+  if (!existsSync(p.statePath)) throw new Error("Local play is not running.");
+  const state = readJson<LocalProcessState>(p.statePath);
+  const response = await fetch(
+    `${state.apiBaseUrl}/local/operator/problems/${encodeURIComponent(problemId)}/disruptions/${encodeURIComponent(disruptionId)}/fire`,
+    { method: "POST" },
+  );
+  if (!response.ok) {
+    throw new Error(`disruption failed (HTTP ${response.status}): ${await response.text()}`);
+  }
+  console.log(`Simulator disruption fired: ${problemId}/${disruptionId}`);
+}
+
+function snapshotName(value: string): string {
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(value)) {
+    throw new Error("SNAPSHOT must contain only letters, digits, dot, underscore, and hyphen");
+  }
+  return value;
+}
+
+async function snapshot(
+  action: "export" | "import",
+  problemId: string,
+  name: string,
+): Promise<void> {
+  const p = resolveLocalPaths();
+  if (!existsSync(p.simulatorSessionPath)) {
+    throw new Error("No running Simulator session was found.");
+  }
+  const snapshotsDir = join(p.localDir, "snapshots");
+  mkdirSync(snapshotsDir, { recursive: true, mode: 0o700 });
+  const path = join(snapshotsDir, `${snapshotName(name)}.json`);
+  const simulator = new SimulatorLocalRuntime({
+    sessionPath: p.simulatorSessionPath,
+    stateDir: p.simulatorStateDir,
+    logPath: p.simulatorLogPath,
+    participantEnvPath: p.simulatorEnvPath,
+  });
+  if (action === "export") await simulator.exportSnapshot(problemId, path);
+  else await simulator.importSnapshot(problemId, path);
+  console.log(`Simulator snapshot ${action}ed: ${path}`);
+}
+
+async function waitForSimulatorCleanup(path: string, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (existsSync(path) && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
+
+async function down(): Promise<void> {
   const p = resolveLocalPaths();
   if (existsSync(p.statePath)) {
-    releaseSessionState(p, readJson<LocalProcessState>(p.statePath));
+    const state = readJson<LocalProcessState>(p.statePath);
+    stopPid(state.pid);
+    await waitForSimulatorCleanup(p.simulatorSessionPath, 5_000);
+    if (existsSync(p.simulatorSessionPath)) {
+      await cleanupRecordedSimulatorSession(p.simulatorSessionPath);
+    }
+    releaseSessionState(p, state);
   } else {
+    await cleanupRecordedSimulatorSession(p.simulatorSessionPath);
     unlinkIfExists(p.deploymentPath);
     restoreRuntimeConfig(p.runtimeConfigBackupPath, p.runtimeConfigPath, false);
   }
@@ -354,12 +495,44 @@ function usage(): string {
     "  serve <path>     Run the local Participant API (used internally by up)",
     "  status           Check the local Participant API",
     "  evaluate <flag>  Submit a flag through the local scoring API",
+    "  reset <problem>  Delete and recreate one local runtime",
+    "  snapshot-export <problem>  Export SNAPSHOT=<name> from a Simulator world",
+    "  snapshot-import <problem>  Import SNAPSHOT=<name> into a Simulator world",
+    "  disrupt <problem>  Fire DISRUPTION=<id> through the Simulator provider command",
     "  down             Stop local services and remove local state",
   ].join("\n");
 }
 
+async function handleSimulatorCommand(
+  command: string | undefined,
+  argument: string | undefined,
+): Promise<boolean> {
+  if (command === "reset") {
+    if (!argument) throw new Error("reset requires a problem id");
+    await reset(argument);
+    return true;
+  }
+  if (command === "snapshot-export" || command === "snapshot-import") {
+    if (!argument) throw new Error(`${command} requires a problem id`);
+    await snapshot(
+      command === "snapshot-export" ? "export" : "import",
+      argument,
+      process.env.SNAPSHOT ?? "latest",
+    );
+    return true;
+  }
+  if (command === "disrupt") {
+    if (!argument) throw new Error("disrupt requires a problem id");
+    if (!process.env.DISRUPTION) throw new Error("DISRUPTION is required");
+    await fireDisruption(argument, process.env.DISRUPTION);
+    return true;
+  }
+  return false;
+}
+
 async function main(): Promise<void> {
   const [command, argument] = process.argv.slice(2);
+  if (await handleSimulatorCommand(command, argument)) return;
   switch (command) {
     case "list":
       listProblems();
@@ -381,7 +554,7 @@ async function main(): Promise<void> {
       await evaluate(argument);
       break;
     case "down":
-      down();
+      await down();
       break;
     default:
       console.log(usage());

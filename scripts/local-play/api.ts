@@ -1,5 +1,6 @@
+import { resolveDefaultUrl } from "@tenkacloud/problem-sdk/internal";
 import { StatusCodes } from "http-status-codes";
-import { revealHint, submitFlag } from "./api-scoring";
+import { revealHint, scoreSimulatedProblem, submitFlag } from "./api-scoring";
 import {
   LOCAL_CONTEXT,
   type LocalPlayRequest,
@@ -7,6 +8,8 @@ import {
   type LocalPlayState,
 } from "./api-state";
 import { leaderboard, teamView } from "./api-views";
+import { parseLoopbackUrl } from "./loopback";
+import { simulatorOutput } from "./simulator-scoring";
 
 /**
  * [#2527 Slice 6] The local scoring API's HTTP routing + on-demand lifecycle commands.
@@ -18,12 +21,24 @@ import { leaderboard, teamView } from "./api-views";
  */
 
 /** [#2392 Phase 2] POST /portal/me/problems/:id/start — on-demand container start. */
-async function startProblem(problemId: string, state: LocalPlayState): Promise<LocalPlayResponse> {
-  if (!state.runtimes.has(problemId)) {
+async function startProblem(
+  problemId: string,
+  state: LocalPlayState,
+  now: number,
+): Promise<LocalPlayResponse> {
+  if (!state.runtimes.has(problemId) && !state.simulatedRuntimes.has(problemId)) {
     return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_problem" } };
   }
   try {
     await state.lifecycle.ensureRunning(problemId);
+    const simulated = state.simulatedRuntimes.get(problemId);
+    if (
+      simulated &&
+      simulated.contract.scoring.kind !== "flag" &&
+      simulated.contract.scoring.kind !== "multi-flag"
+    ) {
+      await scoreSimulatedProblem(problemId, state, now);
+    }
   } catch (error) {
     // Fail loudly: a container that would not come up must not look playable.
     return {
@@ -39,7 +54,7 @@ async function startProblem(problemId: string, state: LocalPlayState): Promise<L
 
 /** [#2392 Phase 2] POST /portal/me/problems/:id/stop — release the container + its port slot. */
 async function stopProblem(problemId: string, state: LocalPlayState): Promise<LocalPlayResponse> {
-  if (!state.runtimes.has(problemId)) {
+  if (!state.runtimes.has(problemId) && !state.simulatedRuntimes.has(problemId)) {
     return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_problem" } };
   }
   await state.lifecycle.stop(problemId);
@@ -48,6 +63,11 @@ async function stopProblem(problemId: string, state: LocalPlayState): Promise<Lo
 
 const START_RE = /^\/portal\/me\/problems\/([^/]+)\/start$/;
 const STOP_RE = /^\/portal\/me\/problems\/([^/]+)\/stop$/;
+const RESET_RE = /^\/portal\/me\/problems\/([^/]+)\/reset$/;
+const SCORE_RE = /^\/portal\/me\/problems\/([^/]+)\/score$/;
+const ENDPOINTS_RE = /^\/portal\/me\/problems\/([^/]+)\/endpoints$/;
+const ENDPOINT_RE = /^\/portal\/me\/problems\/([^/]+)\/endpoints\/([^/]+)$/;
+const DISRUPTION_RE = /^\/local\/operator\/problems\/([^/]+)\/disruptions\/([^/]+)\/fire$/;
 const REVEAL_RE = /^\/portal\/me\/problems\/([^/]+)\/hints\/([^/]+)\/reveal$/;
 
 /** Decode one percent-escaped path segment; undefined when malformed (→ 404, not 500). */
@@ -64,11 +84,23 @@ function handleGet(
   state: LocalPlayState,
   now: number,
 ): LocalPlayResponse | undefined {
+  const endpoints = ENDPOINTS_RE.exec(request.path);
+  if (endpoints) {
+    const problemId = decodePathSegment(endpoints[1]);
+    if (problemId === undefined) {
+      return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_problem" } };
+    }
+    return simulatorEndpoints(problemId, state);
+  }
   switch (request.path) {
     case "/healthz":
       return {
         status: StatusCodes.OK,
-        body: { status: "ok", mode: "local", problemIds: [...state.runtimes.keys()] },
+        body: {
+          status: "ok",
+          mode: "local",
+          problemIds: [...state.runtimes.keys(), ...state.simulatedRuntimes.keys()],
+        },
       };
     case "/portal/me":
       return teamView(state, now);
@@ -120,19 +152,40 @@ function handlePost(
   request: LocalPlayRequest,
   state: LocalPlayState,
   iso: string,
+  now: number,
 ): Promise<LocalPlayResponse> | LocalPlayResponse | undefined {
   if (request.path === "/portal/me/submit-flag") {
     return submitFlag(request, state, iso);
   }
-  const start = START_RE.exec(request.path);
+  const lifecycle = handleLifecyclePost(request.path, state, now);
+  if (lifecycle) return lifecycle;
+  const simulator = handleSimulatorPost(request, state);
+  if (simulator) return simulator;
+  const match = REVEAL_RE.exec(request.path);
+  if (!match) return undefined;
+  const problemId = decodePathSegment(match[1]);
+  const hintId = decodePathSegment(match[2]);
+  if (problemId === undefined || hintId === undefined) {
+    // A malformed percent escape is just an unknown hint, not a 500.
+    return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_hint" } };
+  }
+  return revealHint(problemId, hintId, state, iso);
+}
+
+function handleLifecyclePost(
+  path: string,
+  state: LocalPlayState,
+  now: number,
+): Promise<LocalPlayResponse> | LocalPlayResponse | undefined {
+  const start = START_RE.exec(path);
   if (start) {
     const problemId = decodePathSegment(start[1]);
     if (problemId === undefined) {
       return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_problem" } };
     }
-    return startProblem(problemId, state);
+    return startProblem(problemId, state, now);
   }
-  const stop = STOP_RE.exec(request.path);
+  const stop = STOP_RE.exec(path);
   if (stop) {
     const problemId = decodePathSegment(stop[1]);
     if (problemId === undefined) {
@@ -140,17 +193,144 @@ function handlePost(
     }
     return stopProblem(problemId, state);
   }
-  const match = REVEAL_RE.exec(request.path);
-  if (match) {
-    const problemId = decodePathSegment(match[1]);
-    const hintId = decodePathSegment(match[2]);
-    if (problemId === undefined || hintId === undefined) {
-      // A malformed percent escape is just an unknown hint, not a 500.
-      return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_hint" } };
+  const reset = RESET_RE.exec(path);
+  if (reset) {
+    const problemId = decodePathSegment(reset[1]);
+    if (problemId === undefined) {
+      return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_problem" } };
     }
-    return revealHint(problemId, hintId, state, iso);
+    return stopProblem(problemId, state).then(async (stopped) => {
+      if (stopped.status !== StatusCodes.OK) return stopped;
+      return startProblem(problemId, state, now);
+    });
+  }
+  const score = SCORE_RE.exec(path);
+  if (score) {
+    const problemId = decodePathSegment(score[1]);
+    if (problemId === undefined) {
+      return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_problem" } };
+    }
+    return scoreSimulatedProblem(problemId, state, now);
   }
   return undefined;
+}
+
+function handleSimulatorPost(
+  request: LocalPlayRequest,
+  state: LocalPlayState,
+): Promise<LocalPlayResponse> | LocalPlayResponse | undefined {
+  const endpoint = ENDPOINT_RE.exec(request.path);
+  if (endpoint) {
+    const problemId = decodePathSegment(endpoint[1]);
+    const slot = decodePathSegment(endpoint[2]);
+    if (problemId === undefined || slot === undefined) {
+      return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_slot" } };
+    }
+    return putSimulatorEndpoint(problemId, slot, request.body, state);
+  }
+  const disruption = DISRUPTION_RE.exec(request.path);
+  if (disruption) {
+    const problemId = decodePathSegment(disruption[1]);
+    const disruptionId = decodePathSegment(disruption[2]);
+    const runtime = problemId ? state.simulatedRuntimes.get(problemId) : undefined;
+    if (!runtime || !disruptionId || !state.simulator) {
+      return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_disruption" } };
+    }
+    return state.simulator
+      .fireDisruption(runtime.problem, disruptionId)
+      .then((result) => ({ status: StatusCodes.OK, body: { result } }));
+  }
+  return undefined;
+}
+
+function simulatorEndpoints(problemId: string, state: LocalPlayState): LocalPlayResponse {
+  const runtime = state.simulatedRuntimes.get(problemId);
+  if (!runtime) return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_problem" } };
+  if (runtime.contract.endpoints.length === 0) {
+    return { status: StatusCodes.BAD_REQUEST, body: { error: "no_endpoints" } };
+  }
+  const outputs = runtime.deployment?.outputs ?? {};
+  return {
+    status: StatusCodes.OK,
+    body: {
+      teamId: LOCAL_CONTEXT.teamId,
+      endpoints: runtime.contract.endpoints.map((slot) => {
+        const rawDefault = simulatorOutput(outputs, slot.default.key);
+        const defaultUrl = rawDefault
+          ? resolveDefaultUrl(rawDefault, slot.default.appendPath)
+          : undefined;
+        const overrideUrl = runtime.overrides.get(slot.slot);
+        return {
+          slot: slot.slot,
+          defaultKey: slot.default.key,
+          overridable: slot.overridable,
+          ...(slot.label ? { label: slot.label } : {}),
+          ...(slot.description ? { description: slot.description } : {}),
+          ...(defaultUrl ? { defaultUrl } : {}),
+          ...(overrideUrl ? { overrideUrl } : {}),
+          ...(overrideUrl || defaultUrl ? { effectiveUrl: overrideUrl ?? defaultUrl } : {}),
+        };
+      }),
+    },
+  };
+}
+
+function putSimulatorEndpoint(
+  problemId: string,
+  slotName: string,
+  body: unknown,
+  state: LocalPlayState,
+): LocalPlayResponse {
+  const runtime = state.simulatedRuntimes.get(problemId);
+  if (!runtime) return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_problem" } };
+  const slot = runtime.contract.endpoints.find((candidate) => candidate.slot === slotName);
+  if (!slot) return { status: StatusCodes.BAD_REQUEST, body: { error: "unknown_slot" } };
+  if (!slot.overridable) {
+    return { status: StatusCodes.CONFLICT, body: { error: "slot_not_overridable" } };
+  }
+  const urlValue =
+    body && typeof body === "object" && !Array.isArray(body)
+      ? (body as { url?: unknown }).url
+      : undefined;
+  if (typeof urlValue !== "string") {
+    return { status: StatusCodes.BAD_REQUEST, body: { error: "invalid_url" } };
+  }
+  try {
+    const url = parseLoopbackUrl(urlValue, "endpoint override");
+    if (url.username || url.password) throw new Error("credentials are forbidden");
+    runtime.overrides.set(slotName, url.toString());
+  } catch {
+    return { status: StatusCodes.BAD_REQUEST, body: { error: "invalid_url" } };
+  }
+  return simulatorEndpoints(problemId, state);
+}
+
+function deleteSimulatorEndpoint(
+  problemId: string,
+  slotName: string,
+  state: LocalPlayState,
+): LocalPlayResponse {
+  const runtime = state.simulatedRuntimes.get(problemId);
+  if (!runtime) return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_problem" } };
+  if (!runtime.contract.endpoints.some((slot) => slot.slot === slotName)) {
+    return { status: StatusCodes.BAD_REQUEST, body: { error: "unknown_slot" } };
+  }
+  runtime.overrides.delete(slotName);
+  return simulatorEndpoints(problemId, state);
+}
+
+function handleDelete(
+  request: LocalPlayRequest,
+  state: LocalPlayState,
+): LocalPlayResponse | undefined {
+  const endpoint = ENDPOINT_RE.exec(request.path);
+  if (!endpoint) return undefined;
+  const problemId = decodePathSegment(endpoint[1]);
+  const slot = decodePathSegment(endpoint[2]);
+  if (problemId === undefined || slot === undefined) {
+    return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_slot" } };
+  }
+  return deleteSimulatorEndpoint(problemId, slot, state);
 }
 
 export async function handleLocalPlayRequest(
@@ -168,7 +348,11 @@ export async function handleLocalPlayRequest(
     if (response) return response;
   }
   if (request.method === "POST") {
-    const response = handlePost(request, state, iso);
+    const response = handlePost(request, state, iso, now);
+    if (response) return response;
+  }
+  if (request.method === "DELETE") {
+    const response = handleDelete(request, state);
     if (response) return response;
   }
   return { status: StatusCodes.NOT_FOUND, body: { error: "not_found" } };

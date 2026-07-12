@@ -7,7 +7,11 @@ import {
   type LocalPlayDeployment,
   type LocalPlayState,
 } from "./api-state";
-import { isLoopbackUrl } from "./loopback";
+import { corsHeaders } from "./cors";
+import { proxySimulatorDataPlaneRequest } from "./simulator-data-plane-proxy";
+import { proxySimulatorNativeRequest } from "./simulator-native-proxy";
+
+export { corsHeaders } from "./cors";
 
 const MAX_BODY_BYTES = 1_000_000;
 
@@ -16,11 +20,6 @@ export interface LocalPlayServer {
   readonly state: LocalPlayState;
   readonly close: () => Promise<void>;
 }
-
-type CodespacesEnv = Readonly<{
-  CODESPACE_NAME?: string;
-  GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN?: string;
-}>;
 
 async function readJsonBody(request: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
@@ -41,52 +40,6 @@ async function readJsonBody(request: IncomingMessage): Promise<unknown> {
   }
 }
 
-/**
- * CORS for the loopback scoring API. We reflect the request Origin only when it
- * is itself a loopback origin (the Participant Portal dev server) or the exact
- * same Codespace forwarded Participant Portal origin, and send no
- * `access-control-allow-origin` otherwise. A wildcard would let any website the
- * participant has open drive the local API cross-origin (submit flags, reveal
- * penalty hints, rename the team) — the loopback bind alone does not stop a
- * browser on the same machine.
- */
-function codespacesPortalOrigin(env: CodespacesEnv = process.env): string | undefined {
-  const name = env.CODESPACE_NAME?.trim();
-  const rawDomain = env.GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN?.trim();
-  if (!name || !rawDomain) return undefined;
-  const domain = rawDomain
-    .replace(/^https?:\/\//, "")
-    .replace(/\/.*$/, "")
-    .replace(/^\./, "")
-    .replace(/\.$/, "");
-  if (!domain) return undefined;
-  return `https://${name}-5175.${domain}`.toLowerCase();
-}
-
-function isAllowedCorsOrigin(origin: string, env: CodespacesEnv = process.env): boolean {
-  if (isLoopbackUrl(origin)) return true;
-  try {
-    const url = new URL(origin);
-    if (url.protocol !== "https:") return false;
-    return url.origin.toLowerCase() === codespacesPortalOrigin(env);
-  } catch {
-    return false;
-  }
-}
-
-export function corsHeaders(
-  origin: string | undefined,
-  env: CodespacesEnv = process.env,
-): Record<string, string> {
-  if (origin === undefined || !isAllowedCorsOrigin(origin, env)) return {};
-  return {
-    "access-control-allow-origin": origin,
-    vary: "Origin",
-    "access-control-allow-headers": "authorization, content-type",
-    "access-control-allow-methods": "GET, POST, PATCH, OPTIONS",
-  };
-}
-
 function writeJson(
   response: ServerResponse,
   status: number,
@@ -103,6 +56,8 @@ async function route(
   state: LocalPlayState,
 ): Promise<void> {
   const cors = corsHeaders(request.headers.origin);
+  if (await proxySimulatorDataPlaneRequest(request, response, state)) return;
+  if (await proxySimulatorNativeRequest(request, response, state)) return;
   if (request.method === "OPTIONS") {
     writeJson(response, StatusCodes.NO_CONTENT, undefined, cors);
     return;

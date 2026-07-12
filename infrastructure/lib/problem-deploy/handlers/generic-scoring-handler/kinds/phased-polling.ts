@@ -8,6 +8,7 @@ import {
   type KindResult,
   type KindScoreEvent,
   noopKindResult,
+  type ProbeFn,
   probeUrl,
   resolveActivePhase,
   uptimeEvent,
@@ -112,7 +113,14 @@ async function probePhasedSlots(
 ): Promise<SlotResult[]> {
   return Promise.all(
     input.slots.map((slot) =>
-      probePhasedSlot(slot, input.scoring, outputs, overrideMap.get(slot.slot), scorePath),
+      probePhasedSlot(
+        slot,
+        input.scoring,
+        outputs,
+        overrideMap.get(slot.slot),
+        scorePath,
+        input.probe ?? probeUrl,
+      ),
     ),
   );
 }
@@ -123,6 +131,7 @@ async function probePhasedSlot(
   outputs: Record<string, string>,
   overrideUrl: string | undefined,
   scorePath: string,
+  probe: ProbeFn,
 ): Promise<SlotResult> {
   const outputValue = outputs[slot.default.key];
   const defaultUrl = outputValue
@@ -139,10 +148,10 @@ async function probePhasedSlot(
     };
   }
   const [metaProbe, scoreProbe, postureProbe] = await Promise.all([
-    probeUrl(joinUrl(baseUrl, scoring.probe.metaPath), { readBody: true }),
-    probeUrl(joinUrl(baseUrl, scorePath)),
+    probe(joinUrl(baseUrl, scoring.probe.metaPath), { readBody: true }),
+    probe(joinUrl(baseUrl, scorePath)),
     scoring.probe.posturePath
-      ? probeUrl(joinUrl(baseUrl, scoring.probe.posturePath), { readBody: true })
+      ? probe(joinUrl(baseUrl, scoring.probe.posturePath), { readBody: true })
       : Promise.resolve(undefined),
   ]);
   const posture = parsePostureFromBody(postureProbe?.body);

@@ -19,7 +19,7 @@ export JSII_DEPRECATED := quiet
         deploy-always-on-command destroy-always-on-command synth-always-on-command \
         deploy-always-on-runtime archive-always-on-runtime destroy-always-on-runtime synth-always-on-runtime \
         dev synth check-synth \
-        doctor local-onboard local local-up local-portal local-down local-status local-list local-evaluate ensure-deps
+        doctor local-onboard local local-up local-portal local-down local-status local-list local-evaluate local-reset local-snapshot-export local-snapshot-import local-disrupt ensure-deps
 
 help:
 	@awk '/^# =====/ {gsub(/^# ===== | =====$$/, ""); printf "\n%s\n", $$0} \
@@ -357,6 +357,34 @@ local-evaluate:
 	  exit 1; \
 	fi
 	@bun run scripts/tenkacloud-local.ts evaluate "$(FLAG)"
+
+local-reset:
+	@if [ -z "$(PROBLEM)" ]; then \
+	  echo "error: PROBLEM is required. Example: make local-reset PROBLEM=hello-world" >&2; \
+	  exit 1; \
+	fi
+	@bun run scripts/tenkacloud-local.ts reset "$(PROBLEM)"
+
+local-snapshot-export:
+	@if [ -z "$(PROBLEM)" ]; then \
+	  echo "error: PROBLEM is required. Example: make local-snapshot-export PROBLEM=hello-world SNAPSHOT=before-change" >&2; \
+	  exit 1; \
+	fi
+	@SNAPSHOT="$(SNAPSHOT)" bun run scripts/tenkacloud-local.ts snapshot-export "$(PROBLEM)"
+
+local-snapshot-import:
+	@if [ -z "$(PROBLEM)" ]; then \
+	  echo "error: PROBLEM is required. Example: make local-snapshot-import PROBLEM=hello-world SNAPSHOT=before-change" >&2; \
+	  exit 1; \
+	fi
+	@SNAPSHOT="$(SNAPSHOT)" bun run scripts/tenkacloud-local.ts snapshot-import "$(PROBLEM)"
+
+local-disrupt:
+	@if [ -z "$(PROBLEM)" ] || [ -z "$(DISRUPTION)" ]; then \
+	  echo "error: PROBLEM and DISRUPTION are required. Example: make local-disrupt PROBLEM=hello-world-battle DISRUPTION=frontend-down" >&2; \
+	  exit 1; \
+	fi
+	@DISRUPTION="$(DISRUPTION)" bun run scripts/tenkacloud-local.ts disrupt "$(PROBLEM)"
 
 # E2E smoke: start one local-play problem, assert every container reaches a
 # healthy / one-shot-complete state, then tear it down. Runnable before a commit

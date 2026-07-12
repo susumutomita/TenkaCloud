@@ -383,11 +383,11 @@
     "lifecycle_error": "エラー",
     "lifecycle_start_button": "起動",
     "lifecycle_stop_button": "停止",
-    "lifecycle_stopped_body": "この問題のコンテナは停止しています。起動すると挑戦用エンドポイントが立ち上がり、flag を提出できるようになります。",
-    "lifecycle_running_body": "コンテナは稼働中です。挑戦を終えたら停止してローカルリソースを解放できます (スコアは保持されます)。",
-    "lifecycle_error_header": "コンテナエラー",
-    "lifecycle_error_body": "問題コンテナがエラーになりました。もう一度起動してください。",
-    "lifecycle_action_failed_header": "コンテナ操作に失敗しました"
+    "lifecycle_stopped_body": "この問題のローカルランタイムは停止しています。起動すると挑戦用エンドポイントとツールを利用できます。",
+    "lifecycle_running_body": "ローカルランタイムは稼働中です。挑戦を終えたら停止してローカルリソースを解放できます (スコアは保持されます)。",
+    "lifecycle_error_header": "ローカルランタイムエラー",
+    "lifecycle_error_body": "問題ランタイムがエラーになりました。もう一度起動してください。",
+    "lifecycle_action_failed_header": "ローカルランタイム操作に失敗しました"
   },
   "multi_flag": {
     "progress_header": "解答した flag: {solved} / {total}",

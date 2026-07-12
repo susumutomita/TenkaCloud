@@ -9,10 +9,12 @@ import {
   parseEndpointsHealth,
 } from "../../shared/endpoints-health.js";
 import {
+  type AttackProbeFn,
   joinUrl,
   type KindHandlerInput,
   type KindResult,
   noopKindResult,
+  type ProbeFn,
   probeUrl,
 } from "../shared.js";
 import { scoreCounterDelta } from "./attack-counter.js";
@@ -20,18 +22,20 @@ import { scoreCounterDelta } from "./attack-counter.js";
 type SlotResolver = (slotName: string) => string | undefined;
 type ProbeResult = { key: string; ok: boolean; resolved: boolean };
 type ScoreEvent = NonNullable<KindResult["scoreEvents"]>[number];
+type AttackProbe = NonNullable<UptimeMultiScoringMetadata["attackProbes"]>[number];
 
 /** AND-probe every declared slot; an unresolvable slot is a resolved:false fail (not a noop). */
 async function probeAllSlots(
   probedSlots: UptimeMultiScoringMetadata["probedSlots"],
   resolve: SlotResolver,
+  probe: ProbeFn,
 ): Promise<ProbeResult[]> {
   return Promise.all(
     probedSlots.map(async (ps) => {
       const baseUrl = resolve(ps.slot);
       if (!baseUrl) return { key: ps.slot, ok: false, resolved: false };
-      const probe = await probeUrl(joinUrl(baseUrl, ps.path), { expectStatus: ps.expectStatus });
-      return { key: ps.slot, ok: probe.ok, resolved: true };
+      const outcome = await probe(joinUrl(baseUrl, ps.path), { expectStatus: ps.expectStatus });
+      return { key: ps.slot, ok: outcome.ok, resolved: true };
     }),
   );
 }
@@ -58,11 +62,12 @@ async function computeAttackBlockedBonus(
   attackBlocked: UptimeMultiScoringMetadata["attackBlocked"],
   resolve: SlotResolver,
   prevAttackCount: number | undefined,
+  probeFn: ProbeFn,
 ): Promise<{ bonusPoints: number; bonusState?: { attackCount: number } }> {
   if (!attackBlocked) return { bonusPoints: 0 };
   const base = resolve(attackBlocked.slot);
   if (!base) return { bonusPoints: 0 };
-  const probe = await probeUrl(joinUrl(base, attackBlocked.path), { readBody: true });
+  const probe = await probeFn(joinUrl(base, attackBlocked.path), { readBody: true });
   if (!probe.ok) return { bonusPoints: 0 };
   const scored = scoreCounterDelta(probe.body, prevAttackCount, attackBlocked.pointsPerBlock);
   if (!scored) return { bonusPoints: 0 };
@@ -81,30 +86,51 @@ async function computeAttackBlockedBonus(
  * lands. Non-spoiler: only the author-provided `label` / `symptom` cross the boundary — never the
  * probe's slot / path.
  */
+function attackProbeDisplay(probe: AttackProbe) {
+  return {
+    penalty: probe.penalty,
+    ...(probe.label ? { label: probe.label } : {}),
+    ...(probe.symptom ? { symptom: probe.symptom } : {}),
+  } as const;
+}
+
+async function computeAttackProbeOutcome(
+  attackProbe: AttackProbe,
+  resolve: SlotResolver,
+  probeFn: ProbeFn,
+  attackProbeFn: AttackProbeFn | undefined,
+): Promise<AttackProbeResult> {
+  const display = attackProbeDisplay(attackProbe);
+  const base = resolve(attackProbe.slot);
+  if (!base) return { ...display, outcome: "skipped" };
+  const request = {
+    slot: attackProbe.slot,
+    path: attackProbe.path,
+    ...(attackProbe.method ? { method: attackProbe.method } : {}),
+    ...(attackProbe.body !== undefined ? { body: attackProbe.body } : {}),
+  };
+  const probe = attackProbeFn
+    ? await attackProbeFn(request)
+    : await probeFn(joinUrl(base, attackProbe.path), {
+        ...(attackProbe.method ? { method: attackProbe.method } : {}),
+        ...(attackProbe.body !== undefined ? { body: attackProbe.body } : {}),
+      });
+  if (probe.status === undefined) return { ...display, outcome: "skipped" };
+  return {
+    ...display,
+    outcome: attackProbe.vulnerableStatus.includes(probe.status) ? "landed" : "blocked",
+  };
+}
+
 async function computeAttackProbeOutcomes(
   attackProbes: UptimeMultiScoringMetadata["attackProbes"],
   resolve: SlotResolver,
+  probeFn: ProbeFn,
+  attackProbeFn: AttackProbeFn | undefined,
 ): Promise<{ readonly totalPenalty: number; readonly outcomes: readonly AttackProbeResult[] }> {
   if (!attackProbes || attackProbes.length === 0) return { totalPenalty: 0, outcomes: [] };
   const outcomes = await Promise.all(
-    attackProbes.map(async (ap): Promise<AttackProbeResult> => {
-      const display = {
-        penalty: ap.penalty,
-        ...(ap.label ? { label: ap.label } : {}),
-        ...(ap.symptom ? { symptom: ap.symptom } : {}),
-      } as const;
-      const base = resolve(ap.slot);
-      if (!base) return { ...display, outcome: "skipped" };
-      const probe = await probeUrl(joinUrl(base, ap.path), {
-        ...(ap.method ? { method: ap.method } : {}),
-        ...(ap.body !== undefined ? { body: ap.body } : {}),
-      });
-      if (probe.status === undefined) return { ...display, outcome: "skipped" };
-      return {
-        ...display,
-        outcome: ap.vulnerableStatus.includes(probe.status) ? "landed" : "blocked",
-      };
-    }),
+    attackProbes.map((probe) => computeAttackProbeOutcome(probe, resolve, probeFn, attackProbeFn)),
   );
   const totalPenalty = outcomes.reduce(
     (sum, o) => (o.outcome === "landed" ? sum + o.penalty : sum),
@@ -150,6 +176,7 @@ export async function runUptimeMultiKind(
   input: KindHandlerInput<UptimeMultiScoringMetadata>,
 ): Promise<KindResult> {
   const { deployment, scoring, slots, overrides, nowIso, prevState } = input;
+  const probe = input.probe ?? probeUrl;
   // [Issue #2441 / Phase B3] `deployment` flows from
   // `DeploymentsRepository.forEachCompleteDeploymentPage`, whose
   // `DeploymentRecord` never carries the physical `PK` (unused here beyond this
@@ -172,7 +199,7 @@ export async function runUptimeMultiKind(
     return outputValue ? resolveDefaultUrl(outputValue, slot.default.appendPath) : undefined;
   };
 
-  const probes = await probeAllSlots(scoring.probedSlots, resolveSlotBaseUrl);
+  const probes = await probeAllSlots(scoring.probedSlots, resolveSlotBaseUrl, probe);
 
   // 1 つも解決できない場合 (= deploy 未完了) は採点を保留 (= noop)。
   // 一部のみ解決できないケースは fail 扱い (= 防御側が未配備 = ペナルティ正当)。
@@ -190,10 +217,16 @@ export async function runUptimeMultiKind(
     scoring.attackBlocked,
     resolveSlotBaseUrl,
     prevState.attackCount,
+    probe,
   );
 
   const { totalPenalty: attackPenalty, outcomes: attackOutcomes } =
-    await computeAttackProbeOutcomes(scoring.attackProbes, resolveSlotBaseUrl);
+    await computeAttackProbeOutcomes(
+      scoring.attackProbes,
+      resolveSlotBaseUrl,
+      probe,
+      input.attackProbe,
+    );
 
   const scoreDelta = baseDelta + bonusPoints - attackPenalty;
   const scoreEvents = buildScoreEvents(

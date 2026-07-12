@@ -104,7 +104,7 @@ describe("ProblemPanel on-demand lifecycle (#2392 Phase 2)", () => {
     // Play surface is replaced: no flag panel, no access-URL link, even if outputs leaked.
     expect(screen.queryByTestId("flag-panel")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /challenge\.example\.com/ })).not.toBeInTheDocument();
-    // Header status reflects the container, not the deploy job.
+    // Header status reflects the local runtime, not the deploy job.
     expect(screen.getByText("Stopped")).toBeInTheDocument();
     expect(screen.getByText(/Start it to bring up the challenge endpoints/)).toBeInTheDocument();
 
@@ -130,7 +130,7 @@ describe("ProblemPanel on-demand lifecycle (#2392 Phase 2)", () => {
     renderPanel({ lifecycle: { status: "error" } });
 
     expect(
-      screen.getByText("The problem container hit an error. Start it again to retry."),
+      screen.getByText("The problem runtime hit an error. Start it again to retry."),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
     expect(screen.queryByTestId("flag-panel")).not.toBeInTheDocument();
@@ -172,7 +172,7 @@ describe("ProblemPanel on-demand lifecycle (#2392 Phase 2)", () => {
     expect(screen.getByTestId("multi-flag-panel")).toBeInTheDocument();
   });
 
-  it("should fail loudly when the container start fails and not refresh", async () => {
+  it("should fail loudly when the local runtime start fails and not refresh", async () => {
     const user = userEvent.setup();
     const onScored = vi.fn().mockResolvedValue(undefined);
     apiMocks.startProblem.mockRejectedValue(new Error("docker: container exited (125)"));
@@ -180,7 +180,7 @@ describe("ProblemPanel on-demand lifecycle (#2392 Phase 2)", () => {
 
     await user.click(screen.getByRole("button", { name: "Start" }));
 
-    expect(await screen.findByText("Container operation failed")).toBeInTheDocument();
+    expect(await screen.findByText("Local runtime operation failed")).toBeInTheDocument();
     expect(screen.getByText("docker: container exited (125)")).toBeInTheDocument();
     expect(onScored).not.toHaveBeenCalled();
     // Start stays available for a retry after the failure.

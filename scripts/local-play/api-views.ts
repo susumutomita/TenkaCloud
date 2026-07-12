@@ -1,4 +1,5 @@
 import { StatusCodes } from "http-status-codes";
+import type { SimulatedProblemRuntime } from "./api-state";
 import {
   jobIdOf,
   LOCAL_CONTEXT,
@@ -10,6 +11,7 @@ import {
 import type { ContainerCheck, ContainerHint, ContainerHintRevealMode } from "./manifest";
 import { mapStrings } from "./port-remap";
 import type { ProblemStatus } from "./problem-lifecycle";
+import { participantSimulatorOutputs } from "./simulator-scoring";
 
 /**
  * [#2527 Slice 6] Portal presentation for the local scoring API, extracted verbatim from
@@ -129,6 +131,129 @@ function problemView(
   };
 }
 
+function simulatedProblemView(
+  runtime: SimulatedProblemRuntime,
+  now: number,
+  status: ProblemStatus,
+  browserText: (text: string) => string,
+) {
+  const problem = runtime.problem;
+  const participantOutputs = runtime.deployment
+    ? participantSimulatorOutputs(problem, runtime.deployment.outputs)
+    : {};
+  const outputs = runtime.deployment
+    ? {
+        ...Object.fromEntries(
+          Object.entries(participantOutputs).map(([key, value]) => [key, browserText(value)]),
+        ),
+        SimulatorConsoleUrl: browserText(runtime.deployment.consoleUrl),
+        SimulatorAwsAccessKeyId: runtime.deployment.nativeCredentials.awsAccessKeyId,
+        SimulatorAzureCredential: runtime.deployment.nativeCredentials.azureCredential,
+        SimulatorGcpCredential: runtime.deployment.nativeCredentials.gcpCredential,
+        SimulatorSakuraCredential: runtime.deployment.nativeCredentials.sakuraCredential,
+      }
+    : {};
+  const provider = "kind" in problem.runtime ? "composite" : problem.runtime.provider;
+  const scoring = simulatorScoringView(runtime);
+  const health = simulatorApplicationStatus(runtime.endpointsHealth);
+  return {
+    jobId: jobIdOf(problem.problemId),
+    problemId: problem.problemId,
+    name: problem.name,
+    description: problem.description,
+    instructions: problem.instructions,
+    region: "local",
+    awsAccountId: "local",
+    provider,
+    status: "COMPLETE",
+    lifecycle: { status },
+    stackOutputs: status === "running" ? outputs : {},
+    expiresAt: now + 365 * 24 * 60 * 60 * 1000,
+    score: runtime.score,
+    ...(scoring ? { scoring } : {}),
+    ...(health ? { applicationStatus: health } : {}),
+    ...(runtime.platform ? { platform: runtime.platform } : {}),
+    ...(runtime.lastResult ? { lastResult: runtime.lastResult } : {}),
+    deployLog: { cursor: "", entries: [] },
+    createdAt: new Date(now).toISOString(),
+  };
+}
+
+function simulatorHintViews(runtime: SimulatedProblemRuntime) {
+  const scoring = runtime.contract.scoring;
+  const hints = "hints" in scoring ? (scoring.hints ?? []) : [];
+  return hints.map((hint) => {
+    const revealedAt = runtime.revealedHints.get(hint.id);
+    return {
+      id: hint.id,
+      penalty: hint.penalty,
+      revealed: revealedAt !== undefined,
+      ...(revealedAt ? { content: hint.content, revealedAt } : {}),
+    };
+  });
+}
+
+function simulatorScoringView(runtime: SimulatedProblemRuntime) {
+  const scoring = runtime.contract.scoring;
+  const hints = simulatorHintViews(runtime);
+  if (scoring.kind === "flag") {
+    return {
+      kind: "flag",
+      points: scoring.points,
+      flagSubmitted: runtime.solved.has(runtime.problem.problemId),
+      hints,
+      ...(scoring.hintReveal ? { hintReveal: scoring.hintReveal } : {}),
+    };
+  }
+  if (scoring.kind === "uptime" || scoring.kind === "uptime-flat") {
+    return { kind: scoring.kind, pointsPerSuccess: scoring.pointsPerSuccess, hints };
+  }
+  if (scoring.kind === "uptime-multi") {
+    return { kind: "uptime-multi", pointsAllOk: scoring.pointsAllOk, hints };
+  }
+  if (scoring.kind === "phased-polling") {
+    const points = Math.max(...Object.values(scoring.platformRules).map((rule) => rule.points));
+    return { kind: "phased-polling", pointsPerSuccess: points, hints };
+  }
+  if (scoring.kind === "attack-detection") {
+    return { kind: "attack-detection", pointsPerAttack: scoring.pointsPerAttack, hints };
+  }
+  if (scoring.kind === "composite-probe") {
+    return { kind: "uptime-multi", pointsAllOk: scoring.pointsAllOk };
+  }
+  return undefined;
+}
+
+function simulatorApplicationStatus(raw: string | undefined) {
+  if (!raw) return undefined;
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const entries = Object.values(value as Record<string, unknown>).filter(
+    (entry): entry is { ok: boolean; checkedAt: string } =>
+      !!entry &&
+      typeof entry === "object" &&
+      !Array.isArray(entry) &&
+      typeof (entry as { ok?: unknown }).ok === "boolean" &&
+      typeof (entry as { checkedAt?: unknown }).checkedAt === "string",
+  );
+  if (entries.length === 0) return undefined;
+  const healthyCount = entries.filter((entry) => entry.ok).length;
+  return {
+    overall: healthyCount === entries.length ? "healthy" : healthyCount > 0 ? "degraded" : "down",
+    healthyCount,
+    totalCount: entries.length,
+    checkedAt: entries
+      .map((entry) => entry.checkedAt)
+      .sort()
+      .at(-1),
+  };
+}
+
 export function teamView(state: LocalPlayState, now: number): LocalPlayResponse {
   return {
     status: StatusCodes.OK,
@@ -139,14 +264,24 @@ export function teamView(state: LocalPlayState, now: number): LocalPlayResponse 
         eventId: LOCAL_CONTEXT.eventId,
         teamId: LOCAL_CONTEXT.teamId,
       },
-      problems: [...state.runtimes.entries()].map(([problemId, runtime]) =>
-        problemView(
-          runtime,
-          now,
-          state.lifecycle.statusOf(problemId) ?? "stopped",
-          state.browserText,
+      problems: [
+        ...[...state.runtimes.entries()].map(([problemId, runtime]) =>
+          problemView(
+            runtime,
+            now,
+            state.lifecycle.statusOf(problemId) ?? "stopped",
+            state.browserText,
+          ),
         ),
-      ),
+        ...[...state.simulatedRuntimes.entries()].map(([problemId, runtime]) =>
+          simulatedProblemView(
+            runtime,
+            now,
+            state.lifecycle.statusOf(problemId) ?? "stopped",
+            state.browserText,
+          ),
+        ),
+      ],
       eventGate: { kind: "ok" },
     },
   };
@@ -168,7 +303,7 @@ export function leaderboard(state: LocalPlayState): LocalPlayResponse {
           teamName: state.teamName,
           score: sessionScore(state),
           completedProblems: completed,
-          totalProblems: state.runtimes.size,
+          totalProblems: state.runtimes.size + state.simulatedRuntimes.size,
           isMyTeam: true,
         },
       ],
