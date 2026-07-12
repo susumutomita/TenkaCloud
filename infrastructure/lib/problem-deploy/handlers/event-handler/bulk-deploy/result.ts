@@ -16,6 +16,7 @@ export function buildResult(args: {
   readonly skipped: number;
   readonly unverifiedAccounts: Set<string>;
   readonly unsupportedRuntimeProblems?: Set<string>;
+  readonly missingCredentials?: Set<string>;
 }): BulkDeployResult {
   let result: BulkDeployResult = {
     eventId: args.eventId,
@@ -36,6 +37,16 @@ export function buildResult(args: {
       ...result,
       unsupportedRuntime: args.unsupportedRuntimeProblems.size,
       unsupportedRuntimeProblems: Array.from(args.unsupportedRuntimeProblems).sort(),
+    };
+  }
+  // [#2571] Surface non-AWS rows dropped for a missing per-team credential so
+  // the operator learns exactly which (provider, team) pair to register (same
+  // backward-compat shape as `unverified`).
+  if (args.missingCredentials !== undefined && args.missingCredentials.size > 0) {
+    result = {
+      ...result,
+      missingCredential: args.missingCredentials.size,
+      missingCredentials: Array.from(args.missingCredentials).sort(),
     };
   }
   return result;

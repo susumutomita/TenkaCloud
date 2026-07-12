@@ -419,8 +419,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       packAssets: props.packAssets,
     });
     this.deployCodeBuildProjectName = deployPipeline.deployCodeBuildProjectName;
-    // Issue #2291: undefined on the default CodeBuild path (flag OFF) → ObservabilityStack skips the
-    // CfnDeploy Lambda widget (= default-safe, dashboard body byte-identical).
+    // Issue #2291: undefined on the default CodeBuild path (flag OFF) → ObservabilityStack skips the CfnDeploy Lambda widget (= default-safe, dashboard body byte-identical).
     this.cfnDeployLambdaName = deployPipeline.cfnDeployLambdaName;
     this.deployCreateStateMachineArn = deployPipeline.deployCreateStateMachineArn;
     this.deployDeleteStateMachineArn = deployPipeline.deployDeleteStateMachineArn;
@@ -440,6 +439,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       problemsPhases: props.problemsPhases,
       problemsDisruptions: props.problemsDisruptions,
       problemsCoordination: props.problemsCoordination,
+      problemRuntimes: props.problemRuntimes,
       opsMonitoring: props.opsMonitoring,
     });
     this.genericScoringLambda = scoring.genericScoringFn;

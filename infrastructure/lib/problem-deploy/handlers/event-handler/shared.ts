@@ -2,6 +2,7 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { EventBridgeClient } from "@aws-sdk/client-eventbridge";
 import { S3Client } from "@aws-sdk/client-s3";
 import { SchedulerClient } from "@aws-sdk/client-scheduler";
+import { SSMClient } from "@aws-sdk/client-ssm";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { z } from "zod";
 import { getEnv } from "../../../helper-functions.js";
@@ -117,6 +118,20 @@ export interface EventSharedResources {
   readonly resolveProblemRuntimeDescriptor?: (
     problemId: string,
   ) => ProblemRuntimeDescriptor | undefined;
+  /**
+   * [#2571] non-AWS single-provider (gcp/azure/sakura) の per-team credential 読取用
+   * SSM client。 `buildAdapterDependencies` に渡すと adapter dispatch (bulk deploy /
+   * bulk teardown) が有効になる。 未配線 (undefined) の Lambda は plan-builder /
+   * bulk-delete の v1 `unsupportedRuntime` 拒否 (#2563) のまま — loud かつ documented
+   * な staged enablement (silent skip にはしない)。
+   */
+  readonly ssm?: Pick<SSMClient, "send">;
+  /**
+   * [#2571] Sakura AppRun REST の base URL override (env)。 deploy-handler の
+   * `DeploySharedResources.sakuraAppRunBaseUrl` と同じ意味・同じ env 名
+   * (`SAKURA_APPRUN_BASE_URL`) を共有する。
+   */
+  readonly sakuraAppRunBaseUrl?: string;
 }
 
 export function buildEventSharedResources(runtime: ControlDataRuntime): EventSharedResources {
@@ -165,6 +180,12 @@ export function buildEventSharedResources(runtime: ControlDataRuntime): EventSha
     bulkDeployPayloadBucket: process.env.BULK_DEPLOY_PAYLOAD_BUCKET ?? "",
     useBulkDistributedMap:
       (process.env.BULK_DEPLOY_VIA_DISTRIBUTED_MAP ?? "").toLowerCase() === "true",
+    // [#2571] non-AWS single-provider (gcp/azure/sakura) bulk deploy/teardown 用の
+    // adapter dispatch context。 EventApiLambda は sakura/azure/gcp credential parameter
+    // への ssm:GetParameter + kms:Decrypt を持つ (event-api-lambda.ts, deploy-api-lambda.ts
+    // と同じ pattern)。
+    ssm: new SSMClient({}),
+    sakuraAppRunBaseUrl: process.env.SAKURA_APPRUN_BASE_URL || undefined,
   };
 }
 
@@ -215,6 +236,12 @@ export function buildScheduledTeardownResources(
     problemsProvenance: {},
     bulkDeployPayloadBucket: "",
     useBulkDistributedMap: false,
+    // [#2571] generic-scoring Lambda は sakura/azure/gcp credential parameter への
+    // ssm:GetParameter + kms:Decrypt grant を既に持つ (generic-scoring-lambda.ts) ため、
+    // ここで wire しても新規 IAM は不要。 未 wire のままだと非 AWS single-provider 行の
+    // scheduled bulk teardown が adapter.destroy に届かず leak する (#2571 の core bug)。
+    ssm: new SSMClient({}),
+    sakuraAppRunBaseUrl: process.env.SAKURA_APPRUN_BASE_URL || undefined,
   };
 }
 
@@ -272,6 +299,15 @@ export function buildScheduledDeployResources(
     // 経路 (N×M DeployCreateRequested publish) を使うので bucket 不要 / flag は false 固定。
     bulkDeployPayloadBucket: "",
     useBulkDistributedMap: false,
+    // [#2571] teardown 側と同じく generic-scoring Lambda は sakura/azure/gcp credential
+    // grant を既に持つ。 未 wire のままだと scheduled bulk deploy が非 AWS single-provider
+    // 問題の v1 unsupportedRuntime gate すら通らず silent skip する (#2571 の core bug —
+    // resolveProblemRuntimeDescriptor 自体も未配線だったため)。
+    ssm: new SSMClient({}),
+    sakuraAppRunBaseUrl: process.env.SAKURA_APPRUN_BASE_URL || undefined,
+    resolveProblemRuntimeDescriptor: makeProblemRuntimeDescriptorResolver(
+      process.env.BATTLE_PROBLEMS_RUNTIMES,
+    ),
   };
 }
 

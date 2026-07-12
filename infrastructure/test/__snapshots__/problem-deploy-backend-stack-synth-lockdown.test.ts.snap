@@ -2536,6 +2536,119 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — codebuild 
             ],
           },
         },
+        {
+          "Action": "ssm:GetParameter",
+          "Effect": "Allow",
+          "Resource": [
+            {
+              "Fn::Join": [
+                "",
+                [
+                  "arn:aws:ssm:",
+                  {
+                    "Ref": "AWS::Region",
+                  },
+                  ":",
+                  {
+                    "Ref": "AWS::AccountId",
+                  },
+                  ":parameter/development/tenants/*/teams/*/sakura-api-key",
+                ],
+              ],
+            },
+            {
+              "Fn::Join": [
+                "",
+                [
+                  "arn:aws:ssm:",
+                  {
+                    "Ref": "AWS::Region",
+                  },
+                  ":",
+                  {
+                    "Ref": "AWS::AccountId",
+                  },
+                  ":parameter/development/tenants/*/teams/*/azure-credential",
+                ],
+              ],
+            },
+            {
+              "Fn::Join": [
+                "",
+                [
+                  "arn:aws:ssm:",
+                  {
+                    "Ref": "AWS::Region",
+                  },
+                  ":",
+                  {
+                    "Ref": "AWS::AccountId",
+                  },
+                  ":parameter/development/tenants/*/teams/*/gcp-credential",
+                ],
+              ],
+            },
+          ],
+        },
+        {
+          "Action": "kms:Decrypt",
+          "Condition": {
+            "StringLike": {
+              "kms:EncryptionContext:PARAMETER_ARN": [
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:aws:ssm:",
+                      {
+                        "Ref": "AWS::Region",
+                      },
+                      ":",
+                      {
+                        "Ref": "AWS::AccountId",
+                      },
+                      ":parameter/development/tenants/*/teams/*/sakura-api-key",
+                    ],
+                  ],
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:aws:ssm:",
+                      {
+                        "Ref": "AWS::Region",
+                      },
+                      ":",
+                      {
+                        "Ref": "AWS::AccountId",
+                      },
+                      ":parameter/development/tenants/*/teams/*/azure-credential",
+                    ],
+                  ],
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:aws:ssm:",
+                      {
+                        "Ref": "AWS::Region",
+                      },
+                      ":",
+                      {
+                        "Ref": "AWS::AccountId",
+                      },
+                      ":parameter/development/tenants/*/teams/*/gcp-credential",
+                    ],
+                  ],
+                },
+              ],
+            },
+          },
+          "Effect": "Allow",
+          "Resource": "*",
+        },
       ],
       "Version": "2012-10-17",
     },
@@ -6318,6 +6431,119 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — lambda-dep
               ],
             ],
           },
+        },
+        {
+          "Action": "ssm:GetParameter",
+          "Effect": "Allow",
+          "Resource": [
+            {
+              "Fn::Join": [
+                "",
+                [
+                  "arn:aws:ssm:",
+                  {
+                    "Ref": "AWS::Region",
+                  },
+                  ":",
+                  {
+                    "Ref": "AWS::AccountId",
+                  },
+                  ":parameter/development/tenants/*/teams/*/sakura-api-key",
+                ],
+              ],
+            },
+            {
+              "Fn::Join": [
+                "",
+                [
+                  "arn:aws:ssm:",
+                  {
+                    "Ref": "AWS::Region",
+                  },
+                  ":",
+                  {
+                    "Ref": "AWS::AccountId",
+                  },
+                  ":parameter/development/tenants/*/teams/*/azure-credential",
+                ],
+              ],
+            },
+            {
+              "Fn::Join": [
+                "",
+                [
+                  "arn:aws:ssm:",
+                  {
+                    "Ref": "AWS::Region",
+                  },
+                  ":",
+                  {
+                    "Ref": "AWS::AccountId",
+                  },
+                  ":parameter/development/tenants/*/teams/*/gcp-credential",
+                ],
+              ],
+            },
+          ],
+        },
+        {
+          "Action": "kms:Decrypt",
+          "Condition": {
+            "StringLike": {
+              "kms:EncryptionContext:PARAMETER_ARN": [
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:aws:ssm:",
+                      {
+                        "Ref": "AWS::Region",
+                      },
+                      ":",
+                      {
+                        "Ref": "AWS::AccountId",
+                      },
+                      ":parameter/development/tenants/*/teams/*/sakura-api-key",
+                    ],
+                  ],
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:aws:ssm:",
+                      {
+                        "Ref": "AWS::Region",
+                      },
+                      ":",
+                      {
+                        "Ref": "AWS::AccountId",
+                      },
+                      ":parameter/development/tenants/*/teams/*/azure-credential",
+                    ],
+                  ],
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:aws:ssm:",
+                      {
+                        "Ref": "AWS::Region",
+                      },
+                      ":",
+                      {
+                        "Ref": "AWS::AccountId",
+                      },
+                      ":parameter/development/tenants/*/teams/*/gcp-credential",
+                    ],
+                  ],
+                },
+              ],
+            },
+          },
+          "Effect": "Allow",
+          "Resource": "*",
         },
       ],
       "Version": "2012-10-17",
@@ -10170,6 +10396,119 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — lite mode 
             ],
           },
         },
+        {
+          "Action": "ssm:GetParameter",
+          "Effect": "Allow",
+          "Resource": [
+            {
+              "Fn::Join": [
+                "",
+                [
+                  "arn:aws:ssm:",
+                  {
+                    "Ref": "AWS::Region",
+                  },
+                  ":",
+                  {
+                    "Ref": "AWS::AccountId",
+                  },
+                  ":parameter/development/tenants/*/teams/*/sakura-api-key",
+                ],
+              ],
+            },
+            {
+              "Fn::Join": [
+                "",
+                [
+                  "arn:aws:ssm:",
+                  {
+                    "Ref": "AWS::Region",
+                  },
+                  ":",
+                  {
+                    "Ref": "AWS::AccountId",
+                  },
+                  ":parameter/development/tenants/*/teams/*/azure-credential",
+                ],
+              ],
+            },
+            {
+              "Fn::Join": [
+                "",
+                [
+                  "arn:aws:ssm:",
+                  {
+                    "Ref": "AWS::Region",
+                  },
+                  ":",
+                  {
+                    "Ref": "AWS::AccountId",
+                  },
+                  ":parameter/development/tenants/*/teams/*/gcp-credential",
+                ],
+              ],
+            },
+          ],
+        },
+        {
+          "Action": "kms:Decrypt",
+          "Condition": {
+            "StringLike": {
+              "kms:EncryptionContext:PARAMETER_ARN": [
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:aws:ssm:",
+                      {
+                        "Ref": "AWS::Region",
+                      },
+                      ":",
+                      {
+                        "Ref": "AWS::AccountId",
+                      },
+                      ":parameter/development/tenants/*/teams/*/sakura-api-key",
+                    ],
+                  ],
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:aws:ssm:",
+                      {
+                        "Ref": "AWS::Region",
+                      },
+                      ":",
+                      {
+                        "Ref": "AWS::AccountId",
+                      },
+                      ":parameter/development/tenants/*/teams/*/azure-credential",
+                    ],
+                  ],
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:aws:ssm:",
+                      {
+                        "Ref": "AWS::Region",
+                      },
+                      ":",
+                      {
+                        "Ref": "AWS::AccountId",
+                      },
+                      ":parameter/development/tenants/*/teams/*/gcp-credential",
+                    ],
+                  ],
+                },
+              ],
+            },
+          },
+          "Effect": "Allow",
+          "Resource": "*",
+        },
       ],
       "Version": "2012-10-17",
     },
@@ -13408,6 +13747,119 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — pure-sql t
               ],
             ],
           },
+        },
+        {
+          "Action": "ssm:GetParameter",
+          "Effect": "Allow",
+          "Resource": [
+            {
+              "Fn::Join": [
+                "",
+                [
+                  "arn:aws:ssm:",
+                  {
+                    "Ref": "AWS::Region",
+                  },
+                  ":",
+                  {
+                    "Ref": "AWS::AccountId",
+                  },
+                  ":parameter/development/tenants/*/teams/*/sakura-api-key",
+                ],
+              ],
+            },
+            {
+              "Fn::Join": [
+                "",
+                [
+                  "arn:aws:ssm:",
+                  {
+                    "Ref": "AWS::Region",
+                  },
+                  ":",
+                  {
+                    "Ref": "AWS::AccountId",
+                  },
+                  ":parameter/development/tenants/*/teams/*/azure-credential",
+                ],
+              ],
+            },
+            {
+              "Fn::Join": [
+                "",
+                [
+                  "arn:aws:ssm:",
+                  {
+                    "Ref": "AWS::Region",
+                  },
+                  ":",
+                  {
+                    "Ref": "AWS::AccountId",
+                  },
+                  ":parameter/development/tenants/*/teams/*/gcp-credential",
+                ],
+              ],
+            },
+          ],
+        },
+        {
+          "Action": "kms:Decrypt",
+          "Condition": {
+            "StringLike": {
+              "kms:EncryptionContext:PARAMETER_ARN": [
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:aws:ssm:",
+                      {
+                        "Ref": "AWS::Region",
+                      },
+                      ":",
+                      {
+                        "Ref": "AWS::AccountId",
+                      },
+                      ":parameter/development/tenants/*/teams/*/sakura-api-key",
+                    ],
+                  ],
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:aws:ssm:",
+                      {
+                        "Ref": "AWS::Region",
+                      },
+                      ":",
+                      {
+                        "Ref": "AWS::AccountId",
+                      },
+                      ":parameter/development/tenants/*/teams/*/azure-credential",
+                    ],
+                  ],
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:aws:ssm:",
+                      {
+                        "Ref": "AWS::Region",
+                      },
+                      ":",
+                      {
+                        "Ref": "AWS::AccountId",
+                      },
+                      ":parameter/development/tenants/*/teams/*/gcp-credential",
+                    ],
+                  ],
+                },
+              ],
+            },
+          },
+          "Effect": "Allow",
+          "Resource": "*",
         },
       ],
       "Version": "2012-10-17",
@@ -16859,6 +17311,119 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — turso-mirr
               ],
             ],
           },
+        },
+        {
+          "Action": "ssm:GetParameter",
+          "Effect": "Allow",
+          "Resource": [
+            {
+              "Fn::Join": [
+                "",
+                [
+                  "arn:aws:ssm:",
+                  {
+                    "Ref": "AWS::Region",
+                  },
+                  ":",
+                  {
+                    "Ref": "AWS::AccountId",
+                  },
+                  ":parameter/development/tenants/*/teams/*/sakura-api-key",
+                ],
+              ],
+            },
+            {
+              "Fn::Join": [
+                "",
+                [
+                  "arn:aws:ssm:",
+                  {
+                    "Ref": "AWS::Region",
+                  },
+                  ":",
+                  {
+                    "Ref": "AWS::AccountId",
+                  },
+                  ":parameter/development/tenants/*/teams/*/azure-credential",
+                ],
+              ],
+            },
+            {
+              "Fn::Join": [
+                "",
+                [
+                  "arn:aws:ssm:",
+                  {
+                    "Ref": "AWS::Region",
+                  },
+                  ":",
+                  {
+                    "Ref": "AWS::AccountId",
+                  },
+                  ":parameter/development/tenants/*/teams/*/gcp-credential",
+                ],
+              ],
+            },
+          ],
+        },
+        {
+          "Action": "kms:Decrypt",
+          "Condition": {
+            "StringLike": {
+              "kms:EncryptionContext:PARAMETER_ARN": [
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:aws:ssm:",
+                      {
+                        "Ref": "AWS::Region",
+                      },
+                      ":",
+                      {
+                        "Ref": "AWS::AccountId",
+                      },
+                      ":parameter/development/tenants/*/teams/*/sakura-api-key",
+                    ],
+                  ],
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:aws:ssm:",
+                      {
+                        "Ref": "AWS::Region",
+                      },
+                      ":",
+                      {
+                        "Ref": "AWS::AccountId",
+                      },
+                      ":parameter/development/tenants/*/teams/*/azure-credential",
+                    ],
+                  ],
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      "arn:aws:ssm:",
+                      {
+                        "Ref": "AWS::Region",
+                      },
+                      ":",
+                      {
+                        "Ref": "AWS::AccountId",
+                      },
+                      ":parameter/development/tenants/*/teams/*/gcp-credential",
+                    ],
+                  ],
+                },
+              ],
+            },
+          },
+          "Effect": "Allow",
+          "Resource": "*",
         },
       ],
       "Version": "2012-10-17",

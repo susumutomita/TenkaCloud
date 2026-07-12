@@ -1,5 +1,6 @@
 import { type EventSharedResources, queryDeploymentsByEvent } from "../shared.js";
 import type { BulkDeployRequest } from "../types.js";
+import { dispatchBulkAdapterEntries } from "./adapter-dispatch.js";
 import { indexExistingDeployments } from "./existing-index.js";
 import { markPublishFailuresFailed, writeBulkDeployPlan } from "./persistence.js";
 import { buildBulkDeployPlan } from "./plan-builder.js";
@@ -8,8 +9,8 @@ import { publishBulkDeployPlan } from "./publish.js";
 import { buildResult, emptyBulkDeployResult } from "./result.js";
 import { loadBulkDeployTargets, selectBulkDeployTargets } from "./targets.js";
 import { traceBulkPlan, traceEmptyBulkDeploy, traceEmptyPlan, traceNoFailedRows } from "./trace.js";
-import type { BulkDeployOutcome } from "./types.js";
-import { resolveBulkVerifiedAccounts } from "./verified-accounts.js";
+import type { BulkDeployOutcome, PlanEntry } from "./types.js";
+import { resolveBulkNonAwsCredentials, resolveBulkVerifiedAccounts } from "./verified-accounts.js";
 
 /**
  * `bulkDeployEvent` は Event / Teams を読み、選択された problems 全てに対して
@@ -59,12 +60,10 @@ export async function bulkDeployEvent(
     traceNoFailedRows(eventId, tenantId, existingDeployments);
     return emptyBulkDeployResult(eventId);
   }
-  const verified = await resolveBulkVerifiedAccounts(
-    shared,
-    tenantId,
-    selected.teams,
-    selected.problems,
-  );
+  const [verified, nonAwsCredentials] = await Promise.all([
+    resolveBulkVerifiedAccounts(shared, tenantId, selected.teams, selected.problems),
+    resolveBulkNonAwsCredentials(shared, tenantId, selected.teams, selected.problems),
+  ]);
   const plan = buildBulkDeployPlan({
     shared,
     tenantId,
@@ -74,6 +73,7 @@ export async function bulkDeployEvent(
     selected,
     existing,
     verified,
+    nonAwsCredentials,
     retryFailedOnly,
     forceRedeploy,
   });
@@ -83,17 +83,24 @@ export async function bulkDeployEvent(
   }
   traceBulkPlan(eventId, tenantId, plan, retryFailedOnly, forceRedeploy);
   await writeBulkDeployPlan(shared, tenantId, plan.entries, retryFailedOnly || forceRedeploy);
-  const failures = await publishBulkDeployPlan(
-    shared,
-    tenantId,
-    eventId,
-    plan.createdAt,
-    plan.entries,
+  // [#2571] Both channels dispatch concurrently — they are independent per-row
+  // operations (EventBridge fan-out / adapter REST calls) and every row was
+  // already persisted PENDING above, so ordering between the two channels
+  // doesn't matter. `publishBulkDeployPlan` already filters to eventbridge-kind
+  // entries internally; `dispatchBulkAdapterEntries` gets the pre-filtered
+  // adapter-kind subset.
+  const adapterEntries = plan.entries.filter(
+    (entry): entry is Extract<PlanEntry, { kind: "adapter" }> => entry.kind === "adapter",
   );
+  const [eventBridgeFailures, adapterFailures] = await Promise.all([
+    publishBulkDeployPlan(shared, tenantId, eventId, plan.createdAt, plan.entries),
+    dispatchBulkAdapterEntries(shared, tenantId, adapterEntries),
+  ]);
+  const failures = [...eventBridgeFailures, ...adapterFailures];
   if (failures.length > 0) {
     await markPublishFailuresFailed(shared, tenantId, failures, plan.createdAt);
     throw new Error(
-      `EventBridge PutEvents failed for ${failures.length} deployment(s): ${failures
+      `bulk deploy publish failed for ${failures.length} deployment(s): ${failures
         .map((f) => `${f.jobId} ${f.reason}`)
         .join("; ")}`,
     );

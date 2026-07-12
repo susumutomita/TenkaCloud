@@ -1,6 +1,6 @@
 import type { PutEventsCommand } from "@aws-sdk/client-eventbridge";
 import { GetCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { bulkTeardownEvent } from "../../lib/problem-deploy/handlers/event-handler/bulk-delete";
 import type { EventSharedResources } from "../../lib/problem-deploy/handlers/event-handler/shared";
 import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
@@ -323,6 +323,131 @@ describe("bulkTeardownEvent", () => {
     const queryCmd = ddbSend.mock.calls[1]?.[0] as QueryCommand;
     expect(queryCmd.input.IndexName).toBe("GSI1");
     expect(queryCmd.input.ExpressionAttributeValues?.[":pk"]).toBe("TENANT#tenant-acme");
+    expect(eventsSend).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * [#2571] Bulk teardown for a non-AWS single-provider row (gcp/azure/sakura).
+ * Mirrors `deploy-delete.test.ts`'s "requestTeardown (non-AWS runtime via
+ * adapter)" suite: the real Sakura AppRun adapter runs end-to-end (SSM
+ * credential read + `fetch` stub) rather than mocking `selectAdapter` itself,
+ * so the test proves the whole seam wires together (`buildAdapterDependencies`
+ * -> `selectAdapter` -> `adapter.destroy`) exactly like the single-deploy path.
+ *
+ * Before this fix, `getBulkTeardownTarget` required non-empty `region` /
+ * `awsAccountId` — both persisted as `""` for a non-AWS row (#2571
+ * plan-builder) — so every such row was silently `skipped` and its cloud
+ * resources leaked on event teardown.
+ */
+describe("bulkTeardownEvent (non-AWS runtime via adapter, #2571)", () => {
+  beforeEach(() => vi.clearAllMocks());
+  afterEach(() => vi.unstubAllGlobals());
+
+  function buildSakuraShared(): {
+    shared: EventSharedResources;
+    ddbSend: ReturnType<typeof vi.fn>;
+    eventsSend: ReturnType<typeof vi.fn>;
+    ssmSend: ReturnType<typeof vi.fn>;
+  } {
+    const ddbSend = vi.fn();
+    const eventsSend = vi.fn();
+    const ssmSend = vi.fn(async () => ({
+      Parameter: { Value: JSON.stringify({ accessToken: "tok", accessTokenSecret: "sec" }) },
+    }));
+    const shared = {
+      runtime: makeTestControlDataRuntime(),
+      eventsTableName: "TestEvents",
+      teamsTableName: "TestTeams",
+      deploymentsTableName: "TestDeployments",
+      competitorAccountsTableName: "TestCompetitorAccounts",
+      eventBusName: "test-bus",
+      env: "development",
+      ddb: { send: ddbSend } as unknown as EventSharedResources["ddb"],
+      events: { send: eventsSend } as unknown as EventSharedResources["events"],
+      problemsCatalog: {},
+      ssm: { send: ssmSend } as unknown as EventSharedResources["ssm"],
+    } as unknown as EventSharedResources;
+    return { shared, ddbSend, eventsSend, ssmSend };
+  }
+
+  const sakuraDep = (over: Record<string, unknown> = {}) => ({
+    jobId: "01SAKURA",
+    eventId: "EV1",
+    tenantId: "tenant-acme",
+    problemId: "p",
+    teamName: "team-1",
+    namePrefix: "tc-p-team-1",
+    status: "COMPLETE",
+    runtimeProvider: "sakura",
+    runtimeEngine: "apprun",
+    runtimeEntry: "registry/img:1",
+    awsAccountId: "",
+    region: "",
+    ...over,
+  });
+
+  it("should destroy a non-AWS single-provider row via its adapter and count it as enqueued", async () => {
+    const { shared, ddbSend, eventsSend, ssmSend } = buildSakuraShared();
+    ddbSend.mockResolvedValueOnce({ Item: sampleEvent() }); // Get(Event)
+    ddbSend.mockResolvedValueOnce({ Items: [sakuraDep()] }); // Query(Deployments)
+    ddbSend.mockResolvedValue({}); // DELETING transition + Event TEARDOWN update
+    const appRunFetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ data: [{ id: "a1", name: "tc-p-team-1" }] }), {
+          status: 200,
+        }),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", appRunFetch);
+
+    const out = await bulkTeardownEvent(shared, "tenant-acme", "EV1", NOW_MS);
+    expect(out).toEqual({
+      kind: "ok",
+      result: { eventId: "EV1", enqueued: 1, skipped: 0, failed: 0 },
+    });
+    // No EventBridge publish for this row — it never had a CFn stack to delete.
+    expect(eventsSend).not.toHaveBeenCalled();
+    expect(ssmSend).toHaveBeenCalled();
+    expect(appRunFetch.mock.calls[1]?.[1]?.method).toBe("DELETE");
+  });
+
+  it("should compensate DELETING -> FAILED and count as failed when adapter.destroy throws", async () => {
+    const { shared, ddbSend, eventsSend } = buildSakuraShared();
+    ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
+    ddbSend.mockResolvedValueOnce({ Items: [sakuraDep()] });
+    ddbSend.mockResolvedValue({});
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValueOnce(new Response("boom", { status: 500 })), // findByName list fails
+    );
+
+    const out = await bulkTeardownEvent(shared, "tenant-acme", "EV1", NOW_MS);
+    expect(out).toEqual({
+      kind: "ok",
+      result: { eventId: "EV1", enqueued: 0, skipped: 0, failed: 1 },
+    });
+    expect(eventsSend).not.toHaveBeenCalled();
+    const compensations = ddbSend.mock.calls
+      .map((c) => c[0])
+      .filter((c): c is UpdateCommand => c instanceof UpdateCommand)
+      .filter((c) => c.input.ExpressionAttributeValues?.[":failed"] === "FAILED");
+    expect(compensations).toHaveLength(1);
+    expect(compensations[0]?.input.Key?.PK).toBe("DEPLOYMENT#01SAKURA");
+  });
+
+  it("should skip a non-AWS single-provider row when ssm is unwired (dormant, unchanged behavior)", async () => {
+    const { shared, ddbSend, eventsSend } = buildShared(); // default shared has no ssm field
+    ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
+    ddbSend.mockResolvedValueOnce({ Items: [sakuraDep()] });
+    ddbSend.mockResolvedValue({});
+
+    const out = await bulkTeardownEvent(shared, "tenant-acme", "EV1", NOW_MS);
+    expect(out).toEqual({
+      kind: "ok",
+      result: { eventId: "EV1", enqueued: 0, skipped: 1, failed: 0 },
+    });
     expect(eventsSend).not.toHaveBeenCalled();
   });
 });

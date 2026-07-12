@@ -83,7 +83,7 @@ describe("bulkDeployEvent — error & guard paths", () => {
     });
 
     await expect(bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS)).rejects.toThrow(
-      /EventBridge PutEvents failed/,
+      /bulk deploy publish failed/,
     );
 
     const transactCmd = ddbSend.mock.calls
@@ -114,7 +114,7 @@ describe("bulkDeployEvent — error & guard paths", () => {
     eventsSend.mockRejectedValueOnce(new Error("EventBridge timeout"));
 
     await expect(bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS)).rejects.toThrow(
-      /EventBridge PutEvents failed/,
+      /bulk deploy publish failed/,
     );
 
     const failureUpdates = ddbSend.mock.calls

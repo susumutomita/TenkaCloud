@@ -9,6 +9,9 @@ import { Construct } from "constructs";
 import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
 import { auditLogEnabledEnv } from "./audit-log-env.js";
 import { controlDataBackendEnv } from "./control-data-backend-env.js";
+import { buildAzureCredentialParameterArnPattern } from "./handlers/shared/azure-credential-store.js";
+import { buildGcpCredentialParameterArnPattern } from "./handlers/shared/gcp-credential-store.js";
+import { buildSakuraCredentialParameterArnPattern } from "./handlers/shared/sakura-credential-store.js";
 
 export interface EventApiLambdaProps {
   /**
@@ -131,6 +134,16 @@ export interface EventApiLambdaProps {
   readonly tursoDatabaseUrl?: string;
   /** SSM SecureString parameter name containing the libSQL auth token. */
   readonly tursoAuthTokenParameterName?: string;
+  /**
+   * [ADR-023 / #2054 / Issue #2571] 非 aws/cloudformation の runtime を宣言した問題のみ
+   * (= `{problemId: {provider,engine,entry}}`)。`discoverProblemsRuntime` の戻り値、
+   * DeployApiLambda の同名 prop と同一 source。Bulk Deploy (event-handler の
+   * `buildEventSharedResources`) が `makeProblemRuntimeDescriptorResolver` 経由でここから
+   * 注入される `BATTLE_PROBLEMS_RUNTIMES` を読み、非 AWS single-provider 問題を adapter
+   * dispatch する (#2561 の single-deploy 経路と揃える)。未配線 (`undefined`) は空 map に
+   * 正規化 (= 全 AWS 扱いの v1 refusal のまま、silent skip にはならない)。
+   */
+  readonly problemRuntimes?: Readonly<Record<string, unknown>>;
 }
 
 /**
@@ -159,6 +172,7 @@ export function eventApiBundlingDefine(props: {
   readonly problemsCatalog: Readonly<Record<string, string>>;
   readonly problemsDisruptions: Readonly<Record<string, readonly unknown[]>>;
   readonly problemsProvenance?: Readonly<Record<string, unknown>>;
+  readonly problemRuntimes?: Readonly<Record<string, unknown>>;
 }): Record<string, string> {
   return {
     "process.env.BATTLE_PROBLEMS_CATALOG": JSON.stringify(JSON.stringify(props.problemsCatalog)),
@@ -167,6 +181,12 @@ export function eventApiBundlingDefine(props: {
     ),
     "process.env.BATTLE_PROBLEMS_PROVENANCE": JSON.stringify(
       JSON.stringify(props.problemsProvenance ?? {}),
+    ),
+    // [Issue #2571] Bulk Deploy の adapter dispatch (event-handler の
+    // `makeProblemRuntimeDescriptorResolver`) が読む runtime catalog。DeployApiLambda と同じく
+    // esbuild define channel に載せる (#1308 の 4KB env 上限回避パターンを踏襲)。
+    "process.env.BATTLE_PROBLEMS_RUNTIMES": JSON.stringify(
+      JSON.stringify(props.problemRuntimes ?? {}),
     ),
   };
 }
@@ -317,6 +337,36 @@ export class EventApiLambda extends Construct {
         resources: [
           `arn:aws:scheduler:${Stack.of(this).region}:${Stack.of(this).account}:schedule/default/tc-recur-*`,
         ],
+      }),
+    );
+    // [ADR-026/027/032 / Issue #2571] Bulk Deploy が非 AWS single-provider 問題を adapter 経路で
+    // dispatch する際、 team ごとの sakura/azure/gcp credential (SSM SecureString) の登録有無確認 +
+    // 取得が必要。 DeployApiLambda / GenericScoringLambda と同じ prefix-scope + AWS managed key 復号で
+    // 最小権限を保つ。 ExternalId pattern はここに含めない — bulk 非 AWS dispatch は ExternalId を
+    // 読まない (AWS bulk path は parameter 名だけを event detail に詰め、 復号は downstream の
+    // DeployApi/Worker Lambda が行う)。
+    const stack = Stack.of(this);
+    const credentialSsmArns = [
+      buildSakuraCredentialParameterArnPattern(stack.region, stack.account, props.environmentName),
+      buildAzureCredentialParameterArnPattern(stack.region, stack.account, props.environmentName),
+      buildGcpCredentialParameterArnPattern(stack.region, stack.account, props.environmentName),
+    ];
+    this.fn.addToRolePolicy(
+      new PolicyStatement({
+        actions: ["ssm:GetParameter"],
+        resources: credentialSsmArns,
+      }),
+    );
+    // justify: KMS Decrypt は SSM SecureString 復号 (AWS managed key `alias/aws/ssm`) 用で ARN が
+    // synth 時に定まらない — `kms:EncryptionContext:PARAMETER_ARN` の StringLike condition で
+    // 上記 3 credential パスに実質 scope する (#2571、deploy-api-lambda.ts と同型)。
+    this.fn.addToRolePolicy(
+      new PolicyStatement({
+        actions: ["kms:Decrypt"],
+        resources: ["*"],
+        conditions: {
+          StringLike: { "kms:EncryptionContext:PARAMETER_ARN": credentialSsmArns },
+        },
       }),
     );
   }

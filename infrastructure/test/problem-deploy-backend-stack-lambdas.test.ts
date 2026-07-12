@@ -170,6 +170,95 @@ describe("ProblemDeployBackendStack (MVP-1) — Deploy API Lambda (invoked from 
     const serialized = JSON.stringify(tpl.findResources("AWS::IAM::Policy"));
     expect(serialized).toContain("tenants/*/teams/*/gcp-credential");
   });
+
+  it("EventApi Lambda env should not include BATTLE_PROBLEMS_RUNTIMES (#2571 define channel only)", () => {
+    // Issue #2571: BATTLE_PROBLEMS_RUNTIMES は BATTLE_PROBLEMS_CATALOG / _DISRUPTIONS /
+    // _PROVENANCE と同じ esbuild bundling.define channel に載る (= 4KB env 上限回避、#1308)。
+    // handler は process.env.BATTLE_PROBLEMS_RUNTIMES を読む既存 code のまま。
+    const functions = tpl.findResources("AWS::Lambda::Function");
+    const eventApi = Object.entries(functions).find(
+      ([name]) => name.includes("EventApi") && name.includes("Function"),
+    );
+    expect(eventApi).toBeDefined();
+    const vars =
+      (
+        eventApi?.[1] as {
+          Properties?: { Environment?: { Variables?: Record<string, unknown> } };
+        }
+      )?.Properties?.Environment?.Variables ?? {};
+    expect(vars.BATTLE_PROBLEMS_RUNTIMES).toBeUndefined();
+  });
+
+  it("EventApi Lambda bundling define should include the runtime catalog (#2571)", () => {
+    const define = eventApiBundlingDefine({
+      problemsCatalog: { "hello-world": "problems/challenges/hello-world" },
+      problemsDisruptions: {},
+      problemRuntimes: {
+        "battle-non-aws": { provider: "sakura", engine: "apprun", entry: "template.yaml" },
+      },
+    });
+    expect(JSON.parse(define["process.env.BATTLE_PROBLEMS_RUNTIMES"])).toBe(
+      JSON.stringify({
+        "battle-non-aws": { provider: "sakura", engine: "apprun", entry: "template.yaml" },
+      }),
+    );
+  });
+
+  // Issue #2571: Bulk Deploy (event-handler) の adapter dispatch が非 AWS single-provider 問題の
+  // per-team credential 登録有無を確認 + 取得するため、DeployApi と同型の SSM/KMS grant を
+  // EventApi role にも付与する。DeployApi / GenericScoring も同じ credential パス文字列を policy に
+  // 持つため、テンプレート全体ではなく EventApi の DefaultPolicy に scope して assert する
+  // (#1313 の EventApi policy 特定パターンを踏襲)。
+  describe("EventApi non-AWS credential grants (#2571)", () => {
+    function findEventApiPolicyStatements(): ReadonlyArray<Record<string, unknown>> {
+      const policies = tpl.findResources("AWS::IAM::Policy");
+      const eventApiPolicy = Object.entries(policies).find(
+        ([logicalId]) =>
+          logicalId.includes("EventApi") &&
+          logicalId.includes("ServiceRole") &&
+          logicalId.includes("DefaultPolicy"),
+      );
+      expect(eventApiPolicy).toBeDefined();
+      const stmt = (
+        eventApiPolicy?.[1] as {
+          Properties?: { PolicyDocument?: { Statement?: ReadonlyArray<Record<string, unknown>> } };
+        }
+      )?.Properties?.PolicyDocument?.Statement;
+      expect(Array.isArray(stmt)).toBe(true);
+      return stmt ?? [];
+    }
+
+    it("should grant ssm:GetParameter on the per-team sakura/azure/gcp credential paths to EventApi", () => {
+      const serialized = JSON.stringify(findEventApiPolicyStatements());
+      expect(serialized).toContain("tenants/*/teams/*/sakura-api-key");
+      expect(serialized).toContain("tenants/*/teams/*/azure-credential");
+      expect(serialized).toContain("tenants/*/teams/*/gcp-credential");
+    });
+
+    it("should grant kms:Decrypt on EventApi scoped by the credential parameter EncryptionContext", () => {
+      const statements = findEventApiPolicyStatements();
+      const kmsStatement = statements.find((s) => {
+        const action = (s as { Action?: string | string[] }).Action;
+        const actions = Array.isArray(action) ? action : [action];
+        return actions.includes("kms:Decrypt");
+      });
+      expect(kmsStatement).toBeDefined();
+      const condition = (kmsStatement as { Condition?: Record<string, unknown> })?.Condition;
+      const stringLike = condition?.StringLike as Record<string, unknown> | undefined;
+      expect(stringLike?.["kms:EncryptionContext:PARAMETER_ARN"]).toBeDefined();
+      const serialized = JSON.stringify(stringLike?.["kms:EncryptionContext:PARAMETER_ARN"]);
+      expect(serialized).toContain("tenants/*/teams/*/sakura-api-key");
+      expect(serialized).toContain("tenants/*/teams/*/azure-credential");
+      expect(serialized).toContain("tenants/*/teams/*/gcp-credential");
+    });
+
+    it("should NOT grant the ExternalId parameter path to EventApi", () => {
+      // Bulk 非 AWS dispatch は ExternalId を読まない (AWS bulk path は parameter 名だけを event
+      // detail に詰め、復号は downstream の DeployApi/Worker Lambda が行う)。
+      const serialized = JSON.stringify(findEventApiPolicyStatements());
+      expect(serialized).not.toContain("tenants/*/external-id");
+    });
+  });
 });
 
 describe("ProblemDeployBackendStack (MVP-1) — GenericScoring Lambda", () => {
@@ -205,6 +294,9 @@ describe("ProblemDeployBackendStack (MVP-1) — GenericScoring Lambda", () => {
     expect(vars.BATTLE_PROBLEMS_PHASES).toBeUndefined();
     // [ADR-047 follow-up] catalog は esbuild define で build 時 literal 化するので env からは除く。
     expect(vars.BATTLE_PROBLEMS_CATALOG).toBeUndefined();
+    // [Issue #2571] scheduled auto-deploy adapter dispatch 用 runtime catalog も同じ esbuild
+    // define channel に載る (= EventApi と同型、4KB env 上限回避)。
+    expect(vars.BATTLE_PROBLEMS_RUNTIMES).toBeUndefined();
   });
 
   it("GenericScoring Lambda role should be granted read on the Teams table (#ADR-047 follow-up scheduled deploy)", () => {

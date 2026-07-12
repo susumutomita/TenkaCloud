@@ -18,6 +18,11 @@ export interface BuildScoringSubsystemArgs {
   readonly problemsDisruptions?: Readonly<Record<string, unknown>>;
   readonly problemsCoordination?: Readonly<Record<string, unknown>>;
   /**
+   * [ADR-023 / #2054 / Issue #2571] Bulk Deploy adapter dispatch 用 runtime catalog。EventApi の
+   * 同名 prop と同一 source (= `discoverProblemsRuntime` の戻り値)。
+   */
+  readonly problemRuntimes?: Readonly<Record<string, unknown>>;
+  /**
    * Issue #2406: ops alerting for GenericScoring liveness/errors and monthly cost drift.
    * Undefined means fully dormant: no SNS topic, CloudWatch alarms, or Budget resources.
    */
@@ -80,6 +85,9 @@ export function buildScoringSubsystem(
     // catalog で problemId→problemDir を解決する。
     teamsTable: tables.teams?.table,
     problemsCatalog: args.problemsCatalog,
+    // [Issue #2571] scheduled auto-deploy の adapter dispatch 用 runtime catalog。undefined は
+    // GenericScoringLambda 側の `?? {}` で空 map に正規化される。
+    problemRuntimes: args.problemRuntimes,
     eventBus: args.eventBus,
     // [ADR-026/027/032 / #1410-1412] 非 AWS runtime status reconciler の credential path 構築用。
     environmentName: args.environmentName,

@@ -88,6 +88,31 @@ describe("buildScheduledDeployResources (ADR-047 follow-up)", () => {
     const runtime = makeTestControlDataRuntime();
     expect(buildScheduledDeployResources(runtime)?.runtime).toBe(runtime);
   });
+
+  // [#2571] Before this fix, the scheduled auto-deploy path bypassed even the
+  // v1 `unsupportedRuntime` refusal gate for non-AWS single-provider problems
+  // (silent skip — the core #2571 bug), because neither `ssm` nor
+  // `resolveProblemRuntimeDescriptor` were wired here. The generic-scoring
+  // Lambda already carries the SSM read + kms:Decrypt IAM grants for the
+  // sakura/azure/gcp credential parameter paths, so wiring `ssm` here needs no
+  // new IAM.
+  it("should wire ssm + sakuraAppRunBaseUrl + resolveProblemRuntimeDescriptor for adapter dispatch (#2571)", () => {
+    for (const [key, value] of Object.entries(REQUIRED_ENV)) process.env[key] = value;
+    process.env.SAKURA_APPRUN_BASE_URL = "https://apprun.example.test";
+    process.env.BATTLE_PROBLEMS_RUNTIMES = JSON.stringify({
+      "gcp-problem": { provider: "gcp", engine: "infra-manager", entry: "template.yaml" },
+    });
+    const res = buildScheduledDeployResources(makeTestControlDataRuntime());
+    expect(res?.ssm).toBeDefined();
+    expect(res?.sakuraAppRunBaseUrl).toBe("https://apprun.example.test");
+    expect(res?.resolveProblemRuntimeDescriptor?.("gcp-problem")).toEqual({
+      provider: "gcp",
+      engine: "infra-manager",
+      entry: "template.yaml",
+    });
+    delete process.env.SAKURA_APPRUN_BASE_URL;
+    delete process.env.BATTLE_PROBLEMS_RUNTIMES;
+  });
 });
 
 /**
@@ -131,5 +156,24 @@ describe("buildScheduledTeardownResources (ADR-047)", () => {
     expect(res?.teamsTableName).toBe("");
     expect(res?.problemsCatalog).toEqual({});
     expect(res?.useBulkDistributedMap).toBe(false);
+    // [#2571] ssm は adapter dispatch 用に無条件で wire される。
+    expect(res?.ssm).toBeDefined();
+    expect(res?.sakuraAppRunBaseUrl).toBeUndefined();
+  });
+
+  // [#2571] Before this fix, `bulkTeardownEvent`'s non-AWS adapter branch was
+  // dormant even on the scheduled reconciler path because `ssm` /
+  // `sakuraAppRunBaseUrl` were never wired here — a non-AWS single-provider
+  // deployment would leak its cloud resources when torn down by the auto
+  // teardown tick. The generic-scoring Lambda already carries the SSM read +
+  // kms:Decrypt IAM grants for the sakura/azure/gcp credential parameter
+  // paths, so wiring `ssm` here needs no new IAM.
+  it("should wire ssm + sakuraAppRunBaseUrl for adapter dispatch (#2571)", () => {
+    for (const [key, value] of Object.entries(TEARDOWN_REQUIRED_ENV)) process.env[key] = value;
+    process.env.SAKURA_APPRUN_BASE_URL = "https://apprun.example.test";
+    const res = buildScheduledTeardownResources(makeTestControlDataRuntime());
+    expect(res?.ssm).toBeDefined();
+    expect(res?.sakuraAppRunBaseUrl).toBe("https://apprun.example.test");
+    delete process.env.SAKURA_APPRUN_BASE_URL;
   });
 });

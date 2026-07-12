@@ -165,6 +165,10 @@ export function buildApiLambdas(scope: Construct, args: BuildApiLambdasArgs): Ap
       Record<string, readonly unknown[]>
     >,
     problemsProvenance: args.problemsProvenance ?? {},
+    // [ADR-023 / #2054 / Issue #2571] Bulk Deploy adapter dispatch 用 runtime catalog。DeployApi
+    // と同一 source (args.problemRuntimes) をそのまま流す — undefined は EventApiLambda 側の
+    // `?? {}` で空 map に正規化される。
+    problemRuntimes: args.problemRuntimes,
     // Issue #910 Phase 2.C.2.b: bulk batch payload bucket + feature flag。
     bulkDeployPayloadBucket: bulkPayloadBucket,
     useBulkDistributedMap: args.useBulkDistributedMap ?? false,

@@ -60,10 +60,15 @@ describe("bulkDeployEvent — verification, ExternalId & distributed map path", 
     expect(eventsSend).not.toHaveBeenCalled();
   });
 
-  // [#2563 v1] 非 AWS single-provider 問題は frozen CFn 経路に載せられない。
-  // 黙って skip せず unsupportedRuntime として明示的に返す (AWS 問題は通常通り enqueue)。
-  it("should refuse non-AWS single-provider problems and surface unsupportedRuntime (#2563)", async () => {
+  // [#2563 v1 / #2571] 非 AWS single-provider 問題は frozen CFn 経路に載せられない。
+  // ssm が未配線 (= このテストの `buildShared` default、 scheduled reconciler と同じ staged
+  // enablement 未達 Lambda を模す) のときは黙って skip せず unsupportedRuntime として明示的に
+  // 返す (AWS 問題は通常通り enqueue)。 ssm が配線された場合の adapter dispatch 経路は
+  // event-bulk-deploy-non-aws.test.ts でカバーする。
+  it("should refuse non-AWS single-provider problems and surface unsupportedRuntime when ssm is unwired (#2563)", async () => {
     const { shared, ddbSend, eventsSend } = buildShared({
+      // ssm: undefined (default) — pins the v1 refusal for any Lambda without
+      // the per-team credential SSM grants (#2571 staged-enablement gate).
       resolveProblemRuntimeDescriptor: (problemId) =>
         problemId === "hello-world"
           ? { provider: "gcp", engine: "infra-manager", entry: "template.yaml" }
