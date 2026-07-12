@@ -46,8 +46,7 @@ export interface BuildCommandRoleAppOptions {
  *   - `CDK_PARAM_AWS_REGION` (or `CDK_DEFAULT_REGION`)
  *   - `CDK_PARAM_ALWAYS_ON_ISSUER_URL` — the Worker's https origin (slice A serves
  *     `/.well-known/openid-configuration` + JWKS there)
- *   - `CDK_PARAM_EVENT_BUS_ARN` — the existing deploy bus (same env name the
- *     intent-ingress entrypoint uses for the same bus)
+ *   - `CDK_PARAM_EVENT_BUS_ARN` — the existing deploy bus ARN
  *
  * Optional env:
  *   - `CDK_PARAM_ALWAYS_ON_OIDC_PROVIDER_ARN` — import an existing IAM OIDC provider

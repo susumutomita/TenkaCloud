@@ -20,7 +20,7 @@ import {
 /**
  * ADR-049 Phase 4 per-event runtime composition root.
  *
- * This app is independent of the shared signed-intent ingress and creates exactly one stack keyed
+ * This app is independent of the shared OIDC command seam and creates exactly one stack keyed
  * by event id. App-scope tags/aspects and the stack-scope DynamoDB aspect mirror
  * `tenkacloud-always-on.ts` so the two Always-On composition roots do not drift as resources are
  * added in later phases.

@@ -107,14 +107,6 @@ export type {
   GenerateServiceAccountTokenOutput,
 } from "./gcp-workload-identity.js";
 export { GcpWorkloadIdentityFederationExchange } from "./gcp-workload-identity.js";
-export type { BuildIntentParams } from "./intent-issuer.js";
-export {
-  buildDeployIntent,
-  buildDestroyIntent,
-  buildIntentRequestBody,
-  issueSignedIntentRequest,
-  issueSignedIntentRequestEs256,
-} from "./intent-issuer.js";
 export type {
   JwsHeader,
   SignOptions,

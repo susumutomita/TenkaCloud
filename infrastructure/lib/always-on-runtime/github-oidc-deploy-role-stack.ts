@@ -9,9 +9,9 @@ import { EVENT_RUNTIME_STACK_ID_PREFIX } from "./event-runtime-stack.js";
  * Stands up the least-privilege IAM role that the Always-On event runtime's
  * `workflow_dispatch` deploy/destroy workflows assume via OIDC
  * (`sts:AssumeRoleWithWebIdentity`) — so the runtime lifecycle carries NO long-lived
- * AWS access keys. The workflows run `make deploy-always-on-ingress` /
- * `make destroy-always-on-ingress` (the signed-intent ingress from slices 1-2) under
- * this role.
+ * AWS access keys. The workflows run the per-event runtime lifecycle
+ * (`make deploy-always-on-runtime` / `destroy-always-on-runtime`) under this
+ * role.
  *
  * Trust hardening (ADR-049 §12):
  *   - `aud` (audience) is pinned with `StringEquals` to `sts.amazonaws.com`.
@@ -27,7 +27,7 @@ import { EVENT_RUNTIME_STACK_ID_PREFIX } from "./event-runtime-stack.js";
  *     belongs to those stacks. `DescribeStacks` requires `Resource: *` when called
  *     without a stack name; no mutating wildcard grant is present.
  *
- * Like `CustomerExecutionPlaneStack` / `IntentIngressStack`, this is a standalone,
+ * Like `CustomerExecutionPlaneStack` / `WorkerOidcCommandRoleStack`, this is a standalone,
  * deployable `Stack` that is intentionally NOT wired into the main `bin/infrastructure.ts`
  * app graph: the OIDC role is a one-time bootstrap that a separate entrypoint
  * (`bin/tenkacloud-always-on-oidc.ts`) deploys.

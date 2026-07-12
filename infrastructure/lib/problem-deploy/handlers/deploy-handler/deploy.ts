@@ -27,7 +27,6 @@ import {
 } from "../shared/runtime/index.js";
 import { getSakuraCredential } from "../shared/sakura-credential-store.js";
 import { logDeployTrace } from "../shared/trace-log.js";
-import { emitShadowAudit } from "../shared/trust-bridge-shadow.js";
 import {
   type PrivateVisibility,
   parseProblemsVisibility,
@@ -382,28 +381,6 @@ export async function startDeployment(
   // ADR-008 Phase 3: private 問題 + bucket bind 済なら S3 から 15min TTL presigned URL を
   // 発行。 CodeBuild の deploy-battles.sh が CHALLENGE_PAYLOAD_URL を fetch して zip 展開する。
   const challengePayloadUrl = await resolveChallengePayloadUrl(ctx, request.problemId);
-
-  // Issue #795 ADR-017 Phase 3 (shadow integration): 既存 deploy flow を変更せず、
-  // CloudActionIntent を構築 + audit log を CloudWatch に emit する。 失敗系も
-  // fail-open (= 既存の publishProblemEvent / DDB Put には影響を与えない)。
-  emitShadowAudit({
-    jobId,
-    tenantId: item.tenantId,
-    teamSlug,
-    problemId: item.problemId,
-    namePrefix: item.namePrefix,
-    region: item.region,
-    awsAccountId: item.awsAccountId,
-    ...(competitorRoleArn ? { competitorRoleArn } : {}),
-    nowMs,
-    ttlSeconds: 900,
-    action: "deploy",
-    requestedScopes: [
-      "cloudformation:CreateStack",
-      "cloudformation:DescribeStacks",
-      "cloudformation:DescribeStackEvents",
-    ],
-  });
 
   // Issue #2019 / ADR-017: staged enforcement gate. In the default `shadow` mode
   // this is a single env compare that returns `null` (proceed) with zero extra
