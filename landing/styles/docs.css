@@ -51,6 +51,42 @@ a:hover { text-decoration: underline; }
 .brand-docs { color: var(--ink-4); font-weight: 600; }
 .top-links { font-size: 13px; color: var(--ink-4); }
 
+/* Header right side — same components as the landing header (main.css):
+   the 日本語 / English pill switch and the GitHub mark, so switching
+   language feels identical across the landing and the docs. */
+.top-right { display: flex; align-items: center; gap: 18px; font-size: 12px; font-weight: 700; }
+.lang-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 2px;
+}
+.top-right .lang {
+  color: var(--ink-3);
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-radius: 999px;
+  padding: 4px 9px;
+  font: inherit;
+  font-weight: 800;
+  text-decoration: none;
+}
+.top-right .lang:hover { text-decoration: none; color: var(--ink); }
+.top-right .lang.on {
+  color: var(--ink);
+  background: #eef3fb;
+}
+.github-mark {
+  width: 18px; height: 18px; color: var(--ink);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+@media (max-width: 720px) {
+  .top-right .lang { padding: 0 8px; font-size: 11px; }
+}
+
 /* Layout: sidebar + article. */
 .docs-grid {
   display: grid;
