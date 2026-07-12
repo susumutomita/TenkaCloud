@@ -10,7 +10,7 @@ Issue #2407。TenkaCloud で 1 回のイベント (Battle / Challenge) を運営
 | --- | --- | --- | --- |
 | Lite (単一テナント、デフォルト) | `make deploy` / Console から `lite-pipeline.yaml` | 2 スタック (`ProblemDeployBackendStack` + `TenkaCloudLiteStack`)。Tenant Admin Console + Participant Portal。`tenantId="local"` 固定 | 主催者 1 人 / 1 イベント |
 | SaaS (マルチテナント) | `make deploy-saas` (`scripts/install.sh`) | SBT ControlPlane + Bootstrap + pooled Tenant + 各 SPA hosting。System Admin 招待あり | 複数テナント / 常設運用 |
-| Always-On (ADR-049) | Cloudflare Worker + `make deploy-always-on-ingress` + `make deploy-always-on-runtime` | 常時稼働ゼロ。イベント期間だけ per-event runtime スタック | イベント間の AWS 常時コストを 0 にしたいとき |
+| Always-On (ADR-049) | Cloudflare Worker + `make deploy-always-on-command` + `make deploy-always-on-runtime` | 常時稼働ゼロ。イベント期間だけ per-event runtime スタック | イベント間の AWS 常時コストを 0 にしたいとき |
 
 - Lite / SaaS は AWS の 1 分 tick (EventBridge `rate(1 minute)`) で採点する。
 - Always-On は per-event runtime スタック内の同じ 1 分 tick で Battle を採点し、Flag は Worker 側で採点する。イベント終了後に runtime を destroy すれば AWS 側の常時課金は消える。

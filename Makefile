@@ -16,7 +16,6 @@ export JSII_DEPRECATED := quiet
         env-check env-check-lite env-init \
         deploy deploy-saas destroy destroy-saas \
         deploy-battles destroy-battles \
-        deploy-always-on-ingress destroy-always-on-ingress synth-always-on-ingress \
         deploy-always-on-command destroy-always-on-command synth-always-on-command \
         deploy-always-on-runtime archive-always-on-runtime destroy-always-on-runtime synth-always-on-runtime \
         dev synth check-synth \
@@ -386,72 +385,13 @@ destroy-battles:
 	fi
 	@TEAM_SLUG="$(TEAM_SLUG)" bash scripts/destroy-battles.sh $(BATTLES)
 
-# ===== Always-On ingress (ADR-049 Phase 4 / #2293) =====
-# ADR-049 §8 "runtime スタックの手動デプロイ経路 (make target) を維持"。SLICE 1 で deploy 可能だが
-# どの bin にも未配線だった IntentIngressStack を、専用 app (bin/tenkacloud-always-on.ts) 経由で
-# operator が単体 deploy できる経路。ControlPlane / tenant pipeline / SBT を一切持ち込まないため、
-# `make deploy` / `deploy-saas` / `deploy-battles` に対しては完全に NO-OP。
-#
-# 必須 env: CDK_PARAM_INTENT_INGRESS_VERIFY_SECRET_PARAM (= HS256 rollback 用 SSM SecureString 名) /
-#           CDK_PARAM_INTENT_INGRESS_VERIFY_PUBLIC_KEY_PARAM (= ES256 公開 JWK を保持する SSM String 名) /
-#           CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_NAME / _ARN (= ProblemDeployBackend の CompetitorAccounts
-#           DDB。 ingress が verified account を解決し、未検証 intent を fail-closed するために GetItem する。#2362) /
-#           CDK_PARAM_INTENT_INGRESS_EXPECTED_AUDIENCE (= audience pinning。未指定だと ingress は
-#           fail-open で任意 audience の署名 intent を受理する。control plane の INTENT_AUDIENCE と一致必須。#2365)。
-# 任意 env: CDK_PARAM_EVENT_BUS_ARN (既存 deploy bus へ re-emit。省略で local bus) /
-#           CDK_PARAM_INTENT_INGRESS_ALLOWED_TENANT_IDS / _ALLOWED_EVENT_IDS (defense-in-depth)。
-#
-# 使い方:
-#   make deploy-always-on-ingress \
-#     CDK_PARAM_INTENT_INGRESS_VERIFY_SECRET_PARAM=/tenkacloud/intent-ingress/verify-secret \
-#     CDK_PARAM_INTENT_INGRESS_VERIFY_PUBLIC_KEY_PARAM=/tenkacloud/intent-ingress/verify-public-jwk \
-#     CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_NAME=... CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_ARN=...
-ALWAYS_ON_INGRESS_APP := bunx tsx bin/tenkacloud-always-on.ts
-
-deploy-always-on-ingress:
-	@if [ -z "$${CDK_PARAM_INTENT_INGRESS_VERIFY_SECRET_PARAM}" ]; then \
-	  echo "error: CDK_PARAM_INTENT_INGRESS_VERIFY_SECRET_PARAM が未指定 (= JWS 検証秘密を保持する SSM SecureString 名)。" >&2; \
-	  echo "  例: make deploy-always-on-ingress CDK_PARAM_INTENT_INGRESS_VERIFY_SECRET_PARAM=/tenkacloud/intent-ingress/verify-secret" >&2; \
-	  exit 1; \
-	fi
-	@if [ -z "$${CDK_PARAM_INTENT_INGRESS_VERIFY_PUBLIC_KEY_PARAM}" ]; then \
-	  echo "error: CDK_PARAM_INTENT_INGRESS_VERIFY_PUBLIC_KEY_PARAM が未指定 (= ES256 公開 JWK を保持する SSM String 名)。" >&2; \
-	  echo "  例: make deploy-always-on-ingress CDK_PARAM_INTENT_INGRESS_VERIFY_PUBLIC_KEY_PARAM=/tenkacloud/intent-ingress/verify-public-jwk" >&2; \
-	  exit 1; \
-	fi
-	@if [ -z "$${CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_NAME}" ] || [ -z "$${CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_ARN}" ]; then \
-	  echo "error: CDK_PARAM_COMPETITOR_ACCOUNTS_TABLE_NAME / _ARN が未指定 (= ingress の verified-account 解決に必須。#2362)。" >&2; \
-	  exit 1; \
-	fi
-	@if [ -z "$${CDK_PARAM_INTENT_INGRESS_EXPECTED_AUDIENCE}" ]; then \
-	  echo "error: CDK_PARAM_INTENT_INGRESS_EXPECTED_AUDIENCE が未指定 (= audience pinning。未指定は fail-open。#2365)。" >&2; \
-	  exit 1; \
-	fi
-	$(CDK) deploy --app "$(ALWAYS_ON_INGRESS_APP)" --all $(APPROVAL)
-
-# offline synth 検証 (Docker Lambda バンドルを skip する高速 shape チェック、check-synth と同じ思想)。
-synth-always-on-ingress: export CDK_SKIP_BUNDLING := 1
-synth-always-on-ingress:
-	$(CDK) synth --app "$(ALWAYS_ON_INGRESS_APP)" --all --quiet
-
-destroy-always-on-ingress:
-	@if [ -z "$${CDK_PARAM_INTENT_INGRESS_VERIFY_SECRET_PARAM}" ]; then \
-	  echo "error: CDK_PARAM_INTENT_INGRESS_VERIFY_SECRET_PARAM が未指定 (destroy も app synth のため必須)。" >&2; \
-	  exit 1; \
-	fi
-	@if [ -z "$${CDK_PARAM_INTENT_INGRESS_VERIFY_PUBLIC_KEY_PARAM}" ]; then \
-	  echo "error: CDK_PARAM_INTENT_INGRESS_VERIFY_PUBLIC_KEY_PARAM が未指定 (destroy も app synth のため必須)。" >&2; \
-	  exit 1; \
-	fi
-	$(CDK) destroy --app "$(ALWAYS_ON_INGRESS_APP)" --all --force
-
 # ===== Always-On OIDC command seam (ADR-050 / #2555) =====
 # Worker (slice A の OIDC IdP) を IAM OIDC provider として登録し、frozen `tenkacloud.deploy` を
 # `events:PutEvents` する以外なにもできない federated role `tenkacloud-alwayson-command` を立てる。
-# ingress と同じく event 非依存の singleton bootstrap (bin/tenkacloud-always-on-command.ts)。
+# event 非依存の singleton bootstrap (bin/tenkacloud-always-on-command.ts)。
 #
 # 必須 env: CDK_PARAM_ALWAYS_ON_ISSUER_URL (= Worker origin。/.well-known/openid-configuration を配信) /
-#           CDK_PARAM_EVENT_BUS_ARN (= 既存 deploy bus。ingress target と同じ env 名)。
+#           CDK_PARAM_EVENT_BUS_ARN (= 既存 deploy bus の ARN)。
 # 任意 env: CDK_PARAM_ALWAYS_ON_OIDC_PROVIDER_ARN (既存 provider を import) /
 #           CDK_PARAM_ALWAYS_ON_COMMAND_SUBJECT (sub claim pattern override) /
 #           CDK_PARAM_ALWAYS_ON_COMMAND_ROLE_NAME (物理 role 名 override)。
@@ -486,9 +426,9 @@ destroy-always-on-command:
 	$(CDK) destroy --app "$(ALWAYS_ON_COMMAND_APP)" --all --force
 
 # ===== Always-On per-event runtime (ADR-049 Phase 4 / #2363) =====
-# ingress (上) は event 非依存の singleton。ここは event ごとに立て/畳む per-event runtime stack
+# command seam (上) は event 非依存の singleton。ここは event ごとに立て/畳む per-event runtime stack
 # (bin/tenkacloud-always-on-runtime.ts)。stack id は tenkacloud-event-runtime-<eventId> で、
-# deploy/destroy とも **その 1 stack のみ** を対象にする (`--all` は使わない = 他 event / ingress を
+# deploy/destroy とも **その 1 stack のみ** を対象にする (`--all` は使わない = 他 event / command seam を
 # 巻き込まない)。stack は runtime-tags (TenkaCloud:ManagedBy=always-on-runtime 他) を付与するので、
 # 夜間 sweeper が期限切れ runtime を検出・削除できる。
 #

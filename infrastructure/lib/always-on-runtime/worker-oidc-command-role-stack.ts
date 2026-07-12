@@ -10,8 +10,8 @@ import type { Construct } from "constructs";
  * provider, and stands up the least-privilege `tenkacloud-alwayson-command`
  * role the Worker assumes via `sts:AssumeRoleWithWebIdentity` to publish the
  * frozen `tenkacloud.deploy` EventBridge event itself (ADR-050 variant A).
- * This replaces the bespoke signed-intent ingress (Function URL + verifier +
- * nonce table), which slice D deletes once the exchange is verified live.
+ * This replaced the bespoke signed-intent ingress (Function URL + verifier +
+ * nonce table), which ADR-050 retired.
  *
  * Trust hardening (ADR-050 §7):
  *   - `aud` is pinned with `StringEquals` to `sts.amazonaws.com`.

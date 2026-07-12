@@ -187,7 +187,6 @@ infrastructure/
   lib/app-wiring/                  # Cross-stack wiring helpers
   lib/tenkacloud-lite/             # Lite mode (ADR-016) stack + up/down CLI
   lib/always-on-runtime/           # Always-On (ADR-049) per-event CDK stack + sweeper
-  lib/intent-ingress/              # Always-On signed-intent ingress (Lambda Function URL)
   lib/admin-insight/               # SystemAdmin cross-tenant insight API
   lib/security/                    # CloudFront/Cognito custom domain + security headers
   lib/observability/               # CloudWatch dashboard, cost budget, free-tier alarms

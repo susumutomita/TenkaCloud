@@ -10,7 +10,7 @@
  * so it must derive those fields with byte-identical results — a drifted slug
  * would orphan the deployed stack from its destroy command.
  *
- * Drift protection: `infrastructure/test/intent-ingress/
+ * Drift protection: `infrastructure/test/problem-deploy/
  * deploy-command-naming-parity.test.ts` pins these mirrors against the
  * authoritative helpers with shared input vectors — change them only together.
  */

@@ -4,12 +4,12 @@
  *
  * The authoritative definitions live in the platform's frozen EventBridge detail
  * schema (`infrastructure/lib/problem-deploy/handlers/shared/events.ts`,
- * `DeployCreate/DeleteRequestedDetailSchema`). A control-plane host (the Workers
- * always-on control plane) validates organizer commands against these BEFORE
- * minting and signing an intent, so a command the ingress would reject fails
- * fast client-side instead of consuming a signature + nonce.
+ * `DeployCreate/DeleteRequestedDetailSchema`). The Always-On control-plane
+ * Worker validates organizer commands against these BEFORE the OIDC exchange,
+ * so a command downstream would reject fails fast at the edge instead of
+ * spending an STS round trip.
  *
- * Drift protection: `infrastructure/test/intent-ingress/
+ * Drift protection: `infrastructure/test/problem-deploy/
  * deploy-command-patterns-parity.test.ts` pins these against the authoritative
  * schema with shared accept/reject vectors — change them only together.
  */

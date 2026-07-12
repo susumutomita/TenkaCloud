@@ -31,7 +31,6 @@ TenkaCloud/
 │   │   ├── app-wiring/                      # Cross-stack wiring (Lite pack catalog, problem-deploy-backend props)
 │   │   ├── tenkacloud-lite/                 # Lite mode (ADR-016) stack + up/down CLI
 │   │   ├── always-on-runtime/               # Always-On (ADR-049) per-event CDK stack + cleanup sweeper
-│   │   ├── intent-ingress/                  # Always-On signed-intent ingress (Lambda Function URL)
 │   │   ├── admin-insight/                   # SystemAdmin cross-tenant insight API (Control Plane only)
 │   │   ├── security/                        # CloudFront/Cognito custom domain + security headers
 │   │   ├── observability/                   # CloudWatch dashboard, cost budget, free-tier alarms
@@ -285,7 +284,7 @@ Teardown is `make destroy-saas` (`scripts/cleanup.sh`). It is written to be idem
 A third mode whose goal is **zero always-on AWS compute between events**. It does not use SBT (see the `INVARIANT_CONTROL_PLANE_USES_SBT` row) and is deployed as independent pieces rather than one `make` target:
 
 - **Control plane** — the Cloudflare Worker `apps/always-on-control-plane` (D1 store; events / teams / score summaries / the Auth0-org→tenant projection). Organizer auth is Auth0 (RS256 JWKS); participants use SHA-256-hashed team keys. Deployed via the manual-approval `deploy-always-on-control-plane.yml` workflow. Reconciliation (event status + prune) runs on a Workers Cron (`triggers.crons`), so the control plane needs no AWS tick.
-- **Command seam** — the Worker mints ES256-signed `CloudActionIntent`s (`packages/trust-bridge`) and POSTs them to the AWS **signed-intent ingress** (a Lambda Function URL, `make deploy-always-on-ingress`), which verifies + scope-authorizes them and re-emits the frozen deploy events onto the existing bus. Zero idle compute (a Function URL, not a constant tick).
+- **Command seam** — AWS-native OIDC federation (ADR-050): the Worker is its own OIDC IdP (discovery + JWKS, ES256 key in Workers secrets), exchanges a short-lived JWT via `sts:AssumeRoleWithWebIdentity` for the PutEvents-only `tenkacloud-alwayson-command` role (`make deploy-always-on-command`), and publishes the frozen deploy events onto the existing bus itself. Zero AWS-side components at rest (STS + the IAM OIDC provider are free; no verify Lambda, no nonce table).
 - **Per-event runtime** — a per-event CDK stack (`bin/tenkacloud-always-on-runtime.ts`, stack id `tenkacloud-event-runtime-<eventId>`) deployed / destroyed by the `deploy-` / `destroy-always-on-runtime.yml` workflows (GitHub OIDC, no long-lived keys). Its `TenkaCloud:*` tags mark expired runtimes for the cleanup sweeper (`infrastructure/lib/always-on-runtime/sweeper/`, run manually — the nightly scheduled workflow is retired until Always-On GA #2294) and drive per-event cost attribution. It exists **only during an event**.
 
 The store-convergence decision (D1 as the Always-On control store; the DynamoDB/Turso seam as the Lambda-era bridge; AWS runtime writes summaries into the control store via the Worker API) is recorded in ADR-049 §16. Remaining GA work (uptime-kind scoring inside the per-event runtime + the score-summary feed, and the live fixed/variable-cost measurement) is tracked in #2294.

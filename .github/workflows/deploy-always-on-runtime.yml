@@ -4,7 +4,7 @@ name: deploy-always-on-runtime
 #
 # Deploys the PER-EVENT runtime stack (tenkacloud-event-runtime-<eventId>) via
 # `make deploy-always-on-runtime`, keyed by the eventId input. This is distinct from the
-# event-independent signed-intent ingress (deployed once via `make deploy-always-on-ingress`).
+# event-independent OIDC command seam (deployed once via `make deploy-always-on-command`).
 # The stack carries the TenkaCloud:* runtime tags so expired runtimes can be identified for
 # cleanup (manual sweeper script / destroy workflow) and per-event cost attribution.
 # Authentication is GitHub OIDC only (sts:AssumeRoleWithWebIdentity) — there are NO
