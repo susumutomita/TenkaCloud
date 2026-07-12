@@ -11,6 +11,7 @@ import type { ApiClient } from "../../api/client";
 import type { CompetitorAccountSummary } from "../../api/competitor-accounts-client";
 import {
   getTeamCredentialStatus,
+  TEAM_CREDENTIAL_PROVIDERS,
   type TeamCredentialProvider,
 } from "../../api/team-credentials-client";
 import { useT } from "../../i18n";
@@ -52,18 +53,34 @@ export function EventCreateTeamsSection({
   onUpdateTeamRow,
 }: EventCreateTeamsSectionProps) {
   const t = useT();
-  const [credentialStatus, setCredentialStatus] = useState<Record<number, boolean | undefined>>({});
-  const [checkingCredential, setCheckingCredential] = useState<number | null>(null);
+  // Status keyed by internalSlug (not row index) so a resize/reorder can never
+  // attach a check result to the wrong team.
+  const [credentialStatus, setCredentialStatus] = useState<Record<string, boolean | undefined>>({});
+  const [checkingCredential, setCheckingCredential] = useState<string | null>(null);
+  const [checkFailed, setCheckFailed] = useState<Record<string, boolean | undefined>>({});
+  const providerMode = teamValidation.providerMode;
+  // The credential-check API supports a fixed provider set; an unknown non-AWS
+  // provider still renders the column but cannot offer the check button.
+  const checkableProvider: TeamCredentialProvider | undefined =
+    providerMode?.kind === "nonAws" &&
+    (TEAM_CREDENTIAL_PROVIDERS as readonly string[]).includes(providerMode.provider)
+      ? (providerMode.provider as TeamCredentialProvider)
+      : undefined;
   const checkCredential = async (
-    idx: number,
+    slug: string,
     provider: TeamCredentialProvider,
     teamSlug: string,
   ) => {
+    /* v8 ignore next -- defensive: the button is disabled unless apiClient + a valid slug exist */
     if (!apiClient || !SLUG_RE.test(teamSlug)) return;
-    setCheckingCredential(idx);
+    setCheckingCredential(slug);
+    setCheckFailed((prev) => ({ ...prev, [slug]: undefined }));
     try {
       const status = await getTeamCredentialStatus(apiClient, provider, teamSlug);
-      setCredentialStatus((prev) => ({ ...prev, [idx]: status.registered }));
+      setCredentialStatus((prev) => ({ ...prev, [slug]: status.registered }));
+    } catch {
+      // Loud failure state (never mistaken for "unregistered").
+      setCheckFailed((prev) => ({ ...prev, [slug]: true }));
     } finally {
       setCheckingCredential(null);
     }
@@ -97,46 +114,60 @@ export function EventCreateTeamsSection({
                 />
               ),
             },
-            teamValidation.providerMode?.kind === "nonAws"
+            providerMode?.kind === "nonAws"
               ? {
                   id: "nonAwsCredential",
                   header: t("event_create.col_non_aws_credential", {
-                    provider: teamValidation.providerMode.provider,
+                    provider: providerMode.provider,
                   }),
                   cell: (tr) => (
                     <SpaceBetween size="xxs">
                       <Input
-                        value={tr.nonAwsCredentialTeamSlug ?? ""}
+                        value={tr.nonAwsCredentialTeamSlug}
                         placeholder={tr.internalSlug}
-                        invalid={!SLUG_RE.test(tr.nonAwsCredentialTeamSlug ?? "")}
+                        invalid={!SLUG_RE.test(tr.nonAwsCredentialTeamSlug)}
                         onChange={({ detail }) => {
-                          setCredentialStatus((prev) => ({ ...prev, [tr.idx]: undefined }));
+                          setCredentialStatus((prev) => ({
+                            ...prev,
+                            [tr.internalSlug]: undefined,
+                          }));
                           onUpdateTeamRow(tr.idx, { nonAwsCredentialTeamSlug: detail.value });
                         }}
                       />
                       <Button
-                        loading={checkingCredential === tr.idx}
-                        disabled={!apiClient || !SLUG_RE.test(tr.nonAwsCredentialTeamSlug ?? "")}
-                        onClick={() =>
-                          void checkCredential(
-                            tr.idx,
-                            teamValidation.providerMode?.kind === "nonAws"
-                              ? (teamValidation.providerMode.provider as TeamCredentialProvider)
-                              : "gcp",
-                            tr.nonAwsCredentialTeamSlug ?? tr.internalSlug,
-                          )
+                        loading={checkingCredential === tr.internalSlug}
+                        disabled={
+                          !apiClient ||
+                          checkableProvider === undefined ||
+                          !SLUG_RE.test(tr.nonAwsCredentialTeamSlug)
                         }
+                        onClick={() => {
+                          /* v8 ignore next -- defensive: the button is disabled in this state */
+                          if (checkableProvider === undefined) return;
+                          void checkCredential(
+                            tr.internalSlug,
+                            checkableProvider,
+                            tr.nonAwsCredentialTeamSlug,
+                          );
+                        }}
                       >
                         {t("event_create.check_credential")}
                       </Button>
-                      {credentialStatus[tr.idx] !== undefined && (
+                      {checkFailed[tr.internalSlug] && (
+                        <Box variant="small" color="text-status-error">
+                          {t("event_create.check_credential_failed")}
+                        </Box>
+                      )}
+                      {credentialStatus[tr.internalSlug] !== undefined && (
                         <Box
                           variant="small"
                           color={
-                            credentialStatus[tr.idx] ? "text-status-success" : "text-status-error"
+                            credentialStatus[tr.internalSlug]
+                              ? "text-status-success"
+                              : "text-status-error"
                           }
                         >
-                          {credentialStatus[tr.idx]
+                          {credentialStatus[tr.internalSlug]
                             ? t("event_create.credential_registered")
                             : t("event_create.credential_unregistered")}
                         </Box>
@@ -194,7 +225,7 @@ export function EventCreateTeamsSection({
           ]}
         />
       )}
-      {teamValidation.providerMode?.kind === "mixed" && (
+      {providerMode?.kind === "mixed" && (
         <Box variant="small" color="text-status-error" padding={{ top: "xs" }}>
           {t("event_create.mixed_provider_error")}
         </Box>

@@ -211,7 +211,7 @@ describe("buildBulkDeployPlan provenance", () => {
       catalogSnapshotId: "snap-original",
     });
   });
-  it("should build non-AWS single-provider entries without a verified AWS account", () => {
+  it("should refuse non-AWS single-provider problems instead of publishing onto the CFn pipeline (#2563 v1)", () => {
     const plan = buildBulkDeployPlan({
       shared: buildShared(undefined, {
         resolveProblemRuntimeDescriptor: (problemId) =>
@@ -242,13 +242,11 @@ describe("buildBulkDeployPlan provenance", () => {
       forceRedeploy: false,
     });
 
-    expect(plan.entries).toHaveLength(1);
-    expect(plan.entries[0].item.awsAccountId).toBe("");
-    expect(plan.entries[0].item.region).toBe("");
-    expect(JSON.parse(plan.entries[0].entry.Detail ?? "{}")).toMatchObject({
-      awsAccountId: "",
-      region: "",
-      teamSlug: "gcp-team-1",
-    });
+    // No entry may reach the frozen DeployCreateRequested bus: its detail could
+    // not satisfy the authoritative schema and the CFn pipeline cannot run it.
+    expect(plan.entries).toHaveLength(0);
+    expect(plan.skipped).toBe(0);
+    expect(plan.unverifiedAccounts.size).toBe(0);
+    expect(Array.from(plan.unsupportedRuntimeProblems)).toEqual(["core-problem"]);
   });
 });

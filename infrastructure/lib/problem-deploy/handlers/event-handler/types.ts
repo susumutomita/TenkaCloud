@@ -103,28 +103,36 @@ export const CreateEventRequestSchema = z.object({
   name: z.string().min(1).max(120),
   teams: z
     .array(
-      z.object({
-        internalSlug: z
-          .string()
-          .min(1)
-          .max(40)
-          .regex(
-            /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/,
-            "internalSlug は a-z0-9- (RFC1035-ish) のみ",
-          ),
-        /** #528: AWS-only events require this; non-AWS single-provider events use teamSlug credentials. */
-        awsAccountId: z
-          .string()
-          .regex(/^\d{12}$/, "AWS Account ID は 12 桁の数字")
-          .optional(),
-        /** #2563: Non-AWS credential lookup slug registered via /admin/team-cloud-credentials. */
-        nonAwsCredentialTeamSlug: z
-          .string()
-          .min(1)
-          .max(40)
-          .regex(/^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/, "teamSlug は a-z0-9- のみ")
-          .optional(),
-      }),
+      z
+        .object({
+          internalSlug: z
+            .string()
+            .min(1)
+            .max(40)
+            .regex(
+              /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/,
+              "internalSlug は a-z0-9- (RFC1035-ish) のみ",
+            ),
+          /** #528: AWS-only events require this; non-AWS single-provider events use teamSlug credentials. */
+          awsAccountId: z
+            .string()
+            .regex(/^\d{12}$/, "AWS Account ID は 12 桁の数字")
+            .optional(),
+          /** #2563: Non-AWS credential lookup slug registered via /admin/team-cloud-credentials. */
+          nonAwsCredentialTeamSlug: z
+            .string()
+            .min(1)
+            .max(40)
+            .regex(/^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/, "teamSlug は a-z0-9- のみ")
+            .optional(),
+        })
+        .refine(
+          (team) => team.awsAccountId !== undefined || team.nonAwsCredentialTeamSlug !== undefined,
+          {
+            message:
+              "awsAccountId (AWS event) か nonAwsCredentialTeamSlug (non-AWS event) のどちらかが必須",
+          },
+        ),
     )
     .min(1)
     // create.ts は event 1 行 + teams を 1 つの atomic TransactWrite で書く。 TransactWrite は

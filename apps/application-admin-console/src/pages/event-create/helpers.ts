@@ -37,8 +37,12 @@ export const REGION_OPTIONS: SelectProps.Option[] = AWS_REGIONS.map((r) => ({
 export interface TeamRow {
   internalSlug: string;
   awsAccountId: string;
-  /** Non-AWS single-provider events bind deploy credentials by provider + team slug. */
-  nonAwsCredentialTeamSlug?: string;
+  /**
+   * Non-AWS single-provider events bind deploy credentials by provider + team
+   * slug. Always initialized (defaults to the internalSlug) so validation and
+   * submit never need a fallback branch.
+   */
+  nonAwsCredentialTeamSlug: string;
 }
 
 export interface ProblemRow {
@@ -166,11 +170,12 @@ export function resizeTeamRows(prev: TeamRow[], next: number): TeamRow[] {
 export function resolveEventProviderMode(
   problemRows: readonly Pick<ProblemRow, "runtimeProvider">[],
 ): EventProviderMode {
-  const providers = new Set(problemRows.map((p) => p.runtimeProvider ?? "aws"));
-  providers.delete("aws");
-  if (providers.size === 0) return { kind: "aws" };
-  if (!problemRows.some((p) => p.runtimeProvider === "aws") && providers.size === 1) {
-    const [provider] = providers;
+  // 未宣言 runtime は aws/cloudformation に正規化 (ProblemSummary と同じ規約)。
+  const providers = problemRows.map((p) => p.runtimeProvider ?? "aws");
+  const nonAws = new Set(providers.filter((p) => p !== "aws"));
+  if (nonAws.size === 0) return { kind: "aws" };
+  if (!providers.includes("aws") && nonAws.size === 1) {
+    const [provider] = nonAws;
     return { kind: "nonAws", provider };
   }
   return { kind: "mixed" };
@@ -189,7 +194,7 @@ export function validateTeamRows(
     if (!SLUG_RE.test(t.internalSlug)) allSlugsValid = false;
     if (providerMode.kind === "aws" && !ACCOUNT_ID_RE.test(t.awsAccountId))
       allAccountsValid = false;
-    if (providerMode.kind === "nonAws" && !SLUG_RE.test(t.nonAwsCredentialTeamSlug ?? "")) {
+    if (providerMode.kind === "nonAws" && !SLUG_RE.test(t.nonAwsCredentialTeamSlug)) {
       allNonAwsCredentialSlugsValid = false;
     }
     if (slugs.has(t.internalSlug)) hasDuplicateSlug = true;

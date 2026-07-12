@@ -139,6 +139,9 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
               // が ap-northeast-1 に集中するのを防ぐ)。 未宣言なら従来通り
               // DEFAULT_AWS_REGION にフォールバック。 operator は wizard で override 可能。
               defaultRegion: meta?.defaultRegion ?? DEFAULT_AWS_REGION.code,
+              // runtime は ProblemSummary 上必須 (未宣言は aws/cloudformation に正規化済み)
+              // なので ?? の右辺は meta 欠落 (上と同じ不到達防御) のみ。
+              /* v8 ignore next */
               runtimeProvider: meta?.runtime.provider ?? "aws",
               ...(meta?.costEstimate ? { costEstimate: meta.costEstimate } : {}),
               ...(meta?.supportedRegions ? { supportedRegions: meta.supportedRegions } : {}),
@@ -199,7 +202,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
           internalSlug: tr.internalSlug,
           ...(providerMode.kind === "aws"
             ? { awsAccountId: tr.awsAccountId }
-            : { nonAwsCredentialTeamSlug: tr.nonAwsCredentialTeamSlug ?? tr.internalSlug }),
+            : { nonAwsCredentialTeamSlug: tr.nonAwsCredentialTeamSlug }),
         })),
         problems: problemRows.map((r) => ({
           problemId: r.problemId,
@@ -317,6 +320,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
         visible={deployPromptTarget !== null}
         canMutateTenant={canMutate}
         deployStarting={deployStarting}
+        bulkDeploySupported={providerMode.kind !== "nonAws"}
         onDeployNow={() => void handleDeployNow()}
         onDeployLater={handleDeployLater}
       />

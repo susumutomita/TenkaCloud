@@ -1,8 +1,0 @@
-# Golden fixture for a single-provider GCP problem.
-# The adapter-specific body is intentionally minimal; this pack is used to verify
-# EventCreate can bind a registered GCP credential by teamSlug without requiring
-# an AWS account ID.
-resources: []
-outputs:
-  VerificationUrl:
-    value: https://example.invalid/golden-gcp-single-credential

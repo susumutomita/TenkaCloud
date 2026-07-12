@@ -236,8 +236,10 @@
     "deploy_modal_now": "Deploy now",
     "deploy_modal_alert_header": "Next: Deploy the problems",
     "deploy_modal_alert_body": "Until per-team problem deploy runs, participants cannot access the problems. \"Deploy now\" runs bulk deploy across all teams × problems. \"Later\" lets you trigger it from the EventDetail Deploy button.",
+    "deploy_modal_alert_body_non_aws": "Bulk deploy currently supports AWS events only. For this event, deploy each team's problem from the Deployments page (New deployment), which uses the provider adapter with the team credential slug bound here.",
     "col_non_aws_credential": "{provider} team credential slug",
     "check_credential": "Check credential",
+    "check_credential_failed": "Credential check failed. Try again.",
     "credential_registered": "Credential registered.",
     "credential_unregistered": "Credential is not registered.",
     "mixed_provider_error": "AWS and non-AWS providers cannot be mixed in one event yet. For v1, create separate events per provider."

@@ -16,6 +16,13 @@ export interface EventCreateDeployPromptModalProps {
   visible: boolean;
   canMutateTenant: boolean;
   deployStarting: boolean;
+  /**
+   * [#2563 v1] Bulk deploy rides the AWS/CFn pipeline only; a non-AWS
+   * single-provider event hides "Deploy now" and points the operator at the
+   * per-team single-deploy path instead of enqueueing a bulk run that the
+   * backend would refuse.
+   */
+  bulkDeploySupported?: boolean;
   onDeployNow: () => void;
   onDeployLater: () => void;
 }
@@ -24,6 +31,7 @@ export function EventCreateDeployPromptModal({
   visible,
   canMutateTenant,
   deployStarting,
+  bulkDeploySupported = true,
   onDeployNow,
   onDeployLater,
 }: EventCreateDeployPromptModalProps) {
@@ -39,22 +47,26 @@ export function EventCreateDeployPromptModal({
             <Button onClick={onDeployLater} disabled={deployStarting}>
               {t("event_create.deploy_modal_later")}
             </Button>
-            <Button
-              variant="primary"
-              loading={deployStarting}
-              disabled={!canMutateTenant}
-              onClick={onDeployNow}
-              data-testid="deploy-prompt-now"
-            >
-              {t("event_create.deploy_modal_now")}
-            </Button>
+            {bulkDeploySupported && (
+              <Button
+                variant="primary"
+                loading={deployStarting}
+                disabled={!canMutateTenant}
+                onClick={onDeployNow}
+                data-testid="deploy-prompt-now"
+              >
+                {t("event_create.deploy_modal_now")}
+              </Button>
+            )}
           </SpaceBetween>
         </Box>
       }
     >
       <SpaceBetween size="m">
         <Alert type="info" header={t("event_create.deploy_modal_alert_header")}>
-          {t("event_create.deploy_modal_alert_body")}
+          {bulkDeploySupported
+            ? t("event_create.deploy_modal_alert_body")
+            : t("event_create.deploy_modal_alert_body_non_aws")}
         </Alert>
       </SpaceBetween>
     </Modal>
