@@ -9,23 +9,21 @@ import {
 import type { CloudMode } from "../config";
 import { AppConfigProvider } from "../config-context";
 import { I18nProvider } from "../i18n";
+import { ProblemPanel } from "./ProblemPanel";
 import {
   buildAutoDeleteNotice,
   codespacesLoopbackUrl,
   describeProblemKind,
+  formatProblemPanelActionError,
   getCompleteFlagScoring,
   getCompleteMultiFlagScoring,
   hasProblemStatement,
   isHttpUrlOutput,
   isStaleProblem,
   isUptimeScoring,
-  ProblemPanel,
   resolveProblemTitle,
-  splitStackOutputs,
-} from "./ProblemPanel";
-import {
-  formatProblemPanelActionError,
   shouldRefreshAfterFlagSubmit,
+  splitStackOutputs,
 } from "./ProblemPanel.helpers";
 
 // FlagSubmissionPanel は #1480 で別途 100% 済。 ここでは ProblemPanel の flag 分岐だけ pin。

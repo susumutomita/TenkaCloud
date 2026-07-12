@@ -20,9 +20,19 @@ import { describeAgo } from "../lib/format";
 import { AttackProbesPanel } from "./AttackProbesPanel";
 import { MultiFlagSubmissionPanel } from "./MultiFlagSubmissionPanel";
 import {
+  buildAutoDeleteNotice,
+  codespacesLoopbackUrl,
   describeApplicationStatus,
+  describeProblemKind,
+  getCompleteFlagScoring,
+  getCompleteMultiFlagScoring,
+  hasProblemStatement,
+  isProblemPlayable,
+  isStaleProblem,
   localizeProblem,
   type ProblemPanelT,
+  resolveProblemTitle,
+  splitStackOutputs,
 } from "./ProblemPanel.helpers";
 import { FlagSubmissionPanel } from "./ProblemPanelFlagSubmission";
 import { ProblemLifecyclePanel } from "./ProblemPanelLifecycle";
@@ -52,179 +62,7 @@ const LIFECYCLE_STATUS_TYPE: Record<ProblemLifecycleStatus, StatusIndicatorProps
   error: "error",
 };
 
-const SCORING_KIND_KEY: Record<string, string> = {
-  flag: "problem_panel.kind_flag",
-  "multi-flag": "problem_panel.kind_multi_flag",
-  uptime: "problem_panel.kind_uptime",
-  "uptime-flat": "problem_panel.kind_uptime",
-  "uptime-multi": "problem_panel.kind_uptime",
-  "phased-polling": "problem_panel.kind_phased",
-  "attack-detection": "problem_panel.kind_attack",
-};
-
-type FlagScoringInfo = NonNullable<ParticipantProblemView["scoring"]>;
-type StackOutputEntry = [label: string, value: string];
-
-/** uptime kind で `lastScoredAt` がこの閾値より古ければ「停滞」表示。 */
-const STALE_THRESHOLD_MS = 2 * 60 * 1000;
-
 const COUNTDOWN_REFRESH_MS = 30_000;
-const AUTO_DELETE_SOON_THRESHOLD_MS = 15 * 60 * 1000;
-const HTTP_URL_OUTPUT_RE = /^https?:\/\//i;
-
-export function describeRemainingUntilAutoDelete(t: ProblemPanelT, diffMs: number): string {
-  const totalMinutes = Math.max(1, Math.ceil(diffMs / 60_000));
-  return t("problem_panel.auto_delete_remaining_minutes", { minutes: totalMinutes });
-}
-
-export function buildAutoDeleteNotice(
-  t: ProblemPanelT,
-  expiresAt: number,
-  nowMs: number,
-): { readonly type: "warning"; readonly body: string } | undefined {
-  if (!Number.isFinite(expiresAt) || expiresAt <= 0) return undefined;
-  const expiresAtMs = expiresAt * 1000;
-  const expiresAtLabel = new Date(expiresAtMs).toLocaleString();
-  const diffMs = expiresAtMs - nowMs;
-  if (diffMs <= 0) {
-    return {
-      type: "warning",
-      body: t("problem_panel.auto_delete_expired_body", { expiresAt: expiresAtLabel }),
-    };
-  }
-  if (diffMs <= AUTO_DELETE_SOON_THRESHOLD_MS) {
-    const remaining = describeRemainingUntilAutoDelete(t, diffMs);
-    return {
-      type: "warning",
-      body: t("problem_panel.auto_delete_soon_body", { remaining, expiresAt: expiresAtLabel }),
-    };
-  }
-  return undefined;
-}
-
-export function isHttpUrlOutput(value: string): boolean {
-  return HTTP_URL_OUTPUT_RE.test(value);
-}
-
-// In Codespaces, a loopback challenge URL is rewritten to a portal-proxy URL
-// (`https://<codespace>-5175.<domain>/__tenkacloud-local-port/<port>/…`) so the
-// browser can reach it. That proxy URL is authenticated-browser-only: it can't
-// be curled from the integrated terminal, and a browser address bar can't send
-// an `Authorization` header — so API/curl challenges (IDOR, etc.) are solved
-// against the loopback origin from the terminal. Recover that loopback form
-// from the proxy URL so the portal can show it as a terminal hint.
-const CODESPACES_CHALLENGE_PROXY_PREFIX = "/__tenkacloud-local-port/";
-
-export function codespacesLoopbackUrl(value: string): string | undefined {
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    return undefined;
-  }
-  if (!url.pathname.startsWith(CODESPACES_CHALLENGE_PROXY_PREFIX)) return undefined;
-  const rest = url.pathname.slice(CODESPACES_CHALLENGE_PROXY_PREFIX.length);
-  const slash = rest.indexOf("/");
-  const rawPort = slash === -1 ? rest : rest.slice(0, slash);
-  const port = Number(rawPort);
-  if (!Number.isInteger(port) || port < 1 || port > 65_535) return undefined;
-  const path = slash === -1 ? "/" : rest.slice(slash);
-  return `http://localhost:${port}${path}${url.search}`;
-}
-
-export function splitStackOutputs(stackOutputs: ParticipantProblemView["stackOutputs"]): {
-  readonly accessUrlEntries: StackOutputEntry[];
-  readonly detailEntries: StackOutputEntry[];
-} {
-  const entries = Object.entries(stackOutputs);
-  const accessUrlEntries = entries.filter(([, value]) => isHttpUrlOutput(value));
-  const nonUrlEntries = entries.filter(([, value]) => !isHttpUrlOutput(value));
-  return {
-    accessUrlEntries,
-    detailEntries: accessUrlEntries.length > 0 ? nonUrlEntries : entries,
-  };
-}
-
-export function describeProblemKind(
-  t: ProblemPanelT,
-  scoring: ParticipantProblemView["scoring"],
-): string {
-  if (!scoring) return t("problem_panel.kind_unknown");
-  return t(SCORING_KIND_KEY[scoring.kind] ?? "problem_panel.kind_unknown");
-}
-
-export function isUptimeScoring(scoring: ParticipantProblemView["scoring"]): boolean {
-  // flag / multi-flag は Challenge (= 提出型)。 それ以外 (uptime 系 / phased / attack) は Battle 軸の
-  // 「古い lastScoredAt = stale」 UX を適用する (= polling 採点だから停滞が意味を持つ)。
-  return scoring ? scoring.kind !== "flag" && scoring.kind !== "multi-flag" : false;
-}
-
-export function isStaleProblem(problem: ParticipantProblemView, now: number): boolean {
-  const lastScoredMs = problem.lastScoredAt ? new Date(problem.lastScoredAt).getTime() : Number.NaN;
-  return (
-    isUptimeScoring(problem.scoring) &&
-    Number.isFinite(lastScoredMs) &&
-    now - lastScoredMs > STALE_THRESHOLD_MS &&
-    problem.status === "COMPLETE"
-  );
-}
-
-export function getCompleteFlagScoring(
-  problem: ParticipantProblemView,
-): FlagScoringInfo | undefined {
-  const scoring = problem.scoring;
-  if (problem.status !== "COMPLETE" || scoring?.kind !== "flag") return undefined;
-  return scoring;
-}
-
-/**
- * Issue #1796: deploy COMPLETE かつ multi-flag kind のときだけ MultiFlagSubmissionPanel を出す
- * (= 単一 flag kind の getCompleteFlagScoring と同方針。 deploy 未完だと flagOutputKey の値が無く
- * 提出しても no_outputs になるため)。
- */
-export function getCompleteMultiFlagScoring(
-  problem: ParticipantProblemView,
-): FlagScoringInfo | undefined {
-  const scoring = problem.scoring;
-  if (problem.status !== "COMPLETE" || scoring?.kind !== "multi-flag") return undefined;
-  return scoring;
-}
-
-/**
- * [#2392 Phase 2] play surface (access URL / flag 提出) を出してよいか。 lifecycle 不在は
- * AWS mode (= per-competitor container 無し) なので常に playable (後方互換)。 stopped /
- * starting / error の間は stackOutputs が空・ submit が 409 not_running になるため隠す。
- */
-export function isProblemPlayable(problem: ParticipantProblemView): boolean {
-  const status = problem.lifecycle?.status;
-  return status === undefined || status === "running";
-}
-
-/**
- * #1975: パネル title は人間可読な name を優先し、 不在時 (= AWS mode で問題文未配信) は
- * problemId に fall back する。
- */
-export function resolveProblemTitle(problem: ParticipantProblemView): string {
-  return problem.name?.trim() ? problem.name : problem.problemId;
-}
-
-/**
- * description が非空なら問題文セクションを描画する。
- *
- * #2473: instructions の正本は `ProblemInfoSection`(`ProblemDetail.tsx`)に一本化した
- * (AWS モードでも出る唯一の instructions 描画経路)。ここは description のみで判定する —
- * instructions だけ非空・description 空の問題では、もう描画するものが無いので false になる。
- *
- * TS の user-defined type guard (`problem is ... & { description: string }`) にして、
- * 呼び出し側の `if (!hasProblemStatement(problem)) return null;` 後に `problem.description`
- * が `string` に narrow されるようにする(= `?? ""` のような到達しない fallback 分岐を
- * 作らずに済む)。
- */
-export function hasProblemStatement(
-  problem: ParticipantProblemView,
-): problem is ParticipantProblemView & { description: string } {
-  return Boolean(problem.description?.trim());
-}
 
 /**
  * #1975 / #2473: 問題文 (description) を web-kit `<Markdown>` で描画する。
