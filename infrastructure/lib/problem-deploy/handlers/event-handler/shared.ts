@@ -21,6 +21,10 @@ import type {
 import type { TeamsRepository } from "../../control-data/teams-repository.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { parseProblemsCatalog } from "../shared/catalog.js";
+import {
+  makeProblemRuntimeDescriptorResolver,
+  type ProblemRuntimeDescriptor,
+} from "../shared/runtime/index.js";
 
 /**
  * [Problem Packs / Issue #2096] Resolves a problem's provenance from the EVENT's
@@ -110,6 +114,9 @@ export interface EventSharedResources {
    * pack-sourced row records immutable provenance.
    */
   readonly resolveDeploymentProvenance?: DeploymentProvenanceResolver;
+  readonly resolveProblemRuntimeDescriptor?: (
+    problemId: string,
+  ) => ProblemRuntimeDescriptor | undefined;
 }
 
 export function buildEventSharedResources(runtime: ControlDataRuntime): EventSharedResources {
@@ -151,6 +158,9 @@ export function buildEventSharedResources(runtime: ControlDataRuntime): EventSha
     scheduler: new SchedulerClient({}),
     problemsCatalog: parseProblemsCatalog(process.env.BATTLE_PROBLEMS_CATALOG),
     problemsDisruptions: parseProblemsDisruptions(process.env.BATTLE_PROBLEMS_DISRUPTIONS),
+    resolveProblemRuntimeDescriptor: makeProblemRuntimeDescriptorResolver(
+      process.env.BATTLE_PROBLEMS_RUNTIMES,
+    ),
     problemsProvenance: parseProblemsProvenance(process.env.BATTLE_PROBLEMS_PROVENANCE),
     bulkDeployPayloadBucket: process.env.BULK_DEPLOY_PAYLOAD_BUCKET ?? "",
     useBulkDistributedMap:

@@ -112,8 +112,18 @@ export const CreateEventRequestSchema = z.object({
             /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/,
             "internalSlug は a-z0-9- (RFC1035-ish) のみ",
           ),
-        /** #528: 各 team の deploy 先 AWS Account ID。problem.defaultAwsAccountId 廃止に伴い必須化 */
-        awsAccountId: z.string().regex(/^\d{12}$/, "AWS Account ID は 12 桁の数字"),
+        /** #528: AWS-only events require this; non-AWS single-provider events use teamSlug credentials. */
+        awsAccountId: z
+          .string()
+          .regex(/^\d{12}$/, "AWS Account ID は 12 桁の数字")
+          .optional(),
+        /** #2563: Non-AWS credential lookup slug registered via /admin/team-cloud-credentials. */
+        nonAwsCredentialTeamSlug: z
+          .string()
+          .min(1)
+          .max(40)
+          .regex(/^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/, "teamSlug は a-z0-9- のみ")
+          .optional(),
       }),
     )
     .min(1)

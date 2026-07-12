@@ -211,4 +211,44 @@ describe("buildBulkDeployPlan provenance", () => {
       catalogSnapshotId: "snap-original",
     });
   });
+  it("should build non-AWS single-provider entries without a verified AWS account", () => {
+    const plan = buildBulkDeployPlan({
+      shared: buildShared(undefined, {
+        resolveProblemRuntimeDescriptor: (problemId) =>
+          problemId === "core-problem"
+            ? { provider: "gcp", engine: "infra-manager", entry: "template.yaml" }
+            : undefined,
+      }),
+      tenantId: TENANT,
+      eventId: EVENT_ID,
+      nowMs: NOW_MS,
+      event: { startsAt: undefined, endsAt: undefined },
+      selected: {
+        teams: [
+          {
+            eventId: EVENT_ID,
+            teamId: "T1",
+            tenantId: TENANT,
+            internalSlug: "team-1",
+            nonAwsCredentialTeamSlug: "gcp-team-1",
+            teamLoginKey: "key-1",
+          },
+        ],
+        problems: [{ problemId: "core-problem", defaultRegion: "ap-northeast-1" }],
+      },
+      existing: emptyExisting,
+      verified: new Map(),
+      retryFailedOnly: false,
+      forceRedeploy: false,
+    });
+
+    expect(plan.entries).toHaveLength(1);
+    expect(plan.entries[0].item.awsAccountId).toBe("");
+    expect(plan.entries[0].item.region).toBe("");
+    expect(JSON.parse(plan.entries[0].entry.Detail ?? "{}")).toMatchObject({
+      awsAccountId: "",
+      region: "",
+      teamSlug: "gcp-team-1",
+    });
+  });
 });

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   parseTeamCountInput,
   resizeTeamRows,
+  resolveEventProviderMode,
   resolveInitialRegion,
   resolveRegionOptions,
   validateTeamRows,
@@ -29,8 +30,8 @@ describe("resizeTeamRows", () => {
   it("should keep existing rows and append empty new rows when team count is increased", () => {
     expect(resizeTeamRows([{ internalSlug: "team-1", awsAccountId: "111111111111" }], 3)).toEqual([
       { internalSlug: "team-1", awsAccountId: "111111111111" },
-      { internalSlug: "team-2", awsAccountId: "" },
-      { internalSlug: "team-3", awsAccountId: "" },
+      { internalSlug: "team-2", awsAccountId: "", nonAwsCredentialTeamSlug: "team-2" },
+      { internalSlug: "team-3", awsAccountId: "", nonAwsCredentialTeamSlug: "team-3" },
     ]);
   });
 
@@ -51,7 +52,9 @@ describe("validateTeamRows", () => {
     ).toEqual({
       allSlugsValid: true,
       allAccountsValid: true,
+      allNonAwsCredentialSlugsValid: true,
       hasDuplicateSlug: false,
+      providerMode: { kind: "aws" },
     });
   });
 
@@ -64,7 +67,45 @@ describe("validateTeamRows", () => {
     ).toEqual({
       allSlugsValid: false,
       allAccountsValid: false,
+      allNonAwsCredentialSlugsValid: true,
       hasDuplicateSlug: true,
+      providerMode: { kind: "aws" },
+    });
+  });
+
+  it("should validate non-AWS credential team slugs instead of AWS accounts", () => {
+    const providerMode = { kind: "nonAws" as const, provider: "gcp" };
+
+    expect(
+      validateTeamRows(
+        [{ internalSlug: "team-1", awsAccountId: "", nonAwsCredentialTeamSlug: "gcp-team-1" }],
+        providerMode,
+      ),
+    ).toEqual({
+      allSlugsValid: true,
+      allAccountsValid: true,
+      allNonAwsCredentialSlugsValid: true,
+      hasDuplicateSlug: false,
+      providerMode,
+    });
+  });
+});
+
+describe("resolveEventProviderMode", () => {
+  it("should reject mixed AWS and non-AWS provider events for v1", () => {
+    expect(
+      resolveEventProviderMode([{ runtimeProvider: "aws" }, { runtimeProvider: "gcp" }]),
+    ).toEqual({
+      kind: "mixed",
+    });
+  });
+
+  it("should return the single non-AWS provider when all selected problems match", () => {
+    expect(
+      resolveEventProviderMode([{ runtimeProvider: "gcp" }, { runtimeProvider: "gcp" }]),
+    ).toEqual({
+      kind: "nonAws",
+      provider: "gcp",
     });
   });
 });

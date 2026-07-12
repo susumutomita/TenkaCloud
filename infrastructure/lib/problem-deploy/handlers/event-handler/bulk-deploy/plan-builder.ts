@@ -12,6 +12,7 @@ import {
   EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED,
   EVENT_SOURCE,
 } from "../../shared/events.js";
+import { EXECUTABLE_PROVIDER } from "../../shared/runtime/index.js";
 import type { EventSharedResources } from "../shared.js";
 import type { EventItem, EventProblemTarget } from "../types.js";
 import {
@@ -75,10 +76,29 @@ function buildBulkPlanEntry(
   if (shouldSkipExistingPlanTarget(args, key, replacement)) return { kind: "skip" };
   const problemDir = args.shared.problemsCatalog[problem.problemId];
   if (!problemDir) return { kind: "skip" };
-  const awsAccountId = team.awsAccountId ?? problem.defaultAwsAccountId;
-  if (!awsAccountId) return { kind: "skip" };
-  const verified = args.verified.get(awsAccountId);
-  if (!verified) return { kind: "unverified", accountId: awsAccountId };
+  const runtime = args.shared.resolveProblemRuntimeDescriptor?.(problem.problemId);
+  const isNonAws =
+    runtime !== undefined && !("kind" in runtime) && runtime.provider !== EXECUTABLE_PROVIDER;
+  const candidateAwsAccountId = team.awsAccountId ?? problem.defaultAwsAccountId;
+  if (isNonAws) {
+    return {
+      kind: "entry",
+      entry: createPlanEntry(
+        args,
+        team,
+        problem,
+        problemDir,
+        "",
+        undefined,
+        replacement,
+        createdAt,
+      ),
+    };
+  }
+  if (!candidateAwsAccountId) return { kind: "skip" };
+  const verified = args.verified.get(candidateAwsAccountId);
+  if (!verified) return { kind: "unverified", accountId: candidateAwsAccountId };
+  const awsAccountId = candidateAwsAccountId;
   return {
     kind: "entry",
     entry: createPlanEntry(
@@ -117,7 +137,7 @@ function createPlanEntry(
   problem: EventProblemTarget,
   problemDir: string,
   awsAccountId: string,
-  verified: VerifiedCompetitorAccount,
+  verified: VerifiedCompetitorAccount | undefined,
   replacement: { jobId: string } | undefined,
   createdAt: string,
 ): PlanEntry {
@@ -161,7 +181,7 @@ function createDeploymentItem(
   team: TeamRecord,
   problem: EventProblemTarget,
   awsAccountId: string,
-  verified: VerifiedCompetitorAccount,
+  verified: VerifiedCompetitorAccount | undefined,
   jobId: string,
   namePrefix: string,
   createdAt: string,
@@ -181,8 +201,8 @@ function createDeploymentItem(
     problemId: problem.problemId,
     tenantId: args.tenantId,
     awsAccountId,
-    competitorRoleArn: verified.competitorRoleArn,
-    region: problem.defaultRegion,
+    competitorRoleArn: verified?.competitorRoleArn,
+    region: verified ? problem.defaultRegion : "",
     teamName: team.internalSlug,
     namePrefix,
     teamLoginKey,
@@ -222,7 +242,7 @@ function createDeployDetail(
   problem: EventProblemTarget,
   problemDir: string,
   awsAccountId: string,
-  verified: VerifiedCompetitorAccount,
+  verified: VerifiedCompetitorAccount | undefined,
   jobId: string,
   namePrefix: string,
 ): DeployCreateRequestedDetail {
@@ -232,11 +252,11 @@ function createDeployDetail(
     tenantId,
     problemId: problem.problemId,
     problemDir,
-    teamSlug: slugify(team.internalSlug),
+    teamSlug: team.nonAwsCredentialTeamSlug ?? slugify(team.internalSlug),
     namePrefix,
-    region: problem.defaultRegion,
+    region: verified ? problem.defaultRegion : "",
     awsAccountId,
-    competitorRoleArn: verified.competitorRoleArn,
-    externalIdParameterName: verified.externalIdParameterName,
+    competitorRoleArn: verified?.competitorRoleArn,
+    externalIdParameterName: verified?.externalIdParameterName,
   };
 }

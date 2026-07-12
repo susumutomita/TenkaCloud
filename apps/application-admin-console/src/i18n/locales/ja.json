@@ -235,7 +235,12 @@
     "deploy_modal_later": "あとで",
     "deploy_modal_now": "今すぐ Deploy",
     "deploy_modal_alert_header": "次は問題の Deploy です",
-    "deploy_modal_alert_body": "チーム毎の問題 deploy を実行するまで、 participant は問題にアクセスできません。 「今すぐ Deploy」 で全 team × 全問題を一括 deploy します。 「あとで」 を選んだ場合は、 EventDetail 画面の Deploy button から後で実行できます。"
+    "deploy_modal_alert_body": "チーム毎の問題 deploy を実行するまで、 participant は問題にアクセスできません。 「今すぐ Deploy」 で全 team × 全問題を一括 deploy します。 「あとで」 を選んだ場合は、 EventDetail 画面の Deploy button から後で実行できます。",
+    "col_non_aws_credential": "{provider} team 認証情報 slug",
+    "check_credential": "認証情報を確認",
+    "credential_registered": "認証情報は登録済みです。",
+    "credential_unregistered": "認証情報が未登録です。",
+    "mixed_provider_error": "v1 では AWS と非 AWS provider を同一 Event に混在できません。provider ごとに Event を分けてください。"
   },
   "deployments": {
     "header": "デプロイ履歴",

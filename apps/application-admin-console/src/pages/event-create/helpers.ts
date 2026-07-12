@@ -37,12 +37,15 @@ export const REGION_OPTIONS: SelectProps.Option[] = AWS_REGIONS.map((r) => ({
 export interface TeamRow {
   internalSlug: string;
   awsAccountId: string;
+  /** Non-AWS single-provider events bind deploy credentials by provider + team slug. */
+  nonAwsCredentialTeamSlug?: string;
 }
 
 export interface ProblemRow {
   problemId: string;
   problemName: string;
   defaultRegion: string;
+  runtimeProvider?: string;
   /** Issue #1910: operator-facing cost-risk estimate derived from template.yaml. */
   costEstimate?: ProblemCostEstimateSummary;
   /** Issue #1201 Phase 2: 問題が動作確認済 region 集合。 wizard picker の選択肢を絞る。 */
@@ -52,10 +55,17 @@ export interface ProblemRow {
 export interface TeamValidation {
   readonly allSlugsValid: boolean;
   readonly allAccountsValid: boolean;
+  readonly allNonAwsCredentialSlugsValid?: boolean;
   readonly hasDuplicateSlug: boolean;
+  readonly providerMode?: EventProviderMode;
 }
 
 /** Team table の row 描画に使う view-model (idx を抱える)。 */
+export type EventProviderMode =
+  | { readonly kind: "aws" }
+  | { readonly kind: "nonAws"; readonly provider: string }
+  | { readonly kind: "mixed" };
+
 export type TeamTableItem = TeamRow & { idx: number };
 
 /** Multiselect option (value 必須) */
@@ -148,22 +158,50 @@ export function resizeTeamRows(prev: TeamRow[], next: number): TeamRow[] {
   const additions = Array.from({ length: next - prev.length }, (_, i) => ({
     internalSlug: `team-${prev.length + i + 1}`,
     awsAccountId: "",
+    nonAwsCredentialTeamSlug: `team-${prev.length + i + 1}`,
   }));
   return [...prev, ...additions];
 }
 
-export function validateTeamRows(teamRows: readonly TeamRow[]): TeamValidation {
+export function resolveEventProviderMode(
+  problemRows: readonly Pick<ProblemRow, "runtimeProvider">[],
+): EventProviderMode {
+  const providers = new Set(problemRows.map((p) => p.runtimeProvider ?? "aws"));
+  providers.delete("aws");
+  if (providers.size === 0) return { kind: "aws" };
+  if (!problemRows.some((p) => p.runtimeProvider === "aws") && providers.size === 1) {
+    const [provider] = providers;
+    return { kind: "nonAws", provider };
+  }
+  return { kind: "mixed" };
+}
+
+export function validateTeamRows(
+  teamRows: readonly TeamRow[],
+  providerMode: EventProviderMode = { kind: "aws" },
+): TeamValidation {
   let allSlugsValid = true;
   let allAccountsValid = true;
+  let allNonAwsCredentialSlugsValid = true;
   const slugs = new Set<string>();
   let hasDuplicateSlug = false;
   for (const t of teamRows) {
     if (!SLUG_RE.test(t.internalSlug)) allSlugsValid = false;
-    if (!ACCOUNT_ID_RE.test(t.awsAccountId)) allAccountsValid = false;
+    if (providerMode.kind === "aws" && !ACCOUNT_ID_RE.test(t.awsAccountId))
+      allAccountsValid = false;
+    if (providerMode.kind === "nonAws" && !SLUG_RE.test(t.nonAwsCredentialTeamSlug ?? "")) {
+      allNonAwsCredentialSlugsValid = false;
+    }
     if (slugs.has(t.internalSlug)) hasDuplicateSlug = true;
     else slugs.add(t.internalSlug);
   }
-  return { allSlugsValid, allAccountsValid, hasDuplicateSlug };
+  return {
+    allSlugsValid,
+    allAccountsValid,
+    allNonAwsCredentialSlugsValid,
+    hasDuplicateSlug,
+    providerMode,
+  };
 }
 
 export function parseTeamCountInput(value: string): number | undefined {

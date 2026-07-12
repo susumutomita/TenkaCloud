@@ -1,0 +1,11 @@
+{
+  "id": "golden-gcp-single-credential",
+  "title": "GCP single credential",
+  "category": "challenges",
+  "description": "Golden single-provider fixture for EventCreate non-AWS credential binding. It deploys through the GCP Infra Manager adapter and is intended for manual wizard verification only.",
+  "runtime": {
+    "provider": "gcp",
+    "engine": "infra-manager",
+    "entry": "template.yaml"
+  }
+}
