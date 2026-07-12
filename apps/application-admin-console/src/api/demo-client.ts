@@ -1,5 +1,6 @@
+import { ApiError } from "@tenkacloud/web-kit";
 import { StatusCodes } from "http-status-codes";
-import { type ApiClient, ApiError } from "./client";
+import type { ApiClient } from "./client-contract";
 import type {
   BulkResult,
   CreateEventRequest,

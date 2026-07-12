@@ -8,9 +8,9 @@
  * functions in `problems.ts` made the two modules import each other's VALUES,
  * which crashes under Vite's SSR transform (`Cannot access '__vite_ssr_import__'
  * before initialization`) when the eager top-level compose runs mid-cycle. Living
- * here — with only TYPE-only imports back to `problems.ts` (fully erased at
- * runtime) — this module has no runtime edge to either file, so the cycle is
- * broken. `problems.ts` re-exports these for its existing consumers.
+ * here — with only TYPE-only imports from the leaf `problem-types.ts` module
+ * (fully erased at runtime) — this module has no runtime edge to either file,
+ * so the cycle is broken. `problems.ts` re-exports these for its existing consumers.
  */
 
 import { analyzeProblemCost, type ProblemCostEstimate } from "@tenkacloud/problem-cost";
@@ -20,7 +20,7 @@ import {
   EXECUTABLE_PROVIDER,
   RESERVED_RUNTIMES,
 } from "@tenkacloud/problem-runtime";
-import type { ProblemCostEstimateSummary, ProblemDetail, ProblemMetadata } from "./problems";
+import type { ProblemCostEstimateSummary, ProblemDetail, ProblemMetadata } from "./problem-types";
 
 export function metadataToDetail(metadata: ProblemMetadata, templateYaml?: string): ProblemDetail {
   const costEstimate = templateYaml
