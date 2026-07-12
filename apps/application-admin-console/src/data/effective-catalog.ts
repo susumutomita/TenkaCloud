@@ -38,7 +38,7 @@ import {
   isLocalOnlyProblemRuntime,
   metadataToDetail,
 } from "./problem-mapping";
-import type { ProblemDetail, ProblemMetadata } from "./problems";
+import type { ProblemDetail, ProblemMetadata } from "./problem-types";
 
 /**
  * One already-loaded core problem: its raw `metadata.json` plus the optional
