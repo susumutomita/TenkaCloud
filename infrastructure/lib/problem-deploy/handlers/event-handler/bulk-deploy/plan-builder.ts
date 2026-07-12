@@ -142,7 +142,7 @@ function createPlanEntry(
   problem: EventProblemTarget,
   problemDir: string,
   awsAccountId: string,
-  verified: VerifiedCompetitorAccount | undefined,
+  verified: VerifiedCompetitorAccount,
   replacement: { jobId: string } | undefined,
   createdAt: string,
 ): PlanEntry {
