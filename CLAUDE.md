@@ -132,6 +132,8 @@ Separately, `make harness` runs `.claude/harness/bin/architecture.ts` against st
 - `lambda-env-size` — flags `AWS::Lambda::Function` environment-variable blocks approaching the 4KB hard limit (warn ≥2.5KB, error ≥3KB) by walking `cdk.out`
 - `no-aws-trademark-fictions` — blocks AWS GameDay-style fictional company/character names (e.g. "Unicorn.Rentals") from being reused in TenkaCloud content
 - `no-conflict-markers` — blocks committed `<<<<<<<` / `=======` / `>>>>>>>` Git conflict markers
+- `domain-no-infra-import` — `control-data/domain/**` must not import handlers, adapters (`../`), or the AWS SDK/CDK; adapters depend on the domain, never the reverse (#2527 dependency direction)
+- `runtime-composition-root-only` — `createDefaultControlDataRuntime()` may only be composed at Lambda entrypoints (`handlers/<name>/index.ts`) or the documented `handlers/shared/audit-log.ts` default; everywhere else takes `runtime: ControlDataRuntime` through deps (#2527 Slice 4)
 
 ## Development flow
 
