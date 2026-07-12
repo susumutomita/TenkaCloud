@@ -12,16 +12,14 @@ export interface TeamContext {
 }
 
 /**
- * `INTENT_SIGNING_PRIVATE_JWK` is a Workers secret (injected with `wrangler secret put`),
- * so the generated `Env` from `wrangler types` cannot include it; it is declared
- * here and optional because a misconfigured deployment must fail loudly at use.
+ * Secrets are injected with `wrangler secret put`, so the generated `Env` from
+ * `wrangler types` cannot include them; they are declared here and optional
+ * because a misconfigured deployment must fail loudly at use.
  */
 export interface SecretBindings {
-  readonly INTENT_SIGNING_PRIVATE_JWK?: string;
   /**
-   * ES256 key pair backing the OIDC IdP surface (ADR-050); only the public
-   * half is served from the JWKS route. A Workers secret; optional here
-   * because a misconfigured deployment must fail loudly at use.
+   * ES256 key pair backing the OIDC IdP surface and the command-token mint
+   * (ADR-050); only the public half is served from the JWKS route.
    */
   readonly OIDC_SIGNING_PRIVATE_JWK?: string;
   /**

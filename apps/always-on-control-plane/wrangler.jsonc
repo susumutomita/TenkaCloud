@@ -1,8 +1,7 @@
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
   // Private signing material is never a var. Configure it with:
-  // bunx wrangler secret put INTENT_SIGNING_PRIVATE_JWK --env <environment>
-  // bunx wrangler secret put OIDC_SIGNING_PRIVATE_JWK --env <environment>   (ADR-050 OIDC IdP key)
+  // bunx wrangler secret put OIDC_SIGNING_PRIVATE_JWK --env <environment>   (ADR-050 OIDC IdP + command key)
   "name": "tenkacloud-always-on-control-plane",
   "main": "src/index.ts",
   "compatibility_date": "2026-07-03",
@@ -30,8 +29,12 @@
     "AUTH0_AUDIENCE": "https://api.tenkacloud.dev",
     "AUTH0_CLIENT_ID": "replace-me",
     "AUTH0_ROLES_CLAIM": "https://tenkacloud.dev/roles",
-    "INTENT_INGRESS_URL": "https://replace-me.lambda-url.ap-northeast-1.on.aws/",
-    "INTENT_AUDIENCE": "plane://tenkacloud/intent-ingress"
+    // ADR-050 OIDC command seam: role/bus from `make deploy-always-on-command` outputs;
+    // PROBLEMS_CATALOG is the JSON problemId -> problemDir map offered in Always-On events.
+    "COMMAND_ROLE_ARN": "arn:aws:iam::000000000000:role/tenkacloud-alwayson-command",
+    "COMMAND_AWS_REGION": "ap-northeast-1",
+    "COMMAND_EVENT_BUS_ARN": "arn:aws:events:ap-northeast-1:000000000000:event-bus/replace-me",
+    "PROBLEMS_CATALOG": "{}"
   },
   "d1_databases": [
     {
@@ -49,8 +52,10 @@
         "AUTH0_AUDIENCE": "https://staging-api.tenkacloud.dev",
         "AUTH0_CLIENT_ID": "replace-me-staging",
         "AUTH0_ROLES_CLAIM": "https://tenkacloud.dev/roles",
-        "INTENT_INGRESS_URL": "https://replace-me-staging.lambda-url.ap-northeast-1.on.aws/",
-        "INTENT_AUDIENCE": "plane://tenkacloud/intent-ingress"
+        "COMMAND_ROLE_ARN": "arn:aws:iam::000000000000:role/tenkacloud-alwayson-command",
+        "COMMAND_AWS_REGION": "ap-northeast-1",
+        "COMMAND_EVENT_BUS_ARN": "arn:aws:events:ap-northeast-1:000000000000:event-bus/replace-me",
+        "PROBLEMS_CATALOG": "{}"
       },
       "d1_databases": [
         {
@@ -68,8 +73,10 @@
         "AUTH0_AUDIENCE": "https://api.tenkacloud.dev",
         "AUTH0_CLIENT_ID": "replace-me",
         "AUTH0_ROLES_CLAIM": "https://tenkacloud.dev/roles",
-        "INTENT_INGRESS_URL": "https://replace-me.lambda-url.ap-northeast-1.on.aws/",
-        "INTENT_AUDIENCE": "plane://tenkacloud/intent-ingress"
+        "COMMAND_ROLE_ARN": "arn:aws:iam::000000000000:role/tenkacloud-alwayson-command",
+        "COMMAND_AWS_REGION": "ap-northeast-1",
+        "COMMAND_EVENT_BUS_ARN": "arn:aws:events:ap-northeast-1:000000000000:event-bus/replace-me",
+        "PROBLEMS_CATALOG": "{}"
       },
       "d1_databases": [
         {

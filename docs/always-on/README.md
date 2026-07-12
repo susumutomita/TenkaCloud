@@ -101,20 +101,41 @@ Do not put Auth0 client secrets or Cloudflare tokens in `wrangler.jsonc`.
 Deployment uses the repository/environment secrets
 `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
 
-## Signed intent issuance (Phase 4)
+## Deploy commands over the OIDC seam (ADR-050, #2555)
 
 `POST /v1/admin/events/:eventId/deploy-intents` lets a mutating organizer role
-mint a JWS-signed `CloudActionIntent` (`action: "deploy" | "destroy"`) and relay
-it to the AWS intent-ingress Function URL. The intent carries identifiers only;
-`ExternalId` and other cross-account secrets stay on the AWS side. Configuration
-per environment:
+issue a deploy/destroy command (`action: "deploy" | "destroy"`). The Worker
+mints a short-TTL ES256 JWT against its own OIDC IdP surface
+(`/.well-known/openid-configuration` + JWKS), exchanges it for scoped,
+minutes-lived credentials via `sts:AssumeRoleWithWebIdentity` (the
+`tenkacloud-alwayson-command` role), and publishes the frozen
+`tenkacloud.deploy` EventBridge event itself. There is no AWS-side verifier:
+AWS validates the token against the Worker's JWKS. The command carries
+identifiers only; `ExternalId` stays in SSM on the AWS side. Configuration per
+environment:
 
-- `INTENT_INGRESS_URL` (var): the Function URL emitted by the
-  `tenkacloud-intent-ingress` stack (`make deploy-always-on-ingress`).
-- `INTENT_AUDIENCE` (var): must equal the ingress
-  `CDK_PARAM_INTENT_INGRESS_EXPECTED_AUDIENCE` value when that check is enabled.
-- `INTENT_SIGNING_PRIVATE_JWK` (secret): the ES256 private JWK. Set it with
-  `bunx wrangler secret put INTENT_SIGNING_PRIVATE_JWK --env production`.
+- `COMMAND_ROLE_ARN` (var): the `CommandRoleArnOutput` of
+  `make deploy-always-on-command`.
+- `COMMAND_AWS_REGION` (var): the platform region hosting STS and the deploy
+  bus (not the deploy target region — that comes from the command body).
+- `COMMAND_EVENT_BUS_ARN` (var): the existing deploy EventBridge bus.
+- `PROBLEMS_CATALOG` (var): JSON map `problemId -> problemDir` for the problems
+  offered in Always-On events; a command for an unlisted problem is rejected.
+- `OIDC_SIGNING_PRIVATE_JWK` (secret): the ES256 private JWK backing both the
+  JWKS route and the command-token mint. Set it with
+  `bunx wrangler secret put OIDC_SIGNING_PRIVATE_JWK --env production`.
+
+Deploy commands fail closed unless the target account is registered as
+tenant-owned via the system-admin API (the control-store edition of the
+verified-account check the retired ingress performed, #2362):
+
+```sh
+curl -X PUT "$WORKER_ORIGIN/v1/system/competitor-accounts/<tenantId>/<awsAccountId>" \
+  -H "authorization: Bearer $SYSTEM_ADMIN_TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"competitorRoleArn":"arn:aws:iam::<awsAccountId>:role/TenkaCloud-<tenantId>-deploy-Role",
+       "externalIdParameterName":"/<env>/tenants/<tenantId>/external-id"}'
+```
 
 ### Signing key (ES256)
 
@@ -122,61 +143,40 @@ Generate a P-256 keypair with Node 20+ WebCrypto. Keep the generated private JWK
 out of the repository and shell history:
 
 ```sh
-KEYPAIR_JSON="$(
-  node --input-type=module <<'NODE'
+node --input-type=module <<'NODE' |
 const pair = await crypto.subtle.generateKey(
   { name: "ECDSA", namedCurve: "P-256" },
   true,
   ["sign", "verify"],
 );
-console.log(JSON.stringify({
-  privateJwk: await crypto.subtle.exportKey("jwk", pair.privateKey),
-  publicJwk: await crypto.subtle.exportKey("jwk", pair.publicKey),
-}));
+console.log(JSON.stringify(await crypto.subtle.exportKey("jwk", pair.privateKey)));
 NODE
-)"
-PRIVATE_JWK="$(printf '%s' "$KEYPAIR_JSON" | jq -c .privateJwk)"
-PUBLIC_JWK="$(printf '%s' "$KEYPAIR_JSON" | jq -c .publicJwk)"
-printf '%s' "$PRIVATE_JWK" |
-  bunx wrangler secret put INTENT_SIGNING_PRIVATE_JWK --env production
-aws ssm put-parameter \
-  --name "$CDK_PARAM_INTENT_INGRESS_VERIFY_PUBLIC_KEY_PARAM" \
-  --type String \
-  --value "$PUBLIC_JWK" \
-  --overwrite
-unset KEYPAIR_JSON PRIVATE_JWK PUBLIC_JWK
+  bunx wrangler secret put OIDC_SIGNING_PRIVATE_JWK --env production
 ```
 
-The public JWK is intentionally stored as an SSM `String`, not `SecureString`;
-the ingress Lambda receives its parameter name through
-`CDK_PARAM_INTENT_INGRESS_VERIFY_PUBLIC_KEY_PARAM`. The private JWK exists only
-as the Cloudflare Worker secret. Trust-bridge ES256 supports a `kid` protected
-header for key selection when a keyed resolver is used.
+Only the private JWK is configured anywhere: the Worker itself derives and
+serves the public half (with an RFC 7638 thumbprint `kid`) from
+`/.well-known/jwks.json`, and AWS re-reads that JWKS automatically. Rotation is
+therefore a single secret roll: put the new private JWK, redeploy the Worker,
+and verify a command end to end. No SSM public-key upload exists on this path.
 
-For rotation, publish the new public JWK to SSM, roll
-`INTENT_SIGNING_PRIVATE_JWK` to the matching private JWK, verify ingress, and
-then retire the old key material. HS256 verification through
-`CDK_PARAM_INTENT_INGRESS_VERIFY_SECRET_PARAM` remains available for rollback
-and other trust-bridge consumers; do not remove that SecureString during this
-migration.
+The Worker validates the command shape against the frozen deploy detail
+contract (problem slug, 12-digit AWS account, region; shared patterns and
+naming mirrors exported by trust-bridge), confirms the team belongs to the
+organizer's tenant and event, and returns `202` with `requestId` and
+`deploymentId`. For a deploy the two are equal and become the downstream
+`jobId`; keep the `deploymentId` — a destroy command must send it back so the
+delete targets the same deployment identity. A correctable rejection (unknown
+problem, unregistered account) surfaces as `422` with a stable reason code; an
+STS or EventBridge failure surfaces as `502`.
 
-The Worker validates the command shape against the frozen deploy detail contract
-(problem slug, 12-digit AWS account, region; shared patterns exported by
-trust-bridge), confirms the team belongs to the organizer's tenant and event,
-and returns `202` with `requestId` and `deploymentId`. For a deploy the two are
-equal and become the `jobId` the ingress re-emits; keep the `deploymentId` — a
-destroy command must send it back so the delete targets the same deployment
-identity. An ingress 4xx (the command itself was rejected, e.g. an unknown
-problem) surfaces as `422` with the ingress' stable reason code; an ingress 5xx
-or an unreachable ingress surfaces as `502`.
+### AWS trust bootstrap (`make deploy-always-on-command`)
 
-## OIDC command seam (ADR-050, #2555)
-
-ADR-050 supersedes the signed-intent seam above: the Worker serves an OIDC
-discovery document and JWKS (`/.well-known/openid-configuration`,
-`/.well-known/jwks.json`; ES256 key in the Workers secret
-`OIDC_SIGNING_PRIVATE_JWK`), and AWS trusts it through IAM web-identity
-federation instead of a bespoke verify Lambda. Register the trust with:
+The Worker serves an OIDC discovery document and JWKS
+(`/.well-known/openid-configuration`, `/.well-known/jwks.json`), and AWS
+trusts it through IAM web-identity federation — there is no AWS-side verify
+Lambda and no replay table (ADR-050 superseded the ADR-049 §7 signed-intent
+ingress). Register the trust once per account with:
 
 ```sh
 make deploy-always-on-command \
@@ -191,9 +191,7 @@ IAM OIDC identity provider and creates the federated role
 (the Worker mints `sub = tenkacloud:always-on:command:<tenantId>:<eventId>`),
 and whose only permission is `events:PutEvents` to that one bus with
 `events:source = tenkacloud.deploy`. Bind the emitted `CommandRoleArnOutput`
-to the Worker once the command path switches to
-`sts:AssumeRoleWithWebIdentity` (issue #2555 slice C). The signed-intent
-ingress sections above remain accurate until slice D retires that seam.
+to the Worker var `COMMAND_ROLE_ARN`.
 
 ## Event-month plan runbook
 

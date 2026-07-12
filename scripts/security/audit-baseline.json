@@ -36,6 +36,7 @@
     "analyze-desumasu-dearu": ["prepare"],
     "aria-hidden": ["prepare"],
     "astring": ["prepare"],
+    "aws4fetch": ["prepare"],
     "balanced-match": ["prepare"],
     "brace-expansion": ["prepare"],
     "cookie": ["prepare"],
