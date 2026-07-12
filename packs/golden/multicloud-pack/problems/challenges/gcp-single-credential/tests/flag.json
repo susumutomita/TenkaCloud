@@ -1,0 +1,30 @@
+[
+  {
+    "name": "awards the flag when the FlagValue output is present",
+    "metadata": {
+      "id": "golden-multicloud-gcp-single-credential",
+      "runtime": { "provider": "gcp", "engine": "infra-manager", "entry": "template.yaml" },
+      "scoring": { "kind": "flag", "flagOutputKey": "FlagValue", "points": 50 }
+    },
+    "runtime": { "provider": "gcp", "engine": "infra-manager", "entry": "template.yaml" },
+    "deployment": "ready",
+    "outputs": { "FlagValue": "TENKA{golden-gcp-single-credential}" },
+    "expected": { "valid": true, "score": "success" }
+  },
+  {
+    "name": "is not runnable when the FlagValue output is missing",
+    "metadata": {
+      "id": "golden-multicloud-gcp-single-credential",
+      "runtime": { "provider": "gcp", "engine": "infra-manager", "entry": "template.yaml" },
+      "scoring": { "kind": "flag", "flagOutputKey": "FlagValue", "points": 50 }
+    },
+    "runtime": { "provider": "gcp", "engine": "infra-manager", "entry": "template.yaml" },
+    "deployment": "ready",
+    "outputs": {},
+    "expected": {
+      "valid": true,
+      "score": "not-runnable",
+      "diagnostics": ["SCORING_MISSING_OUTPUT_KEY"]
+    }
+  }
+]

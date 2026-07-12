@@ -1,6 +1,6 @@
 # Golden multicloud pack
 
-Golden reference pack. A Composite Runtime spanning AWS, GCP, Azure, and Sakura targets, scored by composite-probe. Local harness fixtures only; no real cloud deployment runs in CI.
+Golden reference pack. A Composite Runtime spanning AWS, GCP, Azure, and Sakura targets, scored by composite-probe, plus a single-provider GCP sample scored by flag. Local harness fixtures only; no real cloud deployment runs in CI.
 
 It is a canonical, executable example: scaffoldable, validatable, testable, and
 composable through the same public contracts as any external contributor pack.
@@ -9,6 +9,17 @@ It lives outside the core `problems/` catalog and imports no platform internals.
 ## Capability covered
 
 A Composite Runtime spanning AWS, GCP, Azure, and Sakura targets, scored by composite-probe. Local harness fixtures only; no real cloud deployment runs in CI.
+
+## Problems
+
+- `problems/battles/four-corners` — the Composite Runtime problem above (`golden-multicloud-four-corners`).
+- `problems/challenges/gcp-single-credential` (`golden-multicloud-gcp-single-credential`) — a
+  single-provider GCP (Infrastructure Manager) sample using the flat `runtime` form
+  (`{ "provider": "gcp", "engine": "infra-manager", "entry": "template.yaml" }`), scored by the
+  built-in `flag` kind. Its purpose is to manually exercise the EventCreate non-AWS
+  single-provider credential-binding flow (PR #2583) end to end. Like the GCP composite
+  target above, `gcp/infra-manager` is a reserved runtime: it is declared and validated
+  by the SDK, but never deployed by CI — `template.yaml` is an inert placeholder body.
 
 ## Validate
 
