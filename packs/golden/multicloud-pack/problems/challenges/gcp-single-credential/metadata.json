@@ -1,0 +1,16 @@
+{
+  "id": "golden-multicloud-gcp-single-credential",
+  "title": "GCP single-provider credential sample",
+  "category": "challenges",
+  "description": "Single-provider GCP (Infrastructure Manager) golden problem for manually exercising the EventCreate non-AWS single-provider credential-binding flow (PR #2583). gcp/infra-manager is a reserved runtime: declared and validated here, never deployed by CI.",
+  "runtime": {
+    "provider": "gcp",
+    "engine": "infra-manager",
+    "entry": "template.yaml"
+  },
+  "scoring": {
+    "kind": "flag",
+    "flagOutputKey": "FlagValue",
+    "points": 50
+  }
+}

@@ -1,0 +1,8 @@
+# Golden single-provider GCP (Infrastructure Manager) placeholder.
+# Reserved runtime: declared and validated, never deployed in CI.
+# For manually exercising the EventCreate non-AWS single-provider
+# credential-binding flow (PR #2583).
+# The deploy body would emit a FlagValue output for the flag scorer.
+resources: []
+outputs:
+  FlagValue: TENKA{golden-gcp-single-credential}

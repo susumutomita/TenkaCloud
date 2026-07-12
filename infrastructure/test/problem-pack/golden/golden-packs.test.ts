@@ -72,10 +72,11 @@ const GOLDEN_PACKS: readonly GoldenPack[] = [
   {
     dir: "multicloud-pack",
     packId: "com.tenkacloud.golden.multicloud",
-    version: "1.0.1",
-    capability: "four-provider composite runtime + composite-probe scoring",
-    problemIds: ["golden-multicloud-four-corners"],
-    contentDigest: "cbd4c1a0744bbc8b2a2c25ffb4c3e9309f3f31462af95994257801d9229384de",
+    version: "1.0.2",
+    capability:
+      "four-provider composite runtime + composite-probe scoring, plus single-provider GCP flag sample",
+    problemIds: ["golden-multicloud-four-corners", "golden-multicloud-gcp-single-credential"],
+    contentDigest: "b00695847c2bb945a45ab33fa44e5ff8db5112843033268f0773154ccf0fb6fb",
   },
   {
     dir: "private-artifact-pack",
