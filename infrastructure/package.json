@@ -66,7 +66,7 @@
     "@tenkacloud/problem-runtime": "workspace:*",
     "@tenkacloud/problem-sdk": "workspace:*",
     "@tenkacloud/saml-utils": "workspace:*",
-    "ajv": "8.18.0",
+    "ajv": "8.20.0",
     "ajv-formats": "^3.0.1",
     "aws-cdk-lib": "^2.256.1",
     "constructs": "^10.6.0",
