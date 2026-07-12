@@ -29,7 +29,7 @@ describe("queryAllItems", () => {
     expect(send).toHaveBeenCalledOnce();
     expect(result).toEqual([{ jobId: "a" }]);
     // 1 ページ目は ExclusiveStartKey を付けない。
-    expect((send.mock.calls[0]?.[0] as QueryCommand).input.ExclusiveStartKey).toBeUndefined();
+    expect((send.mock.calls[0] as [QueryCommand])[0].input.ExclusiveStartKey).toBeUndefined();
   });
 
   it("should drain every page and concatenate all items in order", async () => {
@@ -41,8 +41,8 @@ describe("queryAllItems", () => {
     const result = await queryAllItems({ send } as never, BASE);
     expect(send).toHaveBeenCalledTimes(3);
     expect(result).toEqual([{ jobId: "a" }, { jobId: "b" }, { jobId: "c" }]);
-    expect((send.mock.calls[1]?.[0] as QueryCommand).input.ExclusiveStartKey).toEqual({ PK: "p1" });
-    expect((send.mock.calls[2]?.[0] as QueryCommand).input.ExclusiveStartKey).toEqual({ PK: "p2" });
+    expect((send.mock.calls[1] as [QueryCommand])[0].input.ExclusiveStartKey).toEqual({ PK: "p1" });
+    expect((send.mock.calls[2] as [QueryCommand])[0].input.ExclusiveStartKey).toEqual({ PK: "p2" });
   });
 
   it("should preserve the caller's query input (filter/projection) on every page", async () => {
@@ -78,8 +78,8 @@ describe("forEachScanPage", () => {
     expect(send).toHaveBeenCalledTimes(2);
     // 各ページの items が page 単位で (= 集約せず) callback に渡る。
     expect(pages).toEqual([[{ jobId: "a" }], [{ jobId: "b" }, { jobId: "c" }]]);
-    expect((send.mock.calls[0]?.[0] as ScanCommand).input.ExclusiveStartKey).toBeUndefined();
-    expect((send.mock.calls[1]?.[0] as ScanCommand).input.ExclusiveStartKey).toEqual({ PK: "p1" });
+    expect((send.mock.calls[0] as [ScanCommand])[0].input.ExclusiveStartKey).toBeUndefined();
+    expect((send.mock.calls[1] as [ScanCommand])[0].input.ExclusiveStartKey).toEqual({ PK: "p1" });
   });
 
   it("should pass an empty array to the callback when a page omits Items", async () => {
@@ -103,7 +103,7 @@ describe("queryAllItemsBounded", () => {
     // 上限 2 ページで打ち止め (3 ページ目以降の LastEvaluatedKey は無視)。
     expect(send).toHaveBeenCalledTimes(2);
     expect(result).toEqual([{ jobId: "a" }, { jobId: "b" }]);
-    expect((send.mock.calls[1]?.[0] as QueryCommand).input.ExclusiveStartKey).toEqual({ PK: "p1" });
+    expect((send.mock.calls[1] as [QueryCommand])[0].input.ExclusiveStartKey).toEqual({ PK: "p1" });
   });
 
   it("should stop early when a page returns no LastEvaluatedKey before maxPages", async () => {

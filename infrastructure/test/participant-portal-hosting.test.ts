@@ -156,8 +156,10 @@ describe("ParticipantPortalHosting", () => {
       const deployments = Template.fromStack(stack).findResources("Custom::CDKBucketDeployment", {
         Properties: { DistributionPaths: ["/runtime-config.json"] },
       });
-      const [resource] = Object.values(deployments);
-      const [sourceKey] = resource?.Properties?.SourceObjectKeys as [string];
+      const [resource] = Object.values(deployments) as [
+        { Properties: { SourceObjectKeys: [string] } },
+      ];
+      const [sourceKey] = resource.Properties.SourceObjectKeys;
       const assetDir = path.join(assemblyDir, `asset.${sourceKey.replace(/\.zip$/, "")}`);
       return JSON.parse(fs.readFileSync(path.join(assetDir, "runtime-config.json"), "utf8"));
     }

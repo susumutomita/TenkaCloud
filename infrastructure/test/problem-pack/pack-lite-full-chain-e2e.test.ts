@@ -194,8 +194,9 @@ async function buildFixture() {
       ],
     },
   );
-  const eventItem = (ddbSend.mock.calls[0]?.[0] as TransactWriteCommand).input.TransactItems?.[0]
-    ?.Put?.Item as
+  const command = ddbSend.mock.calls[0]?.[0];
+  if (!command) throw new Error("Expected a TransactWriteCommand");
+  const eventItem = (command as TransactWriteCommand).input.TransactItems?.[0]?.Put?.Item as
     | {
         catalogSnapshotId?: string;
         packProvenance?: Record<

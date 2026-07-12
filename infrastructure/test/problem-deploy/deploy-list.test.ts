@@ -184,11 +184,11 @@ describe("listDeployments", () => {
     ddbSend.mockResolvedValue({ Items: [], LastEvaluatedKey: undefined });
 
     await listDeployments(shared, { tenantId: "tenant-acme", limit: 500 });
-    expect((ddbSend.mock.calls[0]?.[0] as QueryCommand).input.Limit).toBe(200);
+    expect((ddbSend.mock.calls[0] as [QueryCommand])[0].input.Limit).toBe(200);
 
     ddbSend.mockClear();
     await listDeployments(shared, { tenantId: "tenant-acme", limit: 0 });
-    expect((ddbSend.mock.calls[0]?.[0] as QueryCommand).input.Limit).toBe(1);
+    expect((ddbSend.mock.calls[0] as [QueryCommand])[0].input.Limit).toBe(1);
   });
 });
 

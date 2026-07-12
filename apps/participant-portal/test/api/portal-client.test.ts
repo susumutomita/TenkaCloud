@@ -363,7 +363,8 @@ describe("submitFlag", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
     await submitFlag("https://x", KEY, "hello-world", "FLAG{demo}");
-    const body = JSON.parse((fetchMock.mock.calls[0]?.[1] as RequestInit).body as string);
+    const [, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
+    const body = JSON.parse(init.body as string);
     expect(body).toEqual({ problemId: "hello-world", flag: "FLAG{demo}" });
   });
 
@@ -379,7 +380,8 @@ describe("submitFlag", () => {
     vi.stubGlobal("fetch", fetchMock);
     const out = await submitFlag("https://x", KEY, "net-evo", "answer", "ep01");
     expect(out).toEqual({ kind: "ok", scoreDelta: 300, totalScore: 300, flagId: "ep01" });
-    const body = JSON.parse((fetchMock.mock.calls[0]?.[1] as RequestInit).body as string);
+    const [, init] = fetchMock.mock.calls[0] as [URL, RequestInit];
+    const body = JSON.parse(init.body as string);
     expect(body).toEqual({ problemId: "net-evo", flag: "answer", flagId: "ep01" });
   });
 });

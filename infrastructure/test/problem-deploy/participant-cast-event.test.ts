@@ -204,7 +204,8 @@ describe("castEvent", () => {
 
     const putCall = ddbSend.mock.calls.find(([cmd]) => cmd instanceof PutCommand);
     expect(putCall).toBeDefined();
-    const input = (putCall?.[0] as PutCommand).input as {
+    if (!putCall) throw new Error("Expected a PutCommand");
+    const input = (putCall[0] as PutCommand).input as {
       TableName: string;
       Item: Record<string, unknown>;
     };
@@ -293,7 +294,9 @@ describe("readInbox", () => {
     expect(out.events[1]?.kind).toBe("alliance-propose");
 
     const queryCall = ddbSend.mock.calls[1];
-    const input = (queryCall?.[0] as QueryCommand).input as {
+    expect(queryCall).toBeDefined();
+    if (!queryCall) throw new Error("Expected a QueryCommand call");
+    const input = (queryCall[0] as QueryCommand).input as {
       ScanIndexForward?: boolean;
       ExpressionAttributeValues?: Record<string, string>;
     };
