@@ -527,7 +527,10 @@ describe("provider-neutral local runtime", () => {
       launcherNeedsReplacement: true,
     });
 
-    const recovered = new SimulatorLocalRuntime({ ...options, startTimeoutMs: 3_000 });
+    const recovered = new SimulatorLocalRuntime({
+      ...runtimeOptions(root),
+      startTimeoutMs: 3_000,
+    });
     runningRuntimes.push(recovered);
     await expect(recovered.start(problem(root))).resolves.toMatchObject({
       problemId: "hello-world",
