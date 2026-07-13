@@ -18,6 +18,13 @@ const HOP_BY_HOP_HEADERS = new Set([
   "transfer-encoding",
   "upgrade",
 ]);
+const SIGV4_AUTHORIZATION =
+  /^(AWS4-HMAC-SHA256 Credential=[^,\r\n]+,\s*SignedHeaders=)([a-z0-9;-]+)(,\s*Signature=[a-f0-9]{64})$/;
+const SIMULATOR_ROUTING_HEADERS = [
+  "x-tenkacloud-deployment-id",
+  "x-tenkacloud-target-id",
+  "x-tenkacloud-world-id",
+] as const;
 
 function decoded(value: string): string | undefined {
   try {
@@ -49,6 +56,15 @@ function upstreamHeaders(request: IncomingMessage): Headers {
     } else headers.set(key, value);
   }
   return headers;
+}
+
+function declareInjectedRoutingHeaders(headers: Headers): void {
+  const authorization = headers.get("authorization");
+  const match = authorization ? SIGV4_AUTHORIZATION.exec(authorization) : null;
+  if (!match) return;
+  const signedHeaders = new Set((match[2] ?? "").split(";"));
+  for (const header of SIMULATOR_ROUTING_HEADERS) signedHeaders.add(header);
+  headers.set("authorization", `${match[1]}${[...signedHeaders].sort().join(";")}${match[3]}`);
 }
 
 function writeProxyError(response: ServerResponse, status: number, error: string): void {
@@ -102,6 +118,10 @@ async function forwardNativeRequest(
   headers.set("x-tenkacloud-world-id", route.worldId);
   headers.set("x-tenkacloud-deployment-id", route.deploymentId);
   headers.set("x-tenkacloud-target-id", route.targetId);
+  // Simulator-owned credentials are syntax-checked but never accepted by real
+  // AWS. The loopback proxy owns the injected routing values, so it also adds
+  // those header names to the local SigV4 metadata before forwarding.
+  declareInjectedRoutingHeaders(headers);
   try {
     const body = await requestBody(request);
     const upstream = await fetch(upstreamUrl, {

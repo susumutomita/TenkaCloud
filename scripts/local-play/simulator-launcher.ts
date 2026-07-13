@@ -21,7 +21,7 @@ const WORKLOAD_IMAGE_DIGEST =
 const WORKLOAD_PROXY_IMAGE =
   "busybox@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662";
 export const DEFAULT_SIMULATOR_IMAGE =
-  "ghcr.io/susumutomita/tenkacloud-simulator@sha256:8e9ab4b3da59b268b12174251d10022bc2fd1ecea88b6cdc497820a6ae942f91";
+  "ghcr.io/susumutomita/tenkacloud-simulator@sha256:0b8de36893513ffcf93db60a60e35849b3e592c08099adae2f0730a9f7fd1c9c";
 const DEFAULT_DOCKER_SOCKET = "/var/run/docker.sock";
 const MAX_WORKLOAD_IMAGES = 64;
 

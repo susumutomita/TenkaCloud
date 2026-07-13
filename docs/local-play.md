@@ -81,7 +81,7 @@ Simulator binds a random loopback port and receives a fresh 256-bit launch
 secret. TenkaCloud signs a short-lived `tc_sim_v1` namespace token; it is sent
 to the console only as a URL fragment and is never printed. The default image
 is pinned to
-`ghcr.io/susumutomita/tenkacloud-simulator@sha256:8e9ab4b3da59b268b12174251d10022bc2fd1ecea88b6cdc497820a6ae942f91`;
+`ghcr.io/susumutomita/tenkacloud-simulator@sha256:0b8de36893513ffcf93db60a60e35849b3e592c08099adae2f0730a9f7fd1c9c`;
 an explicit command, image, or externally managed URL replaces that default,
 and configuring more than one explicit source fails before resource creation.
 

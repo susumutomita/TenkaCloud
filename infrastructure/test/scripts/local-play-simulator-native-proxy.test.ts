@@ -90,8 +90,7 @@ describe("local-play Simulator native route proxy", () => {
         {
           method: "POST",
           headers: {
-            authorization:
-              "AWS4-HMAC-SHA256 Credential=TCSIMABCDEFGHIJK/20260712/us-east-1/test/aws4_request, SignedHeaders=host;x-amz-date, Signature=abc",
+            authorization: `AWS4-HMAC-SHA256 Credential=TCSIMABCDEFGHIJK/20260712/us-east-1/test/aws4_request, SignedHeaders=host;x-amz-date, Signature=${"a".repeat(64)}`,
             "content-type": "application/x-www-form-urlencoded",
             "x-amz-date": "20260712T000000Z",
           },
@@ -104,8 +103,7 @@ describe("local-play Simulator native route proxy", () => {
       expect(observed).toEqual({
         method: "POST",
         path: "/service?Action=Describe",
-        authorization:
-          "AWS4-HMAC-SHA256 Credential=TCSIMABCDEFGHIJK/20260712/us-east-1/test/aws4_request, SignedHeaders=host;x-amz-date, Signature=abc",
+        authorization: `AWS4-HMAC-SHA256 Credential=TCSIMABCDEFGHIJK/20260712/us-east-1/test/aws4_request, SignedHeaders=host;x-amz-date;x-tenkacloud-deployment-id;x-tenkacloud-target-id;x-tenkacloud-world-id, Signature=${"a".repeat(64)}`,
         worldId: "world-native",
         deploymentId: "deployment-native",
         targetId: "default",

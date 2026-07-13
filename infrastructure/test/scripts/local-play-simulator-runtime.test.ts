@@ -229,7 +229,7 @@ describe("Simulator launch authorization", () => {
       image: DEFAULT_SIMULATOR_IMAGE,
     });
     expect(DEFAULT_SIMULATOR_IMAGE).toBe(
-      "ghcr.io/susumutomita/tenkacloud-simulator@sha256:8e9ab4b3da59b268b12174251d10022bc2fd1ecea88b6cdc497820a6ae942f91",
+      "ghcr.io/susumutomita/tenkacloud-simulator@sha256:0b8de36893513ffcf93db60a60e35849b3e592c08099adae2f0730a9f7fd1c9c",
     );
   });
 
