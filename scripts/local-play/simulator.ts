@@ -13,12 +13,14 @@ import { SIMULATOR_PROTOCOL_VERSION, type SimulatorCapabilities } from "./simula
 
 export {
   createSimulatorClient,
+  parseSimulatorSnapshot,
   SIMULATOR_PROTOCOL_VERSION,
   type SimulatorCapabilities,
   type SimulatorClockAdvanceResponse,
   type SimulatorDeploymentRequest,
   type SimulatorDeploymentResponse,
   type SimulatorEngineCapabilities,
+  SimulatorHttpError,
   type SimulatorOperation,
   type SimulatorProviderOperationRequest,
   type SimulatorSnapshot,

@@ -1,3 +1,4 @@
+import { PortalNetworkError } from "./errors";
 import { portalFetch } from "./fetch";
 import type { ProblemLifecycleActionResponse } from "./types";
 
@@ -49,4 +50,57 @@ export async function stopProblem(
       signal,
     },
   )) as ProblemLifecycleActionResponse;
+}
+
+/** Reset a simulated-cloud world from its reviewed catalog artifact. */
+export async function resetProblem(
+  apiBaseUrl: string,
+  teamLoginKey: string,
+  problemId: string,
+  signal?: AbortSignal,
+): Promise<ProblemLifecycleActionResponse> {
+  return (await portalFetch<ProblemLifecycleActionResponse>(
+    apiBaseUrl,
+    `portal/me/problems/${encodeURIComponent(problemId)}/reset`,
+    teamLoginKey,
+    { method: "POST", signal },
+  )) as ProblemLifecycleActionResponse;
+}
+
+interface ConsoleHandoffResponse {
+  readonly handoffPath: string;
+}
+
+/**
+ * Exchange the authenticated portal session for a short-lived, one-time browser handoff.
+ * The authenticated response deliberately contains no Simulator launch token; only the
+ * subsequent top-level navigation receives it in a no-store redirect.
+ */
+export async function issueProblemConsoleHandoff(
+  apiBaseUrl: string,
+  teamLoginKey: string,
+  problemId: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  const response = (await portalFetch<ConsoleHandoffResponse>(
+    apiBaseUrl,
+    `portal/me/problems/${encodeURIComponent(problemId)}/console-handoff`,
+    teamLoginKey,
+    { method: "POST", signal },
+  )) as ConsoleHandoffResponse;
+  const base = apiBaseUrl.endsWith("/") ? apiBaseUrl : `${apiBaseUrl}/`;
+  const expected = new URL(`portal/me/problems/${encodeURIComponent(problemId)}/console`, base);
+  const handoff = new URL(response.handoffPath, base);
+  if (
+    handoff.origin !== expected.origin ||
+    handoff.pathname !== expected.pathname ||
+    handoff.username ||
+    handoff.password ||
+    handoff.hash ||
+    handoff.searchParams.size !== 1 ||
+    !handoff.searchParams.get("ticket")
+  ) {
+    throw new PortalNetworkError(502, "invalid_console_handoff");
+  }
+  return handoff.toString();
 }

@@ -33,6 +33,17 @@ export interface StartedContainer {
   readonly problem: ContainerProblem;
 }
 
+export class ContainerStartOwnershipError extends AggregateError {
+  readonly retainsOwnership = true;
+
+  constructor(
+    readonly unit: LocalComposeUnit,
+    errors: readonly unknown[],
+  ) {
+    super(errors, "Problem container start failed and cleanup was incomplete");
+  }
+}
+
 export interface ContainerRunnerDeps {
   readonly runCompose: (
     composePath: string,
@@ -78,39 +89,55 @@ export class ContainerRunner {
       projectDirectory = dirname(problem.composePath);
     }
     const remappedProblem = remapContainerProblem(problem, portMap);
+    const unit: LocalComposeUnit = {
+      problemId: problem.problemId,
+      composePath,
+      composeProjectName: problem.composeProjectName,
+      secretEnv: problem.secretEnv,
+      ...(projectDirectory ? { projectDirectory } : {}),
+      ...(remappedComposePath ? { remappedComposePath } : {}),
+    };
     const composeEnv: NodeJS.ProcessEnv = {
       ...process.env,
       ...this.deps.generateSecretEnv(problem.secretEnv),
     };
     this.deps.log(`Starting problem container for ${problem.name}...`);
-    this.deps.runCompose(
-      composePath,
-      problem.composeProjectName,
-      "up",
-      composeEnv,
-      false,
-      projectDirectory,
-    );
-    await Promise.all(
-      Object.entries(remappedProblem.challengeEndpoints).map(([label, url]) =>
-        this.deps.waitForReachable(url, `challenge endpoint ${label}`),
-      ),
-    );
+    try {
+      this.deps.runCompose(
+        composePath,
+        problem.composeProjectName,
+        "up",
+        composeEnv,
+        false,
+        projectDirectory,
+      );
+      await Promise.all(
+        Object.entries(remappedProblem.challengeEndpoints).map(([label, url]) =>
+          this.deps.waitForReachable(url, `challenge endpoint ${label}`),
+        ),
+      );
+    } catch (startError) {
+      try {
+        this.stop(unit);
+      } catch (cleanupError) {
+        throw new ContainerStartOwnershipError(unit, [startError, cleanupError]);
+      }
+      throw startError;
+    }
     return {
       problem: remappedProblem,
-      unit: {
-        problemId: problem.problemId,
-        composePath,
-        composeProjectName: problem.composeProjectName,
-        secretEnv: problem.secretEnv,
-        ...(projectDirectory ? { projectDirectory } : {}),
-        ...(remappedComposePath ? { remappedComposePath } : {}),
-      },
+      unit,
     };
   }
 
   /** Tear one unit down (idempotent) and drop its remapped temp compose. */
   stop(unit: LocalComposeUnit): void {
+    this.stopPhysical(unit);
+    this.finalizeStop(unit);
+  }
+
+  /** Physical compose down; the ownership record and temp compose still remain retryable. */
+  stopPhysical(unit: LocalComposeUnit): void {
     const env: NodeJS.ProcessEnv = { ...process.env };
     // Blank the per-deploy secret names so compose interpolation does not warn on down.
     for (const name of unit.secretEnv) env[name] = "";
@@ -119,9 +146,13 @@ export class ContainerRunner {
       unit.composeProjectName,
       "down",
       env,
-      true,
+      false,
       unit.projectDirectory,
     );
+  }
+
+  /** Delete the remapped compose only after durable ownership release succeeds. */
+  finalizeStop(unit: LocalComposeUnit): void {
     if (unit.remappedComposePath) this.deps.removeTempCompose(unit.remappedComposePath);
   }
 }

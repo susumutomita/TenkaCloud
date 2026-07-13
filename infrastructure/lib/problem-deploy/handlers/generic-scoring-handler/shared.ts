@@ -492,6 +492,12 @@ export interface AttackProbeRequest {
  */
 export type AttackProbeFn = (request: AttackProbeRequest) => Promise<ProbeResult>;
 
+export interface AuthoritativeEndpointPlacement {
+  readonly slot: string;
+  readonly effectiveUrl: string;
+  readonly verifiedPlatform: string;
+}
+
 /** kind handler の uniform input。dispatcher が組み立てる。 */
 export interface KindHandlerInput<S extends ProblemScoringMetadata = ProblemScoringMetadata> {
   readonly deployment: Partial<DeploymentItem>;
@@ -517,4 +523,6 @@ export interface KindHandlerInput<S extends ProblemScoringMetadata = ProblemScor
   readonly probe?: ProbeFn;
   /** Simulator-only provider command boundary for attack probes; production defaults to real HTTP. */
   readonly attackProbe?: AttackProbeFn;
+  /** Simulator-authenticated placement projection; when present it is authoritative for phased slots. */
+  readonly authoritativeEndpointPlacements?: readonly AuthoritativeEndpointPlacement[];
 }

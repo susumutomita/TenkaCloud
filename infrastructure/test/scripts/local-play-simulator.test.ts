@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { StatusCodes } from "http-status-codes";
 import { describe, expect, it } from "vitest";
 import {
   buildSimulatorCapabilityReport,
@@ -93,6 +94,11 @@ describe("local-play simulator catalog scanner", () => {
             JSON.stringify({ worldId: "w1", consoleUrl: "http://127.0.0.1:7777/console/w1" }),
           );
         }
+        if (String(url).includes("/v1/worlds/by-deployment/")) {
+          return new Response(
+            JSON.stringify({ worldId: "w1", consoleUrl: "http://127.0.0.1:7777/console/w1" }),
+          );
+        }
         return new Response(
           JSON.stringify({
             deploymentId: "d1",
@@ -110,6 +116,7 @@ describe("local-play simulator catalog scanner", () => {
       teamId: "team",
       deploymentId: "dep",
     });
+    const recoveredWorld = await client.getWorldByDeployment("dep");
     const deployment = await client.createDeployment(world.worldId, {
       problemId: "aws-iam",
       runtime: { provider: "aws", engine: "cloudformation", entry: "template.yaml" },
@@ -117,12 +124,16 @@ describe("local-play simulator catalog scanner", () => {
     });
 
     expect(world.consoleUrl).toBe("http://127.0.0.1:7777/console/w1");
+    expect(recoveredWorld).toEqual(world);
     expect(deployment.status).toBe("running");
     expect(calls.map((c) => [c.url, c.init?.method])).toEqual([
       ["http://127.0.0.1:7777/v1/worlds", "POST"],
+      ["http://127.0.0.1:7777/v1/worlds/by-deployment/dep", undefined],
       ["http://127.0.0.1:7777/v1/worlds/w1/deployments", "POST"],
     ]);
     expect(new Headers(calls[0]?.init?.headers).get("authorization")).toBe("Bearer launch-token");
+    expect(new Headers(calls[0]?.init?.headers).get("idempotency-key")).toBe("dep");
+    expect(new Headers(calls[1]?.init?.headers).get("idempotency-key")).toBe("dep");
   });
 
   it("should require authentication and validate the clock advance response contract", async () => {
@@ -152,6 +163,22 @@ describe("local-play simulator catalog scanner", () => {
     const unauthenticated = createSimulatorClient("http://127.0.0.1:7777", fetch);
     await expect(unauthenticated.advanceClock("world", 1)).rejects.toThrow("launch token");
     await expect(client.advanceClock("world", 0)).rejects.toThrow("positive safe integer");
+  });
+
+  it("should redact reflected secrets from delete-world failures", async () => {
+    const reflectedSecret = "tc_sim_v1.reflected-delete-secret";
+    const client = createSimulatorClient(
+      "http://127.0.0.1:7777",
+      async () => new Response(reflectedSecret, { status: StatusCodes.BAD_GATEWAY }),
+      "launch-token",
+    );
+
+    const message = await client.deleteWorld("world").then(
+      () => "resolved",
+      (error: unknown) => (error instanceof Error ? error.message : String(error)),
+    );
+    expect(message).toBe("delete world failed (HTTP 502)");
+    expect(message).not.toContain(reflectedSecret);
   });
 
   it("should classify simulator-supported runtimes", () => {

@@ -36,6 +36,7 @@ export interface ProblemLifecycleView {
   readonly problemId: string;
   readonly status: ProblemStatus;
   readonly offset?: number;
+  readonly cleanupRequired?: true;
 }
 
 interface Entry {
@@ -45,6 +46,8 @@ interface Entry {
   error?: string;
   /** In-flight start promise, so concurrent `ensureRunning` calls share it. */
   starting?: Promise<number>;
+  /** In-flight stop promise, so start/reset waits for teardown to release the slot. */
+  stopping?: Promise<void>;
 }
 
 export class ProblemLifecycle {
@@ -71,11 +74,18 @@ export class ProblemLifecycle {
       problemId,
       status: e.status,
       ...(e.offset !== undefined ? { offset: e.offset } : {}),
+      ...(e.status === "error" && e.offset !== undefined ? { cleanupRequired: true as const } : {}),
     }));
   }
 
   statusOf(problemId: string): ProblemStatus | undefined {
     return this.entries.get(problemId)?.status;
+  }
+
+  /** True when a failed operation may still own a physical runtime and its port slot. */
+  cleanupRequired(problemId: string): boolean {
+    const entry = this.entries.get(problemId);
+    return entry?.status === "error" && entry.offset !== undefined;
   }
 
   /** Bump last-access so an actively-played problem is not the LRU-eviction victim. No-op if not running. */
@@ -92,11 +102,21 @@ export class ProblemLifecycle {
   async ensureRunning(problemId: string): Promise<number> {
     const entry = this.entries.get(problemId);
     if (!entry) throw new Error(`unknown problem: ${problemId}`);
+    if (entry.stopping) {
+      await entry.stopping;
+      return this.ensureRunning(problemId);
+    }
     if (entry.status === "running" && entry.offset !== undefined) {
       entry.lastAccessedAt = this.deps.now();
       return entry.offset;
     }
     if (entry.starting) return entry.starting;
+    // A failed start/stop that retained physical ownership must be torn down
+    // before another start can safely reuse the same problem or port slot.
+    if (entry.status === "error" && entry.offset !== undefined) {
+      await this.stop(problemId);
+      return this.ensureRunning(problemId);
+    }
 
     const run = this.startEntry(problemId, entry);
     entry.starting = run;
@@ -120,7 +140,16 @@ export class ProblemLifecycle {
     } catch (error) {
       entry.status = "error";
       entry.error = error instanceof Error ? error.message : String(error);
-      this.freeOffsets.push(offset);
+      if (
+        typeof error === "object" &&
+        error !== null &&
+        "retainsOwnership" in error &&
+        error.retainsOwnership === true
+      ) {
+        entry.offset = offset;
+      } else {
+        this.freeOffsets.push(offset);
+      }
       throw error;
     }
     entry.status = "running";
@@ -133,15 +162,44 @@ export class ProblemLifecycle {
   /** Stop a running problem's container and release its port slot. No-op if not running. */
   async stop(problemId: string): Promise<void> {
     const entry = this.entries.get(problemId);
-    if (!entry || entry.status !== "running" || entry.offset === undefined) return;
+    if (!entry) return;
+    if (entry.starting) {
+      try {
+        await entry.starting;
+      } catch {
+        // The failed start may have retained ownership. Re-enter stop after
+        // the shared start promise settles so cleanup can use its recorded unit.
+      }
+      return this.stop(problemId);
+    }
+    if (entry.stopping) return entry.stopping;
+    if ((entry.status !== "running" && entry.status !== "error") || entry.offset === undefined) {
+      return;
+    }
     const offset = entry.offset;
+    const stopping = this.stopEntry(problemId, entry, offset);
+    entry.stopping = stopping;
+    try {
+      await stopping;
+    } finally {
+      entry.stopping = undefined;
+    }
+  }
+
+  private async stopEntry(problemId: string, entry: Entry, offset: number): Promise<void> {
     entry.status = "stopping";
     try {
       await this.deps.stopContainer(problemId, offset);
-    } finally {
       entry.status = "stopped";
       entry.offset = undefined;
+      entry.error = undefined;
       this.freeOffsets.push(offset);
+    } catch (error) {
+      // Physical ownership is retained so a later stop/reset can retry. Never
+      // release an offset while its container/world may still exist.
+      entry.status = "error";
+      entry.error = error instanceof Error ? error.message : String(error);
+      throw error;
     }
   }
 
@@ -149,7 +207,9 @@ export class ProblemLifecycle {
   async stopAll(): Promise<void> {
     const errors: unknown[] = [];
     for (const [problemId, entry] of this.entries) {
-      if (entry.status !== "running") continue;
+      if ((entry.status !== "running" && entry.status !== "error") || entry.offset === undefined) {
+        continue;
+      }
       try {
         await this.stop(problemId);
       } catch (error) {

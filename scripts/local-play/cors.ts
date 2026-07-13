@@ -1,24 +1,10 @@
-import { isLoopbackUrl } from "./loopback";
+import { type CodespacesEnv, codespacesForwardedOrigin } from "./codespaces-origin";
 
-export type CodespacesEnv = Readonly<{
-  CODESPACE_NAME?: string;
-  GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN?: string;
-}>;
+export type { CodespacesEnv } from "./codespaces-origin";
 
-function codespacesPortalOrigin(env: CodespacesEnv = process.env): string | undefined {
-  const name = env.CODESPACE_NAME?.trim();
-  const rawDomain = env.GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN?.trim();
-  if (!name || !rawDomain) return undefined;
-  const domain = rawDomain
-    .replace(/^https?:\/\//, "")
-    .replace(/\/.*$/, "")
-    .replace(/^\./, "")
-    .replace(/\.$/, "");
-  if (!domain) return undefined;
-  return `https://${name}-5175.${domain}`.toLowerCase();
-}
+const LOCAL_PORTAL_ORIGINS = new Set(["http://localhost:5175", "http://127.0.0.1:5175"]);
 
-/** Accept only a syntactically exact loopback or current Codespaces portal origin. */
+/** Accept only the exact local or current Codespaces Participant Portal origin. */
 export function isAllowedCorsOrigin(origin: string, env: CodespacesEnv = process.env): boolean {
   try {
     const url = new URL(origin);
@@ -32,8 +18,8 @@ export function isAllowedCorsOrigin(origin: string, env: CodespacesEnv = process
     ) {
       return false;
     }
-    if (isLoopbackUrl(url.origin)) return true;
-    return url.protocol === "https:" && url.origin.toLowerCase() === codespacesPortalOrigin(env);
+    if (LOCAL_PORTAL_ORIGINS.has(url.origin)) return true;
+    return url.protocol === "https:" && url.origin === codespacesForwardedOrigin(5175, env);
   } catch {
     return false;
   }

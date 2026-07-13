@@ -50,10 +50,12 @@ provider-neutral Simulator integration (see
 [`local-play.md`](./local-play.md)). Docker problems still serve the challenge
 surface and their own `/verify`. Cloud and Composite descriptors are delegated
 to a separate, version-pinned Simulator world, then surfaced through the same
-participant portal lifecycle. Until the project publishes a default
-digest-pinned Simulator image, cloud local play requires an explicit image,
-executable, or already-running loopback Simulator; Docker local play remains
-zero-configuration after prerequisites are installed. The current Docker
+participant portal lifecycle. Cloud local play defaults to the reviewed,
+multi-platform OCI index
+`ghcr.io/susumutomita/tenkacloud-simulator@sha256:e4335a99d9b2aa86402bdcda1c65247073d76202dff7f671e429f8568bb8f8b8`;
+contributors can explicitly select another digest-pinned image, executable, or
+already-running loopback Simulator. Docker local play remains zero-configuration
+after prerequisites are installed. The current Docker
 catalog is built around approachable Web application operations subjects, for
 example:
 

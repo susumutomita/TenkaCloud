@@ -87,6 +87,7 @@ function problemView(
   runtime: ProblemRuntime,
   now: number,
   status: ProblemStatus,
+  cleanupRequired: boolean,
   browserText: (text: string) => string,
 ) {
   const problem = mapStrings(runtime.problem, browserText);
@@ -111,7 +112,11 @@ function problemView(
     status: "COMPLETE",
     // [#2392 Phase 2] on-demand container state — the portal renders its
     // start / stop affordance from this field.
-    lifecycle: { status },
+    lifecycle: {
+      status,
+      runtimeKind: "docker" as const,
+      ...(cleanupRequired ? { cleanupRequired: true as const } : {}),
+    },
     // The challenge surface URLs the participant attacks (loopback only). A
     // stopped problem must not leak (stale) endpoints of a down container.
     stackOutputs: status === "running" ? problem.challengeEndpoints : {},
@@ -146,6 +151,7 @@ function simulatedProblemView(
   runtime: SimulatedProblemRuntime,
   now: number,
   status: ProblemStatus,
+  cleanupRequired: boolean,
   browserText: (text: string) => string,
 ) {
   const problem = runtime.problem;
@@ -153,16 +159,9 @@ function simulatedProblemView(
     ? participantSimulatorOutputs(problem, runtime.deployment.outputs)
     : {};
   const outputs = runtime.deployment
-    ? {
-        ...Object.fromEntries(
-          Object.entries(participantOutputs).map(([key, value]) => [key, browserText(value)]),
-        ),
-        SimulatorConsoleUrl: browserText(runtime.deployment.consoleUrl),
-        SimulatorAwsAccessKeyId: runtime.deployment.nativeCredentials.awsAccessKeyId,
-        SimulatorAzureCredential: runtime.deployment.nativeCredentials.azureCredential,
-        SimulatorGcpCredential: runtime.deployment.nativeCredentials.gcpCredential,
-        SimulatorSakuraCredential: runtime.deployment.nativeCredentials.sakuraCredential,
-      }
+    ? Object.fromEntries(
+        Object.entries(participantOutputs).map(([key, value]) => [key, browserText(value)]),
+      )
     : {};
   const provider = "kind" in problem.runtime ? "composite" : problem.runtime.provider;
   const scoring = simulatorScoringView(runtime);
@@ -177,7 +176,11 @@ function simulatedProblemView(
     awsAccountId: "local",
     provider,
     status: "COMPLETE",
-    lifecycle: { status },
+    lifecycle: {
+      status,
+      runtimeKind: "simulated-cloud" as const,
+      ...(cleanupRequired ? { cleanupRequired: true as const } : {}),
+    },
     stackOutputs: status === "running" ? outputs : {},
     expiresAt: now + 365 * 24 * 60 * 60 * 1000,
     score: runtime.score,
@@ -186,8 +189,16 @@ function simulatedProblemView(
     ...(runtime.platform ? { platform: runtime.platform } : {}),
     ...(runtime.lastResult ? { lastResult: runtime.lastResult } : {}),
     deployLog: { cursor: "", entries: [] },
-    createdAt: new Date(now).toISOString(),
+    createdAt: runtime.createdAt ?? new Date(now).toISOString(),
   };
+}
+
+function participantLifecycleStatus(
+  status: ProblemStatus | undefined,
+): Exclude<ProblemStatus, "stopping"> {
+  // The public contract has one transitional/loading state. Keep teardown from
+  // being misrendered as stopped (which would expose a premature Start action).
+  return status === "stopping" ? "starting" : (status ?? "stopped");
 }
 
 function simulatorHintViews(runtime: SimulatedProblemRuntime) {
@@ -280,7 +291,8 @@ export function teamView(state: LocalPlayState, now: number): LocalPlayResponse 
           problemView(
             runtime,
             now,
-            state.lifecycle.statusOf(problemId) ?? "stopped",
+            participantLifecycleStatus(state.lifecycle.statusOf(problemId)),
+            state.lifecycle.cleanupRequired(problemId),
             state.browserText,
           ),
         ),
@@ -288,7 +300,8 @@ export function teamView(state: LocalPlayState, now: number): LocalPlayResponse 
           simulatedProblemView(
             runtime,
             now,
-            state.lifecycle.statusOf(problemId) ?? "stopped",
+            participantLifecycleStatus(state.lifecycle.statusOf(problemId)),
+            state.lifecycle.cleanupRequired(problemId),
             state.browserText,
           ),
         ),

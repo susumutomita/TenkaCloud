@@ -1,3 +1,4 @@
+import { StatusCodes } from "http-status-codes";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runUptimeMultiKind } from "../../lib/problem-deploy/handlers/generic-scoring-handler/kinds/uptime-multi";
 import type {
@@ -264,10 +265,10 @@ describe("uptime-multi kind", () => {
   });
 
   it("should use an injected provider command for attack probes while health stays on HTTP", async () => {
-    fetchMock.mockResolvedValue({ status: 200, text: async () => "" });
+    fetchMock.mockResolvedValue({ status: StatusCodes.OK, text: async () => "" });
     const attackProbe = vi.fn(async () => ({
       ok: false,
-      status: 403,
+      status: StatusCodes.FORBIDDEN,
       responseTimeMs: 1,
     }));
 

@@ -21,6 +21,8 @@ export interface AppConfig {
   readonly eventRegion: string;
   readonly mode: AppMode;
   readonly cloudMode: CloudMode;
+  /** Random local-session login key, present only in generated local runtime config. */
+  readonly localTeamLoginKey?: string;
   /**
    * ADR-028/030 (#1420): 参加者間 coordination dispatcher (専用 Lambda) の Function URL。
    * 未配線 (= coordination 無効 / 旧 deploy) なら undefined。 portal slot が coordination-client で叩く。
@@ -34,6 +36,7 @@ interface RuntimeConfig {
   readonly eventRegion?: string;
   readonly mode?: AppMode;
   readonly cloudMode?: CloudMode;
+  readonly localTeamLoginKey?: string;
   readonly coordinationApiUrl?: string;
 }
 
@@ -135,6 +138,9 @@ export async function loadConfig(): Promise<AppConfig> {
       eventRegion: runtime.eventRegion ?? DEV_FALLBACK.eventRegion,
       mode,
       cloudMode,
+      ...(cloudMode === "local" && runtime.localTeamLoginKey
+        ? { localTeamLoginKey: runtime.localTeamLoginKey }
+        : {}),
       ...(coordinationApiUrl ? { coordinationApiUrl } : {}),
     };
   } catch {

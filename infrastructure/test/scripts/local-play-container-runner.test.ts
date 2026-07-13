@@ -93,12 +93,25 @@ describe("ContainerRunner: start (#2392 Phase 2)", () => {
 
   it("should propagate a compose-up failure (lifecycle marks it error)", async () => {
     const { deps } = makeDeps({
-      runCompose: vi.fn(() => {
-        throw new Error("docker up failed");
+      runCompose: vi.fn((_path, _project, action) => {
+        if (action === "up") throw new Error("docker up failed");
       }),
     });
     const runner = new ContainerRunner("/local", deps);
     await expect(runner.start(problem(), 0)).rejects.toThrow(/docker up failed/);
+  });
+
+  it("should compose down and remove a remapped file when readiness fails", async () => {
+    const { deps, compose, removed } = makeDeps({
+      waitForReachable: vi.fn(async () => {
+        throw new Error("readiness failed");
+      }),
+    });
+    const runner = new ContainerRunner("/local", deps);
+
+    await expect(runner.start(problem(), 100)).rejects.toThrow("readiness failed");
+    expect(compose.map(([action]) => action)).toEqual(["up", "down"]);
+    expect(removed).toEqual(["/local/tc-local-sqli-demo.compose.yml"]);
   });
 });
 
@@ -122,6 +135,21 @@ describe("ContainerRunner: stop (#2392 Phase 2)", () => {
     compose.length = 0;
     runner.stop(unit);
     expect(compose[0]?.[0]).toBe("down");
+    expect(removed).toEqual([]);
+  });
+
+  it("should retain a remapped compose file when physical teardown fails", async () => {
+    let failDown = false;
+    const { deps, removed } = makeDeps({
+      runCompose: vi.fn((_path, _project, action) => {
+        if (action === "down" && failDown) throw new Error("docker down failed");
+      }),
+    });
+    const runner = new ContainerRunner("/local", deps);
+    const { unit } = await runner.start(problem(), 100);
+    failDown = true;
+
+    expect(() => runner.stop(unit)).toThrow("docker down failed");
     expect(removed).toEqual([]);
   });
 });

@@ -205,4 +205,10 @@ describe("LoginPage", () => {
     expect(keyInput()).toHaveValue("INVITE-KEY");
     expect(screen.getAllByText("Open Arena").length).toBeGreaterThan(0);
   });
+
+  it("should prefill the generated local session key when no invite is present", () => {
+    mockIsMock.mockReturnValue(false);
+    renderLogin({ cloudMode: "local", localTeamLoginKey: "random-local-session-key" });
+    expect(keyInput()).toHaveValue("random-local-session-key");
+  });
 });

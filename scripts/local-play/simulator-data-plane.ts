@@ -1,8 +1,6 @@
 import type { SimulatedCloudProblem } from "./simulator";
 import { type NativeTarget, nativeTargets } from "./simulator-native-environment";
 
-export const SIMULATOR_DATA_PLANE_PREFIX = "/local/simulator-data";
-
 const SYNTHETIC_HTTP_HOSTS: Readonly<
   Record<NativeTarget["provider"], readonly RegExp[] | undefined>
 > = {
@@ -48,27 +46,30 @@ function syntheticProviderUrl(value: string, target: NativeTarget): URL | undefi
 export function rewriteSimulatorDataPlaneOutputs(
   problem: SimulatedCloudProblem,
   outputs: Readonly<Record<string, string>>,
-  localBaseUrl: string,
+  targetOrigin: (targetId: string) => string,
 ): Readonly<Record<string, string>> {
-  const base = new URL(localBaseUrl);
-  if (
-    (base.protocol !== "http:" && base.protocol !== "https:") ||
-    !["127.0.0.1", "localhost", "[::1]", "::1"].includes(base.hostname) ||
-    base.username ||
-    base.password ||
-    base.pathname !== "/" ||
-    base.search ||
-    base.hash
-  ) {
-    throw new Error("Simulator data-plane proxy base URL must be a loopback origin");
-  }
+  const validatedBase = (value: string): URL => {
+    const base = new URL(value);
+    if (
+      (base.protocol !== "http:" && base.protocol !== "https:") ||
+      !["127.0.0.1", "localhost", "[::1]", "::1"].includes(base.hostname) ||
+      base.username ||
+      base.password ||
+      base.pathname !== "/" ||
+      base.search ||
+      base.hash
+    ) {
+      throw new Error("Simulator data-plane proxy base URL must be a loopback origin");
+    }
+    return base;
+  };
   return Object.fromEntries(
     Object.entries(outputs).map(([key, value]) => {
       const target = targetForOutput(problem, key);
       const providerUrl = target ? syntheticProviderUrl(value, target) : undefined;
       if (!target || !providerUrl) return [key, value];
-      const localPath = `${SIMULATOR_DATA_PLANE_PREFIX}/${encodeURIComponent(problem.problemId)}/${encodeURIComponent(target.targetId)}${providerUrl.pathname}${providerUrl.search}`;
-      return [key, new URL(localPath, base).toString()];
+      const base = validatedBase(targetOrigin(target.targetId));
+      return [key, new URL(`${providerUrl.pathname}${providerUrl.search}`, base).toString()];
     }),
   );
 }

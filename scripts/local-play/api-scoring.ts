@@ -179,12 +179,12 @@ function submitSimulatorFlag(
   let correct: boolean;
   try {
     correct = simulatorFlagMatches(runtime.problem, runtime.deployment.outputs, submitted);
-  } catch (error) {
+  } catch {
     return {
       status: StatusCodes.BAD_GATEWAY,
       body: {
         error: "simulator_scoring_unavailable",
-        message: error instanceof Error ? error.message : "Simulator scoring failed",
+        message: "Simulator scoring is unavailable",
       },
     };
   }
@@ -275,6 +275,8 @@ async function runSimulatedProblemScoreCycle(
   if (!runtime?.deployment || state.lifecycle.statusOf(problemId) !== "running") {
     return { status: StatusCodes.CONFLICT, body: { error: "not_running" } };
   }
+  const deployment = runtime.deployment;
+  await state.simulator?.refreshAccess(problemId);
   if (!isSimulatorPollingRuntime(runtime)) {
     return {
       status: StatusCodes.OK,
@@ -288,10 +290,21 @@ async function runSimulatedProblemScoreCycle(
     };
   }
   await advancePhasedSimulatorClock(problemId, runtime, state, now);
+  if (state.lifecycle.statusOf(problemId) !== "running" || runtime.deployment !== deployment) {
+    return { status: StatusCodes.CONFLICT, body: { error: "not_running" } };
+  }
   const attackProbe = simulatorAttackProbe(runtime, state, now);
+  const authoritativeEndpointPlacements =
+    runtime.contract.scoring.kind === "phased-polling" && state.simulator?.endpointPlacements
+      ? await state.simulator.endpointPlacements(
+          runtime.problem,
+          runtime.contract.endpoints.map((slot) => slot.slot),
+          now,
+        )
+      : undefined;
   const result = await runSimulatorScoreCycle({
     problem: runtime.problem,
-    outputs: runtime.deployment.outputs,
+    outputs: deployment.outputs,
     overrides: runtime.overrides,
     score: runtime.score,
     createdAt: runtime.createdAt ?? new Date(now).toISOString(),
@@ -300,7 +313,11 @@ async function runSimulatedProblemScoreCycle(
     scoringState: runtime.scoringState,
     nowMs: now,
     ...(attackProbe ? { attackProbe } : {}),
+    ...(authoritativeEndpointPlacements ? { authoritativeEndpointPlacements } : {}),
   });
+  if (state.lifecycle.statusOf(problemId) !== "running" || runtime.deployment !== deployment) {
+    return { status: StatusCodes.CONFLICT, body: { error: "not_running" } };
+  }
   runtime.score += result.scoreDelta;
   runtime.lastResult = result.lastResult;
   runtime.endpointsHealth = result.endpointsHealthJson;

@@ -21,6 +21,7 @@ import { runUptimeMultiKind } from "../../infrastructure/lib/problem-deploy/hand
 import type {
   AttackProbeFn,
   AttackProbeRequest,
+  AuthoritativeEndpointPlacement,
   DeploymentScoringState,
   KindResult,
   ProbeFn,
@@ -58,6 +59,7 @@ export interface SimulatorScoreCycleInput {
   readonly nowMs: number;
   /** Authenticated Simulator provider operation used only for scorer attack probes. */
   readonly attackProbe?: AttackProbeFn;
+  readonly authoritativeEndpointPlacements?: readonly AuthoritativeEndpointPlacement[];
 }
 
 function parseList<T>(
@@ -117,6 +119,11 @@ export function simulatorOutput(
   return keys.length === 1 ? outputs[keys[0]] : undefined;
 }
 
+/** Reserve every namespaced Simulator* segment for runtime control material. */
+export function isParticipantSimulatorOutputKey(key: string): boolean {
+  return key.split(".").every((segment) => !segment.startsWith("Simulator"));
+}
+
 export function participantSimulatorOutputs(
   problem: SimulatedCloudProblem,
   outputs: Readonly<Record<string, string>>,
@@ -130,6 +137,7 @@ export function participantSimulatorOutputs(
   return Object.fromEntries(
     Object.entries(outputs).filter(
       ([key]) =>
+        isParticipantSimulatorOutputKey(key) &&
         ![...hidden].some((outputKey) => key === outputKey || key.endsWith(`.${outputKey}`)),
     ),
   );
@@ -307,6 +315,9 @@ export async function runSimulatorScoreCycle(input: SimulatorScoreCycleInput): P
     prevState: input.scoringState,
     probe: probeSimulatorUrl,
     ...(input.attackProbe ? { attackProbe: input.attackProbe } : {}),
+    ...(input.authoritativeEndpointPlacements
+      ? { authoritativeEndpointPlacements: input.authoritativeEndpointPlacements }
+      : {}),
   };
   if (contract.scoring.kind === "uptime" || contract.scoring.kind === "uptime-flat") {
     return runUptimeFlatKind({ ...genericInput, scoring: contract.scoring });
@@ -315,6 +326,8 @@ export async function runSimulatorScoreCycle(input: SimulatorScoreCycleInput): P
     return runUptimeMultiKind({ ...genericInput, scoring: contract.scoring });
   }
   if (contract.scoring.kind === "phased-polling") {
+    // Fail closed: loopback /meta is participant-controlled and cannot prove a
+    // managed provider tier. Use the production hostname verifier unchanged.
     return runPhasedPollingKind({ ...genericInput, scoring: contract.scoring });
   }
   return runAttackDetectionKind({ ...genericInput, scoring: contract.scoring });

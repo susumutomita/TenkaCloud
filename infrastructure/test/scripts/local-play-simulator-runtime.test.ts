@@ -1,5 +1,15 @@
 import { createHash, createHmac } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  statSync,
+  symlinkSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -8,6 +18,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { handleLocalPlayRequest } from "../../../scripts/local-play/api";
 import { createLocalPlayState, type LocalPlayRequest } from "../../../scripts/local-play/api-state";
 import { waitForReachable } from "../../../scripts/local-play/docker-adapter";
+import { observeProcessIdentity } from "../../../scripts/local-play/process-identity";
 import {
   createSimulatorClient,
   loadSimulatedCloudProblems,
@@ -18,12 +29,20 @@ import {
   createSimulatorLaunchSecret,
   decodeSimulatorLaunchSecret,
   issueSimulatorLaunchToken,
+  simulatorConsoleUrl,
+  simulatorLaunchTokenExpiresAt,
 } from "../../../scripts/local-play/simulator-auth";
 import {
   DEFAULT_SIMULATOR_IMAGE,
+  launchPreparedSimulator,
   launchSimulator,
+  prepareSimulatorLaunch,
+  reconcileSimulatorLaunchIntent,
   resolveSimulatorSource,
+  type SimulatorLauncherRecord,
+  simulatorLaunchIntentPath,
   stopSimulatorLauncher,
+  writeSimulatorLaunchIntent,
 } from "../../../scripts/local-play/simulator-launcher";
 import {
   cleanupRecordedSimulatorSession,
@@ -32,6 +51,11 @@ import {
   type SimulatorSessionRecord,
 } from "../../../scripts/local-play/simulator-runtime";
 import { runSimulatorScoreCycle } from "../../../scripts/local-play/simulator-scoring";
+import {
+  readSimulatorSessionRecord,
+  simulatorSessionSecretPath,
+  writeSimulatorSessionRecord,
+} from "../../../scripts/local-play/simulator-session-record";
 
 const PROCESS_FIXTURE = resolve(
   import.meta.dirname,
@@ -238,6 +262,38 @@ function runtimeOptions(root: string): SimulatorRuntimeOptions {
   };
 }
 
+function emptyExternalSession(port: number): SimulatorSessionRecord {
+  return {
+    protocolVersion: "2026-07-11",
+    launcher: {
+      kind: "external",
+      baseUrl: `http://127.0.0.1:${port}`,
+      launchSecret: createSimulatorLaunchSecret(),
+      nativeCredentials: {
+        awsAccessKeyId: "TCSIM12345678901",
+        awsSecretAccessKey: "tcsim_1234567890123456",
+        azureCredential: "tcsim_1234567890123456",
+        gcpCredential: "tcsim_1234567890123456",
+        sakuraCredential: "tcsim_1234567890123456:tcsim_abcdefghijklmnop",
+      },
+    },
+    deployments: [],
+  };
+}
+
+async function waitForProcessExit(pid: number): Promise<void> {
+  const deadline = Date.now() + 3_000;
+  while (Date.now() < deadline) {
+    try {
+      process.kill(pid, 0);
+    } catch {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(`process ${pid} did not exit`);
+}
+
 async function workloadServer() {
   const server = createServer((_request, response) => {
     response.writeHead(StatusCodes.OK, { "content-type": "application/json" });
@@ -255,8 +311,26 @@ async function workloadServer() {
   };
 }
 
+async function platformWorkloadServer(platform: "lambda" | "ecs" | "apprunner") {
+  const server = createServer((request, response) => {
+    const path = new URL(request.url ?? "/", "http://127.0.0.1").pathname;
+    response.writeHead(StatusCodes.OK, { "content-type": "application/json" });
+    response.end(path.endsWith("/meta") ? JSON.stringify({ platform }) : '{"ok":true}');
+  });
+  await new Promise<void>((accept, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => accept());
+  });
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("workload did not bind");
+  return {
+    url: `http://127.0.0.1:${address.port}`,
+    close: () => new Promise<void>((accept) => server.close(() => accept())),
+  };
+}
+
 describe("Simulator launch authorization", () => {
-  it("応答しない Simulator 呼び出しを有限時間で中断する", async () => {
+  it("should time out a Simulator call that never responds", async () => {
     const client = createSimulatorClient(
       "http://127.0.0.1:7777",
       () => new Promise<Response>(() => {}),
@@ -267,7 +341,7 @@ describe("Simulator launch authorization", () => {
     await expect(client.capabilities()).rejects.toThrow("timed out after 10ms");
   });
 
-  it("header 後に停止した Simulator response body も有限時間で中断する", async () => {
+  it("should time out a Simulator response body that stalls after headers", async () => {
     const client = createSimulatorClient(
       "http://127.0.0.1:7777",
       async () =>
@@ -294,14 +368,322 @@ describe("Simulator launch authorization", () => {
     expect(outcome).toContain("timed out after 10ms");
   });
 
+  it("should cap Simulator response bodies before parsing", async () => {
+    const client = createSimulatorClient("http://127.0.0.1:7777", async () => {
+      return new Response(new Uint8Array(1_000_001), { status: StatusCodes.OK });
+    });
+
+    await expect(client.capabilities()).rejects.toThrow(
+      "Simulator response exceeded 1000000 bytes",
+    );
+  });
+
+  it("should redact a non-success Simulator response body from errors", async () => {
+    const reflectedSecret = "tc_sim_v1.reflected-secret";
+    const client = createSimulatorClient(
+      "http://127.0.0.1:7777",
+      async () => new Response(reflectedSecret, { status: StatusCodes.BAD_GATEWAY }),
+    );
+
+    const message = await client.capabilities().then(
+      () => "resolved",
+      (error: unknown) => (error instanceof Error ? error.message : String(error)),
+    );
+    expect(message).toBe("capabilities failed (HTTP 502)");
+    expect(message).not.toContain(reflectedSecret);
+  });
+
   it("should select the reviewed immutable image when no explicit source is configured", () => {
     expect(resolveSimulatorSource({})).toEqual({
       kind: "container",
       image: DEFAULT_SIMULATOR_IMAGE,
     });
     expect(DEFAULT_SIMULATOR_IMAGE).toBe(
-      "ghcr.io/susumutomita/tenkacloud-simulator@sha256:0b8de36893513ffcf93db60a60e35849b3e592c08099adae2f0730a9f7fd1c9c",
+      "ghcr.io/susumutomita/tenkacloud-simulator@sha256:e4335a99d9b2aa86402bdcda1c65247073d76202dff7f671e429f8568bb8f8b8",
     );
+  });
+
+  it("should clear a pre-spawn process intent without creating ownership files", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-process-intent-only-"));
+    const options = runtimeOptions(root);
+    const prepared = await prepareSimulatorLaunch(options, options.sessionPath);
+    if (prepared.kind !== "owned" || prepared.intent.kind !== "process") {
+      throw new Error("test requires a prepared process launch");
+    }
+    writeSimulatorLaunchIntent(options.sessionPath, prepared.intent);
+
+    expect(statSync(simulatorLaunchIntentPath(options.sessionPath)).mode & 0o777).toBe(0o600);
+    expect(existsSync(prepared.intent.ownershipLeasePath)).toBe(false);
+    expect(existsSync(prepared.intent.registrationPath)).toBe(false);
+
+    await reconcileSimulatorLaunchIntent(options.sessionPath, undefined, options.env, 1);
+
+    expect(existsSync(simulatorLaunchIntentPath(options.sessionPath))).toBe(false);
+    expect(existsSync(prepared.intent.ownershipLeasePath)).toBe(false);
+    expect(existsSync(prepared.intent.registrationPath)).toBe(false);
+  });
+
+  it("should reclaim a registered process after its parent loses the launch response", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-process-launch-crash-"));
+    const options = runtimeOptions(root);
+    const nonEnglishLocaleEnv = {
+      ...options.env,
+      LANG: "fr_FR.UTF-8",
+      LC_ALL: "fr_FR.UTF-8",
+    };
+    const prepared = await prepareSimulatorLaunch(
+      {
+        ...options,
+        env: nonEnglishLocaleEnv,
+      },
+      options.sessionPath,
+    );
+    if (prepared.kind !== "owned" || prepared.intent.kind !== "process") {
+      throw new Error("test requires a prepared process launch");
+    }
+    writeSimulatorLaunchIntent(options.sessionPath, prepared.intent);
+    const launcher = await launchPreparedSimulator(prepared.intent, nonEnglishLocaleEnv);
+    if (launcher.kind !== "process" || launcher.pid === undefined) {
+      throw new Error("test requires a process launcher");
+    }
+
+    expect(existsSync(prepared.intent.ownershipLeasePath)).toBe(true);
+    expect(existsSync(prepared.intent.registrationPath)).toBe(true);
+    await reconcileSimulatorLaunchIntent(options.sessionPath, undefined, options.env);
+    await waitForProcessExit(launcher.pid);
+
+    expect(existsSync(simulatorLaunchIntentPath(options.sessionPath))).toBe(false);
+    expect(existsSync(prepared.intent.ownershipLeasePath)).toBe(false);
+    expect(existsSync(prepared.intent.registrationPath)).toBe(false);
+  });
+
+  it("should recover a direct launch when the caller dies before session commit", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-direct-launch-crash-"));
+    const options = runtimeOptions(root);
+    const launcher = await launchSimulator(options);
+    if (launcher.kind !== "process" || launcher.pid === undefined) {
+      throw new Error("test requires a process launcher");
+    }
+    expect(existsSync(simulatorLaunchIntentPath(options.sessionPath))).toBe(true);
+    expect(existsSync(launcher.ownershipLeasePath ?? "missing")).toBe(true);
+    expect(existsSync(launcher.registrationPath ?? "missing")).toBe(true);
+
+    await cleanupRecordedSimulatorSession(options.sessionPath, fetch, options.env);
+    await waitForProcessExit(launcher.pid);
+
+    expect(existsSync(simulatorLaunchIntentPath(options.sessionPath))).toBe(false);
+    expect(existsSync(launcher.ownershipLeasePath ?? "missing")).toBe(false);
+    expect(existsSync(launcher.registrationPath ?? "missing")).toBe(false);
+  });
+
+  it("should keep the process lease after commit and release it only when stopped", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-process-launch-commit-"));
+    const options = runtimeOptions(root);
+    const prepared = await prepareSimulatorLaunch(options, options.sessionPath);
+    if (prepared.kind !== "owned" || prepared.intent.kind !== "process") {
+      throw new Error("test requires a prepared process launch");
+    }
+    writeSimulatorLaunchIntent(options.sessionPath, prepared.intent);
+    const launcher = await launchPreparedSimulator(prepared.intent, options.env);
+    if (launcher.kind !== "process" || launcher.pid === undefined) {
+      throw new Error("test requires a process launcher");
+    }
+    writeSimulatorSessionRecord(options.sessionPath, {
+      protocolVersion: "2026-07-11",
+      launcher,
+      deployments: [],
+    });
+
+    await reconcileSimulatorLaunchIntent(options.sessionPath, launcher, options.env);
+
+    expect(existsSync(simulatorLaunchIntentPath(options.sessionPath))).toBe(false);
+    expect(existsSync(prepared.intent.ownershipLeasePath)).toBe(true);
+    expect(existsSync(prepared.intent.registrationPath)).toBe(true);
+    const publicRecord = readFileSync(options.sessionPath, "utf8");
+    expect(publicRecord).not.toMatch(
+      /launchSecret|nativeCredentials|ownershipLeasePath|registrationPath/,
+    );
+
+    await stopSimulatorLauncher(launcher, options.env);
+    await waitForProcessExit(launcher.pid);
+    expect(existsSync(prepared.intent.ownershipLeasePath)).toBe(false);
+    expect(existsSync(prepared.intent.registrationPath)).toBe(false);
+  });
+
+  it("should cancel the command when reconciliation races its supervisor registration", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-process-registration-race-"));
+    const commandPath = join(root, "owned-command.mjs");
+    const commandPidPath = join(root, "owned-command.pid");
+    writeFileSync(
+      commandPath,
+      `import { writeFileSync } from "node:fs"; writeFileSync(${JSON.stringify(commandPidPath)}, String(process.pid)); setInterval(() => {}, 1000);\n`,
+    );
+    const options = runtimeOptions(root);
+    const prepared = await prepareSimulatorLaunch(
+      {
+        ...options,
+        env: {
+          ...options.env,
+          TENKACLOUD_SIMULATOR_ARGS: JSON.stringify([commandPath]),
+        },
+      },
+      options.sessionPath,
+    );
+    if (prepared.kind !== "owned" || prepared.intent.kind !== "process") {
+      throw new Error("test requires a prepared process launch");
+    }
+    writeSimulatorLaunchIntent(options.sessionPath, prepared.intent);
+    const launcher = await launchPreparedSimulator(prepared.intent, options.env);
+    if (launcher.kind !== "process" || launcher.pid === undefined) {
+      throw new Error("test requires a process launcher");
+    }
+
+    await reconcileSimulatorLaunchIntent(options.sessionPath, undefined, options.env);
+    await waitForProcessExit(launcher.pid);
+    if (existsSync(commandPidPath)) {
+      await waitForProcessExit(Number(readFileSync(commandPidPath, "utf8")));
+    }
+  });
+
+  it("should reclaim a command that kills its supervisor before launch acknowledgement", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-supervisor-killed-"));
+    const commandPidPath = join(root, "kill-supervisor.pid");
+    const options = runtimeOptions(root);
+    const prepared = await prepareSimulatorLaunch(
+      {
+        ...options,
+        env: {
+          ...options.env,
+          TENKACLOUD_SIMULATOR_COMMAND: "/bin/sh",
+          TENKACLOUD_SIMULATOR_ARGS: JSON.stringify([
+            "-c",
+            'kill -STOP "$PPID"; printf "%s" "$$" > "$1"; kill -KILL "$PPID"; while :; do sleep 1; done',
+            "kill-supervisor",
+            commandPidPath,
+          ]),
+        },
+      },
+      options.sessionPath,
+    );
+    if (prepared.kind !== "owned" || prepared.intent.kind !== "process") {
+      throw new Error("test requires a prepared process launch");
+    }
+    writeSimulatorLaunchIntent(options.sessionPath, prepared.intent);
+
+    let commandPid: number | undefined;
+    try {
+      await launchPreparedSimulator(prepared.intent, options.env).catch(() => undefined);
+      const pidDeadline = Date.now() + 3_000;
+      while (!existsSync(commandPidPath) && Date.now() < pidDeadline) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      expect(existsSync(commandPidPath)).toBe(true);
+      commandPid = Number(readFileSync(commandPidPath, "utf8"));
+
+      await reconcileSimulatorLaunchIntent(options.sessionPath, undefined, options.env);
+      await waitForProcessExit(commandPid);
+
+      expect(existsSync(simulatorLaunchIntentPath(options.sessionPath))).toBe(false);
+      expect(existsSync(prepared.intent.ownershipLeasePath)).toBe(false);
+      expect(existsSync(prepared.intent.registrationPath)).toBe(false);
+    } finally {
+      if (commandPid !== undefined) {
+        const identity = observeProcessIdentity(commandPid);
+        if (identity) {
+          await stopSimulatorLauncher(
+            {
+              kind: "process",
+              baseUrl: prepared.intent.baseUrl,
+              launchSecret: prepared.intent.launchSecret,
+              nativeCredentials: prepared.intent.nativeCredentials,
+              pid: commandPid,
+              processIdentity: identity,
+            },
+            options.env,
+          );
+        }
+      }
+    }
+  });
+
+  it("should reclaim a deterministic container intent before and after spawn", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-container-launch-intent-"));
+    const callsPath = join(root, "docker-calls.log");
+    const docker = join(root, "docker-fixture.mjs");
+    writeFileSync(
+      docker,
+      `#!/usr/bin/env node\nimport { appendFileSync } from "node:fs"; appendFileSync(${JSON.stringify(callsPath)}, JSON.stringify(process.argv.slice(2)) + "\\n"); if (process.argv[2] === "run") process.stdout.write("fixture-container-id\\n");\n`,
+    );
+    chmodSync(docker, 0o700);
+    const options = {
+      stateDir: join(root, "state"),
+      logPath: join(root, "simulator.log"),
+      sessionPath: join(root, "simulator-session.json"),
+      env: { TENKACLOUD_SIMULATOR_DOCKER_CLI: docker },
+    };
+
+    const beforeSpawn = await prepareSimulatorLaunch(options, options.sessionPath);
+    if (beforeSpawn.kind !== "owned" || beforeSpawn.intent.kind !== "container") {
+      throw new Error("test requires a prepared container launch");
+    }
+    writeSimulatorLaunchIntent(options.sessionPath, beforeSpawn.intent);
+    await reconcileSimulatorLaunchIntent(options.sessionPath, undefined, options.env);
+
+    const afterSpawn = await prepareSimulatorLaunch(options, options.sessionPath);
+    if (afterSpawn.kind !== "owned" || afterSpawn.intent.kind !== "container") {
+      throw new Error("test requires a prepared container launch");
+    }
+    writeSimulatorLaunchIntent(options.sessionPath, afterSpawn.intent);
+    await launchPreparedSimulator(afterSpawn.intent, options.env);
+    await reconcileSimulatorLaunchIntent(options.sessionPath, undefined, options.env);
+
+    const calls = readFileSync(callsPath, "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as string[]);
+    expect(calls).toEqual([
+      ["stop", beforeSpawn.intent.containerName],
+      expect.arrayContaining(["run", "--name", afterSpawn.intent.containerName]),
+      ["stop", afterSpawn.intent.containerName],
+    ]);
+    expect(existsSync(simulatorLaunchIntentPath(options.sessionPath))).toBe(false);
+  });
+
+  it("should keep the local-play docs pinned to the reviewed immutable image", () => {
+    const root = resolve(import.meta.dirname, "..", "..", "..");
+    for (const path of [
+      "docs/local-play.md",
+      "docs/architecture/adr-051-local-multicloud-simulator.html",
+      "docs/vision.md",
+    ]) {
+      expect(readFileSync(join(root, path), "utf8")).toContain(DEFAULT_SIMULATOR_IMAGE);
+    }
+  });
+
+  it("should bound the Simulator control container itself", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-control-bounds-"));
+    const argumentsPath = join(root, "docker-arguments.json");
+    const docker = join(root, "docker-fixture.mjs");
+    writeFileSync(
+      docker,
+      `#!/usr/bin/env node\nimport { appendFileSync } from "node:fs";\nappendFileSync(${JSON.stringify(argumentsPath)}, JSON.stringify(process.argv.slice(2)) + "\\n");\nprocess.stdout.write("fixture-container-id\\n");\n`,
+    );
+    chmodSync(docker, 0o700);
+
+    const launcher = await launchSimulator({
+      stateDir: join(root, "state"),
+      logPath: join(root, "simulator.log"),
+      sessionPath: join(root, "simulator-session.json"),
+      env: { TENKACLOUD_SIMULATOR_DOCKER_CLI: docker },
+    });
+
+    const args = JSON.parse(
+      readFileSync(argumentsPath, "utf8").trim().split("\n")[0] ?? "[]",
+    ) as string[];
+    expect(args).toContain("--memory=536870912");
+    expect(args).toContain("--cpus=1");
+    expect(args).toContain("--pids-limit=128");
+    await stopSimulatorLauncher(launcher, { TENKACLOUD_SIMULATOR_DOCKER_CLI: docker });
   });
 
   it("should let one explicit source replace the default and reject ambiguous overrides", () => {
@@ -341,6 +723,18 @@ describe("Simulator launch authorization", () => {
       expiresAt: 61_000,
     });
     expect(claims.nonce).toEqual(expect.any(String));
+    expect(simulatorLaunchTokenExpiresAt(token, secret)).toBe(61_000);
+    expect(simulatorLaunchTokenExpiresAt(token, createSimulatorLaunchSecret())).toBeUndefined();
+  });
+
+  it("should reject pre-tokenized Simulator console URLs instead of stripping their secrets", () => {
+    const base = "http://127.0.0.1:42123";
+    expect(() => simulatorConsoleUrl(`${base}/console?token=leaked`, "fresh", base)).toThrow(
+      "same loopback origin",
+    );
+    expect(() => simulatorConsoleUrl(`${base}/console#token=leaked`, "fresh", base)).toThrow(
+      "same loopback origin",
+    );
   });
 
   it("should reject a short external launch secret and a mutable image tag", async () => {
@@ -494,7 +888,272 @@ describe("Simulator artifact bundle", () => {
 });
 
 describe("provider-neutral local runtime", () => {
-  it("Simulator console URL が launcher と同一 loopback origin でなければ永続化前に拒否する", async () => {
+  it("should preserve the previous generation when the protected commit fails", () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-secret-commit-failure-"));
+    const options = runtimeOptions(root);
+    const original = emptyExternalSession(42_123);
+    writeSimulatorSessionRecord(options.sessionPath, original);
+    const originalPublic = readFileSync(options.sessionPath, "utf8");
+    const originalSecret = readFileSync(simulatorSessionSecretPath(options.sessionPath), "utf8");
+
+    expect(() =>
+      writeSimulatorSessionRecord(options.sessionPath, emptyExternalSession(42_124), {
+        beforeSecretCommit: () => {
+          throw new Error("injected protected commit failure");
+        },
+      }),
+    ).toThrow("injected protected commit failure");
+
+    expect(readFileSync(options.sessionPath, "utf8")).toBe(originalPublic);
+    expect(readFileSync(simulatorSessionSecretPath(options.sessionPath), "utf8")).toBe(
+      originalSecret,
+    );
+    expect(readSimulatorSessionRecord(options.sessionPath).launcher.baseUrl).toBe(
+      original.launcher.baseUrl,
+    );
+  });
+
+  it("should recover the newest protected generation after a public commit interruption", () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-public-commit-failure-"));
+    const options = runtimeOptions(root);
+    const original = emptyExternalSession(42_123);
+    const replacement = emptyExternalSession(42_124);
+    writeSimulatorSessionRecord(options.sessionPath, original);
+
+    expect(() =>
+      writeSimulatorSessionRecord(options.sessionPath, replacement, {
+        afterSecretCommit: () => {
+          throw new Error("injected public commit interruption");
+        },
+      }),
+    ).toThrow("injected public commit interruption");
+    expect(JSON.parse(readFileSync(options.sessionPath, "utf8"))).toMatchObject({
+      launcher: { baseUrl: original.launcher.baseUrl },
+    });
+
+    expect(readSimulatorSessionRecord(options.sessionPath).launcher.baseUrl).toBe(
+      replacement.launcher.baseUrl,
+    );
+    const recoveredPublic = readFileSync(options.sessionPath, "utf8");
+    expect(recoveredPublic).toContain(replacement.launcher.baseUrl);
+    expect(recoveredPublic).not.toMatch(/launchSecret|launchToken|nativeCredentials|#token=/);
+    expect(statSync(options.sessionPath).mode & 0o777).toBe(0o600);
+    expect(statSync(simulatorSessionSecretPath(options.sessionPath)).mode & 0o777).toBe(0o600);
+
+    unlinkSync(options.sessionPath);
+    expect(() => new SimulatorLocalRuntime(options)).not.toThrow();
+    expect(readFileSync(options.sessionPath, "utf8")).toContain(replacement.launcher.baseUrl);
+  });
+
+  it("should stop an owned launcher and allow retry when its first protected commit fails", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-first-persist-failure-"));
+    const launched: SimulatorLauncherRecord[] = [];
+    let failProtectedCommit = true;
+    const options: SimulatorRuntimeOptions = {
+      ...runtimeOptions(root),
+      sessionWriteHooks: {
+        beforeSecretCommit: () => {
+          if (!failProtectedCommit) return;
+          failProtectedCommit = false;
+          throw new Error("injected first protected commit failure");
+        },
+      },
+      onLauncherStarted: (launcher) => launched.push(launcher),
+    };
+    const runtime = new SimulatorLocalRuntime(options);
+    runningRuntimes.push(runtime);
+
+    await expect(runtime.start(problem(root))).rejects.toThrow(
+      "injected first protected commit failure",
+    );
+    const failedLauncher = launched[0];
+    if (failedLauncher?.kind !== "process" || failedLauncher.pid === undefined) {
+      throw new Error("test requires an owned process launcher");
+    }
+    await waitForProcessExit(failedLauncher.pid);
+    expect(existsSync(options.sessionPath)).toBe(false);
+    expect(existsSync(simulatorSessionSecretPath(options.sessionPath))).toBe(false);
+
+    await expect(runtime.start(problem(root))).resolves.toMatchObject({ status: "running" });
+    expect(launched).toHaveLength(2);
+  });
+
+  it("should recover a missing public projection before crash cleanup", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-secret-only-cleanup-"));
+    const options = runtimeOptions(root);
+    const original = emptyExternalSession(42_123);
+    const launchToken = "stale-token";
+    const deployment = {
+      problemId: "secret-only",
+      worldId: "world-secret-only",
+      deploymentId: "deployment-secret-only",
+      launchToken,
+      status: "running" as const,
+      outputs: { ParameterValue: "TC{secret}" },
+      consoleUrl: simulatorConsoleUrl(
+        `${original.launcher.baseUrl}/console/secret-only`,
+        launchToken,
+        original.launcher.baseUrl,
+      ),
+      nativeCredentials: original.launcher.nativeCredentials,
+      clockObservedAtMs: 1,
+    };
+    writeSimulatorSessionRecord(options.sessionPath, {
+      ...original,
+      deployments: [deployment],
+    });
+    unlinkSync(options.sessionPath);
+    let deletedPath: string | undefined;
+
+    await cleanupRecordedSimulatorSession(
+      options.sessionPath,
+      async (input) => {
+        deletedPath = new URL(String(input)).pathname;
+        return new Response(null, { status: StatusCodes.NO_CONTENT });
+      },
+      {},
+      options.participantEnvPath,
+      20,
+    );
+
+    expect(deletedPath).toBe("/v1/worlds/world-secret-only");
+    expect(existsSync(options.sessionPath)).toBe(false);
+    expect(existsSync(simulatorSessionSecretPath(options.sessionPath))).toBe(false);
+  });
+
+  it("should reconcile a deleted world when stop persistence fails once", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-stop-persist-retry-"));
+    let failNextProtectedCommit = false;
+    const options: SimulatorRuntimeOptions = {
+      ...runtimeOptions(root),
+      sessionWriteHooks: {
+        beforeSecretCommit: () => {
+          if (!failNextProtectedCommit) return;
+          failNextProtectedCommit = false;
+          throw new Error("injected stop persistence failure");
+        },
+      },
+    };
+    const runtime = new SimulatorLocalRuntime(options);
+    runningRuntimes.push(runtime);
+    await runtime.start(problem(root));
+
+    failNextProtectedCommit = true;
+    await expect(runtime.stop("hello-world")).rejects.toThrow("injected stop persistence failure");
+    expect(readSimulatorSessionRecord(options.sessionPath).deployments).toHaveLength(1);
+
+    await expect(runtime.stop("hello-world")).resolves.toBeUndefined();
+    expect(readSimulatorSessionRecord(options.sessionPath).deployments).toEqual([]);
+    expect(JSON.parse(readFileSync(join(options.stateDir, "worlds.json"), "utf8"))).toEqual([]);
+  });
+
+  it("should delete and reconcile a new world when its first record update is interrupted", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-deployment-persist-failure-"));
+    let committedProtectedGenerations = 0;
+    const options: SimulatorRuntimeOptions = {
+      ...runtimeOptions(root),
+      sessionWriteHooks: {
+        afterSecretCommit: () => {
+          committedProtectedGenerations += 1;
+          if (committedProtectedGenerations === 3) {
+            throw new Error("injected deployment public commit interruption");
+          }
+        },
+      },
+    };
+    const runtime = new SimulatorLocalRuntime(options);
+    runningRuntimes.push(runtime);
+
+    await expect(runtime.start(problem(root))).rejects.toThrow(
+      "injected deployment public commit interruption",
+    );
+    expect(readSimulatorSessionRecord(options.sessionPath).deployments).toEqual([]);
+    expect(JSON.parse(readFileSync(join(options.stateDir, "worlds.json"), "utf8"))).toEqual([]);
+
+    await expect(runtime.start(problem(root))).resolves.toMatchObject({ status: "running" });
+  });
+
+  it("should persist retained world ownership when first record commit and delete both fail", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-retained-world-"));
+    let protectedCommit = 0;
+    let failDelete = true;
+    const options: SimulatorRuntimeOptions = {
+      ...runtimeOptions(root),
+      sessionWriteHooks: {
+        beforeSecretCommit: () => {
+          protectedCommit += 1;
+          if (protectedCommit === 3) {
+            throw new Error("injected first deployment protected commit failure");
+          }
+        },
+      },
+      fetchFn: async (input, init) => {
+        if (failDelete && init?.method === "DELETE") {
+          throw new Error("injected world delete failure");
+        }
+        return fetch(input, init);
+      },
+    };
+    const simulator = new SimulatorLocalRuntime(options);
+    runningRuntimes.push(simulator);
+    const state = createLocalPlayState(
+      { problems: [], simulatedProblems: [problem(root)] },
+      { simulator, maxRunning: 1 },
+    );
+
+    const started = await handleLocalPlayRequest(
+      post("/portal/me/problems/hello-world/start"),
+      state,
+    );
+    expect(started.status).toBe(StatusCodes.BAD_GATEWAY);
+    expect(state.lifecycle.cleanupRequired("hello-world")).toBe(true);
+    expect(readSimulatorSessionRecord(options.sessionPath).deployments).toMatchObject([
+      { problemId: "hello-world", worldId: expect.any(String) },
+    ]);
+
+    failDelete = false;
+    const stopped = await handleLocalPlayRequest(
+      post("/portal/me/problems/hello-world/stop"),
+      state,
+    );
+    expect(stopped).toEqual({ status: StatusCodes.OK, body: { status: "stopped" } });
+    expect(state.lifecycle.cleanupRequired("hello-world")).toBe(false);
+    expect(readSimulatorSessionRecord(options.sessionPath).deployments).toEqual([]);
+  });
+
+  it("should share one launcher and atomic session across concurrent problem starts", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-cross-problem-start-"));
+    const launchers: SimulatorLauncherRecord[] = [];
+    const runtime = new SimulatorLocalRuntime({
+      ...runtimeOptions(root),
+      onLauncherStarted: (launcher) => launchers.push(launcher),
+    });
+    runningRuntimes.push(runtime);
+    const second = {
+      ...problem(root),
+      problemId: "hello-two",
+      metadata: { ...problem(root).metadata, id: "hello-two" },
+    };
+
+    const [firstDeployment, secondDeployment] = await Promise.all([
+      runtime.start(problem(root)),
+      runtime.start(second),
+    ]);
+
+    expect(launchers).toHaveLength(1);
+    expect(firstDeployment.worldId).not.toBe(secondDeployment.worldId);
+    const recorded = readSimulatorSessionRecord(runtimeOptions(root).sessionPath);
+    expect(recorded.launcher).toMatchObject({
+      pid: launchers[0]?.pid,
+      processIdentity: launchers[0]?.processIdentity,
+    });
+    expect(recorded.deployments.map((deployment) => deployment.problemId).sort()).toEqual([
+      "hello-two",
+      "hello-world",
+    ]);
+  });
+
+  it("should reject a Simulator console URL outside the launcher loopback origin", async () => {
     const root = mkdtempSync(join(tmpdir(), "tc-simulator-console-origin-"));
     const observed: string[] = [];
     const runtime = new SimulatorLocalRuntime({
@@ -537,7 +1196,7 @@ describe("provider-neutral local runtime", () => {
     });
   });
 
-  it("準備不能な記録済み launcher を停止済みとして記録し次回起動で置き換える", async () => {
+  it("should mark an unready recorded launcher for replacement on the next start", async () => {
     const root = mkdtempSync(join(tmpdir(), "tc-simulator-stale-launcher-"));
     const options = {
       ...runtimeOptions(root),
@@ -561,7 +1220,7 @@ describe("provider-neutral local runtime", () => {
       },
       deployments: [],
     };
-    writeFileSync(options.sessionPath, JSON.stringify(stale));
+    writeSimulatorSessionRecord(options.sessionPath, stale);
 
     await expect(new SimulatorLocalRuntime(options).start(problem(root))).rejects.toThrow(
       "Simulator did not become ready",
@@ -584,7 +1243,138 @@ describe("provider-neutral local runtime", () => {
     );
   });
 
-  it("記録済み cleanup は全 world を試し失敗分だけを再試行可能な状態で残す", async () => {
+  it("should migrate a legacy single-file session before restart without losing outputs", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-legacy-restart-"));
+    const options = runtimeOptions(root);
+    const runtime = new SimulatorLocalRuntime(options);
+    runningRuntimes.push(runtime);
+    await runtime.start(problem(root));
+    const legacyRecord = readSimulatorSessionRecord(options.sessionPath);
+    writeFileSync(options.sessionPath, `${JSON.stringify(legacyRecord, null, 2)}\n`);
+    unlinkSync(simulatorSessionSecretPath(options.sessionPath));
+
+    const recovered = new SimulatorLocalRuntime(options);
+    await expect(recovered.fireDisruption(problem(root), "service-stop")).resolves.toMatchObject({
+      provider: "aws",
+      operation: "SendCommand",
+    });
+    const migratedPublicRecord = readFileSync(options.sessionPath, "utf8");
+    expect(migratedPublicRecord).not.toMatch(/launchSecret|launchToken|nativeCredentials|#token=/);
+    expect(statSync(simulatorSessionSecretPath(options.sessionPath)).mode & 0o777).toBe(0o600);
+  });
+
+  it("should rotate an expired persisted launch token before resumed access and cleanup", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-token-renewal-"));
+    const options = runtimeOptions(root);
+    const runtime = new SimulatorLocalRuntime(options);
+    runningRuntimes.push(runtime);
+    await runtime.start(problem(root));
+    const recorded = readSimulatorSessionRecord(options.sessionPath);
+    const deployment = recorded.deployments[0];
+    if (!deployment) throw new Error("expected a recorded deployment");
+    const expiredToken = issueSimulatorLaunchToken(
+      recorded.launcher.launchSecret,
+      {
+        tenantId: "local",
+        eventId: "local",
+        teamId: "local",
+        deploymentId: deployment.deploymentId,
+      },
+      86_400,
+      Date.now() - 86_400_001,
+    );
+    const consoleBase = new URL(deployment.consoleUrl);
+    consoleBase.hash = "";
+    writeSimulatorSessionRecord(options.sessionPath, {
+      ...recorded,
+      deployments: [
+        {
+          ...deployment,
+          launchToken: expiredToken,
+          consoleUrl: simulatorConsoleUrl(
+            consoleBase.toString(),
+            expiredToken,
+            recorded.launcher.baseUrl,
+          ),
+        },
+      ],
+    });
+
+    const recovered = new SimulatorLocalRuntime(options);
+    const resumed = await recovered.start(problem(root));
+    expect(resumed.launchToken).not.toBe(expiredToken);
+    expect(
+      simulatorLaunchTokenExpiresAt(resumed.launchToken, recorded.launcher.launchSecret),
+    ).toBeGreaterThan(Date.now() + 23 * 60 * 60 * 1_000);
+    await expect(recovered.consoleUrl(problem(root).problemId)).resolves.toContain(
+      `#token=${encodeURIComponent(resumed.launchToken)}`,
+    );
+    if (!options.participantEnvPath) throw new Error("participant env path is missing");
+    expect(readFileSync(options.participantEnvPath, "utf8")).not.toContain(expiredToken);
+  });
+
+  it("should migrate and clean up a legacy single-file session during local-down recovery", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-legacy-cleanup-"));
+    const options = runtimeOptions(root);
+    const launchToken = "legacy-launch-token";
+    const nativeCredentials = {
+      awsAccessKeyId: "TCSIM12345678901",
+      awsSecretAccessKey: "tcsim_1234567890123456",
+      azureCredential: "tcsim_1234567890123456",
+      gcpCredential: "tcsim_1234567890123456",
+      sakuraCredential: "tcsim_1234567890123456:tcsim_abcdefghijklmnop",
+    };
+    const launcher = {
+      kind: "external" as const,
+      baseUrl: "http://127.0.0.1:42123",
+      launchSecret: createSimulatorLaunchSecret(),
+      nativeCredentials,
+    };
+    const legacyRecord = {
+      protocolVersion: "2026-07-11" as const,
+      launcher,
+      deployments: [
+        {
+          problemId: "legacy",
+          worldId: "legacy-world",
+          deploymentId: "legacy-deployment",
+          launchToken,
+          status: "running" as const,
+          outputs: { InstanceId: "i-legacy" },
+          consoleUrl: simulatorConsoleUrl(
+            `${launcher.baseUrl}/console/legacy`,
+            launchToken,
+            launcher.baseUrl,
+          ),
+          nativeCredentials,
+          clockObservedAtMs: 1,
+        },
+      ],
+    } satisfies SimulatorSessionRecord;
+    writeFileSync(options.sessionPath, `${JSON.stringify(legacyRecord, null, 2)}\n`);
+    if (!options.participantEnvPath) throw new Error("participant env path is missing");
+    writeFileSync(options.participantEnvPath, "legacy credentials\n");
+    let observedAuthorization: string | null = null;
+
+    await cleanupRecordedSimulatorSession(
+      options.sessionPath,
+      async (_input, init) => {
+        observedAuthorization = new Headers(init?.headers).get("authorization");
+        return new Response(null, { status: StatusCodes.NO_CONTENT });
+      },
+      {},
+      options.participantEnvPath,
+      20,
+    );
+
+    expect(observedAuthorization).toMatch(/^Bearer tc_sim_v1\./);
+    expect(observedAuthorization).not.toBe(`Bearer ${launchToken}`);
+    expect(existsSync(options.sessionPath)).toBe(false);
+    expect(existsSync(simulatorSessionSecretPath(options.sessionPath))).toBe(false);
+    expect(existsSync(options.participantEnvPath)).toBe(false);
+  });
+
+  it("should attempt every recorded world and retain only failed cleanup work", async () => {
     const root = mkdtempSync(join(tmpdir(), "tc-simulator-cleanup-retry-"));
     const options = runtimeOptions(root);
     const launchSecret = createSimulatorLaunchSecret();
@@ -600,21 +1390,29 @@ describe("provider-neutral local runtime", () => {
         sakuraCredential: "tcsim_1234567890123456:tcsim_abcdefghijklmnop",
       },
     };
-    const deployments = ["deleted", "retry"].map((problemId) => ({
-      problemId,
-      worldId: `world-${problemId}`,
-      deploymentId: `deployment-${problemId}`,
-      launchToken: `token-${problemId}`,
-      status: "running" as const,
-      outputs: {},
-      consoleUrl: `http://127.0.0.1:42123/console/${problemId}`,
-      nativeCredentials: launcher.nativeCredentials,
-      clockObservedAtMs: 1,
-    }));
-    writeFileSync(
-      options.sessionPath,
-      JSON.stringify({ protocolVersion: "2026-07-11", launcher, deployments }),
-    );
+    const deployments = ["deleted", "retry"].map((problemId) => {
+      const launchToken = `token-${problemId}`;
+      return {
+        problemId,
+        worldId: `world-${problemId}`,
+        deploymentId: `deployment-${problemId}`,
+        launchToken,
+        status: "running" as const,
+        outputs: {},
+        consoleUrl: simulatorConsoleUrl(
+          `${launcher.baseUrl}/console/${problemId}`,
+          launchToken,
+          launcher.baseUrl,
+        ),
+        nativeCredentials: launcher.nativeCredentials,
+        clockObservedAtMs: 1,
+      };
+    });
+    writeSimulatorSessionRecord(options.sessionPath, {
+      protocolVersion: "2026-07-11",
+      launcher,
+      deployments,
+    });
     if (!options.participantEnvPath) throw new Error("participant env path is missing");
     writeFileSync(options.participantEnvPath, "private");
     const attempted: string[] = [];
@@ -651,32 +1449,34 @@ describe("provider-neutral local runtime", () => {
     expect(existsSync(options.participantEnvPath)).toBe(false);
   });
 
-  it("owned launcher は world 削除失敗中に停止せず次回 cleanup で残りを再試行する", async () => {
+  it("should keep an owned launcher alive until failed world cleanup can retry", async () => {
     const root = mkdtempSync(join(tmpdir(), "tc-simulator-owned-cleanup-retry-"));
     const options = runtimeOptions(root);
     const launcher = await launchSimulator(options);
     if (launcher.kind !== "process" || launcher.pid === undefined) {
       throw new Error("test requires an owned process launcher");
     }
+    const launchToken = "token-retry";
     const deployment = {
       problemId: "retry",
       worldId: "world-retry",
       deploymentId: "deployment-retry",
-      launchToken: "token-retry",
+      launchToken,
       status: "running" as const,
       outputs: {},
-      consoleUrl: `${launcher.baseUrl}/console/retry`,
+      consoleUrl: simulatorConsoleUrl(
+        `${launcher.baseUrl}/console/retry`,
+        launchToken,
+        launcher.baseUrl,
+      ),
       nativeCredentials: launcher.nativeCredentials,
       clockObservedAtMs: 1,
     };
-    writeFileSync(
-      options.sessionPath,
-      JSON.stringify({
-        protocolVersion: "2026-07-11",
-        launcher,
-        deployments: [deployment],
-      } satisfies SimulatorSessionRecord),
-    );
+    writeSimulatorSessionRecord(options.sessionPath, {
+      protocolVersion: "2026-07-11",
+      launcher,
+      deployments: [deployment],
+    } satisfies SimulatorSessionRecord);
     try {
       await expect(
         cleanupRecordedSimulatorSession(
@@ -703,12 +1503,13 @@ describe("provider-neutral local runtime", () => {
         20,
       );
       expect(existsSync(options.sessionPath)).toBe(false);
+      await waitForProcessExit(launcher.pid);
     } finally {
-      stopSimulatorLauncher(launcher, options.env);
+      if (existsSync(options.sessionPath)) await stopSimulatorLauncher(launcher, options.env);
     }
   });
 
-  it("runtime close は一つの world 削除失敗で残りの cleanup を打ち切らない", async () => {
+  it("should continue runtime cleanup after one world deletion fails", async () => {
     const root = mkdtempSync(join(tmpdir(), "tc-simulator-close-aggregate-"));
     const options = runtimeOptions(root);
     const launchSecret = createSimulatorLaunchSecret();
@@ -719,30 +1520,35 @@ describe("provider-neutral local runtime", () => {
       gcpCredential: "tcsim_1234567890123456",
       sakuraCredential: "tcsim_1234567890123456:tcsim_abcdefghijklmnop",
     };
-    const deployments = ["one", "two"].map((problemId) => ({
-      problemId,
-      worldId: `world-${problemId}`,
-      deploymentId: `deployment-${problemId}`,
-      launchToken: `token-${problemId}`,
-      status: "running" as const,
-      outputs: {},
-      consoleUrl: `http://127.0.0.1:42123/console/${problemId}`,
+    const launcher = {
+      kind: "external" as const,
+      baseUrl: "http://127.0.0.1:42123",
+      launchSecret,
       nativeCredentials,
-      clockObservedAtMs: 1,
-    }));
-    writeFileSync(
-      options.sessionPath,
-      JSON.stringify({
-        protocolVersion: "2026-07-11",
-        launcher: {
-          kind: "external",
-          baseUrl: "http://127.0.0.1:42123",
-          launchSecret,
-          nativeCredentials,
-        },
-        deployments,
-      } satisfies SimulatorSessionRecord),
-    );
+    };
+    const deployments = ["one", "two"].map((problemId) => {
+      const launchToken = `token-${problemId}`;
+      return {
+        problemId,
+        worldId: `world-${problemId}`,
+        deploymentId: `deployment-${problemId}`,
+        launchToken,
+        status: "running" as const,
+        outputs: {},
+        consoleUrl: simulatorConsoleUrl(
+          `${launcher.baseUrl}/console/${problemId}`,
+          launchToken,
+          launcher.baseUrl,
+        ),
+        nativeCredentials,
+        clockObservedAtMs: 1,
+      };
+    });
+    writeSimulatorSessionRecord(options.sessionPath, {
+      protocolVersion: "2026-07-11",
+      launcher,
+      deployments,
+    } satisfies SimulatorSessionRecord);
     const attempted: string[] = [];
     const runtime = new SimulatorLocalRuntime({
       ...options,
@@ -762,7 +1568,7 @@ describe("provider-neutral local runtime", () => {
     expect(closeRecord).not.toHaveProperty("launcherNeedsReplacement");
   });
 
-  it("launcher 停止自体が失敗した場合は生存確認を経ず置換済みと記録しない", async () => {
+  it("should not mark a launcher replaced when its stop operation fails", async () => {
     const root = mkdtempSync(join(tmpdir(), "tc-simulator-close-launcher-failure-"));
     const options = runtimeOptions(root);
     const nativeCredentials = {
@@ -772,20 +1578,17 @@ describe("provider-neutral local runtime", () => {
       gcpCredential: "tcsim_1234567890123456",
       sakuraCredential: "tcsim_1234567890123456:tcsim_abcdefghijklmnop",
     };
-    writeFileSync(
-      options.sessionPath,
-      JSON.stringify({
-        protocolVersion: "2026-07-11",
-        launcher: {
-          kind: "container",
-          baseUrl: "http://127.0.0.1:42123",
-          launchSecret: createSimulatorLaunchSecret(),
-          nativeCredentials,
-          containerName: "simulator-stop-must-fail",
-        },
-        deployments: [],
-      } satisfies SimulatorSessionRecord),
-    );
+    writeSimulatorSessionRecord(options.sessionPath, {
+      protocolVersion: "2026-07-11",
+      launcher: {
+        kind: "container",
+        baseUrl: "http://127.0.0.1:42123",
+        launchSecret: createSimulatorLaunchSecret(),
+        nativeCredentials,
+        containerName: "simulator-stop-must-fail",
+      },
+      deployments: [],
+    } satisfies SimulatorSessionRecord);
     const runtime = new SimulatorLocalRuntime({
       ...options,
       env: { ...options.env, TENKACLOUD_SIMULATOR_DOCKER_CLI: "/usr/bin/false" },
@@ -797,7 +1600,7 @@ describe("provider-neutral local runtime", () => {
     );
   });
 
-  it("対応外の cloud scoring kind は world 作成前の state 構築で拒否する", () => {
+  it("should reject unsupported cloud scoring kinds before world creation", () => {
     const root = mkdtempSync(join(tmpdir(), "tc-simulator-unsupported-scoring-"));
     const unsupported = [
       {
@@ -825,7 +1628,7 @@ describe("provider-neutral local runtime", () => {
     }
   });
 
-  it("composite-probe の hint を participant view に公開する", async () => {
+  it("should expose composite-probe hints in the participant view", async () => {
     const root = mkdtempSync(join(tmpdir(), "tc-simulator-composite-hints-"));
     const composite: SimulatedCloudProblem = {
       ...problem(root),
@@ -877,7 +1680,7 @@ describe("provider-neutral local runtime", () => {
     runningRuntimes.push(runtime);
     const state = createLocalPlayState(
       { problems: [], simulatedProblems: [problem(root)] },
-      { simulator: runtime },
+      { simulator: runtime, simulatorSnapshotDir: join(root, "snapshots") },
     );
 
     const started = await handleLocalPlayRequest(
@@ -885,18 +1688,63 @@ describe("provider-neutral local runtime", () => {
       state,
     );
     expect(started.body).toEqual({ status: "running" });
+    const recoveredRuntime = new SimulatorLocalRuntime(options);
+    await expect(
+      recoveredRuntime.fireDisruption(problem(root), "service-stop"),
+    ).resolves.toMatchObject({
+      provider: "aws",
+      operation: "SendCommand",
+    });
+    const simulatedRuntime = state.simulatedRuntimes.get("hello-world");
+    if (!simulatedRuntime?.deployment) throw new Error("simulated deployment is missing");
+    simulatedRuntime.deployment = {
+      ...simulatedRuntime.deployment,
+      outputs: {
+        ...simulatedRuntime.deployment.outputs,
+        SimulatorConsoleUrl: "http://127.0.0.1/console#token=must-not-reach-api",
+        SimulatorAwsAccessKeyId: "TCSIMMUSTNOTREACHAPI",
+        SimulatorAzureCredential: "azure-must-not-reach-api",
+        SimulatorGcpCredential: "gcp-must-not-reach-api",
+        SimulatorSakuraCredential: "sakura-must-not-reach-api",
+        "aws-hello.SimulatorConsoleUrl":
+          "http://127.0.0.1/console#token=namespaced-must-not-reach-api",
+        "gcp-app.SimulatorGcpCredential": "namespaced-gcp-must-not-reach-api",
+      },
+    };
 
     const team = await handleLocalPlayRequest(
       { method: "GET", path: "/portal/me", query: {}, body: undefined },
       state,
     );
-    const view = (team.body as { problems: Array<{ stackOutputs: Record<string, string> }> })
-      .problems[0];
+    const view = (
+      team.body as {
+        problems: Array<{
+          stackOutputs: Record<string, string>;
+          lifecycle: { status: string; runtimeKind?: string };
+        }>;
+      }
+    ).problems[0];
+    expect(view.lifecycle).toEqual({ status: "running", runtimeKind: "simulated-cloud" });
     expect(view.stackOutputs.ParameterName).toBe("/local/hello");
     expect(view.stackOutputs).not.toHaveProperty("ParameterValue");
-    expect(view.stackOutputs.SimulatorConsoleUrl).toContain("#token=tc_sim_v1.");
-    expect(view.stackOutputs.SimulatorAwsAccessKeyId).toMatch(/^TCSIM[A-Z0-9]{11}$/);
+    expect(view.stackOutputs).not.toHaveProperty("SimulatorConsoleUrl");
+    expect(view.stackOutputs).not.toHaveProperty("SimulatorAwsAccessKeyId");
+    expect(view.stackOutputs).not.toHaveProperty("SimulatorAzureCredential");
+    expect(view.stackOutputs).not.toHaveProperty("SimulatorGcpCredential");
+    expect(view.stackOutputs).not.toHaveProperty("SimulatorSakuraCredential");
+    expect(view.stackOutputs).not.toHaveProperty("aws-hello.SimulatorConsoleUrl");
+    expect(view.stackOutputs).not.toHaveProperty("gcp-app.SimulatorGcpCredential");
+    const serializedSession = readFileSync(options.sessionPath, "utf8");
+    expect(serializedSession).not.toMatch(/launchSecret|launchToken|nativeCredentials|#token=/);
+    expect(serializedSession).not.toMatch(/tcsim_[A-Za-z0-9_-]+/);
+    expect(serializedSession).not.toContain("TC{simulated}");
     expect(statSync(options.sessionPath).mode & 0o777).toBe(0o600);
+    const secretPath = simulatorSessionSecretPath(options.sessionPath);
+    expect(statSync(secretPath).mode & 0o777).toBe(0o600);
+    const serializedSecrets = readFileSync(secretPath, "utf8");
+    expect(serializedSecrets).toMatch(/launchSecret|launchToken/);
+    expect(serializedSecrets).toContain("TC{simulated}");
+    expect(JSON.stringify(team.body)).not.toMatch(/tc_sim_v1|tcsim_[A-Za-z0-9_-]+/);
     if (!options.participantEnvPath) throw new Error("participant env path is missing");
     const participantEnvironment = readFileSync(options.participantEnvPath, "utf8");
     expect(statSync(options.participantEnvPath).mode & 0o777).toBe(0o600);
@@ -914,6 +1762,101 @@ describe("provider-neutral local runtime", () => {
     );
     expect(worldsAfterStart[0]?.request?.metadata).not.toHaveProperty("simulationOverlayDocument");
 
+    const unauthenticatedHandoff = await handleLocalPlayRequest(
+      {
+        method: "POST",
+        path: "/portal/me/problems/hello-world/console-handoff",
+        query: {},
+        body: undefined,
+      },
+      state,
+    );
+    expect(unauthenticatedHandoff.status).toBe(StatusCodes.UNAUTHORIZED);
+    const wrongTokenHandoff = await handleLocalPlayRequest(
+      {
+        method: "POST",
+        path: "/portal/me/problems/hello-world/console-handoff",
+        query: {},
+        body: undefined,
+        authorization: "Bearer wrong-local-session",
+      },
+      state,
+    );
+    expect(wrongTokenHandoff.status).toBe(StatusCodes.UNAUTHORIZED);
+    const issuedHandoff = await handleLocalPlayRequest(
+      {
+        method: "POST",
+        path: "/portal/me/problems/hello-world/console-handoff",
+        query: {},
+        body: undefined,
+        authorization: `Bearer ${state.participantToken}`,
+      },
+      state,
+    );
+    expect(JSON.stringify(issuedHandoff.body)).not.toMatch(/tc_sim_v1|#token=/);
+    const handoffPath = (issuedHandoff.body as { handoffPath: string }).handoffPath;
+    const handoffUrl = new URL(handoffPath, "http://local.invalid");
+    const firstHandoff = await handleLocalPlayRequest(
+      {
+        method: "GET",
+        path: handoffUrl.pathname,
+        query: Object.fromEntries(handoffUrl.searchParams),
+        body: undefined,
+      },
+      state,
+    );
+    expect(firstHandoff).toMatchObject({
+      status: StatusCodes.SEE_OTHER,
+      body: undefined,
+      headers: {
+        "cache-control": "no-store",
+        "referrer-policy": "no-referrer",
+      },
+    });
+    expect(firstHandoff.headers?.location).toMatch(
+      /^http:\/\/127\.0\.0\.1:\d+\/console\/[^#]+#token=tc_sim_v1\./,
+    );
+    const replayedHandoff = await handleLocalPlayRequest(
+      {
+        method: "GET",
+        path: handoffUrl.pathname,
+        query: Object.fromEntries(handoffUrl.searchParams),
+        body: undefined,
+      },
+      state,
+    );
+    expect(replayedHandoff.status).toBe(StatusCodes.UNAUTHORIZED);
+
+    const reset = await handleLocalPlayRequest(
+      post("/portal/me/problems/hello-world/reset"),
+      state,
+    );
+    expect(reset.body).toEqual({ status: "running" });
+    const secondIssuedHandoff = await handleLocalPlayRequest(
+      {
+        method: "POST",
+        path: "/portal/me/problems/hello-world/console-handoff",
+        query: {},
+        body: undefined,
+        authorization: `Bearer ${state.participantToken}`,
+      },
+      state,
+    );
+    const secondHandoffUrl = new URL(
+      (secondIssuedHandoff.body as { handoffPath: string }).handoffPath,
+      "http://local.invalid",
+    );
+    const secondHandoff = await handleLocalPlayRequest(
+      {
+        method: "GET",
+        path: secondHandoffUrl.pathname,
+        query: Object.fromEntries(secondHandoffUrl.searchParams),
+        body: undefined,
+      },
+      state,
+    );
+    expect(secondHandoff.headers?.location).not.toBe(firstHandoff.headers?.location);
+
     const submitted = await handleLocalPlayRequest(
       {
         method: "POST",
@@ -925,13 +1868,32 @@ describe("provider-neutral local runtime", () => {
     );
     expect(submitted.body).toEqual({ kind: "ok", scoreDelta: 100, totalScore: 100 });
 
-    const snapshotPath = join(root, "snapshot.json");
-    await runtime.exportSnapshot("hello-world", snapshotPath);
+    const unauthenticatedSnapshot = await handleLocalPlayRequest(
+      post("/local/operator/problems/hello-world/snapshots/latest/export"),
+      state,
+    );
+    expect(unauthenticatedSnapshot.status).toBe(StatusCodes.UNAUTHORIZED);
+    const exportSnapshot = await handleLocalPlayRequest(
+      {
+        ...post("/local/operator/problems/hello-world/snapshots/latest/export"),
+        authorization: `Bearer ${state.participantToken}`,
+      },
+      state,
+    );
+    expect(exportSnapshot.status).toBe(StatusCodes.OK);
+    const snapshotPath = join(root, "snapshots", "latest.json");
     expect(JSON.parse(readFileSync(snapshotPath, "utf8"))).toMatchObject({
       protocolVersion: "2026-07-11",
       namespace: { tenantId: "local", eventId: "local", teamId: "local" },
     });
-    await runtime.importSnapshot("hello-world", snapshotPath);
+    const importSnapshot = await handleLocalPlayRequest(
+      {
+        ...post("/local/operator/problems/hello-world/snapshots/latest/import"),
+        authorization: `Bearer ${state.participantToken}`,
+      },
+      state,
+    );
+    expect(importSnapshot.status).toBe(StatusCodes.OK);
     const disruption = await runtime.fireDisruption(problem(root), "service-stop");
     expect(disruption).toMatchObject({ provider: "aws", operation: "SendCommand" });
     const attackProbe = await runtime.fireDisruption(problem(root), "auth-probe");
@@ -952,7 +1914,226 @@ describe("provider-neutral local runtime", () => {
     expect(() => statSync(options.participantEnvPath ?? "")).toThrow();
   });
 
-  it("should launch and stop an injected executable without a shell", async () => {
+  it("should recover a lost restore response and replay the completed receipt after reload", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-snapshot-response-loss-"));
+    let loseRestoreResponse = true;
+    let restorePosts = 0;
+    const fetchFn: typeof fetch = async (input, init) => {
+      const url = new URL(String(input));
+      if (init?.method === "POST" && url.pathname.endsWith("/snapshots")) {
+        restorePosts += 1;
+        const response = await fetch(input, init);
+        if (loseRestoreResponse) {
+          loseRestoreResponse = false;
+          await response.arrayBuffer();
+          throw new Error("injected lost restore response");
+        }
+        return response;
+      }
+      return fetch(input, init);
+    };
+    const options = { ...runtimeOptions(root), fetchFn, retryDelayMs: 1 };
+    const runtime = new SimulatorLocalRuntime(options);
+    runningRuntimes.push(runtime);
+    const first = await runtime.start(problem(root));
+    const snapshotPath = join(root, "response-loss-snapshot.json");
+    await runtime.exportSnapshot(first.problemId, snapshotPath);
+
+    await runtime.importSnapshot(first.problemId, snapshotPath);
+
+    const afterRestore = readSimulatorSessionRecord(options.sessionPath);
+    const restored = afterRestore.deployments[0];
+    expect(restored?.worldId).not.toBe(first.worldId);
+    expect(afterRestore.pendingSnapshotRestores).toBeUndefined();
+    expect(afterRestore.completedSnapshotRestores).toMatchObject([
+      {
+        problemId: first.problemId,
+        sourceWorldId: first.worldId,
+        restoredWorldId: restored?.worldId,
+        snapshotHash: "a".repeat(64),
+      },
+    ]);
+    await expect(runtime.dataPlaneRoute(problem(root), "default")).resolves.toMatchObject({
+      worldId: restored?.worldId,
+    });
+    expect(restorePosts).toBe(1);
+    const publicRecord = readFileSync(options.sessionPath, "utf8");
+    expect(publicRecord).not.toMatch(
+      /completedSnapshotRestores|idempotencyKey|launchToken|restore-[a-f0-9]{64}/,
+    );
+
+    const recovered = new SimulatorLocalRuntime(options);
+    await expect(recovered.importSnapshot(first.problemId, snapshotPath)).resolves.toBeUndefined();
+    expect(restorePosts).toBe(1);
+    runningRuntimes.splice(runningRuntimes.indexOf(runtime), 1);
+    await recovered.stop(first.problemId);
+    expect(JSON.parse(readFileSync(join(options.stateDir, "worlds.json"), "utf8"))).toEqual([]);
+    expect(readSimulatorSessionRecord(options.sessionPath)).toMatchObject({
+      deployments: [],
+    });
+    expect(
+      readSimulatorSessionRecord(options.sessionPath).completedSnapshotRestores,
+    ).toBeUndefined();
+    await recovered.close();
+  });
+
+  it("should resume the same clone after source deletion fails and the runtime reloads", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-snapshot-delete-retry-"));
+    let sourceWorldId = "";
+    let failSourceDelete = true;
+    let restorePosts = 0;
+    const fetchFn: typeof fetch = async (input, init) => {
+      const url = new URL(String(input));
+      if (init?.method === "POST" && url.pathname.endsWith("/snapshots")) restorePosts += 1;
+      if (
+        failSourceDelete &&
+        init?.method === "DELETE" &&
+        url.pathname === `/v1/worlds/${encodeURIComponent(sourceWorldId)}`
+      ) {
+        failSourceDelete = false;
+        throw new Error("injected source delete failure");
+      }
+      return fetch(input, init);
+    };
+    const options = { ...runtimeOptions(root), fetchFn, retryDelayMs: 1 };
+    const runtime = new SimulatorLocalRuntime(options);
+    runningRuntimes.push(runtime);
+    const original = await runtime.start(problem(root));
+    sourceWorldId = original.worldId;
+    const snapshotPath = join(root, "delete-retry.json");
+    await runtime.exportSnapshot(original.problemId, snapshotPath);
+
+    await expect(runtime.importSnapshot(original.problemId, snapshotPath)).rejects.toThrow(
+      "injected source delete failure",
+    );
+    const interrupted = readSimulatorSessionRecord(options.sessionPath);
+    expect(interrupted.deployments[0]?.worldId).not.toBe(sourceWorldId);
+    expect(interrupted.pendingSnapshotRestores?.[0]).toMatchObject({
+      sourceWorldId,
+      restoredWorldId: interrupted.deployments[0]?.worldId,
+    });
+    expect(JSON.parse(readFileSync(join(options.stateDir, "worlds.json"), "utf8"))).toHaveLength(2);
+
+    const recovered = new SimulatorLocalRuntime(options);
+    await expect(
+      recovered.importSnapshot(original.problemId, snapshotPath),
+    ).resolves.toBeUndefined();
+    expect(restorePosts).toBe(1);
+    expect(JSON.parse(readFileSync(join(options.stateDir, "worlds.json"), "utf8"))).toHaveLength(1);
+    runningRuntimes.splice(runningRuntimes.indexOf(runtime), 1);
+    await recovered.stop(original.problemId);
+    expect(JSON.parse(readFileSync(join(options.stateDir, "worlds.json"), "utf8"))).toEqual([]);
+    await recovered.close();
+  });
+
+  it("should reject symlinked, oversized, and invalid-hash snapshot files", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-snapshot-file-guard-"));
+    const options = runtimeOptions(root);
+    const runtime = new SimulatorLocalRuntime(options);
+    runningRuntimes.push(runtime);
+    const deployment = await runtime.start(problem(root));
+    const validPath = join(root, "valid.json");
+    await runtime.exportSnapshot(deployment.problemId, validPath);
+
+    const symlinkPath = join(root, "snapshot-link.json");
+    symlinkSync(validPath, symlinkPath);
+    await expect(runtime.importSnapshot(deployment.problemId, symlinkPath)).rejects.toThrow();
+
+    const oversizedPath = join(root, "oversized.json");
+    writeFileSync(oversizedPath, "x".repeat(16 * 1024 * 1024 + 1));
+    await expect(runtime.importSnapshot(deployment.problemId, oversizedPath)).rejects.toThrow(
+      "exceeds",
+    );
+
+    const invalidHashPath = join(root, "invalid-hash.json");
+    const snapshot = JSON.parse(readFileSync(validPath, "utf8")) as Record<string, unknown>;
+    writeFileSync(invalidHashPath, JSON.stringify({ ...snapshot, hash: "not-a-hash" }));
+    await expect(runtime.importSnapshot(deployment.problemId, invalidHashPath)).rejects.toThrow();
+  });
+
+  it.each([
+    ["intent-only", 4, false, false],
+    ["restored-known", 5, true, false],
+    ["active-switched", 6, true, false],
+    ["completed-receipt", 7, false, true],
+  ] as const)("should rehydrate and clean the %s snapshot generation", async (stage, failAtCommit, expectsPendingRestored, expectsCompleted) => {
+    const root = mkdtempSync(join(tmpdir(), `tc-simulator-snapshot-${stage}-`));
+    let commits = 0;
+    const options: SimulatorRuntimeOptions = {
+      ...runtimeOptions(root),
+      retryDelayMs: 1,
+      sessionWriteHooks: {
+        afterSecretCommit: () => {
+          commits += 1;
+          if (commits === failAtCommit) {
+            throw new Error(`injected ${stage} commit interruption`);
+          }
+        },
+      },
+    };
+    const runtime = new SimulatorLocalRuntime(options);
+    runningRuntimes.push(runtime);
+    const original = await runtime.start(problem(root));
+    const snapshotPath = join(root, `${stage}.json`);
+    await runtime.exportSnapshot(original.problemId, snapshotPath);
+
+    await expect(runtime.importSnapshot(original.problemId, snapshotPath)).rejects.toThrow(
+      "world still requires cleanup",
+    );
+    let persisted = readSimulatorSessionRecord(options.sessionPath);
+    expect(persisted.completedSnapshotRestores !== undefined).toBe(expectsCompleted);
+    if (expectsCompleted) {
+      expect(persisted.pendingSnapshotRestores).toBeUndefined();
+    } else {
+      expect(persisted.pendingSnapshotRestores).toHaveLength(1);
+      expect(persisted.pendingSnapshotRestores?.[0]?.restoredWorldId !== undefined).toBe(
+        expectsPendingRestored,
+      );
+    }
+    expect(readFileSync(options.sessionPath, "utf8")).not.toMatch(
+      /idempotencyKey|launchToken|completedSnapshotRestores/,
+    );
+
+    if (stage === "restored-known") {
+      const expiredToken = issueSimulatorLaunchToken(
+        persisted.launcher.launchSecret,
+        {
+          tenantId: "local",
+          eventId: "local",
+          teamId: "local",
+          deploymentId: original.deploymentId,
+        },
+        1,
+        0,
+      );
+      writeSimulatorSessionRecord(options.sessionPath, {
+        ...persisted,
+        deployments: persisted.deployments.map((deployment) => ({
+          ...deployment,
+          launchToken: expiredToken,
+          consoleUrl: simulatorConsoleUrl(
+            new URL(deployment.consoleUrl.split("#", 1)[0] ?? deployment.consoleUrl).toString(),
+            expiredToken,
+            persisted.launcher.baseUrl,
+          ),
+        })),
+      });
+      persisted = readSimulatorSessionRecord(options.sessionPath);
+      expect(persisted.deployments[0]?.launchToken).toBe(expiredToken);
+    }
+
+    const recovered = new SimulatorLocalRuntime({ ...options, sessionWriteHooks: undefined });
+    runningRuntimes.splice(runningRuntimes.indexOf(runtime), 1);
+    await recovered.stop(original.problemId);
+    expect(JSON.parse(readFileSync(join(options.stateDir, "worlds.json"), "utf8"))).toEqual([]);
+    const cleaned = readSimulatorSessionRecord(options.sessionPath);
+    expect(cleaned.deployments).toEqual([]);
+    expect(cleaned.pendingSnapshotRestores).toBeUndefined();
+    expect(cleaned.completedSnapshotRestores).toBeUndefined();
+    await recovered.close();
+  });
+
+  it("should launch an injected executable through an argv-safe supervisor", async () => {
     const root = mkdtempSync(join(tmpdir(), "tc-simulator-process-"));
     const options = runtimeOptions(root);
     const launcher = await launchSimulator({
@@ -970,6 +2151,7 @@ describe("provider-neutral local runtime", () => {
       expect(launcher.kind).toBe("process");
       expect(launcher.baseUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
       expect(launcher.launchSecret).not.toContain("=");
+      expect(launcher.processIdentity).toMatch(/^[a-f0-9]{64}$/);
       await waitForReachable(
         `${launcher.baseUrl}/v1/capabilities`,
         "Simulator credential inheritance fixture",
@@ -979,12 +2161,64 @@ describe("provider-neutral local runtime", () => {
         inheritedHostCredentials?: readonly string[];
       };
       expect(capabilities.inheritedHostCredentials).toEqual([]);
+      const {
+        ownershipLeasePath: _ownershipLeasePath,
+        registrationPath: _registrationPath,
+        launchIntentPath: _launchIntentPath,
+        childPid: _childPid,
+        childProcessIdentity: _childProcessIdentity,
+        ...launcherWithoutOwnershipFiles
+      } = launcher;
+      const { processIdentity: _missingIdentity, ...legacyLauncher } =
+        launcherWithoutOwnershipFiles;
+      await expect(stopSimulatorLauncher(legacyLauncher, options.env)).rejects.toThrow(
+        "identity changed",
+      );
+      await expect(
+        stopSimulatorLauncher(
+          { ...launcherWithoutOwnershipFiles, processIdentity: "0".repeat(64) },
+          options.env,
+        ),
+      ).resolves.toBeUndefined();
+      expect(() => process.kill(launcher.pid ?? 0, 0)).not.toThrow();
     } finally {
-      stopSimulatorLauncher(launcher, options.env);
+      await stopSimulatorLauncher(launcher, options.env);
     }
   });
 
-  it("解決済みの Simulator flag と composite challenge を完了数に含めること", async () => {
+  it("should retain ownership when an injected process ignores SIGTERM", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-ignore-sigterm-"));
+    const fixture = join(root, "ignore-sigterm.mjs");
+    writeFileSync(
+      fixture,
+      'process.on("SIGTERM", () => {}); process.on("SIGUSR1", () => process.exit(0)); setInterval(() => {}, 1000);\n',
+    );
+    const options = runtimeOptions(root);
+    const launcher = await launchSimulator({
+      ...options,
+      env: {
+        ...options.env,
+        TENKACLOUD_SIMULATOR_ARGS: JSON.stringify([fixture]),
+      },
+    });
+    if (launcher.kind !== "process" || launcher.pid === undefined) {
+      throw new Error("test requires an owned process launcher");
+    }
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      await expect(stopSimulatorLauncher(launcher, options.env, 50)).rejects.toThrow(
+        "did not stop within 50ms",
+      );
+      expect(() => process.kill(launcher.pid ?? 0, 0)).not.toThrow();
+    } finally {
+      await stopSimulatorLauncher(launcher, options.env, 3_000, "SIGUSR1");
+      await waitForProcessExit(launcher.pid);
+      expect(existsSync(launcher.ownershipLeasePath ?? "missing")).toBe(false);
+      expect(existsSync(launcher.registrationPath ?? "missing")).toBe(false);
+    }
+  });
+
+  it("should count solved Simulator flag and composite challenges as complete", async () => {
     const root = mkdtempSync(join(tmpdir(), "tc-simulator-leaderboard-"));
     const state = createLocalPlayState({
       problems: [],
@@ -1036,7 +2270,7 @@ describe("provider-neutral local runtime", () => {
           "busybox@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662",
       });
     } finally {
-      stopSimulatorLauncher(launcher);
+      await stopSimulatorLauncher(launcher);
     }
   });
 
@@ -1068,7 +2302,192 @@ describe("provider-neutral local runtime", () => {
     expect(worlds[0]?.clockAdvances?.at(-1)).toBe(60_000);
   });
 
-  it("同じ問題への明示採点が重なっても時計と得点を一度だけ進めること", async () => {
+  it("should reset world telemetry without re-enabling session-scoped once awards", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-reset-scoring-state-"));
+    const options = runtimeOptions(root);
+    const runtime = new SimulatorLocalRuntime(options);
+    runningRuntimes.push(runtime);
+    let now = 1_000;
+    const state = createLocalPlayState(
+      { problems: [], simulatedProblems: [phasedProblem(root)] },
+      { simulator: runtime, now: () => now },
+    );
+    await state.lifecycle.ensureRunning("phased-battle");
+    const simulated = state.simulatedRuntimes.get("phased-battle");
+    if (!simulated) throw new Error("phased runtime is missing");
+    simulated.score = 5_000;
+    simulated.scoringState = {
+      bonusAwarded: { "all-slots-on-platforms": true },
+      firedDisruptions: ["once-disruption"],
+      attackCount: 7,
+      activeEffects: [{ disruptionId: "old-world", points: -10, expiresAtMs: 9_999 }],
+    };
+    simulated.endpointsHealth = "old-health";
+    simulated.attackProbes = "old-probes";
+    simulated.posture = "old-posture";
+    simulated.platform = "lambda";
+    simulated.lastResult = "ok";
+    const firstCreatedAt = simulated.createdAt;
+
+    await state.lifecycle.stop("phased-battle");
+    now = 2_000;
+    await state.lifecycle.ensureRunning("phased-battle");
+
+    expect(simulated.createdAt).not.toBe(firstCreatedAt);
+    expect(simulated.score).toBe(5_000);
+    expect(simulated.scoringState).toEqual({
+      bonusAwarded: { "all-slots-on-platforms": true },
+      firedDisruptions: ["once-disruption"],
+    });
+    expect(simulated).toMatchObject({
+      endpointsHealth: undefined,
+      attackProbes: undefined,
+      posture: undefined,
+      platform: undefined,
+      lastResult: undefined,
+    });
+  });
+
+  it("should not resurrect or score a world stopped during an in-flight clock advance", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-stop-during-score-"));
+    let releaseAdvance = (): void => {};
+    const advanceGate = new Promise<void>((resolve) => {
+      releaseAdvance = resolve;
+    });
+    let observeAdvance = (): void => {};
+    const advanceStarted = new Promise<void>((resolve) => {
+      observeAdvance = resolve;
+    });
+    const options: SimulatorRuntimeOptions = {
+      ...runtimeOptions(root),
+      fetchFn: async (input, init) => {
+        if (new URL(String(input)).pathname.endsWith("/clock/advance")) {
+          observeAdvance();
+          await advanceGate;
+        }
+        return fetch(input, init);
+      },
+    };
+    const runtime = new SimulatorLocalRuntime(options);
+    runningRuntimes.push(runtime);
+    const state = createLocalPlayState(
+      { problems: [], simulatedProblems: [phasedProblem(root)] },
+      { simulator: runtime },
+    );
+    await state.lifecycle.ensureRunning("phased-battle");
+    const deployment = state.simulatedRuntimes.get("phased-battle")?.deployment;
+    if (!deployment) throw new Error("phased deployment did not start");
+
+    const scoring = handleLocalPlayRequest(
+      post("/portal/me/problems/phased-battle/score"),
+      state,
+      deployment.clockObservedAtMs + 60_000,
+    );
+    await advanceStarted;
+    const stopping = handleLocalPlayRequest(post("/portal/me/problems/phased-battle/stop"), state);
+    expect(state.lifecycle.statusOf("phased-battle")).toBe("stopping");
+    releaseAdvance();
+
+    await expect(stopping).resolves.toMatchObject({ body: { status: "stopped" } });
+    await expect(scoring).resolves.toEqual({
+      status: StatusCodes.CONFLICT,
+      body: { error: "not_running" },
+    });
+    expect(state.simulatedRuntimes.get("phased-battle")?.score).toBe(0);
+    expect(readSimulatorSessionRecord(options.sessionPath).deployments).toEqual([]);
+  });
+
+  it("should serialize snapshot export with stop and leave no stale deployment", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-snapshot-stop-race-"));
+    let releaseSnapshot = (): void => {};
+    const snapshotGate = new Promise<void>((resolve) => {
+      releaseSnapshot = resolve;
+    });
+    let observeSnapshot = (): void => {};
+    const snapshotStarted = new Promise<void>((resolve) => {
+      observeSnapshot = resolve;
+    });
+    const events: string[] = [];
+    const options: SimulatorRuntimeOptions = {
+      ...runtimeOptions(root),
+      fetchFn: async (input, init) => {
+        const path = new URL(String(input)).pathname;
+        if (path.endsWith("/snapshots") && (init?.method ?? "GET") === "GET") {
+          events.push("snapshot-started");
+          observeSnapshot();
+          await snapshotGate;
+          events.push("snapshot-released");
+        }
+        if (/\/v1\/worlds\/[^/]+$/.test(path) && init?.method === "DELETE") {
+          events.push("world-deleted");
+        }
+        return fetch(input, init);
+      },
+    };
+    const runtime = new SimulatorLocalRuntime(options);
+    runningRuntimes.push(runtime);
+    await runtime.start(problem(root));
+    const snapshotPath = join(root, "race-snapshot.json");
+
+    const exporting = runtime.exportSnapshot("hello-world", snapshotPath);
+    await snapshotStarted;
+    const stopping = runtime.stop("hello-world");
+    await Promise.resolve();
+    expect(events).toEqual(["snapshot-started"]);
+    releaseSnapshot();
+    await Promise.all([exporting, stopping]);
+
+    expect(events).toEqual(["snapshot-started", "snapshot-released", "world-deleted"]);
+    expect(readSimulatorSessionRecord(options.sessionPath).deployments).toEqual([]);
+  });
+
+  it("should serialize snapshot import with stop and clean both world generations", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-snapshot-import-stop-race-"));
+    let releaseRestore = (): void => {};
+    const restoreGate = new Promise<void>((resolve) => {
+      releaseRestore = resolve;
+    });
+    let observeRestore = (): void => {};
+    const restoreStarted = new Promise<void>((resolve) => {
+      observeRestore = resolve;
+    });
+    const options: SimulatorRuntimeOptions = {
+      ...runtimeOptions(root),
+      fetchFn: async (input, init) => {
+        const path = new URL(String(input)).pathname;
+        if (path.endsWith("/snapshots") && init?.method === "POST") {
+          observeRestore();
+          await restoreGate;
+        }
+        return fetch(input, init);
+      },
+    };
+    const runtime = new SimulatorLocalRuntime(options);
+    runningRuntimes.push(runtime);
+    const deployment = await runtime.start(problem(root));
+    const snapshotPath = join(root, "import-stop-race.json");
+    await runtime.exportSnapshot(deployment.problemId, snapshotPath);
+
+    const importing = runtime.importSnapshot(deployment.problemId, snapshotPath);
+    await restoreStarted;
+    let stopResolved = false;
+    const stopping = runtime.stop(deployment.problemId).then(() => {
+      stopResolved = true;
+    });
+    await Promise.resolve();
+    expect(stopResolved).toBe(false);
+    releaseRestore();
+
+    await expect(importing).resolves.toBeUndefined();
+    await expect(stopping).resolves.toBeUndefined();
+    expect(JSON.parse(readFileSync(join(options.stateDir, "worlds.json"), "utf8"))).toEqual([]);
+    const recorded = readSimulatorSessionRecord(options.sessionPath);
+    expect(recorded.deployments).toEqual([]);
+    expect(recorded.pendingSnapshotRestores).toBeUndefined();
+    expect(recorded.completedSnapshotRestores).toBeUndefined();
+  });
+
+  it("should advance clock and score once for concurrent explicit scoring", async () => {
     const root = mkdtempSync(join(tmpdir(), "tc-simulator-concurrent-score-"));
     const options = runtimeOptions(root);
     const runtime = new SimulatorLocalRuntime(options);
@@ -1095,7 +2514,7 @@ describe("provider-neutral local runtime", () => {
     expect(worlds[0]?.clockAdvances).toEqual([60_000]);
   });
 
-  it("同じ問題への start が重なっても初回採点を一度だけ実行すること", async () => {
+  it("should run initial scoring once for concurrent starts of one problem", async () => {
     const root = mkdtempSync(join(tmpdir(), "tc-simulator-concurrent-start-"));
     const options = runtimeOptions(root);
     const runtime = new SimulatorLocalRuntime(options);
@@ -1153,7 +2572,9 @@ describe("provider-neutral local runtime", () => {
       {
         provider: "aws",
         operation: "AttackProbe",
-        idempotencyKey: expect.stringMatching(/^scoring:attack-probe-battle:/),
+        idempotencyKey: expect.stringMatching(
+          /^tenkacloud-internal-attack-probe-[A-Za-z0-9_-]{43}$/,
+        ),
         command: expect.objectContaining({
           service: "http",
           resourceType: "HTTP::Endpoint",
@@ -1168,9 +2589,413 @@ describe("provider-neutral local runtime", () => {
       },
     ]);
   });
+
+  it("should keep endpoint placement keys stable, secret, and immune to predictable poisoning", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-placement-key-"));
+    const keys = new Map<string, string>();
+    const describedKeys: string[] = [];
+    const fetchFn: typeof fetch = async (input, init) => {
+      const url = new URL(String(input));
+      const operation = /\/operations\/([^/]+)$/.exec(url.pathname)?.[1];
+      if (!operation) return fetch(input, init);
+      const key = new Headers(init?.headers).get("idempotency-key") ?? "";
+      const body = String(init?.body ?? "");
+      const prior = keys.get(key);
+      if (prior && prior !== `${operation}:${body}`) {
+        return new Response('{"error":{"code":"IdempotencyConflict"}}', {
+          status: StatusCodes.CONFLICT,
+        });
+      }
+      keys.set(key, `${operation}:${body}`);
+      if (operation === "Poison") return Response.json({ poisoned: true });
+      if (operation === "DescribeEndpointPlacement") {
+        describedKeys.push(key);
+        const command = JSON.parse(body) as {
+          deploymentId: string;
+          targetId: string;
+          input: { Slot: string };
+        };
+        return Response.json({
+          DeploymentId: command.deploymentId,
+          TargetId: command.targetId,
+          Slot: command.input.Slot,
+          EffectiveUrl: "http://127.0.0.1:18080/workload",
+          VerifiedPlatform: "ec2",
+        });
+      }
+      return fetch(input, init);
+    };
+    const options = { ...runtimeOptions(root), fetchFn };
+    const runtime = new SimulatorLocalRuntime(options);
+    runningRuntimes.push(runtime);
+    const deployment = await runtime.start(phasedProblem(root));
+    const recorded = readSimulatorSessionRecord(options.sessionPath);
+    const targetId = "default";
+    const predictableKey = `scoring-placement:${deployment.deploymentId}:${targetId}:frontend`;
+    await createSimulatorClient(
+      recorded.launcher.baseUrl,
+      fetchFn,
+      deployment.launchToken,
+    ).executeProviderOperation(
+      deployment.worldId,
+      "aws",
+      "Poison",
+      {
+        deploymentId: deployment.deploymentId,
+        targetId,
+        engine: "cloudformation",
+        service: "runtime",
+        resourceType: "Runtime::Endpoint",
+        input: { Slot: "frontend" },
+      },
+      predictableKey,
+    );
+
+    await expect(runtime.endpointPlacements(phasedProblem(root), ["frontend"], 1)).resolves.toEqual(
+      [
+        {
+          slot: "frontend",
+          effectiveUrl: "http://127.0.0.1:18080/workload",
+          verifiedPlatform: "ec2",
+        },
+      ],
+    );
+    await runtime.endpointPlacements(phasedProblem(root), ["frontend"], 999_999);
+
+    expect(describedKeys).toHaveLength(2);
+    expect(describedKeys[0]).toBe(describedKeys[1]);
+    expect(describedKeys[0]).toMatch(/^tenkacloud-internal-endpoint-placement-[A-Za-z0-9_-]{43}$/);
+    expect(describedKeys[0]).not.toBe(predictableKey);
+    const publicRecord = readFileSync(options.sessionPath, "utf8");
+    expect(publicRecord).not.toContain(describedKeys[0] ?? "impossible-key");
+    expect(publicRecord).not.toContain(recorded.launcher.launchSecret);
+  });
+
+  it("should fail loud on placement transport and malformed responses but allow exact 404", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-placement-errors-"));
+    let mode: "credentials" | "malformed" | "partial" | "server-error" | "unbound" = "unbound";
+    const fetchFn: typeof fetch = async (input, init) => {
+      const url = new URL(String(input));
+      if (!url.pathname.endsWith("/operations/DescribeEndpointPlacement")) {
+        return fetch(input, init);
+      }
+      if (mode === "unbound") {
+        return new Response('{"error":{"code":"EndpointPlacementNotFound"}}', {
+          status: StatusCodes.NOT_FOUND,
+        });
+      }
+      if (mode === "server-error") {
+        return new Response('{"error":{"code":"Unavailable"}}', {
+          status: StatusCodes.INTERNAL_SERVER_ERROR,
+        });
+      }
+      const command = JSON.parse(String(init?.body)) as {
+        deploymentId: string;
+        targetId: string;
+        input: { Slot: string };
+      };
+      if (mode === "partial" && command.input.Slot === "secondary") {
+        return new Response('{"error":{"code":"Unavailable"}}', {
+          status: StatusCodes.INTERNAL_SERVER_ERROR,
+        });
+      }
+      if (mode === "malformed") return Response.json({ Slot: command.input.Slot });
+      return Response.json({
+        DeploymentId: command.deploymentId,
+        TargetId: command.targetId,
+        Slot: command.input.Slot,
+        EffectiveUrl:
+          mode === "credentials"
+            ? "http://user:password@127.0.0.1:18080/workload"
+            : "http://127.0.0.1:18080/workload",
+        VerifiedPlatform: "ec2",
+      });
+    };
+    const options = { ...runtimeOptions(root), fetchFn };
+    const runtime = new SimulatorLocalRuntime(options);
+    runningRuntimes.push(runtime);
+    const current = phasedProblem(root);
+    await runtime.start(current);
+
+    await expect(runtime.endpointPlacements(current, ["frontend"], 1)).resolves.toEqual([]);
+    mode = "server-error";
+    await expect(runtime.endpointPlacements(current, ["frontend"], 2)).rejects.toThrow("HTTP 500");
+    mode = "malformed";
+    await expect(runtime.endpointPlacements(current, ["frontend"], 3)).rejects.toThrow(
+      "response is invalid",
+    );
+    mode = "credentials";
+    await expect(runtime.endpointPlacements(current, ["frontend"], 4)).rejects.toThrow();
+    mode = "partial";
+    await expect(runtime.endpointPlacements(current, ["frontend", "secondary"], 5)).rejects.toThrow(
+      "HTTP 500",
+    );
+  });
+
+  it("should keep attack-scoring keys secret and immune to predictable poisoning", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-attack-key-"));
+    const keys = new Map<string, string>();
+    const attackKeys: string[] = [];
+    const fetchFn: typeof fetch = async (input, init) => {
+      const url = new URL(String(input));
+      const operation = /\/operations\/([^/]+)$/.exec(url.pathname)?.[1];
+      if (!operation) return fetch(input, init);
+      const key = new Headers(init?.headers).get("idempotency-key") ?? "";
+      const body = String(init?.body ?? "");
+      const prior = keys.get(key);
+      if (prior && prior !== `${operation}:${body}`) {
+        return new Response('{"error":{"code":"IdempotencyConflict"}}', {
+          status: StatusCodes.CONFLICT,
+        });
+      }
+      keys.set(key, `${operation}:${body}`);
+      if (operation === "Poison") return Response.json({ poisoned: true });
+      if (operation === "AttackProbe") {
+        attackKeys.push(key);
+        return Response.json({ StatusCode: StatusCodes.FORBIDDEN, Landed: false });
+      }
+      return fetch(input, init);
+    };
+    const options = { ...runtimeOptions(root), fetchFn };
+    const runtime = new SimulatorLocalRuntime(options);
+    runningRuntimes.push(runtime);
+    const current = attackProbeProblem(root);
+    const deployment = await runtime.start(current);
+    const recorded = readSimulatorSessionRecord(options.sessionPath);
+    const observedAtMs = 123_456;
+    const request = {
+      slot: "api",
+      path: "/api/v1/auth",
+      method: "POST" as const,
+      body: '{"username":"admin"}',
+    };
+    const requestHash = createHash("sha256").update(JSON.stringify(request)).digest("hex");
+    const predictableKey = `scoring:${current.problemId}:${observedAtMs}:${requestHash}`;
+    await createSimulatorClient(
+      recorded.launcher.baseUrl,
+      fetchFn,
+      deployment.launchToken,
+    ).executeProviderOperation(
+      deployment.worldId,
+      "aws",
+      "Poison",
+      {
+        deploymentId: deployment.deploymentId,
+        targetId: "default",
+        engine: "cloudformation",
+        service: "http",
+        resourceType: "HTTP::Endpoint",
+        input: { Slot: "api" },
+      },
+      predictableKey,
+    );
+
+    await expect(runtime.attackProbe(current, request, observedAtMs)).resolves.toMatchObject({
+      ok: false,
+      status: StatusCodes.FORBIDDEN,
+    });
+    expect(attackKeys).toHaveLength(1);
+    expect(attackKeys[0]).toMatch(/^tenkacloud-internal-attack-probe-[A-Za-z0-9_-]{43}$/);
+    expect(attackKeys[0]).not.toBe(predictableKey);
+    expect(readFileSync(options.sessionPath, "utf8")).not.toContain(attackKeys[0] ?? "none");
+  });
+});
+
+describe("Simulator data-plane listener lifecycle", () => {
+  it("should retain a failed listener close and delete the world only after retry succeeds", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-listener-close-retry-"));
+    let closeAttempts = 0;
+    const events: string[] = [];
+    const base = runtimeOptions(root);
+    const options: SimulatorRuntimeOptions = {
+      ...base,
+      startDataPlaneListener: async () => ({
+        port: 31_991,
+        origin: "http://127.0.0.1:31991",
+        close: async () => {
+          closeAttempts += 1;
+          events.push(`listener-close-${closeAttempts}`);
+          if (closeAttempts === 1) throw new Error("injected listener close failure");
+        },
+      }),
+      fetchFn: async (input, init) => {
+        if (init?.method === "DELETE") events.push("world-delete");
+        return fetch(input, init);
+      },
+    };
+    const runtime = new SimulatorLocalRuntime(options);
+    runningRuntimes.push(runtime);
+    await runtime.start(problem(root));
+
+    await expect(runtime.stop("hello-world")).rejects.toThrow(
+      "Simulator data-plane listener cleanup failed",
+    );
+    expect(events).toEqual(["listener-close-1"]);
+    expect(readSimulatorSessionRecord(options.sessionPath).deployments).toHaveLength(1);
+
+    await expect(runtime.stop("hello-world")).resolves.toBeUndefined();
+    expect(events).toEqual(["listener-close-1", "listener-close-2", "world-delete"]);
+    expect(readSimulatorSessionRecord(options.sessionPath).deployments).toEqual([]);
+  });
+
+  it("should serialize Stop behind listener creation and drain before world deletion", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-listener-start-stop-"));
+    let releaseListener = (): void => {};
+    const listenerGate = new Promise<void>((resolve) => {
+      releaseListener = resolve;
+    });
+    let observeListener = (): void => {};
+    const listenerStarted = new Promise<void>((resolve) => {
+      observeListener = resolve;
+    });
+    const events: string[] = [];
+    const base = runtimeOptions(root);
+    const options: SimulatorRuntimeOptions = {
+      ...base,
+      startDataPlaneListener: async () => {
+        events.push("listener-started");
+        observeListener();
+        await listenerGate;
+        events.push("listener-published");
+        return {
+          port: 31_992,
+          origin: "http://127.0.0.1:31992",
+          close: async () => {
+            events.push("listener-drained");
+          },
+        };
+      },
+      fetchFn: async (input, init) => {
+        if (init?.method === "DELETE") events.push("world-deleted");
+        return fetch(input, init);
+      },
+    };
+    const runtime = new SimulatorLocalRuntime(options);
+    runningRuntimes.push(runtime);
+
+    const starting = runtime.start(problem(root)).then((value) => {
+      events.push("start-complete");
+      return value;
+    });
+    await listenerStarted;
+    const stopping = runtime.stop("hello-world");
+    await Promise.resolve();
+    expect(events).toEqual(["listener-started"]);
+    releaseListener();
+    await Promise.all([starting, stopping]);
+    expect(events).toEqual([
+      "listener-started",
+      "listener-published",
+      "start-complete",
+      "listener-drained",
+      "world-deleted",
+    ]);
+  });
 });
 
 describe("Simulator generic scoring bridge", () => {
+  it("should score only authoritative managed placements and award the distinct bonus once", async () => {
+    const workload = await workloadServer();
+    try {
+      const repositoryRoot = resolve(import.meta.dirname, "..", "..", "..");
+      const current = loadSimulatedCloudProblems([
+        join(repositoryRoot, "problems", "battles"),
+      ]).find((candidate) => candidate.problemId === "microservice-migration-battle");
+      if (!current) throw new Error("current migration battle was not loaded");
+      const scoring = current.metadata.scoring as Record<string, unknown>;
+      const battle: SimulatedCloudProblem = {
+        ...current,
+        metadata: {
+          ...current.metadata,
+          scoring: {
+            ...scoring,
+            bonuses: [
+              {
+                kind: "all-slots-distinct-platforms",
+                platforms: ["lambda", "ecs", "apprunner"],
+                points: 5_000,
+                once: true,
+              },
+            ],
+          },
+        },
+      };
+      const placements = [
+        { slot: "users", effectiveUrl: `${workload.url}/users`, verifiedPlatform: "lambda" },
+        { slot: "orders", effectiveUrl: `${workload.url}/orders`, verifiedPlatform: "ecs" },
+        {
+          slot: "catalog",
+          effectiveUrl: `${workload.url}/catalog`,
+          verifiedPlatform: "apprunner",
+        },
+      ] as const;
+      const base = {
+        problem: battle,
+        outputs: { BaseUrl: "http://127.0.0.1:1/untrusted" },
+        overrides: new Map([
+          ["users", "http://127.0.0.1:2/spoofed"],
+          ["orders", "http://127.0.0.1:2/spoofed"],
+          ["catalog", "http://127.0.0.1:2/spoofed"],
+        ]),
+        score: 0,
+        createdAt: "2026-07-12T00:00:00.000Z",
+        nowMs: Date.UTC(2026, 6, 12, 0, 1),
+        authoritativeEndpointPlacements: placements,
+      } as const;
+
+      const first = await runSimulatorScoreCycle({ ...base, scoringState: {} });
+      expect(first.scoreDelta).toBe(8_000);
+      expect(first.newState?.bonusAwarded).toMatchObject({
+        "all-slots-distinct-platforms": true,
+      });
+      const second = await runSimulatorScoreCycle({
+        ...base,
+        scoringState: first.newState ?? {},
+      });
+      expect(second.scoreDelta).toBe(3_000);
+
+      const unbound = await runSimulatorScoreCycle({
+        ...base,
+        scoringState: {},
+        authoritativeEndpointPlacements: [],
+      });
+      expect(unbound.scoreDelta).toBe(-300);
+    } finally {
+      await workload.close();
+    }
+  });
+
+  it("should reject a participant-controlled loopback managed-tier self-report", async () => {
+    const spoofedLambda = await platformWorkloadServer("lambda");
+    try {
+      const repositoryRoot = resolve(import.meta.dirname, "..", "..", "..");
+      const battle = loadSimulatedCloudProblems([join(repositoryRoot, "problems", "battles")]).find(
+        (problem) => problem.problemId === "microservice-migration-battle",
+      );
+      if (!battle) throw new Error("current migration battle was not loaded");
+      const cycleInput = {
+        problem: battle,
+        outputs: { BaseUrl: spoofedLambda.url },
+        overrides: new Map([
+          ["users", `${spoofedLambda.url}/users`],
+          ["orders", `${spoofedLambda.url}/orders`],
+          ["catalog", `${spoofedLambda.url}/catalog`],
+        ]),
+        score: 0,
+        createdAt: "2026-07-12T00:00:00.000Z",
+        scoringState: {},
+        nowMs: Date.UTC(2026, 6, 12, 0, 1),
+      } as const;
+
+      const result = await runSimulatorScoreCycle(cycleInput);
+      expect(result.scoreDelta).toBe(300);
+      expect(result.platform).toBe("ec2");
+      expect(result.newState).toBeUndefined();
+    } finally {
+      await spoofedLambda.close();
+    }
+  });
+
   it("should run composite target probes over real HTTP and award the catalog points once", async () => {
     const aws = await workloadServer();
     const gcp = await workloadServer();

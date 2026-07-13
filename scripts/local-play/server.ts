@@ -8,12 +8,12 @@ import {
   type LocalPlayState,
 } from "./api-state";
 import { corsHeaders, isAllowedCorsOrigin } from "./cors";
-import { proxySimulatorDataPlaneRequest } from "./simulator-data-plane-proxy";
 import { proxySimulatorNativeRequest } from "./simulator-native-proxy";
 
 export { corsHeaders } from "./cors";
 
 const MAX_BODY_BYTES = 1_000_000;
+const CONSOLE_TICKET_PATH = /^\/portal\/me\/problems\/[^/]+\/console$/;
 
 export interface LocalPlayServer {
   readonly port: number;
@@ -45,8 +45,13 @@ function writeJson(
   status: number,
   body: unknown,
   cors: Record<string, string>,
+  headers: Readonly<Record<string, string>> = {},
 ): void {
-  response.writeHead(status, { ...cors, "content-type": "application/json; charset=utf-8" });
+  response.writeHead(status, {
+    ...cors,
+    ...headers,
+    ...(body === undefined ? {} : { "content-type": "application/json; charset=utf-8" }),
+  });
   response.end(body === undefined ? undefined : JSON.stringify(body));
 }
 
@@ -57,17 +62,38 @@ async function route(
 ): Promise<void> {
   const origin = request.headers.origin;
   const cors = corsHeaders(origin);
+  const url = new URL(request.url ?? "/", "http://127.0.0.1");
   if (origin !== undefined && !isAllowedCorsOrigin(origin)) {
     writeJson(response, StatusCodes.FORBIDDEN, { error: "browser_origin_forbidden" }, {});
     return;
   }
-  if (await proxySimulatorDataPlaneRequest(request, response, state)) return;
+  if (url.pathname.startsWith("/local/operator/")) {
+    if (origin !== undefined) {
+      writeJson(response, StatusCodes.FORBIDDEN, { error: "operator_browser_forbidden" }, {});
+      return;
+    }
+    if (request.headers.authorization !== `Bearer ${state.participantToken}`) {
+      writeJson(response, StatusCodes.UNAUTHORIZED, { error: "unauthorized" }, {});
+      return;
+    }
+  }
   if (await proxySimulatorNativeRequest(request, response, state)) return;
   if (request.method === "OPTIONS") {
     writeJson(response, StatusCodes.NO_CONTENT, undefined, cors);
     return;
   }
-  const url = new URL(request.url ?? "/", "http://127.0.0.1");
+  const isConsoleTicketNavigation =
+    request.method === "GET" &&
+    CONSOLE_TICKET_PATH.test(url.pathname) &&
+    url.searchParams.has("ticket");
+  if (
+    url.pathname.startsWith("/portal/") &&
+    !isConsoleTicketNavigation &&
+    request.headers.authorization !== `Bearer ${state.participantToken}`
+  ) {
+    writeJson(response, StatusCodes.UNAUTHORIZED, { error: "unauthorized" }, cors);
+    return;
+  }
   const query = Object.fromEntries(url.searchParams);
   const body = await readJsonBody(request);
   const result = await handleLocalPlayRequest(
@@ -76,10 +102,11 @@ async function route(
       path: url.pathname,
       query,
       body,
+      authorization: request.headers.authorization,
     },
     state,
   );
-  writeJson(response, result.status, result.body, cors);
+  writeJson(response, result.status, result.body, cors, result.headers);
 }
 
 export function startLocalPlayServer(
@@ -98,7 +125,8 @@ export function startLocalPlayServer(
             ? StatusCodes.BAD_REQUEST
             : StatusCodes.INTERNAL_SERVER_ERROR;
       if (!response.headersSent) {
-        writeJson(response, status, { error: message }, corsHeaders(request.headers.origin));
+        const publicError = status === StatusCodes.INTERNAL_SERVER_ERROR ? "internal" : message;
+        writeJson(response, status, { error: publicError }, corsHeaders(request.headers.origin));
       } else response.end();
     });
   });

@@ -35,6 +35,12 @@ describe("portal-contracts", () => {
     expectTypeOf<ParticipantProblemView>().toHaveProperty("accessCapabilities");
   });
 
+  it("should distinguish an optional simulated-cloud lifecycle without changing legacy views", () => {
+    expectTypeOf<NonNullable<ParticipantProblemView["lifecycle"]>>()
+      .toHaveProperty("runtimeKind")
+      .toEqualTypeOf<"docker" | "simulated-cloud" | undefined>();
+  });
+
   it("should keep the submit-flag wire union limited to 200-response bodies", () => {
     // 非 200 系 (unauthorized / no_outputs 等) は HTTP status に map される backend 内部
     // outcome であり、wire contract には現れない。

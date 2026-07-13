@@ -383,11 +383,20 @@
     "lifecycle_error": "エラー",
     "lifecycle_start_button": "起動",
     "lifecycle_stop_button": "停止",
+    "lifecycle_cleanup_button": "クリーンアップを再試行",
+    "lifecycle_cleanup_required_body": "このランタイムはローカルリソースをまだ保持しています。再起動の前にクリーンアップしてください。",
+    "lifecycle_reset_button": "リセット",
+    "lifecycle_simulator_console_button": "Simulator Console を開く",
     "lifecycle_stopped_body": "この問題のローカルランタイムは停止しています。起動すると挑戦用エンドポイントとツールを利用できます。",
     "lifecycle_running_body": "ローカルランタイムは稼働中です。挑戦を終えたら停止してローカルリソースを解放できます (スコアは保持されます)。",
     "lifecycle_error_header": "ローカルランタイムエラー",
     "lifecycle_error_body": "問題ランタイムがエラーになりました。もう一度起動してください。",
-    "lifecycle_action_failed_header": "ローカルランタイム操作に失敗しました"
+    "lifecycle_action_failed_header": "ローカルランタイム操作に失敗しました",
+    "lifecycle_simulator_stopped_body": "この simulated cloud は停止しています。起動すると新しい shared world を作成します。",
+    "lifecycle_simulator_running_body": "simulated cloud は稼働中です。API、CLI、Console の操作は同じ world に反映されます。",
+    "lifecycle_simulator_error_header": "Simulator エラー",
+    "lifecycle_simulator_error_body": "simulated cloud でエラーが発生しました。もう一度起動してください。",
+    "lifecycle_simulator_action_failed_header": "Simulator 操作に失敗しました"
   },
   "multi_flag": {
     "progress_header": "解答した flag: {solved} / {total}",

@@ -80,15 +80,21 @@
       <li>
         Start Simulator on a random loopback port, either as a real injected executable or as a digest-pinned
         container. Cloud local play defaults to the reviewed immutable image
-        <code>ghcr.io/susumutomita/tenkacloud-simulator@sha256:0b8de36893513ffcf93db60a60e35849b3e592c08099adae2f0730a9f7fd1c9c</code>.
+        <code>ghcr.io/susumutomita/tenkacloud-simulator@sha256:e4335a99d9b2aa86402bdcda1c65247073d76202dff7f671e429f8568bb8f8b8</code>.
         An explicit executable, image digest, or externally managed loopback URL replaces that default;
         ambiguous explicit configuration fails before world creation.
       </li>
       <li>
-        Persist the selected launcher, process/container ownership, world/deployment identity, outputs,
-        protocol, and snapshot location beneath <code>.tenkacloud/local</code>. Stop and reset delete the
-        remote world before terminating an owned process. A resumed CLI verifies the recorded process and
-        deployment instead of trusting stale files.
+        Persist participant-safe launcher and world/deployment identity in
+        <code>simulator-session.json</code>. Persist launch secrets, provider credentials, launch tokens, and
+        deployment outputs in a self-contained, mode-0600 <code>simulator-secrets.json</code> generation. Commit that
+        protected source atomically before its public projection; its random record id lets restart regenerate a
+        missing, corrupt, or older public projection. Before an owned process or container starts, commit a private
+        launch intent containing its deterministic cleanup handle. Process mode uses a detached supervisor that
+        registers both its own and its child process identity before readiness and watches a private ownership lease;
+        restart can therefore cancel an uncommitted launch, while a committed session retains the lease until Stop.
+        Stop and reset delete the remote world before terminating an owned process.
+        A resumed CLI verifies the recorded process and deployment instead of trusting stale files.
       </li>
     </ol>
 
@@ -98,10 +104,10 @@
       <tbody>
         <tr><td>Catalog descriptor</td><td><code>docker/compose</code></td><td>single provider or composite runtime</td></tr>
         <tr><td>Lifecycle owner</td><td>Compose runner</td><td>Simulator world client</td></tr>
-        <tr><td>Participant view</td><td>challenge endpoints</td><td>deployment outputs + Simulator console URL</td></tr>
+        <tr><td>Participant view</td><td>challenge endpoints</td><td>participant-safe endpoint outputs + authenticated one-time Simulator console handoff; no launch token or provider credential</td></tr>
         <tr><td>Evaluation</td><td>problem-owned <code>/verify</code></td><td>catalog scoring/probes through Simulator; never synthesized by the platform</td></tr>
         <tr><td>Reset</td><td>Compose down/up with fresh secrets</td><td>delete world and create a new deterministic world</td></tr>
-        <tr><td>Failure</td><td>container error</td><td>protocol/capability/deployment diagnostic surfaced verbatim</td></tr>
+        <tr><td>Failure</td><td>container error</td><td>stable protocol/capability/lifecycle error; untrusted upstream bodies are not surfaced</td></tr>
       </tbody>
     </table>
 
@@ -145,14 +151,16 @@ TENKACLOUD_SIMULATOR_SAKURA_CREDENTIAL=&lt;simulator-only basic pair&gt;</code><
       sent as <code>Authorization: Bearer</code>; namespace fields in a request must match its claims.
     </p>
     <ul>
-      <li>The secret is private state and is never logged. The scoped token appears only in the participant's console link fragment.</li>
+      <li>The secret is private state and is never logged. Browser console access receives the scoped token only in its link fragment; the private native-CLI environment carries it as a bearer credential.</li>
       <li>The console receives the token only in the URL fragment: <code>#token=tc_sim_v1.…</code>. Fragments are not sent in HTTP requests.</li>
       <li>World/deployment ids are generated per local problem and scoped by the local tenant/event/team tuple.</li>
-      <li>Simulator and the participant API bind only to loopback. Codespaces exposure goes through the existing authenticated forwarded-port/browser path.</li>
+      <li>Simulator and the participant API bind only to loopback. Codespaces uses a distinct authenticated forwarded origin for each port; challenge and Simulator content never share the portal origin.</li>
       <li>
-        The participant data-plane route accepts Origin-free CLI traffic or the exact allowed loopback/Codespaces
-        Participant Portal origin. It handles allowed preflight locally and replaces upstream CORS headers with that
-        exact origin, so a provider wildcard cannot turn the server-side launch token into a cross-site capability.
+        Every problem target gets a distinct random loopback listener and origin. A listener accepts Origin-free CLI
+        traffic or only its own exact loopback/Codespaces origin; the Participant Portal origin and every sibling
+        target origin are rejected. Exact Host validation prevents DNS rebinding, private forwarding headers are
+        stripped, and an independent <code>worker-src 'none'</code> CSP policy prevents service-worker persistence
+        across listener shutdown.
       </li>
       <li>
         The route forwards only the catalog-required <code>GET</code>, <code>HEAD</code>, <code>POST</code>, and
@@ -168,11 +176,14 @@ TENKACLOUD_SIMULATOR_SAKURA_CREDENTIAL=&lt;simulator-only basic pair&gt;</code><
 
     <h2>5. Snapshots and recovery</h2>
     <p>
-      Snapshot export/import uses the Simulator snapshot endpoints and stores the validated document with
+      Snapshot export/import runs through the owning local API process, uses the Simulator snapshot endpoints, and stores the validated document with
       mode <code>0600</code>. Export is explicit and stop cleanup does not silently overwrite a named
-      snapshot. Import creates/restores the matching world only after protocol and namespace validation.
-      If state says a world exists but the process, token, or world cannot be verified, recovery fails loud
-      and instructs the operator to reset; it never creates a second invisible world.
+      snapshot. Import first persists a restore intent keyed by the source world and snapshot hash, then asks Simulator
+      to create or recover an idempotent clone. TenkaCloud durably owns both source and restored world ids before it
+      validates the restored deployment. It switches the active participant projection only after the restored
+      deployment is running, persists that switch while retaining source cleanup ownership, deletes the source world,
+      and finally releases the restore intent. A response loss or interrupted commit therefore replays the same restore
+      key or reconciles both worlds; it cannot create an untracked clone or discard the last known-good source.
     </p>
 
     <h3>5.1 Overlay, scoring, and virtual time</h3>
@@ -183,8 +194,9 @@ TENKACLOUD_SIMULATOR_SAKURA_CREDENTIAL=&lt;simulator-only basic pair&gt;</code><
       attack probes use the authenticated <code>HTTP::Endpoint/AttackProbe</code> provider command. Phased
       scoring advances time with <code>POST /v1/worlds/{worldId}/clock/advance</code> and accepts only the strict
       <code>{ clock, appliedTransitions }</code> response, keeping provider transition rules outside TenkaCloud.
-      Score cycles are serialized per problem across lifecycle, explicit, and periodic entry points so terminal
-      awards and virtual-clock advancement are exactly-once within one local process.
+      Score cycles are deduplicated per problem. Simulator lifecycle, snapshot, probe, and virtual-clock mutations
+      share a per-problem operation queue, and a deployment-generation check discards a score result if stop/reset
+      replaced its world before commit.
     </p>
 
     <h3>5.2 Native CLI routing</h3>

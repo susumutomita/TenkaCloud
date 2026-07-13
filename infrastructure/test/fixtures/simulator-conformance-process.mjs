@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { join } from "node:path";
@@ -132,6 +132,31 @@ const server = createServer(async (request, response) => {
       });
       return;
     }
+    const worldByDeploymentMatch = /^\/v1\/worlds\/by-deployment\/([^/]+)$/.exec(url.pathname);
+    if (request.method === "GET" && worldByDeploymentMatch) {
+      const deploymentId = decodeURIComponent(worldByDeploymentMatch[1]);
+      if (request.headers["idempotency-key"] !== deploymentId) {
+        json(response, StatusCodes.NOT_FOUND, { error: { code: "NotFound" } });
+        return;
+      }
+      const world = [...worlds.values()].find(
+        (candidate) =>
+          candidate.deploymentId === deploymentId &&
+          candidate.tenantId === tokenClaims.tenantId &&
+          candidate.eventId === tokenClaims.eventId &&
+          candidate.teamId === tokenClaims.teamId &&
+          deploymentId === tokenClaims.deploymentId,
+      );
+      if (!world) {
+        json(response, StatusCodes.NOT_FOUND, { error: { code: "NotFound" } });
+        return;
+      }
+      json(response, StatusCodes.OK, {
+        worldId: world.worldId,
+        consoleUrl: `${publicOrigin}/console/${encodeURIComponent(world.worldId)}`,
+      });
+      return;
+    }
     const deploymentMatch = /^\/v1\/worlds\/([^/]+)\/deployments(?:\/([^/]+))?$/.exec(url.pathname);
     if (deploymentMatch) {
       const world = worlds.get(decodeURIComponent(deploymentMatch[1]));
@@ -149,6 +174,28 @@ const server = createServer(async (request, response) => {
         json(response, StatusCodes.OK, deployment(world));
         return;
       }
+    }
+    const restoreLookupMatch =
+      /^\/v1\/worlds\/([^/]+)\/snapshots\/restores\/([^/]+)$/.exec(url.pathname);
+    if (request.method === "GET" && restoreLookupMatch) {
+      const sourceWorldId = decodeURIComponent(restoreLookupMatch[1]);
+      const snapshotHash = decodeURIComponent(restoreLookupMatch[2]);
+      const restoreKey = request.headers["idempotency-key"];
+      const restored = [...worlds.values()].find(
+        (candidate) =>
+          candidate.restoredFrom === sourceWorldId &&
+          candidate.snapshotHash === snapshotHash &&
+          candidate.restoreKey === restoreKey,
+      );
+      if (!restored) {
+        json(response, StatusCodes.NOT_FOUND, { error: { code: "NotFound" } });
+        return;
+      }
+      json(response, StatusCodes.OK, {
+        worldId: restored.worldId,
+        consoleUrl: `${publicOrigin}/console/${encodeURIComponent(restored.worldId)}`,
+      });
+      return;
     }
     const snapshotMatch = /^\/v1\/worlds\/([^/]+)\/snapshots$/.exec(url.pathname);
     if (snapshotMatch) {
@@ -168,15 +215,41 @@ const server = createServer(async (request, response) => {
           lastSequence: 1,
           resourceGraph: {},
           providerProjections: {},
-          hash: "conformance",
+          hash: "a".repeat(64),
         });
         return;
       }
       if (request.method === "POST") {
-        await body(request);
+        const snapshot = await body(request);
+        const restoreKey = request.headers["idempotency-key"];
+        if (typeof restoreKey !== "string" || restoreKey.length === 0) {
+          throw new Error("missing snapshot restore idempotency key");
+        }
+        const existing = [...worlds.values()].find(
+          (candidate) =>
+            candidate.restoredFrom === world.worldId &&
+            candidate.snapshotHash === snapshot.hash &&
+            candidate.restoreKey === restoreKey,
+        );
+        const restoredWorldId =
+          existing?.worldId ??
+          `${world.worldId}-restore-${createHash("sha256")
+            .update(`${snapshot.hash}:${restoreKey}`)
+            .digest("hex")
+            .slice(0, 12)}`;
+        if (!existing) {
+          worlds.set(restoredWorldId, {
+            ...world,
+            worldId: restoredWorldId,
+            restoredFrom: world.worldId,
+            snapshotHash: snapshot.hash,
+            restoreKey,
+          });
+          writeFileSync(join(stateDir, "worlds.json"), JSON.stringify([...worlds.values()]));
+        }
         json(response, StatusCodes.CREATED, {
-          worldId: world.worldId,
-          consoleUrl: `${publicOrigin}/console/${encodeURIComponent(world.worldId)}`,
+          worldId: restoredWorldId,
+          consoleUrl: `${publicOrigin}/console/${encodeURIComponent(restoredWorldId)}`,
         });
         return;
       }
@@ -216,6 +289,10 @@ const server = createServer(async (request, response) => {
       }
       const provider = decodeURIComponent(operationMatch[2]);
       const operation = decodeURIComponent(operationMatch[3]);
+      if (operation === "DescribeEndpointPlacement") {
+        json(response, StatusCodes.NOT_FOUND, { error: { code: "EndpointPlacementNotFound" } });
+        return;
+      }
       world.providerOperations ??= [];
       world.providerOperations.push({ provider, operation, idempotencyKey, command });
       writeFileSync(join(stateDir, "worlds.json"), JSON.stringify([...worlds.values()]));

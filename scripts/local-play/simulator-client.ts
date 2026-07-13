@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { SimulationOverlayDocument } from "./simulator";
 
 const DEFAULT_SIMULATOR_REQUEST_TIMEOUT_MS = 10_000;
+const MAX_SIMULATOR_RESPONSE_BYTES = 1_000_000;
 
 /** The pinned TenkaCloud Simulator protocol version consumed by this repo. */
 export const SIMULATOR_PROTOCOL_VERSION = "2026-07-11" as const;
@@ -61,6 +62,7 @@ export interface SimulatorSnapshot {
   readonly protocolVersion: string;
   readonly worldId: string;
   readonly namespace: Readonly<Record<string, string>>;
+  readonly hash: string;
   readonly [key: string]: unknown;
 }
 
@@ -116,8 +118,13 @@ const simulatorSnapshotSchema = z
     protocolVersion: z.string(),
     worldId: z.string().min(1),
     namespace: z.record(z.string(), z.string()),
+    hash: z.string().regex(/^[a-f0-9]{64}$/),
   })
   .passthrough();
+
+export function parseSimulatorSnapshot(value: unknown): SimulatorSnapshot {
+  return simulatorSnapshotSchema.parse(value);
+}
 const simulatorOperationResponseSchema = z.record(z.string(), z.unknown());
 const simulatorClockAdvanceResponseSchema = z
   .object({
@@ -133,9 +140,18 @@ const simulatorClockAdvanceResponseSchema = z
   })
   .strict();
 
+export class SimulatorHttpError extends Error {
+  constructor(
+    readonly operation: string,
+    readonly status: number,
+  ) {
+    super(`${operation} failed (HTTP ${status})`);
+  }
+}
+
 async function parseJson<T>(response: Response, label: string, schema: z.ZodType<T>): Promise<T> {
   const text = await response.text();
-  if (!response.ok) throw new Error(`${label} failed (HTTP ${response.status}): ${text}`);
+  if (!response.ok) throw new SimulatorHttpError(label, response.status);
   let value: unknown;
   try {
     value = JSON.parse(text);
@@ -144,9 +160,42 @@ async function parseJson<T>(response: Response, label: string, schema: z.ZodType
   }
   const parsed = schema.safeParse(value);
   if (!parsed.success) {
-    throw new Error(`${label} returned an invalid response: ${parsed.error.message}`);
+    throw new Error(`${label} returned an invalid response`);
   }
   return parsed.data;
+}
+
+async function readBoundedResponseBody(response: Response): Promise<Uint8Array> {
+  const declared = response.headers.get("content-length");
+  if (declared && /^\d+$/.test(declared) && Number(declared) > MAX_SIMULATOR_RESPONSE_BYTES) {
+    await response.body?.cancel().catch(() => undefined);
+    throw new Error(`Simulator response exceeded ${MAX_SIMULATOR_RESPONSE_BYTES} bytes`);
+  }
+  if (!response.body) return new Uint8Array();
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_SIMULATOR_RESPONSE_BYTES) {
+        await reader.cancel().catch(() => undefined);
+        throw new Error(`Simulator response exceeded ${MAX_SIMULATOR_RESPONSE_BYTES} bytes`);
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const body = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return body;
 }
 
 async function boundedFetch(
@@ -168,7 +217,7 @@ async function boundedFetch(
       const response = await fetchFn(url, { ...init, signal: controller.signal });
       // Fetch resolves at headers. Keep the deadline active until the body is
       // complete so a stalled local process cannot wedge lifecycle or cleanup.
-      const body = await response.arrayBuffer();
+      const body = await readBoundedResponseBody(response);
       const bodyForbidden =
         response.status === StatusCodes.NO_CONTENT ||
         response.status === StatusCodes.RESET_CONTENT ||
@@ -222,10 +271,30 @@ export function createSimulatorClient(
       return parseJson<SimulatorWorldResponse>(
         await timedFetch(`${base}/v1/worlds`, {
           method: "POST",
-          headers: authenticatedHeaders(true),
+          headers: {
+            ...authenticatedHeaders(true),
+            "idempotency-key": request.deploymentId,
+          },
           body: JSON.stringify(request),
         }),
         "create world",
+        simulatorWorldResponseSchema,
+      );
+    },
+    async getWorldByDeployment(deploymentId: string): Promise<SimulatorWorldResponse | undefined> {
+      const response = await timedFetch(
+        `${base}/v1/worlds/by-deployment/${encodeURIComponent(deploymentId)}`,
+        {
+          headers: {
+            ...authenticatedHeaders(),
+            "idempotency-key": deploymentId,
+          },
+        },
+      );
+      if (response.status === StatusCodes.NOT_FOUND) return undefined;
+      return parseJson<SimulatorWorldResponse>(
+        response,
+        "get world by deployment",
         simulatorWorldResponseSchema,
       );
     },
@@ -261,8 +330,8 @@ export function createSimulatorClient(
         method: "DELETE",
         headers: authenticatedHeaders(),
       });
-      if (!response.ok) {
-        throw new Error(`delete world failed (HTTP ${response.status}): ${await response.text()}`);
+      if (!response.ok && response.status !== StatusCodes.NOT_FOUND) {
+        throw new Error(`delete world failed (HTTP ${response.status})`);
       }
     },
     async exportSnapshot(worldId: string): Promise<SimulatorSnapshot> {
@@ -277,14 +346,39 @@ export function createSimulatorClient(
     async importSnapshot(
       worldId: string,
       snapshot: SimulatorSnapshot,
+      idempotencyKey: string,
     ): Promise<SimulatorWorldResponse> {
       return parseJson<SimulatorWorldResponse>(
         await timedFetch(`${base}/v1/worlds/${encodeURIComponent(worldId)}/snapshots`, {
           method: "POST",
-          headers: authenticatedHeaders(true),
+          headers: {
+            ...authenticatedHeaders(true),
+            "idempotency-key": idempotencyKey,
+          },
           body: JSON.stringify(snapshot),
         }),
         "import snapshot",
+        simulatorWorldResponseSchema,
+      );
+    },
+    async getSnapshotRestore(
+      worldId: string,
+      snapshotHash: string,
+      idempotencyKey: string,
+    ): Promise<SimulatorWorldResponse | undefined> {
+      const response = await timedFetch(
+        `${base}/v1/worlds/${encodeURIComponent(worldId)}/snapshots/restores/${encodeURIComponent(snapshotHash)}`,
+        {
+          headers: {
+            ...authenticatedHeaders(),
+            "idempotency-key": idempotencyKey,
+          },
+        },
+      );
+      if (response.status === StatusCodes.NOT_FOUND) return undefined;
+      return parseJson<SimulatorWorldResponse>(
+        response,
+        "get snapshot restore",
         simulatorWorldResponseSchema,
       );
     },

@@ -4,6 +4,8 @@ import {
   getCliCredentials,
   getConsoleSigninUrl,
   getScoreEvents,
+  issueProblemConsoleHandoff,
+  resetProblem,
   revealHint,
   startProblem,
   stopProblem,
@@ -56,6 +58,33 @@ describe("stopProblem", () => {
     const [url, init] = fetchMock.mock.calls[0] ?? [];
     expect(String(url)).toContain("/portal/me/problems/prob%2F1/stop");
     expect((init as RequestInit)?.method).toBe("POST");
+  });
+});
+
+describe("resetProblem", () => {
+  it("should POST the encoded simulated-cloud reset endpoint and return the lifecycle status", async () => {
+    const fetchMock = mockFetch({ status: "running" });
+    const result = await resetProblem(API, KEY, "cloud/prob 1");
+    expect(result).toEqual({ status: "running" });
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    expect(String(url)).toContain("/portal/me/problems/cloud%2Fprob%201/reset");
+    expect((init as RequestInit)?.method).toBe("POST");
+  });
+});
+
+describe("issueProblemConsoleHandoff", () => {
+  it("should authenticate the handoff and return only its one-time URL", async () => {
+    const fetchMock = mockFetch({
+      handoffPath: "portal/me/problems/cloud%2Fprob/console?ticket=opaque-one-time",
+    });
+    const result = await issueProblemConsoleHandoff(API, KEY, "cloud/prob");
+    expect(result).toBe(
+      "https://api.example.com/portal/me/problems/cloud%2Fprob/console?ticket=opaque-one-time",
+    );
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    expect(String(url)).toContain("/portal/me/problems/cloud%2Fprob/console-handoff");
+    expect((init as RequestInit)?.method).toBe("POST");
+    expect((init as RequestInit)?.headers).toMatchObject({ authorization: `Bearer ${KEY}` });
   });
 });
 

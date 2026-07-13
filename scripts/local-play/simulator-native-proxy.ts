@@ -34,7 +34,18 @@ const PRIVATE_RESPONSE_HEADERS = new Set([
   "cookie",
   "set-cookie",
   "set-cookie2",
+  "service-worker-allowed",
 ]);
+
+function privateForwardingHeader(name: string): boolean {
+  return (
+    name === "forwarded" ||
+    name.startsWith("x-forwarded-") ||
+    name.startsWith("x-github-") ||
+    name.startsWith("x-original-") ||
+    name.startsWith("cf-")
+  );
+}
 
 export interface SimulatorNativeProxyOptions {
   readonly fetchFn?: typeof fetch;
@@ -65,7 +76,12 @@ async function requestBody(request: IncomingMessage): Promise<Uint8Array | undef
 function upstreamHeaders(request: IncomingMessage): Headers {
   const headers = new Headers();
   for (const [key, value] of Object.entries(request.headers)) {
-    if (HOP_BY_HOP_HEADERS.has(key) || PRIVATE_REQUEST_HEADERS.has(key) || value === undefined) {
+    if (
+      HOP_BY_HOP_HEADERS.has(key) ||
+      PRIVATE_REQUEST_HEADERS.has(key) ||
+      privateForwardingHeader(key) ||
+      value === undefined
+    ) {
       continue;
     }
     if (Array.isArray(value)) {
@@ -117,15 +133,15 @@ function proxyMatch(pathname: string): RegExpExecArray | null {
   return new RegExp(`^${SIMULATOR_NATIVE_PROXY_PREFIX}/([^/]+)/([^/]+)(/.*)?$`).exec(pathname);
 }
 
-function simulatorRoute(
+async function simulatorRoute(
   state: LocalPlayState,
   problemId: string,
   targetId: string,
-): SimulatorNativeRoute | undefined {
+): Promise<SimulatorNativeRoute | undefined> {
   const problem = state.simulatedRuntimes.get(problemId)?.problem;
   if (!problem || !state.simulator) return undefined;
   try {
-    return state.simulator.nativeRoute(problem, targetId);
+    return await state.simulator.nativeRoute(problem, targetId);
   } catch {
     return undefined;
   }
@@ -184,12 +200,18 @@ async function forwardNativeRequest(
   } catch (error) {
     if (response.headersSent) response.end();
     else {
-      writeProxyError(
-        response,
+      const status =
         error instanceof Error && error.message === "native_payload_too_large"
           ? StatusCodes.REQUEST_TOO_LONG
-          : StatusCodes.BAD_GATEWAY,
-        error instanceof Error ? error.message : "native_proxy_failed",
+          : StatusCodes.BAD_GATEWAY;
+      writeProxyError(
+        response,
+        status,
+        status === StatusCodes.BAD_GATEWAY
+          ? "native_proxy_failed"
+          : error instanceof Error
+            ? error.message
+            : "native_proxy_failed",
       );
     }
   }
@@ -220,7 +242,7 @@ export async function proxySimulatorNativeRequest(
     writeProxyError(response, StatusCodes.BAD_REQUEST, "invalid_native_route");
     return true;
   }
-  const route = simulatorRoute(state, problemId, targetId);
+  const route = await simulatorRoute(state, problemId, targetId);
   if (!route) {
     writeProxyError(response, StatusCodes.NOT_FOUND, "unknown_simulator_target");
     return true;

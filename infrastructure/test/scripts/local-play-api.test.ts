@@ -1,3 +1,4 @@
+import { StatusCodes } from "http-status-codes";
 import { describe, expect, it, vi } from "vitest";
 import { handleLocalPlayRequest } from "../../../scripts/local-play/api";
 import {
@@ -6,6 +7,7 @@ import {
   type LocalPlayRequest,
   type VerifyFn,
 } from "../../../scripts/local-play/api-state";
+import { ContainerStartOwnershipError } from "../../../scripts/local-play/container-runner";
 import type { ContainerProblem } from "../../../scripts/local-play/manifest";
 
 const PROBLEM: ContainerProblem = {
@@ -111,7 +113,7 @@ describe("local-play API", () => {
     const problem = body.problems[0];
     expect(problem.problemId).toBe("sqli-demo");
     expect(problem.instructions).toBe("Bypass the login and read the flag.");
-    expect(problem.lifecycle).toEqual({ status: "running" });
+    expect(problem.lifecycle).toEqual({ status: "running", runtimeKind: "docker" });
     expect(problem.stackOutputs).toEqual({ Web: "http://127.0.0.1:18080/" });
     expect(problem.scoring.kind).toBe("flag");
     expect(problem.scoring.flagSubmitted).toBe(false);
@@ -714,8 +716,7 @@ describe("local-play API: multi-problem session (#2392)", () => {
         browserText: (text) =>
           text.replace(
             /\bhttp:\/\/127\.0\.0\.1:(\d+)(?=\/|[\s`"'<>)]|$)/g,
-            (_match, port: string) =>
-              `https://tenkacloud-demo-5175.app.github.dev/__tenkacloud-local-port/${port}`,
+            (_match, port: string) => `https://tenkacloud-demo-${port}.app.github.dev`,
           ),
       },
     );
@@ -733,11 +734,9 @@ describe("local-play API: multi-problem session (#2392)", () => {
       }
     ).problems[1];
     expect(problem.problemId).toBe("api-idor-demo");
-    expect(problem.instructions).toBe(
-      "Open https://tenkacloud-demo-5175.app.github.dev/__tenkacloud-local-port/18280/admin.",
-    );
+    expect(problem.instructions).toBe("Open https://tenkacloud-demo-18280.app.github.dev/admin.");
     expect(problem.stackOutputs).toEqual({
-      Web: "https://tenkacloud-demo-5175.app.github.dev/__tenkacloud-local-port/18280/",
+      Web: "https://tenkacloud-demo-18280.app.github.dev/",
     });
 
     await handleLocalPlayRequest(
@@ -811,7 +810,7 @@ describe("local-play API: on-demand container lifecycle (#2392 Phase 2)", () => 
     ).problems;
     expect(problems).toHaveLength(2);
     for (const problem of problems) {
-      expect(problem.lifecycle).toEqual({ status: "stopped" });
+      expect(problem.lifecycle).toEqual({ status: "stopped", runtimeKind: "docker" });
       // a stopped container's endpoints must not leak into the portal
       expect(problem.stackOutputs).toEqual({});
     }
@@ -836,7 +835,7 @@ describe("local-play API: on-demand container lifecycle (#2392 Phase 2)", () => 
         problems: Array<{ stackOutputs: Record<string, string>; lifecycle: { status: string } }>;
       }
     ).problems[0];
-    expect(problem.lifecycle).toEqual({ status: "running" });
+    expect(problem.lifecycle).toEqual({ status: "running", runtimeKind: "docker" });
     // first start takes offset 0 → the declared ports are kept as-is
     expect(problem.stackOutputs).toEqual({ Web: "http://127.0.0.1:18080/" });
   });
@@ -884,6 +883,28 @@ describe("local-play API: on-demand container lifecycle (#2392 Phase 2)", () => 
     expect(badStop.status).toBe(404);
   });
 
+  it("should reject reset and console handoff for Docker problems", async () => {
+    const state = await stateWith(neverVerify);
+    const reset = await handleLocalPlayRequest(
+      post("/portal/me/problems/sqli-demo/reset", {}),
+      state,
+      NOW,
+    );
+    expect(reset).toEqual({
+      status: StatusCodes.NOT_FOUND,
+      body: { error: "unknown_simulated_problem" },
+    });
+    const consoleHandoff = await handleLocalPlayRequest(
+      get("/portal/me/problems/sqli-demo/console"),
+      state,
+      NOW,
+    );
+    expect(consoleHandoff).toEqual({
+      status: StatusCodes.NOT_FOUND,
+      body: { error: "unknown_simulated_problem" },
+    });
+  });
+
   it("should fail a start loudly (502 start_failed) and mark the problem error", async () => {
     const state = createLocalPlayState(
       { problems: [PROBLEM] },
@@ -904,7 +925,63 @@ describe("local-play API: on-demand container lifecycle (#2392 Phase 2)", () => 
     const view = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
     const problem = (view.body as { problems: Array<{ lifecycle: { status: string } }> })
       .problems[0];
-    expect(problem.lifecycle).toEqual({ status: "error" });
+    expect(problem.lifecycle).toEqual({ status: "error", runtimeKind: "docker" });
+  });
+
+  it("should expose retained ownership and retry cleanup with the exact failed-start unit", async () => {
+    const unit = {
+      problemId: PROBLEM.problemId,
+      composePath: "/tmp/retained.compose.yml",
+      composeProjectName: "tc-local-retained",
+      secretEnv: [],
+      remappedComposePath: "/tmp/retained.compose.yml",
+    };
+    const stopped: (typeof unit)[] = [];
+    let failStop = true;
+    const state = createLocalPlayState(
+      { problems: [PROBLEM] },
+      {
+        verify: neverVerify,
+        startContainer: async () => {
+          throw new ContainerStartOwnershipError(unit, [new Error("readiness cleanup failed")]);
+        },
+        stopContainer: async (candidate) => {
+          stopped.push(candidate as typeof unit);
+          if (failStop) {
+            failStop = false;
+            throw new Error("retry down failed");
+          }
+        },
+      },
+    );
+
+    const start = await handleLocalPlayRequest(
+      post("/portal/me/problems/sqli-demo/start", {}),
+      state,
+      NOW,
+    );
+    expect(start.status).toBe(StatusCodes.BAD_GATEWAY);
+    const failedView = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
+    const failedProblem = (failedView.body as { problems: Array<{ lifecycle: unknown }> })
+      .problems[0];
+    expect(failedProblem.lifecycle).toEqual({
+      status: "error",
+      runtimeKind: "docker",
+      cleanupRequired: true,
+    });
+
+    await expect(
+      handleLocalPlayRequest(post("/portal/me/problems/sqli-demo/stop", {}), state, NOW),
+    ).rejects.toThrow("retry down failed");
+    expect(state.lifecycle.cleanupRequired(PROBLEM.problemId)).toBe(true);
+    const retry = await handleLocalPlayRequest(
+      post("/portal/me/problems/sqli-demo/stop", {}),
+      state,
+      NOW,
+    );
+    expect(retry).toEqual({ status: StatusCodes.OK, body: { status: "stopped" } });
+    expect(stopped).toEqual([unit, unit]);
+    expect(state.lifecycle.cleanupRequired(PROBLEM.problemId)).toBe(false);
   });
 
   it("should stop a running problem, tear its unit down, and restore the catalog problem", async () => {
@@ -935,7 +1012,7 @@ describe("local-play API: on-demand container lifecycle (#2392 Phase 2)", () => 
         problems: Array<{ stackOutputs: Record<string, string>; lifecycle: { status: string } }>;
       }
     ).problems[0];
-    expect(problem.lifecycle).toEqual({ status: "stopped" });
+    expect(problem.lifecycle).toEqual({ status: "stopped", runtimeKind: "docker" });
     expect(problem.stackOutputs).toEqual({});
   });
 

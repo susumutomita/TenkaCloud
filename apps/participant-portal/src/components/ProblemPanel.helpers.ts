@@ -267,30 +267,31 @@ export function isHttpUrlOutput(value: string): boolean {
   return HTTP_URL_OUTPUT_RE.test(value);
 }
 
-// In Codespaces, a loopback challenge URL is rewritten to a portal-proxy URL
-// (`https://<codespace>-5175.<domain>/__tenkacloud-local-port/<port>/…`) so the
-// browser can reach it. That proxy URL is authenticated-browser-only: it can't
-// be curled from the integrated terminal, and a browser address bar can't send
-// an `Authorization` header — so API/curl challenges (IDOR, etc.) are solved
-// against the loopback origin from the terminal. Recover that loopback form
-// from the proxy URL so the portal can show it as a terminal hint.
-const CODESPACES_CHALLENGE_PROXY_PREFIX = "/__tenkacloud-local-port/";
-
-export function codespacesLoopbackUrl(value: string): string | undefined {
+// Codespaces gives each forwarded port its own origin. Recover a terminal
+// loopback hint only when the target hostname has the exact same codespace name
+// and forwarding domain as this portal's 5175 origin.
+export function codespacesLoopbackUrl(
+  value: string,
+  portalHostname = globalThis.location?.hostname,
+): string | undefined {
   let url: URL;
   try {
     url = new URL(value);
   } catch {
     return undefined;
   }
-  if (!url.pathname.startsWith(CODESPACES_CHALLENGE_PROXY_PREFIX)) return undefined;
-  const rest = url.pathname.slice(CODESPACES_CHALLENGE_PROXY_PREFIX.length);
-  const slash = rest.indexOf("/");
-  const rawPort = slash === -1 ? rest : rest.slice(0, slash);
+  if (url.protocol !== "https:" || url.username || url.password || url.port || !portalHostname) {
+    return undefined;
+  }
+  const portal = /^(?<name>.+)-5175\.(?<domain>.+)$/.exec(portalHostname);
+  if (!portal?.groups) return undefined;
+  const prefix = `${portal.groups.name}-`;
+  const suffix = `.${portal.groups.domain}`;
+  if (!url.hostname.startsWith(prefix) || !url.hostname.endsWith(suffix)) return undefined;
+  const rawPort = url.hostname.slice(prefix.length, -suffix.length);
   const port = Number(rawPort);
   if (!Number.isInteger(port) || port < 1 || port > 65_535) return undefined;
-  const path = slash === -1 ? "/" : rest.slice(slash);
-  return `http://localhost:${port}${path}${url.search}`;
+  return `http://localhost:${port}${url.pathname}${url.search}`;
 }
 
 export function splitStackOutputs(stackOutputs: ParticipantProblemView["stackOutputs"]): {

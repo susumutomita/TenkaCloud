@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, randomUUID } from "node:crypto";
+import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { parseLoopbackUrl } from "./loopback";
 
 const TOKEN_PREFIX = "tc_sim_v1";
@@ -61,6 +61,30 @@ export function issueSimulatorLaunchToken(
   return `${TOKEN_PREFIX}.${payload}.${signature}`;
 }
 
+/** Return a verified token expiry, or undefined for a malformed/foreign token. */
+export function simulatorLaunchTokenExpiresAt(
+  value: string,
+  secretValue: string,
+): number | undefined {
+  try {
+    const [prefix, payload, signature, extra] = value.split(".");
+    if (prefix !== TOKEN_PREFIX || !payload || !signature || extra !== undefined) return undefined;
+    const expected = createHmac("sha256", decodeSimulatorLaunchSecret(secretValue))
+      .update(`${prefix}.${payload}`)
+      .digest();
+    const actual = Buffer.from(signature, "base64url");
+    if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return undefined;
+    const decoded = Buffer.from(payload, "base64url");
+    if (decoded.toString("base64url") !== payload) return undefined;
+    const claims = JSON.parse(decoded.toString("utf8")) as { expiresAt?: unknown };
+    return typeof claims.expiresAt === "number" && Number.isSafeInteger(claims.expiresAt)
+      ? claims.expiresAt
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Append the token as a fragment so HTTP servers and access logs never receive it. */
 export function simulatorConsoleUrl(
   consoleUrl: string,
@@ -69,7 +93,7 @@ export function simulatorConsoleUrl(
 ): string {
   const url = parseLoopbackUrl(consoleUrl, "Simulator console URL");
   const base = parseLoopbackUrl(simulatorBaseUrl, "Simulator base URL");
-  if (url.username || url.password || url.origin !== base.origin) {
+  if (url.username || url.password || url.search || url.hash || url.origin !== base.origin) {
     throw new Error("Simulator console URL must use the same loopback origin as the launcher");
   }
   url.hash = new URLSearchParams({ token: launchToken }).toString();

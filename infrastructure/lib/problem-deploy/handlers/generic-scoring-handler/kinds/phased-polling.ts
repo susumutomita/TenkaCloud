@@ -111,6 +111,9 @@ async function probePhasedSlots(
   overrideMap: Map<string, string>,
   scorePath: string,
 ): Promise<SlotResult[]> {
+  const placementMap = input.authoritativeEndpointPlacements
+    ? new Map(input.authoritativeEndpointPlacements.map((placement) => [placement.slot, placement]))
+    : undefined;
   return Promise.all(
     input.slots.map((slot) =>
       probePhasedSlot(
@@ -118,6 +121,7 @@ async function probePhasedSlots(
         input.scoring,
         outputs,
         overrideMap.get(slot.slot),
+        placementMap?.get(slot.slot),
         scorePath,
         input.probe ?? probeUrl,
       ),
@@ -130,6 +134,9 @@ async function probePhasedSlot(
   scoring: PhasedPollingScoringMetadata,
   outputs: Record<string, string>,
   overrideUrl: string | undefined,
+  authoritativePlacement:
+    | { readonly effectiveUrl: string; readonly verifiedPlatform: string }
+    | undefined,
   scorePath: string,
   probe: ProbeFn,
 ): Promise<SlotResult> {
@@ -137,7 +144,7 @@ async function probePhasedSlot(
   const defaultUrl = outputValue
     ? resolveDefaultUrl(outputValue, slot.default.appendPath)
     : undefined;
-  const baseUrl = overrideUrl ?? defaultUrl;
+  const baseUrl = authoritativePlacement?.effectiveUrl ?? overrideUrl ?? defaultUrl;
   if (!baseUrl) {
     return {
       slotName: slot.slot,
@@ -161,7 +168,8 @@ async function probePhasedSlot(
   return {
     slotName: slot.slot,
     baseUrl,
-    verifiedPlatform: verifyPlatformTier(selfReported, baseUrl),
+    verifiedPlatform:
+      authoritativePlacement?.verifiedPlatform ?? verifyPlatformTier(selfReported, baseUrl),
     ...(posture?.posture ? { posture: posture.posture } : {}),
     ...(posture?.platform ? { posturePlatform: posture.platform } : {}),
     scoreOk: scoreProbe.ok,

@@ -76,6 +76,8 @@ describe("local-play Simulator native route proxy", () => {
         path: request.url,
         authorization: request.headers.authorization,
         cookie: request.headers.cookie,
+        forwardedHost: request.headers["x-forwarded-host"],
+        githubUser: request.headers["x-github-user"],
         worldId: request.headers["x-tenkacloud-world-id"],
         deploymentId: request.headers["x-tenkacloud-deployment-id"],
         targetId: request.headers["x-tenkacloud-target-id"],
@@ -86,6 +88,7 @@ describe("local-play Simulator native route proxy", () => {
         "authentication-info": "nextnonce=must-not-reach-client",
         "content-type": "application/json",
         "set-cookie": "native_session=must-not-reach-client; HttpOnly",
+        "service-worker-allowed": "/",
       });
       response.end('{"native":true}');
     });
@@ -105,6 +108,8 @@ describe("local-play Simulator native route proxy", () => {
             authorization: `AWS4-HMAC-SHA256 Credential=TCSIMABCDEFGHIJK/20260712/us-east-1/test/aws4_request, SignedHeaders=host;x-amz-date, Signature=${"a".repeat(64)}`,
             "content-type": "application/x-www-form-urlencoded",
             cookie: "portal_session=must-not-reach-simulator",
+            "x-forwarded-host": "demo-3199.app.github.dev",
+            "x-github-user": "octocat",
             "x-amz-date": "20260712T000000Z",
           },
           body: "Version=1",
@@ -115,12 +120,15 @@ describe("local-play Simulator native route proxy", () => {
       expect(response.headers.get("authorization")).toBeNull();
       expect(response.headers.get("authentication-info")).toBeNull();
       expect(response.headers.get("set-cookie")).toBeNull();
+      expect(response.headers.get("service-worker-allowed")).toBeNull();
       expect(await response.json()).toEqual({ native: true });
       expect(observed).toEqual({
         method: "POST",
         path: "/service?Action=Describe",
         authorization: `AWS4-HMAC-SHA256 Credential=TCSIMABCDEFGHIJK/20260712/us-east-1/test/aws4_request, SignedHeaders=host;x-amz-date;x-tenkacloud-deployment-id;x-tenkacloud-target-id;x-tenkacloud-world-id, Signature=${"a".repeat(64)}`,
         cookie: undefined,
+        forwardedHost: undefined,
+        githubUser: undefined,
         worldId: "world-native",
         deploymentId: "deployment-native",
         targetId: "default",
@@ -188,7 +196,7 @@ describe("local-play Simulator native route proxy", () => {
       );
 
       expect(response.status).toBe(StatusCodes.BAD_GATEWAY);
-      expect(await response.json()).toEqual({ error: "native_response_too_large" });
+      expect(await response.json()).toEqual({ error: "native_proxy_failed" });
     } finally {
       await local.close();
       await close(upstream);
@@ -234,6 +242,7 @@ describe("local-play Simulator native route proxy", () => {
       expect(response.status).toBe(StatusCodes.BAD_GATEWAY);
       expect(fetchCalled).toBe(true);
       expect(abortObserved).toBe(true);
+      expect(await response.json()).toEqual({ error: "native_proxy_failed" });
     } finally {
       await close(proxy);
     }

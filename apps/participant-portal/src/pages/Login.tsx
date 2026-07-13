@@ -210,7 +210,7 @@ export function LoginPage({ config }: { config: AppConfig }) {
   const isMock = useIsMock();
 
   const [teamLoginKey, setTeamLoginKey] = useState(
-    () => readInviteKeyFromHash(window.location.hash) ?? "",
+    () => readInviteKeyFromHash(window.location.hash) ?? config.localTeamLoginKey ?? "",
   );
   const [show, setShow] = useState(false);
   const [submitting, setSubmitting] = useState(false);
