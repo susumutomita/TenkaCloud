@@ -1,10 +1,12 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildEducationGraphResponse,
   discoverProblemsEducationGraph,
+  type ProblemsEducationGraph,
+  parseProblemsEducationGraph,
   projectEducationMaterials,
 } from "../lib/utils/education-graph";
 
@@ -85,6 +87,24 @@ afterEach(() => {
 });
 
 describe("education graph catalog projection", () => {
+  it("should parse only object-shaped synth input and fail closed for malformed JSON", () => {
+    expect(parseProblemsEducationGraph(undefined)).toEqual({});
+    expect(parseProblemsEducationGraph("")).toEqual({});
+    expect(parseProblemsEducationGraph("null")).toEqual({});
+    expect(parseProblemsEducationGraph("[]")).toEqual({});
+    expect(parseProblemsEducationGraph('"graph"')).toEqual({});
+    expect(parseProblemsEducationGraph('{"safe":true}')).toEqual({ safe: true });
+
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    expect(parseProblemsEducationGraph("{broken")).toEqual({});
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("graph API will be empty"));
+    warn.mockRestore();
+  });
+
+  it("should return an empty catalog when the problems root is absent", () => {
+    expect(discoverProblemsEducationGraph(path.join(catalogRoot(), "absent"))).toEqual({});
+  });
+
   it("should return a stable empty graph for a catalog with no graph metadata", () => {
     expect(buildEducationGraphResponse({}, "ja")).toEqual({
       locale: "ja",
@@ -139,6 +159,106 @@ describe("education graph catalog projection", () => {
         target: "problem.api-idor-demo",
       },
     ]);
+  });
+
+  it("should discover node-only metadata with an empty relation list", () => {
+    const root = catalogRoot();
+    const directory = path.join(root, "challenges", "node-only");
+    fs.mkdirSync(directory, { recursive: true });
+    fs.writeFileSync(
+      path.join(directory, "metadata.json"),
+      JSON.stringify({
+        id: "node-only",
+        name: "ノードだけを持つ問題",
+        nodes: {
+          concepts: [{ id: "concept.node-only", description: "単独の概念" }],
+        },
+      }),
+    );
+
+    expect(discoverProblemsEducationGraph(root)["node-only"]).toMatchObject({
+      nodes: [
+        {
+          id: "concept.node-only",
+          type: "concept",
+          label: "単独の概念",
+          problemId: "node-only",
+        },
+      ],
+      relations: [],
+    });
+  });
+
+  it("should skip filesystem noise and malformed metadata without leaking partial graphs", () => {
+    const root = catalogRoot();
+    fs.writeFileSync(path.join(root, "README.txt"), "not a category");
+    const category = path.join(root, "challenges");
+    fs.mkdirSync(category);
+    fs.writeFileSync(path.join(category, "README.txt"), "not a problem");
+    fs.mkdirSync(path.join(category, "missing-metadata"));
+
+    const invalidJsonDirectory = path.join(category, "invalid-json");
+    fs.mkdirSync(invalidJsonDirectory);
+    fs.writeFileSync(path.join(invalidJsonDirectory, "metadata.json"), "{broken");
+
+    const missingIdDirectory = path.join(category, "missing-id");
+    fs.mkdirSync(missingIdDirectory);
+    fs.writeFileSync(path.join(missingIdDirectory, "metadata.json"), JSON.stringify({ nodes: {} }));
+
+    const graphlessDirectory = path.join(category, "graphless");
+    fs.mkdirSync(graphlessDirectory);
+    fs.writeFileSync(
+      path.join(graphlessDirectory, "metadata.json"),
+      JSON.stringify({ id: "graphless", name: "グラフなし" }),
+    );
+
+    const malformedDirectory = path.join(category, "malformed-fields");
+    fs.mkdirSync(malformedDirectory);
+    fs.writeFileSync(
+      path.join(malformedDirectory, "metadata.json"),
+      JSON.stringify({
+        id: "malformed-fields",
+        name: 123,
+        shortDescription: null,
+        i18n: { en: "invalid" },
+        nodes: {
+          learning_objectives: "not-an-array",
+          concepts: [
+            {},
+            { id: 123, description: "wrong id" },
+            { id: "concept.wrong-description", description: 123 },
+            { id: "concept.valid", description: "有効な概念" },
+          ],
+        },
+        relations: [
+          "not-an-object",
+          { type: "unknown", source: "problem.malformed-fields", target: "concept.valid" },
+          { type: "covers", source: 123, target: "concept.valid" },
+          { type: "covers", source: "problem.malformed-fields", target: 123 },
+          { type: "covers", source: "problem.malformed-fields", target: "concept.valid" },
+        ],
+      }),
+    );
+
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const graph = discoverProblemsEducationGraph(root);
+    warn.mockRestore();
+
+    expect(Object.keys(graph)).toEqual(["malformed-fields"]);
+    expect(graph["malformed-fields"]).toMatchObject({
+      problemId: "malformed-fields",
+      name: { ja: "malformed-fields" },
+      shortDescription: { ja: "" },
+      nodes: [
+        {
+          id: "concept.valid",
+          type: "concept",
+          label: "有効な概念",
+          problemId: "malformed-fields",
+        },
+      ],
+      relations: [{ type: "covers", source: "problem.malformed-fields", target: "concept.valid" }],
+    });
   });
 
   it("should normalize a deterministic API graph with implicit problem nodes", () => {
@@ -198,6 +318,80 @@ describe("education graph catalog projection", () => {
     }
   });
 
+  it("should deduplicate declarations and infer every implicit endpoint type", () => {
+    const catalog: ProblemsEducationGraph = {
+      second: {
+        problemId: "second",
+        name: { ja: "2番目" },
+        shortDescription: { ja: "" },
+        nodes: [
+          { id: "concept.shared", type: "concept", label: "後勝ちしてはいけない" },
+          { id: "", type: "concept", label: "空ID" },
+        ],
+        relations: [
+          { type: "related_to", source: "lo.implicit.goal", target: "concept.implicit" },
+          {
+            type: "related_to",
+            source: "assessment.implicit.result",
+            target: "misconception.implicit-belief",
+          },
+          {
+            type: "related_to",
+            source: "audience.security-engineer",
+            target: "unknown.fallback-type",
+          },
+          { type: "related_to", source: "problem.external", target: "problem.second" },
+        ],
+        referencedProblems: { "problem.external": { ja: "外部問題" } },
+      },
+      first: {
+        problemId: "first",
+        name: { ja: "1番目", en: "First" },
+        shortDescription: { ja: "" },
+        nodes: [{ id: "concept.shared", type: "concept", label: "先に採用される" }],
+        relations: [
+          { type: "covers", source: "problem.first", target: "concept.shared" },
+          { type: "covers", source: "problem.first", target: "concept.z-target" },
+          { type: "covers", source: "problem.second", target: "concept.a-target" },
+        ],
+      },
+    };
+
+    const english = buildEducationGraphResponse(catalog, "en");
+    const japanese = buildEducationGraphResponse(catalog, "ja");
+    const typesById = new Map(english.nodes.map((node) => [node.id, node.type]));
+
+    expect(english.problems.map((problem) => problem.id)).toEqual(["first", "second"]);
+    expect(english.nodes.find((node) => node.id === "concept.shared")).toMatchObject({
+      label: "Shared",
+    });
+    expect(english.nodes.find((node) => node.id === "")).toMatchObject({ label: "" });
+    expect(
+      [...typesById].filter(([id]) => id.includes("implicit") || id.includes("unknown")),
+    ).toEqual([
+      ["assessment.implicit.result", "assessment_criterion"],
+      ["concept.implicit", "concept"],
+      ["lo.implicit.goal", "learning_objective"],
+      ["misconception.implicit-belief", "misconception"],
+      ["unknown.fallback-type", "concept"],
+    ]);
+    expect(typesById.get("audience.security-engineer")).toBe("audience");
+    expect(typesById.get("problem.external")).toBe("problem");
+    expect(english.nodes.find((node) => node.id === "problem.external")?.label).toBe("外部問題");
+    expect(japanese.nodes.find((node) => node.id === "unknown.fallback-type")?.label).toBe(
+      "unknown.fallback-type",
+    );
+    expect(english.relations.map(({ source, target }) => `${source}->${target}`)).toEqual([
+      "problem.first->concept.shared",
+      "problem.first->concept.z-target",
+      "problem.second->concept.a-target",
+      "assessment.implicit.result->misconception.implicit-belief",
+      "audience.security-engineer->unknown.fallback-type",
+      "lo.implicit.goal->concept.implicit",
+      "problem.external->problem.second",
+    ]);
+  });
+
   it("should project deterministic localized video, text, and quiz material", () => {
     const root = catalogRoot();
     writeProblem(root, "api-idor-demo");
@@ -245,6 +439,63 @@ describe("education graph catalog projection", () => {
     });
     expect(JSON.stringify(first)).not.toContain("secret solution");
     expect(JSON.stringify(first)).not.toContain("secret hint");
+  });
+
+  it("should project Japanese material and omit empty material sections", () => {
+    const catalog: ProblemsEducationGraph = {
+      japanese: {
+        problemId: "japanese",
+        name: { ja: "日本語問題" },
+        shortDescription: { ja: "" },
+        nodes: [
+          {
+            id: "assessment.japanese.verify-safe-outcome",
+            type: "assessment_criterion",
+            label: "安全な結果を検証する",
+          },
+        ],
+        relations: [],
+      },
+      empty: {
+        problemId: "empty",
+        name: { ja: "空の問題" },
+        shortDescription: { ja: "" },
+        nodes: [],
+        relations: [],
+      },
+    };
+
+    expect(projectEducationMaterials(catalog, "japanese", "ja")).toEqual({
+      problemId: "japanese",
+      locale: "ja",
+      materials: {
+        videoScript: {
+          title: "日本語問題 - 動画台本",
+          segments: [{ heading: "評価基準", narration: "安全な結果を検証する" }],
+        },
+        textLesson: {
+          title: "日本語問題 - テキスト教材",
+          sections: [{ heading: "評価基準", body: "安全な結果を検証する" }],
+        },
+        quiz: {
+          title: "日本語問題 - 理解確認クイズ",
+          questions: [
+            {
+              id: "quiz.assessment.japanese.verify-safe-outcome",
+              prompt: "日本語問題の評価基準として求められる結果は何ですか。",
+              answer: "安全な結果を検証する",
+              explanation:
+                "評価基準 assessment.japanese.verify-safe-outcome から生成された確認問題です。",
+            },
+          ],
+        },
+      },
+    });
+    expect(projectEducationMaterials(catalog, "empty", "ja")?.materials).toMatchObject({
+      videoScript: { segments: [] },
+      textLesson: { sections: [] },
+      quiz: { questions: [] },
+    });
   });
 
   it("should project the real English sample entirely from graph IDs without Japanese text", () => {

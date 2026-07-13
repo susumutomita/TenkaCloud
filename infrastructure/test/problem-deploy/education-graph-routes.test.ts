@@ -30,10 +30,10 @@ const shared = {
   },
 } as unknown as EventSharedResources;
 
-function buildApp() {
+function buildApp(resources: EventSharedResources = shared) {
   const app = new Hono();
   app.onError(buildAuthErrorHandler({ logPrefix: "[education-graph]" }));
-  registerEducationGraphRoutes(app, shared);
+  registerEducationGraphRoutes(app, resources);
   return app;
 }
 
@@ -83,6 +83,15 @@ describe("education graph admin routes", () => {
     });
   });
 
+  it("should default material projections to Japanese", async () => {
+    const response = await buildApp().request(
+      "/admin/education-graph/problems/api-idor-demo/materials",
+    );
+
+    expect(response.status).toBe(StatusCodes.OK);
+    expect(await response.json()).toMatchObject({ locale: "ja" });
+  });
+
   it("should localize the graph response and default to Japanese", async () => {
     const english = await buildApp().request("/admin/education-graph?locale=en");
     const japanese = await buildApp().request("/admin/education-graph");
@@ -117,6 +126,23 @@ describe("education graph admin routes", () => {
       error: "education_graph_not_found",
       problemId: "not-in-graph",
     });
+  });
+
+  it("should serve an empty graph and 404 materials when graph wiring is absent", async () => {
+    const app = buildApp({} as EventSharedResources);
+    const graphResponse = await app.request("/admin/education-graph");
+    const materialsResponse = await app.request(
+      "/admin/education-graph/problems/api-idor-demo/materials",
+    );
+
+    expect(graphResponse.status).toBe(StatusCodes.OK);
+    expect(await graphResponse.json()).toEqual({
+      locale: "ja",
+      nodes: [],
+      relations: [],
+      problems: [],
+    });
+    expect(materialsResponse.status).toBe(StatusCodes.NOT_FOUND);
   });
 
   it.each([
