@@ -494,6 +494,49 @@ describe("Simulator artifact bundle", () => {
 });
 
 describe("provider-neutral local runtime", () => {
+  it("Simulator console URL が launcher と同一 loopback origin でなければ永続化前に拒否する", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-console-origin-"));
+    const observed: string[] = [];
+    const runtime = new SimulatorLocalRuntime({
+      ...runtimeOptions(root),
+      fetchFn: async (input, init) => {
+        const url = String(input);
+        observed.push(`${init?.method ?? "GET"} ${new URL(url).pathname}`);
+        if (url.endsWith("/v1/capabilities")) {
+          return Response.json({
+            protocolVersion: "2026-07-11",
+            providers: {
+              aws: {
+                engines: {
+                  cloudformation: {
+                    operations: ["deploy", "delete", "get", "capabilities", "world"],
+                  },
+                },
+              },
+            },
+          });
+        }
+        if (url.endsWith("/v1/worlds") && init?.method === "POST") {
+          return Response.json(
+            { worldId: "world-hostile-console", consoleUrl: "http://127.0.0.1:1/console" },
+            { status: StatusCodes.CREATED },
+          );
+        }
+        if (url.endsWith("/v1/worlds/world-hostile-console") && init?.method === "DELETE") {
+          return new Response(null, { status: StatusCodes.NO_CONTENT });
+        }
+        throw new Error(`unexpected Simulator request: ${init?.method ?? "GET"} ${url}`);
+      },
+    });
+    runningRuntimes.push(runtime);
+
+    await expect(runtime.start(problem(root))).rejects.toThrow("same loopback origin");
+    expect(observed).toContain("DELETE /v1/worlds/world-hostile-console");
+    expect(JSON.parse(readFileSync(runtimeOptions(root).sessionPath, "utf8"))).toMatchObject({
+      deployments: [],
+    });
+  });
+
   it("準備不能な記録済み launcher を停止済みとして記録し次回起動で置き換える", async () => {
     const root = mkdtempSync(join(tmpdir(), "tc-simulator-stale-launcher-"));
     const options = {
@@ -606,6 +649,63 @@ describe("provider-neutral local runtime", () => {
     );
     expect(existsSync(options.sessionPath)).toBe(false);
     expect(existsSync(options.participantEnvPath)).toBe(false);
+  });
+
+  it("owned launcher は world 削除失敗中に停止せず次回 cleanup で残りを再試行する", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-owned-cleanup-retry-"));
+    const options = runtimeOptions(root);
+    const launcher = await launchSimulator(options);
+    if (launcher.kind !== "process" || launcher.pid === undefined) {
+      throw new Error("test requires an owned process launcher");
+    }
+    const deployment = {
+      problemId: "retry",
+      worldId: "world-retry",
+      deploymentId: "deployment-retry",
+      launchToken: "token-retry",
+      status: "running" as const,
+      outputs: {},
+      consoleUrl: `${launcher.baseUrl}/console/retry`,
+      nativeCredentials: launcher.nativeCredentials,
+      clockObservedAtMs: 1,
+    };
+    writeFileSync(
+      options.sessionPath,
+      JSON.stringify({
+        protocolVersion: "2026-07-11",
+        launcher,
+        deployments: [deployment],
+      } satisfies SimulatorSessionRecord),
+    );
+    try {
+      await expect(
+        cleanupRecordedSimulatorSession(
+          options.sessionPath,
+          async () => {
+            throw new Error("transient delete failure");
+          },
+          options.env,
+          options.participantEnvPath,
+          20,
+        ),
+      ).rejects.toThrow("can be retried");
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(() => process.kill(launcher.pid ?? 0, 0)).not.toThrow();
+      expect(JSON.parse(readFileSync(options.sessionPath, "utf8"))).toMatchObject({
+        deployments: [{ problemId: "retry" }],
+      });
+
+      await cleanupRecordedSimulatorSession(
+        options.sessionPath,
+        async () => new Response(null, { status: StatusCodes.NO_CONTENT }),
+        options.env,
+        options.participantEnvPath,
+        20,
+      );
+      expect(existsSync(options.sessionPath)).toBe(false);
+    } finally {
+      stopSimulatorLauncher(launcher, options.env);
+    }
   });
 
   it("runtime close は一つの world 削除失敗で残りの cleanup を打ち切らない", async () => {
@@ -854,13 +954,33 @@ describe("provider-neutral local runtime", () => {
 
   it("should launch and stop an injected executable without a shell", async () => {
     const root = mkdtempSync(join(tmpdir(), "tc-simulator-process-"));
-    const launcher = await launchSimulator(runtimeOptions(root));
+    const options = runtimeOptions(root);
+    const launcher = await launchSimulator({
+      ...options,
+      env: {
+        ...options.env,
+        AWS_SECRET_ACCESS_KEY: "must-not-reach-simulator",
+        AWS_SESSION_TOKEN: "must-not-reach-simulator",
+        AZURE_CLIENT_SECRET: "must-not-reach-simulator",
+        GOOGLE_APPLICATION_CREDENTIALS: "/must/not/reach/simulator.json",
+        SAKURACLOUD_ACCESS_TOKEN: "must-not-reach-simulator",
+      },
+    });
     try {
       expect(launcher.kind).toBe("process");
       expect(launcher.baseUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
       expect(launcher.launchSecret).not.toContain("=");
+      await waitForReachable(
+        `${launcher.baseUrl}/v1/capabilities`,
+        "Simulator credential inheritance fixture",
+        3_000,
+      );
+      const capabilities = (await (await fetch(`${launcher.baseUrl}/v1/capabilities`)).json()) as {
+        inheritedHostCredentials?: readonly string[];
+      };
+      expect(capabilities.inheritedHostCredentials).toEqual([]);
     } finally {
-      stopSimulatorLauncher(launcher);
+      stopSimulatorLauncher(launcher, options.env);
     }
   });
 

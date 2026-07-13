@@ -24,6 +24,18 @@ export const DEFAULT_SIMULATOR_IMAGE =
   "ghcr.io/susumutomita/tenkacloud-simulator@sha256:0b8de36893513ffcf93db60a60e35849b3e592c08099adae2f0730a9f7fd1c9c";
 const DEFAULT_DOCKER_SOCKET = "/var/run/docker.sock";
 const MAX_WORKLOAD_IMAGES = 64;
+const SAFE_PROCESS_ENVIRONMENT_KEYS = [
+  "PATH",
+  "TMPDIR",
+  "TMP",
+  "TEMP",
+  "LANG",
+  "LC_ALL",
+  "LC_CTYPE",
+  "TZ",
+  "DOCKER_HOST",
+  "XDG_RUNTIME_DIR",
+] as const;
 
 export type SimulatorLauncherKind = "external" | "process" | "container";
 
@@ -214,6 +226,15 @@ function assertExecutable(command: string): void {
   accessSync(command, constants.X_OK);
 }
 
+function safeProcessEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  return Object.fromEntries(
+    SAFE_PROCESS_ENVIRONMENT_KEYS.flatMap((key) => {
+      const value = env[key];
+      return value === undefined ? [] : [[key, value]];
+    }),
+  );
+}
+
 function startProcess(
   command: string,
   args: readonly string[],
@@ -231,7 +252,7 @@ function startProcess(
     detached: true,
     stdio: ["ignore", logFd, logFd],
     env: {
-      ...env,
+      ...safeProcessEnvironment(env),
       TENKACLOUD_SIMULATOR_HOST: "127.0.0.1",
       TENKACLOUD_SIMULATOR_PORT: String(port),
       TENKACLOUD_SIMULATOR_LAUNCH_SECRET: launchSecret,

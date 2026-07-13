@@ -226,7 +226,7 @@ export class SimulatorLocalRuntime implements LocalSimulatorRuntimePort {
       this.#deployments.set(problemId, {
         ...deployment,
         launchToken,
-        consoleUrl: simulatorConsoleUrl(consoleBase.toString(), launchToken),
+        consoleUrl: simulatorConsoleUrl(consoleBase.toString(), launchToken, replacement.baseUrl),
         nativeCredentials: replacement.nativeCredentials,
       });
     }
@@ -376,6 +376,7 @@ export class SimulatorLocalRuntime implements LocalSimulatorRuntimePort {
       deploymentId,
     });
     try {
+      const consoleUrl = simulatorConsoleUrl(world.consoleUrl, launchToken, launcher.baseUrl);
       const created = await client.createDeployment(world.worldId, {
         problemId: problem.problemId,
         runtime: problem.runtime,
@@ -397,7 +398,7 @@ export class SimulatorLocalRuntime implements LocalSimulatorRuntimePort {
               this.options.nativeProxyBaseUrl,
             )
           : deployed.outputs,
-        consoleUrl: simulatorConsoleUrl(world.consoleUrl, launchToken),
+        consoleUrl,
         nativeCredentials: launcher.nativeCredentials,
         clockObservedAtMs: Date.now(),
       };
@@ -591,18 +592,16 @@ export class SimulatorLocalRuntime implements LocalSimulatorRuntimePort {
       }
     }
     if (this.#launcher) {
-      let launcherStopped = false;
-      try {
-        stopSimulatorLauncher(this.#launcher, this.options.env);
-        launcherStopped = this.#launcher.kind !== "external";
-      } catch (error) {
-        errors.push(error);
+      if (errors.length === 0) {
+        try {
+          stopSimulatorLauncher(this.#launcher, this.options.env);
+        } catch (error) {
+          errors.push(error);
+        }
       }
       if (errors.length === 0) {
         this.#launcher = undefined;
         this.#launcherNeedsReplacement = false;
-      } else {
-        this.#launcherNeedsReplacement = launcherStopped;
       }
       this.#persist();
     }

@@ -30,12 +30,12 @@ export async function cleanupRecordedSimulatorSession(
       remaining.push(deployment);
     }
   }
-  let launcherStopped = false;
-  try {
-    stopSimulatorLauncher(recorded.launcher, env);
-    launcherStopped = recorded.launcher.kind !== "external";
-  } catch (error) {
-    errors.push(error);
+  if (errors.length === 0) {
+    try {
+      stopSimulatorLauncher(recorded.launcher, env);
+    } catch (error) {
+      errors.push(error);
+    }
   }
   if (errors.length === 0) {
     unlinkIfExists(sessionPath);
@@ -44,9 +44,6 @@ export async function cleanupRecordedSimulatorSession(
     writePrivateJson(sessionPath, {
       ...recorded,
       deployments: remaining,
-      ...(launcherStopped
-        ? { launcherNeedsReplacement: true }
-        : { launcherNeedsReplacement: undefined }),
     } satisfies SimulatorSessionRecord);
   }
   if (errors.length > 0) {

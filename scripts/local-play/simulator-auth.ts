@@ -1,4 +1,5 @@
 import { createHmac, randomBytes, randomUUID } from "node:crypto";
+import { parseLoopbackUrl } from "./loopback";
 
 const TOKEN_PREFIX = "tc_sim_v1";
 const MIN_SECRET_BYTES = 32;
@@ -61,8 +62,16 @@ export function issueSimulatorLaunchToken(
 }
 
 /** Append the token as a fragment so HTTP servers and access logs never receive it. */
-export function simulatorConsoleUrl(consoleUrl: string, launchToken: string): string {
-  const url = new URL(consoleUrl);
+export function simulatorConsoleUrl(
+  consoleUrl: string,
+  launchToken: string,
+  simulatorBaseUrl: string,
+): string {
+  const url = parseLoopbackUrl(consoleUrl, "Simulator console URL");
+  const base = parseLoopbackUrl(simulatorBaseUrl, "Simulator base URL");
+  if (url.username || url.password || url.origin !== base.origin) {
+    throw new Error("Simulator console URL must use the same loopback origin as the launcher");
+  }
   url.hash = new URLSearchParams({ token: launchToken }).toString();
   return url.toString();
 }

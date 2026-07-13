@@ -14,6 +14,13 @@ const awsAccessKeyId = process.env.TENKACLOUD_SIMULATOR_AWS_ACCESS_KEY_ID;
 const azureCredential = process.env.TENKACLOUD_SIMULATOR_AZURE_CREDENTIAL;
 const gcpCredential = process.env.TENKACLOUD_SIMULATOR_GCP_CREDENTIAL;
 const sakuraCredential = process.env.TENKACLOUD_SIMULATOR_SAKURA_CREDENTIAL;
+const inheritedHostCredentials = [
+  "AWS_SECRET_ACCESS_KEY",
+  "AWS_SESSION_TOKEN",
+  "AZURE_CLIENT_SECRET",
+  "GOOGLE_APPLICATION_CREDENTIALS",
+  "SAKURACLOUD_ACCESS_TOKEN",
+].filter((name) => process.env[name] !== undefined);
 const workloadPolicy = {
   allowedImages: process.env.TENKACLOUD_SIMULATOR_WORKLOAD_ALLOWED_IMAGES,
   maxMemoryBytes: process.env.TENKACLOUD_SIMULATOR_WORKLOAD_MAX_MEMORY_BYTES,
@@ -93,6 +100,7 @@ const server = createServer(async (request, response) => {
           gcp: { engines: { "infra-manager": { operations: ["deploy", "delete", "get", "capabilities", "world"] } } },
         },
         workloadPolicy,
+        inheritedHostCredentials,
       });
       return;
     }
