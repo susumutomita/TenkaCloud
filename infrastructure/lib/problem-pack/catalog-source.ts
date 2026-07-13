@@ -55,6 +55,7 @@ import {
   discoverProblemsVisibility,
   discoverProblemsWriteups,
 } from "../utils/discover-problems-catalog.js";
+import { discoverProblemsEducationGraph } from "../utils/education-graph.js";
 import {
   composeEffectiveCatalog,
   type EffectiveCatalogProvenance,
@@ -92,6 +93,7 @@ export class LocalCatalogSource implements CatalogSource {
   loadBundle(problemsRoot: string): ProblemsCatalogBundle {
     return {
       catalog: discoverProblemsCatalog(problemsRoot),
+      educationGraph: discoverProblemsEducationGraph(problemsRoot),
       scoring: discoverProblemsScoring(problemsRoot),
       writeups: discoverProblemsWriteups(problemsRoot),
       endpoints: discoverProblemsEndpoints(problemsRoot),

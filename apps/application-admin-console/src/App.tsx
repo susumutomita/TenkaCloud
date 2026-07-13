@@ -11,6 +11,7 @@ import { CallbackPage } from "./pages/Callback";
 import { CompetitorAccountsPage } from "./pages/CompetitorAccounts";
 import { DeploymentDetailPage } from "./pages/DeploymentDetail";
 import { DeploymentsPage } from "./pages/Deployments";
+import { EducationGraphPage } from "./pages/EducationGraph";
 import { EventCreatePage } from "./pages/EventCreate";
 import { EventDetailPage } from "./pages/EventDetail";
 import { EventListPage } from "./pages/EventList";
@@ -80,6 +81,10 @@ function AppRoutes({ baseConfig }: { baseConfig: AppConfig }) {
       <Route path="/callback" element={<CallbackPage config={config} />} />
       <Route path="/" element={guarded(<HomePage />, config)} />
       <Route path="/problems" element={guarded(<ProblemsPage />, config)} />
+      <Route
+        path="/education-graph"
+        element={guarded(<EducationGraphPage config={config} />, config)}
+      />
       <Route
         path="/problems/:problemId"
         element={guarded(<ProblemDetailPage config={config} />, config)}

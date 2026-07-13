@@ -56,6 +56,8 @@ export interface EventApiLambdaProps {
    * Phase 2 (ADR-003) で DDB catalog に置換される予定。
    */
   readonly problemsCatalog: Readonly<Record<string, string>>;
+  /** Issue #2604: normalized, spoiler-safe education graph input baked into the bundle. */
+  readonly problemsEducationGraph?: Readonly<Record<string, unknown>>;
   /**
    * Issue #888: Red Team Disruption Injection の audit + idempotency 用 DDB table。
    *
@@ -170,12 +172,16 @@ function grantEventHotTablesDescribe(
 
 export function eventApiBundlingDefine(props: {
   readonly problemsCatalog: Readonly<Record<string, string>>;
+  readonly problemsEducationGraph?: Readonly<Record<string, unknown>>;
   readonly problemsDisruptions: Readonly<Record<string, readonly unknown[]>>;
   readonly problemsProvenance?: Readonly<Record<string, unknown>>;
   readonly problemRuntimes?: Readonly<Record<string, unknown>>;
 }): Record<string, string> {
   return {
     "process.env.BATTLE_PROBLEMS_CATALOG": JSON.stringify(JSON.stringify(props.problemsCatalog)),
+    "process.env.BATTLE_PROBLEMS_EDUCATION_GRAPH": JSON.stringify(
+      JSON.stringify(props.problemsEducationGraph ?? {}),
+    ),
     "process.env.BATTLE_PROBLEMS_DISRUPTIONS": JSON.stringify(
       JSON.stringify(props.problemsDisruptions),
     ),

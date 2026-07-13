@@ -82,6 +82,7 @@ describe("ProblemDeployBackendStack (MVP-1) — Deploy API Lambda (invoked from 
     // pin: env から消えていること
     expect(vars.BATTLE_PROBLEMS_CATALOG).toBeUndefined();
     expect(vars.BATTLE_PROBLEMS_DISRUPTIONS).toBeUndefined();
+    expect(vars.BATTLE_PROBLEMS_EDUCATION_GRAPH).toBeUndefined();
     // pin: 残しておく env が消えていないこと (= regression 防止)
     expect(vars.EVENTS_TABLE_NAME).toBeDefined();
     expect(vars.DISRUPTIONS_TABLE_NAME).toBeDefined();
@@ -109,6 +110,27 @@ describe("ProblemDeployBackendStack (MVP-1) — Deploy API Lambda (invoked from 
           contentDigest: "sha256-abc",
         },
       }),
+    );
+  });
+
+  it("EventApi Lambda bundling define should include the education graph (#2604)", () => {
+    const graph = {
+      "api-idor-demo": {
+        problemId: "api-idor-demo",
+        name: { ja: "管理者のメモ" },
+        shortDescription: { ja: "認可を学ぶ" },
+        nodes: [],
+        relations: [],
+      },
+    };
+    const define = eventApiBundlingDefine({
+      problemsCatalog: { "api-idor-demo": "problems/challenges/api-idor-demo" },
+      problemsEducationGraph: graph,
+      problemsDisruptions: {},
+    });
+
+    expect(JSON.parse(define["process.env.BATTLE_PROBLEMS_EDUCATION_GRAPH"])).toBe(
+      JSON.stringify(graph),
     );
   });
 
