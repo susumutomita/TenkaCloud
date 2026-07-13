@@ -21,7 +21,10 @@ vi.mock("react-router", () => ({
   useNavigate: () => mockNav,
 }));
 vi.mock("../../src/auth/AuthProvider", () => ({ useAuth: mockAuth }));
-vi.mock("../../src/auth/claims", () => ({ decodeIdToken: mockDecode }));
+vi.mock("../../src/auth/claims", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../src/auth/claims")>();
+  return { ...actual, decodeIdToken: mockDecode };
+});
 vi.mock("../../src/i18n", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../src/i18n")>();
   return {
@@ -76,6 +79,8 @@ describe("ShellLayout", () => {
   });
 
   it("should group navigation by operator jobs and navigate via side links", () => {
+    mockAuth.mockReturnValue({ tokens: { idToken: "tok" }, logout });
+    mockDecode.mockReturnValue({ "custom:userRole": "TenantAdmin" });
     const { container } = renderShell();
     expect(container).toHaveTextContent("nav.event_ops_section");
     expect(container).toHaveTextContent("nav.content_section");
@@ -87,12 +92,31 @@ describe("ShellLayout", () => {
     problemsLink.click();
     expect(mockNav).toHaveBeenCalledWith("/problems");
     mockNav.mockClear();
+    const educationGraphLink = must(
+      must(createWrapper(container).findSideNavigation(), "side nav").findLinkByHref(
+        "/education-graph",
+      ),
+      "education graph link",
+    );
+    educationGraphLink.click();
+    expect(mockNav).toHaveBeenCalledWith("/education-graph");
+    mockNav.mockClear();
     const usersLink = must(
       must(createWrapper(container).findSideNavigation(), "side nav").findLinkByHref("/users"),
       "users link",
     );
     usersLink.click();
     expect(mockNav).toHaveBeenCalledWith("/users");
+  });
+
+  it("should hide the TenantAdmin-only education graph from operators and viewers", () => {
+    mockAuth.mockReturnValue({ tokens: { idToken: "tok" }, logout });
+    mockDecode.mockReturnValue({ "custom:userRole": "TenantOperator" });
+    const { container } = renderShell();
+
+    expect(
+      createWrapper(container).findSideNavigation()?.findLinkByHref("/education-graph"),
+    ).toBeFalsy();
   });
 
   it("should show the Identity providers nav link only when samlSsoEnabled is true", () => {

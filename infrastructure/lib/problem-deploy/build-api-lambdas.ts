@@ -30,6 +30,7 @@ export interface BuildApiLambdasArgs {
   readonly environmentName: string;
   readonly defaultTenantId?: string;
   readonly problemsCatalog: Readonly<Record<string, string>>;
+  readonly problemsEducationGraph?: Readonly<Record<string, unknown>>;
   readonly problemsVisibility?: Readonly<Record<string, "private">>;
   readonly problemRuntimes?: Readonly<Record<string, unknown>>;
   readonly challengePayloadBucketName?: string;
@@ -149,6 +150,7 @@ export function buildApiLambdas(scope: Construct, args: BuildApiLambdasArgs): Ap
     competitorAccountsTable: tables.competitorAccounts?.table,
     eventBus,
     problemsCatalog: args.problemsCatalog,
+    problemsEducationGraph: args.problemsEducationGraph ?? {},
     defaultTenantId: args.defaultTenantId,
     environmentName: args.environmentName,
     // Issue #888: disruption fire / audit / catalog で参照
