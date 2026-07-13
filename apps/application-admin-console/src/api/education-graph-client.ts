@@ -1,4 +1,4 @@
-import type { ApiClient } from "./client";
+import type { ApiClient } from "./client-contract";
 
 export type EducationGraphLocale = "ja" | "en";
 
