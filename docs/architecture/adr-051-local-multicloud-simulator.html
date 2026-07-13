@@ -159,6 +159,11 @@ TENKACLOUD_SIMULATOR_SAKURA_CREDENTIAL=&lt;simulator-only basic pair&gt;</code><
         <code>QUERY</code> methods. Every other method is rejected before upstream I/O rather than trusting Fetch to
         preserve it.
       </li>
+      <li>
+        Unapproved browser origins are rejected before any participant API mutation. Browser cookies and upstream
+        cookies never cross either Simulator proxy, and request/response I/O is bounded by explicit size and abort
+        deadlines.
+      </li>
     </ul>
 
     <h2>5. Snapshots and recovery</h2>
@@ -178,6 +183,8 @@ TENKACLOUD_SIMULATOR_SAKURA_CREDENTIAL=&lt;simulator-only basic pair&gt;</code><
       attack probes use the authenticated <code>HTTP::Endpoint/AttackProbe</code> provider command. Phased
       scoring advances time with <code>POST /v1/worlds/{worldId}/clock/advance</code> and accepts only the strict
       <code>{ clock, appliedTransitions }</code> response, keeping provider transition rules outside TenkaCloud.
+      Score cycles are serialized per problem across lifecycle, explicit, and periodic entry points so terminal
+      awards and virtual-clock advancement are exactly-once within one local process.
     </p>
 
     <h3>5.2 Native CLI routing</h3>

@@ -8,6 +8,7 @@ import type { SimulatorDataPlaneRoute } from "./simulator-runtime";
 
 const MAX_DATA_PLANE_BODY_BYTES = 64 * 1024;
 const MAX_DATA_PLANE_HEADERS = 64;
+const DATA_PLANE_UPSTREAM_TIMEOUT_MS = 10_000;
 const HOP_BY_HOP_HEADERS = new Set([
   "connection",
   "content-length",
@@ -22,10 +23,18 @@ const HOP_BY_HOP_HEADERS = new Set([
 ]);
 const PRIVATE_REQUEST_HEADERS = new Set([
   "authorization",
+  "cookie",
   "x-tenkacloud-deployment-id",
   "x-tenkacloud-simulator-protocol",
   "x-tenkacloud-target-id",
   "x-tenkacloud-world-id",
+]);
+const PRIVATE_RESPONSE_HEADERS = new Set([
+  "authentication-info",
+  "authorization",
+  "cookie",
+  "set-cookie",
+  "set-cookie2",
 ]);
 const REJECTED_CLIENT_HOP_HEADERS = new Set([
   "keep-alive",
@@ -179,6 +188,7 @@ function copyResponseHeaders(
   for (const [key, value] of upstream.headers) {
     if (
       !HOP_BY_HOP_HEADERS.has(key) &&
+      !PRIVATE_RESPONSE_HEADERS.has(key) &&
       key !== "content-encoding" &&
       key !== "content-length" &&
       key !== "vary" &&
@@ -227,6 +237,7 @@ async function forwardDataPlaneRequest(
       method,
       headers,
       redirect: "manual",
+      signal: AbortSignal.timeout(DATA_PLANE_UPSTREAM_TIMEOUT_MS),
       ...(body ? { body } : {}),
     });
     const rawResponseBody = await responseBody(upstream);

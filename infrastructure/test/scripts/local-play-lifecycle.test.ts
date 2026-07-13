@@ -181,4 +181,21 @@ describe("ProblemLifecycle: explicit stop / stop-all (#2392 Phase 2, #2512)", ()
     expect(stopped.map(([id]) => id).sort()).toEqual(["a", "b"]);
     expect(lc.snapshot().every((v) => v.status === "stopped")).toBe(true);
   });
+
+  it("一つの停止失敗後も残りの全問題を停止して最後に集約エラーを返す", async () => {
+    const attempted: string[] = [];
+    const { deps } = makeDeps({
+      stopContainer: async (id) => {
+        attempted.push(id);
+        if (id === "a") throw new Error("a stop failed");
+      },
+    });
+    const lc = new ProblemLifecycle(["a", "b"], deps, { maxRunning: 2 });
+    await lc.ensureRunning("a");
+    await lc.ensureRunning("b");
+
+    await expect(lc.stopAll()).rejects.toThrow("Problem lifecycle cleanup failed");
+    expect(attempted).toEqual(["a", "b"]);
+    expect(lc.snapshot().every((value) => value.status === "stopped")).toBe(true);
+  });
 });

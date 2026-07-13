@@ -72,6 +72,17 @@ function isProblemComplete(runtime: ProblemRuntime): boolean {
   return scoring.checks.every((check) => runtime.solved.has(check.id));
 }
 
+function isSimulatedProblemComplete(runtime: SimulatedProblemRuntime): boolean {
+  const scoring = runtime.contract.scoring;
+  if (scoring.kind === "flag" || scoring.kind === "composite-probe") {
+    return runtime.solved.has(runtime.problem.problemId);
+  }
+  if (scoring.kind === "multi-flag") {
+    return scoring.flags.every((flag) => runtime.solved.has(flag.id));
+  }
+  return false;
+}
+
 function problemView(
   runtime: ProblemRuntime,
   now: number,
@@ -219,7 +230,7 @@ function simulatorScoringView(runtime: SimulatedProblemRuntime) {
     return { kind: "attack-detection", pointsPerAttack: scoring.pointsPerAttack, hints };
   }
   if (scoring.kind === "composite-probe") {
-    return { kind: "uptime-multi", pointsAllOk: scoring.pointsAllOk };
+    return { kind: "uptime-multi", pointsAllOk: scoring.pointsAllOk, hints };
   }
   return undefined;
 }
@@ -291,7 +302,9 @@ export function leaderboard(state: LocalPlayState): LocalPlayResponse {
   // [#2252/#2392] a multi-verify problem counts as complete only when every
   // checkpoint is solved; the session may hold several problems.
   const runtimes = [...state.runtimes.values()];
-  const completed = runtimes.filter((rt) => isProblemComplete(rt)).length;
+  const completed =
+    runtimes.filter((rt) => isProblemComplete(rt)).length +
+    [...state.simulatedRuntimes.values()].filter((rt) => isSimulatedProblemComplete(rt)).length;
   return {
     status: StatusCodes.OK,
     body: {

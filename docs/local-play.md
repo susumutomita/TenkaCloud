@@ -142,7 +142,11 @@ permissions. `make local-down` deletes every recorded Simulator world before
 terminating an owned process/container. The local CLI also exposes explicit
 snapshot export/import and reset commands; recovery verifies the recorded
 protocol, token namespace, process, and deployment instead of trusting a stale
-state file.
+state file. Shutdown is best-effort across every Docker problem and simulated
+world: one teardown failure is aggregated and reported only after the remaining
+worlds and the owned Simulator launcher have also been stopped. Simulator HTTP
+calls have finite abort deadlines, so a loopback process that accepts a request
+and then stalls cannot wedge start, reset, scoring, or shutdown indefinitely.
 
 Catalog metadata may reference a strict `simulation.json` document with
 `simulationOverlay: { "schemaVersion": "1", "entry": "simulation.json" }`.
@@ -160,7 +164,11 @@ real loopback HTTP endpoint. Catalog attack probes instead use the authenticated
 `HTTP::Endpoint/AttackProbe` provider operation so the attack and its observed
 status update the same Simulator world. Phased scoring advances virtual time via
 authenticated `POST /v1/worlds/{worldId}/clock/advance`; the response must contain
-an ISO `clock` and the provider-neutral `appliedTransitions` list.
+an ISO `clock` and the provider-neutral `appliedTransitions` list. Every score
+cycle for one problem is serialized across explicit score requests, lifecycle
+starts, and the periodic scorer so two callers cannot advance virtual time or
+award a terminal score twice. The leaderboard counts a solved simulated flag or
+composite problem in the same completed-problem total as a solved Docker problem.
 
 Synthetic provider HTTP outputs are exposed through the local server at
 `/local/simulator-data/<problem>/<target>/...`. TenkaCloud rewrites only
@@ -179,7 +187,9 @@ with HTTP 403 before target lookup. TenkaCloud answers an allowed `OPTIONS`
 preflight locally and replaces every upstream CORS header, including wildcard
 `Access-Control-Allow-Origin`, with the exact allowed origin. Polling scoring
 uses the Origin-free CLI path. Codespaces applies the existing
-participant-portal port proxy to this route.
+participant-portal port proxy to this route. Browser cookies are never forwarded
+to Simulator/workloads, upstream cookies are never returned, and both request
+and response I/O have finite time and size bounds.
 
 After a simulated problem starts, `.tenkacloud/local/simulator-native.env` is a
 private, source-able multi-profile file. Standard provider CLIs cannot attach
@@ -201,7 +211,9 @@ The file also exports the Simulator URL/token/world fields for the bundled
 Simulator CLI, provider/engine identity, a local-only AWS signing secret, and
 the Azure/GCP/Sakura endpoint and credential pairs. None is a real cloud
 credential. Query parameters are not used for routing because native Query and
-ARM APIs own their query strings.
+ARM APIs own their query strings. The native proxy also applies finite request,
+response, and time bounds and recomputes response framing after buffering; it
+never forwards a stale upstream `Content-Length`.
 
 In Codespaces, browser-facing challenge and Simulator console links are
 rewritten through the
@@ -332,6 +344,9 @@ the harness (no answer, no scoring conditions):
 
 - Containers are loopback-only. Bind ports as `127.0.0.1:<host>:<container>` —
   `/verify` included.
+- A browser request that carries an unapproved `Origin` is rejected before any
+  local API route executes, even when the request would otherwise qualify as a
+  CORS simple request. Origin-free CLI traffic remains supported.
 - A container that fetches an external URL (cloud-style self-deploy) must apply
   SSRF defenses itself: a protocol and host allowlist, no redirect following, a
   timeout, and a response body cap.

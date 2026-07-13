@@ -1,5 +1,5 @@
 import { createHash, createHmac } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -9,6 +9,7 @@ import { handleLocalPlayRequest } from "../../../scripts/local-play/api";
 import { createLocalPlayState, type LocalPlayRequest } from "../../../scripts/local-play/api-state";
 import { waitForReachable } from "../../../scripts/local-play/docker-adapter";
 import {
+  createSimulatorClient,
   loadSimulatedCloudProblems,
   type SimulatedCloudProblem,
   simulatorTemplateBody,
@@ -25,8 +26,10 @@ import {
   stopSimulatorLauncher,
 } from "../../../scripts/local-play/simulator-launcher";
 import {
+  cleanupRecordedSimulatorSession,
   SimulatorLocalRuntime,
   type SimulatorRuntimeOptions,
+  type SimulatorSessionRecord,
 } from "../../../scripts/local-play/simulator-runtime";
 import { runSimulatorScoreCycle } from "../../../scripts/local-play/simulator-scoring";
 
@@ -98,6 +101,36 @@ function problem(problemDir: string): SimulatedCloudProblem {
           plane: "operator",
         },
       ],
+    },
+  };
+}
+
+function compositeProblem(problemDir: string): SimulatedCloudProblem {
+  return {
+    problemId: "hello-multicloud",
+    name: "Hello Multicloud",
+    category: "challenges",
+    description: "Probe every provider.",
+    instructions: "Keep both targets healthy.",
+    problemDir,
+    runtime: {
+      kind: "composite",
+      targets: [
+        { id: "aws", provider: "aws", engine: "cloudformation", entry: "template.yaml" },
+        { id: "gcp", provider: "gcp", engine: "infra-manager", entry: "gcp/terraform" },
+      ],
+    },
+    templateBody: "{}",
+    metadata: {
+      scoring: {
+        kind: "composite-probe",
+        success: "all",
+        pointsAllOk: 100,
+        targets: [
+          { targetId: "aws", probe: "https", outputKey: "Url" },
+          { targetId: "gcp", probe: "https", outputKey: "Url" },
+        ],
+      },
     },
   };
 }
@@ -223,6 +256,44 @@ async function workloadServer() {
 }
 
 describe("Simulator launch authorization", () => {
+  it("応答しない Simulator 呼び出しを有限時間で中断する", async () => {
+    const client = createSimulatorClient(
+      "http://127.0.0.1:7777",
+      () => new Promise<Response>(() => {}),
+      undefined,
+      10,
+    );
+
+    await expect(client.capabilities()).rejects.toThrow("timed out after 10ms");
+  });
+
+  it("header 後に停止した Simulator response body も有限時間で中断する", async () => {
+    const client = createSimulatorClient(
+      "http://127.0.0.1:7777",
+      async () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode('{"protocolVersion":'));
+            },
+          }),
+          { status: StatusCodes.OK, headers: { "content-type": "application/json" } },
+        ),
+      undefined,
+      10,
+    );
+
+    const outcome = await Promise.race([
+      client.capabilities().then(
+        () => "resolved",
+        (error: unknown) => (error instanceof Error ? error.message : String(error)),
+      ),
+      new Promise<string>((resolve) => setTimeout(() => resolve("still pending"), 50)),
+    ]);
+
+    expect(outcome).toContain("timed out after 10ms");
+  });
+
   it("should select the reviewed immutable image when no explicit source is configured", () => {
     expect(resolveSimulatorSource({})).toEqual({
       kind: "container",
@@ -423,6 +494,279 @@ describe("Simulator artifact bundle", () => {
 });
 
 describe("provider-neutral local runtime", () => {
+  it("準備不能な記録済み launcher を停止済みとして記録し次回起動で置き換える", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-stale-launcher-"));
+    const options = {
+      ...runtimeOptions(root),
+      startTimeoutMs: 20,
+      requestTimeoutMs: 5,
+      retryDelayMs: 1,
+    };
+    const stale: SimulatorSessionRecord = {
+      protocolVersion: "2026-07-11",
+      launcher: {
+        kind: "external",
+        baseUrl: "http://127.0.0.1:1",
+        launchSecret: createSimulatorLaunchSecret(),
+        nativeCredentials: {
+          awsAccessKeyId: "TCSIM12345678901",
+          awsSecretAccessKey: "tcsim_1234567890123456",
+          azureCredential: "tcsim_1234567890123456",
+          gcpCredential: "tcsim_1234567890123456",
+          sakuraCredential: "tcsim_1234567890123456:tcsim_abcdefghijklmnop",
+        },
+      },
+      deployments: [],
+    };
+    writeFileSync(options.sessionPath, JSON.stringify(stale));
+
+    await expect(new SimulatorLocalRuntime(options).start(problem(root))).rejects.toThrow(
+      "Simulator did not become ready",
+    );
+    expect(JSON.parse(readFileSync(options.sessionPath, "utf8"))).toMatchObject({
+      launcherNeedsReplacement: true,
+    });
+
+    const recovered = new SimulatorLocalRuntime({ ...options, startTimeoutMs: 3_000 });
+    runningRuntimes.push(recovered);
+    await expect(recovered.start(problem(root))).resolves.toMatchObject({
+      problemId: "hello-world",
+      status: "running",
+    });
+    expect(JSON.parse(readFileSync(options.sessionPath, "utf8"))).not.toHaveProperty(
+      "launcherNeedsReplacement",
+    );
+  });
+
+  it("記録済み cleanup は全 world を試し失敗分だけを再試行可能な状態で残す", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-cleanup-retry-"));
+    const options = runtimeOptions(root);
+    const launchSecret = createSimulatorLaunchSecret();
+    const launcher = {
+      kind: "external" as const,
+      baseUrl: "http://127.0.0.1:42123",
+      launchSecret,
+      nativeCredentials: {
+        awsAccessKeyId: "TCSIM12345678901",
+        awsSecretAccessKey: "tcsim_1234567890123456",
+        azureCredential: "tcsim_1234567890123456",
+        gcpCredential: "tcsim_1234567890123456",
+        sakuraCredential: "tcsim_1234567890123456:tcsim_abcdefghijklmnop",
+      },
+    };
+    const deployments = ["deleted", "retry"].map((problemId) => ({
+      problemId,
+      worldId: `world-${problemId}`,
+      deploymentId: `deployment-${problemId}`,
+      launchToken: `token-${problemId}`,
+      status: "running" as const,
+      outputs: {},
+      consoleUrl: `http://127.0.0.1:42123/console/${problemId}`,
+      nativeCredentials: launcher.nativeCredentials,
+      clockObservedAtMs: 1,
+    }));
+    writeFileSync(
+      options.sessionPath,
+      JSON.stringify({ protocolVersion: "2026-07-11", launcher, deployments }),
+    );
+    if (!options.participantEnvPath) throw new Error("participant env path is missing");
+    writeFileSync(options.participantEnvPath, "private");
+    const attempted: string[] = [];
+    const firstFetch = async (input: string | URL | Request): Promise<Response> => {
+      const url = String(input);
+      attempted.push(url);
+      if (url.endsWith("/world-retry")) throw new Error("transient delete failure");
+      return new Response(null, { status: StatusCodes.NO_CONTENT });
+    };
+
+    await expect(
+      cleanupRecordedSimulatorSession(
+        options.sessionPath,
+        firstFetch,
+        {},
+        options.participantEnvPath,
+        20,
+      ),
+    ).rejects.toThrow("can be retried");
+    expect(attempted).toHaveLength(2);
+    const retryRecord = JSON.parse(readFileSync(options.sessionPath, "utf8"));
+    expect(retryRecord).toMatchObject({ deployments: [{ problemId: "retry" }] });
+    expect(retryRecord).not.toHaveProperty("launcherNeedsReplacement");
+    expect(existsSync(options.participantEnvPath)).toBe(true);
+
+    await cleanupRecordedSimulatorSession(
+      options.sessionPath,
+      async () => new Response(null, { status: StatusCodes.NO_CONTENT }),
+      {},
+      options.participantEnvPath,
+      20,
+    );
+    expect(existsSync(options.sessionPath)).toBe(false);
+    expect(existsSync(options.participantEnvPath)).toBe(false);
+  });
+
+  it("runtime close は一つの world 削除失敗で残りの cleanup を打ち切らない", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-close-aggregate-"));
+    const options = runtimeOptions(root);
+    const launchSecret = createSimulatorLaunchSecret();
+    const nativeCredentials = {
+      awsAccessKeyId: "TCSIM12345678901",
+      awsSecretAccessKey: "tcsim_1234567890123456",
+      azureCredential: "tcsim_1234567890123456",
+      gcpCredential: "tcsim_1234567890123456",
+      sakuraCredential: "tcsim_1234567890123456:tcsim_abcdefghijklmnop",
+    };
+    const deployments = ["one", "two"].map((problemId) => ({
+      problemId,
+      worldId: `world-${problemId}`,
+      deploymentId: `deployment-${problemId}`,
+      launchToken: `token-${problemId}`,
+      status: "running" as const,
+      outputs: {},
+      consoleUrl: `http://127.0.0.1:42123/console/${problemId}`,
+      nativeCredentials,
+      clockObservedAtMs: 1,
+    }));
+    writeFileSync(
+      options.sessionPath,
+      JSON.stringify({
+        protocolVersion: "2026-07-11",
+        launcher: {
+          kind: "external",
+          baseUrl: "http://127.0.0.1:42123",
+          launchSecret,
+          nativeCredentials,
+        },
+        deployments,
+      } satisfies SimulatorSessionRecord),
+    );
+    const attempted: string[] = [];
+    const runtime = new SimulatorLocalRuntime({
+      ...options,
+      fetchFn: async (input) => {
+        attempted.push(String(input));
+        throw new Error("delete failed");
+      },
+      requestTimeoutMs: 20,
+    });
+
+    await expect(runtime.close()).rejects.toThrow("Simulator cleanup failed");
+    expect(attempted).toHaveLength(2);
+    const closeRecord = JSON.parse(readFileSync(options.sessionPath, "utf8"));
+    expect(closeRecord).toMatchObject({
+      deployments: [{ problemId: "one" }, { problemId: "two" }],
+    });
+    expect(closeRecord).not.toHaveProperty("launcherNeedsReplacement");
+  });
+
+  it("launcher 停止自体が失敗した場合は生存確認を経ず置換済みと記録しない", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-close-launcher-failure-"));
+    const options = runtimeOptions(root);
+    const nativeCredentials = {
+      awsAccessKeyId: "TCSIM12345678901",
+      awsSecretAccessKey: "tcsim_1234567890123456",
+      azureCredential: "tcsim_1234567890123456",
+      gcpCredential: "tcsim_1234567890123456",
+      sakuraCredential: "tcsim_1234567890123456:tcsim_abcdefghijklmnop",
+    };
+    writeFileSync(
+      options.sessionPath,
+      JSON.stringify({
+        protocolVersion: "2026-07-11",
+        launcher: {
+          kind: "container",
+          baseUrl: "http://127.0.0.1:42123",
+          launchSecret: createSimulatorLaunchSecret(),
+          nativeCredentials,
+          containerName: "simulator-stop-must-fail",
+        },
+        deployments: [],
+      } satisfies SimulatorSessionRecord),
+    );
+    const runtime = new SimulatorLocalRuntime({
+      ...options,
+      env: { ...options.env, TENKACLOUD_SIMULATOR_DOCKER_CLI: "/usr/bin/false" },
+    });
+
+    await expect(runtime.close()).rejects.toThrow("Simulator cleanup failed");
+    expect(JSON.parse(readFileSync(options.sessionPath, "utf8"))).not.toHaveProperty(
+      "launcherNeedsReplacement",
+    );
+  });
+
+  it("対応外の cloud scoring kind は world 作成前の state 構築で拒否する", () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-unsupported-scoring-"));
+    const unsupported = [
+      {
+        kind: "multi-flag",
+        flags: [{ id: "one", label: "One", flagOutputKey: "FlagOne", points: 50 }],
+      },
+      {
+        kind: "multi-verify",
+        checks: [
+          { id: "one", label: "One", points: 50 },
+          { id: "two", label: "Two", points: 50 },
+        ],
+      },
+    ] as const;
+
+    for (const scoring of unsupported) {
+      expect(() =>
+        createLocalPlayState({
+          problems: [],
+          simulatedProblems: [
+            { ...problem(root), metadata: { ...problem(root).metadata, scoring } },
+          ],
+        }),
+      ).toThrow(`Simulator local play does not support scoring kind ${scoring.kind}`);
+    }
+  });
+
+  it("composite-probe の hint を participant view に公開する", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-composite-hints-"));
+    const composite: SimulatedCloudProblem = {
+      ...problem(root),
+      problemId: "composite-hints",
+      runtime: {
+        kind: "composite",
+        targets: [
+          {
+            id: "aws-app",
+            provider: "aws",
+            engine: "cloudformation",
+            entry: "template.yaml",
+          },
+        ],
+      },
+      metadata: {
+        scoring: {
+          kind: "composite-probe",
+          success: "all",
+          pointsAllOk: 100,
+          targets: [
+            {
+              targetId: "aws-app",
+              probe: "https",
+              outputKey: "ServiceUrl",
+            },
+          ],
+          hints: [{ id: "first-step", content: "Check both targets.", penalty: 5 }],
+        },
+      },
+    };
+    const state = createLocalPlayState({ problems: [], simulatedProblems: [composite] });
+
+    const response = await handleLocalPlayRequest(
+      { method: "GET", path: "/portal/me", query: {}, body: undefined },
+      state,
+    );
+    const view = (
+      response.body as { problems: Array<{ scoring?: { hints?: readonly unknown[] } }> }
+    ).problems[0];
+
+    expect(view.scoring?.hints).toEqual([{ id: "first-step", penalty: 5, revealed: false }]);
+  });
+
   it("should launch a real process, drive portal lifecycle, persist, snapshot, and delete the world", async () => {
     const root = mkdtempSync(join(tmpdir(), "tc-simulator-runtime-"));
     const options = runtimeOptions(root);
@@ -517,6 +861,29 @@ describe("provider-neutral local runtime", () => {
     }
   });
 
+  it("解決済みの Simulator flag と composite challenge を完了数に含めること", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-leaderboard-"));
+    const state = createLocalPlayState({
+      problems: [],
+      simulatedProblems: [problem(root), compositeProblem(root)],
+    });
+    state.simulatedRuntimes.get("hello-world")?.solved.add("hello-world");
+    state.simulatedRuntimes.get("hello-multicloud")?.solved.add("hello-multicloud");
+
+    const leaderboard = await handleLocalPlayRequest(
+      { method: "GET", path: "/portal/leaderboard", query: {}, body: undefined },
+      state,
+    );
+
+    expect(
+      (
+        leaderboard.body as {
+          entries: Array<{ completedProblems: number; totalProblems: number }>;
+        }
+      ).entries[0],
+    ).toMatchObject({ completedProblems: 2, totalProblems: 2 });
+  });
+
   it("should pass only the catalog workload allowlist and fixed quotas to a process runner", async () => {
     const root = mkdtempSync(join(tmpdir(), "tc-simulator-workload-policy-"));
     const workloadImage = `ghcr.io/tenkacloud/workload@sha256:${"a".repeat(64)}`;
@@ -576,6 +943,60 @@ describe("provider-neutral local runtime", () => {
       clockAdvances?: number[];
     }>;
     expect(worlds[0]?.clockAdvances?.at(-1)).toBe(60_000);
+  });
+
+  it("同じ問題への明示採点が重なっても時計と得点を一度だけ進めること", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-concurrent-score-"));
+    const options = runtimeOptions(root);
+    const runtime = new SimulatorLocalRuntime(options);
+    runningRuntimes.push(runtime);
+    const state = createLocalPlayState(
+      { problems: [], simulatedProblems: [phasedProblem(root)] },
+      { simulator: runtime },
+    );
+
+    await handleLocalPlayRequest(post("/portal/me/problems/phased-battle/start"), state);
+    const deployment = state.simulatedRuntimes.get("phased-battle")?.deployment;
+    if (!deployment) throw new Error("phased deployment did not start");
+    const scorePath = "/portal/me/problems/phased-battle/score";
+    const now = deployment.clockObservedAtMs + 60_000;
+    const [first, second] = await Promise.all([
+      handleLocalPlayRequest(post(scorePath), state, now),
+      handleLocalPlayRequest(post(scorePath), state, now),
+    ]);
+
+    expect(second).toEqual(first);
+    const worlds = JSON.parse(
+      readFileSync(join(options.stateDir, "worlds.json"), "utf8"),
+    ) as Array<{ clockAdvances?: number[] }>;
+    expect(worlds[0]?.clockAdvances).toEqual([60_000]);
+  });
+
+  it("同じ問題への start が重なっても初回採点を一度だけ実行すること", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-concurrent-start-"));
+    const options = runtimeOptions(root);
+    const runtime = new SimulatorLocalRuntime(options);
+    runningRuntimes.push(runtime);
+    const state = createLocalPlayState(
+      { problems: [], simulatedProblems: [attackProbeProblem(root)] },
+      { simulator: runtime },
+    );
+    const startPath = "/portal/me/problems/attack-probe-battle/start";
+
+    const [first, second] = await Promise.all([
+      handleLocalPlayRequest(post(startPath), state),
+      handleLocalPlayRequest(post(startPath), state),
+    ]);
+
+    expect(first).toEqual({ status: StatusCodes.OK, body: { status: "running" } });
+    expect(second).toEqual(first);
+    expect(state.simulatedRuntimes.get("attack-probe-battle")?.score).toBe(100);
+    const worlds = JSON.parse(
+      readFileSync(join(options.stateDir, "worlds.json"), "utf8"),
+    ) as Array<{ providerOperations?: Array<{ operation: string }> }>;
+    expect(worlds[0]?.providerOperations?.map((operation) => operation.operation)).toEqual([
+      "AttackProbe",
+    ]);
   });
 
   it("should keep health probes on real HTTP and send attack probes through the authenticated provider command", async () => {

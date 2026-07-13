@@ -32,11 +32,7 @@ async function startProblem(
   try {
     await state.lifecycle.ensureRunning(problemId);
     const simulated = state.simulatedRuntimes.get(problemId);
-    if (
-      simulated &&
-      simulated.contract.scoring.kind !== "flag" &&
-      simulated.contract.scoring.kind !== "multi-flag"
-    ) {
+    if (simulated && simulated.contract.scoring.kind !== "flag") {
       await scoreSimulatedProblem(problemId, state, now);
     }
   } catch (error) {

@@ -7,7 +7,7 @@ import {
   type LocalPlayDeployment,
   type LocalPlayState,
 } from "./api-state";
-import { corsHeaders } from "./cors";
+import { corsHeaders, isAllowedCorsOrigin } from "./cors";
 import { proxySimulatorDataPlaneRequest } from "./simulator-data-plane-proxy";
 import { proxySimulatorNativeRequest } from "./simulator-native-proxy";
 
@@ -55,7 +55,12 @@ async function route(
   response: ServerResponse,
   state: LocalPlayState,
 ): Promise<void> {
-  const cors = corsHeaders(request.headers.origin);
+  const origin = request.headers.origin;
+  const cors = corsHeaders(origin);
+  if (origin !== undefined && !isAllowedCorsOrigin(origin)) {
+    writeJson(response, StatusCodes.FORBIDDEN, { error: "browser_origin_forbidden" }, {});
+    return;
+  }
   if (await proxySimulatorDataPlaneRequest(request, response, state)) return;
   if (await proxySimulatorNativeRequest(request, response, state)) return;
   if (request.method === "OPTIONS") {

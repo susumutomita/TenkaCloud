@@ -34,9 +34,13 @@ const MAX_PROBE_BODY_BYTES = 4_096;
 const DEFAULT_PROBE_TIMEOUT_MS = 8_000;
 
 export type SimulatorDeploymentScoringState = DeploymentScoringState;
+type SimulatorSupportedScoringMetadata = Exclude<
+  ProblemScoringMetadata,
+  { readonly kind: "multi-flag" | "multi-verify" }
+>;
 
 export interface SimulatorScoringContract {
-  readonly scoring: ProblemScoringMetadata;
+  readonly scoring: SimulatorSupportedScoringMetadata;
   readonly endpoints: readonly ProblemEndpointSlot[];
   readonly phases: readonly ProblemPhaseEntry[];
   readonly disruptions: readonly ProblemDisruptionEntry[];
@@ -73,6 +77,9 @@ function parseList<T>(
 export function simulatorScoringContract(problem: SimulatedCloudProblem): SimulatorScoringContract {
   const scoring = parseScoringMetadata(problem.metadata.scoring);
   if (!scoring) throw new Error(`${problem.problemId}.scoring is invalid or unsupported`);
+  if (scoring.kind === "multi-flag" || scoring.kind === "multi-verify") {
+    throw new Error(`Simulator local play does not support scoring kind ${scoring.kind}`);
+  }
   return {
     scoring,
     endpoints: parseList(
@@ -275,11 +282,8 @@ async function compositeCycle(
 /** Run the existing generic scoring kind against Simulator outputs and real loopback probes. */
 export async function runSimulatorScoreCycle(input: SimulatorScoreCycleInput): Promise<KindResult> {
   const contract = simulatorScoringContract(input.problem);
-  if (contract.scoring.kind === "flag" || contract.scoring.kind === "multi-flag") {
+  if (contract.scoring.kind === "flag") {
     return { scoreDelta: 0, scoreEvents: [] };
-  }
-  if (contract.scoring.kind === "multi-verify") {
-    throw new Error("multi-verify scoring is reserved for Docker /verify runtimes");
   }
   if (contract.scoring.kind === "composite-probe") {
     return compositeCycle(input, contract.scoring);
@@ -314,14 +318,6 @@ export async function runSimulatorScoreCycle(input: SimulatorScoreCycleInput): P
     return runPhasedPollingKind({ ...genericInput, scoring: contract.scoring });
   }
   return runAttackDetectionKind({ ...genericInput, scoring: contract.scoring });
-}
-
-export interface SimulatorOperationRequirement {
-  readonly source: string;
-  readonly provider: string;
-  readonly service: string;
-  readonly operation: string;
-  readonly resourceType: string;
 }
 
 export interface SimulatorDisruptionCommand {
@@ -461,65 +457,4 @@ export function simulatorDisruptionCommand(
   if (!disruption) throw new Error(`Unknown Simulator disruption: ${disruptionId}`);
   if (!disruption.action) return simulatorOperatorProbeCommand(problem, disruption);
   return simulatorProviderActionCommand(problem, outputs, disruptionId, disruption.action);
-}
-
-/** Provider commands required by Battle disruption metadata; no problem ids or commands are hard-coded. */
-export function simulatorOperationRequirements(
-  problem: SimulatedCloudProblem,
-): readonly SimulatorOperationRequirement[] {
-  const contract = simulatorScoringContract(problem);
-  const requirements: SimulatorOperationRequirement[] = [];
-  for (const phase of contract.phases) {
-    requirements.push({
-      source: `phase:${phase.name}`,
-      provider: "core",
-      service: "clock",
-      operation: "AdvanceClock",
-      resourceType: "Simulator::World::Clock",
-    });
-  }
-  for (const disruption of contract.disruptions) {
-    const action = disruption.action;
-    if (!action) {
-      if (typeof disruption.parameters?.probe === "string") {
-        const target = primaryRuntime(problem);
-        requirements.push({
-          source: disruption.id,
-          provider: target.provider,
-          service: "http",
-          operation: "AttackProbe",
-          resourceType: "HTTP::Endpoint",
-        });
-      }
-      continue;
-    }
-    if (action.kind === "ssm-run-command") {
-      requirements.push({
-        source: disruption.id,
-        provider: "aws",
-        service: "ssm",
-        operation: "SendCommand",
-        resourceType: "AWS::SSM::Command",
-      });
-      continue;
-    }
-    if (action.kind === "lambda-invoke") {
-      requirements.push({
-        source: disruption.id,
-        provider: "aws",
-        service: "lambda",
-        operation: "Invoke",
-        resourceType: "AWS::Lambda::Function",
-      });
-      continue;
-    }
-    requirements.push({
-      source: disruption.id,
-      provider: "aws",
-      service: "cloudformation",
-      operation: "UpdateStack",
-      resourceType: "AWS::CloudFormation::Stack",
-    });
-  }
-  return requirements;
 }

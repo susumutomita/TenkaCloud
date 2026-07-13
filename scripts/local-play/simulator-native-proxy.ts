@@ -6,6 +6,8 @@ import type { SimulatorNativeRoute } from "./simulator-native-environment";
 
 export const SIMULATOR_NATIVE_PROXY_PREFIX = "/local/simulator-native";
 const MAX_NATIVE_BODY_BYTES = 1024 * 1024;
+const MAX_NATIVE_RESPONSE_BYTES = 1024 * 1024;
+const NATIVE_UPSTREAM_TIMEOUT_MS = 10_000;
 const HOP_BY_HOP_HEADERS = new Set([
   "connection",
   "content-length",
@@ -25,6 +27,19 @@ const SIMULATOR_ROUTING_HEADERS = [
   "x-tenkacloud-target-id",
   "x-tenkacloud-world-id",
 ] as const;
+const PRIVATE_REQUEST_HEADERS = new Set(["cookie"]);
+const PRIVATE_RESPONSE_HEADERS = new Set([
+  "authentication-info",
+  "authorization",
+  "cookie",
+  "set-cookie",
+  "set-cookie2",
+]);
+
+export interface SimulatorNativeProxyOptions {
+  readonly fetchFn?: typeof fetch;
+  readonly timeoutMs?: number;
+}
 
 function decoded(value: string): string | undefined {
   try {
@@ -50,12 +65,38 @@ async function requestBody(request: IncomingMessage): Promise<Uint8Array | undef
 function upstreamHeaders(request: IncomingMessage): Headers {
   const headers = new Headers();
   for (const [key, value] of Object.entries(request.headers)) {
-    if (HOP_BY_HOP_HEADERS.has(key) || value === undefined) continue;
+    if (HOP_BY_HOP_HEADERS.has(key) || PRIVATE_REQUEST_HEADERS.has(key) || value === undefined) {
+      continue;
+    }
     if (Array.isArray(value)) {
       for (const item of value) headers.append(key, item);
     } else headers.set(key, value);
   }
   return headers;
+}
+
+async function responseBody(upstream: Response): Promise<Uint8Array> {
+  const reader = upstream.body?.getReader();
+  if (!reader) return new Uint8Array();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (true) {
+    const next = await reader.read();
+    if (next.done) break;
+    total += next.value.byteLength;
+    if (total > MAX_NATIVE_RESPONSE_BYTES) {
+      await reader.cancel();
+      throw new Error("native_response_too_large");
+    }
+    chunks.push(next.value);
+  }
+  const body = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return body;
 }
 
 function declareInjectedRoutingHeaders(headers: Headers): void {
@@ -102,7 +143,11 @@ function nativeUpstreamUrl(
 
 function copyUpstreamHeaders(upstream: Response, response: ServerResponse): void {
   for (const [key, value] of upstream.headers) {
-    if (!HOP_BY_HOP_HEADERS.has(key) && key !== "content-encoding") {
+    if (
+      !HOP_BY_HOP_HEADERS.has(key) &&
+      !PRIVATE_RESPONSE_HEADERS.has(key) &&
+      key !== "content-encoding"
+    ) {
       response.setHeader(key, value);
     }
   }
@@ -113,6 +158,7 @@ async function forwardNativeRequest(
   response: ServerResponse,
   route: SimulatorNativeRoute,
   upstreamUrl: URL,
+  options: Required<SimulatorNativeProxyOptions>,
 ): Promise<void> {
   const headers = upstreamHeaders(request);
   headers.set("x-tenkacloud-world-id", route.worldId);
@@ -124,15 +170,17 @@ async function forwardNativeRequest(
   declareInjectedRoutingHeaders(headers);
   try {
     const body = await requestBody(request);
-    const upstream = await fetch(upstreamUrl, {
+    const upstream = await options.fetchFn(upstreamUrl, {
       method: request.method ?? "GET",
       headers,
       redirect: "manual",
+      signal: AbortSignal.timeout(options.timeoutMs),
       ...(body ? { body } : {}),
     });
+    const rawResponseBody = await responseBody(upstream);
     copyUpstreamHeaders(upstream, response);
     response.statusCode = upstream.status;
-    response.end(Buffer.from(await upstream.arrayBuffer()));
+    response.end(rawResponseBody);
   } catch (error) {
     if (response.headersSent) response.end();
     else {
@@ -156,6 +204,7 @@ export async function proxySimulatorNativeRequest(
   request: IncomingMessage,
   response: ServerResponse,
   state: LocalPlayState,
+  options: SimulatorNativeProxyOptions = {},
 ): Promise<boolean> {
   const requestUrl = new URL(request.url ?? "/", "http://127.0.0.1");
   const match = proxyMatch(requestUrl.pathname);
@@ -181,6 +230,9 @@ export async function proxySimulatorNativeRequest(
     writeProxyError(response, StatusCodes.BAD_REQUEST, "invalid_native_route");
     return true;
   }
-  await forwardNativeRequest(request, response, route, upstreamUrl);
+  await forwardNativeRequest(request, response, route, upstreamUrl, {
+    fetchFn: options.fetchFn ?? fetch,
+    timeoutMs: options.timeoutMs ?? NATIVE_UPSTREAM_TIMEOUT_MS,
+  });
   return true;
 }

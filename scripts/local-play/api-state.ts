@@ -102,6 +102,8 @@ export interface LocalPlayState {
   /** Per-problem runtime keyed by problemId; insertion order is display order. */
   readonly runtimes: Map<string, ProblemRuntime>;
   readonly simulatedRuntimes: Map<string, SimulatedProblemRuntime>;
+  /** Per-problem Simulator score cycle shared by start, explicit score, and the periodic timer. */
+  readonly simulatorScoringInFlight: Map<string, Promise<LocalPlayResponse>>;
   /** Score events across all problems (each carries its own problemId). */
   readonly scoreEvents: LocalPlayScoreEvent[];
   readonly verify: VerifyFn;
@@ -250,6 +252,7 @@ export function createLocalPlayState(
   return {
     runtimes,
     simulatedRuntimes,
+    simulatorScoringInFlight: new Map(),
     scoreEvents: [],
     verify: options.verify ?? verifySubmission,
     browserText: options.browserText ?? ((text) => text),

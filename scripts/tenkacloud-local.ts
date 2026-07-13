@@ -301,16 +301,22 @@ async function serve(deploymentPath: string): Promise<void> {
   }, 60_000);
   const shutdown = async () => {
     clearInterval(scoringTimer);
-    let exitCode = 0;
+    const errors: unknown[] = [];
     try {
       await server.state.lifecycle.stopAll();
+    } catch (error) {
+      errors.push(error);
+    }
+    try {
       await simulator.close();
     } catch (error) {
+      errors.push(error);
+    }
+    for (const error of errors) {
       console.error(error instanceof Error ? error.message : String(error));
-      exitCode = 1;
     }
     await server.close();
-    process.exit(exitCode);
+    process.exit(errors.length > 0 ? 1 : 0);
   };
   process.once("SIGINT", () => void shutdown());
   process.once("SIGTERM", () => void shutdown());
@@ -464,7 +470,7 @@ function listProblems(): void {
     console.log(`  ${s.problemId.padEnd(idWidth)}  ${s.category.padEnd(categoryWidth)}  ${s.name}`);
   }
   if (simulated.length > 0) {
-    console.log("\nSimulated-cloud problems (require TENKACLOUD_SIMULATOR_URL):\n");
+    console.log("\nSimulated-cloud problems (use the pinned Simulator image by default):\n");
     const simIdWidth = Math.max(...simulated.map((s) => s.problemId.length), "id".length);
     const simCategoryWidth = Math.max(
       ...simulated.map((s) => s.category.length),

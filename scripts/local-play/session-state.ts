@@ -1,7 +1,11 @@
 import {
-  chmodSync,
+  closeSync,
+  constants,
   copyFileSync,
   existsSync,
+  fchmodSync,
+  ftruncateSync,
+  openSync,
   readFileSync,
   unlinkSync,
   writeFileSync,
@@ -86,8 +90,14 @@ export function writePrivateJson(path: string, value: unknown): void {
 }
 
 export function writePrivateText(path: string, value: string): void {
-  writeFileSync(path, value, "utf8");
-  chmodSync(path, 0o600);
+  const fd = openSync(path, constants.O_WRONLY | constants.O_CREAT | constants.O_NOFOLLOW, 0o600);
+  try {
+    fchmodSync(fd, 0o600);
+    ftruncateSync(fd, 0);
+    writeFileSync(fd, value, "utf8");
+  } finally {
+    closeSync(fd);
+  }
 }
 
 export function stopPid(pid: number): void {

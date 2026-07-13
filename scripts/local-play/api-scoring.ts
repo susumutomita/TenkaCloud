@@ -232,7 +232,7 @@ function submitSimulatorFlag(
 }
 
 function isSimulatorPollingRuntime(runtime: SimulatedProblemRuntime): boolean {
-  return runtime.contract.scoring.kind !== "flag" && runtime.contract.scoring.kind !== "multi-flag";
+  return runtime.contract.scoring.kind !== "flag";
 }
 
 function isCompletedComposite(runtime: SimulatedProblemRuntime, problemId: string): boolean {
@@ -266,7 +266,7 @@ function simulatorAttackProbe(
   return (request) => simulator.attackProbe(runtime.problem, request, now);
 }
 
-export async function scoreSimulatedProblem(
+async function runSimulatedProblemScoreCycle(
   problemId: string,
   state: LocalPlayState,
   now = Date.now(),
@@ -329,6 +329,33 @@ export async function scoreSimulatedProblem(
       totalScore: sessionScore(state),
     },
   };
+}
+
+/**
+ * Share one in-flight score cycle per problem across every trigger. Besides
+ * preventing duplicate awards, this keeps Simulator clock advancement and the
+ * corresponding local state commit in the same serialized boundary.
+ */
+export function scoreSimulatedProblem(
+  problemId: string,
+  state: LocalPlayState,
+  now = Date.now(),
+): Promise<LocalPlayResponse> {
+  const inFlight = state.simulatorScoringInFlight.get(problemId);
+  if (inFlight) return inFlight;
+  const cycle = runSimulatedProblemScoreCycle(problemId, state, now);
+  const tracked = cycle.then(
+    (result) => {
+      state.simulatorScoringInFlight.delete(problemId);
+      return result;
+    },
+    (error: unknown) => {
+      state.simulatorScoringInFlight.delete(problemId);
+      throw error;
+    },
+  );
+  state.simulatorScoringInFlight.set(problemId, tracked);
+  return tracked;
 }
 
 /** Award a correct submission's points (metadata is authoritative for multi-verify). */

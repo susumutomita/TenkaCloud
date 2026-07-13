@@ -147,9 +147,16 @@ export class ProblemLifecycle {
 
   /** Stop every running problem (session teardown). */
   async stopAll(): Promise<void> {
+    const errors: unknown[] = [];
     for (const [problemId, entry] of this.entries) {
-      if (entry.status === "running") await this.stop(problemId);
+      if (entry.status !== "running") continue;
+      try {
+        await this.stop(problemId);
+      } catch (error) {
+        errors.push(error);
+      }
     }
+    if (errors.length > 0) throw new AggregateError(errors, "Problem lifecycle cleanup failed");
   }
 
   /** Evict the least-recently-used running problem (not `exceptId`) to free a slot. */

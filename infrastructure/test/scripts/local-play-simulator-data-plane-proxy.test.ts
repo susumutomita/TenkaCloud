@@ -101,12 +101,15 @@ describe("local-play Simulator data-plane proxy", () => {
         method: request.method,
         path: request.url,
         authorization: request.headers.authorization,
+        cookie: request.headers.cookie,
         contentType: request.headers["content-type"],
         idempotencyKey: request.headers["idempotency-key"],
         body: Buffer.concat(chunks).toString("utf8"),
       });
       response.writeHead(StatusCodes.OK, {
+        authorization: "Bearer upstream-value-must-not-reach-browser",
         "content-type": "application/json; charset=utf-8",
+        "set-cookie": "simulator_session=must-not-reach-browser; HttpOnly",
         "x-provider-response": "raw",
       });
       response.end('{"flag":"TC{local-query-proxy}"}');
@@ -129,6 +132,7 @@ describe("local-play Simulator data-plane proxy", () => {
         method: "QUERY",
         headers: {
           authorization: "Bearer participant-value-must-be-replaced",
+          cookie: "portal_session=must-not-reach-simulator",
           "content-type": "application/json",
           "idempotency-key": "participant-query-1",
         },
@@ -137,12 +141,15 @@ describe("local-play Simulator data-plane proxy", () => {
 
       expect(response.status).toBe(StatusCodes.OK);
       expect(response.headers.get("x-provider-response")).toBe("raw");
+      expect(response.headers.get("authorization")).toBeNull();
+      expect(response.headers.get("set-cookie")).toBeNull();
       const responseText = await response.text();
       expect(responseText).toBe('{"flag":"TC{local-query-proxy}"}');
       expect(observed[0]).toEqual({
         method: "QUERY",
         path: "/v1/worlds/world-data-plane/data-plane/aws/default/search?scope=all",
         authorization: "Bearer launch-token-must-remain-server-side",
+        cookie: undefined,
         contentType: "application/json",
         idempotencyKey: "participant-query-1",
         body,
@@ -190,7 +197,7 @@ describe("local-play Simulator data-plane proxy", () => {
       expect(hostile.status).toBe(StatusCodes.FORBIDDEN);
       expect(observedMethods).toEqual([]);
 
-      const unsupported = await rawRequest(localUrl, "TRACK");
+      const unsupported = await rawRequest(localUrl, "PUT");
       expect(unsupported.status).toBe(StatusCodes.BAD_REQUEST);
       expect(observedMethods).toEqual([]);
 

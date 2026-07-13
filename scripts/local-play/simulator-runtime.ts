@@ -37,6 +37,7 @@ export { cleanupRecordedSimulatorSession } from "./simulator-session-cleanup";
 
 const START_TIMEOUT_MS = 15_000;
 const DEPLOY_TIMEOUT_MS = 30_000;
+const RETRY_DELAY_MS = 100;
 const TOKEN_TTL_SECONDS = 86_400;
 
 export interface LocalSimulatorDeployment {
@@ -55,6 +56,8 @@ export interface SimulatorSessionRecord {
   readonly protocolVersion: typeof SIMULATOR_PROTOCOL_VERSION;
   readonly launcher: SimulatorLauncherRecord;
   readonly deployments: readonly LocalSimulatorDeployment[];
+  /** The owned launcher was stopped after a failure and must be replaced before reuse. */
+  readonly launcherNeedsReplacement?: boolean;
 }
 
 export interface SimulatorDataPlaneRoute {
@@ -104,6 +107,11 @@ export interface SimulatorRuntimeOptions {
   readonly nativeProxyBaseUrl?: string;
   readonly env?: NodeJS.ProcessEnv;
   readonly fetchFn?: typeof fetch;
+  /** Test seams; production uses the bounded defaults above. */
+  readonly startTimeoutMs?: number;
+  readonly deploymentTimeoutMs?: number;
+  readonly requestTimeoutMs?: number;
+  readonly retryDelayMs?: number;
 }
 
 function sleep(delayMs: number): Promise<void> {
@@ -125,12 +133,25 @@ function safeMetadata(value: Readonly<Record<string, unknown>>): Readonly<Record
   return JSON.parse(JSON.stringify(value)) as Readonly<Record<string, unknown>>;
 }
 
+function positiveDuration(value: number | undefined, fallback: number, label: string): number {
+  const duration = value ?? fallback;
+  if (!Number.isSafeInteger(duration) || duration < 1) {
+    throw new Error(`${label} must be a positive safe integer`);
+  }
+  return duration;
+}
+
 export class SimulatorLocalRuntime implements LocalSimulatorRuntimePort {
   readonly #deployments = new Map<string, LocalSimulatorDeployment>();
   readonly #problems = new Map<string, SimulatedCloudProblem>();
   #launcher: SimulatorLauncherRecord | undefined;
+  #launcherNeedsReplacement = false;
 
   constructor(private readonly options: SimulatorRuntimeOptions) {
+    positiveDuration(options.startTimeoutMs, START_TIMEOUT_MS, "Simulator start timeout");
+    positiveDuration(options.deploymentTimeoutMs, DEPLOY_TIMEOUT_MS, "Simulator deploy timeout");
+    positiveDuration(options.requestTimeoutMs, 10_000, "Simulator request timeout");
+    positiveDuration(options.retryDelayMs, RETRY_DELAY_MS, "Simulator retry delay");
     if (existsSync(options.sessionPath)) {
       const recorded = readJson<SimulatorSessionRecord>(options.sessionPath);
       if (recorded.protocolVersion !== SIMULATOR_PROTOCOL_VERSION) {
@@ -139,6 +160,7 @@ export class SimulatorLocalRuntime implements LocalSimulatorRuntimePort {
         );
       }
       this.#launcher = recorded.launcher;
+      this.#launcherNeedsReplacement = recorded.launcherNeedsReplacement === true;
       for (const deployment of recorded.deployments) {
         this.#deployments.set(deployment.problemId, deployment);
       }
@@ -155,6 +177,7 @@ export class SimulatorLocalRuntime implements LocalSimulatorRuntimePort {
       protocolVersion: SIMULATOR_PROTOCOL_VERSION,
       launcher: this.#launcher,
       deployments: [...this.#deployments.values()],
+      ...(this.#launcherNeedsReplacement ? { launcherNeedsReplacement: true } : {}),
     } satisfies SimulatorSessionRecord);
     if (this.options.participantEnvPath && this.options.nativeProxyBaseUrl) {
       const environment = simulatorNativeEnvironment(
@@ -168,7 +191,52 @@ export class SimulatorLocalRuntime implements LocalSimulatorRuntimePort {
     }
   }
 
+  #client(launcher: SimulatorLauncherRecord, launchToken?: string) {
+    return createSimulatorClient(
+      launcher.baseUrl,
+      this.options.fetchFn,
+      launchToken,
+      this.options.requestTimeoutMs,
+    );
+  }
+
+  async #replaceLauncher(): Promise<void> {
+    const replacement = await launchSimulator({
+      stateDir: this.options.stateDir,
+      logPath: this.options.logPath,
+      workloadImages: this.options.workloadImages,
+      env: this.options.env,
+    });
+    for (const [problemId, deployment] of this.#deployments) {
+      const launchToken = issueSimulatorLaunchToken(
+        replacement.launchSecret,
+        {
+          tenantId: "local",
+          eventId: "local",
+          teamId: "local",
+          deploymentId: deployment.deploymentId,
+        },
+        TOKEN_TTL_SECONDS,
+      );
+      const previousConsole = new URL(deployment.consoleUrl);
+      const consoleBase = new URL(
+        `${previousConsole.pathname}${previousConsole.search}`,
+        `${replacement.baseUrl}/`,
+      );
+      this.#deployments.set(problemId, {
+        ...deployment,
+        launchToken,
+        consoleUrl: simulatorConsoleUrl(consoleBase.toString(), launchToken),
+        nativeCredentials: replacement.nativeCredentials,
+      });
+    }
+    this.#launcher = replacement;
+    this.#launcherNeedsReplacement = false;
+    this.#persist();
+  }
+
   async #readyLauncher(): Promise<SimulatorLauncherRecord> {
+    if (this.#launcherNeedsReplacement) await this.#replaceLauncher();
     if (!this.#launcher) {
       this.#launcher = await launchSimulator({
         stateDir: this.options.stateDir,
@@ -178,38 +246,57 @@ export class SimulatorLocalRuntime implements LocalSimulatorRuntimePort {
       });
       this.#persist();
     }
-    const deadline = Date.now() + START_TIMEOUT_MS;
+    const launcher = this.#launcher;
+    const deadline =
+      Date.now() +
+      positiveDuration(this.options.startTimeoutMs, START_TIMEOUT_MS, "Simulator start timeout");
     let lastError: unknown;
     while (Date.now() < deadline) {
       try {
-        const capabilities = await createSimulatorClient(
-          this.#launcher.baseUrl,
-          this.options.fetchFn,
-        ).capabilities();
+        const capabilities = await this.#client(launcher).capabilities();
         if (capabilities.protocolVersion !== SIMULATOR_PROTOCOL_VERSION) {
           throw new Error(
             `Simulator protocol ${capabilities.protocolVersion} does not match ${SIMULATOR_PROTOCOL_VERSION}`,
           );
         }
-        return this.#launcher;
+        return launcher;
       } catch (error) {
         lastError = error;
-        await sleep(100);
+        await sleep(
+          positiveDuration(this.options.retryDelayMs, RETRY_DELAY_MS, "Simulator retry delay"),
+        );
       }
     }
-    throw new Error(
+    const readinessError = new Error(
       `Simulator did not become ready: ${lastError instanceof Error ? lastError.message : String(lastError)}`,
     );
+    const errors: unknown[] = [readinessError];
+    let launcherStopped = launcher.kind === "external";
+    try {
+      stopSimulatorLauncher(launcher, this.options.env);
+      launcherStopped = launcher.kind !== "external";
+    } catch (error) {
+      errors.push(error);
+    }
+    // An unready external record is stale even though its process remains
+    // operator-owned. For an owned launcher, replace only after stop succeeds;
+    // a failed stop does not prove the old process/container is gone.
+    this.#launcherNeedsReplacement = launcher.kind === "external" || launcherStopped;
+    this.#persist();
+    if (errors.length > 1) {
+      throw new AggregateError(
+        errors,
+        "Simulator readiness failed and its launcher could not stop",
+      );
+    }
+    throw readinessError;
   }
 
   async #preflight(
     problem: SimulatedCloudProblem,
     launcher: SimulatorLauncherRecord,
   ): Promise<void> {
-    const capabilities = await createSimulatorClient(
-      launcher.baseUrl,
-      this.options.fetchFn,
-    ).capabilities();
+    const capabilities = await this.#client(launcher).capabilities();
     if (capabilities.protocolVersion !== SIMULATOR_PROTOCOL_VERSION) {
       throw new Error(
         `Simulator protocol ${capabilities.protocolVersion} does not match ${SIMULATOR_PROTOCOL_VERSION}`,
@@ -228,10 +315,18 @@ export class SimulatorLocalRuntime implements LocalSimulatorRuntimePort {
     initial: SimulatorDeploymentResponse,
   ): Promise<SimulatorDeploymentResponse> {
     let current = initial;
-    const deadline = Date.now() + DEPLOY_TIMEOUT_MS;
+    const deadline =
+      Date.now() +
+      positiveDuration(
+        this.options.deploymentTimeoutMs,
+        DEPLOY_TIMEOUT_MS,
+        "Simulator deploy timeout",
+      );
     while (current.status === "accepted" || current.status === "deploying") {
       if (Date.now() >= deadline) throw new Error("Simulator deployment readiness timed out");
-      await sleep(100);
+      await sleep(
+        positiveDuration(this.options.retryDelayMs, RETRY_DELAY_MS, "Simulator retry delay"),
+      );
       current = await client.getDeployment(worldId, deploymentId);
     }
     if (current.status !== "running") throw deploymentError(current);
@@ -243,11 +338,7 @@ export class SimulatorLocalRuntime implements LocalSimulatorRuntimePort {
     const existing = this.#deployments.get(problem.problemId);
     if (existing) {
       const launcher = await this.#readyLauncher();
-      const client = createSimulatorClient(
-        launcher.baseUrl,
-        this.options.fetchFn,
-        existing.launchToken,
-      );
+      const client = this.#client(launcher, existing.launchToken);
       const current = await client.getDeployment(existing.worldId, existing.deploymentId);
       if (current.status !== "running") throw deploymentError(current);
       const recovered = {
@@ -277,7 +368,7 @@ export class SimulatorLocalRuntime implements LocalSimulatorRuntimePort {
       { tenantId: "local", eventId: "local", teamId: "local", deploymentId },
       TOKEN_TTL_SECONDS,
     );
-    const client = createSimulatorClient(launcher.baseUrl, this.options.fetchFn, launchToken);
+    const client = this.#client(launcher, launchToken);
     const world = await client.createWorld({
       tenantId: "local",
       eventId: "local",
@@ -329,11 +420,7 @@ export class SimulatorLocalRuntime implements LocalSimulatorRuntimePort {
   async stop(problemId: string): Promise<void> {
     const deployment = this.#deployments.get(problemId);
     if (!deployment || !this.#launcher) return;
-    const client = createSimulatorClient(
-      this.#launcher.baseUrl,
-      this.options.fetchFn,
-      deployment.launchToken,
-    );
+    const client = this.#client(this.#launcher, deployment.launchToken);
     await client.deleteWorld(deployment.worldId);
     this.#deployments.delete(problemId);
     this.#problems.delete(problemId);
@@ -349,11 +436,9 @@ export class SimulatorLocalRuntime implements LocalSimulatorRuntimePort {
     const deployment = this.#deployments.get(problemId);
     if (!deployment || !this.#launcher)
       throw new Error(`Simulator problem is not running: ${problemId}`);
-    const snapshot = await createSimulatorClient(
-      this.#launcher.baseUrl,
-      this.options.fetchFn,
-      deployment.launchToken,
-    ).exportSnapshot(deployment.worldId);
+    const snapshot = await this.#client(this.#launcher, deployment.launchToken).exportSnapshot(
+      deployment.worldId,
+    );
     writePrivateJson(path, snapshot);
   }
 
@@ -368,11 +453,10 @@ export class SimulatorLocalRuntime implements LocalSimulatorRuntimePort {
     ) {
       throw new Error("Simulator snapshot does not match the running world and protocol");
     }
-    await createSimulatorClient(
-      this.#launcher.baseUrl,
-      this.options.fetchFn,
-      deployment.launchToken,
-    ).importSnapshot(deployment.worldId, snapshot);
+    await this.#client(this.#launcher, deployment.launchToken).importSnapshot(
+      deployment.worldId,
+      snapshot,
+    );
   }
 
   async advanceClock(
@@ -388,11 +472,10 @@ export class SimulatorLocalRuntime implements LocalSimulatorRuntimePort {
     if (!Number.isSafeInteger(milliseconds)) {
       throw new Error("Simulator clock advance exceeds the safe integer range");
     }
-    const advanced = await createSimulatorClient(
-      this.#launcher.baseUrl,
-      this.options.fetchFn,
-      deployment.launchToken,
-    ).advanceClock(deployment.worldId, milliseconds);
+    const advanced = await this.#client(this.#launcher, deployment.launchToken).advanceClock(
+      deployment.worldId,
+      milliseconds,
+    );
     this.#deployments.set(problemId, { ...deployment, clockObservedAtMs: nowMs });
     this.#persist();
     return advanced;
@@ -407,11 +490,7 @@ export class SimulatorLocalRuntime implements LocalSimulatorRuntimePort {
       throw new Error(`Simulator problem is not running: ${problem.problemId}`);
     }
     const command = simulatorDisruptionCommand(problem, deployment.outputs, disruptionId);
-    return createSimulatorClient(
-      this.#launcher.baseUrl,
-      this.options.fetchFn,
-      deployment.launchToken,
-    ).executeProviderOperation(
+    return this.#client(this.#launcher, deployment.launchToken).executeProviderOperation(
       deployment.worldId,
       command.provider,
       command.operation,
@@ -439,9 +518,8 @@ export class SimulatorLocalRuntime implements LocalSimulatorRuntimePort {
     const command = simulatorScoringAttackProbeCommand(problem, request);
     const requestHash = createHash("sha256").update(JSON.stringify(request)).digest("hex");
     const startedAt = Date.now();
-    const result = await createSimulatorClient(
-      this.#launcher.baseUrl,
-      this.options.fetchFn,
+    const result = await this.#client(
+      this.#launcher,
       deployment.launchToken,
     ).executeProviderOperation(
       deployment.worldId,
@@ -504,23 +582,30 @@ export class SimulatorLocalRuntime implements LocalSimulatorRuntimePort {
   }
 
   async close(): Promise<void> {
-    let firstError: unknown;
+    const errors: unknown[] = [];
     for (const problemId of [...this.#deployments.keys()]) {
       try {
         await this.stop(problemId);
       } catch (error) {
-        firstError ??= error;
+        errors.push(error);
       }
     }
     if (this.#launcher) {
+      let launcherStopped = false;
       try {
         stopSimulatorLauncher(this.#launcher, this.options.env);
+        launcherStopped = this.#launcher.kind !== "external";
       } catch (error) {
-        firstError ??= error;
+        errors.push(error);
       }
-      this.#launcher = undefined;
+      if (errors.length === 0) {
+        this.#launcher = undefined;
+        this.#launcherNeedsReplacement = false;
+      } else {
+        this.#launcherNeedsReplacement = launcherStopped;
+      }
       this.#persist();
     }
-    if (firstError) throw firstError;
+    if (errors.length > 0) throw new AggregateError(errors, "Simulator cleanup failed");
   }
 }
