@@ -2198,6 +2198,34 @@ describe("provider-neutral local runtime", () => {
     }
   });
 
+  it("should not expose conformance-process exception details over HTTP", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-simulator-error-response-"));
+    const options = runtimeOptions(root);
+    const launcher = await launchSimulator(options);
+    try {
+      await waitForReachable(
+        `${launcher.baseUrl}/v1/capabilities`,
+        "Simulator error-response fixture",
+        3_000,
+      );
+      const response = await fetch(`${launcher.baseUrl}/v1/worlds`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      });
+
+      expect(response.status).toBe(StatusCodes.UNAUTHORIZED);
+      expect(await response.json()).toEqual({
+        error: {
+          code: "UnauthorizedOperation",
+          message: "Simulator request was rejected",
+        },
+      });
+    } finally {
+      await stopSimulatorLauncher(launcher, options.env);
+    }
+  });
+
   it("should retain ownership when an injected process ignores SIGTERM", async () => {
     const root = mkdtempSync(join(tmpdir(), "tc-simulator-ignore-sigterm-"));
     const fixture = join(root, "ignore-sigterm.mjs");

@@ -321,9 +321,9 @@ const server = createServer(async (request, response) => {
       return;
     }
     json(response, StatusCodes.NOT_FOUND, { error: { code: "NotFound" } });
-  } catch (error) {
+  } catch {
     json(response, StatusCodes.UNAUTHORIZED, {
-      error: { code: "UnauthorizedOperation", message: error instanceof Error ? error.message : String(error) },
+      error: { code: "UnauthorizedOperation", message: "Simulator request was rejected" },
     });
   }
 });

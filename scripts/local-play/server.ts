@@ -20,6 +20,13 @@ export { corsHeaders } from "./cors";
 const MAX_BODY_BYTES = 1_000_000;
 const CONSOLE_TICKET_PATH = /^\/portal\/me\/problems\/[^/]+\/console$/;
 
+class LocalPlayRequestError extends Error {
+  constructor(readonly code: "payload_too_large" | "invalid_json") {
+    super(code);
+    this.name = "LocalPlayRequestError";
+  }
+}
+
 export interface LocalPlayServer {
   readonly port: number;
   readonly state: LocalPlayState;
@@ -38,7 +45,7 @@ async function readJsonBody(request: IncomingMessage): Promise<unknown> {
   for await (const chunk of request) {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     bytes += buffer.length;
-    if (bytes > MAX_BODY_BYTES) throw new Error("payload_too_large");
+    if (bytes > MAX_BODY_BYTES) throw new LocalPlayRequestError("payload_too_large");
     chunks.push(buffer);
   }
   if (chunks.length === 0) return undefined;
@@ -47,7 +54,7 @@ async function readJsonBody(request: IncomingMessage): Promise<unknown> {
   try {
     return JSON.parse(raw);
   } catch {
-    throw new Error("invalid_json");
+    throw new LocalPlayRequestError("invalid_json");
   }
 }
 
@@ -132,21 +139,31 @@ function rejectForbiddenRequest(
   return false;
 }
 
+function classifyLocalPlayRouteError(error: unknown): {
+  readonly status: number;
+  readonly error: string;
+} {
+  if (!(error instanceof LocalPlayRequestError)) {
+    return { status: StatusCodes.INTERNAL_SERVER_ERROR, error: "internal" };
+  }
+  return error.code === "payload_too_large"
+    ? { status: StatusCodes.REQUEST_TOO_LONG, error: "payload_too_large" }
+    : { status: StatusCodes.BAD_REQUEST, error: "invalid_json" };
+}
+
 function handleRouteError(
   error: unknown,
   request: IncomingMessage,
   response: ServerResponse,
 ): void {
-  const message = error instanceof Error ? error.message : "internal";
-  const status =
-    message === "payload_too_large"
-      ? StatusCodes.REQUEST_TOO_LONG
-      : message === "invalid_json"
-        ? StatusCodes.BAD_REQUEST
-        : StatusCodes.INTERNAL_SERVER_ERROR;
+  const publicError = classifyLocalPlayRouteError(error);
   if (!response.headersSent) {
-    const publicError = status === StatusCodes.INTERNAL_SERVER_ERROR ? "internal" : message;
-    writeJson(response, status, { error: publicError }, corsHeaders(request.headers.origin));
+    writeJson(
+      response,
+      publicError.status,
+      { error: publicError.error },
+      corsHeaders(request.headers.origin),
+    );
   } else response.end();
 }
 
