@@ -12,7 +12,7 @@ import {
   probeUrl,
   resolveActivePhase,
   uptimeEvent,
-} from "../shared.js";
+} from "../scoring-kernel.js";
 
 /**
  * `phased-polling` kind (ADR-012 Phase 3.B、microservice-migration-battle 想定)。

@@ -24,7 +24,7 @@ TenkaCloud is a self-hostable, Apache-2.0 platform for running hands-on AWS comp
 
 ## Vision
 
-TenkaCloud is not only a competition platform. The product direction is a path from safe, individual practice to team competition: **local drills → practical courses / enterprise training → team competitions / GameDay → global community**. Local drills are live today (`make local`); courses, enterprise training as a packaged product, and a global community are directions we are building toward, not shipped features. See [`docs/vision.md`](./docs/vision.md) for the full picture.
+TenkaCloud is not only a competition platform. The product direction is a path from safe, individual practice to team competition: **local drills → practical courses / enterprise training → team competitions / GameDay → global community**. Local drills are live today (`tenkacloud local`); courses, enterprise training as a packaged product, and a global community are directions we are building toward, not shipped features. See [`docs/vision.md`](./docs/vision.md) for the full picture.
 
 ## What TenkaCloud gives you
 
@@ -65,17 +65,18 @@ Codespaces plays **cloud-independent drills only** — self-contained Docker con
 
 ### Try it locally (no AWS)
 
-`make local` is the single local drill entry point: it starts the local scoring API and the Participant Portal, then you pick and start a drill from the portal screen that opens. It installs nothing and does not trust `mise`; use `make local-onboard` for guided setup.
+`tenkacloud local` is the primary local drill entry point: it starts the local scoring API and the Participant Portal, then you pick and start a drill from the portal screen. Progress is stored by default in the private local SQLite file `.tenkacloud/local/local-play.sqlite`; local play has no DynamoDB or AWS SDK dependency. `make local` remains a compatibility wrapper.
 
 ```bash
 git clone https://github.com/susumutomita/TenkaCloud.git
 cd TenkaCloud
 make install
 git submodule update --init problems
-make local
+bun link
+tenkacloud local
 ```
 
-`make local-list` lists every drill id if you would rather pre-start one with `make local PROBLEM=<id>` instead of picking it from the portal. See [docs/local-play.md](./docs/local-play.md) for that and every other detail.
+Without the one-time `bun link`, use `bun run tenkacloud local`. Run `tenkacloud local list` to list every drill id, or pre-start one with `tenkacloud local --problem <id>`. The optional remote state backend is selected explicitly with `--database turso` and `TENKACLOUD_LOCAL_TURSO_URL` / `TENKACLOUD_LOCAL_TURSO_AUTH_TOKEN`; SQLite remains the default. See [docs/local-play.md](./docs/local-play.md) for every subcommand.
 
 ### Deploy on AWS
 
@@ -100,7 +101,7 @@ TenkaCloud runs in one of two profiles, selected by the `CDK_PARAM_CONTROL_DATA_
 | **AWS-native** (default, unset or `dynamodb`) | Teams / companies who want everything inside AWS | DynamoDB (provisioned 1/1), 8 tables + 8 GSIs | Lambda `CreateStack` (default) |
 | **Zero-cost** (opt-in, `turso`) | Individuals, trials, personal events | Turso (libSQL) — 0 DynamoDB tables / 0 GSIs in the Lite synth | Lambda `CreateStack` (default) |
 
-Opting in to the zero-cost profile starts with `make turso-live-guide ENV=development`. It prints the full step-by-step path from Turso/SSM setup through preflight, deploy, the zero-DynamoDB CloudFormation proof, competitor-account bootstrap, participant scoring, SAML CRUD, and evidence capture. For the written runbook, migration path for an existing `dynamodb`-backed stack, measured costs, and current live-verification status, see [docs/running-costs.md](./docs/running-costs.md).
+Opting in to the zero-cost profile starts with `ENV=development tenkacloud turso-live`. The interactive command detects a missing Turso CLI and, on macOS, offers the official Homebrew installation before showing the complete path from Turso/SSM setup through preflight, deploy, the zero-DynamoDB CloudFormation proof, competitor-account bootstrap, participant scoring, SAML CRUD, and evidence capture. The equivalent non-linked command is `ENV=development bun run tenkacloud turso-live`. For the written runbook and current live-verification status, see [docs/running-costs.md](./docs/running-costs.md).
 
 ## Add your own problems
 

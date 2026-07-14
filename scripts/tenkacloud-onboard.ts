@@ -71,12 +71,12 @@ function doctor(): number {
   const result = diagnose(diagnoseInput());
   console.log(formatDiagnosis(result));
   if (isReady(result)) {
-    console.log("\nAll prerequisites are satisfied — run `make local`.");
+    console.log("\nAll prerequisites are satisfied — run `tenkacloud local`.");
     return 0;
   }
   console.log(
-    "\nSome prerequisites need action. Run `make local-onboard` (it will offer to set them up), " +
-      "or fix them manually with the commands from `make doctor`.",
+    "\nSome prerequisites need action. Run `tenkacloud onboard` (it will offer to set them up), " +
+      "or fix them manually with the commands from `tenkacloud doctor`.",
   );
   return 1;
 }
@@ -143,7 +143,7 @@ async function preflight(autoYes: boolean): Promise<number> {
     return 0;
   }
   const remaining = planRemediation(after, { platform });
-  console.error(formatManualGuidance(remaining, "make local-onboard"));
+  console.error(formatManualGuidance(remaining, "tenkacloud onboard"));
   if (!isInteractive() && !autoYes) {
     console.error(
       "\n(Non-interactive run: software was not installed. Re-run with `--yes` to allow installs.)",
