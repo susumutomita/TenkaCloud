@@ -63,6 +63,7 @@ export interface LocalPaths {
   readonly simulatorStateDir: string;
   readonly simulatorLogPath: string;
   readonly simulatorEnvPath: string;
+  readonly databasePath: string;
   readonly runtimeConfigPath: string;
 }
 
@@ -79,6 +80,7 @@ export function resolveLocalPaths(): LocalPaths {
     simulatorStateDir: join(localDir, "simulator-state"),
     simulatorLogPath: join(localDir, "simulator.log"),
     simulatorEnvPath: join(localDir, "simulator-native.env"),
+    databasePath: join(localDir, "local-play.sqlite"),
     runtimeConfigPath: join(
       REPO_ROOT,
       "apps",

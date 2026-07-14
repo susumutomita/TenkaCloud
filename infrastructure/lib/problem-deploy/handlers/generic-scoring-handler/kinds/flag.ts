@@ -1,6 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
-import type { KindHandlerInput, KindResult } from "../shared.js";
-import { noopKindResult } from "../shared.js";
+import type { KindHandlerInput, KindResult } from "../scoring-kernel.js";
+import { noopKindResult } from "../scoring-kernel.js";
 
 /**
  * `flag` kind (ADR-012 Phase 3.B)。

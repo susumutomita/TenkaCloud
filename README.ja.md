@@ -26,7 +26,7 @@ TenkaCloud は、ハンズオン形式の AWS 競技会を運営するための�
 
 ## ビジョン
 
-TenkaCloud は競技プラットフォームだけを目指しているわけではありません。プロダクトの方向性は、個人が安全に練習できる段階から、チームで競い合う段階へと進む一本道です。**ローカルドリル → 実践的なコース / エンタープライズ研修 → チーム対抗の競技 / GameDay → グローバルコミュニティ**。ローカルドリル(`make local`)は今日すでに動いています。コース、パッケージ化されたエンタープライズ研修、グローバルコミュニティは今後目指している方向であり、まだ実装済みの機能ではありません。実装済みと構想中の区別を含めた全体像は [`docs/vision.md`](./docs/vision.md)(英語)を参照してください。
+TenkaCloud は競技プラットフォームだけを目指しているわけではありません。プロダクトの方向性は、個人が安全に練習できる段階から、チームで競い合う段階へと進む一本道です。**ローカルドリル → 実践的なコース / エンタープライズ研修 → チーム対抗の競技 / GameDay → グローバルコミュニティ**。ローカルドリル(`tenkacloud local`)は今日すでに動いています。コース、パッケージ化されたエンタープライズ研修、グローバルコミュニティは今後目指している方向であり、まだ実装済みの機能ではありません。実装済みと構想中の区別を含めた全体像は [`docs/vision.md`](./docs/vision.md)(英語)を参照してください。
 
 ## TenkaCloud が提供するもの
 
@@ -67,17 +67,18 @@ Codespaces でプレイできるのは **クラウド非依存のドリルのみ
 
 ### ローカルで試す(AWS 不要)
 
-`make local` はローカルドリルの唯一のエントリーポイントです。ローカルの採点 API と Participant Portal を起動し、開いたポータル画面からドリルを選んで開始します。ソフトウェアのインストールや `mise` の trust は行いません。ガイド付きセットアップが必要な場合は `make local-onboard` を使ってください。
+`tenkacloud local` がローカルドリルの主入口です。ローカル採点 API と Participant Portal を起動し、開いた画面からドリルを選べます。進捗はデフォルトでローカルの非公開 SQLite ファイル `.tenkacloud/local/local-play.sqlite` に保存され、DynamoDB と AWS SDK には依存しません。`make local` は互換ラッパーとして残しています。
 
 ```bash
 git clone https://github.com/susumutomita/TenkaCloud.git
 cd TenkaCloud
 make install
 git submodule update --init problems
-make local
+bun link
+tenkacloud local
 ```
 
-ドリルを 1 つあらかじめ起動しておきたい場合は、ポータルから選ぶ代わりに `make local PROBLEM=<id>` を使えます。すべてのドリル id は `make local-list` で一覧できます。それ以外の詳細は [docs/local-play.md](./docs/local-play.md)(英語)を参照してください。
+`bun link` を行わない場合は `bun run tenkacloud local` でも実行できます。ドリル一覧は `tenkacloud local list`、1 つを事前起動する場合は `tenkacloud local --problem <id>` です。リモート保存を使う場合だけ `--database turso` と `TENKACLOUD_LOCAL_TURSO_URL` / `TENKACLOUD_LOCAL_TURSO_AUTH_TOKEN` を明示します。デフォルトは常に SQLite です。全サブコマンドは [docs/local-play.md](./docs/local-play.md)(英語)を参照してください。
 
 ### AWS にデプロイする
 
@@ -102,7 +103,7 @@ TenkaCloud は `CDK_PARAM_CONTROL_DATA_BACKEND` 環境変数で選べる 2 つ�
 | **AWS ネイティブ**(デフォルト、未設定 または `dynamodb`) | すべてを AWS 内で完結させたいチーム / 企業 | DynamoDB(プロビジョンド 1/1)、8 テーブル + 8 GSI | Lambda の `CreateStack`(デフォルト) |
 | **ゼロコスト**(オプトイン、`turso`) | 個人利用・トライアル・個人イベント | Turso(libSQL)— Lite synth で DynamoDB テーブル / GSI ともに 0 個 | Lambda の `CreateStack`(デフォルト) |
 
-ゼロコストプロファイルの初回ライブ検証は、まず `make turso-live-guide ENV=development` を実行してください。Turso / SSM の設定、事前確認、デプロイ、CloudFormation 上の DynamoDB 0 件確認、競技者アカウントの接続、参加者と採点、SAML CRUD、証跡記録までを日本語で順番に表示します。文章版の手順、既存スタックの移行パス、実測コスト、現時点でのライブ検証状況は [docs/running-costs.md](./docs/running-costs.md) にあります。
+ゼロコストプロファイルの初回ライブ検証は、まず `ENV=development tenkacloud turso-live` を実行してください。対話 wizard が Turso CLI / login、DB、SSM SecureString、`.env` の公開設定、read-only preflight、`deploy` の完全一致確認、CloudFormation 上の DynamoDB 0 件確認までを一続きで進めます。token は画面・argv・`.env` に出さず、標準入力から SSM へ渡します。未 link の場合は `ENV=development bun run tenkacloud turso-live` です。その後の画面操作と現時点でのライブ検証状況は [docs/running-costs.md](./docs/running-costs.md) にあります。
 
 ## 自分の問題を追加する
 

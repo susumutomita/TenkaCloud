@@ -14,18 +14,18 @@ The boundary is recorded in
 
 > **Simulator (cloud / Composite) problems are experimental and hidden by
 > default (Issue #2632).** Their endpoint URLs, access instructions, and problem
-> framing are still being brought up to catalog quality, so `make local` neither
+> framing are still being brought up to catalog quality, so `tenkacloud local` neither
 > lists nor serves them unless you opt in with `TENKACLOUD_LOCAL_SIMULATOR=1`.
 > Docker drill problems are unaffected and remain on by default.
 
 ## How it works
 
 ```
-make local [PROBLEM=<id>]
+tenkacloud local [--problem <id>] [--database sqlite|turso]
   ├─ local scoring API    scripts/local-play (reuses the portal contract)
   │     • a flag submission is forwarded to the container's /verify
   │     • the verdict is recorded (score / leaderboard / hints / score events)
-  │     • PROBLEM=<id> pre-starts a container; otherwise containers start on demand
+  │     • --problem <id> pre-starts a runtime; otherwise runtimes start on demand
   ├─ Docker Compose up    the selected problem container (loopback only)
   │     • per-deploy random secret (FLAG_SEED, …) injected as env
   │     • the container serves the challenge surface AND POST /verify
@@ -36,9 +36,9 @@ make local [PROBLEM=<id>]
   │     • stop/reset deletes the isolated world; snapshots support recovery
   ├─ runtime-config.json   points the portal at the local API
   └─ participant portal    Vite dev server (cloudMode:"local")
-make local-up → scoring API only (advanced / scripts)
-make local-portal → attach the portal to an already-running local API
-make local-down → Docker Compose down + restore runtime-config
+tenkacloud local up → scoring API only (advanced / scripts)
+tenkacloud local portal → attach the portal to an already-running local API
+tenkacloud local down → Docker Compose down + restore runtime-config
 ```
 
 | Layer                       | Owns     | Responsibility                                                        |
@@ -56,33 +56,54 @@ or operation is unsupported.
 ## Run it
 
 ```bash
-make local                        # start the scoring API + browser portal; containers start on demand
-make local PROBLEM=sqli-demo      # also pre-start that problem container, then open the portal
-make local-list                   # print every playable problem id
-make local-status                 # is local play running?
-make local-evaluate FLAG='TC{…}'  # submit a flag from the CLI
-make local-down                   # stop everything and restore runtime-config
+tenkacloud local                         # scoring API + portal; local SQLite persistence
+tenkacloud local --problem sqli-demo     # pre-start one problem, then open the portal
+tenkacloud local list                    # print every playable problem id
+tenkacloud local status                  # is local play running?
+tenkacloud local evaluate 'TC{…}'        # submit a flag from the CLI
+tenkacloud local down                    # stop runtimes and restore runtime-config
 ```
+
+Run `bun link` once to install the repository's `tenkacloud` executable, or
+prefix any command with `bun run` (for example, `bun run tenkacloud local`).
+The default backend is the embedded SQLite file
+`.tenkacloud/local/local-play.sqlite`, with owner-only permissions. It retains
+team progress and scores across local API restarts but never persists the
+participant token, process/container ownership, or a running Simulator world.
+Use the remote backend only when explicitly requested:
+
+```bash
+TENKACLOUD_LOCAL_TURSO_URL='https://<database>.turso.io' \
+TENKACLOUD_LOCAL_TURSO_AUTH_TOKEN='<token>' \
+  tenkacloud local --database turso
+```
+
+The token is read from the environment; the CLI has no token-valued argument
+and never writes it to `.env` or the SQLite database. Local runtime imports do
+not cross into the AWS SDK-backed Lambda repository adapters.
 
 Simulator (cloud / Composite) problems are hidden by default; enable them
 with `TENKACLOUD_LOCAL_SIMULATOR=1` (see the note above). When enabled, cloud
 problems use the reviewed, immutable Simulator image by default:
 
 ```bash
-TENKACLOUD_LOCAL_SIMULATOR=1 make local PROBLEM=hello-world
+TENKACLOUD_LOCAL_SIMULATOR=1 tenkacloud local --problem hello-world
 
 # Override the pinned default with another reviewed immutable build:
+TENKACLOUD_LOCAL_SIMULATOR=1 \
 TENKACLOUD_SIMULATOR_IMAGE='ghcr.io/susumutomita/tenkacloud-simulator@sha256:<64-hex>' \
-  make local PROBLEM=hello-world
+  tenkacloud local --problem hello-world
 
 # Simulator contributors may instead point to a real executable process:
+TENKACLOUD_LOCAL_SIMULATOR=1 \
 TENKACLOUD_SIMULATOR_COMMAND='/absolute/path/to/tenkacloud-simulator' \
-  make local PROBLEM=hello-world
+  tenkacloud local --problem hello-world
 
 # Or connect to an already-running loopback instance:
+TENKACLOUD_LOCAL_SIMULATOR=1 \
 TENKACLOUD_SIMULATOR_URL='http://127.0.0.1:42123' \
 TENKACLOUD_SIMULATOR_LAUNCH_SECRET='<base64url-32-byte-secret>' \
-  make local PROBLEM=hello-world
+  tenkacloud local --problem hello-world
 ```
 
 Image tags are rejected: the value must contain `@sha256:`. The launched
@@ -107,25 +128,26 @@ socket or policy cannot be established, workload capability discovery fails
 closed before deployment resources are created. This socket-enabled boundary is
 for single-user local play only, not a hosted or shared deployment mode.
 
-On a bare clone, `make local` is a single, self-healing entry point: it
+On a bare clone, `tenkacloud local` is a single, self-healing entry point: it
 installs missing workspace dependencies (`ensure-deps`, only when `vite` is
 absent — a no-op on a warm tree) and initializes an empty `problems/`
 submodule (`git submodule update --init problems`) automatically before it
-starts, so a fresh checkout can run `make local` straight away with no
+starts, so a fresh checkout can run `tenkacloud local` straight away with no
 separate `make install` or `git submodule update --init` step (#2525, #2533).
-`make local-portal` self-heals the same way.
+`tenkacloud local portal` self-heals the same way. The `make local-*` targets
+remain thin compatibility wrappers around these CLI commands.
 
-Prefer a guided walkthrough instead? `make doctor` reports on prerequisites
+Prefer a guided walkthrough instead? `tenkacloud doctor` reports on prerequisites
 (mise trust / the `problems/` submodule / Bun / Docker Compose / the Docker
-daemon) without installing anything; `make local-onboard` runs the same
+daemon) without installing anything; `tenkacloud onboard` runs the same
 checks interactively and offers to fix what it finds (trusting mise,
 installing Bun, initializing the submodule, Docker Compose help) — add
 `YES=1` to pre-approve every install for unattended use. Both wrap
 `scripts/tenkacloud-onboard.ts`.
 
-Without `PROBLEM=`, `make local` pre-starts no problem containers. It starts the
+Without `--problem`, `tenkacloud local` pre-starts no problem containers. It starts the
 loopback scoring API and browser portal so you can deploy/start a problem from
-the portal screen. Use `PROBLEM=<id>` when you want the CLI to
+the portal screen. Use `--problem <id>` when you want the CLI to
 pre-start one or more containers before the portal opens. The generated portal
 runtime config pre-fills a fresh random team key for each run; the
 Simulator console handoff accepts only that key. The challenge endpoints are
@@ -135,7 +157,7 @@ attack them, recover the flag, and submit it.
 Started containers keep running until an explicit stop — there is no idle
 timeout, so you can leave a problem up, come back later, and its endpoints are
 still there (#2512). The portal problem page's **Stop** button stops one
-problem; `make local-down` stops local play and every recorded container. The
+problem; `tenkacloud local down` stops local play and every recorded container. The
 one automatic stop is the running cap (3 containers by default): starting
 another problem beyond the cap stops the least-recently-played one to free its
 slot.
@@ -145,9 +167,9 @@ slot.
 > `TENKACLOUD_COMPOSE_CLI='docker-compose'` or
 > `TENKACLOUD_COMPOSE_CLI='docker compose'` to force one. The scoring API uses a
 > fresh loopback port per session and can be fixed with `LOCAL_API_PORT`. If it is already
-> taken, `make local` fails loudly rather than adopting a foreign server.
-> For API-only automation, use `make local-up`; attach the browser later with
-> `make local-portal`.
+> taken, `tenkacloud local` fails loudly rather than adopting a foreign server.
+> For API-only automation, use `tenkacloud local up`; attach the browser later with
+> `tenkacloud local portal`.
 
 Simulator sessions are recorded under `.tenkacloud/local` with private file
 permissions. A self-contained protected generation is committed atomically
@@ -155,7 +177,7 @@ before its participant-safe public projection; restart rebuilds a missing or
 older projection from that protected source. Owned process/container launch also
 commits a private intent before spawn. Process mode registers supervisor and
 child identities and keeps a private lease until Stop, so `up`/`down` can reclaim
-a parent-crash generation without signaling a reused PID. `make local-down` deletes every recorded Simulator world before
+a parent-crash generation without signaling a reused PID. `tenkacloud local down` deletes every recorded Simulator world before
 terminating an owned process/container. The local CLI also exposes explicit
 snapshot export/import and reset commands; recovery verifies the recorded
 protocol, token namespace, process, and deployment instead of trusting a stale
@@ -325,7 +347,7 @@ submission box per checkpoint, per-checkpoint hints).
 One directory = one problem. Problems live **only** in the
 [TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge)
 catalog (the `problems/` submodule) — never in this platform repo (ADR-008 /
-ADR-012). The platform is problem-agnostic: `make local PROBLEM=<id>` resolves
+ADR-012). The platform is problem-agnostic: `tenkacloud local --problem <id>` resolves
 `<id>` under `problems/challenges` or `problems/battles` when you choose to
 pre-start a container from the CLI. Otherwise the portal deploys selected
 problems on demand. The reference container problem is `sqli-demo` in the

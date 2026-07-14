@@ -9,6 +9,11 @@ import {
 } from "./api-state";
 import { corsHeaders, isAllowedCorsOrigin } from "./cors";
 import { proxySimulatorNativeRequest } from "./simulator-native-proxy";
+import {
+  type LocalPlayStateStore,
+  restoreLocalPlayState,
+  snapshotLocalPlayState,
+} from "./state-store";
 
 export { corsHeaders } from "./cors";
 
@@ -18,7 +23,13 @@ const CONSOLE_TICKET_PATH = /^\/portal\/me\/problems\/[^/]+\/console$/;
 export interface LocalPlayServer {
   readonly port: number;
   readonly state: LocalPlayState;
+  readonly persist: () => Promise<void>;
   readonly close: () => Promise<void>;
+  readonly closeStateStore: () => Promise<void>;
+}
+
+export interface StartLocalPlayServerOptions extends CreateStateOptions {
+  readonly stateStore?: LocalPlayStateStore;
 }
 
 async function readJsonBody(request: IncomingMessage): Promise<unknown> {
@@ -59,24 +70,12 @@ async function route(
   request: IncomingMessage,
   response: ServerResponse,
   state: LocalPlayState,
+  persist: () => Promise<void>,
 ): Promise<void> {
   const origin = request.headers.origin;
   const cors = corsHeaders(origin);
   const url = new URL(request.url ?? "/", "http://127.0.0.1");
-  if (origin !== undefined && !isAllowedCorsOrigin(origin)) {
-    writeJson(response, StatusCodes.FORBIDDEN, { error: "browser_origin_forbidden" }, {});
-    return;
-  }
-  if (url.pathname.startsWith("/local/operator/")) {
-    if (origin !== undefined) {
-      writeJson(response, StatusCodes.FORBIDDEN, { error: "operator_browser_forbidden" }, {});
-      return;
-    }
-    if (request.headers.authorization !== `Bearer ${state.participantToken}`) {
-      writeJson(response, StatusCodes.UNAUTHORIZED, { error: "unauthorized" }, {});
-      return;
-    }
-  }
+  if (rejectForbiddenRequest(request, response, state, url, origin)) return;
   if (await proxySimulatorNativeRequest(request, response, state)) return;
   if (request.method === "OPTIONS") {
     writeJson(response, StatusCodes.NO_CONTENT, undefined, cors);
@@ -106,42 +105,105 @@ async function route(
     },
     state,
   );
+  if (request.method !== "GET" && request.method !== "OPTIONS") await persist();
   writeJson(response, result.status, result.body, cors, result.headers);
 }
 
-export function startLocalPlayServer(
+function rejectForbiddenRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  state: LocalPlayState,
+  url: URL,
+  origin: string | undefined,
+): boolean {
+  if (origin !== undefined && !isAllowedCorsOrigin(origin)) {
+    writeJson(response, StatusCodes.FORBIDDEN, { error: "browser_origin_forbidden" }, {});
+    return true;
+  }
+  if (!url.pathname.startsWith("/local/operator/")) return false;
+  if (origin !== undefined) {
+    writeJson(response, StatusCodes.FORBIDDEN, { error: "operator_browser_forbidden" }, {});
+    return true;
+  }
+  if (request.headers.authorization !== `Bearer ${state.participantToken}`) {
+    writeJson(response, StatusCodes.UNAUTHORIZED, { error: "unauthorized" }, {});
+    return true;
+  }
+  return false;
+}
+
+function handleRouteError(
+  error: unknown,
+  request: IncomingMessage,
+  response: ServerResponse,
+): void {
+  const message = error instanceof Error ? error.message : "internal";
+  const status =
+    message === "payload_too_large"
+      ? StatusCodes.REQUEST_TOO_LONG
+      : message === "invalid_json"
+        ? StatusCodes.BAD_REQUEST
+        : StatusCodes.INTERNAL_SERVER_ERROR;
+  if (!response.headersSent) {
+    const publicError = status === StatusCodes.INTERNAL_SERVER_ERROR ? "internal" : message;
+    writeJson(response, status, { error: publicError }, corsHeaders(request.headers.origin));
+  } else response.end();
+}
+
+export async function startLocalPlayServer(
   port: number,
   deployment: LocalPlayDeployment,
-  options: CreateStateOptions = {},
+  options: StartLocalPlayServerOptions = {},
 ): Promise<LocalPlayServer> {
   const state = createLocalPlayState(deployment, options);
+  const stateStore = options.stateStore;
+  let saveQueue = Promise.resolve();
+  const persist = (): Promise<void> => {
+    if (!stateStore) return Promise.resolve();
+    const snapshot = snapshotLocalPlayState(state);
+    saveQueue = saveQueue.catch(() => {}).then(() => stateStore.save(snapshot));
+    return saveQueue;
+  };
+  let stateStoreClosed = false;
+  const closeStateStore = async (): Promise<void> => {
+    if (!stateStore || stateStoreClosed) return;
+    stateStoreClosed = true;
+    try {
+      await persist();
+    } finally {
+      await stateStore.close();
+    }
+  };
+  try {
+    const snapshot = await stateStore?.load();
+    if (snapshot) restoreLocalPlayState(state, snapshot);
+  } catch (error) {
+    await stateStore?.close();
+    throw error;
+  }
   const server: Server = createServer((request, response) => {
-    void route(request, response, state).catch((error) => {
-      const message = error instanceof Error ? error.message : "internal";
-      const status =
-        message === "payload_too_large"
-          ? StatusCodes.REQUEST_TOO_LONG
-          : message === "invalid_json"
-            ? StatusCodes.BAD_REQUEST
-            : StatusCodes.INTERNAL_SERVER_ERROR;
-      if (!response.headersSent) {
-        const publicError = status === StatusCodes.INTERNAL_SERVER_ERROR ? "internal" : message;
-        writeJson(response, status, { error: publicError }, corsHeaders(request.headers.origin));
-      } else response.end();
+    void route(request, response, state, persist).catch((error) => {
+      handleRouteError(error, request, response);
     });
   });
   return new Promise((resolve, reject) => {
-    server.once("error", reject);
+    const rejectStartup = (error: Error): void => {
+      void closeStateStore().finally(() => reject(error));
+    };
+    server.once("error", rejectStartup);
     server.listen(port, "127.0.0.1", () => {
+      server.off("error", rejectStartup);
       const address = server.address();
       const boundPort = typeof address === "object" && address ? address.port : port;
       resolve({
         port: boundPort,
         state,
+        persist,
         close: () =>
           new Promise((done) => {
             server.close(() => done());
           }),
+        closeStateStore,
       });
     });
   });

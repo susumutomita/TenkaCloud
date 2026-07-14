@@ -3,12 +3,16 @@
   "version": "1.0.0",
   "description": "",
   "private": true,
+  "bin": {
+    "tenkacloud": "scripts/tenkacloud.ts"
+  },
   "workspaces": [
     "infrastructure",
     "apps/*",
     "packages/*"
   ],
   "scripts": {
+    "tenkacloud": "bun run scripts/tenkacloud.ts",
     "build": "bun run scripts/workspace/run-workspaces.ts build",
     "build:pages": "bun run generate:landing-locales && bun run generate:landing-docs && bun run --filter @TenkaCloud/participant-portal build:pages && mkdir -p landing/portal-demo && cp -r apps/participant-portal/dist/. landing/portal-demo/ && bun run --filter @TenkaCloud/application-admin-console build:pages && mkdir -p landing/admin-demo && cp -r apps/application-admin-console/dist/. landing/admin-demo/",
     "typecheck": "bun run scripts/workspace/run-workspaces.ts typecheck",
@@ -34,6 +38,9 @@
   },
   "author": "Susumu Tomita (https://susumutomita.netlify.app/)",
   "license": "Apache-2.0",
+  "dependencies": {
+    "@libsql/client": "^0.17.4"
+  },
   "devDependencies": {
     "@biomejs/biome": "^2.5.3",
     "@textlint-ja/textlint-rule-preset-ai-writing": "^1.7.0",

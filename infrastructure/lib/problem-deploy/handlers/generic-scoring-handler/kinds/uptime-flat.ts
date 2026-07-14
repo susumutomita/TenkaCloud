@@ -19,7 +19,7 @@ import {
   noopKindResult,
   probeUrl,
   uptimeEvent,
-} from "../shared.js";
+} from "../scoring-kernel.js";
 
 /**
  * `uptime-flat` kind (ADR-012 Phase 3.B、 legacy `uptime` alias)。

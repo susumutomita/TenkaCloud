@@ -27,7 +27,7 @@ import type {
   ProbeFn,
   ProbeOptions,
   ProbeResult,
-} from "../../infrastructure/lib/problem-deploy/handlers/generic-scoring-handler/shared";
+} from "../../infrastructure/lib/problem-deploy/handlers/generic-scoring-handler/scoring-kernel";
 import { parseLoopbackUrl } from "./loopback";
 import type { SimulatedCloudProblem } from "./simulator";
 

@@ -30,6 +30,7 @@ const startLocalScript = readFileSync(
   "utf8",
 );
 const makefile = readFileSync(join(REPO_ROOT, "Makefile"), "utf8");
+const localCli = readFileSync(join(REPO_ROOT, "scripts", "cli", "local-command.ts"), "utf8");
 
 describe("devcontainer postCreate", () => {
   it("should run the single setup script instead of a && chain", () => {
@@ -151,14 +152,16 @@ describe("Makefile local-play guards", () => {
     expect(makefile).toMatch(/\$\(MAKE\) install/);
   });
 
-  it("make local should ensure deps before starting (single self-healing entry point)", () => {
+  it("make local should delegate to the self-healing unified CLI", () => {
     const local = makefile.slice(makefile.indexOf("\nlocal:"));
-    expect(local).toMatch(/\$\(MAKE\) ensure-deps/);
+    expect(local.slice(0, 400)).toContain("bun run tenkacloud local");
+    expect(localCli).toContain("await ensurePortalDependencies(deps)");
+    expect(localCli).toContain('["install", "--ignore-scripts"]');
   });
 
-  it("local-portal should self-heal missing deps via ensure-deps rather than exiting 127", () => {
+  it("local-portal should delegate to the same self-healing CLI path", () => {
     const portal = makefile.slice(makefile.indexOf("\nlocal-portal:"));
-    expect(portal.slice(0, 400)).toMatch(/\$\(MAKE\) ensure-deps/);
+    expect(portal.slice(0, 200)).toContain("bun run tenkacloud local portal");
   });
 
   it("local-onboard should reach a bun the bootstrap just installed", () => {

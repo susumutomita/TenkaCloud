@@ -57,6 +57,7 @@ import {
   cleanupRecordedSimulatorSession,
   SimulatorLocalRuntime,
 } from "./local-play/simulator-runtime";
+import { openLocalPlayStateStore } from "./local-play/state-store-factory";
 
 /**
  * [#2527 Slice 6] The local-play CLI entrypoint: command routing + composition only.
@@ -176,15 +177,15 @@ async function up(problemArg: string): Promise<void> {
     await printRunningEndpoints(apiBaseUrl, participantToken);
     if (problemIds.length === 0) {
       console.log(
-        "No problem was pre-started; run `make local PROBLEM=<id>` or start one from the portal.",
+        "No problem was pre-started; run `tenkacloud local --problem <id>` or start one from the portal.",
       );
     }
     console.log(
       "Started containers keep running until you stop them: use the portal Stop button " +
-        "for one problem, or `make local-down` to stop everything.",
+        "for one problem, or `tenkacloud local down` to stop everything.",
     );
     console.log(
-      "Participant Portal opens from `make local`; if you used `make local-up`, run `make local-portal`.",
+      "Participant Portal opens from `tenkacloud local`; after `tenkacloud local up`, run `tenkacloud local portal`.",
     );
   } catch (error) {
     const errors: unknown[] = [error];
@@ -273,6 +274,7 @@ async function serve(deploymentPath: string): Promise<void> {
   const persistUnits = (): void => {
     writePrivateJson(p.unitsPath, { units: [...units.values()] } satisfies RecordedUnits);
   };
+  const stateStore = await openLocalPlayStateStore(p);
   const server = await startLocalPlayServer(port, deployment, {
     browserText: browserDisplayText,
     startContainer: async (problem, offset) => {
@@ -297,12 +299,14 @@ async function serve(deploymentPath: string): Promise<void> {
     },
     simulator,
     simulatorSnapshotDir: join(p.localDir, "snapshots"),
+    stateStore,
   });
 
   // [#2512] No idle sweeper: a started container keeps running until the
   // participant stops it (portal Stop / `make local-down`) or the running cap
   // evicts the least-recently-played problem to start another one.
   console.log(`Local Participant API listening on http://127.0.0.1:${server.port}`);
+  console.log(`Local progress store: ${stateStore.description}`);
   let scoringCycle: Promise<void> | undefined;
   const scoringTimer = setInterval(() => {
     if (scoringCycle) return;
@@ -311,7 +315,7 @@ async function serve(deploymentPath: string): Promise<void> {
         .filter((problemId) => server.state.lifecycle.statusOf(problemId) === "running")
         .map((problemId) => scoreSimulatedProblem(problemId, server.state)),
     )
-      .then(() => {})
+      .then(() => server.persist())
       .catch(() => {
         console.error("Simulator scoring cycle failed; retrying on the next interval.");
       });
@@ -328,8 +332,10 @@ async function serve(deploymentPath: string): Promise<void> {
     const errors = await shutdownLocalServe({
       closeServer: server.close,
       ...(scoringCycle ? { scoringCycle } : {}),
+      persistState: server.persist,
       stopAll: () => server.state.lifecycle.stopAll(),
       closeSimulator: () => simulator.close(),
+      closeStateStore: server.closeStateStore,
     });
     for (const error of errors) {
       console.error(error instanceof Error ? error.message : String(error));
@@ -474,12 +480,12 @@ function listProblems(): void {
   const simulated = enabledSimulatedCloudSummaries(roots);
   if (summaries.length === 0 && simulated.length === 0) {
     console.log(
-      "No local-play problems found. Run `git submodule update --init` (or `make doctor` / " +
+      "No local-play problems found. Run `git submodule update --init` (or `tenkacloud doctor` / " +
         "`make local-onboard`) to fetch the problems/ catalog.",
     );
     return;
   }
-  console.log("Local-play problems (`make local PROBLEM=<id>`):\n");
+  console.log("Local-play problems (`tenkacloud local --problem <id>`):\n");
   const idWidth = Math.max(...summaries.map((s) => s.problemId.length), "id".length);
   const categoryWidth = Math.max(...summaries.map((s) => s.category.length), "category".length);
   console.log(`  ${"id".padEnd(idWidth)}  ${"category".padEnd(categoryWidth)}  name`);
@@ -556,8 +562,8 @@ async function handleSimulatorCommand(
   return false;
 }
 
-async function main(): Promise<void> {
-  const [command, argument] = process.argv.slice(2);
+export async function runLocalPlayCommand(args: readonly string[]): Promise<void> {
+  const [command, argument] = args;
   if (await handleSimulatorCommand(command, argument)) return;
   switch (command) {
     case "list":
@@ -589,7 +595,7 @@ async function main(): Promise<void> {
 }
 
 if (import.meta.main) {
-  void main().catch((error) => {
+  void runLocalPlayCommand(process.argv.slice(2)).catch((error) => {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;
   });

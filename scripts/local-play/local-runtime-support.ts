@@ -28,8 +28,10 @@ export const SERVE_SHUTDOWN_TIMEOUT_MS = 45_000;
 export interface LocalServeShutdownDeps {
   readonly closeServer: () => Promise<void>;
   readonly scoringCycle?: Promise<void>;
+  readonly persistState?: () => Promise<void>;
   readonly stopAll: () => Promise<void>;
   readonly closeSimulator: () => Promise<void>;
+  readonly closeStateStore?: () => Promise<void>;
 }
 
 /** Quiesce ingress and scoring before either lifecycle owner mutates persisted state. */
@@ -43,12 +45,22 @@ export async function shutdownLocalServe(deps: LocalServeShutdownDeps): Promise<
   });
   await Promise.all([serverClosed, scoringSettled]);
   try {
+    await deps.persistState?.();
+  } catch (error) {
+    errors.push(error);
+  }
+  try {
     await deps.stopAll();
   } catch (error) {
     errors.push(error);
   }
   try {
     await deps.closeSimulator();
+  } catch (error) {
+    errors.push(error);
+  }
+  try {
+    await deps.closeStateStore?.();
   } catch (error) {
     errors.push(error);
   }
