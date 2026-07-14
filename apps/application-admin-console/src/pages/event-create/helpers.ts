@@ -12,7 +12,11 @@
 import type { MultiselectProps, SelectProps } from "@cloudscape-design/components";
 import type { CompetitorAccountSummary } from "../../api/competitor-accounts-client";
 import { AWS_REGIONS } from "../../data/aws-regions";
-import { isProviderSelectable, type ProblemCostEstimateSummary } from "../../data/problems";
+import {
+  isProviderSelectable,
+  type ProblemCostEstimateSummary,
+  type ProblemRuntimeSummary,
+} from "../../data/problems";
 import type { useT } from "../../i18n";
 
 export const NAME_MAX = 120;
@@ -50,6 +54,9 @@ export interface ProblemRow {
   problemName: string;
   defaultRegion: string;
   runtimeProvider?: string;
+  /** Composite runtimes keep every target provider instead of collapsing to AWS. */
+  runtimeProviders?: readonly string[];
+  composite?: boolean;
   /** Issue #1910: operator-facing cost-risk estimate derived from template.yaml. */
   costEstimate?: ProblemCostEstimateSummary;
   /** Issue #1201 Phase 2: 問題が動作確認済 region 集合。 wizard picker の選択肢を絞る。 */
@@ -68,6 +75,7 @@ export interface TeamValidation {
 export type EventProviderMode =
   | { readonly kind: "aws" }
   | { readonly kind: "nonAws"; readonly provider: string }
+  | { readonly kind: "composite"; readonly providers: readonly string[] }
   | { readonly kind: "mixed" };
 
 export type TeamTableItem = TeamRow & { idx: number };
@@ -91,7 +99,7 @@ export function buildProblemOptions(
   problems: readonly {
     readonly id: string;
     readonly name: string;
-    readonly runtime: { readonly provider: string; readonly engine: string };
+    readonly runtime: ProblemRuntimeSummary;
   }[],
   reservedTag: string,
   enabledProviders: ReadonlySet<string>,
@@ -167,9 +175,23 @@ export function resizeTeamRows(prev: TeamRow[], next: number): TeamRow[] {
   return [...prev, ...additions];
 }
 
+function requiredCompositeProviders(
+  problem: Pick<ProblemRow, "runtimeProviders">,
+): readonly string[] {
+  /* v8 ignore next -- composite rows are constructed with runtimeProviders in EventCreate */
+  if (!problem.runtimeProviders) throw new Error("composite problem row is missing providers");
+  return problem.runtimeProviders;
+}
+
 export function resolveEventProviderMode(
-  problemRows: readonly Pick<ProblemRow, "runtimeProvider">[],
+  problemRows: readonly Pick<ProblemRow, "runtimeProvider" | "runtimeProviders" | "composite">[],
 ): EventProviderMode {
+  if (problemRows.some((problem) => problem.composite)) {
+    const providers = problemRows.flatMap((problem) =>
+      problem.composite ? requiredCompositeProviders(problem) : [problem.runtimeProvider ?? "aws"],
+    );
+    return { kind: "composite", providers: [...new Set(providers)] };
+  }
   // 未宣言 runtime は aws/cloudformation に正規化 (ProblemSummary と同じ規約)。
   const providers = problemRows.map((p) => p.runtimeProvider ?? "aws");
   const nonAws = new Set(providers.filter((p) => p !== "aws"));
@@ -181,6 +203,21 @@ export function resolveEventProviderMode(
   return { kind: "mixed" };
 }
 
+function providerRequirements(providerMode: EventProviderMode): {
+  readonly aws: boolean;
+  readonly nonAws: boolean;
+} {
+  if (providerMode.kind === "aws") return { aws: true, nonAws: false };
+  if (providerMode.kind === "nonAws") return { aws: false, nonAws: true };
+  if (providerMode.kind === "composite") {
+    return {
+      aws: providerMode.providers.includes("aws"),
+      nonAws: providerMode.providers.some((provider) => provider !== "aws"),
+    };
+  }
+  return { aws: false, nonAws: false };
+}
+
 export function validateTeamRows(
   teamRows: readonly TeamRow[],
   providerMode: EventProviderMode = { kind: "aws" },
@@ -190,11 +227,11 @@ export function validateTeamRows(
   let allNonAwsCredentialSlugsValid = true;
   const slugs = new Set<string>();
   let hasDuplicateSlug = false;
+  const requirements = providerRequirements(providerMode);
   for (const t of teamRows) {
     if (!SLUG_RE.test(t.internalSlug)) allSlugsValid = false;
-    if (providerMode.kind === "aws" && !ACCOUNT_ID_RE.test(t.awsAccountId))
-      allAccountsValid = false;
-    if (providerMode.kind === "nonAws" && !SLUG_RE.test(t.nonAwsCredentialTeamSlug)) {
+    if (requirements.aws && !ACCOUNT_ID_RE.test(t.awsAccountId)) allAccountsValid = false;
+    if (requirements.nonAws && !SLUG_RE.test(t.nonAwsCredentialTeamSlug)) {
       allNonAwsCredentialSlugsValid = false;
     }
     if (slugs.has(t.internalSlug)) hasDuplicateSlug = true;

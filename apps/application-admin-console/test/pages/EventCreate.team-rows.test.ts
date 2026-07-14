@@ -90,9 +90,32 @@ describe("validateTeamRows", () => {
       providerMode,
     });
   });
+
+  it("should require both an AWS account and credential slug for a composite event", () => {
+    const providerMode = { kind: "composite" as const, providers: ["aws", "gcp"] };
+
+    expect(validateTeamRows([row("team-1", "", "team-1")], providerMode)).toMatchObject({
+      allAccountsValid: false,
+      allNonAwsCredentialSlugsValid: true,
+    });
+    expect(validateTeamRows([row("team-1", "111111111111", "Bad_")], providerMode)).toMatchObject({
+      allAccountsValid: true,
+      allNonAwsCredentialSlugsValid: false,
+    });
+  });
 });
 
 describe("resolveEventProviderMode", () => {
+  it("should preserve every provider from a composite problem", () => {
+    expect(
+      resolveEventProviderMode([
+        { runtimeProviders: ["aws", "gcp", "azure", "sakura"], composite: true },
+        { runtimeProvider: "aws" },
+        {},
+      ]),
+    ).toEqual({ kind: "composite", providers: ["aws", "gcp", "azure", "sakura"] });
+  });
+
   it("should reject mixed AWS and non-AWS provider events for v1", () => {
     expect(
       resolveEventProviderMode([{ runtimeProvider: "aws" }, { runtimeProvider: "gcp" }]),

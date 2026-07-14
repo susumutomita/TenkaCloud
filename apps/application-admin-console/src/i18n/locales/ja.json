@@ -249,7 +249,7 @@
     "go_to_competitor_accounts": "Competitor Accounts へ移動",
     "no_verified_body": "Event を作成する前に、 Competitor Accounts ページで AWS Account を追加し、 接続確認を実行してください。 確認が完了していない account には deploy できません。 別タブで確認した直後は 「再読込」 で反映されます。",
     "teams_header": "Teams ({count})",
-    "teams_description": "各 team の deploy 先 AWS Account を選択します (接続確認が完了した account のみ表示されます)。 team の内部識別子は deploy 後は変更できません。",
+    "teams_description": "選択した問題の target ごとに、各 team の deploy 先を指定します。AWS は接続確認済み account、非 AWS は Competitor Accounts で登録した team 認証情報 slug を使います。team の内部識別子は deploy 後は変更できません。",
     "teams_empty": "チーム数を 1 以上に設定してください。",
     "col_internal_slug": "内部識別子",
     "col_aws_account": "AWS Account ID (接続確認済み)",

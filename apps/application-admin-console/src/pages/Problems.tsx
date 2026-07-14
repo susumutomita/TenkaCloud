@@ -14,7 +14,13 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { ProblemCostSummary } from "../components/ProblemCostSummary";
-import { listProblemSummaries, PROVIDER_LABEL, type ProblemSummary } from "../data/problems";
+import {
+  listProblemSummaries,
+  PROVIDER_LABEL,
+  type ProblemRuntimeSummary,
+  type ProblemSummary,
+  runtimeProviders,
+} from "../data/problems";
 import { interpolate, useT } from "../i18n";
 import {
   collectTagFacets,
@@ -30,6 +36,17 @@ import {
 const PROBLEM_PACK_DOCS_URL =
   "https://github.com/susumutomita/TenkaCloud/tree/main/apps/developer-portal/src/app/developers/docs/tutorials/first-pack";
 const OFFICIAL_CATALOG_REPO_URL = "https://github.com/susumutomita/TenkaCloudChallenge";
+
+function providerBadge(runtime: ProblemRuntimeSummary): {
+  readonly label: string;
+  readonly awsOnly: boolean;
+} {
+  const providers = runtimeProviders(runtime);
+  return {
+    label: providers.map((provider) => PROVIDER_LABEL[provider] ?? provider).join(" / "),
+    awsOnly: providers.every((provider) => provider === "aws"),
+  };
+}
 
 const PACK_GUIDANCE_STEPS = [
   {
@@ -301,8 +318,8 @@ export function ProblemsPage() {
                 <SpaceBetween direction="horizontal" size="xs">
                   <Badge color={item.category === "Battle" ? "red" : "blue"}>{item.category}</Badge>
                   {/* ADR-026 / ADR-027: deploy 先 cloud。 aws 以外 (multi-cloud) は緑で強調。 */}
-                  <Badge color={item.runtime.provider === "aws" ? "grey" : "green"}>
-                    {PROVIDER_LABEL[item.runtime.provider] ?? item.runtime.provider}
+                  <Badge color={providerBadge(item.runtime).awsOnly ? "grey" : "green"}>
+                    {providerBadge(item.runtime).label}
                   </Badge>
                   <Badge color="grey">
                     {interpolate(t("problems.badge_difficulty"), {

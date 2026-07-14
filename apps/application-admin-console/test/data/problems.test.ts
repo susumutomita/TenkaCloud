@@ -79,6 +79,27 @@ describe("metadataToDetail", () => {
     expect(detail.runtime).toEqual({ provider: "gcp", engine: "infra-manager" });
   });
 
+  it("should preserve every target of a composite runtime", () => {
+    const detail = metadataToDetail({
+      ...BASE_METADATA,
+      runtime: {
+        kind: "composite",
+        targets: [
+          { id: "aws", provider: "aws", engine: "cloudformation", entry: "template.yaml" },
+          { id: "gcp", provider: "gcp", engine: "infra-manager", entry: "gcp/main.tf" },
+        ],
+      },
+    });
+
+    expect(detail.runtime).toEqual({
+      kind: "composite",
+      targets: [
+        { id: "aws", provider: "aws", engine: "cloudformation" },
+        { id: "gcp", provider: "gcp", engine: "infra-manager" },
+      ],
+    });
+  });
+
   it("should project scoring.kind to scoringKind (Issue #1776)", () => {
     const detail = metadataToDetail({ ...BASE_METADATA, scoring: { kind: "flag" } });
     expect(detail.scoringKind).toBe("flag");

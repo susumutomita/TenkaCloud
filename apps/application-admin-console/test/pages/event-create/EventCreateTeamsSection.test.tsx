@@ -199,4 +199,25 @@ describe("EventCreateTeamsSection non-AWS credential column (#2563)", () => {
     expect(screen.getByText("event_create.mixed_provider_error")).toBeInTheDocument();
     expect(screen.getByText("event_create.col_aws_account")).toBeInTheDocument();
   });
+
+  it("should render AWS and each non-AWS target control for a composite event", () => {
+    const compositeValidation = {
+      ...validation(),
+      allNonAwsCredentialSlugsValid: true,
+      providerMode: {
+        kind: "composite" as const,
+        providers: ["aws", "gcp", "azure", "sakura"],
+      },
+    };
+    const { container } = render(
+      <EventCreateTeamsSection {...nonAwsProps({ teamValidation: compositeValidation })} />,
+    );
+
+    expect(screen.getByText("event_create.col_aws_account")).toBeInTheDocument();
+    expect(screen.getAllByText("event_create.col_non_aws_credential")).toHaveLength(3);
+    expect(screen.getAllByRole("button", { name: "event_create.check_credential" })).toHaveLength(
+      3,
+    );
+    expect(createWrapper(container).findSelect()).not.toBeNull();
+  });
 });

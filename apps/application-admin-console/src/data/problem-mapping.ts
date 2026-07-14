@@ -22,6 +22,20 @@ import {
 } from "@tenkacloud/problem-runtime";
 import type { ProblemCostEstimateSummary, ProblemDetail, ProblemMetadata } from "./problem-types";
 
+export function metadataRuntimeToSummary(metadata: ProblemMetadata): ProblemDetail["runtime"] {
+  const runtime = metadata.runtime;
+  if (runtime && "kind" in runtime) {
+    return {
+      kind: "composite",
+      targets: runtime.targets.map(({ id, provider, engine }) => ({ id, provider, engine })),
+    };
+  }
+  return {
+    provider: runtime?.provider ?? "aws",
+    engine: runtime?.engine ?? "cloudformation",
+  };
+}
+
 export function metadataToDetail(metadata: ProblemMetadata, templateYaml?: string): ProblemDetail {
   const costEstimate = templateYaml
     ? summarizeProblemCost(analyzeProblemCost(templateYaml, metadata.estimatedDuration))
@@ -39,10 +53,7 @@ export function metadataToDetail(metadata: ProblemMetadata, templateYaml?: strin
     exposedPorts: metadata.exposedPorts,
     learningGoals: metadata.learningGoals,
     // ADR-026 / ADR-027: 実行環境。 未宣言の legacy 問題は aws/cloudformation 既定。
-    runtime: {
-      provider: metadata.runtime?.provider ?? "aws",
-      engine: metadata.runtime?.engine ?? "cloudformation",
-    },
+    runtime: metadataRuntimeToSummary(metadata),
     ...(metadata.defaultRegion ? { defaultRegion: metadata.defaultRegion } : {}),
     ...(metadata.supportedRegions && metadata.supportedRegions.length > 0
       ? { supportedRegions: metadata.supportedRegions }
@@ -70,10 +81,17 @@ function summarizeProblemCost(estimate: ProblemCostEstimate): ProblemCostEstimat
 }
 
 /** Minimal runtime shape the console projects from `metadata.json`. */
-interface ConsoleRuntime {
+interface ConsoleSingleRuntime {
   readonly provider: string;
   readonly engine: string;
 }
+
+type ConsoleRuntime =
+  | ConsoleSingleRuntime
+  | {
+      readonly kind: "composite";
+      readonly targets: readonly ConsoleSingleRuntime[];
+    };
 
 /**
  * ADR-023 D4: only an AWS CloudFormation runtime is deployed/cost-analyzed by the
@@ -82,7 +100,11 @@ interface ConsoleRuntime {
  * cannot drift from the deploy worker's.
  */
 export function isExecutableProblemRuntime(runtime: ConsoleRuntime): boolean {
-  return runtime.provider === EXECUTABLE_PROVIDER && runtime.engine === EXECUTABLE_ENGINE;
+  return (
+    !("kind" in runtime) &&
+    runtime.provider === EXECUTABLE_PROVIDER &&
+    runtime.engine === EXECUTABLE_ENGINE
+  );
 }
 
 /**
@@ -96,6 +118,7 @@ export function isExecutableProblemRuntime(runtime: ConsoleRuntime): boolean {
  * once its adapter ships.
  */
 export function isLocalOnlyProblemRuntime(runtime: ConsoleRuntime): boolean {
+  if ("kind" in runtime) return false;
   return CONTAINER_RUNTIMES.some(
     (r) => r.provider === runtime.provider && r.engine === runtime.engine,
   );
@@ -128,11 +151,21 @@ export function isProviderSelectable(
   runtime: ConsoleRuntime,
   enabledProviders: ReadonlySet<string>,
 ): boolean {
+  if ("kind" in runtime) {
+    return runtime.targets.every((target) => isProviderSelectable(target, enabledProviders));
+  }
   if (isExecutableProblemRuntime(runtime)) return true;
   const recognized = RESERVED_RUNTIMES.some(
     (r) => r.provider === runtime.provider && r.engine === runtime.engine,
   );
   return recognized && enabledProviders.has(runtime.provider);
+}
+
+/** Provider order as authored in metadata, deduplicated for team destination controls. */
+export function runtimeProviders(runtime: ConsoleRuntime): readonly string[] {
+  const providers =
+    "kind" in runtime ? runtime.targets.map((target) => target.provider) : [runtime.provider];
+  return [...new Set(providers)];
 }
 
 /**
