@@ -11,6 +11,7 @@
     "cpus": 4
   },
   "postCreateCommand": "sh scripts/onboard/codespaces-setup.sh",
+  "postStartCommand": "sh scripts/onboard/codespaces-start-local.sh",
   "forwardPorts": [3199, 5175, 18080, 18180, 18280],
   "portsAttributes": {
     "3199": {
