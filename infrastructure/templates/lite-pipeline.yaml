@@ -97,8 +97,8 @@ Parameters:
       - sql-mirror
     Description: >-
       Control-plane data backend (CDK_PARAM_CONTROL_DATA_BACKEND). `dynamodb` (default)
-      keeps every table on DynamoDB. `turso`/`sql` is the pure-SQL zero-cost backend —
-      CDK synthesizes ZERO DynamoDB tables — and requires TursoDatabaseUrl +
+      keeps every table on DynamoDB. `turso`/`sql` is the pure-SQL zero-cost backend -
+      CDK synthesizes ZERO DynamoDB tables - and requires TursoDatabaseUrl +
       TursoAuthTokenParameterName. `turso-mirror`/`sql-mirror` keeps DynamoDB canonical
       while mirroring writes into SQL (migration bridge). See docs/running-costs.md.
 
@@ -113,7 +113,7 @@ Parameters:
     Type: String
     Default: ""
     Description: >-
-      SSM Parameter Store name (SecureString) holding the Turso auth token — create it
+      SSM Parameter Store name (SecureString) holding the Turso auth token - create it
       first, e.g. `aws ssm put-parameter --name /TenkaCloud/development/turso/auth-token
       --type SecureString --value <token>`. Required for a non-dynamodb backend. The
       deploy Lambda reads it at runtime; CodeBuild only forwards the name.
