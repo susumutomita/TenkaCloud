@@ -35,8 +35,8 @@ make dev
 `make dev` writes a `dev-mock` `runtime-config.json`, so any non-empty team login
 key signs in without a backend. For the local scoring API and Docker-backed
 problems, run `make local` from the repo root; that starts this portal in local
-mode too. The local mode also accepts any non-empty key, but the portal calls the
-local API.
+mode too. Its generated runtime config pre-fills a fresh random local team key;
+the authenticated Simulator console handoff accepts only that session key.
 
 `make help` lists the available targets.
 

@@ -45,11 +45,19 @@ Local drills are not a stripped-down demo of the competition. They are a
 different exercise with a different goal: build the reflex of "look, then
 decide" with no clock, no team, and no AWS account required.
 
-**Live today** — `make local` runs an entirely local, Docker-based drill loop
-(see [`local-play.md`](./local-play.md)): a problem container serves the
-challenge surface and its own `/verify`, and the platform contributes only the
-scoring API, portal, leaderboard, and hints. Today's local-play catalog is
-built around approachable Web application operations subjects, for example:
+**Live today** — `make local` runs the established Docker drill loop and the
+provider-neutral Simulator integration (see
+[`local-play.md`](./local-play.md)). Docker problems still serve the challenge
+surface and their own `/verify`. Cloud and Composite descriptors are delegated
+to a separate, version-pinned Simulator world, then surfaced through the same
+participant portal lifecycle. Cloud local play defaults to the reviewed,
+multi-platform OCI index
+`ghcr.io/susumutomita/tenkacloud-simulator@sha256:049c6c165f9947b386b2c5864983aebefba26e996ec62859dae0e9814c52d505`;
+contributors can explicitly select another digest-pinned image, executable, or
+already-running loopback Simulator. Docker local play remains zero-configuration
+after prerequisites are installed. The current Docker
+catalog is built around approachable Web application operations subjects, for
+example:
 
 - `wp-exposed-backup` / `wp-harden-leaks` — inspect a live WordPress +
   database stack, find files and settings a previous operator left exposed
@@ -63,10 +71,11 @@ The pattern behind all of them — inspect logs, check settings, find risky
 users or permissions, detect exposed files, identify outdated components,
 decide what to stop, update, delete, or restrict — is deliberately not
 AWS-specific. WordPress is the first approachable subject because almost
-everyone can picture "a website with a leaky backup." **Direction** — the
-same pattern is the template for expanding local drills into cloud, CI/CD,
-GitHub, IAM, SaaS, Kubernetes, and other operational domains; that expansion
-has not been built yet.
+everyone can picture "a website with a leaky backup." Multi-cloud emulation is
+now a working platform boundary, while catalog coverage and fidelity remain
+explicit capability-report facts rather than a blanket compatibility claim.
+**Direction** — expand those verified capabilities and authored drills across
+cloud, CI/CD, GitHub, IAM, SaaS, Kubernetes, and other operational domains.
 
 ## From drills to courses to competitions
 

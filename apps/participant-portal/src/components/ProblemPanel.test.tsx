@@ -86,6 +86,7 @@ const baseProblem: ParticipantProblemView = {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 
 describe("ProblemPanel deploy log privacy", () => {
@@ -219,33 +220,41 @@ describe("ProblemPanel pure helpers", () => {
     });
   });
 
-  it("should recover the loopback form from a Codespaces challenge-proxy URL", () => {
+  it("should recover the loopback form from the same Codespaces forwarded domain", () => {
     expect(
       codespacesLoopbackUrl(
-        "https://demo-5175.app.github.dev/__tenkacloud-local-port/18080/api/profile/1",
+        "https://demo-18080.app.github.dev/api/profile/1",
+        "demo-5175.app.github.dev",
       ),
     ).toBe("http://localhost:18080/api/profile/1");
   });
 
-  it("should default a bare-port proxy URL to the loopback root and preserve the query", () => {
+  it("should preserve the forwarded path and query in the terminal hint", () => {
     expect(
-      codespacesLoopbackUrl("https://demo-5175.app.github.dev/__tenkacloud-local-port/18080"),
+      codespacesLoopbackUrl("https://demo-18080.app.github.dev/", "demo-5175.app.github.dev"),
     ).toBe("http://localhost:18080/");
     expect(
-      codespacesLoopbackUrl("https://demo-5175.app.github.dev/__tenkacloud-local-port/18080/?q=1"),
-    ).toBe("http://localhost:18080/?q=1");
+      codespacesLoopbackUrl(
+        "https://demo-18080.app.github.dev/search?q=1",
+        "demo-5175.app.github.dev",
+      ),
+    ).toBe("http://localhost:18080/search?q=1");
   });
 
-  it("should return undefined for non-proxy, malformed, or invalid-port URLs", () => {
-    expect(codespacesLoopbackUrl("https://app.example.com/api/profile/1")).toBeUndefined();
-    expect(codespacesLoopbackUrl("http://127.0.0.1:18080/api/profile/1")).toBeUndefined();
-    expect(codespacesLoopbackUrl("not a url")).toBeUndefined();
+  it("should reject attacker domains, other codespaces, and malformed ports", () => {
+    const portal = "demo-5175.app.github.dev";
+    expect(codespacesLoopbackUrl("https://demo-18080.evil.example/x", portal)).toBeUndefined();
+    expect(codespacesLoopbackUrl("https://other-18080.app.github.dev/x", portal)).toBeUndefined();
+    expect(codespacesLoopbackUrl("http://demo-18080.app.github.dev/x", portal)).toBeUndefined();
     expect(
-      codespacesLoopbackUrl("https://demo-5175.app.github.dev/__tenkacloud-local-port/0/x"),
+      codespacesLoopbackUrl("https://operator@demo-18080.app.github.dev/x", portal),
     ).toBeUndefined();
     expect(
-      codespacesLoopbackUrl("https://demo-5175.app.github.dev/__tenkacloud-local-port/nope/x"),
+      codespacesLoopbackUrl("https://demo-18080.app.github.dev:8443/x", portal),
     ).toBeUndefined();
+    expect(codespacesLoopbackUrl("not a url", portal)).toBeUndefined();
+    expect(codespacesLoopbackUrl("https://demo-0.app.github.dev/x", portal)).toBeUndefined();
+    expect(codespacesLoopbackUrl("https://demo-nope.app.github.dev/x", portal)).toBeUndefined();
   });
 
   it("should build the auto-delete notice for expired / soon / far / invalid expiry", () => {
@@ -376,9 +385,10 @@ describe("ProblemPanel render branches", () => {
   });
 
   it("should show the terminal loopback hint for a Codespaces challenge-proxy access URL", () => {
+    vi.stubGlobal("location", new URL("https://demo-5175.app.github.dev/"));
     renderPanel({
       stackOutputs: {
-        Web: "https://demo-5175.app.github.dev/__tenkacloud-local-port/18080/api/profile/1",
+        Web: "https://demo-18080.app.github.dev/api/profile/1",
       },
     });
     expect(screen.getByText("http://localhost:18080/api/profile/1")).toBeInTheDocument();

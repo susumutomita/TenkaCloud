@@ -107,6 +107,55 @@ describe("ProblemLifecycle: on-demand start (#2392 Phase 2)", () => {
     const lc2 = new ProblemLifecycle(["a"], ok, { maxRunning: 1 });
     expect(await lc2.ensureRunning("a")).toBe(0);
   });
+
+  it("should retain the slot when failed-start cleanup still owns a container", async () => {
+    const ownershipError = Object.assign(new Error("cleanup failed"), {
+      retainsOwnership: true,
+    });
+    const stopped: string[] = [];
+    const { deps } = makeDeps({
+      startContainer: async () => {
+        throw ownershipError;
+      },
+      stopContainer: async (id) => {
+        stopped.push(id);
+      },
+    });
+    const lifecycle = new ProblemLifecycle(["a"], deps, { maxRunning: 1 });
+
+    await expect(lifecycle.ensureRunning("a")).rejects.toThrow("cleanup failed");
+    expect(lifecycle.snapshot()).toEqual([
+      { problemId: "a", status: "error", offset: 0, cleanupRequired: true },
+    ]);
+    await lifecycle.stop("a");
+    expect(stopped).toEqual(["a"]);
+    expect(lifecycle.statusOf("a")).toBe("stopped");
+  });
+
+  it("should tear down retained ownership before a retry start", async () => {
+    let starts = 0;
+    const events: string[] = [];
+    const { deps } = makeDeps({
+      startContainer: async () => {
+        starts += 1;
+        events.push(`start-${starts}`);
+        if (starts === 1) {
+          throw Object.assign(new Error("start cleanup incomplete"), {
+            retainsOwnership: true,
+          });
+        }
+      },
+      stopContainer: async () => {
+        events.push("stop-retained");
+      },
+    });
+    const lifecycle = new ProblemLifecycle(["a"], deps, { maxRunning: 1 });
+
+    await expect(lifecycle.ensureRunning("a")).rejects.toThrow("start cleanup incomplete");
+    await expect(lifecycle.ensureRunning("a")).resolves.toBe(0);
+    expect(events).toEqual(["start-1", "stop-retained", "start-2"]);
+    expect(lifecycle.statusOf("a")).toBe("running");
+  });
 });
 
 describe("ProblemLifecycle: concurrency cap + LRU eviction (#2392 Phase 2)", () => {
@@ -152,6 +201,50 @@ describe("ProblemLifecycle: explicit stop / stop-all (#2392 Phase 2, #2512)", ()
     expect(stopped).toEqual([]);
   });
 
+  it("should finish an in-flight start before honoring a concurrent stop", async () => {
+    let releaseStart = (): void => {};
+    const startGate = new Promise<void>((resolve) => {
+      releaseStart = resolve;
+    });
+    const { deps, stopped } = makeDeps({
+      startContainer: async () => startGate,
+    });
+    const lifecycle = new ProblemLifecycle(["a"], deps, { maxRunning: 1 });
+
+    const starting = lifecycle.ensureRunning("a");
+    const stopping = lifecycle.stop("a");
+    expect(lifecycle.statusOf("a")).toBe("starting");
+    releaseStart();
+    await Promise.all([starting, stopping]);
+
+    expect(stopped).toEqual([["a", 0]]);
+    expect(lifecycle.statusOf("a")).toBe("stopped");
+  });
+
+  it("should wait for an in-flight stop before restarting the same problem", async () => {
+    let releaseStop = (): void => {};
+    const stopGate = new Promise<void>((resolve) => {
+      releaseStop = resolve;
+    });
+    const { deps, started } = makeDeps({
+      stopContainer: async () => stopGate,
+    });
+    const lifecycle = new ProblemLifecycle(["a"], deps, { maxRunning: 1 });
+    await lifecycle.ensureRunning("a");
+
+    const stopping = lifecycle.stop("a");
+    const restarting = lifecycle.ensureRunning("a");
+    expect(lifecycle.statusOf("a")).toBe("stopping");
+    releaseStop();
+    await Promise.all([stopping, restarting]);
+
+    expect(started).toEqual([
+      ["a", 0],
+      ["a", 0],
+    ]);
+    expect(lifecycle.statusOf("a")).toBe("running");
+  });
+
   it("should keep running problems up no matter how long they sit untouched (#2512)", async () => {
     const { deps, stopped, tick } = makeDeps();
     const lc = new ProblemLifecycle(["a", "b"], deps, { maxRunning: 2 });
@@ -180,5 +273,33 @@ describe("ProblemLifecycle: explicit stop / stop-all (#2392 Phase 2, #2512)", ()
     await lc.stopAll();
     expect(stopped.map(([id]) => id).sort()).toEqual(["a", "b"]);
     expect(lc.snapshot().every((v) => v.status === "stopped")).toBe(true);
+  });
+
+  it("should stop every remaining problem before returning an aggregate failure", async () => {
+    const attempted: string[] = [];
+    let failFirstAStop = true;
+    const { deps } = makeDeps({
+      stopContainer: async (id) => {
+        attempted.push(id);
+        if (id === "a" && failFirstAStop) {
+          failFirstAStop = false;
+          throw new Error("a stop failed");
+        }
+      },
+    });
+    const lc = new ProblemLifecycle(["a", "b"], deps, { maxRunning: 2 });
+    await lc.ensureRunning("a");
+    await lc.ensureRunning("b");
+
+    await expect(lc.stopAll()).rejects.toThrow("Problem lifecycle cleanup failed");
+    expect(attempted).toEqual(["a", "b"]);
+    expect(lc.snapshot()).toEqual([
+      { problemId: "a", status: "error", offset: 0, cleanupRequired: true },
+      { problemId: "b", status: "stopped" },
+    ]);
+
+    await expect(lc.stopAll()).resolves.toBeUndefined();
+    expect(attempted).toEqual(["a", "b", "a"]);
+    expect(lc.snapshot().every((value) => value.status === "stopped")).toBe(true);
   });
 });

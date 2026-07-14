@@ -4,10 +4,33 @@ import Button from "@cloudscape-design/components/button";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import { useState } from "react";
-import type { ProblemLifecycleStatus } from "../api/portal-client";
-import { startProblem, stopProblem } from "../api/portal-client";
+import type { ProblemLifecycleStatus, ProblemRuntimeKind } from "../api/portal-client";
+import {
+  issueProblemConsoleHandoff,
+  resetProblem,
+  startProblem,
+  stopProblem,
+} from "../api/portal-client";
 import { useT } from "../i18n";
 import { formatProblemPanelActionError } from "./ProblemPanel.helpers";
+
+type LifecycleAction = typeof startProblem;
+
+const DOCKER_COPY = {
+  actionFailedHeader: "problem_panel.lifecycle_action_failed_header",
+  errorBody: "problem_panel.lifecycle_error_body",
+  errorHeader: "problem_panel.lifecycle_error_header",
+  runningBody: "problem_panel.lifecycle_running_body",
+  stoppedBody: "problem_panel.lifecycle_stopped_body",
+} as const;
+
+const SIMULATOR_COPY = {
+  actionFailedHeader: "problem_panel.lifecycle_simulator_action_failed_header",
+  errorBody: "problem_panel.lifecycle_simulator_error_body",
+  errorHeader: "problem_panel.lifecycle_simulator_error_header",
+  runningBody: "problem_panel.lifecycle_simulator_running_body",
+  stoppedBody: "problem_panel.lifecycle_simulator_stopped_body",
+} as const;
 
 /**
  * [#2392 Phase 2] local-play on-demand container control。 lifecycle field を持つ問題
@@ -17,12 +40,16 @@ import { formatProblemPanelActionError } from "./ProblemPanel.helpers";
  */
 export function ProblemLifecyclePanel({
   status,
+  runtimeKind,
+  cleanupRequired,
   apiBaseUrl,
   sessionToken,
   problemId,
   onScored,
 }: {
   status: ProblemLifecycleStatus;
+  runtimeKind: ProblemRuntimeKind | undefined;
+  cleanupRequired: boolean;
   apiBaseUrl: string;
   sessionToken: string;
   problemId: string;
@@ -31,14 +58,33 @@ export function ProblemLifecyclePanel({
   const t = useT();
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const simulatedCloud = runtimeKind === "simulated-cloud";
+  const copy = simulatedCloud ? SIMULATOR_COPY : DOCKER_COPY;
 
-  const runAction = async (action: typeof startProblem) => {
+  const runAction = async (action: LifecycleAction) => {
     setBusy(true);
     setActionError(null);
     try {
       await action(apiBaseUrl, sessionToken, problemId);
       await onScored();
     } catch (err) {
+      setActionError(formatProblemPanelActionError(t, err, "problem_panel.validation_error"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const openSimulatorConsole = async () => {
+    const consoleWindow = window.open("about:blank", "_blank");
+    if (consoleWindow) consoleWindow.opener = null;
+    setBusy(true);
+    setActionError(null);
+    try {
+      if (!consoleWindow) throw new Error("Simulator console popup was blocked");
+      const handoffUrl = await issueProblemConsoleHandoff(apiBaseUrl, sessionToken, problemId);
+      consoleWindow.location.replace(handoffUrl);
+    } catch (err) {
+      consoleWindow?.close();
       setActionError(formatProblemPanelActionError(t, err, "problem_panel.validation_error"));
     } finally {
       setBusy(false);
@@ -53,8 +99,27 @@ export function ProblemLifecyclePanel({
         <Button loading={busy} onClick={() => void runAction(stopProblem)}>
           {t("problem_panel.lifecycle_stop_button")}
         </Button>
+        {simulatedCloud && (
+          <Button loading={busy} onClick={() => void runAction(resetProblem)}>
+            {t("problem_panel.lifecycle_reset_button")}
+          </Button>
+        )}
+        {simulatedCloud && (
+          <Button iconName="external" loading={busy} onClick={() => void openSimulatorConsole()}>
+            {t("problem_panel.lifecycle_simulator_console_button")}
+          </Button>
+        )}
         <Box variant="small" color="text-status-inactive">
-          {t("problem_panel.lifecycle_running_body")}
+          {t(copy.runningBody)}
+        </Box>
+      </SpaceBetween>
+    ) : status === "error" && cleanupRequired ? (
+      <SpaceBetween direction="horizontal" size="xs" alignItems="center">
+        <Button loading={busy} onClick={() => void runAction(stopProblem)}>
+          {t("problem_panel.lifecycle_cleanup_button")}
+        </Button>
+        <Box variant="small" color="text-status-inactive">
+          {t("problem_panel.lifecycle_cleanup_required_body")}
         </Box>
       </SpaceBetween>
     ) : (
@@ -63,7 +128,7 @@ export function ProblemLifecyclePanel({
           {t("problem_panel.lifecycle_start_button")}
         </Button>
         <Box variant="small" color="text-status-inactive">
-          {t("problem_panel.lifecycle_stopped_body")}
+          {t(copy.stoppedBody)}
         </Box>
       </SpaceBetween>
     );
@@ -71,12 +136,12 @@ export function ProblemLifecyclePanel({
   return (
     <SpaceBetween size="s">
       {status === "error" && (
-        <Alert type="error" header={t("problem_panel.lifecycle_error_header")}>
-          {t("problem_panel.lifecycle_error_body")}
+        <Alert type="error" header={t(copy.errorHeader)}>
+          {t(copy.errorBody)}
         </Alert>
       )}
       {actionError !== null && (
-        <Alert type="error" header={t("problem_panel.lifecycle_action_failed_header")}>
+        <Alert type="error" header={t(copy.actionFailedHeader)}>
           {actionError}
         </Alert>
       )}

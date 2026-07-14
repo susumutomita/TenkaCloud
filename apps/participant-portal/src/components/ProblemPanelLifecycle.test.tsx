@@ -20,13 +20,21 @@ import { ProblemPanel } from "./ProblemPanel";
  */
 
 const apiMocks = vi.hoisted(() => ({
+  issueProblemConsoleHandoff: vi.fn(),
+  resetProblem: vi.fn(),
   startProblem: vi.fn(),
   stopProblem: vi.fn(),
 }));
 
 vi.mock("../api/portal-client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../api/portal-client")>();
-  return { ...actual, startProblem: apiMocks.startProblem, stopProblem: apiMocks.stopProblem };
+  return {
+    ...actual,
+    issueProblemConsoleHandoff: apiMocks.issueProblemConsoleHandoff,
+    resetProblem: apiMocks.resetProblem,
+    startProblem: apiMocks.startProblem,
+    stopProblem: apiMocks.stopProblem,
+  };
 });
 
 // FlagSubmissionPanel / MultiFlagSubmissionPanel は個別 test で 100% 済。 ここでは
@@ -87,6 +95,8 @@ beforeEach(() => {
   window.localStorage.setItem("tenkacloud.portal.locale", "en");
   apiMocks.startProblem.mockReset();
   apiMocks.stopProblem.mockReset();
+  apiMocks.resetProblem.mockReset();
+  apiMocks.issueProblemConsoleHandoff.mockReset();
 });
 
 afterEach(() => {
@@ -104,7 +114,7 @@ describe("ProblemPanel on-demand lifecycle (#2392 Phase 2)", () => {
     // Play surface is replaced: no flag panel, no access-URL link, even if outputs leaked.
     expect(screen.queryByTestId("flag-panel")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /challenge\.example\.com/ })).not.toBeInTheDocument();
-    // Header status reflects the container, not the deploy job.
+    // Header status reflects the local runtime, not the deploy job.
     expect(screen.getByText("Stopped")).toBeInTheDocument();
     expect(screen.getByText(/Start it to bring up the challenge endpoints/)).toBeInTheDocument();
 
@@ -130,10 +140,34 @@ describe("ProblemPanel on-demand lifecycle (#2392 Phase 2)", () => {
     renderPanel({ lifecycle: { status: "error" } });
 
     expect(
-      screen.getByText("The problem container hit an error. Start it again to retry."),
+      screen.getByText("The problem runtime hit an error. Start it again to retry."),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
     expect(screen.queryByTestId("flag-panel")).not.toBeInTheDocument();
+  });
+
+  it("should retry retained cleanup from the error state before exposing Start", async () => {
+    const user = userEvent.setup();
+    const onScored = vi.fn().mockResolvedValue(undefined);
+    apiMocks.stopProblem
+      .mockRejectedValueOnce(new Error("cleanup still failed"))
+      .mockResolvedValueOnce({ status: "stopped" });
+    renderPanel({ lifecycle: { status: "error", cleanupRequired: true } }, onScored);
+
+    expect(
+      screen.getByText(
+        "This runtime still owns local resources. Clean it up before starting again.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Start" })).not.toBeInTheDocument();
+    const retry = screen.getByRole("button", { name: "Retry cleanup" });
+    await user.click(retry);
+    expect(await screen.findByText("cleanup still failed")).toBeInTheDocument();
+    expect(onScored).not.toHaveBeenCalled();
+
+    await user.click(retry);
+    await waitFor(() => expect(onScored).toHaveBeenCalledTimes(1));
+    expect(apiMocks.stopProblem).toHaveBeenCalledTimes(2);
   });
 
   it("should keep the play surface and offer a Stop button when running", async () => {
@@ -145,6 +179,8 @@ describe("ProblemPanel on-demand lifecycle (#2392 Phase 2)", () => {
     // Current behavior unchanged: flag panel + access URL stay visible.
     expect(screen.getByTestId("flag-panel")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "https://challenge.example.com" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reset" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Open Simulator Console" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Stop" }));
     expect(apiMocks.stopProblem).toHaveBeenCalledWith(
@@ -153,6 +189,83 @@ describe("ProblemPanel on-demand lifecycle (#2392 Phase 2)", () => {
       "hello-world",
     );
     await waitFor(() => expect(onScored).toHaveBeenCalled());
+  });
+
+  it("should offer Reset and an authenticated console handoff only for a running simulated cloud", async () => {
+    const user = userEvent.setup();
+    const onScored = vi.fn().mockResolvedValue(undefined);
+    apiMocks.resetProblem.mockResolvedValue({ status: "running" });
+    apiMocks.issueProblemConsoleHandoff.mockResolvedValue(
+      "https://api.example.com/portal/me/problems/hello-world/console?ticket=opaque-one-time",
+    );
+    const replace = vi.fn();
+    const close = vi.fn();
+    vi.spyOn(window, "open").mockReturnValue({
+      close,
+      location: { replace },
+      opener: window,
+    } as unknown as Window);
+    renderPanel(
+      {
+        lifecycle: { status: "running", runtimeKind: "simulated-cloud" },
+        stackOutputs: {
+          ChallengeUrl: "https://challenge.example.com",
+          SimulatorConsoleUrl: "http://127.0.0.1:4173/world#token=must-not-reach-ui",
+          SimulatorAzureCredential: "azure-must-not-reach-ui",
+          SimulatorGcpCredential: "gcp-must-not-reach-ui",
+          SimulatorSakuraCredential: "sakura-must-not-reach-ui",
+          "aws-hello.SimulatorConsoleUrl":
+            "http://127.0.0.1:4173/world#token=namespaced-must-not-reach-ui",
+          "azure-app.SimulatorAzureCredential": "namespaced-azure-must-not-reach-ui",
+        },
+      },
+      onScored,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Open Simulator Console" }));
+    expect(apiMocks.issueProblemConsoleHandoff).toHaveBeenCalledWith(
+      "https://api.example.com",
+      "team-key",
+      "hello-world",
+    );
+    await waitFor(() =>
+      expect(replace).toHaveBeenCalledWith(
+        "https://api.example.com/portal/me/problems/hello-world/console?ticket=opaque-one-time",
+      ),
+    );
+    expect(close).not.toHaveBeenCalled();
+    for (const secret of [
+      "must-not-reach-ui",
+      "azure-must-not-reach-ui",
+      "gcp-must-not-reach-ui",
+      "sakura-must-not-reach-ui",
+      "namespaced-must-not-reach-ui",
+      "namespaced-azure-must-not-reach-ui",
+    ]) {
+      expect(document.body.textContent).not.toContain(secret);
+      expect(document.body.innerHTML).not.toContain(secret);
+    }
+
+    await user.click(screen.getByRole("button", { name: "Reset" }));
+    expect(apiMocks.resetProblem).toHaveBeenCalledWith(
+      "https://api.example.com",
+      "team-key",
+      "hello-world",
+    );
+    await waitFor(() => expect(onScored).toHaveBeenCalled());
+  });
+
+  it("should fail loudly when a simulated-cloud reset fails", async () => {
+    const user = userEvent.setup();
+    const onScored = vi.fn().mockResolvedValue(undefined);
+    apiMocks.resetProblem.mockRejectedValue(new Error("world deletion failed"));
+    renderPanel({ lifecycle: { status: "running", runtimeKind: "simulated-cloud" } }, onScored);
+
+    await user.click(screen.getByRole("button", { name: "Reset" }));
+
+    expect(await screen.findByText("Simulator operation failed")).toBeInTheDocument();
+    expect(screen.getByText("world deletion failed")).toBeInTheDocument();
+    expect(onScored).not.toHaveBeenCalled();
   });
 
   it("should leave problems without a lifecycle field unchanged (AWS mode)", () => {
@@ -172,7 +285,7 @@ describe("ProblemPanel on-demand lifecycle (#2392 Phase 2)", () => {
     expect(screen.getByTestId("multi-flag-panel")).toBeInTheDocument();
   });
 
-  it("should fail loudly when the container start fails and not refresh", async () => {
+  it("should fail loudly when the local runtime start fails and not refresh", async () => {
     const user = userEvent.setup();
     const onScored = vi.fn().mockResolvedValue(undefined);
     apiMocks.startProblem.mockRejectedValue(new Error("docker: container exited (125)"));
@@ -180,7 +293,7 @@ describe("ProblemPanel on-demand lifecycle (#2392 Phase 2)", () => {
 
     await user.click(screen.getByRole("button", { name: "Start" }));
 
-    expect(await screen.findByText("Container operation failed")).toBeInTheDocument();
+    expect(await screen.findByText("Local runtime operation failed")).toBeInTheDocument();
     expect(screen.getByText("docker: container exited (125)")).toBeInTheDocument();
     expect(onScored).not.toHaveBeenCalled();
     // Start stays available for a retry after the failure.

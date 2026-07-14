@@ -1,3 +1,14 @@
+import {
+  chmodSync,
+  closeSync,
+  mkdtempSync,
+  readFileSync,
+  rmdirSync,
+  statSync,
+  unlinkSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
   autoInitProblemsSubmodule,
@@ -7,14 +18,222 @@ import {
   browserDisplayText,
   buildLocalRuntimeConfig,
 } from "../../../scripts/local-play/codespaces-links";
+import { codespacesForwardedOrigin } from "../../../scripts/local-play/codespaces-origin";
 import {
   composeArgs,
   composeArgsForCli,
   composeFailureMessage,
   generateSecretEnv,
+  openPrivateAppendLog,
   resolveComposeCli,
 } from "../../../scripts/local-play/docker-adapter";
-import { reclaimStaleSession } from "../../../scripts/local-play/session-state";
+import { observeProcessIdentity } from "../../../scripts/local-play/process-identity";
+import {
+  reclaimStaleSession,
+  stopRecordedProcess,
+} from "../../../scripts/local-play/session-state";
+import {
+  ensurePrivateLocalDirectory,
+  persistStartedContainerUnit,
+  recordedApiIsHealthy,
+  requiredLocalApiPort,
+  shutdownLocalServe,
+  stopPersistedContainerUnit,
+  waitForServeProcessExit,
+} from "../../../scripts/tenkacloud-local";
+
+function deferred(): { readonly promise: Promise<void>; readonly resolve: () => void } {
+  let resolve = (): void => {};
+  const promise = new Promise<void>((accept) => {
+    resolve = accept;
+  });
+  return { promise, resolve };
+}
+
+describe("shutdownLocalServe", () => {
+  it("should quiesce HTTP and in-flight scoring before lifecycle cleanup", async () => {
+    const server = deferred();
+    const scoring = deferred();
+    const events: string[] = [];
+    const shutdown = shutdownLocalServe({
+      closeServer: () => {
+        events.push("server-close-started");
+        return server.promise;
+      },
+      scoringCycle: scoring.promise.then(() => {
+        events.push("scoring-settled");
+      }),
+      stopAll: async () => {
+        events.push("lifecycle-stopped");
+      },
+      closeSimulator: async () => {
+        events.push("simulator-closed");
+      },
+    });
+
+    await Promise.resolve();
+    expect(events).toEqual(["server-close-started"]);
+    server.resolve();
+    await Promise.resolve();
+    expect(events).toEqual(["server-close-started"]);
+    scoring.resolve();
+    await expect(shutdown).resolves.toEqual([]);
+    expect(events).toEqual([
+      "server-close-started",
+      "scoring-settled",
+      "lifecycle-stopped",
+      "simulator-closed",
+    ]);
+  });
+});
+
+describe("detached serve port", () => {
+  it("should require the parent-selected API port and reject invalid values", () => {
+    expect(requiredLocalApiPort("43199")).toBe(43199);
+    expect(() => requiredLocalApiPort(undefined)).toThrow("LOCAL_API_PORT is required");
+    expect(() => requiredLocalApiPort("0")).toThrow("between 1 and 65535");
+  });
+});
+
+describe("local state permissions", () => {
+  it("should repair the local directory and API log to owner-only modes", () => {
+    const directory = mkdtempSync(join(tmpdir(), "tenkacloud-local-permissions-"));
+    const logPath = join(directory, "api.log");
+    try {
+      chmodSync(directory, 0o755);
+      ensurePrivateLocalDirectory(directory);
+      expect(statSync(directory).mode & 0o777).toBe(0o700);
+
+      const logFd = openPrivateAppendLog(logPath);
+      closeSync(logFd);
+      expect(statSync(logPath).mode & 0o777).toBe(0o600);
+    } finally {
+      unlinkSync(logPath);
+      rmdirSync(directory);
+    }
+  });
+});
+
+describe("persisted container ownership", () => {
+  it("should retain a new unit when its first durable commit reports an after-rename failure", () => {
+    const unit = {
+      problemId: "ambiguous-start",
+      composePath: "/tmp/ambiguous.compose.yml",
+      composeProjectName: "tc-ambiguous-start",
+      secretEnv: [],
+      remappedComposePath: "/tmp/ambiguous.compose.yml",
+    };
+    const units = new Map<string, typeof unit>();
+    const durableProjection: (typeof unit)[] = [];
+    let first = true;
+    const persistUnits = vi.fn(() => {
+      durableProjection.splice(0, durableProjection.length, ...units.values());
+      if (first) {
+        first = false;
+        throw new Error("directory fsync failed after rename");
+      }
+    });
+
+    expect(() => persistStartedContainerUnit(units, persistUnits, unit)).toThrow(
+      "Problem container start failed and cleanup was incomplete",
+    );
+    expect(persistUnits).toHaveBeenCalledTimes(2);
+    expect(units.get(unit.problemId)).toBe(unit);
+    expect(durableProjection).toEqual([unit]);
+  });
+
+  it("should keep the compose handle until ownership release persists and allow Stop retry", () => {
+    const unit = {
+      problemId: "retry-cleanup",
+      composePath: "/tmp/retry.compose.yml",
+      composeProjectName: "tc-retry-cleanup",
+      secretEnv: [],
+      remappedComposePath: "/tmp/retry.compose.yml",
+    };
+    const units = new Map([[unit.problemId, unit]]);
+    const runner = {
+      stopPhysical: vi.fn(),
+      finalizeStop: vi.fn(),
+    };
+    let failPersist = true;
+    const persistUnits = vi.fn(() => {
+      if (failPersist) {
+        failPersist = false;
+        throw new Error("units persistence failed");
+      }
+    });
+
+    expect(() => stopPersistedContainerUnit(runner, units, persistUnits, unit)).toThrow(
+      "units persistence failed",
+    );
+    expect(units.get(unit.problemId)).toBe(unit);
+    expect(runner.stopPhysical).toHaveBeenCalledTimes(1);
+    expect(runner.finalizeStop).not.toHaveBeenCalled();
+
+    expect(() => stopPersistedContainerUnit(runner, units, persistUnits, unit)).not.toThrow();
+    expect(units.has(unit.problemId)).toBe(false);
+    expect(runner.stopPhysical).toHaveBeenCalledTimes(2);
+    expect(runner.finalizeStop).toHaveBeenCalledWith(unit);
+  });
+});
+
+describe("recorded serve process identity", () => {
+  it("should treat a reused PID as the recorded process already being gone", () => {
+    const identity = observeProcessIdentity(process.pid);
+    expect(identity).toMatch(/^[a-f0-9]{64}$/);
+    const kill = vi.spyOn(process, "kill");
+    expect(() => stopRecordedProcess(process.pid, undefined, "Local-play serve")).not.toThrow();
+    expect(() =>
+      stopRecordedProcess(process.pid, "0".repeat(64), "Local-play serve"),
+    ).not.toThrow();
+    expect(kill).not.toHaveBeenCalled();
+    kill.mockRestore();
+    expect(() => process.kill(process.pid, 0)).not.toThrow();
+  });
+
+  it("should reject foreign health without probing a reused serve port", async () => {
+    const health = vi.fn(async () => true);
+    await expect(
+      recordedApiIsHealthy(
+        {
+          pid: 42_123,
+          processIdentity: "a".repeat(64),
+          apiBaseUrl: "http://127.0.0.1:3199",
+          problemIds: [],
+          deploymentPath: "/repo/deployment.json",
+          runtimeConfigPath: "/repo/runtime-config.json",
+          participantToken: "a".repeat(43),
+        },
+        () => "b".repeat(64),
+        health,
+      ),
+    ).resolves.toBe(false);
+    expect(health).not.toHaveBeenCalled();
+  });
+
+  it("should treat ESRCH after identity observation as an idempotent exit race", () => {
+    const identity = observeProcessIdentity(process.pid);
+    if (!identity) throw new Error("test process identity is unavailable");
+    const noSuchProcess = Object.assign(new Error("no such process"), { code: "ESRCH" });
+    const kill = vi.spyOn(process, "kill").mockImplementationOnce(() => {
+      throw noSuchProcess;
+    });
+
+    expect(() => stopRecordedProcess(process.pid, identity, "Local-play serve")).not.toThrow();
+    expect(kill).toHaveBeenCalledWith(process.pid, "SIGTERM");
+    kill.mockRestore();
+  });
+
+  it("should treat PID reuse during exit waiting as the recorded process exiting", async () => {
+    const observed = ["recorded-identity", "replacement-identity"];
+    const observe = vi.fn(() => observed.shift() ?? "replacement-identity");
+
+    await expect(
+      waitForServeProcessExit(42_123, "recorded-identity", 1_000, observe, async () => {}),
+    ).resolves.toBe(true);
+    expect(observe).toHaveBeenCalledTimes(2);
+  });
+});
 
 describe("autoInitProblemsSubmodule", () => {
   it("should check out the problems/ submodule when it is registered (fresh clone / Codespace)", () => {
@@ -230,17 +449,18 @@ describe("composeFailureMessage", () => {
 
 describe("buildLocalRuntimeConfig", () => {
   it("should wire the portal to the loopback scoring API in local backend mode", () => {
-    const config = buildLocalRuntimeConfig("http://127.0.0.1:3199");
+    const config = buildLocalRuntimeConfig("http://127.0.0.1:3199", "local-session-token");
     expect(config).toMatchObject({
       apiBaseUrl: "http://127.0.0.1:3199",
       mode: "backend",
       cloudMode: "local",
       eventRegion: "local",
+      localTeamLoginKey: "local-session-token",
     });
   });
 
-  it("should use the Codespaces portal-origin API proxy for the browser runtime config", () => {
-    const config = buildLocalRuntimeConfig("http://127.0.0.1:3199", {
+  it("should use the fixed Codespaces portal API bridge for browser runtime config", () => {
+    const config = buildLocalRuntimeConfig("http://127.0.0.1:3199", "codespaces-session-token", {
       CODESPACE_NAME: "tenkacloud-demo",
       GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN: "app.github.dev",
     });
@@ -249,7 +469,50 @@ describe("buildLocalRuntimeConfig", () => {
       apiBaseUrl: "https://tenkacloud-demo-5175.app.github.dev/__tenkacloud-local-api",
       mode: "backend",
       cloudMode: "local",
+      localTeamLoginKey: "codespaces-session-token",
     });
+  });
+
+  it("should reject poisoned Codespaces names and forwarding domains", () => {
+    for (const env of [
+      {
+        CODESPACE_NAME: "demo",
+        GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN: "evil.com@attacker.example",
+      },
+      {
+        CODESPACE_NAME: "demo",
+        GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN: "app.github.dev:8443",
+      },
+      {
+        CODESPACE_NAME: "demo/path",
+        GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN: "app.github.dev",
+      },
+      {
+        CODESPACE_NAME: "demo",
+        GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN: "https://app.github.dev/path",
+      },
+    ]) {
+      expect(codespacesForwardedOrigin(3199, env)).toBeUndefined();
+      expect(buildLocalRuntimeConfig("http://127.0.0.1:3199", "session", env).apiBaseUrl).toBe(
+        "http://127.0.0.1:3199",
+      );
+    }
+  });
+
+  it("should reject a forwarded hostname whose combined first DNS label exceeds 63 bytes", () => {
+    const domain = "app.github.dev";
+    expect(
+      codespacesForwardedOrigin(3199, {
+        CODESPACE_NAME: "a".repeat(58),
+        GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN: domain,
+      }),
+    ).toBe(`https://${"a".repeat(58)}-3199.${domain}`);
+    expect(
+      codespacesForwardedOrigin(3199, {
+        CODESPACE_NAME: "a".repeat(59),
+        GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN: domain,
+      }),
+    ).toBeUndefined();
   });
 });
 
@@ -298,14 +561,14 @@ describe("reclaimStaleSession", () => {
 });
 
 describe("browserDisplayText", () => {
-  it("should rewrite loopback challenge URLs to the Codespaces portal proxy", () => {
+  it("should rewrite loopback URLs to isolated Codespaces port origins", () => {
     expect(
       browserDisplayText("Open http://127.0.0.1:18180/admin and http://localhost:18280/healthz.", {
         CODESPACE_NAME: "tenkacloud-demo",
         GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN: "app.github.dev",
       }),
     ).toBe(
-      "Open https://tenkacloud-demo-5175.app.github.dev/__tenkacloud-local-port/18180/admin and https://tenkacloud-demo-5175.app.github.dev/__tenkacloud-local-port/18280/healthz.",
+      "Open https://tenkacloud-demo-18180.app.github.dev/admin and https://tenkacloud-demo-18280.app.github.dev/healthz.",
     );
   });
 
@@ -315,14 +578,23 @@ describe("browserDisplayText", () => {
         CODESPACE_NAME: "tenkacloud-demo",
         GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN: "https://app.github.dev/",
       }),
-    ).toBe(
-      "Open https://tenkacloud-demo-5175.app.github.dev/__tenkacloud-local-port/18180/search?q=flag#top",
-    );
+    ).toBe("Open https://tenkacloud-demo-18180.app.github.dev/search?q=flag#top");
   });
 
   it("should leave loopback URLs unchanged outside Codespaces", () => {
     expect(browserDisplayText("Open http://127.0.0.1:18180/admin.", {})).toBe(
       "Open http://127.0.0.1:18180/admin.",
     );
+  });
+
+  it("should keep arbitrary challenge ports off the portal origin and expose only the API bridge", () => {
+    const viteConfig = readFileSync(
+      resolve(import.meta.dirname, "..", "..", "..", "apps/participant-portal/vite.config.ts"),
+      "utf8",
+    );
+    expect(viteConfig).not.toContain("__tenkacloud-local-port");
+    expect(viteConfig).toContain("createLocalApiProxyMiddleware");
+    expect(viteConfig).toContain("strictPort: true");
+    expect(viteConfig).toContain("cors: false");
   });
 });

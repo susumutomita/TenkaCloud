@@ -40,6 +40,26 @@ export function assertPortFree(port: number, label: string): Promise<void> {
   });
 }
 
+/** Ask the OS for a fresh loopback port; explicit LOCAL_API_PORT still uses assertPortFree. */
+export function freeLoopbackPort(): Promise<number> {
+  return new Promise((resolvePromise, reject) => {
+    const tester = createServer();
+    tester.once("error", reject);
+    tester.once("listening", () => {
+      const address = tester.address();
+      if (!address || typeof address === "string") {
+        tester.close();
+        reject(new Error("Could not allocate a loopback Participant API port"));
+        return;
+      }
+      tester.close((closeError) =>
+        closeError ? reject(closeError) : resolvePromise(address.port),
+      );
+    });
+    tester.listen(0, "127.0.0.1");
+  });
+}
+
 /**
  * Wait until the local Participant API at `apiBaseUrl` reports it is *our*
  * server for `problemIds` (#2392: a session may serve several). Fails loudly

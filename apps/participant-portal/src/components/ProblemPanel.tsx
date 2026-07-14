@@ -64,6 +64,16 @@ const LIFECYCLE_STATUS_TYPE: Record<ProblemLifecycleStatus, StatusIndicatorProps
 
 const COUNTDOWN_REFRESH_MS = 30_000;
 
+/** Defense in depth: runtime control material is never a participant stack output. */
+function visibleStackOutputs(problem: ParticipantProblemView): Record<string, string> {
+  if (problem.lifecycle?.runtimeKind !== "simulated-cloud") return problem.stackOutputs;
+  return Object.fromEntries(
+    Object.entries(problem.stackOutputs).filter(([key]) =>
+      key.split(".").every((segment) => !segment.startsWith("Simulator")),
+    ),
+  );
+}
+
 /**
  * #1975 / #2473: 問題文 (description) を web-kit `<Markdown>` で描画する。
  *
@@ -165,7 +175,7 @@ export function ProblemPanel({
   const isStale = isStaleProblem(problem, now);
   const flagScoring = getCompleteFlagScoring(problem);
   const multiFlagScoring = getCompleteMultiFlagScoring(problem);
-  const stackOutputs = splitStackOutputs(problem.stackOutputs);
+  const stackOutputs = splitStackOutputs(visibleStackOutputs(problem));
   // [#2392 Phase 2] local-play on-demand container。 lifecycle 不在 = AWS mode = running 扱い。
   const lifecycleStatus = problem.lifecycle?.status;
   const playable = isProblemPlayable(problem);
@@ -215,6 +225,8 @@ export function ProblemPanel({
         {lifecycleStatus !== undefined && (
           <ProblemLifecyclePanel
             status={lifecycleStatus}
+            runtimeKind={problem.lifecycle?.runtimeKind}
+            cleanupRequired={problem.lifecycle?.cleanupRequired === true}
             apiBaseUrl={apiBaseUrl}
             sessionToken={sessionToken}
             problemId={problem.problemId}

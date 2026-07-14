@@ -1,7 +1,19 @@
-import type { LocalComposeUnit, StartedContainer } from "./container-runner";
+import { randomBytes } from "node:crypto";
+import {
+  ContainerStartOwnershipError,
+  type LocalComposeUnit,
+  type StartedContainer,
+} from "./container-runner";
 import type { ContainerProblem } from "./manifest";
 import { remapContainerProblem } from "./port-remap";
 import { ProblemLifecycle } from "./problem-lifecycle";
+import type { SimulatedCloudProblem } from "./simulator";
+import type { LocalSimulatorDeployment, LocalSimulatorRuntimePort } from "./simulator-runtime";
+import {
+  type SimulatorDeploymentScoringState,
+  type SimulatorScoringContract,
+  simulatorScoringContract,
+} from "./simulator-scoring";
 import { type VerifyContext, type VerifyResult, verifySubmission } from "./verify-client";
 
 /**
@@ -20,6 +32,10 @@ export const LOCAL_CONTEXT = {
 export interface LocalPlayDeployment {
   /** [#2392] The full local-play catalog (order = portal display order). */
   readonly problems: readonly ContainerProblem[];
+  /** Cloud and Composite descriptors delegated to TenkaCloud Simulator. */
+  readonly simulatedProblems?: readonly SimulatedCloudProblem[];
+  /** Random bearer generated for this local session's sensitive participant handoffs. */
+  readonly participantToken?: string;
 }
 
 /** [#2392 Phase 2] 同時起動コンテナ数の既定キャップ / default cap on running containers. */
@@ -44,7 +60,7 @@ export type VerifyFn = (
 export interface LocalPlayScoreEvent {
   readonly jobId: string;
   readonly problemId: string;
-  readonly source: "flag" | "flag-wrong" | "hint";
+  readonly source: "flag" | "flag-wrong" | "hint" | "uptime" | "attack-detected";
   readonly points: number;
   readonly result: "ok" | "wrong";
   readonly occurredAt: string;
@@ -71,9 +87,39 @@ export interface ProblemRuntime {
   score: number;
 }
 
+export interface SimulatedProblemRuntime {
+  readonly problem: SimulatedCloudProblem;
+  readonly contract: SimulatorScoringContract;
+  readonly overrides: Map<string, string>;
+  readonly solved: Set<string>;
+  readonly revealedHints: Map<string, string>;
+  readonly wrongCounts: Map<string, number>;
+  deployment?: LocalSimulatorDeployment;
+  createdAt?: string;
+  scoringState: SimulatorDeploymentScoringState;
+  endpointsHealth?: string;
+  attackProbes?: string;
+  posture?: string;
+  platform?: string;
+  lastResult?: "ok" | "fail";
+  score: number;
+}
+
 export interface LocalPlayState {
   /** Per-problem runtime keyed by problemId; insertion order is display order. */
   readonly runtimes: Map<string, ProblemRuntime>;
+  readonly simulatedRuntimes: Map<string, SimulatedProblemRuntime>;
+  /** Per-problem Simulator score cycle shared by start, explicit score, and the periodic timer. */
+  readonly simulatorScoringInFlight: Map<string, Promise<LocalPlayResponse>>;
+  /** Short-lived, single-use tickets that exchange an authenticated request for a browser redirect. */
+  readonly consoleHandoffs: Map<
+    string,
+    {
+      readonly problemId: string;
+      readonly deploymentId: string;
+      readonly expiresAtMs: number;
+    }
+  >;
   /** Score events across all problems (each carries its own problemId). */
   readonly scoreEvents: LocalPlayScoreEvent[];
   readonly verify: VerifyFn;
@@ -81,6 +127,10 @@ export interface LocalPlayState {
   readonly browserText: (text: string) => string;
   /** [#2392 Phase 2] On-demand container lifecycle (cap / LRU eviction; explicit stop only, #2512). */
   readonly lifecycle: ProblemLifecycle;
+  readonly simulator?: LocalSimulatorRuntimePort;
+  /** Server-owned directory for operator snapshot export/import. */
+  readonly simulatorSnapshotDir?: string;
+  readonly participantToken: string;
   teamName: string;
 }
 
@@ -89,11 +139,14 @@ export interface LocalPlayRequest {
   readonly path: string;
   readonly query: Readonly<Record<string, string>>;
   readonly body: unknown;
+  readonly authorization?: string;
 }
 
 export interface LocalPlayResponse {
   readonly status: number;
   readonly body: unknown;
+  /** Non-JSON response metadata used only for explicit browser handoffs. */
+  readonly headers?: Readonly<Record<string, string>>;
 }
 
 export const jobIdOf = (problemId: string) => `local-${problemId}`;
@@ -111,6 +164,10 @@ export interface CreateStateOptions {
   readonly startContainer?: StartProblemContainer;
   /** Docker stop seam; `serve` injects the real `ContainerRunner`. */
   readonly stopContainer?: StopProblemContainer;
+  /** Real provider-neutral Simulator lifecycle port. Required only when a cloud problem is started. */
+  readonly simulator?: LocalSimulatorRuntimePort;
+  /** Server-owned directory for Simulator snapshots; never accepted from an HTTP request. */
+  readonly simulatorSnapshotDir?: string;
 }
 
 /**
@@ -141,7 +198,12 @@ export function createLocalPlayState(
   deployment: LocalPlayDeployment,
   options: CreateStateOptions = {},
 ): LocalPlayState {
+  const participantToken = deployment.participantToken ?? randomBytes(32).toString("base64url");
+  if (!/^[A-Za-z0-9_-]{43}$/.test(participantToken)) {
+    throw new Error("Local participant token must be 32-byte base64url");
+  }
   const runtimes = new Map<string, ProblemRuntime>();
+  const simulatedRuntimes = new Map<string, SimulatedProblemRuntime>();
   const catalog = new Map<string, ContainerProblem>();
   for (const problem of deployment.problems) {
     catalog.set(problem.problemId, problem);
@@ -153,43 +215,105 @@ export function createLocalPlayState(
       score: 0,
     });
   }
+  for (const problem of deployment.simulatedProblems ?? []) {
+    if (catalog.has(problem.problemId) || simulatedRuntimes.has(problem.problemId)) {
+      throw new Error(`duplicate local problem id: ${problem.problemId}`);
+    }
+    simulatedRuntimes.set(problem.problemId, {
+      problem,
+      contract: simulatorScoringContract(problem),
+      overrides: new Map(),
+      solved: new Set(),
+      revealedHints: new Map(),
+      wrongCounts: new Map(),
+      scoringState: {},
+      score: 0,
+    });
+  }
   const startContainer = options.startContainer ?? fakeStartContainer;
   const stopContainer = options.stopContainer ?? (() => {});
+  const now = options.now ?? Date.now;
   /** Teardown handle per running problem (the lifecycle only knows ids + offsets). */
   const units = new Map<string, LocalComposeUnit>();
   const lifecycle = new ProblemLifecycle(
-    [...catalog.keys()],
+    [...catalog.keys(), ...simulatedRuntimes.keys()],
     {
       // 起動: catalog 原本を offset へ remap して runtime に差し替える /
       // start the catalog original on its offset block and swap it in.
       startContainer: async (problemId, offset) => {
+        const simulatedRuntime = simulatedRuntimes.get(problemId);
+        if (simulatedRuntime) {
+          if (!options.simulator) {
+            throw new Error("Cloud local play requires a configured TenkaCloud Simulator runtime");
+          }
+          simulatedRuntime.deployment = await options.simulator.start(simulatedRuntime.problem);
+          // A fresh world gets a fresh phase origin and world-scoped telemetry.
+          // Session score/solved history, one-time awards/disruptions, and
+          // participant overrides remain cumulative so reset cannot farm them.
+          const priorScoringState = simulatedRuntime.scoringState;
+          simulatedRuntime.createdAt = new Date(now()).toISOString();
+          simulatedRuntime.scoringState = {
+            ...(priorScoringState.bonusAwarded
+              ? { bonusAwarded: priorScoringState.bonusAwarded }
+              : {}),
+            ...(priorScoringState.firedDisruptions
+              ? { firedDisruptions: priorScoringState.firedDisruptions }
+              : {}),
+          };
+          simulatedRuntime.endpointsHealth = undefined;
+          simulatedRuntime.attackProbes = undefined;
+          simulatedRuntime.posture = undefined;
+          simulatedRuntime.platform = undefined;
+          simulatedRuntime.lastResult = undefined;
+          return;
+        }
         const problem = catalog.get(problemId);
         const runtime = runtimes.get(problemId);
         if (!problem || !runtime) throw new Error(`unknown problem: ${problemId}`);
-        const started = await startContainer(problem, offset);
+        let started: StartedContainer;
+        try {
+          started = await startContainer(problem, offset);
+        } catch (error) {
+          if (error instanceof ContainerStartOwnershipError) {
+            units.set(problemId, error.unit);
+          }
+          throw error;
+        }
         units.set(problemId, started.unit);
         runtime.problem = started.problem;
       },
       // 停止: unit を破棄して catalog 原本へ戻す / tear the unit down and
       // restore the catalog original (stale offset URLs must not linger).
       stopContainer: async (problemId) => {
+        const simulatedRuntime = simulatedRuntimes.get(problemId);
+        if (simulatedRuntime) {
+          if (options.simulator) await options.simulator.stop(problemId);
+          simulatedRuntime.deployment = undefined;
+          return;
+        }
         const unit = units.get(problemId);
-        units.delete(problemId);
         if (unit) await stopContainer(unit);
+        units.delete(problemId);
         const problem = catalog.get(problemId);
         const runtime = runtimes.get(problemId);
         if (problem && runtime) runtime.problem = problem;
       },
-      now: options.now ?? Date.now,
+      now,
     },
     { maxRunning: options.maxRunning ?? DEFAULT_MAX_RUNNING },
   );
   return {
     runtimes,
+    simulatedRuntimes,
+    simulatorScoringInFlight: new Map(),
+    consoleHandoffs: new Map(),
     scoreEvents: [],
     verify: options.verify ?? verifySubmission,
     browserText: options.browserText ?? ((text) => text),
     lifecycle,
+    ...(options.simulator ? { simulator: options.simulator } : {}),
+    ...(options.simulatorSnapshotDir ? { simulatorSnapshotDir: options.simulatorSnapshotDir } : {}),
+    participantToken,
     teamName: options.teamName ?? "Local Player",
   };
 }
@@ -198,6 +322,7 @@ export function createLocalPlayState(
 export function sessionScore(state: LocalPlayState): number {
   let total = 0;
   for (const rt of state.runtimes.values()) total += rt.score;
+  for (const rt of state.simulatedRuntimes.values()) total += rt.score;
   return total;
 }
 

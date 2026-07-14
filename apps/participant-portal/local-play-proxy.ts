@@ -1,132 +1,222 @@
-import { type IncomingMessage, request, type ServerResponse } from "node:http";
+import { existsSync, readFileSync } from "node:fs";
+import {
+  type IncomingHttpHeaders,
+  type IncomingMessage,
+  request,
+  type ServerResponse,
+} from "node:http";
+import { resolve } from "node:path";
 import { StatusCodes } from "http-status-codes";
 
-export const LOCAL_CHALLENGE_PROXY_PREFIX = "/__tenkacloud-local-port";
+export const LOCAL_API_PROXY_PREFIX = "/__tenkacloud-local-api";
+const MAX_PROXY_BODY_BYTES = 1_000_000;
+const MAX_PROXY_HEADERS = 64;
+const PROXY_TIMEOUT_MS = 15_000;
+const HOP_BY_HOP_HEADERS = new Set([
+  "connection",
+  "content-length",
+  "host",
+  "keep-alive",
+  "proxy-authenticate",
+  "proxy-authorization",
+  "te",
+  "trailer",
+  "transfer-encoding",
+  "upgrade",
+]);
+const PRIVATE_REQUEST_HEADERS = new Set(["cookie", "cookie2"]);
+const PRIVATE_RESPONSE_HEADERS = new Set([
+  "cookie",
+  "set-cookie",
+  "set-cookie2",
+  "service-worker-allowed",
+]);
 
-export interface LocalChallengeProxyTarget {
-  readonly port: number;
-  readonly path: string;
+interface LocalStateProjection {
+  readonly apiBaseUrl?: unknown;
 }
 
-export function parseLocalChallengeProxyUrl(
-  url: string | undefined,
-): LocalChallengeProxyTarget | undefined {
-  if (!url?.startsWith(`${LOCAL_CHALLENGE_PROXY_PREFIX}/`)) return undefined;
-  const rest = url.slice(LOCAL_CHALLENGE_PROXY_PREFIX.length + 1);
-  const pathStart = rest.search(/[/?]/);
-  const rawPort = pathStart === -1 ? rest : rest.slice(0, pathStart);
-  const port = Number(rawPort);
-  if (!Number.isInteger(port) || port < 1 || port > 65_535) return undefined;
-  const rawPath = pathStart === -1 ? "" : rest.slice(pathStart);
-  return {
-    port,
-    path: rawPath.length === 0 ? "/" : rawPath.startsWith("?") ? `/${rawPath}` : rawPath,
-  };
+export interface LocalApiProxyOptions {
+  readonly statePath?: string;
+  readonly timeoutMs?: number;
 }
 
-export function rewriteLoopbackUrlPrefixes(
-  value: string,
-  forwardedPrefix = LOCAL_CHALLENGE_PROXY_PREFIX,
-): string {
-  return value.replace(
-    /\bhttp:\/\/(?:127\.0\.0\.1|localhost):(\d+)(?=\/|[?#]|[\s`"'<>)]|$)/g,
-    (_match, port: string) => `${forwardedPrefix}/${port}`,
+function defaultStatePath(): string {
+  return resolve(
+    process.env.TENKACLOUD_LOCAL_DIR ?? resolve(import.meta.dirname, "../..", ".tenkacloud/local"),
+    "state.json",
   );
 }
 
-export const rewriteLoopbackLocationHeader = rewriteLoopbackUrlPrefixes;
+export function parseLocalApiProxyUrl(url: string | undefined): string | undefined {
+  if (!url || (url !== LOCAL_API_PROXY_PREFIX && !url.startsWith(`${LOCAL_API_PROXY_PREFIX}/`))) {
+    return undefined;
+  }
+  const path = url.slice(LOCAL_API_PROXY_PREFIX.length) || "/";
+  const pathname = new URL(path, "http://127.0.0.1").pathname;
+  if (pathname !== "/healthz" && !pathname.startsWith("/portal/")) return undefined;
+  return path;
+}
 
-export function rewritesBody(headers: IncomingMessage["headers"]): boolean {
-  const encoding = headers["content-encoding"];
-  if (encoding && encoding !== "identity") return false;
-  const type = String(headers["content-type"] ?? "").toLowerCase();
+export function resolveLocalApiTarget(statePath = defaultStatePath()): URL | undefined {
+  if (!existsSync(statePath)) return undefined;
+  try {
+    const state = JSON.parse(readFileSync(statePath, "utf8")) as LocalStateProjection;
+    if (typeof state.apiBaseUrl !== "string") return undefined;
+    const url = new URL(state.apiBaseUrl);
+    if (
+      url.protocol !== "http:" ||
+      (url.hostname !== "127.0.0.1" && url.hostname !== "localhost") ||
+      !url.port ||
+      url.username ||
+      url.password ||
+      url.pathname !== "/" ||
+      url.search ||
+      url.hash
+    ) {
+      return undefined;
+    }
+    return url;
+  } catch {
+    return undefined;
+  }
+}
+
+function privateForwardingHeader(name: string): boolean {
   return (
-    type.includes("text/html") ||
-    type.includes("text/css") ||
-    type.includes("javascript") ||
-    type.includes("application/json")
+    PRIVATE_REQUEST_HEADERS.has(name) ||
+    name === "forwarded" ||
+    name.startsWith("x-forwarded-") ||
+    name.startsWith("x-github-") ||
+    name.startsWith("x-original-") ||
+    name.startsWith("cf-")
   );
 }
 
-export function copyProxyHeaders(headers: IncomingMessage["headers"], res: ServerResponse): void {
-  for (const [name, value] of Object.entries(headers)) {
-    if (value === undefined) continue;
-    if (name.toLowerCase() === "content-length" && rewritesBody(headers)) continue;
-    if (name.toLowerCase() === "location") {
-      const raw = Array.isArray(value) ? value[0] : value;
-      if (raw) res.setHeader(name, rewriteLoopbackLocationHeader(raw));
+export function localApiRequestHeaders(
+  source: IncomingHttpHeaders,
+  target: URL,
+): IncomingHttpHeaders {
+  const headers: IncomingHttpHeaders = {};
+  let count = 0;
+  for (const [rawName, value] of Object.entries(source)) {
+    const name = rawName.toLowerCase();
+    if (value === undefined || HOP_BY_HOP_HEADERS.has(name) || privateForwardingHeader(name)) {
       continue;
     }
-    res.setHeader(name, value);
+    count += 1;
+    if (count > MAX_PROXY_HEADERS) throw new Error("local_api_proxy_headers_too_large");
+    headers[name] = value;
   }
+  headers.host = target.host;
+  headers["accept-encoding"] = "identity";
+  return headers;
 }
 
-export function proxyStatusCode(statusCode: number | undefined): number {
-  return statusCode ?? StatusCodes.BAD_GATEWAY;
-}
-
-export function handleProxyError(
-  error: NodeJS.ErrnoException,
-  res: ServerResponse,
-  port: number,
-): void {
-  if (res.headersSent) {
-    res.destroy(error);
-    return;
-  }
-  res.statusCode =
-    error.code === "ECONNREFUSED" ? StatusCodes.BAD_GATEWAY : StatusCodes.INTERNAL_SERVER_ERROR;
-  res.setHeader("content-type", "text/plain; charset=utf-8");
-  res.end(`Local challenge proxy failed for port ${port}: ${error.message}`);
-}
-
-export function proxyResponseBody(upstreamRes: IncomingMessage, res: ServerResponse): void {
-  if (!rewritesBody(upstreamRes.headers)) {
-    upstreamRes.pipe(res);
-    return;
-  }
-
-  const chunks: Buffer[] = [];
-  upstreamRes.on("data", (chunk: Buffer | string) => {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-  });
-  upstreamRes.on("end", () => {
-    res.end(rewriteLoopbackUrlPrefixes(Buffer.concat(chunks).toString("utf8")));
+function readBoundedBody(stream: IncomingMessage): Promise<Buffer> {
+  return new Promise((accept, reject) => {
+    const chunks: Buffer[] = [];
+    let bytes = 0;
+    stream.on("data", (chunk: Buffer | string) => {
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      bytes += buffer.length;
+      if (bytes > MAX_PROXY_BODY_BYTES) {
+        reject(new Error("local_api_proxy_payload_too_large"));
+        stream.destroy();
+        return;
+      }
+      chunks.push(buffer);
+    });
+    stream.once("end", () => accept(Buffer.concat(chunks)));
+    stream.once("error", reject);
   });
 }
 
-export function createLocalChallengeProxyMiddleware() {
-  return (req: IncomingMessage, res: ServerResponse, next: () => void) => {
-    const target = parseLocalChallengeProxyUrl(req.url);
-    if (!target) {
+function copyResponseHeaders(headers: IncomingHttpHeaders, response: ServerResponse): void {
+  for (const [rawName, value] of Object.entries(headers)) {
+    const name = rawName.toLowerCase();
+    if (
+      value === undefined ||
+      HOP_BY_HOP_HEADERS.has(name) ||
+      PRIVATE_RESPONSE_HEADERS.has(name) ||
+      name === "content-encoding"
+    ) {
+      continue;
+    }
+    response.setHeader(name, value);
+  }
+}
+
+function writeProxyError(response: ServerResponse, error: unknown): void {
+  if (response.headersSent) {
+    response.destroy(error instanceof Error ? error : undefined);
+    return;
+  }
+  const message = error instanceof Error ? error.message : "local_api_proxy_failed";
+  const status =
+    message === "local_api_proxy_payload_too_large"
+      ? StatusCodes.REQUEST_TOO_LONG
+      : message === "local_api_proxy_headers_too_large"
+        ? StatusCodes.BAD_REQUEST
+        : StatusCodes.BAD_GATEWAY;
+  response.writeHead(status, { "content-type": "application/json; charset=utf-8" });
+  response.end(
+    JSON.stringify({
+      error: status === StatusCodes.BAD_GATEWAY ? "local_api_proxy_failed" : message,
+    }),
+  );
+}
+
+async function forwardLocalApiRequest(
+  incoming: IncomingMessage,
+  response: ServerResponse,
+  path: string,
+  options: LocalApiProxyOptions,
+): Promise<void> {
+  const target = resolveLocalApiTarget(options.statePath);
+  if (!target) throw new Error("local_api_target_unavailable");
+  const body = await readBoundedBody(incoming);
+  const headers = localApiRequestHeaders(incoming.headers, target);
+  await new Promise<void>((accept, reject) => {
+    const upstream = request(
+      {
+        hostname: target.hostname,
+        port: target.port,
+        method: incoming.method,
+        path,
+        headers,
+        timeout: options.timeoutMs ?? PROXY_TIMEOUT_MS,
+      },
+      async (upstreamResponse) => {
+        try {
+          const responseBody = await readBoundedBody(upstreamResponse);
+          response.statusCode = upstreamResponse.statusCode ?? StatusCodes.BAD_GATEWAY;
+          copyResponseHeaders(upstreamResponse.headers, response);
+          response.setHeader("content-length", String(responseBody.length));
+          response.end(responseBody);
+          accept();
+        } catch (error) {
+          reject(error);
+        }
+      },
+    );
+    upstream.once("timeout", () => upstream.destroy(new Error("local_api_proxy_timeout")));
+    upstream.once("error", reject);
+    if (body.length > 0) upstream.write(body);
+    upstream.end();
+  });
+}
+
+/** Codespaces-only fixed Participant API bridge; arbitrary challenge ports stay isolated. */
+export function createLocalApiProxyMiddleware(options: LocalApiProxyOptions = {}) {
+  return (request: IncomingMessage, response: ServerResponse, next: () => void) => {
+    const path = parseLocalApiProxyUrl(request.url);
+    if (!path) {
       next();
       return;
     }
-
-    const headers = {
-      ...req.headers,
-      "accept-encoding": "identity",
-      host: `127.0.0.1:${target.port}`,
-    };
-    const upstream = request(
-      {
-        hostname: "127.0.0.1",
-        port: target.port,
-        method: req.method,
-        path: target.path,
-        headers,
-      },
-      (upstreamRes) => {
-        res.statusCode = proxyStatusCode(upstreamRes.statusCode);
-        copyProxyHeaders(upstreamRes.headers, res);
-        proxyResponseBody(upstreamRes, res);
-      },
-    );
-
-    upstream.on("error", (error: NodeJS.ErrnoException) => {
-      handleProxyError(error, res, target.port);
+    void forwardLocalApiRequest(request, response, path, options).catch((error) => {
+      writeProxyError(response, error);
     });
-
-    req.pipe(upstream);
   };
 }
