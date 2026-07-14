@@ -61,20 +61,26 @@ describe("TenkaCloud CLI (#2633)", () => {
       .mockReturnValueOnce({ status: 0, stdout: "", stderr: "" })
       .mockReturnValueOnce({ status: 0, stdout: "susumu", stderr: "" });
 
+    const confirm = vi
+      .fn<(question: string) => Promise<boolean>>()
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(false);
+
     await expect(
       runTursoLiveCommand(
         [],
         { ENV: "development" },
         {
+          repoRoot: "/repo",
           processRunner: { run },
           interactive: true,
           platform: "darwin",
-          confirm: vi.fn(async () => true),
+          confirm,
           prompt: vi.fn(async () => ""),
           log: vi.fn(),
         },
       ),
-    ).resolves.toBe(0);
+    ).resolves.toBe(1);
     expect(run).toHaveBeenCalledWith("brew", ["install", "tursodatabase/tap/turso"], {
       inherit: true,
     });
@@ -92,6 +98,7 @@ describe("TenkaCloud CLI (#2633)", () => {
       CDK_PARAM_FEATURES: '{"samlSso":true}',
     };
     const base = {
+      repoRoot: "/repo",
       processRunner: { run },
       interactive: true,
       platform: "darwin" as const,

@@ -43,6 +43,7 @@ export async function runTenkaCloudCli(args: readonly string[]): Promise<number>
   }
   if (command === "turso-live") {
     return runTursoLiveCommand(rest, process.env, {
+      repoRoot: REPO_ROOT,
       processRunner: systemProcessRunner,
       interactive: Boolean(process.stdin.isTTY) && !process.env.CI,
       platform: process.platform,

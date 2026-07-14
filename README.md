@@ -101,7 +101,7 @@ TenkaCloud runs in one of two profiles, selected by the `CDK_PARAM_CONTROL_DATA_
 | **AWS-native** (default, unset or `dynamodb`) | Teams / companies who want everything inside AWS | DynamoDB (provisioned 1/1), 8 tables + 8 GSIs | Lambda `CreateStack` (default) |
 | **Zero-cost** (opt-in, `turso`) | Individuals, trials, personal events | Turso (libSQL) — 0 DynamoDB tables / 0 GSIs in the Lite synth | Lambda `CreateStack` (default) |
 
-Opting in to the zero-cost profile starts with `ENV=development tenkacloud turso-live`. The interactive command detects a missing Turso CLI and, on macOS, offers the official Homebrew installation before showing the complete path from Turso/SSM setup through preflight, deploy, the zero-DynamoDB CloudFormation proof, competitor-account bootstrap, participant scoring, SAML CRUD, and evidence capture. The equivalent non-linked command is `ENV=development bun run tenkacloud turso-live`. For the written runbook and current live-verification status, see [docs/running-costs.md](./docs/running-costs.md).
+Opting in to the zero-cost profile starts with `ENV=development tenkacloud turso-live`. The interactive wizard handles the Turso CLI and login, database creation, an SSM `SecureString`, public `.env` wiring, read-only preflight, an exact `deploy` confirmation, and the deployed zero-DynamoDB CloudFormation proof as one flow. The token travels to SSM over stdin and is never printed, placed in argv, or written to `.env`. The equivalent non-linked command is `ENV=development bun run tenkacloud turso-live`. For the remaining console checks and current live-verification status, see [docs/running-costs.md](./docs/running-costs.md).
 
 ## Add your own problems
 

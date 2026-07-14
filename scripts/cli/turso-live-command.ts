@@ -6,8 +6,11 @@ import {
   validateTursoLiveEnvironment,
 } from "../ops/turso-live-guide";
 import type { ProcessRunner } from "./process";
+import { loadTursoLiveEnvironment } from "./turso-live-environment";
+import { runTursoLiveSetup } from "./turso-live-setup";
 
 export interface TursoLiveCommandDeps {
+  readonly repoRoot: string;
   readonly processRunner: ProcessRunner;
   readonly interactive: boolean;
   readonly platform: NodeJS.Platform;
@@ -56,6 +59,17 @@ async function ensureTursoCli(deps: TursoLiveCommandDeps): Promise<boolean> {
   return true;
 }
 
+async function ensureTursoAuthentication(deps: TursoLiveCommandDeps): Promise<boolean> {
+  if (deps.processRunner.run("turso", ["auth", "whoami"]).status === 0) return true;
+  if (!(await deps.confirm("Turso にログインしますか?"))) return false;
+  const login = deps.processRunner.run("turso", ["auth", "login"], { inherit: true });
+  if (login.status !== 0) throw new Error("turso auth login failed");
+  if (deps.processRunner.run("turso", ["auth", "whoami"]).status !== 0) {
+    throw new Error("Turso login completed but authentication could not be verified");
+  }
+  return true;
+}
+
 export async function runTursoLiveCommand(
   args: readonly string[],
   env: NodeJS.ProcessEnv,
@@ -63,21 +77,47 @@ export async function runTursoLiveCommand(
 ): Promise<number> {
   const command = args[0];
   const environment = environmentName(env);
-  if (command === "deploy") return deployTursoLive(environment, env, deps);
-  const directResult = runReadOnlyTursoCommand(command, environment, env, deps.log);
+  if (command === "guide") {
+    deps.log(renderTursoLiveGuide(environment));
+    return 0;
+  }
+  const loaded = loadTursoLiveEnvironment(deps.repoRoot, environment, env).env;
+  if (command === "deploy") return deployTursoLive(environment, loaded, deps);
+  const directResult = runReadOnlyTursoCommand(command, environment, loaded, deps);
   if (directResult !== undefined) return directResult;
-  if (command && command !== "guide") throw new Error(`Unknown turso-live command: ${command}`);
+  if (command) throw new Error(`Unknown turso-live command: ${command}`);
+
+  if (!deps.interactive) {
+    deps.log(
+      "対話 wizard には TTY が必要です。設定確認だけなら `turso-live guide` を使ってください。",
+    );
+    return 1;
+  }
 
   const available = await ensureTursoCli(deps);
-  if (available && deps.interactive) {
-    const authenticated = deps.processRunner.run("turso", ["auth", "whoami"]);
-    if (authenticated.status !== 0 && (await deps.confirm("Turso にログインしますか?"))) {
-      const login = deps.processRunner.run("turso", ["auth", "login"], { inherit: true });
-      if (login.status !== 0) throw new Error("turso auth login failed");
-    }
+  if (!available || !(await ensureTursoAuthentication(deps))) {
+    deps.log(renderTursoLiveGuide(environment));
+    return 1;
   }
+  const setup = await runTursoLiveSetup(environment, loaded, deps);
+  if (!setup.ok) return 1;
+  const preflight = runTursoLivePreflight(setup.env, (executable, executableArgs) =>
+    deps.processRunner.run(executable, executableArgs),
+  );
+  deps.log(preflight.output);
+  if (!preflight.ok) return 1;
+  const deploy = await deployTursoLive(environment, setup.env, deps);
+  if (deploy !== 0) return deploy;
+  const verification = runCloudFormationVerification(
+    environment,
+    setup.env,
+    (executable, executableArgs) => deps.processRunner.run(executable, executableArgs),
+  );
+  deps.log(verification.output);
+  if (!verification.ok) return 1;
+  deps.log("✓ AWS deploy と DynamoDB 0-table 検証が完了しました。次は画面上の主要フローです。");
   deps.log(renderTursoLiveGuide(environment));
-  return available ? 0 : 1;
+  return 0;
 }
 
 async function deployTursoLive(
@@ -107,16 +147,20 @@ function runReadOnlyTursoCommand(
   command: string | undefined,
   environment: string,
   env: NodeJS.ProcessEnv,
-  log: (message: string) => void,
+  deps: TursoLiveCommandDeps,
 ): number | undefined {
   if (command === "preflight") {
-    const result = runTursoLivePreflight(env);
-    log(result.output);
+    const result = runTursoLivePreflight(env, (executable, args) =>
+      deps.processRunner.run(executable, args),
+    );
+    deps.log(result.output);
     return result.ok ? 0 : 1;
   }
   if (command === "verify-cloudformation") {
-    const result = runCloudFormationVerification(environment, env);
-    log(result.output);
+    const result = runCloudFormationVerification(environment, env, (executable, args) =>
+      deps.processRunner.run(executable, args),
+    );
+    deps.log(result.output);
     return result.ok ? 0 : 1;
   }
   return undefined;
