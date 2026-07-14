@@ -16,7 +16,10 @@ function createMemoryStorage(): Storage {
   };
 }
 
-if (typeof window !== "undefined" && typeof window.localStorage.clear !== "function") {
+if (
+  typeof window !== "undefined" &&
+  (window.localStorage === undefined || typeof window.localStorage.clear !== "function")
+) {
   Object.defineProperty(window, "localStorage", {
     configurable: true,
     value: createMemoryStorage(),
