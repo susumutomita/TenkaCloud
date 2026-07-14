@@ -56,6 +56,12 @@ describe("defaultCompetitorRoleName", () => {
     expect(name).toContain("tenant-with-space");
   });
 
+  it("should trim every leading and trailing dash without changing the role name", () => {
+    expect(
+      defaultCompetitorRoleName({ tenantId: "---acme---", namespace: "---rehearsal---" }),
+    ).toBe("TenkaCloud-acme-rehearsal-Role");
+  });
+
   it("should truncate the tenant segment when the result would exceed 64 chars", () => {
     const longTenant = "a".repeat(200);
     const name = defaultCompetitorRoleName({ tenantId: longTenant });

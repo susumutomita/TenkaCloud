@@ -52,8 +52,18 @@ export const EVENT_DETAIL_TYPE_BULK_DEPLOY_CREATE_REQUESTED = "BulkDeployCreateR
 const IAM_ROLE_SANITIZE_RE = /[^A-Za-z0-9_+=,.@-]+/g;
 const IAM_ROLE_MAX_LENGTH = 64;
 
+function trimBoundaryDashes(input: string): string {
+  let start = 0;
+  while (input[start] === "-") start += 1;
+
+  let end = input.length;
+  while (end > start && input[end - 1] === "-") end -= 1;
+
+  return input.slice(start, end);
+}
+
 function sanitizeRoleSegment(segment: string): string {
-  return segment.replace(IAM_ROLE_SANITIZE_RE, "-").replace(/^-+|-+$/g, "");
+  return trimBoundaryDashes(segment.replace(IAM_ROLE_SANITIZE_RE, "-"));
 }
 
 export function defaultCompetitorRoleName(opts: { tenantId: string; namespace?: string }): string {

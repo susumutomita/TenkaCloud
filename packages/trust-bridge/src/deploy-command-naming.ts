@@ -16,15 +16,21 @@
  */
 
 const SLUG_NON_ALPHANUM = /[^A-Za-z0-9]+/g;
-const SLUG_TRIM_DASH = /^-+|-+$/g;
+
+function trimBoundaryDashes(input: string): string {
+  let start = 0;
+  while (input[start] === "-") start += 1;
+
+  let end = input.length;
+  while (end > start && input[end - 1] === "-") end -= 1;
+
+  return input.slice(start, end);
+}
 
 /** Mirror of the deploy handler's `slugify` (lowercase, dash-joined, max 40). */
 export function deploySlugify(input: string): string {
-  return input
-    .toLowerCase()
-    .replace(SLUG_NON_ALPHANUM, "-")
-    .replace(SLUG_TRIM_DASH, "")
-    .slice(0, 40);
+  const sanitized = input.toLowerCase().replace(SLUG_NON_ALPHANUM, "-");
+  return trimBoundaryDashes(sanitized).slice(0, 40);
 }
 
 /** Mirror of the deploy handler's `buildStackPrefix` (`tc-{problem}-{team}`). */
