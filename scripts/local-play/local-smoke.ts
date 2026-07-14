@@ -13,6 +13,7 @@
  * tested with no Docker.
  */
 import { spawnSync } from "node:child_process";
+import { z } from "zod";
 import { resolveComposeCli } from "./docker-adapter";
 
 export interface ComposeService {
@@ -23,26 +24,43 @@ export interface ComposeService {
   readonly exitCode: number;
 }
 
+const ComposePsRowsSchema = z.array(
+  z
+    .object({
+      Name: z.string().optional(),
+      Service: z.string().optional(),
+      State: z.string().optional(),
+      Health: z.string().optional(),
+      ExitCode: z.number().optional(),
+    })
+    .transform(
+      (row): ComposeService => ({
+        name: row.Name ?? "",
+        service: row.Service ?? "",
+        state: row.State ?? "",
+        health: row.Health ?? "",
+        exitCode: row.ExitCode ?? 0,
+      }),
+    ),
+);
+
 /** Parse `docker compose ps --format json` (newline-delimited objects, or a JSON array). */
 export function parseComposePs(stdout: string): ComposeService[] {
   const text = stdout.trim();
   if (!text) return [];
-  const rows: unknown[] = text.startsWith("[")
-    ? (JSON.parse(text) as unknown[])
-    : text
-        .split("\n")
-        .filter((line) => line.trim().length > 0)
-        .map((line) => JSON.parse(line) as unknown);
-  return rows.map((row) => {
-    const r = row as Record<string, unknown>;
-    return {
-      name: typeof r.Name === "string" ? r.Name : "",
-      service: typeof r.Service === "string" ? r.Service : "",
-      state: typeof r.State === "string" ? r.State : "",
-      health: typeof r.Health === "string" ? r.Health : "",
-      exitCode: typeof r.ExitCode === "number" ? r.ExitCode : 0,
-    };
-  });
+  let parsed: unknown;
+  try {
+    parsed = text.startsWith("[")
+      ? JSON.parse(text)
+      : text
+          .split("\n")
+          .filter((line) => line.trim().length > 0)
+          .map((line) => JSON.parse(line));
+  } catch {
+    return [];
+  }
+  const result = ComposePsRowsSchema.safeParse(parsed);
+  return result.success ? result.data : [];
 }
 
 export type ServiceVerdict = "ok" | "completed" | "failing" | "pending";

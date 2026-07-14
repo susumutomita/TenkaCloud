@@ -45,6 +45,24 @@ describe("parseComposePs", () => {
     expect(parseComposePs(out)).toHaveLength(2);
   });
 
+  it("should fail closed for malformed json", () => {
+    expect(parseComposePs('[{"Service":"web"}')).toEqual([]);
+  });
+
+  it("should fail closed when warning text is mixed with line-delimited json", () => {
+    expect(parseComposePs(`WARN compose output follows\n${psLine({ service: "web" })}`)).toEqual(
+      [],
+    );
+  });
+
+  it("should fail closed when any compose row has an invalid schema", () => {
+    const out = JSON.stringify([
+      JSON.parse(psLine({ service: "db" })),
+      { Service: "web", ExitCode: "1" },
+    ]);
+    expect(parseComposePs(out)).toEqual([]);
+  });
+
   it("should return an empty array for empty output", () => {
     expect(parseComposePs("   \n  ")).toEqual([]);
   });
@@ -382,6 +400,15 @@ describe("runSmoke", () => {
     expect(await runSmoke(deps, "sqli-demo", OPTS)).toBe(0);
     const psCalls = calls.filter((c) => c.includes("ps"));
     expect(psCalls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("should diagnose instead of throwing when compose ps output is malformed", async () => {
+    const { deps, logs } = mockDeps({
+      ps: [`WARN compose output follows\n${psLine({})}`],
+      clock: [0, 10_000_000],
+    });
+    expect(await runSmoke(deps, "sqli-demo", OPTS)).toBe(1);
+    expect(logs.join("\n")).toContain("Timed out");
   });
 
   it("should fail and surface a disk-full hint when a container crashes on a full disk", async () => {
