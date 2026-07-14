@@ -224,10 +224,11 @@ export async function startProblemViaApi(
 }
 
 /** Print the running problems' challenge endpoints as the API sees them (post-remap). */
-function endpointDisplay(label: string, value: string): string {
-  if (/credential|accesskey/i.test(label)) return "[available in Participant Portal]";
-  if (!URL.canParse(value)) return value;
+function endpointDisplay(label: string, value: string): string | undefined {
+  if (!URL.canParse(value)) return undefined;
   const parsed = new URL(value);
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return undefined;
+  if (/credential|accesskey/i.test(label)) return "[available in Participant Portal]";
   if (parsed.hash) parsed.hash = "";
   return parsed.toString();
 }
@@ -249,7 +250,9 @@ export async function printRunningEndpoints(
   for (const problem of body.problems ?? []) {
     if (problem.lifecycle?.status !== "running") continue;
     for (const [label, url] of Object.entries(problem.stackOutputs)) {
-      console.log(`Challenge — ${problem.name} (${label}): ${endpointDisplay(label, url)}`);
+      const display = endpointDisplay(label, url);
+      if (display === undefined) continue;
+      console.log(`Challenge — ${problem.name} (${label}): ${display}`);
     }
   }
 }

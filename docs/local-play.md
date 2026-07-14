@@ -213,10 +213,14 @@ composite problem in the same completed-problem total as a solved Docker problem
 Each synthetic provider HTTP target is exposed on its own random loopback
 listener and origin. TenkaCloud rewrites only Simulator-owned AWS/Azure/GCP/Sakura
 HTTP endpoint outputs to the matching target listener; external URLs and resource
-identifiers remain unchanged. A browser origin for one problem or target cannot
-read another target, and the participant API does not expose a shared data-plane
-route. Simulator
-credentials, launch tokens, console URLs, and any namespaced
+identifiers remain unchanged internally. AWS-owned HTTP URLs that remain after
+that rewrite (for example an AWS Console deep link or stale `*.on.aws`
+value) are omitted from the participant projection because they cannot address
+the local world. The CLI prints only projected HTTP access URLs, so resource
+identifiers such as an RDS hostname are not mislabeled as challenge endpoints.
+A browser origin for one problem or target cannot read another target, and the
+participant API does not expose a shared data-plane route. Simulator credentials,
+launch tokens, console URLs, and any namespaced
 `*.Simulator...` output are omitted from the participant view. The portal
 authenticates `POST .../console-handoff`, receives only a 30-second one-time
 ticket, and navigates to a no-store redirect that consumes the ticket before
