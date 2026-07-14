@@ -32,8 +32,12 @@ start_pid=$!
 # non-zero) if the start process exits first, so a broken start is surfaced in the
 # Codespaces startup UI instead of silently passing.
 portal_url="http://127.0.0.1:5175"
-attempt=0
-while [ "$attempt" -lt 60 ]; do
+# Bound the whole probe by wall clock, and bound each curl with --max-time: a server
+# that accepts the connection but never sends a response would make a bare curl block
+# forever, so the loop would never reach its timeout. `date +%s` keeps the total
+# bounded regardless of how long any single probe takes.
+deadline=$(( $(date +%s) + 120 ))
+while [ "$(date +%s)" -lt "$deadline" ]; do
   if ! kill -0 "$start_pid" 2>/dev/null; then
     echo "ERROR: local play exited during startup — the Participant Portal will not open." >&2
     echo "Last 40 log lines ($log):" >&2
@@ -43,12 +47,11 @@ while [ "$attempt" -lt 60 ]; do
   # Confirm the response is actually OUR portal (its <title>), not merely that
   # SOMETHING answered on 5175 — a stale/foreign server, or a PID-reuse race on
   # start_pid, could otherwise let readiness falsely succeed on the wrong process.
-  if curl -sf "$portal_url" 2>/dev/null | grep -q "TenkaCloud Participant Portal"; then
+  if curl -sf --max-time 5 "$portal_url" 2>/dev/null | grep -q "TenkaCloud Participant Portal"; then
     echo "TenkaCloud local play is up — the Participant Portal is serving on port 5175 (no command needed)."
     echo "Startup log: $log"
     exit 0
   fi
-  attempt=$((attempt + 1))
   sleep 2
 done
 

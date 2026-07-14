@@ -120,6 +120,15 @@ describe("scripts/onboard/codespaces-start-local.sh", () => {
     // merely answers on 5175 — verify the served <title> is the participant portal.
     expect(startLocalScript).toMatch(/curl -sf .*\| grep -q "TenkaCloud Participant Portal"/);
   });
+
+  it("should bound each probe and the whole loop so it cannot hang forever", () => {
+    // A bare curl against a server that accepts but never responds would block
+    // forever and the loop would never reach its timeout. --max-time bounds each
+    // probe; a wall-clock deadline bounds the total.
+    expect(startLocalScript).toContain("--max-time");
+    expect(startLocalScript).toMatch(/deadline=\$\(\(\s*\$\(date \+%s\)/);
+    expect(startLocalScript).toMatch(/while \[ "\$\(date \+%s\)" -lt "\$deadline" \]/);
+  });
 });
 
 describe("scripts/onboard/onboard-bootstrap.sh", () => {
