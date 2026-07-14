@@ -5,6 +5,7 @@ import Header from "@cloudscape-design/components/header";
 import Select, { type SelectProps } from "@cloudscape-design/components/select";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
+import { StatusCodes } from "http-status-codes";
 import { useEffect, useMemo, useState } from "react";
 import { ApiError, useApiClient } from "../api/client";
 import {
@@ -46,7 +47,9 @@ export function EducationGraphPage({ config }: { readonly config: AppConfig }) {
       .catch((error: unknown) => {
         if (!cancelled) {
           setGraphError(
-            error instanceof ApiError && error.status === 403 ? "forbidden" : "generic",
+            error instanceof ApiError && error.status === StatusCodes.FORBIDDEN
+              ? "forbidden"
+              : "generic",
           );
         }
       });
