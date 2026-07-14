@@ -1,11 +1,14 @@
+import { Stack } from "aws-cdk-lib";
 import {
   AuthorizationType,
   CognitoUserPoolsAuthorizer,
+  Integration,
+  IntegrationType,
   LambdaIntegration,
   RestApi,
 } from "aws-cdk-lib/aws-apigateway";
 import type { IUserPool } from "aws-cdk-lib/aws-cognito";
-import type { IFunction } from "aws-cdk-lib/aws-lambda";
+import { CfnPermission, type IFunction } from "aws-cdk-lib/aws-lambda";
 import { Construct } from "constructs";
 import type { CustomApiKey } from "../interfaces/custom-api-key.js";
 import type { IdentityDetails } from "../interfaces/identity-details.js";
@@ -134,7 +137,30 @@ export class ApiGateway extends Construct {
     // /events/{eventId}/end            POST  = Event を ENDED 状態にし採点を停止 (Issue #494)
     // /events/{eventId}/notifications  POST  = 運営 → 競技者 通知 1 件作成 (ADR-006、#553)
     // /events/{eventId}/lock-scoring   POST  = 採点を lock (表彰フェーズ)、DELETE = unlock (#558)
-    const eventIntegration = new LambdaIntegration(props.eventApiLambda);
+    // The EventApi Lambda serves ~40 routes. CDK's LambdaIntegration adds one
+    // AWS::Lambda::Permission per method, but a Lambda resource policy is capped at
+    // 20KB — with that many methods the policy overflowed at deploy time ("The final
+    // policy size ... is bigger than the limit (20480)"), which is what blocked adding
+    // the /feature-flags routes. Grant a single wildcard invoke permission and use a
+    // low-level AWS_PROXY integration (identical wire behaviour to LambdaIntegration)
+    // so no per-method permission is generated for this Lambda.
+    // Scope the permission to THIS stack (the API's stack) via CfnPermission rather than
+    // `eventApiLambda.addPermission` (which would attach it to the Lambda's own stack). The
+    // Lambda lives in a different stack, so a Lambda-stack permission that references this
+    // API's ARN reverses the existing cross-stack dependency and CFn synth fails with a
+    // DependencyCycle. Attaching it here references the Lambda ARN in the existing direction
+    // (API stack → Lambda stack), exactly as LambdaIntegration's per-method permissions do.
+    new CfnPermission(this, "ApiGatewayInvokeEventRoutes", {
+      action: "lambda:InvokeFunction",
+      functionName: props.eventApiLambda.functionArn,
+      principal: "apigateway.amazonaws.com",
+      sourceArn: this.restApi.arnForExecuteApi(),
+    });
+    const eventIntegration = new Integration({
+      type: IntegrationType.AWS_PROXY,
+      integrationHttpMethod: "POST",
+      uri: `arn:${Stack.of(this).partition}:apigateway:${Stack.of(this).region}:lambda:path/2015-03-31/functions/${props.eventApiLambda.functionArn}/invocations`,
+    });
     const events = this.restApi.root.addResource("events");
     events.addMethod("GET", eventIntegration, deployMethodOptions);
     events.addMethod("POST", eventIntegration, deployMethodOptions);
@@ -220,6 +246,18 @@ export class ApiGateway extends Construct {
     // (resource が無いと Gateway 403 に CORS が付かず browser が "Failed to fetch" になる、
     // Issue #1292 audit-log と同じ理由)。
     admin.addResource("capacity").addMethod("GET", eventIntegration, deployMethodOptions);
+
+    // Issue #2231 (ADR-035): per-tenant runtime feature-flag overrides, served by the same
+    // EventApi handler as /admin/audit-log and /admin/capacity.
+    //   GET  /feature-flags        readable by any tenant role (gates UI tabs for all roles)
+    //   PUT  /admin/feature-flags  TenantAdmin-only full-replace of the override set
+    // Both Gateway resources must exist or the request 403s before reaching the Lambda with no
+    // CORS header, which the console surfaces as "フィーチャーフラグの取得に失敗しました" — the
+    // same failure mode as the #1292 audit-log / #2410 capacity routes above.
+    this.restApi.root
+      .addResource("feature-flags")
+      .addMethod("GET", eventIntegration, deployMethodOptions);
+    admin.addResource("feature-flags").addMethod("PUT", eventIntegration, deployMethodOptions);
 
     // Issue #2604: education graph + deterministic video/text/quiz projections.
     // Both routes use the existing EventApi integration and Tenant Cognito authorizer;
