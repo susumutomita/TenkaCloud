@@ -105,6 +105,15 @@ describe("scripts/onboard/codespaces-start-local.sh", () => {
   it("should stop on the first failure so a broken start is loud", () => {
     expect(startLocalScript).toMatch(/^set -eu$/m);
   });
+
+  it("should surface a failed background start instead of reporting success", () => {
+    // Backgrounding with nohup+& exits 0 even if `make local` dies, which would
+    // silently regress to the empty port-5175 preview. The script must watch the
+    // start PID, probe the portal, and exit non-zero when the start process dies.
+    expect(startLocalScript).toMatch(/kill -0 "\$start_pid"/);
+    expect(startLocalScript).toContain("curl -sf");
+    expect(startLocalScript).toMatch(/^\s*exit 1$/m);
+  });
 });
 
 describe("scripts/onboard/onboard-bootstrap.sh", () => {
