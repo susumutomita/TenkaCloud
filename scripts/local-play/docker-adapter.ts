@@ -1,6 +1,15 @@
 import { spawn, spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { closeSync, existsSync, openSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  closeSync,
+  constants,
+  existsSync,
+  fchmodSync,
+  openSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ContainerRunner } from "./container-runner";
@@ -214,7 +223,7 @@ export function createContainerRunner(localDir: string): ContainerRunner {
  * the session log. Returns the child pid.
  */
 export function startDetachedServe(deploymentPath: string, port: number, logPath: string): number {
-  const logFd = openSync(logPath, "a");
+  const logFd = openPrivateAppendLog(logPath);
   try {
     const child = spawn(
       process.execPath,
@@ -232,4 +241,14 @@ export function startDetachedServe(deploymentPath: string, port: number, logPath
   } finally {
     closeSync(logFd);
   }
+}
+
+export function openPrivateAppendLog(logPath: string): number {
+  const logFd = openSync(
+    logPath,
+    constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND | constants.O_NOFOLLOW,
+    0o600,
+  );
+  fchmodSync(logFd, 0o600);
+  return logFd;
 }

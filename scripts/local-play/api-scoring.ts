@@ -1,4 +1,5 @@
 import { StatusCodes } from "http-status-codes";
+import type { AttackProbeFn } from "../../infrastructure/lib/problem-deploy/handlers/generic-scoring-handler/shared";
 import {
   jobIdOf,
   LOCAL_CONTEXT,
@@ -6,9 +7,11 @@ import {
   type LocalPlayResponse,
   type LocalPlayState,
   type ProblemRuntime,
+  type SimulatedProblemRuntime,
   sessionScore,
 } from "./api-state";
 import { mapStrings } from "./port-remap";
+import { runSimulatorScoreCycle, simulatorFlagMatches } from "./simulator-scoring";
 import type { VerifyResult } from "./verify-client";
 
 /**
@@ -80,11 +83,27 @@ export async function submitFlag(
   iso: string,
 ): Promise<LocalPlayResponse> {
   const body = (request.body ?? {}) as { problemId?: unknown; flag?: unknown; flagId?: unknown };
-  const runtime =
-    typeof body.problemId === "string" ? state.runtimes.get(body.problemId) : undefined;
-  if (!runtime || typeof body.flag !== "string") {
+  if (typeof body.problemId !== "string" || typeof body.flag !== "string") {
     return { status: StatusCodes.BAD_REQUEST, body: { error: "invalid_flag" } };
   }
+  const simulatedRuntime = state.simulatedRuntimes.get(body.problemId);
+  if (simulatedRuntime) {
+    return submitSimulatorFlag(simulatedRuntime, body.flag, state, iso);
+  }
+  const runtime = state.runtimes.get(body.problemId);
+  if (!runtime) {
+    return { status: StatusCodes.BAD_REQUEST, body: { error: "invalid_flag" } };
+  }
+  return submitContainerFlag(runtime, body.flag, body.flagId, state, iso);
+}
+
+async function submitContainerFlag(
+  runtime: ProblemRuntime,
+  flag: string,
+  flagId: unknown,
+  state: LocalPlayState,
+  iso: string,
+): Promise<LocalPlayResponse> {
   const problem = runtime.problem;
   // [#2392 Phase 2] A stopped container cannot judge — refuse loudly instead of
   // timing out against a down /verify. Playing bumps LRU recency (touch) so an
@@ -93,7 +112,7 @@ export async function submitFlag(
     return { status: StatusCodes.CONFLICT, body: { error: "not_running" } };
   }
   state.lifecycle.touch(problem.problemId);
-  const target = resolveSubmissionTarget(runtime, body.flagId);
+  const target = resolveSubmissionTarget(runtime, flagId);
   if (!target) {
     // Mirrors the AWS multi-flag contract: unknown / missing flagId → 404
     // { kind: "unknown_flag" } (route-helpers ERROR_STATUS).
@@ -116,10 +135,10 @@ export async function submitFlag(
     // multi-verify adds the checkpoint the container must judge and echo.
     verdict =
       target.checkpointId !== undefined
-        ? await state.verify(problem.verifyUrl, body.flag, context, {
+        ? await state.verify(problem.verifyUrl, flag, context, {
             checkpointId: target.checkpointId,
           })
-        : await state.verify(problem.verifyUrl, body.flag, context);
+        : await state.verify(problem.verifyUrl, flag, context);
   } catch (error) {
     // Fail loudly — never silently mark wrong/right when the container's /verify
     // is unreachable or misbehaving. The portal surfaces this as an error.
@@ -135,6 +154,225 @@ export async function submitFlag(
   return verdict.correct
     ? recordCorrect(state, runtime, target, verdict, iso, flagIdEcho)
     : recordWrong(state, runtime, target, iso, flagIdEcho);
+}
+
+function submitSimulatorFlag(
+  runtime: SimulatedProblemRuntime,
+  submitted: string,
+  state: LocalPlayState,
+  iso: string,
+): LocalPlayResponse {
+  const problemId = runtime.problem.problemId;
+  if (state.lifecycle.statusOf(problemId) !== "running" || !runtime.deployment) {
+    return { status: StatusCodes.CONFLICT, body: { error: "not_running" } };
+  }
+  if (runtime.contract.scoring.kind !== "flag") {
+    return { status: StatusCodes.NOT_FOUND, body: { kind: "unknown_flag" } };
+  }
+  state.lifecycle.touch(problemId);
+  if (runtime.solved.has(problemId)) {
+    return {
+      status: StatusCodes.OK,
+      body: { kind: "already_scored", totalScore: sessionScore(state) },
+    };
+  }
+  let correct: boolean;
+  try {
+    correct = simulatorFlagMatches(runtime.problem, runtime.deployment.outputs, submitted);
+  } catch {
+    return {
+      status: StatusCodes.BAD_GATEWAY,
+      body: {
+        error: "simulator_scoring_unavailable",
+        message: "Simulator scoring is unavailable",
+      },
+    };
+  }
+  if (correct) {
+    runtime.solved.add(problemId);
+    runtime.score += runtime.contract.scoring.points;
+    state.scoreEvents.unshift({
+      jobId: jobIdOf(problemId),
+      problemId,
+      source: "flag",
+      points: runtime.contract.scoring.points,
+      result: "ok",
+      occurredAt: iso,
+    });
+    return {
+      status: StatusCodes.OK,
+      body: {
+        kind: "ok",
+        scoreDelta: runtime.contract.scoring.points,
+        totalScore: sessionScore(state),
+      },
+    };
+  }
+  const wrongCount = (runtime.wrongCounts.get(problemId) ?? 0) + 1;
+  runtime.wrongCounts.set(problemId, wrongCount);
+  const penalty = runtime.contract.scoring.wrongAnswerPenalty ?? 0;
+  runtime.score -= penalty;
+  state.scoreEvents.unshift({
+    jobId: jobIdOf(problemId),
+    problemId,
+    source: "flag-wrong",
+    points: -penalty,
+    result: "wrong",
+    occurredAt: iso,
+  });
+  return {
+    status: StatusCodes.OK,
+    body: {
+      kind: "wrong",
+      scoreDelta: -penalty,
+      totalScore: sessionScore(state),
+      wrongCount,
+    },
+  };
+}
+
+function isSimulatorPollingRuntime(runtime: SimulatedProblemRuntime): boolean {
+  return runtime.contract.scoring.kind !== "flag";
+}
+
+function isCompletedComposite(runtime: SimulatedProblemRuntime, problemId: string): boolean {
+  return runtime.contract.scoring.kind === "composite-probe" && runtime.solved.has(problemId);
+}
+
+async function advancePhasedSimulatorClock(
+  problemId: string,
+  runtime: SimulatedProblemRuntime,
+  state: LocalPlayState,
+  now: number,
+): Promise<void> {
+  if (runtime.contract.phases.length === 0) return;
+  if (!state.simulator) {
+    throw new Error("Simulator runtime is required to advance a phased problem clock");
+  }
+  await state.simulator.advanceClock(problemId, now);
+}
+
+function simulatorAttackProbe(
+  runtime: SimulatedProblemRuntime,
+  state: LocalPlayState,
+  now: number,
+): AttackProbeFn | undefined {
+  const scoring = runtime.contract.scoring;
+  if (scoring.kind !== "uptime-multi" || !scoring.attackProbes?.length) return undefined;
+  const simulator = state.simulator;
+  if (!simulator) {
+    throw new Error("Simulator runtime is required to execute attack probes");
+  }
+  return (request) => simulator.attackProbe(runtime.problem, request, now);
+}
+
+async function runSimulatedProblemScoreCycle(
+  problemId: string,
+  state: LocalPlayState,
+  now = Date.now(),
+): Promise<LocalPlayResponse> {
+  const runtime = state.simulatedRuntimes.get(problemId);
+  if (!runtime?.deployment || state.lifecycle.statusOf(problemId) !== "running") {
+    return { status: StatusCodes.CONFLICT, body: { error: "not_running" } };
+  }
+  const deployment = runtime.deployment;
+  await state.simulator?.refreshAccess(problemId);
+  if (!isSimulatorPollingRuntime(runtime)) {
+    return {
+      status: StatusCodes.OK,
+      body: { kind: "not_polling", totalScore: sessionScore(state) },
+    };
+  }
+  if (isCompletedComposite(runtime, problemId)) {
+    return {
+      status: StatusCodes.OK,
+      body: { kind: "already_scored", totalScore: sessionScore(state) },
+    };
+  }
+  await advancePhasedSimulatorClock(problemId, runtime, state, now);
+  if (state.lifecycle.statusOf(problemId) !== "running" || runtime.deployment !== deployment) {
+    return { status: StatusCodes.CONFLICT, body: { error: "not_running" } };
+  }
+  const attackProbe = simulatorAttackProbe(runtime, state, now);
+  const authoritativeEndpointPlacements =
+    runtime.contract.scoring.kind === "phased-polling" && state.simulator?.endpointPlacements
+      ? await state.simulator.endpointPlacements(
+          runtime.problem,
+          runtime.contract.endpoints.map((slot) => slot.slot),
+          now,
+        )
+      : undefined;
+  const result = await runSimulatorScoreCycle({
+    problem: runtime.problem,
+    outputs: deployment.outputs,
+    overrides: runtime.overrides,
+    score: runtime.score,
+    createdAt: runtime.createdAt ?? new Date(now).toISOString(),
+    ...(runtime.lastResult ? { lastResult: runtime.lastResult } : {}),
+    ...(runtime.endpointsHealth ? { endpointsHealth: runtime.endpointsHealth } : {}),
+    scoringState: runtime.scoringState,
+    nowMs: now,
+    ...(attackProbe ? { attackProbe } : {}),
+    ...(authoritativeEndpointPlacements ? { authoritativeEndpointPlacements } : {}),
+  });
+  if (state.lifecycle.statusOf(problemId) !== "running" || runtime.deployment !== deployment) {
+    return { status: StatusCodes.CONFLICT, body: { error: "not_running" } };
+  }
+  runtime.score += result.scoreDelta;
+  runtime.lastResult = result.lastResult;
+  runtime.endpointsHealth = result.endpointsHealthJson;
+  runtime.attackProbes = result.attackProbesJson;
+  runtime.posture = result.postureJson;
+  runtime.platform = result.platform;
+  if (result.newState) runtime.scoringState = result.newState;
+  if (runtime.contract.scoring.kind === "composite-probe" && result.lastResult === "ok") {
+    runtime.solved.add(problemId);
+  }
+  for (const event of [...result.scoreEvents].reverse()) {
+    state.scoreEvents.unshift({
+      jobId: jobIdOf(problemId),
+      problemId,
+      source: event.source,
+      points: event.points,
+      result: result.lastResult === "fail" ? "wrong" : "ok",
+      occurredAt: event.occurredAt,
+    });
+  }
+  return {
+    status: StatusCodes.OK,
+    body: {
+      kind: result.lastResult ?? "no_change",
+      scoreDelta: result.scoreDelta,
+      totalScore: sessionScore(state),
+    },
+  };
+}
+
+/**
+ * Share one in-flight score cycle per problem across every trigger. Besides
+ * preventing duplicate awards, this keeps Simulator clock advancement and the
+ * corresponding local state commit in the same serialized boundary.
+ */
+export function scoreSimulatedProblem(
+  problemId: string,
+  state: LocalPlayState,
+  now = Date.now(),
+): Promise<LocalPlayResponse> {
+  const inFlight = state.simulatorScoringInFlight.get(problemId);
+  if (inFlight) return inFlight;
+  const cycle = runSimulatedProblemScoreCycle(problemId, state, now);
+  const tracked = cycle.then(
+    (result) => {
+      state.simulatorScoringInFlight.delete(problemId);
+      return result;
+    },
+    (error: unknown) => {
+      state.simulatorScoringInFlight.delete(problemId);
+      throw error;
+    },
+  );
+  state.simulatorScoringInFlight.set(problemId, tracked);
+  return tracked;
 }
 
 /** Award a correct submission's points (metadata is authoritative for multi-verify). */
@@ -202,7 +440,11 @@ export function revealHint(
   iso: string,
 ): LocalPlayResponse {
   const runtime = state.runtimes.get(problemId);
-  if (!runtime) return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_hint" } };
+  const simulatedRuntime = state.simulatedRuntimes.get(problemId);
+  if (!runtime && !simulatedRuntime) {
+    return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_hint" } };
+  }
+  if (simulatedRuntime) return revealSimulatorHint(simulatedRuntime, state, iso, hintId);
   // [#2392 Phase 2] Hints are part of playing the problem — gate on a running
   // container and bump its LRU recency, matching submit.
   if (state.lifecycle.statusOf(problemId) !== "running") {
@@ -255,6 +497,57 @@ export function revealHint(
       content,
       ...i18n,
       penaltyApplied: penalty,
+      totalScore: sessionScore(state),
+      revealedAt: iso,
+    },
+  };
+}
+
+function revealSimulatorHint(
+  runtime: SimulatedProblemRuntime,
+  state: LocalPlayState,
+  iso: string,
+  hintId: string,
+): LocalPlayResponse {
+  const problemId = runtime.problem.problemId;
+  if (state.lifecycle.statusOf(problemId) !== "running") {
+    return { status: StatusCodes.CONFLICT, body: { error: "not_running" } };
+  }
+  const scoring = runtime.contract.scoring;
+  const hints = "hints" in scoring ? (scoring.hints ?? []) : [];
+  const hint = hints.find((candidate) => candidate.id === hintId);
+  if (!hint) return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_hint" } };
+  const existing = runtime.revealedHints.get(hint.id);
+  if (existing) {
+    return {
+      status: StatusCodes.OK,
+      body: {
+        kind: "already_revealed",
+        content: state.browserText(hint.content),
+        penaltyApplied: 0,
+        totalScore: sessionScore(state),
+        revealedAt: existing,
+      },
+    };
+  }
+  runtime.revealedHints.set(hint.id, iso);
+  runtime.score -= hint.penalty;
+  if (hint.penalty > 0) {
+    state.scoreEvents.unshift({
+      jobId: jobIdOf(problemId),
+      problemId,
+      source: "hint",
+      points: -hint.penalty,
+      result: "ok",
+      occurredAt: iso,
+    });
+  }
+  return {
+    status: StatusCodes.OK,
+    body: {
+      kind: "ok",
+      content: state.browserText(hint.content),
+      penaltyApplied: hint.penalty,
       totalScore: sessionScore(state),
       revealedAt: iso,
     },

@@ -1,306 +1,370 @@
-import { EventEmitter } from "node:events";
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { PassThrough } from "node:stream";
 import { StatusCodes } from "http-status-codes";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
-  copyProxyHeaders,
-  createLocalChallengeProxyMiddleware,
-  handleProxyError,
-  parseLocalChallengeProxyUrl,
-  proxyResponseBody,
-  proxyStatusCode,
-  rewriteLoopbackLocationHeader,
-  rewriteLoopbackUrlPrefixes,
-  rewritesBody,
+  createLocalApiProxyMiddleware,
+  LOCAL_API_PROXY_PREFIX,
+  localApiRequestHeaders,
+  parseLocalApiProxyUrl,
+  resolveLocalApiTarget,
 } from "../local-play-proxy";
 
 async function listen(server: Server): Promise<number> {
-  await new Promise<void>((resolve) => {
-    server.listen(0, "127.0.0.1", resolve);
-  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   return (server.address() as AddressInfo).port;
 }
 
 async function close(server: Server): Promise<void> {
   await new Promise<void>((resolve, reject) => {
-    server.close((error) => {
-      if (error) reject(error);
-      else resolve();
+    server.close((error) => (error ? reject(error) : resolve()));
+  });
+}
+
+function statePath(apiBaseUrl: string): string {
+  const path = join(mkdtempSync(join(tmpdir(), "tc-local-api-proxy-")), "state.json");
+  writeFileSync(path, JSON.stringify({ apiBaseUrl }));
+  return path;
+}
+
+function proxyServer(path: string, timeoutMs?: number): Server {
+  const middleware = createLocalApiProxyMiddleware({ statePath: path, timeoutMs });
+  return createServer((request, response) => {
+    middleware(request, response, () => {
+      response.writeHead(StatusCodes.NOT_FOUND);
+      response.end("not proxied");
     });
   });
 }
 
-function createResponseStub(headersSent = false) {
-  const headers = new Map<string, string | readonly string[] | number>();
-  let body = "";
-  let destroyedWith: unknown;
-  const res = {
+function mockResponse(headersSent = false): {
+  readonly done: Promise<void>;
+  readonly response: ServerResponse;
+  readonly status: () => number | undefined;
+  readonly body: () => string | undefined;
+  readonly destroy: ReturnType<typeof vi.fn>;
+} {
+  let accept!: () => void;
+  let status: number | undefined;
+  let body: string | undefined;
+  const done = new Promise<void>((resolve) => {
+    accept = resolve;
+  });
+  const destroy = vi.fn(() => accept());
+  const response = {
     headersSent,
-    statusCode: StatusCodes.OK,
-    destroy(error?: Error) {
-      destroyedWith = error;
-      return this as unknown as ServerResponse;
-    },
-    end(chunk?: string | Buffer) {
-      body = chunk === undefined ? "" : String(chunk);
-      return this as unknown as ServerResponse;
-    },
-    getHeader(name: string) {
-      return headers.get(name.toLowerCase());
-    },
-    setHeader(name: string, value: string | readonly string[] | number) {
-      headers.set(name.toLowerCase(), value);
-      return this as unknown as ServerResponse;
-    },
-    get body() {
-      return body;
-    },
-    get destroyedWith() {
-      return destroyedWith;
-    },
-  };
-  return res as ServerResponse & {
-    readonly body: string;
-    readonly destroyedWith: unknown;
-  };
+    setHeader: vi.fn(),
+    writeHead: vi.fn((nextStatus: number) => {
+      status = nextStatus;
+    }),
+    end: vi.fn((value?: Buffer | string) => {
+      body = value?.toString();
+      accept();
+    }),
+    destroy,
+  } as unknown as ServerResponse;
+  return { done, response, status: () => status, body: () => body, destroy };
 }
 
-describe("local play challenge proxy", () => {
-  it("should parse a local challenge proxy URL", () => {
-    expect(parseLocalChallengeProxyUrl("/__tenkacloud-local-port/18180/admin?q=flag")).toEqual({
-      port: 18180,
-      path: "/admin?q=flag",
-    });
-  });
+function mockIncoming(
+  url: string,
+  headers: IncomingMessage["headers"] = {},
+  asText = false,
+): PassThrough & IncomingMessage {
+  const stream = new PassThrough();
+  if (asText) stream.setEncoding("utf8");
+  return Object.assign(stream, { headers, method: "POST", url }) as PassThrough & IncomingMessage;
+}
 
-  it("should route a bare port to the challenge root", () => {
-    expect(parseLocalChallengeProxyUrl("/__tenkacloud-local-port/18180")).toEqual({
-      port: 18180,
-      path: "/",
-    });
-  });
-
-  it("should preserve a query directly after the port", () => {
-    expect(parseLocalChallengeProxyUrl("/__tenkacloud-local-port/18180?q=flag")).toEqual({
-      port: 18180,
-      path: "/?q=flag",
-    });
-  });
-
-  it("should reject invalid proxy URLs", () => {
-    expect(parseLocalChallengeProxyUrl(undefined)).toBeUndefined();
-    expect(parseLocalChallengeProxyUrl("/problems")).toBeUndefined();
-    expect(parseLocalChallengeProxyUrl("/__tenkacloud-local-port/0/")).toBeUndefined();
-    expect(parseLocalChallengeProxyUrl("/__tenkacloud-local-port/not-a-port/")).toBeUndefined();
-    expect(parseLocalChallengeProxyUrl("/__tenkacloud-local-port/70000/")).toBeUndefined();
-  });
-
-  it("should rewrite loopback Location headers through the same proxy", () => {
-    expect(rewriteLoopbackLocationHeader("http://127.0.0.1:18180/login")).toBe(
-      "/__tenkacloud-local-port/18180/login",
+describe("Codespaces local Participant API proxy", () => {
+  it("should allow only health and participant API routes below the fixed prefix", () => {
+    expect(parseLocalApiProxyUrl("/__tenkacloud-local-api/healthz")).toBe("/healthz");
+    expect(parseLocalApiProxyUrl("/__tenkacloud-local-api/portal/me?fresh=1")).toBe(
+      "/portal/me?fresh=1",
     );
-    expect(rewriteLoopbackLocationHeader("http://localhost:18280/search?q=x")).toBe(
-      "/__tenkacloud-local-port/18280/search?q=x",
-    );
-  });
-
-  it("should rewrite loopback URLs embedded in challenge HTML", () => {
     expect(
-      rewriteLoopbackUrlPrefixes(
-        '<a href="http://127.0.0.1:18180/admin">admin</a><script src="http://localhost:18180/app.js"></script>',
-      ),
-    ).toBe(
-      '<a href="/__tenkacloud-local-port/18180/admin">admin</a><script src="/__tenkacloud-local-port/18180/app.js"></script>',
+      parseLocalApiProxyUrl("/__tenkacloud-local-api/local/operator/snapshot"),
+    ).toBeUndefined();
+    expect(parseLocalApiProxyUrl("/__tenkacloud-local-port/18180/")).toBeUndefined();
+    expect(parseLocalApiProxyUrl(LOCAL_API_PROXY_PREFIX)).toBeUndefined();
+    expect(parseLocalApiProxyUrl(undefined)).toBeUndefined();
+  });
+
+  it("should resolve only an exact loopback API origin from local session state", () => {
+    expect(resolveLocalApiTarget(statePath("http://127.0.0.1:43199"))?.origin).toBe(
+      "http://127.0.0.1:43199",
     );
+    expect(resolveLocalApiTarget(statePath("https://attacker.example"))).toBeUndefined();
+    expect(resolveLocalApiTarget(statePath("http://attacker.example:43199"))).toBeUndefined();
+    expect(resolveLocalApiTarget(statePath("http://127.0.0.1"))).toBeUndefined();
+    expect(resolveLocalApiTarget(statePath("http://user:secret@127.0.0.1:43199"))).toBeUndefined();
+    expect(resolveLocalApiTarget(statePath("http://127.0.0.1:43199/path"))).toBeUndefined();
+    expect(resolveLocalApiTarget(statePath("http://127.0.0.1:43199?query=1"))).toBeUndefined();
+    expect(resolveLocalApiTarget(statePath("http://127.0.0.1:43199#fragment"))).toBeUndefined();
+    expect(resolveLocalApiTarget(statePath("http://localhost:43199"))?.hostname).toBe("localhost");
   });
 
-  it("should support a custom forwarded prefix when rewriting loopback URLs", () => {
-    expect(rewriteLoopbackUrlPrefixes("http://localhost:18180/admin", "/proxy")).toBe(
-      "/proxy/18180/admin",
+  it("should fail closed for missing or malformed local session state", () => {
+    const directory = mkdtempSync(join(tmpdir(), "tc-local-api-proxy-state-"));
+    const missing = join(directory, "missing.json");
+    const malformed = join(directory, "malformed.json");
+    const wrongShape = join(directory, "wrong-shape.json");
+    writeFileSync(malformed, "{");
+    writeFileSync(wrongShape, JSON.stringify({ apiBaseUrl: 43199 }));
+
+    expect(resolveLocalApiTarget(missing)).toBeUndefined();
+    expect(resolveLocalApiTarget(malformed)).toBeUndefined();
+    expect(resolveLocalApiTarget(wrongShape)).toBeUndefined();
+  });
+
+  it("should resolve the default state path with and without a local directory override", () => {
+    const original = process.env.TENKACLOUD_LOCAL_DIR;
+    const directory = mkdtempSync(join(tmpdir(), "tc-local-api-proxy-default-"));
+    writeFileSync(
+      join(directory, "state.json"),
+      JSON.stringify({ apiBaseUrl: "http://127.0.0.1:43199" }),
     );
-  });
-
-  it("should identify body content types that can be rewritten", () => {
-    expect(rewritesBody({ "content-type": "text/html; charset=utf-8" })).toBe(true);
-    expect(rewritesBody({ "content-encoding": "identity", "content-type": "text/css" })).toBe(true);
-    expect(rewritesBody({ "content-type": "application/javascript" })).toBe(true);
-    expect(rewritesBody({ "content-type": "application/json" })).toBe(true);
-    expect(rewritesBody({ "content-type": "application/octet-stream" })).toBe(false);
-    expect(rewritesBody({ "content-encoding": "gzip", "content-type": "text/html" })).toBe(false);
-    expect(rewritesBody({})).toBe(false);
-  });
-
-  it("should copy proxy headers and rewrite loopback redirects", () => {
-    const res = createResponseStub();
-
-    copyProxyHeaders(
-      {
-        "content-length": "64",
-        "content-type": "text/html",
-        location: ["http://localhost:18180/login"],
-        "x-empty": undefined,
-        "x-request-id": "request-1",
-      } as unknown as IncomingMessage["headers"],
-      res,
-    );
-
-    expect(res.getHeader("content-length")).toBeUndefined();
-    expect(res.getHeader("content-type")).toBe("text/html");
-    expect(res.getHeader("location")).toBe("/__tenkacloud-local-port/18180/login");
-    expect(res.getHeader("x-empty")).toBeUndefined();
-    expect(res.getHeader("x-request-id")).toBe("request-1");
-  });
-
-  it("should preserve content length for non-rewritten bodies", () => {
-    const res = createResponseStub();
-
-    copyProxyHeaders(
-      {
-        "content-length": "4",
-        "content-type": "application/octet-stream",
-        location: [],
-      } as unknown as IncomingMessage["headers"],
-      res,
-    );
-
-    expect(res.getHeader("content-length")).toBe("4");
-    expect(res.getHeader("location")).toBeUndefined();
-  });
-
-  it("should derive proxy status codes for missing upstream statuses", () => {
-    expect(proxyStatusCode(StatusCodes.CREATED)).toBe(StatusCodes.CREATED);
-    expect(proxyStatusCode(undefined)).toBe(StatusCodes.BAD_GATEWAY);
-  });
-
-  it("should write proxy errors before headers are sent", () => {
-    const res = createResponseStub();
-    const error = new Error("boom") as NodeJS.ErrnoException;
-    error.code = "EHOSTUNREACH";
-
-    handleProxyError(error, res, 18180);
-
-    expect(res.statusCode).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
-    expect(res.getHeader("content-type")).toBe("text/plain; charset=utf-8");
-    expect(res.body).toContain("Local challenge proxy failed for port 18180: boom");
-  });
-
-  it("should destroy the response when a proxy error happens after headers are sent", () => {
-    const res = createResponseStub(true);
-    const error = new Error("late failure") as NodeJS.ErrnoException;
-
-    handleProxyError(error, res, 18180);
-
-    expect(res.destroyedWith).toBe(error);
-  });
-
-  it("should pipe non-rewritten upstream response bodies", () => {
-    const upstreamRes = {
-      headers: { "content-type": "application/octet-stream" },
-      pipe: (res: ServerResponse) => res,
-    } as IncomingMessage;
-    const res = createResponseStub();
-
-    expect(proxyResponseBody(upstreamRes, res)).toBeUndefined();
-  });
-
-  it("should rewrite string chunks in upstream response bodies", () => {
-    const upstreamRes = new EventEmitter() as IncomingMessage;
-    upstreamRes.headers = { "content-type": "text/html" };
-    const res = createResponseStub();
-
-    proxyResponseBody(upstreamRes, res);
-    upstreamRes.emit("data", "http://localhost:18180/admin");
-    upstreamRes.emit("end");
-
-    expect(res.body).toBe("/__tenkacloud-local-port/18180/admin");
-  });
-
-  it("should call the next middleware for non-proxy requests", async () => {
-    const middleware = createLocalChallengeProxyMiddleware();
-    const proxy = createServer((req, res) => {
-      middleware(req, res, () => {
-        res.statusCode = StatusCodes.NOT_FOUND;
-        res.end("next middleware");
-      });
-    });
-    const proxyPort = await listen(proxy);
-
     try {
-      const res = await fetch(`http://127.0.0.1:${proxyPort}/not-a-proxy-route`);
-
-      expect(res.status).toBe(StatusCodes.NOT_FOUND);
-      expect(await res.text()).toBe("next middleware");
+      process.env.TENKACLOUD_LOCAL_DIR = directory;
+      expect(resolveLocalApiTarget()?.origin).toBe("http://127.0.0.1:43199");
+      delete process.env.TENKACLOUD_LOCAL_DIR;
+      expect(resolveLocalApiTarget()?.protocol).not.toBe("https:");
     } finally {
-      await close(proxy);
+      if (original === undefined) delete process.env.TENKACLOUD_LOCAL_DIR;
+      else process.env.TENKACLOUD_LOCAL_DIR = original;
     }
   });
 
-  it("should proxy local challenge responses through the participant portal origin", async () => {
-    let upstreamPort = 0;
-    const upstream = createServer((req, res) => {
-      const body = `<a href="http://127.0.0.1:${upstreamPort}/admin">admin</a>`;
-      expect(req.method).toBe("POST");
-      expect(req.url).toBe("/admin?q=flag");
-      expect(req.headers.host).toBe(`127.0.0.1:${upstreamPort}`);
-      expect(req.headers["accept-encoding"]).toBe("identity");
-      res.statusCode = StatusCodes.CREATED;
-      res.setHeader("content-type", "text/html; charset=utf-8");
-      res.setHeader("content-length", String(Buffer.byteLength(body)));
-      res.setHeader("location", `http://127.0.0.1:${upstreamPort}/login`);
-      res.end(body);
+  it("should strip forwarding auth material while preserving portal Origin and bearer", () => {
+    expect(
+      localApiRequestHeaders(
+        {
+          authorization: "Bearer participant-token",
+          cookie: "github_auth=secret",
+          cookie2: "legacy=secret",
+          forwarded: "for=203.0.113.5",
+          origin: "https://demo-5175.app.github.dev",
+          "cf-connecting-ip": "203.0.113.5",
+          "x-forwarded-host": "demo-5175.app.github.dev",
+          "x-github-user": "octocat",
+          "x-original-url": "/private",
+        },
+        new URL("http://127.0.0.1:43199"),
+      ),
+    ).toEqual({
+      "accept-encoding": "identity",
+      authorization: "Bearer participant-token",
+      host: "127.0.0.1:43199",
+      origin: "https://demo-5175.app.github.dev",
     });
-    upstreamPort = await listen(upstream);
-    const middleware = createLocalChallengeProxyMiddleware();
-    const proxy = createServer((req, res) => {
-      middleware(req, res, () => {
-        res.statusCode = StatusCodes.NOT_FOUND;
-        res.end("unhandled");
+  });
+
+  it("should reject an excessive number of forwarded headers", () => {
+    const headers = Object.fromEntries(
+      Array.from({ length: 65 }, (_, index) => [`x-portal-${index}`, String(index)]),
+    );
+    expect(() => localApiRequestHeaders(headers, new URL("http://127.0.0.1:43199"))).toThrow(
+      "local_api_proxy_headers_too_large",
+    );
+  });
+
+  it("should preserve participant auth, Origin, and manual redirects without leaking cookies", async () => {
+    let observed: Record<string, unknown> | undefined;
+    const upstream = createServer((request, response) => {
+      observed = {
+        authorization: request.headers.authorization,
+        cookie: request.headers.cookie,
+        github: request.headers["x-github-user"],
+        origin: request.headers.origin,
+        path: request.url,
+      };
+      response.writeHead(StatusCodes.SEE_OTHER, {
+        location: "https://demo-43210.app.github.dev/console#token=fragment",
+        "service-worker-allowed": "/",
+        "set-cookie": "simulator=secret",
       });
+      response.end();
     });
+    const upstreamPort = await listen(upstream);
+    const proxy = proxyServer(statePath(`http://127.0.0.1:${upstreamPort}`));
     const proxyPort = await listen(proxy);
-
     try {
-      const res = await fetch(
-        `http://127.0.0.1:${proxyPort}/__tenkacloud-local-port/${upstreamPort}/admin?q=flag`,
-        { body: "payload", method: "POST" },
+      const response = await fetch(
+        `http://127.0.0.1:${proxyPort}/__tenkacloud-local-api/portal/me/problems/p/console?ticket=t`,
+        {
+          headers: {
+            authorization: "Bearer participant-token",
+            cookie: "github_auth=secret",
+            origin: "https://demo-5175.app.github.dev",
+            "x-github-user": "octocat",
+          },
+          redirect: "manual",
+        },
       );
-      const expectedBody = `<a href="/__tenkacloud-local-port/${upstreamPort}/admin">admin</a>`;
-
-      expect(res.status).toBe(StatusCodes.CREATED);
-      expect(res.headers.get("content-length")).toBe(String(Buffer.byteLength(expectedBody)));
-      expect(res.headers.get("location")).toBe(`/__tenkacloud-local-port/${upstreamPort}/login`);
-      expect(await res.text()).toBe(expectedBody);
+      expect(response.status).toBe(StatusCodes.SEE_OTHER);
+      expect(response.headers.get("location")).toBe(
+        "https://demo-43210.app.github.dev/console#token=fragment",
+      );
+      expect(response.headers.get("set-cookie")).toBeNull();
+      expect(response.headers.get("service-worker-allowed")).toBeNull();
+      expect(observed).toEqual({
+        authorization: "Bearer participant-token",
+        cookie: undefined,
+        github: undefined,
+        origin: "https://demo-5175.app.github.dev",
+        path: "/portal/me/problems/p/console?ticket=t",
+      });
     } finally {
       await close(proxy);
       await close(upstream);
     }
   });
 
-  it("should return bad gateway when the local challenge port is unavailable", async () => {
-    const closedServer = createServer();
-    const unavailablePort = await listen(closedServer);
-    await close(closedServer);
-    const middleware = createLocalChallengeProxyMiddleware();
-    const proxy = createServer((req, res) => {
-      middleware(req, res, () => {
-        res.statusCode = StatusCodes.NOT_FOUND;
-        res.end("unhandled");
-      });
+  it("should bound upstream responses and time out stalled requests", async () => {
+    const oversized = createServer((_request, response) => {
+      response.end(Buffer.alloc(1_000_001, "x"));
     });
-    const proxyPort = await listen(proxy);
-
+    const oversizedPort = await listen(oversized);
+    const oversizedProxy = proxyServer(statePath(`http://127.0.0.1:${oversizedPort}`));
+    const oversizedProxyPort = await listen(oversizedProxy);
     try {
-      const res = await fetch(
-        `http://127.0.0.1:${proxyPort}/__tenkacloud-local-port/${unavailablePort}/`,
+      const response = await fetch(
+        `http://127.0.0.1:${oversizedProxyPort}/__tenkacloud-local-api/portal/me`,
       );
-
-      expect(res.status).toBe(StatusCodes.BAD_GATEWAY);
-      expect(await res.text()).toContain(
-        `Local challenge proxy failed for port ${unavailablePort}:`,
-      );
+      expect(response.status).toBe(StatusCodes.REQUEST_TOO_LONG);
     } finally {
-      await close(proxy);
+      await close(oversizedProxy);
+      await close(oversized);
+    }
+
+    const stalled = createServer(() => {});
+    const stalledPort = await listen(stalled);
+    const stalledProxy = proxyServer(statePath(`http://127.0.0.1:${stalledPort}`), 20);
+    const stalledProxyPort = await listen(stalledProxy);
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:${stalledProxyPort}/__tenkacloud-local-api/portal/me`,
+      );
+      expect(response.status).toBe(StatusCodes.BAD_GATEWAY);
+      expect(await response.json()).toEqual({ error: "local_api_proxy_failed" });
+    } finally {
+      await close(stalledProxy);
+      await close(stalled);
+    }
+  });
+
+  it("should forward a text request body and preserve a missing upstream status fallback", async () => {
+    let observedBody = "";
+    const upstream = createServer((request, response) => {
+      request.setEncoding("utf8");
+      request.on("data", (chunk: string) => {
+        observedBody += chunk;
+      });
+      request.on("end", () => response.end("ok"));
+    });
+    const upstreamPort = await listen(upstream);
+    const middleware = createLocalApiProxyMiddleware({
+      statePath: statePath(`http://127.0.0.1:${upstreamPort}`),
+    });
+    const incoming = mockIncoming(`${LOCAL_API_PROXY_PREFIX}/portal/me`, {}, true);
+    const captured = mockResponse();
+    try {
+      middleware(incoming, captured.response, vi.fn());
+      incoming.end("hello simulator");
+      await captured.done;
+      expect(observedBody).toBe("hello simulator");
+      expect(captured.body()).toBe("ok");
+    } finally {
+      await close(upstream);
+    }
+  });
+
+  it("should return explicit errors for an unavailable target and excessive headers", async () => {
+    const unavailable = proxyServer(join(tmpdir(), "tc-local-api-proxy-missing-state.json"));
+    const unavailablePort = await listen(unavailable);
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:${unavailablePort}${LOCAL_API_PROXY_PREFIX}/portal/me`,
+      );
+      expect(response.status).toBe(StatusCodes.BAD_GATEWAY);
+    } finally {
+      await close(unavailable);
+    }
+
+    const upstream = createServer((_request, response) => response.end("unused"));
+    const upstreamPort = await listen(upstream);
+    const middleware = createLocalApiProxyMiddleware({
+      statePath: statePath(`http://127.0.0.1:${upstreamPort}`),
+    });
+    const headers = Object.fromEntries(
+      Array.from({ length: 65 }, (_, index) => [`x-portal-${index}`, String(index)]),
+    );
+    const incoming = mockIncoming(`${LOCAL_API_PROXY_PREFIX}/portal/me`, headers);
+    const captured = mockResponse();
+    try {
+      middleware(incoming, captured.response, vi.fn());
+      incoming.end();
+      await captured.done;
+      expect(captured.status()).toBe(StatusCodes.BAD_REQUEST);
+      expect(JSON.parse(captured.body() ?? "{}")).toEqual({
+        error: "local_api_proxy_headers_too_large",
+      });
+    } finally {
+      await close(upstream);
+    }
+  });
+
+  it("should delegate requests outside the fixed proxy prefix", async () => {
+    const server = proxyServer(statePath("http://127.0.0.1:43199"));
+    const port = await listen(server);
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/outside`);
+      expect(response.status).toBe(StatusCodes.NOT_FOUND);
+      expect(await response.text()).toBe("not proxied");
+    } finally {
+      await close(server);
+    }
+  });
+
+  it("should destroy an already-started response for Error and non-Error failures", async () => {
+    const unavailableMiddleware = createLocalApiProxyMiddleware({
+      statePath: join(tmpdir(), "tc-local-api-proxy-still-missing.json"),
+    });
+    const unavailableRequest = mockIncoming(`${LOCAL_API_PROXY_PREFIX}/portal/me`);
+    const errorResponse = mockResponse(true);
+    unavailableMiddleware(unavailableRequest, errorResponse.response, vi.fn());
+    unavailableRequest.end();
+    await errorResponse.done;
+    expect(errorResponse.destroy.mock.calls[0]?.[0]).toBeInstanceOf(Error);
+
+    const upstream = createServer((_request, response) => response.end("unused"));
+    const upstreamPort = await listen(upstream);
+    const middleware = createLocalApiProxyMiddleware({
+      statePath: statePath(`http://127.0.0.1:${upstreamPort}`),
+    });
+    const incoming = mockIncoming(`${LOCAL_API_PROXY_PREFIX}/portal/me`);
+    const nonErrorResponse = mockResponse(true);
+    try {
+      middleware(incoming, nonErrorResponse.response, vi.fn());
+      incoming.emit("error", "not-an-error");
+      await nonErrorResponse.done;
+      expect(nonErrorResponse.destroy).toHaveBeenCalledWith(undefined);
+
+      const visibleErrorRequest = mockIncoming(`${LOCAL_API_PROXY_PREFIX}/portal/me`);
+      const visibleErrorResponse = mockResponse();
+      middleware(visibleErrorRequest, visibleErrorResponse.response, vi.fn());
+      visibleErrorRequest.emit("error", "not-an-error");
+      await visibleErrorResponse.done;
+      expect(visibleErrorResponse.status()).toBe(StatusCodes.BAD_GATEWAY);
+      expect(JSON.parse(visibleErrorResponse.body() ?? "{}")).toEqual({
+        error: "local_api_proxy_failed",
+      });
+    } finally {
+      await close(upstream);
     }
   });
 });

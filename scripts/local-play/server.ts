@@ -7,20 +7,19 @@ import {
   type LocalPlayDeployment,
   type LocalPlayState,
 } from "./api-state";
-import { isLoopbackUrl } from "./loopback";
+import { corsHeaders, isAllowedCorsOrigin } from "./cors";
+import { proxySimulatorNativeRequest } from "./simulator-native-proxy";
+
+export { corsHeaders } from "./cors";
 
 const MAX_BODY_BYTES = 1_000_000;
+const CONSOLE_TICKET_PATH = /^\/portal\/me\/problems\/[^/]+\/console$/;
 
 export interface LocalPlayServer {
   readonly port: number;
   readonly state: LocalPlayState;
   readonly close: () => Promise<void>;
 }
-
-type CodespacesEnv = Readonly<{
-  CODESPACE_NAME?: string;
-  GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN?: string;
-}>;
 
 async function readJsonBody(request: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
@@ -41,59 +40,18 @@ async function readJsonBody(request: IncomingMessage): Promise<unknown> {
   }
 }
 
-/**
- * CORS for the loopback scoring API. We reflect the request Origin only when it
- * is itself a loopback origin (the Participant Portal dev server) or the exact
- * same Codespace forwarded Participant Portal origin, and send no
- * `access-control-allow-origin` otherwise. A wildcard would let any website the
- * participant has open drive the local API cross-origin (submit flags, reveal
- * penalty hints, rename the team) — the loopback bind alone does not stop a
- * browser on the same machine.
- */
-function codespacesPortalOrigin(env: CodespacesEnv = process.env): string | undefined {
-  const name = env.CODESPACE_NAME?.trim();
-  const rawDomain = env.GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN?.trim();
-  if (!name || !rawDomain) return undefined;
-  const domain = rawDomain
-    .replace(/^https?:\/\//, "")
-    .replace(/\/.*$/, "")
-    .replace(/^\./, "")
-    .replace(/\.$/, "");
-  if (!domain) return undefined;
-  return `https://${name}-5175.${domain}`.toLowerCase();
-}
-
-function isAllowedCorsOrigin(origin: string, env: CodespacesEnv = process.env): boolean {
-  if (isLoopbackUrl(origin)) return true;
-  try {
-    const url = new URL(origin);
-    if (url.protocol !== "https:") return false;
-    return url.origin.toLowerCase() === codespacesPortalOrigin(env);
-  } catch {
-    return false;
-  }
-}
-
-export function corsHeaders(
-  origin: string | undefined,
-  env: CodespacesEnv = process.env,
-): Record<string, string> {
-  if (origin === undefined || !isAllowedCorsOrigin(origin, env)) return {};
-  return {
-    "access-control-allow-origin": origin,
-    vary: "Origin",
-    "access-control-allow-headers": "authorization, content-type",
-    "access-control-allow-methods": "GET, POST, PATCH, OPTIONS",
-  };
-}
-
 function writeJson(
   response: ServerResponse,
   status: number,
   body: unknown,
   cors: Record<string, string>,
+  headers: Readonly<Record<string, string>> = {},
 ): void {
-  response.writeHead(status, { ...cors, "content-type": "application/json; charset=utf-8" });
+  response.writeHead(status, {
+    ...cors,
+    ...headers,
+    ...(body === undefined ? {} : { "content-type": "application/json; charset=utf-8" }),
+  });
   response.end(body === undefined ? undefined : JSON.stringify(body));
 }
 
@@ -102,12 +60,40 @@ async function route(
   response: ServerResponse,
   state: LocalPlayState,
 ): Promise<void> {
-  const cors = corsHeaders(request.headers.origin);
+  const origin = request.headers.origin;
+  const cors = corsHeaders(origin);
+  const url = new URL(request.url ?? "/", "http://127.0.0.1");
+  if (origin !== undefined && !isAllowedCorsOrigin(origin)) {
+    writeJson(response, StatusCodes.FORBIDDEN, { error: "browser_origin_forbidden" }, {});
+    return;
+  }
+  if (url.pathname.startsWith("/local/operator/")) {
+    if (origin !== undefined) {
+      writeJson(response, StatusCodes.FORBIDDEN, { error: "operator_browser_forbidden" }, {});
+      return;
+    }
+    if (request.headers.authorization !== `Bearer ${state.participantToken}`) {
+      writeJson(response, StatusCodes.UNAUTHORIZED, { error: "unauthorized" }, {});
+      return;
+    }
+  }
+  if (await proxySimulatorNativeRequest(request, response, state)) return;
   if (request.method === "OPTIONS") {
     writeJson(response, StatusCodes.NO_CONTENT, undefined, cors);
     return;
   }
-  const url = new URL(request.url ?? "/", "http://127.0.0.1");
+  const isConsoleTicketNavigation =
+    request.method === "GET" &&
+    CONSOLE_TICKET_PATH.test(url.pathname) &&
+    url.searchParams.has("ticket");
+  if (
+    url.pathname.startsWith("/portal/") &&
+    !isConsoleTicketNavigation &&
+    request.headers.authorization !== `Bearer ${state.participantToken}`
+  ) {
+    writeJson(response, StatusCodes.UNAUTHORIZED, { error: "unauthorized" }, cors);
+    return;
+  }
   const query = Object.fromEntries(url.searchParams);
   const body = await readJsonBody(request);
   const result = await handleLocalPlayRequest(
@@ -116,10 +102,11 @@ async function route(
       path: url.pathname,
       query,
       body,
+      authorization: request.headers.authorization,
     },
     state,
   );
-  writeJson(response, result.status, result.body, cors);
+  writeJson(response, result.status, result.body, cors, result.headers);
 }
 
 export function startLocalPlayServer(
@@ -138,7 +125,8 @@ export function startLocalPlayServer(
             ? StatusCodes.BAD_REQUEST
             : StatusCodes.INTERNAL_SERVER_ERROR;
       if (!response.headersSent) {
-        writeJson(response, status, { error: message }, corsHeaders(request.headers.origin));
+        const publicError = status === StatusCodes.INTERNAL_SERVER_ERROR ? "internal" : message;
+        writeJson(response, status, { error: publicError }, corsHeaders(request.headers.origin));
       } else response.end();
     });
   });

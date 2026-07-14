@@ -28,6 +28,7 @@ export {
   type ParticipantProgressionView,
   type ParticipantScoringInfo,
   type ParticipantTeamView,
+  type ProblemRuntimeKind,
   type ProblemTextI18n,
   type ProgressionGatePolicy,
   type ScoringKind,
@@ -45,7 +46,7 @@ import type { DeploymentLogEntry, ParticipantProblemView } from "@tenkacloud/por
  */
 export type ProblemLifecycleStatus = NonNullable<ParticipantProblemView["lifecycle"]>["status"];
 
-/** `POST /portal/me/problems/:id/start` / `.../stop` の応答 body。 */
+/** `POST /portal/me/problems/:id/start` / `.../stop` / `.../reset` の応答 body。 */
 export interface ProblemLifecycleActionResponse {
   readonly status: ProblemLifecycleStatus;
 }

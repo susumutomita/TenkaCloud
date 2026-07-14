@@ -1,8 +1,8 @@
 import react from "@vitejs/plugin-react-swc";
-import type { Plugin, ViteDevServer } from "vite";
-import { createLogger, defineConfig } from "vite";
+import { createLogger, defineConfig, type Plugin } from "vite";
+import { codespacesForwardedOrigin } from "../../scripts/local-play/codespaces-origin";
 import { stripProblemWriteupsPlugin } from "./build/strip-problem-writeups";
-import { createLocalChallengeProxyMiddleware } from "./local-play-proxy";
+import { createLocalApiProxyMiddleware } from "./local-play-proxy";
 
 // 他 app と同じく Vite 7 の vite:react-swc deprecation warning を抑制する。
 const logger = createLogger();
@@ -12,30 +12,25 @@ logger.warn = (msg, opts) => {
   originalWarn(msg, opts);
 };
 
-const LOCAL_API_PROXY_PREFIX = "/__tenkacloud-local-api";
-
-function localChallengeProxyPlugin(): Plugin {
+function localApiProxyPlugin(): Plugin {
   return {
-    name: "tenkacloud-local-challenge-proxy",
-    configureServer(server: ViteDevServer) {
-      server.middlewares.use(createLocalChallengeProxyMiddleware());
+    name: "tenkacloud-local-api-proxy",
+    configureServer(server) {
+      if (!codespacesForwardedOrigin(5175)) return;
+      server.middlewares.use(createLocalApiProxyMiddleware());
     },
   };
 }
 
 export default defineConfig({
-  plugins: [localChallengeProxyPlugin(), stripProblemWriteupsPlugin(), react()],
+  plugins: [stripProblemWriteupsPlugin(), localApiProxyPlugin(), react()],
   customLogger: logger,
   // admin-console (5173) / application-admin-console (5174) と並走できるよう別ポート。
   server: {
     port: 5175,
-    proxy: {
-      [LOCAL_API_PROXY_PREFIX]: {
-        target: "http://127.0.0.1:3199",
-        changeOrigin: false,
-        rewrite: (path) => path.replace(new RegExp(`^${LOCAL_API_PROXY_PREFIX}`), ""),
-      },
-    },
+    strictPort: true,
+    // Challenge ports are separate origins and must not read runtime-config or portal storage.
+    cors: false,
   },
   build: {
     chunkSizeWarningLimit: 1200,

@@ -8,6 +8,7 @@ import {
   type KindResult,
   type KindScoreEvent,
   noopKindResult,
+  type ProbeFn,
   probeUrl,
   resolveActivePhase,
   uptimeEvent,
@@ -110,9 +111,20 @@ async function probePhasedSlots(
   overrideMap: Map<string, string>,
   scorePath: string,
 ): Promise<SlotResult[]> {
+  const placementMap = input.authoritativeEndpointPlacements
+    ? new Map(input.authoritativeEndpointPlacements.map((placement) => [placement.slot, placement]))
+    : undefined;
   return Promise.all(
     input.slots.map((slot) =>
-      probePhasedSlot(slot, input.scoring, outputs, overrideMap.get(slot.slot), scorePath),
+      probePhasedSlot(
+        slot,
+        input.scoring,
+        outputs,
+        overrideMap.get(slot.slot),
+        placementMap?.get(slot.slot),
+        scorePath,
+        input.probe ?? probeUrl,
+      ),
     ),
   );
 }
@@ -122,13 +134,17 @@ async function probePhasedSlot(
   scoring: PhasedPollingScoringMetadata,
   outputs: Record<string, string>,
   overrideUrl: string | undefined,
+  authoritativePlacement:
+    | { readonly effectiveUrl: string; readonly verifiedPlatform: string }
+    | undefined,
   scorePath: string,
+  probe: ProbeFn,
 ): Promise<SlotResult> {
   const outputValue = outputs[slot.default.key];
   const defaultUrl = outputValue
     ? resolveDefaultUrl(outputValue, slot.default.appendPath)
     : undefined;
-  const baseUrl = overrideUrl ?? defaultUrl;
+  const baseUrl = authoritativePlacement?.effectiveUrl ?? overrideUrl ?? defaultUrl;
   if (!baseUrl) {
     return {
       slotName: slot.slot,
@@ -139,10 +155,10 @@ async function probePhasedSlot(
     };
   }
   const [metaProbe, scoreProbe, postureProbe] = await Promise.all([
-    probeUrl(joinUrl(baseUrl, scoring.probe.metaPath), { readBody: true }),
-    probeUrl(joinUrl(baseUrl, scorePath)),
+    probe(joinUrl(baseUrl, scoring.probe.metaPath), { readBody: true }),
+    probe(joinUrl(baseUrl, scorePath)),
     scoring.probe.posturePath
-      ? probeUrl(joinUrl(baseUrl, scoring.probe.posturePath), { readBody: true })
+      ? probe(joinUrl(baseUrl, scoring.probe.posturePath), { readBody: true })
       : Promise.resolve(undefined),
   ]);
   const posture = parsePostureFromBody(postureProbe?.body);
@@ -152,7 +168,8 @@ async function probePhasedSlot(
   return {
     slotName: slot.slot,
     baseUrl,
-    verifiedPlatform: verifyPlatformTier(selfReported, baseUrl),
+    verifiedPlatform:
+      authoritativePlacement?.verifiedPlatform ?? verifyPlatformTier(selfReported, baseUrl),
     ...(posture?.posture ? { posture: posture.posture } : {}),
     ...(posture?.platform ? { posturePlatform: posture.platform } : {}),
     scoreOk: scoreProbe.ok,

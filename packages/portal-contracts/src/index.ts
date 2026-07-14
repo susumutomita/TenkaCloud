@@ -220,6 +220,9 @@ export type TargetAccessCapability =
   | "external-portal"
   | "unsupported";
 
+/** Local-play runtime family; absent on legacy/AWS participant views. */
+export type ProblemRuntimeKind = "docker" | "simulated-cloud";
+
 /**
  * Phase 2c: 1 problem 単位の view (= team の N 問題のうち 1 つ)。
  */
@@ -251,7 +254,13 @@ export interface ParticipantProblemView {
    * AWS mode never sends it (no per-competitor container lifecycle); absent is
    * treated as `running` (backward compat with the pre-Phase-2 wire).
    */
-  readonly lifecycle?: { readonly status: "stopped" | "starting" | "running" | "error" };
+  readonly lifecycle?: {
+    readonly status: "stopped" | "starting" | "running" | "error";
+    /** Enables runtime-specific controls without exposing runtime credentials or URLs. */
+    readonly runtimeKind?: ProblemRuntimeKind;
+    /** A failed operation still owns local resources; Stop retries cleanup before restart. */
+    readonly cleanupRequired?: true;
+  };
   readonly region: string;
   /** 競技アカウント ID。 SSO Credentials の AWS Console federation で使う。
    *  (機密ではない — IAM role 信頼ポリシーや CFn template にも露出する。) */

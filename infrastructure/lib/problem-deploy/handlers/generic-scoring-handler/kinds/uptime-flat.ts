@@ -59,7 +59,7 @@ export async function runUptimeFlatKind(
     scoring.endpoints.map(async (e) => {
       const resolved = resolveEndpointUrl(e, slotMap, overrideMap, outputs);
       if (!resolved) return undefined;
-      const probe = await probeUrl(joinUrl(resolved.baseUrl, e.path), {
+      const probe = await (input.probe ?? probeUrl)(joinUrl(resolved.baseUrl, e.path), {
         expectStatus: e.expectStatus,
       });
       return { key: resolved.healthKey, ok: probe.ok };

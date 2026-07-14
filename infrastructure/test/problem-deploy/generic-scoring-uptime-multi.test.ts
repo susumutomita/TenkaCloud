@@ -1,3 +1,4 @@
+import { StatusCodes } from "http-status-codes";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runUptimeMultiKind } from "../../lib/problem-deploy/handlers/generic-scoring-handler/kinds/uptime-multi";
 import type {
@@ -261,6 +262,28 @@ describe("uptime-multi kind", () => {
       (c: unknown[]) => typeof c[0] === "string" && (c[0] as string).includes("/api/v1/auth"),
     );
     expect((authCall?.[1] as { method?: string })?.method).toBe("POST");
+  });
+
+  it("should use an injected provider command for attack probes while health stays on HTTP", async () => {
+    fetchMock.mockResolvedValue({ status: StatusCodes.OK, text: async () => "" });
+    const attackProbe = vi.fn(async () => ({
+      ok: false,
+      status: StatusCodes.FORBIDDEN,
+      responseTimeMs: 1,
+    }));
+
+    const result = await runUptimeMultiKind({ ...withAttackProbe(), attackProbe });
+
+    expect(result.scoreDelta).toBe(100);
+    expect(attackProbe).toHaveBeenCalledWith({
+      slot: "api",
+      path: "/api/v1/auth",
+      method: "POST",
+      body: JSON.stringify({ username: "' OR '1'='1", password: "x" }),
+    });
+    expect(
+      fetchMock.mock.calls.some((call: unknown[]) => String(call[0]).includes("/api/v1/auth")),
+    ).toBe(false);
   });
 
   it("should NOT penalize when the SQLi attack is rejected (defense held)", async () => {

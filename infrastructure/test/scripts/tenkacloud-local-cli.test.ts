@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { StatusCodes } from "http-status-codes";
 import { afterEach, describe, expect, it } from "vitest";
+import { observeProcessIdentity } from "../../../scripts/local-play/process-identity";
 
 /**
  * Issue #2527 Slice 0: characterization tests for the tenkacloud-local CLI's command
@@ -40,6 +41,7 @@ const RUNTIME_CONFIG_PATH = join(
 // Each test spawns a bun subprocess (cold transpile) and `status` against a dead API
 // polls for 3s before failing — give every test the same generous ceiling.
 const CLI_TIMEOUT_MS = 30_000;
+const TEST_PARTICIPANT_TOKEN = "t".repeat(43);
 
 interface CliResult {
   readonly stdout: string;
@@ -155,13 +157,17 @@ function writeState(
   localDir: string,
   state: { apiBaseUrl: string; problemIds: readonly string[] },
 ): void {
+  const processIdentity = observeProcessIdentity(process.pid);
+  if (!processIdentity) throw new Error("test process identity is unavailable");
   writeFileSync(
     join(localDir, "state.json"),
     JSON.stringify(
       {
-        pid: 99_999_999,
+        pid: process.pid,
+        processIdentity,
         deploymentPath: join(localDir, "deployment.json"),
         runtimeConfigPath: RUNTIME_CONFIG_PATH,
+        participantToken: TEST_PARTICIPANT_TOKEN,
         ...state,
       },
       null,
@@ -340,7 +346,7 @@ describe("tenkacloud-local CLI — evaluate (#2527 Slice 0)", () => {
       const request = session.requests[0];
       expect(request?.method).toBe("POST");
       expect(request?.url).toBe("/portal/me/submit-flag");
-      expect(request?.authorization).toBe("Bearer local");
+      expect(request?.authorization).toBe(`Bearer ${TEST_PARTICIPANT_TOKEN}`);
       expect(JSON.parse(request?.body ?? "")).toEqual({
         problemId: "hello-world",
         flag: "FLAG{tenka}",

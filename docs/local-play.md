@@ -1,11 +1,16 @@
-# Local play (Docker, no AWS)
+# Local play (Docker and multi-cloud simulation, no cloud account)
 
-Local play lets a participant solve a problem entirely on their machine — no AWS
-account, no cloud resources. Each problem ships as a **Docker container** that
-owns both the challenge surface and its own scoring (`/verify`). TenkaCloud
-contributes only the scoring half: the participant API, portal, leaderboard,
-hints, and progress. (Issue #2054 — supersedes the earlier Kumo / AWS-emulator
-approach.)
+Local play lets a participant solve a problem entirely on their machine — no
+cloud account and no billed cloud resources. It has two explicit runtimes:
+
+- Docker drills keep the established Compose + problem-owned `/verify` contract.
+- Cloud and Composite problems use TenkaCloud Simulator through protocol
+  `2026-07-11`; the Simulator owns provider behavior and its event-sourced world.
+
+The participant API, portal, leaderboard, hints, and lifecycle stay common. A
+cloud runtime is never silently converted to Docker or sent to a real cloud.
+The boundary is recorded in
+[ADR-051](./architecture/adr-051-local-multicloud-simulator.html).
 
 ## How it works
 
@@ -18,6 +23,11 @@ make local [PROBLEM=<id>]
   ├─ Docker Compose up    the selected problem container (loopback only)
   │     • per-deploy random secret (FLAG_SEED, …) injected as env
   │     • the container serves the challenge surface AND POST /verify
+  ├─ OR Simulator         a selected cloud / Composite problem (loopback only)
+  │     • capability preflight runs before world creation
+  │     • participant-safe endpoint outputs return to the portal
+  │     • an authenticated one-time handoff opens the unified console
+  │     • stop/reset deletes the isolated world; snapshots support recovery
   ├─ runtime-config.json   points the portal at the local API
   └─ participant portal    Vite dev server (cloudMode:"local")
 make local-up → scoring API only (advanced / scripts)
@@ -27,13 +37,15 @@ make local-down → Docker Compose down + restore runtime-config
 
 | Layer                       | Owns     | Responsibility                                                        |
 | --------------------------- | -------- | -------------------------------------------------------------------- |
-| Problem container (catalog) | problem  | The challenge itself **and `/verify`** (answer, hidden tests, scoring conditions live only here) |
-| TenkaCloud platform         | platform | Scoring, portal, leaderboard, hints, orchestration (**no evaluation logic**) |
+| Problem container (catalog) | problem  | Docker challenge surface **and `/verify`** (answer and hidden tests stay here) |
+| TenkaCloud Simulator        | simulator | Provider APIs, IaC/resource projections, deterministic worlds, snapshots, and unified console |
+| TenkaCloud platform         | platform | Catalog, scoring/probes, portal, leaderboard, hints, and provider-neutral lifecycle orchestration |
 
-The platform never holds the answer. It delegates each submission to the
-container and trusts the container's `correct` verdict. This is the local
-counterpart of the cloud self-deploy model (a problem deploys its own verify
-Lambda) — one `/verify` contract, two runtimes.
+For Docker, the platform never holds the answer: it delegates each submission
+to the container and trusts the container's `correct` verdict. Cloud scoring
+remains catalog-driven and is evaluated against the Simulator state/probe
+boundary; the platform does not invent a successful verdict when a capability
+or operation is unsupported.
 
 ## Run it
 
@@ -45,6 +57,47 @@ make local-status                 # is local play running?
 make local-evaluate FLAG='TC{…}'  # submit a flag from the CLI
 make local-down                   # stop everything and restore runtime-config
 ```
+
+Cloud problems use the reviewed, immutable Simulator image by default:
+
+```bash
+make local PROBLEM=hello-world
+
+# Override the pinned default with another reviewed immutable build:
+TENKACLOUD_SIMULATOR_IMAGE='ghcr.io/susumutomita/tenkacloud-simulator@sha256:<64-hex>' \
+  make local PROBLEM=hello-world
+
+# Simulator contributors may instead point to a real executable process:
+TENKACLOUD_SIMULATOR_COMMAND='/absolute/path/to/tenkacloud-simulator' \
+  make local PROBLEM=hello-world
+
+# Or connect to an already-running loopback instance:
+TENKACLOUD_SIMULATOR_URL='http://127.0.0.1:42123' \
+TENKACLOUD_SIMULATOR_LAUNCH_SECRET='<base64url-32-byte-secret>' \
+  make local PROBLEM=hello-world
+```
+
+Image tags are rejected: the value must contain `@sha256:`. The launched
+Simulator binds a random loopback port and receives a fresh 256-bit launch
+secret. TenkaCloud signs a short-lived `tc_sim_v1` namespace token; browser
+console access receives it only as a URL fragment and it is never printed. The
+private native-CLI environment uses the token as a bearer credential. The default image
+is pinned to
+`ghcr.io/susumutomita/tenkacloud-simulator@sha256:049c6c165f9947b386b2c5864983aebefba26e996ec62859dae0e9814c52d505`;
+an explicit command, image, or externally managed URL replaces that default,
+and configuring more than one explicit source fails before resource creation.
+
+When the validated catalog contains a digest-pinned workload, the local launcher
+also enables Simulator's bounded workload runner. A Simulator process uses the
+user-owned Docker CLI directly. A Simulator container receives only the Docker
+daemon UNIX socket, its numeric socket group, the reviewed workload image
+allowlist, fixed resource quotas, and its own container identity. The process
+remains non-root; workload containers remain read-only, non-root, capability
+dropped, quota bounded, and attached to a world-internal network. Catalog
+overlays cannot add host mounts, Docker flags, credentials, or secrets. If the
+socket or policy cannot be established, workload capability discovery fails
+closed before deployment resources are created. This socket-enabled boundary is
+for single-user local play only, not a hosted or shared deployment mode.
 
 On a bare clone, `make local` is a single, self-healing entry point: it
 installs missing workspace dependencies (`ensure-deps`, only when `vite` is
@@ -65,8 +118,10 @@ installing Bun, initializing the submodule, Docker Compose help) — add
 Without `PROBLEM=`, `make local` pre-starts no problem containers. It starts the
 loopback scoring API and browser portal so you can deploy/start a problem from
 the portal screen. Use `PROBLEM=<id>` when you want the CLI to
-pre-start one or more containers before the portal opens. Log in with any
-non-empty team key. The challenge endpoints are shown on the problem page;
+pre-start one or more containers before the portal opens. The generated portal
+runtime config pre-fills a fresh random team key for each run; the
+Simulator console handoff accepts only that key. The challenge endpoints are
+shown on the problem page;
 attack them, recover the flag, and submit it.
 
 Started containers keep running until an explicit stop — there is no idle
@@ -77,25 +132,117 @@ one automatic stop is the running cap (3 containers by default): starting
 another problem beyond the cap stops the least-recently-played one to free its
 slot.
 
-> Requires Docker Compose. Both `docker compose` and standalone `docker-compose`
+> Docker problems require Docker Compose. Both `docker compose` and standalone `docker-compose`
 > are supported. TenkaCloud auto-detects the frontend; set
 > `TENKACLOUD_COMPOSE_CLI='docker-compose'` or
-> `TENKACLOUD_COMPOSE_CLI='docker compose'` to force one. The scoring API port
-> defaults to `3199` and can be overridden with `LOCAL_API_PORT`. If it is already
+> `TENKACLOUD_COMPOSE_CLI='docker compose'` to force one. The scoring API uses a
+> fresh loopback port per session and can be fixed with `LOCAL_API_PORT`. If it is already
 > taken, `make local` fails loudly rather than adopting a foreign server.
 > For API-only automation, use `make local-up`; attach the browser later with
 > `make local-portal`.
 
-In Codespaces, browser-facing challenge links are rewritten through the
-Participant Portal dev server on port `5175`:
+Simulator sessions are recorded under `.tenkacloud/local` with private file
+permissions. A self-contained protected generation is committed atomically
+before its participant-safe public projection; restart rebuilds a missing or
+older projection from that protected source. Owned process/container launch also
+commits a private intent before spawn. Process mode registers supervisor and
+child identities and keeps a private lease until Stop, so `up`/`down` can reclaim
+a parent-crash generation without signaling a reused PID. `make local-down` deletes every recorded Simulator world before
+terminating an owned process/container. The local CLI also exposes explicit
+snapshot export/import and reset commands; recovery verifies the recorded
+protocol, token namespace, process, and deployment instead of trusting a stale
+state file. Shutdown is best-effort across every Docker problem and simulated
+world: one teardown failure is aggregated and reported only after the remaining
+worlds and the owned Simulator launcher have also been stopped. Simulator HTTP
+calls have finite abort deadlines, so a loopback process that accepts a request
+and then stalls cannot wedge start, reset, scoring, or shutdown indefinitely.
 
-```text
-https://<codespace>-5175.app.github.dev/__tenkacloud-local-port/18180/...
+Catalog metadata may reference a strict `simulation.json` document with
+`simulationOverlay: { "schemaVersion": "1", "entry": "simulation.json" }`.
+TenkaCloud validates paths, symlinks, target ids, duplicate identities, size
+limits, digest-pinned workloads, and artifact hashes before launch, then sends
+the parsed document as the deployment request's top-level `simulationOverlay`
+field. It never embeds the document under `metadata`. Every artifact referenced
+by a requirement or workload is also included exactly once in that target's
+deterministically ordered Simulator artifact bundle, even when the runtime
+entry itself is a single file. This lets Simulator verify the declared digest
+against the exact bytes it compiles or materializes.
+
+Polling scoring sends ordinary health requests to the materialized workload's
+real loopback HTTP endpoint. Catalog attack probes instead use the authenticated
+`HTTP::Endpoint/AttackProbe` provider operation so the attack and its observed
+status update the same Simulator world. Phased scoring advances virtual time via
+authenticated `POST /v1/worlds/{worldId}/clock/advance`; the response must contain
+an ISO `clock` and the provider-neutral `appliedTransitions` list. Every score
+cycle is deduplicated per problem, while Simulator lifecycle, clock, probe, and
+snapshot operations share a per-problem queue. A deployment-generation check
+discards scoring results if stop/reset replaced the world while a probe was in
+flight. The leaderboard counts a solved simulated flag or
+composite problem in the same completed-problem total as a solved Docker problem.
+
+Each synthetic provider HTTP target is exposed on its own random loopback
+listener and origin. TenkaCloud rewrites only Simulator-owned AWS/Azure/GCP/Sakura
+HTTP endpoint outputs to the matching target listener; external URLs and resource
+identifiers remain unchanged. A browser origin for one problem or target cannot
+read another target, and the participant API does not expose a shared data-plane
+route. Simulator
+credentials, launch tokens, console URLs, and any namespaced
+`*.Simulator...` output are omitted from the participant view. The portal
+authenticates `POST .../console-handoff`, receives only a 30-second one-time
+ticket, and navigates to a no-store redirect that consumes the ticket before
+placing the launch token in the Simulator URL fragment. The proxy accepts only
+the methods required by the current catalog (`GET`, `HEAD`, `POST`, and
+`QUERY`) and preserves the method, query string, content type, and body while
+injecting the short-lived launch token server-side. Other methods fail with
+HTTP 400 before reaching Simulator, so the HTTP client cannot silently
+normalize an accepted method.
+
+The token-injecting route accepts requests without an `Origin` header for CLI
+use, or requests from an allowed loopback Participant Portal origin and the
+exact current Codespaces Participant Portal origin. Other browser origins fail
+with HTTP 403 before target lookup. TenkaCloud answers an allowed `OPTIONS`
+preflight locally and replaces every upstream CORS header, including wildcard
+`Access-Control-Allow-Origin`, with the exact allowed origin. Polling scoring
+uses the Origin-free CLI path. Codespaces exposes the Participant API and each
+challenge/Simulator port on separate forwarded origins. Browser cookies are never forwarded
+to Simulator/workloads, upstream cookies are never returned, and both request
+and response I/O have finite time and size bounds.
+
+After a simulated problem starts, `.tenkacloud/local/simulator-native.env` is a
+private, source-able multi-profile file. Standard provider CLIs cannot attach
+TenkaCloud's world-routing headers, so their endpoint must be the generated
+loopback route proxy, not the Simulator origin directly. The proxy preserves
+the native authorization and body, strips only its local profile prefix, and
+injects the selected world/deployment/target routing server-side:
+
+```bash
+source .tenkacloud/local/simulator-native.env
+aws sts get-caller-identity                  # AWS_ENDPOINT_URL is already set
+
+# Composite/multi-problem session:
+TENKACLOUD_SIMULATOR_PROFILE='hello-multicloud:gcp-hello' \
+  source .tenkacloud/local/simulator-native.env
 ```
 
-The portal proxies that path to `http://127.0.0.1:18180/...` inside the
-codespace, so users do not need to manually forward every problem port. Terminal
-commands can still use the raw loopback URL.
+The protected file also exports the Simulator URL/token/world fields for the bundled
+Simulator CLI, provider/engine identity, a local-only AWS signing secret, and
+the Azure/GCP/Sakura endpoint and credential pairs. None is a real cloud
+credential. Query parameters are not used for routing because native Query and
+ARM APIs own their query strings. The native proxy also applies finite request,
+response, and time bounds and recomputes response framing after buffering; it
+never forwards a stale upstream `Content-Length`.
+
+In Codespaces, the portal, Participant API, each challenge, and Simulator
+console remain on distinct forwarded-port origins. For example:
+
+```text
+https://<codespace>-18180.app.github.dev/...
+```
+
+The generated runtime config points directly at that run's forwarded API
+port, and browser-facing output URLs use their own forwarded port. Nothing is
+proxied through the portal's `5175` origin, so challenge content cannot read the
+portal runtime config or storage. Terminal commands can still use loopback.
 
 ## The `/verify` contract
 
@@ -214,6 +361,9 @@ the harness (no answer, no scoring conditions):
 
 - Containers are loopback-only. Bind ports as `127.0.0.1:<host>:<container>` —
   `/verify` included.
+- A browser request that carries an unapproved `Origin` is rejected before any
+  local API route executes, even when the request would otherwise qualify as a
+  CORS simple request. Origin-free CLI traffic remains supported.
 - A container that fetches an external URL (cloud-style self-deploy) must apply
   SSRF defenses itself: a protocol and host allowlist, no redirect following, a
   timeout, and a response body cap.
