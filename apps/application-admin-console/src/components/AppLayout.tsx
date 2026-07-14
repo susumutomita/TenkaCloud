@@ -28,12 +28,15 @@ const LOCALE_NAME: Record<LocaleCode, string> = {
 export function ShellLayout({
   children,
   samlSsoEnabled = false,
+  educationGraphEnabled = false,
   demoMode = false,
   demoParticipantUrl,
 }: {
   children: ReactNode;
   /** Feature-flagged: show the Identity providers (SAML SSO) nav item only when enabled. */
   samlSsoEnabled?: boolean;
+  /** Feature-flagged (default OFF): show the 教育グラフ nav item only when enabled. */
+  educationGraphEnabled?: boolean;
   /** Issue #1954: no-AWS demo mode の常時バナーを出す。 */
   demoMode?: boolean;
   /** Issue #1954: 参加者 demo (participant-portal) への hand-off 先 base URL。 */
@@ -83,7 +86,9 @@ export function ShellLayout({
           text: t("nav.content_section"),
           items: [
             { type: "link", href: "/problems", text: t("nav.problems") },
-            ...(hasTenantAdminRole(claims)
+            // 教育グラフは既定 OFF の feature flag で gate (設定画面で ON にしたときだけ表示)。
+            // TenantAdmin 限定は据え置き。
+            ...(educationGraphEnabled && hasTenantAdminRole(claims)
               ? [
                   {
                     type: "link" as const,

@@ -42,7 +42,8 @@ function must<T>(value: T | null | undefined, what: string): T {
 }
 
 const logout = vi.fn();
-const renderShell = () => render(<ShellLayout>child-content</ShellLayout>);
+const renderShell = (educationGraphEnabled = false) =>
+  render(<ShellLayout educationGraphEnabled={educationGraphEnabled}>child-content</ShellLayout>);
 const topNav = (container: HTMLElement) =>
   must(createWrapper(container).findTopNavigation(), "top navigation");
 
@@ -81,7 +82,9 @@ describe("ShellLayout", () => {
   it("should group navigation by operator jobs and navigate via side links", () => {
     mockAuth.mockReturnValue({ tokens: { idToken: "tok" }, logout });
     mockDecode.mockReturnValue({ "custom:userRole": "TenantAdmin" });
-    const { container } = renderShell();
+    // Education graph nav is feature-flagged (default OFF); enable it so this test can
+    // exercise its side link. Default-off visibility is covered in AppLayout.education-graph.test.
+    const { container } = renderShell(true);
     expect(container).toHaveTextContent("nav.event_ops_section");
     expect(container).toHaveTextContent("nav.content_section");
 
