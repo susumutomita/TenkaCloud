@@ -116,7 +116,7 @@ aws s3api put-bucket-versioning --bucket "${CDK_PARAM_S3_BUCKET_NAME}" \
 # source of truth とし、 emit script が AWS API shape の JSON を stdout に出力する
 # (= config の二重持ちを避け、 `${VAR:-default}` placeholder で env override 可)。
 echo "[prepare-source-bundle] applying lifecycle policy..."
-LIFECYCLE_JSON=$(bun run "${SCRIPT_DIR}/print-source-bundle-lifecycle.ts" "${ENV:-development}")
+LIFECYCLE_JSON=$(bun run "${SCRIPT_DIR}/ops/print-source-bundle-lifecycle.ts" "${ENV:-development}")
 aws s3api put-bucket-lifecycle-configuration \
   --bucket "${CDK_PARAM_S3_BUCKET_NAME}" \
   --lifecycle-configuration "${LIFECYCLE_JSON}"
