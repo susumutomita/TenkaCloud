@@ -18,6 +18,49 @@ const PROBLEM: ContainerProblem = {
 };
 
 describe("local-play CORS", () => {
+  it("should not turn a persistence exception message into a public request error", async () => {
+    const save = vi
+      .fn<() => Promise<void>>()
+      .mockRejectedValueOnce(new Error("invalid_json"))
+      .mockResolvedValue(undefined);
+    const server = await startLocalPlayServer(
+      0,
+      { problems: [PROBLEM], participantToken: "a".repeat(43) },
+      {
+        startContainer: async () => ({
+          problem: PROBLEM,
+          unit: {
+            problemId: PROBLEM.problemId,
+            composePath: PROBLEM.composePath,
+            composeProjectName: PROBLEM.composeProjectName,
+            secretEnv: PROBLEM.secretEnv,
+          },
+        }),
+        stateStore: {
+          description: "injected failure",
+          load: async () => undefined,
+          save,
+          close: async () => {},
+        },
+      },
+    );
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:${server.port}/portal/me/problems/${PROBLEM.problemId}/start`,
+        {
+          method: "POST",
+          headers: { authorization: `Bearer ${"a".repeat(43)}` },
+        },
+      );
+
+      expect(response.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
+      expect(await response.json()).toEqual({ error: "internal" });
+    } finally {
+      await server.close();
+      await server.closeStateStore();
+    }
+  });
+
   it("should reflect a loopback origin (the portal dev server)", () => {
     expect(corsHeaders("http://localhost:5175")).toMatchObject({
       "access-control-allow-origin": "http://localhost:5175",
