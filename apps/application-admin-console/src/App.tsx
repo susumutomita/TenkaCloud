@@ -39,6 +39,7 @@ function guarded(element: React.ReactNode, config: AppConfig) {
     <RequireAuth>
       <ShellLayout
         samlSsoEnabled={config.features?.samlSso}
+        educationGraphEnabled={config.features?.educationGraph}
         demoMode={config.mode === "demo"}
         // The banner only renders the link when demoMode is true, so passing the URL
         // unconditionally is safe (and avoids an untested non-demo ternary branch).

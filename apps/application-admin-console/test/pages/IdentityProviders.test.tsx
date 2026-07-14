@@ -132,6 +132,7 @@ describe("IdentityProvidersPage", () => {
           nonAwsRuntime: false,
           redTeam: false,
           challengePrerequisiteGate: false,
+          educationGraph: false,
         },
       }),
     );
