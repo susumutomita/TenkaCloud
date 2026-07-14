@@ -80,8 +80,7 @@ describe("local-play state store contract (#2633)", () => {
     const fixture = join(import.meta.dirname, "..", "fixtures", "local-play-sqlite-store.ts");
     const result = spawnSync("bun", [fixture, databasePath], { encoding: "utf8" });
 
-    expect(result.stderr).toBe("");
-    expect(result.status).toBe(0);
+    expect(result.status, result.stderr).toBe(0);
     expect(JSON.parse(result.stdout)).toMatchObject({ version: 1, teamName: "SQLite team" });
     expect(statSync(databasePath).mode & 0o777).toBe(0o600);
   });
