@@ -124,6 +124,29 @@ export function isParticipantSimulatorOutputKey(key: string): boolean {
   return key.split(".").every((segment) => !segment.startsWith("Simulator"));
 }
 
+const SIMULATOR_AWS_PUBLIC_HOSTS = [
+  /(^|\.)amazonaws\.com$/,
+  /(^|\.)on\.aws$/,
+  /(^|\.)console\.aws\.amazon\.com$/,
+] as const;
+
+/**
+ * Simulator provider URLs are synthetic control/data-plane identifiers. The
+ * routable data-plane variants are replaced with loopback URLs before this
+ * boundary; anything still pointing at an AWS-owned host would only send the
+ * participant away from the local world (for example an AWS Console deep link).
+ */
+function isUnroutableSimulatorAwsUrl(value: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+  return SIMULATOR_AWS_PUBLIC_HOSTS.some((pattern) => pattern.test(url.hostname));
+}
+
 export function participantSimulatorOutputs(
   problem: SimulatedCloudProblem,
   outputs: Readonly<Record<string, string>>,
@@ -136,9 +159,10 @@ export function participantSimulatorOutputs(
   }
   return Object.fromEntries(
     Object.entries(outputs).filter(
-      ([key]) =>
+      ([key, value]) =>
         isParticipantSimulatorOutputKey(key) &&
-        ![...hidden].some((outputKey) => key === outputKey || key.endsWith(`.${outputKey}`)),
+        ![...hidden].some((outputKey) => key === outputKey || key.endsWith(`.${outputKey}`)) &&
+        !isUnroutableSimulatorAwsUrl(value),
     ),
   );
 }

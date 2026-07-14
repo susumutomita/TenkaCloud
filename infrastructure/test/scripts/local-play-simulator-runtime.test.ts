@@ -1721,6 +1721,11 @@ describe("provider-neutral local runtime", () => {
         "aws-hello.SimulatorConsoleUrl":
           "http://127.0.0.1/console#token=namespaced-must-not-reach-api",
         "gcp-app.SimulatorGcpCredential": "namespaced-gcp-must-not-reach-api",
+        ParameterConsoleUrl:
+          "https://us-east-1.console.aws.amazon.com/systems-manager/parameters/local/hello",
+        StaleAlbUrl: "https://abc123.elb.us-east-1.amazonaws.com/",
+        StaleFunctionUrl: "https://fn123.lambda-url.us-east-1.on.aws/",
+        ExternalDocsUrl: "https://example.com/local-play-guide",
       },
     };
 
@@ -1746,6 +1751,13 @@ describe("provider-neutral local runtime", () => {
     expect(view.stackOutputs).not.toHaveProperty("SimulatorSakuraCredential");
     expect(view.stackOutputs).not.toHaveProperty("aws-hello.SimulatorConsoleUrl");
     expect(view.stackOutputs).not.toHaveProperty("gcp-app.SimulatorGcpCredential");
+    expect(view.stackOutputs).not.toHaveProperty("ParameterConsoleUrl");
+    expect(view.stackOutputs).not.toHaveProperty("StaleAlbUrl");
+    expect(view.stackOutputs).not.toHaveProperty("StaleFunctionUrl");
+    expect(view.stackOutputs.ExternalDocsUrl).toBe("https://example.com/local-play-guide");
+    expect(simulatedRuntime.deployment.outputs.ParameterConsoleUrl).toContain(
+      "console.aws.amazon.com",
+    );
     const serializedSession = readFileSync(options.sessionPath, "utf8");
     expect(serializedSession).not.toMatch(/launchSecret|launchToken|nativeCredentials|#token=/);
     expect(serializedSession).not.toMatch(/tcsim_[A-Za-z0-9_-]+/);

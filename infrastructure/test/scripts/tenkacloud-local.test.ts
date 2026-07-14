@@ -30,6 +30,7 @@ import {
 import {
   ensurePrivateLocalDirectory,
   persistStartedContainerUnit,
+  printRunningEndpoints,
   recordedApiIsHealthy,
   requiredLocalApiPort,
   shutdownLocalServe,
@@ -100,6 +101,38 @@ describe("detached serve port", () => {
     expect(requiredLocalApiPort("43199")).toBe(43199);
     expect(() => requiredLocalApiPort(undefined)).toThrow("LOCAL_API_PORT is required");
     expect(() => requiredLocalApiPort("0")).toThrow("between 1 and 65535");
+  });
+});
+
+describe("local endpoint presentation", () => {
+  it("should print only HTTP access URLs returned by the participant projection", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json({
+        problems: [
+          {
+            name: "Simulated app",
+            lifecycle: { status: "running", runtimeKind: "simulated-cloud" },
+            stackOutputs: {
+              AppUrl: "http://127.0.0.1:43199/",
+              DbEndpoint: "db.example.us-east-1.rds.amazonaws.com",
+              InstanceId: "i-local",
+            },
+          },
+        ],
+      }),
+    );
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      await printRunningEndpoints("http://127.0.0.1:41000", "participant-token");
+
+      expect(log).toHaveBeenCalledTimes(1);
+      expect(log).toHaveBeenCalledWith(
+        "Challenge — Simulated app (AppUrl): http://127.0.0.1:43199/",
+      );
+    } finally {
+      log.mockRestore();
+      fetchMock.mockRestore();
+    }
   });
 });
 
