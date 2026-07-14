@@ -14,6 +14,8 @@ export interface ProcessRunner {
       readonly inherit?: boolean;
       readonly cwd?: string;
       readonly env?: NodeJS.ProcessEnv;
+      /** Sensitive stdin is allowed here so credentials never need to appear in argv. */
+      readonly input?: string;
     },
   ) => ProcessResult;
 }
@@ -24,6 +26,7 @@ export const systemProcessRunner: ProcessRunner = {
       cwd: options.cwd,
       env: options.env,
       encoding: "utf8",
+      input: options.input,
       stdio: options.inherit ? "inherit" : "pipe",
     });
     return {
