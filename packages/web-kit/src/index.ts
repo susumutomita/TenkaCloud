@@ -13,6 +13,7 @@ export {
   BrandMark,
   type BrandMarkProps,
   brandColors,
+  createTenkaCloudTopNavigationIdentity,
   tenkaCloudAppIconDataUri,
 } from "./brand";
 export {

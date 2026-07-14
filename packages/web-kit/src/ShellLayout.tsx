@@ -20,7 +20,7 @@ import TopNavigation, {
   type TopNavigationProps,
 } from "@cloudscape-design/components/top-navigation";
 import type { ReactNode } from "react";
-import { tenkaCloudAppIconDataUri } from "./brand";
+import { createTenkaCloudTopNavigationIdentity } from "./brand";
 
 /** TopNav 右上に出すサインインユーザー menu (= application-admin-console の email dropdown)。 */
 export interface ShellUserMenu {
@@ -35,7 +35,7 @@ export interface ShellUserMenu {
 export interface ShellLayoutProps<L extends string> {
   /** AppLayout の content slot に描画する page 本体。 */
   readonly children: ReactNode;
-  /** TopNavigation identity の title。 省略時はアイコンのみ (= application-admin-console)。 */
+  /** TenkaCloud wordmark の後に表示する product title。省略時も brand lockup は表示する。 */
   readonly title?: string;
   /** SideNavigation header text (= メニュー見出し)。 */
   readonly navHeaderText: string;
@@ -118,11 +118,7 @@ export function ShellLayout<L extends string>({
   return (
     <>
       <TopNavigation
-        identity={{
-          href: "/",
-          ...(title ? { title } : {}),
-          logo: { src: tenkaCloudAppIconDataUri, alt: "TenkaCloud" },
-        }}
+        identity={createTenkaCloudTopNavigationIdentity(title)}
         utilities={
           isAuthenticated ? [localeUtility, userMenuUtility ?? signOutButton] : [localeUtility]
         }

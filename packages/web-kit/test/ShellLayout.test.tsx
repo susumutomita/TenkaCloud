@@ -6,7 +6,7 @@
  * dropdown を開いてから item を選ぶ。
  *
  * 検証観点:
- *   - title 有無 (admin-console は title あり / application-admin-console は icon のみ)
+ *   - TenkaCloud brand lockup + optional product title
  *   - 未認証時は locale switcher のみ、 認証時は sign-out (userMenu 無) / user menu (userMenu 有)
  *   - locale 切替が setLocale を呼ぶ / user menu の sign-out が onSignOut を呼ぶ
  *   - SideNavigation の internal link は preventDefault + onNavigate、 external link は素通し
@@ -16,6 +16,7 @@
 import createWrapper from "@cloudscape-design/components/test-utils/dom";
 import { fireEvent, render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { tenkaCloudAppIconDataUri } from "../src/brand";
 import { ShellLayout, type ShellLayoutProps } from "../src/ShellLayout";
 
 type Locale = "ja" | "en";
@@ -56,15 +57,15 @@ describe("ShellLayout", () => {
     expect(getByText("page-body")).toBeInTheDocument();
   });
 
-  it("should render the title when provided", () => {
+  it("should render the branded product title when provided", () => {
     const { topNav } = renderShell({ title: "Admin Console" });
-    expect(topNav.findTitle()?.getElement().textContent).toContain("Admin Console");
+    expect(topNav.findTitle()?.getElement()).toHaveTextContent("TenkaCloud · Admin Console");
   });
 
-  it("should render no title text when title is omitted (icon-only identity)", () => {
+  it("should render the TenkaCloud brand lockup when the product title is omitted", () => {
     const { topNav } = renderShell();
-    // title prop 無しでは identity に title 文字を出さない (= ブランドはアイコンが担う)。
-    expect(topNav.findTitle()?.getElement().textContent ?? "").toBe("");
+    expect(topNav.findTitle()?.getElement()).toHaveTextContent("TenkaCloud");
+    expect(topNav.findLogo()?.getElement()).toHaveAttribute("src", tenkaCloudAppIconDataUri);
   });
 
   it("should show only the locale switcher when unauthenticated", () => {

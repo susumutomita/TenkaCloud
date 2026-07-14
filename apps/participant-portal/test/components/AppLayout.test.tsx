@@ -411,6 +411,11 @@ beforeEach(() => {
 afterEach(() => vi.clearAllMocks());
 
 describe("ShellLayout", () => {
+  it("should render the shared TenkaCloud brand with the event title", () => {
+    renderShell();
+    expect(screen.getAllByText("TenkaCloud · Test event").length).toBeGreaterThan(0);
+  });
+
   it("should render children and the team profile when signed in", () => {
     renderShell();
     expect(screen.getByText("child-content")).toBeInTheDocument();

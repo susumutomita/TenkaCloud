@@ -9,7 +9,7 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import TopNavigation, {
   type TopNavigationProps,
 } from "@cloudscape-design/components/top-navigation";
-import { tenkaCloudAppIconDataUri } from "@tenkacloud/web-kit";
+import { createTenkaCloudTopNavigationIdentity } from "@tenkacloud/web-kit";
 import { type ReactNode, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router";
 import type { LeaderboardResponse, ParticipantTeamView } from "../api/portal-client";
@@ -354,13 +354,7 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
   return (
     <>
       <TopNavigation
-        identity={{
-          href: "/",
-          // ロゴが "TenkaCloud" ブランドを担うので title は event 名のみ。冗長な接頭辞を外し、
-          // TopNavigation の title 省略 (…) を避けてイベント名を出し切る。
-          title: config.eventTitle,
-          logo: { src: tenkaCloudAppIconDataUri, alt: "TenkaCloud" },
-        }}
+        identity={createTenkaCloudTopNavigationIdentity(config.eventTitle)}
         utilities={utilities}
       />
       <AppLayout
