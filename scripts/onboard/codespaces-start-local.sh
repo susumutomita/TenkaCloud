@@ -40,8 +40,11 @@ while [ "$attempt" -lt 60 ]; do
     tail -n 40 "$log" 2>/dev/null || true
     exit 1
   fi
-  if curl -sf -o /dev/null "$portal_url" 2>/dev/null; then
-    echo "TenkaCloud local play is up — the Participant Portal opens on port 5175 (no command needed)."
+  # Confirm the response is actually OUR portal (its <title>), not merely that
+  # SOMETHING answered on 5175 — a stale/foreign server, or a PID-reuse race on
+  # start_pid, could otherwise let readiness falsely succeed on the wrong process.
+  if curl -sf "$portal_url" 2>/dev/null | grep -q "TenkaCloud Participant Portal"; then
+    echo "TenkaCloud local play is up — the Participant Portal is serving on port 5175 (no command needed)."
     echo "Startup log: $log"
     exit 0
   fi

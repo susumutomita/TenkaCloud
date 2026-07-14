@@ -114,6 +114,12 @@ describe("scripts/onboard/codespaces-start-local.sh", () => {
     expect(startLocalScript).toContain("curl -sf");
     expect(startLocalScript).toMatch(/^\s*exit 1$/m);
   });
+
+  it("should confirm the response is our portal, not any process on 5175", () => {
+    // Readiness must not pass on a stale/foreign server (or a PID-reuse race) that
+    // merely answers on 5175 — verify the served <title> is the participant portal.
+    expect(startLocalScript).toMatch(/curl -sf .*\| grep -q "TenkaCloud Participant Portal"/);
+  });
 });
 
 describe("scripts/onboard/onboard-bootstrap.sh", () => {
