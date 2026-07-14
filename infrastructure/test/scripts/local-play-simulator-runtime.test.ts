@@ -341,6 +341,18 @@ describe("Simulator launch authorization", () => {
     await expect(client.capabilities()).rejects.toThrow("timed out after 10ms");
   });
 
+  it("should give synchronous world deletion its longer cleanup deadline", async () => {
+    const client = createSimulatorClient(
+      "http://127.0.0.1:7777",
+      () => new Promise<Response>(() => {}),
+      "launch-token",
+      5,
+      20,
+    );
+
+    await expect(client.deleteWorld("world")).rejects.toThrow("timed out after 20ms");
+  });
+
   it("should time out a Simulator response body that stalls after headers", async () => {
     const client = createSimulatorClient(
       "http://127.0.0.1:7777",
@@ -399,7 +411,7 @@ describe("Simulator launch authorization", () => {
       image: DEFAULT_SIMULATOR_IMAGE,
     });
     expect(DEFAULT_SIMULATOR_IMAGE).toBe(
-      "ghcr.io/susumutomita/tenkacloud-simulator@sha256:e4335a99d9b2aa86402bdcda1c65247073d76202dff7f671e429f8568bb8f8b8",
+      "ghcr.io/susumutomita/tenkacloud-simulator@sha256:049c6c165f9947b386b2c5864983aebefba26e996ec62859dae0e9814c52d505",
     );
   });
 
@@ -642,9 +654,9 @@ describe("Simulator launch authorization", () => {
       .split("\n")
       .map((line) => JSON.parse(line) as string[]);
     expect(calls).toEqual([
-      ["stop", beforeSpawn.intent.containerName],
+      ["stop", "--time", "5", beforeSpawn.intent.containerName],
       expect.arrayContaining(["run", "--name", afterSpawn.intent.containerName]),
-      ["stop", afterSpawn.intent.containerName],
+      ["stop", "--time", "5", afterSpawn.intent.containerName],
     ]);
     expect(existsSync(simulatorLaunchIntentPath(options.sessionPath))).toBe(false);
   });

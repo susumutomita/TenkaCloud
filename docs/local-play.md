@@ -83,7 +83,7 @@ secret. TenkaCloud signs a short-lived `tc_sim_v1` namespace token; browser
 console access receives it only as a URL fragment and it is never printed. The
 private native-CLI environment uses the token as a bearer credential. The default image
 is pinned to
-`ghcr.io/susumutomita/tenkacloud-simulator@sha256:e4335a99d9b2aa86402bdcda1c65247073d76202dff7f671e429f8568bb8f8b8`;
+`ghcr.io/susumutomita/tenkacloud-simulator@sha256:049c6c165f9947b386b2c5864983aebefba26e996ec62859dae0e9814c52d505`;
 an explicit command, image, or externally managed URL replaces that default,
 and configuring more than one explicit source fails before resource creation.
 

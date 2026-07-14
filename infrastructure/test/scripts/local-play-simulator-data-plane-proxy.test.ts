@@ -393,6 +393,19 @@ describe("local-play Simulator data-plane proxy", () => {
           { id: "sakura-app", provider: "sakura", engine: "apprun", entry: "app.json" },
         ],
       },
+      simulationOverlay: {
+        schemaVersion: "1",
+        workloads: [
+          {
+            id: "reviewed-app",
+            targetId: "sakura-app",
+            resourceRef: "BaseUrl",
+            image:
+              "ghcr.io/susumutomita/reviewed-app@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            containerPort: 8080,
+          },
+        ],
+      },
     };
     const targetOrigins: Readonly<Record<string, string>> = {
       "aws-app": "http://127.0.0.1:31991",
@@ -405,9 +418,11 @@ describe("local-play Simulator data-plane proxy", () => {
       {
         "aws-app.AlbUrl": "https://abc123.elb.us-east-1.amazonaws.com/search?q=1",
         "aws-app.FunctionUrl": "https://fn123.lambda-url.us-east-1.on.aws/",
-        "azure-app.ApplicationUrl": "https://aca123.azurecontainerapps.local/api",
+        "azure-app.ApplicationUrl": "https://container-app_aca123.azurecontainerapps.local/api",
         "gcp-app.ServiceUrl": "https://run123.run.gcp.local/health",
-        "sakura-app.ApplicationUrl": "https://app123.apprun.sakura.local/",
+        "sakura-app.ApplicationUrl": "https://app_123.apprun.sakura.local/",
+        "sakura-app.BaseUrl": "https://app_123.apprun.sakura.local/",
+        "sakura-app.Workload.reviewed-app.Endpoint": "http://127.0.0.1:32000",
         "aws-app.ExternalUrl": "https://example.com/search",
         "aws-app.DatabaseUrl": "https://db.rds.us-east-1.amazonaws.com/",
         "aws-app.ConsoleUrl": "http://127.0.0.1:7777/console/world",
@@ -423,6 +438,8 @@ describe("local-play Simulator data-plane proxy", () => {
       "azure-app.ApplicationUrl": "http://127.0.0.1:31992/api",
       "gcp-app.ServiceUrl": "http://127.0.0.1:31993/health",
       "sakura-app.ApplicationUrl": "http://127.0.0.1:31994/",
+      "sakura-app.BaseUrl": "http://127.0.0.1:32000/",
+      "sakura-app.Workload.reviewed-app.Endpoint": "http://127.0.0.1:32000",
       "aws-app.ExternalUrl": "https://example.com/search",
       "aws-app.DatabaseUrl": "https://db.rds.us-east-1.amazonaws.com/",
       "aws-app.ConsoleUrl": "http://127.0.0.1:7777/console/world",

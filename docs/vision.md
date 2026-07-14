@@ -52,7 +52,7 @@ surface and their own `/verify`. Cloud and Composite descriptors are delegated
 to a separate, version-pinned Simulator world, then surfaced through the same
 participant portal lifecycle. Cloud local play defaults to the reviewed,
 multi-platform OCI index
-`ghcr.io/susumutomita/tenkacloud-simulator@sha256:e4335a99d9b2aa86402bdcda1c65247073d76202dff7f671e429f8568bb8f8b8`;
+`ghcr.io/susumutomita/tenkacloud-simulator@sha256:049c6c165f9947b386b2c5864983aebefba26e996ec62859dae0e9814c52d505`;
 contributors can explicitly select another digest-pinned image, executable, or
 already-running loopback Simulator. Docker local play remains zero-configuration
 after prerequisites are installed. The current Docker

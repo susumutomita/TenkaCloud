@@ -29,7 +29,7 @@ const WORKLOAD_IMAGE_DIGEST =
 const WORKLOAD_PROXY_IMAGE =
   "busybox@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662";
 export const DEFAULT_SIMULATOR_IMAGE =
-  "ghcr.io/susumutomita/tenkacloud-simulator@sha256:e4335a99d9b2aa86402bdcda1c65247073d76202dff7f671e429f8568bb8f8b8";
+  "ghcr.io/susumutomita/tenkacloud-simulator@sha256:049c6c165f9947b386b2c5864983aebefba26e996ec62859dae0e9814c52d505";
 const DEFAULT_DOCKER_SOCKET = "/var/run/docker.sock";
 const LAUNCHER_STOP_TIMEOUT_MS = 5_000;
 const LAUNCH_REGISTRATION_TIMEOUT_MS = 3_000;
@@ -1017,10 +1017,12 @@ export async function stopSimulatorLauncher(
     releaseProcessLaunchFiles(launcher);
   }
   if (launcher.kind === "container" && launcher.containerName) {
+    const stopGraceSeconds = Math.max(1, Math.ceil(timeoutMs / 1_000));
+    const commandTimeoutMs = Math.min(timeoutMs + 5_000, 2_147_483_647);
     const result = spawnSync(
       dockerCli(env.TENKACLOUD_SIMULATOR_DOCKER_CLI),
-      ["stop", launcher.containerName],
-      { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 10_000 },
+      ["stop", "--time", String(stopGraceSeconds), launcher.containerName],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: commandTimeoutMs },
     );
     if (result.status !== 0 && !result.stderr.includes("No such container")) {
       throw new Error(`Simulator container failed to stop: ${result.stderr.trim()}`);

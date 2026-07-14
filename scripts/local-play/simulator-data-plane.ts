@@ -1,3 +1,4 @@
+import { parseLoopbackUrl } from "./loopback";
 import type { SimulatedCloudProblem } from "./simulator";
 import { type NativeTarget, nativeTargets } from "./simulator-native-environment";
 
@@ -8,9 +9,9 @@ const SYNTHETIC_HTTP_HOSTS: Readonly<
     /^[a-z0-9-]+\.elb\.[a-z0-9-]+\.amazonaws\.com$/,
     /^[a-z0-9-]+\.lambda-url\.[a-z0-9-]+\.on\.aws$/,
   ],
-  azure: [/^[a-z0-9-]+\.azurecontainerapps\.local$/],
+  azure: [/^[a-z0-9_-]+\.azurecontainerapps\.local$/],
   gcp: [/^[a-z0-9-]+\.run\.gcp\.local$/],
-  sakura: [/^[a-z0-9-]+\.apprun\.sakura\.local$/],
+  sakura: [/^[a-z0-9_-]+\.apprun\.sakura\.local$/],
 };
 
 function targetForOutput(problem: SimulatedCloudProblem, key: string): NativeTarget | undefined {
@@ -37,6 +38,37 @@ function syntheticProviderUrl(value: string, target: NativeTarget): URL | undefi
   }
   const patterns = SYNTHETIC_HTTP_HOSTS[target.provider];
   return patterns?.some((pattern) => pattern.test(url.hostname)) ? url : undefined;
+}
+
+function reviewedWorkloadOrigin(
+  problem: SimulatedCloudProblem,
+  outputs: Readonly<Record<string, string>>,
+  key: string,
+  target: NativeTarget,
+): URL | undefined {
+  const outputKey = "kind" in problem.runtime ? key.slice(`${target.targetId}.`.length) : key;
+  const workloads =
+    problem.simulationOverlay?.workloads?.filter(
+      (workload) => workload.targetId === target.targetId && workload.resourceRef === outputKey,
+    ) ?? [];
+  if (workloads.length !== 1) return undefined;
+  const workload = workloads[0];
+  if (!workload) return undefined;
+  const endpointKey =
+    "kind" in problem.runtime
+      ? `${target.targetId}.Workload.${workload.id}.Endpoint`
+      : `Workload.${workload.id}.Endpoint`;
+  const endpoint = outputs[endpointKey];
+  if (!endpoint) return undefined;
+  try {
+    const url = parseLoopbackUrl(endpoint, "reviewed Simulator workload endpoint");
+    if (url.username || url.password || url.pathname !== "/" || url.search || url.hash) {
+      return undefined;
+    }
+    return url;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -68,7 +100,9 @@ export function rewriteSimulatorDataPlaneOutputs(
       const target = targetForOutput(problem, key);
       const providerUrl = target ? syntheticProviderUrl(value, target) : undefined;
       if (!target || !providerUrl) return [key, value];
-      const base = validatedBase(targetOrigin(target.targetId));
+      const base =
+        reviewedWorkloadOrigin(problem, outputs, key, target) ??
+        validatedBase(targetOrigin(target.targetId));
       return [key, new URL(`${providerUrl.pathname}${providerUrl.search}`, base).toString()];
     }),
   );

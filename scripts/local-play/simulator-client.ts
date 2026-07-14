@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { SimulationOverlayDocument } from "./simulator";
 
 const DEFAULT_SIMULATOR_REQUEST_TIMEOUT_MS = 10_000;
+const DEFAULT_SIMULATOR_DELETE_TIMEOUT_MS = 600_000;
 const MAX_SIMULATOR_RESPONSE_BYTES = 1_000_000;
 
 /** The pinned TenkaCloud Simulator protocol version consumed by this repo. */
@@ -238,10 +239,17 @@ export function createSimulatorClient(
   baseUrl: string,
   fetchFn: typeof fetch = fetch,
   launchToken?: string,
-  requestTimeoutMs = DEFAULT_SIMULATOR_REQUEST_TIMEOUT_MS,
+  requestTimeoutMs?: number,
+  deleteTimeoutMs?: number,
 ) {
-  if (!Number.isSafeInteger(requestTimeoutMs) || requestTimeoutMs < 1) {
+  const requestDeadlineMs = requestTimeoutMs ?? DEFAULT_SIMULATOR_REQUEST_TIMEOUT_MS;
+  const deleteDeadlineMs =
+    deleteTimeoutMs ?? requestTimeoutMs ?? DEFAULT_SIMULATOR_DELETE_TIMEOUT_MS;
+  if (!Number.isSafeInteger(requestDeadlineMs) || requestDeadlineMs < 1) {
     throw new Error("Simulator request timeout must be a positive safe integer");
+  }
+  if (!Number.isSafeInteger(deleteDeadlineMs) || deleteDeadlineMs < 1) {
+    throw new Error("Simulator delete timeout must be a positive safe integer");
   }
   const base = baseUrl.replace(/\/$/, "");
   const protocolHeaders: Record<string, string> = {
@@ -257,8 +265,11 @@ export function createSimulatorClient(
       ...protocolHeaders,
     };
   };
-  const timedFetch = (url: string, init?: RequestInit): Promise<Response> =>
-    boundedFetch(fetchFn, url, init, requestTimeoutMs);
+  const timedFetch = (
+    url: string,
+    init?: RequestInit,
+    timeoutMs = requestDeadlineMs,
+  ): Promise<Response> => boundedFetch(fetchFn, url, init, timeoutMs);
   return {
     async capabilities(): Promise<SimulatorCapabilities> {
       return parseJson<SimulatorCapabilities>(
@@ -326,10 +337,14 @@ export function createSimulatorClient(
       );
     },
     async deleteWorld(worldId: string): Promise<void> {
-      const response = await timedFetch(`${base}/v1/worlds/${encodeURIComponent(worldId)}`, {
-        method: "DELETE",
-        headers: authenticatedHeaders(),
-      });
+      const response = await timedFetch(
+        `${base}/v1/worlds/${encodeURIComponent(worldId)}`,
+        {
+          method: "DELETE",
+          headers: authenticatedHeaders(),
+        },
+        deleteDeadlineMs,
+      );
       if (!response.ok && response.status !== StatusCodes.NOT_FOUND) {
         throw new Error(`delete world failed (HTTP ${response.status})`);
       }
