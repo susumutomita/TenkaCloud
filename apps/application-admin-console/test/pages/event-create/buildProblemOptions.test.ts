@@ -69,4 +69,22 @@ describe("buildProblemOptions", () => {
     );
     expect(opts.map((o) => Boolean(o.disabled))).toEqual([false, true, true]);
   });
+
+  it("should make a composite option selectable only when every target is enabled", () => {
+    const composite = {
+      id: "multi",
+      name: "Problem multi",
+      runtime: {
+        kind: "composite" as const,
+        targets: [
+          { id: "aws", provider: "aws", engine: "cloudformation" },
+          { id: "gcp", provider: "gcp", engine: "infra-manager" },
+          { id: "azure", provider: "azure", engine: "bicep" },
+        ],
+      },
+    };
+
+    expect(buildProblemOptions([composite], "近日対応", FLAG_OFF)[0]?.disabled).toBe(true);
+    expect(buildProblemOptions([composite], "近日対応", FLAG_ON)[0]?.disabled).toBeUndefined();
+  });
 });

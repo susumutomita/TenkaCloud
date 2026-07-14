@@ -21,6 +21,7 @@ export {
   isProviderSelectable,
   metadataToDetail,
   NON_AWS_SELECTABLE_PROVIDERS,
+  runtimeProviders,
 } from "./problem-mapping";
 
 export type {
@@ -29,6 +30,7 @@ export type {
   ProblemCostResourceSummary,
   ProblemDetail,
   ProblemMetadata,
+  ProblemRuntimeSummary,
   ProblemStatus,
   ProblemSummary,
 } from "./problem-types";
@@ -53,7 +55,10 @@ function findTemplateYaml(
 ): string | undefined {
   // cfnTemplate は SCHEMA 必須 (= validate-problems が保証) なので `?? "template.yaml"` の
   // 最終 fallback は不到達。 dead branch を残さない (coverage gate / simplify)。
-  const templateName = metadata.runtime?.entry ?? metadata.cfnTemplate;
+  const templateName =
+    metadata.runtime && !("kind" in metadata.runtime)
+      ? (metadata.runtime.entry ?? metadata.cfnTemplate)
+      : metadata.cfnTemplate;
   const templatePath = metadataPath.replace(/metadata\.json$/, templateName);
   return modules[templatePath];
 }

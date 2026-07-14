@@ -19,6 +19,22 @@ export interface ProblemCostEstimateSummary {
   readonly resourceTypes: readonly string[];
 }
 
+export interface ProblemSingleRuntimeSummary {
+  readonly provider: string;
+  readonly engine: string;
+}
+
+export interface ProblemCompositeRuntimeTargetSummary extends ProblemSingleRuntimeSummary {
+  readonly id: string;
+}
+
+export type ProblemRuntimeSummary =
+  | ProblemSingleRuntimeSummary
+  | {
+      readonly kind: "composite";
+      readonly targets: readonly ProblemCompositeRuntimeTargetSummary[];
+    };
+
 export interface ProblemSummary {
   id: string;
   name: string;
@@ -45,7 +61,7 @@ export interface ProblemSummary {
    */
   supportedRegions?: readonly string[];
   /** ADR-026 / ADR-027: 問題が deploy される cloud (provider) と engine。 未宣言は aws/cloudformation。 */
-  runtime: { readonly provider: string; readonly engine: string };
+  runtime: ProblemRuntimeSummary;
   /**
    * Issue #1776: `metadata.json` の `scoring.kind` (ADR-012 の 5 builtin kind:
    * flag / uptime-flat / uptime-multi / phased-polling / attack-detection)。
@@ -99,7 +115,17 @@ export interface ProblemMetadata {
   cfnTemplate: string;
   cfnParameters?: Record<string, string>;
   /** ADR-026 / ADR-027: 問題の実行環境 (provider/engine)。 未宣言は aws/cloudformation 既定。 */
-  runtime?: { provider?: string; engine?: string; entry?: string };
+  runtime?:
+    | { provider?: string; engine?: string; entry?: string }
+    | {
+        kind: "composite";
+        targets: {
+          id: string;
+          provider: string;
+          engine: string;
+          entry: string;
+        }[];
+      };
   /**
    * ADR-012: scoring 宣言。 UI が使うのは `kind` のみ (kind は schema 上 scoring 内で必須)。
    * 配点詳細 (points / flagOutputKey 等) は backend の責務なので型として持たない。

@@ -105,6 +105,19 @@ beforeEach(() => {
       name: "AWS Problem",
       runtime: { provider: "aws", engine: "cloudformation" },
     }),
+    problem({
+      id: "pcm1",
+      name: "Composite Problem",
+      runtime: {
+        kind: "composite",
+        targets: [
+          { id: "aws", provider: "aws", engine: "cloudformation" },
+          { id: "gcp", provider: "gcp", engine: "infra-manager" },
+          { id: "azure", provider: "azure", engine: "bicep" },
+          { id: "sakura", provider: "sakura", engine: "apprun" },
+        ],
+      },
+    }),
   ]);
   mockLoader.mockReturnValue({
     competitorAccounts: [account],
@@ -150,5 +163,31 @@ describe("EventCreatePage non-AWS flow (#2563)", () => {
     ms?.selectOptionByValue("pa1");
     expect(screen.getByText("event_create.mixed_provider_error")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "event_create.submit" })).toBeDisabled();
+  });
+
+  it("should submit both AWS and non-AWS bindings for a composite event", async () => {
+    const { container } = renderPage();
+    w(container).findAllInputs()[1]?.setInputValue("1");
+    w(container).findAllInputs()[0]?.setInputValue("Composite Event");
+    const ms = problemSelect(container);
+    ms?.openDropdown();
+    ms?.selectOptionByValue("pcm1");
+
+    expect(screen.getByText("event_create.col_aws_account")).toBeInTheDocument();
+    expect(screen.getAllByText("event_create.col_non_aws_credential")).toHaveLength(3);
+    const accountSelect = w(container).findAllSelects()[0];
+    accountSelect?.openDropdown();
+    accountSelect?.selectOptionByValue(account.awsAccountId, { expandToViewport: true });
+
+    fireEvent.click(screen.getByRole("button", { name: "event_create.submit" }));
+    await waitFor(() => expect(mockCreate).toHaveBeenCalled());
+    expect(mockCreate.mock.calls[0]?.[1].teams).toEqual([
+      {
+        internalSlug: "team-1",
+        awsAccountId: account.awsAccountId,
+        nonAwsCredentialTeamSlug: "team-1",
+      },
+    ]);
+    expect(screen.queryByTestId("deploy-prompt-now")).not.toBeInTheDocument();
   });
 });

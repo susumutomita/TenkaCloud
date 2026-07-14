@@ -36,6 +36,7 @@
 import {
   isExecutableProblemRuntime,
   isLocalOnlyProblemRuntime,
+  metadataRuntimeToSummary,
   metadataToDetail,
 } from "./problem-mapping";
 import type { ProblemDetail, ProblemMetadata } from "./problem-types";
@@ -72,12 +73,7 @@ export interface EffectiveCatalogInput {
  * every other runtime the template body is dropped before {@link metadataToDetail}
  * sees it, guaranteeing the cost analyzer is never invoked on a non-AWS artifact.
  */
-function runtimeOf(metadata: ProblemMetadata): { provider: string; engine: string } {
-  return {
-    provider: metadata.runtime?.provider ?? "aws",
-    engine: metadata.runtime?.engine ?? "cloudformation",
-  };
-}
+const runtimeOf = metadataRuntimeToSummary;
 
 function templateForCost(
   metadata: ProblemMetadata,

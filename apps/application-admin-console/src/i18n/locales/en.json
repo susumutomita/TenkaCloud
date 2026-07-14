@@ -249,7 +249,7 @@
     "go_to_competitor_accounts": "Go to Competitor Accounts",
     "no_verified_body": "Before creating an Event, add AWS Accounts on the Competitor Accounts page and verify the connection. Accounts that have not been verified cannot be deployed to. After verifying in another tab, click Reload to refresh.",
     "teams_header": "Teams ({count})",
-    "teams_description": "Select each team's deploy target AWS Account (only verified accounts are shown). A team's internal ID cannot be changed after deploy.",
+    "teams_description": "Choose each team's deploy destination for every selected problem target. AWS uses a verified account; non-AWS targets use a team credential slug registered under Competitor Accounts. A team's internal ID cannot be changed after deploy.",
     "teams_empty": "Set team count to at least 1.",
     "col_internal_slug": "Internal ID",
     "col_aws_account": "AWS Account ID (verified)",

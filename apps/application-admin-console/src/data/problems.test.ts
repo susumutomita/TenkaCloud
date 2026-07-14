@@ -194,6 +194,38 @@ describe("buildCoreInputs (#2093 core glob projection)", () => {
     );
     expect(inputs).toEqual([{ metadata: metadata({ id: "a" }), templateYaml: "Resources: {}" }]);
   });
+
+  it("should resolve a composite problem's root CloudFormation template", () => {
+    const composite = metadata({
+      id: "multi",
+      runtime: {
+        kind: "composite",
+        targets: [
+          { id: "aws", provider: "aws", engine: "cloudformation", entry: "template.yaml" },
+          { id: "gcp", provider: "gcp", engine: "infra-manager", entry: "gcp/main.tf" },
+        ],
+      },
+    });
+    const inputs = buildCoreInputs(
+      { "../../../../problems/challenges/multi/metadata.json": { default: composite } },
+      { "../../../../problems/challenges/multi/template.yaml": "Resources: {}" },
+    );
+
+    expect(inputs[0]?.templateYaml).toBe("Resources: {}");
+  });
+
+  it("should use cfnTemplate when a single runtime omits entry", () => {
+    const withoutEntry = metadata({
+      id: "gcp",
+      runtime: { provider: "gcp", engine: "infra-manager" },
+    });
+    const inputs = buildCoreInputs(
+      { "../../../../problems/challenges/gcp/metadata.json": { default: withoutEntry } },
+      { "../../../../problems/challenges/gcp/template.yaml": "Resources: {}" },
+    );
+
+    expect(inputs[0]?.templateYaml).toBe("Resources: {}");
+  });
 });
 
 describe("findPackManifest (#2093 snapshot provenance lookup)", () => {

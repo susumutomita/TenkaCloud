@@ -12,7 +12,7 @@ import { canMutateTenant, useApiClient } from "../api/client";
 import { bulkDeployEvent, createEvent } from "../api/events-client";
 import type { AppConfig } from "../config";
 import { DEFAULT_AWS_REGION } from "../data/aws-regions";
-import { listProblemSummaries } from "../data/problems";
+import { listProblemSummaries, type ProblemSummary, runtimeProviders } from "../data/problems";
 import { useT } from "../i18n";
 import { filterVerifiedAccounts } from "../lib/competitor-accounts-filter";
 import { EventCreateAccountsAlerts } from "./event-create/EventCreateAccountsAlerts";
@@ -46,6 +46,21 @@ export {
   resolveRegionOptions,
   validateTeamRows,
 } from "./event-create/helpers";
+
+function newProblemRow(meta: ProblemSummary, problemId: string): ProblemRow {
+  const runtimeFields =
+    "provider" in meta.runtime
+      ? { runtimeProvider: meta.runtime.provider }
+      : { composite: true, runtimeProviders: runtimeProviders(meta.runtime) };
+  return {
+    problemId,
+    problemName: meta.name,
+    defaultRegion: meta.defaultRegion ?? DEFAULT_AWS_REGION.code,
+    ...runtimeFields,
+    ...(meta.costEstimate ? { costEstimate: meta.costEstimate } : {}),
+    ...(meta.supportedRegions ? { supportedRegions: meta.supportedRegions } : {}),
+  };
+}
 
 /**
  * Event 作成 form。
@@ -129,23 +144,10 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
             const existing = byId.get(opt.value);
             if (existing) return existing;
             const meta = allProblems.find((p) => p.id === opt.value);
-            return {
-              problemId: opt.value,
-              // option は problemOptions (= allProblems 由来) なので meta は必ず見つかる。
-              // = meta?. の null 側 / ?? opt.value は不到達 (防御)。
-              /* v8 ignore next */
-              problemName: meta?.name ?? opt.value,
-              // Issue #1201: 問題 metadata の defaultRegion を初期値に採用 (= 全 event
-              // が ap-northeast-1 に集中するのを防ぐ)。 未宣言なら従来通り
-              // DEFAULT_AWS_REGION にフォールバック。 operator は wizard で override 可能。
-              defaultRegion: meta?.defaultRegion ?? DEFAULT_AWS_REGION.code,
-              // runtime は ProblemSummary 上必須 (未宣言は aws/cloudformation に正規化済み)
-              // なので ?? の右辺は meta 欠落 (上と同じ不到達防御) のみ。
-              /* v8 ignore next */
-              runtimeProvider: meta?.runtime.provider ?? "aws",
-              ...(meta?.costEstimate ? { costEstimate: meta.costEstimate } : {}),
-              ...(meta?.supportedRegions ? { supportedRegions: meta.supportedRegions } : {}),
-            };
+            // selected options are built from this exact catalog, so a miss is unreachable.
+            /* v8 ignore next */
+            if (!meta) throw new Error(`selected problem is missing from catalog: ${opt.value}`);
+            return newProblemRow(meta, opt.value);
           });
       });
     },
@@ -200,9 +202,14 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
         name,
         teams: teamRows.map((tr) => ({
           internalSlug: tr.internalSlug,
-          ...(providerMode.kind === "aws"
+          ...(providerMode.kind === "aws" ||
+          (providerMode.kind === "composite" && providerMode.providers.includes("aws"))
             ? { awsAccountId: tr.awsAccountId }
-            : { nonAwsCredentialTeamSlug: tr.nonAwsCredentialTeamSlug }),
+            : {}),
+          ...(providerMode.kind === "nonAws" ||
+          (providerMode.kind === "composite" && providerMode.providers.some((p) => p !== "aws"))
+            ? { nonAwsCredentialTeamSlug: tr.nonAwsCredentialTeamSlug }
+            : {}),
         })),
         problems: problemRows.map((r) => ({
           problemId: r.problemId,
@@ -320,7 +327,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
         visible={deployPromptTarget !== null}
         canMutateTenant={canMutate}
         deployStarting={deployStarting}
-        bulkDeploySupported={providerMode.kind !== "nonAws"}
+        bulkDeploySupported={providerMode.kind === "aws"}
         onDeployNow={() => void handleDeployNow()}
         onDeployLater={handleDeployLater}
       />
