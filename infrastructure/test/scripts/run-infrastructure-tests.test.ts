@@ -97,9 +97,9 @@ describe("infrastructure test runner (#1551)", () => {
   });
 });
 
-// Issue #2515: existing cdk.out.test visibility. Existing data can belong to a parallel run or
-// an interrupted run, so the runner reports it but never assumes that it is safe to delete.
-describe("existing cdk.out.test visibility (#2515)", () => {
+// Issue #2515: existing cdk.out/test-synth visibility. Existing data can belong to a parallel run
+// or an interrupted run, so the runner reports it but never assumes that it is safe to delete.
+describe("existing cdk.out/test-synth visibility (#2515)", () => {
   it("should compute the recursive size of a directory tree", () => {
     const root = mkdtempSync(join(tmpdir(), "tenkacloud-du-"));
     tempDirs.push(root);
@@ -116,7 +116,7 @@ describe("existing cdk.out.test visibility (#2515)", () => {
 
   it("should format the existing-dir message with a top-level entry count", () => {
     expect(formatExistingCdkOutdirMessage(2)).toBe(
-      "found 2 existing cdk.out.test entries — active parallel, interrupted, or direct run",
+      "found 2 existing cdk.out/test-synth entries — active parallel, interrupted, or direct run",
     );
   });
 
@@ -128,7 +128,9 @@ describe("existing cdk.out.test visibility (#2515)", () => {
 
     reportExistingCdkTestOutdir(root);
 
-    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("existing cdk.out.test entries"));
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.stringContaining("existing cdk.out/test-synth entries"),
+    );
     logSpy.mockRestore();
   });
 

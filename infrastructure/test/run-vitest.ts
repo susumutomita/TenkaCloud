@@ -12,10 +12,15 @@ import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { CDK_TEST_RUN_ID_ENV, CDK_TEST_RUN_ID_PATTERN } from "./cdk-test-outdir-contract";
 
+// Under `cdk.out/` (see test/setup.ts) so a leftover run dir is covered by the
+// existing `cdk.out` excludes in tsconfig.json / vitest.config.ts and never
+// type-checked by the build. The purge below only ever removes `run-<pid>-*`
+// children of this root, so nesting under `cdk.out` cannot touch deploy synth.
 export const CDK_TEST_OUTDIR = resolve(
   dirname(fileURLToPath(import.meta.url)),
   "..",
-  "cdk.out.test",
+  "cdk.out",
+  "test-synth",
 );
 
 function validateCdkTestOutdirRoot(root: string, create: boolean): boolean {
@@ -89,7 +94,7 @@ export function directorySizeBytes(path: string): number {
 }
 
 export function formatExistingCdkOutdirMessage(entryCount: number): string {
-  return `found ${entryCount} existing cdk.out.test entries — active parallel, interrupted, or direct run`;
+  return `found ${entryCount} existing cdk.out/test-synth entries — active parallel, interrupted, or direct run`;
 }
 
 // Visibility only: existing data may belong to an active parallel run, so never delete it here.

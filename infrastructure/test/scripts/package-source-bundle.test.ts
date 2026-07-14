@@ -25,7 +25,7 @@ function makeFixture(): { root: string; workDir: string } {
     JSON.stringify({ name: "fixture", workspaces: ["infrastructure", "packages/*"] }),
   );
   write(root, "infrastructure/lib/index.ts");
-  write(root, "infrastructure/cdk.out.test/worker/large-generated-file");
+  write(root, "infrastructure/cdk.out/test-synth/worker/large-generated-file");
   write(root, "infrastructure/coverage/lcov.info");
   write(root, "scripts/runtime.sh");
   write(root, "problems/challenges/demo/metadata.json", "{}");

@@ -8,13 +8,20 @@
 // the repo keeps output owned by this package. VITEST_WORKER_ID is unique only
 // inside one Vitest invocation, so test/run-vitest.ts supplies a unique run ID
 // and purges only that invocation's directory.
+//
+// The path lives *under* `cdk.out/` (a `cdk.out/test-synth/` subtree) on purpose:
+// `infrastructure/tsconfig.json` and `vitest.config.ts` both already exclude
+// `cdk.out`, and the source bundle excludes `cdk.out*`. Keeping test synth under
+// that umbrella means a leftover run dir can never be type-checked by the build's
+// `tsc` (no `include`, so it globs everything else) — the failure mode that broke
+// `make deploy` when this dir was the sibling `cdk.out.test/`.
 import { join, resolve } from "node:path";
 import { resolveCdkTestRunId, resolveVitestWorkerId } from "./cdk-test-outdir-contract";
 
 const runId = resolveCdkTestRunId();
 const workerId = resolveVitestWorkerId();
 
-process.env.CDK_OUTDIR = join(resolve(__dirname, ".."), "cdk.out.test", runId, workerId);
+process.env.CDK_OUTDIR = join(resolve(__dirname, ".."), "cdk.out", "test-synth", runId, workerId);
 
 // Issue #2515: skip real esbuild asset bundling for every CDK stack synthed in the test suite.
 // aws-cdk-lib's `App` constructor unconditionally merges `CDK_CONTEXT_JSON` (cxapi.CONTEXT_ENV)

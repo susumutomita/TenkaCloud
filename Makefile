@@ -52,7 +52,7 @@ test-coverage: ; bun run test:coverage
 # sanity check before `make before-commit`, not a substitute for it.
 test-scripts:  ; bun run --filter '@TenkaCloud/infrastructure' test test/scripts
 # Issues #1295 / #1551: vitest setup pins CDK_OUTDIR to the repo-local
-# infrastructure/cdk.out.test/<run>/<worker>. The wrapper purges only its own successful run;
+# infrastructure/cdk.out/test-synth/<run>/<worker>. The wrapper purges only its own successful run;
 # interrupted, failed, and direct invocations are preserved and reported for manual inspection.
 # 依存パッケージの lifecycle script 監査 (mini Shai-Hulud 2nd 対策)。 CI が走らせる。
 audit-deps:    ; bun run audit:dependencies
