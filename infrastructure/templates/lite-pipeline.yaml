@@ -86,6 +86,38 @@ Parameters:
       Optional CDK_PARAM_DEPLOY_EXTERNAL_ID for AssumeRole into competitor accounts
       (problem deploy backend). Leave empty for a local-only Lite trial.
 
+  ControlDataBackend:
+    Type: String
+    Default: dynamodb
+    AllowedValues:
+      - dynamodb
+      - turso
+      - sql
+      - turso-mirror
+      - sql-mirror
+    Description: >-
+      Control-plane data backend (CDK_PARAM_CONTROL_DATA_BACKEND). `dynamodb` (default)
+      keeps every table on DynamoDB. `turso`/`sql` is the pure-SQL zero-cost backend —
+      CDK synthesizes ZERO DynamoDB tables — and requires TursoDatabaseUrl +
+      TursoAuthTokenParameterName. `turso-mirror`/`sql-mirror` keeps DynamoDB canonical
+      while mirroring writes into SQL (migration bridge). See docs/running-costs.md.
+
+  TursoDatabaseUrl:
+    Type: String
+    Default: ""
+    Description: >-
+      Turso libsql:// database URL (from `turso db show <db> --url`). Required when
+      ControlDataBackend is turso/sql/turso-mirror/sql-mirror; leave empty for dynamodb.
+
+  TursoAuthTokenParameterName:
+    Type: String
+    Default: ""
+    Description: >-
+      SSM Parameter Store name (SecureString) holding the Turso auth token — create it
+      first, e.g. `aws ssm put-parameter --name /TenkaCloud/development/turso/auth-token
+      --type SecureString --value <token>`. Required for a non-dynamodb backend. The
+      deploy Lambda reads it at runtime; CodeBuild only forwards the name.
+
   BunVersion:
     Type: String
     Default: 1.3.11
@@ -145,6 +177,15 @@ Resources:
           - Name: DEPLOY_EXTERNAL_ID
             Value: !If [HasExternalId, !Ref DeployExternalId, ""]
             Type: PLAINTEXT
+          - Name: CONTROL_DATA_BACKEND
+            Value: !Ref ControlDataBackend
+            Type: PLAINTEXT
+          - Name: TURSO_DATABASE_URL
+            Value: !Ref TursoDatabaseUrl
+            Type: PLAINTEXT
+          - Name: TURSO_AUTH_TOKEN_PARAMETER_NAME
+            Value: !Ref TursoAuthTokenParameterName
+            Type: PLAINTEXT
           - Name: BUN_VERSION
             Value: !Ref BunVersion
             Type: PLAINTEXT
@@ -191,6 +232,14 @@ Resources:
                     echo "AWS_REGION=${AWS_REGION}"
                     if [ -n "${DEPLOY_EXTERNAL_ID}" ]; then
                       echo "CDK_PARAM_DEPLOY_EXTERNAL_ID=${DEPLOY_EXTERNAL_ID}"
+                    fi
+                    # Zero-cost Turso backend (docs/running-costs.md). Only emit the
+                    # CDK_PARAM_* when a non-DynamoDB backend is chosen; env-check-lite
+                    # then enforces that the URL + token-parameter-name are both set.
+                    if [ "${CONTROL_DATA_BACKEND}" != "dynamodb" ]; then
+                      echo "CDK_PARAM_CONTROL_DATA_BACKEND=${CONTROL_DATA_BACKEND}"
+                      echo "CDK_PARAM_TURSO_DATABASE_URL=${TURSO_DATABASE_URL}"
+                      echo "CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME=${TURSO_AUTH_TOKEN_PARAMETER_NAME}"
                     fi
                   } > "${ENV_DIR}/.env"
                 - echo "Wrote ${ENV_DIR}/.env (TENANT_ADMIN_EMAIL / AWS_ACCOUNT_ID / AWS_REGION)"
