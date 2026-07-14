@@ -54,11 +54,12 @@ describe("TenkaCloud CLI (#2633)", () => {
     expect(deps.processRunner.run).not.toHaveBeenCalled();
   });
 
-  it("should offer the official macOS Turso install when the CLI is missing", async () => {
+  it("should install the pinned official Turso binary when the CLI is missing", async () => {
     const run = vi
       .fn()
       .mockReturnValueOnce({ status: 1, stdout: "", stderr: "not found" })
-      .mockReturnValueOnce({ status: 0, stdout: "", stderr: "" })
+      .mockReturnValueOnce({ status: 1, stdout: "", stderr: "not found" })
+      .mockReturnValueOnce({ status: 0, stdout: "turso 1.0.29", stderr: "" })
       .mockReturnValueOnce({ status: 0, stdout: "susumu", stderr: "" });
 
     const confirm = vi
@@ -66,6 +67,7 @@ describe("TenkaCloud CLI (#2633)", () => {
       .mockResolvedValueOnce(true)
       .mockResolvedValueOnce(false);
 
+    const installTursoCli = vi.fn(() => "/home/test/.turso/turso");
     await expect(
       runTursoLiveCommand(
         [],
@@ -75,15 +77,43 @@ describe("TenkaCloud CLI (#2633)", () => {
           processRunner: { run },
           interactive: true,
           platform: "darwin",
+          architecture: "arm64",
+          homeDirectory: "/home/test",
+          installTursoCli,
           confirm,
           prompt: vi.fn(async () => ""),
           log: vi.fn(),
         },
       ),
     ).resolves.toBe(1);
-    expect(run).toHaveBeenCalledWith("brew", ["install", "tursodatabase/tap/turso"], {
-      inherit: true,
-    });
+    expect(installTursoCli).toHaveBeenCalledOnce();
+    expect(run.mock.calls.some(([command]) => command === "brew")).toBe(false);
+  });
+
+  it("should give CodeBuild a non-interactive token path without mutating the image", async () => {
+    const run = vi.fn(() => ({ status: 1, stdout: "", stderr: "not found" }));
+    const log = vi.fn();
+
+    await expect(
+      runTursoLiveCommand(
+        [],
+        { CI: "true", CODEBUILD_BUILD_ID: "build:1" },
+        {
+          repoRoot: "/repo",
+          processRunner: { run },
+          interactive: false,
+          platform: "linux",
+          architecture: "x64",
+          homeDirectory: "/home/codebuild",
+          installTursoCli: vi.fn(() => "/home/codebuild/.turso/turso"),
+          confirm: vi.fn(async () => false),
+          prompt: vi.fn(async () => ""),
+          log,
+        },
+      ),
+    ).resolves.toBe(1);
+    expect(run).not.toHaveBeenCalled();
+    expect(log.mock.calls.flat().join("\n")).toContain("TURSO_API_TOKEN");
   });
 
   it("should require an exact interactive confirmation before a live deploy", async () => {
@@ -102,6 +132,9 @@ describe("TenkaCloud CLI (#2633)", () => {
       processRunner: { run },
       interactive: true,
       platform: "darwin" as const,
+      architecture: "arm64" as const,
+      homeDirectory: "/home/test",
+      installTursoCli: vi.fn(() => "/home/test/.turso/turso"),
       confirm: vi.fn(async () => true),
       log: vi.fn(),
     };
