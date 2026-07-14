@@ -358,6 +358,16 @@ local-evaluate:
 	fi
 	@bun run scripts/tenkacloud-local.ts evaluate "$(FLAG)"
 
+# E2E smoke: start one local-play problem, assert every container reaches a
+# healthy / one-shot-complete state, then tear it down. Runnable before a commit
+# and in CI to catch a problem whose containers fail to start (broken compose,
+# wrong image, an unhealthy service, or a full Docker VM disk). Preflights the VM
+# disk so a full disk is reported plainly instead of a cryptic 502 start_failed.
+# Defaults to a light single-container problem; override with PROBLEM=<id>.
+local-smoke:
+	@$(MAKE) ensure-deps
+	@PROBLEM="$(PROBLEM)" bun run scripts/local-play/local-smoke.ts
+
 # ===== Problem deploy smoke test =====
 # 引数に問題フォルダを取り、順次 CFn deploy する開発者向け smoke test ツール。
 # SaaS 配線 (Step Functions / EventBridge / tenant API / Cognito) を持ち込まず、
