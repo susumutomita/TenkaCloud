@@ -1,10 +1,11 @@
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
-const PREPARE_SCRIPT = resolve(__dirname, "..", "..", "..", "scripts", "prepare-source-bundle.sh");
+const SCRIPT_DIR = resolve(__dirname, "..", "..", "..", "scripts");
+const PREPARE_SCRIPT = join(SCRIPT_DIR, "prepare-source-bundle.sh");
 
 const tempDirs: string[] = [];
 
@@ -68,6 +69,30 @@ afterEach(() => {
 
 // bash + aws CLI shim を spawn する実 I/O テスト。全 suite 並列時は fork 飽和で
 // default 5s を超え flake するため、明示 timeout を持つ (package-source-bundle と同型)。
+// The resolve-only seam (PREPARE_SOURCE_BUNDLE_RESOLVE_ONLY=1) exits before the
+// deploy steps run, so the resolution tests never exercise the `bun run` / `bash`
+// helper invocations further down. This static guard catches a moved helper (e.g.
+// #2566 relocated print-source-bundle-lifecycle.ts into scripts/ops/) whose
+// ${SCRIPT_DIR}-relative reference here was not updated — the exact break that
+// failed the CodeBuild Lite deploy.
+describe("scripts/prepare-source-bundle.sh helper references", () => {
+  it("should reference helper scripts that exist on disk", () => {
+    const script = readFileSync(PREPARE_SCRIPT, "utf8");
+    const referenced = [...script.matchAll(/\$\{SCRIPT_DIR\}\/(\S+?\.(?:ts|sh))/g)].map(
+      (match) => match[1],
+    );
+
+    // The script does invoke ${SCRIPT_DIR}-relative helpers; guard against a
+    // regex that silently matches nothing.
+    expect(referenced.length).toBeGreaterThan(0);
+    for (const relativePath of referenced) {
+      expect(existsSync(join(SCRIPT_DIR, relativePath)), `missing helper: ${relativePath}`).toBe(
+        true,
+      );
+    }
+  });
+});
+
 describe("scripts/prepare-source-bundle.sh region resolution", { timeout: 30_000 }, () => {
   it("should resolve region from AWS_REGION when no aws config profile exists", () => {
     // Reproduces the CodeBuild Lite-deploy failure: AWS_REGION is injected by the
