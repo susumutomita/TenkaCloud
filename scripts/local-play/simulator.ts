@@ -549,3 +549,36 @@ export function loadSimulatedCloudProblems(
     };
   });
 }
+
+/**
+ * [Issue #2632] The multicloud Simulator problems (Issue #2631) are still being
+ * brought up to catalog quality — endpoint URLs, access instructions, and problem
+ * framing are inconsistent — so they are gated OFF by default. Opt in per session
+ * with `TENKACLOUD_LOCAL_SIMULATOR=1 make local`. The value is parsed strictly
+ * (only `1` / `true`, case- and whitespace-insensitive) so a stray truthy-looking
+ * string cannot silently surface half-ready problems.
+ */
+export function isSimulatorEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  const raw = (env.TENKACLOUD_LOCAL_SIMULATOR ?? "").trim().toLowerCase();
+  return raw === "1" || raw === "true";
+}
+
+/**
+ * Gated accessor for the loadable simulated-cloud catalog. Returns an empty
+ * catalog unless {@link isSimulatorEnabled}, so `make local` neither lists,
+ * wires, nor serves Simulator problems by default.
+ */
+export function enabledSimulatedCloudProblems(
+  roots: readonly string[],
+  env: NodeJS.ProcessEnv = process.env,
+): readonly SimulatedCloudProblem[] {
+  return isSimulatorEnabled(env) ? loadSimulatedCloudProblems(roots) : [];
+}
+
+/** Gated accessor for simulated-cloud catalog summaries (mirror of {@link enabledSimulatedCloudProblems}). */
+export function enabledSimulatedCloudSummaries(
+  roots: readonly string[],
+  env: NodeJS.ProcessEnv = process.env,
+): readonly SimulatedCloudProblemSummary[] {
+  return isSimulatorEnabled(env) ? listSimulatedCloudProblems(roots) : [];
+}

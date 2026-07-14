@@ -6,6 +6,9 @@ import { describe, expect, it } from "vitest";
 import {
   buildSimulatorCapabilityReport,
   createSimulatorClient,
+  enabledSimulatedCloudProblems,
+  enabledSimulatedCloudSummaries,
+  isSimulatorEnabled,
   isSimulatorRuntime,
   listSimulatedCloudProblems,
   SIMULATOR_PROTOCOL_VERSION,
@@ -192,5 +195,50 @@ describe("local-play simulator catalog scanner", () => {
         entry: "local/docker-compose.yml",
       }),
     ).toBe(false);
+  });
+});
+
+describe("simulated-cloud feature flag (default off, Issue #2632)", () => {
+  it("should be disabled by default when the flag is unset", () => {
+    expect(isSimulatorEnabled({})).toBe(false);
+  });
+
+  it("should stay disabled for falsy or unrelated flag values", () => {
+    for (const raw of ["", "0", "false", "no", "off", "yes", "enable"]) {
+      expect(isSimulatorEnabled({ TENKACLOUD_LOCAL_SIMULATOR: raw })).toBe(false);
+    }
+  });
+
+  it("should enable only for an explicit 1 / true opt-in, tolerating case and whitespace", () => {
+    for (const raw of ["1", "true", "TRUE", "  true  ", "True"]) {
+      expect(isSimulatorEnabled({ TENKACLOUD_LOCAL_SIMULATOR: raw })).toBe(true);
+    }
+  });
+
+  it("should hide catalog summaries of existing simulated problems while the flag is off", () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-sim-flag-"));
+    writeProblem(root, "aws-iam", {
+      name: "AWS IAM",
+      runtime: { provider: "aws", engine: "cloudformation", entry: "template.yaml" },
+    });
+    // The problem exists on disk...
+    expect(listSimulatedCloudProblems([root])).toHaveLength(1);
+    // ...but the gated accessor hides it when the flag is unset.
+    expect(enabledSimulatedCloudSummaries([root], {})).toEqual([]);
+    // ...and surfaces it once the operator opts in.
+    expect(
+      enabledSimulatedCloudSummaries([root], { TENKACLOUD_LOCAL_SIMULATOR: "1" }),
+    ).toHaveLength(1);
+  });
+
+  it("should return no loadable simulated problems while the flag is off", () => {
+    const root = mkdtempSync(join(tmpdir(), "tc-sim-flag-"));
+    writeProblem(root, "aws-iam", {
+      name: "AWS IAM",
+      runtime: { provider: "aws", engine: "cloudformation", entry: "template.yaml" },
+    });
+    expect(enabledSimulatedCloudProblems([root], {})).toEqual([]);
+    // With the flag on, the accessor delegates to the real loader (empty roots => empty catalog).
+    expect(enabledSimulatedCloudProblems([], { TENKACLOUD_LOCAL_SIMULATOR: "1" })).toEqual([]);
   });
 });

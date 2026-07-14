@@ -12,6 +12,12 @@ cloud runtime is never silently converted to Docker or sent to a real cloud.
 The boundary is recorded in
 [ADR-051](./architecture/adr-051-local-multicloud-simulator.html).
 
+> **Simulator (cloud / Composite) problems are experimental and hidden by
+> default (Issue #2632).** Their endpoint URLs, access instructions, and problem
+> framing are still being brought up to catalog quality, so `tenkacloud local` neither
+> lists nor serves them unless you opt in with `TENKACLOUD_LOCAL_SIMULATOR=1`.
+> Docker drill problems are unaffected and remain on by default.
+
 ## How it works
 
 ```
@@ -19,7 +25,7 @@ tenkacloud local [--problem <id>] [--database sqlite|turso]
   ├─ local scoring API    scripts/local-play (reuses the portal contract)
   │     • a flag submission is forwarded to the container's /verify
   │     • the verdict is recorded (score / leaderboard / hints / score events)
-  │     • PROBLEM=<id> pre-starts a container; otherwise containers start on demand
+  │     • --problem <id> pre-starts a runtime; otherwise runtimes start on demand
   ├─ Docker Compose up    the selected problem container (loopback only)
   │     • per-deploy random secret (FLAG_SEED, …) injected as env
   │     • the container serves the challenge surface AND POST /verify
@@ -76,20 +82,25 @@ The token is read from the environment; the CLI has no token-valued argument
 and never writes it to `.env` or the SQLite database. Local runtime imports do
 not cross into the AWS SDK-backed Lambda repository adapters.
 
-Cloud problems use the reviewed, immutable Simulator image by default:
+Simulator (cloud / Composite) problems are hidden by default; enable them
+with `TENKACLOUD_LOCAL_SIMULATOR=1` (see the note above). When enabled, cloud
+problems use the reviewed, immutable Simulator image by default:
 
 ```bash
-tenkacloud local --problem hello-world
+TENKACLOUD_LOCAL_SIMULATOR=1 tenkacloud local --problem hello-world
 
 # Override the pinned default with another reviewed immutable build:
+TENKACLOUD_LOCAL_SIMULATOR=1 \
 TENKACLOUD_SIMULATOR_IMAGE='ghcr.io/susumutomita/tenkacloud-simulator@sha256:<64-hex>' \
   tenkacloud local --problem hello-world
 
 # Simulator contributors may instead point to a real executable process:
+TENKACLOUD_LOCAL_SIMULATOR=1 \
 TENKACLOUD_SIMULATOR_COMMAND='/absolute/path/to/tenkacloud-simulator' \
   tenkacloud local --problem hello-world
 
 # Or connect to an already-running loopback instance:
+TENKACLOUD_LOCAL_SIMULATOR=1 \
 TENKACLOUD_SIMULATOR_URL='http://127.0.0.1:42123' \
 TENKACLOUD_SIMULATOR_LAUNCH_SECRET='<base64url-32-byte-secret>' \
   tenkacloud local --problem hello-world
