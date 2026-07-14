@@ -12,6 +12,12 @@ cloud runtime is never silently converted to Docker or sent to a real cloud.
 The boundary is recorded in
 [ADR-051](./architecture/adr-051-local-multicloud-simulator.html).
 
+> **Simulator (cloud / Composite) problems are experimental and hidden by
+> default (Issue #2632).** Their endpoint URLs, access instructions, and problem
+> framing are still being brought up to catalog quality, so `make local` neither
+> lists nor serves them unless you opt in with `TENKACLOUD_LOCAL_SIMULATOR=1`.
+> Docker drill problems are unaffected and remain on by default.
+
 ## How it works
 
 ```
@@ -58,10 +64,12 @@ make local-evaluate FLAG='TC{…}'  # submit a flag from the CLI
 make local-down                   # stop everything and restore runtime-config
 ```
 
-Cloud problems use the reviewed, immutable Simulator image by default:
+Simulator (cloud / Composite) problems are hidden by default; enable them
+with `TENKACLOUD_LOCAL_SIMULATOR=1` (see the note above). When enabled, cloud
+problems use the reviewed, immutable Simulator image by default:
 
 ```bash
-make local PROBLEM=hello-world
+TENKACLOUD_LOCAL_SIMULATOR=1 make local PROBLEM=hello-world
 
 # Override the pinned default with another reviewed immutable build:
 TENKACLOUD_SIMULATOR_IMAGE='ghcr.io/susumutomita/tenkacloud-simulator@sha256:<64-hex>' \

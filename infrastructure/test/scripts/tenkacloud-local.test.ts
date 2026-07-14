@@ -27,11 +27,6 @@ import {
   openPrivateAppendLog,
   resolveComposeCli,
 } from "../../../scripts/local-play/docker-adapter";
-import { observeProcessIdentity } from "../../../scripts/local-play/process-identity";
-import {
-  reclaimStaleSession,
-  stopRecordedProcess,
-} from "../../../scripts/local-play/session-state";
 import {
   ensurePrivateLocalDirectory,
   persistStartedContainerUnit,
@@ -40,7 +35,12 @@ import {
   shutdownLocalServe,
   stopPersistedContainerUnit,
   waitForServeProcessExit,
-} from "../../../scripts/tenkacloud-local";
+} from "../../../scripts/local-play/local-runtime-support";
+import { observeProcessIdentity } from "../../../scripts/local-play/process-identity";
+import {
+  reclaimStaleSession,
+  stopRecordedProcess,
+} from "../../../scripts/local-play/session-state";
 
 function deferred(): { readonly promise: Promise<void>; readonly resolve: () => void } {
   let resolve = (): void => {};
