@@ -13,7 +13,7 @@ export JSII_DEPRECATED := quiet
         fix fix-md fix-text fix-format format \
         harness harness-test tech-debt \
         pack-init pack-validate pack-install pack-activate pack-deactivate pack-list \
-        env-check env-check-lite env-init \
+        env-check env-check-lite env-init turso-live-guide turso-live-preflight turso-live-verify-cfn \
         deploy deploy-saas destroy destroy-saas \
         deploy-battles destroy-battles \
         deploy-always-on-command destroy-always-on-command synth-always-on-command \
@@ -207,7 +207,7 @@ env-check-lite:
 			if [ -n "$${missing}" ]; then \
 				echo "ERROR: CDK_PARAM_CONTROL_DATA_BACKEND=$${CDK_PARAM_CONTROL_DATA_BACKEND} には以下が $(ENV_FILE) に必要です:"; \
 				for v in $${missing}; do echo "       $${v}"; done; \
-				echo "       docs/running-costs.md の \"Opt in to the zero-cost profile\" 手順を参照してください"; \
+				echo "       make turso-live-guide ENV=$(ENV) で初回ライブ検証の全手順を確認してください"; \
 				exit 1; \
 			fi \
 			;; \
@@ -218,6 +218,18 @@ env-check-lite:
 # infrastructure/environments/$(ENV)/.env を生成する。 既存 .env があれば skip。
 env-init:
 	@ENV=$(ENV) bun run scripts/ops/env-init.ts
+
+# Issue #2617: Turso pure-SQL profile の初回 live E2E を「資料を探す」状態から、1 本の
+# discoverable な導線へまとめる。guide は副作用なし、preflight / verify-cfn は AWS read-only。
+# deploy / destroy は意図的に内包しない (= live resource mutation は operator が明示実行)。
+turso-live-guide:
+	@ENV=$(ENV) bun run scripts/ops/turso-live-guide.ts guide
+
+turso-live-preflight: env-check-lite
+	@ENV=$(ENV) bun run scripts/ops/turso-live-guide.ts preflight
+
+turso-live-verify-cfn:
+	@ENV=$(ENV) bun run scripts/ops/turso-live-guide.ts verify-cloudformation
 
 # Issue #955: デフォルトの make deploy は Lite (= single-tenant) mode。
 # 大半の利用者は 1 人 1 大会の主催で multi-tenant 抽象 (= SBT ControlPlane / tenant pipeline /

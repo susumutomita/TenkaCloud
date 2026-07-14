@@ -2,7 +2,7 @@
 
 This is the full detail behind the [README's Running costs summary](../README.md#running-costs): what each profile costs, the opt-in walkthrough for the zero-cost profile, the migration path for an existing stack, measured numbers, and what has and has not been live-verified.
 
-> **Before you opt in — not yet live-verified.** Every claim on this page is implemented and covered by CDK-synth and repository-seam unit tests, but nobody has run `make deploy` with `CONTROL_DATA_BACKEND=turso` against a fresh AWS account and a real Turso database and read the resulting AWS bill yet. See [Live-verification status](#live-verification-status) at the bottom of this page before relying on the zero-cost profile for a real event.
+> **Before you opt in — not yet live-verified.** Every claim on this page is implemented and covered by CDK-synth and repository-seam unit tests, but nobody has run `make deploy` with `CONTROL_DATA_BACKEND=turso` against a fresh AWS account and a real Turso database and read the resulting AWS bill yet. See [Live-verification status](#live-verification-status) at the bottom of this page before relying on the zero-cost profile for a real event. **Start here for Issue #2617:** run `make turso-live-guide ENV=development`. It prints the complete Japanese step-by-step path, including the competitor-account bootstrap and SAML CRUD checks that are easy to miss in the short opt-in instructions below. The command itself has no cloud side effects.
 
 ## The two profiles
 
@@ -25,11 +25,11 @@ The steps below are for a **fresh** stack. See [Migrating an existing stack](#mi
 
    ```bash
    turso db create tenkacloud-lite
-   turso db show tenkacloud-lite --url
+   turso db show tenkacloud-lite --http-url
    turso db tokens create tenkacloud-lite
    ```
 
-   `db show --url` prints something like `libsql://tenkacloud-lite-<organization>.turso.io`; keep the token from `db tokens create` for the next step.
+   `db show --http-url` prints something like `https://tenkacloud-lite-<organization>.turso.io`. The Lambda uses the HTTP-only libSQL client, so the live runbook standardizes on the provider's HTTP URL and removes URL protocol conversion from the experiment. Keep the token from `db tokens create` for the next step.
 
 2. **Store the token in SSM as a `SecureString`** — never write it into `.env`:
 
@@ -44,11 +44,177 @@ The steps below are for a **fresh** stack. See [Migrating an existing stack](#mi
 
    ```bash
    CDK_PARAM_CONTROL_DATA_BACKEND=turso
-   CDK_PARAM_TURSO_DATABASE_URL=libsql://tenkacloud-lite-<organization>.turso.io
+   CDK_PARAM_TURSO_DATABASE_URL=https://tenkacloud-lite-<organization>.turso.io
    CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME=/TenkaCloud/development/turso/auth-token
    ```
 
 4. **`make deploy`.** CDK skips synthesizing all eight DynamoDB tables listed above; the first Lambda cold start creates the SQL schema on the Turso database for you (no manual migration step). `env-check-lite` (the gate `make deploy` runs first) validates that both `CDK_PARAM_TURSO_DATABASE_URL` and `CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME` are set whenever `CDK_PARAM_CONTROL_DATA_BACKEND` is `turso`/`sql`/`turso-mirror`/`sql-mirror`, so a missing value fails immediately instead of after a full SPA build or, worse, at the deploy Lambda's first cold start.
+
+## First live E2E verification runbook
+
+This is the source of truth for Issue #2617. It is deliberately more explicit than the four-step opt-in path: a successful `make deploy` alone does not prove that all eight repositories, cross-account problem deployment, participant scoring, and SAML IdP CRUD work against a real Turso database.
+
+### 0. Use a fresh environment
+
+Use a fresh Lite stack with no control data to migrate. Do not point this runbook at an existing `dynamodb` deployment: those tables have `RemovalPolicy.RETAIN`, so a direct switch would orphan still-billing tables. Existing deployments must use [Migrating an existing stack](#migrating-an-existing-stack).
+
+Choose the environment once and pass it to every command. The examples use `development`:
+
+```bash
+make turso-live-guide ENV=development
+```
+
+For `staging` or another environment, the guide prints the matching `.env` path, SSM path, and suffixed CloudFormation stack names.
+
+### 1. Confirm identities and install the CLIs
+
+You need Bun dependencies installed, an authenticated AWS CLI, and an authenticated Turso CLI. Do not proceed until `aws sts get-caller-identity` shows the account named by `AWS_ACCOUNT_ID` in the selected `.env`.
+
+```bash
+bun install --frozen-lockfile --ignore-scripts
+aws sts get-caller-identity
+turso auth login
+```
+
+The current Turso CLI installation and login commands are linked from the [Turso CLI introduction](https://docs.turso.tech/cli/introduction). This runbook never asks you to put either an AWS credential or a Turso token in the repository.
+
+### 2. Create the Turso database and secret
+
+Create a database and copy its HTTP URL. Generate a full-access database token because schema initialization and every CRUD flow write rows.
+
+```bash
+turso db create tenkacloud-lite
+turso db show tenkacloud-lite --http-url
+turso db tokens create tenkacloud-lite
+```
+
+Put the token in SSM `SecureString` in the same AWS region as the Lite deployment. Reading it into a shell variable keeps the token itself out of shell history; clear the variable immediately afterward.
+
+```bash
+read -rs TURSO_TOKEN
+aws ssm put-parameter \
+  --name /TenkaCloud/development/turso/auth-token \
+  --type SecureString \
+  --value "$TURSO_TOKEN" \
+  --region ap-northeast-1
+unset TURSO_TOKEN
+```
+
+Do not paste the token into `.env`, an Issue comment, a screenshot, or the live-evidence record.
+
+### 3. Configure the selected `.env`
+
+Create `infrastructure/environments/development/.env` with `make env-init` if it does not exist, then set the following public wiring values:
+
+```bash
+CDK_PARAM_CONTROL_DATA_BACKEND=turso
+CDK_PARAM_TURSO_DATABASE_URL=https://tenkacloud-lite-<organization>.turso.io
+CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME=/TenkaCloud/development/turso/auth-token
+CDK_PARAM_FEATURES={"samlSso":true}
+```
+
+The `samlSso` override is part of this verification, not an unrelated product setting. The Identity providers page is experimental and hidden by default, so omitting it makes the SAML acceptance check impossible even though the backend Lambda exists.
+
+Also verify that `AWS_ACCOUNT_ID`, `AWS_REGION`, and `TENANT_ADMIN_EMAIL` contain real values. Never commit `.env`.
+
+### 4. Run the read-only preflight
+
+```bash
+make turso-live-preflight ENV=development
+```
+
+The preflight fails unless the exact pure backend (`turso`) and the SAML verification flag are selected. It checks the active AWS account, region, and SSM parameter type. The SSM call uses `describe-parameters`, not `get-parameter`; it proves that a `SecureString` exists without requesting the token value.
+
+Stop here on any red line. The output names the value or identity to fix.
+
+### 5. Deploy explicitly
+
+This is the first state-changing step. It bootstraps CDK, uploads the source bundle, and creates or updates AWS resources, so review the selected account and region again before running it.
+
+```bash
+make deploy ENV=development
+```
+
+Save the full terminal output. A green command satisfies only the deploy portion of the acceptance criteria; continue through every step below.
+
+### 6. Prove the deployed stacks contain zero DynamoDB tables
+
+```bash
+make turso-live-verify-cfn ENV=development
+```
+
+This read-only target resolves the same stack names as the deploy CLI, checks both stack states, and counts deployed `AWS::DynamoDB::Table` resources with `aws cloudformation list-stack-resources`. For `development`, the targets are `tenkacloud-lite` and `tenkacloud-lite-problem-deploy`. The result must end with both of these lines:
+
+```text
+✓ DynamoDB tables: 0
+✓ CloudFormation acceptance passed
+```
+
+Do not substitute a local synth result here. The Issue acceptance criterion is the deployed CloudFormation state.
+
+### 7. Exercise the live data path in order
+
+Open the Application Admin Console URL printed by `make deploy` and sign in with the Cognito invitation sent to `TENANT_ADMIN_EMAIL`.
+
+1. Open **Events**. The first real request cold-starts the Lambda and runs `initializeControlDataSchema`; record any error before retrying.
+2. Open **Competitor Accounts**, choose **Add account**, and save the one-time ExternalId plus Launch Stack URL.
+3. In the disposable competitor AWS account, create the bootstrap stack from that link. Return to TenkaCloud and choose **Verify**. The detailed manual alternative is in [`infrastructure/templates/README.md`](../infrastructure/templates/README.md).
+4. Create one Event with one team and select catalog problems `hello-world` plus `hello-world-battle`. The first is the minimal answer-submission path; the second currently declares overridable endpoints and the bounded `frontend-down` disruption. Choose **Deploy now** and wait for both deployments to reach a successful terminal state. If either ID is absent in a future catalog, select the documented replacement with the same two contracts rather than skipping the check.
+5. Copy the team login key from the deployment hand-off and open the Participant Portal URL. Sign in with that key.
+6. Follow that problem's catalog `README`/`OPERATOR.md`, submit its expected answer, and wait for scoring. Confirm the Participant Portal score and the Application Admin Console scoreboard agree.
+7. For the Battle, register an endpoint override, update it, and clear it again. Confirm each server response is reflected in the portal. This explicitly exercises ProblemEndpoints CRUD instead of merely reading an empty endpoint list.
+8. In the Event's **Disruptions** tab, fire one declared manual disruption at the test team and confirm it appears in the fire history. Use the Battle's `OPERATOR.md` to reverse any physical effect afterward.
+9. Open **Audit log** and confirm the earlier `create_competitor_account` action is present. This proves the AdminAuditLog write and tenant-scoped read paths, rather than inferring them from the account appearing in a different repository.
+10. Open **Identity providers**. With a disposable real SAML IdP, complete create → list → edit → delete. The form prints the exact ACS URL and SP identifier; do not use fabricated metadata that the Cognito API would reject.
+
+The mapping from each SQL repository to observable evidence is explicit:
+
+| Repository | Live evidence |
+| --- | --- |
+| Events | Event create and subsequent read |
+| Teams | The created team and participant login-key lookup |
+| Deployments | Challenge/Battle deployment terminal state and scoring update |
+| ProblemEndpoints | Endpoint override create/update/delete |
+| CompetitorAccounts | Account add and live AssumeRole verification |
+| Disruptions | Manual fire and history read |
+| AdminAuditLog | `create_competitor_account` visible in Audit log |
+| SamlIdps | IdP create/list/edit/delete |
+
+Afterward, inspect CloudWatch for the involved Lambdas and record whether any schema, libSQL HTTP, SSM, or SQL error occurred. The full event-day operational checks remain in [`docs/operations/event-runbook.md`](./operations/event-runbook.md).
+
+### 8. Capture evidence and check billing later
+
+Copy the template below into the Issue or a PR description while the run is fresh. Redact account IDs if required by your disclosure policy, and always redact the SSM token and team login key.
+
+```text
+Live E2E date/time (UTC):
+Git commit:
+AWS account (redacted if needed) / region:
+Turso database region/group:
+make turso-live-preflight: PASS/FAIL
+make deploy: PASS/FAIL (duration):
+tenkacloud-lite status / DDB count:
+tenkacloud-lite-problem-deploy status / DDB count:
+Event create:
+Competitor Account add + Verify:
+Challenge + Battle deploy:
+Participant login:
+Scoring result:
+ProblemEndpoints create/update/delete:
+Disruption fire/history/reversal:
+AdminAuditLog write/read:
+SAML IdP create/list/edit/delete:
+CloudWatch errors:
+Turso usage immediately after run:
+AWS Cost Explorer date checked / DynamoDB usage and cost:
+Unexpected behavior and follow-up Issue:
+```
+
+Cost Explorer data can lag behind the deployment. Record the functional run immediately, then add a dated follow-up after AWS usage and cost data has settled. Credits showing an invoice total of `$0` are not proof that DynamoDB usage was zero; the CloudFormation resource count and the DynamoDB service usage line are separate evidence.
+
+### 9. Tear down deliberately
+
+After saving evidence, delete the problem stack in the competitor account, remove the competitor bootstrap stack, and then run `make destroy ENV=development` if the entire Lite environment is disposable. Destruction is intentionally not part of any `turso-live-*` helper: each deletion must be reviewed by the operator who owns the accounts.
 
 ## Migrating an existing stack
 
