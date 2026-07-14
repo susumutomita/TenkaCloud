@@ -16,7 +16,7 @@ import {
   noopKindResult,
   type ProbeFn,
   probeUrl,
-} from "../shared.js";
+} from "../scoring-kernel.js";
 import { scoreCounterDelta } from "./attack-counter.js";
 
 type SlotResolver = (slotName: string) => string | undefined;

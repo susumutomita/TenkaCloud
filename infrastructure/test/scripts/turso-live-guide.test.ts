@@ -27,17 +27,17 @@ describe("scripts/ops/turso-live-guide (#2617)", () => {
     const guide = renderTursoLiveGuide("development");
 
     expect(guide).toContain("#2617 Turso 初回ライブ E2E 検証ガイド");
-    expect(guide).toContain("make turso-live-preflight ENV=development");
-    expect(guide).toContain("make deploy ENV=development");
-    expect(guide).toContain("make turso-live-verify-cfn ENV=development");
+    expect(guide).toContain("ENV=development tenkacloud turso-live preflight");
+    expect(guide).toContain("ENV=development tenkacloud turso-live deploy");
+    expect(guide).toContain("ENV=development tenkacloud turso-live verify-cloudformation");
     expect(guide).toContain("Competitor Accounts");
     expect(guide).toContain("Identity providers");
     expect(guide).toContain("ProblemEndpoints");
     expect(guide).toContain("Disruptions");
     expect(guide).toContain("監査ログ");
     expect(guide).toContain("docs/running-costs.md");
-    expect(guide.indexOf("事前確認")).toBeLessThan(guide.indexOf("make deploy ENV=development"));
-    expect(guide.indexOf("make deploy ENV=development")).toBeLessThan(
+    expect(guide.indexOf("事前確認")).toBeLessThan(guide.indexOf("tenkacloud turso-live deploy"));
+    expect(guide.indexOf("tenkacloud turso-live deploy")).toBeLessThan(
       guide.indexOf("8. Application Admin Console で主要フロー"),
     );
   });
@@ -185,10 +185,10 @@ describe("scripts/ops/turso-live-guide (#2617)", () => {
     expect(makefile).toContain("turso-live-guide:");
     expect(makefile).toContain("turso-live-preflight:");
     expect(makefile).toContain("turso-live-verify-cfn:");
-    expect(makefile).toContain("make turso-live-guide ENV=$(ENV)");
-    expect(readme).toContain("make turso-live-guide");
-    expect(readmeJa).toContain("make turso-live-guide");
+    expect(makefile).toContain("bun run tenkacloud turso-live guide");
+    expect(readme).toContain("tenkacloud turso-live");
+    expect(readmeJa).toContain("tenkacloud turso-live");
     expect(runningCosts).toContain("## First live E2E verification runbook");
-    expect(envExample).toContain("make turso-live-guide");
+    expect(envExample).toContain("tenkacloud turso-live");
   });
 });

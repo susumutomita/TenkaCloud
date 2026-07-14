@@ -69,6 +69,12 @@ describe("shutdownLocalServe", () => {
       closeSimulator: async () => {
         events.push("simulator-closed");
       },
+      persistState: async () => {
+        events.push("state-persisted");
+      },
+      closeStateStore: async () => {
+        events.push("state-store-closed");
+      },
     });
 
     await Promise.resolve();
@@ -81,8 +87,10 @@ describe("shutdownLocalServe", () => {
     expect(events).toEqual([
       "server-close-started",
       "scoring-settled",
+      "state-persisted",
       "lifecycle-stopped",
       "simulator-closed",
+      "state-store-closed",
     ]);
   });
 });

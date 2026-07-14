@@ -27,8 +27,9 @@ lives:
 | `destroy-battles.sh` | `make destroy-battles` | Operator-side Battle teardown wrapper |
 | `package-source-bundle.sh` | CodeBuild (problem deploy) | Build the problem source bundle artifact |
 | `prepare-source-bundle.sh` | `tenkacloud-lite.ts`, docs | Stage the source bundle S3 object |
+| `tenkacloud.ts` | `tenkacloud` / `bun run tenkacloud` | Unified local, doctor, and Turso live-verification CLI |
 | `tenkacloud-lite.ts` | `make deploy` / `make destroy` | Lite mode (ADR-016) up/down CLI |
-| `tenkacloud-local.ts` | `make local-*` | Docker local-play CLI (no AWS) |
+| `tenkacloud-local.ts` | `tenkacloud local` / `make local-*` | Internal Docker local-play commands (no AWS) |
 | `tenkacloud-onboard.ts` | `make doctor` / `make onboard` | Toolchain doctor + first-run onboarding CLI |
 
 ## Subdirectories — domain tooling
@@ -41,6 +42,7 @@ lives:
 | `onboard/` | First-run onboarding helpers behind `tenkacloud-onboard.ts`: `diagnose.ts`, `plan.ts`, `report.ts`, `onboard-bootstrap.sh`, `codespaces-setup.sh` (devcontainer `postCreateCommand`) |
 | `ops/` | Operator utilities for a running deployment: `env-init.ts` (`make env-check` wizard), `turso-live-guide.ts` (`make turso-live-guide` / read-only preflight and CFn verification), `scale-event-capacity.ts` + `capacity-model.ts` (DDB capacity), `disruption-live-fire.ts`, `report-retained-tables.ts` (used by `cleanup.sh`), `participant-portal-runtime-config.ts` (`make dev` mock config), `print-source-bundle-lifecycle.ts` |
 | `local-play/` | Modules behind `tenkacloud-local.ts` (container runner, manifest, readiness, scoring API) |
+| `cli/` | Unified CLI command adapters and process boundary behind `tenkacloud.ts` |
 | `lib/` | Shared helpers for the top-level shell scripts and `ops/` CLIs (`battles-common.sh`, `names.sh`, capacity/disruption/retained-tables logic) |
 
 ## Related directories (not scripts)

@@ -221,15 +221,15 @@ env-init:
 
 # Issue #2617: Turso pure-SQL profile の初回 live E2E を「資料を探す」状態から、1 本の
 # discoverable な導線へまとめる。guide は副作用なし、preflight / verify-cfn は AWS read-only。
-# deploy / destroy は意図的に内包しない (= live resource mutation は operator が明示実行)。
+# deploy は CLI 側で exact confirmation を要求し、destroy は意図的に内包しない。
 turso-live-guide:
-	@ENV=$(ENV) bun run scripts/ops/turso-live-guide.ts guide
+	@ENV=$(ENV) bun run tenkacloud turso-live guide
 
 turso-live-preflight: env-check-lite
-	@ENV=$(ENV) bun run scripts/ops/turso-live-guide.ts preflight
+	@ENV=$(ENV) bun run tenkacloud turso-live preflight
 
 turso-live-verify-cfn:
-	@ENV=$(ENV) bun run scripts/ops/turso-live-guide.ts verify-cloudformation
+	@ENV=$(ENV) bun run tenkacloud turso-live verify-cloudformation
 
 # Issue #955: デフォルトの make deploy は Lite (= single-tenant) mode。
 # 大半の利用者は 1 人 1 大会の主催で multi-tenant 抽象 (= SBT ControlPlane / tenant pipeline /
@@ -297,7 +297,7 @@ doctor:
 	  echo "Bun is required for diagnostics."; \
 	  echo "  Install: (macOS) brew install oven-sh/bun/bun   (Linux) curl -fsSL https://bun.sh/install | bash"; \
 	  exit 1; }
-	@bun run scripts/tenkacloud-onboard.ts doctor
+	@bun run tenkacloud doctor
 
 # Issue #2119: optional guided setup. This is the only local-play target that
 # offers to trust mise, install Bun, initialize the problems/ submodule, or help
@@ -321,82 +321,59 @@ ensure-deps:
 # Issue #2054 / #2392 / #2511: start the detached local scoring API, then the
 # browser portal. `local-up` remains the API-only escape hatch for scripts.
 local:
-	@$(MAKE) ensure-deps
-	@set -e; \
-	problem="$(PROBLEM)"; \
-	if bun run scripts/tenkacloud-local.ts status >/dev/null 2>&1; then \
-	  if [ -n "$$problem" ]; then \
-	    echo "Local play is already running; ignoring PROBLEM=$$problem. Run 'make local-down' first to restart with a pre-started problem."; \
-	  else \
-	    echo "Local play is already running; opening Participant Portal."; \
-	  fi; \
-	else \
-	  if [ -n "$$problem" ]; then \
-	    echo "Pre-starting PROBLEM=$$problem. Run 'make local-list' to see other local-play problems."; \
-	  else \
-	    echo "Starting local play. Problems start on demand from the browser portal."; \
-	  fi; \
-	  $(MAKE) local-up PROBLEM="$$problem" LOCAL_API_PORT="$(LOCAL_API_PORT)"; \
-	fi; \
-	$(MAKE) local-portal
+	@bun run tenkacloud local $(if $(PROBLEM),--problem "$(PROBLEM)",) $(if $(LOCAL_API_PORT),--api-port "$(LOCAL_API_PORT)",)
 
 local-up:
-	@PROBLEM="$(PROBLEM)" LOCAL_API_PORT="$(LOCAL_API_PORT)" bun run scripts/tenkacloud-local.ts up "$(PROBLEM)"
+	@bun run tenkacloud local up $(if $(PROBLEM),--problem "$(PROBLEM)",) $(if $(LOCAL_API_PORT),--api-port "$(LOCAL_API_PORT)",)
 
 local-portal:
-	@bun run scripts/tenkacloud-local.ts status >/dev/null
-	@# vite lives in the workspace root's node_modules/.bin (bun hoists it); a
-	@# fresh clone that skipped `make install` would otherwise die with the
-	@# cryptic "vite: command not found" (exit 127) here. ensure-deps installs it
-	@# on demand so `make local-portal` self-heals like `make local`.
-	@$(MAKE) ensure-deps
-	@( cd apps/participant-portal && bun run dev --host 127.0.0.1 )
+	@bun run tenkacloud local portal
 
 local-down:
-	@bun run scripts/tenkacloud-local.ts down
+	@bun run tenkacloud local down
 
 local-status:
-	@bun run scripts/tenkacloud-local.ts status
+	@bun run tenkacloud local status
 
 # Issue #2188: list local-play problems (id / category / display name) for
 # players who want to pre-start one by id.
 local-list:
-	@bun run scripts/tenkacloud-local.ts list
+	@bun run tenkacloud local list
 
 local-evaluate:
 	@if [ -z "$(FLAG)" ]; then \
 	  echo "error: FLAG is required. Example: make local-evaluate FLAG='TC{...}'" >&2; \
 	  exit 1; \
 	fi
-	@bun run scripts/tenkacloud-local.ts evaluate "$(FLAG)"
+	@bun run tenkacloud local evaluate "$(FLAG)"
 
 local-reset:
 	@if [ -z "$(PROBLEM)" ]; then \
 	  echo "error: PROBLEM is required. Example: make local-reset PROBLEM=hello-world" >&2; \
 	  exit 1; \
 	fi
-	@bun run scripts/tenkacloud-local.ts reset "$(PROBLEM)"
+	@bun run tenkacloud local reset "$(PROBLEM)"
 
 local-snapshot-export:
 	@if [ -z "$(PROBLEM)" ]; then \
 	  echo "error: PROBLEM is required. Example: make local-snapshot-export PROBLEM=hello-world SNAPSHOT=before-change" >&2; \
 	  exit 1; \
 	fi
-	@SNAPSHOT="$(SNAPSHOT)" bun run scripts/tenkacloud-local.ts snapshot-export "$(PROBLEM)"
+	@SNAPSHOT="$(SNAPSHOT)" bun run tenkacloud local snapshot-export "$(PROBLEM)"
 
 local-snapshot-import:
 	@if [ -z "$(PROBLEM)" ]; then \
 	  echo "error: PROBLEM is required. Example: make local-snapshot-import PROBLEM=hello-world SNAPSHOT=before-change" >&2; \
 	  exit 1; \
 	fi
-	@SNAPSHOT="$(SNAPSHOT)" bun run scripts/tenkacloud-local.ts snapshot-import "$(PROBLEM)"
+	@SNAPSHOT="$(SNAPSHOT)" bun run tenkacloud local snapshot-import "$(PROBLEM)"
 
 local-disrupt:
 	@if [ -z "$(PROBLEM)" ] || [ -z "$(DISRUPTION)" ]; then \
 	  echo "error: PROBLEM and DISRUPTION are required. Example: make local-disrupt PROBLEM=hello-world-battle DISRUPTION=frontend-down" >&2; \
 	  exit 1; \
 	fi
-	@DISRUPTION="$(DISRUPTION)" bun run scripts/tenkacloud-local.ts disrupt "$(PROBLEM)"
+	@DISRUPTION="$(DISRUPTION)" bun run tenkacloud local disrupt "$(PROBLEM)"
 
 # E2E smoke: start one local-play problem, assert every container reaches a
 # healthy / one-shot-complete state, then tear it down. Runnable before a commit
