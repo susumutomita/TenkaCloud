@@ -49,7 +49,13 @@ while [ "$attempt" -lt 60 ]; do
   sleep 2
 done
 
-# Still alive after the wait (e.g. a cold dependency install) — leave it running and
-# tell the learner it is on its way rather than hard-failing a healthy-but-slow start.
-echo "TenkaCloud local play is still starting (taking longer than usual)."
-echo "The Participant Portal on port 5175 will open when it is ready. Startup log: $log"
+# Portal never answered within the (generous) window. postCreate already installed
+# deps, so a warm vite start is seconds — reaching here means the start is wedged or
+# broken. The background process is LEFT RUNNING (it may still come up and forward
+# 5175), but the timeout is surfaced as a failure (exit non-zero) rather than a green
+# "success" hiding an empty preview.
+echo "ERROR: the Participant Portal did not answer on 5175 within the startup window." >&2
+echo "Local play is still running in the background and may yet come up; if not, check the log." >&2
+echo "Last 40 log lines ($log):" >&2
+tail -n 40 "$log" 2>/dev/null || true
+exit 1
