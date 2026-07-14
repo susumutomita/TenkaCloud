@@ -23,7 +23,7 @@ const LOCALE_NAME: Record<LocaleCode, string> = {
  * (custom:tenantId / 将来 custom:tenantName) からユーザの所属テナントを描画する。
  *
  * shell 構造 (TopNav + SideNav + AppLayout) は @tenkacloud/web-kit の ShellLayout に集約し、
- * ここでは admin-console との差分 (= title なし + user-menu + per-app nav) だけを props で渡す。
+ * ここでは admin-console との差分 (= product title + user-menu + per-app nav) だけを props で渡す。
  */
 export function ShellLayout({
   children,
@@ -66,6 +66,7 @@ export function ShellLayout({
 
   return (
     <WebKitShellLayout<LocaleCode>
+      title={t("app.title")}
       navHeaderText={t("nav.menu")}
       navItems={[
         { type: "link", href: "/", text: t("nav.home") },

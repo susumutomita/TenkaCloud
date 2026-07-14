@@ -68,6 +68,11 @@ afterEach(() => {
 });
 
 describe("ShellLayout", () => {
+  it("should render the branded application title in the shared header", () => {
+    const { container } = renderShell();
+    expect(topNav(container).findTitle()?.getElement()).toHaveTextContent("TenkaCloud · app.title");
+  });
+
   it("should render only the locale switcher when signed out and switch the locale", () => {
     const { container } = renderShell();
     const localeMenu = must(
