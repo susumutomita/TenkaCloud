@@ -272,4 +272,38 @@ describe("tenant ApiGateway", () => {
       ResourceId: { Ref: materialsResource },
     });
   });
+
+  it("should bind GET /feature-flags and PUT /admin/feature-flags to the EventApi integration (#2231)", () => {
+    // Regression: the EventApi handler serves both routes, but they were missing from the
+    // Gateway, so the console's Feature Flags page 403'd at the Gateway before reaching the
+    // Lambda ("フィーチャーフラグの取得に失敗しました") — the same failure class as the #1292
+    // audit-log / #2410 capacity routes.
+    const adminResourceId = Object.entries(
+      tpl.findResources("AWS::ApiGateway::Resource", { Properties: { PathPart: "admin" } }),
+    )[0]?.[0];
+    expect(adminResourceId).toBeDefined();
+
+    // Two resources share the PathPart: root /feature-flags (GET, any role) and
+    // /admin/feature-flags (PUT, TenantAdmin-only). Disambiguate by parent.
+    const featureFlagsResources = tpl.findResources("AWS::ApiGateway::Resource", {
+      Properties: { PathPart: "feature-flags" },
+    });
+    const adminFeatureFlagsId = Object.entries(featureFlagsResources).find(
+      ([, res]) => res.Properties?.ParentId?.Ref === adminResourceId,
+    )?.[0];
+    const rootFeatureFlagsId = Object.entries(featureFlagsResources).find(
+      ([, res]) => res.Properties?.ParentId?.Ref !== adminResourceId,
+    )?.[0];
+    expect(rootFeatureFlagsId).toBeDefined();
+    expect(adminFeatureFlagsId).toBeDefined();
+
+    tpl.hasResourceProperties("AWS::ApiGateway::Method", {
+      HttpMethod: "GET",
+      ResourceId: { Ref: rootFeatureFlagsId },
+    });
+    tpl.hasResourceProperties("AWS::ApiGateway::Method", {
+      HttpMethod: "PUT",
+      ResourceId: { Ref: adminFeatureFlagsId },
+    });
+  });
 });

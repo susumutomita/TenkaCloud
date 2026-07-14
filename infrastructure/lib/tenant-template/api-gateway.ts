@@ -221,6 +221,18 @@ export class ApiGateway extends Construct {
     // Issue #1292 audit-log と同じ理由)。
     admin.addResource("capacity").addMethod("GET", eventIntegration, deployMethodOptions);
 
+    // Issue #2231 (ADR-035): per-tenant runtime feature-flag overrides, served by the same
+    // EventApi handler as /admin/audit-log and /admin/capacity.
+    //   GET  /feature-flags        readable by any tenant role (gates UI tabs for all roles)
+    //   PUT  /admin/feature-flags  TenantAdmin-only full-replace of the override set
+    // Both Gateway resources must exist or the request 403s before reaching the Lambda with no
+    // CORS header, which the console surfaces as "フィーチャーフラグの取得に失敗しました" — the
+    // same failure mode as the #1292 audit-log / #2410 capacity routes above.
+    this.restApi.root
+      .addResource("feature-flags")
+      .addMethod("GET", eventIntegration, deployMethodOptions);
+    admin.addResource("feature-flags").addMethod("PUT", eventIntegration, deployMethodOptions);
+
     // Issue #2604: education graph + deterministic video/text/quiz projections.
     // Both routes use the existing EventApi integration and Tenant Cognito authorizer;
     // no new endpoint URL or runtime-config field is needed.
