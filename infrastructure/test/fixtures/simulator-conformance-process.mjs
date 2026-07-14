@@ -330,5 +330,11 @@ const server = createServer(async (request, response) => {
 
 server.listen(port, host);
 for (const signal of ["SIGINT", "SIGTERM"]) {
-  process.once(signal, () => server.close(() => process.exit(0)));
+  process.once(signal, () => {
+    server.close(() => process.exit(0));
+    // Node waits for keep-alive clients before completing server.close(). The
+    // coverage runner's fetch pool retains those sockets, so terminate the
+    // fixture-owned connections after stopping new accepts.
+    server.closeAllConnections();
+  });
 }

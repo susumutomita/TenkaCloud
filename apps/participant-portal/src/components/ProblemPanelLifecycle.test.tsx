@@ -255,6 +255,34 @@ describe("ProblemPanel on-demand lifecycle (#2392 Phase 2)", () => {
     await waitFor(() => expect(onScored).toHaveBeenCalled());
   });
 
+  it("should close a blank popup and surface an authenticated console handoff failure", async () => {
+    const user = userEvent.setup();
+    apiMocks.issueProblemConsoleHandoff.mockRejectedValue(new Error("handoff failed"));
+    const close = vi.fn();
+    vi.spyOn(window, "open").mockReturnValue({
+      close,
+      location: { replace: vi.fn() },
+      opener: window,
+    } as unknown as Window);
+    renderPanel({ lifecycle: { status: "running", runtimeKind: "simulated-cloud" } });
+
+    await user.click(screen.getByRole("button", { name: "Open Simulator Console" }));
+
+    await waitFor(() => expect(close).toHaveBeenCalled());
+    expect(screen.getByText("handoff failed")).toBeInTheDocument();
+  });
+
+  it("should fail loudly when the simulator console popup is blocked", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, "open").mockReturnValue(null);
+    renderPanel({ lifecycle: { status: "running", runtimeKind: "simulated-cloud" } });
+
+    await user.click(screen.getByRole("button", { name: "Open Simulator Console" }));
+
+    expect(await screen.findByText("Simulator console popup was blocked")).toBeInTheDocument();
+    expect(apiMocks.issueProblemConsoleHandoff).not.toHaveBeenCalled();
+  });
+
   it("should fail loudly when a simulated-cloud reset fails", async () => {
     const user = userEvent.setup();
     const onScored = vi.fn().mockResolvedValue(undefined);

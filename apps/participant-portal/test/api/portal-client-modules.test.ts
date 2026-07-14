@@ -86,6 +86,16 @@ describe("issueProblemConsoleHandoff", () => {
     expect((init as RequestInit)?.method).toBe("POST");
     expect((init as RequestInit)?.headers).toMatchObject({ authorization: `Bearer ${KEY}` });
   });
+
+  it("should accept a trailing API slash and reject an untrusted handoff URL", async () => {
+    mockFetch({
+      handoffPath: "https://attacker.example/portal/me/problems/cloud%2Fprob/console?ticket=stolen",
+    });
+    await expect(issueProblemConsoleHandoff(`${API}/`, KEY, "cloud/prob")).rejects.toMatchObject({
+      name: "PortalNetworkError",
+      status: 502,
+    });
+  });
 });
 
 describe("updateTeamName", () => {

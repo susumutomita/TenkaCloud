@@ -39,6 +39,7 @@ interface LocalStateProjection {
 export interface LocalApiProxyOptions {
   readonly statePath?: string;
   readonly timeoutMs?: number;
+  readonly request?: typeof request;
 }
 
 function defaultStatePath(): string {
@@ -178,7 +179,7 @@ async function forwardLocalApiRequest(
   const body = await readBoundedBody(incoming);
   const headers = localApiRequestHeaders(incoming.headers, target);
   await new Promise<void>((accept, reject) => {
-    const upstream = request(
+    const upstream = (options.request ?? request)(
       {
         hostname: target.hostname,
         port: target.port,

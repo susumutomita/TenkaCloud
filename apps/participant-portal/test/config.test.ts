@@ -47,12 +47,14 @@ describe("loadConfig", () => {
         eventRegion: "local",
         mode: "backend",
         cloudMode: "local",
+        localTeamLoginKey: "local-team-key",
       }),
     });
     const cfg = await loadConfig();
     expect(cfg.mode).toBe("backend");
     expect(cfg.cloudMode).toBe("local");
     expect(cfg.apiBaseUrl).toBe("http://127.0.0.1:3199");
+    expect(cfg.localTeamLoginKey).toBe("local-team-key");
   });
 
   it("should fall back when cloudMode=local but apiBaseUrl is non-loopback HTTP", async () => {
