@@ -25,12 +25,24 @@ const bootstrap = readFileSync(
   join(REPO_ROOT, "scripts", "onboard", "onboard-bootstrap.sh"),
   "utf8",
 );
+const startLocalScript = readFileSync(
+  join(REPO_ROOT, "scripts", "onboard", "codespaces-start-local.sh"),
+  "utf8",
+);
 const makefile = readFileSync(join(REPO_ROOT, "Makefile"), "utf8");
 
 describe("devcontainer postCreate", () => {
   it("should run the single setup script instead of a && chain", () => {
     const { postCreateCommand } = JSON.parse(devcontainer) as { postCreateCommand: string };
     expect(postCreateCommand).toBe("sh scripts/onboard/codespaces-setup.sh");
+  });
+
+  it("should auto-start local play on container start so the learner types nothing", () => {
+    // The zero-manual-steps promise needs an auto-START, not just an auto-install:
+    // a non-technical learner opens the Codespace to an empty port-5175 preview
+    // unless something runs `make local` for them. postStart does exactly that.
+    const { postStartCommand } = JSON.parse(devcontainer) as { postStartCommand: string };
+    expect(postStartCommand).toBe("sh scripts/onboard/codespaces-start-local.sh");
   });
 
   it("should disable git-lfs autoPull so its hook install cannot abort postCreate", () => {
@@ -73,6 +85,49 @@ describe("scripts/onboard/codespaces-setup.sh", () => {
 
   it("should stop on the first failure so a broken setup is loud", () => {
     expect(setupScript).toMatch(/^set -eu$/m);
+  });
+});
+
+describe("scripts/onboard/codespaces-start-local.sh", () => {
+  it("should start `make local` detached so the lifecycle step returns immediately", () => {
+    // nohup + & keeps the portal alive past this shell and lets the Codespace
+    // finish attaching (blocking here would hang the whole start).
+    expect(startLocalScript).toMatch(/nohup make -C "\$repo_root" local .*&\s*$/m);
+  });
+
+  it("should export ~/.bun/bin onto PATH before invoking make (make local needs bun)", () => {
+    const pathExport = startLocalScript.indexOf('export PATH="$BUN_INSTALL/bin:$PATH"');
+    const makeRun = startLocalScript.indexOf("nohup make");
+    expect(pathExport).toBeGreaterThan(-1);
+    expect(makeRun).toBeGreaterThan(pathExport);
+  });
+
+  it("should stop on the first failure so a broken start is loud", () => {
+    expect(startLocalScript).toMatch(/^set -eu$/m);
+  });
+
+  it("should surface a failed background start instead of reporting success", () => {
+    // Backgrounding with nohup+& exits 0 even if `make local` dies, which would
+    // silently regress to the empty port-5175 preview. The script must watch the
+    // start PID, probe the portal, and exit non-zero when the start process dies.
+    expect(startLocalScript).toMatch(/kill -0 "\$start_pid"/);
+    expect(startLocalScript).toContain("curl -sf");
+    expect(startLocalScript).toMatch(/^\s*exit 1$/m);
+  });
+
+  it("should confirm the response is our portal, not any process on 5175", () => {
+    // Readiness must not pass on a stale/foreign server (or a PID-reuse race) that
+    // merely answers on 5175 — verify the served <title> is the participant portal.
+    expect(startLocalScript).toMatch(/curl -sf .*\| grep -q "TenkaCloud Participant Portal"/);
+  });
+
+  it("should bound each probe and the whole loop so it cannot hang forever", () => {
+    // A bare curl against a server that accepts but never responds would block
+    // forever and the loop would never reach its timeout. --max-time bounds each
+    // probe; a wall-clock deadline bounds the total.
+    expect(startLocalScript).toContain("--max-time");
+    expect(startLocalScript).toMatch(/deadline=\$\(\(\s*\$\(date \+%s\)/);
+    expect(startLocalScript).toMatch(/while \[ "\$\(date \+%s\)" -lt "\$deadline" \]/);
   });
 });
 
