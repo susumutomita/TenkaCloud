@@ -986,17 +986,9 @@ export async function stopSimulatorLauncher(
   }
   if (launcher.kind === "process" && launcher.pid !== undefined) {
     const errors: unknown[] = [];
-    try {
-      await stopExactProcess(
-        launcher.pid,
-        launcher.processIdentity,
-        timeoutMs,
-        signal,
-        "Simulator supervisor process",
-      );
-    } catch (error) {
-      errors.push(error);
-    }
+    // Stop the supervised command first. On Linux /bin/sh may defer its trap
+    // while it waits for that command, so waiting on the supervisor first can
+    // consume the whole timeout even though both processes honor the signal.
     if (launcher.childPid !== undefined && launcher.childPid !== launcher.pid) {
       try {
         await stopExactProcess(
@@ -1009,6 +1001,17 @@ export async function stopSimulatorLauncher(
       } catch (error) {
         errors.push(error);
       }
+    }
+    try {
+      await stopExactProcess(
+        launcher.pid,
+        launcher.processIdentity,
+        timeoutMs,
+        signal,
+        "Simulator supervisor process",
+      );
+    } catch (error) {
+      errors.push(error);
     }
     if (errors.length === 1) throw errors[0];
     if (errors.length > 1) {
