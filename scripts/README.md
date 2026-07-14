@@ -39,7 +39,7 @@ lives:
 | `security/` | Supply-chain and content security: `audit-dependencies.ts` + `audit-baseline.json` (lifecycle-script audit, `make audit-deps`), `detect-suspicious-comment.ts` (issue/PR comment scanner) |
 | `landing/` | Landing-site generators: `generate-landing-docs.ts`, `generate-landing-locales.ts` (both support `--check`), `landing-seo.test.ts` |
 | `onboard/` | First-run onboarding helpers behind `tenkacloud-onboard.ts`: `diagnose.ts`, `plan.ts`, `report.ts`, `onboard-bootstrap.sh`, `codespaces-setup.sh` (devcontainer `postCreateCommand`) |
-| `ops/` | Operator utilities for a running deployment: `env-init.ts` (`make env-check` wizard), `scale-event-capacity.ts` + `capacity-model.ts` (DDB capacity), `disruption-live-fire.ts`, `report-retained-tables.ts` (used by `cleanup.sh`), `participant-portal-runtime-config.ts` (`make dev` mock config), `print-source-bundle-lifecycle.ts` |
+| `ops/` | Operator utilities for a running deployment: `env-init.ts` (`make env-check` wizard), `turso-live-guide.ts` (`make turso-live-guide` / read-only preflight and CFn verification), `scale-event-capacity.ts` + `capacity-model.ts` (DDB capacity), `disruption-live-fire.ts`, `report-retained-tables.ts` (used by `cleanup.sh`), `participant-portal-runtime-config.ts` (`make dev` mock config), `print-source-bundle-lifecycle.ts` |
 | `local-play/` | Modules behind `tenkacloud-local.ts` (container runner, manifest, readiness, scoring API) |
 | `lib/` | Shared helpers for the top-level shell scripts and `ops/` CLIs (`battles-common.sh`, `names.sh`, capacity/disruption/retained-tables logic) |
 

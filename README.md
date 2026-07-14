@@ -100,7 +100,7 @@ TenkaCloud runs in one of two profiles, selected by the `CDK_PARAM_CONTROL_DATA_
 | **AWS-native** (default, unset or `dynamodb`) | Teams / companies who want everything inside AWS | DynamoDB (provisioned 1/1), 8 tables + 8 GSIs | Lambda `CreateStack` (default) |
 | **Zero-cost** (opt-in, `turso`) | Individuals, trials, personal events | Turso (libSQL) — 0 DynamoDB tables / 0 GSIs in the Lite synth | Lambda `CreateStack` (default) |
 
-Opting in to the zero-cost profile is four steps: create a Turso database, store its token in SSM as a `SecureString`, add three `CDK_PARAM_TURSO_*` lines to your `.env`, then `make deploy`. For the full walkthrough, the migration path for an existing `dynamodb`-backed stack, measured costs, and the current live-verification status, see [docs/running-costs.md](./docs/running-costs.md).
+Opting in to the zero-cost profile starts with `make turso-live-guide ENV=development`. It prints the full step-by-step path from Turso/SSM setup through preflight, deploy, the zero-DynamoDB CloudFormation proof, competitor-account bootstrap, participant scoring, SAML CRUD, and evidence capture. For the written runbook, migration path for an existing `dynamodb`-backed stack, measured costs, and current live-verification status, see [docs/running-costs.md](./docs/running-costs.md).
 
 ## Add your own problems
 

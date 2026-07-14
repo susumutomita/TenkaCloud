@@ -102,7 +102,7 @@ TenkaCloud は `CDK_PARAM_CONTROL_DATA_BACKEND` 環境変数で選べる 2 つ�
 | **AWS ネイティブ**(デフォルト、未設定 または `dynamodb`) | すべてを AWS 内で完結させたいチーム / 企業 | DynamoDB(プロビジョンド 1/1)、8 テーブル + 8 GSI | Lambda の `CreateStack`(デフォルト) |
 | **ゼロコスト**(オプトイン、`turso`) | 個人利用・トライアル・個人イベント | Turso(libSQL)— Lite synth で DynamoDB テーブル / GSI ともに 0 個 | Lambda の `CreateStack`(デフォルト) |
 
-ゼロコストプロファイルへの切り替えは 4 手順です。Turso データベースを作成し、その token を SSM の `SecureString` に保存し、`.env` に `CDK_PARAM_TURSO_*` の 3 行を追加してから `make deploy` するだけです。詳しい手順、既存スタックの移行パス、実測コスト、現時点での live 検証状況については [docs/running-costs.md](./docs/running-costs.md)(英語)を参照してください。
+ゼロコストプロファイルの初回ライブ検証は、まず `make turso-live-guide ENV=development` を実行してください。Turso / SSM の設定、事前確認、デプロイ、CloudFormation 上の DynamoDB 0 件確認、競技者アカウントの接続、参加者と採点、SAML CRUD、証跡記録までを日本語で順番に表示します。文章版の手順、既存スタックの移行パス、実測コスト、現時点でのライブ検証状況は [docs/running-costs.md](./docs/running-costs.md) にあります。
 
 ## 自分の問題を追加する
 
