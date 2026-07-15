@@ -9,7 +9,7 @@
 // ---------------------------------------------------------------------------
 // [Issue #2442 / Phase C1] ProblemEndpoints aggregate (ADR-012 Phase 3.A).
 //
-// Physical shape (unchanged, `problem-endpoints-table.ts`):
+// Physical shape (unchanged, `dynamodb-problem-endpoint-keys.ts`):
 //   PK = `TENANT#<tenantId>#TEAM#<teamId>#PROBLEM#<problemId>`
 //   SK = `SLOT#<slot>`
 // No GSI, no conditional writes, no Scan — the smallest of the control-data
@@ -34,7 +34,7 @@ export interface ProblemEndpointRecord {
   readonly overrideUrl?: string;
   /**
    * Phase 3.A では未使用 (= default URL は read-through 算出)。Phase 3.B 以降で deploy 完了
-   * hook が書く余地を残す (`problem-endpoints-table.ts` の元 docblock を参照)。
+   * hook が書く余地を残す (`problem-endpoints-table.ts` の construct docblock を参照)。
    */
   readonly defaultCacheUrl?: string;
   readonly platform?: string;

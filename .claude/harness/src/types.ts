@@ -13,6 +13,11 @@ export interface Finding {
 export interface RuleContext {
   /** Repository-relative paths (POSIX separators) the rule should inspect. */
   readonly files: readonly string[];
+  /**
+   * Every tracked repository file, including files outside a staged-only run. Graph rules use
+   * this to follow unchanged callers into a changed transitive dependency.
+   */
+  readonly allFiles?: readonly string[];
   /** Returns file contents for a given repo-relative path. */
   readonly readFile: (path: string) => string;
 }
