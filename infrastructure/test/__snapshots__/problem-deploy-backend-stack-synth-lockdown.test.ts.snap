@@ -14417,7 +14417,7 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — pure-sql t
         "Ref": "DeployStatusWriterFunctionLogGroup4ED3E8B7",
       },
     },
-    "MemorySize": 1024,
+    "MemorySize": 2048,
     "Role": {
       "Fn::GetAtt": [
         "DeployStatusWriterFunctionServiceRole2FCA6A0E",
