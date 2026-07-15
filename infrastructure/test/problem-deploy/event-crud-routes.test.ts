@@ -5,7 +5,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 /**
  * Issue #1424: event CRUD + bulk-teardown routes (routes/events.ts)。
  * POST /events, GET /events, GET /events/:id, DELETE /events/:id の
- * validation / duplicate / pagination / role-gated login-key / not_found / error 分岐。
+ * validation / duplicate / pagination / one-time login-key / not_found / error 分岐。
  *
  * create module は importOriginal で error class (Duplicate*) を実体のまま残しつつ
  * createEvent だけ mock 化する (= route の `err instanceof Duplicate*` を本物の class で判定)。
@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   listEvents: vi.fn(),
   getEventDetail: vi.fn(),
   bulkTeardownEvent: vi.fn(),
+  rotateTeamLoginKey: vi.fn(),
 }));
 vi.mock("../../lib/problem-deploy/handlers/event-handler/create", async (importOriginal) => {
   const actual =
@@ -27,6 +28,9 @@ vi.mock("../../lib/problem-deploy/handlers/event-handler/list", () => ({
 }));
 vi.mock("../../lib/problem-deploy/handlers/event-handler/bulk-delete", () => ({
   bulkTeardownEvent: mocks.bulkTeardownEvent,
+}));
+vi.mock("../../lib/problem-deploy/handlers/event-handler/rotate-team-login-key", () => ({
+  rotateTeamLoginKey: mocks.rotateTeamLoginKey,
 }));
 
 const { registerEventRoutes } = await import(
@@ -53,6 +57,9 @@ const postEvent = (body: unknown) =>
 const getEvents = (query = "") => buildApp().request(`/events${query}`);
 const getDetail = (query = "") => buildApp().request(`/events/${EVENT_ID}${query}`);
 const deleteEvent = () => buildApp().request(`/events/${EVENT_ID}`, { method: "DELETE" });
+const TEAM_ID = "01HZX0K3M3K9ZQHB3MRQHBA1B3";
+const rotateLoginKey = (teamId = TEAM_ID) =>
+  buildApp().request(`/events/${EVENT_ID}/teams/${teamId}/rotate-login-key`, { method: "POST" });
 const validCreateBody = {
   name: "Spring Cup",
   teams: [{ internalSlug: "team-a", awsAccountId: "123456789012" }],
@@ -133,23 +140,21 @@ describe("GET /events/:eventId", () => {
     expect((await getDetail()).status).toBe(StatusCodes.NOT_FOUND);
   });
 
-  it("should include login keys + score events for a mutating role with withScoreEvents=true", async () => {
+  it("should request score events without enabling a credential re-read path", async () => {
     mocks.getEventDetail.mockResolvedValueOnce({ eventId: EVENT_ID });
     const res = await getDetail("?withScoreEvents=true");
     expect(res.status).toBe(StatusCodes.OK);
     expect(mocks.getEventDetail).toHaveBeenCalledWith(shared, "tenant-test", EVENT_ID, {
       withScoreEvents: true,
-      includeLoginKeys: true,
     });
   });
 
-  it("should withhold login keys for a read-only viewer role", async () => {
+  it("should use the same one-time-key contract for a read-only viewer role", async () => {
     process.env.DEFAULT_USER_ROLE = "TenantViewer";
     mocks.getEventDetail.mockResolvedValueOnce({ eventId: EVENT_ID });
     await getDetail();
     expect(mocks.getEventDetail.mock.calls[0][3]).toEqual({
       withScoreEvents: false,
-      includeLoginKeys: false,
     });
   });
 
@@ -175,5 +180,46 @@ describe("DELETE /events/:eventId", () => {
   it("should surface a bulkTeardownEvent error (5xx)", async () => {
     mocks.bulkTeardownEvent.mockRejectedValueOnce(new Error("boom"));
     expect((await deleteEvent()).status).toBeGreaterThanOrEqual(500);
+  });
+});
+
+describe("POST /events/:eventId/teams/:teamId/rotate-login-key", () => {
+  it("should reject a malformed team id before rotation", async () => {
+    expect((await rotateLoginKey("bad-team-id")).status).toBe(StatusCodes.BAD_REQUEST);
+    expect(mocks.rotateTeamLoginKey).not.toHaveBeenCalled();
+  });
+
+  it("should return 404 when the team is absent", async () => {
+    mocks.rotateTeamLoginKey.mockResolvedValueOnce({ kind: "not_found" });
+    expect((await rotateLoginKey()).status).toBe(StatusCodes.NOT_FOUND);
+  });
+
+  it("should return the one-time replacement key", async () => {
+    mocks.rotateTeamLoginKey.mockResolvedValueOnce({
+      kind: "ok",
+      teamId: TEAM_ID,
+      teamLoginKey: "NEW-KEY",
+      rotatedAt: "2026-07-15T00:00:00.000Z",
+    });
+    const response = await rotateLoginKey();
+    expect(response.status).toBe(StatusCodes.OK);
+    expect(await response.json()).toEqual({
+      kind: "ok",
+      teamId: TEAM_ID,
+      teamLoginKey: "NEW-KEY",
+      rotatedAt: "2026-07-15T00:00:00.000Z",
+    });
+  });
+
+  it("should return 409 when a concurrent deployment changed the rotation set", async () => {
+    mocks.rotateTeamLoginKey.mockResolvedValueOnce({ kind: "conflict" });
+    const response = await rotateLoginKey();
+    expect(response.status).toBe(StatusCodes.CONFLICT);
+    expect(await response.json()).toEqual({ error: "rotation_conflict" });
+  });
+
+  it("should surface an unexpected rotation error as 500", async () => {
+    mocks.rotateTeamLoginKey.mockRejectedValueOnce(new Error("database unavailable"));
+    expect((await rotateLoginKey()).status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
   });
 });

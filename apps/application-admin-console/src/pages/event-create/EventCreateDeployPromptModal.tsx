@@ -3,7 +3,10 @@ import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import Modal from "@cloudscape-design/components/modal";
 import SpaceBetween from "@cloudscape-design/components/space-between";
+import Table from "@cloudscape-design/components/table";
+import type { CreateEventResponse } from "../../api/events-client";
 import { useT } from "../../i18n";
+import { buildInviteLink } from "../../lib/invite-link";
 
 /**
  * Issue #1067: Event 作成成功後に operator へ deploy の必要性を明示する modal。
@@ -23,6 +26,9 @@ export interface EventCreateDeployPromptModalProps {
    * backend would refuse.
    */
   bulkDeploySupported?: boolean;
+  /** Plaintext values from POST /events. They exist only while this modal is open. */
+  teams: CreateEventResponse["teams"];
+  readonly participantPortalUrl?: string;
   onDeployNow: () => void;
   onDeployLater: () => void;
 }
@@ -32,10 +38,16 @@ export function EventCreateDeployPromptModal({
   canMutateTenant,
   deployStarting,
   bulkDeploySupported = true,
+  teams,
+  participantPortalUrl,
   onDeployNow,
   onDeployLater,
 }: EventCreateDeployPromptModalProps) {
   const t = useT();
+  const copyAll = () =>
+    navigator.clipboard?.writeText(
+      teams.map((team) => `${team.internalSlug}\t${team.teamLoginKey}`).join("\n"),
+    );
   return (
     <Modal
       visible={visible}
@@ -63,6 +75,53 @@ export function EventCreateDeployPromptModal({
       }
     >
       <SpaceBetween size="m">
+        <Alert type="warning" header={t("event_create.login_keys_header")}>
+          {t("event_create.login_keys_body")}
+        </Alert>
+        <Table
+          variant="embedded"
+          items={[...teams]}
+          columnDefinitions={[
+            {
+              id: "team",
+              header: t("event_create.login_keys_team"),
+              cell: (team) => <code>{team.internalSlug}</code>,
+            },
+            {
+              id: "key",
+              header: "teamLoginKey",
+              cell: (team) => <Box variant="code">{team.teamLoginKey}</Box>,
+            },
+            ...(participantPortalUrl
+              ? [
+                  {
+                    id: "invite",
+                    header: t("event_create.login_keys_invite"),
+                    cell: (team: CreateEventResponse["teams"][number]) => (
+                      <Button
+                        iconName="share"
+                        onClick={() =>
+                          void navigator.clipboard?.writeText(
+                            buildInviteLink(participantPortalUrl, team.teamLoginKey),
+                          )
+                        }
+                      >
+                        {t("event_create.login_keys_copy_invite", {
+                          slug: team.internalSlug,
+                        })}
+                      </Button>
+                    ),
+                  },
+                ]
+              : []),
+          ]}
+          empty={<Box>{t("event_create.login_keys_empty")}</Box>}
+        />
+        <Box float="right">
+          <Button iconName="copy" onClick={() => void copyAll()} disabled={teams.length === 0}>
+            {t("event_create.login_keys_copy_all")}
+          </Button>
+        </Box>
         <Alert type="info" header={t("event_create.deploy_modal_alert_header")}>
           {bulkDeploySupported
             ? t("event_create.deploy_modal_alert_body")

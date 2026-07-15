@@ -126,6 +126,9 @@ export function recordToItem(record: DeploymentWriteRecord): Record<string, unkn
     item.GSI3SK = compositeTargetGsi3Sk(record.targetOrdinal, record.targetId);
     return item;
   }
+  if (record.teamLoginKeyHash !== undefined) {
+    throw new Error("DynamoDB deployments require a plaintext login credential");
+  }
   item.GSI1PK = `TENANT#${record.tenantId}`;
   item.GSI1SK = record.createdAt;
   if (record.teamLoginKey) {

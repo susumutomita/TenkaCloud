@@ -2,14 +2,15 @@ import type { Hono } from "hono";
 import { StatusCodes } from "http-status-codes";
 import {
   resolveTenantId,
-  resolveUserRole,
   TENANT_ADMIN_ROLE,
   TENANT_OPERATOR_ROLE,
 } from "../../deploy-handler/auth.js";
+import { ULID_RE } from "../../shared/constants.js";
 import { auditEventAction } from "../audit.js";
 import { bulkTeardownEvent } from "../bulk-delete.js";
 import { createEvent, DuplicateInternalSlugError, DuplicateProblemIdError } from "../create.js";
 import { getEventDetail, listEvents } from "../list.js";
+import { rotateTeamLoginKey } from "../rotate-team-login-key.js";
 import { handleRouteError, parseLimit, withEventId, withJsonBody } from "../route-helpers.js";
 import type { EventSharedResources } from "../shared.js";
 import { CreateEventRequestSchema } from "../types.js";
@@ -77,14 +78,9 @@ export function registerEventRoutes(app: Hono, shared: EventSharedResources): vo
       // Issue #1038 P1 #7: opt-in で全 team の累計 score event timeline を返す。
       // default (= "true" 以外) は scoreEventsByTeam を省き、 既存 caller を素通り。
       const withScoreEvents = c.req.query("withScoreEvents") === "true";
-      // #1392: teamLoginKey (participant bearer) は hand-off 担当の mutating role にのみ返す。
-      // 読取り専用の TenantViewer には露出しない (= getEventDetail は default-deny)。
-      const role = resolveUserRole(c);
-      const includeLoginKeys = role === TENANT_ADMIN_ROLE || role === TENANT_OPERATOR_ROLE;
       try {
         const detail = await getEventDetail(shared, resolveTenantId(c), eventId, {
           withScoreEvents,
-          includeLoginKeys,
         });
         if (!detail) return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
         return c.json(detail, StatusCodes.OK);
@@ -92,6 +88,46 @@ export function registerEventRoutes(app: Hono, shared: EventSharedResources): vo
         return handleRouteError(c, "[events] getEventDetail failed", { eventId }, err);
       }
     }),
+  );
+
+  app.post(
+    "/events/:eventId/teams/:teamId/rotate-login-key",
+    withEventId(
+      async ({ c, eventId }) => {
+        const teamId = c.req.param("teamId") ?? "";
+        if (!ULID_RE.test(teamId)) {
+          return c.json({ error: "invalid_team_id" }, StatusCodes.BAD_REQUEST);
+        }
+        try {
+          const outcome = await rotateTeamLoginKey(
+            shared,
+            resolveTenantId(c),
+            eventId,
+            teamId,
+            Date.now(),
+          );
+          if (outcome.kind === "not_found") {
+            return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
+          }
+          if (outcome.kind === "conflict") {
+            return c.json({ error: "rotation_conflict" }, StatusCodes.CONFLICT);
+          }
+          auditEventAction(c, "rotate_team_login_key", `${eventId}/${teamId}`);
+          return c.json(outcome, StatusCodes.OK);
+        } catch (err) {
+          return handleRouteError(
+            c,
+            "[events] rotateTeamLoginKey failed",
+            { eventId, teamId },
+            err,
+          );
+        }
+      },
+      {
+        roles: [TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE],
+        rejectSuspendedTenant: true,
+      },
+    ),
   );
 
   app.delete(

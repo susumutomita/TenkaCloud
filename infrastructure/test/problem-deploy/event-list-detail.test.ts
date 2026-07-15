@@ -5,7 +5,7 @@ import type { EventSharedResources } from "../../lib/problem-deploy/handlers/eve
 /**
  * Issue #1418: event-handler/list.ts (listEvents + getEventDetail + 集約 helper) は 60% branch
  * だった。 toSummary の field default 群、 cursor encode/decode、 limit clamp、 getEventDetail の
- * not-found / tenant-mismatch / displayName precedence / includeLoginKeys / withScoreEvents、
+ * not-found / tenant-mismatch / displayName precedence / one-time login keys / withScoreEvents、
  * deployment 集約の guard 群を pin する。
  *
  * collectTeamScoreEvents は mock (= withScoreEvents 経路の marker)。 DDB は command 種別 +
@@ -216,17 +216,16 @@ describe("getEventDetail", () => {
     ];
     const detail = await getEventDetail(shared, "t1", "e1", {
       withScoreEvents: true,
-      includeLoginKeys: true,
     });
     expect(detail?.teams[0]).toMatchObject({
       teamId: "team-1",
       displayName: "FromPortal", // Deployments overrides TeamsTable
-      teamLoginKey: "key-1",
       awsAccountId: "123456789012",
     });
+    expect(detail?.teams[0]).not.toHaveProperty("teamLoginKey");
     // team-2: no portal name, no TeamsTable displayName → undefined; no login key field
     expect(detail?.teams[1].displayName).toBeUndefined();
-    expect(detail?.teams[1].teamLoginKey).toBeUndefined();
+    expect(detail?.teams[1]).not.toHaveProperty("teamLoginKey");
     expect(detail?.deploymentsByProblem.p.map((d) => d.jobId)).toEqual(["01J", "02J"]);
     expect(detail?.scoreEventsByTeam).toBeDefined();
     expect(mocks.collectTeamScoreEvents).toHaveBeenCalledTimes(1);
@@ -238,7 +237,7 @@ describe("getEventDetail", () => {
       { teamId: "team-1", internalSlug: "a", displayName: "X", teamLoginKey: "key-1" },
     ];
     const detail = await getEventDetail(shared, "t1", "e1");
-    expect(detail?.teams[0].teamLoginKey).toBeUndefined(); // includeLoginKeys not set
+    expect(detail?.teams[0]).not.toHaveProperty("teamLoginKey");
     expect(detail?.teams[0].displayName).toBe("X"); // TeamsTable fallback (no deployment)
     expect(detail?.scoreEventsByTeam).toBeUndefined();
     expect(mocks.collectTeamScoreEvents).not.toHaveBeenCalled();

@@ -94,10 +94,9 @@ export async function listEvents(
 /**
  * 指定 eventId の Event 詳細 + Teams 一覧を返す。`tenantId` 不一致は undefined (404 相当)。
  *
- * teams[].teamLoginKey は participant の bearer credential であり、 **明示的に
- * `opts.includeLoginKeys=true` を渡した呼び出しでのみ露出** する (default-deny)。 #1392: route 側で
- * mutating role (TenantAdmin / TenantOperator = hand-off 担当) のときだけ true を渡し、 read-only の
- * TenantViewer には返さない。 一覧経路 (`listEvents`) では teams 自体を返さない。
+ * teams[].teamLoginKey is intentionally absent. Creation and explicit rotation
+ * responses are the only plaintext handoff paths, so SQL hash-only storage and
+ * the legacy DynamoDB backend expose the same read contract.
  *
  * Issue #1038 P1 #7: `opts.withScoreEvents=true` のとき全 team の累計 score event timeline を
  * `scoreEventsByTeam` に含める。 default (= false) は従来挙動を維持 (= 余分な DDB query を
@@ -107,7 +106,7 @@ export async function getEventDetail(
   shared: EventSharedResources,
   tenantId: string,
   eventId: string,
-  opts: { readonly withScoreEvents?: boolean; readonly includeLoginKeys?: boolean } = {},
+  opts: { readonly withScoreEvents?: boolean } = {},
 ): Promise<EventDetail | undefined> {
   // [ADR-049 §5.1] Event 行の point read も Teams 一覧も repository seam 経由 (getEvent が
   // tenant scope + 404 判定を、 listTeamsByEvent が base-table query を担う)。 default backend
@@ -115,7 +114,7 @@ export async function getEventDetail(
   // / 同 KeyConditionExpression / 同 client)、 CFn 差分 0。 CONTROL_DATA_BACKEND を turso/sql に
   // 切替えると同 read が SQLite に向く (適用は @libsql adapter 配線後)。 listTeamsByEvent は
   // teamId 昇順で TeamRecord[] (物理キー無し) を返すが、 下流は teamId / internalSlug /
-  // displayName / teamLoginKey / awsAccountId の domain field しか読まないので挙動は同一。
+  // displayName / awsAccountId の非機密 field だけを projection する。
   // Event Get と Teams / Deployments Query は依存関係なし → 並列発火でラウンドトリップを節約。
   // Deployments は競技者が PATCH /portal/me で設定した displayTeamName を引くため必要
   // (TeamsTable には participant が直接書けないので displayName が常に空のままになる、
@@ -144,9 +143,6 @@ export async function getEventDetail(
       // 競技者が portal で設定した名前 (Deployments 経由) を優先、無ければ
       // TeamsTable.displayName (operator 事前設定があれば)、それも無ければ undefined。
       displayName: displayNameByTeamId.get(teamId) ?? fromTeamsTable,
-      // #1392: bearer credential。 mutating role 経由 (includeLoginKeys) のときだけ露出する。
-      teamLoginKey:
-        opts.includeLoginKeys && typeof t.teamLoginKey === "string" ? t.teamLoginKey : undefined,
       // #528: team の deploy 先 AWS Account ID。旧 Event は undefined。
       awsAccountId: typeof t.awsAccountId === "string" ? t.awsAccountId : undefined,
     };

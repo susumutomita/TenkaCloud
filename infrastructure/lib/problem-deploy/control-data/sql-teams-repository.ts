@@ -1,5 +1,13 @@
 import { createHash } from "node:crypto";
-import type { SqlExecutor, SqlParam, TeamRecord, TeamsRepository } from "./types.js";
+import type {
+  SqlExecutor,
+  SqlParam,
+  TeamDeploymentRecord,
+  TeamLoginKeyRotationInput,
+  TeamLoginKeyRotationOutcome,
+  TeamRecord,
+  TeamsRepository,
+} from "./types.js";
 
 export const TEAM_LOGIN_KEY_SCRUB_MIGRATION_ID = "2026-07-04-team-login-key-payload-scrub";
 export const TEAM_LOGIN_KEY_SCRUB_SQL =
@@ -144,6 +152,69 @@ export class SqlTeamsRepository implements TeamsRepository {
     return rows.map((row) => recordWithoutStoredLoginKey(row.payload));
   }
 
+  async listTeamsForDeployment(eventId: string): Promise<readonly TeamDeploymentRecord[]> {
+    const rows = await this.sql.all(
+      "SELECT payload, login_key_hash FROM teams WHERE event_id = ? ORDER BY team_id ASC",
+      [eventId],
+    );
+    return rows.map((row) => {
+      const team = recordWithoutStoredLoginKey(row.payload);
+      const loginKeyHash = row.login_key_hash;
+      if (typeof loginKeyHash !== "string" || !/^[0-9a-f]{64}$/.test(loginKeyHash)) {
+        throw new Error(
+          `team ${team.teamId} in event ${eventId} has no participant login credential`,
+        );
+      }
+      return { ...team, credential: { kind: "sha256", value: loginKeyHash } };
+    });
+  }
+
+  async rotateLoginKey(input: TeamLoginKeyRotationInput): Promise<TeamLoginKeyRotationOutcome> {
+    const loginKeyHash = hashLoginKey(input.newLoginKey);
+    // libSQL batch is atomic, but UPDATE does not fail when its predicate matches zero rows.
+    // The deliberately invalid INSERT turns any non-exact match into a constraint error so
+    // a concurrent delete cannot partially rotate the Team and its Deployment indexes.
+    const assertPreviousUpdateMatchedExactlyOneRow = {
+      sql:
+        "INSERT INTO control_data_migrations (migration_id, applied_at) " +
+        "SELECT 'login-key-rotation-assertion', NULL WHERE changes() <> 1",
+    };
+    const statements = [
+      {
+        sql:
+          "UPDATE teams SET login_key_hash = ?, payload = json_set(payload, '$.updatedAt', ?) " +
+          "WHERE tenant_id = ? AND event_id = ? AND team_id = ?",
+        params: [loginKeyHash, input.updatedAt, input.tenantId, input.eventId, input.teamId],
+      },
+      assertPreviousUpdateMatchedExactlyOneRow,
+      ...input.deployments.flatMap((deployment) => [
+        {
+          sql:
+            "UPDATE deployments SET login_key_hash = ?, updated_at = ?, " +
+            "payload = json_set(json_remove(payload, '$.teamLoginKey', '$.teamLoginKeyHash'), '$.updatedAt', ?) " +
+            "WHERE list_tenant_id = ? AND event_id = ? AND team_id = ? AND job_id = ?",
+          params: [
+            loginKeyHash,
+            input.updatedAt,
+            input.updatedAt,
+            input.tenantId,
+            input.eventId,
+            input.teamId,
+            deployment.jobId,
+          ],
+        },
+        assertPreviousUpdateMatchedExactlyOneRow,
+      ]),
+    ];
+    try {
+      await this.sql.batch(statements);
+      return { outcome: "updated" };
+    } catch (error) {
+      if (isLoginKeyRotationConflict(error)) return { outcome: "conflict" };
+      throw error;
+    }
+  }
+
   async putTeam(record: TeamRecord): Promise<void> {
     await this.sql.run(
       `${TEAM_INSERT_SQL} ` +
@@ -165,4 +236,21 @@ export class SqlTeamsRepository implements TeamsRepository {
     );
     return Number(result.changes);
   }
+}
+
+function isLoginKeyRotationConflict(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const { code, extendedCode } = error as { code?: unknown; extendedCode?: unknown };
+  if (
+    [code, extendedCode].some((value) =>
+      [
+        "SQLITE_CONSTRAINT_NOTNULL",
+        "SQLITE_CONSTRAINT_PRIMARYKEY",
+        "SQLITE_CONSTRAINT_UNIQUE",
+      ].includes(String(value)),
+    )
+  ) {
+    return true;
+  }
+  return /(?:NOT NULL|UNIQUE) constraint failed/.test(error.message);
 }

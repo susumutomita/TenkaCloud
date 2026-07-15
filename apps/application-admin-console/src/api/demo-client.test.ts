@@ -71,7 +71,23 @@ describe("demo client — create + bulk deploy", () => {
 
     const detail = await client.get<EventDetail>(`events/${res.eventId}`);
     expect(detail.teams).toHaveLength(2);
+    expect(detail.teams[0]).not.toHaveProperty("teamLoginKey");
     expect(detail.deploymentsByProblem).toEqual({});
+
+    const rotated = await client.post<{
+      kind: "ok";
+      teamId: string;
+      teamLoginKey: string;
+    }>(`events/${res.eventId}/teams/${res.teams[0]?.teamId}/rotate-login-key`, {});
+    expect(rotated).toEqual({
+      kind: "ok",
+      teamId: res.teams[0]?.teamId,
+      teamLoginKey: `demo-rotated-key-${res.eventId}-1`,
+      rotatedAt: "2026-06-21T00:00:00.000Z",
+    });
+    expect((await client.get<EventDetail>(`events/${res.eventId}`)).teams[0]).not.toHaveProperty(
+      "teamLoginKey",
+    );
   });
 
   it("should progress a bulk deploy queued → deploying → ready over time", async () => {
@@ -99,6 +115,15 @@ describe("demo client — create + bulk deploy", () => {
     // the list reflects the same derived status (EventList polling sees progress too).
     const list = await client.get<EventListResponse>("events");
     expect(list.items.find((e) => e.eventId === created.eventId)?.status).toBe("READY");
+  });
+
+  it("should 404 when rotating an unknown demo team", async () => {
+    await expect(
+      client.post("events/demo-event-ready/teams/missing-team/rotate-login-key", {}),
+    ).rejects.toBeInstanceOf(ApiError);
+    await expect(
+      client.post("events/demo-event-ready/teams/missing-team/rotate-login-key", {}),
+    ).rejects.toThrow(/team .* not found/i);
   });
 
   it("should 404 when deploying an unknown event", async () => {

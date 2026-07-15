@@ -1,7 +1,13 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { EventDetail } from "../../../src/api/events-client";
 import { EventTeamsPanel } from "../../../src/components/event-detail/EventTeamsPanel";
+
+const mocks = vi.hoisted(() => ({ rotateTeamLoginKey: vi.fn() }));
+vi.mock("../../../src/api/events-client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../src/api/events-client")>();
+  return { ...actual, rotateTeamLoginKey: mocks.rotateTeamLoginKey };
+});
 
 const t = (key: string, params?: Readonly<Record<string, string | number>>) =>
   params ? `${key}|${JSON.stringify(params)}` : key;
@@ -11,9 +17,7 @@ const detail = (teams: any[], status = "DRAFT") => ({ status, teams }) as unknow
 afterEach(() => vi.clearAllMocks());
 
 describe("EventTeamsPanel", () => {
-  it("should render full team rows and copy the login key", () => {
-    const writeText = vi.fn();
-    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+  it("should render team metadata without pretending a one-time key can be read again", () => {
     render(
       <EventTeamsPanel
         detail={detail([
@@ -30,45 +34,7 @@ describe("EventTeamsPanel", () => {
     expect(screen.getByText("team-a")).toBeInTheDocument();
     expect(screen.getByText("Alpha")).toBeInTheDocument();
     expect(screen.getByText("111122223333")).toBeInTheDocument();
-    expect(screen.getByText("KEY-A")).toBeInTheDocument();
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: 'event_detail.teams_col_login_key_aria|{"slug":"team-a"}',
-      }),
-    );
-    expect(writeText).toHaveBeenCalledWith("KEY-A");
-  });
-
-  it("should copy an invite link when participantPortalUrl is configured (#1772)", () => {
-    const writeText = vi.fn();
-    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
-    render(
-      <EventTeamsPanel
-        detail={detail([{ internalSlug: "team-a", teamLoginKey: "KEY A" }])}
-        participantPortalUrl="https://portal.example.com/"
-        t={t}
-      />,
-    );
-    fireEvent.click(
-      screen.getByRole("button", {
-        name: 'event_detail.teams_col_invite_link_aria|{"slug":"team-a"}',
-      }),
-    );
-    expect(writeText).toHaveBeenCalledWith("https://portal.example.com/login#invite=KEY%20A");
-  });
-
-  it("should not render the invite-link button without participantPortalUrl", () => {
-    render(
-      <EventTeamsPanel
-        detail={detail([{ internalSlug: "team-a", teamLoginKey: "KEY-A" }])}
-        t={t}
-      />,
-    );
-    expect(
-      screen.queryByRole("button", {
-        name: 'event_detail.teams_col_invite_link_aria|{"slug":"team-a"}',
-      }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText("KEY-A")).not.toBeInTheDocument();
   });
 
   it("should show the unset / legacy fallbacks for missing fields (collapsed for RUNNING)", () => {
@@ -80,11 +46,63 @@ describe("EventTeamsPanel", () => {
     );
     expect(screen.getByText("event_detail.teams_col_display_name_unset")).toBeInTheDocument();
     expect(screen.getByText("event_detail.teams_col_account_legacy")).toBeInTheDocument();
-    expect(screen.getByText("event_detail.teams_col_login_key_legacy")).toBeInTheDocument();
   });
 
   it("should render the empty state for an event with no teams", () => {
     render(<EventTeamsPanel detail={detail([])} t={t} />);
     expect(screen.getByText("event_detail.teams_empty")).toBeInTheDocument();
+  });
+
+  it("should rotate a team key and expose the replacement only in the modal", async () => {
+    const writeText = vi.fn();
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    mocks.rotateTeamLoginKey.mockResolvedValue({
+      kind: "ok",
+      teamId: "team-1",
+      teamLoginKey: "NEW-ONE-TIME-KEY",
+      rotatedAt: "2026-07-15T00:00:00.000Z",
+    });
+    render(
+      <EventTeamsPanel
+        apiClient={{} as never}
+        canMutateTenant
+        detail={
+          {
+            ...detail([{ teamId: "team-1", internalSlug: "team-a" }]),
+            eventId: "event-1",
+          } as EventDetail
+        }
+        t={t}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "event_detail.rotate_key_action" }));
+    fireEvent.click(screen.getByRole("button", { name: "event_detail.rotate_key_confirm" }));
+    expect(await screen.findByText("NEW-ONE-TIME-KEY")).toBeInTheDocument();
+    expect(mocks.rotateTeamLoginKey).toHaveBeenCalledWith(expect.anything(), "event-1", "team-1");
+    fireEvent.click(screen.getByRole("button", { name: "event_detail.rotate_key_copy" }));
+    expect(writeText).toHaveBeenCalledWith("NEW-ONE-TIME-KEY");
+    fireEvent.click(screen.getByRole("button", { name: "event_detail.rotate_key_done" }));
+    await waitFor(() => expect(screen.queryByText("NEW-ONE-TIME-KEY")).not.toBeInTheDocument());
+  });
+
+  it("should show a safe error when key rotation fails", async () => {
+    mocks.rotateTeamLoginKey.mockRejectedValue(new Error("rotation failed"));
+    render(
+      <EventTeamsPanel
+        apiClient={{} as never}
+        canMutateTenant
+        detail={
+          {
+            ...detail([{ teamId: "team-1", internalSlug: "team-a" }]),
+            eventId: "event-1",
+          } as EventDetail
+        }
+        t={t}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "event_detail.rotate_key_action" }));
+    fireEvent.click(screen.getByRole("button", { name: "event_detail.rotate_key_confirm" }));
+    expect(await screen.findByText("rotation failed")).toBeInTheDocument();
   });
 });

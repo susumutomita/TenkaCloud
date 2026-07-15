@@ -161,7 +161,11 @@ export function normalizeJsonValue(value: unknown): unknown {
 }
 
 export function payloadWithoutLoginKey(record: DeploymentWriteRecord): string {
-  const { teamLoginKey: _teamLoginKey, ...safeRecord } = record as Record<string, unknown>;
+  const {
+    teamLoginKey: _teamLoginKey,
+    teamLoginKeyHash: _teamLoginKeyHash,
+    ...safeRecord
+  } = record as Record<string, unknown>;
   return JSON.stringify(normalizeJsonValue(safeRecord));
 }
 
@@ -193,13 +197,29 @@ export function optionalNumber(value: unknown): number | null {
   return typeof value === "number" ? value : null;
 }
 
+const SHA256_HEX_RE = /^[0-9a-f]{64}$/;
+
+/** Select the SQL-only credential representation without accepting ambiguous input. */
+function resolveLoginKeyHash(record: DeploymentWriteRecord, normalTenantId: string | null) {
+  if (!normalTenantId) return null;
+  const plaintext = (record as { teamLoginKey?: unknown }).teamLoginKey;
+  const prehashed = (record as { teamLoginKeyHash?: unknown }).teamLoginKeyHash;
+  if (typeof plaintext === "string" && typeof prehashed === "string") {
+    throw new Error("Provide a plaintext or pre-hashed login credential, not both");
+  }
+  if (typeof prehashed === "string") {
+    if (!SHA256_HEX_RE.test(prehashed)) {
+      throw new Error("Expected a valid SHA-256 login credential");
+    }
+    return prehashed;
+  }
+  return typeof plaintext === "string" && plaintext.length > 0 ? hashLoginKey(plaintext) : null;
+}
+
 export function deploymentRowParams(record: DeploymentWriteRecord): SqlParam[] {
   const normalTenantId =
     !isCompositeParentRecord(record) && !isCompositeTargetRecord(record) ? record.tenantId : null;
-  const loginKeyHash =
-    normalTenantId && (record as { teamLoginKey?: string }).teamLoginKey
-      ? hashLoginKey((record as { teamLoginKey: string }).teamLoginKey)
-      : null;
+  const loginKeyHash = resolveLoginKeyHash(record, normalTenantId);
   return [
     record.jobId,
     record.tenantId,

@@ -17,7 +17,7 @@ export async function loadBulkDeployTargets(
   const repositories = await resolveEventRepositories(shared);
   const [event, allTeams] = await Promise.all([
     repositories.events.getEvent(tenantId, eventId),
-    repositories.teams.listTeamsByEvent(eventId),
+    repositories.teams.listTeamsForDeployment(eventId),
   ]);
   // getEvent は tenant 不一致 / 不在をどちらも undefined に畳む
   // (= 従来の `!event || event.tenantId !== tenantId` を repository 内へ移設)。

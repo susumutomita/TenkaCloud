@@ -5,9 +5,24 @@ import {
   PutCommand,
   QueryCommand,
   ScanCommand,
+  TransactWriteCommand,
+  type TransactWriteCommandInput,
 } from "@aws-sdk/lib-dynamodb";
 import type { TeamItem } from "../handlers/event-handler/types.js";
-import type { TeamRecord, TeamsRepository } from "./types.js";
+import type {
+  TeamDeploymentRecord,
+  TeamLoginKeyRotationInput,
+  TeamLoginKeyRotationOutcome,
+  TeamRecord,
+  TeamsRepository,
+} from "./types.js";
+
+function isConditionalTransactionCancellation(error: unknown): boolean {
+  if (!(error instanceof Error) || error.name !== "TransactionCanceledException") return false;
+  const reasons = (error as { CancellationReasons?: ReadonlyArray<{ Code?: string }> })
+    .CancellationReasons;
+  return (reasons ?? []).some((reason) => reason.Code === "ConditionalCheckFailed");
+}
 
 /**
  * [ADR-049 §5.1] DynamoDB implementation of {@link TeamsRepository}. This is a
@@ -80,6 +95,7 @@ export class DynamoDbTeamsRepository implements TeamsRepository {
   constructor(
     private readonly ddb: DynamoDBDocumentClient,
     private readonly tableName: string,
+    private readonly deploymentsTableName?: string,
   ) {}
 
   async getTeam(
@@ -138,6 +154,70 @@ export class DynamoDbTeamsRepository implements TeamsRepository {
       exclusiveStartKey = out.LastEvaluatedKey as Record<string, unknown> | undefined;
     } while (exclusiveStartKey);
     return records;
+  }
+
+  async listTeamsForDeployment(eventId: string): Promise<readonly TeamDeploymentRecord[]> {
+    const records = await this.listTeamsByEvent(eventId);
+    return records.map((record) => {
+      const { teamLoginKey, ...team } = record;
+      if (!teamLoginKey) {
+        throw new Error(
+          `team ${record.teamId} in event ${eventId} has no participant login credential`,
+        );
+      }
+      return { ...team, credential: { kind: "plaintext", value: teamLoginKey } };
+    });
+  }
+
+  async rotateLoginKey(input: TeamLoginKeyRotationInput): Promise<TeamLoginKeyRotationOutcome> {
+    if (input.deployments.length > 0 && !this.deploymentsTableName) {
+      throw new Error("rotateLoginKey requires a deployments table name");
+    }
+    const transactItems: TransactWriteCommandInput["TransactItems"] = [
+      {
+        Update: {
+          TableName: this.tableName,
+          Key: { PK: `EVENT#${input.eventId}`, SK: `${TEAM_SK_PREFIX}${input.teamId}` },
+          UpdateExpression:
+            "SET teamLoginKey = :loginKey, GSI2PK = :gsi2pk, GSI2SK = :meta, updatedAt = :updatedAt",
+          ConditionExpression: "tenantId = :tenantId AND eventId = :eventId AND teamId = :teamId",
+          ExpressionAttributeValues: {
+            ":loginKey": input.newLoginKey,
+            ":gsi2pk": `TEAMKEY#${input.newLoginKey}`,
+            ":meta": TEAM_GSI2_SK,
+            ":updatedAt": input.updatedAt,
+            ":tenantId": input.tenantId,
+            ":eventId": input.eventId,
+            ":teamId": input.teamId,
+          },
+        },
+      },
+      ...input.deployments.map((deployment) => ({
+        Update: {
+          TableName: this.deploymentsTableName as string,
+          Key: { PK: `DEPLOYMENT#${deployment.jobId}`, SK: "META" },
+          UpdateExpression:
+            "SET teamLoginKey = :loginKey, GSI2PK = :gsi2pk, GSI2SK = :gsi2sk, updatedAt = :updatedAt",
+          ConditionExpression: "tenantId = :tenantId AND eventId = :eventId AND teamId = :teamId",
+          ExpressionAttributeValues: {
+            ":loginKey": input.newLoginKey,
+            ":gsi2pk": `TEAMKEY#${input.newLoginKey}`,
+            ":gsi2sk": deployment.createdAt,
+            ":updatedAt": input.updatedAt,
+            ":tenantId": input.tenantId,
+            ":eventId": input.eventId,
+            ":teamId": input.teamId,
+          },
+        },
+      })),
+    ];
+    try {
+      await this.ddb.send(new TransactWriteCommand({ TransactItems: transactItems }));
+      return { outcome: "updated" };
+    } catch (error) {
+      if (isConditionalTransactionCancellation(error)) return { outcome: "conflict" };
+      throw error;
+    }
   }
 
   async putTeam(record: TeamRecord): Promise<void> {

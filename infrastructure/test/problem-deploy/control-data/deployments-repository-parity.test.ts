@@ -629,6 +629,61 @@ describe("SqlDeploymentsRepository login-key storage", () => {
     expect(JSON.parse(String(row?.payload))).not.toHaveProperty("teamLoginKey");
     expect((await repo.listByTeamLoginKey(plaintext))[0]?.teamLoginKey).toBe(plaintext);
   });
+
+  it("should preserve a pre-hashed team credential without ever receiving plaintext", async () => {
+    const sql = makeSqliteExecutor();
+    const repo = new SqlDeploymentsRepository(sql);
+    const plaintext = "ONE-TIME-CREATE-RESPONSE-KEY";
+    const prehashed = hashLoginKey(plaintext);
+    const record = deployment({ jobId: "prehashed" });
+    delete record.teamLoginKey;
+    record.teamLoginKeyHash = prehashed;
+
+    await repo.putDeployment(record);
+
+    const row = await sql.get("SELECT login_key_hash, payload FROM deployments WHERE job_id = ?", [
+      "prehashed",
+    ]);
+    expect(row?.login_key_hash).toBe(prehashed);
+    expect(String(row?.payload)).not.toContain(prehashed);
+    expect(JSON.parse(String(row?.payload))).not.toHaveProperty("teamLoginKeyHash");
+    expect((await repo.listByTeamLoginKey(plaintext))[0]?.jobId).toBe("prehashed");
+  });
+
+  it("should reject ambiguous plaintext and pre-hashed credentials", async () => {
+    const repo = new SqlDeploymentsRepository(makeSqliteExecutor());
+    await expect(
+      repo.putDeployment(
+        deployment({
+          jobId: "ambiguous",
+          teamLoginKey: "PLAINTEXT",
+          teamLoginKeyHash: hashLoginKey("PLAINTEXT"),
+        }),
+      ),
+    ).rejects.toThrow("plaintext or pre-hashed login credential, not both");
+  });
+
+  it("should reject malformed pre-hashed credentials", async () => {
+    const repo = new SqlDeploymentsRepository(makeSqliteExecutor());
+    const record = deployment({ jobId: "malformed" });
+    delete record.teamLoginKey;
+    record.teamLoginKeyHash = "not-a-sha256-hash";
+
+    await expect(repo.putDeployment(record)).rejects.toThrow("valid SHA-256 login credential");
+  });
+});
+
+describe("DynamoDbDeploymentsRepository login-key storage", () => {
+  it("should reject a hash-only credential that cannot populate the plaintext GSI", async () => {
+    const repo = new DynamoDbDeploymentsRepository(makeFakeDdb(), TABLE);
+    const record = deployment({ jobId: "hash-only" });
+    delete record.teamLoginKey;
+    record.teamLoginKeyHash = hashLoginKey("PLAINTEXT");
+
+    await expect(repo.putDeployment(record)).rejects.toThrow(
+      "DynamoDB deployments require a plaintext login credential",
+    );
+  });
 });
 
 function scoreEvent(overrides: Partial<ScoreEventRecord> = {}): ScoreEventRecord {

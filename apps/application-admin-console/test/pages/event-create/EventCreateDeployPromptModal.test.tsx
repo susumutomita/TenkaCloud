@@ -18,6 +18,11 @@ const props = (
   visible: true,
   canMutateTenant: true,
   deployStarting: false,
+  teams: [
+    { teamId: "team-1", internalSlug: "team-a", teamLoginKey: "KEY-A" },
+    { teamId: "team-2", internalSlug: "team-b", teamLoginKey: "KEY-B" },
+  ],
+  participantPortalUrl: "https://portal.example.com/",
   onDeployNow: vi.fn(),
   onDeployLater: vi.fn(),
   ...over,
@@ -26,6 +31,21 @@ const props = (
 afterEach(() => vi.clearAllMocks());
 
 describe("EventCreateDeployPromptModal", () => {
+  it("should show every one-time login key and copy the complete handoff list", () => {
+    const writeText = vi.fn();
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    render(<EventCreateDeployPromptModal {...props()} />);
+
+    expect(screen.getByText("KEY-A")).toBeInTheDocument();
+    expect(screen.getByText("KEY-B")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "event_create.login_keys_copy_all" }));
+    expect(writeText).toHaveBeenCalledWith("team-a\tKEY-A\nteam-b\tKEY-B");
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "event_create.login_keys_copy_invite" })[0] as Element,
+    );
+    expect(writeText).toHaveBeenLastCalledWith("https://portal.example.com/login#invite=KEY-A");
+  });
+
   it("should trigger deploy-now and deploy-later from the footer buttons", () => {
     const p = props();
     render(<EventCreateDeployPromptModal {...p} />);

@@ -41,6 +41,34 @@ export type TeamRecord = {
 };
 
 /**
+ * Internal participant credential handed from the Teams aggregate to deployment
+ * planning. SQL exposes only the already-derived SHA-256 digest; DynamoDB exposes
+ * the legacy plaintext value. This type never crosses an HTTP response boundary.
+ */
+export type TeamLoginCredential =
+  | { readonly kind: "plaintext"; readonly value: string }
+  | { readonly kind: "sha256"; readonly value: string };
+
+/** Team metadata plus the credential material required to build deployment indexes. */
+export type TeamDeploymentRecord = Omit<TeamRecord, "teamLoginKey"> & {
+  readonly credential: TeamLoginCredential;
+};
+
+export interface TeamLoginKeyRotationInput {
+  readonly tenantId: string;
+  readonly eventId: string;
+  readonly teamId: string;
+  readonly newLoginKey: string;
+  readonly updatedAt: string;
+  readonly deployments: readonly {
+    readonly jobId: string;
+    readonly createdAt: string;
+  }[];
+}
+
+export type TeamLoginKeyRotationOutcome = { readonly outcome: "updated" | "conflict" };
+
+/**
  * [ADR-049 §5.1] Aggregate-scoped repository for the Teams aggregate — domain
  * methods, not a generic key-value shim (mirror of {@link EventsRepository}). Two
  * interchangeable backends implement it: {@link DynamoDbTeamsRepository} (status
@@ -75,6 +103,14 @@ export interface TeamsRepository {
    * teamId 昇順で並べ、 backend 間で決定的な順序を保証する。
    */
   listTeamsByEvent(eventId: string): Promise<readonly TeamRecord[]>;
+  /**
+   * Deployment-only view. Unlike {@link listTeamsByEvent}, this fails loudly if
+   * a row has no participant credential and can return a hash without exposing
+   * plaintext from a SQL backend.
+   */
+  listTeamsForDeployment(eventId: string): Promise<readonly TeamDeploymentRecord[]>;
+  /** Atomically rotate the team row and every denormalized deployment login index. */
+  rotateLoginKey(input: TeamLoginKeyRotationInput): Promise<TeamLoginKeyRotationOutcome>;
   /** Upsert one team row. */
   putTeam(record: TeamRecord): Promise<void>;
   /** Delete one team row by its event/team domain identifiers. */

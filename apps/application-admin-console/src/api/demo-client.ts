@@ -17,6 +17,7 @@ import type {
   EventProblemTarget,
   EventStatus,
   EventSummary,
+  RotateTeamLoginKeyResponse,
   TeamSummary,
 } from "./events-client";
 
@@ -28,9 +29,9 @@ import type {
  * `config.mode === "demo"` のとき差し込む (= 公開 demo URL で AWS なし・課金なしの運営フロー)。
  *
  * 対応経路: EventList (`GET events`) / EventDetail (`GET events/{id}`) / イベント作成
- * (`POST events`) / bulk deploy (`POST events/{id}/deploy`)。 未対応は `NOT_IMPLEMENTED`、
- * 存在しない event は `NOT_FOUND` を投げる (= 黙って空を返さない)。 疑似デプロイの時間進行と
- * participant 連携・ホスティングは後続 slice。
+ * (`POST events`) / key rotation / bulk deploy (`POST events/{id}/deploy`)。 未対応は
+ * `NOT_IMPLEMENTED`、存在しない event は `NOT_FOUND` を投げる (= 黙って空を返さない)。
+ * 疑似デプロイの時間進行と participant 連携・ホスティングは後続 slice。
  */
 
 interface DemoEventRecord {
@@ -127,7 +128,6 @@ function synthRecord(summary: EventSummary): DemoEventRecord {
     teamId: `${summary.eventId}-team-${i + 1}`,
     internalSlug: `team-${i + 1}`,
     displayName: `Team ${i + 1}`,
-    teamLoginKey: `demo-key-${summary.eventId}-${i + 1}`,
   }));
   const problems: EventProblemTarget[] = Array.from({ length: summary.problemCount }, (_, i) => ({
     problemId: `demo-problem-${i + 1}`,
@@ -151,11 +151,13 @@ function synthRecord(summary: EventSummary): DemoEventRecord {
 
 let events: DemoEventRecord[] = SEED_SUMMARIES.map(synthRecord);
 let createdCounter = 0;
+let rotationCounter = 0;
 
 /** テスト間で store を初期状態に戻す。 */
 export function resetDemoStore(): void {
   events = SEED_SUMMARIES.map(synthRecord);
   createdCounter = 0;
+  rotationCounter = 0;
 }
 
 function findEvent(eventId: string): DemoEventRecord {
@@ -204,7 +206,6 @@ function createEventOp(body: CreateEventRequest): CreateEventResponse {
     teamId: `${eventId}-team-${i + 1}`,
     internalSlug: t.internalSlug,
     displayName: t.internalSlug,
-    teamLoginKey: `demo-key-${eventId}-${i + 1}`,
     awsAccountId: t.awsAccountId,
   }));
   const problems: EventProblemTarget[] = body.problems.map((p) => ({ ...p }));
@@ -240,6 +241,20 @@ function bulkDeployOp(eventId: string): BulkResult {
   rec.deployStartedAtMs = Date.now();
   rec.summary = { ...rec.summary, status: "DEPLOYING" };
   return { eventId, enqueued: rec.teams.length * rec.problems.length, skipped: 0 };
+}
+
+function rotateTeamLoginKeyOp(eventId: string, teamId: string): RotateTeamLoginKeyResponse {
+  const rec = findEvent(eventId);
+  if (!rec.teams.some((team) => team.teamId === teamId)) {
+    throw new ApiError(StatusCodes.NOT_FOUND, `Demo team "${teamId}" not found.`);
+  }
+  rotationCounter += 1;
+  return {
+    kind: "ok",
+    teamId,
+    teamLoginKey: `demo-rotated-key-${eventId}-${rotationCounter}`,
+    rotatedAt: "2026-06-21T00:00:00.000Z",
+  };
 }
 
 function educationLocale(path: string): EducationGraphLocale {
@@ -472,6 +487,17 @@ export function createDemoApiClient(): ApiClient {
       }
       if (parts[0] === "events" && parts.length === 3 && parts[2] === "deploy") {
         return bulkDeployOp(decodeURIComponent(parts[1])) as unknown as T;
+      }
+      if (
+        parts[0] === "events" &&
+        parts[2] === "teams" &&
+        parts[4] === "rotate-login-key" &&
+        parts.length === 5
+      ) {
+        return rotateTeamLoginKeyOp(
+          decodeURIComponent(parts[1]),
+          decodeURIComponent(parts[3]),
+        ) as unknown as T;
       }
       return unsupported("POST", path);
     },

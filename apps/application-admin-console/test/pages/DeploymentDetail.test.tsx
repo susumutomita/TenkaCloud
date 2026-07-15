@@ -283,19 +283,19 @@ describe("DeploymentDetailPage (Netlify-style phase + log view)", () => {
     expect(screen.getByText("fetch boom")).toBeInTheDocument();
   });
 
-  it("should render failure-reason, hand-off, and CFn outputs sections when present", async () => {
+  it("should render failure-reason and CFn outputs without a legacy plaintext key", async () => {
     mocks.getDeployment.mockResolvedValue({
       ...baseDeployment,
       status: "FAILED",
       failureReason: "CFn rollback",
       teamLoginKey: "KEY-123",
       stackOutputs: JSON.stringify({ FrontendUrl: "https://app.example.com" }),
-    });
+    } satisfies DeploymentSummary & { readonly teamLoginKey: string });
     mocks.getStackProgress.mockResolvedValue(emptyProgress);
     renderPage();
     expect(await screen.findByText("失敗理由")).toBeInTheDocument(); // failure_reason_header
     expect(screen.getAllByText("CFn rollback").length).toBeGreaterThan(0); // alert + guidance
-    expect(screen.getByText("競技者 hand-off")).toBeInTheDocument(); // handoff_header
+    expect(screen.queryByText("KEY-123")).not.toBeInTheDocument();
     expect(screen.getByText("https://app.example.com")).toBeInTheDocument(); // CfnOutputsSection
   });
 

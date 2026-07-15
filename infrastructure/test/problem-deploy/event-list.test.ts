@@ -120,7 +120,7 @@ describe("listEvents", () => {
 describe("getEventDetail", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("normal case: should return Event + Teams, exposing teamLoginKey only when includeLoginKeys=true", async () => {
+  it("normal case: should return Event + Teams without re-exposing teamLoginKey", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
       Item: {
@@ -147,15 +147,16 @@ describe("getEventDetail", () => {
     // いないので displayTeamName 行は無し。
     ddbSend.mockResolvedValueOnce({ Items: [] });
 
-    const out = await getEventDetail(shared, "tenant-acme", "EV1", { includeLoginKeys: true });
+    const out = await getEventDetail(shared, "tenant-acme", "EV1");
     expect(out).toBeDefined();
     expect(out?.eventId).toBe("EV1");
     expect(out?.problems).toHaveLength(1);
     expect(out?.teams).toHaveLength(2);
-    expect(out?.teams[0]).toMatchObject({
+    expect(out?.teams[0]).toEqual({
       teamId: "T1",
       internalSlug: "team-alpha",
-      teamLoginKey: "key-1",
+      displayName: undefined,
+      awsAccountId: undefined,
     });
 
     // 1 件目は GetCommand (Event)
@@ -194,10 +195,10 @@ describe("getEventDetail", () => {
     });
     ddbSend.mockResolvedValueOnce({ Items: [] });
 
-    // includeLoginKeys を渡さない (= default) → bearer credential は露出しない。
+    // Event detail reads never re-expose the one-time bearer credential.
     const out = await getEventDetail(shared, "tenant-acme", "EV1");
     expect(out?.teams).toHaveLength(1);
-    expect(out?.teams[0]?.teamLoginKey).toBeUndefined();
+    expect(out?.teams[0]).not.toHaveProperty("teamLoginKey");
     // 他の team メタデータ (internalSlug 等) は引き続き返る。
     expect(out?.teams[0]?.internalSlug).toBe("team-alpha");
     expect(JSON.stringify(out)).not.toContain("key-1");

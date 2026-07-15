@@ -168,8 +168,6 @@ export interface DeploymentSummary {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly expiresAt: number;
-  /** 単一行 Get でのみ返る。`listDeployments` の戻り値には含まれない (誤露出防止)。 */
-  readonly teamLoginKey?: string;
   /**
    * Composite (multi-cloud) parent でのみ返る per-target status。legacy
    * single-provider deployment では undefined (= 旧 UI を byte 互換に保つ)。
