@@ -57,15 +57,18 @@ describe("ShellLayout", () => {
     expect(getByText("page-body")).toBeInTheDocument();
   });
 
-  it("should render the branded product title when provided", () => {
+  it("should render the console identifier as the title and never truncate it behind the brand (#2662)", () => {
     const { topNav } = renderShell({ title: "Admin Console" });
-    expect(topNav.findTitle()?.getElement()).toHaveTextContent("TenkaCloud · Admin Console");
+    expect(topNav.findTitle()?.getElement()).toHaveTextContent("Admin Console");
+    expect(topNav.findTitle()?.getElement().textContent).not.toContain("TenkaCloud");
+    expect(topNav.findLogo()?.getElement()).toHaveAttribute("alt", "TenkaCloud");
   });
 
   it("should render the TenkaCloud brand lockup when the product title is omitted", () => {
     const { topNav } = renderShell();
     expect(topNav.findTitle()?.getElement()).toHaveTextContent("TenkaCloud");
     expect(topNav.findLogo()?.getElement()).toHaveAttribute("src", tenkaCloudAppIconDataUri);
+    expect(topNav.findLogo()?.getElement()).toHaveAttribute("alt", "");
   });
 
   it("should show only the locale switcher when unauthenticated", () => {
