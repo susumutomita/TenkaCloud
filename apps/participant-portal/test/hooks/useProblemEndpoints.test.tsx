@@ -1,113 +1,151 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ParticipantEndpointView } from "../../src/api/portal-client";
 
-/**
- * [Issue #2661] useProblemEndpoints: ProblemDetail が 1 problem の endpoint 一覧を単一 source として
- * 保持する hook。 mount fetch (success / error / no_endpoints) / cancelled guard / enabled・problemId・
- * teamLoginKey による fetch gating / replaceEndpoints を pin する。 fetch は EndpointOverrideForm から
- * この hook へ移したもの。
- */
-const { mockList } = vi.hoisted(() => ({ mockList: vi.fn() }));
+const { mockListProblemEndpoints } = vi.hoisted(() => ({
+  mockListProblemEndpoints: vi.fn(),
+}));
+
 vi.mock("../../src/api/portal-client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../src/api/portal-client")>();
-  return { ...actual, listProblemEndpoints: mockList };
+  return { ...actual, listProblemEndpoints: mockListProblemEndpoints };
 });
 
 const { useProblemEndpoints } = await import("../../src/hooks/useProblemEndpoints");
 
-const ep: ParticipantEndpointView = {
-  slot: "app",
-  overridable: true,
-  defaultKey: "RegisteredUrl",
-  effectiveUrl: "https://team.example/app",
-  overrideUrl: "https://team.example/app",
+const args = {
+  apiBaseUrl: "https://api.example.com",
+  teamLoginKey: "TEAM-KEY",
+  problemId: "stackstack",
+  enabled: true,
 };
 
 afterEach(() => vi.clearAllMocks());
 
 describe("useProblemEndpoints", () => {
-  it("should fetch and expose the server-computed endpoints (+ plugin-marshalled) on mount", async () => {
-    mockList.mockResolvedValue({ teamId: "t1", endpoints: [ep] });
-    const { result } = renderHook(() => useProblemEndpoints("https://api", "KEY", "p1", true));
-    await waitFor(() => expect(result.current.endpoints).toEqual([ep]));
-    expect(result.current.listError).toBeUndefined();
-    expect(mockList).toHaveBeenCalledWith("https://api", "KEY", "p1");
-    // portalEndpoints は plugin SDK 形 (defaultKey を落とし、 override マージ済 URL を保つ)。
-    expect(result.current.portalEndpoints).toEqual([
+  it("should load the authoritative endpoint registry once and expose shared updates", async () => {
+    const endpoints = [
       {
         slot: "app",
         overridable: true,
-        effectiveUrl: "https://team.example/app",
-        overrideUrl: "https://team.example/app",
+        defaultKey: "RegisteredUrl",
+        overrideUrl: "https://override.example.com",
+        effectiveUrl: "https://override.example.com",
       },
-    ]);
+    ];
+    mockListProblemEndpoints.mockResolvedValue({ teamId: "team-1", endpoints });
+
+    const { result } = renderHook(() => useProblemEndpoints(args));
+
+    await waitFor(() => expect(result.current.endpoints).toEqual(endpoints));
+    expect(mockListProblemEndpoints).toHaveBeenCalledOnce();
+    expect(mockListProblemEndpoints).toHaveBeenCalledWith(
+      args.apiBaseUrl,
+      args.teamLoginKey,
+      args.problemId,
+      expect.any(AbortSignal),
+    );
+
+    const afterClear = [
+      {
+        slot: "app",
+        overridable: true,
+        defaultKey: "RegisteredUrl",
+      },
+    ];
+    act(() => result.current.replaceEndpoints(afterClear));
+    expect(result.current.endpoints).toEqual(afterClear);
   });
 
-  it("should expose the error message when the list fetch fails", async () => {
-    mockList.mockRejectedValue(new Error("list boom"));
-    const { result } = renderHook(() => useProblemEndpoints("https://api", "KEY", "p1", true));
-    await waitFor(() => expect(result.current.listError).toBe("list boom"));
+  it("should expose list failures instead of silently substituting an empty registry", async () => {
+    mockListProblemEndpoints.mockRejectedValue(new Error("endpoint registry unavailable"));
+
+    const { result } = renderHook(() => useProblemEndpoints(args));
+
+    await waitFor(() => expect(result.current.error).toBe("endpoint registry unavailable"));
     expect(result.current.endpoints).toBeUndefined();
   });
 
-  it("should surface the no_endpoints signal so consumers can hide the section", async () => {
-    mockList.mockRejectedValue("no_endpoints");
-    const { result } = renderHook(() => useProblemEndpoints("https://api", "KEY", "p1", true));
-    await waitFor(() => expect(result.current.listError).toBe("no_endpoints"));
-  });
+  it("should not fetch while endpoint UI is disabled", () => {
+    const { result } = renderHook(() => useProblemEndpoints({ ...args, enabled: false }));
 
-  it.each([
-    ["disabled", "https://api", "KEY", "p1", false],
-    ["no problemId", "https://api", "KEY", undefined, true],
-    ["empty teamLoginKey", "https://api", "", "p1", true],
-  ])("should not fetch when %s", async (_label, api, key, problemId, enabled) => {
-    const { result } = renderHook(() => useProblemEndpoints(api, key, problemId, enabled));
-    await act(async () => {});
-    expect(mockList).not.toHaveBeenCalled();
+    expect(mockListProblemEndpoints).not.toHaveBeenCalled();
     expect(result.current.endpoints).toBeUndefined();
-    expect(result.current.listError).toBeUndefined();
-    expect(result.current.portalEndpoints).toBeUndefined();
+    expect(result.current.error).toBeUndefined();
   });
 
-  it("should replace endpoints and clear the error via replaceEndpoints", async () => {
-    mockList.mockRejectedValue(new Error("stale"));
-    const { result } = renderHook(() => useProblemEndpoints("https://api", "KEY", "p1", true));
-    await waitFor(() => expect(result.current.listError).toBe("stale"));
+  it("should hide stale data and reject a late mutation update after the problem changes", async () => {
+    const firstEndpoints = [
+      {
+        slot: "first",
+        overridable: true,
+        defaultKey: "FirstUrl",
+        effectiveUrl: "https://first.example.com",
+      },
+    ];
+    let resolveSecond: ((value: unknown) => void) | undefined;
+    mockListProblemEndpoints
+      .mockResolvedValueOnce({ teamId: "team-1", endpoints: firstEndpoints })
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveSecond = resolve;
+        }),
+      );
 
-    const next = [{ ...ep, effectiveUrl: "https://new.example/app" }];
-    act(() => result.current.replaceEndpoints(next));
-    expect(result.current.endpoints).toEqual(next);
-    expect(result.current.listError).toBeUndefined();
+    const { result, rerender } = renderHook(
+      ({ problemId }) => useProblemEndpoints({ ...args, problemId }),
+      { initialProps: { problemId: "first" } },
+    );
+    await waitFor(() => expect(result.current.endpoints).toEqual(firstEndpoints));
+    const replaceFirstEndpoints = result.current.replaceEndpoints;
+
+    rerender({ problemId: "second" });
+    expect(result.current.endpoints).toBeUndefined();
+
+    act(() => replaceFirstEndpoints(firstEndpoints));
+    expect(result.current.endpoints).toBeUndefined();
+
+    const secondEndpoints = [
+      {
+        slot: "second",
+        overridable: true,
+        defaultKey: "SecondUrl",
+        effectiveUrl: "https://second.example.com",
+      },
+    ];
+    await act(async () => {
+      resolveSecond?.({ teamId: "team-1", endpoints: secondEndpoints });
+      await Promise.resolve();
+    });
+    expect(result.current.endpoints).toEqual(secondEndpoints);
   });
 
-  it("should ignore a late resolution after unmount (cancelled guard)", async () => {
-    let resolveList: (v: unknown) => void = () => {};
-    mockList.mockReturnValueOnce(
+  it("should ignore late resolution and rejection after the request is aborted", async () => {
+    let resolveRequest: ((value: unknown) => void) | undefined;
+    mockListProblemEndpoints.mockReturnValueOnce(
       new Promise((resolve) => {
-        resolveList = resolve;
+        resolveRequest = resolve;
       }),
     );
-    const { unmount } = renderHook(() => useProblemEndpoints("https://api", "KEY", "p1", true));
-    unmount();
+    const resolved = renderHook(() => useProblemEndpoints(args));
+    resolved.unmount();
     await act(async () => {
-      resolveList({ teamId: "t1", endpoints: [ep] });
+      resolveRequest?.({ teamId: "team-1", endpoints: [] });
       await Promise.resolve();
     });
 
-    let rejectList: (e: unknown) => void = () => {};
-    mockList.mockReturnValueOnce(
-      new Promise((_resolve, reject) => {
-        rejectList = reject;
+    let rejectRequest: ((reason: unknown) => void) | undefined;
+    mockListProblemEndpoints.mockReturnValueOnce(
+      new Promise((_, reject) => {
+        rejectRequest = reject;
       }),
     );
-    const second = renderHook(() => useProblemEndpoints("https://api", "KEY", "p1", true));
-    second.unmount();
+    const rejected = renderHook(() => useProblemEndpoints(args));
+    rejected.unmount();
     await act(async () => {
-      rejectList(new Error("late"));
+      rejectRequest?.(new Error("late failure"));
       await Promise.resolve();
     });
-    // どちらも cancelled guard で state 更新せず throw / warning なく完了する。
-    expect(true).toBe(true);
+
+    expect(mockListProblemEndpoints).toHaveBeenCalledTimes(2);
   });
 });

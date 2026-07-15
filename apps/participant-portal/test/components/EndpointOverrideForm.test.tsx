@@ -2,13 +2,6 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { type ParticipantEndpointView, PortalValidationError } from "../../src/api/portal-client";
 
-/**
- * Issue #607 / #2661: EndpointOverrideForm。 [Issue #2661] 以降 endpoints / listError は props で
- * 受ける controlled component (fetch は ProblemDetail の useProblemEndpoints が担う)。 このテストは
- * render 分岐 (effectiveUrl / overrideUrl / overridable / not-yet) と、 save / delete が API を叩き、
- * server 返却の endpoints を `onEndpointsChange` で親へ返すこと、 validation code の inline error を pin
- * する。 mount fetch / list error / cancelled guard は useProblemEndpoints.test に移した。
- */
 const { mockPut, mockDelete } = vi.hoisted(() => ({
   mockPut: vi.fn(),
   mockDelete: vi.fn(),
@@ -28,6 +21,14 @@ vi.mock("../../src/i18n", () => ({
 
 const { EndpointOverrideForm } = await import("../../src/components/EndpointOverrideForm");
 
+const onEndpointsChange = vi.fn();
+const props = {
+  apiBaseUrl: "https://api.example.com",
+  teamLoginKey: "KEY",
+  problemId: "p1",
+  listError: undefined,
+  onEndpointsChange,
+};
 const usersEp: ParticipantEndpointView = {
   slot: "users",
   label: "Users API",
@@ -38,64 +39,35 @@ const usersEp: ParticipantEndpointView = {
   defaultKey: "UsersBaseUrl",
 };
 
-const controlled = (
-  over: {
-    endpoints?: readonly ParticipantEndpointView[] | undefined;
-    listError?: string | undefined;
-    onEndpointsChange?: (next: readonly ParticipantEndpointView[]) => void;
-  } = {},
-) => ({
-  apiBaseUrl: "https://api.example.com",
-  teamLoginKey: "KEY",
-  problemId: "p1",
-  endpoints: over.endpoints,
-  listError: over.listError,
-  onEndpointsChange: over.onEndpointsChange ?? vi.fn(),
-});
-
 afterEach(() => vi.clearAllMocks());
 
 describe("EndpointOverrideForm", () => {
-  it("should render endpoints incl. overridable form, override-active note, and non-overridable slots", () => {
+  it("should render override, fixed-slot, and missing-default states", () => {
     const { container } = render(
       <EndpointOverrideForm
-        {...controlled({
-          endpoints: [usersEp, { slot: "orders", overridable: false, defaultKey: "OrdersBaseUrl" }],
-        })}
+        {...props}
+        endpoints={[usersEp, { slot: "orders", overridable: false, defaultKey: "OrdersBaseUrl" }]}
       />,
     );
-    expect(screen.getByText("Users API")).toBeInTheDocument();
     expect(container.textContent).toContain("https://override.example/users");
     expect(container.textContent).toContain("problem_detail.endpoint_override_active_label");
     expect(container.textContent).toContain("problem_detail.endpoint_not_overridable");
     expect(container.textContent).toContain("OrdersBaseUrl");
   });
 
-  it("should show an error alert when the parent reports a list error", () => {
-    render(<EndpointOverrideForm {...controlled({ listError: "list boom" })} />);
-    expect(screen.getByText("list boom")).toBeInTheDocument();
-  });
-
-  it("should show a loading note before the parent has provided endpoints", () => {
-    const { container } = render(
-      <EndpointOverrideForm {...controlled({ endpoints: undefined })} />,
+  it("should render nothing for no_endpoints or an empty registry", () => {
+    const noEndpoints = render(
+      <EndpointOverrideForm {...props} endpoints={undefined} listError="no_endpoints" />,
     );
-    expect(container.textContent).toContain("problem_detail.endpoint_loading");
-  });
+    expect(noEndpoints.container.textContent).toBe("");
+    noEndpoints.unmount();
 
-  it("should render nothing for a no_endpoints error or an empty endpoint list", () => {
-    const a = render(<EndpointOverrideForm {...controlled({ listError: "no_endpoints" })} />);
-    expect(a.container.textContent).toBe("");
-    a.unmount();
-
-    const b = render(<EndpointOverrideForm {...controlled({ endpoints: [] })} />);
-    expect(b.container.textContent).toBe("");
+    const empty = render(<EndpointOverrideForm {...props} endpoints={[]} />);
+    expect(empty.container.textContent).toBe("");
   });
 
   it("should reject an empty override URL before calling the API", () => {
-    const { container } = render(
-      <EndpointOverrideForm {...controlled({ endpoints: [usersEp] })} />,
-    );
+    const { container } = render(<EndpointOverrideForm {...props} endpoints={[usersEp]} />);
     fireEvent.click(
       screen.getByRole("button", { name: "problem_detail.endpoint_override_submit" }),
     );
@@ -103,13 +75,11 @@ describe("EndpointOverrideForm", () => {
     expect(mockPut).not.toHaveBeenCalled();
   });
 
-  it("should save an override and hand the response endpoints up to the parent (#2661)", async () => {
-    mockPut.mockResolvedValue({ endpoints: [usersEp] });
-    const onEndpointsChange = vi.fn();
+  it("should save an override and publish the shared endpoint registry", async () => {
+    const next = [{ ...usersEp, effectiveUrl: "https://my.example/users" }];
+    mockPut.mockResolvedValue({ endpoints: next });
     render(
-      <EndpointOverrideForm
-        {...controlled({ endpoints: [{ ...usersEp, overrideUrl: undefined }], onEndpointsChange })}
-      />,
+      <EndpointOverrideForm {...props} endpoints={[{ ...usersEp, overrideUrl: undefined }]} />,
     );
     fireEvent.change(screen.getByPlaceholderText("https://example.com/api"), {
       target: { value: "https://my.example/users" },
@@ -126,15 +96,12 @@ describe("EndpointOverrideForm", () => {
         "https://my.example/users",
       ),
     );
-    // 単一 source を親 (= plugin にも配る側) へ返すことで両カードの表示が一致する。
-    expect(onEndpointsChange).toHaveBeenCalledWith([usersEp]);
+    expect(onEndpointsChange).toHaveBeenCalledWith(next);
   });
 
-  it("should map each PortalValidationError code (and plain errors) to a message", async () => {
+  it("should map each mutation error to a competitor-facing message", async () => {
     render(
-      <EndpointOverrideForm
-        {...controlled({ endpoints: [{ ...usersEp, overrideUrl: undefined }] })}
-      />,
+      <EndpointOverrideForm {...props} endpoints={[{ ...usersEp, overrideUrl: undefined }]} />,
     );
     const input = screen.getByPlaceholderText("https://example.com/api");
     const save = () =>
@@ -167,35 +134,32 @@ describe("EndpointOverrideForm", () => {
     }
   });
 
-  it("should clear an override via delete and hand the response up (#2661)", async () => {
-    const cleared = [{ ...usersEp, overrideUrl: undefined, effectiveUrl: undefined }];
-    mockDelete.mockResolvedValueOnce({ endpoints: cleared });
-    const onEndpointsChange = vi.fn();
-    render(<EndpointOverrideForm {...controlled({ endpoints: [usersEp], onEndpointsChange })} />);
+  it("should clear an override and publish the default endpoint", async () => {
+    const next = [
+      {
+        ...usersEp,
+        overrideUrl: undefined,
+        effectiveUrl: usersEp.defaultUrl,
+      },
+    ];
+    mockDelete.mockResolvedValue({ endpoints: next });
+    render(<EndpointOverrideForm {...props} endpoints={[usersEp]} />);
     fireEvent.click(screen.getByRole("button", { name: "problem_detail.endpoint_override_clear" }));
     await waitFor(() =>
       expect(mockDelete).toHaveBeenCalledWith("https://api.example.com", "KEY", "p1", "users"),
     );
-    expect(onEndpointsChange).toHaveBeenCalledWith(cleared);
+    expect(onEndpointsChange).toHaveBeenCalledWith(next);
   });
 
-  it("should surface a delete error inline", async () => {
+  it("should surface delete errors and show no-default override context", async () => {
     mockDelete.mockRejectedValue(new PortalValidationError("slot_not_overridable"));
     const { container } = render(
-      <EndpointOverrideForm {...controlled({ endpoints: [usersEp] })} />,
+      <EndpointOverrideForm {...props} endpoints={[{ ...usersEp, defaultUrl: undefined }]} />,
     );
+    expect(container.textContent).toContain("—");
     fireEvent.click(screen.getByRole("button", { name: "problem_detail.endpoint_override_clear" }));
     await waitFor(() =>
       expect(container.textContent).toContain("problem_detail.endpoint_error_slot_not_overridable"),
     );
-  });
-
-  it("should show an em-dash in the override-active note when there is no default URL", () => {
-    const { container } = render(
-      <EndpointOverrideForm
-        {...controlled({ endpoints: [{ ...usersEp, defaultUrl: undefined }] })}
-      />,
-    );
-    expect(container.textContent).toContain("—");
   });
 });

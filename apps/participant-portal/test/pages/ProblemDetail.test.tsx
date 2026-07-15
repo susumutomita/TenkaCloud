@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppConfig } from "../../src/config";
 
@@ -19,6 +20,8 @@ const {
   mockNarrative,
   mockFindDiagram,
   mockUseProblemEndpoints,
+  mockEndpointOverrideForm,
+  mockPortalPluginSlots,
 } = vi.hoisted(() => ({
   mockNav: vi.fn(),
   mockParams: vi.fn(),
@@ -29,6 +32,8 @@ const {
   mockNarrative: vi.fn(),
   mockFindDiagram: vi.fn(),
   mockUseProblemEndpoints: vi.fn(),
+  mockEndpointOverrideForm: vi.fn(),
+  mockPortalPluginSlots: vi.fn(),
 }));
 
 vi.mock("react-router", () => ({
@@ -38,6 +43,9 @@ vi.mock("react-router", () => ({
 }));
 vi.mock("../../src/auth/AuthProvider", () => ({ useAuth: mockAuth }));
 vi.mock("../../src/auth/TeamViewProvider", () => ({ useTeamView: mockTeamView }));
+vi.mock("../../src/hooks/useProblemEndpoints", () => ({
+  useProblemEndpoints: mockUseProblemEndpoints,
+}));
 vi.mock("../../src/i18n", () => ({
   useT: () => (key: string, params?: Readonly<Record<string, string | number>>) =>
     params ? `${key}|${JSON.stringify(params)}` : key,
@@ -52,13 +60,25 @@ vi.mock("../../src/components/ProblemPanel", () => ({
   ProblemPanel: () => <div data-testid="problem-panel" />,
 }));
 vi.mock("../../src/components/EndpointOverrideForm", () => ({
-  EndpointOverrideForm: () => <div data-testid="endpoint-form" />,
+  EndpointOverrideForm: (props: unknown) => {
+    const [draft, setDraft] = useState("");
+    mockEndpointOverrideForm(props);
+    return (
+      <div data-testid="endpoint-form">
+        <input
+          aria-label="mock endpoint draft"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+        />
+      </div>
+    );
+  },
 }));
 vi.mock("../../src/plugins/PortalPluginSlots", () => ({
-  PortalPluginSlots: () => <div data-testid="plugin-slots" />,
-}));
-vi.mock("../../src/hooks/useProblemEndpoints", () => ({
-  useProblemEndpoints: mockUseProblemEndpoints,
+  PortalPluginSlots: (props: unknown) => {
+    mockPortalPluginSlots(props);
+    return <div data-testid="plugin-slots" />;
+  },
 }));
 
 const {
@@ -66,7 +86,6 @@ const {
   isProblemDetailLocked,
   canRenderProblemDetailBody,
   canRenderEndpointOverride,
-  shouldLoadEndpoints,
 } = await import("../../src/pages/ProblemDetail");
 
 const config = { apiBaseUrl: "https://api.example.com" } as AppConfig;
@@ -115,11 +134,9 @@ beforeEach(() => {
   mockFindMeta.mockReturnValue(undefined);
   mockFindDiagram.mockReturnValue(undefined);
   mockNarrative.mockReturnValue({ name: "Hello World", shortDescription: "Solve it" });
-  // [#2661] default は server endpoints 取得済 (= portalEndpoints の truthy 経路)。
   mockUseProblemEndpoints.mockReturnValue({
-    endpoints: [{ slot: "app", overridable: true, defaultKey: "RegisteredUrl" }],
-    listError: undefined,
-    portalEndpoints: [{ slot: "app", overridable: true }],
+    endpoints: undefined,
+    error: undefined,
     replaceEndpoints: vi.fn(),
   });
 });
@@ -144,17 +161,6 @@ describe("visibility helpers", () => {
     expect(canRenderEndpointOverride(base)).toBe(true);
     expect(canRenderEndpointOverride({ ...base, endpointCount: 0 })).toBe(false);
     expect(canRenderEndpointOverride({ ...base, hasMetadata: false })).toBe(false);
-  });
-
-  it("should load endpoints when overridable or when a dashboard plugin is present (#2661)", () => {
-    // biome-ignore lint/suspicious/noExplicitAny: dashboardSlots だけ見る helper に最小 metadata を渡す。
-    const withSlots = { dashboardSlots: { dashboard: ["s.tsx"] } } as any;
-    // biome-ignore lint/suspicious/noExplicitAny: 同上。
-    const noSlots = { dashboardSlots: undefined } as any;
-    expect(shouldLoadEndpoints(true, undefined)).toBe(true); // override 可能
-    expect(shouldLoadEndpoints(false, withSlots)).toBe(true); // plugin あり
-    expect(shouldLoadEndpoints(false, noSlots)).toBe(false); // どちらでもない
-    expect(shouldLoadEndpoints(false, undefined)).toBe(false); // metadata 不在
   });
 });
 
@@ -471,18 +477,61 @@ describe("ProblemDetailPage", () => {
     expect(screen.queryByTestId("plugin-slots")).not.toBeInTheDocument();
   });
 
-  it("should still render both cards before server endpoints resolve (portalEndpoints undefined) (#2661)", () => {
-    // server endpoints 未取得 (undefined) の初期 render 経路。plugin は stackOutputs fallback を使う。
+  it("should share the authoritative endpoint registry between the form and plugin", () => {
+    const endpoints = [
+      {
+        slot: "app",
+        overridable: true,
+        defaultKey: "RegisteredUrl",
+        overrideUrl: "https://override.example.com",
+        effectiveUrl: "https://override.example.com",
+      },
+    ];
+    const replaceEndpoints = vi.fn();
     mockUseProblemEndpoints.mockReturnValue({
-      endpoints: undefined,
-      listError: undefined,
-      replaceEndpoints: vi.fn(),
+      endpoints,
+      error: undefined,
+      replaceEndpoints,
     });
     mockFindMeta.mockReturnValue(meta());
     mockTeamView.mockReturnValue(teamView({ view: viewWith() }));
+
     renderPage();
-    expect(screen.getByTestId("endpoint-form")).toBeInTheDocument();
-    expect(screen.getByTestId("plugin-slots")).toBeInTheDocument();
+
+    expect(mockEndpointOverrideForm).toHaveBeenCalledWith(
+      expect.objectContaining({ endpoints, onEndpointsChange: replaceEndpoints }),
+    );
+    expect(mockPortalPluginSlots).toHaveBeenCalledWith(expect.objectContaining({ endpoints }));
+  });
+
+  it("should reset endpoint form state when the active problem or team changes", async () => {
+    const user = userEvent.setup();
+    let activeView = viewWith({
+      problems: [problem({ problemId: "first" })],
+      team: { teamId: "team-1", teamName: "Team One" },
+    });
+    mockFindMeta.mockReturnValue(meta());
+    mockTeamView.mockImplementation(() => teamView({ view: activeView }));
+    const rendered = renderPage();
+    const draft = () => screen.getByRole("textbox", { name: "mock endpoint draft" });
+
+    await user.type(draft(), "https://draft.example.com");
+    expect(draft()).toHaveValue("https://draft.example.com");
+
+    activeView = viewWith({
+      problems: [problem({ problemId: "second" })],
+      team: { teamId: "team-1", teamName: "Team One" },
+    });
+    rendered.rerender(<ProblemDetailPage config={config} />);
+    expect(draft()).toHaveValue("");
+
+    await user.type(draft(), "https://another-draft.example.com");
+    activeView = viewWith({
+      problems: [problem({ problemId: "second" })],
+      team: { teamId: "team-2", teamName: "Team Two" },
+    });
+    rendered.rerender(<ProblemDetailPage config={config} />);
+    expect(draft()).toHaveValue("");
   });
 
   it("should fall the session token back to empty when there is no auth session", () => {

@@ -55,6 +55,20 @@ interface EndpointOverrideVisibilityState extends ProblemDetailVisibilityState {
   readonly endpointCount: number;
 }
 
+function problemEndpointsRequest(
+  config: AppConfig,
+  sessionToken: string | null,
+  problem: ParticipantProblemView | undefined,
+  enabled: boolean,
+) {
+  return {
+    apiBaseUrl: config.apiBaseUrl,
+    teamLoginKey: sessionToken ?? "",
+    problemId: problem?.problemId ?? "",
+    enabled,
+  };
+}
+
 export function isProblemDetailLocked(eventGate: ProblemDetailGate | undefined): boolean {
   return eventGate?.kind === "scoring_not_started";
 }
@@ -71,18 +85,6 @@ function getScoringNotStartedStartsAt(
   eventGate: ParticipantTeamView["eventGate"] | undefined,
 ): string | undefined {
   return eventGate?.kind === "scoring_not_started" ? eventGate.startsAt : undefined;
-}
-
-/**
- * [Issue #2661] endpoint 一覧を引く価値がある問題か。 endpoint override 可能 (= EndpointOverrideForm
- * を出す) か、 dashboard plugin を持つ (= PortalPluginSlots に override 反映済 endpoints を渡す) とき。
- * どちらでもない flag-only 問題では無駄な GET を出さない。
- */
-export function shouldLoadEndpoints(
-  canRenderEndpoints: boolean,
-  metadata: ProblemCatalogEntry | undefined,
-): boolean {
-  return canRenderEndpoints || !!metadata?.dashboardSlots;
 }
 
 /**
@@ -133,22 +135,10 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
     endpointCount: metadata?.endpoints.length ?? 0,
     locked: anyLocked,
   });
-  const scoringNotStartedAt = getScoringNotStartedStartsAt(view?.eventGate);
-
-  // [Issue #2661] endpoint 一覧を単一 source として保持し、EndpointOverrideForm と PortalPluginSlots
-  // の双方へ同じ値を配る (以前は plugin が stackOutputs だけを見て override を反映できなかった)。
-  // plugin 側でも使うため、enabled は「endpoint 登録可能 or dashboard plugin あり」で判定する。
-  const {
-    endpoints: serverEndpoints,
-    listError: endpointsListError,
-    portalEndpoints,
-    replaceEndpoints,
-  } = useProblemEndpoints(
-    config.apiBaseUrl,
-    sessionToken ?? "",
-    problem?.problemId,
-    shouldLoadEndpoints(canRenderEndpoints, metadata),
+  const endpointRegistry = useProblemEndpoints(
+    problemEndpointsRequest(config, sessionToken, problem, canRenderEndpoints),
   );
+  const scoringNotStartedAt = getScoringNotStartedStartsAt(view?.eventGate);
 
   if (!jobId) return <Navigate to="/problems" replace />;
 
@@ -215,12 +205,13 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
        *   Issue #1038 P0 #2: scoring_not_started のときは render しない (= lock)。 */}
       {canRenderEndpoints && problem && (
         <EndpointOverrideForm
+          key={JSON.stringify([view?.team.teamId, sessionToken, problem.problemId])}
           apiBaseUrl={config.apiBaseUrl}
           teamLoginKey={sessionToken ?? ""}
           problemId={problem.problemId}
-          endpoints={serverEndpoints}
-          listError={endpointsListError}
-          onEndpointsChange={replaceEndpoints}
+          endpoints={endpointRegistry.endpoints}
+          listError={endpointRegistry.error}
+          onEndpointsChange={endpointRegistry.replaceEndpoints}
         />
       )}
 
@@ -236,7 +227,7 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
           platform={problem.platform}
           team={view.team}
           stackOutputs={problem.stackOutputs}
-          serverEndpoints={portalEndpoints}
+          endpoints={endpointRegistry.endpoints}
           coordinationApiUrl={config.coordinationApiUrl}
           sessionToken={sessionToken ?? undefined}
         />

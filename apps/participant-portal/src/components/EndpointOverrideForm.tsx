@@ -36,14 +36,10 @@ interface EndpointOverrideFormProps {
   readonly apiBaseUrl: string;
   readonly teamLoginKey: string;
   readonly problemId: string;
-  /**
-   * [Issue #2661] endpoints は ProblemDetail が `useProblemEndpoints` で 1 回引いた単一 source を
-   * props で受ける (= このカードと問題側 plugin が同じ値を見る)。override の POST / DELETE 後は
-   * server 返却の endpoints を `onEndpointsChange` で親へ返し、両カードへ同時反映する。
-   */
+  /** ProblemDetail が取得した server-side の集約 view。undefined は loading。 */
   readonly endpoints: readonly ParticipantEndpointView[] | undefined;
   readonly listError: string | undefined;
-  readonly onEndpointsChange: (next: readonly ParticipantEndpointView[]) => void;
+  readonly onEndpointsChange: (endpoints: readonly ParticipantEndpointView[]) => void;
 }
 
 interface SlotEditState {
