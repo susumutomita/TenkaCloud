@@ -68,6 +68,7 @@ Rules:
   iam-wildcard-needs-justify    Wildcard IAM policies need an inline justification comment.
   file-too-large                Single .ts/.tsx files must not exceed 500 (warn) / 800 (error) lines.
   handler-no-direct-sdk-import  handlers/<x>/index.ts must not import @aws-sdk/client-* directly.
+  handler-no-transitive-cdk-import  Lambda handler value-import graphs must not reach aws-cdk-lib.
   lambda-env-size               AWS::Lambda::Function env total must stay under 3KB (4KB hard limit - 1KB margin).
 
 Baselines:
@@ -78,11 +79,10 @@ Baselines:
 `;
 
 export function run(opts: RunOptions): RunResult {
-  const files = opts.staged
-    ? listStagedFiles({ cwd: opts.cwd })
-    : listAllTrackedFiles({ cwd: opts.cwd });
+  const allFiles = listAllTrackedFiles({ cwd: opts.cwd });
+  const files = opts.staged ? listStagedFiles({ cwd: opts.cwd }) : allFiles;
   const readFile = (path: string): string => readFileSync(resolve(opts.cwd, path), "utf8");
-  const ctx = { files, readFile };
+  const ctx = { files, allFiles, readFile };
   const findings: Finding[] = [];
   for (const rule of ALL_RULES) {
     findings.push(...rule.check(ctx));

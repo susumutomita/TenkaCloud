@@ -4,6 +4,7 @@ import { domainNoInfraImport } from "./domain-no-infra-import.ts";
 import { fileTooLarge } from "./file-too-large.ts";
 import { handlerMustNotCallFetch } from "./handler-must-not-call-fetch.ts";
 import { handlerNoDirectSdkImport } from "./handler-no-direct-sdk-import.ts";
+import { handlerNoTransitiveCdkImport } from "./handler-no-transitive-cdk-import.ts";
 import { handlerTenantIsolation } from "./handler-tenant-isolation.ts";
 import { iamWildcardNeedsJustify } from "./iam-wildcard-needs-justify.ts";
 import { lambdaEnvSize } from "./lambda-env-size.ts";
@@ -19,6 +20,8 @@ export const architectureRules = [
   // Issue #986 / SOLID 規律強制
   fileTooLarge,
   handlerNoDirectSdkImport,
+  // Issue #2654: Lambda runtime bundles must never pull in the CDK construct library transitively.
+  handlerNoTransitiveCdkImport,
   // Issue #997 / tenant 分離 audit
   handlerTenantIsolation,
   // feedback_pull_main_before_task: PR の conflict を防ぐ第一線。 commit 内の marker 検知

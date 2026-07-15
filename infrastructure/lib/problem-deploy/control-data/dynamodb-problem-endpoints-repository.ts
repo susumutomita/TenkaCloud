@@ -4,7 +4,7 @@ import {
   PutCommand,
   QueryCommand,
 } from "@aws-sdk/lib-dynamodb";
-import { buildEndpointPK, buildEndpointSK } from "../problem-endpoints-table.js";
+import { buildEndpointPK, buildEndpointSK } from "./dynamodb-problem-endpoint-keys.js";
 import type { ProblemEndpointRecord, ProblemEndpointsRepository } from "./types.js";
 
 /**
@@ -16,7 +16,7 @@ import type { ProblemEndpointRecord, ProblemEndpointsRepository } from "./types.
  * default backend — flipping to SQLite is a one-flag rollback
  * (`CONTROL_DATA_BACKEND`).
  *
- * Physical shape (unchanged, `problem-endpoints-table.ts`):
+ * Physical shape (unchanged, `dynamodb-problem-endpoint-keys.ts`):
  *   PK = `TENANT#<tenantId>#TEAM#<teamId>#PROBLEM#<problemId>` / SK = `SLOT#<slot>`
  *
  * No GSI to strip on read — only the base-table PK/SK.

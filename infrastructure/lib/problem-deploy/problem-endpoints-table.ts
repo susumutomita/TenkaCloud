@@ -42,13 +42,3 @@ export class ProblemEndpointsTable extends Construct {
     });
   }
 }
-
-/** PK 構築 helper — runtime / test で同一規約を保つ。 */
-export function buildEndpointPK(tenantId: string, teamId: string, problemId: string): string {
-  return `TENANT#${tenantId}#TEAM#${teamId}#PROBLEM#${problemId}`;
-}
-
-/** SK 構築 helper — slot 名 (kebab-case) は metadata 側で validation 済前提。 */
-export function buildEndpointSK(slot: string): string {
-  return `SLOT#${slot}`;
-}
