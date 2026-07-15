@@ -22,7 +22,7 @@ export function tenkaCloudUsage(): string {
     "  tenkacloud onboard [--yes]",
     "        Interactively repair missing local prerequisites",
     "  tenkacloud turso-live [guide|preflight|deploy|verify-cloudformation]",
-    "        Guided Turso/AWS live verification for Issue #2617",
+    "        Guided Turso/AWS live verification",
   ].join("\n");
 }
 

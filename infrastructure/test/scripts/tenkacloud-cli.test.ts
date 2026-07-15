@@ -157,9 +157,12 @@ describe("TenkaCloud CLI (#2633)", () => {
   });
 
   it("should expose local, doctor, and live verification through one help screen", () => {
-    expect(tenkaCloudUsage()).toContain("tenkacloud local");
-    expect(tenkaCloudUsage()).toContain("doctor");
-    expect(tenkaCloudUsage()).toContain("onboard");
-    expect(tenkaCloudUsage()).toContain("turso-live");
+    const usage = tenkaCloudUsage();
+
+    expect(usage).toContain("tenkacloud local");
+    expect(usage).toContain("doctor");
+    expect(usage).toContain("onboard");
+    expect(usage).toContain("turso-live");
+    expect(usage).not.toMatch(/(?:Issue\s*)?#\d+/);
   });
 });

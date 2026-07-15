@@ -254,6 +254,7 @@ describe("TenkaCloud Turso live wizard (#2617)", () => {
       ),
     ).resolves.toBe(0);
     expect(run).not.toHaveBeenCalled();
-    expect(log).toHaveBeenCalledWith(expect.stringContaining("#2617 Turso 初回ライブ E2E"));
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("Turso 初回ライブ E2E"));
+    expect(log).not.toHaveBeenCalledWith(expect.stringMatching(/(?:Issue\s*)?#\d+/));
   });
 });
