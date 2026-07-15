@@ -54,7 +54,7 @@ describe("EventTeamsPanel", () => {
   });
 
   it("should rotate a team key and expose the replacement only in the modal", async () => {
-    const writeText = vi.fn();
+    const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
     mocks.rotateTeamLoginKey.mockResolvedValue({
       kind: "ok",
@@ -82,6 +82,7 @@ describe("EventTeamsPanel", () => {
     expect(mocks.rotateTeamLoginKey).toHaveBeenCalledWith(expect.anything(), "event-1", "team-1");
     fireEvent.click(screen.getByRole("button", { name: "event_detail.rotate_key_copy" }));
     expect(writeText).toHaveBeenCalledWith("NEW-ONE-TIME-KEY");
+    await screen.findByRole("button", { name: "event_detail.rotate_key_copied" });
     fireEvent.click(screen.getByRole("button", { name: "event_detail.rotate_key_done" }));
     await waitFor(() => expect(screen.queryByText("NEW-ONE-TIME-KEY")).not.toBeInTheDocument());
   });

@@ -9,6 +9,7 @@ import {
   type TransactWriteCommandInput,
 } from "@aws-sdk/lib-dynamodb";
 import type { TeamItem } from "../handlers/event-handler/types.js";
+import { deploymentPk, META_SK } from "./dynamodb-deployments-core.js";
 import type {
   TeamDeploymentRecord,
   TeamLoginKeyRotationInput,
@@ -170,6 +171,9 @@ export class DynamoDbTeamsRepository implements TeamsRepository {
   }
 
   async rotateLoginKey(input: TeamLoginKeyRotationInput): Promise<TeamLoginKeyRotationOutcome> {
+    if (input.deployments.length > 99) {
+      throw new Error("rotateLoginKey supports at most 99 deployments per DynamoDB transaction");
+    }
     if (input.deployments.length > 0 && !this.deploymentsTableName) {
       throw new Error("rotateLoginKey requires a deployments table name");
     }
@@ -180,7 +184,8 @@ export class DynamoDbTeamsRepository implements TeamsRepository {
           Key: { PK: `EVENT#${input.eventId}`, SK: `${TEAM_SK_PREFIX}${input.teamId}` },
           UpdateExpression:
             "SET teamLoginKey = :loginKey, GSI2PK = :gsi2pk, GSI2SK = :meta, updatedAt = :updatedAt",
-          ConditionExpression: "tenantId = :tenantId AND eventId = :eventId AND teamId = :teamId",
+          ConditionExpression:
+            "tenantId = :tenantId AND eventId = :eventId AND teamId = :teamId AND updatedAt = :expectedUpdatedAt",
           ExpressionAttributeValues: {
             ":loginKey": input.newLoginKey,
             ":gsi2pk": `TEAMKEY#${input.newLoginKey}`,
@@ -189,13 +194,14 @@ export class DynamoDbTeamsRepository implements TeamsRepository {
             ":tenantId": input.tenantId,
             ":eventId": input.eventId,
             ":teamId": input.teamId,
+            ":expectedUpdatedAt": input.expectedUpdatedAt,
           },
         },
       },
       ...input.deployments.map((deployment) => ({
         Update: {
           TableName: this.deploymentsTableName as string,
-          Key: { PK: `DEPLOYMENT#${deployment.jobId}`, SK: "META" },
+          Key: { PK: deploymentPk(deployment.jobId), SK: META_SK },
           UpdateExpression:
             "SET teamLoginKey = :loginKey, GSI2PK = :gsi2pk, GSI2SK = :gsi2sk, updatedAt = :updatedAt",
           ConditionExpression: "tenantId = :tenantId AND eventId = :eventId AND teamId = :teamId",

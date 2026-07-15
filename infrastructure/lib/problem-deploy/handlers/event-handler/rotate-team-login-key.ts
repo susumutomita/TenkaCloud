@@ -53,6 +53,7 @@ export async function rotateTeamLoginKey(
     eventId,
     teamId,
     newLoginKey: teamLoginKey,
+    expectedUpdatedAt: team.updatedAt,
     updatedAt: rotatedAt,
     deployments,
   });

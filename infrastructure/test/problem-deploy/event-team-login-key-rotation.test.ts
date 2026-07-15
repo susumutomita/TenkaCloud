@@ -41,7 +41,12 @@ describe("rotateTeamLoginKey", () => {
 
   it("should rotate only participant-resolvable deployment indexes and return plaintext once", async () => {
     const { shared, teams } = sharedWith({
-      team: { teamId: "team-1", eventId: "event-1", tenantId: "tenant-a" },
+      team: {
+        teamId: "team-1",
+        eventId: "event-1",
+        tenantId: "tenant-a",
+        updatedAt: "2026-07-14T00:00:00.000Z",
+      },
       deployments: [
         {
           jobId: "active",
@@ -84,6 +89,7 @@ describe("rotateTeamLoginKey", () => {
       eventId: "event-1",
       teamId: "team-1",
       newLoginKey: "NEW-KEY",
+      expectedUpdatedAt: "2026-07-14T00:00:00.000Z",
       updatedAt: "2023-11-14T22:13:20.000Z",
       deployments: [{ jobId: "active", createdAt: "2026-07-15T00:00:00Z" }],
     });
@@ -91,7 +97,7 @@ describe("rotateTeamLoginKey", () => {
 
   it("should return a conflict outcome when the atomic write loses a race", async () => {
     const { shared } = sharedWith({
-      team: { teamId: "team-1" },
+      team: { teamId: "team-1", updatedAt: "2026-07-14T00:00:00.000Z" },
       rotateOutcome: "conflict",
     });
 

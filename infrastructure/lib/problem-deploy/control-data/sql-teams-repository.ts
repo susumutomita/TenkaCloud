@@ -183,8 +183,16 @@ export class SqlTeamsRepository implements TeamsRepository {
       {
         sql:
           "UPDATE teams SET login_key_hash = ?, payload = json_set(payload, '$.updatedAt', ?) " +
-          "WHERE tenant_id = ? AND event_id = ? AND team_id = ?",
-        params: [loginKeyHash, input.updatedAt, input.tenantId, input.eventId, input.teamId],
+          "WHERE tenant_id = ? AND event_id = ? AND team_id = ? " +
+          "AND json_extract(payload, '$.updatedAt') = ?",
+        params: [
+          loginKeyHash,
+          input.updatedAt,
+          input.tenantId,
+          input.eventId,
+          input.teamId,
+          input.expectedUpdatedAt,
+        ],
       },
       assertPreviousUpdateMatchedExactlyOneRow,
       ...input.deployments.flatMap((deployment) => [

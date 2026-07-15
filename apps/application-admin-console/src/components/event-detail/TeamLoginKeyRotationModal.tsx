@@ -3,7 +3,9 @@ import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import Modal from "@cloudscape-design/components/modal";
 import SpaceBetween from "@cloudscape-design/components/space-between";
+import { useState } from "react";
 import type { RotateTeamLoginKeyResponse, TeamSummary } from "../../api/events-client";
+import { OneTimeSecretCopyButton } from "../OneTimeSecretCopyButton";
 
 type Translate = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
@@ -24,15 +26,18 @@ export function TeamLoginKeyRotationModal({
   readonly team: TeamSummary | null;
   readonly t: Translate;
 }) {
+  const [copyPending, setCopyPending] = useState(false);
+  const busy = inFlight || copyPending;
+
   return (
     <Modal
       visible={team !== null}
-      onDismiss={inFlight ? undefined : onClose}
+      onDismiss={busy ? undefined : onClose}
       header={t("event_detail.rotate_key_header", { slug: team?.internalSlug ?? "" })}
       footer={
         <Box float="right">
           <SpaceBetween direction="horizontal" size="xs">
-            <Button onClick={onClose} disabled={inFlight}>
+            <Button onClick={onClose} disabled={busy}>
               {result ? t("event_detail.rotate_key_done") : t("event_detail.modal_cancel")}
             </Button>
             {!result && (
@@ -52,12 +57,14 @@ export function TeamLoginKeyRotationModal({
               {t("event_detail.rotate_key_success_body")}
             </Alert>
             <Box variant="code">{result.teamLoginKey}</Box>
-            <Button
-              iconName="copy"
-              onClick={() => void navigator.clipboard?.writeText(result.teamLoginKey)}
-            >
-              {t("event_detail.rotate_key_copy")}
-            </Button>
+            <OneTimeSecretCopyButton
+              textToCopy={result.teamLoginKey}
+              copyLabel={t("event_detail.rotate_key_copy")}
+              copyingLabel={t("event_detail.rotate_key_copying")}
+              copiedLabel={t("event_detail.rotate_key_copied")}
+              failedLabel={t("event_detail.rotate_key_copy_failed")}
+              onPendingChange={setCopyPending}
+            />
           </>
         ) : (
           <Alert type="warning" header={t("event_detail.rotate_key_warning_header")}>

@@ -413,6 +413,7 @@ describe.each([
         eventId: team.eventId,
         teamId: team.teamId,
         newLoginKey: "NEW-TEAM-KEY",
+        expectedUpdatedAt: team.updatedAt,
         updatedAt: "2026-07-15T12:00:00.000Z",
         deployments: [{ jobId: deployment.jobId, createdAt: deployment.createdAt }],
       }),
@@ -438,6 +439,7 @@ describe.each([
         eventId: team.eventId,
         teamId: team.teamId,
         newLoginKey: "MUST-NOT-COMMIT",
+        expectedUpdatedAt: team.updatedAt,
         updatedAt: "2026-07-15T12:00:00.000Z",
         deployments: [{ jobId: "concurrently-deleted", createdAt: team.createdAt }],
       }),
@@ -445,6 +447,38 @@ describe.each([
 
     expect((await teams.getTeamByLoginKey("STILL-VALID-OLD-KEY"))?.teamId).toBe(team.teamId);
     await expect(teams.getTeamByLoginKey("MUST-NOT-COMMIT")).resolves.toBeUndefined();
+  });
+
+  it("should reject a stale second rotation for the same team", async () => {
+    const { teams } = makeRepositories() as { teams: TeamsRepository };
+    const team = sampleRecord({ teamLoginKey: "ORIGINAL-KEY" });
+    await teams.putTeam(team);
+
+    await expect(
+      teams.rotateLoginKey({
+        tenantId: team.tenantId,
+        eventId: team.eventId,
+        teamId: team.teamId,
+        newLoginKey: "FIRST-ROTATION",
+        expectedUpdatedAt: team.updatedAt,
+        updatedAt: "2026-07-15T12:00:00.000Z",
+        deployments: [],
+      }),
+    ).resolves.toEqual({ outcome: "updated" });
+    await expect(
+      teams.rotateLoginKey({
+        tenantId: team.tenantId,
+        eventId: team.eventId,
+        teamId: team.teamId,
+        newLoginKey: "STALE-SECOND-ROTATION",
+        expectedUpdatedAt: team.updatedAt,
+        updatedAt: "2026-07-15T12:01:00.000Z",
+        deployments: [],
+      }),
+    ).resolves.toEqual({ outcome: "conflict" });
+
+    expect((await teams.getTeamByLoginKey("FIRST-ROTATION"))?.teamId).toBe(team.teamId);
+    await expect(teams.getTeamByLoginKey("STALE-SECOND-ROTATION")).resolves.toBeUndefined();
   });
 });
 
@@ -454,6 +488,7 @@ describe("DynamoDbTeamsRepository rotation errors", () => {
     eventId: "event-a",
     teamId: "team-a",
     newLoginKey: "NEW-KEY",
+    expectedUpdatedAt: "2026-07-14T00:00:00.000Z",
     updatedAt: "2026-07-15T12:00:00.000Z",
     deployments: [] as const,
   };
@@ -479,6 +514,41 @@ describe("DynamoDbTeamsRepository rotation errors", () => {
         deployments: [{ jobId: "job-1", createdAt: "2026-07-15T00:00:00.000Z" }],
       }),
     ).rejects.toThrow(/requires a deployments table name/);
+  });
+
+  it("should reject more deployments than one DynamoDB transaction can rotate", async () => {
+    const repository = new DynamoDbTeamsRepository(makeFakeDdb(), "Teams", "Deployments");
+    const deployments = Array.from({ length: 100 }, (_, index) => ({
+      jobId: `job-${index}`,
+      createdAt: "2026-07-15T00:00:00.000Z",
+    }));
+
+    await expect(repository.rotateLoginKey({ ...input, deployments })).rejects.toThrow(
+      /at most 99 deployments/,
+    );
+  });
+
+  it("should allow the 99-deployment DynamoDB transaction boundary", async () => {
+    let actionCount = 0;
+    const repository = new DynamoDbTeamsRepository(
+      {
+        send: async (command: { input: { TransactItems?: readonly unknown[] } }) => {
+          actionCount = command.input.TransactItems?.length ?? 0;
+          return {};
+        },
+      } as never,
+      "Teams",
+      "Deployments",
+    );
+    const deployments = Array.from({ length: 99 }, (_, index) => ({
+      jobId: `job-${index}`,
+      createdAt: "2026-07-15T00:00:00.000Z",
+    }));
+
+    await expect(repository.rotateLoginKey({ ...input, deployments })).resolves.toEqual({
+      outcome: "updated",
+    });
+    expect(actionCount).toBe(100);
   });
 
   it("should propagate a transaction cancellation that has no cancellation reasons", async () => {
@@ -522,6 +592,7 @@ describe("SqlTeamsRepository rotation errors", () => {
     eventId: "event-a",
     teamId: "team-a",
     newLoginKey: "NEW-KEY",
+    expectedUpdatedAt: "2026-07-14T00:00:00.000Z",
     updatedAt: "2026-07-15T12:00:00.000Z",
     deployments: [] as const,
   };
@@ -575,6 +646,7 @@ describe("MirroredTeamsRepository rotation errors", () => {
         eventId: "event-a",
         teamId: "team-a",
         newLoginKey: "NEW-KEY",
+        expectedUpdatedAt: "2026-07-14T00:00:00.000Z",
         updatedAt: "2026-07-15T12:00:00.000Z",
         deployments: [],
       }),

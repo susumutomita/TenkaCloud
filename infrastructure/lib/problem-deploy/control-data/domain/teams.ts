@@ -59,6 +59,8 @@ export interface TeamLoginKeyRotationInput {
   readonly eventId: string;
   readonly teamId: string;
   readonly newLoginKey: string;
+  /** Team version read before rotation; prevents two callers from both succeeding. */
+  readonly expectedUpdatedAt: string;
   readonly updatedAt: string;
   readonly deployments: readonly {
     readonly jobId: string;
