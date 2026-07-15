@@ -13870,22 +13870,6 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — pure-sql t
       },
     ],
   },
-  "EventCapacityRunbookAutomationRoleA7A0BC69": {
-    "AssumeRolePolicyDocument": {
-      "Statement": [
-        {
-          "Action": "sts:AssumeRole",
-          "Effect": "Allow",
-          "Principal": {
-            "Service": "ssm.amazonaws.com",
-          },
-        },
-      ],
-      "Version": "2012-10-17",
-    },
-    "ManagedPolicyArns": undefined,
-    "Policies": undefined,
-  },
   "ExternalIdAuditFunctionServiceRole21F1442C": {
     "AssumeRolePolicyDocument": {
       "Statement": [
@@ -14290,9 +14274,7 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — pure-sql t
       "Ref": "BulkDeployPayloadBucketA76F3B42",
     },
     "BULK_DEPLOY_VIA_DISTRIBUTED_MAP": "false",
-    "CAPACITY_RUNBOOK_DOCUMENT_NAME": {
-      "Ref": "EventCapacityRunbookDocument9260BA28",
-    },
+    "CAPACITY_RUNBOOK_DOCUMENT_NAME": "",
     "CONTROL_DATA_BACKEND": "turso",
     "DEPLOY_ENVIRONMENT": "development",
     "DEPLOY_EVENT_BUS_NAME": "test-bus",
@@ -14578,12 +14560,6 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — pure-sql t
       "Ref": "DeployCreateStateMachine9B2B6CCA",
     },
   },
-  "EventCapacityRunbookName": {
-    "Description": "Issue #2410 SSM Automation document 名。aws ssm start-automation-execution --document-name に渡してイベント中のキャパを上げ下げする。",
-    "Value": {
-      "Ref": "EventCapacityRunbookDocument9260BA28",
-    },
-  },
 }
 `;
 
@@ -14655,8 +14631,6 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — pure-sql t
   "EventApiFunctionLogGroup410F0107",
   "EventApiFunctionServiceRole7EA6BDCB",
   "EventApiFunctionServiceRoleDefaultPolicyB049BD9B",
-  "EventCapacityRunbookAutomationRoleA7A0BC69",
-  "EventCapacityRunbookDocument9260BA28",
   "ExternalIdAuditFunction32BBC33C",
   "ExternalIdAuditFunctionLogGroup4DFC50D4",
   "ExternalIdAuditFunctionServiceRole21F1442C",

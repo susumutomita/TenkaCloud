@@ -114,6 +114,11 @@ export function CapacityPanel({ apiClient, t }: { apiClient: ApiClient | null; t
 
   const exampleTable = overview?.runbookDocumentName ? pickExampleTable(rows) : null;
 
+  // Issue #2648: 純 SQL backend (DynamoDB 不使用) では容量監視は恒久的に非該当。空データや
+  // エラー alert を見せるより panel 自体を出さないのが筋 (route が 404 → not_applicable)。
+  // 全 hook を呼び切った後に return する (Rules of Hooks — early return で hook を飛ばさない)。
+  if (terminalReason === "not_applicable") return null;
+
   return (
     <Container
       data-testid="capacity-panel"

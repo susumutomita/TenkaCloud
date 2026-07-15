@@ -4,7 +4,11 @@ import {
   EVENT_CAPACITY_CEILING,
   EVENT_CAPACITY_PARAM_PATTERN,
 } from "../lib/problem-deploy/event-capacity-constants";
-import { SYNTH_TIMEOUT_MS, synthDefault } from "./problem-deploy-backend-stack.test-helpers";
+import {
+  SYNTH_TIMEOUT_MS,
+  synthDefault,
+  synthWithControlDataBackendTurso,
+} from "./problem-deploy-backend-stack.test-helpers";
 
 /**
  * Issue #2410: event capacity ops wiring.
@@ -141,5 +145,27 @@ describe("ProblemDeployBackendStack — event capacity runbook (#2410)", {
     );
     expect(actions).toContain("dynamodb:DescribeTable");
     expect(actions).toContain("cloudwatch:GetMetricData");
+  });
+});
+
+/**
+ * Issue #2648: 純 SQL backend (turso|sql) では event-hot 5 テーブルが 1 つも synth されない。
+ * その状態で capacity runbook を作ると、対象テーブル 0 件の動かしようのない SSM Automation
+ * document (と CfnOutput) が deploy 済み stack に残り運用者を誤解させる。テーブルが無いときは
+ * runbook 自体を synth しないことを pin する。
+ */
+describe("ProblemDeployBackendStack — event capacity runbook on pure SQL backend (#2648)", {
+  timeout: SYNTH_TIMEOUT_MS,
+}, () => {
+  const tpl = synthWithControlDataBackendTurso();
+
+  it("should not synth the EventCapacityRunbook SSM document when there are no event-hot tables", () => {
+    const docs = tpl.findResources("AWS::SSM::Document");
+    const runbook = Object.keys(docs).find((name) => name.includes("EventCapacityRunbook"));
+    expect(runbook).toBeUndefined();
+  });
+
+  it("should not emit the EventCapacityRunbookName output when there are no event-hot tables", () => {
+    expect(Object.keys(tpl.findOutputs("EventCapacityRunbookName"))).toHaveLength(0);
   });
 });

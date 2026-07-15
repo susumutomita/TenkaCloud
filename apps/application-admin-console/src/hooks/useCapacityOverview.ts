@@ -17,7 +17,7 @@ import { DEPLOYMENT_POLL_INTERVAL_MS } from "../constants/polling";
  *  - ページ非表示: ブラウザが hidden の間は poll しない (再表示で即 fetch)。
  */
 
-export type CapacityTerminalReason = "forbidden" | "unavailable" | "unsupported";
+export type CapacityTerminalReason = "forbidden" | "unavailable" | "unsupported" | "not_applicable";
 
 export interface CapacityOverviewState {
   readonly overview: CapacityOverview | null;
@@ -34,6 +34,9 @@ function terminalReasonOf(err: unknown): CapacityTerminalReason | null {
   // demo mode: fixture client は /admin/capacity を simulate しない (EventProgressionGatePanel
   // の isDemoFlagsUnsupported と同じ NOT_IMPLEMENTED 慣行)。
   if (err.status === StatusCodes.NOT_IMPLEMENTED) return "unsupported";
+  // Issue #2648: 純 SQL backend は DynamoDB を使わないので容量監視は非該当 (route が 404 を返す)。
+  // panel 自体を出さない terminal 状態 (CapacityPanel が null を描く)。
+  if (err.status === StatusCodes.NOT_FOUND) return "not_applicable";
   return null;
 }
 

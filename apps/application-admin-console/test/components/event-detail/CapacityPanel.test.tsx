@@ -166,6 +166,19 @@ describe("CapacityPanel", () => {
     expect(screen.queryByText("capacity.loading")).not.toBeInTheDocument();
   });
 
+  it("should hide the panel entirely when the backend has no DynamoDB tables (404 not applicable)", async () => {
+    mocks.getCapacityOverview.mockRejectedValue(
+      new ApiError(StatusCodes.NOT_FOUND, "capacity_not_applicable"),
+    );
+
+    render(<CapacityPanel apiClient={apiClient} t={t} />);
+
+    // 純 SQL backend では panel 自体を出さない (Issue #2648): container も terminal alert も出ない。
+    await waitFor(() => expect(screen.queryByTestId("capacity-panel")).not.toBeInTheDocument());
+    expect(screen.queryByTestId("capacity-terminal")).not.toBeInTheDocument();
+    expect(screen.queryByText("capacity.loading")).not.toBeInTheDocument();
+  });
+
   it("should recover from a terminal state via the manual refresh button", async () => {
     mocks.getCapacityOverview
       .mockRejectedValueOnce(new ApiError(StatusCodes.SERVICE_UNAVAILABLE, "unwired"))

@@ -94,6 +94,21 @@ export class CapacityUnconfiguredError extends Error {
   }
 }
 
+/**
+ * Issue #2648: 純 SQL backend (turso|sql) では event-hot 5 テーブルが 1 つも synth されず
+ * {@link resolveEventHotTables} が空になる。DynamoDB が存在しない構成では容量監視は原理的に
+ * 非該当なので、CloudWatch を空クエリで叩かず (= AWS の "MetricDataQueries is required" を
+ * 誘発して 500 にせず) このエラーで fail する。route は専用 status に変換し、frontend は
+ * 容量監視 panel 自体を出さない (`capacity_monitoring_unconfigured` の「未配線」とは別の恒久的な
+ * 「この backend には該当しない」を表す)。
+ */
+export class CapacityNotApplicableError extends Error {
+  constructor() {
+    super("capacity monitoring does not apply: no DynamoDB event-hot tables in this backend");
+    this.name = "CapacityNotApplicableError";
+  }
+}
+
 interface EventHotTable {
   readonly role: CapacityTableRole;
   readonly tableName: string;
@@ -330,6 +345,11 @@ export async function getCapacityOverview(
   },
 ): Promise<CapacityOverview> {
   const tables = resolveEventHotTables(shared);
+  // Issue #2648: 純 SQL backend では event-hot テーブルが 0 件。CloudWatch を空クエリで叩くと
+  // "MetricDataQueries is required" で 500 になるので、その手前で非該当として fail する。
+  if (tables.length === 0) {
+    throw new CapacityNotApplicableError();
+  }
   const clients = opts.clients ?? defaultCapacityClients();
   const now = opts.now ?? new Date();
 

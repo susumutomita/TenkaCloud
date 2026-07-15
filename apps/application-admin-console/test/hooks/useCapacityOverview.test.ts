@@ -109,6 +109,8 @@ describe("useCapacityOverview", () => {
     [StatusCodes.FORBIDDEN, "forbidden"],
     [StatusCodes.SERVICE_UNAVAILABLE, "unavailable"],
     [StatusCodes.NOT_IMPLEMENTED, "unsupported"],
+    // Issue #2648: 純 SQL backend は容量監視非該当 → route が 404 → not_applicable で polling 停止。
+    [StatusCodes.NOT_FOUND, "not_applicable"],
   ] as const)("should stop polling on terminal status %s and expose reason %s", async (status, reason) => {
     vi.useFakeTimers();
     mocks.getCapacityOverview.mockRejectedValue(new ApiError(status, "nope"));
