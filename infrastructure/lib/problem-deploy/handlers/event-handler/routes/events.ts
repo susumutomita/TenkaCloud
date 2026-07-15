@@ -1,5 +1,6 @@
 import type { Hono } from "hono";
 import { StatusCodes } from "http-status-codes";
+import { z } from "zod";
 import {
   resolveTenantId,
   TENANT_ADMIN_ROLE,
@@ -14,6 +15,8 @@ import { rotateTeamLoginKey } from "../rotate-team-login-key.js";
 import { handleRouteError, parseLimit, withEventId, withJsonBody } from "../route-helpers.js";
 import type { EventSharedResources } from "../shared.js";
 import { CreateEventRequestSchema } from "../types.js";
+
+const TeamIdPathSchema = z.string().regex(ULID_RE);
 
 /**
  * Event CRUD + bulk-teardown routes.
@@ -94,10 +97,11 @@ export function registerEventRoutes(app: Hono, shared: EventSharedResources): vo
     "/events/:eventId/teams/:teamId/rotate-login-key",
     withEventId(
       async ({ c, eventId }) => {
-        const teamId = c.req.param("teamId");
-        if (!ULID_RE.test(teamId)) {
+        const teamIdResult = TeamIdPathSchema.safeParse(c.req.param("teamId"));
+        if (!teamIdResult.success) {
           return c.json({ error: "invalid_team_id" }, StatusCodes.BAD_REQUEST);
         }
+        const teamId = teamIdResult.data;
         try {
           const outcome = await rotateTeamLoginKey(
             shared,
