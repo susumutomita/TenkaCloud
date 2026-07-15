@@ -90,6 +90,34 @@ describe("reconcileEventStatuses stuck-DELETING rescue (#828)", () => {
     expect(ddbSend).toHaveBeenCalledTimes(2);
   });
 
+  it("should not archive the event when the conditional rescue loses a deletion race", async () => {
+    const now = "2026-05-15T01:00:00.000Z";
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        { PK: "EVENT#EV-RACE", tenantId: "tenant-acme", eventId: "EV-RACE", status: "TEARDOWN" },
+      ],
+    });
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        {
+          PK: "DEPLOYMENT#RACE",
+          status: "DELETING",
+          updatedAt: "2026-05-15T00:00:00.000Z",
+        },
+      ],
+    });
+    ddbSend.mockImplementationOnce(async () => {
+      const error: Error & { name?: string } = new Error("conditional check failed");
+      error.name = "ConditionalCheckFailedException";
+      throw error;
+    });
+
+    await expect(reconcileEventStatuses(ctx, now)).resolves.toBeUndefined();
+
+    // Scan + Query + rescue attempt only. No TEARDOWN -> ARCHIVED update.
+    expect(ddbSend).toHaveBeenCalledTimes(3);
+  });
+
   it("`isStuckDeletingForTeardown` pure logic should combine eventStatus / status / threshold", () => {
     const nowMs = Date.parse("2026-05-15T01:00:00.000Z");
     const stale = "2026-05-15T00:00:00.000Z"; // 60 min 前
