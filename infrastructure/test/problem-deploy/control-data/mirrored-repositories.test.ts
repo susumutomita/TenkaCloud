@@ -407,6 +407,24 @@ describe("MirroredEventsRepository listing/batch/count seam (#2438)", () => {
 });
 
 describe("MirroredTeamsRepository", () => {
+  it("should return canonical reads after repairing the replica without re-reading it", async () => {
+    const current = team();
+    const canonical = memoryTeams([current]);
+    const replica = memoryTeams([team({ internalSlug: "stale" })]);
+    const getTeam = vi.spyOn(replica.repo, "getTeam");
+    const getTeamByLoginKey = vi.spyOn(replica.repo, "getTeamByLoginKey");
+    const listTeamsByEvent = vi.spyOn(replica.repo, "listTeamsByEvent");
+    const repository = new MirroredTeamsRepository(canonical.repo, replica.repo);
+
+    await expect(repository.getTeam("tenant-1", "event-1", "team-1")).resolves.toBe(current);
+    await expect(repository.getTeamByLoginKey("key-1")).resolves.toBe(current);
+    await expect(repository.listTeamsByEvent("event-1")).resolves.toEqual([current]);
+
+    expect(getTeam).toHaveBeenCalledOnce();
+    expect(getTeamByLoginKey).toHaveBeenCalledOnce();
+    expect(listTeamsByEvent).toHaveBeenCalledOnce();
+  });
+
   it("should heal team point, login-key, and event-list reads", async () => {
     const current = team({ internalSlug: "current" });
     const second = team({ teamId: "team-2", teamLoginKey: "key-2" });

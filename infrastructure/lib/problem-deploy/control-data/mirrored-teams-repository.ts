@@ -33,8 +33,7 @@ export class MirroredTeamsRepository implements TeamsRepository {
     if (!replica || !sameTeamRecord(canonical, replica)) {
       await this.replica.putTeam(canonical);
     }
-    const reconciled = await this.replica.getTeam(tenantId, eventId, teamId);
-    return reconciled ?? canonical;
+    return canonical;
   }
 
   async getTeamByLoginKey(loginKey: string): Promise<TeamRecord | undefined> {
@@ -49,7 +48,7 @@ export class MirroredTeamsRepository implements TeamsRepository {
     if (!replica || !sameTeamRecord(canonical, replica)) {
       await this.replica.putTeam(canonical);
     }
-    return (await this.replica.getTeamByLoginKey(loginKey)) ?? canonical;
+    return canonical;
   }
 
   async listTeamsByEvent(eventId: string): Promise<readonly TeamRecord[]> {
@@ -70,8 +69,7 @@ export class MirroredTeamsRepository implements TeamsRepository {
         .filter((record) => !canonicalById.has(record.teamId))
         .map((record) => this.replica.deleteTeam(eventId, record.teamId)),
     ]);
-    const reconciled = await this.replica.listTeamsByEvent(eventId);
-    return reconciled;
+    return canonical;
   }
 
   listTeamsForDeployment(eventId: string): Promise<readonly TeamDeploymentRecord[]> {
