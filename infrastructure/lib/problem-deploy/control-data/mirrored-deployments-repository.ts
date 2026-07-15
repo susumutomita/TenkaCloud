@@ -440,6 +440,16 @@ export class MirroredDeploymentsRepository implements DeploymentsRepository {
     );
   }
 
+  async markStuckCreatingFailed(
+    jobId: string,
+    reason: string,
+    at: string,
+  ): Promise<DeploymentMutationOutcome> {
+    return this.mirrorWrite(await this.canonical.markStuckCreatingFailed(jobId, reason, at), () =>
+      this.replica.markStuckCreatingFailed(jobId, reason, at),
+    );
+  }
+
   async transitionRuntimeStatus(
     jobId: string,
     tenantId: string,

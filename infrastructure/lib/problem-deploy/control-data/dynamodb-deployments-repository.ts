@@ -100,6 +100,9 @@ export class DynamoDbDeploymentsRepository implements DeploymentsRepository {
   readonly markStuckDeletingFailed: DeploymentsLifecyclePort["markStuckDeletingFailed"] = (
     ...args
   ) => this.lifecycle.markStuckDeletingFailed(...args);
+  readonly markStuckCreatingFailed: DeploymentsLifecyclePort["markStuckCreatingFailed"] = (
+    ...args
+  ) => this.lifecycle.markStuckCreatingFailed(...args);
   readonly transitionRuntimeStatus: DeploymentsLifecyclePort["transitionRuntimeStatus"] = (
     ...args
   ) => this.lifecycle.transitionRuntimeStatus(...args);

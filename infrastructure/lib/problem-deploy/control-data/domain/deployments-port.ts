@@ -310,6 +310,18 @@ export interface DeploymentsLifecyclePort {
     at: string,
   ): Promise<DeploymentMutationOutcome>;
 
+  /**
+   * Issue #2651: the scheduled reconciler's independent recovery write for a DeployCreate
+   * execution that outlived the state-machine timeout. The update is conditional on the current
+   * status still being PENDING or IN_PROGRESS, so a concurrent MarkSucceeded/MarkFailed wins
+   * without being overwritten.
+   */
+  markStuckCreatingFailed(
+    jobId: string,
+    reason: string,
+    at: string,
+  ): Promise<DeploymentMutationOutcome>;
+
   transitionRuntimeStatus(
     jobId: string,
     tenantId: string,

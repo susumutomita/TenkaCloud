@@ -5,6 +5,7 @@ import type {
 } from "../../control-data/deployments-repository.js";
 import type { EventRecord, ScheduleFiredKind } from "../../control-data/events-repository.js";
 import type { ControlDataRuntime } from "../../control-data/runtime-repositories.js";
+import { DEPLOY_STUCK_RECOVERY_THRESHOLD_MS } from "../../deploy-cost-model.js";
 import { bulkTeardownEvent } from "../event-handler/bulk-delete.js";
 import { bulkDeployEvent } from "../event-handler/bulk-deploy.js";
 import { type EventSharedResources, resolveEventsRepository } from "../event-handler/shared.js";
@@ -179,12 +180,27 @@ export function isStuckDeletingForTeardown(
   nowMs: number,
   thresholdMs: number = STUCK_DELETING_THRESHOLD_MS,
 ): boolean {
-  if (eventStatus !== "TEARDOWN") return false;
-  if (row.status !== "DELETING") return false;
-  if (!Number.isFinite(nowMs)) return false;
-  const updatedAtMs = row.updatedAt ? Date.parse(row.updatedAt) : Number.NaN;
-  if (!Number.isFinite(updatedAtMs)) return false;
-  return nowMs - updatedAtMs >= thresholdMs;
+  return (
+    eventStatus === "TEARDOWN" &&
+    staleDeploymentUpdatedAtMs(row, nowMs, thresholdMs, ["DELETING"]) !== undefined
+  );
+}
+
+/**
+ * Issue #2651: deploy State Machine の timeout と grace period を超えても `PENDING` /
+ * `IN_PROGRESS` のまま残った deployment を判定する。Event が `DEPLOYING` の場合だけ
+ * rescue し、通常の create path や terminal 行には触れない。
+ */
+export function isStuckCreatingForDeploy(
+  eventStatus: string,
+  row: DeploymentReconcilerRow,
+  nowMs: number,
+  thresholdMs: number = DEPLOY_STUCK_RECOVERY_THRESHOLD_MS,
+): boolean {
+  return (
+    eventStatus === "DEPLOYING" &&
+    staleDeploymentUpdatedAtMs(row, nowMs, thresholdMs, ["PENDING", "IN_PROGRESS"]) !== undefined
+  );
 }
 
 async function queryDeploymentRowsForEvent(
@@ -210,58 +226,118 @@ export async function rescueStuckDeletingDeployments(
   nowMs: number,
   thresholdMs: number = STUCK_DELETING_THRESHOLD_MS,
 ): Promise<number> {
-  const rescued = await Promise.all(
-    rows.map((row) => rescueStuckDeletingDeployment(ctx, row, nowMs, thresholdMs)),
-  );
-  return rescued.filter(Boolean).length;
+  return (await rescueStuckDeletingDeploymentIds(ctx, rows, nowMs, thresholdMs)).size;
 }
 
-async function rescueStuckDeletingDeployment(
+/**
+ * Issue #2651: stuck create 行を独立した reconciler Lambda から conditional update する。
+ * status writer 自身が利用不能でも毎分再試行でき、Event の `DEPLOYING` 固着を解消する。
+ */
+export async function rescueStuckCreatingDeployments(
+  ctx: ReconcileEventStatusesContext,
+  rows: readonly DeploymentReconcilerRow[],
+  nowMs: number,
+  thresholdMs: number = DEPLOY_STUCK_RECOVERY_THRESHOLD_MS,
+): Promise<number> {
+  return (await rescueStuckCreatingDeploymentIds(ctx, rows, nowMs, thresholdMs)).size;
+}
+
+type StuckRecoveryKind = "creating" | "deleting";
+
+async function rescueStuckDeletingDeploymentIds(
+  ctx: ReconcileEventStatusesContext,
+  rows: readonly DeploymentReconcilerRow[],
+  nowMs: number,
+  thresholdMs: number,
+): Promise<ReadonlySet<string>> {
+  return rescueStuckDeploymentIds(ctx, rows, nowMs, thresholdMs, "deleting");
+}
+
+async function rescueStuckCreatingDeploymentIds(
+  ctx: ReconcileEventStatusesContext,
+  rows: readonly DeploymentReconcilerRow[],
+  nowMs: number,
+  thresholdMs: number,
+): Promise<ReadonlySet<string>> {
+  return rescueStuckDeploymentIds(ctx, rows, nowMs, thresholdMs, "creating");
+}
+
+async function rescueStuckDeploymentIds(
+  ctx: ReconcileEventStatusesContext,
+  rows: readonly DeploymentReconcilerRow[],
+  nowMs: number,
+  thresholdMs: number,
+  kind: StuckRecoveryKind,
+): Promise<ReadonlySet<string>> {
+  const rescued = await Promise.all(
+    rows.map((row) => rescueStuckDeployment(ctx, row, nowMs, thresholdMs, kind)),
+  );
+  return new Set(rescued.filter((jobId): jobId is string => jobId !== undefined));
+}
+
+async function rescueStuckDeployment(
   ctx: ReconcileEventStatusesContext,
   row: DeploymentReconcilerRow,
   nowMs: number,
   thresholdMs: number,
-): Promise<boolean> {
-  const updatedAtMs = staleDeletingUpdatedAtMs(row, nowMs, thresholdMs);
-  if (updatedAtMs === undefined || !row.jobId) return false;
-  // listReconcilerRowsByEvent returns domain jobIds; the rescue write still
-  // targets the physical DynamoDB deployment row (the seam derives the PK).
+  kind: StuckRecoveryKind,
+): Promise<string | undefined> {
+  const statuses = kind === "creating" ? ["PENDING", "IN_PROGRESS"] : ["DELETING"];
+  const updatedAtMs = staleDeploymentUpdatedAtMs(row, nowMs, thresholdMs, statuses);
+  if (updatedAtMs === undefined || !row.jobId) return undefined;
+
   const pk = `DEPLOYMENT#${row.jobId}`;
-  const reason = `reconciler: stuck DELETING > ${Math.floor(thresholdMs / 60_000)} min, treating as FAILED to unblock Event TEARDOWN (#828)`;
   try {
-    // [Issue #2441 / Phase B2] `markStuckDeletingFailed` folds the CCF into a
-    // `conflict` outcome instead of throwing (= the pre-seam CCF-catch → silent
-    // `return false`); an outcome other than "updated" hits the same branch as
-    // the old CCF catch, no warning logged. A genuine SDK/network error still
-    // throws, caught below and logged exactly like the pre-seam non-CCF catch.
     const repository: DeploymentsQueryPort & DeploymentsLifecyclePort =
       await resolveDeploymentsRepository(ctx);
-    const outcome = await repository.markStuckDeletingFailed(
+    const outcome = await markStuckDeploymentFailed(
+      repository,
       row.jobId,
-      reason,
+      recoveryReason(kind, thresholdMs),
       new Date(nowMs).toISOString(),
+      kind,
     );
-    if (outcome.outcome !== "updated") return false;
-    console.warn("[generic-scoring] rescued stuck DELETING deployment", {
+    if (outcome.outcome !== "updated") return undefined;
+    console.warn(`[generic-scoring] rescued stuck ${kind} deployment`, {
       PK: pk,
       staleForMs: nowMs - updatedAtMs,
     });
-    return true;
+    return row.jobId;
   } catch (err) {
-    console.warn("[generic-scoring] stuck-DELETING rescue failed", {
+    console.warn(`[generic-scoring] stuck-${kind} rescue failed`, {
       PK: pk,
       message: err instanceof Error ? err.message : String(err),
     });
-    return false;
+    return undefined;
   }
 }
 
-function staleDeletingUpdatedAtMs(
+function markStuckDeploymentFailed(
+  repository: DeploymentsLifecyclePort,
+  jobId: string,
+  reason: string,
+  at: string,
+  kind: StuckRecoveryKind,
+) {
+  return kind === "creating"
+    ? repository.markStuckCreatingFailed(jobId, reason, at)
+    : repository.markStuckDeletingFailed(jobId, reason, at);
+}
+
+function recoveryReason(kind: StuckRecoveryKind, thresholdMs: number): string {
+  const minutes = Math.floor(thresholdMs / 60_000);
+  return kind === "creating"
+    ? `reconciler: stuck PENDING/IN_PROGRESS > ${minutes} min after DeployCreate timeout, treating as FAILED to unblock Event DEPLOYING (#2651)`
+    : `reconciler: stuck DELETING > ${minutes} min, treating as FAILED to unblock Event TEARDOWN (#828)`;
+}
+
+function staleDeploymentUpdatedAtMs(
   row: DeploymentReconcilerRow,
   nowMs: number,
   thresholdMs: number,
+  statuses: readonly string[],
 ): number | undefined {
-  if (row.status !== "DELETING") return undefined;
+  if (!statuses.includes(row.status) || !Number.isFinite(nowMs)) return undefined;
   const updatedAtMs = row.updatedAt ? Date.parse(row.updatedAt) : Number.NaN;
   if (!Number.isFinite(updatedAtMs) || nowMs - updatedAtMs < thresholdMs) return undefined;
   return updatedAtMs;
@@ -390,16 +466,12 @@ async function reconcileSingleEvent(
     tenantId: event.tenantId,
     eventId: event.eventId,
   });
-  // Issue #828: TEARDOWN で `DELETING` 行が `STUCK_DELETING_THRESHOLD_MS` 以上停滞していれば
-  // FAILED に倒す (= bulk-delete publish chunk 失敗 / State Machine 未起動 / 競技者の手動 stack
-  // 削除で silent path に倒れた orphan 行を救済し、 ARCHIVED 自動遷移を解錠する)。
-  // DDB Update は side-effect で発火、 同 tick の transition 判定には rescue 後の値を
-  // 想定した `adjustedStatuses` を使う (= 次 tick を待たずに同 tick で ARCHIVED 化可能)。
-  if (eventStatus === "TEARDOWN" && Number.isFinite(nowMs)) {
-    await rescueStuckDeletingDeployments(ctx, depRows, nowMs);
-  }
-  const adjustedStatuses = depRows.map((r) =>
-    isStuckDeletingForTeardown(eventStatus, r, nowMs) ? "FAILED" : r.status,
+  // A row is treated as FAILED in this tick only after its conditional rescue
+  // write succeeds. A conflict or backend error must not advance the parent
+  // Event from the stale projection alone.
+  const rescuedJobIds = await rescueStuckDeploymentsForEvent(ctx, eventStatus, depRows, nowMs);
+  const adjustedStatuses = depRows.map((row) =>
+    row.jobId && rescuedJobIds.has(row.jobId) ? "FAILED" : row.status,
   );
   const next = resolveEventStatusTransition(eventStatus, adjustedStatuses);
   if (!next) return;
@@ -410,6 +482,22 @@ async function reconcileSingleEvent(
     to: next,
     nowIso,
   });
+}
+
+async function rescueStuckDeploymentsForEvent(
+  ctx: ReconcileEventStatusesContext,
+  eventStatus: string,
+  rows: readonly DeploymentReconcilerRow[],
+  nowMs: number,
+): Promise<ReadonlySet<string>> {
+  if (!Number.isFinite(nowMs)) return new Set();
+  if (eventStatus === "DEPLOYING") {
+    return rescueStuckCreatingDeploymentIds(ctx, rows, nowMs, DEPLOY_STUCK_RECOVERY_THRESHOLD_MS);
+  }
+  if (eventStatus === "TEARDOWN") {
+    return rescueStuckDeletingDeploymentIds(ctx, rows, nowMs, STUCK_DELETING_THRESHOLD_MS);
+  }
+  return new Set();
 }
 
 async function applyEventStatusTransition(

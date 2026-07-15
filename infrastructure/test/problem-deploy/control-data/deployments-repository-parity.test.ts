@@ -499,6 +499,25 @@ describe.each(backends)("DeploymentsRepository parity: %s", (_label, makeBackend
     await repo.putDeployment(deployment({ jobId: "stuck", status: "DELETING" }));
     await expectOutcome(repo.markStuckDeletingFailed("stuck", "stuck", AT), "updated");
     await expectOutcome(repo.markStuckDeletingFailed("stuck", "stuck", AT), "conflict");
+    await repo.putDeployment(deployment({ jobId: "stuck-pending", status: "PENDING" }));
+    await expectOutcome(
+      repo.markStuckCreatingFailed("stuck-pending", "stuck create", AT),
+      "updated",
+    );
+    await expectOutcome(
+      repo.markStuckCreatingFailed("stuck-pending", "stuck create", AT),
+      "conflict",
+    );
+    await repo.putDeployment(deployment({ jobId: "stuck-progress", status: "IN_PROGRESS" }));
+    await expectOutcome(
+      repo.markStuckCreatingFailed("stuck-progress", "stuck create", AT),
+      "updated",
+    );
+    await repo.putDeployment(deployment({ jobId: "already-complete", status: "COMPLETE" }));
+    await expectOutcome(
+      repo.markStuckCreatingFailed("already-complete", "stuck create", AT),
+      "conflict",
+    );
     await repo.putDeployment(deployment({ jobId: "runtime", status: "IN_PROGRESS" }));
     await expectOutcome(
       repo.transitionRuntimeStatus("runtime", "tenant-a", "IN_PROGRESS", "COMPLETE", "{}", AT),

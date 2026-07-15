@@ -755,6 +755,7 @@ describe("MirroredDeploymentsRepository", () => {
         markCompositeParentDeleting: vi.fn(async () => ({ outcome: "updated" as const })),
         putCompositeParent: vi.fn(async () => ({ outcome: "updated" as const })),
         putCompositeTarget: vi.fn(async () => ({ outcome: "updated" as const })),
+        markStuckCreatingFailed: vi.fn(async () => ({ outcome: "updated" as const })),
         markStuckDeletingFailed: vi.fn(async () => ({ outcome: "updated" as const })),
         transitionRuntimeStatus: vi.fn(async () => ({ outcome: "updated" as const })),
         compensateBulkTeardown: vi.fn(async () => ({ outcome: "updated" as const })),
@@ -775,6 +776,7 @@ describe("MirroredDeploymentsRepository", () => {
       await repository.markCompositeParentDeleting("parent-1", AT);
       await repository.putCompositeParent(compositeParent);
       await repository.putCompositeTarget(compositeTarget);
+      await repository.markStuckCreatingFailed("job-1", "create reason", AT);
       await repository.markStuckDeletingFailed("job-1", "reason", AT);
       await repository.transitionRuntimeStatus(
         "job-1",
@@ -791,6 +793,11 @@ describe("MirroredDeploymentsRepository", () => {
       expect(replicaCalls.markCompositeParentDeleting).toHaveBeenCalledWith("parent-1", AT);
       expect(replicaCalls.putCompositeParent).toHaveBeenCalledWith(compositeParent);
       expect(replicaCalls.putCompositeTarget).toHaveBeenCalledWith(compositeTarget);
+      expect(replicaCalls.markStuckCreatingFailed).toHaveBeenCalledWith(
+        "job-1",
+        "create reason",
+        AT,
+      );
       expect(replicaCalls.markStuckDeletingFailed).toHaveBeenCalledWith("job-1", "reason", AT);
       expect(replicaCalls.transitionRuntimeStatus).toHaveBeenCalledWith(
         "job-1",

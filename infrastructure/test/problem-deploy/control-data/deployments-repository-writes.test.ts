@@ -619,6 +619,7 @@ describe("DynamoDbDeploymentsRepository writes — generic scoring", () => {
       itemFrom(deployment({ jobId: "gate", status: "COMPLETE" })),
       itemFrom(deployment({ jobId: "state", status: "COMPLETE" })),
       itemFrom(deployment({ jobId: "stuck", status: "DELETING", teamLoginKey: "KEY-STUCK" })),
+      itemFrom(deployment({ jobId: "stuck-create", status: "IN_PROGRESS" })),
       itemFrom(deployment({ jobId: "runtime", status: "IN_PROGRESS" })),
     ]);
 
@@ -658,6 +659,16 @@ describe("DynamoDbDeploymentsRepository writes — generic scoring", () => {
       ConditionExpression: "#status = :deleting",
     });
     expect((await repo.getDeployment("stuck"))?.teamLoginKey).toBe("KEY-STUCK");
+
+    reset();
+    await expectOutcome(
+      repo.markStuckCreatingFailed("stuck-create", "create timed out", AT),
+      "updated",
+    );
+    expect(updates(commands)[0].input).toMatchObject({
+      UpdateExpression: "SET #status = :failed, updatedAt = :now, #reason = :reason",
+      ConditionExpression: "#status IN (:pending, :inProgress)",
+    });
 
     reset();
     await expectOutcome(
