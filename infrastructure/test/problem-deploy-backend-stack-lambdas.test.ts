@@ -652,8 +652,8 @@ describe("ProblemDeployBackendStack — control-data writer Lambdas memory on Tu
     return resource.Properties?.MemorySize ?? 0;
   };
 
-  it("DeployStatusWriter Lambda should be provisioned at 1024MB (was 256MB → init OOM)", () => {
-    expect(memoryOf("DeployStatusWriter")).toBe(1024);
+  it("DeployStatusWriter Lambda should use the live-verified 2048MB safety value", () => {
+    expect(memoryOf("DeployStatusWriter")).toBe(2048);
   });
 
   it("ExternalIdAudit Lambda should be provisioned at 1024MB (same control-data runtime)", () => {
