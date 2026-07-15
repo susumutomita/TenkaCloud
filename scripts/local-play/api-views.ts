@@ -92,15 +92,21 @@ function problemView(
 ) {
   const problem = mapStrings(runtime.problem, browserText);
   const complete = isProblemComplete(runtime);
+  // [fairness contract / platform #1124] `description` is the admin/authoring
+  // field — SCHEMA.json defines it as "採点ルール / hardened state / 段階詳細など
+  // ネタバレを含む長文" and states it is never shown to a competitor. Only
+  // `instructions` / `shortDescription` are participant-facing. The en overlay
+  // drops it for the same reason; this mirrors `sanitizeI18n()` in
+  // apps/participant-portal/src/data/problems.ts (the build-time projection).
+  const { description: _adminOnlyEnDescription, ...englishOverlay } = problem.i18n?.en ?? {};
   const englishText = {
-    ...(problem.i18n?.en ?? {}),
+    ...englishOverlay,
     ...(complete && problem.writeupI18n ? { writeup: problem.writeupI18n } : {}),
   };
   return {
     jobId: jobIdOf(problem.problemId),
     problemId: problem.problemId,
     name: problem.name,
-    description: problem.description,
     instructions: problem.instructions,
     // Local mode is a drill: reveal immediately after the whole problem is solved.
     ...(complete && problem.writeup ? { writeup: problem.writeup } : {}),
@@ -170,7 +176,8 @@ function simulatedProblemView(
     jobId: jobIdOf(problem.problemId),
     problemId: problem.problemId,
     name: problem.name,
-    description: problem.description,
+    // [fairness contract / platform #1124] admin/authoring `description` is
+    // dropped here exactly as it is in problemView() above.
     instructions: problem.instructions,
     region: "local",
     awsAccountId: "local",
