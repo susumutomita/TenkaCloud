@@ -176,50 +176,69 @@ function pathWithin(path: string, root: string): boolean {
   return absolute === absoluteRoot || absolute.startsWith(`${absoluteRoot}${sep}`);
 }
 
+function assertRecordedUnitShape(unit: Record<string, unknown>): void {
+  if (
+    typeof unit.problemId !== "string" ||
+    !/^[a-z0-9][a-z0-9-]{0,127}$/.test(unit.problemId) ||
+    typeof unit.composePath !== "string" ||
+    !isAbsolute(unit.composePath) ||
+    typeof unit.composeProjectName !== "string" ||
+    !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(unit.composeProjectName) ||
+    !Array.isArray(unit.secretEnv)
+  ) {
+    throw new Error("Recorded compose unit is invalid");
+  }
+  if (
+    unit.secretEnv.some(
+      (name) => typeof name !== "string" || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name),
+    )
+  ) {
+    throw new Error("Recorded compose unit is invalid");
+  }
+}
+
+function assertRecordedProjectDirectory(unit: Record<string, unknown>): void {
+  if (
+    unit.projectDirectory !== undefined &&
+    (typeof unit.projectDirectory !== "string" ||
+      !isAbsolute(unit.projectDirectory) ||
+      !pathWithin(unit.projectDirectory, REPO_ROOT))
+  ) {
+    throw new Error("Recorded compose project directory is outside the repository");
+  }
+}
+
+function assertRecordedComposePath(unit: Record<string, unknown>, localDir: string): void {
+  if (unit.remappedComposePath === undefined) {
+    if (!pathWithin(String(unit.composePath), REPO_ROOT)) {
+      throw new Error("Recorded compose path is outside the repository");
+    }
+    return;
+  }
+  if (
+    typeof unit.remappedComposePath !== "string" ||
+    !isAbsolute(unit.remappedComposePath) ||
+    !pathWithin(unit.remappedComposePath, localDir) ||
+    resolve(String(unit.composePath)) !== resolve(unit.remappedComposePath) ||
+    (existsSync(unit.remappedComposePath) && lstatSync(unit.remappedComposePath).isSymbolicLink())
+  ) {
+    throw new Error("Recorded remapped compose path is outside local state");
+  }
+}
+
+function recordedComposeUnit(item: unknown, localDir: string): LocalComposeUnit {
+  const unit = record(item, "Recorded compose unit");
+  assertRecordedUnitShape(unit);
+  assertRecordedProjectDirectory(unit);
+  assertRecordedComposePath(unit, localDir);
+  return unit as unknown as LocalComposeUnit;
+}
+
 /** Validate persisted compose ownership before invoking Docker or deleting a temp file. */
 export function readRecordedUnits(path: string, localDir: string): RecordedUnits {
   const value = record(readPrivateJson<unknown>(path, 1024 * 1024), "Recorded units");
   if (!Array.isArray(value.units)) throw new Error("Recorded units must contain an array");
-  const units = value.units.map((item) => {
-    const unit = record(item, "Recorded compose unit");
-    if (
-      typeof unit.problemId !== "string" ||
-      !/^[a-z0-9][a-z0-9-]{0,127}$/.test(unit.problemId) ||
-      typeof unit.composePath !== "string" ||
-      !isAbsolute(unit.composePath) ||
-      typeof unit.composeProjectName !== "string" ||
-      !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(unit.composeProjectName) ||
-      !Array.isArray(unit.secretEnv) ||
-      unit.secretEnv.some(
-        (name) => typeof name !== "string" || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name),
-      )
-    ) {
-      throw new Error("Recorded compose unit is invalid");
-    }
-    if (
-      unit.projectDirectory !== undefined &&
-      (typeof unit.projectDirectory !== "string" ||
-        !isAbsolute(unit.projectDirectory) ||
-        !pathWithin(unit.projectDirectory, REPO_ROOT))
-    ) {
-      throw new Error("Recorded compose project directory is outside the repository");
-    }
-    if (unit.remappedComposePath !== undefined) {
-      if (
-        typeof unit.remappedComposePath !== "string" ||
-        !isAbsolute(unit.remappedComposePath) ||
-        !pathWithin(unit.remappedComposePath, localDir) ||
-        resolve(unit.composePath) !== resolve(unit.remappedComposePath) ||
-        (existsSync(unit.remappedComposePath) &&
-          lstatSync(unit.remappedComposePath).isSymbolicLink())
-      ) {
-        throw new Error("Recorded remapped compose path is outside local state");
-      }
-    } else if (!pathWithin(unit.composePath, REPO_ROOT)) {
-      throw new Error("Recorded compose path is outside the repository");
-    }
-    return unit as unknown as LocalComposeUnit;
-  });
+  const units = value.units.map((item) => recordedComposeUnit(item, localDir));
   if (new Set(units.map((unit) => unit.problemId)).size !== units.length) {
     throw new Error("Recorded compose problem IDs must be unique");
   }

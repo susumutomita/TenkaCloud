@@ -68,11 +68,29 @@ import { openLocalPlayStateStore } from "./local-play/state-store-factory";
  */
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-async function up(problemArg: string): Promise<void> {
-  const p = privateLocalPaths();
+
+type LocalPaths = ReturnType<typeof privateLocalPaths>;
+type ContainerCatalog = ReturnType<typeof loadLocalPlayCatalog>;
+type SimulatorCatalog = ReturnType<typeof enabledSimulatedCloudProblems>;
+
+interface LocalStartupPlan {
+  readonly paths: LocalPaths;
+  readonly problemIds: string[];
+  readonly apiPort: number;
+  readonly apiBaseUrl: string;
+  readonly catalog: ContainerCatalog;
+  readonly simulatedCatalog: SimulatorCatalog;
+}
+
+interface ApiProcessOwnership {
+  pid?: number;
+  processIdentity?: string;
+}
+
+async function reclaimPreviousLocalSession(paths: LocalPaths): Promise<void> {
   await reclaimStaleSession(
-    p.statePath,
-    () => readLocalProcessState(p.statePath, p),
+    paths.statePath,
+    () => readLocalProcessState(paths.statePath, paths),
     recordedApiIsHealthy,
     async (state) => {
       stopRecordedServeProcess(state);
@@ -87,11 +105,30 @@ async function up(problemArg: string): Promise<void> {
           "Previous local-play serve process did not stop; refusing concurrent cleanup",
         );
       }
-      await cleanupRecordedSimulatorSession(p.simulatorSessionPath);
-      releaseSessionState(p, state);
+      await cleanupRecordedSimulatorSession(paths.simulatorSessionPath);
+      releaseSessionState(paths, state);
     },
   );
+}
 
+function assertRequestedProblemsExist(
+  problemIds: readonly string[],
+  roots: readonly string[],
+  catalog: ContainerCatalog,
+  simulatedCatalog: SimulatorCatalog,
+): void {
+  const catalogIds = new Set([...catalog, ...simulatedCatalog].map((problem) => problem.problemId));
+  for (const id of problemIds) {
+    if (!catalogIds.has(id)) {
+      throw new Error(`problem "${id}" was not found under: ${roots.join(", ")}`);
+    }
+  }
+}
+
+async function prepareLocalStartup(
+  problemArg: string,
+  paths: LocalPaths,
+): Promise<LocalStartupPlan> {
   const problemIds = parseProblemIds(problemArg);
   const apiPort = process.env.LOCAL_API_PORT
     ? positivePort(process.env.LOCAL_API_PORT, 1, "LOCAL_API_PORT")
@@ -100,7 +137,7 @@ async function up(problemArg: string): Promise<void> {
   if (process.env.LOCAL_API_PORT) await assertPortFree(apiPort, "Participant API");
   // Leftover containers from a crashed session would collide with this one on
   // the same port blocks — reclaim them first (idempotent).
-  tearDownRecordedUnits(p);
+  tearDownRecordedUnits(paths);
 
   // [#2392 Phase 2] Warm session: the API serves the WHOLE local-play catalog
   // and containers start on demand. PROBLEM= only selects what to pre-start —
@@ -109,118 +146,149 @@ async function up(problemArg: string): Promise<void> {
   const catalog = loadLocalPlayCatalog(REPO_ROOT, roots);
   // [#2632] Simulator problems are OFF by default (opt in: TENKACLOUD_LOCAL_SIMULATOR=1).
   const simulatedCatalog = enabledSimulatedCloudProblems(roots);
-  const catalogIds = new Set([...catalog, ...simulatedCatalog].map((problem) => problem.problemId));
-  for (const id of problemIds) {
-    if (!catalogIds.has(id)) {
-      throw new Error(`problem "${id}" was not found under: ${roots.join(", ")}`);
-    }
-  }
+  assertRequestedProblemsExist(problemIds, roots, catalog, simulatedCatalog);
   const containerIds = new Set(catalog.map((problem) => problem.problemId));
   if (problemIds.length === 0 || problemIds.some((id) => containerIds.has(id))) {
     assertDockerAvailable();
   }
+  return { paths, problemIds, apiPort, apiBaseUrl, catalog, simulatedCatalog };
+}
 
-  let runtimeConfigBackedUp = false;
-  if (existsSync(p.runtimeConfigBackupPath)) {
+function backupRuntimeConfig(paths: LocalPaths): boolean {
+  if (existsSync(paths.runtimeConfigBackupPath)) {
     // An orphaned backup from a crashed run holds the real original — adopt it
     // rather than overwriting it with the (possibly stale local) live config.
-    runtimeConfigBackedUp = true;
-  } else if (existsSync(p.runtimeConfigPath)) {
-    copyFileSync(p.runtimeConfigPath, p.runtimeConfigBackupPath);
-    runtimeConfigBackedUp = true;
+    return true;
   }
+  if (!existsSync(paths.runtimeConfigPath)) return false;
+  copyFileSync(paths.runtimeConfigPath, paths.runtimeConfigBackupPath);
+  return true;
+}
 
-  let apiPid: number | undefined;
-  let apiProcessIdentity: string | undefined;
+async function printLocalStartupSuccess(
+  plan: LocalStartupPlan,
+  participantToken: string,
+): Promise<void> {
+  const catalogSize = plan.catalog.length + plan.simulatedCatalog.length;
+  console.log(
+    `Local play is ready (catalog: ${catalogSize} problem${catalogSize > 1 ? "s" : ""}, ` +
+      `${plan.problemIds.length} pre-started).`,
+  );
+  console.log(`Participant API: ${plan.apiBaseUrl}`);
+  await printRunningEndpoints(plan.apiBaseUrl, participantToken);
+  if (plan.problemIds.length === 0) {
+    console.log(
+      "No problem was pre-started; run `tenkacloud local --problem <id>` or start one from the portal.",
+    );
+  }
+  console.log(
+    "Started containers keep running until you stop them: use the portal Stop button " +
+      "for one problem, or `tenkacloud local down` to stop everything.",
+  );
+  console.log(
+    "Participant Portal opens from `tenkacloud local`; after `tenkacloud local up`, run `tenkacloud local portal`.",
+  );
+}
+
+async function startLocalSession(
+  plan: LocalStartupPlan,
+  runtimeConfigBackedUp: boolean,
+  ownership: ApiProcessOwnership,
+): Promise<void> {
+  const participantToken = randomBytes(32).toString("base64url");
+  const deployment: LocalPlayDeployment = {
+    problems: plan.catalog,
+    simulatedProblems: plan.simulatedCatalog,
+    participantToken,
+  };
+  writePrivateJson(plan.paths.deploymentPath, deployment);
+  ownership.pid = startDetachedServe(plan.paths.deploymentPath, plan.apiPort, plan.paths.logPath);
+  ownership.processIdentity = observeProcessIdentity(ownership.pid);
+  if (!ownership.processIdentity) {
+    throw new Error("Local Participant API process identity could not be recorded");
+  }
+  const state: LocalProcessState = {
+    pid: ownership.pid,
+    processIdentity: ownership.processIdentity,
+    apiBaseUrl: plan.apiBaseUrl,
+    problemIds: plan.problemIds,
+    deploymentPath: plan.paths.deploymentPath,
+    runtimeConfigPath: plan.paths.runtimeConfigPath,
+    participantToken,
+    ...(runtimeConfigBackedUp
+      ? { runtimeConfigBackupPath: plan.paths.runtimeConfigBackupPath }
+      : {}),
+  };
+  // Commit ownership before any pre-start or runtime-config side effect. A
+  // parent crash from this point is recoverable by the next up/down command.
+  writePrivateJson(plan.paths.statePath, state);
+  await waitForLocalApi(plan.apiBaseUrl, plan.problemIds, ownership.pid, plan.paths.logPath);
+  // Pre-start through the API so the serve process owns every lifecycle.
+  for (const id of plan.problemIds) {
+    await startProblemViaApi(plan.apiBaseUrl, id, participantToken);
+  }
+  const runtimeConfig = buildLocalRuntimeConfig(plan.apiBaseUrl, participantToken);
+  writeFileSync(
+    plan.paths.runtimeConfigPath,
+    `${JSON.stringify(runtimeConfig, null, 2)}\n`,
+    "utf8",
+  );
+  await printLocalStartupSuccess(plan, participantToken);
+}
+
+async function stopFailedApiProcess(ownership: ApiProcessOwnership): Promise<boolean> {
+  if (ownership.pid === undefined) return true;
+  ownership.processIdentity ??= observeProcessIdentity(ownership.pid);
+  stopRecordedProcess(ownership.pid, ownership.processIdentity, "Local-play serve");
+  const exited = await waitForServeProcessExit(
+    ownership.pid,
+    ownership.processIdentity,
+    SERVE_SHUTDOWN_TIMEOUT_MS,
+  );
+  if (!exited)
+    throw new Error("Local-play serve process did not stop; refusing concurrent cleanup");
+  return true;
+}
+
+async function cleanupFailedLocalStartup(
+  error: unknown,
+  paths: LocalPaths,
+  ownership: ApiProcessOwnership,
+): Promise<never> {
+  const errors: unknown[] = [error];
+  let serveExited = false;
   try {
-    const participantToken = randomBytes(32).toString("base64url");
-    const deployment: LocalPlayDeployment = {
-      problems: catalog,
-      simulatedProblems: simulatedCatalog,
-      participantToken,
-    };
-    writePrivateJson(p.deploymentPath, deployment);
-    apiPid = startDetachedServe(p.deploymentPath, apiPort, p.logPath);
-    apiProcessIdentity = observeProcessIdentity(apiPid);
-    if (!apiProcessIdentity) {
-      throw new Error("Local Participant API process identity could not be recorded");
+    serveExited = await stopFailedApiProcess(ownership);
+  } catch (shutdownError) {
+    errors.push(shutdownError);
+  }
+  if (serveExited) {
+    try {
+      await cleanupRecordedSimulatorSession(paths.simulatorSessionPath);
+    } catch (cleanupError) {
+      errors.push(cleanupError);
     }
-    const state: LocalProcessState = {
-      pid: apiPid,
-      processIdentity: apiProcessIdentity,
-      apiBaseUrl,
-      problemIds,
-      deploymentPath: p.deploymentPath,
-      runtimeConfigPath: p.runtimeConfigPath,
-      participantToken,
-      ...(runtimeConfigBackedUp ? { runtimeConfigBackupPath: p.runtimeConfigBackupPath } : {}),
-    };
-    // Commit ownership before any pre-start or runtime-config side effect. A
-    // parent crash from this point is recoverable by the next up/down command.
-    writePrivateJson(p.statePath, state);
-    await waitForLocalApi(apiBaseUrl, problemIds, apiPid, p.logPath);
+    unlinkIfExists(paths.deploymentPath);
+    unlinkIfExists(paths.statePath);
+    restoreRuntimeConfig(paths.runtimeConfigBackupPath, paths.runtimeConfigPath, true);
+    tearDownRecordedUnits(paths);
+  }
+  if (errors.length > 1) {
+    throw new AggregateError(errors, "Local play startup failed and cleanup was incomplete");
+  }
+  throw error;
+}
 
-    // Pre-start the requested problems through the API so the serve process's
-    // lifecycle owns every container (cap + LRU eviction included).
-    for (const id of problemIds) {
-      await startProblemViaApi(apiBaseUrl, id, participantToken);
-    }
-
-    const runtimeConfig = buildLocalRuntimeConfig(apiBaseUrl, participantToken);
-    writeFileSync(p.runtimeConfigPath, `${JSON.stringify(runtimeConfig, null, 2)}\n`, "utf8");
-
-    console.log(
-      `Local play is ready (catalog: ${catalog.length + simulatedCatalog.length} problem${catalog.length + simulatedCatalog.length > 1 ? "s" : ""}, ` +
-        `${problemIds.length} pre-started).`,
-    );
-    console.log(`Participant API: ${apiBaseUrl}`);
-    await printRunningEndpoints(apiBaseUrl, participantToken);
-    if (problemIds.length === 0) {
-      console.log(
-        "No problem was pre-started; run `tenkacloud local --problem <id>` or start one from the portal.",
-      );
-    }
-    console.log(
-      "Started containers keep running until you stop them: use the portal Stop button " +
-        "for one problem, or `tenkacloud local down` to stop everything.",
-    );
-    console.log(
-      "Participant Portal opens from `tenkacloud local`; after `tenkacloud local up`, run `tenkacloud local portal`.",
-    );
+async function up(problemArg: string): Promise<void> {
+  const paths = privateLocalPaths();
+  await reclaimPreviousLocalSession(paths);
+  const plan = await prepareLocalStartup(problemArg, paths);
+  const runtimeConfigBackedUp = backupRuntimeConfig(paths);
+  const ownership: ApiProcessOwnership = {};
+  try {
+    await startLocalSession(plan, runtimeConfigBackedUp, ownership);
   } catch (error) {
-    const errors: unknown[] = [error];
-    let serveExited = apiPid === undefined;
-    if (apiPid !== undefined) {
-      try {
-        apiProcessIdentity ??= observeProcessIdentity(apiPid);
-        stopRecordedProcess(apiPid, apiProcessIdentity, "Local-play serve");
-        serveExited = await waitForServeProcessExit(
-          apiPid,
-          apiProcessIdentity,
-          SERVE_SHUTDOWN_TIMEOUT_MS,
-        );
-        if (!serveExited) {
-          throw new Error("Local-play serve process did not stop; refusing concurrent cleanup");
-        }
-      } catch (shutdownError) {
-        errors.push(shutdownError);
-      }
-    }
-    if (serveExited) {
-      try {
-        await cleanupRecordedSimulatorSession(p.simulatorSessionPath);
-      } catch (cleanupError) {
-        errors.push(cleanupError);
-      }
-      unlinkIfExists(p.deploymentPath);
-      unlinkIfExists(p.statePath);
-      restoreRuntimeConfig(p.runtimeConfigBackupPath, p.runtimeConfigPath, true);
-      tearDownRecordedUnits(p);
-    }
-    if (errors.length > 1) {
-      throw new AggregateError(errors, "Local play startup failed and cleanup was incomplete");
-    }
-    throw error;
+    await cleanupFailedLocalStartup(error, paths, ownership);
   }
 }
 

@@ -9,6 +9,7 @@ import {
   type LocalPlayRequest,
   type LocalPlayResponse,
   type LocalPlayState,
+  type SimulatedProblemRuntime,
 } from "./api-state";
 import { leaderboard, teamView } from "./api-views";
 import { parseLoopbackUrl } from "./loopback";
@@ -316,6 +317,63 @@ function handleLifecyclePost(
   return undefined;
 }
 
+function handleSnapshotPost(
+  snapshot: RegExpExecArray,
+  state: LocalPlayState,
+): Promise<LocalPlayResponse> | LocalPlayResponse {
+  const problemId = decodePathSegment(snapshot[1]);
+  const name = decodePathSegment(snapshot[2]);
+  const action = snapshot[3];
+  const runtime = problemId ? state.simulatedRuntimes.get(problemId) : undefined;
+  if (!runtime || !state.simulator || !state.simulatorSnapshotDir) {
+    return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_snapshot_target" } };
+  }
+  if (!name || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(name)) {
+    return { status: StatusCodes.BAD_REQUEST, body: { error: "invalid_snapshot_name" } };
+  }
+  if (state.lifecycle.statusOf(problemId) !== "running" || !runtime.deployment) {
+    return { status: StatusCodes.CONFLICT, body: { error: "not_running" } };
+  }
+  mkdirSync(state.simulatorSnapshotDir, { recursive: true, mode: 0o700 });
+  const path = join(state.simulatorSnapshotDir, `${name}.json`);
+  const operation =
+    action === "export"
+      ? state.simulator.exportSnapshot(problemId, path)
+      : state.simulator.importSnapshot(problemId, path);
+  return operation.then(() => ({
+    status: StatusCodes.OK,
+    body: { action, problemId, name },
+  }));
+}
+
+function handleEndpointPost(
+  endpoint: RegExpExecArray,
+  body: unknown,
+  state: LocalPlayState,
+): LocalPlayResponse {
+  const problemId = decodePathSegment(endpoint[1]);
+  const slot = decodePathSegment(endpoint[2]);
+  if (problemId === undefined || slot === undefined) {
+    return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_slot" } };
+  }
+  return putSimulatorEndpoint(problemId, slot, body, state);
+}
+
+function handleDisruptionPost(
+  disruption: RegExpExecArray,
+  state: LocalPlayState,
+): Promise<LocalPlayResponse> | LocalPlayResponse {
+  const problemId = decodePathSegment(disruption[1]);
+  const disruptionId = decodePathSegment(disruption[2]);
+  const runtime = problemId ? state.simulatedRuntimes.get(problemId) : undefined;
+  if (!runtime || !disruptionId || !state.simulator) {
+    return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_disruption" } };
+  }
+  return state.simulator
+    .fireDisruption(runtime.problem, disruptionId)
+    .then((result) => ({ status: StatusCodes.OK, body: { result } }));
+}
+
 function handleSimulatorPost(
   request: LocalPlayRequest,
   state: LocalPlayState,
@@ -327,53 +385,39 @@ function handleSimulatorPost(
     return { status: StatusCodes.UNAUTHORIZED, body: { error: "unauthorized" } };
   }
   const snapshot = SNAPSHOT_RE.exec(request.path);
-  if (snapshot) {
-    const problemId = decodePathSegment(snapshot[1]);
-    const name = decodePathSegment(snapshot[2]);
-    const action = snapshot[3];
-    const runtime = problemId ? state.simulatedRuntimes.get(problemId) : undefined;
-    if (!runtime || !state.simulator || !state.simulatorSnapshotDir) {
-      return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_snapshot_target" } };
-    }
-    if (!name || !/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(name)) {
-      return { status: StatusCodes.BAD_REQUEST, body: { error: "invalid_snapshot_name" } };
-    }
-    if (state.lifecycle.statusOf(problemId) !== "running" || !runtime.deployment) {
-      return { status: StatusCodes.CONFLICT, body: { error: "not_running" } };
-    }
-    mkdirSync(state.simulatorSnapshotDir, { recursive: true, mode: 0o700 });
-    const path = join(state.simulatorSnapshotDir, `${name}.json`);
-    const operation =
-      action === "export"
-        ? state.simulator.exportSnapshot(problemId, path)
-        : state.simulator.importSnapshot(problemId, path);
-    return operation.then(() => ({
-      status: StatusCodes.OK,
-      body: { action, problemId, name },
-    }));
-  }
+  if (snapshot) return handleSnapshotPost(snapshot, state);
   const endpoint = ENDPOINT_RE.exec(request.path);
-  if (endpoint) {
-    const problemId = decodePathSegment(endpoint[1]);
-    const slot = decodePathSegment(endpoint[2]);
-    if (problemId === undefined || slot === undefined) {
-      return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_slot" } };
-    }
-    return putSimulatorEndpoint(problemId, slot, request.body, state);
-  }
+  if (endpoint) return handleEndpointPost(endpoint, request.body, state);
   const disruption = DISRUPTION_RE.exec(request.path);
-  if (disruption) {
-    const problemId = decodePathSegment(disruption[1]);
-    const disruptionId = decodePathSegment(disruption[2]);
-    const runtime = problemId ? state.simulatedRuntimes.get(problemId) : undefined;
-    if (!runtime || !disruptionId || !state.simulator) {
-      return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_disruption" } };
-    }
-    return state.simulator
-      .fireDisruption(runtime.problem, disruptionId)
-      .then((result) => ({ status: StatusCodes.OK, body: { result } }));
-  }
+  if (disruption) return handleDisruptionPost(disruption, state);
   return undefined;
+}
+
+function simulatorEndpointView(
+  slot: SimulatedProblemRuntime["contract"]["endpoints"][number],
+  runtime: SimulatedProblemRuntime,
+  outputs: Readonly<Record<string, string>>,
+  state: LocalPlayState,
+) {
+  const rawDefault = simulatorOutput(outputs, slot.default.key);
+  const defaultUrl = rawDefault
+    ? resolveDefaultUrl(rawDefault, slot.default.appendPath)
+    : undefined;
+  const overrideUrl = runtime.overrides.get(slot.slot);
+  const visibleDefaultUrl = defaultUrl ? state.browserText(defaultUrl) : undefined;
+  const visibleOverrideUrl = overrideUrl ? state.browserText(overrideUrl) : undefined;
+  return {
+    slot: slot.slot,
+    defaultKey: slot.default.key,
+    overridable: slot.overridable,
+    ...(slot.label ? { label: slot.label } : {}),
+    ...(slot.description ? { description: slot.description } : {}),
+    ...(visibleDefaultUrl ? { defaultUrl: visibleDefaultUrl } : {}),
+    ...(visibleOverrideUrl ? { overrideUrl: visibleOverrideUrl } : {}),
+    ...(visibleOverrideUrl || visibleDefaultUrl
+      ? { effectiveUrl: visibleOverrideUrl ?? visibleDefaultUrl }
+      : {}),
+  };
 }
 
 function simulatorEndpoints(problemId: string, state: LocalPlayState): LocalPlayResponse {
@@ -389,27 +433,9 @@ function simulatorEndpoints(problemId: string, state: LocalPlayState): LocalPlay
     status: StatusCodes.OK,
     body: {
       teamId: LOCAL_CONTEXT.teamId,
-      endpoints: runtime.contract.endpoints.map((slot) => {
-        const rawDefault = simulatorOutput(outputs, slot.default.key);
-        const defaultUrl = rawDefault
-          ? resolveDefaultUrl(rawDefault, slot.default.appendPath)
-          : undefined;
-        const overrideUrl = runtime.overrides.get(slot.slot);
-        const visibleDefaultUrl = defaultUrl ? state.browserText(defaultUrl) : undefined;
-        const visibleOverrideUrl = overrideUrl ? state.browserText(overrideUrl) : undefined;
-        return {
-          slot: slot.slot,
-          defaultKey: slot.default.key,
-          overridable: slot.overridable,
-          ...(slot.label ? { label: slot.label } : {}),
-          ...(slot.description ? { description: slot.description } : {}),
-          ...(visibleDefaultUrl ? { defaultUrl: visibleDefaultUrl } : {}),
-          ...(visibleOverrideUrl ? { overrideUrl: visibleOverrideUrl } : {}),
-          ...(visibleOverrideUrl || visibleDefaultUrl
-            ? { effectiveUrl: visibleOverrideUrl ?? visibleDefaultUrl }
-            : {}),
-        };
-      }),
+      endpoints: runtime.contract.endpoints.map((slot) =>
+        simulatorEndpointView(slot, runtime, outputs, state),
+      ),
     },
   };
 }

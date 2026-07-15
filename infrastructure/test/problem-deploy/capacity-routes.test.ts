@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { StatusCodes } from "http-status-codes";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import type { EventSharedResources } from "../../lib/problem-deploy/handlers/event-handler/shared";
 import { buildAuthErrorHandler } from "../../lib/problem-deploy/handlers/shared/auth-wiring";
 
 /**
@@ -31,13 +32,12 @@ const { registerCapacityRoutes } = await import(
 );
 
 // route は shared から 4 テーブル名を引く (capacity.ts の resolveEventHotTables)。
-// biome-ignore lint/suspicious/noExplicitAny: 最小 shared (route は service 層に委譲するだけ)。
 const shared = {
   deploymentsTableName: "Deployments-x",
   eventsTableName: "Events-x",
   teamsTableName: "Teams-x",
   disruptionsTableName: "Disruptions-x",
-} as any;
+} as EventSharedResources;
 
 const buildApp = () => {
   const app = new Hono();
