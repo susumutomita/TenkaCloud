@@ -3668,7 +3668,7 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — codebuild 
         "Ref": "ExternalIdAuditFunctionLogGroup4DFC50D4",
       },
     },
-    "MemorySize": 256,
+    "MemorySize": 1024,
     "Role": {
       "Fn::GetAtt": [
         "ExternalIdAuditFunctionServiceRole21F1442C",
@@ -3708,7 +3708,7 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — codebuild 
         "Ref": "SystemAuditWriterFunctionLogGroupBA2CF810",
       },
     },
-    "MemorySize": 256,
+    "MemorySize": 1024,
     "Role": {
       "Fn::GetAtt": [
         "SystemAuditWriterFunctionServiceRoleF0B15AD1",
@@ -7626,7 +7626,7 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — lambda-dep
         "Ref": "ExternalIdAuditFunctionLogGroup4DFC50D4",
       },
     },
-    "MemorySize": 256,
+    "MemorySize": 1024,
     "Role": {
       "Fn::GetAtt": [
         "ExternalIdAuditFunctionServiceRole21F1442C",
@@ -7666,7 +7666,7 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — lambda-dep
         "Ref": "SystemAuditWriterFunctionLogGroupBA2CF810",
       },
     },
-    "MemorySize": 256,
+    "MemorySize": 1024,
     "Role": {
       "Fn::GetAtt": [
         "SystemAuditWriterFunctionServiceRoleF0B15AD1",
@@ -11539,7 +11539,7 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — lite mode 
         "Ref": "ExternalIdAuditFunctionLogGroup4DFC50D4",
       },
     },
-    "MemorySize": 256,
+    "MemorySize": 1024,
     "Role": {
       "Fn::GetAtt": [
         "ExternalIdAuditFunctionServiceRole21F1442C",
@@ -11579,7 +11579,7 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — lite mode 
         "Ref": "SystemAuditWriterFunctionLogGroupBA2CF810",
       },
     },
-    "MemorySize": 256,
+    "MemorySize": 1024,
     "Role": {
       "Fn::GetAtt": [
         "SystemAuditWriterFunctionServiceRoleF0B15AD1",
@@ -14417,7 +14417,7 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — pure-sql t
         "Ref": "DeployStatusWriterFunctionLogGroup4ED3E8B7",
       },
     },
-    "MemorySize": 256,
+    "MemorySize": 1024,
     "Role": {
       "Fn::GetAtt": [
         "DeployStatusWriterFunctionServiceRole2FCA6A0E",
@@ -14498,7 +14498,7 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — pure-sql t
         "Ref": "ExternalIdAuditFunctionLogGroup4DFC50D4",
       },
     },
-    "MemorySize": 256,
+    "MemorySize": 1024,
     "Role": {
       "Fn::GetAtt": [
         "ExternalIdAuditFunctionServiceRole21F1442C",
@@ -14538,7 +14538,7 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — pure-sql t
         "Ref": "SystemAuditWriterFunctionLogGroupBA2CF810",
       },
     },
-    "MemorySize": 256,
+    "MemorySize": 1024,
     "Role": {
       "Fn::GetAtt": [
         "SystemAuditWriterFunctionServiceRoleF0B15AD1",
@@ -18537,7 +18537,7 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — turso-mirr
         "Ref": "ExternalIdAuditFunctionLogGroup4DFC50D4",
       },
     },
-    "MemorySize": 256,
+    "MemorySize": 1024,
     "Role": {
       "Fn::GetAtt": [
         "ExternalIdAuditFunctionServiceRole21F1442C",
@@ -18577,7 +18577,7 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — turso-mirr
         "Ref": "SystemAuditWriterFunctionLogGroupBA2CF810",
       },
     },
-    "MemorySize": 256,
+    "MemorySize": 1024,
     "Role": {
       "Fn::GetAtt": [
         "SystemAuditWriterFunctionServiceRoleF0B15AD1",
