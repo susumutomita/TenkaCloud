@@ -23,11 +23,13 @@ import {
 import { toErrorMessage } from "@tenkacloud/web-kit";
 import { Component, type ErrorInfo, type ReactNode, Suspense, useMemo } from "react";
 import { getCoordinationProjection, submitCoordinationOp } from "../api/coordination-client";
+import type { ParticipantEndpointView } from "../api/portal-client";
 import { loadPluginSlot } from "./loader";
 import {
   buildPortalCoordination,
   buildPortalDisruptions,
   buildPortalEndpointsFromOutputs,
+  buildPortalEndpointsFromRegistry,
   buildPortalPhases,
   buildPortalTeam,
 } from "./props-builder";
@@ -45,6 +47,8 @@ interface PortalPluginSlotsProps {
     readonly eventId?: string;
   };
   readonly stackOutputs: Record<string, string>;
+  /** Server-computed registry; undefined means loading/error and uses the CFn-output fallback. */
+  readonly endpoints?: readonly ParticipantEndpointView[];
   /** [#1420] coordination dispatcher の Function URL (= config.coordinationApiUrl)。 未配線なら省略。 */
   readonly coordinationApiUrl?: string;
   /** [#1420] team の session token (= bearer)。 coordinationClient の束縛に使う。 */
@@ -60,6 +64,7 @@ export function PortalPluginSlots({
   platform,
   team,
   stackOutputs,
+  endpoints: registeredEndpoints,
   coordinationApiUrl,
   sessionToken,
 }: PortalPluginSlotsProps) {
@@ -69,8 +74,11 @@ export function PortalPluginSlots({
   const disruptions = useMemo(() => buildPortalDisruptions(problemId), [problemId]);
   const coordination = useMemo(() => buildPortalCoordination(problemId), [problemId]);
   const endpoints = useMemo(
-    () => buildPortalEndpointsFromOutputs(problemId, stackOutputs),
-    [problemId, stackOutputs],
+    () =>
+      registeredEndpoints === undefined
+        ? buildPortalEndpointsFromOutputs(problemId, stackOutputs)
+        : buildPortalEndpointsFromRegistry(registeredEndpoints),
+    [problemId, stackOutputs, registeredEndpoints],
   );
   const teamProp = useMemo(() => buildPortalTeam(team), [team]);
   // [#1420] dispatcher URL + session が揃ったときだけ live coordination client を束縛する

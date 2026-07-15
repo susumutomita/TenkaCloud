@@ -20,6 +20,7 @@ import type {
   PortalSlotProps,
 } from "@tenkacloud/portal-plugin-sdk";
 import { toErrorMessage } from "@tenkacloud/web-kit";
+import type { ParticipantEndpointView } from "../api/portal-client";
 import { findProblemMetadata } from "../data/problems";
 
 /**
@@ -35,7 +36,8 @@ function joinUrl(base: string, appendPath?: string): string {
 
 /**
  * `metadata.endpoints[]` + deployment.stackOutputs から PortalEndpoint[] を組み立てる。
- * overrideUrl は本 fn では未対応 (= portal の endpoint registry API を後で wire-up する)。
+ * Endpoint registry を取得できない間・取得失敗時だけ使う fallback。registry 成功後は
+ * {@link buildPortalEndpointsFromRegistry} が server-side の effective URL を正とする。
  * URL 結合失敗時は context 付きで throw (= caller の ErrorBoundary に降ろす)。
  */
 export function buildPortalEndpointsFromOutputs(
@@ -70,6 +72,13 @@ export function buildPortalEndpointsFromOutputs(
       ...(defaultUrl ? { defaultUrl, effectiveUrl: defaultUrl } : {}),
     };
   });
+}
+
+/** Narrows the server endpoint registry response to the public plugin SDK contract. */
+export function buildPortalEndpointsFromRegistry(
+  endpoints: readonly ParticipantEndpointView[],
+): readonly PortalEndpoint[] {
+  return endpoints.map(({ defaultKey: _defaultKey, ...endpoint }) => endpoint);
 }
 
 /**

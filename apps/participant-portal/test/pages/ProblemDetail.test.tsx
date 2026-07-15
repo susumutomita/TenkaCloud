@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppConfig } from "../../src/config";
 
@@ -18,6 +19,9 @@ const {
   mockFindMeta,
   mockNarrative,
   mockFindDiagram,
+  mockUseProblemEndpoints,
+  mockEndpointOverrideForm,
+  mockPortalPluginSlots,
 } = vi.hoisted(() => ({
   mockNav: vi.fn(),
   mockParams: vi.fn(),
@@ -27,6 +31,9 @@ const {
   mockFindMeta: vi.fn(),
   mockNarrative: vi.fn(),
   mockFindDiagram: vi.fn(),
+  mockUseProblemEndpoints: vi.fn(),
+  mockEndpointOverrideForm: vi.fn(),
+  mockPortalPluginSlots: vi.fn(),
 }));
 
 vi.mock("react-router", () => ({
@@ -36,6 +43,9 @@ vi.mock("react-router", () => ({
 }));
 vi.mock("../../src/auth/AuthProvider", () => ({ useAuth: mockAuth }));
 vi.mock("../../src/auth/TeamViewProvider", () => ({ useTeamView: mockTeamView }));
+vi.mock("../../src/hooks/useProblemEndpoints", () => ({
+  useProblemEndpoints: mockUseProblemEndpoints,
+}));
 vi.mock("../../src/i18n", () => ({
   useT: () => (key: string, params?: Readonly<Record<string, string | number>>) =>
     params ? `${key}|${JSON.stringify(params)}` : key,
@@ -50,10 +60,25 @@ vi.mock("../../src/components/ProblemPanel", () => ({
   ProblemPanel: () => <div data-testid="problem-panel" />,
 }));
 vi.mock("../../src/components/EndpointOverrideForm", () => ({
-  EndpointOverrideForm: () => <div data-testid="endpoint-form" />,
+  EndpointOverrideForm: (props: unknown) => {
+    const [draft, setDraft] = useState("");
+    mockEndpointOverrideForm(props);
+    return (
+      <div data-testid="endpoint-form">
+        <input
+          aria-label="mock endpoint draft"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+        />
+      </div>
+    );
+  },
 }));
 vi.mock("../../src/plugins/PortalPluginSlots", () => ({
-  PortalPluginSlots: () => <div data-testid="plugin-slots" />,
+  PortalPluginSlots: (props: unknown) => {
+    mockPortalPluginSlots(props);
+    return <div data-testid="plugin-slots" />;
+  },
 }));
 
 const {
@@ -109,6 +134,11 @@ beforeEach(() => {
   mockFindMeta.mockReturnValue(undefined);
   mockFindDiagram.mockReturnValue(undefined);
   mockNarrative.mockReturnValue({ name: "Hello World", shortDescription: "Solve it" });
+  mockUseProblemEndpoints.mockReturnValue({
+    endpoints: undefined,
+    error: undefined,
+    replaceEndpoints: vi.fn(),
+  });
 });
 
 afterEach(() => vi.clearAllMocks());
@@ -445,6 +475,63 @@ describe("ProblemDetailPage", () => {
     mockTeamView.mockReturnValue(teamView({ view: viewWith() }));
     renderPage();
     expect(screen.queryByTestId("plugin-slots")).not.toBeInTheDocument();
+  });
+
+  it("should share the authoritative endpoint registry between the form and plugin", () => {
+    const endpoints = [
+      {
+        slot: "app",
+        overridable: true,
+        defaultKey: "RegisteredUrl",
+        overrideUrl: "https://override.example.com",
+        effectiveUrl: "https://override.example.com",
+      },
+    ];
+    const replaceEndpoints = vi.fn();
+    mockUseProblemEndpoints.mockReturnValue({
+      endpoints,
+      error: undefined,
+      replaceEndpoints,
+    });
+    mockFindMeta.mockReturnValue(meta());
+    mockTeamView.mockReturnValue(teamView({ view: viewWith() }));
+
+    renderPage();
+
+    expect(mockEndpointOverrideForm).toHaveBeenCalledWith(
+      expect.objectContaining({ endpoints, onEndpointsChange: replaceEndpoints }),
+    );
+    expect(mockPortalPluginSlots).toHaveBeenCalledWith(expect.objectContaining({ endpoints }));
+  });
+
+  it("should reset endpoint form state when the active problem or team changes", async () => {
+    const user = userEvent.setup();
+    let activeView = viewWith({
+      problems: [problem({ problemId: "first" })],
+      team: { teamId: "team-1", teamName: "Team One" },
+    });
+    mockFindMeta.mockReturnValue(meta());
+    mockTeamView.mockImplementation(() => teamView({ view: activeView }));
+    const rendered = renderPage();
+    const draft = () => screen.getByRole("textbox", { name: "mock endpoint draft" });
+
+    await user.type(draft(), "https://draft.example.com");
+    expect(draft()).toHaveValue("https://draft.example.com");
+
+    activeView = viewWith({
+      problems: [problem({ problemId: "second" })],
+      team: { teamId: "team-1", teamName: "Team One" },
+    });
+    rendered.rerender(<ProblemDetailPage config={config} />);
+    expect(draft()).toHaveValue("");
+
+    await user.type(draft(), "https://another-draft.example.com");
+    activeView = viewWith({
+      problems: [problem({ problemId: "second" })],
+      team: { teamId: "team-2", teamName: "Team Two" },
+    });
+    rendered.rerender(<ProblemDetailPage config={config} />);
+    expect(draft()).toHaveValue("");
   });
 
   it("should fall the session token back to empty when there is no auth session", () => {

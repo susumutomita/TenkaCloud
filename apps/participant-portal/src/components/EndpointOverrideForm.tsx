@@ -23,10 +23,9 @@ import Header from "@cloudscape-design/components/header";
 import Input from "@cloudscape-design/components/input";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import { toErrorMessage } from "@tenkacloud/web-kit";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   deleteProblemEndpointOverride,
-  listProblemEndpoints,
   type ParticipantEndpointView,
   PortalValidationError,
   putProblemEndpointOverride,
@@ -37,8 +36,10 @@ interface EndpointOverrideFormProps {
   readonly apiBaseUrl: string;
   readonly teamLoginKey: string;
   readonly problemId: string;
-  /** 親 (= ProblemDetail) の problem.stackOutputs から default が組み立てられない時の
-   *   shortcut。 endpoints は server-side で defaultUrl も計算済で返ってくるので不要。 */
+  /** ProblemDetail が取得した server-side の集約 view。undefined は loading。 */
+  readonly endpoints: readonly ParticipantEndpointView[] | undefined;
+  readonly listError: string | undefined;
+  readonly onEndpointsChange: (endpoints: readonly ParticipantEndpointView[]) => void;
 }
 
 interface SlotEditState {
@@ -82,32 +83,12 @@ export function EndpointOverrideForm({
   apiBaseUrl,
   teamLoginKey,
   problemId,
+  endpoints,
+  listError,
+  onEndpointsChange,
 }: EndpointOverrideFormProps) {
   const t = useT();
-  const [endpoints, setEndpoints] = useState<readonly ParticipantEndpointView[] | undefined>(
-    undefined,
-  );
-  const [listError, setListError] = useState<string | undefined>(undefined);
   const [editState, setEditState] = useState<Record<string, SlotEditState>>({});
-
-  // 初回 + problemId 変更時に endpoints を引く。 (= mount 時 fetch、 polling は外側 view が
-  // 別途やっているのでここでは 1 回でよい)
-  useEffect(() => {
-    let cancelled = false;
-    listProblemEndpoints(apiBaseUrl, teamLoginKey, problemId)
-      .then((res) => {
-        if (cancelled) return;
-        setEndpoints(res.endpoints);
-        setListError(undefined);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setListError(toErrorMessage(err));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [apiBaseUrl, teamLoginKey, problemId]);
 
   function patchEditState(slot: string, patch: Partial<SlotEditState>): void {
     setEditState((prev) => ({
@@ -132,7 +113,7 @@ export function EndpointOverrideForm({
         slot,
         trimmed,
       );
-      setEndpoints(res.endpoints);
+      onEndpointsChange(res.endpoints);
       patchEditState(slot, { value: "", busy: false, error: undefined });
     } catch (err) {
       patchEditState(slot, { busy: false, error: formatValidationError(err, t) });
@@ -143,7 +124,7 @@ export function EndpointOverrideForm({
     patchEditState(slot, { busy: true, error: undefined });
     try {
       const res = await deleteProblemEndpointOverride(apiBaseUrl, teamLoginKey, problemId, slot);
-      setEndpoints(res.endpoints);
+      onEndpointsChange(res.endpoints);
       patchEditState(slot, EMPTY_SLOT_STATE);
     } catch (err) {
       patchEditState(slot, { busy: false, error: formatValidationError(err, t) });

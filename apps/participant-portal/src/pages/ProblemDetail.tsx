@@ -23,6 +23,7 @@ import {
   resolveLocalizedNarrative,
 } from "../data/problems";
 import { providerLabel } from "../data/providers";
+import { useProblemEndpoints } from "../hooks/useProblemEndpoints";
 import { useI18n, useT } from "../i18n";
 import {
   findGateProblem,
@@ -52,6 +53,20 @@ interface ProblemDetailVisibilityState {
 interface EndpointOverrideVisibilityState extends ProblemDetailVisibilityState {
   readonly hasMetadata: boolean;
   readonly endpointCount: number;
+}
+
+function problemEndpointsRequest(
+  config: AppConfig,
+  sessionToken: string | null,
+  problem: ParticipantProblemView | undefined,
+  enabled: boolean,
+) {
+  return {
+    apiBaseUrl: config.apiBaseUrl,
+    teamLoginKey: sessionToken ?? "",
+    problemId: problem?.problemId ?? "",
+    enabled,
+  };
 }
 
 export function isProblemDetailLocked(eventGate: ProblemDetailGate | undefined): boolean {
@@ -120,6 +135,9 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
     endpointCount: metadata?.endpoints.length ?? 0,
     locked: anyLocked,
   });
+  const endpointRegistry = useProblemEndpoints(
+    problemEndpointsRequest(config, sessionToken, problem, canRenderEndpoints),
+  );
   const scoringNotStartedAt = getScoringNotStartedStartsAt(view?.eventGate);
 
   if (!jobId) return <Navigate to="/problems" replace />;
@@ -187,9 +205,13 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
        *   Issue #1038 P0 #2: scoring_not_started のときは render しない (= lock)。 */}
       {canRenderEndpoints && problem && (
         <EndpointOverrideForm
+          key={JSON.stringify([view?.team.teamId, sessionToken, problem.problemId])}
           apiBaseUrl={config.apiBaseUrl}
           teamLoginKey={sessionToken ?? ""}
           problemId={problem.problemId}
+          endpoints={endpointRegistry.endpoints}
+          listError={endpointRegistry.error}
+          onEndpointsChange={endpointRegistry.replaceEndpoints}
         />
       )}
 
@@ -205,6 +227,7 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
           platform={problem.platform}
           team={view.team}
           stackOutputs={problem.stackOutputs}
+          endpoints={endpointRegistry.endpoints}
           coordinationApiUrl={config.coordinationApiUrl}
           sessionToken={sessionToken ?? undefined}
         />
