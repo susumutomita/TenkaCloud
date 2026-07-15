@@ -204,23 +204,46 @@ describe("scripts/ops/turso-live-guide (#2617)", () => {
     expect(envExample).toContain("tenkacloud turso-live");
   });
 
-  it("should keep internal issue numbers and duplicate targets out of make help", () => {
+  it("should default make help to English and provide an explicit Japanese view", () => {
     const makefile = readFileSync(join(REPO_ROOT, "Makefile"), "utf8");
-    const help = execFileSync("make", [], { cwd: REPO_ROOT, encoding: "utf8" });
+    const english = execFileSync("make", [], { cwd: REPO_ROOT, encoding: "utf8" });
+    const explicitEnglish = execFileSync("make", ["help-en"], {
+      cwd: REPO_ROOT,
+      encoding: "utf8",
+    });
+    const japanese = execFileSync("make", ["help-ja"], {
+      cwd: REPO_ROOT,
+      encoding: "utf8",
+    });
 
-    expect(makefile).toContain("# ===== Problem catalog validation =====");
-    expect(makefile).toContain("# ===== Problem Packs (author-side CLI) =====");
-    expect(makefile).toContain("# ===== Always-On OIDC command seam (ADR-050) =====");
-    expect(makefile).toContain("# ===== Always-On per-event runtime (ADR-049 Phase 4) =====");
-    expect(help).not.toMatch(/(?:Issue\s*)?#\d+/);
-    expect(help.match(/^\s+check-synth\s+/gm)).toHaveLength(1);
-    expect(help.match(/^\s+synth-always-on-command\s+/gm)).toHaveLength(1);
-    expect(help.match(/^\s+synth-always-on-runtime\s+/gm)).toHaveLength(1);
-    expect(help).toMatch(/^\s+turso-live\s+Turso\/AWS/m);
-    expect(help).toMatch(/^\s+local\s+ローカル問題演習/m);
-    expect(help).not.toMatch(/^\s+ensure-deps\s+/m);
-    for (const line of help.split("\n").filter((line) => /^\s{2}\S/.test(line))) {
-      expect(line).toMatch(/^\s{2}\S+\s{2,}\S/);
+    expect(makefile).toContain("# ===== Problem catalog validation | 問題カタログ検証 =====");
+    expect(makefile).toContain(
+      "# ===== Problem Packs (author-side CLI) | 問題パック（作成者向けCLI） =====",
+    );
+    expect(english).toBe(explicitEnglish);
+    expect(english).toContain("Language: English (Japanese: make help-ja)");
+    expect(english).toContain("Setup / Build");
+    expect(english).toMatch(/^\s+install\s+Install development dependencies safely/m);
+    expect(english).toMatch(
+      /^\s+turso-live\s+Start the interactive Turso\/AWS live verification wizard/m,
+    );
+    expect(english).toMatch(/^\s+local\s+Start the local drill API and portal/m);
+    expect(english).not.toContain("開発依存関係を安全設定でインストール");
+    expect(japanese).toContain("言語: 日本語（英語: make help-en）");
+    expect(japanese).toContain("セットアップ / ビルド");
+    expect(japanese).toMatch(/^\s+install\s+開発依存関係を安全設定でインストール/m);
+    expect(japanese).toMatch(/^\s+turso-live\s+Turso\/AWSの初回live検証wizardを開始/m);
+    expect(japanese).toMatch(/^\s+local\s+ローカル問題演習のAPIとportalを起動/m);
+    expect(japanese).not.toContain("Install development dependencies safely");
+    for (const help of [english, japanese]) {
+      expect(help).not.toMatch(/(?:Issue\s*)?#\d+/);
+      expect(help.match(/^\s+check-synth\s+/gm)).toHaveLength(1);
+      expect(help.match(/^\s+synth-always-on-command\s+/gm)).toHaveLength(1);
+      expect(help.match(/^\s+synth-always-on-runtime\s+/gm)).toHaveLength(1);
+      expect(help).not.toMatch(/^\s+ensure-deps\s+/m);
+      for (const line of help.split("\n").filter((line) => /^\s{2}\S/.test(line))) {
+        expect(line).toMatch(/^\s{2}\S+\s{2,}\S/);
+      }
     }
   });
 });
