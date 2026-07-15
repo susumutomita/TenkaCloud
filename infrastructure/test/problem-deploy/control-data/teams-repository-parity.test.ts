@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { MirroredTeamsRepository } from "../../../lib/problem-deploy/control-data/mirrored-repositories";
+import {
+  DynamoDbDeploymentsRepository,
+  SqlDeploymentsRepository,
+} from "../../../lib/problem-deploy/control-data/deployments-repository";
+import {
+  MirroredDeploymentsRepository,
+  MirroredTeamsRepository,
+} from "../../../lib/problem-deploy/control-data/mirrored-repositories";
 import {
   createTeamsRepository,
   DynamoDbTeamsRepository,
@@ -10,6 +17,11 @@ import {
   type TeamRecord,
   type TeamsRepository,
 } from "../../../lib/problem-deploy/control-data/teams-repository";
+import type {
+  DeploymentRecord,
+  DeploymentsRepository,
+  SqlExecutor,
+} from "../../../lib/problem-deploy/control-data/types";
 import { makeFakeDdb, makeSqliteExecutor } from "./control-data-write.test-helpers";
 
 /**
@@ -130,6 +142,33 @@ describe.each(backends)("TeamsRepository parity: %s", (name, makeRepo) => {
     await repo.putTeam(sampleRecord({ teamId: "t-b", teamLoginKey: "k-b" }));
     const listed = await repo.listTeamsByEvent("01EVENTAAAAAAAAAAAAAAAAAAA");
     expect(listed.map((r) => r.teamId)).toEqual(["t-a", "t-b", "t-c"]);
+  });
+
+  it("should expose a backend-neutral credential only to deployment planning", async () => {
+    const repo = makeRepo();
+    const record = sampleRecord({ teamLoginKey: "DEPLOYMENT-HANDOFF-KEY" });
+    await repo.putTeam(record);
+
+    const [target] = await repo.listTeamsForDeployment(record.eventId);
+
+    expect(target?.teamId).toBe(record.teamId);
+    expect(target?.credential).toEqual(
+      name === "SqlTeamsRepository"
+        ? { kind: "sha256", value: hashLoginKey("DEPLOYMENT-HANDOFF-KEY") }
+        : { kind: "plaintext", value: "DEPLOYMENT-HANDOFF-KEY" },
+    );
+    const { credential: _credential, ...metadata } = target ?? {};
+    expect(JSON.stringify(metadata)).not.toContain("DEPLOYMENT-HANDOFF-KEY");
+  });
+
+  it("should reject deployment planning when a team has no login credential", async () => {
+    const repo = makeRepo();
+    const record = sampleRecord({ teamLoginKey: "" });
+    await repo.putTeam(record);
+
+    await expect(repo.listTeamsForDeployment(record.eventId)).rejects.toThrow(
+      /has no participant login credential/,
+    );
   });
 
   it("should not list another event's teams", async () => {
@@ -254,6 +293,22 @@ describe("hashLoginKey (Issue #2290)", () => {
     expect(row?.login_key_hash).toBeNull();
   });
 
+  it("should reject a malformed stored SQL login-key hash during deployment planning", async () => {
+    const executor = makeSqliteExecutor();
+    const repository = new SqlTeamsRepository(executor);
+    const record = sampleRecord();
+    await repository.putTeam(record);
+    await executor.run("UPDATE teams SET login_key_hash = ? WHERE event_id = ? AND team_id = ?", [
+      "not-a-sha256-digest",
+      record.eventId,
+      record.teamId,
+    ]);
+
+    await expect(repository.listTeamsForDeployment(record.eventId)).rejects.toThrow(
+      /has no participant login credential/,
+    );
+  });
+
   it("should scrub a legacy plaintext login key from payloads and never return it on point reads", async () => {
     const executor = makeSqliteExecutor();
     const record = sampleRecord({ teamLoginKey: "LEGACY-PLAINTEXT" });
@@ -285,5 +340,316 @@ describe("hashLoginKey (Issue #2290)", () => {
     ]);
     expect(String(row?.payload)).not.toContain("LEGACY-PLAINTEXT");
     expect(JSON.parse(String(row?.payload))).not.toHaveProperty("teamLoginKey");
+  });
+});
+
+describe.each([
+  [
+    "DynamoDB",
+    () => {
+      const ddb = makeFakeDdb();
+      return {
+        teams: new DynamoDbTeamsRepository(ddb, "Teams", "Deployments"),
+        deployments: new DynamoDbDeploymentsRepository(ddb, "Deployments"),
+      };
+    },
+  ],
+  [
+    "SQL",
+    () => {
+      const sql = makeSqliteExecutor();
+      return {
+        teams: new SqlTeamsRepository(sql),
+        deployments: new SqlDeploymentsRepository(sql),
+      };
+    },
+  ],
+  [
+    "mirror",
+    () => {
+      const ddb = makeFakeDdb();
+      const sql = makeSqliteExecutor();
+      return {
+        teams: new MirroredTeamsRepository(
+          new DynamoDbTeamsRepository(ddb, "Teams", "Deployments"),
+          new SqlTeamsRepository(sql),
+        ),
+        deployments: new MirroredDeploymentsRepository(
+          new DynamoDbDeploymentsRepository(ddb, "Deployments"),
+          new SqlDeploymentsRepository(sql),
+        ),
+      };
+    },
+  ],
+] as const)("team login-key rotation: %s", (_name, makeRepositories) => {
+  it("should invalidate the old key and rotate every deployment index", async () => {
+    const { teams, deployments } = makeRepositories() as {
+      teams: TeamsRepository;
+      deployments: DeploymentsRepository;
+    };
+    const team = sampleRecord({ teamLoginKey: "OLD-TEAM-KEY" });
+    const deployment: DeploymentRecord = {
+      jobId: "job-1",
+      problemId: "p1",
+      tenantId: team.tenantId,
+      awsAccountId: "123456789012",
+      region: "ap-northeast-1",
+      teamName: team.internalSlug,
+      namePrefix: "tc-alpha-p1",
+      teamLoginKey: "OLD-TEAM-KEY",
+      status: "COMPLETE",
+      eventId: team.eventId,
+      teamId: team.teamId,
+      createdAt: team.createdAt,
+      updatedAt: team.updatedAt,
+      expiresAt: team.expiresAt,
+    };
+    await teams.putTeam(team);
+    await deployments.putDeployment(deployment);
+
+    await expect(
+      teams.rotateLoginKey({
+        tenantId: team.tenantId,
+        eventId: team.eventId,
+        teamId: team.teamId,
+        newLoginKey: "NEW-TEAM-KEY",
+        expectedUpdatedAt: team.updatedAt,
+        updatedAt: "2026-07-15T12:00:00.000Z",
+        deployments: [{ jobId: deployment.jobId, createdAt: deployment.createdAt }],
+      }),
+    ).resolves.toEqual({ outcome: "updated" });
+
+    await expect(teams.getTeamByLoginKey("OLD-TEAM-KEY")).resolves.toBeUndefined();
+    await expect(deployments.listByTeamLoginKey("OLD-TEAM-KEY")).resolves.toEqual([]);
+    expect((await teams.getTeamByLoginKey("NEW-TEAM-KEY"))?.teamId).toBe(team.teamId);
+    expect((await deployments.listByTeamLoginKey("NEW-TEAM-KEY"))[0]?.jobId).toBe("job-1");
+  });
+
+  it("should roll back the whole rotation when any deployment changed concurrently", async () => {
+    const { teams } = makeRepositories() as {
+      teams: TeamsRepository;
+      deployments: DeploymentsRepository;
+    };
+    const team = sampleRecord({ teamLoginKey: "STILL-VALID-OLD-KEY" });
+    await teams.putTeam(team);
+
+    await expect(
+      teams.rotateLoginKey({
+        tenantId: team.tenantId,
+        eventId: team.eventId,
+        teamId: team.teamId,
+        newLoginKey: "MUST-NOT-COMMIT",
+        expectedUpdatedAt: team.updatedAt,
+        updatedAt: "2026-07-15T12:00:00.000Z",
+        deployments: [{ jobId: "concurrently-deleted", createdAt: team.createdAt }],
+      }),
+    ).resolves.toEqual({ outcome: "conflict" });
+
+    expect((await teams.getTeamByLoginKey("STILL-VALID-OLD-KEY"))?.teamId).toBe(team.teamId);
+    await expect(teams.getTeamByLoginKey("MUST-NOT-COMMIT")).resolves.toBeUndefined();
+  });
+
+  it("should reject a stale second rotation for the same team", async () => {
+    const { teams } = makeRepositories() as { teams: TeamsRepository };
+    const team = sampleRecord({ teamLoginKey: "ORIGINAL-KEY" });
+    await teams.putTeam(team);
+
+    await expect(
+      teams.rotateLoginKey({
+        tenantId: team.tenantId,
+        eventId: team.eventId,
+        teamId: team.teamId,
+        newLoginKey: "FIRST-ROTATION",
+        expectedUpdatedAt: team.updatedAt,
+        updatedAt: "2026-07-15T12:00:00.000Z",
+        deployments: [],
+      }),
+    ).resolves.toEqual({ outcome: "updated" });
+    await expect(
+      teams.rotateLoginKey({
+        tenantId: team.tenantId,
+        eventId: team.eventId,
+        teamId: team.teamId,
+        newLoginKey: "STALE-SECOND-ROTATION",
+        expectedUpdatedAt: team.updatedAt,
+        updatedAt: "2026-07-15T12:01:00.000Z",
+        deployments: [],
+      }),
+    ).resolves.toEqual({ outcome: "conflict" });
+
+    expect((await teams.getTeamByLoginKey("FIRST-ROTATION"))?.teamId).toBe(team.teamId);
+    await expect(teams.getTeamByLoginKey("STALE-SECOND-ROTATION")).resolves.toBeUndefined();
+  });
+});
+
+describe("DynamoDbTeamsRepository rotation errors", () => {
+  const input = {
+    tenantId: "tenant-a",
+    eventId: "event-a",
+    teamId: "team-a",
+    newLoginKey: "NEW-KEY",
+    expectedUpdatedAt: "2026-07-14T00:00:00.000Z",
+    updatedAt: "2026-07-15T12:00:00.000Z",
+    deployments: [] as const,
+  };
+
+  it("should classify only a conditional cancellation as a conflict", async () => {
+    const error = Object.assign(new Error("conditional conflict"), {
+      name: "TransactionCanceledException",
+      CancellationReasons: [{ Code: "ConditionalCheckFailed" }],
+    });
+    const repository = new DynamoDbTeamsRepository(
+      { send: async () => Promise.reject(error) } as never,
+      "Teams",
+      "Deployments",
+    );
+    await expect(repository.rotateLoginKey(input)).resolves.toEqual({ outcome: "conflict" });
+  });
+
+  it("should require a deployments table before rotating deployment indexes", async () => {
+    const repository = new DynamoDbTeamsRepository(makeFakeDdb(), "Teams");
+    await expect(
+      repository.rotateLoginKey({
+        ...input,
+        deployments: [{ jobId: "job-1", createdAt: "2026-07-15T00:00:00.000Z" }],
+      }),
+    ).rejects.toThrow(/requires a deployments table name/);
+  });
+
+  it("should reject more deployments than one DynamoDB transaction can rotate", async () => {
+    const repository = new DynamoDbTeamsRepository(makeFakeDdb(), "Teams", "Deployments");
+    const deployments = Array.from({ length: 100 }, (_, index) => ({
+      jobId: `job-${index}`,
+      createdAt: "2026-07-15T00:00:00.000Z",
+    }));
+
+    await expect(repository.rotateLoginKey({ ...input, deployments })).rejects.toThrow(
+      /at most 99 deployments/,
+    );
+  });
+
+  it("should allow the 99-deployment DynamoDB transaction boundary", async () => {
+    let actionCount = 0;
+    const repository = new DynamoDbTeamsRepository(
+      {
+        send: async (command: { input: { TransactItems?: readonly unknown[] } }) => {
+          actionCount = command.input.TransactItems?.length ?? 0;
+          return {};
+        },
+      } as never,
+      "Teams",
+      "Deployments",
+    );
+    const deployments = Array.from({ length: 99 }, (_, index) => ({
+      jobId: `job-${index}`,
+      createdAt: "2026-07-15T00:00:00.000Z",
+    }));
+
+    await expect(repository.rotateLoginKey({ ...input, deployments })).resolves.toEqual({
+      outcome: "updated",
+    });
+    expect(actionCount).toBe(100);
+  });
+
+  it("should propagate a transaction cancellation that has no cancellation reasons", async () => {
+    const error = Object.assign(new Error("transaction cancelled"), {
+      name: "TransactionCanceledException",
+    });
+    const repository = new DynamoDbTeamsRepository(
+      { send: async () => Promise.reject(error) } as never,
+      "Teams",
+      "Deployments",
+    );
+    await expect(repository.rotateLoginKey(input)).rejects.toBe(error);
+  });
+
+  it("should propagate a non-Error rejection", async () => {
+    const repository = new DynamoDbTeamsRepository(
+      { send: async () => Promise.reject("transaction failed") } as never,
+      "Teams",
+      "Deployments",
+    );
+    await expect(repository.rotateLoginKey(input)).rejects.toBe("transaction failed");
+  });
+
+  it("should propagate capacity cancellation instead of misreporting a data conflict", async () => {
+    const error = Object.assign(new Error("capacity exhausted"), {
+      name: "TransactionCanceledException",
+      CancellationReasons: [{ Code: "ProvisionedThroughputExceeded" }],
+    });
+    const repository = new DynamoDbTeamsRepository(
+      { send: async () => Promise.reject(error) } as never,
+      "Teams",
+      "Deployments",
+    );
+    await expect(repository.rotateLoginKey(input)).rejects.toBe(error);
+  });
+});
+
+describe("SqlTeamsRepository rotation errors", () => {
+  const input = {
+    tenantId: "tenant-a",
+    eventId: "event-a",
+    teamId: "team-a",
+    newLoginKey: "NEW-KEY",
+    expectedUpdatedAt: "2026-07-14T00:00:00.000Z",
+    updatedAt: "2026-07-15T12:00:00.000Z",
+    deployments: [] as const,
+  };
+
+  function sqlWithBatchError(error: unknown): SqlExecutor {
+    return {
+      ...makeSqliteExecutor(),
+      batch: () => {
+        throw error;
+      },
+    };
+  }
+
+  it("should classify a libSQL extended constraint code as a conflict", async () => {
+    const error = Object.assign(new Error("constraint rejected"), {
+      code: "SQLITE_CONSTRAINT",
+      extendedCode: "SQLITE_CONSTRAINT_UNIQUE",
+    });
+    const repository = new SqlTeamsRepository(sqlWithBatchError(error));
+
+    await expect(repository.rotateLoginKey(input)).resolves.toEqual({ outcome: "conflict" });
+  });
+
+  it("should propagate an unrelated SQL error", async () => {
+    const error = new Error("database unavailable");
+    const repository = new SqlTeamsRepository(sqlWithBatchError(error));
+
+    await expect(repository.rotateLoginKey(input)).rejects.toBe(error);
+  });
+
+  it("should propagate a non-Error SQL rejection", async () => {
+    const repository = new SqlTeamsRepository(sqlWithBatchError("database unavailable"));
+
+    await expect(repository.rotateLoginKey(input)).rejects.toBe("database unavailable");
+  });
+});
+
+describe("MirroredTeamsRepository rotation errors", () => {
+  it("should fail loudly when the replica conflicts after the canonical update", async () => {
+    const canonical = {
+      rotateLoginKey: async () => ({ outcome: "updated" as const }),
+    } as TeamsRepository;
+    const replica = {
+      rotateLoginKey: async () => ({ outcome: "conflict" as const }),
+    } as TeamsRepository;
+    const repository = new MirroredTeamsRepository(canonical, replica);
+
+    await expect(
+      repository.rotateLoginKey({
+        tenantId: "tenant-a",
+        eventId: "event-a",
+        teamId: "team-a",
+        newLoginKey: "NEW-KEY",
+        expectedUpdatedAt: "2026-07-14T00:00:00.000Z",
+        updatedAt: "2026-07-15T12:00:00.000Z",
+        deployments: [],
+      }),
+    ).rejects.toThrow(/replica conflict after canonical update/);
   });
 });

@@ -1,5 +1,5 @@
 import type { PutEventsRequestEntry } from "@aws-sdk/client-eventbridge";
-import type { TeamRecord } from "../../../control-data/teams-repository.js";
+import type { TeamDeploymentRecord } from "../../../control-data/teams-repository.js";
 import type { DeploymentItem } from "../../deploy-handler/types.js";
 import type { ProblemRuntime } from "../../shared/runtime/index.js";
 import type { EventItem, EventProblemTarget } from "../types.js";
@@ -109,14 +109,14 @@ export type AdapterPlanEntry = Extract<PlanEntry, { kind: "adapter" }>;
 export interface LoadedBulkDeployTargets {
   readonly event: Partial<EventItem>;
   // [ADR-049 §5.1] Teams aggregate は repository seam 経由で読むため、 物理 DDB キーを
-  // 剥がした domain shape (TeamRecord)。 下流 (plan-builder) が読む teamId / internalSlug /
-  // teamLoginKey / awsAccountId はすべて domain field として保持される。
-  readonly allTeams: readonly TeamRecord[];
+  // 剥がした deployment view。下流は team metadata と、backend が明示した plaintext/hash
+  // credential の discriminated union だけを読む。
+  readonly allTeams: readonly TeamDeploymentRecord[];
   readonly allProblems: readonly EventProblemTarget[];
 }
 
 export interface SelectedBulkDeployTargets {
-  readonly teams: readonly TeamRecord[];
+  readonly teams: readonly TeamDeploymentRecord[];
   readonly problems: readonly EventProblemTarget[];
 }
 

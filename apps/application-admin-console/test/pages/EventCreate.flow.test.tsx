@@ -123,7 +123,10 @@ function fillValidForm(container: HTMLElement) {
 beforeEach(() => {
   mockApiClient.mockReturnValue({ post: vi.fn() });
   mockNav.mockClear();
-  mockCreate.mockReset().mockResolvedValue({ eventId: "e1" });
+  mockCreate.mockReset().mockResolvedValue({
+    eventId: "e1",
+    teams: [{ teamId: "t1", internalSlug: "team-1", teamLoginKey: "ONE-TIME-KEY" }],
+  });
   mockBulk.mockReset().mockResolvedValue({ ok: true });
   mockListProblems.mockReturnValue([
     problem({ costEstimate }), // p1: costEstimate あり → 引き継ぎ分岐 (truthy)
@@ -156,6 +159,7 @@ describe("EventCreatePage flow", () => {
     fillValidForm(container);
     fireEvent.click(screen.getByRole("button", { name: "event_create.submit" }));
     await waitFor(() => expect(mockCreate).toHaveBeenCalled());
+    expect(screen.getByText("ONE-TIME-KEY")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "event_create.deploy_modal_later" }));
     expect(mockNav).toHaveBeenCalledWith("/events/e1");
     expect(mockBulk).not.toHaveBeenCalled();

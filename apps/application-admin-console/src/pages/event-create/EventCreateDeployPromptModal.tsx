@@ -3,7 +3,12 @@ import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import Modal from "@cloudscape-design/components/modal";
 import SpaceBetween from "@cloudscape-design/components/space-between";
+import Table from "@cloudscape-design/components/table";
+import { useState } from "react";
+import type { CreateEventResponse } from "../../api/events-client";
+import { OneTimeSecretCopyButton } from "../../components/OneTimeSecretCopyButton";
 import { useT } from "../../i18n";
+import { buildInviteLink } from "../../lib/invite-link";
 
 /**
  * Issue #1067: Event 作成成功後に operator へ deploy の必要性を明示する modal。
@@ -23,6 +28,9 @@ export interface EventCreateDeployPromptModalProps {
    * backend would refuse.
    */
   bulkDeploySupported?: boolean;
+  /** Plaintext values from POST /events. They exist only while this modal is open. */
+  teams: CreateEventResponse["teams"];
+  readonly participantPortalUrl?: string;
   onDeployNow: () => void;
   onDeployLater: () => void;
 }
@@ -32,26 +40,32 @@ export function EventCreateDeployPromptModal({
   canMutateTenant,
   deployStarting,
   bulkDeploySupported = true,
+  teams,
+  participantPortalUrl,
   onDeployNow,
   onDeployLater,
 }: EventCreateDeployPromptModalProps) {
   const t = useT();
+  const [copyPending, setCopyPending] = useState(false);
+  const busy = deployStarting || copyPending;
+  const allLoginKeys = teams.map((team) => `${team.internalSlug}\t${team.teamLoginKey}`).join("\n");
+
   return (
     <Modal
       visible={visible}
-      onDismiss={() => (deployStarting ? undefined : onDeployLater())}
+      onDismiss={busy ? undefined : onDeployLater}
       header={t("event_create.deploy_modal_header")}
       footer={
         <Box float="right">
           <SpaceBetween direction="horizontal" size="xs">
-            <Button onClick={onDeployLater} disabled={deployStarting}>
+            <Button onClick={onDeployLater} disabled={busy}>
               {t("event_create.deploy_modal_later")}
             </Button>
             {bulkDeploySupported && (
               <Button
                 variant="primary"
                 loading={deployStarting}
-                disabled={!canMutateTenant}
+                disabled={!canMutateTenant || copyPending}
                 onClick={onDeployNow}
                 data-testid="deploy-prompt-now"
               >
@@ -63,6 +77,58 @@ export function EventCreateDeployPromptModal({
       }
     >
       <SpaceBetween size="m">
+        <Alert type="warning" header={t("event_create.login_keys_header")}>
+          {t("event_create.login_keys_body")}
+        </Alert>
+        <Table
+          variant="embedded"
+          items={[...teams]}
+          columnDefinitions={[
+            {
+              id: "team",
+              header: t("event_create.login_keys_team"),
+              cell: (team) => <code>{team.internalSlug}</code>,
+            },
+            {
+              id: "key",
+              header: t("event_create.login_keys_key"),
+              cell: (team) => <Box variant="code">{team.teamLoginKey}</Box>,
+            },
+            ...(participantPortalUrl
+              ? [
+                  {
+                    id: "invite",
+                    header: t("event_create.login_keys_invite"),
+                    cell: (team: CreateEventResponse["teams"][number]) => (
+                      <OneTimeSecretCopyButton
+                        textToCopy={buildInviteLink(participantPortalUrl, team.teamLoginKey)}
+                        copyLabel={t("event_create.login_keys_copy_invite", {
+                          slug: team.internalSlug,
+                        })}
+                        copyingLabel={t("event_create.login_keys_copying")}
+                        copiedLabel={t("event_create.login_keys_copied")}
+                        failedLabel={t("event_create.login_keys_copy_failed")}
+                        disabled={busy}
+                        onPendingChange={setCopyPending}
+                      />
+                    ),
+                  },
+                ]
+              : []),
+          ]}
+          empty={<Box>{t("event_create.login_keys_empty")}</Box>}
+        />
+        <Box float="right">
+          <OneTimeSecretCopyButton
+            textToCopy={allLoginKeys}
+            copyLabel={t("event_create.login_keys_copy_all")}
+            copyingLabel={t("event_create.login_keys_copying")}
+            copiedLabel={t("event_create.login_keys_copied")}
+            failedLabel={t("event_create.login_keys_copy_failed")}
+            disabled={busy || teams.length === 0}
+            onPendingChange={setCopyPending}
+          />
+        </Box>
         <Alert type="info" header={t("event_create.deploy_modal_alert_header")}>
           {bulkDeploySupported
             ? t("event_create.deploy_modal_alert_body")

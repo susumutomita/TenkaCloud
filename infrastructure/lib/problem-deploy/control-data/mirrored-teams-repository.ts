@@ -1,4 +1,10 @@
-import type { TeamRecord, TeamsRepository } from "./types.js";
+import type {
+  TeamDeploymentRecord,
+  TeamLoginKeyRotationInput,
+  TeamLoginKeyRotationOutcome,
+  TeamRecord,
+  TeamsRepository,
+} from "./types.js";
 
 function withoutLoginKey(record: TeamRecord): Omit<TeamRecord, "teamLoginKey"> {
   const { teamLoginKey: _teamLoginKey, ...safeRecord } = record;
@@ -78,6 +84,22 @@ export class MirroredTeamsRepository implements TeamsRepository {
       const canonicalRecord = canonicalById.get(record.teamId);
       return canonicalRecord ? restoreLoginKey(record, canonicalRecord) : record;
     });
+  }
+
+  listTeamsForDeployment(eventId: string): Promise<readonly TeamDeploymentRecord[]> {
+    // The canonical DynamoDB side owns plaintext in mirror mode. Returning its
+    // explicit deployment view keeps the replica's hash-only storage private.
+    return this.canonical.listTeamsForDeployment(eventId);
+  }
+
+  async rotateLoginKey(input: TeamLoginKeyRotationInput): Promise<TeamLoginKeyRotationOutcome> {
+    const canonical = await this.canonical.rotateLoginKey(input);
+    if (canonical.outcome !== "updated") return canonical;
+    const replica = await this.replica.rotateLoginKey(input);
+    if (replica.outcome !== "updated") {
+      throw new Error("team login key rotation replica conflict after canonical update");
+    }
+    return canonical;
   }
 
   async putTeam(record: TeamRecord): Promise<void> {

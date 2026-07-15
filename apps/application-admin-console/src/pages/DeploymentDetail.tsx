@@ -20,7 +20,6 @@ import {
   FailureGuidanceSection,
   shouldShowFailureGuidance,
 } from "./deployment-detail/FailureGuidanceSection";
-import { HandoffSection } from "./deployment-detail/HandoffSection";
 import { ProvenanceSummarySection } from "./deployment-detail/ProvenanceSummarySection";
 import { TerminalLogView } from "./deployment-detail/TerminalLogView";
 import { useDeploymentDetail } from "./deployment-detail/useDeploymentDetail";
@@ -33,7 +32,7 @@ import { useDeploymentDetail } from "./deployment-detail/useDeploymentDetail";
  * 構成は `./deployment-detail/` 配下の sub-component に分割している (#1240):
  *   - useDeploymentDetail — 30s polling + StackProgress 並列 fetch
  *   - DeployLogSection — Netlify-style phase list + 操作 (#534)
- *   - BasicInfoSection / HandoffSection / CfnOutputsSection — 静的な情報セクション
+ *   - BasicInfoSection / CfnOutputsSection — 静的な情報セクション
  *   - PhaseRow / StackProgressBody / TerminalLogView — log / CFn 進行状況の描画
  */
 export function DeploymentDetailPage({ config }: { config: AppConfig }) {
@@ -85,7 +84,6 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
   if (!item) return null;
 
   const outputs = parseStackOutputs(item.stackOutputs);
-  const teamLoginKey = item.teamLoginKey;
   const summaryTitle = deploySummaryTitle(item);
 
   return (
@@ -128,8 +126,6 @@ export function DeploymentDetailPage({ config }: { config: AppConfig }) {
       {item.composite && <CompositeTargetsSection composite={item.composite} t={t} />}
 
       <BasicInfoSection item={item} t={t} />
-
-      {teamLoginKey && <HandoffSection teamLoginKey={teamLoginKey} t={t} />}
 
       {Object.keys(outputs).length > 0 && <CfnOutputsSection outputs={outputs} t={t} />}
 

@@ -109,8 +109,16 @@ export type DeploymentRecord = {
    * 体験のため、operator 入力ではなく競技者自身が決める。未設定なら undefined。
    */
   displayTeamName?: string;
-  /** 短命キー。API レスポンスで TenantAdmin に 1 度だけ露出し、以降は DDB 内に閉じる。 */
-  teamLoginKey: string;
+  /**
+   * One-time participant bearer. Present on DynamoDB-backed records and while a
+   * caller already holds plaintext; SQL records deliberately omit it.
+   */
+  teamLoginKey?: string;
+  /**
+   * Internal SQL write handoff. It is never serialized into a payload or API
+   * response; the SQL adapter moves it into the indexed login_key_hash column.
+   */
+  teamLoginKeyHash?: string;
   status: DeploymentStatus;
 
   /**

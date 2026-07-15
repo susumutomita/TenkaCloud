@@ -50,8 +50,6 @@ export interface TeamSummary {
   teamId: string;
   internalSlug: string;
   displayName?: string;
-  /** 詳細経路 (`GET /events/{id}`) でのみ含まれる短命キー。 */
-  teamLoginKey?: string;
   /** #528: team の deploy 先 AWS Account ID (12 桁)。旧 Event は undefined。 */
   awsAccountId?: string;
 }
@@ -192,6 +190,25 @@ export async function createEvent(
   body: CreateEventRequest,
 ): Promise<CreateEventResponse> {
   return api.post<CreateEventResponse>("events", body);
+}
+
+export interface RotateTeamLoginKeyResponse {
+  readonly kind: "ok";
+  readonly teamId: string;
+  readonly teamLoginKey: string;
+  readonly rotatedAt: string;
+}
+
+/** Rotate one team bearer and return the replacement plaintext exactly once. */
+export function rotateTeamLoginKey(
+  api: ApiClient,
+  eventId: string,
+  teamId: string,
+): Promise<RotateTeamLoginKeyResponse> {
+  return api.post<RotateTeamLoginKeyResponse>(
+    `events/${encodeURIComponent(eventId)}/teams/${encodeURIComponent(teamId)}/rotate-login-key`,
+    {},
+  );
 }
 
 /**

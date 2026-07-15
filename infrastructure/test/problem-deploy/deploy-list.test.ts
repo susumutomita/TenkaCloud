@@ -222,13 +222,14 @@ describe("getDeployment", () => {
     expect(out).toBeUndefined();
   });
 
-  it("should include teamLoginKey for operators", async () => {
+  it("should not re-expose teamLoginKey from deployment details", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: sampleRow() });
 
     const out = await getDeployment(shared, "tenant-acme", "01HABC");
     expect(out).toBeDefined();
-    expect(out?.teamLoginKey).toBe("SECRET_LOGIN_KEY_DO_NOT_LEAK");
+    expect(out).not.toHaveProperty("teamLoginKey");
+    expect(JSON.stringify(out)).not.toContain("SECRET_LOGIN_KEY_DO_NOT_LEAK");
   });
 
   it("listing should not include teamLoginKey", async () => {

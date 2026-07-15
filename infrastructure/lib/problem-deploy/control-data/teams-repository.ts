@@ -17,6 +17,10 @@ export type {
   SqlParam,
   SqlRow,
   SqlRunResult,
+  TeamDeploymentRecord,
+  TeamLoginCredential,
+  TeamLoginKeyRotationInput,
+  TeamLoginKeyRotationOutcome,
   TeamRecord,
   TeamsRepository,
 } from "./types.js";
@@ -31,6 +35,8 @@ export interface CreateTeamsRepositoryDeps {
   readonly ddb?: DynamoDBDocumentClient;
   /** Teams table name — required for the `dynamodb` backend. */
   readonly teamsTableName?: string;
+  /** Deployments table name — required only by login-key rotation. */
+  readonly deploymentsTableName?: string;
   /** SQL driver — required for the `turso` / `sql` backend. */
   readonly sql?: SqlExecutor;
 }
@@ -71,5 +77,5 @@ export function createTeamsRepository(
   if (!deps.ddb || !deps.teamsTableName) {
     throw new Error("DynamoDbTeamsRepository requires deps.ddb and deps.teamsTableName.");
   }
-  return new DynamoDbTeamsRepository(deps.ddb, deps.teamsTableName);
+  return new DynamoDbTeamsRepository(deps.ddb, deps.teamsTableName, deps.deploymentsTableName);
 }
