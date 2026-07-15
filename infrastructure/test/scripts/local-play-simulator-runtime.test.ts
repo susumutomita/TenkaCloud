@@ -1683,6 +1683,10 @@ describe("provider-neutral local runtime", () => {
     ).problems[0];
 
     expect(view.scoring?.hints).toEqual([{ id: "first-step", penalty: 5, revealed: false }]);
+    // fairness contract (platform #1124 / SCHEMA): `description` is the
+    // admin/authoring field (scoring rules, hardened state, red-team playbook).
+    // The simulated view must drop it exactly like the Docker view does.
+    expect(view).not.toHaveProperty("description");
   });
 
   it("should launch a real process, drive portal lifecycle, persist, snapshot, and delete the world", async () => {

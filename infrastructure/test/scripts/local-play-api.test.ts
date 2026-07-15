@@ -121,6 +121,10 @@ describe("local-play API", () => {
     expect(problem.score).toBe(0);
     expect(problem).not.toHaveProperty("writeup");
     expect(problem).not.toHaveProperty("i18n");
+    // fairness contract (platform #1124 / SCHEMA): `description` is the
+    // admin/authoring field (scoring rules, hardened state, red-team playbook)
+    // and must never reach the competitor. Only `instructions` is participant-facing.
+    expect(problem).not.toHaveProperty("description");
     // Default (unset) omits hintReveal → portal keeps the sequential gate.
     expect(problem.scoring).not.toHaveProperty("hintReveal");
   });
@@ -299,8 +303,10 @@ describe("local-play API", () => {
     await state.lifecycle.ensureRunning(problem.problemId);
     const before = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
     const beforeProblem = (before.body as { problems: Array<Record<string, unknown>> }).problems[0];
+    // fairness contract: the en overlay drops `description` for the same reason
+    // the top-level field does (mirror of the build-time catalog's sanitizeI18n).
     expect(beforeProblem.i18n).toEqual({
-      en: { name: "SQLi", description: "Vuln login (EN).", instructions: "Bypass (EN)." },
+      en: { name: "SQLi", instructions: "Bypass (EN)." },
     });
     // unrevealed hints leak neither ja content nor the en translation
     const hintsBefore = (beforeProblem.scoring as { hints: Array<Record<string, unknown>> }).hints;
@@ -816,7 +822,9 @@ describe("local-play API: on-demand container lifecycle (#2392 Phase 2)", () => 
     }
     // the display / scoring shell stays so the portal can render a start affordance
     expect(problems[0].name).toBe("SQL Injection Demo");
-    expect(problems[0].description).toBe("Vulnerable login.");
+    // fairness contract (platform #1124): the admin/authoring `description` is
+    // dropped even in the stopped view — `instructions` is the participant text.
+    expect(problems[0]).not.toHaveProperty("description");
     expect(problems[0].scoring).toMatchObject({ kind: "flag", points: 200 });
   });
 
