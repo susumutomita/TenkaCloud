@@ -27,6 +27,9 @@ describe("scripts/ops/turso-live-guide (#2617)", () => {
     const guide = renderTursoLiveGuide("development");
 
     expect(guide).toContain("#2617 Turso 初回ライブ E2E 検証ガイド");
+    expect(guide).toContain("macOS/Linux");
+    expect(guide).toContain("Homebrew不要");
+    expect(guide).toContain("TURSO_API_TOKEN");
     expect(guide).toContain("ENV=development tenkacloud turso-live preflight");
     expect(guide).toContain("ENV=development tenkacloud turso-live deploy");
     expect(guide).toContain("ENV=development tenkacloud turso-live verify-cloudformation");
@@ -189,6 +192,8 @@ describe("scripts/ops/turso-live-guide (#2617)", () => {
     expect(readme).toContain("tenkacloud turso-live");
     expect(readmeJa).toContain("tenkacloud turso-live");
     expect(runningCosts).toContain("## First live E2E verification runbook");
+    expect(runningCosts).toContain("including Codespaces");
+    expect(runningCosts).toContain("avoids Homebrew and external tap dependencies");
     expect(envExample).toContain("tenkacloud turso-live");
   });
 });

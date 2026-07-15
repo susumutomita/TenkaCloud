@@ -78,7 +78,9 @@ aws sts get-caller-identity
 turso auth login
 ```
 
-The current Turso CLI installation and login commands are linked from the [Turso CLI introduction](https://docs.turso.tech/cli/introduction). This runbook never asks you to put either an AWS credential or a Turso token in the repository.
+On macOS and Linux (including Codespaces), the recommended `tenkacloud turso-live` wizard installs the pinned official Turso Cloud CLI release under `~/.turso` after verifying its published SHA-256 checksum. It deliberately avoids Homebrew and external tap dependencies. The wizard invokes the installed path directly and does not edit your shell profile; for manual commands, either use `~/.turso/turso` or add `~/.turso` to `PATH` yourself. See the [Turso CLI introduction](https://docs.turso.tech/cli/introduction) for upstream CLI reference.
+
+CodeBuild is non-interactive: pre-install the same pinned CLI in the build image and provide `TURSO_API_TOKEN` from the build environment's secret store. The live deploy wizard remains TTY-only and still requires the exact `deploy` confirmation. This runbook never asks you to put either an AWS credential or a Turso token in the repository.
 
 ### 2. Create the Turso database and secret
 

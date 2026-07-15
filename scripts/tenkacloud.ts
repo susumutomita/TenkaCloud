@@ -1,9 +1,11 @@
 #!/usr/bin/env bun
 
+import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defaultLocalCommandDeps, runLocalCommand } from "./cli/local-command";
 import { systemProcessRunner } from "./cli/process";
+import { installTursoCli } from "./cli/turso-cli-installer";
 import { runTursoLiveCommand, terminalConfirm, terminalPrompt } from "./cli/turso-live-command";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -47,6 +49,15 @@ export async function runTenkaCloudCli(args: readonly string[]): Promise<number>
       processRunner: systemProcessRunner,
       interactive: Boolean(process.stdin.isTTY) && !process.env.CI,
       platform: process.platform,
+      architecture: process.arch,
+      homeDirectory: homedir(),
+      installTursoCli: () =>
+        installTursoCli({
+          architecture: process.arch,
+          homeDirectory: homedir(),
+          platform: process.platform,
+          processRunner: systemProcessRunner,
+        }),
       confirm: terminalConfirm,
       prompt: terminalPrompt,
       log: console.log,

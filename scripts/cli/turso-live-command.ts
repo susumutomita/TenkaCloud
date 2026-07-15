@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import {
   renderTursoLiveGuide,
@@ -14,6 +15,9 @@ export interface TursoLiveCommandDeps {
   readonly processRunner: ProcessRunner;
   readonly interactive: boolean;
   readonly platform: NodeJS.Platform;
+  readonly architecture: NodeJS.Architecture;
+  readonly homeDirectory: string;
+  readonly installTursoCli: () => string;
   readonly confirm: (question: string) => Promise<boolean>;
   readonly prompt: (question: string) => Promise<string>;
   readonly log: (message: string) => void;
@@ -37,34 +41,48 @@ function environmentName(env: NodeJS.ProcessEnv): string {
   return env.ENV ?? env.CDK_PARAM_ENVIRONMENT ?? "development";
 }
 
-async function ensureTursoCli(deps: TursoLiveCommandDeps): Promise<boolean> {
-  if (deps.processRunner.run("turso", ["--version"]).status === 0) return true;
-  deps.log("Turso CLI が見つかりません。");
-  if (!deps.interactive) {
-    deps.log("macOS: brew install tursodatabase/tap/turso");
-    return false;
-  }
-  if (deps.platform !== "darwin") {
-    deps.log("インストール手順: https://docs.turso.tech/cli/installation");
-    return false;
-  }
-  if (!(await deps.confirm("公式 Homebrew tap から Turso CLI をインストールしますか?"))) {
-    deps.log("中止しました。手動実行: brew install tursodatabase/tap/turso");
-    return false;
-  }
-  const install = deps.processRunner.run("brew", ["install", "tursodatabase/tap/turso"], {
-    inherit: true,
-  });
-  if (install.status !== 0) throw new Error("Turso CLI installation failed");
-  return true;
+function installedTursoCliPath(deps: TursoLiveCommandDeps): string {
+  return join(deps.homeDirectory, ".turso", "turso");
 }
 
-async function ensureTursoAuthentication(deps: TursoLiveCommandDeps): Promise<boolean> {
-  if (deps.processRunner.run("turso", ["auth", "whoami"]).status === 0) return true;
+function resolveTursoCli(deps: TursoLiveCommandDeps): string | undefined {
+  if (deps.processRunner.run("turso", ["--version"]).status === 0) return "turso";
+  const installed = installedTursoCliPath(deps);
+  return deps.processRunner.run(installed, ["--version"]).status === 0 ? installed : undefined;
+}
+
+async function ensureTursoCli(deps: TursoLiveCommandDeps): Promise<string | undefined> {
+  const available = resolveTursoCli(deps);
+  if (available) return available;
+  deps.log("Turso CLI が見つかりません。");
+  if (deps.platform !== "darwin" && deps.platform !== "linux") {
+    deps.log(`未対応OSです: ${deps.platform}`);
+    return undefined;
+  }
+  if (
+    !(await deps.confirm(
+      `公式 Turso Cloud CLI (${deps.platform}/${deps.architecture}) をチェックサム検証してインストールしますか?`,
+    ))
+  ) {
+    deps.log("Turso CLI のインストールを中止しました。");
+    return undefined;
+  }
+  const installed = deps.installTursoCli();
+  const verification = deps.processRunner.run(installed, ["--version"]);
+  if (verification.status !== 0) throw new Error("Turso CLI installation could not be verified");
+  deps.log(`✓ Turso CLI: ${installed}`);
+  return installed;
+}
+
+async function ensureTursoAuthentication(
+  tursoExecutable: string,
+  deps: TursoLiveCommandDeps,
+): Promise<boolean> {
+  if (deps.processRunner.run(tursoExecutable, ["auth", "whoami"]).status === 0) return true;
   if (!(await deps.confirm("Turso にログインしますか?"))) return false;
-  const login = deps.processRunner.run("turso", ["auth", "login"], { inherit: true });
+  const login = deps.processRunner.run(tursoExecutable, ["auth", "login"], { inherit: true });
   if (login.status !== 0) throw new Error("turso auth login failed");
-  if (deps.processRunner.run("turso", ["auth", "whoami"]).status !== 0) {
+  if (deps.processRunner.run(tursoExecutable, ["auth", "whoami"]).status !== 0) {
     throw new Error("Turso login completed but authentication could not be verified");
   }
   return true;
@@ -91,18 +109,23 @@ export async function runTursoLiveCommand(
     deps.log(
       "対話 wizard には TTY が必要です。設定確認だけなら `turso-live guide` を使ってください。",
     );
+    if (env.CODEBUILD_BUILD_ID || env.CI) {
+      deps.log(
+        "CodeBuild/CI では Turso CLI をイメージに事前導入し、TURSO_API_TOKEN を secret 環境変数で渡してください。",
+      );
+    }
     return 1;
   }
 
-  const available = await ensureTursoCli(deps);
-  if (!available || !(await ensureTursoAuthentication(deps))) {
+  const tursoExecutable = await ensureTursoCli(deps);
+  if (!tursoExecutable || !(await ensureTursoAuthentication(tursoExecutable, deps))) {
     deps.log(renderTursoLiveGuide(environment));
     return 1;
   }
-  const setup = await runTursoLiveSetup(environment, loaded, deps);
+  const setup = await runTursoLiveSetup(environment, loaded, { ...deps, tursoExecutable });
   if (!setup.ok) return 1;
   const preflight = runTursoLivePreflight(setup.env, (executable, executableArgs) =>
-    deps.processRunner.run(executable, executableArgs),
+    deps.processRunner.run(executable === "turso" ? tursoExecutable : executable, executableArgs),
   );
   deps.log(preflight.output);
   if (!preflight.ok) return 1;
@@ -150,8 +173,9 @@ function runReadOnlyTursoCommand(
   deps: TursoLiveCommandDeps,
 ): number | undefined {
   if (command === "preflight") {
+    const tursoExecutable = resolveTursoCli(deps) ?? "turso";
     const result = runTursoLivePreflight(env, (executable, args) =>
-      deps.processRunner.run(executable, args),
+      deps.processRunner.run(executable === "turso" ? tursoExecutable : executable, args),
     );
     deps.log(result.output);
     return result.ok ? 0 : 1;

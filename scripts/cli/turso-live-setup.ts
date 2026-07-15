@@ -12,6 +12,7 @@ export interface TursoLiveSetupDeps {
   readonly confirm: (question: string) => Promise<boolean>;
   readonly prompt: (question: string) => Promise<string>;
   readonly log: (message: string) => void;
+  readonly tursoExecutable: string;
 }
 
 export interface TursoLiveSetupResult {
@@ -113,17 +114,17 @@ async function ensureTursoDatabase(
   if (!validDatabaseName(name)) {
     throw new Error("Turso database name must use lowercase letters, numbers, and dashes (max 64)");
   }
-  let show = deps.processRunner.run("turso", ["db", "show", name, "--http-url"]);
+  let show = deps.processRunner.run(deps.tursoExecutable, ["db", "show", name, "--http-url"]);
   if (show.status !== 0) {
     deps.log(`Turso database ${name} はまだ見つかりません。`);
     if (!(await deps.confirm(`${name} を作成しますか?`))) return undefined;
     requiredResult(
       `turso db create ${name}`,
-      deps.processRunner.run("turso", ["db", "create", name, "--wait"]),
+      deps.processRunner.run(deps.tursoExecutable, ["db", "create", name, "--wait"]),
     );
     show = requiredResult(
       `turso db show ${name}`,
-      deps.processRunner.run("turso", ["db", "show", name, "--http-url"]),
+      deps.processRunner.run(deps.tursoExecutable, ["db", "show", name, "--http-url"]),
     );
   }
   const url = show.stdout.trim();
@@ -171,7 +172,7 @@ async function ensureSecureString(
   }
   const tokenResult = requiredSecretResult(
     "turso db tokens create",
-    deps.processRunner.run("turso", [
+    deps.processRunner.run(deps.tursoExecutable, [
       "db",
       "tokens",
       "create",
