@@ -64,4 +64,41 @@ describe("EventCreateDeployPromptModal", () => {
     render(<EventCreateDeployPromptModal {...p} />);
     expect(screen.getByTestId("deploy-prompt-now")).toBeDisabled();
   });
+
+  it("should not render the key-distribution section when no team keys are provided (#2649)", () => {
+    render(<EventCreateDeployPromptModal {...props()} />);
+    expect(screen.queryByTestId("deploy-prompt-keys")).not.toBeInTheDocument();
+  });
+
+  it("should list each team's plaintext teamLoginKey once for distribution (#2649)", () => {
+    render(
+      <EventCreateDeployPromptModal
+        {...props({
+          teamKeys: [
+            { internalSlug: "alpha", teamLoginKey: "key-alpha" },
+            { internalSlug: "bravo", teamLoginKey: "key-bravo" },
+          ],
+        })}
+      />,
+    );
+    expect(screen.getByTestId("deploy-prompt-keys")).toBeInTheDocument();
+    expect(screen.getByText("key-alpha")).toBeInTheDocument();
+    expect(screen.getByText("alpha")).toBeInTheDocument();
+    expect(screen.getByText("key-bravo")).toBeInTheDocument();
+    expect(screen.getByText("bravo")).toBeInTheDocument();
+  });
+
+  it("should copy a team's key to the clipboard from its copy button (#2649)", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    render(
+      <EventCreateDeployPromptModal
+        {...props({ teamKeys: [{ internalSlug: "alpha", teamLoginKey: "key-alpha" }] })}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "event_create.deploy_modal_keys_copy_aria" }),
+    );
+    expect(writeText).toHaveBeenCalledWith("key-alpha");
+  });
 });

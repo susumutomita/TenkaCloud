@@ -123,7 +123,15 @@ function fillValidForm(container: HTMLElement) {
 beforeEach(() => {
   mockApiClient.mockReturnValue({ post: vi.fn() });
   mockNav.mockClear();
-  mockCreate.mockReset().mockResolvedValue({ eventId: "e1" });
+  // [#2649] create response は平文 teamLoginKey を含む。 modal がそれを一度だけ配布表示する。
+  mockCreate.mockReset().mockResolvedValue({
+    eventId: "e1",
+    status: "DRAFT",
+    createdAt: "2026-07-15T00:00:00.000Z",
+    expiresAt: 0,
+    teams: [{ teamId: "t1", internalSlug: "team-1", teamLoginKey: "plaintext-key-1" }],
+    problems: [],
+  });
   mockBulk.mockReset().mockResolvedValue({ ok: true });
   mockListProblems.mockReturnValue([
     problem({ costEstimate }), // p1: costEstimate あり → 引き継ぎ分岐 (truthy)
@@ -149,6 +157,16 @@ describe("EventCreatePage flow", () => {
     fireEvent.click(screen.getByTestId("deploy-prompt-now"));
     await waitFor(() => expect(mockBulk).toHaveBeenCalledWith(expect.anything(), "e1"));
     expect(mockNav).toHaveBeenCalledWith("/events/e1");
+  });
+
+  it("should surface the created teamLoginKeys once in the deploy prompt (#2649)", async () => {
+    const { container } = renderPage();
+    fillValidForm(container);
+    fireEvent.click(screen.getByRole("button", { name: "event_create.submit" }));
+    await waitFor(() => expect(screen.getByTestId("deploy-prompt-keys")).toBeInTheDocument());
+    // 平文 key と team slug が配布可能な形で出る (純 SQL backend ではここが唯一の配布機会)。
+    expect(screen.getByText("plaintext-key-1")).toBeInTheDocument();
+    expect(screen.getByText("team-1")).toBeInTheDocument();
   });
 
   it("should navigate without deploying on 'deploy later'", async () => {

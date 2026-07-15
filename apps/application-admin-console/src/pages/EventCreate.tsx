@@ -187,7 +187,12 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
   // Issue #1067: 作成成功後、 EventDetail へ自動遷移する前に 「Deploy する? あとで?」 modal を出す。
   // 旧挙動は即遷移だったが、 「Deploy が必要」 と operator が気付かないまま放置されるケースが
   // 多発していた (= participant 側で問題が見えない silent failure)。 modal で明示促す。
-  const [deployPromptTarget, setDeployPromptTarget] = useState<{ eventId: string } | null>(null);
+  // [#2649] teamKeys は作成 response の平文 teamLoginKey。 純 SQL backend はここでしか出ないので
+  // deploy 促し modal で一度だけ配布可能な形で見せる。
+  const [deployPromptTarget, setDeployPromptTarget] = useState<{
+    eventId: string;
+    teamKeys: readonly { internalSlug: string; teamLoginKey: string }[];
+  } | null>(null);
   const [deployStarting, setDeployStarting] = useState(false);
 
   const handleSubmit = async () => {
@@ -217,7 +222,14 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
         })),
       });
       // Issue #1067: 即 navigate せず deploy 促し modal を出す。
-      setDeployPromptTarget({ eventId: res.eventId });
+      // [#2649] 作成 response の平文 teamLoginKey を modal に渡し、 生成時に一度だけ配布させる。
+      setDeployPromptTarget({
+        eventId: res.eventId,
+        teamKeys: res.teams.map((team) => ({
+          internalSlug: team.internalSlug,
+          teamLoginKey: team.teamLoginKey,
+        })),
+      });
     } catch (err) {
       setError(toErrorMessage(err));
     } finally {
@@ -328,6 +340,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
         canMutateTenant={canMutate}
         deployStarting={deployStarting}
         bulkDeploySupported={providerMode.kind === "aws"}
+        teamKeys={deployPromptTarget?.teamKeys}
         onDeployNow={() => void handleDeployNow()}
         onDeployLater={handleDeployLater}
       />
