@@ -139,6 +139,18 @@ describe("resolveEventHotTables", () => {
       { role: "disruptions", tableName: "Disruptions-x" },
     ]);
   });
+
+  it("should return no event-hot tables when every DynamoDB role is absent in a pure SQL backend", () => {
+    delete process.env.PROBLEM_ENDPOINTS_TABLE_NAME;
+    expect(
+      resolveEventHotTables({
+        deploymentsTableName: "",
+        eventsTableName: "",
+        teamsTableName: "",
+        disruptionsTableName: "",
+      }),
+    ).toEqual([]);
+  });
 });
 
 describe("CapacityQuerySchema", () => {
@@ -163,6 +175,33 @@ describe("CapacityQuerySchema", () => {
 });
 
 describe("getCapacityOverview", () => {
+  it("should return not-applicable without calling AWS when a pure SQL backend has no DynamoDB tables", async () => {
+    delete process.env.PROBLEM_ENDPOINTS_TABLE_NAME;
+    const { clients, ddbSend, cwSend } = buildClients();
+
+    const overview = await getCapacityOverview(
+      {
+        deploymentsTableName: "",
+        eventsTableName: "",
+        teamsTableName: "",
+        disruptionsTableName: "",
+      },
+      { windowMinutes: 30, now: NOW, clients },
+    );
+
+    expect(overview).toEqual({
+      applicable: false,
+      reason: "dynamodb_not_in_use",
+      windowMinutes: 30,
+      ceiling: 200,
+      runbookDocumentName: null,
+      generatedAt: NOW.toISOString(),
+      tables: [],
+    });
+    expect(ddbSend).not.toHaveBeenCalled();
+    expect(cwSend).not.toHaveBeenCalled();
+  });
+
   it("should combine DescribeTable provisioning with CloudWatch consumption and throttles", async () => {
     const { clients } = buildClients({
       values: {
@@ -178,6 +217,7 @@ describe("getCapacityOverview", () => {
 
     const overview = await getCapacityOverview(SHARED, { windowMinutes: 30, now: NOW, clients });
 
+    expect(overview.applicable).toBe(true);
     expect(overview.windowMinutes).toBe(30);
     expect(overview.ceiling).toBe(200);
     expect(overview.generatedAt).toBe(NOW.toISOString());

@@ -74,7 +74,7 @@ export function useCapacityOverview(apiClient: ApiClient | null): CapacityOvervi
   );
 
   usePolling(refresh, DEPLOYMENT_POLL_INTERVAL_MS, {
-    enabled: pageVisible && terminalReason === null,
+    enabled: pageVisible && terminalReason === null && overview?.applicable !== false,
   });
 
   return { overview, error, terminalReason, refresh };

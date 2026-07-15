@@ -8,7 +8,10 @@ import {
 
 const KEY = "TenkaCloud.application_admin.login_return_path";
 
-afterEach(() => sessionStorage.clear());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  sessionStorage.clear();
+});
 
 describe("login return path", () => {
   it("should preserve a same-app deep link with its query and hash", () => {
@@ -52,10 +55,14 @@ describe("login return path", () => {
 
   it("should fall back to home when sessionStorage is unavailable", () => {
     // privacy-restricted ブラウザ等で getItem が throw する catch 経路 (= home へフォールバック)。
-    const spy = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
-      throw new Error("storage blocked");
+    // Stub the global object itself. Bun on macOS can expose a different `Storage.prototype`,
+    // which made a prototype spy pass without exercising the catch branch.
+    vi.stubGlobal("sessionStorage", {
+      getItem: () => {
+        throw new Error("storage blocked");
+      },
+      removeItem: vi.fn(),
     });
     expect(consumeLoginReturnPath()).toBe("/");
-    spy.mockRestore();
   });
 });

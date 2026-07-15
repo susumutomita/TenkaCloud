@@ -982,7 +982,7 @@
     "refresh": "更新",
     "loading": "キャパシティ情報を取得中",
     "empty": "データがありません",
-    "load_failed": "キャパシティ情報の取得に失敗しました: {message}",
+    "load_failed": "キャパシティ情報の取得に失敗しました。再試行しても解消しない場合は運用担当者に連絡してください。",
     "col_table": "テーブル",
     "col_health": "状態",
     "col_provisioned": "プロビジョン (R / W)",

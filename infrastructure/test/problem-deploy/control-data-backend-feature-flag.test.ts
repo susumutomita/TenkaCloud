@@ -233,6 +233,16 @@ describe("pure SQL backend does not synth Events/Teams/Deployments/ProblemEndpoi
       expect(() => tpl.hasOutput("DeploymentsTableName", {})).toThrow();
       expect(() => tpl.hasOutput("ProblemEndpointsTableName", {})).toThrow();
       expect(() => tpl.hasOutput("CompetitorAccountsTableName", {})).toThrow();
+      // Pure SQL has no event-hot DynamoDB resources, so capacity operations must disappear
+      // end-to-end rather than leaving a dead runbook, output, env value, or broad CW permission.
+      expect(
+        Object.keys(tpl.findResources("AWS::SSM::Document")).some((id) =>
+          id.includes("EventCapacityRunbook"),
+        ),
+      ).toBe(false);
+      expect(() => tpl.hasOutput("EventCapacityRunbookName", {})).toThrow();
+      expect(envOf(tpl, "EventApi").CAPACITY_RUNBOOK_DOCUMENT_NAME).toBeUndefined();
+      expect(JSON.stringify(tpl.toJSON())).not.toContain("cloudwatch:GetMetricData");
     },
     SYNTH_TIMEOUT_MS,
   );

@@ -114,6 +114,11 @@ export function CapacityPanel({ apiClient, t }: { apiClient: ApiClient | null; t
 
   const exampleTable = overview?.runbookDocumentName ? pickExampleTable(rows) : null;
 
+  // Hide the entire DynamoDB-specific surface until capability resolution completes. Pure SQL
+  // backends remain hidden after their explicit non-applicable response and stop polling in the
+  // hook, so operators never see a misleading empty DynamoDB panel.
+  if ((!overview && !error && !terminalReason) || overview?.applicable === false) return null;
+
   return (
     <Container
       data-testid="capacity-panel"
@@ -154,7 +159,7 @@ export function CapacityPanel({ apiClient, t }: { apiClient: ApiClient | null; t
           <>
             {error && (
               <Alert type="error" data-testid="capacity-error">
-                {t("capacity.load_failed", { message: error })}
+                {t("capacity.load_failed")}
               </Alert>
             )}
             <Table<CapacityRowModel>

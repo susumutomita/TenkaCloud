@@ -67,6 +67,10 @@ export interface CapacityTableSummary {
 }
 
 export interface CapacityOverview {
+  /** false when the selected control-data backend has no DynamoDB tables to monitor. */
+  readonly applicable: boolean;
+  /** Machine-readable explanation for a non-applicable overview. */
+  readonly reason?: "dynamodb_not_in_use";
   readonly windowMinutes: number;
   /** runbook の構造的ハード上限 (UI が「上限 200」を表示するための echo)。 */
   readonly ceiling: number;
@@ -330,8 +334,24 @@ export async function getCapacityOverview(
   },
 ): Promise<CapacityOverview> {
   const tables = resolveEventHotTables(shared);
-  const clients = opts.clients ?? defaultCapacityClients();
   const now = opts.now ?? new Date();
+
+  // A pure SQL backend deliberately synthesizes none of the five event-hot DynamoDB tables.
+  // Return an explicit capability signal before constructing AWS clients or sending an invalid
+  // GetMetricData request with zero queries.
+  if (tables.length === 0) {
+    return {
+      applicable: false,
+      reason: "dynamodb_not_in_use",
+      windowMinutes: opts.windowMinutes,
+      ceiling: EVENT_CAPACITY_CEILING,
+      runbookDocumentName: null,
+      generatedAt: now.toISOString(),
+      tables: [],
+    };
+  }
+
+  const clients = opts.clients ?? defaultCapacityClients();
 
   // Metric query は DescribeTable の GSI 一覧に依存するため 2 段 (probe → GetMetricData)。
   // GSI 構成は deploy でしか変わらないが、キャパ値は runbook で runtime に変わるので
@@ -350,6 +370,7 @@ export async function getCapacityOverview(
 
   const windowSeconds = opts.windowMinutes * 60;
   return {
+    applicable: true,
     windowMinutes: opts.windowMinutes,
     ceiling: EVENT_CAPACITY_CEILING,
     runbookDocumentName: process.env.CAPACITY_RUNBOOK_DOCUMENT_NAME || null,
