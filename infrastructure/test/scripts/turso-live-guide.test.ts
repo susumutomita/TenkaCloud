@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -26,7 +27,8 @@ describe("scripts/ops/turso-live-guide (#2617)", () => {
   it("should render one ordered path from setup through live evidence capture", () => {
     const guide = renderTursoLiveGuide("development");
 
-    expect(guide).toContain("#2617 Turso 初回ライブ E2E 検証ガイド");
+    expect(guide).toContain("Turso 初回ライブ E2E 検証ガイド");
+    expect(guide).not.toMatch(/(?:Issue\s*)?#\d+/);
     expect(guide).toContain("macOS/Linux");
     expect(guide).toContain("Homebrew不要");
     expect(guide).toContain("TURSO_API_TOKEN");
@@ -186,14 +188,39 @@ describe("scripts/ops/turso-live-guide (#2617)", () => {
     );
 
     expect(makefile).toContain("turso-live-guide:");
+    expect(makefile).toContain("turso-live:");
+    expect(makefile).toContain("ENV=$(ENV) bun run tenkacloud turso-live");
     expect(makefile).toContain("turso-live-preflight:");
     expect(makefile).toContain("turso-live-verify-cfn:");
     expect(makefile).toContain("bun run tenkacloud turso-live guide");
     expect(readme).toContain("tenkacloud turso-live");
     expect(readmeJa).toContain("tenkacloud turso-live");
     expect(runningCosts).toContain("## First live E2E verification runbook");
+    expect(readme).toContain("make turso-live ENV=development");
+    expect(readmeJa).toContain("make turso-live ENV=development");
+    expect(runningCosts).toContain("make turso-live ENV=development");
     expect(runningCosts).toContain("including Codespaces");
     expect(runningCosts).toContain("avoids Homebrew and external tap dependencies");
     expect(envExample).toContain("tenkacloud turso-live");
+  });
+
+  it("should keep internal issue numbers and duplicate targets out of make help", () => {
+    const makefile = readFileSync(join(REPO_ROOT, "Makefile"), "utf8");
+    const help = execFileSync("make", [], { cwd: REPO_ROOT, encoding: "utf8" });
+
+    expect(makefile).toContain("# ===== Problem catalog validation =====");
+    expect(makefile).toContain("# ===== Problem Packs (author-side CLI) =====");
+    expect(makefile).toContain("# ===== Always-On OIDC command seam (ADR-050) =====");
+    expect(makefile).toContain("# ===== Always-On per-event runtime (ADR-049 Phase 4) =====");
+    expect(help).not.toMatch(/(?:Issue\s*)?#\d+/);
+    expect(help.match(/^\s+check-synth\s+/gm)).toHaveLength(1);
+    expect(help.match(/^\s+synth-always-on-command\s+/gm)).toHaveLength(1);
+    expect(help.match(/^\s+synth-always-on-runtime\s+/gm)).toHaveLength(1);
+    expect(help).toMatch(/^\s+turso-live\s+Turso\/AWS/m);
+    expect(help).toMatch(/^\s+local\s+ローカル問題演習/m);
+    expect(help).not.toMatch(/^\s+ensure-deps\s+/m);
+    for (const line of help.split("\n").filter((line) => /^\s{2}\S/.test(line))) {
+      expect(line).toMatch(/^\s{2}\S+\s{2,}\S/);
+    }
   });
 });

@@ -103,7 +103,7 @@ TenkaCloud は `CDK_PARAM_CONTROL_DATA_BACKEND` 環境変数で選べる 2 つ�
 | **AWS ネイティブ**(デフォルト、未設定 または `dynamodb`) | すべてを AWS 内で完結させたいチーム / 企業 | DynamoDB(プロビジョンド 1/1)、8 テーブル + 8 GSI | Lambda の `CreateStack`(デフォルト) |
 | **ゼロコスト**(オプトイン、`turso`) | 個人利用・トライアル・個人イベント | Turso(libSQL)— Lite synth で DynamoDB テーブル / GSI ともに 0 個 | Lambda の `CreateStack`(デフォルト) |
 
-ゼロコストプロファイルの初回ライブ検証は、まず `ENV=development tenkacloud turso-live` を実行してください。対話 wizard が Turso CLI / login、DB、SSM SecureString、`.env` の公開設定、read-only preflight、`deploy` の完全一致確認、CloudFormation 上の DynamoDB 0 件確認までを一続きで進めます。token は画面・argv・`.env` に出さず、標準入力から SSM へ渡します。未 link の場合は `ENV=development bun run tenkacloud turso-live` です。その後の画面操作と現時点でのライブ検証状況は [docs/running-costs.md](./docs/running-costs.md) にあります。
+ゼロコストプロファイルの初回ライブ検証は、まず `make turso-live ENV=development` を実行してください。対話 wizard が Turso CLI / login、DB、SSM SecureString、`.env` の公開設定、read-only preflight、`deploy` の完全一致確認、CloudFormation 上の DynamoDB 0 件確認までを一続きで進めます。token は画面・argv・`.env` に出さず、標準入力から SSM へ渡します。同じ機能を直接実行する場合は `ENV=development bun run tenkacloud turso-live`、`bun link` 後は `ENV=development tenkacloud turso-live` を使えます。その後の画面操作と現時点でのライブ検証状況は [docs/running-costs.md](./docs/running-costs.md) にあります。
 
 ## 自分の問題を追加する
 

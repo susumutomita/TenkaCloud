@@ -2,7 +2,7 @@
 
 This is the full detail behind the [README's Running costs summary](../README.md#running-costs): what each profile costs, the opt-in walkthrough for the zero-cost profile, the migration path for an existing stack, measured numbers, and what has and has not been live-verified.
 
-> **Before you opt in — not yet live-verified.** Every claim on this page is implemented and covered by CDK-synth and repository-seam unit tests, but nobody has run `make deploy` with `CONTROL_DATA_BACKEND=turso` against a fresh AWS account and a real Turso database and read the resulting AWS bill yet. See [Live-verification status](#live-verification-status) at the bottom of this page before relying on the zero-cost profile for a real event. **Start here for Issue #2617:** run `ENV=development tenkacloud turso-live` (or `ENV=development bun run tenkacloud turso-live` before `bun link`). The wizard walks through Turso and AWS setup, performs the read-only preflight, and only deploys after an exact `deploy` confirmation. It never automates destruction.
+> **Before you opt in — not yet live-verified.** Every claim on this page is implemented and covered by CDK-synth and repository-seam unit tests, but nobody has run `make deploy` with `CONTROL_DATA_BACKEND=turso` against a fresh AWS account and a real Turso database and read the resulting AWS bill yet. See [Live-verification status](#live-verification-status) at the bottom of this page before relying on the zero-cost profile for a real event. **Start here:** run `make turso-live ENV=development`. The wizard walks through Turso and AWS setup, performs the read-only preflight, and only deploys after an exact `deploy` confirmation. It never automates destruction.
 
 ## The two profiles
 
@@ -52,7 +52,7 @@ The steps below are for a **fresh** stack. See [Migrating an existing stack](#mi
 
 ## First live E2E verification runbook
 
-This is the source of truth for Issue #2617. It is deliberately more explicit than the four-step opt-in path: a successful `make deploy` alone does not prove that all eight repositories, cross-account problem deployment, participant scoring, and SAML IdP CRUD work against a real Turso database.
+This is the source of truth for the first live verification. It is deliberately more explicit than the four-step opt-in path: a successful `make deploy` alone does not prove that all eight repositories, cross-account problem deployment, participant scoring, and SAML IdP CRUD work against a real Turso database.
 
 ### 0. Use a fresh environment
 
@@ -61,7 +61,7 @@ Use a fresh Lite stack with no control data to migrate. Do not point this runboo
 Choose the environment once and pass it to every command. The examples use `development`:
 
 ```bash
-ENV=development tenkacloud turso-live
+make turso-live ENV=development
 ```
 
 For `staging` or another environment, the wizard uses the matching `.env` path, SSM path, and suffixed CloudFormation stack names. It creates or reuses the Turso database and SSM `SecureString`, merges `samlSso: true` without discarding other feature flags, runs preflight, asks for the exact word `deploy`, and verifies both deployed stacks. The token is captured in memory and sent to the AWS CLI over stdin; it is never printed, placed in process argv, or written to `.env`.

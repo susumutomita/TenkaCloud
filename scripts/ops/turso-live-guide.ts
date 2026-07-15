@@ -50,7 +50,7 @@ export function validateTursoLiveEnvironment(env: NodeJS.ProcessEnv): readonly s
   const errors: string[] = [];
   if (env.CDK_PARAM_CONTROL_DATA_BACKEND !== "turso") {
     errors.push(
-      "CDK_PARAM_CONTROL_DATA_BACKEND=turso が必要です (mirror/sql alias では #2617 の受け入れ条件になりません)",
+      "CDK_PARAM_CONTROL_DATA_BACKEND=turso が必要です (mirror/sql alias はpure backendではありません)",
     );
   }
 
@@ -91,7 +91,7 @@ export function runTursoLivePreflight(
   env: NodeJS.ProcessEnv,
   run: CommandRunner = defaultRunner,
 ): CheckResult {
-  const lines = ["=== #2617 Turso live preflight (read-only) ==="];
+  const lines = ["=== Turso live preflight (read-only) ==="];
   const configErrors = validateTursoLiveEnvironment(env);
   if (configErrors.length > 0) {
     lines.push(...configErrors.map((error) => `✗ ${error}`));
@@ -229,7 +229,7 @@ export function runCloudFormationVerification(
   if (!region) return { ok: false, output: "✗ AWS_REGION が必要です" };
 
   const stackNames = resolveLiteStackNames(environment);
-  const lines = ["=== #2617 deployed CloudFormation verification (read-only) ==="];
+  const lines = ["=== Deployed CloudFormation verification (read-only) ==="];
   const results = [stackNames.app, stackNames.problemDeploy].map((stackName) =>
     verifyStack(stackName, region, run),
   );
@@ -258,13 +258,13 @@ export function renderTursoLiveGuide(environment: string): string {
   const stackNames = resolveLiteStackNames(environment);
   const envFile = `infrastructure/environments/${environment}/.env`;
   return [
-    "#2617 Turso 初回ライブ E2E 検証ガイド",
+    "Turso 初回ライブ E2E 検証ガイド",
     "",
     "このガイドは fresh な Lite stack 用です。既存 DynamoDB stack の移行には使わず、",
     "docs/running-costs.md の migration 手順 (mirror → pure) を使ってください。",
     "",
     "推奨: 次のコマンドだけで 1〜7 を対話式に進めます。",
-    `   ENV=${environment} tenkacloud turso-live`,
+    `   make turso-live ENV=${environment}`,
     "   macOS/Linux は公式CLIをチェックサム検証して ~/.turso に導入します (Homebrew不要)。",
     "   CodeBuild/CI は事前導入済みCLIと secret の TURSO_API_TOKEN を使います。",
     "   token は標準入力経由で SSM に保存し、画面・argv・.env には出しません。",
