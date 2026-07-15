@@ -205,6 +205,7 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
        *   Issue #1038 P0 #2: scoring_not_started のときは render しない (= lock)。 */}
       {canRenderEndpoints && problem && (
         <EndpointOverrideForm
+          key={JSON.stringify([view?.team.teamId, sessionToken, problem.problemId])}
           apiBaseUrl={config.apiBaseUrl}
           teamLoginKey={sessionToken ?? ""}
           problemId={problem.problemId}

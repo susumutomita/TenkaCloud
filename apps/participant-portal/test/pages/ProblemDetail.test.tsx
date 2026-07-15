@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppConfig } from "../../src/config";
 
@@ -60,8 +61,17 @@ vi.mock("../../src/components/ProblemPanel", () => ({
 }));
 vi.mock("../../src/components/EndpointOverrideForm", () => ({
   EndpointOverrideForm: (props: unknown) => {
+    const [draft, setDraft] = useState("");
     mockEndpointOverrideForm(props);
-    return <div data-testid="endpoint-form" />;
+    return (
+      <div data-testid="endpoint-form">
+        <input
+          aria-label="mock endpoint draft"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+        />
+      </div>
+    );
   },
 }));
 vi.mock("../../src/plugins/PortalPluginSlots", () => ({
@@ -492,6 +502,36 @@ describe("ProblemDetailPage", () => {
       expect.objectContaining({ endpoints, onEndpointsChange: replaceEndpoints }),
     );
     expect(mockPortalPluginSlots).toHaveBeenCalledWith(expect.objectContaining({ endpoints }));
+  });
+
+  it("should reset endpoint form state when the active problem or team changes", async () => {
+    const user = userEvent.setup();
+    let activeView = viewWith({
+      problems: [problem({ problemId: "first" })],
+      team: { teamId: "team-1", teamName: "Team One" },
+    });
+    mockFindMeta.mockReturnValue(meta());
+    mockTeamView.mockImplementation(() => teamView({ view: activeView }));
+    const rendered = renderPage();
+    const draft = () => screen.getByRole("textbox", { name: "mock endpoint draft" });
+
+    await user.type(draft(), "https://draft.example.com");
+    expect(draft()).toHaveValue("https://draft.example.com");
+
+    activeView = viewWith({
+      problems: [problem({ problemId: "second" })],
+      team: { teamId: "team-1", teamName: "Team One" },
+    });
+    rendered.rerender(<ProblemDetailPage config={config} />);
+    expect(draft()).toHaveValue("");
+
+    await user.type(draft(), "https://another-draft.example.com");
+    activeView = viewWith({
+      problems: [problem({ problemId: "second" })],
+      team: { teamId: "team-2", teamName: "Team Two" },
+    });
+    rendered.rerender(<ProblemDetailPage config={config} />);
+    expect(draft()).toHaveValue("");
   });
 
   it("should fall the session token back to empty when there is no auth session", () => {
