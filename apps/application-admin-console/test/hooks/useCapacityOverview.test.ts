@@ -23,6 +23,7 @@ const { DEPLOYMENT_POLL_INTERVAL_MS } = await import("../../src/constants/pollin
 const apiClient = {} as unknown as ApiClient;
 
 const overview: CapacityOverview = {
+  applicable: true,
   windowMinutes: 30,
   ceiling: 200,
   runbookDocumentName: "stack-event-capacity",
@@ -67,6 +68,29 @@ describe("useCapacityOverview", () => {
       vi.advanceTimersByTime(DEPLOYMENT_POLL_INTERVAL_MS);
     });
     expect(mocks.getCapacityOverview).toHaveBeenCalledTimes(2);
+  });
+
+  it("should stop polling after the backend reports DynamoDB capacity is not applicable", async () => {
+    vi.useFakeTimers();
+    mocks.getCapacityOverview.mockResolvedValue({
+      applicable: false,
+      reason: "dynamodb_not_in_use",
+      windowMinutes: 30,
+      ceiling: 200,
+      runbookDocumentName: null,
+      generatedAt: "2026-07-07T12:00:00.000Z",
+      tables: [],
+    });
+
+    const { result } = renderHook(() => useCapacityOverview(apiClient));
+    await act(async () => {});
+    expect(result.current.overview?.applicable).toBe(false);
+    expect(mocks.getCapacityOverview).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      vi.advanceTimersByTime(DEPLOYMENT_POLL_INTERVAL_MS * 3);
+    });
+    expect(mocks.getCapacityOverview).toHaveBeenCalledTimes(1);
   });
 
   it("should never fetch without an api client", async () => {

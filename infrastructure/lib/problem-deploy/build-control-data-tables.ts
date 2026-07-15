@@ -31,7 +31,7 @@ export interface ControlDataTablesOutputs {
    * Issue #2410 Slice 1 の SSM Automation Runbook document 名。EventApiLambda の
    * `GET /admin/capacity` が実行コマンド例の表示に使う。
    */
-  readonly capacityRunbookDocumentName: string;
+  readonly capacityRunbookDocumentName?: string;
 }
 
 /**
@@ -116,14 +116,18 @@ export function buildControlDataTables(
     endpoints?.table,
     disruptions?.table,
   ].filter((t): t is Table => t !== undefined);
-  const capacityRunbook = new EventCapacityRunbook(scope, "EventCapacityRunbook", {
-    eventHotTables,
-  });
-  new CfnOutput(scope, "EventCapacityRunbookName", {
-    value: capacityRunbook.documentName,
-    description:
-      "Issue #2410 SSM Automation document 名。aws ssm start-automation-execution --document-name に渡してイベント中のキャパを上げ下げする。",
-  });
+  let capacityRunbookDocumentName: string | undefined;
+  if (eventHotTables.length > 0) {
+    const capacityRunbook = new EventCapacityRunbook(scope, "EventCapacityRunbook", {
+      eventHotTables,
+    });
+    capacityRunbookDocumentName = capacityRunbook.documentName;
+    new CfnOutput(scope, "EventCapacityRunbookName", {
+      value: capacityRunbook.documentName,
+      description:
+        "Issue #2410 SSM Automation document 名。aws ssm start-automation-execution --document-name に渡してイベント中のキャパを上げ下げする。",
+    });
+  }
 
   // Issue #2440 / #2441 / #2442: 純 SQL backend では table 自体が無いので output も作らない
   // (存在しない論理 ID を参照する CfnOutput は synth できない)。
@@ -168,6 +172,6 @@ export function buildControlDataTables(
     competitorAccounts,
     disruptions,
     adminAuditLog,
-    capacityRunbookDocumentName: capacityRunbook.documentName,
+    capacityRunbookDocumentName,
   };
 }

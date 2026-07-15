@@ -982,7 +982,7 @@
     "refresh": "Refresh",
     "loading": "Loading capacity data",
     "empty": "No data",
-    "load_failed": "Failed to load capacity data: {message}",
+    "load_failed": "Failed to load capacity data. Try again or contact an operator if the problem continues.",
     "col_table": "Table",
     "col_health": "Health",
     "col_provisioned": "Provisioned (R / W)",

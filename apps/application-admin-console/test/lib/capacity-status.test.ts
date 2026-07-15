@@ -92,6 +92,7 @@ describe("classifyTable", () => {
 describe("buildCapacityRows", () => {
   it("should build display rows with labels and health per table", () => {
     const overview: CapacityOverview = {
+      applicable: true,
       windowMinutes: 30,
       ceiling: 200,
       runbookDocumentName: "stack-event-capacity",
