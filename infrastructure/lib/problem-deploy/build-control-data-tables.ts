@@ -31,7 +31,7 @@ export interface ControlDataTablesOutputs {
    * Issue #2410 Slice 1 の SSM Automation Runbook document 名。EventApiLambda の
    * `GET /admin/capacity` が実行コマンド例の表示に使う。
    */
-  readonly capacityRunbookDocumentName: string;
+  readonly capacityRunbookDocumentName?: string;
 }
 
 /**
@@ -116,20 +116,17 @@ export function buildControlDataTables(
     endpoints?.table,
     disruptions?.table,
   ].filter((t): t is Table => t !== undefined);
-  // Issue #2648: 純 SQL backend では event-hot テーブルが 0 件になる。対象テーブルが無いのに
-  // runbook を synth すると、動かしようのない SSM Automation document (と CfnOutput) が deploy
-  // 済み stack に残り運用者を誤解させる。テーブルが 1 つ以上あるときだけ runbook を作る。
-  let capacityRunbookDocumentName = "";
+  let capacityRunbookDocumentName: string | undefined;
   if (eventHotTables.length > 0) {
     const capacityRunbook = new EventCapacityRunbook(scope, "EventCapacityRunbook", {
       eventHotTables,
     });
+    capacityRunbookDocumentName = capacityRunbook.documentName;
     new CfnOutput(scope, "EventCapacityRunbookName", {
       value: capacityRunbook.documentName,
       description:
         "Issue #2410 SSM Automation document 名。aws ssm start-automation-execution --document-name に渡してイベント中のキャパを上げ下げする。",
     });
-    capacityRunbookDocumentName = capacityRunbook.documentName;
   }
 
   // Issue #2440 / #2441 / #2442: 純 SQL backend では table 自体が無いので output も作らない

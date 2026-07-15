@@ -16,6 +16,7 @@ import {
   type ProgressionGateConfig,
   putEventProgressionGate,
   putTenantFeatureFlags,
+  rotateTeamLoginKey,
   setEventSchedule,
   unlockEventScoring,
 } from "../../src/api/events-client";
@@ -150,6 +151,20 @@ describe("bulkDeployEvent", () => {
     const { client, calls } = fakeClient({ eventId: "EV1", enqueued: 2, skipped: 0 });
     await bulkDeployEvent(client, "EV1", { forceRedeploy: true });
     expect(calls[0]?.body).toEqual({ forceRedeploy: true });
+  });
+});
+
+describe("rotateTeamLoginKey", () => {
+  it("should post to the scoped team rotation endpoint", async () => {
+    const { client, calls } = fakeClient({ teamLoginKey: "NEW-KEY" });
+
+    await rotateTeamLoginKey(client, "EVENT/1", "TEAM/1");
+
+    expect(calls[0]).toEqual({
+      path: "events/EVENT%2F1/teams/TEAM%2F1/rotate-login-key",
+      method: "POST",
+      body: {},
+    });
   });
 });
 

@@ -22,8 +22,8 @@ import { resolveBulkNonAwsCredentials, resolveBulkVerifiedAccounts } from "./ver
  * teams × problems の deployment 行を一括 PUT し、既存 `DeployCreateRequested` を
  * 個別に publish する (= EventBridge fan-out)。
  *
- * 各 deployment 行は eventId / teamId / teamLoginKey (Team 行と同値) を持ち、
- * Phase 2c の Participant Portal は teamLoginKey で `team の全 deployment` を引ける。
+ * 各 deployment 行は eventId / teamId と backend-specific login index を持ち、
+ * Phase 2c の Participant Portal は plaintext input から `team の全 deployment` を引ける。
  *
  * 既存 deployment と (eventId, teamId, problemId) が衝突する場合は in-memory で
  * 検出して skipped に計上する (= 後追い deploy で既行を二重生成しない)。

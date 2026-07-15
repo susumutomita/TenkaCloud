@@ -96,15 +96,7 @@ function fillNonAwsForm(container: HTMLElement) {
 beforeEach(() => {
   mockApiClient.mockReturnValue({ post: vi.fn() });
   mockNav.mockClear();
-  // [#2649] create response は平文 teamLoginKey を含む (modal が一度だけ配布表示する)。
-  mockCreate.mockReset().mockResolvedValue({
-    eventId: "e9",
-    status: "DRAFT",
-    createdAt: "2026-07-15T00:00:00.000Z",
-    expiresAt: 0,
-    teams: [{ teamId: "t9", internalSlug: "team-1", teamLoginKey: "plaintext-key-9" }],
-    problems: [],
-  });
+  mockCreate.mockReset().mockResolvedValue({ eventId: "e9" });
   mockBulk.mockReset().mockResolvedValue({ ok: true });
   mockListProblems.mockReturnValue([
     problem(),

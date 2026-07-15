@@ -44,7 +44,7 @@ export interface BuildApiLambdasArgs {
   readonly problemsDisruptions?: Readonly<Record<string, unknown>>;
   readonly problemsProvenance?: Readonly<Record<string, unknown>>;
   readonly useBulkDistributedMap?: boolean;
-  readonly capacityRunbookDocumentName: string;
+  readonly capacityRunbookDocumentName?: string;
   readonly deployViaLambda?: boolean;
 }
 

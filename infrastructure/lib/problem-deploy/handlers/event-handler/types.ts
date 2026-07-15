@@ -145,8 +145,8 @@ export const CreateEventRequestSchema = z.object({
 export type CreateEventRequest = z.infer<typeof CreateEventRequestSchema>;
 
 /**
- * `POST /events` のレスポンス。teamLoginKey は **この経路でしか露出しない短命キー**。
- * 競技者への hand-off は本レスポンスを保存して operator が手動配布する。
+ * `POST /events` のレスポンス。作成時の teamLoginKey はこのレスポンスで一度だけ露出する。
+ * 紛失時は明示的な rotation endpoint で別キーを再発行し、保存済み平文を再読込しない。
  */
 export const CreateEventResponseSchema = z.object({
   eventId: z.string(),
@@ -272,8 +272,6 @@ export const TeamSummarySchema = z.object({
   teamId: z.string(),
   internalSlug: z.string(),
   displayName: z.string().optional(),
-  /** 詳細経路でのみ teamLoginKey を返す。一覧経路には含めない。 */
-  teamLoginKey: z.string().optional(),
   /** #528: team の deploy 先 AWS Account ID。旧 Event は undefined。 */
   awsAccountId: z.string().optional(),
 });

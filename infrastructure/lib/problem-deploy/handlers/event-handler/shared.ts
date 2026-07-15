@@ -342,6 +342,7 @@ export function resolveEventRepositories(
     ddb: shared.ddb,
     eventsTableName: shared.eventsTableName,
     teamsTableName: shared.teamsTableName,
+    deploymentsTableName: shared.deploymentsTableName,
   });
 }
 
@@ -384,6 +385,7 @@ export function resolveTeamsRepository(shared: EventSharedResources): Promise<Te
   return shared.runtime.resolveTeamsRepository({
     ddb: shared.ddb,
     teamsTableName: shared.teamsTableName,
+    deploymentsTableName: shared.deploymentsTableName,
   });
 }
 

@@ -23,6 +23,7 @@ const { DEPLOYMENT_POLL_INTERVAL_MS } = await import("../../src/constants/pollin
 const apiClient = {} as unknown as ApiClient;
 
 const overview: CapacityOverview = {
+  applicable: true,
   windowMinutes: 30,
   ceiling: 200,
   runbookDocumentName: "stack-event-capacity",
@@ -69,6 +70,29 @@ describe("useCapacityOverview", () => {
     expect(mocks.getCapacityOverview).toHaveBeenCalledTimes(2);
   });
 
+  it("should stop polling after the backend reports DynamoDB capacity is not applicable", async () => {
+    vi.useFakeTimers();
+    mocks.getCapacityOverview.mockResolvedValue({
+      applicable: false,
+      reason: "dynamodb_not_in_use",
+      windowMinutes: 30,
+      ceiling: 200,
+      runbookDocumentName: null,
+      generatedAt: "2026-07-07T12:00:00.000Z",
+      tables: [],
+    });
+
+    const { result } = renderHook(() => useCapacityOverview(apiClient));
+    await act(async () => {});
+    expect(result.current.overview?.applicable).toBe(false);
+    expect(mocks.getCapacityOverview).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      vi.advanceTimersByTime(DEPLOYMENT_POLL_INTERVAL_MS * 3);
+    });
+    expect(mocks.getCapacityOverview).toHaveBeenCalledTimes(1);
+  });
+
   it("should never fetch without an api client", async () => {
     const { result } = renderHook(() => useCapacityOverview(null));
 
@@ -109,8 +133,6 @@ describe("useCapacityOverview", () => {
     [StatusCodes.FORBIDDEN, "forbidden"],
     [StatusCodes.SERVICE_UNAVAILABLE, "unavailable"],
     [StatusCodes.NOT_IMPLEMENTED, "unsupported"],
-    // Issue #2648: 純 SQL backend は容量監視非該当 → route が 404 → not_applicable で polling 停止。
-    [StatusCodes.NOT_FOUND, "not_applicable"],
   ] as const)("should stop polling on terminal status %s and expose reason %s", async (status, reason) => {
     vi.useFakeTimers();
     mocks.getCapacityOverview.mockRejectedValue(new ApiError(status, "nope"));

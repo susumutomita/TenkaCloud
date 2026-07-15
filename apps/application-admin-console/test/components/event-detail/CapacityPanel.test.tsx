@@ -47,6 +47,7 @@ function table(over: Partial<CapacityTableSummary>): CapacityTableSummary {
 }
 
 const overview: CapacityOverview = {
+  applicable: true,
   windowMinutes: 30,
   ceiling: 200,
   runbookDocumentName: "stack-event-capacity",
@@ -83,6 +84,24 @@ afterEach(() => {
 });
 
 describe("CapacityPanel", () => {
+  it("should stay hidden while capability is unresolved and when DynamoDB capacity is not applicable", async () => {
+    mocks.getCapacityOverview.mockResolvedValue({
+      applicable: false,
+      reason: "dynamodb_not_in_use",
+      windowMinutes: 30,
+      ceiling: 200,
+      runbookDocumentName: null,
+      generatedAt: "2026-07-07T12:00:00.000Z",
+      tables: [],
+    });
+
+    render(<CapacityPanel apiClient={apiClient} t={t} />);
+
+    expect(screen.queryByTestId("capacity-panel")).not.toBeInTheDocument();
+    await waitFor(() => expect(mocks.getCapacityOverview).toHaveBeenCalledTimes(1));
+    expect(screen.queryByTestId("capacity-panel")).not.toBeInTheDocument();
+  });
+
   it("should render one row per event-hot table with health indicators after a successful load", async () => {
     mocks.getCapacityOverview.mockResolvedValue(overview);
 
@@ -141,7 +160,8 @@ describe("CapacityPanel", () => {
     render(<CapacityPanel apiClient={apiClient} t={t} />);
 
     await waitFor(() => expect(screen.getByTestId("capacity-error")).toBeInTheDocument());
-    expect(screen.getByText(/capacity\.load_failed/)).toBeInTheDocument();
+    expect(screen.getByText("capacity.load_failed")).toBeInTheDocument();
+    expect(screen.queryByText("api 500")).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByTestId("capacity-refresh"));
 
@@ -166,19 +186,6 @@ describe("CapacityPanel", () => {
     expect(screen.queryByText("capacity.loading")).not.toBeInTheDocument();
   });
 
-  it("should hide the panel entirely when the backend has no DynamoDB tables (404 not applicable)", async () => {
-    mocks.getCapacityOverview.mockRejectedValue(
-      new ApiError(StatusCodes.NOT_FOUND, "capacity_not_applicable"),
-    );
-
-    render(<CapacityPanel apiClient={apiClient} t={t} />);
-
-    // 純 SQL backend では panel 自体を出さない (Issue #2648): container も terminal alert も出ない。
-    await waitFor(() => expect(screen.queryByTestId("capacity-panel")).not.toBeInTheDocument());
-    expect(screen.queryByTestId("capacity-terminal")).not.toBeInTheDocument();
-    expect(screen.queryByText("capacity.loading")).not.toBeInTheDocument();
-  });
-
   it("should recover from a terminal state via the manual refresh button", async () => {
     mocks.getCapacityOverview
       .mockRejectedValueOnce(new ApiError(StatusCodes.SERVICE_UNAVAILABLE, "unwired"))
@@ -193,10 +200,10 @@ describe("CapacityPanel", () => {
     expect(screen.queryByTestId("capacity-terminal")).not.toBeInTheDocument();
   });
 
-  it("should stay in the loading state and never fetch when the api client is absent", async () => {
+  it("should stay hidden and never fetch when the api client is absent", async () => {
     render(<CapacityPanel apiClient={null} t={t} />);
 
-    expect(screen.getByText("capacity.loading")).toBeInTheDocument();
+    expect(screen.queryByTestId("capacity-panel")).not.toBeInTheDocument();
     expect(mocks.getCapacityOverview).not.toHaveBeenCalled();
   });
 });

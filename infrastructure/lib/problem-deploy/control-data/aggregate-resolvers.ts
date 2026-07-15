@@ -78,6 +78,7 @@ export interface AggregateResolvers {
   readonly resolveTeamsRepository: (input: {
     readonly ddb?: DynamoDBDocumentClient;
     readonly teamsTableName?: string;
+    readonly deploymentsTableName?: string;
   }) => Promise<TeamsRepository>;
   readonly resolveNotificationsRepository: (input: {
     readonly ddb?: DynamoDBDocumentClient;
@@ -206,6 +207,7 @@ export function createAggregateResolvers(
   async function resolveTeamsRepository(input: {
     readonly ddb?: DynamoDBDocumentClient;
     readonly teamsTableName?: string;
+    readonly deploymentsTableName?: string;
   }): Promise<TeamsRepository> {
     const backend = selectBackend(env);
     if (backend.kind === "pure") {
@@ -223,6 +225,7 @@ export function createAggregateResolvers(
       return createTeamsRepository("dynamodb", {
         ddb: requiredInput.ddb,
         teamsTableName: requiredInput.tableName,
+        deploymentsTableName: input.deploymentsTableName,
       });
     }
     const sql = await acquireSqlExecutor();
@@ -230,6 +233,7 @@ export function createAggregateResolvers(
       createTeamsRepository("dynamodb", {
         ddb: requiredInput.ddb,
         teamsTableName: requiredInput.tableName,
+        deploymentsTableName: input.deploymentsTableName,
       }),
       createTeamsRepository(backend.dialect, { sql }),
     );

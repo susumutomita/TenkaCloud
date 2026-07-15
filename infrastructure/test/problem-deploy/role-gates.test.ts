@@ -93,6 +93,7 @@ const eventMocks = vi.hoisted(() => ({
   archiveEvent: vi.fn(),
   bulkDeployEvent: vi.fn(),
   bulkTeardownEvent: vi.fn(),
+  rotateTeamLoginKey: vi.fn(),
   createNotification: vi.fn(),
   fireDisruption: vi.fn(),
   isEventOwnedByTenant: vi.fn(),
@@ -144,6 +145,9 @@ vi.mock("../../lib/problem-deploy/handlers/event-handler/bulk-deploy", () => ({
 }));
 vi.mock("../../lib/problem-deploy/handlers/event-handler/bulk-delete", () => ({
   bulkTeardownEvent: eventMocks.bulkTeardownEvent,
+}));
+vi.mock("../../lib/problem-deploy/handlers/event-handler/rotate-team-login-key", () => ({
+  rotateTeamLoginKey: eventMocks.rotateTeamLoginKey,
 }));
 vi.mock("../../lib/problem-deploy/handlers/event-handler/create-notification", () => ({
   createNotification: eventMocks.createNotification,
@@ -386,14 +390,14 @@ describe("ADR-020 Phase B.1 (#948): event-handler route role gates", () => {
       expect(res.status).toBe(200);
     });
 
-    it("GET /events/:id は pass するが teamLoginKey 露出を抑止する (#1392: includeLoginKeys=false)", async () => {
+    it("GET /events/:id は one-time credential の再読込 option 無しで pass する", async () => {
       const res = await eventApp.request(`/events/${ULID}`);
       await expectNotForbidden(res);
       expect(eventMocks.getEventDetail).toHaveBeenCalledWith(
         expect.anything(),
         expect.anything(),
         ULID,
-        expect.objectContaining({ includeLoginKeys: false }),
+        { withScoreEvents: false },
       );
     });
 
@@ -439,6 +443,13 @@ describe("ADR-020 Phase B.1 (#948): event-handler route role gates", () => {
       const res = await eventApp.request(`/events/${ULID}/lock-scoring`, { method: "POST" });
       await expectForbidden(res);
     });
+
+    it("POST /events/:id/teams/:teamId/rotate-login-key は 403", async () => {
+      const res = await eventApp.request(`/events/${ULID}/teams/${ULID}/rotate-login-key`, {
+        method: "POST",
+      });
+      await expectForbidden(res);
+    });
   });
 
   describe("TenantOperator (= mutate OK, destructive NG)", () => {
@@ -468,14 +479,27 @@ describe("ADR-020 Phase B.1 (#948): event-handler route role gates", () => {
       await expectNotForbidden(res);
     });
 
-    it("#1392: GET /events/:id は teamLoginKey を含めて呼ばれる (hand-off 担当 = includeLoginKeys=true)", async () => {
+    it("POST /events/:id/teams/:teamId/rotate-login-key は pass", async () => {
+      eventMocks.rotateTeamLoginKey.mockResolvedValueOnce({
+        kind: "ok",
+        teamId: ULID,
+        teamLoginKey: "NEW-KEY",
+        rotatedAt: "2026-07-15T00:00:00.000Z",
+      });
+      const res = await eventApp.request(`/events/${ULID}/teams/${ULID}/rotate-login-key`, {
+        method: "POST",
+      });
+      await expectNotForbidden(res);
+    });
+
+    it("GET /events/:id は mutating role でも credential を再読込しない", async () => {
       const res = await eventApp.request(`/events/${ULID}`);
       await expectNotForbidden(res);
       expect(eventMocks.getEventDetail).toHaveBeenCalledWith(
         expect.anything(),
         expect.anything(),
         ULID,
-        expect.objectContaining({ includeLoginKeys: true }),
+        { withScoreEvents: false },
       );
     });
 

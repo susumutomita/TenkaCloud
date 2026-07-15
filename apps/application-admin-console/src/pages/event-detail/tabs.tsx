@@ -107,11 +107,16 @@ export function ProblemsTab({ detail, t }: EventTabContentProps) {
   return <EventProblemSetPanel detail={detail} t={t} />;
 }
 
-export function TeamsTab({ config, detail, t }: EventTabContentProps) {
+export function TeamsTab({ apiClient, canMutateTenant, config, detail, t }: EventTabContentProps) {
   return (
     <>
       <EventParticipantsPanel config={config} detail={detail} t={t} />
-      <EventTeamsPanel detail={detail} participantPortalUrl={config.participantPortalUrl} t={t} />
+      <EventTeamsPanel
+        apiClient={apiClient}
+        canMutateTenant={canMutateTenant}
+        detail={detail}
+        t={t}
+      />
     </>
   );
 }

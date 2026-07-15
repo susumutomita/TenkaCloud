@@ -36,6 +36,9 @@ export interface CapacityTableSummary {
 }
 
 export interface CapacityOverview {
+  /** false when this deployment uses no DynamoDB control-data tables. */
+  readonly applicable: boolean;
+  readonly reason?: "dynamodb_not_in_use";
   readonly windowMinutes: number;
   readonly ceiling: number;
   readonly runbookDocumentName: string | null;

@@ -2,7 +2,6 @@ import type { Context, Hono } from "hono";
 import { StatusCodes } from "http-status-codes";
 import { requireRole, TENANT_ADMIN_ROLE } from "../../deploy-handler/auth.js";
 import {
-  CapacityNotApplicableError,
   CapacityQuerySchema,
   CapacityUnconfiguredError,
   getCapacityOverview,
@@ -42,11 +41,6 @@ async function handleCapacityOverview(c: Context, shared: EventSharedResources):
     if (err instanceof CapacityUnconfiguredError) {
       // 旧 deploy chain (= env 未配線)。audit-log read の `audit_log_unconfigured` と同型。
       return c.json({ error: "capacity_monitoring_unconfigured" }, StatusCodes.SERVICE_UNAVAILABLE);
-    }
-    if (err instanceof CapacityNotApplicableError) {
-      // Issue #2648: 純 SQL backend は DynamoDB を使わないので容量監視は恒久的に非該当。
-      // 404 で「このリソースはこの構成に存在しない」を表し、frontend は panel を出さない。
-      return c.json({ error: "capacity_not_applicable" }, StatusCodes.NOT_FOUND);
     }
     return handleRouteError(c, "[events] getCapacityOverview failed", {}, err);
   }

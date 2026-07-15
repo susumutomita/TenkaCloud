@@ -3,7 +3,12 @@ import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import Modal from "@cloudscape-design/components/modal";
 import SpaceBetween from "@cloudscape-design/components/space-between";
+import Table from "@cloudscape-design/components/table";
+import { useState } from "react";
+import type { CreateEventResponse } from "../../api/events-client";
+import { OneTimeSecretCopyButton } from "../../components/OneTimeSecretCopyButton";
 import { useT } from "../../i18n";
+import { buildInviteLink } from "../../lib/invite-link";
 
 /**
  * Issue #1067: Event 作成成功後に operator へ deploy の必要性を明示する modal。
@@ -11,17 +16,7 @@ import { useT } from "../../i18n";
  * 旧挙動 (= 即 EventDetail に navigate) では「Deploy が必要」 と気付かないまま
  * participant 側で問題が見えない silent failure が頻発していた。 modal で
  * 「いま deploy する」 / 「あとで」 の二択を明示する。
- *
- * [Issue #2649] 作成 response の平文 teamLoginKey をこの modal で一度だけ配布可能な形で出す。
- * 純 SQL backend (turso|sql) は key を hash でしか保存しないため EventDetail のチーム表から
- * 復元できず、 ここで捕まえ損ねると再 deploy でしか再発行できない。DynamoDB backend でも同じ
- * 「生成時に配布」 UX に揃える (backend 分岐なし = INVARIANT_APP_CODE_IS_UNMODIFIED)。
  */
-export interface DeployPromptTeamKey {
-  readonly internalSlug: string;
-  readonly teamLoginKey: string;
-}
-
 export interface EventCreateDeployPromptModalProps {
   visible: boolean;
   canMutateTenant: boolean;
@@ -33,11 +28,9 @@ export interface EventCreateDeployPromptModalProps {
    * backend would refuse.
    */
   bulkDeploySupported?: boolean;
-  /**
-   * [#2649] 作成直後の team ごとの平文 teamLoginKey。plaintext がここでしか出ない (特に SQL
-   * backend) ので、 operator が今コピーして配布するための一覧を出す。空/未指定なら section を出さない。
-   */
-  teamKeys?: readonly DeployPromptTeamKey[];
+  /** Plaintext values from POST /events. They exist only while this modal is open. */
+  teams: CreateEventResponse["teams"];
+  readonly participantPortalUrl?: string;
   onDeployNow: () => void;
   onDeployLater: () => void;
 }
@@ -47,27 +40,32 @@ export function EventCreateDeployPromptModal({
   canMutateTenant,
   deployStarting,
   bulkDeploySupported = true,
-  teamKeys,
+  teams,
+  participantPortalUrl,
   onDeployNow,
   onDeployLater,
 }: EventCreateDeployPromptModalProps) {
   const t = useT();
+  const [copyPending, setCopyPending] = useState(false);
+  const busy = deployStarting || copyPending;
+  const allLoginKeys = teams.map((team) => `${team.internalSlug}\t${team.teamLoginKey}`).join("\n");
+
   return (
     <Modal
       visible={visible}
-      onDismiss={() => (deployStarting ? undefined : onDeployLater())}
+      onDismiss={busy ? undefined : onDeployLater}
       header={t("event_create.deploy_modal_header")}
       footer={
         <Box float="right">
           <SpaceBetween direction="horizontal" size="xs">
-            <Button onClick={onDeployLater} disabled={deployStarting}>
+            <Button onClick={onDeployLater} disabled={busy}>
               {t("event_create.deploy_modal_later")}
             </Button>
             {bulkDeploySupported && (
               <Button
                 variant="primary"
                 loading={deployStarting}
-                disabled={!canMutateTenant}
+                disabled={!canMutateTenant || copyPending}
                 onClick={onDeployNow}
                 data-testid="deploy-prompt-now"
               >
@@ -79,43 +77,63 @@ export function EventCreateDeployPromptModal({
       }
     >
       <SpaceBetween size="m">
+        <Alert type="warning" header={t("event_create.login_keys_header")}>
+          {t("event_create.login_keys_body")}
+        </Alert>
+        <Table
+          variant="embedded"
+          items={[...teams]}
+          columnDefinitions={[
+            {
+              id: "team",
+              header: t("event_create.login_keys_team"),
+              cell: (team) => <code>{team.internalSlug}</code>,
+            },
+            {
+              id: "key",
+              header: t("event_create.login_keys_key"),
+              cell: (team) => <Box variant="code">{team.teamLoginKey}</Box>,
+            },
+            ...(participantPortalUrl
+              ? [
+                  {
+                    id: "invite",
+                    header: t("event_create.login_keys_invite"),
+                    cell: (team: CreateEventResponse["teams"][number]) => (
+                      <OneTimeSecretCopyButton
+                        textToCopy={buildInviteLink(participantPortalUrl, team.teamLoginKey)}
+                        copyLabel={t("event_create.login_keys_copy_invite", {
+                          slug: team.internalSlug,
+                        })}
+                        copyingLabel={t("event_create.login_keys_copying")}
+                        copiedLabel={t("event_create.login_keys_copied")}
+                        failedLabel={t("event_create.login_keys_copy_failed")}
+                        disabled={busy}
+                        onPendingChange={setCopyPending}
+                      />
+                    ),
+                  },
+                ]
+              : []),
+          ]}
+          empty={<Box>{t("event_create.login_keys_empty")}</Box>}
+        />
+        <Box float="right">
+          <OneTimeSecretCopyButton
+            textToCopy={allLoginKeys}
+            copyLabel={t("event_create.login_keys_copy_all")}
+            copyingLabel={t("event_create.login_keys_copying")}
+            copiedLabel={t("event_create.login_keys_copied")}
+            failedLabel={t("event_create.login_keys_copy_failed")}
+            disabled={busy || teams.length === 0}
+            onPendingChange={setCopyPending}
+          />
+        </Box>
         <Alert type="info" header={t("event_create.deploy_modal_alert_header")}>
           {bulkDeploySupported
             ? t("event_create.deploy_modal_alert_body")
             : t("event_create.deploy_modal_alert_body_non_aws")}
         </Alert>
-        {teamKeys && teamKeys.length > 0 && (
-          <Alert
-            type="warning"
-            header={t("event_create.deploy_modal_keys_header")}
-            data-testid="deploy-prompt-keys"
-          >
-            <SpaceBetween size="s">
-              <Box>{t("event_create.deploy_modal_keys_warning")}</Box>
-              {teamKeys.map((team) => (
-                <SpaceBetween
-                  key={team.internalSlug}
-                  direction="horizontal"
-                  size="xs"
-                  alignItems="center"
-                >
-                  <Box variant="awsui-key-label">{team.internalSlug}</Box>
-                  <Box variant="code" fontSize="body-s">
-                    {team.teamLoginKey}
-                  </Box>
-                  <Button
-                    iconName="copy"
-                    variant="inline-icon"
-                    ariaLabel={t("event_create.deploy_modal_keys_copy_aria", {
-                      slug: team.internalSlug,
-                    })}
-                    onClick={() => void navigator.clipboard?.writeText(team.teamLoginKey)}
-                  />
-                </SpaceBetween>
-              ))}
-            </SpaceBetween>
-          </Alert>
-        )}
       </SpaceBetween>
     </Modal>
   );

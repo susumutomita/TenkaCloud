@@ -1,4 +1,4 @@
-import type { TeamRecord } from "../../../control-data/teams-repository.js";
+import type { TeamDeploymentRecord } from "../../../control-data/teams-repository.js";
 import { slugify } from "../../deploy-handler/naming.js";
 import {
   resolveVerifiedCompetitorAccount,
@@ -20,7 +20,7 @@ import { nonAwsCredentialKey } from "./types.js";
 export async function resolveBulkVerifiedAccounts(
   shared: EventSharedResources,
   tenantId: string,
-  teams: readonly TeamRecord[],
+  teams: readonly TeamDeploymentRecord[],
   problems: readonly EventProblemTarget[],
 ): Promise<Map<string, VerifiedCompetitorAccount>> {
   const accountIds = candidateBulkAccountIds(teams, problems);
@@ -44,7 +44,7 @@ export async function resolveBulkVerifiedAccounts(
 }
 
 function candidateBulkAccountIds(
-  teams: readonly TeamRecord[],
+  teams: readonly TeamDeploymentRecord[],
   problems: readonly EventProblemTarget[],
 ): Set<string> {
   const ids = new Set<string>();
@@ -82,7 +82,7 @@ const SSM_FAN_OUT_CHUNK_SIZE = 8;
 export async function resolveBulkNonAwsCredentials(
   shared: EventSharedResources,
   tenantId: string,
-  teams: readonly TeamRecord[],
+  teams: readonly TeamDeploymentRecord[],
   problems: readonly EventProblemTarget[],
 ): Promise<ReadonlySet<string>> {
   const ssm = shared.ssm;

@@ -67,6 +67,10 @@ export interface CapacityTableSummary {
 }
 
 export interface CapacityOverview {
+  /** false when the selected control-data backend has no DynamoDB tables to monitor. */
+  readonly applicable: boolean;
+  /** Machine-readable explanation for a non-applicable overview. */
+  readonly reason?: "dynamodb_not_in_use";
   readonly windowMinutes: number;
   /** runbook の構造的ハード上限 (UI が「上限 200」を表示するための echo)。 */
   readonly ceiling: number;
@@ -91,21 +95,6 @@ export class CapacityUnconfiguredError extends Error {
   constructor(missingEnv: string) {
     super(`capacity monitoring is not wired: missing env ${missingEnv}`);
     this.name = "CapacityUnconfiguredError";
-  }
-}
-
-/**
- * Issue #2648: 純 SQL backend (turso|sql) では event-hot 5 テーブルが 1 つも synth されず
- * {@link resolveEventHotTables} が空になる。DynamoDB が存在しない構成では容量監視は原理的に
- * 非該当なので、CloudWatch を空クエリで叩かず (= AWS の "MetricDataQueries is required" を
- * 誘発して 500 にせず) このエラーで fail する。route は専用 status に変換し、frontend は
- * 容量監視 panel 自体を出さない (`capacity_monitoring_unconfigured` の「未配線」とは別の恒久的な
- * 「この backend には該当しない」を表す)。
- */
-export class CapacityNotApplicableError extends Error {
-  constructor() {
-    super("capacity monitoring does not apply: no DynamoDB event-hot tables in this backend");
-    this.name = "CapacityNotApplicableError";
   }
 }
 
@@ -345,13 +334,24 @@ export async function getCapacityOverview(
   },
 ): Promise<CapacityOverview> {
   const tables = resolveEventHotTables(shared);
-  // Issue #2648: 純 SQL backend では event-hot テーブルが 0 件。CloudWatch を空クエリで叩くと
-  // "MetricDataQueries is required" で 500 になるので、その手前で非該当として fail する。
-  if (tables.length === 0) {
-    throw new CapacityNotApplicableError();
-  }
-  const clients = opts.clients ?? defaultCapacityClients();
   const now = opts.now ?? new Date();
+
+  // A pure SQL backend deliberately synthesizes none of the five event-hot DynamoDB tables.
+  // Return an explicit capability signal before constructing AWS clients or sending an invalid
+  // GetMetricData request with zero queries.
+  if (tables.length === 0) {
+    return {
+      applicable: false,
+      reason: "dynamodb_not_in_use",
+      windowMinutes: opts.windowMinutes,
+      ceiling: EVENT_CAPACITY_CEILING,
+      runbookDocumentName: null,
+      generatedAt: now.toISOString(),
+      tables: [],
+    };
+  }
+
+  const clients = opts.clients ?? defaultCapacityClients();
 
   // Metric query は DescribeTable の GSI 一覧に依存するため 2 段 (probe → GetMetricData)。
   // GSI 構成は deploy でしか変わらないが、キャパ値は runbook で runtime に変わるので
@@ -370,6 +370,7 @@ export async function getCapacityOverview(
 
   const windowSeconds = opts.windowMinutes * 60;
   return {
+    applicable: true,
     windowMinutes: opts.windowMinutes,
     ceiling: EVENT_CAPACITY_CEILING,
     runbookDocumentName: process.env.CAPACITY_RUNBOOK_DOCUMENT_NAME || null,

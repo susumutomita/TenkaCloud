@@ -33,6 +33,7 @@ export interface ControlDataRuntimeInput {
   readonly ddb?: DynamoDBDocumentClient;
   readonly eventsTableName?: string;
   readonly teamsTableName?: string;
+  readonly deploymentsTableName?: string;
 }
 
 export interface ControlDataRuntime extends AggregateResolvers {

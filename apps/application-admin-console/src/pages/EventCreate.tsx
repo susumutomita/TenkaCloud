@@ -9,7 +9,7 @@ import { toErrorMessage } from "@tenkacloud/web-kit";
 import { useCallback, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { canMutateTenant, useApiClient } from "../api/client";
-import { bulkDeployEvent, createEvent } from "../api/events-client";
+import { bulkDeployEvent, type CreateEventResponse, createEvent } from "../api/events-client";
 import type { AppConfig } from "../config";
 import { DEFAULT_AWS_REGION } from "../data/aws-regions";
 import { listProblemSummaries, type ProblemSummary, runtimeProviders } from "../data/problems";
@@ -71,9 +71,9 @@ function newProblemRow(meta: ProblemSummary, problemId: string): ProblemRow {
  *   - **Teams table** (#528): 各 team の internalSlug + AWS Account ID を入力
  *   - 問題セット (`Multiselect`) — 各問題ごとに deploy region を選ぶ (account は team 単位)
  *
- * 提出後は EventDetail に直接 navigate する (#530)。teamLoginKey は EventDetail の
- * 「チーム」 table で常時表示 + 各行にコピー button があるので、modal で 1 度きり露出
- * する旧 UX は不要。
+ * teamLoginKey is returned only by createEvent. The success modal keeps that
+ * response in React state long enough for the operator to copy it, then drops
+ * it on navigation; it is never written to browser storage.
  *
  * Issue #1241: section components (`event-create/*`) に分割。 このファイルは
  * state / handler / 子 section への配線だけを担う orchestrator。
@@ -187,11 +187,9 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
   // Issue #1067: 作成成功後、 EventDetail へ自動遷移する前に 「Deploy する? あとで?」 modal を出す。
   // 旧挙動は即遷移だったが、 「Deploy が必要」 と operator が気付かないまま放置されるケースが
   // 多発していた (= participant 側で問題が見えない silent failure)。 modal で明示促す。
-  // [#2649] teamKeys は作成 response の平文 teamLoginKey。 純 SQL backend はここでしか出ないので
-  // deploy 促し modal で一度だけ配布可能な形で見せる。
   const [deployPromptTarget, setDeployPromptTarget] = useState<{
     eventId: string;
-    teamKeys: readonly { internalSlug: string; teamLoginKey: string }[];
+    teams: CreateEventResponse["teams"];
   } | null>(null);
   const [deployStarting, setDeployStarting] = useState(false);
 
@@ -222,14 +220,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
         })),
       });
       // Issue #1067: 即 navigate せず deploy 促し modal を出す。
-      // [#2649] 作成 response の平文 teamLoginKey を modal に渡し、 生成時に一度だけ配布させる。
-      setDeployPromptTarget({
-        eventId: res.eventId,
-        teamKeys: res.teams.map((team) => ({
-          internalSlug: team.internalSlug,
-          teamLoginKey: team.teamLoginKey,
-        })),
-      });
+      setDeployPromptTarget({ eventId: res.eventId, teams: res.teams });
     } catch (err) {
       setError(toErrorMessage(err));
     } finally {
@@ -340,7 +331,8 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
         canMutateTenant={canMutate}
         deployStarting={deployStarting}
         bulkDeploySupported={providerMode.kind === "aws"}
-        teamKeys={deployPromptTarget?.teamKeys}
+        participantPortalUrl={config.participantPortalUrl}
+        teams={deployPromptTarget?.teams ?? []}
         onDeployNow={() => void handleDeployNow()}
         onDeployLater={handleDeployLater}
       />

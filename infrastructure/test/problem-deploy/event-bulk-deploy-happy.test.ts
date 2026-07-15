@@ -1,7 +1,12 @@
 import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
 import { GetCommand, QueryCommand, TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { SqlDeploymentsRepository } from "../../lib/problem-deploy/control-data/deployments-repository";
+import { SqlTeamsRepository } from "../../lib/problem-deploy/control-data/teams-repository";
 import { bulkDeployEvent } from "../../lib/problem-deploy/handlers/event-handler/bulk-deploy";
+import { buildBulkDeployPlan } from "../../lib/problem-deploy/handlers/event-handler/bulk-deploy/plan-builder";
+import type { EventSharedResources } from "../../lib/problem-deploy/handlers/event-handler/shared";
+import { makeSqliteExecutor } from "./control-data/control-data-write.test-helpers";
 import { buildShared, NOW_MS, sampleEvent, sampleTeams } from "./event-bulk-deploy.test-helpers";
 
 describe("bulkDeployEvent — happy path & chunking", () => {
@@ -95,5 +100,68 @@ describe("bulkDeployEvent — happy path & chunking", () => {
     expect(putCmds).toHaveLength(3);
     expect(putCmds[0]?.input.Entries).toHaveLength(10);
     expect(putCmds[2]?.input.Entries).toHaveLength(10);
+  });
+
+  it("should keep the create-response key usable through a pure-SQL bulk plan", async () => {
+    const sql = makeSqliteExecutor();
+    const teams = new SqlTeamsRepository(sql);
+    const deployments = new SqlDeploymentsRepository(sql);
+    const plaintext = "ONE-TIME-CREATE-RESPONSE-KEY";
+    await teams.putTeam({
+      eventId: "EV1",
+      teamId: "T1",
+      tenantId: "tenant-acme",
+      internalSlug: "team-1",
+      teamLoginKey: plaintext,
+      awsAccountId: "111111111111",
+      createdAt: "2026-07-15T00:00:00.000Z",
+      updatedAt: "2026-07-15T00:00:00.000Z",
+      expiresAt: 4_102_444_800,
+    });
+    const selectedTeams = await teams.listTeamsForDeployment("EV1");
+    const plan = buildBulkDeployPlan({
+      shared: {
+        problemsCatalog: { p1: "problems/challenges/p1" },
+        eventBusName: "test-bus",
+      } as EventSharedResources,
+      tenantId: "tenant-acme",
+      eventId: "EV1",
+      nowMs: NOW_MS,
+      event: {},
+      selected: {
+        teams: selectedTeams,
+        problems: [{ problemId: "p1", defaultRegion: "ap-northeast-1" }],
+      },
+      existing: {
+        failedByKey: new Map(),
+        forceRedeployByKey: new Map(),
+        existingKey: new Set(),
+      },
+      verified: new Map([
+        [
+          "111111111111",
+          {
+            awsAccountId: "111111111111",
+            competitorRoleName: "DeployRole",
+            region: "ap-northeast-1",
+            externalIdParameterName: "/test/external-id",
+            competitorRoleArn: "arn:aws:iam::111111111111:role/DeployRole",
+          },
+        ],
+      ]),
+      nonAwsCredentials: new Set(),
+      retryFailedOnly: false,
+      forceRedeploy: false,
+    });
+
+    await deployments.createBulkDeployments(
+      "tenant-acme",
+      plan.entries.map((entry) => ({ record: entry.item })),
+    );
+
+    expect((await deployments.listByTeamLoginKey(plaintext))[0]?.teamId).toBe("T1");
+    const row = await sql.get("SELECT payload FROM deployments LIMIT 1");
+    expect(String(row?.payload)).not.toContain(plaintext);
+    expect(JSON.parse(String(row?.payload))).not.toHaveProperty("teamLoginKeyHash");
   });
 });

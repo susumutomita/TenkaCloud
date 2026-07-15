@@ -232,7 +232,7 @@ async function buildFixture() {
           teamId: "T1",
           tenantId: TENANT_ID,
           internalSlug: "team-alpha",
-          teamLoginKey: "key-1",
+          credential: { kind: "plaintext", value: "key-1" },
           awsAccountId: AWS_ACCOUNT_ID,
         },
       ] as unknown as SelectedBulkDeployTargets["teams"],

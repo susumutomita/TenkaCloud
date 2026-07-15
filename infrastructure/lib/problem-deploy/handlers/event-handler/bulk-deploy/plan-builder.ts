@@ -1,5 +1,5 @@
 import { ulid } from "ulid";
-import type { TeamRecord } from "../../../control-data/teams-repository.js";
+import type { TeamDeploymentRecord } from "../../../control-data/teams-repository.js";
 import { buildStackPrefix, slugify } from "../../deploy-handler/naming.js";
 import { type DeploymentItem, runtimeItemFields } from "../../deploy-handler/types.js";
 import type { VerifiedCompetitorAccount } from "../../shared/competitor-account-lookup.js";
@@ -126,7 +126,7 @@ function recordBulkPlanCandidate(acc: BulkPlanAccumulator, candidate: BulkPlanCa
 
 function buildBulkPlanEntry(
   args: BuildBulkDeployPlanArgs,
-  team: TeamRecord,
+  team: TeamDeploymentRecord,
   problem: EventProblemTarget,
   createdAt: string,
 ): BulkPlanCandidate {
@@ -225,7 +225,7 @@ function classifyBulkRuntimeDispatch(
  */
 function buildNonAwsPlanCandidate(
   args: BuildBulkDeployPlanArgs,
-  team: TeamRecord,
+  team: TeamDeploymentRecord,
   problem: EventProblemTarget,
   problemDir: string,
   runtime: ProblemRuntime,
@@ -273,7 +273,7 @@ function shouldSkipExistingPlanTarget(
 
 function createAwsPlanEntry(
   args: BuildBulkDeployPlanArgs,
-  team: TeamRecord,
+  team: TeamDeploymentRecord,
   problem: EventProblemTarget,
   problemDir: string,
   awsAccountId: string,
@@ -323,7 +323,7 @@ function createAwsPlanEntry(
  */
 function createNonAwsPlanEntry(
   args: BuildBulkDeployPlanArgs,
-  team: TeamRecord,
+  team: TeamDeploymentRecord,
   problem: EventProblemTarget,
   problemDir: string,
   runtime: ProblemRuntime,
@@ -368,7 +368,7 @@ function createNonAwsPlanEntry(
  */
 function createDeploymentItem(
   args: BuildBulkDeployPlanArgs,
-  team: TeamRecord,
+  team: TeamDeploymentRecord,
   problem: EventProblemTarget,
   jobId: string,
   namePrefix: string,
@@ -382,17 +382,19 @@ function createDeploymentItem(
     Pick<DeploymentItem, "runtimeProvider" | "runtimeEngine" | "runtimeEntry">
   > = {},
 ): DeploymentItem {
-  // TeamRecord は teamLoginKey を型上 optional にする (SQL backend が plaintext bearer を
-  // index 列に載せないため) が、 DDB backend の list は非キー属性として実値を保持する
-  // (create.ts が必ず非空 key を書き込む)。 従来の非空値を保つための coercion (実データでは常に非空)。
-  const teamLoginKey = team.teamLoginKey ?? "";
+  const participantCredential =
+    team.credential.kind === "plaintext"
+      ? {
+          teamLoginKey: team.credential.value,
+          GSI2PK: `TEAMKEY#${team.credential.value}`,
+          GSI2SK: createdAt,
+        }
+      : { teamLoginKeyHash: team.credential.value };
   return {
     PK: `DEPLOYMENT#${jobId}`,
     SK: "META",
     GSI1PK: `TENANT#${args.tenantId}`,
     GSI1SK: createdAt,
-    GSI2PK: `TEAMKEY#${teamLoginKey}`,
-    GSI2SK: createdAt,
     jobId,
     problemId: problem.problemId,
     tenantId: args.tenantId,
@@ -401,7 +403,7 @@ function createDeploymentItem(
     region: aws.region,
     teamName: team.internalSlug,
     namePrefix,
-    teamLoginKey,
+    ...participantCredential,
     status: "PENDING",
     createdAt,
     updatedAt: createdAt,
@@ -437,7 +439,7 @@ function resolvePlanProvenance(args: BuildBulkDeployPlanArgs, problemId: string)
 
 function createDeployDetail(
   tenantId: string,
-  team: TeamRecord,
+  team: TeamDeploymentRecord,
   problem: EventProblemTarget,
   problemDir: string,
   awsAccountId: string,

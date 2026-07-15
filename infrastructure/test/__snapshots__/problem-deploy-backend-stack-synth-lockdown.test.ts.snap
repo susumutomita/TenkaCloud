@@ -13724,11 +13724,6 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — pure-sql t
           },
         },
         {
-          "Action": "cloudwatch:GetMetricData",
-          "Effect": "Allow",
-          "Resource": "*",
-        },
-        {
           "Action": "scheduler:DeleteSchedule",
           "Effect": "Allow",
           "Resource": {
@@ -14274,7 +14269,6 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — pure-sql t
       "Ref": "BulkDeployPayloadBucketA76F3B42",
     },
     "BULK_DEPLOY_VIA_DISTRIBUTED_MAP": "false",
-    "CAPACITY_RUNBOOK_DOCUMENT_NAME": "",
     "CONTROL_DATA_BACKEND": "turso",
     "DEPLOY_ENVIRONMENT": "development",
     "DEPLOY_EVENT_BUS_NAME": "test-bus",

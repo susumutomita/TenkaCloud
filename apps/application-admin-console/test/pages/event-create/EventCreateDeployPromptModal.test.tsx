@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   EventCreateDeployPromptModal,
@@ -18,6 +18,11 @@ const props = (
   visible: true,
   canMutateTenant: true,
   deployStarting: false,
+  teams: [
+    { teamId: "team-1", internalSlug: "team-a", teamLoginKey: "KEY-A" },
+    { teamId: "team-2", internalSlug: "team-b", teamLoginKey: "KEY-B" },
+  ],
+  participantPortalUrl: "https://portal.example.com/",
   onDeployNow: vi.fn(),
   onDeployLater: vi.fn(),
   ...over,
@@ -26,6 +31,51 @@ const props = (
 afterEach(() => vi.clearAllMocks());
 
 describe("EventCreateDeployPromptModal", () => {
+  it("should show every one-time login key and copy the complete handoff list", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    render(<EventCreateDeployPromptModal {...props()} />);
+
+    expect(screen.getByText("KEY-A")).toBeInTheDocument();
+    expect(screen.getByText("KEY-B")).toBeInTheDocument();
+    expect(screen.getByText("event_create.login_keys_key")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "event_create.login_keys_copy_all" }));
+    expect(writeText).toHaveBeenCalledWith("team-a\tKEY-A\nteam-b\tKEY-B");
+    await screen.findByRole("button", { name: "event_create.login_keys_copied" });
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "event_create.login_keys_copy_invite" })[0] as Element,
+    );
+    await waitFor(() =>
+      expect(writeText).toHaveBeenLastCalledWith("https://portal.example.com/login#invite=KEY-A"),
+    );
+  });
+
+  it("should prevent dismissal until clipboard feedback is available", async () => {
+    let finishCopy: (() => void) | undefined;
+    Object.defineProperty(navigator, "clipboard", {
+      value: {
+        writeText: () =>
+          new Promise<void>((resolve) => {
+            finishCopy = resolve;
+          }),
+      },
+      configurable: true,
+    });
+    const p = props();
+    render(<EventCreateDeployPromptModal {...p} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "event_create.login_keys_copy_all" }));
+    expect(screen.getByRole("button", { name: "event_create.deploy_modal_later" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "event_create.deploy_modal_later" }));
+    expect(p.onDeployLater).not.toHaveBeenCalled();
+
+    finishCopy?.();
+    expect(
+      await screen.findByRole("button", { name: "event_create.login_keys_copied" }),
+    ).toBeEnabled();
+    expect(screen.getByRole("button", { name: "event_create.deploy_modal_later" })).toBeEnabled();
+  });
+
   it("should trigger deploy-now and deploy-later from the footer buttons", () => {
     const p = props();
     render(<EventCreateDeployPromptModal {...p} />);
@@ -54,8 +104,13 @@ describe("EventCreateDeployPromptModal", () => {
   });
 
   it("should hide deploy-now and show single-deploy guidance for a non-AWS event (#2563)", () => {
-    render(<EventCreateDeployPromptModal {...props({ bulkDeploySupported: false })} />);
+    render(
+      <EventCreateDeployPromptModal
+        {...props({ bulkDeploySupported: false, participantPortalUrl: undefined })}
+      />,
+    );
     expect(screen.queryByTestId("deploy-prompt-now")).not.toBeInTheDocument();
+    expect(screen.queryByText("event_create.login_keys_invite")).not.toBeInTheDocument();
     expect(screen.getByText("event_create.deploy_modal_alert_body_non_aws")).toBeInTheDocument();
   });
 
@@ -63,42 +118,5 @@ describe("EventCreateDeployPromptModal", () => {
     const p = props({ canMutateTenant: false });
     render(<EventCreateDeployPromptModal {...p} />);
     expect(screen.getByTestId("deploy-prompt-now")).toBeDisabled();
-  });
-
-  it("should not render the key-distribution section when no team keys are provided (#2649)", () => {
-    render(<EventCreateDeployPromptModal {...props()} />);
-    expect(screen.queryByTestId("deploy-prompt-keys")).not.toBeInTheDocument();
-  });
-
-  it("should list each team's plaintext teamLoginKey once for distribution (#2649)", () => {
-    render(
-      <EventCreateDeployPromptModal
-        {...props({
-          teamKeys: [
-            { internalSlug: "alpha", teamLoginKey: "key-alpha" },
-            { internalSlug: "bravo", teamLoginKey: "key-bravo" },
-          ],
-        })}
-      />,
-    );
-    expect(screen.getByTestId("deploy-prompt-keys")).toBeInTheDocument();
-    expect(screen.getByText("key-alpha")).toBeInTheDocument();
-    expect(screen.getByText("alpha")).toBeInTheDocument();
-    expect(screen.getByText("key-bravo")).toBeInTheDocument();
-    expect(screen.getByText("bravo")).toBeInTheDocument();
-  });
-
-  it("should copy a team's key to the clipboard from its copy button (#2649)", async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
-    render(
-      <EventCreateDeployPromptModal
-        {...props({ teamKeys: [{ internalSlug: "alpha", teamLoginKey: "key-alpha" }] })}
-      />,
-    );
-    fireEvent.click(
-      screen.getByRole("button", { name: "event_create.deploy_modal_keys_copy_aria" }),
-    );
-    expect(writeText).toHaveBeenCalledWith("key-alpha");
   });
 });

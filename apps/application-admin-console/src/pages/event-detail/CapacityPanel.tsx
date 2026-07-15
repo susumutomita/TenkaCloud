@@ -114,10 +114,10 @@ export function CapacityPanel({ apiClient, t }: { apiClient: ApiClient | null; t
 
   const exampleTable = overview?.runbookDocumentName ? pickExampleTable(rows) : null;
 
-  // Issue #2648: 純 SQL backend (DynamoDB 不使用) では容量監視は恒久的に非該当。空データや
-  // エラー alert を見せるより panel 自体を出さないのが筋 (route が 404 → not_applicable)。
-  // 全 hook を呼び切った後に return する (Rules of Hooks — early return で hook を飛ばさない)。
-  if (terminalReason === "not_applicable") return null;
+  // Hide the entire DynamoDB-specific surface until capability resolution completes. Pure SQL
+  // backends remain hidden after their explicit non-applicable response and stop polling in the
+  // hook, so operators never see a misleading empty DynamoDB panel.
+  if ((!overview && !error && !terminalReason) || overview?.applicable === false) return null;
 
   return (
     <Container
@@ -159,7 +159,7 @@ export function CapacityPanel({ apiClient, t }: { apiClient: ApiClient | null; t
           <>
             {error && (
               <Alert type="error" data-testid="capacity-error">
-                {t("capacity.load_failed", { message: error })}
+                {t("capacity.load_failed")}
               </Alert>
             )}
             <Table<CapacityRowModel>

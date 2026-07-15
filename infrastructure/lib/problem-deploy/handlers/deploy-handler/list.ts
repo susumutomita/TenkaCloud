@@ -31,12 +31,6 @@ export interface DeploymentSummary {
   readonly updatedAt: string;
   readonly expiresAt: number;
   /**
-   * チーム共有ログインキー (短命 bearer)。`getDeployment` 経路 (= caller が own tenantId
-   * で TenantAdmin 認可済) では返す。`listDeployments` 経路では出さない (= 万が一
-   * UI が一覧画面でも誤露出しないよう、複数行スコープでは引かない)。
-   */
-  readonly teamLoginKey?: string;
-  /**
    * [#2073] Composite parent 行のときだけ付く target-level status view。GSI3 を
    * ordinal 順に引いた各 target の whitelisted summary (secret / role / credential
    * は含まない)。legacy single-provider 行には付かない (= byte 互換を保つ)。
@@ -93,15 +87,10 @@ export function toSummary(item: Partial<DeploymentItem>): DeploymentSummary {
   };
 }
 
-/**
- * 詳細画面 (`getDeployment`) 専用の shape。`toSummary` に加えて `teamLoginKey` を含める。
- * caller は own tenantId で TenantAdmin 認可済なので、operator が hand-off のため再取得
- * できる必要がある。一覧 (`toSummary`) には含めず、誤露出経路を限定する。
- */
+/** 詳細画面 (`getDeployment`) 専用の shape。One-time bearer は再露出しない。 */
 export function toDetail(item: Partial<DeploymentItem>): DeploymentSummary {
   return {
     ...toSummary(item),
-    teamLoginKey: typeof item.teamLoginKey === "string" ? item.teamLoginKey : undefined,
     // [#2096] Pack-sourced deployments only: surface the immutable provenance
     // resolved from the event-pinned snapshot. Core rows have no `provenance`
     // attribute, so the field is omitted and the response shape is unchanged.

@@ -3,7 +3,6 @@ import { DescribeTableCommand } from "@aws-sdk/client-dynamodb";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CAPACITY_WINDOW_DEFAULT_MINUTES,
-  CapacityNotApplicableError,
   CapacityQuerySchema,
   getCapacityOverview,
   resolveEventHotTables,
@@ -141,11 +140,8 @@ describe("resolveEventHotTables", () => {
     ]);
   });
 
-  // Issue #2648: 純 SQL backend (turso|sql) では event-hot 5 テーブルが 1 つも synth されない。
-  // 個別スライス (#2440/#2442) は一部だけ空になる前提だったので、全 5 role が空 → [] になる
-  // 実際の純 SQL 構成のケースがテストに無かった。それがこの N=0 テスト。
-  it("should return no tables when every event-hot role is empty (pure SQL backend, N=0)", () => {
-    process.env.PROBLEM_ENDPOINTS_TABLE_NAME = "";
+  it("should return no event-hot tables when every DynamoDB role is absent in a pure SQL backend", () => {
+    delete process.env.PROBLEM_ENDPOINTS_TABLE_NAME;
     expect(
       resolveEventHotTables({
         deploymentsTableName: "",
@@ -179,23 +175,29 @@ describe("CapacityQuerySchema", () => {
 });
 
 describe("getCapacityOverview", () => {
-  // Issue #2648: 純 SQL backend では resolveEventHotTables が [] を返す。この状態で GetMetricData
-  // を空の MetricDataQueries で叩くと AWS が "MetricDataQueries is required" を投げ、route が 500
-  // internal_error に変換していた。0 テーブルは CapacityNotApplicableError で早期に fail し、
-  // AWS (DescribeTable / GetMetricData) を一切叩かないことを保証する。
-  it("should throw CapacityNotApplicableError without touching AWS when there are no event-hot tables", async () => {
-    process.env.PROBLEM_ENDPOINTS_TABLE_NAME = "";
+  it("should return not-applicable without calling AWS when a pure SQL backend has no DynamoDB tables", async () => {
+    delete process.env.PROBLEM_ENDPOINTS_TABLE_NAME;
     const { clients, ddbSend, cwSend } = buildClients();
-    const emptyShared = {
-      deploymentsTableName: "",
-      eventsTableName: "",
-      teamsTableName: "",
-      disruptionsTableName: "",
-    };
 
-    await expect(
-      getCapacityOverview(emptyShared, { windowMinutes: 30, now: NOW, clients }),
-    ).rejects.toBeInstanceOf(CapacityNotApplicableError);
+    const overview = await getCapacityOverview(
+      {
+        deploymentsTableName: "",
+        eventsTableName: "",
+        teamsTableName: "",
+        disruptionsTableName: "",
+      },
+      { windowMinutes: 30, now: NOW, clients },
+    );
+
+    expect(overview).toEqual({
+      applicable: false,
+      reason: "dynamodb_not_in_use",
+      windowMinutes: 30,
+      ceiling: 200,
+      runbookDocumentName: null,
+      generatedAt: NOW.toISOString(),
+      tables: [],
+    });
     expect(ddbSend).not.toHaveBeenCalled();
     expect(cwSend).not.toHaveBeenCalled();
   });
@@ -215,6 +217,7 @@ describe("getCapacityOverview", () => {
 
     const overview = await getCapacityOverview(SHARED, { windowMinutes: 30, now: NOW, clients });
 
+    expect(overview.applicable).toBe(true);
     expect(overview.windowMinutes).toBe(30);
     expect(overview.ceiling).toBe(200);
     expect(overview.generatedAt).toBe(NOW.toISOString());

@@ -24,7 +24,7 @@ vi.mock("../../lib/problem-deploy/handlers/event-handler/capacity", async (impor
   };
 });
 
-const { CapacityNotApplicableError, CapacityUnconfiguredError } = await import(
+const { CapacityUnconfiguredError } = await import(
   "../../lib/problem-deploy/handlers/event-handler/capacity"
 );
 const { registerCapacityRoutes } = await import(
@@ -112,15 +112,6 @@ describe("GET /admin/capacity", () => {
 
     expect(res.status).toBe(StatusCodes.SERVICE_UNAVAILABLE);
     expect((await res.json()).error).toBe("capacity_monitoring_unconfigured");
-  });
-
-  it("should 404 with capacity_not_applicable when the backend has no DynamoDB tables (pure SQL)", async () => {
-    mocks.getCapacityOverview.mockRejectedValueOnce(new CapacityNotApplicableError());
-
-    const res = await buildApp().request("/admin/capacity");
-
-    expect(res.status).toBe(StatusCodes.NOT_FOUND);
-    expect((await res.json()).error).toBe("capacity_not_applicable");
   });
 
   it("should surface an AWS read error via handleRouteError (5xx)", async () => {
