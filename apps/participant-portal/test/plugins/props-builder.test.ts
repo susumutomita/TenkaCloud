@@ -3,6 +3,7 @@ import type { ProblemCatalogEntry } from "../../src/data/problems";
 import {
   buildPortalDisruptions,
   buildPortalEndpointsFromOutputs,
+  buildPortalEndpointsFromRegistry,
   buildPortalPhases,
   buildPortalTeam,
 } from "../../src/plugins/props-builder";
@@ -141,6 +142,50 @@ describe("buildPortalEndpointsFromOutputs", () => {
     expect(() =>
       buildPortalEndpointsFromOutputs("battle-x", { BaseUrl: "not-a-valid-base" }),
     ).toThrow(/Failed to build endpoint URL for problemId=battle-x slot=users key=BaseUrl/);
+  });
+});
+
+describe("buildPortalEndpointsFromRegistry", () => {
+  it("should preserve an override as the effective URL when the default output is empty", () => {
+    expect(
+      buildPortalEndpointsFromRegistry([
+        {
+          slot: "app",
+          overridable: true,
+          defaultKey: "RegisteredUrl",
+          overrideUrl: "https://app.example.com",
+          effectiveUrl: "https://app.example.com",
+        },
+      ]),
+    ).toEqual([
+      {
+        slot: "app",
+        overridable: true,
+        overrideUrl: "https://app.example.com",
+        effectiveUrl: "https://app.example.com",
+      },
+    ]);
+  });
+
+  it("should return the server default after an override is cleared", () => {
+    expect(
+      buildPortalEndpointsFromRegistry([
+        {
+          slot: "app",
+          overridable: true,
+          defaultKey: "RegisteredUrl",
+          defaultUrl: "https://default.example.com",
+          effectiveUrl: "https://default.example.com",
+        },
+      ]),
+    ).toEqual([
+      {
+        slot: "app",
+        overridable: true,
+        defaultUrl: "https://default.example.com",
+        effectiveUrl: "https://default.example.com",
+      },
+    ]);
   });
 });
 

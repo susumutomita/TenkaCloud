@@ -15,6 +15,7 @@ vi.mock("../../src/plugins/props-builder", () => ({
   buildPortalDisruptions: () => [],
   buildPortalCoordination: () => undefined,
   buildPortalEndpointsFromOutputs: () => [],
+  buildPortalEndpointsFromRegistry: (endpoints: unknown) => endpoints,
   buildPortalTeam: (team: unknown) => team,
 }));
 

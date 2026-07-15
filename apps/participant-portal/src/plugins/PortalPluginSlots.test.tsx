@@ -22,6 +22,7 @@ vi.mock("./loader", () => {
 // props-builder も catalog 依存なので mock し、 PortalSlotProps の組立は本テスト範囲外と分離。
 vi.mock("./props-builder", () => ({
   buildPortalEndpointsFromOutputs: vi.fn(() => []),
+  buildPortalEndpointsFromRegistry: vi.fn((endpoints) => endpoints),
   buildPortalPhases: vi.fn(() => []),
   buildPortalDisruptions: vi.fn(() => []),
   buildPortalCoordination: vi.fn(() => undefined),
@@ -117,6 +118,36 @@ describe("PortalPluginSlots (ADR-012 Phase 5)", () => {
     );
     await waitFor(() =>
       expect(screen.getByTestId("runtime-props")).toHaveTextContent("en:posture-1:done"),
+    );
+  });
+
+  it("should pass the authoritative endpoint override to plugin slot props", async () => {
+    function EndpointPanel(props: {
+      endpoints: readonly { slot: string; effectiveUrl?: string }[];
+    }) {
+      return <div data-testid="endpoint-url">{props.endpoints[0]?.effectiveUrl}</div>;
+    }
+    mockLoadPluginSlot.mockImplementation((_problemId, slotName) =>
+      slotName === "StatusPanel" ? EndpointPanel : undefined,
+    );
+
+    render(
+      <PortalPluginSlots
+        {...baseProps}
+        endpoints={[
+          {
+            slot: "app",
+            overridable: true,
+            defaultKey: "RegisteredUrl",
+            overrideUrl: "https://override.example.com",
+            effectiveUrl: "https://override.example.com",
+          },
+        ]}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("endpoint-url")).toHaveTextContent("https://override.example.com"),
     );
   });
 
