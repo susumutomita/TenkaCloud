@@ -5,7 +5,7 @@ import type { EventSharedResources } from "../../lib/problem-deploy/handlers/eve
 /**
  * Issue #1418: event-handler/list.ts (listEvents + getEventDetail + 集約 helper) は 60% branch
  * だった。 toSummary の field default 群、 cursor encode/decode、 limit clamp、 getEventDetail の
- * not-found / tenant-mismatch / displayName precedence / one-time login keys / withScoreEvents、
+ * not-found / tenant-mismatch / displayName precedence / login-key expansion / withScoreEvents、
  * deployment 集約の guard 群を pin する。
  *
  * collectTeamScoreEvents は mock (= withScoreEvents 経路の marker)。 DDB は command 種別 +
@@ -241,6 +241,21 @@ describe("getEventDetail", () => {
     expect(detail?.teams[0].displayName).toBe("X"); // TeamsTable fallback (no deployment)
     expect(detail?.scoreEventsByTeam).toBeUndefined();
     expect(mocks.collectTeamScoreEvents).not.toHaveBeenCalled();
+  });
+
+  it("should include stored login keys only when the caller explicitly opts in", async () => {
+    cfg.eventItem = { ...eventBase };
+    cfg.teamItems = [
+      { teamId: "team-1", internalSlug: "a", teamLoginKey: "key-1" },
+      { teamId: "team-2", internalSlug: "b" },
+    ];
+
+    const detail = await getEventDetail(shared, "t1", "e1", {
+      withTeamLoginKeys: true,
+    });
+
+    expect(detail?.teams[0]).toHaveProperty("teamLoginKey", "key-1");
+    expect(detail?.teams[1]).not.toHaveProperty("teamLoginKey");
   });
 
   it("should default problems to [] when the event has a non-array problems field", async () => {

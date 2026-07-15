@@ -390,15 +390,21 @@ describe("ADR-020 Phase B.1 (#948): event-handler route role gates", () => {
       expect(res.status).toBe(200);
     });
 
-    it("GET /events/:id は one-time credential の再読込 option 無しで pass する", async () => {
+    it("GET /events/:id は credential の再読込 option 無しで pass する", async () => {
       const res = await eventApp.request(`/events/${ULID}`);
       await expectNotForbidden(res);
       expect(eventMocks.getEventDetail).toHaveBeenCalledWith(
         expect.anything(),
         expect.anything(),
         ULID,
-        { withScoreEvents: false },
+        { withScoreEvents: false, withTeamLoginKeys: false },
       );
+    });
+
+    it("GET /events/:id?withTeamLoginKeys=true は 403", async () => {
+      const res = await eventApp.request(`/events/${ULID}?withTeamLoginKeys=true`);
+      await expectForbidden(res);
+      expect(eventMocks.getEventDetail).not.toHaveBeenCalled();
     });
 
     it("GET /events/:id/disruptions は pass (= disruption catalog 観覧)", async () => {
@@ -492,14 +498,14 @@ describe("ADR-020 Phase B.1 (#948): event-handler route role gates", () => {
       await expectNotForbidden(res);
     });
 
-    it("GET /events/:id は mutating role でも credential を再読込しない", async () => {
-      const res = await eventApp.request(`/events/${ULID}`);
+    it("GET /events/:id は opt-in で保存済み credential を再読込できる", async () => {
+      const res = await eventApp.request(`/events/${ULID}?withTeamLoginKeys=true`);
       await expectNotForbidden(res);
       expect(eventMocks.getEventDetail).toHaveBeenCalledWith(
         expect.anything(),
         expect.anything(),
         ULID,
-        { withScoreEvents: false },
+        { withScoreEvents: false, withTeamLoginKeys: true },
       );
     });
 

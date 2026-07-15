@@ -36,11 +36,11 @@ import { makeFakeDdb, makeSqliteExecutor } from "./control-data-write.test-helpe
  *   - Sql impl against Node's built-in `node:sqlite` DatabaseSync (`:memory:`),
  *     so no new dependency is introduced.
  *
- * [Issue #2290] The participant login key is stored as a SHA-256 hash in the SQL
- * backend (never as an index column plaintext); the DDB backend keeps its sparse
- * GSI2 `TEAMKEY#<plaintext>`. Both must resolve the same plaintext key to the same
- * team — asserted in the parity `getTeamByLoginKey` cases and in a focused hashing
- * suite below.
+ * [Issue #2290] SQL indexes the participant login key only as a SHA-256 hash while
+ * retaining plaintext in the aggregate payload for authorized redistribution;
+ * DDB keeps its sparse GSI2 `TEAMKEY#<plaintext>`. Both must resolve the same
+ * plaintext key to the same team — asserted in the parity
+ * `getTeamByLoginKey` cases and in a focused hashing suite below.
  */
 
 const TABLE = "Teams";
@@ -83,9 +83,7 @@ describe.each(backends)("TeamsRepository parity: %s", (name, makeRepo) => {
     const repo = makeRepo();
     const record = sampleRecord({ displayName: "Team Alpha" });
     await repo.putTeam(record);
-    expect(await repo.getTeam(record.tenantId, record.eventId, record.teamId)).toEqual(
-      name === "SqlTeamsRepository" ? withoutLoginKey(record) : record,
-    );
+    expect(await repo.getTeam(record.tenantId, record.eventId, record.teamId)).toEqual(record);
   });
 
   it("should return undefined for a missing team", async () => {
@@ -142,6 +140,7 @@ describe.each(backends)("TeamsRepository parity: %s", (name, makeRepo) => {
     await repo.putTeam(sampleRecord({ teamId: "t-b", teamLoginKey: "k-b" }));
     const listed = await repo.listTeamsByEvent("01EVENTAAAAAAAAAAAAAAAAAAA");
     expect(listed.map((r) => r.teamId)).toEqual(["t-a", "t-b", "t-c"]);
+    expect(listed.map((r) => r.teamLoginKey)).toEqual(["k-a", "k-b", "k-c"]);
   });
 
   it("should expose a backend-neutral credential only to deployment planning", async () => {
@@ -231,9 +230,7 @@ describe("createTeamsRepository", () => {
     const repo = createTeamsRepository("turso", { sql: makeSqliteExecutor() });
     const record = sampleRecord();
     await repo.putTeam(record);
-    expect(await repo.getTeam(record.tenantId, record.eventId, record.teamId)).toEqual(
-      withoutLoginKey(record),
-    );
+    expect(await repo.getTeam(record.tenantId, record.eventId, record.teamId)).toEqual(record);
   });
 
   it("should fail loudly when the SQL backend is selected without a SqlExecutor", () => {
@@ -264,7 +261,7 @@ describe("hashLoginKey (Issue #2290)", () => {
     expect(hashLoginKey("key-one")).not.toBe(hashLoginKey("key-two"));
   });
 
-  it("should store the login-key hash (never the plaintext) in the SQL row", async () => {
+  it("should index the login-key hash while retaining plaintext in the team aggregate", async () => {
     const executor = makeSqliteExecutor();
     const repo = new SqlTeamsRepository(executor);
     const plaintext = "PLAINTEXT-BEARER";
@@ -277,8 +274,7 @@ describe("hashLoginKey (Issue #2290)", () => {
     );
     expect(row?.login_key_hash).toBe(hashLoginKey(plaintext));
     expect(row?.login_key_hash).not.toBe(plaintext);
-    expect(String(row?.payload)).not.toContain(plaintext);
-    expect(JSON.parse(String(row?.payload))).not.toHaveProperty("teamLoginKey");
+    expect(JSON.parse(String(row?.payload))).toHaveProperty("teamLoginKey", plaintext);
   });
 
   it("should store NULL in login_key_hash when the team has no login key", async () => {
@@ -309,7 +305,7 @@ describe("hashLoginKey (Issue #2290)", () => {
     );
   });
 
-  it("should scrub a legacy plaintext login key from payloads and never return it on point reads", async () => {
+  it("should keep the historical scrub migration explicit for pre-persistence rows", async () => {
     const executor = makeSqliteExecutor();
     const record = sampleRecord({ teamLoginKey: "LEGACY-PLAINTEXT" });
     await executor.run(
@@ -329,7 +325,7 @@ describe("hashLoginKey (Issue #2290)", () => {
 
     await expect(
       repository.getTeam(record.tenantId, record.eventId, record.teamId),
-    ).resolves.toEqual(withoutLoginKey(record));
+    ).resolves.toEqual(record);
     await executor.run("DELETE FROM control_data_migrations WHERE migration_id = ?", [
       TEAM_LOGIN_KEY_SCRUB_MIGRATION_ID,
     ]);
@@ -340,6 +336,35 @@ describe("hashLoginKey (Issue #2290)", () => {
     ]);
     expect(String(row?.payload)).not.toContain("LEGACY-PLAINTEXT");
     expect(JSON.parse(String(row?.payload))).not.toHaveProperty("teamLoginKey");
+    await expect(
+      repository.getTeam(record.tenantId, record.eventId, record.teamId),
+    ).resolves.toEqual(withoutLoginKey(record));
+  });
+});
+
+describe("MirroredTeamsRepository login-key repair", () => {
+  it("should persist a canonical login key into a legacy hash-only replica row", async () => {
+    const ddb = makeFakeDdb();
+    const sql = makeSqliteExecutor();
+    const canonical = new DynamoDbTeamsRepository(ddb, TABLE);
+    const replica = new SqlTeamsRepository(sql);
+    const record = sampleRecord({ teamLoginKey: "CANONICAL-KEY" });
+    await canonical.putTeam(record);
+    await replica.putTeam(record);
+    await sql.run(
+      "UPDATE teams SET payload = json_remove(payload, '$.teamLoginKey') " +
+        "WHERE event_id = ? AND team_id = ?",
+      [record.eventId, record.teamId],
+    );
+
+    const mirrored = new MirroredTeamsRepository(canonical, replica);
+    await expect(mirrored.listTeamsByEvent(record.eventId)).resolves.toEqual([record]);
+
+    const row = await sql.get("SELECT payload FROM teams WHERE event_id = ? AND team_id = ?", [
+      record.eventId,
+      record.teamId,
+    ]);
+    expect(JSON.parse(String(row?.payload))).toHaveProperty("teamLoginKey", "CANONICAL-KEY");
   });
 });
 
@@ -422,6 +447,9 @@ describe.each([
     await expect(teams.getTeamByLoginKey("OLD-TEAM-KEY")).resolves.toBeUndefined();
     await expect(deployments.listByTeamLoginKey("OLD-TEAM-KEY")).resolves.toEqual([]);
     expect((await teams.getTeamByLoginKey("NEW-TEAM-KEY"))?.teamId).toBe(team.teamId);
+    expect((await teams.getTeam(team.tenantId, team.eventId, team.teamId))?.teamLoginKey).toBe(
+      "NEW-TEAM-KEY",
+    );
     expect((await deployments.listByTeamLoginKey("NEW-TEAM-KEY"))[0]?.jobId).toBe("job-1");
   });
 

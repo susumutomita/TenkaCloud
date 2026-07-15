@@ -6,17 +6,8 @@ import type {
   TeamsRepository,
 } from "./types.js";
 
-function withoutLoginKey(record: TeamRecord): Omit<TeamRecord, "teamLoginKey"> {
-  const { teamLoginKey: _teamLoginKey, ...safeRecord } = record;
-  return safeRecord;
-}
-
 function sameTeamRecord(left: TeamRecord, right: TeamRecord): boolean {
-  return JSON.stringify(withoutLoginKey(left)) === JSON.stringify(withoutLoginKey(right));
-}
-
-function restoreLoginKey(record: TeamRecord, canonical: TeamRecord): TeamRecord {
-  return canonical.teamLoginKey ? { ...record, teamLoginKey: canonical.teamLoginKey } : record;
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 /** DynamoDB-primary/Turso-replica equivalent for the Teams aggregate. */
@@ -43,7 +34,7 @@ export class MirroredTeamsRepository implements TeamsRepository {
       await this.replica.putTeam(canonical);
     }
     const reconciled = await this.replica.getTeam(tenantId, eventId, teamId);
-    return reconciled ? restoreLoginKey(reconciled, canonical) : canonical;
+    return reconciled ?? canonical;
   }
 
   async getTeamByLoginKey(loginKey: string): Promise<TeamRecord | undefined> {
@@ -80,15 +71,12 @@ export class MirroredTeamsRepository implements TeamsRepository {
         .map((record) => this.replica.deleteTeam(eventId, record.teamId)),
     ]);
     const reconciled = await this.replica.listTeamsByEvent(eventId);
-    return reconciled.map((record) => {
-      const canonicalRecord = canonicalById.get(record.teamId);
-      return canonicalRecord ? restoreLoginKey(record, canonicalRecord) : record;
-    });
+    return reconciled;
   }
 
   listTeamsForDeployment(eventId: string): Promise<readonly TeamDeploymentRecord[]> {
-    // The canonical DynamoDB side owns plaintext in mirror mode. Returning its
-    // explicit deployment view keeps the replica's hash-only storage private.
+    // The canonical DynamoDB side remains authoritative in mirror mode. Its
+    // explicit deployment view also avoids relying on replica repair timing.
     return this.canonical.listTeamsForDeployment(eventId);
   }
 

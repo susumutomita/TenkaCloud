@@ -9,6 +9,7 @@ import type {
   TeamsRepository,
 } from "./types.js";
 
+/** Historical migration retained for databases created before key retention was adopted. */
 export const TEAM_LOGIN_KEY_SCRUB_MIGRATION_ID = "2026-07-04-team-login-key-payload-scrub";
 export const TEAM_LOGIN_KEY_SCRUB_SQL =
   "UPDATE teams SET payload = json_remove(payload, '$.teamLoginKey') " +
@@ -32,8 +33,10 @@ export const TEAM_LOGIN_KEY_SCRUB_SQL =
  *
  * **[Issue #2290]** The participant bearer (`teamLoginKey`) is indexed only as a
  * SHA-256 **hash** in `login_key_hash` — the plaintext key never lands in an index
- * column. DynamoDB's GSI2 stores `TEAMKEY#<plaintext>`; the SQLite backend stores
- * `sha256(key)`. Both are looked up by the same plaintext key
+ * column. The team aggregate retains the plaintext in `payload` so an authorized
+ * operator can redistribute it; HTTP response authorization is enforced by the
+ * Event route. DynamoDB's GSI2 stores `TEAMKEY#<plaintext>`; the SQLite backend
+ * stores `sha256(key)`. Both are looked up by the same plaintext key
  * ({@link SqlTeamsRepository.getTeamByLoginKey}) and return the same team.
  */
 export const TEAMS_SCHEMA_STATEMENTS = [
@@ -72,20 +75,11 @@ export function hashLoginKey(key: string): string {
 }
 
 /**
- * JSON payload with the plaintext bearer stripped ([Issue #2290] the login key
- * never lands in the payload column).
- */
-function teamPayloadWithoutLoginKey(record: TeamRecord): string {
-  const { teamLoginKey: _teamLoginKey, ...safeRecord } = record;
-  return JSON.stringify(safeRecord);
-}
-
-/**
  * [#2437] Column list + positional params for inserting one team row. Shared by
  * {@link SqlTeamsRepository.putTeam} and
  * `SqlEventsRepository.createEventWithTeams` so the atomic event+teams
  * transaction marshals rows exactly like this repository's own writes
- * (sparse `login_key_hash`, login-key-scrubbed payload).
+ * (sparse `login_key_hash`, complete team aggregate payload).
  */
 export const TEAM_INSERT_SQL =
   "INSERT INTO teams (event_id, team_id, tenant_id, login_key_hash, expires_at, payload) " +
@@ -101,14 +95,12 @@ export function teamRowParams(record: TeamRecord): SqlParam[] {
     record.tenantId,
     record.teamLoginKey ? hashLoginKey(record.teamLoginKey) : null,
     record.expiresAt,
-    teamPayloadWithoutLoginKey(record),
+    JSON.stringify(record),
   ];
 }
 
-function recordWithoutStoredLoginKey(payload: unknown): TeamRecord {
-  const parsed = JSON.parse(String(payload)) as TeamRecord;
-  const { teamLoginKey: _teamLoginKey, ...safeRecord } = parsed;
-  return safeRecord;
+function parseTeamRecord(payload: unknown): TeamRecord {
+  return JSON.parse(String(payload)) as TeamRecord;
 }
 
 export class SqlTeamsRepository implements TeamsRepository {
@@ -125,7 +117,7 @@ export class SqlTeamsRepository implements TeamsRepository {
     );
     // Same guard as the DDB backend: absent row or tenant mismatch → undefined.
     if (!row || row.tenant_id !== tenantId) return undefined;
-    return recordWithoutStoredLoginKey(row.payload);
+    return parseTeamRecord(row.payload);
   }
 
   async getTeamByLoginKey(loginKey: string): Promise<TeamRecord | undefined> {
@@ -135,10 +127,11 @@ export class SqlTeamsRepository implements TeamsRepository {
       hashLoginKey(loginKey),
     ]);
     if (!row) return undefined;
+    const stored = parseTeamRecord(row.payload);
     return {
-      ...recordWithoutStoredLoginKey(row.payload),
-      // The caller already presented this bearer. Restore it in memory only;
-      // it is never loaded from or persisted to SQL.
+      ...stored,
+      // Historical hash-only rows can still authenticate. Restore the bearer
+      // supplied by the caller when the aggregate predates plaintext retention.
       teamLoginKey: loginKey,
     };
   }
@@ -149,7 +142,7 @@ export class SqlTeamsRepository implements TeamsRepository {
       "SELECT payload FROM teams WHERE event_id = ? ORDER BY team_id ASC",
       [eventId],
     );
-    return rows.map((row) => recordWithoutStoredLoginKey(row.payload));
+    return rows.map((row) => parseTeamRecord(row.payload));
   }
 
   async listTeamsForDeployment(eventId: string): Promise<readonly TeamDeploymentRecord[]> {
@@ -158,7 +151,7 @@ export class SqlTeamsRepository implements TeamsRepository {
       [eventId],
     );
     return rows.map((row) => {
-      const team = recordWithoutStoredLoginKey(row.payload);
+      const { teamLoginKey: _teamLoginKey, ...team } = parseTeamRecord(row.payload);
       const loginKeyHash = row.login_key_hash;
       if (typeof loginKeyHash !== "string" || !/^[0-9a-f]{64}$/.test(loginKeyHash)) {
         throw new Error(
@@ -182,11 +175,13 @@ export class SqlTeamsRepository implements TeamsRepository {
     const statements = [
       {
         sql:
-          "UPDATE teams SET login_key_hash = ?, payload = json_set(payload, '$.updatedAt', ?) " +
+          "UPDATE teams SET login_key_hash = ?, " +
+          "payload = json_set(payload, '$.teamLoginKey', ?, '$.updatedAt', ?) " +
           "WHERE tenant_id = ? AND event_id = ? AND team_id = ? " +
           "AND json_extract(payload, '$.updatedAt') = ?",
         params: [
           loginKeyHash,
+          input.newLoginKey,
           input.updatedAt,
           input.tenantId,
           input.eventId,

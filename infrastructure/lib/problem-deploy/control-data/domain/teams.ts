@@ -26,8 +26,9 @@ export type TeamRecord = {
   internalSlug: string;
   /**
    * 短命 bearer。team scope (1 key で event 内 N 問題にアクセス可)。
-   * Present for DynamoDB reads and when the caller already supplied the key.
-   * SQL point/list payloads deliberately omit the plaintext bearer.
+   * Stored in the Team aggregate for operator redistribution. Participant-facing
+   * and viewer-facing HTTP contracts must omit it unless an authorized operator
+   * explicitly requests the credential expansion.
    */
   readonly teamLoginKey?: string;
   /** #528: team の deploy 先 AWS Account ID (12 桁数字)。Bulk Deploy で problem.defaultRegion と
@@ -107,8 +108,8 @@ export interface TeamsRepository {
   listTeamsByEvent(eventId: string): Promise<readonly TeamRecord[]>;
   /**
    * Deployment-only view. Unlike {@link listTeamsByEvent}, this fails loudly if
-   * a row has no participant credential and can return a hash without exposing
-   * plaintext from a SQL backend.
+   * a row has no participant credential and returns only the backend-neutral
+   * credential plus non-secret team metadata.
    */
   listTeamsForDeployment(eventId: string): Promise<readonly TeamDeploymentRecord[]>;
   /** Atomically rotate the team row and every denormalized deployment login index. */

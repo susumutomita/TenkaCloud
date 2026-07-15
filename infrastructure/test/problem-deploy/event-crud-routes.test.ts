@@ -5,7 +5,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 /**
  * Issue #1424: event CRUD + bulk-teardown routes (routes/events.ts)。
  * POST /events, GET /events, GET /events/:id, DELETE /events/:id の
- * validation / duplicate / pagination / one-time login-key / not_found / error 分岐。
+ * validation / duplicate / pagination / login-key expansion / not_found / error 分岐。
  *
  * create module は importOriginal で error class (Duplicate*) を実体のまま残しつつ
  * createEvent だけ mock 化する (= route の `err instanceof Duplicate*` を本物の class で判定)。
@@ -140,12 +140,13 @@ describe("GET /events/:eventId", () => {
     expect((await getDetail()).status).toBe(StatusCodes.NOT_FOUND);
   });
 
-  it("should request score events without enabling a credential re-read path", async () => {
+  it("should pass requested detail expansions", async () => {
     mocks.getEventDetail.mockResolvedValueOnce({ eventId: EVENT_ID });
-    const res = await getDetail("?withScoreEvents=true");
+    const res = await getDetail("?withScoreEvents=true&withTeamLoginKeys=true");
     expect(res.status).toBe(StatusCodes.OK);
     expect(mocks.getEventDetail).toHaveBeenCalledWith(shared, "tenant-test", EVENT_ID, {
       withScoreEvents: true,
+      withTeamLoginKeys: true,
     });
   });
 
@@ -155,6 +156,7 @@ describe("GET /events/:eventId", () => {
     await getDetail();
     expect(mocks.getEventDetail.mock.calls[0][3]).toEqual({
       withScoreEvents: false,
+      withTeamLoginKeys: false,
     });
   });
 
