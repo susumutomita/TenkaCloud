@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { eventApiBundlingDefine } from "../lib/problem-deploy/event-api-lambda";
 import {
   synthDefault,
+  synthWithControlDataBackendTurso,
   synthWithDeployConcurrentBuildLimit,
 } from "./problem-deploy-backend-stack.test-helpers";
 
@@ -627,5 +628,39 @@ describe("ProblemDeployBackendStack — admin API Lambdas memory (OOM/timeout fi
 
   it("CompetitorAccounts Lambda should be provisioned at 1024MB (was 256MB → init OOM)", () => {
     expect(memoryOf("CompetitorAccounts")).toBe(1024);
+  });
+});
+
+// Issue #2647: the same init-OOM class as the admin API Lambdas above, on the Turso profile.
+// These writers resolve their repository through the control-data runtime, so on a pure SQL
+// backend they load `@libsql/client/http` on top of the AWS SDK during init. At 256MB
+// DeployStatusWriter died with Runtime.OutOfMemory (measured live: Max Memory Used 256MB of
+// 256MB, killed 1253ms in) — and because that writer is what records deploy completion, every
+// deploy stayed "in progress" forever and no event could start. DeployStatusWriter is only
+// synthesized on a pure SQL backend, so `synthDefault()` cannot see it: assert against the
+// Turso synth or this regression stays invisible.
+describe("ProblemDeployBackendStack — control-data writer Lambdas memory on Turso (#2647)", () => {
+  const tpl = synthWithControlDataBackendTurso();
+
+  const memoryOf = (nameFragment: string): number => {
+    const functions = tpl.findResources("AWS::Lambda::Function");
+    const entry = Object.entries(functions).find(
+      ([name]) => name.includes(nameFragment) && name.includes("Function"),
+    );
+    expect(entry, `Lambda matching ${nameFragment} should exist`).toBeDefined();
+    const [, resource] = entry as [string, { Properties?: { MemorySize?: number } }];
+    return resource.Properties?.MemorySize ?? 0;
+  };
+
+  it("DeployStatusWriter Lambda should be provisioned at 1024MB (was 256MB → init OOM)", () => {
+    expect(memoryOf("DeployStatusWriter")).toBe(1024);
+  });
+
+  it("ExternalIdAudit Lambda should be provisioned at 1024MB (same control-data runtime)", () => {
+    expect(memoryOf("ExternalIdAudit")).toBe(1024);
+  });
+
+  it("SystemAuditWriter Lambda should be provisioned at 1024MB (same control-data runtime)", () => {
+    expect(memoryOf("SystemAuditWriter")).toBe(1024);
   });
 });

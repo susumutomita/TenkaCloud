@@ -88,7 +88,10 @@ export class SystemAuditWriterLambda extends Construct {
     this.fn = defineNodejsFunction(this, {
       entry: path.resolve(import.meta.dirname, "handlers/system-audit-writer/index.ts"),
       timeout: Duration.seconds(10),
-      memorySize: 256,
+      // Issue #2647: 純 SQL backend では control-data runtime 経由で `@libsql/client/http` を
+      // AWS SDK と併せて読むため、256MB では init が収まらない (同経路の DeployStatusWriter が
+      // 実測で Runtime.OutOfMemory)。#2530 / DeployStatusWriter と同じ 1024MB に揃える。
+      memorySize: 1024,
       environment: {
         // [Issue #2442] 純 SQL backend では table 自体が無いので env も足さない。
         ...(props.adminAuditLogTable

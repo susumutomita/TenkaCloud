@@ -37,7 +37,12 @@ export class DeployStatusWriterLambda extends Construct {
     this.fn = defineNodejsFunction(this, {
       entry: path.resolve(import.meta.dirname, "handlers/deploy-status-writer-handler/index.ts"),
       timeout: Duration.seconds(15),
-      memorySize: 256,
+      // Issue #2647: 256MB では init 中に Runtime.OutOfMemory で落ちていた (実測 Max Memory Used
+      // 256MB / 256MB、1253ms で killed)。control-data runtime 経由で `@libsql/client/http` を
+      // AWS SDK と併せて読むため init が収まらない。この Lambda が deploy 完了を書き戻す担当な
+      // ので、死ぬと deploy が永久に「進行中」のままになり event を開始できない。#2530 が admin
+      // API Lambda に適用した実測値 (init peak ~676MB) と同じ 1024MB に揃える。
+      memorySize: 1024,
       environment: {
         // This Lambda is only synthesized when pureSql (see build-deploy-pipeline.ts), so in
         // production `deploymentsTable` is always undefined here — the repository seam never

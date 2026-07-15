@@ -65,7 +65,10 @@ export class ExternalIdAuditLambda extends Construct {
       entry: path.resolve(import.meta.dirname, "handlers/external-id-audit-handler/index.ts"),
       // DDB Scan + PutMetricData 1 回。MVP 規模で 5s 以内に終わる想定だが余裕で 60s。
       timeout: Duration.seconds(60),
-      memorySize: 256,
+      // Issue #2647: 純 SQL backend では control-data runtime 経由で `@libsql/client/http` を
+      // AWS SDK と併せて読むため、256MB では init が収まらない (同経路の DeployStatusWriter が
+      // 実測で Runtime.OutOfMemory)。#2530 / DeployStatusWriter と同じ 1024MB に揃える。
+      memorySize: 1024,
       environment: {
         // Issue #2442: 純 SQL backend では table 自体が無いので env も足さない。
         ...(props.competitorAccountsTable
