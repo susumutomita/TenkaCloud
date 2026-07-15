@@ -164,6 +164,29 @@ describe("resolveWorkspaces", () => {
   });
 });
 
+describe("codecov.yml (Issue #2666)", () => {
+  // Codecov must wait for every coverage shard before it evaluates status, otherwise a
+  // partial upload (e.g. the infrastructure shard alone at ~92.11%) leaks out as a false
+  // `codecov/project` failure. `after_n_builds` encodes the shard count, so it must track
+  // SHARD_NAMES; this test fails loudly if the two drift (a 4th shard added without bumping
+  // codecov.yml, or vice versa).
+  const codecovPath = join(root, "codecov.yml");
+
+  it("should exist at the repo root", () => {
+    expect(existsSync(codecovPath)).toBe(true);
+  });
+
+  it("should set every after_n_builds to the shard count so status waits for all shards", () => {
+    const values = [
+      ...readFileSync(codecovPath, "utf8").matchAll(/^\s*after_n_builds:\s*(\d+)/gm),
+    ].map((m) => Number(m[1]));
+    expect(values.length).toBeGreaterThan(0);
+    for (const n of values) {
+      expect(n).toBe(SHARD_NAMES.length);
+    }
+  });
+});
+
 describe("formatDuration", () => {
   it("should format sub-minute durations as seconds with one decimal place", () => {
     expect(formatDuration(1234)).toBe("1.2s");
