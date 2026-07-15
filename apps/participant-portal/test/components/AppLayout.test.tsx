@@ -411,9 +411,21 @@ beforeEach(() => {
 afterEach(() => vi.clearAllMocks());
 
 describe("ShellLayout", () => {
-  it("should render the shared TenkaCloud brand with the event title", () => {
+  it("should render the event title as the header identifier, with the brand on the mark (#2662)", () => {
     renderShell();
-    expect(screen.getAllByText("TenkaCloud · Test event").length).toBeGreaterThan(0);
+    // 識別子 (event 名) をそのまま title に据える。`TenkaCloud ·` を前置しないので Cloudscape の
+    // 末尾省略で event 名が消えない。ブランドは隣接の Summit mark が担う。
+    expect(screen.getAllByText("Test event").length).toBeGreaterThan(0);
+    expect(screen.queryByText("TenkaCloud · Test event")).not.toBeInTheDocument();
+  });
+
+  it("should keep a long event name as the title rather than sacrificing it to the brand (#2662)", () => {
+    const longEventTitle =
+      "第 12 回 天下一クラウドチャレンジ 全国大会 本選 ラウンド 3 — 本番環境ハードニング";
+    renderShell({ eventTitle: longEventTitle });
+    // 運営が長い event 名を付けても、識別子が title 本体なので幅不足時の切り詰めは末尾に向かい、
+    // ブランド接頭辞に押し出されて先頭から消えることはない。
+    expect(screen.getAllByText(longEventTitle).length).toBeGreaterThan(0);
   });
 
   it("should render children and the team profile when signed in", () => {

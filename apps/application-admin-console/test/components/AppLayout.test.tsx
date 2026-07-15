@@ -68,9 +68,12 @@ afterEach(() => {
 });
 
 describe("ShellLayout", () => {
-  it("should render the branded application title in the shared header", () => {
+  it("should render the console identifier as the header title, not behind the brand (#2662)", () => {
     const { container } = renderShell();
-    expect(topNav(container).findTitle()?.getElement()).toHaveTextContent("TenkaCloud · app.title");
+    // Issue #2662: 識別子 (app.title) を title 本体に据える。`TenkaCloud ·` を前置しないので、
+    // Cloudscape の末尾省略が「どのコンソールか」を先に切り落とさない。
+    expect(topNav(container).findTitle()?.getElement()).toHaveTextContent("app.title");
+    expect(topNav(container).findTitle()?.getElement().textContent).not.toContain("TenkaCloud");
   });
 
   it("should render only the locale switcher when signed out and switch the locale", () => {

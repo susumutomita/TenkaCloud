@@ -57,15 +57,22 @@ describe("ShellLayout", () => {
     expect(getByText("page-body")).toBeInTheDocument();
   });
 
-  it("should render the branded product title when provided", () => {
+  it("should render the console identifier as the title and never truncate it behind the brand (#2662)", () => {
     const { topNav } = renderShell({ title: "Admin Console" });
-    expect(topNav.findTitle()?.getElement()).toHaveTextContent("TenkaCloud · Admin Console");
+    // 識別子だけを title に据える (ブランドは隣接の mark が担う)。`TenkaCloud ·` を前置しないので
+    // Cloudscape の末尾省略が識別子を犠牲にしない。
+    expect(topNav.findTitle()?.getElement()).toHaveTextContent("Admin Console");
+    expect(topNav.findTitle()?.getElement().textContent).not.toContain("TenkaCloud");
+    // context 表示時は mark が唯一のブランド表現なので accessible name を持つ。
+    expect(topNav.findLogo()?.getElement()).toHaveAttribute("alt", "TenkaCloud");
   });
 
   it("should render the TenkaCloud brand lockup when the product title is omitted", () => {
     const { topNav } = renderShell();
     expect(topNav.findTitle()?.getElement()).toHaveTextContent("TenkaCloud");
     expect(topNav.findLogo()?.getElement()).toHaveAttribute("src", tenkaCloudAppIconDataUri);
+    // context 無しでは wordmark が title に出るので、mark は重複回避で decorative (alt="")。
+    expect(topNav.findLogo()?.getElement()).toHaveAttribute("alt", "");
   });
 
   it("should show only the locale switcher when unauthenticated", () => {
