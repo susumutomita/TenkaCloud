@@ -27,7 +27,10 @@ import {
   LambdaInvoke,
 } from "aws-cdk-lib/aws-stepfunctions-tasks";
 import { Construct } from "constructs";
-import { DEPLOY_STATUS_POLL_INTERVAL_SECONDS } from "./deploy-cost-model.js";
+import {
+  DEPLOY_STATE_MACHINE_TIMEOUT_MINUTES,
+  DEPLOY_STATUS_POLL_INTERVAL_SECONDS,
+} from "./deploy-cost-model.js";
 import { deploymentKey, stateEnteredTime } from "./state-machine-helpers.js";
 
 export interface DeployCreateStateMachineProps {
@@ -133,7 +136,7 @@ export class DeployCreateStateMachine extends Construct {
 
     this.stateMachine = new StateMachine(this, "StateMachine", {
       definitionBody: DefinitionBody.fromChainable(definitionHead),
-      timeout: Duration.minutes(60),
+      timeout: Duration.minutes(DEPLOY_STATE_MACHINE_TIMEOUT_MINUTES),
       logs: { destination: logGroup, level: LogLevel.ALL },
       tracingEnabled: true,
     });
@@ -484,13 +487,24 @@ export class DeployCreateStateMachine extends Construct {
     resultPath: string | undefined,
     statusWriterFunction: IFunction,
   ): LambdaInvoke {
-    return new LambdaInvoke(this, id, {
+    const task = new LambdaInvoke(this, id, {
       lambdaFunction: statusWriterFunction,
       payload: TaskInput.fromObject(payload),
       payloadResponseOnly: true,
       retryOnServiceExceptions: false,
       ...(resultPath ? { resultPath } : {}),
     });
+    // Issue #2651: pure-SQL status writes cross a Lambda + Turso boundary. Retry the whole task
+    // before following its Catch path; this absorbs transient Lambda, SSM, network, throttling,
+    // and libSQL failures. Deterministic failures still terminate after four attempts and are
+    // converged independently by the scheduled stuck-create reconciler.
+    task.addRetry({
+      errors: ["States.TaskFailed"],
+      interval: Duration.seconds(2),
+      maxAttempts: 4,
+      backoffRate: 2,
+    });
+    return task;
   }
 
   private buildMarkSucceeded(

@@ -234,6 +234,26 @@ export class SqlDeploymentsLifecycle implements DeploymentsLifecyclePort {
     });
   }
 
+  async markStuckCreatingFailed(
+    jobId: string,
+    reason: string,
+    at: string,
+  ): Promise<DeploymentMutationOutcome> {
+    const creatingStatuses = ["PENDING", "IN_PROGRESS"];
+    return this.core.mutateExisting({
+      jobId,
+      whereSql: "status IN (?, ?)",
+      whereParams: creatingStatuses,
+      predicate: (record) => statusIn(record, creatingStatuses),
+      mutate: (record) => {
+        record.status = "FAILED";
+        record.updatedAt = at;
+        record.failureReason = reason;
+      },
+      onMiss: "conflict",
+    });
+  }
+
   async transitionRuntimeStatus(
     jobId: string,
     tenantId: string,

@@ -291,6 +291,29 @@ export class DynamoDbDeploymentsLifecycle implements DeploymentsLifecyclePort {
     );
   }
 
+  async markStuckCreatingFailed(
+    jobId: string,
+    reason: string,
+    at: string,
+  ): Promise<DeploymentMutationOutcome> {
+    return this.core.conditionalUpdate(
+      jobId,
+      {
+        UpdateExpression: "SET #status = :failed, updatedAt = :now, #reason = :reason",
+        ConditionExpression: "#status IN (:pending, :inProgress)",
+        ExpressionAttributeNames: { "#status": "status", "#reason": "failureReason" },
+        ExpressionAttributeValues: {
+          ":pending": "PENDING",
+          ":inProgress": "IN_PROGRESS",
+          ":failed": "FAILED",
+          ":now": at,
+          ":reason": reason,
+        },
+      },
+      "conflict",
+    );
+  }
+
   async transitionRuntimeStatus(
     jobId: string,
     tenantId: string,

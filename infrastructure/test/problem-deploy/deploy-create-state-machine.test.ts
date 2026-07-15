@@ -372,4 +372,37 @@ describe("DeployCreateStateMachine SQL status-writer branch (#2441 Phase B PR-5)
     expect(asJson).not.toContain("codebuild.Build.Id");
     expect(asJson).not.toContain("dynamodb:updateItem");
   });
+
+  it("should retry every SQL status write before the recovery reconciler takes over (#2651)", () => {
+    const definition = JSON.parse(
+      definitionJson(buildTestStack({ statusWriter: true }).template),
+    ) as {
+      States: Record<
+        string,
+        {
+          Retry?: Array<{
+            ErrorEquals?: string[];
+            IntervalSeconds?: number;
+            MaxAttempts?: number;
+            BackoffRate?: number;
+          }>;
+        }
+      >;
+    };
+    for (const stateName of [
+      "MarkInProgress",
+      "MarkSucceeded",
+      "MarkFailed",
+      "MarkFailedWithoutBuildId",
+    ]) {
+      expect(definition.States[stateName]?.Retry).toEqual([
+        {
+          ErrorEquals: ["States.TaskFailed"],
+          IntervalSeconds: 2,
+          MaxAttempts: 4,
+          BackoffRate: 2,
+        },
+      ]);
+    }
+  });
 });

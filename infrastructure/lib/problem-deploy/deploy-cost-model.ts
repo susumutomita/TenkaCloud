@@ -37,6 +37,24 @@ export const DEPLOY_POLL_CYCLE_TRANSITIONS = 3;
  */
 export const DEPLOY_STATUS_POLL_INTERVAL_SECONDS = 30;
 
+/** Hard timeout shared by DeployCreate's Standard Workflow definition. */
+export const DEPLOY_STATE_MACHINE_TIMEOUT_MINUTES = 60;
+
+/**
+ * Extra time after the workflow timeout before the scheduled reconciler declares a non-terminal
+ * create row abandoned. This prevents a tick at the exact timeout boundary from racing the final
+ * workflow write.
+ */
+export const DEPLOY_STUCK_RECOVERY_GRACE_MINUTES = 5;
+
+/**
+ * PENDING/IN_PROGRESS age at which the independent reconciler may conditionally mark a deploy
+ * FAILED. The threshold stays derived from the workflow timeout so the two recovery contracts
+ * cannot drift independently.
+ */
+export const DEPLOY_STUCK_RECOVERY_THRESHOLD_MS =
+  (DEPLOY_STATE_MACHINE_TIMEOUT_MINUTES + DEPLOY_STUCK_RECOVERY_GRACE_MINUTES) * 60 * 1_000;
+
 /**
  * State transitions one Lambda-path deploy execution costs, given how long CloudFormation takes to
  * settle and the poll interval. `deploySeconds` <= 0 means the stack was already terminal on the
