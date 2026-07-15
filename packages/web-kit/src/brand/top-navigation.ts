@@ -6,16 +6,19 @@ const TENKACLOUD_WORDMARK = "TenkaCloud";
 /**
  * Cloudscape TopNavigation 向けの TenkaCloud brand lockup。
  *
- * Summit mark と wordmark を常に一組で表示し、各 SPA の product / event 名は middle dot で
- * 分離する。title は Cloudscape の theme token を継ぐため、light / dark mode の双方で
- * contrast を保つ。mark は隣接する wordmark と意味が重複しないよう decorative image にする。
+ * ブランドは Summit mark が担い、context があるときは console / event の識別子だけを
+ * title に据える。Cloudscape は title を単一行の末尾から省略するため、wordmark を先頭へ
+ * 連結すると幅不足時に識別子側から失われる。context が無いときだけ wordmark を title に戻す。
+ *
+ * context 表示時は mark が唯一のブランド表現なので accessible name を持たせ、wordmark が
+ * title に出るときは意味の重複を避けるため decorative にする。
  */
 export function createTenkaCloudTopNavigationIdentity(
   contextTitle?: string,
 ): TopNavigationProps.Identity {
   return {
     href: "/",
-    title: contextTitle ? `${TENKACLOUD_WORDMARK} · ${contextTitle}` : TENKACLOUD_WORDMARK,
-    logo: { src: tenkaCloudAppIconDataUri, alt: "" },
+    title: contextTitle || TENKACLOUD_WORDMARK,
+    logo: { src: tenkaCloudAppIconDataUri, alt: contextTitle ? TENKACLOUD_WORDMARK : "" },
   };
 }
