@@ -66,8 +66,10 @@ export class ExternalIdAuditLambda extends Construct {
       // DDB Scan + PutMetricData 1 回。MVP 規模で 5s 以内に終わる想定だが余裕で 60s。
       timeout: Duration.seconds(60),
       // Issue #2647: 純 SQL backend では control-data runtime 経由で `@libsql/client/http` を
-      // AWS SDK と併せて読むため、256MB では init が収まらない (同経路の DeployStatusWriter が
-      // 実測で Runtime.OutOfMemory)。#2530 / DeployStatusWriter と同じ 1024MB に揃える。
+      // AWS SDK と併せて読むため、256MB では init が収まらない。#2654 (aws-cdk-lib の runtime
+      // bundle 漏れ) を #2657 が根治し、`audit-handlers-bundle.test.ts` がこの handler の bundle が
+      // CDK-free かつ小さいことを pin しているので、1024MB は余裕 (再測定で下げられる方向)。
+      // 実 invoke での再測定と引き下げは #2650 の live E2E checklist で追跡する。
       memorySize: 1024,
       environment: {
         // Issue #2442: 純 SQL backend では table 自体が無いので env も足さない。
