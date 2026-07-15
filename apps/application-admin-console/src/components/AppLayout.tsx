@@ -2,7 +2,7 @@ import Alert from "@cloudscape-design/components/alert";
 import Link from "@cloudscape-design/components/link";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import { type ShellUserMenu, ShellLayout as WebKitShellLayout } from "@tenkacloud/web-kit";
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode, useReducer } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { useAuth } from "../auth/AuthProvider";
 import { decodeIdToken, hasTenantAdminRole } from "../auth/claims";
@@ -46,6 +46,7 @@ export function ShellLayout({
   const location = useLocation();
   const navigate = useNavigate();
   const { locale, setLocale, t } = useI18n();
+  const [contentRevision, refreshContent] = useReducer((revision: number) => revision + 1, 0);
 
   const onSignOut = () => {
     auth.logout();
@@ -130,6 +131,7 @@ export function ShellLayout({
       isAuthenticated={Boolean(auth.tokens)}
       onSignOut={onSignOut}
       userMenu={userMenu}
+      refreshAction={{ label: t("nav.refresh_latest"), onRefresh: refreshContent }}
       locale={locale}
       setLocale={setLocale}
       t={t}
@@ -137,23 +139,25 @@ export function ShellLayout({
       localeNames={LOCALE_NAME}
       localeSwitcherAriaLabel={t("nav.locale_switcher_aria")}
     >
-      {demoMode ? (
-        <SpaceBetween size="m">
-          <Alert type="info" header={t("demo.banner_header")}>
-            <SpaceBetween size="xs">
-              <span>{t("demo.banner_body")}</span>
-              {demoParticipantUrl && (
-                <Link href={`${demoParticipantUrl}/?demo=1`} external>
-                  {t("demo.view_as_participant")}
-                </Link>
-              )}
-            </SpaceBetween>
-          </Alert>
-          {children}
-        </SpaceBetween>
-      ) : (
-        children
-      )}
+      <Fragment key={contentRevision}>
+        {demoMode ? (
+          <SpaceBetween size="m">
+            <Alert type="info" header={t("demo.banner_header")}>
+              <SpaceBetween size="xs">
+                <span>{t("demo.banner_body")}</span>
+                {demoParticipantUrl && (
+                  <Link href={`${demoParticipantUrl}/?demo=1`} external>
+                    {t("demo.view_as_participant")}
+                  </Link>
+                )}
+              </SpaceBetween>
+            </Alert>
+            {children}
+          </SpaceBetween>
+        ) : (
+          children
+        )}
+      </Fragment>
     </WebKitShellLayout>
   );
 }

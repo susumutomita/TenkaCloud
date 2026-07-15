@@ -1,5 +1,6 @@
 import createWrapper from "@cloudscape-design/components/test-utils/dom";
 import { render } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -85,6 +86,29 @@ describe("ShellLayout", () => {
     expect(mockSetLocale).toHaveBeenCalledWith("en");
   });
 
+  it("should remount the current route content when refreshing the latest state", () => {
+    mockAuth.mockReturnValue({ tokens: { idToken: "tok" }, logout });
+    let mountCount = 0;
+    function RouteContent() {
+      const [mountId] = useState(() => ++mountCount);
+      return <span>route-mount-{mountId}</span>;
+    }
+    const { container } = render(
+      <ShellLayout>
+        <RouteContent />
+      </ShellLayout>,
+    );
+
+    expect(container).toHaveTextContent("route-mount-1");
+    const refresh = must(
+      must(topNav(container).findUtility(1), "refresh utility").findButtonLinkType(),
+      "refresh button",
+    );
+    expect(refresh.getElement()).toHaveTextContent("nav.refresh_latest");
+    refresh.click();
+    expect(container).toHaveTextContent("route-mount-2");
+  });
+
   it("should group navigation by operator jobs and navigate via side links", () => {
     mockAuth.mockReturnValue({ tokens: { idToken: "tok" }, logout });
     mockDecode.mockReturnValue({ "custom:userRole": "TenantAdmin" });
@@ -141,9 +165,9 @@ describe("ShellLayout", () => {
     mockAuth.mockReturnValue({ tokens: { idToken: "tok" }, logout });
     mockDecode.mockReturnValue({ email: "user@example.com" });
     const { container } = renderShell();
-    // utilities = [locale(1), userMenu(2)]
+    // utilities = [refresh(1), locale(2), userMenu(3)]
     const userMenu = must(
-      must(topNav(container).findUtility(2), "utility 2").findMenuDropdownType(),
+      must(topNav(container).findUtility(3), "utility 3").findMenuDropdownType(),
       "user menu",
     );
     userMenu.openDropdown();
@@ -156,9 +180,9 @@ describe("ShellLayout", () => {
     mockAuth.mockReturnValue({ tokens: { idToken: "tok" }, logout });
     mockDecode.mockReturnValue(null); // no email → userMenuUtility undefined
     const { container } = renderShell();
-    // utilities = [locale(1), signout-button(2)]
+    // utilities = [refresh(1), locale(2), signout-button(3)]
     const signout = must(
-      must(topNav(container).findUtility(2), "utility 2").findButtonLinkType(),
+      must(topNav(container).findUtility(3), "utility 3").findButtonLinkType(),
       "signout button",
     );
     signout.click();

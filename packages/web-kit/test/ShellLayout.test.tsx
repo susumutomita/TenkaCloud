@@ -59,9 +59,11 @@ describe("ShellLayout", () => {
 
   it("should render the console identifier as the title and never truncate it behind the brand (#2662)", () => {
     const { topNav } = renderShell({ title: "Admin Console" });
-    expect(topNav.findTitle()?.getElement()).toHaveTextContent("Admin Console");
-    expect(topNav.findTitle()?.getElement().textContent).not.toContain("TenkaCloud");
+    const title = topNav.findTitle()?.getElement();
+    expect(title).toHaveTextContent("Admin Console");
+    expect(title?.textContent).not.toContain("TenkaCloud");
     expect(topNav.findLogo()?.getElement()).toHaveAttribute("alt", "TenkaCloud");
+    expect(topNav.getElement().closest(".tenkacloud-shell-top-navigation")).not.toBeNull();
   });
 
   it("should render the TenkaCloud brand lockup when the product title is omitted", () => {
@@ -82,6 +84,29 @@ describe("ShellLayout", () => {
     expect(utilities).toHaveLength(2);
     // 2 番目の utility は variant 無しの type:"button" = button-link type のサインアウト。
     expect(utilities[1]?.findButtonLinkType()).not.toBeNull();
+  });
+
+  it("should show an authenticated refresh action and invoke it from the header", () => {
+    const onRefresh = vi.fn();
+    const { topNav } = renderShell({
+      refreshAction: { label: "Refresh latest state", onRefresh },
+    });
+    const refresh = topNav.findUtilities()[0]?.findButtonLinkType();
+
+    expect(topNav.findUtilities()).toHaveLength(3);
+    expect(refresh?.getElement()).toHaveTextContent("Refresh latest state");
+    refresh?.click();
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("should not expose the refresh action while unauthenticated", () => {
+    const { topNav } = renderShell({
+      isAuthenticated: false,
+      refreshAction: { label: "Refresh latest state", onRefresh: vi.fn() },
+    });
+
+    expect(topNav.findUtilities()).toHaveLength(1);
+    expect(topNav.findUtilities()[0]?.findMenuDropdownType()).not.toBeNull();
   });
 
   it("should call onSignOut when the plain sign-out button is clicked", () => {

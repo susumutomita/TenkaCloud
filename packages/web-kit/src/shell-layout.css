@@ -1,0 +1,11 @@
+/*
+ * Cloudscape intentionally lets the identity flex item shrink before its
+ * responsive state moves utilities into the overflow menu. A long localized
+ * console title therefore receives CSS ellipsis even on a wide desktop header.
+ * Keep the visible identity at its intrinsic width; Cloudscape's own measured
+ * responsive states still hide the title or collapse utilities when the whole
+ * header genuinely cannot fit.
+ */
+.tenkacloud-shell-top-navigation header > div > :first-child {
+  flex-shrink: 0;
+}
