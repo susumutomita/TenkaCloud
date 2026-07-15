@@ -8,8 +8,10 @@
  *   - 副作用なし (= test 容易)
  *   - metadata 不在 / endpoint slot 宣言なしは空配列 (= plugin 側で `.map` で安全に処理可)
  *   - URL 結合失敗は context (problemId / slot / key) 付きで throw (= silent skip しない)
- *   - effectiveUrl は portal 側 endpoint registry (Phase 3.A) が override を返すまでは
- *     defaultUrl と同一値。 plugin から見ると "default が常に effective" になる初期 state。
+ *   - `buildPortalEndpointsFromOutputs` は CFn stackOutputs だけを見る override 非対応の経路で、
+ *     `effectiveUrl` は常に `defaultUrl` と同一。default URL が空になりうる問題では override が
+ *     反映されないため、[Issue #2661] 以降 ProblemDetail は server 集約の `buildPortalEndpointsFromServer`
+ *     を優先し、この fn は server endpoints 未取得時の fallback に降格した。
  */
 
 import type {
@@ -20,6 +22,7 @@ import type {
   PortalSlotProps,
 } from "@tenkacloud/portal-plugin-sdk";
 import { toErrorMessage } from "@tenkacloud/web-kit";
+import type { ParticipantEndpointView } from "../api/portal-client";
 import { findProblemMetadata } from "../data/problems";
 
 /**
@@ -34,9 +37,10 @@ function joinUrl(base: string, appendPath?: string): string {
 }
 
 /**
- * `metadata.endpoints[]` + deployment.stackOutputs から PortalEndpoint[] を組み立てる。
- * overrideUrl は本 fn では未対応 (= portal の endpoint registry API を後で wire-up する)。
- * URL 結合失敗時は context 付きで throw (= caller の ErrorBoundary に降ろす)。
+ * `metadata.endpoints[]` + deployment.stackOutputs から PortalEndpoint[] を組み立てる **fallback**。
+ * override は見ない (stackOutputs のみ)。override を反映するには server 集約の
+ * `buildPortalEndpointsFromServer` を使う ([Issue #2661])。この fn は server endpoints が
+ * まだ取得できていない初期 render 用。URL 結合失敗時は context 付きで throw (= caller の ErrorBoundary に降ろす)。
  */
 export function buildPortalEndpointsFromOutputs(
   problemId: string,
@@ -70,6 +74,28 @@ export function buildPortalEndpointsFromOutputs(
       ...(defaultUrl ? { defaultUrl, effectiveUrl: defaultUrl } : {}),
     };
   });
+}
+
+/**
+ * [Issue #2661] server (`listProblemEndpoints`) が返す `ParticipantEndpointView[]` を
+ * plugin SDK の `PortalEndpoint[]` に marshal する。server 側で override をマージ済なので、
+ * `buildPortalEndpointsFromOutputs` (= CFn stackOutputs のみ、override 非対応) と違い、
+ * default URL が空の override 前提問題でも `effectiveUrl` / `overrideUrl` が正しく入る。
+ * `defaultKey` は plugin 契約に無いので落とし、undefined field は exactOptionalPropertyTypes の
+ * ために conditional spread で除く。
+ */
+export function buildPortalEndpointsFromServer(
+  endpoints: readonly ParticipantEndpointView[],
+): readonly PortalEndpoint[] {
+  return endpoints.map((ep) => ({
+    slot: ep.slot,
+    overridable: ep.overridable,
+    ...(ep.label ? { label: ep.label } : {}),
+    ...(ep.description ? { description: ep.description } : {}),
+    ...(ep.defaultUrl ? { defaultUrl: ep.defaultUrl } : {}),
+    ...(ep.overrideUrl ? { overrideUrl: ep.overrideUrl } : {}),
+    ...(ep.effectiveUrl ? { effectiveUrl: ep.effectiveUrl } : {}),
+  }));
 }
 
 /**

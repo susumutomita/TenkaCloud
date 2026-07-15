@@ -18,6 +18,7 @@ const {
   mockFindMeta,
   mockNarrative,
   mockFindDiagram,
+  mockUseProblemEndpoints,
 } = vi.hoisted(() => ({
   mockNav: vi.fn(),
   mockParams: vi.fn(),
@@ -27,6 +28,7 @@ const {
   mockFindMeta: vi.fn(),
   mockNarrative: vi.fn(),
   mockFindDiagram: vi.fn(),
+  mockUseProblemEndpoints: vi.fn(),
 }));
 
 vi.mock("react-router", () => ({
@@ -55,12 +57,16 @@ vi.mock("../../src/components/EndpointOverrideForm", () => ({
 vi.mock("../../src/plugins/PortalPluginSlots", () => ({
   PortalPluginSlots: () => <div data-testid="plugin-slots" />,
 }));
+vi.mock("../../src/hooks/useProblemEndpoints", () => ({
+  useProblemEndpoints: mockUseProblemEndpoints,
+}));
 
 const {
   ProblemDetailPage,
   isProblemDetailLocked,
   canRenderProblemDetailBody,
   canRenderEndpointOverride,
+  shouldLoadEndpoints,
 } = await import("../../src/pages/ProblemDetail");
 
 const config = { apiBaseUrl: "https://api.example.com" } as AppConfig;
@@ -109,6 +115,13 @@ beforeEach(() => {
   mockFindMeta.mockReturnValue(undefined);
   mockFindDiagram.mockReturnValue(undefined);
   mockNarrative.mockReturnValue({ name: "Hello World", shortDescription: "Solve it" });
+  // [#2661] default は server endpoints 取得済 (= portalEndpoints の truthy 経路)。
+  mockUseProblemEndpoints.mockReturnValue({
+    endpoints: [{ slot: "app", overridable: true, defaultKey: "RegisteredUrl" }],
+    listError: undefined,
+    portalEndpoints: [{ slot: "app", overridable: true }],
+    replaceEndpoints: vi.fn(),
+  });
 });
 
 afterEach(() => vi.clearAllMocks());
@@ -131,6 +144,17 @@ describe("visibility helpers", () => {
     expect(canRenderEndpointOverride(base)).toBe(true);
     expect(canRenderEndpointOverride({ ...base, endpointCount: 0 })).toBe(false);
     expect(canRenderEndpointOverride({ ...base, hasMetadata: false })).toBe(false);
+  });
+
+  it("should load endpoints when overridable or when a dashboard plugin is present (#2661)", () => {
+    // biome-ignore lint/suspicious/noExplicitAny: dashboardSlots だけ見る helper に最小 metadata を渡す。
+    const withSlots = { dashboardSlots: { dashboard: ["s.tsx"] } } as any;
+    // biome-ignore lint/suspicious/noExplicitAny: 同上。
+    const noSlots = { dashboardSlots: undefined } as any;
+    expect(shouldLoadEndpoints(true, undefined)).toBe(true); // override 可能
+    expect(shouldLoadEndpoints(false, withSlots)).toBe(true); // plugin あり
+    expect(shouldLoadEndpoints(false, noSlots)).toBe(false); // どちらでもない
+    expect(shouldLoadEndpoints(false, undefined)).toBe(false); // metadata 不在
   });
 });
 
@@ -445,6 +469,20 @@ describe("ProblemDetailPage", () => {
     mockTeamView.mockReturnValue(teamView({ view: viewWith() }));
     renderPage();
     expect(screen.queryByTestId("plugin-slots")).not.toBeInTheDocument();
+  });
+
+  it("should still render both cards before server endpoints resolve (portalEndpoints undefined) (#2661)", () => {
+    // server endpoints 未取得 (undefined) の初期 render 経路。plugin は stackOutputs fallback を使う。
+    mockUseProblemEndpoints.mockReturnValue({
+      endpoints: undefined,
+      listError: undefined,
+      replaceEndpoints: vi.fn(),
+    });
+    mockFindMeta.mockReturnValue(meta());
+    mockTeamView.mockReturnValue(teamView({ view: viewWith() }));
+    renderPage();
+    expect(screen.getByTestId("endpoint-form")).toBeInTheDocument();
+    expect(screen.getByTestId("plugin-slots")).toBeInTheDocument();
   });
 
   it("should fall the session token back to empty when there is no auth session", () => {

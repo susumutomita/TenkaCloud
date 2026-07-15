@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ParticipantEndpointView } from "../../src/api/portal-client";
 import type { ProblemCatalogEntry } from "../../src/data/problems";
 import {
   buildPortalDisruptions,
   buildPortalEndpointsFromOutputs,
+  buildPortalEndpointsFromServer,
   buildPortalPhases,
   buildPortalTeam,
 } from "../../src/plugins/props-builder";
@@ -203,5 +205,61 @@ describe("buildPortalTeam (narrow undefined optionals for exactOptionalPropertyT
       teamName: "Alpha",
       teamId: "t1",
     });
+  });
+});
+
+describe("buildPortalEndpointsFromServer (#2661)", () => {
+  it("should marshal server endpoints to PortalEndpoint, keeping the override-merged URLs", () => {
+    const server: readonly ParticipantEndpointView[] = [
+      {
+        slot: "app",
+        overridable: true,
+        label: "App",
+        description: "the app",
+        defaultKey: "RegisteredUrl",
+        defaultUrl: "https://default.example/app",
+        overrideUrl: "https://team.example/app",
+        effectiveUrl: "https://team.example/app",
+      },
+    ];
+    expect(buildPortalEndpointsFromServer(server)).toEqual([
+      {
+        slot: "app",
+        overridable: true,
+        label: "App",
+        description: "the app",
+        defaultUrl: "https://default.example/app",
+        overrideUrl: "https://team.example/app",
+        effectiveUrl: "https://team.example/app",
+      },
+    ]);
+  });
+
+  it("should carry an override even when the default URL is empty (RegisteredUrl empty)", () => {
+    // StackStack: RegisteredUrl は意図的に空。 override があれば effectiveUrl は空にならない。
+    const server: readonly ParticipantEndpointView[] = [
+      {
+        slot: "app",
+        overridable: true,
+        defaultKey: "RegisteredUrl",
+        overrideUrl: "https://team.example/app",
+        effectiveUrl: "https://team.example/app",
+      },
+    ];
+    expect(buildPortalEndpointsFromServer(server)).toEqual([
+      {
+        slot: "app",
+        overridable: true,
+        overrideUrl: "https://team.example/app",
+        effectiveUrl: "https://team.example/app",
+      },
+    ]);
+  });
+
+  it("should drop absent optional fields (no default/override/effective) and the defaultKey", () => {
+    const server: readonly ParticipantEndpointView[] = [
+      { slot: "app", overridable: false, defaultKey: "RegisteredUrl" },
+    ];
+    expect(buildPortalEndpointsFromServer(server)).toEqual([{ slot: "app", overridable: false }]);
   });
 });

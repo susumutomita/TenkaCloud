@@ -17,6 +17,7 @@ import Box from "@cloudscape-design/components/box";
 import {
   PORTAL_SLOT_NAMES,
   type PortalCoordinationClient,
+  type PortalEndpoint,
   type PortalLocale,
   type PortalSlotProps,
 } from "@tenkacloud/portal-plugin-sdk";
@@ -45,6 +46,12 @@ interface PortalPluginSlotsProps {
     readonly eventId?: string;
   };
   readonly stackOutputs: Record<string, string>;
+  /**
+   * [Issue #2661] ProblemDetail が server (`listProblemEndpoints`) から得た override マージ済の
+   * endpoints。EndpointOverrideForm と同じ単一 source なので、両カードの service URL 表示が一致する。
+   * 未取得 (undefined) の初期 render では `stackOutputs` からの default 組み立てに fallback する。
+   */
+  readonly serverEndpoints?: readonly PortalEndpoint[];
   /** [#1420] coordination dispatcher の Function URL (= config.coordinationApiUrl)。 未配線なら省略。 */
   readonly coordinationApiUrl?: string;
   /** [#1420] team の session token (= bearer)。 coordinationClient の束縛に使う。 */
@@ -60,6 +67,7 @@ export function PortalPluginSlots({
   platform,
   team,
   stackOutputs,
+  serverEndpoints,
   coordinationApiUrl,
   sessionToken,
 }: PortalPluginSlotsProps) {
@@ -68,9 +76,12 @@ export function PortalPluginSlots({
   const phases = useMemo(() => buildPortalPhases(problemId), [problemId]);
   const disruptions = useMemo(() => buildPortalDisruptions(problemId), [problemId]);
   const coordination = useMemo(() => buildPortalCoordination(problemId), [problemId]);
+  // [Issue #2661] server 集約 (override マージ済) を優先。未取得の初期 render のみ stackOutputs
+  // から default を組み立てる fallback に落ちる (= default URL が空の override 前提問題では
+  // fallback は空 URL を返すが、server endpoints 取得後に override が反映される)。
   const endpoints = useMemo(
-    () => buildPortalEndpointsFromOutputs(problemId, stackOutputs),
-    [problemId, stackOutputs],
+    () => serverEndpoints ?? buildPortalEndpointsFromOutputs(problemId, stackOutputs),
+    [serverEndpoints, problemId, stackOutputs],
   );
   const teamProp = useMemo(() => buildPortalTeam(team), [team]);
   // [#1420] dispatcher URL + session が揃ったときだけ live coordination client を束縛する

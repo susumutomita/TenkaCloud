@@ -14,7 +14,10 @@ vi.mock("../../src/plugins/props-builder", () => ({
   buildPortalPhases: () => [],
   buildPortalDisruptions: () => [],
   buildPortalCoordination: () => undefined,
-  buildPortalEndpointsFromOutputs: () => [],
+  // [#2661] fallback は識別可能な sentinel を返し、 serverEndpoints 優先を区別できるようにする。
+  buildPortalEndpointsFromOutputs: () => [
+    { slot: "fallback", overridable: false, effectiveUrl: "https://stackoutputs.example" },
+  ],
   buildPortalTeam: (team: unknown) => team,
 }));
 
@@ -66,5 +69,41 @@ describe("PortalPluginSlots", () => {
     mockLoad.mockImplementation(onlyFirst(boom));
     render(<PortalPluginSlots {...props} />);
     await waitFor(() => expect(screen.getByText("plugin-string-failure")).toBeInTheDocument());
+  });
+
+  // [#2661] plugin に届く endpoints は「server (override マージ済) 優先、 未取得時のみ stackOutputs
+  // fallback」。 この 2 経路で plugin が受け取る effectiveUrl を pin する。
+  const endpointRenderer = () =>
+    lazy(() =>
+      Promise.resolve({
+        default: (p: { endpoints: readonly { readonly effectiveUrl?: string }[] }) => (
+          <div data-testid="ep">
+            {p.endpoints.map((e) => e.effectiveUrl ?? "none").join(",") || "empty"}
+          </div>
+        ),
+      }),
+    );
+
+  it("should pass server endpoints (override-merged) to the plugin over the fallback (#2661)", async () => {
+    mockLoad.mockImplementation(onlyFirst(endpointRenderer()));
+    render(
+      <PortalPluginSlots
+        {...props}
+        serverEndpoints={[
+          { slot: "app", overridable: true, effectiveUrl: "https://team.example/app" },
+        ]}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("ep")).toHaveTextContent("https://team.example/app"),
+    );
+  });
+
+  it("should fall back to the stackOutputs-derived endpoints when server endpoints are absent (#2661)", async () => {
+    mockLoad.mockImplementation(onlyFirst(endpointRenderer()));
+    render(<PortalPluginSlots {...props} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("ep")).toHaveTextContent("https://stackoutputs.example"),
+    );
   });
 });
