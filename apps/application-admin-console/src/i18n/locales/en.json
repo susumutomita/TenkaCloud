@@ -15,6 +15,7 @@
     "menu": "Menu",
     "user_menu_aria": "Menu for {userEmail}",
     "locale_switcher_aria": "Language switcher",
+    "refresh_latest": "Refresh latest state",
     "home": "Home",
     "events": "Events",
     "problems": "Problems",

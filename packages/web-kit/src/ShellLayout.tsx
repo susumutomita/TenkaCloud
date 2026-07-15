@@ -21,6 +21,7 @@ import TopNavigation, {
 } from "@cloudscape-design/components/top-navigation";
 import type { ReactNode } from "react";
 import { createTenkaCloudTopNavigationIdentity } from "./brand";
+import "./shell-layout.css";
 
 /** TopNav 右上に出すサインインユーザー menu (= application-admin-console の email dropdown)。 */
 export interface ShellUserMenu {
@@ -30,6 +31,14 @@ export interface ShellUserMenu {
   readonly ariaLabel: string;
   /** dropdown 内のサインアウト項目のラベル。 */
   readonly signOutLabel: string;
+}
+
+/** Optional app-level action that refreshes the currently displayed data. */
+export interface ShellRefreshAction {
+  /** Visible button text and accessible name. */
+  readonly label: string;
+  /** Refresh callback owned by the consuming app. */
+  readonly onRefresh: () => void;
 }
 
 export interface ShellLayoutProps<L extends string> {
@@ -51,6 +60,8 @@ export interface ShellLayoutProps<L extends string> {
   readonly onSignOut: () => void;
   /** 右上のユーザー menu。 指定時は plain な sign-out ボタンの代わりにこの dropdown を出す。 */
   readonly userMenu?: ShellUserMenu;
+  /** 認証済み header に表示する app-level refresh action。 */
+  readonly refreshAction?: ShellRefreshAction;
   /** 現在の locale。 */
   readonly locale: L;
   /** locale 切替 callback。 */
@@ -80,6 +91,7 @@ export function ShellLayout<L extends string>({
   isAuthenticated,
   onSignOut,
   userMenu,
+  refreshAction,
   locale,
   setLocale,
   t,
@@ -103,6 +115,17 @@ export function ShellLayout<L extends string>({
     onClick: onSignOut,
   };
 
+  const refreshUtility: TopNavigationProps.Utility | undefined = refreshAction
+    ? {
+        type: "button",
+        iconName: "refresh",
+        text: refreshAction.label,
+        ariaLabel: refreshAction.label,
+        disableTextCollapse: true,
+        onClick: refreshAction.onRefresh,
+      }
+    : undefined;
+
   const userMenuUtility: TopNavigationProps.Utility | undefined = userMenu
     ? {
         type: "menu-dropdown",
@@ -118,9 +141,14 @@ export function ShellLayout<L extends string>({
   return (
     <>
       <TopNavigation
+        className="tenkacloud-shell-top-navigation"
         identity={createTenkaCloudTopNavigationIdentity(title)}
         utilities={
-          isAuthenticated ? [localeUtility, userMenuUtility ?? signOutButton] : [localeUtility]
+          isAuthenticated
+            ? [refreshUtility, localeUtility, userMenuUtility ?? signOutButton].filter(
+                (utility): utility is TopNavigationProps.Utility => utility !== undefined,
+              )
+            : [localeUtility]
         }
       />
       <AppLayout

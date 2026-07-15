@@ -15,6 +15,7 @@
     "menu": "メニュー",
     "user_menu_aria": "{userEmail} のメニュー",
     "locale_switcher_aria": "言語切替 / Language",
+    "refresh_latest": "最新の状態に更新",
     "home": "ホーム",
     "events": "Events",
     "problems": "Problems",
