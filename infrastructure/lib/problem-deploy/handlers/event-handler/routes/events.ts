@@ -94,7 +94,7 @@ export function registerEventRoutes(app: Hono, shared: EventSharedResources): vo
     "/events/:eventId/teams/:teamId/rotate-login-key",
     withEventId(
       async ({ c, eventId }) => {
-        const teamId = c.req.param("teamId") ?? "";
+        const teamId = c.req.param("teamId");
         if (!ULID_RE.test(teamId)) {
           return c.json({ error: "invalid_team_id" }, StatusCodes.BAD_REQUEST);
         }

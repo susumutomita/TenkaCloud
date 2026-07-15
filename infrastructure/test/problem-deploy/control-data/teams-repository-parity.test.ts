@@ -20,6 +20,7 @@ import {
 import type {
   DeploymentRecord,
   DeploymentsRepository,
+  SqlExecutor,
 } from "../../../lib/problem-deploy/control-data/types";
 import { makeFakeDdb, makeSqliteExecutor } from "./control-data-write.test-helpers";
 
@@ -160,6 +161,16 @@ describe.each(backends)("TeamsRepository parity: %s", (name, makeRepo) => {
     expect(JSON.stringify(metadata)).not.toContain("DEPLOYMENT-HANDOFF-KEY");
   });
 
+  it("should reject deployment planning when a team has no login credential", async () => {
+    const repo = makeRepo();
+    const record = sampleRecord({ teamLoginKey: "" });
+    await repo.putTeam(record);
+
+    await expect(repo.listTeamsForDeployment(record.eventId)).rejects.toThrow(
+      /has no participant login credential/,
+    );
+  });
+
   it("should not list another event's teams", async () => {
     const repo = makeRepo();
     await repo.putTeam(sampleRecord({ eventId: "e-1", teamId: "t1", teamLoginKey: "k1" }));
@@ -280,6 +291,22 @@ describe("hashLoginKey (Issue #2290)", () => {
       ["01EVENTAAAAAAAAAAAAAAAAAAA", "01TEAMAAAAAAAAAAAAAAAAAAAA"],
     );
     expect(row?.login_key_hash).toBeNull();
+  });
+
+  it("should reject a malformed stored SQL login-key hash during deployment planning", async () => {
+    const executor = makeSqliteExecutor();
+    const repository = new SqlTeamsRepository(executor);
+    const record = sampleRecord();
+    await repository.putTeam(record);
+    await executor.run("UPDATE teams SET login_key_hash = ? WHERE event_id = ? AND team_id = ?", [
+      "not-a-sha256-digest",
+      record.eventId,
+      record.teamId,
+    ]);
+
+    await expect(repository.listTeamsForDeployment(record.eventId)).rejects.toThrow(
+      /has no participant login credential/,
+    );
   });
 
   it("should scrub a legacy plaintext login key from payloads and never return it on point reads", async () => {
@@ -444,6 +471,37 @@ describe("DynamoDbTeamsRepository rotation errors", () => {
     await expect(repository.rotateLoginKey(input)).resolves.toEqual({ outcome: "conflict" });
   });
 
+  it("should require a deployments table before rotating deployment indexes", async () => {
+    const repository = new DynamoDbTeamsRepository(makeFakeDdb(), "Teams");
+    await expect(
+      repository.rotateLoginKey({
+        ...input,
+        deployments: [{ jobId: "job-1", createdAt: "2026-07-15T00:00:00.000Z" }],
+      }),
+    ).rejects.toThrow(/requires a deployments table name/);
+  });
+
+  it("should propagate a transaction cancellation that has no cancellation reasons", async () => {
+    const error = Object.assign(new Error("transaction cancelled"), {
+      name: "TransactionCanceledException",
+    });
+    const repository = new DynamoDbTeamsRepository(
+      { send: async () => Promise.reject(error) } as never,
+      "Teams",
+      "Deployments",
+    );
+    await expect(repository.rotateLoginKey(input)).rejects.toBe(error);
+  });
+
+  it("should propagate a non-Error rejection", async () => {
+    const repository = new DynamoDbTeamsRepository(
+      { send: async () => Promise.reject("transaction failed") } as never,
+      "Teams",
+      "Deployments",
+    );
+    await expect(repository.rotateLoginKey(input)).rejects.toBe("transaction failed");
+  });
+
   it("should propagate capacity cancellation instead of misreporting a data conflict", async () => {
     const error = Object.assign(new Error("capacity exhausted"), {
       name: "TransactionCanceledException",
@@ -455,5 +513,71 @@ describe("DynamoDbTeamsRepository rotation errors", () => {
       "Deployments",
     );
     await expect(repository.rotateLoginKey(input)).rejects.toBe(error);
+  });
+});
+
+describe("SqlTeamsRepository rotation errors", () => {
+  const input = {
+    tenantId: "tenant-a",
+    eventId: "event-a",
+    teamId: "team-a",
+    newLoginKey: "NEW-KEY",
+    updatedAt: "2026-07-15T12:00:00.000Z",
+    deployments: [] as const,
+  };
+
+  function sqlWithBatchError(error: unknown): SqlExecutor {
+    return {
+      ...makeSqliteExecutor(),
+      batch: () => {
+        throw error;
+      },
+    };
+  }
+
+  it("should classify a libSQL extended constraint code as a conflict", async () => {
+    const error = Object.assign(new Error("constraint rejected"), {
+      code: "SQLITE_CONSTRAINT",
+      extendedCode: "SQLITE_CONSTRAINT_UNIQUE",
+    });
+    const repository = new SqlTeamsRepository(sqlWithBatchError(error));
+
+    await expect(repository.rotateLoginKey(input)).resolves.toEqual({ outcome: "conflict" });
+  });
+
+  it("should propagate an unrelated SQL error", async () => {
+    const error = new Error("database unavailable");
+    const repository = new SqlTeamsRepository(sqlWithBatchError(error));
+
+    await expect(repository.rotateLoginKey(input)).rejects.toBe(error);
+  });
+
+  it("should propagate a non-Error SQL rejection", async () => {
+    const repository = new SqlTeamsRepository(sqlWithBatchError("database unavailable"));
+
+    await expect(repository.rotateLoginKey(input)).rejects.toBe("database unavailable");
+  });
+});
+
+describe("MirroredTeamsRepository rotation errors", () => {
+  it("should fail loudly when the replica conflicts after the canonical update", async () => {
+    const canonical = {
+      rotateLoginKey: async () => ({ outcome: "updated" as const }),
+    } as TeamsRepository;
+    const replica = {
+      rotateLoginKey: async () => ({ outcome: "conflict" as const }),
+    } as TeamsRepository;
+    const repository = new MirroredTeamsRepository(canonical, replica);
+
+    await expect(
+      repository.rotateLoginKey({
+        tenantId: "tenant-a",
+        eventId: "event-a",
+        teamId: "team-a",
+        newLoginKey: "NEW-KEY",
+        updatedAt: "2026-07-15T12:00:00.000Z",
+        deployments: [],
+      }),
+    ).rejects.toThrow(/replica conflict after canonical update/);
   });
 });
