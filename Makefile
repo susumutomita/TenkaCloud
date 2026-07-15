@@ -13,7 +13,7 @@ export JSII_DEPRECATED := quiet
         fix fix-md fix-text fix-format format \
         harness harness-test tech-debt \
         pack-init pack-validate pack-install pack-activate pack-deactivate pack-list \
-        env-check env-check-lite env-init turso-live-guide turso-live-preflight turso-live-verify-cfn \
+        env-check env-check-lite env-init turso-live turso-live-guide turso-live-preflight turso-live-verify-cfn \
         deploy deploy-saas destroy destroy-saas \
         deploy-battles destroy-battles \
         deploy-always-on-command destroy-always-on-command synth-always-on-command \
@@ -22,47 +22,55 @@ export JSII_DEPRECATED := quiet
         doctor local-onboard local local-up local-portal local-down local-status local-list local-evaluate local-reset local-snapshot-export local-snapshot-import local-disrupt ensure-deps
 
 help:
-	@awk '/^# =====/ {gsub(/^# ===== | =====$$/, ""); printf "\n%s\n", $$0} \
-	      /^[a-z][a-zA-Z0-9_-]*:/ && !/^help:/ {sub(/:.*/, ""); printf "  %s\n", $$0}' Makefile
+	@awk 'BEGIN {FS = ":.*## "} \
+	      /^# =====/ {gsub(/^# ===== | =====$$/, ""); printf "\n%s\n", $$0} \
+	      /^[a-z][a-zA-Z0-9_-]*:.*## / {printf "  %-30s %s\n", $$1, $$2}' Makefile
 
 # ===== Setup / Build =====
-install:
+install: ## 開発依存関係を安全設定でインストール
 	# --ignore-scripts: defuse mini-shai-hulud 2nd wave (Flatt Tech, 2026-05-12).
 	# bun does not honour npm_config_ignore_scripts or .npmrc's ignore-scripts,
 	# so the flag is required on every invocation. Husky's `prepare` is skipped
 	# along with everything else, so we re-bootstrap it explicitly afterwards.
 	bun install --ignore-scripts
 	bun x husky
-install_ci:    ; bun install --frozen-lockfile --ignore-scripts
+install_ci: ## lockfile固定・script無効でCI依存関係をインストール
+	bun install --frozen-lockfile --ignore-scripts
 # Manual on-demand bump of the problems/ submodule to its tracked branch tip (.gitmodules branch=main).
 # Leaves the bump *staged* for you to review + commit; the scheduled submodule-sync workflow does the
 # same automatically as its own PR. Pre-commit only *syncs* the worktree to the pin, it never bumps.
-submodule-latest:
+submodule-latest: ## 問題カタログsubmoduleを最新版へ更新してstage
 	git submodule update --remote --recursive problems
 	@git diff --quiet -- problems \
 		&& echo "problems already at the latest pin." \
 		|| { git add problems; echo "problems bumped + staged — review the submodule diff, then commit."; }
-build:         ; bun run build
-typecheck:     ; bun run typecheck
-test:          ; bun run test
-test-coverage: ; bun run test:coverage
+build: ## 全アプリとinfrastructureをbuild
+	bun run build
+typecheck: ## 全workspaceのTypeScript型検査
+	bun run typecheck
+test: ## 全workspaceのテストを実行
+	bun run test
+test-coverage: ## 全coverage shardを直列実行
+	bun run test:coverage
 # Issue #2515: fast path for script/CLI-only changes (scripts/**/*.ts, infrastructure/test/scripts/*)
 # that never touch CDK constructs — runs just that directory, skipping every other workspace and
 # every CDK-synth test file. No architecture-invariant / coverage guarantee: it's a quick local
 # sanity check before `make before-commit`, not a substitute for it.
-test-scripts:  ; bun run --filter '@TenkaCloud/infrastructure' test test/scripts
+test-scripts: ## script・CLI関連テストだけを高速実行
+	bun run --filter '@TenkaCloud/infrastructure' test test/scripts
 # Issues #1295 / #1551: vitest setup pins CDK_OUTDIR to the repo-local
 # infrastructure/cdk.out/test-synth/<run>/<worker>. The wrapper purges only its own successful run;
 # interrupted, failed, and direct invocations are preserved and reported for manual inspection.
 # 依存パッケージの lifecycle script 監査 (mini Shai-Hulud 2nd 対策)。 CI が走らせる。
-audit-deps:    ; bun run audit:dependencies
+audit-deps: ## 依存packageのlifecycle script差分を監査
+	bun run audit:dependencies
 # Pre-PR gate for the product BODY, run by the pre-commit hook. 品質ゲート (HTTP magic number /
 # template / coverage / IAM ASCII / merge / submodule) は本体と混ぜないため
 # .claude/skills/quality-gates へ分離済み — pre-commit フックが before-commit とは別呼び出しで
 # runner を走らせ、CI は --ci グループを走らせる。
 GATE_CHECKS := lint test
 
-before-commit: $(GATE_CHECKS)
+before-commit: $(GATE_CHECKS) ## commit前のlintと全テストを実行
 
 # Issue #2219: `before-commit` (lint + test) is a fast pre-push sanity check, not a full CI
 # mirror — CI (.github/workflows/ci.yml) additionally runs audit-deps / the submodule pin
@@ -75,7 +83,7 @@ before-commit: $(GATE_CHECKS)
 # with the `ci` job. `test-coverage` below (and `ci-local`, which chains it) instead runs all
 # 3 shards serially in one process — same checks, same workspace set, intentionally different
 # parallelism.
-ci-local:
+ci-local: ## GitHub Actions相当の全gateをローカル実行
 	git fetch --no-tags origin main:refs/remotes/origin/main
 	git -C problems fetch --no-tags --unshallow origin 2>/dev/null || git -C problems fetch --no-tags origin || true
 	$(MAKE) audit-deps
@@ -89,34 +97,43 @@ ci-local:
 	$(MAKE) build
 
 # ===== Lint / Fix =====
-lint:   lint-md lint-text lint-format
-fix:    fix-md  fix-text  fix-format
-format: fix
+lint: lint-md lint-text lint-format ## Markdown・文章・code formatを検査
+fix: fix-md fix-text fix-format ## lint可能な問題を一括修正
+format: fix ## fixと同じ一括整形を実行
 
-lint-md:     ; bun run lint:md
-lint-text:   ; bun run lint:text
-lint-format: ; bun run lint:format
-fix-md:      ; bun run fix:md
-fix-text:    ; bun run fix:text
-fix-format:  ; bun run fix:format
+lint-md: ## Markdown規約を検査
+	bun run lint:md
+lint-text: ## 日本語・技術文章規約を検査
+	bun run lint:text
+lint-format: ## Biomeでcode formatを検査
+	bun run lint:format
+fix-md: ## Markdown規約違反を自動修正
+	bun run fix:md
+fix-text: ## 文章規約違反を自動修正
+	bun run fix:text
+fix-format: ## Biomeでcode formatを自動修正
+	bun run fix:format
 
 # ===== Harness =====
 HARNESS := bun run .claude/harness/bin
-harness:      ; $(HARNESS)/architecture.ts --staged --fail-on=error
-harness-test: ; cd .claude/harness && bun vitest run
-tech-debt:    ; $(HARNESS)/tech-debt.ts
+harness: ## architecture invariant違反を検査
+	$(HARNESS)/architecture.ts --staged --fail-on=error
+harness-test: ## harness自身のunit testを実行
+	cd .claude/harness && bun vitest run
+tech-debt: ## tech debt backlogを生成
+	$(HARNESS)/tech-debt.ts
 
-# ===== Problem catalog validation (#2254) =====
+# ===== Problem catalog validation =====
 # Run the catalog authoring-contract validator (schema + the bilingual-README invariant from
 # TenkaCloudChallenge #136: each problem dir must carry non-empty, non-symlink README.md +
 # README.ja.md) against the platform's problems/ mirror. This makes a README-less / schema-invalid
 # problem fail platform CI too — not only the catalog repo's own CI — closing the drift #2254 flags.
 # problems/ is a git submodule (not a workspace member), so its own deps (ajv etc.) install here.
-validate-problems:
+validate-problems: ## 問題catalogのschemaと日英READMEを検証
 	git submodule update --init problems
 	cd problems && bun install --frozen-lockfile --ignore-scripts && bun run scripts/validate-problems.ts
 
-# ===== Problem Packs (#2088, author-side CLI, Issue #2460) =====
+# ===== Problem Packs (author-side CLI) =====
 # Thin delegation to the offline `pack` CLI (infrastructure/lib/problem-pack/pack-cli.ts,
 # entry infrastructure/bin/tenkacloud-pack.ts). ARGS carries the subcommand's own
 # positionals/flags verbatim — this Makefile never parses pack syntax itself. Examples:
@@ -138,12 +155,18 @@ validate-problems:
 # infrastructure/.tenkacloud/pack-store where nothing reads them.
 PACK := ./node_modules/.bin/tsx infrastructure/bin/tenkacloud-pack.ts
 
-pack-init:       ; $(PACK) init $(ARGS)
-pack-validate:   ; $(PACK) validate $(ARGS)
-pack-install:    ; $(PACK) install $(ARGS)
-pack-activate:   ; $(PACK) activate $(ARGS)
-pack-deactivate: ; $(PACK) deactivate $(ARGS)
-pack-list:       ; $(PACK) list $(ARGS)
+pack-init: ## 問題packの雛形を作成
+	$(PACK) init $(ARGS)
+pack-validate: ## 問題packのmanifestとassetを検証
+	$(PACK) validate $(ARGS)
+pack-install: ## 問題packをlocal storeへinstall
+	$(PACK) install $(ARGS)
+pack-activate: ## install済みpackをtenantで有効化
+	$(PACK) activate $(ARGS)
+pack-deactivate: ## tenantの問題packを無効化
+	$(PACK) deactivate $(ARGS)
+pack-list: ## install済み問題packを一覧表示
+	$(PACK) list $(ARGS)
 
 # ===== CDK =====
 # 環境切替。make deploy ENV=production 等で上書き可能。デフォルトは development。
@@ -171,7 +194,7 @@ CDK_PARAM_S3_BUCKET_NAME ?= $(if $(and $(strip $(AWS_ACCOUNT_ID)),$(TC_SOURCE_RE
 CDK_SOURCE_NAME ?= source.zip
 CDK_PARAM_COMMIT_ID ?= placeholder
 
-env-check:
+env-check: ## SaaS deploy用の環境設定を検証
 	@[ -f "$(ENV_FILE)" ] || { \
 		echo "ERROR: $(ENV_FILE) が存在しません。"; \
 		echo "       cp infrastructure/environments/$(ENV)/.env.example infrastructure/environments/$(ENV)/.env"; \
@@ -186,7 +209,7 @@ env-check:
 # ただし Application Admin Console にログインする tenant admin の email は必須 (= deploy
 # 後に Cognito UserPool へ admin-create-user で 1 user を起こすため、 無いとログイン不能)。
 # 互換のため SYSTEM_ADMIN_EMAIL でも fallback 可。
-env-check-lite:
+env-check-lite: ## Lite deploy用の環境設定を検証
 	@[ -f "$(ENV_FILE)" ] || { \
 		echo "ERROR: $(ENV_FILE) が存在しません。"; \
 		echo "       make env-init  で対話 wizard から生成できます (Issue #1345)、 または"; \
@@ -207,7 +230,7 @@ env-check-lite:
 			if [ -n "$${missing}" ]; then \
 				echo "ERROR: CDK_PARAM_CONTROL_DATA_BACKEND=$${CDK_PARAM_CONTROL_DATA_BACKEND} には以下が $(ENV_FILE) に必要です:"; \
 				for v in $${missing}; do echo "       $${v}"; done; \
-				echo "       make turso-live-guide ENV=$(ENV) で初回ライブ検証の全手順を確認してください"; \
+				echo "       make turso-live ENV=$(ENV) で対話設定を開始してください"; \
 				exit 1; \
 			fi \
 			;; \
@@ -216,19 +239,22 @@ env-check-lite:
 # Issue #1345: Lite mode の first-run UX。 .env.example を読んで対話的に必須 3 vars
 # (TENANT_ADMIN_EMAIL / AWS_REGION / CDK_PARAM_DEPLOY_EXTERNAL_ID) を埋め、
 # infrastructure/environments/$(ENV)/.env を生成する。 既存 .env があれば skip。
-env-init:
+env-init: ## Lite用.envを対話wizardで作成
 	@ENV=$(ENV) bun run scripts/ops/env-init.ts
 
 # Issue #2617: Turso pure-SQL profile の初回 live E2E を「資料を探す」状態から、1 本の
 # discoverable な導線へまとめる。guide は副作用なし、preflight / verify-cfn は AWS read-only。
 # deploy は CLI 側で exact confirmation を要求し、destroy は意図的に内包しない。
-turso-live-guide:
+turso-live: ## Turso/AWSの初回live検証wizardを開始
+	@ENV=$(ENV) bun run tenkacloud turso-live
+
+turso-live-guide: ## Turso live検証の手順だけを表示
 	@ENV=$(ENV) bun run tenkacloud turso-live guide
 
-turso-live-preflight: env-check-lite
+turso-live-preflight: env-check-lite ## Turso/AWS/SSM設定をread-only検証
 	@ENV=$(ENV) bun run tenkacloud turso-live preflight
 
-turso-live-verify-cfn:
+turso-live-verify-cfn: ## deploy済みstackとDynamoDB 0件を検証
 	@ENV=$(ENV) bun run tenkacloud turso-live verify-cloudformation
 
 # Issue #955: デフォルトの make deploy は Lite (= single-tenant) mode。
@@ -241,23 +267,26 @@ turso-live-verify-cfn:
 # `problems/**/metadata.json` を取り込む (apps/*/src/data/problems.ts) ため、 submodule を
 # 最新化しても SPA を再 build しないと dist が古いカタログのまま deploy され、 新規問題が
 # 取り込まれない。 そのため deploy 系は build を prereq 化する。
-deploy:               env-check-lite build ; bun run scripts/tenkacloud-lite.ts up
+deploy: env-check-lite build ## Lite modeをAWSへdeploy
+	bun run scripts/tenkacloud-lite.ts up
 # ref の install.sh 準拠の orchestration (= SaaS mode、 SBT ControlPlane を立てる):
 #   1. S3 source bucket (serverless-saas-${ACCOUNT_ID}-${REGION}) を作成
 #   2. infrastructure/ を source.zip にして S3 に upload
 #   3. cdk bootstrap + cdk deploy --all (ControlPlane + Bootstrap + Tenant-pooled)
 #   4. client/client-template deploy (CloudFront + S3 for Admin/Application UI)
-deploy-saas:          env-check
+deploy-saas: env-check ## multi-tenant SaaS modeをAWSへdeploy
 	@cd scripts && bash install.sh "$${SYSTEM_ADMIN_EMAIL}"
 
-destroy:              env-check-lite  ; bun run scripts/tenkacloud-lite.ts down
-destroy-saas:         env-check       ; bash scripts/cleanup.sh
+destroy: env-check-lite ## Lite modeのAWS resourceを削除
+	bun run scripts/tenkacloud-lite.ts down
+destroy-saas: env-check ## SaaS modeのAWS resourceを削除
+	bash scripts/cleanup.sh
 
 # ===== Local dev (no AWS) =====
 # Issue #2228: AGENTS.md "SPA dev servers" documented this target before it existed.
 # Starts all 3 SPA dev servers in parallel (admin-console :5173 / application-admin-console
 # :5174 / participant-portal :5175). Ctrl-C stops all three (bun --parallel propagates SIGINT).
-dev:
+dev: ## 3つのSPA dev serverをAWSなしで起動
 	bun run scripts/ops/participant-portal-runtime-config.ts --cloud-mode mock
 	bun run --filter '@TenkaCloud/admin-console' --filter '@TenkaCloud/application-admin-console' --filter '@TenkaCloud/participant-portal' --parallel dev
 
@@ -269,11 +298,11 @@ dev:
 #     bundling, #1446) + the IAM Description ASCII gate (#664) that only sees synth output.
 #     This is the "infra changes carry extra care" verification step AGENTS.md's Role
 #     split section points agents at.
-synth:
+synth: ## 全CDK stackをbundle込みでsynth
 	$(CDK) synth --all --quiet
 
 check-synth: export CDK_SKIP_BUNDLING := 1
-check-synth:
+check-synth: ## 高速CDK synthとIAM ASCII検査を実行
 	$(CDK) synth --all --quiet
 	bun run .claude/skills/quality-gates/scripts/check-synth-iam-ascii.ts
 
@@ -292,7 +321,7 @@ ONBOARD_FLAGS := $(if $(YES),--yes,)
 
 # Issue #2119: report-only prerequisite diagnosis (mise trust / submodule / bun /
 # Docker Compose / daemon). Installs nothing.
-doctor:
+doctor: ## local playの前提環境を変更せず診断
 	@command -v bun >/dev/null 2>&1 || { \
 	  echo "Bun is required for diagnostics."; \
 	  echo "  Install: (macOS) brew install oven-sh/bun/bun   (Linux) curl -fsSL https://bun.sh/install | bash"; \
@@ -302,7 +331,7 @@ doctor:
 # Issue #2119: optional guided setup. This is the only local-play target that
 # offers to trust mise, install Bun, initialize the problems/ submodule, or help
 # with Docker setup. Keep `make local` itself lightweight and non-installing.
-local-onboard:
+local-onboard: ## local playの不足toolを対話形式で導入
 	@sh scripts/onboard/onboard-bootstrap.sh $(ONBOARD_FLAGS)
 	@# The bootstrap may have JUST installed bun into ~/.bun/bin; this recipe line
 	@# runs in a fresh shell whose PATH predates that install, so prefix it.
@@ -320,55 +349,55 @@ ensure-deps:
 
 # Issue #2054 / #2392 / #2511: start the detached local scoring API, then the
 # browser portal. `local-up` remains the API-only escape hatch for scripts.
-local:
+local: ## ローカル問題演習のAPIとportalを起動
 	@bun run tenkacloud local $(if $(PROBLEM),--problem "$(PROBLEM)",) $(if $(LOCAL_API_PORT),--api-port "$(LOCAL_API_PORT)",)
 
-local-up:
+local-up: ## ローカル採点APIだけを起動
 	@bun run tenkacloud local up $(if $(PROBLEM),--problem "$(PROBLEM)",) $(if $(LOCAL_API_PORT),--api-port "$(LOCAL_API_PORT)",)
 
-local-portal:
+local-portal: ## 起動済みlocal APIへportalを接続
 	@bun run tenkacloud local portal
 
-local-down:
+local-down: ## local playのprocessとcontainerを停止
 	@bun run tenkacloud local down
 
-local-status:
+local-status: ## local playの起動状態を表示
 	@bun run tenkacloud local status
 
 # Issue #2188: list local-play problems (id / category / display name) for
 # players who want to pre-start one by id.
-local-list:
+local-list: ## 利用可能なlocal問題を一覧表示
 	@bun run tenkacloud local list
 
-local-evaluate:
+local-evaluate: ## FLAGをlocal採点APIへ提出
 	@if [ -z "$(FLAG)" ]; then \
 	  echo "error: FLAG is required. Example: make local-evaluate FLAG='TC{...}'" >&2; \
 	  exit 1; \
 	fi
 	@bun run tenkacloud local evaluate "$(FLAG)"
 
-local-reset:
+local-reset: ## 指定したlocal問題の状態を初期化
 	@if [ -z "$(PROBLEM)" ]; then \
 	  echo "error: PROBLEM is required. Example: make local-reset PROBLEM=hello-world" >&2; \
 	  exit 1; \
 	fi
 	@bun run tenkacloud local reset "$(PROBLEM)"
 
-local-snapshot-export:
+local-snapshot-export: ## local問題のsnapshotを保存
 	@if [ -z "$(PROBLEM)" ]; then \
 	  echo "error: PROBLEM is required. Example: make local-snapshot-export PROBLEM=hello-world SNAPSHOT=before-change" >&2; \
 	  exit 1; \
 	fi
 	@SNAPSHOT="$(SNAPSHOT)" bun run tenkacloud local snapshot-export "$(PROBLEM)"
 
-local-snapshot-import:
+local-snapshot-import: ## 保存済みsnapshotをlocal問題へ復元
 	@if [ -z "$(PROBLEM)" ]; then \
 	  echo "error: PROBLEM is required. Example: make local-snapshot-import PROBLEM=hello-world SNAPSHOT=before-change" >&2; \
 	  exit 1; \
 	fi
 	@SNAPSHOT="$(SNAPSHOT)" bun run tenkacloud local snapshot-import "$(PROBLEM)"
 
-local-disrupt:
+local-disrupt: ## local battleへ障害を注入
 	@if [ -z "$(PROBLEM)" ] || [ -z "$(DISRUPTION)" ]; then \
 	  echo "error: PROBLEM and DISRUPTION are required. Example: make local-disrupt PROBLEM=hello-world-battle DISRUPTION=frontend-down" >&2; \
 	  exit 1; \
@@ -381,7 +410,7 @@ local-disrupt:
 # wrong image, an unhealthy service, or a full Docker VM disk). Preflights the VM
 # disk so a full disk is reported plainly instead of a cryptic 502 start_failed.
 # Defaults to a light single-container problem; override with PROBLEM=<id>.
-local-smoke:
+local-smoke: ## 代表問題を起動・health確認・停止までsmoke test
 	@$(MAKE) ensure-deps
 	@PROBLEM="$(PROBLEM)" bun run scripts/local-play/local-smoke.ts
 
@@ -399,20 +428,20 @@ local-smoke:
 #   make deploy-battles BATTLES="problems/battles/security-battle-royale" TEAM_SLUG=alpha
 TEAM_SLUG ?= demo-team
 
-deploy-battles:
+deploy-battles: ## 指定した問題templateをAWSへsmoke deploy
 	@if [ -z "$(BATTLES)" ]; then \
 	  echo "error: BATTLES が未指定。例: make deploy-battles BATTLES=\"problems/battles/security-battle-royale\"" >&2; \
 	  exit 1; \
 	fi
 	@TEAM_SLUG="$(TEAM_SLUG)" bash scripts/deploy-battles.sh $(BATTLES)
-destroy-battles:
+destroy-battles: ## smoke deployした問題stackを削除
 	@if [ -z "$(BATTLES)" ]; then \
 	  echo "error: BATTLES が未指定。例: make destroy-battles BATTLES=\"problems/battles/security-battle-royale\"" >&2; \
 	  exit 1; \
 	fi
 	@TEAM_SLUG="$(TEAM_SLUG)" bash scripts/destroy-battles.sh $(BATTLES)
 
-# ===== Always-On OIDC command seam (ADR-050 / #2555) =====
+# ===== Always-On OIDC command seam (ADR-050) =====
 # Worker (slice A の OIDC IdP) を IAM OIDC provider として登録し、frozen `tenkacloud.deploy` を
 # `events:PutEvents` する以外なにもできない federated role `tenkacloud-alwayson-command` を立てる。
 # event 非依存の singleton bootstrap (bin/tenkacloud-always-on-command.ts)。
@@ -429,7 +458,7 @@ destroy-battles:
 #     CDK_PARAM_EVENT_BUS_ARN=arn:aws:events:ap-northeast-1:123456789012:event-bus/...
 ALWAYS_ON_COMMAND_APP := bunx tsx bin/tenkacloud-always-on-command.ts
 
-deploy-always-on-command:
+deploy-always-on-command: ## Always-On OIDC command seamをdeploy
 	@if [ -z "$${CDK_PARAM_ALWAYS_ON_ISSUER_URL}" ]; then \
 	  echo "error: CDK_PARAM_ALWAYS_ON_ISSUER_URL が未指定 (= OIDC discovery を配信する Worker origin)。" >&2; \
 	  echo "  例: make deploy-always-on-command CDK_PARAM_ALWAYS_ON_ISSUER_URL=https://<worker>.workers.dev" >&2; \
@@ -442,17 +471,17 @@ deploy-always-on-command:
 	$(CDK) deploy --app "$(ALWAYS_ON_COMMAND_APP)" --all $(APPROVAL)
 
 synth-always-on-command: export CDK_SKIP_BUNDLING := 1
-synth-always-on-command:
+synth-always-on-command: ## Always-On OIDC command seamをsynth
 	$(CDK) synth --app "$(ALWAYS_ON_COMMAND_APP)" --all --quiet
 
-destroy-always-on-command:
+destroy-always-on-command: ## Always-On OIDC command seamを削除
 	@if [ -z "$${CDK_PARAM_ALWAYS_ON_ISSUER_URL}" ] || [ -z "$${CDK_PARAM_EVENT_BUS_ARN}" ]; then \
 	  echo "error: CDK_PARAM_ALWAYS_ON_ISSUER_URL / CDK_PARAM_EVENT_BUS_ARN が未指定 (destroy も app synth のため必須)。" >&2; \
 	  exit 1; \
 	fi
 	$(CDK) destroy --app "$(ALWAYS_ON_COMMAND_APP)" --all --force
 
-# ===== Always-On per-event runtime (ADR-049 Phase 4 / #2363) =====
+# ===== Always-On per-event runtime (ADR-049 Phase 4) =====
 # command seam (上) は event 非依存の singleton。ここは event ごとに立て/畳む per-event runtime stack
 # (bin/tenkacloud-always-on-runtime.ts)。stack id は tenkacloud-event-runtime-<eventId> で、
 # deploy/destroy とも **その 1 stack のみ** を対象にする (`--all` は使わない = 他 event / command seam を
@@ -464,7 +493,7 @@ destroy-always-on-command:
 ALWAYS_ON_RUNTIME_APP := bunx tsx bin/tenkacloud-always-on-runtime.ts
 ALWAYS_ON_RUNTIME_STACK := tenkacloud-event-runtime-$(CDK_PARAM_ALWAYS_ON_EVENT_ID)
 
-deploy-always-on-runtime:
+deploy-always-on-runtime: ## event単位のAlways-On runtimeをdeploy
 	@if [ -z "$${CDK_PARAM_ALWAYS_ON_EVENT_ID}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_TENANT_ID}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_EXPIRES_AT}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_DEPLOYMENTS_TABLE_NAME}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_EVENTS_TABLE_NAME}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_ENDPOINTS_TABLE_NAME}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_CONTROL_PLANE_URL}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_RUNTIME_FEED_TOKEN_PARAMETER}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_ARCHIVE_BUCKET_NAME}" ]; then \
 	  echo "error: Always-On runtime lifecycle/scoring の必須 CDK_PARAM が不足しています。docs/always-on/README.md を確認してください (#2294)。" >&2; \
 	  exit 1; \
@@ -472,10 +501,10 @@ deploy-always-on-runtime:
 	$(CDK) deploy --app "$(ALWAYS_ON_RUNTIME_APP)" "$(ALWAYS_ON_RUNTIME_STACK)" $(APPROVAL)
 
 synth-always-on-runtime: export CDK_SKIP_BUNDLING := 1
-synth-always-on-runtime:
+synth-always-on-runtime: ## event単位のAlways-On runtimeをsynth
 	$(CDK) synth --app "$(ALWAYS_ON_RUNTIME_APP)" "$(ALWAYS_ON_RUNTIME_STACK)" --quiet
 
-archive-always-on-runtime:
+archive-always-on-runtime: ## runtime score eventをS3へarchive
 	@set -eu; \
 	function_name=$$(aws cloudformation describe-stacks \
 	  --stack-name "$(ALWAYS_ON_RUNTIME_STACK)" \
@@ -502,7 +531,7 @@ archive-always-on-runtime:
 	  exit 1; \
 	fi
 
-destroy-always-on-runtime:
+destroy-always-on-runtime: ## event単位のAlways-On runtimeを削除
 	@if [ -z "$${CDK_PARAM_ALWAYS_ON_EVENT_ID}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_TENANT_ID}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_EXPIRES_AT}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_DEPLOYMENTS_TABLE_NAME}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_EVENTS_TABLE_NAME}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_ENDPOINTS_TABLE_NAME}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_CONTROL_PLANE_URL}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_RUNTIME_FEED_TOKEN_PARAMETER}" ] || [ -z "$${CDK_PARAM_ALWAYS_ON_ARCHIVE_BUCKET_NAME}" ]; then \
 	  echo "error: destroy の app synth に必要な Always-On runtime CDK_PARAM が不足しています。" >&2; \
 	  exit 1; \

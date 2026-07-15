@@ -58,13 +58,16 @@ function extractMakePackCommands(block: string): string[] {
 
 /**
  * Parse the root Makefile's `pack-*` targets into `target name -> delegated
- * pack-CLI subcommand`. Matches the single-line `pack-foo: ; $(PACK) foo
- * $(ARGS)` form the Problem Packs section uses.
+ * pack-CLI subcommand`. Accept both an inline recipe and the conventional
+ * tab-indented recipe on the following line.
  */
 function extractMakefilePackTargets(makefile: string): Map<string, string> {
   const targets = new Map<string, string>();
-  for (const match of makefile.matchAll(/^(pack-[a-zA-Z0-9_-]+):.*\$\(PACK\)\s+(\S+)/gm)) {
-    targets.set(match[1], match[2]);
+  const targetPattern = /^(pack-[a-zA-Z0-9_-]+):([^\n]*)(?:\n((?:\t[^\n]*(?:\n|$))*))?/gm;
+  for (const match of makefile.matchAll(targetPattern)) {
+    const recipe = `${match[2]}\n${match[3] ?? ""}`;
+    const delegation = recipe.match(/\$\(PACK\)\s+(\S+)/);
+    if (delegation) targets.set(match[1], delegation[1]);
   }
   return targets;
 }
