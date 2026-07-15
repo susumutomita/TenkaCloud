@@ -169,13 +169,12 @@ function copyUpstreamHeaders(upstream: Response, response: ServerResponse): void
   }
 }
 
-async function forwardNativeRequest(
+async function fetchNativeResponse(
   request: IncomingMessage,
-  response: ServerResponse,
   route: SimulatorNativeRoute,
   upstreamUrl: URL,
   options: Required<SimulatorNativeProxyOptions>,
-): Promise<void> {
+): Promise<readonly [Response, Uint8Array]> {
   const headers = upstreamHeaders(request);
   headers.set("x-tenkacloud-world-id", route.worldId);
   headers.set("x-tenkacloud-deployment-id", route.deploymentId);
@@ -184,36 +183,49 @@ async function forwardNativeRequest(
   // AWS. The loopback proxy owns the injected routing values, so it also adds
   // those header names to the local SigV4 metadata before forwarding.
   declareInjectedRoutingHeaders(headers);
+  const body = await requestBody(request);
+  const upstream = await options.fetchFn(upstreamUrl, {
+    method: request.method ?? "GET",
+    headers,
+    redirect: "manual",
+    signal: AbortSignal.timeout(options.timeoutMs),
+    ...(body ? { body } : {}),
+  });
+  return [upstream, await responseBody(upstream)];
+}
+
+function writeNativeRequestError(response: ServerResponse, error: unknown): void {
+  if (response.headersSent) {
+    response.end();
+    return;
+  }
+  const payloadTooLarge = error instanceof Error && error.message === "native_payload_too_large";
+  writeProxyError(
+    response,
+    payloadTooLarge ? StatusCodes.REQUEST_TOO_LONG : StatusCodes.BAD_GATEWAY,
+    payloadTooLarge ? "native_payload_too_large" : "native_proxy_failed",
+  );
+}
+
+async function forwardNativeRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  route: SimulatorNativeRoute,
+  upstreamUrl: URL,
+  options: Required<SimulatorNativeProxyOptions>,
+): Promise<void> {
   try {
-    const body = await requestBody(request);
-    const upstream = await options.fetchFn(upstreamUrl, {
-      method: request.method ?? "GET",
-      headers,
-      redirect: "manual",
-      signal: AbortSignal.timeout(options.timeoutMs),
-      ...(body ? { body } : {}),
-    });
-    const rawResponseBody = await responseBody(upstream);
+    const [upstream, rawResponseBody] = await fetchNativeResponse(
+      request,
+      route,
+      upstreamUrl,
+      options,
+    );
     copyUpstreamHeaders(upstream, response);
     response.statusCode = upstream.status;
     response.end(rawResponseBody);
   } catch (error) {
-    if (response.headersSent) response.end();
-    else {
-      const status =
-        error instanceof Error && error.message === "native_payload_too_large"
-          ? StatusCodes.REQUEST_TOO_LONG
-          : StatusCodes.BAD_GATEWAY;
-      writeProxyError(
-        response,
-        status,
-        status === StatusCodes.BAD_GATEWAY
-          ? "native_proxy_failed"
-          : error instanceof Error
-            ? error.message
-            : "native_proxy_failed",
-      );
-    }
+    writeNativeRequestError(response, error);
   }
 }
 

@@ -100,9 +100,7 @@ exit 0
     "bash",
     [
       "-c",
-      'set -e; source "$BATTLES_COMMON"; assume_competitor_role_if_configured; ' +
-        'echo "RESULT_AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}"; ' +
-        'echo "RESULT_AWS_REGION=${AWS_REGION:-}"',
+      `set -e; source "$BATTLES_COMMON"; assume_competitor_role_if_configured; echo "RESULT_AWS_ACCESS_KEY_ID=\${AWS_ACCESS_KEY_ID:-}"; echo "RESULT_AWS_REGION=\${AWS_REGION:-}"`,
     ],
     {
       encoding: "utf8",

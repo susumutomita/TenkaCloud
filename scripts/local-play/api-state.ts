@@ -194,14 +194,13 @@ function fakeStartContainer(problem: ContainerProblem, offset: number): Promise<
   });
 }
 
-export function createLocalPlayState(
-  deployment: LocalPlayDeployment,
-  options: CreateStateOptions = {},
-): LocalPlayState {
-  const participantToken = deployment.participantToken ?? randomBytes(32).toString("base64url");
-  if (!/^[A-Za-z0-9_-]{43}$/.test(participantToken)) {
-    throw new Error("Local participant token must be 32-byte base64url");
-  }
+interface RuntimeCollections {
+  readonly runtimes: Map<string, ProblemRuntime>;
+  readonly simulatedRuntimes: Map<string, SimulatedProblemRuntime>;
+  readonly catalog: Map<string, ContainerProblem>;
+}
+
+function createRuntimeCollections(deployment: LocalPlayDeployment): RuntimeCollections {
   const runtimes = new Map<string, ProblemRuntime>();
   const simulatedRuntimes = new Map<string, SimulatedProblemRuntime>();
   const catalog = new Map<string, ContainerProblem>();
@@ -230,74 +229,120 @@ export function createLocalPlayState(
       score: 0,
     });
   }
+  return { runtimes, simulatedRuntimes, catalog };
+}
+
+interface LifecycleContext extends RuntimeCollections {
+  readonly simulator?: LocalSimulatorRuntimePort;
+  readonly startContainer: StartProblemContainer;
+  readonly stopContainer: StopProblemContainer;
+  readonly now: () => number;
+  readonly units: Map<string, LocalComposeUnit>;
+}
+
+function resetSimulatedRuntime(
+  runtime: SimulatedProblemRuntime,
+  deployment: LocalSimulatorDeployment,
+  now: number,
+): void {
+  // A fresh world resets phase timing and world-scoped telemetry. Session
+  // score, solved history, one-time awards/disruptions, and participant
+  // overrides stay cumulative so reset cannot be used to farm points.
+  const priorScoringState = runtime.scoringState;
+  runtime.deployment = deployment;
+  runtime.createdAt = new Date(now).toISOString();
+  runtime.scoringState = {
+    ...(priorScoringState.bonusAwarded ? { bonusAwarded: priorScoringState.bonusAwarded } : {}),
+    ...(priorScoringState.firedDisruptions
+      ? { firedDisruptions: priorScoringState.firedDisruptions }
+      : {}),
+  };
+  runtime.endpointsHealth = undefined;
+  runtime.attackProbes = undefined;
+  runtime.posture = undefined;
+  runtime.platform = undefined;
+  runtime.lastResult = undefined;
+}
+
+async function startLifecycleProblem(
+  context: LifecycleContext,
+  problemId: string,
+  offset: number,
+): Promise<void> {
+  const simulatedRuntime = context.simulatedRuntimes.get(problemId);
+  if (simulatedRuntime) {
+    if (!context.simulator) {
+      throw new Error("Cloud local play requires a configured TenkaCloud Simulator runtime");
+    }
+    const deployment = await context.simulator.start(simulatedRuntime.problem);
+    resetSimulatedRuntime(simulatedRuntime, deployment, context.now());
+    return;
+  }
+  const problem = context.catalog.get(problemId);
+  const runtime = context.runtimes.get(problemId);
+  if (!problem || !runtime) throw new Error(`unknown problem: ${problemId}`);
+  let started: StartedContainer;
+  try {
+    started = await context.startContainer(problem, offset);
+  } catch (error) {
+    if (error instanceof ContainerStartOwnershipError) {
+      context.units.set(problemId, error.unit);
+    }
+    throw error;
+  }
+  context.units.set(problemId, started.unit);
+  runtime.problem = started.problem;
+}
+
+async function stopLifecycleProblem(context: LifecycleContext, problemId: string): Promise<void> {
+  const simulatedRuntime = context.simulatedRuntimes.get(problemId);
+  if (simulatedRuntime) {
+    if (context.simulator) await context.simulator.stop(problemId);
+    simulatedRuntime.deployment = undefined;
+    return;
+  }
+  const unit = context.units.get(problemId);
+  if (unit) await context.stopContainer(unit);
+  context.units.delete(problemId);
+  const problem = context.catalog.get(problemId);
+  const runtime = context.runtimes.get(problemId);
+  if (problem && runtime) runtime.problem = problem;
+}
+
+export function createLocalPlayState(
+  deployment: LocalPlayDeployment,
+  options: CreateStateOptions = {},
+): LocalPlayState {
+  const participantToken = deployment.participantToken ?? randomBytes(32).toString("base64url");
+  if (!/^[A-Za-z0-9_-]{43}$/.test(participantToken)) {
+    throw new Error("Local participant token must be 32-byte base64url");
+  }
+  const { runtimes, simulatedRuntimes, catalog } = createRuntimeCollections(deployment);
   const startContainer = options.startContainer ?? fakeStartContainer;
   const stopContainer = options.stopContainer ?? (() => {});
   const now = options.now ?? Date.now;
   /** Teardown handle per running problem (the lifecycle only knows ids + offsets). */
   const units = new Map<string, LocalComposeUnit>();
+  const lifecycleContext: LifecycleContext = {
+    runtimes,
+    simulatedRuntimes,
+    catalog,
+    ...(options.simulator ? { simulator: options.simulator } : {}),
+    startContainer,
+    stopContainer,
+    now,
+    units,
+  };
   const lifecycle = new ProblemLifecycle(
     [...catalog.keys(), ...simulatedRuntimes.keys()],
     {
       // 起動: catalog 原本を offset へ remap して runtime に差し替える /
       // start the catalog original on its offset block and swap it in.
-      startContainer: async (problemId, offset) => {
-        const simulatedRuntime = simulatedRuntimes.get(problemId);
-        if (simulatedRuntime) {
-          if (!options.simulator) {
-            throw new Error("Cloud local play requires a configured TenkaCloud Simulator runtime");
-          }
-          simulatedRuntime.deployment = await options.simulator.start(simulatedRuntime.problem);
-          // A fresh world gets a fresh phase origin and world-scoped telemetry.
-          // Session score/solved history, one-time awards/disruptions, and
-          // participant overrides remain cumulative so reset cannot farm them.
-          const priorScoringState = simulatedRuntime.scoringState;
-          simulatedRuntime.createdAt = new Date(now()).toISOString();
-          simulatedRuntime.scoringState = {
-            ...(priorScoringState.bonusAwarded
-              ? { bonusAwarded: priorScoringState.bonusAwarded }
-              : {}),
-            ...(priorScoringState.firedDisruptions
-              ? { firedDisruptions: priorScoringState.firedDisruptions }
-              : {}),
-          };
-          simulatedRuntime.endpointsHealth = undefined;
-          simulatedRuntime.attackProbes = undefined;
-          simulatedRuntime.posture = undefined;
-          simulatedRuntime.platform = undefined;
-          simulatedRuntime.lastResult = undefined;
-          return;
-        }
-        const problem = catalog.get(problemId);
-        const runtime = runtimes.get(problemId);
-        if (!problem || !runtime) throw new Error(`unknown problem: ${problemId}`);
-        let started: StartedContainer;
-        try {
-          started = await startContainer(problem, offset);
-        } catch (error) {
-          if (error instanceof ContainerStartOwnershipError) {
-            units.set(problemId, error.unit);
-          }
-          throw error;
-        }
-        units.set(problemId, started.unit);
-        runtime.problem = started.problem;
-      },
+      startContainer: (problemId, offset) =>
+        startLifecycleProblem(lifecycleContext, problemId, offset),
       // 停止: unit を破棄して catalog 原本へ戻す / tear the unit down and
       // restore the catalog original (stale offset URLs must not linger).
-      stopContainer: async (problemId) => {
-        const simulatedRuntime = simulatedRuntimes.get(problemId);
-        if (simulatedRuntime) {
-          if (options.simulator) await options.simulator.stop(problemId);
-          simulatedRuntime.deployment = undefined;
-          return;
-        }
-        const unit = units.get(problemId);
-        if (unit) await stopContainer(unit);
-        units.delete(problemId);
-        const problem = catalog.get(problemId);
-        const runtime = runtimes.get(problemId);
-        if (problem && runtime) runtime.problem = problem;
-      },
+      stopContainer: (problemId) => stopLifecycleProblem(lifecycleContext, problemId),
       now,
     },
     { maxRunning: options.maxRunning ?? DEFAULT_MAX_RUNNING },

@@ -281,6 +281,48 @@ function emptyExternalSession(port: number): SimulatorSessionRecord {
   };
 }
 
+type PlacementResponseMode = "credentials" | "malformed" | "partial" | "server-error" | "unbound";
+
+function placementResponseFetch(mode: () => PlacementResponseMode): typeof fetch {
+  return async (input, init) => {
+    const url = new URL(String(input));
+    if (!url.pathname.endsWith("/operations/DescribeEndpointPlacement")) {
+      return fetch(input, init);
+    }
+    if (mode() === "unbound") {
+      return new Response('{"error":{"code":"EndpointPlacementNotFound"}}', {
+        status: StatusCodes.NOT_FOUND,
+      });
+    }
+    if (mode() === "server-error") {
+      return new Response('{"error":{"code":"Unavailable"}}', {
+        status: StatusCodes.INTERNAL_SERVER_ERROR,
+      });
+    }
+    const command = JSON.parse(String(init?.body)) as {
+      deploymentId: string;
+      targetId: string;
+      input: { Slot: string };
+    };
+    if (mode() === "partial" && command.input.Slot === "secondary") {
+      return new Response('{"error":{"code":"Unavailable"}}', {
+        status: StatusCodes.INTERNAL_SERVER_ERROR,
+      });
+    }
+    if (mode() === "malformed") return Response.json({ Slot: command.input.Slot });
+    return Response.json({
+      DeploymentId: command.deploymentId,
+      TargetId: command.targetId,
+      Slot: command.input.Slot,
+      EffectiveUrl:
+        mode() === "credentials"
+          ? "http://user:password@127.0.0.1:18080/workload"
+          : "http://127.0.0.1:18080/workload",
+      VerifiedPlatform: "ec2",
+    });
+  };
+}
+
 async function waitForProcessExit(pid: number): Promise<void> {
   const deadline = Date.now() + 3_000;
   while (Date.now() < deadline) {
@@ -2729,44 +2771,8 @@ describe("provider-neutral local runtime", () => {
 
   it("should fail loud on placement transport and malformed responses but allow exact 404", async () => {
     const root = mkdtempSync(join(tmpdir(), "tc-simulator-placement-errors-"));
-    let mode: "credentials" | "malformed" | "partial" | "server-error" | "unbound" = "unbound";
-    const fetchFn: typeof fetch = async (input, init) => {
-      const url = new URL(String(input));
-      if (!url.pathname.endsWith("/operations/DescribeEndpointPlacement")) {
-        return fetch(input, init);
-      }
-      if (mode === "unbound") {
-        return new Response('{"error":{"code":"EndpointPlacementNotFound"}}', {
-          status: StatusCodes.NOT_FOUND,
-        });
-      }
-      if (mode === "server-error") {
-        return new Response('{"error":{"code":"Unavailable"}}', {
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-        });
-      }
-      const command = JSON.parse(String(init?.body)) as {
-        deploymentId: string;
-        targetId: string;
-        input: { Slot: string };
-      };
-      if (mode === "partial" && command.input.Slot === "secondary") {
-        return new Response('{"error":{"code":"Unavailable"}}', {
-          status: StatusCodes.INTERNAL_SERVER_ERROR,
-        });
-      }
-      if (mode === "malformed") return Response.json({ Slot: command.input.Slot });
-      return Response.json({
-        DeploymentId: command.deploymentId,
-        TargetId: command.targetId,
-        Slot: command.input.Slot,
-        EffectiveUrl:
-          mode === "credentials"
-            ? "http://user:password@127.0.0.1:18080/workload"
-            : "http://127.0.0.1:18080/workload",
-        VerifiedPlatform: "ec2",
-      });
-    };
+    let mode: PlacementResponseMode = "unbound";
+    const fetchFn = placementResponseFetch(() => mode);
     const options = { ...runtimeOptions(root), fetchFn };
     const runtime = new SimulatorLocalRuntime(options);
     runningRuntimes.push(runtime);

@@ -32,7 +32,7 @@ export function toDeploymentProvenance(
   resolved: EffectiveCatalogProvenance | undefined,
   catalogSnapshotId: string,
 ): DeploymentProvenance | undefined {
-  if (!resolved || resolved.source !== "pack") return undefined;
+  if (resolved?.source !== "pack") return undefined;
   return {
     packId: resolved.packId,
     packVersion: resolved.packVersion,

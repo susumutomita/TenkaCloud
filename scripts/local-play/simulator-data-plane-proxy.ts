@@ -209,6 +209,46 @@ function upstreamHeaders(request: IncomingMessage, launchToken: string): Headers
   return headers;
 }
 
+function assertResponseHeadersValid(entries: readonly (readonly [string, string])[]): void {
+  if (entries.length > MAX_DATA_PLANE_HEADERS) {
+    throw new Error("data_plane_response_headers_invalid");
+  }
+  const invalid = entries.some(
+    ([key, value]) =>
+      key.length > MAX_DATA_PLANE_HEADER_BYTES ||
+      value.length > MAX_DATA_PLANE_HEADER_BYTES ||
+      value.includes("\r") ||
+      value.includes("\n"),
+  );
+  if (invalid) throw new Error("data_plane_response_headers_invalid");
+}
+
+function responseHeaderAllowed(key: string): boolean {
+  return (
+    !HOP_BY_HOP_HEADERS.has(key) &&
+    !PRIVATE_RESPONSE_HEADERS.has(key) &&
+    key !== "content-encoding" &&
+    key !== "content-length" &&
+    key !== "vary" &&
+    key !== "timing-allow-origin" &&
+    !key.startsWith("access-control-")
+  );
+}
+
+function setForwardedResponseHeader(response: ServerResponse, key: string, value: string): void {
+  if (key !== "content-security-policy") {
+    response.setHeader(key, value);
+    return;
+  }
+  const existing = response.getHeader(key);
+  const policies = Array.isArray(existing)
+    ? existing.map(String)
+    : existing === undefined
+      ? []
+      : [String(existing)];
+  response.setHeader(key, [value, ...policies]);
+}
+
 function copyResponseHeaders(
   upstream: Response,
   response: ServerResponse,
@@ -216,40 +256,9 @@ function copyResponseHeaders(
   apiPort: number | undefined,
 ): void {
   const entries = [...upstream.headers];
-  if (
-    entries.length > MAX_DATA_PLANE_HEADERS ||
-    entries.some(
-      ([key, value]) =>
-        key.length > MAX_DATA_PLANE_HEADER_BYTES ||
-        value.length > MAX_DATA_PLANE_HEADER_BYTES ||
-        value.includes("\r") ||
-        value.includes("\n"),
-    )
-  ) {
-    throw new Error("data_plane_response_headers_invalid");
-  }
+  assertResponseHeadersValid(entries);
   for (const [key, value] of entries) {
-    if (
-      !HOP_BY_HOP_HEADERS.has(key) &&
-      !PRIVATE_RESPONSE_HEADERS.has(key) &&
-      key !== "content-encoding" &&
-      key !== "content-length" &&
-      key !== "vary" &&
-      key !== "timing-allow-origin" &&
-      !key.startsWith("access-control-")
-    ) {
-      if (key === "content-security-policy") {
-        const existing = response.getHeader(key);
-        const policies = Array.isArray(existing)
-          ? existing.map(String)
-          : existing === undefined
-            ? []
-            : [String(existing)];
-        response.setHeader(key, [value, ...policies]);
-      } else {
-        response.setHeader(key, value);
-      }
-    }
+    if (responseHeaderAllowed(key)) setForwardedResponseHeader(response, key, value);
   }
   for (const [key, value] of Object.entries(dataPlaneCorsHeaders(origin, apiPort))) {
     response.setHeader(key, value);
@@ -279,6 +288,49 @@ function requestErrorStatus(error: unknown): number {
   return StatusCodes.BAD_GATEWAY;
 }
 
+async function fetchDataPlaneResponse(
+  request: IncomingMessage,
+  route: SimulatorDataPlaneRoute,
+  targetUrl: URL,
+  method: string,
+  fetchFn: typeof fetch,
+  closeSignal?: AbortSignal,
+): Promise<readonly [Response, Uint8Array]> {
+  const headers = upstreamHeaders(request, route.launchToken);
+  const body = await requestBody(request);
+  if ((method === "GET" || method === "HEAD") && body) {
+    throw new Error("data_plane_method_body_forbidden");
+  }
+  if (closeSignal?.aborted) throw new Error("data_plane_listener_closing");
+  const timeoutSignal = AbortSignal.timeout(DATA_PLANE_UPSTREAM_TIMEOUT_MS);
+  const upstream = await fetchFn(targetUrl, {
+    method,
+    headers,
+    redirect: "manual",
+    signal: closeSignal ? AbortSignal.any([timeoutSignal, closeSignal]) : timeoutSignal,
+    ...(body ? { body } : {}),
+  });
+  return [upstream, await responseBody(upstream)];
+}
+
+function writeDataPlaneRequestError(
+  response: ServerResponse,
+  error: unknown,
+  origin: string | undefined,
+  apiPort: number | undefined,
+): void {
+  if (response.headersSent) {
+    response.end();
+    return;
+  }
+  const status = requestErrorStatus(error);
+  const message =
+    status === StatusCodes.BAD_GATEWAY || !(error instanceof Error)
+      ? "data_plane_proxy_failed"
+      : error.message;
+  writeProxyError(response, status, message, dataPlaneCorsHeaders(origin, apiPort));
+}
+
 async function forwardDataPlaneRequest(
   request: IncomingMessage,
   response: ServerResponse,
@@ -291,39 +343,19 @@ async function forwardDataPlaneRequest(
   closeSignal?: AbortSignal,
 ): Promise<void> {
   try {
-    const headers = upstreamHeaders(request, route.launchToken);
-    const body = await requestBody(request);
-    if ((method === "GET" || method === "HEAD") && body) {
-      throw new Error("data_plane_method_body_forbidden");
-    }
-    if (closeSignal?.aborted) throw new Error("data_plane_listener_closing");
-    const timeoutSignal = AbortSignal.timeout(DATA_PLANE_UPSTREAM_TIMEOUT_MS);
-    const upstream = await fetchFn(targetUrl, {
+    const [upstream, rawResponseBody] = await fetchDataPlaneResponse(
+      request,
+      route,
+      targetUrl,
       method,
-      headers,
-      redirect: "manual",
-      signal: closeSignal ? AbortSignal.any([timeoutSignal, closeSignal]) : timeoutSignal,
-      ...(body ? { body } : {}),
-    });
-    const rawResponseBody = await responseBody(upstream);
+      fetchFn,
+      closeSignal,
+    );
     copyResponseHeaders(upstream, response, origin, apiPort);
     response.statusCode = upstream.status;
     response.end(method === "HEAD" ? undefined : rawResponseBody);
   } catch (error) {
-    if (response.headersSent) response.end();
-    else {
-      const status = requestErrorStatus(error);
-      writeProxyError(
-        response,
-        status,
-        status === StatusCodes.BAD_GATEWAY
-          ? "data_plane_proxy_failed"
-          : error instanceof Error
-            ? error.message
-            : "data_plane_proxy_failed",
-        dataPlaneCorsHeaders(origin, apiPort),
-      );
-    }
+    writeDataPlaneRequestError(response, error, origin, apiPort);
   }
 }
 
@@ -355,37 +387,50 @@ function fixedListenerHostAllowed(host: string | undefined, port: number | undef
   return codespacesOrigin !== undefined && host === new URL(codespacesOrigin).host;
 }
 
-async function proxyFixedSimulatorTarget(
+interface FixedDataPlaneRequest {
+  readonly origin: string | undefined;
+  readonly listenerPort: number | undefined;
+  readonly method: string;
+  readonly requestUrl: URL;
+}
+
+function fixedListenerAccessAllowed(
   request: IncomingMessage,
   response: ServerResponse,
-  resolveRoute: () => Promise<SimulatorDataPlaneRoute>,
-  fetchFn: typeof fetch,
-  closeSignal: AbortSignal,
   isClosing: () => boolean,
-): Promise<void> {
-  const origin = request.headers.origin;
+): boolean {
   const listenerPort = request.socket.localPort;
-  response.setHeader("content-security-policy", NO_WORKERS_CSP);
   if (!requestHeadersAllowed(request)) {
     writeProxyError(
       response,
       StatusCodes.REQUEST_HEADER_FIELDS_TOO_LARGE,
       "data_plane_headers_too_large",
     );
-    return;
+    return false;
   }
   if (!fixedListenerHostAllowed(request.headers.host, listenerPort)) {
     writeProxyError(response, StatusCodes.MISDIRECTED_REQUEST, "data_plane_host_forbidden");
-    return;
+    return false;
   }
   if (isClosing()) {
     writeProxyError(response, StatusCodes.SERVICE_UNAVAILABLE, "data_plane_listener_closing");
-    return;
+    return false;
   }
-  if (!browserOriginAllowed(origin, listenerPort)) {
+  if (!browserOriginAllowed(request.headers.origin, listenerPort)) {
     writeProxyError(response, StatusCodes.FORBIDDEN, "data_plane_browser_origin_forbidden");
-    return;
+    return false;
   }
+  return true;
+}
+
+function fixedDataPlaneRequest(
+  request: IncomingMessage,
+  response: ServerResponse,
+  isClosing: () => boolean,
+): FixedDataPlaneRequest | undefined {
+  if (!fixedListenerAccessAllowed(request, response, isClosing)) return undefined;
+  const origin = request.headers.origin;
+  const listenerPort = request.socket.localPort;
   const method = request.method ?? "GET";
   if (!dataPlaneMethodAllowed(method)) {
     writeProxyError(
@@ -394,38 +439,61 @@ async function proxyFixedSimulatorTarget(
       "data_plane_method_invalid",
       dataPlaneCorsHeaders(origin, listenerPort),
     );
-    return;
-  }
-  if (method === "OPTIONS" && origin !== undefined) {
-    response.writeHead(StatusCodes.NO_CONTENT, dataPlaneCorsHeaders(origin, listenerPort));
-    response.end();
-    return;
+    return undefined;
   }
   if (method === "OPTIONS") {
-    writeProxyError(response, StatusCodes.BAD_REQUEST, "data_plane_method_invalid");
-    return;
+    if (origin === undefined) {
+      writeProxyError(response, StatusCodes.BAD_REQUEST, "data_plane_method_invalid");
+    } else {
+      response.writeHead(StatusCodes.NO_CONTENT, dataPlaneCorsHeaders(origin, listenerPort));
+      response.end();
+    }
+    return undefined;
   }
   const requestUrl = new URL(request.url ?? "/", "http://127.0.0.1");
   if (!requestUrl.pathname.startsWith("/") || requestUrl.pathname.startsWith("//")) {
     writeProxyError(response, StatusCodes.BAD_REQUEST, "invalid_data_plane_route");
-    return;
+    return undefined;
   }
-  let route: SimulatorDataPlaneRoute;
+  return { origin, listenerPort, method, requestUrl };
+}
+
+async function resolvedDataPlaneRoute(
+  response: ServerResponse,
+  resolveRoute: () => Promise<SimulatorDataPlaneRoute>,
+  closeSignal: AbortSignal,
+  isClosing: () => boolean,
+): Promise<SimulatorDataPlaneRoute | undefined> {
   try {
-    route = await resolveRouteWhileOpen(resolveRoute, closeSignal);
+    return await resolveRouteWhileOpen(resolveRoute, closeSignal);
   } catch {
     if (isClosing()) {
       writeProxyError(response, StatusCodes.SERVICE_UNAVAILABLE, "data_plane_listener_closing");
-      return;
+    } else {
+      writeProxyError(response, StatusCodes.NOT_FOUND, "unknown_simulator_target");
     }
-    writeProxyError(response, StatusCodes.NOT_FOUND, "unknown_simulator_target");
-    return;
+    return undefined;
   }
+}
+
+async function proxyFixedSimulatorTarget(
+  request: IncomingMessage,
+  response: ServerResponse,
+  resolveRoute: () => Promise<SimulatorDataPlaneRoute>,
+  fetchFn: typeof fetch,
+  closeSignal: AbortSignal,
+  isClosing: () => boolean,
+): Promise<void> {
+  response.setHeader("content-security-policy", NO_WORKERS_CSP);
+  const context = fixedDataPlaneRequest(request, response, isClosing);
+  if (!context) return;
+  const route = await resolvedDataPlaneRoute(response, resolveRoute, closeSignal, isClosing);
+  if (!route) return;
   if (isClosing()) {
     writeProxyError(response, StatusCodes.SERVICE_UNAVAILABLE, "data_plane_listener_closing");
     return;
   }
-  const targetUrl = upstreamUrl(route, requestUrl.pathname, requestUrl.search);
+  const targetUrl = upstreamUrl(route, context.requestUrl.pathname, context.requestUrl.search);
   if (!targetUrl) {
     writeProxyError(response, StatusCodes.BAD_REQUEST, "invalid_data_plane_route");
     return;
@@ -435,12 +503,44 @@ async function proxyFixedSimulatorTarget(
     response,
     route,
     targetUrl,
-    method,
-    origin,
-    listenerPort,
+    context.method,
+    context.origin,
+    context.listenerPort,
     fetchFn,
     closeSignal,
   );
+}
+
+function waitForDataPlaneServerClose(
+  server: Server,
+  sockets: ReadonlySet<Socket>,
+  closeController: AbortController,
+): Promise<void> {
+  return new Promise((resolveClose, rejectClose) => {
+    const forceClose = setTimeout(() => {
+      closeController.abort();
+      for (const socket of sockets) socket.destroy();
+      server.closeAllConnections();
+      resolveClose();
+    }, DATA_PLANE_CLOSE_GRACE_MS);
+    forceClose.unref();
+    server.close((error) => {
+      clearTimeout(forceClose);
+      if (error) rejectClose(error);
+      else resolveClose();
+    });
+    server.closeIdleConnections();
+  });
+}
+
+async function closeDataPlaneServer(
+  server: Server,
+  sockets: ReadonlySet<Socket>,
+  closeController: AbortController,
+  activeHandlers: ReadonlySet<Promise<void>>,
+): Promise<void> {
+  await waitForDataPlaneServerClose(server, sockets, closeController);
+  await Promise.allSettled([...activeHandlers]);
 }
 
 /** Start one isolated loopback origin for exactly one problem target. */
@@ -494,32 +594,12 @@ export function startSimulatorDataPlaneListener(
         close: () => {
           if (closing) return closing;
           closeRequested = true;
-          closing = (async () => {
-            await new Promise<void>((resolveClose, rejectClose) => {
-              let settled = false;
-              let forceClose: NodeJS.Timeout | undefined;
-              const finish = (error?: Error): void => {
-                if (settled) return;
-                settled = true;
-                if (forceClose) clearTimeout(forceClose);
-                if (error) rejectClose(error);
-                else resolveClose();
-              };
-              forceClose = setTimeout(() => {
-                closeController.abort();
-                for (const socket of sockets) socket.destroy();
-                server.closeAllConnections();
-                finish();
-              }, DATA_PLANE_CLOSE_GRACE_MS);
-              forceClose.unref();
-              server.close((error) => finish(error ?? undefined));
-              server.closeIdleConnections();
-            });
-            await Promise.allSettled([...activeHandlers]);
-          })().catch((error) => {
-            closing = undefined;
-            throw error;
-          });
+          closing = closeDataPlaneServer(server, sockets, closeController, activeHandlers).catch(
+            (error) => {
+              closing = undefined;
+              throw error;
+            },
+          );
           return closing;
         },
       });

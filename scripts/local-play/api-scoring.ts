@@ -11,6 +11,7 @@ import {
   sessionScore,
 } from "./api-state";
 import { mapStrings } from "./port-remap";
+import type { LocalSimulatorDeployment } from "./simulator-runtime";
 import { runSimulatorScoreCycle, simulatorFlagMatches } from "./simulator-scoring";
 import type { VerifyResult } from "./verify-client";
 
@@ -266,6 +267,60 @@ function simulatorAttackProbe(
   return (request) => simulator.attackProbe(runtime.problem, request, now);
 }
 
+function simulatorDeploymentIsCurrent(
+  problemId: string,
+  runtime: SimulatedProblemRuntime,
+  state: LocalPlayState,
+  deployment: LocalSimulatorDeployment,
+): boolean {
+  return state.lifecycle.statusOf(problemId) === "running" && runtime.deployment === deployment;
+}
+
+async function authoritativeEndpointPlacements(
+  runtime: SimulatedProblemRuntime,
+  state: LocalPlayState,
+  now: number,
+) {
+  if (runtime.contract.scoring.kind !== "phased-polling") return undefined;
+  const simulator = state.simulator;
+  if (!simulator?.endpointPlacements) return undefined;
+  return simulator.endpointPlacements(
+    runtime.problem,
+    runtime.contract.endpoints.map((slot) => slot.slot),
+    now,
+  );
+}
+
+type SimulatorScoreResult = Awaited<ReturnType<typeof runSimulatorScoreCycle>>;
+
+function applySimulatorScoreResult(
+  problemId: string,
+  runtime: SimulatedProblemRuntime,
+  state: LocalPlayState,
+  result: SimulatorScoreResult,
+): void {
+  runtime.score += result.scoreDelta;
+  runtime.lastResult = result.lastResult;
+  runtime.endpointsHealth = result.endpointsHealthJson;
+  runtime.attackProbes = result.attackProbesJson;
+  runtime.posture = result.postureJson;
+  runtime.platform = result.platform;
+  if (result.newState) runtime.scoringState = result.newState;
+  if (runtime.contract.scoring.kind === "composite-probe" && result.lastResult === "ok") {
+    runtime.solved.add(problemId);
+  }
+  for (const event of [...result.scoreEvents].reverse()) {
+    state.scoreEvents.unshift({
+      jobId: jobIdOf(problemId),
+      problemId,
+      source: event.source,
+      points: event.points,
+      result: result.lastResult === "fail" ? "wrong" : "ok",
+      occurredAt: event.occurredAt,
+    });
+  }
+}
+
 async function runSimulatedProblemScoreCycle(
   problemId: string,
   state: LocalPlayState,
@@ -290,18 +345,11 @@ async function runSimulatedProblemScoreCycle(
     };
   }
   await advancePhasedSimulatorClock(problemId, runtime, state, now);
-  if (state.lifecycle.statusOf(problemId) !== "running" || runtime.deployment !== deployment) {
+  if (!simulatorDeploymentIsCurrent(problemId, runtime, state, deployment)) {
     return { status: StatusCodes.CONFLICT, body: { error: "not_running" } };
   }
   const attackProbe = simulatorAttackProbe(runtime, state, now);
-  const authoritativeEndpointPlacements =
-    runtime.contract.scoring.kind === "phased-polling" && state.simulator?.endpointPlacements
-      ? await state.simulator.endpointPlacements(
-          runtime.problem,
-          runtime.contract.endpoints.map((slot) => slot.slot),
-          now,
-        )
-      : undefined;
+  const placements = await authoritativeEndpointPlacements(runtime, state, now);
   const result = await runSimulatorScoreCycle({
     problem: runtime.problem,
     outputs: deployment.outputs,
@@ -313,31 +361,12 @@ async function runSimulatedProblemScoreCycle(
     scoringState: runtime.scoringState,
     nowMs: now,
     ...(attackProbe ? { attackProbe } : {}),
-    ...(authoritativeEndpointPlacements ? { authoritativeEndpointPlacements } : {}),
+    ...(placements ? { authoritativeEndpointPlacements: placements } : {}),
   });
-  if (state.lifecycle.statusOf(problemId) !== "running" || runtime.deployment !== deployment) {
+  if (!simulatorDeploymentIsCurrent(problemId, runtime, state, deployment)) {
     return { status: StatusCodes.CONFLICT, body: { error: "not_running" } };
   }
-  runtime.score += result.scoreDelta;
-  runtime.lastResult = result.lastResult;
-  runtime.endpointsHealth = result.endpointsHealthJson;
-  runtime.attackProbes = result.attackProbesJson;
-  runtime.posture = result.postureJson;
-  runtime.platform = result.platform;
-  if (result.newState) runtime.scoringState = result.newState;
-  if (runtime.contract.scoring.kind === "composite-probe" && result.lastResult === "ok") {
-    runtime.solved.add(problemId);
-  }
-  for (const event of [...result.scoreEvents].reverse()) {
-    state.scoreEvents.unshift({
-      jobId: jobIdOf(problemId),
-      problemId,
-      source: event.source,
-      points: event.points,
-      result: result.lastResult === "fail" ? "wrong" : "ok",
-      occurredAt: event.occurredAt,
-    });
-  }
+  applySimulatorScoreResult(problemId, runtime, state, result);
   return {
     status: StatusCodes.OK,
     body: {
