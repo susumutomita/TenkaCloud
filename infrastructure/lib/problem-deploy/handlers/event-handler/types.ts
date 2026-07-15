@@ -274,6 +274,8 @@ export const TeamSummarySchema = z.object({
   displayName: z.string().optional(),
   /** #528: team の deploy 先 AWS Account ID。旧 Event は undefined。 */
   awsAccountId: z.string().optional(),
+  /** Admin/Operator の明示的な credential expansion でのみ返す。 */
+  teamLoginKey: z.string().optional(),
 });
 export type TeamSummary = z.infer<typeof TeamSummarySchema>;
 

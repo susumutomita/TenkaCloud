@@ -28,6 +28,23 @@ describe("useEventDetail", () => {
     expect(mockGetEvent).toHaveBeenCalledWith(CLIENT, "e1", { withScoreEvents: true });
   });
 
+  it("should request stored team login keys for a mutating operator", async () => {
+    mockGetEvent.mockResolvedValue(DETAIL);
+    renderHook(() =>
+      useEventDetail({
+        apiClient: CLIENT,
+        eventId: "e1",
+        eventIdValid: true,
+        withTeamLoginKeys: true,
+      }),
+    );
+    await waitFor(() => expect(mockGetEvent).toHaveBeenCalled());
+    expect(mockGetEvent).toHaveBeenCalledWith(CLIENT, "e1", {
+      withScoreEvents: true,
+      withTeamLoginKeys: true,
+    });
+  });
+
   it("should no-op when the client is missing / eventId invalid / eventId undefined", async () => {
     for (const args of [
       { apiClient: null, eventId: "e1", eventIdValid: true },

@@ -1,5 +1,6 @@
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
+import CopyToClipboard from "@cloudscape-design/components/copy-to-clipboard";
 import ExpandableSection from "@cloudscape-design/components/expandable-section";
 import Table from "@cloudscape-design/components/table";
 import { toErrorMessage } from "@tenkacloud/web-kit";
@@ -20,16 +21,19 @@ export function EventTeamsPanel({
   apiClient,
   canMutateTenant = false,
   t,
+  onRefresh,
 }: {
   readonly apiClient?: ApiClient | null;
   readonly canMutateTenant?: boolean;
   readonly detail: EventDetail;
+  readonly onRefresh?: () => void;
   readonly t: Translate;
 }) {
   const [rotationTeam, setRotationTeam] = useState<TeamSummary | null>(null);
   const [rotationResult, setRotationResult] = useState<RotateTeamLoginKeyResponse | null>(null);
   const [rotationError, setRotationError] = useState<string | null>(null);
   const [rotationInFlight, setRotationInFlight] = useState(false);
+  const [rotatedKeys, setRotatedKeys] = useState<Readonly<Record<string, string>>>({});
 
   const closeRotation = () => {
     setRotationTeam(null);
@@ -43,7 +47,10 @@ export function EventTeamsPanel({
     setRotationInFlight(true);
     setRotationError(null);
     try {
-      setRotationResult(await rotateTeamLoginKey(apiClient, detail.eventId, rotationTeam.teamId));
+      const result = await rotateTeamLoginKey(apiClient, detail.eventId, rotationTeam.teamId);
+      setRotationResult(result);
+      setRotatedKeys((current) => ({ ...current, [result.teamId]: result.teamLoginKey }));
+      onRefresh?.();
     } catch (error) {
       setRotationError(toErrorMessage(error));
     } finally {
@@ -91,6 +98,27 @@ export function EventTeamsPanel({
                     {t("event_detail.teams_col_account_legacy")}
                   </Box>
                 ),
+            },
+            {
+              id: "loginKey",
+              header: t("event_detail.teams_col_login_key"),
+              cell: (team) => {
+                const loginKey = rotatedKeys[team.teamId] ?? team.teamLoginKey;
+                return canMutateTenant && loginKey ? (
+                  <CopyToClipboard
+                    textToCopy={loginKey}
+                    copyButtonText={t("event_detail.teams_col_login_key_copy")}
+                    copyButtonAriaLabel={t("event_detail.teams_col_login_key_copy")}
+                    copySuccessText={t("event_detail.teams_col_login_key_copied")}
+                    copyErrorText={t("event_detail.teams_col_login_key_copy_failed")}
+                    variant="inline"
+                  />
+                ) : (
+                  <Box variant="small" color="text-status-inactive">
+                    {t("event_detail.teams_col_login_key_unavailable")}
+                  </Box>
+                );
+              },
             },
             {
               id: "access",

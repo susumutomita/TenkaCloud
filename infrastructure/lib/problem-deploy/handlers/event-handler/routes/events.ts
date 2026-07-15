@@ -2,6 +2,7 @@ import type { Hono } from "hono";
 import { StatusCodes } from "http-status-codes";
 import { z } from "zod";
 import {
+  requireRole,
   resolveTenantId,
   TENANT_ADMIN_ROLE,
   TENANT_OPERATOR_ROLE,
@@ -81,9 +82,14 @@ export function registerEventRoutes(app: Hono, shared: EventSharedResources): vo
       // Issue #1038 P1 #7: opt-in で全 team の累計 score event timeline を返す。
       // default (= "true" 以外) は scoreEventsByTeam を省き、 既存 caller を素通り。
       const withScoreEvents = c.req.query("withScoreEvents") === "true";
+      const withTeamLoginKeys = c.req.query("withTeamLoginKeys") === "true";
+      if (withTeamLoginKeys) {
+        requireRole(c, [TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE]);
+      }
       try {
         const detail = await getEventDetail(shared, resolveTenantId(c), eventId, {
           withScoreEvents,
+          withTeamLoginKeys,
         });
         if (!detail) return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
         return c.json(detail, StatusCodes.OK);

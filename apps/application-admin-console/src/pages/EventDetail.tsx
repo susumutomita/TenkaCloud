@@ -123,6 +123,7 @@ export function EventDetailPage({ config }: { config: AppConfig }) {
       apiClient,
       eventId,
       eventIdValid,
+      withTeamLoginKeys: canMutate,
     },
   );
   const operations = useEventOperations({

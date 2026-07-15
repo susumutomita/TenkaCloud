@@ -94,9 +94,9 @@ export async function listEvents(
 /**
  * 指定 eventId の Event 詳細 + Teams 一覧を返す。`tenantId` 不一致は undefined (404 相当)。
  *
- * teams[].teamLoginKey is intentionally absent. Creation and explicit rotation
- * responses are the only plaintext handoff paths, so SQL hash-only storage and
- * the legacy DynamoDB backend expose the same read contract.
+ * teams[].teamLoginKey is absent by default. An authorized route can opt in with
+ * `withTeamLoginKeys`; authorization stays at the HTTP boundary rather than in
+ * this repository projection helper.
  *
  * Issue #1038 P1 #7: `opts.withScoreEvents=true` のとき全 team の累計 score event timeline を
  * `scoreEventsByTeam` に含める。 default (= false) は従来挙動を維持 (= 余分な DDB query を
@@ -106,7 +106,10 @@ export async function getEventDetail(
   shared: EventSharedResources,
   tenantId: string,
   eventId: string,
-  opts: { readonly withScoreEvents?: boolean } = {},
+  opts: {
+    readonly withScoreEvents?: boolean;
+    readonly withTeamLoginKeys?: boolean;
+  } = {},
 ): Promise<EventDetail | undefined> {
   // [ADR-049 §5.1] Event 行の point read も Teams 一覧も repository seam 経由 (getEvent が
   // tenant scope + 404 判定を、 listTeamsByEvent が base-table query を担う)。 default backend
@@ -145,6 +148,9 @@ export async function getEventDetail(
       displayName: displayNameByTeamId.get(teamId) ?? fromTeamsTable,
       // #528: team の deploy 先 AWS Account ID。旧 Event は undefined。
       awsAccountId: typeof t.awsAccountId === "string" ? t.awsAccountId : undefined,
+      ...(opts.withTeamLoginKeys && typeof t.teamLoginKey === "string"
+        ? { teamLoginKey: t.teamLoginKey }
+        : {}),
     };
   });
 

@@ -17,7 +17,7 @@ const detail = (teams: any[], status = "DRAFT") => ({ status, teams }) as unknow
 afterEach(() => vi.clearAllMocks());
 
 describe("EventTeamsPanel", () => {
-  it("should render team metadata without pretending a one-time key can be read again", () => {
+  it("should render the stored team login key for an authorized operator", () => {
     render(
       <EventTeamsPanel
         detail={detail([
@@ -28,13 +28,15 @@ describe("EventTeamsPanel", () => {
             teamLoginKey: "KEY-A",
           },
         ])}
+        apiClient={{} as never}
+        canMutateTenant
         t={t}
       />,
     );
     expect(screen.getByText("team-a")).toBeInTheDocument();
     expect(screen.getByText("Alpha")).toBeInTheDocument();
     expect(screen.getByText("111122223333")).toBeInTheDocument();
-    expect(screen.queryByText("KEY-A")).not.toBeInTheDocument();
+    expect(screen.getByText("KEY-A")).toBeInTheDocument();
   });
 
   it("should show the unset / legacy fallbacks for missing fields (collapsed for RUNNING)", () => {
@@ -46,6 +48,7 @@ describe("EventTeamsPanel", () => {
     );
     expect(screen.getByText("event_detail.teams_col_display_name_unset")).toBeInTheDocument();
     expect(screen.getByText("event_detail.teams_col_account_legacy")).toBeInTheDocument();
+    expect(screen.getByText("event_detail.teams_col_login_key_unavailable")).toBeInTheDocument();
   });
 
   it("should render the empty state for an event with no teams", () => {
@@ -53,7 +56,7 @@ describe("EventTeamsPanel", () => {
     expect(screen.getByText("event_detail.teams_empty")).toBeInTheDocument();
   });
 
-  it("should rotate a team key and expose the replacement only in the modal", async () => {
+  it("should rotate a team key and keep the replacement in the team table", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
     mocks.rotateTeamLoginKey.mockResolvedValue({
@@ -62,10 +65,12 @@ describe("EventTeamsPanel", () => {
       teamLoginKey: "NEW-ONE-TIME-KEY",
       rotatedAt: "2026-07-15T00:00:00.000Z",
     });
+    const onRefresh = vi.fn();
     render(
       <EventTeamsPanel
         apiClient={{} as never}
         canMutateTenant
+        onRefresh={onRefresh}
         detail={
           {
             ...detail([{ teamId: "team-1", internalSlug: "team-a" }]),
@@ -78,13 +83,14 @@ describe("EventTeamsPanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "event_detail.rotate_key_action" }));
     fireEvent.click(screen.getByRole("button", { name: "event_detail.rotate_key_confirm" }));
-    expect(await screen.findByText("NEW-ONE-TIME-KEY")).toBeInTheDocument();
+    expect(await screen.findAllByText("NEW-ONE-TIME-KEY")).toHaveLength(2);
     expect(mocks.rotateTeamLoginKey).toHaveBeenCalledWith(expect.anything(), "event-1", "team-1");
+    expect(onRefresh).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole("button", { name: "event_detail.rotate_key_copy" }));
     expect(writeText).toHaveBeenCalledWith("NEW-ONE-TIME-KEY");
     await screen.findByRole("button", { name: "event_detail.rotate_key_copied" });
     fireEvent.click(screen.getByRole("button", { name: "event_detail.rotate_key_done" }));
-    await waitFor(() => expect(screen.queryByText("NEW-ONE-TIME-KEY")).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("NEW-ONE-TIME-KEY")).toBeInTheDocument());
   });
 
   it("should show a safe error when key rotation fails", async () => {

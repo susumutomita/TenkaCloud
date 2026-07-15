@@ -107,7 +107,14 @@ export function ProblemsTab({ detail, t }: EventTabContentProps) {
   return <EventProblemSetPanel detail={detail} t={t} />;
 }
 
-export function TeamsTab({ apiClient, canMutateTenant, config, detail, t }: EventTabContentProps) {
+export function TeamsTab({
+  apiClient,
+  canMutateTenant,
+  config,
+  detail,
+  manualRefresh,
+  t,
+}: EventTabContentProps) {
   return (
     <>
       <EventParticipantsPanel config={config} detail={detail} t={t} />
@@ -115,6 +122,7 @@ export function TeamsTab({ apiClient, canMutateTenant, config, detail, t }: Even
         apiClient={apiClient}
         canMutateTenant={canMutateTenant}
         detail={detail}
+        onRefresh={manualRefresh}
         t={t}
       />
     </>

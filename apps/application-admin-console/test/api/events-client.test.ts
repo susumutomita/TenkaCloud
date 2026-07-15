@@ -94,6 +94,12 @@ describe("getEvent", () => {
     await getEvent(client, "EV1", { withScoreEvents: true });
     expect(calls[0]?.path).toBe("events/EV1?withScoreEvents=true");
   });
+
+  it("should append both optional detail expansions when requested", async () => {
+    const { client, calls } = fakeClient({ eventId: "EV1" });
+    await getEvent(client, "EV1", { withScoreEvents: true, withTeamLoginKeys: true });
+    expect(calls[0]?.path).toBe("events/EV1?withScoreEvents=true&withTeamLoginKeys=true");
+  });
 });
 
 describe("createEvent", () => {

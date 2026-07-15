@@ -52,6 +52,8 @@ export interface TeamSummary {
   displayName?: string;
   /** #528: team の deploy 先 AWS Account ID (12 桁)。旧 Event は undefined。 */
   awsAccountId?: string;
+  /** Admin/Operator の明示的な detail expansion でのみ返る。 */
+  teamLoginKey?: string;
 }
 
 export type EventDeploymentStatus =
@@ -177,11 +179,16 @@ export async function listEvents(
 export async function getEvent(
   api: ApiClient,
   eventId: string,
-  options: { readonly withScoreEvents?: boolean } = {},
+  options: {
+    readonly withScoreEvents?: boolean;
+    readonly withTeamLoginKeys?: boolean;
+  } = {},
 ): Promise<EventDetail> {
-  const path = `events/${encodeURIComponent(eventId)}${
-    options.withScoreEvents ? "?withScoreEvents=true" : ""
-  }`;
+  const params = new URLSearchParams();
+  if (options.withScoreEvents) params.set("withScoreEvents", "true");
+  if (options.withTeamLoginKeys) params.set("withTeamLoginKeys", "true");
+  const query = params.toString();
+  const path = `events/${encodeURIComponent(eventId)}${query ? `?${query}` : ""}`;
   return api.get<EventDetail>(path);
 }
 
@@ -199,7 +206,7 @@ export interface RotateTeamLoginKeyResponse {
   readonly rotatedAt: string;
 }
 
-/** Rotate one team bearer and return the replacement plaintext exactly once. */
+/** Rotate one team bearer and return the replacement plaintext immediately. */
 export function rotateTeamLoginKey(
   api: ApiClient,
   eventId: string,

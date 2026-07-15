@@ -160,6 +160,20 @@ describe("bulkDeployEvent — happy path & chunking", () => {
     );
 
     expect((await deployments.listByTeamLoginKey(plaintext))[0]?.teamId).toBe("T1");
+    const jobId = plan.entries[0]?.item.jobId;
+    expect(jobId).toBeDefined();
+    await deployments.markCreateInProgress(String(jobId), "2026-07-15T00:01:00.000Z");
+    await deployments.markCreateSucceeded(
+      String(jobId),
+      "arn:aws:cloudformation:ap-northeast-1:111111111111:stack/test/id",
+      "[]",
+      undefined,
+      "2026-07-15T00:02:00.000Z",
+    );
+    expect((await deployments.listByTeamLoginKey(plaintext))[0]).toMatchObject({
+      teamId: "T1",
+      status: "COMPLETE",
+    });
     const row = await sql.get("SELECT payload FROM deployments LIMIT 1");
     expect(String(row?.payload)).not.toContain(plaintext);
     expect(JSON.parse(String(row?.payload))).not.toHaveProperty("teamLoginKeyHash");

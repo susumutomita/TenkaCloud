@@ -7,8 +7,9 @@ export function useEventDetail(args: {
   readonly apiClient: ApiClient | null;
   readonly eventId: string | undefined;
   readonly eventIdValid: boolean;
+  readonly withTeamLoginKeys?: boolean;
 }) {
-  const { apiClient, eventId, eventIdValid } = args;
+  const { apiClient, eventId, eventIdValid, withTeamLoginKeys = false } = args;
   const [detail, setDetail] = useState<EventDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [manualRefreshInFlight, setManualRefreshInFlight] = useState(false);
@@ -18,13 +19,16 @@ export function useEventDetail(args: {
     try {
       // Issue #1038 P1 #7: operator が「どのチームがいつ加点 / 減点したか」 を一目で
       // 把握できるよう、 Event 詳細取得で全 team の score event timeline も同時に fetch する。
-      const nextDetail = await getEvent(apiClient, eventId, { withScoreEvents: true });
+      const nextDetail = await getEvent(apiClient, eventId, {
+        withScoreEvents: true,
+        ...(withTeamLoginKeys ? { withTeamLoginKeys: true } : {}),
+      });
       setDetail(nextDetail);
       setError(null);
     } catch (err) {
       setError(toErrorMessage(err));
     }
-  }, [apiClient, eventId, eventIdValid]);
+  }, [apiClient, eventId, eventIdValid, withTeamLoginKeys]);
 
   const manualRefresh = useCallback(async () => {
     if (manualRefreshInFlight) return;
