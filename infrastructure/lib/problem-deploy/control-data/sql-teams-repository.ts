@@ -35,9 +35,16 @@ export const TEAM_LOGIN_KEY_SCRUB_SQL =
  * SHA-256 **hash** in `login_key_hash` — the plaintext key never lands in an index
  * column. The team aggregate retains the plaintext in `payload` so an authorized
  * operator can redistribute it; HTTP response authorization is enforced by the
- * Event route. DynamoDB's GSI2 stores `TEAMKEY#<plaintext>`; the SQLite backend
- * stores `sha256(key)`. Both are looked up by the same plaintext key
- * ({@link SqlTeamsRepository.getTeamByLoginKey}) and return the same team.
+ * Event route.
+ *
+ * **[Issue #2674]** Neither backend has a Teams login-key READ path anymore —
+ * participant auth is the Deployments aggregate (`listByTeamLoginKey`), and the
+ * DynamoDB Teams GSI2 was deleted. The `login_key_hash` column + its UNIQUE
+ * index deliberately STAY on the SQL side (an intentional asymmetry with DDB):
+ * `listTeamsForDeployment` reads the column as the sha256 deploy credential, and
+ * the UNIQUE partial index is load-bearing for {@link SqlTeamsRepository.rotateLoginKey}'s
+ * conflict semantics (a rotation onto a key another team already holds must fail
+ * with SQLITE_CONSTRAINT_UNIQUE, see `isLoginKeyRotationConflict`).
  */
 export const TEAMS_SCHEMA_STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS teams (
@@ -118,22 +125,6 @@ export class SqlTeamsRepository implements TeamsRepository {
     // Same guard as the DDB backend: absent row or tenant mismatch → undefined.
     if (!row || row.tenant_id !== tenantId) return undefined;
     return parseTeamRecord(row.payload);
-  }
-
-  async getTeamByLoginKey(loginKey: string): Promise<TeamRecord | undefined> {
-    // Hash the incoming plaintext key and match the indexed hash column — the
-    // plaintext bearer never touches an index (mirror of DDB GSI2 `TEAMKEY#<key>`).
-    const row = await this.sql.get("SELECT payload FROM teams WHERE login_key_hash = ?", [
-      hashLoginKey(loginKey),
-    ]);
-    if (!row) return undefined;
-    const stored = parseTeamRecord(row.payload);
-    return {
-      ...stored,
-      // Historical hash-only rows can still authenticate. Restore the bearer
-      // supplied by the caller when the aggregate predates plaintext retention.
-      teamLoginKey: loginKey,
-    };
   }
 
   async listTeamsByEvent(eventId: string): Promise<readonly TeamRecord[]> {

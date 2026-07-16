@@ -11,6 +11,7 @@ import {
 } from "../../../lib/problem-deploy/control-data/mirrored-repositories";
 import {
   DynamoDbTeamsRepository,
+  hashLoginKey,
   SqlTeamsRepository,
   type TeamRecord,
   type TeamsRepository,
@@ -631,7 +632,7 @@ describe.each(backends)("EventsRepository mutations parity: %s", (_name, makeRep
   });
 
   describe("createEventWithTeams", () => {
-    it("should create the event and all teams atomically and resolve them by login key", async () => {
+    it("should create the event and all teams atomically with their login credentials", async () => {
       const { events, teams } = makeRepos();
       const event = sampleEvent({ status: "DRAFT" });
       const teamRecords = [
@@ -652,10 +653,17 @@ describe.each(backends)("EventsRepository mutations parity: %s", (_name, makeRep
         "01TEAMAAAAAAAAAAAAAAAAAAAA",
         "01TEAMBBBBBBBBBBBBBBBBBBBB",
       ]);
-      // participant login: どちらの backend でも同じ plaintext key で引ける。
-      expect((await teams.getTeamByLoginKey("KEY-BETA"))?.teamId).toBe(
-        "01TEAMBBBBBBBBBBBBBBBBBBBB",
-      );
+      // [#2674] Teams に login-key read は無い — 配布用 credential が team 行に
+      // 書かれていることを deployment credential view で確認する (どちらの backend も
+      // KEY-BETA 由来の credential を返す = 運営のキー配布経路が成立している)。
+      const deployable = await teams.listTeamsForDeployment(event.eventId);
+      const beta = deployable.find((t) => t.teamId === "01TEAMBBBBBBBBBBBBBBBBBBBB");
+      expect(beta?.credential).toBeDefined();
+      expect(
+        beta?.credential.kind === "plaintext"
+          ? beta.credential.value === "KEY-BETA"
+          : beta?.credential.value === hashLoginKey("KEY-BETA"),
+      ).toBe(true);
     });
 
     it("should return conflict and write NOTHING when the event row already exists", async () => {

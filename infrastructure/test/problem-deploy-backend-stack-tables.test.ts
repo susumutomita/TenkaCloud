@@ -1,5 +1,5 @@
 import { Match } from "aws-cdk-lib/assertions";
-import { describe, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { synthDefault } from "./problem-deploy-backend-stack.test-helpers";
 
 describe("ProblemDeployBackendStack (MVP-1) — DDB tables", () => {
@@ -25,6 +25,22 @@ describe("ProblemDeployBackendStack (MVP-1) — DDB tables", () => {
         ]),
       }),
     );
+  });
+
+  it("should keep exactly GSI1 on the Teams table — the plaintext login-key GSI2 is deleted (#2674)", () => {
+    // #2674: the Teams GSI2 (`GSI2PK = TEAMKEY#<plaintext>`) had zero readers —
+    // participant auth queries the DEPLOYMENTS table's GSI2 — so it was removed.
+    // Pin the shape so the plaintext bearer can never silently become an index
+    // key on Teams again.
+    const tables = tpl.findResources("AWS::DynamoDB::Table");
+    const teams = Object.entries(tables).find(([logicalId]) => logicalId.includes("TeamsTable"));
+    if (!teams) throw new Error("Teams table not found in the synthesized template");
+    const props = (
+      teams[1] as {
+        Properties: { GlobalSecondaryIndexes?: readonly { IndexName: string }[] };
+      }
+    ).Properties;
+    expect(props.GlobalSecondaryIndexes?.map((gsi) => gsi.IndexName)).toEqual(["GSI1"]);
   });
 
   it("should enable TTL on expiresAt", () => {

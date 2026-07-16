@@ -92,8 +92,6 @@ function memoryTeams(initial: readonly TeamRecord[] = []): {
         const record = records.get(key(eventId, teamId));
         return record?.tenantId === tenantId ? record : undefined;
       },
-      getTeamByLoginKey: async (loginKey) =>
-        [...records.values()].find((record) => record.teamLoginKey === loginKey),
       putTeam: async (record) => {
         records.set(key(record.eventId, record.teamId), record);
       },
@@ -412,20 +410,17 @@ describe("MirroredTeamsRepository", () => {
     const canonical = memoryTeams([current]);
     const replica = memoryTeams([team({ internalSlug: "stale" })]);
     const getTeam = vi.spyOn(replica.repo, "getTeam");
-    const getTeamByLoginKey = vi.spyOn(replica.repo, "getTeamByLoginKey");
     const listTeamsByEvent = vi.spyOn(replica.repo, "listTeamsByEvent");
     const repository = new MirroredTeamsRepository(canonical.repo, replica.repo);
 
     await expect(repository.getTeam("tenant-1", "event-1", "team-1")).resolves.toBe(current);
-    await expect(repository.getTeamByLoginKey("key-1")).resolves.toBe(current);
     await expect(repository.listTeamsByEvent("event-1")).resolves.toEqual([current]);
 
     expect(getTeam).toHaveBeenCalledOnce();
-    expect(getTeamByLoginKey).toHaveBeenCalledOnce();
     expect(listTeamsByEvent).toHaveBeenCalledOnce();
   });
 
-  it("should heal team point, login-key, and event-list reads", async () => {
+  it("should heal team point and event-list reads", async () => {
     const current = team({ internalSlug: "current" });
     const second = team({ teamId: "team-2", teamLoginKey: "key-2" });
     const third = team({ teamId: "team-3", teamLoginKey: "key-3" });
@@ -439,9 +434,6 @@ describe("MirroredTeamsRepository", () => {
     await expect(repository.getTeam("tenant-1", "event-1", "team-1")).resolves.toEqual(current);
     await expect(repository.getTeam("tenant-1", "event-1", "missing")).resolves.toBeUndefined();
     await expect(repository.getTeam("tenant-1", "event-1", "ghost")).resolves.toBeUndefined();
-    await expect(repository.getTeamByLoginKey("key-2")).resolves.toEqual(second);
-    await replica.repo.putTeam(team({ teamId: "login-ghost", teamLoginKey: "ghost-key" }));
-    await expect(repository.getTeamByLoginKey("ghost-key")).resolves.toBeUndefined();
     await replica.repo.putTeam(team({ teamId: "ghost-2", teamLoginKey: "ghost-key-2" }));
     await expect(repository.listTeamsByEvent("event-1")).resolves.toEqual([current, second, third]);
     expect([...replica.records.keys()].sort()).toEqual([

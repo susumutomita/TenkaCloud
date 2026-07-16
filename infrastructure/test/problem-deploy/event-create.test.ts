@@ -198,7 +198,7 @@ describe("createEvent", () => {
     expect(ddbSend).not.toHaveBeenCalled();
   });
 
-  it("Teams Put should always attach GSI1 (TENANT) and GSI2 (TEAMKEY) attributes (against sparse expiry)", async () => {
+  it("Teams Put should attach GSI1 (TENANT) attributes and no login-key GSI keys (#2674)", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({});
 
@@ -208,8 +208,11 @@ describe("createEvent", () => {
     const teamItem = cmd.input.TransactItems?.[1]?.Put?.Item;
     expect(teamItem?.GSI1PK).toBe("TENANT#tenant-acme");
     expect(teamItem?.GSI1SK).toMatch(/^EVENT#[0-9A-HJKMNP-TV-Z]{26}#TEAM#[0-9A-HJKMNP-TV-Z]{26}$/);
-    expect(teamItem?.GSI2PK).toBe(`TEAMKEY#${teamItem?.teamLoginKey}`);
-    expect(teamItem?.GSI2SK).toBe("META");
+    // [#2674] Teams GSI2 was deleted; the plaintext bearer must no longer be
+    // written as an index key, while the distributable attribute itself remains.
+    expect(teamItem?.GSI2PK).toBeUndefined();
+    expect(teamItem?.GSI2SK).toBeUndefined();
+    expect(String(teamItem?.teamLoginKey ?? "").length).toBeGreaterThan(0);
   });
 
   it("Event Put should attach GSI1 (TENANT / createdAt) to enable newest-first queries", async () => {

@@ -516,7 +516,8 @@ export interface EventsRepository {
 }
 export interface TeamsRepository {
   getTeam(tenantId: string, eventId: string, teamId: string): Promise&lt;TeamRecord | undefined&gt;;
-  getTeamByLoginKey(loginKey: string): Promise&lt;TeamRecord | undefined&gt;; // SQL hashes internally
+  // participant login-key auth lives on the Deployments aggregate (listByTeamLoginKey);
+  // Teams deliberately has no login-key read.
   listTeamsByEvent(eventId: string): Promise&lt;readonly TeamRecord[]&gt;;
   putTeam(record: TeamRecord): Promise&lt;void&gt;;
   deleteTeam(eventId: string, teamId: string): Promise&lt;void&gt;;

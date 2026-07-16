@@ -101,9 +101,9 @@ Participant Portal のログインはチームログイン鍵そのものを bea
 
 - **鍵が空**: フロントが `EMPTY_TEAM_LOGIN_KEY` を出し、リクエストは飛ばない。→ 鍵を入力してもらう。
 - **鍵の形式が不正** (43 文字の base64url でない): DynamoDB を引く前に **401**。コピー&ペーストで前後に空白 / 改行が混ざっている、鍵が途中で切れている、を疑う。
-- **形式は正しいがチームが見つからない**: 鍵がローテーション / TTL 失効した、または撤収でスタックが消えて sparse GSI2 の行が消えた、などで **401** (`PortalAuthError`)。→ 有効な鍵を再発行 / 再配布する。デプロイをテスト中に消していないか確認する。
+- **形式は正しいがチームが見つからない**: 鍵がローテーション / TTL 失効した、または撤収でスタックが消えて Deployments テーブルの sparse GSI2 行が消えた、などで **401** (`PortalAuthError`)。→ 有効な鍵を再発行 / 再配布する。デプロイをテスト中に消していないか確認する。サーバ側には `portal.login.unauthorized` の構造化ログ (reason = `no_rows` / `all_deleted` / `no_live_sample`) が出るので、CloudWatch で原因を切り分けられる (Issue 2675)。
 - **バックエンド到達不能**: フロントが `BACKEND_UNREACHABLE`。Participant Portal のバックエンド (`tenkacloud-problem-deploy`) が生きているか、URL / runtime-config が正しいかを確認する。
-- 鍵の保存方式はバックエンドで異なる (デフォルト DynamoDB は sparse GSI2 `TEAMKEY#<鍵>` に平文で索引、Always-On / SQL 経路は SHA-256 ハッシュのみ)。どちらでも「鍵 = そのチームの認証情報」なので、鍵の配布経路は限定する。
+- 鍵の保存方式はバックエンドで異なる (デフォルト DynamoDB は **Deployments テーブル**の sparse GSI2 `TEAMKEY#<鍵>` に平文で索引、Always-On / SQL 経路は SHA-256 ハッシュのみ。Teams テーブル側の平文 index は Issue 2674 で削除済みで、鍵は再配布用の属性としてのみ残る)。どちらでも「鍵 = そのチームの認証情報」なので、鍵の配布経路は限定する。
 
 ## 撤収チェックリスト
 
