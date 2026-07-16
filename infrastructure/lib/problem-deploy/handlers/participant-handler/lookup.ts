@@ -18,6 +18,7 @@ import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
 import { parseEndpointsHealth } from "../shared/endpoints-health.js";
 import { parseHintRevealedAttribute } from "../shared/hint-reveal.js";
 import { decorateTeamView } from "./challenge-access.js";
+import { warnLoginUnauthorized } from "./login-diagnostics.js";
 import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
 import { getSolvedFlagIds } from "./submit-flag.js";
 
@@ -373,7 +374,13 @@ export async function lookupTeamByLoginKey(
 ): Promise<ParticipantTeamView | undefined> {
   const items = await queryTeamItems(shared, teamLoginKey);
   const view = buildTeamView(items, shared.problemsScoring);
-  if (!view) return undefined;
+  if (!view) {
+    // Issue #2675: emit a server-side triage line before the opaque 401. The HTTP
+    // response is unchanged (still undefined → `unauthorized`); only the reason and
+    // a non-reversible key fingerprint are logged, never the plaintext key.
+    warnLoginUnauthorized(teamLoginKey, items);
+    return undefined;
+  }
 
   // eventGate + progression (Issue #2283) の注入と locked 問題の stackOutputs 空化は
   // decorateTeamView に集約 (= PATCH /portal/me 応答と同じ経路)。 eventId 不在は
