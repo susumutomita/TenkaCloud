@@ -139,7 +139,7 @@ describe("Codespaces local Participant API proxy", () => {
     }
   });
 
-  it("should strip forwarding auth material while preserving portal Origin and bearer", () => {
+  it("should strip browser and forwarding identity while preserving the bearer", () => {
     expect(
       localApiRequestHeaders(
         {
@@ -159,7 +159,6 @@ describe("Codespaces local Participant API proxy", () => {
       "accept-encoding": "identity",
       authorization: "Bearer participant-token",
       host: "127.0.0.1:43199",
-      origin: "https://demo-5175.app.github.dev",
     });
   });
 
@@ -172,13 +171,14 @@ describe("Codespaces local Participant API proxy", () => {
     );
   });
 
-  it("should preserve participant auth, Origin, and manual redirects without leaking cookies", async () => {
+  it("should forward a Codespaces runtime mutation without leaking browser identity", async () => {
     let observed: Record<string, unknown> | undefined;
     const upstream = createServer((request, response) => {
       observed = {
         authorization: request.headers.authorization,
         cookie: request.headers.cookie,
         github: request.headers["x-github-user"],
+        method: request.method,
         origin: request.headers.origin,
         path: request.url,
       };
@@ -194,7 +194,7 @@ describe("Codespaces local Participant API proxy", () => {
     const proxyPort = await listen(proxy);
     try {
       const response = await fetch(
-        `http://127.0.0.1:${proxyPort}/__tenkacloud-local-api/portal/me/problems/p/console?ticket=t`,
+        `http://127.0.0.1:${proxyPort}/__tenkacloud-local-api/portal/me/problems/p/start`,
         {
           headers: {
             authorization: "Bearer participant-token",
@@ -202,6 +202,7 @@ describe("Codespaces local Participant API proxy", () => {
             origin: "https://demo-5175.app.github.dev",
             "x-github-user": "octocat",
           },
+          method: "POST",
           redirect: "manual",
         },
       );
@@ -215,8 +216,9 @@ describe("Codespaces local Participant API proxy", () => {
         authorization: "Bearer participant-token",
         cookie: undefined,
         github: undefined,
-        origin: "https://demo-5175.app.github.dev",
-        path: "/portal/me/problems/p/console?ticket=t",
+        method: "POST",
+        origin: undefined,
+        path: "/portal/me/problems/p/start",
       });
     } finally {
       await close(proxy);

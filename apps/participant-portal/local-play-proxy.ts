@@ -24,7 +24,9 @@ const HOP_BY_HOP_HEADERS = new Set([
   "transfer-encoding",
   "upgrade",
 ]);
-const PRIVATE_REQUEST_HEADERS = new Set(["cookie", "cookie2"]);
+// Browser identity terminates at this same-origin bridge. The loopback API sees
+// the bridge itself, while the explicit participant bearer remains authoritative.
+const BRIDGE_ONLY_REQUEST_HEADERS = new Set(["cookie", "cookie2", "origin"]);
 const PRIVATE_RESPONSE_HEADERS = new Set([
   "cookie",
   "set-cookie",
@@ -83,9 +85,9 @@ export function resolveLocalApiTarget(statePath = defaultStatePath()): URL | und
   }
 }
 
-function privateForwardingHeader(name: string): boolean {
+function bridgeOnlyRequestHeader(name: string): boolean {
   return (
-    PRIVATE_REQUEST_HEADERS.has(name) ||
+    BRIDGE_ONLY_REQUEST_HEADERS.has(name) ||
     name === "forwarded" ||
     name.startsWith("x-forwarded-") ||
     name.startsWith("x-github-") ||
@@ -102,7 +104,7 @@ export function localApiRequestHeaders(
   let count = 0;
   for (const [rawName, value] of Object.entries(source)) {
     const name = rawName.toLowerCase();
-    if (value === undefined || HOP_BY_HOP_HEADERS.has(name) || privateForwardingHeader(name)) {
+    if (value === undefined || HOP_BY_HOP_HEADERS.has(name) || bridgeOnlyRequestHeader(name)) {
       continue;
     }
     count += 1;
