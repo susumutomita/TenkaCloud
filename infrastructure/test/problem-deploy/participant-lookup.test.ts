@@ -187,6 +187,74 @@ describe("lookupTeamByLoginKey (Phase 2c team scope)", () => {
     expect(view).toBeUndefined();
   });
 
+  /* Issue #2675: server-side 401 diagnostic. The client response stays identical
+     (undefined → 401) for every miss reason; only a warn line distinguishes them,
+     and it never carries the plaintext key. */
+  describe("Issue #2675: 401 diagnostic log", () => {
+    const readWarn = (warn: ReturnType<typeof vi.spyOn>): Record<string, unknown> =>
+      JSON.parse(warn.mock.calls[0]?.[0] as string);
+
+    it("should log reason=no_rows and still return undefined when the key matches no rows", async () => {
+      const { shared, ddbSend } = buildShared();
+      ddbSend.mockResolvedValueOnce({ Items: [] });
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        const view = await lookupTeamByLoginKey(shared, "SECRET_DO_NOT_LEAK");
+        expect(view).toBeUndefined();
+        const parsed = readWarn(warn);
+        expect(parsed).toMatchObject({ event: "portal.login.unauthorized", reason: "no_rows" });
+        expect(warn.mock.calls[0]?.[0]).not.toContain("SECRET_DO_NOT_LEAK");
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it("should log reason=all_deleted and still return undefined when every row is torn down", async () => {
+      const { shared, ddbSend } = buildShared();
+      ddbSend.mockResolvedValueOnce({
+        Items: [sampleRow({ status: "DELETING" }), sampleRow({ jobId: "JOB2", status: "DELETED" })],
+      });
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        const view = await lookupTeamByLoginKey(shared, "KEY1");
+        expect(view).toBeUndefined();
+        expect(readWarn(warn).reason).toBe("all_deleted");
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it("should log reason=no_live_sample and still return undefined when all rows are lifecycle-expired", async () => {
+      const { shared, ddbSend } = buildShared();
+      ddbSend.mockResolvedValueOnce({
+        Items: [
+          sampleRow({ status: "EXPIRED" }),
+          sampleRow({ jobId: "JOB2", status: "AUTO_DELETED" }),
+        ],
+      });
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        const view = await lookupTeamByLoginKey(shared, "KEY1");
+        expect(view).toBeUndefined();
+        expect(readWarn(warn).reason).toBe("no_live_sample");
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it("should not emit any diagnostic line on a successful lookup", async () => {
+      const { shared, ddbSend } = buildShared();
+      ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        expect(await lookupTeamByLoginKey(shared, "KEY1")).toBeDefined();
+        expect(warn).not.toHaveBeenCalled();
+      } finally {
+        warn.mockRestore();
+      }
+    });
+  });
+
   it("should build problems[] from live rows only for teams partially DELETED", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({
