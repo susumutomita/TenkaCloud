@@ -2517,6 +2517,44 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — codebuild 
           "Resource": "*",
         },
         {
+          "Action": "ssm:StartAutomationExecution",
+          "Effect": "Allow",
+          "Resource": {
+            "Fn::Join": [
+              "",
+              [
+                "arn:",
+                {
+                  "Ref": "AWS::Partition",
+                },
+                ":ssm:",
+                {
+                  "Ref": "AWS::Region",
+                },
+                ":",
+                {
+                  "Ref": "AWS::AccountId",
+                },
+                ":automation-definition/",
+                {
+                  "Ref": "EventCapacityRunbookDocument9260BA28",
+                },
+                ":*",
+              ],
+            ],
+          },
+        },
+        {
+          "Action": "iam:PassRole",
+          "Effect": "Allow",
+          "Resource": {
+            "Fn::GetAtt": [
+              "EventCapacityRunbookAutomationRoleA7A0BC69",
+              "Arn",
+            ],
+          },
+        },
+        {
           "Action": "scheduler:DeleteSchedule",
           "Effect": "Allow",
           "Resource": {
@@ -6411,6 +6449,44 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — lambda-dep
           "Action": "cloudwatch:GetMetricData",
           "Effect": "Allow",
           "Resource": "*",
+        },
+        {
+          "Action": "ssm:StartAutomationExecution",
+          "Effect": "Allow",
+          "Resource": {
+            "Fn::Join": [
+              "",
+              [
+                "arn:",
+                {
+                  "Ref": "AWS::Partition",
+                },
+                ":ssm:",
+                {
+                  "Ref": "AWS::Region",
+                },
+                ":",
+                {
+                  "Ref": "AWS::AccountId",
+                },
+                ":automation-definition/",
+                {
+                  "Ref": "EventCapacityRunbookDocument9260BA28",
+                },
+                ":*",
+              ],
+            ],
+          },
+        },
+        {
+          "Action": "iam:PassRole",
+          "Effect": "Allow",
+          "Resource": {
+            "Fn::GetAtt": [
+              "EventCapacityRunbookAutomationRoleA7A0BC69",
+              "Arn",
+            ],
+          },
         },
         {
           "Action": "scheduler:DeleteSchedule",
@@ -10375,6 +10451,44 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — lite mode 
           "Action": "cloudwatch:GetMetricData",
           "Effect": "Allow",
           "Resource": "*",
+        },
+        {
+          "Action": "ssm:StartAutomationExecution",
+          "Effect": "Allow",
+          "Resource": {
+            "Fn::Join": [
+              "",
+              [
+                "arn:",
+                {
+                  "Ref": "AWS::Partition",
+                },
+                ":ssm:",
+                {
+                  "Ref": "AWS::Region",
+                },
+                ":",
+                {
+                  "Ref": "AWS::AccountId",
+                },
+                ":automation-definition/",
+                {
+                  "Ref": "EventCapacityRunbookDocument9260BA28",
+                },
+                ":*",
+              ],
+            ],
+          },
+        },
+        {
+          "Action": "iam:PassRole",
+          "Effect": "Allow",
+          "Resource": {
+            "Fn::GetAtt": [
+              "EventCapacityRunbookAutomationRoleA7A0BC69",
+              "Arn",
+            ],
+          },
         },
         {
           "Action": "scheduler:DeleteSchedule",

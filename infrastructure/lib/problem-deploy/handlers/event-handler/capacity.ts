@@ -29,6 +29,7 @@ import type { EventSharedResources } from "./shared.js";
  * 変換する (silent zero は返さない)。
  *
  * ADR-014 / AGENTS.md の方針どおり frontend は polling でこの route を叩く (SSE/WS なし)。
+ * write 側 (`POST /admin/capacity` の runbook 起動、Issue #2680) は `capacity-scale.ts`。
  */
 
 /** event-hot テーブルの論理 role (UI 表示ラベル + response の安定キー)。 */

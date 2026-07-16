@@ -124,22 +124,63 @@ describe("ProblemDeployBackendStack — event capacity runbook (#2410)", {
     expect(vars.CAPACITY_RUNBOOK_DOCUMENT_NAME).toBeDefined();
   });
 
-  it("should grant the EventApi Lambda DescribeTable + GetMetricData for the monitoring read", () => {
+  interface PolicyStatementShape {
+    Action?: unknown;
+    Resource?: unknown;
+  }
+
+  function eventApiPolicyStatements(): PolicyStatementShape[] {
     const policies = tpl.findResources("AWS::IAM::Policy");
     const eventApiPolicy = Object.entries(policies).find(([name]) =>
       name.includes("EventApiFunctionServiceRoleDefaultPolicy"),
     );
     expect(eventApiPolicy).toBeDefined();
-    const statements =
+    return (
       (
         eventApiPolicy?.[1] as {
-          Properties?: { PolicyDocument?: { Statement?: { Action?: unknown }[] } };
+          Properties?: { PolicyDocument?: { Statement?: PolicyStatementShape[] } };
         }
-      )?.Properties?.PolicyDocument?.Statement ?? [];
-    const actions = statements.flatMap((s) =>
-      Array.isArray(s.Action) ? (s.Action as string[]) : [s.Action as string],
+      )?.Properties?.PolicyDocument?.Statement ?? []
     );
+  }
+
+  function statementActions(s: PolicyStatementShape): string[] {
+    return Array.isArray(s.Action) ? (s.Action as string[]) : [s.Action as string];
+  }
+
+  it("should grant the EventApi Lambda DescribeTable + GetMetricData for the monitoring read", () => {
+    const actions = eventApiPolicyStatements().flatMap(statementActions);
     expect(actions).toContain("dynamodb:DescribeTable");
     expect(actions).toContain("cloudwatch:GetMetricData");
+  });
+
+  it("should grant the EventApi Lambda StartAutomationExecution scoped to the runbook automation-definition only (#2680)", () => {
+    const statement = eventApiPolicyStatements().find((s) =>
+      statementActions(s).includes("ssm:StartAutomationExecution"),
+    );
+    expect(statement).toBeDefined();
+    // 対象は同 stack の runbook document (全 version) のみ — wildcard 無し。
+    expect(statementActions(statement as PolicyStatementShape)).toEqual([
+      "ssm:StartAutomationExecution",
+    ]);
+    const resource = JSON.stringify(statement?.Resource);
+    expect(resource).toContain("automation-definition/");
+    expect(resource).toContain(":*");
+    expect(resource).toMatch(/EventCapacityRunbookDocument/);
+    expect(resource).not.toBe('"*"');
+  });
+
+  it("should grant the EventApi Lambda iam:PassRole scoped to the runbook automation role only (#2680)", () => {
+    const statement = eventApiPolicyStatements().find((s) =>
+      statementActions(s).includes("iam:PassRole"),
+    );
+    expect(statement).toBeDefined();
+    expect(statementActions(statement as PolicyStatementShape)).toEqual(["iam:PassRole"]);
+    const resource = (statement as PolicyStatementShape).Resource as {
+      "Fn::GetAtt"?: [string, string];
+    };
+    const getAtt = resource["Fn::GetAtt"];
+    expect(getAtt?.[0]).toMatch(/EventCapacityRunbookAutomationRole/);
+    expect(getAtt?.[1]).toBe("Arn");
   });
 });

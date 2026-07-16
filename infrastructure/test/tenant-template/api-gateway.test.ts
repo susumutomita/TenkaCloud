@@ -231,7 +231,7 @@ describe("tenant ApiGateway", () => {
     });
   });
 
-  it("should bind GET /admin/capacity to the EventApi integration (#2410)", () => {
+  it("should bind GET and POST /admin/capacity to the EventApi integration (#2410 / #2680)", () => {
     const adminResourceId = Object.entries(
       tpl.findResources("AWS::ApiGateway::Resource", {
         Properties: { PathPart: "admin" },
@@ -246,6 +246,12 @@ describe("tenant ApiGateway", () => {
     expect(capacityResourceId).toBeDefined();
     tpl.hasResourceProperties("AWS::ApiGateway::Method", {
       HttpMethod: "GET",
+      ResourceId: { Ref: capacityResourceId },
+    });
+    // Issue #2680: 変更 (SSM runbook 起動) の POST。Gateway resource が無いと request は
+    // Lambda に届かず 403 になる (#2231 の feature-flags と同じ regression class)。
+    tpl.hasResourceProperties("AWS::ApiGateway::Method", {
+      HttpMethod: "POST",
       ResourceId: { Ref: capacityResourceId },
     });
   });

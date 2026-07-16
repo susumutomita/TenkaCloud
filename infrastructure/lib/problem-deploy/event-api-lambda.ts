@@ -87,6 +87,13 @@ export interface EventApiLambdaProps {
    */
   readonly capacityRunbookDocumentName?: string;
   /**
+   * Issue #2680: Slice 1 runbook の automation role ARN。`POST /admin/capacity` が document
+   * default の `AutomationAssumeRole` を渡すのに必要な `iam:PassRole` の対象。
+   * {@link capacityRunbookDocumentName} と両方揃ったときだけ StartAutomationExecution /
+   * PassRole の IAM を付与する。純 SQL backend では runbook 自体が無いため未指定。
+   */
+  readonly capacityRunbookAutomationRoleArn?: string;
+  /**
    * Issue #888: problem metadata.json の `disruptions[]` 宣言。 Lambda runtime で
    * `(problemId, disruptionId)` lookup に使う。
    */
@@ -181,6 +188,38 @@ function grantEventHotCapacityRead(
 
 function capacityRunbookEnv(documentName: string | undefined): Record<string, string> {
   return documentName ? { CAPACITY_RUNBOOK_DOCUMENT_NAME: documentName } : {};
+}
+
+/**
+ * [Issue #2680] `POST /admin/capacity` が Slice 1 runbook を起動するための最小 IAM。
+ * document + automation role が両方配線された stack (= dynamodb backend) だけに付与する。
+ * 純 SQL backend では runbook 自体が synth されないため、この statement も一切残らない。
+ *
+ *  - ssm:StartAutomationExecution — 対象はこの stack の runbook document (全 version) のみ。
+ *    実行対象 ARN は `automation-definition/<name>` 形式 (document ARN とは別 namespace)。
+ *  - iam:PassRole — document default の `AutomationAssumeRole` (least-privilege role) のみ。
+ */
+function grantCapacityRunbookExecute(
+  fn: NodejsFunction,
+  stack: Stack,
+  documentName: string | undefined,
+  automationRoleArn: string | undefined,
+): void {
+  if (!documentName || !automationRoleArn) return;
+  fn.addToRolePolicy(
+    new PolicyStatement({
+      actions: ["ssm:StartAutomationExecution"],
+      resources: [
+        `arn:${stack.partition}:ssm:${stack.region}:${stack.account}:automation-definition/${documentName}:*`,
+      ],
+    }),
+  );
+  fn.addToRolePolicy(
+    new PolicyStatement({
+      actions: ["iam:PassRole"],
+      resources: [automationRoleArn],
+    }),
+  );
 }
 
 export function eventApiBundlingDefine(props: {
@@ -341,6 +380,14 @@ export class EventApiLambda extends Construct {
       props.problemEndpointsTable,
       props.disruptionsTable,
     ]);
+    // Issue #2680: `POST /admin/capacity` が Slice 1 runbook を起動する (document + automation
+    // role が両方揃った stack のみ。scope はその 2 ARN に限定 — wildcard 無し)。
+    grantCapacityRunbookExecute(
+      this.fn,
+      Stack.of(this),
+      props.capacityRunbookDocumentName,
+      props.capacityRunbookAutomationRoleArn,
+    );
     // [ADR-037 Slice 2] recurring disruption の早期解除 (operator の一覧→Cancel) は、 executor が作った
     // `tc-recur-*` rate schedule を同一アカウントから消す。 DeleteSchedule を tc-recur-* に scope して付与
     // (= 最小権限。 作成は executor、 削除は本 Lambda)。 EndDate 到達分は aws-scheduler が自動削除する。

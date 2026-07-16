@@ -241,11 +241,14 @@ export class ApiGateway extends Construct {
     auditLog.addMethod("GET", eventIntegration, deployMethodOptions);
     auditLog.addResource("export").addMethod("GET", eventIntegration, deployMethodOptions);
 
-    // Issue #2410 Slice 2: イベント中の DynamoDB キャパ監視 (TenantAdmin のみ、read-only)。
+    // Issue #2410 Slice 2: イベント中の DynamoDB キャパ監視 (TenantAdmin のみ、GET=read)。
+    // Issue #2680: 同じ resource に POST (= SSM runbook 起動でキャパ変更) を追加。
     // EventApi handler 側の `/admin/capacity` route と同じ EventApi integration に公開する
     // (resource が無いと Gateway 403 に CORS が付かず browser が "Failed to fetch" になる、
     // Issue #1292 audit-log と同じ理由)。
-    admin.addResource("capacity").addMethod("GET", eventIntegration, deployMethodOptions);
+    const capacity = admin.addResource("capacity");
+    capacity.addMethod("GET", eventIntegration, deployMethodOptions);
+    capacity.addMethod("POST", eventIntegration, deployMethodOptions);
 
     // Issue #2231 (ADR-035): per-tenant runtime feature-flag overrides, served by the same
     // EventApi handler as /admin/audit-log and /admin/capacity.

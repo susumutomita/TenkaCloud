@@ -393,6 +393,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       problemsProvenance: props.problemsProvenance,
       useBulkDistributedMap: props.useBulkDistributedMap,
       capacityRunbookDocumentName: tables.capacityRunbookDocumentName,
+      capacityRunbookAutomationRoleArn: tables.capacityRunbookAutomationRoleArn,
       deployViaLambda: props.deployViaLambda,
     });
     this.deployApiLambda = apiLambdas.deployApiFn;

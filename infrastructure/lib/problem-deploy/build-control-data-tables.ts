@@ -32,6 +32,12 @@ export interface ControlDataTablesOutputs {
    * `GET /admin/capacity` が実行コマンド例の表示に使う。
    */
   readonly capacityRunbookDocumentName?: string;
+  /**
+   * Issue #2680: runbook の least-privilege automation role ARN。EventApi Lambda の
+   * `POST /admin/capacity` (StartAutomationExecution) が document default の
+   * `AutomationAssumeRole` を渡すのに必要な `iam:PassRole` の対象として使う。
+   */
+  readonly capacityRunbookAutomationRoleArn?: string;
 }
 
 /**
@@ -117,11 +123,15 @@ export function buildControlDataTables(
     disruptions?.table,
   ].filter((t): t is Table => t !== undefined);
   let capacityRunbookDocumentName: string | undefined;
+  let capacityRunbookAutomationRoleArn: string | undefined;
   if (eventHotTables.length > 0) {
     const capacityRunbook = new EventCapacityRunbook(scope, "EventCapacityRunbook", {
       eventHotTables,
     });
     capacityRunbookDocumentName = capacityRunbook.documentName;
+    // Issue #2680: EventApi Lambda が `POST /admin/capacity` で document default の
+    // AutomationAssumeRole を渡すための iam:PassRole 対象。
+    capacityRunbookAutomationRoleArn = capacityRunbook.automationRoleArn;
     new CfnOutput(scope, "EventCapacityRunbookName", {
       value: capacityRunbook.documentName,
       description:
@@ -173,5 +183,6 @@ export function buildControlDataTables(
     disruptions,
     adminAuditLog,
     capacityRunbookDocumentName,
+    capacityRunbookAutomationRoleArn,
   };
 }

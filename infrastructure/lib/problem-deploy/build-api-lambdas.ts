@@ -45,6 +45,7 @@ export interface BuildApiLambdasArgs {
   readonly problemsProvenance?: Readonly<Record<string, unknown>>;
   readonly useBulkDistributedMap?: boolean;
   readonly capacityRunbookDocumentName?: string;
+  readonly capacityRunbookAutomationRoleArn?: string;
   readonly deployViaLambda?: boolean;
 }
 
@@ -163,6 +164,8 @@ export function buildApiLambdas(scope: Construct, args: BuildApiLambdasArgs): Ap
     // DescribeTable IAM を EventApiLambda 側で条件化)。
     problemEndpointsTable: tables.endpoints?.table,
     capacityRunbookDocumentName: args.capacityRunbookDocumentName,
+    // Issue #2680: `POST /admin/capacity` (StartAutomationExecution + PassRole) の IAM scope。
+    capacityRunbookAutomationRoleArn: args.capacityRunbookAutomationRoleArn,
     problemsDisruptions: (args.problemsDisruptions ?? {}) as Readonly<
       Record<string, readonly unknown[]>
     >,

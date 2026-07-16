@@ -50,6 +50,8 @@ runbook は base table と全 GSI を**同じ値**に揃える (base だけ上�
 
 イベント開始の 30 分前に、規模の目安表どおりに**事前に**上げておくのが基本。throttle は participant 体験を直撃するので、出てから上げるのは最終手段。
 
+同じ panel の「キャパシティを変更」action (Issue 2680) からも上げ下げできる。中身は下記 CLI と同一の SSM runbook (`StartAutomationExecution`) を `POST /admin/capacity` (TenantAdmin のみ) 経由で起動するだけなので、ceiling などのガードはそのまま効き、実行履歴も SSM に必ず残る。CLI での実行も従来どおり使える。
+
 ## 規模 → 目安
 
 チーム数を N とした初期値の目安。迷ったら小さめに設定し、panel を見ながら上げる。

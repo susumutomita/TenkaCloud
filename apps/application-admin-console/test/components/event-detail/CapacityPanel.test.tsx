@@ -1,3 +1,4 @@
+import createWrapper from "@cloudscape-design/components/test-utils/dom";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StatusCodes } from "http-status-codes";
@@ -7,17 +8,24 @@ import { type ApiClient, ApiError } from "../../../src/api/client";
 import type { CapacityRowModel } from "../../../src/lib/capacity-status";
 
 /**
- * Issue #2410 Slice 2: CapacityPanel — 消費/プロビジョン/throttle の read-only 監視 panel。
+ * Issue #2410 Slice 2: CapacityPanel — 消費/プロビジョン/throttle の監視 panel。
  * getCapacityOverview を mock し、成功 / 一時エラー / terminal (403・503・demo 501) /
  * runbook hint の対象テーブル選択 / 手動更新 / apiClient 不在 を検証。
+ * Issue #2680: 「キャパシティを変更」action (modal 起動 → 受理 flash) も startCapacityScale
+ * mock で検証する。
  */
 const mocks = vi.hoisted(() => ({
   getCapacityOverview: vi.fn(),
+  startCapacityScale: vi.fn(),
 }));
 
 vi.mock("../../../src/api/capacity-client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../../src/api/capacity-client")>();
-  return { ...actual, getCapacityOverview: mocks.getCapacityOverview };
+  return {
+    ...actual,
+    getCapacityOverview: mocks.getCapacityOverview,
+    startCapacityScale: mocks.startCapacityScale,
+  };
 });
 
 const { CapacityPanel, pickExampleTable } = await import(
@@ -143,13 +151,15 @@ describe("CapacityPanel", () => {
     expect(screen.getByText("capacity.empty")).toBeInTheDocument();
   });
 
-  it("should hide the runbook hint when the stack has no runbook wired", async () => {
+  it("should hide the runbook hint and the scale action when the stack has no runbook wired", async () => {
     mocks.getCapacityOverview.mockResolvedValue({ ...overview, runbookDocumentName: null });
 
     render(<CapacityPanel apiClient={apiClient} t={t} />);
 
     await waitFor(() => expect(screen.getByText("Deployments-x")).toBeInTheDocument());
     expect(screen.queryByTestId("capacity-runbook-hint")).not.toBeInTheDocument();
+    // Issue #2680: runbook 未配線 stack は read-only のまま (変更 action を出さない)。
+    expect(screen.queryByTestId("capacity-scale-open")).not.toBeInTheDocument();
   });
 
   it("should surface a transient load error and recover on manual refresh", async () => {
@@ -162,6 +172,8 @@ describe("CapacityPanel", () => {
     await waitFor(() => expect(screen.getByTestId("capacity-error")).toBeInTheDocument());
     expect(screen.getByText("capacity.load_failed")).toBeInTheDocument();
     expect(screen.queryByText("api 500")).not.toBeInTheDocument();
+    // Issue #2680: overview 未取得 (エラー中) は変更 action を出さない。
+    expect(screen.queryByTestId("capacity-scale-open")).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByTestId("capacity-refresh"));
 
@@ -205,6 +217,64 @@ describe("CapacityPanel", () => {
 
     expect(screen.queryByTestId("capacity-panel")).not.toBeInTheDocument();
     expect(mocks.getCapacityOverview).not.toHaveBeenCalled();
+  });
+});
+
+describe("CapacityPanel — capacity change action (#2680)", () => {
+  it("should submit a change through the modal, close it and show a dismissible accepted flash", async () => {
+    mocks.getCapacityOverview.mockResolvedValue(overview);
+    mocks.startCapacityScale.mockResolvedValue({
+      executionId: "exec-123",
+      tableName: "Deployments-x",
+      role: "deployments",
+      readCapacityUnits: 5,
+      writeCapacityUnits: 2,
+      status: "accepted",
+    });
+
+    render(<CapacityPanel apiClient={apiClient} t={t} />);
+
+    await waitFor(() => expect(screen.getByTestId("capacity-scale-open")).toBeInTheDocument());
+    await userEvent.click(screen.getByTestId("capacity-scale-open"));
+    // modal は先頭テーブルの現行値 (5/2) を prefill 済みなのでそのまま送信できる。
+    await userEvent.click(screen.getByTestId("capacity-scale-submit"));
+
+    await waitFor(() => expect(screen.getByTestId("capacity-scale-accepted")).toBeInTheDocument());
+    expect(
+      screen.getByText('capacity.scale_accepted:{"executionId":"exec-123"}'),
+    ).toBeInTheDocument();
+    expect(mocks.startCapacityScale).toHaveBeenCalledWith(apiClient, {
+      tableName: "Deployments-x",
+      readCapacityUnits: 5,
+      writeCapacityUnits: 2,
+    });
+    // 受理後は modal を閉じる。
+    expect(screen.queryByTestId("capacity-scale-submit")).not.toBeInTheDocument();
+
+    // flash は dismissible。
+    createWrapper(document.body)
+      .findAlert('[data-testid="capacity-scale-accepted"]')
+      ?.findDismissButton()
+      ?.click();
+    await waitFor(() =>
+      expect(screen.queryByTestId("capacity-scale-accepted")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("should close the scale modal via cancel without starting the runbook", async () => {
+    mocks.getCapacityOverview.mockResolvedValue(overview);
+
+    render(<CapacityPanel apiClient={apiClient} t={t} />);
+
+    await waitFor(() => expect(screen.getByTestId("capacity-scale-open")).toBeInTheDocument());
+    await userEvent.click(screen.getByTestId("capacity-scale-open"));
+    await userEvent.click(screen.getByTestId("capacity-scale-cancel"));
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("capacity-scale-submit")).not.toBeInTheDocument(),
+    );
+    expect(mocks.startCapacityScale).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("capacity-scale-accepted")).not.toBeInTheDocument();
   });
 });
 

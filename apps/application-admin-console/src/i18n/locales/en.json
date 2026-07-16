@@ -1023,6 +1023,17 @@
     "runbook_doc_pointer": "See docs/operations/dynamodb-event-capacity.md for sizing guidance. Scale back to 1/1 with the same runbook after the event.",
     "forbidden": "Capacity monitoring is visible to TenantAdmin only.",
     "unconfigured": "The capacity monitoring backend is not wired yet (deploy chain update required).",
-    "demo_unsupported": "Demo mode does not simulate capacity monitoring."
+    "demo_unsupported": "Demo mode does not simulate capacity monitoring.",
+    "scale_action": "Change capacity",
+    "scale_modal_header": "Change capacity (SSM runbook)",
+    "scale_table_label": "Target table",
+    "scale_rcu_label": "Read capacity units (RCU)",
+    "scale_wcu_label": "Write capacity units (WCU)",
+    "scale_constraint": "1-{ceiling}. The billed total is the value x (1 + GSI count).",
+    "scale_invalid": "Enter an integer between 1 and {ceiling}.",
+    "scale_warning": "DynamoDB limits how many times a table can be scaled down per day. UpdateTable is asynchronous, so the change takes time to apply (watch the 30-second auto refresh).",
+    "scale_cancel": "Cancel",
+    "scale_submit": "Apply change",
+    "scale_accepted": "Change accepted (execution {executionId}). It may take a few minutes to apply."
   }
 }
