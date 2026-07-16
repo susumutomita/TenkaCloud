@@ -92,7 +92,7 @@ export function buildScoringSubsystem(
     // [ADR-026/027/032 / #1410-1412] 非 AWS runtime status reconciler の credential path 構築用。
     environmentName: args.environmentName,
     // Issue #2440: control-plane data backend。event status reconcile + manual prune tick が
-    // repository seam 経由でこの env を読む (= turso/sql/turso-mirror/sql-mirror 選択時のみ注入)。
+    // repository seam 経由でこの env を読む (= turso 選択時のみ注入)。
     ...args.controlDataBackendProps,
   });
 

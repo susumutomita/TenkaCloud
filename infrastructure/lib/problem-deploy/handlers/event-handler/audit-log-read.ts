@@ -16,7 +16,7 @@ import type { AdminAuditLogRepository, AdminAuditRow } from "../../control-data/
  * (`resolveAdminAuditLogRepository` in `shared.ts` resolves it). The cursor wire format on the
  * DynamoDB backend stays byte-identical (plain base64 JSON) — this module no longer computes it
  * directly, but the repository's `listPage` produces the exact same encoding. env
- * `ADMIN_AUDIT_LOG_TABLE_NAME` が未設定 (かつ dynamodb/mirror backend) なら caller (= routes/
+ * `ADMIN_AUDIT_LOG_TABLE_NAME` が未設定 (かつ dynamodb backend) なら caller (= routes/
  * audit-log.ts) で 503 を返す。
  */
 

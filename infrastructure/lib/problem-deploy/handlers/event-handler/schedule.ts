@@ -101,7 +101,7 @@ export async function setEventSchedule(
   const validation = validateScheduleParams(params);
   if (validation) return validation;
 
-  // Event 行の read / write は同じ repository seam を使う。 mirror backend
+  // Event 行の read / write は同じ repository seam を使う。 turso backend
   // (`CONTROL_DATA_BACKEND=turso`) でも効くよう runtime resolver 経由 (default backend は
   // byte 互換)。 getEvent は tenant scope + 404 判定を内包する (= 従来の Get +
   // `tenantId` 手動照合と等価。 旧実装の ProjectionExpression 絞り込みは A1 で撤去済)。

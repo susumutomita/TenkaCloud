@@ -29,7 +29,7 @@ export interface CreateNotificationsRepositoryDeps {
   readonly ddb?: DynamoDBDocumentClient;
   /** Events table name — required for the `dynamodb` backend. */
   readonly eventsTableName?: string;
-  /** SQL driver — required for the `turso` / `sql` backend. */
+  /** SQL driver — required for the `turso` backend. */
   readonly sql?: SqlExecutor;
 }
 
@@ -37,7 +37,7 @@ export interface CreateNotificationsRepositoryDeps {
  * [ADR-049 §5.1] Cold-start factory that selects the Notifications backend from
  * the `CONTROL_DATA_BACKEND` flag value. **Default = dynamodb**
  * (behavior-preserving): an unset / empty / `"dynamodb"` flag returns the DDB
- * repository. `"turso"` / `"sql"` return the SQLite repository. Any other value
+ * repository. `"turso"` returns the SQLite repository. Any other value
  * is a hard error (fail loud).
  */
 export function createNotificationsRepository(
@@ -46,7 +46,7 @@ export function createNotificationsRepository(
 ): NotificationsRepository {
   const selected = (backend ?? "dynamodb").toLowerCase();
 
-  if (selected === "turso" || selected === "sql") {
+  if (selected === "turso") {
     if (!deps.sql) {
       throw new Error(
         `CONTROL_DATA_BACKEND="${backend}" requires a SqlExecutor (deps.sql). ` +
@@ -58,7 +58,7 @@ export function createNotificationsRepository(
 
   if (selected !== "dynamodb") {
     throw new Error(
-      `Unknown CONTROL_DATA_BACKEND="${backend}" (expected one of: dynamodb, turso, sql).`,
+      `Unknown CONTROL_DATA_BACKEND="${backend}" (expected one of: dynamodb, turso).`,
     );
   }
 

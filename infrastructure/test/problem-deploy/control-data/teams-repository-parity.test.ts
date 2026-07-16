@@ -4,10 +4,6 @@ import {
   SqlDeploymentsRepository,
 } from "../../../lib/problem-deploy/control-data/deployments-repository";
 import {
-  MirroredDeploymentsRepository,
-  MirroredTeamsRepository,
-} from "../../../lib/problem-deploy/control-data/mirrored-repositories";
-import {
   createTeamsRepository,
   DynamoDbTeamsRepository,
   hashLoginKey,
@@ -26,10 +22,8 @@ import { makeFakeDdb, makeSqliteExecutor } from "./control-data-write.test-helpe
 
 /**
  * [ADR-049 §5] Parity suite for the Teams repository seam. The SAME assertions run
- * against every backend so DynamoDB (behavior-preserving extraction), SQLite
- * (Turso / D1 dialect), and the mirror composition (DDB canonical + SQL replica,
- * [#2527 Slice 0] — read-repair restores the canonical login key, so callers see
- * the DynamoDB-shaped record) are provably interchangeable:
+ * against both backends so DynamoDB (behavior-preserving extraction) and SQLite
+ * (Turso / D1 dialect) are provably interchangeable:
  *   - DynamoDb impl against the shared in-memory fake DocumentClient
  *     (`control-data-write.test-helpers.ts` — real round-trip: put → get returns
  *     the stored row; base-table + GSI2 queries).
@@ -64,14 +58,6 @@ function sampleRecord(overrides: Partial<TeamRecord> = {}): TeamRecord {
 const backends: ReadonlyArray<readonly [string, () => TeamsRepository]> = [
   ["DynamoDbTeamsRepository", () => new DynamoDbTeamsRepository(makeFakeDdb(), TABLE)],
   ["SqlTeamsRepository", () => new SqlTeamsRepository(makeSqliteExecutor())],
-  [
-    "MirroredTeamsRepository",
-    () =>
-      new MirroredTeamsRepository(
-        new DynamoDbTeamsRepository(makeFakeDdb(), TABLE),
-        new SqlTeamsRepository(makeSqliteExecutor()),
-      ),
-  ],
 ];
 
 function withoutLoginKey(record: TeamRecord): TeamRecord {
@@ -205,11 +191,8 @@ describe("createTeamsRepository", () => {
     expect(createTeamsRepository("DynamoDB", ddbDeps())).toBeInstanceOf(DynamoDbTeamsRepository);
   });
 
-  it("should select the SQL backend for turso and sql flags", () => {
+  it("should select the SQL backend for the turso flag", () => {
     expect(createTeamsRepository("turso", { sql: makeSqliteExecutor() })).toBeInstanceOf(
-      SqlTeamsRepository,
-    );
-    expect(createTeamsRepository("sql", { sql: makeSqliteExecutor() })).toBeInstanceOf(
       SqlTeamsRepository,
     );
   });
@@ -236,6 +219,14 @@ describe("createTeamsRepository", () => {
     expect(() => createTeamsRepository("postgres", ddbDeps())).toThrow(
       /Unknown CONTROL_DATA_BACKEND/,
     );
+  });
+
+  it("should reject the removed sql alias and mirror values (#2677)", () => {
+    for (const removed of ["sql", "turso-mirror", "sql-mirror"]) {
+      expect(() => createTeamsRepository(removed, ddbDeps())).toThrow(
+        /Unknown CONTROL_DATA_BACKEND.*expected one of: dynamodb, turso/,
+      );
+    }
   });
 });
 
@@ -330,32 +321,6 @@ describe("hashLoginKey (Issue #2290)", () => {
   });
 });
 
-describe("MirroredTeamsRepository login-key repair", () => {
-  it("should persist a canonical login key into a legacy hash-only replica row", async () => {
-    const ddb = makeFakeDdb();
-    const sql = makeSqliteExecutor();
-    const canonical = new DynamoDbTeamsRepository(ddb, TABLE);
-    const replica = new SqlTeamsRepository(sql);
-    const record = sampleRecord({ teamLoginKey: "CANONICAL-KEY" });
-    await canonical.putTeam(record);
-    await replica.putTeam(record);
-    await sql.run(
-      "UPDATE teams SET payload = json_remove(payload, '$.teamLoginKey') " +
-        "WHERE event_id = ? AND team_id = ?",
-      [record.eventId, record.teamId],
-    );
-
-    const mirrored = new MirroredTeamsRepository(canonical, replica);
-    await expect(mirrored.listTeamsByEvent(record.eventId)).resolves.toEqual([record]);
-
-    const row = await sql.get("SELECT payload FROM teams WHERE event_id = ? AND team_id = ?", [
-      record.eventId,
-      record.teamId,
-    ]);
-    expect(JSON.parse(String(row?.payload))).toHaveProperty("teamLoginKey", "CANONICAL-KEY");
-  });
-});
-
 describe.each([
   [
     "DynamoDB",
@@ -374,23 +339,6 @@ describe.each([
       return {
         teams: new SqlTeamsRepository(sql),
         deployments: new SqlDeploymentsRepository(sql),
-      };
-    },
-  ],
-  [
-    "mirror",
-    () => {
-      const ddb = makeFakeDdb();
-      const sql = makeSqliteExecutor();
-      return {
-        teams: new MirroredTeamsRepository(
-          new DynamoDbTeamsRepository(ddb, "Teams", "Deployments"),
-          new SqlTeamsRepository(sql),
-        ),
-        deployments: new MirroredDeploymentsRepository(
-          new DynamoDbDeploymentsRepository(ddb, "Deployments"),
-          new SqlDeploymentsRepository(sql),
-        ),
       };
     },
   ],
@@ -647,29 +595,5 @@ describe("SqlTeamsRepository rotation errors", () => {
     const repository = new SqlTeamsRepository(sqlWithBatchError("database unavailable"));
 
     await expect(repository.rotateLoginKey(input)).rejects.toBe("database unavailable");
-  });
-});
-
-describe("MirroredTeamsRepository rotation errors", () => {
-  it("should fail loudly when the replica conflicts after the canonical update", async () => {
-    const canonical = {
-      rotateLoginKey: async () => ({ outcome: "updated" as const }),
-    } as TeamsRepository;
-    const replica = {
-      rotateLoginKey: async () => ({ outcome: "conflict" as const }),
-    } as TeamsRepository;
-    const repository = new MirroredTeamsRepository(canonical, replica);
-
-    await expect(
-      repository.rotateLoginKey({
-        tenantId: "tenant-a",
-        eventId: "event-a",
-        teamId: "team-a",
-        newLoginKey: "NEW-KEY",
-        expectedUpdatedAt: "2026-07-14T00:00:00.000Z",
-        updatedAt: "2026-07-15T12:00:00.000Z",
-        deployments: [],
-      }),
-    ).rejects.toThrow(/replica conflict after canonical update/);
   });
 });

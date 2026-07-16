@@ -62,7 +62,7 @@ function isGateFlagEnabled(
   const cached = cache.get(tenantId);
   if (cached) return cached;
   // [#2450] cold-start cache 済みの async resolver (injected `shared.runtime`) 経由で FeatureFlags
-  // repository を解決するため `CONTROL_DATA_BACKEND=turso|sql` でも動作する。 default backend では
+  // repository を解決するため `CONTROL_DATA_BACKEND=turso` でも動作する。 default backend では
   // 従来と byte 互換の GetCommand が飛ぶ。 tick (1 invocation) 内 cache の構造は不変 —
   // cache に入れる `Promise<boolean>` の構築だけ `.then()` 連結にする。
   const promise = shared.runtime

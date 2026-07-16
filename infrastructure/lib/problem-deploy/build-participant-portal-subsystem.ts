@@ -16,17 +16,17 @@ import { ParticipantPortalLambda } from "./participant-portal-lambda.js";
 
 export interface BuildParticipantPortalSubsystemArgs {
   /**
-   * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。
    */
   readonly deploymentsTable?: Table;
   /**
-   * [Issue #2440 / ADR-049 §5.1 Phase A5] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * [Issue #2440 / ADR-049 §5.1 Phase A5] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。
    */
   readonly eventsTable?: Table;
   /**
-   * [Issue #2442 / Phase C1] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * [Issue #2442 / Phase C1] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。
    */
   readonly endpointsTable?: Table;

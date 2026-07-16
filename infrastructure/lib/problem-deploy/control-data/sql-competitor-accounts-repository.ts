@@ -9,8 +9,9 @@ import type {
 
 /**
  * [Issue #2442 / Phase C2] SQLite schema for the CompetitorAccounts aggregate.
- * One SQL layer in the SQLite dialect covers both Turso (libSQL) and
- * Cloudflare D1.
+ * One SQL layer in the SQLite dialect targets the Turso (libSQL) hosted
+ * backend (#2677: Turso-only; the Always-On Worker holds its own D1 binding,
+ * never this seam).
  *
  * Denormalized `tenant_id` / `aws_account_id` columns mirror the DynamoDB
  * physical PK/SK (`TENANT#<t>` / `ACCOUNT#<a>`) so `listAccounts` /

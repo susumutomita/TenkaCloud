@@ -3,7 +3,6 @@ import {
   DynamoDbDeploymentsRepository,
   SqlDeploymentsRepository,
 } from "../../../lib/problem-deploy/control-data/deployments-repository";
-import { MirroredDeploymentsRepository } from "../../../lib/problem-deploy/control-data/mirrored-repositories";
 import { hashLoginKey } from "../../../lib/problem-deploy/control-data/teams-repository";
 import type {
   CompositeParentDeploymentRecord,
@@ -41,18 +40,6 @@ const backends: ReadonlyArray<readonly [string, () => Backend]> = [
       const sql = makeSqliteExecutor();
       return { name: "SqlDeploymentsRepository", repo: new SqlDeploymentsRepository(sql), sql };
     },
-  ],
-  // [#2527 Slice 0] The turso-mirror / sql-mirror bridge (DDB canonical + SQL
-  // replica) must satisfy the exact same contract as each backend alone.
-  [
-    "MirroredDeploymentsRepository",
-    () => ({
-      name: "MirroredDeploymentsRepository",
-      repo: new MirroredDeploymentsRepository(
-        new DynamoDbDeploymentsRepository(makeFakeDdb(), TABLE),
-        new SqlDeploymentsRepository(makeSqliteExecutor()),
-      ),
-    }),
   ],
 ];
 

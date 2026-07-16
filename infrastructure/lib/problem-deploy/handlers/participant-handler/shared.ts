@@ -58,15 +58,15 @@ export function buildParticipantSharedResources(
 ): ParticipantSharedResources {
   return {
     runtime,
-    // [Issue #2441 / Phase B PR-6] pure SQL backend (turso|sql) では Deployments table 自体が
+    // [Issue #2441 / Phase B PR-6] pure SQL backend (turso) では Deployments table 自体が
     // synth されず env も配線されないため、module-load を fail-fast にすると cold start が落ちる。
-    // 空文字 default に緩和し、dynamodb / mirror backend の誤設定は runtime resolver
+    // 空文字 default に緩和し、dynamodb backend の誤設定は runtime resolver
     // (`runtime-repositories.ts`) が fail loud に受ける (= silent fallback にはならない、
     // EVENTS_TABLE_NAME と同じ緩和)。
     tableName: process.env.DEPLOYMENTS_TABLE_NAME ?? "",
-    // [Issue #2440 / ADR-049 §5.1 Phase A5] pure SQL backend (turso|sql) では Events table
+    // [Issue #2440 / ADR-049 §5.1 Phase A5] pure SQL backend (turso) では Events table
     // 自体が synth されず env も配線されないため、module-load を fail-fast にすると cold start
-    // が落ちる。空文字 default に緩和し、dynamodb / mirror backend の誤設定は runtime resolver
+    // が落ちる。空文字 default に緩和し、dynamodb backend の誤設定は runtime resolver
     // (`runtime-repositories.ts`) が fail loud に受ける (= silent fallback にはならない)。
     eventsTableName: process.env.EVENTS_TABLE_NAME ?? "",
     // 未配線時 (= legacy stack) でも import が落ちないよう env 必須にしない (= 空文字)。
@@ -92,7 +92,7 @@ export interface ParticipantDeploymentsTableSharedResources {
  * [Issue #2441 / Phase B1] Deployments READ seam for participant-handler modules.
  *
  * Default backend stays DynamoDB and emits the same GSI2/base-table reads through
- * the same injected DocumentClient. `CONTROL_DATA_BACKEND=turso/sql` is the
+ * the same injected DocumentClient. `CONTROL_DATA_BACKEND=turso` is the
  * known B4 constraint: the control-data factory fails loudly until the SQL
  * Deployments backend exists.
  *
@@ -146,7 +146,7 @@ export async function queryTeamItems(
  * 経由で発火する。 participant portal は通知の read しか行わない。
  *
  * [#2450] cold-start cache 済みの async resolver (injected `shared.runtime`) 経由で解決するため
- * `CONTROL_DATA_BACKEND=turso|sql` でも Mirrored で動作する (read は canonical DDB の passthrough)。
+ * `CONTROL_DATA_BACKEND=turso` (pure SQL) でも動作する。
  * SSM GetParameter + libsql client 構築は turso 選択時のみ・Lambda instance ごとに 1 回だけ
  * (dynamodb default では SSM に触れず byte 互換)。 `Promise` を返すので caller は await する。
  */
@@ -164,7 +164,7 @@ export function resolveNotificationsRepository(
  * ({@link resolveNotificationsRepository} の鏡像)。 challenge access guard の Gate flag 判定が
  * seam 経由で per-tenant flag 行を読む。 default backend では従来と byte 互換の GetCommand を
  * `shared.ddb` 経由で発火する。 [#2450] notifications seam と同じく async resolver 経由なので
- * `CONTROL_DATA_BACKEND=turso|sql` でも Mirrored で動作する。 `Promise` を返す。
+ * `CONTROL_DATA_BACKEND=turso` (pure SQL) でも動作する。 `Promise` を返す。
  */
 export function resolveFeatureFlagsRepository(
   shared: Pick<ParticipantSharedResources, "runtime" | "ddb" | "eventsTableName">,

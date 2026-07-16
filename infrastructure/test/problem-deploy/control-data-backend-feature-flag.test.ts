@@ -4,7 +4,6 @@ import {
   SYNTH_TIMEOUT_MS,
   synthDefault,
   synthWithControlDataBackendTurso,
-  synthWithControlDataBackendTursoMirror,
 } from "../problem-deploy-backend-stack.test-helpers";
 
 /** Logical IDs of every `AWS::DynamoDB::Table` in the template (helper for table-presence pins). */
@@ -133,9 +132,9 @@ describe("control-data backend feature flag env wiring (#2290)", () => {
       // [Issue #2560] DeployApi *does* open the DB: `startDeployment` resolves
       // `resolveDeploymentsRepository` and `resolveVerifiedCompetitorAccount` resolves
       // `resolveCompetitorAccountsRepository`, both of which acquire a SQL executor in pure
-      // turso/sql mode. It therefore carries the same Turso executor wiring as EventApi/
+      // turso mode. It therefore carries the same Turso executor wiring as EventApi/
       // GenericScoring/CompetitorAccountsApi (previously this was wired as "scope out",
-      // which made every deploy/list/retry call throw in pure turso/sql mode).
+      // which made every deploy/list/retry call throw in pure turso mode).
       expect(envOf(tpl, "DeployApi").TURSO_DATABASE_URL).toBe("libsql://example.turso.io");
       expect(envOf(tpl, "DeployApi").TURSO_AUTH_TOKEN_PARAMETER_NAME).toBe(
         "/tenkacloud/development/turso-token",
@@ -187,16 +186,11 @@ describe("DeployCreate SFN SQL status-writer branch (#2441 Phase B PR-5)", () =>
   );
 
   it(
-    "should keep native DDB status writes for default and mirror backends",
+    "should keep native DDB status writes for the default backend",
     () => {
       const defaultDefinition = deployCreateDefinition(synthDefault());
-      const mirrorTpl = synthWithControlDataBackendTursoMirror();
-      const mirrorDefinition = deployCreateDefinition(mirrorTpl);
 
       expect(defaultDefinition).toContain("dynamodb:updateItem");
-      expect(mirrorDefinition).toContain("dynamodb:updateItem");
-      expect(lambdaIds(mirrorTpl).some((id) => id.includes("DeployStatusWriter"))).toBe(false);
-      expect(mirrorDefinition).not.toContain('"transition":"markSucceeded"');
     },
     SYNTH_TIMEOUT_MS,
   );
@@ -269,33 +263,6 @@ describe("pure SQL backend does not synth Events/Teams/Deployments/ProblemEndpoi
   );
 
   it(
-    "should still create Events/Teams/Deployments/ProblemEndpoints/CompetitorAccounts/Disruptions/AdminAuditLog tables + inject CONTROL_DATA_BACKEND='turso-mirror' when the migration-bridge backend is selected",
-    () => {
-      const tpl = synthWithControlDataBackendTursoMirror();
-      const ids = tableLogicalIds(tpl);
-      expect(ids.some((id) => id.startsWith("Events"))).toBe(true);
-      expect(ids.some((id) => id.startsWith("Teams"))).toBe(true);
-      expect(ids.some((id) => id.startsWith("Deployments"))).toBe(true);
-      expect(ids.some((id) => id.startsWith("ProblemEndpoints"))).toBe(true);
-      expect(ids.some((id) => id.startsWith("CompetitorAccounts"))).toBe(true);
-      expect(ids.some((id) => id.startsWith("Disruptions"))).toBe(true);
-      expect(ids.some((id) => id.startsWith("AdminAuditLog"))).toBe(true);
-      expect(envOf(tpl, "EventApi").CONTROL_DATA_BACKEND).toBe("turso-mirror");
-      expect(envOf(tpl, "DisruptionExecutor").CONTROL_DATA_BACKEND).toBe("turso-mirror");
-      expect(envOf(tpl, "GenericScoring").CONTROL_DATA_BACKEND).toBe("turso-mirror");
-      expect(envOf(tpl, "CompetitorAccountsApi").CONTROL_DATA_BACKEND).toBe("turso-mirror");
-      expect(envOf(tpl, "ExternalIdAudit").CONTROL_DATA_BACKEND).toBe("turso-mirror");
-      expect(envOf(tpl, "SystemAuditWriter").CONTROL_DATA_BACKEND).toBe("turso-mirror");
-      tpl.hasOutput("EventsTableName", {});
-      tpl.hasOutput("TeamsTableName", {});
-      tpl.hasOutput("DeploymentsTableName", {});
-      tpl.hasOutput("ProblemEndpointsTableName", {});
-      tpl.hasOutput("CompetitorAccountsTableName", {});
-    },
-    SYNTH_TIMEOUT_MS,
-  );
-
-  it(
     "should fall back ADMIN_AUDIT_LOG_TABLE_NAME to '' on DeployApi/EventApi/CompetitorAccountsApi under turso (pre-existing `?? \"\"` pattern, left as-is per #2442 Phase C4 scope)",
     () => {
       const tpl = synthWithControlDataBackendTurso();
@@ -316,12 +283,9 @@ describe("pure SQL backend does not synth Events/Teams/Deployments/ProblemEndpoi
   );
 
   it(
-    "should still inject ADMIN_AUDIT_LOG_TABLE_NAME for default and turso-mirror backends (byte-compat)",
+    "should still inject ADMIN_AUDIT_LOG_TABLE_NAME for the default backend (byte-compat)",
     () => {
       expect(envOf(synthDefault(), "EventApi").ADMIN_AUDIT_LOG_TABLE_NAME).toBeDefined();
-      expect(
-        envOf(synthWithControlDataBackendTursoMirror(), "EventApi").ADMIN_AUDIT_LOG_TABLE_NAME,
-      ).toBeDefined();
     },
     SYNTH_TIMEOUT_MS,
   );
@@ -349,12 +313,9 @@ describe("pure SQL backend does not synth Events/Teams/Deployments/ProblemEndpoi
   );
 
   it(
-    "should still inject PROBLEM_ENDPOINTS_TABLE_NAME for default and turso-mirror backends (byte-compat)",
+    "should still inject PROBLEM_ENDPOINTS_TABLE_NAME for the default backend (byte-compat)",
     () => {
       expect(envOf(synthDefault(), "EventApi").PROBLEM_ENDPOINTS_TABLE_NAME).toBeDefined();
-      expect(
-        envOf(synthWithControlDataBackendTursoMirror(), "EventApi").PROBLEM_ENDPOINTS_TABLE_NAME,
-      ).toBeDefined();
     },
     SYNTH_TIMEOUT_MS,
   );
@@ -377,12 +338,9 @@ describe("pure SQL backend does not synth Events/Teams/Deployments/ProblemEndpoi
   );
 
   it(
-    "should still inject COMPETITOR_ACCOUNTS_TABLE_NAME for default and turso-mirror backends (byte-compat)",
+    "should still inject COMPETITOR_ACCOUNTS_TABLE_NAME for the default backend (byte-compat)",
     () => {
       expect(envOf(synthDefault(), "EventApi").COMPETITOR_ACCOUNTS_TABLE_NAME).toBeDefined();
-      expect(
-        envOf(synthWithControlDataBackendTursoMirror(), "EventApi").COMPETITOR_ACCOUNTS_TABLE_NAME,
-      ).toBeDefined();
     },
     SYNTH_TIMEOUT_MS,
   );
@@ -399,12 +357,9 @@ describe("pure SQL backend does not synth Events/Teams/Deployments/ProblemEndpoi
   );
 
   it(
-    "should still inject DISRUPTIONS_TABLE_NAME for default and turso-mirror backends (byte-compat)",
+    "should still inject DISRUPTIONS_TABLE_NAME for the default backend (byte-compat)",
     () => {
       expect(envOf(synthDefault(), "EventApi").DISRUPTIONS_TABLE_NAME).toBeDefined();
-      expect(
-        envOf(synthWithControlDataBackendTursoMirror(), "EventApi").DISRUPTIONS_TABLE_NAME,
-      ).toBeDefined();
     },
     SYNTH_TIMEOUT_MS,
   );
@@ -444,15 +399,12 @@ describe("DeployDelete SFN SQL status-writer branch (#2441 Phase B PR-6)", () =>
   );
 
   it(
-    "should keep native DDB status writes for default and mirror backends",
+    "should keep native DDB status writes for the default backend",
     () => {
       const defaultDefinition = deployDeleteDefinition(synthDefault());
-      const mirrorDefinition = deployDeleteDefinition(synthWithControlDataBackendTursoMirror());
 
       expect(defaultDefinition).toContain("dynamodb:updateItem");
-      expect(mirrorDefinition).toContain("dynamodb:updateItem");
       expect(defaultDefinition).not.toContain('"transition":"markDeleted"');
-      expect(mirrorDefinition).not.toContain('"transition":"markDeleted"');
     },
     SYNTH_TIMEOUT_MS,
   );

@@ -28,7 +28,7 @@ export interface CreateFeatureFlagsRepositoryDeps {
   readonly ddb?: DynamoDBDocumentClient;
   /** Events table name — required for the `dynamodb` backend. */
   readonly eventsTableName?: string;
-  /** SQL driver — required for the `turso` / `sql` backend. */
+  /** SQL driver — required for the `turso` backend. */
   readonly sql?: SqlExecutor;
 }
 
@@ -36,7 +36,7 @@ export interface CreateFeatureFlagsRepositoryDeps {
  * [ADR-049 §5.1] Cold-start factory that selects the FeatureFlags backend from
  * the `CONTROL_DATA_BACKEND` flag value. **Default = dynamodb**
  * (behavior-preserving): an unset / empty / `"dynamodb"` flag returns the DDB
- * repository. `"turso"` / `"sql"` return the SQLite repository. Any other value
+ * repository. `"turso"` returns the SQLite repository. Any other value
  * is a hard error (fail loud).
  */
 export function createFeatureFlagsRepository(
@@ -45,7 +45,7 @@ export function createFeatureFlagsRepository(
 ): FeatureFlagsRepository {
   const selected = (backend ?? "dynamodb").toLowerCase();
 
-  if (selected === "turso" || selected === "sql") {
+  if (selected === "turso") {
     if (!deps.sql) {
       throw new Error(
         `CONTROL_DATA_BACKEND="${backend}" requires a SqlExecutor (deps.sql). ` +
@@ -57,7 +57,7 @@ export function createFeatureFlagsRepository(
 
   if (selected !== "dynamodb") {
     throw new Error(
-      `Unknown CONTROL_DATA_BACKEND="${backend}" (expected one of: dynamodb, turso, sql).`,
+      `Unknown CONTROL_DATA_BACKEND="${backend}" (expected one of: dynamodb, turso).`,
     );
   }
 

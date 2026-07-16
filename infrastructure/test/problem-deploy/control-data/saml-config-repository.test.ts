@@ -1,6 +1,5 @@
 import { GetCommand } from "@aws-sdk/lib-dynamodb";
 import { describe, expect, it, vi } from "vitest";
-import { MirroredSamlConfigRepository } from "../../../lib/problem-deploy/control-data/mirrored-repositories";
 import { createControlDataRuntime } from "../../../lib/problem-deploy/control-data/runtime-repositories";
 import {
   createSamlConfigRepository,
@@ -38,16 +37,6 @@ function sampleRecord(overrides: Partial<SamlConfigRecord> = {}): SamlConfigReco
 const backends: ReadonlyArray<readonly [string, () => SamlConfigRepository]> = [
   ["DynamoDbSamlConfigRepository", () => new DynamoDbSamlConfigRepository(makeFakeDdb(), TABLE)],
   ["SqlSamlConfigRepository", () => new SqlSamlConfigRepository(makeSqliteExecutor())],
-  // [#2527 Slice 0] Mirror mode (DDB canonical + SQL replica) must satisfy the
-  // same contract as each backend alone.
-  [
-    "MirroredSamlConfigRepository",
-    () =>
-      new MirroredSamlConfigRepository(
-        new DynamoDbSamlConfigRepository(makeFakeDdb(), TABLE),
-        new SqlSamlConfigRepository(makeSqliteExecutor()),
-      ),
-  ],
 ];
 
 describe.each(backends)("SamlConfigRepository parity: %s", (_name, makeRepo) => {
@@ -126,75 +115,6 @@ describe("DynamoDbSamlConfigRepository physical row", () => {
   });
 });
 
-describe("MirroredSamlConfigRepository", () => {
-  function memorySamlConfig(initial: readonly SamlConfigRecord[] = []): {
-    readonly repo: SamlConfigRepository;
-    readonly records: Map<string, SamlConfigRecord>;
-  } {
-    const records = new Map(initial.map((record) => [record.tenantId, record]));
-    return {
-      records,
-      repo: {
-        getSamlConfig: async (tenantId) => records.get(tenantId),
-        putSamlConfig: async (record) => {
-          records.set(record.tenantId, record);
-          return record;
-        },
-        deleteSamlConfig: async (tenantId) => {
-          records.delete(tenantId);
-        },
-      },
-    };
-  }
-
-  it("should write through on put", async () => {
-    const canonical = memorySamlConfig();
-    const replica = memorySamlConfig();
-    const repository = new MirroredSamlConfigRepository(canonical.repo, replica.repo);
-    const record = sampleRecord();
-
-    await repository.putSamlConfig(record);
-
-    expect(canonical.records.get(record.tenantId)).toEqual(record);
-    expect(replica.records.get(record.tenantId)).toEqual(record);
-  });
-
-  it("should write through on delete", async () => {
-    const record = sampleRecord();
-    const canonical = memorySamlConfig([record]);
-    const replica = memorySamlConfig([record]);
-    const repository = new MirroredSamlConfigRepository(canonical.repo, replica.repo);
-
-    await repository.deleteSamlConfig(record.tenantId);
-
-    expect(canonical.records.has(record.tenantId)).toBe(false);
-    expect(replica.records.has(record.tenantId)).toBe(false);
-  });
-
-  it("should serve get from canonical only", async () => {
-    const canonicalGet = vi.fn(async () => sampleRecord({ providerName: "Canonical" }));
-    const replicaGet = vi.fn(async () => sampleRecord({ providerName: "Replica" }));
-    const repository = new MirroredSamlConfigRepository(
-      {
-        getSamlConfig: canonicalGet,
-        putSamlConfig: async (r) => r,
-        deleteSamlConfig: async () => {},
-      },
-      {
-        getSamlConfig: replicaGet,
-        putSamlConfig: async (r) => r,
-        deleteSamlConfig: async () => {},
-      },
-    );
-
-    const record = await repository.getSamlConfig("tenant-a");
-
-    expect(record?.providerName).toBe("Canonical");
-    expect(canonicalGet).toHaveBeenCalledWith("tenant-a");
-    expect(replicaGet).not.toHaveBeenCalled();
-  });
-});
-
 describe("createSamlConfigRepository", () => {
   const ddbDeps = () => ({ ddb: makeFakeDdb(), competitorAccountsTableName: TABLE });
 
@@ -204,11 +124,8 @@ describe("createSamlConfigRepository", () => {
     );
   });
 
-  it("should select the SQL backend for turso and sql flags", () => {
+  it("should select the SQL backend for the turso flag", () => {
     expect(createSamlConfigRepository("turso", { sql: makeSqliteExecutor() })).toBeInstanceOf(
-      SqlSamlConfigRepository,
-    );
-    expect(createSamlConfigRepository("sql", { sql: makeSqliteExecutor() })).toBeInstanceOf(
       SqlSamlConfigRepository,
     );
   });
@@ -217,8 +134,13 @@ describe("createSamlConfigRepository", () => {
     expect(() => createSamlConfigRepository("turso", {})).toThrow(/requires a SqlExecutor/);
   });
 
-  it("should reject an unknown backend value", () => {
-    expect(() => createSamlConfigRepository("postgres", ddbDeps())).toThrow(
+  it.each([
+    "postgres",
+    "sql",
+    "turso-mirror",
+    "sql-mirror",
+  ])("should reject the unknown backend value %s", (backend) => {
+    expect(() => createSamlConfigRepository(backend, ddbDeps())).toThrow(
       /Unknown CONTROL_DATA_BACKEND/,
     );
   });
@@ -243,13 +165,10 @@ describe("resolveSamlConfigRepository (runtime)", () => {
     expect(repo).toBeInstanceOf(DynamoDbSamlConfigRepository);
   });
 
-  it.each([
-    "turso",
-    "sql",
-  ])("should return the SQL backend for CONTROL_DATA_BACKEND=%s without DDB inputs", async (backend) => {
+  it("should return the SQL backend for CONTROL_DATA_BACKEND=turso without DDB inputs", async () => {
     const runtime = createControlDataRuntime({
       env: {
-        CONTROL_DATA_BACKEND: backend,
+        CONTROL_DATA_BACKEND: "turso",
         TURSO_DATABASE_URL: "file:local.db",
         TURSO_AUTH_TOKEN_PARAMETER_NAME: "/tenkacloud/dev/sql-token",
       },
@@ -265,39 +184,15 @@ describe("resolveSamlConfigRepository (runtime)", () => {
     );
   });
 
-  it.each([
-    "turso-mirror",
-    "sql-mirror",
-  ])("should return the mirrored backend for CONTROL_DATA_BACKEND=%s", async (backend) => {
+  it("should fail loudly when the dynamodb backend is missing ddb/competitorAccountsTableName", async () => {
     const runtime = createControlDataRuntime({
-      env: {
-        CONTROL_DATA_BACKEND: backend,
-        TURSO_DATABASE_URL: "file:local.db",
-        TURSO_AUTH_TOKEN_PARAMETER_NAME: "/tenkacloud/dev/sql-token",
-      },
-      ssm: { send: vi.fn().mockResolvedValue({ Parameter: { Value: "secret-token" } }) },
-      createClient: vi.fn().mockReturnValue({
-        execute: vi.fn().mockResolvedValue({ rows: [], rowsAffected: 0 }),
-        batch: vi.fn().mockResolvedValue([]),
-      }),
-    });
-
-    const repo = await runtime.resolveSamlConfigRepository({
-      ddb: makeFakeDdb(),
-      competitorAccountsTableName: TABLE,
-    });
-    expect(repo).toBeInstanceOf(MirroredSamlConfigRepository);
-  });
-
-  it("should fail loudly when mirror/dynamodb backends are missing ddb/competitorAccountsTableName", async () => {
-    const runtime = createControlDataRuntime({
-      env: { CONTROL_DATA_BACKEND: "turso-mirror" },
+      env: { CONTROL_DATA_BACKEND: "dynamodb" },
       ssm: { send: vi.fn() },
       createClient: vi.fn(),
     });
 
     await expect(runtime.resolveSamlConfigRepository({ ddb: makeFakeDdb() })).rejects.toThrow(
-      /mirror backend requires ddb\/competitorAccountsTableName/,
+      /dynamodb backend requires ddb\/competitorAccountsTableName/,
     );
   });
 });

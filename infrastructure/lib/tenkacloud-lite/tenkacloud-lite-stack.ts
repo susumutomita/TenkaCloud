@@ -57,12 +57,12 @@ export interface TenkaCloudLiteStackProps extends StackProps {
   readonly features?: Readonly<Record<string, boolean>>;
   /**
    * [Issue #2442 / Phase C5 / ADR-049 §5.1] control-plane data backend
-   * (dynamodb|turso|sql|turso-mirror|sql-mirror)。 純 SQL (`turso`/`sql`) のときは
+   * (dynamodb|turso)。 純 SQL (`turso`) のときは
    * `SamlIdpsTable` を synth しない (= DynamoDB standing cost をゼロにする A5/B6/C1-C4 と同じ
    * 条件)。 default 未指定 / `dynamodb` は既存 CFn と byte 互換。
    */
   readonly controlDataBackend?: string;
-  /** [Issue #2442 / Phase C5] Public remote libSQL URL — `controlDataBackend` が turso/sql/*-mirror のとき必須。 */
+  /** [Issue #2442 / Phase C5] Public remote libSQL URL — `controlDataBackend` が turso のとき必須。 */
   readonly tursoDatabaseUrl?: string;
   /** [Issue #2442 / Phase C5] Turso auth token を格納する SSM SecureString parameter 名。 */
   readonly tursoAuthTokenParameterName?: string;
@@ -113,11 +113,11 @@ export class TenkaCloudLiteStack extends Stack {
     // ApiGateway に `/tenant/idp*` route を配線する (= UserPool と SAML IdP Lambda を同 stack
     // 同居させて cross-stack cyclic dependency を避ける契約)。
     //
-    // [Issue #2442 / Phase C5] `controlDataBackend` が純 SQL (`turso`/`sql`) のときは本 table を
+    // [Issue #2442 / Phase C5] `controlDataBackend` が純 SQL (`turso`) のときは本 table を
     // **synth しない** (= `undefined`) — DynamoDB standing cost をゼロにする A5/B6/C1-C4 と同じ
     // 条件。 IdP CRUD API 自体は `attachSamlIdpLambda: true` を常に渡すため table の有無に
     // 関わらず提供され続ける (= repository seam 経由で SQL executor に直結する)。
-    const pureSql = props.controlDataBackend === "turso" || props.controlDataBackend === "sql";
+    const pureSql = props.controlDataBackend === "turso";
     const samlIdps = pureSql ? undefined : new SamlIdpsTable(this, "SamlIdps");
 
     const appPlane = buildAppPlaneCore(this, {

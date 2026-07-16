@@ -9,7 +9,7 @@ import { controlDataBackendEnv } from "./control-data-backend-env.js";
 
 export interface DeployStatusWriterLambdaProps {
   /**
-   * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。この Lambda は
    * `pureSql` のときのみ生成されるため、実運用では常に `undefined` で渡ってくる
    * (repository seam が SQL executor 直結で処理するため table 自体を参照しない)。
@@ -22,7 +22,7 @@ export interface DeployStatusWriterLambdaProps {
 
 /**
  * Thin SFN status writer used only when DeployCreate's control-data backend is
- * pure SQL (`turso` / `sql`). The default and mirror backends keep the existing
+ * pure SQL (`turso`). The default (dynamodb) backend keeps the existing
  * native DynamoUpdateItem state machine path.
  */
 export class DeployStatusWriterLambda extends Construct {
@@ -32,7 +32,7 @@ export class DeployStatusWriterLambda extends Construct {
     super(scope, id);
 
     const backend = props.controlDataBackend ?? "dynamodb";
-    const pureSql = backend === "turso" || backend === "sql";
+    const pureSql = backend === "turso";
 
     this.fn = defineNodejsFunction(this, {
       entry: path.resolve(import.meta.dirname, "handlers/deploy-status-writer-handler/index.ts"),

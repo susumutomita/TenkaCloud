@@ -15,12 +15,16 @@ const template = readFileSync(
 );
 
 describe("lite-pipeline.yaml Turso backend opt-in", () => {
-  it("should declare a ControlDataBackend parameter that allows turso/sql", () => {
+  it("should declare a ControlDataBackend parameter that allows turso", () => {
     expect(template).toMatch(/ControlDataBackend:\s*\n\s*Type: String/);
     // dynamodb stays the default so existing pipelines are unchanged.
     expect(template).toMatch(/ControlDataBackend:[\s\S]*?Default: dynamodb/);
-    for (const value of ["dynamodb", "turso", "sql", "turso-mirror", "sql-mirror"]) {
+    for (const value of ["dynamodb", "turso"]) {
       expect(template).toContain(`- ${value}`);
+    }
+    // #2677 removed the sql alias and the mirror bridge values entirely.
+    for (const removed of ["- sql", "- turso-mirror", "- sql-mirror"]) {
+      expect(template).not.toContain(removed);
     }
   });
 
@@ -39,7 +43,7 @@ describe("lite-pipeline.yaml Turso backend opt-in", () => {
 
   it("should write the CDK_PARAM Turso lines into .env only for a non-dynamodb backend", () => {
     // Gated on the backend so a default (dynamodb) pipeline writes nothing new and
-    // env-check-lite still enforces url + token-name for the turso/sql/mirror values.
+    // env-check-lite still enforces url + token-name for the turso value.
     expect(template).toMatch(/if \[ "\$\{CONTROL_DATA_BACKEND\}" != "dynamodb" \]; then/);
     expect(template).toMatch(/CDK_PARAM_CONTROL_DATA_BACKEND=\$\{CONTROL_DATA_BACKEND\}/);
     expect(template).toMatch(/CDK_PARAM_TURSO_DATABASE_URL=\$\{TURSO_DATABASE_URL\}/);

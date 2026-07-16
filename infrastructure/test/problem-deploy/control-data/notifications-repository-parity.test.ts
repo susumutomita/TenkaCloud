@@ -1,6 +1,5 @@
 import { GetCommand } from "@aws-sdk/lib-dynamodb";
-import { describe, expect, it, vi } from "vitest";
-import { MirroredNotificationsRepository } from "../../../lib/problem-deploy/control-data/mirrored-repositories";
+import { describe, expect, it } from "vitest";
 import {
   DynamoDbNotificationsRepository,
   type NotificationRecord,
@@ -32,16 +31,6 @@ const backends: ReadonlyArray<readonly [string, () => NotificationsRepository]> 
     () => new DynamoDbNotificationsRepository(makeFakeDdb(), TABLE),
   ],
   ["SqlNotificationsRepository", () => new SqlNotificationsRepository(makeSqliteExecutor())],
-  // [#2527 Slice 0] Mirror mode (DDB canonical + SQL replica) must satisfy the
-  // same contract; listByEvent cursors stay canonical-only by design.
-  [
-    "MirroredNotificationsRepository",
-    () =>
-      new MirroredNotificationsRepository(
-        new DynamoDbNotificationsRepository(makeFakeDdb(), TABLE),
-        new SqlNotificationsRepository(makeSqliteExecutor()),
-      ),
-  ],
 ];
 
 function encodeForeignCursor(): string {
@@ -239,93 +228,5 @@ describe("DynamoDbNotificationsRepository physical row", () => {
       SK: `NOTIFICATION#${record.occurredAt}#${record.notificationId}`,
       ...record,
     });
-  });
-});
-
-describe("MirroredNotificationsRepository", () => {
-  function memoryNotifications(initial: readonly NotificationRecord[] = []): {
-    readonly repo: NotificationsRepository;
-    readonly records: Map<string, NotificationRecord>;
-  } {
-    const key = (record: NotificationRecord): string =>
-      `${record.eventId}:${record.occurredAt}:${record.notificationId}`;
-    const records = new Map(initial.map((record) => [key(record), record]));
-    return {
-      records,
-      repo: {
-        append: async (record) => {
-          records.set(key(record), record);
-        },
-        listByEvent: async (eventId) => ({
-          notifications: [...records.values()]
-            .filter((record) => record.eventId === eventId)
-            .sort((left, right) => right.occurredAt.localeCompare(left.occurredAt)),
-        }),
-        pruneExpired: async (nowEpochSeconds) => {
-          let deleted = 0;
-          for (const [k, record] of records) {
-            if (record.expiresAt > 0 && record.expiresAt <= nowEpochSeconds) {
-              records.delete(k);
-              deleted += 1;
-            }
-          }
-          return deleted;
-        },
-      },
-    };
-  }
-
-  it("should write through to both backends on append", async () => {
-    const canonical = memoryNotifications();
-    const replica = memoryNotifications();
-    const repository = new MirroredNotificationsRepository(canonical.repo, replica.repo);
-    const record = sampleRecord();
-
-    await repository.append(record);
-
-    expect([...canonical.records.values()]).toEqual([record]);
-    expect([...replica.records.values()]).toEqual([record]);
-  });
-
-  it("should serve listByEvent from canonical only", async () => {
-    const canonicalList = vi.fn(async () => ({
-      notifications: [sampleRecord({ notificationId: "canonical" })],
-    }));
-    const replicaList = vi.fn(async () => ({
-      notifications: [sampleRecord({ notificationId: "replica" })],
-    }));
-    const repository = new MirroredNotificationsRepository(
-      { append: async () => {}, listByEvent: canonicalList, pruneExpired: async () => 0 },
-      { append: async () => {}, listByEvent: replicaList, pruneExpired: async () => 0 },
-    );
-
-    const page = await repository.listByEvent("01EVENTAAAAAAAAAAAAAAAAAAA", {
-      limit: 10,
-      cursor: "cursor-1",
-    });
-
-    expect(page.notifications.map((record) => record.notificationId)).toEqual(["canonical"]);
-    expect(canonicalList).toHaveBeenCalledWith("01EVENTAAAAAAAAAAAAAAAAAAA", {
-      limit: 10,
-      cursor: "cursor-1",
-    });
-    expect(replicaList).not.toHaveBeenCalled();
-  });
-
-  it("should prune replica first and return the canonical delete count", async () => {
-    const expired = sampleRecord({ notificationId: "expired", expiresAt: 100 });
-    const active = sampleRecord({ notificationId: "active", expiresAt: 200 });
-    const canonical = memoryNotifications([expired, active]);
-    const replica = memoryNotifications([expired, active]);
-    const repository = new MirroredNotificationsRepository(canonical.repo, replica.repo);
-
-    await expect(repository.pruneExpired(150)).resolves.toBe(1);
-
-    expect([...canonical.records.values()].map((record) => record.notificationId)).toEqual([
-      "active",
-    ]);
-    expect([...replica.records.values()].map((record) => record.notificationId)).toEqual([
-      "active",
-    ]);
   });
 });

@@ -6,7 +6,6 @@ import {
   synthLite,
   synthWithCodeBuild,
   synthWithControlDataBackendTurso,
-  synthWithControlDataBackendTursoMirror,
 } from "./problem-deploy-backend-stack.test-helpers";
 
 /**
@@ -112,7 +111,6 @@ const VARIANTS: ReadonlyArray<readonly [name: string, synth: () => Template]> = 
   ["lambda-deploy default", synthDefault],
   ["codebuild rollback path", synthWithCodeBuild],
   ["pure-sql turso backend", synthWithControlDataBackendTurso],
-  ["turso-mirror bridge backend", synthWithControlDataBackendTursoMirror],
   ["lite mode (no eventBusArn)", () => synthLite("TestStackLite", "test-source-bucket")],
 ];
 

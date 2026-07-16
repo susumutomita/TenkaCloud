@@ -8,7 +8,6 @@ import {
 import type { SamlIdpConfig } from "@tenkacloud/saml-utils";
 import { describe, expect, it, vi } from "vitest";
 import type { IdpScope } from "../../../lib/control-plane/handlers/idp-handler/core";
-import { MirroredSamlIdpsRepository } from "../../../lib/problem-deploy/control-data/mirrored-repositories";
 import { createControlDataRuntime } from "../../../lib/problem-deploy/control-data/runtime-repositories";
 import {
   createSamlIdpsRepository,
@@ -244,11 +243,8 @@ describe("createSamlIdpsRepository", () => {
     );
   });
 
-  it("should select the SQL backend for turso and sql flags", () => {
+  it("should select the SQL backend for the turso flag", () => {
     expect(createSamlIdpsRepository("turso", { sql: makeSqliteExecutor() })).toBeInstanceOf(
-      SqlSamlIdpsRepository,
-    );
-    expect(createSamlIdpsRepository("sql", { sql: makeSqliteExecutor() })).toBeInstanceOf(
       SqlSamlIdpsRepository,
     );
   });
@@ -260,6 +256,16 @@ describe("createSamlIdpsRepository", () => {
   it("should reject an unknown backend value", () => {
     expect(() => createSamlIdpsRepository("postgres", ddbDeps())).toThrow(
       /Unknown CONTROL_DATA_BACKEND/,
+    );
+  });
+
+  it.each([
+    "sql",
+    "turso-mirror",
+    "sql-mirror",
+  ])("should reject the removed %s backend value (#2677)", (backend) => {
+    expect(() => createSamlIdpsRepository(backend, ddbDeps())).toThrow(
+      /Unknown CONTROL_DATA_BACKEND.*expected one of: dynamodb, turso/,
     );
   });
 
@@ -288,7 +294,6 @@ describe("resolveSamlIdpsRepository (runtime)", () => {
 
   it.each([
     "turso",
-    "sql",
   ])("should return the SQL backend for CONTROL_DATA_BACKEND=%s without DDB inputs", async (backend) => {
     const runtime = createControlDataRuntime({
       env: {
@@ -308,39 +313,15 @@ describe("resolveSamlIdpsRepository (runtime)", () => {
     );
   });
 
-  it.each([
-    "turso-mirror",
-    "sql-mirror",
-  ])("should return the mirrored backend for CONTROL_DATA_BACKEND=%s", async (backend) => {
+  it("should fail loudly when the dynamodb backend is missing ddb/samlIdpsTableName", async () => {
     const runtime = createControlDataRuntime({
-      env: {
-        CONTROL_DATA_BACKEND: backend,
-        TURSO_DATABASE_URL: "file:local.db",
-        TURSO_AUTH_TOKEN_PARAMETER_NAME: "/tenkacloud/dev/sql-token",
-      },
-      ssm: { send: vi.fn().mockResolvedValue({ Parameter: { Value: "secret-token" } }) },
-      createClient: vi.fn().mockReturnValue({
-        execute: vi.fn().mockResolvedValue({ rows: [], rowsAffected: 0 }),
-        batch: vi.fn().mockResolvedValue([]),
-      }),
-    });
-
-    const repo = await runtime.resolveSamlIdpsRepository({
-      ddb: makeFakeIdpDdb().ddb,
-      samlIdpsTableName: TABLE,
-    });
-    expect(repo).toBeInstanceOf(MirroredSamlIdpsRepository);
-  });
-
-  it("should fail loudly when mirror/dynamodb backends are missing ddb/samlIdpsTableName", async () => {
-    const runtime = createControlDataRuntime({
-      env: { CONTROL_DATA_BACKEND: "turso-mirror" },
+      env: { CONTROL_DATA_BACKEND: "dynamodb" },
       ssm: { send: vi.fn() },
       createClient: vi.fn(),
     });
 
     await expect(runtime.resolveSamlIdpsRepository({ ddb: makeFakeIdpDdb().ddb })).rejects.toThrow(
-      /mirror backend requires ddb\/samlIdpsTableName/,
+      /dynamodb backend requires ddb\/samlIdpsTableName/,
     );
   });
 });

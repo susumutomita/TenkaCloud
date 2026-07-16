@@ -11,7 +11,7 @@ export type { ApiKeySSMParameterNames };
  * `ControlDataBackend` を import せずここに local 定義する (= 同一の literal union)。runtime factory
  * (`createEventsRepository` / `createTeamsRepository`) が cold-start で再検証するため二重管理でも安全。
  */
-export type ControlDataBackend = "dynamodb" | "turso" | "sql" | "turso-mirror" | "sql-mirror";
+export type ControlDataBackend = "dynamodb" | "turso";
 
 /**
  * [Problem Packs / Issue #2462] One active pack's on-disk materialization descriptor.
@@ -181,11 +181,9 @@ export interface AppConfig {
 
   /**
    * Issue #2290 (ADR-049 §5.1): Events / Teams repository seam の backend を deploy 時に選ぶ
-   * (`CDK_PARAM_CONTROL_DATA_BACKEND`、`dynamodb` | `turso` | `sql` | `turso-mirror` |
-   * `sql-mirror`)。**default `"dynamodb"`**
-   * (未設定は在来の DDB 経路で、Lambda env を足さず CFn テンプレ byte 互換)。非 DDB のときだけ
-   * EventApi 系 Lambda に `CONTROL_DATA_BACKEND` を注入し、runtime resolver が pure SQL または
-   * Mirrored bridge を選ぶ。
+   * (`CDK_PARAM_CONTROL_DATA_BACKEND`、`dynamodb` | `turso` の二択、#2677)。**default `"dynamodb"`**
+   * (未設定は在来の DDB 経路で、Lambda env を足さず CFn テンプレ byte 互換)。turso のときだけ
+   * EventApi 系 Lambda に `CONTROL_DATA_BACKEND` を注入し、runtime resolver が pure SQL を選ぶ。
    */
   readonly controlDataBackend: ControlDataBackend;
   /** Public libSQL/Turso database URL, injected only into the Event API Lambda. */

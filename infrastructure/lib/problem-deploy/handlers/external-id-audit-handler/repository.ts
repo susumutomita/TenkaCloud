@@ -30,7 +30,7 @@ import type { CompetitorAccountItem } from "../competitor-accounts-handler/types
  * so this module no longer constructs a `ScanCommand` directly — it delegates
  * to `CompetitorAccountsRepository.forEachCompetitorAccountPage` (the B3
  * per-page callback pattern), which is transparent to the `dynamodb` /
- * `turso` / `sql` backend selection.
+ * `turso` backend selection.
  *
  * Behaviour parity (= no runtime change vs the previous in-handler
  * implementation) on the `dynamodb` backend:

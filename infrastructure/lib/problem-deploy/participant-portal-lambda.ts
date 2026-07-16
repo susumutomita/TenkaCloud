@@ -19,7 +19,7 @@ import { buildExternalIdParameterArnPattern } from "./handlers/shared/external-i
 
 export interface ParticipantPortalLambdaProps {
   /**
-   * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env も
    * `DeploymentsRead` inline policy も付与しない — 参加者の deployment / coordination /
    * score-event 読み書きは repository seam (`resolveDeploymentsRepository`) が SQL executor
@@ -30,7 +30,7 @@ export interface ParticipantPortalLambdaProps {
    * Events table (ADR-006 Notifications で参照)。
    * `GET /portal/me/notifications` が `PK=EVENT#<eventId>` で `dynamodb:Query`。
    *
-   * [Issue #2440 / ADR-049 §5.1 Phase A5] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * [Issue #2440 / ADR-049 §5.1 Phase A5] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env
    * `EVENTS_TABLE_NAME` も EventsRead IAM も付与しない — notifications / feature-flags は
    * repository seam (entrypoint 注入の control-data runtime) が SQL executor 直結で処理する。
@@ -40,7 +40,7 @@ export interface ParticipantPortalLambdaProps {
    * ADR-012 Phase 3.A: Endpoint registry テーブル。
    * `/portal/me/problems/:problemId/endpoints` 系 route が読み書きする。
    *
-   * [Issue #2442 / Phase C1] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * [Issue #2442 / Phase C1] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env も
    * `EndpointsRW` inline policy も付与しない — override 読み書きは repository seam
    * (`resolveProblemEndpointsRepository`) が SQL executor 直結で処理する
@@ -83,8 +83,8 @@ export interface ParticipantPortalLambdaProps {
    */
   readonly deployJobLogGroup?: ILogGroup;
   /**
-   * [Issue #2440 / ADR-049 §5.1 Phase A5] control-plane data backend (dynamodb|turso|sql|
-   * turso-mirror|sql-mirror)。 notifications / feature-flags の repository seam
+   * [Issue #2440 / ADR-049 §5.1 Phase A5] control-plane data backend (dynamodb|turso)。
+   * notifications / feature-flags の repository seam
    * (entrypoint 注入の control-data runtime) がこの env を読む。default (未指定 / `dynamodb`) は env を足さず
    * byte 互換。`EventApiLambda` と同型の注入パターン。
    */
@@ -326,7 +326,7 @@ export class ParticipantPortalLambda extends Construct {
       },
     });
 
-    // [Issue #2440]: turso/sql backend が Turso auth token を読むための SSM SecureString
+    // [Issue #2440]: turso backend が Turso auth token を読むための SSM SecureString
     // read 権限。 未配線 (= dynamodb default) なら付与しない (`EventApiLambda` と同型)。
     if (props.tursoAuthTokenParameterName) {
       this.fn.addToRolePolicy(

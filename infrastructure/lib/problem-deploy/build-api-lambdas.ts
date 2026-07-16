@@ -14,7 +14,7 @@ import { SystemAuditWriterLambda } from "./system-audit-writer-lambda.js";
 /**
  * control-plane data backend selector + Turso executor wiring, spread into every Lambda
  * construct that "opens the DB" (resolves a repository seam to a SQL executor in
- * turso/sql/turso-mirror/sql-mirror mode) — same undefined-when-dynamodb shape as the old
+ * turso mode) — same undefined-when-dynamodb shape as the old
  * three explicit props, so each `...controlDataBackendProps` call site is byte-identical.
  */
 export interface ControlDataBackendProps {
@@ -179,7 +179,7 @@ export function buildApiLambdas(scope: Construct, args: BuildApiLambdasArgs): Ap
     // Issue #2311: 監査ログ feature flag。
     auditLogEnabled: args.auditLogEnabled,
     // Issue #2290: control-plane data backend。event-handler の getEventDetail が Events / Teams
-    // repository seam を切替える (= turso/sql 選択時のみ CONTROL_DATA_BACKEND を注入)。
+    // repository seam を切替える (= turso 選択時のみ CONTROL_DATA_BACKEND を注入)。
     ...controlDataBackendProps,
   });
 

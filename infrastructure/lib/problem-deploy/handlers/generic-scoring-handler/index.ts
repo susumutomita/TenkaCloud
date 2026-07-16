@@ -461,10 +461,10 @@ function foldActiveDisruptionEffects(
  *
  * [Issue #2442 / Phase C1] raw `QueryCommand` は `resolveProblemEndpointsRepository`
  * (control-data seam) 経由に置き換えた。`tableName` が空文字なのは 2 通りある:
- *   - pure SQL backend (`turso`/`sql`) 選択時 — table 自体が synth されず env も配線されない
+ *   - pure SQL backend (`turso`) 選択時 — table 自体が synth されず env も配線されない
  *     (= 正常。 injected `runtime.needsManualPrune()` が true を返す — A5 で導入した
  *     既存 predicate を再利用して pure backend かどうかを判定する)
- *   - dynamodb / mirror backend で本当に未配線 (= 旧来の「機能無効」状態)
+ *   - dynamodb backend で本当に未配線 (= 旧来の「機能無効」状態)
  * 後者だけ `[]` に degrade する (= 1 mis-wired site が tick 全体を落とさない、既存挙動を維持)。
  * pure backend は tableName を無視して seam が SQL executor 直結で解決するため、素通りする。
  */

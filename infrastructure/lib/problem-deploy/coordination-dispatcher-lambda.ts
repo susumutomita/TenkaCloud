@@ -18,7 +18,7 @@ export interface CoordinationDispatcherLambdaProps {
   /**
    * team-login-key 認証 (GSI2 Query) + coordination state 行 (PK=COORD#...) の Get/Put 先。
    *
-   * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env も
    * `CoordinationRW` inline policy も付与しない — team-login-key 認証 / coordination state は
    * repository seam (`resolveDeploymentsRepository`、`coordination-store.ts` は既に seam 経由) が
@@ -28,7 +28,7 @@ export interface CoordinationDispatcherLambdaProps {
   /**
    * `buildParticipantSharedResources` が読む `EVENTS_TABLE_NAME` env の source。 coordination
    * route は events を読まない (= IAM は付与しない)。 [Issue #2440 / ADR-049 §5.1 Phase A5]
-   * `controlDataBackend` が純 SQL (`turso`/`sql`) のとき `ProblemDeployBackendStack` は本
+   * `controlDataBackend` が純 SQL (`turso`) のとき `ProblemDeployBackendStack` は本
    * table を synth しない (= `undefined`)。 その場合 env も注入しない (= shared builder は
    * env 不在でも空文字にフォールバックするだけで dispatcher の挙動に影響しない)。
    */

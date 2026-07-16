@@ -13,7 +13,7 @@ export interface AdminInsightApiLambdaProps {
    * 問題 deploy 状況 (active / failed 集計) の出元。`ProblemDeployBackendStack` の
    * `Deployments` table を cross-stack 参照する。Read-only (= ADR-011 D6 Phase 1 は read-only)。
    *
-   * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env も
    * grant も付与しない — deploy 状況集計は repository seam (`resolveDeploymentsRepository` /
    * `countActiveByTenant`) が SQL executor 直結で処理する ({@link eventsTable} と同じ条件)。
@@ -23,7 +23,7 @@ export interface AdminInsightApiLambdaProps {
    * 競技 Event 総数の出元。`ProblemDeployBackendStack` の `Events` table を cross-stack 参照する。
    * Read-only。
    *
-   * [Issue #2440 / ADR-049 §5.1 Phase A5] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * [Issue #2440 / ADR-049 §5.1 Phase A5] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env
    * `EVENTS_TABLE_NAME` も grant も付与しない — Events 集計は repository seam
    * (`resolveEventsRepository` / injected runtime) が SQL executor 直結で処理する。
@@ -71,15 +71,15 @@ export interface AdminInsightApiLambdaProps {
    */
   readonly costBudgetAccountId?: string;
   /**
-   * [Issue #2438 / Phase A3 / #2450] control-plane data backend (dynamodb|turso|sql)。
+   * [Issue #2438 / Phase A3 / #2450] control-plane data backend (dynamodb|turso)。
    * `summary.ts` の `countTenantEvents` が Events repository seam を組み立てる際に読む。
    * default (未指定 / `dynamodb`) は env を足さず byte 互換 — env 注入のメカニズム自体は
    * `EventApiLambda` と同型。
    *
-   * `"turso"` / `"sql"` 指定時は handler 層 (`admin-insight-handler/shared.ts` の
+   * `"turso"` 指定時は handler 層 (`admin-insight-handler/shared.ts` の
    * `resolveEventsRepository`) が cold-start cache 済みの async resolver (injected runtime)
-   * 経由で Mirrored repository を解決するため、 `/admin/insight/tenants/summary` は正しく動作する
-   * (read は Mirrored の canonical DDB passthrough)。 Turso auth token を読む SSM read 権限は
+   * 経由で SQL repository を解決するため、 `/admin/insight/tenants/summary` は正しく動作する。
+   * Turso auth token を読む SSM read 権限は
    * `tursoAuthTokenParameterName` 指定時にのみ付与される (下記 `ssm:GetParameter` policy)。
    */
   readonly controlDataBackend?: string;
@@ -226,7 +226,7 @@ export class AdminInsightApiLambda extends Construct {
       );
     }
 
-    // [Issue #2438]: turso/sql backend が Turso auth token を読むための SSM SecureString
+    // [Issue #2438]: turso backend が Turso auth token を読むための SSM SecureString
     // read 権限。 未配線 (= dynamodb default) なら付与しない (`EventApiLambda` と同型)。
     if (props.tursoAuthTokenParameterName) {
       this.fn.addToRolePolicy(

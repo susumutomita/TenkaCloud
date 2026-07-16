@@ -52,7 +52,7 @@ async function synthWithParticipantPortal(
     participantPortal: { runtimeConfig: "default-dev-mock" },
     // #2291: flag OFF (default) では CfnDeploy / job log group を生成しない。
     ...(opts.deployViaLambda ? { deployViaLambda: true } : {}),
-    // Issue #2440: control-plane data backend (turso/turso-mirror wiring pin).
+    // Issue #2440: control-plane data backend (turso wiring pin).
     ...(opts.controlDataBackend ? { controlDataBackend: opts.controlDataBackend } : {}),
     ...(opts.tursoDatabaseUrl ? { tursoDatabaseUrl: opts.tursoDatabaseUrl } : {}),
     ...(opts.tursoAuthTokenParameterName

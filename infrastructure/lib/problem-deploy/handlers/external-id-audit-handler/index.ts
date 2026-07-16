@@ -33,7 +33,7 @@ import {
  * (`resolveCompetitorAccountsRepository`) 経由になり、`repository.ts` の
  * `forEachAccountPage` (= B3 の per-page callback パターン、`DeploymentsRepository
  * .forEachCompleteDeploymentPage` と同型) を1 度呼ぶだけで全ページを走査する
- * (= 旧 `cursor` 手動ループは廃止)。 backend 選択 (dynamodb/turso/sql) は本 handler から
+ * (= 旧 `cursor` 手動ループは廃止)。 backend 選択 (dynamodb/turso) は本 handler から
  * 透過的。
  *
  * Metric namespace / dimension (= repository が保証する物理形):
@@ -105,9 +105,9 @@ export async function runAudit(deps: AuditDependencies): Promise<{ readonly coun
 const controlDataRuntime = createDefaultControlDataRuntime();
 
 export async function handler(): Promise<void> {
-  // [Issue #2442 / Phase C2] pure SQL backend (turso|sql) では CompetitorAccounts table
+  // [Issue #2442 / Phase C2] pure SQL backend (turso) では CompetitorAccounts table
   // 自体が synth されず env も配線されない — `getEnv` の fail-fast に委ねると invoke ごとに
-  // Initialization Error になる。空文字 default に緩和し、dynamodb / mirror backend の
+  // Initialization Error になる。空文字 default に緩和し、dynamodb backend の
   // 誤設定は runtime resolver (`requireDdbAndTableName`) が fail loud に受ける
   // (= silent fallback にはならない、他の shared builder と同じ緩和)。
   const deps: AuditDependencies = {

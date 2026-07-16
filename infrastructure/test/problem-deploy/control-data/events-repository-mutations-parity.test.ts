@@ -6,10 +6,6 @@ import {
   SqlEventsRepository,
 } from "../../../lib/problem-deploy/control-data/events-repository";
 import {
-  MirroredEventsRepository,
-  MirroredTeamsRepository,
-} from "../../../lib/problem-deploy/control-data/mirrored-repositories";
-import {
   DynamoDbTeamsRepository,
   hashLoginKey,
   SqlTeamsRepository,
@@ -21,12 +17,11 @@ import { makeFakeDdb, makeSqliteExecutor } from "./control-data-write.test-helpe
 /**
  * [Issue #2437 / Phase A2] Parity suite for the conditional/atomic Event
  * mutations. The SAME assertions run against every backend so the DynamoDB
- * implementation (verbatim relocation of the pre-seam handler expressions),
- * the SQLite implementation (json_set/json_extract single-statement updates),
- * and the mirror composition (DDB canonical + SQL replica, [#2527 Slice 0])
- * are provably interchangeable. Every method covers its updated / conflict /
- * not_found union branches; `createEventWithTeams` additionally pins the
- * 99-team cap and all-or-nothing atomicity on every backend.
+ * implementation (verbatim relocation of the pre-seam handler expressions)
+ * and the SQLite implementation (json_set/json_extract single-statement
+ * updates) are provably interchangeable. Every method covers its updated /
+ * conflict / not_found union branches; `createEventWithTeams` additionally
+ * pins the 99-team cap and all-or-nothing atomicity on every backend.
  */
 
 const EVENTS_TABLE = "Events";
@@ -54,25 +49,9 @@ function makeSqlBackend(): BackendRepos {
   };
 }
 
-function makeMirrorBackend(): BackendRepos {
-  const ddb = makeFakeDdb();
-  const sql = makeSqliteExecutor();
-  return {
-    events: new MirroredEventsRepository(
-      new DynamoDbEventsRepository(ddb, EVENTS_TABLE, TEAMS_TABLE),
-      new SqlEventsRepository(sql),
-    ),
-    teams: new MirroredTeamsRepository(
-      new DynamoDbTeamsRepository(ddb, TEAMS_TABLE),
-      new SqlTeamsRepository(sql),
-    ),
-  };
-}
-
 const backends: ReadonlyArray<readonly [string, () => BackendRepos]> = [
   ["DynamoDbEventsRepository", makeDdbBackend],
   ["SqlEventsRepository", makeSqlBackend],
-  ["MirroredEventsRepository", makeMirrorBackend],
 ];
 
 function sampleEvent(overrides: Partial<EventRecord> = {}): EventRecord {

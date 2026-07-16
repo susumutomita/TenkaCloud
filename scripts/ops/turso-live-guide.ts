@@ -49,9 +49,7 @@ function parseFeatures(raw: string | undefined): Readonly<Record<string, unknown
 export function validateTursoLiveEnvironment(env: NodeJS.ProcessEnv): readonly string[] {
   const errors: string[] = [];
   if (env.CDK_PARAM_CONTROL_DATA_BACKEND !== "turso") {
-    errors.push(
-      "CDK_PARAM_CONTROL_DATA_BACKEND=turso が必要です (mirror/sql alias はpure backendではありません)",
-    );
+    errors.push("CDK_PARAM_CONTROL_DATA_BACKEND=turso が必要です (値は `turso` のみ有効です)");
   }
 
   const databaseUrl = env.CDK_PARAM_TURSO_DATABASE_URL?.trim() ?? "";
@@ -261,7 +259,7 @@ export function renderTursoLiveGuide(environment: string): string {
     "Turso 初回ライブ E2E 検証ガイド",
     "",
     "このガイドは fresh な Lite stack 用です。既存 DynamoDB stack の移行には使わず、",
-    "docs/running-costs.md の migration 手順 (mirror → pure) を使ってください。",
+    "docs/running-costs.md の migration 手順を使ってください。",
     "",
     "推奨: 次のコマンドだけで 1〜7 を対話式に進めます。",
     `   make turso-live ENV=${environment}`,

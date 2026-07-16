@@ -14,7 +14,7 @@ import { buildSakuraCredentialParameterArnPattern } from "./handlers/shared/saku
 
 export interface GenericScoringLambdaProps {
   /**
-   * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env も
    * grant も付与しない — 採点 dispatch / event status reconcile の Deployments 読み書きは
    * repository seam (`resolveDeploymentsRepository`) が SQL executor 直結で処理する。
@@ -24,7 +24,7 @@ export interface GenericScoringLambdaProps {
    * Events table。Event status の auto-transition (#557 / #539) を 1-min tick で reconcile する。
    * 採点 dispatcher とは独立の責務だが、 cron schedule (= rate(1 minute)) を共有する。
    *
-   * [Issue #2440 / ADR-049 §5.1 Phase A5] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * [Issue #2440 / ADR-049 §5.1 Phase A5] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env
    * `EVENTS_TABLE_NAME` は注入せず grant も付与しない — Events 読み書きは repository seam
    * (`resolveEventsRepository` / entrypoint 注入の control-data runtime) が SQL executor 直結で処理する。
@@ -49,7 +49,7 @@ export interface GenericScoringLambdaProps {
    * per (tenant, team, problem) で override 行を Query で引き、 effective URL (= override ?? default)
    * を probe する。
    *
-   * [Issue #2442 / Phase C1] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * [Issue #2442 / Phase C1] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env も
    * grant も付与しない — override 読み取りは repository seam
    * (`resolveProblemEndpointsRepository`) が SQL executor 直結で処理する。
@@ -88,7 +88,7 @@ export interface GenericScoringLambdaProps {
    * [ADR-033 / #1665] disruptions audit table。 operator-fired disruption の active 採点効果を tick で
    * 解決するため read-only で query する (= scoring-side effect)。
    *
-   * [Issue #2442 / Phase C3] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * [Issue #2442 / Phase C3] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env も
    * grant も付与しない — operator-fired effect の解決は repository seam
    * (`resolveDisruptionsRepository`) が SQL executor 直結で処理する。
@@ -100,7 +100,7 @@ export interface GenericScoringLambdaProps {
    * これを配線すると `buildScheduledTeardownResources()` が有効化され、 reconciler が
    * teardownAt 経過の event を自動撤去する (未配線なら dormant)。
    *
-   * [Issue #2442 / Phase C2] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * [Issue #2442 / Phase C2] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env
    * `COMPETITOR_ACCOUNTS_TABLE_NAME` は注入せず grant も付与しない —
    * `buildScheduledTeardownResources` / `buildScheduledDeployResources` は空文字 env を
@@ -119,8 +119,8 @@ export interface GenericScoringLambdaProps {
    */
   readonly environmentName: string;
   /**
-   * [Issue #2440 / ADR-049 §5.1 Phase A5] control-plane data backend (dynamodb|turso|sql|
-   * turso-mirror|sql-mirror)。 event status reconcile (`resolveEventsRepository`) と manual prune
+   * [Issue #2440 / ADR-049 §5.1 Phase A5] control-plane data backend (dynamodb|turso)。
+   * event status reconcile (`resolveEventsRepository`) と manual prune
    * tick (注入 runtime の `needsManualPrune`) の両方がこの env を読む。default (未指定 /
    * `dynamodb`) は env を足さず byte 互換。`EventApiLambda` と同型の注入パターン。
    */
@@ -279,7 +279,7 @@ export class GenericScoringLambda extends Construct {
     // #1422: condition-triggered disruption を event bus に publish する (= events:PutEvents、
     // 当該 bus に scope された least-privilege)。
     props.eventBus.grantPutEventsTo(this.fn);
-    // [Issue #2440]: turso/sql backend が Turso auth token を読むための SSM SecureString
+    // [Issue #2440]: turso backend が Turso auth token を読むための SSM SecureString
     // read 権限。 未配線 (= dynamodb default) なら付与しない (`EventApiLambda` と同型)。
     if (props.tursoAuthTokenParameterName) {
       this.fn.addToRolePolicy(

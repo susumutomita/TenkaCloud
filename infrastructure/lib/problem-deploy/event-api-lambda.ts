@@ -15,10 +15,10 @@ import { buildSakuraCredentialParameterArnPattern } from "./handlers/shared/saku
 
 export interface EventApiLambdaProps {
   /**
-   * [Issue #2440 / ADR-049 §5.1 Phase A5] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき、
+   * [Issue #2440 / ADR-049 §5.1 Phase A5] `controlDataBackend` が純 SQL (`turso`) のとき、
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env
    * `EVENTS_TABLE_NAME` は注入せず、grant も付与しない — Events CRUD は repository seam
-   * (`resolveEventRepositories`) が SQL executor 直結で処理する。`dynamodb` / `*-mirror` では
+   * (`resolveEventRepositories`) が SQL executor 直結で処理する。`dynamodb` では
    * 従来どおり必ず渡される。
    */
   readonly eventsTable?: Table;
@@ -28,7 +28,7 @@ export interface EventApiLambdaProps {
    * Phase 2a (Bulk Deploy / Bulk Teardown) で deployment 行を作成 / 状態更新するため
    * 既存 Deployments table への RW 権限が必要。
    *
-   * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env も
    * grant も付与しない — Deployments read/write は repository seam
    * (`resolveDeploymentsRepository`) が SQL executor 直結で処理する。
@@ -38,7 +38,7 @@ export interface EventApiLambdaProps {
    * Phase 2.2 (Issue #459): Bulk Deploy が deploy 前に verified=true 行のみ許可する
    * gate のため、CompetitorAccounts table を Read する。
    *
-   * [Issue #2442 / Phase C2] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * [Issue #2442 / Phase C2] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env
    * `COMPETITOR_ACCOUNTS_TABLE_NAME` は注入せず、grant も付与しない — verified-gate lookup /
    * CRUD は repository seam (`resolveCompetitorAccountsRepository`) が本 Lambda に既に配線
@@ -61,7 +61,7 @@ export interface EventApiLambdaProps {
   /**
    * Issue #888: Red Team Disruption Injection の audit + idempotency 用 DDB table。
    *
-   * [Issue #2442 / Phase C3] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * [Issue #2442 / Phase C3] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env
    * `DISRUPTIONS_TABLE_NAME` は注入せず、grant も付与しない — disruption fire / audit /
    * catalog は repository seam (`resolveDisruptionsRepository`) が本 Lambda に既に配線済みの
@@ -73,11 +73,11 @@ export interface EventApiLambdaProps {
    * event-hot テーブルの 1 つ。他 4 テーブル (Events / Teams / Deployments / Disruptions)
    * は既存 props を流用し、本 prop で 5 テーブルが揃う。
    *
-   * [Issue #2442 / Phase C1] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * [Issue #2442 / Phase C1] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env
    * `PROBLEM_ENDPOINTS_TABLE_NAME` は注入せず、DescribeTable IAM の対象からも外す — override
    * registry の読み書きは repository seam (`resolveProblemEndpointsRepository`) が SQL executor
-   * 直結で処理する。`dynamodb` / `*-mirror` では従来どおり必ず渡される。
+   * 直結で処理する。`dynamodb` では従来どおり必ず渡される。
    */
   readonly problemEndpointsTable?: Table;
   /**
@@ -127,9 +127,9 @@ export interface EventApiLambdaProps {
    */
   readonly auditLogEnabled?: boolean;
   /**
-   * Issue #2290 (ADR-049 §5.1): control-plane data backend (dynamodb|turso|sql)。event-handler の
+   * Issue #2290 (ADR-049 §5.1): control-plane data backend (dynamodb|turso)。event-handler の
    * `getEventDetail` が Events / Teams repository を組み立てる seam を切替える。default (未指定 /
-   * `dynamodb`) は env を足さず byte 互換、`turso` / `sql` で `CONTROL_DATA_BACKEND` を注入する。
+   * `dynamodb`) は env を足さず byte 互換、`turso` で `CONTROL_DATA_BACKEND` を注入する。
    */
   readonly controlDataBackend?: string;
   /** Public remote libSQL URL. Never contains authentication material. */
@@ -168,8 +168,9 @@ function grantEventHotCapacityRead(
       resources: eventHotTables.map((t) => t.tableArn),
     }),
   );
-  // GetMetricData has no resource-level permission support. Keep the broad resource only on
-  // stacks that actually expose event-hot DynamoDB tables.
+  // justify: cloudwatch:GetMetricData has no resource-level permission support (AWS API
+  // constraint). Keep the broad resource only on stacks that actually expose event-hot
+  // DynamoDB tables.
   fn.addToRolePolicy(
     new PolicyStatement({
       actions: ["cloudwatch:GetMetricData"],
