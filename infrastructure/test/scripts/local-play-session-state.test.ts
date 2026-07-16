@@ -31,6 +31,7 @@ function localPaths(directory: string): LocalPaths {
     simulatorStateDir: join(directory, "simulator-state"),
     simulatorLogPath: join(directory, "simulator.log"),
     simulatorEnvPath: join(directory, "simulator-native.env"),
+    databasePath: join(directory, "local-play.sqlite"),
     runtimeConfigPath: join(directory, "runtime-config.json"),
   };
 }
@@ -102,6 +103,30 @@ describe("local-play private session state", () => {
       expect(() => readLocalProcessState(paths.statePath, paths)).toThrow(
         "non-loopback Participant API origin",
       );
+    } finally {
+      unlinkSync(paths.statePath);
+      rmdirSync(directory);
+    }
+  });
+
+  it("should validate the recorded local-play database backend", () => {
+    const directory = mkdtempSync(join(tmpdir(), "tenkacloud-private-state-"));
+    const paths = localPaths(directory);
+    const state = {
+      pid: process.pid,
+      processIdentity: "0".repeat(64),
+      apiBaseUrl: "http://127.0.0.1:43199",
+      problemIds: [],
+      deploymentPath: paths.deploymentPath,
+      runtimeConfigPath: paths.runtimeConfigPath,
+      participantToken: "a".repeat(43),
+    };
+    try {
+      writeFileSync(paths.statePath, JSON.stringify({ ...state, databaseBackend: "turso" }));
+      expect(readLocalProcessState(paths.statePath, paths).databaseBackend).toBe("turso");
+
+      writeFileSync(paths.statePath, JSON.stringify({ ...state, databaseBackend: "dynamodb" }));
+      expect(() => readLocalProcessState(paths.statePath, paths)).toThrow("database backend");
     } finally {
       unlinkSync(paths.statePath);
       rmdirSync(directory);

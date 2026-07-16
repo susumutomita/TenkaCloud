@@ -39,6 +39,7 @@ export async function openSqliteLocalPlayStateStore(path: string): Promise<Local
       snapshot_json = excluded.snapshot_json,
       updated_at = excluded.updated_at
   `);
+  const clear = database.query("DELETE FROM local_play_state WHERE session_id = 'default'");
   return {
     description: `SQLite ${path}`,
     load: async () => {
@@ -51,6 +52,9 @@ export async function openSqliteLocalPlayStateStore(path: string): Promise<Local
     },
     save: async (snapshot) => {
       upsert.run(JSON.stringify(snapshot), new Date().toISOString());
+    },
+    clear: async () => {
+      clear.run();
     },
     close: async () => {
       database.close();

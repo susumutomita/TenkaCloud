@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import {
   chmodSync,
   closeSync,
@@ -93,6 +94,29 @@ describe("shutdownLocalServe", () => {
       "simulator-closed",
       "state-store-closed",
     ]);
+  });
+});
+
+describe("local-down progress lifecycle", () => {
+  it("should clear persisted progress after stopping local play", () => {
+    const directory = mkdtempSync(join(tmpdir(), "tenkacloud-local-down-"));
+    const databasePath = join(directory, "local-play.sqlite");
+    const fixture = join(import.meta.dirname, "..", "fixtures", "local-play-down.ts");
+
+    try {
+      const result = spawnSync("bun", [fixture, directory], { encoding: "utf8" });
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout).toContain("Local play stopped and progress cleared.");
+      expect(result.stdout.trim().endsWith("undefined")).toBe(true);
+    } finally {
+      for (const suffix of ["", "-shm", "-wal"]) {
+        const path = `${databasePath}${suffix}`;
+        try {
+          unlinkSync(path);
+        } catch {}
+      }
+      rmdirSync(directory);
+    }
   });
 });
 

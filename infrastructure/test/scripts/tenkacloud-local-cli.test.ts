@@ -429,7 +429,7 @@ describe("tenkacloud-local CLI — evaluate (#2527 Slice 0)", () => {
 
 describe("tenkacloud-local CLI — down (#2527 Slice 0)", () => {
   it(
-    "should clean up crash leftovers and report stopped when no session state exists",
+    "should clean up crash leftovers and clear progress when no session state exists",
     async () => {
       const localDir = makeLocalDir();
       // A crashed `up` can leave deployment.json behind without state.json.
@@ -441,7 +441,7 @@ describe("tenkacloud-local CLI — down (#2527 Slice 0)", () => {
 
       const result = await runCli(["down"], { TENKACLOUD_LOCAL_DIR: localDir });
       expect(result.status).toBe(0);
-      expect(result.stdout).toContain("Local play stopped.");
+      expect(result.stdout).toContain("Local play stopped and progress cleared.");
       expect(existsSync(leftoverDeployment)).toBe(false);
       // Without a backup the developer's live portal config must be left alone.
       const runtimeConfigAfter = existsSync(RUNTIME_CONFIG_PATH)
