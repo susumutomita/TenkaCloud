@@ -101,11 +101,8 @@ jobs:
       matrix:
         include:
           - shard: infrastructure
-            codecov_files: ./infrastructure/coverage/lcov.info
           - shard: spas
-            codecov_files: ./apps/admin-console/coverage/lcov.info,./apps/application-admin-console/coverage/lcov.info,./apps/participant-portal/coverage/lcov.info
           - shard: packages
-            codecov_files: ./packages/trust-bridge/coverage/lcov.info
     steps:
       - name: Check out the code
         # actions/checkout v4.3.1
@@ -137,6 +134,15 @@ jobs:
         run: |
           bun run scripts/workspace/run-coverage.ts --shard ${{ matrix.shard }}
 
+      # Issue #2676: derive the Codecov upload file list from the same COVERAGE_WORKSPACES
+      # registry that runs coverage. A hand-written matrix list drifted to 5 lcov files while
+      # run-coverage.ts generated 17 workspace reports, leaving several packages invisible in
+      # Codecov even though the local coverage gate still checked them.
+      - name: Resolve Codecov lcov files (shard ${{ matrix.shard }})
+        id: lcov
+        run: |
+          echo "files=$(bun run scripts/workspace/run-coverage.ts --shard ${{ matrix.shard }} --print-lcov-paths)" >> "$GITHUB_OUTPUT"
+
       # Issue #1424 / #2513: agent-owned workspace の 100% coverage を shard 単位で enforce。
       # 品質ゲートは本体と分離し .claude/skills/quality-gates へ移設済み (--shard で絞って直接呼ぶ、
       # run.ts は経由しない)。
@@ -156,7 +162,8 @@ jobs:
           # Codecov 側 outage で CI 全体を落とさない。 coverage 計測は補助、 必須でない。
           fail_ci_if_error: false
           # 各 workspace の coverage/lcov.info を明示的に拾う (= auto-discover に依存しない)。
-          files: ${{ matrix.codecov_files }}
+          # The list is derived from COVERAGE_WORKSPACES to avoid upload drift (#2676).
+          files: ${{ steps.lcov.outputs.files }}
 
   # Issue #2513: branch protection 用の安定した単一 check 名。 matrix job (coverage) は shard 数
   # だけ check が並び、 shard 構成が変わるたびに required status の設定も追随させる必要が出るため

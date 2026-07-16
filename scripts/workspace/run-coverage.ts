@@ -111,23 +111,47 @@ export class UsageError extends Error {}
 
 export interface ParsedArgs {
   readonly shard?: ShardName;
+  readonly printLcovPaths: boolean;
+}
+
+export function lcovPathForWorkspace(ws: CoverageWorkspace): string {
+  return `./${ws.dir}/coverage/lcov.info`;
+}
+
+export function resolveLcovPaths(shard: ShardName | undefined): readonly string[] {
+  return resolveWorkspaces(shard).map(lcovPathForWorkspace);
 }
 
 /** No args = every workspace (current serial behavior). `--shard <name>` narrows to one shard. */
 export function parseArgs(argv: readonly string[]): ParsedArgs {
-  if (argv.length === 0) {
-    return {};
-  }
-  if (argv.length === 2 && argv[0] === "--shard") {
-    const candidate = argv[1];
-    if (candidate === undefined || !isShardName(candidate)) {
-      throw new UsageError(`Unknown shard "${argv[1]}". Known shards: ${SHARD_NAMES.join(", ")}`);
+  let shard: ShardName | undefined;
+  let printLcovPaths = false;
+
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (arg === "--print-lcov-paths") {
+      printLcovPaths = true;
+      continue;
     }
-    return { shard: candidate };
+    if (arg === "--shard") {
+      const candidate = argv[i + 1];
+      if (candidate === undefined || !isShardName(candidate)) {
+        throw new UsageError(
+          `Unknown shard "${candidate}". Known shards: ${SHARD_NAMES.join(", ")}`,
+        );
+      }
+      if (shard !== undefined) {
+        throw new UsageError(`--shard was provided more than once`);
+      }
+      shard = candidate;
+      i += 1;
+      continue;
+    }
+    throw new UsageError(
+      `Unknown arguments: ${argv.join(" ")}. Usage: bun run scripts/workspace/run-coverage.ts [--shard <${SHARD_NAMES.join("|")}>] [--print-lcov-paths]`,
+    );
   }
-  throw new UsageError(
-    `Unknown arguments: ${argv.join(" ")}. Usage: bun run scripts/workspace/run-coverage.ts [--shard <${SHARD_NAMES.join("|")}>]`,
-  );
+  return { shard, printLcovPaths };
 }
 
 export function resolveWorkspaces(shard: ShardName | undefined): readonly CoverageWorkspace[] {
@@ -245,6 +269,11 @@ function main(): void {
   }
 
   validateWorkspaces(COVERAGE_WORKSPACES);
+
+  if (parsed.printLcovPaths) {
+    console.log(resolveLcovPaths(parsed.shard).join(","));
+    return;
+  }
 
   const workspaces = resolveWorkspaces(parsed.shard);
   const { results, failed } = runWorkspaces(workspaces);

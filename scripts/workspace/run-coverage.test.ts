@@ -8,7 +8,9 @@ import {
 import {
   COVERAGE_WORKSPACES,
   formatDuration,
+  lcovPathForWorkspace,
   parseArgs,
+  resolveLcovPaths,
   resolveWorkspaces,
   SHARD_NAMES,
   SHARDS,
@@ -137,11 +139,21 @@ describe("validateWorkspaces", () => {
 
 describe("parseArgs", () => {
   it("should select every workspace when called with no arguments", () => {
-    expect(parseArgs([])).toEqual({});
+    expect(parseArgs([])).toEqual({ shard: undefined, printLcovPaths: false });
   });
 
   it("should select the requested shard for --shard packages", () => {
-    expect(parseArgs(["--shard", "packages"])).toEqual({ shard: "packages" });
+    expect(parseArgs(["--shard", "packages"])).toEqual({
+      shard: "packages",
+      printLcovPaths: false,
+    });
+  });
+
+  it("should allow printing lcov paths for a shard without running tests", () => {
+    expect(parseArgs(["--shard", "packages", "--print-lcov-paths"])).toEqual({
+      shard: "packages",
+      printLcovPaths: true,
+    });
   });
 
   it("should reject an unknown shard name", () => {
@@ -150,6 +162,30 @@ describe("parseArgs", () => {
 
   it("should reject an unknown flag", () => {
     expect(() => parseArgs(["--bogus"])).toThrow(UsageError);
+  });
+});
+
+describe("resolveLcovPaths", () => {
+  it("should derive every Codecov upload path from COVERAGE_WORKSPACES", () => {
+    expect(resolveLcovPaths(undefined)).toEqual(COVERAGE_WORKSPACES.map(lcovPathForWorkspace));
+  });
+
+  it("should derive the packages shard upload list instead of relying on a hand-written CI list", () => {
+    expect(resolveLcovPaths("packages")).toEqual([
+      "./packages/trust-bridge/coverage/lcov.info",
+      "./packages/auth-client/coverage/lcov.info",
+      "./packages/saml-utils/coverage/lcov.info",
+      "./packages/problem-cost/coverage/lcov.info",
+      "./packages/problem-runtime/coverage/lcov.info",
+      "./packages/problem-sdk/coverage/lcov.info",
+      "./packages/format/coverage/lcov.info",
+      "./packages/coordination-plugin-sdk/coverage/lcov.info",
+      "./packages/portal-contracts/coverage/lcov.info",
+      "./packages/web-kit/coverage/lcov.info",
+      "./packages/portal-plugin-sdk/coverage/lcov.info",
+      "./packages/problem-test-harness/coverage/lcov.info",
+      "./apps/always-on-control-plane/coverage/lcov.info",
+    ]);
   });
 });
 
