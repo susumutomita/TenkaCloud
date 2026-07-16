@@ -57,7 +57,11 @@ import {
   cleanupRecordedSimulatorSession,
   SimulatorLocalRuntime,
 } from "./local-play/simulator-runtime";
-import { openLocalPlayStateStore } from "./local-play/state-store-factory";
+import {
+  clearLocalPlayStateStore,
+  localPlayDatabaseBackend,
+  openLocalPlayStateStore,
+} from "./local-play/state-store-factory";
 
 /**
  * [#2527 Slice 6] The local-play CLI entrypoint: command routing + composition only.
@@ -215,6 +219,7 @@ async function startLocalSession(
     deploymentPath: plan.paths.deploymentPath,
     runtimeConfigPath: plan.paths.runtimeConfigPath,
     participantToken,
+    databaseBackend: localPlayDatabaseBackend(process.env),
     ...(runtimeConfigBackedUp
       ? { runtimeConfigBackupPath: plan.paths.runtimeConfigBackupPath }
       : {}),
@@ -512,25 +517,39 @@ async function snapshot(
 
 async function down(): Promise<void> {
   const p = privateLocalPaths();
+  let databaseBackend = localPlayDatabaseBackend(process.env);
+  let recordedState: LocalProcessState | undefined;
   if (existsSync(p.statePath)) {
-    const state = readLocalProcessState(p.statePath, p);
-    stopRecordedServeProcess(state);
+    recordedState = readLocalProcessState(p.statePath, p);
+    databaseBackend = recordedState.databaseBackend ?? databaseBackend;
+    stopRecordedServeProcess(recordedState);
     if (
-      !(await waitForServeProcessExit(state.pid, state.processIdentity, SERVE_SHUTDOWN_TIMEOUT_MS))
+      !(await waitForServeProcessExit(
+        recordedState.pid,
+        recordedState.processIdentity,
+        SERVE_SHUTDOWN_TIMEOUT_MS,
+      ))
     ) {
       throw new Error("Local-play serve process did not stop; refusing concurrent cleanup");
     }
     await cleanupRecordedSimulatorSession(p.simulatorSessionPath);
-    releaseSessionState(p, state);
   } else {
     await cleanupRecordedSimulatorSession(p.simulatorSessionPath);
-    unlinkIfExists(p.deploymentPath);
-    restoreRuntimeConfig(p.runtimeConfigBackupPath, p.runtimeConfigPath, false);
   }
   // [#2392 Phase 2] Containers are owned by the serve process's lifecycle;
   // units.json is its persisted mirror, so this also reclaims crash leftovers.
   tearDownRecordedUnits(p);
-  console.log("Local play stopped.");
+  await clearLocalPlayStateStore(p, {
+    ...process.env,
+    TENKACLOUD_LOCAL_DATABASE: databaseBackend,
+  });
+  if (recordedState) {
+    releaseSessionState(p, recordedState);
+  } else {
+    unlinkIfExists(p.deploymentPath);
+    restoreRuntimeConfig(p.runtimeConfigBackupPath, p.runtimeConfigPath, false);
+  }
+  console.log("Local play stopped and progress cleared.");
 }
 
 /**
@@ -596,7 +615,7 @@ function usage(): string {
     "  snapshot-export <problem>  Export SNAPSHOT=<name> from a Simulator world",
     "  snapshot-import <problem>  Import SNAPSHOT=<name> into a Simulator world",
     "  disrupt <problem>  Fire DISRUPTION=<id> through the Simulator provider command",
-    "  down             Stop local services and remove local state",
+    "  down             Stop local services and clear all persisted progress",
     "",
     "Simulated-cloud (multicloud Simulator) problems are experimental and hidden by",
     "default; opt in with TENKACLOUD_LOCAL_SIMULATOR=1 (e.g. TENKACLOUD_LOCAL_SIMULATOR=1 make local).",

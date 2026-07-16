@@ -12,6 +12,7 @@ import {
   snapshotLocalPlayState,
 } from "../../../scripts/local-play/state-store";
 import {
+  clearLocalPlayStateStore,
   localPlayDatabaseBackend,
   openLocalPlayStateStore,
 } from "../../../scripts/local-play/state-store-factory";
@@ -81,7 +82,9 @@ describe("local-play state store contract (#2633)", () => {
     const result = spawnSync("bun", [fixture, databasePath], { encoding: "utf8" });
 
     expect(result.status, result.stderr).toBe(0);
-    expect(JSON.parse(result.stdout)).toMatchObject({ version: 1, teamName: "SQLite team" });
+    expect(JSON.parse(result.stdout)).toEqual({
+      beforeClear: expect.objectContaining({ version: 1, teamName: "SQLite team" }),
+    });
     expect(statSync(databasePath).mode & 0o777).toBe(0o600);
   });
 
@@ -104,12 +107,14 @@ describe("local-play state store contract (#2633)", () => {
       description: "sqlite",
       load: async () => undefined,
       save: async () => {},
+      clear: async () => {},
       close: async () => {},
     }));
     const turso = vi.fn(async () => ({
       description: "turso",
       load: async () => undefined,
       save: async () => {},
+      clear: async () => {},
       close: async () => {},
     }));
     const paths = { databasePath: "/private/local-play.sqlite" } as Parameters<
@@ -139,6 +144,29 @@ describe("local-play state store contract (#2633)", () => {
     );
   });
 
+  it("should clear and always close the selected state store", async () => {
+    const clear = vi.fn(async () => {});
+    const close = vi.fn(async () => {});
+    const open = vi.fn(async () => ({
+      description: "selected store",
+      load: async () => undefined,
+      save: async () => {},
+      clear,
+      close,
+    }));
+    const paths = { databasePath: "/private/local-play.sqlite" } as Parameters<
+      typeof openLocalPlayStateStore
+    >[0];
+
+    await expect(clearLocalPlayStateStore(paths, {}, open)).resolves.toBeUndefined();
+    expect(clear).toHaveBeenCalledOnce();
+    expect(close).toHaveBeenCalledOnce();
+
+    clear.mockRejectedValueOnce(new Error("clear failed"));
+    await expect(clearLocalPlayStateStore(paths, {}, open)).rejects.toThrow("clear failed");
+    expect(close).toHaveBeenCalledTimes(2);
+  });
+
   it("should reject unsafe Turso configuration before creating a client", async () => {
     await expect(
       openTursoLocalPlayStateStore({ url: "file:///tmp/local.db", authToken: "secret" }),
@@ -152,6 +180,24 @@ describe("local-play state store contract (#2633)", () => {
         authToken: "secret",
       }),
     ).rejects.toThrow("must not contain credentials");
+  });
+
+  it("should clear the persisted Turso progress row", async () => {
+    const execute = vi.fn(async () => ({ rows: [] }));
+    const close = vi.fn();
+    const store = await openTursoLocalPlayStateStore(
+      { url: "https://example.turso.io", authToken: "secret" },
+      { execute, close },
+    );
+
+    await store.clear();
+    await store.close();
+
+    expect(execute).toHaveBeenLastCalledWith({
+      sql: "DELETE FROM local_play_state WHERE session_id = 'default'",
+      args: [],
+    });
+    expect(close).toHaveBeenCalledOnce();
   });
 
   it("should restore progress before serving and persist it before closing storage", async () => {
@@ -168,6 +214,7 @@ describe("local-play state store contract (#2633)", () => {
           description: "test store",
           load: async () => snapshot,
           save,
+          clear: async () => {},
           close,
         },
       },

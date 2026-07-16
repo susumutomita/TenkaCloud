@@ -40,6 +40,7 @@ describe("local-play CORS", () => {
           description: "injected failure",
           load: async () => undefined,
           save,
+          clear: async () => {},
           close: async () => {},
         },
       },

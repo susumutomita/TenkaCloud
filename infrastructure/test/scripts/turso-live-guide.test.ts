@@ -228,6 +228,23 @@ describe("scripts/ops/turso-live-guide (#2617)", () => {
       /^\s+turso-live\s+Start the interactive Turso\/AWS live verification wizard/m,
     );
     expect(english).toMatch(/^\s+local\s+Start the local drill API and portal/m);
+    expect(english).toMatch(/^\s+local-down\s+Stop local play and clear all persisted progress/m);
+    for (const hiddenLocalTarget of [
+      "doctor",
+      "local-onboard",
+      "local-up",
+      "local-portal",
+      "local-status",
+      "local-list",
+      "local-evaluate",
+      "local-reset",
+      "local-snapshot-export",
+      "local-snapshot-import",
+      "local-disrupt",
+      "local-smoke",
+    ]) {
+      expect(english).not.toMatch(new RegExp(`^\\s+${hiddenLocalTarget}\\s+`, "m"));
+    }
     expect(english).not.toContain("開発依存関係を安全設定でインストール");
     expect(japanese).toContain("言語: 日本語（英語: make help-en）");
     expect(japanese).toContain("セットアップ / ビルド");

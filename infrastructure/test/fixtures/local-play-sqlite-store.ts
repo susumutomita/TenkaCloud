@@ -11,5 +11,8 @@ await store.save({
   simulatedRuntimes: {},
   scoreEvents: [],
 });
-console.log(JSON.stringify(await store.load()));
+const beforeClear = await store.load();
+await store.clear();
+const afterClear = await store.load();
+console.log(JSON.stringify({ beforeClear, afterClear }));
 await store.close();
