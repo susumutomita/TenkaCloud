@@ -264,6 +264,7 @@ function scorePhasedBonuses(
  * of these that the registered URL host does not confirm is downgraded to `ec2` (untrusted).
  */
 const MANAGED_TIERS: ReadonlySet<string> = new Set(["lambda", "ecs", "apprunner"]);
+const HOSTING_TIERS: ReadonlySet<string> = new Set(["ec2", ...MANAGED_TIERS]);
 
 /**
  * [Issue #2420] Derive the hosting tier from the registered URL host, never from the service's
@@ -300,13 +301,16 @@ function hostFromUrl(url: string | undefined): string | undefined {
 
 /**
  * [Issue #2420] The hosting tier the engine will actually score. The registered URL host is
- * authoritative for managed tiers:
+ * authoritative only when `/meta` reports a hosting tier:
  *
- *   - URL host matches a managed runtime → that tier (even if `/meta` disagrees — the URL wins).
+ *   - A problem-specific platform (`posture-2`, `production`, etc.) is not a hosting claim and
+ *     passes through unchanged. StackStack, for example, is fronted by an ALB while scoring its
+ *     production posture rather than the ALB's implementation tier.
+ *   - URL host matches a managed runtime and `/meta` reports a hosting tier → the URL-derived tier
+ *     wins (for example an EC2 self-report behind API Gateway is verified as lambda).
  *   - No managed host + a **managed** self-report → `ec2` (a lie: EC2-hosted service claiming
  *     lambda/ecs/apprunner earns EC2-tier points at most and never the cross-platform bonus).
- *   - No managed host + a **non-managed** self-report (`ec2`, or stackstack's `posture-3` /
- *     `production` posture strings, which are not hosting tiers) → passed through unchanged.
+ *   - No managed host + an `ec2` self-report → `ec2`.
  *   - No managed host + no self-report → `undefined` (→ failurePenalty, preserved).
  *
  * The degraded phase (keyed on the tier via `switchPlatformToDegraded`) therefore also sees the
@@ -316,6 +320,7 @@ export function verifyPlatformTier(
   selfReported: string | undefined,
   baseUrl: string | undefined,
 ): string | undefined {
+  if (selfReported !== undefined && !HOSTING_TIERS.has(selfReported)) return selfReported;
   const derived = classifyManagedHost(hostFromUrl(baseUrl));
   if (derived) return derived;
   if (selfReported !== undefined && MANAGED_TIERS.has(selfReported)) return "ec2";

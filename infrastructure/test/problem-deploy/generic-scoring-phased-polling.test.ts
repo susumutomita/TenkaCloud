@@ -363,6 +363,26 @@ describe("phased-polling kind", () => {
     expect(result.scoreDelta).toBe(10); // ec2 degradedPoints, not lambda's 1000
   });
 
+  it("should preserve StackStack posture scoring when the endpoint is behind an ALB", async () => {
+    const stackStackScoring: PhasedPollingScoringMetadata = {
+      ...baseScoring,
+      platformRules: { "posture-2": { points: 200 } },
+      bonuses: [],
+    };
+    fetchMock
+      .mockResolvedValueOnce({
+        status: 200,
+        text: async () => JSON.stringify({ platform: "posture-2" }),
+      })
+      .mockResolvedValueOnce({ status: 200, text: async () => JSON.stringify({ ok: true }) });
+
+    const result = await runPhasedPollingKind(singleSlotInput(ELB_URL, stackStackScoring));
+
+    expect(result.scoreDelta).toBe(200);
+    expect(result.lastResult).toBe("ok");
+    expect(result.platform).toBe("posture-2");
+  });
+
   it("should award lambda-tier points for a service behind API Gateway even if /meta says ec2", async () => {
     // URL host wins over the self-report: execute-api → lambda tier.
     const noBonus: PhasedPollingScoringMetadata = { ...baseScoring, bonuses: [] };
