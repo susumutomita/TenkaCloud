@@ -41,3 +41,19 @@ export async function openLocalPlayStateStore(
     authToken: env.TENKACLOUD_LOCAL_TURSO_AUTH_TOKEN ?? "",
   });
 }
+
+export async function clearLocalPlayStateStore(
+  paths: LocalPaths,
+  env: NodeJS.ProcessEnv = process.env,
+  open: (
+    paths: LocalPaths,
+    env: NodeJS.ProcessEnv,
+  ) => Promise<LocalPlayStateStore> = openLocalPlayStateStore,
+): Promise<void> {
+  const store = await open(paths, env);
+  try {
+    await store.clear();
+  } finally {
+    await store.close();
+  }
+}

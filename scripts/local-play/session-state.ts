@@ -40,6 +40,8 @@ export interface LocalProcessState {
   readonly runtimeConfigPath: string;
   readonly runtimeConfigBackupPath?: string;
   readonly participantToken: string;
+  /** Progress backend selected for this session; no credentials are persisted. */
+  readonly databaseBackend?: "sqlite" | "turso";
 }
 
 /**
@@ -166,6 +168,13 @@ export function readLocalProcessState(path: string, paths: LocalPaths): LocalPro
     !/^[A-Za-z0-9_-]{43}$/.test(value.participantToken)
   ) {
     throw new Error("Local process state has an invalid participant token");
+  }
+  if (
+    value.databaseBackend !== undefined &&
+    value.databaseBackend !== "sqlite" &&
+    value.databaseBackend !== "turso"
+  ) {
+    throw new Error("Local process state has an invalid database backend");
   }
   return value as unknown as LocalProcessState;
 }

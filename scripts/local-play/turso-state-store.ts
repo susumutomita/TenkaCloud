@@ -1,9 +1,15 @@
-import type { Client } from "@libsql/client";
 import { type LocalPlayStateStore, parseLocalPlaySnapshot } from "./state-store";
 
 export interface TursoLocalPlayStateStoreOptions {
   readonly url: string;
   readonly authToken: string;
+}
+
+interface TursoLocalPlayStateClient {
+  readonly execute: (
+    statement: string | { readonly sql: string; readonly args: readonly unknown[] },
+  ) => Promise<{ readonly rows: readonly Record<string, unknown>[] }>;
+  readonly close: () => void;
 }
 
 function validateOptions(options: TursoLocalPlayStateStoreOptions): void {
@@ -27,10 +33,15 @@ function validateOptions(options: TursoLocalPlayStateStoreOptions): void {
 /** Optional remote libSQL adapter. The default local path never imports this module. */
 export async function openTursoLocalPlayStateStore(
   options: TursoLocalPlayStateStoreOptions,
+  injectedClient?: TursoLocalPlayStateClient,
 ): Promise<LocalPlayStateStore> {
   validateOptions(options);
-  const { createClient } = await import("@libsql/client/http");
-  const client: Client = createClient({ url: options.url, authToken: options.authToken });
+  const client =
+    injectedClient ??
+    ((await import("@libsql/client/http")).createClient({
+      url: options.url,
+      authToken: options.authToken,
+    }) as unknown as TursoLocalPlayStateClient);
   await client.execute(`
     CREATE TABLE IF NOT EXISTS local_play_state (
       session_id TEXT PRIMARY KEY CHECK (session_id = 'default'),
@@ -62,6 +73,12 @@ export async function openTursoLocalPlayStateStore(
             updated_at = excluded.updated_at
         `,
         args: [JSON.stringify(snapshot), new Date().toISOString()],
+      });
+    },
+    clear: async () => {
+      await client.execute({
+        sql: "DELETE FROM local_play_state WHERE session_id = 'default'",
+        args: [],
       });
     },
     close: async () => {

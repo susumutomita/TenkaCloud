@@ -38,7 +38,7 @@ tenkacloud local [--problem <id>] [--database sqlite|turso]
   └─ participant portal    Vite dev server (cloudMode:"local")
 tenkacloud local up → scoring API only (advanced / scripts)
 tenkacloud local portal → attach the portal to an already-running local API
-tenkacloud local down → Docker Compose down + restore runtime-config
+tenkacloud local down → stop runtimes + restore runtime-config + clear progress
 ```
 
 | Layer                       | Owns     | Responsibility                                                        |
@@ -58,18 +58,17 @@ or operation is unsupported.
 ```bash
 tenkacloud local                         # scoring API + portal; local SQLite persistence
 tenkacloud local --problem sqli-demo     # pre-start one problem, then open the portal
-tenkacloud local list                    # print every playable problem id
-tenkacloud local status                  # is local play running?
-tenkacloud local evaluate 'TC{…}'        # submit a flag from the CLI
-tenkacloud local down                    # stop runtimes and restore runtime-config
+tenkacloud local down                    # stop runtimes and clear all progress
 ```
 
 Run `bun link` once to install the repository's `tenkacloud` executable, or
 prefix any command with `bun run` (for example, `bun run tenkacloud local`).
 The default backend is the embedded SQLite file
 `.tenkacloud/local/local-play.sqlite`, with owner-only permissions. It retains
-team progress and scores across local API restarts but never persists the
-participant token, process/container ownership, or a running Simulator world.
+team progress and scores while local play is running and across unexpected API
+restarts. An explicit `tenkacloud local down` clears that progress. The store
+never persists the participant token, process/container ownership, or a running
+Simulator world.
 Use the remote backend only when explicitly requested:
 
 ```bash
@@ -157,7 +156,8 @@ attack them, recover the flag, and submit it.
 Started containers keep running until an explicit stop — there is no idle
 timeout, so you can leave a problem up, come back later, and its endpoints are
 still there (#2512). The portal problem page's **Stop** button stops one
-problem; `tenkacloud local down` stops local play and every recorded container. The
+problem; `tenkacloud local down` stops local play and every recorded container,
+then clears all persisted progress and scores. The
 one automatic stop is the running cap (3 containers by default): starting
 another problem beyond the cap stops the least-recently-played one to free its
 slot.

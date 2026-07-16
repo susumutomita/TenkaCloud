@@ -320,7 +320,7 @@ check-synth: ## Run fast CDK synth and the IAM ASCII check | 高速CDK synthとI
 #   make local PROBLEM=sqli-demo   問題コンテナを pre-start し、採点 API + Portal を起動
 #   make local-up                  採点 API のみを起動 (上級者向け)
 #   make local-portal              既存の採点 API に Participant Portal を接続
-#   make local-down                コンテナ停止 + runtime-config 復元
+#   make local-down                停止 + runtime-config 復元 + 全進捗消去
 #   make local-evaluate FLAG=...   採点 API 経由でフラグを提出 (= 問題コンテナ /verify に委譲)
 #   TENKACLOUD_COMPOSE_CLI='docker-compose'  standalone compose を明示
 # Issue #2119: `make local-onboard YES=1` pre-approves software installs (also for automation).
@@ -328,7 +328,7 @@ ONBOARD_FLAGS := $(if $(YES),--yes,)
 
 # Issue #2119: report-only prerequisite diagnosis (mise trust / submodule / bun /
 # Docker Compose / daemon). Installs nothing.
-doctor: ## Diagnose local-play prerequisites without changes | local playの前提環境を変更せず診断
+doctor:
 	@command -v bun >/dev/null 2>&1 || { \
 	  echo "Bun is required for diagnostics."; \
 	  echo "  Install: (macOS) brew install oven-sh/bun/bun   (Linux) curl -fsSL https://bun.sh/install | bash"; \
@@ -338,7 +338,7 @@ doctor: ## Diagnose local-play prerequisites without changes | local playの前�
 # Issue #2119: optional guided setup. This is the only local-play target that
 # offers to trust mise, install Bun, initialize the problems/ submodule, or help
 # with Docker setup. Keep `make local` itself lightweight and non-installing.
-local-onboard: ## Install missing local-play tools interactively | local playの不足toolを対話形式で導入
+local-onboard:
 	@sh scripts/onboard/onboard-bootstrap.sh $(ONBOARD_FLAGS)
 	@# The bootstrap may have JUST installed bun into ~/.bun/bin; this recipe line
 	@# runs in a fresh shell whose PATH predates that install, so prefix it.
@@ -359,52 +359,52 @@ ensure-deps:
 local: ## Start the local drill API and portal | ローカル問題演習のAPIとportalを起動
 	@bun run tenkacloud local $(if $(PROBLEM),--problem "$(PROBLEM)",) $(if $(LOCAL_API_PORT),--api-port "$(LOCAL_API_PORT)",)
 
-local-up: ## Start only the local scoring API | ローカル採点APIだけを起動
+local-up:
 	@bun run tenkacloud local up $(if $(PROBLEM),--problem "$(PROBLEM)",) $(if $(LOCAL_API_PORT),--api-port "$(LOCAL_API_PORT)",)
 
-local-portal: ## Connect the portal to a running local API | 起動済みlocal APIへportalを接続
+local-portal:
 	@bun run tenkacloud local portal
 
-local-down: ## Stop local-play processes and containers | local playのprocessとcontainerを停止
+local-down: ## Stop local play and clear all persisted progress | local playを停止して全進捗を消去
 	@bun run tenkacloud local down
 
-local-status: ## Show local-play status | local playの起動状態を表示
+local-status:
 	@bun run tenkacloud local status
 
 # Issue #2188: list local-play problems (id / category / display name) for
 # players who want to pre-start one by id.
-local-list: ## List available local problems | 利用可能なlocal問題を一覧表示
+local-list:
 	@bun run tenkacloud local list
 
-local-evaluate: ## Submit a flag to the local scoring API | FLAGをlocal採点APIへ提出
+local-evaluate:
 	@if [ -z "$(FLAG)" ]; then \
 	  echo "error: FLAG is required. Example: make local-evaluate FLAG='TC{...}'" >&2; \
 	  exit 1; \
 	fi
 	@bun run tenkacloud local evaluate "$(FLAG)"
 
-local-reset: ## Reset the selected local problem | 指定したlocal問題の状態を初期化
+local-reset:
 	@if [ -z "$(PROBLEM)" ]; then \
 	  echo "error: PROBLEM is required. Example: make local-reset PROBLEM=hello-world" >&2; \
 	  exit 1; \
 	fi
 	@bun run tenkacloud local reset "$(PROBLEM)"
 
-local-snapshot-export: ## Export a local-problem snapshot | local問題のsnapshotを保存
+local-snapshot-export:
 	@if [ -z "$(PROBLEM)" ]; then \
 	  echo "error: PROBLEM is required. Example: make local-snapshot-export PROBLEM=hello-world SNAPSHOT=before-change" >&2; \
 	  exit 1; \
 	fi
 	@SNAPSHOT="$(SNAPSHOT)" bun run tenkacloud local snapshot-export "$(PROBLEM)"
 
-local-snapshot-import: ## Restore a saved local-problem snapshot | 保存済みsnapshotをlocal問題へ復元
+local-snapshot-import:
 	@if [ -z "$(PROBLEM)" ]; then \
 	  echo "error: PROBLEM is required. Example: make local-snapshot-import PROBLEM=hello-world SNAPSHOT=before-change" >&2; \
 	  exit 1; \
 	fi
 	@SNAPSHOT="$(SNAPSHOT)" bun run tenkacloud local snapshot-import "$(PROBLEM)"
 
-local-disrupt: ## Inject a disruption into a local battle | local battleへ障害を注入
+local-disrupt:
 	@if [ -z "$(PROBLEM)" ] || [ -z "$(DISRUPTION)" ]; then \
 	  echo "error: PROBLEM and DISRUPTION are required. Example: make local-disrupt PROBLEM=hello-world-battle DISRUPTION=frontend-down" >&2; \
 	  exit 1; \
@@ -417,7 +417,7 @@ local-disrupt: ## Inject a disruption into a local battle | local battleへ障�
 # wrong image, an unhealthy service, or a full Docker VM disk). Preflights the VM
 # disk so a full disk is reported plainly instead of a cryptic 502 start_failed.
 # Defaults to a light single-container problem; override with PROBLEM=<id>.
-local-smoke: ## Smoke-test problem start, health, and shutdown | 代表問題を起動・health確認・停止までsmoke test
+local-smoke:
 	@$(MAKE) ensure-deps
 	@PROBLEM="$(PROBLEM)" bun run scripts/local-play/local-smoke.ts
 

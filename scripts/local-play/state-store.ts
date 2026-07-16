@@ -37,6 +37,7 @@ export interface LocalPlayStateStore {
   readonly description: string;
   readonly load: () => Promise<LocalPlaySnapshot | undefined>;
   readonly save: (snapshot: LocalPlaySnapshot) => Promise<void>;
+  readonly clear: () => Promise<void>;
   readonly close: () => Promise<void>;
 }
 
