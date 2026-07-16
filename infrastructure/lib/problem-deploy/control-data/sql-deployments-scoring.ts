@@ -2,9 +2,9 @@ import { ulid } from "ulid";
 import { buildScoreEventRecord } from "../handlers/shared/score-event.js";
 import type { MutableDeploymentRecord } from "./sql-deployments-core.js";
 import {
-  DEPLOYMENT_UPDATE_SET,
+  DEPLOYMENT_MUTATE_SET,
   deploymentFromPayload,
-  deploymentUpdateParams,
+  deploymentMutateParams,
   ensureNumber,
   getSolvedFlagSet,
   INBOX_EVENT_SK_PREFIX,
@@ -246,8 +246,9 @@ export class SqlDeploymentsScoring implements DeploymentsScoringPort {
     const scoreEvent = buildScoreEventRecord(parent, "gate-bonus", bonus, at);
     const statements: SqlStatement[] = [
       {
-        sql: `UPDATE deployments SET ${DEPLOYMENT_UPDATE_SET} WHERE job_id = ?`,
-        params: [...deploymentUpdateParams(record), parent.jobId],
+        // [#2672] Rebuilt from payload (credential-stripped), so preserve login_key_hash.
+        sql: `UPDATE deployments SET ${DEPLOYMENT_MUTATE_SET} WHERE job_id = ?`,
+        params: [...deploymentMutateParams(record), parent.jobId],
       },
       {
         sql:
