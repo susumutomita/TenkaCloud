@@ -9,6 +9,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createLocalApiProxyMiddleware,
   LOCAL_API_PROXY_PREFIX,
+  localApiProxyTimeoutMs,
   localApiRequestHeaders,
   parseLocalApiProxyUrl,
   resolveLocalApiTarget,
@@ -162,6 +163,14 @@ describe("Codespaces local Participant API proxy", () => {
     });
   });
 
+  it("should reserve the long timeout for lifecycle mutations", () => {
+    for (const action of ["start", "stop", "reset"]) {
+      expect(localApiProxyTimeoutMs(`/portal/me/problems/p/${action}`, "POST")).toBe(180_000);
+    }
+    expect(localApiProxyTimeoutMs("/portal/me/problems/p/start", "GET")).toBe(15_000);
+    expect(localApiProxyTimeoutMs("/portal/me/problems/p/score", "POST")).toBe(15_000);
+  });
+
   it("should reject an excessive number of forwarded headers", () => {
     const headers = Object.fromEntries(
       Array.from({ length: 65 }, (_, index) => [`x-portal-${index}`, String(index)]),
@@ -251,8 +260,8 @@ describe("Codespaces local Participant API proxy", () => {
       const response = await fetch(
         `http://127.0.0.1:${stalledProxyPort}/__tenkacloud-local-api/portal/me`,
       );
-      expect(response.status).toBe(StatusCodes.BAD_GATEWAY);
-      expect(await response.json()).toEqual({ error: "local_api_proxy_failed" });
+      expect(response.status).toBe(StatusCodes.GATEWAY_TIMEOUT);
+      expect(await response.json()).toEqual({ error: "local_api_proxy_timeout" });
     } finally {
       await close(stalledProxy);
       await close(stalled);
