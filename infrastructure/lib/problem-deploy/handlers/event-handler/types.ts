@@ -74,7 +74,9 @@ const _eventProblemTargetLockstep: _MutuallyAssignable<
  *
  *   PK     = `EVENT#<eventId>` / SK = `TEAM#<teamId>`
  *   GSI1PK = `TENANT#<tenantId>` / GSI1SK = `EVENT#<eventId>#TEAM#<teamId>`
- *   GSI2PK = `TEAMKEY#<teamLoginKey>` / GSI2SK = `META` (sparse)
+ *
+ * [Issue #2674] 旧 GSI2 (`TEAMKEY#<平文キー>`) は Teams テーブルごと削除済み —
+ * participant 認証は Deployments テーブルの GSI2 が正本。
  *
  * [Issue #2527 Slice 1 step 2] The domain fields live on {@link TeamRecord}
  * (`control-data/domain/teams.ts`, the source of truth); this item adds the
@@ -87,8 +89,6 @@ export interface TeamItem extends Omit<TeamRecord, "teamLoginKey"> {
   SK: string;
   GSI1PK: string;
   GSI1SK: string;
-  GSI2PK?: string;
-  GSI2SK?: string;
   /** 短命 bearer。team scope (1 key で event 内 N 問題にアクセス可)。 */
   teamLoginKey: string;
 }

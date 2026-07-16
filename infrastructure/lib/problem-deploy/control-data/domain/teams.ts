@@ -8,7 +8,7 @@
 
 /**
  * [ADR-049 §5.1] Team aggregate の domain shape。 物理 DDB キー (PK / SK / GSI1PK /
- * GSI1SK / GSI2PK / GSI2SK) は DynamoDB backend の実装詳細であり、 SQLite backend
+ * GSI1SK) は DynamoDB backend の実装詳細であり、 SQLite backend
  * (Turso / D1) は独自のキー / カラムを導出する。
  *
  * [Issue #2527 Slice 1 step 2] Source of truth: the physical row
@@ -80,8 +80,10 @@ export type TeamLoginKeyRotationOutcome = { readonly outcome: "updated" | "confl
  * flag through {@link createTeamsRepository}.
  *
  * すべてのメソッドは既存の実アクセスパターン (create.ts の team 書込み /
- * event-handler/list.ts の team 一覧 / participant portal の teamLoginKey lookup) に
- * 対応する — 投機的な API は 1 つも含まない。
+ * event-handler/list.ts の team 一覧 / bulk-deploy の credential 供給) に
+ * 対応する — 投機的な API は 1 つも含まない。 [Issue #2674] participant の
+ * teamLoginKey 認証は Deployments aggregate (`listByTeamLoginKey`) が正本であり、
+ * Teams 側に login-key lookup は存在しない。
  */
 export interface TeamsRepository {
   /**
@@ -90,16 +92,6 @@ export interface TeamsRepository {
    * row). Tenant / event / team の 3 段スコープで 1 行を引く。
    */
   getTeam(tenantId: string, eventId: string, teamId: string): Promise<TeamRecord | undefined>;
-  /**
-   * Participant bearer lookup by `teamLoginKey` (the DynamoDB GSI2 sparse index,
-   * `TEAMKEY#<key>`). Returns `undefined` when no team carries that key.
-   *
-   * **[Issue #2290]** The SQLite backend indexes only a SHA-256 *hash* of the
-   * login key ({@link SqlTeamsRepository}), so the plaintext bearer never lands in
-   * an index column. Callers pass the plaintext key to both backends and get the
-   * same team back.
-   */
-  getTeamByLoginKey(loginKey: string): Promise<TeamRecord | undefined>;
   /**
    * すべての team を 1 event 分だけ返す (DynamoDB では
    * `PK = EVENT#<eventId> AND begins_with(SK, "TEAM#")` の base-table query)。

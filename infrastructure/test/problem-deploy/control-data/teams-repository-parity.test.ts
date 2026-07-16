@@ -37,10 +37,11 @@ import { makeFakeDdb, makeSqliteExecutor } from "./control-data-write.test-helpe
  *     so no new dependency is introduced.
  *
  * [Issue #2290] SQL indexes the participant login key only as a SHA-256 hash while
- * retaining plaintext in the aggregate payload for authorized redistribution;
- * DDB keeps its sparse GSI2 `TEAMKEY#<plaintext>`. Both must resolve the same
- * plaintext key to the same team — asserted in the parity
- * `getTeamByLoginKey` cases and in a focused hashing suite below.
+ * retaining plaintext in the aggregate payload for authorized redistribution.
+ * [Issue #2674] Neither backend has a Teams login-key READ anymore (participant
+ * auth = Deployments `listByTeamLoginKey`; the DDB Teams GSI2 was deleted), so
+ * rotation outcomes are asserted via `getTeam` + the deployment credential view;
+ * the SQL hash column itself is pinned in the focused hashing suite below.
  */
 
 const TABLE = "Teams";
@@ -96,19 +97,6 @@ describe.each(backends)("TeamsRepository parity: %s", (name, makeRepo) => {
     const record = sampleRecord();
     await repo.putTeam(record);
     expect(await repo.getTeam("tenant-b", record.eventId, record.teamId)).toBeUndefined();
-  });
-
-  it("should look up a team by its plaintext login key", async () => {
-    const repo = makeRepo();
-    const record = sampleRecord({ teamLoginKey: "SHARED-PLAINTEXT-KEY" });
-    await repo.putTeam(record);
-    expect(await repo.getTeamByLoginKey("SHARED-PLAINTEXT-KEY")).toEqual(record);
-  });
-
-  it("should return undefined for an unknown login key", async () => {
-    const repo = makeRepo();
-    await repo.putTeam(sampleRecord({ teamLoginKey: "REAL-KEY" }));
-    expect(await repo.getTeamByLoginKey("WRONG-KEY")).toBeUndefined();
   });
 
   it("should upsert (second putTeam overwrites the first)", async () => {
@@ -444,9 +432,9 @@ describe.each([
       }),
     ).resolves.toEqual({ outcome: "updated" });
 
-    await expect(teams.getTeamByLoginKey("OLD-TEAM-KEY")).resolves.toBeUndefined();
+    // [#2674] Teams no longer has a login-key read; old-key invalidation is
+    // asserted on the real auth index (Deployments) + the rewritten Team row.
     await expect(deployments.listByTeamLoginKey("OLD-TEAM-KEY")).resolves.toEqual([]);
-    expect((await teams.getTeamByLoginKey("NEW-TEAM-KEY"))?.teamId).toBe(team.teamId);
     expect((await teams.getTeam(team.tenantId, team.eventId, team.teamId))?.teamLoginKey).toBe(
       "NEW-TEAM-KEY",
     );
@@ -473,8 +461,10 @@ describe.each([
       }),
     ).resolves.toEqual({ outcome: "conflict" });
 
-    expect((await teams.getTeamByLoginKey("STILL-VALID-OLD-KEY"))?.teamId).toBe(team.teamId);
-    await expect(teams.getTeamByLoginKey("MUST-NOT-COMMIT")).resolves.toBeUndefined();
+    // Rolled back: the Team row still carries the old key, not the aborted one.
+    expect((await teams.getTeam(team.tenantId, team.eventId, team.teamId))?.teamLoginKey).toBe(
+      "STILL-VALID-OLD-KEY",
+    );
   });
 
   it("should reject a stale second rotation for the same team", async () => {
@@ -505,8 +495,10 @@ describe.each([
       }),
     ).resolves.toEqual({ outcome: "conflict" });
 
-    expect((await teams.getTeamByLoginKey("FIRST-ROTATION"))?.teamId).toBe(team.teamId);
-    await expect(teams.getTeamByLoginKey("STALE-SECOND-ROTATION")).resolves.toBeUndefined();
+    // The stale rotation must not have overwritten the first one.
+    expect((await teams.getTeam(team.tenantId, team.eventId, team.teamId))?.teamLoginKey).toBe(
+      "FIRST-ROTATION",
+    );
   });
 });
 

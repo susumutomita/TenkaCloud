@@ -36,21 +36,6 @@ export class MirroredTeamsRepository implements TeamsRepository {
     return canonical;
   }
 
-  async getTeamByLoginKey(loginKey: string): Promise<TeamRecord | undefined> {
-    const [canonical, replica] = await Promise.all([
-      this.canonical.getTeamByLoginKey(loginKey),
-      this.replica.getTeamByLoginKey(loginKey),
-    ]);
-    if (!canonical) {
-      if (replica) await this.replica.deleteTeam(replica.eventId, replica.teamId);
-      return undefined;
-    }
-    if (!replica || !sameTeamRecord(canonical, replica)) {
-      await this.replica.putTeam(canonical);
-    }
-    return canonical;
-  }
-
   async listTeamsByEvent(eventId: string): Promise<readonly TeamRecord[]> {
     const [canonical, replica] = await Promise.all([
       this.canonical.listTeamsByEvent(eventId),

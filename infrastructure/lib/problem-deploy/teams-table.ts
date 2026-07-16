@@ -20,10 +20,11 @@ import { Construct } from "constructs";
  *   PK: TENANT#<tenantId>
  *   SK: EVENT#<eventId>#TEAM#<teamId>
  *
- * GSI2 (Participant Portal が teamLoginKey で 1 行引く):
- *   PK: TEAMKEY#<teamLoginKey>
- *   SK: META
- *   sparse — 失効した team は GSI2PK 属性ごと削除して index から外す
+ * [Issue #2674] 旧 GSI2 (`TEAMKEY#<平文キー>` で 1 行引く sparse index) は削除済み。
+ * participant の teamLoginKey 認証は Deployments テーブルの GSI2 が正本で、
+ * Teams 側の index は読み手ゼロのまま平文 bearer を保持し続けていたため落とした。
+ * 平文 `teamLoginKey` 属性そのものは残る (bulk-deploy への credential 供給と
+ * 運営のキー再配布が読む)。
  *
  * Capacity / lifecycle:
  *   provisioned 1/1。RETAIN (operator が後で参照したい場合のため)。
@@ -48,14 +49,6 @@ export class TeamsTable extends Construct {
       indexName: "GSI1",
       partitionKey: { name: "GSI1PK", type: AttributeType.STRING },
       sortKey: { name: "GSI1SK", type: AttributeType.STRING },
-      readCapacity: 1,
-      writeCapacity: 1,
-    });
-
-    this.table.addGlobalSecondaryIndex({
-      indexName: "GSI2",
-      partitionKey: { name: "GSI2PK", type: AttributeType.STRING },
-      sortKey: { name: "GSI2SK", type: AttributeType.STRING },
       readCapacity: 1,
       writeCapacity: 1,
     });

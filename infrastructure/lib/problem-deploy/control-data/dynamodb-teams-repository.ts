@@ -36,16 +36,20 @@ function isConditionalTransactionCancellation(error: unknown): boolean {
  * `create.ts`):
  *   PK     = `EVENT#<eventId>`   / SK     = `TEAM#<teamId>`
  *   GSI1PK = `TENANT#<tenantId>` / GSI1SK = `EVENT#<eventId>#TEAM#<teamId>`
- *   GSI2PK = `TEAMKEY#<teamLoginKey>` / GSI2SK = `META`   (sparse — participant login)
  *   TTL attribute = `expiresAt` (epoch seconds)
  *
- * GSI2 は **sparse**: `teamLoginKey` が空のときは GSI2PK / GSI2SK を書かず index から
- * 外す (= create.ts が `TEAMKEY#<key>` を書く挙動、 teardown が REMOVE で失効させる挙動と
- * 一致させる)。
+ * [Issue #2674] The Teams table no longer carries a login-key GSI. Participant
+ * authentication reads the **Deployments** table (`listByTeamLoginKey`), so the
+ * old `GSI2PK = TEAMKEY#<plaintext>` index was a write-only exposure of the
+ * participant bearer plus a dead 1-RCU/1-WCU standing cost. The plaintext
+ * `teamLoginKey` ATTRIBUTE stays — `listTeamsForDeployment` supplies it as the
+ * bulk-deploy credential and the operator key-distribution path reads it.
  */
 
 const TEAM_SK_PREFIX = "TEAM#" as const;
-const TEAM_GSI2_SK = "META" as const;
+// GSI2PK / GSI2SK stay in the strip set even though nothing writes them anymore
+// (#2674): rows written before the GSI2 removal still carry the attributes, and
+// they must not surface as TeamRecord fields.
 const DDB_KEY_ATTRS: ReadonlySet<string> = new Set([
   "PK",
   "SK",
@@ -69,15 +73,15 @@ function itemToRecord(item: Record<string, unknown>): TeamRecord {
  * Re-derive the physical DDB item from a domain record. The key derivation is
  * byte-identical to `handlers/event-handler/create.ts`, so a record written here
  * is indistinguishable from one written by the existing transactional create path.
- * GSI2PK / GSI2SK are written **only when `teamLoginKey` is non-empty** so the
- * participant-login index stays sparse (matches create.ts / teardown behavior).
+ * [#2674] GSI2PK / GSI2SK are no longer written — the Teams login-key index is
+ * gone; the plaintext `teamLoginKey` attribute itself stays (credential supply).
  *
  * Exported for `DynamoDbEventsRepository.createEventWithTeams` (#2437) — the
  * atomic event+teams transaction must marshal team rows with the exact same
  * keys as this repository's own writes.
  */
 export function teamRecordToItem(record: TeamRecord): TeamItem {
-  const base: TeamItem = {
+  return {
     PK: `EVENT#${record.eventId}`,
     SK: `${TEAM_SK_PREFIX}${record.teamId}`,
     GSI1PK: `TENANT#${record.tenantId}`,
@@ -85,11 +89,6 @@ export function teamRecordToItem(record: TeamRecord): TeamItem {
     ...record,
     teamLoginKey: record.teamLoginKey ?? "",
   };
-  if (record.teamLoginKey) {
-    base.GSI2PK = `TEAMKEY#${record.teamLoginKey}`;
-    base.GSI2SK = TEAM_GSI2_SK;
-  }
-  return base;
 }
 
 export class DynamoDbTeamsRepository implements TeamsRepository {
@@ -113,22 +112,6 @@ export class DynamoDbTeamsRepository implements TeamsRepository {
     const item = out.Item as Record<string, unknown> | undefined;
     // Same guard the handlers apply inline: absent row or tenant mismatch → 404.
     if (!item || item.tenantId !== tenantId) return undefined;
-    return itemToRecord(item);
-  }
-
-  async getTeamByLoginKey(loginKey: string): Promise<TeamRecord | undefined> {
-    // Participant bearer lookup: GSI2 (`TEAMKEY#<key>`) は sparse かつ team 毎に一意なので
-    // 高々 1 行しか返らない。 先頭行を採用し、 無ければ undefined (= 401 相当)。
-    const out = await this.ddb.send(
-      new QueryCommand({
-        TableName: this.tableName,
-        IndexName: "GSI2",
-        KeyConditionExpression: "GSI2PK = :pk",
-        ExpressionAttributeValues: { ":pk": `TEAMKEY#${loginKey}` },
-      }),
-    );
-    const item = (out.Items ?? [])[0] as Record<string, unknown> | undefined;
-    if (!item) return undefined;
     return itemToRecord(item);
   }
 
@@ -182,14 +165,14 @@ export class DynamoDbTeamsRepository implements TeamsRepository {
         Update: {
           TableName: this.tableName,
           Key: { PK: `EVENT#${input.eventId}`, SK: `${TEAM_SK_PREFIX}${input.teamId}` },
-          UpdateExpression:
-            "SET teamLoginKey = :loginKey, GSI2PK = :gsi2pk, GSI2SK = :meta, updatedAt = :updatedAt",
+          // [#2674] The Teams login-key GSI is gone, so rotation only rewrites the
+          // plaintext attribute; the auth-path index rewrite is the deployments
+          // Update below (GSI2 on the DEPLOYMENTS table, unchanged).
+          UpdateExpression: "SET teamLoginKey = :loginKey, updatedAt = :updatedAt",
           ConditionExpression:
             "tenantId = :tenantId AND eventId = :eventId AND teamId = :teamId AND updatedAt = :expectedUpdatedAt",
           ExpressionAttributeValues: {
             ":loginKey": input.newLoginKey,
-            ":gsi2pk": `TEAMKEY#${input.newLoginKey}`,
-            ":meta": TEAM_GSI2_SK,
             ":updatedAt": input.updatedAt,
             ":tenantId": input.tenantId,
             ":eventId": input.eventId,
