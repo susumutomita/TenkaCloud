@@ -1,3 +1,4 @@
+import { StatusCodes } from "http-status-codes";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runPhasedPollingKind } from "../../lib/problem-deploy/handlers/generic-scoring-handler/kinds/phased-polling";
 import type {
@@ -371,10 +372,13 @@ describe("phased-polling kind", () => {
     };
     fetchMock
       .mockResolvedValueOnce({
-        status: 200,
+        status: StatusCodes.OK,
         text: async () => JSON.stringify({ platform: "posture-2" }),
       })
-      .mockResolvedValueOnce({ status: 200, text: async () => JSON.stringify({ ok: true }) });
+      .mockResolvedValueOnce({
+        status: StatusCodes.OK,
+        text: async () => JSON.stringify({ ok: true }),
+      });
 
     const result = await runPhasedPollingKind(singleSlotInput(ELB_URL, stackStackScoring));
 
