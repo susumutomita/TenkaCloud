@@ -11,7 +11,9 @@ import { StatusCodes } from "http-status-codes";
 export const LOCAL_API_PROXY_PREFIX = "/__tenkacloud-local-api";
 const MAX_PROXY_BODY_BYTES = 1_000_000;
 const MAX_PROXY_HEADERS = 64;
-const PROXY_TIMEOUT_MS = 15_000;
+const FAST_PROXY_TIMEOUT_MS = 15_000;
+const LIFECYCLE_PROXY_TIMEOUT_MS = 180_000;
+const LIFECYCLE_MUTATION_PATH = /^\/portal\/me\/problems\/[^/]+\/(?:start|stop|reset)$/;
 const HOP_BY_HOP_HEADERS = new Set([
   "connection",
   "content-length",
@@ -59,6 +61,13 @@ export function parseLocalApiProxyUrl(url: string | undefined): string | undefin
   const pathname = new URL(path, "http://127.0.0.1").pathname;
   if (pathname !== "/healthz" && !pathname.startsWith("/portal/")) return undefined;
   return path;
+}
+
+export function localApiProxyTimeoutMs(path: string, method: string | undefined): number {
+  const pathname = new URL(path, "http://127.0.0.1").pathname;
+  return method?.toUpperCase() === "POST" && LIFECYCLE_MUTATION_PATH.test(pathname)
+    ? LIFECYCLE_PROXY_TIMEOUT_MS
+    : FAST_PROXY_TIMEOUT_MS;
 }
 
 export function resolveLocalApiTarget(statePath = defaultStatePath()): URL | undefined {
@@ -150,18 +159,26 @@ function copyResponseHeaders(headers: IncomingHttpHeaders, response: ServerRespo
   }
 }
 
+function proxyErrorStatus(message: string): number {
+  switch (message) {
+    case "local_api_proxy_timeout":
+      return StatusCodes.GATEWAY_TIMEOUT;
+    case "local_api_proxy_payload_too_large":
+      return StatusCodes.REQUEST_TOO_LONG;
+    case "local_api_proxy_headers_too_large":
+      return StatusCodes.BAD_REQUEST;
+    default:
+      return StatusCodes.BAD_GATEWAY;
+  }
+}
+
 function writeProxyError(response: ServerResponse, error: unknown): void {
   if (response.headersSent) {
     response.destroy(error instanceof Error ? error : undefined);
     return;
   }
   const message = error instanceof Error ? error.message : "local_api_proxy_failed";
-  const status =
-    message === "local_api_proxy_payload_too_large"
-      ? StatusCodes.REQUEST_TOO_LONG
-      : message === "local_api_proxy_headers_too_large"
-        ? StatusCodes.BAD_REQUEST
-        : StatusCodes.BAD_GATEWAY;
+  const status = proxyErrorStatus(message);
   response.writeHead(status, { "content-type": "application/json; charset=utf-8" });
   response.end(
     JSON.stringify({
@@ -188,7 +205,7 @@ async function forwardLocalApiRequest(
         method: incoming.method,
         path,
         headers,
-        timeout: options.timeoutMs ?? PROXY_TIMEOUT_MS,
+        timeout: options.timeoutMs ?? localApiProxyTimeoutMs(path, incoming.method),
       },
       async (upstreamResponse) => {
         try {
