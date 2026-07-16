@@ -120,6 +120,23 @@ export const DEPLOYMENT_UPDATE_SET =
   "target_id = ?, runtime_kind = ?, runtime_provider = ?, event_id = ?, team_id = ?, " +
   "problem_id = ?, name_prefix = ?, score = ?, payload = ?";
 
+/**
+ * [Issue #2672] Update clause for read-modify-write mutations that rebuild the
+ * record from `payload` — which, by [Issue #2290], deliberately omits the
+ * credential (`teamLoginKey` / `teamLoginKeyHash`). Writing `login_key_hash`
+ * from such a record would `resolveLoginKeyHash → null` and wipe the column,
+ * breaking participant login (`listByTeamLoginKey` returns 0 rows). So this SET
+ * omits `login_key_hash`, leaving the stored value untouched. The credential is
+ * written only by paths that hold the real value: `DEPLOYMENT_INSERT_SQL` (put)
+ * and the upsert conflict clause. Intentional clears (`markDeleted`) use the
+ * full `DEPLOYMENT_UPDATE_SET` with a credential-stripped record on purpose.
+ */
+export const DEPLOYMENT_MUTATE_SET =
+  "tenant_id = ?, list_tenant_id = ?, status = ?, created_at = ?, updated_at = ?, " +
+  "expires_at = ?, parent_deployment_id = ?, target_ordinal = ?, " +
+  "target_id = ?, runtime_kind = ?, runtime_provider = ?, event_id = ?, team_id = ?, " +
+  "problem_id = ?, name_prefix = ?, score = ?, payload = ?";
+
 export function encodeCursor(cursor: DeploymentsKeysetCursor): string {
   return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
 }
@@ -247,6 +264,16 @@ export function deploymentUpdateParams(record: DeploymentWriteRecord): SqlParam[
   return deploymentRowParams(record).slice(1);
 }
 
+/**
+ * [Issue #2672] Params for {@link DEPLOYMENT_MUTATE_SET}: the update params with
+ * the `login_key_hash` value (index 6 of the 18-column update tuple) dropped, so
+ * a read-modify-write never overwrites the stored credential with null.
+ */
+export function deploymentMutateParams(record: DeploymentWriteRecord): SqlParam[] {
+  const params = deploymentUpdateParams(record);
+  return [...params.slice(0, 6), ...params.slice(7)];
+}
+
 export function sameJsonValue(left: unknown, right: unknown): boolean {
   return JSON.stringify(normalizeJsonValue(left)) === JSON.stringify(normalizeJsonValue(right));
 }
@@ -329,11 +356,13 @@ export class SqlDeploymentsCore {
     const record = deploymentFromPayload(row.payload) as MutableDeploymentRecord;
     if (!args.predicate(record, row)) return this.handleMiss(args.jobId, args.onMiss);
     args.mutate(record);
-    const params = [...deploymentUpdateParams(record), args.jobId, ...(args.whereParams ?? [])];
+    // [#2672] A generic mutation rebuilds `record` from `payload`, which omits the
+    // credential (#2290), so it must not touch `login_key_hash`; use the mutate SET.
+    const params = [...deploymentMutateParams(record), args.jobId, ...(args.whereParams ?? [])];
     const where = args.whereSql ? ` AND (${args.whereSql})` : "";
     if (args.withPostImage) {
       const rows = await this.sql.all(
-        `UPDATE deployments SET ${DEPLOYMENT_UPDATE_SET} WHERE job_id = ?${where} RETURNING payload`,
+        `UPDATE deployments SET ${DEPLOYMENT_MUTATE_SET} WHERE job_id = ?${where} RETURNING payload`,
         params,
       );
       const updated = rows[0];
@@ -344,7 +373,7 @@ export class SqlDeploymentsCore {
       };
     }
     const result = await this.sql.run(
-      `UPDATE deployments SET ${DEPLOYMENT_UPDATE_SET} WHERE job_id = ?${where}`,
+      `UPDATE deployments SET ${DEPLOYMENT_MUTATE_SET} WHERE job_id = ?${where}`,
       params,
     );
     if (Number(result.changes) === 0) return this.handleMiss(args.jobId, args.onMiss);
