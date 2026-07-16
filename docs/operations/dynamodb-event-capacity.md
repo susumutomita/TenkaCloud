@@ -4,16 +4,25 @@ Issue #2410。有料イベントで throttle を出さないために、イベ�
 
 ## 前提 (プラットフォームの設計)
 
-- 全テーブルは `DynamoDbLowCapacity` Aspect で PROVISIONED 1 RCU / 1 WCU に固定されている (= アイドル時コストゼロ、AWS Free Tier 25 RCU/WCU 予算内)。
+- 全テーブルは `DynamoDbLowCapacity` Aspect で PROVISIONED に固定され、値は**デプロイ時パラメータ**が決める (デフォルト 1 RCU / 1 WCU = アイドル時コスト最小)。lite pipeline (CFn ワンクリックデプロイ) では `DynamoReadCapacity` / `DynamoWriteCapacity` パラメータ (Issue 2679、デフォルト 1 / 上限 200) が、`.env` 直書きでは `CDK_PARAM_DYNAMODB_READ_CAPACITY` / `_WRITE_CAPACITY` がこの値になる。
 - **オートスケーリングは採用しない**。サイレントにランプして課金が膨らむ経路を作らず、人手が介在する明示操作だけを許す。
-- キャパ変更は **SSM Automation Runbook** (`<stack 名>-event-capacity`) 経由で行う。bounded (上限 200) / logged (SSM 実行履歴) / deliberate (手動実行) の 3 点を構造化している。
+- イベント中の一時変更は **SSM Automation Runbook** (`<stack 名>-event-capacity`) 経由で行う。bounded (上限 200) / logged (SSM 実行履歴) / deliberate (手動実行) の 3 点を構造化している。
+
+### 2 つのノブの使い分け (デプロイ時 vs イベント中)
+
+| ノブ | 対象 | 持続性 | 用途 |
+| --- | --- | --- | --- |
+| デプロイパラメータ (`DynamoReadCapacity` / `DynamoWriteCapacity`) | **全テーブル + 全 GSI** に同値 | 次の deploy まで恒久 (= standing cost) | イベント前に適切なベースラインで立てる本線 |
+| SSM runbook (`<stack 名>-event-capacity`) | event-hot 5 テーブル (テーブルごとに指定) | 手動で戻すまで / **次の CFn UPDATE deploy で上書き** | イベント中の緊急増強・一時変更 |
+
+**優先関係**: テーブルに CFn UPDATE が入る deploy は、SSM で上げた値を**デプロイパラメータの値に上書きして収斂させる**。イベント中に SSM で上げた状態のまま redeploy すると増強分が黙って消えるので、イベント期間中の deploy は避けるか、デプロイパラメータ側を同じ値にしてから行うこと。
 
 ### 課金爆死ガード (4 層)
 
 1. **PROVISIONED のまま**。on-demand (PAY_PER_REQUEST) には切替えない。リクエストが激増しても throttle するだけで、青天井課金にならない。
-2. **ハード上限 ceiling = 200 RCU/WCU**。runbook の parameter validation (`allowedPattern`) と script 内 assert の二重化。桁打ち間違い (例: 20 のつもりが 2000) は実行前に fail する。
+2. **ハード上限 ceiling = 200 RCU/WCU**。runbook の parameter validation (`allowedPattern`) と script 内 assert の二重化。桁打ち間違い (例: 20 のつもりが 2000) は実行前に fail する。デプロイパラメータ側 (`DynamoReadCapacity` / `DynamoWriteCapacity`) も CFn の `MaxValue: 200` で同じ ceiling を張っている。
 3. **手動実行のみ**。`StartAutomationExecution` は必ず SSM の実行履歴に残る (誰が・いつ・どのテーブルを・いくつに変えたか)。
-4. **明示 scale-down**。イベント後に同じ runbook で 1/1 に戻す。CFn がテーブルを次に UPDATE する deploy では template の 1/1 に収斂する (ただし template 差分がない deploy はテーブルに触らないため、**戻し忘れの保険にはならない**。イベント終了チェックリストに scale-down を入れること)。
+4. **明示 scale-down**。イベント後に同じ runbook で戻す。CFn がテーブルを次に UPDATE する deploy では**デプロイパラメータの値 (デフォルト 1/1) に収斂する** (ただし template 差分がない deploy はテーブルに触らないため、**戻し忘れの保険にはならない**。イベント終了チェックリストに scale-down を入れること。デプロイパラメータを上げて運用している環境では「戻す先」もそのパラメータ値になる点に注意)。
 
 ## 対象テーブル (event-hot 5 テーブル)
 

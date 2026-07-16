@@ -122,21 +122,25 @@ Parameters:
     Type: Number
     Default: 1
     MinValue: 1
+    MaxValue: 200
     Description: >-
       Provisioned read capacity units applied to every DynamoDB table AND every GSI
       (CDK_PARAM_DYNAMODB_READ_CAPACITY, fanned out by the DynamoDbLowCapacity aspect).
       Default 1 keeps the standing cost at the practical minimum for a personal trial;
       raise it for an event with real load - 1 RCU throttles quickly. Raising it raises
-      the hourly DynamoDB charge. Ignored when ControlDataBackend is turso/sql (zero
+      the hourly DynamoDB charge; the 200 ceiling matches the event-capacity runbook's
+      billing guard (docs/operations/dynamodb-event-capacity.md) so a digit typo cannot
+      provision thousands of units. Ignored when ControlDataBackend is turso/sql (zero
       DynamoDB tables are synthesized there).
 
   DynamoWriteCapacity:
     Type: Number
     Default: 1
     MinValue: 1
+    MaxValue: 200
     Description: >-
       Provisioned write capacity units applied to every DynamoDB table AND every GSI
-      (CDK_PARAM_DYNAMODB_WRITE_CAPACITY). Same default/cost/behavior notes as
+      (CDK_PARAM_DYNAMODB_WRITE_CAPACITY). Same default/cost/ceiling/behavior notes as
       DynamoReadCapacity, including being ignored when ControlDataBackend is turso/sql.
 
   BunVersion:
