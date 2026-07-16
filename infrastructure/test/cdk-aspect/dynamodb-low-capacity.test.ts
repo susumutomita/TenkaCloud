@@ -77,4 +77,40 @@ describe("DynamoDbLowCapacity aspect", () => {
       ],
     });
   });
+
+  it("should apply a raised capacity to both the table and its GSIs (Issue #2679 deploy knob)", () => {
+    // #2679 exposes CDK_PARAM_DYNAMODB_READ/WRITE_CAPACITY through the lite pipeline.
+    // The aspect is the single place that fans the value out, so pin the raised-value
+    // direction too — not just the 1/1 floor — including the GSI overwrite.
+    const app = new App();
+    const stack = new Stack(app, "RaisedStack");
+    new CfnTable(stack, "WithGsi", {
+      keySchema: [{ attributeName: "pk", keyType: "HASH" }],
+      attributeDefinitions: [
+        { attributeName: "pk", attributeType: "S" },
+        { attributeName: "email", attributeType: "S" },
+      ],
+      billingMode: "PROVISIONED",
+      provisionedThroughput: { readCapacityUnits: 1, writeCapacityUnits: 1 },
+      globalSecondaryIndexes: [
+        {
+          indexName: "byEmail",
+          keySchema: [{ attributeName: "email", keyType: "HASH" }],
+          projection: { projectionType: "ALL" },
+          provisionedThroughput: { readCapacityUnits: 1, writeCapacityUnits: 1 },
+        },
+      ],
+    });
+    Aspects.of(app).add(new DynamoDbLowCapacity(25, 10));
+    const template = Template.fromStack(stack);
+    template.hasResourceProperties("AWS::DynamoDB::Table", {
+      ProvisionedThroughput: { ReadCapacityUnits: 25, WriteCapacityUnits: 10 },
+      GlobalSecondaryIndexes: [
+        {
+          IndexName: "byEmail",
+          ProvisionedThroughput: { ReadCapacityUnits: 25, WriteCapacityUnits: 10 },
+        },
+      ],
+    });
+  });
 });

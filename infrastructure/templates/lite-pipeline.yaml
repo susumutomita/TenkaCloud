@@ -118,6 +118,27 @@ Parameters:
       --type SecureString --value <token>`. Required for a non-dynamodb backend. The
       deploy Lambda reads it at runtime; CodeBuild only forwards the name.
 
+  DynamoReadCapacity:
+    Type: Number
+    Default: 1
+    MinValue: 1
+    Description: >-
+      Provisioned read capacity units applied to every DynamoDB table AND every GSI
+      (CDK_PARAM_DYNAMODB_READ_CAPACITY, fanned out by the DynamoDbLowCapacity aspect).
+      Default 1 keeps the standing cost at the practical minimum for a personal trial;
+      raise it for an event with real load - 1 RCU throttles quickly. Raising it raises
+      the hourly DynamoDB charge. Ignored when ControlDataBackend is turso/sql (zero
+      DynamoDB tables are synthesized there).
+
+  DynamoWriteCapacity:
+    Type: Number
+    Default: 1
+    MinValue: 1
+    Description: >-
+      Provisioned write capacity units applied to every DynamoDB table AND every GSI
+      (CDK_PARAM_DYNAMODB_WRITE_CAPACITY). Same default/cost/behavior notes as
+      DynamoReadCapacity, including being ignored when ControlDataBackend is turso/sql.
+
   BunVersion:
     Type: String
     Default: 1.3.11
@@ -186,6 +207,12 @@ Resources:
           - Name: TURSO_AUTH_TOKEN_PARAMETER_NAME
             Value: !Ref TursoAuthTokenParameterName
             Type: PLAINTEXT
+          - Name: DYNAMO_READ_CAPACITY
+            Value: !Ref DynamoReadCapacity
+            Type: PLAINTEXT
+          - Name: DYNAMO_WRITE_CAPACITY
+            Value: !Ref DynamoWriteCapacity
+            Type: PLAINTEXT
           - Name: BUN_VERSION
             Value: !Ref BunVersion
             Type: PLAINTEXT
@@ -241,6 +268,11 @@ Resources:
                       echo "CDK_PARAM_TURSO_DATABASE_URL=${TURSO_DATABASE_URL}"
                       echo "CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME=${TURSO_AUTH_TOKEN_PARAMETER_NAME}"
                     fi
+                    # DynamoDB capacity knob (#2679). Emitted unconditionally: with the
+                    # default (1/1) it resolves to the same synth as before, and a turso
+                    # backend synthesizes zero DynamoDB tables so the value is ignored.
+                    echo "CDK_PARAM_DYNAMODB_READ_CAPACITY=${DYNAMO_READ_CAPACITY}"
+                    echo "CDK_PARAM_DYNAMODB_WRITE_CAPACITY=${DYNAMO_WRITE_CAPACITY}"
                   } > "${ENV_DIR}/.env"
                 - echo "Wrote ${ENV_DIR}/.env (TENANT_ADMIN_EMAIL / AWS_ACCOUNT_ID / AWS_REGION)"
                 # Bootstrap is only needed to deploy (idempotent); skip it when destroying.
