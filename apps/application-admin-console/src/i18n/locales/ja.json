@@ -1023,6 +1023,17 @@
     "runbook_doc_pointer": "上げ幅の目安と手順は docs/operations/dynamodb-event-capacity.md を参照。イベント後は同じ runbook で 1/1 に戻します。",
     "forbidden": "キャパシティ監視は TenantAdmin のみ閲覧できます。",
     "unconfigured": "キャパシティ監視 backend が未配線です (deploy chain の更新が必要)。",
-    "demo_unsupported": "demo mode ではキャパシティ監視を simulate しません。"
+    "demo_unsupported": "demo mode ではキャパシティ監視を simulate しません。",
+    "scale_action": "キャパシティを変更",
+    "scale_modal_header": "キャパシティを変更 (SSM runbook)",
+    "scale_table_label": "対象テーブル",
+    "scale_rcu_label": "Read capacity units (RCU)",
+    "scale_wcu_label": "Write capacity units (WCU)",
+    "scale_constraint": "1〜{ceiling}。基準値 × (1 + GSI 数) が課金合計になります。",
+    "scale_invalid": "1〜{ceiling} の整数を入力してください。",
+    "scale_warning": "DynamoDB のスケールダウンはテーブルごとに 1 日あたりの回数上限があります。UpdateTable は非同期のため反映まで時間がかかります (30 秒ごとの自動更新で確認できます)。",
+    "scale_cancel": "キャンセル",
+    "scale_submit": "変更する",
+    "scale_accepted": "変更を受け付けました (execution {executionId})。反映まで数分かかることがあります。"
   }
 }

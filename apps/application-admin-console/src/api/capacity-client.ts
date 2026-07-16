@@ -53,3 +53,30 @@ export async function getCapacityOverview(
   const qs = windowMinutes !== undefined ? `?windowMinutes=${windowMinutes}` : "";
   return client.get<CapacityOverview>(`/admin/capacity${qs}`);
 }
+
+/**
+ * Issue #2680: `POST /admin/capacity` — Slice 1 の SSM runbook を admin console から起動して
+ * 1 テーブルの RCU/WCU を変更する。型は backend `handlers/event-handler/capacity.ts` /
+ * `routes/capacity.ts` の request/response と 1:1。
+ */
+export interface CapacityScaleRequest {
+  readonly tableName: string;
+  readonly readCapacityUnits: number;
+  readonly writeCapacityUnits: number;
+}
+
+export interface CapacityScaleAccepted {
+  readonly executionId: string;
+  readonly tableName: string;
+  readonly role: CapacityTableRole;
+  readonly readCapacityUnits: number;
+  readonly writeCapacityUnits: number;
+  readonly status: "accepted";
+}
+
+export async function startCapacityScale(
+  client: ApiClient,
+  req: CapacityScaleRequest,
+): Promise<CapacityScaleAccepted> {
+  return client.post<CapacityScaleAccepted>("/admin/capacity", req);
+}

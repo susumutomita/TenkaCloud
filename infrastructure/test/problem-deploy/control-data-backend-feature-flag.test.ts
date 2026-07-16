@@ -237,6 +237,10 @@ describe("pure SQL backend does not synth Events/Teams/Deployments/ProblemEndpoi
       expect(() => tpl.hasOutput("EventCapacityRunbookName", {})).toThrow();
       expect(envOf(tpl, "EventApi").CAPACITY_RUNBOOK_DOCUMENT_NAME).toBeUndefined();
       expect(JSON.stringify(tpl.toJSON())).not.toContain("cloudwatch:GetMetricData");
+      // [Issue #2680] POST /admin/capacity の runbook 起動 IAM (StartAutomationExecution +
+      // automation-definition ARN) も document/role が無い pure SQL では一切付与されない。
+      expect(JSON.stringify(tpl.toJSON())).not.toContain("ssm:StartAutomationExecution");
+      expect(JSON.stringify(tpl.toJSON())).not.toContain("automation-definition");
     },
     SYNTH_TIMEOUT_MS,
   );
