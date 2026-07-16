@@ -13,7 +13,7 @@ export interface SamlIdpLambdaProps {
    * Issue #1312: per-tenant SAML IdP CRUD 用の DDB Table。 PK=`pk` (scope) / SK=`sk` (idpId)。
    * Handler 側 `createSeamIdpStore` の Key 名と一致させること。
    *
-   * [Issue #2442 / Phase C5] `controlDataBackend` が純 SQL (`turso`/`sql`) のときは
+   * [Issue #2442 / Phase C5] `controlDataBackend` が純 SQL (`turso`) のときは
    * `TenkaCloudLiteStack` が本 table を synth しない (= `undefined`)。 その場合 env
    * `SAML_IDPS_TABLE_NAME` は注入せず grant も付与しない — IdP CRUD は repository seam
    * (`createSeamIdpStore` → `resolveSamlIdpsRepository`) が下記の Turso executor 配線経由で
@@ -35,7 +35,7 @@ export interface SamlIdpLambdaProps {
    */
   readonly idpTierGuard: "silo";
   /**
-   * Issue #2290 (ADR-049 §5.1): control-plane data backend (dynamodb|turso|sql)。他の C-series
+   * Issue #2290 (ADR-049 §5.1): control-plane data backend (dynamodb|turso)。他の C-series
    * Lambda 群と lockstep で env を配線する。default (未指定 / `dynamodb`) は env を足さず byte 互換。
    */
   readonly controlDataBackend?: string;
@@ -96,7 +96,7 @@ export class SamlIdpLambda extends Construct {
     // [Issue #2442] 純 SQL backend では table 自体が無いので grant も付与しない。
     props.samlIdpsTable?.grantReadWriteData(this.fn);
 
-    // [Issue #2442]: turso/sql backend が Turso auth token を読むための SSM SecureString
+    // [Issue #2442]: turso backend が Turso auth token を読むための SSM SecureString
     // read 権限。 未配線 (= dynamodb default) なら付与しない (`SystemAuditWriterLambda` と同型)。
     if (props.tursoAuthTokenParameterName) {
       this.fn.addToRolePolicy(

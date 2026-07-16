@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 /**
- * [Issue #2564] `make env-check-lite` must reject a misconfigured Turso/SQL
+ * [Issue #2564] `make env-check-lite` must reject a misconfigured Turso
  * `.env` before `make deploy` runs the full SPA build — previously it checked
  * only that `.env` exists and an admin email is set, so a
  * `CDK_PARAM_CONTROL_DATA_BACKEND=turso` selection with a missing
@@ -47,7 +47,7 @@ function runEnvCheckLite(envFileContent: string): { status: number | null; outpu
   return { status: result.status, output: `${result.stdout}\n${result.stderr}` };
 }
 
-describe("make env-check-lite Turso/SQL validation (#2564)", () => {
+describe("make env-check-lite Turso validation (#2564)", () => {
   afterEach(() => {
     rmSync(FIXTURE_DIR, { recursive: true, force: true });
   });
@@ -65,7 +65,7 @@ describe("make env-check-lite Turso/SQL validation (#2564)", () => {
     const { status, output } = runEnvCheckLite(
       [
         "TENANT_ADMIN_EMAIL=test@example.com",
-        "CDK_PARAM_CONTROL_DATA_BACKEND=sql",
+        "CDK_PARAM_CONTROL_DATA_BACKEND=turso",
         "CDK_PARAM_TURSO_DATABASE_URL=libsql://example.turso.io",
         "",
       ].join("\n"),
@@ -75,12 +75,7 @@ describe("make env-check-lite Turso/SQL validation (#2564)", () => {
     expect(output).not.toContain("CDK_PARAM_TURSO_DATABASE_URL");
   });
 
-  it.each([
-    "turso",
-    "sql",
-    "turso-mirror",
-    "sql-mirror",
-  ])("should pass for backend=%s when both Turso vars are present", (backend) => {
+  it.each(["turso"])("should pass for backend=%s when both Turso vars are present", (backend) => {
     const { status } = runEnvCheckLite(
       [
         "TENANT_ADMIN_EMAIL=test@example.com",

@@ -21,7 +21,7 @@ export interface CreateSamlConfigRepositoryDeps {
   readonly ddb?: DynamoDBDocumentClient;
   /** CompetitorAccounts table name (SAML_CONFIG shares its partition) — required for `dynamodb`. */
   readonly competitorAccountsTableName?: string;
-  /** SQL driver — required for the `turso` / `sql` backend. */
+  /** SQL driver — required for the `turso` backend. */
   readonly sql?: SqlExecutor;
 }
 
@@ -37,7 +37,7 @@ export function createSamlConfigRepository(
 ): SamlConfigRepository {
   const selected = (backend ?? "dynamodb").toLowerCase();
 
-  if (selected === "turso" || selected === "sql") {
+  if (selected === "turso") {
     if (!deps.sql) {
       throw new Error(`CONTROL_DATA_BACKEND="${backend}" requires a SqlExecutor (deps.sql).`);
     }
@@ -46,7 +46,7 @@ export function createSamlConfigRepository(
 
   if (selected !== "dynamodb") {
     throw new Error(
-      `Unknown CONTROL_DATA_BACKEND="${backend}" (expected one of: dynamodb, turso, sql).`,
+      `Unknown CONTROL_DATA_BACKEND="${backend}" (expected one of: dynamodb, turso).`,
     );
   }
 

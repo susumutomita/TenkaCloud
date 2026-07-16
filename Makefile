@@ -230,7 +230,7 @@ env-check-lite: ## Validate the Lite deployment environment | Lite deploy用の�
 		exit 1; \
 	fi
 	@case "$${CDK_PARAM_CONTROL_DATA_BACKEND}" in \
-		turso|sql|turso-mirror|sql-mirror) \
+		turso) \
 			missing=""; \
 			[ -n "$${CDK_PARAM_TURSO_DATABASE_URL}" ] || missing="$${missing} CDK_PARAM_TURSO_DATABASE_URL"; \
 			[ -n "$${CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME}" ] || missing="$${missing} CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME"; \

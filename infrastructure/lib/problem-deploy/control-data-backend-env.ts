@@ -10,7 +10,7 @@
  * したがって:
  *   - `dynamodb` (default) → env を **足さない** (= 既存テンプレートと byte 互換、 CFn 差分 0、
  *     factory は unset で dynamodb に落ちるので挙動も不変)。
- *   - `turso` / `sql` → `CONTROL_DATA_BACKEND="<backend>"` を注入し、 factory が SQLite 実装を選ぶ。
+ *   - `turso` → `CONTROL_DATA_BACKEND="<backend>"` を注入し、 factory が SQLite 実装を選ぶ。
  *
  * 各 Lambda construct が同じ条件式を lockstep で持つと drift の温床になるため
  * (`app-wiring/problem-deploy-backend-props.ts` の教訓)、 1 helper に集約する。

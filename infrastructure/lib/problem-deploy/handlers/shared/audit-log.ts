@@ -129,12 +129,12 @@ export interface AuditClient {
  */
 function isPureSqlBackend(): boolean {
   const backend = process.env.CONTROL_DATA_BACKEND;
-  return backend === "turso" || backend === "sql";
+  return backend === "turso";
 }
 
 function getEnv(): { tableName: string; env: string } | undefined {
   const tableName = process.env.ADMIN_AUDIT_LOG_TABLE_NAME ?? "";
-  // dynamodb / mirror backends require the physical table; a legacy stack that never wired the
+  // the dynamodb backend requires the physical table; a legacy stack that never wired the
   // table stays a no-op (旧 stack 互換). Pure SQL never had a table to begin with.
   if (!isPureSqlBackend() && tableName.length === 0) return undefined;
   const env = process.env.DEPLOY_ENVIRONMENT ?? "development";
@@ -148,7 +148,7 @@ function getEnv(): { tableName: string; env: string } | undefined {
  * (= 「best-effort write」 として扱う)。 unit test は env mock + client mock で coverage。
  *
  * [Issue #2442 / Phase C4] The actual write now routes through the `AdminAuditLogRepository` seam
- * (`CONTROL_DATA_BACKEND` 5-value participation, mirrors every other C-phase aggregate). The
+ * (`CONTROL_DATA_BACKEND` participation, mirrors every other C-phase aggregate). The
  * best-effort contract is unchanged: the seam itself throws on failure (fail loud, matching every
  * other repository in this codebase), and this function is the one place that catches it and
  * degrades to a warning — callers never see a rejected promise.

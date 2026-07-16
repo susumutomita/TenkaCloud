@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { MirroredProblemEndpointsRepository } from "../../../lib/problem-deploy/control-data/mirrored-repositories";
 import {
   DynamoDbProblemEndpointsRepository,
   SqlProblemEndpointsRepository,
@@ -12,10 +11,9 @@ import { makeFakeDdb, makeSqliteExecutor } from "./control-data-write.test-helpe
 
 /**
  * [Issue #2442 / Phase C1] Cross-backend parity suite for the ProblemEndpoints
- * seam: the same test body runs against {@link DynamoDbProblemEndpointsRepository},
- * {@link SqlProblemEndpointsRepository}, and the mirror composition
- * ([#2527 Slice 0]), pinning that a caller sees identical domain behavior
- * regardless of `CONTROL_DATA_BACKEND` (mirrors
+ * seam: the same test body runs against {@link DynamoDbProblemEndpointsRepository}
+ * and {@link SqlProblemEndpointsRepository}, pinning that a caller sees identical
+ * domain behavior regardless of `CONTROL_DATA_BACKEND` (mirrors
  * `deployments-repository-parity.test.ts`).
  */
 
@@ -39,16 +37,6 @@ const backends: ReadonlyArray<readonly [string, () => Backend]> = [
     () => ({
       name: "SqlProblemEndpointsRepository",
       repo: new SqlProblemEndpointsRepository(makeSqliteExecutor()),
-    }),
-  ],
-  [
-    "MirroredProblemEndpointsRepository",
-    () => ({
-      name: "MirroredProblemEndpointsRepository",
-      repo: new MirroredProblemEndpointsRepository(
-        new DynamoDbProblemEndpointsRepository(makeFakeDdb(), TABLE),
-        new SqlProblemEndpointsRepository(makeSqliteExecutor()),
-      ),
     }),
   ],
 ];

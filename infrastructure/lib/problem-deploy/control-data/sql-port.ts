@@ -9,7 +9,7 @@
  */
 
 /** Backend selector value carried by the `CONTROL_DATA_BACKEND` flag. */
-export type ControlDataBackend = "dynamodb" | "turso" | "sql" | "turso-mirror" | "sql-mirror";
+export type ControlDataBackend = "dynamodb" | "turso";
 
 /** Positional bind parameter accepted by {@link SqlExecutor}. */
 export type SqlParam = string | number | bigint | null;
@@ -28,11 +28,10 @@ export interface SqlStatement {
 /**
  * [ADR-049 §5.1] Minimal injected SQL driver so {@link SqlEventsRepository} stays
  * decoupled from any concrete client. Node's built-in `node:sqlite`
- * (`DatabaseSync`) backs it for tests and offline validation; a production
- * `@libsql/client` (Turso / self-hosted sqld) adapter — and a Cloudflare D1
- * binding adapter — map onto the same methods. Production Lambda wiring
- * uses the HTTP-only `@libsql/client` adapter in `runtime-repositories.ts`; a
- * future Cloudflare D1 binding adapter keeps this repository contract unchanged.
+ * (`DatabaseSync`) backs it for tests and offline validation; the production
+ * adapter is the HTTP-only `@libsql/client` (Turso) wired in
+ * `runtime-repositories.ts`. (#2677: Turso-only — the Always-On Cloudflare
+ * Worker accesses D1 through its own binding, never through this seam.)
  *
  * [Issue #2437] Contract notes:
  * - `all()` accepts `UPDATE … RETURNING` statements — a conditional update and

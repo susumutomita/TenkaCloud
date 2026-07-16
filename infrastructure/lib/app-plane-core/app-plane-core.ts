@@ -65,7 +65,7 @@ export interface AppPlaneCoreProps {
    * `SAML_IDPS_TABLE_NAME` env + R+W grant を配線する (= `SamlIdpLambda` 自体の生成有無は
    * {@link attachSamlIdpLambda} が決める — table の有無だけでは決めない、 下記参照)。
    *
-   * [Issue #2442 / Phase C5] `controlDataBackend` が純 SQL (`turso`/`sql`) のときは caller
+   * [Issue #2442 / Phase C5] `controlDataBackend` が純 SQL (`turso`) のときは caller
    * (`TenkaCloudLiteStack`) が本 table を synth せず `undefined` を渡す。 IdP CRUD API 自体は
    * `attachSamlIdpLambda` が独立して制御するため、 table 不在でも Lambda は生成され続ける
    * (= repository seam 経由で SQL executor に直結する)。
@@ -124,9 +124,8 @@ export interface AppPlaneCoreProps {
    */
   readonly features?: Readonly<Record<string, boolean>>;
   /**
-   * [Issue #2442 / Phase C5] control-plane data backend (dynamodb|turso|sql|turso-mirror|
-   * sql-mirror)。 `SamlIdpLambda` へそのまま転送する (default 未指定 / `dynamodb` は env を足さず
-   * byte 互換)。
+   * [Issue #2442 / Phase C5] control-plane data backend (dynamodb|turso)。 `SamlIdpLambda` へ
+   * そのまま転送する (default 未指定 / `dynamodb` は env を足さず byte 互換)。
    */
   readonly controlDataBackend?: string;
   /** [Issue #2442 / Phase C5] `SamlIdpLambda` の Turso executor 配線用 URL。 */

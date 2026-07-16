@@ -24,7 +24,7 @@ export interface AdminConsoleInsightStackProps extends cdk.StackProps {
    * 問題 deploy 状況 (active / failed) を集計するため `ProblemDeployBackendStack` の
    * Deployments table を cross-stack 参照する。Read-only。
    *
-   * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。
    */
   readonly deploymentsTable?: Table;
@@ -32,7 +32,7 @@ export interface AdminConsoleInsightStackProps extends cdk.StackProps {
    * 競技 Event の総数を集計するため `ProblemDeployBackendStack` の Events table を
    * cross-stack 参照する。Read-only。
    *
-   * [Issue #2440 / ADR-049 §5.1 Phase A5] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * [Issue #2440 / ADR-049 §5.1 Phase A5] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。
    */
   readonly eventsTable?: Table;
@@ -101,7 +101,7 @@ export interface AdminConsoleInsightStackProps extends cdk.StackProps {
     readonly userPoolId: string;
   }>;
   /**
-   * [Issue #2438 / Phase A3] control-plane data backend (dynamodb|turso|sql)。 未指定
+   * [Issue #2438 / Phase A3] control-plane data backend (dynamodb|turso)。 未指定
    * (= 既存テンプレートと byte 互換) が既定。`ProblemDeployBackendStack` の同名 prop と同型。
    */
   readonly controlDataBackend?: string;
@@ -288,16 +288,14 @@ export class AdminConsoleInsightStack extends cdk.Stack {
       integration,
     });
 
-    // [Issue #2442 / Phase C4] pure SQL backend (turso|sql) では AdminAuditLogTable 自体が
+    // [Issue #2442 / Phase C4] pure SQL backend (turso) では AdminAuditLogTable 自体が
     // synth されない (= `props.adminAuditLogTable` は `undefined`) が、 audit write は
     // repository seam (`writeAuditEvent` → `resolveAdminAuditLogRepository`) が Turso executor
     // 直結で処理できるため、 SignInAuditLambda の生成条件はテーブルの有無ではなく「audit backend
     // が何かしら存在するか」に一般化する。 dynamodb backend でテーブルが未配線 (= 旧 stack /
     // 既存テストの後方互換パス) のときは従来どおり Lambda を作らない。
     const auditBackendAvailable =
-      Boolean(props.adminAuditLogTable) ||
-      props.controlDataBackend === "turso" ||
-      props.controlDataBackend === "sql";
+      Boolean(props.adminAuditLogTable) || props.controlDataBackend === "turso";
 
     // Issue #1335 Phase 1: Control Plane Cognito sign-in events を CloudTrail / EventBridge 経由で
     // listen し、 AdminAuditLogTable に audit 行を書き出す Lambda + Rule。 UserPool への直接の

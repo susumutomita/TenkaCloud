@@ -23,7 +23,7 @@ import { DescribeStackLambda } from "./describe-stack-lambda.js";
 
 export interface BuildDeployPipelineArgs {
   /**
-   * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合
    * `DeployStatusWriterLambda` が生成され、DeployCreate/DeployDelete 双方の SFN 書き戻しは
    * Lambda invoke 経由になる (= 本 table を参照しない)。
@@ -45,8 +45,8 @@ export interface BuildDeployPipelineArgs {
   readonly deployViaLambda?: boolean;
   /**
    * [Issue #2441 Phase B PR-5] Control-data backend selector. Pure SQL
-   * (`turso` / `sql`) swaps DeployCreate's SFN status writes to
-   * DeployStatusWriterLambda; default and mirror modes keep native DDB writes.
+   * (`turso`) swaps DeployCreate's SFN status writes to
+   * DeployStatusWriterLambda; the default (dynamodb) mode keeps native DDB writes.
    */
   readonly controlDataBackend?: string;
   readonly tursoDatabaseUrl?: string;
@@ -210,7 +210,7 @@ export function buildDeployPipeline(
     }
   }
 
-  const pureSqlBackend = args.controlDataBackend === "turso" || args.controlDataBackend === "sql";
+  const pureSqlBackend = args.controlDataBackend === "turso";
   const statusWriter = pureSqlBackend
     ? new DeployStatusWriterLambda(scope, "DeployStatusWriter", {
         deploymentsTable: args.deploymentsTable,

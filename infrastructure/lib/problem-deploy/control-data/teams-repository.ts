@@ -37,7 +37,7 @@ export interface CreateTeamsRepositoryDeps {
   readonly teamsTableName?: string;
   /** Deployments table name — required only by login-key rotation. */
   readonly deploymentsTableName?: string;
-  /** SQL driver — required for the `turso` / `sql` backend. */
+  /** SQL driver — required for the `turso` backend. */
   readonly sql?: SqlExecutor;
 }
 
@@ -46,7 +46,7 @@ export interface CreateTeamsRepositoryDeps {
  * `CONTROL_DATA_BACKEND` flag value (ADR-035 mechanism; mirror of
  * `createEventsRepository`). **Default = dynamodb** (behavior-preserving): an
  * unset / empty / `"dynamodb"` flag returns the DDB repository, so the existing
- * path is byte-identical. `"turso"` / `"sql"` return the SQLite repository. Any
+ * path is byte-identical. `"turso"` returns the SQLite repository. Any
  * other value is a hard error (fail loud).
  *
  * @param backend the raw `CONTROL_DATA_BACKEND` value (case-insensitive; may be undefined)
@@ -58,7 +58,7 @@ export function createTeamsRepository(
 ): TeamsRepository {
   const selected = (backend ?? "dynamodb").toLowerCase();
 
-  if (selected === "turso" || selected === "sql") {
+  if (selected === "turso") {
     if (!deps.sql) {
       throw new Error(
         `CONTROL_DATA_BACKEND="${backend}" requires a SqlExecutor (deps.sql). ` +
@@ -70,7 +70,7 @@ export function createTeamsRepository(
 
   if (selected !== "dynamodb") {
     throw new Error(
-      `Unknown CONTROL_DATA_BACKEND="${backend}" (expected one of: dynamodb, turso, sql).`,
+      `Unknown CONTROL_DATA_BACKEND="${backend}" (expected one of: dynamodb, turso).`,
     );
   }
 

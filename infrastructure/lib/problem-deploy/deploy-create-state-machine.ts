@@ -46,7 +46,7 @@ export interface DeployCreateStateMachineProps {
    * Deployment 行を持つ DDB Table。CodeBuild 完了時に `status` を `PENDING` →
    * `COMPLETE` / `FAILED` に更新するために必要。
    *
-   * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合
    * {@link statusWriterFunction} が必須で、本 table は一切参照されない。
    */
@@ -68,8 +68,8 @@ export interface DeployCreateStateMachineProps {
   readonly eventBus?: IEventBus;
   /**
    * [Issue #2441 Phase B PR-5] When present, the four DeployCreate status write
-   * states use this Lambda instead of native DynamoUpdateItem. Only pure SQL
-   * backends pass it; default and mirror backends keep DDB canonical direct
+   * states use this Lambda instead of native DynamoUpdateItem. Only the pure SQL
+   * backend passes it; the default (dynamodb) backend keeps DDB direct
    * writes for byte-compatible ASL/IAM.
    */
   readonly statusWriterFunction?: IFunction;

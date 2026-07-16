@@ -10,17 +10,16 @@ import {
   DynamoDbAdminAuditLogRepository,
   SqlAdminAuditLogRepository,
 } from "../../../lib/problem-deploy/control-data/admin-audit-log-repository";
-import { MirroredAdminAuditLogRepository } from "../../../lib/problem-deploy/control-data/mirrored-repositories";
 import { createControlDataRuntime } from "../../../lib/problem-deploy/control-data/runtime-repositories";
 import type { AdminAuditRow } from "../../../lib/problem-deploy/control-data/types";
 import { makeFakeDdb, makeSqliteExecutor } from "./control-data-write.test-helpers";
 
 /**
- * [Issue #2442 / Phase C4] DynamoDB / SQL / Mirrored byte-pin + parity test suite for the
+ * [Issue #2442 / Phase C4] DynamoDB / SQL byte-pin + parity test suite for the
  * AdminAuditLog seam. Mirrors `disruptions-repository.test.ts` / `problem-endpoints-repository
  * .test.ts`'s structure: round-trip + byte-pin for the DynamoDB backend, round-trip for the SQL
- * backend, write-through/read-passthrough for Mirrored, plus factory / runtime-resolver coverage
- * for all five `CONTROL_DATA_BACKEND` values.
+ * backend, plus factory / runtime-resolver coverage for both `CONTROL_DATA_BACKEND` values
+ * ([#2677] the `sql` alias and the `turso-mirror`/`sql-mirror` bridge were removed).
  */
 
 const TABLE = "AdminAuditLog";
@@ -347,11 +346,8 @@ describe("createAdminAuditLogRepository", () => {
     );
   });
 
-  it("should select the SQL backend for turso and sql flags", () => {
+  it("should select the SQL backend for the turso flag", () => {
     expect(createAdminAuditLogRepository("turso", { sql: makeSqliteExecutor() })).toBeInstanceOf(
-      SqlAdminAuditLogRepository,
-    );
-    expect(createAdminAuditLogRepository("sql", { sql: makeSqliteExecutor() })).toBeInstanceOf(
       SqlAdminAuditLogRepository,
     );
   });
@@ -366,62 +362,21 @@ describe("createAdminAuditLogRepository", () => {
     );
   });
 
+  it.each([
+    "sql",
+    "turso-mirror",
+    "sql-mirror",
+  ])("should reject the removed legacy backend value %s", (legacy) => {
+    expect(() => createAdminAuditLogRepository(legacy, ddbDeps())).toThrow(
+      /expected one of: dynamodb, turso/,
+    );
+  });
+
   it("should fail loudly when DynamoDB deps are missing", () => {
     expect(() => createAdminAuditLogRepository("dynamodb", {})).toThrow(/requires deps.ddb/);
     expect(() => createAdminAuditLogRepository("dynamodb", { ddb: makeFakeDdb() })).toThrow(
       /requires deps.ddb/,
     );
-  });
-});
-
-describe("MirroredAdminAuditLogRepository", () => {
-  it("should write-through appendAudit to both backends", async () => {
-    const canonical = new DynamoDbAdminAuditLogRepository(makeFakeDdb(), TABLE);
-    const replica = new SqlAdminAuditLogRepository(makeSqliteExecutor());
-    const repo = new MirroredAdminAuditLogRepository(canonical, replica);
-
-    await repo.appendAudit(row());
-
-    await expect(replica.listPage("TENANT#tenant-a", { limit: 10 })).resolves.toMatchObject({
-      items: [row()],
-    });
-  });
-
-  it("should serve listPage / listAllByPartition from canonical only", async () => {
-    const canonicalListPage = vi.fn(async () => ({ items: [row({ sk: "canonical" })] }));
-    const replicaListPage = vi.fn(async () => ({ items: [row({ sk: "replica" })] }));
-    const stub = (listPage: typeof canonicalListPage) => ({
-      appendAudit: async () => {},
-      listPage,
-      listAllByPartition: async () => [],
-      pruneExpired: async () => 0,
-    });
-    const repo = new MirroredAdminAuditLogRepository(
-      stub(canonicalListPage),
-      stub(replicaListPage),
-    );
-
-    const out = await repo.listPage("TENANT#tenant-a", { limit: 10 });
-
-    expect(out.items[0]?.sk).toBe("canonical");
-    expect(canonicalListPage).toHaveBeenCalled();
-    expect(replicaListPage).not.toHaveBeenCalled();
-  });
-
-  it("should prune both backends and return the canonical count", async () => {
-    const canonicalPrune = vi.fn(async () => 3);
-    const replicaPrune = vi.fn(async () => 3);
-    const stub = (pruneExpired: typeof canonicalPrune) => ({
-      appendAudit: async () => {},
-      listPage: async () => ({ items: [] }),
-      listAllByPartition: async () => [],
-      pruneExpired,
-    });
-    const repo = new MirroredAdminAuditLogRepository(stub(canonicalPrune), stub(replicaPrune));
-
-    expect(await repo.pruneExpired(5000)).toBe(3);
-    expect(canonicalPrune).toHaveBeenCalledWith(5000);
-    expect(replicaPrune).toHaveBeenCalledWith(5000);
   });
 });
 
@@ -440,13 +395,10 @@ describe("resolveAdminAuditLogRepository (runtime)", () => {
     expect(repo).toBeInstanceOf(DynamoDbAdminAuditLogRepository);
   });
 
-  it.each([
-    "turso",
-    "sql",
-  ])("should return the SQL backend for CONTROL_DATA_BACKEND=%s without DDB inputs", async (backend) => {
+  it("should return the SQL backend for CONTROL_DATA_BACKEND=turso without DDB inputs", async () => {
     const runtime = createControlDataRuntime({
       env: {
-        CONTROL_DATA_BACKEND: backend,
+        CONTROL_DATA_BACKEND: "turso",
         TURSO_DATABASE_URL: "file:local.db",
         TURSO_AUTH_TOKEN_PARAMETER_NAME: "/tenkacloud/dev/sql-token",
       },
@@ -462,39 +414,15 @@ describe("resolveAdminAuditLogRepository (runtime)", () => {
     );
   });
 
-  it.each([
-    "turso-mirror",
-    "sql-mirror",
-  ])("should return the mirrored backend for CONTROL_DATA_BACKEND=%s", async (backend) => {
+  it("should fail loudly when the dynamodb backend is missing ddb/adminAuditLogTableName", async () => {
     const runtime = createControlDataRuntime({
-      env: {
-        CONTROL_DATA_BACKEND: backend,
-        TURSO_DATABASE_URL: "file:local.db",
-        TURSO_AUTH_TOKEN_PARAMETER_NAME: "/tenkacloud/dev/sql-token",
-      },
-      ssm: { send: vi.fn().mockResolvedValue({ Parameter: { Value: "secret-token" } }) },
-      createClient: vi.fn().mockReturnValue({
-        execute: vi.fn().mockResolvedValue({ rows: [], rowsAffected: 0 }),
-        batch: vi.fn().mockResolvedValue([]),
-      }),
-    });
-
-    const repo = await runtime.resolveAdminAuditLogRepository({
-      ddb: makeFakeDdb(),
-      adminAuditLogTableName: TABLE,
-    });
-    expect(repo).toBeInstanceOf(MirroredAdminAuditLogRepository);
-  });
-
-  it("should fail loudly when mirror/dynamodb backends are missing ddb/adminAuditLogTableName", async () => {
-    const runtime = createControlDataRuntime({
-      env: { CONTROL_DATA_BACKEND: "turso-mirror" },
+      env: {},
       ssm: { send: vi.fn() },
       createClient: vi.fn(),
     });
 
     await expect(runtime.resolveAdminAuditLogRepository({ ddb: makeFakeDdb() })).rejects.toThrow(
-      /mirror backend requires ddb\/adminAuditLogTableName/,
+      /dynamodb backend requires ddb\/adminAuditLogTableName/,
     );
   });
 });

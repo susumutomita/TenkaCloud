@@ -16,7 +16,7 @@ import { buildSakuraCredentialParameterArnPattern } from "./handlers/shared/saku
 
 export interface DeployApiLambdaProps {
   /**
-   * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env
    * `DEPLOYMENTS_TABLE_NAME` は空文字、grant も付与しない — deploy 起動 (PutItem) は
    * repository seam (`resolveDeploymentsRepository`) が SQL executor 直結で処理する。
@@ -27,7 +27,7 @@ export interface DeployApiLambdaProps {
    * Phase 2.2 (Issue #459): single-deploy / stack-progress が verified=true 行のみ
    * 許可する gate のため、CompetitorAccounts table を Read する。
    *
-   * [Issue #2442 / Phase C2] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * [Issue #2442 / Phase C2] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env
    * `COMPETITOR_ACCOUNTS_TABLE_NAME` は注入せず、grant も付与しない — verified-gate lookup
    * は repository seam (`resolveVerifiedCompetitorAccount` → `resolveCompetitorAccountsRepository`)
@@ -88,7 +88,7 @@ export interface DeployApiLambdaProps {
    */
   readonly auditLogEnabled?: boolean;
   /**
-   * Issue #2290 (ADR-049 §5.1): control-plane data backend (dynamodb|turso|sql)。監査 Lambda 群と
+   * Issue #2290 (ADR-049 §5.1): control-plane data backend (dynamodb|turso)。監査 Lambda 群と
    * lockstep で env を配線する (= 実際に repository seam を使うのは EventApi だが、AUDIT_LOG_ENABLED と
    * 同じ注入面に揃える)。default (未指定 / `dynamodb`) は env を足さず byte 互換。
    */

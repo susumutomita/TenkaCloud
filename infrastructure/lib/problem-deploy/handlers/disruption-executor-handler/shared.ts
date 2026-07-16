@@ -14,7 +14,7 @@ export interface DisruptionExecutorDeploymentsSharedResources {
  * [Issue #2441 / Phase B1] Deployments READ seam for disruption-executor modules.
  *
  * Default backend stays DynamoDB and emits the same GSI1 read through the same
- * injected DocumentClient. `CONTROL_DATA_BACKEND=turso/sql` is the known B4
+ * injected DocumentClient. `CONTROL_DATA_BACKEND=turso` is the known B4
  * constraint: the control-data factory fails loudly until the SQL Deployments
  * backend exists.
  *
@@ -42,7 +42,7 @@ export interface DisruptionExecutorDisruptionsSharedResources {
  * {@link resolveDeploymentsRepository}). Default backend stays DynamoDB and emits the same
  * conditional PutItem (`EXEC#` claim) through the same injected DocumentClient — byte-identical
  * to the pre-seam inline access. Delegates to the cold-start-cached injected `shared.runtime`, so
- * `CONTROL_DATA_BACKEND=turso|sql|turso-mirror|sql-mirror` all work.
+ * `CONTROL_DATA_BACKEND=turso` works.
  */
 export function resolveDisruptionsRepository(
   shared: DisruptionExecutorDisruptionsSharedResources,

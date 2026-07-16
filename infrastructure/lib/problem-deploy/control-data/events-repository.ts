@@ -39,7 +39,7 @@ export interface CreateEventsRepositoryDeps {
    * Events-only wirings may omit it; that method then fails loudly.
    */
   readonly teamsTableName?: string;
-  /** SQL driver — required for the `turso` / `sql` backend. */
+  /** SQL driver — required for the `turso` backend. */
   readonly sql?: SqlExecutor;
 }
 
@@ -47,7 +47,7 @@ export interface CreateEventsRepositoryDeps {
  * [ADR-049 §5.1] Cold-start factory that selects the Events backend from the
  * `CONTROL_DATA_BACKEND` flag value (ADR-035 mechanism). **Default = dynamodb**
  * (behavior-preserving): an unset / empty / `"dynamodb"` flag returns the DDB
- * repository, so the existing path is byte-identical. `"turso"` / `"sql"` return
+ * repository, so the existing path is byte-identical. `"turso"` return
  * the SQLite repository. Any other value is a hard error (fail loud).
  *
  * @param backend the raw `CONTROL_DATA_BACKEND` value (case-insensitive; may be undefined)
@@ -59,7 +59,7 @@ export function createEventsRepository(
 ): EventsRepository {
   const selected = (backend ?? "dynamodb").toLowerCase();
 
-  if (selected === "turso" || selected === "sql") {
+  if (selected === "turso") {
     if (!deps.sql) {
       throw new Error(
         `CONTROL_DATA_BACKEND="${backend}" requires a SqlExecutor (deps.sql). ` +
@@ -71,7 +71,7 @@ export function createEventsRepository(
 
   if (selected !== "dynamodb") {
     throw new Error(
-      `Unknown CONTROL_DATA_BACKEND="${backend}" (expected one of: dynamodb, turso, sql).`,
+      `Unknown CONTROL_DATA_BACKEND="${backend}" (expected one of: dynamodb, turso).`,
     );
   }
 

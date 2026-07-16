@@ -3,7 +3,6 @@ import { DeleteCommand, GetCommand, PutCommand, QueryCommand } from "@aws-sdk/li
 import type { SamlIdpConfig } from "@tenkacloud/saml-utils";
 import { describe, expect, it } from "vitest";
 import type { IdpScope } from "../../../lib/control-plane/handlers/idp-handler/core";
-import { MirroredSamlIdpsRepository } from "../../../lib/problem-deploy/control-data/mirrored-repositories";
 import {
   DynamoDbSamlIdpsRepository,
   SqlSamlIdpsRepository,
@@ -13,10 +12,10 @@ import { makeSqliteExecutor } from "./control-data-write.test-helpers";
 
 /**
  * [Issue #2442 / Phase C5] Cross-backend parity suite for the SamlIdps seam: the
- * same test body runs against {@link DynamoDbSamlIdpsRepository},
- * {@link SqlSamlIdpsRepository}, and the mirror composition ([#2527 Slice 0]),
- * pinning that a caller sees identical domain behavior regardless of
- * `CONTROL_DATA_BACKEND` (mirrors `problem-endpoints-repository-parity.test.ts`).
+ * same test body runs against {@link DynamoDbSamlIdpsRepository} and
+ * {@link SqlSamlIdpsRepository}, pinning that a caller sees identical domain
+ * behavior regardless of `CONTROL_DATA_BACKEND` (mirrors
+ * `problem-endpoints-repository-parity.test.ts`).
  */
 
 const TABLE = "SamlIdps";
@@ -68,16 +67,6 @@ const backends: ReadonlyArray<readonly [string, () => Backend]> = [
     () => ({
       name: "SqlSamlIdpsRepository",
       repo: new SqlSamlIdpsRepository(makeSqliteExecutor()),
-    }),
-  ],
-  [
-    "MirroredSamlIdpsRepository",
-    () => ({
-      name: "MirroredSamlIdpsRepository",
-      repo: new MirroredSamlIdpsRepository(
-        new DynamoDbSamlIdpsRepository(makeFakeIdpDdb(), TABLE),
-        new SqlSamlIdpsRepository(makeSqliteExecutor()),
-      ),
     }),
   ],
 ];

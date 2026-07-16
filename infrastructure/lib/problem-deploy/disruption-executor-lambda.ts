@@ -17,7 +17,7 @@ export interface DisruptionExecutorLambdaProps {
   /**
    * team deployment 解決 (GSI1 Query) 用。
    *
-   * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env も
    * GSI1 Query IAM も付与しない — team deployment 解決は repository seam
    * (`resolveDeploymentsRepository`) が SQL executor 直結で処理する
@@ -27,7 +27,7 @@ export interface DisruptionExecutorLambdaProps {
   /**
    * EXEC# 冪等行 (conditional Put) 用。 fire の REQUEST#/AUDIT# と同居。
    *
-   * [Issue #2442 / Phase C3] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * [Issue #2442 / Phase C3] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env も
    * PutItem IAM も付与しない — EXEC# claim は repository seam (`resolveDisruptionsRepository`)
    * が本 Lambda に配線する Turso executor (下記) 経由で処理する ({@link deploymentsTable} と
@@ -37,8 +37,8 @@ export interface DisruptionExecutorLambdaProps {
   /** `{ [problemId]: ProblemDisruptionEntry[] }` (action 込)。 build 時 literal 置換で env 4KB を回避。 */
   readonly problemsDisruptions?: Readonly<Record<string, unknown>>;
   /**
-   * [Issue #2442 / Phase C3] control-plane data backend (dynamodb|turso|sql|turso-mirror|
-   * sql-mirror)。 `claimExecution` の repository seam がこの env を読む。default (未指定 /
+   * [Issue #2442 / Phase C3] control-plane data backend (dynamodb|turso)。
+   * `claimExecution` の repository seam がこの env を読む。default (未指定 /
    * `dynamodb`) は env を足さず byte 互換。`EventApiLambda` と同型の注入パターン。
    */
   readonly controlDataBackend?: string;
@@ -159,7 +159,7 @@ export class DisruptionExecutorLambda extends Construct {
         conditions: { StringLike: { "kms:EncryptionContext:PARAMETER_ARN": ssmArn } },
       }),
     );
-    // [Issue #2442] turso/sql backend が Turso auth token を読むための SSM SecureString read
+    // [Issue #2442] turso backend が Turso auth token を読むための SSM SecureString read
     // 権限。 未配線 (= dynamodb default) なら付与しない (`EventApiLambda` と同型)。
     if (props.tursoAuthTokenParameterName) {
       this.fn.addToRolePolicy(

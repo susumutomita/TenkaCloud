@@ -181,7 +181,7 @@ describe("resolveAppConfig env/fs/input-driven branches", () => {
     );
   });
 
-  it("should accept pure and mirror SQL controlDataBackend values and normalize case (#2290)", () => {
+  it("should accept the two backend values and normalize case (#2290, #2677)", () => {
     const remote = {
       CDK_PARAM_TURSO_DATABASE_URL: "libsql://example.turso.io",
       CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME: "/tenkacloud/dev/turso-token",
@@ -189,21 +189,10 @@ describe("resolveAppConfig env/fs/input-driven branches", () => {
     expect(
       resolve(baseEnv({ ...remote, CDK_PARAM_CONTROL_DATA_BACKEND: "turso" })).controlDataBackend,
     ).toBe("turso");
-    expect(
-      resolve(baseEnv({ ...remote, CDK_PARAM_CONTROL_DATA_BACKEND: "sql" })).controlDataBackend,
-    ).toBe("sql");
     // 大文字混在は lowercase 正規化する。
     expect(
       resolve(baseEnv({ ...remote, CDK_PARAM_CONTROL_DATA_BACKEND: "Turso" })).controlDataBackend,
     ).toBe("turso");
-    expect(
-      resolve(baseEnv({ ...remote, CDK_PARAM_CONTROL_DATA_BACKEND: "turso-mirror" }))
-        .controlDataBackend,
-    ).toBe("turso-mirror");
-    expect(
-      resolve(baseEnv({ ...remote, CDK_PARAM_CONTROL_DATA_BACKEND: "SQL-Mirror" }))
-        .controlDataBackend,
-    ).toBe("sql-mirror");
     expect(
       resolve(baseEnv({ CDK_PARAM_CONTROL_DATA_BACKEND: "DynamoDB" })).controlDataBackend,
     ).toBe("dynamodb");
@@ -213,14 +202,19 @@ describe("resolveAppConfig env/fs/input-driven branches", () => {
     expect(() => resolve(baseEnv({ CDK_PARAM_CONTROL_DATA_BACKEND: "turso" }))).toThrow(
       /CDK_PARAM_TURSO_DATABASE_URL/,
     );
-    expect(() => resolve(baseEnv({ CDK_PARAM_CONTROL_DATA_BACKEND: "sql-mirror" }))).toThrow(
-      /CDK_PARAM_TURSO_DATABASE_URL/,
-    );
   });
 
-  it("should throw loudly on an unknown controlDataBackend value instead of silently defaulting (#2290)", () => {
-    expect(() => resolve(baseEnv({ CDK_PARAM_CONTROL_DATA_BACKEND: "postgres" }))).toThrow(
-      /CDK_PARAM_CONTROL_DATA_BACKEND must be one of dynamodb\|turso\|sql\|turso-mirror\|sql-mirror/,
+  // [#2677] The former `sql` alias and the `turso-mirror`/`sql-mirror` bridge were
+  // removed — a leftover value in .env must fail the synth loudly, never silently
+  // change the data path.
+  it.each([
+    "postgres",
+    "sql",
+    "turso-mirror",
+    "sql-mirror",
+  ])("should throw loudly on the removed/unknown controlDataBackend value %s (#2290, #2677)", (value) => {
+    expect(() => resolve(baseEnv({ CDK_PARAM_CONTROL_DATA_BACKEND: value }))).toThrow(
+      /CDK_PARAM_CONTROL_DATA_BACKEND must be one of dynamodb\|turso/,
     );
   });
 

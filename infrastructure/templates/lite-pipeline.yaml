@@ -92,22 +92,18 @@ Parameters:
     AllowedValues:
       - dynamodb
       - turso
-      - sql
-      - turso-mirror
-      - sql-mirror
     Description: >-
       Control-plane data backend (CDK_PARAM_CONTROL_DATA_BACKEND). `dynamodb` (default)
-      keeps every table on DynamoDB. `turso`/`sql` is the pure-SQL zero-cost backend -
+      keeps every table on DynamoDB. `turso` is the pure-SQL zero-cost backend -
       CDK synthesizes ZERO DynamoDB tables - and requires TursoDatabaseUrl +
-      TursoAuthTokenParameterName. `turso-mirror`/`sql-mirror` keeps DynamoDB canonical
-      while mirroring writes into SQL (migration bridge). See docs/running-costs.md.
+      TursoAuthTokenParameterName. See docs/running-costs.md.
 
   TursoDatabaseUrl:
     Type: String
     Default: ""
     Description: >-
       Turso libsql:// database URL (from `turso db show <db> --url`). Required when
-      ControlDataBackend is turso/sql/turso-mirror/sql-mirror; leave empty for dynamodb.
+      ControlDataBackend is turso; leave empty for dynamodb.
 
   TursoAuthTokenParameterName:
     Type: String
@@ -130,7 +126,7 @@ Parameters:
       raise it for an event with real load - 1 RCU throttles quickly. Raising it raises
       the hourly DynamoDB charge; the 200 ceiling matches the event-capacity runbook's
       billing guard (docs/operations/dynamodb-event-capacity.md) so a digit typo cannot
-      provision thousands of units. Ignored when ControlDataBackend is turso/sql (zero
+      provision thousands of units. Ignored when ControlDataBackend is turso (zero
       DynamoDB tables are synthesized there).
 
   DynamoWriteCapacity:
@@ -141,7 +137,7 @@ Parameters:
     Description: >-
       Provisioned write capacity units applied to every DynamoDB table AND every GSI
       (CDK_PARAM_DYNAMODB_WRITE_CAPACITY). Same default/cost/ceiling/behavior notes as
-      DynamoReadCapacity, including being ignored when ControlDataBackend is turso/sql.
+      DynamoReadCapacity, including being ignored when ControlDataBackend is turso.
 
   BunVersion:
     Type: String

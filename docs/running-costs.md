@@ -48,7 +48,7 @@ The steps below are for a **fresh** stack. See [Migrating an existing stack](#mi
    CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME=/TenkaCloud/development/turso/auth-token
    ```
 
-4. **`make deploy`.** CDK skips synthesizing all eight DynamoDB tables listed above; the first Lambda cold start creates the SQL schema on the Turso database for you (no manual migration step). `env-check-lite` (the gate `make deploy` runs first) validates that both `CDK_PARAM_TURSO_DATABASE_URL` and `CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME` are set whenever `CDK_PARAM_CONTROL_DATA_BACKEND` is `turso`/`sql`/`turso-mirror`/`sql-mirror`, so a missing value fails immediately instead of after a full SPA build or, worse, at the deploy Lambda's first cold start.
+4. **`make deploy`.** CDK skips synthesizing all eight DynamoDB tables listed above; the first Lambda cold start creates the SQL schema on the Turso database for you (no manual migration step). `env-check-lite` (the gate `make deploy` runs first) validates that both `CDK_PARAM_TURSO_DATABASE_URL` and `CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME` are set whenever `CDK_PARAM_CONTROL_DATA_BACKEND` is `turso`, so a missing value fails immediately instead of after a full SPA build or, worse, at the deploy Lambda's first cold start.
 
 ## First live E2E verification runbook
 
@@ -226,12 +226,11 @@ Moving an *existing* `dynamodb`-backed stack to `turso` is a separate, riskier p
 
 Recommended sequence, also documented in the `CDK_PARAM_CONTROL_DATA_BACKEND` comment block in [`infrastructure/environments/development/.env.example`](../infrastructure/environments/development/.env.example):
 
-1. Deploy with `turso-mirror` (or `sql-mirror`) first — this keeps DynamoDB canonical (every table still exists) while mirroring writes into SQL, so you can validate a cutover before switching to the pure value.
-2. Verify the SQL replica is complete and correct.
-3. Redeploy with `turso` (or `sql`, the pure value) once satisfied — this is the point where CDK stops synthesizing the eight DynamoDB tables.
-4. Manually delete the now-orphaned tables (and their GSIs) with `aws dynamodb delete-table` after confirming you no longer need the DynamoDB copy.
+1. Export the data you need from the DynamoDB tables (scores, event definitions) before switching — the two backends never sync (#2677 removed the former `turso-mirror` dual-write bridge; the backend is a hard two-way choice now).
+2. Redeploy with `CDK_PARAM_CONTROL_DATA_BACKEND=turso` — this is the point where CDK stops synthesizing the eight DynamoDB tables. The stack starts from an empty SQL database; re-create events/teams there.
+3. Manually delete the now-orphaned tables (and their GSIs) with `aws dynamodb delete-table` after confirming you no longer need the DynamoDB copy.
 
-Rolling back `turso`/`sql` → `dynamodb` loses any write that only ever reached the SQL backend (pure SQL never writes to DynamoDB) — do this only with fresh/empty tables, not as a way to "undo" a cutover with live data.
+Rolling back `turso` → `dynamodb` loses any write that only ever reached the SQL backend (pure SQL never writes to DynamoDB) — do this only with fresh/empty tables, not as a way to "undo" a cutover with live data. In practice: pick the backend per environment BEFORE the first real event; treat a mid-life cutover as a data migration project, not a flag flip.
 
 ## Measured cost (single AWS account, 2026-06, AWS-native/`dynamodb` profile)
 

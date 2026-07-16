@@ -6,7 +6,6 @@ import {
   type EventsRepository,
   SqlEventsRepository,
 } from "../../../lib/problem-deploy/control-data/events-repository";
-import { MirroredEventsRepository } from "../../../lib/problem-deploy/control-data/mirrored-repositories";
 import type { SqlExecutor } from "../../../lib/problem-deploy/control-data/types";
 import { makeFakeDdb, makeSqliteExecutor } from "./control-data-write.test-helpers";
 
@@ -16,9 +15,7 @@ import { makeFakeDdb, makeSqliteExecutor } from "./control-data-write.test-helpe
  * (cursor-paginated tenant listing), `listEventsByStatus` (cross-tenant
  * reconciler scan), `batchGetEvents` (scoring-meta batch read), and
  * `countEventsByTenant`. Same assertions run against every backend so
- * DynamoDB, SQLite, and the mirror composition ([#2527 Slice 0] — these
- * seams delegate to canonical, so cursors stay canonical-only by contract)
- * stay provably interchangeable.
+ * DynamoDB and SQLite stay provably interchangeable.
  */
 
 const TABLE = "Events";
@@ -41,14 +38,6 @@ function sampleRecord(overrides: Partial<EventRecord> = {}): EventRecord {
 const backends: ReadonlyArray<readonly [string, () => EventsRepository]> = [
   ["DynamoDbEventsRepository", () => new DynamoDbEventsRepository(makeFakeDdb(), TABLE)],
   ["SqlEventsRepository", () => new SqlEventsRepository(makeSqliteExecutor())],
-  [
-    "MirroredEventsRepository",
-    () =>
-      new MirroredEventsRepository(
-        new DynamoDbEventsRepository(makeFakeDdb(), TABLE),
-        new SqlEventsRepository(makeSqliteExecutor()),
-      ),
-  ],
 ];
 
 describe.each(backends)("EventsRepository listing/batch/count parity: %s", (_name, makeRepo) => {

@@ -142,7 +142,10 @@ two backends, selected by `CDK_PARAM_CONTROL_DATA_BACKEND` in your `.env`:
 | --- | --- | --- | --- |
 | **DynamoDB** (default) | unset, or `dynamodb` | Provisioned 1 RCU/1 WCU on every table — small but nonzero, and new-style AWS Free Tier accounts have no always-free DynamoDB allowance | Teams that want everything inside AWS |
 | **Turso (libSQL)** | `turso` | None on this path — the Lite synth creates **zero** DynamoDB tables | Individuals, trials, personal events |
-| Migration bridge | `turso-mirror` | Same as DynamoDB (tables remain canonical, writes mirrored to SQL) | Validating a cutover before switching to `turso` |
+
+These are the only two values — pick the backend per environment before your
+first real event (the two stores never sync, so a later switch is a data
+migration, not a flag flip).
 
 Opting in to Turso is four steps: create a Turso database, store its auth token
 in SSM as a `SecureString`, add three lines to your `.env`
@@ -150,7 +153,7 @@ in SSM as a `SecureString`, add three lines to your `.env`
 `CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME`), and `make deploy` — the first
 Lambda cold start creates the SQL schema for you, and the deploy gate fails
 fast if the backend is set while either Turso value is missing.
-The full walkthrough, the migration path for an existing DynamoDB-backed stack,
+The full walkthrough, the cutover notes for an existing DynamoDB-backed stack,
 measured monthly costs, and the current live-verification status are in
 [`docs/running-costs.md`](https://github.com/susumutomita/TenkaCloud/blob/main/docs/running-costs.md).
 

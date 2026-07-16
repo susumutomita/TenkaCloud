@@ -3,13 +3,13 @@
  * (Issue #1294; split out of `index.ts` in #2442 Phase C5).
  *
  * `tableName` mirrors `buildCompetitorAccountsSharedResources`'s relaxation
- * (`?? ""` instead of `requireEnv`): pure SQL backend (`turso`/`sql`) selection
+ * (`?? ""` instead of `requireEnv`): pure SQL backend (`turso`) selection
  * means `TenkaCloudLiteStack` does not synth `SamlIdpsTable` at all, so
  * `SAML_IDPS_TABLE_NAME` is absent from the Lambda's environment. Fail-fasting
  * on module load would turn that into an Initialization Error for the whole
  * Lambda instead of a graceful fall-through to the SQL executor — the
  * repository seam (`createSeamIdpStore` → `resolveSamlIdpsRepository`) is what
- * actually enforces "table required" for the `dynamodb` / `*-mirror` backends
+ * actually enforces "table required" for the `dynamodb` backend
  * (fail loud there, not here).
  *
  * `TENANT_USER_POOL_ID` stays required: the tenant UserPool always exists

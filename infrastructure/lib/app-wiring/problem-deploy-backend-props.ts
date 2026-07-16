@@ -57,7 +57,7 @@ export function buildProblemDeployBackendBaseProps(config: AppConfig) {
     packAssets: config.packAssets,
     // Issue #2311: 監査ログ出力の on/off。両モードで同一挙動にするため base props に集約。
     auditLogEnabled: config.auditLogEnabled,
-    // Issue #2290: control-plane data backend (dynamodb|turso|sql) の選択。base props に集約する
+    // Issue #2290: control-plane data backend (dynamodb|turso) の選択。base props に集約する
     // ことで SaaS (wire.ts) と Lite (bin/tenkacloud-lite.ts) の両モードへ同一に届く (= Lite mode
     // での flag 切替配線)。default "dynamodb" は Lambda env を足さず CFn byte 互換。
     controlDataBackend: config.controlDataBackend,

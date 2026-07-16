@@ -587,10 +587,9 @@ export interface DeploymentsCoordinationPort {
 /**
  * [ADR-049 §5.1 / Issue #2441] Aggregate-scoped repository for the Deployments
  * aggregate — domain methods, not a generic key-value shim (mirror of
- * {@link EventsRepository} / {@link TeamsRepository}). Three interchangeable
- * backends implement it: `DynamoDbDeploymentsRepository` (status quo, default),
- * `SqlDeploymentsRepository` (SQLite dialect for Turso / D1), and
- * `MirroredDeploymentsRepository` (DDB canonical + SQL replica bridge).
+ * {@link EventsRepository} / {@link TeamsRepository}). Two interchangeable
+ * backends implement it: `DynamoDbDeploymentsRepository` (status quo, default)
+ * and `SqlDeploymentsRepository` (SQLite dialect for Turso / D1).
  *
  * [Issue #2527 Slice 2] This is the COMPOSITION of the five capability ports
  * above — it exists only for the composition boundaries (backend implementors

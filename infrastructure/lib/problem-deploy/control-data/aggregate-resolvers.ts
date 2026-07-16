@@ -6,19 +6,6 @@ import { createDeploymentsRepository } from "./deployments-repository.js";
 import { createDisruptionsRepository } from "./disruptions-repository.js";
 import { createEventsRepository } from "./events-repository.js";
 import { createFeatureFlagsRepository } from "./feature-flags-repository.js";
-import {
-  MirroredAdminAuditLogRepository,
-  MirroredCompetitorAccountsRepository,
-  MirroredDeploymentsRepository,
-  MirroredDisruptionsRepository,
-  MirroredEventsRepository,
-  MirroredFeatureFlagsRepository,
-  MirroredNotificationsRepository,
-  MirroredProblemEndpointsRepository,
-  MirroredSamlConfigRepository,
-  MirroredSamlIdpsRepository,
-  MirroredTeamsRepository,
-} from "./mirrored-repositories.js";
 import { createNotificationsRepository } from "./notifications-repository.js";
 import { createProblemEndpointsRepository } from "./problem-endpoints-repository.js";
 import { createSamlConfigRepository } from "./saml-config-repository.js";
@@ -41,12 +28,14 @@ import type {
 
 /**
  * [#2527 Slice 4] The per-aggregate cold-start resolvers, extracted verbatim
- * from `runtime-repositories.ts`. Each resolver applies the same three-branch
- * policy — `pure` returns the SQL adapter, `dynamodb` returns the DDB adapter,
- * `mirror` composes DDB-canonical + SQL-replica — kept explicit per aggregate
- * (the epic prefers searchable domain semantics over a generic combinator).
- * Backend selection lives in `backend-config.ts`; the shared SQL executor is
- * injected as `acquireSqlExecutor` from `sql-executor-cache.ts`.
+ * from `runtime-repositories.ts`. Each resolver applies the same two-branch
+ * policy — `pure` (turso) returns the SQL adapter, `dynamodb` returns the DDB
+ * adapter — kept explicit per aggregate (the epic prefers searchable domain
+ * semantics over a generic combinator). [#2677] The former mirror branch
+ * (DDB-canonical + SQL-replica dual write) was deleted along with its
+ * dual-write repository implementations; the backend is a two-way choice. Backend
+ * selection lives in `backend-config.ts`; the shared SQL executor is injected
+ * as `acquireSqlExecutor` from `sql-executor-cache.ts`.
  */
 
 function requireDdbAndTableName(
@@ -61,10 +50,9 @@ function requireDdbAndTableName(
     | "disruptionsTableName"
     | "adminAuditLogTableName"
     | "samlIdpsTableName",
-  backendKind: "dynamodb" | "mirror",
 ): { readonly ddb: DynamoDBDocumentClient; readonly tableName: string } {
   if (!ddb || !tableName) {
-    throw new Error(`${backendKind} backend requires ddb/${tableNameLabel}.`);
+    throw new Error(`dynamodb backend requires ddb/${tableNameLabel}.`);
   }
   return { ddb, tableName };
 }
@@ -89,20 +77,16 @@ export interface AggregateResolvers {
     readonly eventsTableName?: string;
   }) => Promise<FeatureFlagsRepository>;
   /**
-   * [Issue #2441 / Phase B4] Cold-start resolver for the Deployments seam.
-   * Deployments now participates in all five `CONTROL_DATA_BACKEND` values:
-   * `dynamodb` returns DDB, `turso` / `sql` return pure SQL, and mirror modes
-   * write through DDB then SQL while serving reads/scans from canonical DDB.
+   * [Issue #2441 / Phase B4] Cold-start resolver for the Deployments seam:
+   * `dynamodb` returns DDB, `turso` returns pure SQL.
    */
   readonly resolveDeploymentsRepository: (input: {
     readonly ddb?: DynamoDBDocumentClient;
     readonly deploymentsTableName?: string;
   }) => Promise<DeploymentsRepository>;
   /**
-   * [Issue #2442 / Phase C1] Cold-start resolver for the ProblemEndpoints seam.
-   * Participates in all five `CONTROL_DATA_BACKEND` values like Deployments:
-   * `dynamodb` returns DDB, `turso` / `sql` return pure SQL, and mirror modes
-   * write through DDB then SQL while serving reads from canonical DDB.
+   * [Issue #2442 / Phase C1] Cold-start resolver for the ProblemEndpoints seam
+   * (same two-branch policy as Deployments).
    */
   readonly resolveProblemEndpointsRepository: (input: {
     readonly ddb?: DynamoDBDocumentClient;
@@ -110,10 +94,7 @@ export interface AggregateResolvers {
   }) => Promise<ProblemEndpointsRepository>;
   /**
    * [Issue #2442 / Phase C2] Cold-start resolver for the CompetitorAccounts
-   * seam. Participates in all five `CONTROL_DATA_BACKEND` values like
-   * ProblemEndpoints: `dynamodb` returns DDB, `turso` / `sql` return pure SQL,
-   * and mirror modes write through DDB then SQL while serving reads/scans
-   * from canonical DDB.
+   * seam (same two-branch policy as ProblemEndpoints).
    */
   readonly resolveCompetitorAccountsRepository: (input: {
     readonly ddb?: DynamoDBDocumentClient;
@@ -122,40 +103,34 @@ export interface AggregateResolvers {
   /**
    * [Issue #2442 / Phase C2] Cold-start resolver for the SamlConfig
    * sub-aggregate (co-habits the CompetitorAccounts DynamoDB table's
-   * partition; same five-value participation as {@link resolveCompetitorAccountsRepository}).
+   * partition; same two-branch policy as {@link resolveCompetitorAccountsRepository}).
    */
   readonly resolveSamlConfigRepository: (input: {
     readonly ddb?: DynamoDBDocumentClient;
     readonly competitorAccountsTableName?: string;
   }) => Promise<SamlConfigRepository>;
   /**
-   * [Issue #2442 / Phase C3] Cold-start resolver for the Disruptions seam. Participates in all
-   * five `CONTROL_DATA_BACKEND` values like ProblemEndpoints/CompetitorAccounts: `dynamodb`
-   * returns DDB, `turso` / `sql` return pure SQL, and mirror modes write through DDB then SQL
-   * while serving reads from canonical DDB.
+   * [Issue #2442 / Phase C3] Cold-start resolver for the Disruptions seam
+   * (same two-branch policy as CompetitorAccounts).
    */
   readonly resolveDisruptionsRepository: (input: {
     readonly ddb?: DynamoDBDocumentClient;
     readonly disruptionsTableName?: string;
   }) => Promise<DisruptionsRepository>;
   /**
-   * [Issue #2442 / Phase C4] Cold-start resolver for the AdminAuditLog seam. Participates in all
-   * five `CONTROL_DATA_BACKEND` values like Disruptions/CompetitorAccounts: `dynamodb` returns
-   * DDB, `turso` / `sql` return pure SQL, and mirror modes write through DDB then SQL while
-   * serving reads from canonical DDB.
+   * [Issue #2442 / Phase C4] Cold-start resolver for the AdminAuditLog seam
+   * (same two-branch policy as Disruptions).
    */
   readonly resolveAdminAuditLogRepository: (input: {
     readonly ddb?: DynamoDBDocumentClient;
     readonly adminAuditLogTableName?: string;
   }) => Promise<AdminAuditLogRepository>;
   /**
-   * [Issue #2442 / Phase C5] Cold-start resolver for the SamlIdps seam. Participates in all five
-   * `CONTROL_DATA_BACKEND` values like AdminAuditLog/Disruptions/CompetitorAccounts: `dynamodb`
-   * returns DDB, `turso` / `sql` return pure SQL, and mirror modes write through DDB then SQL
-   * while serving reads from canonical DDB. Unlike every other resolver here, the caller is
-   * **Lite-mode only** (`tenant-template/handlers/idp-handler/index.ts` via
-   * `control-plane/handlers/idp-handler/ddb-store.ts`'s `createSeamIdpStore`) — SaaS/Full mode
-   * never wires the SamlIdps table or Lambda at all.
+   * [Issue #2442 / Phase C5] Cold-start resolver for the SamlIdps seam (same
+   * two-branch policy as AdminAuditLog). Unlike every other resolver here, the
+   * caller is **Lite-mode only** (`tenant-template/handlers/idp-handler/index.ts`
+   * via `control-plane/handlers/idp-handler/ddb-store.ts`'s `createSeamIdpStore`)
+   * — SaaS/Full mode never wires the SamlIdps table or Lambda at all.
    */
   readonly resolveSamlIdpsRepository: (input: {
     readonly ddb?: DynamoDBDocumentClient;
@@ -172,36 +147,22 @@ export function createAggregateResolvers(
     readonly eventsTableName?: string;
     readonly teamsTableName?: string;
   }): Promise<EventsRepository> {
-    const backend = selectBackend(env);
-    if (backend.kind === "pure") {
+    if (selectBackend(env).kind === "pure") {
       const sql = await acquireSqlExecutor();
-      return createEventsRepository(backend.dialect, { sql });
+      return createEventsRepository("turso", { sql });
     }
-
     const requiredInput = requireDdbAndTableName(
       input.ddb,
       input.eventsTableName,
       "eventsTableName",
-      backend.kind,
     );
-    if (backend.kind === "dynamodb") {
-      return createEventsRepository("dynamodb", {
-        ddb: requiredInput.ddb,
-        eventsTableName: requiredInput.tableName,
-        // #2437: createEventWithTeams (atomic event+teams transaction) writes
-        // the Teams table through the Events repository.
-        teamsTableName: input.teamsTableName,
-      });
-    }
-    const sql = await acquireSqlExecutor();
-    return new MirroredEventsRepository(
-      createEventsRepository("dynamodb", {
-        ddb: requiredInput.ddb,
-        eventsTableName: requiredInput.tableName,
-        teamsTableName: input.teamsTableName,
-      }),
-      createEventsRepository(backend.dialect, { sql }),
-    );
+    return createEventsRepository("dynamodb", {
+      ddb: requiredInput.ddb,
+      eventsTableName: requiredInput.tableName,
+      // #2437: createEventWithTeams (atomic event+teams transaction) writes
+      // the Teams table through the Events repository.
+      teamsTableName: input.teamsTableName,
+    });
   }
 
   async function resolveTeamsRepository(input: {
@@ -209,98 +170,54 @@ export function createAggregateResolvers(
     readonly teamsTableName?: string;
     readonly deploymentsTableName?: string;
   }): Promise<TeamsRepository> {
-    const backend = selectBackend(env);
-    if (backend.kind === "pure") {
+    if (selectBackend(env).kind === "pure") {
       const sql = await acquireSqlExecutor();
-      return createTeamsRepository(backend.dialect, { sql });
+      return createTeamsRepository("turso", { sql });
     }
-
-    const requiredInput = requireDdbAndTableName(
-      input.ddb,
-      input.teamsTableName,
-      "teamsTableName",
-      backend.kind,
-    );
-    if (backend.kind === "dynamodb") {
-      return createTeamsRepository("dynamodb", {
-        ddb: requiredInput.ddb,
-        teamsTableName: requiredInput.tableName,
-        deploymentsTableName: input.deploymentsTableName,
-      });
-    }
-    const sql = await acquireSqlExecutor();
-    return new MirroredTeamsRepository(
-      createTeamsRepository("dynamodb", {
-        ddb: requiredInput.ddb,
-        teamsTableName: requiredInput.tableName,
-        deploymentsTableName: input.deploymentsTableName,
-      }),
-      createTeamsRepository(backend.dialect, { sql }),
-    );
+    const requiredInput = requireDdbAndTableName(input.ddb, input.teamsTableName, "teamsTableName");
+    return createTeamsRepository("dynamodb", {
+      ddb: requiredInput.ddb,
+      teamsTableName: requiredInput.tableName,
+      deploymentsTableName: input.deploymentsTableName,
+    });
   }
 
   async function resolveNotificationsRepository(input: {
     readonly ddb?: DynamoDBDocumentClient;
     readonly eventsTableName?: string;
   }): Promise<NotificationsRepository> {
-    const backend = selectBackend(env);
-    if (backend.kind === "pure") {
+    if (selectBackend(env).kind === "pure") {
       const sql = await acquireSqlExecutor();
-      return createNotificationsRepository(backend.dialect, { sql });
+      return createNotificationsRepository("turso", { sql });
     }
-
     const requiredInput = requireDdbAndTableName(
       input.ddb,
       input.eventsTableName,
       "eventsTableName",
-      backend.kind,
     );
-    if (backend.kind === "dynamodb") {
-      return createNotificationsRepository("dynamodb", {
-        ddb: requiredInput.ddb,
-        eventsTableName: requiredInput.tableName,
-      });
-    }
-    const sql = await acquireSqlExecutor();
-    return new MirroredNotificationsRepository(
-      createNotificationsRepository("dynamodb", {
-        ddb: requiredInput.ddb,
-        eventsTableName: requiredInput.tableName,
-      }),
-      createNotificationsRepository(backend.dialect, { sql }),
-    );
+    return createNotificationsRepository("dynamodb", {
+      ddb: requiredInput.ddb,
+      eventsTableName: requiredInput.tableName,
+    });
   }
 
   async function resolveFeatureFlagsRepository(input: {
     readonly ddb?: DynamoDBDocumentClient;
     readonly eventsTableName?: string;
   }): Promise<FeatureFlagsRepository> {
-    const backend = selectBackend(env);
-    if (backend.kind === "pure") {
+    if (selectBackend(env).kind === "pure") {
       const sql = await acquireSqlExecutor();
-      return createFeatureFlagsRepository(backend.dialect, { sql });
+      return createFeatureFlagsRepository("turso", { sql });
     }
-
     const requiredInput = requireDdbAndTableName(
       input.ddb,
       input.eventsTableName,
       "eventsTableName",
-      backend.kind,
     );
-    if (backend.kind === "dynamodb") {
-      return createFeatureFlagsRepository("dynamodb", {
-        ddb: requiredInput.ddb,
-        eventsTableName: requiredInput.tableName,
-      });
-    }
-    const sql = await acquireSqlExecutor();
-    return new MirroredFeatureFlagsRepository(
-      createFeatureFlagsRepository("dynamodb", {
-        ddb: requiredInput.ddb,
-        eventsTableName: requiredInput.tableName,
-      }),
-      createFeatureFlagsRepository(backend.dialect, { sql }),
-    );
+    return createFeatureFlagsRepository("dynamodb", {
+      ddb: requiredInput.ddb,
+      eventsTableName: requiredInput.tableName,
+    });
   }
 
   /** Deployments is not part of `resolveRepositories` (runtime-repositories.ts) — callers resolve it individually. */
@@ -308,32 +225,19 @@ export function createAggregateResolvers(
     readonly ddb?: DynamoDBDocumentClient;
     readonly deploymentsTableName?: string;
   }): Promise<DeploymentsRepository> {
-    const backend = selectBackend(env);
-    if (backend.kind === "pure") {
+    if (selectBackend(env).kind === "pure") {
       const sql = await acquireSqlExecutor();
-      return createDeploymentsRepository(backend.dialect, { sql });
+      return createDeploymentsRepository("turso", { sql });
     }
-
     const requiredInput = requireDdbAndTableName(
       input.ddb,
       input.deploymentsTableName,
       "deploymentsTableName",
-      backend.kind,
     );
-    if (backend.kind === "dynamodb") {
-      return createDeploymentsRepository("dynamodb", {
-        ddb: requiredInput.ddb,
-        deploymentsTableName: requiredInput.tableName,
-      });
-    }
-    const sql = await acquireSqlExecutor();
-    return new MirroredDeploymentsRepository(
-      createDeploymentsRepository("dynamodb", {
-        ddb: requiredInput.ddb,
-        deploymentsTableName: requiredInput.tableName,
-      }),
-      createDeploymentsRepository(backend.dialect, { sql }),
-    );
+    return createDeploymentsRepository("dynamodb", {
+      ddb: requiredInput.ddb,
+      deploymentsTableName: requiredInput.tableName,
+    });
   }
 
   /** [Issue #2442 / Phase C1] Resolver for the ProblemEndpoints seam (mirrors resolveDeploymentsRepository). */
@@ -341,32 +245,19 @@ export function createAggregateResolvers(
     readonly ddb?: DynamoDBDocumentClient;
     readonly endpointsTableName?: string;
   }): Promise<ProblemEndpointsRepository> {
-    const backend = selectBackend(env);
-    if (backend.kind === "pure") {
+    if (selectBackend(env).kind === "pure") {
       const sql = await acquireSqlExecutor();
-      return createProblemEndpointsRepository(backend.dialect, { sql });
+      return createProblemEndpointsRepository("turso", { sql });
     }
-
     const requiredInput = requireDdbAndTableName(
       input.ddb,
       input.endpointsTableName,
       "endpointsTableName",
-      backend.kind,
     );
-    if (backend.kind === "dynamodb") {
-      return createProblemEndpointsRepository("dynamodb", {
-        ddb: requiredInput.ddb,
-        endpointsTableName: requiredInput.tableName,
-      });
-    }
-    const sql = await acquireSqlExecutor();
-    return new MirroredProblemEndpointsRepository(
-      createProblemEndpointsRepository("dynamodb", {
-        ddb: requiredInput.ddb,
-        endpointsTableName: requiredInput.tableName,
-      }),
-      createProblemEndpointsRepository(backend.dialect, { sql }),
-    );
+    return createProblemEndpointsRepository("dynamodb", {
+      ddb: requiredInput.ddb,
+      endpointsTableName: requiredInput.tableName,
+    });
   }
 
   /** [Issue #2442 / Phase C2] Resolver for the CompetitorAccounts seam (mirrors resolveProblemEndpointsRepository). */
@@ -374,32 +265,19 @@ export function createAggregateResolvers(
     readonly ddb?: DynamoDBDocumentClient;
     readonly competitorAccountsTableName?: string;
   }): Promise<CompetitorAccountsRepository> {
-    const backend = selectBackend(env);
-    if (backend.kind === "pure") {
+    if (selectBackend(env).kind === "pure") {
       const sql = await acquireSqlExecutor();
-      return createCompetitorAccountsRepository(backend.dialect, { sql });
+      return createCompetitorAccountsRepository("turso", { sql });
     }
-
     const requiredInput = requireDdbAndTableName(
       input.ddb,
       input.competitorAccountsTableName,
       "competitorAccountsTableName",
-      backend.kind,
     );
-    if (backend.kind === "dynamodb") {
-      return createCompetitorAccountsRepository("dynamodb", {
-        ddb: requiredInput.ddb,
-        competitorAccountsTableName: requiredInput.tableName,
-      });
-    }
-    const sql = await acquireSqlExecutor();
-    return new MirroredCompetitorAccountsRepository(
-      createCompetitorAccountsRepository("dynamodb", {
-        ddb: requiredInput.ddb,
-        competitorAccountsTableName: requiredInput.tableName,
-      }),
-      createCompetitorAccountsRepository(backend.dialect, { sql }),
-    );
+    return createCompetitorAccountsRepository("dynamodb", {
+      ddb: requiredInput.ddb,
+      competitorAccountsTableName: requiredInput.tableName,
+    });
   }
 
   /** [Issue #2442 / Phase C2] Resolver for the SamlConfig sub-aggregate (mirrors resolveCompetitorAccountsRepository). */
@@ -407,32 +285,19 @@ export function createAggregateResolvers(
     readonly ddb?: DynamoDBDocumentClient;
     readonly competitorAccountsTableName?: string;
   }): Promise<SamlConfigRepository> {
-    const backend = selectBackend(env);
-    if (backend.kind === "pure") {
+    if (selectBackend(env).kind === "pure") {
       const sql = await acquireSqlExecutor();
-      return createSamlConfigRepository(backend.dialect, { sql });
+      return createSamlConfigRepository("turso", { sql });
     }
-
     const requiredInput = requireDdbAndTableName(
       input.ddb,
       input.competitorAccountsTableName,
       "competitorAccountsTableName",
-      backend.kind,
     );
-    if (backend.kind === "dynamodb") {
-      return createSamlConfigRepository("dynamodb", {
-        ddb: requiredInput.ddb,
-        competitorAccountsTableName: requiredInput.tableName,
-      });
-    }
-    const sql = await acquireSqlExecutor();
-    return new MirroredSamlConfigRepository(
-      createSamlConfigRepository("dynamodb", {
-        ddb: requiredInput.ddb,
-        competitorAccountsTableName: requiredInput.tableName,
-      }),
-      createSamlConfigRepository(backend.dialect, { sql }),
-    );
+    return createSamlConfigRepository("dynamodb", {
+      ddb: requiredInput.ddb,
+      competitorAccountsTableName: requiredInput.tableName,
+    });
   }
 
   /** [Issue #2442 / Phase C3] Resolver for the Disruptions seam (mirrors resolveCompetitorAccountsRepository). */
@@ -440,32 +305,19 @@ export function createAggregateResolvers(
     readonly ddb?: DynamoDBDocumentClient;
     readonly disruptionsTableName?: string;
   }): Promise<DisruptionsRepository> {
-    const backend = selectBackend(env);
-    if (backend.kind === "pure") {
+    if (selectBackend(env).kind === "pure") {
       const sql = await acquireSqlExecutor();
-      return createDisruptionsRepository(backend.dialect, { sql });
+      return createDisruptionsRepository("turso", { sql });
     }
-
     const requiredInput = requireDdbAndTableName(
       input.ddb,
       input.disruptionsTableName,
       "disruptionsTableName",
-      backend.kind,
     );
-    if (backend.kind === "dynamodb") {
-      return createDisruptionsRepository("dynamodb", {
-        ddb: requiredInput.ddb,
-        disruptionsTableName: requiredInput.tableName,
-      });
-    }
-    const sql = await acquireSqlExecutor();
-    return new MirroredDisruptionsRepository(
-      createDisruptionsRepository("dynamodb", {
-        ddb: requiredInput.ddb,
-        disruptionsTableName: requiredInput.tableName,
-      }),
-      createDisruptionsRepository(backend.dialect, { sql }),
-    );
+    return createDisruptionsRepository("dynamodb", {
+      ddb: requiredInput.ddb,
+      disruptionsTableName: requiredInput.tableName,
+    });
   }
 
   /** [Issue #2442 / Phase C4] Resolver for the AdminAuditLog seam (mirrors resolveDisruptionsRepository). */
@@ -473,32 +325,19 @@ export function createAggregateResolvers(
     readonly ddb?: DynamoDBDocumentClient;
     readonly adminAuditLogTableName?: string;
   }): Promise<AdminAuditLogRepository> {
-    const backend = selectBackend(env);
-    if (backend.kind === "pure") {
+    if (selectBackend(env).kind === "pure") {
       const sql = await acquireSqlExecutor();
-      return createAdminAuditLogRepository(backend.dialect, { sql });
+      return createAdminAuditLogRepository("turso", { sql });
     }
-
     const requiredInput = requireDdbAndTableName(
       input.ddb,
       input.adminAuditLogTableName,
       "adminAuditLogTableName",
-      backend.kind,
     );
-    if (backend.kind === "dynamodb") {
-      return createAdminAuditLogRepository("dynamodb", {
-        ddb: requiredInput.ddb,
-        adminAuditLogTableName: requiredInput.tableName,
-      });
-    }
-    const sql = await acquireSqlExecutor();
-    return new MirroredAdminAuditLogRepository(
-      createAdminAuditLogRepository("dynamodb", {
-        ddb: requiredInput.ddb,
-        adminAuditLogTableName: requiredInput.tableName,
-      }),
-      createAdminAuditLogRepository(backend.dialect, { sql }),
-    );
+    return createAdminAuditLogRepository("dynamodb", {
+      ddb: requiredInput.ddb,
+      adminAuditLogTableName: requiredInput.tableName,
+    });
   }
 
   /** [Issue #2442 / Phase C5] Resolver for the SamlIdps seam (mirrors resolveAdminAuditLogRepository). */
@@ -506,32 +345,19 @@ export function createAggregateResolvers(
     readonly ddb?: DynamoDBDocumentClient;
     readonly samlIdpsTableName?: string;
   }): Promise<SamlIdpsRepository> {
-    const backend = selectBackend(env);
-    if (backend.kind === "pure") {
+    if (selectBackend(env).kind === "pure") {
       const sql = await acquireSqlExecutor();
-      return createSamlIdpsRepository(backend.dialect, { sql });
+      return createSamlIdpsRepository("turso", { sql });
     }
-
     const requiredInput = requireDdbAndTableName(
       input.ddb,
       input.samlIdpsTableName,
       "samlIdpsTableName",
-      backend.kind,
     );
-    if (backend.kind === "dynamodb") {
-      return createSamlIdpsRepository("dynamodb", {
-        ddb: requiredInput.ddb,
-        samlIdpsTableName: requiredInput.tableName,
-      });
-    }
-    const sql = await acquireSqlExecutor();
-    return new MirroredSamlIdpsRepository(
-      createSamlIdpsRepository("dynamodb", {
-        ddb: requiredInput.ddb,
-        samlIdpsTableName: requiredInput.tableName,
-      }),
-      createSamlIdpsRepository(backend.dialect, { sql }),
-    );
+    return createSamlIdpsRepository("dynamodb", {
+      ddb: requiredInput.ddb,
+      samlIdpsTableName: requiredInput.tableName,
+    });
   }
 
   return {

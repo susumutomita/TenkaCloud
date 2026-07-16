@@ -80,7 +80,7 @@ export interface EventSharedResources {
   readonly disruptionsTableName: string;
   /**
    * Issue #950 (ADR-020 Phase D) / #2442 Phase C4: admin audit log 用 DDB table 名。 pure SQL
-   * backend (turso|sql) では table 自体が synth されず env も配線されないため、他の
+   * backend (turso) では table 自体が synth されず env も配線されないため、他の
    * `*TableName` field と同じ空文字 default 緩和を適用する (`resolveAdminAuditLogRepository` が
    * fail loud に受ける)。 tenant-scoped read route (`routes/audit-log.ts`) が使う。
    */
@@ -143,31 +143,31 @@ export interface EventSharedResources {
 export function buildEventSharedResources(runtime: ControlDataRuntime): EventSharedResources {
   return {
     runtime,
-    // [Issue #2440 / ADR-049 §5.1 Phase A5] pure SQL backend (turso|sql) 選択時は Events/Teams
+    // [Issue #2440 / ADR-049 §5.1 Phase A5] pure SQL backend (turso) 選択時は Events/Teams
     // table 自体が synth されない (= env も未配線) ため、module-load を`getEnv`の fail-fast に
-    // 委ねると cold start が Initialization Error で落ちる。空文字 default に緩和し、dynamodb /
-    // mirror backend での誤設定 (= 本来 table がある構成で env を配線し忘れた場合) は runtime
+    // 委ねると cold start が Initialization Error で落ちる。空文字 default に緩和し、dynamodb
+    // backend での誤設定 (= 本来 table がある構成で env を配線し忘れた場合) は runtime
     // resolver (`aggregate-resolvers.ts` の `requireDdbAndTableName`) が fail loud に受ける
     // (= silent fallback にはならない)。
     eventsTableName: process.env.EVENTS_TABLE_NAME ?? "",
     teamsTableName: process.env.TEAMS_TABLE_NAME ?? "",
-    // [Issue #2441 / Phase B PR-6] pure SQL backend (turso|sql) では Deployments table 自体が
+    // [Issue #2441 / Phase B PR-6] pure SQL backend (turso) では Deployments table 自体が
     // synth されず env も配線されないため、module-load を `getEnv` の fail-fast に委ねると
-    // cold start が Initialization Error で落ちる。空文字 default に緩和し、dynamodb / mirror
+    // cold start が Initialization Error で落ちる。空文字 default に緩和し、dynamodb
     // backend の誤設定は runtime resolver (`runtime-repositories.ts`) が fail loud に受ける
     // (= silent fallback にはならない、EVENTS_TABLE_NAME/TEAMS_TABLE_NAME と同じ緩和)。
     deploymentsTableName: process.env.DEPLOYMENTS_TABLE_NAME ?? "",
-    // [Issue #2442 / Phase C2] pure SQL backend (turso|sql) では CompetitorAccounts table
+    // [Issue #2442 / Phase C2] pure SQL backend (turso) では CompetitorAccounts table
     // 自体が synth されず env も配線されないため、`getEnv` の fail-fast に委ねると cold
     // start が Initialization Error で落ちる (= EventApiLambda 全 route が壊れる)。空文字
-    // default に緩和し、dynamodb / mirror backend の誤設定は runtime resolver が fail
+    // default に緩和し、dynamodb backend の誤設定は runtime resolver が fail
     // loud に受ける (= silent fallback にはならない、eventsTableName/deploymentsTableName
     // と同じ緩和)。
     competitorAccountsTableName: process.env.COMPETITOR_ACCOUNTS_TABLE_NAME ?? "",
-    // [Issue #2442 / Phase C3] pure SQL backend (turso|sql) では Disruptions table 自体が
+    // [Issue #2442 / Phase C3] pure SQL backend (turso) では Disruptions table 自体が
     // synth されず env も配線されないため、`getEnv` の fail-fast に委ねると cold start が
     // Initialization Error で落ちる (= EventApiLambda 全 route が壊れる)。空文字 default に
-    // 緩和し、dynamodb / mirror backend の誤設定は runtime resolver が fail loud に受ける
+    // 緩和し、dynamodb backend の誤設定は runtime resolver が fail loud に受ける
     // (= silent fallback にはならない、competitorAccountsTableName と同じ緩和)。
     disruptionsTableName: process.env.DISRUPTIONS_TABLE_NAME ?? "",
     adminAuditLogTableName: process.env.ADMIN_AUDIT_LOG_TABLE_NAME ?? "",
@@ -356,7 +356,7 @@ export function resolveEventRepositories(
  * default backend では従来と byte 互換の Get/UpdateCommand を `shared.ddb` 経由で発火する。
  *
  * [#2450] cold-start cache 済みの async resolver (injected `shared.runtime`) 経由で解決するため、
- * `CONTROL_DATA_BACKEND=turso|sql` でも Mirrored で動作する (read は canonical DDB の passthrough)。
+ * `CONTROL_DATA_BACKEND=turso` (pure SQL) でも動作する。
  * SSM GetParameter (WithDecryption) + libsql client 構築は turso 選択時のみ・Lambda instance
  * ごとに 1 回だけ (dynamodb default では SSM に触れず、 発火コマンドも従来と byte 互換)。
  * `Promise<EventsRepository>` を返すので caller は await してからメソッドを呼ぶ。
@@ -379,7 +379,7 @@ export function resolveEventsRepository(
  * `shared.ddb` 経由で発火し、 teamId 昇順の {@link TeamRecord}[] を返す。
  *
  * [#2450] events-only seam と同じく cold-start cache 済みの async resolver (injected `shared.runtime`)
- * 経由で解決するため、 `CONTROL_DATA_BACKEND=turso|sql` でも Mirrored で動作する。 `Promise` を返す。
+ * 経由で解決するため、 `CONTROL_DATA_BACKEND=turso` (pure SQL) でも動作する。 `Promise` を返す。
  */
 export function resolveTeamsRepository(shared: EventSharedResources): Promise<TeamsRepository> {
   return shared.runtime.resolveTeamsRepository({
@@ -393,7 +393,7 @@ export function resolveTeamsRepository(shared: EventSharedResources): Promise<Te
  * [Issue #2441 / Phase B1] Deployments READ seam for event-handler modules.
  *
  * Default backend stays DynamoDB and emits the same GSI1/base-table reads through
- * the same injected DocumentClient. `CONTROL_DATA_BACKEND=turso/sql` is the
+ * the same injected DocumentClient. `CONTROL_DATA_BACKEND=turso` is the
  * known B4 constraint: the control-data factory fails loudly until the SQL
  * Deployments backend exists.
  *
@@ -417,8 +417,8 @@ export function resolveDeploymentsRepository(
  * access — existing tests that mock `shared.ddb.send` pass unmodified).
  *
  * [#2467-era runtime] Delegates to the cold-start-cached injected `shared.runtime` (mirror of
- * {@link resolveDeploymentsRepository}), so `CONTROL_DATA_BACKEND=turso|sql|turso-mirror|
- * sql-mirror` all work. `Promise<DisruptionsRepository>` — caller must await before use.
+ * {@link resolveDeploymentsRepository}), so `CONTROL_DATA_BACKEND=turso` works.
+ * `Promise<DisruptionsRepository>` — caller must await before use.
  */
 export function resolveDisruptionsRepository(
   shared: Pick<EventSharedResources, "runtime" | "ddb" | "disruptionsTableName">,
@@ -434,7 +434,7 @@ export function resolveDisruptionsRepository(
  * — Issue #1292). Default backend stays DynamoDB and emits the same Query through the same
  * injected DocumentClient (byte-identical to the pre-seam inline access). Delegates to the
  * cold-start-cached injected `shared.runtime` (mirror of {@link resolveDisruptionsRepository}), so
- * `CONTROL_DATA_BACKEND=turso|sql|turso-mirror|sql-mirror` all work.
+ * `CONTROL_DATA_BACKEND=turso` works.
  */
 export function resolveAdminAuditLogRepository(
   shared: Pick<EventSharedResources, "runtime" | "ddb" | "adminAuditLogTableName">,
@@ -489,7 +489,7 @@ function parseProblemsProvenance(
  * [Issue #2441 / Phase B PR-6] repository seam (`listByTenantAndEvent`) 経由に統一。
  * 従来は呼び出し側が `projectionExpression` (= `"jobId, teamId, problemId, #s"`) を渡すと
  * 本 helper が raw `QueryCommand` を直接発火する近道を持っていたが、これは repository seam を
- * 迂回する唯一の残存経路で、pure SQL backend (turso|sql) では table 自体が無いため
+ * 迂回する唯一の残存経路で、pure SQL backend (turso) では table 自体が無いため
  * `TableName: ""` で即死していた (= B1〜B3 の 62-site 移行から漏れていた回帰)。default backend
  * では projection 分だけ読み取りペイロードが増えるが (GSI1 の full-item Query)、bulk-deploy /
  * scheduled auto-deploy は低頻度の operator 操作であり、backend 抽象を全サイトで貫徹する方を

@@ -12,9 +12,9 @@ import { TeamsTable } from "./teams-table.js";
 
 export interface BuildControlDataTablesArgs {
   /**
-   * [Issue #2440 / #2441 / #2442] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき true。
+   * [Issue #2440 / #2441 / #2442] `controlDataBackend` が純 SQL (`turso`) のとき true。
    * 7 つの control-data DDB table を一切 synth しない (= DynamoDB standing cost をゼロにする)。
-   * `turso-mirror`/`sql-mirror` は DDB が正本のまま (= Mirrored) なので通常どおりテーブルを作る。
+   * `dynamodb` (default) では従来どおりテーブルを作る。
    */
   readonly pureSql: boolean;
 }
@@ -53,7 +53,7 @@ export function buildControlDataTables(
   // ADR-004 Phase 1: Event / Team の 2 Table を Deployments と並列に持つ。
   // Phase 2 で Bulk Deploy / Bulk Teardown を State Machine 経由で動かす。
   //
-  // [Issue #2440 / ADR-049 §5.1 Phase A5] `controlDataBackend` が純 SQL (`turso`/`sql`) の
+  // [Issue #2440 / ADR-049 §5.1 Phase A5] `controlDataBackend` が純 SQL (`turso`) の
   // ときは Events/Teams を **synth しない** — DynamoDB standing cost (Events+Teams+GSI 3本 =
   // 5 ユニット常時) をゼロにする。
   //
@@ -67,7 +67,7 @@ export function buildControlDataTables(
   // ADR-012 Phase 3.A: Endpoint registry。per (tenant, team, problem, slot) で override
   // URL を保管する。default URL は read-through で deployment.stackOutputs から算出。
   //
-  // [Issue #2442 / Phase C1] `controlDataBackend` が純 SQL (`turso`/`sql`) のときは Events/Teams/
+  // [Issue #2442 / Phase C1] `controlDataBackend` が純 SQL (`turso`) のときは Events/Teams/
   // Deployments と同条件で **synth しない**。62 handler サイトが repository seam
   // (`resolveProblemEndpointsRepository`) 経由で読み書きするため、pure SQL では本 table への
   // 参照が残らない。

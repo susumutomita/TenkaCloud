@@ -63,7 +63,7 @@ async function writeBulkDeployChunk(
  * repository seam の `markDeploying(tenantId, eventId, at)` に移設 — 条件不成立は
  * conflict outcome として返り no-op (= 旧 ConditionalCheckFailed 握り潰しと同じ挙動)。
  * bulk-deploy は Teams table を必ず配線する (手動 route / scheduled deploy とも) ので、
- * mirror backend も効く runtime resolver 経由で解決する。
+ * どちらの backend でも効く runtime resolver 経由で解決する。
  */
 export async function markBulkEventDeploying(
   shared: EventSharedResources,

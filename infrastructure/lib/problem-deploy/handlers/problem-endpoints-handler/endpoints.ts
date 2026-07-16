@@ -38,7 +38,7 @@ function isAuthorizedDeployment(d: Partial<DeploymentItem> | undefined): d is Au
 
 /**
  * [Issue #2442 / Phase C1] `shared.endpointsTableName` が空文字なのは 2 通りある:
- *   - pure SQL backend (`turso`/`sql`) 選択時 — `ProblemDeployBackendStack` が本 table を
+ *   - pure SQL backend (`turso`) 選択時 — `ProblemDeployBackendStack` が本 table を
  *     synth しないため env も配線されない (= 正常。 store.ts の seam が SQL executor 直結で処理する)
  *   - 旧 deploy chain — table 自体が未配線 (= 真の misconfigured)
  * injected `shared.runtime.needsManualPrune()` は「pure SQL backend が選択されているか」を返す

@@ -55,9 +55,9 @@ describe("scripts/ops/turso-live-guide (#2617)", () => {
     expect(guide).toContain("infrastructure/environments/staging/.env");
   });
 
-  it("should reject a non-pure backend and missing SAML verification flag", () => {
+  it("should reject a non-turso backend and missing SAML verification flag", () => {
     const env = validEnvironment();
-    env.CDK_PARAM_CONTROL_DATA_BACKEND = "turso-mirror";
+    env.CDK_PARAM_CONTROL_DATA_BACKEND = "dynamodb";
     env.CDK_PARAM_FEATURES = '{"samlSso":false}';
 
     expect(validateTursoLiveEnvironment(env)).toEqual(

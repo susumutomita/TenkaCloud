@@ -109,10 +109,10 @@ interface EventHotTable {
  * から読む。
  *
  * events/teams/problemEndpoints は [Issue #2440 / ADR-049 §5.1 Phase A5、Issue #2442 / Phase C1]
- * 純 SQL backend (turso|sql) 選択時は table 自体が synth されず env も空文字になる
+ * 純 SQL backend (turso) 選択時は table 自体が synth されず env も空文字になる
  * (`event-handler/shared.ts` / `generic-scoring-handler/shared.ts` 側で fail-fast を緩和済み)。
  * その場合はこの role を **監視対象から外す** (= DescribeTable(TableName="") で fail するのを
- * 防ぐ)。dynamodb / mirror backend では従来どおり 5 role とも揃う。
+ * 防ぐ)。dynamodb backend では従来どおり 5 role とも揃う。
  *
  * この並びは stack 側の `EventCapacityRunbook` 配線 (allowedValues + IAM) と
  * `docs/operations/dynamodb-event-capacity.md` の表と対応する。event-hot テーブルを増減する

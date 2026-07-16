@@ -164,26 +164,6 @@ export const synthWithControlDataBackendTurso = memoizeTemplate((): Template => 
   return Template.fromStack(stack);
 });
 
-// [Issue #2440 / ADR-049 §5.1 Phase A5] controlDataBackend: "turso-mirror" (= 移行ブリッジ、
-// DDB 正本 + SQL replica) を反映させた synth。純 SQL の `synthWithControlDataBackendTurso` と
-// 対で、Events/Teams テーブルが従来どおり存在することを pin する。
-export const synthWithControlDataBackendTursoMirror = memoizeTemplate((): Template => {
-  const app = new cdk.App();
-  const stack = new ProblemDeployBackendStack(app, "TestStackControlDataTursoMirror", {
-    eventBusArn: "arn:aws:events:ap-northeast-1:123456789012:event-bus/test-bus",
-    sourceBucketName: "test-source-bucket",
-    sourceObjectKey: "source.zip",
-    problemsCatalog: { "hello-world": "problems/challenges/hello-world" },
-    problemsScoring: {},
-    problemsEndpoints: {},
-    controlDataBackend: "turso-mirror",
-    tursoDatabaseUrl: "libsql://example.turso.io",
-    tursoAuthTokenParameterName: "/tenkacloud/development/turso-token",
-    environmentName: "development",
-  });
-  return Template.fromStack(stack);
-});
-
 // Issue #2291: Lambda deploy 経路 (CfnDeployLambda + EmitDeployFailedEvent + DeployFailureRule) を
 // 明示的に検証するための helper。既定反転後 (#2291 完了) は synthDefault と同一 shape なので、
 // 重複 synth を避けて synthDefault のメモ化 Template をそのまま返す。Lambda 経路を意図する

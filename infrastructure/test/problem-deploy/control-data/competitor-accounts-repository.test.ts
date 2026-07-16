@@ -12,7 +12,6 @@ import {
   DynamoDbCompetitorAccountsRepository,
   SqlCompetitorAccountsRepository,
 } from "../../../lib/problem-deploy/control-data/competitor-accounts-repository";
-import { MirroredCompetitorAccountsRepository } from "../../../lib/problem-deploy/control-data/mirrored-repositories";
 import { createControlDataRuntime } from "../../../lib/problem-deploy/control-data/runtime-repositories";
 import type { CompetitorAccountRecord } from "../../../lib/problem-deploy/control-data/types";
 import { makeFakeDdb, makeSqliteExecutor } from "./control-data-write.test-helpers";
@@ -21,8 +20,8 @@ import { makeFakeDdb, makeSqliteExecutor } from "./control-data-write.test-helpe
  * [Issue #2442 / Phase C2] DynamoDB byte-pin + SQLite round-trip test suite for
  * the CompetitorAccounts seam. Mirrors `problem-endpoints-repository.test.ts`'s
  * structure: byte-pin for the DynamoDB backend (conditional writes included),
- * SQL round-trip, factory / runtime-resolver coverage for all five
- * `CONTROL_DATA_BACKEND` values.
+ * SQL round-trip, factory / runtime-resolver coverage for both
+ * `CONTROL_DATA_BACKEND` values (dynamodb / turso, #2677).
  */
 
 const TABLE = "CompetitorAccounts";
@@ -359,78 +358,6 @@ describe("SqlCompetitorAccountsRepository", () => {
   });
 });
 
-describe("MirroredCompetitorAccountsRepository", () => {
-  it("should apply createAccount to the replica only when canonical succeeds", async () => {
-    const canonical = new DynamoDbCompetitorAccountsRepository(makeFakeDdb(), TABLE);
-    const replica = new SqlCompetitorAccountsRepository(makeSqliteExecutor());
-    const repo = new MirroredCompetitorAccountsRepository(canonical, replica);
-
-    expect(await repo.createAccount(record())).toEqual({ outcome: "created" });
-    await expect(replica.getAccount("tenant-acme", "222222222222")).resolves.toEqual(record());
-
-    // A duplicate create fails on canonical (DDB) — the replica must not see a second write.
-    expect(await repo.createAccount(record())).toEqual({ outcome: "conflict" });
-  });
-
-  it("should apply markVerified to the replica only when canonical finds the row", async () => {
-    const canonical = new DynamoDbCompetitorAccountsRepository(makeFakeDdb(), TABLE);
-    const replica = new SqlCompetitorAccountsRepository(makeSqliteExecutor());
-    const repo = new MirroredCompetitorAccountsRepository(canonical, replica);
-    await repo.createAccount(record());
-
-    const outcome = await repo.markVerified(
-      "tenant-acme",
-      "222222222222",
-      "2026-07-08T13:00:00.000Z",
-    );
-
-    expect(outcome.outcome).toBe("updated");
-    await expect(replica.getAccount("tenant-acme", "222222222222")).resolves.toMatchObject({
-      verified: true,
-    });
-
-    expect(
-      await repo.markVerified("tenant-acme", "999999999999", "2026-07-08T13:00:00.000Z"),
-    ).toEqual({ outcome: "not_found" });
-  });
-
-  it("should apply deleteAccount to the replica only when canonical finds the row", async () => {
-    const canonical = new DynamoDbCompetitorAccountsRepository(makeFakeDdb(), TABLE);
-    const replica = new SqlCompetitorAccountsRepository(makeSqliteExecutor());
-    const repo = new MirroredCompetitorAccountsRepository(canonical, replica);
-    await repo.createAccount(record());
-
-    expect(await repo.deleteAccount("tenant-acme", "222222222222")).toEqual({
-      outcome: "updated",
-    });
-    await expect(replica.getAccount("tenant-acme", "222222222222")).resolves.toBeUndefined();
-    expect(await repo.deleteAccount("tenant-acme", "222222222222")).toEqual({
-      outcome: "not_found",
-    });
-  });
-
-  it("should serve reads from canonical only", async () => {
-    const canonicalGet = vi.fn(async () => record({ alias: "canonical" }));
-    const replicaGet = vi.fn(async () => record({ alias: "replica" }));
-    const stub = (get: typeof canonicalGet) => ({
-      createAccount: async () => ({ outcome: "created" as const }),
-      listAccounts: async () => [],
-      getAccount: get,
-      markVerified: async () => ({ outcome: "not_found" as const }),
-      deleteAccount: async () => ({ outcome: "not_found" as const }),
-      hasRemainingAccounts: async () => false,
-      forEachCompetitorAccountPage: async () => {},
-    });
-    const repo = new MirroredCompetitorAccountsRepository(stub(canonicalGet), stub(replicaGet));
-
-    const out = await repo.getAccount("tenant-acme", "222222222222");
-
-    expect(out?.alias).toBe("canonical");
-    expect(canonicalGet).toHaveBeenCalledWith("tenant-acme", "222222222222");
-    expect(replicaGet).not.toHaveBeenCalled();
-  });
-});
-
 describe("createCompetitorAccountsRepository", () => {
   const ddbDeps = () => ({ ddb: makeFakeDdb(), competitorAccountsTableName: TABLE });
 
@@ -446,13 +373,10 @@ describe("createCompetitorAccountsRepository", () => {
     );
   });
 
-  it("should select the SQL backend for turso and sql flags", () => {
+  it("should select the SQL backend for the turso flag", () => {
     expect(
       createCompetitorAccountsRepository("turso", { sql: makeSqliteExecutor() }),
     ).toBeInstanceOf(SqlCompetitorAccountsRepository);
-    expect(createCompetitorAccountsRepository("sql", { sql: makeSqliteExecutor() })).toBeInstanceOf(
-      SqlCompetitorAccountsRepository,
-    );
   });
 
   it("should fail loudly when the SQL backend is selected without a SqlExecutor", () => {
@@ -462,6 +386,16 @@ describe("createCompetitorAccountsRepository", () => {
   it("should reject an unknown backend value", () => {
     expect(() => createCompetitorAccountsRepository("postgres", ddbDeps())).toThrow(
       /Unknown CONTROL_DATA_BACKEND/,
+    );
+  });
+
+  it.each([
+    "sql",
+    "turso-mirror",
+    "sql-mirror",
+  ])("should reject the removed backend value %s", (backend) => {
+    expect(() => createCompetitorAccountsRepository(backend, ddbDeps())).toThrow(
+      /expected one of: dynamodb, turso/,
     );
   });
 
@@ -490,7 +424,6 @@ describe("resolveCompetitorAccountsRepository (runtime)", () => {
 
   it.each([
     "turso",
-    "sql",
   ])("should return the SQL backend for CONTROL_DATA_BACKEND=%s without DDB inputs", async (backend) => {
     const runtime = createControlDataRuntime({
       env: {
@@ -510,39 +443,15 @@ describe("resolveCompetitorAccountsRepository (runtime)", () => {
     );
   });
 
-  it.each([
-    "turso-mirror",
-    "sql-mirror",
-  ])("should return the mirrored backend for CONTROL_DATA_BACKEND=%s", async (backend) => {
+  it("should fail loudly when the dynamodb backend is missing ddb/competitorAccountsTableName", async () => {
     const runtime = createControlDataRuntime({
-      env: {
-        CONTROL_DATA_BACKEND: backend,
-        TURSO_DATABASE_URL: "file:local.db",
-        TURSO_AUTH_TOKEN_PARAMETER_NAME: "/tenkacloud/dev/sql-token",
-      },
-      ssm: { send: vi.fn().mockResolvedValue({ Parameter: { Value: "secret-token" } }) },
-      createClient: vi.fn().mockReturnValue({
-        execute: vi.fn().mockResolvedValue({ rows: [], rowsAffected: 0 }),
-        batch: vi.fn().mockResolvedValue([]),
-      }),
-    });
-
-    const repo = await runtime.resolveCompetitorAccountsRepository({
-      ddb: makeFakeDdb(),
-      competitorAccountsTableName: TABLE,
-    });
-    expect(repo).toBeInstanceOf(MirroredCompetitorAccountsRepository);
-  });
-
-  it("should fail loudly when mirror/dynamodb backends are missing ddb/competitorAccountsTableName", async () => {
-    const runtime = createControlDataRuntime({
-      env: { CONTROL_DATA_BACKEND: "turso-mirror" },
+      env: { CONTROL_DATA_BACKEND: "dynamodb" },
       ssm: { send: vi.fn() },
       createClient: vi.fn(),
     });
 
     await expect(
       runtime.resolveCompetitorAccountsRepository({ ddb: makeFakeDdb() }),
-    ).rejects.toThrow(/mirror backend requires ddb\/competitorAccountsTableName/);
+    ).rejects.toThrow(/dynamodb backend requires ddb\/competitorAccountsTableName/);
   });
 });

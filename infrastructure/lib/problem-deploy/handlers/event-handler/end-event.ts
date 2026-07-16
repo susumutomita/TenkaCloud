@@ -38,7 +38,7 @@ export type EndEventOutcome =
  * [#2437 Phase A2] READY→ENDED の条件付き書き込みは repository seam の
  * `endEvent(tenantId, eventId, at)` に移設。 CCF catch + probe Get の分岐は
  * `EventMutationOutcome` union の分岐に置き換え (HTTP ステータス対応は不変)。
- * mirror backend (`CONTROL_DATA_BACKEND=turso`) でも効くよう、 event-api の write は
+ * turso backend (`CONTROL_DATA_BACKEND=turso`) でも効くよう、 event-api の write は
  * `resolveEventRepositories` (= runtime resolver 経由、 default backend は byte 互換) を使う。
  */
 export async function endEvent(

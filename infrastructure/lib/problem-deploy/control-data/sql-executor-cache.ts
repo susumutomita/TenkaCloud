@@ -21,9 +21,7 @@ export interface RuntimeDependencies {
 function required(value: string | undefined, name: string): string {
   const normalized = value?.trim();
   if (!normalized) {
-    throw new Error(
-      `${name} is required when CONTROL_DATA_BACKEND is turso/sql/turso-mirror/sql-mirror.`,
-    );
+    throw new Error(`${name} is required when CONTROL_DATA_BACKEND is turso.`);
   }
   return normalized;
 }

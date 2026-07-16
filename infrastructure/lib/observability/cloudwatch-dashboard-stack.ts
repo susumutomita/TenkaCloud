@@ -21,27 +21,27 @@ export interface ObservabilityStackProps extends cdk.StackProps {
   };
   readonly dynamoDbTableNames: {
     /**
-     * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`/`sql`) のときは
+     * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`) のときは
      * Deployments table が synth されないため `undefined`。 dashboard は該当 widget を省く
      * (= default-safe、既存 dynamodb backend の dashboard body は byte 互換)。
      */
     readonly deployments?: string;
     /**
-     * [Issue #2440 / ADR-049 §5.1 Phase A5] `controlDataBackend` が純 SQL (`turso`/`sql`) の
+     * [Issue #2440 / ADR-049 §5.1 Phase A5] `controlDataBackend` が純 SQL (`turso`) の
      * ときは Events/Teams table が synth されないため `undefined`。 dashboard は該当 widget を
      * 省く (= default-safe、既存 dynamodb backend の dashboard body は byte 互換)。
      */
     readonly events?: string;
     readonly teams?: string;
     /**
-     * [Issue #2442 / Phase C2] `controlDataBackend` が純 SQL (`turso`/`sql`) のときは
+     * [Issue #2442 / Phase C2] `controlDataBackend` が純 SQL (`turso`) のときは
      * CompetitorAccounts table が synth されないため `undefined`。 dashboard は該当 widget を
      * 省く (= default-safe、既存 dynamodb backend の dashboard body は byte 互換、
      * {@link deployments} と同じ条件)。
      */
     readonly competitorAccounts?: string;
     /**
-     * [Issue #2442 / Phase C1] `controlDataBackend` が純 SQL (`turso`/`sql`) のときは
+     * [Issue #2442 / Phase C1] `controlDataBackend` が純 SQL (`turso`) のときは
      * ProblemEndpoints table が synth されないため `undefined`。 dashboard は該当 widget を省く
      * (= default-safe、既存 dynamodb backend の dashboard body は byte 互換、
      * {@link deployments} と同じ条件)。

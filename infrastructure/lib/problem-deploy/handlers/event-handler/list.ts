@@ -114,7 +114,7 @@ export async function getEventDetail(
   // [ADR-049 §5.1] Event 行の point read も Teams 一覧も repository seam 経由 (getEvent が
   // tenant scope + 404 判定を、 listTeamsByEvent が base-table query を担う)。 default backend
   // = dynamodb なので発火する GetCommand / QueryCommand は従来と byte 互換 (= 同 table / 同 Key
-  // / 同 KeyConditionExpression / 同 client)、 CFn 差分 0。 CONTROL_DATA_BACKEND を turso/sql に
+  // / 同 KeyConditionExpression / 同 client)、 CFn 差分 0。 CONTROL_DATA_BACKEND を turso に
   // 切替えると同 read が SQLite に向く (適用は @libsql adapter 配線後)。 listTeamsByEvent は
   // teamId 昇順で TeamRecord[] (物理キー無し) を返すが、 下流は teamId / internalSlug /
   // displayName / awsAccountId の非機密 field だけを projection する。

@@ -11,7 +11,6 @@ import {
   DynamoDbDisruptionsRepository,
   SqlDisruptionsRepository,
 } from "../../../lib/problem-deploy/control-data/disruptions-repository";
-import { MirroredDisruptionsRepository } from "../../../lib/problem-deploy/control-data/mirrored-repositories";
 import { createControlDataRuntime } from "../../../lib/problem-deploy/control-data/runtime-repositories";
 import type { DisruptionRecurringRecord } from "../../../lib/problem-deploy/control-data/types";
 import type { DisruptionAuditRow } from "../../../lib/problem-deploy/handlers/event-handler/disruption-types";
@@ -21,7 +20,7 @@ import { makeFakeDdb, makeSqliteExecutor } from "./control-data-write.test-helpe
  * [Issue #2442 / Phase C3] DynamoDB byte-pin + SQLite round-trip test suite for the
  * Disruptions seam. Mirrors `competitor-accounts-repository.test.ts`'s structure: byte-pin
  * for the DynamoDB backend (conditional writes included), SQL round-trip, factory /
- * runtime-resolver coverage for all five `CONTROL_DATA_BACKEND` values.
+ * runtime-resolver coverage for both `CONTROL_DATA_BACKEND` values (#2677).
  */
 
 const TABLE = "Disruptions";
@@ -543,140 +542,6 @@ describe("SqlDisruptionsRepository", () => {
   });
 });
 
-describe("MirroredDisruptionsRepository", () => {
-  it("should apply claimFireIdempotency to the replica only when canonical claims", async () => {
-    const canonical = new DynamoDbDisruptionsRepository(makeFakeDdb(), TABLE);
-    const replica = new SqlDisruptionsRepository(makeSqliteExecutor());
-    const repo = new MirroredDisruptionsRepository(canonical, replica);
-
-    expect(await repo.claimFireIdempotency(auditRow())).toEqual({ outcome: "claimed" });
-    await expect(replica.getFireIdempotencyRecord("tenant-acme", "req-12345678")).resolves.toEqual(
-      auditRow(),
-    );
-
-    // A duplicate claim fails on canonical (DDB) — the replica must not see a second write.
-    expect(await repo.claimFireIdempotency(auditRow())).toEqual({ outcome: "already" });
-  });
-
-  it("should write-through appendAudit / putRecurringRegistry unconditionally", async () => {
-    const canonical = new DynamoDbDisruptionsRepository(makeFakeDdb(), TABLE);
-    const replica = new SqlDisruptionsRepository(makeSqliteExecutor());
-    const repo = new MirroredDisruptionsRepository(canonical, replica);
-
-    await repo.appendAudit(auditRow());
-    await repo.putRecurringRegistry(recurringRecord());
-
-    await expect(
-      replica.listAuditPage("01HZX0EVENT000000000000001", { limit: 10 }),
-    ).resolves.toMatchObject({ items: [auditRow()] });
-    await expect(
-      replica.getRecurringRegistry("01HZX0EVENT000000000000001", "req-recur-1"),
-    ).resolves.toEqual(recurringRecord());
-  });
-
-  it("should apply cancelRecurringRegistry to the replica only when canonical updates", async () => {
-    const canonical = new DynamoDbDisruptionsRepository(makeFakeDdb(), TABLE);
-    const replica = new SqlDisruptionsRepository(makeSqliteExecutor());
-    const repo = new MirroredDisruptionsRepository(canonical, replica);
-    await repo.putRecurringRegistry(recurringRecord());
-
-    const outcome = await repo.cancelRecurringRegistry(
-      "01HZX0EVENT000000000000001",
-      "req-recur-1",
-      "tenant-acme",
-      "2026-07-08T13:00:00.000Z",
-    );
-
-    expect(outcome).toEqual({ outcome: "updated" });
-    await expect(
-      replica.getRecurringRegistry("01HZX0EVENT000000000000001", "req-recur-1"),
-    ).resolves.toMatchObject({ cancelledAt: "2026-07-08T13:00:00.000Z" });
-
-    expect(
-      await repo.cancelRecurringRegistry(
-        "01HZX0EVENT000000000000001",
-        "req-recur-1",
-        "tenant-other",
-        "2026-07-08T13:00:00.000Z",
-      ),
-    ).toEqual({ outcome: "not_found" });
-  });
-
-  it("should apply claimExecutionSlot to the replica only when canonical claims", async () => {
-    const canonical = new DynamoDbDisruptionsRepository(makeFakeDdb(), TABLE);
-    const replica = new SqlDisruptionsRepository(makeSqliteExecutor());
-    const repo = new MirroredDisruptionsRepository(canonical, replica);
-    const input = {
-      requestId: "req-1",
-      teamId: "team-a",
-      phase: "event" as const,
-      disruptionId: "router-throttle",
-      eventId: "01HZX0EVENT000000000000001",
-      problemId: "battle-1",
-      tenantId: "tenant-acme",
-      firedAt: "2026-07-08T12:00:00.000Z",
-      expiresAt: 1_800_000_000,
-    };
-
-    expect(await repo.claimExecutionSlot(input)).toEqual({ outcome: "claimed" });
-    expect(await repo.claimExecutionSlot(input)).toEqual({ outcome: "already" });
-  });
-
-  it("should serve reads from canonical only", async () => {
-    const canonicalGet = vi.fn(async () => auditRow({ requestId: "canonical" }));
-    const replicaGet = vi.fn(async () => auditRow({ requestId: "replica" }));
-    const stub = (get: typeof canonicalGet) => ({
-      claimFireIdempotency: async () => ({ outcome: "claimed" as const }),
-      getFireIdempotencyRecord: get,
-      appendAudit: async () => {},
-      listAuditPage: async () => ({ items: [] }),
-      listAuditSince: async () => [],
-      putRecurringRegistry: async () => {},
-      listRecurringByEvent: async () => [],
-      getRecurringRegistry: async () => undefined,
-      cancelRecurringRegistry: async () => ({ outcome: "not_found" as const }),
-      claimExecutionSlot: async () => ({ outcome: "claimed" as const }),
-      pruneExpired: async () => 0,
-    });
-    const repo = new MirroredDisruptionsRepository(stub(canonicalGet), stub(replicaGet));
-
-    const out = await repo.getFireIdempotencyRecord("tenant-acme", "req-12345678");
-
-    expect(out?.requestId).toBe("canonical");
-    expect(canonicalGet).toHaveBeenCalledWith("tenant-acme", "req-12345678");
-    expect(replicaGet).not.toHaveBeenCalled();
-  });
-
-  it("should prune the replica first, then return the canonical count", async () => {
-    const canonicalPrune = vi.fn(async () => 3);
-    const replicaPrune = vi.fn(async () => 1);
-    const order: string[] = [];
-    const stub = (prune: () => Promise<number>, label: string) => ({
-      claimFireIdempotency: async () => ({ outcome: "claimed" as const }),
-      getFireIdempotencyRecord: async () => undefined,
-      appendAudit: async () => {},
-      listAuditPage: async () => ({ items: [] }),
-      listAuditSince: async () => [],
-      putRecurringRegistry: async () => {},
-      listRecurringByEvent: async () => [],
-      getRecurringRegistry: async () => undefined,
-      cancelRecurringRegistry: async () => ({ outcome: "not_found" as const }),
-      claimExecutionSlot: async () => ({ outcome: "claimed" as const }),
-      pruneExpired: async () => {
-        order.push(label);
-        return prune();
-      },
-    });
-    const repo = new MirroredDisruptionsRepository(
-      stub(canonicalPrune, "canonical"),
-      stub(replicaPrune, "replica"),
-    );
-
-    expect(await repo.pruneExpired(500)).toBe(3);
-    expect(order).toEqual(["replica", "canonical"]);
-  });
-});
-
 describe("createDisruptionsRepository", () => {
   const ddbDeps = () => ({ ddb: makeFakeDdb(), disruptionsTableName: TABLE });
 
@@ -692,11 +557,8 @@ describe("createDisruptionsRepository", () => {
     );
   });
 
-  it("should select the SQL backend for turso and sql flags", () => {
+  it("should select the SQL backend for the turso flag", () => {
     expect(createDisruptionsRepository("turso", { sql: makeSqliteExecutor() })).toBeInstanceOf(
-      SqlDisruptionsRepository,
-    );
-    expect(createDisruptionsRepository("sql", { sql: makeSqliteExecutor() })).toBeInstanceOf(
       SqlDisruptionsRepository,
     );
   });
@@ -705,10 +567,12 @@ describe("createDisruptionsRepository", () => {
     expect(() => createDisruptionsRepository("turso", {})).toThrow(/requires a SqlExecutor/);
   });
 
-  it("should reject an unknown backend value", () => {
-    expect(() => createDisruptionsRepository("postgres", ddbDeps())).toThrow(
-      /Unknown CONTROL_DATA_BACKEND/,
-    );
+  it("should reject unknown and removed backend values (#2677)", () => {
+    for (const backend of ["postgres", "sql", "turso-mirror", "sql-mirror"]) {
+      expect(() => createDisruptionsRepository(backend, ddbDeps())).toThrow(
+        /Unknown CONTROL_DATA_BACKEND.*expected one of: dynamodb, turso/,
+      );
+    }
   });
 
   it("should fail loudly when DynamoDB deps are missing", () => {
@@ -734,13 +598,10 @@ describe("resolveDisruptionsRepository (runtime)", () => {
     expect(repo).toBeInstanceOf(DynamoDbDisruptionsRepository);
   });
 
-  it.each([
-    "turso",
-    "sql",
-  ])("should return the SQL backend for CONTROL_DATA_BACKEND=%s without DDB inputs", async (backend) => {
+  it("should return the SQL backend for CONTROL_DATA_BACKEND=turso without DDB inputs", async () => {
     const runtime = createControlDataRuntime({
       env: {
-        CONTROL_DATA_BACKEND: backend,
+        CONTROL_DATA_BACKEND: "turso",
         TURSO_DATABASE_URL: "file:local.db",
         TURSO_AUTH_TOKEN_PARAMETER_NAME: "/tenkacloud/dev/sql-token",
       },
@@ -756,39 +617,15 @@ describe("resolveDisruptionsRepository (runtime)", () => {
     );
   });
 
-  it.each([
-    "turso-mirror",
-    "sql-mirror",
-  ])("should return the mirrored backend for CONTROL_DATA_BACKEND=%s", async (backend) => {
+  it("should fail loudly when the dynamodb backend is missing ddb/disruptionsTableName", async () => {
     const runtime = createControlDataRuntime({
-      env: {
-        CONTROL_DATA_BACKEND: backend,
-        TURSO_DATABASE_URL: "file:local.db",
-        TURSO_AUTH_TOKEN_PARAMETER_NAME: "/tenkacloud/dev/sql-token",
-      },
-      ssm: { send: vi.fn().mockResolvedValue({ Parameter: { Value: "secret-token" } }) },
-      createClient: vi.fn().mockReturnValue({
-        execute: vi.fn().mockResolvedValue({ rows: [], rowsAffected: 0 }),
-        batch: vi.fn().mockResolvedValue([]),
-      }),
-    });
-
-    const repo = await runtime.resolveDisruptionsRepository({
-      ddb: makeFakeDdb(),
-      disruptionsTableName: TABLE,
-    });
-    expect(repo).toBeInstanceOf(MirroredDisruptionsRepository);
-  });
-
-  it("should fail loudly when mirror/dynamodb backends are missing ddb/disruptionsTableName", async () => {
-    const runtime = createControlDataRuntime({
-      env: { CONTROL_DATA_BACKEND: "turso-mirror" },
+      env: { CONTROL_DATA_BACKEND: "dynamodb" },
       ssm: { send: vi.fn() },
       createClient: vi.fn(),
     });
 
     await expect(runtime.resolveDisruptionsRepository({ ddb: makeFakeDdb() })).rejects.toThrow(
-      /mirror backend requires ddb\/disruptionsTableName/,
+      /dynamodb backend requires ddb\/disruptionsTableName/,
     );
   });
 });

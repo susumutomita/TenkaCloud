@@ -125,11 +125,11 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
    * event-handler の `getEventDetail` が Events / Teams repository を組み立てる cold-start factory
    * (`createEventsRepository` / `createTeamsRepository`) の seam を切替える。default (未指定 /
    * `dynamodb`) は監査 Lambda 群 (deploy-api / event-api / competitor-accounts-api /
-   * system-audit-writer) の env を足さず在来 DDB 経路 (= CFn テンプレ byte 互換)。`turso` / `sql` の
+   * system-audit-writer) の env を足さず在来 DDB 経路 (= CFn テンプレ byte 互換)。`turso` の
    * ときだけ各 Lambda env に `CONTROL_DATA_BACKEND` を注入する。
    */
   readonly controlDataBackend?: string;
-  /** Public remote libSQL URL. Required when controlDataBackend is turso/sql. */
+  /** Public remote libSQL URL. Required when controlDataBackend is turso. */
   readonly tursoDatabaseUrl?: string;
   /** SSM SecureString parameter name containing the remote libSQL auth token. */
   readonly tursoAuthTokenParameterName?: string;
@@ -248,17 +248,17 @@ export class ProblemDeployBackendStack extends cdk.Stack {
    * 跨ぐため公開)。grantReadData は呼び出し側で行う。
    *
    * [Issue #2441 / Phase B PR-6 / ADR-049 §5.1] `controlDataBackend` が純 SQL
-   * (`turso`/`sql`) のときは本 table を **synth しない** (= `undefined`) — DynamoDB
+   * (`turso`) のときは本 table を **synth しない** (= `undefined`) — DynamoDB
    * standing cost (テーブル+GSI3本=4ユニット常時) をゼロにする PR-6 の核心。
-   * `dynamodb` / `*-mirror` では従来どおり必ず存在する ({@link eventsTable} と同じ条件)。
+   * `dynamodb` では従来どおり必ず存在する ({@link eventsTable} と同じ条件)。
    */
   public readonly deploymentsTable?: Table;
   /**
    * Events table (ADR-011 #590 で AdminConsoleInsightStack が cross-stack read する)。
    *
-   * [Issue #2440 / ADR-049 §5.1 Phase A5] `controlDataBackend` が純 SQL (`turso`/`sql`) の
+   * [Issue #2440 / ADR-049 §5.1 Phase A5] `controlDataBackend` が純 SQL (`turso`) の
    * ときは本 table を **synth しない** (= `undefined`) — DynamoDB standing cost をゼロにする
-   * A5 の核心。 `dynamodb` / `*-mirror` では従来どおり必ず存在する。
+   * A5 の核心。 `dynamodb` では従来どおり必ず存在する。
    */
   public readonly eventsTable?: Table;
   /**
@@ -270,26 +270,26 @@ export class ProblemDeployBackendStack extends cdk.Stack {
   /**
    * CompetitorAccounts table name is surfaced to ObservabilityStack metrics.
    *
-   * [Issue #2442 / Phase C2] `controlDataBackend` が純 SQL (`turso`/`sql`) のときは本 table を
+   * [Issue #2442 / Phase C2] `controlDataBackend` が純 SQL (`turso`) のときは本 table を
    * **synth しない** (= `undefined`) — DynamoDB standing cost をゼロにする A5/B6/C1 と同じ条件。
-   * `dynamodb` / `*-mirror` では従来どおり必ず存在する ({@link problemEndpointsTable} と同じ条件)。
+   * `dynamodb` では従来どおり必ず存在する ({@link problemEndpointsTable} と同じ条件)。
    */
   public readonly competitorAccountsTable?: Table;
   /**
    * ProblemEndpoints table name is surfaced to ObservabilityStack metrics.
    *
-   * [Issue #2442 / Phase C1] `controlDataBackend` が純 SQL (`turso`/`sql`) のときは本 table を
+   * [Issue #2442 / Phase C1] `controlDataBackend` が純 SQL (`turso`) のときは本 table を
    * **synth しない** (= `undefined`) — DynamoDB standing cost をゼロにする A5/B6 と同じ条件。
-   * `dynamodb` / `*-mirror` では従来どおり必ず存在する ({@link eventsTable} と同じ条件)。
+   * `dynamodb` では従来どおり必ず存在する ({@link eventsTable} と同じ条件)。
    */
   public readonly problemEndpointsTable?: Table;
   /**
    * Issue #950 (ADR-020 Phase D): admin audit log table。 AdminConsoleInsightStack が
    * cross-stack read で audit UI に出すため公開する (= read-only)。
    *
-   * [Issue #2442 / Phase C4] `controlDataBackend` が純 SQL (`turso`/`sql`) のときは本 table を
+   * [Issue #2442 / Phase C4] `controlDataBackend` が純 SQL (`turso`) のときは本 table を
    * **synth しない** (= `undefined`) — DynamoDB standing cost をゼロにする A5/B6/C1-C3 と同じ
-   * 条件。 `dynamodb` / `*-mirror` では従来どおり必ず存在する ({@link problemEndpointsTable} と
+   * 条件。 `dynamodb` では従来どおり必ず存在する ({@link problemEndpointsTable} と
    * 同じ条件)。 write 元 6 Lambda + admin-insight の read は repository seam
    * (`resolveAdminAuditLogRepository`) 経由で SQL executor 直結するため、pure SQL では本 table
    * への参照が残らない (壊れる参照は下記で個別に条件化)。
@@ -330,9 +330,9 @@ export class ProblemDeployBackendStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: ProblemDeployBackendStackProps) {
     super(scope, id, props);
 
-    // [Issue #2440 / #2441 / #2442 / ADR-049 §5.1] 純 SQL backend (`turso`/`sql`) は control-data
-    // DDB table 群を synth しない (mirror は DDB 正本のまま作る)。詳細は build-control-data-tables.ts。
-    const pureSql = props.controlDataBackend === "turso" || props.controlDataBackend === "sql";
+    // [Issue #2440 / #2441 / #2442 / ADR-049 §5.1] 純 SQL backend (`turso`) は control-data
+    // DDB table 群を synth しない。詳細は build-control-data-tables.ts。
+    const pureSql = props.controlDataBackend === "turso";
     // control-plane data backend selector + Turso executor wiring, spread into every Lambda
     // construct that "opens the DB" (= resolves a repository seam to a SQL executor)。
     // shape の詳細は build-api-lambdas.ts の ControlDataBackendProps を参照。
@@ -415,7 +415,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       // Issue #2291: flag OFF (default) では CodeBuild 経路のまま (追加リソースなし)。
       deployViaLambda: props.deployViaLambda,
       // Issue #2441 Phase B PR-5: pure SQL backend uses a Lambda status-writer for DeployCreate
-      // SFN writeback states; dynamodb/mirror keep native DynamoUpdateItem.
+      // SFN writeback states; dynamodb keeps native DynamoUpdateItem.
       ...controlDataBackendProps,
       // Issue #2462: active pack の実体を core problems/ の隣に materialize する (Lambda 経路のみ)。
       // undefined / 空 → BucketDeployment 追加ゼロ = CFn byte 互換。

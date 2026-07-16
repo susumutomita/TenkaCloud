@@ -98,7 +98,7 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
   // リグレッションなし)。明示 "false" のときだけ監査 Lambda 群を no-op 化する。
   const auditLogEnabled = env.CDK_PARAM_AUDIT_LOG_ENABLED !== "false";
   // Issue #2290: control-plane data backend の選択。default "dynamodb" (未設定 / "dynamodb" は
-  // 在来 DDB 経路で Lambda env を足さない = byte 互換)。turso/sql 以外は synth 時に throw。
+  // 在来 DDB 経路で Lambda env を足さない = byte 互換)。dynamodb/turso 以外は synth 時に throw。
   const controlDataBackend = resolveControlDataBackend(env);
   const tursoDatabaseUrl = env.CDK_PARAM_TURSO_DATABASE_URL?.trim() || undefined;
   const tursoAuthTokenParameterName =
@@ -106,7 +106,7 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
   if (controlDataBackend !== "dynamodb" && (!tursoDatabaseUrl || !tursoAuthTokenParameterName)) {
     throw new Error(
       "CDK_PARAM_TURSO_DATABASE_URL and CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME " +
-        "are required when CDK_PARAM_CONTROL_DATA_BACKEND is turso/sql/turso-mirror/sql-mirror.",
+        "are required when CDK_PARAM_CONTROL_DATA_BACKEND is turso.",
     );
   }
   const features = resolveFeatures(env);
@@ -394,29 +394,21 @@ function resolveDeployConcurrentBuildLimit(env: NodeJS.ProcessEnv): number | und
 
 /**
  * Issue #2290 (ADR-049 §5.1): control-plane data backend の選択フラグ
- * (`CDK_PARAM_CONTROL_DATA_BACKEND`) を synth 時に検証する。Events / Teams repository seam を
- * `dynamodb` / `turso` / `sql` / `turso-mirror` / `sql-mirror` から選ぶ。**default `"dynamodb"`** (未設定 / 空文字は在来 DDB 経路で、
+ * (`CDK_PARAM_CONTROL_DATA_BACKEND`) を synth 時に検証する。control-data repository seam を
+ * `dynamodb` / `turso` の二択から選ぶ (#2677 で `sql` alias と `*-mirror` bridge を削除)。
+ * **default `"dynamodb"`** (未設定 / 空文字は在来 DDB 経路で、
  * `controlDataBackendEnv` が Lambda env を足さない = CFn テンプレ byte 互換)。大文字小文字は無視して
- * lowercase 正規化し、5 値以外は throw する (= runtime factory の guard と揃えた fail-loud、
+ * lowercase 正規化し、2 値以外は throw する (= runtime factory の guard と揃えた fail-loud、
  * 壊れた値を Lambda まで持ち越さない / no-silent-fallback)。
  */
 function resolveControlDataBackend(env: NodeJS.ProcessEnv): ControlDataBackend {
   const raw = env.CDK_PARAM_CONTROL_DATA_BACKEND;
   if (raw === undefined || raw.trim() === "") return "dynamodb";
   const normalized = raw.trim().toLowerCase();
-  if (
-    normalized === "dynamodb" ||
-    normalized === "turso" ||
-    normalized === "sql" ||
-    normalized === "turso-mirror" ||
-    normalized === "sql-mirror"
-  ) {
+  if (normalized === "dynamodb" || normalized === "turso") {
     return normalized;
   }
-  throw new Error(
-    "CDK_PARAM_CONTROL_DATA_BACKEND must be one of " +
-      `dynamodb|turso|sql|turso-mirror|sql-mirror, got: ${raw}`,
-  );
+  throw new Error(`CDK_PARAM_CONTROL_DATA_BACKEND must be one of dynamodb|turso, got: ${raw}`);
 }
 
 /**

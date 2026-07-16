@@ -5,7 +5,6 @@ import {
   QueryCommand,
 } from "@aws-sdk/lib-dynamodb";
 import { describe, expect, it, vi } from "vitest";
-import { MirroredProblemEndpointsRepository } from "../../../lib/problem-deploy/control-data/mirrored-repositories";
 import {
   createProblemEndpointsRepository,
   DynamoDbProblemEndpointsRepository,
@@ -20,7 +19,7 @@ import { makeFakeDdb, makeSqliteExecutor } from "./control-data-write.test-helpe
  * seam — the smallest control-data table (no GSI, no conditional writes, no
  * Scan). Mirrors `deployments-repository.test.ts`'s structure: round-trip +
  * byte-pin for the DynamoDB backend, plus factory / runtime-resolver coverage
- * for all five `CONTROL_DATA_BACKEND` values.
+ * for both `CONTROL_DATA_BACKEND` values (dynamodb / turso, #2677).
  */
 
 const TABLE = "ProblemEndpoints";
@@ -194,11 +193,8 @@ describe("createProblemEndpointsRepository", () => {
     );
   });
 
-  it("should select the SQL backend for turso and sql flags", () => {
+  it("should select the SQL backend for the turso flag", () => {
     expect(createProblemEndpointsRepository("turso", { sql: makeSqliteExecutor() })).toBeInstanceOf(
-      SqlProblemEndpointsRepository,
-    );
-    expect(createProblemEndpointsRepository("sql", { sql: makeSqliteExecutor() })).toBeInstanceOf(
       SqlProblemEndpointsRepository,
     );
   });
@@ -207,9 +203,14 @@ describe("createProblemEndpointsRepository", () => {
     expect(() => createProblemEndpointsRepository("turso", {})).toThrow(/requires a SqlExecutor/);
   });
 
-  it("should reject an unknown backend value", () => {
-    expect(() => createProblemEndpointsRepository("postgres", ddbDeps())).toThrow(
-      /Unknown CONTROL_DATA_BACKEND/,
+  it.each([
+    "postgres",
+    "sql",
+    "turso-mirror",
+    "sql-mirror",
+  ])("should reject the unknown backend value %s", (backend) => {
+    expect(() => createProblemEndpointsRepository(backend, ddbDeps())).toThrow(
+      /Unknown CONTROL_DATA_BACKEND.*expected one of: dynamodb, turso/,
     );
   });
 
@@ -236,13 +237,10 @@ describe("resolveProblemEndpointsRepository (runtime)", () => {
     expect(repo).toBeInstanceOf(DynamoDbProblemEndpointsRepository);
   });
 
-  it.each([
-    "turso",
-    "sql",
-  ])("should return the SQL backend for CONTROL_DATA_BACKEND=%s without DDB inputs", async (backend) => {
+  it("should return the SQL backend for CONTROL_DATA_BACKEND=turso without DDB inputs", async () => {
     const runtime = createControlDataRuntime({
       env: {
-        CONTROL_DATA_BACKEND: backend,
+        CONTROL_DATA_BACKEND: "turso",
         TURSO_DATABASE_URL: "file:local.db",
         TURSO_AUTH_TOKEN_PARAMETER_NAME: "/tenkacloud/dev/sql-token",
       },
@@ -258,39 +256,15 @@ describe("resolveProblemEndpointsRepository (runtime)", () => {
     );
   });
 
-  it.each([
-    "turso-mirror",
-    "sql-mirror",
-  ])("should return the mirrored backend for CONTROL_DATA_BACKEND=%s", async (backend) => {
+  it("should fail loudly when the dynamodb backend is missing ddb/endpointsTableName", async () => {
     const runtime = createControlDataRuntime({
-      env: {
-        CONTROL_DATA_BACKEND: backend,
-        TURSO_DATABASE_URL: "file:local.db",
-        TURSO_AUTH_TOKEN_PARAMETER_NAME: "/tenkacloud/dev/sql-token",
-      },
-      ssm: { send: vi.fn().mockResolvedValue({ Parameter: { Value: "secret-token" } }) },
-      createClient: vi.fn().mockReturnValue({
-        execute: vi.fn().mockResolvedValue({ rows: [], rowsAffected: 0 }),
-        batch: vi.fn().mockResolvedValue([]),
-      }),
-    });
-
-    const repo = await runtime.resolveProblemEndpointsRepository({
-      ddb: makeFakeDdb(),
-      endpointsTableName: TABLE,
-    });
-    expect(repo).toBeInstanceOf(MirroredProblemEndpointsRepository);
-  });
-
-  it("should fail loudly when mirror/dynamodb backends are missing ddb/endpointsTableName", async () => {
-    const runtime = createControlDataRuntime({
-      env: { CONTROL_DATA_BACKEND: "turso-mirror" },
+      env: { CONTROL_DATA_BACKEND: "dynamodb" },
       ssm: { send: vi.fn() },
       createClient: vi.fn(),
     });
 
     await expect(runtime.resolveProblemEndpointsRepository({ ddb: makeFakeDdb() })).rejects.toThrow(
-      /mirror backend requires ddb\/endpointsTableName/,
+      /dynamodb backend requires ddb\/endpointsTableName/,
     );
   });
 });

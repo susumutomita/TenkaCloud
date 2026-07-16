@@ -330,11 +330,11 @@ async function handleCostSummary(c: Context): Promise<Response> {
  * [Issue #2442 / Phase C4] `true` for pure-SQL `CONTROL_DATA_BACKEND` values, where the
  * AdminAuditLog table is not synthesized (mirrors `handlers/shared/audit-log.ts`'s
  * `isPureSqlBackend`). An empty `shared.auditTableName` is legitimate there, not a
- * misconfiguration — only dynamodb/mirror backends require the physical table name.
+ * misconfiguration — only the dynamodb backend requires the physical table name.
  */
 function isPureSqlBackend(): boolean {
   const backend = process.env.CONTROL_DATA_BACKEND;
-  return backend === "turso" || backend === "sql";
+  return backend === "turso";
 }
 
 async function handleAuditEntries(c: Context): Promise<Response> {

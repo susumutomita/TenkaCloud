@@ -7,7 +7,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { TenkaCloudLiteStack, type TenkaCloudLiteStackProps } from "../../lib/tenkacloud-lite";
 
 // synth() は Lambda asset bundling を含む重い実処理。全 suite 並列時は default 5s を超えて
-// flake するため、個別の pureSql / turso-mirror synth を要する test には明示 timeout を持つ
+// flake するため、個別の backend synth を要する test には明示 timeout を持つ
 // (`SYNTH_TIMEOUT_MS` — problem-deploy-backend-stack.test-helpers.ts と同じ値)。
 const SYNTH_TIMEOUT_MS = 120_000;
 
@@ -268,7 +268,7 @@ describe("TenkaCloudLiteStack (#778 ADR-016 Phase 3)", { timeout: 60_000 }, () =
 
 /**
  * [Issue #2442 / Phase C5] `controlDataBackend` conditional synth for `SamlIdpsTable` — mirrors
- * `control-data-backend-feature-flag.test.ts`'s pure-SQL / turso-mirror pattern for
+ * `control-data-backend-feature-flag.test.ts`'s pure-SQL / dynamodb pattern for
  * `ProblemDeployBackendStack`, but scoped to `TenkaCloudLiteStack` (the actual generation site for
  * this table — see `saml-idps-table.ts` / `tenkacloud-lite-stack.ts`, NOT
  * `problem-deploy-backend-stack.ts`). The SamlIdp Lambda / `/tenant/idp*` API is decoupled from
@@ -359,22 +359,6 @@ describe("SamlIdps pure SQL conditional synth (#2442 Phase C5)", () => {
       expect(JSON.stringify(template.toJSON())).toContain(
         "parameter/tenkacloud/development/turso-token",
       );
-    },
-    SYNTH_TIMEOUT_MS,
-  );
-
-  it(
-    "should still create the SamlIdps AWS::DynamoDB::Table + inject CONTROL_DATA_BACKEND='turso-mirror' when the migration-bridge backend is selected",
-    () => {
-      const template = synth({
-        controlDataBackend: "turso-mirror",
-        tursoDatabaseUrl: "libsql://example.turso.io",
-        tursoAuthTokenParameterName: "/tenkacloud/development/turso-token",
-      });
-      template.resourceCountIs("AWS::DynamoDB::Table", 1);
-      const vars = samlIdpFunctionEnv(template);
-      expect(vars.CONTROL_DATA_BACKEND).toBe("turso-mirror");
-      expect(vars.SAML_IDPS_TABLE_NAME).toBeDefined();
     },
     SYNTH_TIMEOUT_MS,
   );

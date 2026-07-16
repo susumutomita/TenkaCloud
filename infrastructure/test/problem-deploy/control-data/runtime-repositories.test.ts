@@ -11,12 +11,6 @@ import {
   SqlFeatureFlagsRepository,
 } from "../../../lib/problem-deploy/control-data/feature-flags-repository.js";
 import {
-  MirroredEventsRepository,
-  MirroredFeatureFlagsRepository,
-  MirroredNotificationsRepository,
-  MirroredTeamsRepository,
-} from "../../../lib/problem-deploy/control-data/mirrored-repositories.js";
-import {
   DynamoDbNotificationsRepository,
   SqlNotificationsRepository,
 } from "../../../lib/problem-deploy/control-data/notifications-repository.js";
@@ -96,9 +90,6 @@ describe("control-data runtime repository resolver", () => {
     expect(makeRuntime(undefined).needsManualPrune()).toBe(false);
     expect(makeRuntime("dynamodb").needsManualPrune()).toBe(false);
     expect(makeRuntime("turso").needsManualPrune()).toBe(true);
-    expect(makeRuntime("sql").needsManualPrune()).toBe(true);
-    expect(makeRuntime("turso-mirror").needsManualPrune()).toBe(false);
-    expect(makeRuntime("sql-mirror").needsManualPrune()).toBe(false);
   });
 
   it("should keep createControlDataRepositoryResolver as a full resolver wrapper", async () => {
@@ -184,82 +175,6 @@ describe("control-data runtime repository resolver", () => {
     expect(send).toHaveBeenCalledTimes(1);
   });
 
-  it("should return Mirrored implementations on turso-mirror for every aggregate resolver", async () => {
-    const send = vi.fn().mockResolvedValue({ Parameter: { Value: "secret-token" } });
-    const { client } = mockLibsqlClient();
-    const runtime = createControlDataRuntime({
-      env: {
-        CONTROL_DATA_BACKEND: "turso-mirror",
-        TURSO_DATABASE_URL: "libsql://example.turso.io",
-        TURSO_AUTH_TOKEN_PARAMETER_NAME: "/tenkacloud/dev/turso-token",
-      },
-      ssm: { send },
-      createClient: vi.fn().mockReturnValue(client),
-    });
-
-    const events = await runtime.resolveEventsRepository({
-      ddb: input.ddb,
-      eventsTableName: input.eventsTableName,
-      teamsTableName: input.teamsTableName,
-    });
-    const teams = await runtime.resolveTeamsRepository({
-      ddb: input.ddb,
-      teamsTableName: input.teamsTableName,
-    });
-    const notifications = await runtime.resolveNotificationsRepository({
-      ddb: input.ddb,
-      eventsTableName: input.eventsTableName,
-    });
-    const featureFlags = await runtime.resolveFeatureFlagsRepository({
-      ddb: input.ddb,
-      eventsTableName: input.eventsTableName,
-    });
-
-    expect(events).toBeInstanceOf(MirroredEventsRepository);
-    expect(teams).toBeInstanceOf(MirroredTeamsRepository);
-    expect(notifications).toBeInstanceOf(MirroredNotificationsRepository);
-    expect(featureFlags).toBeInstanceOf(MirroredFeatureFlagsRepository);
-  });
-
-  it("should normalize sql-mirror to the SQL replica dialect while keeping DynamoDB canonical", async () => {
-    const send = vi.fn().mockResolvedValue({ Parameter: { Value: "secret-token" } });
-    const { client } = mockLibsqlClient();
-    const runtime = createControlDataRuntime({
-      env: {
-        CONTROL_DATA_BACKEND: "sql-mirror",
-        TURSO_DATABASE_URL: "file:local.db",
-        TURSO_AUTH_TOKEN_PARAMETER_NAME: "/tenkacloud/dev/sql-token",
-      },
-      ssm: { send },
-      createClient: vi.fn().mockReturnValue(client),
-    });
-
-    await expect(runtime.resolveEventsRepository(input)).resolves.toBeInstanceOf(
-      MirroredEventsRepository,
-    );
-  });
-
-  it("should fail loudly before SSM access when mirror backend is missing DDB inputs", async () => {
-    const send = vi.fn();
-    const runtime = createControlDataRuntime({
-      env: {
-        CONTROL_DATA_BACKEND: "turso-mirror",
-        TURSO_DATABASE_URL: "libsql://example.turso.io",
-        TURSO_AUTH_TOKEN_PARAMETER_NAME: "/tenkacloud/dev/turso-token",
-      },
-      ssm: { send },
-      createClient: vi.fn(),
-    });
-
-    await expect(
-      runtime.resolveEventsRepository({ eventsTableName: input.eventsTableName }),
-    ).rejects.toThrow(/mirror backend requires ddb\/eventsTableName/);
-    await expect(runtime.resolveTeamsRepository({ ddb: input.ddb })).rejects.toThrow(
-      /mirror backend requires ddb\/teamsTableName/,
-    );
-    expect(send).not.toHaveBeenCalled();
-  });
-
   it("should throw fail-loud when turso env vars are missing via the events-only resolver", async () => {
     const send = vi.fn();
     const runtime = createControlDataRuntime({
@@ -277,10 +192,18 @@ describe("control-data runtime repository resolver", () => {
     expect(send).not.toHaveBeenCalled();
   });
 
-  it("should reject an unknown runtime backend before network access", async () => {
+  // [#2677] The former `sql` alias and the `turso-mirror`/`sql-mirror` bridge
+  // values were removed — they must now fail loudly, never silently fall back
+  // to another data path.
+  it.each([
+    "postgres",
+    "sql",
+    "turso-mirror",
+    "sql-mirror",
+  ])("should reject the removed/unknown backend %s before network access", async (backend) => {
     const send = vi.fn();
     const runtime = createControlDataRuntime({
-      env: { CONTROL_DATA_BACKEND: "postgres" },
+      env: { CONTROL_DATA_BACKEND: backend },
       ssm: { send },
       createClient: vi.fn(),
     });

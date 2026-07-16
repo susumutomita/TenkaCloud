@@ -17,7 +17,7 @@ export interface SystemAuditWriterLambdaProps {
   /**
    * ADR-020 Phase D の admin audit log table (= `PK=SYSTEM#<env>` で行を書く)。
    *
-   * [Issue #2442 / Phase C4] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * [Issue #2442 / Phase C4] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env
    * `ADMIN_AUDIT_LOG_TABLE_NAME` は注入せず grant も付与しない — audit write は repository seam
    * (`writeAuditEvent` → `resolveAdminAuditLogRepository`) が下記の Turso executor 配線経由で
@@ -31,7 +31,7 @@ export interface SystemAuditWriterLambdaProps {
    */
   readonly auditLogEnabled?: boolean;
   /**
-   * Issue #2290 (ADR-049 §5.1): control-plane data backend (dynamodb|turso|sql)。監査 Lambda 群と
+   * Issue #2290 (ADR-049 §5.1): control-plane data backend (dynamodb|turso)。監査 Lambda 群と
    * lockstep で env を配線する。default (未指定 / `dynamodb`) は env を足さず byte 互換。
    */
   readonly controlDataBackend?: string;
@@ -113,7 +113,7 @@ export class SystemAuditWriterLambda extends Construct {
     // [Issue #2442] 純 SQL backend では table 自体が無いので grant も付与しない。
     props.adminAuditLogTable?.grantWriteData(this.fn);
 
-    // [Issue #2442]: turso/sql backend が Turso auth token を読むための SSM SecureString
+    // [Issue #2442]: turso backend が Turso auth token を読むための SSM SecureString
     // read 権限。 未配線 (= dynamodb default) なら付与しない (`ExternalIdAuditLambda` と同型)。
     if (props.tursoAuthTokenParameterName) {
       this.fn.addToRolePolicy(

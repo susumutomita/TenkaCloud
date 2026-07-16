@@ -39,7 +39,7 @@ export interface DeployDeleteStateMachineProps {
    * Deployment 行を持つ DDB Table。CodeBuild 完了時に `status` を `DELETING` →
    * `DELETED` / `FAILED` に更新するために必要。
    *
-   * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合
    * {@link statusWriterFunction} が必須で、native `DynamoUpdateItem` の代わりに Lambda
    * status-writer 経由で書く (= `DeployCreateStateMachine` と同型)。
@@ -60,8 +60,8 @@ export interface DeployDeleteStateMachineProps {
   /**
    * [Issue #2441 Phase B PR-6] When present, MarkDeleted/MarkFailed use this Lambda
    * instead of native `DynamoUpdateItem` (same `DeployStatusWriterLambda` instance
-   * `DeployCreateStateMachine` uses — shared, not a second Lambda). Only pure SQL
-   * backends pass it; default and mirror backends keep DDB canonical direct writes
+   * `DeployCreateStateMachine` uses — shared, not a second Lambda). Only the pure SQL
+   * backend passes it; the default (dynamodb) backend keeps DDB direct writes
    * for byte-compatible ASL/IAM.
    */
   readonly statusWriterFunction?: IFunction;

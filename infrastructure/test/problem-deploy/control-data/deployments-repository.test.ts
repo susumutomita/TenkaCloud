@@ -10,7 +10,6 @@ import {
   DynamoDbDeploymentsRepository,
   SqlDeploymentsRepository,
 } from "../../../lib/problem-deploy/control-data/deployments-repository";
-import { MirroredDeploymentsRepository } from "../../../lib/problem-deploy/control-data/mirrored-repositories";
 import { createControlDataRuntime } from "../../../lib/problem-deploy/control-data/runtime-repositories";
 import { makeFakeDdb, makeSqliteExecutor } from "./control-data-write.test-helpers";
 
@@ -634,11 +633,8 @@ describe("createDeploymentsRepository", () => {
     );
   });
 
-  it("should select the SQL backend for turso and sql flags", () => {
+  it("should select the SQL backend for the turso flag", () => {
     expect(createDeploymentsRepository("turso", { sql: makeSqliteExecutor() })).toBeInstanceOf(
-      SqlDeploymentsRepository,
-    );
-    expect(createDeploymentsRepository("sql", { sql: makeSqliteExecutor() })).toBeInstanceOf(
       SqlDeploymentsRepository,
     );
   });
@@ -649,6 +645,16 @@ describe("createDeploymentsRepository", () => {
 
   it("should reject an unknown backend value", () => {
     expect(() => createDeploymentsRepository("postgres", ddbDeps())).toThrow(
+      /Unknown CONTROL_DATA_BACKEND/,
+    );
+  });
+
+  it.each([
+    "sql",
+    "turso-mirror",
+    "sql-mirror",
+  ])("should reject the removed %s backend value (#2677)", (backend) => {
+    expect(() => createDeploymentsRepository(backend, ddbDeps())).toThrow(
       /Unknown CONTROL_DATA_BACKEND/,
     );
   });
@@ -676,13 +682,10 @@ describe("resolveDeploymentsRepository (runtime)", () => {
     expect(repo).toBeInstanceOf(DynamoDbDeploymentsRepository);
   });
 
-  it.each([
-    "turso",
-    "sql",
-  ])("should return the SQL backend for CONTROL_DATA_BACKEND=%s without DDB inputs", async (backend) => {
+  it("should return the SQL backend for CONTROL_DATA_BACKEND=turso without DDB inputs", async () => {
     const runtime = createControlDataRuntime({
       env: {
-        CONTROL_DATA_BACKEND: backend,
+        CONTROL_DATA_BACKEND: "turso",
         TURSO_DATABASE_URL: "file:local.db",
         TURSO_AUTH_TOKEN_PARAMETER_NAME: "/tenkacloud/dev/sql-token",
       },
@@ -698,39 +701,15 @@ describe("resolveDeploymentsRepository (runtime)", () => {
     );
   });
 
-  it.each([
-    "turso-mirror",
-    "sql-mirror",
-  ])("should return the mirrored backend for CONTROL_DATA_BACKEND=%s", async (backend) => {
+  it("should fail loudly when the dynamodb backend is missing ddb/deploymentsTableName", async () => {
     const runtime = createControlDataRuntime({
-      env: {
-        CONTROL_DATA_BACKEND: backend,
-        TURSO_DATABASE_URL: "file:local.db",
-        TURSO_AUTH_TOKEN_PARAMETER_NAME: "/tenkacloud/dev/sql-token",
-      },
-      ssm: { send: vi.fn().mockResolvedValue({ Parameter: { Value: "secret-token" } }) },
-      createClient: vi.fn().mockReturnValue({
-        execute: vi.fn().mockResolvedValue({ rows: [], rowsAffected: 0 }),
-        batch: vi.fn().mockResolvedValue([]),
-      }),
-    });
-
-    const repo = await runtime.resolveDeploymentsRepository({
-      ddb: makeFakeDdb(),
-      deploymentsTableName: TABLE,
-    });
-    expect(repo).toBeInstanceOf(MirroredDeploymentsRepository);
-  });
-
-  it("should fail loudly when mirror/dynamodb backends are missing ddb/deploymentsTableName", async () => {
-    const runtime = createControlDataRuntime({
-      env: { CONTROL_DATA_BACKEND: "turso-mirror" },
+      env: { CONTROL_DATA_BACKEND: "dynamodb" },
       ssm: { send: vi.fn() },
       createClient: vi.fn(),
     });
 
     await expect(runtime.resolveDeploymentsRepository({ ddb: makeFakeDdb() })).rejects.toThrow(
-      /mirror backend requires ddb\/deploymentsTableName/,
+      /dynamodb backend requires ddb\/deploymentsTableName/,
     );
   });
 });

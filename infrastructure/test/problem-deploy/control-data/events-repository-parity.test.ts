@@ -6,20 +6,16 @@ import {
   type EventsRepository,
   SqlEventsRepository,
 } from "../../../lib/problem-deploy/control-data/events-repository";
-import { MirroredEventsRepository } from "../../../lib/problem-deploy/control-data/mirrored-repositories";
 import { makeFakeDdb, makeSqliteExecutor } from "./control-data-write.test-helpers";
 
 /**
  * [ADR-049 §5] Parity suite for the Events repository seam. The SAME assertions
- * run against every backend so DynamoDB (behavior-preserving extraction),
- * SQLite (Turso / D1 dialect), and mirror mode are provably interchangeable:
+ * run against every backend so DynamoDB (behavior-preserving extraction) and
+ * SQLite (Turso / D1 dialect) are provably interchangeable:
  *   - DynamoDb impl against a faithful in-memory fake DocumentClient (real
  *     round-trip: put → get returns the stored row).
  *   - Sql impl against Node's built-in `node:sqlite` DatabaseSync (`:memory:`),
  *     so no new dependency is introduced.
- *   - Mirrored composition (DDB canonical + SQL replica) — [#2527 Slice 0] the
- *     `turso-mirror` / `sql-mirror` bridge must satisfy the exact same contract
- *     as each backend alone.
  */
 
 const TABLE = "Events";
@@ -42,14 +38,6 @@ function sampleRecord(overrides: Partial<EventRecord> = {}): EventRecord {
 const backends: ReadonlyArray<readonly [string, () => EventsRepository]> = [
   ["DynamoDbEventsRepository", () => new DynamoDbEventsRepository(makeFakeDdb(), TABLE)],
   ["SqlEventsRepository", () => new SqlEventsRepository(makeSqliteExecutor())],
-  [
-    "MirroredEventsRepository",
-    () =>
-      new MirroredEventsRepository(
-        new DynamoDbEventsRepository(makeFakeDdb(), TABLE),
-        new SqlEventsRepository(makeSqliteExecutor()),
-      ),
-  ],
 ];
 
 describe.each(backends)("EventsRepository parity: %s", (_name, makeRepo) => {
@@ -149,10 +137,9 @@ describe("createEventsRepository", () => {
     expect(createEventsRepository("DynamoDB", ddbDeps())).toBeInstanceOf(DynamoDbEventsRepository);
   });
 
-  it("should select the SQL backend for turso and sql flags", () => {
+  it("should select the SQL backend for the turso flag", () => {
     const sql = makeSqliteExecutor();
     expect(createEventsRepository("turso", { sql })).toBeInstanceOf(SqlEventsRepository);
-    expect(createEventsRepository("sql", { sql })).toBeInstanceOf(SqlEventsRepository);
   });
 
   it("should build a working SQL repository through the factory", async () => {
@@ -174,8 +161,10 @@ describe("createEventsRepository", () => {
   });
 
   it("should reject an unknown backend value", () => {
-    expect(() => createEventsRepository("postgres", ddbDeps())).toThrow(
-      /Unknown CONTROL_DATA_BACKEND/,
-    );
+    for (const value of ["postgres", "sql", "turso-mirror", "sql-mirror"]) {
+      expect(() => createEventsRepository(value, ddbDeps())).toThrow(
+        /Unknown CONTROL_DATA_BACKEND.*expected one of: dynamodb, turso/,
+      );
+    }
   });
 });

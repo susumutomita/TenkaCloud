@@ -1,12 +1,11 @@
 import { GetCommand } from "@aws-sdk/lib-dynamodb";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   DynamoDbFeatureFlagsRepository,
   type FeatureFlagsRepository,
   SqlFeatureFlagsRepository,
   type TenantFeatureFlagsRecord,
 } from "../../../lib/problem-deploy/control-data/feature-flags-repository";
-import { MirroredFeatureFlagsRepository } from "../../../lib/problem-deploy/control-data/mirrored-repositories";
 import { makeFakeDdb, makeSqliteExecutor } from "./control-data-write.test-helpers";
 
 const TABLE = "Events";
@@ -27,16 +26,6 @@ const backends: ReadonlyArray<readonly [string, () => FeatureFlagsRepository]> =
     () => new DynamoDbFeatureFlagsRepository(makeFakeDdb(), TABLE),
   ],
   ["SqlFeatureFlagsRepository", () => new SqlFeatureFlagsRepository(makeSqliteExecutor())],
-  // [#2527 Slice 0] Mirror mode (DDB canonical + SQL replica) must satisfy the
-  // same contract as each backend alone.
-  [
-    "MirroredFeatureFlagsRepository",
-    () =>
-      new MirroredFeatureFlagsRepository(
-        new DynamoDbFeatureFlagsRepository(makeFakeDdb(), TABLE),
-        new SqlFeatureFlagsRepository(makeSqliteExecutor()),
-      ),
-  ],
 ];
 
 describe.each(backends)("FeatureFlagsRepository parity: %s", (_name, makeRepo) => {
@@ -107,50 +96,5 @@ describe("DynamoDbFeatureFlagsRepository physical row", () => {
       SK: "FLAGS",
       ...record,
     });
-  });
-});
-
-describe("MirroredFeatureFlagsRepository", () => {
-  function memoryFeatureFlags(initial: readonly TenantFeatureFlagsRecord[] = []): {
-    readonly repo: FeatureFlagsRepository;
-    readonly records: Map<string, TenantFeatureFlagsRecord>;
-  } {
-    const records = new Map(initial.map((record) => [record.tenantId, record]));
-    return {
-      records,
-      repo: {
-        get: async (tenantId) => records.get(tenantId),
-        put: async (record) => {
-          records.set(record.tenantId, record);
-        },
-      },
-    };
-  }
-
-  it("should write through on put", async () => {
-    const canonical = memoryFeatureFlags();
-    const replica = memoryFeatureFlags();
-    const repository = new MirroredFeatureFlagsRepository(canonical.repo, replica.repo);
-    const record = sampleRecord();
-
-    await repository.put(record);
-
-    expect(canonical.records.get(record.tenantId)).toEqual(record);
-    expect(replica.records.get(record.tenantId)).toEqual(record);
-  });
-
-  it("should serve get from canonical only", async () => {
-    const canonicalGet = vi.fn(async () => sampleRecord({ flags: { canonical: true } }));
-    const replicaGet = vi.fn(async () => sampleRecord({ flags: { replica: true } }));
-    const repository = new MirroredFeatureFlagsRepository(
-      { get: canonicalGet, put: async () => {} },
-      { get: replicaGet, put: async () => {} },
-    );
-
-    const record = await repository.get("tenant-a");
-
-    expect(record?.flags).toEqual({ canonical: true });
-    expect(canonicalGet).toHaveBeenCalledWith("tenant-a");
-    expect(replicaGet).not.toHaveBeenCalled();
   });
 });

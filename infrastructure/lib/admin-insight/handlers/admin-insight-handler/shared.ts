@@ -10,11 +10,11 @@ import type { ControlDataRuntime } from "../../../problem-deploy/control-data/ru
  *
  * Lambda warm invoke で SDK client / connection pool を使い回すため、handler 外で
  * `buildSharedResources()` を呼ぶ。[Issue #2440 / ADR-049 §5.1 Phase A5] `EVENTS_TABLE_NAME` /
- * `TEAMS_TABLE_NAME` は純 SQL backend (turso|sql) で table 自体が synth されないため対象外
+ * `TEAMS_TABLE_NAME` は純 SQL backend (turso) で table 自体が synth されないため対象外
  * (空文字 default、下記参照)。[Issue #2441 / Phase B PR-6] `DEPLOYMENTS_TABLE_NAME` も同じ
  * 条件で synth されないため、同じ空文字 default に統一した (以前は module 評価時に throw して
  * いたが、それだと turso backend で AdminInsight Lambda 自体が Initialization Error で落ちる)。
- * dynamodb / mirror backend の誤設定は runtime resolver (`runtime-repositories.ts`) が fail
+ * dynamodb backend の誤設定は runtime resolver (`runtime-repositories.ts`) が fail
  * loud に受ける (= silent fallback にはならない)。
  */
 export interface AdminInsightSharedResources {
@@ -42,12 +42,12 @@ export function buildSharedResources(runtime: ControlDataRuntime): AdminInsightS
   const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}));
   return {
     runtime,
-    // [Issue #2441 / Phase B PR-6] pure SQL backend (turso|sql) では Deployments table 自体が
+    // [Issue #2441 / Phase B PR-6] pure SQL backend (turso) では Deployments table 自体が
     // synth されず env も配線されない。EVENTS_TABLE_NAME/TEAMS_TABLE_NAME と同じ空文字 default。
     deploymentsTableName: process.env.DEPLOYMENTS_TABLE_NAME ?? "",
-    // [Issue #2440 / ADR-049 §5.1 Phase A5] pure SQL backend (turso|sql) では Events/Teams
+    // [Issue #2440 / ADR-049 §5.1 Phase A5] pure SQL backend (turso) では Events/Teams
     // table 自体が synth されず env も配線されないため、module-load を fail-fast にすると cold
-    // start が Initialization Error で落ちる。空文字 default に緩和し、dynamodb / mirror backend
+    // start が Initialization Error で落ちる。空文字 default に緩和し、dynamodb backend
     // の誤設定は runtime resolver (`runtime-repositories.ts`) が fail loud に受ける (= silent
     // fallback にはならない)。
     eventsTableName: process.env.EVENTS_TABLE_NAME ?? "",
@@ -67,8 +67,8 @@ export function buildSharedResources(runtime: ControlDataRuntime): AdminInsightS
  * Events の read-only 集計のみ行う (mutating method は使わない) ため、 events-only seam で十分。
  *
  * [#2450] turso 対応済み: cold-start cache 済みの async resolver (injected `shared.runtime`) 経由で
- * 解決するため `CONTROL_DATA_BACKEND=turso|sql` でも動作する (read は Mirrored の canonical
- * passthrough)。 `AdminInsightApiLambdaProps.controlDataBackend` に `"turso"` を渡すと
+ * 解決するため `CONTROL_DATA_BACKEND=turso` (pure SQL) でも動作する。
+ * `AdminInsightApiLambdaProps.controlDataBackend` に `"turso"` を渡すと
  * `CONTROL_DATA_BACKEND` env が注入され、 SSM read 権限は `tursoAuthTokenParameterName` 指定時に
  * 付与される。 `Promise<EventsRepository>` を返すので caller は await する。
  */
@@ -85,7 +85,7 @@ export function resolveEventsRepository(
  * [Issue #2441 / Phase B PR-6] Deployments aggregate 専用 read seam (mirror of
  * {@link resolveEventsRepository}). `summary.ts`'s `countTenantDeployments` uses
  * this instead of a raw GSI1 `QueryCommand` so tenant deploy-status counts keep
- * working when `controlDataBackend` is pure SQL (turso|sql) — the previous raw
+ * working when `controlDataBackend` is pure SQL (turso) — the previous raw
  * query hard-coded `TableName: shared.deploymentsTableName`, which is `""` once
  * the Deployments table is no longer synthesized. default backend (`dynamodb`)
  * stays byte-identical to the pre-seam Query it replaces, other than splitting
@@ -103,8 +103,8 @@ export function resolveDeploymentsRepository(
 /**
  * [Issue #2442 / Phase C4] AdminAuditLog read seam for the SystemAdmin cross-tenant `/admin/
  * insight/audit` route (mirror of {@link resolveDeploymentsRepository}). default backend
- * (`CONTROL_DATA_BACKEND` unset = dynamodb) stays byte-identical to the pre-seam Query; turso/sql
- * work via the same cold-start-cached async resolver every other seam in this module uses.
+ * (`CONTROL_DATA_BACKEND` unset = dynamodb) stays byte-identical to the pre-seam Query; turso
+ * works via the same cold-start-cached async resolver every other seam in this module uses.
  */
 export function resolveAdminAuditLogRepository(
   shared: Pick<AdminInsightSharedResources, "runtime" | "ddb" | "auditTableName">,

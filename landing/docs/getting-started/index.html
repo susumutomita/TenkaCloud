@@ -235,13 +235,10 @@ make deploy
 <td>このパスでは発生しません — Lite の synth は DynamoDB テーブルを<strong>一切</strong>作成しません</td>
 <td>個人、お試し利用、個人イベント</td>
 </tr>
-<tr>
-<td>移行ブリッジ</td>
-<td><code>turso-mirror</code></td>
-<td>DynamoDB と同じ（テーブルが正のまま残り、書き込みが SQL にミラーされます）</td>
-<td><code>turso</code> への切り替え前のカットオーバー検証</td>
-</tr>
 </tbody></table>
+<p>設定値はこの 2 つだけです。2 つのストアが同期することはないため、最初の本番
+イベントの前に環境ごとにバックエンドを決めてください（後からの切り替えは
+フラグの変更ではなくデータ移行になります）。</p>
 <p>Turso へのオプトインは 4 ステップです。Turso データベースを作成し、その認証
 トークンを <code>SecureString</code> として SSM に保存し、<code>.env</code> に 3 行
 （<code>CDK_PARAM_CONTROL_DATA_BACKEND=turso</code> に加えて

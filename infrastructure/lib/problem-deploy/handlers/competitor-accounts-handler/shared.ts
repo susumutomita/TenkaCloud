@@ -32,10 +32,10 @@ export function buildCompetitorAccountsSharedResources(
 ): CompetitorAccountsSharedResources {
   return {
     runtime,
-    // [Issue #2442 / Phase C2] `controlDataBackend` が純 SQL (`turso`/`sql`) のときは
+    // [Issue #2442 / Phase C2] `controlDataBackend` が純 SQL (`turso`) のときは
     // CompetitorAccounts table 自体が synth されず env も配線されないため、module-load を
     // `getEnv` の fail-fast に委ねると cold start が Initialization Error で落ちる。空文字
-    // default に緩和し、dynamodb / mirror backend の誤設定は runtime resolver
+    // default に緩和し、dynamodb backend の誤設定は runtime resolver
     // (`aggregate-resolvers.ts` の `requireDdbAndTableName`) が fail loud に受ける
     // (= silent fallback にはならない、event-handler/shared.ts と同じ緩和)。
     tableName: process.env.COMPETITOR_ACCOUNTS_TABLE_NAME ?? "",

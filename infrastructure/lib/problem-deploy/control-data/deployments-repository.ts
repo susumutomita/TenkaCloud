@@ -43,7 +43,7 @@ export interface CreateDeploymentsRepositoryDeps {
   readonly ddb?: DynamoDBDocumentClient;
   /** Deployments table name — required for the `dynamodb` backend. */
   readonly deploymentsTableName?: string;
-  /** SQL driver — required for the `turso` / `sql` backend. */
+  /** SQL driver — required for the `turso` backend. */
   readonly sql?: SqlExecutor;
 }
 
@@ -54,7 +54,7 @@ export interface CreateDeploymentsRepositoryDeps {
  * (behavior-preserving): an unset / empty / `"dynamodb"` flag returns the DDB
  * repository, so the existing path is byte-identical.
  *
- * `"turso"` / `"sql"` return the SQLite repository. Any other value is a hard
+ * `"turso"` returns the SQLite repository. Any other value is a hard
  * error (fail loud). Mirror mode is composed by `runtime-repositories.ts`, not
  * this aggregate factory.
  *
@@ -67,7 +67,7 @@ export function createDeploymentsRepository(
 ): DeploymentsRepository {
   const selected = (backend ?? "dynamodb").toLowerCase();
 
-  if (selected === "turso" || selected === "sql") {
+  if (selected === "turso") {
     if (!deps.sql) {
       throw new Error(`CONTROL_DATA_BACKEND="${backend}" requires a SqlExecutor (deps.sql).`);
     }
@@ -76,7 +76,7 @@ export function createDeploymentsRepository(
 
   if (selected !== "dynamodb") {
     throw new Error(
-      `Unknown CONTROL_DATA_BACKEND="${backend}" (expected one of: dynamodb, turso, sql).`,
+      `Unknown CONTROL_DATA_BACKEND="${backend}" (expected one of: dynamodb, turso).`,
     );
   }
 

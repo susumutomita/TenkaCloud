@@ -37,7 +37,7 @@ const FAILED_DEPLOY_STATUSES = ["FAILED"];
  *
  * [Issue #2441 / Phase B PR-6] repository seam (`countActiveByTenant`) 経由に置き換えた。
  * 従来は本 module 専用の raw GSI1 `QueryCommand` (`ProjectionExpression: "#s"`, 1 query で
- * active/failed 両方を集計) だったが、pure SQL backend (turso|sql) では Deployments table
+ * active/failed 両方を集計) だったが、pure SQL backend (turso) では Deployments table
  * 自体が synth されず `shared.deploymentsTableName` が空文字になるため即死していた。
  * `countActiveByTenant` は deploy-quota.ts (#2441 Phase B1) で既に全 backend 実装済みの
  * 汎用カウントメソッドなので、それを active/failed の 2 回呼ぶ形に寄せる。default backend

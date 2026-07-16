@@ -13,7 +13,7 @@ export interface DeploymentsTableSharedResources {
  * [Issue #2441 / Phase B1] Deployments READ seam for deploy-handler modules.
  *
  * Default backend stays DynamoDB and emits the same Get/Query requests through
- * the same injected DocumentClient. `CONTROL_DATA_BACKEND=turso/sql` is the
+ * the same injected DocumentClient. `CONTROL_DATA_BACKEND=turso` is the
  * known B4 constraint: the control-data factory fails loudly until the SQL
  * Deployments backend exists.
  *

@@ -13,7 +13,7 @@ export interface ExternalIdAuditLambdaProps {
   /**
    * `CompetitorAccounts` DDB table (rotatedAt / createdAt を読み取る)。
    *
-   * [Issue #2442 / Phase C2] `controlDataBackend` が純 SQL (`turso`/`sql`) のとき
+   * [Issue #2442 / Phase C2] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env
    * `COMPETITOR_ACCOUNTS_TABLE_NAME` は注入せず grant も付与しない — 日次 rotation 監査は
    * repository seam (`resolveCompetitorAccountsRepository`) が下記の Turso executor 配線
@@ -27,7 +27,7 @@ export interface ExternalIdAuditLambdaProps {
    */
   readonly environmentName: string;
   /**
-   * Issue #2290 (ADR-049 §5.1): control-plane data backend (dynamodb|turso|sql)。
+   * Issue #2290 (ADR-049 §5.1): control-plane data backend (dynamodb|turso)。
    * default (未指定 / `dynamodb`) は env を足さず byte 互換。
    */
   readonly controlDataBackend?: string;
@@ -104,7 +104,7 @@ export class ExternalIdAuditLambda extends Construct {
       }),
     );
 
-    // [Issue #2442]: turso/sql backend が Turso auth token を読むための SSM SecureString
+    // [Issue #2442]: turso backend が Turso auth token を読むための SSM SecureString
     // read 権限。 未配線 (= dynamodb default) なら付与しない (`EventApiLambda` と同型)。
     if (props.tursoAuthTokenParameterName) {
       this.fn.addToRolePolicy(
