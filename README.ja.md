@@ -60,14 +60,30 @@ Codespaces でプレイできるのは **クラウド非依存のドリルのみ
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/susumutomita/TenkaCloud)
 
 1. 上のバッジをクリックして **Create codespace on main** を選ぶ(最初のビルドで Bun のインストール、`problems/` の初期化、Docker の起動まで自動で行われる)。
-2. **「▷ ローカルプレイ開始」** タスクを実行する(コマンドパレット → **Tasks: Run Task**、または `Cmd/Ctrl+Shift+B`)— これが代わりに `make local` を実行してくれる。
-3. Participant Portal が起動したら **PORTS** タブを開き、ポート **5175** の横にあるプレビュー用のアイコンをクリックする。
+2. コンテナの起動が終わるまで待つ。ローカルプレイは自動で起動し、**Participant Portal も自動でプレビュータブに開く** — 何も入力する必要はない。
+3. 自動でプレビューが開かなかった場合は、**PORTS** タブを開き、ポート **5175** の横にあるプレビュー用のアイコンをクリックする。
 
 > Codespaces の中にとどまってください。ドリルへのリンクはポート `5175` のプレビュー URL 経由で解決されます。自分の PC のブラウザタブに生の `127.0.0.1` の URL を貼り付けても、自分の PC 自体を指すだけで動作しません。
+>
+> **任意の手動再実行:** 自動起動には 2 分の待機ウィンドウがあります。タイムアウトした場合(Codespaces の起動ログにその旨が表示されます)は、**「▷ ローカルプレイ開始」** タスクを自分で実行してください(コマンドパレット → **Tasks: Run Task**、または `Cmd/Ctrl+Shift+B`)— これが代わりに `make local` を実行してくれる。
 
 ### ローカルで試す(AWS 不要)
 
 `tenkacloud local` がローカルドリルの主入口です。ローカル採点 API と Participant Portal を起動し、開いた画面からドリルを選べます。進捗はデフォルトでローカルの非公開 SQLite ファイル `.tenkacloud/local/local-play.sqlite` に保存され、DynamoDB と AWS SDK には依存しません。`make local` は互換ラッパーとして残しています。
+
+**クローン直後にはこちらを推奨(自己修復型、Bun の事前インストール不要):**
+
+```bash
+git clone https://github.com/susumutomita/TenkaCloud.git
+cd TenkaCloud
+make local-onboard
+bun run tenkacloud local
+```
+
+`make local-onboard` は、必要なものをインストールする前に必ず同意を求めます — Bun 本体(未インストールの場合)、`problems/` submodule、Docker の診断 — その上で準備状況を報告します。同意なしに何かをインストールすることはありません。無人実行では `make local-onboard YES=1` ですべてのインストールを事前承認できます(GitHub Codespaces もこの経路を使っています)。すべての前提条件が揃ったと報告されたら、`bun run tenkacloud local` でローカル採点 API と Participant Portal が起動します。
+
+<details>
+<summary>内部で行っていること / 手動での代替手順</summary>
 
 ```bash
 git clone https://github.com/susumutomita/TenkaCloud.git
@@ -78,7 +94,11 @@ bun link
 tenkacloud local
 ```
 
-`bun link` を行わない場合は `bun run tenkacloud local` でも実行できます。ドリル一覧は `tenkacloud local list`、1 つを事前起動する場合は `tenkacloud local --problem <id>` です。リモート保存を使う場合だけ `--database turso` と `TENKACLOUD_LOCAL_TURSO_URL` / `TENKACLOUD_LOCAL_TURSO_AUTH_TOKEN` を明示します。デフォルトは常に SQLite です。全サブコマンドは [docs/local-play.md](./docs/local-play.md)(英語)を参照してください。
+`bun link` を行わない場合は `bun run tenkacloud local` でも実行できます。ドリル一覧は `tenkacloud local list`、1 つを事前起動する場合は `tenkacloud local --problem <id>` です。リモート保存を使う場合だけ `--database turso` と `TENKACLOUD_LOCAL_TURSO_URL` / `TENKACLOUD_LOCAL_TURSO_AUTH_TOKEN` を明示します。デフォルトは常に SQLite です。
+
+</details>
+
+全サブコマンドは [docs/local-play.md](./docs/local-play.md)(英語)を参照してください。
 
 ### AWS にデプロイする
 
@@ -90,9 +110,15 @@ AWS コンソールからデプロイします。CloudFormation スタックが 
 4. **acknowledge IAM** にチェックし、スタックを作成する。
 5. スタックの **`StartBuildConsoleUrl`** 出力から CodeBuild プロジェクトを開き、**Start build** を押す。
 
-15〜30 分ほどでビルドが完了します。**Admin Console** と **Participant Portal** の URL は、ビルドが作成する `tenkacloud-lite` / `tenkacloud-lite-problem-deploy` 各スタックの **Outputs** に載っています。これでデプロイは完了です。
+15〜30 分ほどでビルドが完了します。すでに見ている CodeBuild のビルドログを一番下までスクロールしてください — デプロイの最後に `✓ Lite mode deploy complete` ブロックが出力され、その **Access URLs:** セクションに **Application Admin Console** と **Participant Portal** の URL がそのまま載っており、続けて **Next steps:** と **Teardown:** の案内も表示されます。CloudFormation 側で確認したい場合は、同じ 2 つの URL がビルドが作成する `tenkacloud-lite` / `tenkacloud-lite-problem-deploy` 各スタックの **Outputs** にも載っています。
 
 **削除する場合:** 同じ CodeBuild プロジェクトで **Start build with overrides** を選び、環境変数 `ACTION` に `destroy` を設定して実行してください — 2 つのアプリスタックが正しい順序で削除されます。その後 `tenkacloud-lite-launcher` スタック自体を削除すると、CodeBuild プロジェクトも消えます。
+
+## 対応環境
+
+- **macOS・Linux・WSL2** — ローカルプレイ(`make local` / `tenkacloud local`)と AWS デプロイ(`make deploy` の Lite mode、`make deploy-saas` の SaaS mode)の両方に対応する。
+- **WSL2 を使わないネイティブ Windows** — ローカルプレイは非対応。上記の GitHub Codespaces を使うか、先に WSL2 を導入する。
+- **ブラウザのみでローカルインストール不要な場合** — 上記の GitHub Codespaces を使う。
 
 ## 運用コスト
 

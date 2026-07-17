@@ -58,14 +58,30 @@ Codespaces plays **cloud-independent drills only** — self-contained Docker con
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/susumutomita/TenkaCloud)
 
 1. Click the badge above → **Create codespace on main** (the first build installs Bun, initializes `problems/`, and starts Docker for you).
-2. Run the **"▷ ローカルプレイ開始"** task (Command Palette → **Tasks: Run Task**, or `Cmd/Ctrl+Shift+B`) — it runs `make local` for you.
-3. Once the Participant Portal is running, open the **PORTS** tab and click the preview icon next to port **5175**.
+2. Wait for the container to finish starting. Local play starts automatically, and **the Participant Portal opens automatically** in a preview tab — nothing to type.
+3. If the preview does not open by itself, open the **PORTS** tab and click the preview icon next to port **5175**.
 
 > Stay inside the codespace: drill links go through the port `5175` preview URL; a raw `127.0.0.1` URL pasted into a browser tab on your own machine will not work.
+>
+> **Optional manual re-run:** the automatic start has a two-minute window. If it times out (the Codespaces startup log says so), run the **"▷ ローカルプレイ開始"** task yourself (Command Palette → **Tasks: Run Task**, or `Cmd/Ctrl+Shift+B`) — it runs `make local` for you.
 
 ### Try it locally (no AWS)
 
 `tenkacloud local` is the primary local drill entry point: it starts the local scoring API and the Participant Portal, then you pick and start a drill from the portal screen. Progress is stored by default in the private local SQLite file `.tenkacloud/local/local-play.sqlite`; local play has no DynamoDB or AWS SDK dependency. `make local` remains a compatibility wrapper.
+
+**Recommended for a fresh clone — self-healing, no Bun preinstall required:**
+
+```bash
+git clone https://github.com/susumutomita/TenkaCloud.git
+cd TenkaCloud
+make local-onboard
+bun run tenkacloud local
+```
+
+`make local-onboard` asks for consent before installing anything it needs — Bun itself if missing, the `problems/` submodule, and a Docker diagnosis — then reports readiness; it installs nothing without asking. Pass `YES=1` (`make local-onboard YES=1`) to pre-approve every install for unattended runs (this is the path GitHub Codespaces uses). Once it reports all prerequisites satisfied, `bun run tenkacloud local` starts the local scoring API and Participant Portal.
+
+<details>
+<summary>What it does under the hood / manual alternative</summary>
 
 ```bash
 git clone https://github.com/susumutomita/TenkaCloud.git
@@ -76,7 +92,11 @@ bun link
 tenkacloud local
 ```
 
-Without the one-time `bun link`, use `bun run tenkacloud local`. Run `tenkacloud local list` to list every drill id, or pre-start one with `tenkacloud local --problem <id>`. The optional remote state backend is selected explicitly with `--database turso` and `TENKACLOUD_LOCAL_TURSO_URL` / `TENKACLOUD_LOCAL_TURSO_AUTH_TOKEN`; SQLite remains the default. See [docs/local-play.md](./docs/local-play.md) for every subcommand.
+Without the one-time `bun link`, use `bun run tenkacloud local`. Run `tenkacloud local list` to list every drill id, or pre-start one with `tenkacloud local --problem <id>`. The optional remote state backend is selected explicitly with `--database turso` and `TENKACLOUD_LOCAL_TURSO_URL` / `TENKACLOUD_LOCAL_TURSO_AUTH_TOKEN`; SQLite remains the default.
+
+</details>
+
+See [docs/local-play.md](./docs/local-play.md) for every subcommand.
 
 ### Deploy on AWS
 
@@ -88,9 +108,15 @@ Deploy from the AWS Console — a CloudFormation stack creates a CodeBuild proje
 4. Check **acknowledge IAM** and create the stack.
 5. Open the CodeBuild project from the stack's **`StartBuildConsoleUrl`** output and press **Start build**.
 
-After ~15-30 minutes the build finishes. The **Admin Console** and **Participant Portal** URLs are in the **Outputs** of the `tenkacloud-lite` and `tenkacloud-lite-problem-deploy` stacks that the build creates.
+After ~15-30 minutes the build finishes. Scroll to the end of the CodeBuild build log you're already watching — the deploy prints a `✓ Lite mode deploy complete` block whose **Access URLs:** section lists the **Application Admin Console** and **Participant Portal** URLs directly, followed by **Next steps:** and **Teardown:** guidance. If you'd rather read them from CloudFormation, the same two URLs are also in the **Outputs** of the `tenkacloud-lite` and `tenkacloud-lite-problem-deploy` stacks that the build creates.
 
 **Tear down:** in the same CodeBuild project, choose **Start build with overrides**, set `ACTION` to `destroy`, and start it; then delete the `tenkacloud-lite-launcher` stack to remove the CodeBuild project itself.
+
+## Supported environments
+
+- **macOS, Linux, or WSL2** — supported for local play (`make local` / `tenkacloud local`) and for AWS deploys (`make deploy` Lite mode, `make deploy-saas` SaaS mode).
+- **Native Windows without WSL2** — not supported for local play; use GitHub Codespaces (above) or install WSL2 first.
+- **Browser only, no local install** — use GitHub Codespaces (above).
 
 ## Running costs
 
