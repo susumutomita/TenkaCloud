@@ -42,6 +42,38 @@ describe("stepFor", () => {
   });
 });
 
+describe("stepFor on unsupported platforms (win32 / BSD / anything not darwin or linux)", () => {
+  const LINUX_ONLY_MARKERS = ["curl", "systemctl", "brew", "get.docker.com"];
+
+  /** No branch may leak a macOS/Linux command; every branch must redirect instead. */
+  function expectRedirectNotLinuxCommand(step: RemediationStep): void {
+    const rendered = JSON.stringify(step);
+    for (const marker of LINUX_ONLY_MARKERS) {
+      expect(rendered).not.toContain(marker);
+    }
+    expect(rendered).toContain("Codespaces");
+    expect(rendered).toContain("WSL2");
+    expect(step.commands).toHaveLength(0);
+    expect(step.kind).toBe("manual-only");
+  }
+
+  it("should redirect the Bun install step to Codespaces/WSL2 instead of the Linux installer", () => {
+    expectRedirectNotLinuxCommand(stepFor(check("bun", "missing"), "other"));
+  });
+
+  it("should redirect the Docker install step to Codespaces/WSL2 instead of get.docker.com", () => {
+    expectRedirectNotLinuxCommand(stepFor(check("docker-cli", "missing"), "other"));
+  });
+
+  it("should redirect the Docker Compose install step to Codespaces/WSL2 instead of get.docker.com", () => {
+    expectRedirectNotLinuxCommand(stepFor(check("docker-compose", "missing"), "other"));
+  });
+
+  it("should redirect the Docker daemon step to Codespaces/WSL2 instead of systemctl", () => {
+    expectRedirectNotLinuxCommand(stepFor(check("docker-daemon", "action-needed"), "other"));
+  });
+});
+
 describe("planRemediation", () => {
   it("should only produce steps for blocking checks, in order", () => {
     const diagnosis: Diagnosis = {

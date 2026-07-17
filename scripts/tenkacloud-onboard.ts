@@ -50,9 +50,10 @@ function diagnoseInput(): DiagnoseInput {
   return { repoRoot: REPO_ROOT, run: nodeRunner, fs: { existsSync } };
 }
 
-function currentPlatform(): Platform {
-  if (process.platform === "darwin") return "darwin";
-  if (process.platform === "linux") return "linux";
+/** Injectable so it's unit-testable, same pattern as diagnose()/plan(); defaults to the real platform. */
+export function currentPlatform(platform: string = process.platform): Platform {
+  if (platform === "darwin") return "darwin";
+  if (platform === "linux") return "linux";
   return "other";
 }
 

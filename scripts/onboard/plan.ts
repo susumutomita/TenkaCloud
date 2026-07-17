@@ -24,6 +24,16 @@ export type StepKind = "safe-auto" | "software-install" | "manual-only";
 
 export type Platform = "darwin" | "linux" | "other";
 
+/**
+ * Shown instead of a command on "other" platforms (native Windows win32, BSD,
+ * anything not darwin/linux) — these never get a Linux install command, only a
+ * redirect. Wording matches the README's "Supported environments" section.
+ */
+const UNSUPPORTED_PLATFORM_NOTE =
+  "This platform is not supported for local install (see README's Supported " +
+  "environments) — use GitHub Codespaces for a zero-install browser run, or " +
+  "install WSL2 first and run TenkaCloud from there.";
+
 export interface RemediationStep {
   readonly id: CheckResult["id"];
   readonly title: string;
@@ -47,6 +57,16 @@ export interface ResolveOptions {
 }
 
 function bunStep(platform: Platform): RemediationStep {
+  if (platform === "other") {
+    return {
+      id: "bun",
+      title: "Install Bun",
+      why: "Bun runs every TenkaCloud script and installs workspace dependencies.",
+      kind: "manual-only",
+      commands: [],
+      notes: UNSUPPORTED_PLATFORM_NOTE,
+    };
+  }
   const commands =
     platform === "darwin"
       ? ["brew install oven-sh/bun/bun"]
@@ -74,6 +94,16 @@ function dockerInstallStep(platform: Platform): RemediationStep {
         "Docker Desktop is an alternative — install it from docker.com and start the app instead.",
     };
   }
+  if (platform === "other") {
+    return {
+      id: "docker-cli",
+      title: "Install a Docker runtime",
+      why: "Local play starts each challenge in a Docker container via Docker Compose.",
+      kind: "manual-only",
+      commands: [],
+      notes: UNSUPPORTED_PLATFORM_NOTE,
+    };
+  }
   return {
     id: "docker-cli",
     title: "Install a Docker runtime",
@@ -96,6 +126,16 @@ function dockerComposeStep(platform: Platform): RemediationStep {
 }
 
 function dockerDaemonStep(platform: Platform): RemediationStep {
+  if (platform === "other") {
+    return {
+      id: "docker-daemon",
+      title: "Start the Docker daemon",
+      why: "The Docker CLI is installed but the daemon must be running to start containers.",
+      kind: "manual-only",
+      commands: [],
+      notes: UNSUPPORTED_PLATFORM_NOTE,
+    };
+  }
   const commands =
     platform === "darwin"
       ? ["colima start  # or launch Docker Desktop"]
