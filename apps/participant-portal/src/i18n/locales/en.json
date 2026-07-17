@@ -140,6 +140,7 @@
     "locked_unlock_condition": "Unlocks after completing \"{gateName}\"",
     "gate_start_here": "Start here",
     "gate_completion_bonus": "Completion bonus +{points} pt",
+    "recommended_start_here": "Start here",
     "difficulty_label": "Difficulty: {label}",
     "difficulty_1": "Intro",
     "difficulty_2": "Beginner",

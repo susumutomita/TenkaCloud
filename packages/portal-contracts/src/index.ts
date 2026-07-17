@@ -261,6 +261,14 @@ export interface ParticipantProblemView {
     /** A failed operation still owns local resources; Stop retries cleanup before restart. */
     readonly cleanupRequired?: true;
   };
+  /**
+   * [#2696 PR5] Local-play only: true when this is the platform's one fixed
+   * intro drill (`challenges/hello-world`, the ADR-012 reference implementation).
+   * `scripts/local-play/catalog-loader.ts` pins this problem first in the
+   * catalog; the portal renders a "start here" badge on it. AWS mode never
+   * sends this field.
+   */
+  readonly recommended?: true;
   readonly region: string;
   /** 競技アカウント ID。 SSO Credentials の AWS Console federation で使う。
    *  (機密ではない — IAM role 信頼ポリシーや CFn template にも露出する。) */

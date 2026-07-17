@@ -39,11 +39,39 @@ export function autoInitProblemsSubmodule(
   return run("git", ["submodule", "update", "--init", "problems"]);
 }
 
+/**
+ * [#2696 PR5] The platform's one fixed intro drill for local play: the ADR-012
+ * reference implementation, Docker (on by default — simulator drills stay
+ * opt-in per #2632), and already named as the "what's next" pointer in the
+ * post-deploy guide. A single named constant here keeps the pin decision in
+ * one place instead of being re-decided per caller / component.
+ */
+export const LOCAL_INTRO_DRILL_PROBLEM_ID = "hello-world";
+
+/**
+ * Move the intro drill to the front of `items`, keeping every other entry in
+ * its existing relative order. A no-op when the drill is absent from `items`
+ * (e.g. a stripped-down fixture) or is already first — so the learner's
+ * catalog always opens on one obvious first click. Used by both the portal
+ * catalog ({@link loadLocalPlayCatalog}) and `tenkacloud local list`, so
+ * ordering never has to be re-decided in a frontend component.
+ */
+export function pinIntroDrillFirst<T extends { readonly problemId: string }>(
+  items: readonly T[],
+): T[] {
+  const introIndex = items.findIndex((item) => item.problemId === LOCAL_INTRO_DRILL_PROBLEM_ID);
+  if (introIndex <= 0) return [...items];
+  const intro = items[introIndex] as T;
+  return [intro, ...items.slice(0, introIndex), ...items.slice(introIndex + 1)];
+}
+
 /** Load the full local-play catalog, self-healing an uninitialized problems/ submodule first. */
 export function loadLocalPlayCatalog(repoRoot: string, roots: string[]) {
   const load = () =>
-    listLocalPlayProblems(roots).map((summary) =>
-      loadContainerProblem(resolveProblemDir(roots, summary.problemId)),
+    pinIntroDrillFirst(
+      listLocalPlayProblems(roots).map((summary) =>
+        loadContainerProblem(resolveProblemDir(roots, summary.problemId)),
+      ),
     );
   let catalog = load();
   if (catalog.length === 0 && autoInitProblemsSubmodule(repoRoot)) {

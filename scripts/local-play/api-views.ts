@@ -8,6 +8,7 @@ import {
   type ProblemRuntime,
   sessionScore,
 } from "./api-state";
+import { LOCAL_INTRO_DRILL_PROBLEM_ID } from "./catalog-loader";
 import type { ContainerCheck, ContainerHint, ContainerHintRevealMode } from "./manifest";
 import { mapStrings } from "./port-remap";
 import type { ProblemStatus } from "./problem-lifecycle";
@@ -108,6 +109,10 @@ function problemView(
     problemId: problem.problemId,
     name: problem.name,
     instructions: problem.instructions,
+    // [#2696 PR5] The platform's one fixed intro drill (ADR-012 reference
+    // implementation) — the portal pins this problem first and shows a
+    // "start here" badge on it. Every other problem omits the field.
+    ...(problem.problemId === LOCAL_INTRO_DRILL_PROBLEM_ID ? { recommended: true as const } : {}),
     // Local mode is a drill: reveal immediately after the whole problem is solved.
     ...(complete && problem.writeup ? { writeup: problem.writeup } : {}),
     // #2054 i18n: ship the en overlay so the portal locale switcher can render

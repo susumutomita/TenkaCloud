@@ -127,6 +127,20 @@ describe("local-play API", () => {
     expect(problem).not.toHaveProperty("description");
     // Default (unset) omits hintReveal → portal keeps the sequential gate.
     expect(problem.scoring).not.toHaveProperty("hintReveal");
+    // [#2696 PR5] Only the fixed intro drill (challenges/hello-world) is flagged
+    // recommended — an ordinary problem must never carry it.
+    expect(problem).not.toHaveProperty("recommended");
+  });
+
+  it("[#2696 PR5] should flag challenges/hello-world as the recommended intro drill", async () => {
+    const introDrill: ContainerProblem = { ...PROBLEM, problemId: "hello-world" };
+    const state = createLocalPlayState({ problems: [introDrill] }, { verify: neverVerify });
+    await state.lifecycle.ensureRunning(introDrill.problemId);
+    const res = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
+    const problem = (res.body as { problems: Array<{ problemId: string; recommended?: boolean }> })
+      .problems[0];
+    expect(problem?.problemId).toBe("hello-world");
+    expect(problem?.recommended).toBe(true);
   });
 
   it("should surface hintReveal:'flat' on a verify (flag) view when opted in", async () => {
