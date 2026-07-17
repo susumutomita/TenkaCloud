@@ -1,3 +1,4 @@
+import { LITE_DRILL_CHECKPOINTS, LITE_DRILL_PROBLEM_ID } from "@tenkacloud/portal-contracts";
 import type {
   LeaderboardResponse,
   NotificationsResponse,
@@ -16,6 +17,13 @@ import type {
  *   - どちらも flag 提出型なので、 endpoint (= クリックで 404 する偽 URL) を持たない。
  *   - 問題文 (name / description / instructions) を同梱し「何をするか」を明示する。
  *   - 1 問は解答済み (celebration 済みの状態)、 もう 1 問は未解答 (訪問者が解ける)。
+ *
+ * 加えて Issue #2696: 「自分の TenkaCloud Lite を立てる」 実践ドリルを 1 問固定出題する。
+ * これはデモ内で完結しない唯一の問題で、 学習者が実際に自分の AWS アカウントへ Lite mode
+ * を deploy → Competitor アカウント検証 → 初回イベント作成、 と進むたびに実環境の各画面に
+ * 印字されるチェックポイントコード (`@tenkacloud/portal-contracts` の lite-drill 契約) を
+ * この demo portal に提出して得点する。 デモ (A ルート「まず遊ぶ」) から実デプロイ (B ルート
+ * 「イベントを開く」) への導線をゲームとして一本化するのが狙い。
  *
  * タイムスタンプはすべて **モジュール読み込み時刻からの相対値**。固定日時にすると実時刻が
  * 進んだとき「自動削除超過」「N 時間前に採点」の警告が出てデモが壊れて見えるため。
@@ -101,6 +109,88 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
       deployLog: { cursor: "", entries: [] },
       createdAt: iso(-25 * MIN),
     },
+    {
+      jobId: "01HZX0KZZ3DR0PW9M4Q7XV2C5D",
+      problemId: LITE_DRILL_PROBLEM_ID,
+      name: "自分の TenkaCloud Lite を立てる",
+      description:
+        "デモの外に出て、自分の AWS アカウントに本物の TenkaCloud Lite を立ち上げる実践ドリル。" +
+        "手順を正しく実行するたびに、実環境の画面にチェックポイントコード TENKA{...} が現れる。" +
+        "それをこの画面に提出して得点しよう。\n\n" +
+        "はじめる前に:\n" +
+        "- 管理者相当の権限で使える AWS アカウントと、受信できるメールアドレスが必要\n" +
+        "- デプロイ中はデフォルト構成で約 $7/月の継続費用が発生する (遊び終えたら手順 5 で必ず片付ける)\n" +
+        "- launcher は CodeBuild 用に広い権限の IAM Role を作成する (CloudFormation の IAM acknowledge で明示同意する)",
+      instructions:
+        "1. README の Quickstart から lite-pipeline.yaml で CloudFormation スタックを作成する (必須入力は TenantAdminEmail のみ)。" +
+        "作成完了後、スタックの「出力 (Outputs)」タブの OnboardingDrillCheckpoint の値を「1. Launcher スタック作成」に提出。\n" +
+        "2. Outputs の StartBuildConsoleUrl から CodeBuild を開き「ビルドを開始」。ログ末尾の「✓ Lite mode deploy complete」ブロックのコードを「2. Lite デプロイ完了」に提出。\n" +
+        "3. 招待メールの一時パスワードで Application Admin Console にサインインし、Competitor Accounts で競技用 AWS アカウントを登録 → bootstrap テンプレートを競技側アカウントに適用 → 「検証」。成功表示のコードを「3. Competitor アカウント検証」に提出。\n" +
+        "4. Events タブで最初のイベントを作成する (チームに検証済みアカウントを割り当てる)。作成成功画面のコードを「4. 初回イベント作成」に提出。\n" +
+        "5. 遊び終えたら CodeBuild の「Start build with overrides」で ACTION=destroy を実行し、最後に launcher スタックを削除して課金を止める。",
+      i18n: {
+        en: {
+          name: "Deploy your own TenkaCloud Lite",
+          description:
+            "Step outside the demo and stand up a real TenkaCloud Lite in your own AWS account. " +
+            "Each step you complete reveals a TENKA{...} checkpoint code on the real screens — " +
+            "paste it back here to score.\n\n" +
+            "Before you start:\n" +
+            "- You need an AWS account with admin-level access and an email address you can read\n" +
+            "- The default profile costs about $7/month while deployed (step 5 tears it down)\n" +
+            "- The launcher creates a broad-permission IAM Role for CodeBuild (you acknowledge it in CloudFormation)",
+          instructions:
+            "1. Create the CloudFormation stack from lite-pipeline.yaml via the README Quickstart (TenantAdminEmail is the only required field). " +
+            'When it completes, submit the OnboardingDrillCheckpoint value from the stack\'s "Outputs" tab to "1. Launcher stack created".\n' +
+            '2. Open the CodeBuild project via the StartBuildConsoleUrl output and press "Start build". Submit the code printed in the "Lite mode deploy complete" block at the end of the log to "2. Lite deploy complete".\n' +
+            '3. Sign in to the Application Admin Console with the invite email, register a competitor AWS account under Competitor Accounts, apply the bootstrap template in that account, then press "Verify". Submit the code from the success message to "3. Competitor account verified".\n' +
+            '4. Create your first event on the Events tab (assign the verified account to a team). Submit the code shown on the success screen to "4. First event created".\n' +
+            '5. When you are done, run "Start build with overrides" with ACTION=destroy, then delete the launcher stack to stop the charges.',
+        },
+      },
+      region: "ap-northeast-1",
+      awsAccountId: "999999999999",
+      status: "COMPLETE",
+      stackOutputs: {},
+      expiresAt: DEPLOY_EXPIRES_AT,
+      // 全 sub-flag 未提出で始める (= 実デプロイに進んだ学習者だけが埋められる)。
+      score: 0,
+      scoring: {
+        kind: "multi-flag",
+        flags: [
+          {
+            id: LITE_DRILL_CHECKPOINTS.launcherCreated.flagId,
+            label: "1. Launcher スタック作成",
+            points: 100,
+            solved: false,
+            i18n: { en: { label: "1. Launcher stack created" } },
+          },
+          {
+            id: LITE_DRILL_CHECKPOINTS.deployComplete.flagId,
+            label: "2. Lite デプロイ完了",
+            points: 100,
+            solved: false,
+            i18n: { en: { label: "2. Lite deploy complete" } },
+          },
+          {
+            id: LITE_DRILL_CHECKPOINTS.competitorVerified.flagId,
+            label: "3. Competitor アカウント検証",
+            points: 100,
+            solved: false,
+            i18n: { en: { label: "3. Competitor account verified" } },
+          },
+          {
+            id: LITE_DRILL_CHECKPOINTS.firstEventCreated.flagId,
+            label: "4. 初回イベント作成",
+            points: 100,
+            solved: false,
+            i18n: { en: { label: "4. First event created" } },
+          },
+        ],
+      },
+      deployLog: { cursor: "", entries: [] },
+      createdAt: iso(-25 * MIN),
+    },
   ],
   eventGate: { kind: "ok" },
 };
@@ -114,7 +204,7 @@ export const DEV_MOCK_LEADERBOARD: LeaderboardResponse = {
       teamName: "Alpha Squad",
       score: 600,
       completedProblems: 2,
-      totalProblems: 2,
+      totalProblems: 3,
       isMyTeam: false,
     },
     {
@@ -123,7 +213,7 @@ export const DEV_MOCK_LEADERBOARD: LeaderboardResponse = {
       teamName: "Bravo Crew",
       score: 450,
       completedProblems: 1,
-      totalProblems: 2,
+      totalProblems: 3,
       isMyTeam: false,
     },
     {
@@ -132,7 +222,7 @@ export const DEV_MOCK_LEADERBOARD: LeaderboardResponse = {
       teamName: "Demo Team",
       score: 300,
       completedProblems: 1,
-      totalProblems: 2,
+      totalProblems: 3,
       isMyTeam: true,
     },
     {
@@ -141,7 +231,7 @@ export const DEV_MOCK_LEADERBOARD: LeaderboardResponse = {
       teamName: "Delta Force",
       score: 300,
       completedProblems: 1,
-      totalProblems: 2,
+      totalProblems: 3,
       isMyTeam: false,
     },
     {
@@ -150,7 +240,7 @@ export const DEV_MOCK_LEADERBOARD: LeaderboardResponse = {
       teamName: "Echo Five",
       score: 0,
       completedProblems: 0,
-      totalProblems: 2,
+      totalProblems: 3,
       isMyTeam: false,
     },
   ],
@@ -162,6 +252,13 @@ export const DEV_MOCK_NOTIFICATIONS: NotificationsResponse = {
   eventId: "evt-demo",
   items: [
     {
+      notificationId: "notif-003",
+      title: "実践ドリル開放",
+      body: "「自分の TenkaCloud Lite を立てる」ドリルが追加されました。自分の AWS アカウントに本物の TenkaCloud を立ち上げ、各手順で現れるチェックポイントコードを提出しよう。",
+      severity: "info",
+      occurredAt: iso(-2 * MIN),
+    },
+    {
       notificationId: "notif-002",
       title: "ヒントが解放されました",
       body: `「${SEQUENCE_PROBLEM_ID}」のヒントが開放されました。ペナルティを払って閲覧できます。`,
@@ -171,7 +268,7 @@ export const DEV_MOCK_NOTIFICATIONS: NotificationsResponse = {
     {
       notificationId: "notif-001",
       title: "競技開始",
-      body: "TenkaCloud のデモを開始しました。2 問のクエストが出題されています。解いて flag を提出しよう!",
+      body: "TenkaCloud のデモを開始しました。2 問のクエストと 1 つの実践ドリルが出題されています。解いて flag を提出しよう!",
       severity: "info",
       occurredAt: iso(-25 * MIN),
     },

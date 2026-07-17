@@ -6,6 +6,7 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import Table from "@cloudscape-design/components/table";
 import { useState } from "react";
 import type { CreateEventResponse } from "../../api/events-client";
+import { LiteDrillCheckpointAlert } from "../../components/LiteDrillCheckpointAlert";
 import { OneTimeSecretCopyButton } from "../../components/OneTimeSecretCopyButton";
 import { useT } from "../../i18n";
 import { buildInviteLink } from "../../lib/invite-link";
@@ -31,6 +32,11 @@ export interface EventCreateDeployPromptModalProps {
   /** Plaintext values from POST /events. They exist only while this modal is open. */
   teams: CreateEventResponse["teams"];
   readonly participantPortalUrl?: string;
+  /**
+   * Issue #2696: Lite mode のオンボーディングドリル 「初回イベント作成」 チェックポイント
+   * コード。 caller (= EventCreatePage) が Lite 判定込みで解決し、 非 Lite では undefined。
+   */
+  readonly liteDrillCheckpointCode?: string;
   onDeployNow: () => void;
   onDeployLater: () => void;
 }
@@ -42,6 +48,7 @@ export function EventCreateDeployPromptModal({
   bulkDeploySupported = true,
   teams,
   participantPortalUrl,
+  liteDrillCheckpointCode,
   onDeployNow,
   onDeployLater,
 }: EventCreateDeployPromptModalProps) {
@@ -134,6 +141,7 @@ export function EventCreateDeployPromptModal({
             ? t("event_create.deploy_modal_alert_body")
             : t("event_create.deploy_modal_alert_body_non_aws")}
         </Alert>
+        {liteDrillCheckpointCode && <LiteDrillCheckpointAlert code={liteDrillCheckpointCode} />}
       </SpaceBetween>
     </Modal>
   );

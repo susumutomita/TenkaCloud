@@ -1,3 +1,4 @@
+import { LITE_DRILL_CHECKPOINTS, LITE_DRILL_PROBLEM_ID } from "@tenkacloud/portal-contracts";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type * as React from "react";
@@ -191,6 +192,32 @@ describe("MultiFlagSubmissionPanel", () => {
     const buttons = screen.getAllByRole("button", { name: /^Submit/ });
     await user.click(buttons[0]);
     expect(await screen.findByText("🎉 Ep01: Reachability — solved")).toBeInTheDocument();
+    expect(apiMocks.submitFlag).not.toHaveBeenCalled();
+  });
+});
+
+describe("Lite deploy drill (issue #2696)", () => {
+  const CHECKPOINT = LITE_DRILL_CHECKPOINTS.launcherCreated;
+  const DRILL_FLAGS = [
+    { id: CHECKPOINT.flagId, label: "1. Launcher スタック作成", points: 100, solved: false },
+  ];
+
+  it("should solve a drill step in dev-mock mode only with its checkpoint code", async () => {
+    const user = userEvent.setup();
+    renderPanel({ problemId: LITE_DRILL_PROBLEM_ID, flags: DRILL_FLAGS }, "dev-mock");
+    // userEvent.type は `{` を修飾記法として解釈するため、 literal brace は `{{` に escape する。
+    await user.type(screen.getByRole("textbox"), CHECKPOINT.code.replaceAll("{", "{{"));
+    await user.click(screen.getByRole("button", { name: /^Submit/ }));
+    expect(await screen.findByText("🎉 1. Launcher スタック作成 — solved")).toBeInTheDocument();
+    expect(apiMocks.submitFlag).not.toHaveBeenCalled();
+  });
+
+  it("should reject the generic mock flag on a drill step in dev-mock mode", async () => {
+    const user = userEvent.setup();
+    renderPanel({ problemId: LITE_DRILL_PROBLEM_ID, flags: DRILL_FLAGS }, "dev-mock");
+    await user.type(screen.getByRole("textbox"), "tenkacloudsample");
+    await user.click(screen.getByRole("button", { name: /^Submit/ }));
+    expect(await screen.findByText("Wrong (-10 pt) — total -10 pt")).toBeInTheDocument();
     expect(apiMocks.submitFlag).not.toHaveBeenCalled();
   });
 });

@@ -292,6 +292,11 @@
     "credential_unregistered": "Credential is not registered.",
     "mixed_provider_error": "AWS and non-AWS providers cannot be mixed in one event yet. For v1, create separate events per provider."
   },
+  "lite_drill": {
+    "checkpoint_header": "Onboarding drill: checkpoint earned!",
+    "checkpoint_body": "Paste this code into the \"Deploy your own TenkaCloud Lite\" drill in the landing demo portal to score.",
+    "copy_aria": "Copy the checkpoint code"
+  },
   "deployments": {
     "header": "Deployments",
     "description": "Deploy jobs launched by your tenant. Click a row for details.",

@@ -12,7 +12,7 @@ import {
   submitFlag,
 } from "../api/portal-client";
 import { useIsMock } from "../config-context";
-import { evaluateMockFlag } from "../dev-mock/flag-submit";
+import { evaluateMockSubFlag } from "../dev-mock/flag-submit";
 import { useLang, useT } from "../i18n";
 import { CelebrationOverlay } from "./CelebrationOverlay";
 import { formatProblemPanelActionError } from "./ProblemPanel.helpers";
@@ -25,7 +25,8 @@ import { HintsPanel } from "./ProblemPanelFlagSubmission";
  *
  * - solved な flag: 「解答済 (+N pt)」 の success Alert
  * - 未 solved な flag: label 付き Input + submit Button (= per-flag の submitting state)
- * - dev-mock mode では backend を叩かず `evaluateMockFlag` で local 評価する
+ * - dev-mock mode では backend を叩かず `evaluateMockSubFlag` で local 評価する
+ *   (Lite deploy ドリル #2696 は sub-flag ごとのチェックポイントコード一致を要求)
  * - 正解後は `onScored()` で /portal/me を refetch し、 server truth (= solved 状態) を読み直す
  *
  * polling 以外の状態同期 (SSE / WebSocket) は使わない (AGENTS.md)。 refetch は親の polling と
@@ -93,8 +94,8 @@ function SubFlagRow({
   const lang = useLang();
   // [#2252] i18n.en.checks 由来の label 訳 (multi-verify)。 無ければ ja label に fallback。
   const label = lang === "en" && flag.i18n?.en?.label ? flag.i18n.en.label : flag.label;
-  // dev-mock mode のとき submit を backend に投げず evaluateMockFlag で local 評価する
-  // (= 単一 flag kind の FlagSubmissionPanel と同方針)。
+  // dev-mock mode のとき submit を backend に投げず evaluateMockSubFlag で local 評価する
+  // (= 単一 flag kind の FlagSubmissionPanel と同方針。 ドリル問題のみ per-flag 判定)。
   const isMock = useIsMock();
   const [value, setValue] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -122,7 +123,7 @@ function SubFlagRow({
     setOutcome(null);
     try {
       const result = isMock
-        ? evaluateMockFlag(value, flag.points)
+        ? evaluateMockSubFlag(problemId, flag.id, value, flag.points)
         : await submitFlag(apiBaseUrl, sessionToken, problemId, value, flag.id);
       setOutcome(result);
       if (!isMock && result.kind === "ok") await onScored();

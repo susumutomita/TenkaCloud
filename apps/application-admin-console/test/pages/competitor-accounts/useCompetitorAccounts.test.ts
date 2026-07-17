@@ -93,7 +93,8 @@ describe("useCompetitorAccounts", () => {
   it("should verify an account and reload, clearing verifyInFlight afterward", async () => {
     mockUseApiClient.mockReturnValue(FAKE_CLIENT);
     mockList.mockResolvedValue({ items: ITEMS });
-    mockVerify.mockResolvedValue(undefined);
+    // 実 API (verifyCompetitorAccount) は更新後の CompetitorAccountSummary を返す。
+    mockVerify.mockResolvedValue({ awsAccountId: "111122223333", verified: true });
 
     const { result } = renderHook(() => useCompetitorAccounts(config));
     await waitFor(() => expect(result.current.items).not.toBeNull());
@@ -105,12 +106,14 @@ describe("useCompetitorAccounts", () => {
     // reload (mount) + reload (after verify) = 2 回。
     expect(mockList).toHaveBeenCalledTimes(2);
     expect(result.current.verifyInFlight).toBeNull();
+    // Issue #2696: trust 検証成功の signal (= Lite drill チェックポイント表示に使う)。
+    expect(result.current.lastVerified?.awsAccountId).toBe("111122223333");
   });
 
-  it("should record a friendly error and clear verifyInFlight when verify fails", async () => {
+  it("should not raise the lastVerified signal when the API reports verified=false (#2696)", async () => {
     mockUseApiClient.mockReturnValue(FAKE_CLIENT);
     mockList.mockResolvedValue({ items: ITEMS });
-    mockVerify.mockRejectedValue(new Error("verify failed"));
+    mockVerify.mockResolvedValue({ awsAccountId: "111122223333", verified: false });
 
     const { result } = renderHook(() => useCompetitorAccounts(config));
     await waitFor(() => expect(result.current.items).not.toBeNull());
@@ -118,8 +121,49 @@ describe("useCompetitorAccounts", () => {
     await act(async () => {
       await result.current.verify("111122223333");
     });
+    expect(result.current.lastVerified).toBeNull();
+  });
+
+  it("should let the caller dismiss the lastVerified signal (#2696)", async () => {
+    mockUseApiClient.mockReturnValue(FAKE_CLIENT);
+    mockList.mockResolvedValue({ items: ITEMS });
+    mockVerify.mockResolvedValue({ awsAccountId: "111122223333", verified: true });
+
+    const { result } = renderHook(() => useCompetitorAccounts(config));
+    await waitFor(() => expect(result.current.items).not.toBeNull());
+
+    await act(async () => {
+      await result.current.verify("111122223333");
+    });
+    expect(result.current.lastVerified).not.toBeNull();
+    act(() => {
+      result.current.clearLastVerified();
+    });
+    expect(result.current.lastVerified).toBeNull();
+  });
+
+  it("should record a friendly error and clear verifyInFlight when verify fails", async () => {
+    mockUseApiClient.mockReturnValue(FAKE_CLIENT);
+    mockList.mockResolvedValue({ items: ITEMS });
+    mockVerify
+      .mockResolvedValueOnce({ awsAccountId: "111122223333", verified: true })
+      .mockRejectedValueOnce(new Error("verify failed"));
+
+    const { result } = renderHook(() => useCompetitorAccounts(config));
+    await waitFor(() => expect(result.current.items).not.toBeNull());
+
+    // 1 回目の成功で lastVerified が立ち、 2 回目の失敗で下りる (= 古い成功表示を残さない)。
+    await act(async () => {
+      await result.current.verify("111122223333");
+    });
+    expect(result.current.lastVerified).not.toBeNull();
+
+    await act(async () => {
+      await result.current.verify("111122223333");
+    });
     expect(result.current.error?.title).toBe("verify failed");
     expect(result.current.verifyInFlight).toBeNull();
+    expect(result.current.lastVerified).toBeNull();
   });
 
   it("should delete an account and reload, clearing deleteInFlight afterward", async () => {
