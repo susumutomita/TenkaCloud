@@ -181,3 +181,4 @@ sampleimages/
 # Agent commit-flow scratch files — never commit (one leaked in PR #2496, removed since)
 .git-commit-msg.txt
 .pr-body.md
+.jscpd-report/

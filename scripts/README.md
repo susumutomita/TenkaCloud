@@ -38,6 +38,7 @@ lives:
 | --------- | -------- |
 | `workspace/` | Workspace-task orchestration: `run-workspaces.ts` (root `build` / `typecheck` / `test`), `run-coverage.ts` (3-shard coverage runner, #2513), `fix-coverage-paths.ts`, and their tests |
 | `security/` | Supply-chain and content security: `audit-dependencies.ts` + `audit-baseline.json` (lifecycle-script audit, `make audit-deps`), `detect-suspicious-comment.ts` (issue/PR comment scanner) |
+| `quality/` | Code-quality ratchets: `check-duplication.ts` + `duplication-baseline.json` (jscpd baseline gate, `make dup-check` — fails only when duplication grows past the baseline) |
 | `landing/` | Landing-site generators: `generate-landing-docs.ts`, `generate-landing-locales.ts` (both support `--check`), `landing-seo.test.ts` |
 | `onboard/` | First-run onboarding helpers behind `tenkacloud-onboard.ts`: `diagnose.ts`, `plan.ts`, `report.ts`, `onboard-bootstrap.sh`, `codespaces-setup.sh` (devcontainer `postCreateCommand`) |
 | `ops/` | Operator utilities for a running deployment: `env-init.ts` (`make env-check` wizard), `turso-live-guide.ts` (`make turso-live-guide` / read-only preflight and CFn verification), `scale-event-capacity.ts` + `capacity-model.ts` (DDB capacity), `disruption-live-fire.ts`, `report-retained-tables.ts` (used by `cleanup.sh`), `participant-portal-runtime-config.ts` (`make dev` mock config), `print-source-bundle-lifecycle.ts` |

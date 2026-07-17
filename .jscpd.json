@@ -1,0 +1,23 @@
+{
+  "format": ["typescript", "tsx", "javascript"],
+  "pattern": "{apps,packages,infrastructure,scripts,.claude}/**/*.{ts,tsx,js}",
+  "ignore": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/coverage/**",
+    "**/cdk.out/**",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/test/**",
+    "**/__tests__/**",
+    "problems/**",
+    "packs/**",
+    "landing/**"
+  ],
+  "minTokens": 50,
+  "minLines": 5,
+  "reporters": ["consoleFull", "json"],
+  "output": ".jscpd-report",
+  "absolute": false,
+  "gitignore": true
+}
