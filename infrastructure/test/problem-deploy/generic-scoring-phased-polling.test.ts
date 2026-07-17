@@ -384,6 +384,74 @@ describe("phased-polling kind", () => {
     expect(result.platform).toBe("apprunner");
   });
 
+  // --- Issue #2694: domain-specific platform keys must survive a managed host in front ---
+
+  // StackStack-style rules: platform keys are domain postures, not hosting tiers.
+  const postureScoring: PhasedPollingScoringMetadata = {
+    kind: "phased-polling",
+    intervalMinutes: 1,
+    probe: { metaPath: "/meta", scorePath: "/score" },
+    platformRules: {
+      "posture-0": { points: 0 },
+      "posture-2": { points: 200 },
+      production: { points: 500 },
+    },
+    failurePenalty: -100,
+    responsePenalties: [],
+    bonuses: [],
+  };
+
+  it("should preserve a StackStack posture key and award its points behind an ALB", async () => {
+    // The ALB hostname must not rewrite posture-2 to ecs (which has no rule → -100).
+    fetchMock
+      .mockResolvedValueOnce({
+        status: 200,
+        text: async () => JSON.stringify({ platform: "posture-2" }),
+      })
+      .mockResolvedValueOnce({ status: 200, text: async () => "" });
+    const result = await runPhasedPollingKind(singleSlotInput(ELB_URL, postureScoring));
+    expect(result.scoreDelta).toBe(200);
+    expect(result.platform).toBe("posture-2");
+  });
+
+  it("should preserve the production posture key behind an ALB", async () => {
+    fetchMock
+      .mockResolvedValueOnce({
+        status: 200,
+        text: async () => JSON.stringify({ platform: "production" }),
+      })
+      .mockResolvedValueOnce({ status: 200, text: async () => "" });
+    const result = await runPhasedPollingKind(singleSlotInput(ELB_URL, postureScoring));
+    expect(result.scoreDelta).toBe(500);
+    expect(result.platform).toBe("production");
+  });
+
+  it("should still derive ecs from the ALB host when /meta reports a hosting tier", async () => {
+    // Hosting-tier semantics unchanged: an ec2 self-report behind ELB DNS scores as ecs.
+    const noBonus: PhasedPollingScoringMetadata = { ...baseScoring, bonuses: [] };
+    fetchMock
+      .mockResolvedValueOnce({ status: 200, text: async () => JSON.stringify({ platform: "ec2" }) })
+      .mockResolvedValueOnce({ status: 200, text: async () => "" });
+    const result = await runPhasedPollingKind(singleSlotInput(ELB_URL, noBonus));
+    expect(result.scoreDelta).toBe(1000);
+    expect(result.platform).toBe("ecs");
+  });
+
+  it("should not let a posture key claim managed-tier points on a hosting-tier problem", async () => {
+    // A posture self-report on a problem without that rule key falls to failurePenalty,
+    // never to a managed tier (anti-spoof from #2420 stays intact).
+    const noBonus: PhasedPollingScoringMetadata = { ...baseScoring, bonuses: [] };
+    fetchMock
+      .mockResolvedValueOnce({
+        status: 200,
+        text: async () => JSON.stringify({ platform: "posture-2" }),
+      })
+      .mockResolvedValueOnce({ status: 200, text: async () => "" });
+    const result = await runPhasedPollingKind(singleSlotInput(EC2_HOST_URL, noBonus));
+    expect(result.scoreDelta).toBe(-100);
+    expect(result.platform).toBe("posture-2");
+  });
+
   // --- Issue #2421: all-slots-distinct-platforms bonus (uses the verified tier from #2420) ---
 
   const THREE_SLOTS = [
