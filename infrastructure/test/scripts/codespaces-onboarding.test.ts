@@ -31,6 +31,18 @@ const startLocalScript = readFileSync(
 );
 const makefile = readFileSync(join(REPO_ROOT, "Makefile"), "utf8");
 const localCli = readFileSync(join(REPO_ROOT, "scripts", "cli", "local-command.ts"), "utf8");
+const readmeEn = readFileSync(join(REPO_ROOT, "README.md"), "utf8");
+const readmeJa = readFileSync(join(REPO_ROOT, "README.ja.md"), "utf8");
+
+/** Slice out one Quickstart subsection so numbered-step assertions can't drift
+ *  onto an unrelated "2." elsewhere in the README (e.g. "Deploy on AWS" step 2). */
+function extractSection(markdown: string, startHeading: string, endHeading: string): string {
+  const start = markdown.indexOf(startHeading);
+  expect(start, `heading "${startHeading}" not found`).toBeGreaterThan(-1);
+  const end = markdown.indexOf(endHeading, start);
+  expect(end, `heading "${endHeading}" not found after "${startHeading}"`).toBeGreaterThan(-1);
+  return markdown.slice(start, end);
+}
 
 describe("devcontainer postCreate", () => {
   it("should run the single setup script instead of a && chain", () => {
@@ -168,5 +180,62 @@ describe("Makefile local-play guards", () => {
     expect(makefile).toMatch(
       /PATH="\$\$HOME\/\.bun\/bin:\$\$PATH" bun run scripts\/tenkacloud-onboard\.ts preflight/,
     );
+  });
+});
+
+/**
+ * Issue #2696 PR 1: the devcontainer's postStartCommand (pinned above) already
+ * auto-starts local play and auto-forwards port 5175 with `openPreview` — but the
+ * README still told the reader to manually run the "▷ ローカルプレイ開始" VS Code
+ * task as a REQUIRED step, contradicting the auto-start the devcontainer already
+ * performs. These tests pin the doc fix: the auto-start must be described as the
+ * primary flow, and the task must read as an optional manual re-run (only needed
+ * if the auto-start's startup window times out), not a required step.
+ */
+describe("README does not present the manual local-play task as required (Issue #2696)", () => {
+  it("should describe the Participant Portal as opening automatically in README.md", () => {
+    const section = extractSection(
+      readmeEn,
+      "### Try it in your browser (GitHub Codespaces, zero install)",
+      "### Try it locally (no AWS)",
+    );
+    expect(section).toMatch(/Participant Portal opens automatically/);
+  });
+
+  it("should describe the Participant Portal as opening automatically in README.ja.md", () => {
+    const section = extractSection(
+      readmeJa,
+      "### ブラウザで試す(GitHub Codespaces、インストール不要)",
+      "### ローカルで試す(AWS 不要)",
+    );
+    expect(section).toMatch(/Participant Portal も自動でプレビュータブに開く/);
+  });
+
+  it("should mark the ▷ ローカルプレイ開始 task as an optional manual re-run in README.md, not a required numbered step", () => {
+    const section = extractSection(
+      readmeEn,
+      "### Try it in your browser (GitHub Codespaces, zero install)",
+      "### Try it locally (no AWS)",
+    );
+    const taskIndex = section.indexOf("ローカルプレイ開始");
+    expect(taskIndex).toBeGreaterThan(-1);
+    // The task mention must be preceded (within the same section) by the
+    // "optional manual re-run" callout, not appear as one of the 1./2./3. steps.
+    expect(section.slice(0, taskIndex)).toMatch(/Optional manual re-run/i);
+    const numberedSteps = section.split("\n").filter((line) => /^\d+\.\s/.test(line));
+    expect(numberedSteps.some((line) => line.includes("ローカルプレイ開始"))).toBe(false);
+  });
+
+  it("should mark the ▷ ローカルプレイ開始 task as an optional manual re-run in README.ja.md, not a required numbered step", () => {
+    const section = extractSection(
+      readmeJa,
+      "### ブラウザで試す(GitHub Codespaces、インストール不要)",
+      "### ローカルで試す(AWS 不要)",
+    );
+    const taskIndex = section.indexOf("ローカルプレイ開始");
+    expect(taskIndex).toBeGreaterThan(-1);
+    expect(section.slice(0, taskIndex)).toMatch(/任意の手動再実行/);
+    const numberedSteps = section.split("\n").filter((line) => /^\d+\.\s/.test(line));
+    expect(numberedSteps.some((line) => line.includes("ローカルプレイ開始"))).toBe(false);
   });
 });
