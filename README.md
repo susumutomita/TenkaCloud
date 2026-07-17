@@ -104,8 +104,8 @@ Deploy from the AWS Console — a CloudFormation stack creates a CodeBuild proje
 
 1. Download [`infrastructure/templates/lite-pipeline.yaml`](./infrastructure/templates/lite-pipeline.yaml).
 2. Open the [CloudFormation create-stack page](https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-1#/stacks/create/template) in `ap-northeast-1` → **Upload a template file** → upload it → stack name **`tenkacloud-lite-launcher`**.
-3. Set **`TenantAdminEmail`** (the only required parameter) to your Admin Console login email. *(To ship your own problems, also set `ProblemsRepoUrl` — see [Add your own problems](#add-your-own-problems).)*
-4. Check **acknowledge IAM** and create the stack.
+3. In the **Required** parameter group, set **`TenantAdminEmail`** to your Admin Console login email — every other group is pre-filled and safe to leave alone. *(To ship your own problems, open **Advanced: repository sources** and set `ProblemsRepoUrl` — see [Add your own problems](#add-your-own-problems).)*
+4. Check **acknowledge IAM** (the console explains why: the build's CodeBuild role needs broad permissions to deploy every TenkaCloud stack) and create the stack.
 5. Open the CodeBuild project from the stack's **`StartBuildConsoleUrl`** output and press **Start build**.
 
 After ~15-30 minutes the build finishes. Scroll to the end of the CodeBuild build log you're already watching — the deploy prints a `✓ Lite mode deploy complete` block whose **Access URLs:** section lists the **Application Admin Console** and **Participant Portal** URLs directly, followed by **Next steps:** and **Teardown:** guidance. If you'd rather read them from CloudFormation, the same two URLs are also in the **Outputs** of the `tenkacloud-lite` and `tenkacloud-lite-problem-deploy` stacks that the build creates.
