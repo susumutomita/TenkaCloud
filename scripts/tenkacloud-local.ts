@@ -7,6 +7,7 @@ import type { LocalPlayDeployment } from "./local-play/api-state";
 import {
   autoInitProblemsSubmodule,
   loadLocalPlayCatalog,
+  pinIntroDrillFirst,
   problemSearchRoots,
 } from "./local-play/catalog-loader";
 import { browserDisplayText, buildLocalRuntimeConfig } from "./local-play/codespaces-links";
@@ -559,9 +560,11 @@ async function down(): Promise<void> {
  */
 function listProblems(): void {
   const roots = problemSearchRoots(REPO_ROOT);
-  let summaries = listLocalPlayProblems(roots);
+  // [#2696 PR5] Same pin the portal catalog applies (loadLocalPlayCatalog) — the
+  // CLI text listing and the Participant Portal must agree on which drill is "first".
+  let summaries = pinIntroDrillFirst(listLocalPlayProblems(roots));
   if (summaries.length === 0 && autoInitProblemsSubmodule(REPO_ROOT)) {
-    summaries = listLocalPlayProblems(roots);
+    summaries = pinIntroDrillFirst(listLocalPlayProblems(roots));
   }
   // [#2632] Simulator problems are OFF by default (opt in: TENKACLOUD_LOCAL_SIMULATOR=1).
   const simulated = enabledSimulatedCloudSummaries(roots);

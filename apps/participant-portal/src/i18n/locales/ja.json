@@ -140,6 +140,7 @@
     "locked_unlock_condition": "「{gateName}」を完了すると解放",
     "gate_start_here": "最初にここから",
     "gate_completion_bonus": "完了ボーナス +{points} pt",
+    "recommended_start_here": "まずはこれ",
     "difficulty_label": "難易度: {label}",
     "difficulty_1": "入門",
     "difficulty_2": "初級",

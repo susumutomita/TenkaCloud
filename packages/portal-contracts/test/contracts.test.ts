@@ -41,6 +41,12 @@ describe("portal-contracts", () => {
       .toEqualTypeOf<"docker" | "simulated-cloud" | undefined>();
   });
 
+  it("[#2696 PR5] should carry the local-play fixed-intro-drill recommendation flag", () => {
+    expectTypeOf<ParticipantProblemView>()
+      .toHaveProperty("recommended")
+      .toEqualTypeOf<true | undefined>();
+  });
+
   it("should keep the submit-flag wire union limited to 200-response bodies", () => {
     // 非 200 系 (unauthorized / no_outputs 等) は HTTP status に map される backend 内部
     // outcome であり、wire contract には現れない。

@@ -256,6 +256,27 @@ describe("QuestsPage", () => {
     // 解決済 section に cleared card。
     expect(screen.getByText("ctf-cleared")).toBeInTheDocument();
   });
+
+  // [#2696 PR5] local play's fixed intro drill (challenges/hello-world): the backend
+  // pins it first in `view.problems` and flags it `recommended: true`; the portal's
+  // only job is to render the "start here" badge on that card.
+  it("should show a start-here badge on the recommended intro drill", () => {
+    const introDrill = problem({
+      problemId: "hello-world",
+      jobId: "job-hello",
+      scoring: { kind: "flag", flagSubmitted: false },
+      recommended: true,
+    });
+    mockTeamView.mockReturnValue({ view: { problems: [introDrill] }, error: null });
+    render(<QuestsPage />);
+    expect(screen.getByText("quests.recommended_start_here")).toBeInTheDocument();
+  });
+
+  it("should not show the start-here badge on a problem without the recommended flag", () => {
+    mockTeamView.mockReturnValue({ view: { problems: [flagUnsolved] }, error: null });
+    render(<QuestsPage />);
+    expect(screen.queryByText("quests.recommended_start_here")).not.toBeInTheDocument();
+  });
 });
 
 // ── Issue #2283: Progression Gate の badge / 解放条件表示 ─────────────────────
