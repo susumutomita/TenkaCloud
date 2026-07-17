@@ -46,6 +46,7 @@
     "@textlint-ja/textlint-rule-preset-ai-writing": "^1.7.0",
     "@vitest/coverage-v8": "^4.1.9",
     "husky": "^9.1.7",
+    "jscpd": "^5.0.12",
     "markdownlint-cli2": "^0.22.1",
     "marked": "^18.0.3",
     "textlint": "^15.7.1",

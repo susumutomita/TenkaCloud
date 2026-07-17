@@ -71,6 +71,17 @@ test-scripts: ## Run only the fast script and CLI tests | script・CLI関連テ�
 # 依存パッケージの lifecycle script 監査 (mini Shai-Hulud 2nd 対策)。 CI が走らせる。
 audit-deps: ## Audit dependency lifecycle-script changes | 依存packageのlifecycle script差分を監査
 	bun run audit:dependencies
+
+# jscpd ベースライン・ラチェット。 重複ゼロは強制しない (責務分離の意図的重複は baseline に
+# 焼き込み済み)。 baseline を超える新しいコピペ / 再実装だけ fail させる。 CI が走らせる。
+dup-check: ## Fail when code duplication grows past the baseline | 重複がbaselineを超えたらfail
+	bun run scripts/quality/check-duplication.ts
+
+dup-baseline: ## Re-freeze the duplication baseline (justify increases in the PR) | 重複baselineを現状で更新
+	bun run scripts/quality/check-duplication.ts --update
+
+dup-report: ## Show every clone jscpd finds (human-readable) | jscpdの全クローンを表示
+	bunx jscpd
 # Pre-PR gate for the product BODY, run by the pre-commit hook. 品質ゲート (HTTP magic number /
 # template / coverage / IAM ASCII / merge / submodule) は本体と混ぜないため
 # .claude/skills/quality-gates へ分離済み — pre-commit フックが before-commit とは別呼び出しで
@@ -94,6 +105,7 @@ ci-local: ## Run the full GitHub Actions gate locally | GitHub Actions相当の�
 	git fetch --no-tags origin main:refs/remotes/origin/main
 	git -C problems fetch --no-tags --unshallow origin 2>/dev/null || git -C problems fetch --no-tags origin || true
 	$(MAKE) audit-deps
+	$(MAKE) dup-check
 	bun run .claude/skills/quality-gates/scripts/run.ts submodule-not-behind
 	$(MAKE) validate-problems
 	$(MAKE) lint-text

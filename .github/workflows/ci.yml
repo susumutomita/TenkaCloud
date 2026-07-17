@@ -56,6 +56,14 @@ jobs:
         run: |
           make audit-deps
 
+      # jscpd baseline ratchet: zero-duplication is NOT the goal (apps are split by
+      # responsibility, so some intentional similarity is baselined). This fails only when
+      # a PR grows duplication past scripts/quality/duplication-baseline.json — i.e. new
+      # copy-paste / reimplementation landed without checking for an existing helper.
+      - name: Duplication baseline ratchet (jscpd)
+        run: |
+          make dup-check
+
       # Submodule pin guard: reject PRs that roll the problems/ gitlink backward or
       # sideways (the ping-pong where an old-pin branch reverts a newer pin, e.g. #1927).
       # Shallow checkout has no origin/main / submodule history, so fetch both first.
