@@ -9,9 +9,27 @@
 
 TenkaCloud は、ハンズオン形式の AWS 競技会を運営するための、セルフホスト可能な Apache-2.0 ライセンスのプラットフォームです。運営者は 1 つのアプリケーションから、イベント・チーム・デプロイ・採点・ヒント・チームごとの AWS コンソール連携をまとめて管理でき、参加者は隔離されたアカウントの中で本物の AWS シナリオを解きます。
 
-[ランディングページ](https://tenkacloud.com) · [デモポータル](https://tenkacloud.com/portal-demo/?demo=1) · [クイックスタート](#クイックスタート) · [自分の問題を追加する](#自分の問題を追加する)
+<table>
+<tr>
+<td width="50%" align="center" valign="top">
+
+**A. まず遊ぶ** <sub>(推奨・AWS 不要・約 5 分)</sub>
 
 [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/susumutomita/TenkaCloud)
+
+</td>
+<td width="50%" align="center" valign="top">
+
+**B. 自分のイベントを開く** <sub>(AWS アカウント・課金あり・約 30 分)</sub>
+
+[**AWS にデプロイする →**](#aws-にデプロイする)
+
+</td>
+</tr>
+</table>
+
+[ランディングページ](https://tenkacloud.com) · [デモポータル](https://tenkacloud.com/portal-demo/?demo=1) · [クイックスタート](#クイックスタート) · [自分の問題を追加する](#自分の問題を追加する)
+
 [![CI](https://github.com/susumutomita/TenkaCloud/actions/workflows/ci.yml/badge.svg)](https://github.com/susumutomita/TenkaCloud/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/susumutomita/TenkaCloud/graph/badge.svg?token=WfleGvJor9)](https://codecov.io/gh/susumutomita/TenkaCloud)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](./LICENSE)
