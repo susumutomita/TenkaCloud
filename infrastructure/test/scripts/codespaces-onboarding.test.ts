@@ -58,6 +58,17 @@ describe("devcontainer postCreate", () => {
     expect(postStartCommand).toBe("sh scripts/onboard/codespaces-start-local.sh");
   });
 
+  it("should request an 8-core / 32gb machine so make-local containers actually start", () => {
+    // 4-core / 16gb machines OOM-killed the docker-in-docker problem containers
+    // (`make local` = dockerd + 3 dev servers + per-problem containers) — the
+    // Codespace attached but the drill surface never came up.
+    const { hostRequirements } = JSON.parse(devcontainer) as {
+      hostRequirements: { cpus: number; memory: string };
+    };
+    expect(hostRequirements.cpus).toBe(8);
+    expect(hostRequirements.memory).toBe("32gb");
+  });
+
   it("should disable git-lfs autoPull so its hook install cannot abort postCreate", () => {
     // The universal:noble base image bundles the git-lfs feature, whose
     // pull-git-lfs-artifacts.sh runs `git lfs update` on create. That collides
@@ -94,6 +105,20 @@ describe("scripts/onboard/codespaces-setup.sh", () => {
 
   it("should install workspace dependencies (vite for the portal)", () => {
     expect(setupScript).toContain('make -C "$repo_root" install');
+  });
+
+  it("should preinstall the claude and codex CLIs without letting a failure abort setup", () => {
+    // `claude` / `codex` must work for in-Codespace debugging out of the box,
+    // but a registry outage must not brick the Codespace (set -eu would abort
+    // the whole postCreate) — hence the || warn fallback.
+    expect(setupScript).toContain("npm install -g @anthropic-ai/claude-code @openai/codex");
+    expect(setupScript).toMatch(/\|\| echo "\[codespaces-setup\] WARN: agent CLI install failed/);
+  });
+
+  it("should install the agent CLIs from $HOME so the repo .npmrc cannot alter them", () => {
+    // The repo .npmrc sets ignore-scripts / min-release-age for PROJECT deps;
+    // a global install run from the workspace dir would silently inherit them.
+    expect(setupScript).toMatch(/cd "\$HOME" \\\n\s+&& npm install -g/);
   });
 
   it("should stop on the first failure so a broken setup is loud", () => {

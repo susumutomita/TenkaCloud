@@ -19,5 +19,15 @@ export PATH="$BUN_INSTALL/bin:$PATH"
 # Preflight (--yes) checks out the problems/ submodule and diagnoses Docker.
 bun run "$repo_root/scripts/tenkacloud-onboard.ts" preflight --yes
 
+# Agent CLIs (Claude Code + Codex) so `claude` / `codex` work for in-Codespace
+# debugging out of the box. Best-effort: a registry outage must not brick the
+# Codespace, so a failure only warns. Runs from $HOME so the repo .npmrc
+# (ignore-scripts / min-release-age, aimed at project deps) does not alter the
+# global install of these first-party CLIs.
+(
+  cd "$HOME" \
+    && npm install -g @anthropic-ai/claude-code @openai/codex
+) || echo "[codespaces-setup] WARN: agent CLI install failed — run manually: npm install -g @anthropic-ai/claude-code @openai/codex"
+
 # Dependencies for every workspace — `make local` needs vite for the portal.
 make -C "$repo_root" install

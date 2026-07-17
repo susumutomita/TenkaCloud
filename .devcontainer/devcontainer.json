@@ -8,7 +8,8 @@
     }
   },
   "hostRequirements": {
-    "cpus": 4
+    "cpus": 8,
+    "memory": "32gb"
   },
   "postCreateCommand": "sh scripts/onboard/codespaces-setup.sh",
   "postStartCommand": "sh scripts/onboard/codespaces-start-local.sh",
