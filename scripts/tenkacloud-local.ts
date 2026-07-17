@@ -31,6 +31,7 @@ import {
   startProblemViaApi,
   stopPersistedContainerUnit,
   tearDownRecordedUnits,
+  waitForProblemRunning,
   waitForServeProcessExit,
 } from "./local-play/local-runtime-support";
 import { listLocalPlayProblems } from "./local-play/manifest";
@@ -230,8 +231,11 @@ async function startLocalSession(
   writePrivateJson(plan.paths.statePath, state);
   await waitForLocalApi(plan.apiBaseUrl, plan.problemIds, ownership.pid, plan.paths.logPath);
   // Pre-start through the API so the serve process owns every lifecycle.
+  // start は 202 (async) で返るため、 endpoints 表示前に running まで待つ。
   for (const id of plan.problemIds) {
     await startProblemViaApi(plan.apiBaseUrl, id, participantToken);
+    console.log(`Waiting for problem "${id}" (first start may build its container image)...`);
+    await waitForProblemRunning(plan.apiBaseUrl, id, participantToken);
   }
   const runtimeConfig = buildLocalRuntimeConfig(plan.apiBaseUrl, participantToken);
   writeFileSync(

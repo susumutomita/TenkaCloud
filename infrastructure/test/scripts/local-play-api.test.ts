@@ -58,6 +58,14 @@ function post(path: string, body: unknown): LocalPlayRequest {
   return { method: "POST", path, query: {}, body };
 }
 
+/**
+ * Container start は 202 (async) で返る — 応答後に detached で走る start / evict
+ * チェーン (fake adapter は microtask 解決) を 1 macrotask 待って確定させる。
+ */
+function settleLifecycle(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 describe("isLocalApiHealthy", () => {
   const healthy = { status: "ok", mode: "local", problemIds: ["sqli-demo", "api-idor-demo"] };
 
@@ -849,8 +857,12 @@ describe("local-play API: on-demand container lifecycle (#2392 Phase 2)", () => 
       state,
       NOW,
     );
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual({ status: "running" });
+    // 202 (async): 初回 start は compose の暗黙イメージビルドで数分かかり得るため、
+    // 応答は待たずに返し、 進行は lifecycle.status の polling で読む (Codespaces の
+    // forwarded proxy が長時間リクエストを切断するのを避ける)。
+    expect(res.status).toBe(StatusCodes.ACCEPTED);
+    expect(res.body).toEqual({ status: "starting" });
+    await settleLifecycle();
     const view = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
     const problem = (
       view.body as {
@@ -866,6 +878,7 @@ describe("local-play API: on-demand container lifecycle (#2392 Phase 2)", () => 
     const state = createLocalPlayState({ problems: [PROBLEM, IDOR] }, { verify: neverVerify });
     await handleLocalPlayRequest(post("/portal/me/problems/sqli-demo/start", {}), state, NOW);
     await handleLocalPlayRequest(post("/portal/me/problems/api-idor-demo/start", {}), state, NOW);
+    await settleLifecycle();
     const view = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
     const problems = (view.body as { problems: Array<{ stackOutputs: Record<string, string> }> })
       .problems;
@@ -927,7 +940,7 @@ describe("local-play API: on-demand container lifecycle (#2392 Phase 2)", () => 
     });
   });
 
-  it("should fail a start loudly (502 start_failed) and mark the problem error", async () => {
+  it("should surface an async start failure via lifecycle lastError (202 + polling)", async () => {
     const state = createLocalPlayState(
       { problems: [PROBLEM] },
       {
@@ -942,12 +955,18 @@ describe("local-play API: on-demand container lifecycle (#2392 Phase 2)", () => 
       state,
       NOW,
     );
-    expect(res.status).toBe(502);
-    expect(res.body).toEqual({ error: "start_failed", message: "compose boom" });
+    // 202 が先に返り、 失敗は polling で読む lifecycle (status "error" + lastError)
+    // が唯一の伝達経路になる。
+    expect(res.status).toBe(StatusCodes.ACCEPTED);
+    await settleLifecycle();
     const view = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
     const problem = (view.body as { problems: Array<{ lifecycle: { status: string } }> })
       .problems[0];
-    expect(problem.lifecycle).toEqual({ status: "error", runtimeKind: "docker" });
+    expect(problem.lifecycle).toEqual({
+      status: "error",
+      runtimeKind: "docker",
+      lastError: "compose boom",
+    });
   });
 
   it("should expose retained ownership and retry cleanup with the exact failed-start unit", async () => {
@@ -982,15 +1001,18 @@ describe("local-play API: on-demand container lifecycle (#2392 Phase 2)", () => 
       state,
       NOW,
     );
-    expect(start.status).toBe(StatusCodes.BAD_GATEWAY);
+    expect(start.status).toBe(StatusCodes.ACCEPTED);
+    await settleLifecycle();
     const failedView = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
-    const failedProblem = (failedView.body as { problems: Array<{ lifecycle: unknown }> })
-      .problems[0];
-    expect(failedProblem.lifecycle).toEqual({
+    const failedProblem = (
+      failedView.body as { problems: Array<{ lifecycle: { lastError?: string } }> }
+    ).problems[0];
+    expect(failedProblem.lifecycle).toMatchObject({
       status: "error",
       runtimeKind: "docker",
       cleanupRequired: true,
     });
+    expect(typeof failedProblem.lifecycle.lastError).toBe("string");
 
     await expect(
       handleLocalPlayRequest(post("/portal/me/problems/sqli-demo/stop", {}), state, NOW),
@@ -1018,6 +1040,7 @@ describe("local-play API: on-demand container lifecycle (#2392 Phase 2)", () => 
       },
     );
     await handleLocalPlayRequest(post("/portal/me/problems/sqli-demo/start", {}), state, NOW);
+    await settleLifecycle();
     const res = await handleLocalPlayRequest(
       post("/portal/me/problems/sqli-demo/stop", {}),
       state,
@@ -1061,6 +1084,7 @@ describe("local-play API: on-demand container lifecycle (#2392 Phase 2)", () => 
       },
     );
     await handleLocalPlayRequest(post("/portal/me/problems/sqli-demo/start", {}), state, NOW);
+    await settleLifecycle();
     const view = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
     const problem = (view.body as { problems: Array<{ stackOutputs: Record<string, string> }> })
       .problems[0];
@@ -1117,6 +1141,7 @@ describe("local-play API: on-demand container lifecycle (#2392 Phase 2)", () => 
     clock = 30;
     // At the cap: starting a third evicts the LRU — idor, not the just-played sqli.
     await handleLocalPlayRequest(post("/portal/me/problems/xss-demo/start", {}), state, clock);
+    await settleLifecycle();
     expect(state.lifecycle.statusOf("sqli-demo")).toBe("running");
     expect(state.lifecycle.statusOf("api-idor-demo")).toBe("stopped");
     expect(state.lifecycle.statusOf("xss-demo")).toBe("running");
@@ -1139,6 +1164,7 @@ describe("local-play API: on-demand container lifecycle (#2392 Phase 2)", () => 
     );
     clock = 30;
     await handleLocalPlayRequest(post("/portal/me/problems/xss-demo/start", {}), state, clock);
+    await settleLifecycle();
     expect(state.lifecycle.statusOf("sqli-demo")).toBe("running");
     expect(state.lifecycle.statusOf("api-idor-demo")).toBe("stopped");
     expect(state.lifecycle.statusOf("xss-demo")).toBe("running");
@@ -1161,13 +1187,16 @@ describe("local-play API: on-demand container lifecycle (#2392 Phase 2)", () => 
       state,
       NOW,
     );
-    expect(first.body).toEqual({ status: "running" });
+    expect(first.body).toEqual({ status: "starting" });
+    await settleLifecycle();
+    expect(state.lifecycle.statusOf("sqli-demo")).toBe("running");
     const second = await handleLocalPlayRequest(
       post("/portal/me/problems/api-idor-demo/start", {}),
       state,
       NOW,
     );
-    expect(second.body).toEqual({ status: "running" });
+    expect(second.status).toBe(StatusCodes.ACCEPTED);
+    await settleLifecycle();
     // the cap is 1: starting the second evicted the first (its unit torn down)
     expect(stopped).toEqual(["sqli-demo"]);
     expect(state.lifecycle.statusOf("sqli-demo")).toBe("stopped");
@@ -1195,11 +1224,13 @@ describe("local-play API: on-demand container lifecycle (#2392 Phase 2)", () => 
       },
     );
     await handleLocalPlayRequest(post("/portal/me/problems/sqli-demo/start", {}), state, NOW);
+    await settleLifecycle();
     const again = await handleLocalPlayRequest(
       post("/portal/me/problems/sqli-demo/start", {}),
       state,
       NOW,
     );
+    // 既に running のときの再 start は 202 応答の body に現状態がそのまま乗る。
     expect(again.body).toEqual({ status: "running" });
     expect(startCalls).toEqual(["sqli-demo"]); // the container was not restarted
   });

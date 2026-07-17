@@ -82,6 +82,16 @@ export class ProblemLifecycle {
     return this.entries.get(problemId)?.status;
   }
 
+  /**
+   * 直近の start / stop 失敗メッセージ (status "error" のときのみ)。 start が非同期化
+   * された (= HTTP 応答は 202 で先に返る) ため、 失敗理由はここを経由して portal の
+   * polling へ届く。
+   */
+  errorOf(problemId: string): string | undefined {
+    const entry = this.entries.get(problemId);
+    return entry?.status === "error" ? entry.error : undefined;
+  }
+
   /** True when a failed operation may still own a physical runtime and its port slot. */
   cleanupRequired(problemId: string): boolean {
     const entry = this.entries.get(problemId);

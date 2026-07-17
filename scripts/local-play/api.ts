@@ -34,26 +34,35 @@ async function startProblem(
     return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_problem" } };
   }
   const simulated = state.simulatedRuntimes.get(problemId);
-  try {
-    await state.lifecycle.ensureRunning(problemId);
-    if (simulated && simulated.contract.scoring.kind !== "flag") {
-      await scoreSimulatedProblem(problemId, state, now);
+  if (simulated) {
+    try {
+      await state.lifecycle.ensureRunning(problemId);
+      if (simulated.contract.scoring.kind !== "flag") {
+        await scoreSimulatedProblem(problemId, state, now);
+      }
+    } catch {
+      // Fail loudly: a simulator that would not come up must not look playable.
+      return {
+        status: StatusCodes.BAD_GATEWAY,
+        body: { error: "start_failed", message: "Simulator problem failed to start" },
+      };
     }
-  } catch (error) {
-    // Fail loudly: a container that would not come up must not look playable.
-    return {
-      status: StatusCodes.BAD_GATEWAY,
-      body: {
-        error: "start_failed",
-        message: simulated
-          ? "Simulator problem failed to start"
-          : error instanceof Error
-            ? error.message
-            : "problem container failed to start",
-      },
-    };
+    return { status: StatusCodes.OK, body: { status: state.lifecycle.statusOf(problemId) } };
   }
-  return { status: StatusCodes.OK, body: { status: state.lifecycle.statusOf(problemId) } };
+  // Container (docker compose) 問題は応答を待たずに 202 で返す。 初回 start は
+  // compose の暗黙イメージビルド (例: ai-riscv-screen-repair の RISC-V toolchain で
+  // 数分) を含み、 同期応答は GitHub Codespaces の forwarded proxy が長時間リクエスト
+  // を切断して必ず失敗する。 進行/失敗は lifecycle status ("starting" / "running" /
+  // "error" + lastError) を portal の既存 polling が読む (AGENTS.md の polling 方針)。
+  state.lifecycle.ensureRunning(problemId).catch(() => {
+    // 失敗は lifecycle entry (status "error" + error message) に記録済みで、
+    // team view の lastError として届く。 ここは detached promise の unhandled
+    // rejection を防ぐだけ (握りつぶしではない)。
+  });
+  return {
+    status: StatusCodes.ACCEPTED,
+    body: { status: state.lifecycle.statusOf(problemId) ?? "starting" },
+  };
 }
 
 /** [#2392 Phase 2] POST /portal/me/problems/:id/stop — release the container + its port slot. */

@@ -89,6 +89,7 @@ function problemView(
   now: number,
   status: ProblemStatus,
   cleanupRequired: boolean,
+  lastError: string | undefined,
   browserText: (text: string) => string,
 ) {
   const problem = mapStrings(runtime.problem, browserText);
@@ -127,6 +128,9 @@ function problemView(
       status,
       runtimeKind: "docker" as const,
       ...(cleanupRequired ? { cleanupRequired: true as const } : {}),
+      // 非同期 start (202) の失敗理由。 compose stderr は loopback URL を含み得るので
+      // browserText (= Codespaces の forwarded origin 書き換え) を通す。
+      ...(status === "error" && lastError ? { lastError: browserText(lastError) } : {}),
     },
     // The challenge surface URLs the participant attacks (loopback only). A
     // stopped problem must not leak (stale) endpoints of a down container.
@@ -163,6 +167,7 @@ function simulatedProblemView(
   now: number,
   status: ProblemStatus,
   cleanupRequired: boolean,
+  lastError: string | undefined,
   browserText: (text: string) => string,
 ) {
   const problem = runtime.problem;
@@ -192,6 +197,7 @@ function simulatedProblemView(
       status,
       runtimeKind: "simulated-cloud" as const,
       ...(cleanupRequired ? { cleanupRequired: true as const } : {}),
+      ...(status === "error" && lastError ? { lastError: browserText(lastError) } : {}),
     },
     stackOutputs: status === "running" ? outputs : {},
     expiresAt: now + 365 * 24 * 60 * 60 * 1000,
@@ -305,6 +311,7 @@ export function teamView(state: LocalPlayState, now: number): LocalPlayResponse 
             now,
             participantLifecycleStatus(state.lifecycle.statusOf(problemId)),
             state.lifecycle.cleanupRequired(problemId),
+            state.lifecycle.errorOf(problemId),
             state.browserText,
           ),
         ),
@@ -314,6 +321,7 @@ export function teamView(state: LocalPlayState, now: number): LocalPlayResponse 
             now,
             participantLifecycleStatus(state.lifecycle.statusOf(problemId)),
             state.lifecycle.cleanupRequired(problemId),
+            state.lifecycle.errorOf(problemId),
             state.browserText,
           ),
         ),

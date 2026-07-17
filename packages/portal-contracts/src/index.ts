@@ -264,6 +264,13 @@ export interface ParticipantProblemView {
     readonly runtimeKind?: ProblemRuntimeKind;
     /** A failed operation still owns local resources; Stop retries cleanup before restart. */
     readonly cleanupRequired?: true;
+    /**
+     * Why the last async start / stop failed (status "error" のときのみ)。 container
+     * start は 202 で先に返り (= 初回の compose イメージビルドが数分かかっても
+     * Codespaces の forwarded proxy に切られない)、 失敗理由は polling で読むこの
+     * field が唯一の伝達経路になる。 表示専用の human-readable text。
+     */
+    readonly lastError?: string;
   };
   /**
    * [#2696 PR5] Local-play only: true when this is the platform's one fixed

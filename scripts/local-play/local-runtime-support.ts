@@ -223,6 +223,50 @@ export async function startProblemViaApi(
   }
 }
 
+/**
+ * Container 問題の start は 202 (async) で返る — 初回はcompose の暗黙イメージ
+ * ビルド (数分かかり得る) が走るため。 CLI の pre-start はブラウザと違い proxy に
+ * 切られないが、 endpoints 表示や成功メッセージの前に terminal 状態まで待つ。
+ * lifecycle.status が "running" になれば解決、 "error" なら lastError 込みで throw。
+ */
+export async function waitForProblemRunning(
+  apiBaseUrl: string,
+  problemId: string,
+  participantToken: string,
+  options: { timeoutMs?: number; pollMs?: number; now?: () => number } = {},
+): Promise<void> {
+  const timeoutMs = options.timeoutMs ?? 20 * 60 * 1000;
+  const pollMs = options.pollMs ?? 2_000;
+  const now = options.now ?? Date.now;
+  const deadline = now() + timeoutMs;
+  for (;;) {
+    const response = await fetch(`${apiBaseUrl}/portal/me`, {
+      headers: { authorization: `Bearer ${participantToken}` },
+    });
+    if (!response.ok) {
+      throw new Error(`failed to poll problem "${problemId}" (HTTP ${response.status})`);
+    }
+    const body = (await response.json()) as {
+      problems?: { problemId: string; lifecycle?: { status?: string; lastError?: string } }[];
+    };
+    const lifecycle = body.problems?.find((p) => p.problemId === problemId)?.lifecycle;
+    // lifecycle 不在 (= AWS mode 相当の view) は常時 playable 扱い → 待つ必要なし。
+    if (!lifecycle || lifecycle.status === "running") return;
+    if (lifecycle.status === "error") {
+      throw new Error(
+        `problem "${problemId}" failed to start${lifecycle.lastError ? `: ${lifecycle.lastError}` : ""}`,
+      );
+    }
+    if (now() >= deadline) {
+      throw new Error(
+        `timed out after ${Math.round(timeoutMs / 1000)}s waiting for problem "${problemId}" to start ` +
+          "(the first start may build a heavy toolchain image — check the serve log)",
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
+  }
+}
+
 /** Print the running problems' challenge endpoints as the API sees them (post-remap). */
 function endpointDisplay(label: string, value: string): string | undefined {
   if (!URL.canParse(value)) return undefined;

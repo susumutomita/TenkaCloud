@@ -227,6 +227,7 @@ export function ProblemPanel({
             status={lifecycleStatus}
             runtimeKind={problem.lifecycle?.runtimeKind}
             cleanupRequired={problem.lifecycle?.cleanupRequired === true}
+            lastError={problem.lifecycle?.lastError}
             apiBaseUrl={apiBaseUrl}
             sessionToken={sessionToken}
             problemId={problem.problemId}

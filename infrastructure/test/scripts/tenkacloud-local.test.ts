@@ -36,6 +36,7 @@ import {
   requiredLocalApiPort,
   shutdownLocalServe,
   stopPersistedContainerUnit,
+  waitForProblemRunning,
   waitForServeProcessExit,
 } from "../../../scripts/local-play/local-runtime-support";
 import { observeProcessIdentity } from "../../../scripts/local-play/process-identity";
@@ -156,6 +157,81 @@ describe("local endpoint presentation", () => {
     } finally {
       log.mockRestore();
       fetchMock.mockRestore();
+    }
+  });
+});
+
+describe("waitForProblemRunning (async 202 start)", () => {
+  const lifecycleResponse = (lifecycle: Record<string, unknown> | undefined) =>
+    Response.json({ problems: [{ problemId: "p1", ...(lifecycle ? { lifecycle } : {}) }] });
+
+  it("should resolve once the problem's lifecycle reaches running", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(lifecycleResponse({ status: "starting" }))
+      .mockResolvedValueOnce(lifecycleResponse({ status: "running" }));
+    try {
+      await waitForProblemRunning("http://127.0.0.1:41000", "p1", "token", { pollMs: 1 });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  it("should treat a lifecycle-less view (AWS-mode shape) as already playable", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(lifecycleResponse(undefined));
+    try {
+      await waitForProblemRunning("http://127.0.0.1:41000", "p1", "token", { pollMs: 1 });
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  it("should throw with the lifecycle lastError when the async start failed", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(lifecycleResponse({ status: "error", lastError: "compose boom" }));
+    try {
+      await expect(
+        waitForProblemRunning("http://127.0.0.1:41000", "p1", "token", { pollMs: 1 }),
+      ).rejects.toThrow('problem "p1" failed to start: compose boom');
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  it("should throw on an unreachable poll and on timeout with a build hint", async () => {
+    const failing = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response("nope", { status: 500 }));
+    try {
+      await expect(
+        waitForProblemRunning("http://127.0.0.1:41000", "p1", "token", { pollMs: 1 }),
+      ).rejects.toThrow('failed to poll problem "p1" (HTTP 500)');
+    } finally {
+      failing.mockRestore();
+    }
+
+    // 疑似時計を timeout の先へ進め、 "starting" のまま打ち切られる経路を観測する。
+    let clock = 0;
+    const stuck = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(() => Promise.resolve(lifecycleResponse({ status: "starting" })));
+    try {
+      await expect(
+        waitForProblemRunning("http://127.0.0.1:41000", "p1", "token", {
+          pollMs: 1,
+          timeoutMs: 10,
+          now: () => {
+            clock += 6;
+            return clock;
+          },
+        }),
+      ).rejects.toThrow(/timed out .* toolchain image/);
+    } finally {
+      stuck.mockRestore();
     }
   });
 });
