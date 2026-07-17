@@ -113,39 +113,61 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
       jobId: "01HZX0KZZ3DR0PW9M4Q7XV2C5D",
       problemId: LITE_DRILL_PROBLEM_ID,
       name: "自分の TenkaCloud Lite を立てる",
-      description:
-        "デモの外に出て、自分の AWS アカウントに本物の TenkaCloud Lite を立ち上げる実践ドリル。" +
-        "手順を正しく実行するたびに、実環境の画面にチェックポイントコード TENKA{...} が現れる。" +
-        "それをこの画面に提出して得点しよう。\n\n" +
-        "はじめる前に:\n" +
-        "- 管理者相当の権限で使える AWS アカウントと、受信できるメールアドレスが必要\n" +
-        "- デプロイ中はデフォルト構成で約 $7/月の継続費用が発生する (遊び終えたら手順 5 で必ず片付ける)\n" +
-        "- launcher は CodeBuild 用に広い権限の IAM Role を作成する (CloudFormation の IAM acknowledge で明示同意する)",
+      // 注: fixture 問題は catalog metadata を持たないため ProblemInfoSection (= instructions
+      // の描画箇所) が skip される。 competitor に見せる本文はすべて description に置く
+      // (ProblemPanel が <Markdown> で描画する唯一の確実な経路)。 instructions は将来
+      // metadata 経路が通ったときのための短い要約に留める。
+      description: [
+        "デモの外に出て、自分の AWS アカウントに **本物の TenkaCloud Lite** を立ち上げる実践ドリル。",
+        "手順を正しく実行するたびに、実環境の画面にチェックポイントコード `TENKA{...}` が現れる。それを下の対応する提出欄に貼って得点しよう。",
+        "",
+        "#### はじめる前に",
+        "",
+        "- 管理者相当の権限で使える AWS アカウントと、受信できるメールアドレスが必要",
+        "- デプロイ中はデフォルト構成で **約 $7/月** の継続費用が発生する(遊び終えたらステップ 5 で必ず片付ける)",
+        "- launcher は CodeBuild 用に広い権限の IAM Role を作成する(CloudFormation の IAM acknowledge で明示同意する)",
+        "",
+        "#### 進め方",
+        "",
+        "**1. Launcher スタック作成** — README の Quickstart から `lite-pipeline.yaml` で CloudFormation スタックを作成する(必須入力は `TenantAdminEmail` のみ)。完了後、スタックの **出力 (Outputs)** タブにある `OnboardingDrillCheckpoint` の値を提出。",
+        "",
+        "**2. Lite デプロイ完了** — Outputs の `StartBuildConsoleUrl` から CodeBuild を開き **ビルドを開始**。ログ末尾の `Lite mode deploy complete` ブロックに印字されるコードを提出。",
+        "",
+        "**3. Competitor アカウント検証** — 招待メールの一時パスワードで Application Admin Console にサインイン。**Competitor Accounts** で競技用 AWS アカウントを登録し、bootstrap テンプレートを競技側アカウントに適用して **検証**。成功表示のコードを提出。",
+        "",
+        "**4. 初回イベント作成** — **Events** タブでイベントを作成する(チームに検証済みアカウントを割り当てる)。作成成功画面のコードを提出。",
+        "",
+        "**5. 片付け(採点対象外)** — CodeBuild の **Start build with overrides** で `ACTION=destroy` を実行し、最後に launcher スタック自体を削除して課金を止める。",
+      ].join("\n"),
       instructions:
-        "1. README の Quickstart から lite-pipeline.yaml で CloudFormation スタックを作成する (必須入力は TenantAdminEmail のみ)。" +
-        "作成完了後、スタックの「出力 (Outputs)」タブの OnboardingDrillCheckpoint の値を「1. Launcher スタック作成」に提出。\n" +
-        "2. Outputs の StartBuildConsoleUrl から CodeBuild を開き「ビルドを開始」。ログ末尾の「✓ Lite mode deploy complete」ブロックのコードを「2. Lite デプロイ完了」に提出。\n" +
-        "3. 招待メールの一時パスワードで Application Admin Console にサインインし、Competitor Accounts で競技用 AWS アカウントを登録 → bootstrap テンプレートを競技側アカウントに適用 → 「検証」。成功表示のコードを「3. Competitor アカウント検証」に提出。\n" +
-        "4. Events タブで最初のイベントを作成する (チームに検証済みアカウントを割り当てる)。作成成功画面のコードを「4. 初回イベント作成」に提出。\n" +
-        "5. 遊び終えたら CodeBuild の「Start build with overrides」で ACTION=destroy を実行し、最後に launcher スタックを削除して課金を止める。",
+        "各ステップで実環境の画面に現れる `TENKA{...}` コードを、下の対応する提出欄に貼って得点する。手順の詳細は上の問題文を参照。",
       i18n: {
         en: {
           name: "Deploy your own TenkaCloud Lite",
-          description:
-            "Step outside the demo and stand up a real TenkaCloud Lite in your own AWS account. " +
-            "Each step you complete reveals a TENKA{...} checkpoint code on the real screens — " +
-            "paste it back here to score.\n\n" +
-            "Before you start:\n" +
-            "- You need an AWS account with admin-level access and an email address you can read\n" +
-            "- The default profile costs about $7/month while deployed (step 5 tears it down)\n" +
+          description: [
+            "Step outside the demo and stand up a **real TenkaCloud Lite** in your own AWS account.",
+            "Each step you complete reveals a `TENKA{...}` checkpoint code on the real screens — paste it into the matching submission box below to score.",
+            "",
+            "#### Before you start",
+            "",
+            "- You need an AWS account with admin-level access and an email address you can read",
+            "- The default profile costs **about $7/month** while deployed (step 5 tears it down)",
             "- The launcher creates a broad-permission IAM Role for CodeBuild (you acknowledge it in CloudFormation)",
+            "",
+            "#### How to play",
+            "",
+            "**1. Launcher stack created** — Create the CloudFormation stack from `lite-pipeline.yaml` via the README Quickstart (`TenantAdminEmail` is the only required field). When it completes, submit the `OnboardingDrillCheckpoint` value from the stack's **Outputs** tab.",
+            "",
+            "**2. Lite deploy complete** — Open the CodeBuild project via the `StartBuildConsoleUrl` output and press **Start build**. Submit the code printed in the `Lite mode deploy complete` block at the end of the log.",
+            "",
+            "**3. Competitor account verified** — Sign in to the Application Admin Console with the invite email. Register a competitor AWS account under **Competitor Accounts**, apply the bootstrap template in that account, then press **Verify**. Submit the code from the success message.",
+            "",
+            "**4. First event created** — Create your first event on the **Events** tab (assign the verified account to a team). Submit the code shown on the success screen.",
+            "",
+            "**5. Clean up (not scored)** — Run **Start build with overrides** with `ACTION=destroy`, then delete the launcher stack itself to stop the charges.",
+          ].join("\n"),
           instructions:
-            "1. Create the CloudFormation stack from lite-pipeline.yaml via the README Quickstart (TenantAdminEmail is the only required field). " +
-            'When it completes, submit the OnboardingDrillCheckpoint value from the stack\'s "Outputs" tab to "1. Launcher stack created".\n' +
-            '2. Open the CodeBuild project via the StartBuildConsoleUrl output and press "Start build". Submit the code printed in the "Lite mode deploy complete" block at the end of the log to "2. Lite deploy complete".\n' +
-            '3. Sign in to the Application Admin Console with the invite email, register a competitor AWS account under Competitor Accounts, apply the bootstrap template in that account, then press "Verify". Submit the code from the success message to "3. Competitor account verified".\n' +
-            '4. Create your first event on the Events tab (assign the verified account to a team). Submit the code shown on the success screen to "4. First event created".\n' +
-            '5. When you are done, run "Start build with overrides" with ACTION=destroy, then delete the launcher stack to stop the charges.',
+            "Each step reveals a `TENKA{...}` code on the real screens — paste it into the matching submission box below. See the problem text above for the full steps.",
         },
       },
       region: "ap-northeast-1",
