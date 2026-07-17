@@ -5,6 +5,17 @@ Description: >-
   `make deploy` (Lite mode) to stand up TenkaCloud in this AWS account. It does NOT
   create the TenkaCloud stacks itself; the build step does.
 
+
+  Cost note: build minutes for a handful of Lite deploys cost under a dollar.
+  Separately, once deployed, the default DynamoDB profile is a standing cost of
+  about $7.06 per month until you run `make destroy` or launch this build with the
+  destroy action (see docs/running-costs.md).
+
+
+  IAM note: creating this stack also creates a CodeBuild role with broad,
+  administrator-equivalent permissions so the build can deploy every TenkaCloud
+  stack; this is why the console asks you to acknowledge IAM capabilities below.
+
 # Single-file ("perapeti") template launched from the console. Because TenkaCloud is a
 # PUBLIC OSS repo, CodeBuild git-clones it directly -- there is NO GitHub
 # CodeStar/CodeConnections connection to set up, and no CodePipeline. After the stack is
@@ -22,6 +33,40 @@ Description: >-
 # IAM Role / Policy "Description" fields only accept ASCII (0x20-0x7E) + Latin-1 (0xA1-0xFF);
 # CJK causes CREATE_FAILED. All comments in this file are ASCII so the quality-gates
 # template-ascii check (walks infrastructure/templates/) passes.
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Required (only field you need to fill in)"
+        Parameters:
+          - TenantAdminEmail
+      - Label:
+          default: "Advanced: repository sources (safe to leave alone)"
+        Parameters:
+          - RepoUrl
+          - RepoRef
+          - ProblemsRepoUrl
+          - ProblemsRepoRef
+      - Label:
+          default: "Advanced: control-data backend (safe to leave alone)"
+        Parameters:
+          - ControlDataBackend
+          - TursoDatabaseUrl
+          - TursoAuthTokenParameterName
+      - Label:
+          default: "Advanced: capacity and build tuning (safe to leave alone)"
+        Parameters:
+          - Environment
+          - Action
+          - DeployExternalId
+          - DynamoReadCapacity
+          - DynamoWriteCapacity
+          - BunVersion
+          - CodeBuildTimeoutMinutes
+    ParameterLabels:
+      TenantAdminEmail:
+        default: "Tenant Admin email (receives the Cognito invite after deploy)"
 
 Parameters:
   Environment:
