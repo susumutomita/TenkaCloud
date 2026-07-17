@@ -1,4 +1,10 @@
-import { LITE_DRILL_PROBLEM_ID, matchesLiteDrillCheckpoint } from "@tenkacloud/portal-contracts";
+import {
+  LITE_DRILL_PROBLEM_ID,
+  LOCAL_DRILL_FIRST_SCORE,
+  LOCAL_DRILL_PROBLEM_ID,
+  matchesLiteDrillCheckpoint,
+  matchesLocalDrillFirstScore,
+} from "@tenkacloud/portal-contracts";
 import type { SubmitFlagOutcome } from "../api/portal-client";
 
 /**
@@ -57,12 +63,37 @@ export function evaluateMockFlag(rawFlag: string, points: number): SubmitFlagOut
   return WRONG_OUTCOME;
 }
 
+/** Issue #2707: 「TenkaCloud を理解する」 クイズ問題の id (demo fixture 専用)。 */
+export const UNDERSTAND_DRILL_PROBLEM_ID = "understand-tenkacloud";
+
 /**
- * Issue #2696: multi-flag 用の dev-mock 判定。 Lite deploy オンボーディングドリル
- * (= `LITE_DRILL_PROBLEM_ID`) だけは sub-flag ごとに実環境で拾うチェックポイント
- * コードとの一致を要求する (= 手順を踏まないと画面に出ない値の確認がドリルの本体
- * なので、 canonical flag / Easter egg では通らない)。 それ以外の multi-flag 問題は
- * 従来どおり `evaluateMockFlag` の緩い判定に fallback する。
+ * Issue #2707: クイズ型 sub-flag の許容解。 問題文 (description) を読めば導ける
+ * 単語を、 表記揺れ (英/日) 込みで列挙する。 判定は trim + 小文字化の完全一致。
+ */
+const QUIZ_ANSWERS: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> = {
+  [UNDERSTAND_DRILL_PROBLEM_ID]: {
+    "category-realtime": ["battle", "バトル"],
+    "category-selfpaced": ["challenge", "チャレンジ"],
+    "competitor-screen": ["participant portal", "portal", "参加者ポータル", "ポータル"],
+    "single-account-mode": ["lite", "ライト", "lite mode", "lite モード"],
+  },
+  [LOCAL_DRILL_PROBLEM_ID]: {
+    "portal-port": ["5175"],
+  },
+};
+
+function matchesQuizAnswer(problemId: string, flagId: string, rawFlag: string): boolean {
+  const answers = QUIZ_ANSWERS[problemId]?.[flagId];
+  if (!answers) return false;
+  return answers.includes(rawFlag.trim().toLowerCase());
+}
+
+/**
+ * Issue #2696 / #2707: multi-flag 用の dev-mock 判定。 オンボーディングドリル
+ * (理解クイズ / ローカル初得点 / Lite デプロイ) は sub-flag ごとの期待解との一致を
+ * 要求する (= 手順を踏む・問題文を読むと得られる値の確認がドリルの本体なので、
+ * canonical flag / Easter egg では通らない)。 それ以外の multi-flag 問題は従来どおり
+ * `evaluateMockFlag` の緩い判定に fallback する。
  */
 export function evaluateMockSubFlag(
   problemId: string,
@@ -70,9 +101,15 @@ export function evaluateMockSubFlag(
   rawFlag: string,
   points: number,
 ): SubmitFlagOutcome {
-  if (problemId !== LITE_DRILL_PROBLEM_ID) return evaluateMockFlag(rawFlag, points);
-  if (matchesLiteDrillCheckpoint(flagId, rawFlag)) {
-    return { kind: "ok", scoreDelta: points, totalScore: points };
+  const ok = (): SubmitFlagOutcome => ({ kind: "ok", scoreDelta: points, totalScore: points });
+  if (problemId === LITE_DRILL_PROBLEM_ID) {
+    return matchesLiteDrillCheckpoint(flagId, rawFlag) ? ok() : WRONG_OUTCOME;
   }
-  return WRONG_OUTCOME;
+  if (problemId === LOCAL_DRILL_PROBLEM_ID && flagId === LOCAL_DRILL_FIRST_SCORE.flagId) {
+    return matchesLocalDrillFirstScore(rawFlag) ? ok() : WRONG_OUTCOME;
+  }
+  if (QUIZ_ANSWERS[problemId]) {
+    return matchesQuizAnswer(problemId, flagId, rawFlag) ? ok() : WRONG_OUTCOME;
+  }
+  return evaluateMockFlag(rawFlag, points);
 }

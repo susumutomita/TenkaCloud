@@ -1,3 +1,4 @@
+import { LOCAL_DRILL_FIRST_SCORE } from "@tenkacloud/portal-contracts";
 import { StatusCodes } from "http-status-codes";
 import type { SimulatedProblemRuntime } from "./api-state";
 import {
@@ -20,6 +21,17 @@ import { participantSimulatorOutputs } from "./simulator-scoring";
  * multi-flag portal mapping, #2252, and reveal-gated hint views). Pure reads over
  * {@link LocalPlayState} — no mutation, no routing.
  */
+
+/** [#2707] hello-world 初クリア時に writeup へ足すオンボーディングドリルの案内 (markdown)。 */
+function localDrillCheckpointNote(): string {
+  return [
+    "#### オンボーディングドリル チェックポイント",
+    "",
+    `\`${LOCAL_DRILL_FIRST_SCORE.code}\``,
+    "",
+    "このコードを LP デモポータルの「ローカルモードで遊ぶ」ドリルに提出すると得点になります。",
+  ].join("\n");
+}
 
 function hintViews(runtime: ProblemRuntime, hints: readonly ContainerHint[]) {
   return hints.map((hint) => {
@@ -94,6 +106,15 @@ function problemView(
 ) {
   const problem = mapStrings(runtime.problem, browserText);
   const complete = isProblemComplete(runtime);
+  // [#2707] 固定入門ドリル (hello-world) の初クリア時、 writeup 末尾に LP デモポータルの
+  // 「ローカルモードで遊ぶ」 ドリルへ提出するチェックポイントコードを付加する。 writeup と
+  // 同じく complete ゲート下なので、 解く前にコードは見えない。
+  const writeup =
+    complete && problem.problemId === LOCAL_INTRO_DRILL_PROBLEM_ID
+      ? `${problem.writeup ? `${problem.writeup}\n\n---\n\n` : ""}${localDrillCheckpointNote()}`
+      : complete
+        ? problem.writeup
+        : undefined;
   // [fairness contract / platform #1124] `description` is the admin/authoring
   // field — SCHEMA.json defines it as "採点ルール / hardened state / 段階詳細など
   // ネタバレを含む長文" and states it is never shown to a competitor. Only
@@ -115,7 +136,7 @@ function problemView(
     // "start here" badge on it. Every other problem omits the field.
     ...(problem.problemId === LOCAL_INTRO_DRILL_PROBLEM_ID ? { recommended: true as const } : {}),
     // Local mode is a drill: reveal immediately after the whole problem is solved.
-    ...(complete && problem.writeup ? { writeup: problem.writeup } : {}),
+    ...(writeup ? { writeup } : {}),
     // #2054 i18n: ship the en overlay so the portal locale switcher can render
     // the problem in English (ja stays the top-level canonical).
     ...(Object.keys(englishText).length > 0 ? { i18n: { en: englishText } } : {}),

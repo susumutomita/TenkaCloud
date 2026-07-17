@@ -304,4 +304,18 @@ describe("HintsPanel reveal flow", () => {
       await screen.findByText("No penalty for this hint. Revealing will display the content."),
     ).toBeInTheDocument();
   });
+
+  it("should reveal locally in dev-mock mode without calling the backend (#2707)", async () => {
+    const user = userEvent.setup();
+    // dev-mock は fixture が content を同梱し、 開封状態だけローカル state で持つ。
+    renderPanel(
+      { hints: [{ id: "hint-1", penalty: 0, revealed: false, content: "step-by-step here" }] },
+      "dev-mock",
+    );
+    expect(screen.queryByText("step-by-step here")).not.toBeInTheDocument();
+    const confirm = await openConfirm(user);
+    await user.click(confirm);
+    expect(await screen.findByText("step-by-step here")).toBeInTheDocument();
+    expect(apiMocks.revealHint).not.toHaveBeenCalled();
+  });
 });

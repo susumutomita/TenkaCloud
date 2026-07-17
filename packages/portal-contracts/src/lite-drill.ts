@@ -54,10 +54,15 @@ export function findLiteDrillCheckpointCode(flagId: string): string | undefined 
 
 /**
  * 提出値がチェックポイントコードと一致するか。 コピー時の前後空白と大文字小文字は
- * 許容する (= 初見者のコピペ揺れで弾かない)。 未知の flagId は常に false。
+ * 許容する (= 初見者のコピー&ペースト揺れで弾かない)。 lite / local の両ドリルが共用する。
  */
+export function matchesCheckpointCode(code: string, submitted: string): boolean {
+  return submitted.trim().toUpperCase() === code.toUpperCase();
+}
+
+/** 提出値が lite ドリルの該当チェックポイントと一致するか。 未知の flagId は常に false。 */
 export function matchesLiteDrillCheckpoint(flagId: string, submitted: string): boolean {
   const code = findLiteDrillCheckpointCode(flagId);
   if (!code) return false;
-  return submitted.trim().toUpperCase() === code.toUpperCase();
+  return matchesCheckpointCode(code, submitted);
 }
