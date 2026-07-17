@@ -102,10 +102,15 @@ describe("ProblemLifecycle: on-demand start (#2392 Phase 2)", () => {
     const lc = new ProblemLifecycle(["a", "b"], deps, { maxRunning: 1 });
     await expect(lc.ensureRunning("a")).rejects.toThrow(/compose boom/);
     expect(lc.statusOf("a")).toBe("error");
+    // 非同期 start (202) の失敗理由は errorOf 経由で view の lastError に届く。
+    expect(lc.errorOf("a")).toBe("compose boom");
     // the slot was released, so another problem can still start
     const { deps: ok } = makeDeps();
     const lc2 = new ProblemLifecycle(["a"], ok, { maxRunning: 1 });
     expect(await lc2.ensureRunning("a")).toBe(0);
+    // error 状態でない問題 (running / 未登場) は lastError を持たない。
+    expect(lc2.errorOf("a")).toBeUndefined();
+    expect(lc2.errorOf("never-started")).toBeUndefined();
   });
 
   it("should retain the slot when failed-start cleanup still owns a container", async () => {

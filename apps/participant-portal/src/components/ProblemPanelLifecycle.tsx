@@ -42,6 +42,7 @@ export function ProblemLifecyclePanel({
   status,
   runtimeKind,
   cleanupRequired,
+  lastError,
   apiBaseUrl,
   sessionToken,
   problemId,
@@ -50,6 +51,8 @@ export function ProblemLifecyclePanel({
   status: ProblemLifecycleStatus;
   runtimeKind: ProblemRuntimeKind | undefined;
   cleanupRequired: boolean;
+  /** [#2392] 非同期 start の失敗理由 (lifecycle.lastError)。 error 状態でのみ表示。 */
+  lastError?: string | undefined;
   apiBaseUrl: string;
   sessionToken: string;
   problemId: string;
@@ -137,7 +140,10 @@ export function ProblemLifecyclePanel({
     <SpaceBetween size="s">
       {status === "error" && (
         <Alert type="error" header={t(copy.errorHeader)}>
-          {t(copy.errorBody)}
+          <SpaceBetween size="xs">
+            <Box>{t(copy.errorBody)}</Box>
+            {lastError && <Box variant="code">{lastError}</Box>}
+          </SpaceBetween>
         </Alert>
       )}
       {actionError !== null && (

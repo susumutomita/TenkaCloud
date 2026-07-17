@@ -168,7 +168,8 @@ describe("local-play CORS", () => {
           origin: "https://tenkacloud-demo-5175.app.github.dev",
         },
       });
-      expect(portalOrigin.status).toBe(StatusCodes.OK);
+      // Container start は 202 (async) — CORS 判定の関心はここでは「通ったか」のみ。
+      expect(portalOrigin.status).toBe(StatusCodes.ACCEPTED);
       expect(startContainer).toHaveBeenCalledTimes(1);
     } finally {
       await server.close();

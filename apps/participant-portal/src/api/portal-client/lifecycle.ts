@@ -10,9 +10,12 @@ import type { ProblemLifecycleActionResponse } from "./types";
  */
 
 /**
- * `POST /portal/me/problems/{problemId}/start`。 200 で `{status:"running"}`。
- * container が上がらないときは 502 `start_failed` (= `PortalNetworkError` として
- * throw され、 UI は失敗を隠さず表示する)。
+ * `POST /portal/me/problems/{problemId}/start`。 container 問題は 202 で
+ * `{status:"starting"}` が即時に返る (= 初回 start は compose のイメージビルドで
+ * 数分かかり得るため非同期)。 進行と失敗は polling する team view の
+ * `lifecycle.status` / `lifecycle.lastError` で読む。 simulated-cloud 問題は
+ * 同期のままで、 上がらないときは 502 `start_failed` (= `PortalNetworkError`
+ * として throw され、 UI は失敗を隠さず表示する)。
  */
 export async function startProblem(
   apiBaseUrl: string,

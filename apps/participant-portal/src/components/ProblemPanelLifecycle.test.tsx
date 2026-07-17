@@ -146,6 +146,17 @@ describe("ProblemPanel on-demand lifecycle (#2392 Phase 2)", () => {
     expect(screen.queryByTestId("flag-panel")).not.toBeInTheDocument();
   });
 
+  it("should show the async start failure reason (lifecycle.lastError) in the error alert", () => {
+    // 非同期 start (202) の失敗理由は polling の lifecycle.lastError でだけ届く —
+    // 表示されないと学習者は「何もできない」まま原因に辿り着けない。
+    renderPanel({
+      lifecycle: { status: "error", lastError: "compose build failed: no space left on device" },
+    });
+
+    expect(screen.getByText("compose build failed: no space left on device")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
+  });
+
   it("should retry retained cleanup from the error state before exposing Start", async () => {
     const user = userEvent.setup();
     const onScored = vi.fn().mockResolvedValue(undefined);
