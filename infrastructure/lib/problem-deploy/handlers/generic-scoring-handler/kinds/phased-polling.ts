@@ -266,6 +266,14 @@ function scorePhasedBonuses(
 const MANAGED_TIERS: ReadonlySet<string> = new Set(["lambda", "ecs", "apprunner"]);
 
 /**
+ * Issue #2694: the full hosting-tier vocabulary. Only these self-reports are subject to being
+ * overridden by the registered URL host — domain-specific platform keys (e.g. StackStack's
+ * `posture-0`…`production`) are not hosting tiers and must survive an ALB or other managed
+ * hostname sitting in front of the service.
+ */
+const HOSTING_TIERS: ReadonlySet<string> = new Set([...MANAGED_TIERS, "ec2"]);
+
+/**
  * [Issue #2420] Derive the hosting tier from the registered URL host, never from the service's
  * `/meta` self-report. Managed AWS runtimes expose an unforgeable, AWS-owned hostname; a team
  * running on EC2 cannot mint one of these DNS names, so the tier cannot be faked by editing the
@@ -300,24 +308,34 @@ function hostFromUrl(url: string | undefined): string | undefined {
 
 /**
  * [Issue #2420] The hosting tier the engine will actually score. The registered URL host is
- * authoritative for managed tiers:
+ * authoritative for hosting tiers:
  *
- *   - URL host matches a managed runtime → that tier (even if `/meta` disagrees — the URL wins).
+ *   - URL host matches a managed runtime + a **hosting-tier** (or missing) self-report → that
+ *     derived tier (even if `/meta` disagrees — the URL wins).
+ *   - URL host matches a managed runtime + a **domain-specific** self-report (StackStack's
+ *     `posture-0`…`production` posture keys, which are not hosting tiers) → passed through
+ *     unchanged (Issue #2694: an ALB in front of the service must not rewrite the posture key
+ *     to `ecs`, which has no platformRule and would turn every healthy tick into
+ *     failurePenalty).
  *   - No managed host + a **managed** self-report → `ec2` (a lie: EC2-hosted service claiming
  *     lambda/ecs/apprunner earns EC2-tier points at most and never the cross-platform bonus).
- *   - No managed host + a **non-managed** self-report (`ec2`, or stackstack's `posture-3` /
- *     `production` posture strings, which are not hosting tiers) → passed through unchanged.
+ *   - No managed host + a **non-managed** self-report (`ec2` or a domain-specific key) →
+ *     passed through unchanged.
  *   - No managed host + no self-report → `undefined` (→ failurePenalty, preserved).
  *
  * The degraded phase (keyed on the tier via `switchPlatformToDegraded`) therefore also sees the
- * verified tier: a service left on EC2 while faking `lambda` is still degraded.
+ * verified tier: a service left on EC2 while faking `lambda` is still degraded. Domain-specific
+ * keys cannot spoof managed tiers either way: on a hosting-tier problem an unknown key matches
+ * no platformRule and falls to failurePenalty.
  */
 export function verifyPlatformTier(
   selfReported: string | undefined,
   baseUrl: string | undefined,
 ): string | undefined {
   const derived = classifyManagedHost(hostFromUrl(baseUrl));
-  if (derived) return derived;
+  if (derived && (selfReported === undefined || HOSTING_TIERS.has(selfReported))) {
+    return derived;
+  }
   if (selfReported !== undefined && MANAGED_TIERS.has(selfReported)) return "ec2";
   return selfReported;
 }
