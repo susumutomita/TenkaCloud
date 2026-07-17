@@ -62,6 +62,21 @@ describe("formatStep", () => {
     expect(out).toContain("colima start");
     expect(out).toContain("Note: Creates a container VM.");
   });
+
+  it("should omit the Run: block for a manual step with no commands (e.g. an unsupported-platform redirect)", () => {
+    const step: RemediationStep = {
+      id: "bun",
+      title: "Install Bun",
+      why: "Bun runs every TenkaCloud script and installs workspace dependencies.",
+      kind: "manual-only",
+      commands: [],
+      notes: "Use GitHub Codespaces, or install WSL2 first.",
+    };
+    const out = formatStep(step, 0, 1);
+    expect(out).toContain("[1/1] Install Bun");
+    expect(out).not.toContain("Run:");
+    expect(out).toContain("Note: Use GitHub Codespaces, or install WSL2 first.");
+  });
 });
 
 describe("formatManualGuidance", () => {
