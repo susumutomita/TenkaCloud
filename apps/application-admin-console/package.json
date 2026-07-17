@@ -18,6 +18,7 @@
     "@cloudscape-design/global-styles": "^1.0.61",
     "@tenkacloud/auth-client": "workspace:*",
     "@tenkacloud/format": "workspace:*",
+    "@tenkacloud/portal-contracts": "workspace:*",
     "@tenkacloud/problem-cost": "workspace:*",
     "@tenkacloud/problem-runtime": "workspace:*",
     "@tenkacloud/web-kit": "workspace:*",

@@ -1,3 +1,4 @@
+import { LITE_DRILL_PROBLEM_ID, matchesLiteDrillCheckpoint } from "@tenkacloud/portal-contracts";
 import type { SubmitFlagOutcome } from "../api/portal-client";
 
 /**
@@ -51,6 +52,26 @@ function isEasterEgg(trimmed: string): boolean {
 export function evaluateMockFlag(rawFlag: string, points: number): SubmitFlagOutcome {
   const trimmed = rawFlag.trim().toLowerCase();
   if (isCanonicalMatch(trimmed) || isEasterEgg(trimmed)) {
+    return { kind: "ok", scoreDelta: points, totalScore: points };
+  }
+  return WRONG_OUTCOME;
+}
+
+/**
+ * Issue #2696: multi-flag 用の dev-mock 判定。 Lite deploy オンボーディングドリル
+ * (= `LITE_DRILL_PROBLEM_ID`) だけは sub-flag ごとに実環境で拾うチェックポイント
+ * コードとの一致を要求する (= 手順を踏まないと画面に出ない値の確認がドリルの本体
+ * なので、 canonical flag / Easter egg では通らない)。 それ以外の multi-flag 問題は
+ * 従来どおり `evaluateMockFlag` の緩い判定に fallback する。
+ */
+export function evaluateMockSubFlag(
+  problemId: string,
+  flagId: string,
+  rawFlag: string,
+  points: number,
+): SubmitFlagOutcome {
+  if (problemId !== LITE_DRILL_PROBLEM_ID) return evaluateMockFlag(rawFlag, points);
+  if (matchesLiteDrillCheckpoint(flagId, rawFlag)) {
     return { kind: "ok", scoreDelta: points, totalScore: points };
   }
   return WRONG_OUTCOME;

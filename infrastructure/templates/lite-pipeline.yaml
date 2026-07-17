@@ -440,3 +440,14 @@ Outputs:
       Open the CodeBuild project: "Start build" deploys; "Start build with overrides" with
       ACTION=destroy tears down.
     Value: !Sub https://${AWS::Region}.console.aws.amazon.com/codesuite/codebuild/projects/tenkacloud-lite-${Environment}?region=${AWS::Region}
+
+  # Issue #2696: onboarding drill checkpoint 1 ("launcher created"). Deliberately a fixed,
+  # public code -- it proves the learner reached this Outputs tab, not cryptographic
+  # possession. The paired submission UI is the "Deploy your own TenkaCloud Lite" drill in
+  # the landing demo portal; keep the value in sync with the lite-drill contract in
+  # packages/portal-contracts (pinned by infrastructure/test/scripts/lite-pipeline-drill.test.ts).
+  OnboardingDrillCheckpoint:
+    Description: >-
+      Onboarding drill checkpoint 1. Paste this code into the "Deploy your own TenkaCloud
+      Lite" drill in the landing demo portal to score the "launcher created" step.
+    Value: TENKA{LITE-LAUNCHER-READY}

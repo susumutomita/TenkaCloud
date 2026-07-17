@@ -1,3 +1,4 @@
+import { LITE_DRILL_CHECKPOINTS } from "@tenkacloud/portal-contracts";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppConfig } from "../../src/config";
@@ -81,12 +82,15 @@ const { CompetitorAccountsPage } = await import("../../src/pages/CompetitorAccou
 const remove = vi.fn().mockResolvedValue(undefined);
 const verify = vi.fn();
 const reload = vi.fn().mockResolvedValue(undefined);
+const clearLastVerified = vi.fn();
 const hookState = (over: Record<string, unknown> = {}) => ({
   items: [],
   error: null,
   verifyInFlight: null,
   deleteInFlight: false,
   canMutateTenant: true,
+  lastVerified: null,
+  clearLastVerified,
   reload,
   verify,
   remove,
@@ -207,5 +211,30 @@ describe("CompetitorAccountsPage", () => {
     renderPage();
     fireEvent.click(screen.getByText("stub-confirm-delete")); // target null
     expect(remove).not.toHaveBeenCalled();
+  });
+
+  it("should reveal the Lite drill checkpoint after a verified trust check in Lite mode (#2696)", () => {
+    mockHook.mockReturnValue(hookState({ lastVerified: { awsAccountId: "acct-1" } }));
+    renderPage(config({ tenantId: "local" }));
+    expect(screen.getByText(LITE_DRILL_CHECKPOINTS.competitorVerified.code)).toBeInTheDocument();
+  });
+
+  it("should keep the drill checkpoint hidden outside Lite mode even after a verified check", () => {
+    mockHook.mockReturnValue(hookState({ lastVerified: { awsAccountId: "acct-1" } }));
+    renderPage(config({ tenantId: "pooled" }));
+    expect(
+      screen.queryByText(LITE_DRILL_CHECKPOINTS.competitorVerified.code),
+    ).not.toBeInTheDocument();
+  });
+
+  it("should clear the drill checkpoint signal when the alert is dismissed", () => {
+    mockHook.mockReturnValue(hookState({ lastVerified: { awsAccountId: "acct-1" } }));
+    renderPage(config({ tenantId: "local" }));
+    // LiteDrillCheckpointAlert は実物を render。 Cloudscape Alert の dismiss button は
+    // aria-label を持たないため、 modal テストと同じ class selector で特定する。
+    const dismiss = document.querySelector('button[class*="dismiss"]');
+    expect(dismiss).not.toBeNull();
+    fireEvent.click(dismiss as HTMLElement);
+    expect(clearLastVerified).toHaveBeenCalledTimes(1);
   });
 });

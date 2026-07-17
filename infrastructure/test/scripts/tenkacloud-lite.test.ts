@@ -1,3 +1,4 @@
+import { LITE_DRILL_CHECKPOINTS } from "@tenkacloud/portal-contracts";
 import { describe, expect, it } from "vitest";
 import {
   type CliIO,
@@ -319,6 +320,15 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
       expect(out).toContain("Next steps");
       expect(out).toContain("hello-world");
       expect(out).toContain("Teardown");
+    });
+
+    it("up should print the onboarding drill deploy-complete checkpoint code (#2696)", async () => {
+      const { io, stdout } = buildPostDeployIO();
+      await main(["up"], io);
+      const out = stdout.join("");
+      expect(out).toContain("Onboarding drill");
+      expect(out).toContain(LITE_DRILL_CHECKPOINTS.deployComplete.code);
+      expect(out).toContain("自分の TenkaCloud Lite を立てる");
     });
 
     it("up should number each phase as [i/4] progress markers", async () => {

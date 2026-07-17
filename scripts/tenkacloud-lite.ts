@@ -31,6 +31,7 @@
 import { spawn } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
+import { LITE_DRILL_CHECKPOINTS } from "@tenkacloud/portal-contracts";
 import {
   resolveLiteEnvironment,
   resolveLiteStackNames,
@@ -388,6 +389,14 @@ function printPostDeployGuide(io: CliIO, input: PostDeployGuideInput): void {
     "  2. Event タブで 「Demo」 という名前の event を作成",
     "  3. Problems タブから hello-world を deploy",
     "  4. Participant Portal URL を team に共有 (login key は event 作成時に発行)",
+    "",
+    // Issue #2696: LP デモポータルのオンボーディングドリル 「2. Lite デプロイ完了」 の
+    // チェックポイント。 このブロックは CodeBuild ログ末尾 (= lite-pipeline 経由) と
+    // 手元の `make deploy` の両方に出る。
+    "Onboarding drill (LP デモポータル):",
+    `  Checkpoint code: ${LITE_DRILL_CHECKPOINTS.deployComplete.code}`,
+    "  「自分の TenkaCloud Lite を立てる」 ドリルの 「2. Lite デプロイ完了」 に提出しよう。",
+    "  (他のコードは CloudFormation Outputs と Admin Console の各操作成功時に表示される)",
     "",
     "Teardown:",
     "  make destroy     — 全 stack を削除 (DDB / S3 含む、 確認 prompt あり)",

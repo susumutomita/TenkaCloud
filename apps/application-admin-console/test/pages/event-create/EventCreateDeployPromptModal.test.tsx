@@ -1,3 +1,4 @@
+import { LITE_DRILL_CHECKPOINTS } from "@tenkacloud/portal-contracts";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -118,5 +119,20 @@ describe("EventCreateDeployPromptModal", () => {
     const p = props({ canMutateTenant: false });
     render(<EventCreateDeployPromptModal {...p} />);
     expect(screen.getByTestId("deploy-prompt-now")).toBeDisabled();
+  });
+
+  it("should surface the Lite drill checkpoint code when the caller passes one (#2696)", () => {
+    render(
+      <EventCreateDeployPromptModal
+        {...props({ liteDrillCheckpointCode: LITE_DRILL_CHECKPOINTS.firstEventCreated.code })}
+      />,
+    );
+    expect(screen.getByText(LITE_DRILL_CHECKPOINTS.firstEventCreated.code)).toBeInTheDocument();
+    expect(screen.getByText("lite_drill.checkpoint_header")).toBeInTheDocument();
+  });
+
+  it("should omit the Lite drill checkpoint outside Lite mode (no code passed)", () => {
+    render(<EventCreateDeployPromptModal {...props()} />);
+    expect(screen.queryByText("lite_drill.checkpoint_header")).not.toBeInTheDocument();
   });
 });

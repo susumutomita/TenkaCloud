@@ -10,9 +10,11 @@ import type {
   CreateCompetitorAccountResponse,
 } from "../api/competitor-accounts-client";
 import { FriendlyErrorAlert } from "../components/FriendlyErrorAlert";
+import { LiteDrillCheckpointAlert } from "../components/LiteDrillCheckpointAlert";
 import type { AppConfig } from "../config";
 import { useT } from "../i18n";
 import { isBootstrapUrlMissing } from "../lib/competitor-bootstrap";
+import { liteDrillCheckpointCode } from "../lib/lite-drill";
 import { AddAccountModal } from "./competitor-accounts/AddAccountModal";
 import { CompetitorAccountDeleteModal } from "./competitor-accounts/CompetitorAccountDeleteModal";
 import { CompetitorAccountsTable } from "./competitor-accounts/CompetitorAccountsTable";
@@ -22,8 +24,21 @@ import { useCompetitorAccounts } from "./competitor-accounts/useCompetitorAccoun
 
 export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
   const t = useT();
-  const { items, error, verifyInFlight, deleteInFlight, canMutateTenant, reload, verify, remove } =
-    useCompetitorAccounts(config);
+  const {
+    items,
+    error,
+    verifyInFlight,
+    deleteInFlight,
+    canMutateTenant,
+    lastVerified,
+    clearLastVerified,
+    reload,
+    verify,
+    remove,
+  } = useCompetitorAccounts(config);
+  // Issue #2696: Lite mode (tenantId="local") でだけ、 検証成功直後にオンボーディング
+  // ドリルのチェックポイントコードを表示する。
+  const drillCode = liteDrillCheckpointCode(config, "competitorVerified");
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<CompetitorAccountSummary | null>(null);
   const [showSecret, setShowSecret] = useState<CreateCompetitorAccountResponse | null>(null);
@@ -68,6 +83,10 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
       )}
 
       {error && <FriendlyErrorAlert error={error} />}
+
+      {lastVerified && drillCode && (
+        <LiteDrillCheckpointAlert code={drillCode} onDismiss={clearLastVerified} />
+      )}
 
       <CompetitorAccountsTable
         items={items ?? []}

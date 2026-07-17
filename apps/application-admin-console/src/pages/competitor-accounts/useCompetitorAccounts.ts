@@ -15,6 +15,13 @@ export interface UseCompetitorAccountsResult {
   verifyInFlight: string | null;
   deleteInFlight: boolean;
   canMutateTenant: boolean;
+  /**
+   * Issue #2696: 直近の verify が成功した account (= trust 検証が通った瞬間の signal)。
+   * Lite mode のオンボーディングドリルのチェックポイント表示に使う。 dismiss / 再 verify
+   * 失敗で null に戻る。
+   */
+  lastVerified: CompetitorAccountSummary | null;
+  clearLastVerified: () => void;
   reload: () => Promise<void>;
   verify: (awsAccountId: string) => Promise<void>;
   remove: (awsAccountId: string) => Promise<void>;
@@ -27,6 +34,7 @@ export function useCompetitorAccounts(config: AppConfig): UseCompetitorAccountsR
   const [error, setError] = useState<FriendlyError | null>(null);
   const [verifyInFlight, setVerifyInFlight] = useState<string | null>(null);
   const [deleteInFlight, setDeleteInFlight] = useState(false);
+  const [lastVerified, setLastVerified] = useState<CompetitorAccountSummary | null>(null);
 
   const reload = useCallback(async () => {
     if (!apiClient) return;
@@ -48,9 +56,13 @@ export function useCompetitorAccounts(config: AppConfig): UseCompetitorAccountsR
       if (!apiClient || !canMutate) return;
       setVerifyInFlight(awsAccountId);
       try {
-        await verifyCompetitorAccount(apiClient, awsAccountId);
+        const res = await verifyCompetitorAccount(apiClient, awsAccountId);
+        // Issue #2696: trust 検証が通ったときだけ signal を立てる (= verified=false の
+        // 応答や例外では立てない)。 直近成功のみ保持し、 失敗は既存の error 表示に任せる。
+        setLastVerified(res.verified ? res : null);
         await reload();
       } catch (err) {
+        setLastVerified(null);
         setError(toFriendlyError(err));
       } finally {
         setVerifyInFlight(null);
@@ -58,6 +70,8 @@ export function useCompetitorAccounts(config: AppConfig): UseCompetitorAccountsR
     },
     [apiClient, canMutate, reload],
   );
+
+  const clearLastVerified = useCallback(() => setLastVerified(null), []);
 
   const remove = useCallback(
     async (awsAccountId: string) => {
@@ -81,6 +95,8 @@ export function useCompetitorAccounts(config: AppConfig): UseCompetitorAccountsR
     verifyInFlight,
     deleteInFlight,
     canMutateTenant: canMutate,
+    lastVerified,
+    clearLastVerified,
     reload,
     verify,
     remove,

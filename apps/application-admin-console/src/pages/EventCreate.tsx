@@ -15,6 +15,7 @@ import { DEFAULT_AWS_REGION } from "../data/aws-regions";
 import { listProblemSummaries, type ProblemSummary, runtimeProviders } from "../data/problems";
 import { useT } from "../i18n";
 import { filterVerifiedAccounts } from "../lib/competitor-accounts-filter";
+import { liteDrillCheckpointCode } from "../lib/lite-drill";
 import { EventCreateAccountsAlerts } from "./event-create/EventCreateAccountsAlerts";
 import { EventCreateBasicInfoSection } from "./event-create/EventCreateBasicInfoSection";
 import { EventCreateDeployPromptModal } from "./event-create/EventCreateDeployPromptModal";
@@ -333,6 +334,8 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
         bulkDeploySupported={providerMode.kind === "aws"}
         participantPortalUrl={config.participantPortalUrl}
         teams={deployPromptTarget?.teams ?? []}
+        // Issue #2696: Lite mode でだけ 「初回イベント作成」 ドリルのチェックポイントを出す。
+        liteDrillCheckpointCode={liteDrillCheckpointCode(config, "firstEventCreated")}
         onDeployNow={() => void handleDeployNow()}
         onDeployLater={handleDeployLater}
       />

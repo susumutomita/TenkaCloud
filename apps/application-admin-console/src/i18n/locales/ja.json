@@ -292,6 +292,11 @@
     "credential_unregistered": "認証情報が未登録です。",
     "mixed_provider_error": "v1 では AWS と非 AWS provider を同一 Event に混在できません。provider ごとに Event を分けてください。"
   },
+  "lite_drill": {
+    "checkpoint_header": "オンボーディングドリル: チェックポイント獲得!",
+    "checkpoint_body": "このコードを LP デモポータルの「自分の TenkaCloud Lite を立てる」ドリルに提出すると得点になります。",
+    "copy_aria": "チェックポイントコードをコピー"
+  },
   "deployments": {
     "header": "デプロイ履歴",
     "description": "自テナントで起動した問題の deploy ジョブ一覧。 各行を選ぶと詳細が見られます。",
