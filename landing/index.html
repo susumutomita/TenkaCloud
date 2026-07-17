@@ -154,26 +154,36 @@
       <div class="cta-row">
         <a
           class="cta-primary"
-          href="#pricing"
-          data-cta="get-quote"
-        >
-          <span data-i18n="hero.cta1">Hosted Event の見積もり</span> →
-        </a>
-        <a
-          href="/portal-demo/?demo=1"
-          data-cta="try-demo"
-        >
-          <span data-i18n="hero.cta3">ライブデモを触る</span> →
-        </a>
-        <a
-          href="https://github.com/susumutomita/TenkaCloud#readme"
+          href="https://codespaces.new/susumutomita/TenkaCloud"
           target="_blank"
           rel="noopener noreferrer"
-          data-cta="try-oss"
+          data-cta="try-codespaces"
         >
-          <span data-i18n="hero.cta2">OSS で試す</span> →
+          <span class="cta-label">
+            <span data-i18n="hero.cta_play">まず遊ぶ</span>
+            <small class="cta-note" data-i18n="hero.cta_play_note">推奨 · AWS 不要 · 約 5 分</small>
+          </span>
+          →
+        </a>
+        <a
+          class="cta-primary"
+          href="https://github.com/susumutomita/TenkaCloud#deploy-on-aws"
+          target="_blank"
+          rel="noopener noreferrer"
+          data-cta="deploy-aws"
+        >
+          <span class="cta-label">
+            <span data-i18n="hero.cta_host">自分のイベントを開く</span>
+            <small class="cta-note" data-i18n="hero.cta_host_note">AWS アカウント · 課金あり · 約 30 分</small>
+          </span>
+          →
         </a>
       </div>
+      <p class="hero-secondary">
+        <a href="/portal-demo/?demo=1" data-cta="try-demo"><span data-i18n="hero.cta_demo">ライブデモを触る</span></a>
+        ·
+        <a href="#pricing" data-cta="get-quote"><span data-i18n="hero.cta_quote">Hosted Event の見積もり</span></a>
+      </p>
       <p class="hero-trust" data-i18n="hero.trust">合同会社 BULL 運営 · Apache 2.0</p>
     </div>
     <div class="hero-visual">
