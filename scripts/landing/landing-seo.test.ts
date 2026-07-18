@@ -265,3 +265,38 @@ describe("AI-agent briefing and paste-able prompt", () => {
     expect(app).toContain("navigator.clipboard.writeText");
   });
 });
+
+/**
+ * #2696 P1: 30 秒 LP 動画。 hero の secondary 行と両 README の CTA 付近から
+ * 参照され、 自ホスト mp4 (16:9 / 9:16) + README 用 preview GIF が実在する。
+ */
+describe("30-second product video placement (#2696 P1)", () => {
+  it("should ship the self-hosted 30s assets", () => {
+    const { existsSync } = require("node:fs") as typeof import("node:fs");
+    for (const path of [
+      "landing/videos/lp/tenkacloud-30s.mp4",
+      "landing/videos/lp/tenkacloud-30s-vertical.mp4",
+      "docs/assets/lp-30s/tenkacloud-30s-preview.gif",
+      "docs/assets/lp-30s/tenkacloud-30s-poster.jpg",
+    ]) {
+      expect(existsSync(join(root, path)), `${path} missing`).toBe(true);
+    }
+  });
+
+  it("should link the 30s video from the hero secondary row on both pages", () => {
+    for (const page of ["landing/index.html", "landing/index.en.html"]) {
+      const html = read(page);
+      expect(html).toContain('data-cta="watch-30s"');
+      expect(html).toContain('href="/videos/lp/tenkacloud-30s.mp4"');
+    }
+  });
+
+  it("should embed the preview GIF near the top CTA of both READMEs", () => {
+    for (const page of ["README.md", "README.ja.md"]) {
+      const md = read(page);
+      expect(md).toContain("docs/assets/lp-30s/tenkacloud-30s-preview.gif");
+      expect(md).toContain("landing/videos/lp/tenkacloud-30s.mp4");
+      expect(md).toContain("landing/videos/lp/tenkacloud-30s-vertical.mp4");
+    }
+  });
+});

@@ -6,7 +6,7 @@ import {
   FADE_S,
   videoNominalDurationS,
 } from "./render";
-import { ONBOARDING_VIDEOS } from "./script-data";
+import { LP_VIDEO, ONBOARDING_VIDEOS } from "./script-data";
 
 /**
  * #2707 P1: 動画は生成物 (mp4) を CI で検証できないので、 台本と組み立てロジックの
@@ -34,7 +34,7 @@ describe("onboarding video scripts (#2707)", () => {
   });
 
   it("should open with INTRO, close with GOAL, and caption every slide bilingually", () => {
-    for (const video of ONBOARDING_VIDEOS) {
+    for (const video of [...ONBOARDING_VIDEOS, LP_VIDEO]) {
       expect(video.slides[0]?.badge).toBe("INTRO");
       expect(video.slides.at(-1)?.badge).toBe("GOAL");
       for (const slide of video.slides) {
@@ -46,7 +46,7 @@ describe("onboarding video scripts (#2707)", () => {
   });
 
   it("should never reveal a real checkpoint code in a slide", () => {
-    for (const video of ONBOARDING_VIDEOS) {
+    for (const video of [...ONBOARDING_VIDEOS, LP_VIDEO]) {
       for (const slide of video.slides) {
         const text = JSON.stringify(slide);
         // 実値 TENKA{...} は実環境の画面にだけ現れる。 動画に出すとドリルのネタバレになる。
@@ -86,5 +86,32 @@ describe("ffmpeg filter graph builder", () => {
     const graph = buildFilterGraph([10]);
     expect(graph).toContain("[v0]format=yuv420p[vout]");
     expect(graph).not.toContain("xfade");
+  });
+});
+
+describe("LP 30-second product video (#2696 P1)", () => {
+  it("should stay within 30 seconds effective and keep the 2-CTA closing slide", () => {
+    const nominal = videoNominalDurationS(LP_VIDEO);
+    const fades = (LP_VIDEO.slides.length - 1) * FADE_S;
+    expect(nominal - fades).toBeLessThanOrEqual(30);
+    expect(LP_VIDEO.problemId).toBe("tenkacloud-30s");
+    const closing = LP_VIDEO.slides.at(-1);
+    expect(closing?.bulletsJa).toHaveLength(2);
+    expect(closing?.titleJa).toContain("tenkacloud.com");
+  });
+
+  it("should build portrait slides with the vertical layout overrides", () => {
+    const html = buildSlideHtml(
+      LP_VIDEO,
+      LP_VIDEO.slides[0],
+      0,
+      LP_VIDEO.slides.length,
+      "portrait",
+    );
+    expect(html).toContain("width: 720px; height: 1280px;");
+    expect(html).toContain(".vtitle { display: none; }");
+    const graph = buildFilterGraph([4.5, 5.5], "portrait");
+    expect(graph).toContain("crop=1440:2560:0:0");
+    expect(graph).toContain("s=720x1280");
   });
 });

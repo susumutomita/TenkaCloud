@@ -146,6 +146,7 @@
       "hero.quest_desc":
         "説明を読むのではなく、1 問解く。プロダクトの仕組みもモードの違いも問題の中で分かり、クリアすると次の問題 <code>deploy-tenkacloud-lite</code> が開く。",
       "hero.quest_cta": "この問題で始める",
+      "hero.cta_video": "▶ 30 秒でわかる",
       "hero.host_prefix": "主催者の方へ:",
       "hero.cta_host": "自分のイベントを開く",
       "hero.cta_quote": "Hosted Event の見積もり",
@@ -403,6 +404,7 @@
       "hero.quest_desc":
         "Don't read the pitch — solve one quest. You'll learn the product and its modes inside the problem; clearing it unlocks <code>deploy-tenkacloud-lite</code>.",
       "hero.quest_cta": "Start with this quest",
+      "hero.cta_video": "▶ Watch the 30-second tour",
       "hero.host_prefix": "Hosting an event?",
       "hero.cta_host": "Host your own event",
       "hero.cta_quote": "Get a Hosted Event quote",
