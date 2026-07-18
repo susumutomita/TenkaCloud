@@ -106,6 +106,19 @@ const QUIZ_ANSWERS: Readonly<Record<string, Readonly<Record<string, readonly str
   },
 };
 
+/**
+ * #2711 follow-up: 厳密判定のオンボーディングドリルか。 これらの問題では
+ * 「`tenkacloudsample` で正解を体験できる」 という緩い demo 判定のヘルパー文言を
+ * 出さない (従うと wrong になる誤案内のため)。
+ */
+export function isStrictDrillProblem(problemId: string): boolean {
+  return (
+    problemId === WHAT_IS_DRILL_PROBLEM_ID ||
+    problemId === LOCAL_DRILL_PROBLEM_ID ||
+    problemId === LITE_DRILL_PROBLEM_ID
+  );
+}
+
 function matchesQuizAnswer(problemId: string, flagId: string, rawFlag: string): boolean {
   const answers = QUIZ_ANSWERS[problemId]?.[flagId];
   if (!answers) return false;

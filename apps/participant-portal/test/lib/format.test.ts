@@ -43,6 +43,13 @@ describe("describeAgo", () => {
   it("should treat future timestamps (= sinceIso newer than now) as 0 seconds ago (= clock skew defense)", () => {
     expect(describeAgo("2026-05-05T10:01:00.000Z", NOW)).toBe("0 秒前");
   });
+
+  it("should localize every branch for the en locale (#2711 follow-up)", () => {
+    expect(describeAgo(undefined, NOW, "en")).toBe("Not scored yet");
+    expect(describeAgo("2026-05-05T09:59:30.000Z", NOW, "en")).toBe("30 s ago");
+    expect(describeAgo("2026-05-05T09:58:00.000Z", NOW, "en")).toBe("2 min ago");
+    expect(describeAgo("2026-05-05T08:30:00.000Z", NOW, "en")).toBe("1 h 30 min ago");
+  });
 });
 
 /**
@@ -103,6 +110,10 @@ describe("formatRelativeTime", () => {
 describe("formatOccurredAtTooltip", () => {
   it("should return 「未採点」 for undefined", () => {
     expect(formatOccurredAtTooltip(undefined)).toBe("未採点");
+  });
+
+  it("should localize the not-scored fallback for the en locale (#2711 follow-up)", () => {
+    expect(formatOccurredAtTooltip(undefined, "en")).toBe("Not scored yet");
   });
 
   it("should return 「?」 for an invalid ISO string (= 防御的 fallback)", () => {

@@ -197,14 +197,29 @@ export function localizeProblem(
   if (lang !== "en") return problem;
   const en = problem.i18n?.en;
   const hints = problem.scoring?.hints;
+  // #2711 follow-up: multi-flag の per-flag hints も locale 解決する。 以前は問題レベルの
+  // hints だけを map しており、 ドリルのヒントが en locale でも ja のまま表示されていた。
+  const flags = problem.scoring?.flags;
   return {
     ...problem,
     ...(en?.name?.trim() ? { name: en.name } : {}),
     ...(en?.description?.trim() ? { description: en.description } : {}),
     ...(en?.instructions?.trim() ? { instructions: en.instructions } : {}),
     ...(en?.writeup?.trim() ? { writeup: en.writeup } : {}),
-    ...(problem.scoring && hints
-      ? { scoring: { ...problem.scoring, hints: hints.map(localizeHint) } }
+    ...(problem.scoring && (hints || flags)
+      ? {
+          scoring: {
+            ...problem.scoring,
+            ...(hints ? { hints: hints.map(localizeHint) } : {}),
+            ...(flags
+              ? {
+                  flags: flags.map((flag) =>
+                    flag.hints ? { ...flag, hints: flag.hints.map(localizeHint) } : flag,
+                  ),
+                }
+              : {}),
+          },
+        }
       : {}),
   };
 }

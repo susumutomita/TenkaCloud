@@ -17,9 +17,14 @@ import { useAuth } from "../auth/AuthProvider";
 import { TeamViewProvider, useTeamView } from "../auth/TeamViewProvider";
 import type { AppConfig, CloudMode } from "../config";
 import { problemProvider } from "../data/providers";
-import { useI18n } from "../i18n";
+import { type LocaleCode, SUPPORTED_LOCALES, useI18n } from "../i18n";
 import { CountdownTimer } from "./CountdownTimer";
-import { buildLocaleUtility } from "./locale-switcher";
+import {
+  buildLocaleUtility,
+  LOCALE_DICTIONARIES_NAME,
+  LOCALE_NAV_HREF_PREFIX,
+  localeFromNavHref,
+} from "./locale-switcher";
 import { useConsoleAccess } from "./useConsoleAccess";
 
 type Translate = (key: string) => string;
@@ -213,9 +218,16 @@ export function handleSideNavFollow(
     readonly detail: { readonly external?: boolean; readonly href: string };
   },
   navigate: (href: string) => void,
+  setLocale: (locale: LocaleCode) => void,
 ): void {
   if (event.detail.external) return;
   event.preventDefault();
+  // #2711 follow-up: `#locale-<code>` は画面遷移ではなく locale 切替 (モバイル用導線)。
+  const locale = localeFromNavHref(event.detail.href);
+  if (locale) {
+    setLocale(locale);
+    return;
+  }
   navigate(event.detail.href);
 }
 
@@ -243,6 +255,7 @@ export function buildSideNavItems(
   unread: number,
   t: (key: string) => string,
   cloudMode: CloudMode,
+  locale: LocaleCode,
 ): SideNavigationProps.Item[] {
   const isLocal = cloudMode === "local";
   const eventItems: SideNavigationProps.Item[] = [
@@ -274,6 +287,17 @@ export function buildSideNavItems(
       items: [{ type: "link", href: "/tools/sso", text: t("nav.sso_credentials") }],
     });
   }
+  // #2711 follow-up: モバイル幅では TopNavigation の utilities (globe dropdown) が畳まれて
+  // 言語切替に到達できないため、 ハンバーガーで常に開ける side nav にも切替を置く。
+  sections.push({
+    type: "section",
+    text: t("nav.language_section"),
+    items: SUPPORTED_LOCALES.map((code) => ({
+      type: "link",
+      href: `${LOCALE_NAV_HREF_PREFIX}${code}`,
+      text: `${locale === code ? "✓ " : ""}${LOCALE_DICTIONARIES_NAME[code]}`,
+    })),
+  });
   return sections;
 }
 
@@ -347,8 +371,8 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
   ]);
 
   const sideNavItems = useMemo(
-    () => buildSideNavItems(teamView.unreadNotificationCount, t, config.cloudMode),
-    [teamView.unreadNotificationCount, t, config.cloudMode],
+    () => buildSideNavItems(teamView.unreadNotificationCount, t, config.cloudMode, locale),
+    [teamView.unreadNotificationCount, t, config.cloudMode, locale],
   );
 
   return (
@@ -363,7 +387,7 @@ function ShellInner({ config, children }: { config: AppConfig; children: ReactNo
             activeHref={location.pathname}
             header={{ href: "/", text: t("nav.menu_header") }}
             items={sideNavItems}
-            onFollow={(e) => handleSideNavFollow(e, navigate)}
+            onFollow={(e) => handleSideNavFollow(e, navigate, setLocale)}
           />
         }
         content={

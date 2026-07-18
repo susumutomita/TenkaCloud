@@ -63,7 +63,10 @@ export function pickNextProblem(
   // Issue #1349: COMPLETE (= deploy 完了済) を優先、 deploy 中はやることが無いので後ろ。
   const ready = unsolved.filter((p) => p.status === "COMPLETE");
   const pool = ready.length > 0 ? ready : unsolved;
-  return [...pool].sort((a, b) => a.problemId.localeCompare(b.problemId))[0];
+  // #2711 follow-up: 以前は problemId の辞書順で選んでいたが、 オンボーディング導線では
+  // 表示順 (= fixture / deploy が pin する journey order) が正であり、 辞書順だと
+  // deploy-tenkacloud-lite がチュートリアルより先に出てしまう。 /start と同じく表示順の先頭。
+  return pool[0];
 }
 
 export function computeNextActionState(args: {

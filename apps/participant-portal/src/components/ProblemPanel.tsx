@@ -16,7 +16,7 @@ import type {
 } from "../api/portal-client";
 import { useAppConfig } from "../config-context";
 import { useLang, useT } from "../i18n";
-import { describeAgo } from "../lib/format";
+import { describeAgo, type SupportedLang } from "../lib/format";
 import { AttackProbesPanel } from "./AttackProbesPanel";
 import { MultiFlagSubmissionPanel } from "./MultiFlagSubmissionPanel";
 import {
@@ -118,12 +118,14 @@ function ProblemPanelAlerts({
   autoDeleteNotice,
   now,
   t,
+  lang,
 }: {
   problem: ParticipantProblemView;
   isStale: boolean;
   autoDeleteNotice?: { readonly type: "warning"; readonly body: string };
   now: number;
   t: ProblemPanelT;
+  lang: SupportedLang;
 }) {
   return (
     <>
@@ -134,7 +136,7 @@ function ProblemPanelAlerts({
       )}
       {isStale && (
         <Alert type="warning" header={t("problem_panel.stale_header")}>
-          {t("problem_panel.stale_body", { ago: describeAgo(problem.lastScoredAt, now) })}
+          {t("problem_panel.stale_body", { ago: describeAgo(problem.lastScoredAt, now, lang) })}
         </Alert>
       )}
       {autoDeleteNotice && (
@@ -214,6 +216,7 @@ export function ProblemPanel({
           autoDeleteNotice={autoDeleteNotice}
           now={now}
           t={t}
+          lang={lang}
         />
         {/* #1975 / #2473: 問題文 (name / description)。 local mode は同梱して返すので
             「何の問題か」 を表示できる。 instructions は ProblemInfoSection 側の唯一の描画経路に
@@ -253,7 +256,7 @@ export function ProblemPanel({
               : []),
             {
               label: t("problem_panel.last_scored_label"),
-              value: describeAgo(problem.lastScoredAt, now),
+              value: describeAgo(problem.lastScoredAt, now, lang),
             },
           ]}
         />

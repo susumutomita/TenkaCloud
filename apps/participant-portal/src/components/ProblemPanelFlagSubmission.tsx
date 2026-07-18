@@ -17,7 +17,7 @@ import {
 } from "../api/portal-client";
 import { useIsMock } from "../config-context";
 import { evaluateMockFlag } from "../dev-mock/flag-submit";
-import { useT } from "../i18n";
+import { useLang, useT } from "../i18n";
 import { describeAgo } from "../lib/format";
 import { CelebrationOverlay } from "./CelebrationOverlay";
 import {
@@ -226,6 +226,8 @@ export function HintsPanel({
   revealOrder?: HintRevealMode;
 }) {
   const t = useT();
+  // #2711 follow-up: 開封時刻の相対表示 (describeAgo) も locale に合わせる。
+  const lang = useLang();
   // [#2707] dev-mock (= LP デモ) では backend が無いので reveal をローカル state で行う。
   // fixture がドリルの hint content を同梱し (公開前提のオンボーディング教材)、 開封状態
   // だけをこの Set で持つ。 backend mode では従来どおり server truth。
@@ -292,7 +294,7 @@ export function HintsPanel({
                     {h.revealedAt && (
                       <Box variant="small" color="text-status-info" margin={{ top: "xxs" }}>
                         {t("problem_panel.hint_revealed_ago", {
-                          ago: describeAgo(h.revealedAt, Date.now()),
+                          ago: describeAgo(h.revealedAt, Date.now(), lang),
                         })}
                       </Box>
                     )}

@@ -5,7 +5,7 @@ import type * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppConfigProvider } from "../config-context";
 import { I18nProvider } from "../i18n";
-import { MultiFlagSubmissionPanel } from "./MultiFlagSubmissionPanel";
+import { MultiFlagSubmissionPanel, subFlagFieldPresentation } from "./MultiFlagSubmissionPanel";
 
 /**
  * Issue #1796: MultiFlagSubmissionPanel を実 provider (AppConfigProvider + I18nProvider) で
@@ -219,6 +219,36 @@ describe("Lite deploy drill (issue #2696)", () => {
     await user.click(screen.getByRole("button", { name: /^Submit/ }));
     expect(await screen.findByText("Wrong (-10 pt) — total -10 pt")).toBeInTheDocument();
     expect(apiMocks.submitFlag).not.toHaveBeenCalled();
+  });
+
+  it("should show honest drill copy instead of the demo Easter-egg helper (#2711 follow-up)", () => {
+    renderPanel({ problemId: LITE_DRILL_PROBLEM_ID, flags: DRILL_FLAGS }, "dev-mock");
+    // 誤案内だった 「partial matches / Easter eggs もOK」 の demo helper を出さない。
+    expect(screen.queryByText(/Easter eggs like/)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/Only the exact value from the text or the steps counts here/),
+    ).toBeInTheDocument();
+    // クイズ回答欄なので 「(deployment output value)」 接尾辞なしの素 label + 素 placeholder。
+    expect(screen.getByText("1. Launcher スタック作成")).toBeInTheDocument();
+    expect(screen.queryByText(/deployment output value/)).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Type your answer")).toBeInTheDocument();
+  });
+
+  it("should keep the demo helper and labeled field for non-drill problems in dev-mock", () => {
+    renderPanel({}, "dev-mock");
+    expect(screen.getAllByText(/Easter eggs like/).length).toBeGreaterThan(0);
+    expect(screen.getByText("Ep01: Reachability (deployment output value)")).toBeInTheDocument();
+    expect(screen.queryByText(/Only the exact value from the text/)).not.toBeInTheDocument();
+  });
+
+  it("should drop the drill description outside dev-mock (backend keeps the field silent)", () => {
+    // 将来ドリルを backend 評価に載せた場合も demo/drill helper は mock 専用のまま。
+    const t = (key: string) => key;
+    expect(subFlagFieldPresentation(true, false, "Step 1", t)).toEqual({
+      label: "Step 1",
+      description: undefined,
+      placeholder: "problem_panel.flag_drill_placeholder",
+    });
   });
 });
 

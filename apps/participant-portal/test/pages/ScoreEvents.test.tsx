@@ -22,6 +22,7 @@ const { mockAuth, mockIsMock, mockGet } = vi.hoisted(() => ({
 vi.mock("../../src/i18n", () => ({
   useT: () => (key: string, params?: Readonly<Record<string, string | number>>) =>
     params ? `${key}|${JSON.stringify(params)}` : key,
+  useLang: () => "ja",
 }));
 vi.mock("../../src/config-context", () => ({ useIsMock: mockIsMock }));
 vi.mock("../../src/auth/AuthProvider", () => ({ useAuth: mockAuth }));

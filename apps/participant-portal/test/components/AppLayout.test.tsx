@@ -300,19 +300,52 @@ describe("utility builders", () => {
 
   it("should navigate for internal links and defer to the browser for external ones", () => {
     const navigate = vi.fn();
+    const setLocale = vi.fn();
     const preventDefault = vi.fn();
-    handleSideNavFollow({ preventDefault, detail: { external: false, href: "/x" } }, navigate);
+    handleSideNavFollow(
+      { preventDefault, detail: { external: false, href: "/x" } },
+      navigate,
+      setLocale,
+    );
     expect(preventDefault).toHaveBeenCalled();
     expect(navigate).toHaveBeenCalledWith("/x");
+    expect(setLocale).not.toHaveBeenCalled();
 
     navigate.mockClear();
     preventDefault.mockClear();
     handleSideNavFollow(
       { preventDefault, detail: { external: true, href: "https://ext" } },
       navigate,
+      setLocale,
     );
     expect(preventDefault).not.toHaveBeenCalled();
     expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("should switch the locale instead of navigating for #locale- links (#2711 follow-up)", () => {
+    const navigate = vi.fn();
+    const setLocale = vi.fn();
+    const preventDefault = vi.fn();
+    handleSideNavFollow(
+      { preventDefault, detail: { external: false, href: "#locale-ja" } },
+      navigate,
+      setLocale,
+    );
+    expect(preventDefault).toHaveBeenCalled();
+    expect(setLocale).toHaveBeenCalledWith("ja");
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("should fall through to navigate for an unknown #locale- code (type guard)", () => {
+    const navigate = vi.fn();
+    const setLocale = vi.fn();
+    handleSideNavFollow(
+      { preventDefault: vi.fn(), detail: { external: false, href: "#locale-xx" } },
+      navigate,
+      setLocale,
+    );
+    expect(setLocale).not.toHaveBeenCalled();
+    expect(navigate).toHaveBeenCalledWith("#locale-xx");
   });
 });
 
@@ -325,7 +358,7 @@ const linkHrefs = (section: SideNavigationProps.Section | undefined) =>
 
 describe("buildSideNavItems (Issue #2474 local nav pruning)", () => {
   it("should omit the Tools section and the notifications link in local cloud mode", () => {
-    const items = buildSideNavItems(0, (k) => k, "local");
+    const items = buildSideNavItems(0, (k) => k, "local", "ja");
     // Tools (SSO 資格情報) セクションは丸ごと省く。
     expect(sectionByText(items, "nav.tools_section")).toBeUndefined();
     // Event セクションは home / scoreboard / score-events のみで notifications 無し。
@@ -339,15 +372,33 @@ describe("buildSideNavItems (Issue #2474 local nav pruning)", () => {
   });
 
   it("should keep the Tools section and notifications link in real cloud mode (regression guard)", () => {
-    const items = buildSideNavItems(0, (k) => k, "real");
+    const items = buildSideNavItems(0, (k) => k, "real", "ja");
     expect(sectionByText(items, "nav.tools_section")).toBeDefined();
     expect(linkHrefs(sectionByText(items, "nav.event_section"))).toContain("/notifications");
   });
 
   it("should keep the Tools section and notifications link in mock cloud mode (regression guard)", () => {
-    const items = buildSideNavItems(0, (k) => k, "mock");
+    const items = buildSideNavItems(0, (k) => k, "mock", "ja");
     expect(sectionByText(items, "nav.tools_section")).toBeDefined();
     expect(linkHrefs(sectionByText(items, "nav.event_section"))).toContain("/notifications");
+  });
+
+  it("should append a language section with #locale- links in every cloud mode (#2711 follow-up)", () => {
+    for (const cloudMode of ["local", "mock", "real"] as const) {
+      const items = buildSideNavItems(0, (k) => k, cloudMode, "ja");
+      const language = sectionByText(items, "nav.language_section");
+      expect(language).toBeDefined();
+      expect(linkHrefs(language)).toEqual(["#locale-ja", "#locale-en"]);
+    }
+  });
+
+  it("should mark only the active locale with a checkmark in the language section", () => {
+    const language = sectionByText(
+      buildSideNavItems(0, (k) => k, "real", "en"),
+      "nav.language_section",
+    );
+    const texts = (language?.items ?? []).map((i) => ("text" in i ? i.text : undefined));
+    expect(texts).toEqual(["日本語", "✓ English"]);
   });
 });
 
@@ -474,6 +525,20 @@ describe("ShellLayout", () => {
     renderShell();
     fireEvent.click(screen.getByText("nav.scoreboard"));
     expect(mockNav).toHaveBeenCalledWith("/scoreboard");
+  });
+
+  it("should switch the locale from the side navigation language section (#2711 follow-up)", () => {
+    renderShell();
+    // locale=en なので未選択側の 「日本語」 link が side nav に出る (TopNavigation の
+    // 計測用 hidden 複製と衝突しないよう aria-hidden 外の要素を選ぶ)。 click は setLocale で
+    // あり画面遷移しない。
+    const jaLink = screen
+      .getAllByText("日本語")
+      .find((el) => el.closest('[aria-hidden="true"]') === null);
+    expect(jaLink).toBeDefined();
+    fireEvent.click(jaLink as HTMLElement);
+    expect(mockSetLocale).toHaveBeenCalledWith("ja");
+    expect(mockNav).not.toHaveBeenCalled();
   });
 
   it("should not render an offline alert in real cloud mode", () => {
