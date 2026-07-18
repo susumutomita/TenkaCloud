@@ -10,7 +10,7 @@ import type {
   ParticipantTeamView,
   ScoreEventsResponse,
 } from "../api/portal-client";
-import { WHAT_IS_DRILL_PROBLEM_ID } from "../dev-mock/flag-submit";
+import { AI_AGENT_LOCAL_DRILL_PROBLEM_ID, WHAT_IS_DRILL_PROBLEM_ID } from "../dev-mock/flag-submit";
 
 /**
  * `mode === "dev-mock"` のとき backend が存在しないので、 portal の各画面が空 state に
@@ -24,6 +24,7 @@ import { WHAT_IS_DRILL_PROBLEM_ID } from "../dev-mock/flag-submit";
  *      2 択 (ブラウザ Lite / Codespaces) はステップ 3 で初めて提示する
  *   2. 「自分の TenkaCloud Lite を立てる」 — 実 AWS デプロイ (#2696、 lite-drill 契約)
  *   3. 「ローカルモードで遊ぶ」 — Codespaces 派向け。 hello-world 初得点 → チェックポイント提出
+ *   4. 「AIエージェントでMac起動」 — LP のプロンプトからローカル起動確認までの実演
  *   + 旧来の「クエスト」2 問 (hidden-passphrase は解答済み、 number-sequence は未解答)
  *
  * オンボーディングドリルは「本文は概要 → 詰まったら提出欄ごとのヒントでステップバイステップ手順」の
@@ -476,6 +477,101 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
       createdAt: iso(-25 * MIN),
     },
     {
+      jobId: "01HZX0M2A1AGENTMACTENKA0003",
+      problemId: AI_AGENT_LOCAL_DRILL_PROBLEM_ID,
+      videoUrl: "/videos/onboarding/ai-agent-local-mac.mp4",
+      name: "AIエージェントでMac起動",
+      description: [
+        "LP の **AI エージェントで始める** にあるプロンプトを Claude Code や Codex へ貼ると、TenkaCloud の説明だけでなく、遊び始めるところまで案内してくれる。",
+        "Mac で **PLAY → 手元のローカル環境** を選んだ今回の実演では、AI が前提確認、取得、インストール、ローカルモード起動、HTTP 疎通確認まで完走した。人が長いコマンド列を写すのではなく、AI が実環境を見ながら起動までこぎつけるのがポイントだ。",
+        "",
+        "#### チェックポイント",
+        "",
+        "1. AI が最初に読む正規ブリーフィングのファイル名を答える",
+        "2. 起動完了時に HTTP 200 を確認した Participant Portal のポート番号を答える",
+        "",
+        "冒頭の 1 分動画で、プロンプトを貼ってからローカルモードが ready になるまでを確認できる。ヒントはペナルティなしで開ける。",
+      ].join("\n"),
+      instructions:
+        "冒頭の 1 分動画を見て、AI が読んだブリーフィング名と、Mac 上で確認した Portal のポート番号を提出する。",
+      i18n: {
+        en: {
+          name: "Launch on Mac with an AI agent",
+          videoUrl: "/videos/onboarding/ai-agent-local-mac-en.mp4",
+          description: [
+            "Paste the prompt from **Start with an AI agent** on the landing page into Claude Code or Codex. The agent does more than explain TenkaCloud: it guides you all the way to a playable environment.",
+            "In this Mac run, choosing **PLAY → local machine** let the agent check prerequisites, clone, install, start local mode, and verify HTTP reachability. The point is not memorizing a command list — it is seeing an agent inspect the real machine and carry the setup to ready.",
+            "",
+            "#### Checkpoints",
+            "",
+            "1. Submit the filename of the canonical briefing the agent reads first",
+            "2. Submit the Participant Portal port that returned HTTP 200",
+            "",
+            "The one-minute video shows the path from pasted prompt to a ready local mode. Hints are penalty-free.",
+          ].join("\n"),
+          instructions:
+            "Watch the one-minute video, then submit the briefing filename and the Portal port verified on the Mac.",
+        },
+      },
+      region: "ap-northeast-1",
+      awsAccountId: "999999999999",
+      status: "COMPLETE",
+      stackOutputs: {},
+      expiresAt: DEPLOY_EXPIRES_AT,
+      score: 0,
+      scoring: {
+        kind: "multi-flag",
+        flags: [
+          {
+            id: "briefing-file",
+            label: "1. AI が最初に読むブリーフィングは?",
+            points: 100,
+            solved: false,
+            i18n: { en: { label: "1. Which briefing does the agent read first?" } },
+            hints: [
+              {
+                id: "ai-mac-h1",
+                penalty: 0,
+                revealed: false,
+                content:
+                  "LP のプロンプトは `Fetch https://tenkacloud.com/...` で始まる。URL 末尾のファイル名を、拡張子まで含めて提出する。",
+                i18n: {
+                  en: {
+                    content:
+                      "The landing-page prompt starts with `Fetch https://tenkacloud.com/...`. Submit the filename at the end of that URL, including its extension.",
+                  },
+                },
+              },
+            ],
+          },
+          {
+            id: "portal-port",
+            label: "2. HTTP 200 を確認した Portal のポート番号は?",
+            points: 100,
+            solved: false,
+            i18n: { en: { label: "2. Which Portal port returned HTTP 200?" } },
+            hints: [
+              {
+                id: "ai-mac-h2",
+                penalty: 0,
+                revealed: false,
+                content:
+                  "動画の終盤に `Participant Portal ... LISTENING` と `HTTP 200` が表示される。同じ行にある 4 桁のポート番号を提出する。",
+                i18n: {
+                  en: {
+                    content:
+                      "Near the end of the video, `Participant Portal ... LISTENING` and `HTTP 200` appear. Submit the four-digit port shown on that line.",
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      },
+      deployLog: { cursor: "", entries: [] },
+      createdAt: iso(-25 * MIN),
+    },
+    {
       jobId: "01HZX0KFFCT7BHGAQM6Q2WP1AB",
       problemId: SEQUENCE_PROBLEM_ID,
       name: "欠けた数",
@@ -549,7 +645,7 @@ export const DEV_MOCK_LEADERBOARD: LeaderboardResponse = {
       teamName: "Alpha Squad",
       score: 600,
       completedProblems: 2,
-      totalProblems: 5,
+      totalProblems: 6,
       isMyTeam: false,
     },
     {
@@ -558,7 +654,7 @@ export const DEV_MOCK_LEADERBOARD: LeaderboardResponse = {
       teamName: "Bravo Crew",
       score: 450,
       completedProblems: 1,
-      totalProblems: 5,
+      totalProblems: 6,
       isMyTeam: false,
     },
     {
@@ -567,7 +663,7 @@ export const DEV_MOCK_LEADERBOARD: LeaderboardResponse = {
       teamName: "Demo Team",
       score: 300,
       completedProblems: 1,
-      totalProblems: 5,
+      totalProblems: 6,
       isMyTeam: true,
     },
     {
@@ -576,7 +672,7 @@ export const DEV_MOCK_LEADERBOARD: LeaderboardResponse = {
       teamName: "Delta Force",
       score: 300,
       completedProblems: 1,
-      totalProblems: 5,
+      totalProblems: 6,
       isMyTeam: false,
     },
     {
@@ -585,7 +681,7 @@ export const DEV_MOCK_LEADERBOARD: LeaderboardResponse = {
       teamName: "Echo Five",
       score: 0,
       completedProblems: 0,
-      totalProblems: 5,
+      totalProblems: 6,
       isMyTeam: false,
     },
   ],
@@ -599,7 +695,7 @@ export const DEV_MOCK_NOTIFICATIONS: NotificationsResponse = {
     {
       notificationId: "notif-003",
       title: "オンボーディングチュートリアルを開放",
-      body: "「TenkaCloud とは?」から始めて「自分の TenkaCloud Lite を立てる」へ進むと、理解から実デプロイまで得点しながら完走できます。Codespaces 派は「ローカルモードで遊ぶ」も。詰まったら各提出欄のヒント(ペナルティなし)へ。",
+      body: "「TenkaCloud とは?」から始めて「自分の TenkaCloud Lite を立てる」へ進むと、理解から実デプロイまで得点しながら完走できます。Codespaces 派は「ローカルモードで遊ぶ」、Mac 派は「AIエージェントでMac起動」も。詰まったら各提出欄のヒント(ペナルティなし)へ。",
       severity: "info",
       occurredAt: iso(-2 * MIN),
     },
@@ -613,7 +709,7 @@ export const DEV_MOCK_NOTIFICATIONS: NotificationsResponse = {
     {
       notificationId: "notif-001",
       title: "競技開始",
-      body: "TenkaCloud のデモを開始しました。オンボーディングチュートリアルと 2 問のクエストが出題されています。解いて flag を提出しよう!",
+      body: "TenkaCloud のデモを開始しました。4 問のオンボーディングチュートリアルと 2 問のクエストが出題されています。解いて flag を提出しよう!",
       severity: "info",
       occurredAt: iso(-25 * MIN),
     },

@@ -15,6 +15,7 @@ import { useAuth } from "../auth/AuthProvider";
 import { useTeamView } from "../auth/TeamViewProvider";
 import { EndpointOverrideForm } from "../components/EndpointOverrideForm";
 import { ProblemPanel } from "../components/ProblemPanel";
+import { localizeProblem } from "../components/ProblemPanel.helpers";
 import { ProblemVideoSection } from "../components/ProblemVideoSection";
 import type { AppConfig } from "../config";
 import {
@@ -106,6 +107,10 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
   // hooks-rule のため early return より前で hook を呼ぶ (= jobId 不在でも順序が変わらない)。
   const { locale } = useI18n();
   const problem = view?.problems.find((p) => p.jobId === jobId);
+  const localizedProblem = useMemo(
+    () => (problem ? localizeProblem(problem, locale) : undefined),
+    [problem, locale],
+  );
   // #550: problem.problemId から build-time catalog で metadata を引いて narrative を表示。
   // backend を経由せず Portal が直接 metadata.json を bundle に持つ (admin-console と同 source、
   // ADR-003 で DDB API 化したらここを差し替える)。catalog 不在 (= 旧 problem 等) は undefined。
@@ -179,7 +184,9 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
 
       {/* #2707 P0-1: 冒頭の 1 分 operation 動画 (自ホスト)。 videoUrl を持つ問題のみ。
        *   lock 中 (scoring_not_started / prerequisite) は本文と同様に出さない。 */}
-      {canRenderBody && problem?.videoUrl && <ProblemVideoSection videoUrl={problem.videoUrl} />}
+      {canRenderBody && localizedProblem?.videoUrl && (
+        <ProblemVideoSection videoUrl={localizedProblem.videoUrl} />
+      )}
 
       {/* #550: 競技者向けに problem の narrative を 1 section にまとめる。
        *   metadata 不在 (= 旧 problem 等) は section ごと skip。

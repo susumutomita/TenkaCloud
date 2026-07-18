@@ -212,6 +212,8 @@ export interface ProblemTextI18n {
   readonly instructions?: string;
   /** Issue #2191: translated post-solve explanation; absent until release policy allows it. */
   readonly writeup?: string;
+  /** Optional locale-specific operation video when the canonical video is not bilingual. */
+  readonly videoUrl?: string;
 }
 
 /**
@@ -256,8 +258,8 @@ export interface ParticipantProblemView {
   /**
    * #2707 P0-1: optional 1-minute operation video shown above the problem body.
    * Must be a same-origin URL (the landing CSP forbids external embeds), served
-   * from the hosting origin (e.g. `/videos/onboarding/<problemId>.mp4`). Captions
-   * are baked into the video bilingually, so a single URL serves every locale.
+   * from the hosting origin (e.g. `/videos/onboarding/<problemId>.mp4`). A video
+   * that is not bilingual may provide a locale-specific URL through `i18n.en.videoUrl`.
    * Absent — or unloadable in the current environment — the problem renders
    * unchanged: the video is an enhancement, never a prerequisite.
    */

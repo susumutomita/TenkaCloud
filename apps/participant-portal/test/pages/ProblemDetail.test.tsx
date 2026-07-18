@@ -208,6 +208,24 @@ describe("ProblemDetailPage", () => {
     expect(container.querySelectorAll("video")).toHaveLength(1);
   });
 
+  it("should use the localized English video when the problem provides one", () => {
+    mockTeamView.mockReturnValue(
+      teamView({
+        view: viewWith({
+          problems: [
+            problem({
+              videoUrl: "/videos/onboarding/demo-ja.mp4",
+              i18n: { en: { videoUrl: "/videos/onboarding/demo-en.mp4" } },
+            }),
+          ],
+        }),
+      }),
+    );
+    mockLocale.value = "en";
+    const { container } = renderPage();
+    expect(container.querySelector('video[src="/videos/onboarding/demo-en.mp4"]')).not.toBeNull();
+  });
+
   it("should lock the body and show the start time when scoring has not started", () => {
     mockTeamView.mockReturnValue(
       teamView({

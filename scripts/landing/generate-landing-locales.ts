@@ -91,6 +91,15 @@ function replaceElementContent(html: string, key: string, value: string): string
   });
 }
 
+function replaceI18nHref(html: string, key: string, value: string): string {
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(
+    `(<a\\b(?=[^>]*\\bdata-i18n-href="${escapedKey}")[^>]*?\\shref=")[^"]*(")`,
+    "g",
+  );
+  return html.replace(pattern, (_match, opening, closing) => `${opening}${value}${closing}`);
+}
+
 function replaceTagContent(html: string, tag: string, value: string): string {
   const pattern = new RegExp(`(<${tag}>)[\\s\\S]*?(<\\/${tag}>)`);
   return html.replace(pattern, (_match, opening, closing) => `${opening}${value}${closing}`);
@@ -184,7 +193,10 @@ export function generateEnglishLanding(): string {
   html = html.replace('<html lang="ja">', '<html lang="en" data-static-lang="en">');
 
   for (const [key, value] of Object.entries(translations)) {
-    if (typeof value === "string") html = replaceElementContent(html, key, value);
+    if (typeof value === "string") {
+      html = replaceElementContent(html, key, value);
+      html = replaceI18nHref(html, key, value);
+    }
   }
 
   const bullets = translations["trust.bullets"] as Array<[string, string]>;

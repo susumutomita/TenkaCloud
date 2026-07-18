@@ -66,6 +66,9 @@ export function evaluateMockFlag(rawFlag: string, points: number): SubmitFlagOut
 /** Issue #2711: チュートリアル問題 what-is-tenkacloud の id (demo fixture 専用)。 */
 export const WHAT_IS_DRILL_PROBLEM_ID = "what-is-tenkacloud";
 
+/** LP のプロンプトから Mac ローカル起動までを追う AI-agent チュートリアル。 */
+export const AI_AGENT_LOCAL_DRILL_PROBLEM_ID = "ai-agent-local-mac";
+
 /**
  * Issue #2707 / #2711: クイズ型 sub-flag の許容解。 問題文 (description) を読めば導ける
  * 単語を、 表記揺れ (英/日) 込みで列挙する。 判定は trim + 小文字化の完全一致。
@@ -102,6 +105,14 @@ const QUIZ_ANSWERS: Readonly<Record<string, Readonly<Record<string, readonly str
     "first-flag": ["tenka{hello-tenkacloud}"],
   },
   [LOCAL_DRILL_PROBLEM_ID]: {
+    "portal-port": ["5175"],
+  },
+  [AI_AGENT_LOCAL_DRILL_PROBLEM_ID]: {
+    "briefing-file": [
+      "llms-full.txt",
+      "https://tenkacloud.com/llms-full.txt",
+      "https://www.tenkacloud.com/llms-full.txt",
+    ],
     "portal-port": ["5175"],
   },
 };

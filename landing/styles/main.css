@@ -326,6 +326,12 @@ section .lead {
   border-radius: 8px; font-family: var(--font-mono); font-size: 11.5px; line-height: 1.65;
   color: var(--ink-2); white-space: pre-wrap; overflow-wrap: anywhere; user-select: all;
 }
+.agent-prompt-actions {
+  margin-top: 12px; display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+}
+.agent-prompt-actions a { color: var(--blue); font-size: 12.5px; font-weight: 800; text-decoration: none; }
+.agent-prompt-actions a:hover { text-decoration: underline; }
 
 /* ============== TWO-UP FEATURE ============== */
 .twoup { display: grid; grid-template-columns: 1fr 1fr; gap: 52px; max-width: 980px; margin: 0 auto; }

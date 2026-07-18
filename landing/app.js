@@ -298,6 +298,9 @@
       "extend.agent_lead":
         'Claude Code や Codex に下のプロンプトを貼り付けると、エージェントが TenkaCloud の説明から「遊ぶ / 立てる」の案内までやってくれます。中身は LLM 向けブリーフィング <a href="/llms-full.txt" target="_blank" rel="noopener noreferrer">llms-full.txt</a> です。',
       "extend.agent_copy": "プロンプトをコピー",
+      "extend.agent_video": "▶ Mac でのワンショット起動を 1 分で見る",
+      "extend.agent_video_href": "/videos/onboarding/ai-agent-local-mac.mp4",
+      "extend.agent_tutorial": "チュートリアルで確認する →",
 
       "offerings.eyebrow": "商用プラン",
       "offerings.h2": "プロダクト化された 3 つの提供形態。",
@@ -555,6 +558,9 @@
       "extend.agent_lead":
         'Paste the prompt below into Claude Code or Codex and the agent will explain TenkaCloud and guide you through playing or hosting. It reads the LLM briefing <a href="/llms-full.txt" target="_blank" rel="noopener noreferrer">llms-full.txt</a>.',
       "extend.agent_copy": "Copy prompt",
+      "extend.agent_video": "▶ Watch the one-shot Mac launch in 1 minute",
+      "extend.agent_video_href": "/videos/onboarding/ai-agent-local-mac-en.mp4",
+      "extend.agent_tutorial": "Check it in the tutorial →",
 
       "offerings.eyebrow": "Commercial offerings",
       "offerings.h2": "Three productized offerings — formally documented.",
@@ -684,6 +690,11 @@
       // インライン `<a>` や `<code>` を含む lead で innerHTML を使う必要があるため、
       // 全 i18n key で innerHTML 経由で render する (= textContent と違って HTML が escape されない)。
       el.innerHTML = dict[key];
+    });
+    document.querySelectorAll("[data-i18n-href]").forEach((el) => {
+      var key = el.getAttribute("data-i18n-href");
+      if (dict[key] == null) return;
+      el.setAttribute("href", dict[key]);
     });
     document.querySelectorAll(".nav-right .lang").forEach((btn) => {
       var isActive = btn.getAttribute("data-lang") === lang;
