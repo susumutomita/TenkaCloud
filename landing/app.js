@@ -293,6 +293,10 @@
         '問題カタログは <a href="https://github.com/susumutomita/TenkaCloudChallenge" target="_blank" rel="noopener noreferrer">TenkaCloudChallenge</a> リポジトリで完全に開かれていて、 metadata.json + template.yaml の 2 ファイルを書けば 1 問追加できます。 Claude Code 等のコーディングエージェント向けに 問題作成 skill (<code>new-problem</code>) も同梱されているので、 「こういう問題を作りたい」 とアイデアを話すだけで、 初めてでも 1 問が形になります。',
       "extend.cta1": "問題カタログを見る",
       "extend.cta2": "new-problem skill",
+      "extend.agent_title": "AI エージェントで始める",
+      "extend.agent_lead":
+        'Claude Code や Codex に下のプロンプトを貼り付けると、エージェントが TenkaCloud の説明から「遊ぶ / 立てる」の案内までやってくれます。中身は LLM 向けブリーフィング <a href="/llms-full.txt" target="_blank" rel="noopener noreferrer">llms-full.txt</a> です。',
+      "extend.agent_copy": "プロンプトをコピー",
 
       "offerings.eyebrow": "商用プラン",
       "offerings.h2": "プロダクト化された 3 つの提供形態。",
@@ -545,6 +549,10 @@
         'The problem catalog lives in the open <a href="https://github.com/susumutomita/TenkaCloudChallenge" target="_blank" rel="noopener noreferrer">TenkaCloudChallenge</a> repo — write two files (metadata.json + template.yaml) and you have a new problem. A <code>new-problem</code> skill is shipped for Claude Code and other coding agents, so even first-timers can ship a problem just by describing the idea.',
       "extend.cta1": "Browse the catalog",
       "extend.cta2": "new-problem skill",
+      "extend.agent_title": "Start with an AI agent",
+      "extend.agent_lead":
+        'Paste the prompt below into Claude Code or Codex and the agent will explain TenkaCloud and guide you through playing or hosting. It reads the LLM briefing <a href="/llms-full.txt" target="_blank" rel="noopener noreferrer">llms-full.txt</a>.',
+      "extend.agent_copy": "Copy prompt",
 
       "offerings.eyebrow": "Commercial offerings",
       "offerings.h2": "Three productized offerings — formally documented.",
@@ -769,6 +777,19 @@
     btn.addEventListener("click", () => {
       var lang = btn.getAttribute("data-lang");
       persistLang(lang);
+    });
+  });
+
+  // #2711 follow-up: 「AI エージェントで始める」 の貼り付けプロンプトをコピーする。
+  // ボタン文言は i18n のまま、 成功表示は CSS (.copied::after) に寄せる。
+  document.querySelectorAll("[data-copy-target]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      var target = document.getElementById(btn.getAttribute("data-copy-target"));
+      if (!target || !navigator.clipboard) return;
+      navigator.clipboard.writeText(target.textContent.trim()).then(() => {
+        btn.classList.add("copied");
+        setTimeout(() => btn.classList.remove("copied"), 1600);
+      });
     });
   });
 
