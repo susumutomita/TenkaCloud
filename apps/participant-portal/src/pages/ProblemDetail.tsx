@@ -15,6 +15,7 @@ import { useAuth } from "../auth/AuthProvider";
 import { useTeamView } from "../auth/TeamViewProvider";
 import { EndpointOverrideForm } from "../components/EndpointOverrideForm";
 import { ProblemPanel } from "../components/ProblemPanel";
+import { ProblemVideoSection } from "../components/ProblemVideoSection";
 import type { AppConfig } from "../config";
 import {
   findProblemDiagramUrl,
@@ -175,6 +176,10 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
         t={t}
         view={view}
       />
+
+      {/* #2707 P0-1: 冒頭の 1 分 operation 動画 (自ホスト)。 videoUrl を持つ問題のみ。
+       *   lock 中 (scoring_not_started / prerequisite) は本文と同様に出さない。 */}
+      {canRenderBody && problem?.videoUrl && <ProblemVideoSection videoUrl={problem.videoUrl} />}
 
       {/* #550: 競技者向けに problem の narrative を 1 section にまとめる。
        *   metadata 不在 (= 旧 problem 等) は section ごと skip。

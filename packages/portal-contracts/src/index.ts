@@ -254,6 +254,15 @@ export interface ParticipantProblemView {
    */
   readonly i18n?: { readonly en?: ProblemTextI18n };
   /**
+   * #2707 P0-1: optional 1-minute operation video shown above the problem body.
+   * Must be a same-origin URL (the landing CSP forbids external embeds), served
+   * from the hosting origin (e.g. `/videos/onboarding/<problemId>.mp4`). Captions
+   * are baked into the video bilingually, so a single URL serves every locale.
+   * Absent — or unloadable in the current environment — the problem renders
+   * unchanged: the video is an enhancement, never a prerequisite.
+   */
+  readonly videoUrl?: string;
+  /**
    * [#2392 Phase 2] local-play on-demand container status. The warm local
    * session serves the whole catalog, so a problem is `stopped` until started.
    * AWS mode never sends it (no per-competitor container lifecycle); absent is
