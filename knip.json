@@ -1,0 +1,72 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignore": [
+    "**/dist/**",
+    "**/cdk.out/**",
+    "**/cdk.out.test/**",
+    "**/coverage/**",
+    "**/*.d.ts",
+    "apps/developer-portal/src/app/**/page.ja.mdx",
+    ".claude/**",
+    "problems/**",
+    "packs/**",
+    "landing/**",
+    "references/**"
+  ],
+  "ignoreExportsUsedInFile": true,
+  "rules": {
+    "exports": "warn",
+    "types": "warn",
+    "files": "warn",
+    "duplicates": "warn",
+    "dependencies": "off",
+    "devDependencies": "off",
+    "optionalPeerDependencies": "off",
+    "unlisted": "off",
+    "binaries": "off",
+    "unresolved": "off",
+    "enumMembers": "off",
+    "nsExports": "off",
+    "nsTypes": "off"
+  },
+  "workspaces": {
+    ".": {
+      "entry": ["scripts/**/*.ts"],
+      "project": ["scripts/**/*.ts"]
+    },
+    "infrastructure": {
+      "entry": [
+        "bin/*.ts",
+        "lib/**/handlers/**/index.ts",
+        "lib/**/handler/index.ts",
+        "lib/**/handlers/handler.ts",
+        "lib/always-on-runtime/handlers/*.ts",
+        "lib/always-on-runtime/sweeper/index.ts",
+        "lib/problem-pack/pack-cli.ts",
+        "test/**/*.ts"
+      ],
+      "project": ["bin/**/*.ts", "lib/**/*.ts", "test/**/*.ts"]
+    },
+    "apps/admin-console": {
+      "project": ["src/**"]
+    },
+    "apps/application-admin-console": {
+      "project": ["src/**"]
+    },
+    "apps/participant-portal": {
+      "project": ["src/**"]
+    },
+    "apps/developer-portal": {
+      "entry": ["scripts/**/*.ts"],
+      "project": ["src/**", "scripts/**"]
+    },
+    "apps/always-on-control-plane": {
+      "entry": ["src/index.ts", "test/**/*.ts"],
+      "project": ["src/**", "test/**"]
+    },
+    "packages/*": {
+      "entry": ["test/**/*.ts"],
+      "project": ["src/**", "test/**"]
+    }
+  }
+}
