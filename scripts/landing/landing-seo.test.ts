@@ -225,6 +225,30 @@ describe("landing asset cache busting (content-hash stamped)", () => {
 });
 
 /**
+ * デモ deep link のリロード復旧: Cloudflare Pages は 404.html 不在時の暗黙 SPA fallback で
+ * 未知パスに root index.html (= landing) を返し、 これは landing/_redirects の
+ * `/portal-demo/* 200` rewrite より優先される。 landing 側の head 先頭スクリプトが
+ * demo prefix を検知して `/portal-demo/?goto=<元パス>` へ replace し、 SPA 側
+ * (RootEntryPage) がルートを復元する。 このスクリプトが両言語の landing に載っていること、
+ * 相対アセットの取得より前 (= stylesheet link より前) に置かれていることを pin する。
+ */
+describe("demo deep-link reload recovery (Cloudflare implicit SPA fallback)", () => {
+  it("should ship the recovery script on both landing pages, before the stylesheet", () => {
+    for (const page of ["landing/index.html", "landing/index.en.html"]) {
+      const html = read(page);
+      const scriptAt = html.indexOf("portal-demo|admin-demo");
+      const stylesheetAt = html.indexOf('rel="stylesheet"');
+      expect(scriptAt, `${page} lacks the recovery script`).toBeGreaterThan(-1);
+      expect(scriptAt, `${page} loads assets before the recovery script`).toBeLessThan(
+        stylesheetAt,
+      );
+      expect(html).toContain("location.replace");
+      expect(html).toContain('"/?goto=" + encodeURIComponent');
+    }
+  });
+});
+
+/**
  * AI エージェント向け導線: llms-full.txt (自己完結ブリーフィング) と、 #extend 内の
  * 貼り付けプロンプト。 プロンプトは LLM 向けなので言語切替しない (data-i18n なし)。
  */
