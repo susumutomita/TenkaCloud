@@ -28,6 +28,12 @@ TenkaCloud は、ハンズオン形式の AWS 競技会を運営するための�
 </tr>
 </table>
 
+<a href="./landing/videos/lp/tenkacloud-30s.mp4">
+  <img src="./docs/assets/lp-30s/tenkacloud-30s-preview.gif" alt="30 秒でわかる TenkaCloud: ブラウザで遊ぶ → 得点する → AWS で自分のイベントを開く" width="800">
+</a>
+<br>
+<sub>30 秒でわかる TenkaCloud (音声なし・日英字幕): ブラウザで遊ぶ → 得点 → AWS で自分のイベントを開く。<a href="./landing/videos/lp/tenkacloud-30s.mp4">16:9 MP4</a> · <a href="./landing/videos/lp/tenkacloud-30s-vertical.mp4">9:16 MP4</a></sub>
+
 [ランディングページ](https://tenkacloud.com) · [デモポータル](https://tenkacloud.com/portal-demo/?demo=1) · [クイックスタート](#クイックスタート) · [自分の問題を追加する](#自分の問題を追加する)
 
 [![CI](https://github.com/susumutomita/TenkaCloud/actions/workflows/ci.yml/badge.svg)](https://github.com/susumutomita/TenkaCloud/actions/workflows/ci.yml)

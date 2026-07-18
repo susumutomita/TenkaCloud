@@ -20,10 +20,43 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ONBOARDING_VIDEOS, type OnboardingSlide, type OnboardingVideo } from "./script-data";
+import {
+  LP_VIDEO,
+  ONBOARDING_VIDEOS,
+  type OnboardingSlide,
+  type OnboardingVideo,
+} from "./script-data";
 
 export const FADE_S = 0.5;
 export const FPS = 30;
+
+/**
+ * 出力レイアウト。 landscape = 1280x720 (README / LP / 問題冒頭)、
+ * portrait = 720x1280 (SNS 縦型、 #2696 P1 の 9:16 variant)。
+ */
+export type SlideLayout = "landscape" | "portrait";
+
+export const LAYOUTS: Record<SlideLayout, { w: number; h: number; windowH: number; css: string }> =
+  {
+    landscape: { w: 1280, h: 720, windowH: 800, css: "" },
+    portrait: {
+      w: 720,
+      h: 1280,
+      windowH: 1360,
+      // 縦型は幅が細いので余白と型を詰め、 video タイトル行 (.vtitle) は落とす。
+      css: `
+  html, body { width: 720px; height: 1280px; }
+  .frame { padding: 44px 40px 40px; }
+  .vtitle { display: none; }
+  main { max-width: 100%; gap: 22px; }
+  h1 { font-size: 44px; }
+  .subtitle { font-size: 20px; }
+  li .ja { font-size: 24px; }
+  li .en { font-size: 15px; }
+  .code { font-size: 22px; padding: 12px 20px; }
+`,
+    },
+  };
 
 export function escapeHtml(text: string): string {
   return text
@@ -77,6 +110,7 @@ export function buildSlideHtml(
   slide: OnboardingSlide,
   index: number,
   total: number,
+  layout: SlideLayout = "landscape",
 ): string {
   const segments = Array.from(
     { length: total },
@@ -122,7 +156,7 @@ export function buildSlideHtml(
   .seg { height: 6px; flex: 1; border-radius: 3px; background: #edf0f5; }
   .seg.on { background: #0969da; }
   .counter { font-size: 15px; color: #8a94a3; font-variant-numeric: tabular-nums; }
-</style></head>
+${LAYOUTS[layout].css}</style></head>
 <body>
   <div class="frame">
     <header>
@@ -151,14 +185,18 @@ export function buildSlideHtml(
  * ゆっくり寄り) をかけ、 隣接スライドを `FADE_S` 秒の xfade で繋ぐ。
  * offset_k = (先頭から k 枚分の合計秒数) - k * FADE_S。
  */
-export function buildFilterGraph(durations: readonly number[]): string {
-  // screenshot は 1280x800 窓 (2 倍解像度で 2560x1600)。 720 ちょうどの窓だと chromium
-  // headless が最下段 (footer) を描画しないことがあるため、 余白付きで撮って crop する。
+export function buildFilterGraph(
+  durations: readonly number[],
+  layout: SlideLayout = "landscape",
+): string {
+  // screenshot は高さ余白付きの窓 (2 倍解像度)。 高さちょうどの窓だと chromium headless が
+  // 最下段 (footer) を描画しないことがあるため、 余白付きで撮って crop する。
+  const { w, h } = LAYOUTS[layout];
   const pre = durations
     .map(
       (_, i) =>
-        `[${i}:v]crop=2560:1440:0:0,` +
-        `zoompan=z='min(zoom+0.0003,1.06)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=1280x720:fps=${FPS},setsar=1[v${i}]`,
+        `[${i}:v]crop=${w * 2}:${h * 2}:0:0,` +
+        `zoompan=z='min(zoom+0.0003,1.06)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${w}x${h}:fps=${FPS},setsar=1[v${i}]`,
     )
     .join(";");
   if (durations.length === 1) return `${pre};[v0]format=yuv420p[vout]`;
@@ -196,23 +234,30 @@ function run(bin: string, args: string[]): void {
   }
 }
 
-function renderVideo(video: OnboardingVideo, chromium: string, ffmpeg: string, outDir: string) {
-  const work = mkdtempSync(join(tmpdir(), `tenka-video-${video.problemId}-`));
+function renderVideo(
+  video: OnboardingVideo,
+  chromium: string,
+  ffmpeg: string,
+  outPath: string,
+  layout: SlideLayout = "landscape",
+) {
+  const work = mkdtempSync(join(tmpdir(), `tenka-video-${video.problemId}-${layout}-`));
+  const { w, windowH } = LAYOUTS[layout];
   const total = video.slides.length;
   const pngs: string[] = [];
   video.slides.forEach((slide, i) => {
     const htmlPath = join(work, `slide-${i}.html`);
     const pngPath = join(work, `slide-${i}.png`);
-    writeFileSync(htmlPath, buildSlideHtml(video, slide, i, total));
+    writeFileSync(htmlPath, buildSlideHtml(video, slide, i, total, layout));
     run(chromium, [
       "--headless",
       "--no-sandbox",
       "--disable-gpu",
       "--hide-scrollbars",
       "--force-device-scale-factor=2",
-      // 720 ちょうどの窓は最下段を落とすことがある (footer 消失) ので余白を持たせ、
-      // ffmpeg 側で 2560x1440 (= 1280x720 の 2 倍) に crop する。
-      "--window-size=1280,800",
+      // 高さちょうどの窓は最下段を落とすことがある (footer 消失) ので余白を持たせ、
+      // ffmpeg 側で出力サイズの 2 倍に crop する。
+      `--window-size=${w},${windowH}`,
       "--default-background-color=FFFFFFFF",
       "--virtual-time-budget=3000",
       `--screenshot=${pngPath}`,
@@ -232,12 +277,11 @@ function renderVideo(video: OnboardingVideo, chromium: string, ffmpeg: string, o
     "-i",
     png,
   ]);
-  const outPath = join(outDir, `${video.problemId}.mp4`);
   run(ffmpeg, [
     "-y",
     ...inputs,
     "-filter_complex",
-    buildFilterGraph(durations),
+    buildFilterGraph(durations, layout),
     "-map",
     "[vout]",
     "-c:v",
@@ -259,11 +303,45 @@ function renderVideo(video: OnboardingVideo, chromium: string, ffmpeg: string, o
 function main() {
   const chromium = resolveBin("CHROMIUM_BIN", ["chromium", "/opt/pw-browsers/chromium"]);
   const ffmpeg = resolveBin("FFMPEG_BIN", ["ffmpeg"]);
-  const outDir = join(import.meta.dir, "../../../landing/videos/onboarding");
-  mkdirSync(outDir, { recursive: true });
+  const root = join(import.meta.dir, "../../..");
+  const onboardingDir = join(root, "landing/videos/onboarding");
+  mkdirSync(onboardingDir, { recursive: true });
   for (const video of ONBOARDING_VIDEOS) {
-    renderVideo(video, chromium, ffmpeg, outDir);
+    renderVideo(video, chromium, ffmpeg, join(onboardingDir, `${video.problemId}.mp4`));
   }
+
+  // #2696 P1: 30 秒 LP 動画 (16:9 + 9:16) と README 用 preview GIF / poster。
+  const lpDir = join(root, "landing/videos/lp");
+  const lpAssetsDir = join(root, "docs/assets/lp-30s");
+  mkdirSync(lpDir, { recursive: true });
+  mkdirSync(lpAssetsDir, { recursive: true });
+  const lp169 = join(lpDir, "tenkacloud-30s.mp4");
+  renderVideo(LP_VIDEO, chromium, ffmpeg, lp169, "landscape");
+  renderVideo(LP_VIDEO, chromium, ffmpeg, join(lpDir, "tenkacloud-30s-vertical.mp4"), "portrait");
+  // preview GIF: 全編を 1 fps でサンプルし 4 倍速再生 (= 約 7 秒ループの早回し)。
+  run(ffmpeg, [
+    "-y",
+    "-i",
+    lp169,
+    "-vf",
+    "fps=1,setpts=PTS*0.25,scale=480:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=128[p];[s1][p]paletteuse=dither=bayer",
+    "-loop",
+    "0",
+    join(lpAssetsDir, "tenkacloud-30s-preview.gif"),
+  ]);
+  run(ffmpeg, [
+    "-y",
+    "-ss",
+    "1.0",
+    "-i",
+    lp169,
+    "-frames:v",
+    "1",
+    "-q:v",
+    "3",
+    join(lpAssetsDir, "tenkacloud-30s-poster.jpg"),
+  ]);
+  console.log(`wrote ${lpAssetsDir}/tenkacloud-30s-preview.gif and -poster.jpg`);
 }
 
 if (import.meta.main) main();

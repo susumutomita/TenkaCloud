@@ -289,3 +289,67 @@ export const ONBOARDING_VIDEOS: readonly OnboardingVideo[] = [
     ],
   },
 ];
+
+/**
+ * #2696 P1: LP / README 用の 30 秒プロダクト動画 (問題冒頭の operation 動画とは別物)。
+ * 実効尺 (crossfade 控除後) を 30 秒以内に収める (render.test.ts が機械検証)。
+ * 現行ファネル (#2711: 1 問カード → チュートリアル → Lite) に合わせた構成。
+ */
+export const LP_VIDEO: OnboardingVideo = {
+  problemId: "tenkacloud-30s",
+  titleJa: "30 秒でわかる TenkaCloud",
+  titleEn: "TenkaCloud in 30 seconds",
+  slides: [
+    {
+      badge: "INTRO",
+      durationS: 4.5,
+      titleJa: "本物のクラウド演習を、遊ぶか。開催するか。",
+      titleEn: "Real cloud drills — play them, or host them",
+      bulletsJa: ["クラウドエンジニアの、天下一武道会", "OSS · Apache 2.0"],
+      bulletsEn: ["The cloud engineer's Tenka-Ichi", "Open source · Apache 2.0"],
+    },
+    {
+      badge: "PLAY",
+      durationS: 5.5,
+      titleJa: "まず遊ぶ — AWS 不要",
+      titleEn: "Play first — no AWS",
+      bulletsJa: [
+        "LP の「最初の 1 問」から登録不要で開始",
+        "チュートリアルを解きながら製品がわかる",
+      ],
+      bulletsEn: ["Start from the first quest — no signup", "Learn the product by solving it"],
+    },
+    {
+      badge: "SCORE",
+      durationS: 5.5,
+      titleJa: "解いて、提出して、得点",
+      titleEn: "Solve, submit, score",
+      bulletsJa: ["flag 提出で +100 pt、スコアボードが動く", "詰まったらヒント (ペナルティなし)"],
+      bulletsEn: ["Flags score +100 pt; the board moves live", "Hints are penalty-free"],
+    },
+    {
+      badge: "LOCAL",
+      durationS: 5.5,
+      titleJa: "本物の問題コンテナも、AWS なしで",
+      titleEn: "Real problem containers, still no AWS",
+      bulletsJa: ["Codespaces 1 クリックで手元にフル構成", "ローカル採点で初得点まで数分"],
+      bulletsEn: ["One click on Codespaces for the full stack", "Local scoring in minutes"],
+    },
+    {
+      badge: "HOST",
+      durationS: 5.5,
+      titleJa: "イベントを開く — TenkaCloud Lite",
+      titleEn: "Host your event — TenkaCloud Lite",
+      bulletsJa: ["自分の AWS にメールアドレス 1 つで約 30 分", "片付けもワンアクション"],
+      bulletsEn: ["Your AWS, one email address, ~30 min", "Teardown is one action"],
+    },
+    {
+      badge: "GOAL",
+      durationS: 3.5,
+      titleJa: "tenkacloud.com",
+      titleEn: "tenkacloud.com",
+      bulletsJa: ["今すぐ 1 問解く", "AWS でイベントを開く"],
+      bulletsEn: ["Solve your first quest now", "Host your own event on AWS"],
+    },
+  ],
+};

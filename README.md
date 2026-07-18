@@ -28,6 +28,12 @@ TenkaCloud is a self-hostable, Apache-2.0 platform for running hands-on AWS comp
 </tr>
 </table>
 
+<a href="./landing/videos/lp/tenkacloud-30s.mp4">
+  <img src="./docs/assets/lp-30s/tenkacloud-30s-preview.gif" alt="30-second TenkaCloud overview: play in the browser, score, then host your own event on AWS" width="800">
+</a>
+<br>
+<sub>30-second overview (silent, bilingual captions): play in the browser → score → host your own event on AWS. <a href="./landing/videos/lp/tenkacloud-30s.mp4">16:9 MP4</a> · <a href="./landing/videos/lp/tenkacloud-30s-vertical.mp4">9:16 MP4</a></sub>
+
 [Landing page](https://tenkacloud.com) · [Demo portal](https://tenkacloud.com/portal-demo/?demo=1) · [Quickstart](#quickstart) · [Add your own problems](#add-your-own-problems)
 
 [![CI](https://github.com/susumutomita/TenkaCloud/actions/workflows/ci.yml/badge.svg)](https://github.com/susumutomita/TenkaCloud/actions/workflows/ci.yml)
