@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<script>
+  // このファイルの存在が Cloudflare Pages の暗黙 SPA fallback (= 未知パスに root
+  // index.html を 200 で返す) を解除し、 実在しない URL に正しい 404 を返す。
+  // デモ SPA の deep link リロードが `landing/_redirects` の 200 rewrite に拾われず
+  // ここへ落ちた場合に備え、 landing/index.html と同じ復旧を仕込む: デモ prefix を
+  // 検知したら実在する SPA の index へ即 replace し、 元ルートは `goto` クエリで
+  // SPA 側 (RootEntryPage) に復元させる。
+  (function () {
+    var m = location.pathname.match(/^\/(portal-demo|admin-demo)\/([^.]+)$/);
+    if (m) {
+      var rest = location.search ? "&" + location.search.slice(1) : "";
+      location.replace("/" + m[1] + "/?goto=" + encodeURIComponent("/" + m[2]) + rest);
+    }
+  })();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>404 | TenkaCloud</title>
+<style>
+  /* 任意の深さの URL で描画されるため、 相対パスの外部アセットは参照できない。
+     すべて inline で自己完結させる (landing の ink 系トーンだけ揃える)。 */
+  :root {
+    --ink: #07111f;
+    --ink-3: #5d6877;
+    --link: #1d4ed8;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    min-height: 100svh;
+    display: grid;
+    place-items: center;
+    font-family: "Noto Sans JP", "Hiragino Sans", system-ui, sans-serif;
+    color: var(--ink);
+    background: #f7f8fa;
+    padding: 24px;
+  }
+  main { max-width: 32rem; text-align: center; }
+  .code {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-size: clamp(4rem, 14vw, 7rem);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    line-height: 1;
+  }
+  h1 { font-size: 1.25rem; margin-top: 0.75rem; }
+  h1 .en { display: block; font-size: 0.95rem; font-weight: 400; color: var(--ink-3); margin-top: 0.25rem; }
+  p.desc { color: var(--ink-3); font-size: 0.9rem; margin-top: 1rem; line-height: 1.7; }
+  nav.back { margin-top: 1.75rem; display: flex; gap: 1.25rem; justify-content: center; flex-wrap: wrap; }
+  nav.back a { color: var(--link); text-decoration: none; font-size: 0.95rem; }
+  nav.back a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<main>
+  <p class="code">404</p>
+  <h1>ページが見つかりません<span class="en" lang="en">Page not found</span></h1>
+  <p class="desc">
+    URL が変更されたか、存在しないページです。<br />
+    <span lang="en">The URL may have changed, or this page never existed.</span>
+  </p>
+  <nav class="back">
+    <a href="/">トップへ戻る / Back to home</a>
+    <a href="/portal-demo/?demo=1&amp;goto=start">デモを試す / Try the demo</a>
+  </nav>
+</main>
+</body>
+</html>

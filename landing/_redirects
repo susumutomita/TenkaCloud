@@ -2,13 +2,21 @@
 #
 # The demos (participant-portal, application-admin-console) are client-routed SPAs
 # staged under /portal-demo/ and /admin-demo/. Reloading a client route such as
-# /portal-demo/quests/x has no matching file, so without these rules Cloudflare
-# falls through to the root landing index.html — whose asset paths are RELATIVE
-# (./styles/main.css), which then 404 under a deep path and render the page
-# unstyled. A 200 rewrite serves each SPA's own index.html (its assets are absolute,
-# /portal-demo/... , so they resolve) while keeping the URL for the router.
+# /portal-demo/problems/x has no matching file; a 200 rewrite serves each SPA's own
+# index.html (its assets are absolute, /portal-demo/..., so they resolve) while
+# keeping the URL for the router. Cloudflare serves existing files first, so real
+# assets under these prefixes are unaffected; only non-existent (client-route)
+# paths hit the rewrite.
 #
-# Cloudflare serves existing files first, so real assets under these prefixes are
-# unaffected; only non-existent (client-route) paths hit the rewrite.
+# In practice these rewrites have NOT been reliable in production: without a
+# 404.html Cloudflare enters implicit SPA mode and serves the ROOT index.html for
+# unknown paths, which takes precedence over these rules (community-reported
+# behavior). Two repo-side layers make demo deep links survive regardless:
+#   1. landing/404.html exists — this disables implicit SPA mode, so unknown
+#      paths get a real 404 instead of the unstyled landing.
+#   2. Both landing/index.html and landing/404.html carry a head-top recovery
+#      script: if either page is served under /portal-demo/ or /admin-demo/,
+#      it immediately redirects to that SPA's real index with the original
+#      route in ?goto=<path>, and RootEntryPage restores the route client-side.
 /portal-demo/*  /portal-demo/index.html  200
 /admin-demo/*   /admin-demo/index.html   200
