@@ -2,6 +2,21 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8" />
+<script>
+  // Cloudflare Pages は 404.html が無いと暗黙の SPA fallback になり、 未知パスに
+  // root index.html (= この landing) を返す。 この fallback は landing/_redirects の
+  // `/portal-demo/* 200` rewrite より優先されるため、 デモ SPA の deep link を
+  // リロードすると landing が相対アセット切れの素の HTML で表示されてしまう。
+  // landing 自身がデモ prefix を検知したら、 実在する SPA の index へ即座に
+  // replace し、 元のルートは `goto` クエリで SPA 側 (RootEntryPage) に復元させる。
+  (function () {
+    var m = location.pathname.match(/^\/(portal-demo|admin-demo)\/([^.]+)$/);
+    if (m) {
+      var rest = location.search ? "&" + location.search.slice(1) : "";
+      location.replace("/" + m[1] + "/?goto=" + encodeURIComponent("/" + m[2]) + rest);
+    }
+  })();
+</script>
 <!-- Google tag (gtag.js) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-6WQ914PCKT"></script>
 <script>

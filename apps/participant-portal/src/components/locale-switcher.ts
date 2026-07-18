@@ -7,10 +7,24 @@ type Translate = (key: string) => string;
  * locale code → 表示名。 AppLayout / TeamSetup で重複定義されていた literal を 1 箇所へ集約
  * (#1418 SOLID/DRY)。 SUPPORTED_LOCALES と同期する。
  */
-const LOCALE_DICTIONARIES_NAME: Record<LocaleCode, string> = {
+export const LOCALE_DICTIONARIES_NAME: Record<LocaleCode, string> = {
   ja: "日本語",
   en: "English",
 };
+
+/**
+ * #2711 follow-up: SideNavigation 用の locale 切替リンク href。 モバイル幅では
+ * TopNavigation の utilities (globe dropdown) が畳まれて見えないため、 ハンバーガーで
+ * 常に開ける side nav にも言語切替を置く。 `#locale-<code>` を follow handler が
+ * 横取りして setLocale する (= 画面遷移しない)。
+ */
+export const LOCALE_NAV_HREF_PREFIX = "#locale-";
+
+export function localeFromNavHref(href: string): LocaleCode | null {
+  if (!href.startsWith(LOCALE_NAV_HREF_PREFIX)) return null;
+  const code = href.slice(LOCALE_NAV_HREF_PREFIX.length);
+  return isSupportedLocaleId(code) ? code : null;
+}
 
 /** menu-dropdown の item id が対応 locale か (= 不正 id で setLocale しない型ガード)。 */
 export function isSupportedLocaleId(id: string): id is LocaleCode {

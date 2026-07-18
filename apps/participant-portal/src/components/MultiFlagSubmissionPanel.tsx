@@ -12,7 +12,7 @@ import {
   submitFlag,
 } from "../api/portal-client";
 import { useIsMock } from "../config-context";
-import { evaluateMockSubFlag } from "../dev-mock/flag-submit";
+import { evaluateMockSubFlag, isStrictDrillProblem } from "../dev-mock/flag-submit";
 import { useLang, useT } from "../i18n";
 import { CelebrationOverlay } from "./CelebrationOverlay";
 import { formatProblemPanelActionError } from "./ProblemPanel.helpers";
@@ -75,6 +75,34 @@ export function MultiFlagSubmissionPanel({
   );
 }
 
+/**
+ * #2711 follow-up: 提出欄の label / description / placeholder を strict ドリルか否かで出し分ける
+ * pure helper。 厳密ドリル (= what-is / local / lite) はクイズ回答欄なので 「(deployment output
+ * value)」 接尾辞と 「部分一致 / Easter egg OK」 の demo helper が誤案内になる — 素の label +
+ * 正直な drill 文言に差し替える。
+ */
+export function subFlagFieldPresentation(
+  strict: boolean,
+  isMock: boolean,
+  label: string,
+  t: (key: string, params?: Readonly<Record<string, string | number>>) => string,
+): { label: string; description: string | undefined; placeholder: string } {
+  if (strict) {
+    return {
+      label,
+      description: isMock ? t("problem_panel.flag_drill_hint") : undefined,
+      placeholder: t("problem_panel.flag_drill_placeholder"),
+    };
+  }
+  return {
+    label: t("multi_flag.flag_field_label", { label }),
+    description: isMock ? t("problem_panel.flag_mock_hint") : undefined,
+    placeholder: isMock
+      ? t("problem_panel.flag_mock_placeholder")
+      : t("problem_panel.flag_placeholder"),
+  };
+}
+
 function SubFlagRow({
   apiBaseUrl,
   sessionToken,
@@ -97,6 +125,7 @@ function SubFlagRow({
   // dev-mock mode のとき submit を backend に投げず evaluateMockSubFlag で local 評価する
   // (= 単一 flag kind の FlagSubmissionPanel と同方針。 ドリル問題のみ per-flag 判定)。
   const isMock = useIsMock();
+  const field = subFlagFieldPresentation(isStrictDrillProblem(problemId), isMock, label, t);
   const [value, setValue] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [outcome, setOutcome] = useState<SubmitFlagOutcome | null>(null);
@@ -144,18 +173,11 @@ function SubFlagRow({
             </Button>
           }
         >
-          <FormField
-            label={t("multi_flag.flag_field_label", { label })}
-            description={isMock ? t("problem_panel.flag_mock_hint") : undefined}
-          >
+          <FormField label={field.label} description={field.description}>
             <Input
               value={value}
               onChange={(e) => setValue(e.detail.value)}
-              placeholder={
-                isMock
-                  ? t("problem_panel.flag_mock_placeholder")
-                  : t("problem_panel.flag_placeholder")
-              }
+              placeholder={field.placeholder}
               disabled={submitting}
             />
           </FormField>

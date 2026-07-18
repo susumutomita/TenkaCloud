@@ -67,6 +67,11 @@ describe("dev-mock fixtures", () => {
           expect(hint.revealed).toBe(false);
           // dev-mock は reveal をローカル state で行うため content を同梱する。
           expect(hint.content).toBeTruthy();
+          // #2711 follow-up: en locale でヒントが日本語のまま出る bug の再発防止 — 全ヒントに英訳を同梱。
+          expect(
+            hint.i18n?.en?.content,
+            `${drill.problemId}/${flag.id}/${hint.id} has no en hint`,
+          ).toBeTruthy();
         }
       }
     }

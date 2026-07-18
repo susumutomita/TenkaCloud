@@ -4,7 +4,7 @@ import Pagination from "@cloudscape-design/components/pagination";
 import Table from "@cloudscape-design/components/table";
 import { useState } from "react";
 import type { ScoreEventView } from "../api/portal-client";
-import { useT } from "../i18n";
+import { useLang, useT } from "../i18n";
 import { describeAgo, formatOccurredAtTooltip } from "../lib/format";
 
 /** 履歴 1 ページの行数。 uptime Battle は毎分加点で行が増え続けるためページングする (#履歴多すぎ)。 */
@@ -52,6 +52,7 @@ function reasonKey(event: ScoreEventView): string {
  */
 export function ScoreEventsTable({ entries }: { entries: readonly ScoreEventView[] }) {
   const t = useT();
+  const lang = useLang();
   const [pageIndex, setPageIndex] = useState(1);
   const pagesCount = Math.max(1, Math.ceil(entries.length / PAGE_SIZE));
   // entries は polling で増減しうるので、 範囲外に出た page を clamp する (= 末尾削除で空表示になるのを防ぐ)。
@@ -80,8 +81,8 @@ export function ScoreEventsTable({ entries }: { entries: readonly ScoreEventView
           id: "occurredAt",
           header: t("score_events.col_occurred_at"),
           cell: (e) => (
-            <span title={formatOccurredAtTooltip(e.occurredAt)}>
-              {describeAgo(e.occurredAt, Date.now())}
+            <span title={formatOccurredAtTooltip(e.occurredAt, lang)}>
+              {describeAgo(e.occurredAt, Date.now(), lang)}
             </span>
           ),
         },

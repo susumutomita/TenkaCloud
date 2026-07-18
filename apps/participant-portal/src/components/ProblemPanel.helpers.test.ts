@@ -275,4 +275,40 @@ describe("localizeProblem", () => {
     );
     expect(out.scoring).toEqual({ kind: "uptime-flat" });
   });
+
+  it("should localize per-flag hints for multi-flag scoring (#2711 follow-up)", () => {
+    const out = localizeProblem(
+      {
+        ...base,
+        scoring: {
+          kind: "multi-flag",
+          flags: [
+            {
+              id: "sub-1",
+              label: "ステップ 1",
+              points: 100,
+              solved: false,
+              hints: [
+                {
+                  id: "hint-1",
+                  penalty: 0,
+                  revealed: true,
+                  content: "日本語ヒント。",
+                  i18n: { en: { content: "English hint." } },
+                },
+                { id: "hint-2", penalty: 0, revealed: true, content: "訳なし。" },
+              ],
+            },
+            // hints を持たない flag はそのまま通す (multi-flag AWS 問題の既定形)。
+            { id: "sub-2", label: "ステップ 2", points: 100, solved: false },
+          ],
+        },
+      },
+      "en",
+    );
+    const flags = out.scoring?.flags;
+    expect(flags?.[0].hints?.[0].content).toBe("English hint.");
+    expect(flags?.[0].hints?.[1].content).toBe("訳なし。"); // 訳が無い hint は canonical のまま
+    expect(flags?.[1].hints).toBeUndefined();
+  });
 });

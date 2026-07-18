@@ -115,7 +115,7 @@ describe("pickNextProblem", () => {
     expect(pickNextProblem([inProgress, ready])?.problemId).toBe("b-problem");
   });
 
-  it("should pick the lexically first problemId when multiple are ready", () => {
+  it("should pick the first ready problem in view order, not lexical order (#2711)", () => {
     const a = problem({
       jobId: "j-a",
       problemId: "alpha",
@@ -128,7 +128,8 @@ describe("pickNextProblem", () => {
       status: "COMPLETE",
       scoring: { kind: "flag" },
     });
-    expect(pickNextProblem([b, a])?.problemId).toBe("alpha");
+    // 表示順 (= 引数順) が journey order の正。 辞書順なら alpha になってしまう。
+    expect(pickNextProblem([b, a])?.problemId).toBe("bravo");
   });
 
   it("should return undefined when nothing is unsolved", () => {

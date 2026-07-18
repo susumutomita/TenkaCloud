@@ -144,6 +144,12 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
                 revealed: false,
                 content:
                   "ステップ 1 の太字。「本物のクラウド」(または英語で real cloud)と提出する。",
+                i18n: {
+                  en: {
+                    content:
+                      'The bold words in step 1. Submit 本物のクラウド or, in English, "real cloud".',
+                  },
+                },
               },
             ],
           },
@@ -160,6 +166,12 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
                 revealed: false,
                 content:
                   "ステップ 2 に太字のカテゴリが 2 つある。リアルタイムの方を英単語 1 語で提出する。",
+                i18n: {
+                  en: {
+                    content:
+                      "Step 2 has two bold categories; submit the real-time one as a single English word.",
+                  },
+                },
               },
             ],
           },
@@ -176,6 +188,12 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
                 revealed: false,
                 content:
                   "どちらを選んでも正解。**ブラウザ (Lite)**(推奨)は登録もインストールも不要で、このタブのまま次の問題に進める。**Codespaces**(フル機能)は GitHub アカウントで約 5 分、AWS 不要のまま本物と同じ構成を手元に立てる。「lite」か「codespaces」と提出する。上級者向けの deploy-local / deploy-saas はクリア後に問題一覧へ出てくる。",
+                i18n: {
+                  en: {
+                    content:
+                      'Either choice is correct. **Browser (Lite)** (recommended) needs no signup or installs and continues right in this tab. **Codespaces** (full stack) takes about 5 minutes with a GitHub account, still no AWS. Submit "lite" or "codespaces". The advanced deploy-local / deploy-saas appear in the problem list after you clear this.',
+                  },
+                },
               },
             ],
           },
@@ -192,6 +210,12 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
                 revealed: false,
                 content:
                   "ステップ 4 に印字されている `TENKA{HELLO-TENKACLOUD}` をコピーして、この欄に貼るだけ。大文字小文字と前後の空白は気にしなくていい。",
+                i18n: {
+                  en: {
+                    content:
+                      "Copy the `TENKA{HELLO-TENKACLOUD}` printed at step 4 and paste it here. Case and surrounding spaces do not matter.",
+                  },
+                },
               },
             ],
           },
@@ -276,6 +300,12 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
                 revealed: false,
                 content:
                   "README の Quickstart から `lite-pipeline.yaml` で CloudFormation スタックを作成する(必須入力は `TenantAdminEmail` のみ、IAM acknowledge にチェック)。作成完了後、スタックの「出力 (Outputs)」タブにある `OnboardingDrillCheckpoint` の値を提出する。",
+                i18n: {
+                  en: {
+                    content:
+                      "Create the CloudFormation stack from lite-pipeline.yaml in the README Quickstart (the only required input is `TenantAdminEmail`; check the IAM acknowledgement). After it completes, submit the `OnboardingDrillCheckpoint` value from the stack's Outputs tab.",
+                  },
+                },
               },
             ],
           },
@@ -292,6 +322,12 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
                 revealed: false,
                 content:
                   "Outputs の `StartBuildConsoleUrl` から CodeBuild プロジェクトを開き「ビルドを開始」。ビルドは数十分かかることがある。ログ末尾の `Lite mode deploy complete` ブロックに印字されるコードを提出する。",
+                i18n: {
+                  en: {
+                    content:
+                      "Open the CodeBuild project from the `StartBuildConsoleUrl` output and press Start build. The build can take tens of minutes; submit the code printed in the `Lite mode deploy complete` block at the end of the log.",
+                  },
+                },
               },
             ],
           },
@@ -308,6 +344,12 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
                 revealed: false,
                 content:
                   "招待メールの一時パスワードで Application Admin Console にサインインする。**Competitor Accounts** で競技用 AWS アカウントを登録し、表示される bootstrap テンプレートを競技側アカウントに適用してから「検証」を押す。成功表示に出るコードを提出する。",
+                i18n: {
+                  en: {
+                    content:
+                      "Sign in to the Application Admin Console with the temporary password from the invite email. In **Competitor Accounts**, register your competition AWS account, apply the bootstrap template it shows, then press Verify. Submit the code shown on success.",
+                  },
+                },
               },
             ],
           },
@@ -324,6 +366,12 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
                 revealed: false,
                 content:
                   "**Events** タブからイベントを作成する(チームに検証済みアカウントを割り当てる)。作成成功画面に表示されるコードを提出する。",
+                i18n: {
+                  en: {
+                    content:
+                      "Create an event from the **Events** tab (assign the verified account to a team). Submit the code shown on the creation success screen.",
+                  },
+                },
               },
             ],
           },
@@ -391,6 +439,12 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
                 revealed: false,
                 content:
                   "GitHub の TenkaCloud リポジトリで「Code ▸ Codespaces ▸ Create codespace」を押す。数分待つと Portal のプレビューが自動で開く。VS Code の Ports タブ(または README の Quickstart)に Participant Portal のポート番号が数字 4 桁で載っている。",
+                i18n: {
+                  en: {
+                    content:
+                      "On the TenkaCloud GitHub repo, press Code ▸ Codespaces ▸ Create codespace. After a few minutes the Portal preview opens automatically; the Participant Portal port (4 digits) is listed in the VS Code Ports tab (or the README Quickstart).",
+                  },
+                },
               },
             ],
           },
@@ -407,6 +461,12 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
                 revealed: false,
                 content:
                   "自動で開いた Portal で hello-world を開き、Start を押してコンテナを起動する。問題の指示どおりに flag を見つけて提出すると、クリア直後に解説 (writeup) が開く。その末尾の「オンボーディングドリル チェックポイント」にある `TENKA{...}` をここに貼る。",
+                i18n: {
+                  en: {
+                    content:
+                      "In the auto-opened Portal, open hello-world, press Start, then find and submit the flag as instructed. The writeup opens right after your first clear — paste the `TENKA{...}` from its closing onboarding-drill-checkpoint section here.",
+                  },
+                },
               },
             ],
           },

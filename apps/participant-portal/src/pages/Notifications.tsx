@@ -9,7 +9,7 @@ import { useEffect } from "react";
 import type { NotificationView } from "../api/portal-client";
 import { useTeamView } from "../auth/TeamViewProvider";
 import { useIsMock } from "../config-context";
-import { useT } from "../i18n";
+import { useLang, useT } from "../i18n";
 import { describeAgo } from "../lib/format";
 
 const SEVERITY_COLOR: Record<NotificationView["severity"], "blue" | "red"> = {
@@ -31,6 +31,7 @@ export function NotificationsPage() {
   const { notifications, notificationsError, notificationsNoEvent, markNotificationsSeen } =
     useTeamView();
   const t = useT();
+  const lang = useLang();
   const isMock = useIsMock();
   const items = notifications?.items;
 
@@ -113,7 +114,7 @@ export function NotificationsPage() {
                   </pre>
                 </Box>
                 <Box variant="small" color="text-status-inactive">
-                  {n.occurredAt} ({describeAgo(n.occurredAt, Date.now())})
+                  {n.occurredAt} ({describeAgo(n.occurredAt, Date.now(), lang)})
                 </Box>
               </SpaceBetween>
             </Container>
