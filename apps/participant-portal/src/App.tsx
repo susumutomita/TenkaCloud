@@ -1,6 +1,7 @@
 import "@cloudscape-design/global-styles/index.css";
 import { Navigate, Route, Routes } from "react-router";
-import { AuthProvider, useAuth } from "./auth/AuthProvider";
+import { AuthProvider } from "./auth/AuthProvider";
+import { RequireAuth } from "./auth/RequireAuth";
 import { ShellLayout } from "./components/AppLayout";
 import type { AppConfig } from "./config";
 import { HomePage } from "./pages/Home";
@@ -11,24 +12,8 @@ import { QuestsPage } from "./pages/Quests";
 import { ScoreboardPage } from "./pages/Scoreboard";
 import { ScoreEventsPage } from "./pages/ScoreEvents";
 import { SsoCredentialsPage } from "./pages/SsoCredentials";
+import { StartPage } from "./pages/Start";
 import { TeamSetupPage } from "./pages/TeamSetup";
-
-export function RequireAuth({
-  requireTeamName,
-  children,
-}: {
-  requireTeamName: boolean;
-  children: React.ReactNode;
-}) {
-  const auth = useAuth();
-  if (!auth.ready) return null;
-  if (!auth.session) return <Navigate to="/login" replace />;
-  // backend モードで、まだチーム名を設定していない競技者は /setup に誘導する。
-  if (requireTeamName && !auth.session.teamNameSetByCompetitor) {
-    return <Navigate to="/setup" replace />;
-  }
-  return <>{children}</>;
-}
 
 function guarded(config: AppConfig, element: React.ReactNode) {
   return (
@@ -52,6 +37,8 @@ export function App({ config }: { config: AppConfig }) {
           }
         />
         <Route path="/" element={guarded(config, <HomePage config={config} />)} />
+        {/* #2707 P0-5: LP hero 「始める」の着地点。 表示順で最初の未得点問題へ直行する。 */}
+        <Route path="/start" element={guarded(config, <StartPage />)} />
         <Route path="/scoreboard" element={guarded(config, <ScoreboardPage config={config} />)} />
         <Route
           path="/score-events"

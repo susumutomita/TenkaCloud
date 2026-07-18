@@ -84,6 +84,13 @@ describe("dev-mock fixtures", () => {
     }
   });
 
+  it("should ship a self-hosted onboarding video on every trilogy drill (#2707 P0-1)", () => {
+    for (const drill of drills) {
+      // 同一 origin の自ホスト mp4 のみ (landing CSP)。 URL は problemId と揃えて迷子を防ぐ。
+      expect(drill.videoUrl).toBe(`/videos/onboarding/${drill.problemId}.mp4`);
+    }
+  });
+
   it("should keep the leaderboard problem totals in sync with the fixture problem count", () => {
     const total = DEV_MOCK_TEAM_VIEW.problems.length;
     for (const entry of DEV_MOCK_LEADERBOARD.entries) {

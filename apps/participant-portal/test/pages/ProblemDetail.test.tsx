@@ -191,6 +191,23 @@ describe("ProblemDetailPage", () => {
     expect(screen.queryByTestId("problem-panel")).not.toBeInTheDocument();
   });
 
+  it("should show the onboarding video section only when the problem ships a videoUrl (#2707)", () => {
+    mockTeamView.mockReturnValue(
+      teamView({
+        view: viewWith({
+          problems: [problem({ videoUrl: "/videos/onboarding/understand-tenkacloud.mp4" })],
+        }),
+      }),
+    );
+    const { container } = renderPage();
+    expect(
+      container.querySelector('video[src="/videos/onboarding/understand-tenkacloud.mp4"]'),
+    ).not.toBeNull();
+    // videoUrl の無い既存 problem では section 自体が出ない (他 test の render で担保) が、
+    // ここでも明示: video 要素は 1 つだけ。
+    expect(container.querySelectorAll("video")).toHaveLength(1);
+  });
+
   it("should lock the body and show the start time when scoring has not started", () => {
     mockTeamView.mockReturnValue(
       teamView({

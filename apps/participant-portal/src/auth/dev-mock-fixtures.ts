@@ -55,6 +55,8 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
     {
       jobId: "01HZX0M0UNDR5TND7ENKA0CL0D",
       problemId: UNDERSTAND_DRILL_PROBLEM_ID,
+      // #2707 P0-1: 冒頭 1 分 operation 動画 (字幕 ja/en 焼き込み、landing origin 配信)。
+      videoUrl: "/videos/onboarding/understand-tenkacloud.mp4",
       name: "TenkaCloud を理解する",
       description: [
         "ようこそ。TenkaCloud は、**本物のクラウドアカウント**の上で戦うクラウド競技プラットフォームだ。",
@@ -172,6 +174,8 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
     {
       jobId: "01HZX0M1L0CALPLAYTENKA0002",
       problemId: LOCAL_DRILL_PROBLEM_ID,
+      // #2707 P0-1: 冒頭 1 分 operation 動画 (字幕 ja/en 焼き込み、landing origin 配信)。
+      videoUrl: "/videos/onboarding/play-local-mode.mp4",
       name: "ローカルモードで遊ぶ",
       description: [
         "AWS アカウントなしで、**本物の問題コンテナ**を手元で動かすのがローカルモード。ブラウザだけで済ませるなら **GitHub Codespaces** が最短ルートだ。",
@@ -253,6 +257,8 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
     {
       jobId: "01HZX0KZZ3DR0PW9M4Q7XV2C5D",
       problemId: LITE_DRILL_PROBLEM_ID,
+      // #2707 P0-1: 冒頭 1 分 operation 動画 (字幕 ja/en 焼き込み、landing origin 配信)。
+      videoUrl: "/videos/onboarding/deploy-tenkacloud-lite.mp4",
       name: "自分の TenkaCloud Lite を立てる",
       // 注: fixture 問題は catalog metadata を持たないため ProblemInfoSection (= instructions
       // の描画箇所) が skip される。 competitor に見せる本文はすべて description に置く

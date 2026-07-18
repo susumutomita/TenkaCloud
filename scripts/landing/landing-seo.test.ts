@@ -117,16 +117,16 @@ describe("landing page SEO", () => {
 });
 
 /**
- * Issue #2696 PR 4: the hero CTA row used to expose three co-equal links
- * (get-quote / try-demo / try-oss). The onboarding audit's P0 checkbox 1
- * requires the top CTA to collapse to exactly two primary choices — "play
- * first" (Codespaces, no AWS) and "host your own event" (Deploy on AWS) —
- * with the commercial Hosted Event quote demoted to a secondary hero link
- * rather than removed (orchestrator decision: analytics/behavior for
- * data-cta="get-quote" must keep working, so its attribute and href are
- * pinned unchanged even though it moves out of .cta-row).
+ * Issue #2707 P0-5 (supersedes the #2696 PR 4 two-choice split): the hero now
+ * leads straight into the product — the primary CTA 「始める」 deep-links to the
+ * demo portal's `/start` route, which lands on onboarding drill problem 1.
+ * The two-primary discipline from #2696 is kept (start-drill / deploy-aws);
+ * Codespaces moves to a secondary hero link because onboarding drill problem 2
+ * sends visitors there with full context. Analytics continuity: get-quote and
+ * try-codespaces keep their data-cta attributes and hrefs; try-demo is retired
+ * because its destination (the demo portal) became the primary CTA itself.
  */
-describe("landing hero CTA two-choice onboarding split (Issue #2696 PR 4)", () => {
+describe("landing hero start-direct CTA (Issue #2707 P0-5)", () => {
   const index = read("landing/index.html");
   const app = read("landing/app.js");
 
@@ -152,10 +152,13 @@ describe("landing hero CTA two-choice onboarding split (Issue #2696 PR 4)", () =
     expect(primaryMatches).toHaveLength(2);
   });
 
-  it("should point the play-first primary CTA at GitHub Codespaces", () => {
+  it("should point the start primary CTA straight at the demo portal /start deep link", () => {
     const row = ctaRow(index);
-    expect(row).toContain('data-cta="try-codespaces"');
-    expect(row).toContain('href="https://codespaces.new/susumutomita/TenkaCloud"');
+    expect(row).toContain('data-cta="start-drill"');
+    expect(row).toContain('href="/portal-demo/start?demo=1"');
+    // 同一 origin への直行なので新規 tab で開かない (= 直行型の体験を壊さない)。
+    const startAnchor = row.slice(row.indexOf('href="/portal-demo/start?demo=1"'));
+    expect(startAnchor.slice(0, startAnchor.indexOf(">"))).not.toContain("target=");
   });
 
   it("should point the host-your-own-event primary CTA at the README Deploy on AWS section", () => {
@@ -164,7 +167,15 @@ describe("landing hero CTA two-choice onboarding split (Issue #2696 PR 4)", () =
     expect(row).toContain('href="https://github.com/susumutomita/TenkaCloud#deploy-on-aws"');
   });
 
-  it("should demote the Hosted Event quote CTA out of the primary cta-row while preserving its data-cta and href", () => {
+  it("should demote the Codespaces CTA to a secondary hero link with its data-cta and href preserved", () => {
+    const hero = heroSection(index);
+    const row = ctaRow(index);
+    expect(row).not.toContain("try-codespaces");
+    expect(hero).toContain('data-cta="try-codespaces"');
+    expect(hero).toContain('href="https://codespaces.new/susumutomita/TenkaCloud"');
+  });
+
+  it("should keep the Hosted Event quote CTA as a secondary hero link with its data-cta and href preserved", () => {
     const hero = heroSection(index);
     const row = ctaRow(index);
     expect(row).not.toContain("get-quote");
@@ -172,32 +183,30 @@ describe("landing hero CTA two-choice onboarding split (Issue #2696 PR 4)", () =
     expect(hero).toContain('href="#pricing"');
   });
 
-  it("should keep the live-demo CTA as a secondary hero link, not a primary onboarding choice", () => {
+  it("should retire the try-demo CTA now that the demo portal is the primary destination", () => {
     const hero = heroSection(index);
-    const row = ctaRow(index);
-    expect(row).not.toContain("try-demo");
-    expect(hero).toContain('data-cta="try-demo"');
-    expect(hero).toContain('href="/portal-demo/?demo=1"');
+    expect(hero).not.toContain("try-demo");
+    expect(app).not.toContain("hero.cta_demo");
   });
 
-  it("should define matching ja/en hero copy for the two-choice onboarding split in app.js", () => {
-    expect(app).toContain('"hero.cta_play": "まず遊ぶ"');
-    expect(app).toContain('"hero.cta_play_note": "推奨 · AWS 不要 · 約 5 分"');
+  it("should define matching ja/en hero copy for the start-direct CTA in app.js", () => {
+    expect(app).toContain('"hero.cta_start": "始める"');
+    expect(app).toContain('"hero.cta_start_note": "登録不要 · ブラウザだけ · 約 3 分"');
+    expect(app).toContain('"hero.cta_play": "Codespaces で遊ぶ"');
     expect(app).toContain('"hero.cta_host": "自分のイベントを開く"');
-    expect(app).toContain('"hero.cta_host_note": "AWS アカウント · 課金あり · 約 30 分"');
-    expect(app).toContain('"hero.cta_play": "Play first"');
-    expect(app).toContain('"hero.cta_play_note": "Recommended · No AWS · ~5 min"');
+    expect(app).toContain('"hero.cta_start": "Start"');
+    expect(app).toContain('"hero.cta_start_note": "No signup · Browser only · ~3 min"');
+    expect(app).toContain('"hero.cta_play": "Play in Codespaces"');
     expect(app).toContain('"hero.cta_host": "Host your own event"');
-    expect(app).toContain('"hero.cta_host_note": "AWS account · Billed · ~30 min"');
   });
 
-  it("should publish the same two-choice CTA structure on the generated English landing page", () => {
+  it("should publish the same start-direct CTA structure on the generated English landing page", () => {
     const english = read("landing/index.en.html");
     const row = ctaRow(english);
     expect([...row.matchAll(/class="cta-primary"/g)]).toHaveLength(2);
-    expect(row).toContain('data-cta="try-codespaces"');
+    expect(row).toContain('data-cta="start-drill"');
     expect(row).toContain('data-cta="deploy-aws"');
-    expect(english).toContain("Play first");
+    expect(english).toContain("Start");
     expect(english).toContain("Host your own event");
   });
 });

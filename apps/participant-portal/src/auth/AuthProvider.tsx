@@ -11,6 +11,7 @@ import {
 import { getPortalMe, PortalAuthError } from "../api/portal-client";
 import type { AppConfig } from "../config";
 import { toAsciiSlug } from "../lib/slug";
+import { isDemoAutoLoginRequested } from "./demo-login";
 import { clearSession, loadSession, type ParticipantSession, saveSession } from "./storage";
 
 /**
@@ -90,6 +91,11 @@ async function exchangeKeyForSession(
 interface AuthState {
   session: ParticipantSession | null;
   ready: boolean;
+  /**
+   * #2707: dev-mock の `?demo=1` auto-login が要求されていて session がまだ無い間 true。
+   * RequireAuth はこの間 `/login` へ redirect せず待つ (= deep link の行き先を保持する)。
+   */
+  demoLoginPending: boolean;
   /** team login key を渡してセッションを発行。失敗時は throw する。 */
   login: (teamLoginKey: string) => Promise<void>;
   logout: () => void;
@@ -120,13 +126,12 @@ export function AuthProvider({ config, children }: { config: AppConfig; children
   // LP iframe からの demo 起動: `?demo=1` を query に乗せて開くと、 dev-mock モード
   // のときだけ固定 team で auto-login して dashboard を即表示する。 production
   // (`mode === "backend"`) では何もしない (= teamLoginKey の入力を強制)。
+  const demoLoginPending =
+    !session && isDemoAutoLoginRequested(config.mode, window.location.search);
   useEffect(() => {
-    if (session) return;
-    if (config.mode !== "dev-mock") return;
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("demo") !== "1") return;
+    if (!demoLoginPending) return;
     void login("demo-team");
-  }, [session, config.mode, login]);
+  }, [demoLoginPending, login]);
 
   const logout = useCallback(() => {
     clearSession();
@@ -172,8 +177,8 @@ export function AuthProvider({ config, children }: { config: AppConfig; children
   }, []);
 
   const value = useMemo<AuthState>(
-    () => ({ session, ready: true, login, logout, updateSession }),
-    [session, login, logout, updateSession],
+    () => ({ session, ready: true, demoLoginPending, login, logout, updateSession }),
+    [session, demoLoginPending, login, logout, updateSession],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

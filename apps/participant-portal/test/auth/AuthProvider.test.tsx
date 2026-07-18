@@ -167,8 +167,18 @@ describe("AuthProvider", () => {
   it("dev-mock + ?demo=1: should auto-login a fixed demo team", async () => {
     window.history.replaceState({}, "", "/?demo=1");
     const { result } = renderAuth(devConfig);
+    // #2707: auto-login 完了までは pending (= RequireAuth が /login へ逃がさない)。
+    expect(result.current.demoLoginPending).toBe(true);
     await waitFor(() => expect(result.current.session).not.toBeNull());
     expect(result.current.session?.teamId).toMatch(/^team-/);
+    expect(result.current.demoLoginPending).toBe(false);
+  });
+
+  it("backend + ?demo=1: should keep demoLoginPending false (= force the login form)", () => {
+    window.history.replaceState({}, "", "/?demo=1");
+    const { result } = renderAuth(prodConfig);
+    expect(result.current.demoLoginPending).toBe(false);
+    expect(result.current.session).toBeNull();
   });
 
   describe("updateSession", () => {
