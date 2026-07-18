@@ -1,6 +1,16 @@
-import { LITE_DRILL_CHECKPOINTS, LITE_DRILL_PROBLEM_ID } from "@tenkacloud/portal-contracts";
+import {
+  LITE_DRILL_CHECKPOINTS,
+  LITE_DRILL_PROBLEM_ID,
+  LOCAL_DRILL_FIRST_SCORE,
+  LOCAL_DRILL_PROBLEM_ID,
+} from "@tenkacloud/portal-contracts";
 import { describe, expect, it } from "vitest";
-import { CANONICAL_MOCK_FLAG, evaluateMockFlag, evaluateMockSubFlag } from "./flag-submit";
+import {
+  CANONICAL_MOCK_FLAG,
+  evaluateMockFlag,
+  evaluateMockSubFlag,
+  UNDERSTAND_DRILL_PROBLEM_ID,
+} from "./flag-submit";
 
 describe("evaluateMockFlag", () => {
   it("should accept the canonical flag and inputs containing it", () => {
@@ -48,5 +58,64 @@ describe("evaluateMockSubFlag (#2696 Lite deploy drill)", () => {
   it("should fall back to the generic mock evaluation for non-drill problems", () => {
     expect(evaluateMockSubFlag("net-evo", "ep01", CANONICAL_MOCK_FLAG, 300).kind).toBe("ok");
     expect(evaluateMockSubFlag("net-evo", "ep01", "not-a-flag", 300).kind).toBe("wrong");
+  });
+});
+
+describe("evaluateMockSubFlag (#2707 understand quiz)", () => {
+  it("should accept quiz answers case-insensitively including Japanese variants", () => {
+    expect(
+      evaluateMockSubFlag(UNDERSTAND_DRILL_PROBLEM_ID, "category-realtime", " Battle ", 50).kind,
+    ).toBe("ok");
+    expect(
+      evaluateMockSubFlag(UNDERSTAND_DRILL_PROBLEM_ID, "category-selfpaced", "チャレンジ", 50).kind,
+    ).toBe("ok");
+    expect(
+      evaluateMockSubFlag(UNDERSTAND_DRILL_PROBLEM_ID, "competitor-screen", "portal", 50).kind,
+    ).toBe("ok");
+    expect(
+      evaluateMockSubFlag(UNDERSTAND_DRILL_PROBLEM_ID, "single-account-mode", "Lite", 50).kind,
+    ).toBe("ok");
+  });
+
+  it("should reject wrong quiz answers, Easter eggs, and unknown quiz flag ids", () => {
+    expect(
+      evaluateMockSubFlag(UNDERSTAND_DRILL_PROBLEM_ID, "category-realtime", "challenge", 50).kind,
+    ).toBe("wrong");
+    expect(
+      evaluateMockSubFlag(UNDERSTAND_DRILL_PROBLEM_ID, "category-realtime", "42", 50).kind,
+    ).toBe("wrong");
+    expect(
+      evaluateMockSubFlag(UNDERSTAND_DRILL_PROBLEM_ID, "no-such-question", "battle", 50).kind,
+    ).toBe("wrong");
+  });
+});
+
+describe("evaluateMockSubFlag (#2707 local-mode drill)", () => {
+  it("should accept the port quiz answer and the first-score checkpoint code", () => {
+    expect(evaluateMockSubFlag(LOCAL_DRILL_PROBLEM_ID, "portal-port", " 5175 ", 100).kind).toBe(
+      "ok",
+    );
+    expect(
+      evaluateMockSubFlag(
+        LOCAL_DRILL_PROBLEM_ID,
+        LOCAL_DRILL_FIRST_SCORE.flagId,
+        ` ${LOCAL_DRILL_FIRST_SCORE.code.toLowerCase()} `,
+        100,
+      ).kind,
+    ).toBe("ok");
+  });
+
+  it("should reject wrong answers and cross-drill codes on the local drill", () => {
+    expect(evaluateMockSubFlag(LOCAL_DRILL_PROBLEM_ID, "portal-port", "5173", 100).kind).toBe(
+      "wrong",
+    );
+    expect(
+      evaluateMockSubFlag(
+        LOCAL_DRILL_PROBLEM_ID,
+        LOCAL_DRILL_FIRST_SCORE.flagId,
+        LITE_DRILL_CHECKPOINTS.deployComplete.code,
+        100,
+      ).kind,
+    ).toBe("wrong");
   });
 });

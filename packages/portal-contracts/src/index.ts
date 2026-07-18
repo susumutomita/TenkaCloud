@@ -17,9 +17,10 @@
  * 本契約のどの型にも現れない。 field を足すときは「競技者に見せてよいか」 を必ず確認する。
  */
 
-// Issue #2696: LP デモポータルの Lite deploy オンボーディングドリル (意図的公開のチェック
+// Issue #2696 / #2707: LP デモポータルのオンボーディングドリル (意図的公開のチェック
 // ポイントコード。 上の回答秘匿の不変条件の例外ではなく、 競技 flag ではない教材用契約)。
 export * from "./lite-drill.js";
+export * from "./local-drill.js";
 
 export type DeploymentStatus =
   | "PENDING"

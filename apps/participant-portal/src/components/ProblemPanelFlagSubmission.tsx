@@ -226,16 +226,30 @@ export function HintsPanel({
   revealOrder?: HintRevealMode;
 }) {
   const t = useT();
+  // [#2707] dev-mock (= LP デモ) では backend が無いので reveal をローカル state で行う。
+  // fixture がドリルの hint content を同梱し (公開前提のオンボーディング教材)、 開封状態
+  // だけをこの Set で持つ。 backend mode では従来どおり server truth。
+  const isMock = useIsMock();
+  const [mockRevealed, setMockRevealed] = useState<ReadonlySet<string>>(new Set());
   const [revealing, setRevealing] = useState<string | null>(null);
   const [revealError, setRevealError] = useState<string | null>(null);
   const [pendingReveal, setPendingReveal] = useState<ParticipantHintView | null>(null);
   const [pendingIndex, setPendingIndex] = useState<number>(0);
+
+  const effectiveHints = isMock
+    ? hints.map((h) => (mockRevealed.has(h.id) ? { ...h, revealed: true } : h))
+    : hints;
 
   const handleReveal = async (hintId: string) => {
     // 再入防止ガード。 唯一の呼び出し元 (confirm modal の submit button) は reveal 実行中
     // `loading` で無効化されるので UI からは再入できない (= 防御的に残す不到達分岐)。
     /* v8 ignore next */
     if (revealing) return;
+    if (isMock) {
+      setMockRevealed((prev) => new Set([...prev, hintId]));
+      setPendingReveal(null);
+      return;
+    }
     setRevealing(hintId);
     setRevealError(null);
     try {
@@ -249,7 +263,7 @@ export function HintsPanel({
     }
   };
 
-  const revealedCount = hints.filter((h) => h.revealed).length;
+  const revealedCount = effectiveHints.filter((h) => h.revealed).length;
   // flat モードでは順序ゲートを一切かけない (= どの hint も独立に開封できる)。
   const flat = revealOrder === "flat";
   return (
@@ -259,12 +273,12 @@ export function HintsPanel({
         header={t("problem_panel.hint_header", { revealed: revealedCount, total: hints.length })}
       >
         <SpaceBetween size="xs">
-          {hints.map((h, i) => {
+          {effectiveHints.map((h, i) => {
             // Issue #1315: progressive hint 順序制約。 Hint N (index i) は Hint 1..i が
             // すべて revealed=true のときのみ button 有効。 backend (409 hint_out_of_order)
             // と同じ contract を UI で先回り disable し、 不要な round trip を抑える。
             // flat モード (問題の scoring.hintReveal="flat") では順序制約を外す。
-            const predecessorsRevealed = hints.slice(0, i).every((prev) => prev.revealed);
+            const predecessorsRevealed = effectiveHints.slice(0, i).every((prev) => prev.revealed);
             const lockedByOrder = !flat && !predecessorsRevealed;
             const ariaLabel = lockedByOrder
               ? t("problem_panel.hint_predecessor_required_aria", { index: i })
