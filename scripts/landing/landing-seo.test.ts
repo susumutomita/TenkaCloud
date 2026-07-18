@@ -193,3 +193,75 @@ describe("landing hero quest card (Issue #2711)", () => {
     expect(english).toContain("Learn what TenkaCloud is");
   });
 });
+
+/**
+ * #2711 follow-up: hero カード無スタイル事故の再発防止。 アセットのキャッシュバスターは
+ * 手動日付 (`?v=20260625-2`) だと bump を忘れて古い CSS が配信され続けるため、 内容
+ * ハッシュ (`scripts/landing/stamp-asset-versions.ts`) に固定する。 このテストは
+ * 「参照 URL のハッシュ == 実ファイルの内容ハッシュ」 を機械検証し、 CSS/JS を変えて
+ * スタンプし忘れた PR を CI で落とす。
+ */
+describe("landing asset cache busting (content-hash stamped)", () => {
+  const { assetVersion, stampHtml } = require("./stamp-asset-versions") as {
+    assetVersion: (content: string) => string;
+    stampHtml: (html: string, css: string, js: string) => string;
+  };
+  const cssVersion = assetVersion(read("landing/styles/main.css"));
+  const jsVersion = assetVersion(read("landing/app.js"));
+
+  it("should reference main.css and app.js with their current content hashes", () => {
+    for (const page of ["landing/index.html", "landing/index.en.html"]) {
+      const html = read(page);
+      expect(html).toContain(`./styles/main.css?v=${cssVersion}`);
+      expect(html).toContain(`./app.js?v=${jsVersion}`);
+      expect(html).not.toMatch(/\.\/styles\/main\.css\?v=(?!${"x"})[0-9]{8}-/);
+    }
+  });
+
+  it("should stamp idempotently", () => {
+    const html = read("landing/index.html");
+    expect(stampHtml(html, cssVersion, jsVersion)).toBe(html);
+  });
+});
+
+/**
+ * AI エージェント向け導線: llms-full.txt (自己完結ブリーフィング) と、 #extend 内の
+ * 貼り付けプロンプト。 プロンプトは LLM 向けなので言語切替しない (data-i18n なし)。
+ */
+describe("AI-agent briefing and paste-able prompt", () => {
+  const full = read("landing/llms-full.txt");
+  const llms = read("landing/llms.txt");
+  const index = read("landing/index.html");
+  const english = read("landing/index.en.html");
+
+  it("should ship a self-contained llms-full.txt with both quick starts", () => {
+    expect(full).toContain("Instructions for the agent reading this");
+    expect(full).toContain("https://tenkacloud.com/portal-demo/?demo=1&goto=start");
+    expect(full).toContain("https://codespaces.new/susumutomita/TenkaCloud");
+    expect(full).toContain("ACTION=destroy");
+    expect(full).toContain("Apache 2.0");
+    // ドリルのチェックポイントコード実値はネタバレになるので載せない。
+    expect(full).not.toMatch(/TENKA\{[A-Z0-9-]+\}/);
+  });
+
+  it("should link llms-full.txt from llms.txt", () => {
+    expect(llms).toContain("https://tenkacloud.com/llms-full.txt");
+  });
+
+  it("should render the copyable agent prompt on both landing pages", () => {
+    for (const html of [index, english]) {
+      expect(html).toContain('id="agent-prompt-text"');
+      expect(html).toContain('data-copy-target="agent-prompt-text"');
+      expect(html).toContain("Fetch https://tenkacloud.com/llms-full.txt");
+    }
+    // プロンプト本文は言語切替対象にしない。
+    const pre = index.slice(index.indexOf('id="agent-prompt-text"'));
+    expect(pre.slice(0, pre.indexOf(">"))).not.toContain("data-i18n");
+  });
+
+  it("should wire the copy button handler in app.js", () => {
+    const app = read("landing/app.js");
+    expect(app).toContain("[data-copy-target]");
+    expect(app).toContain("navigator.clipboard.writeText");
+  });
+});

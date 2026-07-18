@@ -109,7 +109,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" />
-<link rel="stylesheet" href="./styles/main.css?v=20260625-2" />
+<link rel="stylesheet" href="./styles/main.css?v=472f28c8e3" />
 </head>
 <body>
 
@@ -476,6 +476,16 @@
       <a class="more" href="https://github.com/susumutomita/TenkaCloudChallenge#readme" target="_blank" rel="noopener noreferrer"><span data-i18n="extend.cta1">Browse the catalog</span> ›</a>
       <a class="more" href="https://github.com/susumutomita/TenkaCloudChallenge/blob/main/.claude/skills/new-problem/SKILL.md#new-problem--scaffold-a-tenkacloudchallenge-problem" target="_blank" rel="noopener noreferrer"><span data-i18n="extend.cta2">new-problem skill</span> ›</a>
     </div>
+    <!-- #2711 follow-up: AI エージェントへの貼り付けプロンプト。 プロンプト本文は LLM 向け
+         なので言語切替しない (data-i18n を付けない)。 正本は /llms-full.txt。 -->
+    <div class="agent-prompt">
+      <div class="agent-prompt-head">
+        <span class="agent-prompt-title" data-i18n="extend.agent_title">Start with an AI agent</span>
+        <button type="button" class="agent-prompt-copy" data-copy-target="agent-prompt-text" data-i18n="extend.agent_copy">Copy prompt</button>
+      </div>
+      <p class="agent-prompt-lead" data-i18n="extend.agent_lead">Paste the prompt below into Claude Code or Codex and the agent will explain TenkaCloud and guide you through playing or hosting. It reads the LLM briefing <a href="/llms-full.txt" target="_blank" rel="noopener noreferrer">llms-full.txt</a>.</p>
+      <pre class="agent-prompt-text" id="agent-prompt-text">Fetch https://tenkacloud.com/llms-full.txt and read it — it is the canonical AI-agent briefing for TenkaCloud. If you cannot fetch URLs, ask me to paste its contents instead. Then, in my language: (1) explain what TenkaCloud is in about five sentences, (2) ask whether I want to PLAY (no AWS account needed) or HOST my own event on AWS, and (3) guide me step by step through the matching quick start from the briefing, stating costs and teardown before anything touches a real AWS account.</pre>
+    </div>
   </div>
 </section>
 
@@ -635,7 +645,7 @@
 </footer>
 
 <script src="./ink-bg.js" defer></script>
-<script src="./app.js?v=20260625-2" defer></script>
+<script src="./app.js?v=04b72e049d" defer></script>
 
 </body>
 </html>

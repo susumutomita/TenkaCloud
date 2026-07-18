@@ -14,7 +14,7 @@
   "scripts": {
     "tenkacloud": "bun run scripts/tenkacloud.ts",
     "build": "bun run scripts/workspace/run-workspaces.ts build",
-    "build:pages": "bun run generate:landing-locales && bun run generate:landing-docs && bun run --filter @TenkaCloud/participant-portal build:pages && mkdir -p landing/portal-demo && cp -r apps/participant-portal/dist/. landing/portal-demo/ && bun run --filter @TenkaCloud/application-admin-console build:pages && mkdir -p landing/admin-demo && cp -r apps/application-admin-console/dist/. landing/admin-demo/",
+    "build:pages": "bun run generate:landing-locales && bun run generate:landing-docs && bun run stamp:landing-assets && bun run --filter @TenkaCloud/participant-portal build:pages && mkdir -p landing/portal-demo && cp -r apps/participant-portal/dist/. landing/portal-demo/ && bun run --filter @TenkaCloud/application-admin-console build:pages && mkdir -p landing/admin-demo && cp -r apps/application-admin-console/dist/. landing/admin-demo/",
     "typecheck": "bun run scripts/workspace/run-workspaces.ts typecheck",
     "synth": "bun run --filter @TenkaCloud/infrastructure synth",
     "test": "bun run scripts/landing/generate-landing-locales.ts --check && bun run scripts/landing/generate-landing-docs.ts --check && bun test scripts/landing/landing-seo.test.ts scripts/workspace/run-coverage.test.ts scripts/workspace/run-workspaces.test.ts && bun run scripts/workspace/run-workspaces.ts test",
@@ -23,6 +23,7 @@
     "dead-code": "knip --no-config-hints",
     "generate:landing-locales": "bun run scripts/landing/generate-landing-locales.ts",
     "generate:landing-docs": "bun run scripts/landing/generate-landing-docs.ts",
+    "stamp:landing-assets": "bun run scripts/landing/stamp-asset-versions.ts",
     "lint:md": "markdownlint-cli2 '**/*.md' '#**/node_modules' '#references' '#client' '#src' '#**/cdk.out/**' '#**/cdk.out.test/**' '#**/dist' '#problems/**' '#.cache/**'",
     "lint:text": "textlint '**/*.md' '!problems/**'",
     "lint:format": "biome check",

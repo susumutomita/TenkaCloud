@@ -305,6 +305,27 @@ section .lead {
 }
 .extend-cta .more { font-size: 13px; color: #0066cc; text-decoration: none; }
 .extend-cta .more:hover { text-decoration: underline; }
+/* #2711 follow-up: AI エージェント貼り付けプロンプト (#extend 内)。 */
+.agent-prompt {
+  margin: 26px auto 0; padding: 16px 18px 18px;
+  background: var(--paper-3); border: 1px solid var(--line); border-radius: 10px;
+  max-width: 760px; text-align: left;
+}
+.agent-prompt-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.agent-prompt-title { font-size: 14px; font-weight: 800; color: var(--ink); }
+.agent-prompt-copy {
+  border: 1px solid var(--line); border-radius: 999px; background: var(--paper);
+  padding: 5px 14px; font-size: 12px; font-weight: 800; color: var(--blue); cursor: pointer;
+}
+.agent-prompt-copy:hover { border-color: var(--blue); }
+.agent-prompt-copy.copied::after { content: " ✓"; }
+.agent-prompt-lead { margin: 8px 0 10px; font-size: 12.5px; line-height: 1.7; color: var(--ink-2); }
+.agent-prompt-lead a { color: var(--blue); }
+.agent-prompt-text {
+  margin: 0; padding: 12px 14px; background: var(--paper); border: 1px solid var(--line-soft);
+  border-radius: 8px; font-family: var(--font-mono); font-size: 11.5px; line-height: 1.65;
+  color: var(--ink-2); white-space: pre-wrap; overflow-wrap: anywhere; user-select: all;
+}
 
 /* ============== TWO-UP FEATURE ============== */
 .twoup { display: grid; grid-template-columns: 1fr 1fr; gap: 52px; max-width: 980px; margin: 0 auto; }
