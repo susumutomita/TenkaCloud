@@ -4,11 +4,11 @@ import { AuthProvider } from "./auth/AuthProvider";
 import { RequireAuth } from "./auth/RequireAuth";
 import { ShellLayout } from "./components/AppLayout";
 import type { AppConfig } from "./config";
-import { HomePage } from "./pages/Home";
 import { LoginPage } from "./pages/Login";
 import { NotificationsPage } from "./pages/Notifications";
 import { ProblemDetailPage } from "./pages/ProblemDetail";
 import { QuestsPage } from "./pages/Quests";
+import { RootEntryPage } from "./pages/RootEntry";
 import { ScoreboardPage } from "./pages/Scoreboard";
 import { ScoreEventsPage } from "./pages/ScoreEvents";
 import { SsoCredentialsPage } from "./pages/SsoCredentials";
@@ -36,8 +36,9 @@ export function App({ config }: { config: AppConfig }) {
             </RequireAuth>
           }
         />
-        <Route path="/" element={guarded(config, <HomePage config={config} />)} />
-        {/* #2707 P0-5: LP hero 「始める」の着地点。 表示順で最初の未得点問題へ直行する。 */}
+        {/* #2711: `?goto=start` 付きの実ファイル着地 (LP hero カード) を /start へ流す。 */}
+        <Route path="/" element={guarded(config, <RootEntryPage config={config} />)} />
+        {/* #2707 P0-5: オンボーディング開始点。 表示順で最初の未得点問題へ直行する。 */}
         <Route path="/start" element={guarded(config, <StartPage />)} />
         <Route path="/scoreboard" element={guarded(config, <ScoreboardPage config={config} />)} />
         <Route

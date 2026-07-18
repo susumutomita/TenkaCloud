@@ -151,7 +151,10 @@
         <span data-i18n="hero.h1a">クラウドエンジニアの、</span><em data-i18n="hero.h1b">天下一武道会。</em>
       </h1>
       <p class="sub" data-i18n="hero.sub">本物の AWS で競う、OSS の競技プラットフォーム。 「ローカルでは動く」アプリを本番品質へ ── 認証・公開範囲・監査・可用性の仕上がりを毎分自動採点し、 順位がリアルタイムに動く。 主催者はイベント・採点・再利用できる問題カタログを 1 画面で運営。</p>
-      <a class="hero-quest-card" href="/portal-demo/start?demo=1" data-cta="start-drill">
+      <!-- #2711 follow-up: /portal-demo/start の deep link は静的ホスティングの rewrite が
+           効かない環境で 404 fallback に崩れるため、 実在する index.html に着地して
+           SPA 側 (`goto=start`) で /start へ遷移する。 -->
+      <a class="hero-quest-card" href="/portal-demo/?demo=1&amp;goto=start" data-cta="start-drill">
         <span class="hero-quest-meta" data-i18n="hero.quest_meta">最初の 1 問 · 登録不要 · 約 3 分</span>
         <span class="hero-quest-tags">
           <code>what-is-tenkacloud</code>

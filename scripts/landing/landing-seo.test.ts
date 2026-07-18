@@ -143,10 +143,13 @@ describe("landing hero quest card (Issue #2711)", () => {
     expect(hero).not.toContain("cta-row");
   });
 
-  it("should present exactly one quest card that deep-links to the tutorial problem", () => {
+  it("should present exactly one quest card that lands on a real file (rewrite-independent)", () => {
     const hero = heroSection(index);
     expect([...hero.matchAll(/class="hero-quest-card"/g)]).toHaveLength(1);
-    expect(hero).toContain('href="/portal-demo/start?demo=1"');
+    // /portal-demo/start の deep link は静的ホスティングの rewrite が無い環境で 404
+    // fallback に崩れる。 入口は必ず実在する index.html + `goto=start` (SPA 側で遷移)。
+    expect(hero).toContain('href="/portal-demo/?demo=1&amp;goto=start"');
+    expect(hero).not.toContain('href="/portal-demo/start');
     expect(hero).toContain('data-cta="start-drill"');
     expect(hero).toContain("<code>what-is-tenkacloud</code>");
     // 同一 origin への直行なので新規 tab で開かない (= 直行型の体験を壊さない)。
