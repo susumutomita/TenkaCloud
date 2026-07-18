@@ -6,6 +6,7 @@ import {
 } from "@tenkacloud/portal-contracts";
 import { describe, expect, it } from "vitest";
 import {
+  AI_AGENT_LOCAL_DRILL_PROBLEM_ID,
   CANONICAL_MOCK_FLAG,
   evaluateMockFlag,
   evaluateMockSubFlag,
@@ -133,5 +134,34 @@ describe("evaluateMockSubFlag (#2707 local-mode drill)", () => {
         100,
       ).kind,
     ).toBe("wrong");
+  });
+});
+
+describe("evaluateMockSubFlag (AI-agent local Mac tutorial)", () => {
+  it("should accept the canonical briefing filename and the confirmed portal port", () => {
+    expect(
+      evaluateMockSubFlag(AI_AGENT_LOCAL_DRILL_PROBLEM_ID, "briefing-file", " llms-full.txt ", 100)
+        .kind,
+    ).toBe("ok");
+    expect(
+      evaluateMockSubFlag(AI_AGENT_LOCAL_DRILL_PROBLEM_ID, "portal-port", " 5175 ", 100).kind,
+    ).toBe("ok");
+  });
+
+  it("should reject generic flags, the Codespaces port, and unknown checkpoints", () => {
+    expect(
+      evaluateMockSubFlag(
+        AI_AGENT_LOCAL_DRILL_PROBLEM_ID,
+        "briefing-file",
+        CANONICAL_MOCK_FLAG,
+        100,
+      ).kind,
+    ).toBe("wrong");
+    expect(
+      evaluateMockSubFlag(AI_AGENT_LOCAL_DRILL_PROBLEM_ID, "portal-port", "5173", 100).kind,
+    ).toBe("wrong");
+    expect(evaluateMockSubFlag(AI_AGENT_LOCAL_DRILL_PROBLEM_ID, "unknown", "5175", 100).kind).toBe(
+      "wrong",
+    );
   });
 });

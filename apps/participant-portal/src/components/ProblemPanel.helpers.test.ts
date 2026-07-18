@@ -190,6 +190,7 @@ describe("localizeProblem", () => {
     description: "脆弱なログイン。",
     instructions: "ログインを突破。",
     writeup: "日本語の解説",
+    videoUrl: "/videos/onboarding/demo-ja.mp4",
     region: "local",
     awsAccountId: "local",
     status: "COMPLETE",
@@ -203,6 +204,7 @@ describe("localizeProblem", () => {
         description: "Vuln login.",
         instructions: "Bypass it.",
         writeup: "English explanation",
+        videoUrl: "/videos/onboarding/demo-en.mp4",
       },
     },
     scoring: {
@@ -231,6 +233,7 @@ describe("localizeProblem", () => {
     expect(out.description).toBe("Vuln login.");
     expect(out.instructions).toBe("Bypass it.");
     expect(out.writeup).toBe("English explanation");
+    expect(out.videoUrl).toBe("/videos/onboarding/demo-en.mp4");
     expect(out.scoring?.hints?.[0].content).toBe("Try a quote.");
     // a hint without a translation keeps its canonical (here: absent) content
     expect(out.scoring?.hints?.[1].content).toBeUndefined();
@@ -252,6 +255,7 @@ describe("localizeProblem", () => {
     expect(out.name).toBe("SQL インジェクション"); // blank en.name → canonical ja
     expect(out.description).toBe("Only desc EN.");
     expect(out.instructions).toBe("ログインを突破。"); // no en.instructions → canonical ja
+    expect(out.videoUrl).toBe("/videos/onboarding/demo-ja.mp4");
     expect(out.scoring?.hints?.[0].content).toBe("ja content"); // hint has no i18n → canonical
   });
 

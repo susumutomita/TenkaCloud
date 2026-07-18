@@ -186,7 +186,7 @@ function localizeHint(hint: ParticipantHintView): ParticipantHintView {
 /**
  * #2054 i18n: resolve the displayed problem text for the current locale so the
  * portal's locale switcher localizes the live API view (name / description /
- * instructions + revealed hint content). ja is the top-level canonical and is
+ * instructions / operation video + revealed hint content). ja is the top-level canonical and is
  * returned unchanged; en overlays each field from `i18n.en`, falling back to the
  * canonical value when an override is missing or empty.
  */
@@ -206,6 +206,7 @@ export function localizeProblem(
     ...(en?.description?.trim() ? { description: en.description } : {}),
     ...(en?.instructions?.trim() ? { instructions: en.instructions } : {}),
     ...(en?.writeup?.trim() ? { writeup: en.writeup } : {}),
+    ...(en?.videoUrl?.trim() ? { videoUrl: en.videoUrl } : {}),
     ...(problem.scoring && (hints || flags)
       ? {
           scoring: {

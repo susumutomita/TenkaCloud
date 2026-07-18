@@ -4,7 +4,11 @@ import {
   LOCAL_DRILL_PROBLEM_ID,
 } from "@tenkacloud/portal-contracts";
 import { describe, expect, it } from "vitest";
-import { evaluateMockSubFlag, WHAT_IS_DRILL_PROBLEM_ID } from "../dev-mock/flag-submit";
+import {
+  AI_AGENT_LOCAL_DRILL_PROBLEM_ID,
+  evaluateMockSubFlag,
+  WHAT_IS_DRILL_PROBLEM_ID,
+} from "../dev-mock/flag-submit";
 import {
   DEV_MOCK_LEADERBOARD,
   DEV_MOCK_NOTIFICATIONS,
@@ -16,14 +20,24 @@ import {
  * 整合性を pin する。 ドリルの sub-flag id が判定側 (`evaluateMockSubFlag`) と揃って
  * いなければ永遠に wrong を返すし、 ヒントの無いドリルは「本文は概要 → ヒントで
  * ステップバイステップ」 という構造契約を破る。 #2711 で問題 1 は what-is-tenkacloud
- * (4 ステップ、 モード 2 択はステップ 3) になり、 順序は チュートリアル → Lite → ローカル。
+ * (4 ステップ、 モード 2 択はステップ 3) になり、 AI/Mac 実演は Codespaces 問題と
+ * 混ぜずに独立した 4 問目として置く。
  */
 describe("dev-mock fixtures", () => {
-  const TRILOGY_IDS = [WHAT_IS_DRILL_PROBLEM_ID, LITE_DRILL_PROBLEM_ID, LOCAL_DRILL_PROBLEM_ID];
-  const drills = DEV_MOCK_TEAM_VIEW.problems.filter((p) => TRILOGY_IDS.includes(p.problemId));
+  const ONBOARDING_DRILL_IDS = [
+    WHAT_IS_DRILL_PROBLEM_ID,
+    LITE_DRILL_PROBLEM_ID,
+    LOCAL_DRILL_PROBLEM_ID,
+    AI_AGENT_LOCAL_DRILL_PROBLEM_ID,
+  ];
+  const drills = DEV_MOCK_TEAM_VIEW.problems.filter((p) =>
+    ONBOARDING_DRILL_IDS.includes(p.problemId),
+  );
 
   it("should pin the onboarding drills first, in journey order (#2711)", () => {
-    expect(DEV_MOCK_TEAM_VIEW.problems.slice(0, 3).map((p) => p.problemId)).toEqual(TRILOGY_IDS);
+    expect(DEV_MOCK_TEAM_VIEW.problems.slice(0, 4).map((p) => p.problemId)).toEqual(
+      ONBOARDING_DRILL_IDS,
+    );
   });
 
   it("should give the tutorial the 4-step shape with the mode choice at step 3 (#2711)", () => {
@@ -48,8 +62,8 @@ describe("dev-mock fixtures", () => {
     ).toBe("ok");
   });
 
-  it("should ship every trilogy problem as an unsolved multi-flag drill", () => {
-    expect(drills).toHaveLength(3);
+  it("should ship every onboarding problem as an unsolved multi-flag drill", () => {
+    expect(drills).toHaveLength(4);
     for (const drill of drills) {
       expect(drill.scoring?.kind).toBe("multi-flag");
       expect(drill.score).toBe(0);
@@ -112,7 +126,15 @@ describe("dev-mock fixtures", () => {
     }
   });
 
-  it("should ship a self-hosted onboarding video on every trilogy drill (#2707 P0-1)", () => {
+  it("should localize the AI-agent Mac tutorial video for English", () => {
+    const drill = DEV_MOCK_TEAM_VIEW.problems.find(
+      (problem) => problem.problemId === "ai-agent-local-mac",
+    );
+    expect(drill?.videoUrl).toBe("/videos/onboarding/ai-agent-local-mac.mp4");
+    expect(drill?.i18n?.en?.videoUrl).toBe("/videos/onboarding/ai-agent-local-mac-en.mp4");
+  });
+
+  it("should ship a self-hosted onboarding video on every onboarding drill (#2707 P0-1)", () => {
     for (const drill of drills) {
       // 同一 origin の自ホスト mp4 のみ (landing CSP)。 URL は problemId と揃えて迷子を防ぐ。
       expect(drill.videoUrl).toBe(`/videos/onboarding/${drill.problemId}.mp4`);
@@ -131,5 +153,6 @@ describe("dev-mock fixtures", () => {
     expect(bodies).toContain("TenkaCloud とは?");
     expect(bodies).toContain("ローカルモードで遊ぶ");
     expect(bodies).toContain("自分の TenkaCloud Lite を立てる");
+    expect(bodies).toContain("AIエージェントでMac起動");
   });
 });
