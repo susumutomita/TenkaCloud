@@ -130,13 +130,20 @@ describe("dev-mock fixtures", () => {
     const drill = DEV_MOCK_TEAM_VIEW.problems.find(
       (problem) => problem.problemId === "ai-agent-local-mac",
     );
-    expect(drill?.videoUrl).toBe("/videos/onboarding/ai-agent-local-mac.mp4");
-    expect(drill?.i18n?.en?.videoUrl).toBe("/videos/onboarding/ai-agent-local-mac-en.mp4");
+    expect(drill?.videoUrl).toBe("/videos/onboarding/ai-agent-local-mac-privacy-safe.mp4");
+    expect(drill?.i18n?.en?.videoUrl).toBe(
+      "/videos/onboarding/ai-agent-local-mac-privacy-safe-en.mp4",
+    );
   });
 
   it("should ship a self-hosted onboarding video on every onboarding drill (#2707 P0-1)", () => {
     for (const drill of drills) {
-      // 同一 origin の自ホスト mp4 のみ (landing CSP)。 URL は problemId と揃えて迷子を防ぐ。
+      // privacy-safe 版は旧動画の CDN cache を確実に回避するため suffix 付き。
+      if (drill.problemId === "ai-agent-local-mac") {
+        expect(drill.videoUrl).toBe("/videos/onboarding/ai-agent-local-mac-privacy-safe.mp4");
+        continue;
+      }
+      // その他は problemId とファイル名を一致させる既存 contract を維持する。
       expect(drill.videoUrl).toBe(`/videos/onboarding/${drill.problemId}.mp4`);
     }
   });

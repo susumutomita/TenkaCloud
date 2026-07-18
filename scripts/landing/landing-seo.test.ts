@@ -310,11 +310,11 @@ describe("AI-agent briefing and paste-able prompt", () => {
     const { existsSync } = require("node:fs") as typeof import("node:fs");
     const app = read("landing/app.js");
     expect(
-      existsSync(join(root, "landing/videos/onboarding/ai-agent-local-mac.mp4")),
+      existsSync(join(root, "landing/videos/onboarding/ai-agent-local-mac-privacy-safe.mp4")),
       "Japanese AI-agent Mac demo missing",
     ).toBe(true);
     expect(
-      existsSync(join(root, "landing/videos/onboarding/ai-agent-local-mac-en.mp4")),
+      existsSync(join(root, "landing/videos/onboarding/ai-agent-local-mac-privacy-safe-en.mp4")),
       "English AI-agent Mac demo missing",
     ).toBe(true);
 
@@ -324,8 +324,8 @@ describe("AI-agent briefing and paste-able prompt", () => {
       expect(html).toContain('data-cta="try-ai-local-mac"');
       expect(html).toContain("goto=/problems/01HZX0M2A1AGENTMACTENKA0003");
     }
-    expect(index).toContain('href="/videos/onboarding/ai-agent-local-mac.mp4"');
-    expect(english).toContain('href="/videos/onboarding/ai-agent-local-mac-en.mp4"');
+    expect(index).toContain('href="/videos/onboarding/ai-agent-local-mac-privacy-safe.mp4"');
+    expect(english).toContain('href="/videos/onboarding/ai-agent-local-mac-privacy-safe-en.mp4"');
     expect(app).toContain('querySelectorAll("[data-i18n-href]")');
   });
 });

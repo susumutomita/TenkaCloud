@@ -299,7 +299,7 @@
         'Claude Code や Codex に下のプロンプトを貼り付けると、エージェントが TenkaCloud の説明から「遊ぶ / 立てる」の案内までやってくれます。中身は LLM 向けブリーフィング <a href="/llms-full.txt" target="_blank" rel="noopener noreferrer">llms-full.txt</a> です。',
       "extend.agent_copy": "プロンプトをコピー",
       "extend.agent_video": "▶ Mac でのワンショット起動を 1 分で見る",
-      "extend.agent_video_href": "/videos/onboarding/ai-agent-local-mac.mp4",
+      "extend.agent_video_href": "/videos/onboarding/ai-agent-local-mac-privacy-safe.mp4",
       "extend.agent_tutorial": "チュートリアルで確認する →",
 
       "offerings.eyebrow": "商用プラン",
@@ -559,7 +559,7 @@
         'Paste the prompt below into Claude Code or Codex and the agent will explain TenkaCloud and guide you through playing or hosting. It reads the LLM briefing <a href="/llms-full.txt" target="_blank" rel="noopener noreferrer">llms-full.txt</a>.',
       "extend.agent_copy": "Copy prompt",
       "extend.agent_video": "▶ Watch the one-shot Mac launch in 1 minute",
-      "extend.agent_video_href": "/videos/onboarding/ai-agent-local-mac-en.mp4",
+      "extend.agent_video_href": "/videos/onboarding/ai-agent-local-mac-privacy-safe-en.mp4",
       "extend.agent_tutorial": "Check it in the tutorial →",
 
       "offerings.eyebrow": "Commercial offerings",
