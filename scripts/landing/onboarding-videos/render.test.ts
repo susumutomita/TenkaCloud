@@ -17,7 +17,7 @@ import { ONBOARDING_VIDEOS } from "./script-data";
 describe("onboarding video scripts (#2707)", () => {
   it("should ship exactly the trilogy videos, named after their fixture problemIds", () => {
     expect(ONBOARDING_VIDEOS.map((v) => v.problemId)).toEqual([
-      "understand-tenkacloud",
+      "what-is-tenkacloud",
       "play-local-mode",
       "deploy-tenkacloud-lite",
     ]);

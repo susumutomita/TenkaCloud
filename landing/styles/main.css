@@ -142,38 +142,54 @@ p { margin: 0; }
   letter-spacing: 0;
   text-wrap: balance;
 }
-.hero .cta-row {
-  display: flex; gap: 16px; flex-wrap: wrap; justify-content: flex-start;
-  margin-top: 30px; font-size: 15px; font-weight: 800;
+/* Issue #2711 (design 6a): the hero funnels every visitor into one quest card —
+   the tutorial problem what-is-tenkacloud. No stacked primary buttons; the
+   organizer path is demoted to the text-link row below the card. */
+.hero .hero-quest-card {
+  display: block; max-width: 410px; margin-top: 28px;
+  padding: 18px 20px 20px; background: #fff;
+  border: 1px solid #b8c0cc; border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(8, 20, 37, .06);
+  text-decoration: none; cursor: pointer;
+  transition: box-shadow .15s ease;
 }
-.hero .cta-row a {
-  color: #0066cc; text-decoration: none;
-  display: inline-flex; align-items: center; gap: 8px;
-}
-.hero .cta-row a:hover { text-decoration: underline; }
-/* Issue #2696 PR 4: the top hero CTA collapses to exactly two primary,
-   equally-weighted onboarding choices (play first / host your own event) —
-   styled as solid buttons so they read as the two actions, not text links. */
-.hero .cta-row a.cta-primary {
-  color: #fff;
-  background: var(--blue);
-  border-radius: 8px;
-  padding: 12px 20px;
+.hero .hero-quest-card:hover {
+  box-shadow: 0 10px 30px rgba(8, 20, 37, .1), 0 0 0 3px rgba(9, 105, 218, .22);
   text-decoration: none;
 }
-.hero .cta-row a.cta-primary:hover { background: #075197; text-decoration: none; }
-.hero .cta-row a.cta-primary .cta-label {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  text-align: left;
+.hero .hero-quest-meta {
+  display: block; margin-bottom: 10px;
+  font-size: 11px; font-weight: 800; letter-spacing: .05em; color: #5d6877;
 }
-.hero .cta-row a.cta-primary .cta-note {
-  display: block;
-  font-size: 11.5px;
-  font-weight: 600;
-  opacity: 0.88;
+.hero .hero-quest-tags { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.hero .hero-quest-tags code {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12px; font-weight: 700; color: #0969da;
 }
+.hero .hero-quest-badge {
+  display: inline-flex; align-items: center; height: 18px; padding: 0 6px;
+  border-radius: 4px; background: #f2f3f5; color: #5b6770;
+  font-size: 9px; font-weight: 800;
+}
+.hero .hero-quest-badge.primary { background: #0969da; color: #fff; }
+.hero .hero-quest-title {
+  display: block; font-size: 17px; font-weight: 800;
+  letter-spacing: -.02em; line-height: 1.35; color: #07111f;
+}
+.hero .hero-quest-desc {
+  display: block; margin-top: 6px;
+  font-size: 12.5px; font-weight: 500; line-height: 1.65; color: #263241;
+}
+.hero .hero-quest-desc code {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11.5px; font-weight: 700; color: #0969da;
+}
+.hero .hero-quest-cta {
+  display: inline-flex; align-items: center; gap: 9px; height: 40px; padding: 0 22px;
+  margin-top: 14px; background: #0969da; color: #fff; border-radius: 999px;
+  font-size: 14px; font-weight: 800; white-space: nowrap;
+}
+.hero .hero-quest-card:hover .hero-quest-cta { background: #075197; }
 .hero .hero-secondary {
   margin: 16px 0 0;
   font-size: 13px;
@@ -834,7 +850,7 @@ footer .footer-legal-links { display: inline-flex; flex-wrap: wrap; gap: 0 6px; 
   .hero { padding-top: 36px; }
   .hero h1 { font-size: 38px; line-height: 1.18; }
   .hero .sub { font-size: 15px; line-height: 1.7; }
-  .hero .cta-row { gap: 18px; flex-wrap: wrap; }
+  .hero .hero-quest-card { max-width: 100%; }
   .metric-grid { grid-template-columns: 1fr 1fr; }
   .dashboard { padding: 12px; }
   .portal-preview { padding: 14px; }
@@ -864,8 +880,6 @@ footer .footer-legal-links { display: inline-flex; flex-wrap: wrap; gap: 0 6px; 
   /* ent-cta inner padding を mobile で詰める */
   .ent-cta { padding: 28px 22px; }
   .ent-cta h2 { font-size: clamp(22px, 6vw, 30px); }
-  /* hero CTA を横並びから縦並びへ (= タッチターゲット拡大) */
-  .hero .cta-row a { width: 100%; justify-content: center; padding: 10px 16px; }
   /* nav-right brand 隠す (= ロゴはあるので冗長) */
   .nav-brand-sub { display: none; }
 }

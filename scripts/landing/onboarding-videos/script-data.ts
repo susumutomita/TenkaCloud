@@ -1,5 +1,5 @@
 /**
- * #2707 P1: オンボーディング 3 部作の 1 分 operation 動画の台本 (source of truth)。
+ * #2707 P1 / #2711: オンボーディングドリル 3 本の 1 分 operation 動画の台本 (source of truth)。
  *
  * この module が「再撮影用の台本」そのもの。 スライド文言を直して
  * `bun run scripts/landing/onboarding-videos/render.ts` を実行すると
@@ -45,74 +45,75 @@ const MASKED_CODE = "TENKA{ ****** }";
 
 export const ONBOARDING_VIDEOS: readonly OnboardingVideo[] = [
   {
-    problemId: "understand-tenkacloud",
-    titleJa: "TenkaCloud を理解する",
-    titleEn: "Understand TenkaCloud",
+    problemId: "what-is-tenkacloud",
+    titleJa: "TenkaCloud とは?",
+    titleEn: "What is TenkaCloud?",
     slides: [
       {
         badge: "INTRO",
-        durationS: 7,
-        titleJa: "TenkaCloud を理解する",
-        titleEn: "Understand TenkaCloud",
-        bulletsJa: ["読んで、答えて、得点する最初の 1 問", "ブラウザだけ・登録不要"],
-        bulletsEn: ["Read, answer, and score your first problem", "Browser only — no signup"],
+        durationS: 7.5,
+        titleJa: "TenkaCloud とは? を、触って知る",
+        titleEn: "Learn what TenkaCloud is — by playing it",
+        bulletsJa: ["説明を読むのではなく、1 問解く", "登録不要・ブラウザだけ・約 3 分"],
+        bulletsEn: ["Don't read the pitch — solve one quest", "No signup, browser only, ~3 min"],
       },
       {
         badge: "STEP 1",
-        durationS: 7,
-        titleJa: "問題文を読む",
-        titleEn: "Read the problem text",
-        bulletsJa: ["4 問の答えはすべて本文の中にある", "まず一度スクロールして全体を眺める"],
-        bulletsEn: ["All four answers are in the text itself", "Scroll once to see the whole page"],
+        durationS: 7.5,
+        titleJa: "本物のクラウドの上で競技する",
+        titleEn: "Compete on the real cloud",
+        bulletsJa: ["「ローカルでは動く」を本番品質へ鍛える", "答えは本文の太字にある"],
+        bulletsEn: ['From "works locally" to production-grade', "The answer is bold in the text"],
       },
       {
         badge: "STEP 2",
         durationS: 7.5,
-        titleJa: "2 つの競技カテゴリ",
-        titleEn: "Two competition categories",
+        titleJa: "Battle と Challenge",
+        titleEn: "Battle and Challenge",
         bulletsJa: ["リアルタイム対戦 = Battle", "自分のペースで挑む = Challenge"],
         bulletsEn: ["Real-time head-to-head = Battle", "Self-paced = Challenge"],
       },
       {
         badge: "STEP 3",
-        durationS: 7,
-        titleJa: "競技者が見る画面",
-        titleEn: "The competitor's screen",
+        durationS: 8.5,
+        titleJa: "どこで動かす?",
+        titleEn: "Where will you run it?",
         bulletsJa: [
-          "いま開いているこの画面が Participant Portal",
-          "スコア・問題・ヒントがここに集まる",
+          "ブラウザ (Lite) — 推奨。このタブでいますぐ",
+          "Codespaces — フル機能。GitHub アカウントで約 5 分",
+          "どちらを選んでも正解",
         ],
         bulletsEn: [
-          "This very screen is the Participant Portal",
-          "Scores, problems, and hints all live here",
+          "Browser (Lite) — recommended, right in this tab",
+          "Codespaces — full stack, ~5 min with GitHub",
+          "Either choice is correct",
         ],
       },
       {
         badge: "STEP 4",
-        durationS: 7,
-        titleJa: "1 アカウントで立てる構成",
-        titleEn: "The one-account setup",
-        bulletsJa: [
-          "AWS アカウント 1 つで主催できるのが Lite モード",
-          "3 問目で実際にデプロイする",
+        durationS: 8,
+        titleJa: "flag を提出してみる",
+        titleEn: "Submit your first flag",
+        bulletsJa: ["練習用 flag は本文に印字済み", "貼るだけで +100 pt — 採点を初体験"],
+        bulletsEn: [
+          "The practice flag is printed in the text",
+          "Paste it for +100 pt — first taste of scoring",
         ],
-        bulletsEn: ["Lite mode hosts on a single AWS account", "You will deploy it in problem 3"],
-      },
-      {
-        badge: "STEP 5",
-        durationS: 7.5,
-        titleJa: "答えを提出する",
-        titleEn: "Submit your answers",
-        bulletsJa: ["各提出欄に入力して +50 pt × 4", "詰まったらヒントを開く (ペナルティなし)"],
-        bulletsEn: ["Each box scores +50 pt, four in total", "Stuck? Hints are penalty-free"],
+        code: { text: MASKED_CODE, tone: "step" },
       },
       {
         badge: "GOAL",
-        durationS: 8,
-        titleJa: "200 pt で問題 1 クリア",
-        titleEn: "200 pt clears problem 1",
-        bulletsJa: ["次は「ローカルモードで遊ぶ」へ", "本物の問題コンテナを AWS なしで動かす"],
-        bulletsEn: ['Next up: "Play local mode"', "Run real problem containers with no AWS"],
+        durationS: 9,
+        titleJa: "クリアで次の問題が開く",
+        titleEn: "Clearing unlocks the next quest",
+        bulletsJa: [
+          "次は「自分の TenkaCloud Lite を立てる」",
+          "Codespaces 派は「ローカルモードで遊ぶ」も",
+        ],
+        bulletsEn: [
+          'Next: "Deploy your own TenkaCloud Lite"',
+          'Picked Codespaces? "Play local mode" awaits too',
+        ],
       },
     ],
   },
@@ -279,8 +280,8 @@ export const ONBOARDING_VIDEOS: readonly OnboardingVideo[] = [
       {
         badge: "GOAL",
         durationS: 8,
-        titleJa: "3 部作完走!",
-        titleEn: "Trilogy complete!",
+        titleJa: "オンボーディング完走!",
+        titleEn: "Onboarding complete!",
         bulletsJa: ["あなたの TenkaCloud が動いている", "次はあなたのイベントを開く番"],
         bulletsEn: ["Your own TenkaCloud is live", "Now go host your own event"],
         code: { text: "TENKA CLOUD — READY", tone: "goal" },

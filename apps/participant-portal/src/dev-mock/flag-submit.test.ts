@@ -9,7 +9,7 @@ import {
   CANONICAL_MOCK_FLAG,
   evaluateMockFlag,
   evaluateMockSubFlag,
-  UNDERSTAND_DRILL_PROBLEM_ID,
+  WHAT_IS_DRILL_PROBLEM_ID,
 } from "./flag-submit";
 
 describe("evaluateMockFlag", () => {
@@ -61,32 +61,48 @@ describe("evaluateMockSubFlag (#2696 Lite deploy drill)", () => {
   });
 });
 
-describe("evaluateMockSubFlag (#2707 understand quiz)", () => {
-  it("should accept quiz answers case-insensitively including Japanese variants", () => {
+describe("evaluateMockSubFlag (#2711 what-is-tenkacloud tutorial)", () => {
+  it("should accept the reading-quiz answers case-insensitively including Japanese variants", () => {
     expect(
-      evaluateMockSubFlag(UNDERSTAND_DRILL_PROBLEM_ID, "category-realtime", " Battle ", 50).kind,
+      evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, "tenka-what", " 本物のクラウド ", 100).kind,
     ).toBe("ok");
     expect(
-      evaluateMockSubFlag(UNDERSTAND_DRILL_PROBLEM_ID, "category-selfpaced", "チャレンジ", 50).kind,
+      evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, "tenka-what", "Real Cloud", 100).kind,
     ).toBe("ok");
     expect(
-      evaluateMockSubFlag(UNDERSTAND_DRILL_PROBLEM_ID, "competitor-screen", "portal", 50).kind,
-    ).toBe("ok");
-    expect(
-      evaluateMockSubFlag(UNDERSTAND_DRILL_PROBLEM_ID, "single-account-mode", "Lite", 50).kind,
+      evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, "battle-challenge", " Battle ", 100).kind,
     ).toBe("ok");
   });
 
-  it("should reject wrong quiz answers, Easter eggs, and unknown quiz flag ids", () => {
+  it("should accept either mode at the step-3 choice (choice, not quiz)", () => {
+    expect(evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, "choose-mode", "Lite", 100).kind).toBe(
+      "ok",
+    );
+    expect(evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, "choose-mode", "ブラウザ", 100).kind).toBe(
+      "ok",
+    );
     expect(
-      evaluateMockSubFlag(UNDERSTAND_DRILL_PROBLEM_ID, "category-realtime", "challenge", 50).kind,
-    ).toBe("wrong");
+      evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, "choose-mode", "Codespaces", 100).kind,
+    ).toBe("ok");
+  });
+
+  it("should score the printed practice flag at step 4 with paste tolerance", () => {
     expect(
-      evaluateMockSubFlag(UNDERSTAND_DRILL_PROBLEM_ID, "category-realtime", "42", 50).kind,
-    ).toBe("wrong");
+      evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, "first-flag", " TENKA{HELLO-TENKACLOUD} ", 100)
+        .kind,
+    ).toBe("ok");
+  });
+
+  it("should reject wrong answers, Easter eggs, and unknown step ids", () => {
     expect(
-      evaluateMockSubFlag(UNDERSTAND_DRILL_PROBLEM_ID, "no-such-question", "battle", 50).kind,
+      evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, "battle-challenge", "challenge", 100).kind,
     ).toBe("wrong");
+    expect(evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, "tenka-what", "42", 100).kind).toBe(
+      "wrong",
+    );
+    expect(evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, "no-such-step", "battle", 100).kind).toBe(
+      "wrong",
+    );
   });
 });
 
