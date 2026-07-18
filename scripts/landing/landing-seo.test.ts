@@ -246,6 +246,23 @@ describe("demo deep-link reload recovery (Cloudflare implicit SPA fallback)", ()
       expect(html).toContain('"/?goto=" + encodeURIComponent');
     }
   });
+
+  // 404.html の存在自体が Cloudflare の暗黙 SPA fallback (= 未知パスに root index.html を
+  // 200 で返す) を解除するスイッチ。 消えると「崩れた landing」 が復活するので存在を pin する。
+  it("should ship a custom 404 page that disables the implicit SPA fallback", () => {
+    const html = read("landing/404.html");
+    // デモ deep link が _redirects に拾われずここへ落ちても復旧できる (index.html と同じ script)。
+    expect(html).toContain("portal-demo|admin-demo");
+    expect(html).toContain('"/?goto=" + encodeURIComponent');
+    // 任意の深さの URL で描画されるため、 相対パスの外部アセット参照は禁止 (inline 自己完結)。
+    expect(html).not.toMatch(/(?:href|src)="\.\.?\//);
+    expect(html).not.toContain('rel="stylesheet"');
+    // 迷子ユーザー向けの両言語コピーと帰り道。
+    expect(html).toContain("ページが見つかりません");
+    expect(html).toContain("Page not found");
+    expect(html).toContain('href="/"');
+    expect(html).toContain('name="robots" content="noindex"');
+  });
 });
 
 /**
