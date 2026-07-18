@@ -64,6 +64,21 @@ jobs:
         run: |
           make dup-check
 
+      # knip dead-code scan: report-only ("知らせるだけ"). knip reports everything that
+      # exists right now, not the delta this PR introduced, so gating on it would punish
+      # PRs for pre-existing debt (contrast dup-check above, which is delta-exact via the
+      # baseline ratchet and therefore CAN gate). Findings go to the job summary; humans
+      # judge whether a finding is real and whether this PR made it worse. `|| true` keeps
+      # a knip crash from blocking CI — this step is advisory by design.
+      - name: Dead-code scan (knip, report-only)
+        run: |
+          {
+            echo '## Dead-code scan (knip, report-only)'
+            echo '```'
+            bun run --silent dead-code 2>/dev/null || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       # Submodule pin guard: reject PRs that roll the problems/ gitlink backward or
       # sideways (the ping-pong where an old-pin branch reverts a newer pin, e.g. #1927).
       # Shallow checkout has no origin/main / submodule history, so fetch both first.

@@ -95,6 +95,7 @@ We don't use a single-table DynamoDB design. Each stack owns its own tables (Ten
 | `make dup-check`        | jscpd baseline ratchet — fails only when duplication grows past `scripts/quality/duplication-baseline.json` |
 | `make dup-baseline`     | Re-freeze the duplication baseline (increases must be justified in the PR body)  |
 | `make dup-report`       | Human-readable listing of every clone jscpd finds                                |
+| `make dead-code`        | knip dead-code report (unused files / exports) — report-only, never fails        |
 | `make install_ci`       | CI-only install: `bun install --frozen-lockfile --ignore-scripts` + Safe Chain |
 | `make local`            | Docker local-play (no AWS) for one problem — `make local-up` / `local-down` / `local-status` / `local-evaluate` |
 | `make help`             | List every Makefile target                                               |
@@ -155,7 +156,7 @@ ADRs must be self-contained for OSS readers. Do not leave chat context, rolling-
 
 You are not done until they all pass. If something fails, find the root cause and fix the code (don't edit `biome.json` / `vitest.config.ts` / etc. to mask it).
 
-`make before-commit` (lint + test) is a fast sanity check, not a full CI mirror — CI (`.github/workflows/ci.yml`) additionally runs `audit-deps`, the **duplication baseline ratchet** (`make dup-check` — jscpd; fails only when a PR grows copy-paste past `scripts/quality/duplication-baseline.json`, intentional responsibility-split similarity stays baselined), the submodule pin guard, **problem-catalog validation** (`make validate-problems` — schema + the bilingual `README.md`/`README.ja.md` invariant, #2254), and a 3-shard coverage matrix (infrastructure / spas / packages, #2513) that runs a per-shard 100％ coverage gate for agent-owned workspaces plus a per-shard Codecov upload that Codecov merges into one commit report, so a green `before-commit` does not guarantee a green CI. Run `make ci-local` for the full mirror (same checks CI runs, same order, minus the Codecov upload) before opening a PR if you want that guarantee locally.
+`make before-commit` (lint + test) is a fast sanity check, not a full CI mirror — CI (`.github/workflows/ci.yml`) additionally runs `audit-deps`, the **duplication baseline ratchet** (`make dup-check` — jscpd; fails only when a PR grows copy-paste past `scripts/quality/duplication-baseline.json`, intentional responsibility-split similarity stays baselined), the submodule pin guard, a **report-only knip dead-code scan** (`make dead-code` — knip reports current totals rather than the PR delta, so it informs the job summary instead of gating; see [`docs/shared-utils.md`](./docs/shared-utils.md) for the prevention side), **problem-catalog validation** (`make validate-problems` — schema + the bilingual `README.md`/`README.ja.md` invariant, #2254), and a 3-shard coverage matrix (infrastructure / spas / packages, #2513) that runs a per-shard 100％ coverage gate for agent-owned workspaces plus a per-shard Codecov upload that Codecov merges into one commit report, so a green `before-commit` does not guarantee a green CI. Run `make ci-local` for the full mirror (same checks CI runs, same order, minus the Codecov upload) before opening a PR if you want that guarantee locally.
 
 ### Other workflows
 
