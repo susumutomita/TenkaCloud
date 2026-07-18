@@ -1,5 +1,5 @@
 /**
- * #2707 P1: オンボーディング 3 部作の 1 分 operation 動画を生成する CLI。
+ * #2707 P1 / #2711: オンボーディングドリル 3 本の 1 分 operation 動画を生成する CLI。
  *
  * 使い方:
  *   bun run scripts/landing/onboarding-videos/render.ts

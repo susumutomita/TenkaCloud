@@ -4,7 +4,7 @@ import {
   LOCAL_DRILL_PROBLEM_ID,
 } from "@tenkacloud/portal-contracts";
 import { describe, expect, it } from "vitest";
-import { evaluateMockSubFlag, UNDERSTAND_DRILL_PROBLEM_ID } from "../dev-mock/flag-submit";
+import { evaluateMockSubFlag, WHAT_IS_DRILL_PROBLEM_ID } from "../dev-mock/flag-submit";
 import {
   DEV_MOCK_LEADERBOARD,
   DEV_MOCK_NOTIFICATIONS,
@@ -12,17 +12,40 @@ import {
 } from "./dev-mock-fixtures";
 
 /**
- * Issue #2696 / #2707: LP デモの固定出題 (オンボーディング 3 部作 + 2 クエスト) の
+ * Issue #2696 / #2707 / #2711: LP デモの固定出題 (オンボーディングドリル + 2 クエスト) の
  * 整合性を pin する。 ドリルの sub-flag id が判定側 (`evaluateMockSubFlag`) と揃って
  * いなければ永遠に wrong を返すし、 ヒントの無いドリルは「本文は概要 → ヒントで
- * ステップバイステップ」 という 3 部作の構造契約を破る。
+ * ステップバイステップ」 という構造契約を破る。 #2711 で問題 1 は what-is-tenkacloud
+ * (4 ステップ、 モード 2 択はステップ 3) になり、 順序は チュートリアル → Lite → ローカル。
  */
 describe("dev-mock fixtures", () => {
-  const TRILOGY_IDS = [UNDERSTAND_DRILL_PROBLEM_ID, LOCAL_DRILL_PROBLEM_ID, LITE_DRILL_PROBLEM_ID];
+  const TRILOGY_IDS = [WHAT_IS_DRILL_PROBLEM_ID, LITE_DRILL_PROBLEM_ID, LOCAL_DRILL_PROBLEM_ID];
   const drills = DEV_MOCK_TEAM_VIEW.problems.filter((p) => TRILOGY_IDS.includes(p.problemId));
 
-  it("should pin the onboarding trilogy first, in journey order", () => {
+  it("should pin the onboarding drills first, in journey order (#2711)", () => {
     expect(DEV_MOCK_TEAM_VIEW.problems.slice(0, 3).map((p) => p.problemId)).toEqual(TRILOGY_IDS);
+  });
+
+  it("should give the tutorial the 4-step shape with the mode choice at step 3 (#2711)", () => {
+    const tutorial = drills.find((p) => p.problemId === WHAT_IS_DRILL_PROBLEM_ID);
+    expect(tutorial?.scoring?.flags?.map((f) => f.id)).toEqual([
+      "tenka-what",
+      "battle-challenge",
+      "choose-mode",
+      "first-flag",
+    ]);
+    // モードの 2 択はステップ 3 のセクションで初めて出す (それ以前の本文に出さない)。
+    const body = tutorial?.description ?? "";
+    const step3At = body.indexOf("ステップ 3");
+    expect(step3At).toBeGreaterThan(-1);
+    expect(body.slice(0, step3At)).not.toContain("Codespaces");
+    // どちらのモードを選んでも正解 (= クイズではなく選択)。
+    expect(evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, "choose-mode", "lite", 100).kind).toBe(
+      "ok",
+    );
+    expect(
+      evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, "choose-mode", "codespaces", 100).kind,
+    ).toBe("ok");
   });
 
   it("should ship every trilogy problem as an unsolved multi-flag drill", () => {
@@ -98,9 +121,9 @@ describe("dev-mock fixtures", () => {
     }
   });
 
-  it("should announce the trilogy in the notifications feed", () => {
+  it("should announce the onboarding drills in the notifications feed", () => {
     const bodies = DEV_MOCK_NOTIFICATIONS.items.map((n) => `${n.title} ${n.body}`).join("\n");
-    expect(bodies).toContain("TenkaCloud を理解する");
+    expect(bodies).toContain("TenkaCloud とは?");
     expect(bodies).toContain("ローカルモードで遊ぶ");
     expect(bodies).toContain("自分の TenkaCloud Lite を立てる");
   });

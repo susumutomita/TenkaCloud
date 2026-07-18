@@ -152,36 +152,25 @@
         <span data-i18n="hero.h1a">The cloud engineer's </span><em data-i18n="hero.h1b">Tenka-Ichi.</em>
       </h1>
       <p class="sub" data-i18n="hero.sub">An OSS competition platform on real AWS. Take an app that "only works locally" and make it production-grade — <strong>auth, exposure, audit, and availability</strong> are auto-scored every minute, and the leaderboard moves in real time. Organizers run events, scoring, and a reusable problem catalog from one console.</p>
-      <div class="cta-row">
-        <a
-          class="cta-primary"
-          href="/portal-demo/start?demo=1"
-          data-cta="start-drill"
-        >
-          <span class="cta-label">
-            <span data-i18n="hero.cta_start">Start</span>
-            <small class="cta-note" data-i18n="hero.cta_start_note">No signup · Browser only · ~3 min</small>
-          </span>
-          →
-        </a>
-        <a
-          class="cta-primary"
-          href="https://github.com/susumutomita/TenkaCloud#deploy-on-aws"
-          target="_blank"
-          rel="noopener noreferrer"
-          data-cta="deploy-aws"
-        >
-          <span class="cta-label">
-            <span data-i18n="hero.cta_host">Host your own event</span>
-            <small class="cta-note" data-i18n="hero.cta_host_note">AWS account · Billed · ~30 min</small>
-          </span>
-          →
-        </a>
-      </div>
+      <!-- #2711 follow-up: /portal-demo/start の deep link は静的ホスティングの rewrite が
+           効かない環境で 404 fallback に崩れるため、 実在する index.html に着地して
+           SPA 側 (`goto=start`) で /start へ遷移する。 -->
+      <a class="hero-quest-card" href="/portal-demo/?demo=1&amp;goto=start" data-cta="start-drill">
+        <span class="hero-quest-meta" data-i18n="hero.quest_meta">First quest · No signup · ~3 min</span>
+        <span class="hero-quest-tags">
+          <code>what-is-tenkacloud</code>
+          <span class="hero-quest-badge primary" data-i18n="hero.quest_badge">Tutorial</span>
+          <span class="hero-quest-badge" data-i18n="hero.quest_diff">Difficulty: Intro</span>
+        </span>
+        <span class="hero-quest-title" data-i18n="hero.quest_title">Learn what TenkaCloud is — by playing it.</span>
+        <span class="hero-quest-desc" data-i18n="hero.quest_desc">Don't read the pitch — solve one quest. You'll learn the product and its modes inside the problem; clearing it unlocks <code>deploy-tenkacloud-lite</code>.</span>
+        <span class="hero-quest-cta"><span data-i18n="hero.quest_cta">Start with this quest</span> →</span>
+      </a>
       <p class="hero-secondary">
-        <a href="https://codespaces.new/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer" data-cta="try-codespaces"><span data-i18n="hero.cta_play">Play in Codespaces</span></a>
+        <span data-i18n="hero.host_prefix">Hosting an event?</span>
+        <a href="https://github.com/susumutomita/TenkaCloud#deploy-on-aws" target="_blank" rel="noopener noreferrer" data-cta="deploy-aws"><span data-i18n="hero.cta_host">Host your own event</span> →</a>
         ·
-        <a href="#pricing" data-cta="get-quote"><span data-i18n="hero.cta_quote">Get a Hosted Event quote</span></a>
+        <a href="#pricing" data-cta="get-quote"><span data-i18n="hero.cta_quote">Get a Hosted Event quote</span> →</a>
       </p>
       <p class="hero-trust" data-i18n="hero.trust">Operated by BULL LLC · Apache 2.0</p>
     </div>

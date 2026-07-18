@@ -117,16 +117,15 @@ describe("landing page SEO", () => {
 });
 
 /**
- * Issue #2707 P0-5 (supersedes the #2696 PR 4 two-choice split): the hero now
- * leads straight into the product — the primary CTA 「始める」 deep-links to the
- * demo portal's `/start` route, which lands on onboarding drill problem 1.
- * The two-primary discipline from #2696 is kept (start-drill / deploy-aws);
- * Codespaces moves to a secondary hero link because onboarding drill problem 2
- * sends visitors there with full context. Analytics continuity: get-quote and
- * try-codespaces keep their data-cta attributes and hrefs; try-demo is retired
- * because its destination (the demo portal) became the primary CTA itself.
+ * Issue #2711 (design 6a, supersedes the #2707 start-direct buttons): the hero
+ * shows exactly one participant entry — a quest card for the tutorial problem
+ * what-is-tenkacloud — with no stacked primary buttons. The organizer path is
+ * demoted to a text-link row below the card. The Lite/Codespaces mode choice
+ * must not appear on the LP at all (it lives inside the problem, step 3).
+ * Analytics continuity: start-drill / deploy-aws / get-quote keep their
+ * data-cta attributes and destinations.
  */
-describe("landing hero start-direct CTA (Issue #2707 P0-5)", () => {
+describe("landing hero quest card (Issue #2711)", () => {
   const index = read("landing/index.html");
   const app = read("landing/app.js");
 
@@ -138,75 +137,59 @@ describe("landing hero start-direct CTA (Issue #2707 P0-5)", () => {
     return html.slice(start, end);
   }
 
-  function ctaRow(html: string): string {
-    const hero = heroSection(html);
-    const start = hero.indexOf('<div class="cta-row">');
-    const end = hero.indexOf("</div>", start);
-    expect(start, "cta-row not found in hero").toBeGreaterThan(-1);
-    return hero.slice(start, end);
-  }
-
-  it("should present exactly two primary CTAs in the hero cta-row", () => {
-    const row = ctaRow(index);
-    const primaryMatches = [...row.matchAll(/class="cta-primary"/g)];
-    expect(primaryMatches).toHaveLength(2);
+  it("should show no stacked primary buttons (cta-primary / cta-row) in the hero", () => {
+    const hero = heroSection(index);
+    expect(hero).not.toContain("cta-primary");
+    expect(hero).not.toContain("cta-row");
   });
 
-  it("should point the start primary CTA straight at the demo portal /start deep link", () => {
-    const row = ctaRow(index);
-    expect(row).toContain('data-cta="start-drill"');
-    expect(row).toContain('href="/portal-demo/start?demo=1"');
+  it("should present exactly one quest card that lands on a real file (rewrite-independent)", () => {
+    const hero = heroSection(index);
+    expect([...hero.matchAll(/class="hero-quest-card"/g)]).toHaveLength(1);
+    // /portal-demo/start の deep link は静的ホスティングの rewrite が無い環境で 404
+    // fallback に崩れる。 入口は必ず実在する index.html + `goto=start` (SPA 側で遷移)。
+    expect(hero).toContain('href="/portal-demo/?demo=1&amp;goto=start"');
+    expect(hero).not.toContain('href="/portal-demo/start');
+    expect(hero).toContain('data-cta="start-drill"');
+    expect(hero).toContain("<code>what-is-tenkacloud</code>");
     // 同一 origin への直行なので新規 tab で開かない (= 直行型の体験を壊さない)。
-    const startAnchor = row.slice(row.indexOf('href="/portal-demo/start?demo=1"'));
-    expect(startAnchor.slice(0, startAnchor.indexOf(">"))).not.toContain("target=");
+    const card = hero.slice(hero.indexOf('class="hero-quest-card"'));
+    expect(card.slice(0, card.indexOf(">"))).not.toContain("target=");
   });
 
-  it("should point the host-your-own-event primary CTA at the README Deploy on AWS section", () => {
-    const row = ctaRow(index);
-    expect(row).toContain('data-cta="deploy-aws"');
-    expect(row).toContain('href="https://github.com/susumutomita/TenkaCloud#deploy-on-aws"');
-  });
-
-  it("should demote the Codespaces CTA to a secondary hero link with its data-cta and href preserved", () => {
+  it("should not present the Lite/Codespaces mode choice anywhere in the hero", () => {
     const hero = heroSection(index);
-    const row = ctaRow(index);
-    expect(row).not.toContain("try-codespaces");
-    expect(hero).toContain('data-cta="try-codespaces"');
-    expect(hero).toContain('href="https://codespaces.new/susumutomita/TenkaCloud"');
+    expect(hero).not.toContain("codespaces.new");
+    expect(hero).not.toContain("Codespaces");
   });
 
-  it("should keep the Hosted Event quote CTA as a secondary hero link with its data-cta and href preserved", () => {
+  it("should demote the organizer links to a text row with data-cta and hrefs preserved", () => {
     const hero = heroSection(index);
-    const row = ctaRow(index);
-    expect(row).not.toContain("get-quote");
+    expect(hero).toContain('data-cta="deploy-aws"');
+    expect(hero).toContain('href="https://github.com/susumutomita/TenkaCloud#deploy-on-aws"');
     expect(hero).toContain('data-cta="get-quote"');
     expect(hero).toContain('href="#pricing"');
   });
 
-  it("should retire the try-demo CTA now that the demo portal is the primary destination", () => {
-    const hero = heroSection(index);
-    expect(hero).not.toContain("try-demo");
-    expect(app).not.toContain("hero.cta_demo");
+  it("should define matching ja/en quest-card copy in app.js", () => {
+    expect(app).toContain('"hero.quest_meta": "最初の 1 問 · 登録不要 · 約 3 分"');
+    expect(app).toContain('"hero.quest_badge": "チュートリアル"');
+    expect(app).toContain('"hero.quest_title": "TenkaCloud とは? を、触って知る。"');
+    expect(app).toContain('"hero.quest_cta": "この問題で始める"');
+    expect(app).toContain('"hero.host_prefix": "主催者の方へ:"');
+    expect(app).toContain('"hero.quest_meta": "First quest · No signup · ~3 min"');
+    expect(app).toContain('"hero.quest_badge": "Tutorial"');
+    expect(app).toContain('"hero.quest_title": "Learn what TenkaCloud is — by playing it."');
+    expect(app).toContain('"hero.quest_cta": "Start with this quest"');
+    expect(app).toContain('"hero.host_prefix": "Hosting an event?"');
   });
 
-  it("should define matching ja/en hero copy for the start-direct CTA in app.js", () => {
-    expect(app).toContain('"hero.cta_start": "始める"');
-    expect(app).toContain('"hero.cta_start_note": "登録不要 · ブラウザだけ · 約 3 分"');
-    expect(app).toContain('"hero.cta_play": "Codespaces で遊ぶ"');
-    expect(app).toContain('"hero.cta_host": "自分のイベントを開く"');
-    expect(app).toContain('"hero.cta_start": "Start"');
-    expect(app).toContain('"hero.cta_start_note": "No signup · Browser only · ~3 min"');
-    expect(app).toContain('"hero.cta_play": "Play in Codespaces"');
-    expect(app).toContain('"hero.cta_host": "Host your own event"');
-  });
-
-  it("should publish the same start-direct CTA structure on the generated English landing page", () => {
+  it("should publish the same quest-card structure on the generated English landing page", () => {
     const english = read("landing/index.en.html");
-    const row = ctaRow(english);
-    expect([...row.matchAll(/class="cta-primary"/g)]).toHaveLength(2);
-    expect(row).toContain('data-cta="start-drill"');
-    expect(row).toContain('data-cta="deploy-aws"');
-    expect(english).toContain("Start");
-    expect(english).toContain("Host your own event");
+    const hero = heroSection(english);
+    expect(hero).not.toContain("cta-primary");
+    expect([...hero.matchAll(/class="hero-quest-card"/g)]).toHaveLength(1);
+    expect(hero).toContain('data-cta="start-drill"');
+    expect(english).toContain("Learn what TenkaCloud is");
   });
 });

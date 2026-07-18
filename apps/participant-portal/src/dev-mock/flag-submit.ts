@@ -63,19 +63,43 @@ export function evaluateMockFlag(rawFlag: string, points: number): SubmitFlagOut
   return WRONG_OUTCOME;
 }
 
-/** Issue #2707: 「TenkaCloud を理解する」 クイズ問題の id (demo fixture 専用)。 */
-export const UNDERSTAND_DRILL_PROBLEM_ID = "understand-tenkacloud";
+/** Issue #2711: チュートリアル問題 what-is-tenkacloud の id (demo fixture 専用)。 */
+export const WHAT_IS_DRILL_PROBLEM_ID = "what-is-tenkacloud";
 
 /**
- * Issue #2707: クイズ型 sub-flag の許容解。 問題文 (description) を読めば導ける
+ * Issue #2707 / #2711: クイズ型 sub-flag の許容解。 問題文 (description) を読めば導ける
  * 単語を、 表記揺れ (英/日) 込みで列挙する。 判定は trim + 小文字化の完全一致。
+ *
+ * what-is-tenkacloud の 4 ステップ (#2711 デザイン 6b):
+ *   1. tenka-what      — TenkaCloud とは (本文に答えがある読解クイズ)
+ *   2. battle-challenge — Battle と Challenge の区別
+ *   3. choose-mode      — モードを選ぶ。 ブラウザ (Lite) / Codespaces のどちらを
+ *                         選んでも正解 (= クイズではなく選択。 詳細はヒントに)
+ *   4. first-flag       — 本文に印字された flag をそのまま提出する採点体験
  */
 const QUIZ_ANSWERS: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> = {
-  [UNDERSTAND_DRILL_PROBLEM_ID]: {
-    "category-realtime": ["battle", "バトル"],
-    "category-selfpaced": ["challenge", "チャレンジ"],
-    "competitor-screen": ["participant portal", "portal", "参加者ポータル", "ポータル"],
-    "single-account-mode": ["lite", "ライト", "lite mode", "lite モード"],
+  [WHAT_IS_DRILL_PROBLEM_ID]: {
+    "tenka-what": [
+      "本物のクラウド",
+      "本物のクラウドアカウント",
+      "クラウド",
+      "real cloud",
+      "real cloud accounts",
+      "the real cloud",
+      "aws",
+    ],
+    "battle-challenge": ["battle", "バトル"],
+    "choose-mode": [
+      "lite",
+      "ライト",
+      "browser",
+      "ブラウザ",
+      "ブラウザ (lite)",
+      "browser (lite)",
+      "codespaces",
+      "コードスペース",
+    ],
+    "first-flag": ["tenka{hello-tenkacloud}"],
   },
   [LOCAL_DRILL_PROBLEM_ID]: {
     "portal-port": ["5175"],

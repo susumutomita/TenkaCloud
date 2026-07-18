@@ -151,36 +151,25 @@
         <span data-i18n="hero.h1a">クラウドエンジニアの、</span><em data-i18n="hero.h1b">天下一武道会。</em>
       </h1>
       <p class="sub" data-i18n="hero.sub">本物の AWS で競う、OSS の競技プラットフォーム。 「ローカルでは動く」アプリを本番品質へ ── 認証・公開範囲・監査・可用性の仕上がりを毎分自動採点し、 順位がリアルタイムに動く。 主催者はイベント・採点・再利用できる問題カタログを 1 画面で運営。</p>
-      <div class="cta-row">
-        <a
-          class="cta-primary"
-          href="/portal-demo/start?demo=1"
-          data-cta="start-drill"
-        >
-          <span class="cta-label">
-            <span data-i18n="hero.cta_start">始める</span>
-            <small class="cta-note" data-i18n="hero.cta_start_note">登録不要 · ブラウザだけ · 約 3 分</small>
-          </span>
-          →
-        </a>
-        <a
-          class="cta-primary"
-          href="https://github.com/susumutomita/TenkaCloud#deploy-on-aws"
-          target="_blank"
-          rel="noopener noreferrer"
-          data-cta="deploy-aws"
-        >
-          <span class="cta-label">
-            <span data-i18n="hero.cta_host">自分のイベントを開く</span>
-            <small class="cta-note" data-i18n="hero.cta_host_note">AWS アカウント · 課金あり · 約 30 分</small>
-          </span>
-          →
-        </a>
-      </div>
+      <!-- #2711 follow-up: /portal-demo/start の deep link は静的ホスティングの rewrite が
+           効かない環境で 404 fallback に崩れるため、 実在する index.html に着地して
+           SPA 側 (`goto=start`) で /start へ遷移する。 -->
+      <a class="hero-quest-card" href="/portal-demo/?demo=1&amp;goto=start" data-cta="start-drill">
+        <span class="hero-quest-meta" data-i18n="hero.quest_meta">最初の 1 問 · 登録不要 · 約 3 分</span>
+        <span class="hero-quest-tags">
+          <code>what-is-tenkacloud</code>
+          <span class="hero-quest-badge primary" data-i18n="hero.quest_badge">チュートリアル</span>
+          <span class="hero-quest-badge" data-i18n="hero.quest_diff">難易度: 入門</span>
+        </span>
+        <span class="hero-quest-title" data-i18n="hero.quest_title">TenkaCloud とは? を、触って知る。</span>
+        <span class="hero-quest-desc" data-i18n="hero.quest_desc">説明を読むのではなく、1 問解く。プロダクトの仕組みもモードの違いも問題の中で分かり、クリアすると次の問題 <code>deploy-tenkacloud-lite</code> が開く。</span>
+        <span class="hero-quest-cta"><span data-i18n="hero.quest_cta">この問題で始める</span> →</span>
+      </a>
       <p class="hero-secondary">
-        <a href="https://codespaces.new/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer" data-cta="try-codespaces"><span data-i18n="hero.cta_play">Codespaces で遊ぶ</span></a>
+        <span data-i18n="hero.host_prefix">主催者の方へ:</span>
+        <a href="https://github.com/susumutomita/TenkaCloud#deploy-on-aws" target="_blank" rel="noopener noreferrer" data-cta="deploy-aws"><span data-i18n="hero.cta_host">自分のイベントを開く</span> →</a>
         ·
-        <a href="#pricing" data-cta="get-quote"><span data-i18n="hero.cta_quote">Hosted Event の見積もり</span></a>
+        <a href="#pricing" data-cta="get-quote"><span data-i18n="hero.cta_quote">Hosted Event の見積もり</span> →</a>
       </p>
       <p class="hero-trust" data-i18n="hero.trust">合同会社 BULL 運営 · Apache 2.0</p>
     </div>
