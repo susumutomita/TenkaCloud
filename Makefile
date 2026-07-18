@@ -13,7 +13,7 @@ HELP_RENDERER := scripts/ops/make-help.awk
 .PHONY: help help-en help-ja install install_ci submodule-latest build typecheck test test-coverage test-scripts audit-deps before-commit ci-local \
         lint lint-md lint-text lint-format \
         fix fix-md fix-text fix-format format \
-        harness harness-test tech-debt \
+        harness harness-test tech-debt dead-code \
         pack-init pack-validate pack-install pack-activate pack-deactivate pack-list \
         env-check env-check-lite env-init turso-live turso-live-guide turso-live-preflight turso-live-verify-cfn \
         deploy deploy-saas destroy destroy-saas \
@@ -82,6 +82,12 @@ dup-baseline: ## Re-freeze the duplication baseline (justify increases in the PR
 
 dup-report: ## Show every clone jscpd finds (human-readable) | jscpdの全クローンを表示
 	bunx jscpd
+
+# knip デッドコードスキャン。 knip は「この PR で増えた分」ではなく「現時点の全量」しか出せない
+# ため、 CI ゲートにはせず報告のみ (= 知らせるだけ)。 rules は knip.json で warn 化済みなので
+# 検出があっても exit 0。 出しどころ: CI job summary + ローカルのこのターゲット。
+dead-code: ## Report unused files/exports found by knip (never fails) | knipで未使用コード検出(報告のみ)
+	bun run dead-code
 # Pre-PR gate for the product BODY, run by the pre-commit hook. 品質ゲート (HTTP magic number /
 # template / coverage / IAM ASCII / merge / submodule) は本体と混ぜないため
 # .claude/skills/quality-gates へ分離済み — pre-commit フックが before-commit とは別呼び出しで
