@@ -134,6 +134,14 @@ describe("dev-mock fixtures", () => {
     expect(drill?.i18n?.en?.videoUrl).toBe("https://www.youtube.com/embed/GDu9FhWrQns");
   });
 
+  it("should localize the What is TenkaCloud tutorial video for English", () => {
+    const drill = DEV_MOCK_TEAM_VIEW.problems.find(
+      (problem) => problem.problemId === WHAT_IS_DRILL_PROBLEM_ID,
+    );
+    expect(drill?.videoUrl).toBe("https://www.youtube.com/embed/5_ZEa_hLFzw");
+    expect(drill?.i18n?.en?.videoUrl).toBe("https://www.youtube.com/embed/GAdV_fZMzk0");
+  });
+
   it("should describe local mode on the learner's Mac, not as a Codespaces tutorial", () => {
     const drill = drills.find((problem) => problem.problemId === LOCAL_DRILL_PROBLEM_ID);
     expect(drill?.description).toContain("手元の Mac");
@@ -143,18 +151,19 @@ describe("dev-mock fixtures", () => {
     expect(drill?.i18n?.en?.description).not.toContain("Codespaces");
   });
 
-  it("should keep stale local-mode footage off the portal and use YouTube for AI video", () => {
+  it("should keep stale local-mode footage off the portal and use YouTube for current videos", () => {
     for (const drill of drills) {
-      // AI-agent tutorial はリポジトリ肥大化を避けるため YouTube へ分離する。
-      if (drill.problemId === "ai-agent-local-mac") {
+      // 公開済みチュートリアルはリポジトリ肥大化を避けるため YouTube へ分離する。
+      if (drill.problemId === WHAT_IS_DRILL_PROBLEM_ID) {
+        expect(drill.videoUrl).toBe("https://www.youtube.com/embed/5_ZEa_hLFzw");
+        continue;
+      }
+      if (drill.problemId === AI_AGENT_LOCAL_DRILL_PROBLEM_ID) {
         expect(drill.videoUrl).toBe("https://www.youtube.com/embed/nLsSJ3npdfw");
         continue;
       }
       // 旧版は、正しいYouTube版ができるまで表示しない。
-      if (
-        drill.problemId === LOCAL_DRILL_PROBLEM_ID ||
-        drill.problemId === WHAT_IS_DRILL_PROBLEM_ID
-      ) {
+      if (drill.problemId === LOCAL_DRILL_PROBLEM_ID) {
         expect(drill.videoUrl).toBeUndefined();
         continue;
       }

@@ -62,7 +62,8 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
     {
       jobId: "01HZX0M0UNDR5TND7ENKA0CL0D",
       problemId: WHAT_IS_DRILL_PROBLEM_ID,
-      // 45秒の旧版は撤去済み。新しい15秒版はYouTube公開後に言語別URLを設定する。
+      // 30 秒の縦型オンボーディング動画は、リポジトリを肥大化させないよう YouTube で配信する。
+      videoUrl: "https://www.youtube.com/embed/5_ZEa_hLFzw",
       name: "TenkaCloud とは?",
       // #2711 (デザイン 6b): 4 ステップのチュートリアル。 モードの 2 択 (ブラウザ Lite /
       // Codespaces) は LP には出さず、 ここのステップ 3 で初めて提示する。
@@ -97,6 +98,7 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
       i18n: {
         en: {
           name: "What is TenkaCloud?",
+          videoUrl: "https://www.youtube.com/embed/GAdV_fZMzk0",
           description: [
             "Welcome. This is not a pitch page — it is a **solvable problem**. Answer 4 steps and you will know what TenkaCloud is.",
             "",
