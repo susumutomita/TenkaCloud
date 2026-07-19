@@ -46,7 +46,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.3",
     "@textlint-ja/textlint-rule-preset-ai-writing": "^1.7.0",
-    "@vitest/coverage-v8": "^4.1.9",
+    "@vitest/coverage-v8": "^4.1.10",
     "husky": "^9.1.7",
     "jscpd": "^5.0.12",
     "knip": "^6.27.0",
