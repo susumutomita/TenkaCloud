@@ -130,17 +130,15 @@ describe("dev-mock fixtures", () => {
     const drill = DEV_MOCK_TEAM_VIEW.problems.find(
       (problem) => problem.problemId === "ai-agent-local-mac",
     );
-    expect(drill?.videoUrl).toBe("/videos/onboarding/ai-agent-local-mac-privacy-safe.mp4");
-    expect(drill?.i18n?.en?.videoUrl).toBe(
-      "/videos/onboarding/ai-agent-local-mac-privacy-safe-en.mp4",
-    );
+    expect(drill?.videoUrl).toBe("https://www.youtube.com/embed/nLsSJ3npdfw");
+    expect(drill?.i18n?.en?.videoUrl).toBe("https://www.youtube.com/embed/GDu9FhWrQns");
   });
 
-  it("should ship a self-hosted onboarding video on every onboarding drill (#2707 P0-1)", () => {
+  it("should ship a playable onboarding video on every onboarding drill (#2707 P0-1)", () => {
     for (const drill of drills) {
-      // privacy-safe 版は旧動画の CDN cache を確実に回避するため suffix 付き。
+      // AI-agent tutorial はリポジトリ肥大化を避けるため YouTube へ分離する。
       if (drill.problemId === "ai-agent-local-mac") {
-        expect(drill.videoUrl).toBe("/videos/onboarding/ai-agent-local-mac-privacy-safe.mp4");
+        expect(drill.videoUrl).toBe("https://www.youtube.com/embed/nLsSJ3npdfw");
         continue;
       }
       // その他は problemId とファイル名を一致させる既存 contract を維持する。

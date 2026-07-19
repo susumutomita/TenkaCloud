@@ -66,6 +66,7 @@ export class ParticipantPortalHosting extends Construct {
         `https://*.lambda-url.${region}.on.aws`,
         `https://*.execute-api.${region}.amazonaws.com`,
       ],
+      frameSrcAllowedOrigins: ["https://www.youtube.com"],
     });
 
     const distDir = path.join(

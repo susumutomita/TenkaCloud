@@ -91,10 +91,15 @@ function replaceElementContent(html: string, key: string, value: string): string
   });
 }
 
-function replaceI18nHref(html: string, key: string, value: string): string {
+function replaceI18nAttribute(
+  html: string,
+  key: string,
+  value: string,
+  attribute: "href" | "src" | "title",
+): string {
   const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const pattern = new RegExp(
-    `(<a\\b(?=[^>]*\\bdata-i18n-href="${escapedKey}")[^>]*?\\shref=")[^"]*(")`,
+    `(<[\\w:-]+\\b(?=[^>]*\\bdata-i18n-${attribute}="${escapedKey}")[^>]*?\\s${attribute}=")[^"]*(")`,
     "g",
   );
   return html.replace(pattern, (_match, opening, closing) => `${opening}${value}${closing}`);
@@ -195,7 +200,9 @@ export function generateEnglishLanding(): string {
   for (const [key, value] of Object.entries(translations)) {
     if (typeof value === "string") {
       html = replaceElementContent(html, key, value);
-      html = replaceI18nHref(html, key, value);
+      html = replaceI18nAttribute(html, key, value, "href");
+      html = replaceI18nAttribute(html, key, value, "src");
+      html = replaceI18nAttribute(html, key, value, "title");
     }
   }
 

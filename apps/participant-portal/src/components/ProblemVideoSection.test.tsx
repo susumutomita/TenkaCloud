@@ -33,4 +33,25 @@ describe("ProblemVideoSection", () => {
     expect(container.querySelector("video")).toBeNull();
     expect(screen.queryByText("problem_detail.video_header")).toBeNull();
   });
+
+  it("should render an allow-listed YouTube embed without falling back to a video element", () => {
+    const { container } = render(
+      <ProblemVideoSection videoUrl="https://www.youtube.com/embed/nLsSJ3npdfw" />,
+    );
+    const iframe = container.querySelector("iframe");
+    expect(iframe?.getAttribute("src")).toBe("https://www.youtube.com/embed/nLsSJ3npdfw");
+    expect(iframe?.hasAttribute("allowfullscreen")).toBe(true);
+    expect(container.querySelector("video")).toBeNull();
+    expect(screen.getByText("problem_detail.video_note_youtube")).toBeDefined();
+  });
+
+  it("should not iframe a non-allow-listed external URL", () => {
+    const { container } = render(
+      <ProblemVideoSection videoUrl="https://example.com/embed/nLsSJ3npdfw" />,
+    );
+    expect(container.querySelector("iframe")).toBeNull();
+    expect(container.querySelector("video")?.getAttribute("src")).toBe(
+      "https://example.com/embed/nLsSJ3npdfw",
+    );
+  });
 });

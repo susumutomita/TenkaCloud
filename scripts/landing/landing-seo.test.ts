@@ -306,27 +306,25 @@ describe("AI-agent briefing and paste-able prompt", () => {
     expect(app).toContain("navigator.clipboard.writeText");
   });
 
-  it("should place the one-minute Mac demo and its separate tutorial beside the prompt", () => {
-    const { existsSync } = require("node:fs") as typeof import("node:fs");
+  it("should embed the language-specific YouTube Mac demo beside the prompt", () => {
     const app = read("landing/app.js");
-    expect(
-      existsSync(join(root, "landing/videos/onboarding/ai-agent-local-mac-privacy-safe.mp4")),
-      "Japanese AI-agent Mac demo missing",
-    ).toBe(true);
-    expect(
-      existsSync(join(root, "landing/videos/onboarding/ai-agent-local-mac-privacy-safe-en.mp4")),
-      "English AI-agent Mac demo missing",
-    ).toBe(true);
 
     for (const html of [index, english]) {
+      expect(html).toContain('class="agent-prompt-video"');
+      expect(html).toContain('data-i18n-src="extend.agent_video_embed_src"');
+      expect(html).toContain('data-i18n-title="extend.agent_video_title"');
       expect(html).toContain('data-cta="watch-ai-local-mac"');
       expect(html).toContain('data-i18n-href="extend.agent_video_href"');
       expect(html).toContain('data-cta="try-ai-local-mac"');
       expect(html).toContain("goto=/problems/01HZX0M2A1AGENTMACTENKA0003");
     }
-    expect(index).toContain('href="/videos/onboarding/ai-agent-local-mac-privacy-safe.mp4"');
-    expect(english).toContain('href="/videos/onboarding/ai-agent-local-mac-privacy-safe-en.mp4"');
+    expect(index).toContain('src="https://www.youtube.com/embed/nLsSJ3npdfw"');
+    expect(index).toContain('href="https://www.youtube.com/watch?v=nLsSJ3npdfw"');
+    expect(english).toContain('src="https://www.youtube.com/embed/GDu9FhWrQns"');
+    expect(english).toContain('href="https://www.youtube.com/watch?v=GDu9FhWrQns"');
     expect(app).toContain('querySelectorAll("[data-i18n-href]")');
+    expect(app).toContain('querySelectorAll("[data-i18n-src]")');
+    expect(app).toContain('querySelectorAll("[data-i18n-title]")');
   });
 });
 
