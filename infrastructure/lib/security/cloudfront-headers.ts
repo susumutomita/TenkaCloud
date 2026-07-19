@@ -25,6 +25,7 @@ import type { Construct } from "constructs";
  *   - img-src 'self' data: (= Cloudscape の base64 inline icon)
  *   - font-src 'self' data: (= 同上)
  *   - connect-src は SPA ごとに override (= caller が apiOrigins / cognitoDomain を渡す)
+ *   - frame-src は default `'self'`、 必要な SPA だけ外部 embed origin を追加
  *   - frame-ancestors 'none' (= clickjacking 防御、 X-Frame-Options より厳格)
  *   - form-action 'self' (= 同 origin の form submit のみ、 phishing 経路を狭める)
  *   - base-uri 'self' (= <base> tag 操作による URL hijack 防御)
@@ -56,6 +57,10 @@ export interface SecurityHeadersOptions {
    * 同時に \`style-src\` にも追加 (Scalar が inline 風 CSS を出すため一部 CDN style も必要)。
    */
   readonly additionalScriptSrcs?: readonly string[];
+  /**
+   * CSP frame-src で許可する外部 origin。 未指定時は同 origin の iframe のみに閉じる。
+   */
+  readonly frameSrcAllowedOrigins?: readonly string[];
 }
 
 /**
@@ -104,6 +109,7 @@ export function buildContentSecurityPolicy(opts: SecurityHeadersOptions = {}): s
     ? ["'self'", "'unsafe-eval'", ...additionalScripts]
     : ["'self'", ...additionalScripts];
   const styleSrc = ["'self'", "'unsafe-inline'", ...additionalScripts];
+  const frameSrc = ["'self'", ...(opts.frameSrcAllowedOrigins ?? [])];
   const directives: readonly string[] = [
     "default-src 'self'",
     `script-src ${scriptSrc.join(" ")}`,
@@ -112,6 +118,7 @@ export function buildContentSecurityPolicy(opts: SecurityHeadersOptions = {}): s
     "font-src 'self' data:",
     `connect-src ${connectSrc.join(" ")}`,
     `form-action ${formAction.join(" ")}`,
+    `frame-src ${frameSrc.join(" ")}`,
     "base-uri 'self'",
     "frame-ancestors 'none'",
     "object-src 'none'",

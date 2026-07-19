@@ -479,7 +479,7 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
     {
       jobId: "01HZX0M2A1AGENTMACTENKA0003",
       problemId: AI_AGENT_LOCAL_DRILL_PROBLEM_ID,
-      videoUrl: "/videos/onboarding/ai-agent-local-mac-privacy-safe.mp4",
+      videoUrl: "https://www.youtube.com/embed/nLsSJ3npdfw",
       name: "AIエージェントでMac起動",
       description: [
         "LP の **AI エージェントで始める** にあるプロンプトを Claude Code や Codex へ貼ると、TenkaCloud の説明だけでなく、遊び始めるところまで案内してくれる。",
@@ -497,7 +497,7 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
       i18n: {
         en: {
           name: "Launch on Mac with an AI agent",
-          videoUrl: "/videos/onboarding/ai-agent-local-mac-privacy-safe-en.mp4",
+          videoUrl: "https://www.youtube.com/embed/GDu9FhWrQns",
           description: [
             "Paste the prompt from **Start with an AI agent** on the landing page into Claude Code or Codex. The agent does more than explain TenkaCloud: it guides you all the way to a playable environment.",
             "In this Mac run, choosing **PLAY → local machine** let the agent check prerequisites, clone, install, start local mode, and verify HTTP reachability. The point is not memorizing a command list — it is seeing an agent inspect the real machine and carry the setup to ready.",

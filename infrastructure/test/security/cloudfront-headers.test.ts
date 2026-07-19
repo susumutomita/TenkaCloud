@@ -24,7 +24,7 @@ interface SecurityHeadersConfig {
  */
 
 describe("buildContentSecurityPolicy (pure helper)", () => {
-  it("default で 9 directive を持ち、 connect-src / form-action は 'self' のみ", () => {
+  it("default で connect-src / form-action / frame-src を 'self' のみに閉じる", () => {
     const csp = buildContentSecurityPolicy();
     expect(csp).toContain("default-src 'self'");
     expect(csp).toContain("script-src 'self'");
@@ -34,6 +34,7 @@ describe("buildContentSecurityPolicy (pure helper)", () => {
     expect(csp).toContain("font-src 'self' data:");
     expect(csp).toContain("connect-src 'self'");
     expect(csp).toContain("form-action 'self'");
+    expect(csp).toContain("frame-src 'self'");
     expect(csp).toContain("base-uri 'self'");
     expect(csp).toContain("frame-ancestors 'none'");
     expect(csp).toContain("object-src 'none'");
@@ -51,6 +52,15 @@ describe("buildContentSecurityPolicy (pure helper)", () => {
       formActionAllowedOrigins: ["https://auth.example.com"],
     });
     expect(csp).toContain("form-action 'self' https://auth.example.com");
+  });
+
+  it("should add frameSrcAllowedOrigins to 'self' without widening other directives", () => {
+    const csp = buildContentSecurityPolicy({
+      frameSrcAllowedOrigins: ["https://www.youtube.com"],
+    });
+    expect(csp).toContain("frame-src 'self' https://www.youtube.com");
+    expect(csp).toContain("script-src 'self'");
+    expect(csp).not.toContain("script-src 'self' https://www.youtube.com");
   });
 
   it("allowUnsafeEval=true なら script-src に 'unsafe-eval' を入れる (= dev only)", () => {
