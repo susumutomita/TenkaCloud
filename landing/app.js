@@ -820,22 +820,6 @@
     });
   });
 
-  // LP → onboarding → step completion → next drill can be assembled as one GA4
-  // funnel. Do not attach visible text or query values: only the curated CTA id.
-  document.addEventListener("click", (event) => {
-    var element = event.target instanceof Element ? event.target.closest("[data-cta]") : null;
-    if (!element || typeof window.gtag !== "function") return;
-    var ctaId = element.getAttribute("data-cta") || "unknown";
-    window.gtag(
-      "event",
-      ctaId === "start-drill" ? "onboarding_start_clicked" : "landing_cta_clicked",
-      {
-        cta_id: ctaId,
-        language: document.documentElement.lang || "unknown",
-      },
-    );
-  });
-
   var initialLang = detectInitialLang();
   applyLang(initialLang);
   reflectLangInUrl(initialLang);

@@ -41,13 +41,6 @@ describe("landing page SEO", () => {
     expect(app).toContain("https://tenkacloud.com/?lang=ja");
   });
 
-  it("should measure the landing-to-onboarding funnel without form values", () => {
-    expect(index).toContain('data-cta="start-drill"');
-    expect(app).toContain("onboarding_start_clicked");
-    expect(app).toContain("landing_cta_clicked");
-    expect(app).not.toContain("input_value");
-  });
-
   it("should publish a static English landing page for non-JavaScript crawlers", () => {
     const english = read("landing/index.en.html");
     expect(english).toContain('<html lang="en" data-static-lang="en">');

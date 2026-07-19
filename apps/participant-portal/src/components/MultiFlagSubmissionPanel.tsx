@@ -7,9 +7,8 @@ import FormField from "@cloudscape-design/components/form-field";
 import Header from "@cloudscape-design/components/header";
 import Input from "@cloudscape-design/components/input";
 import SpaceBetween from "@cloudscape-design/components/space-between";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router";
-import { trackAnalyticsEventOnce } from "../analytics";
 import {
   type HintRevealMode,
   type MultiFlagEntryView,
@@ -67,22 +66,6 @@ export function MultiFlagSubmissionPanel({
   const solvedCount = flags.filter(isSolved).length;
   const allSolved = flags.length > 0 && solvedCount === flags.length;
 
-  useEffect(() => {
-    if (problemId !== WHAT_IS_DRILL_PROBLEM_ID) return;
-    trackAnalyticsEventOnce("what-is.started", "onboarding_started", {
-      problem_id: problemId,
-      step_total: flags.length,
-    });
-  }, [flags.length, problemId]);
-
-  useEffect(() => {
-    if (problemId !== WHAT_IS_DRILL_PROBLEM_ID || !allSolved) return;
-    trackAnalyticsEventOnce("what-is.completed", "onboarding_completed", {
-      problem_id: problemId,
-      step_total: flags.length,
-    });
-  }, [allSolved, flags.length, problemId]);
-
   return (
     <SpaceBetween size="s">
       <Alert
@@ -99,8 +82,6 @@ export function MultiFlagSubmissionPanel({
           problemId={problemId}
           flag={flag}
           solved={isSolved(flag)}
-          stepNumber={flags.indexOf(flag) + 1}
-          stepTotal={flags.length}
           onMockSolved={(flagId) => {
             setMockSolvedIds((current) => new Set([...current, flagId]));
           }}
@@ -118,10 +99,6 @@ function WhatIsTutorialComplete() {
   const navigate = useNavigate();
 
   const goTo = (target: "first-drill" | "problem-list") => {
-    trackAnalyticsEventOnce(`what-is.next.${target}`, "onboarding_next_selected", {
-      problem_id: WHAT_IS_DRILL_PROBLEM_ID,
-      next_target: target,
-    });
     navigate(target === "first-drill" ? `/problems/${FIRST_BROWSER_DRILL_JOB_ID}` : "/problems");
   };
 
@@ -179,8 +156,6 @@ function SubFlagRow({
   problemId,
   flag,
   solved,
-  stepNumber,
-  stepTotal,
   onMockSolved,
   onScored,
   revealOrder,
@@ -190,8 +165,6 @@ function SubFlagRow({
   problemId: string;
   flag: MultiFlagEntryView;
   solved: boolean;
-  stepNumber: number;
-  stepTotal: number;
   onMockSolved: (flagId: string) => void;
   onScored: () => Promise<void>;
   revealOrder?: HintRevealMode;
@@ -234,14 +207,6 @@ function SubFlagRow({
         : await submitFlag(apiBaseUrl, sessionToken, problemId, value, flag.id);
       setOutcome(result);
       if (result.kind !== "ok") return;
-      if (problemId === WHAT_IS_DRILL_PROBLEM_ID) {
-        trackAnalyticsEventOnce(`what-is.step.${flag.id}`, "onboarding_step_completed", {
-          problem_id: problemId,
-          step_id: flag.id,
-          step_number: stepNumber,
-          step_total: stepTotal,
-        });
-      }
       if (isMock) onMockSolved(flag.id);
       else await onScored();
     } catch (err) {
