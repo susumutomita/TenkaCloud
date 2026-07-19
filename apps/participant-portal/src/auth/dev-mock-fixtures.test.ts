@@ -134,14 +134,30 @@ describe("dev-mock fixtures", () => {
     expect(drill?.i18n?.en?.videoUrl).toBe("https://www.youtube.com/embed/GDu9FhWrQns");
   });
 
-  it("should ship a playable onboarding video on every onboarding drill (#2707 P0-1)", () => {
+  it("should describe local mode on the learner's Mac, not as a Codespaces tutorial", () => {
+    const drill = drills.find((problem) => problem.problemId === LOCAL_DRILL_PROBLEM_ID);
+    expect(drill?.description).toContain("手元の Mac");
+    expect(drill?.description).toContain("bun run tenkacloud local --problem sqli-demo");
+    expect(drill?.description).not.toContain("Codespaces");
+    expect(drill?.i18n?.en?.description).toContain("on your Mac");
+    expect(drill?.i18n?.en?.description).not.toContain("Codespaces");
+  });
+
+  it("should keep stale local-mode footage off the portal and use YouTube for AI video", () => {
     for (const drill of drills) {
       // AI-agent tutorial はリポジトリ肥大化を避けるため YouTube へ分離する。
       if (drill.problemId === "ai-agent-local-mac") {
         expect(drill.videoUrl).toBe("https://www.youtube.com/embed/nLsSJ3npdfw");
         continue;
       }
-      // その他は problemId とファイル名を一致させる既存 contract を維持する。
+      // 旧版は、正しいYouTube版ができるまで表示しない。
+      if (
+        drill.problemId === LOCAL_DRILL_PROBLEM_ID ||
+        drill.problemId === WHAT_IS_DRILL_PROBLEM_ID
+      ) {
+        expect(drill.videoUrl).toBeUndefined();
+        continue;
+      }
       expect(drill.videoUrl).toBe(`/videos/onboarding/${drill.problemId}.mp4`);
     }
   });

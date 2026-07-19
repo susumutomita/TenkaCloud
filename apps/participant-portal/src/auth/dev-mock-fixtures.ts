@@ -10,7 +10,12 @@ import type {
   ParticipantTeamView,
   ScoreEventsResponse,
 } from "../api/portal-client";
-import { AI_AGENT_LOCAL_DRILL_PROBLEM_ID, WHAT_IS_DRILL_PROBLEM_ID } from "../dev-mock/flag-submit";
+import {
+  AI_AGENT_LOCAL_DRILL_PROBLEM_ID,
+  FIRST_BROWSER_DRILL_JOB_ID,
+  FIRST_BROWSER_DRILL_PROBLEM_ID,
+  WHAT_IS_DRILL_PROBLEM_ID,
+} from "../dev-mock/flag-submit";
 
 /**
  * `mode === "dev-mock"` のとき backend が存在しないので、 portal の各画面が空 state に
@@ -23,7 +28,7 @@ import { AI_AGENT_LOCAL_DRILL_PROBLEM_ID, WHAT_IS_DRILL_PROBLEM_ID } from "../de
  *   1. 「TenkaCloud とは?」 — 4 ステップのチュートリアル (#2711 デザイン 6b)。 モードの
  *      2 択 (ブラウザ Lite / Codespaces) はステップ 3 で初めて提示する
  *   2. 「自分の TenkaCloud Lite を立てる」 — 実 AWS デプロイ (#2696、 lite-drill 契約)
- *   3. 「ローカルモードで遊ぶ」 — Codespaces 派向け。 hello-world 初得点 → チェックポイント提出
+ *   3. 「ローカルモードで遊ぶ」 — 手元の Mac。 sqli-demo 初得点 → チェックポイント提出
  *   4. 「AIエージェントでMac起動」 — LP のプロンプトからローカル起動確認までの実演
  *   + 旧来の「クエスト」2 問 (hidden-passphrase は解答済み、 number-sequence は未解答)
  *
@@ -44,7 +49,7 @@ const iso = (offsetMs: number): string => new Date(now + offsetMs).toISOString()
 const DEPLOY_EXPIRES_AT = Math.floor((now + 4 * HOUR) / SEC);
 
 const CIPHER_PROBLEM_ID = "hidden-passphrase";
-const SEQUENCE_PROBLEM_ID = "number-sequence";
+const SEQUENCE_PROBLEM_ID = FIRST_BROWSER_DRILL_PROBLEM_ID;
 
 export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
   team: {
@@ -57,8 +62,7 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
     {
       jobId: "01HZX0M0UNDR5TND7ENKA0CL0D",
       problemId: WHAT_IS_DRILL_PROBLEM_ID,
-      // #2707 P0-1: 冒頭 1 分 operation 動画 (字幕 ja/en 焼き込み、landing origin 配信)。
-      videoUrl: "/videos/onboarding/what-is-tenkacloud.mp4",
+      // 45秒の旧版は撤去済み。新しい15秒版はYouTube公開後に言語別URLを設定する。
       name: "TenkaCloud とは?",
       // #2711 (デザイン 6b): 4 ステップのチュートリアル。 モードの 2 択 (ブラウザ Lite /
       // Codespaces) は LP には出さず、 ここのステップ 3 で初めて提示する。
@@ -86,7 +90,7 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
         "",
         "TenkaCloud の採点は flag 提出が基本形。練習用の flag はこれ: `TENKA{HELLO-TENKACLOUD}`。そのままステップ 4 の提出欄に貼ると +100 pt — 採点とスコアの動きも、ここで最初に体験する。",
         "",
-        "詰まったら各提出欄の **ヒント** を開こう(ペナルティなし)。クリアすると次の問題「自分の TenkaCloud Lite を立てる」が待っている。Codespaces を選んだ人は「ローカルモードで遊ぶ」も遊べる。",
+        "詰まったら各提出欄の **ヒント** を開こう(ペナルティなし)。全問正解すると解説と、スマホのまま解ける最初の実戦ドリル「欠けた数」へのボタンが現れる。",
       ].join("\n"),
       instructions:
         "4 つのステップに順に答える(大文字小文字は不問)。モードの 2 択はステップ 3 で初めて出てくる。ヒントはペナルティなしで開ける。",
@@ -117,7 +121,7 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
             "",
             "Scoring in TenkaCloud is flag-based. Here is a practice flag: `TENKA{HELLO-TENKACLOUD}`. Paste it into the step 4 box for +100 pt — your first taste of scoring and the moving scoreboard.",
             "",
-            'Stuck? Open the **hint** on each submission box (no penalty). Clearing this unlocks "Deploy your own TenkaCloud Lite" — and if you picked Codespaces, "Play local mode" is there too.',
+            "Stuck? Open the **hint** on each submission box (no penalty). Answer all four to reveal the explanation and a button to your first real drill, “The missing number,” which also works on your phone.",
           ].join("\n"),
           instructions:
             "Answer the 4 steps in order (case-insensitive). The mode choice only appears at step 3. Hints are penalty-free.",
@@ -384,38 +388,36 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
     {
       jobId: "01HZX0M1L0CALPLAYTENKA0002",
       problemId: LOCAL_DRILL_PROBLEM_ID,
-      // #2707 P0-1: 冒頭 1 分 operation 動画 (字幕 ja/en 焼き込み、landing origin 配信)。
-      videoUrl: "/videos/onboarding/play-local-mode.mp4",
       name: "ローカルモードで遊ぶ",
       description: [
-        "AWS アカウントなしで、**本物の問題コンテナ**を手元で動かすのがローカルモード。ブラウザだけで済ませるなら **GitHub Codespaces** が最短ルートだ。",
-        "Codespace を作ると Participant Portal が自動で開き、固定の入門ドリル **hello-world** が最初に表示される。",
+        "AWS アカウントなしで、**本物の問題コンテナ**を手元の Mac で動かすのがローカルモード。Docker を使い、ブラウザの Participant Portal から挑戦する。",
+        "TenkaCloud リポジトリで `bun run tenkacloud local --problem sqli-demo` を実行すると、Portal と Docker 対応の入門ドリル **sqli-demo** が起動する。",
         "",
         "#### チェックポイント",
         "",
-        "1. Codespaces で Portal が自動で開くポート番号を答える",
-        "2. hello-world を初クリアすると解説 (writeup) の末尾に現れる `TENKA{...}` コードを提出する",
+        "1. Mac で起動した Participant Portal のポート番号を答える",
+        "2. sqli-demo を初クリアすると解説 (writeup) の末尾に現れる `TENKA{...}` コードを提出する",
         "",
         "手順に詰まったら各提出欄の **ヒント** を開こう(ペナルティなし)。クリアしたら、まだの人は「自分の TenkaCloud Lite を立てる」で仕上げよう。",
       ].join("\n"),
       instructions:
-        "Codespaces (または手元の `make local`) でローカルプレイを起動し、2 つのチェックポイントを提出する。ヒントはペナルティなしで開ける。",
+        "手元の Mac でローカルプレイを起動し、2 つのチェックポイントを提出する。ヒントはペナルティなしで開ける。",
       i18n: {
         en: {
           name: "Play local mode",
           description: [
-            "Local mode runs **real problem containers** on your machine with no AWS account. The fastest browser-only route is **GitHub Codespaces**.",
-            "Create a Codespace and the Participant Portal opens automatically, with the fixed intro drill **hello-world** shown first.",
+            "Local mode runs **real problem containers** on your Mac with no AWS account. Docker runs the challenge while you play from the Participant Portal in your browser.",
+            "In the TenkaCloud repository, run `bun run tenkacloud local --problem sqli-demo` to start the Portal and the Docker-based intro drill **sqli-demo**.",
             "",
             "#### Checkpoints",
             "",
-            "1. Answer the port number the Portal auto-opens on in Codespaces",
-            "2. Clear hello-world once and submit the `TENKA{...}` code that appears at the end of its writeup",
+            "1. Answer the Participant Portal port shown when local mode starts on your Mac",
+            "2. Clear sqli-demo once and submit the `TENKA{...}` code that appears at the end of its writeup",
             "",
             'Stuck? Open the **hint** on each submission box (no penalty). Then finish with "Deploy your own TenkaCloud Lite" if you have not yet.',
           ].join("\n"),
           instructions:
-            "Start local play in Codespaces (or `make local` on your machine) and submit the 2 checkpoints. Hints are penalty-free.",
+            "Start local play on your Mac and submit the 2 checkpoints. Hints are penalty-free.",
         },
       },
       region: "ap-northeast-1",
@@ -429,21 +431,21 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
         flags: [
           {
             id: "portal-port",
-            label: "1. Portal が自動で開くポート番号は?",
+            label: "1. Mac で起動した Portal のポート番号は?",
             points: 100,
             solved: false,
-            i18n: { en: { label: "1. Which port does the Portal auto-open on?" } },
+            i18n: { en: { label: "1. Which Portal port starts on your Mac?" } },
             hints: [
               {
                 id: "local-h1",
                 penalty: 0,
                 revealed: false,
                 content:
-                  "GitHub の TenkaCloud リポジトリで「Code ▸ Codespaces ▸ Create codespace」を押す。数分待つと Portal のプレビューが自動で開く。VS Code の Ports タブ(または README の Quickstart)に Participant Portal のポート番号が数字 4 桁で載っている。",
+                  "Mac で Docker を起動し、TenkaCloud リポジトリから `bun run tenkacloud local --problem sqli-demo` を実行する。ready 表示に `Participant Portal ... 5175` と出るので、その 4 桁を提出する。",
                 i18n: {
                   en: {
                     content:
-                      "On the TenkaCloud GitHub repo, press Code ▸ Codespaces ▸ Create codespace. After a few minutes the Portal preview opens automatically; the Participant Portal port (4 digits) is listed in the VS Code Ports tab (or the README Quickstart).",
+                      "Start Docker on your Mac, then run `bun run tenkacloud local --problem sqli-demo` from the TenkaCloud repository. The ready message shows `Participant Portal ... 5175`; submit those four digits.",
                   },
                 },
               },
@@ -451,21 +453,21 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
           },
           {
             id: LOCAL_DRILL_FIRST_SCORE.flagId,
-            label: "2. hello-world 初クリアのコード",
+            label: "2. sqli-demo 初クリアのコード",
             points: 100,
             solved: false,
-            i18n: { en: { label: "2. The code from your first hello-world clear" } },
+            i18n: { en: { label: "2. The code from your first sqli-demo clear" } },
             hints: [
               {
                 id: "local-h2",
                 penalty: 0,
                 revealed: false,
                 content:
-                  "自動で開いた Portal で hello-world を開き、Start を押してコンテナを起動する。問題の指示どおりに flag を見つけて提出すると、クリア直後に解説 (writeup) が開く。その末尾の「オンボーディングドリル チェックポイント」にある `TENKA{...}` をここに貼る。",
+                  "手元の Portal で sqli-demo を開き、Start を押してコンテナを起動する。問題の指示どおりにスタッフ専用画面へ入り、表示された flag を提出すると、クリア直後に解説 (writeup) が開く。その末尾の「オンボーディングドリル チェックポイント」にある `TENKA{...}` をここに貼る。",
                 i18n: {
                   en: {
                     content:
-                      "In the auto-opened Portal, open hello-world, press Start, then find and submit the flag as instructed. The writeup opens right after your first clear — paste the `TENKA{...}` from its closing onboarding-drill-checkpoint section here.",
+                      "In your local Portal, open sqli-demo and press Start. Follow the problem instructions to enter the staff-only page and submit the displayed flag. The writeup opens after your first clear — paste the `TENKA{...}` from its closing onboarding-drill-checkpoint section here.",
                   },
                 },
               },
@@ -572,7 +574,7 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
       createdAt: iso(-25 * MIN),
     },
     {
-      jobId: "01HZX0KFFCT7BHGAQM6Q2WP1AB",
+      jobId: FIRST_BROWSER_DRILL_JOB_ID,
       problemId: SEQUENCE_PROBLEM_ID,
       name: "欠けた数",
       description:

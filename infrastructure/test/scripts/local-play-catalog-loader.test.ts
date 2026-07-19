@@ -21,38 +21,38 @@ function items(...problemIds: readonly string[]): Item[] {
 }
 
 describe("LOCAL_INTRO_DRILL_PROBLEM_ID", () => {
-  it("should be hello-world (ADR-012 reference implementation, Docker, on by default)", () => {
-    expect(LOCAL_INTRO_DRILL_PROBLEM_ID).toBe("hello-world");
+  it("should be sqli-demo (the documented Docker reference problem)", () => {
+    expect(LOCAL_INTRO_DRILL_PROBLEM_ID).toBe("sqli-demo");
   });
 });
 
 describe("pinIntroDrillFirst", () => {
   it("should move the intro drill to the front, keeping every other item's relative order", () => {
-    const catalog = items("ai-riscv-screen-repair", "csrf-demo", "hello-world", "sqli-demo");
+    const catalog = items("ai-riscv-screen-repair", "csrf-demo", "sqli-demo", "xss-demo");
     expect(pinIntroDrillFirst(catalog).map((i) => i.problemId)).toEqual([
-      "hello-world",
+      "sqli-demo",
       "ai-riscv-screen-repair",
       "csrf-demo",
-      "sqli-demo",
+      "xss-demo",
     ]);
   });
 
   it("should leave the order unchanged when the intro drill is already first", () => {
-    const catalog = items("hello-world", "csrf-demo", "sqli-demo");
+    const catalog = items("sqli-demo", "csrf-demo", "xss-demo");
     expect(pinIntroDrillFirst(catalog).map((i) => i.problemId)).toEqual([
-      "hello-world",
-      "csrf-demo",
       "sqli-demo",
+      "csrf-demo",
+      "xss-demo",
     ]);
   });
 
   it("should leave the order unchanged when the intro drill is absent", () => {
-    const catalog = items("csrf-demo", "sqli-demo");
-    expect(pinIntroDrillFirst(catalog).map((i) => i.problemId)).toEqual(["csrf-demo", "sqli-demo"]);
+    const catalog = items("csrf-demo", "xss-demo");
+    expect(pinIntroDrillFirst(catalog).map((i) => i.problemId)).toEqual(["csrf-demo", "xss-demo"]);
   });
 
   it("should not mutate the input array", () => {
-    const catalog = items("csrf-demo", "hello-world");
+    const catalog = items("csrf-demo", "sqli-demo");
     const original = [...catalog];
     pinIntroDrillFirst(catalog);
     expect(catalog).toEqual(original);

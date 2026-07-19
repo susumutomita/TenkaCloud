@@ -1,10 +1,15 @@
 import Alert from "@cloudscape-design/components/alert";
+import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
+import Container from "@cloudscape-design/components/container";
 import Form from "@cloudscape-design/components/form";
 import FormField from "@cloudscape-design/components/form-field";
+import Header from "@cloudscape-design/components/header";
 import Input from "@cloudscape-design/components/input";
 import SpaceBetween from "@cloudscape-design/components/space-between";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router";
+import { trackAnalyticsEventOnce } from "../analytics";
 import {
   type HintRevealMode,
   type MultiFlagEntryView,
@@ -12,7 +17,12 @@ import {
   submitFlag,
 } from "../api/portal-client";
 import { useIsMock } from "../config-context";
-import { evaluateMockSubFlag, isStrictDrillProblem } from "../dev-mock/flag-submit";
+import {
+  evaluateMockSubFlag,
+  FIRST_BROWSER_DRILL_JOB_ID,
+  isStrictDrillProblem,
+  WHAT_IS_DRILL_PROBLEM_ID,
+} from "../dev-mock/flag-submit";
 import { useLang, useT } from "../i18n";
 import { CelebrationOverlay } from "./CelebrationOverlay";
 import { formatProblemPanelActionError } from "./ProblemPanel.helpers";
@@ -49,8 +59,29 @@ export function MultiFlagSubmissionPanel({
   revealOrder?: HintRevealMode;
 }) {
   const t = useT();
-  const solvedCount = flags.filter((f) => f.solved).length;
+  // dev-mock has no backend refetch to persist solved flags. Keep the solved ids
+  // at panel level so the progress counter can actually reach 4/4 and reveal the
+  // completion handoff observed missing in the mobile onboarding recording.
+  const [mockSolvedIds, setMockSolvedIds] = useState<ReadonlySet<string>>(() => new Set());
+  const isSolved = (flag: MultiFlagEntryView) => flag.solved || mockSolvedIds.has(flag.id);
+  const solvedCount = flags.filter(isSolved).length;
   const allSolved = flags.length > 0 && solvedCount === flags.length;
+
+  useEffect(() => {
+    if (problemId !== WHAT_IS_DRILL_PROBLEM_ID) return;
+    trackAnalyticsEventOnce("what-is.started", "onboarding_started", {
+      problem_id: problemId,
+      step_total: flags.length,
+    });
+  }, [flags.length, problemId]);
+
+  useEffect(() => {
+    if (problemId !== WHAT_IS_DRILL_PROBLEM_ID || !allSolved) return;
+    trackAnalyticsEventOnce("what-is.completed", "onboarding_completed", {
+      problem_id: problemId,
+      step_total: flags.length,
+    });
+  }, [allSolved, flags.length, problemId]);
 
   return (
     <SpaceBetween size="s">
@@ -67,11 +98,50 @@ export function MultiFlagSubmissionPanel({
           sessionToken={sessionToken}
           problemId={problemId}
           flag={flag}
+          solved={isSolved(flag)}
+          stepNumber={flags.indexOf(flag) + 1}
+          stepTotal={flags.length}
+          onMockSolved={(flagId) => {
+            setMockSolvedIds((current) => new Set([...current, flagId]));
+          }}
           onScored={onScored}
           revealOrder={revealOrder}
         />
       ))}
+      {problemId === WHAT_IS_DRILL_PROBLEM_ID && allSolved && <WhatIsTutorialComplete />}
     </SpaceBetween>
+  );
+}
+
+function WhatIsTutorialComplete() {
+  const t = useT();
+  const navigate = useNavigate();
+
+  const goTo = (target: "first-drill" | "problem-list") => {
+    trackAnalyticsEventOnce(`what-is.next.${target}`, "onboarding_next_selected", {
+      problem_id: WHAT_IS_DRILL_PROBLEM_ID,
+      next_target: target,
+    });
+    navigate(target === "first-drill" ? `/problems/${FIRST_BROWSER_DRILL_JOB_ID}` : "/problems");
+  };
+
+  return (
+    <Container header={<Header variant="h3">{t("multi_flag.tutorial_complete_header")}</Header>}>
+      <SpaceBetween size="m">
+        <Box>{t("multi_flag.tutorial_complete_body")}</Box>
+        <Alert type="success" header={t("multi_flag.tutorial_next_header")}>
+          {t("multi_flag.tutorial_next_body")}
+        </Alert>
+        <SpaceBetween size="xs" direction="horizontal">
+          <Button variant="primary" onClick={() => goTo("first-drill")}>
+            {t("multi_flag.tutorial_next_button")}
+          </Button>
+          <Button onClick={() => goTo("problem-list")}>
+            {t("multi_flag.tutorial_problem_list_button")}
+          </Button>
+        </SpaceBetween>
+      </SpaceBetween>
+    </Container>
   );
 }
 
@@ -108,6 +178,10 @@ function SubFlagRow({
   sessionToken,
   problemId,
   flag,
+  solved,
+  stepNumber,
+  stepTotal,
+  onMockSolved,
   onScored,
   revealOrder,
 }: {
@@ -115,6 +189,10 @@ function SubFlagRow({
   sessionToken: string;
   problemId: string;
   flag: MultiFlagEntryView;
+  solved: boolean;
+  stepNumber: number;
+  stepTotal: number;
+  onMockSolved: (flagId: string) => void;
   onScored: () => Promise<void>;
   revealOrder?: HintRevealMode;
 }) {
@@ -133,7 +211,7 @@ function SubFlagRow({
 
   // 正解直後 (mock / backend 共通): 祝祭 + 獲得スコア。 server 由来の solved 表示も同じ success
   // Alert に倒すので、 「refetch が空振りして solved に切り替わらない」 mock mode も吸収できる。
-  if (flag.solved || outcome?.kind === "ok") {
+  if (solved || outcome?.kind === "ok") {
     return (
       <>
         {outcome?.kind === "ok" && <CelebrationOverlay visible />}
@@ -155,7 +233,17 @@ function SubFlagRow({
         ? evaluateMockSubFlag(problemId, flag.id, value, flag.points)
         : await submitFlag(apiBaseUrl, sessionToken, problemId, value, flag.id);
       setOutcome(result);
-      if (!isMock && result.kind === "ok") await onScored();
+      if (result.kind !== "ok") return;
+      if (problemId === WHAT_IS_DRILL_PROBLEM_ID) {
+        trackAnalyticsEventOnce(`what-is.step.${flag.id}`, "onboarding_step_completed", {
+          problem_id: problemId,
+          step_id: flag.id,
+          step_number: stepNumber,
+          step_total: stepTotal,
+        });
+      }
+      if (isMock) onMockSolved(flag.id);
+      else await onScored();
     } catch (err) {
       setSubmitError(formatProblemPanelActionError(t, err, "problem_panel.submit_error_prefix"));
     } finally {

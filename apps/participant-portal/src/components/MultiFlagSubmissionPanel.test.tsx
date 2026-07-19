@@ -2,8 +2,10 @@ import { LITE_DRILL_CHECKPOINTS, LITE_DRILL_PROBLEM_ID } from "@tenkacloud/porta
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type * as React from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppConfigProvider } from "../config-context";
+import { WHAT_IS_DRILL_PROBLEM_ID } from "../dev-mock/flag-submit";
 import { I18nProvider } from "../i18n";
 import { MultiFlagSubmissionPanel, subFlagFieldPresentation } from "./MultiFlagSubmissionPanel";
 
@@ -31,7 +33,9 @@ function withProviders(node: React.ReactNode, mode: "backend" | "dev-mock" = "ba
         cloudMode: mode === "backend" ? "real" : "mock",
       }}
     >
-      <I18nProvider>{node}</I18nProvider>
+      <I18nProvider>
+        <MemoryRouter>{node}</MemoryRouter>
+      </I18nProvider>
     </AppConfigProvider>
   );
 }
@@ -192,6 +196,34 @@ describe("MultiFlagSubmissionPanel", () => {
     const buttons = screen.getAllByRole("button", { name: /^Submit/ });
     await user.click(buttons[0]);
     expect(await screen.findByText("🎉 Ep01: Reachability — solved")).toBeInTheDocument();
+    expect(apiMocks.submitFlag).not.toHaveBeenCalled();
+  });
+
+  it("should reach 4/4 in mock mode and hand off to a real browser drill", async () => {
+    const user = userEvent.setup();
+    const tutorialFlags = [
+      { id: "tenka-what", label: "Step 1", points: 100, solved: false },
+      { id: "battle-challenge", label: "Step 2", points: 100, solved: false },
+      { id: "choose-mode", label: "Step 3", points: 100, solved: false },
+      { id: "first-flag", label: "Step 4", points: 100, solved: false },
+    ];
+    renderPanel({ problemId: WHAT_IS_DRILL_PROBLEM_ID, flags: tutorialFlags }, "dev-mock");
+
+    const answers = ["real cloud", "battle", "lite", "TENKA{HELLO-TENKACLOUD}"];
+    for (const [index, answer] of answers.entries()) {
+      await user.type(screen.getAllByRole("textbox")[0], answer.replaceAll("{", "{{"));
+      await user.click(screen.getAllByRole("button", { name: /^Submit/ })[0]);
+      await waitFor(() =>
+        expect(screen.queryAllByRole("textbox")).toHaveLength(answers.length - index - 1),
+      );
+    }
+
+    expect(screen.getByText("Flags solved: 4 / 4")).toBeInTheDocument();
+    expect(screen.getByText("🎉 You have the TenkaCloud basics")).toBeInTheDocument();
+    expect(screen.getByText("Next: your first real drill")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Next: solve “The missing number”" }),
+    ).toBeInTheDocument();
     expect(apiMocks.submitFlag).not.toHaveBeenCalled();
   });
 });

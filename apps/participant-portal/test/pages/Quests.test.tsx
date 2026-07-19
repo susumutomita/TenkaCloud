@@ -257,13 +257,13 @@ describe("QuestsPage", () => {
     expect(screen.getByText("ctf-cleared")).toBeInTheDocument();
   });
 
-  // [#2696 PR5] local play's fixed intro drill (challenges/hello-world): the backend
+  // Local play's fixed intro drill (sqli-demo): the backend
   // pins it first in `view.problems` and flags it `recommended: true`; the portal's
   // only job is to render the "start here" badge on that card.
   it("should show a start-here badge on the recommended intro drill", () => {
     const introDrill = problem({
-      problemId: "hello-world",
-      jobId: "job-hello",
+      problemId: "sqli-demo",
+      jobId: "job-sqli",
       scoring: { kind: "flag", flagSubmitted: false },
       recommended: true,
     });

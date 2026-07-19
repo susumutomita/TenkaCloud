@@ -13,7 +13,7 @@ import { FlagSubmissionPanel } from "./ProblemPanelFlagSubmission";
  * 空入力) と progressive hint reveal (順序制約 #1315 / confirm modal / 成功 / error /
  * hint_out_of_order / dismiss / cancel / penalty 有無) を pin する。
  *
- * submitFlag / revealHint だけ mock し、 evaluateMockFlag・PortalValidationError・i18n は実物。
+ * submitFlag / revealHint だけ mock し、 mock flag evaluator・PortalValidationError・i18n は実物。
  */
 
 const apiMocks = vi.hoisted(() => ({
@@ -93,6 +93,17 @@ describe("FlagSubmissionPanel submit flow", () => {
     renderPanel({}, "dev-mock");
     await user.type(screen.getByRole("textbox"), "tenkacloud");
     await user.click(screen.getByRole("button", { name: SUBMIT }));
+    expect(await screen.findByText(/🎉 Correct!/)).toBeInTheDocument();
+    expect(apiMocks.submitFlag).not.toHaveBeenCalled();
+  });
+
+  it("should make the recommended next drill accept its printed answer", async () => {
+    const user = userEvent.setup();
+    renderPanel({ problemId: "number-sequence", points: 300 }, "dev-mock");
+    await user.type(screen.getByRole("textbox"), "TC{{21}");
+    expect(screen.queryByText(/Easter eggs like/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Only the exact value from the text/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Submit flag (+300 pt)" }));
     expect(await screen.findByText(/🎉 Correct!/)).toBeInTheDocument();
     expect(apiMocks.submitFlag).not.toHaveBeenCalled();
   });

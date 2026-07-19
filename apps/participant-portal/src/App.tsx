@@ -1,5 +1,6 @@
 import "@cloudscape-design/global-styles/index.css";
 import { Navigate, Route, Routes } from "react-router";
+import { AnalyticsRouteTracker } from "./analytics";
 import { AuthProvider } from "./auth/AuthProvider";
 import { RequireAuth } from "./auth/RequireAuth";
 import { ShellLayout } from "./components/AppLayout";
@@ -26,6 +27,7 @@ function guarded(config: AppConfig, element: React.ReactNode) {
 export function App({ config }: { config: AppConfig }) {
   return (
     <AuthProvider config={config}>
+      <AnalyticsRouteTracker />
       <Routes>
         <Route path="/login" element={<LoginPage config={config} />} />
         <Route

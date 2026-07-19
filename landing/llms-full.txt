@@ -59,14 +59,15 @@ human's language:
    This lands on the in-product tutorial problem `what-is-tenkacloud`
    (4 scored steps; the mode choice appears at step 3; hints are
    penalty-free).
-2. Full local stack (~5 min, still no AWS): create a GitHub Codespace from
-   https://codespaces.new/susumutomita/TenkaCloud
-   The Participant Portal opens automatically (port 5175) with the fixed
-   intro drill `hello-world` listed first. Real problem containers run via
-   Docker inside the Codespace.
-3. On their own machine instead of Codespaces (macOS / Linux / WSL2, Docker
-   required): `git clone --recurse-submodules`, then `make install`, then
-   `make local`. `make doctor` diagnoses a broken toolchain.
+2. Full local stack on their own machine (~5 min, still no AWS; macOS / Linux /
+   WSL2 with Docker): `git clone --recurse-submodules`, then `make install`,
+   then `bun run tenkacloud local --problem sqli-demo`. The Participant Portal
+   runs on port 5175, and the real `sqli-demo` problem container runs locally.
+   `make doctor` diagnoses a broken toolchain.
+3. GitHub Codespaces is an optional browser-hosted development environment,
+   not the `play-local-mode` tutorial. If they choose it, create a Codespace
+   from https://codespaces.new/susumutomita/TenkaCloud and run the local-mode
+   command there; do not promise that a drill opens or is solved automatically.
 
 ## Quick start B — host your own event (their AWS account, billed)
 

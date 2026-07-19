@@ -196,7 +196,7 @@ export function QuestsPage() {
               >
                 {questCardTitle(problem.problemId)}
               </Link>
-              {/* [#2696 PR5] local play's one fixed intro drill (challenges/hello-world):
+              {/* [#2696 PR5] local play's one fixed container intro drill:
                * the backend pins it first in the catalog and flags it `recommended`. */}
               {problem.recommended && (
                 <Badge color="green">{t("quests.recommended_start_here")}</Badge>

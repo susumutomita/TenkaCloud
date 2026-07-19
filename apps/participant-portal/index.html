@@ -9,6 +9,16 @@
       content="TenkaCloud Participant Portal is an event-specific authenticated app shell and is not intended for public search indexing."
     />
     <title>TenkaCloud Participant Portal</title>
+    <!-- Same GA4 property as the landing page. SPA page views are emitted by React. -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-6WQ914PCKT"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag("js", new Date());
+      gtag("config", "G-6WQ914PCKT", { send_page_view: false });
+    </script>
   </head>
   <body>
     <div id="root"></div>

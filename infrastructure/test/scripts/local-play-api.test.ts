@@ -136,20 +136,19 @@ describe("local-play API", () => {
     expect(problem).not.toHaveProperty("description");
     // Default (unset) omits hintReveal → portal keeps the sequential gate.
     expect(problem.scoring).not.toHaveProperty("hintReveal");
-    // [#2696 PR5] Only the fixed intro drill (challenges/hello-world) is flagged
-    // recommended — an ordinary problem must never carry it.
-    expect(problem).not.toHaveProperty("recommended");
+    // The documented Docker reference problem is the local-mode starting point.
+    expect(problem.recommended).toBe(true);
   });
 
-  it("[#2696 PR5] should flag challenges/hello-world as the recommended intro drill", async () => {
-    const introDrill: ContainerProblem = { ...PROBLEM, problemId: "hello-world" };
-    const state = createLocalPlayState({ problems: [introDrill] }, { verify: neverVerify });
-    await state.lifecycle.ensureRunning(introDrill.problemId);
+  it("should not recommend an ordinary container problem", async () => {
+    const ordinaryProblem: ContainerProblem = { ...PROBLEM, problemId: "csrf-demo" };
+    const state = createLocalPlayState({ problems: [ordinaryProblem] }, { verify: neverVerify });
+    await state.lifecycle.ensureRunning(ordinaryProblem.problemId);
     const res = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
     const problem = (res.body as { problems: Array<{ problemId: string; recommended?: boolean }> })
       .problems[0];
-    expect(problem?.problemId).toBe("hello-world");
-    expect(problem?.recommended).toBe(true);
+    expect(problem?.problemId).toBe("csrf-demo");
+    expect(problem).not.toHaveProperty("recommended");
   });
 
   it("should surface hintReveal:'flat' on a verify (flag) view when opted in", async () => {
@@ -186,24 +185,26 @@ describe("local-play API", () => {
         problems: Array<{ writeup?: string; i18n?: { en?: { writeup?: string } } }>;
       }
     ).problems[0];
-    expect(solvedProblem.writeup).toBe("日本語の解説");
-    expect(solvedProblem.i18n?.en?.writeup).toBe("English explanation");
+    expect(solvedProblem.writeup).toContain("日本語の解説");
+    expect(solvedProblem.writeup).toContain(LOCAL_DRILL_FIRST_SCORE.code);
+    expect(solvedProblem.i18n?.en?.writeup).toContain("English explanation");
+    expect(solvedProblem.i18n?.en?.writeup).toContain(LOCAL_DRILL_FIRST_SCORE.code);
   });
 
   it("[#2707] should append the local-drill checkpoint to the intro drill writeup on first clear", async () => {
-    const introDrill: ContainerProblem = { ...PROBLEM, problemId: "hello-world" };
+    const introDrill: ContainerProblem = PROBLEM;
     const state = createLocalPlayState(
       { problems: [introDrill] },
       { verify: async () => ({ correct: true }) },
     );
-    await state.lifecycle.ensureRunning("hello-world");
+    await state.lifecycle.ensureRunning(PROBLEM.problemId);
 
     // クリア前: writeup にも view にもコードは存在しない (= 解く前に見えない)。
     const before = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
     expect(JSON.stringify(before.body)).not.toContain(LOCAL_DRILL_FIRST_SCORE.code);
 
     await handleLocalPlayRequest(
-      post("/portal/me/submit-flag", { problemId: "hello-world", flag: "TC{x}" }),
+      post("/portal/me/submit-flag", { problemId: PROBLEM.problemId, flag: "TC{x}" }),
       state,
       NOW,
     );
@@ -217,14 +218,14 @@ describe("local-play API", () => {
 
   it("[#2707] should emit the checkpoint even when the intro drill ships no writeup", async () => {
     const { writeup: _w, writeupI18n: _wi, ...rest } = PROBLEM;
-    const introDrill = { ...rest, problemId: "hello-world" } as ContainerProblem;
+    const introDrill = rest as ContainerProblem;
     const state = createLocalPlayState(
       { problems: [introDrill] },
       { verify: async () => ({ correct: true }) },
     );
-    await state.lifecycle.ensureRunning("hello-world");
+    await state.lifecycle.ensureRunning(PROBLEM.problemId);
     await handleLocalPlayRequest(
-      post("/portal/me/submit-flag", { problemId: "hello-world", flag: "TC{x}" }),
+      post("/portal/me/submit-flag", { problemId: PROBLEM.problemId, flag: "TC{x}" }),
       state,
       NOW,
     );

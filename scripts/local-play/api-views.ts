@@ -22,14 +22,18 @@ import { participantSimulatorOutputs } from "./simulator-scoring";
  * {@link LocalPlayState} — no mutation, no routing.
  */
 
-/** [#2707] hello-world 初クリア時に writeup へ足すオンボーディングドリルの案内 (markdown)。 */
-function localDrillCheckpointNote(): string {
+/** [#2707] ローカル入門問題の初クリア時に writeup へ足すチェックポイント案内。 */
+function localDrillCheckpointNote(lang: "ja" | "en"): string {
   return [
-    "#### オンボーディングドリル チェックポイント",
+    lang === "ja"
+      ? "#### オンボーディングドリル チェックポイント"
+      : "#### Onboarding drill checkpoint",
     "",
     `\`${LOCAL_DRILL_FIRST_SCORE.code}\``,
     "",
-    "このコードを LP デモポータルの「ローカルモードで遊ぶ」ドリルに提出すると得点になります。",
+    lang === "ja"
+      ? "このコードを LP デモポータルの「ローカルモードで遊ぶ」ドリルに提出すると得点になります。"
+      : "Submit this code to the “Play local mode” drill in the LP demo portal to score it.",
   ].join("\n");
 }
 
@@ -106,12 +110,12 @@ function problemView(
 ) {
   const problem = mapStrings(runtime.problem, browserText);
   const complete = isProblemComplete(runtime);
-  // [#2707] 固定入門ドリル (hello-world) の初クリア時、 writeup 末尾に LP デモポータルの
+  // [#2707] 固定入門ドリルの初クリア時、 writeup 末尾に LP デモポータルの
   // 「ローカルモードで遊ぶ」 ドリルへ提出するチェックポイントコードを付加する。 writeup と
   // 同じく complete ゲート下なので、 解く前にコードは見えない。
   const writeup =
     complete && problem.problemId === LOCAL_INTRO_DRILL_PROBLEM_ID
-      ? `${problem.writeup ? `${problem.writeup}\n\n---\n\n` : ""}${localDrillCheckpointNote()}`
+      ? `${problem.writeup ? `${problem.writeup}\n\n---\n\n` : ""}${localDrillCheckpointNote("ja")}`
       : complete
         ? problem.writeup
         : undefined;
@@ -122,9 +126,15 @@ function problemView(
   // drops it for the same reason; this mirrors `sanitizeI18n()` in
   // apps/participant-portal/src/data/problems.ts (the build-time projection).
   const { description: _adminOnlyEnDescription, ...englishOverlay } = problem.i18n?.en ?? {};
+  const englishWriteup =
+    complete && problem.problemId === LOCAL_INTRO_DRILL_PROBLEM_ID
+      ? `${problem.writeupI18n ? `${problem.writeupI18n}\n\n---\n\n` : ""}${localDrillCheckpointNote("en")}`
+      : complete
+        ? problem.writeupI18n
+        : undefined;
   const englishText = {
     ...englishOverlay,
-    ...(complete && problem.writeupI18n ? { writeup: problem.writeupI18n } : {}),
+    ...(englishWriteup ? { writeup: englishWriteup } : {}),
   };
   return {
     jobId: jobIdOf(problem.problemId),

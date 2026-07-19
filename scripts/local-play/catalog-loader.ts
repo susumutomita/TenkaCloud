@@ -40,13 +40,13 @@ export function autoInitProblemsSubmodule(
 }
 
 /**
- * [#2696 PR5] The platform's one fixed intro drill for local play: the ADR-012
- * reference implementation, Docker (on by default — simulator drills stay
- * opt-in per #2632), and already named as the "what's next" pointer in the
- * post-deploy guide. A single named constant here keeps the pin decision in
- * one place instead of being re-decided per caller / component.
+ * [#2696 PR5] The platform's one fixed intro drill for local play. It must be a
+ * real container problem because the local catalog excludes AWS-only problems.
+ * `sqli-demo` is the documented reference container problem and works with the
+ * default Docker runtime. A single named constant keeps the pin decision in one
+ * place instead of being re-decided per caller / component.
  */
-export const LOCAL_INTRO_DRILL_PROBLEM_ID = "hello-world";
+export const LOCAL_INTRO_DRILL_PROBLEM_ID = "sqli-demo";
 
 /**
  * Move the intro drill to the front of `items`, keeping every other entry in
