@@ -2,10 +2,10 @@ import { LITE_DRILL_CHECKPOINTS, LITE_DRILL_PROBLEM_ID } from "@tenkacloud/porta
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type * as React from "react";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppConfigProvider } from "../config-context";
-import { WHAT_IS_DRILL_PROBLEM_ID } from "../dev-mock/flag-submit";
+import { FIRST_BROWSER_DRILL_JOB_ID, WHAT_IS_DRILL_PROBLEM_ID } from "../dev-mock/flag-submit";
 import { I18nProvider } from "../i18n";
 import { MultiFlagSubmissionPanel, subFlagFieldPresentation } from "./MultiFlagSubmissionPanel";
 
@@ -22,6 +22,10 @@ vi.mock("../api/portal-client", async (importOriginal) => {
   return { ...actual, submitFlag: apiMocks.submitFlag };
 });
 
+function LocationProbe() {
+  return <output data-testid="router-path">{useLocation().pathname}</output>;
+}
+
 function withProviders(node: React.ReactNode, mode: "backend" | "dev-mock" = "backend") {
   return (
     <AppConfigProvider
@@ -34,7 +38,10 @@ function withProviders(node: React.ReactNode, mode: "backend" | "dev-mock" = "ba
       }}
     >
       <I18nProvider>
-        <MemoryRouter>{node}</MemoryRouter>
+        <MemoryRouter>
+          {node}
+          <LocationProbe />
+        </MemoryRouter>
       </I18nProvider>
     </AppConfigProvider>
   );
@@ -221,9 +228,12 @@ describe("MultiFlagSubmissionPanel", () => {
     expect(screen.getByText("Flags solved: 4 / 4")).toBeInTheDocument();
     expect(screen.getByText("🎉 You have the TenkaCloud basics")).toBeInTheDocument();
     expect(screen.getByText("Next: your first real drill")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Next: solve “The missing number”" }),
-    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Next: solve “The missing number”" }));
+    expect(screen.getByTestId("router-path")).toHaveTextContent(
+      `/problems/${FIRST_BROWSER_DRILL_JOB_ID}`,
+    );
+    await user.click(screen.getByRole("button", { name: "Browse other problems" }));
+    expect(screen.getByTestId("router-path")).toHaveTextContent("/problems");
     expect(apiMocks.submitFlag).not.toHaveBeenCalled();
   });
 });

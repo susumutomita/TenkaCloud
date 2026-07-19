@@ -206,9 +206,14 @@ function SubFlagRow({
         ? evaluateMockSubFlag(problemId, flag.id, value, flag.points)
         : await submitFlag(apiBaseUrl, sessionToken, problemId, value, flag.id);
       setOutcome(result);
-      if (result.kind !== "ok") return;
-      if (isMock) onMockSolved(flag.id);
-      else await onScored();
+      switch (result.kind) {
+        case "ok":
+          if (isMock) onMockSolved(flag.id);
+          else await onScored();
+          break;
+        default:
+          break;
+      }
     } catch (err) {
       setSubmitError(formatProblemPanelActionError(t, err, "problem_panel.submit_error_prefix"));
     } finally {
