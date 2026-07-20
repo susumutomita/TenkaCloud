@@ -92,7 +92,7 @@ dead-code: ## Report unused files/exports found by knip (never fails) | knipで�
 # template / coverage / IAM ASCII / merge / submodule) は本体と混ぜないため
 # .claude/skills/quality-gates へ分離済み — pre-commit フックが before-commit とは別呼び出しで
 # runner を走らせ、CI は --ci グループを走らせる。
-GATE_CHECKS := lint test
+GATE_CHECKS := harness lint test
 
 before-commit: $(GATE_CHECKS) ## Run lint and all tests before committing | commit前のlintと全テストを実行
 
@@ -108,6 +108,8 @@ before-commit: $(GATE_CHECKS) ## Run lint and all tests before committing | comm
 # 3 shards serially in one process — same checks, same workspace set, intentionally different
 # parallelism.
 ci-local: ## Run the full GitHub Actions gate locally | GitHub Actions相当の全gateをローカル実行
+	bun run .claude/harness/bin/architecture.ts --fail-on=error
+	$(MAKE) harness-test
 	git fetch --no-tags origin main:refs/remotes/origin/main
 	git -C problems fetch --no-tags --unshallow origin 2>/dev/null || git -C problems fetch --no-tags origin || true
 	$(MAKE) audit-deps
