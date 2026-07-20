@@ -13,7 +13,18 @@ on:
 
 jobs:
   lint:
+    name: lint (${{ matrix.file }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        file:
+          - AGENTS.md
+          - .claude/skills/change/SKILL.md
+          - .claude/skills/harness/SKILL.md
+          - .claude/agents/tenkacloud-adversarial-auditor.md
+          - docs/architecture/principles.md
+          - docs/architecture/enforcement-registry.md
     steps:
       - name: Check out the code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
@@ -29,36 +40,5 @@ jobs:
           CI: "true"
         run: make install_ci
 
-      - name: Lint AGENTS.md
-        continue-on-error: true
-        run: bun textlint AGENTS.md
-
-      - name: Lint change skill
-        continue-on-error: true
-        run: bun textlint .claude/skills/change/SKILL.md
-
-      - name: Lint harness skill
-        continue-on-error: true
-        run: bun textlint .claude/skills/harness/SKILL.md
-
-      - name: Lint adversarial auditor
-        continue-on-error: true
-        run: bun textlint .claude/agents/tenkacloud-adversarial-auditor.md
-
-      - name: Lint principle registry
-        continue-on-error: true
-        run: bun textlint docs/architecture/principles.md
-
-      - name: Lint enforcement registry
-        continue-on-error: true
-        run: bun textlint docs/architecture/enforcement-registry.md
-
-      - name: Fail when any document remains invalid
-        run: |
-          bun textlint \
-            AGENTS.md \
-            .claude/skills/change/SKILL.md \
-            .claude/skills/harness/SKILL.md \
-            .claude/agents/tenkacloud-adversarial-auditor.md \
-            docs/architecture/principles.md \
-            docs/architecture/enforcement-registry.md
+      - name: Run textlint
+        run: bun textlint "${{ matrix.file }}"
