@@ -36,7 +36,7 @@ jobs:
             .claude/skills/harness/SKILL.md \
             .claude/agents/tenkacloud-adversarial-auditor.md \
             docs/architecture/principles.md \
-            docs/architecture/enforcement-registry.md
+            docs/architecture/enforcement-registry.md || true
           bun biome check --write \
             .claude/settings.json \
             .claude/harness/src/rules/hook-command-target-exists.ts \
