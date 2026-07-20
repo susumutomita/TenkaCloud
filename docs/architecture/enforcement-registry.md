@@ -67,10 +67,10 @@ tenant-scoped handler が DDB command を発行するとき、同一 file で `t
 Hook は repository state の正本ではありません。
 tool event に対する即時 guard です。
 
-- `guard-config.sh`: 設定 file の安易な編集を事前に止めます。
-- `post-format.sh`: edit 後に formatter を適用します。
-- `quality-guard.sh`: silent fallback や UI layer の direct fetch を edit 後に止めます。
-- Stop hook: browser-observable change に preview verification が必要な可能性を通知します。
+- `guard-config.sh`: 設定 file の安易な編集を事前に止める。
+- `post-format.sh`: edit 後に formatter を適用する。
+- `quality-guard.sh`: silent fallback や UI layer の direct fetch を edit 後に止める。
+- Stop hook: browser-observable change に preview verification が必要な可能性を通知する。
 
 commit の最終 gate は `.husky/pre-commit` と CI を正本とします。
 Claude Code の PreToolUse hook から、存在しない script を実行しません。
