@@ -2,11 +2,11 @@
 
 この文書は、AI エージェントの遵守に委ねず、機械的に強制する rule と gate の索引です。
 
-判断原則は [Principle Registry](./principles.md) を正本とする。
+判断原則は [Principle Registry](./principles.md) を正本とします。
 
 ## 登録要件
 
-新しい禁止や必須条件を追加するときは、最初に機械判定可能かを判断する。可能な場合は散文だけへ追加せず、次を同じ PR に含める。
+新しい禁止や必須条件を追加するときは、最初に機械判定可能かを判断します。可能な場合は散文だけへ追加せず、次を同じ PR に含めます。
 
 - rule ID。
 - 対応する principle ID。
@@ -35,9 +35,9 @@
 | `no-conflict-markers` | `PRINCIPLE_COMPLETION_REQUIRES_AUDIT` | repository text | error |
 | `no-aws-trademark-fictions` | `PRINCIPLE_ONE_PASS_PRODUCT_SLICE` | public content | error |
 
-`handler-tenant-isolation` は tenant logic を handler から禁止する rule ではない。tenant-scoped handler が DDB command を発行するとき、同一 file で `tenantId` を参照することを要求し、partition key や condition への tenant boundary の入れ忘れを検知する guard である。
+`handler-tenant-isolation` は tenant logic を handler から禁止する rule ではありません。tenant-scoped handler が DDB command を発行するとき、同一 file で `tenantId` を参照することを要求し、partition key や condition への tenant boundary の入れ忘れを検知する guard です。
 
-`hook-command-target-exists` は Claude Code settings の `command` を走査し、`.claude/` または `scripts/` 配下の local script target が実在することを確認する。削除済み script を参照する stale hook を commit 前と CI で止める。
+`hook-command-target-exists` は Claude Code settings の `command` を走査し、`.claude/` または `scripts/` 配下の local script target が実在することを確認します。削除済み script を参照する stale hook を commit 前と CI で止めます。
 
 ## Quality gates
 
@@ -59,18 +59,18 @@
 
 ## Hooks
 
-Hook は repository state の正本ではなく、tool event に対する即時 guard である。
+Hook は repository state の正本ではなく、tool event に対する即時 guard です。
 
-- `guard-config.sh`: 設定 file の安易な変更を実行前に止める。
-- `post-format.sh`: edit 後に formatter を適用する。
-- `quality-guard.sh`: silent fallback、UI layer direct fetch など局所的な危険パターンを edit 後に止める。
-- Stop hook: browser-observable change に preview verification が必要な可能性を通知する。
+- `guard-config.sh`: 設定 file の安易な編集を事前に止めます。
+- `post-format.sh`: edit 後に formatter を適用します。
+- `quality-guard.sh`: silent fallback、UI layer direct fetch など局所的な危険パターンを edit 後に止めます。
+- Stop hook: browser-observable change に preview verification が必要な可能性を通知します。
 
-commit の最終 gate は `.husky/pre-commit` と CI を正本とする。Claude Code の PreToolUse hook から、存在しない script や別系統の gate を重複実行しない。
+commit の最終 gate は `.husky/pre-commit` と CI を正本とします。Claude Code の PreToolUse hook から、存在しない script や別系統の gate を重複実行しません。
 
 ## Process invariants
 
-次は意味論的な契約であり、単独の regex rule だけでは十分に判定できない。
+次は意味論的な契約であり、単独の regex rule だけでは十分に判定できません。
 
 - `INVARIANT_CONTROL_PLANE_USES_SBT`。
 - `INVARIANT_CONTROL_PLANE_DOES_NOT_HOST_TENANT_RUNTIME`。
@@ -84,13 +84,13 @@ commit の最終 gate は `.husky/pre-commit` と CI を正本とする。Claude
 - `ONE_PASS_LOCAL`。
 - `ONE_PASS_AWS`。
 
-これらは Principle Registry、ADR、PR body、review、実行証拠で監査する。機械化できる部分が見つかった場合は、小さな enforcement rule と test を追加する。
+これらは Principle Registry、ADR、PR body、review、実行証拠で監査します。機械化できる部分が見つかった場合は、小さな enforcement rule と test を追加します。
 
 ## 例外手続き
 
-違反時の第一手は code の修正である。config、baseline、rule の緩和で隠さない。
+違反時の第一手は code の修正です。config、baseline、rule の緩和で隠しません。
 
-正当な例外が必要な場合は、次を行う。
+正当な例外が必要な場合は、次を行います。
 
 1. rule の誤検知ではなく設計例外である証拠を示す。
 2. trust boundary、影響範囲、代替防御を記録する。
