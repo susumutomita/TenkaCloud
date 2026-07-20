@@ -1,0 +1,55 @@
+name: agent-auto-fix-temp
+
+permissions:
+  contents: write
+
+on:
+  push:
+    branches:
+      - agent/principle-driven-harness
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: agent/principle-driven-harness
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: "1.3.11"
+
+      - name: Install packages
+        env:
+          npm_config_ignore_scripts: "true"
+          CI: "true"
+        run: make install_ci
+
+      - name: Apply deterministic fixes
+        run: |
+          bun textlint --fix \
+            AGENTS.md \
+            .claude/skills/change/SKILL.md \
+            .claude/skills/harness/SKILL.md \
+            .claude/agents/tenkacloud-adversarial-auditor.md \
+            docs/architecture/principles.md \
+            docs/architecture/enforcement-registry.md
+          bun biome check --write \
+            .claude/settings.json \
+            .claude/harness/src/rules/hook-command-target-exists.ts \
+            .claude/harness/src/rules/hook-command-target-exists.test.ts \
+            .claude/harness/src/rules/index.ts
+
+      - name: Commit fixes when needed
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add AGENTS.md .claude docs/architecture
+          git commit -m "fix(agent): apply deterministic lint fixes"
+          git push origin HEAD:agent/principle-driven-harness
