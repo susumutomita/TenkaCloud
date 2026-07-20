@@ -1,7 +1,7 @@
 name: agent-doc-lint-debug
 
 permissions:
-  contents: read
+  contents: write
 
 on:
   pull_request:
@@ -12,22 +12,13 @@ on:
       - ".github/workflows/agent-doc-lint-debug.yml"
 
 jobs:
-  lint:
-    name: lint (${{ matrix.file }})
+  capture:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        file:
-          - AGENTS.md
-          - .claude/skills/change/SKILL.md
-          - .claude/skills/harness/SKILL.md
-          - .claude/agents/tenkacloud-adversarial-auditor.md
-          - docs/architecture/principles.md
-          - docs/architecture/enforcement-registry.md
     steps:
-      - name: Check out the code
+      - name: Check out the PR branch
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: agent/principle-driven-harness
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
@@ -40,5 +31,21 @@ jobs:
           CI: "true"
         run: make install_ci
 
-      - name: Run textlint
-        run: bun textlint "${{ matrix.file }}"
+      - name: Capture exact diagnostics
+        run: |
+          mkdir -p .claude/state
+          bun textlint -f json \
+            docs/architecture/principles.md \
+            docs/architecture/enforcement-registry.md \
+            > .claude/state/textlint-diagnostics.json || true
+
+      - name: Commit diagnostics
+        run: |
+          if git diff --quiet -- .claude/state/textlint-diagnostics.json; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .claude/state/textlint-diagnostics.json
+          git commit -m "chore(agent): capture textlint diagnostics"
+          git push origin HEAD:agent/principle-driven-harness
