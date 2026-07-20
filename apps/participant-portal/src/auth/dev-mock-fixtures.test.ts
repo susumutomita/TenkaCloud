@@ -138,8 +138,8 @@ describe("dev-mock fixtures", () => {
     const drill = DEV_MOCK_TEAM_VIEW.problems.find(
       (problem) => problem.problemId === WHAT_IS_DRILL_PROBLEM_ID,
     );
-    expect(drill?.videoUrl).toBe("https://www.youtube.com/embed/5_ZEa_hLFzw");
-    expect(drill?.i18n?.en?.videoUrl).toBe("https://www.youtube.com/embed/GAdV_fZMzk0");
+    expect(drill?.videoUrl).toBe("https://www.youtube.com/embed/mcL_O17QVsA");
+    expect(drill?.i18n?.en?.videoUrl).toBe("https://www.youtube.com/embed/6qMzFcP5dgw");
   });
 
   it("should describe local mode on the learner's Mac, not as a Codespaces tutorial", () => {
@@ -155,7 +155,7 @@ describe("dev-mock fixtures", () => {
     for (const drill of drills) {
       // 公開済みチュートリアルはリポジトリ肥大化を避けるため YouTube へ分離する。
       if (drill.problemId === WHAT_IS_DRILL_PROBLEM_ID) {
-        expect(drill.videoUrl).toBe("https://www.youtube.com/embed/5_ZEa_hLFzw");
+        expect(drill.videoUrl).toBe("https://www.youtube.com/embed/mcL_O17QVsA");
         continue;
       }
       if (drill.problemId === AI_AGENT_LOCAL_DRILL_PROBLEM_ID) {
