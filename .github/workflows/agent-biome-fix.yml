@@ -6,10 +6,11 @@ permissions:
 on:
   pull_request:
     paths:
-      - ".claude/harness/**/*.ts"
-      - ".claude/settings.json"
-      - "infrastructure/lib/problem-deploy/**/*.ts"
-      - ".github/workflows/agent-biome-fix.yml"
+      - ".claude/**"
+      - "docs/architecture/**"
+      - "infrastructure/lib/problem-deploy/**"
+      - "Makefile"
+      - ".github/workflows/**"
 
 jobs:
   fix:
@@ -32,16 +33,7 @@ jobs:
         run: make install_ci
 
       - name: Apply Biome formatting
-        run: |
-          bun biome check --write \
-            .claude/settings.json \
-            .claude/harness/src/rules/hook-command-target-exists.ts \
-            .claude/harness/src/rules/hook-command-target-exists.test.ts \
-            .claude/harness/src/rules/index.ts \
-            infrastructure/lib/problem-deploy/runtime-clients/ssrf-guard.ts \
-            infrastructure/lib/problem-deploy/runtime-clients/http-probe-client.ts \
-            infrastructure/lib/problem-deploy/handlers/shared/ssrf-guard.ts \
-            infrastructure/lib/problem-deploy/handlers/generic-scoring-handler/scoring-kernel.ts
+        run: bun biome check --write
 
       - name: Commit format changes
         run: |
@@ -50,6 +42,6 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .claude infrastructure/lib/problem-deploy
+          git add -A
           git commit -m "fix(agent): apply Biome formatting"
           git push origin HEAD:agent/principle-driven-harness
