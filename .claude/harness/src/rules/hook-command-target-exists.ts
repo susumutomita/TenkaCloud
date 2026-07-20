@@ -54,20 +54,21 @@ export const hookCommandTargetExists: Rule = {
       return [];
     }
 
+    const targets = new Set(
+      collectCommandStrings(settings).flatMap(extractLocalTargets),
+    );
     const findings: Finding[] = [];
-    for (const command of collectCommandStrings(settings)) {
-      for (const target of extractLocalTargets(command)) {
-        if (targetExists(ctx, target)) continue;
-        findings.push({
-          ruleId: "hook-command-target-exists",
-          severity: "error",
-          filePath: SETTINGS_PATH,
-          match: target,
-          message: `Claude Code hook が存在しない local command target を参照しています: ${target}`,
-          recommendation:
-            "stale hook を削除するか、現在の gate / script の実在 path へ置き換えてください。commit gate は .husky/pre-commit と CI を正本とし、同じ検査を複数の hook へ複製しないでください。",
-        });
-      }
+    for (const target of targets) {
+      if (targetExists(ctx, target)) continue;
+      findings.push({
+        ruleId: "hook-command-target-exists",
+        severity: "error",
+        filePath: SETTINGS_PATH,
+        match: target,
+        message: `Claude Code hook が存在しない local command target を参照しています: ${target}`,
+        recommendation:
+          "stale hook を削除するか、現在の gate / script の実在 path へ置き換えてください。commit gate は .husky/pre-commit と CI を正本とし、同じ検査を複数の hook へ複製しないでください。",
+      });
     }
     return findings;
   },
