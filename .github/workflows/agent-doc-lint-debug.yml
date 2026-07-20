@@ -1,0 +1,48 @@
+name: agent-doc-lint-debug
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    paths:
+      - ".claude/**/*.md"
+      - "AGENTS.md"
+      - "docs/architecture/*.md"
+      - ".github/workflows/agent-doc-lint-debug.yml"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: "1.3.11"
+
+      - name: Install packages
+        env:
+          npm_config_ignore_scripts: "true"
+          CI: "true"
+        run: make install_ci
+
+      - name: Lint AGENTS.md
+        run: bun textlint AGENTS.md
+
+      - name: Lint change skill
+        run: bun textlint .claude/skills/change/SKILL.md
+
+      - name: Lint harness skill
+        run: bun textlint .claude/skills/harness/SKILL.md
+
+      - name: Lint adversarial auditor
+        run: bun textlint .claude/agents/tenkacloud-adversarial-auditor.md
+
+      - name: Lint principle registry
+        run: bun textlint docs/architecture/principles.md
+
+      - name: Lint enforcement registry
+        run: bun textlint docs/architecture/enforcement-registry.md
