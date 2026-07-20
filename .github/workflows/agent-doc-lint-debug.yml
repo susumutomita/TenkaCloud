@@ -33,19 +33,18 @@ jobs:
 
       - name: Capture exact diagnostics
         run: |
-          mkdir -p .claude/state
           bun textlint -f json \
             docs/architecture/principles.md \
             docs/architecture/enforcement-registry.md \
-            > .claude/state/textlint-diagnostics.json || true
+            > textlint-diagnostics.json || true
 
       - name: Commit diagnostics
         run: |
-          if [ -z "$(git status --porcelain -- .claude/state/textlint-diagnostics.json)" ]; then
+          if [ -z "$(git status --porcelain -- textlint-diagnostics.json)" ]; then
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .claude/state/textlint-diagnostics.json
+          git add textlint-diagnostics.json
           git commit -m "chore(agent): capture textlint diagnostics"
           git push origin HEAD:agent/principle-driven-harness
