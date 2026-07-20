@@ -1,15 +1,15 @@
 import type { ProblemEndpointSlot } from "../../../utils/endpoints-metadata.js";
 import type { ProblemScoringMetadata } from "../../../utils/scoring-metadata.js";
 import {
-  probeUrl,
   type ProbeFn,
   type ProbeOptions,
   type ProbeResult,
+  probeUrl,
 } from "../../runtime-clients/http-probe-client.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 
-export { probeUrl };
 export type { ProbeFn, ProbeOptions, ProbeResult };
+export { probeUrl };
 
 /** Pure scoring state shared by Lambda and the AWS-free local Simulator. */
 export interface ActiveDisruptionEffect {
