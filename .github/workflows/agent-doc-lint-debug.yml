@@ -1,0 +1,44 @@
+name: agent-doc-lint-debug
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    paths:
+      - ".claude/**/*.md"
+      - "AGENTS.md"
+      - "docs/architecture/*.md"
+      - ".github/workflows/agent-doc-lint-debug.yml"
+
+jobs:
+  lint:
+    name: lint (${{ matrix.file }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        file:
+          - AGENTS.md
+          - .claude/skills/change/SKILL.md
+          - .claude/skills/harness/SKILL.md
+          - .claude/agents/tenkacloud-adversarial-auditor.md
+          - docs/architecture/principles.md
+          - docs/architecture/enforcement-registry.md
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: "1.3.11"
+
+      - name: Install packages
+        env:
+          npm_config_ignore_scripts: "true"
+          CI: "true"
+        run: make install_ci
+
+      - name: Run textlint
+        run: bun textlint "${{ matrix.file }}"
