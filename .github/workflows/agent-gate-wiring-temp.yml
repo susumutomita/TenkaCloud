@@ -17,34 +17,52 @@ jobs:
         with:
           ref: agent/principle-driven-harness
 
-      - name: Wire harness into Makefile gates
+      - name: Wire harness into local and CI gates
         run: |
           python3 - <<'PY'
           from pathlib import Path
 
-          path = Path("Makefile")
-          content = path.read_text()
+          makefile = Path("Makefile")
+          make_content = makefile.read_text()
 
           old_gate = "GATE_CHECKS := lint test"
           new_gate = "GATE_CHECKS := harness lint test"
-          if old_gate in content:
-              content = content.replace(old_gate, new_gate, 1)
+          if old_gate in make_content:
+              make_content = make_content.replace(old_gate, new_gate, 1)
 
           old_ci_local = "ci-local: ## Run the full GitHub Actions gate locally | GitHub Actions相当の全gateをローカル実行\n\tgit fetch"
           new_ci_local = "ci-local: ## Run the full GitHub Actions gate locally | GitHub Actions相当の全gateをローカル実行\n\tbun run .claude/harness/bin/architecture.ts --fail-on=error\n\t$(MAKE) harness-test\n\tgit fetch"
-          if old_ci_local in content:
-              content = content.replace(old_ci_local, new_ci_local, 1)
+          if old_ci_local in make_content:
+              make_content = make_content.replace(old_ci_local, new_ci_local, 1)
 
-          path.write_text(content)
+          makefile.write_text(make_content)
+
+          workflow = Path(".github/workflows/ci.yml")
+          ci_content = workflow.read_text()
+          audit_block = """      - name: Audit dependency lifecycle scripts
+        run: |
+          make audit-deps
+
+"""
+          harness_block = audit_block + """      - name: Run architecture harness
+        run: bun run .claude/harness/bin/architecture.ts --fail-on=error
+
+      - name: Test architecture harness
+        run: make harness-test
+
+"""
+          if "- name: Run architecture harness" not in ci_content:
+              ci_content = ci_content.replace(audit_block, harness_block, 1)
+          workflow.write_text(ci_content)
           PY
 
       - name: Commit patch when needed
         run: |
-          if git diff --quiet -- Makefile; then
+          if git diff --quiet -- Makefile .github/workflows/ci.yml; then
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Makefile
-          git commit -m "fix(harness): wire checks into local gates"
+          git add Makefile .github/workflows/ci.yml
+          git commit -m "fix(harness): wire checks into all gates"
           git push origin HEAD:agent/principle-driven-harness
