@@ -1,0 +1,50 @@
+name: agent-gate-wiring-temp
+
+permissions:
+  contents: write
+
+on:
+  push:
+    branches:
+      - agent/principle-driven-harness
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: agent/principle-driven-harness
+
+      - name: Wire harness into Makefile gates
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("Makefile")
+          content = path.read_text()
+
+          old_gate = "GATE_CHECKS := lint test"
+          new_gate = "GATE_CHECKS := harness lint test"
+          if old_gate in content:
+              content = content.replace(old_gate, new_gate, 1)
+
+          old_ci_local = "ci-local: ## Run the full GitHub Actions gate locally | GitHub Actions相当の全gateをローカル実行\n\tgit fetch"
+          new_ci_local = "ci-local: ## Run the full GitHub Actions gate locally | GitHub Actions相当の全gateをローカル実行\n\tbun run .claude/harness/bin/architecture.ts --fail-on=error\n\t$(MAKE) harness-test\n\tgit fetch"
+          if old_ci_local in content:
+              content = content.replace(old_ci_local, new_ci_local, 1)
+
+          path.write_text(content)
+          PY
+
+      - name: Commit patch when needed
+        run: |
+          if git diff --quiet -- Makefile; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Makefile
+          git commit -m "fix(harness): wire checks into local gates"
+          git push origin HEAD:agent/principle-driven-harness
