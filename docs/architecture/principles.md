@@ -42,13 +42,13 @@ control plane、application plane、problem runtime、data consistency、auth、
 
 認証、認可、tenant、AWS account、cross-account AssumeRole の境界を明示する。
 
-一般の IAM policy は least privilege を既定とする。ただし `infrastructure/templates/competitor-bootstrap.yaml` の competitor account role は、問題 template が作成する AWS resource の種類が事前に固定できないため、意図的に `AdministratorAccess` を使う例外である。
+一般の IAM policy は least privilege をデフォルトとする。ただし `infrastructure/templates/competitor-bootstrap.yaml` の competitor account role は、問題 template が作成する AWS resource の種類が事前に固定できないため、意図的に `AdministratorAccess` を使う例外である。
 
 この例外は次の代替防御と一体で扱う。
 
 - trust policy を TenkaCloud account ID へ限定する。
 - `ExternalId` を必須とする。
-- session duration を制限する。
+- セッション duration を制限する。
 - competitor が stack 削除で一括 revoke できる。
 - 競技用または隔離された account を前提とする。
 
@@ -82,7 +82,7 @@ TenkaCloud の個人利用と community event の継続可能性を守るため�
 
 未検証の仮定、live verification、migration gap、未対応 mode、blocked reason、retry condition を具体的に記録する。
 
-SaaS、Lite、Always-On、local play の一つだけで成功した結果を、他 mode でも検証済みであるかのように扱わない。
+SaaS、Lite、Always-On、local play の1つだけで成功した結果を、他 mode でも検証済みであるかのように扱わない。
 
 ### `PRINCIPLE_COMPLETION_REQUIRES_AUDIT`
 

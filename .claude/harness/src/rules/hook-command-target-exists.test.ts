@@ -67,10 +67,7 @@ describe("hookCommandTargetExists", () => {
       hooks: {
         PreToolUse: [
           {
-            hooks: [
-              { command: "bash scripts/check.ts" },
-              { command: "bun scripts/check.ts" },
-            ],
+            hooks: [{ command: "bash scripts/check.ts" }, { command: "bun scripts/check.ts" }],
           },
         ],
         Stop: [{ hooks: [{ command: "bash .claude/hooks/stop.sh" }] }],

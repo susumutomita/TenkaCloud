@@ -54,9 +54,7 @@ export const hookCommandTargetExists: Rule = {
       return [];
     }
 
-    const targets = new Set(
-      collectCommandStrings(settings).flatMap(extractLocalTargets),
-    );
+    const targets = new Set(collectCommandStrings(settings).flatMap(extractLocalTargets));
     const findings: Finding[] = [];
     for (const target of targets) {
       if (targetExists(ctx, target)) continue;
