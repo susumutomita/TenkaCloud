@@ -24,6 +24,7 @@
 | `handler-must-not-call-fetch` | `PRINCIPLE_FAIL_LOUDLY_AT_BOUNDARIES` | handler | error |
 | `handler-no-direct-sdk-import` | `PRINCIPLE_ONE_PASS_PRODUCT_SLICE` | Lambda entrypoint | error |
 | `handler-tenant-isolation` | `PRINCIPLE_EXPLICIT_TRUST_BOUNDARY` | tenant-scoped DDB handler | error |
+| `hook-command-target-exists` | `PRINCIPLE_EVIDENCE_OVER_CONFIDENCE` | `.claude/settings.json` local script targets | error |
 | `iam-wildcard-needs-justify` | `PRINCIPLE_EXPLICIT_TRUST_BOUNDARY` | IAM policy | error |
 | `lambda-env-size` | `PRINCIPLE_PHYSICAL_EFFECTS_ARE_BEHAVIOR` | synthesized Lambda environment | warning / error |
 | `domain-no-infra-import` | `PRINCIPLE_ONE_PASS_PRODUCT_SLICE` | control-data domain | error |
@@ -35,6 +36,8 @@
 | `no-aws-trademark-fictions` | `PRINCIPLE_ONE_PASS_PRODUCT_SLICE` | public content | error |
 
 `handler-tenant-isolation` は tenant logic を handler から禁止する rule ではない。tenant-scoped handler が DDB command を発行するとき、同一 file で `tenantId` を参照することを要求し、partition key や condition への tenant boundary の入れ忘れを検知する guard である。
+
+`hook-command-target-exists` は Claude Code settings の `command` を走査し、`.claude/` または `scripts/` 配下の local script target が実在することを確認する。削除済み script を参照する stale hook を commit 前と CI で止める。
 
 ## Quality gates
 
