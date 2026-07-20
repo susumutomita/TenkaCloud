@@ -213,7 +213,7 @@
   },
   "problem_detail": {
     "back_button": "問題一覧へ戻る",
-    "video_header": "1 分でわかる操作の流れ",
+    "video_header": "動画でわかる操作の流れ",
     "video_note": "音声なし・字幕入りです。動画を見られない環境でも、下の問題文とヒントだけで進められます。",
     "video_note_youtube": "音声・字幕付きです。動画を見られない環境でも、下の問題文とヒントだけで進められます。",
     "deploy_missing_header": "この問題は自チームに deploy されていません",
@@ -412,7 +412,13 @@
     "solved_header": "🎉 {label} — 解答済",
     "solved_body": "この flag で +{points} pt を獲得しました。",
     "submit_button": "提出 (+{points} pt)",
-    "flag_field_label": "{label} (デプロイ出力値)"
+    "flag_field_label": "{label} (デプロイ出力値)",
+    "tutorial_complete_header": "🎉 TenkaCloud の基本をつかみました",
+    "tutorial_complete_body": "TenkaCloud は、クラウドを題材に手を動かし、flag と自動採点で学びを確かめる競技・演習プラットフォームです。4 問で Battle / Challenge / 始め方 / 採点の基本を体験しました。",
+    "tutorial_next_header": "次は、最初の実戦ドリルへ",
+    "tutorial_next_body": "スマホのまま約 60 秒で解ける「欠けた数」で、問題を読み、flag を提出し、自動採点される一連の流れを体験しましょう。",
+    "tutorial_next_button": "次へ: 「欠けた数」を解く",
+    "tutorial_problem_list_button": "ほかの問題を見る"
   },
   "score_timeline": {
     "header": "スコア推移",

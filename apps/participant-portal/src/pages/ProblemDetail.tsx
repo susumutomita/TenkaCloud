@@ -182,7 +182,7 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
         view={view}
       />
 
-      {/* #2707 P0-1: 冒頭の 1 分 operation 動画。 videoUrl を持つ問題のみ。
+      {/* #2707 P0-1: 冒頭の短い operation 動画。 videoUrl を持つ問題のみ。
        *   lock 中 (scoring_not_started / prerequisite) は本文と同様に出さない。 */}
       {canRenderBody && localizedProblem?.videoUrl && (
         <ProblemVideoSection videoUrl={localizedProblem.videoUrl} />

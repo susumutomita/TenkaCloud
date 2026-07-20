@@ -6,7 +6,7 @@ import { useState } from "react";
 import { useT } from "../i18n";
 
 /**
- * #2707 P0-1: 問題冒頭の 1 分 operation 動画。 同一 origin の自ホスト mp4 に加えて、
+ * #2707 P0-1: 問題冒頭の短い operation 動画。 同一 origin の自ホスト mp4 に加えて、
  * リポジトリ肥大化を避けるため YouTube の正規 embed URL を扱う。 YouTube は strict allow-list
  * で iframe に限定し、それ以外は従来どおり video として扱う。
  */

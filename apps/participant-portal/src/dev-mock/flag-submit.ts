@@ -69,6 +69,10 @@ export const WHAT_IS_DRILL_PROBLEM_ID = "what-is-tenkacloud";
 /** LP のプロンプトから Mac ローカル起動までを追う AI-agent チュートリアル。 */
 export const AI_AGENT_LOCAL_DRILL_PROBLEM_ID = "ai-agent-local-mac";
 
+/** First no-signup browser drill recommended after the four-step tutorial. */
+export const FIRST_BROWSER_DRILL_PROBLEM_ID = "number-sequence";
+export const FIRST_BROWSER_DRILL_JOB_ID = "01HZX0KFFCT7BHGAQM6Q2WP1AB";
+
 /**
  * Issue #2707 / #2711: クイズ型 sub-flag の許容解。 問題文 (description) を読めば導ける
  * 単語を、 表記揺れ (英/日) 込みで列挙する。 判定は trim + 小文字化の完全一致。
@@ -160,4 +164,26 @@ export function evaluateMockSubFlag(
     return matchesQuizAnswer(problemId, flagId, rawFlag) ? ok() : WRONG_OUTCOME;
   }
   return evaluateMockFlag(rawFlag, points);
+}
+
+/**
+ * Single-flag demo problems need their real answer too. Falling back to the
+ * generic Easter-egg evaluator made the visible `TC{21}` instruction fail in
+ * `number-sequence`, so the onboarding handoff was a dead end.
+ */
+export function evaluateMockProblemFlag(
+  problemId: string,
+  rawFlag: string,
+  points: number,
+): SubmitFlagOutcome {
+  if (problemId === FIRST_BROWSER_DRILL_PROBLEM_ID) {
+    return rawFlag.trim().toLowerCase() === "tc{21}"
+      ? { kind: "ok", scoreDelta: points, totalScore: points }
+      : WRONG_OUTCOME;
+  }
+  return evaluateMockFlag(rawFlag, points);
+}
+
+export function isStrictMockProblemFlag(problemId: string): boolean {
+  return problemId === FIRST_BROWSER_DRILL_PROBLEM_ID;
 }

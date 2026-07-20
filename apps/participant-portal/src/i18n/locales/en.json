@@ -213,7 +213,7 @@
   },
   "problem_detail": {
     "back_button": "Back to problems",
-    "video_header": "The flow in one minute",
+    "video_header": "Watch the flow",
     "video_note": "No audio — captions are baked in. If the video does not load, the description and hints below are all you need.",
     "video_note_youtube": "Includes audio and captions. If the video does not load, the description and hints below are all you need.",
     "deploy_missing_header": "This problem is not deployed to your team",
@@ -412,7 +412,13 @@
     "solved_header": "🎉 {label} — solved",
     "solved_body": "You earned +{points} pt for this flag.",
     "submit_button": "Submit (+{points} pt)",
-    "flag_field_label": "{label} (deployment output value)"
+    "flag_field_label": "{label} (deployment output value)",
+    "tutorial_complete_header": "🎉 You have the TenkaCloud basics",
+    "tutorial_complete_body": "TenkaCloud is a competition and practice platform where you learn by working through cloud problems, submitting flags, and getting instant scoring. These four steps covered Battle, Challenge, ways to start, and scoring.",
+    "tutorial_next_header": "Next: your first real drill",
+    "tutorial_next_body": "Stay on your phone and solve “The missing number” in about 60 seconds. Read the problem, submit a flag, and see the full scoring loop.",
+    "tutorial_next_button": "Next: solve “The missing number”",
+    "tutorial_problem_list_button": "Browse other problems"
   },
   "score_timeline": {
     "header": "Score timeline",

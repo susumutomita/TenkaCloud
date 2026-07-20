@@ -9,6 +9,7 @@ import {
   AI_AGENT_LOCAL_DRILL_PROBLEM_ID,
   CANONICAL_MOCK_FLAG,
   evaluateMockFlag,
+  evaluateMockProblemFlag,
   evaluateMockSubFlag,
   WHAT_IS_DRILL_PROBLEM_ID,
 } from "./flag-submit";
@@ -28,6 +29,16 @@ describe("evaluateMockFlag", () => {
     expect(evaluateMockFlag("   ", 300).kind).toBe("wrong");
     const wrong = evaluateMockFlag("not-a-flag", 300);
     expect(wrong).toMatchObject({ kind: "wrong", scoreDelta: -10 });
+  });
+});
+
+describe("evaluateMockProblemFlag (first browser drill)", () => {
+  it("scores the answer printed by number-sequence and rejects generic demo flags", () => {
+    expect(evaluateMockProblemFlag("number-sequence", " TC{21} ", 300)).toMatchObject({
+      kind: "ok",
+      scoreDelta: 300,
+    });
+    expect(evaluateMockProblemFlag("number-sequence", CANONICAL_MOCK_FLAG, 300).kind).toBe("wrong");
   });
 });
 
