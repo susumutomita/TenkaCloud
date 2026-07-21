@@ -11,9 +11,7 @@ describe("stringifyRuntimeOutput", () => {
   });
 
   it("should serialize structured values deterministically", () => {
-    expect(stringifyRuntimeOutput({ nested: ["value"] }, "provider")).toBe(
-      '{"nested":["value"]}',
-    );
+    expect(stringifyRuntimeOutput({ nested: ["value"] }, "provider")).toBe('{"nested":["value"]}');
   });
 
   it("should fail loudly for unsupported or circular values", () => {
