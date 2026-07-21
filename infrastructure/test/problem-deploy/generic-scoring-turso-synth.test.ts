@@ -29,9 +29,7 @@ describe("GenericScoring scheduled actions on pure Turso synth (#2739)", () => {
     expect(variables.DEPLOY_EVENT_BUS_NAME).toBeDefined();
     expect(variables.DEPLOY_ENVIRONMENT).toBe("development");
     expect(variables.TURSO_DATABASE_URL).toBe("libsql://example.turso.io");
-    expect(variables.TURSO_AUTH_TOKEN_PARAMETER_NAME).toBe(
-      "/tenkacloud/development/turso-token",
-    );
+    expect(variables.TURSO_AUTH_TOKEN_PARAMETER_NAME).toBe("/tenkacloud/development/turso-token");
     expect(variables.EVENTS_TABLE_NAME).toBeUndefined();
     expect(variables.DEPLOYMENTS_TABLE_NAME).toBeUndefined();
     expect(variables.TEAMS_TABLE_NAME).toBeUndefined();
