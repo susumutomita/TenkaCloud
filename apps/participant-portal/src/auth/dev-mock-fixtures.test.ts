@@ -20,7 +20,7 @@ import {
  * 整合性を pin する。 ドリルの sub-flag id が判定側 (`evaluateMockSubFlag`) と揃って
  * いなければ永遠に wrong を返すし、 ヒントの無いドリルは「本文は概要 → ヒントで
  * ステップバイステップ」 という構造契約を破る。 #2711 で問題 1 は what-is-tenkacloud
- * (4 ステップ、 モード 2 択はステップ 3) になり、 AI/Mac 実演は Codespaces 問題と
+ * (4 ステップ、 モード 3 択はステップ 3) になり、 AI/Mac 実演はローカルモード問題と
  * 混ぜずに独立した 4 問目として置く。
  */
 describe("dev-mock fixtures", () => {
@@ -48,18 +48,30 @@ describe("dev-mock fixtures", () => {
       "choose-mode",
       "first-flag",
     ]);
-    // モードの 2 択はステップ 3 のセクションで初めて出す (それ以前の本文に出さない)。
+    // モードの 3 択はステップ 3 のセクションで初めて出す (それ以前の本文に出さない)。
     const body = tutorial?.description ?? "";
     const step3At = body.indexOf("ステップ 3");
     expect(step3At).toBeGreaterThan(-1);
+    expect(body.slice(0, step3At)).not.toContain("ローカルモード");
+    expect(body.slice(0, step3At)).not.toContain("SaaS");
     expect(body.slice(0, step3At)).not.toContain("Codespaces");
-    // どちらのモードを選んでも正解 (= クイズではなく選択)。
-    expect(evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, "choose-mode", "lite", 100).kind).toBe(
-      "ok",
-    );
-    expect(
-      evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, "choose-mode", "codespaces", 100).kind,
-    ).toBe("ok");
+    // 実在するモード (ローカル / Lite / SaaS + 文脈として Always-On) を提示し、
+    // 実在しないモード名を出さない。
+    const step3 = body.slice(step3At);
+    expect(step3).toContain("ローカルモード");
+    expect(step3).toContain("Lite モード");
+    expect(step3).toContain("SaaS モード");
+    expect(step3).toContain("Always-On モード");
+    expect(tutorial?.i18n?.en?.description).toContain("Always-On mode");
+    expect(body).not.toContain("deploy-local");
+    expect(tutorial?.i18n?.en?.description).not.toContain("deploy-local");
+    // どのモードを選んでも正解 (= クイズではなく選択)。
+    for (const answer of ["local", "lite", "saas", "always-on", "codespaces"]) {
+      expect(
+        evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, "choose-mode", answer, 100).kind,
+        `choose-mode should accept "${answer}"`,
+      ).toBe("ok");
+    }
   });
 
   it("should ship every onboarding problem as an unsolved multi-flag drill", () => {
@@ -145,9 +157,14 @@ describe("dev-mock fixtures", () => {
   it("should describe local mode on the learner's Mac, not as a Codespaces tutorial", () => {
     const drill = drills.find((problem) => problem.problemId === LOCAL_DRILL_PROBLEM_ID);
     expect(drill?.description).toContain("手元の Mac");
-    expect(drill?.description).toContain("bun run tenkacloud local --problem sqli-demo");
+    // 正規の入口は make local (起動後に Portal で問題を選ぶ)。内部実装の
+    // `bun run tenkacloud local --problem ...` を競技者向け本文に出さない。
+    expect(drill?.description).toContain("`make local`");
+    expect(drill?.description).not.toContain("bun run tenkacloud");
     expect(drill?.description).not.toContain("Codespaces");
     expect(drill?.i18n?.en?.description).toContain("on your Mac");
+    expect(drill?.i18n?.en?.description).toContain("`make local`");
+    expect(drill?.i18n?.en?.description).not.toContain("bun run tenkacloud");
     expect(drill?.i18n?.en?.description).not.toContain("Codespaces");
   });
 
