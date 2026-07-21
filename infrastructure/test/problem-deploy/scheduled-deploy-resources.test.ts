@@ -11,6 +11,11 @@ import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers"
  * deploy に必須な env が 1 つでも欠けると `undefined` (= dormant) を返し、 reconciler が scheduled
  * deploy を skip して毎分 tick / 採点を壊さないことを pin する。 全 env が揃って初めて有効な
  * EventSharedResources (teamsTableName / problemsCatalog 込み) を返す。
+ *
+ * [Issue #2739] 上記ガードは dynamodb backend (既定) 専用。 pure SQL backend (turso) では table
+ * 自体が synth されず env も配線されないため、 table name をガードに含めると
+ * scheduled teardown/deploy が永久に dormant になる (2026-07-21 ライブ障害)。 turso 選択時は
+ * table name 抜きで (bus + environment + catalog のみ) 有効化されることを pin する。
  */
 
 const REQUIRED_ENV = {
@@ -23,7 +28,11 @@ const REQUIRED_ENV = {
   BATTLE_PROBLEMS_CATALOG: JSON.stringify({ "hello-world-battle": "battle/hello-world-battle" }),
 } as const;
 
-const ENV_KEYS = [...Object.keys(REQUIRED_ENV), "DISRUPTIONS_TABLE_NAME"] as const;
+const ENV_KEYS = [
+  ...Object.keys(REQUIRED_ENV),
+  "DISRUPTIONS_TABLE_NAME",
+  "CONTROL_DATA_BACKEND",
+] as const;
 
 const saved: Record<string, string | undefined> = {};
 
@@ -116,6 +125,52 @@ describe("buildScheduledDeployResources (ADR-047 follow-up)", () => {
 });
 
 /**
+ * [Issue #2739] 2026-07-21 ライブ障害の回帰テスト: 純 Turso (`CONTROL_DATA_BACKEND=turso`) では
+ * Events/Teams/Deployments/CompetitorAccounts table 自体が synth されず table name env も
+ * 配線されない。 バグ修正前は `buildScheduledDeployResources` がこの状態を「未配線 = dormant」と
+ * 誤認し、 turso 選択時は teardownAt / deployAt が永久に発火しなかった。 table name 抜きでも
+ * bus + environment + catalog さえ揃えば有効な resources を返すことを pin する。
+ */
+describe("buildScheduledDeployResources (Issue #2739, pure SQL backend)", () => {
+  const TURSO_BUS_ENV = {
+    CONTROL_DATA_BACKEND: "turso",
+    DEPLOY_EVENT_BUS_NAME: "bus",
+    DEPLOY_ENVIRONMENT: "test",
+    BATTLE_PROBLEMS_CATALOG: JSON.stringify({ "hello-world-battle": "battle/hello-world-battle" }),
+  } as const;
+
+  it("should build resources with empty-string table-name placeholders when no table env is wired (turso never dormant on table names)", () => {
+    for (const [key, value] of Object.entries(TURSO_BUS_ENV)) process.env[key] = value;
+    const runtime = makeTestControlDataRuntime();
+    const res = buildScheduledDeployResources(runtime);
+    expect(res).toBeDefined();
+    expect(res?.runtime).toBe(runtime);
+    expect(res?.eventsTableName).toBe("");
+    expect(res?.deploymentsTableName).toBe("");
+    expect(res?.teamsTableName).toBe("");
+    expect(res?.competitorAccountsTableName).toBe("");
+    expect(res?.eventBusName).toBe("bus");
+    expect(res?.env).toBe("test");
+    expect(res?.problemsCatalog).toEqual({
+      "hello-world-battle": "battle/hello-world-battle",
+    });
+  });
+
+  it("should still return undefined when the bus/environment/catalog guard is unmet, even on turso", () => {
+    process.env.CONTROL_DATA_BACKEND = "turso";
+    expect(buildScheduledDeployResources(makeTestControlDataRuntime())).toBeUndefined();
+  });
+
+  it("should keep the dynamodb backend gate unchanged (still dormant without table-name env, #1910 compat pin)", () => {
+    for (const [key, value] of Object.entries(TURSO_BUS_ENV)) {
+      if (key !== "CONTROL_DATA_BACKEND") process.env[key] = value;
+    }
+    // CONTROL_DATA_BACKEND left unset => defaults to dynamodb.
+    expect(buildScheduledDeployResources(makeTestControlDataRuntime())).toBeUndefined();
+  });
+});
+
+/**
  * [ADR-047] `buildScheduledTeardownResources` の段階的有効化ガード (deploy 側の鏡像)。
  * teardown は Teams / catalog を使わないため必須 env が deploy より狭い。
  */
@@ -175,5 +230,46 @@ describe("buildScheduledTeardownResources (ADR-047)", () => {
     expect(res?.ssm).toBeDefined();
     expect(res?.sakuraAppRunBaseUrl).toBe("https://apprun.example.test");
     delete process.env.SAKURA_APPRUN_BASE_URL;
+  });
+});
+
+/**
+ * [Issue #2739] 2026-07-21 ライブ障害の回帰テスト (teardown 側、 deploy 側の鏡像)。
+ * event `01KY29N716HRCNDJ7VBMAQQ3ZG` は teardownAt を過ぎても発火せず、 手動「即座に撤去」で
+ * 初めて TEARDOWN に進んだ。 純 Turso では table name env が無いのが正常状態であり、
+ * bus + environment さえ揃えば有効な resources を返すことを pin する。
+ */
+describe("buildScheduledTeardownResources (Issue #2739, pure SQL backend)", () => {
+  const TURSO_BUS_ENV = {
+    CONTROL_DATA_BACKEND: "turso",
+    DEPLOY_EVENT_BUS_NAME: "bus",
+    DEPLOY_ENVIRONMENT: "test",
+  } as const;
+
+  it("should build resources with empty-string table-name placeholders when no table env is wired (turso never dormant on table names)", () => {
+    for (const [key, value] of Object.entries(TURSO_BUS_ENV)) process.env[key] = value;
+    const runtime = makeTestControlDataRuntime();
+    const res = buildScheduledTeardownResources(runtime);
+    expect(res).toBeDefined();
+    expect(res?.runtime).toBe(runtime);
+    expect(res?.eventsTableName).toBe("");
+    expect(res?.deploymentsTableName).toBe("");
+    expect(res?.competitorAccountsTableName).toBe("");
+    expect(res?.teamsTableName).toBe("");
+    expect(res?.eventBusName).toBe("bus");
+    expect(res?.env).toBe("test");
+  });
+
+  it("should still return undefined when the bus/environment guard is unmet, even on turso", () => {
+    process.env.CONTROL_DATA_BACKEND = "turso";
+    expect(buildScheduledTeardownResources(makeTestControlDataRuntime())).toBeUndefined();
+  });
+
+  it("should keep the dynamodb backend gate unchanged (still dormant without table-name env, #1910 compat pin)", () => {
+    for (const [key, value] of Object.entries(TURSO_BUS_ENV)) {
+      if (key !== "CONTROL_DATA_BACKEND") process.env[key] = value;
+    }
+    // CONTROL_DATA_BACKEND left unset => defaults to dynamodb.
+    expect(buildScheduledTeardownResources(makeTestControlDataRuntime())).toBeUndefined();
   });
 });

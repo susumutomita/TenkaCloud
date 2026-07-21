@@ -13,6 +13,7 @@ import {
   parseProblemsEducationGraph,
 } from "../../../utils/education-graph.js";
 import type { AdminAuditLogRepository } from "../../control-data/admin-audit-log-repository.js";
+import { type SelectedBackend, selectBackend } from "../../control-data/backend-config.js";
 import type {
   DeploymentsQueryPort,
   DeploymentsRepository,
@@ -199,37 +200,60 @@ export function buildEventSharedResources(runtime: ControlDataRuntime): EventSha
 }
 
 /**
+ * [Issue #2739] Resolves the table-name triple for {@link buildScheduledTeardownResources},
+ * branching on the selected control-data backend:
+ *
+ * - **pure SQL (turso)**: table names are never synthesized, so they must never gate
+ *   dormancy (empty-string placeholders — the SQL repositories resolve through the
+ *   injected `runtime` and ignore the name, same treatment as every other
+ *   `*TableName` field on `EventSharedResources`).
+ * - **dynamodb (default)**: unchanged #1910 staged-enablement gate — `undefined`
+ *   until an owner wires every table name env (+ grants).
+ */
+function resolveScheduledTeardownTableNames(backend: SelectedBackend):
+  | {
+      readonly eventsTableName: string;
+      readonly deploymentsTableName: string;
+      readonly competitorAccountsTableName: string;
+    }
+  | undefined {
+  if (backend.kind === "pure") {
+    return { eventsTableName: "", deploymentsTableName: "", competitorAccountsTableName: "" };
+  }
+  const competitorAccountsTableName = process.env.COMPETITOR_ACCOUNTS_TABLE_NAME;
+  const eventsTableName = process.env.EVENTS_TABLE_NAME;
+  const deploymentsTableName = process.env.DEPLOYMENTS_TABLE_NAME;
+  if (!competitorAccountsTableName || !eventsTableName || !deploymentsTableName) return undefined;
+  return { eventsTableName, deploymentsTableName, competitorAccountsTableName };
+}
+
+/**
  * [ADR-047] 毎分 reconciler (generic-scoring Lambda) から `bulkTeardownEvent` を呼ぶための
  * 最小 `EventSharedResources`。 teardown は Events / Deployments / CompetitorAccounts table と
  * deploy event bus だけを使う (= Teams / problem catalog / S3 は不要)。 未使用 field は安全な
  * placeholder で埋める。
  *
- * **防御設計**: `COMPETITOR_ACCOUNTS_TABLE_NAME` env が未配線なら `undefined` を返す。 これにより
- * オーナーが generic-scoring Lambda に CompetitorAccounts read grant + env を足す前は scheduled
- * teardown が dormant になり、 毎分 tick / 採点を一切壊さない。
+ * **防御設計**: dynamodb backend (既定) では `COMPETITOR_ACCOUNTS_TABLE_NAME` 等の table name env
+ * が未配線なら `undefined` を返す (#1910 の段階的有効化モデル)。 これによりオーナーが
+ * generic-scoring Lambda に CompetitorAccounts read grant + env を足す前は scheduled teardown が
+ * dormant になり、 毎分 tick / 採点を一切壊さない。
+ *
+ * [Issue #2739] pure SQL backend (turso) は table 自体が synth されず env も配線されないため、
+ * 上記ガードを table name に適用すると **永久に** dormant になる (= ライブ障害の根本原因)。
+ * table name は bus + environment(+ deploy 側は catalog) の必須ガードから外し、 turso 選択時は
+ * 空文字 placeholder で常に有効化する ({@link resolveScheduledTeardownTableNames})。
  */
 export function buildScheduledTeardownResources(
   runtime: ControlDataRuntime,
 ): EventSharedResources | undefined {
-  const competitorAccountsTableName = process.env.COMPETITOR_ACCOUNTS_TABLE_NAME;
-  const eventsTableName = process.env.EVENTS_TABLE_NAME;
-  const deploymentsTableName = process.env.DEPLOYMENTS_TABLE_NAME;
   const eventBusName = process.env.DEPLOY_EVENT_BUS_NAME;
   const env = process.env.DEPLOY_ENVIRONMENT;
-  if (
-    !competitorAccountsTableName ||
-    !eventsTableName ||
-    !deploymentsTableName ||
-    !eventBusName ||
-    !env
-  ) {
-    return undefined;
-  }
+  if (!eventBusName || !env) return undefined;
+  const tableNames = resolveScheduledTeardownTableNames(selectBackend(process.env));
+  if (!tableNames) return undefined;
   return {
     runtime,
-    eventsTableName,
-    deploymentsTableName,
-    competitorAccountsTableName,
+    ...tableNames,
     eventBusName,
     env,
     ddb: DynamoDBDocumentClient.from(new DynamoDBClient({})),
@@ -255,43 +279,69 @@ export function buildScheduledTeardownResources(
 }
 
 /**
- * [ADR-047 follow-up] 毎分 reconciler (generic-scoring Lambda) から `bulkDeployEvent` を呼ぶための
- * `EventSharedResources` (teardown の鏡像)。 bulk deploy は Events / Deployments / Teams /
- * CompetitorAccounts table と deploy event bus + problem catalog を使う (= teardown より広い)。
- *
- * **防御設計**: deploy に必須な env (`TEAMS_TABLE_NAME` + `BATTLE_PROBLEMS_CATALOG` を含む) が
- * 1 つでも欠けると `undefined` を返す。 これにより generic-scoring Lambda に Teams read grant +
- * catalog 配線が無い間は scheduled deploy が dormant になり、 毎分 tick / 採点を一切壊さない
- * (= teardown 配線 (#1910) と同じ段階的有効化モデル)。 `bulkDeployEvent` は teams を Query し
- * problemsCatalog で problemId→problemDir を解決するため、 teardown の placeholder では不足する。
+ * [Issue #2739] Resolves the table-name quadruple for {@link buildScheduledDeployResources}
+ * (mirror of {@link resolveScheduledTeardownTableNames}, extended with `teamsTableName` since
+ * `bulkDeployEvent` queries teams). Same backend branch: pure SQL (turso) never gates on table
+ * names (empty-string placeholders); dynamodb (default) keeps the unchanged #1910 gate.
  */
-export function buildScheduledDeployResources(
-  runtime: ControlDataRuntime,
-): EventSharedResources | undefined {
+function resolveScheduledDeployTableNames(backend: SelectedBackend):
+  | {
+      readonly eventsTableName: string;
+      readonly deploymentsTableName: string;
+      readonly teamsTableName: string;
+      readonly competitorAccountsTableName: string;
+    }
+  | undefined {
+  if (backend.kind === "pure") {
+    return {
+      eventsTableName: "",
+      deploymentsTableName: "",
+      teamsTableName: "",
+      competitorAccountsTableName: "",
+    };
+  }
   const competitorAccountsTableName = process.env.COMPETITOR_ACCOUNTS_TABLE_NAME;
   const eventsTableName = process.env.EVENTS_TABLE_NAME;
   const deploymentsTableName = process.env.DEPLOYMENTS_TABLE_NAME;
   const teamsTableName = process.env.TEAMS_TABLE_NAME;
-  const eventBusName = process.env.DEPLOY_EVENT_BUS_NAME;
-  const env = process.env.DEPLOY_ENVIRONMENT;
-  const problemsCatalog = parseProblemsCatalog(process.env.BATTLE_PROBLEMS_CATALOG);
   if (
     !competitorAccountsTableName ||
     !eventsTableName ||
     !deploymentsTableName ||
-    !teamsTableName ||
-    !eventBusName ||
-    !env ||
-    Object.keys(problemsCatalog).length === 0
+    !teamsTableName
   ) {
     return undefined;
   }
+  return { eventsTableName, deploymentsTableName, teamsTableName, competitorAccountsTableName };
+}
+
+/**
+ * [ADR-047 follow-up] 毎分 reconciler (generic-scoring Lambda) から `bulkDeployEvent` を呼ぶための
+ * `EventSharedResources` (teardown の鏡像)。 bulk deploy は Events / Deployments / Teams /
+ * CompetitorAccounts table と deploy event bus + problem catalog を使う (= teardown より広い)。
+ *
+ * **防御設計**: dynamodb backend (既定) では deploy に必須な env (`TEAMS_TABLE_NAME` を含む
+ * table name 群) が 1 つでも欠けると `undefined` を返す (#1910 の段階的有効化モデル、
+ * teardown 配線と同じ)。 `bulkDeployEvent` は teams を Query し problemsCatalog で
+ * problemId→problemDir を解決するため、 teardown の placeholder では不足する。
+ *
+ * [Issue #2739] pure SQL backend (turso) は table 自体が synth されず env も配線されないため、
+ * table name をガードに含めると永久に dormant になる (teardown と同じ根本原因)。
+ * 必須ガードは bus + environment + catalog(非空) に縮め、 table name は turso 選択時に空文字
+ * placeholder で常に有効化する ({@link resolveScheduledDeployTableNames})。
+ */
+export function buildScheduledDeployResources(
+  runtime: ControlDataRuntime,
+): EventSharedResources | undefined {
+  const eventBusName = process.env.DEPLOY_EVENT_BUS_NAME;
+  const env = process.env.DEPLOY_ENVIRONMENT;
+  const problemsCatalog = parseProblemsCatalog(process.env.BATTLE_PROBLEMS_CATALOG);
+  if (!eventBusName || !env || Object.keys(problemsCatalog).length === 0) return undefined;
+  const tableNames = resolveScheduledDeployTableNames(selectBackend(process.env));
+  if (!tableNames) return undefined;
   return {
     runtime,
-    eventsTableName,
-    deploymentsTableName,
-    teamsTableName,
-    competitorAccountsTableName,
+    ...tableNames,
     eventBusName,
     env,
     problemsCatalog,
