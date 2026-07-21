@@ -1,5 +1,5 @@
 /**
- * [ADR-026 / Issue #1412] sakura/apprun runtime adapter.
+ * [ADR-026 / Issues #1412, #2746] sakura/apprun runtime adapter.
  *
  * Sakura には CloudFormation 相当の state-owning IaC が無いので、 problem の container image を
  * **AppRun application** として deploy し、 AppRun (Knative on managed k8s) が runtime / scaling /
@@ -72,15 +72,17 @@ export const SAKURA_PROVIDER = "sakura";
 export const SAKURA_ENGINE = "apprun";
 
 /**
- * AppRun (Knative) の status 文字列を platform の 6-state に射影する。 不在 (= 未作成 / 削除済) は
- * `destroyed`、 終了系は `failed`/`destroying`/`destroyed`、 稼働は `ready`、 それ以外 (provisioning /
- * pending / 未知) は安全側で `deploying` (= ready と誤判定して採点を始めない)。 厳密な値は実 account で確認。
+ * AppRun の current status (`Healthy` / `Deploying` / `UnHealthy`) と互換 alias を platform の
+ * 6-state に射影する。 不在 (= 未作成 / 削除済) は `destroyed`、 稼働は `ready`、 failure は `failed`、
+ * それ以外 (provisioning / pending / 未知) は安全側で `deploying` (= ready と誤判定して採点を始めない)。
  */
 export function mapSakuraStatus(raw: string | undefined): RuntimeStatus {
   if (raw === undefined) return "destroyed";
   const s = raw.toLowerCase();
-  if (["running", "ready", "active", "succeeded", "available"].includes(s)) return "ready";
-  if (["failed", "error", "crashed", "failure"].includes(s)) return "failed";
+  if (["healthy", "running", "ready", "active", "succeeded", "available"].includes(s)) {
+    return "ready";
+  }
+  if (["unhealthy", "failed", "error", "crashed", "failure"].includes(s)) return "failed";
   if (["deleting", "terminating"].includes(s)) return "destroying";
   if (["deleted", "gone", "notfound"].includes(s)) return "destroyed";
   return "deploying";

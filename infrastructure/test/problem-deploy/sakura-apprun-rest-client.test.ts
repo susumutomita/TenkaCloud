@@ -2,9 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import { createSakuraAppRunRestClient } from "../../lib/problem-deploy/runtime-clients/sakura-apprun-rest-client.js";
 
 /**
- * [ADR-026 / #1412] AppRun REST client の wire 整形を pin。 fetch を mock し、 endpoint / Basic auth /
- * body 整形 / name↔id 解決 / status+public_url 射影 / idempotent delete / 非2xx throw を観測する。
- * 実 API の field 名差は integration 相で吸収する前提 (= waterfall)。
+ * [ADR-026 / #1412 / #2746] AppRun REST client の wire 整形を pin。 fetch を mock し、 endpoint /
+ * Basic auth / current resource enums / PATCH update / detail+status endpoint / name↔id 解決 /
+ * public_url 射影 / idempotent delete / 非2xx throw を観測する。
  */
 
 const CRED = { accessToken: "tok", accessTokenSecret: "sec" };
@@ -22,22 +22,25 @@ function makeClient(fetchImpl: ReturnType<typeof vi.fn>) {
   return createSakuraAppRunRestClient(CRED, { baseUrl: BASE, fetchImpl: fetchImpl as never });
 }
 
-describe("sakura-apprun-rest-client (ADR-026 #1412)", () => {
-  it("should POST a new application with Basic auth and an image/env component when none exists", async () => {
+describe("sakura-apprun-rest-client (ADR-026 #1412 #2746)", () => {
+  it("should POST a new application with Basic auth and supported component resources", async () => {
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse({ data: [] })) // list → empty
       .mockResolvedValueOnce(jsonResponse({ id: "app-1", name: "p-team" }, 201)); // create
+
     await makeClient(fetchImpl).upsertApplication({
       name: "p-team",
       image: "registry.example/img:latest",
       env: { TENKACLOUD_TEAM: "team-a" },
     });
+
     expect(fetchImpl).toHaveBeenCalledTimes(2);
     const [listUrl, listInit] = fetchImpl.mock.calls[0];
     expect(listUrl).toBe(`${BASE}/applications`);
     expect(listInit.method).toBe("GET");
     expect(listInit.headers.Authorization).toBe(EXPECTED_AUTH);
+
     const [createUrl, createInit] = fetchImpl.mock.calls[1];
     expect(createUrl).toBe(`${BASE}/applications`);
     expect(createInit.method).toBe("POST");
@@ -47,21 +50,25 @@ describe("sakura-apprun-rest-client (ADR-026 #1412)", () => {
       "registry.example/img:latest",
     );
     expect(body.components[0].env).toEqual([{ key: "TENKACLOUD_TEAM", value: "team-a" }]);
+    expect(body.components[0].max_cpu).toBe("0.5");
+    expect(body.components[0].max_memory).toBe("1Gi");
     expect(body.port).toBe(8080);
   });
 
-  it("should PUT to the resolved id when an application with the same name already exists (idempotent deploy)", async () => {
+  it("should PATCH the resolved id when an application with the same name already exists", async () => {
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse({ data: [{ id: "app-9", name: "p-team" }] }))
       .mockResolvedValueOnce(jsonResponse({ id: "app-9", name: "p-team" }));
+
     await makeClient(fetchImpl).upsertApplication({ name: "p-team", image: "img:2", env: {} });
+
     const [updateUrl, updateInit] = fetchImpl.mock.calls[1];
     expect(updateUrl).toBe(`${BASE}/applications/app-9`);
-    expect(updateInit.method).toBe("PUT");
+    expect(updateInit.method).toBe("PATCH");
   });
 
-  it("should resolve name→id then read status + public_url for getApplication", async () => {
+  it("should resolve name to id, read detail, and use the dedicated status endpoint", async () => {
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse({ data: [{ id: "app-1", name: "p-team" }] }))
@@ -69,32 +76,53 @@ describe("sakura-apprun-rest-client (ADR-026 #1412)", () => {
         jsonResponse({
           id: "app-1",
           name: "p-team",
-          status: "running",
+          status: "Deploying",
           public_url: "https://x.apprun",
         }),
-      );
+      )
+      .mockResolvedValueOnce(jsonResponse({ status: "Healthy" }));
+
     const state = await makeClient(fetchImpl).getApplication("p-team");
-    expect(state).toEqual({ status: "running", publicUrl: "https://x.apprun" });
+
+    expect(state).toEqual({ status: "Healthy", publicUrl: "https://x.apprun" });
     expect(fetchImpl.mock.calls[1][0]).toBe(`${BASE}/applications/app-1`);
+    expect(fetchImpl.mock.calls[2][0]).toBe(`${BASE}/applications/app-1/status`);
   });
 
-  it("should return undefined from getApplication when the name is not in the list", async () => {
-    const fetchImpl = vi
+  it("should return undefined when the name is absent or disappears between reads", async () => {
+    const missing = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse({ data: [{ id: "x", name: "other" }] }));
-    expect(await makeClient(fetchImpl).getApplication("p-team")).toBeUndefined();
-    expect(fetchImpl).toHaveBeenCalledTimes(1); // no read when not found
+    expect(await makeClient(missing).getApplication("p-team")).toBeUndefined();
+    expect(missing).toHaveBeenCalledTimes(1);
+
+    const detailGone = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ data: [{ id: "app-1", name: "p-team" }] }))
+      .mockResolvedValueOnce(new Response("gone", { status: 404 }));
+    expect(await makeClient(detailGone).getApplication("p-team")).toBeUndefined();
+    expect(detailGone).toHaveBeenCalledTimes(2);
+
+    const statusGone = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ data: [{ id: "app-1", name: "p-team" }] }))
+      .mockResolvedValueOnce(jsonResponse({ id: "app-1", name: "p-team" }))
+      .mockResolvedValueOnce(new Response("gone", { status: 404 }));
+    expect(await makeClient(statusGone).getApplication("p-team")).toBeUndefined();
+    expect(statusGone).toHaveBeenCalledTimes(3);
   });
 
   it("should omit publicUrl when the application has no public_url yet", async () => {
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse({ data: [{ id: "app-1", name: "p" }] }))
-      .mockResolvedValueOnce(jsonResponse({ id: "app-1", name: "p", status: "provisioning" }));
-    expect(await makeClient(fetchImpl).getApplication("p")).toEqual({ status: "provisioning" });
+      .mockResolvedValueOnce(jsonResponse({ id: "app-1", name: "p", status: "Deploying" }))
+      .mockResolvedValueOnce(jsonResponse({ status: "Deploying" }));
+
+    expect(await makeClient(fetchImpl).getApplication("p")).toEqual({ status: "Deploying" });
   });
 
-  it("should DELETE by resolved id and treat a missing application as a no-op", async () => {
+  it("should DELETE by resolved id and treat absent or concurrently deleted apps as success", async () => {
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse({ data: [{ id: "app-1", name: "p" }] }))
@@ -103,12 +131,18 @@ describe("sakura-apprun-rest-client (ADR-026 #1412)", () => {
     expect(fetchImpl.mock.calls[1][0]).toBe(`${BASE}/applications/app-1`);
     expect(fetchImpl.mock.calls[1][1].method).toBe("DELETE");
 
+    const alreadyGone = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ data: [{ id: "app-1", name: "p" }] }))
+      .mockResolvedValueOnce(new Response("gone", { status: 404 }));
+    await expect(makeClient(alreadyGone).deleteApplication("p")).resolves.toBeUndefined();
+
     const emptyFetch = vi.fn().mockResolvedValueOnce(jsonResponse({ data: [] }));
     await expect(makeClient(emptyFetch).deleteApplication("p")).resolves.toBeUndefined();
     expect(emptyFetch).toHaveBeenCalledTimes(1);
   });
 
-  it("should throw with the status + body on a non-2xx response", async () => {
+  it("should throw with the status and body on a non-2xx response", async () => {
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse({ data: [] }))

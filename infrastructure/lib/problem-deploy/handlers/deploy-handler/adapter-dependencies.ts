@@ -134,10 +134,10 @@ function buildAzureAdapterContext(
 }
 
 /**
- * [ADR-027 / ADR-032 / #1411] gcp/infra-manager の adapter context を組む。 getCredential は per-team の
+ * [ADR-027 / ADR-032 / #1411 / #2745] gcp/infra-manager の adapter context を組む。 getCredential は per-team の
  * WIF config を SSM から引き未登録なら loud throw、 **署名鍵レス**で AWS subject token (= 署名済
  * GetCallerIdentity) を作り → GCP STS で federated token → SA impersonation で短命 access token を得る。
- * client は同 config の project/location で Infra Manager REST client を束ねる (Azure 同様 closure に config 保持)。
+ * client は同 config の project/location/service account で Infra Manager REST client を束ねる。
  */
 function buildGcpAdapterContext(
   ssm: Pick<SSMClient, "send">,
@@ -148,7 +148,13 @@ function buildGcpAdapterContext(
   signer: GcpAwsSubjectTokenSigner,
   awsRegion: string,
 ): NonNullable<AdapterDependencies["gcp"]> {
-  let resolved: { readonly projectId: string; readonly location: string } | undefined;
+  let resolved:
+    | {
+        readonly projectId: string;
+        readonly location: string;
+        readonly serviceAccountEmail: string;
+      }
+    | undefined;
   return {
     getCredential: async () => {
       const config = await getGcpCredential({ ssm, env }, tenantId, teamSlug);
@@ -158,7 +164,11 @@ function buildGcpAdapterContext(
             "(register the WIF audience + service account + project/location in the per-team SSM SecureString store)",
         );
       }
-      resolved = { projectId: config.projectId, location: config.location };
+      resolved = {
+        projectId: config.projectId,
+        location: config.location,
+        serviceAccountEmail: config.serviceAccountEmail,
+      };
       // ADR-032: AWS identity を subject にした署名済 GetCallerIdentity (鍵レス)。
       const signed = await signer.sign({ region: awsRegion, wifAudience: config.wifAudience });
       const subjectToken = formatGcpSubjectToken(signed);
@@ -182,6 +192,7 @@ function buildGcpAdapterContext(
       }
       return createGcpInfraManagerRestClient(credential, {
         projectId: resolved.projectId,
+        serviceAccountEmail: resolved.serviceAccountEmail,
         location: resolved.location,
       });
     },

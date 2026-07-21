@@ -1,5 +1,5 @@
 /**
- * [ADR-026 / Issue #1412] Unit tests for the sakura/apprun runtime adapter + its registry wiring.
+ * [ADR-026 / Issues #1412, #2746] Unit tests for the sakura/apprun runtime adapter + its registry wiring.
  *
  * orchestration は注入された SakuraAppRunClient / getApiKey に対して全分岐を pin する
  * (= 実 AppRun REST / SSM key 取得は account-gated な別レイヤ。 #1419 executor と同方針)。
@@ -46,14 +46,17 @@ function makeCtx(client: SakuraAppRunClient): {
   return { ctx: { getApiKey, client: clientFactory }, getApiKey, clientFactory };
 }
 
-describe("mapSakuraStatus (ADR-026 #1412)", () => {
-  it("should map AppRun states to the 6-state runtime status", () => {
+describe("mapSakuraStatus (ADR-026 #1412 #2746)", () => {
+  it("should map current AppRun and compatible states to the 6-state runtime status", () => {
+    expect(mapSakuraStatus("Healthy")).toBe("ready");
     expect(mapSakuraStatus("Running")).toBe("ready");
     expect(mapSakuraStatus("available")).toBe("ready");
+    expect(mapSakuraStatus("UnHealthy")).toBe("failed");
     expect(mapSakuraStatus("Failed")).toBe("failed");
     expect(mapSakuraStatus("Deleting")).toBe("destroying");
     expect(mapSakuraStatus("deleted")).toBe("destroyed");
     expect(mapSakuraStatus(undefined)).toBe("destroyed"); // not found = 未作成/削除済
+    expect(mapSakuraStatus("Deploying")).toBe("deploying");
     expect(mapSakuraStatus("Provisioning")).toBe("deploying"); // 未知/進行中は安全側
     expect(mapSakuraStatus("totally-unknown")).toBe("deploying");
   });
@@ -70,7 +73,7 @@ describe("SakuraAppRunRuntimeAdapter (ADR-026 #1412)", () => {
       upsertApplication: vi.fn().mockResolvedValue(undefined),
       getApplication: vi
         .fn()
-        .mockResolvedValue({ status: "Running", publicUrl: "https://app.example" }),
+        .mockResolvedValue({ status: "Healthy", publicUrl: "https://app.example" }),
       deleteApplication: vi.fn().mockResolvedValue(undefined),
     };
   });
@@ -121,7 +124,7 @@ describe("SakuraAppRunRuntimeAdapter (ADR-026 #1412)", () => {
     ).toEqual({
       BaseUrl: "https://app.example",
     });
-    client.getApplication.mockResolvedValueOnce({ status: "Provisioning" }); // no publicUrl yet
+    client.getApplication.mockResolvedValueOnce({ status: "Deploying" }); // no publicUrl yet
     expect(
       await a.collectOutputs({ jobId: "j", namePrefix: "x", region: "is1a", awsAccountId: "n/a" }),
     ).toEqual({});

@@ -1,5 +1,5 @@
 /**
- * [ADR-027 / Issue #1410] Concrete Azure Deployment Stacks REST client.
+ * [ADR-027 / Issues #1410, #2743] Concrete Azure Deployment Stacks REST client.
  *
  * `AzureDeploymentStackClient` interface (= `handlers/shared/runtime/azure-bicep-adapter.ts` の注入境界)
  * を実 ARM Deployment Stacks REST API に実装する。 adapter は orchestration (= parameters / status 射影)
@@ -13,7 +13,7 @@
  *   - PUT/GET/DELETE `https://management.azure.com/subscriptions/{sub}/resourceGroups/{rg}/providers/
  *     Microsoft.Resources/deploymentStacks/{name}?api-version=2024-03-01`
  *   - body: `{location, properties: {templateLink|template, parameters, actionOnUnmanage, denySettings}}`
- *   - GET response: `properties.provisioningState` + `properties.outputs` ({name:{type,value}})
+ *   - GET response: `properties.provisioningState` + direct-value `properties.outputs`
  *
  * spec が運ばない subscription / resourceGroup / location / api-version は options で注入する
  * (= per-team Azure account の onboarding が供給、 account-gated)。 実 account で照合する余地は body の
@@ -27,6 +27,7 @@ import type {
   AzureDeploymentStackSpec,
   AzureDeploymentStackState,
 } from "../handlers/shared/runtime/azure-bicep-adapter.js";
+import { stringifyRuntimeOutput } from "./runtime-output.js";
 
 const DEFAULT_BASE_URL = "https://management.azure.com";
 const DEFAULT_API_VERSION = "2024-03-01";
@@ -51,7 +52,8 @@ export interface AzureDeploymentStacksRestClientOptions {
 interface ArmDeploymentStack {
   readonly properties?: {
     readonly provisioningState?: string;
-    readonly outputs?: Record<string, { readonly value?: unknown }>;
+    /** Deployment Stacks API は通常 Deployment API の `{type,value}` wrapper ではなく direct value を返す。 */
+    readonly outputs?: Readonly<Record<string, unknown>>;
   };
 }
 
@@ -132,7 +134,10 @@ export function createAzureDeploymentStacksRestClient(
       const outputs = stack.properties?.outputs;
       const flattened = outputs
         ? Object.fromEntries(
-            Object.entries(outputs).map(([key, out]) => [key, String(out.value ?? "")]),
+            Object.entries(outputs).map(([key, value]) => [
+              key,
+              stringifyRuntimeOutput(value, "Azure Deployment Stacks"),
+            ]),
           )
         : undefined;
       return { provisioningState, ...(flattened ? { outputs: flattened } : {}) };
