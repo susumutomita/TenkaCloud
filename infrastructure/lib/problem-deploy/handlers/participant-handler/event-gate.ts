@@ -1,4 +1,3 @@
-import { createEventsRepository } from "../../control-data/events-repository.js";
 import { type ProgressionGateConfig, parseProgressionGate } from "../shared/progression-gate.js";
 import type { ParticipantSharedResources } from "./shared.js";
 
@@ -65,7 +64,11 @@ export async function getEventGate(
   // tenantId が導出できない (= identity を持つ live deployment 行が無い) 場合は fail-closed。
   if (!tenantId) return undefined;
   try {
-    const events = createEventsRepository(process.env.CONTROL_DATA_BACKEND, {
+    // [#2527 Slice 4] events repository は注入済み runtime 経由で解決する。 旧実装は
+    // createEventsRepository を env 直読みで手組みし deps.sql を渡せなかったため、
+    // turso backend では factory が毎回 throw → 本 catch の fail-closed により全問題が
+    // 「競技開始前」に固定される live 障害を起こした (2026-07-21、 純 Turso Lite 環境)。
+    const events = await shared.runtime.resolveEventsRepository({
       ddb: shared.ddb,
       eventsTableName: shared.eventsTableName,
     });
