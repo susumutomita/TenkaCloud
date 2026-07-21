@@ -5,8 +5,8 @@ const ENFORCEMENT_DOC_PATH = "docs/architecture/enforcement-registry.md";
 const ENFORCEMENT_MANIFEST_PATH = "docs/architecture/enforcement-rules.json";
 const RULES_PREFIX = ".claude/harness/src/rules/";
 const PRINCIPLE_HEADING = /^### `(?<id>PRINCIPLE_[A-Z0-9_]+)`$/gm;
-const RULE_ID = /\bid:\s*"(?<id>[a-z0-9-]+)"/;
-const RULE_SEVERITY = /\bseverity:\s*"(?<severity>error|warning|info)"/;
+const RULE_CONTRACT =
+  /:\s*Rule\s*=\s*\{[\s\S]*?\bid:\s*"(?<id>[a-z0-9-]+)"[\s\S]*?\bseverity:\s*"(?<severity>error|warning|info)"/;
 
 interface EnforcementEntry {
   readonly id: string;
@@ -84,8 +84,9 @@ function parseManifest(source: string): readonly EnforcementEntry[] | undefined 
 }
 
 function extractRuleContract(source: string): { id: string; severity: Severity } | undefined {
-  const id = source.match(RULE_ID)?.groups?.id;
-  const severity = source.match(RULE_SEVERITY)?.groups?.severity as Severity | undefined;
+  const match = source.match(RULE_CONTRACT);
+  const id = match?.groups?.id;
+  const severity = match?.groups?.severity as Severity | undefined;
   return id && severity ? { id, severity } : undefined;
 }
 
