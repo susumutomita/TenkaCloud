@@ -37,13 +37,6 @@ export const EASTER_EGGS: readonly string[] = [
   "tenka",
 ];
 
-const WRONG_OUTCOME: SubmitFlagOutcome = {
-  kind: "wrong",
-  scoreDelta: -10,
-  totalScore: -10,
-  wrongCount: 1,
-};
-
 function isCanonicalMatch(trimmed: string): boolean {
   if (trimmed.length === 0) return false;
   // `tenkacloudsample` を含むか、 逆に `tenkacloudsample` が入力を含む (= prefix
@@ -60,7 +53,37 @@ export function evaluateMockFlag(rawFlag: string, points: number): SubmitFlagOut
   if (isCanonicalMatch(trimmed) || isEasterEgg(trimmed)) {
     return { kind: "ok", scoreDelta: points, totalScore: points };
   }
-  return WRONG_OUTCOME;
+  return { kind: "wrong", scoreDelta: -10, totalScore: -10, wrongCount: 1 };
+}
+
+/**
+ * dev-mock は backend の score / wrongCount 集計を持たないため、 problem ごとの
+ * 累計スコアと flag ごとの不正解回数を module 内で数える。 これが無いと 2 回目
+ * 以降の不正解で Alert の数字が一切変化せず 「提出しても反応が無い」 ように見える
+ * (2026-07-21 デモ報告)。 実採点と同じく累計は 0 pt を下回らない。
+ */
+const mockProblemScores = new Map<string, number>();
+const mockWrongCounts = new Map<string, number>();
+
+/** テスト間の module state 汚染を防ぐ reset。 production からは呼ばない。 */
+export function resetMockScoring(): void {
+  mockProblemScores.clear();
+  mockWrongCounts.clear();
+}
+
+function okOutcome(problemId: string, points: number): SubmitFlagOutcome {
+  const total = (mockProblemScores.get(problemId) ?? 0) + points;
+  mockProblemScores.set(problemId, total);
+  return { kind: "ok", scoreDelta: points, totalScore: total };
+}
+
+function wrongOutcome(problemId: string, flagId: string): SubmitFlagOutcome {
+  const key = `${problemId}/${flagId}`;
+  const count = (mockWrongCounts.get(key) ?? 0) + 1;
+  mockWrongCounts.set(key, count);
+  const total = Math.max(0, (mockProblemScores.get(problemId) ?? 0) - 10);
+  mockProblemScores.set(problemId, total);
+  return { kind: "wrong", scoreDelta: -10, totalScore: total, wrongCount: count };
 }
 
 /** Issue #2711: チュートリアル問題 what-is-tenkacloud の id (demo fixture 専用)。 */
@@ -69,9 +92,12 @@ export const WHAT_IS_DRILL_PROBLEM_ID = "what-is-tenkacloud";
 /** LP のプロンプトから Mac ローカル起動までを追う AI-agent チュートリアル。 */
 export const AI_AGENT_LOCAL_DRILL_PROBLEM_ID = "ai-agent-local-mac";
 
-/** First no-signup browser drill recommended after the four-step tutorial. */
-export const FIRST_BROWSER_DRILL_PROBLEM_ID = "number-sequence";
-export const FIRST_BROWSER_DRILL_JOB_ID = "01HZX0KFFCT7BHGAQM6Q2WP1AB";
+/**
+ * デモ問題一覧の jobId。 fixture の出題と、 what-is チュートリアル完走パネルの
+ * 「次のドリルへ」 ボタン (Lite / ローカル) が同じ問題ページを指すよう共有する。
+ */
+export const LITE_DRILL_JOB_ID = "01HZX0KZZ3DR0PW9M4Q7XV2C5D";
+export const LOCAL_DRILL_JOB_ID = "01HZX0M1L0CALPLAYTENKA0002";
 
 /**
  * Issue #2707 / #2711: クイズ型 sub-flag の許容解。 問題文 (description) を読めば導ける
@@ -166,37 +192,17 @@ export function evaluateMockSubFlag(
   rawFlag: string,
   points: number,
 ): SubmitFlagOutcome {
-  const ok = (): SubmitFlagOutcome => ({ kind: "ok", scoreDelta: points, totalScore: points });
+  const ok = () => okOutcome(problemId, points);
+  const wrong = () => wrongOutcome(problemId, flagId);
   if (problemId === LITE_DRILL_PROBLEM_ID) {
-    return matchesLiteDrillCheckpoint(flagId, rawFlag) ? ok() : WRONG_OUTCOME;
+    return matchesLiteDrillCheckpoint(flagId, rawFlag) ? ok() : wrong();
   }
   if (problemId === LOCAL_DRILL_PROBLEM_ID && flagId === LOCAL_DRILL_FIRST_SCORE.flagId) {
-    return matchesLocalDrillFirstScore(rawFlag) ? ok() : WRONG_OUTCOME;
+    return matchesLocalDrillFirstScore(rawFlag) ? ok() : wrong();
   }
   if (QUIZ_ANSWERS[problemId]) {
-    return matchesQuizAnswer(problemId, flagId, rawFlag) ? ok() : WRONG_OUTCOME;
+    return matchesQuizAnswer(problemId, flagId, rawFlag) ? ok() : wrong();
   }
-  return evaluateMockFlag(rawFlag, points);
-}
-
-/**
- * Single-flag demo problems need their real answer too. Falling back to the
- * generic Easter-egg evaluator made the visible `TC{21}` instruction fail in
- * `number-sequence`, so the onboarding handoff was a dead end.
- */
-export function evaluateMockProblemFlag(
-  problemId: string,
-  rawFlag: string,
-  points: number,
-): SubmitFlagOutcome {
-  if (problemId === FIRST_BROWSER_DRILL_PROBLEM_ID) {
-    return rawFlag.trim().toLowerCase() === "tc{21}"
-      ? { kind: "ok", scoreDelta: points, totalScore: points }
-      : WRONG_OUTCOME;
-  }
-  return evaluateMockFlag(rawFlag, points);
-}
-
-export function isStrictMockProblemFlag(problemId: string): boolean {
-  return problemId === FIRST_BROWSER_DRILL_PROBLEM_ID;
+  const trimmed = rawFlag.trim().toLowerCase();
+  return isCanonicalMatch(trimmed) || isEasterEgg(trimmed) ? ok() : wrong();
 }

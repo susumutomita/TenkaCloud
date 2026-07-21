@@ -415,10 +415,10 @@
     "flag_field_label": "{label} (デプロイ出力値)",
     "tutorial_complete_header": "🎉 TenkaCloud の基本をつかみました",
     "tutorial_complete_body": "TenkaCloud は、クラウドを題材に手を動かし、flag と自動採点で学びを確かめる競技・演習プラットフォームです。4 問で Battle / Challenge / 始め方 / 採点の基本を体験しました。",
-    "tutorial_next_header": "次は、最初の実戦ドリルへ",
-    "tutorial_next_body": "スマホのまま約 60 秒で解ける「欠けた数」で、問題を読み、flag を提出し、自動採点される一連の流れを体験しましょう。",
-    "tutorial_next_button": "次へ: 「欠けた数」を解く",
-    "tutorial_problem_list_button": "ほかの問題を見る"
+    "tutorial_next_header": "次は、実際に動かしてみよう",
+    "tutorial_next_body": "AWS なしで手元の Mac で遊ぶ「ローカルモードで遊ぶ」か、自分の AWS アカウントに本物を立てる「自分の TenkaCloud Lite を立てる」へ進みましょう。",
+    "tutorial_local_button": "「ローカルモードで遊ぶ」へ",
+    "tutorial_lite_button": "「自分の TenkaCloud Lite を立てる」へ"
   },
   "score_timeline": {
     "header": "スコア推移",

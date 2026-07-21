@@ -12,8 +12,8 @@ import type {
 } from "../api/portal-client";
 import {
   AI_AGENT_LOCAL_DRILL_PROBLEM_ID,
-  FIRST_BROWSER_DRILL_JOB_ID,
-  FIRST_BROWSER_DRILL_PROBLEM_ID,
+  LITE_DRILL_JOB_ID,
+  LOCAL_DRILL_JOB_ID,
   WHAT_IS_DRILL_PROBLEM_ID,
 } from "../dev-mock/flag-submit";
 
@@ -30,7 +30,8 @@ import {
  *   2. 「自分の TenkaCloud Lite を立てる」 — 実 AWS デプロイ (#2696、 lite-drill 契約)
  *   3. 「ローカルモードで遊ぶ」 — 手元の Mac。 sqli-demo 初得点 → チェックポイント提出
  *   4. 「AIエージェントでMac起動」 — LP のプロンプトからローカル起動確認までの実演
- *   + 旧来の「クエスト」2 問 (hidden-passphrase は解答済み、 number-sequence は未解答)
+ *   (旧来の「クエスト」2 問は削除済み — チュートリアル 4 本で完結させ、 余計な問題で
+ *    迷わせない。 完走後の導線はローカル / Lite の実在ドリルへ直接つなぐ)
  *
  * オンボーディングドリルは「本文は概要 → 詰まったら提出欄ごとのヒントでステップバイステップ手順」の
  * 同一構造。 ヒント content は fixture に同梱する (公開前提のオンボーディング教材であり、
@@ -47,9 +48,6 @@ const HOUR = 60 * MIN;
 const iso = (offsetMs: number): string => new Date(now + offsetMs).toISOString();
 // 自動削除は常に「まだ先」に置く (= expired 警告を出さない)。
 const DEPLOY_EXPIRES_AT = Math.floor((now + 4 * HOUR) / SEC);
-
-const CIPHER_PROBLEM_ID = "hidden-passphrase";
-const SEQUENCE_PROBLEM_ID = FIRST_BROWSER_DRILL_PROBLEM_ID;
 
 export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
   team: {
@@ -92,7 +90,7 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
         "",
         "TenkaCloud の採点は flag 提出が基本形。練習用の flag はこれ: `TENKA{HELLO-TENKACLOUD}`。そのままステップ 4 の提出欄に貼ると +100 pt — 採点とスコアの動きも、ここで最初に体験する。",
         "",
-        "詰まったら各提出欄の **ヒント** を開こう(ペナルティなし)。全問正解すると解説と、スマホのまま解ける最初の実戦ドリル「欠けた数」へのボタンが現れる。",
+        "詰まったら各提出欄の **ヒント** を開こう(ペナルティなし)。全問正解すると解説と、次のドリル(「ローカルモードで遊ぶ」/「自分の TenkaCloud Lite を立てる」)へ進むボタンが現れる。",
       ].join("\n"),
       instructions:
         "4 つのステップに順に答える(大文字小文字は不問)。モードの 3 択はステップ 3 で初めて出てくる。ヒントはペナルティなしで開ける。",
@@ -125,7 +123,7 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
             "",
             "Scoring in TenkaCloud is flag-based. Here is a practice flag: `TENKA{HELLO-TENKACLOUD}`. Paste it into the step 4 box for +100 pt — your first taste of scoring and the moving scoreboard.",
             "",
-            "Stuck? Open the **hint** on each submission box (no penalty). Answer all four to reveal the explanation and a button to your first real drill, “The missing number,” which also works on your phone.",
+            "Stuck? Open the **hint** on each submission box (no penalty). Answer all four to reveal the explanation and buttons to the next drills — “Play local mode” and “Deploy your own TenkaCloud Lite.”",
           ].join("\n"),
           instructions:
             "Answer the 4 steps in order (case-insensitive). The mode choice only appears at step 3. Hints are penalty-free.",
@@ -234,7 +232,7 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
       createdAt: iso(-25 * MIN),
     },
     {
-      jobId: "01HZX0KZZ3DR0PW9M4Q7XV2C5D",
+      jobId: LITE_DRILL_JOB_ID,
       problemId: LITE_DRILL_PROBLEM_ID,
       // #2707 P0-1: 冒頭 1 分 operation 動画 (字幕 ja/en 焼き込み、landing origin 配信)。
       videoUrl: "/videos/onboarding/deploy-tenkacloud-lite.mp4",
@@ -390,7 +388,7 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
       createdAt: iso(-25 * MIN),
     },
     {
-      jobId: "01HZX0M1L0CALPLAYTENKA0002",
+      jobId: LOCAL_DRILL_JOB_ID,
       problemId: LOCAL_DRILL_PROBLEM_ID,
       name: "ローカルモードで遊ぶ",
       description: [
@@ -577,67 +575,6 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
       deployLog: { cursor: "", entries: [] },
       createdAt: iso(-25 * MIN),
     },
-    {
-      jobId: FIRST_BROWSER_DRILL_JOB_ID,
-      problemId: SEQUENCE_PROBLEM_ID,
-      name: "欠けた数",
-      description:
-        "次の数列には空欄が 1 つある:\n\n    2, 3, 5, 8, 13, ?, 34\n\n各項は、直前の 2 項の和になっている。",
-      instructions: "`?` に入る数を求め、`TC{数字}` 形式で提出せよ (例: `TC{99}`)。",
-      i18n: {
-        en: {
-          name: "The missing number",
-          description:
-            "One number is missing from this sequence:\n\n    2, 3, 5, 8, 13, ?, 34\n\nEach term is the sum of the previous two.",
-          instructions: "Find the `?` and submit it as `TC{number}` (e.g. `TC{99}`).",
-        },
-      },
-      region: "ap-northeast-1",
-      awsAccountId: "999999999999",
-      status: "COMPLETE",
-      stackOutputs: {},
-      expiresAt: DEPLOY_EXPIRES_AT,
-      // 未提出でデモを始める (= 訪問者が submit ボタンを押すまでの体験を作る)。
-      score: 0,
-      scoring: {
-        kind: "flag",
-        points: 300,
-        flagSubmitted: false,
-      },
-      deployLog: { cursor: "", entries: [] },
-      createdAt: iso(-25 * MIN),
-    },
-    {
-      jobId: "01HZX0K3M3K9ZQHB3MRQHBA1B2",
-      problemId: CIPHER_PROBLEM_ID,
-      name: "隠された合言葉",
-      description:
-        "前任のエンジニアが、引き継ぎメモに ROT13 で暗号化した合言葉を残していった:\n\n    GP{jrypbzr_gb_grexnpybhq}\n\nROT13 はアルファベットを 13 文字ずらす暗号 (A↔N, B↔O, …)。数字や記号は変わらない。",
-      instructions:
-        "上の暗号を ROT13 で復号し、出てきた `TC{...}` をそのまま提出せよ。\n(ヒント: `T` は ROT13 で `G`。逆に `G` を戻すと `T`。)",
-      i18n: {
-        en: {
-          name: "The hidden passphrase",
-          description:
-            "Your predecessor left a passphrase in the handover notes, encrypted with ROT13:\n\n    GP{jrypbzr_gb_grexnpybhq}\n\nROT13 shifts each letter by 13 (A↔N, B↔O, …). Digits and symbols are unchanged.",
-          instructions:
-            "Decode it with ROT13 and submit the `TC{...}` you get, verbatim.\n(Hint: `T` becomes `G` under ROT13, so `G` decodes back to `T`.)",
-        },
-      },
-      region: "ap-northeast-1",
-      awsAccountId: "999999999999",
-      status: "COMPLETE",
-      stackOutputs: {},
-      expiresAt: DEPLOY_EXPIRES_AT,
-      score: 300,
-      scoring: {
-        kind: "flag",
-        points: 300,
-        flagSubmitted: true,
-      },
-      deployLog: { cursor: "", entries: [] },
-      createdAt: iso(-25 * MIN),
-    },
   ],
   eventGate: { kind: "ok" },
 };
@@ -651,7 +588,7 @@ export const DEV_MOCK_LEADERBOARD: LeaderboardResponse = {
       teamName: "Alpha Squad",
       score: 600,
       completedProblems: 2,
-      totalProblems: 6,
+      totalProblems: 4,
       isMyTeam: false,
     },
     {
@@ -660,26 +597,27 @@ export const DEV_MOCK_LEADERBOARD: LeaderboardResponse = {
       teamName: "Bravo Crew",
       score: 450,
       completedProblems: 1,
-      totalProblems: 6,
+      totalProblems: 4,
       isMyTeam: false,
     },
     {
       rank: 3,
-      teamId: "team-demo-1",
-      teamName: "Demo Team",
-      score: 300,
-      completedProblems: 1,
-      totalProblems: 6,
-      isMyTeam: true,
-    },
-    {
-      rank: 4,
       teamId: "team-delta",
       teamName: "Delta Force",
       score: 300,
       completedProblems: 1,
-      totalProblems: 6,
+      totalProblems: 4,
       isMyTeam: false,
+    },
+    // 自チームは 0 pt から始める (= チュートリアルを解くと leaderboard が動く体験)。
+    {
+      rank: 4,
+      teamId: "team-demo-1",
+      teamName: "Demo Team",
+      score: 0,
+      completedProblems: 0,
+      totalProblems: 4,
+      isMyTeam: true,
     },
     {
       rank: 5,
@@ -687,7 +625,7 @@ export const DEV_MOCK_LEADERBOARD: LeaderboardResponse = {
       teamName: "Echo Five",
       score: 0,
       completedProblems: 0,
-      totalProblems: 6,
+      totalProblems: 4,
       isMyTeam: false,
     },
   ],
@@ -706,16 +644,9 @@ export const DEV_MOCK_NOTIFICATIONS: NotificationsResponse = {
       occurredAt: iso(-2 * MIN),
     },
     {
-      notificationId: "notif-002",
-      title: "ヒントが解放されました",
-      body: `「${SEQUENCE_PROBLEM_ID}」のヒントが開放されました。ペナルティを払って閲覧できます。`,
-      severity: "info",
-      occurredAt: iso(-8 * MIN),
-    },
-    {
       notificationId: "notif-001",
       title: "競技開始",
-      body: "TenkaCloud のデモを開始しました。4 問のオンボーディングチュートリアルと 2 問のクエストが出題されています。解いて flag を提出しよう!",
+      body: "TenkaCloud のデモを開始しました。4 問のオンボーディングチュートリアルが出題されています。解いて flag を提出しよう!",
       severity: "info",
       occurredAt: iso(-25 * MIN),
     },
@@ -724,33 +655,9 @@ export const DEV_MOCK_NOTIFICATIONS: NotificationsResponse = {
 
 /**
  * 自チームの score 変動履歴。 ScoreEventsPage が直接 fetch する API の dev-mock 版。
- * occurredAt 降順 (新しい順) で並べる。
+ * 旧クエスト削除後は解答済み問題が無いため空 (= 0 pt スタートと整合)。 ページ側の
+ * empty state がそのまま出る。
  */
 export const DEV_MOCK_SCORE_EVENTS: ScoreEventsResponse = {
-  entries: [
-    {
-      jobId: "01HZX0K3M3K9ZQHB3MRQHBA1B2",
-      problemId: CIPHER_PROBLEM_ID,
-      source: "flag",
-      points: 300,
-      result: "ok",
-      occurredAt: iso(-3 * MIN),
-    },
-    {
-      jobId: "01HZX0K3M3K9ZQHB3MRQHBA1B2",
-      problemId: CIPHER_PROBLEM_ID,
-      source: "flag-wrong",
-      points: -10,
-      result: "wrong",
-      occurredAt: iso(-6 * MIN),
-    },
-    {
-      jobId: "01HZX0KFFCT7BHGAQM6Q2WP1AB",
-      problemId: SEQUENCE_PROBLEM_ID,
-      source: "hint",
-      points: -50,
-      result: "ok",
-      occurredAt: iso(-8 * MIN),
-    },
-  ],
+  entries: [],
 };

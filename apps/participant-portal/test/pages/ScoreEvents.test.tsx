@@ -238,7 +238,10 @@ describe("ScoreEventsPage", () => {
   it("should seed dev-mock fixtures without calling the backend in mock mode", async () => {
     mockIsMock.mockReturnValue(true);
     renderPage();
-    expect(await screen.findByText("score_events.cumulative_header")).toBeInTheDocument();
+    // 旧クエスト削除後の demo fixture は履歴 0 件 (= 0 pt スタート)。 チャートは出ず
+    // 履歴 Container の empty 表示だけが出る。
+    expect(await screen.findByText('score_events.history_header|{"count":0}')).toBeInTheDocument();
+    expect(screen.queryByText("score_events.cumulative_header")).not.toBeInTheDocument();
     expect(mockGet).not.toHaveBeenCalled();
   });
 
