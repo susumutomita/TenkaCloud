@@ -274,9 +274,7 @@ export function createSakuraAppRunRestClient(
       for (const application of matches) {
         const result = await request<void>("DELETE", applicationPath(application.id));
         if (result.kind === "conflict") {
-          throw new Error(
-            `Sakura AppRun API DELETE ${applicationPath(application.id)} conflicted`,
-          );
+          throw new Error(`Sakura AppRun API DELETE ${applicationPath(application.id)} conflicted`);
         }
         // ok / not-found are both successful teardown outcomes.
       }

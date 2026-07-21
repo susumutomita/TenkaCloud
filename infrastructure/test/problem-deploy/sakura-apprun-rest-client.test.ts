@@ -10,8 +10,7 @@ import { createSakuraAppRunRestClient } from "../../lib/problem-deploy/runtime-c
 const CREDENTIAL = { accessToken: "tok", accessTokenSecret: "sec" };
 const BASE_URL = "https://example.test/apprun/api";
 const EXPECTED_AUTH = `Basic ${Buffer.from("tok:sec").toString("base64")}`;
-const LIST_PATH =
-  "/applications?page_num=1&page_size=100&sort_field=created_at&sort_order=asc";
+const LIST_PATH = "/applications?page_num=1&page_size=100&sort_field=created_at&sort_order=asc";
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -273,14 +272,10 @@ describe("sakura-apprun-rest-client (#2746)", () => {
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse({ id: "user" }))
-      .mockResolvedValueOnce(
-        new Response("tok sec reflected-secret-value", { status: 429 }),
-      );
+      .mockResolvedValueOnce(new Response("tok sec reflected-secret-value", { status: 429 }));
 
     const failure = makeClient(fetchImpl).getApplication("target");
-    await expect(failure).rejects.toThrow(
-      `Sakura AppRun API GET ${LIST_PATH} failed: 429`,
-    );
+    await expect(failure).rejects.toThrow(`Sakura AppRun API GET ${LIST_PATH} failed: 429`);
     await expect(failure).rejects.not.toThrow(/tok|sec|reflected-secret-value/);
   });
 
