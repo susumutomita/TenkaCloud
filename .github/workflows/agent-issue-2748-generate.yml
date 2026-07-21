@@ -1,0 +1,302 @@
+name: Agent issue 2748 generate
+
+permissions:
+  contents: write
+
+on:
+  push:
+    branches:
+      - agent/issue-2748-runtime-capability-evidence
+
+jobs:
+  generate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: "1.3.11"
+
+      - name: Install dependencies without lifecycle scripts
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Apply capability-source integrations
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          def replace(path: str, old: str, new: str) -> None:
+              target = Path(path)
+              source = target.read_text()
+              if old not in source:
+                  raise SystemExit(f"anchor not found in {path}: {old[:80]!r}")
+              target.write_text(source.replace(old, new, 1))
+
+          generator = "apps/developer-portal/scripts/generate-reference.ts"
+          replace(
+              generator,
+              '''import {
+            CONTAINER_RUNTIMES,
+            DEFAULT_ENTRY,
+            EXECUTABLE_ENGINE,
+            EXECUTABLE_PROVIDER,
+            MAX_COMPOSITE_TARGETS,
+            MIN_COMPOSITE_TARGETS,
+            RESERVED_RUNTIMES,
+          } from "@tenkacloud/problem-runtime";''',
+              '''import {
+            DEFAULT_ENTRY,
+            MAX_COMPOSITE_TARGETS,
+            MIN_COMPOSITE_TARGETS,
+          } from "@tenkacloud/problem-runtime";
+          import {
+            RUNTIME_CAPABILITIES,
+            validateRuntimeCapabilityEvidence,
+          } from "@tenkacloud/problem-runtime/capabilities";''',
+          )
+          replace(
+              generator,
+              '''type Maturity = "stable" | "preview" | "planned";
+
+          // The matrix is derived from problem-runtime's capability declarations. The one
+          // executable pair is `stable`; reserved roadmap pairs are `planned`; the local
+          // container runtime is `preview` (recognized + runnable locally, not cloud).
+          function buildRuntimeMatrix(): readonly RuntimeCapabilityRow[] {
+            const rows: RuntimeCapabilityRow[] = [
+              {
+                provider: EXECUTABLE_PROVIDER,
+                engine: EXECUTABLE_ENGINE,
+                support: "executable",
+                maturity: "stable" satisfies Maturity,
+                note: "The only cloud-executable runtime today: deployed via CloudFormation CreateStack.",
+              },
+            ];
+            for (const reserved of RESERVED_RUNTIMES) {
+              rows.push({
+                provider: reserved.provider,
+                engine: reserved.engine,
+                support: "reserved",
+                maturity: "planned",
+                note: "Reserved roadmap runtime: recognized by the validator but no adapter ships yet.",
+              });
+            }
+            for (const container of CONTAINER_RUNTIMES) {
+              rows.push({
+                provider: container.provider,
+                engine: container.engine,
+                support: "container",
+                maturity: "preview",
+                note: "Local container runtime (make local). Recognized but never cloud-deployed.",
+              });
+            }
+            // Stable provider/engine first, then a deterministic provider/engine sort so the
+            // table matches SUPPORTED_RUNTIME_CAPABILITIES ordering intent.
+            return rows.sort((a, b) => {
+              if (a.support === "executable") return -1;
+              if (b.support === "executable") return 1;
+              return `${a.provider}/${a.engine}`.localeCompare(`${b.provider}/${b.engine}`);
+            });
+          }''',
+              '''// The matrix is a direct projection of problem-runtime's evidence declarations.
+          // A mock test can exercise an adapter, but only `liveVerified: true` in that source may
+          // produce a live-verified public claim.
+          function buildRuntimeMatrix(): readonly RuntimeCapabilityRow[] {
+            const rows = RUNTIME_CAPABILITIES.map((capability) => {
+              const issues = validateRuntimeCapabilityEvidence(capability);
+              if (issues.length > 0) {
+                throw new Error(`Invalid runtime capability evidence: ${issues.join("; ")}`);
+              }
+              return {
+                provider: capability.provider,
+                engine: capability.engine,
+                recognized: capability.recognized,
+                adapterWired: capability.adapterWired,
+                executable: capability.executable,
+                liveVerified: capability.liveVerified,
+                executionMode: capability.executionMode,
+                selection: capability.selection,
+                maturity: capability.maturity,
+                blockingIssues: [...capability.blockingIssues],
+                evidence: capability.evidence,
+              } satisfies RuntimeCapabilityRow;
+            });
+            return rows.sort((left, right) => {
+              if (left.selection === "default" && right.selection !== "default") return -1;
+              if (right.selection === "default" && left.selection !== "default") return 1;
+              return `${left.provider}/${left.engine}`.localeCompare(
+                `${right.provider}/${right.engine}`,
+              );
+            });
+          }''',
+          )
+          replace(
+              generator,
+              '''export interface RuntimeCapabilityRow {
+            readonly provider: string;
+            readonly engine: string;
+            readonly support: "executable" | "reserved" | "container";
+            readonly maturity: ReferenceMaturity;
+            readonly note: string;
+          }''',
+              '''export interface RuntimeCapabilityRow {
+            readonly provider: string;
+            readonly engine: string;
+            readonly recognized: boolean;
+            readonly adapterWired: boolean;
+            readonly executable: boolean;
+            readonly liveVerified: boolean;
+            readonly executionMode: "cloud" | "local";
+            readonly selection: "default" | "feature-gated" | "local-only";
+            readonly maturity: ReferenceMaturity;
+            readonly blockingIssues: readonly number[];
+            readonly evidence: string;
+          }''',
+          )
+
+          landing = "scripts/landing/generate-landing-docs.ts"
+          replace(
+              landing,
+              '''  RuntimeMatrixTable: () =>
+            table(
+              ["Provider", "Engine", "Support", "Maturity", "Notes"],
+              REFERENCE_DATA.runtimeMatrix.map((r) => [
+                `<code>${escapeHtml(r.provider)}</code>`,
+                `<code>${escapeHtml(r.engine)}</code>`,
+                escapeHtml(r.support),
+                badge(r.maturity),
+                escapeHtml(r.note),
+              ]),
+            ),''',
+              '''  RuntimeMatrixTable: () =>
+            table(
+              [
+                "Provider",
+                "Engine",
+                "Mode",
+                "Recognized",
+                "Adapter wired",
+                "Executable",
+                "Live verified",
+                "Maturity",
+                "Blocking issues",
+                "Evidence",
+              ],
+              REFERENCE_DATA.runtimeMatrix.map((r) => [
+                `<code>${escapeHtml(r.provider)}</code>`,
+                `<code>${escapeHtml(r.engine)}</code>`,
+                escapeHtml(r.executionMode),
+                r.recognized ? "yes" : "no",
+                r.adapterWired ? "yes" : "no",
+                r.executable ? "yes" : "no",
+                r.liveVerified ? "yes" : "no",
+                badge(r.maturity),
+                r.blockingIssues.length === 0
+                  ? "—"
+                  : r.blockingIssues
+                      .map(
+                        (issue) =>
+                          `<a href="${GITHUB_REPO}/issues/${issue}">#${issue}</a>`,
+                      )
+                      .join(", "),
+                escapeHtml(r.evidence),
+              ]),
+            ),''',
+          )
+
+          mapping = "apps/application-admin-console/src/data/problem-mapping.ts"
+          replace(
+              mapping,
+              '''import {
+            CONTAINER_RUNTIMES,
+            EXECUTABLE_ENGINE,
+            EXECUTABLE_PROVIDER,
+            RESERVED_RUNTIMES,
+          } from "@tenkacloud/problem-runtime";''',
+              '''import { EXECUTABLE_ENGINE, EXECUTABLE_PROVIDER } from "@tenkacloud/problem-runtime";
+          import {
+            findRuntimeCapability,
+            RUNTIME_CAPABILITIES,
+          } from "@tenkacloud/problem-runtime/capabilities";''',
+          )
+          replace(
+              mapping,
+              '''  return CONTAINER_RUNTIMES.some(
+                (r) => r.provider === runtime.provider && r.engine === runtime.engine,
+              );''',
+              '''  return findRuntimeCapability(runtime.provider, runtime.engine)?.selection === "local-only";''',
+          )
+          replace(
+              mapping,
+              '''export const NON_AWS_SELECTABLE_PROVIDERS: readonly string[] = [
+            ...new Set(RESERVED_RUNTIMES.map((r) => r.provider)),
+          ];''',
+              '''export const NON_AWS_SELECTABLE_PROVIDERS: readonly string[] = [
+            ...new Set(
+              RUNTIME_CAPABILITIES.filter(
+                (capability) =>
+                  capability.executionMode === "cloud" &&
+                  capability.selection === "feature-gated" &&
+                  capability.adapterWired,
+              ).map((capability) => capability.provider),
+            ),
+          ];''',
+          )
+          replace(
+              mapping,
+              '''  const recognized = RESERVED_RUNTIMES.some(
+                (r) => r.provider === runtime.provider && r.engine === runtime.engine,
+              );
+              return recognized && enabledProviders.has(runtime.provider);''',
+              '''  const capability = findRuntimeCapability(runtime.provider, runtime.engine);
+              return (
+                capability?.adapterWired === true &&
+                capability.selection === "feature-gated" &&
+                enabledProviders.has(runtime.provider)
+              );''',
+          )
+          source = Path(mapping).read_text()
+          source = source.replace("RESERVED (planned-but-not-yet-shipped provider)", "adapter-wired cloud provider")
+          source = source.replace("reserved `(provider, engine)` pair", "adapter-wired `(provider, engine)` pair")
+          source = source.replace("recognized reserved", "recognized adapter-wired")
+          Path(mapping).write_text(source)
+          PY
+
+      - name: Regenerate portal and landing artifacts
+        run: |
+          bun run --filter @TenkaCloud/developer-portal generate:reference
+          bun run scripts/landing/generate-landing-docs.ts
+
+      - name: Format changed sources and artifacts
+        run: |
+          bun x biome check --write \
+            packages/problem-runtime/package.json \
+            packages/problem-runtime/src/capabilities.ts \
+            packages/problem-runtime/test/capabilities.test.ts \
+            apps/application-admin-console/src/data/problem-mapping.ts \
+            apps/developer-portal/scripts/generate-reference.ts \
+            apps/developer-portal/scripts/generate-reference.test.ts \
+            apps/developer-portal/src/components/ReferenceTables.tsx \
+            apps/developer-portal/src/content/reference-data.ts \
+            scripts/landing/generate-landing-docs.ts
+
+      - name: Run focused validation
+        run: |
+          bun run --filter @tenkacloud/problem-runtime test
+          bun run --filter @tenkacloud/problem-runtime typecheck
+          bun run --filter @TenkaCloud/developer-portal test
+          bun run --filter @TenkaCloud/developer-portal typecheck
+          bun test scripts/landing/generate-landing-docs.test.ts
+
+      - name: Commit generated capability documentation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add packages/problem-runtime apps/application-admin-console apps/developer-portal scripts/landing landing/docs
+          git commit -m "docs(runtime): generate capability evidence matrix"
+          git push
