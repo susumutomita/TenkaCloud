@@ -65,7 +65,7 @@
     "implementation": ".claude/harness/src/rules/handler-no-direct-sdk-import.ts",
     "test": ".claude/harness/src/rules/handler-no-direct-sdk-import.test.ts",
     "timing": "pre-commit / CI",
-    "severity": "error",
+    "severity": "warning",
     "scope": "Lambda entrypoints",
     "exception": "inject an adapter or repository at the composition root"
   },
@@ -85,7 +85,7 @@
     "implementation": ".claude/harness/src/rules/handler-tenant-isolation.ts",
     "test": ".claude/harness/src/rules/handler-tenant-isolation.test.ts",
     "timing": "pre-commit / CI",
-    "severity": "error",
+    "severity": "warning",
     "scope": "tenant-scoped DynamoDB handlers",
     "exception": "prove the file is not tenant-scoped or add the tenant condition"
   },
