@@ -29,12 +29,6 @@ jobs:
       - name: Update lockfile without lifecycle scripts
         run: bun install --ignore-scripts
 
-      - name: Run problem-test checks
-        run: |
-          bun run --filter @tenkacloud/problem-test test
-          bun run --filter @tenkacloud/problem-test typecheck
-          bun x biome check packages/problem-test-harness/package.json packages/problem-test-harness/test/scorer.property.test.ts
-
       - name: Commit the generated lockfile
         run: |
           git config user.name "github-actions[bot]"
@@ -42,7 +36,13 @@ jobs:
           git add bun.lock
           if git diff --cached --quiet; then
             echo "bun.lock is already current"
-            exit 0
+          else
+            git commit -m "test(problem-test): update property-test lockfile"
+            git push
           fi
-          git commit -m "test(problem-test): update property-test lockfile"
-          git push
+
+      - name: Run problem-test checks
+        run: |
+          bun run --filter @tenkacloud/problem-test test
+          bun run --filter @tenkacloud/problem-test typecheck
+          bun x biome check packages/problem-test-harness/package.json packages/problem-test-harness/test/scorer.property.test.ts
