@@ -1,4 +1,3 @@
-import { LOCAL_DRILL_FIRST_SCORE } from "@tenkacloud/portal-contracts";
 import { StatusCodes } from "http-status-codes";
 import { describe, expect, it, vi } from "vitest";
 import { handleLocalPlayRequest } from "../../../scripts/local-play/api";
@@ -186,52 +185,7 @@ describe("local-play API", () => {
       }
     ).problems[0];
     expect(solvedProblem.writeup).toContain("日本語の解説");
-    expect(solvedProblem.writeup).toContain(LOCAL_DRILL_FIRST_SCORE.code);
     expect(solvedProblem.i18n?.en?.writeup).toContain("English explanation");
-    expect(solvedProblem.i18n?.en?.writeup).toContain(LOCAL_DRILL_FIRST_SCORE.code);
-  });
-
-  it("[#2707] should append the local-drill checkpoint to the intro drill writeup on first clear", async () => {
-    const introDrill: ContainerProblem = PROBLEM;
-    const state = createLocalPlayState(
-      { problems: [introDrill] },
-      { verify: async () => ({ correct: true }) },
-    );
-    await state.lifecycle.ensureRunning(PROBLEM.problemId);
-
-    // クリア前: writeup にも view にもコードは存在しない (= 解く前に見えない)。
-    const before = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
-    expect(JSON.stringify(before.body)).not.toContain(LOCAL_DRILL_FIRST_SCORE.code);
-
-    await handleLocalPlayRequest(
-      post("/portal/me/submit-flag", { problemId: PROBLEM.problemId, flag: "TC{x}" }),
-      state,
-      NOW,
-    );
-    const after = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
-    const solved = (after.body as { problems: Array<{ writeup?: string }> }).problems[0];
-    // 元の writeup を保ちながら、 末尾に demo portal へ提出するチェックポイントが付く。
-    expect(solved.writeup).toContain("日本語の解説");
-    expect(solved.writeup).toContain(LOCAL_DRILL_FIRST_SCORE.code);
-    expect(solved.writeup).toContain("ローカルモードで遊ぶ");
-  });
-
-  it("[#2707] should emit the checkpoint even when the intro drill ships no writeup", async () => {
-    const { writeup: _w, writeupI18n: _wi, ...rest } = PROBLEM;
-    const introDrill = rest as ContainerProblem;
-    const state = createLocalPlayState(
-      { problems: [introDrill] },
-      { verify: async () => ({ correct: true }) },
-    );
-    await state.lifecycle.ensureRunning(PROBLEM.problemId);
-    await handleLocalPlayRequest(
-      post("/portal/me/submit-flag", { problemId: PROBLEM.problemId, flag: "TC{x}" }),
-      state,
-      NOW,
-    );
-    const after = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
-    const solved = (after.body as { problems: Array<{ writeup?: string }> }).problems[0];
-    expect(solved.writeup).toContain(LOCAL_DRILL_FIRST_SCORE.code);
   });
 
   it("should honor a points override returned by /verify", async () => {

@@ -1,7 +1,7 @@
 import {
   LITE_DRILL_CHECKPOINTS,
   LITE_DRILL_PROBLEM_ID,
-  LOCAL_DRILL_FIRST_SCORE,
+  LOCAL_DRILL_LAUNCH_COMMAND,
   LOCAL_DRILL_PROBLEM_ID,
 } from "@tenkacloud/portal-contracts";
 import type {
@@ -28,7 +28,7 @@ import {
  *   1. 「TenkaCloud とは?」 — 4 ステップのチュートリアル (#2711 デザイン 6b)。 モードの
  *      3 択 (ローカル / Lite / SaaS) はステップ 3 で初めて提示する
  *   2. 「自分の TenkaCloud Lite を立てる」 — 実 AWS デプロイ (#2696、 lite-drill 契約)
- *   3. 「ローカルモードで遊ぶ」 — 手元の Mac。 sqli-demo 初得点 → チェックポイント提出
+ *   3. 「ローカルモードで遊ぶ」 — 手元の Mac。 起動コマンド (`make local` 等) をそのまま提出
  *   4. 「AIエージェントでMac起動」 — LP のプロンプトからローカル起動確認までの実演
  *   (旧来の「クエスト」2 問は削除済み — チュートリアル 4 本で完結させ、 余計な問題で
  *    迷わせない。 完走後の導線はローカル / Lite の実在ドリルへ直接つなぐ)
@@ -393,12 +393,12 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
       name: "ローカルモードで遊ぶ",
       description: [
         "AWS アカウントなしで、**本物の問題コンテナ**を手元の Mac で動かすのがローカルモード。Docker を使い、ブラウザの Participant Portal から挑戦する。",
-        "TenkaCloud リポジトリで `make local` を実行するとローカルモードが起動する。ブラウザで Participant Portal を開き、問題一覧から Docker 対応の入門ドリル **sqli-demo** を選んで起動しよう。",
+        "TenkaCloud リポジトリで `make local` を実行するとローカルモードが起動する。ブラウザで Participant Portal を開こう。問題一覧には Docker 対応の入門ドリル **sqli-demo** もあるので、遊びたければ試してみるといい。",
         "",
         "#### チェックポイント",
         "",
         "1. Mac で起動した Participant Portal のポート番号を答える",
-        "2. sqli-demo を初クリアすると解説 (writeup) の末尾に現れる `TENKA{...}` コードを提出する",
+        "2. ローカルモードを起動したコマンドを提出する",
         "",
         "手順に詰まったら各提出欄の **ヒント** を開こう(ペナルティなし)。クリアしたら、まだの人は「自分の TenkaCloud Lite を立てる」で仕上げよう。",
       ].join("\n"),
@@ -409,12 +409,12 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
           name: "Play local mode",
           description: [
             "Local mode runs **real problem containers** on your Mac with no AWS account. Docker runs the challenge while you play from the Participant Portal in your browser.",
-            "In the TenkaCloud repository, run `make local` to start local mode. Open the Participant Portal in your browser and pick the Docker-based intro drill **sqli-demo** from the problem list to start it.",
+            "In the TenkaCloud repository, run `make local` to start local mode. Open the Participant Portal in your browser. The problem list also has the Docker-based intro drill **sqli-demo** if you want to try it.",
             "",
             "#### Checkpoints",
             "",
             "1. Answer the Participant Portal port shown when local mode starts on your Mac",
-            "2. Clear sqli-demo once and submit the `TENKA{...}` code that appears at the end of its writeup",
+            "2. Submit the command you used to start local mode",
             "",
             'Stuck? Open the **hint** on each submission box (no penalty). Then finish with "Deploy your own TenkaCloud Lite" if you have not yet.',
           ].join("\n"),
@@ -454,22 +454,22 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
             ],
           },
           {
-            id: LOCAL_DRILL_FIRST_SCORE.flagId,
-            label: "2. sqli-demo 初クリアのコード",
+            id: LOCAL_DRILL_LAUNCH_COMMAND.flagId,
+            label: "2. ローカルモードを起動したコマンド",
             points: 100,
             solved: false,
-            i18n: { en: { label: "2. The code from your first sqli-demo clear" } },
+            i18n: { en: { label: "2. The command you used to start local mode" } },
             hints: [
               {
                 id: "local-h2",
                 penalty: 0,
                 revealed: false,
                 content:
-                  "手元の Portal で sqli-demo を開き、Start を押してコンテナを起動する。問題の指示どおりにスタッフ専用画面へ入り、表示された flag を提出すると、クリア直後に解説 (writeup) が開く。その末尾の「オンボーディングドリル チェックポイント」にある `TENKA{...}` をここに貼る。",
+                  "手元の Mac のターミナルで、TenkaCloud リポジトリからローカルモードを起動したコマンドをそのままここに貼る。",
                 i18n: {
                   en: {
                     content:
-                      "In your local Portal, open sqli-demo and press Start. Follow the problem instructions to enter the staff-only page and submit the displayed flag. The writeup opens after your first clear — paste the `TENKA{...}` from its closing onboarding-drill-checkpoint section here.",
+                      "Paste the exact command you ran in your Mac's terminal, from the TenkaCloud repository, to start local mode.",
                   },
                 },
               },

@@ -102,6 +102,9 @@ const renderPage = (cfg = config()) => render(<CompetitorAccountsPage config={cf
 
 beforeEach(() => {
   mockHook.mockReturnValue(hookState());
+  // #2696 follow-up (2026-07-21): the drill checkpoint's "already shown" state lives in
+  // localStorage so it survives remounts within one browser — reset it between tests too.
+  window.localStorage.clear();
 });
 afterEach(() => vi.clearAllMocks());
 
@@ -216,6 +219,19 @@ describe("CompetitorAccountsPage", () => {
   it("should reveal the Lite drill checkpoint after a verified trust check in Lite mode (#2696)", () => {
     mockHook.mockReturnValue(hookState({ lastVerified: { awsAccountId: "acct-1" } }));
     renderPage(config({ tenantId: "local" }));
+    expect(screen.getByText(LITE_DRILL_CHECKPOINTS.competitorVerified.code)).toBeInTheDocument();
+  });
+
+  it("should keep the checkpoint alert visible across the reload re-render after verify (2026-07-21)", () => {
+    // Regression: verify() sets lastVerified, then awaits reload() (a separate render pass).
+    // Recomputing liteDrillCheckpointCode() fresh on that later render would report "already
+    // shown" (since the effect already marked it after the first render) and hide the alert
+    // before the learner can read it. The revealed code must stay pinned in local state.
+    mockHook.mockReturnValue(hookState({ lastVerified: { awsAccountId: "acct-1" } }));
+    const { rerender } = renderPage(config({ tenantId: "local" }));
+    expect(screen.getByText(LITE_DRILL_CHECKPOINTS.competitorVerified.code)).toBeInTheDocument();
+
+    rerender(<CompetitorAccountsPage config={config({ tenantId: "local" })} />);
     expect(screen.getByText(LITE_DRILL_CHECKPOINTS.competitorVerified.code)).toBeInTheDocument();
   });
 

@@ -6,7 +6,7 @@ import Form from "@cloudscape-design/components/form";
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import { toErrorMessage } from "@tenkacloud/web-kit";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { canMutateTenant, useApiClient } from "../api/client";
 import { bulkDeployEvent, type CreateEventResponse, createEvent } from "../api/events-client";
@@ -15,7 +15,7 @@ import { DEFAULT_AWS_REGION } from "../data/aws-regions";
 import { listProblemSummaries, type ProblemSummary, runtimeProviders } from "../data/problems";
 import { useT } from "../i18n";
 import { filterVerifiedAccounts } from "../lib/competitor-accounts-filter";
-import { liteDrillCheckpointCode } from "../lib/lite-drill";
+import { liteDrillCheckpointCode, markLiteDrillCheckpointShown } from "../lib/lite-drill";
 import { EventCreateAccountsAlerts } from "./event-create/EventCreateAccountsAlerts";
 import { EventCreateBasicInfoSection } from "./event-create/EventCreateBasicInfoSection";
 import { EventCreateDeployPromptModal } from "./event-create/EventCreateDeployPromptModal";
@@ -194,6 +194,25 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
   } | null>(null);
   const [deployStarting, setDeployStarting] = useState(false);
 
+  // Issue #2696: Lite mode でだけ 「初回イベント作成」 ドリルのチェックポイントを出す。
+  // 一度表示したら二度と出さない (2026-07-21) — 毎回の event 作成で再表示されていたため。
+  // 表示可否の判定は deployPromptTarget が立った瞬間に 1 回だけ effect 内で行い、 結果を
+  // local state に固定する。 modal 表示中の再 render (例: handleDeployNow の
+  // setDeployStarting) で liteDrillCheckpointCode() を呼び直すと、 既に「表示済み」
+  // 判定が効いて modal が開いたまま Alert だけ消えてしまうため (CompetitorAccountsPage
+  // と同じ race)。
+  const [revealedFirstEventDrillCode, setRevealedFirstEventDrillCode] = useState<
+    string | undefined
+  >(undefined);
+  useEffect(() => {
+    if (!deployPromptTarget) return;
+    const code = liteDrillCheckpointCode(config, "firstEventCreated");
+    if (code) {
+      setRevealedFirstEventDrillCode(code);
+      markLiteDrillCheckpointShown("firstEventCreated");
+    }
+  }, [deployPromptTarget, config]);
+
   const handleSubmit = async () => {
     // submit button は disabled={!canSubmit} なので canSubmit 偽では発火し得ず、 canSubmit 真なら
     // apiClient は非 null (canSubmit に含む)。 = この guard の return は UI 経路では不到達 (防御)。
@@ -334,8 +353,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
         bulkDeploySupported={providerMode.kind === "aws"}
         participantPortalUrl={config.participantPortalUrl}
         teams={deployPromptTarget?.teams ?? []}
-        // Issue #2696: Lite mode でだけ 「初回イベント作成」 ドリルのチェックポイントを出す。
-        liteDrillCheckpointCode={liteDrillCheckpointCode(config, "firstEventCreated")}
+        liteDrillCheckpointCode={revealedFirstEventDrillCode}
         onDeployNow={() => void handleDeployNow()}
         onDeployLater={handleDeployLater}
       />

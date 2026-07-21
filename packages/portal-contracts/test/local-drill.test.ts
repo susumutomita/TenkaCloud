@@ -1,22 +1,37 @@
 import { describe, expect, it } from "vitest";
 import {
-  LOCAL_DRILL_FIRST_SCORE,
+  LOCAL_DRILL_LAUNCH_COMMAND,
   LOCAL_DRILL_PROBLEM_ID,
   matchesCheckpointCode,
-  matchesLocalDrillFirstScore,
+  matchesLocalDrillLaunchCommand,
 } from "../src/index.js";
 
 describe("local-drill checkpoint (#2707)", () => {
-  it("should expose the drill problem id and a TENKA{...}-shaped checkpoint code", () => {
+  it("should expose the drill problem id and the launch-command checkpoint code", () => {
     expect(LOCAL_DRILL_PROBLEM_ID).toBe("play-local-mode");
-    expect(LOCAL_DRILL_FIRST_SCORE.flagId).toBe("first-score");
-    expect(LOCAL_DRILL_FIRST_SCORE.code).toMatch(/^TENKA\{[A-Z0-9-]+\}$/);
+    expect(LOCAL_DRILL_LAUNCH_COMMAND.flagId).toBe("first-score");
+    expect(LOCAL_DRILL_LAUNCH_COMMAND.code).toBe("make local");
   });
 
-  it("should match the first-score code ignoring whitespace and letter case", () => {
-    expect(matchesLocalDrillFirstScore("  tenka{local-first-score} ")).toBe(true);
-    expect(matchesLocalDrillFirstScore(LOCAL_DRILL_FIRST_SCORE.code)).toBe(true);
-    expect(matchesLocalDrillFirstScore("TENKA{WRONG}")).toBe(false);
+  it("should match the launch-command code ignoring whitespace and letter case", () => {
+    expect(matchesLocalDrillLaunchCommand("  Make Local ")).toBe(true);
+    expect(matchesLocalDrillLaunchCommand(LOCAL_DRILL_LAUNCH_COMMAND.code)).toBe(true);
+    expect(matchesLocalDrillLaunchCommand("make lite")).toBe(false);
+  });
+
+  it("should collapse internal double-spaces in a multi-word code (2026-07-21)", () => {
+    expect(matchesLocalDrillLaunchCommand("make  local")).toBe(true);
+    expect(matchesLocalDrillLaunchCommand("make   local")).toBe(true);
+  });
+
+  it("should accept every real launch command that also starts the portal (2026-07-21)", () => {
+    expect(matchesLocalDrillLaunchCommand("tenkacloud local")).toBe(true);
+    expect(matchesLocalDrillLaunchCommand("bun run tenkacloud local")).toBe(true);
+    expect(matchesLocalDrillLaunchCommand("BUN RUN TENKACLOUD LOCAL")).toBe(true);
+  });
+
+  it("should reject make local-up (API-only, does not start the portal)", () => {
+    expect(matchesLocalDrillLaunchCommand("make local-up")).toBe(false);
   });
 
   it("should share one checkpoint matcher with the lite drill", () => {

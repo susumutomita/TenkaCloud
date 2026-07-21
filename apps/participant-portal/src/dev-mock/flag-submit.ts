@@ -1,9 +1,9 @@
 import {
   LITE_DRILL_PROBLEM_ID,
-  LOCAL_DRILL_FIRST_SCORE,
+  LOCAL_DRILL_LAUNCH_COMMAND,
   LOCAL_DRILL_PROBLEM_ID,
   matchesLiteDrillCheckpoint,
-  matchesLocalDrillFirstScore,
+  matchesLocalDrillLaunchCommand,
 } from "@tenkacloud/portal-contracts";
 import type { SubmitFlagOutcome } from "../api/portal-client";
 
@@ -197,8 +197,8 @@ export function evaluateMockSubFlag(
   if (problemId === LITE_DRILL_PROBLEM_ID) {
     return matchesLiteDrillCheckpoint(flagId, rawFlag) ? ok() : wrong();
   }
-  if (problemId === LOCAL_DRILL_PROBLEM_ID && flagId === LOCAL_DRILL_FIRST_SCORE.flagId) {
-    return matchesLocalDrillFirstScore(rawFlag) ? ok() : wrong();
+  if (problemId === LOCAL_DRILL_PROBLEM_ID && flagId === LOCAL_DRILL_LAUNCH_COMMAND.flagId) {
+    return matchesLocalDrillLaunchCommand(rawFlag) ? ok() : wrong();
   }
   if (QUIZ_ANSWERS[problemId]) {
     return matchesQuizAnswer(problemId, flagId, rawFlag) ? ok() : wrong();

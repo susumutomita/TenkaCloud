@@ -1,9 +1,11 @@
 import createWrapper from "@cloudscape-design/components/test-utils/dom";
+import { LITE_DRILL_CHECKPOINTS } from "@tenkacloud/portal-contracts";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CompetitorAccountSummary } from "../../src/api/competitor-accounts-client";
 import type { AppConfig } from "../../src/config";
 import type { ProblemSummary } from "../../src/data/problems";
+import { hasLiteDrillCheckpointBeenShown } from "../../src/lib/lite-drill";
 
 /**
  * Issue #1241: EventCreatePage は section に分割済の orchestrator。 ここでは page の
@@ -100,7 +102,7 @@ const problem = (over: Partial<ProblemSummary> = {}): ProblemSummary =>
     ...over,
   }) as ProblemSummary;
 
-const config = {} as AppConfig;
+let config: AppConfig = {} as AppConfig;
 const renderPage = () => render(<EventCreatePage config={config} />);
 const w = (c: HTMLElement) => createWrapper(c);
 // #1776: 問題選択 Multiselect の前に filter 用 Multiselect (difficulty / scoring kind / tags)
@@ -121,6 +123,8 @@ function fillValidForm(container: HTMLElement) {
 }
 
 beforeEach(() => {
+  config = {} as AppConfig;
+  window.localStorage.clear();
   mockApiClient.mockReturnValue({ post: vi.fn() });
   mockNav.mockClear();
   mockCreate.mockReset().mockResolvedValue({
@@ -152,6 +156,18 @@ describe("EventCreatePage flow", () => {
     fireEvent.click(screen.getByTestId("deploy-prompt-now"));
     await waitFor(() => expect(mockBulk).toHaveBeenCalledWith(expect.anything(), "e1"));
     expect(mockNav).toHaveBeenCalledWith("/events/e1");
+  });
+
+  it("should mark the first-event-created drill checkpoint shown once revealed in Lite mode (#2696)", async () => {
+    config = { tenantId: "local" } as AppConfig;
+    const { container } = renderPage();
+    fillValidForm(container);
+    fireEvent.click(screen.getByRole("button", { name: "event_create.submit" }));
+    await waitFor(() => expect(mockCreate).toHaveBeenCalled());
+    expect(
+      await screen.findByText(LITE_DRILL_CHECKPOINTS.firstEventCreated.code),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(hasLiteDrillCheckpointBeenShown("firstEventCreated")).toBe(true));
   });
 
   it("should navigate without deploying on 'deploy later'", async () => {
