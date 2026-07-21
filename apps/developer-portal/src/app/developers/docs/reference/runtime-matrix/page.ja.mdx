@@ -6,25 +6,32 @@ export const metadata = { title: "ランタイム対応マトリクス" };
 # ランタイム対応マトリクス <MaturityBadge level="preview" />
 
 パックは、必要とする `(provider, engine)` ランタイムを宣言します。以下のマトリクスは、
-`@tenkacloud/problem-runtime` のランタイム対応宣言（`EXECUTABLE_PROVIDER` /
-`EXECUTABLE_ENGINE`、`RESERVED_RUNTIMES`、`CONTAINER_RUNTIMES`）から導出された
-**規範的リファレンス**です。エンジンが出荷されると reserved セットから外れ、
-この表は自動的に再生成されます。
+`@tenkacloud/problem-runtime/capabilities` の `RUNTIME_CAPABILITIES` から生成される
+**規範的リファレンス**です。
 
 ## マトリクス
 
 <RuntimeMatrixTable />
 
-## サポート区分
+## 独立した capability 事実
 
-- **executable** — 現時点でクラウドにデプロイ可能です。デプロイワーカーが競技者アカウント内で
-  CloudFormation の `CreateStack` を実行します。
-- **reserved** — ロードマップ上で認知されているものの、まだアダプターが存在しない
-  プロバイダー / エンジンです。バリデーターは受理しますが、デプロイワーカーは
-  クラウドデプロイを明示的に拒否します。
-- **container** — ローカルのコンテナランタイム（`make local`）です。認識はされますが、
-  クラウドにデプロイされることはありません。
+- **Recognized** — メタデータと schema が正確な provider / engine の組を受理します。
+  デプロイ実装が存在することまでは意味しません。
+- **Adapter wired** — 具体的な adapter と credential / composition の配線が repository に
+  含まれます。artifact 処理や provider API 契約の正しさを証明するものではありません。
+- **Executable** — materialization から provider wire までの経路が、宣言された mode
+  (`cloud` または `local`) で実行可能です。
+- **Live verified** — mock ではなく実際の lifecycle が実証済みです。unit / mock test は
+  必須の回帰証拠ですが、live verification の代わりにはなりません。
 
-AWS は `Stable` です。GCP、Azure、Sakura は `Planned` の reserved ロードマップターゲットです。
+Azure、GCP、Sakura は adapter-wired です。
+[multicloud acceptance #2081](https://github.com/susumutomita/TenkaCloud/issues/2081)
+が open の間は live verified ではありません。Azure と GCP は、表に示す artifact / output の
+blocker が閉じるまで executable でもありません。Sakura は #2746 後に API 契約上 executable
+ですが、実 account lifecycle が #2081 に添付されるまでは競技 ready としません。
+
+ローカルの `docker/compose` は `make local` mode で独立に executable / verified ですが、
+クラウドランタイムではありません。AWS CloudFormation は既定の stable / live-verified
+クラウドランタイムです。
 
 関連: [問題メタデータリファレンス](/developers/docs/reference/problem-metadata/)。
