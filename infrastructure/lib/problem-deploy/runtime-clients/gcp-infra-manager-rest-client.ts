@@ -206,12 +206,13 @@ export function createGcpInfraManagerRestClient(
           ? await getRevision(name, deployment.latestRevision)
           : undefined;
       const rawOutputs = revision?.applyResults?.outputs;
+      // Terraform marks potentially secret outputs explicitly. `stackOutputs` is persisted in
+      // control-data and consumed by scoring/UI, so sensitive values must never enter it.
       const outputs = rawOutputs
         ? Object.fromEntries(
-            Object.entries(rawOutputs).map(([key, output]) => [
-              key,
-              stringifyTerraformOutput(output.value),
-            ]),
+            Object.entries(rawOutputs)
+              .filter(([, output]) => output.sensitive !== true)
+              .map(([key, output]) => [key, stringifyTerraformOutput(output.value)]),
           )
         : undefined;
 
