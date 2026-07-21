@@ -99,7 +99,8 @@ describe("gcp-infra-manager-rest-client (ADR-027 #1411 #2745)", () => {
               replicas: { value: 2 },
               enabled: { value: true },
               config: { value: { nested: "value" } },
-              empty: { value: null, sensitive: true },
+              nullable: { value: null },
+              secret: { value: "do-not-persist", sensitive: true },
             },
           },
         }),
@@ -112,7 +113,7 @@ describe("gcp-infra-manager-rest-client (ADR-027 #1411 #2745)", () => {
         replicas: "2",
         enabled: "true",
         config: '{"nested":"value"}',
-        empty: "",
+        nullable: "",
       },
     });
     expect(fetchImpl.mock.calls[1][0]).toBe(`https://config.test/v1/${REVISION}`);
