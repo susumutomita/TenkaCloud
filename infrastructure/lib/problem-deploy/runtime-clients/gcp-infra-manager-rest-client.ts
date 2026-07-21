@@ -29,6 +29,7 @@ import type {
   GcpDeploymentState,
   GcpInfraManagerClient,
 } from "../handlers/shared/runtime/gcp-infra-manager-adapter.js";
+import { stringifyRuntimeOutput } from "./runtime-output.js";
 
 const DEFAULT_BASE_URL = "https://config.googleapis.com/v1";
 const UPDATE_MASK = "terraformBlueprint,serviceAccount";
@@ -80,17 +81,6 @@ function assertGcsBlueprintRef(blueprintRef: string): void {
   }
 }
 
-function stringifyTerraformOutput(value: unknown): string {
-  if (typeof value === "string") return value;
-  if (value === null || value === undefined) return "";
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
-  const serialized = JSON.stringify(value);
-  if (serialized === undefined) {
-    throw new Error("GCP Infra Manager returned a Terraform output that is not JSON serializable");
-  }
-  return serialized;
-}
-
 export function createGcpInfraManagerRestClient(
   credential: GcpCredential,
   options: GcpInfraManagerRestClientOptions,
@@ -125,20 +115,26 @@ export function createGcpInfraManagerRestClient(
     };
   }
 
-  async function getRaw(name: string): Promise<InfraManagerDeployment | undefined> {
-    const res = await doFetch(`${baseUrl}/${deploymentName(name)}`, {
+  async function getOptionalJson<T>(url: string, operation: string): Promise<T | undefined> {
+    const response = await doFetch(url, {
       method: "GET",
       headers: authHeaders(false),
     });
-    if (res.status === StatusCodes.NOT_FOUND) return undefined;
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(`GCP Infra Manager GET deployment failed: ${res.status} ${text}`.trim());
+    if (response.status === StatusCodes.NOT_FOUND) return undefined;
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      throw new Error(
+        `GCP Infra Manager GET ${operation} failed: ${response.status} ${text}`.trim(),
+      );
     }
-    return (await res.json()) as InfraManagerDeployment;
+    return (await response.json()) as T;
   }
 
-  async function getRevision(
+  function getRaw(name: string): Promise<InfraManagerDeployment | undefined> {
+    return getOptionalJson(`${baseUrl}/${deploymentName(name)}`, "deployment");
+  }
+
+  function getRevision(
     deploymentId: string,
     revisionName: string,
   ): Promise<InfraManagerRevision | undefined> {
@@ -148,16 +144,7 @@ export function createGcpInfraManagerRestClient(
         `GCP Infra Manager returned an unexpected latestRevision outside deployment '${deploymentId}'`,
       );
     }
-    const res = await doFetch(`${baseUrl}/${revisionName}`, {
-      method: "GET",
-      headers: authHeaders(false),
-    });
-    if (res.status === StatusCodes.NOT_FOUND) return undefined;
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(`GCP Infra Manager GET revision failed: ${res.status} ${text}`.trim());
-    }
-    return (await res.json()) as InfraManagerRevision;
+    return getOptionalJson(`${baseUrl}/${revisionName}`, "revision");
   }
 
   async function mutate(method: string, url: string, body: unknown): Promise<void> {
@@ -212,7 +199,10 @@ export function createGcpInfraManagerRestClient(
         ? Object.fromEntries(
             Object.entries(rawOutputs)
               .filter(([, output]) => output.sensitive !== true)
-              .map(([key, output]) => [key, stringifyTerraformOutput(output.value)]),
+              .map(([key, output]) => [
+                key,
+                stringifyRuntimeOutput(output.value, "GCP Infra Manager"),
+              ]),
           )
         : undefined;
 
