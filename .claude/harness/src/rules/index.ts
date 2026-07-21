@@ -6,6 +6,7 @@ import { handlerMustNotCallFetch } from "./handler-must-not-call-fetch.ts";
 import { handlerNoDirectSdkImport } from "./handler-no-direct-sdk-import.ts";
 import { handlerNoTransitiveCdkImport } from "./handler-no-transitive-cdk-import.ts";
 import { handlerTenantIsolation } from "./handler-tenant-isolation.ts";
+import { hookCommandTargetExists } from "./hook-command-target-exists.ts";
 import { iamWildcardNeedsJustify } from "./iam-wildcard-needs-justify.ts";
 import { lambdaEnvSize } from "./lambda-env-size.ts";
 import { noAwsTrademarkFictions } from "./no-aws-trademark-fictions.ts";
@@ -24,6 +25,8 @@ export const architectureRules = [
   handlerNoTransitiveCdkImport,
   // Issue #997 / tenant 分離 audit
   handlerTenantIsolation,
+  // Prevent Claude Code settings drift from referencing deleted local scripts.
+  hookCommandTargetExists,
   // feedback_pull_main_before_task: PR の conflict を防ぐ第一線。 commit 内の marker 検知
   noConflictMarkers,
   // Issue #1309 / Lambda env 4KB hard limit 再発防止 (= #1308 root cause)
