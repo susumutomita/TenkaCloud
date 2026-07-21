@@ -17,8 +17,7 @@ const OPTS = {
 const RESOURCE_PARENT = "projects/proj-1/locations/asia-northeast1";
 const PARENT = `https://config.test/v1/${RESOURCE_PARENT}`;
 const REVISION = `${RESOURCE_PARENT}/deployments/p-team/revisions/rev-1`;
-const SERVICE_ACCOUNT =
-  "projects/proj-1/serviceAccounts/tenkacloud@proj-1.iam.gserviceaccount.com";
+const SERVICE_ACCOUNT = "projects/proj-1/serviceAccounts/tenkacloud@proj-1.iam.gserviceaccount.com";
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
