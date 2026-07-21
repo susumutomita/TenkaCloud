@@ -1,0 +1,43 @@
+name: Agent issue 2746 coverage diagnose
+
+permissions:
+  contents: write
+
+on:
+  push:
+    branches:
+      - agent/issue-2746-sakura-hardening
+
+jobs:
+  diagnose:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.ref_name }}
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: "1.3.11"
+      - name: Install dependencies
+        run: bun install --frozen-lockfile --ignore-scripts
+      - name: Capture focused test output
+        run: |
+          set +e
+          bun run --filter @TenkaCloud/infrastructure test \
+            test/problem-deploy/sakura-apprun-rest-client.test.ts \
+            test/problem-deploy/sakura-apprun-adapter.test.ts \
+            > /tmp/sakura.log 2>&1
+          status=$?
+          mkdir -p .agent
+          cp /tmp/sakura.log .agent/issue-2746-coverage.log
+          printf '\nexit_status=%s\n' "$status" >> .agent/issue-2746-coverage.log
+      - name: Commit diagnostics
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .agent/issue-2746-coverage.log
+          git commit -m "chore(agent): capture Sakura coverage diagnostics"
+          git push
