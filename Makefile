@@ -15,7 +15,7 @@ HELP_RENDERER := scripts/ops/make-help.awk
         fix fix-md fix-text fix-format format \
         harness harness-test tech-debt dead-code \
         pack-init pack-validate pack-install pack-activate pack-deactivate pack-list \
-        env-check env-check-lite env-init turso-live turso-live-guide turso-live-preflight turso-live-verify-cfn \
+        env-check env-check-lite env-init turso-live turso-live-guide turso-live-preflight turso-live-verify-cfn turso-reset \
         deploy deploy-saas destroy destroy-saas \
         deploy-battles destroy-battles \
         deploy-always-on-command destroy-always-on-command synth-always-on-command \
@@ -283,6 +283,9 @@ turso-live-preflight: env-check-lite ## Validate Turso, AWS, and SSM settings re
 
 turso-live-verify-cfn: ## Verify deployed stacks contain no DynamoDB tables | deploy済みstackとDynamoDB 0件を検証
 	@ENV=$(ENV) bun run tenkacloud turso-live verify-cloudformation
+
+turso-reset: ## Delete all Turso control-data rows, keep schema | Tursoのcontrol-data全行を削除(スキーマ維持)
+	@ENV=$(ENV) bun run tenkacloud turso-live reset
 
 # Issue #955: デフォルトの make deploy は Lite (= single-tenant) mode。
 # 大半の利用者は 1 人 1 大会の主催で multi-tenant 抽象 (= SBT ControlPlane / tenant pipeline /

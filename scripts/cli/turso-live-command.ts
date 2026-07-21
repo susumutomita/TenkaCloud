@@ -6,6 +6,7 @@ import {
   runTursoLivePreflight,
   validateTursoLiveEnvironment,
 } from "../ops/turso-live-guide";
+import { runTursoReset, tursoPipelinePost } from "../ops/turso-reset";
 import type { ProcessRunner } from "./process";
 import { loadTursoLiveEnvironment } from "./turso-live-environment";
 import { runTursoLiveSetup } from "./turso-live-setup";
@@ -101,6 +102,19 @@ export async function runTursoLiveCommand(
   }
   const loaded = loadTursoLiveEnvironment(deps.repoRoot, environment, env).env;
   if (command === "deploy") return deployTursoLive(environment, loaded, deps);
+  if (command === "reset") {
+    // destructive: 全 control-data 行の削除 (スキーマ / マイグレーション状態は維持)。
+    return runTursoReset({
+      env: loaded,
+      environment,
+      processRunner: deps.processRunner,
+      httpPost: tursoPipelinePost,
+      confirm: deps.confirm,
+      log: deps.log,
+      interactive: deps.interactive,
+      assumeYes: args.includes("--yes"),
+    });
+  }
   const directResult = runReadOnlyTursoCommand(command, environment, loaded, deps);
   if (directResult !== undefined) return directResult;
   if (command) throw new Error(`Unknown turso-live command: ${command}`);

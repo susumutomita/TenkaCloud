@@ -21,7 +21,7 @@ export function tenkaCloudUsage(): string {
     "        Diagnose local prerequisites without changing the machine",
     "  tenkacloud onboard [--yes]",
     "        Interactively repair missing local prerequisites",
-    "  tenkacloud turso-live [guide|preflight|deploy|verify-cloudformation]",
+    "  tenkacloud turso-live [guide|preflight|deploy|verify-cloudformation|reset]",
     "        Guided Turso/AWS live verification",
   ].join("\n");
 }
