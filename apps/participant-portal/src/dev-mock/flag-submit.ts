@@ -80,8 +80,9 @@ export const FIRST_BROWSER_DRILL_JOB_ID = "01HZX0KFFCT7BHGAQM6Q2WP1AB";
  * what-is-tenkacloud の 4 ステップ (#2711 デザイン 6b):
  *   1. tenka-what      — TenkaCloud とは (本文に答えがある読解クイズ)
  *   2. battle-challenge — Battle と Challenge の区別
- *   3. choose-mode      — モードを選ぶ。 ブラウザ (Lite) / Codespaces のどちらを
- *                         選んでも正解 (= クイズではなく選択。 詳細はヒントに)
+ *   3. choose-mode      — モードを選ぶ。 ローカル / Lite / SaaS (+ 文脈で触れる
+ *                         Always-On) のどれを選んでも正解 (= クイズではなく選択。
+ *                         詳細はヒントに)
  *   4. first-flag       — 本文に印字された flag をそのまま提出する採点体験
  */
 const QUIZ_ANSWERS: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> = {
@@ -97,12 +98,24 @@ const QUIZ_ANSWERS: Readonly<Record<string, Readonly<Record<string, readonly str
     ],
     "battle-challenge": ["battle", "バトル"],
     "choose-mode": [
+      "local",
+      "ローカル",
+      "ローカルモード",
+      "local mode",
       "lite",
       "ライト",
-      "browser",
-      "ブラウザ",
-      "ブラウザ (lite)",
-      "browser (lite)",
+      "lite モード",
+      "lite mode",
+      "saas",
+      "サース",
+      "saas モード",
+      "saas mode",
+      // 本文で文脈として触れる Always-On も実在モードなので正解として受け付ける
+      "always-on",
+      "alwayson",
+      "always on",
+      "always-on モード",
+      // Codespaces はローカルモードの実行環境の 1 つなので正解のまま受け付ける
       "codespaces",
       "コードスペース",
     ],
