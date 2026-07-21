@@ -1,5 +1,6 @@
 name: Agent issue 2731 diagnose
 
+# Temporary branch-only diagnostics; deleted before merge.
 permissions:
   contents: write
 
