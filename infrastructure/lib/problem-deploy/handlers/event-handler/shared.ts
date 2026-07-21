@@ -13,6 +13,7 @@ import {
   parseProblemsEducationGraph,
 } from "../../../utils/education-graph.js";
 import type { AdminAuditLogRepository } from "../../control-data/admin-audit-log-repository.js";
+import { selectBackend } from "../../control-data/backend-config.js";
 import type {
   DeploymentsQueryPort,
   DeploymentsRepository,
@@ -204,32 +205,34 @@ export function buildEventSharedResources(runtime: ControlDataRuntime): EventSha
  * deploy event bus だけを使う (= Teams / problem catalog / S3 は不要)。 未使用 field は安全な
  * placeholder で埋める。
  *
- * **防御設計**: `COMPETITOR_ACCOUNTS_TABLE_NAME` env が未配線なら `undefined` を返す。 これにより
- * オーナーが generic-scoring Lambda に CompetitorAccounts read grant + env を足す前は scheduled
- * teardown が dormant になり、 毎分 tick / 採点を一切壊さない。
+ * **防御設計**: default DynamoDB backend では従来どおり table env が 1 つでも欠ければ
+ * `undefined` を返して dormant にする。pure Turso backend は table 自体を synth しないため、注入済み
+ * `ControlDataRuntime` が SQL repository を解決し、backend 非依存の bus / environment だけで有効化する
+ * (#2739)。unknown backend は `selectBackend` が fail loud に拒否する。
  */
 export function buildScheduledTeardownResources(
   runtime: ControlDataRuntime,
 ): EventSharedResources | undefined {
+  const backend = selectBackend(process.env);
   const competitorAccountsTableName = process.env.COMPETITOR_ACCOUNTS_TABLE_NAME;
   const eventsTableName = process.env.EVENTS_TABLE_NAME;
   const deploymentsTableName = process.env.DEPLOYMENTS_TABLE_NAME;
   const eventBusName = process.env.DEPLOY_EVENT_BUS_NAME;
   const env = process.env.DEPLOY_ENVIRONMENT;
+  if (!eventBusName || !env) return undefined;
   if (
-    !competitorAccountsTableName ||
-    !eventsTableName ||
-    !deploymentsTableName ||
-    !eventBusName ||
-    !env
+    backend.kind === "dynamodb" &&
+    (!competitorAccountsTableName || !eventsTableName || !deploymentsTableName)
   ) {
     return undefined;
   }
   return {
     runtime,
-    eventsTableName,
-    deploymentsTableName,
-    competitorAccountsTableName,
+    // Pure Turso has no DynamoDB tables. Repository seams ignore these placeholders and resolve
+    // through the injected SQL runtime; DynamoDB reached this point only with every name present.
+    eventsTableName: eventsTableName ?? "",
+    deploymentsTableName: deploymentsTableName ?? "",
+    competitorAccountsTableName: competitorAccountsTableName ?? "",
     eventBusName,
     env,
     ddb: DynamoDBDocumentClient.from(new DynamoDBClient({})),
@@ -259,15 +262,15 @@ export function buildScheduledTeardownResources(
  * `EventSharedResources` (teardown の鏡像)。 bulk deploy は Events / Deployments / Teams /
  * CompetitorAccounts table と deploy event bus + problem catalog を使う (= teardown より広い)。
  *
- * **防御設計**: deploy に必須な env (`TEAMS_TABLE_NAME` + `BATTLE_PROBLEMS_CATALOG` を含む) が
- * 1 つでも欠けると `undefined` を返す。 これにより generic-scoring Lambda に Teams read grant +
- * catalog 配線が無い間は scheduled deploy が dormant になり、 毎分 tick / 採点を一切壊さない
- * (= teardown 配線 (#1910) と同じ段階的有効化モデル)。 `bulkDeployEvent` は teams を Query し
- * problemsCatalog で problemId→problemDir を解決するため、 teardown の placeholder では不足する。
+ * **防御設計**: problem catalog / bus / environment は backend 共通で必須。default DynamoDB
+ * backend は Teams を含む 4 table env も必須のままにし、1 つでも欠ければ dormant にする。pure Turso
+ * backend は table env を synth しないため、空 placeholder と注入済み SQL runtime で repository seam を
+ * 通す (#2739)。`bulkDeployEvent` の problemId→problemDir 解決には catalog が引き続き必須。
  */
 export function buildScheduledDeployResources(
   runtime: ControlDataRuntime,
 ): EventSharedResources | undefined {
+  const backend = selectBackend(process.env);
   const competitorAccountsTableName = process.env.COMPETITOR_ACCOUNTS_TABLE_NAME;
   const eventsTableName = process.env.EVENTS_TABLE_NAME;
   const deploymentsTableName = process.env.DEPLOYMENTS_TABLE_NAME;
@@ -275,23 +278,21 @@ export function buildScheduledDeployResources(
   const eventBusName = process.env.DEPLOY_EVENT_BUS_NAME;
   const env = process.env.DEPLOY_ENVIRONMENT;
   const problemsCatalog = parseProblemsCatalog(process.env.BATTLE_PROBLEMS_CATALOG);
+  if (!eventBusName || !env || Object.keys(problemsCatalog).length === 0) return undefined;
   if (
-    !competitorAccountsTableName ||
-    !eventsTableName ||
-    !deploymentsTableName ||
-    !teamsTableName ||
-    !eventBusName ||
-    !env ||
-    Object.keys(problemsCatalog).length === 0
+    backend.kind === "dynamodb" &&
+    (!competitorAccountsTableName || !eventsTableName || !deploymentsTableName || !teamsTableName)
   ) {
     return undefined;
   }
   return {
     runtime,
-    eventsTableName,
-    deploymentsTableName,
-    teamsTableName,
-    competitorAccountsTableName,
+    // Pure Turso has no DynamoDB tables. Repository seams ignore these placeholders and resolve
+    // through the injected SQL runtime; DynamoDB reached this point only with every name present.
+    eventsTableName: eventsTableName ?? "",
+    deploymentsTableName: deploymentsTableName ?? "",
+    teamsTableName: teamsTableName ?? "",
+    competitorAccountsTableName: competitorAccountsTableName ?? "",
     eventBusName,
     env,
     problemsCatalog,
