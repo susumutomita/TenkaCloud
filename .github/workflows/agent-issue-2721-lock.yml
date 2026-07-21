@@ -41,8 +41,28 @@ jobs:
             git push
           fi
 
-      - name: Run problem-test checks
+      - name: Capture problem-test checks
         run: |
-          bun run --filter @tenkacloud/problem-test test
-          bun run --filter @tenkacloud/problem-test typecheck
-          bun x biome check packages/problem-test-harness/package.json packages/problem-test-harness/test/scorer.property.test.ts
+          set +e
+          {
+            bun run --filter @tenkacloud/problem-test test
+            bun run --filter @tenkacloud/problem-test typecheck
+            bun x biome check packages/problem-test-harness/package.json packages/problem-test-harness/test/scorer.property.test.ts
+          } > "${RUNNER_TEMP}/problem-test-checks.log" 2>&1
+          status=$?
+          cat "${RUNNER_TEMP}/problem-test-checks.log"
+          printf '%s\n' "${status}" > "${RUNNER_TEMP}/problem-test-checks.status"
+
+      - name: Upload problem-test check log
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: issue-2721-problem-test-checks
+          path: |
+            ${{ runner.temp }}/problem-test-checks.log
+            ${{ runner.temp }}/problem-test-checks.status
+          if-no-files-found: error
+
+      - name: Fail when problem-test checks failed
+        if: always()
+        run: exit "$(cat "${RUNNER_TEMP}/problem-test-checks.status")"
