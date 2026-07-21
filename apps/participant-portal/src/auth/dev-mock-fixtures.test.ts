@@ -55,15 +55,18 @@ describe("dev-mock fixtures", () => {
     expect(body.slice(0, step3At)).not.toContain("ローカルモード");
     expect(body.slice(0, step3At)).not.toContain("SaaS");
     expect(body.slice(0, step3At)).not.toContain("Codespaces");
-    // 実在する 3 モード (ローカル / Lite / SaaS) を提示し、実在しないモード名を出さない。
+    // 実在するモード (ローカル / Lite / SaaS + 文脈として Always-On) を提示し、
+    // 実在しないモード名を出さない。
     const step3 = body.slice(step3At);
     expect(step3).toContain("ローカルモード");
     expect(step3).toContain("Lite モード");
     expect(step3).toContain("SaaS モード");
+    expect(step3).toContain("Always-On モード");
+    expect(tutorial?.i18n?.en?.description).toContain("Always-On mode");
     expect(body).not.toContain("deploy-local");
     expect(tutorial?.i18n?.en?.description).not.toContain("deploy-local");
     // どのモードを選んでも正解 (= クイズではなく選択)。
-    for (const answer of ["local", "lite", "saas", "codespaces"]) {
+    for (const answer of ["local", "lite", "saas", "always-on", "codespaces"]) {
       expect(
         evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, "choose-mode", answer, 100).kind,
         `choose-mode should accept "${answer}"`,
