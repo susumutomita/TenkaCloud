@@ -200,8 +200,7 @@ export function createGcpInfraManagerRestClient(
       if (!deployment) return undefined;
 
       const normalizedState = deployment.state?.toUpperCase();
-      const canReadOutputs =
-        normalizedState === "ACTIVE" || normalizedState === "SUCCEEDED";
+      const canReadOutputs = normalizedState === "ACTIVE" || normalizedState === "SUCCEEDED";
       const revision =
         canReadOutputs && deployment.latestRevision
           ? await getRevision(name, deployment.latestRevision)
