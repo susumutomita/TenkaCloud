@@ -16,7 +16,7 @@ import {
   submitFlag,
 } from "../api/portal-client";
 import { useIsMock } from "../config-context";
-import { evaluateMockProblemFlag, isStrictMockProblemFlag } from "../dev-mock/flag-submit";
+import { evaluateMockFlag } from "../dev-mock/flag-submit";
 import { useLang, useT } from "../i18n";
 import { describeAgo } from "../lib/format";
 import { CelebrationOverlay } from "./CelebrationOverlay";
@@ -50,7 +50,6 @@ export function FlagSubmissionPanel({
   // dev-mock/flag-submit.evaluateMockFlag で local 評価する。 mode は AppConfig
   // context から直接読む (= 旧 isMock prop drill を撤去)。
   const isMock = useIsMock();
-  const strictMockFlag = isMock && isStrictMockProblemFlag(problemId);
   const [flag, setFlag] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [outcome, setOutcome] = useState<SubmitFlagOutcome | null>(null);
@@ -90,7 +89,7 @@ export function FlagSubmissionPanel({
     setOutcome(null);
     try {
       const result = isMock
-        ? evaluateMockProblemFlag(problemId, flag, points)
+        ? evaluateMockFlag(flag, points)
         : await submitFlag(apiBaseUrl, sessionToken, problemId, flag);
       setOutcome(result);
       if (!isMock && shouldRefreshAfterFlagSubmit(result)) await onScored();
@@ -123,26 +122,14 @@ export function FlagSubmissionPanel({
         >
           <FormField
             label={t("problem_panel.flag_field_label")}
-            description={
-              isMock
-                ? t(
-                    strictMockFlag
-                      ? "problem_panel.flag_drill_hint"
-                      : "problem_panel.flag_mock_hint",
-                  )
-                : undefined
-            }
+            description={isMock ? t("problem_panel.flag_mock_hint") : undefined}
           >
             <Input
               value={flag}
               onChange={(e) => setFlag(e.detail.value)}
               placeholder={
                 isMock
-                  ? t(
-                      strictMockFlag
-                        ? "problem_panel.flag_drill_placeholder"
-                        : "problem_panel.flag_mock_placeholder",
-                    )
+                  ? t("problem_panel.flag_mock_placeholder")
                   : t("problem_panel.flag_placeholder")
               }
               disabled={submitting}

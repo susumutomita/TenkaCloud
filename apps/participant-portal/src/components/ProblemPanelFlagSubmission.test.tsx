@@ -97,17 +97,6 @@ describe("FlagSubmissionPanel submit flow", () => {
     expect(apiMocks.submitFlag).not.toHaveBeenCalled();
   });
 
-  it("should make the recommended next drill accept its printed answer", async () => {
-    const user = userEvent.setup();
-    renderPanel({ problemId: "number-sequence", points: 300 }, "dev-mock");
-    await user.type(screen.getByRole("textbox"), "TC{{21}");
-    expect(screen.queryByText(/Easter eggs like/)).not.toBeInTheDocument();
-    expect(screen.getByText(/Only the exact value from the text/)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Submit flag (+300 pt)" }));
-    expect(await screen.findByText(/🎉 Correct!/)).toBeInTheDocument();
-    expect(apiMocks.submitFlag).not.toHaveBeenCalled();
-  });
-
   it("should celebrate and refresh on a correct backend flag", async () => {
     const user = userEvent.setup();
     const onScored = vi.fn().mockResolvedValue(undefined);

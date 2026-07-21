@@ -415,10 +415,10 @@
     "flag_field_label": "{label} (deployment output value)",
     "tutorial_complete_header": "🎉 You have the TenkaCloud basics",
     "tutorial_complete_body": "TenkaCloud is a competition and practice platform where you learn by working through cloud problems, submitting flags, and getting instant scoring. These four steps covered Battle, Challenge, ways to start, and scoring.",
-    "tutorial_next_header": "Next: your first real drill",
-    "tutorial_next_body": "Stay on your phone and solve “The missing number” in about 60 seconds. Read the problem, submit a flag, and see the full scoring loop.",
-    "tutorial_next_button": "Next: solve “The missing number”",
-    "tutorial_problem_list_button": "Browse other problems"
+    "tutorial_next_header": "Next: run it for real",
+    "tutorial_next_body": "Continue with “Play local mode” (no AWS, on your own machine) or “Deploy your own TenkaCloud Lite” (your own AWS account).",
+    "tutorial_local_button": "Go to “Play local mode”",
+    "tutorial_lite_button": "Go to “Deploy your own TenkaCloud Lite”"
   },
   "score_timeline": {
     "header": "Score timeline",

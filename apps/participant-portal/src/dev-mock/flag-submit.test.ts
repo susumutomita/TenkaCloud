@@ -4,15 +4,21 @@ import {
   LOCAL_DRILL_FIRST_SCORE,
   LOCAL_DRILL_PROBLEM_ID,
 } from "@tenkacloud/portal-contracts";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
   AI_AGENT_LOCAL_DRILL_PROBLEM_ID,
   CANONICAL_MOCK_FLAG,
   evaluateMockFlag,
-  evaluateMockProblemFlag,
   evaluateMockSubFlag,
+  resetMockScoring,
   WHAT_IS_DRILL_PROBLEM_ID,
 } from "./flag-submit";
+
+// evaluateMockSubFlag は問題スコア / 不正解回数を module 内に蓄積するため、
+// テスト間で毎回リセットして順序依存を断つ。
+beforeEach(() => {
+  resetMockScoring();
+});
 
 describe("evaluateMockFlag", () => {
   it("should accept the canonical flag and inputs containing it", () => {
@@ -32,13 +38,28 @@ describe("evaluateMockFlag", () => {
   });
 });
 
-describe("evaluateMockProblemFlag (first browser drill)", () => {
-  it("scores the answer printed by number-sequence and rejects generic demo flags", () => {
-    expect(evaluateMockProblemFlag("number-sequence", " TC{21} ", 300)).toMatchObject({
-      kind: "ok",
-      scoreDelta: 300,
-    });
-    expect(evaluateMockProblemFlag("number-sequence", CANONICAL_MOCK_FLAG, 300).kind).toBe("wrong");
+describe("evaluateMockSubFlag scoring accumulation", () => {
+  it("should count repeated wrong submissions so the alert visibly changes every attempt", () => {
+    // 同じ誤答を繰り返しても表示が変わらず「反応が無い」ように見えた 2026-07-21 の
+    // デモ報告の再発防止: wrongCount が 1 → 2 と進む。
+    const first = evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, "tenka-what", "nope", 100);
+    const second = evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, "tenka-what", "nope", 100);
+    expect(first).toMatchObject({ kind: "wrong", scoreDelta: -10, wrongCount: 1 });
+    expect(second).toMatchObject({ kind: "wrong", scoreDelta: -10, wrongCount: 2 });
+  });
+
+  it("should floor the problem total at 0 pt and add solved points on top", () => {
+    const wrong = evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, "tenka-what", "nope", 100);
+    expect(wrong).toMatchObject({ kind: "wrong", totalScore: 0 });
+    const ok = evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, "tenka-what", "real cloud", 100);
+    expect(ok).toMatchObject({ kind: "ok", scoreDelta: 100, totalScore: 100 });
+    const okAgain = evaluateMockSubFlag(
+      WHAT_IS_DRILL_PROBLEM_ID,
+      "battle-challenge",
+      "battle",
+      100,
+    );
+    expect(okAgain).toMatchObject({ kind: "ok", totalScore: 200 });
   });
 });
 

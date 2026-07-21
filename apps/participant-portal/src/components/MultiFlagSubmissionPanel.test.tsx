@@ -5,7 +5,12 @@ import type * as React from "react";
 import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppConfigProvider } from "../config-context";
-import { FIRST_BROWSER_DRILL_JOB_ID, WHAT_IS_DRILL_PROBLEM_ID } from "../dev-mock/flag-submit";
+import {
+  LITE_DRILL_JOB_ID,
+  LOCAL_DRILL_JOB_ID,
+  resetMockScoring,
+  WHAT_IS_DRILL_PROBLEM_ID,
+} from "../dev-mock/flag-submit";
 import { I18nProvider } from "../i18n";
 import { MultiFlagSubmissionPanel, subFlagFieldPresentation } from "./MultiFlagSubmissionPanel";
 
@@ -70,11 +75,15 @@ function renderPanel(
 beforeEach(() => {
   window.localStorage.setItem("tenkacloud.portal.locale", "en");
   apiMocks.submitFlag.mockReset();
+  // dev-mock の累積スコアと sessionStorage 進捗をテスト間で持ち越さない。
+  resetMockScoring();
+  window.sessionStorage.clear();
 });
 
 afterEach(() => {
   vi.clearAllMocks();
   window.localStorage.clear();
+  window.sessionStorage.clear();
 });
 
 describe("MultiFlagSubmissionPanel", () => {
@@ -206,7 +215,7 @@ describe("MultiFlagSubmissionPanel", () => {
     expect(apiMocks.submitFlag).not.toHaveBeenCalled();
   });
 
-  it("should reach 4/4 in mock mode and hand off to a real browser drill", async () => {
+  it("should reach 4/4 in mock mode and hand off to the local and Lite drills", async () => {
     const user = userEvent.setup();
     const tutorialFlags = [
       { id: "tenka-what", label: "Step 1", points: 100, solved: false },
@@ -227,14 +236,33 @@ describe("MultiFlagSubmissionPanel", () => {
 
     expect(screen.getByText("Flags solved: 4 / 4")).toBeInTheDocument();
     expect(screen.getByText("🎉 You have the TenkaCloud basics")).toBeInTheDocument();
-    expect(screen.getByText("Next: your first real drill")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Next: solve “The missing number”" }));
-    expect(screen.getByTestId("router-path")).toHaveTextContent(
-      `/problems/${FIRST_BROWSER_DRILL_JOB_ID}`,
+    expect(screen.getByText("Next: run it for real")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Go to “Play local mode”" }));
+    expect(screen.getByTestId("router-path")).toHaveTextContent(`/problems/${LOCAL_DRILL_JOB_ID}`);
+    await user.click(
+      screen.getByRole("button", { name: "Go to “Deploy your own TenkaCloud Lite”" }),
     );
-    await user.click(screen.getByRole("button", { name: "Browse other problems" }));
-    expect(screen.getByTestId("router-path")).toHaveTextContent("/problems");
+    expect(screen.getByTestId("router-path")).toHaveTextContent(`/problems/${LITE_DRILL_JOB_ID}`);
     expect(apiMocks.submitFlag).not.toHaveBeenCalled();
+  });
+
+  it("should restore mock-solved flags after unmount so the demo does not look reset", async () => {
+    // 2026-07-21 デモ報告: 解いた後に問題を開き直すと進捗が消えて見えた。
+    // sessionStorage の進捗 store から solved を復元することを pin する。
+    const user = userEvent.setup();
+    const tutorialFlags = [{ id: "tenka-what", label: "Step 1", points: 100, solved: false }];
+    const first = renderPanel(
+      { problemId: WHAT_IS_DRILL_PROBLEM_ID, flags: tutorialFlags },
+      "dev-mock",
+    );
+    await user.type(screen.getByRole("textbox"), "real cloud");
+    await user.click(screen.getByRole("button", { name: /^Submit/ }));
+    expect(await screen.findByText("🎉 Step 1 — solved")).toBeInTheDocument();
+    first.unmount();
+
+    renderPanel({ problemId: WHAT_IS_DRILL_PROBLEM_ID, flags: tutorialFlags }, "dev-mock");
+    expect(screen.getByText("🎉 Step 1 — solved")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
 });
 
@@ -257,9 +285,15 @@ describe("Lite deploy drill (issue #2696)", () => {
   it("should reject the generic mock flag on a drill step in dev-mock mode", async () => {
     const user = userEvent.setup();
     renderPanel({ problemId: LITE_DRILL_PROBLEM_ID, flags: DRILL_FLAGS }, "dev-mock");
+    // 累計は 0 pt を下回らない (実採点の floor と同じ)。
     await user.type(screen.getByRole("textbox"), "tenkacloudsample");
     await user.click(screen.getByRole("button", { name: /^Submit/ }));
-    expect(await screen.findByText("Wrong (-10 pt) — total -10 pt")).toBeInTheDocument();
+    expect(await screen.findByText("Wrong (-10 pt) — total 0 pt")).toBeInTheDocument();
+    expect(screen.getByText(/1 wrong/)).toBeInTheDocument();
+    // 2 回目の不正解で回数表示が進む (= 「反応が無い」ように見えない)。
+    await user.type(screen.getByRole("textbox"), "tenkacloudsample");
+    await user.click(screen.getByRole("button", { name: /^Submit/ }));
+    expect(await screen.findByText(/2 wrong/)).toBeInTheDocument();
     expect(apiMocks.submitFlag).not.toHaveBeenCalled();
   });
 

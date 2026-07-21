@@ -18,10 +18,12 @@ import {
 import { useIsMock } from "../config-context";
 import {
   evaluateMockSubFlag,
-  FIRST_BROWSER_DRILL_JOB_ID,
   isStrictDrillProblem,
+  LITE_DRILL_JOB_ID,
+  LOCAL_DRILL_JOB_ID,
   WHAT_IS_DRILL_PROBLEM_ID,
 } from "../dev-mock/flag-submit";
+import { loadMockSolvedFlagIds, saveMockSolvedFlagId } from "../dev-mock/progress-store";
 import { useLang, useT } from "../i18n";
 import { CelebrationOverlay } from "./CelebrationOverlay";
 import { formatProblemPanelActionError } from "./ProblemPanel.helpers";
@@ -58,10 +60,14 @@ export function MultiFlagSubmissionPanel({
   revealOrder?: HintRevealMode;
 }) {
   const t = useT();
+  const isMock = useIsMock();
   // dev-mock has no backend refetch to persist solved flags. Keep the solved ids
-  // at panel level so the progress counter can actually reach 4/4 and reveal the
-  // completion handoff observed missing in the mobile onboarding recording.
-  const [mockSolvedIds, setMockSolvedIds] = useState<ReadonlySet<string>>(() => new Set());
+  // at panel level (so the progress counter can reach 4/4 and reveal the
+  // completion handoff) and mirror them into the sessionStorage progress store —
+  // without it, navigating away unmounts the panel and the demo looks reset.
+  const [mockSolvedIds, setMockSolvedIds] = useState<ReadonlySet<string>>(() =>
+    isMock ? loadMockSolvedFlagIds(problemId) : new Set(),
+  );
   const isSolved = (flag: MultiFlagEntryView) => flag.solved || mockSolvedIds.has(flag.id);
   const solvedCount = flags.filter(isSolved).length;
   const allSolved = flags.length > 0 && solvedCount === flags.length;
@@ -84,6 +90,7 @@ export function MultiFlagSubmissionPanel({
           solved={isSolved(flag)}
           onMockSolved={(flagId) => {
             setMockSolvedIds((current) => new Set([...current, flagId]));
+            saveMockSolvedFlagId(problemId, flagId);
           }}
           onScored={onScored}
           revealOrder={revealOrder}
@@ -98,10 +105,8 @@ function WhatIsTutorialComplete() {
   const t = useT();
   const navigate = useNavigate();
 
-  const goTo = (target: "first-drill" | "problem-list") => {
-    navigate(target === "first-drill" ? `/problems/${FIRST_BROWSER_DRILL_JOB_ID}` : "/problems");
-  };
-
+  // #2711 follow-up: 完走後の導線は実在ドリル 2 本に絞る (旧クエスト「欠けた数」は
+  // 削除済み)。 primary は AWS 不要のローカルモード、 次点で Lite 実デプロイ。
   return (
     <Container header={<Header variant="h3">{t("multi_flag.tutorial_complete_header")}</Header>}>
       <SpaceBetween size="m">
@@ -110,11 +115,11 @@ function WhatIsTutorialComplete() {
           {t("multi_flag.tutorial_next_body")}
         </Alert>
         <SpaceBetween size="xs" direction="horizontal">
-          <Button variant="primary" onClick={() => goTo("first-drill")}>
-            {t("multi_flag.tutorial_next_button")}
+          <Button variant="primary" onClick={() => navigate(`/problems/${LOCAL_DRILL_JOB_ID}`)}>
+            {t("multi_flag.tutorial_local_button")}
           </Button>
-          <Button onClick={() => goTo("problem-list")}>
-            {t("multi_flag.tutorial_problem_list_button")}
+          <Button onClick={() => navigate(`/problems/${LITE_DRILL_JOB_ID}`)}>
+            {t("multi_flag.tutorial_lite_button")}
           </Button>
         </SpaceBetween>
       </SpaceBetween>
