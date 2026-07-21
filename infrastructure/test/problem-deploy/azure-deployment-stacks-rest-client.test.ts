@@ -2,9 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import { createAzureDeploymentStacksRestClient } from "../../lib/problem-deploy/runtime-clients/azure-deployment-stacks-rest-client.js";
 
 /**
- * [ADR-027 / #1410] ARM Deployment Stacks REST client の wire 整形を pin。 fetch を mock し、
+ * [ADR-027 / #1410 / #2743] ARM Deployment Stacks REST client の wire 整形を pin。 fetch を mock し、
  * endpoint / Bearer auth / ARM body (templateLink + parameters{value} + actionOnUnmanage) /
- * provisioningState+outputs 射影 / 404→undefined / idempotent delete / 非2xx throw を観測する。
+ * provisioningState+direct outputs 射影 / 404→undefined / idempotent delete / 非2xx throw を観測する。
  */
 
 const CRED = { accessToken: "aad-token" };
@@ -28,7 +28,7 @@ function client(fetchImpl: ReturnType<typeof vi.fn>) {
 const EXPECTED_PATH =
   "https://arm.test/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Resources/deploymentStacks/p-team?api-version=2024-03-01";
 
-describe("azure-deployment-stacks-rest-client (ADR-027 #1410)", () => {
+describe("azure-deployment-stacks-rest-client (ADR-027 #1410 #2743)", () => {
   it("should PUT a deployment stack with Bearer auth, templateLink, and ARM-shaped parameters", async () => {
     const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse({}, 200));
     await client(fetchImpl).upsertStack({
@@ -46,19 +46,31 @@ describe("azure-deployment-stacks-rest-client (ADR-027 #1410)", () => {
     expect(body.properties.actionOnUnmanage.resources).toBe("delete");
   });
 
-  it("should GET provisioningState and flatten outputs", async () => {
+  it("should GET provisioningState and flatten direct Deployment Stacks outputs", async () => {
     const fetchImpl = vi.fn().mockResolvedValueOnce(
       jsonResponse({
         properties: {
           provisioningState: "succeeded",
-          outputs: { baseUrl: { type: "String", value: "https://app.test" } },
+          outputs: {
+            baseUrl: "https://app.test",
+            replicas: 2,
+            enabled: true,
+            config: { nested: "value" },
+            nullable: null,
+          },
         },
       }),
     );
     const state = await client(fetchImpl).getStack("p-team");
     expect(state).toEqual({
       provisioningState: "succeeded",
-      outputs: { baseUrl: "https://app.test" },
+      outputs: {
+        baseUrl: "https://app.test",
+        replicas: "2",
+        enabled: "true",
+        config: '{"nested":"value"}',
+        nullable: "",
+      },
     });
   });
 
@@ -89,5 +101,7 @@ describe("azure-deployment-stacks-rest-client (ADR-027 #1410)", () => {
     ).rejects.toThrow(/400/);
     const get = vi.fn().mockResolvedValueOnce(new Response("boom", { status: 500 }));
     await expect(client(get).getStack("p")).rejects.toThrow(/500/);
+    const del = vi.fn().mockResolvedValueOnce(new Response("nope", { status: 503 }));
+    await expect(client(del).deleteStack("p")).rejects.toThrow(/503/);
   });
 });
