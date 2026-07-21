@@ -154,18 +154,38 @@ describe("dev-mock fixtures", () => {
     expect(drill?.i18n?.en?.videoUrl).toBe("https://www.youtube.com/embed/6qMzFcP5dgw");
   });
 
-  it("should describe local mode on the learner's Mac, not as a Codespaces tutorial", () => {
+  // 2026-07-21 PO feedback: 旧版は Mac 前提の一行説明だった。ローカルモードは
+  // Docker が動くマシンなら OS を問わず、かつ GitHub Codespaces でも動く。丁寧な
+  // オンボーディング教材として、何か・特性・必要環境・起動手順・クラウド版との違い・
+  // コストを説明する構造に書き直す (Mac 前提をやめる)。
+  it("should teach local mode end to end: what, prerequisites, commands, cloud difference, cost", () => {
     const drill = drills.find((problem) => problem.problemId === LOCAL_DRILL_PROBLEM_ID);
-    expect(drill?.description).toContain("手元の Mac");
-    // 正規の入口は make local (起動後に Portal で問題を選ぶ)。内部実装の
-    // `bun run tenkacloud local --problem ...` を競技者向け本文に出さない。
-    expect(drill?.description).toContain("`make local`");
-    expect(drill?.description).not.toContain("bun run tenkacloud");
-    expect(drill?.description).not.toContain("Codespaces");
-    expect(drill?.i18n?.en?.description).toContain("on your Mac");
-    expect(drill?.i18n?.en?.description).toContain("`make local`");
-    expect(drill?.i18n?.en?.description).not.toContain("bun run tenkacloud");
-    expect(drill?.i18n?.en?.description).not.toContain("Codespaces");
+    for (const body of [drill?.description, drill?.i18n?.en?.description]) {
+      expect(body).toContain("`make local`");
+      expect(body).toContain("make install");
+      expect(body).toContain("Codespaces");
+      expect(body).toContain("Docker");
+      expect(body).toContain("5175");
+      expect(body).toContain("$7");
+      expect(body).toContain("WSL2");
+      expect(body).toContain("sqli-demo");
+      // 正規の入口は make local (起動後に Portal で問題を選ぶ)。内部実装の
+      // `bun run tenkacloud local --problem ...` を競技者向け本文に出さない。
+      expect(body).not.toContain("bun run tenkacloud");
+    }
+    expect(drill?.description).not.toContain("手元の Mac");
+    expect(drill?.i18n?.en?.description).not.toContain("your Mac");
+    // ラベル / ヒントにも Mac 前提を残さない (macOS 表記は description 側のみ)。
+    for (const flag of drill?.scoring?.flags ?? []) {
+      const texts = [
+        flag.label,
+        flag.i18n?.en?.label,
+        ...(flag.hints ?? []).flatMap((h) => [h.content, h.i18n?.en?.content]),
+      ];
+      for (const text of texts) {
+        expect(text, `local drill flag ${flag.id} still assumes a Mac`).not.toContain("Mac");
+      }
+    }
   });
 
   it("should keep stale local-mode footage off the portal and use YouTube for current videos", () => {
