@@ -59,7 +59,7 @@
         "@TenkaCloud/trust-bridge": "workspace:*",
         "@tenkacloud/auth-client": "workspace:*",
         "aws4fetch": "^1.0.20",
-        "hono": "^4.12.29",
+        "hono": "^4.12.31",
         "http-status-codes": "^2.3.0",
         "zod": "^3.25.76",
       },
@@ -217,7 +217,7 @@
         "@types/node": "^26.1.0",
         "aws-cdk": "2.1122.0",
         "cdk-nag": "^3.0.1",
-        "hono": "^4.12.29",
+        "hono": "^4.12.31",
         "ts-node": "^10.9.2",
         "tsx": "^4.22.4",
         "typescript": "~6.0.3",
@@ -1792,7 +1792,7 @@
 
     "highlight.js": ["highlight.js@11.11.1", "", {}, "sha512-Xwwo44whKBVCYoliBQwaPvtd/2tYFkRQtXDWj1nackaV2JPXx3L0+Jvd8/qCJ2p+ML0/XVkJ2q+Mr+UVdpJK5w=="],
 
-    "hono": ["hono@4.12.29", "", {}, "sha512-1hNiRjawYrLq/4m3DQQjPGFg0VZkk4RjQJDff/excI6Dm9BiL75qxGrd7/c6YOxPdq6AscP3LiXhQ6fKFC1Waw=="],
+    "hono": ["hono@4.12.31", "", {}, "sha512-zJIHFrl6bq3RDd2YusFNCDlM8qUprxKswyi/OPzPyzKDdyBXDqWx8bZlZ7R+saTdSTatUmb3O7K4SspGPaEOQg=="],
 
     "hookable": ["hookable@6.1.1", "", {}, "sha512-U9LYDy1CwhMCnprUfeAZWZGByVbhd54hwepegYTK7Pi5NvqEj63ifz5z+xukznehT7i6NIZRu89Ay1AZmRsLEQ=="],
 
