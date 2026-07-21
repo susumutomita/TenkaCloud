@@ -1,0 +1,55 @@
+name: Agent issue 2746 hardening
+
+permissions:
+  contents: write
+
+on:
+  push:
+    branches:
+      - agent/issue-2746-sakura-hardening
+
+jobs:
+  format-and-check:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: "1.3.11"
+
+      - name: Install dependencies without lifecycle scripts
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Format changed files
+        run: |
+          bun x biome check --write \
+            infrastructure/lib/problem-deploy/runtime-clients/sakura-apprun-rest-client.ts \
+            infrastructure/test/problem-deploy/sakura-apprun-rest-client.test.ts
+
+      - name: Commit formatting
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            infrastructure/lib/problem-deploy/runtime-clients/sakura-apprun-rest-client.ts \
+            infrastructure/test/problem-deploy/sakura-apprun-rest-client.test.ts
+          if git diff --cached --quiet; then
+            echo "Formatting already current"
+          else
+            git commit -m "style(multicloud): format Sakura hardening"
+            git push
+          fi
+
+      - name: Run focused tests
+        run: |
+          bun run --filter @TenkaCloud/infrastructure test \
+            test/problem-deploy/sakura-apprun-rest-client.test.ts
+
+      - name: Type-check infrastructure
+        run: bun run --filter @TenkaCloud/infrastructure typecheck
