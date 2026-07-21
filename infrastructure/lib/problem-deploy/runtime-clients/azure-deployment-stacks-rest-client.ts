@@ -27,6 +27,7 @@ import type {
   AzureDeploymentStackSpec,
   AzureDeploymentStackState,
 } from "../handlers/shared/runtime/azure-bicep-adapter.js";
+import { stringifyRuntimeOutput } from "./runtime-output.js";
 
 const DEFAULT_BASE_URL = "https://management.azure.com";
 const DEFAULT_API_VERSION = "2024-03-01";
@@ -54,17 +55,6 @@ interface ArmDeploymentStack {
     /** Deployment Stacks API は通常 Deployment API の `{type,value}` wrapper ではなく direct value を返す。 */
     readonly outputs?: Readonly<Record<string, unknown>>;
   };
-}
-
-function stringifyAzureOutput(value: unknown): string {
-  if (typeof value === "string") return value;
-  if (value === null || value === undefined) return "";
-  if (typeof value === "number" || typeof value === "boolean") return String(value);
-  const serialized = JSON.stringify(value);
-  if (serialized === undefined) {
-    throw new Error("Azure Deployment Stacks returned an output that is not JSON serializable");
-  }
-  return serialized;
 }
 
 export function createAzureDeploymentStacksRestClient(
@@ -144,7 +134,10 @@ export function createAzureDeploymentStacksRestClient(
       const outputs = stack.properties?.outputs;
       const flattened = outputs
         ? Object.fromEntries(
-            Object.entries(outputs).map(([key, value]) => [key, stringifyAzureOutput(value)]),
+            Object.entries(outputs).map(([key, value]) => [
+              key,
+              stringifyRuntimeOutput(value, "Azure Deployment Stacks"),
+            ]),
           )
         : undefined;
       return { provisioningState, ...(flattened ? { outputs: flattened } : {}) };
