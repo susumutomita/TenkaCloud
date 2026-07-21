@@ -20,13 +20,24 @@ import { matchesCheckpointCode } from "./lite-drill.js";
 
 export const LOCAL_DRILL_PROBLEM_ID = "play-local-mode";
 
-/** ローカルモードを起動したコマンド。 checkpoint 2 の正解。 */
+/** ローカルモードを起動したコマンド。 checkpoint 2 の正解 (代表例。 実際は複数の書き方を許容する)。 */
 export const LOCAL_DRILL_LAUNCH_COMMAND = {
   flagId: "first-score",
   code: "make local",
 } as const satisfies LiteDrillCheckpoint;
 
+/**
+ * 実際に checkpoint 1 (Portal port) を満たせる = portal ごと起動する書き方をすべて許容する。
+ * `make local-up` はポータルを起動しない API-only escape hatch (Makefile) なので、
+ * このドリルの正解には含めない。
+ */
+const ACCEPTED_LAUNCH_COMMANDS = [
+  LOCAL_DRILL_LAUNCH_COMMAND.code,
+  "tenkacloud local",
+  "bun run tenkacloud local",
+] as const;
+
 /** 提出値が「ローカルモード起動コマンド」チェックポイントと一致するか (空白・大文字小文字は許容)。 */
 export function matchesLocalDrillLaunchCommand(submitted: string): boolean {
-  return matchesCheckpointCode(LOCAL_DRILL_LAUNCH_COMMAND.code, submitted);
+  return ACCEPTED_LAUNCH_COMMANDS.some((command) => matchesCheckpointCode(command, submitted));
 }

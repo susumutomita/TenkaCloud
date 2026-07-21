@@ -19,6 +19,21 @@ describe("local-drill checkpoint (#2707)", () => {
     expect(matchesLocalDrillLaunchCommand("make lite")).toBe(false);
   });
 
+  it("should collapse internal double-spaces in a multi-word code (2026-07-21)", () => {
+    expect(matchesLocalDrillLaunchCommand("make  local")).toBe(true);
+    expect(matchesLocalDrillLaunchCommand("make   local")).toBe(true);
+  });
+
+  it("should accept every real launch command that also starts the portal (2026-07-21)", () => {
+    expect(matchesLocalDrillLaunchCommand("tenkacloud local")).toBe(true);
+    expect(matchesLocalDrillLaunchCommand("bun run tenkacloud local")).toBe(true);
+    expect(matchesLocalDrillLaunchCommand("BUN RUN TENKACLOUD LOCAL")).toBe(true);
+  });
+
+  it("should reject make local-up (API-only, does not start the portal)", () => {
+    expect(matchesLocalDrillLaunchCommand("make local-up")).toBe(false);
+  });
+
   it("should share one checkpoint matcher with the lite drill", () => {
     expect(matchesCheckpointCode("TENKA{X}", " tenka{x} ")).toBe(true);
     expect(matchesCheckpointCode("TENKA{X}", "tenka{y}")).toBe(false);

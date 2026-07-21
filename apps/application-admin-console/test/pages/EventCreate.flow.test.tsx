@@ -164,7 +164,9 @@ describe("EventCreatePage flow", () => {
     fillValidForm(container);
     fireEvent.click(screen.getByRole("button", { name: "event_create.submit" }));
     await waitFor(() => expect(mockCreate).toHaveBeenCalled());
-    expect(screen.getByText(LITE_DRILL_CHECKPOINTS.firstEventCreated.code)).toBeInTheDocument();
+    expect(
+      await screen.findByText(LITE_DRILL_CHECKPOINTS.firstEventCreated.code),
+    ).toBeInTheDocument();
     await waitFor(() => expect(hasLiteDrillCheckpointBeenShown("firstEventCreated")).toBe(true));
   });
 

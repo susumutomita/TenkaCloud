@@ -39,8 +39,18 @@ describe("liteDrillCheckpointCode (#2696)", () => {
   });
 
   describe("when localStorage throws (private mode / disabled storage)", () => {
-    const getItem = vi.spyOn(window.localStorage.__proto__, "getItem");
-    const setItem = vi.spyOn(window.localStorage.__proto__, "setItem");
+    // Spies must be (re)created per-test: a spy created once at describe-body-eval time is
+    // torn down by the first test's afterEach, so a second test's mockImplementation would
+    // mutate an already-restored (detached) spy and silently exercise the real, non-throwing
+    // localStorage instead — the assertion would then pass even with no try/catch in the
+    // source (2026-07-21 review finding: this made the write-failure test vacuous).
+    let getItem: ReturnType<typeof vi.spyOn>;
+    let setItem: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      getItem = vi.spyOn(Storage.prototype, "getItem");
+      setItem = vi.spyOn(Storage.prototype, "setItem");
+    });
 
     afterEach(() => {
       getItem.mockRestore();

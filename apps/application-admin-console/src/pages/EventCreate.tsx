@@ -196,12 +196,22 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
 
   // Issue #2696: Lite mode でだけ 「初回イベント作成」 ドリルのチェックポイントを出す。
   // 一度表示したら二度と出さない (2026-07-21) — 毎回の event 作成で再表示されていたため。
-  const firstEventDrillCode = liteDrillCheckpointCode(config, "firstEventCreated");
+  // 表示可否の判定は deployPromptTarget が立った瞬間に 1 回だけ effect 内で行い、 結果を
+  // local state に固定する。 modal 表示中の再 render (例: handleDeployNow の
+  // setDeployStarting) で liteDrillCheckpointCode() を呼び直すと、 既に「表示済み」
+  // 判定が効いて modal が開いたまま Alert だけ消えてしまうため (CompetitorAccountsPage
+  // と同じ race)。
+  const [revealedFirstEventDrillCode, setRevealedFirstEventDrillCode] = useState<
+    string | undefined
+  >(undefined);
   useEffect(() => {
-    if (deployPromptTarget && firstEventDrillCode) {
+    if (!deployPromptTarget) return;
+    const code = liteDrillCheckpointCode(config, "firstEventCreated");
+    if (code) {
+      setRevealedFirstEventDrillCode(code);
       markLiteDrillCheckpointShown("firstEventCreated");
     }
-  }, [deployPromptTarget, firstEventDrillCode]);
+  }, [deployPromptTarget, config]);
 
   const handleSubmit = async () => {
     // submit button は disabled={!canSubmit} なので canSubmit 偽では発火し得ず、 canSubmit 真なら
@@ -343,7 +353,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
         bulkDeploySupported={providerMode.kind === "aws"}
         participantPortalUrl={config.participantPortalUrl}
         teams={deployPromptTarget?.teams ?? []}
-        liteDrillCheckpointCode={firstEventDrillCode}
+        liteDrillCheckpointCode={revealedFirstEventDrillCode}
         onDeployNow={() => void handleDeployNow()}
         onDeployLater={handleDeployLater}
       />

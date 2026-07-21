@@ -28,7 +28,7 @@ import {
  *   1. 「TenkaCloud とは?」 — 4 ステップのチュートリアル (#2711 デザイン 6b)。 モードの
  *      3 択 (ローカル / Lite / SaaS) はステップ 3 で初めて提示する
  *   2. 「自分の TenkaCloud Lite を立てる」 — 実 AWS デプロイ (#2696、 lite-drill 契約)
- *   3. 「ローカルモードで遊ぶ」 — 手元の Mac。 sqli-demo 初得点 → チェックポイント提出
+ *   3. 「ローカルモードで遊ぶ」 — 手元の Mac。 起動コマンド (`make local` 等) をそのまま提出
  *   4. 「AIエージェントでMac起動」 — LP のプロンプトからローカル起動確認までの実演
  *   (旧来の「クエスト」2 問は削除済み — チュートリアル 4 本で完結させ、 余計な問題で
  *    迷わせない。 完走後の導線はローカル / Lite の実在ドリルへ直接つなぐ)
@@ -393,7 +393,7 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
       name: "ローカルモードで遊ぶ",
       description: [
         "AWS アカウントなしで、**本物の問題コンテナ**を手元の Mac で動かすのがローカルモード。Docker を使い、ブラウザの Participant Portal から挑戦する。",
-        "TenkaCloud リポジトリで `make local` を実行するとローカルモードが起動する。ブラウザで Participant Portal を開き、問題一覧から Docker 対応の入門ドリル **sqli-demo** を選んで起動しよう。",
+        "TenkaCloud リポジトリで `make local` を実行するとローカルモードが起動する。ブラウザで Participant Portal を開こう。問題一覧には Docker 対応の入門ドリル **sqli-demo** もあるので、遊びたければ試してみるといい。",
         "",
         "#### チェックポイント",
         "",
@@ -409,7 +409,7 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
           name: "Play local mode",
           description: [
             "Local mode runs **real problem containers** on your Mac with no AWS account. Docker runs the challenge while you play from the Participant Portal in your browser.",
-            "In the TenkaCloud repository, run `make local` to start local mode. Open the Participant Portal in your browser and pick the Docker-based intro drill **sqli-demo** from the problem list to start it.",
+            "In the TenkaCloud repository, run `make local` to start local mode. Open the Participant Portal in your browser. The problem list also has the Docker-based intro drill **sqli-demo** if you want to try it.",
             "",
             "#### Checkpoints",
             "",
