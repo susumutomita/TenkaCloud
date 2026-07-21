@@ -1,7 +1,7 @@
 import {
   LITE_DRILL_CHECKPOINTS,
   LITE_DRILL_PROBLEM_ID,
-  LOCAL_DRILL_FIRST_SCORE,
+  LOCAL_DRILL_LAUNCH_COMMAND,
   LOCAL_DRILL_PROBLEM_ID,
 } from "@tenkacloud/portal-contracts";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -151,15 +151,15 @@ describe("evaluateMockSubFlag (#2711 what-is-tenkacloud tutorial)", () => {
 });
 
 describe("evaluateMockSubFlag (#2707 local-mode drill)", () => {
-  it("should accept the port quiz answer and the first-score checkpoint code", () => {
+  it("should accept the port quiz answer and the launch-command checkpoint code", () => {
     expect(evaluateMockSubFlag(LOCAL_DRILL_PROBLEM_ID, "portal-port", " 5175 ", 100).kind).toBe(
       "ok",
     );
     expect(
       evaluateMockSubFlag(
         LOCAL_DRILL_PROBLEM_ID,
-        LOCAL_DRILL_FIRST_SCORE.flagId,
-        ` ${LOCAL_DRILL_FIRST_SCORE.code.toLowerCase()} `,
+        LOCAL_DRILL_LAUNCH_COMMAND.flagId,
+        ` ${LOCAL_DRILL_LAUNCH_COMMAND.code.toUpperCase()} `,
         100,
       ).kind,
     ).toBe("ok");
@@ -172,7 +172,7 @@ describe("evaluateMockSubFlag (#2707 local-mode drill)", () => {
     expect(
       evaluateMockSubFlag(
         LOCAL_DRILL_PROBLEM_ID,
-        LOCAL_DRILL_FIRST_SCORE.flagId,
+        LOCAL_DRILL_LAUNCH_COMMAND.flagId,
         LITE_DRILL_CHECKPOINTS.deployComplete.code,
         100,
       ).kind,

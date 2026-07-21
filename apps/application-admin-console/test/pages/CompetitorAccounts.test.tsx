@@ -102,6 +102,9 @@ const renderPage = (cfg = config()) => render(<CompetitorAccountsPage config={cf
 
 beforeEach(() => {
   mockHook.mockReturnValue(hookState());
+  // #2696 follow-up (2026-07-21): the drill checkpoint's "already shown" state lives in
+  // localStorage so it survives remounts within one browser — reset it between tests too.
+  window.localStorage.clear();
 });
 afterEach(() => vi.clearAllMocks());
 

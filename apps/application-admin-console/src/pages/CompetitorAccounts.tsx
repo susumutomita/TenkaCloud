@@ -4,7 +4,7 @@ import Button from "@cloudscape-design/components/button";
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Spinner from "@cloudscape-design/components/spinner";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type {
   CompetitorAccountSummary,
   CreateCompetitorAccountResponse,
@@ -14,7 +14,7 @@ import { LiteDrillCheckpointAlert } from "../components/LiteDrillCheckpointAlert
 import type { AppConfig } from "../config";
 import { useT } from "../i18n";
 import { isBootstrapUrlMissing } from "../lib/competitor-bootstrap";
-import { liteDrillCheckpointCode } from "../lib/lite-drill";
+import { liteDrillCheckpointCode, markLiteDrillCheckpointShown } from "../lib/lite-drill";
 import { AddAccountModal } from "./competitor-accounts/AddAccountModal";
 import { CompetitorAccountDeleteModal } from "./competitor-accounts/CompetitorAccountDeleteModal";
 import { CompetitorAccountsTable } from "./competitor-accounts/CompetitorAccountsTable";
@@ -37,11 +37,15 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
     remove,
   } = useCompetitorAccounts(config);
   // Issue #2696: Lite mode (tenantId="local") でだけ、 検証成功直後にオンボーディング
-  // ドリルのチェックポイントコードを表示する。
+  // ドリルのチェックポイントコードを表示する。 一度表示したら二度と出さない (2026-07-21)。
   const drillCode = liteDrillCheckpointCode(config, "competitorVerified");
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<CompetitorAccountSummary | null>(null);
   const [showSecret, setShowSecret] = useState<CreateCompetitorAccountResponse | null>(null);
+
+  useEffect(() => {
+    if (lastVerified && drillCode) markLiteDrillCheckpointShown("competitorVerified");
+  }, [lastVerified, drillCode]);
 
   const handleConfirmDelete = async () => {
     if (!canMutateTenant || !deleteTarget) return;

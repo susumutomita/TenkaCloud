@@ -1,7 +1,7 @@
 import {
   LITE_DRILL_CHECKPOINTS,
   LITE_DRILL_PROBLEM_ID,
-  LOCAL_DRILL_FIRST_SCORE,
+  LOCAL_DRILL_LAUNCH_COMMAND,
   LOCAL_DRILL_PROBLEM_ID,
 } from "@tenkacloud/portal-contracts";
 import type {
@@ -398,7 +398,7 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
         "#### チェックポイント",
         "",
         "1. Mac で起動した Participant Portal のポート番号を答える",
-        "2. sqli-demo を初クリアすると解説 (writeup) の末尾に現れる `TENKA{...}` コードを提出する",
+        "2. ローカルモードを起動したコマンドを提出する",
         "",
         "手順に詰まったら各提出欄の **ヒント** を開こう(ペナルティなし)。クリアしたら、まだの人は「自分の TenkaCloud Lite を立てる」で仕上げよう。",
       ].join("\n"),
@@ -414,7 +414,7 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
             "#### Checkpoints",
             "",
             "1. Answer the Participant Portal port shown when local mode starts on your Mac",
-            "2. Clear sqli-demo once and submit the `TENKA{...}` code that appears at the end of its writeup",
+            "2. Submit the command you used to start local mode",
             "",
             'Stuck? Open the **hint** on each submission box (no penalty). Then finish with "Deploy your own TenkaCloud Lite" if you have not yet.',
           ].join("\n"),
@@ -454,22 +454,22 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
             ],
           },
           {
-            id: LOCAL_DRILL_FIRST_SCORE.flagId,
-            label: "2. sqli-demo 初クリアのコード",
+            id: LOCAL_DRILL_LAUNCH_COMMAND.flagId,
+            label: "2. ローカルモードを起動したコマンド",
             points: 100,
             solved: false,
-            i18n: { en: { label: "2. The code from your first sqli-demo clear" } },
+            i18n: { en: { label: "2. The command you used to start local mode" } },
             hints: [
               {
                 id: "local-h2",
                 penalty: 0,
                 revealed: false,
                 content:
-                  "手元の Portal で sqli-demo を開き、Start を押してコンテナを起動する。問題の指示どおりにスタッフ専用画面へ入り、表示された flag を提出すると、クリア直後に解説 (writeup) が開く。その末尾の「オンボーディングドリル チェックポイント」にある `TENKA{...}` をここに貼る。",
+                  "手元の Mac のターミナルで、TenkaCloud リポジトリからローカルモードを起動したコマンドをそのままここに貼る。",
                 i18n: {
                   en: {
                     content:
-                      "In your local Portal, open sqli-demo and press Start. Follow the problem instructions to enter the staff-only page and submit the displayed flag. The writeup opens after your first clear — paste the `TENKA{...}` from its closing onboarding-drill-checkpoint section here.",
+                      "Paste the exact command you ran in your Mac's terminal, from the TenkaCloud repository, to start local mode.",
                   },
                 },
               },

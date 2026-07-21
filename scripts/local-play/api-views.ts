@@ -1,4 +1,3 @@
-import { LOCAL_DRILL_FIRST_SCORE } from "@tenkacloud/portal-contracts";
 import { StatusCodes } from "http-status-codes";
 import type { SimulatedProblemRuntime } from "./api-state";
 import {
@@ -21,21 +20,6 @@ import { participantSimulatorOutputs } from "./simulator-scoring";
  * multi-flag portal mapping, #2252, and reveal-gated hint views). Pure reads over
  * {@link LocalPlayState} — no mutation, no routing.
  */
-
-/** [#2707] ローカル入門問題の初クリア時に writeup へ足すチェックポイント案内。 */
-function localDrillCheckpointNote(lang: "ja" | "en"): string {
-  return [
-    lang === "ja"
-      ? "#### オンボーディングドリル チェックポイント"
-      : "#### Onboarding drill checkpoint",
-    "",
-    `\`${LOCAL_DRILL_FIRST_SCORE.code}\``,
-    "",
-    lang === "ja"
-      ? "このコードを LP デモポータルの「ローカルモードで遊ぶ」ドリルに提出すると得点になります。"
-      : "Submit this code to the “Play local mode” drill in the LP demo portal to score it.",
-  ].join("\n");
-}
 
 function hintViews(runtime: ProblemRuntime, hints: readonly ContainerHint[]) {
   return hints.map((hint) => {
@@ -110,15 +94,8 @@ function problemView(
 ) {
   const problem = mapStrings(runtime.problem, browserText);
   const complete = isProblemComplete(runtime);
-  // [#2707] 固定入門ドリルの初クリア時、 writeup 末尾に LP デモポータルの
-  // 「ローカルモードで遊ぶ」 ドリルへ提出するチェックポイントコードを付加する。 writeup と
-  // 同じく complete ゲート下なので、 解く前にコードは見えない。
-  const writeup =
-    complete && problem.problemId === LOCAL_INTRO_DRILL_PROBLEM_ID
-      ? `${problem.writeup ? `${problem.writeup}\n\n---\n\n` : ""}${localDrillCheckpointNote("ja")}`
-      : complete
-        ? problem.writeup
-        : undefined;
+  // Local mode is a drill: reveal the writeup immediately after the whole problem is solved.
+  const writeup = complete ? problem.writeup : undefined;
   // [fairness contract / platform #1124] `description` is the admin/authoring
   // field — SCHEMA.json defines it as "採点ルール / hardened state / 段階詳細など
   // ネタバレを含む長文" and states it is never shown to a competitor. Only
@@ -126,12 +103,7 @@ function problemView(
   // drops it for the same reason; this mirrors `sanitizeI18n()` in
   // apps/participant-portal/src/data/problems.ts (the build-time projection).
   const { description: _adminOnlyEnDescription, ...englishOverlay } = problem.i18n?.en ?? {};
-  const englishWriteup =
-    complete && problem.problemId === LOCAL_INTRO_DRILL_PROBLEM_ID
-      ? `${problem.writeupI18n ? `${problem.writeupI18n}\n\n---\n\n` : ""}${localDrillCheckpointNote("en")}`
-      : complete
-        ? problem.writeupI18n
-        : undefined;
+  const englishWriteup = complete ? problem.writeupI18n : undefined;
   const englishText = {
     ...englishOverlay,
     ...(englishWriteup ? { writeup: englishWriteup } : {}),
@@ -145,7 +117,6 @@ function problemView(
     // implementation) — the portal pins this problem first and shows a
     // "start here" badge on it. Every other problem omits the field.
     ...(problem.problemId === LOCAL_INTRO_DRILL_PROBLEM_ID ? { recommended: true as const } : {}),
-    // Local mode is a drill: reveal immediately after the whole problem is solved.
     ...(writeup ? { writeup } : {}),
     // #2054 i18n: ship the en overlay so the portal locale switcher can render
     // the problem in English (ja stays the top-level canonical).
