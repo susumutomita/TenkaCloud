@@ -10,10 +10,8 @@ import { createSakuraAppRunRestClient } from "../../lib/problem-deploy/runtime-c
 const CREDENTIAL = { accessToken: "tok", accessTokenSecret: "sec" };
 const BASE_URL = "https://example.test/apprun/api";
 const EXPECTED_AUTH = `Basic ${Buffer.from("tok:sec").toString("base64")}`;
-const LIST_PAGE_1 =
-  "/applications?page_num=1&page_size=100&sort_field=created_at&sort_order=asc";
-const LIST_PAGE_2 =
-  "/applications?page_num=2&page_size=100&sort_field=created_at&sort_order=asc";
+const LIST_PAGE_1 = "/applications?page_num=1&page_size=100&sort_field=created_at&sort_order=asc";
+const LIST_PAGE_2 = "/applications?page_num=2&page_size=100&sort_field=created_at&sort_order=asc";
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -350,10 +348,7 @@ describe("sakura-apprun-rest-client (#2746)", () => {
       await makeClient(responseFailure).getApplication("p-team");
       expect.unreachable("request should fail");
     } catch (error) {
-      expectSafeError(
-        error,
-        `Sakura AppRun API GET ${LIST_PAGE_1} failed: 429`,
-      );
+      expectSafeError(error, `Sakura AppRun API GET ${LIST_PAGE_1} failed: 429`);
     }
 
     const transportFailure = vi.fn().mockRejectedValueOnce(new Error(EXPECTED_AUTH));

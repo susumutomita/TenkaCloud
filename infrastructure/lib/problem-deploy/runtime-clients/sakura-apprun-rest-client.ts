@@ -63,7 +63,11 @@ export function createSakuraAppRunRestClient(
   ).toString("base64")}`;
   let userReady: Promise<void> | undefined;
 
-  async function request<T>(method: string, path: string, body?: unknown): Promise<RequestResult<T>> {
+  async function request<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+  ): Promise<RequestResult<T>> {
     let response: Response;
     try {
       response = await doFetch(`${baseUrl}${path}`, {
