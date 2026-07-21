@@ -1,0 +1,43 @@
+name: Agent issue 2721 lockfile
+
+permissions:
+  contents: write
+
+on:
+  push:
+    branches:
+      - agent/issue-2721-scorer-properties
+
+jobs:
+  update-lockfile:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: "1.3.11"
+
+      - name: Update lockfile without lifecycle scripts
+        run: bun install --ignore-scripts
+
+      - name: Run problem-test checks
+        run: |
+          bun run --filter @tenkacloud/problem-test test
+          bun run --filter @tenkacloud/problem-test typecheck
+          bun x biome check packages/problem-test-harness/package.json packages/problem-test-harness/test/scorer.property.test.ts
+
+      - name: Commit the generated lockfile
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bun.lock
+          if git diff --cached --quiet; then
+            echo "bun.lock is already current"
+            exit 0
+          fi
+          git commit -m "test(problem-test): update property-test lockfile"
+          git push
