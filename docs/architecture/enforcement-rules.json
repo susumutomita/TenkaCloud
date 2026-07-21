@@ -115,7 +115,7 @@
     "implementation": ".claude/harness/src/rules/lambda-env-size.ts",
     "test": ".claude/harness/src/rules/lambda-env-size.test.ts",
     "timing": "pre-commit / CI",
-    "severity": "warning",
+    "severity": "error",
     "scope": "synthesized Lambda environment",
     "exception": "move large static data to bundling defines or an external store"
   },
