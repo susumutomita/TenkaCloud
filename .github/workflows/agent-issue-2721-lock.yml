@@ -7,6 +7,9 @@ on:
   push:
     branches:
       - agent/issue-2721-scorer-properties
+  pull_request:
+    branches:
+      - main
 
 jobs:
   update-lockfile:
@@ -15,6 +18,8 @@ jobs:
     steps:
       - name: Check out the branch
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.head_ref || github.ref_name }}
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
