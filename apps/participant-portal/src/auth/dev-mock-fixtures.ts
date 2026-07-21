@@ -26,7 +26,7 @@ import {
  *
  * 出題構成 (Issue #2707 → #2711: LP ヒーローから始める自己解説型オンボーディング):
  *   1. 「TenkaCloud とは?」 — 4 ステップのチュートリアル (#2711 デザイン 6b)。 モードの
- *      2 択 (ブラウザ Lite / Codespaces) はステップ 3 で初めて提示する
+ *      3 択 (ローカル / Lite / SaaS) はステップ 3 で初めて提示する
  *   2. 「自分の TenkaCloud Lite を立てる」 — 実 AWS デプロイ (#2696、 lite-drill 契約)
  *   3. 「ローカルモードで遊ぶ」 — 手元の Mac。 sqli-demo 初得点 → チェックポイント提出
  *   4. 「AIエージェントでMac起動」 — LP のプロンプトからローカル起動確認までの実演
@@ -65,8 +65,8 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
       // オンボーディング動画は、リポジトリを肥大化させないよう YouTube で配信する。
       videoUrl: "https://www.youtube.com/embed/mcL_O17QVsA",
       name: "TenkaCloud とは?",
-      // #2711 (デザイン 6b): 4 ステップのチュートリアル。 モードの 2 択 (ブラウザ Lite /
-      // Codespaces) は LP には出さず、 ここのステップ 3 で初めて提示する。
+      // #2711 (デザイン 6b): 4 ステップのチュートリアル。 モードの 3 択 (ローカル /
+      // Lite / SaaS) は LP には出さず、 ここのステップ 3 で初めて提示する。
       description: [
         "ようこそ。これは説明ページではなく、**解ける問題**だ。4 つのステップに答えながら、TenkaCloud が何かを掴む。",
         "",
@@ -80,12 +80,13 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
         "",
         "#### ステップ 3 · モードを選ぶ",
         "",
-        "TenkaCloud は同じ問題をどの環境でも動かせる。初めてなら、次のどちらか。選んだ方を提出欄に書く(**どちらも正解**)。",
+        "TenkaCloud は同じ問題をどの環境でも動かせる。モードは 3 つ(いま見ているこのタブは、登録不要でモックデータが動く**ブラウザデモ**)。次に試したいモードを提出欄に書く(**どれも正解**)。",
         "",
-        "- **ブラウザ (Lite)**(推奨)— 登録もインストールも不要。このタブでいますぐ動く。まず全体像を掴みたい人向け",
-        "- **Codespaces**(フル機能)— GitHub アカウントで約 5 分。AWS 不要のまま、本物と同じ構成を手元に立てたい人向け",
+        "- **ローカルモード**(AWS 不要)— Docker が動く PC や GitHub Codespaces で、本物の問題コンテナを手元で動かす。まず遊ぶならこれ",
+        "- **Lite モード**(実 AWS)— 自分の AWS アカウントに TenkaCloud 本体をデプロイして、自分のイベントを主催する。データストアは DynamoDB / Turso を選べる",
+        "- **SaaS モード**(上級者向け)— TenkaCloud をマルチテナント SaaS として展開する運営者モード。構成も運用も本格的",
         "",
-        "上級者向けの `deploy-local` (docker compose) と `deploy-saas` (本番イベント · AWS) は、クリア後に問題一覧へ出てくる。",
+        "クリア後の問題一覧には、ローカルモードと Lite モードを実際に体験するドリルが並んでいる。",
         "",
         "#### ステップ 4 · flag を提出してみる",
         "",
@@ -94,7 +95,7 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
         "詰まったら各提出欄の **ヒント** を開こう(ペナルティなし)。全問正解すると解説と、スマホのまま解ける最初の実戦ドリル「欠けた数」へのボタンが現れる。",
       ].join("\n"),
       instructions:
-        "4 つのステップに順に答える(大文字小文字は不問)。モードの 2 択はステップ 3 で初めて出てくる。ヒントはペナルティなしで開ける。",
+        "4 つのステップに順に答える(大文字小文字は不問)。モードの 3 択はステップ 3 で初めて出てくる。ヒントはペナルティなしで開ける。",
       i18n: {
         en: {
           name: "What is TenkaCloud?",
@@ -112,12 +113,13 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
             "",
             "#### Step 3 · Choose your mode",
             "",
-            "TenkaCloud runs the same problems anywhere. If this is your first time, pick one of these and submit your choice (**either answer is correct**):",
+            "TenkaCloud runs the same problems anywhere. There are 3 modes (this tab is the signup-free **browser demo** running on mock data). Submit the mode you want to try next (**any answer is correct**):",
             "",
-            "- **Browser (Lite)** (recommended) — no signup, no installs; runs right in this tab. For grasping the big picture first",
-            "- **Codespaces** (full stack) — about 5 minutes with a GitHub account; the real setup on your own machine, still no AWS",
+            "- **Local mode** (no AWS) — run real problem containers on a Docker-capable machine or GitHub Codespaces. Start here to play",
+            "- **Lite mode** (real AWS) — deploy TenkaCloud into your own AWS account and host your own event; pick DynamoDB or Turso as the data store",
+            "- **SaaS mode** (advanced) — run TenkaCloud as a full multi-tenant SaaS; a serious setup with real operational work",
             "",
-            "For advanced users, `deploy-local` (docker compose) and `deploy-saas` (production events on AWS) appear in the problem list after you clear this.",
+            "After you clear this, the problem list has drills that walk you through local mode and Lite mode for real.",
             "",
             "#### Step 4 · Submit your first flag",
             "",
@@ -194,11 +196,11 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
                 penalty: 0,
                 revealed: false,
                 content:
-                  "どちらを選んでも正解。**ブラウザ (Lite)**(推奨)は登録もインストールも不要で、このタブのまま次の問題に進める。**Codespaces**(フル機能)は GitHub アカウントで約 5 分、AWS 不要のまま本物と同じ構成を手元に立てる。「lite」か「codespaces」と提出する。上級者向けの deploy-local / deploy-saas はクリア後に問題一覧へ出てくる。",
+                  "どれを選んでも正解。**ローカルモード**は AWS 不要 — Docker が動く PC や GitHub Codespaces で本物の問題コンテナを動かす。**Lite モード**は自分の AWS アカウントに TenkaCloud をデプロイして自分のイベントを主催する(データストアは DynamoDB / Turso を選択可)。**SaaS モード**はマルチテナント SaaS として展開する上級者向け。「local」「lite」「saas」のどれかを提出する。",
                 i18n: {
                   en: {
                     content:
-                      'Either choice is correct. **Browser (Lite)** (recommended) needs no signup or installs and continues right in this tab. **Codespaces** (full stack) takes about 5 minutes with a GitHub account, still no AWS. Submit "lite" or "codespaces". The advanced deploy-local / deploy-saas appear in the problem list after you clear this.',
+                      'Any choice is correct. **Local mode** needs no AWS — real problem containers run on a Docker-capable machine or GitHub Codespaces. **Lite mode** deploys TenkaCloud into your own AWS account so you can host your own event (DynamoDB or Turso as the data store). **SaaS mode** runs TenkaCloud as a full multi-tenant SaaS — advanced, with real operational work. Submit "local", "lite", or "saas".',
                   },
                 },
               },
@@ -393,7 +395,7 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
       name: "ローカルモードで遊ぶ",
       description: [
         "AWS アカウントなしで、**本物の問題コンテナ**を手元の Mac で動かすのがローカルモード。Docker を使い、ブラウザの Participant Portal から挑戦する。",
-        "TenkaCloud リポジトリで `bun run tenkacloud local --problem sqli-demo` を実行すると、Portal と Docker 対応の入門ドリル **sqli-demo** が起動する。",
+        "TenkaCloud リポジトリで `make local` を実行するとローカルモードが起動する。ブラウザで Participant Portal を開き、問題一覧から Docker 対応の入門ドリル **sqli-demo** を選んで起動しよう。",
         "",
         "#### チェックポイント",
         "",
@@ -409,7 +411,7 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
           name: "Play local mode",
           description: [
             "Local mode runs **real problem containers** on your Mac with no AWS account. Docker runs the challenge while you play from the Participant Portal in your browser.",
-            "In the TenkaCloud repository, run `bun run tenkacloud local --problem sqli-demo` to start the Portal and the Docker-based intro drill **sqli-demo**.",
+            "In the TenkaCloud repository, run `make local` to start local mode. Open the Participant Portal in your browser and pick the Docker-based intro drill **sqli-demo** from the problem list to start it.",
             "",
             "#### Checkpoints",
             "",
@@ -443,11 +445,11 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
                 penalty: 0,
                 revealed: false,
                 content:
-                  "Mac で Docker を起動し、TenkaCloud リポジトリから `bun run tenkacloud local --problem sqli-demo` を実行する。ready 表示に `Participant Portal ... 5175` と出るので、その 4 桁を提出する。",
+                  "Mac で Docker を起動し、TenkaCloud リポジトリから `make local` を実行する。ready 表示に `Participant Portal ... 5175` と出るので、その 4 桁を提出する。",
                 i18n: {
                   en: {
                     content:
-                      "Start Docker on your Mac, then run `bun run tenkacloud local --problem sqli-demo` from the TenkaCloud repository. The ready message shows `Participant Portal ... 5175`; submit those four digits.",
+                      "Start Docker on your Mac, then run `make local` from the TenkaCloud repository. The ready message shows `Participant Portal ... 5175`; submit those four digits.",
                   },
                 },
               },
@@ -699,7 +701,7 @@ export const DEV_MOCK_NOTIFICATIONS: NotificationsResponse = {
     {
       notificationId: "notif-003",
       title: "オンボーディングチュートリアルを開放",
-      body: "「TenkaCloud とは?」から始めて「自分の TenkaCloud Lite を立てる」へ進むと、理解から実デプロイまで得点しながら完走できます。Codespaces 派は「ローカルモードで遊ぶ」、Mac 派は「AIエージェントでMac起動」も。詰まったら各提出欄のヒント(ペナルティなし)へ。",
+      body: "「TenkaCloud とは?」から始めて「自分の TenkaCloud Lite を立てる」へ進むと、理解から実デプロイまで得点しながら完走できます。AWS なしで遊ぶなら「ローカルモードで遊ぶ」、AI に任せるなら「AIエージェントでMac起動」も。詰まったら各提出欄のヒント(ペナルティなし)へ。",
       severity: "info",
       occurredAt: iso(-2 * MIN),
     },

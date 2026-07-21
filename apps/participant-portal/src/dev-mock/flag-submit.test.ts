@@ -86,16 +86,27 @@ describe("evaluateMockSubFlag (#2711 what-is-tenkacloud tutorial)", () => {
     ).toBe("ok");
   });
 
-  it("should accept either mode at the step-3 choice (choice, not quiz)", () => {
-    expect(evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, "choose-mode", "Lite", 100).kind).toBe(
-      "ok",
-    );
-    expect(evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, "choose-mode", "ブラウザ", 100).kind).toBe(
+  it("should accept any real mode at the step-3 choice (choice, not quiz)", () => {
+    expect(evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, "choose-mode", "Local", 100).kind).toBe(
       "ok",
     );
     expect(
+      evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, "choose-mode", "ローカルモード", 100).kind,
+    ).toBe("ok");
+    expect(evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, "choose-mode", "Lite", 100).kind).toBe(
+      "ok",
+    );
+    expect(evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, "choose-mode", "SaaS", 100).kind).toBe(
+      "ok",
+    );
+    // Codespaces はローカルモードの実行環境の 1 つなので正解のまま。
+    expect(
       evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, "choose-mode", "Codespaces", 100).kind,
     ).toBe("ok");
+    // 「ブラウザ (Lite)」 は実在しないモード名 (このタブはデモ) — 正解にしない。
+    expect(
+      evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, "choose-mode", "ブラウザ (Lite)", 100).kind,
+    ).toBe("wrong");
   });
 
   it("should score the printed practice flag at step 4 with paste tolerance", () => {

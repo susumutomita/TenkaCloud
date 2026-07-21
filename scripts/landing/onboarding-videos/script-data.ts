@@ -79,14 +79,16 @@ export const ONBOARDING_VIDEOS: readonly OnboardingVideo[] = [
         titleJa: "どこで動かす?",
         titleEn: "Where will you run it?",
         bulletsJa: [
-          "ブラウザ (Lite) — 推奨。このタブでいますぐ",
-          "Codespaces — フル機能。GitHub アカウントで約 5 分",
-          "どちらを選んでも正解",
+          "ローカル — AWS 不要。Docker / Codespaces で動く",
+          "Lite — 自分の AWS にデプロイして主催",
+          "SaaS — マルチテナント展開(上級者向け)",
+          "どれを選んでも正解",
         ],
         bulletsEn: [
-          "Browser (Lite) — recommended, right in this tab",
-          "Codespaces — full stack, ~5 min with GitHub",
-          "Either choice is correct",
+          "Local — no AWS; runs on Docker / Codespaces",
+          "Lite — deploy to your own AWS and host",
+          "SaaS — multi-tenant, for advanced operators",
+          "Any choice is correct",
         ],
       },
       {
@@ -108,11 +110,11 @@ export const ONBOARDING_VIDEOS: readonly OnboardingVideo[] = [
         titleEn: "Clearing unlocks the next quest",
         bulletsJa: [
           "次は「自分の TenkaCloud Lite を立てる」",
-          "Codespaces 派は「ローカルモードで遊ぶ」も",
+          "AWS なしで遊ぶなら「ローカルモードで遊ぶ」も",
         ],
         bulletsEn: [
           'Next: "Deploy your own TenkaCloud Lite"',
-          'Picked Codespaces? "Play local mode" awaits too',
+          'No AWS yet? "Play local mode" awaits too',
         ],
       },
     ],
@@ -135,8 +137,8 @@ export const ONBOARDING_VIDEOS: readonly OnboardingVideo[] = [
         durationS: 7.5,
         titleJa: "Mac でローカルモードを起動",
         titleEn: "Start local mode on your Mac",
-        bulletsJa: ["Docker を起動", "bun run tenkacloud local --problem sqli-demo"],
-        bulletsEn: ["Start Docker", "bun run tenkacloud local --problem sqli-demo"],
+        bulletsJa: ["Docker を起動", "TenkaCloud リポジトリで make local"],
+        bulletsEn: ["Start Docker", "Run make local in the TenkaCloud repo"],
       },
       {
         badge: "STEP 2",
