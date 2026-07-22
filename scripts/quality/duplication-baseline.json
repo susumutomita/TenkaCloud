@@ -3,7 +3,7 @@
   "apps/admin-console": 1119,
   "apps/always-on-control-plane": 26,
   "apps/application-admin-console": 1393,
-  "apps/developer-portal": 220,
+  "apps/developer-portal": 32,
   "apps/participant-portal": 322,
   "infrastructure": 5213,
   "packages/portal-contracts": 22,
