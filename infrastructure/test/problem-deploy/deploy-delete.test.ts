@@ -379,9 +379,10 @@ describe("requestTeardown (non-AWS runtime via adapter)", () => {
     const { shared, ddbSend, eventsSend, ssmSend } = buildSakuraShared();
     ddbSend.mockResolvedValueOnce({ Item: sakuraRow() }); // Get row
     ddbSend.mockResolvedValueOnce({}); // transition → DELETING
-    // AppRun REST: findByName (list) → delete by id
+    // AppRun REST: user bootstrap → findByName (list) → delete by id
     const appRunFetch = vi
       .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "user" }), { status: 200 }))
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ data: [{ id: "a1", name: "tc-p-t" }] }), { status: 200 }),
       )
@@ -394,9 +395,9 @@ describe("requestTeardown (non-AWS runtime via adapter)", () => {
     expect(ddbSend.mock.calls.some((c) => c[0] instanceof UpdateCommand)).toBe(true);
     // CFn delete event は publish しない
     expect(eventsSend).not.toHaveBeenCalled();
-    // SSM から鍵を引き AppRun REST を叩いた (list + DELETE)
+    // SSM から鍵を引き AppRun REST を叩いた (user bootstrap + list + DELETE)
     expect(ssmSend).toHaveBeenCalled();
-    expect(appRunFetch.mock.calls[1][1].method).toBe("DELETE");
+    expect(appRunFetch.mock.calls[2][1].method).toBe("DELETE");
   });
 
   it("should compensate to FAILED when adapter.destroy throws", async () => {

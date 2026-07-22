@@ -192,6 +192,7 @@ describe("startDeployment sakura/apprun dispatch (ADR-026 / Issue #1412)", () =>
   it("should deploy via AppRun (not EventBridge) and resolve the key from SSM when wired", async () => {
     const appRunFetch = vi
       .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "user" }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ data: [] }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ id: "app-1" }), { status: 201 }));
     vi.stubGlobal("fetch", appRunFetch);
@@ -206,9 +207,9 @@ describe("startDeployment sakura/apprun dispatch (ADR-026 / Issue #1412)", () =>
     expect(res.status).toBe("PENDING");
     // SSM から鍵を decrypt 取得した
     expect(ssmSend.mock.calls.some((c) => c[0] instanceof GetParameterCommand)).toBe(true);
-    // AppRun REST を叩いた (list → create)、 EventBridge は使わない
-    expect(appRunFetch).toHaveBeenCalledTimes(2);
-    expect(appRunFetch.mock.calls[1][1].method).toBe("POST");
+    // AppRun REST を叩いた (user bootstrap → list → create)、 EventBridge は使わない
+    expect(appRunFetch).toHaveBeenCalledTimes(3);
+    expect(appRunFetch.mock.calls[2][1].method).toBe("POST");
     expect(eventsSend).not.toHaveBeenCalled();
     // deployment 行は Put 済 (= AWS と同じ enqueue セマンティクス)
     expect(putSend.mock.calls.some((c) => c[0] instanceof PutCommand)).toBe(true);
