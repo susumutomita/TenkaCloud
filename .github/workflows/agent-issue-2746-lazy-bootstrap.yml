@@ -1,0 +1,287 @@
+name: Agent issue 2746 lazy bootstrap fix
+
+permissions:
+  contents: write
+
+on:
+  push:
+    branches:
+      - agent/issue-2746-sakura-hardening
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: agent/issue-2746-sakura-hardening
+          fetch-depth: 0
+          submodules: true
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: "1.3.11"
+
+      - name: Install locked dependencies
+        run: make install_ci
+
+      - name: Apply lazy bootstrap and regression updates
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          def replace(path: str, old: str, new: str) -> None:
+              target = Path(path)
+              source = target.read_text()
+              if old not in source:
+                  raise SystemExit(f"anchor not found in {path}: {old[:100]!r}")
+              target.write_text(source.replace(old, new, 1))
+
+          client = "infrastructure/lib/problem-deploy/runtime-clients/sakura-apprun-rest-client.ts"
+          replace(
+              client,
+              '''  async function required<T>(method: string, path: string): Promise<T> {
+            const result = await request<T>(method, path);
+            if (result.kind !== "ok" || result.value === undefined) {
+              throw new Error(`Sakura AppRun API ${method} ${path} returned no document`);
+            }
+            return result.value;
+          }
+''',
+              '''  async function readApplicationPage(pageNum: number): Promise<SakuraApiApplicationList> {
+            const path = listPath(pageNum);
+            let result = await request<SakuraApiApplicationList>("GET", path);
+            if (result.kind === "not-found") {
+              // AppRun may not have initialized the account-local user yet. Bootstrap only after
+              // the ordinary list request proves it is necessary, then retry the original read.
+              await ensureUser();
+              result = await request<SakuraApiApplicationList>("GET", path);
+            }
+            if (result.kind === "conflict") {
+              throw new Error(`Sakura AppRun API GET ${path} conflicted`);
+            }
+            if (result.kind === "not-found") {
+              throw new Error(`Sakura AppRun API GET ${path} returned not-found`);
+            }
+            if (result.value === undefined) {
+              throw new Error(`Sakura AppRun API GET ${path} returned no document`);
+            }
+            return result.value;
+          }
+''',
+          )
+          replace(
+              client,
+              '      const response = await required<SakuraApiApplicationList>("GET", listPath(pageNum));',
+              '      const response = await readApplicationPage(pageNum);',
+          )
+          for anchor in (
+              '      await ensureUser();\n      for (let attempt = 0; attempt < UPSERT_MAX_ATTEMPTS; attempt += 1) {',
+              '      await ensureUser();\n      const existing = (await findByName(name))[0];',
+              '      await ensureUser();\n      for (const application of await findByName(name)) {',
+          ):
+              replace(client, anchor, anchor.replace('      await ensureUser();\n', ''))
+
+          test = "infrastructure/test/problem-deploy/sakura-apprun-rest-client.test.ts"
+          replace(
+              test,
+              '''function readyUser(fetchImpl = vi.fn()): ReturnType<typeof vi.fn> {
+            return fetchImpl.mockResolvedValueOnce(jsonResponse({ id: "user" }));
+          }
+''',
+              '''function readyUser(fetchImpl = vi.fn()): ReturnType<typeof vi.fn> {
+            return fetchImpl;
+          }
+''',
+          )
+          replace(
+              test,
+              '''  it("should bootstrap the AppRun user once and cache the result", async () => {
+            const fetchImpl = vi
+              .fn()
+              .mockResolvedValueOnce(new Response(null, { status: 404 }))
+              .mockResolvedValueOnce(jsonResponse({ id: "user" }, 201))
+              .mockResolvedValueOnce(listResponse([]))
+              .mockResolvedValueOnce(listResponse([]));
+            const client = makeClient(fetchImpl);
+
+            await expect(client.getApplication("missing")).resolves.toBeUndefined();
+            await expect(client.deleteApplication("missing")).resolves.toBeUndefined();
+
+            expect(fetchImpl.mock.calls.map((call) => call[0])).toEqual([
+              `${BASE_URL}/user`,
+              `${BASE_URL}/user`,
+              `${BASE_URL}${LIST_PAGE_1}`,
+              `${BASE_URL}${LIST_PAGE_1}`,
+            ]);
+            expect(fetchImpl.mock.calls[1]?.[1].method).toBe("POST");
+          });
+
+          it("should accept a concurrent user-create conflict", async () => {
+            const fetchImpl = vi
+              .fn()
+              .mockResolvedValueOnce(new Response(null, { status: 404 }))
+              .mockResolvedValueOnce(new Response(null, { status: 409 }))
+              .mockResolvedValueOnce(listResponse([]));
+
+            await expect(makeClient(fetchImpl).getApplication("missing")).resolves.toBeUndefined();
+          });
+
+          it("should reject unexpected user lookup and creation outcomes", async () => {
+            const lookupConflict = vi.fn().mockResolvedValueOnce(new Response(null, { status: 409 }));
+            await expect(makeClient(lookupConflict).getApplication("missing")).rejects.toThrow(
+              "Sakura AppRun API GET /user conflicted",
+            );
+
+            const createNotFound = vi
+              .fn()
+              .mockResolvedValueOnce(new Response(null, { status: 404 }))
+              .mockResolvedValueOnce(new Response(null, { status: 404 }));
+            await expect(makeClient(createNotFound).getApplication("missing")).rejects.toThrow(
+              "Sakura AppRun API POST /user returned not-found",
+            );
+          });
+
+          it("should reset failed user initialization so a later call can retry", async () => {
+            const fetchImpl = vi
+              .fn()
+              .mockRejectedValueOnce(new Error(`Authorization: ${EXPECTED_AUTH}`))
+              .mockResolvedValueOnce(jsonResponse({ id: "user" }))
+              .mockResolvedValueOnce(listResponse([]));
+            const client = makeClient(fetchImpl);
+
+            await expect(client.getApplication("missing")).rejects.toThrow(
+              "Sakura AppRun API GET /user request failed",
+            );
+            await expect(client.getApplication("missing")).resolves.toBeUndefined();
+            expect(fetchImpl).toHaveBeenCalledTimes(3);
+          });
+''',
+              '''  it("should bootstrap the AppRun user after a missing application list and cache it", async () => {
+            const fetchImpl = vi
+              .fn()
+              .mockResolvedValueOnce(new Response(null, { status: 404 }))
+              .mockResolvedValueOnce(new Response(null, { status: 404 }))
+              .mockResolvedValueOnce(jsonResponse({ id: "user" }, 201))
+              .mockResolvedValueOnce(listResponse([]))
+              .mockResolvedValueOnce(listResponse([]));
+            const client = makeClient(fetchImpl);
+
+            await expect(client.getApplication("missing")).resolves.toBeUndefined();
+            await expect(client.deleteApplication("missing")).resolves.toBeUndefined();
+
+            expect(fetchImpl.mock.calls.map((call) => call[0])).toEqual([
+              `${BASE_URL}${LIST_PAGE_1}`,
+              `${BASE_URL}/user`,
+              `${BASE_URL}/user`,
+              `${BASE_URL}${LIST_PAGE_1}`,
+              `${BASE_URL}${LIST_PAGE_1}`,
+            ]);
+            expect(fetchImpl.mock.calls[2]?.[1].method).toBe("POST");
+          });
+
+          it("should accept a concurrent user-create conflict", async () => {
+            const fetchImpl = vi
+              .fn()
+              .mockResolvedValueOnce(new Response(null, { status: 404 }))
+              .mockResolvedValueOnce(new Response(null, { status: 404 }))
+              .mockResolvedValueOnce(new Response(null, { status: 409 }))
+              .mockResolvedValueOnce(listResponse([]));
+
+            await expect(makeClient(fetchImpl).getApplication("missing")).resolves.toBeUndefined();
+          });
+
+          it("should reject unexpected user lookup and creation outcomes", async () => {
+            const lookupConflict = vi
+              .fn()
+              .mockResolvedValueOnce(new Response(null, { status: 404 }))
+              .mockResolvedValueOnce(new Response(null, { status: 409 }));
+            await expect(makeClient(lookupConflict).getApplication("missing")).rejects.toThrow(
+              "Sakura AppRun API GET /user conflicted",
+            );
+
+            const createNotFound = vi
+              .fn()
+              .mockResolvedValueOnce(new Response(null, { status: 404 }))
+              .mockResolvedValueOnce(new Response(null, { status: 404 }))
+              .mockResolvedValueOnce(new Response(null, { status: 404 }));
+            await expect(makeClient(createNotFound).getApplication("missing")).rejects.toThrow(
+              "Sakura AppRun API POST /user returned not-found",
+            );
+          });
+
+          it("should reset failed user initialization so a later call can retry", async () => {
+            const fetchImpl = vi
+              .fn()
+              .mockResolvedValueOnce(new Response(null, { status: 404 }))
+              .mockRejectedValueOnce(new Error(`Authorization: ${EXPECTED_AUTH}`))
+              .mockResolvedValueOnce(new Response(null, { status: 404 }))
+              .mockResolvedValueOnce(jsonResponse({ id: "user" }))
+              .mockResolvedValueOnce(listResponse([]));
+            const client = makeClient(fetchImpl);
+
+            await expect(client.getApplication("missing")).rejects.toThrow(
+              "Sakura AppRun API GET /user request failed",
+            );
+            await expect(client.getApplication("missing")).resolves.toBeUndefined();
+            expect(fetchImpl).toHaveBeenCalledTimes(5);
+          });
+''',
+          )
+
+          replacements = {
+              'expect(fetchImpl).toHaveBeenCalledTimes(3);\n    expect(fetchImpl.mock.calls[0]?.[1].headers.Authorization).toBe(EXPECTED_AUTH);\n    const [createUrl, createInit] = fetchImpl.mock.calls[2] ?? [];':
+                  'expect(fetchImpl).toHaveBeenCalledTimes(2);\n    expect(fetchImpl.mock.calls[0]?.[1].headers.Authorization).toBe(EXPECTED_AUTH);\n    const [createUrl, createInit] = fetchImpl.mock.calls[1] ?? [];',
+              'const [patchUrl, patchInit] = fetchImpl.mock.calls[2] ?? [];':
+                  'const [patchUrl, patchInit] = fetchImpl.mock.calls[1] ?? [];',
+              'expect(fetchImpl.mock.calls[1]?.[0]).toBe(`${BASE_URL}${LIST_PAGE_1}`);\n    expect(fetchImpl.mock.calls[2]?.[0]).toBe(`${BASE_URL}${LIST_PAGE_2}`);':
+                  'expect(fetchImpl.mock.calls[0]?.[0]).toBe(`${BASE_URL}${LIST_PAGE_1}`);\n    expect(fetchImpl.mock.calls[1]?.[0]).toBe(`${BASE_URL}${LIST_PAGE_2}`);',
+              'expect(fetchImpl.mock.calls[2]?.[0]).toBe(`${BASE_URL}${LIST_PAGE_2}`);':
+                  'expect(fetchImpl.mock.calls[1]?.[0]).toBe(`${BASE_URL}${LIST_PAGE_2}`);',
+              'expect(fetchImpl.mock.calls[2]?.[1].method).toBe("PATCH");\n    expect(fetchImpl.mock.calls[4]?.[1].method).toBe("POST");':
+                  'expect(fetchImpl.mock.calls[1]?.[1].method).toBe("PATCH");\n    expect(fetchImpl.mock.calls[3]?.[1].method).toBe("POST");',
+              'expect(fetchImpl.mock.calls[2]?.[1].method).toBe("POST");\n    expect(fetchImpl.mock.calls[4]?.[1].method).toBe("PATCH");':
+                  'expect(fetchImpl.mock.calls[1]?.[1].method).toBe("POST");\n    expect(fetchImpl.mock.calls[3]?.[1].method).toBe("PATCH");',
+              'expect(fetchImpl.mock.calls[3]?.[0]).toBe(`${BASE_URL}/applications/app/status`);':
+                  'expect(fetchImpl.mock.calls[2]?.[0]).toBe(`${BASE_URL}/applications/app/status`);',
+              'expect(fetchImpl.mock.calls.slice(2).map((call) => call[0])).toEqual([':
+                  'expect(fetchImpl.mock.calls.slice(1).map((call) => call[0])).toEqual([',
+              'expectSafeError(error, "Sakura AppRun API GET /user request failed");':
+                  'expectSafeError(error, `Sakura AppRun API GET ${LIST_PAGE_1} request failed`);',
+              '"https://secure.sakura.ad.jp/cloud/api/apprun/1.0/apprun/api/user",':
+                  '"https://secure.sakura.ad.jp/cloud/api/apprun/1.0/apprun/api/applications?page_num=1&page_size=100&sort_field=created_at&sort_order=asc",',
+          }
+          for old, new in replacements.items():
+              replace(test, old, new)
+          PY
+
+          bun x biome check --write \
+            infrastructure/lib/problem-deploy/runtime-clients/sakura-apprun-rest-client.ts \
+            infrastructure/test/problem-deploy/sakura-apprun-rest-client.test.ts
+
+      - name: Run Sakura and affected integration tests
+        run: |
+          bun run --filter @TenkaCloud/infrastructure test \
+            test/problem-deploy/sakura-apprun-rest-client.test.ts \
+            test/problem-deploy/sakura-apprun-adapter.test.ts \
+            test/problem-deploy/deploy-runtime-dispatch.test.ts \
+            test/problem-deploy/event-bulk-delete.test.ts \
+            test/problem-deploy/runtime-status-reconciler.test.ts \
+            test/problem-deploy/deploy-delete.test.ts
+          bun run --filter @TenkaCloud/infrastructure typecheck
+
+      - name: Remove diagnostics and commit product changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm -f .github/workflows/agent-issue-2746-lazy-bootstrap.yml
+          git rm -f .agent/issue-2746-coverage-full.log || true
+          git add \
+            infrastructure/lib/problem-deploy/runtime-clients/sakura-apprun-rest-client.ts \
+            infrastructure/test/problem-deploy/sakura-apprun-rest-client.test.ts
+          git commit -m "fix(multicloud): bootstrap Sakura user only when required"
+          git pull --rebase origin agent/issue-2746-sakura-hardening
+          git push origin HEAD:agent/issue-2746-sakura-hardening
