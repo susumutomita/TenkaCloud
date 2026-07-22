@@ -49,6 +49,10 @@ const SCAN_EXTENSIONS = new Set([
 
 const ALLOW_MARKER = /allow-aws-fiction\b/;
 
+// Self-documentation checks use the same stable value. The exported Rule keeps a
+// literal id so agent-registry-consistency can verify it without executing code.
+const RULE_ID = "no-aws-trademark-fictions";
+
 function shouldScan(path: string): boolean {
   // 本 rule 自身 / そのテストは検査対象外 (rule 説明やテスト fixture が banned 文字列を含むため)
   if (path.endsWith("no-aws-trademark-fictions.ts")) return false;
@@ -79,7 +83,6 @@ function findFirstForbidden(
 }
 
 export const noAwsTrademarkFictions: Rule = {
-  // Keep the contract literal machine-readable for agent-registry-consistency.
   id: "no-aws-trademark-fictions",
   severity: "error",
   check(ctx: RuleContext): readonly Finding[] {
@@ -108,7 +111,3 @@ export const noAwsTrademarkFictions: Rule = {
     return findings;
   },
 };
-
-// Self-documentation exemption derives from the exported Rule contract, so the
-// identifier cannot drift from the value registered in the architecture harness.
-const RULE_ID = noAwsTrademarkFictions.id;
