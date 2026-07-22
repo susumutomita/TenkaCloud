@@ -1,1 +1,1 @@
-trigger Composite dataflow integration on latest main-derived branch
+trigger Composite dataflow integration after PR creation
