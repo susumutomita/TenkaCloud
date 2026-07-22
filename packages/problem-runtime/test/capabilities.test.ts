@@ -3,8 +3,8 @@ import {
   ADAPTER_WIRED_RUNTIMES,
   findRuntimeCapability,
   RUNTIME_CAPABILITIES,
-  runtimeCapabilityKey,
   type RuntimeCapabilityDeclaration,
+  runtimeCapabilityKey,
   validateRuntimeCapabilityEvidence,
 } from "../src/capabilities.js";
 
@@ -25,9 +25,10 @@ const VALID_FIXTURE: RuntimeCapabilityDeclaration = {
 describe("runtime capability evidence (#2748)", () => {
   it("should keep every declaration internally consistent", () => {
     for (const capability of RUNTIME_CAPABILITIES) {
-      expect(validateRuntimeCapabilityEvidence(capability), runtimeCapabilityKey(capability)).toEqual(
-        [],
-      );
+      expect(
+        validateRuntimeCapabilityEvidence(capability),
+        runtimeCapabilityKey(capability),
+      ).toEqual([]);
     }
   });
 

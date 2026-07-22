@@ -43,7 +43,8 @@ export const RUNTIME_CAPABILITIES = [
     selection: "default",
     maturity: "stable",
     blockingIssues: [],
-    evidence: "Default competitor-account CloudFormation lifecycle is production and live verified.",
+    evidence:
+      "Default competitor-account CloudFormation lifecycle is production and live verified.",
   },
   {
     provider: "azure",
@@ -70,7 +71,8 @@ export const RUNTIME_CAPABILITIES = [
     selection: "local-only",
     maturity: "preview",
     blockingIssues: [],
-    evidence: "Executable and verified through the AWS-free make local lifecycle; never cloud deployed.",
+    evidence:
+      "Executable and verified through the AWS-free make local lifecycle; never cloud deployed.",
   },
   {
     provider: "gcp",
