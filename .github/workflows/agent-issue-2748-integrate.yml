@@ -1,0 +1,64 @@
+name: Agent issue 2748 integrate
+
+permissions:
+  contents: write
+
+on:
+  push:
+    branches:
+      - agent/issue-2748-runtime-capability-evidence
+
+jobs:
+  integrate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: agent/issue-2748-runtime-capability-evidence
+          fetch-depth: 0
+          submodules: true
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: "1.3.11"
+
+      - name: Install locked dependencies
+        run: make install_ci
+
+      - name: Generate and validate capability artifacts
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          path = Path('.agent/issue-2748-autofix.py')
+          source = path.read_text()
+          old = '["bun", "test", "scripts/landing/generate-landing-docs.test.ts"],'
+          new = '["bun", "test", "./scripts/landing/generate-landing-docs.test.ts"],'
+          if old not in source:
+              raise SystemExit('landing test command anchor not found')
+          path.write_text(source.replace(old, new, 1))
+          PY
+          python .agent/issue-2748-autofix.py
+          make lint-format
+
+      - name: Remove diagnostics and restore canonical CI
+        run: |
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          git checkout origin/main -- .github/workflows/ci.yml
+          git rm -f .github/workflows/agent-issue-2748-integrate.yml
+          git rm -f .agent/issue-2748-autofix-full.log || true
+          git rm -f .agent/issue-2748-autofix.log || true
+          git rm -f .agent/issue-2748-autofix.py || true
+          git rm -f .agent/trigger-2748.txt || true
+
+      - name: Commit final capability implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps packages scripts landing .github/workflows/ci.yml
+          git commit -m "feat(runtime): generate evidence-based capability matrix"
+          git pull --rebase origin agent/issue-2748-runtime-capability-evidence
+          git push origin HEAD:agent/issue-2748-runtime-capability-evidence
