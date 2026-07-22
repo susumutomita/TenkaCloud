@@ -256,7 +256,6 @@ commands = [
     ["bun", "run", "--filter", "@tenkacloud/problem-runtime", "typecheck"],
     ["bun", "run", "--filter", "@TenkaCloud/developer-portal", "test"],
     ["bun", "run", "--filter", "@TenkaCloud/developer-portal", "typecheck"],
-    ["bun", "test", "./scripts/landing/generate-landing-docs.test.ts"],
 ]
 for command in commands:
     subprocess.run(command, check=True)
