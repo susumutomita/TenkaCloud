@@ -31,80 +31,111 @@ export interface RuntimeCapabilityDeclaration {
   readonly evidence: string;
 }
 
-export const RUNTIME_CAPABILITIES = [
-  {
-    provider: "aws",
-    engine: "cloudformation",
-    recognized: true,
-    adapterWired: true,
-    executable: true,
-    liveVerified: true,
-    executionMode: "cloud",
-    selection: "default",
-    maturity: "stable",
-    blockingIssues: [],
-    evidence:
-      "Default competitor-account CloudFormation lifecycle is production and live verified.",
-  },
-  {
-    provider: "azure",
-    engine: "bicep",
-    recognized: true,
-    adapterWired: true,
-    executable: false,
-    liveVerified: false,
-    executionMode: "cloud",
-    selection: "feature-gated",
-    maturity: "preview",
-    blockingIssues: [2743, 2081],
-    evidence:
-      "Adapter and credential wiring ship, but Bicep artifact materialization and live acceptance remain open.",
-  },
-  {
-    provider: "docker",
-    engine: "compose",
-    recognized: true,
-    adapterWired: true,
-    executable: true,
-    liveVerified: true,
-    executionMode: "local",
-    selection: "local-only",
-    maturity: "preview",
-    blockingIssues: [],
-    evidence:
-      "Executable and verified through the AWS-free make local lifecycle; never cloud deployed.",
-  },
-  {
-    provider: "gcp",
-    engine: "infra-manager",
-    recognized: true,
-    adapterWired: true,
-    executable: false,
-    liveVerified: false,
-    executionMode: "cloud",
-    selection: "feature-gated",
-    maturity: "preview",
-    blockingIssues: [2745, 2081],
-    evidence:
-      "Adapter and WIF wiring ship, but Terraform source/output handling and live acceptance remain open.",
-  },
-  {
-    provider: "sakura",
-    engine: "apprun",
-    recognized: true,
-    adapterWired: true,
-    executable: true,
-    liveVerified: false,
-    executionMode: "cloud",
-    selection: "feature-gated",
-    maturity: "preview",
-    blockingIssues: [2081],
-    evidence:
-      "Adapter and current AppRun API wire contract ship; real-account lifecycle acceptance remains open.",
-  },
-] as const satisfies readonly RuntimeCapabilityDeclaration[];
+type RuntimeCapabilityRow = readonly [
+  provider: string,
+  engine: string,
+  executable: boolean,
+  liveVerified: boolean,
+  executionMode: RuntimeExecutionMode,
+  selection: RuntimeSelectionAvailability,
+  maturity: RuntimeCapabilityMaturity,
+  blockingIssues: readonly number[],
+  evidence: string,
+];
 
-export type DeclaredRuntimeCapability = (typeof RUNTIME_CAPABILITIES)[number];
+/**
+ * Recognition and adapter wiring are true for every declared row in the current registry. Keeping
+ * those shared facts in the projection avoids five copy-pasted object blocks while preserving the
+ * independent booleans in the public contract and its validation rules.
+ */
+const RUNTIME_CAPABILITY_ROWS = [
+  [
+    "aws",
+    "cloudformation",
+    true,
+    true,
+    "cloud",
+    "default",
+    "stable",
+    [],
+    "Default competitor-account CloudFormation lifecycle is production and live verified.",
+  ],
+  [
+    "azure",
+    "bicep",
+    false,
+    false,
+    "cloud",
+    "feature-gated",
+    "preview",
+    [2743, 2081],
+    "Adapter and credential wiring ship, but Bicep artifact materialization and live acceptance remain open.",
+  ],
+  [
+    "docker",
+    "compose",
+    true,
+    true,
+    "local",
+    "local-only",
+    "preview",
+    [],
+    "Executable and verified through the AWS-free make local lifecycle; never cloud deployed.",
+  ],
+  [
+    "gcp",
+    "infra-manager",
+    false,
+    false,
+    "cloud",
+    "feature-gated",
+    "preview",
+    [2745, 2081],
+    "Adapter and WIF wiring ship, but Terraform source/output handling and live acceptance remain open.",
+  ],
+  [
+    "sakura",
+    "apprun",
+    true,
+    false,
+    "cloud",
+    "feature-gated",
+    "preview",
+    [2081],
+    "Adapter and current AppRun API wire contract ship; real-account lifecycle acceptance remains open.",
+  ],
+] as const satisfies readonly RuntimeCapabilityRow[];
+
+export const RUNTIME_CAPABILITIES: readonly RuntimeCapabilityDeclaration[] = Object.freeze(
+  RUNTIME_CAPABILITY_ROWS.map(
+    ([
+      provider,
+      engine,
+      executable,
+      liveVerified,
+      executionMode,
+      selection,
+      maturity,
+      blockingIssues,
+      evidence,
+    ]) =>
+      Object.freeze({
+        provider,
+        engine,
+        recognized: true,
+        adapterWired: true,
+        executable,
+        liveVerified,
+        executionMode,
+        selection,
+        maturity,
+        blockingIssues: Object.freeze([...blockingIssues]),
+        evidence,
+      }),
+  ),
+);
+
+export type DeclaredRuntimeCapability = RuntimeCapabilityDeclaration;
 
 export function findRuntimeCapability(
   provider: string,
