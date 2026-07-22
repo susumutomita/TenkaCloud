@@ -1,25 +1,9 @@
 /**
- * [Composite Runtime / Issue #2063] Composite deployment materialization.
+ * [Composite Runtime / Issues #2063, #2747] Composite deployment materialization.
  *
- * Turns a validated composite deploy request + a deterministic
- * {@link CompositeDeploymentPlan} (#2062) into one persisted parent job and one
- * persisted target job per plan target (via the #2061 repository). It ONLY
- * persists jobs — it never invokes adapters, publishes EventBridge events,
- * assumes cloud roles, issues credentials, or mutates status after creation.
- *
- * Everything non-deterministic is injected (ID factory, team-login-key factory,
- * clock) and the persistence functions are injected too, so this module imports
- * no AWS SDK client, EventBridge client, adapter, fetch, or credential store —
- * it is a pure orchestration over its dependencies.
- *
- * Ordering / failure semantics (issue #2063):
- *   - The parent is created before any target. If the parent write fails, no
- *     target is attempted (the error propagates).
- *   - Targets are created in plan (ordinal) order. If target N fails, targets
- *     0..N-1 are left in place (no cleanup here) and the thrown
- *     {@link CompositeMaterializationError} names the parent + the failed target.
- *   - Each call generates fresh ids — this is not a retry API. Idempotent retry
- *     of a known target row is the repository's responsibility (#2061).
+ * A validated deterministic plan becomes one parent row and one target row per node. Dependency,
+ * binding, output-classification, and execution-wave metadata are immutable target identity: a
+ * retry cannot silently change the graph already persisted for a parent.
  */
 
 import type { CompositeDeploymentPlan } from "@tenkacloud/problem-runtime";
@@ -32,16 +16,9 @@ import type {
   CreateCompositeTargetInput,
 } from "./composite-repository.js";
 
-/** 8 hours — matches the single-provider deployment session TTL in deploy.ts. */
 const DEFAULT_TTL_MS = 8 * 60 * 60 * 1000;
-
 const toEpochSeconds = (ms: number): number => Math.floor(ms / 1000);
 
-/**
- * Injected dependencies. Persistence is the #2061 repository's create
- * functions; the rest are deterministic factories so tests pin every id / key /
- * timestamp. No concrete AWS / event / adapter dependency appears here.
- */
 export interface MaterializeCompositeDeploymentDeps {
   readonly createParent: (
     input: CreateCompositeParentInput,
@@ -49,13 +26,9 @@ export interface MaterializeCompositeDeploymentDeps {
   readonly createTarget: (
     input: CreateCompositeTargetInput,
   ) => Promise<CompositeTargetDeploymentItem>;
-  /** Fresh globally-unique deployment id (e.g. a ULID) per call. */
   readonly newDeploymentId: () => string;
-  /** Fresh team-login-key, generated once and shared across parent + targets. */
   readonly newTeamLoginKey: () => string;
-  /** Clock in epoch milliseconds. */
   readonly now: () => number;
-  /** Session TTL; defaults to 8h. */
   readonly ttlMs?: number;
 }
 
@@ -64,25 +37,20 @@ export interface MaterializeCompositeDeploymentInput {
   readonly tenantId: string;
   readonly problemId: string;
   readonly teamName: string;
-  /** Competitor AWS account + region from the deploy request (shared context). */
   readonly awsAccountId: string;
   readonly region: string;
-  /** Existing optional bulk-deploy grouping fields from the deploy request. */
   readonly accountGroupId?: string;
   readonly problemSetId?: string;
-  /** Base stack-name prefix; each target gets `${namePrefix}-${targetId}`. */
   readonly namePrefix: string;
 }
 
 export interface MaterializeCompositeDeploymentResult {
   readonly parentDeploymentId: string;
   readonly teamLoginKey: string;
-  /** targetId → targetDeploymentId. */
   readonly targetDeploymentIds: Readonly<Record<string, string>>;
   readonly expiresAt: number;
 }
 
-/** Thrown when a target write fails; names the parent + the failed target. */
 export class CompositeMaterializationError extends Error {
   constructor(
     public readonly parentDeploymentId: string,
@@ -98,10 +66,6 @@ export class CompositeMaterializationError extends Error {
   }
 }
 
-/**
- * Materialize a composite deploy request into a parent job + one target job per
- * plan target. See module docs for ordering / failure semantics.
- */
 export async function materializeCompositeDeployment(
   deps: MaterializeCompositeDeploymentDeps,
   input: MaterializeCompositeDeploymentInput,
@@ -112,7 +76,6 @@ export async function materializeCompositeDeployment(
   const teamLoginKey = deps.newTeamLoginKey();
   const parentDeploymentId = deps.newDeploymentId();
 
-  // Parent first. A failure here propagates with no target attempted.
   await deps.createParent({
     parentDeploymentId,
     tenantId: input.tenantId,
@@ -127,7 +90,6 @@ export async function materializeCompositeDeployment(
     problemSetId: input.problemSetId,
   });
 
-  // Targets in declared (ordinal) order. Partial state is preserved on failure.
   const targetDeploymentIds: Record<string, string> = {};
   for (const target of input.plan.targets) {
     const targetDeploymentId = deps.newDeploymentId();
@@ -137,6 +99,10 @@ export async function materializeCompositeDeployment(
         parentDeploymentId,
         targetId: target.targetId,
         targetOrdinal: target.targetOrdinal,
+        executionWave: target.executionWave,
+        dependsOn: target.dependsOn,
+        inputs: target.inputs,
+        outputs: target.outputs,
         tenantId: input.tenantId,
         problemId: input.problemId,
         provider: target.provider,
@@ -153,8 +119,8 @@ export async function materializeCompositeDeployment(
         accountGroupId: input.accountGroupId,
         problemSetId: input.problemSetId,
       });
-    } catch (err) {
-      throw new CompositeMaterializationError(parentDeploymentId, target.targetId, err);
+    } catch (error) {
+      throw new CompositeMaterializationError(parentDeploymentId, target.targetId, error);
     }
     targetDeploymentIds[target.targetId] = targetDeploymentId;
   }
