@@ -1,0 +1,990 @@
+name: Agent issue 2747 integrate
+
+permissions:
+  contents: write
+
+on:
+  push:
+    branches:
+      - agent/issue-2747-composite-dataflow-v2
+
+jobs:
+  integrate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: agent/issue-2747-composite-dataflow-v2
+          fetch-depth: 0
+          submodules: true
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: "1.3.11"
+
+      - name: Install locked dependencies
+        run: make install_ci
+
+      - name: Connect persistence, adapters, scheduled waves, and operator contracts
+        run: |
+          python <<'PY'
+          from pathlib import Path
+          import json
+
+          def replace(path: str, old: str, new: str) -> None:
+              target = Path(path)
+              source = target.read_text()
+              if new in source:
+                  return
+              if old not in source:
+                  raise SystemExit(f"anchor not found in {path}: {old[:120]!r}")
+              target.write_text(source.replace(old, new, 1))
+
+          # Deployment-domain persistence contract.
+          domain = "infrastructure/lib/problem-deploy/control-data/domain/deployments.ts"
+          replace(
+              domain,
+              '''/**
+           * [Issue #2527 Slice 1] Deployments aggregate — domain records, mutation outcomes, and the (Slice 2 target) repository port.
+           *''',
+              '''import type {
+            CompositeInputBinding,
+            CompositeOutputDeclaration,
+          } from "@tenkacloud/problem-runtime";
+
+          /**
+           * [Issue #2527 Slice 1] Deployments aggregate — domain records, mutation outcomes, and the (Slice 2 target) repository port.
+           *''',
+          )
+          replace(
+              domain,
+              '''  targetOrdinal: number;
+            runtimeProvider: string;
+            runtimeEngine: string;
+            runtimeEntry: string;
+          };''',
+              '''  targetOrdinal: number;
+            runtimeProvider: string;
+            runtimeEngine: string;
+            runtimeEntry: string;
+            /** [#2747] Deterministic DAG wave and dependency/binding metadata. */
+            compositeExecutionWave?: number;
+            compositeDependsOn?: readonly string[];
+            compositeInputs?: Readonly<Record<string, CompositeInputBinding>>;
+            compositeOutputs?: Readonly<Record<string, CompositeOutputDeclaration>>;
+          };''',
+          )
+
+          repository = "infrastructure/lib/problem-deploy/handlers/deploy-handler/composite-repository.ts"
+          replace(
+              repository,
+              '''import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";''',
+              '''import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+          import type {
+            CompositeInputBinding,
+            CompositeOutputDeclaration,
+          } from "@tenkacloud/problem-runtime";''',
+          )
+          replace(
+              repository,
+              '''  readonly targetOrdinal: number;
+            readonly tenantId: string;''',
+              '''  readonly targetOrdinal: number;
+            readonly executionWave?: number;
+            readonly dependsOn?: readonly string[];
+            readonly inputs?: Readonly<Record<string, CompositeInputBinding>>;
+            readonly outputs?: Readonly<Record<string, CompositeOutputDeclaration>>;
+            readonly tenantId: string;''',
+          )
+          replace(
+              repository,
+              '''    targetOrdinal: input.targetOrdinal,
+              runtimeProvider: input.provider,
+              runtimeEngine: input.engine,
+              runtimeEntry: input.entry,''',
+              '''    targetOrdinal: input.targetOrdinal,
+              runtimeProvider: input.provider,
+              runtimeEngine: input.engine,
+              runtimeEntry: input.entry,
+              ...(input.executionWave !== undefined
+                ? { compositeExecutionWave: input.executionWave }
+                : {}),
+              ...(input.dependsOn ? { compositeDependsOn: [...input.dependsOn] } : {}),
+              ...(input.inputs ? { compositeInputs: input.inputs } : {}),
+              ...(input.outputs ? { compositeOutputs: input.outputs } : {}),''',
+          )
+          replace(
+              repository,
+              '''    existing.runtimeProvider === next.runtimeProvider &&
+              existing.runtimeEngine === next.runtimeEngine &&
+              existing.runtimeEntry === next.runtimeEntry
+            );''',
+              '''    existing.runtimeProvider === next.runtimeProvider &&
+              existing.runtimeEngine === next.runtimeEngine &&
+              existing.runtimeEntry === next.runtimeEntry &&
+              existing.compositeExecutionWave === next.compositeExecutionWave &&
+              JSON.stringify(existing.compositeDependsOn ?? []) ===
+                JSON.stringify(next.compositeDependsOn ?? []) &&
+              JSON.stringify(existing.compositeInputs ?? {}) === JSON.stringify(next.compositeInputs ?? {}) &&
+              JSON.stringify(existing.compositeOutputs ?? {}) === JSON.stringify(next.compositeOutputs ?? {})
+            );''',
+          )
+
+          # Provider-neutral public parameter contract.
+          adapter = "infrastructure/lib/problem-deploy/handlers/shared/runtime/adapter.ts"
+          replace(
+              adapter,
+              '''  /** ADR-008: optional presigned URL for private problem payloads. */
+            readonly challengePayloadUrl?: string;
+          }''',
+              '''  /** ADR-008: optional presigned URL for private problem payloads. */
+            readonly challengePayloadUrl?: string;
+            /** [#2747] Explicit public Composite bindings, keyed by provider parameter name. */
+            readonly parameters?: Readonly<Record<string, string>>;
+          }''',
+          )
+          prepared = "infrastructure/lib/problem-deploy/handlers/deploy-handler/prepared-dispatch.ts"
+          replace(
+              prepared,
+              '''  readonly parameters?: Readonly<Record<string, unknown>>;''',
+              '''  readonly parameters?: Readonly<Record<string, string>>;''',
+          )
+
+          dispatch = "infrastructure/lib/problem-deploy/handlers/deploy-handler/composite-dispatch.ts"
+          replace(
+              dispatch,
+              '''  readonly selectAdapter: (runtime: {
+              provider: string;
+              engine: string;
+              entry: string;
+            }) => Pick<ProblemRuntimeAdapter, "deploy">;''',
+              '''  readonly selectAdapter: (
+              runtime: { provider: string; engine: string; entry: string },
+              target: CompositeTargetDeploymentRecord,
+            ) => Pick<ProblemRuntimeAdapter, "deploy">;''',
+          )
+          replace(
+              dispatch,
+              '''    if (declaration.sensitivity === "sensitive" && binding.allowSensitive !== true) {
+                return {
+                  ok: false,
+                  reason: `binding failed: sensitive output ${binding.fromTarget}.${binding.output} not allowed`,
+                };
+              }''',
+              '''    if (declaration.sensitivity === "sensitive") {
+                return {
+                  ok: false,
+                  reason: `binding failed: sensitive output ${binding.fromTarget}.${binding.output} requires secure transport`,
+                };
+              }''',
+          )
+          replace(
+              dispatch,
+              '''    adapter = deps.selectAdapter({
+                provider: target.runtimeProvider,
+                engine: target.runtimeEngine,
+                entry: target.runtimeEntry,
+              });''',
+              '''    adapter = deps.selectAdapter(
+                {
+                  provider: target.runtimeProvider,
+                  engine: target.runtimeEngine,
+                  entry: target.runtimeEntry,
+                },
+                target,
+              );''',
+          )
+
+          # Runtime metadata validation: public bindings only; provider-owned names are reserved.
+          runtime = "packages/problem-runtime/src/index.ts"
+          replace(
+              runtime,
+              '''  /** Required when the upstream output is classified as sensitive. */
+            readonly allowSensitive?: boolean;
+          }''',
+              '''  /** Sensitive outputs require a separate secret transport and cannot use this map. */
+          }''',
+          )
+          replace(
+              runtime,
+              '''const IDENTIFIER_PARAMETER_PATTERN = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
+          export const MIN_COMPOSITE_TARGETS = 2;''',
+              '''const IDENTIFIER_PARAMETER_PATTERN = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
+          const RESERVED_PARAMETERS: Readonly<Record<string, ReadonlySet<string>>> = {
+            aws: new Set(["NamePrefix", "TenkaCloudAccountId", "ExternalId", "AllowedCidr"]),
+            gcp: new Set([
+              "tenkacloud_name_prefix",
+              "tenkacloud_problem_id",
+              "tenkacloud_team",
+              "tenkacloud_challenge_payload_url",
+            ]),
+            azure: new Set([
+              "tenkacloudNamePrefix",
+              "tenkacloudProblemId",
+              "tenkacloudTeam",
+              "tenkacloudChallengePayloadUrl",
+            ]),
+            sakura: new Set([
+              "TENKACLOUD_NAME_PREFIX",
+              "TENKACLOUD_PROBLEM_ID",
+              "TENKACLOUD_TEAM",
+              "TENKACLOUD_CHALLENGE_PAYLOAD_URL",
+            ]),
+          };
+          export const MIN_COMPOSITE_TARGETS = 2;''',
+          )
+          replace(
+              runtime,
+              '''    if (!expectedParameter.test(parameterName)) {
+                issues.push(
+                  issue(
+                    problemId,
+                    `${path}.${parameterName}`,
+                    `parameter name is invalid for provider ${provider || "<unknown>"}`,
+                  ),
+                );
+              }
+              if (!isRecord(binding)) {''',
+              '''    if (!expectedParameter.test(parameterName)) {
+                issues.push(
+                  issue(
+                    problemId,
+                    `${path}.${parameterName}`,
+                    `parameter name is invalid for provider ${provider || "<unknown>"}`,
+                  ),
+                );
+              }
+              if (RESERVED_PARAMETERS[provider]?.has(parameterName)) {
+                issues.push(
+                  issue(
+                    problemId,
+                    `${path}.${parameterName}`,
+                    `parameter ${parameterName} is reserved by provider ${provider}`,
+                  ),
+                );
+              }
+              if (!isRecord(binding)) {''',
+          )
+          replace(
+              runtime,
+              '''    if (binding.allowSensitive !== undefined && typeof binding.allowSensitive !== "boolean") {
+                issues.push(
+                  issue(problemId, `${path}.${parameterName}.allowSensitive`, "allowSensitive must be boolean"),
+                );
+              }''',
+              '''    if ("allowSensitive" in binding) {
+                issues.push(
+                  issue(
+                    problemId,
+                    `${path}.${parameterName}.allowSensitive`,
+                    "allowSensitive is not supported by ordinary bindings; use a secure secret transport",
+                  ),
+                );
+              }''',
+          )
+          replace(
+              runtime,
+              '''      if (sensitivity === "sensitive" && rawBinding.allowSensitive !== true) {
+                issues.push(
+                  issue(
+                    problemId,
+                    `${path}.inputs.${parameterName}.allowSensitive`,
+                    `sensitive output ${fromTarget}.${output} requires allowSensitive: true`,
+                  ),
+                );
+              }''',
+              '''      if (sensitivity === "sensitive") {
+                issues.push(
+                  issue(
+                    problemId,
+                    `${path}.inputs.${parameterName}.output`,
+                    `sensitive output ${fromTarget}.${output} requires a secure binding transport`,
+                  ),
+                );
+              }''',
+          )
+          replace(
+              runtime,
+              '''    result[parameter] = {
+                fromTarget: record.fromTarget as string,
+                output: record.output as string,
+                ...(record.allowSensitive === true ? { allowSensitive: true } : {}),
+              };''',
+              '''    result[parameter] = {
+                fromTarget: record.fromTarget as string,
+                output: record.output as string,
+              };''',
+          )
+
+          # Provider adapters consume the same typed map; platform-owned values win defensively.
+          gcp = "infrastructure/lib/problem-deploy/handlers/shared/runtime/gcp-infra-manager-adapter.ts"
+          replace(
+              gcp,
+              '''      inputs: {
+                tenkacloud_name_prefix: input.namePrefix,''',
+              '''      inputs: {
+                ...(input.parameters ?? {}),
+                tenkacloud_name_prefix: input.namePrefix,''',
+          )
+          azure = "infrastructure/lib/problem-deploy/handlers/shared/runtime/azure-bicep-adapter.ts"
+          replace(
+              azure,
+              '''      parameters: {
+                tenkacloudNamePrefix: input.namePrefix,''',
+              '''      parameters: {
+                ...(input.parameters ?? {}),
+                tenkacloudNamePrefix: input.namePrefix,''',
+          )
+          sakura = "infrastructure/lib/problem-deploy/handlers/shared/runtime/sakura-apprun-adapter.ts"
+          replace(
+              sakura,
+              '''      env: {
+                TENKACLOUD_NAME_PREFIX: input.namePrefix,''',
+              '''      env: {
+                ...(input.parameters ?? {}),
+                TENKACLOUD_NAME_PREFIX: input.namePrefix,''',
+          )
+          aws = "infrastructure/lib/problem-deploy/handlers/shared/runtime/aws-cfn-adapter.ts"
+          replace(
+              aws,
+              '''      awsAccountId: input.awsAccountId,
+              ...(input.competitorRoleArn ? { competitorRoleArn: input.competitorRoleArn } : {}),''',
+              '''      awsAccountId: input.awsAccountId,
+              parameters: { ...(input.parameters ?? {}) },
+              ...(input.competitorRoleArn ? { competitorRoleArn: input.competitorRoleArn } : {}),''',
+          )
+
+          events = "infrastructure/lib/problem-deploy/handlers/shared/events.ts"
+          replace(
+              events,
+              '''  awsAccountId: z.string().regex(/^\\d{12}$/),
+            /**
+             * Phase 2.2''',
+              '''  awsAccountId: z.string().regex(/^\\d{12}$/),
+            /** [#2747] Public provider parameters resolved from Composite output bindings. */
+            parameters: z.record(z.string(), z.string()).optional(),
+            /**
+             * Phase 2.2''',
+          )
+          retry = "infrastructure/lib/problem-deploy/handlers/deploy-handler/retry.ts"
+          replace(
+              retry,
+              '''    awsAccountId: String(item.awsAccountId ?? ""),
+              ...(item.competitorRoleArn ? { competitorRoleArn: item.competitorRoleArn } : {}),''',
+              '''    awsAccountId: String(item.awsAccountId ?? ""),
+              parameters: {},
+              ...(item.competitorRoleArn ? { competitorRoleArn: item.competitorRoleArn } : {}),''',
+          )
+          bulk = "infrastructure/lib/problem-deploy/handlers/event-handler/bulk-deploy/plan-builder.ts"
+          replace(
+              bulk,
+              '''    awsAccountId,
+              competitorRoleArn: verified.competitorRoleArn,''',
+              '''    awsAccountId,
+              parameters: {},
+              competitorRoleArn: verified.competitorRoleArn,''',
+          )
+
+          # AWS Lambda and CodeBuild paths receive the same public map.
+          create_stack = "infrastructure/lib/problem-deploy/handlers/cfn-deploy-handler/create-stack.ts"
+          replace(
+              create_stack,
+              '''  readonly cfnParameters: Readonly<Record<string, string>>;
+            readonly namePrefix: string;''',
+              '''  readonly cfnParameters: Readonly<Record<string, string>>;
+            readonly boundParameters?: Readonly<Record<string, string>>;
+            readonly namePrefix: string;''',
+          )
+          replace(
+              create_stack,
+              '''  for (const [key, value] of Object.entries(args.cfnParameters)) {
+                if (!key) continue;
+                if (allowedCidrOverride.kind === "configured" && key === "AllowedCidr") continue;
+                const resolved = value === RANDOM_PASSWORD_TOKEN ? args.generateToken() : value;
+                overrides.push({ ParameterKey: key, ParameterValue: resolved });
+              }''',
+              '''  const mergedParameters: Record<string, string> = { ...args.cfnParameters };
+              const reservedBoundParameters = new Set([
+                "NamePrefix",
+                "TenkaCloudAccountId",
+                "ExternalId",
+                "AllowedCidr",
+              ]);
+              for (const [key, value] of Object.entries(args.boundParameters ?? {})) {
+                if (!reservedBoundParameters.has(key)) mergedParameters[key] = value;
+              }
+              for (const [key, value] of Object.entries(mergedParameters)) {
+                if (!key) continue;
+                if (allowedCidrOverride.kind === "configured" && key === "AllowedCidr") continue;
+                const resolved = value === RANDOM_PASSWORD_TOKEN ? args.generateToken() : value;
+                overrides.push({ ParameterKey: key, ParameterValue: resolved });
+              }''',
+          )
+          replace(
+              create_stack,
+              '''    cfnParameters: artifacts.cfnParameters,
+                namePrefix: detail.namePrefix,''',
+              '''    cfnParameters: artifacts.cfnParameters,
+                boundParameters: detail.parameters,
+                namePrefix: detail.namePrefix,''',
+          )
+
+          state_machine = "infrastructure/lib/problem-deploy/deploy-create-state-machine.ts"
+          marker = '''        TENKACLOUD_JOB_ID: { value: JsonPath.stringAt("$.detail.jobId") },'''
+          addition = '''        TENKACLOUD_JOB_ID: { value: JsonPath.stringAt("$.detail.jobId") },
+                TENKACLOUD_BOUND_PARAMETERS_JSON: {
+                  value: JsonPath.jsonToString(JsonPath.objectAt("$.detail.parameters")),
+                },'''
+          source = Path(state_machine).read_text()
+          if "TENKACLOUD_BOUND_PARAMETERS_JSON" not in source:
+              if source.count(marker) != 2:
+                  raise SystemExit("expected two CodeBuild environment anchors")
+              Path(state_machine).write_text(source.replace(marker, addition))
+
+          script = "scripts/deploy-battles.sh"
+          replace(
+              script,
+              '''#   DB_PASSWORD   問題テンプレ (security-battle-royale 等) の DbPassword Parameter に渡す。''',
+              '''#   TENKACLOUD_BOUND_PARAMETERS_JSON  Composite Runtime が解決した public binding の JSON object。
+          #                 metadata.json の cfnParameters より優先するが platform reserved parameter は無視する。
+          #   DB_PASSWORD   問題テンプレ (security-battle-royale 等) の DbPassword Parameter に渡す。''',
+          )
+          replace(
+              script,
+              '''  if [[ ! -f "${metadata}" ]]; then
+                printf '%s\n' "${overrides[@]}"
+                return 0
+              fi
+
+              local key value
+              while IFS=$'\\t' read -r key value; do
+                [[ -z "${key}" ]] && continue
+                if [[ "${value}" == "__RANDOM_PASSWORD__" ]]; then
+                  # /dev/urandom を `tr` で英数字に絞って 32 桁切り出す。`head -c 32` が早期 close した
+                  # 際の SIGPIPE で `set -o pipefail` が pipeline を 141 で fail させることがあるため、
+                  # subshell で pipefail を局所的に無効化する。
+                  value="$(set +o pipefail; LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)"
+                fi
+                overrides+=("${key}=${value}")
+              done < <(jq -r '.cfnParameters // {} | to_entries[] | "\\(.key)\\t\\(.value)"' "${metadata}")''',
+              '''  local bound_parameters_json="${TENKACLOUD_BOUND_PARAMETERS_JSON:-{}}"
+              if ! jq -e 'type == "object" and all(to_entries[]; .value | type == "string")' \
+                <<<"${bound_parameters_json}" >/dev/null; then
+                echo "error: TENKACLOUD_BOUND_PARAMETERS_JSON must be a JSON object of string values" >&2
+                return 1
+              fi
+              local metadata_json='{}'
+              if [[ -f "${metadata}" ]]; then
+                metadata_json="$(cat "${metadata}")"
+              fi
+
+              local key value
+              while IFS=$'\\t' read -r key value; do
+                [[ -z "${key}" ]] && continue
+                if [[ "${value}" == "__RANDOM_PASSWORD__" ]]; then
+                  value="$(set +o pipefail; LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)"
+                fi
+                overrides+=("${key}=${value}")
+              done < <(
+                jq -r --argjson bound "${bound_parameters_json}" '
+                  ($bound | del(.NamePrefix, .TenkaCloudAccountId, .ExternalId, .AllowedCidr)) as $safe_bound
+                  | ((.cfnParameters // {}) + $safe_bound)
+                  | to_entries[]
+                  | "\\(.key)\\t\\(.value)"
+                ' <<<"${metadata_json}"
+              )''',
+          )
+
+          # Dispatch later waves from the existing scheduled reconciliation tick.
+          reconciler = "infrastructure/lib/problem-deploy/handlers/generic-scoring-handler/composite-status-reconciler.ts"
+          replace(
+              reconciler,
+              '''export async function reconcileDeployStatusMaintenance(
+            deps: CompositeParentReconcileDeps,
+            nowIso: string,
+            reconcilePerTarget: () => Promise<void>,
+          ): Promise<void> {
+            await reconcilePerTarget();
+            await reconcileCompositeParents(deps, nowIso);
+            await reconcileCompositeParentTeardowns(deps, nowIso);
+          }''',
+              '''export async function reconcileDeployStatusMaintenance(
+            deps: CompositeParentReconcileDeps,
+            nowIso: string,
+            reconcilePerTarget: () => Promise<void>,
+            dispatchReadyTargets: () => Promise<void> = async () => undefined,
+          ): Promise<void> {
+            await reconcilePerTarget();
+            await dispatchReadyTargets();
+            await reconcileCompositeParents(deps, nowIso);
+            await reconcileCompositeParentTeardowns(deps, nowIso);
+          }''',
+          )
+          scoring_index = "infrastructure/lib/problem-deploy/handlers/generic-scoring-handler/index.ts"
+          replace(
+              scoring_index,
+              '''import { reconcileDeployStatusMaintenance } from "./composite-status-reconciler.js";''',
+              '''import { dispatchCompositeReadyTargets } from "./composite-ready-dispatch.js";
+          import { reconcileDeployStatusMaintenance } from "./composite-status-reconciler.js";''',
+          )
+          replace(
+              scoring_index,
+              '''    : reconcileDeployStatusMaintenance(shared, nowIso, () =>
+                reconcileRuntimeStatuses(shared, nowIso).catch((err) => {
+                  console.warn("[generic-scoring] reconcileRuntimeStatuses failed", {
+                    message: err instanceof Error ? err.message : String(err),
+                  });
+                }),
+              ).catch((err) => {''',
+              '''    : reconcileDeployStatusMaintenance(
+                shared,
+                nowIso,
+                () =>
+                  reconcileRuntimeStatuses(shared, nowIso).catch((err) => {
+                    console.warn("[generic-scoring] reconcileRuntimeStatuses failed", {
+                      message: err instanceof Error ? err.message : String(err),
+                    });
+                  }),
+                () => dispatchCompositeReadyTargets(shared, nowMs),
+              ).catch((err) => {''',
+          )
+
+          # Hide declared sensitive outputs from ordinary aggregate/operator views.
+          outputs = "infrastructure/lib/problem-deploy/handlers/deploy-handler/composite-outputs.ts"
+          replace(
+              outputs,
+              '''    result[target.targetId] = parseStackOutputs(raw);''',
+              '''    const parsed = parseStackOutputs(raw);
+              const declarations = target.compositeOutputs;
+              result[target.targetId] = declarations
+                ? Object.fromEntries(
+                    Object.entries(parsed).filter(
+                      ([key]) => declarations[key]?.sensitivity !== "sensitive",
+                    ),
+                  )
+                : parsed;''',
+          )
+          detail = "infrastructure/lib/problem-deploy/handlers/deploy-handler/composite-detail.ts"
+          replace(
+              detail,
+              '''    const outputs = parseStackOutputs(raw);
+              const dataflow = hasDataflowMetadata(target);''',
+              '''    const parsedOutputs = parseStackOutputs(raw);
+              const outputs = target.compositeOutputs
+                ? Object.fromEntries(
+                    Object.entries(parsedOutputs).filter(
+                      ([key]) => target.compositeOutputs?.[key]?.sensitivity !== "sensitive",
+                    ),
+                  )
+                : parsedOutputs;
+              const dataflow = hasDataflowMetadata(target);''',
+          )
+
+          # Operator API and UI copy dependency state without values.
+          api = "apps/application-admin-console/src/api/deploy-client.ts"
+          replace(
+              api,
+              '''  readonly failureReason?: string;
+            readonly outputs?: Readonly<Record<string, string>>;
+          }''',
+              '''  readonly failureReason?: string;
+            readonly outputs?: Readonly<Record<string, string>>;
+            readonly executionWave?: number;
+            readonly dependencyState?: "ready" | "waiting" | "running" | "complete" | "blocked";
+            readonly dependsOn?: readonly string[];
+            readonly inputParameters?: readonly string[];
+          }''',
+          )
+          translations = {
+              "en": {
+                  "composite_col_dependency_state": "Dependency state",
+                  "composite_col_dependencies": "Depends on",
+                  "composite_col_bound_inputs": "Bound inputs",
+                  "composite_dependency_ready": "Ready",
+                  "composite_dependency_waiting": "Waiting",
+                  "composite_dependency_running": "Running",
+                  "composite_dependency_complete": "Complete",
+                  "composite_dependency_blocked": "Blocked",
+                  "composite_dependency_legacy": "Legacy",
+              },
+              "ja": {
+                  "composite_col_dependency_state": "依存状態",
+                  "composite_col_dependencies": "依存先",
+                  "composite_col_bound_inputs": "バインド入力",
+                  "composite_dependency_ready": "実行可能",
+                  "composite_dependency_waiting": "待機中",
+                  "composite_dependency_running": "実行中",
+                  "composite_dependency_complete": "完了",
+                  "composite_dependency_blocked": "ブロック",
+                  "composite_dependency_legacy": "旧形式",
+              },
+          }
+          for locale, values in translations.items():
+              path = Path(f"apps/application-admin-console/src/i18n/locales/{locale}.json")
+              data = json.loads(path.read_text())
+              section = data["deployment_detail"]
+              section.update(values)
+              path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+
+          # Update tests for fail-closed sensitive bindings and reserved names.
+          runtime_test = "packages/problem-runtime/test/composite-dataflow.test.ts"
+          replace(
+              runtime_test,
+              '''  it("should require an explicit allowSensitive flag for sensitive output propagation", () => {
+                const sensitiveAws = {
+                  ...aws,
+                  inputs: {
+                    SigningKey: { fromTarget: "gcp-service", output: "signing_key" },
+                  },
+                };
+                expect(() => composite([gcp, sensitiveAws])).toThrow(/requires allowSensitive: true/);
+
+                expect(
+                  composite([
+                    gcp,
+                    {
+                      ...sensitiveAws,
+                      inputs: {
+                        SigningKey: {
+                          fromTarget: "gcp-service",
+                          output: "signing_key",
+                          allowSensitive: true,
+                        },
+                      },
+                    },
+                  ]),
+                ).toBeDefined();
+              });''',
+              '''  it("should reject sensitive output propagation through the ordinary binding map", () => {
+                const sensitiveAws = {
+                  ...aws,
+                  inputs: {
+                    SigningKey: { fromTarget: "gcp-service", output: "signing_key" },
+                  },
+                };
+                expect(() => composite([gcp, sensitiveAws])).toThrow(/requires a secure binding transport/);
+                expect(() =>
+                  composite([
+                    gcp,
+                    {
+                      ...sensitiveAws,
+                      inputs: {
+                        SigningKey: {
+                          fromTarget: "gcp-service",
+                          output: "signing_key",
+                          allowSensitive: true,
+                        },
+                      },
+                    },
+                  ]),
+                ).toThrow(/allowSensitive is not supported/);
+              });''',
+          )
+          replace(
+              runtime_test,
+              '''  it("should reject malformed output declarations and bindings", () => {''',
+              '''  it("should reject provider-owned parameter names", () => {
+                expect(() =>
+                  composite([
+                    gcp,
+                    {
+                      ...aws,
+                      inputs: {
+                        NamePrefix: { fromTarget: "gcp-service", output: "project_number" },
+                      },
+                    },
+                  ]),
+                ).toThrow(/parameter NamePrefix is reserved by provider aws/);
+              });
+
+              it("should reject malformed output declarations and bindings", () => {''',
+          )
+          dispatch_test = "infrastructure/test/problem-deploy/composite-dataflow-dispatch.test.ts"
+          replace(
+              dispatch_test,
+              '''  it("should allow explicitly classified sensitive propagation without duplicating completed work", async () => {
+                const harness = makeHarness([
+                  target("gcp-a", 0, {
+                    status: "COMPLETE",
+                    stackOutputs: JSON.stringify({ Secret: "bound-value" }),
+                    compositeOutputs: { Secret: { sensitivity: "sensitive" } },
+                  }),
+                  target("aws-final", 1, {
+                    compositeDependsOn: ["gcp-a"],
+                    compositeInputs: {
+                      SecretParam: { fromTarget: "gcp-a", output: "Secret", allowSensitive: true },
+                    },
+                  }),
+                ]);
+                const deploy = vi.fn(async () => ({ status: "deploying" }));
+                harness.deployByTarget.set("aws-final", deploy);
+
+                await dispatchCompositeDeployment(harness.deps, PARENT_ID);
+                harness.targets.get("aws-final")!.status = "IN_PROGRESS";
+                await dispatchCompositeDeployment(harness.deps, PARENT_ID);
+
+                expect(deploy).toHaveBeenCalledTimes(1);
+                expect(deploy).toHaveBeenCalledWith(
+                  expect.objectContaining({ parameters: { SecretParam: "bound-value" } }),
+                );
+              });''',
+              '''  it("should not duplicate already-active targets when a later wave is reconciled", async () => {
+                const harness = makeHarness([
+                  target("gcp-a", 0, { status: "COMPLETE" }),
+                  target("aws-final", 1, { compositeDependsOn: ["gcp-a"] }),
+                ]);
+                const deploy = vi.fn(async () => ({ status: "deploying" }));
+                harness.deployByTarget.set("aws-final", deploy);
+
+                await dispatchCompositeDeployment(harness.deps, PARENT_ID);
+                harness.targets.get("aws-final")!.status = "IN_PROGRESS";
+                await dispatchCompositeDeployment(harness.deps, PARENT_ID);
+
+                expect(deploy).toHaveBeenCalledTimes(1);
+              });''',
+          )
+          replace(
+              dispatch_test,
+              '''    expect(reason).toBe("binding failed: sensitive output gcp-a.Secret not allowed");''',
+              '''    expect(reason).toBe("binding failed: sensitive output gcp-a.Secret requires secure transport");''',
+          )
+
+          # Cross-provider adapter and AWS transport tests.
+          Path("infrastructure/test/problem-deploy/runtime-adapter-parameters.test.ts").write_text(r'''import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
+          import { describe, expect, it, vi } from "vitest";
+          import { AwsCloudFormationRuntimeAdapter } from "../../lib/problem-deploy/handlers/shared/runtime/aws-cfn-adapter";
+          import { AzureBicepRuntimeAdapter } from "../../lib/problem-deploy/handlers/shared/runtime/azure-bicep-adapter";
+          import { GcpInfraManagerRuntimeAdapter } from "../../lib/problem-deploy/handlers/shared/runtime/gcp-infra-manager-adapter";
+          import { SakuraAppRunRuntimeAdapter } from "../../lib/problem-deploy/handlers/shared/runtime/sakura-apprun-adapter";
+          import { buildParameterOverrides } from "../../lib/problem-deploy/handlers/cfn-deploy-handler/create-stack";
+
+          const input = {
+            jobId: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+            correlationId: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+            tenantId: "tenant-a",
+            problemId: "cross-cloud",
+            problemDir: "problems/challenges/cross-cloud",
+            teamSlug: "alpha",
+            namePrefix: "tc-cross-cloud-alpha",
+            region: "ap-northeast-1",
+            awsAccountId: "123456789012",
+            parameters: { Endpoint: "https://upstream.example" },
+          } as const;
+
+          describe("runtime adapter public parameters (#2747)", () => {
+            it("should pass bindings to GCP, Azure, and Sakura while preserving platform-owned values", async () => {
+              const gcpUpsert = vi.fn(async () => undefined);
+              const gcp = new GcpInfraManagerRuntimeAdapter(
+                {
+                  getCredential: async () => ({ accessToken: "token" }),
+                  client: () => ({
+                    upsertDeployment: gcpUpsert,
+                    getDeployment: vi.fn(),
+                    deleteDeployment: vi.fn(),
+                  }),
+                },
+                { provider: "gcp", engine: "infra-manager", entry: "gs://bucket/root.zip" },
+              );
+              await gcp.deploy(input);
+              expect(gcpUpsert).toHaveBeenCalledWith(
+                expect.objectContaining({
+                  inputs: expect.objectContaining({
+                    Endpoint: "https://upstream.example",
+                    tenkacloud_name_prefix: input.namePrefix,
+                  }),
+                }),
+              );
+
+              const azureUpsert = vi.fn(async () => undefined);
+              const azure = new AzureBicepRuntimeAdapter(
+                {
+                  getCredential: async () => ({ accessToken: "token" }),
+                  client: () => ({
+                    upsertStack: azureUpsert,
+                    getStack: vi.fn(),
+                    deleteStack: vi.fn(),
+                  }),
+                },
+                { provider: "azure", engine: "bicep", entry: "https://template.example/arm.json" },
+              );
+              await azure.deploy(input);
+              expect(azureUpsert).toHaveBeenCalledWith(
+                expect.objectContaining({
+                  parameters: expect.objectContaining({
+                    Endpoint: "https://upstream.example",
+                    tenkacloudNamePrefix: input.namePrefix,
+                  }),
+                }),
+              );
+
+              const sakuraUpsert = vi.fn(async () => undefined);
+              const sakura = new SakuraAppRunRuntimeAdapter(
+                {
+                  getApiKey: async () => ({ accessToken: "token", accessTokenSecret: "secret" }),
+                  client: () => ({
+                    upsertApplication: sakuraUpsert,
+                    getApplication: vi.fn(),
+                    deleteApplication: vi.fn(),
+                  }),
+                },
+                { provider: "sakura", engine: "apprun", entry: "registry.example/app:latest" },
+              );
+              await sakura.deploy(input);
+              expect(sakuraUpsert).toHaveBeenCalledWith(
+                expect.objectContaining({
+                  env: expect.objectContaining({
+                    Endpoint: "https://upstream.example",
+                    TENKACLOUD_NAME_PREFIX: input.namePrefix,
+                  }),
+                }),
+              );
+            });
+
+            it("should include public bindings in the AWS event detail", async () => {
+              const send = vi.fn(async () => ({}));
+              const adapter = new AwsCloudFormationRuntimeAdapter({
+                events: { send } as never,
+                eventBusName: "bus",
+              });
+              await adapter.deploy(input);
+              const command = send.mock.calls[0]?.[0];
+              expect(command).toBeInstanceOf(PutEventsCommand);
+              const detail = JSON.parse(String(command.input.Entries?.[0]?.Detail));
+              expect(detail.parameters).toEqual(input.parameters);
+            });
+
+            it("should let public bindings override authored defaults but not platform parameters", () => {
+              const parameters = buildParameterOverrides({
+                cfnParameters: { Endpoint: "default", NamePrefix: "metadata-value" },
+                boundParameters: { Endpoint: "bound", NamePrefix: "attacker-value" },
+                namePrefix: "tc-cross-cloud-alpha",
+                tenkaCloudAccountId: "123456789012",
+                externalId: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+                generateToken: () => "token",
+              });
+              expect(parameters.filter(({ ParameterKey }) => ParameterKey === "Endpoint")).toEqual([
+                { ParameterKey: "Endpoint", ParameterValue: "bound" },
+              ]);
+              expect(parameters.filter(({ ParameterKey }) => ParameterKey === "NamePrefix")).toEqual([
+                { ParameterKey: "NamePrefix", ParameterValue: "tc-cross-cloud-alpha" },
+                { ParameterKey: "NamePrefix", ParameterValue: "metadata-value" },
+              ]);
+            });
+          });
+          '''.replace("          ", ""))
+
+          state_test = "infrastructure/test/problem-deploy/deploy-create-state-machine.test.ts"
+          replace(
+              state_test,
+              '''    expect(asJson).toContain('"Name":"PROBLEM_EXTERNAL_ID"');
+              });''',
+              '''    expect(asJson).toContain('"Name":"PROBLEM_EXTERNAL_ID"');
+                expect(asJson).toContain('"Name":"TENKACLOUD_BOUND_PARAMETERS_JSON"');
+                expect(asJson).toContain('States.JsonToString($.detail.parameters)');
+              });''',
+          )
+          Path("infrastructure/test/problem-deploy/composite-sensitive-outputs.test.ts").write_text(r'''import { describe, expect, it, vi } from "vitest";
+          import { buildCompositeDetail } from "../../lib/problem-deploy/handlers/deploy-handler/composite-detail";
+          import { collectCompositeOutputs } from "../../lib/problem-deploy/handlers/deploy-handler/composite-outputs";
+          import * as repository from "../../lib/problem-deploy/handlers/deploy-handler/composite-repository";
+
+          describe("Composite sensitive output projection (#2747)", () => {
+            it("should omit declared sensitive values from aggregate and operator views", async () => {
+              vi.spyOn(repository, "listCompositeTargets").mockResolvedValue([
+                {
+                  jobId: "target-1",
+                  parentDeploymentId: "parent-1",
+                  targetId: "source",
+                  targetOrdinal: 0,
+                  tenantId: "tenant",
+                  problemId: "problem",
+                  awsAccountId: "",
+                  region: "",
+                  teamName: "team",
+                  namePrefix: "tc-problem-team-source",
+                  status: "COMPLETE",
+                  runtimeProvider: "gcp",
+                  runtimeEngine: "infra-manager",
+                  runtimeEntry: "gs://bucket/root.zip",
+                  stackOutputs: JSON.stringify({ Endpoint: "https://public", Secret: "hidden" }),
+                  compositeOutputs: {
+                    Endpoint: { sensitivity: "public" },
+                    Secret: { sensitivity: "sensitive" },
+                  },
+                  createdAt: "2026-07-22T00:00:00.000Z",
+                  updatedAt: "2026-07-22T00:00:00.000Z",
+                  expiresAt: 0,
+                },
+              ] as never);
+              const deps = {} as never;
+              await expect(collectCompositeOutputs(deps, "parent-1")).resolves.toEqual({
+                source: { Endpoint: "https://public" },
+              });
+              const detail = await buildCompositeDetail(deps, "parent-1");
+              expect(detail.targets[0]?.outputs).toEqual({ Endpoint: "https://public" });
+            });
+          });
+          '''.replace("          ", ""))
+          PY
+
+          bun x biome check --write \
+            packages/problem-runtime/src/index.ts \
+            packages/problem-runtime/test/composite-dataflow.test.ts \
+            infrastructure/lib/problem-deploy/control-data/domain/deployments.ts \
+            infrastructure/lib/problem-deploy/handlers/deploy-handler/composite-repository.ts \
+            infrastructure/lib/problem-deploy/handlers/deploy-handler/composite-dispatch.ts \
+            infrastructure/lib/problem-deploy/handlers/deploy-handler/prepared-dispatch.ts \
+            infrastructure/lib/problem-deploy/handlers/deploy-handler/composite-outputs.ts \
+            infrastructure/lib/problem-deploy/handlers/deploy-handler/composite-detail.ts \
+            infrastructure/lib/problem-deploy/handlers/shared/runtime/adapter.ts \
+            infrastructure/lib/problem-deploy/handlers/shared/runtime/aws-cfn-adapter.ts \
+            infrastructure/lib/problem-deploy/handlers/shared/runtime/gcp-infra-manager-adapter.ts \
+            infrastructure/lib/problem-deploy/handlers/shared/runtime/azure-bicep-adapter.ts \
+            infrastructure/lib/problem-deploy/handlers/shared/runtime/sakura-apprun-adapter.ts \
+            infrastructure/lib/problem-deploy/handlers/shared/events.ts \
+            infrastructure/lib/problem-deploy/handlers/deploy-handler/retry.ts \
+            infrastructure/lib/problem-deploy/handlers/event-handler/bulk-deploy/plan-builder.ts \
+            infrastructure/lib/problem-deploy/handlers/cfn-deploy-handler/create-stack.ts \
+            infrastructure/lib/problem-deploy/deploy-create-state-machine.ts \
+            infrastructure/lib/problem-deploy/handlers/generic-scoring-handler/composite-status-reconciler.ts \
+            infrastructure/lib/problem-deploy/handlers/generic-scoring-handler/index.ts \
+            apps/application-admin-console/src/api/deploy-client.ts \
+            apps/application-admin-console/src/pages/deployment-detail/CompositeTargetsSection.tsx \
+            infrastructure/test/problem-deploy/runtime-adapter-parameters.test.ts \
+            infrastructure/test/problem-deploy/composite-dataflow-dispatch.test.ts \
+            infrastructure/test/problem-deploy/composite-sensitive-outputs.test.ts \
+            infrastructure/test/problem-deploy/deploy-create-state-machine.test.ts
+
+      - name: Run focused validation
+        run: |
+          bun run --filter @tenkacloud/problem-runtime test
+          bun run --filter @tenkacloud/problem-runtime typecheck
+          bun run --filter @TenkaCloud/infrastructure test \
+            test/problem-deploy/composite-dataflow-dispatch.test.ts \
+            test/problem-deploy/composite-sensitive-outputs.test.ts \
+            test/problem-deploy/runtime-adapter-parameters.test.ts \
+            test/problem-deploy/composite-materialization.test.ts \
+            test/problem-deploy/composite-dispatch.test.ts \
+            test/problem-deploy/composite-detail.test.ts \
+            test/problem-deploy/composite-outputs.test.ts \
+            test/problem-deploy/composite-status-reconciler.test.ts \
+            test/problem-deploy/deploy-create-state-machine.test.ts \
+            test/problem-deploy/cfn-deploy-handler.test.ts
+          bun run --filter @TenkaCloud/infrastructure typecheck
+          bun run --filter @TenkaCloud/application-admin-console typecheck
+          bun run --filter @TenkaCloud/application-admin-console test \
+            test/pages/deployment-detail/CompositeTargetsSection.test.tsx
+          bun run scripts/quality/check-duplication.ts
+
+      - name: Remove helper and commit product slice
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm -f .github/workflows/agent-issue-2747-integrate.yml
+          git add packages infrastructure apps scripts
+          git commit -m "feat(composite): wire public target bindings through runtime adapters"
+          git pull --rebase origin agent/issue-2747-composite-dataflow-v2
+          git push origin HEAD:agent/issue-2747-composite-dataflow-v2
