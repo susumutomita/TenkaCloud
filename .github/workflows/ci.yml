@@ -254,6 +254,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .agent/issue-2746-coverage.log
+          git add -f .agent/issue-2746-coverage.log
           git commit -m "chore(agent): capture Sakura infrastructure coverage failure"
           git push origin HEAD:agent/issue-2746-sakura-hardening
