@@ -1,0 +1,143 @@
+name: Agent issue 2748 dedupe
+
+permissions:
+  contents: write
+
+on:
+  push:
+    branches:
+      - agent/issue-2748-runtime-capability-evidence
+
+jobs:
+  dedupe:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: agent/issue-2748-runtime-capability-evidence
+          fetch-depth: 0
+          submodules: true
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: "1.3.11"
+
+      - name: Install locked dependencies
+        run: make install_ci
+
+      - name: Reference the capability source instead of serializing a duplicate
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          def replace(path: str, old: str, new: str) -> None:
+              target = Path(path)
+              source = target.read_text()
+              if old not in source:
+                  raise SystemExit(f"anchor not found in {path}: {old[:100]!r}")
+              target.write_text(source.replace(old, new, 1))
+
+          generator = "apps/developer-portal/scripts/generate-reference.ts"
+          replace(
+              generator,
+              '''export interface RuntimeCapabilityRow {
+            readonly provider: string;
+            readonly engine: string;
+            readonly recognized: boolean;
+            readonly adapterWired: boolean;
+            readonly executable: boolean;
+            readonly liveVerified: boolean;
+            readonly executionMode: "cloud" | "local";
+            readonly selection: "default" | "feature-gated" | "local-only";
+            readonly maturity: ReferenceMaturity;
+            readonly blockingIssues: readonly number[];
+            readonly evidence: string;
+          }''',
+              '''export type RuntimeCapabilityRow = RuntimeCapabilityDeclaration;''',
+          )
+          replace(
+              generator,
+              '''export function renderReferenceModule(data: ReferenceData): string {
+            const raw = `${GENERATED_HEADER}\n${TYPE_DECLARATIONS}\nexport const REFERENCE_DATA: ReferenceData = ${JSON.stringify(
+              data,
+              null,
+              2,
+            )} as const;\n`;
+            return formatWithBiome(raw);
+          }''',
+              '''export function renderReferenceModule(data: ReferenceData): string {
+            const runtimeMatrixSentinel = "__RUNTIME_CAPABILITIES__";
+            const serialized = JSON.stringify(
+              { ...data, runtimeMatrix: runtimeMatrixSentinel },
+              null,
+              2,
+            ).replace(`"${runtimeMatrixSentinel}"`, "RUNTIME_CAPABILITIES");
+            const raw = `${GENERATED_HEADER}\nimport { RUNTIME_CAPABILITIES, type RuntimeCapabilityDeclaration } from "@tenkacloud/problem-runtime/capabilities";\n\n${TYPE_DECLARATIONS}\nexport const REFERENCE_DATA: ReferenceData = ${serialized} as const;\n`;
+            return formatWithBiome(raw);
+          }''',
+          )
+
+          test = "apps/developer-portal/scripts/generate-reference.test.ts"
+          replace(
+              test,
+              '''import { describe, expect, it } from "vitest";''',
+              '''import { RUNTIME_CAPABILITIES } from "@tenkacloud/problem-runtime/capabilities";
+          import { describe, expect, it } from "vitest";''',
+          )
+          replace(
+              test,
+              '''  it("should derive the runtime matrix from the real provider declarations", () => {
+            const generated = generateReferenceModule();
+            // AWS/CloudFormation is the one executable, stable runtime; the reserved roadmap
+            // providers and the local container runtime are all present. Keys are unquoted
+            // because the generated module is Biome-formatted.
+            expect(generated).toContain('provider: "aws"');
+            expect(generated).toContain('engine: "cloudformation"');
+            expect(generated).toContain('provider: "sakura"');
+            expect(generated).toContain('provider: "azure"');
+            expect(generated).toContain('provider: "gcp"');
+          });''',
+              '''  it("should reference the runtime capability source instead of serializing a copy", () => {
+            const generated = generateReferenceModule();
+            expect(generated).toContain(
+              'import { RUNTIME_CAPABILITIES, type RuntimeCapabilityDeclaration } from "@tenkacloud/problem-runtime/capabilities";',
+            );
+            expect(generated).toContain("runtimeMatrix: RUNTIME_CAPABILITIES");
+            expect(RUNTIME_CAPABILITIES.map(({ provider, engine }) => `${provider}/${engine}`)).toEqual([
+              "aws/cloudformation",
+              "azure/bicep",
+              "docker/compose",
+              "gcp/infra-manager",
+              "sakura/apprun",
+            ]);
+          });''',
+          )
+          PY
+
+          bun run --filter @TenkaCloud/developer-portal generate:reference
+          bun x biome check --write \
+            packages/problem-runtime/src/capabilities.ts \
+            apps/developer-portal/scripts/generate-reference.ts \
+            apps/developer-portal/scripts/generate-reference.test.ts \
+            apps/developer-portal/src/content/reference-data.ts
+
+      - name: Run focused validation
+        run: |
+          bun run --filter @tenkacloud/problem-runtime test
+          bun run --filter @tenkacloud/problem-runtime typecheck
+          bun run --filter @TenkaCloud/developer-portal test
+          bun run --filter @TenkaCloud/developer-portal typecheck
+          bun run scripts/quality/check-duplication.ts
+
+      - name: Remove helper and commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm -f .github/workflows/agent-issue-2748-dedupe.yml
+          git add packages/problem-runtime apps/developer-portal
+          git commit -m "refactor(runtime): reuse capability evidence in generated docs"
+          git pull --rebase origin agent/issue-2748-runtime-capability-evidence
+          git push origin HEAD:agent/issue-2748-runtime-capability-evidence
