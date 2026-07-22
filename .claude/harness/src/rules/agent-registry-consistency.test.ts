@@ -32,8 +32,7 @@ function entry(overrides: Record<string, unknown> = {}) {
 
 function fixture(options: FixtureOptions = {}) {
   const files: Record<string, string> = {
-    [PRINCIPLES_PATH]:
-      options.principles ?? "# Principles\n\n### `PRINCIPLE_SAMPLE`\n\nSample.\n",
+    [PRINCIPLES_PATH]: options.principles ?? "# Principles\n\n### `PRINCIPLE_SAMPLE`\n\nSample.\n",
     [ENFORCEMENT_DOC_PATH]:
       options.enforcement ??
       "# Enforcement\n\n| Rule ID | Principle | Scope | Severity |\n| --- | --- | --- | --- |\n| `sample-rule` | `PRINCIPLE_SAMPLE` | sample | error |\n",
@@ -55,7 +54,9 @@ function fixture(options: FixtureOptions = {}) {
 }
 
 function findingMatches(options: FixtureOptions, match: string): boolean {
-  return agentRegistryConsistency.check(fixture(options)).some((finding) => finding.match === match);
+  return agentRegistryConsistency
+    .check(fixture(options))
+    .some((finding) => finding.match === match);
 }
 
 describe("agentRegistryConsistency", () => {
