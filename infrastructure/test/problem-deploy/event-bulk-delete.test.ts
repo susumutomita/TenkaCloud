@@ -386,7 +386,6 @@ describe("bulkTeardownEvent (non-AWS runtime via adapter, #2571)", () => {
     ddbSend.mockResolvedValue({}); // DELETING transition + Event TEARDOWN update
     const appRunFetch = vi
       .fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "user" }), { status: 200 }))
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ data: [{ id: "a1", name: "tc-p-team-1" }] }), {
           status: 200,
@@ -403,7 +402,7 @@ describe("bulkTeardownEvent (non-AWS runtime via adapter, #2571)", () => {
     // No EventBridge publish for this row — it never had a CFn stack to delete.
     expect(eventsSend).not.toHaveBeenCalled();
     expect(ssmSend).toHaveBeenCalled();
-    expect(appRunFetch.mock.calls[2]?.[1]?.method).toBe("DELETE");
+    expect(appRunFetch.mock.calls[1]?.[1]?.method).toBe("DELETE");
   });
 
   it("should compensate DELETING -> FAILED, count as failed, and emit a loud trace when adapter.destroy throws", async () => {
@@ -414,10 +413,7 @@ describe("bulkTeardownEvent (non-AWS runtime via adapter, #2571)", () => {
     ddbSend.mockResolvedValue({});
     vi.stubGlobal(
       "fetch",
-      vi
-        .fn()
-        .mockResolvedValueOnce(new Response(JSON.stringify({ id: "user" }), { status: 200 }))
-        .mockResolvedValueOnce(new Response("boom", { status: 500 })), // findByName list fails
+      vi.fn().mockResolvedValueOnce(new Response("boom", { status: 500 })), // findByName list fails
     );
 
     const out = await bulkTeardownEvent(shared, "tenant-acme", "EV1", NOW_MS);
@@ -510,7 +506,6 @@ describe("bulkTeardownEvent (non-AWS runtime via adapter, #2571)", () => {
     ddbSend.mockResolvedValue({});
     const appRunFetch = vi
       .fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "user" }), { status: 200 }))
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ data: [{ id: "a1", name: "tc-p-team-1" }] }), {
           status: 200,
@@ -540,7 +535,6 @@ describe("bulkTeardownEvent (non-AWS runtime via adapter, #2571)", () => {
     // through cleanly instead of a `String(undefined)` crash.
     const appRunFetch = vi
       .fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "user" }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ data: [] }), { status: 200 }));
     vi.stubGlobal("fetch", appRunFetch);
 
@@ -551,7 +545,7 @@ describe("bulkTeardownEvent (non-AWS runtime via adapter, #2571)", () => {
     });
     expect(eventsSend).not.toHaveBeenCalled();
     expect(ssmSend).toHaveBeenCalled();
-    expect(appRunFetch).toHaveBeenCalledTimes(2);
+    expect(appRunFetch).toHaveBeenCalledTimes(1);
   });
 
   it("should treat a row with a partial runtime combo (provider set, engine/entry missing) as the legacy AWS/CFn path", async () => {
@@ -626,7 +620,6 @@ describe("bulkTeardownEvent (non-AWS runtime via adapter, #2571)", () => {
     ddbSend.mockResolvedValue({});
     const appRunFetch = vi
       .fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "user" }), { status: 200 }))
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ data: [{ id: "a1", name: "tc-p-team-1" }] }), {
           status: 200,
