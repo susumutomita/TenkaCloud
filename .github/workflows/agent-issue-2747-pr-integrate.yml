@@ -1,0 +1,137 @@
+name: Agent issue 2747 PR integrate
+
+permissions:
+  contents: write
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  integrate:
+    if: >-
+      github.event.pull_request.head.ref == 'agent/issue-2747-composite-dataflow-v2' &&
+      github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the PR branch
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: agent/issue-2747-composite-dataflow-v2
+          fetch-depth: 0
+          submodules: true
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: "1.3.11"
+
+      - name: Install locked dependencies
+        run: make install_ci
+
+      - name: Apply and validate product integration
+        id: integrate
+        run: |
+          set +e
+          exec > >(tee /tmp/issue-2747-integrate.log) 2>&1
+          sed -n "/python <<'PY'/,/^          PY$/p" \
+            .github/workflows/agent-issue-2747-integrate.yml \
+            | sed '1d;$d;s/^          //' > /tmp/issue-2747-integrate.py
+          python /tmp/issue-2747-integrate.py
+          status=$?
+          if [ "$status" -eq 0 ]; then
+            bun x biome check --write \
+              packages/problem-runtime/src/index.ts \
+              packages/problem-runtime/test/composite-dataflow.test.ts \
+              infrastructure/lib/problem-deploy/control-data/domain/deployments.ts \
+              infrastructure/lib/problem-deploy/handlers/deploy-handler/composite-repository.ts \
+              infrastructure/lib/problem-deploy/handlers/deploy-handler/composite-dispatch.ts \
+              infrastructure/lib/problem-deploy/handlers/deploy-handler/prepared-dispatch.ts \
+              infrastructure/lib/problem-deploy/handlers/deploy-handler/composite-outputs.ts \
+              infrastructure/lib/problem-deploy/handlers/deploy-handler/composite-detail.ts \
+              infrastructure/lib/problem-deploy/handlers/shared/runtime/adapter.ts \
+              infrastructure/lib/problem-deploy/handlers/shared/runtime/aws-cfn-adapter.ts \
+              infrastructure/lib/problem-deploy/handlers/shared/runtime/gcp-infra-manager-adapter.ts \
+              infrastructure/lib/problem-deploy/handlers/shared/runtime/azure-bicep-adapter.ts \
+              infrastructure/lib/problem-deploy/handlers/shared/runtime/sakura-apprun-adapter.ts \
+              infrastructure/lib/problem-deploy/handlers/shared/events.ts \
+              infrastructure/lib/problem-deploy/handlers/deploy-handler/retry.ts \
+              infrastructure/lib/problem-deploy/handlers/event-handler/bulk-deploy/plan-builder.ts \
+              infrastructure/lib/problem-deploy/handlers/cfn-deploy-handler/create-stack.ts \
+              infrastructure/lib/problem-deploy/deploy-create-state-machine.ts \
+              infrastructure/lib/problem-deploy/handlers/generic-scoring-handler/composite-status-reconciler.ts \
+              infrastructure/lib/problem-deploy/handlers/generic-scoring-handler/index.ts \
+              apps/application-admin-console/src/api/deploy-client.ts \
+              apps/application-admin-console/src/pages/deployment-detail/CompositeTargetsSection.tsx \
+              infrastructure/test/problem-deploy/runtime-adapter-parameters.test.ts \
+              infrastructure/test/problem-deploy/composite-dataflow-dispatch.test.ts \
+              infrastructure/test/problem-deploy/composite-sensitive-outputs.test.ts \
+              infrastructure/test/problem-deploy/deploy-create-state-machine.test.ts
+            status=$?
+          fi
+          if [ "$status" -eq 0 ]; then
+            bun run --filter @tenkacloud/problem-runtime test
+            status=$?
+          fi
+          if [ "$status" -eq 0 ]; then
+            bun run --filter @tenkacloud/problem-runtime typecheck
+            status=$?
+          fi
+          if [ "$status" -eq 0 ]; then
+            bun run --filter @TenkaCloud/infrastructure test \
+              test/problem-deploy/composite-dataflow-dispatch.test.ts \
+              test/problem-deploy/composite-sensitive-outputs.test.ts \
+              test/problem-deploy/runtime-adapter-parameters.test.ts \
+              test/problem-deploy/composite-materialization.test.ts \
+              test/problem-deploy/composite-dispatch.test.ts \
+              test/problem-deploy/composite-detail.test.ts \
+              test/problem-deploy/composite-outputs.test.ts \
+              test/problem-deploy/composite-status-reconciler.test.ts \
+              test/problem-deploy/deploy-create-state-machine.test.ts \
+              test/problem-deploy/cfn-deploy-handler.test.ts
+            status=$?
+          fi
+          if [ "$status" -eq 0 ]; then
+            bun run --filter @TenkaCloud/infrastructure typecheck
+            status=$?
+          fi
+          if [ "$status" -eq 0 ]; then
+            bun run --filter @TenkaCloud/application-admin-console typecheck
+            status=$?
+          fi
+          if [ "$status" -eq 0 ]; then
+            bun run --filter @TenkaCloud/application-admin-console test \
+              test/pages/deployment-detail/CompositeTargetsSection.test.tsx
+            status=$?
+          fi
+          if [ "$status" -eq 0 ]; then
+            bun run scripts/quality/check-duplication.ts
+            status=$?
+          fi
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Commit product slice or diagnostics
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ "${{ steps.integrate.outputs.status }}" = "0" ]; then
+            git rm -f .github/workflows/agent-issue-2747-integrate.yml
+            git rm -f .github/workflows/agent-issue-2747-pr-integrate.yml
+            git rm -f .agent/trigger-2747-v2.txt || true
+            git add packages infrastructure apps scripts
+            git commit -m "feat(composite): wire public target bindings through runtime adapters"
+          else
+            git reset --hard HEAD
+            mkdir -p .agent
+            {
+              echo "exit_status=${{ steps.integrate.outputs.status }}"
+              echo
+              tail -n 1200 /tmp/issue-2747-integrate.log
+            } > .agent/issue-2747-integrate.log
+            git add -f .agent/issue-2747-integrate.log
+            git commit -m "chore(agent): capture Composite integration diagnostics"
+          fi
+          git pull --rebase origin agent/issue-2747-composite-dataflow-v2
+          git push origin HEAD:agent/issue-2747-composite-dataflow-v2
