@@ -34,10 +34,6 @@ function makeClient(fetchImpl: ReturnType<typeof vi.fn>) {
   });
 }
 
-function readyUser(fetchImpl = vi.fn()): ReturnType<typeof vi.fn> {
-  return fetchImpl.mockResolvedValueOnce(jsonResponse({ id: "user" }));
-}
-
 function expectSafeError(error: unknown, expected: string): void {
   expect(error).toBeInstanceOf(Error);
   expect((error as Error).message).toBe(expected);
@@ -45,9 +41,10 @@ function expectSafeError(error: unknown, expected: string): void {
 }
 
 describe("sakura-apprun-rest-client (#2746)", () => {
-  it("should bootstrap the AppRun user once and cache the result", async () => {
+  it("should bootstrap the AppRun user only after a missing list and cache the result", async () => {
     const fetchImpl = vi
       .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 404 }))
       .mockResolvedValueOnce(new Response(null, { status: 404 }))
       .mockResolvedValueOnce(jsonResponse({ id: "user" }, 201))
       .mockResolvedValueOnce(listResponse([]))
@@ -58,17 +55,19 @@ describe("sakura-apprun-rest-client (#2746)", () => {
     await expect(client.deleteApplication("missing")).resolves.toBeUndefined();
 
     expect(fetchImpl.mock.calls.map((call) => call[0])).toEqual([
+      `${BASE_URL}${LIST_PAGE_1}`,
       `${BASE_URL}/user`,
       `${BASE_URL}/user`,
       `${BASE_URL}${LIST_PAGE_1}`,
       `${BASE_URL}${LIST_PAGE_1}`,
     ]);
-    expect(fetchImpl.mock.calls[1]?.[1].method).toBe("POST");
+    expect(fetchImpl.mock.calls[2]?.[1].method).toBe("POST");
   });
 
   it("should accept a concurrent user-create conflict", async () => {
     const fetchImpl = vi
       .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 404 }))
       .mockResolvedValueOnce(new Response(null, { status: 404 }))
       .mockResolvedValueOnce(new Response(null, { status: 409 }))
       .mockResolvedValueOnce(listResponse([]));
@@ -77,13 +76,17 @@ describe("sakura-apprun-rest-client (#2746)", () => {
   });
 
   it("should reject unexpected user lookup and creation outcomes", async () => {
-    const lookupConflict = vi.fn().mockResolvedValueOnce(new Response(null, { status: 409 }));
+    const lookupConflict = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 404 }))
+      .mockResolvedValueOnce(new Response(null, { status: 409 }));
     await expect(makeClient(lookupConflict).getApplication("missing")).rejects.toThrow(
       "Sakura AppRun API GET /user conflicted",
     );
 
     const createNotFound = vi
       .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 404 }))
       .mockResolvedValueOnce(new Response(null, { status: 404 }))
       .mockResolvedValueOnce(new Response(null, { status: 404 }));
     await expect(makeClient(createNotFound).getApplication("missing")).rejects.toThrow(
@@ -94,7 +97,9 @@ describe("sakura-apprun-rest-client (#2746)", () => {
   it("should reset failed user initialization so a later call can retry", async () => {
     const fetchImpl = vi
       .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 404 }))
       .mockRejectedValueOnce(new Error(`Authorization: ${EXPECTED_AUTH}`))
+      .mockResolvedValueOnce(new Response(null, { status: 404 }))
       .mockResolvedValueOnce(jsonResponse({ id: "user" }))
       .mockResolvedValueOnce(listResponse([]));
     const client = makeClient(fetchImpl);
@@ -103,11 +108,12 @@ describe("sakura-apprun-rest-client (#2746)", () => {
       "Sakura AppRun API GET /user request failed",
     );
     await expect(client.getApplication("missing")).resolves.toBeUndefined();
-    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(fetchImpl).toHaveBeenCalledTimes(5);
   });
 
   it("should POST a new application with supported resources and deterministic env ordering", async () => {
-    const fetchImpl = readyUser()
+    const fetchImpl = vi
+      .fn()
       .mockResolvedValueOnce(listResponse([]))
       .mockResolvedValueOnce(jsonResponse({ id: "app-1" }, 201));
 
@@ -117,9 +123,9 @@ describe("sakura-apprun-rest-client (#2746)", () => {
       env: { Z_VALUE: "z", A_VALUE: "a" },
     });
 
-    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
     expect(fetchImpl.mock.calls[0]?.[1].headers.Authorization).toBe(EXPECTED_AUTH);
-    const [createUrl, createInit] = fetchImpl.mock.calls[2] ?? [];
+    const [createUrl, createInit] = fetchImpl.mock.calls[1] ?? [];
     expect(createUrl).toBe(`${BASE_URL}/applications`);
     expect(createInit.method).toBe("POST");
     const body = JSON.parse(String(createInit.body));
@@ -145,7 +151,8 @@ describe("sakura-apprun-rest-client (#2746)", () => {
   });
 
   it("should PATCH a deterministic existing id without including immutable name", async () => {
-    const fetchImpl = readyUser()
+    const fetchImpl = vi
+      .fn()
       .mockResolvedValueOnce(
         listResponse([
           { id: "app-z", name: "p-team" },
@@ -156,7 +163,7 @@ describe("sakura-apprun-rest-client (#2746)", () => {
 
     await makeClient(fetchImpl).upsertApplication({ name: "p-team", image: "image:v2", env: {} });
 
-    const [patchUrl, patchInit] = fetchImpl.mock.calls[2] ?? [];
+    const [patchUrl, patchInit] = fetchImpl.mock.calls[1] ?? [];
     expect(patchUrl).toBe(`${BASE_URL}/applications/app-a`);
     expect(patchInit.method).toBe("PATCH");
     const body = JSON.parse(String(patchInit.body));
@@ -169,15 +176,16 @@ describe("sakura-apprun-rest-client (#2746)", () => {
       id: `other-${index}`,
       name: `other-${index}`,
     }));
-    const fetchImpl = readyUser()
+    const fetchImpl = vi
+      .fn()
       .mockResolvedValueOnce(listResponse(firstPage, 101))
       .mockResolvedValueOnce(listResponse([{ id: "target", name: "p-team" }], 101))
       .mockResolvedValueOnce(jsonResponse({ id: "target" }));
 
     await makeClient(fetchImpl).upsertApplication({ name: "p-team", image: "image", env: {} });
 
-    expect(fetchImpl.mock.calls[1]?.[0]).toBe(`${BASE_URL}${LIST_PAGE_1}`);
-    expect(fetchImpl.mock.calls[2]?.[0]).toBe(`${BASE_URL}${LIST_PAGE_2}`);
+    expect(fetchImpl.mock.calls[0]?.[0]).toBe(`${BASE_URL}${LIST_PAGE_1}`);
+    expect(fetchImpl.mock.calls[1]?.[0]).toBe(`${BASE_URL}${LIST_PAGE_2}`);
   });
 
   it("should stop pagination on an empty page when total is absent", async () => {
@@ -185,47 +193,52 @@ describe("sakura-apprun-rest-client (#2746)", () => {
       id: `other-${index}`,
       name: `other-${index}`,
     }));
-    const fetchImpl = readyUser()
+    const fetchImpl = vi
+      .fn()
       .mockResolvedValueOnce(listResponse(fullPage))
       .mockResolvedValueOnce(listResponse([]));
 
     await expect(makeClient(fetchImpl).getApplication("missing")).resolves.toBeUndefined();
-    expect(fetchImpl.mock.calls[2]?.[0]).toBe(`${BASE_URL}${LIST_PAGE_2}`);
+    expect(fetchImpl.mock.calls[1]?.[0]).toBe(`${BASE_URL}${LIST_PAGE_2}`);
   });
 
   it("should recover when PATCH loses a delete race", async () => {
-    const fetchImpl = readyUser()
+    const fetchImpl = vi
+      .fn()
       .mockResolvedValueOnce(listResponse([{ id: "old", name: "p-team" }]))
       .mockResolvedValueOnce(new Response(null, { status: 404 }))
       .mockResolvedValueOnce(listResponse([]))
       .mockResolvedValueOnce(jsonResponse({ id: "new" }, 201));
 
     await makeClient(fetchImpl).upsertApplication({ name: "p-team", image: "image", env: {} });
-    expect(fetchImpl.mock.calls[2]?.[1].method).toBe("PATCH");
-    expect(fetchImpl.mock.calls[4]?.[1].method).toBe("POST");
+    expect(fetchImpl.mock.calls[1]?.[1].method).toBe("PATCH");
+    expect(fetchImpl.mock.calls[3]?.[1].method).toBe("POST");
   });
 
   it("should recover when create loses a same-name race", async () => {
-    const fetchImpl = readyUser()
+    const fetchImpl = vi
+      .fn()
       .mockResolvedValueOnce(listResponse([]))
       .mockResolvedValueOnce(new Response(null, { status: 409 }))
       .mockResolvedValueOnce(listResponse([{ id: "winner", name: "p-team" }]))
       .mockResolvedValueOnce(jsonResponse({ id: "winner" }));
 
     await makeClient(fetchImpl).upsertApplication({ name: "p-team", image: "image", env: {} });
-    expect(fetchImpl.mock.calls[2]?.[1].method).toBe("POST");
-    expect(fetchImpl.mock.calls[4]?.[1].method).toBe("PATCH");
+    expect(fetchImpl.mock.calls[1]?.[1].method).toBe("POST");
+    expect(fetchImpl.mock.calls[3]?.[1].method).toBe("PATCH");
   });
 
   it("should reject PATCH conflicts and impossible POST not-found responses", async () => {
-    const patchConflict = readyUser()
+    const patchConflict = vi
+      .fn()
       .mockResolvedValueOnce(listResponse([{ id: "app", name: "p-team" }]))
       .mockResolvedValueOnce(new Response(null, { status: 409 }));
     await expect(
       makeClient(patchConflict).upsertApplication({ name: "p-team", image: "image", env: {} }),
     ).rejects.toThrow("Sakura AppRun API PATCH /applications/app conflicted");
 
-    const createNotFound = readyUser()
+    const createNotFound = vi
+      .fn()
       .mockResolvedValueOnce(listResponse([]))
       .mockResolvedValueOnce(new Response(null, { status: 404 }));
     await expect(
@@ -234,7 +247,7 @@ describe("sakura-apprun-rest-client (#2746)", () => {
   });
 
   it("should fail loudly when repeated create conflicts never converge", async () => {
-    const fetchImpl = readyUser();
+    const fetchImpl = vi.fn();
     for (let attempt = 0; attempt < 3; attempt += 1) {
       fetchImpl
         .mockResolvedValueOnce(listResponse([]))
@@ -247,7 +260,8 @@ describe("sakura-apprun-rest-client (#2746)", () => {
   });
 
   it("should combine public_url detail with the dedicated current status", async () => {
-    const fetchImpl = readyUser()
+    const fetchImpl = vi
+      .fn()
       .mockResolvedValueOnce(
         listResponse([
           { id: "app", name: "p-team", status: "Deploying", public_url: "https://list" },
@@ -262,11 +276,12 @@ describe("sakura-apprun-rest-client (#2746)", () => {
       status: "Healthy",
       publicUrl: "https://detail",
     });
-    expect(fetchImpl.mock.calls[3]?.[0]).toBe(`${BASE_URL}/applications/app/status`);
+    expect(fetchImpl.mock.calls[2]?.[0]).toBe(`${BASE_URL}/applications/app/status`);
   });
 
   it("should fall back through detail, list, and unknown status values", async () => {
-    const detailStatus = readyUser()
+    const detailStatus = vi
+      .fn()
       .mockResolvedValueOnce(listResponse([{ id: "detail", name: "p-team" }]))
       .mockResolvedValueOnce(jsonResponse({ id: "detail", name: "p-team", status: "Deploying" }))
       .mockResolvedValueOnce(jsonResponse({}));
@@ -274,7 +289,8 @@ describe("sakura-apprun-rest-client (#2746)", () => {
       status: "Deploying",
     });
 
-    const listStatus = readyUser()
+    const listStatus = vi
+      .fn()
       .mockResolvedValueOnce(
         listResponse([
           { id: "list", name: "p-team", status: "Healthy", public_url: "https://list" },
@@ -287,7 +303,8 @@ describe("sakura-apprun-rest-client (#2746)", () => {
       publicUrl: "https://list",
     });
 
-    const unknown = readyUser()
+    const unknown = vi
+      .fn()
       .mockResolvedValueOnce(listResponse([{ id: "unknown", name: "p-team" }]))
       .mockResolvedValueOnce(jsonResponse({ id: "unknown", name: "p-team" }))
       .mockResolvedValueOnce(jsonResponse({}));
@@ -297,15 +314,17 @@ describe("sakura-apprun-rest-client (#2746)", () => {
   });
 
   it("should return undefined for missing names and detail/status races", async () => {
-    const missing = readyUser().mockResolvedValueOnce(listResponse([]));
+    const missing = vi.fn().mockResolvedValueOnce(listResponse([]));
     await expect(makeClient(missing).getApplication("p-team")).resolves.toBeUndefined();
 
-    const detailGone = readyUser()
+    const detailGone = vi
+      .fn()
       .mockResolvedValueOnce(listResponse([{ id: "app", name: "p-team" }]))
       .mockResolvedValueOnce(new Response(null, { status: 404 }));
     await expect(makeClient(detailGone).getApplication("p-team")).resolves.toBeUndefined();
 
-    const statusGone = readyUser()
+    const statusGone = vi
+      .fn()
       .mockResolvedValueOnce(listResponse([{ id: "app", name: "p-team" }]))
       .mockResolvedValueOnce(jsonResponse({ id: "app", name: "p-team" }))
       .mockResolvedValueOnce(new Response(null, { status: 204 }));
@@ -313,7 +332,8 @@ describe("sakura-apprun-rest-client (#2746)", () => {
   });
 
   it("should delete all exact-name duplicates and tolerate concurrent not-found", async () => {
-    const fetchImpl = readyUser()
+    const fetchImpl = vi
+      .fn()
       .mockResolvedValueOnce(
         listResponse([
           { id: "app-b", name: "p-team" },
@@ -325,14 +345,15 @@ describe("sakura-apprun-rest-client (#2746)", () => {
       .mockResolvedValueOnce(new Response(null, { status: 404 }));
 
     await expect(makeClient(fetchImpl).deleteApplication("p-team")).resolves.toBeUndefined();
-    expect(fetchImpl.mock.calls.slice(2).map((call) => call[0])).toEqual([
+    expect(fetchImpl.mock.calls.slice(1).map((call) => call[0])).toEqual([
       `${BASE_URL}/applications/app-a`,
       `${BASE_URL}/applications/app-b`,
     ]);
   });
 
   it("should reject delete conflicts", async () => {
-    const fetchImpl = readyUser()
+    const fetchImpl = vi
+      .fn()
       .mockResolvedValueOnce(listResponse([{ id: "app", name: "p-team" }]))
       .mockResolvedValueOnce(new Response(null, { status: 409 }));
     await expect(makeClient(fetchImpl).deleteApplication("p-team")).rejects.toThrow(
@@ -341,9 +362,9 @@ describe("sakura-apprun-rest-client (#2746)", () => {
   });
 
   it("should sanitize non-2xx response bodies and transport errors", async () => {
-    const responseFailure = readyUser().mockResolvedValueOnce(
-      new Response("tok sec reflected-secret", { status: 429 }),
-    );
+    const responseFailure = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("tok sec reflected-secret", { status: 429 }));
     try {
       await makeClient(responseFailure).getApplication("p-team");
       expect.unreachable("request should fail");
@@ -356,23 +377,39 @@ describe("sakura-apprun-rest-client (#2746)", () => {
       await makeClient(transportFailure).getApplication("p-team");
       expect.unreachable("request should fail");
     } catch (error) {
-      expectSafeError(error, "Sakura AppRun API GET /user request failed");
+      expectSafeError(error, `Sakura AppRun API GET ${LIST_PAGE_1} request failed`);
     }
   });
 
+  it("should reject list conflicts and repeated not-found after bootstrap", async () => {
+    const conflict = vi.fn().mockResolvedValueOnce(new Response(null, { status: 409 }));
+    await expect(makeClient(conflict).getApplication("p-team")).rejects.toThrow(
+      `Sakura AppRun API GET ${LIST_PAGE_1} conflicted`,
+    );
+
+    const stillMissing = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(null, { status: 404 }))
+      .mockResolvedValueOnce(jsonResponse({ id: "user" }))
+      .mockResolvedValueOnce(new Response(null, { status: 404 }));
+    await expect(makeClient(stillMissing).getApplication("p-team")).rejects.toThrow(
+      `Sakura AppRun API GET ${LIST_PAGE_1} returned not-found`,
+    );
+  });
+
   it("should fail loudly when a required list document is absent", async () => {
-    const fetchImpl = readyUser().mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const fetchImpl = vi.fn().mockResolvedValueOnce(new Response(null, { status: 204 }));
     await expect(makeClient(fetchImpl).getApplication("p-team")).rejects.toThrow(
       `Sakura AppRun API GET ${LIST_PAGE_1} returned no document`,
     );
   });
 
   it("should default to the production AppRun base URL", async () => {
-    const fetchImpl = readyUser().mockResolvedValueOnce(listResponse([]));
+    const fetchImpl = vi.fn().mockResolvedValueOnce(listResponse([]));
     const client = createSakuraAppRunRestClient(CREDENTIAL, { fetchImpl: fetchImpl as never });
     await client.getApplication("missing");
     expect(fetchImpl.mock.calls[0]?.[0]).toBe(
-      "https://secure.sakura.ad.jp/cloud/api/apprun/1.0/apprun/api/user",
+      "https://secure.sakura.ad.jp/cloud/api/apprun/1.0/apprun/api/applications?page_num=1&page_size=100&sort_field=created_at&sort_order=asc",
     );
   });
 });
