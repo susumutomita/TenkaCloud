@@ -59,28 +59,34 @@
 <article>
 <h1>ランタイム対応マトリクス <span class="doc-badge doc-badge--preview">Preview</span></h1>
 <p>パックは、必要とする <code>(provider, engine)</code> ランタイムを宣言します。以下のマトリクスは、
-<code>@tenkacloud/problem-runtime</code> のランタイム対応宣言（<code>EXECUTABLE_PROVIDER</code> /
-<code>EXECUTABLE_ENGINE</code>、<code>RESERVED_RUNTIMES</code>、<code>CONTAINER_RUNTIMES</code>）から導出された
-<strong>規範的リファレンス</strong>です。エンジンが出荷されると reserved セットから外れ、
-この表は自動的に再生成されます。</p>
+<code>@tenkacloud/problem-runtime/capabilities</code> の <code>RUNTIME_CAPABILITIES</code> から生成される
+<strong>規範的リファレンス</strong>です。</p>
 <h2>マトリクス</h2>
-<table class="reference-table"><thead><tr><th>Provider</th><th>Engine</th><th>Support</th><th>Maturity</th><th>Notes</th></tr></thead><tbody>
-<tr><td><code>aws</code></td><td><code>cloudformation</code></td><td>executable</td><td><span class="doc-badge doc-badge--stable">Stable</span></td><td>The only cloud-executable runtime today: deployed via CloudFormation CreateStack.</td></tr>
-<tr><td><code>azure</code></td><td><code>bicep</code></td><td>reserved</td><td><span class="doc-badge doc-badge--planned">Planned</span></td><td>Reserved roadmap runtime: recognized by the validator but no adapter ships yet.</td></tr>
-<tr><td><code>docker</code></td><td><code>compose</code></td><td>container</td><td><span class="doc-badge doc-badge--preview">Preview</span></td><td>Local container runtime (make local). Recognized but never cloud-deployed.</td></tr>
-<tr><td><code>gcp</code></td><td><code>infra-manager</code></td><td>reserved</td><td><span class="doc-badge doc-badge--planned">Planned</span></td><td>Reserved roadmap runtime: recognized by the validator but no adapter ships yet.</td></tr>
-<tr><td><code>sakura</code></td><td><code>apprun</code></td><td>reserved</td><td><span class="doc-badge doc-badge--planned">Planned</span></td><td>Reserved roadmap runtime: recognized by the validator but no adapter ships yet.</td></tr>
-</tbody></table><h2>サポート区分</h2>
+<table class="reference-table"><thead><tr><th>Provider</th><th>Engine</th><th>Mode</th><th>Recognized</th><th>Adapter wired</th><th>Executable</th><th>Live verified</th><th>Maturity</th><th>Blocking issues</th><th>Evidence</th></tr></thead><tbody>
+<tr><td><code>aws</code></td><td><code>cloudformation</code></td><td>cloud</td><td>yes</td><td>yes</td><td>yes</td><td>yes</td><td><span class="doc-badge doc-badge--stable">Stable</span></td><td>—</td><td>Default competitor-account CloudFormation lifecycle is production and live verified.</td></tr>
+<tr><td><code>azure</code></td><td><code>bicep</code></td><td>cloud</td><td>yes</td><td>yes</td><td>no</td><td>no</td><td><span class="doc-badge doc-badge--preview">Preview</span></td><td><a href="https://github.com/susumutomita/TenkaCloud/issues/2743">#2743</a>, <a href="https://github.com/susumutomita/TenkaCloud/issues/2081">#2081</a></td><td>Adapter and credential wiring ship, but Bicep artifact materialization and live acceptance remain open.</td></tr>
+<tr><td><code>docker</code></td><td><code>compose</code></td><td>local</td><td>yes</td><td>yes</td><td>yes</td><td>yes</td><td><span class="doc-badge doc-badge--preview">Preview</span></td><td>—</td><td>Executable and verified through the AWS-free make local lifecycle; never cloud deployed.</td></tr>
+<tr><td><code>gcp</code></td><td><code>infra-manager</code></td><td>cloud</td><td>yes</td><td>yes</td><td>no</td><td>no</td><td><span class="doc-badge doc-badge--preview">Preview</span></td><td><a href="https://github.com/susumutomita/TenkaCloud/issues/2745">#2745</a>, <a href="https://github.com/susumutomita/TenkaCloud/issues/2081">#2081</a></td><td>Adapter and WIF wiring ship, but Terraform source/output handling and live acceptance remain open.</td></tr>
+<tr><td><code>sakura</code></td><td><code>apprun</code></td><td>cloud</td><td>yes</td><td>yes</td><td>yes</td><td>no</td><td><span class="doc-badge doc-badge--preview">Preview</span></td><td><a href="https://github.com/susumutomita/TenkaCloud/issues/2081">#2081</a></td><td>Adapter and current AppRun API wire contract ship; real-account lifecycle acceptance remains open.</td></tr>
+</tbody></table><h2>独立した capability 事実</h2>
 <ul>
-<li><strong>executable</strong> — 現時点でクラウドにデプロイ可能です。デプロイワーカーが競技者アカウント内で
-CloudFormation の <code>CreateStack</code> を実行します。</li>
-<li><strong>reserved</strong> — ロードマップ上で認知されているものの、まだアダプターが存在しない
-プロバイダー / エンジンです。バリデーターは受理しますが、デプロイワーカーは
-クラウドデプロイを明示的に拒否します。</li>
-<li><strong>container</strong> — ローカルのコンテナランタイム（<code>make local</code>）です。認識はされますが、
-クラウドにデプロイされることはありません。</li>
+<li><strong>Recognized</strong> — メタデータと schema が正確な provider / engine の組を受理します。
+デプロイ実装が存在することまでは意味しません。</li>
+<li><strong>Adapter wired</strong> — 具体的な adapter と credential / composition の配線が repository に
+含まれます。artifact 処理や provider API 契約の正しさを証明するものではありません。</li>
+<li><strong>Executable</strong> — materialization から provider wire までの経路が、宣言された mode
+(<code>cloud</code> または <code>local</code>) で実行可能です。</li>
+<li><strong>Live verified</strong> — mock ではなく実際の lifecycle が実証済みです。unit / mock test は
+必須の回帰証拠ですが、live verification の代わりにはなりません。</li>
 </ul>
-<p>AWS は <code>Stable</code> です。GCP、Azure、Sakura は <code>Planned</code> の reserved ロードマップターゲットです。</p>
+<p>Azure、GCP、Sakura は adapter-wired です。
+<a href="https://github.com/susumutomita/TenkaCloud/issues/2081">multicloud acceptance #2081</a>
+が open の間は live verified ではありません。Azure と GCP は、表に示す artifact / output の
+blocker が閉じるまで executable でもありません。Sakura は #2746 後に API 契約上 executable
+ですが、実 account lifecycle が #2081 に添付されるまでは競技 ready としません。</p>
+<p>ローカルの <code>docker/compose</code> は <code>make local</code> mode で独立に executable / verified ですが、
+クラウドランタイムではありません。AWS CloudFormation は既定の stable / live-verified
+クラウドランタイムです。</p>
 <p>関連: <a href="/docs/reference/problem-metadata/">問題メタデータリファレンス</a>。</p>
 
 </article>

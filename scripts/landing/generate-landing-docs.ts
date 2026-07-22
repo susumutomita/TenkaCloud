@@ -148,13 +148,33 @@ const COMPONENT_RENDERERS: Record<string, () => string> = {
     ),
   RuntimeMatrixTable: () =>
     table(
-      ["Provider", "Engine", "Support", "Maturity", "Notes"],
+      [
+        "Provider",
+        "Engine",
+        "Mode",
+        "Recognized",
+        "Adapter wired",
+        "Executable",
+        "Live verified",
+        "Maturity",
+        "Blocking issues",
+        "Evidence",
+      ],
       REFERENCE_DATA.runtimeMatrix.map((r) => [
         `<code>${escapeHtml(r.provider)}</code>`,
         `<code>${escapeHtml(r.engine)}</code>`,
-        escapeHtml(r.support),
+        escapeHtml(r.executionMode),
+        r.recognized ? "yes" : "no",
+        r.adapterWired ? "yes" : "no",
+        r.executable ? "yes" : "no",
+        r.liveVerified ? "yes" : "no",
         badge(r.maturity),
-        escapeHtml(r.note),
+        r.blockingIssues.length === 0
+          ? "—"
+          : r.blockingIssues
+              .map((issue) => `<a href="${GITHUB_REPO}/issues/${issue}">#${issue}</a>`)
+              .join(", "),
+        escapeHtml(r.evidence),
       ]),
     ),
   CliCommandTable: () =>

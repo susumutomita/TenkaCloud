@@ -58,28 +58,36 @@
 <main class="doc">
 <article>
 <h1>Runtime capability matrix <span class="doc-badge doc-badge--preview">Preview</span></h1>
-<p>A pack declares the <code>(provider, engine)</code> runtimes it requires. The matrix below is
-<strong>normative reference</strong> derived from the runtime capability declarations in
-<code>@tenkacloud/problem-runtime</code> (<code>EXECUTABLE_PROVIDER</code> / <code>EXECUTABLE_ENGINE</code>,
-<code>RESERVED_RUNTIMES</code>, and <code>CONTAINER_RUNTIMES</code>). When an engine ships it moves out
-of the reserved set and this table regenerates automatically.</p>
+<p>A pack declares the <code>(provider, engine)</code> runtimes it requires. The matrix below is a
+<strong>normative reference</strong> generated from <code>RUNTIME_CAPABILITIES</code> in
+<code>@tenkacloud/problem-runtime/capabilities</code>.</p>
 <h2>Matrix</h2>
-<table class="reference-table"><thead><tr><th>Provider</th><th>Engine</th><th>Support</th><th>Maturity</th><th>Notes</th></tr></thead><tbody>
-<tr><td><code>aws</code></td><td><code>cloudformation</code></td><td>executable</td><td><span class="doc-badge doc-badge--stable">Stable</span></td><td>The only cloud-executable runtime today: deployed via CloudFormation CreateStack.</td></tr>
-<tr><td><code>azure</code></td><td><code>bicep</code></td><td>reserved</td><td><span class="doc-badge doc-badge--planned">Planned</span></td><td>Reserved roadmap runtime: recognized by the validator but no adapter ships yet.</td></tr>
-<tr><td><code>docker</code></td><td><code>compose</code></td><td>container</td><td><span class="doc-badge doc-badge--preview">Preview</span></td><td>Local container runtime (make local). Recognized but never cloud-deployed.</td></tr>
-<tr><td><code>gcp</code></td><td><code>infra-manager</code></td><td>reserved</td><td><span class="doc-badge doc-badge--planned">Planned</span></td><td>Reserved roadmap runtime: recognized by the validator but no adapter ships yet.</td></tr>
-<tr><td><code>sakura</code></td><td><code>apprun</code></td><td>reserved</td><td><span class="doc-badge doc-badge--planned">Planned</span></td><td>Reserved roadmap runtime: recognized by the validator but no adapter ships yet.</td></tr>
-</tbody></table><h2>Support classes</h2>
+<table class="reference-table"><thead><tr><th>Provider</th><th>Engine</th><th>Mode</th><th>Recognized</th><th>Adapter wired</th><th>Executable</th><th>Live verified</th><th>Maturity</th><th>Blocking issues</th><th>Evidence</th></tr></thead><tbody>
+<tr><td><code>aws</code></td><td><code>cloudformation</code></td><td>cloud</td><td>yes</td><td>yes</td><td>yes</td><td>yes</td><td><span class="doc-badge doc-badge--stable">Stable</span></td><td>—</td><td>Default competitor-account CloudFormation lifecycle is production and live verified.</td></tr>
+<tr><td><code>azure</code></td><td><code>bicep</code></td><td>cloud</td><td>yes</td><td>yes</td><td>no</td><td>no</td><td><span class="doc-badge doc-badge--preview">Preview</span></td><td><a href="https://github.com/susumutomita/TenkaCloud/issues/2743">#2743</a>, <a href="https://github.com/susumutomita/TenkaCloud/issues/2081">#2081</a></td><td>Adapter and credential wiring ship, but Bicep artifact materialization and live acceptance remain open.</td></tr>
+<tr><td><code>docker</code></td><td><code>compose</code></td><td>local</td><td>yes</td><td>yes</td><td>yes</td><td>yes</td><td><span class="doc-badge doc-badge--preview">Preview</span></td><td>—</td><td>Executable and verified through the AWS-free make local lifecycle; never cloud deployed.</td></tr>
+<tr><td><code>gcp</code></td><td><code>infra-manager</code></td><td>cloud</td><td>yes</td><td>yes</td><td>no</td><td>no</td><td><span class="doc-badge doc-badge--preview">Preview</span></td><td><a href="https://github.com/susumutomita/TenkaCloud/issues/2745">#2745</a>, <a href="https://github.com/susumutomita/TenkaCloud/issues/2081">#2081</a></td><td>Adapter and WIF wiring ship, but Terraform source/output handling and live acceptance remain open.</td></tr>
+<tr><td><code>sakura</code></td><td><code>apprun</code></td><td>cloud</td><td>yes</td><td>yes</td><td>yes</td><td>no</td><td><span class="doc-badge doc-badge--preview">Preview</span></td><td><a href="https://github.com/susumutomita/TenkaCloud/issues/2081">#2081</a></td><td>Adapter and current AppRun API wire contract ship; real-account lifecycle acceptance remains open.</td></tr>
+</tbody></table><h2>Independent capability facts</h2>
 <ul>
-<li><strong>executable</strong> — cloud-deployable today. The deploy worker runs a CloudFormation
-<code>CreateStack</code> in the competitor account.</li>
-<li><strong>reserved</strong> — a recognized roadmap provider/engine with no adapter yet. The
-validator accepts it but the deploy worker rejects a cloud deploy loudly.</li>
-<li><strong>container</strong> — a local container runtime (<code>make local</code>). Recognized but never
-cloud-deployed.</li>
+<li><strong>Recognized</strong> — metadata and schema accept the exact provider/engine pair. This
+does not imply that deployment code exists.</li>
+<li><strong>Adapter wired</strong> — a concrete adapter plus its credential/composition wiring ships
+in the repository. This still does not prove artifact handling or provider API
+correctness.</li>
+<li><strong>Executable</strong> — the complete materialization and provider wire path is expected to
+run in its declared mode (<code>cloud</code> or <code>local</code>).</li>
+<li><strong>Live verified</strong> — a real lifecycle has been demonstrated. Mock and unit tests are
+required regression evidence, but they never count as live verification.</li>
 </ul>
-<p>AWS is <code>Stable</code>; GCP, Azure, and Sakura are <code>Planned</code> reserved roadmap targets.</p>
+<p>Azure, GCP, and Sakura are adapter-wired. Their live verification remains false while
+<a href="https://github.com/susumutomita/TenkaCloud/issues/2081">multicloud acceptance #2081</a>
+is open. Azure and GCP also remain non-executable until their artifact/output blockers
+shown in the table are closed. Sakura&#39;s API contract is executable after #2746, but it
+is not competition-ready until the real-account lifecycle is attached to #2081.</p>
+<p>The local <code>docker/compose</code> runtime is independently executable and verified in the
+<code>make local</code> mode; it is not a cloud runtime. AWS CloudFormation is the default stable,
+live-verified cloud runtime.</p>
 <p>Related: <a href="/docs/reference/problem-metadata/index.en.html">problem metadata reference</a>.</p>
 
 </article>

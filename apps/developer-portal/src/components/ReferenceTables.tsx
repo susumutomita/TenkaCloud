@@ -1,14 +1,16 @@
-// [Issue #2103] Reference-table renderers. Every table below renders the GENERATED
-// `REFERENCE_DATA` (apps/developer-portal/src/content/reference-data.ts), which the
-// generator derives from the real pack/problem schemas, runtime capability
-// declarations, the pack CLI usage strings, and the validator error-code registry.
-// The MDX reference pages embed these so the normative facts have one source of
-// truth in code/schema and cannot be hand-edited out of sync.
+// [Issues #2103, #2748] Reference-table renderers. Every table below renders the GENERATED
+// `REFERENCE_DATA`, which the generator derives from real schemas and capability declarations.
 import { REFERENCE_DATA } from "@/content/reference-data";
 import { MaturityBadge } from "./MaturityBadge";
 
+const GITHUB_ISSUES = "https://github.com/susumutomita/TenkaCloud/issues";
+
 function requiredLabel(required: boolean): string {
   return required ? "Required" : "Optional";
+}
+
+function capabilityLabel(value: boolean): string {
+  return value ? "yes" : "no";
 }
 
 export function ManifestFieldTable() {
@@ -76,9 +78,14 @@ export function RuntimeMatrixTable() {
         <tr>
           <th>Provider</th>
           <th>Engine</th>
-          <th>Support</th>
+          <th>Mode</th>
+          <th>Recognized</th>
+          <th>Adapter wired</th>
+          <th>Executable</th>
+          <th>Live verified</th>
           <th>Maturity</th>
-          <th>Notes</th>
+          <th>Blocking issues</th>
+          <th>Evidence</th>
         </tr>
       </thead>
       <tbody>
@@ -90,11 +97,25 @@ export function RuntimeMatrixTable() {
             <td>
               <code>{row.engine}</code>
             </td>
-            <td>{row.support}</td>
+            <td>{row.executionMode}</td>
+            <td>{capabilityLabel(row.recognized)}</td>
+            <td>{capabilityLabel(row.adapterWired)}</td>
+            <td>{capabilityLabel(row.executable)}</td>
+            <td>{capabilityLabel(row.liveVerified)}</td>
             <td>
               <MaturityBadge level={row.maturity} />
             </td>
-            <td>{row.note}</td>
+            <td>
+              {row.blockingIssues.length === 0
+                ? "—"
+                : row.blockingIssues.map((issue, index) => (
+                    <span key={issue}>
+                      {index > 0 ? ", " : ""}
+                      <a href={`${GITHUB_ISSUES}/${issue}`}>#{issue}</a>
+                    </span>
+                  ))}
+            </td>
+            <td>{row.evidence}</td>
           </tr>
         ))}
       </tbody>

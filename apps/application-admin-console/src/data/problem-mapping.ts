@@ -14,12 +14,11 @@
  */
 
 import { analyzeProblemCost, type ProblemCostEstimate } from "@tenkacloud/problem-cost";
+import { EXECUTABLE_ENGINE, EXECUTABLE_PROVIDER } from "@tenkacloud/problem-runtime";
 import {
-  CONTAINER_RUNTIMES,
-  EXECUTABLE_ENGINE,
-  EXECUTABLE_PROVIDER,
-  RESERVED_RUNTIMES,
-} from "@tenkacloud/problem-runtime";
+  findRuntimeCapability,
+  RUNTIME_CAPABILITIES,
+} from "@tenkacloud/problem-runtime/capabilities";
 import type { ProblemCostEstimateSummary, ProblemDetail, ProblemMetadata } from "./problem-types";
 
 export function metadataRuntimeToSummary(metadata: ProblemMetadata): ProblemDetail["runtime"] {
@@ -113,15 +112,13 @@ export function isExecutableProblemRuntime(runtime: ConsoleRuntime): boolean {
  * `CONTAINER_RUNTIMES` — the same source of truth the deploy worker uses to reject a
  * cloud deploy of these (`classifyRuntimeSupport` → `"container"`) — so a local-only
  * problem can never be silently treated as cloud-deployable here. Distinct from a
- * RESERVED (planned-but-not-yet-shipped provider) runtime: a container runtime is
+ * adapter-wired cloud provider runtime: a container runtime is
  * intentionally never cloud-executable, whereas a reserved one becomes executable
  * once its adapter ships.
  */
 export function isLocalOnlyProblemRuntime(runtime: ConsoleRuntime): boolean {
   if ("kind" in runtime) return false;
-  return CONTAINER_RUNTIMES.some(
-    (r) => r.provider === runtime.provider && r.engine === runtime.engine,
-  );
+  return findRuntimeCapability(runtime.provider, runtime.engine)?.selection === "local-only";
 }
 
 /**
@@ -132,7 +129,14 @@ export function isLocalOnlyProblemRuntime(runtime: ConsoleRuntime): boolean {
  * engines ship — there is no second hand-maintained provider list to drift.
  */
 export const NON_AWS_SELECTABLE_PROVIDERS: readonly string[] = [
-  ...new Set(RESERVED_RUNTIMES.map((r) => r.provider)),
+  ...new Set(
+    RUNTIME_CAPABILITIES.filter(
+      (capability) =>
+        capability.executionMode === "cloud" &&
+        capability.selection === "feature-gated" &&
+        capability.adapterWired,
+    ).map((capability) => capability.provider),
+  ),
 ];
 
 /**
@@ -140,7 +144,7 @@ export const NON_AWS_SELECTABLE_PROVIDERS: readonly string[] = [
  * (which governs cost analysis, AWS/CloudFormation only). A problem is selectable in
  * the event picker when:
  *   - it is the always-executable AWS/CloudFormation runtime, OR
- *   - it is a recognized reserved `(provider, engine)` pair AND that provider is in
+ *   - it is a recognized adapter-wired `(provider, engine)` pair AND that provider is in
  *     `enabledProviders` (today: the whole non-AWS set when `features.nonAwsRuntime`
  *     is on; later, the set of providers with registered team credentials).
  * A provider being enabled does NOT make an unrecognized `(provider, engine)` pair
@@ -155,10 +159,12 @@ export function isProviderSelectable(
     return runtime.targets.every((target) => isProviderSelectable(target, enabledProviders));
   }
   if (isExecutableProblemRuntime(runtime)) return true;
-  const recognized = RESERVED_RUNTIMES.some(
-    (r) => r.provider === runtime.provider && r.engine === runtime.engine,
+  const capability = findRuntimeCapability(runtime.provider, runtime.engine);
+  return (
+    capability?.adapterWired === true &&
+    capability.selection === "feature-gated" &&
+    enabledProviders.has(runtime.provider)
   );
-  return recognized && enabledProviders.has(runtime.provider);
 }
 
 /** Provider order as authored in metadata, deduplicated for team destination controls. */

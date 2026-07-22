@@ -33,14 +33,14 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  CONTAINER_RUNTIMES,
   DEFAULT_ENTRY,
-  EXECUTABLE_ENGINE,
-  EXECUTABLE_PROVIDER,
   MAX_COMPOSITE_TARGETS,
   MIN_COMPOSITE_TARGETS,
-  RESERVED_RUNTIMES,
 } from "@tenkacloud/problem-runtime";
+import {
+  RUNTIME_CAPABILITIES,
+  validateRuntimeCapabilityEvidence,
+} from "@tenkacloud/problem-runtime/capabilities";
 import { PACK_SCHEMA_VERSION } from "@tenkacloud/problem-sdk";
 import { PACK_PROVIDERS } from "@tenkacloud/problem-sdk/internal";
 import type {
@@ -184,45 +184,33 @@ const COMPOSITE_TARGET_BOUNDS = {
 
 // --- Runtime capability matrix ------------------------------------------------
 
-type Maturity = "stable" | "preview" | "planned";
-
-// The matrix is derived from problem-runtime's capability declarations. The one
-// executable pair is `stable`; reserved roadmap pairs are `planned`; the local
-// container runtime is `preview` (recognized + runnable locally, not cloud).
+// The matrix is a direct projection of problem-runtime's evidence declarations.
+// A mock test can exercise an adapter, but only `liveVerified: true` in that source may
+// produce a live-verified public claim.
 function buildRuntimeMatrix(): readonly RuntimeCapabilityRow[] {
-  const rows: RuntimeCapabilityRow[] = [
-    {
-      provider: EXECUTABLE_PROVIDER,
-      engine: EXECUTABLE_ENGINE,
-      support: "executable",
-      maturity: "stable" satisfies Maturity,
-      note: "The only cloud-executable runtime today: deployed via CloudFormation CreateStack.",
-    },
-  ];
-  for (const reserved of RESERVED_RUNTIMES) {
-    rows.push({
-      provider: reserved.provider,
-      engine: reserved.engine,
-      support: "reserved",
-      maturity: "planned",
-      note: "Reserved roadmap runtime: recognized by the validator but no adapter ships yet.",
-    });
-  }
-  for (const container of CONTAINER_RUNTIMES) {
-    rows.push({
-      provider: container.provider,
-      engine: container.engine,
-      support: "container",
-      maturity: "preview",
-      note: "Local container runtime (make local). Recognized but never cloud-deployed.",
-    });
-  }
-  // Stable provider/engine first, then a deterministic provider/engine sort so the
-  // table matches SUPPORTED_RUNTIME_CAPABILITIES ordering intent.
-  return rows.sort((a, b) => {
-    if (a.support === "executable") return -1;
-    if (b.support === "executable") return 1;
-    return `${a.provider}/${a.engine}`.localeCompare(`${b.provider}/${b.engine}`);
+  const rows = RUNTIME_CAPABILITIES.map((capability) => {
+    const issues = validateRuntimeCapabilityEvidence(capability);
+    if (issues.length > 0) {
+      throw new Error(`Invalid runtime capability evidence: ${issues.join("; ")}`);
+    }
+    return {
+      provider: capability.provider,
+      engine: capability.engine,
+      recognized: capability.recognized,
+      adapterWired: capability.adapterWired,
+      executable: capability.executable,
+      liveVerified: capability.liveVerified,
+      executionMode: capability.executionMode,
+      selection: capability.selection,
+      maturity: capability.maturity,
+      blockingIssues: [...capability.blockingIssues],
+      evidence: capability.evidence,
+    } satisfies RuntimeCapabilityRow;
+  });
+  return rows.sort((left, right) => {
+    if (left.selection === "default" && right.selection !== "default") return -1;
+    if (right.selection === "default" && left.selection !== "default") return 1;
+    return `${left.provider}/${left.engine}`.localeCompare(`${right.provider}/${right.engine}`);
   });
 }
 
@@ -380,9 +368,15 @@ export interface MetadataFieldReference {
 export interface RuntimeCapabilityRow {
   readonly provider: string;
   readonly engine: string;
-  readonly support: "executable" | "reserved" | "container";
+  readonly recognized: boolean;
+  readonly adapterWired: boolean;
+  readonly executable: boolean;
+  readonly liveVerified: boolean;
+  readonly executionMode: "cloud" | "local";
+  readonly selection: "default" | "feature-gated" | "local-only";
   readonly maturity: ReferenceMaturity;
-  readonly note: string;
+  readonly blockingIssues: readonly number[];
+  readonly evidence: string;
 }
 
 export interface CliCommandReference {

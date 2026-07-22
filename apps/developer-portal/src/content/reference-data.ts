@@ -24,9 +24,15 @@ export interface MetadataFieldReference {
 export interface RuntimeCapabilityRow {
   readonly provider: string;
   readonly engine: string;
-  readonly support: "executable" | "reserved" | "container";
+  readonly recognized: boolean;
+  readonly adapterWired: boolean;
+  readonly executable: boolean;
+  readonly liveVerified: boolean;
+  readonly executionMode: "cloud" | "local";
+  readonly selection: "default" | "feature-gated" | "local-only";
   readonly maturity: ReferenceMaturity;
-  readonly note: string;
+  readonly blockingIssues: readonly number[];
+  readonly evidence: string;
 }
 
 export interface CliCommandReference {
@@ -177,37 +183,72 @@ export const REFERENCE_DATA: ReferenceData = {
     {
       provider: "aws",
       engine: "cloudformation",
-      support: "executable",
+      recognized: true,
+      adapterWired: true,
+      executable: true,
+      liveVerified: true,
+      executionMode: "cloud",
+      selection: "default",
       maturity: "stable",
-      note: "The only cloud-executable runtime today: deployed via CloudFormation CreateStack.",
+      blockingIssues: [],
+      evidence:
+        "Default competitor-account CloudFormation lifecycle is production and live verified.",
     },
     {
       provider: "azure",
       engine: "bicep",
-      support: "reserved",
-      maturity: "planned",
-      note: "Reserved roadmap runtime: recognized by the validator but no adapter ships yet.",
+      recognized: true,
+      adapterWired: true,
+      executable: false,
+      liveVerified: false,
+      executionMode: "cloud",
+      selection: "feature-gated",
+      maturity: "preview",
+      blockingIssues: [2743, 2081],
+      evidence:
+        "Adapter and credential wiring ship, but Bicep artifact materialization and live acceptance remain open.",
     },
     {
       provider: "docker",
       engine: "compose",
-      support: "container",
+      recognized: true,
+      adapterWired: true,
+      executable: true,
+      liveVerified: true,
+      executionMode: "local",
+      selection: "local-only",
       maturity: "preview",
-      note: "Local container runtime (make local). Recognized but never cloud-deployed.",
+      blockingIssues: [],
+      evidence:
+        "Executable and verified through the AWS-free make local lifecycle; never cloud deployed.",
     },
     {
       provider: "gcp",
       engine: "infra-manager",
-      support: "reserved",
-      maturity: "planned",
-      note: "Reserved roadmap runtime: recognized by the validator but no adapter ships yet.",
+      recognized: true,
+      adapterWired: true,
+      executable: false,
+      liveVerified: false,
+      executionMode: "cloud",
+      selection: "feature-gated",
+      maturity: "preview",
+      blockingIssues: [2745, 2081],
+      evidence:
+        "Adapter and WIF wiring ship, but Terraform source/output handling and live acceptance remain open.",
     },
     {
       provider: "sakura",
       engine: "apprun",
-      support: "reserved",
-      maturity: "planned",
-      note: "Reserved roadmap runtime: recognized by the validator but no adapter ships yet.",
+      recognized: true,
+      adapterWired: true,
+      executable: true,
+      liveVerified: false,
+      executionMode: "cloud",
+      selection: "feature-gated",
+      maturity: "preview",
+      blockingIssues: [2081],
+      evidence:
+        "Adapter and current AppRun API wire contract ship; real-account lifecycle acceptance remains open.",
     },
   ],
   cliCommands: [
