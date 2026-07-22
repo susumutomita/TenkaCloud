@@ -3,64 +3,57 @@ exit_status=1
 @TenkaCloud/developer-portal generate:reference: Wrote /home/runner/work/TenkaCloud/TenkaCloud/apps/developer-portal/src/content/reference-data.ts
 @TenkaCloud/developer-portal generate:reference: Exited with code 0
 wrote 28 files under landing/docs/.
-Checked 9 files in 40ms. Fixed 2 files.
+Checked 9 files in 37ms. Fixed 2 files.
 @tenkacloud/problem-runtime test: 
 @tenkacloud/problem-runtime test: [1m[30m[46m RUN [49m[39m[22m [36mv4.1.9 [39m[90m/home/runner/work/TenkaCloud/TenkaCloud/packages/problem-runtime[39m
 @tenkacloud/problem-runtime test: 
-@tenkacloud/problem-runtime test:  [32m✓[39m test/capabilities.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 12[2mms[22m[39m
-@tenkacloud/problem-runtime test:  [32m✓[39m test/composite-plan.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 10[2mms[22m[39m
-@tenkacloud/problem-runtime test:  [32m✓[39m test/runtime.test.ts [2m([22m[2m41 tests[22m[2m)[22m[32m 18[2mms[22m[39m
+@tenkacloud/problem-runtime test:  [32m✓[39m test/capabilities.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+@tenkacloud/problem-runtime test:  [32m✓[39m test/composite-plan.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+@tenkacloud/problem-runtime test:  [32m✓[39m test/runtime.test.ts [2m([22m[2m41 tests[22m[2m)[22m[32m 12[2mms[22m[39m
 @tenkacloud/problem-runtime test: 
 @tenkacloud/problem-runtime test: [2m Test Files [22m [1m[32m3 passed[39m[22m[90m (3)[39m
 @tenkacloud/problem-runtime test: [2m      Tests [22m [1m[32m61 passed[39m[22m[90m (61)[39m
-@tenkacloud/problem-runtime test: [2m   Start at [22m 03:16:55
-@tenkacloud/problem-runtime test: [2m   Duration [22m 351ms[2m (transform 284ms, setup 0ms, import 355ms, tests 40ms, environment 0ms)[22m
+@tenkacloud/problem-runtime test: [2m   Start at [22m 03:20:04
+@tenkacloud/problem-runtime test: [2m   Duration [22m 381ms[2m (transform 209ms, setup 0ms, import 254ms, tests 30ms, environment 0ms)[22m
 @tenkacloud/problem-runtime test: 
 @tenkacloud/problem-runtime test: Exited with code 0
 @tenkacloud/problem-runtime typecheck: Exited with code 0
 @TenkaCloud/developer-portal test: 
 @TenkaCloud/developer-portal test: [1m[30m[46m RUN [49m[39m[22m [36mv4.1.9 [39m[90m/home/runner/work/TenkaCloud/TenkaCloud/apps/developer-portal[39m
 @TenkaCloud/developer-portal test: 
-@TenkaCloud/developer-portal test:  [32m✓[39m src/content/docs-registry.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 17[2mms[22m[39m
-@TenkaCloud/developer-portal test:  [32m✓[39m scripts/generate-reference.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 379[2mms[22m[39m
-@TenkaCloud/developer-portal test:  [32m✓[39m src/content/site-copy.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 20[2mms[22m[39m
-@TenkaCloud/developer-portal test:  [32m✓[39m src/app/page.test.tsx [2m([22m[2m11 tests[22m[2m)[22m[33m 1325[2mms[22m[39m
-@TenkaCloud/developer-portal test:      [33m[2m✓[22m[39m should render the Japanese marketing hero [33m 319[2mms[22m[39m
-@TenkaCloud/developer-portal test:  [32m✓[39m src/content/catalog-data.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 34[2mms[22m[39m
-@TenkaCloud/developer-portal test:  [32m✓[39m src/lib/catalog.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 8[2mms[22m[39m
-@TenkaCloud/developer-portal test:  [32m✓[39m src/components/SiteHeader.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[33m 489[2mms[22m[39m
-@TenkaCloud/developer-portal test:  [32m✓[39m src/components/CatalogView.test.tsx [2m([22m[2m5 tests[22m[2m)[22m[33m 579[2mms[22m[39m
-@TenkaCloud/developer-portal test:  [32m✓[39m src/components/CommandSearch.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[33m 559[2mms[22m[39m
-@TenkaCloud/developer-portal test:  [32m✓[39m src/components/MarketingPreviews.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[32m 158[2mms[22m[39m
-@TenkaCloud/developer-portal test:  [32m✓[39m scripts/check-internal-links.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 14[2mms[22m[39m
-@TenkaCloud/developer-portal test:  [32m✓[39m src/lib/locale-path.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 11[2mms[22m[39m
-@TenkaCloud/developer-portal test:  [32m✓[39m src/components/HeaderLangSwitch.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[32m 279[2mms[22m[39m
-@TenkaCloud/developer-portal test:  [32m✓[39m src/components/AppShell.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[33m 433[2mms[22m[39m
+@TenkaCloud/developer-portal test:  [32m✓[39m src/content/docs-registry.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+@TenkaCloud/developer-portal test:  [32m✓[39m scripts/generate-reference.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 302[2mms[22m[39m
+@TenkaCloud/developer-portal test:  [32m✓[39m src/content/site-copy.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+@TenkaCloud/developer-portal test:  [32m✓[39m src/app/page.test.tsx [2m([22m[2m11 tests[22m[2m)[22m[33m 919[2mms[22m[39m
+@TenkaCloud/developer-portal test:  [32m✓[39m src/content/catalog-data.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 20[2mms[22m[39m
+@TenkaCloud/developer-portal test:  [32m✓[39m src/lib/catalog.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+@TenkaCloud/developer-portal test:  [32m✓[39m src/components/SiteHeader.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[33m 465[2mms[22m[39m
+@TenkaCloud/developer-portal test:      [33m[2m✓[22m[39m should render shared global navigation identically across landing, docs, and API reference [33m 338[2mms[22m[39m
+@TenkaCloud/developer-portal test:  [32m✓[39m src/components/CatalogView.test.tsx [2m([22m[2m5 tests[22m[2m)[22m[33m 440[2mms[22m[39m
+@TenkaCloud/developer-portal test:  [32m✓[39m src/components/CommandSearch.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[33m 409[2mms[22m[39m
+@TenkaCloud/developer-portal test:  [32m✓[39m src/components/MarketingPreviews.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[32m 134[2mms[22m[39m
+@TenkaCloud/developer-portal test:  [32m✓[39m scripts/check-internal-links.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+@TenkaCloud/developer-portal test:  [32m✓[39m src/components/HeaderLangSwitch.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[32m 155[2mms[22m[39m
+@TenkaCloud/developer-portal test:  [32m✓[39m src/lib/locale-path.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+@TenkaCloud/developer-portal test:  [32m✓[39m src/components/AppShell.test.tsx [2m([22m[2m3 tests[22m[2m)[22m[33m 335[2mms[22m[39m
 @TenkaCloud/developer-portal test:  [32m✓[39m src/content/openapi.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 8[2mms[22m[39m
-@TenkaCloud/developer-portal test:  [32m✓[39m scripts/generate-catalog.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 181[2mms[22m[39m
-@TenkaCloud/developer-portal test:  [32m✓[39m src/lib/redirects.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 6[2mms[22m[39m
-@TenkaCloud/developer-portal test:  [32m✓[39m src/lib/search.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 9[2mms[22m[39m
-@TenkaCloud/developer-portal test:  [32m✓[39m src/components/DocsSidebar.test.tsx [2m([22m[2m1 test[22m[2m)[22m[32m 210[2mms[22m[39m
+@TenkaCloud/developer-portal test:  [32m✓[39m scripts/generate-catalog.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 159[2mms[22m[39m
+@TenkaCloud/developer-portal test:  [32m✓[39m src/lib/redirects.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+@TenkaCloud/developer-portal test:  [32m✓[39m src/lib/search.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+@TenkaCloud/developer-portal test:  [32m✓[39m src/components/DocsSidebar.test.tsx [2m([22m[2m1 test[22m[2m)[22m[32m 155[2mms[22m[39m
 @TenkaCloud/developer-portal test: 
 @TenkaCloud/developer-portal test: [2m Test Files [22m [1m[32m19 passed[39m[22m[90m (19)[39m
 @TenkaCloud/developer-portal test: [2m      Tests [22m [1m[32m93 passed[39m[22m[90m (93)[39m
-@TenkaCloud/developer-portal test: [2m   Start at [22m 03:16:57
-@TenkaCloud/developer-portal test: [2m   Duration [22m 11.75s[2m (transform 1.05s, setup 1.79s, import 2.49s, tests 4.72s, environment 20.39s)[22m
+@TenkaCloud/developer-portal test: [2m   Start at [22m 03:20:05
+@TenkaCloud/developer-portal test: [2m   Duration [22m 8.59s[2m (transform 1.07s, setup 1.29s, import 2.05s, tests 3.56s, environment 14.54s)[22m
 @TenkaCloud/developer-portal test: 
 @TenkaCloud/developer-portal test: Exited with code 0
 @TenkaCloud/developer-portal typecheck: Exited with code 0
 bun test v1.3.11 (af24e281)
-The following filters did not match any test files:
- scripts/landing/generate-landing-docs.test.ts
-3016 files were searched [23.00ms]
-
-note: Tests need ".test", "_test_", ".spec" or "_spec_" in the filename (ex: "MyApp.test.ts")
-note: To treat the "scripts/landing/generate-landing-docs.test.ts" filter as a path, run "bun test ./scripts/landing/generate-landing-docs.test.ts"
-
-Learn more about bun test: https://bun.com/docs/cli/test
+Test filter "./scripts/landing/generate-landing-docs.test.ts" had no matches
 Traceback (most recent call last):
   File "/home/runner/work/TenkaCloud/TenkaCloud/.agent/issue-2748-autofix.py", line 262, in <module>
     subprocess.run(command, check=True)
   File "/usr/lib/python3.12/subprocess.py", line 571, in run
     raise CalledProcessError(retcode, process.args,
-subprocess.CalledProcessError: Command '['bun', 'test', 'scripts/landing/generate-landing-docs.test.ts']' returned non-zero exit status 1.
+subprocess.CalledProcessError: Command '['bun', 'test', './scripts/landing/generate-landing-docs.test.ts']' returned non-zero exit status 1.
