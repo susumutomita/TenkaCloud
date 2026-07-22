@@ -1,5 +1,7 @@
 exit_status=1
 
+@TenkaCloud/infrastructure test:coverage:     [32m'    "path": [\n'[39m +
+@TenkaCloud/infrastructure test:coverage:     [32m'      "displayName"\n'[39m +
 @TenkaCloud/infrastructure test:coverage:     [32m'    ],\n'[39m +
 @TenkaCloud/infrastructure test:coverage:     [32m'    "message": "Required"\n'[39m +
 @TenkaCloud/infrastructure test:coverage:     [32m'  },\n'[39m +
@@ -189,35 +191,35 @@ exit_status=1
 @TenkaCloud/infrastructure test:coverage:   errorMessage: [90mundefined[39m
 @TenkaCloud/infrastructure test:coverage: }
 @TenkaCloud/infrastructure test:coverage: 
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/idp/routes.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 69[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/lite-pipeline-interface.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 8[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/control-plane/handlers/sign-in-audit.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 17[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/auth-wiring.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 51[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/control-plane/saml-admin-allowlist.test.ts [2m([22m[2m18 tests[22m[2m)[22m[32m 164[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy-backend-stack-statemachines.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 9[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage: (node:6321) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/idp/routes.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 64[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/lite-pipeline-interface.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/control-plane/handlers/sign-in-audit.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/auth-wiring.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 53[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/control-plane/saml-admin-allowlist.test.ts [2m([22m[2m18 tests[22m[2m)[22m[32m 163[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy-backend-stack-statemachines.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage: (node:6370) ExperimentalWarning: SQLite is an experimental feature and might change at any time
 @TenkaCloud/infrastructure test:coverage: (Use `node --trace-warnings ...` to show where the warning was created)
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/control-data/saml-config-repository.test.ts [2m([22m[2m22 tests[22m[2m)[22m[32m 25[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage: (node:6313) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 beforeExit listeners added to [process]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/control-data/saml-config-repository.test.ts [2m([22m[2m22 tests[22m[2m)[22m[32m 22[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage: (node:6362) MaxListenersExceededWarning: Possible EventEmitter memory leak detected. 11 beforeExit listeners added to [process]. MaxListeners is 10. Use emitter.setMaxListeners() to increase limit
 @TenkaCloud/infrastructure test:coverage: (Use `node --trace-warnings ...` to show where the warning was created)
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/cfn-deploy-lambda.test.ts [2m([22m[2m11 tests[22m[2m)[22m[33m 485[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage: (node:6338) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/cfn-deploy-lambda.test.ts [2m([22m[2m11 tests[22m[2m)[22m[33m 461[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage: (node:6385) ExperimentalWarning: SQLite is an experimental feature and might change at any time
 @TenkaCloud/infrastructure test:coverage: (Use `node --trace-warnings ...` to show where the warning was created)
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/always-on-runtime/sweeper/sweep.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/always-on-runtime/sweeper/sweep.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 12[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/external-id-audit-handler-repository.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 22[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage: (node:6353) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+@TenkaCloud/infrastructure test:coverage: (node:6400) ExperimentalWarning: SQLite is an experimental feature and might change at any time
 @TenkaCloud/infrastructure test:coverage: (Use `node --trace-warnings ...` to show where the warning was created)
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/coordination-handler.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 12[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/control-data/events-repository-parity.test.ts [2m([22m[2m27 tests[22m[2m)[22m[32m 45[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/local-play-port-remap.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 9[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/disruption-schedule-revert.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 17[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/disruption-recurring.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 15[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/onboard-diagnose.test.ts [2m([22m[2m19 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/control-data/events-repository-parity.test.ts [2m([22m[2m27 tests[22m[2m)[22m[32m 39[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/coordination-handler.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/local-play-port-remap.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/disruption-schedule-revert.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/disruption-recurring.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/onboard-diagnose.test.ts [2m([22m[2m19 tests[22m[2m)[22m[32m 15[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage: [90mstdout[2m | test/problem-deploy/saml-routes-orchestrators.test.ts[2m > [22m[2mrouteDelete[2m > [22m[2mshould delegate to handleDelete and return deleted:true
-@TenkaCloud/infrastructure test:coverage: [22m[39m{"event":"tenant-saml.delete","tenantId":"tenant-test","providerName":"CompanySAML","deletedBy":"unknown","deletedAt":"2026-07-22T03:07:01.567Z"}
+@TenkaCloud/infrastructure test:coverage: [22m[39m{"event":"tenant-saml.delete","tenantId":"tenant-test","providerName":"CompanySAML","deletedBy":"unknown","deletedAt":"2026-07-22T03:10:39.254Z"}
 @TenkaCloud/infrastructure test:coverage: 
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/saml-routes-orchestrators.test.ts [2m([22m[2m14 tests[22m[2m)[22m[32m 26[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/participant-update.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 18[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/saml-routes-orchestrators.test.ts [2m([22m[2m14 tests[22m[2m)[22m[32m 25[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/participant-update.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 16[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage: [90mstderr[2m | test/problem-deploy/event-progression-gate-routes.test.ts[2m > [22m[2mPUT /events/:eventId/progression-gate[2m > [22m[2mshould reject a TenantViewer caller (fail-closed)
 @TenkaCloud/infrastructure test:coverage: [22m[39m[events] forbidden role {
 @TenkaCloud/infrastructure test:coverage:   path: [32m'/events/01ARZ3NDEKTSV4RRFFQ69G5FAV/progression-gate'[39m,
@@ -237,26 +239,26 @@ exit_status=1
 @TenkaCloud/infrastructure test:coverage:   requiredRoles: [ [32m'TenantAdmin'[39m, [32m'TenantOperator'[39m ]
 @TenkaCloud/infrastructure test:coverage: }
 @TenkaCloud/infrastructure test:coverage: 
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/disruption-fire-queries.test.ts [2m([22m[2m19 tests[22m[2m)[22m[32m 13[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/event-progression-gate-routes.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 45[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/config-loader.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 14[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/gcp-infra-manager-rest-client.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 56[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/sakura-apprun-adapter.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 18[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/detect-suspicious-comment.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 16[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/app-plane-core/handlers/pre-token-generation.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 7[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/always-on-runtime/sweeper/index.composition.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 22[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/event-lock-scoring.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 14[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/local-play-container-runner.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 27[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/event-progression-gate-routes.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 63[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/disruption-fire-queries.test.ts [2m([22m[2m19 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/config-loader.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/gcp-infra-manager-rest-client.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 47[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/detect-suspicious-comment.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/sakura-apprun-adapter.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/app-plane-core/handlers/pre-token-generation.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/always-on-runtime/sweeper/index.composition.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 30[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/event-lock-scoring.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/local-play-container-runner.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 20[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage: [90mstderr[2m | test/problem-deploy/audit-log-routes.test.ts[2m > [22m[2mGET /admin/audit-log[2m > [22m[2mshould surface a read error via handleRouteError (5xx)
 @TenkaCloud/infrastructure test:coverage: [22m[39m[events] listTenantAuditEntries failed { message: [32m'ddb boom'[39m }
 @TenkaCloud/infrastructure test:coverage: 
 @TenkaCloud/infrastructure test:coverage: [90mstderr[2m | test/problem-deploy/audit-log-routes.test.ts[2m > [22m[2mGET /admin/audit-log/export[2m > [22m[2mshould surface an export error via handleRouteError (5xx)
 @TenkaCloud/infrastructure test:coverage: [22m[39m[events] exportTenantAuditCsv failed { message: [32m'export boom'[39m }
 @TenkaCloud/infrastructure test:coverage: 
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/audit-log-routes.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 45[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-pack/saas-pack-guard.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 64[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/audit-log-routes.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 41[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-pack/saas-pack-guard.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 61[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/coordination-dispatcher-index.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 37[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage: (node:6527) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+@TenkaCloud/infrastructure test:coverage: (node:6571) ExperimentalWarning: SQLite is an experimental feature and might change at any time
 @TenkaCloud/infrastructure test:coverage: (Use `node --trace-warnings ...` to show where the warning was created)
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/control-data/saml-idps-repository-parity.test.ts [2m([22m[2m18 tests[22m[2m)[22m[32m 22[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage: [90mstderr[2m | test/problem-deploy/feature-flags-routes.test.ts[2m > [22m[2mGET /feature-flags[2m > [22m[2mshould surface a read error via handleRouteError (5xx)
@@ -281,8 +283,8 @@ exit_status=1
 @TenkaCloud/infrastructure test:coverage: [90mstderr[2m | test/problem-deploy/feature-flags-routes.test.ts[2m > [22m[2mPUT /admin/feature-flags[2m > [22m[2mshould surface a write error via handleRouteError (5xx)
 @TenkaCloud/infrastructure test:coverage: [22m[39m[events] putFeatureFlags failed { message: [32m'ddb boom'[39m }
 @TenkaCloud/infrastructure test:coverage: 
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/feature-flags-routes.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 42[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/tenkacloud-lite-bin.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/feature-flags-routes.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 39[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/tenkacloud-lite-bin.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 11[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage: [90mstdout[2m | test/admin-insight/admin-insight-routes.test.ts[2m > [22m[2mGET /admin/insight/tenants/summary[2m > [22m[2mshould return 200 when the SystemAdmin role claim is present
 @TenkaCloud/infrastructure test:coverage: [22m[39m{
 @TenkaCloud/infrastructure test:coverage:   event: [32m'admin.insight.read'[39m,
@@ -328,42 +330,42 @@ exit_status=1
 @TenkaCloud/infrastructure test:coverage: [90mstderr[2m | test/admin-insight/admin-insight-routes.test.ts[2m > [22m[2mGET /admin/insight/tenants/summary[2m > [22m[2mshould return 500 + body { error: 'internal_error' } on internal throw
 @TenkaCloud/infrastructure test:coverage: [22m[39m[admin-insight] summarizeTenants failed { message: [32m'ddb down'[39m }
 @TenkaCloud/infrastructure test:coverage: 
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/admin-insight/admin-insight-routes.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 39[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/admin-insight/admin-insight-routes.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 36[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage: [90mstderr[2m | test/problem-deploy/generic-scoring-reconciler-stuck-deleting.test.ts[2m > [22m[2mreconcileEventStatuses stuck-DELETING rescue (#828)[2m > [22m[2mshould rescue stuck `DELETING` rows for 30+ min to FAILED and transition to ARCHIVED during TEARDOWN
 @TenkaCloud/infrastructure test:coverage: [22m[39m[generic-scoring] rescued stuck deleting deployment { PK: [32m'DEPLOYMENT#STUCK'[39m, staleForMs: [33m2100000[39m }
 @TenkaCloud/infrastructure test:coverage: 
 @TenkaCloud/infrastructure test:coverage: [90mstdout[2m | test/problem-deploy/generic-scoring-reconciler-stuck-deleting.test.ts[2m > [22m[2mreconcileEventStatuses stuck-DELETING rescue (#828)[2m > [22m[2mshould rescue stuck `DELETING` rows for 30+ min to FAILED and transition to ARCHIVED during TEARDOWN
 @TenkaCloud/infrastructure test:coverage: [22m[39m[generic-scoring] Event status auto-transition { eventId: [32m'EV-STUCK'[39m, from: [32m'TEARDOWN'[39m, to: [32m'ARCHIVED'[39m }
 @TenkaCloud/infrastructure test:coverage: 
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/generic-scoring-reconciler-stuck-deleting.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 16[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/composite-outputs.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 18[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/generic-scoring-reconciler-stuck-deleting.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/composite-outputs.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 17[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage: [90mstderr[2m | test/problem-deploy/event-bulk-deploy-errors.test.ts[2m > [22m[2mbulkDeployEvent — error & guard paths[2m > [22m[2mshould return enqueued=0 without writing when teams or problems is empty
-@TenkaCloud/infrastructure test:coverage: [22m[39m{"event":"bulk-deploy.skip.no_teams_or_problems","level":"warn","component":"problem-deploy","timestamp":"2026-07-22T03:07:07.648Z","correlationId":"EV1","tenantId":"tenant-acme","allTeamsCount":3,"allProblemsCount":0,"retryFailedOnly":false}
+@TenkaCloud/infrastructure test:coverage: [22m[39m{"event":"bulk-deploy.skip.no_teams_or_problems","level":"warn","component":"problem-deploy","timestamp":"2026-07-22T03:10:44.894Z","correlationId":"EV1","tenantId":"tenant-acme","allTeamsCount":3,"allProblemsCount":0,"retryFailedOnly":false}
 @TenkaCloud/infrastructure test:coverage: 
 @TenkaCloud/infrastructure test:coverage: [90mstderr[2m | test/problem-deploy/event-bulk-deploy-errors.test.ts[2m > [22m[2mbulkDeployEvent — error & guard paths[2m > [22m[2mshould skip when neither team.awsAccountId nor problem.defaultAwsAccountId is present (#528)
-@TenkaCloud/infrastructure test:coverage: [22m[39m{"event":"bulk-deploy.skip.plan_empty_after_iteration","level":"warn","component":"problem-deploy","timestamp":"2026-07-22T03:07:07.652Z","correlationId":"EV1","tenantId":"tenant-acme","retryFailedOnly":false,"forceRedeploy":false,"teamsCount":1,"problemsCount":1,"failedByKeyCount":0,"forceRedeployByKeyCount":0,"existingKeyCount":0,"skipped":1,"unverifiedAccountsCount":0,"missingCredentialsCount":0,"missingCredentials":[],"failedKeys":[],"liveTeamIds":["T1"],"liveProblemIds":["hello-world"]}
+@TenkaCloud/infrastructure test:coverage: [22m[39m{"event":"bulk-deploy.skip.plan_empty_after_iteration","level":"warn","component":"problem-deploy","timestamp":"2026-07-22T03:10:44.898Z","correlationId":"EV1","tenantId":"tenant-acme","retryFailedOnly":false,"forceRedeploy":false,"teamsCount":1,"problemsCount":1,"failedByKeyCount":0,"forceRedeployByKeyCount":0,"existingKeyCount":0,"skipped":1,"unverifiedAccountsCount":0,"missingCredentialsCount":0,"missingCredentials":[],"failedKeys":[],"liveTeamIds":["T1"],"liveProblemIds":["hello-world"]}
 @TenkaCloud/infrastructure test:coverage: 
 @TenkaCloud/infrastructure test:coverage: [90mstdout[2m | test/problem-deploy/event-bulk-deploy-errors.test.ts[2m > [22m[2mbulkDeployEvent — error & guard paths[2m > [22m[2mshould mark the affected deployments as FAILED and keep them retryable on PutEvents partial failure
-@TenkaCloud/infrastructure test:coverage: [22m[39m{"event":"bulk-deploy.enqueued","level":"info","component":"problem-deploy","timestamp":"2026-07-22T03:07:07.657Z","correlationId":"EV1","tenantId":"tenant-acme","retryFailedOnly":false,"forceRedeploy":false,"planCount":2,"skipped":0,"unverifiedAccountsCount":0,"missingCredentialsCount":0,"missingCredentials":[]}
+@TenkaCloud/infrastructure test:coverage: [22m[39m{"event":"bulk-deploy.enqueued","level":"info","component":"problem-deploy","timestamp":"2026-07-22T03:10:44.901Z","correlationId":"EV1","tenantId":"tenant-acme","retryFailedOnly":false,"forceRedeploy":false,"planCount":2,"skipped":0,"unverifiedAccountsCount":0,"missingCredentialsCount":0,"missingCredentials":[]}
 @TenkaCloud/infrastructure test:coverage: 
 @TenkaCloud/infrastructure test:coverage: [90mstdout[2m | test/problem-deploy/event-bulk-deploy-errors.test.ts[2m > [22m[2mbulkDeployEvent — error & guard paths[2m > [22m[2mshould mark the deployments in the chunk as FAILED and keep them retryable on PutEvents timeout/reject
-@TenkaCloud/infrastructure test:coverage: [22m[39m{"event":"bulk-deploy.enqueued","level":"info","component":"problem-deploy","timestamp":"2026-07-22T03:07:07.663Z","correlationId":"EV1","tenantId":"tenant-acme","retryFailedOnly":false,"forceRedeploy":false,"planCount":2,"skipped":0,"unverifiedAccountsCount":0,"missingCredentialsCount":0,"missingCredentials":[]}
+@TenkaCloud/infrastructure test:coverage: [22m[39m{"event":"bulk-deploy.enqueued","level":"info","component":"problem-deploy","timestamp":"2026-07-22T03:10:44.905Z","correlationId":"EV1","tenantId":"tenant-acme","retryFailedOnly":false,"forceRedeploy":false,"planCount":2,"skipped":0,"unverifiedAccountsCount":0,"missingCredentialsCount":0,"missingCredentials":[]}
 @TenkaCloud/infrastructure test:coverage: 
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/event-bulk-deploy-errors.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 29[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/event-bulk-deploy-errors.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 22[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage: [90mstderr[2m | test/problem-deploy/lifecycle-routes.test.ts[2m > [22m[2mPATCH /events/:eventId/schedule[2m > [22m[2mshould surface a schedule error via handleRouteError (5xx)
 @TenkaCloud/infrastructure test:coverage: [22m[39m[events] setEventSchedule failed { eventId: [32m'01HZX0K3M3K9ZQHB3MRQHBA1B2'[39m, message: [32m'ddb boom'[39m }
 @TenkaCloud/infrastructure test:coverage: 
 @TenkaCloud/infrastructure test:coverage: [90mstderr[2m | test/problem-deploy/lifecycle-routes.test.ts[2m > [22m[2mPOST /events/:eventId/end[2m > [22m[2mshould surface an end error via handleRouteError (5xx)
 @TenkaCloud/infrastructure test:coverage: [22m[39m[events] endEvent failed { eventId: [32m'01HZX0K3M3K9ZQHB3MRQHBA1B2'[39m, message: [32m'end boom'[39m }
 @TenkaCloud/infrastructure test:coverage: 
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/lifecycle-routes.test.ts [2m([22m[2m17 tests[22m[2m)[22m[32m 46[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/audit-dependencies.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 101[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/cdk-aspect/log-group-retention.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 285[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/lifecycle-routes.test.ts [2m([22m[2m17 tests[22m[2m)[22m[32m 43[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/audit-dependencies.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 91[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/cdk-aspect/log-group-retention.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 286[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/disruption-effects.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 9[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/bulk-adapter-dispatch.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 12[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/security/cloudfront-headers.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 122[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/cloud-action-enforcement.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 12[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/participant-notifications.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/bulk-adapter-dispatch.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/security/cloudfront-headers.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 118[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/cloud-action-enforcement.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/participant-notifications.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 12[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage: [90mstdout[2m | test/app-config/resolve-pack-catalog.test.ts[2m > [22m[2mresolveAppConfig pack catalog source (#2462)[2m > [22m[2mshould include active pack problems in the resolved catalog
 @TenkaCloud/infrastructure test:coverage: [22m[39mTenant ID is empty, a default tenant id "pooled" will be assigned
 @TenkaCloud/infrastructure test:coverage: 
@@ -371,68 +373,68 @@ exit_status=1
 @TenkaCloud/infrastructure test:coverage: [22m[39mTenant ID is empty, a default tenant id "pooled" will be assigned
 @TenkaCloud/infrastructure test:coverage: Tenant ID is empty, a default tenant id "pooled" will be assigned
 @TenkaCloud/infrastructure test:coverage: 
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/app-config/resolve-pack-catalog.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 34[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy-backend-stack-synth-lockdown.test.ts [2m([22m[2m20 tests[22m[2m)[22m[33m 1527[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m should keep the exact logical ID inventory (REPLACE/DELETE guard) [33m 815[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/deploy-cost-model.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 242[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage: (node:6686) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/app-config/resolve-pack-catalog.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 37[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy-backend-stack-synth-lockdown.test.ts [2m([22m[2m20 tests[22m[2m)[22m[33m 1449[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m should keep the exact logical ID inventory (REPLACE/DELETE guard) [33m 769[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/deploy-cost-model.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 215[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage: (node:6730) ExperimentalWarning: SQLite is an experimental feature and might change at any time
 @TenkaCloud/infrastructure test:coverage: (Use `node --trace-warnings ...` to show where the warning was created)
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/control-data/events-repository-error-paths.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 23[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage: [90mstdout[2m | test/problem-deploy/event-bulk-deploy-persistence.test.ts[2m > [22m[2mbulkDeployEvent — persistence: row shape & Event status flip[2m > [22m[2mshould denormalize Event.startsAt into the deployment row as eventStartsAt
-@TenkaCloud/infrastructure test:coverage: [22m[39m{"event":"bulk-deploy.enqueued","level":"info","component":"problem-deploy","timestamp":"2026-07-22T03:07:12.528Z","correlationId":"EV1","tenantId":"tenant-acme","retryFailedOnly":false,"forceRedeploy":false,"planCount":2,"skipped":0,"unverifiedAccountsCount":0,"missingCredentialsCount":0,"missingCredentials":[]}
+@TenkaCloud/infrastructure test:coverage: [22m[39m{"event":"bulk-deploy.enqueued","level":"info","component":"problem-deploy","timestamp":"2026-07-22T03:10:49.647Z","correlationId":"EV1","tenantId":"tenant-acme","retryFailedOnly":false,"forceRedeploy":false,"planCount":2,"skipped":0,"unverifiedAccountsCount":0,"missingCredentialsCount":0,"missingCredentials":[]}
 @TenkaCloud/infrastructure test:coverage: 
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/control-data/events-repository-error-paths.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 21[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage: [90mstdout[2m | test/problem-deploy/event-bulk-deploy-persistence.test.ts[2m > [22m[2mbulkDeployEvent — persistence: row shape & Event status flip[2m > [22m[2mshould leave eventStartsAt undefined when Event.startsAt is unset (score gate side)
-@TenkaCloud/infrastructure test:coverage: [22m[39m{"event":"bulk-deploy.enqueued","level":"info","component":"problem-deploy","timestamp":"2026-07-22T03:07:12.533Z","correlationId":"EV1","tenantId":"tenant-acme","retryFailedOnly":false,"forceRedeploy":false,"planCount":2,"skipped":0,"unverifiedAccountsCount":0,"missingCredentialsCount":0,"missingCredentials":[]}
+@TenkaCloud/infrastructure test:coverage: [22m[39m{"event":"bulk-deploy.enqueued","level":"info","component":"problem-deploy","timestamp":"2026-07-22T03:10:49.652Z","correlationId":"EV1","tenantId":"tenant-acme","retryFailedOnly":false,"forceRedeploy":false,"planCount":2,"skipped":0,"unverifiedAccountsCount":0,"missingCredentialsCount":0,"missingCredentials":[]}
 @TenkaCloud/infrastructure test:coverage: 
 @TenkaCloud/infrastructure test:coverage: [90mstdout[2m | test/problem-deploy/event-bulk-deploy-persistence.test.ts[2m > [22m[2mbulkDeployEvent — persistence: row shape & Event status flip[2m > [22m[2mshould use the team awsAccountId for the deployment row's awsAccountId (#528)
-@TenkaCloud/infrastructure test:coverage: [22m[39m{"event":"bulk-deploy.enqueued","level":"info","component":"problem-deploy","timestamp":"2026-07-22T03:07:12.535Z","correlationId":"EV1","tenantId":"tenant-acme","retryFailedOnly":false,"forceRedeploy":false,"planCount":4,"skipped":0,"unverifiedAccountsCount":0,"missingCredentialsCount":0,"missingCredentials":[]}
+@TenkaCloud/infrastructure test:coverage: [22m[39m{"event":"bulk-deploy.enqueued","level":"info","component":"problem-deploy","timestamp":"2026-07-22T03:10:49.653Z","correlationId":"EV1","tenantId":"tenant-acme","retryFailedOnly":false,"forceRedeploy":false,"planCount":4,"skipped":0,"unverifiedAccountsCount":0,"missingCredentialsCount":0,"missingCredentials":[]}
 @TenkaCloud/infrastructure test:coverage: 
 @TenkaCloud/infrastructure test:coverage: [90mstdout[2m | test/problem-deploy/event-bulk-deploy-persistence.test.ts[2m > [22m[2mbulkDeployEvent — persistence: row shape & Event status flip[2m > [22m[2mshould fall back to problem.defaultAwsAccountId when team.awsAccountId is absent (#528 migration)
-@TenkaCloud/infrastructure test:coverage: [22m[39m{"event":"bulk-deploy.enqueued","level":"info","component":"problem-deploy","timestamp":"2026-07-22T03:07:12.538Z","correlationId":"EV1","tenantId":"tenant-acme","retryFailedOnly":false,"forceRedeploy":false,"planCount":2,"skipped":0,"unverifiedAccountsCount":0,"missingCredentialsCount":0,"missingCredentials":[]}
+@TenkaCloud/infrastructure test:coverage: [22m[39m{"event":"bulk-deploy.enqueued","level":"info","component":"problem-deploy","timestamp":"2026-07-22T03:10:49.656Z","correlationId":"EV1","tenantId":"tenant-acme","retryFailedOnly":false,"forceRedeploy":false,"planCount":2,"skipped":0,"unverifiedAccountsCount":0,"missingCredentialsCount":0,"missingCredentials":[]}
 @TenkaCloud/infrastructure test:coverage: 
 @TenkaCloud/infrastructure test:coverage: [90mstdout[2m | test/problem-deploy/event-bulk-deploy-persistence.test.ts[2m > [22m[2mbulkDeployEvent — persistence: row shape & Event status flip[2m > [22m[2mshould flip Event status DRAFT → DEPLOYING after success (for status-badge visibility)
-@TenkaCloud/infrastructure test:coverage: [22m[39m{"event":"bulk-deploy.enqueued","level":"info","component":"problem-deploy","timestamp":"2026-07-22T03:07:12.540Z","correlationId":"EV1","tenantId":"tenant-acme","retryFailedOnly":false,"forceRedeploy":false,"planCount":2,"skipped":0,"unverifiedAccountsCount":0,"missingCredentialsCount":0,"missingCredentials":[]}
+@TenkaCloud/infrastructure test:coverage: [22m[39m{"event":"bulk-deploy.enqueued","level":"info","component":"problem-deploy","timestamp":"2026-07-22T03:10:49.657Z","correlationId":"EV1","tenantId":"tenant-acme","retryFailedOnly":false,"forceRedeploy":false,"planCount":2,"skipped":0,"unverifiedAccountsCount":0,"missingCredentialsCount":0,"missingCredentials":[]}
 @TenkaCloud/infrastructure test:coverage: 
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/event-bulk-deploy-persistence.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 23[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage: (node:6698) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/event-bulk-deploy-persistence.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 20[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage: (node:6738) ExperimentalWarning: SQLite is an experimental feature and might change at any time
 @TenkaCloud/infrastructure test:coverage: (Use `node --trace-warnings ...` to show where the warning was created)
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-pack/pack-cli-git-install.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 49[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-pack/pack-cli-git-install.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 36[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage: [90mstdout[2m | test/problem-deploy/deploy-handler-turso-regression.test.ts[2m > [22m[2mstartDeployment against a pure SQL (turso/sql) control-data backend[2m > [22m[2mshould create a deployment row through the SQL repository seam and publish DeployCreateRequested
-@TenkaCloud/infrastructure test:coverage: [22m[39m{"event":"deploy.eventbridge.publish.succeeded","level":"info","component":"problem-deploy","timestamp":"2026-07-22T03:07:13.167Z","jobId":"01KY3WN9WB4VTYBEK4713Q9KJ9","correlationId":"01KY3WN9WB4VTYBEK4713Q9KJ9","detailType":"DeployCreateRequested","eventBusName":"test-bus","resource":"tenkacloud:deployment:01KY3WN9WB4VTYBEK4713Q9KJ9"}
+@TenkaCloud/infrastructure test:coverage: [22m[39m{"event":"deploy.eventbridge.publish.succeeded","level":"info","component":"problem-deploy","timestamp":"2026-07-22T03:10:50.152Z","jobId":"01KY3WVXS6XHBT81WMJGD1QSPF","correlationId":"01KY3WVXS6XHBT81WMJGD1QSPF","detailType":"DeployCreateRequested","eventBusName":"test-bus","resource":"tenkacloud:deployment:01KY3WVXS6XHBT81WMJGD1QSPF"}
 @TenkaCloud/infrastructure test:coverage: 
 @TenkaCloud/infrastructure test:coverage: [90mstdout[2m | test/problem-deploy/deploy-handler-turso-regression.test.ts[2m > [22m[2mstartDeployment against a pure SQL (turso/sql) control-data backend[2m > [22m[2mshould create a deployment row through the SQL repository seam and publish DeployCreateRequested
-@TenkaCloud/infrastructure test:coverage: [22m[39m{"event":"deploy.create.enqueued","level":"info","component":"problem-deploy","timestamp":"2026-07-22T03:07:13.168Z","jobId":"01KY3WN9WB4VTYBEK4713Q9KJ9","correlationId":"01KY3WN9WB4VTYBEK4713Q9KJ9","tenantId":"tenant-acme","problemId":"hello-world","teamSlug":"alpha-team","region":"ap-northeast-1","awsAccountId":"123456789012","namePrefix":"tc-hello-world-alpha-team"}
+@TenkaCloud/infrastructure test:coverage: [22m[39m{"event":"deploy.create.enqueued","level":"info","component":"problem-deploy","timestamp":"2026-07-22T03:10:50.153Z","jobId":"01KY3WVXS6XHBT81WMJGD1QSPF","correlationId":"01KY3WVXS6XHBT81WMJGD1QSPF","tenantId":"tenant-acme","problemId":"hello-world","teamSlug":"alpha-team","region":"ap-northeast-1","awsAccountId":"123456789012","namePrefix":"tc-hello-world-alpha-team"}
 @TenkaCloud/infrastructure test:coverage: 
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/deploy-handler-turso-regression.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 17[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/sakura-credential-store.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 17[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/disruption-send-dispatch.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/deploy-handler-turso-regression.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/sakura-credential-store.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/disruption-send-dispatch.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 13[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage: [90mstdout[2m | test/problem-deploy/cfn-deploy-delete-handler-entry.test.ts[2m > [22m[2mcfn-deploy delete handler real-SDK entries (#2291)[2m > [22m[2mshould build real SDK clients and delete the stack through deleteHandler
-@TenkaCloud/infrastructure test:coverage: [22m[39m{"event":"deploy.cfn-lambda.delete.start","level":"info","component":"problem-deploy","timestamp":"2026-07-22T03:07:13.747Z","jobId":"01HX0000000000000000000ABC","correlationId":"01HX0000000000000000000ABC","tenantId":"tenant-acme","stackName":"tc-sample-flag-demo-team","region":"ap-northeast-1","hasCompetitorRole":true}
+@TenkaCloud/infrastructure test:coverage: [22m[39m{"event":"deploy.cfn-lambda.delete.start","level":"info","component":"problem-deploy","timestamp":"2026-07-22T03:10:50.754Z","jobId":"01HX0000000000000000000ABC","correlationId":"01HX0000000000000000000ABC","tenantId":"tenant-acme","stackName":"tc-sample-flag-demo-team","region":"ap-northeast-1","hasCompetitorRole":true}
 @TenkaCloud/infrastructure test:coverage: 
 @TenkaCloud/infrastructure test:coverage: [90mstdout[2m | test/problem-deploy/cfn-deploy-delete-handler-entry.test.ts[2m > [22m[2mcfn-deploy delete handler real-SDK entries (#2291)[2m > [22m[2mshould build real SDK clients and delete the stack through deleteHandler
-@TenkaCloud/infrastructure test:coverage: [22m[39m{"event":"deploy.cfn-lambda.delete.submitted","level":"info","component":"problem-deploy","timestamp":"2026-07-22T03:07:13.748Z","jobId":"01HX0000000000000000000ABC","correlationId":"01HX0000000000000000000ABC","tenantId":"tenant-acme","stackName":"tc-sample-flag-demo-team","region":"ap-northeast-1"}
+@TenkaCloud/infrastructure test:coverage: [22m[39m{"event":"deploy.cfn-lambda.delete.submitted","level":"info","component":"problem-deploy","timestamp":"2026-07-22T03:10:50.756Z","jobId":"01HX0000000000000000000ABC","correlationId":"01HX0000000000000000000ABC","tenantId":"tenant-acme","stackName":"tc-sample-flag-demo-team","region":"ap-northeast-1"}
 @TenkaCloud/infrastructure test:coverage: 
 @TenkaCloud/infrastructure test:coverage: [90mstdout[2m | test/problem-deploy/cfn-deploy-delete-handler-entry.test.ts[2m > [22m[2mcfn-deploy delete handler real-SDK entries (#2291)[2m > [22m[2mshould shape assumed credentials onto the CFn client (sdkCredentials) for deleteHandler
-@TenkaCloud/infrastructure test:coverage: [22m[39m{"event":"deploy.cfn-lambda.delete.start","level":"info","component":"problem-deploy","timestamp":"2026-07-22T03:07:13.751Z","jobId":"01HX0000000000000000000ABC","correlationId":"01HX0000000000000000000ABC","tenantId":"tenant-acme","stackName":"tc-sample-flag-demo-team","region":"ap-northeast-1","hasCompetitorRole":true}
+@TenkaCloud/infrastructure test:coverage: [22m[39m{"event":"deploy.cfn-lambda.delete.start","level":"info","component":"problem-deploy","timestamp":"2026-07-22T03:10:50.759Z","jobId":"01HX0000000000000000000ABC","correlationId":"01HX0000000000000000000ABC","tenantId":"tenant-acme","stackName":"tc-sample-flag-demo-team","region":"ap-northeast-1","hasCompetitorRole":true}
 @TenkaCloud/infrastructure test:coverage: 
 @TenkaCloud/infrastructure test:coverage: [90mstdout[2m | test/problem-deploy/cfn-deploy-delete-handler-entry.test.ts[2m > [22m[2mcfn-deploy delete handler real-SDK entries (#2291)[2m > [22m[2mshould shape assumed credentials onto the CFn client (sdkCredentials) for deleteHandler
-@TenkaCloud/infrastructure test:coverage: [22m[39m{"event":"deploy.cfn-lambda.delete.submitted","level":"info","component":"problem-deploy","timestamp":"2026-07-22T03:07:13.751Z","jobId":"01HX0000000000000000000ABC","correlationId":"01HX0000000000000000000ABC","tenantId":"tenant-acme","stackName":"tc-sample-flag-demo-team","region":"ap-northeast-1"}
+@TenkaCloud/infrastructure test:coverage: [22m[39m{"event":"deploy.cfn-lambda.delete.submitted","level":"info","component":"problem-deploy","timestamp":"2026-07-22T03:10:50.759Z","jobId":"01HX0000000000000000000ABC","correlationId":"01HX0000000000000000000ABC","tenantId":"tenant-acme","stackName":"tc-sample-flag-demo-team","region":"ap-northeast-1"}
 @TenkaCloud/infrastructure test:coverage: 
 @TenkaCloud/infrastructure test:coverage: [90mstdout[2m | test/problem-deploy/cfn-deploy-delete-handler-entry.test.ts[2m > [22m[2mcfn-deploy delete handler real-SDK entries (#2291)[2m > [22m[2mshould normalize an already-gone stack to DELETE_COMPLETE through describeDeleteHandler
-@TenkaCloud/infrastructure test:coverage: [22m[39m{"event":"deploy.cfn-lambda.delete.poll.gone","level":"info","component":"problem-deploy","timestamp":"2026-07-22T03:07:13.755Z","jobId":"01HX0000000000000000000ABC","correlationId":"01HX0000000000000000000ABC","stackName":"tc-sample-flag-demo-team","region":"ap-northeast-1"}
+@TenkaCloud/infrastructure test:coverage: [22m[39m{"event":"deploy.cfn-lambda.delete.poll.gone","level":"info","component":"problem-deploy","timestamp":"2026-07-22T03:10:50.762Z","jobId":"01HX0000000000000000000ABC","correlationId":"01HX0000000000000000000ABC","stackName":"tc-sample-flag-demo-team","region":"ap-northeast-1"}
 @TenkaCloud/infrastructure test:coverage: 
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/cfn-deploy-delete-handler-entry.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 15[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/assume-competitor-role.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 17[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/tenkacloud-cli.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 19[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/coordination-plugin-loader.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/cfn-deploy-delete-handler-entry.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/assume-competitor-role.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/tenkacloud-cli.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 20[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/coordination-plugin-loader.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 11[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage: [90mstdout[2m | test/problem-deploy/deploy-handler-non-aws-gate.test.ts[2m > [22m[2mstartDeployment for a non-AWS single-provider problem (Issue #2561)[2m > [22m[2mshould deploy without an AWS account when the team's provider credential is registered
-@TenkaCloud/infrastructure test:coverage: [22m[39m{"event":"deploy.create.enqueued","level":"info","component":"problem-deploy","timestamp":"2026-07-22T03:07:15.031Z","jobId":"01KY3WNBPN2V2ZR311HRK1APNM","correlationId":"01KY3WNBPN2V2ZR311HRK1APNM","tenantId":"tenant-acme","problemId":"gcp-only-problem","teamSlug":"alpha-team","region":"","awsAccountId":"","namePrefix":"tc-gcp-only-problem-alpha-team"}
+@TenkaCloud/infrastructure test:coverage: [22m[39m{"event":"deploy.create.enqueued","level":"info","component":"problem-deploy","timestamp":"2026-07-22T03:10:51.928Z","jobId":"01KY3WVZGPAGQ2225Y8APCV14H","correlationId":"01KY3WVZGPAGQ2225Y8APCV14H","tenantId":"tenant-acme","problemId":"gcp-only-problem","teamSlug":"alpha-team","region":"","awsAccountId":"","namePrefix":"tc-gcp-only-problem-alpha-team"}
 @TenkaCloud/infrastructure test:coverage: 
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/deploy-handler-non-aws-gate.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 15[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/deploy-quota.test.ts [2m([22m[2m22 tests[22m[2m)[22m[32m 17[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/observability/cloudwatch-dashboard-stack.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 76[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/observability/cloudwatch-dashboard-stack.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 74[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/disruption-dispatch-command.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 9[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/challenge-payload-stack.test.ts [2m([22m[2m9 tests[22m[2m)[22m[33m 400[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/challenge-payload-stack.test.ts [2m([22m[2m9 tests[22m[2m)[22m[33m 393[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage: [90mstderr[2m | test/problem-deploy/system-audit-writer-handler.test.ts[2m > [22m[2msystem-audit-writer handler[2m > [22m[2mshould skip a non-audit-worthy event without writing
 @TenkaCloud/infrastructure test:coverage: [22m[39m[system-audit-writer] unknown / non-audit-worthy event, skipping { detailType: [32m'SomeUnrelatedEvent'[39m }
 @TenkaCloud/infrastructure test:coverage: 
@@ -445,8 +447,8 @@ exit_status=1
 @TenkaCloud/infrastructure test:coverage: [90mstderr[2m | test/problem-deploy/system-audit-writer-handler.test.ts[2m > [22m[2msystem-audit-writer handler[2m > [22m[2mshould skip a SUCCEEDED CodeBuild event
 @TenkaCloud/infrastructure test:coverage: [22m[39m[system-audit-writer] unknown / non-audit-worthy event, skipping { detailType: [32m'CodeBuild Build State Change'[39m }
 @TenkaCloud/infrastructure test:coverage: 
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/system-audit-writer-handler.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 21[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/local-play-verify-client.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 68[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/local-play-verify-client.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 64[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/system-audit-writer-handler.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 22[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage: [90mstderr[2m | test/problem-deploy/education-graph-routes.test.ts[2m > [22m[2meducation graph admin routes[2m > [22m[2mshould reject role "TenantOperator"
 @TenkaCloud/infrastructure test:coverage: [22m[39m[education-graph] forbidden role {
 @TenkaCloud/infrastructure test:coverage:   path: [32m'/admin/education-graph'[39m,
@@ -463,18 +465,19 @@ exit_status=1
 @TenkaCloud/infrastructure test:coverage:   requiredRoles: [ [32m'TenantAdmin'[39m ]
 @TenkaCloud/infrastructure test:coverage: }
 @TenkaCloud/infrastructure test:coverage: 
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/education-graph-routes.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 82[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [31m❯[39m test/problem-deploy/runtime-status-reconciler.test.ts [2m([22m[2m5 tests[22m[2m | [22m[31m2 failed[39m[2m)[22m[32m 39[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/education-graph-routes.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 77[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [31m❯[39m test/problem-deploy/runtime-status-reconciler.test.ts [2m([22m[2m5 tests[22m[2m | [22m[31m2 failed[39m[2m)[22m[32m 37[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:      [32m✓[39m should map the 6 RuntimeStatus values to DeploymentStatus[32m 2[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage: [31m     [31m×[31m should write COMPLETE + stackOutputs when a sakura deployment becomes ready[39m[32m 29[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage: [31m     [31m×[31m should write COMPLETE + stackOutputs when a sakura deployment becomes ready[39m[32m 27[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage: [31m     [31m×[31m should NOT write when status is unchanged and not ready (deploying → IN_PROGRESS, same)[39m[32m 3[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:      [32m✓[39m should swallow ConditionalCheckFailed (concurrent teardown/tick race) without throwing[32m 2[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:      [32m✓[39m should skip AWS / runtime-less rows without calling the cloud (no fetch, no Update)[32m 0[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/control-plane/saml-identity-providers.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 160[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/capacity-scale.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 20[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/control-data/libsql-executor.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 11[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-pack/pack-cli-activation.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 53[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/control-plane/saml-identity-providers.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 164[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/capacity-scale.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 23[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/control-data/libsql-executor.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-pack/pack-cli-activation.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 54[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/admin-insight/summary.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/usage-metering.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 15[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage: [90mstderr[2m | test/problem-deploy/scoring-routes.test.ts[2m > [22m[2mPOST /events/:eventId/lock-scoring[2m > [22m[2mshould surface a lock error (5xx)
 @TenkaCloud/infrastructure test:coverage: [22m[39m[events] lockScoring failed { eventId: [32m'01HZX0K3M3K9ZQHB3MRQHBA1B2'[39m, message: [32m'boom'[39m }
 @TenkaCloud/infrastructure test:coverage: 
@@ -484,21 +487,20 @@ exit_status=1
 @TenkaCloud/infrastructure test:coverage: [90mstderr[2m | test/problem-deploy/scoring-routes.test.ts[2m > [22m[2mPOST /events/:eventId/archive[2m > [22m[2mshould surface an archive error (5xx)
 @TenkaCloud/infrastructure test:coverage: [22m[39m[events] archiveEvent failed { eventId: [32m'01HZX0K3M3K9ZQHB3MRQHBA1B2'[39m, message: [32m'boom'[39m }
 @TenkaCloud/infrastructure test:coverage: 
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/usage-metering.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 16[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/scoring-routes.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 58[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/local-play-session-state.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 15[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/event-archive.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 13[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/bulk-deploy-persistence.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 14[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problems-schema-hints.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 44[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy-backend-stack-events.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 16[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/admin-insight/audit-routes.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 10[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/shared-http-parse.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 48[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/scoring-routes.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 42[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/local-play-session-state.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/event-archive.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/bulk-deploy-persistence.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problems-schema-hints.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 39[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy-backend-stack-events.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/admin-insight/audit-routes.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/shared-http-parse.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 44[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/observability/cost-budget.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 156[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/onboard-plan.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 10[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/observability/cost-budget.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 173[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/ddb-paginate.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 11[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/generic-scoring-attack-detection.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/generic-scoring-attack-detection.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/ddb-paginate.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 13[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/pack-dx-drift.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 5[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/end-event-internals.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/end-event-internals.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 14[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage: [90mstderr[2m | test/problem-deploy/handler-error-cors.test.ts[2m > [22m[2mHono handler onError (#559 defensive layer)[2m > [22m[2mdeploy-handler: should return 500 + CORS headers + JSON `error` even on uncaught throws
 @TenkaCloud/infrastructure test:coverage: [22m[39m[deploy] uncaught handler error { path: [32m'/__test_throw__'[39m, message: [32m'boom from deploy'[39m }
 @TenkaCloud/infrastructure test:coverage: 
@@ -508,7 +510,7 @@ exit_status=1
 @TenkaCloud/infrastructure test:coverage: [90mstderr[2m | test/problem-deploy/handler-error-cors.test.ts[2m > [22m[2mHono handler onError (#559 defensive layer)[2m > [22m[2mexisting handler internal catch paths should also return 500 + CORS (regression guard)
 @TenkaCloud/infrastructure test:coverage: [22m[39m[deploy] listDeployments failed { problemId: [32m'security-battle-royale'[39m, message: [32m'inner catch path'[39m }
 @TenkaCloud/infrastructure test:coverage: 
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/handler-error-cors.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 35[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/handler-error-cors.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 32[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage: [90mstderr[2m | test/problem-deploy/generic-scoring-reconciler-stuck-creating.test.ts[2m > [22m[2mreconcileEventStatuses stuck-create recovery (#2651)[2m > [22m[2mshould fail stale PENDING and IN_PROGRESS rows and unlock DEPLOYING in the same tick
 @TenkaCloud/infrastructure test:coverage: [22m[39m[generic-scoring] rescued stuck creating deployment { PK: [32m'DEPLOYMENT#PENDING'[39m, staleForMs: [33m4200000[39m }
 @TenkaCloud/infrastructure test:coverage: [generic-scoring] rescued stuck creating deployment { PK: [32m'DEPLOYMENT#IN-PROGRESS'[39m, staleForMs: [33m4200000[39m }
@@ -516,33 +518,32 @@ exit_status=1
 @TenkaCloud/infrastructure test:coverage: [90mstdout[2m | test/problem-deploy/generic-scoring-reconciler-stuck-creating.test.ts[2m > [22m[2mreconcileEventStatuses stuck-create recovery (#2651)[2m > [22m[2mshould fail stale PENDING and IN_PROGRESS rows and unlock DEPLOYING in the same tick
 @TenkaCloud/infrastructure test:coverage: [22m[39m[generic-scoring] Event status auto-transition { eventId: [32m'EV-STUCK-CREATE'[39m, from: [32m'DEPLOYING'[39m, to: [32m'READY'[39m }
 @TenkaCloud/infrastructure test:coverage: 
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/generic-scoring-reconciler-stuck-creating.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/generic-scoring-reconciler-stuck-creating.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 14[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/readme-onboarding-choice.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 9[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/deploy-handler-non-aws-route.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 38[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/admin-console-runtime-config-stack.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/deploy-handler-non-aws-route.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 37[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/admin-console-runtime-config-stack.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 9[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/cdk-aspect/dynamodb-low-capacity.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 119[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/runtime-score-feed.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 33[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage: (node:7066) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+@TenkaCloud/infrastructure test:coverage: (node:7114) ExperimentalWarning: SQLite is an experimental feature and might change at any time
 @TenkaCloud/infrastructure test:coverage: (Use `node --trace-warnings ...` to show where the warning was created)
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/control-data/problem-endpoints-repository-parity.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 30[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/cdk-aspect/codebuild-use-aws-managed-kms.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 210[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/admin-console-hosting.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 500[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:        [33m[2m✓[22m[39m connect-src should include the execute-api region wildcard [33m 324[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/idp/ddb-store.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 9[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/team-credentials-routes.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 14[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/admin-insight/pipeline-executions.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 10[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/tenant-template/tenant-template-stack-saml.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 1794[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m should NOT attach a SAML IdP when samlIdps is omitted (= existing tenants stay byte-for-byte identical) [33m 901[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m should IGNORE samlIdps on pooled tier even when env provides them (= ADR-018 pooled isolation) [33m 461[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m should ATTACH samlIdps on silo tier (= per-tenant UserPool) [33m 429[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-pack/reference-coordination-battle-coordination.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/control-data/problem-endpoints-repository-parity.test.ts [2m([22m[2m16 tests[22m[2m)[22m[32m 34[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/cdk-aspect/codebuild-use-aws-managed-kms.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 187[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/admin-console-hosting.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 479[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/idp/ddb-store.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/team-credentials-routes.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/admin-insight/pipeline-executions.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/tenant-template/tenant-template-stack-saml.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 1653[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m should NOT attach a SAML IdP when samlIdps is omitted (= existing tenants stay byte-for-byte identical) [33m 843[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m should IGNORE samlIdps on pooled tier even when env provides them (= ADR-018 pooled isolation) [33m 411[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m should ATTACH samlIdps on silo tier (= per-tenant UserPool) [33m 397[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-pack/reference-coordination-battle-coordination.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 10[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/always-on-runtime/sweeper/cfn-stacks-client.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 16[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/install-script.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 6[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/handlers/shared/secure-headers.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 47[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/delete-battles-account-check.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 99[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/s3-plugin-importer.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 24[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/rate-limiter.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/handlers/shared/secure-headers.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 49[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/s3-plugin-importer.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 23[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/delete-battles-account-check.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 88[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/local-play-multi-verify-contract.test.ts [2m([22m[2m15 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/rate-limiter.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 9[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage: [90mstderr[2m | test/problem-deploy/runtime-catalog-env.test.ts[2m > [22m[2mparseProblemRuntimes (#2054 / ADR-023)[2m > [22m[2mshould fail safe (empty) on malformed JSON or non-object payloads
 @TenkaCloud/infrastructure test:coverage: [22m[39m[parseProblemRuntimes] BATTLE_PROBLEMS_RUNTIMES parse failed (Expected property name or '}' in JSON at position 1 (line 1 column 2)). non-aws problems will fall through to the aws/cloudformation default (deploy then fails at template resolution).
 @TenkaCloud/infrastructure test:coverage: 
@@ -552,8 +553,8 @@ exit_status=1
 @TenkaCloud/infrastructure test:coverage: [90mstderr[2m | test/problem-deploy/runtime-catalog-env.test.ts[2m > [22m[2mparseProblemRuntimeDescriptors (#2075)[2m > [22m[2mshould drop a malformed composite entry without throwing (fail-safe)
 @TenkaCloud/infrastructure test:coverage: [22m[39m[parseProblemRuntimeDescriptors] dropping invalid runtime for bad-composite: bad-composite:runtime.targets: composite runtime requires at least 2 targets
 @TenkaCloud/infrastructure test:coverage: 
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/runtime-catalog-env.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 14[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/audit-wrapper.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/runtime-catalog-env.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/audit-wrapper.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 12[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage: [90mstderr[2m | test/problem-deploy/bulk-deploy-create-state-machine.test.ts[2m > [22m[2mBulkDeployCreateStateMachine[2m > [22m[2mshould include a Distributed Map state (not Standard Map; for 750 batch)
 @TenkaCloud/infrastructure test:coverage: [22m[39m[WARNING] aws-cdk-lib.aws_stepfunctions.StateMachineProps#definition is deprecated.
 @TenkaCloud/infrastructure test:coverage:   use definitionBody: DefinitionBody.fromChainable()
@@ -594,14 +595,14 @@ exit_status=1
 @TenkaCloud/infrastructure test:coverage:   use definitionBody: DefinitionBody.fromChainable()
 @TenkaCloud/infrastructure test:coverage:   This API will be removed in the next major release.
 @TenkaCloud/infrastructure test:coverage: 
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/bulk-deploy-create-state-machine.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 295[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/control-plane/managed-login.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 148[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/event-create-notification.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/bulk-deploy-create-state-machine.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 276[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/control-plane/managed-login.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 138[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/event-create-notification.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 14[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/feature-flags.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 13[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/iam-description-ascii.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 10[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/azure-deployment-stacks-rest-client.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 49[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/composite-live-acceptance.test.ts [2m([22m[2m4 tests[22m[2m | [22m[33m3 skipped[39m[2m)[22m[32m 5[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/turso-cli-installer.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/azure-deployment-stacks-rest-client.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 43[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/composite-live-acceptance.test.ts [2m([22m[2m4 tests[22m[2m | [22m[33m3 skipped[39m[2m)[22m[32m 4[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/turso-cli-installer.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 13[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage: [90mstderr[2m | test/problem-deploy/event-handler-index.test.ts[2m > [22m[2mevent-handler app wiring[2m > [22m[2mshould map MissingTenantClaimError to 401 via onError (with CORS)
 @TenkaCloud/infrastructure test:coverage: [22m[39m[events] missing tenantId claim { path: [32m'/__throw_missing_tenant__'[39m }
 @TenkaCloud/infrastructure test:coverage: 
@@ -622,26 +623,26 @@ exit_status=1
 @TenkaCloud/infrastructure test:coverage: [90mstderr[2m | test/problem-deploy/event-handler-index.test.ts[2m > [22m[2mevent-handler app wiring[2m > [22m[2mshould 403 tenant_suspended before bulk-deploying an event
 @TenkaCloud/infrastructure test:coverage: [22m[39m[events] tenant suspended { path: [32m'/events/01HZX0K3M3K9ZQHB3MRQHBA1B2/deploy'[39m, method: [32m'POST'[39m }
 @TenkaCloud/infrastructure test:coverage: 
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/event-handler-index.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 35[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/disruption-live-fire.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 10[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/azure-bicep-adapter.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 14[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/env-check-lite-turso.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 38[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/event-handler-index.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 36[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/disruption-live-fire.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/azure-bicep-adapter.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/env-check-lite-turso.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 36[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage: [90mstdout[2m | test/problem-deploy/generic-scoring-reconciler-pagination.test.ts[2m > [22m[2mreconcileEventStatuses pagination (#557 #539)[2m > [22m[2mScan should paginate (with LastEvaluatedKey → next Scan) before processing any event
 @TenkaCloud/infrastructure test:coverage: [22m[39m[generic-scoring] Event status auto-transition { eventId: [32m'P1'[39m, from: [32m'DEPLOYING'[39m, to: [32m'READY'[39m }
 @TenkaCloud/infrastructure test:coverage: 
 @TenkaCloud/infrastructure test:coverage: [90mstdout[2m | test/problem-deploy/generic-scoring-reconciler-pagination.test.ts[2m > [22m[2mreconcileEventStatuses pagination (#557 #539)[2m > [22m[2mDeployment Query should paginate (judging READY across empty pages after filtering)
 @TenkaCloud/infrastructure test:coverage: [22m[39m[generic-scoring] Event status auto-transition { eventId: [32m'EV-PAGED'[39m, from: [32m'DEPLOYING'[39m, to: [32m'READY'[39m }
 @TenkaCloud/infrastructure test:coverage: 
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/generic-scoring-reconciler-pagination.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 13[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/endpoints-metadata.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 8[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/gcp-infra-manager-adapter.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 10[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/scheduled-resources-turso.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 23[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/job-progress-log.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/endpoints-metadata.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/generic-scoring-reconciler-pagination.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/gcp-infra-manager-adapter.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/scheduled-resources-turso.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 22[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/job-progress-log.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 15[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/scoreboard-freeze.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 8[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/tenant-status-reconciler/status-policy.test.ts [2m([22m[2m11 tests[22m[2m)[22m[32m 6[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/deploy-stack-recovery.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 123[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/prepared-dispatch.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 11[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/coordination-plugin-bundle.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 341[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/coordination-plugin-bundle.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 316[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage: [90mstderr[2m | test/app-wiring/wire-synth.test.ts
 @TenkaCloud/infrastructure test:coverage: [22m[39m[WARNING] aws-cdk-lib.aws_cognito.UserPoolProps#advancedSecurityMode is deprecated.
 @TenkaCloud/infrastructure test:coverage:   Advanced Security Mode is deprecated due to user pool feature plans. Use StandardThreatProtectionMode and CustomThreatProtectionMode to set Thread Protection level.
@@ -656,7 +657,7 @@ exit_status=1
 @TenkaCloud/infrastructure test:coverage:   use `pointInTimeRecoverySpecification` instead
 @TenkaCloud/infrastructure test:coverage:   This API will be removed in the next major release.
 @TenkaCloud/infrastructure test:coverage: 
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/customer-execution/customer-execution-plane-stack.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 377[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/customer-execution/customer-execution-plane-stack.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 356[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/app-wiring/problem-deploy-backend-props.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 5[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage: [90mstderr[2m | test/app-wiring/wire-synth.test.ts[2m > [22m[2mbuildTenkaCloudApp synth regression (issue #2192)[2m > [22m[2mshould suffix every stack ID for non-development environments (issue #992)
 @TenkaCloud/infrastructure test:coverage: [22m[39m[WARNING] aws-cdk-lib.aws_cognito.UserPoolProps#advancedSecurityMode is deprecated.
@@ -672,29 +673,29 @@ exit_status=1
 @TenkaCloud/infrastructure test:coverage:   use `pointInTimeRecoverySpecification` instead
 @TenkaCloud/infrastructure test:coverage:   This API will be removed in the next major release.
 @TenkaCloud/infrastructure test:coverage: 
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/app-wiring/wire-synth.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 1022[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m should suffix every stack ID for non-development environments (issue #992) [33m 1005[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/app-wiring/wire-synth.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 994[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m should suffix every stack ID for non-development environments (issue #992) [33m 977[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/external-id-store.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 11[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/metadata-parser.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 9[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/participant-portal-runtime-config.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 250[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/azure-credential-store.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 12[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/deployment-detail-provenance.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 13[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-pack/pack-cli.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 22[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/metadata-parser.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/participant-portal-runtime-config.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 215[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/azure-credential-store.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/deployment-detail-provenance.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 8[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage: [90mstdout[2m | test/problem-deploy/generic-scoring-reconciler-scheduled-turso.test.ts[2m > [22m[2mreconcileEventStatuses scheduled Turso teardown (#2739)[2m > [22m[2mshould enter bulkTeardownEvent for a due Turso event without table-name env variables
 @TenkaCloud/infrastructure test:coverage: [22m[39m[generic-scoring] scheduled auto-teardown fired (ADR-047) { eventId: [32m'01KY29N716HRCNDJ7VBMAQQ3ZG'[39m, outcome: [32m'ok'[39m, enqueued: [33m1[39m }
 @TenkaCloud/infrastructure test:coverage: 
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/generic-scoring-reconciler-scheduled-turso.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 20[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/lite-pipeline-capacity.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 7[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/gcp-sts-rest-client.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 38[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-pack/pack-cli.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/generic-scoring-reconciler-scheduled-turso.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 15[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/lite-pipeline-capacity.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/gcp-sts-rest-client.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 43[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/problem-endpoints-resolve.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 7[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/scale-event-capacity.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 11[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/tenant-template/saml-identity-providers.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 136[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/idp/tenant-tier-guard.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 45[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/root-package-quality-gates.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 20[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/trace-log.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 14[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/shared-events-put-events-batched.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/tenant-template/saml-identity-providers.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 137[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/idp/tenant-tier-guard.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 31[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/root-package-quality-gates.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/trace-log.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/shared-events-put-events-batched.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 13[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/event-team-login-key-rotation.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 9[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/composite-status.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/composite-status.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 9[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage: [90mstderr[2m | test/problem-deploy/tenant-feature-flags.test.ts[2m > [22m[2misTenantFeatureEnabled[2m > [22m[2mshould treat a read error as OFF (opt-in feature must not block competition ops)
 @TenkaCloud/infrastructure test:coverage: [22m[39m[tenant-feature-flags] read failed (treating flag as OFF) {
 @TenkaCloud/infrastructure test:coverage:   tenantId: [32m't-1'[39m,
@@ -702,65 +703,65 @@ exit_status=1
 @TenkaCloud/infrastructure test:coverage:   message: [32m'ddb boom'[39m
 @TenkaCloud/infrastructure test:coverage: }
 @TenkaCloud/infrastructure test:coverage: 
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/tenant-feature-flags.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 15[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-pack/pack-cli-init.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 20[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage: (node:7823) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/tenant-feature-flags.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-pack/pack-cli-init.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 22[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage: (node:7866) ExperimentalWarning: SQLite is an experimental feature and might change at any time
 @TenkaCloud/infrastructure test:coverage: (Use `node --trace-warnings ...` to show where the warning was created)
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/always-on-runtime/runtime-score-archive.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 18[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/deployments-login-key-preserved.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/always-on-runtime/runtime-score-archive.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/deployments-login-key-preserved.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 14[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/ssrf-guard.test.ts [2m([22m[2m21 tests[22m[2m)[22m[32m 8[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/admin-insight/audit-export.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/admin-insight/audit-export.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 9[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/env-encoding.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 10[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/onboard-report.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 9[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/cdk-aspect/kms-key-short-pending-window.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 132[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/admin-console-runtime-config.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 397[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/score-event.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 9[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/audit-redact.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 10[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/default-competitor-role-name.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 7[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/deployment-progress-log.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 13[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/turso-live-environment.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 15[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/participant-login-diagnostics.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/onboard-report.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/admin-console-runtime-config.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 378[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/cdk-aspect/kms-key-short-pending-window.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 127[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/score-event.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/audit-redact.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/default-competitor-role-name.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/deployment-progress-log.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/turso-live-environment.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/participant-login-diagnostics.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 11[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/handlers/shared/cursor-codec.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 7[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/bootstrap-template/job-runner-permissions.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 22[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/check-duplication.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/bootstrap-template/job-runner-permissions.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/check-duplication.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 9[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/deployment-provenance.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 7[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/endpoints-store-and-audit-repository.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 23[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/readme-local-onboard.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 8[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage: (node:7978) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/readme-local-onboard.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage: (node:8021) ExperimentalWarning: SQLite is an experimental feature and might change at any time
 @TenkaCloud/infrastructure test:coverage: (Use `node --trace-warnings ...` to show where the warning was created)
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/control-data/feature-flags-repository-parity.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 15[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/coordination-dispatcher-lambda.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 245[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/control-data/feature-flags-repository-parity.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/coordination-dispatcher-lambda.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 216[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/tenant-saml-tier-guard.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 9[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/idp/idp-entry-composition.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 442[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m should compose at cold start and serve healthz [33m 417[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/cognito-custom-domain.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 118[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy-backend-stack-ops-monitoring.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 1093[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m should skip the entire monitoring construct when the ops alert email is unset [33m 832[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/deployments-table-gsi3.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/idp/idp-entry-composition.test.ts [2m([22m[2m4 tests[22m[2m)[22m[33m 444[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m should compose at cold start and serve healthz [33m 415[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/cognito-custom-domain.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 114[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy-backend-stack-ops-monitoring.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 1036[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m should skip the entire monitoring construct when the ops alert email is unset [33m 779[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/deployments-table-gsi3.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 9[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy-backend-stack-pack-artifacts.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 10[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/admin-insight/admin-insight-handler-shared.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/admin-insight/admin-insight-handler-shared.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 13[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage: Bundling asset Test/CfnDeploy/Function/Code/Stage...
 @TenkaCloud/infrastructure test:coverage: 
-@TenkaCloud/infrastructure test:coverage:   ...99c866a337116d3d6fe177c575c05b79c591843d5628c8-building/index.js  1.6mb ⚠️
-@TenkaCloud/infrastructure test:coverage:   ...66a337116d3d6fe177c575c05b79c591843d5628c8-building/index.js.map  6.1mb
+@TenkaCloud/infrastructure test:coverage:   ...f14446164d35766402d0c8f555bce5aedad35cacd4e8b6-building/index.js  1.6mb ⚠️
+@TenkaCloud/infrastructure test:coverage:   ...46164d35766402d0c8f555bce5aedad35cacd4e8b6-building/index.js.map  6.1mb
 @TenkaCloud/infrastructure test:coverage: 
-@TenkaCloud/infrastructure test:coverage: ⚡ Done in 394ms
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/tenant-status-reconciler/tenant-status-reconciler.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 481[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m should create 1 set of Lambda + EventBridge Rule [33m 341[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage: ⚡ Done in 387ms
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/tenant-status-reconciler/tenant-status-reconciler.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 441[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m should create 1 set of Lambda + EventBridge Rule [33m 309[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/control-plane-stack.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 8[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/nodejs-function-bundling-smoke.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 702[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m should really esbuild-bundle a NodejsFunction when the skip context is removed [33m 700[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/nodejs-function-bundling-smoke.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 690[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m should really esbuild-bundle a NodejsFunction when the skip context is removed [33m 688[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage: [90mstderr[2m | test/problem-deploy/bulk-deploy-routes.test.ts[2m > [22m[2mPOST /events/:eventId/deploy[2m > [22m[2mshould surface a bulkDeployEvent error (5xx)
 @TenkaCloud/infrastructure test:coverage: [22m[39m[events] bulkDeployEvent failed { eventId: [32m'01HZX0K3M3K9ZQHB3MRQHBA1B2'[39m, message: [32m'boom'[39m }
 @TenkaCloud/infrastructure test:coverage: 
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/bulk-deploy-routes.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 34[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/bulk-deploy-routes.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 42[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/admin-insight/cost.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 9[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/secure-json-store.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/secure-json-store.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 10[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/generic-scoring-turso-synth.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 6[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/gcp-credential-store.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 8[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/always-on-runtime/event-runtime-stack.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 114[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/gcp-credential-store.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/always-on-runtime/event-runtime-stack.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 106[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/event-handler-shared.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 8[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/azure-entra-token-client.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 38[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/azure-entra-token-client.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 40[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/admin-insight/summary-edge.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 8[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/event-audit.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 8[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage: [90mstderr[2m | test/bootstrap-template/source-bucket-injection.test.ts
@@ -779,106 +780,105 @@ exit_status=1
 @TenkaCloud/infrastructure test:coverage: 
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/bootstrap-template/source-bucket-injection.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 9[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/shared/attack-probe-status.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 6[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/visibility.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/visibility.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 9[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/round-liveness.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 7[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/competitor-account-lookup.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 13[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/idp/tenant-tier-guard-paths.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 23[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/source-bundle/lifecycle-policy.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 11[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/cdk-outdir-concurrency.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 1883[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m should let two parallel wrapper invocations synthesize without deleting each other [33m 1881[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/lite-pipeline-turso.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/idp/tenant-tier-guard-paths.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/source-bundle/lifecycle-policy.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/cdk-outdir-concurrency.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 1886[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m should let two parallel wrapper invocations synthesize without deleting each other [33m 1884[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/lite-pipeline-turso.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 8[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/competitor-accounts-shared.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 27[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/always-on-runtime/sweeper/github-issue-filer.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 41[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy-backend-stack-artifacts.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 10[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/always-on-runtime/runtime-tags.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 114[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/always-on-runtime/sweeper/github-issue-filer.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 43[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy-backend-stack-artifacts.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/always-on-runtime/runtime-tags.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 116[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/deploy-command-naming-parity.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 8[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/generic-scoring-flag.test.ts [2m([22m[2m8 tests[22m[2m)[22m[32m 9[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/source-bucket-name.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 163[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/source-bucket-name.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 143[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage: [90mstderr[2m | test/problem-deploy/notification-routes.test.ts[2m > [22m[2mPOST /events/:eventId/notifications[2m > [22m[2mshould surface a createNotification error (5xx)
 @TenkaCloud/infrastructure test:coverage: [22m[39m[events] createNotification failed { eventId: [32m'01HZX0K3M3K9ZQHB3MRQHBA1B2'[39m, message: [32m'boom'[39m }
 @TenkaCloud/infrastructure test:coverage: 
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/notification-routes.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 34[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/hint-reveal.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/notification-routes.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 35[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/hint-reveal.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 8[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/admin-insight/auth.test.ts [2m([22m[2m10 tests[22m[2m)[22m[32m 6[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/capacity-model.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 6[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/event-bulk-deploy-provenance-audit.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 7[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/tenant-template/saml-admin-allowlist.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 154[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy-backend-stack-tables.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/tenant-template/saml-admin-allowlist.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 164[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy-backend-stack-tables.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 10[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/tenkacloud-lite/stack-names.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 14[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/bundling-skip-context.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 236[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-pack/reference-coordination-battle-pack.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 14[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy-backend-stack-outputs.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 13[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-pack/sample-aws-endpoint-pack.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 16[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/idp/auth.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 6[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/gcp-aws-subject-token.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 14[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/bundling-skip-context.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 224[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-pack/reference-coordination-battle-pack.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy-backend-stack-outputs.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-pack/sample-aws-endpoint-pack.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/idp/auth.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/gcp-aws-subject-token.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 9[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/generic-scoring-reconciler-errors.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 9[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/bundle-coordination-plugins.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 67[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/bundle-coordination-plugins.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 68[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-pack/sample-aws-flag-pack.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 15[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/cfn-deploy-handler-index.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 6[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/tenant-pipeline/serverless-saas-pipeline.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 546[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m tenant pipeline Python Lambda should use the latest runtime [33m 373[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/local-play-aws-sdk-boundary.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 760[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m should keep the local CLI runtime graph free of every AWS SDK package [33m 757[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/cfn-deploy-handler-index.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/tenant-pipeline/serverless-saas-pipeline.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 534[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m tenant pipeline Python Lambda should use the latest runtime [33m 360[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/local-play-aws-sdk-boundary.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 750[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m should keep the local CLI runtime graph free of every AWS SDK package [33m 747[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy-backend-stack-codebuild.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 9[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/control-data/quota-model.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 8[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/participant-auth.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 8[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/local-play-catalog-loader.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 8[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/print-source-bundle-lifecycle.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 79[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-pack/reference-pack.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 12[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy-backend-stack-lite-mode.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 1072[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m should create 1 new local EventBus when eventBusArn is omitted (Lite mode self-contained) [33m 648[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m should not create a local EventBus in the existing path (Full mode) where eventBusArn is provided [33m 420[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/deploy-command-patterns-parity.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/control-data/quota-model.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/participant-auth.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/local-play-catalog-loader.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/print-source-bundle-lifecycle.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 70[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-pack/reference-pack.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 16[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy-backend-stack-lite-mode.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 1070[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m should create 1 new local EventBus when eventBusArn is omitted (Lite mode self-contained) [33m 613[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m should not create a local EventBus in the existing path (Full mode) where eventBusArn is provided [33m 452[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/deploy-command-patterns-parity.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 14[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/csv.test.ts [2m([22m[2m9 tests[22m[2m)[22m[32m 6[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/idp/idp-handler-shared.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 22[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/coordination-tick-invoker.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 7[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/composite-deploy-wiring.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/idp/idp-handler-shared.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 19[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/coordination-tick-invoker.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 10[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/composite-deploy-wiring.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 7[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/shared/managed-login-branding.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 5[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/audit-log-feature-flag.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 1120[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m should inject AUDIT_LOG_ENABLED='false' into every audit-writing Lambda when disabled [33m 677[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m should NOT add AUDIT_LOG_ENABLED by default (byte-compat, no regression) [33m 441[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/lite-pipeline-drill.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 6[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/readme-bilingual-parity.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 5[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/bootstrap-template/compose-tenant-script.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 8[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/cdk-outdir.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 82[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/audit-log-feature-flag.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 1114[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m should inject AUDIT_LOG_ENABLED='false' into every audit-writing Lambda when disabled [33m 692[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m should NOT add AUDIT_LOG_ENABLED by default (byte-compat, no regression) [33m 419[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/lite-pipeline-drill.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/readme-bilingual-parity.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/bootstrap-template/compose-tenant-script.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/cdk-outdir.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 85[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/control-plane/mfa-policy.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 6[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/local-play-readiness.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 14[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/attack-counter.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 7[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/bootstrap-template/tenant-api-key.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 116[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/local-play-readiness.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 18[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/attack-counter.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/bootstrap-template/tenant-api-key.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 114[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/presigned-url.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 7[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/security/cloudfront-custom-domain.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 57[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/security/cloudfront-custom-domain.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 59[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/app-config/resolve-features.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 7[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/cfn-status.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/cfn-status.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 6[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/ssm-parameter.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 5[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage: (node:8787) ExperimentalWarning: SQLite is an experimental feature and might change at any time
+@TenkaCloud/infrastructure test:coverage: (node:8833) ExperimentalWarning: SQLite is an experimental feature and might change at any time
 @TenkaCloud/infrastructure test:coverage: (Use `node --trace-warnings ...` to show where the warning was created)
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/control-data/score-summary-schema.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 6[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy-backend-stack-bulk-distributed-map.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 1148[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m should default BULK_DEPLOY_VIA_DISTRIBUTED_MAP to false when useBulkDistributedMap is unset [33m 881[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/control-data/score-summary-schema.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 5[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy-backend-stack-bulk-distributed-map.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 995[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m should default BULK_DEPLOY_VIA_DISTRIBUTED_MAP to false when useBulkDistributedMap is unset [33m 771[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/deploy-events/problem-dir-schema.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 7[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/utils/iam-helpers.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 62[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/cdk-outdir-concurrency-fixture.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 88[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/customer-execution/message.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 10[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/deployment-retention.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 6[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/catalog.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 9[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/always-on-runtime/sweeper/index.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/utils/iam-helpers.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 60[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/cdk-outdir-concurrency-fixture.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 82[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/customer-execution/message.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/deployment-retention.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 4[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/catalog.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/always-on-runtime/sweeper/index.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 8[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/runtime-output.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 6[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/sso-console-destination.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/sso-console-destination.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 6[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/control-data-backend-env.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 5[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/local-play-loopback.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 11[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/github-workflows-parse.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 43[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/local-play-loopback.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/github-workflows-parse.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 40[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/tenkacloud-onboard.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 8[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/deployment-status.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 7[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/audit-log-env.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 6[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/audit-handlers-bundle.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 916[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m should exclude aws-cdk-lib and stay below the runtime-only size ceiling ('ExternalIdAudit') [33m 599[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m should exclude aws-cdk-lib and stay below the runtime-only size ceiling ('SystemAuditWriter') [33m 315[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/naming.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 6[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/audit-handlers-bundle.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 707[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m should exclude aws-cdk-lib and stay below the runtime-only size ceiling ('ExternalIdAudit') [33m 483[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/audit-log-env.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/naming.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 8[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/process-identity.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 15[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/writeup-metadata.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 5[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/team-key.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 6[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/deploy-status-writer-bundle.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 311[2mms[22m[39m
-@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m should exclude aws-cdk-lib and stay below the runtime-only size ceiling [33m 309[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/team-key.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 7[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/deploy-status-writer-bundle.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 304[2mms[22m[39m
+@TenkaCloud/infrastructure test:coverage:      [33m[2m✓[22m[39m should exclude aws-cdk-lib and stay below the runtime-only size ceiling [33m 302[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/scripts/local-play-deployment-plan.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 5[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage:  [32m✓[39m test/problem-deploy/control-data/dynamodb-problem-endpoint-keys.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 4[2mms[22m[39m
 @TenkaCloud/infrastructure test:coverage: 
@@ -1171,32 +1171,32 @@ exit_status=1
 @TenkaCloud/infrastructure test:coverage: 
 @TenkaCloud/infrastructure test:coverage: [2m Test Files [22m [1m[31m4 failed[39m[22m[2m | [22m[1m[32m477 passed[39m[22m[90m (481)[39m
 @TenkaCloud/infrastructure test:coverage: [2m      Tests [22m [1m[31m8 failed[39m[22m[2m | [22m[1m[32m5762 passed[39m[22m[2m | [22m[33m3 skipped[39m[90m (5773)[39m
-@TenkaCloud/infrastructure test:coverage: [2m   Start at [22m 03:05:35
-@TenkaCloud/infrastructure test:coverage: [2m   Duration [22m 168.79s[2m (transform 9.78s, setup 3.94s, import 143.48s, tests 81.37s, environment 61ms)[22m
+@TenkaCloud/infrastructure test:coverage: [2m   Start at [22m 03:09:18
+@TenkaCloud/infrastructure test:coverage: [2m   Duration [22m 159.40s[2m (transform 8.94s, setup 3.72s, import 135.61s, tests 76.85s, environment 57ms)[22m
 @TenkaCloud/infrastructure test:coverage: 
-@TenkaCloud/infrastructure test:coverage: JSON report written to /home/runner/work/TenkaCloud/TenkaCloud/infrastructure/cdk.out/test-synth/run-2547-Jq58ua/vitest-report.json
+@TenkaCloud/infrastructure test:coverage: JSON report written to /home/runner/work/TenkaCloud/TenkaCloud/infrastructure/cdk.out/test-synth/run-2634-Voknli/vitest-report.json
 @TenkaCloud/infrastructure test:coverage: 
 @TenkaCloud/infrastructure test:coverage: Slowest test files:
-@TenkaCloud/infrastructure test:coverage:   11.20s  /home/runner/work/TenkaCloud/TenkaCloud/infrastructure/test/scripts/local-play-simulator-runtime.test.ts
-@TenkaCloud/infrastructure test:coverage:   8.45s  /home/runner/work/TenkaCloud/TenkaCloud/infrastructure/test/tenkacloud-lite/tenkacloud-lite-stack.test.ts
-@TenkaCloud/infrastructure test:coverage:   5.15s  /home/runner/work/TenkaCloud/TenkaCloud/infrastructure/test/scripts/tenkacloud-local-cli.test.ts
-@TenkaCloud/infrastructure test:coverage:   3.99s  /home/runner/work/TenkaCloud/TenkaCloud/infrastructure/test/problem-deploy-backend-stack-participant-portal-subsystem.test.ts
-@TenkaCloud/infrastructure test:coverage:   3.63s  /home/runner/work/TenkaCloud/TenkaCloud/infrastructure/test/app-plane-core/build-app-plane-core.test.ts
-@TenkaCloud/infrastructure test:coverage:   2.29s  /home/runner/work/TenkaCloud/TenkaCloud/infrastructure/test/app-wiring/wire.test.ts
+@TenkaCloud/infrastructure test:coverage:   10.53s  /home/runner/work/TenkaCloud/TenkaCloud/infrastructure/test/scripts/local-play-simulator-runtime.test.ts
+@TenkaCloud/infrastructure test:coverage:   7.95s  /home/runner/work/TenkaCloud/TenkaCloud/infrastructure/test/tenkacloud-lite/tenkacloud-lite-stack.test.ts
+@TenkaCloud/infrastructure test:coverage:   4.96s  /home/runner/work/TenkaCloud/TenkaCloud/infrastructure/test/scripts/tenkacloud-local-cli.test.ts
+@TenkaCloud/infrastructure test:coverage:   3.84s  /home/runner/work/TenkaCloud/TenkaCloud/infrastructure/test/problem-deploy-backend-stack-participant-portal-subsystem.test.ts
+@TenkaCloud/infrastructure test:coverage:   3.35s  /home/runner/work/TenkaCloud/TenkaCloud/infrastructure/test/app-plane-core/build-app-plane-core.test.ts
+@TenkaCloud/infrastructure test:coverage:   2.21s  /home/runner/work/TenkaCloud/TenkaCloud/infrastructure/test/app-wiring/wire.test.ts
 @TenkaCloud/infrastructure test:coverage:   1.88s  /home/runner/work/TenkaCloud/TenkaCloud/infrastructure/test/cdk-outdir-concurrency.test.ts
-@TenkaCloud/infrastructure test:coverage:   1.79s  /home/runner/work/TenkaCloud/TenkaCloud/infrastructure/test/tenant-template/tenant-template-stack-saml.test.ts
-@TenkaCloud/infrastructure test:coverage:   1.60s  /home/runner/work/TenkaCloud/TenkaCloud/infrastructure/test/scripts/package-source-bundle.test.ts
-@TenkaCloud/infrastructure test:coverage:   1.60s  /home/runner/work/TenkaCloud/TenkaCloud/infrastructure/test/admin-insight/admin-console-insight-stack.test.ts
-@TenkaCloud/infrastructure test:coverage:   1.53s  /home/runner/work/TenkaCloud/TenkaCloud/infrastructure/test/problem-deploy-backend-stack-synth-lockdown.test.ts
-@TenkaCloud/infrastructure test:coverage:   1.15s  /home/runner/work/TenkaCloud/TenkaCloud/infrastructure/test/problem-deploy-backend-stack-bulk-distributed-map.test.ts
-@TenkaCloud/infrastructure test:coverage:   1.12s  /home/runner/work/TenkaCloud/TenkaCloud/infrastructure/test/problem-deploy/audit-log-feature-flag.test.ts
-@TenkaCloud/infrastructure test:coverage:   1.11s  /home/runner/work/TenkaCloud/TenkaCloud/infrastructure/test/problem-deploy/control-data-backend-feature-flag.test.ts
-@TenkaCloud/infrastructure test:coverage:   1.09s  /home/runner/work/TenkaCloud/TenkaCloud/infrastructure/test/problem-deploy-backend-stack-ops-monitoring.test.ts
+@TenkaCloud/infrastructure test:coverage:   1.65s  /home/runner/work/TenkaCloud/TenkaCloud/infrastructure/test/tenant-template/tenant-template-stack-saml.test.ts
+@TenkaCloud/infrastructure test:coverage:   1.50s  /home/runner/work/TenkaCloud/TenkaCloud/infrastructure/test/scripts/package-source-bundle.test.ts
+@TenkaCloud/infrastructure test:coverage:   1.45s  /home/runner/work/TenkaCloud/TenkaCloud/infrastructure/test/problem-deploy-backend-stack-synth-lockdown.test.ts
+@TenkaCloud/infrastructure test:coverage:   1.43s  /home/runner/work/TenkaCloud/TenkaCloud/infrastructure/test/admin-insight/admin-console-insight-stack.test.ts
+@TenkaCloud/infrastructure test:coverage:   1.11s  /home/runner/work/TenkaCloud/TenkaCloud/infrastructure/test/problem-deploy/audit-log-feature-flag.test.ts
+@TenkaCloud/infrastructure test:coverage:   1.07s  /home/runner/work/TenkaCloud/TenkaCloud/infrastructure/test/problem-deploy-backend-stack-lite-mode.test.ts
+@TenkaCloud/infrastructure test:coverage:   1.03s  /home/runner/work/TenkaCloud/TenkaCloud/infrastructure/test/problem-deploy-backend-stack-ops-monitoring.test.ts
+@TenkaCloud/infrastructure test:coverage:   1.03s  /home/runner/work/TenkaCloud/TenkaCloud/infrastructure/test/problem-deploy/control-data-backend-feature-flag.test.ts
 @TenkaCloud/infrastructure test:coverage: CDK asset bundles produced: 196 (660.1 MB total)
-@TenkaCloud/infrastructure test:coverage: preserving CDK test output after failed or interrupted run: /home/runner/work/TenkaCloud/TenkaCloud/infrastructure/cdk.out/test-synth/run-2547-Jq58ua
+@TenkaCloud/infrastructure test:coverage: preserving CDK test output after failed or interrupted run: /home/runner/work/TenkaCloud/TenkaCloud/infrastructure/cdk.out/test-synth/run-2634-Voknli
 @TenkaCloud/infrastructure test:coverage: Exited with code 1
-❌ infrastructure failed (2m49.9s)
+❌ infrastructure failed (2m40.5s)
 
 Coverage timing summary (#2513):
-  ❌ infrastructure                           2m49.9s
-  total                                       2m49.9s
+  ❌ infrastructure                           2m40.5s
+  total                                       2m40.5s
