@@ -1,10 +1,26 @@
 import { describe, expect, it } from "vitest";
 import {
+  ADAPTER_WIRED_RUNTIMES,
   findRuntimeCapability,
   RUNTIME_CAPABILITIES,
   runtimeCapabilityKey,
+  type RuntimeCapabilityDeclaration,
   validateRuntimeCapabilityEvidence,
 } from "../src/capabilities.js";
+
+const VALID_FIXTURE: RuntimeCapabilityDeclaration = {
+  provider: "test",
+  engine: "engine",
+  recognized: true,
+  adapterWired: true,
+  executable: true,
+  liveVerified: false,
+  executionMode: "cloud",
+  selection: "feature-gated",
+  maturity: "preview",
+  blockingIssues: [],
+  evidence: "test fixture",
+};
 
 describe("runtime capability evidence (#2748)", () => {
   it("should keep every declaration internally consistent", () => {
@@ -66,25 +82,65 @@ describe("runtime capability evidence (#2748)", () => {
     });
   });
 
-  it("should reject unsupported evidence promotions", () => {
+  it("should expose only declarations whose adapters are wired", () => {
+    expect(ADAPTER_WIRED_RUNTIMES).toEqual(RUNTIME_CAPABILITIES);
+  });
+
+  it("should reject adapter wiring without schema recognition", () => {
     expect(
       validateRuntimeCapabilityEvidence({
-        provider: "test",
-        engine: "adapterless",
-        recognized: true,
-        adapterWired: false,
-        executable: true,
-        liveVerified: true,
-        executionMode: "cloud",
-        selection: "feature-gated",
-        maturity: "preview",
-        blockingIssues: [999],
-        evidence: "invalid fixture",
+        ...VALID_FIXTURE,
+        recognized: false,
+        executable: false,
       }),
-    ).toEqual([
-      "test/adapterless: executable requires adapterWired",
-      "test/adapterless: liveVerified cannot retain blockingIssues",
-    ]);
+    ).toEqual(["test/engine: adapterWired requires recognized"]);
+  });
+
+  it("should reject execution without an adapter", () => {
+    expect(
+      validateRuntimeCapabilityEvidence({
+        ...VALID_FIXTURE,
+        adapterWired: false,
+      }),
+    ).toEqual(["test/engine: executable requires adapterWired"]);
+  });
+
+  it("should reject live verification without execution", () => {
+    expect(
+      validateRuntimeCapabilityEvidence({
+        ...VALID_FIXTURE,
+        executable: false,
+        liveVerified: true,
+      }),
+    ).toEqual(["test/engine: liveVerified requires executable"]);
+  });
+
+  it("should reject live verification while blockers remain", () => {
+    expect(
+      validateRuntimeCapabilityEvidence({
+        ...VALID_FIXTURE,
+        liveVerified: true,
+        blockingIssues: [999],
+      }),
+    ).toEqual(["test/engine: liveVerified cannot retain blockingIssues"]);
+  });
+
+  it("should require local execution for local-only selection", () => {
+    expect(
+      validateRuntimeCapabilityEvidence({
+        ...VALID_FIXTURE,
+        selection: "local-only",
+      }),
+    ).toEqual(["test/engine: local-only selection requires local executionMode"]);
+  });
+
+  it("should require local-only selection for local execution", () => {
+    expect(
+      validateRuntimeCapabilityEvidence({
+        ...VALID_FIXTURE,
+        executionMode: "local",
+      }),
+    ).toEqual(["test/engine: local executionMode requires local-only selection"]);
   });
 
   it("should return undefined for an unrecognized pair", () => {
