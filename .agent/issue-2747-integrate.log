@@ -1,3 +1,0 @@
-exit_status=1
-
-anchor not found in packages/problem-runtime/src/index.ts: '      if (sensitivity === "sensitive" && rawBinding.allowSensitive !== true) {\n      issues.push(\n        issue(\n       '
