@@ -49,9 +49,8 @@ const SCAN_EXTENSIONS = new Set([
 
 const ALLOW_MARKER = /allow-aws-fiction\b/;
 
-// この rule 自身の id。 `noAwsTrademarkFictions.id` と同一の定数を参照させることで、
-// 「rule id を名指しする行は自己文書化として exempt」の判定と rule 登録 (index.ts の id)
-// の間で文字列の二重管理を避ける。
+// Self-documentation checks use the same stable value. The exported Rule keeps a
+// literal id so agent-registry-consistency can verify it without executing code.
 const RULE_ID = "no-aws-trademark-fictions";
 
 function shouldScan(path: string): boolean {
@@ -84,7 +83,7 @@ function findFirstForbidden(
 }
 
 export const noAwsTrademarkFictions: Rule = {
-  id: RULE_ID,
+  id: "no-aws-trademark-fictions",
   severity: "error",
   check(ctx: RuleContext): readonly Finding[] {
     const findings: Finding[] = [];
