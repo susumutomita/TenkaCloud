@@ -92,14 +92,6 @@ export function createSakuraAppRunRestClient(
     return { kind: "ok", value: (await response.json()) as T };
   }
 
-  async function required<T>(method: string, path: string): Promise<T> {
-    const result = await request<T>(method, path);
-    if (result.kind !== "ok" || result.value === undefined) {
-      throw new Error(`Sakura AppRun API ${method} ${path} returned no document`);
-    }
-    return result.value;
-  }
-
   function ensureUser(): Promise<void> {
     if (userReady) return userReady;
     userReady = (async () => {
@@ -134,10 +126,31 @@ export function createSakuraAppRunRestClient(
     return `/applications?${query.toString()}`;
   }
 
+  async function readApplicationPage(pageNum: number): Promise<SakuraApiApplicationList> {
+    const path = listPath(pageNum);
+    let result = await request<SakuraApiApplicationList>("GET", path);
+    if (result.kind === "not-found") {
+      // Existing accounts list applications directly. A newly enabled account can require one
+      // user initialization, so bootstrap only after the ordinary list call proves it necessary.
+      await ensureUser();
+      result = await request<SakuraApiApplicationList>("GET", path);
+    }
+    if (result.kind === "conflict") {
+      throw new Error(`Sakura AppRun API GET ${path} conflicted`);
+    }
+    if (result.kind === "not-found") {
+      throw new Error(`Sakura AppRun API GET ${path} returned not-found`);
+    }
+    if (result.value === undefined) {
+      throw new Error(`Sakura AppRun API GET ${path} returned no document`);
+    }
+    return result.value;
+  }
+
   async function listApplications(): Promise<SakuraApiApplication[]> {
     const applications: SakuraApiApplication[] = [];
     for (let pageNum = 1; ; pageNum += 1) {
-      const response = await required<SakuraApiApplicationList>("GET", listPath(pageNum));
+      const response = await readApplicationPage(pageNum);
       const page = [...(response.data ?? [])];
       applications.push(...page);
       const total = response.meta?.object_total;
@@ -190,7 +203,6 @@ export function createSakuraAppRunRestClient(
 
   return {
     async upsertApplication(spec: SakuraAppRunSpec): Promise<void> {
-      await ensureUser();
       for (let attempt = 0; attempt < UPSERT_MAX_ATTEMPTS; attempt += 1) {
         const existing = (await findByName(spec.name))[0];
         if (existing) {
@@ -216,7 +228,6 @@ export function createSakuraAppRunRestClient(
     },
 
     async getApplication(name: string): Promise<SakuraApplicationState | undefined> {
-      await ensureUser();
       const existing = (await findByName(name))[0];
       if (!existing) return undefined;
       const path = applicationPath(existing.id);
@@ -232,7 +243,6 @@ export function createSakuraAppRunRestClient(
     },
 
     async deleteApplication(name: string): Promise<void> {
-      await ensureUser();
       for (const application of await findByName(name)) {
         const deleted = await request<void>("DELETE", applicationPath(application.id));
         if (deleted.kind === "conflict") {
