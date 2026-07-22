@@ -239,16 +239,35 @@ jobs:
         run: make install_ci
 
       - name: Generate, format, and validate capability artifacts
-        run: python .agent/issue-2748-autofix.py
+        run: |
+          set +e
+          python .agent/issue-2748-autofix.py > /tmp/issue-2748-autofix.log 2>&1
+          status=$?
+          echo "AUTOFIX_STATUS=$status" >> "$GITHUB_ENV"
+          if [ "$status" -ne 0 ]; then
+            git restore apps packages scripts landing
+            mkdir -p .agent
+            {
+              echo "exit_status=$status"
+              echo
+              tail -n 700 /tmp/issue-2748-autofix.log
+            } > .agent/issue-2748-autofix.log
+          fi
 
-      - name: Commit generated integration
+      - name: Commit generated integration or diagnostics
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add apps packages scripts landing
-          if git diff --cached --quiet; then
-            echo "Capability artifacts already current"
+          if [ "$AUTOFIX_STATUS" -eq 0 ]; then
+            git add apps packages scripts landing
+            message="docs(runtime): generate capability evidence matrix"
           else
-            git commit -m "docs(runtime): generate capability evidence matrix"
+            git add -f .agent/issue-2748-autofix.log
+            message="chore(agent): capture capability generation failure"
+          fi
+          if git diff --cached --quiet; then
+            echo "No capability artifact changes"
+          else
+            git commit -m "$message"
             git push origin HEAD:agent/issue-2748-runtime-capability-evidence
           fi
