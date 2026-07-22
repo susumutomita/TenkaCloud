@@ -1,24 +1,10 @@
 /**
  * [ADR-026 / Issues #1412, #2746] Concrete Sakura AppRun REST client.
  *
- * `SakuraAppRunClient` interface (= `handlers/shared/runtime/sakura-apprun-adapter.ts` の注入境界) を
- * AppRun 共用型 REST API に実装する。 adapter は orchestration (= image/env の組立、 status の
- * 6-state 射影) を持ち、 本 client は **wire 層** (= endpoint / Basic auth / JSON 整形 / name↔id 解決) だけを担う。
- *
- * 配置: `handlers/` の外 (= service / repository 層) に置く。 `handler-must-not-call-fetch` 規約どおり
- * `fetch` は handler に書かず本 client に閉じ込め、 composition root (deploy worker) が factory を注入する。
- *
- * API (current generated sacloud/apprun OpenAPI client と整合):
- *   - base: `https://secure.sakura.ad.jp/cloud/api/apprun/1.0/apprun/api`
- *   - auth: HTTP Basic (user = Access Token, password = Access Token Secret)
- *   - create: POST `/applications`
- *   - update: PATCH `/applications/{id}`
- *   - detail: GET `/applications/{id}`
- *   - status: GET `/applications/{id}/status`
- *   - delete: DELETE `/applications/{id}`
- *
- * applications は id ベースだが adapter contract は name ベースなので、 list → name 一致で id を解決する。
- * list/detail/status 間で application が消える race は not-found として扱い、 lifecycle polling を壊さない。
+ * The adapter owns orchestration while this service owns the current AppRun wire contract:
+ * user bootstrap, Basic authentication, paginated name-to-id lookup, POST/PATCH, detail/status
+ * reads, and idempotent deletion. Provider response bodies and transport errors are never
+ * included in thrown errors because they may reflect credentials or user-supplied values.
  */
 
 import { StatusCodes } from "http-status-codes";
@@ -30,28 +16,21 @@ import type {
 } from "../handlers/shared/runtime/sakura-apprun-adapter.js";
 
 const DEFAULT_BASE_URL = "https://secure.sakura.ad.jp/cloud/api/apprun/1.0/apprun/api";
-
-/**
- * AppRun の current API enum に含まれる最小 resource。 競技問題の container は HTTP を単一 port で serve し、
- * 1 team 1 instance で足りる前提 (= 最小コスト)。
- */
 const DEFAULT_PORT = 8080;
 const DEFAULT_MIN_SCALE = 0;
 const DEFAULT_MAX_SCALE = 1;
 const DEFAULT_MAX_CPU = "0.5";
 const DEFAULT_MAX_MEMORY = "1Gi";
 const DEFAULT_TIMEOUT_SECONDS = 60;
-/** component 名は AppRun 内部の識別子。 1 component 構成なので固定名で十分。 */
 const DEFAULT_COMPONENT_NAME = "main";
+const APPLICATION_LIST_PAGE_SIZE = 100;
+const UPSERT_MAX_ATTEMPTS = 3;
 
 export interface SakuraAppRunRestClientOptions {
-  /** base URL override (= test / 環境別)。 省略時は本番 AppRun 共用型。 */
   readonly baseUrl?: string;
-  /** fetch 実装の注入 (= unit test で mock、 本番は global fetch)。 */
   readonly fetchImpl?: typeof fetch;
 }
 
-/** AppRun list / detail が返す application の最小形。 */
 interface SakuraApiApplication {
   readonly id: string;
   readonly name: string;
@@ -59,119 +38,218 @@ interface SakuraApiApplication {
   readonly public_url?: string;
 }
 
+interface SakuraApiApplicationList {
+  readonly data?: readonly SakuraApiApplication[];
+  readonly meta?: { readonly object_total?: number };
+}
+
 interface SakuraApiApplicationStatus {
   readonly status?: string;
 }
+
+type RequestResult<T> =
+  | { readonly kind: "ok"; readonly value?: T }
+  | { readonly kind: "not-found" }
+  | { readonly kind: "conflict" };
 
 export function createSakuraAppRunRestClient(
   credential: SakuraCredential,
   options: SakuraAppRunRestClientOptions = {},
 ): SakuraAppRunClient {
-  const baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/$/, "");
+  const baseUrl = (options.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
   const doFetch = options.fetchImpl ?? fetch;
-  const authHeader = `Basic ${Buffer.from(`${credential.accessToken}:${credential.accessTokenSecret}`).toString("base64")}`;
+  const authHeader = `Basic ${Buffer.from(
+    `${credential.accessToken}:${credential.accessTokenSecret}`,
+  ).toString("base64")}`;
+  let userReady: Promise<void> | undefined;
 
-  async function performRequest(method: string, path: string, body?: unknown): Promise<Response> {
-    return doFetch(`${baseUrl}${path}`, {
-      method,
-      headers: {
-        Authorization: authHeader,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    });
-  }
-
-  async function decodeResponse<T>(response: Response, method: string, path: string): Promise<T> {
-    if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      throw new Error(
-        `Sakura AppRun API ${method} ${path} failed: ${response.status} ${text}`.trim(),
-      );
-    }
-    if (response.status === StatusCodes.NO_CONTENT) return undefined as T;
-    return (await response.json()) as T;
-  }
-
-  async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-    return decodeResponse<T>(await performRequest(method, path, body), method, path);
-  }
-
-  async function requestOptional<T>(
+  async function request<T>(
     method: string,
     path: string,
     body?: unknown,
-  ): Promise<T | undefined> {
-    const response = await performRequest(method, path, body);
-    if (response.status === StatusCodes.NOT_FOUND) return undefined;
-    return decodeResponse<T>(response, method, path);
+  ): Promise<RequestResult<T>> {
+    let response: Response;
+    try {
+      response = await doFetch(`${baseUrl}${path}`, {
+        method,
+        headers: {
+          Authorization: authHeader,
+          Accept: "application/json",
+          ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+    } catch {
+      throw new Error(`Sakura AppRun API ${method} ${path} request failed`);
+    }
+
+    if (response.status === StatusCodes.NOT_FOUND) return { kind: "not-found" };
+    if (response.status === StatusCodes.CONFLICT) return { kind: "conflict" };
+    if (!response.ok) {
+      throw new Error(`Sakura AppRun API ${method} ${path} failed: ${response.status}`);
+    }
+    if (response.status === StatusCodes.NO_CONTENT) return { kind: "ok" };
+    return { kind: "ok", value: (await response.json()) as T };
   }
 
-  /** name で application を 1 件解決 (= name↔id mapping)。 不在は undefined。 */
-  async function findByName(name: string): Promise<SakuraApiApplication | undefined> {
-    const listed = await request<{ data?: SakuraApiApplication[] }>("GET", "/applications");
-    return (listed.data ?? []).find((app) => app.name === name);
+  function ensureUser(): Promise<void> {
+    if (userReady) return userReady;
+    userReady = (async () => {
+      const current = await request<unknown>("GET", "/user");
+      if (current.kind === "ok") return;
+      if (current.kind === "conflict") {
+        throw new Error("Sakura AppRun API GET /user conflicted");
+      }
+      const created = await request<unknown>("POST", "/user");
+      if (created.kind === "not-found") {
+        throw new Error("Sakura AppRun API POST /user returned not-found");
+      }
+      // A concurrent initializer may win; POST 409 means the required user now exists.
+    })().catch((error: unknown) => {
+      userReady = undefined;
+      throw error;
+    });
+    return userReady;
   }
 
-  /** spec → AppRun create/patch body。 env(record) → [{key,value}]、 image → component。 */
-  function buildBody(spec: SakuraAppRunSpec) {
+  function applicationPath(id: string): string {
+    return `/applications/${encodeURIComponent(id)}`;
+  }
+
+  function listPath(pageNum: number): string {
+    const query = new URLSearchParams({
+      page_num: String(pageNum),
+      page_size: String(APPLICATION_LIST_PAGE_SIZE),
+      sort_field: "created_at",
+      sort_order: "asc",
+    });
+    return `/applications?${query.toString()}`;
+  }
+
+  async function readApplicationPage(pageNum: number): Promise<SakuraApiApplicationList> {
+    const path = listPath(pageNum);
+    let result = await request<SakuraApiApplicationList>("GET", path);
+    if (result.kind === "not-found") {
+      // Existing accounts list applications directly. A newly enabled account can require one
+      // user initialization, so bootstrap only after the ordinary list call proves it necessary.
+      await ensureUser();
+      result = await request<SakuraApiApplicationList>("GET", path);
+    }
+    if (result.kind === "conflict") {
+      throw new Error(`Sakura AppRun API GET ${path} conflicted`);
+    }
+    if (result.kind === "not-found") {
+      throw new Error(`Sakura AppRun API GET ${path} returned not-found`);
+    }
+    if (result.value === undefined) {
+      throw new Error(`Sakura AppRun API GET ${path} returned no document`);
+    }
+    return result.value;
+  }
+
+  async function listApplications(): Promise<SakuraApiApplication[]> {
+    const applications: SakuraApiApplication[] = [];
+    for (let pageNum = 1; ; pageNum += 1) {
+      const response = await readApplicationPage(pageNum);
+      const page = [...(response.data ?? [])];
+      applications.push(...page);
+      const total = response.meta?.object_total;
+      if (page.length === 0) break;
+      if (typeof total === "number" && applications.length >= total) break;
+      if (total === undefined && page.length < APPLICATION_LIST_PAGE_SIZE) break;
+    }
+    return applications;
+  }
+
+  async function findByName(name: string): Promise<SakuraApiApplication[]> {
+    return (await listApplications())
+      .filter((application) => application.name === name)
+      .sort((left, right) => left.id.localeCompare(right.id));
+  }
+
+  function component(spec: SakuraAppRunSpec) {
+    return {
+      name: DEFAULT_COMPONENT_NAME,
+      max_cpu: DEFAULT_MAX_CPU,
+      max_memory: DEFAULT_MAX_MEMORY,
+      deploy_source: { container_registry: { image: spec.image } },
+      env: Object.entries(spec.env)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, value]) => ({ key, value })),
+    };
+  }
+
+  function createBody(spec: SakuraAppRunSpec) {
     return {
       name: spec.name,
       timeout_seconds: DEFAULT_TIMEOUT_SECONDS,
       port: DEFAULT_PORT,
       min_scale: DEFAULT_MIN_SCALE,
       max_scale: DEFAULT_MAX_SCALE,
-      components: [
-        {
-          name: DEFAULT_COMPONENT_NAME,
-          max_cpu: DEFAULT_MAX_CPU,
-          max_memory: DEFAULT_MAX_MEMORY,
-          deploy_source: { container_registry: { image: spec.image } },
-          env: Object.entries(spec.env).map(([key, value]) => ({ key, value })),
-        },
-      ],
+      components: [component(spec)],
+    };
+  }
+
+  function patchBody(spec: SakuraAppRunSpec) {
+    return {
+      timeout_seconds: DEFAULT_TIMEOUT_SECONDS,
+      port: DEFAULT_PORT,
+      min_scale: DEFAULT_MIN_SCALE,
+      max_scale: DEFAULT_MAX_SCALE,
+      components: [component(spec)],
+      all_traffic_available: true,
     };
   }
 
   return {
     async upsertApplication(spec: SakuraAppRunSpec): Promise<void> {
-      const existing = await findByName(spec.name);
-      const body = buildBody(spec);
-      if (existing) {
-        await request("PATCH", `/applications/${existing.id}`, body);
-        return;
+      for (let attempt = 0; attempt < UPSERT_MAX_ATTEMPTS; attempt += 1) {
+        const existing = (await findByName(spec.name))[0];
+        if (existing) {
+          const patched = await request<unknown>(
+            "PATCH",
+            applicationPath(existing.id),
+            patchBody(spec),
+          );
+          if (patched.kind === "ok") return;
+          if (patched.kind === "conflict") {
+            throw new Error(`Sakura AppRun API PATCH ${applicationPath(existing.id)} conflicted`);
+          }
+          continue;
+        }
+        const created = await request<unknown>("POST", "/applications", createBody(spec));
+        if (created.kind === "ok") return;
+        if (created.kind === "not-found") {
+          throw new Error("Sakura AppRun API POST /applications returned not-found");
+        }
+        // POST 409 means another worker created the same name. Re-list and PATCH it.
       }
-      await request("POST", "/applications", body);
+      throw new Error("Sakura AppRun application upsert did not converge");
     },
 
     async getApplication(name: string): Promise<SakuraApplicationState | undefined> {
-      const existing = await findByName(name);
+      const existing = (await findByName(name))[0];
       if (!existing) return undefined;
-
-      const application = await requestOptional<SakuraApiApplication>(
-        "GET",
-        `/applications/${existing.id}`,
-      );
-      if (!application) return undefined;
-      const liveStatus = await requestOptional<SakuraApiApplicationStatus>(
-        "GET",
-        `/applications/${existing.id}/status`,
-      );
-      if (!liveStatus) return undefined;
-
-      const publicUrl = application.public_url ?? existing.public_url;
+      const path = applicationPath(existing.id);
+      const detail = await request<SakuraApiApplication>("GET", path);
+      if (detail.kind !== "ok" || detail.value === undefined) return undefined;
+      const status = await request<SakuraApiApplicationStatus>("GET", `${path}/status`);
+      if (status.kind !== "ok" || status.value === undefined) return undefined;
+      const publicUrl = detail.value.public_url ?? existing.public_url;
       return {
-        status: liveStatus.status ?? application.status ?? existing.status ?? "unknown",
+        status: status.value.status ?? detail.value.status ?? existing.status ?? "unknown",
         ...(publicUrl ? { publicUrl } : {}),
       };
     },
 
     async deleteApplication(name: string): Promise<void> {
-      const existing = await findByName(name);
-      if (!existing) return;
-      // list 後に削除済みでも idempotent success。
-      await requestOptional<void>("DELETE", `/applications/${existing.id}`);
+      for (const application of await findByName(name)) {
+        const deleted = await request<void>("DELETE", applicationPath(application.id));
+        if (deleted.kind === "conflict") {
+          throw new Error(`Sakura AppRun API DELETE ${applicationPath(application.id)} conflicted`);
+        }
+        // `ok` and `not-found` are both successful idempotent teardown outcomes.
+      }
     },
   };
 }

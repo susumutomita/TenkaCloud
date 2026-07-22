@@ -70,13 +70,18 @@ describe("runtime-status-reconciler — reconcileRuntimeDeployment", () => {
       status,
       ...(publicUrl ? { public_url: publicUrl } : {}),
     };
-    const fetchMock = vi.fn(async (url: string) =>
-      url.endsWith("/applications")
-        ? new Response(JSON.stringify({ data: [{ id: "a1", name: "tc-p-team-a" }] }), {
-            status: 200,
-          })
-        : new Response(JSON.stringify(app), { status: 200 }),
-    );
+    const fetchMock = vi.fn(async (url: string) => {
+      const path = new URL(url).pathname;
+      if (path.endsWith("/applications")) {
+        return new Response(JSON.stringify({ data: [{ id: "a1", name: "tc-p-team-a" }] }), {
+          status: 200,
+        });
+      }
+      if (path.endsWith("/applications/a1/status")) {
+        return new Response(JSON.stringify({ status }), { status: 200 });
+      }
+      return new Response(JSON.stringify(app), { status: 200 });
+    });
     vi.stubGlobal("fetch", fetchMock);
     return fetchMock;
   }
