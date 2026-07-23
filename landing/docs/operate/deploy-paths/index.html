@@ -61,7 +61,7 @@
 <p>初めて運用する方がつまずきやすい疑問が 2 つあります。「プラットフォームは実際どうやってデプロイするのか」と「CodePipeline がデフォルトなら、いつ実行されるのか」です。このページはその見取り図です。プラットフォーム自体は<strong>手動の CLI</strong> ステップでデプロイします。CodePipeline は<strong>テナントスタックをロールアウトする</strong>ためのものであり、プラットフォームを立ち上げるためのものではありません。</p>
 <h2>2 つのデプロイモード</h2>
 <ul>
-<li><strong>Lite モード</strong> — <code>make deploy</code>。1 人の主催者が 1 つのイベントを運営するためのモードです。SBT コントロールプレーン、テナントパイプライン、System Admin の招待をすべてスキップし、<code>infrastructure/bin/tenkacloud-lite.ts</code> 経由で 2 つのスタックだけをデプロイします。AppPlaneCore (<code>tenantId=&quot;local&quot;</code>) と、problem-deploy バックエンド / Participant Portal です。<strong>Lite モードに CodePipeline はありません。</strong> 破棄は <code>make destroy</code> です。</li>
+<li><strong>Lite モード</strong> — <code>make deploy</code>。1 人の主催者が 1 つのイベントを運営するためのモードです。SBT コントロールプレーン、テナントパイプライン、System Admin の招待をすべてスキップし、<code>infrastructure/bin/tenkacloud-lite.ts</code> 経由で 2 つのスタックだけをデプロイします。AppPlaneCore (<code>tenantId=&quot;local&quot;</code>) と、problem-deploy バックエンド / Participant Portal です。<strong>Lite モードに CodePipeline はありません。</strong> 完全削除は <code>make destroy-all</code>、DynamoDB 履歴を残す場合は <code>make destroy</code> です。</li>
 <li><strong>SaaS モード</strong> — <code>make deploy-saas</code> (<code>scripts/install.sh</code>、3 フェーズ)。プール型の BASIC / ADVANCED ティア、サイロ型の PLATINUM ティア、System Admin の招待を含む、完全なマルチテナント運用です。破棄は <code>make destroy-saas</code> です。</li>
 </ul>
 <p>どちらのモードもオペレーターがシェルから実行します。CI がデプロイすることはありません。</p>

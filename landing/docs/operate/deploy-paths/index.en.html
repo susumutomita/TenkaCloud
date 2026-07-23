@@ -68,7 +68,8 @@ CodePipeline is for <strong>rolling out tenant stacks</strong>, not for standing
 SBT control plane, tenant pipeline, and System Admin invitation entirely and
 deploys just two stacks via <code>infrastructure/bin/tenkacloud-lite.ts</code>:
 AppPlaneCore (<code>tenantId=&quot;local&quot;</code>) plus the problem-deploy backend / participant
-portal. <strong>There is no CodePipeline in Lite mode.</strong> Teardown is <code>make destroy</code>.</li>
+portal. <strong>There is no CodePipeline in Lite mode.</strong> Complete removal is
+<code>make destroy-all</code>; use <code>make destroy</code> only to preserve DynamoDB history.</li>
 <li><strong>SaaS mode</strong> — <code>make deploy-saas</code> (<code>scripts/install.sh</code>, three phases). Full
 multi-tenant operation: pooled BASIC / ADVANCED tiers, the PLATINUM silo tier,
 and System Admin invitations. Teardown is <code>make destroy-saas</code>.</li>

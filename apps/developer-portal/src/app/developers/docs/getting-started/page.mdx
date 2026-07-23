@@ -99,8 +99,14 @@ appear in the **Outputs** of the `tenkacloud-lite` and
 `tenkacloud-lite-problem-deploy` stacks the build created. Sign in with the
 temporary password mailed to `TenantAdminEmail`.
 
-**Tear down:** in the same CodeBuild project, **Start build with overrides**
-with `ACTION=destroy`, then delete the `tenkacloud-lite-launcher` stack itself.
+**Complete teardown:** in the same CodeBuild project, use
+**Start build with overrides** with `ACTION=destroy-all`. This also removes the
+DynamoDB tables and problem-deploy logs owned by the Lite stacks. After it
+succeeds, delete the `tenkacloud-lite-launcher` stack itself. Use
+`ACTION=destroy` only when you intentionally want to preserve DynamoDB history.
+If the launcher predates `destroy-all`, update its CloudFormation stack with the
+latest template first. Never pass `destroy-all` to the older buildspec because
+it treats unknown actions as deploy.
 
 ## 4. Lite mode on AWS — CLI
 
@@ -130,8 +136,9 @@ make deploy
 
 The command prints the Admin Console and Participant Portal URLs when it
 finishes. Switch environments with `make deploy ENV=production` (each
-environment has its own `infrastructure/environments/<env>/.env`), and tear
-down with `make destroy`.
+environment has its own `infrastructure/environments/<env>/.env`). Use
+`make destroy-all` for complete removal, or `make destroy` to remove the stacks
+while preserving DynamoDB history.
 
 ### Choosing the control-data backend: DynamoDB or Turso
 

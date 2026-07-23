@@ -8,6 +8,8 @@
  * 使い方:
  *   bun run scripts/tenkacloud-lite.ts up          — Lite stack を deploy + URL を表示
  *   bun run scripts/tenkacloud-lite.ts down        — Lite stack を destroy
+ *   bun run scripts/tenkacloud-lite.ts down --purge-retained-data
+ *                                                — stack 所有 DDB / CloudWatch logs も完全削除
  *   bun run scripts/tenkacloud-lite.ts portal-url  — Participant Portal URL を表示
  *   bun run scripts/tenkacloud-lite.ts console-url — Application Admin Console URL を表示
  *   bun run scripts/tenkacloud-lite.ts status      — 両 stack の状態を表示
@@ -36,12 +38,19 @@ import {
   resolveLiteEnvironment,
   resolveLiteStackNames,
 } from "../infrastructure/lib/tenkacloud-lite/stack-names";
+import {
+  parseStackOwnedCleanupResources,
+  purgeLiteStackOwnedResources,
+} from "./lib/lite-complete-teardown";
 import { reportRetainedTables } from "./lib/retained-tables";
+
+export { parseStackOwnedCleanupResources };
 
 // Issue #2193: CDK app (bin/tenkacloud-lite.ts) と同じ規則で env suffix を解決する。
 // Makefile が `infrastructure/environments/<env>/.env` を load してから本 CLI を起動する
 // ため、 process 起動時点の CDK_PARAM_ENVIRONMENT で確定する。
-export const LITE_STACK_NAMES = resolveLiteStackNames(resolveLiteEnvironment(process.env));
+const LITE_ENVIRONMENT = resolveLiteEnvironment(process.env);
+export const LITE_STACK_NAMES = resolveLiteStackNames(LITE_ENVIRONMENT);
 
 // cdk + tsx を repo root から呼ぶ。 monorepo workspace で aws-cdk / tsx は **repo root**
 // の node_modules に hoist されるため、 `infrastructure/node_modules/.bin/cdk` は broken
@@ -94,7 +103,7 @@ const COMMANDS: Record<string, CommandSpec> = {
     run: cmdUp,
   },
   down: {
-    help: "Lite stack 2 個を destroy する。 RemovalPolicy=DESTROY が効いていれば S3 / DDB 含めて削除される。",
+    help: "Lite stack 2 個を destroy する。DDB 履歴は保持。--purge-retained-data で完全削除。",
     run: cmdDown,
   },
   "portal-url": {
@@ -399,7 +408,8 @@ function printPostDeployGuide(io: CliIO, input: PostDeployGuideInput): void {
     "  (他のコードは CloudFormation Outputs と Admin Console の各操作成功時に表示される)",
     "",
     "Teardown:",
-    "  make destroy     — 全 stack を削除 (DDB / S3 含む、 確認 prompt あり)",
+    "  make destroy       — stack を削除し、DynamoDB 履歴は保持",
+    "  make destroy-all   — stack 所有のDynamoDB履歴とCodeBuild logsも完全削除",
     "",
     "Docs:",
     "  - README.md (Quickstart)     — 30-min first-run の全体像",
@@ -487,23 +497,24 @@ async function ensureTenantAdminUser(email: string, io: CliIO): Promise<number> 
 }
 
 async function cmdDown(args: readonly string[], io: CliIO): Promise<number> {
-  // Issue #1345: destroy は idempotent でも DB データ消去を伴うので、 first-run user の
-  // 誤爆を避けるため確認 prompt を入れる。 `--yes` / `-y` で skip 可能 (= CI / cleanup
-  // script から呼ぶときは bypass)。
-  const skipConfirm =
-    args.includes("--yes") || args.includes("-y") || process.env.TENKACLOUD_LITE_DOWN_YES === "1";
-  if (!skipConfirm) {
-    const confirmed = await io.confirm(
-      "[lite] make destroy は Lite mode の **全 stack** (= AppPlane + ProblemDeploy) を削除します。\n" +
-        "[lite] DynamoDB の Deployments / Apps / DDB データ、 S3 bucket の portal asset / source bundle、\n" +
-        "[lite] Cognito UserPool (= Tenant Admin user 含む) も RemovalPolicy=DESTROY で消えます。\n" +
-        "[lite] 続行しますか? (y/N): ",
-    );
-    if (!confirmed) {
-      io.stdout("[lite] aborted (no resources were modified).\n");
-      return 0;
-    }
+  // Issue #1345: destructive teardown の first-run 誤爆を避けるため確認 prompt を入れる。
+  // `--yes` / `-y` で skip 可能 (= CI / cleanup script から呼ぶときは bypass)。
+  const purgeRetainedData = args.includes("--purge-retained-data");
+  if (!(await confirmTeardown(args, purgeRetainedData, io))) {
+    io.stdout("[lite] aborted (no resources were modified).\n");
+    return 0;
   }
+
+  if (purgeRetainedData) {
+    const purgeCode = await purgeLiteStackOwnedResources({
+      stackNames: [LITE_STACK_NAMES.app, LITE_STACK_NAMES.problemDeploy],
+      environment: LITE_ENVIRONMENT,
+      includeLegacyLauncherLogGroup: process.env.TENKACLOUD_LITE_MANAGED_LAUNCHER_LOG_GROUP === "1",
+      io,
+    });
+    if (purgeCode !== 0) return purgeCode;
+  }
+
   // `cdk destroy` synths the app the same way `cdk deploy` does, so the shared CDK app
   // still requires CDK_PARAM_SYSTEM_ADMIN_EMAIL. Derive it from the tenant admin email so
   // `make destroy` works with only TENANT_ADMIN_EMAIL set (the Lite .env the CodeBuild
@@ -533,8 +544,31 @@ async function cmdDown(args: readonly string[], io: CliIO): Promise<number> {
   // PROVISIONED 1/1 の standing cost を出し続ける。 残存テーブルを列挙して警告する
   // (削除はしない — RETAIN は意図的)。 list 失敗は警告に留め destroy の exit code は
   // 変えない (reportRetainedTables は throw せず戻り値も持たない)。
-  await reportRetainedTables((args) => io.spawnCapture("aws", args), io.stdout);
+  if (purgeRetainedData) {
+    io.stdout("[lite] complete teardown succeeded; stack-owned retained data was removed.\n");
+  } else {
+    await reportRetainedTables((args) => io.spawnCapture("aws", args), io.stdout);
+  }
   return 0;
+}
+
+async function confirmTeardown(
+  args: readonly string[],
+  purgeRetainedData: boolean,
+  io: CliIO,
+): Promise<boolean> {
+  const skipConfirm =
+    args.includes("--yes") || args.includes("-y") || process.env.TENKACLOUD_LITE_DOWN_YES === "1";
+  if (skipConfirm) return true;
+  return io.confirm(
+    (purgeRetainedData
+      ? "[lite] make destroy-all は Lite stack と、stack が所有する DynamoDB の全履歴を完全削除します。\n" +
+        "[lite] このデータは復元できません。stack に紐づく CloudWatch log group も削除します。\n"
+      : "[lite] make destroy は Lite stack を削除しますが、DynamoDB の履歴は RETAIN されます。\n" +
+        "[lite] 完全削除して課金も止める場合は make destroy-all を使ってください。\n") +
+      "[lite] Cognito UserPool / S3 / CloudFront など stack 管理 resource も削除されます。\n" +
+      "[lite] 続行しますか? (y/N): ",
+  );
 }
 
 async function cmdStatus(_args: readonly string[], io: CliIO): Promise<number> {

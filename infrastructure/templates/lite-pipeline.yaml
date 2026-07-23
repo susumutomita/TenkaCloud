@@ -8,8 +8,8 @@ Description: >-
 
   Cost note: build minutes for a handful of Lite deploys cost under a dollar.
   Separately, once deployed, the default DynamoDB profile is a standing cost of
-  about $7.06 per month until you run `make destroy` or launch this build with the
-  destroy action (see docs/running-costs.md).
+  about $7.06 per month until you run `make destroy-all` or launch this build with
+  the destroy-all action (see docs/running-costs.md).
 
 
   IAM note: creating this stack also creates a CodeBuild role with broad,
@@ -25,10 +25,10 @@ Description: >-
 # submodule -- so a third party can deploy with their OWN catalog (fork TenkaCloudChallenge,
 # author with its scripts/new-problem.ts, then pass ProblemsRepoUrl=<their fork>).
 #
-# Teardown: "Start build with overrides" + ACTION=destroy runs `make destroy` (which deletes
-# the two app stacks in the correct cross-stack order), then delete the launcher stack created
-# from this template. The deploy itself creates the platform (Lambda + Cognito + DynamoDB +
-# S3 + CloudFront + ...); a handful of Lite deploys cost under a dollar.
+# Teardown: "Start build with overrides" + ACTION=destroy-all removes stack-owned retained
+# data and the two app stacks, then delete the launcher stack created from this template.
+# ACTION=destroy preserves DynamoDB history. The deploy itself creates the platform (Lambda +
+# Cognito + DynamoDB + S3 + CloudFront + ...); a handful of Lite deploys cost under a dollar.
 #
 # IAM Role / Policy "Description" fields only accept ASCII (0x20-0x7E) + Latin-1 (0xA1-0xFF);
 # CJK causes CREATE_FAILED. All comments in this file are ASCII so the quality-gates
@@ -86,10 +86,11 @@ Parameters:
     AllowedValues:
       - deploy
       - destroy
+      - destroy-all
     Description: >-
-      What this build does. `deploy` stands up the Lite stacks; `destroy` tears them
-      down in the correct cross-stack order. To tear down from the console, open the
-      CodeBuild project and use "Start build with overrides" with ACTION=destroy.
+      What this build does. `deploy` stands up Lite; `destroy` removes stacks while
+      preserving DynamoDB history; `destroy-all` permanently removes stack-owned
+      retained data and then the stacks. The cleanup tutorial uses ACTION=destroy-all.
 
   TenantAdminEmail:
     Type: String
@@ -200,6 +201,16 @@ Conditions:
   HasExternalId: !Not [!Equals [!Ref DeployExternalId, ""]]
 
 Resources:
+  LauncherLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      # Distinct from CodeBuild's legacy default `/aws/codebuild/<project>` so an existing
+      # launcher can update without "resource already exists"; destroy-all removes that legacy group.
+      LogGroupName: !Sub /tenkacloud/codebuild/lite-launcher-${Environment}
+      RetentionInDays: 1
+
   # =====================================
   # CodeBuild project: clones the repos, installs bun, builds the SPAs, bootstraps CDK,
   # runs `make deploy`. NO_SOURCE -> the buildspec fetches its own source via git clone.
@@ -264,6 +275,9 @@ Resources:
           - Name: JSII_DEPRECATED
             Value: quiet
             Type: PLAINTEXT
+          - Name: TENKACLOUD_LITE_MANAGED_LAUNCHER_LOG_GROUP
+            Value: "1"
+            Type: PLAINTEXT
       Source:
         Type: NO_SOURCE
         BuildSpec: |
@@ -320,42 +334,54 @@ Resources:
                     echo "CDK_PARAM_DYNAMODB_WRITE_CAPACITY=${DYNAMO_WRITE_CAPACITY}"
                   } > "${ENV_DIR}/.env"
                 - echo "Wrote ${ENV_DIR}/.env (TENANT_ADMIN_EMAIL / AWS_ACCOUNT_ID / AWS_REGION)"
-                # Bootstrap is only needed to deploy (idempotent); skip it when destroying.
+                # Bootstrap is only needed to deploy (idempotent); skip it for both teardown modes.
                 - |
-                  if [ "${ACTION}" != "destroy" ]; then
+                  if [ "${ACTION}" = "deploy" ]; then
                     ./node_modules/aws-cdk/bin/cdk bootstrap "aws://${AWS_ACCOUNT_ID}/${AWS_REGION}"
                   fi
             build:
               commands:
                 - cd "${CODEBUILD_SRC_DIR}/repo"
                 - |
-                  if [ "${ACTION}" = "destroy" ]; then
-                    echo "ACTION=destroy -> tearing down the Lite stacks in the correct order"
+                  if [ "${ACTION}" = "destroy-all" ]; then
+                    echo "ACTION=destroy-all -> removing stack-owned data, logs, and Lite stacks"
                     # TENKACLOUD_LITE_DOWN_YES bypasses the interactive confirm in this non-TTY build.
-                    if ! TENKACLOUD_LITE_DOWN_YES=1 make destroy ENV="${ENVIRONMENT}"; then
-                      echo "Lite teardown failed; cleanup checkpoint will not be emitted."
+                    if ! TENKACLOUD_LITE_DOWN_YES=1 make destroy-all ENV="${ENVIRONMENT}"; then
+                      echo "Lite complete teardown failed; cleanup checkpoint will not be emitted."
                       exit 1
                     fi
-                    # Public onboarding checkpoint: emitted only after a successful teardown.
+                    # Public onboarding checkpoint: complete teardown only, never preserve mode.
                     echo "Cleanup checkpoint: TC{LITE-CLEANUP-COMPLETE}"
-                  else
+                  elif [ "${ACTION}" = "destroy" ]; then
+                    echo "ACTION=destroy -> removing Lite stacks while preserving DynamoDB history"
+                    if ! TENKACLOUD_LITE_DOWN_YES=1 make destroy ENV="${ENVIRONMENT}"; then
+                      echo "Lite teardown failed."
+                      exit 1
+                    fi
+                    echo "DynamoDB history was retained; no complete-cleanup checkpoint is emitted."
+                  elif [ "${ACTION}" = "deploy" ]; then
                     # `make deploy` builds the SPAs (ships the cloned catalog) then runs the Lite deploy.
                     make deploy ENV="${ENVIRONMENT}"
+                  else
+                    echo "Unsupported ACTION: ${ACTION}"
+                    exit 2
                   fi
             post_build:
               commands:
                 - |
-                  if [ "${ACTION}" = "destroy" ]; then
+                  if [ "${ACTION}" = "destroy" ] || [ "${ACTION}" = "destroy-all" ]; then
                     echo "Teardown finished. Finally, delete the launcher stack you created from this"
-                    echo "template to remove the CodeBuild project + its role."
-                  else
+                    echo "template to remove the CodeBuild project, its role, and its log group."
+                  elif [ "${ACTION}" = "deploy" ]; then
                     echo "Deploy finished. The Admin Console + Participant Portal URLs are in the"
                     echo "CloudFormation Outputs of the tenkacloud-lite / tenkacloud-lite-problem-deploy stacks."
+                  else
+                    echo "No supported launcher action completed."
                   fi
       LogsConfig:
         CloudWatchLogs:
           Status: ENABLED
-          GroupName: !Sub /aws/codebuild/tenkacloud-lite-${Environment}
+          GroupName: !Ref LauncherLogGroup
       TimeoutInMinutes: !Ref CodeBuildTimeoutMinutes
 
   # =====================================
@@ -443,7 +469,7 @@ Outputs:
   StartBuildConsoleUrl:
     Description: >-
       Open the CodeBuild project: "Start build" deploys; "Start build with overrides" with
-      ACTION=destroy tears down.
+      ACTION=destroy-all completely removes Lite; ACTION=destroy preserves DynamoDB history.
     Value: !Sub https://${AWS::Region}.console.aws.amazon.com/codesuite/codebuild/projects/tenkacloud-lite-${Environment}?region=${AWS::Region}
 
   # Issue #2696: onboarding drill checkpoint 1 ("launcher created"). Deliberately a fixed,

@@ -5,6 +5,7 @@ import {
   LITE_STACK_NAMES,
   main,
   parseResolvedBucketName,
+  parseStackOwnedCleanupResources,
   type SpawnCaptureResult,
 } from "../../../scripts/tenkacloud-lite";
 
@@ -220,6 +221,68 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
       expect(parseResolvedBucketName("REGION=ap-northeast-1\nACCOUNT_ID=1\n")).toBeUndefined();
       expect(parseResolvedBucketName("CDK_PARAM_S3_BUCKET_NAME=\n")).toBeUndefined();
       expect(parseResolvedBucketName("")).toBeUndefined();
+    });
+  });
+
+  describe("parseStackOwnedCleanupResources (#2765)", () => {
+    it("should return only exact table and log-group names derived from stack physical IDs", () => {
+      const result = parseStackOwnedCleanupResources(
+        JSON.stringify({
+          StackResourceSummaries: [
+            {
+              LogicalResourceId: "EventsTable",
+              PhysicalResourceId: "tenkacloud-lite-problem-deploy-Events-ABC",
+              ResourceType: "AWS::DynamoDB::Table",
+            },
+            {
+              LogicalResourceId: "DeployCodeBuildProject",
+              PhysicalResourceId: "tenkacloud-lite-problem-deploy-DeployCodeBuild-XYZ",
+              ResourceType: "AWS::CodeBuild::Project",
+            },
+            {
+              LogicalResourceId: "DeployApiFunction",
+              PhysicalResourceId: "tenkacloud-lite-problem-deploy-DeployApi-ABC",
+              ResourceType: "AWS::Lambda::Function",
+            },
+            {
+              LogicalResourceId: "DeployApiFunctionLogGroup",
+              PhysicalResourceId: "/aws/lambda/tenkacloud-lite-explicit-log",
+              ResourceType: "AWS::Logs::LogGroup",
+            },
+            {
+              LogicalResourceId: "UnrelatedBucket",
+              PhysicalResourceId: "tenkacloud-lite-assets",
+              ResourceType: "AWS::S3::Bucket",
+            },
+          ],
+        }),
+      );
+
+      expect(result).toEqual({
+        tableNames: ["tenkacloud-lite-problem-deploy-Events-ABC"],
+        logGroupNames: [
+          "/aws/codebuild/tenkacloud-lite-problem-deploy-DeployCodeBuild-XYZ",
+          "/aws/lambda/tenkacloud-lite-problem-deploy-DeployApi-ABC",
+          "/aws/lambda/tenkacloud-lite-explicit-log",
+        ],
+      });
+    });
+
+    it("should fail closed when the CloudFormation response is malformed", () => {
+      expect(parseStackOwnedCleanupResources("not-json")).toBeUndefined();
+      expect(parseStackOwnedCleanupResources("{}")).toBeUndefined();
+      expect(
+        parseStackOwnedCleanupResources(
+          JSON.stringify({
+            StackResourceSummaries: [
+              {
+                LogicalResourceId: "EventsTable",
+                ResourceType: "AWS::DynamoDB::Table",
+              },
+            ],
+          }),
+        ),
+      ).toBeUndefined();
     });
   });
 
@@ -454,6 +517,260 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
     // exit code は destroy の失敗コードのまま (warning が exit code を変えない)。
     expect(code).toBe(5);
     expect(calls.filter((c) => c.args.includes("list-tables"))).toHaveLength(0);
+  });
+
+  it("down --purge-retained-data should purge only stack-owned resources before destroying (#2765)", async () => {
+    const { io, calls } = buildIO({
+      inheritExitCode: 0,
+      capture: (_cmd, args) => {
+        if (args.includes("list-stack-resources")) {
+          const stackName = args[args.indexOf("--stack-name") + 1];
+          return {
+            code: 0,
+            stdout: JSON.stringify({
+              StackResourceSummaries:
+                stackName === LITE_STACK_NAMES.app
+                  ? [
+                      {
+                        PhysicalResourceId: "tenkacloud-lite-SamlIdps-APP",
+                        ResourceType: "AWS::DynamoDB::Table",
+                      },
+                    ]
+                  : [
+                      {
+                        PhysicalResourceId: "tenkacloud-lite-problem-deploy-Events-PROBLEM",
+                        ResourceType: "AWS::DynamoDB::Table",
+                      },
+                      {
+                        PhysicalResourceId: "tenkacloud-lite-problem-deploy-CodeBuild-PROJECT",
+                        ResourceType: "AWS::CodeBuild::Project",
+                      },
+                      {
+                        PhysicalResourceId: "tenkacloud-lite-problem-deploy-DeployApi-FUNCTION",
+                        ResourceType: "AWS::Lambda::Function",
+                      },
+                      {
+                        PhysicalResourceId: "/aws/vendedlogs/states/tenkacloud-lite-problem",
+                        ResourceType: "AWS::Logs::LogGroup",
+                      },
+                    ],
+            }),
+            stderr: "",
+          };
+        }
+        return { code: 0, stdout: "", stderr: "" };
+      },
+    });
+
+    const code = await main(["down", "--purge-retained-data", "--yes"], io);
+
+    expect(code).toBe(0);
+    const deleteTableCalls = calls.filter((call) => call.args.includes("delete-table"));
+    expect(deleteTableCalls.map((call) => call.args.at(-1))).toEqual([
+      "tenkacloud-lite-SamlIdps-APP",
+      "tenkacloud-lite-problem-deploy-Events-PROBLEM",
+    ]);
+    const deleteLogGroupCall = calls.find((call) => call.args.includes("delete-log-group"));
+    expect(deleteLogGroupCall?.args).toContain(
+      "/aws/codebuild/tenkacloud-lite-problem-deploy-CodeBuild-PROJECT",
+    );
+    expect(
+      calls.some(
+        (call) =>
+          call.args.includes("delete-log-group") &&
+          call.args.includes("/aws/lambda/tenkacloud-lite-problem-deploy-DeployApi-FUNCTION"),
+      ),
+    ).toBe(true);
+    expect(
+      calls.some(
+        (call) =>
+          call.args.includes("delete-log-group") &&
+          call.args.includes("/aws/vendedlogs/states/tenkacloud-lite-problem"),
+      ),
+    ).toBe(true);
+    expect(calls.some((call) => call.args.includes("list-tables"))).toBe(false);
+
+    const lastPurgeAt = Math.max(
+      ...calls
+        .map((call, index) =>
+          call.args.includes("table-not-exists") || call.args.includes("delete-log-group")
+            ? index
+            : -1,
+        )
+        .filter((index) => index >= 0),
+    );
+    const firstDestroyAt = calls.findIndex((call) => call.args.includes("destroy"));
+    expect(lastPurgeAt).toBeLessThan(firstDestroyAt);
+  });
+
+  it("down --purge-retained-data should fail before mutation when ownership discovery fails (#2765)", async () => {
+    const { io, calls, stderr } = buildIO({
+      inheritExitCode: 0,
+      capture: (_cmd, args) =>
+        args.includes("list-stack-resources")
+          ? { code: 4, stdout: "", stderr: "AccessDenied" }
+          : { code: 0, stdout: "", stderr: "" },
+    });
+
+    const code = await main(["down", "--purge-retained-data", "--yes"], io);
+
+    expect(code).toBe(4);
+    expect(calls.some((call) => call.args.includes("delete-table"))).toBe(false);
+    expect(calls.some((call) => call.args.includes("delete-log-group"))).toBe(false);
+    expect(calls.some((call) => call.args.includes("destroy"))).toBe(false);
+    expect(stderr.join("")).toContain("ownership discovery failed");
+  });
+
+  it("down --purge-retained-data should stop before stack deletion when a table purge fails (#2765)", async () => {
+    const { io, calls } = buildIO({
+      inheritExitCode: 0,
+      capture: (_cmd, args) => {
+        if (args.includes("list-stack-resources")) {
+          return {
+            code: 0,
+            stdout: JSON.stringify({
+              StackResourceSummaries: [
+                {
+                  PhysicalResourceId: "tenkacloud-lite-Events-FAIL",
+                  ResourceType: "AWS::DynamoDB::Table",
+                },
+              ],
+            }),
+            stderr: "",
+          };
+        }
+        if (args.includes("delete-table")) {
+          return { code: 7, stdout: "", stderr: "AccessDeniedException" };
+        }
+        return { code: 0, stdout: "", stderr: "" };
+      },
+    });
+
+    const code = await main(["down", "--purge-retained-data", "--yes"], io);
+
+    expect(code).toBe(7);
+    expect(calls.some((call) => call.args.includes("destroy"))).toBe(false);
+  });
+
+  it("down --purge-retained-data should treat already-missing captured resources as retry-safe (#2765)", async () => {
+    const { io, calls } = buildIO({
+      inheritExitCode: 0,
+      capture: (_cmd, args) => {
+        if (args.includes("list-stack-resources")) {
+          return {
+            code: 0,
+            stdout: JSON.stringify({
+              StackResourceSummaries: [
+                {
+                  PhysicalResourceId: "tenkacloud-lite-Events-GONE",
+                  ResourceType: "AWS::DynamoDB::Table",
+                },
+                {
+                  PhysicalResourceId: "tenkacloud-lite-DeployProject-GONE",
+                  ResourceType: "AWS::CodeBuild::Project",
+                },
+              ],
+            }),
+            stderr: "",
+          };
+        }
+        if (args.includes("delete-table") || args.includes("delete-log-group")) {
+          return { code: 254, stdout: "", stderr: "ResourceNotFoundException" };
+        }
+        return { code: 0, stdout: "", stderr: "" };
+      },
+    });
+
+    const code = await main(["down", "--purge-retained-data", "--yes"], io);
+
+    expect(code).toBe(0);
+    expect(calls.filter((call) => call.args.includes("destroy"))).toHaveLength(2);
+  });
+
+  it("down --purge-retained-data should retry safely when the first stack is already gone (#2765)", async () => {
+    const { io, calls } = buildIO({
+      inheritExitCode: 0,
+      capture: (_cmd, args) => {
+        if (args.includes("list-stack-resources")) {
+          const stackName = args[args.indexOf("--stack-name") + 1];
+          if (stackName === LITE_STACK_NAMES.app) {
+            return {
+              code: 255,
+              stdout: "",
+              stderr: `Stack with id ${stackName} does not exist`,
+            };
+          }
+          return {
+            code: 0,
+            stdout: JSON.stringify({
+              StackResourceSummaries: [
+                {
+                  PhysicalResourceId: "tenkacloud-lite-Events-RETRY",
+                  ResourceType: "AWS::DynamoDB::Table",
+                },
+              ],
+            }),
+            stderr: "",
+          };
+        }
+        if (args.includes("delete-table")) {
+          return { code: 254, stdout: "", stderr: "ResourceNotFoundException" };
+        }
+        return { code: 0, stdout: "", stderr: "" };
+      },
+    });
+
+    const code = await main(["down", "--purge-retained-data", "--yes"], io);
+
+    expect(code).toBe(0);
+    expect(calls.some((call) => call.args.includes("delete-table"))).toBe(true);
+    expect(calls.filter((call) => call.args.includes("destroy"))).toHaveLength(2);
+  });
+
+  it("down --purge-retained-data should fail closed when both ownership stacks are already absent (#2765)", async () => {
+    const { io, calls, stderr } = buildIO({
+      inheritExitCode: 0,
+      capture: (_cmd, args) =>
+        args.includes("list-stack-resources")
+          ? { code: 255, stdout: "", stderr: "Stack does not exist" }
+          : { code: 0, stdout: "", stderr: "" },
+    });
+
+    const code = await main(["down", "--purge-retained-data", "--yes"], io);
+
+    expect(code).toBe(1);
+    expect(calls.some((call) => call.args.includes("destroy"))).toBe(false);
+    expect(stderr.join("")).toContain("ownership cannot be proven");
+  });
+
+  it("down --purge-retained-data should remove the exact legacy launcher log only after managed logging is enabled (#2765)", async () => {
+    const previous = process.env.TENKACLOUD_LITE_MANAGED_LAUNCHER_LOG_GROUP;
+    process.env.TENKACLOUD_LITE_MANAGED_LAUNCHER_LOG_GROUP = "1";
+    try {
+      const { io, calls } = buildIO({
+        inheritExitCode: 0,
+        capture: (_cmd, args) =>
+          args.includes("list-stack-resources")
+            ? {
+                code: 0,
+                stdout: JSON.stringify({ StackResourceSummaries: [] }),
+                stderr: "",
+              }
+            : { code: 0, stdout: "", stderr: "" },
+      });
+
+      const code = await main(["down", "--purge-retained-data", "--yes"], io);
+
+      expect(code).toBe(0);
+      const logDelete = calls.find((call) => call.args.includes("delete-log-group"));
+      expect(logDelete?.args).toContain("/aws/codebuild/tenkacloud-lite-development");
+    } finally {
+      if (previous === undefined) {
+        delete process.env.TENKACLOUD_LITE_MANAGED_LAUNCHER_LOG_GROUP;
+      } else {
+        process.env.TENKACLOUD_LITE_MANAGED_LAUNCHER_LOG_GROUP = previous;
+      }
+    }
   });
 
   // Regression: `cdk destroy` synths the shared CDK app (bin/tenkacloud-lite.ts ->

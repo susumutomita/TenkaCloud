@@ -176,8 +176,14 @@ output and press <strong>Start build</strong>.</li>
 appear in the <strong>Outputs</strong> of the <code>tenkacloud-lite</code> and
 <code>tenkacloud-lite-problem-deploy</code> stacks the build created. Sign in with the
 temporary password mailed to <code>TenantAdminEmail</code>.</p>
-<p><strong>Tear down:</strong> in the same CodeBuild project, <strong>Start build with overrides</strong>
-with <code>ACTION=destroy</code>, then delete the <code>tenkacloud-lite-launcher</code> stack itself.</p>
+<p><strong>Complete teardown:</strong> in the same CodeBuild project, use
+<strong>Start build with overrides</strong> with <code>ACTION=destroy-all</code>. This also removes the
+DynamoDB tables and problem-deploy logs owned by the Lite stacks. After it
+succeeds, delete the <code>tenkacloud-lite-launcher</code> stack itself. Use
+<code>ACTION=destroy</code> only when you intentionally want to preserve DynamoDB history.
+If the launcher predates <code>destroy-all</code>, update its CloudFormation stack with the
+latest template first. Never pass <code>destroy-all</code> to the older buildspec because
+it treats unknown actions as deploy.</p>
 <h2>4. Lite mode on AWS — CLI</h2>
 <p>The same two stacks as mode 3, deployed from your shell — the path you want
 when you also develop on the platform.</p>
@@ -201,8 +207,9 @@ make deploy
 </code></pre>
 <p>The command prints the Admin Console and Participant Portal URLs when it
 finishes. Switch environments with <code>make deploy ENV=production</code> (each
-environment has its own <code>infrastructure/environments/&lt;env&gt;/.env</code>), and tear
-down with <code>make destroy</code>.</p>
+environment has its own <code>infrastructure/environments/&lt;env&gt;/.env</code>). Use
+<code>make destroy-all</code> for complete removal, or <code>make destroy</code> to remove the stacks
+while preserving DynamoDB history.</p>
 <h3>Choosing the control-data backend: DynamoDB or Turso</h3>
 <p>Lite mode stores control data (events, teams, deployments, scores) in one of
 two backends, selected by <code>CDK_PARAM_CONTROL_DATA_BACKEND</code> in your <code>.env</code>:</p>

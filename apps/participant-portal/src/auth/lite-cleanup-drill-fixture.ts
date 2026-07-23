@@ -31,15 +31,15 @@ export function createLiteCleanupDrillFixture({
       "#### 進め方",
       "",
       "1. launcher スタックの `StartBuildConsoleUrl` から CodeBuild を開く",
-      "2. **Start build with overrides** を選び、環境変数 `ACTION=destroy` を指定して開始する",
-      "3. 削除成功ログに出るチェックポイントコードを控える",
-      "4. CloudFormation で launcher スタック自体を削除する(CodeBuild project と IAM Role も削除される)",
+      "2. **Start build with overrides** を選び、環境変数 `ACTION=destroy-all` を指定して開始する",
+      "3. DynamoDB テーブルと CodeBuild ログを含む完全削除の成功ログで、チェックポイントコードを控える",
+      "4. CloudFormation で launcher スタック自体を削除する(CodeBuild project、IAM Role、launcher のログも削除される)",
       "5. launcher の削除完了を確認してから、控えたコードを下へ提出する",
       "",
       "途中で失敗した場合は launcher を先に消さず、同じ override で再実行する。launcher は片付けを再試行するための最後の手段なので、必ず最後に削除する。",
     ].join("\n"),
     instructions:
-      "CodeBuild を ACTION=destroy で成功させ、チェックポイントを控えてから launcher スタックを削除し、最後にコードを提出する。",
+      "CodeBuild を ACTION=destroy-all で成功させ、チェックポイントを控えてから launcher スタックを削除し、最後にコードを提出する。",
     i18n: {
       en: {
         name: "Clean up TenkaCloud Lite",
@@ -57,15 +57,15 @@ export function createLiteCleanupDrillFixture({
           "#### Steps",
           "",
           "1. Open CodeBuild from the launcher stack's `StartBuildConsoleUrl`",
-          "2. Choose **Start build with overrides**, set the environment override `ACTION=destroy`, and start",
-          "3. Copy the checkpoint printed in the successful teardown log",
-          "4. Delete the launcher stack itself in CloudFormation (this also removes its CodeBuild project and IAM Role)",
+          "2. Choose **Start build with overrides**, set the environment override `ACTION=destroy-all`, and start",
+          "3. Copy the checkpoint from the successful complete-teardown log after DynamoDB tables and CodeBuild logs are removed",
+          "4. Delete the launcher stack itself in CloudFormation (this also removes its CodeBuild project, IAM Role, and launcher log group)",
           "5. After the launcher deletion completes, submit the code you copied below",
           "",
           "If teardown fails, keep the launcher and rerun the same override. The launcher is your recovery path, so always delete it last.",
         ].join("\n"),
         instructions:
-          "Run CodeBuild successfully with ACTION=destroy, save the checkpoint, delete the launcher stack, then submit the code.",
+          "Run CodeBuild successfully with ACTION=destroy-all, save the checkpoint, delete the launcher stack, then submit the code.",
       },
     },
     region: "ap-northeast-1",
@@ -89,11 +89,11 @@ export function createLiteCleanupDrillFixture({
               penalty: 0,
               revealed: false,
               content:
-                "CodeBuild の **Start build with overrides** で `ACTION=destroy` を指定する。成功ログの `Cleanup checkpoint` を控え、CloudFormation で launcher スタックの削除完了を確認してから、そのコードを提出する。失敗時は launcher を残して再実行する。",
+                "CodeBuild の **Start build with overrides** で `ACTION=destroy-all` を指定する。DynamoDB と CodeBuild ログを含む完全削除の成功ログで `Cleanup checkpoint` を控え、CloudFormation で launcher スタックの削除完了を確認してから、そのコードを提出する。失敗時は launcher を残して再実行する。",
               i18n: {
                 en: {
                   content:
-                    "Use **Start build with overrides** in CodeBuild and set `ACTION=destroy`. Save the `Cleanup checkpoint` from the success log, confirm the launcher stack is deleted in CloudFormation, then submit that code. Keep the launcher and retry if teardown fails.",
+                    "Use **Start build with overrides** in CodeBuild and set `ACTION=destroy-all`. Save the `Cleanup checkpoint` after the log confirms complete teardown of DynamoDB data and CodeBuild logs, confirm the launcher stack is deleted in CloudFormation, then submit that code. Keep the launcher and retry if teardown fails.",
                 },
               },
             },

@@ -8,7 +8,7 @@ export const metadata = { title: "デプロイモードと起動経路" };
 
 ## 2 つのデプロイモード
 
-- **Lite モード** — `make deploy`。1 人の主催者が 1 つのイベントを運営するためのモードです。SBT コントロールプレーン、テナントパイプライン、System Admin の招待をすべてスキップし、`infrastructure/bin/tenkacloud-lite.ts` 経由で 2 つのスタックだけをデプロイします。AppPlaneCore (`tenantId="local"`) と、problem-deploy バックエンド / Participant Portal です。**Lite モードに CodePipeline はありません。** 破棄は `make destroy` です。
+- **Lite モード** — `make deploy`。1 人の主催者が 1 つのイベントを運営するためのモードです。SBT コントロールプレーン、テナントパイプライン、System Admin の招待をすべてスキップし、`infrastructure/bin/tenkacloud-lite.ts` 経由で 2 つのスタックだけをデプロイします。AppPlaneCore (`tenantId="local"`) と、problem-deploy バックエンド / Participant Portal です。**Lite モードに CodePipeline はありません。** 完全削除は `make destroy-all`、DynamoDB 履歴を残す場合は `make destroy` です。
 - **SaaS モード** — `make deploy-saas` (`scripts/install.sh`、3 フェーズ)。プール型の BASIC / ADVANCED ティア、サイロ型の PLATINUM ティア、System Admin の招待を含む、完全なマルチテナント運用です。破棄は `make destroy-saas` です。
 
 どちらのモードもオペレーターがシェルから実行します。CI がデプロイすることはありません。

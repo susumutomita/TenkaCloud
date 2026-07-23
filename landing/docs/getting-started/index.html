@@ -182,9 +182,14 @@ Participant Portal、問題デプロイバックエンドを、固定の単一�
 <code>tenkacloud-lite-problem-deploy</code> スタックの <strong>Outputs</strong> に <strong>Admin Console</strong>
 と <strong>Participant Portal</strong> の URL が表示されます。<code>TenantAdminEmail</code> に届いた
 一時パスワードでサインインしてください。</p>
-<p><strong>破棄する場合:</strong> 同じ CodeBuild プロジェクトで <code>ACTION=destroy</code> を指定して
-<strong>Start build with overrides</strong> を実行し、その後 <code>tenkacloud-lite-launcher</code>
-スタック自体を削除します。</p>
+<p><strong>完全に破棄する場合:</strong> 同じ CodeBuild プロジェクトで
+<code>ACTION=destroy-all</code> を指定して <strong>Start build with overrides</strong> を実行します。
+これにより Lite スタックが所有する DynamoDB テーブルと問題デプロイ用ログも
+削除されます。成功後に <code>tenkacloud-lite-launcher</code> スタック自体を削除して
+ください。DynamoDB 履歴を残す場合だけ <code>ACTION=destroy</code> を使います。
+<code>destroy-all</code> 追加前の launcher は、先に CloudFormation のスタック更新で
+最新版のテンプレートを適用してください。旧 buildspec は未知の ACTION を
+deploy として扱うため、旧 launcher に <code>destroy-all</code> を直接指定してはいけません。</p>
 <h2>4. AWS 上の Lite モード — CLI</h2>
 <p>モード 3 と同じ 2 つのスタックを、シェルからデプロイします。プラットフォーム
 自体の開発も行う場合はこちらを選んでください。</p>
@@ -208,7 +213,8 @@ make deploy
 </code></pre>
 <p>コマンドが完了すると、Admin Console と Participant Portal の URL が表示
 されます。環境の切り替えは <code>make deploy ENV=production</code> で行い（環境ごとに
-専用の <code>infrastructure/environments/&lt;env&gt;/.env</code> があります）、破棄は
+専用の <code>infrastructure/environments/&lt;env&gt;/.env</code> があります）。完全削除は
+<code>make destroy-all</code>、DynamoDB 履歴を残すスタック削除は
 <code>make destroy</code> で行います。</p>
 <h3>コントロールデータのバックエンドを選ぶ: DynamoDB か Turso か</h3>
 <p>Lite モードはコントロールデータ（イベント、チーム、デプロイメント、スコア）を

@@ -134,7 +134,9 @@ Deploy from the AWS Console — a CloudFormation stack creates a CodeBuild proje
 
 After ~15-30 minutes the build finishes. Scroll to the end of the CodeBuild build log you're already watching — the deploy prints a `✓ Lite mode deploy complete` block whose **Access URLs:** section lists the **Application Admin Console** and **Participant Portal** URLs directly, followed by **Next steps:** and **Teardown:** guidance. If you'd rather read them from CloudFormation, the same two URLs are also in the **Outputs** of the `tenkacloud-lite` and `tenkacloud-lite-problem-deploy` stacks that the build creates.
 
-**Tear down:** in the same CodeBuild project, choose **Start build with overrides**, set `ACTION` to `destroy`, and start it; then delete the `tenkacloud-lite-launcher` stack to remove the CodeBuild project itself.
+**Complete teardown:** in the same CodeBuild project, choose **Start build with overrides**, set `ACTION` to `destroy-all`, and start it. This removes the Lite stacks plus their retained DynamoDB tables and problem-deploy logs. Then delete the `tenkacloud-lite-launcher` stack to remove its CodeBuild project, role, and log group. Use `ACTION=destroy` only when you intentionally want to preserve DynamoDB history.
+
+If the launcher predates `destroy-all`, update its CloudFormation stack with the latest `lite-pipeline.yaml` first. Do not pass `destroy-all` to an older launcher: its old buildspec treats unknown actions as deploy.
 
 ## Supported environments
 

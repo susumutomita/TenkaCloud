@@ -207,10 +207,10 @@ describe("dev-mock fixtures", () => {
     expect(cleanup?.scoring?.flags?.map((f) => f.id)).toEqual([
       LITE_CLEANUP_DRILL_CHECKPOINT.flagId,
     ]);
-    expect(cleanup?.description).toContain("ACTION=destroy");
+    expect(cleanup?.description).toContain("ACTION=destroy-all");
     expect(cleanup?.description).toContain("launcher");
     expect(cleanup?.description).toContain("自分で確認");
-    expect(cleanup?.i18n?.en?.description).toContain("ACTION=destroy");
+    expect(cleanup?.i18n?.en?.description).toContain("ACTION=destroy-all");
     expect(cleanup?.i18n?.en?.description).toContain("launcher");
     expect(cleanup?.i18n?.en?.description).toContain("self-confirm");
   });

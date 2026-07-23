@@ -136,7 +136,9 @@ AWS コンソールからデプロイします。CloudFormation スタックが 
 
 15〜30 分ほどでビルドが完了します。すでに見ている CodeBuild のビルドログを一番下までスクロールしてください — デプロイの最後に `✓ Lite mode deploy complete` ブロックが出力され、その **Access URLs:** セクションに **Application Admin Console** と **Participant Portal** の URL がそのまま載っており、続けて **Next steps:** と **Teardown:** の案内も表示されます。CloudFormation 側で確認したい場合は、同じ 2 つの URL がビルドが作成する `tenkacloud-lite` / `tenkacloud-lite-problem-deploy` 各スタックの **Outputs** にも載っています。
 
-**削除する場合:** 同じ CodeBuild プロジェクトで **Start build with overrides** を選び、環境変数 `ACTION` に `destroy` を設定して実行してください — 2 つのアプリスタックが正しい順序で削除されます。その後 `tenkacloud-lite-launcher` スタック自体を削除すると、CodeBuild プロジェクトも消えます。
+**完全削除する場合:** 同じ CodeBuild プロジェクトで **Start build with overrides** を選び、環境変数 `ACTION` に `destroy-all` を設定して実行してください。Lite の 2 スタックに加え、保持された DynamoDB テーブルと問題デプロイ用ログも削除されます。その後 `tenkacloud-lite-launcher` スタック自体を削除すると、CodeBuild プロジェクト、IAM Role、launcher のログも消えます。DynamoDB 履歴を意図的に残す場合だけ `ACTION=destroy` を使います。
+
+`destroy-all` 追加前に作成した launcher は、先に CloudFormation のスタック更新で最新版の `lite-pipeline.yaml` を適用してください。旧 buildspec は未知の ACTION を deploy として扱うため、旧 launcher に `destroy-all` を直接指定してはいけません。
 
 ## 対応環境
 
