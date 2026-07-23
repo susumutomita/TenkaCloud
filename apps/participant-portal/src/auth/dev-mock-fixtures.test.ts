@@ -1,4 +1,6 @@
 import {
+  LITE_CLEANUP_DRILL_CHECKPOINT,
+  LITE_CLEANUP_DRILL_PROBLEM_ID,
   LITE_DRILL_CHECKPOINTS,
   LITE_DRILL_PROBLEM_ID,
   LOCAL_DRILL_PROBLEM_ID,
@@ -27,6 +29,7 @@ describe("dev-mock fixtures", () => {
   const ONBOARDING_DRILL_IDS = [
     WHAT_IS_DRILL_PROBLEM_ID,
     LITE_DRILL_PROBLEM_ID,
+    LITE_CLEANUP_DRILL_PROBLEM_ID,
     LOCAL_DRILL_PROBLEM_ID,
     AI_AGENT_LOCAL_DRILL_PROBLEM_ID,
   ];
@@ -35,7 +38,7 @@ describe("dev-mock fixtures", () => {
   );
 
   it("should pin the onboarding drills first, in journey order (#2711)", () => {
-    expect(DEV_MOCK_TEAM_VIEW.problems.slice(0, 4).map((p) => p.problemId)).toEqual(
+    expect(DEV_MOCK_TEAM_VIEW.problems.slice(0, 5).map((p) => p.problemId)).toEqual(
       ONBOARDING_DRILL_IDS,
     );
   });
@@ -75,7 +78,7 @@ describe("dev-mock fixtures", () => {
   });
 
   it("should ship every onboarding problem as an unsolved multi-flag drill", () => {
-    expect(drills).toHaveLength(4);
+    expect(drills).toHaveLength(5);
     for (const drill of drills) {
       expect(drill.scoring?.kind).toBe("multi-flag");
       expect(drill.score).toBe(0);
@@ -103,6 +106,16 @@ describe("dev-mock fixtures", () => {
     }
   });
 
+  it("should tell the local drill player the team key is auto-filled at login (no manual key entry)", () => {
+    const local = drills.find((p) => p.problemId === LOCAL_DRILL_PROBLEM_ID);
+    // Opening the Portal lands on a login screen; make local pre-fills the throwaway
+    // team key into runtime-config, so the step must say "just sign in", not "type a key".
+    expect(local?.description).toContain("チームキーは自動で入力済み");
+    expect(local?.description).toContain("「サインイン」を押すだけ");
+    expect(local?.i18n?.en?.description).toContain("team key is already filled in");
+    expect(local?.i18n?.en?.description).toContain("just press **Sign in**");
+  });
+
   it("should keep the lite drill sub-flag ids aligned with the lite-drill contract, in journey order", () => {
     const lite = drills.find((p) => p.problemId === LITE_DRILL_PROBLEM_ID);
     expect(lite?.scoring?.flags?.map((f) => f.id)).toEqual([
@@ -111,6 +124,95 @@ describe("dev-mock fixtures", () => {
       LITE_DRILL_CHECKPOINTS.competitorVerified.flagId,
       LITE_DRILL_CHECKPOINTS.firstEventCreated.flagId,
     ]);
+  });
+
+  it("should link the exact Lite template and CloudFormation create-stack entry", () => {
+    const lite = drills.find((p) => p.problemId === LITE_DRILL_PROBLEM_ID);
+    const launcherHint = lite?.scoring?.flags?.find(
+      (flag) => flag.id === LITE_DRILL_CHECKPOINTS.launcherCreated.flagId,
+    )?.hints?.[0];
+
+    expect(launcherHint?.content).toContain(
+      "github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/lite-pipeline.yaml",
+    );
+    expect(launcherHint?.content).toContain(
+      "console.aws.amazon.com/cloudformation/home?region=ap-northeast-1#/stacks/create/template",
+    );
+    expect(launcherHint?.i18n?.en?.content).toContain(
+      "github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/lite-pipeline.yaml",
+    );
+    expect(launcherHint?.i18n?.en?.content).toContain(
+      "console.aws.amazon.com/cloudformation/home?region=ap-northeast-1#/stacks/create/template",
+    );
+    expect(lite?.description).not.toContain("デプロイ用パイプライン");
+    expect(lite?.description).toContain("CloudFormationに読み込ませる");
+    expect(lite?.description).toContain("CodeBuildとIAM Role");
+    expect(lite?.description).toContain("AWS CodePipelineは使わない");
+    expect(lite?.description).toContain("AWS経験者向け");
+    expect(lite?.description).toContain(
+      "CloudFormation stack → CodeBuild project → CDK deploy → CloudFormation stacks",
+    );
+    expect(lite?.description).toContain("細かいデプロイ手順");
+    expect(lite?.description).toContain("Start build");
+    expect(lite?.i18n?.en?.description).not.toContain("deployment pipeline");
+    expect(lite?.i18n?.en?.description).toContain("load into CloudFormation");
+    expect(lite?.i18n?.en?.description).toContain("CodeBuild project and IAM Role");
+    expect(lite?.i18n?.en?.description).toContain("does not use the AWS CodePipeline service");
+    expect(lite?.i18n?.en?.description).toContain("AWS shorthand");
+    expect(lite?.i18n?.en?.description).toContain("without learning");
+    expect(lite?.i18n?.en?.description).toContain("Start build");
+    expect(lite?.description).toContain("#### AWSサービスの役割");
+    expect(lite?.i18n?.en?.description).toContain("#### What the AWS services do");
+    for (const service of [
+      "CloudFormation",
+      "CodeBuild",
+      "IAM Role",
+      "S3",
+      "CloudFront",
+      "Cognito",
+      "Lambda",
+      "API Gateway",
+      "DynamoDB",
+      "Step Functions",
+      "EventBridge",
+      "CloudWatch",
+      "Systems Manager",
+    ]) {
+      expect(lite?.description).toContain(service);
+      expect(lite?.i18n?.en?.description).toContain(service);
+    }
+
+    expect(launcherHint?.content).not.toContain("デプロイ用パイプライン");
+    expect(launcherHint?.content).toContain("自動デプロイ環境");
+    expect(launcherHint?.content).toContain("tenkacloud-lite-launcher");
+    expect(launcherHint?.content).toContain("手動で操作する必要はない");
+    expect(launcherHint?.content).toContain("tenkacloud-lite-problem-deploy");
+    expect(launcherHint?.i18n?.en?.content).not.toContain("deployment pipeline");
+    expect(launcherHint?.i18n?.en?.content).toContain("automatic deployment setup");
+    expect(launcherHint?.i18n?.en?.content).toContain("tenkacloud-lite-launcher");
+    expect(launcherHint?.i18n?.en?.content).toContain("do not operate");
+    expect(launcherHint?.i18n?.en?.content).toContain("tenkacloud-lite-problem-deploy");
+  });
+
+  it("should keep cleanup out of the deploy drill and give it a separate scored problem", () => {
+    const deploy = drills.find((p) => p.problemId === LITE_DRILL_PROBLEM_ID);
+    const cleanup = drills.find((p) => p.problemId === LITE_CLEANUP_DRILL_PROBLEM_ID);
+
+    expect(deploy?.videoUrl).toBe("https://www.youtube.com/embed/ItgRfIeQ0ac");
+    expect(deploy?.i18n?.en?.videoUrl).toBe("https://www.youtube.com/embed/7LjkPdf5zM0");
+    expect(deploy?.description).not.toContain("ACTION=destroy");
+    expect(deploy?.i18n?.en?.description).not.toContain("ACTION=destroy");
+    expect(cleanup?.videoUrl).toBe("/videos/onboarding/cleanup-tenkacloud-lite.mp4");
+    expect(cleanup?.i18n?.en?.videoUrl).toBe("/videos/onboarding/cleanup-tenkacloud-lite.en.mp4");
+    expect(cleanup?.scoring?.flags?.map((f) => f.id)).toEqual([
+      LITE_CLEANUP_DRILL_CHECKPOINT.flagId,
+    ]);
+    expect(cleanup?.description).toContain("ACTION=destroy");
+    expect(cleanup?.description).toContain("launcher");
+    expect(cleanup?.description).toContain("自分で確認");
+    expect(cleanup?.i18n?.en?.description).toContain("ACTION=destroy");
+    expect(cleanup?.i18n?.en?.description).toContain("launcher");
+    expect(cleanup?.i18n?.en?.description).toContain("self-confirm");
   });
 
   it("should make every drill sub-flag strict: the generic mock flag never solves it", () => {
@@ -199,12 +301,18 @@ describe("dev-mock fixtures", () => {
         expect(drill.videoUrl).toBe("https://www.youtube.com/embed/nLsSJ3npdfw");
         continue;
       }
+      if (drill.problemId === LITE_DRILL_PROBLEM_ID) {
+        expect(drill.videoUrl).toBe("https://www.youtube.com/embed/ItgRfIeQ0ac");
+        expect(drill.i18n?.en?.videoUrl).toBe("https://www.youtube.com/embed/7LjkPdf5zM0");
+        continue;
+      }
       // 旧版は、正しいYouTube版ができるまで表示しない。
       if (drill.problemId === LOCAL_DRILL_PROBLEM_ID) {
         expect(drill.videoUrl).toBeUndefined();
         continue;
       }
       expect(drill.videoUrl).toBe(`/videos/onboarding/${drill.problemId}.mp4`);
+      expect(drill.i18n?.en?.videoUrl).toBe(`/videos/onboarding/${drill.problemId}.en.mp4`);
     }
   });
 
@@ -220,6 +328,7 @@ describe("dev-mock fixtures", () => {
     expect(bodies).toContain("TenkaCloud とは?");
     expect(bodies).toContain("ローカルモードで遊ぶ");
     expect(bodies).toContain("自分の TenkaCloud Lite を立てる");
+    expect(bodies).toContain("TenkaCloud Lite を片付ける");
     expect(bodies).toContain("AIエージェントでMac起動");
   });
 });

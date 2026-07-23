@@ -1,4 +1,6 @@
 import {
+  LITE_CLEANUP_DRILL_CHECKPOINT,
+  LITE_CLEANUP_DRILL_PROBLEM_ID,
   LITE_DRILL_CHECKPOINTS,
   LITE_DRILL_PROBLEM_ID,
   LOCAL_DRILL_LAUNCH_COMMAND,
@@ -94,6 +96,25 @@ describe("evaluateMockSubFlag (#2696 Lite deploy drill)", () => {
   });
 });
 
+describe("evaluateMockSubFlag (Lite cleanup drill)", () => {
+  const { flagId, code } = LITE_CLEANUP_DRILL_CHECKPOINT;
+
+  it("should accept only the cleanup checkpoint for the cleanup problem", () => {
+    expect(evaluateMockSubFlag(LITE_CLEANUP_DRILL_PROBLEM_ID, flagId, code, 100)).toMatchObject({
+      kind: "ok",
+      scoreDelta: 100,
+    });
+    expect(
+      evaluateMockSubFlag(
+        LITE_CLEANUP_DRILL_PROBLEM_ID,
+        flagId,
+        LITE_DRILL_CHECKPOINTS.deployComplete.code,
+        100,
+      ).kind,
+    ).toBe("wrong");
+  });
+});
+
 describe("evaluateMockSubFlag (#2711 what-is-tenkacloud tutorial)", () => {
   it("should accept the reading-quiz answers case-insensitively including Japanese variants", () => {
     expect(
@@ -132,7 +153,7 @@ describe("evaluateMockSubFlag (#2711 what-is-tenkacloud tutorial)", () => {
 
   it("should score the printed practice flag at step 4 with paste tolerance", () => {
     expect(
-      evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, "first-flag", " TENKA{HELLO-TENKACLOUD} ", 100)
+      evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, "first-flag", " TC{HELLO-TENKACLOUD} ", 100)
         .kind,
     ).toBe("ok");
   });

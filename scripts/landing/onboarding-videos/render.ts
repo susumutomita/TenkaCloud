@@ -1,5 +1,5 @@
 /**
- * #2707 P1 / #2711: オンボーディングドリル 3 本の 1 分 operation 動画を生成する CLI。
+ * #2707 P1 / #2711: オンボーディングドリル 4 本の 1 分 operation 動画を生成する CLI。
  *
  * 使い方:
  *   bun run scripts/landing/onboarding-videos/render.ts
@@ -17,15 +17,25 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import {
   LP_VIDEO,
   ONBOARDING_VIDEOS,
   type OnboardingSlide,
   type OnboardingVideo,
 } from "./script-data";
+
+/** 実画面収録から生成するため、この slide renderer では上書きしない動画。 */
+export const RECORDED_ONBOARDING_VIDEO_IDS: ReadonlySet<string> = new Set([
+  "deploy-tenkacloud-lite",
+  "cleanup-tenkacloud-lite",
+]);
+
+export function shouldRenderGeneratedOnboardingVideo(problemId: string): boolean {
+  return !RECORDED_ONBOARDING_VIDEO_IDS.has(problemId);
+}
 
 export const FADE_S = 0.5;
 export const FPS = 30;
@@ -212,7 +222,7 @@ export function buildFilterGraph(
   return `${pre}${chain};[vx]format=yuv420p[vout]`;
 }
 
-function resolveBin(envName: string, candidates: readonly string[]): string {
+export function resolveBin(envName: string, candidates: readonly string[]): string {
   const fromEnv = process.env[envName];
   if (fromEnv) return fromEnv;
   for (const c of candidates) {
@@ -225,13 +235,31 @@ function resolveBin(envName: string, candidates: readonly string[]): string {
   throw new Error(`${envName} not set and none of [${candidates.join(", ")}] found`);
 }
 
-function run(bin: string, args: string[]): void {
+export function run(bin: string, args: string[]): void {
   const res = spawnSync(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
   if (res.status !== 0) {
     throw new Error(
       `${bin} ${args.slice(0, 4).join(" ")}… failed (exit ${res.status}):\n${res.stderr?.toString().slice(-2000)}`,
     );
   }
+}
+
+export function createTemporaryVideoDirectory(prefix: string): string {
+  if (!/^tenka(?:cloud)?-[a-z0-9-]+-$/i.test(prefix)) {
+    throw new Error(`Invalid video temp prefix: ${prefix}`);
+  }
+  return mkdtempSync(join(tmpdir(), prefix));
+}
+
+export function cleanupTemporaryVideoDirectory(workDir: string): void {
+  const resolvedWorkDir = resolve(workDir);
+  if (
+    dirname(resolvedWorkDir) !== resolve(tmpdir()) ||
+    !/^tenka(?:cloud)?-[a-z0-9-]+-[a-z0-9]{6}$/i.test(basename(resolvedWorkDir))
+  ) {
+    throw new Error(`Refusing to remove non-video temp directory: ${workDir}`);
+  }
+  rmSync(resolvedWorkDir, { recursive: true, force: true });
 }
 
 function renderVideo(
@@ -241,63 +269,67 @@ function renderVideo(
   outPath: string,
   layout: SlideLayout = "landscape",
 ) {
-  const work = mkdtempSync(join(tmpdir(), `tenka-video-${video.problemId}-${layout}-`));
-  const { w, windowH } = LAYOUTS[layout];
-  const total = video.slides.length;
-  const pngs: string[] = [];
-  video.slides.forEach((slide, i) => {
-    const htmlPath = join(work, `slide-${i}.html`);
-    const pngPath = join(work, `slide-${i}.png`);
-    writeFileSync(htmlPath, buildSlideHtml(video, slide, i, total, layout));
-    run(chromium, [
-      "--headless",
-      "--no-sandbox",
-      "--disable-gpu",
-      "--hide-scrollbars",
-      "--force-device-scale-factor=2",
-      // 高さちょうどの窓は最下段を落とすことがある (footer 消失) ので余白を持たせ、
-      // ffmpeg 側で出力サイズの 2 倍に crop する。
-      `--window-size=${w},${windowH}`,
-      "--default-background-color=FFFFFFFF",
-      "--virtual-time-budget=3000",
-      `--screenshot=${pngPath}`,
-      `file://${htmlPath}`,
-    ]);
-    pngs.push(pngPath);
-  });
+  const work = createTemporaryVideoDirectory(`tenka-video-${video.problemId}-${layout}-`);
+  try {
+    const { w, windowH } = LAYOUTS[layout];
+    const total = video.slides.length;
+    const pngs: string[] = [];
+    video.slides.forEach((slide, i) => {
+      const htmlPath = join(work, `slide-${i}.html`);
+      const pngPath = join(work, `slide-${i}.png`);
+      writeFileSync(htmlPath, buildSlideHtml(video, slide, i, total, layout));
+      run(chromium, [
+        "--headless",
+        "--no-sandbox",
+        "--disable-gpu",
+        "--hide-scrollbars",
+        "--force-device-scale-factor=2",
+        // 高さちょうどの窓は最下段を落とすことがある (footer 消失) ので余白を持たせ、
+        // ffmpeg 側で出力サイズの 2 倍に crop する。
+        `--window-size=${w},${windowH}`,
+        "--default-background-color=FFFFFFFF",
+        "--virtual-time-budget=3000",
+        `--screenshot=${pngPath}`,
+        `file://${htmlPath}`,
+      ]);
+      pngs.push(pngPath);
+    });
 
-  const durations = video.slides.map((s) => s.durationS);
-  const inputs = pngs.flatMap((png, i) => [
-    "-loop",
-    "1",
-    "-framerate",
-    String(FPS),
-    "-t",
-    String(durations[i]),
-    "-i",
-    png,
-  ]);
-  run(ffmpeg, [
-    "-y",
-    ...inputs,
-    "-filter_complex",
-    buildFilterGraph(durations, layout),
-    "-map",
-    "[vout]",
-    "-c:v",
-    "libx264",
-    "-preset",
-    "slow",
-    "-crf",
-    "23",
-    "-r",
-    String(FPS),
-    "-movflags",
-    "+faststart",
-    "-an",
-    outPath,
-  ]);
-  console.log(`wrote ${outPath}`);
+    const durations = video.slides.map((s) => s.durationS);
+    const inputs = pngs.flatMap((png, i) => [
+      "-loop",
+      "1",
+      "-framerate",
+      String(FPS),
+      "-t",
+      String(durations[i]),
+      "-i",
+      png,
+    ]);
+    run(ffmpeg, [
+      "-y",
+      ...inputs,
+      "-filter_complex",
+      buildFilterGraph(durations, layout),
+      "-map",
+      "[vout]",
+      "-c:v",
+      "libx264",
+      "-preset",
+      "slow",
+      "-crf",
+      "23",
+      "-r",
+      String(FPS),
+      "-movflags",
+      "+faststart",
+      "-an",
+      outPath,
+    ]);
+    console.log(`wrote ${outPath}`);
+  } finally {
+    cleanupTemporaryVideoDirectory(work);
+  }
 }
 
 function main() {
@@ -307,6 +339,7 @@ function main() {
   const onboardingDir = join(root, "landing/videos/onboarding");
   mkdirSync(onboardingDir, { recursive: true });
   for (const video of ONBOARDING_VIDEOS) {
+    if (!shouldRenderGeneratedOnboardingVideo(video.problemId)) continue;
     renderVideo(video, chromium, ffmpeg, join(onboardingDir, `${video.problemId}.mp4`));
   }
 

@@ -44,6 +44,7 @@ Reused by operator CLIs and deploy scripts; import directly by relative path.
 | `capacity-model.ts` | DynamoDB 1/1-capacity throughput model (teams-before-throttle, #1667) |
 | `disruption-live-fire.ts` | Disruption live-fire pure logic (fire → probe → auto-revert, #1419/#1666) |
 | `iam-description-ascii.ts` | IAM Description ASCII/Latin-1 gate logic (#664) |
+| `landing/onboarding-videos/render.ts` | Onboarding video renderer helpers: HTML escaping, binary resolution, checked command execution, and guarded temporary-workspace cleanup |
 | `retained-tables.ts` | Post-destroy RETAIN-table enumeration for billing warnings (#2444) |
 | `scale-event-capacity.ts` | Event-window capacity scaling logic |
 

@@ -12,16 +12,32 @@ vi.mock("../i18n", () => ({
 }));
 
 describe("ProblemVideoSection", () => {
-  it("should render a same-origin video with controls and a no-audio note", () => {
+  it("should render the Lite video with localized caption tracks", () => {
     const { container } = render(
-      <ProblemVideoSection videoUrl="/videos/onboarding/understand-tenkacloud.mp4" />,
+      <ProblemVideoSection videoUrl="/videos/onboarding/deploy-tenkacloud-lite.mp4" />,
     );
     const video = container.querySelector("video");
     expect(video).not.toBeNull();
-    expect(video?.getAttribute("src")).toBe("/videos/onboarding/understand-tenkacloud.mp4");
+    expect(video?.getAttribute("src")).toBe("/videos/onboarding/deploy-tenkacloud-lite.mp4");
     expect(video?.hasAttribute("controls")).toBe(true);
+    const tracks = [...container.querySelectorAll("track")];
+    expect(tracks.map((track) => track.getAttribute("src"))).toEqual([
+      "/videos/onboarding/deploy-tenkacloud-lite.ja.vtt",
+      "/videos/onboarding/deploy-tenkacloud-lite.en.vtt",
+    ]);
+    expect(tracks[0]?.hasAttribute("default")).toBe(true);
+    expect(tracks[1]?.hasAttribute("default")).toBe(false);
     expect(screen.getByText("problem_detail.video_header")).toBeDefined();
-    expect(screen.getByText("problem_detail.video_note")).toBeDefined();
+    expect(screen.getByText("problem_detail.video_note_voicevox")).toBeDefined();
+  });
+
+  it("should default to English captions for the English video", () => {
+    const { container } = render(
+      <ProblemVideoSection videoUrl="/videos/onboarding/cleanup-tenkacloud-lite.en.mp4" />,
+    );
+    const tracks = [...container.querySelectorAll("track")];
+    expect(tracks[0]?.hasAttribute("default")).toBe(false);
+    expect(tracks[1]?.hasAttribute("default")).toBe(true);
   });
 
   it("should remove the whole section when the video fails to load", () => {
@@ -32,6 +48,11 @@ describe("ProblemVideoSection", () => {
     fireEvent.error(video);
     expect(container.querySelector("video")).toBeNull();
     expect(screen.queryByText("problem_detail.video_header")).toBeNull();
+  });
+
+  it("should keep the legacy baked-caption note for other self-hosted videos", () => {
+    render(<ProblemVideoSection videoUrl="/videos/onboarding/understand-tenkacloud.mp4" />);
+    expect(screen.getByText("problem_detail.video_note")).toBeDefined();
   });
 
   it("should render an allow-listed YouTube embed without falling back to a video element", () => {

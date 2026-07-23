@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { I18nProvider } from "../i18n";
 import { LiteDrillCheckpointAlert } from "./LiteDrillCheckpointAlert";
 
-const CODE = "TENKA{COMPETITOR-TRUST-OK}";
+const CODE = "TC{COMPETITOR-TRUST-OK}";
 
 beforeEach(() => {
   window.localStorage.setItem("tenkacloud.application-admin.locale", "ja");

@@ -1,0 +1,259 @@
+/**
+ * Zundamon voice-over scripts for recorded TenkaCloud Lite deploy and cleanup footage.
+ *
+ * These lines are intentionally separate from script-data.ts because the LP/problem videos can be
+ * edited from real screen recordings while the slide scripts remain the generated fallback.
+ * The timing windows are editor guidance for cutting the deploy and cleanup recordings separately.
+ */
+
+export type VoiceoverLocale = "ja" | "en";
+
+export interface VoiceoverCue {
+  /** Human-readable edit section, not a subtitle timestamp. */
+  readonly section: string;
+  /** Always-visible operation label burned into the video. */
+  readonly heading: Record<VoiceoverLocale, string>;
+  /** Target voice length in seconds for one locale. */
+  readonly targetS: number;
+  readonly ja: string;
+  readonly en: string;
+  /** Generated cards replace the recording before returning to the matching real operation. */
+  readonly layout?: "intro" | "start" | "explainer";
+  /** Short code-grounded facts shown on the intro card. */
+  readonly details?: Record<VoiceoverLocale, readonly string[]>;
+  /** Supporting prerequisite shown with the operation, but not read as the main narration. */
+  readonly note?: Record<VoiceoverLocale, string>;
+}
+
+export interface VoiceoverScript {
+  readonly id: string;
+  readonly title: Record<VoiceoverLocale, string>;
+  readonly voice: Record<VoiceoverLocale, string>;
+  readonly music: string;
+  readonly usage: readonly string[];
+  readonly cues: readonly VoiceoverCue[];
+}
+
+export const DEPLOY_TENKACLOUD_LITE_ZUNDAMON_VOICEOVER: VoiceoverScript = {
+  id: "deploy-tenkacloud-lite-zundamon",
+  title: {
+    ja: "TenkaCloud Lite をデプロイするのだ",
+    en: "Deploy TenkaCloud Lite",
+  },
+  voice: {
+    ja: "VOICEVOX:ずんだもん（ノーマル）",
+    en: "macOS Samantha（自然な米国英語）",
+  },
+  music: "なし。AWS の画面操作とナレーションを優先する。",
+  usage: [
+    "LP の deploy-tenkacloud-lite 問題に載せる実録動画向け。",
+    "全体フローと理由を説明するスライドの直後に、対応する実機操作を置く。",
+    "問題の回答画面は使わず、AWS アカウント ID、メール、URL は拡大ショットの画角外にする。",
+  ],
+  cues: [
+    {
+      section: "1. What TenkaCloud Lite is",
+      heading: { ja: "自分のAWS環境へデプロイ", en: "Deploy to your AWS account" },
+      targetS: 10,
+      ja: "TenkaCloud Lite は、一人の主催者が自分の AWS 環境で大会を開く構成なのだ。まず全体の流れを見るのだ。",
+      en: "TenkaCloud Lite lets one organizer run an event in their AWS account. Here is the whole flow.",
+      layout: "intro",
+      details: {
+        ja: [
+          "1  LiteをAWSへ導入",
+          "2  競技用AWSを登録",
+          "3  イベントを作成・Deploy",
+          "4  Participant Portal・スコア",
+        ],
+        en: [
+          "1  Deploy Lite to AWS",
+          "2  Register competitor AWS",
+          "3  Create and deploy an event",
+          "4  Participant Portal and score",
+        ],
+      },
+      note: {
+        ja: "AWS上の本体: tenkacloud-lite + tenkacloud-lite-problem-deploy",
+        en: "AWS stacks: tenkacloud-lite + tenkacloud-lite-problem-deploy",
+      },
+    },
+    {
+      section: "2. AWS services behind automatic deployment",
+      heading: {
+        ja: "AWSの自動デプロイとは",
+        en: "How AWS automatic deployment works",
+      },
+      targetS: 5,
+      ja: "CloudFormation stackからCodeBuildでCDK deployするのだ。",
+      en: "The CloudFormation stack invokes CodeBuild to run CDK deploy.",
+      layout: "start",
+      details: {
+        ja: [
+          "CloudFormation stack: ひな形からAWSリソースを作る",
+          "CodeBuild project: make deploy / CDK deployを実行",
+          "IAM Role: ServiceRoleとして実行権限を付与",
+        ],
+        en: [
+          "CloudFormation stack: creates resources from the template",
+          "CodeBuild project: runs make deploy / CDK deploy",
+          "IAM Role: attached as the CodeBuild ServiceRole",
+        ],
+      },
+      note: {
+        ja: "主な本体: S3/CloudFront（画面）・Cognito（ログイン）・Lambda/API Gateway/DynamoDB（API・データ）",
+        en: "Main platform: S3/CloudFront (UI), Cognito (login), Lambda/API Gateway/DynamoDB (API and data)",
+      },
+    },
+    {
+      section: "3. Launcher stack",
+      heading: {
+        ja: "自動デプロイ環境を作成",
+        en: "Create the automatic deployment setup",
+      },
+      targetS: 6,
+      ja: "テンプレートをアップロードすると、自動デプロイ環境が作られるのだ。",
+      en: "Upload the template so CloudFormation creates the automatic deployment setup.",
+      note: {
+        ja: "stack名: tenkacloud-lite-launcher／収録: AdministratorAccess（実運用は必要権限へ縮小）",
+        en: "Stack: tenkacloud-lite-launcher; recording: AdministratorAccess (use least privilege in production)",
+      },
+    },
+    {
+      section: "4. CodeBuild deploy",
+      heading: { ja: "自動デプロイを開始", en: "Start automatic deployment" },
+      targetS: 5,
+      ja: "Start build を押し、Lite の自動デプロイ成功と URL を確認するのだ。",
+      en: "Press Start build, then confirm the automatic Lite deployment and its URLs.",
+    },
+    {
+      section: "5. Admin sign-in",
+      heading: { ja: "管理画面へサインイン", en: "Sign in to Admin Console" },
+      targetS: 5,
+      ja: "招待メールから管理画面を開くのだ。",
+      en: "Open the Admin Console from the invite email.",
+    },
+    {
+      section: "6. Why competitor AWS is separate",
+      heading: { ja: "なぜ競技用AWSを分けるのか", en: "Why separate competitor AWS?" },
+      targetS: 5,
+      ja: "運営と競技用 AWS を分け、ExternalId 付きでつなぐのだ。",
+      en: "Keep operations and competitor AWS separate, then connect them with an external I D.",
+      layout: "explainer",
+      details: {
+        ja: ["TenkaCloud Lite", "Assume Role + ExternalId", "競技用AWS"],
+        en: ["TenkaCloud Lite", "Assume Role + ExternalId", "Competitor AWS"],
+      },
+      note: {
+        ja: "問題リソースだけを競技用AWSへ作り、信頼関係をVerifyする",
+        en: "Problem resources are created in competitor AWS after the trust is verified",
+      },
+    },
+    {
+      section: "7. Competitor account",
+      heading: { ja: "Competitorを登録", en: "Register a competitor" },
+      targetS: 10,
+      ja: "問題を競技用 AWS へ出せるように、アカウントを登録するのだ。bootstrap を作り、Verify するのだ。",
+      en: "Register the competitor AWS account, create its bootstrap stack, then verify the trust.",
+      note: {
+        ja: "ExternalId付きAssumeRoleで競技用AWSへの信頼を確認",
+        en: "Trust is verified with AssumeRole and an ExternalId",
+      },
+    },
+    {
+      section: "8. Why an event comes first",
+      heading: { ja: "なぜEventを先に作るのか", en: "Why create an event first?" },
+      targetS: 5,
+      ja: "Event でチーム、AWS、問題を結び付けてから配るのだ。",
+      en: "An event connects the team, AWS account, and problem before deployment.",
+      layout: "explainer",
+      details: {
+        ja: ["Team + AWS + Problem", "Event Deploy", "Portal + Score"],
+        en: ["Team + AWS + problem", "Event deploy", "Portal + score"],
+      },
+      note: {
+        ja: "Eventを配布単位にすることで、参加者と問題スタックを対応付ける",
+        en: "The event is the delivery unit that maps participants to problem stacks",
+      },
+    },
+    {
+      section: "9. Create event",
+      heading: { ja: "イベントを作成", en: "Create an event" },
+      targetS: 7,
+      ja: "イベント名とチームを決め、検証済みアカウントと遊ぶ問題を選ぶのだ。",
+      en: "Create an event, then assign the verified account and the problem to play.",
+    },
+    {
+      section: "10. Event deployment",
+      heading: { ja: "イベントをDeploy", en: "Deploy the event" },
+      targetS: 5,
+      ja: "Deploy を押し、問題スタックの準備完了を待つのだ。",
+      en: "Select deploy, then wait until the problem stack is ready.",
+      note: {
+        ja: "問題テンプレートを競技用AWSのCloudFormation CreateStackへ渡す",
+        en: "The problem template is submitted to CloudFormation CreateStack in competitor AWS",
+      },
+    },
+    {
+      section: "11. Participant sign-in",
+      heading: { ja: "Participant Portalへ入る", en: "Open Participant Portal" },
+      targetS: 4,
+      ja: "Participant Portal に team key で入るのだ。",
+      en: "Sign in to Participant Portal with the team key.",
+    },
+    {
+      section: "12. Play the problem",
+      heading: { ja: "問題をプレイ", en: "Play the problem" },
+      targetS: 6,
+      ja: "問題の説明を読み、回答欄から提出するのだ。答えは見せないのだ。",
+      en: "Read the problem and submit through its answer field. The answer is not shown.",
+    },
+    {
+      section: "13. Score and close",
+      heading: { ja: "スコアを確認", en: "Confirm the score" },
+      targetS: 4,
+      ja: "Scoreboard への反映を確認して完了なのだ。",
+      en: "Confirm the Scoreboard update to finish.",
+    },
+  ],
+};
+
+export const CLEANUP_TENKACLOUD_LITE_ZUNDAMON_VOICEOVER: VoiceoverScript = {
+  id: "cleanup-tenkacloud-lite-zundamon",
+  title: {
+    ja: "TenkaCloud Lite を片付けるのだ",
+    en: "Clean up TenkaCloud Lite",
+  },
+  voice: {
+    ja: "VOICEVOX:ずんだもん（ノーマル）",
+    en: "macOS Samantha（自然な米国英語）",
+  },
+  music: "なし。AWS の画面操作とナレーションを優先する。",
+  usage: [
+    "LP の cleanup-tenkacloud-lite 問題に載せる実録動画向け。",
+    "ACTION=destroy の開始から launcher スタック削除までの素材だけで編集する。",
+    "AWS アカウント ID、メール、URL は拡大ショットの画角外にする。",
+  ],
+  cues: [
+    {
+      section: "1. Build with ACTION=destroy",
+      heading: { ja: "削除ビルドを開始", en: "Start the cleanup build" },
+      targetS: 4,
+      ja: "ACTION を destroy にするのだ。",
+      en: "Set ACTION to destroy.",
+    },
+    {
+      section: "2. Teardown progress",
+      heading: { ja: "Liteの削除を確認", en: "Confirm Lite teardown" },
+      targetS: 6,
+      ja: "二つの Lite スタックが消えるまで待つのだ。",
+      en: "Wait until both Lite stacks are gone.",
+    },
+    {
+      section: "3. Delete launcher",
+      heading: { ja: "Launcherを削除", en: "Delete the launcher" },
+      targetS: 9,
+      ja: "最後に CloudFormation で launcher を削除するのだ。CodeBuild と IAM Role も消えて、片付け完了なのだ。",
+      en: "Finally, delete the launcher stack. Its CodeBuild project and IAM role are removed, completing cleanup.",
+    },
+  ],
+};

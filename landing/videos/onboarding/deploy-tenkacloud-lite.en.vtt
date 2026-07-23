@@ -1,0 +1,53 @@
+WEBVTT
+
+1
+00:00:00.200 --> 00:00:08.700
+TenkaCloud Lite lets one organizer run an event in their AWS account. Here is the whole flow.
+
+2
+00:00:08.900 --> 00:00:13.500
+The CloudFormation stack invokes CodeBuild to run CDK deploy.
+
+3
+00:00:13.700 --> 00:00:19.800
+Upload the template so CloudFormation creates the automatic deployment setup.
+
+4
+00:00:20.000 --> 00:00:26.200
+Press Start build, then confirm the automatic Lite deployment and its URLs.
+
+5
+00:00:26.400 --> 00:00:29.900
+Open the Admin Console from the invite email.
+
+6
+00:00:30.100 --> 00:00:35.100
+Keep operations and competitor AWS separate, then connect them with an external I D.
+
+7
+00:00:35.300 --> 00:00:45.233
+Register the competitor AWS account, create its bootstrap stack, then verify the trust.
+
+8
+00:00:45.433 --> 00:00:49.933
+An event connects the team, AWS account, and problem before deployment.
+
+9
+00:00:50.133 --> 00:00:57.433
+Create an event, then assign the verified account and the problem to play.
+
+10
+00:00:57.633 --> 00:01:02.133
+Select deploy, then wait until the problem stack is ready.
+
+11
+00:01:02.333 --> 00:01:11.233
+Sign in to Participant Portal with the team key.
+
+12
+00:01:11.433 --> 00:01:16.133
+Read the problem and submit through its answer field. The answer is not shown.
+
+13
+00:01:16.333 --> 00:01:19.933
+Confirm the Scoreboard update to finish.

@@ -225,7 +225,7 @@ describe("MultiFlagSubmissionPanel", () => {
     ];
     renderPanel({ problemId: WHAT_IS_DRILL_PROBLEM_ID, flags: tutorialFlags }, "dev-mock");
 
-    const answers = ["real cloud", "battle", "lite", "TENKA{HELLO-TENKACLOUD}"];
+    const answers = ["real cloud", "battle", "lite", "TC{HELLO-TENKACLOUD}"];
     for (const [index, answer] of answers.entries()) {
       await user.type(screen.getAllByRole("textbox")[0], answer.replaceAll("{", "{{"));
       await user.click(screen.getAllByRole("button", { name: /^Submit/ })[0]);

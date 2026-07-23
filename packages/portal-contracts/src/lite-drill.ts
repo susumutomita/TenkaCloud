@@ -12,14 +12,17 @@
  *   - deployComplete     → `scripts/tenkacloud-lite.ts` の post-deploy guide (CodeBuild ログ末尾)
  *   - competitorVerified → Application Admin Console の Competitor Accounts 検証成功 Alert (Lite のみ)
  *   - firstEventCreated  → Application Admin Console の Event 作成成功 modal (Lite のみ)
+ *   - cleanupComplete    → launcher CodeBuild の `make destroy` 成功直後のログ
  *
  * fairness contract 上の位置づけ: これは競技問題の flag ではなく **意図的に公開** の
  * オンボーディング用チェックポイント (repo を grep すれば見える)。 デプロイの暗号学的
  * 証明ではなく 「手順を踏まないと画面に出ない値の確認」 であり、 競技スコアには使わない。
- * 判定は demo portal のクライアント側 (dev-mock) に閉じる。
+ * cleanupComplete が観測するのは Lite 本体の destroy 成功までで、 その後の launcher 削除は
+ * 技術的に観測できないため学習者の自己確認。 判定は demo portal のクライアント側に閉じる。
  */
 
 export const LITE_DRILL_PROBLEM_ID = "deploy-tenkacloud-lite";
+export const LITE_CLEANUP_DRILL_PROBLEM_ID = "cleanup-tenkacloud-lite";
 
 export interface LiteDrillCheckpoint {
   /** dev-mock team view の multi-flag sub-flag id (= 提出欄の対応付け)。 */
@@ -31,21 +34,30 @@ export interface LiteDrillCheckpoint {
 export const LITE_DRILL_CHECKPOINTS = {
   launcherCreated: {
     flagId: "launcher-created",
-    code: "TENKA{LITE-LAUNCHER-READY}",
+    code: "TC{LITE-LAUNCHER-READY}",
   },
   deployComplete: {
     flagId: "deploy-complete",
-    code: "TENKA{LITE-DEPLOY-COMPLETE}",
+    code: "TC{LITE-DEPLOY-COMPLETE}",
   },
   competitorVerified: {
     flagId: "competitor-verified",
-    code: "TENKA{COMPETITOR-TRUST-OK}",
+    code: "TC{COMPETITOR-TRUST-OK}",
   },
   firstEventCreated: {
     flagId: "first-event-created",
-    code: "TENKA{FIRST-EVENT-LIVE}",
+    code: "TC{FIRST-EVENT-LIVE}",
   },
 } as const satisfies Record<string, LiteDrillCheckpoint>;
+
+/**
+ * `ACTION=destroy` が成功した CodeBuild ログにだけ印字する、片付け問題用の
+ * チェックポイント。launcher スタックを削除する前に控え、削除後に提出する。
+ */
+export const LITE_CLEANUP_DRILL_CHECKPOINT = {
+  flagId: "cleanup-complete",
+  code: "TC{LITE-CLEANUP-COMPLETE}",
+} as const satisfies LiteDrillCheckpoint;
 
 /** ドリルの sub-flag id → 期待コード。 未知の id は undefined (= caller 側で fallback)。 */
 export function findLiteDrillCheckpointCode(flagId: string): string | undefined {
@@ -68,4 +80,12 @@ export function matchesLiteDrillCheckpoint(flagId: string, submitted: string): b
   const code = findLiteDrillCheckpointCode(flagId);
   if (!code) return false;
   return matchesCheckpointCode(code, submitted);
+}
+
+/** クリーンアップ問題のチェックポイントと一致するか。 */
+export function matchesLiteCleanupDrillCheckpoint(flagId: string, submitted: string): boolean {
+  return (
+    flagId === LITE_CLEANUP_DRILL_CHECKPOINT.flagId &&
+    matchesCheckpointCode(LITE_CLEANUP_DRILL_CHECKPOINT.code, submitted)
+  );
 }

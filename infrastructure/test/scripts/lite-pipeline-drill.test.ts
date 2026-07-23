@@ -1,6 +1,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { LITE_DRILL_CHECKPOINTS } from "@tenkacloud/portal-contracts";
+import {
+  LITE_CLEANUP_DRILL_CHECKPOINT,
+  LITE_DRILL_CHECKPOINTS,
+} from "@tenkacloud/portal-contracts";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -40,5 +43,17 @@ describe("lite-pipeline onboarding drill checkpoint (#2696)", () => {
     expect(description).toBeTruthy();
     expect(description).toContain("Deploy your own TenkaCloud");
     expect(description).toContain("demo portal");
+  });
+
+  it("should print the cleanup checkpoint only after make destroy succeeds", () => {
+    const destroyAt = template.indexOf(
+      `TENKACLOUD_LITE_DOWN_YES=1 make destroy ENV="\${ENVIRONMENT}"`,
+    );
+    const checkpointAt = template.indexOf(LITE_CLEANUP_DRILL_CHECKPOINT.code);
+    const deployBranchAt = template.indexOf("make deploy ENV");
+
+    expect(destroyAt).toBeGreaterThan(-1);
+    expect(checkpointAt).toBeGreaterThan(destroyAt);
+    expect(checkpointAt).toBeLessThan(deployBranchAt);
   });
 });

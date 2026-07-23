@@ -35,7 +35,7 @@ describe("local-drill checkpoint (#2707)", () => {
   });
 
   it("should share one checkpoint matcher with the lite drill", () => {
-    expect(matchesCheckpointCode("TENKA{X}", " tenka{x} ")).toBe(true);
-    expect(matchesCheckpointCode("TENKA{X}", "tenka{y}")).toBe(false);
+    expect(matchesCheckpointCode("TC{X}", " tc{x} ")).toBe(true);
+    expect(matchesCheckpointCode("TC{X}", "tc{y}")).toBe(false);
   });
 });

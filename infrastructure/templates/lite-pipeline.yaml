@@ -332,7 +332,12 @@ Resources:
                   if [ "${ACTION}" = "destroy" ]; then
                     echo "ACTION=destroy -> tearing down the Lite stacks in the correct order"
                     # TENKACLOUD_LITE_DOWN_YES bypasses the interactive confirm in this non-TTY build.
-                    TENKACLOUD_LITE_DOWN_YES=1 make destroy ENV="${ENVIRONMENT}"
+                    if ! TENKACLOUD_LITE_DOWN_YES=1 make destroy ENV="${ENVIRONMENT}"; then
+                      echo "Lite teardown failed; cleanup checkpoint will not be emitted."
+                      exit 1
+                    fi
+                    # Public onboarding checkpoint: emitted only after a successful teardown.
+                    echo "Cleanup checkpoint: TC{LITE-CLEANUP-COMPLETE}"
                   else
                     # `make deploy` builds the SPAs (ships the cloned catalog) then runs the Lite deploy.
                     make deploy ENV="${ENVIRONMENT}"
@@ -450,4 +455,4 @@ Outputs:
     Description: >-
       Onboarding drill checkpoint 1. Paste this code into the "Deploy your own TenkaCloud
       Lite" drill in the landing demo portal to score the "launcher created" step.
-    Value: TENKA{LITE-LAUNCHER-READY}
+    Value: TC{LITE-LAUNCHER-READY}
