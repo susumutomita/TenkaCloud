@@ -1,5 +1,5 @@
 /**
- * #2707 P1 / #2711: オンボーディングドリル 3 本の 1 分 operation 動画の台本 (source of truth)。
+ * #2707 P1 / #2711: オンボーディングドリル 4 本の 1 分 operation 動画の台本 (source of truth)。
  *
  * この module が「再撮影用の台本」そのもの。 スライド文言を直して
  * `bun run scripts/landing/onboarding-videos/render.ts` を実行すると
@@ -10,7 +10,7 @@
  * - 音声なし・字幕 (スライド文字) だけで理解できること (#2696 の動画基準と同じ)
  * - ja が主、 en を各行に併記 (= 1 本の動画で両 locale を賄い、 videoUrl を locale
  *   分岐させない)
- * - チェックポイントコード `TENKA{...}` の実値は動画に出さない (実環境の画面で
+ * - チェックポイントコード `TC{...}` の実値は動画に出さない (実環境の画面で
  *   手順を踏んだ人にだけ現れる、 というドリルの構造を守る)
  * - 各動画は合計 50〜65 秒 (script-data.test.ts が機械検証する)
  */
@@ -41,7 +41,7 @@ export interface OnboardingVideo {
 }
 
 /** マスク表示 (実値は実環境の画面にだけ現れる)。 */
-const MASKED_CODE = "TENKA{ ****** }";
+const MASKED_CODE = "TC{ ****** }";
 
 export const ONBOARDING_VIDEOS: readonly OnboardingVideo[] = [
   {
@@ -274,27 +274,75 @@ export const ONBOARDING_VIDEOS: readonly OnboardingVideo[] = [
         bulletsEn: ["Assign the verified account to a team", "Checkpoint 4 shows on creation"],
       },
       {
-        badge: "NOTE",
-        durationS: 7,
-        titleJa: "片付けもワンアクション",
-        titleEn: "Teardown is one action",
-        bulletsJa: [
-          "ACTION=destroy でビルドを再実行",
-          "最後に launcher スタックを削除して課金停止",
-        ],
+        badge: "GOAL",
+        durationS: 8,
+        titleJa: "TenkaCloud Lite のデプロイ完了!",
+        titleEn: "TenkaCloud Lite is deployed!",
+        bulletsJa: ["あなたの競技基盤が動いている", "遊び終えたら次の片付け問題へ"],
+        bulletsEn: ["Your event platform is live", "When done, continue to the cleanup problem"],
+        code: { text: "TENKA CLOUD — READY", tone: "goal" },
+      },
+    ],
+  },
+  {
+    problemId: "cleanup-tenkacloud-lite",
+    titleJa: "TenkaCloud Lite を片付ける",
+    titleEn: "Clean up TenkaCloud Lite",
+    slides: [
+      {
+        badge: "INTRO",
+        durationS: 8,
+        titleJa: "遊び終えたら、課金を止める",
+        titleEn: "Done playing? Stop the charges",
+        bulletsJa: ["Lite 本体と launcher の両方を削除する", "途中で閉じず、最後まで確認する"],
+        bulletsEn: ["Remove both Lite and the launcher", "Stay through the final confirmation"],
+      },
+      {
+        badge: "STEP 1",
+        durationS: 8,
+        titleJa: "CodeBuild を override 付きで開始",
+        titleEn: "Start CodeBuild with overrides",
+        bulletsJa: ["launcher の StartBuildConsoleUrl を開く", "Start build with overrides を選ぶ"],
         bulletsEn: [
-          "Re-run the build with ACTION=destroy",
-          "Delete the launcher stack to stop billing",
+          "Open the launcher's StartBuildConsoleUrl",
+          "Choose Start build with overrides",
+        ],
+      },
+      {
+        badge: "STEP 2",
+        durationS: 8,
+        titleJa: "ACTION を destroy に変更",
+        titleEn: "Set ACTION to destroy",
+        bulletsJa: ["環境変数 ACTION=destroy を指定", "確認してビルドを開始する"],
+        bulletsEn: ["Set the ACTION=destroy environment override", "Review, then start the build"],
+      },
+      {
+        badge: "STEP 3",
+        durationS: 8,
+        titleJa: "削除完了ログを確認",
+        titleEn: "Confirm teardown in the logs",
+        bulletsJa: ["Lite スタックが順番に削除される", "成功ログのチェックポイントを控える"],
+        bulletsEn: ["Lite stacks are removed in order", "Copy the checkpoint from the success log"],
+      },
+      {
+        badge: "STEP 4",
+        durationS: 8,
+        titleJa: "launcher スタックも削除",
+        titleEn: "Delete the launcher stack too",
+        bulletsJa: ["CloudFormation で launcher を削除", "CodeBuild project と IAM Role も消える"],
+        bulletsEn: [
+          "Delete the launcher in CloudFormation",
+          "Its CodeBuild project and IAM Role go too",
         ],
       },
       {
         badge: "GOAL",
         durationS: 8,
-        titleJa: "オンボーディング完走!",
-        titleEn: "Onboarding complete!",
-        bulletsJa: ["あなたの TenkaCloud が動いている", "次はあなたのイベントを開く番"],
-        bulletsEn: ["Your own TenkaCloud is live", "Now go host your own event"],
-        code: { text: "TENKA CLOUD — READY", tone: "goal" },
+        titleJa: "クリーンアップ完了!",
+        titleEn: "Cleanup complete!",
+        bulletsJa: ["控えたコードを問題へ提出", "これで Lite の継続課金を止められる"],
+        bulletsEn: ["Submit the checkpoint you copied", "This stops ongoing Lite charges"],
+        code: { text: "TENKA CLOUD — CLEAN", tone: "goal" },
       },
     ],
   },

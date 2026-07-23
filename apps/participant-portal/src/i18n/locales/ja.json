@@ -215,6 +215,7 @@
     "back_button": "問題一覧へ戻る",
     "video_header": "動画でわかる操作の流れ",
     "video_note": "音声なし・字幕入りです。動画を見られない環境でも、下の問題文とヒントだけで進められます。",
+    "video_note_voicevox": "音声・字幕付きです。音声: VOICEVOX:ずんだもん。動画を見られない環境でも、下の問題文とヒントだけで進められます。",
     "video_note_youtube": "音声・字幕付きです。動画を見られない環境でも、下の問題文とヒントだけで進められます。",
     "deploy_missing_header": "この問題は自チームに deploy されていません",
     "deploy_missing_body": "jobId {jobId} は自チームの deploy リストに無いため、詳細を表示できません。 operator にお問い合わせください。",

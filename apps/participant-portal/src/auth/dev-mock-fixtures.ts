@@ -16,6 +16,7 @@ import {
   LOCAL_DRILL_JOB_ID,
   WHAT_IS_DRILL_PROBLEM_ID,
 } from "../dev-mock/flag-submit";
+import { createLiteCleanupDrillFixture } from "./lite-cleanup-drill-fixture";
 
 /**
  * `mode === "dev-mock"` のとき backend が存在しないので、 portal の各画面が空 state に
@@ -28,9 +29,10 @@ import {
  *   1. 「TenkaCloud とは?」 — 4 ステップのチュートリアル (#2711 デザイン 6b)。 モードの
  *      3 択 (ローカル / Lite / SaaS) はステップ 3 で初めて提示する
  *   2. 「自分の TenkaCloud Lite を立てる」 — 実 AWS デプロイ (#2696、 lite-drill 契約)
- *   3. 「ローカルモードで遊ぶ」 — 手元の Mac。 起動コマンド (`make local` 等) をそのまま提出
- *   4. 「AIエージェントでMac起動」 — LP のプロンプトからローカル起動確認までの実演
- *   (旧来の「クエスト」2 問は削除済み — チュートリアル 4 本で完結させ、 余計な問題で
+ *   3. 「TenkaCloud Lite を片付ける」 — ACTION override と launcher 削除
+ *   4. 「ローカルモードで遊ぶ」 — Docker / Codespaces。起動コマンドをそのまま提出
+ *   5. 「AIエージェントでMac起動」 — LP のプロンプトからローカル起動確認までの実演
+ *   (旧来の「クエスト」2 問は削除済み — チュートリアル 5 問で完結させ、 余計な問題で
  *    迷わせない。 完走後の導線はローカル / Lite の実在ドリルへ直接つなぐ)
  *
  * オンボーディングドリルは「本文は概要 → 詰まったら提出欄ごとのヒントでステップバイステップ手順」の
@@ -48,6 +50,10 @@ const HOUR = 60 * MIN;
 const iso = (offsetMs: number): string => new Date(now + offsetMs).toISOString();
 // 自動削除は常に「まだ先」に置く (= expired 警告を出さない)。
 const DEPLOY_EXPIRES_AT = Math.floor((now + 4 * HOUR) / SEC);
+const LITE_PIPELINE_TEMPLATE_URL =
+  "https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/lite-pipeline.yaml";
+const LITE_CLOUDFORMATION_CREATE_STACK_URL =
+  "https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-1#/stacks/create/template";
 
 export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
   team: {
@@ -88,7 +94,7 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
         "",
         "#### ステップ 4 · flag を提出してみる",
         "",
-        "TenkaCloud の採点は flag 提出が基本形。練習用の flag はこれ: `TENKA{HELLO-TENKACLOUD}`。そのままステップ 4 の提出欄に貼ると +100 pt — 採点とスコアの動きも、ここで最初に体験する。",
+        "TenkaCloud の採点は flag 提出が基本形。練習用の flag はこれ: `TC{HELLO-TENKACLOUD}`。そのままステップ 4 の提出欄に貼ると +100 pt — 採点とスコアの動きも、ここで最初に体験する。",
         "",
         "詰まったら各提出欄の **ヒント** を開こう(ペナルティなし)。全問正解すると解説と、次のドリル(「ローカルモードで遊ぶ」/「自分の TenkaCloud Lite を立てる」)へ進むボタンが現れる。",
       ].join("\n"),
@@ -121,7 +127,7 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
             "",
             "#### Step 4 · Submit your first flag",
             "",
-            "Scoring in TenkaCloud is flag-based. Here is a practice flag: `TENKA{HELLO-TENKACLOUD}`. Paste it into the step 4 box for +100 pt — your first taste of scoring and the moving scoreboard.",
+            "Scoring in TenkaCloud is flag-based. Here is a practice flag: `TC{HELLO-TENKACLOUD}`. Paste it into the step 4 box for +100 pt — your first taste of scoring and the moving scoreboard.",
             "",
             "Stuck? Open the **hint** on each submission box (no penalty). Answer all four to reveal the explanation and buttons to the next drills — “Play local mode” and “Deploy your own TenkaCloud Lite.”",
           ].join("\n"),
@@ -216,11 +222,11 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
                 penalty: 0,
                 revealed: false,
                 content:
-                  "ステップ 4 に印字されている `TENKA{HELLO-TENKACLOUD}` をコピーして、この欄に貼るだけ。大文字小文字と前後の空白は気にしなくていい。",
+                  "ステップ 4 に印字されている `TC{HELLO-TENKACLOUD}` をコピーして、この欄に貼るだけ。大文字小文字と前後の空白は気にしなくていい。",
                 i18n: {
                   en: {
                     content:
-                      "Copy the `TENKA{HELLO-TENKACLOUD}` printed at step 4 and paste it here. Case and surrounding spaces do not matter.",
+                      "Copy the `TC{HELLO-TENKACLOUD}` printed at step 4 and paste it here. Case and surrounding spaces do not matter.",
                   },
                 },
               },
@@ -234,8 +240,8 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
     {
       jobId: LITE_DRILL_JOB_ID,
       problemId: LITE_DRILL_PROBLEM_ID,
-      // #2707 P0-1: 冒頭 1 分 operation 動画 (字幕 ja/en 焼き込み、landing origin 配信)。
-      videoUrl: "/videos/onboarding/deploy-tenkacloud-lite.mp4",
+      // 実際の AWS 操作を使った短尺動画。 locale ごとに音声を分け、WebVTT 字幕を付ける。
+      videoUrl: "https://www.youtube.com/embed/ItgRfIeQ0ac",
       name: "自分の TenkaCloud Lite を立てる",
       // 注: fixture 問題は catalog metadata を持たないため ProblemInfoSection (= instructions
       // の描画箇所) が skip される。 competitor に見せる本文はすべて description に置く
@@ -243,45 +249,90 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
       // metadata 経路が通ったときのための短い要約に留める。
       description: [
         "チュートリアルの仕上げ。デモの外に出て、自分の AWS アカウントに **本物の TenkaCloud Lite** を立ち上げる。",
-        "手順を正しく実行するたびに、実環境の画面にチェックポイントコード `TENKA{...}` が現れる。それを下の対応する提出欄に貼って得点しよう。",
+        "手順を正しく実行するたびに、実環境の画面にチェックポイントコード `TC{...}` が現れる。それを下の対応する提出欄に貼って得点しよう。",
+        "`lite-pipeline.yaml` は、CloudFormationに読み込ませる**自動デプロイ環境のひな形**。名前にpipelineとあるが、AWS CodePipelineは使わない。CloudFormationがCodeBuildとIAM Roleを用意するので、`Start build` を押せば、細かいデプロイ手順を知らなくてもLiteを自動構築できる。",
+        "",
+        "#### AWSサービスの役割",
+        "",
+        "- **CloudFormation**: YAMLのひな形を読み、必要なAWSリソースをまとめて作る",
+        "- **CodeBuild**: AWS上の一時的なコンピューターで、TenkaCloudの構築処理を自動実行する",
+        "- **IAM Role**: CodeBuildがAWSリソースを作るために使う実行権限",
+        "- **S3 / CloudFront**: Admin ConsoleとParticipant Portalの画面を保存・配信する",
+        "- **Cognito**: 管理者と参加者のログインを扱う",
+        "- **Lambda / API Gateway / DynamoDB**: APIの処理、公開、イベントやスコアなどのデータ保存を担う",
+        "- **Step Functions / EventBridge**: デプロイなど複数段階の処理と、サービス間のイベント連携を進める",
+        "- **CloudWatch / Systems Manager**: 実行ログの確認と、設定値の安全な保管に使う",
+        "",
+        "#### `Start build` のあとに起きること",
+        "",
+        "1. CodeBuildがTenkaCloudと問題カタログを取得する",
+        "2. CodeBuildがビルドとCDKによるデプロイを自動実行する",
+        "3. CloudFormationがTenkaCloud Lite本体のAWSリソースを作成する",
+        "",
+        "**AWS経験者向け:** CloudFormation stack → CodeBuild project → CDK deploy → CloudFormation stacks。CodeBuildのServiceRoleにはIAM Roleを使用する。",
         "",
         "#### はじめる前に",
         "",
-        "- 管理者相当の権限で使える AWS アカウントと、受信できるメールアドレスが必要",
+        "- この動画では手順を明確にするため `AdministratorAccess` のユーザーで操作する。実運用ではデプロイに必要な権限へ絞る",
+        "- 受信できるメールアドレスが必要",
         "- デプロイ中はデフォルト構成で **約 $7/月** の継続費用が発生する(遊び終えたら必ず片付ける)",
-        "- launcher は CodeBuild 用に広い権限の IAM Role を作成する(CloudFormation の IAM acknowledge で明示同意する)",
+        "- 自動デプロイ環境はCodeBuild用に広い権限のIAM Roleを作成する(CloudFormationのIAM acknowledgeで明示同意する)",
         "",
         "#### 進め方",
         "",
-        "ステップは 4 つ: Launcher スタック作成 → Lite デプロイ完了 → Competitor アカウント検証 → 初回イベント作成。",
+        "チェックポイントは4つ: 自動デプロイ環境を作成 → Liteデプロイ完了 → Competitorアカウント検証 → 初回イベント作成。",
+        "続けてイベントを Deploy し、Participant Portal に team login key で入り、問題をプレイしてスコア反映まで確認する。動画はこの一連の使い方に集中している。",
         "各ステップの詳しい手順は、提出欄ごとの **ヒント** を開くと表示される(ペナルティなし)。自力で進める人はネタバレなしで挑戦できる。",
         "",
-        "**片付け(採点対象外)** — 遊び終えたら CodeBuild の **Start build with overrides** で `ACTION=destroy` を実行し、最後に launcher スタック自体を削除して課金を止める。ここまでやって、オンボーディング完走!",
+        "4 ステップを終えて遊び終わったら、次の問題 **「TenkaCloud Lite を片付ける」** へ進む。課金を止めるところまでがオンボーディング。",
       ].join("\n"),
       instructions:
-        "各ステップで実環境の画面に現れる `TENKA{...}` コードを、下の対応する提出欄に貼って得点する。手順の詳細は提出欄ごとのヒントから。",
+        "各ステップで実環境の画面に現れる `TC{...}` コードを、下の対応する提出欄に貼って得点する。手順の詳細は提出欄ごとのヒントから。",
       i18n: {
         en: {
+          videoUrl: "https://www.youtube.com/embed/7LjkPdf5zM0",
           name: "Deploy your own TenkaCloud Lite",
           description: [
             "The tutorial finale. Step outside the demo and stand up a **real TenkaCloud Lite** in your own AWS account.",
-            "Each step you complete reveals a `TENKA{...}` checkpoint code on the real screens — paste it into the matching submission box below to score.",
+            "Each step you complete reveals a `TC{...}` checkpoint code on the real screens — paste it into the matching submission box below to score.",
+            "`lite-pipeline.yaml` is an **automatic deployment setup template** that you load into CloudFormation. Despite the filename, it does not use the AWS CodePipeline service. CloudFormation creates a CodeBuild project and IAM Role, so pressing `Start build` deploys Lite automatically without learning every underlying deployment step.",
+            "",
+            "#### What the AWS services do",
+            "",
+            "- **CloudFormation**: reads the YAML template and creates the required AWS resources together",
+            "- **CodeBuild**: provides a temporary computer in AWS that runs the TenkaCloud deployment automatically",
+            "- **IAM Role**: grants CodeBuild permission to create the AWS resources",
+            "- **S3 / CloudFront**: stores and serves the Admin Console and Participant Portal",
+            "- **Cognito**: handles administrator and participant login",
+            "- **Lambda / API Gateway / DynamoDB**: runs and publishes APIs and stores event, score, and related data",
+            "- **Step Functions / EventBridge**: coordinates multi-step work such as deployment and passes events between services",
+            "- **CloudWatch / Systems Manager**: provides execution logs and secure configuration storage",
+            "",
+            "#### What happens after `Start build`",
+            "",
+            "1. CodeBuild downloads TenkaCloud and the problem catalog",
+            "2. CodeBuild runs the build and CDK deployment automatically",
+            "3. CloudFormation creates the AWS resources for the TenkaCloud Lite platform",
+            "",
+            "**AWS shorthand:** CloudFormation stack → CodeBuild project → CDK deploy → CloudFormation stacks. An IAM Role is attached as the CodeBuild ServiceRole.",
             "",
             "#### Before you start",
             "",
-            "- You need an AWS account with admin-level access and an email address you can read",
+            "- The video uses an `AdministratorAccess` user for a clear walkthrough. In production, narrow it to the permissions required for deployment",
+            "- You need an email address you can read",
             "- The default profile costs **about $7/month** while deployed (tear it down when you are done)",
-            "- The launcher creates a broad-permission IAM Role for CodeBuild (you acknowledge it in CloudFormation)",
+            "- The automatic deployment setup creates a broad-permission IAM Role for CodeBuild internally (you acknowledge it in CloudFormation)",
             "",
             "#### How to play",
             "",
-            "There are 4 steps: create the launcher stack → Lite deploy completes → verify a competitor account → create your first event.",
+            "There are 4 checkpoints: create the automatic deployment setup → Lite deploy completes → verify a competitor account → create your first event.",
+            "Then deploy the event, sign in through the Participant Portal with the team key, play the problem, and confirm the score. The video focuses on this end-to-end product workflow.",
             "Open the **hint** on each submission box for the detailed instructions (penalty-free). Prefer to figure it out yourself? Go in blind.",
             "",
-            "**Clean up (not scored)** — When you are done, run **Start build with overrides** with `ACTION=destroy`, then delete the launcher stack itself to stop the charges. That completes the onboarding!",
+            'After all 4 steps and when you are done playing, continue to the separate **"Clean up TenkaCloud Lite"** problem. Onboarding ends only after the charges are stopped.',
           ].join("\n"),
           instructions:
-            "Each step reveals a `TENKA{...}` code on the real screens — paste it into the matching submission box below. Detailed steps live in each box's hint.",
+            "Each step reveals a `TC{...}` code on the real screens — paste it into the matching submission box below. Detailed steps live in each box's hint.",
         },
       },
       region: "ap-northeast-1",
@@ -296,21 +347,31 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
         flags: [
           {
             id: LITE_DRILL_CHECKPOINTS.launcherCreated.flagId,
-            label: "1. Launcher スタック作成",
+            label: "1. デプロイ用パイプライン作成",
             points: 100,
             solved: false,
-            i18n: { en: { label: "1. Launcher stack created" } },
+            i18n: { en: { label: "1. Deployment pipeline created" } },
             hints: [
               {
                 id: "lite-h1",
                 penalty: 0,
                 revealed: false,
-                content:
-                  "README の Quickstart から `lite-pipeline.yaml` で CloudFormation スタックを作成する(必須入力は `TenantAdminEmail` のみ、IAM acknowledge にチェック)。作成完了後、スタックの「出力 (Outputs)」タブにある `OnboardingDrillCheckpoint` の値を提出する。",
+                content: [
+                  `[TenkaCloud の lite-pipeline.yaml](${LITE_PIPELINE_TEMPLATE_URL}) をダウンロードする。`,
+                  `[AWS CloudFormation の「スタックの作成」](${LITE_CLOUDFORMATION_CREATE_STACK_URL}) を開き、**テンプレートファイルのアップロード**で先ほどの YAML を選ぶ。`,
+                  "スタック名は `tenkacloud-lite-launcher`。必須入力は `TenantAdminEmail` のみで、IAM acknowledge にチェックする。",
+                  "`tenkacloud-lite-launcher` は自動デプロイ環境のCloudFormation stack名。CloudFormationがCodeBuildとIAM Roleを作り、そのCodeBuildが必要な処理を自動化するため、利用者が `git clone`・`make deploy`・CDKを手動で操作する必要はない。次のステップで `Start build` を押すと、`tenkacloud-lite` / `tenkacloud-lite-problem-deploy` の2スタックが作られる。",
+                  "作成完了後、スタックの「出力 (Outputs)」タブにある `OnboardingDrillCheckpoint` の値を提出する。",
+                ].join("\n\n"),
                 i18n: {
                   en: {
-                    content:
-                      "Create the CloudFormation stack from lite-pipeline.yaml in the README Quickstart (the only required input is `TenantAdminEmail`; check the IAM acknowledgement). After it completes, submit the `OnboardingDrillCheckpoint` value from the stack's Outputs tab.",
+                    content: [
+                      `[Download TenkaCloud's lite-pipeline.yaml](${LITE_PIPELINE_TEMPLATE_URL}).`,
+                      `[Open AWS CloudFormation Create stack](${LITE_CLOUDFORMATION_CREATE_STACK_URL}), choose **Upload a template file**, and select the YAML you downloaded.`,
+                      "Use `tenkacloud-lite-launcher` as the stack name. The only required input is `TenantAdminEmail`; check the IAM acknowledgement.",
+                      "`tenkacloud-lite-launcher` is the CloudFormation stack name for the automatic deployment setup. CloudFormation creates the CodeBuild project and IAM Role, and CodeBuild automates the required work, so you do not operate `git clone`, `make deploy`, or CDK manually. In the next step, press `Start build` to create the `tenkacloud-lite` and `tenkacloud-lite-problem-deploy` stacks.",
+                      "After it completes, submit the `OnboardingDrillCheckpoint` value from the stack's Outputs tab.",
+                    ].join("\n\n"),
                   },
                 },
               },
@@ -387,6 +448,10 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
       deployLog: { cursor: "", entries: [] },
       createdAt: iso(-25 * MIN),
     },
+    createLiteCleanupDrillFixture({
+      expiresAt: DEPLOY_EXPIRES_AT,
+      createdAt: iso(-25 * MIN),
+    }),
     {
       jobId: LOCAL_DRILL_JOB_ID,
       problemId: LOCAL_DRILL_PROBLEM_ID,
@@ -409,7 +474,8 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
         "2. `make install`(ツールチェーンがおかしいときは `make doctor` で診断できる)",
         "3. `make local`",
         "4. ready 表示に `Participant Portal ... 5175` と出たら、ブラウザで Portal を開く",
-        "5. 問題一覧から入門ドリル **sqli-demo** を選び、Start を押す",
+        "5. ログイン画面が出たら、**チームキーは自動で入力済み**なので、そのまま「サインイン」を押すだけ(自分でキーを打つ必要はない。`make local` ごとに変わる使い捨てのチームキーが Portal に自動で渡される)",
+        "6. 問題一覧から入門ドリル **sqli-demo** を選び、Start を押す",
         "",
         "Codespaces で遊ぶ場合は https://codespaces.new/susumutomita/TenkaCloud から作成し、開いたターミナルで同じ `make local` を実行すればいい(ポートはブラウザへ自動で転送される)。",
         "",
@@ -448,7 +514,8 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
             "2. `make install` (use `make doctor` if the toolchain looks broken)",
             "3. `make local`",
             "4. When the ready output shows `Participant Portal ... 5175`, open the Portal in your browser",
-            "5. Pick the intro drill **sqli-demo** from the problem list and press Start",
+            "5. On the login screen the **team key is already filled in** — just press **Sign in** (no need to type a key; local mode hands the Portal a throwaway team key that changes on every `make local`)",
+            "6. Pick the intro drill **sqli-demo** from the problem list and press Start",
             "",
             "On Codespaces, create one from https://codespaces.new/susumutomita/TenkaCloud and run the same `make local` in its terminal — the port forwards to your browser automatically.",
             "",
@@ -634,7 +701,7 @@ export const DEV_MOCK_LEADERBOARD: LeaderboardResponse = {
       teamName: "Alpha Squad",
       score: 600,
       completedProblems: 2,
-      totalProblems: 4,
+      totalProblems: DEV_MOCK_TEAM_VIEW.problems.length,
       isMyTeam: false,
     },
     {
@@ -643,7 +710,7 @@ export const DEV_MOCK_LEADERBOARD: LeaderboardResponse = {
       teamName: "Bravo Crew",
       score: 450,
       completedProblems: 1,
-      totalProblems: 4,
+      totalProblems: DEV_MOCK_TEAM_VIEW.problems.length,
       isMyTeam: false,
     },
     {
@@ -652,7 +719,7 @@ export const DEV_MOCK_LEADERBOARD: LeaderboardResponse = {
       teamName: "Delta Force",
       score: 300,
       completedProblems: 1,
-      totalProblems: 4,
+      totalProblems: DEV_MOCK_TEAM_VIEW.problems.length,
       isMyTeam: false,
     },
     // 自チームは 0 pt から始める (= チュートリアルを解くと leaderboard が動く体験)。
@@ -662,7 +729,7 @@ export const DEV_MOCK_LEADERBOARD: LeaderboardResponse = {
       teamName: "Demo Team",
       score: 0,
       completedProblems: 0,
-      totalProblems: 4,
+      totalProblems: DEV_MOCK_TEAM_VIEW.problems.length,
       isMyTeam: true,
     },
     {
@@ -671,7 +738,7 @@ export const DEV_MOCK_LEADERBOARD: LeaderboardResponse = {
       teamName: "Echo Five",
       score: 0,
       completedProblems: 0,
-      totalProblems: 4,
+      totalProblems: DEV_MOCK_TEAM_VIEW.problems.length,
       isMyTeam: false,
     },
   ],
@@ -685,14 +752,14 @@ export const DEV_MOCK_NOTIFICATIONS: NotificationsResponse = {
     {
       notificationId: "notif-003",
       title: "オンボーディングチュートリアルを開放",
-      body: "「TenkaCloud とは?」から始めて「自分の TenkaCloud Lite を立てる」へ進むと、理解から実デプロイまで得点しながら完走できます。AWS なしで遊ぶなら「ローカルモードで遊ぶ」、AI に任せるなら「AIエージェントでMac起動」も。詰まったら各提出欄のヒント(ペナルティなし)へ。",
+      body: "「TenkaCloud とは?」から始めて「自分の TenkaCloud Lite を立てる」へ進み、最後は「TenkaCloud Lite を片付ける」で課金停止まで完走できます。AWS なしで遊ぶなら「ローカルモードで遊ぶ」、AI に任せるなら「AIエージェントでMac起動」も。詰まったら各提出欄のヒント(ペナルティなし)へ。",
       severity: "info",
       occurredAt: iso(-2 * MIN),
     },
     {
       notificationId: "notif-001",
       title: "競技開始",
-      body: "TenkaCloud のデモを開始しました。4 問のオンボーディングチュートリアルが出題されています。解いて flag を提出しよう!",
+      body: "TenkaCloud のデモを開始しました。5 問のオンボーディングチュートリアルが出題されています。解いて flag を提出しよう!",
       severity: "info",
       occurredAt: iso(-25 * MIN),
     },

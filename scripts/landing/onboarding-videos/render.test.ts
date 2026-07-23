@@ -1,9 +1,14 @@
 import { describe, expect, it } from "bun:test";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import {
   buildFilterGraph,
   buildSlideHtml,
+  cleanupTemporaryVideoDirectory,
+  createTemporaryVideoDirectory,
   escapeHtml,
   FADE_S,
+  shouldRenderGeneratedOnboardingVideo,
   videoNominalDurationS,
 } from "./render";
 import { LP_VIDEO, ONBOARDING_VIDEOS } from "./script-data";
@@ -15,11 +20,12 @@ import { LP_VIDEO, ONBOARDING_VIDEOS } from "./script-data";
  */
 
 describe("onboarding video scripts (#2707)", () => {
-  it("should ship exactly the trilogy videos, named after their fixture problemIds", () => {
+  it("should ship separate deploy and cleanup videos named after their fixture problemIds", () => {
     expect(ONBOARDING_VIDEOS.map((v) => v.problemId)).toEqual([
       "what-is-tenkacloud",
       "play-local-mode",
       "deploy-tenkacloud-lite",
+      "cleanup-tenkacloud-lite",
     ]);
   });
 
@@ -49,10 +55,29 @@ describe("onboarding video scripts (#2707)", () => {
     for (const video of [...ONBOARDING_VIDEOS, LP_VIDEO]) {
       for (const slide of video.slides) {
         const text = JSON.stringify(slide);
-        // 実値 TENKA{...} は実環境の画面にだけ現れる。 動画に出すとドリルのネタバレになる。
-        expect(text, `${video.problemId}/${slide.badge}`).not.toMatch(/TENKA\{[A-Z0-9-]+\}/);
+        // 実値 TC{...} は実環境の画面にだけ現れる。 動画に出すとドリルのネタバレになる。
+        expect(text, `${video.problemId}/${slide.badge}`).not.toMatch(/TC\{[A-Z0-9-]+\}/);
       }
     }
+  });
+
+  it("should keep deploy and cleanup instructions in their own videos", () => {
+    const deploy = ONBOARDING_VIDEOS.find((video) => video.problemId === "deploy-tenkacloud-lite");
+    const cleanup = ONBOARDING_VIDEOS.find(
+      (video) => video.problemId === "cleanup-tenkacloud-lite",
+    );
+    const deployText = JSON.stringify(deploy);
+    const cleanupText = JSON.stringify(cleanup);
+
+    expect(deployText).not.toContain("ACTION=destroy");
+    expect(cleanupText).toContain("ACTION=destroy");
+    expect(cleanupText).toContain("launcher");
+  });
+
+  it("should never overwrite the recorded deploy and cleanup videos with slide fallbacks", () => {
+    expect(shouldRenderGeneratedOnboardingVideo("deploy-tenkacloud-lite")).toBe(false);
+    expect(shouldRenderGeneratedOnboardingVideo("cleanup-tenkacloud-lite")).toBe(false);
+    expect(shouldRenderGeneratedOnboardingVideo("what-is-tenkacloud")).toBe(true);
   });
 });
 
@@ -70,6 +95,20 @@ describe("slide HTML builder", () => {
     expect(html).toContain(`>${video.slides[1].badge}<`);
     expect([...html.matchAll(/class="seg on"/g)]).toHaveLength(2);
     expect(html).toContain(`2 / ${video.slides.length}`);
+  });
+});
+
+describe("temporary video workspace", () => {
+  it("should remove only a video workspace created directly under the OS temp directory", () => {
+    const workDir = createTemporaryVideoDirectory("tenkacloud-video-test-");
+    expect(existsSync(workDir)).toBe(true);
+
+    cleanupTemporaryVideoDirectory(workDir);
+
+    expect(existsSync(workDir)).toBe(false);
+    expect(() => cleanupTemporaryVideoDirectory(join(process.cwd(), "tmp"))).toThrow(
+      "Refusing to remove non-video temp directory",
+    );
   });
 });
 

@@ -1,7 +1,9 @@
 import {
+  LITE_CLEANUP_DRILL_PROBLEM_ID,
   LITE_DRILL_PROBLEM_ID,
   LOCAL_DRILL_LAUNCH_COMMAND,
   LOCAL_DRILL_PROBLEM_ID,
+  matchesLiteCleanupDrillCheckpoint,
   matchesLiteDrillCheckpoint,
   matchesLocalDrillLaunchCommand,
 } from "@tenkacloud/portal-contracts";
@@ -145,7 +147,7 @@ const QUIZ_ANSWERS: Readonly<Record<string, Readonly<Record<string, readonly str
       "codespaces",
       "コードスペース",
     ],
-    "first-flag": ["tenka{hello-tenkacloud}"],
+    "first-flag": ["tc{hello-tenkacloud}"],
   },
   [LOCAL_DRILL_PROBLEM_ID]: {
     "portal-port": ["5175"],
@@ -169,6 +171,7 @@ export function isStrictDrillProblem(problemId: string): boolean {
   return (
     problemId === WHAT_IS_DRILL_PROBLEM_ID ||
     problemId === LOCAL_DRILL_PROBLEM_ID ||
+    problemId === LITE_CLEANUP_DRILL_PROBLEM_ID ||
     problemId === LITE_DRILL_PROBLEM_ID
   );
 }
@@ -196,6 +199,9 @@ export function evaluateMockSubFlag(
   const wrong = () => wrongOutcome(problemId, flagId);
   if (problemId === LITE_DRILL_PROBLEM_ID) {
     return matchesLiteDrillCheckpoint(flagId, rawFlag) ? ok() : wrong();
+  }
+  if (problemId === LITE_CLEANUP_DRILL_PROBLEM_ID) {
+    return matchesLiteCleanupDrillCheckpoint(flagId, rawFlag) ? ok() : wrong();
   }
   if (problemId === LOCAL_DRILL_PROBLEM_ID && flagId === LOCAL_DRILL_LAUNCH_COMMAND.flagId) {
     return matchesLocalDrillLaunchCommand(rawFlag) ? ok() : wrong();
