@@ -52,7 +52,18 @@ comment attachments unless they have been inspected in a safe environment.
 
 ## Hardening and posture
 
-- Cross-account `AssumeRole` into competitor accounts always requires `ExternalId`,
-  and the competitor IAM role is least-privilege. Auth is Cognito JWT throughout
-  (no bypasses). See [CLAUDE.md](./CLAUDE.md) ("Security") for the full list.
-</content>
+- Cross-account `AssumeRole` into competitor accounts always requires `ExternalId`.
+  Auth is Cognito JWT throughout (no bypasses). See [CLAUDE.md](./CLAUDE.md)
+  ("Security") for the full list.
+- **Competitor bootstrap role is a deliberate exception, not least-privilege.**
+  The IAM role created by
+  [`infrastructure/templates/competitor-bootstrap.yaml`](./infrastructure/templates/competitor-bootstrap.yaml)
+  attaches the AWS managed `AdministratorAccess` policy inside the
+  competitor's own AWS account (Issue #721: granular per-service policies kept
+  missing permissions as new problem templates were added, causing repeated
+  `CREATE_FAILED` / `ROLLBACK_COMPLETE`). This exception is scoped to that one
+  role — it does not extend to the Control Plane, Application Plane, CI, or
+  operator roles, which stay least-privilege. Compensating controls: the
+  trust policy is locked to the TenkaCloud account ID plus a mandatory
+  `ExternalId`, `MaxSessionDuration` is capped at 1 hour, and the competitor
+  revokes access in one shot by deleting the stack.
