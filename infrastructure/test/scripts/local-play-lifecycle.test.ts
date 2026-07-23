@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { PORT_STRIDE } from "../../../scripts/local-play/port-remap";
 import {
   type LifecycleDeps,
   ProblemLifecycle,
@@ -58,7 +59,7 @@ describe("ProblemLifecycle: on-demand start (#2392 Phase 2)", () => {
     const { deps } = makeDeps();
     const lc = new ProblemLifecycle(["a", "b"], deps, { maxRunning: 2 });
     expect(await lc.ensureRunning("a")).toBe(0);
-    expect(await lc.ensureRunning("b")).toBe(100);
+    expect(await lc.ensureRunning("b")).toBe(PORT_STRIDE);
   });
 
   it("should be idempotent + touch when already running (no second container start)", async () => {
@@ -175,11 +176,11 @@ describe("ProblemLifecycle: concurrency cap + LRU eviction (#2392 Phase 2)", () 
     lc.touch("a"); // a re-touched @ t=1020, so b is now the LRU
     tick(10);
     await lc.ensureRunning("c"); // at cap → evict LRU (b), then start c
-    expect(stopped).toEqual([["b", 100]]); // b evicted, freeing offset 100
+    expect(stopped).toEqual([["b", PORT_STRIDE]]); // b evicted, freeing its offset
     expect(started).toEqual([
       ["a", 0],
-      ["b", 100],
-      ["c", 100], // c reuses the freed slot
+      ["b", PORT_STRIDE],
+      ["c", PORT_STRIDE], // c reuses the freed slot
     ]);
     expect(lc.statusOf("b")).toBe("stopped");
     expect(lc.statusOf("c")).toBe("running");
