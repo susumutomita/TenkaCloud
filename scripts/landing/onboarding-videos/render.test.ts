@@ -8,7 +8,6 @@ import {
   createTemporaryVideoDirectory,
   escapeHtml,
   FADE_S,
-  shouldRenderGeneratedOnboardingVideo,
   videoNominalDurationS,
 } from "./render";
 import { LP_VIDEO, ONBOARDING_VIDEOS } from "./script-data";
@@ -72,12 +71,6 @@ describe("onboarding video scripts (#2707)", () => {
     expect(deployText).not.toContain("ACTION=destroy");
     expect(cleanupText).toContain("ACTION=destroy");
     expect(cleanupText).toContain("launcher");
-  });
-
-  it("should never overwrite the recorded deploy and cleanup videos with slide fallbacks", () => {
-    expect(shouldRenderGeneratedOnboardingVideo("deploy-tenkacloud-lite")).toBe(false);
-    expect(shouldRenderGeneratedOnboardingVideo("cleanup-tenkacloud-lite")).toBe(false);
-    expect(shouldRenderGeneratedOnboardingVideo("what-is-tenkacloud")).toBe(true);
   });
 });
 

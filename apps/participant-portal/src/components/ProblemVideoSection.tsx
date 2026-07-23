@@ -14,25 +14,11 @@ function isYouTubeEmbedUrl(videoUrl: string): boolean {
   return /^https:\/\/www\.youtube\.com\/embed\/[A-Za-z0-9_-]{11}$/.test(videoUrl);
 }
 
-function liteCaptionStem(videoUrl: string): string | undefined {
-  const match = videoUrl.match(
-    /^(\/videos\/onboarding\/(?:deploy|cleanup)-tenkacloud-lite)(?:\.en)?\.mp4$/,
-  );
-  return match?.[1];
-}
-
 export function ProblemVideoSection({ videoUrl }: { videoUrl: string }) {
   const t = useT();
   const [unavailable, setUnavailable] = useState(false);
   if (unavailable) return null;
   const isYouTube = isYouTubeEmbedUrl(videoUrl);
-  const captionStem = liteCaptionStem(videoUrl);
-  const englishVideo = videoUrl.endsWith(".en.mp4");
-  const noteKey = isYouTube
-    ? "problem_detail.video_note_youtube"
-    : captionStem
-      ? "problem_detail.video_note_voicevox"
-      : "problem_detail.video_note";
   return (
     <Container header={<Header variant="h2">{t("problem_detail.video_header")}</Header>}>
       <SpaceBetween size="xs">
@@ -53,7 +39,7 @@ export function ProblemVideoSection({ videoUrl }: { videoUrl: string }) {
             }}
           />
         ) : (
-          // biome-ignore lint/a11y/useMediaCaption: 音声付き Lite 動画には直下で日英 WebVTT track を付ける。旧動画は無音・字幕焼き込み済み。
+          // biome-ignore lint/a11y/useMediaCaption: 自ホスト動画は無音・字幕焼き込み済み。音声付きチュートリアルはYouTubeで配信する。
           <video
             controls
             preload="metadata"
@@ -61,28 +47,11 @@ export function ProblemVideoSection({ videoUrl }: { videoUrl: string }) {
             aria-label={t("problem_detail.video_header")}
             style={{ width: "100%", maxWidth: 960, display: "block", borderRadius: 8 }}
             onError={() => setUnavailable(true)}
-          >
-            {captionStem && (
-              <>
-                <track
-                  default={!englishVideo}
-                  kind="captions"
-                  src={`${captionStem}.ja.vtt`}
-                  srcLang="ja"
-                  label="日本語"
-                />
-                <track
-                  default={englishVideo}
-                  kind="captions"
-                  src={`${captionStem}.en.vtt`}
-                  srcLang="en"
-                  label="English"
-                />
-              </>
-            )}
-          </video>
+          />
         )}
-        <Box variant="small">{t(noteKey)}</Box>
+        <Box variant="small">
+          {t(isYouTube ? "problem_detail.video_note_youtube" : "problem_detail.video_note")}
+        </Box>
       </SpaceBetween>
     </Container>
   );

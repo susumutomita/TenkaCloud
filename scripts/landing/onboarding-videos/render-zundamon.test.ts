@@ -93,6 +93,17 @@ describe("recorded Lite Zundamon renderer", () => {
     expect(deployStarts[2]).toBeCloseTo(recordedChapterStartS(deployEdit, "launcher") + 0.3);
     expect(deployStarts[3]).toBeCloseTo(recordedChapterStartS(deployEdit, "deploy") + 0.2);
     expect(deployStarts[4]).toBeCloseTo(recordedChapterStartS(deployEdit, "admin-sign-in") + 0.2);
+
+    const cleanupEdit = RECORDED_LITE_EDITS[1];
+    const cleanupStarts = VOICEOVER_TIMELINES["cleanup-tenkacloud-lite"].starts;
+    expect(cleanupStarts[0]).toBeCloseTo(recordedChapterStartS(cleanupEdit, "cleanup-intro") + 0.2);
+    expect(cleanupStarts[1]).toBeCloseTo(recordedChapterStartS(cleanupEdit, "cleanup-order") + 0.2);
+    expect(cleanupStarts[2]).toBeCloseTo(
+      recordedChapterStartS(cleanupEdit, "cleanup-action") + 0.3,
+    );
+    expect(cleanupStarts[5]).toBeCloseTo(
+      recordedChapterStartS(cleanupEdit, "cleanup-complete") + 0.2,
+    );
   });
 
   it("should generate valid bilingual WebVTT without leaking checkpoint values", () => {
@@ -155,6 +166,25 @@ describe("recorded Lite Zundamon renderer", () => {
     expect(html).toContain("Next: actual screen operation");
   });
 
+  it("should render cleanup-specific flow, reason, and completion slides", () => {
+    const [intro, order, , , , complete] = CLEANUP_TENKACLOUD_LITE_ZUNDAMON_VOICEOVER.cues;
+    if (!intro || !order || !complete) throw new Error("expected complete cleanup story");
+
+    const introHtml = buildCaptionOverlayHtml(intro, "ja", 0, 6);
+    expect(introHtml).toContain("TENKACLOUD LITE · AWS CLEANUP");
+    expect(introHtml).toContain("CodeBuildでLite本体を削除");
+    expect(introHtml).toContain("launcherを最後に削除");
+
+    const orderHtml = buildCaptionOverlayHtml(order, "ja", 1, 6);
+    expect(orderHtml).toContain("WHY THIS ORDER · THEN THE REAL AWS CONSOLE");
+    expect(orderHtml).toContain("復旧経路");
+
+    const completeHtml = buildCaptionOverlayHtml(complete, "ja", 5, 6);
+    expect(completeHtml).toContain("CLEANUP COMPLETE · VERIFY IN AWS");
+    expect(completeHtml).toContain("削除完了を確認");
+    expect(completeHtml).toContain("AWS billing");
+  });
+
   it("should burn an always-visible step heading, note, and caption over recorded operations", () => {
     const cue = DEPLOY_TENKACLOUD_LITE_ZUNDAMON_VOICEOVER.cues.find(
       (candidate) => candidate.layout === undefined && candidate.note !== undefined,
@@ -171,6 +201,15 @@ describe("recorded Lite Zundamon renderer", () => {
     const filter = buildCaptionOverlayFilter([0.3, 12.5], 3, 24);
     expect(filter).toContain("[0:v][3:v]overlay=0:0:enable='between(t,0.300,12.300)'");
     expect(filter).toContain("format=yuv420p[vout]");
+  });
+
+  it("should keep the cleanup action visible by placing its caption above the form", () => {
+    const action = CLEANUP_TENKACLOUD_LITE_ZUNDAMON_VOICEOVER.cues[2];
+    if (!action) throw new Error("expected cleanup action cue");
+    const html = buildCaptionOverlayHtml(action, "ja", 0, 3);
+    expect(html).toContain('class="caption top-right"');
+    expect(html).toContain("top: 18px");
+    expect(html).toContain("bottom: auto");
   });
 
   it("should delay, mix, normalize, and trim synthesized cue audio", () => {

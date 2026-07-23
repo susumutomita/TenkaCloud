@@ -1,10 +1,8 @@
 /**
  * #2707 P1 / #2711: オンボーディングドリル 4 本の 1 分 operation 動画の台本 (source of truth)。
  *
- * この module が「再撮影用の台本」そのもの。 スライド文言を直して
- * `bun run scripts/landing/onboarding-videos/render.ts` を実行すると
- * `landing/videos/onboarding/<problemId>.mp4` が再生成される (要 chromium + ffmpeg、
- * 手順は render.ts のヘッダーコメント参照)。
+ * この module が「再撮影用の台本」そのもの。オンボーディング動画は YouTube 用の
+ * 外部作業ディレクトリへ生成し、リポジトリには置かない。
  *
  * 設計制約:
  * - 音声なし・字幕 (スライド文字) だけで理解できること (#2696 の動画基準と同じ)
@@ -33,7 +31,7 @@ export interface OnboardingSlide {
 }
 
 export interface OnboardingVideo {
-  /** 出力ファイル名 (= fixture の videoUrl と揃える): landing/videos/onboarding/<problemId>.mp4 */
+  /** YouTube 公開前のローカル編集用 ID。 */
   readonly problemId: string;
   readonly titleJa: string;
   readonly titleEn: string;

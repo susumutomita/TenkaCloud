@@ -202,8 +202,8 @@ describe("dev-mock fixtures", () => {
     expect(deploy?.i18n?.en?.videoUrl).toBe("https://www.youtube.com/embed/7LjkPdf5zM0");
     expect(deploy?.description).not.toContain("ACTION=destroy");
     expect(deploy?.i18n?.en?.description).not.toContain("ACTION=destroy");
-    expect(cleanup?.videoUrl).toBe("/videos/onboarding/cleanup-tenkacloud-lite.mp4");
-    expect(cleanup?.i18n?.en?.videoUrl).toBe("/videos/onboarding/cleanup-tenkacloud-lite.en.mp4");
+    expect(cleanup?.videoUrl).toBeUndefined();
+    expect(cleanup?.i18n?.en?.videoUrl).toBeUndefined();
     expect(cleanup?.scoring?.flags?.map((f) => f.id)).toEqual([
       LITE_CLEANUP_DRILL_CHECKPOINT.flagId,
     ]);
@@ -306,13 +306,16 @@ describe("dev-mock fixtures", () => {
         expect(drill.i18n?.en?.videoUrl).toBe("https://www.youtube.com/embed/7LjkPdf5zM0");
         continue;
       }
-      // 旧版は、正しいYouTube版ができるまで表示しない。
-      if (drill.problemId === LOCAL_DRILL_PROBLEM_ID) {
+      // 正しいYouTube版ができるまでは、リポジトリへ動画を置かず非表示にする。
+      if (
+        drill.problemId === LOCAL_DRILL_PROBLEM_ID ||
+        drill.problemId === LITE_CLEANUP_DRILL_PROBLEM_ID
+      ) {
         expect(drill.videoUrl).toBeUndefined();
+        expect(drill.i18n?.en?.videoUrl).toBeUndefined();
         continue;
       }
-      expect(drill.videoUrl).toBe(`/videos/onboarding/${drill.problemId}.mp4`);
-      expect(drill.i18n?.en?.videoUrl).toBe(`/videos/onboarding/${drill.problemId}.en.mp4`);
+      throw new Error(`Unhandled onboarding video contract: ${drill.problemId}`);
     }
   });
 
