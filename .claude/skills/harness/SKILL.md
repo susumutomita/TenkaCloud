@@ -50,21 +50,7 @@ HTTP magic number、template、coverage、IAM ASCII、merge、submodule など�
 
 ## Machine enforcement rules
 
-- `secrets-manager-forbidden` — `@aws-sdk/client-secrets-manager` の import を error。SSM Parameter Store SecureString を使う。
-- `handler-must-not-call-fetch` — handler から `fetch` を直接呼ばず、Service / Repository に閉じ込める。
-- `handler-no-direct-sdk-import` — Lambda entrypoint から AWS SDK client を直接 import しない。
-- `handler-tenant-isolation` — tenant-scoped handler が DDB command を発行する場合、同一 file で `tenantId` を参照していることを要求する。tenant logic を禁止する rule ではなく、tenant boundary の欠落を検知する guard である。
-- `iam-wildcard-needs-justify` — IAM wildcard には AWS API constraint または設計理由の inline justification を要求する。
-- `lambda-env-size` — Lambda environment variable block が 4 KB hard limit に近づく変更を検出する。
-- `no-aws-trademark-fictions` — AWS GameDay 系の架空企業名を TenkaCloud content に再利用しない。
-- `no-conflict-markers` — conflict marker の混入を error にする。
-- `adr-must-be-html` — ADR は `docs/architecture/adr-*.html` を source of truth とする。
-- `adr-self-contained` — ADR に chat context、rolling update metadata、agent role split を残さない。
-- `file-too-large` — baseline を超えて巨大 file を増やす変更を抑止する。
-- `domain-no-infra-import` — control-data domain から adapter、handler、AWS SDK / CDK への逆依存を禁止する。
-- `runtime-composition-root-only` — default runtime composition を Lambda entrypoint など許可された composition root に限定する。
-
-rule 一覧を別文書へ手書きで複製すると drift する。説明を更新する場合は、rule implementation、unit test、Enforcement Registry、この Skill を同じ PR で確認する。
+rule ID・principle・scope・severity の一覧は [`docs/architecture/enforcement-registry.md`](../../../docs/architecture/enforcement-registry.md)（人間向け索引）と [`enforcement-rules.json`](../../../docs/architecture/enforcement-rules.json)（machine-readable manifest）を正本とする。この Skill では手書き複製しない — 過去に手書きリストが registry と drift した実例があり、`agent-registry-consistency` rule がその再発を検知する。rule ごとの実装は `.claude/harness/src/rules/<ruleId>.ts`、test は同名の `.test.ts` に一 rule 一 file で置く。
 
 ## 落ちたときの対処
 

@@ -122,21 +122,9 @@ The `INVARIANT_*` / `ONE_PASS_*` IDs below are **process invariants** — the pl
 
 ### Machine-checked enforcement rules
 
-Separately, `make harness` runs `.claude/harness/bin/architecture.ts` against staged files and reports deviations as errors. It executes a **rule registry** — one rule per file under `.claude/harness/src/rules/`, registered in `.claude/harness/src/rules/index.ts`:
+Separately, `make harness` runs `.claude/harness/bin/architecture.ts` against staged files and reports deviations as errors. It executes a **rule registry** — one rule per file under `.claude/harness/src/rules/`, registered in `.claude/harness/src/rules/index.ts`. Each `ruleId` maps 1:1 to its implementation file (`.claude/harness/src/rules/<ruleId>.ts`) and test (`.claude/harness/src/rules/<ruleId>.test.ts`).
 
-- `secrets-manager-forbidden` — `@aws-sdk/client-secrets-manager` is forbidden (use SSM Parameter Store SecureString — cost-zero principle)
-- `handler-must-not-call-fetch` — `lib/handlers/` must not call `fetch(` directly (keep it inside Service / Repository)
-- `adr-must-be-html` — ADRs live in `docs/architecture/adr-*.html`. Markdown ADRs are forbidden
-- `adr-self-contained` — ADRs must not retain chat context, rolling-update metadata, or notes about which AI agent owns what
-- `file-too-large` — Warns at 500 lines / errors at 800 lines per file under `infrastructure/lib/`, `apps/*/src/`, `scripts/`, and select `packages/*/src/` (SRP guardrail; existing violations are baselined)
-- `handler-no-direct-sdk-import` — `infrastructure/lib/**/handlers/**/index.ts` must not import `@aws-sdk/client-*` / `@aws-sdk/lib-*` directly; SDK calls belong in a service/repository layer
-- `handler-tenant-isolation` — a tenant-scoped handler that issues a DDB command (Query/Scan/Update/Delete/Put/TransactWrite/BatchWrite) must reference `tenantId` at least once in the same file
-- `iam-wildcard-needs-justify` — `resources: ["*"]` under `infrastructure/lib/**` needs an inline justification (issue/PR ref, `justify:`, or a recognized AWS-API-constraint keyword) within 5 lines
-- `lambda-env-size` — flags `AWS::Lambda::Function` environment-variable blocks approaching the 4KB hard limit (warn ≥2.5KB, error ≥3KB) by walking `cdk.out`
-- `no-aws-trademark-fictions` — blocks AWS GameDay-style fictional company/character names (e.g. "Unicorn.Rentals") from being reused in TenkaCloud content
-- `no-conflict-markers` — blocks committed `<<<<<<<` / `=======` / `>>>>>>>` Git conflict markers
-- `domain-no-infra-import` — `control-data/domain/**` must not import handlers, adapters (`../`), or the AWS SDK/CDK; adapters depend on the domain, never the reverse (#2527 dependency direction)
-- `runtime-composition-root-only` — `createDefaultControlDataRuntime()` may only be composed at Lambda entrypoints (`handlers/<name>/index.ts`) or the documented `handlers/shared/audit-log.ts` default; everywhere else takes `runtime: ControlDataRuntime` through deps (#2527 Slice 4)
+The full, current rule list — with the principle each rule enforces, its scope, and its severity — lives only in [`docs/architecture/enforcement-registry.md`](./docs/architecture/enforcement-registry.md) (human-readable index) and [`docs/architecture/enforcement-rules.json`](./docs/architecture/enforcement-rules.json) (machine-readable manifest). Those two files are the source of truth; this section intentionally does not re-enumerate rule IDs, because a hand-maintained copy here has drifted out of sync with the registry before. The harness rule `agent-registry-consistency` checks the manifest, its implementations/tests, and the registry doc against each other on every relevant change.
 
 ## Development flow
 

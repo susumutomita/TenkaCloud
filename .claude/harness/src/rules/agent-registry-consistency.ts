@@ -4,9 +4,15 @@ const PRINCIPLES_PATH = "docs/architecture/principles.md";
 const ENFORCEMENT_DOC_PATH = "docs/architecture/enforcement-registry.md";
 const ENFORCEMENT_MANIFEST_PATH = "docs/architecture/enforcement-rules.json";
 const RULES_PREFIX = ".claude/harness/src/rules/";
+// Prose surfaces that have re-grown a hand-maintained, drifting copy of the rule catalog
+// before (CLAUDE.md's "Machine-checked enforcement rules" section once listed 13 of 16
+// registered rules). These two are checked for partial rule-ID enumeration below.
+const CLAUDE_MD_PATH = "CLAUDE.md";
+const HARNESS_SKILL_PATH = ".claude/skills/harness/SKILL.md";
 const PRINCIPLE_HEADING = /^### `(?<id>PRINCIPLE_[A-Z0-9_]+)`$/gm;
 const RULE_CONTRACT =
   /:\s*Rule\s*=\s*\{[\s\S]*?\bid:\s*"(?<id>[a-z0-9-]+)"[\s\S]*?\bseverity:\s*"(?<severity>error|warning|info)"/;
+const BACKTICK_TOKEN = /`([^`]+)`/g;
 
 interface EnforcementEntry {
   readonly id: string;
@@ -104,8 +110,49 @@ function relevantChange(path: string): boolean {
     path === PRINCIPLES_PATH ||
     path === ENFORCEMENT_DOC_PATH ||
     path === ENFORCEMENT_MANIFEST_PATH ||
+    path === CLAUDE_MD_PATH ||
+    path === HARNESS_SKILL_PATH ||
     path.startsWith(RULES_PREFIX)
   );
+}
+
+/** Rule IDs from `ruleIds` that appear as a backtick-quoted token in `source`. */
+function collectMentionedRuleIds(source: string, ruleIds: ReadonlySet<string>): Set<string> {
+  const mentioned = new Set<string>();
+  for (const match of source.matchAll(BACKTICK_TOKEN)) {
+    const token = match[1];
+    if (token !== undefined && ruleIds.has(token)) mentioned.add(token);
+  }
+  return mentioned;
+}
+
+/**
+ * Prose lists drift: a hand-maintained rule catalog in CLAUDE.md / the harness skill has
+ * fallen out of sync with the manifest before (13-of-16 rules listed). A file that mentions
+ * 2+ registered rule IDs but not the full current set is re-growing that drifting list —
+ * either it should point at the registry instead, or it must stay exhaustive.
+ */
+function checkProseRuleListDrift(
+  ctx: RuleContext,
+  manifest: readonly EnforcementEntry[],
+): readonly Finding[] {
+  const manifestIdSet = new Set(manifest.map((entry) => entry.id));
+  const findings: Finding[] = [];
+  for (const path of [CLAUDE_MD_PATH, HARNESS_SKILL_PATH]) {
+    const source = readOptional(ctx, path);
+    if (source === undefined) continue;
+    const mentioned = collectMentionedRuleIds(source, manifestIdSet);
+    if (mentioned.size < 2 || mentioned.size === manifestIdSet.size) continue;
+    findings.push(
+      finding(
+        path,
+        [...mentioned].sort().join(", "),
+        `${path} が machine rule ID を部分的に列挙しています (${mentioned.size}/${manifestIdSet.size})。`,
+        "手書きの rule 一覧を Enforcement Registry (docs/architecture/enforcement-registry.md / enforcement-rules.json) へのポインタに置き換えてください。",
+      ),
+    );
+  }
+  return findings;
 }
 
 export const agentRegistryConsistency: Rule = {
@@ -286,6 +333,8 @@ export const agentRegistryConsistency: Rule = {
         );
       }
     }
+
+    findings.push(...checkProseRuleListDrift(ctx, manifest));
 
     return findings;
   },
