@@ -4,6 +4,7 @@ import {
   RECORDED_LITE_EDITS,
   recordedChapterStartS,
   recordedEditDurationS,
+  selectRecordedLiteEdits,
 } from "./render-recorded-lite";
 
 describe("recorded TenkaCloud Lite video edits", () => {
@@ -14,15 +15,16 @@ describe("recorded TenkaCloud Lite video edits", () => {
     ]);
     const [deploy, cleanup] = RECORDED_LITE_EDITS;
     expect(deploy.sourceRanges.at(-1)?.endS).toBeLessThanOrEqual(500);
-    expect(cleanup.sourceRanges[0]?.startS).toBeGreaterThanOrEqual(500);
+    const firstCleanupRecording = cleanup.sourceRanges.find((range) => !range.generated);
+    expect(firstCleanupRecording?.startS).toBeGreaterThanOrEqual(500);
   });
 
-  it("should keep the complete deploy story short and cleanup shorter", () => {
+  it("should keep both complete stories concise", () => {
     const [deploy, cleanup] = RECORDED_LITE_EDITS;
     expect(recordedEditDurationS(deploy)).toBeGreaterThanOrEqual(55);
     expect(recordedEditDurationS(deploy)).toBeLessThanOrEqual(82);
-    expect(recordedEditDurationS(cleanup)).toBeGreaterThanOrEqual(25);
-    expect(recordedEditDurationS(cleanup)).toBeLessThanOrEqual(60);
+    expect(recordedEditDurationS(cleanup)).toBeGreaterThanOrEqual(40);
+    expect(recordedEditDurationS(cleanup)).toBeLessThanOrEqual(50);
   });
 
   it("should tell the deploy story in causal order through play and scoring", () => {
@@ -57,9 +59,18 @@ describe("recorded TenkaCloud Lite video edits", () => {
     );
 
     const cleanup = RECORDED_LITE_EDITS[1];
-    expect(recordedChapterStartS(cleanup, "cleanup-action")).toBe(0);
+    expect(recordedChapterStartS(cleanup, "cleanup-intro")).toBe(0);
+    expect(recordedChapterStartS(cleanup, "cleanup-order")).toBeGreaterThan(
+      recordedChapterStartS(cleanup, "cleanup-intro"),
+    );
+    expect(recordedChapterStartS(cleanup, "cleanup-action")).toBeGreaterThan(
+      recordedChapterStartS(cleanup, "cleanup-order"),
+    );
     expect(recordedChapterStartS(cleanup, "cleanup-launcher")).toBeGreaterThan(
       recordedChapterStartS(cleanup, "cleanup-wait"),
+    );
+    expect(recordedChapterStartS(cleanup, "cleanup-complete")).toBeGreaterThan(
+      recordedChapterStartS(cleanup, "cleanup-launcher"),
     );
   });
 
@@ -105,6 +116,32 @@ describe("recorded TenkaCloud Lite video edits", () => {
       expect(RECORDED_LITE_EDITS[0].sourceRanges[index]?.generated).toBe("explainer");
       expect(RECORDED_LITE_EDITS[0].sourceRanges[index + 1]?.generated).toBeUndefined();
     }
+  });
+
+  it("should explain the cleanup flow and deletion order around the real AWS operations", () => {
+    const cleanup = RECORDED_LITE_EDITS[1];
+    expect([...new Set(cleanup.sourceRanges.map((range) => range.chapter))]).toEqual([
+      "cleanup-intro",
+      "cleanup-order",
+      "cleanup-action",
+      "cleanup-wait",
+      "cleanup-launcher",
+      "cleanup-complete",
+    ]);
+    expect(cleanup.sourceRanges[0]).toMatchObject({
+      chapter: "cleanup-intro",
+      generated: "intro",
+    });
+    expect(cleanup.sourceRanges[1]).toMatchObject({
+      chapter: "cleanup-order",
+      generated: "explainer",
+    });
+    expect(cleanup.sourceRanges[2]?.chapter).toBe("cleanup-action");
+    expect(cleanup.sourceRanges[2]?.generated).toBeUndefined();
+    expect(cleanup.sourceRanges.at(-1)).toMatchObject({
+      chapter: "cleanup-complete",
+      generated: "explainer",
+    });
   });
 
   it("should enlarge safe operation targets instead of drawing black masks", () => {
@@ -153,7 +190,8 @@ describe("recorded TenkaCloud Lite video edits", () => {
     ]) {
       expect(
         cleanup?.sourceRanges.some(
-          (range) => range.startS <= unsafeTime && unsafeTime < range.endS,
+          (range) =>
+            range.generated === undefined && range.startS <= unsafeTime && unsafeTime < range.endS,
         ),
         `source ${unsafeTime}s`,
       ).toBe(false);
@@ -164,10 +202,19 @@ describe("recorded TenkaCloud Lite video edits", () => {
       );
       expect(range?.focus, `source ${protectedTime}s`).toBeDefined();
     }
-    expect(cleanup?.sourceRanges.at(-1)?.endS).toBeLessThan(660);
+    const lastCleanupRecording = cleanup?.sourceRanges.findLast((range) => !range.generated);
+    expect(lastCleanupRecording?.endS).toBeLessThan(660);
   });
 
   it("should reject an empty edit rather than emitting a blank video", () => {
     expect(() => buildRecordedFilterGraph([])).toThrow("At least one source range is required");
+  });
+
+  it("should allow rendering only the requested external upload master", () => {
+    expect(
+      selectRecordedLiteEdits("cleanup-tenkacloud-lite").map((edit) => edit.problemId),
+    ).toEqual(["cleanup-tenkacloud-lite"]);
+    expect(selectRecordedLiteEdits()).toEqual(RECORDED_LITE_EDITS);
+    expect(() => selectRecordedLiteEdits("unknown")).toThrow("Unknown recorded Lite problem");
   });
 });

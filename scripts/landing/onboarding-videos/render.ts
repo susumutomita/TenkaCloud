@@ -1,5 +1,5 @@
 /**
- * #2707 P1 / #2711: オンボーディングドリル 4 本の 1 分 operation 動画を生成する CLI。
+ * #2707 P1 / #2711: LP 用 30 秒動画を生成する CLI。
  *
  * 使い方:
  *   bun run scripts/landing/onboarding-videos/render.ts
@@ -13,29 +13,14 @@
  * 仕組み: script-data.ts の台本からスライド HTML を組み立て → chromium headless で
  * 2 倍解像度 (2560x1440) の PNG に撮影 → ffmpeg の zoompan (ゆっくり寄る) + xfade
  * (crossfade) で 1280x720 / 30fps / H.264 の mp4 に組む。 音声なし (字幕焼き込み)。
- * 出力先: landing/videos/onboarding/<problemId>.mp4
+ * オンボーディング動画は YouTube 配信のため、この CLI はリポジトリへ出力しない。
  */
 
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
-import {
-  LP_VIDEO,
-  ONBOARDING_VIDEOS,
-  type OnboardingSlide,
-  type OnboardingVideo,
-} from "./script-data";
-
-/** 実画面収録から生成するため、この slide renderer では上書きしない動画。 */
-export const RECORDED_ONBOARDING_VIDEO_IDS: ReadonlySet<string> = new Set([
-  "deploy-tenkacloud-lite",
-  "cleanup-tenkacloud-lite",
-]);
-
-export function shouldRenderGeneratedOnboardingVideo(problemId: string): boolean {
-  return !RECORDED_ONBOARDING_VIDEO_IDS.has(problemId);
-}
+import { LP_VIDEO, type OnboardingSlide, type OnboardingVideo } from "./script-data";
 
 export const FADE_S = 0.5;
 export const FPS = 30;
@@ -336,12 +321,6 @@ function main() {
   const chromium = resolveBin("CHROMIUM_BIN", ["chromium", "/opt/pw-browsers/chromium"]);
   const ffmpeg = resolveBin("FFMPEG_BIN", ["ffmpeg"]);
   const root = join(import.meta.dir, "../../..");
-  const onboardingDir = join(root, "landing/videos/onboarding");
-  mkdirSync(onboardingDir, { recursive: true });
-  for (const video of ONBOARDING_VIDEOS) {
-    if (!shouldRenderGeneratedOnboardingVideo(video.problemId)) continue;
-    renderVideo(video, chromium, ffmpeg, join(onboardingDir, `${video.problemId}.mp4`));
-  }
 
   // #2696 P1: 30 秒 LP 動画 (16:9 + 9:16) と README 用 preview GIF / poster。
   const lpDir = join(root, "landing/videos/lp");

@@ -89,6 +89,9 @@ cdk.out.test/
 .nuxt
 dist
 
+# Onboarding videos are published on YouTube; never commit rendered media.
+landing/videos/onboarding/
+
 # Gatsby files
 .cache/
 # Comment in the public line in if your project uses Gatsby and not Next.js

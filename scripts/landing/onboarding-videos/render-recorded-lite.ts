@@ -2,7 +2,8 @@
  * TenkaCloud Lite の実画面収録を、デプロイ編とクリーンアップ編へ切り出す CLI。
  *
  * Usage:
- *   bun run scripts/landing/onboarding-videos/render-recorded-lite.ts /path/to/source.mp4
+ *   bun run scripts/landing/onboarding-videos/render-recorded-lite.ts \
+ *     /path/to/source.mp4 /path/to/upload-work [deploy-tenkacloud-lite|cleanup-tenkacloud-lite]
  *
  * 個人用ブラウザサイドバー、URL バー、AWS role / email が出る上部 chrome は全編で
  * crop する。認証入力、AWS account ID、問題の回答、teamLoginKey が映る区間は
@@ -28,9 +29,12 @@ export interface RecordedRange {
     | "participant"
     | "play"
     | "score"
+    | "cleanup-intro"
+    | "cleanup-order"
     | "cleanup-action"
     | "cleanup-wait"
-    | "cleanup-launcher";
+    | "cleanup-launcher"
+    | "cleanup-complete";
   /** A generated neutral card; it does not consume or expose source-recording frames. */
   readonly generated?: "intro" | "explainer";
   readonly startS: number;
@@ -172,10 +176,22 @@ export const RECORDED_LITE_EDITS: readonly RecordedLiteEdit[] = [
     problemId: "cleanup-tenkacloud-lite",
     sourceRanges: [
       {
+        chapter: "cleanup-intro",
+        generated: "intro",
+        startS: 0,
+        endS: 7,
+      },
+      {
+        chapter: "cleanup-order",
+        generated: "explainer",
+        startS: 0,
+        endS: 8,
+      },
+      {
         chapter: "cleanup-action",
         startS: 527,
         endS: 529.8,
-        speed: 0.65,
+        speed: 0.5,
         // ACTION=destroy と入力する領域へ寄り、直下のメールと repository URL を外す。
         focus: { x: 100, y: 30, width: 540, height: 304 },
       },
@@ -200,9 +216,22 @@ export const RECORDED_LITE_EDITS: readonly RecordedLiteEdit[] = [
         speed: 0.65,
         focus: { x: 90, y: 260, width: 650, height: 250 },
       },
+      {
+        chapter: "cleanup-complete",
+        generated: "explainer",
+        startS: 0,
+        endS: 7,
+      },
     ],
   },
 ];
+
+export function selectRecordedLiteEdits(problemId?: string): readonly RecordedLiteEdit[] {
+  if (!problemId) return RECORDED_LITE_EDITS;
+  const edit = RECORDED_LITE_EDITS.find((candidate) => candidate.problemId === problemId);
+  if (!edit) throw new Error(`Unknown recorded Lite problem: ${problemId}`);
+  return [edit];
+}
 
 const TRANSITION_S = 0.3;
 
@@ -316,12 +345,17 @@ function runFfmpeg(sourcePath: string, edit: RecordedLiteEdit, outputPath: strin
 
 function main(): void {
   const sourcePath = process.argv[2];
-  if (!sourcePath) throw new Error("Pass the recorded source mp4 path as the first argument");
+  const outputDir = process.argv[3];
+  const problemId = process.argv[4];
+  if (!sourcePath || !outputDir) {
+    throw new Error(
+      "Usage: render-recorded-lite.ts <source.mp4> <external-output-directory> [problem-id]",
+    );
+  }
   if (!existsSync(sourcePath)) throw new Error(`Recorded source not found: ${sourcePath}`);
 
-  const outputDir = join(import.meta.dir, "../../../landing/videos/onboarding");
   mkdirSync(outputDir, { recursive: true });
-  for (const edit of RECORDED_LITE_EDITS) {
+  for (const edit of selectRecordedLiteEdits(problemId)) {
     const outputPath = join(outputDir, `${edit.problemId}.mp4`);
     runFfmpeg(sourcePath, edit, outputPath);
     console.log(`wrote ${outputPath} (${recordedEditDurationS(edit).toFixed(1)}s)`);

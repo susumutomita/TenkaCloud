@@ -16,7 +16,6 @@ export function createLiteCleanupDrillFixture({
   return {
     jobId: "01HZX0M0CLEANUPTENKA0001",
     problemId: LITE_CLEANUP_DRILL_PROBLEM_ID,
-    videoUrl: "/videos/onboarding/cleanup-tenkacloud-lite.mp4",
     name: "TenkaCloud Lite を片付ける",
     description: [
       "デプロイした TenkaCloud Lite には継続費用が発生する。遊び終わったら、**Lite 本体と launcher の両方**を削除して課金を止める。",
@@ -43,7 +42,6 @@ export function createLiteCleanupDrillFixture({
       "CodeBuild を ACTION=destroy で成功させ、チェックポイントを控えてから launcher スタックを削除し、最後にコードを提出する。",
     i18n: {
       en: {
-        videoUrl: "/videos/onboarding/cleanup-tenkacloud-lite.en.mp4",
         name: "Clean up TenkaCloud Lite",
         description: [
           "A deployed TenkaCloud Lite keeps incurring cost. When you are done, remove **both Lite itself and the launcher** to stop the charges.",

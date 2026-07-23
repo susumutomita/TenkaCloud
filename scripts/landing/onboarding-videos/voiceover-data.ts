@@ -18,7 +18,11 @@ export interface VoiceoverCue {
   readonly ja: string;
   readonly en: string;
   /** Generated cards replace the recording before returning to the matching real operation. */
-  readonly layout?: "intro" | "start" | "explainer";
+  readonly layout?: "intro" | "start" | "explainer" | "complete";
+  /** Controls cleanup-specific card labels without changing the official AWS terminology. */
+  readonly theme?: "deployment" | "cleanup";
+  /** Moves a caption away from the operation target when the target is near the bottom edge. */
+  readonly captionPlacement?: "bottom" | "top-right";
   /** Short code-grounded facts shown on the intro card. */
   readonly details?: Record<VoiceoverLocale, readonly string[]>;
   /** Supporting prerequisite shown with the operation, but not read as the main narration. */
@@ -227,33 +231,96 @@ export const CLEANUP_TENKACLOUD_LITE_ZUNDAMON_VOICEOVER: VoiceoverScript = {
     ja: "VOICEVOX:ずんだもん（ノーマル）",
     en: "macOS Samantha（自然な米国英語）",
   },
-  music: "なし。AWS の画面操作とナレーションを優先する。",
+  music: "Cat_life.mp3 / GT-K。ナレーションを妨げない音量でミックスする。",
   usage: [
     "LP の cleanup-tenkacloud-lite 問題に載せる実録動画向け。",
-    "ACTION=destroy の開始から launcher スタック削除までの素材だけで編集する。",
-    "AWS アカウント ID、メール、URL は拡大ショットの画角外にする。",
+    "全体フローと削除順の理由を説明するスライドの直後に、対応する実機操作を置く。",
+    "ACTION=destroy から launcher スタック削除までを扱い、チュートリアルの回答は見せない。",
+    "AWS アカウント ID、メール、URL は黒マスクではなく拡大ショットの画角外にする。",
   ],
   cues: [
     {
-      section: "1. Build with ACTION=destroy",
+      section: "1. Cleanup overview",
+      heading: {
+        ja: "TenkaCloud Liteを安全に片付ける",
+        en: "Clean up TenkaCloud Lite safely",
+      },
+      targetS: 7,
+      ja: "遊び終わったら、Lite本体と自動デプロイ環境を順番に削除して、AWSの継続費用を止めるのだ。",
+      en: "When the event is over, remove the Lite platform and its deployment setup in this order to stop ongoing A W S costs.",
+      layout: "intro",
+      theme: "cleanup",
+      details: {
+        ja: ["1  CodeBuildでLite本体を削除", "2  削除成功を確認", "3  launcherを最後に削除"],
+        en: [
+          "1  Remove Lite with CodeBuild",
+          "2  Confirm successful deletion",
+          "3  Delete the launcher last",
+        ],
+      },
+      note: {
+        ja: "必要なイベント結果を保存してから削除する",
+        en: "Save any event results you need before cleanup",
+      },
+    },
+    {
+      section: "2. Why the launcher is deleted last",
+      heading: {
+        ja: "なぜlauncherを最後に消すのか",
+        en: "Why delete the launcher last?",
+      },
+      targetS: 8,
+      ja: "launcherのCodeBuildがLiteを削除する復旧経路なのだ。先にACTION=destroyを実行し、launcherは最後に消すのだ。",
+      en: "The launcher CodeBuild project is the path that removes Lite. Run ACTION equals destroy first, and delete the launcher last.",
+      layout: "explainer",
+      theme: "cleanup",
+      details: {
+        ja: ["launcher CodeBuild", "ACTION=destroy", "Lite stacks", "launcher stack"],
+        en: ["Launcher CodeBuild", "ACTION=destroy", "Lite stacks", "Launcher stack"],
+      },
+      note: {
+        ja: "launcherを先に消すと、同じパイプラインからLite本体を削除できない",
+        en: "Deleting the launcher first removes the pipeline used to clean up Lite",
+      },
+    },
+    {
+      section: "3. Build with ACTION=destroy",
       heading: { ja: "削除ビルドを開始", en: "Start the cleanup build" },
       targetS: 4,
-      ja: "ACTION を destroy にするのだ。",
-      en: "Set ACTION to destroy.",
+      ja: "CodeBuildでACTION=destroyにして、ビルドを開始するのだ。",
+      en: "In CodeBuild, set ACTION to destroy and start the build.",
+      captionPlacement: "top-right",
     },
     {
-      section: "2. Teardown progress",
+      section: "4. Teardown progress",
       heading: { ja: "Liteの削除を確認", en: "Confirm Lite teardown" },
-      targetS: 6,
-      ja: "二つの Lite スタックが消えるまで待つのだ。",
-      en: "Wait until both Lite stacks are gone.",
+      targetS: 8,
+      ja: "ビルド成功と、tenkacloud-lite、tenkacloud-lite-problem-deployの二つのスタック削除を確認するのだ。",
+      en: "Confirm that the build succeeded and both Lite stacks, tenkacloud-lite and tenkacloud-lite-problem-deploy, were deleted.",
     },
     {
-      section: "3. Delete launcher",
+      section: "5. Delete launcher",
       heading: { ja: "Launcherを削除", en: "Delete the launcher" },
       targetS: 9,
-      ja: "最後に CloudFormation で launcher を削除するのだ。CodeBuild と IAM Role も消えて、片付け完了なのだ。",
-      en: "Finally, delete the launcher stack. Its CodeBuild project and IAM role are removed, completing cleanup.",
+      ja: "最後にCloudFormationでlauncher stackを削除するのだ。これでCodeBuild projectとIAM Roleも削除されるのだ。",
+      en: "Finally, delete the launcher stack in CloudFormation. This also removes its CodeBuild project and IAM role.",
+    },
+    {
+      section: "6. Confirm cleanup complete",
+      heading: { ja: "削除完了を確認", en: "Confirm cleanup is complete" },
+      targetS: 6,
+      ja: "Lite stacksとlauncher stackがないことを確認し、AWSの請求画面も確認して完了なのだ。",
+      en: "Confirm that the Lite and launcher stacks are gone, then check A W S billing to finish.",
+      layout: "complete",
+      theme: "cleanup",
+      details: {
+        ja: ["Lite stacks: deleted", "launcher stack: deleted", "AWS billing: check console"],
+        en: ["Lite stacks: deleted", "Launcher stack: deleted", "AWS billing: check console"],
+      },
+      note: {
+        ja: "共有アカウントの既存リソースは削除対象に含めない",
+        en: "Do not remove unrelated resources from a shared AWS account",
+      },
     },
   ],
 };

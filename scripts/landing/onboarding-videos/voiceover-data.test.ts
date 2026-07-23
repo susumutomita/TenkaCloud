@@ -92,8 +92,11 @@ describe("cleanup-tenkacloud-lite Zundamon voice-over", () => {
 
   it("should provide Japanese and English lines for cleanup-only footage", () => {
     expect(script.id).toBe("cleanup-tenkacloud-lite-zundamon");
+    expect(script.cues).toHaveLength(6);
     expect(script.voice.en).toContain("Samantha");
     expect(script.voice.en).not.toContain("VOICEVOX");
+    expect(script.music).toContain("Cat_life.mp3");
+    expect(script.music).toContain("GT-K");
     for (const cue of script.cues) {
       expect(cue.heading.ja, cue.section).toMatch(/[ぁ-んァ-ヶ一-龠]/);
       expect(cue.heading.en, cue.section).toMatch(/[A-Za-z]/);
@@ -115,8 +118,32 @@ describe("cleanup-tenkacloud-lite Zundamon voice-over", () => {
     expect(joined).not.toMatch(/TENKA\{[A-Z0-9-]+\}/);
   });
 
+  it("should teach the cleanup flow and explain why the launcher is deleted last", () => {
+    const [intro, order, action, wait, launcher, complete] = script.cues;
+
+    expect(intro?.layout).toBe("intro");
+    expect(intro?.details?.ja).toEqual([
+      "1  CodeBuildでLite本体を削除",
+      "2  削除成功を確認",
+      "3  launcherを最後に削除",
+    ]);
+    expect(order?.layout).toBe("explainer");
+    expect(order?.heading.ja).toContain("launcherを最後");
+    expect(order?.ja).toContain("復旧経路");
+    expect(action?.ja).toContain("ACTION=destroy");
+    expect(action?.captionPlacement).toBe("top-right");
+    expect(wait?.ja).toContain("tenkacloud-lite");
+    expect(wait?.ja).toContain("tenkacloud-lite-problem-deploy");
+    expect(launcher?.ja).toContain("CloudFormation");
+    expect(launcher?.ja).toContain("CodeBuild");
+    expect(launcher?.ja).toContain("IAM Role");
+    expect(complete?.layout).toBe("complete");
+    expect(complete?.heading.ja).toContain("削除完了");
+  });
+
   it("should fit a short cleanup narration budget", () => {
     const totalTargetS = script.cues.reduce((sum, cue) => sum + cue.targetS, 0);
-    expect(totalTargetS).toBeLessThanOrEqual(60);
+    expect(totalTargetS).toBeGreaterThanOrEqual(35);
+    expect(totalTargetS).toBeLessThanOrEqual(50);
   });
 });
