@@ -9,20 +9,20 @@
  * only the host binding moves.
  *
  * The transform is a targeted text rewrite (not a YAML round-trip): it only
- * rewrites the 3-part published-port form `127.0.0.1:<host>:<container>`, which
- * is the exact shape every catalog compose uses. This preserves the rest of the
+ * rewrites the 3-part published-port form
+ * `<127.0.0.1|localhost>:<host>:<container>`. This preserves the rest of the
  * file byte-for-byte (comments, build contexts, volumes, healthchecks) — in
  * particular healthcheck URLs like `http://127.0.0.1:8080/healthz` are the
- * 2-part `ip:port` form and are deliberately NOT matched.
+ * 2-part `host:port` form and are deliberately NOT matched.
  */
 
-/** Host-port block width per problem. A single problem never publishes this many ports. */
-export const PORT_STRIDE = 100;
+/** Host-port block width per problem; larger than the catalog base-port spread. */
+export const PORT_STRIDE = 1000;
 
-/** `127.0.0.1:<hostPort>:<containerPort>` — the only published-port form we rewrite. */
-const LOOPBACK_PUBLISH_RE = /127\.0\.0\.1:(\d+):(\d+)/g;
-/** `127.0.0.1:<port>` inside a loopback URL (host side only). */
-const LOOPBACK_URL_PORT_RE = /127\.0\.0\.1:(\d+)/g;
+/** `<127.0.0.1|localhost>:<hostPort>:<containerPort>` published-port form. */
+const LOOPBACK_PUBLISH_RE = /(127\.0\.0\.1|localhost):(\d+):(\d+)/g;
+/** `<127.0.0.1|localhost>:<port>` inside a loopback URL (host side only). */
+const LOOPBACK_URL_PORT_RE = /(127\.0\.0\.1|localhost):(\d+)/g;
 
 export interface ComposePortRemap {
   /** The rewritten compose text (identical to the input when offset is 0). */
@@ -44,7 +44,7 @@ export function remapComposeHostPorts(composeText: string, offset: number): Comp
   const portMap = new Map<number, number>();
   const text = composeText.replace(
     LOOPBACK_PUBLISH_RE,
-    (_match, host: string, container: string) => {
+    (_match, loopbackHost: string, host: string, container: string) => {
       const hostPort = Number(host);
       const newHost = hostPort + offset;
       if (newHost > 65_535) {
@@ -53,7 +53,7 @@ export function remapComposeHostPorts(composeText: string, offset: number): Comp
         );
       }
       portMap.set(hostPort, newHost);
-      return `127.0.0.1:${newHost}:${container}`;
+      return `${loopbackHost}:${newHost}:${container}`;
     },
   );
   return { text, portMap };
@@ -69,9 +69,9 @@ export function remapComposeHostPorts(composeText: string, offset: number): Comp
  * each occurrence, so any number of URLs in one string all move together.
  */
 export function offsetLoopbackUrl(text: string, portMap: ReadonlyMap<number, number>): string {
-  return text.replace(LOOPBACK_URL_PORT_RE, (match, port: string) => {
+  return text.replace(LOOPBACK_URL_PORT_RE, (match, loopbackHost: string, port: string) => {
     const mapped = portMap.get(Number(port));
-    return mapped === undefined ? match : `127.0.0.1:${mapped}`;
+    return mapped === undefined ? match : `${loopbackHost}:${mapped}`;
   });
 }
 
@@ -107,8 +107,8 @@ export function mapStrings<T>(value: T, mapString: (text: string) => string): T 
  *
  * The prose must move with the endpoints: a catalog problem hard-codes the base
  * port (`http://127.0.0.1:18080/…`) in its instructions and hints, so a problem
- * running on a later block (e.g. the third problem, offset 200 → 18280) would
- * otherwise tell the player to curl 18080 while its surface is on 18280 (#2392).
+ * running on a later block (e.g. the third problem, offset 2000 → 20080) would
+ * otherwise tell the player to curl 18080 while its surface is on 20080 (#2392).
  * A single deep string walk covers every text field at once, so a newly added
  * prose field cannot silently miss the remap. Only ports present in `portMap`
  * change; every other string (paths, ids, non-loopback text) is byte-for-byte

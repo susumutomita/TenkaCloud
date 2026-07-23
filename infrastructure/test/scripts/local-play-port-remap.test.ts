@@ -25,15 +25,37 @@ const COMPOSE = [
 ].join("\n");
 
 describe("port-remap: remapComposeHostPorts (#2392)", () => {
+  it("should keep every real catalog host port unique across all running slots", () => {
+    const catalogBaseHostPorts = [18080, 18081, 18100, 18101, 18200, 18201];
+    const maxRunning = 3;
+    const offsets = Array.from({ length: maxRunning }, (_, slot) => slot * PORT_STRIDE);
+    const assignedHostPorts = offsets.flatMap((offset) =>
+      catalogBaseHostPorts.map((basePort) => basePort + offset),
+    );
+
+    expect(new Set(assignedHostPorts).size).toBe(assignedHostPorts.length);
+  });
+
+  it("should remap localhost compose bindings and URLs", () => {
+    const localhostCompose = 'ports:\n  - "localhost:18080:8080"';
+    const { text, portMap } = remapComposeHostPorts(localhostCompose, PORT_STRIDE);
+
+    expect(text).toContain(`"localhost:${18080 + PORT_STRIDE}:8080"`);
+    expect(portMap.get(18080)).toBe(18080 + PORT_STRIDE);
+    expect(offsetLoopbackUrl("http://localhost:18080/healthz", portMap)).toBe(
+      `http://localhost:${18080 + PORT_STRIDE}/healthz`,
+    );
+  });
+
   it("should offset only the published host port, never the container or healthcheck port", () => {
     const { text, portMap } = remapComposeHostPorts(COMPOSE, PORT_STRIDE);
-    expect(text).toContain('"127.0.0.1:18180:8080"'); // host moved, container 8080 kept
-    expect(text).toContain('"127.0.0.1:18181:8081"');
+    expect(text).toContain('"127.0.0.1:19080:8080"'); // host moved, container 8080 kept
+    expect(text).toContain('"127.0.0.1:19081:8081"');
     expect(text).not.toContain("127.0.0.1:18080:"); // old host bindings gone
     // The 2-part healthcheck URL (ip:port) must be untouched.
     expect(text).toContain("http://127.0.0.1:8080/healthz");
-    expect(portMap.get(18080)).toBe(18180);
-    expect(portMap.get(18081)).toBe(18181);
+    expect(portMap.get(18080)).toBe(19080);
+    expect(portMap.get(18081)).toBe(19081);
   });
 
   it("should be the identity at offset 0 but still record the port map", () => {

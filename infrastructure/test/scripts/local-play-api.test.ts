@@ -9,6 +9,7 @@ import {
 } from "../../../scripts/local-play/api-state";
 import { ContainerStartOwnershipError } from "../../../scripts/local-play/container-runner";
 import type { ContainerProblem } from "../../../scripts/local-play/manifest";
+import { PORT_STRIDE } from "../../../scripts/local-play/port-remap";
 
 const PROBLEM: ContainerProblem = {
   problemId: "sqli-demo",
@@ -656,9 +657,11 @@ describe("local-play API: multi-problem session (#2392)", () => {
 
   it("should route a submission to the addressed problem and total across the session", async () => {
     // The container only 'verifies' for the second problem's /verify url. That
-    // problem started second, so its URLs sit on the offset-100 port block
-    // (base 18181 → 18281) — submissions must follow the running container.
-    const verify = vi.fn<VerifyFn>(async (url) => ({ correct: url.includes("18281") }));
+    // problem started second, so its URLs sit on the offset-1000 port block
+    // (base 18181 → 19181) — submissions must follow the running container.
+    const verify = vi.fn<VerifyFn>(async (url) => ({
+      correct: url.includes(String(18181 + PORT_STRIDE)),
+    }));
     const state = await twoProblems(verify);
     const res = await handleLocalPlayRequest(
       post("/portal/me/submit-flag", { problemId: "api-idor-demo", flag: "TC{x}" }),
@@ -666,7 +669,7 @@ describe("local-play API: multi-problem session (#2392)", () => {
       NOW,
     );
     expect(res.body).toMatchObject({ kind: "ok", scoreDelta: 100, totalScore: 100 });
-    expect(verify).toHaveBeenCalledWith("http://127.0.0.1:18281/verify", "TC{x}", {
+    expect(verify).toHaveBeenCalledWith(`http://127.0.0.1:${18181 + PORT_STRIDE}/verify`, "TC{x}", {
       teamId: "local",
       problemId: "api-idor-demo",
     });
@@ -698,7 +701,7 @@ describe("local-play API: multi-problem session (#2392)", () => {
   it("should remap the port in instructions to match the running container's block", async () => {
     // The catalog problem hard-codes its base surface port in its prose (here
     // 18180, matching `second`'s declared endpoints). Starting it second moves
-    // the surface to the offset-100 block (18280), and the instructions must
+    // the surface to the offset-1000 block (19180), and the instructions must
     // follow — the portal must not tell the player the stale port (#2392).
     const withPortInInstructions: ContainerProblem = {
       ...second,
@@ -722,12 +725,16 @@ describe("local-play API: multi-problem session (#2392)", () => {
         }>;
       }
     ).problems[1];
-    expect(problem.instructions).toBe("Run `curl http://127.0.0.1:18280/internal/ops/status`.");
+    expect(problem.instructions).toBe(
+      `Run \`curl http://127.0.0.1:${18180 + PORT_STRIDE}/internal/ops/status\`.`,
+    );
     expect(problem.i18n?.en?.instructions).toBe(
-      "Run `curl http://127.0.0.1:18280/internal/ops/status`.",
+      `Run \`curl http://127.0.0.1:${18180 + PORT_STRIDE}/internal/ops/status\`.`,
     );
     // The instructions now agree with the surface URL the portal shows.
-    expect(problem.stackOutputs).toEqual({ Web: "http://127.0.0.1:18280/" });
+    expect(problem.stackOutputs).toEqual({
+      Web: `http://127.0.0.1:${18180 + PORT_STRIDE}/`,
+    });
   });
 
   it("should rewrite display URLs for Codespaces without changing the internal verifier URL", async () => {
@@ -761,9 +768,11 @@ describe("local-play API: multi-problem session (#2392)", () => {
       }
     ).problems[1];
     expect(problem.problemId).toBe("api-idor-demo");
-    expect(problem.instructions).toBe("Open https://tenkacloud-demo-18280.app.github.dev/admin.");
+    expect(problem.instructions).toBe(
+      `Open https://tenkacloud-demo-${18180 + PORT_STRIDE}.app.github.dev/admin.`,
+    );
     expect(problem.stackOutputs).toEqual({
-      Web: "https://tenkacloud-demo-18280.app.github.dev/",
+      Web: `https://tenkacloud-demo-${18180 + PORT_STRIDE}.app.github.dev/`,
     });
 
     await handleLocalPlayRequest(
@@ -771,7 +780,7 @@ describe("local-play API: multi-problem session (#2392)", () => {
       state,
       NOW,
     );
-    expect(verify).toHaveBeenCalledWith("http://127.0.0.1:18281/verify", "wrong", {
+    expect(verify).toHaveBeenCalledWith(`http://127.0.0.1:${18181 + PORT_STRIDE}/verify`, "wrong", {
       teamId: "local",
       problemId: "api-idor-demo",
     });
@@ -882,8 +891,10 @@ describe("local-play API: on-demand container lifecycle (#2392 Phase 2)", () => 
     const problems = (view.body as { problems: Array<{ stackOutputs: Record<string, string> }> })
       .problems;
     expect(problems[0].stackOutputs).toEqual({ Web: "http://127.0.0.1:18080/" });
-    // offset 100: the fake docker applies the same URL remap as ContainerRunner
-    expect(problems[1].stackOutputs).toEqual({ Web: "http://127.0.0.1:18280/" });
+    // offset 1000: the fake docker applies the same URL remap as ContainerRunner
+    expect(problems[1].stackOutputs).toEqual({
+      Web: `http://127.0.0.1:${18180 + PORT_STRIDE}/`,
+    });
   });
 
   it("should 404 start/stop for an unknown or malformed problem id", async () => {
