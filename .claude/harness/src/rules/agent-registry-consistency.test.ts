@@ -6,6 +6,14 @@ const ENFORCEMENT_DOC_PATH = "docs/architecture/enforcement-registry.md";
 const MANIFEST_PATH = "docs/architecture/enforcement-rules.json";
 const IMPLEMENTATION_PATH = ".claude/harness/src/rules/sample-rule.ts";
 const TEST_PATH = ".claude/harness/src/rules/sample-rule.test.ts";
+const CLAUDE_MD_PATH = "CLAUDE.md";
+const HARNESS_SKILL_PATH = ".claude/skills/harness/SKILL.md";
+const RULE_A_PATH = ".claude/harness/src/rules/rule-a.ts";
+const RULE_A_TEST_PATH = ".claude/harness/src/rules/rule-a.test.ts";
+const RULE_B_PATH = ".claude/harness/src/rules/rule-b.ts";
+const RULE_B_TEST_PATH = ".claude/harness/src/rules/rule-b.test.ts";
+const RULE_C_PATH = ".claude/harness/src/rules/rule-c.ts";
+const RULE_C_TEST_PATH = ".claude/harness/src/rules/rule-c.test.ts";
 
 interface FixtureOptions {
   readonly principles?: string;
@@ -57,6 +65,42 @@ function findingMatches(options: FixtureOptions, match: string): boolean {
   return agentRegistryConsistency
     .check(fixture(options))
     .some((finding) => finding.match === match);
+}
+
+function ruleImplementation(id: string): string {
+  return `import type { Rule } from "../types.ts";\nexport const rule: Rule = { id: "${id}", severity: "error", check: () => [] };\n`;
+}
+
+/** A 4-rule manifest (sample-rule + rule-a/b/c) used to reproduce a *partial* prose
+ * enumeration — the exact shape of the "13 of 16 rules" drift this check exists to catch. */
+function fourRuleManifest() {
+  return [
+    entry(),
+    entry({ id: "rule-a", implementation: RULE_A_PATH, test: RULE_A_TEST_PATH }),
+    entry({ id: "rule-b", implementation: RULE_B_PATH, test: RULE_B_TEST_PATH }),
+    entry({ id: "rule-c", implementation: RULE_C_PATH, test: RULE_C_TEST_PATH }),
+  ];
+}
+
+function fourRuleEnforcementDoc(): string {
+  return (
+    "# Enforcement\n\n| Rule ID | Principle | Scope | Severity |\n| --- | --- | --- | --- |\n" +
+    "| `sample-rule` | `PRINCIPLE_SAMPLE` | sample | error |\n" +
+    "| `rule-a` | `PRINCIPLE_SAMPLE` | sample | error |\n" +
+    "| `rule-b` | `PRINCIPLE_SAMPLE` | sample | error |\n" +
+    "| `rule-c` | `PRINCIPLE_SAMPLE` | sample | error |\n"
+  );
+}
+
+function fourRuleImplementationFiles(): Record<string, string> {
+  return {
+    [RULE_A_PATH]: ruleImplementation("rule-a"),
+    [RULE_A_TEST_PATH]: "// rule-a contract test\n",
+    [RULE_B_PATH]: ruleImplementation("rule-b"),
+    [RULE_B_TEST_PATH]: "// rule-b contract test\n",
+    [RULE_C_PATH]: ruleImplementation("rule-c"),
+    [RULE_C_TEST_PATH]: "// rule-c contract test\n",
+  };
 }
 
 describe("agentRegistryConsistency", () => {
@@ -169,5 +213,71 @@ describe("agentRegistryConsistency", () => {
         files: ["README.md"],
       }),
     ).toEqual([]);
+  });
+
+  it("should pass when CLAUDE.md points at the registry without enumerating rule IDs", () => {
+    const findings = agentRegistryConsistency.check(
+      fixture({
+        extraFiles: {
+          [CLAUDE_MD_PATH]: "See docs/architecture/enforcement-registry.md for the rule list.\n",
+        },
+      }),
+    );
+    expect(findings.some((finding) => finding.filePath === CLAUDE_MD_PATH)).toBe(false);
+  });
+
+  it("should reject CLAUDE.md re-growing a partial machine-rule list (reproduces the 13-of-16 drift)", () => {
+    const findings = agentRegistryConsistency.check(
+      fixture({
+        manifest: fourRuleManifest(),
+        enforcement: fourRuleEnforcementDoc(),
+        extraFiles: {
+          ...fourRuleImplementationFiles(),
+          [CLAUDE_MD_PATH]: "- `sample-rule` — sample.\n- `rule-a` — a.\n",
+        },
+      }),
+    );
+    expect(findings.some((finding) => finding.filePath === CLAUDE_MD_PATH)).toBe(true);
+  });
+
+  it("should reject the harness skill re-growing a partial machine-rule list", () => {
+    const findings = agentRegistryConsistency.check(
+      fixture({
+        manifest: fourRuleManifest(),
+        enforcement: fourRuleEnforcementDoc(),
+        extraFiles: {
+          ...fourRuleImplementationFiles(),
+          [HARNESS_SKILL_PATH]: "- `sample-rule` — sample.\n- `rule-a` — a.\n",
+        },
+      }),
+    );
+    expect(findings.some((finding) => finding.filePath === HARNESS_SKILL_PATH)).toBe(true);
+  });
+
+  it("should not flag CLAUDE.md when it enumerates every currently registered rule ID", () => {
+    const findings = agentRegistryConsistency.check(
+      fixture({
+        manifest: fourRuleManifest(),
+        enforcement: fourRuleEnforcementDoc(),
+        extraFiles: {
+          ...fourRuleImplementationFiles(),
+          [CLAUDE_MD_PATH]: "- `sample-rule`\n- `rule-a`\n- `rule-b`\n- `rule-c`\n",
+        },
+      }),
+    );
+    expect(findings.some((finding) => finding.filePath === CLAUDE_MD_PATH)).toBe(false);
+  });
+
+  it("should detect CLAUDE.md rule-list drift even when CLAUDE.md is the only staged file", () => {
+    const context = fixture({
+      manifest: fourRuleManifest(),
+      enforcement: fourRuleEnforcementDoc(),
+      extraFiles: {
+        ...fourRuleImplementationFiles(),
+        [CLAUDE_MD_PATH]: "- `sample-rule` — sample.\n- `rule-a` — a.\n",
+      },
+    });
+    const findings = agentRegistryConsistency.check({ ...context, files: [CLAUDE_MD_PATH] });
+    expect(findings.some((finding) => finding.filePath === CLAUDE_MD_PATH)).toBe(true);
   });
 });

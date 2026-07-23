@@ -78,9 +78,10 @@ Hook は repository state の正本ではなく、tool event に対する即時 
 - `guard-config.sh`: 設定 file の安易な編集を事前に止める。
 - `post-format.sh`: edit 後に formatter を適用する。
 - `quality-guard.sh`: silent fallback や UI layer の direct fetch を edit 後に止める。
+- PreToolUse (`git commit`, `.claude/settings.json`): Claude Code が `git commit` を含む Bash command を実行しようとした瞬間に `make before-commit` を先取り実行する。
 - Stop hook: browser-observable change に preview verification が必要な可能性を通知する。
 
-commit の最終 gate は `.husky/pre-commit` と CI を正本とします。Claude Code の PreToolUse hook から存在しない script を実行せず、別系統の gate も重複実行しません。
+commit の最終 gate は `.husky/pre-commit` と CI を正本とします。上記の `git commit` PreToolUse hook は `.husky/pre-commit` と同じ `make before-commit` を呼び出しており、これは意図しない重複ではなく **意図的な defense-in-depth** です。PreToolUse hook は Claude Code が commit コマンドを発行するより前に働く最速の guard で、失敗を早く agent へ返せます。一方 `.husky/pre-commit` は Claude Code 以外の経路 (人間の `git commit`、他の agent、他ツール) でも同じ gate を確実に通す最終防衛線です。片方が無効化・迂回されてももう片方が残るため、二重実行はコストではなく設計です。Claude Code の PreToolUse hook から存在しない script を実行しないことは `hook-command-target-exists` が機械強制します。
 
 ## Process invariants
 
