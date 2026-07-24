@@ -131,9 +131,15 @@ describe("cleanup-tenkacloud-lite Zundamon voice-over", () => {
     expect(order?.heading.ja).toContain("launcherを最後");
     expect(order?.ja).toContain("復旧経路");
     expect(action?.ja).toContain("ACTION=destroy-all");
-    expect(action?.captionPlacement).toBe("top-right");
-    expect(wait?.ja).toContain("tenkacloud-lite");
-    expect(wait?.ja).toContain("tenkacloud-lite-problem-deploy");
+    expect(action?.layout).toBe("explainer");
+    expect(action?.details?.ja).toEqual([
+      "CodeBuild",
+      "DynamoDB",
+      "CloudWatch Logs",
+      "Lite stacks",
+    ]);
+    expect(wait?.ja).toContain("Lite本体");
+    expect(wait?.ja).toContain("problem-deploy");
     expect(launcher?.ja).toContain("CloudFormation");
     expect(launcher?.ja).toContain("CodeBuild");
     expect(launcher?.ja).toContain("IAM Role");

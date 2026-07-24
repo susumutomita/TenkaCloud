@@ -136,8 +136,10 @@ describe("recorded TenkaCloud Lite video edits", () => {
       chapter: "cleanup-order",
       generated: "explainer",
     });
-    expect(cleanup.sourceRanges[2]?.chapter).toBe("cleanup-action");
-    expect(cleanup.sourceRanges[2]?.generated).toBeUndefined();
+    expect(cleanup.sourceRanges[2]).toMatchObject({
+      chapter: "cleanup-action",
+      generated: "explainer",
+    });
     expect(cleanup.sourceRanges.at(-1)).toMatchObject({
       chapter: "cleanup-complete",
       generated: "explainer",
@@ -148,7 +150,7 @@ describe("recorded TenkaCloud Lite video edits", () => {
     const ranges = RECORDED_LITE_EDITS.flatMap((edit) => edit.sourceRanges);
     const graph = buildRecordedFilterGraph(ranges);
     expect(graph).not.toContain("drawbox");
-    expect(graph).toContain("crop=540:304:100:30");
+    expect(graph).toContain("crop=650:300:90:200");
     expect(graph).toContain("pad=1280:720:(ow-iw)/2:(oh-ih)/2:color=0xf5f7fa");
     for (const range of ranges) {
       if (!range.focus) continue;
@@ -186,7 +188,7 @@ describe("recorded TenkaCloud Lite video edits", () => {
       (edit) => edit.problemId === "cleanup-tenkacloud-lite",
     );
     for (const unsafeTime of [
-      510, 514.5, 519, 520, 526, 529.8, 598, 620, 622.5, 623.5, 660, 770.8,
+      510, 514.5, 519, 520, 526, 528, 529, 529.8, 598, 620, 622.5, 623.5, 660, 770.8,
     ]) {
       expect(
         cleanup?.sourceRanges.some(
@@ -196,7 +198,7 @@ describe("recorded TenkaCloud Lite video edits", () => {
         `source ${unsafeTime}s`,
       ).toBe(false);
     }
-    for (const protectedTime of [528, 529, 590, 631, 642]) {
+    for (const protectedTime of [590, 631, 642]) {
       const range = cleanup?.sourceRanges.find(
         (candidate) => candidate.startS <= protectedTime && protectedTime < candidate.endS,
       );

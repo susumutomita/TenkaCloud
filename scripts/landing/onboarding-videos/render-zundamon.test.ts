@@ -182,7 +182,7 @@ describe("recorded Lite Zundamon renderer", () => {
     const completeHtml = buildCaptionOverlayHtml(complete, "ja", 5, 6);
     expect(completeHtml).toContain("CLEANUP COMPLETE · VERIFY IN AWS");
     expect(completeHtml).toContain("削除完了を確認");
-    expect(completeHtml).toContain("AWS billing");
+    expect(completeHtml).toContain("AWSの請求");
   });
 
   it("should burn an always-visible step heading, note, and caption over recorded operations", () => {
@@ -203,13 +203,14 @@ describe("recorded Lite Zundamon renderer", () => {
     expect(filter).toContain("format=yuv420p[vout]");
   });
 
-  it("should keep the cleanup action visible by placing its caption above the form", () => {
+  it("should explain destroy-all without showing the obsolete cleanup form", () => {
     const action = CLEANUP_TENKACLOUD_LITE_ZUNDAMON_VOICEOVER.cues[2];
     if (!action) throw new Error("expected cleanup action cue");
     const html = buildCaptionOverlayHtml(action, "ja", 0, 3);
-    expect(html).toContain('class="caption top-right"');
-    expect(html).toContain("top: 18px");
-    expect(html).toContain("bottom: auto");
+    expect(html).toContain("WHY THIS ORDER · THEN THE REAL AWS CONSOLE");
+    expect(html).toContain("ACTION=destroy-all");
+    expect(html).toContain("DynamoDB");
+    expect(html).toContain("CloudWatch Logs");
   });
 
   it("should delay, mix, normalize, and trim synthesized cue audio", () => {
