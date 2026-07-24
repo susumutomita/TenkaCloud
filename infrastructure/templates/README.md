@@ -124,6 +124,26 @@ CodePipeline も使いません。問題カタログは Git submodule ではな�
 > Launch Stack ボタンは `TemplateURL must be a supported URL` になるため、README では
 > **Upload a template file** 手順を正式手順にしています。
 
+#### Deploy リンク: バッジを配布しないという記録された意思決定
+
+Issue #2760 は CloudFormation Quick Create URL / Deploy to AWS badge の追加を求めていたが、
+上記の制約（`templateURL` は Amazon S3 URL のみ）により、GitHub でホストする OSS リポジトリ
+からバッジ 1 つで launcher stack 作成まで進める経路は存在しない。検討した配布先は次の 3 つ。
+
+1. **Amazon S3 に公開ミラーを置く**（Quick Create URL が使えるようになる）— 運営側が管理する
+   公開 S3 バケットを常設する必要があり、ベンダーホスト型 SaaS ではない自己ホスト OSS
+   プロジェクトの運用モデルに合わない。
+2. **CloudFront 経由で配布する** — 同様に常設のホスティングインフラが要る。
+3. **リポジトリのファイルをそのまま参照する**（現状の選択）— README からリポジトリ内の
+   `lite-pipeline.yaml` へ直接リンクし、閲覧している ref のテンプレートをそのままダウンロード
+   してもらう。追加のホスティングインフラも公開パイプラインも不要で、テンプレートは常に
+   その ref のコードと一致する。
+
+本プロジェクトは選択肢 3 を採用し、Quick Create バッジは提供しない。README の手順 1〜2
+（ダウンロードして **Upload a template file**）が one-click 相当の正式手順です。この判断は
+Open Question 7（配布先を S3 / CloudFront / GitHub Release のどれにするか）への回答でもあり、
+GitHub Release アセットとしての配布も現時点では行っていない。
+
 ### デプロイ手順
 
 1. README の [Quickstart](../../README.md#quickstart) から `lite-pipeline.yaml` を download する
@@ -141,6 +161,11 @@ CodePipeline も使いません。問題カタログは Git submodule ではな�
 | `ProblemsRepoRef` | 任意 | カタログの branch / tag。デフォルト `main` |
 | `RepoUrl` / `RepoRef` | 任意 | 本体 repo と branch / tag（デフォルトは公式 repo の `main`）。fork のときだけ上書き |
 | `DeployExternalId` | 任意 | 競技者アカウントへ AssumeRole する場合のみ |
+| `ControlDataBackend` | 任意 | `dynamodb`（デフォルト、全テーブル DynamoDB）/ `turso`（DynamoDB テーブルを一切 synth しない SQL backend）。既存 stack での切替は破壊的になりうる（下の再ビルド方針を参照） |
+| `TursoDatabaseUrl` | `ControlDataBackend=turso` のときのみ必須 | Turso の `libsql://` database URL |
+| `TursoAuthTokenParameterName` | `ControlDataBackend=turso` のときのみ必須 | Turso auth token を保持する SSM Parameter Store 名（SecureString。トークンの値そのものはこのパラメータに渡さない） |
+| `DynamoReadCapacity` | 任意 | 全 DynamoDB テーブル + GSI に適用する provisioned read capacity（デフォルト 1、上限 200）。`turso` のときは無視される |
+| `DynamoWriteCapacity` | 任意 | 同上の write capacity（デフォルト 1、上限 200） |
 | `BunVersion` | 任意 | CodeBuild に install する Bun。デフォルトは repo toolchain と同じ `1.3.11` |
 | `CodeBuildTimeoutMinutes` | 任意 | CodeBuild timeout。デフォルトは 90 分 |
 
@@ -151,6 +176,55 @@ CodePipeline も使いません。問題カタログは Git submodule ではな�
 > **自分の問題で deploy する場合:** [TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge)
 > を fork し（`scripts/new-problem.ts`・schema・validation が同梱）、そこで作問してから
 > `ProblemsRepoUrl` に自分の fork を指定する。本体の fork は不要。
+
+### launcher / build / destroy の責務境界
+
+このテンプレート（launcher stack）が作るのは CodeBuild プロジェクト 1 つ + IAM Role + 専用
+ロググループ（`LauncherLogGroup`）だけで、TenkaCloud 本体の stack（`tenkacloud-lite` /
+`tenkacloud-lite-problem-deploy`）は一切作らない。本体の作成・更新・削除はすべて CodeBuild の
+1 回のビルドが `make deploy` / `make destroy` / `make destroy-all` を実行することで行われ、
+launcher stack 自体はビルドの起動口を用意するだけです。触るレバーは 3 段階に分かれる。
+
+| レバー | 変わるもの | 効果が続く範囲 |
+| --- | --- | --- |
+| launcher stack の **Update stack** | `lite-pipeline.yaml` の Parameters が持つデフォルト値（= CodeBuild 環境変数の `Value`）を CFn UPDATE でその場変更する（置換なし） | 以後、override なしで Start build するたびに使われる |
+| CodeBuild **Start build with overrides** | その 1 回のビルドだけ任意の環境変数を上書きする。launcher stack 自体は変更されない | その 1 ビルドのみ |
+| CodeBuild **Start build**（override なし） | 何も変えず、launcher stack に保存されたデフォルト値どおりに実行する | — |
+
+`RepoRef` をリハーサル後の tag に固定する・`TenantAdminEmail` を恒久的に変えるなど「今後ずっと
+この値にしたい」ときは launcher stack の Update stack を使う。`ACTION=destroy-all` の実行、
+`Environment` を変えて同じ launcher から別イベントを動かす、といった単発の変更は Start build
+with overrides で済ませ、launcher のデフォルト値は触らない。
+
+### パラメータ別の再ビルド方針
+
+各パラメータを変えたときに override だけで済むか、そして既存データ・環境にどう影響するかを
+次に示す（「影響」欄は CDK / CLI の実装を確認した内容）。
+
+| パラメータ | override で反映されるか | 既存データ・環境への影響 |
+| --- | --- | --- |
+| `Environment` | 可（その回だけ別 env で走らせられる） | 別の env 名は別のスタック名（development だけ suffix なし、他は `-<env>`）になり、同一 AWS アカウント内で並行する**別の Lite デプロイ**になる。1 つの launcher から複数イベントを並行運用する手段にもなるが、デフォルト運用はイベントごとに launcher を分けることを推奨する |
+| `Action` | 可（むしろ override 前提） | `deploy` / `destroy` / `destroy-all` の選択そのもの。デフォルト値を `destroy` 系のまま launcher に保存すると、次の無指定 Start build が誤って撤去を実行するのでデフォルト値は `deploy` のままにする |
+| `TenantAdminEmail` | 可 | 同じ email なら `ensureTenantAdminUser` が既存ユーザーを検出して **skip**（冪等）。別 email に変えて再実行すると、古いユーザーは削除・置換されず**新しい Tenant Admin がもう 1 人追加される**（重複作成） |
+| `RepoUrl` / `RepoRef` | 可 | CodeBuild は毎回リポジトリを新規に `git clone` し直すので取得内容は必ず更新される。`cdk deploy` は差分を CFn UPDATE として適用する（stateful resource の置換が起きうる）。本番直前に `main` の最新を無条件で当てる運用は非推奨 — リハーサル後は tag / commit SHA へ固定する |
+| `ProblemsRepoUrl` / `ProblemsRepoRef` | 可 | 同上でカタログ・portal 資材が再ビルドされる。community catalog（= 「core」問題）の provenance は event 作成時に `{source:"core"}` としてしか記録されず、内容の digest は pin されない。そのため再ビルド後は**既存 event の問題 picker にも新しい catalog がそのまま反映される**。Problem Pack 経由の問題だけは `packId` / `packVersion` / `contentDigest` が event 作成時に不変 pin される（`infrastructure/lib/problem-pack/event-pin.ts` の `createEventSnapshot` / `resolveDeploymentProvenance`）ので、pack を更新しても既存 event の解決済み provenance は変わらない |
+| `DeployExternalId` | 可 | AssumeRole の trust に影響する。競技者側 `competitor-bootstrap.yaml` の ExternalId と一致させる必要がある |
+| `ControlDataBackend` | 可（ただし極めて破壊的） | `dynamodb` ⇔ `turso` の切替を既にデータが入っている stack に対して行うと、**切替後は空のバックエンドから始まり旧データは同期されない**（#2677 で dual-write bridge は廃止済み）。詳細は [`docs/running-costs.md`](../../docs/running-costs.md) の「Migrating an existing stack」を参照 |
+| `TursoDatabaseUrl` / `TursoAuthTokenParameterName` | 可 | `ControlDataBackend=turso` のときのみ意味を持つ。値を誤ると turso 接続失敗で deploy が fail する |
+| `DynamoReadCapacity` / `DynamoWriteCapacity` | 可 | `DynamoDbLowCapacity` aspect が対象テーブル + GSI の `ProvisionedThroughput` を書き換える。DynamoDB の Provisioned Throughput 変更は **CFn UPDATE（置換なし、データ消失なし）**。`ControlDataBackend=turso` のときは DynamoDB テーブル自体が synth されないため無視される |
+| `BunVersion` / `CodeBuildTimeoutMinutes` | 可 | ビルド環境の設定のみで、デプロイ済みリソースには影響しない |
+
+**開催中の再ビルドは原則非推奨。** 特に `ProblemsRepoRef` / `RepoRef` / `ControlDataBackend` の
+変更は、開催中の event に対して参加者間の公平性やデータ整合性を壊しうる。緊急修正が必要な場合は
+影響範囲を確認し、対応内容・時刻・対象チームを event log に残す。当日の運用フローは
+[`docs/operations/event-runbook.md`](../../docs/operations/event-runbook.md) を参照。
+
+**同じ launcher から destroy 後に再デプロイすること自体は可能だが、注意が必要。** DynamoDB
+テーブルは明示的な `TableName` を持たず CloudFormation が物理名を自動生成するため、
+`ACTION=destroy`（履歴保持）の後に同じ launcher で再度 deploy しても新しいテーブルが衝突なく
+作られる — が、**前回の RETAIN テーブルは孤立したまま残り、課金され続ける**
+（`scripts/lib/retained-tables.ts` が警告するのはこの孤立分）。再デプロイの前に必ず
+`ACTION=destroy-all` で完全削除するか、孤立テーブルを手動で削除すること。
 
 ### 撤去 (teardown)
 
