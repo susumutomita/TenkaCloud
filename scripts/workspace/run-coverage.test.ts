@@ -20,7 +20,7 @@ import {
 
 const root = join(import.meta.dir, "../..");
 
-// Issue #2513: hardcode the expected set so an accidental drop from the 17-workspace
+// Issue #2513 / #2756: hardcode the expected set so an accidental drop from the 18-workspace
 // chain (e.g. someone forgetting to port a workspace when editing this file) fails loudly
 // instead of silently shrinking the coverage matrix.
 const EXPECTED_DIRS = [
@@ -41,15 +41,20 @@ const EXPECTED_DIRS = [
   "packages/portal-plugin-sdk",
   "packages/problem-test-harness",
   "apps/always-on-control-plane",
+  "apps/developer-portal",
 ];
 
 describe("COVERAGE_WORKSPACES", () => {
-  it("should match the 17 workspaces currently in the root test:coverage chain", () => {
+  it("should match the 18 workspaces currently in the coverage matrix", () => {
     expect(COVERAGE_WORKSPACES.map((ws) => ws.dir)).toEqual(EXPECTED_DIRS);
   });
 
-  it("should not include developer-portal, which is intentionally excluded from coverage", () => {
-    expect(COVERAGE_WORKSPACES.some((ws) => ws.dir.includes("developer-portal"))).toBe(false);
+  // Issue #2756: developer-portal has a working vitest.config.ts and 18 test files but its
+  // tests never ran in CI. It now runs in the packages shard alongside its fellow app
+  // apps/always-on-control-plane, which already broke the "packages shard = packages/*" pattern.
+  it("should include developer-portal in the packages shard now that its tests run in CI", () => {
+    const ws = COVERAGE_WORKSPACES.find((w) => w.dir === "apps/developer-portal");
+    expect(ws?.shard).toBe("packages");
   });
 
   it("should point every workspace at a dir that exists and a filter matching package.json name", () => {
@@ -86,7 +91,7 @@ describe("SHARDS", () => {
     ]);
   });
 
-  it("should assign every remaining package + always-on-control-plane to the packages shard", () => {
+  it("should assign every remaining package + always-on-control-plane + developer-portal to the packages shard", () => {
     expect(SHARDS.packages).toEqual([
       "packages/trust-bridge",
       "packages/auth-client",
@@ -101,6 +106,7 @@ describe("SHARDS", () => {
       "packages/portal-plugin-sdk",
       "packages/problem-test-harness",
       "apps/always-on-control-plane",
+      "apps/developer-portal",
     ]);
   });
 
@@ -185,6 +191,7 @@ describe("resolveLcovPaths", () => {
       "./packages/portal-plugin-sdk/coverage/lcov.info",
       "./packages/problem-test-harness/coverage/lcov.info",
       "./apps/always-on-control-plane/coverage/lcov.info",
+      "./apps/developer-portal/coverage/lcov.info",
     ]);
   });
 });
