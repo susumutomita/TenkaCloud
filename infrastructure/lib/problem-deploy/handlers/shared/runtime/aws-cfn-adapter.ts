@@ -30,16 +30,17 @@ import {
   EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED,
   publishProblemEvent,
 } from "../events.js";
-import type {
-  ProblemRuntimeAdapter,
-  RuntimeCollectOutputsInput,
-  RuntimeDeployInput,
-  RuntimeDeployResult,
-  RuntimeDestroyInput,
-  RuntimeDestroyResult,
-  RuntimeOutputs,
-  RuntimeStatus,
-  RuntimeStatusInput,
+import {
+  optionalParametersField,
+  type ProblemRuntimeAdapter,
+  type RuntimeCollectOutputsInput,
+  type RuntimeDeployInput,
+  type RuntimeDeployResult,
+  type RuntimeDestroyInput,
+  type RuntimeDestroyResult,
+  type RuntimeOutputs,
+  type RuntimeStatus,
+  type RuntimeStatusInput,
 } from "./adapter.js";
 
 /**
@@ -93,6 +94,9 @@ export class AwsCloudFormationRuntimeAdapter implements ProblemRuntimeAdapter {
         ? { externalIdParameterName: input.externalIdParameterName }
         : {}),
       ...(input.challengePayloadUrl ? { challengePayloadUrl: input.challengePayloadUrl } : {}),
+      // [Composite Runtime / #2747] Bound Composite input values, forwarded verbatim so
+      // create-stack.ts (deployViaLambda) can merge them into the CFn Parameters it builds.
+      ...optionalParametersField(input.parameters),
     };
     await publishProblemEvent({
       client: this.ctx.events,

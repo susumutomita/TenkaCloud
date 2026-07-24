@@ -12,21 +12,20 @@ import type { DeploymentsRepository } from "../../control-data/deployments-repos
 import type { DisruptionsRepository } from "../../control-data/disruptions-repository.js";
 import type { ProblemEndpointsRepository } from "../../control-data/problem-endpoints-repository.js";
 import type { ControlDataRuntime } from "../../control-data/runtime-repositories.js";
+import { parseProblemsCatalog } from "../shared/catalog.js";
 
-/**
- * Lambda-only composition for the generic scoring dispatcher. Pure scoring
- * contracts and algorithms live in scoring-kernel.ts so local play never loads
- * these AWS clients merely to reuse a kind handler.
- */
+/** Lambda-only composition for scoring, reconciliation, and Composite DAG continuation. */
 export interface GenericScoringSharedResources {
   readonly runtime: ControlDataRuntime;
   readonly ddb: DynamoDBDocumentClient;
   readonly deploymentsTableName: string;
   readonly eventsTableName: string;
   readonly endpointsTableName: string;
+  readonly competitorAccountsTableName: string;
   readonly problemsScoring: Record<string, ProblemScoringMetadata>;
   readonly problemsEndpoints: Record<string, readonly ProblemEndpointSlot[]>;
   readonly problemsDisruptions: Record<string, readonly ProblemDisruptionEntry[]>;
+  readonly problemsCatalog: Readonly<Record<string, string>>;
   readonly disruptionsTableName: string;
   readonly eventBusName: string;
   readonly events: EventBridgeClient;
@@ -42,9 +41,11 @@ export function buildSharedResources(runtime: ControlDataRuntime): GenericScorin
     deploymentsTableName: process.env.DEPLOYMENTS_TABLE_NAME ?? "",
     eventsTableName: process.env.EVENTS_TABLE_NAME ?? "",
     endpointsTableName: process.env.PROBLEM_ENDPOINTS_TABLE_NAME ?? "",
+    competitorAccountsTableName: process.env.COMPETITOR_ACCOUNTS_TABLE_NAME ?? "",
     problemsScoring: parseScoringEnv(process.env.BATTLE_PROBLEMS_SCORING),
     problemsEndpoints: parseEndpointsEnv(process.env.PROBLEM_ENDPOINTS),
     problemsDisruptions: parseDisruptionsCatalogEnv(process.env.BATTLE_PROBLEMS_DISRUPTIONS),
+    problemsCatalog: parseProblemsCatalog(process.env.BATTLE_PROBLEMS_CATALOG),
     disruptionsTableName: process.env.DISRUPTIONS_TABLE_NAME ?? "",
     eventBusName: process.env.DEPLOY_EVENT_BUS_NAME ?? "",
     events: new EventBridgeClient({}),

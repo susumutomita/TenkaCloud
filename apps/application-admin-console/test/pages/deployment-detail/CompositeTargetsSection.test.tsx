@@ -106,4 +106,131 @@ describe("CompositeTargetsSection", () => {
     render(<CompositeTargetsSection composite={{ version: 1, targets: [] }} t={t} />);
     expect(screen.getByText("deployment_detail.composite_targets_empty")).toBeInTheDocument();
   });
+
+  /**
+   * [Composite Runtime / Issue #2747] Every `dependencyState` StatusIndicator variant, the
+   * legacy (no dataflow metadata) branch, and the `dependsOn` / `inputParameters` "some entries"
+   * vs. "none" branches — all `hasDataflowMetadata` paths in `composite-detail.ts` projected here.
+   */
+  describe("Composite dataflow metadata (#2747)", () => {
+    const dataflowComposite: CompositeDetail = {
+      version: 1,
+      targets: [
+        {
+          targetId: "ready-target",
+          targetDeploymentId: "01HTARGETready",
+          ordinal: 0,
+          provider: "gcp",
+          engine: "infra-manager",
+          status: "PENDING",
+          updatedAt: "2026-07-22T00:00:00.000Z",
+          dependencyState: "ready",
+          dependsOn: [],
+          inputParameters: [],
+        },
+        {
+          targetId: "waiting-target",
+          targetDeploymentId: "01HTARGETwaiting",
+          ordinal: 1,
+          provider: "aws",
+          engine: "cloudformation",
+          status: "PENDING",
+          updatedAt: "2026-07-22T00:00:01.000Z",
+          dependencyState: "waiting",
+          dependsOn: ["ready-target"],
+          inputParameters: ["GcpEndpoint"],
+        },
+        {
+          targetId: "running-target",
+          targetDeploymentId: "01HTARGETrunning",
+          ordinal: 2,
+          provider: "azure",
+          engine: "bicep",
+          status: "IN_PROGRESS",
+          updatedAt: "2026-07-22T00:00:02.000Z",
+          dependencyState: "running",
+          dependsOn: ["ready-target", "waiting-target"],
+          inputParameters: ["GcpEndpoint", "AwsEndpoint"],
+        },
+        {
+          targetId: "complete-target",
+          targetDeploymentId: "01HTARGETcomplete",
+          ordinal: 3,
+          provider: "sakura",
+          engine: "apprun",
+          status: "COMPLETE",
+          updatedAt: "2026-07-22T00:00:03.000Z",
+          dependencyState: "complete",
+        },
+        {
+          targetId: "blocked-target",
+          targetDeploymentId: "01HTARGETblocked",
+          ordinal: 4,
+          provider: "aws",
+          engine: "cloudformation",
+          status: "FAILED",
+          updatedAt: "2026-07-22T00:00:04.000Z",
+          dependencyState: "blocked",
+          failureReason: "dependency blocked: ready-target",
+        },
+        {
+          // A row that predates #2747 (no dependencyState / dependsOn / inputParameters at all).
+          targetId: "legacy-target",
+          targetDeploymentId: "01HTARGETlegacy",
+          ordinal: 5,
+          provider: "aws",
+          engine: "cloudformation",
+          status: "COMPLETE",
+          updatedAt: "2026-07-22T00:00:05.000Z",
+        },
+      ],
+    };
+
+    it("should render the matching StatusIndicator label for every dependencyState", () => {
+      render(<CompositeTargetsSection composite={dataflowComposite} t={t} />);
+
+      for (const state of ["ready", "waiting", "running", "complete", "blocked"] as const) {
+        const row = within(targetRow(`${state}-target`));
+        expect(
+          row.getByText(`deployment_detail.composite_dependency_${state}`),
+        ).toBeInTheDocument();
+      }
+    });
+
+    it("should render the legacy placeholder when dependencyState is absent", () => {
+      render(<CompositeTargetsSection composite={dataflowComposite} t={t} />);
+
+      const legacy = within(targetRow("legacy-target"));
+      expect(legacy.getByText("deployment_detail.composite_dependency_legacy")).toBeInTheDocument();
+    });
+
+    it("should join dependsOn target ids, and fall back to common.none when empty or absent", () => {
+      render(<CompositeTargetsSection composite={dataflowComposite} t={t} />);
+
+      expect(within(targetRow("waiting-target")).getByText("ready-target")).toBeInTheDocument();
+      expect(
+        within(targetRow("running-target")).getByText("ready-target, waiting-target"),
+      ).toBeInTheDocument();
+      // Explicit empty array (independent target) — dependsOn and inputParameters both empty,
+      // so the row has two "common.none" cells.
+      expect(within(targetRow("ready-target")).getAllByText("common.none")).toHaveLength(2);
+      // Absent entirely (legacy row) — dependencyState / dependsOn / inputParameters all absent.
+      expect(within(targetRow("legacy-target")).getAllByText("common.none")).toHaveLength(2);
+    });
+
+    it("should join bound input parameter names, and fall back to common.none when empty or absent", () => {
+      render(<CompositeTargetsSection composite={dataflowComposite} t={t} />);
+
+      expect(within(targetRow("waiting-target")).getByText("GcpEndpoint")).toBeInTheDocument();
+      expect(
+        within(targetRow("running-target")).getByText("GcpEndpoint, AwsEndpoint"),
+      ).toBeInTheDocument();
+      // Explicit empty array (independent target — no bindings) — two "common.none" cells
+      // (dependsOn and inputParameters both empty).
+      expect(within(targetRow("ready-target")).getAllByText("common.none")).toHaveLength(2);
+      // Absent entirely (complete-target has dependencyState but no dependsOn/inputParameters) —
+      // also two "common.none" cells.
+      expect(within(targetRow("complete-target")).getAllByText("common.none")).toHaveLength(2);
+    });
+  });
 });

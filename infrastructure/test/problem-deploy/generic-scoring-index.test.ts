@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => ({
   reconcileEventStatuses: vi.fn(),
   reconcileRuntimeStatuses: vi.fn(),
   reconcileDeployStatusMaintenance: vi.fn(),
+  dispatchCompositeReadyTargets: vi.fn(),
   isScoringActive: vi.fn(),
   runUptimeFlatKind: vi.fn(),
   runUptimeMultiKind: vi.fn(),
@@ -61,6 +62,12 @@ vi.mock(
   "../../lib/problem-deploy/handlers/generic-scoring-handler/composite-status-reconciler",
   () => ({
     reconcileDeployStatusMaintenance: mocks.reconcileDeployStatusMaintenance,
+  }),
+);
+vi.mock(
+  "../../lib/problem-deploy/handlers/generic-scoring-handler/composite-ready-dispatch",
+  () => ({
+    dispatchCompositeReadyTargets: mocks.dispatchCompositeReadyTargets,
   }),
 );
 vi.mock("../../lib/problem-deploy/handlers/generic-scoring-handler/scoring-active", () => ({
@@ -190,11 +197,19 @@ beforeEach(() => {
   mocks.isScoringActive.mockReturnValue(true);
   mocks.reconcileEventStatuses.mockResolvedValue(undefined);
   mocks.reconcileRuntimeStatuses.mockResolvedValue(undefined);
-  // [#2068] run the injected per-target reconciler (so reconcileRuntimeStatuses is
-  // still exercised) but skip the real composite parent scan in this index test.
+  mocks.dispatchCompositeReadyTargets.mockResolvedValue(undefined);
+  // [#2068 / #2747] run the injected per-target reconciler and DAG-continuation callback (so
+  // reconcileRuntimeStatuses / dispatchCompositeReadyTargets are still exercised) but skip the
+  // real composite parent scan in this index test.
   mocks.reconcileDeployStatusMaintenance.mockImplementation(
-    async (_deps: unknown, _nowIso: unknown, perTarget: () => Promise<void>) => {
+    async (
+      _deps: unknown,
+      _nowIso: unknown,
+      perTarget: () => Promise<void>,
+      dispatchReadyTargets?: () => Promise<void>,
+    ) => {
       await perTarget();
+      await dispatchReadyTargets?.();
     },
   );
   mocks.runUptimeFlatKind.mockResolvedValue(EMPTY_RESULT);
@@ -238,6 +253,57 @@ describe("handler scan loop", () => {
     expect(mocks.reconcileEventStatuses).toHaveBeenCalledTimes(1);
     // [#1410-1412] 非 AWS runtime reconciler も 1 tick で 1 回 await される。
     expect(mocks.reconcileRuntimeStatuses).toHaveBeenCalledTimes(1);
+    // [#2747] Composite DAG continuation runs once per tick, after the per-target reconciler.
+    expect(mocks.dispatchCompositeReadyTargets).toHaveBeenCalledTimes(1);
+    expect(mocks.dispatchCompositeReadyTargets).toHaveBeenCalledWith(shared, expect.any(Number));
+  });
+
+  it("should swallow a dispatchCompositeReadyTargets failure without throwing (#2747)", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    mocks.dispatchCompositeReadyTargets.mockRejectedValueOnce(new Error("dispatch boom"));
+    cfg.scanPages = [{ Items: [], LastEvaluatedKey: undefined }];
+    await expect(handler()).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledWith(
+      "[generic-scoring] dispatchCompositeReadyTargets failed",
+      expect.objectContaining({ message: "dispatch boom" }),
+    );
+    warn.mockRestore();
+  });
+
+  it("should record a generic reason when dispatchCompositeReadyTargets rejects with a non-Error value (#2747)", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    mocks.dispatchCompositeReadyTargets.mockRejectedValueOnce("dispatch string rejection");
+    cfg.scanPages = [{ Items: [], LastEvaluatedKey: undefined }];
+    await expect(handler()).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledWith(
+      "[generic-scoring] dispatchCompositeReadyTargets failed",
+      expect.objectContaining({ message: "dispatch string rejection" }),
+    );
+    warn.mockRestore();
+  });
+
+  it("should swallow a reconcileRuntimeStatuses failure without throwing (#1410-1412)", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    mocks.reconcileRuntimeStatuses.mockRejectedValueOnce(new Error("runtime reconcile boom"));
+    cfg.scanPages = [{ Items: [], LastEvaluatedKey: undefined }];
+    await expect(handler()).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledWith(
+      "[generic-scoring] reconcileRuntimeStatuses failed",
+      expect.objectContaining({ message: "runtime reconcile boom" }),
+    );
+    warn.mockRestore();
+  });
+
+  it("should record a generic reason when reconcileRuntimeStatuses rejects with a non-Error value", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    mocks.reconcileRuntimeStatuses.mockRejectedValueOnce("runtime string rejection");
+    cfg.scanPages = [{ Items: [], LastEvaluatedKey: undefined }];
+    await expect(handler()).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledWith(
+      "[generic-scoring] reconcileRuntimeStatuses failed",
+      expect.objectContaining({ message: "runtime string rejection" }),
+    );
+    warn.mockRestore();
   });
 
   it("should swallow a reconcile failure without throwing", async () => {
@@ -291,6 +357,7 @@ describe("handler scan loop", () => {
     expect(mocks.reconcileEventStatuses).not.toHaveBeenCalled();
     expect(mocks.reconcileRuntimeStatuses).not.toHaveBeenCalled();
     expect(mocks.reconcileDeployStatusMaintenance).not.toHaveBeenCalled();
+    expect(mocks.dispatchCompositeReadyTargets).not.toHaveBeenCalled();
     expect(mocks.publishRuntimeScoreFeed).toHaveBeenCalledWith(
       expect.objectContaining({ eventId: "01HZX0K3M3K9ZQHB3MRQHBA1ZZ" }),
       expect.objectContaining({ ddb }),

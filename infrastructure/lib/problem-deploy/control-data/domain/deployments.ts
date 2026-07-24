@@ -6,6 +6,11 @@
  * module as a temporary compatibility barrel while consumers migrate to direct imports.
  */
 
+import type {
+  CompositeInputBinding,
+  CompositeOutputDeclaration,
+} from "@tenkacloud/problem-runtime";
+
 /**
  * [Issue #2527 Slice 1 step 2] Deployment lifecycle status — the domain union is
  * the source of truth; the request-validation Zod enum in
@@ -297,6 +302,18 @@ export type CompositeTargetDeploymentRecord = DeploymentRecord & {
   runtimeProvider: string;
   runtimeEngine: string;
   runtimeEntry: string;
+  /**
+   * [Composite Runtime / Issue #2747] Target dependency + output-binding graph metadata,
+   * persisted verbatim from the validated plan (`buildCompositeDeploymentPlan`). Immutable
+   * target identity — see `composite-materialization.ts` — so a retry cannot silently change
+   * the graph already persisted for a parent. Absent on legacy (pre-#2747) target rows, which
+   * `composite-dispatch.ts` / `composite-detail.ts` treat as "no explicit dependencies" (declaration
+   * order stays the only ordering signal, matching the #2066 behavior those rows were created under).
+   */
+  compositeExecutionWave?: number;
+  compositeDependsOn?: readonly string[];
+  compositeInputs?: Readonly<Record<string, CompositeInputBinding>>;
+  compositeOutputs?: Readonly<Record<string, CompositeOutputDeclaration>>;
 };
 
 /**

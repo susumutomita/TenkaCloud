@@ -73,6 +73,46 @@ export interface RuntimeDeployInput {
   readonly externalIdParameterName?: string;
   /** ADR-008: optional presigned URL for private problem payloads. */
   readonly challengePayloadUrl?: string;
+  /**
+   * [Composite Runtime / Issue #2747] The ONE typed, provider-neutral parameter contract: bound
+   * values `composite-dispatch.ts` resolved from an upstream target's declared, non-sensitive (or
+   * explicitly `allowSensitive`) outputs, keyed by the downstream parameter name the target's
+   * `inputs` declared. Every adapter merges this map into its own provider-specific transport
+   * (AWS CFn `Parameters`, GCP Infra Manager `inputs`, Azure Deployment Stack `parameters`, Sakura
+   * AppRun `env`) alongside its own platform-injected identifiers — reserved-name collisions are
+   * already rejected at plan-validation time (`@tenkacloud/problem-runtime` `validateInputsShape`).
+   * Undefined / empty for a single-provider (non-Composite) deploy, preserving byte-identical
+   * behavior for every problem that does not declare Composite `inputs`.
+   */
+  readonly parameters?: Readonly<Record<string, string>>;
+}
+
+/**
+ * [Composite Runtime / Issue #2747] Merge bound Composite input values (`RuntimeDeployInput.parameters`)
+ * into a provider's platform-injected parameter/env/input map. Every provider-owned adapter
+ * (`AzureBicepRuntimeAdapter`, `GcpInfraManagerRuntimeAdapter`, `SakuraAppRunRuntimeAdapter`) calls
+ * this from `deploy()` instead of repeating the merge inline, so the reserved-name-collision
+ * rationale — collisions with the platform-injected identifiers already in `platformInjected` are
+ * rejected at plan-validation time (`@tenkacloud/problem-runtime` `validateInputsShape`), so this
+ * spread cannot silently shadow them — is documented in exactly one place.
+ */
+export function mergeCompositeParameters<T extends Readonly<Record<string, string>>>(
+  platformInjected: T,
+  parameters: Readonly<Record<string, string>> | undefined,
+): Readonly<Record<string, string>> {
+  return { ...platformInjected, ...parameters };
+}
+
+/**
+ * Include `parameters` as a single optional key only when it is defined and non-empty. Shared by
+ * `AwsCloudFormationRuntimeAdapter` and `dispatchPreparedDeployment`, both of which must preserve
+ * the byte-identical legacy event/dispatch shape for single-provider (non-Composite) deploys —
+ * omitting the field entirely rather than serializing `parameters: {}`.
+ */
+export function optionalParametersField(parameters: Readonly<Record<string, string>> | undefined): {
+  readonly parameters?: Readonly<Record<string, string>>;
+} {
+  return parameters && Object.keys(parameters).length > 0 ? { parameters } : {};
 }
 
 /** Adapter-side outcome of `deploy`. */

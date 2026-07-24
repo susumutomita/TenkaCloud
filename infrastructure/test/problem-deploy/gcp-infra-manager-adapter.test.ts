@@ -79,6 +79,24 @@ describe("GcpInfraManagerRuntimeAdapter (ADR-027 #1411)", () => {
     });
   });
 
+  it("should merge bound Composite parameters into Infra Manager inputs (#2747)", async () => {
+    const { ctx } = makeCtx(client);
+    await new GcpInfraManagerRuntimeAdapter(ctx, runtime).deploy({
+      ...deployInput,
+      parameters: { tenkacloud_upstream_endpoint: "https://aws.example" },
+    });
+    expect(client.upsertDeployment).toHaveBeenCalledWith({
+      name: "tc-team-a-gcp-run",
+      blueprintRef: "blueprint/",
+      inputs: {
+        tenkacloud_name_prefix: "tc-team-a-gcp-run",
+        tenkacloud_problem_id: "gcp-run",
+        tenkacloud_team: "team-a",
+        tenkacloud_upstream_endpoint: "https://aws.example",
+      },
+    });
+  });
+
   it("should collect deployment outputs / map status / destroy", async () => {
     const { ctx } = makeCtx(client);
     const a = new GcpInfraManagerRuntimeAdapter(ctx, runtime);
