@@ -48,21 +48,23 @@ Reused by operator CLIs and deploy scripts; import directly by relative path.
 | `retained-tables.ts` | Post-destroy RETAIN-table enumeration for billing warnings (#2444) |
 | `scale-event-capacity.ts` | Event-window capacity scaling logic |
 
-## Infrastructure shared modules (`infrastructure/lib/problem-deploy/handlers/shared/`)
+## Infrastructure shared modules (`infrastructure/lib/problem-deploy/`)
 
 | Module | What it provides |
 | ------ | ---------------- |
-| `runtime/adapter.ts` | `mergeCompositeParameters` / `optionalParametersField` — the Composite-bound-parameter merge idioms shared by every `ProblemRuntimeAdapter` (`aws-cfn-adapter.ts`, `azure-bicep-adapter.ts`, `gcp-infra-manager-adapter.ts`, `sakura-apprun-adapter.ts`) and `prepared-dispatch.ts` (#2747) |
+| `handlers/shared/runtime/adapter.ts` | `mergeCompositeParameters` / `optionalParametersField` — the Composite-bound-parameter merge idioms shared by every `ProblemRuntimeAdapter` (`aws-cfn-adapter.ts`, `azure-bicep-adapter.ts`, `gcp-infra-manager-adapter.ts`, `sakura-apprun-adapter.ts`) and `prepared-dispatch.ts` (#2747) |
+| `s3-artifact-text.ts` | `getS3ObjectText` — read one S3 object as UTF-8 text. Shared by `handlers/cfn-deploy-handler/create-stack.ts` (public-problem `template.yaml`/`metadata.json`, #2291) and `handlers/deploy-handler/adapter-dependencies.ts` (public-problem Azure ARM template, #2743). Uses the SDK, not raw `fetch(`, so it may be imported directly from a handler too |
 
-## Infrastructure shared modules (`infrastructure/lib/problem-deploy/`, outside `handlers/`)
+### Outside `handlers/`
 
 Live outside `handlers/` on purpose (the `handler-must-not-call-fetch` harness rule forbids a raw
 `fetch(` under any `.../handlers/...` path) — each is injected into a handler as a dependency.
 
 | Module | What it provides |
 | ------ | ---------------- |
-| `challenge-payload-artifacts.ts` | `fetchChallengePayloadDirectory` — bounded fetch+unzip of an arbitrary DIRECTORY out of a private problem's presigned `payload.zip` (a Terraform / Infra Manager root module), sharing the same zip-bomb bounds + `defaultHttpGet` as `fetchChallengePayloadArtifacts`'s two-fixed-filename read (#2745) |
+| `challenge-payload-artifacts.ts` | `fetchChallengePayloadArtifacts` (fixed `template.yaml`/`metadata.json` pair) / `fetchChallengePayloadDirectory` (an arbitrary DIRECTORY — a Terraform/Infra Manager root module, #2745) / `fetchChallengePayloadEntry` (one arbitrary NAMED file — an Azure ARM/Bicep target, #2743) — three bounded fetch+unzip readers over a private problem's presigned `payload.zip`, sharing one `defaultHttpGet` + zip-bomb-bound primitive set |
 | `runtime-clients/gcp-blueprint-materializer.ts` | `materializeGcpBlueprint` / `resolveGcpTerraformSource` / `buildDeterministicBlueprintZip` — resolves a GCP problem's Terraform root module (materialized `problems/` tree OR private payload zip), zips it deterministically, and uploads it to GCS as an immutable, content-addressed object (#2745) |
+| `runtime-clients/azure-template-materializer.ts` | `materializeAzureTemplate` / `createBicepCliCompiler` — resolves an Azure problem's ARM template (a precompiled `.json` read-and-validate, or a `.bicep` compile via an injected, fail-closed-when-absent compiler seam) into an inline ARM JSON document (#2743) |
 
 ## Where a new helper belongs
 

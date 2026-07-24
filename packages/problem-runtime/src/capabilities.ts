@@ -68,8 +68,8 @@ const RUNTIME_CAPABILITY_ROWS = [
     "cloud",
     "feature-gated",
     "preview",
-    [2743, 2081],
-    "Adapter and credential wiring ship, but Bicep artifact materialization and live acceptance remain open.",
+    [2081],
+    "Adapter, credential wiring, and inline-ARM-template materialization (precompiled JSON or a Bicep compile, fail-closed when neither is available) ship; live acceptance remains open.",
   ],
   [
     "docker",

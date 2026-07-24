@@ -35,7 +35,7 @@ import {
   UpdateStackCommand,
   type UpdateStackCommandOutput,
 } from "@aws-sdk/client-cloudformation";
-import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { S3Client } from "@aws-sdk/client-s3";
 import { SSMClient } from "@aws-sdk/client-ssm";
 import { type Credentials, STSClient } from "@aws-sdk/client-sts";
 import {
@@ -47,6 +47,7 @@ import {
   parseDeployAllowedCidrs,
   resolveAllowedCidrOverride,
 } from "../../deploy-allowed-cidrs.js";
+import { getS3ObjectText } from "../../s3-artifact-text.js";
 import {
   type AssumeCompetitorRoleDeps,
   assumeCompetitorRole,
@@ -216,15 +217,6 @@ export function parseCfnParameters(metadataJson: string): Readonly<Record<string
   return out;
 }
 
-async function getS3Text(s3: Pick<S3Client, "send">, bucket: string, key: string): Promise<string> {
-  const out = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
-  const body = out.Body;
-  if (!body || typeof (body as { transformToString?: unknown }).transformToString !== "function") {
-    throw new Error(`empty or unreadable S3 object: s3://${bucket}/${key}`);
-  }
-  return (body as { transformToString: () => Promise<string> }).transformToString();
-}
-
 /**
  * Public-problem artifacts resolver: read the problem's `template.yaml` + `metadata.json` from the
  * materialized `problems/` tree in the source bucket (published by #2347). Private problems do not
@@ -237,12 +229,12 @@ export function buildS3ArtifactsResolver(
   opts: { readonly sourceBucket: string },
 ): (detail: DeployCreateRequestedDetail) => Promise<DeployArtifacts> {
   return async (detail) => {
-    const templateBody = await getS3Text(
+    const templateBody = await getS3ObjectText(
       s3,
       opts.sourceBucket,
       `${detail.problemDir}/template.yaml`,
     );
-    const metadataText = await getS3Text(
+    const metadataText = await getS3ObjectText(
       s3,
       opts.sourceBucket,
       `${detail.problemDir}/metadata.json`,

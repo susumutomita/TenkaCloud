@@ -2,11 +2,16 @@ import type { GcpStsClient } from "@TenkaCloud/trust-bridge";
 import type { EventBridgeClient } from "@aws-sdk/client-eventbridge";
 import type { S3Client } from "@aws-sdk/client-s3";
 import type { SSMClient } from "@aws-sdk/client-ssm";
+import { fetchChallengePayloadEntry } from "../../challenge-payload-artifacts.js";
 import { createAzureDeploymentStacksRestClient } from "../../runtime-clients/azure-deployment-stacks-rest-client.js";
 import {
   type AzureEntraTokenClient,
   createAzureEntraTokenClient,
 } from "../../runtime-clients/azure-entra-token-client.js";
+import {
+  createBicepCliCompiler,
+  materializeAzureTemplate,
+} from "../../runtime-clients/azure-template-materializer.js";
 import {
   createSigV4SubjectTokenSigner,
   formatGcpSubjectToken,
@@ -16,6 +21,7 @@ import { materializeGcpBlueprint } from "../../runtime-clients/gcp-blueprint-mat
 import { createGcpInfraManagerRestClient } from "../../runtime-clients/gcp-infra-manager-rest-client.js";
 import { createGcpStsRestClient } from "../../runtime-clients/gcp-sts-rest-client.js";
 import { createSakuraAppRunRestClient } from "../../runtime-clients/sakura-apprun-rest-client.js";
+import { getS3ObjectText } from "../../s3-artifact-text.js";
 import {
   type AzureDeployCredential,
   getAzureCredential,
@@ -25,6 +31,7 @@ import {
   type AdapterDependencies,
   AZURE_ENGINE,
   AZURE_PROVIDER,
+  type AzureArtifactLocation,
   GCP_ENGINE,
   GCP_PROVIDER,
   type ProblemRuntime,
@@ -53,12 +60,14 @@ export interface AdapterDependencyConfig {
   readonly gcpSubjectTokenSigner?: GcpAwsSubjectTokenSigner;
   readonly awsRegion?: string;
   /**
-   * [Issue #2745] Public-problem Terraform source read for `gcp/infra-manager`: the materialized
-   * `problems/` tree S3 client + its bucket name. Reuses the SAME `s3` field `DeployContext`
-   * already carries for the ADR-008 private-payload presigned URL, so wiring this costs no new
-   * Lambda dependency — only a wider IAM read grant (see `deploy-api-lambda.ts`). Absent (as in
-   * Lite mode / no `SOURCE_BUCKET_NAME`) + no `challengePayloadUrl` on the deploy → the
-   * materializer fails loud with an actionable diagnostic (never a silent empty blueprint).
+   * [Issue #2745 / #2743] Public-problem source read for `gcp/infra-manager` (a Terraform
+   * directory, `gcp-blueprint-materializer.ts`) AND `azure/bicep` (a single `.bicep`/`.json` file,
+   * `adapter-dependencies.ts`'s own `resolveAzureArtifact`): the materialized `problems/` tree S3
+   * client + its bucket name. Reuses the SAME `s3` field `DeployContext` already carries for the
+   * ADR-008 private-payload presigned URL, so wiring this costs no new Lambda dependency — only a
+   * wider IAM read grant (see `deploy-api-lambda.ts`). Absent (as in Lite mode / no
+   * `SOURCE_BUCKET_NAME`) + no `challengePayloadUrl` on the deploy → the materializer fails loud
+   * with an actionable diagnostic (never a silent empty result).
    */
   readonly s3?: Pick<S3Client, "send">;
   readonly sourceBucketName?: string;
@@ -101,10 +110,40 @@ function buildSakuraAdapterContext(
 }
 
 /**
- * [ADR-027 / ADR-032 / #1410] azure/bicep の adapter context を組む。 getCredential は per-team の
+ * [Issue #2743 / #2745] Resolve `entry`'s raw text for one Azure deployment. Private
+ * (`challengePayloadUrl` set) takes priority over public (materialized `problems/` tree, read via
+ * the shared {@link getS3ObjectText} primitive over the SAME `s3`/`sourceBucketName` wiring
+ * `gcp-blueprint-materializer.ts` uses, #2745 — Azure's `entry` is always exactly one file, unlike
+ * GCP's Terraform directory); neither configured is a fail-closed wiring error, not a silent empty
+ * result — mirrors `resolveGcpTerraformSource`'s exact priority and error shape.
+ */
+async function resolveAzureArtifact(
+  s3: Pick<S3Client, "send"> | undefined,
+  sourceBucketName: string | undefined,
+  location: AzureArtifactLocation,
+  entry: string,
+): Promise<string> {
+  if (location.challengePayloadUrl) {
+    return fetchChallengePayloadEntry(location.challengePayloadUrl, entry);
+  }
+  if (s3 && sourceBucketName) {
+    return getS3ObjectText(s3, sourceBucketName, `${location.problemDir}/${entry}`);
+  }
+  throw new Error(
+    "Azure Bicep template source is unavailable: neither a private challengePayloadUrl nor a " +
+      "materialized source bucket (SOURCE_BUCKET_NAME) is configured for this deploy",
+  );
+}
+
+/**
+ * [ADR-027 / ADR-032 / #1410 / #2743] azure/bicep の adapter context を組む。 getCredential は per-team の
  * Azure deploy 設定 (app registration secret + subscription/RG) を SSM から引き、 未登録なら loud に throw、
  * client_credentials grant で ARM token を得る。 client は同 config の subscription/RG で Deployment Stacks
  * REST client を束ねる。 adapter は必ず getCredential → client の順で呼ぶので config を closure に保持する。
+ * `materialize` は `runtime.entry` を inline ARM template 化する (= 常に fail-closed の
+ * `materializeAzureTemplate` を呼ぶ。 CLI 有無に関わらず `createBicepCliCompiler()` を注入する — CLI 不在は
+ * 材料化時点で actionable な診断とともに throw する、 silent skip はしない)。 `s3`/`sourceBucketName` は
+ * gcp/infra-manager (#2745) と同じ materialized `problems/` tree 読み取り配線を public 問題向けに再利用する。
  */
 function buildAzureAdapterContext(
   ssm: Pick<SSMClient, "send">,
@@ -112,8 +151,11 @@ function buildAzureAdapterContext(
   tenantId: string,
   teamSlug: string,
   tokenClient: AzureEntraTokenClient,
+  s3: Pick<S3Client, "send"> | undefined,
+  sourceBucketName: string | undefined,
 ): NonNullable<AdapterDependencies["azure"]> {
   let resolved: AzureDeployCredential | undefined;
+  const compiler = createBicepCliCompiler();
   return {
     getCredential: async () => {
       const config = await getAzureCredential({ ssm, env }, tenantId, teamSlug);
@@ -142,6 +184,11 @@ function buildAzureAdapterContext(
         ...(resolved.location ? { location: resolved.location } : {}),
       });
     },
+    materialize: (entry, location) =>
+      materializeAzureTemplate(entry, {
+        compiler,
+        readArtifact: (e) => resolveAzureArtifact(s3, sourceBucketName, location, e),
+      }),
   };
 }
 
@@ -274,6 +321,8 @@ export function buildAdapterDependencies(
         config.tenantId,
         teamSlug,
         config.azureEntraTokenClient ?? createAzureEntraTokenClient(),
+        config.s3,
+        config.sourceBucketName,
       ),
     };
   }

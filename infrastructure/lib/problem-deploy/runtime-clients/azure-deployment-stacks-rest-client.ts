@@ -15,6 +15,14 @@
  *   - body: `{location, properties: {templateLink|template, parameters, actionOnUnmanage, denySettings}}`
  *   - GET response: `properties.provisioningState` + direct-value `properties.outputs`
  *
+ * [Issue #2743] `spec.template` is a discriminated union (see `azure-bicep-adapter.ts`
+ * `AzureArmTemplateSource`): `kind: "inline"` sends the materialized ARM JSON document as
+ * `properties.template` (what `AzureBicepRuntimeAdapter` always produces — the platform's inline
+ * template contract, avoiding blob upload / SAS-URL reachability entirely); `kind: "remote"` sends
+ * `properties.templateLink` for REST-client completeness, guarded by {@link assertArmTemplateUri}
+ * (https-only, no repo-relative paths — mirrors the GCP REST client's `assertGcsBlueprintRef`) so a
+ * materialization-skipped path can never reach ARM as a raw, unreachable string.
+ *
  * spec が運ばない subscription / resourceGroup / location / api-version は options で注入する
  * (= per-team Azure account の onboarding が供給、 account-gated)。 実 account で照合する余地は body の
  * actionOnUnmanage / denySettings の既定と outputs の正確な形 (= integration 相、 waterfall)。
@@ -22,6 +30,7 @@
 
 import { StatusCodes } from "http-status-codes";
 import type {
+  AzureArmTemplateSource,
   AzureCredential,
   AzureDeploymentStackClient,
   AzureDeploymentStackSpec,
@@ -46,6 +55,43 @@ export interface AzureDeploymentStacksRestClientOptions {
   readonly baseUrl?: string;
   /** fetch 実装の注入 (= unit test で mock)。 */
   readonly fetchImpl?: typeof fetch;
+}
+
+/**
+ * [Issue #2743] Fail-closed guard for the `remote` template source: ARM `templateLink.uri` must be
+ * a reachable absolute `https://` URL. A repo-relative Bicep/JSON path (or any non-https scheme)
+ * is rejected BEFORE any Azure call — mirrors `assertGcsBlueprintRef` in the GCP REST client.
+ */
+function assertArmTemplateUri(uri: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(uri);
+  } catch {
+    throw new Error(
+      `Azure ARM remote template URI must be an absolute https:// URL, received '${uri}'`,
+    );
+  }
+  if (parsed.protocol !== "https:" || parsed.hostname.length === 0) {
+    throw new Error(
+      `Azure ARM remote template URI must be an absolute https:// URL, received '${uri}'`,
+    );
+  }
+}
+
+/**
+ * [Issue #2743] Project `spec.template` onto the one ARM body field it maps to. `remote` is
+ * guarded BEFORE the field is built, so a rejected URI never reaches `properties`.
+ */
+function buildTemplateField(
+  source: AzureArmTemplateSource,
+):
+  | { readonly template: Readonly<Record<string, unknown>> }
+  | { readonly templateLink: { readonly uri: string } } {
+  if (source.kind === "inline") {
+    return { template: source.document };
+  }
+  assertArmTemplateUri(source.uri);
+  return { templateLink: { uri: source.uri } };
 }
 
 /** ARM Deployment Stack GET レスポンスの最小形 (本 client が依存する field のみ)。 */
@@ -96,13 +142,15 @@ export function createAzureDeploymentStacksRestClient(
 
   return {
     async upsertStack(spec: AzureDeploymentStackSpec): Promise<void> {
-      // ARM parameters は {name: {value}} 形。 actionOnUnmanage=deleteAll で teardown 時に resource も削除、
-      // denySettings=none で competitor の操作を妨げない (= 競技環境)。 templateRef は Bicep を ARM 化した
-      // templateLink URI として渡す前提。
+      // [Issue #2743] `inline` sends the materialized ARM JSON as `properties.template`; `remote`
+      // is fail-closed-guarded BEFORE this PUT (no repo-relative path / non-https URI ever reaches
+      // ARM). actionOnUnmanage=deleteAll で teardown 時に resource も削除、 denySettings=none で
+      // competitor の操作を妨げない (= 競技環境)。
+      const templateField = buildTemplateField(spec.template);
       await request("PUT", stackPath(spec.name), {
         location,
         properties: {
-          templateLink: { uri: spec.templateRef },
+          ...templateField,
           parameters: Object.fromEntries(
             Object.entries(spec.parameters).map(([key, value]) => [key, { value }]),
           ),

@@ -45,6 +45,8 @@ export {
 export {
   AZURE_ENGINE,
   AZURE_PROVIDER,
+  type AzureArmTemplateSource,
+  type AzureArtifactLocation,
   type AzureBicepAdapterContext,
   AzureBicepRuntimeAdapter,
   type AzureCredential,

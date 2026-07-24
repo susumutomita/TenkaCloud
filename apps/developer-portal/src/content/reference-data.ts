@@ -204,9 +204,9 @@ export const REFERENCE_DATA: ReferenceData = {
       executionMode: "cloud",
       selection: "feature-gated",
       maturity: "preview",
-      blockingIssues: [2743, 2081],
+      blockingIssues: [2081],
       evidence:
-        "Adapter and credential wiring ship, but Bicep artifact materialization and live acceptance remain open.",
+        "Adapter, credential wiring, and inline-ARM-template materialization (precompiled JSON or a Bicep compile, fail-closed when neither is available) ship; live acceptance remains open.",
     },
     {
       provider: "docker",

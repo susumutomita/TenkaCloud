@@ -1,0 +1,17 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "hand-precompiled",
+      "note": "Precompiled by hand from the sibling azure.bicep source (Issue #2743) so this golden problem deploys where no `bicep` CLI is available. Regenerate with `bicep build azure.bicep --outfile azure.json` if azure.bicep ever changes."
+    }
+  },
+  "resources": [],
+  "outputs": {
+    "AzureUrl": {
+      "type": "string",
+      "value": "https://azure.example.invalid"
+    }
+  }
+}

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   fetchChallengePayloadArtifacts,
   fetchChallengePayloadDirectory,
+  fetchChallengePayloadEntry,
   MAX_PAYLOAD_BYTES,
 } from "../../lib/problem-deploy/challenge-payload-artifacts.js";
 
@@ -311,5 +312,152 @@ describe("fetchChallengePayloadDirectory (#2745)", () => {
     });
     // main.tf was dropped pre-inflation (over cap); small.tf still comes through.
     expect(files).toEqual([{ relativePath: "small.tf", bytes: strToU8(VARS_TF) }]);
+  });
+});
+
+/**
+ * [Issue #2743] `fetchChallengePayloadEntry` extends the same bounded fetch + unzip primitive to
+ * pull exactly ONE author-chosen named entry out of a private payload (an Azure ARM/Bicep target,
+ * unlike the two fixed filenames or the whole-directory reads above).
+ */
+describe("fetchChallengePayloadEntry (#2743)", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const ARM_JSON = JSON.stringify({ $schema: "s", resources: [] });
+
+  it("should fetch + unzip a private payload and return the one named entry", async () => {
+    const zip = payloadZip({ "targets/azure.json": ARM_JSON, "targets/gcp/main.tf": "unrelated" });
+    const httpGet = vi.fn(async () => zip);
+
+    const out = await fetchChallengePayloadEntry("https://s3.example/presigned", "azure.json", {
+      httpGet,
+    });
+
+    expect(httpGet).toHaveBeenCalledWith("https://s3.example/presigned");
+    expect(out).toBe(ARM_JSON);
+  });
+
+  it("should resolve an entry at the zip root (no directory prefix)", async () => {
+    const zip = payloadZip({ "azure.json": ARM_JSON });
+    const out = await fetchChallengePayloadEntry("https://s3.example/p", "azure.json", {
+      httpGet: async () => zip,
+    });
+    expect(out).toBe(ARM_JSON);
+  });
+
+  it("should throw when the named entry is absent from the payload", async () => {
+    const zip = payloadZip({ "targets/gcp/main.tf": "unrelated" });
+    await expect(
+      fetchChallengePayloadEntry("https://s3.example/p", "azure.json", {
+        httpGet: async () => zip,
+      }),
+    ).rejects.toThrow(/does not contain a 'azure\.json' entry/);
+  });
+
+  it("should reject an ambiguous match — both a root and a nested entry with the same name — instead of silently picking one", async () => {
+    const zip = payloadZip({ "azure.json": ARM_JSON, "targets/azure.json": ARM_JSON });
+    await expect(
+      fetchChallengePayloadEntry("https://s3.example/p", "azure.json", {
+        httpGet: async () => zip,
+      }),
+    ).rejects.toThrow(/2 entries matching 'azure\.json'.*must be unambiguous/);
+  });
+
+  it("should reject an ambiguous match under a generous default maxEntryCount (independent of the cap)", async () => {
+    const zip = payloadZip({ "a/azure.json": ARM_JSON, "b/azure.json": ARM_JSON });
+    await expect(
+      fetchChallengePayloadEntry("https://s3.example/p", "azure.json", {
+        httpGet: async () => zip,
+      }),
+    ).rejects.toThrow(/2 entries matching 'azure\.json'.*must be unambiguous/);
+  });
+
+  it("should reject an oversized payload before unzip", async () => {
+    const httpGet = vi.fn(async () => new Uint8Array(11));
+    await expect(
+      fetchChallengePayloadEntry("https://s3.example/p", "azure.json", {
+        httpGet,
+        maxPayloadBytes: 10,
+      }),
+    ).rejects.toThrow(/exceeding the 10-byte cap/);
+  });
+
+  it("should reject a matched entry whose declared size exceeds the per-entry cap (pre-inflation)", async () => {
+    const zip = payloadZip({ "azure.json": "x".repeat(4096) });
+    await expect(
+      fetchChallengePayloadEntry("https://s3.example/p", "azure.json", {
+        httpGet: async () => zip,
+        maxEntryBytes: 1024,
+      }),
+    ).rejects.toThrow(/does not contain a 'azure\.json' entry/);
+  });
+
+  it("should reject when more matching entries exist than the cap allows", async () => {
+    const zip = payloadZip({ "a/azure.json": ARM_JSON, "b/azure.json": ARM_JSON });
+    await expect(
+      fetchChallengePayloadEntry("https://s3.example/p", "azure.json", {
+        httpGet: async () => zip,
+        maxEntryCount: 1,
+      }),
+    ).rejects.toThrow(/exceeding the 1 cap/);
+  });
+
+  it("should reject a payload whose decompressed size exceeds the cap", async () => {
+    const zip = payloadZip({ "azure.json": ARM_JSON });
+    await expect(
+      fetchChallengePayloadEntry("https://s3.example/p", "azure.json", {
+        httpGet: async () => zip,
+        maxDecompressedBytes: 1,
+      }),
+    ).rejects.toThrow(/decompressed size exceeds the 1-byte cap/);
+  });
+
+  it("should GET the presigned URL via the default fetch primitive and return the entry", async () => {
+    const zip = payloadZip({ "azure.json": ARM_JSON });
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => String(zip.byteLength) },
+      arrayBuffer: async () => zip.buffer.slice(zip.byteOffset, zip.byteOffset + zip.byteLength),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const out = await fetchChallengePayloadEntry("https://s3.example/presigned", "azure.json");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://s3.example/presigned",
+      expect.objectContaining({ method: "GET", redirect: "error" }),
+    );
+    expect(out).toBe(ARM_JSON);
+  });
+
+  it("should reject a non-2xx response (fail loud, never an empty payload)", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 403,
+      headers: { get: () => null },
+      arrayBuffer: async () => new ArrayBuffer(0),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      fetchChallengePayloadEntry("https://s3.example/expired", "azure.json"),
+    ).rejects.toThrow(/HTTP status 403/);
+  });
+
+  it("should reject a Content-Length over the cap before downloading the body", async () => {
+    const arrayBuffer = vi.fn(async () => new ArrayBuffer(0));
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => String(MAX_PAYLOAD_BYTES + 1) },
+      arrayBuffer,
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      fetchChallengePayloadEntry("https://s3.example/huge", "azure.json"),
+    ).rejects.toThrow(/Content-Length .* exceeds the/);
+    expect(arrayBuffer).not.toHaveBeenCalled();
   });
 });
