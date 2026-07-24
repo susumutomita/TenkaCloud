@@ -189,11 +189,9 @@ export const RECORDED_LITE_EDITS: readonly RecordedLiteEdit[] = [
       },
       {
         chapter: "cleanup-action",
-        startS: 527,
-        endS: 529.8,
-        speed: 0.5,
-        // ACTION override の入力領域へ寄り、直下のメールと repository URL を外す。
-        focus: { x: 100, y: 30, width: 540, height: 304 },
+        generated: "explainer",
+        startS: 0,
+        endS: 5.6,
       },
       {
         chapter: "cleanup-wait",

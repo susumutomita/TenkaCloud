@@ -247,7 +247,7 @@ export const CLEANUP_TENKACLOUD_LITE_ZUNDAMON_VOICEOVER: VoiceoverScript = {
       },
       targetS: 7,
       ja: "遊び終わったら、Lite本体と自動デプロイ環境を順番に削除して、AWSの継続費用を止めるのだ。",
-      en: "When the event is over, remove the Lite platform and its deployment setup in this order to stop ongoing A W S costs.",
+      en: "When the event is over, remove the Lite platform and its deployment setup in this order to stop ongoing AWS costs.",
       layout: "intro",
       theme: "cleanup",
       details: {
@@ -289,14 +289,23 @@ export const CLEANUP_TENKACLOUD_LITE_ZUNDAMON_VOICEOVER: VoiceoverScript = {
       targetS: 4,
       ja: "CodeBuildでACTION=destroy-allにして、ビルドを開始するのだ。",
       en: "In CodeBuild, set ACTION to destroy all and start the build.",
-      captionPlacement: "top-right",
+      layout: "explainer",
+      theme: "cleanup",
+      details: {
+        ja: ["CodeBuild", "DynamoDB", "CloudWatch Logs", "Lite stacks"],
+        en: ["CodeBuild", "DynamoDB", "CloudWatch Logs", "Lite stacks"],
+      },
+      note: {
+        ja: "古いlauncherは、先に最新テンプレートへ更新する",
+        en: "Update an older launcher to the latest template first",
+      },
     },
     {
       section: "4. Teardown progress",
       heading: { ja: "Liteの削除を確認", en: "Confirm Lite teardown" },
       targetS: 8,
-      ja: "DynamoDBとログ、それからtenkacloud-liteとtenkacloud-lite-problem-deployの削除を確認するのだ。",
-      en: "Confirm removal of DynamoDB data and logs, then both tenkacloud-lite stacks.",
+      ja: "destroy-allはDynamoDBとログ、Lite本体とproblem-deployのstackを削除するのだ。CloudFormationで進行を確認するのだ。",
+      en: "Destroy all removes DynamoDB data and logs, then the TenkaCloud Lite and problem deploy stacks. Follow the progress in CloudFormation.",
     },
     {
       section: "5. Delete launcher",
@@ -318,8 +327,8 @@ export const CLEANUP_TENKACLOUD_LITE_ZUNDAMON_VOICEOVER: VoiceoverScript = {
         en: ["Lite stacks: deleted", "DynamoDB / logs: deleted", "Launcher stack: deleted"],
       },
       note: {
-        ja: "共有アカウントの既存リソースは削除対象に含めない",
-        en: "Do not remove unrelated resources from a shared AWS account",
+        ja: "AWSの請求を確認し、共有アカウントの既存リソースは削除しない",
+        en: "Check AWS billing; do not remove unrelated resources from a shared account",
       },
     },
   ],

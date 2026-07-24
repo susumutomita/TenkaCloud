@@ -202,8 +202,8 @@ describe("dev-mock fixtures", () => {
     expect(deploy?.i18n?.en?.videoUrl).toBe("https://www.youtube.com/embed/7LjkPdf5zM0");
     expect(deploy?.description).not.toContain("ACTION=destroy");
     expect(deploy?.i18n?.en?.description).not.toContain("ACTION=destroy");
-    expect(cleanup?.videoUrl).toBeUndefined();
-    expect(cleanup?.i18n?.en?.videoUrl).toBeUndefined();
+    expect(cleanup?.videoUrl).toBe("https://www.youtube.com/embed/sRUn3Tzu4UM");
+    expect(cleanup?.i18n?.en?.videoUrl).toBe("https://www.youtube.com/embed/BOrIywCb_KU");
     expect(cleanup?.scoring?.flags?.map((f) => f.id)).toEqual([
       LITE_CLEANUP_DRILL_CHECKPOINT.flagId,
     ]);
@@ -291,31 +291,49 @@ describe("dev-mock fixtures", () => {
   });
 
   it("should keep stale local-mode footage off the portal and use YouTube for current videos", () => {
+    const publishedVideos = new Map<string, { readonly ja: string; readonly en: string }>([
+      [
+        WHAT_IS_DRILL_PROBLEM_ID,
+        {
+          ja: "https://www.youtube.com/embed/mcL_O17QVsA",
+          en: "https://www.youtube.com/embed/6qMzFcP5dgw",
+        },
+      ],
+      [
+        AI_AGENT_LOCAL_DRILL_PROBLEM_ID,
+        {
+          ja: "https://www.youtube.com/embed/nLsSJ3npdfw",
+          en: "https://www.youtube.com/embed/GDu9FhWrQns",
+        },
+      ],
+      [
+        LITE_DRILL_PROBLEM_ID,
+        {
+          ja: "https://www.youtube.com/embed/ItgRfIeQ0ac",
+          en: "https://www.youtube.com/embed/7LjkPdf5zM0",
+        },
+      ],
+      [
+        LITE_CLEANUP_DRILL_PROBLEM_ID,
+        {
+          ja: "https://www.youtube.com/embed/sRUn3Tzu4UM",
+          en: "https://www.youtube.com/embed/BOrIywCb_KU",
+        },
+      ],
+    ]);
+
     for (const drill of drills) {
       // 公開済みチュートリアルはリポジトリ肥大化を避けるため YouTube へ分離する。
-      if (drill.problemId === WHAT_IS_DRILL_PROBLEM_ID) {
-        expect(drill.videoUrl).toBe("https://www.youtube.com/embed/mcL_O17QVsA");
-        continue;
-      }
-      if (drill.problemId === AI_AGENT_LOCAL_DRILL_PROBLEM_ID) {
-        expect(drill.videoUrl).toBe("https://www.youtube.com/embed/nLsSJ3npdfw");
-        continue;
-      }
-      if (drill.problemId === LITE_DRILL_PROBLEM_ID) {
-        expect(drill.videoUrl).toBe("https://www.youtube.com/embed/ItgRfIeQ0ac");
-        expect(drill.i18n?.en?.videoUrl).toBe("https://www.youtube.com/embed/7LjkPdf5zM0");
+      const published = publishedVideos.get(drill.problemId);
+      if (published) {
+        expect(drill.videoUrl).toBe(published.ja);
+        expect(drill.i18n?.en?.videoUrl).toBe(published.en);
         continue;
       }
       // 正しいYouTube版ができるまでは、リポジトリへ動画を置かず非表示にする。
-      if (
-        drill.problemId === LOCAL_DRILL_PROBLEM_ID ||
-        drill.problemId === LITE_CLEANUP_DRILL_PROBLEM_ID
-      ) {
-        expect(drill.videoUrl).toBeUndefined();
-        expect(drill.i18n?.en?.videoUrl).toBeUndefined();
-        continue;
-      }
-      throw new Error(`Unhandled onboarding video contract: ${drill.problemId}`);
+      expect(drill.problemId).toBe(LOCAL_DRILL_PROBLEM_ID);
+      expect(drill.videoUrl).toBeUndefined();
+      expect(drill.i18n?.en?.videoUrl).toBeUndefined();
     }
   });
 
