@@ -128,17 +128,25 @@ tenkacloud local
 
 AWS コンソールからデプロイします。CloudFormation スタックが CodeBuild プロジェクトを作成し、このリポジトリを Git clone してデプロイまで代行してくれます。**ローカルへのインストールも GitHub 連携も不要です**。
 
+> **設計意図: イベント単位の一時環境。** デフォルトのライフサイクルは「1 イベント用に launcher を作り、デプロイし、イベントを実施し、撤去する」であり、自動で更新され続ける常設 SaaS ではありません。イベントの合間も稼働させたままで構いませんが、以下の手順(撤去を含む)はすべてイベント単位の運用を前提に書いています。launcher・build・destroy の責務分担とパラメータ別の再ビルド方針は [`infrastructure/templates/README.md`](./infrastructure/templates/README.md#cloudformation-console-lite-mode-deployment-pipeline)、当日の運用フローは [`docs/operations/event-runbook.md`](./docs/operations/event-runbook.md) を参照してください。
+
 1. [`infrastructure/templates/lite-pipeline.yaml`](./infrastructure/templates/lite-pipeline.yaml) をダウンロードする。
 2. `ap-northeast-1` の [CloudFormation のスタック作成ページ](https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-1#/stacks/create/template) を開き、**Upload a template file** でアップロード、スタック名は **`tenkacloud-lite-launcher`** とする。
 3. パラメータグループ **Required** の **`TenantAdminEmail`** に、Admin Console のログイン用メールアドレスを設定する — それ以外のグループは初期値のままで構わない。(自分の問題カタログを使いたい場合は **Advanced: repository sources** グループの `ProblemsRepoUrl` も設定してください — [自分の問題を追加する](#自分の問題を追加する) を参照。)
 4. **acknowledge IAM** にチェックし、スタックを作成する(ビルド用の CodeBuild ロールが全スタックをデプロイできる強い権限を必要とするため、コンソールにその理由が表示される)。
 5. スタックの **`StartBuildConsoleUrl`** 出力から CodeBuild プロジェクトを開き、**Start build** を押す。
 
+上に one-click の *Launch Stack* バッジを置いていないのは意図的な判断です。CloudFormation の `templateURL` は Amazon S3 URL にしか対応しておらず、GitHub raw URL をそのまま渡すと `TemplateURL must be a supported URL` で失敗します。**Upload a template file**(手順 2)が、自前で S3 バケットを持たない self-host OSS プロジェクトにおける one-click 相当の正式な手順です。
+
+**`Start build` を手動のままにしている理由:** launcher スタックを作るだけではデプロイは自動開始しません。これは片付け忘れの手作業ではなく意図的な設計です — 課金の発生する操作を明示的なスイッチの先に置き、`RepoRef` / `ProblemsRepoRef` / capacity を確認してから実行できる確認点を作り、launcher への意図しない CloudFormation スタック更新が黙って再デプロイを引き起こさないようにしています。**Start build** は、イベント環境を起動するスイッチだと捉えてください。
+
 15〜30 分ほどでビルドが完了します。すでに見ている CodeBuild のビルドログを一番下までスクロールしてください — デプロイの最後に `✓ Lite mode deploy complete` ブロックが出力され、その **Access URLs:** セクションに **Application Admin Console** と **Participant Portal** の URL がそのまま載っており、続けて **Next steps:** と **Teardown:** の案内も表示されます。CloudFormation 側で確認したい場合は、同じ 2 つの URL がビルドが作成する `tenkacloud-lite` / `tenkacloud-lite-problem-deploy` 各スタックの **Outputs** にも載っています。
 
 **完全削除する場合:** 同じ CodeBuild プロジェクトで **Start build with overrides** を選び、環境変数 `ACTION` に `destroy-all` を設定して実行してください。Lite の 2 スタックに加え、保持された DynamoDB テーブルと問題デプロイ用ログも削除されます。その後 `tenkacloud-lite-launcher` スタック自体を削除すると、CodeBuild プロジェクト、IAM Role、launcher のログも消えます。DynamoDB 履歴を意図的に残す場合だけ `ACTION=destroy` を使います。
 
 `destroy-all` 追加前に作成した launcher は、先に CloudFormation のスタック更新で最新版の `lite-pipeline.yaml` を適用してください。旧 buildspec は未知の ACTION を deploy として扱うため、旧 launcher に `destroy-all` を直接指定してはいけません。
+
+同じ launcher を次のイベントでも再利用すること自体は可能です(ビルドのたびに両方の repo を re-clone するため)。ただし推奨する運用は、イベントごとに launcher を作り直すことです — 本番の前に `RepoRef` / `ProblemsRepoRef` をリハーサル済みの tag またはコミット SHA へ固定し、撤去したら launcher も削除します。パラメータ別の再ビルド表とリハーサルから本番までの流れは [`infrastructure/templates/README.md`](./infrastructure/templates/README.md#cloudformation-console-lite-mode-deployment-pipeline) と [`docs/operations/event-runbook.md`](./docs/operations/event-runbook.md) を参照してください。
 
 ## 対応環境
 
