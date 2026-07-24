@@ -54,6 +54,16 @@ Reused by operator CLIs and deploy scripts; import directly by relative path.
 | ------ | ---------------- |
 | `runtime/adapter.ts` | `mergeCompositeParameters` / `optionalParametersField` — the Composite-bound-parameter merge idioms shared by every `ProblemRuntimeAdapter` (`aws-cfn-adapter.ts`, `azure-bicep-adapter.ts`, `gcp-infra-manager-adapter.ts`, `sakura-apprun-adapter.ts`) and `prepared-dispatch.ts` (#2747) |
 
+## Infrastructure shared modules (`infrastructure/lib/problem-deploy/`, outside `handlers/`)
+
+Live outside `handlers/` on purpose (the `handler-must-not-call-fetch` harness rule forbids a raw
+`fetch(` under any `.../handlers/...` path) — each is injected into a handler as a dependency.
+
+| Module | What it provides |
+| ------ | ---------------- |
+| `challenge-payload-artifacts.ts` | `fetchChallengePayloadDirectory` — bounded fetch+unzip of an arbitrary DIRECTORY out of a private problem's presigned `payload.zip` (a Terraform / Infra Manager root module), sharing the same zip-bomb bounds + `defaultHttpGet` as `fetchChallengePayloadArtifacts`'s two-fixed-filename read (#2745) |
+| `runtime-clients/gcp-blueprint-materializer.ts` | `materializeGcpBlueprint` / `resolveGcpTerraformSource` / `buildDeterministicBlueprintZip` — resolves a GCP problem's Terraform root module (materialized `problems/` tree OR private payload zip), zips it deterministically, and uploads it to GCS as an immutable, content-addressed object (#2745) |
+
 ## Where a new helper belongs
 
 - Shared across ≥2 SPAs (or SPA + Lambda): a `packages/*` workspace — extend the

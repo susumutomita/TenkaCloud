@@ -62,6 +62,7 @@ export {
   type GcpInfraManagerAdapterContext,
   type GcpInfraManagerClient,
   GcpInfraManagerRuntimeAdapter,
+  type MaterializeGcpBlueprintInput,
   mapGcpDeploymentState,
 } from "./gcp-infra-manager-adapter.js";
 export { type RuntimeItemFields, resolveItemRuntime } from "./item-runtime.js";

@@ -72,11 +72,13 @@ const GOLDEN_PACKS: readonly GoldenPack[] = [
   {
     dir: "multicloud-pack",
     packId: "com.tenkacloud.golden.multicloud",
-    version: "1.0.2",
+    version: "1.0.3",
     capability:
       "four-provider composite runtime + composite-probe scoring, plus single-provider GCP flag sample",
     problemIds: ["golden-multicloud-four-corners", "golden-multicloud-gcp-single-credential"],
-    contentDigest: "b00695847c2bb945a45ab33fa44e5ff8db5112843033268f0773154ccf0fb6fb",
+    // [Issue #2745] Regenerated after replacing the inert `targets/gcp.yaml` placeholder with a
+    // real Terraform root module directory (`targets/gcp/{main,variables,outputs}.tf`).
+    contentDigest: "a73b508914478da9be8413452f6b99335256ef7dfbd26ae336bb5a6394f96b35",
   },
   {
     dir: "private-artifact-pack",

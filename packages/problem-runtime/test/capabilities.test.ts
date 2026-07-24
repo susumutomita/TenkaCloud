@@ -53,7 +53,7 @@ describe("runtime capability evidence (#2748)", () => {
       adapterWired: true,
       executable: false,
       liveVerified: false,
-      blockingIssues: [2745, 2081],
+      blockingIssues: [2081],
     });
 
     const sakura = findRuntimeCapability("sakura", "apprun");

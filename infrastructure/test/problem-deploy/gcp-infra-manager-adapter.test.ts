@@ -1,7 +1,7 @@
 /**
- * [ADR-027 / Issue #1411] Unit tests for the gcp/infra-manager runtime adapter + registry wiring.
- * orchestration を注入された GcpInfraManagerClient / getCredential に対して pin する
- * (実 Infra Manager REST + WIF exchange は account-gated)。
+ * [ADR-027 / Issue #1411 / #2745] Unit tests for the gcp/infra-manager runtime adapter + registry
+ * wiring. orchestration を注入された GcpInfraManagerClient / getCredential / materializeBlueprint に
+ * 対して pin する (= 実 Infra Manager REST + WIF exchange + 実 materializer は account-gated / 別レイヤ)。
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -16,7 +16,7 @@ import {
   selectAdapter,
 } from "../../lib/problem-deploy/handlers/shared/runtime/index";
 
-const runtime: ProblemRuntime = { provider: "gcp", engine: "infra-manager", entry: "blueprint/" };
+const runtime: ProblemRuntime = { provider: "gcp", engine: "infra-manager", entry: "targets/gcp" };
 const deployInput = {
   jobId: "job-1",
   correlationId: "job-1",
@@ -29,12 +29,22 @@ const deployInput = {
   awsAccountId: "n/a",
 };
 
+/** [#2745] The fake materializer's fixed output — distinct from `runtime.entry` on purpose, so an
+ * assertion on `blueprintRef` proves the adapter used the MATERIALIZED ref, not the raw entry. */
+const MATERIALIZED_REF = "gs://team-a-artifacts/tenkacloud/t1/team-a/gcp-run/deadbeef.zip#1";
+
 function makeCtx(client: GcpInfraManagerClient): {
   ctx: GcpInfraManagerAdapterContext;
   getCredential: ReturnType<typeof vi.fn>;
+  materializeBlueprint: ReturnType<typeof vi.fn>;
 } {
   const getCredential = vi.fn().mockResolvedValue({ accessToken: "tok" });
-  return { ctx: { getCredential, client: vi.fn().mockReturnValue(client) }, getCredential };
+  const materializeBlueprint = vi.fn().mockResolvedValue(MATERIALIZED_REF);
+  return {
+    ctx: { getCredential, client: vi.fn().mockReturnValue(client), materializeBlueprint },
+    getCredential,
+    materializeBlueprint,
+  };
 }
 
 describe("mapGcpDeploymentState (ADR-027 #1411)", () => {
@@ -63,20 +73,54 @@ describe("GcpInfraManagerRuntimeAdapter (ADR-027 #1411)", () => {
     };
   });
 
-  it("should deploy by upserting the Infra Manager deployment with blueprintRef=entry + inputs", async () => {
-    const { ctx, getCredential } = makeCtx(client);
+  it("should deploy by materializing the blueprint THEN upserting with blueprintRef=materialized ref (#2745)", async () => {
+    const { ctx, getCredential, materializeBlueprint } = makeCtx(client);
     const result = await new GcpInfraManagerRuntimeAdapter(ctx, runtime).deploy(deployInput);
     expect(result).toEqual({ status: "deploying" });
+    // getCredential runs once and is reused for BOTH materializeBlueprint and client() — no
+    // second WIF exchange per deploy.
     expect(getCredential).toHaveBeenCalledTimes(1);
+    expect(materializeBlueprint).toHaveBeenCalledWith(
+      { accessToken: "tok" },
+      {
+        tenantId: "t1",
+        teamSlug: "team-a",
+        problemId: "gcp-run",
+        problemDir: "problems/challenges/gcp-run",
+        entry: "targets/gcp", // runtime.entry, NOT yet a gs:// ref
+      },
+    );
     expect(client.upsertDeployment).toHaveBeenCalledWith({
       name: "tc-team-a-gcp-run",
-      blueprintRef: "blueprint/",
+      blueprintRef: MATERIALIZED_REF, // materialized gs:// ref, not the raw repository entry
       inputs: {
         tenkacloud_name_prefix: "tc-team-a-gcp-run",
         tenkacloud_problem_id: "gcp-run",
         tenkacloud_team: "team-a",
       },
     });
+  });
+
+  it("should pass challengePayloadUrl through to materializeBlueprint for a private problem", async () => {
+    const { ctx, materializeBlueprint } = makeCtx(client);
+    await new GcpInfraManagerRuntimeAdapter(ctx, runtime).deploy({
+      ...deployInput,
+      challengePayloadUrl: "https://s3.example/presigned",
+    });
+    expect(materializeBlueprint).toHaveBeenCalledWith(
+      { accessToken: "tok" },
+      expect.objectContaining({ challengePayloadUrl: "https://s3.example/presigned" }),
+    );
+  });
+
+  it("should propagate a materializer failure WITHOUT calling the provider client (fail-closed, no provider mutation)", async () => {
+    const { ctx, materializeBlueprint } = makeCtx(client);
+    materializeBlueprint.mockRejectedValueOnce(new Error("no artifactBucket registered"));
+
+    await expect(
+      new GcpInfraManagerRuntimeAdapter(ctx, runtime).deploy(deployInput),
+    ).rejects.toThrow(/no artifactBucket registered/);
+    expect(client.upsertDeployment).not.toHaveBeenCalled();
   });
 
   it("should merge bound Composite parameters into Infra Manager inputs (#2747)", async () => {
@@ -87,7 +131,7 @@ describe("GcpInfraManagerRuntimeAdapter (ADR-027 #1411)", () => {
     });
     expect(client.upsertDeployment).toHaveBeenCalledWith({
       name: "tc-team-a-gcp-run",
-      blueprintRef: "blueprint/",
+      blueprintRef: MATERIALIZED_REF,
       inputs: {
         tenkacloud_name_prefix: "tc-team-a-gcp-run",
         tenkacloud_problem_id: "gcp-run",
@@ -118,7 +162,11 @@ describe("GcpInfraManagerRuntimeAdapter (ADR-027 #1411)", () => {
 describe("selectAdapter gcp wiring (ADR-027 #1411)", () => {
   const aws = {} as AwsCloudFormationAdapterContext;
   it("should return the GCP adapter only when its WIF context is wired, else reserved", () => {
-    const ctx: GcpInfraManagerAdapterContext = { getCredential: vi.fn(), client: vi.fn() };
+    const ctx: GcpInfraManagerAdapterContext = {
+      getCredential: vi.fn(),
+      client: vi.fn(),
+      materializeBlueprint: vi.fn(),
+    };
     expect(selectAdapter(runtime, { aws, gcp: ctx }).engine).toBe("infra-manager");
     expect(() => selectAdapter(runtime, { aws })).toThrow(RuntimeNotSupportedError);
   });

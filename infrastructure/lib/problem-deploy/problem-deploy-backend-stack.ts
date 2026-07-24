@@ -395,6 +395,8 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       capacityRunbookDocumentName: tables.capacityRunbookDocumentName,
       capacityRunbookAutomationRoleArn: tables.capacityRunbookAutomationRoleArn,
       deployViaLambda: props.deployViaLambda,
+      // [Issue #2745] materialized problems/ tree bucket — public gcp/infra-manager Terraform read.
+      sourceBucketName: props.sourceBucketName,
     });
     this.deployApiLambda = apiLambdas.deployApiFn;
     this.eventApiLambda = apiLambdas.eventApiFn;

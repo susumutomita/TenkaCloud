@@ -13,6 +13,7 @@
 
 import { GetParameterCommand } from "@aws-sdk/client-ssm";
 import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { strToU8, zipSync } from "fflate";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   type DeployContext,
@@ -329,16 +330,16 @@ describe("startDeployment azure/bicep dispatch (ADR-032 / Issue #1410)", () => {
 });
 
 /**
- * [ADR-032 / Issue #1411] gcp/infra-manager dispatch wiring。 SSM (per-team WIF config) + STS client +
- * subject-token signer が配線されたときだけ executable になり、 鍵レスで AWS subject → GCP STS →
- * SA impersonation → Infra Manager REST へ deploy する (EventBridge 不使用)。 config 未登録は loud throw、
- * SSM 未配線では reserved のまま。
+ * [ADR-032 / Issue #1411 / #2745] gcp/infra-manager dispatch wiring。 SSM (per-team WIF config) +
+ * STS client + subject-token signer が配線されたときだけ executable になり、 鍵レスで AWS subject →
+ * GCP STS → SA impersonation → **Terraform blueprint materialize (#2745)** → Infra Manager REST へ
+ * deploy する (EventBridge 不使用)。 config 未登録は loud throw、 SSM 未配線では reserved のまま。
  */
-describe("startDeployment gcp/infra-manager dispatch (ADR-032 / Issue #1411)", () => {
+describe("startDeployment gcp/infra-manager dispatch (ADR-032 / Issue #1411 / #2745)", () => {
   const gcpRuntime: ProblemRuntime = {
     provider: "gcp",
     engine: "infra-manager",
-    entry: "gs://b/cfg",
+    entry: "targets/gcp",
   };
   const GCP_CONFIG = {
     wifAudience:
@@ -346,7 +347,11 @@ describe("startDeployment gcp/infra-manager dispatch (ADR-032 / Issue #1411)", (
     serviceAccountEmail: "deployer@proj.iam.gserviceaccount.com",
     projectId: "proj-1",
     location: "asia-northeast1",
+    // [Issue #2745] materializeGcpBlueprint fails closed without this.
+    artifactBucket: "team-a-gcp-artifacts",
   };
+  /** A real (tiny) zip so fetchChallengePayloadDirectory has a real `targets/gcp/main.tf` to find. */
+  const PAYLOAD_ZIP = zipSync({ "targets/gcp/main.tf": strToU8('resource "x" {}') });
 
   beforeEach(() => vi.clearAllMocks());
   afterEach(() => vi.unstubAllGlobals());
@@ -364,13 +369,19 @@ describe("startDeployment gcp/infra-manager dispatch (ADR-032 / Issue #1411)", (
     };
   }
 
-  it("should deploy via Infra Manager (not EventBridge) after WIF exchange + SA impersonation", async () => {
-    // Infra Manager の getRaw (GET → 404) + create (POST) で 2 fetch。
-    const imFetch = vi
+  it("should deploy via Infra Manager (not EventBridge) after WIF exchange + SA impersonation + blueprint materialization", async () => {
+    // fetch call order: (1) materializer downloads the private payload zip, (2) materializer
+    // uploads the materialized blueprint to GCS, (3) Infra Manager getRaw (GET → 404), (4) Infra
+    // Manager create (POST). All four hit the SAME stubbed global fetch (no separate client).
+    const gcpFetch = vi
       .fn()
+      .mockResolvedValueOnce(new Response(PAYLOAD_ZIP, { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ generation: "1700000000000001" }), { status: 200 }),
+      )
       .mockResolvedValueOnce(new Response("not found", { status: 404 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ name: "op" }), { status: 200 }));
-    vi.stubGlobal("fetch", imFetch);
+    vi.stubGlobal("fetch", gcpFetch);
     const signer = { sign: vi.fn().mockResolvedValue({ url: "u", method: "POST", headers: [] }) };
     const stsClient = {
       exchangeToken: vi.fn().mockResolvedValue({ access_token: "fed", expires_in: 3600 }),
@@ -384,6 +395,12 @@ describe("startDeployment gcp/infra-manager dispatch (ADR-032 / Issue #1411)", (
       gcpSubjectTokenSigner: signer as unknown as DeployContext["gcpSubjectTokenSigner"],
       awsRegion: "ap-northeast-1",
       resolveProblemRuntime: () => gcpRuntime,
+      // ADR-008 Phase 3: private-problem path — the presigned URL itself is mocked at module
+      // scope (`generateChallengePayloadUrl`); ctx.s3 just needs to be truthy so
+      // resolveChallengePayloadUrl's "S3 client wired?" check passes.
+      problemsVisibility: { "hello-world": "private" },
+      challengePayloadBucket: "test-challenge-payload-bucket",
+      s3: {} as unknown as DeployContext["s3"],
     });
     const res = await startDeployment(ctx, sampleRequest());
     expect(res.status).toBe("PENDING");
@@ -400,8 +417,23 @@ describe("startDeployment gcp/infra-manager dispatch (ADR-032 / Issue #1411)", (
         federatedToken: "fed",
       }),
     );
-    expect(imFetch.mock.calls[1][1].method).toBe("POST"); // Infra Manager create
-    expect(imFetch.mock.calls[1][1].headers.Authorization).toBe("Bearer sa-token");
+    // (1) materializer downloaded the presigned payload zip.
+    expect(gcpFetch.mock.calls[0][0]).toBe("https://example.invalid/fake.zip");
+    // (2) materializer uploaded the materialized blueprint to GCS with the SA token.
+    expect(gcpFetch.mock.calls[1][0]).toContain(
+      "https://storage.googleapis.com/upload/storage/v1/b/team-a-gcp-artifacts/o?",
+    );
+    expect(gcpFetch.mock.calls[1][1].headers.Authorization).toBe("Bearer sa-token");
+    // (3)-(4) Infra Manager create, with blueprintRef = the materialized gs:// ref (never the raw
+    // repository-relative "targets/gcp" entry — assertGcsBlueprintRef would reject that).
+    expect(gcpFetch.mock.calls[3][1].method).toBe("POST"); // Infra Manager create
+    expect(gcpFetch.mock.calls[3][1].headers.Authorization).toBe("Bearer sa-token");
+    const createBody = JSON.parse(gcpFetch.mock.calls[3][1].body);
+    // tenant-acme / alpha-team (slugify("Alpha Team")) / hello-world — tenant/team/problem-scoped
+    // content-addressed key, ending in the SA-impersonation-token-authenticated upload's generation.
+    expect(createBody.terraformBlueprint.gcsSource).toMatch(
+      /^gs:\/\/team-a-gcp-artifacts\/tenkacloud\/tenant-acme\/alpha-team\/hello-world\/[0-9a-f]{64}\.zip#1700000000000001$/,
+    );
     expect(eventsSend).not.toHaveBeenCalled();
     expect(putSend.mock.calls.some((c) => c[0] instanceof PutCommand)).toBe(true);
   });
