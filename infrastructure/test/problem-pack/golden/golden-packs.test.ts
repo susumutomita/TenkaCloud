@@ -72,13 +72,16 @@ const GOLDEN_PACKS: readonly GoldenPack[] = [
   {
     dir: "multicloud-pack",
     packId: "com.tenkacloud.golden.multicloud",
-    version: "1.0.3",
+    version: "1.0.4",
     capability:
       "four-provider composite runtime + composite-probe scoring, plus single-provider GCP flag sample",
     problemIds: ["golden-multicloud-four-corners", "golden-multicloud-gcp-single-credential"],
-    // [Issue #2745] Regenerated after replacing the inert `targets/gcp.yaml` placeholder with a
-    // real Terraform root module directory (`targets/gcp/{main,variables,outputs}.tf`).
-    contentDigest: "a73b508914478da9be8413452f6b99335256ef7dfbd26ae336bb5a6394f96b35",
+    // [Issue #2745] real Terraform root module directory (`targets/gcp/{main,variables,outputs}.tf`)
+    // + [Issue #2743] real compilable `azure.bicep` + its precompiled `azure.json` (metadata.json's
+    // azure target now points at the .json so the pack deploys without a `bicep` CLI; the local
+    // fixture's failure-scenario case keeps its azure entries on `targets/azure.bicep` so both the
+    // precompiled-JSON and the compile-path routing stay declaratively represented).
+    contentDigest: "63be56ca897f0454e1b0381497e5d252433e8ee1c049c6754f1ca84ff767e96b",
   },
   {
     dir: "private-artifact-pack",

@@ -330,3 +330,56 @@ export async function fetchChallengePayloadDirectory(
     .map((name) => ({ relativePath: relativeToEntryDir(name, entryDir), bytes: entries[name] }))
     .sort((a, b) => a.relativePath.localeCompare(b.relativePath));
 }
+
+/** Matches `entryName` at the zip root or nested under any directory depth. */
+function matchesNamedEntry(name: string, entryName: string): boolean {
+  return name === entryName || name.endsWith(`/${entryName}`);
+}
+
+/**
+ * [Issue #2743] Fetch + unzip a private problem's payload and return the text of exactly ONE
+ * author-chosen named entry — for a composite/non-AWS runtime target whose `entry` is a single
+ * filename (e.g. `targets/azure.bicep` / `targets/azure.json`), unlike the two FIXED filenames
+ * {@link fetchChallengePayloadArtifacts} reads or the whole DIRECTORY
+ * {@link fetchChallengePayloadDirectory} reads. Shares the same `resolvePayloadLimits` /
+ * `downloadBoundedPayload` / `enforceEntryBackstops` primitives as both siblings. Missing entry
+ * throws (fail loud — never a silent empty artifact).
+ */
+export async function fetchChallengePayloadEntry(
+  url: string,
+  entryName: string,
+  deps: FetchChallengePayloadDeps = {},
+): Promise<string> {
+  const limits = resolvePayloadLimits(deps);
+  const bytes = await downloadBoundedPayload(url, deps, limits);
+
+  // (b) PRIMARY decompress bound — see enforceEntryBackstops docblock.
+  const entries = unzipSync(bytes, {
+    filter: (file) =>
+      matchesNamedEntry(file.name, entryName) && file.originalSize <= limits.maxEntryBytes,
+  });
+  const entryNames = Object.keys(entries);
+  enforceEntryBackstops(
+    entries,
+    entryNames,
+    limits,
+    (count, cap) =>
+      `challenge payload has ${count} entries matching '${entryName}', exceeding the ${cap} cap`,
+  );
+  // Fail loud on an ambiguous match — independent of maxEntryCount: a payload containing BOTH
+  // `azure.json` and `targets/azure.json` would otherwise silently resolve `entryNames[0]`
+  // (nondeterministic which entry, since Object.keys iteration order over the unzip result is not
+  // a contract this module makes). Two-or-more matches is always a caller/payload error, never a
+  // "pick one" situation.
+  if (entryNames.length > 1) {
+    throw new Error(
+      `challenge payload has ${entryNames.length} entries matching '${entryName}' ` +
+        `(${[...entryNames].sort().join(", ")}); the entry name must be unambiguous`,
+    );
+  }
+  const matchedKey = entryNames[0];
+  if (!matchedKey) {
+    throw new Error(`challenge payload does not contain a '${entryName}' entry`);
+  }
+  return new TextDecoder().decode(entries[matchedKey]);
+}

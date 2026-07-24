@@ -1,7 +1,7 @@
 /**
- * [ADR-027 / Issue #1410] Unit tests for the azure/bicep runtime adapter + registry wiring.
- * orchestration を注入された AzureDeploymentStackClient / getCredential に対して pin する
- * (実 ARM REST + WIF exchange は account-gated)。
+ * [ADR-027 / Issue #1410 / #2743] Unit tests for the azure/bicep runtime adapter + registry wiring.
+ * orchestration を注入された AzureDeploymentStackClient / getCredential / materialize に対して pin する
+ * (実 ARM REST + WIF exchange + Bicep compile は account-gated / #2743 別レイヤ)。
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -15,6 +15,7 @@ import {
   RuntimeNotSupportedError,
   selectAdapter,
 } from "../../lib/problem-deploy/handlers/shared/runtime/index";
+import type { InlineArmTemplate } from "../../lib/problem-deploy/runtime-clients/azure-template-materializer";
 
 const runtime: ProblemRuntime = { provider: "azure", engine: "bicep", entry: "main.bicep" };
 const deployInput = {
@@ -29,14 +30,28 @@ const deployInput = {
   awsAccountId: "n/a",
 };
 
+const ARM_DOCUMENT = { $schema: "s", resources: [] };
+const MATERIALIZED: InlineArmTemplate = {
+  document: ARM_DOCUMENT,
+  sourceSha256: "deadbeef",
+  diagnostics: [],
+};
+
 function makeCtx(client: AzureDeploymentStackClient): {
   ctx: AzureBicepAdapterContext;
   getCredential: ReturnType<typeof vi.fn>;
   factory: ReturnType<typeof vi.fn>;
+  materialize: ReturnType<typeof vi.fn>;
 } {
   const getCredential = vi.fn().mockResolvedValue({ accessToken: "tok" });
   const factory = vi.fn().mockReturnValue(client);
-  return { ctx: { getCredential, client: factory }, getCredential, factory };
+  const materialize = vi.fn().mockResolvedValue(MATERIALIZED);
+  return {
+    ctx: { getCredential, client: factory, materialize },
+    getCredential,
+    factory,
+    materialize,
+  };
 }
 
 describe("mapAzureProvisioningState (ADR-027 #1410)", () => {
@@ -45,12 +60,13 @@ describe("mapAzureProvisioningState (ADR-027 #1410)", () => {
     expect(mapAzureProvisioningState("Failed")).toBe("failed");
     expect(mapAzureProvisioningState("Canceled")).toBe("failed");
     expect(mapAzureProvisioningState("Deleting")).toBe("destroying");
+    expect(mapAzureProvisioningState("Deleted")).toBe("destroyed");
     expect(mapAzureProvisioningState(undefined)).toBe("destroyed");
     expect(mapAzureProvisioningState("Running")).toBe("deploying");
   });
 });
 
-describe("AzureBicepRuntimeAdapter (ADR-027 #1410)", () => {
+describe("AzureBicepRuntimeAdapter (ADR-027 #1410 / #2743)", () => {
   let client: {
     upsertStack: ReturnType<typeof vi.fn>;
     getStack: ReturnType<typeof vi.fn>;
@@ -67,19 +83,34 @@ describe("AzureBicepRuntimeAdapter (ADR-027 #1410)", () => {
     };
   });
 
-  it("should deploy by upserting the Deployment Stack with templateRef=entry + params", async () => {
-    const { ctx, getCredential } = makeCtx(client);
+  it("should materialize entry BEFORE upserting the Deployment Stack with the inline template + params", async () => {
+    const { ctx, getCredential, materialize } = makeCtx(client);
     const result = await new AzureBicepRuntimeAdapter(ctx, runtime).deploy(deployInput);
     expect(result).toEqual({ status: "deploying" });
+    expect(materialize).toHaveBeenCalledWith("main.bicep", {
+      problemDir: "problems/challenges/azure-fn",
+    });
     expect(getCredential).toHaveBeenCalledTimes(1);
     expect(client.upsertStack).toHaveBeenCalledWith({
       name: "tc-team-a-azure-fn",
-      templateRef: "main.bicep",
+      template: { kind: "inline", document: ARM_DOCUMENT },
       parameters: {
         tenkacloudNamePrefix: "tc-team-a-azure-fn",
         tenkacloudProblemId: "azure-fn",
         tenkacloudTeam: "team-a",
       },
+    });
+  });
+
+  it("should pass challengePayloadUrl through to materialize's artifact location", async () => {
+    const { ctx, materialize } = makeCtx(client);
+    await new AzureBicepRuntimeAdapter(ctx, runtime).deploy({
+      ...deployInput,
+      challengePayloadUrl: "https://s3.example/presigned",
+    });
+    expect(materialize).toHaveBeenCalledWith("main.bicep", {
+      problemDir: "problems/challenges/azure-fn",
+      challengePayloadUrl: "https://s3.example/presigned",
     });
   });
 
@@ -91,7 +122,7 @@ describe("AzureBicepRuntimeAdapter (ADR-027 #1410)", () => {
     });
     expect(client.upsertStack).toHaveBeenCalledWith({
       name: "tc-team-a-azure-fn",
-      templateRef: "main.bicep",
+      template: { kind: "inline", document: ARM_DOCUMENT },
       parameters: {
         tenkacloudNamePrefix: "tc-team-a-azure-fn",
         tenkacloudProblemId: "azure-fn",
@@ -99,6 +130,38 @@ describe("AzureBicepRuntimeAdapter (ADR-027 #1410)", () => {
         tenkacloudUpstreamEndpoint: "https://aws.example",
       },
     });
+  });
+
+  it("should include non-empty compiler diagnostics in the materialize trace log (#2743)", async () => {
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      const { ctx } = makeCtx(client);
+      ctx.materialize = vi.fn().mockResolvedValue({
+        document: ARM_DOCUMENT,
+        sourceSha256: "deadbeef",
+        diagnostics: ["Warning BCP035: unused param 'foo'"],
+      });
+      await new AzureBicepRuntimeAdapter(ctx, runtime).deploy(deployInput);
+      const traceCall = logSpy.mock.calls.find(([line]) =>
+        String(line).includes("deploy.azure-bicep.materialize"),
+      );
+      expect(traceCall).toBeDefined();
+      const traceBody = JSON.parse(String(traceCall?.[0]));
+      expect(traceBody.diagnostics).toEqual(["Warning BCP035: unused param 'foo'"]);
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  it("should propagate a materialize failure WITHOUT touching credentials or the Azure client (#2743)", async () => {
+    const { ctx, getCredential, factory } = makeCtx(client);
+    ctx.materialize = vi.fn().mockRejectedValue(new Error("no Bicep compiler is configured"));
+    await expect(new AzureBicepRuntimeAdapter(ctx, runtime).deploy(deployInput)).rejects.toThrow(
+      /no Bicep compiler is configured/,
+    );
+    expect(getCredential).not.toHaveBeenCalled();
+    expect(factory).not.toHaveBeenCalled();
+    expect(client.upsertStack).not.toHaveBeenCalled();
   });
 
   it("should collect stack outputs / map status / destroy", async () => {
@@ -122,7 +185,11 @@ describe("AzureBicepRuntimeAdapter (ADR-027 #1410)", () => {
 describe("selectAdapter azure wiring (ADR-027 #1410)", () => {
   const aws = {} as AwsCloudFormationAdapterContext;
   it("should return the Azure adapter only when its WIF context is wired, else reserved", () => {
-    const ctx: AzureBicepAdapterContext = { getCredential: vi.fn(), client: vi.fn() };
+    const ctx: AzureBicepAdapterContext = {
+      getCredential: vi.fn(),
+      client: vi.fn(),
+      materialize: vi.fn(),
+    };
     expect(selectAdapter(runtime, { aws, azure: ctx }).provider).toBe("azure");
     expect(() => selectAdapter(runtime, { aws })).toThrow(RuntimeNotSupportedError);
   });

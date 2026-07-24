@@ -8,7 +8,7 @@
     "targets": [
       { "id": "aws", "provider": "aws", "engine": "cloudformation", "entry": "targets/aws.yaml" },
       { "id": "gcp", "provider": "gcp", "engine": "infra-manager", "entry": "targets/gcp" },
-      { "id": "azure", "provider": "azure", "engine": "bicep", "entry": "targets/azure.bicep" },
+      { "id": "azure", "provider": "azure", "engine": "bicep", "entry": "targets/azure.json" },
       { "id": "sakura", "provider": "sakura", "engine": "apprun", "entry": "targets/sakura.yaml" }
     ]
   },

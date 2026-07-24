@@ -11,6 +11,7 @@
  *      BEFORE any DDB Put or EventBridge publish — = no cloud mutation.
  */
 
+import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { GetParameterCommand } from "@aws-sdk/client-ssm";
 import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 import { strToU8, zipSync } from "fflate";
@@ -247,10 +248,18 @@ describe("startDeployment sakura/apprun dispatch (ADR-026 / Issue #1412)", () =>
 });
 
 /**
- * [ADR-032 / Issue #1410] azure/bicep dispatch wiring。 SSM (per-team Azure credential) + Entra token client
- * が配線されたときだけ executable になり、 ARM Deployment Stacks REST へ deploy する (EventBridge は使わない)。
- * config 未登録は loud throw、 SSM 未配線では reserved のまま。 [Issue #2561] verified-AWS-account gate は
- * provider-aware になったため、 azure/bicep も #1412 と同じく AWS competitor account 不要。
+ * [ADR-032 / Issue #1410 / #2743] azure/bicep dispatch wiring。 SSM (per-team Azure credential) +
+ * Entra token client が配線されたときだけ executable になり、 `runtime.entry` を必ず materialize してから
+ * ARM Deployment Stacks REST へ deploy する (EventBridge は使わない)。 config 未登録は loud throw、 SSM
+ * 未配線では reserved のまま。 [Issue #2561] verified-AWS-account gate は provider-aware になったため、
+ * azure/bicep も #1412 と同じく AWS competitor account 不要。
+ *
+ * [Issue #2743] Production materialization today only reads a PRIVATE (challengePayloadUrl-backed)
+ * problem's artifact (`resolveAzureArtifact` in `adapter-dependencies.ts`) — reading a PUBLIC
+ * problem's non-AWS target straight from a source bucket is not yet wired into this Lambda. The
+ * "deploy via ARM" test below therefore configures the private-problem path (visibility + bucket +
+ * S3 stub) so the deploy actually materializes `main.json` out of a real (fflate-built) payload zip
+ * before it ever PUTs the Deployment Stack.
  */
 describe("startDeployment azure/bicep dispatch (ADR-032 / Issue #1410)", () => {
   const azureRuntime: ProblemRuntime = { provider: "azure", engine: "bicep", entry: "main.json" };
@@ -261,6 +270,7 @@ describe("startDeployment azure/bicep dispatch (ADR-032 / Issue #1410)", () => {
     subscriptionId: "sub-1",
     resourceGroup: "rg-1",
   };
+  const ARM_JSON_TEMPLATE = { $schema: "s", resources: [] };
 
   beforeEach(() => vi.clearAllMocks());
   afterEach(() => vi.unstubAllGlobals());
@@ -278,24 +288,106 @@ describe("startDeployment azure/bicep dispatch (ADR-032 / Issue #1410)", () => {
     };
   }
 
-  it("should deploy via ARM (not EventBridge), resolving config from SSM + ARM token via the Entra client", async () => {
-    const armFetch = vi.fn().mockResolvedValueOnce(new Response("{}", { status: 200 })); // PUT deploymentStacks
+  /** [Issue #2743] `main.json` inside a real (fflate) payload.zip — the private-problem source. */
+  function payloadZipResponse(): Response {
+    const zip = zipSync({ "main.json": strToU8(JSON.stringify(ARM_JSON_TEMPLATE)) });
+    return new Response(zip, {
+      status: 200,
+      headers: { "content-length": String(zip.byteLength) },
+    });
+  }
+
+  it("should materialize main.json from the private payload, then deploy via ARM (not EventBridge)", async () => {
+    const armFetch = vi
+      .fn()
+      .mockResolvedValueOnce(payloadZipResponse()) // GET the challenge payload zip (materialize)
+      .mockResolvedValueOnce(new Response("{}", { status: 200 })); // PUT deploymentStacks
     vi.stubGlobal("fetch", armFetch);
     const tokenClient = { getToken: vi.fn().mockResolvedValue("arm-token") };
     const { ctx, putSend, eventsSend } = buildContext({
       ssm: ssmReturning(JSON.stringify(AZURE_CONFIG)) as unknown as DeployContext["ssm"],
       azureEntraTokenClient: tokenClient as unknown as DeployContext["azureEntraTokenClient"],
       resolveProblemRuntime: () => azureRuntime,
+      // [Issue #2743] Private problem so `resolveChallengePayloadUrl` actually mints a URL and
+      // the materializer has a real artifact source to read `main.json` from.
+      problemsVisibility: { "hello-world": "private" },
+      challengePayloadBucket: "test-bucket",
+      s3: { send: vi.fn() } as unknown as DeployContext["s3"],
     });
     const res = await startDeployment(ctx, sampleRequest());
     expect(res.status).toBe("PENDING");
     expect(tokenClient.getToken).toHaveBeenCalledWith(
       expect.objectContaining({ azureTenantId: "dir-1", clientId: "app-1", clientSecret: "shh" }),
     );
-    expect(armFetch).toHaveBeenCalledTimes(1);
-    expect(armFetch.mock.calls[0][1].method).toBe("PUT");
+    expect(armFetch).toHaveBeenCalledTimes(2);
+    // [0] = the payload zip GET (materialize), [1] = the ARM PUT with the inlined template.
+    expect(armFetch.mock.calls[0][1].method).toBe("GET");
+    expect(armFetch.mock.calls[1][1].method).toBe("PUT");
+    const putBody = JSON.parse(armFetch.mock.calls[1][1].body);
+    expect(putBody.properties.template).toEqual(ARM_JSON_TEMPLATE);
+    expect(putBody.properties.templateLink).toBeUndefined();
     expect(eventsSend).not.toHaveBeenCalled();
     expect(putSend.mock.calls.some((c) => c[0] instanceof PutCommand)).toBe(true);
+  });
+
+  it("[Issue #2743 / #2745] should materialize main.json from the materialized source bucket for a public problem (no private challengePayloadUrl configured)", async () => {
+    // No `problemsVisibility`/`challengePayloadBucket` override → `resolveChallengePayloadUrl`
+    // resolves undefined (public problem), so `resolveAzureArtifact` falls through to the
+    // `sourceBucketName`/`s3` materialized-tree read instead of the private presigned-zip path.
+    const armFetch = vi.fn().mockResolvedValueOnce(new Response("{}", { status: 200 })); // PUT deploymentStacks only
+    vi.stubGlobal("fetch", armFetch);
+    const tokenClient = { getToken: vi.fn().mockResolvedValue("arm-token") };
+    const s3Send = vi.fn().mockResolvedValue({
+      Body: { transformToString: async () => JSON.stringify(ARM_JSON_TEMPLATE) },
+    });
+    const { ctx, putSend, eventsSend } = buildContext({
+      ssm: ssmReturning(JSON.stringify(AZURE_CONFIG)) as unknown as DeployContext["ssm"],
+      azureEntraTokenClient: tokenClient as unknown as DeployContext["azureEntraTokenClient"],
+      resolveProblemRuntime: () => azureRuntime,
+      sourceBucketName: "test-source-bucket",
+      s3: { send: s3Send } as unknown as DeployContext["s3"],
+    });
+    const res = await startDeployment(ctx, sampleRequest());
+    expect(res.status).toBe("PENDING");
+    expect(s3Send).toHaveBeenCalledTimes(1);
+    const getObjectCall = s3Send.mock.calls[0][0];
+    expect(getObjectCall).toBeInstanceOf(GetObjectCommand);
+    expect(getObjectCall.input).toEqual({
+      Bucket: "test-source-bucket",
+      Key: "problems/challenges/hello-world/main.json",
+    });
+    // No zip GET this time (public source is read straight from S3, not a presigned payload zip) —
+    // the only `fetch` call is the ARM PUT itself.
+    expect(armFetch).toHaveBeenCalledTimes(1);
+    expect(armFetch.mock.calls[0][1].method).toBe("PUT");
+    const putBody = JSON.parse(armFetch.mock.calls[0][1].body);
+    expect(putBody.properties.template).toEqual(ARM_JSON_TEMPLATE);
+    expect(eventsSend).not.toHaveBeenCalled();
+    expect(putSend.mock.calls.some((c) => c[0] instanceof PutCommand)).toBe(true);
+  });
+
+  it("[Issue #2743] should fail closed with an actionable diagnostic — before any WIF token exchange or ARM call — when neither a private challengePayloadUrl nor SOURCE_BUCKET_NAME is configured", async () => {
+    const armFetch = vi.fn();
+    vi.stubGlobal("fetch", armFetch);
+    const tokenClient = { getToken: vi.fn().mockResolvedValue("arm-token") };
+    const { ctx, putSend, eventsSend } = buildContext({
+      ssm: ssmReturning(JSON.stringify(AZURE_CONFIG)) as unknown as DeployContext["ssm"],
+      azureEntraTokenClient: tokenClient as unknown as DeployContext["azureEntraTokenClient"],
+      resolveProblemRuntime: () => azureRuntime,
+      // Neither wired: no problemsVisibility/challengePayloadBucket (public) AND no
+      // sourceBucketName/s3 (no materialized-tree read either).
+    });
+    await expect(startDeployment(ctx, sampleRequest())).rejects.toThrow(
+      /Azure Bicep template source is unavailable/,
+    );
+    // The PENDING deployment row is written before the adapter is ever dispatched (unconditional
+    // for every provider, Issue #2561) — this failure happens *inside* the adapter's `deploy()`, so
+    // the row exists but materialize() still ran before getCredential()/upsertStack(): no WIF
+    // exchange and no ARM call ever happens.
+    expect(putSend.mock.calls.some((c) => c[0] instanceof PutCommand)).toBe(true);
+    expect(tokenClient.getToken).not.toHaveBeenCalled();
+    expect(armFetch).not.toHaveBeenCalled();
+    expect(eventsSend).not.toHaveBeenCalled();
   });
 
   it("[Issue #2561] should throw loudly when no Azure credential is registered", async () => {

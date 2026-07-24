@@ -1,19 +1,28 @@
 /**
- * [ADR-027 / Issue #1410] azure/bicep runtime adapter (Deployment Stacks).
+ * [ADR-027 / Issue #1410 / #2743] azure/bicep runtime adapter (Deployment Stacks).
  *
  * Azure problem は Bicep テンプレートを **Deployment Stack** として展開する。 Deployment Stack は
  * CFn 相当で、 配下リソースの lifecycle / teardown を Azure 側が所有する (= ADR-023 D3 を満たす。
- * platform は state file / lock を持たない)。 `runtime.entry` が Bicep テンプレート参照、 problem
- * パラメータは stack parameters、 stack outputs を deploy output に読む。
+ * platform は state file / lock を持たない)。 `runtime.entry` が Bicep/precompiled-ARM-JSON 参照、
+ * problem パラメータは stack parameters、 stack outputs を deploy output に読む。
  *
  * 認証は **Workload Identity Federation** (ADR-027): trust-bridge の `azure-federated-credential`
  * adapter が短命 OAuth token を発行する (stored key 不要、 AWS AssumeRole 並みの isolation)。 本 adapter は
  * その token を受け取る credential resolver を注入される (= account-gated な exchange は handler 側)。
  *
- * orchestration は注入された `AzureDeploymentStackClient` / `getCredential` に対して書き unit test で pin
- * する。 具体 ARM REST 実装 + WIF exchange は実 account で検証する別レイヤ (#1419 / Sakura と同方針)。
+ * [Issue #2743] `runtime.entry` は fail-open で ARM `templateLink.uri` へ直行しない — `deploy()` は
+ * `ctx.materialize` (= `azure-template-materializer.ts` の `materializeAzureTemplate`) を必ず
+ * `client.upsertStack` の前に await し、 inline ARM JSON を得てから spec を組む。 materialize が失敗すれば
+ * ARM 呼び出しは一切走らない (fail closed)。 materialize 結果の `sourceSha256` は deploy trace に記録する
+ * (non-secret な provenance)。
+ *
+ * orchestration は注入された `AzureDeploymentStackClient` / `getCredential` / `materialize` に対して
+ * 書き unit test で pin する。 具体 ARM REST 実装 + WIF exchange は実 account で検証する別レイヤ
+ * (#1419 / Sakura と同方針)。
  */
 
+import type { InlineArmTemplate } from "../../../runtime-clients/azure-template-materializer.js";
+import { logDeployTrace } from "../trace-log.js";
 import {
   mergeCompositeParameters,
   type ProblemRuntime,
@@ -33,11 +42,27 @@ export interface AzureCredential {
   readonly accessToken: string;
 }
 
-/** Deployment Stack の展開仕様。 templateRef = runtime.entry (Bicep)、 parameters = problem パラメータ。 */
+/**
+ * [Issue #2743] Deployment Stack の ARM template 供給元。 型レベルで曖昧さを消す — 「repo-relative な
+ * Bicep パス」と「到達可能な ARM JSON URL」を同じ `string` で表さない。 `AzureBicepRuntimeAdapter` は
+ * 常に `materialize()` の結果を `inline` として送る。 `remote` は REST client 側の完全性 (+将来の
+ * 非マテリアライズ経路) のために存在し、 今日のプラットフォームでは発行しない。
+ */
+export type AzureArmTemplateSource =
+  | { readonly kind: "inline"; readonly document: Readonly<Record<string, unknown>> }
+  | { readonly kind: "remote"; readonly uri: string };
+
+/** Deployment Stack の展開仕様。 template = 材料化済み ARM template、 parameters = problem パラメータ。 */
 export interface AzureDeploymentStackSpec {
   readonly name: string;
-  readonly templateRef: string;
+  readonly template: AzureArmTemplateSource;
   readonly parameters: Readonly<Record<string, string>>;
+}
+
+/** `runtime.entry` を materialize する場所の情報 (= 1 deployment 分、 adapter.deploy() が組む)。 */
+export interface AzureArtifactLocation {
+  readonly problemDir: string;
+  readonly challengePayloadUrl?: string;
 }
 
 /** Deployment Stack の観測状態。 provisioningState は ARM 由来、 outputs は ready 後に埋まる。 */
@@ -57,6 +82,14 @@ export interface AzureBicepAdapterContext {
   /** WIF 短命 token を解決 (trust-bridge 経由、 handler が束縛、 account-gated)。 */
   readonly getCredential: () => Promise<AzureCredential>;
   readonly client: (credential: AzureCredential) => AzureDeploymentStackClient;
+  /**
+   * [Issue #2743] `runtime.entry` を inline ARM template に materialize する。 `deploy()` は必ず
+   * `client.upsertStack` の前にこれを await する — materialize が失敗すれば ARM 呼び出しは一切走らない。
+   */
+  readonly materialize: (
+    entry: string,
+    location: AzureArtifactLocation,
+  ) => Promise<InlineArmTemplate>;
 }
 
 export const AZURE_PROVIDER = "azure";
@@ -87,7 +120,25 @@ export class AzureBicepRuntimeAdapter implements ProblemRuntimeAdapter {
   }
 
   async deploy(input: RuntimeDeployInput): Promise<RuntimeDeployResult> {
+    // [Issue #2743] Materialize BEFORE any Azure call (including the WIF token exchange) — a
+    // failed materialization (missing artifact source, absent Bicep compiler, malformed ARM JSON,
+    // path traversal) never reaches `getCredential`/`upsertStack`, so no credential is minted and
+    // no Deployment Stack is ever created/updated from an un-inlined template.
+    const template = await this.ctx.materialize(this.runtime.entry, {
+      problemDir: input.problemDir,
+      ...(input.challengePayloadUrl ? { challengePayloadUrl: input.challengePayloadUrl } : {}),
+    });
     const client = await this.resolveClient();
+    logDeployTrace("deploy.azure-bicep.materialize", {
+      jobId: input.jobId,
+      correlationId: input.correlationId,
+      tenantId: input.tenantId,
+      problemId: input.problemId,
+      entry: this.runtime.entry,
+      // Non-secret content-addressed provenance of exactly what was inlined.
+      sourceSha256: template.sourceSha256,
+      ...(template.diagnostics.length > 0 ? { diagnostics: template.diagnostics } : {}),
+    });
     const platformParameters = {
       tenkacloudNamePrefix: input.namePrefix,
       tenkacloudProblemId: input.problemId,
@@ -98,7 +149,7 @@ export class AzureBicepRuntimeAdapter implements ProblemRuntimeAdapter {
     };
     await client.upsertStack({
       name: input.namePrefix,
-      templateRef: this.runtime.entry, // ADR-027: runtime.entry = Bicep template reference
+      template: { kind: "inline", document: template.document },
       parameters: mergeCompositeParameters(platformParameters, input.parameters),
     });
     return { status: "deploying" };
