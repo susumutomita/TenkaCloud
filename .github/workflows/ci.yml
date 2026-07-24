@@ -181,6 +181,17 @@ jobs:
         run: |
           bun run .claude/skills/quality-gates/scripts/check-coverage-gate.ts --shard ${{ matrix.shard }}
 
+      # Issue #2758: infrastructure 全体はまだ #1424 の 100% gate 対象外 (report-only) だが、
+      # AssumeRole/ExternalId・tenant isolation・deploy state machine・scoring・delete
+      # lifecycle・auth boundary (scripts/quality/infra-critical-paths.ts) は壊れると越境/
+      # 不正スコアリングに直結するため、jscpd と同じ baseline ratchet 方式 (make dup-check) で
+      # coverage の後退だけを検出する。 infrastructure shard の lcov.info しか対象にしないため
+      # infrastructure shard leg でのみ実行し、テストは再実行しない (既存 lcov.info を読むだけ)。
+      - name: Infra critical-path coverage ratchet (infrastructure shard only)
+        if: matrix.shard == 'infrastructure'
+        run: |
+          make infra-coverage-check
+
       # 3rd-party action は tag (mutable) ではなく commit SHA (immutable) で pin する
       # (= supply-chain attack 防御、 maintainer / attacker が tag を移動できなくする)。 v5.5.4 SHA。
       # Codecov は同一 commit に対する複数 upload を 1 つの commit report へマージするため、
