@@ -1,0 +1,142 @@
+{
+  "infrastructure/lib/admin-insight/handlers/admin-insight-handler/auth.ts": {
+    "lines": 100,
+    "functions": 100,
+    "branches": 100
+  },
+  "infrastructure/lib/control-plane/handlers/idp-handler/auth.ts": {
+    "lines": 100,
+    "functions": 100,
+    "branches": 92.86
+  },
+  "infrastructure/lib/problem-deploy/bulk-deploy-create-state-machine.ts": {
+    "lines": 100,
+    "functions": 100,
+    "branches": 100
+  },
+  "infrastructure/lib/problem-deploy/control-data/dynamodb-deployments-scoring.ts": {
+    "lines": 100,
+    "functions": 100,
+    "branches": 100
+  },
+  "infrastructure/lib/problem-deploy/control-data/sql-deployments-scoring.ts": {
+    "lines": 100,
+    "functions": 100,
+    "branches": 93.18
+  },
+  "infrastructure/lib/problem-deploy/deploy-create-state-machine.ts": {
+    "lines": 93.67,
+    "functions": 100,
+    "branches": 86.84
+  },
+  "infrastructure/lib/problem-deploy/deploy-delete-state-machine.ts": {
+    "lines": 94.12,
+    "functions": 100,
+    "branches": 83.33
+  },
+  "infrastructure/lib/problem-deploy/external-id-audit-lambda.ts": {
+    "lines": 100,
+    "functions": 100,
+    "branches": 100
+  },
+  "infrastructure/lib/problem-deploy/generic-scoring-lambda.ts": {
+    "lines": 100,
+    "functions": 100,
+    "branches": 95.83
+  },
+  "infrastructure/lib/problem-deploy/handlers/cfn-deploy-handler/delete-stack.ts": {
+    "lines": 98.48,
+    "functions": 93.33,
+    "branches": 88
+  },
+  "infrastructure/lib/problem-deploy/handlers/competitor-accounts-handler/index.ts": {
+    "lines": 66.88,
+    "functions": 57.89,
+    "branches": 61.67
+  },
+  "infrastructure/lib/problem-deploy/handlers/deploy-handler/auth.ts": {
+    "lines": 98.08,
+    "functions": 100,
+    "branches": 96.36
+  },
+  "infrastructure/lib/problem-deploy/handlers/deploy-handler/composite-deploy.ts": {
+    "lines": 100,
+    "functions": 100,
+    "branches": 84.62
+  },
+  "infrastructure/lib/problem-deploy/handlers/deploy-handler/delete.ts": {
+    "lines": 100,
+    "functions": 100,
+    "branches": 77.5
+  },
+  "infrastructure/lib/problem-deploy/handlers/deploy-handler/deploy.ts": {
+    "lines": 93.33,
+    "functions": 75,
+    "branches": 79.17
+  },
+  "infrastructure/lib/problem-deploy/handlers/deploy-handler/index.ts": {
+    "lines": 100,
+    "functions": 100,
+    "branches": 100
+  },
+  "infrastructure/lib/problem-deploy/handlers/describe-stack-handler/index.ts": {
+    "lines": 100,
+    "functions": 100,
+    "branches": 94.44
+  },
+  "infrastructure/lib/problem-deploy/handlers/event-handler/bulk-delete.ts": {
+    "lines": 98.44,
+    "functions": 100,
+    "branches": 84.13
+  },
+  "infrastructure/lib/problem-deploy/handlers/event-handler/index.ts": {
+    "lines": 100,
+    "functions": 100,
+    "branches": 100
+  },
+  "infrastructure/lib/problem-deploy/handlers/generic-scoring-handler/index.ts": {
+    "lines": 97.46,
+    "functions": 92.59,
+    "branches": 89.66
+  },
+  "infrastructure/lib/problem-deploy/handlers/generic-scoring-handler/scoring-active.ts": {
+    "lines": 100,
+    "functions": 100,
+    "branches": 100
+  },
+  "infrastructure/lib/problem-deploy/handlers/generic-scoring-handler/scoring-kernel.ts": {
+    "lines": 100,
+    "functions": 100,
+    "branches": 100
+  },
+  "infrastructure/lib/problem-deploy/handlers/participant-handler/auth.ts": {
+    "lines": 100,
+    "functions": 100,
+    "branches": 100
+  },
+  "infrastructure/lib/problem-deploy/handlers/shared/assume-competitor-role.ts": {
+    "lines": 100,
+    "functions": 100,
+    "branches": 96.77
+  },
+  "infrastructure/lib/problem-deploy/handlers/shared/auth-wiring.ts": {
+    "lines": 100,
+    "functions": 100,
+    "branches": 100
+  },
+  "infrastructure/lib/problem-deploy/handlers/shared/external-id-store.ts": {
+    "lines": 89.47,
+    "functions": 100,
+    "branches": 80
+  },
+  "infrastructure/lib/problem-deploy/handlers/system-audit-writer/index.ts": {
+    "lines": 100,
+    "functions": 100,
+    "branches": 100
+  },
+  "infrastructure/lib/problem-deploy/state-machine-helpers.ts": {
+    "lines": 100,
+    "functions": 100,
+    "branches": 100
+  }
+}

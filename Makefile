@@ -83,6 +83,17 @@ dup-baseline: ## Re-freeze the duplication baseline (justify increases in the PR
 dup-report: ## Show every clone jscpd finds (human-readable) | jscpdの全クローンを表示
 	bunx jscpd
 
+# Issue #2758: infrastructure 全体はまだ #1424 の 100% gate 対象外 (report-only) だが、
+# AssumeRole/ExternalId・tenant isolation・deploy state machine・scoring・delete lifecycle・
+# auth boundary (scripts/quality/infra-critical-paths.ts) は壊れると越境/不正スコアリングに
+# 直結するため、jscpd と同じ baseline ratchet 方式で coverage の後退だけを検出する
+# (100% gate ではない)。 テストは再実行しない — 既存の infrastructure/coverage/lcov.info を読む。
+infra-coverage-check: ## Fail when critical-path infra coverage drops below baseline | high-riskファイルのcoverage低下をfail
+	bun run scripts/quality/check-infra-critical-coverage.ts
+
+infra-coverage-baseline: ## Re-freeze the critical-path coverage baseline (justify decreases in the PR) | critical-path coverage baselineを現状で更新
+	bun run scripts/quality/check-infra-critical-coverage.ts --update
+
 # knip デッドコードスキャン。 knip は「この PR で増えた分」ではなく「現時点の全量」しか出せない
 # ため、 CI ゲートにはせず報告のみ (= 知らせるだけ)。 rules は knip.json で warn 化済みなので
 # 検出があっても exit 0。 出しどころ: CI job summary + ローカルのこのターゲット。
