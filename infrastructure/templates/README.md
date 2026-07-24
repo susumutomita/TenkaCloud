@@ -135,7 +135,7 @@ CodePipeline も使いません。問題カタログは Git submodule ではな�
 | パラメータ | 必須 | 説明 |
 | --- | --- | --- |
 | `Environment` | 任意 | `development` / `staging` / `production`。対応する config.json / .env を使う |
-| `Action` | 任意 | `deploy`（デフォルト）/ `destroy`。撤去は後述（Start build with overrides で `ACTION=destroy`）|
+| `Action` | 任意 | `deploy`（デフォルト）/ `destroy`（DynamoDB 履歴保持）/ `destroy-all`（完全削除）。撤去は後述 |
 | `TenantAdminEmail` | 必須 | Application Admin Console の初期ユーザー宛先 |
 | `ProblemsRepoUrl` | 任意 | 載せる問題カタログ repo。デフォルトは公式 TenkaCloudChallenge。自分の fork を指定すれば自分の問題で deploy できる |
 | `ProblemsRepoRef` | 任意 | カタログの branch / tag。デフォルト `main` |
@@ -159,20 +159,29 @@ CodeBuild プロジェクト）と、ビルドが作る `tenkacloud-lite` / `ten
 （本体）。launcher を消しても本体は残るので順番に撤去する。
 
 **推奨（CodeBuild から）:** CodeBuild プロジェクトで **Start build with overrides** を選び、
-環境変数 `ACTION` に `destroy` を入れて実行する。`make destroy` が本体 2 スタックを正しい順序
-（cross-stack 参照の都合で `tenkacloud-lite` → `tenkacloud-lite-problem-deploy`）で削除する。
-その後 `tenkacloud-lite-launcher` スタックを削除すれば CodeBuild プロジェクトも消える。
+環境変数 `ACTION` に `destroy-all` を入れて実行する。CodeBuild は本体 2 スタックが所有する
+DynamoDB テーブルと問題デプロイ用ログを物理 ID で特定して完全削除し、続けて 2 スタックを正しい
+順序（cross-stack 参照の都合で `tenkacloud-lite` → `tenkacloud-lite-problem-deploy`）で削除する。
+その後 `tenkacloud-lite-launcher` スタックを削除すれば CodeBuild プロジェクト、IAM Role、
+launcher のロググループも消える。DynamoDB 履歴を残したい場合だけ `ACTION=destroy` を使う。
+
+> **既存 launcher の更新:** `destroy-all` を追加する前のテンプレートで作成した launcher は、
+> CloudFormation の **Update stack** から最新版の `lite-pipeline.yaml` をアップロードして更新して
+> から実行する。旧 buildspec は未知の `ACTION` を deploy として扱うため、旧 launcher に
+> `ACTION=destroy-all` を直接指定してはいけない。最新版は未知の値を fail closed する。
 
 **手動（Console から）:** CloudFormation で **`tenkacloud-lite` を先に削除** → DELETE_COMPLETE
 を待って **`tenkacloud-lite-problem-deploy`** を削除 → 最後に `tenkacloud-lite-launcher`。逆順
-だと `Export ... cannot be deleted as it is in use` で止まる。S3 / DynamoDB は
-`RemovalPolicy=DESTROY` ＋ auto-delete が効くのでスタック削除で中身ごと消える。
+だと `Export ... cannot be deleted as it is in use` で止まる。この手順では
+`RemovalPolicy.RETAIN` の DynamoDB テーブルが残るため完全削除にはならない。名前の前方一致で
+手動削除せず、完全削除には上の `ACTION=destroy-all` を使う。
 
 ### コストの注意
 
 問題テンプレート (`problems/**/template.yaml`) は AWS 無料枠 0 円に収めているが、この
 デプロイは CodeBuild (build-minute 課金) を使うため厳密な 0 円ではない（月数回のデプロイで
-1 ドル未満）。使い終えたら上記 teardown でスタックを削除すれば課金は止まる。
+1 ドル未満）。使い終えたら `ACTION=destroy-all` と launcher スタック削除まで完了させる。
+`ACTION=destroy` だけでは保持された DynamoDB の provisioned capacity 課金は止まらない。
 
 ## マルチクラウド（非 AWS）の team 認証情報セットアップ
 

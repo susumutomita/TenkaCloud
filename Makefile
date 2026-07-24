@@ -309,6 +309,8 @@ deploy-saas: env-check ## Deploy multi-tenant SaaS mode to AWS | multi-tenant Sa
 
 destroy: env-check-lite ## Delete Lite-mode AWS resources | Lite modeのAWS resourceを削除
 	bun run scripts/tenkacloud-lite.ts down
+destroy-all: env-check-lite ## Delete Lite stacks and retained data | Lite stackと保持データを完全削除
+	bun run scripts/tenkacloud-lite.ts down --purge-retained-data
 destroy-saas: env-check ## Delete SaaS-mode AWS resources | SaaS modeのAWS resourceを削除
 	bash scripts/cleanup.sh
 

@@ -69,7 +69,7 @@ describe("onboarding video scripts (#2707)", () => {
     const cleanupText = JSON.stringify(cleanup);
 
     expect(deployText).not.toContain("ACTION=destroy");
-    expect(cleanupText).toContain("ACTION=destroy");
+    expect(cleanupText).toContain("ACTION=destroy-all");
     expect(cleanupText).toContain("launcher");
   });
 });

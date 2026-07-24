@@ -45,15 +45,45 @@ describe("lite-pipeline onboarding drill checkpoint (#2696)", () => {
     expect(description).toContain("demo portal");
   });
 
-  it("should print the cleanup checkpoint only after make destroy succeeds", () => {
-    const destroyAt = template.indexOf(
-      `TENKACLOUD_LITE_DOWN_YES=1 make destroy ENV="\${ENVIRONMENT}"`,
+  it("should print the cleanup checkpoint only after complete teardown succeeds", () => {
+    const destroyAllAt = template.indexOf(
+      `TENKACLOUD_LITE_DOWN_YES=1 make destroy-all ENV="\${ENVIRONMENT}"`,
     );
     const checkpointAt = template.indexOf(LITE_CLEANUP_DRILL_CHECKPOINT.code);
     const deployBranchAt = template.indexOf("make deploy ENV");
 
-    expect(destroyAt).toBeGreaterThan(-1);
-    expect(checkpointAt).toBeGreaterThan(destroyAt);
+    expect(destroyAllAt).toBeGreaterThan(-1);
+    expect(checkpointAt).toBeGreaterThan(destroyAllAt);
     expect(checkpointAt).toBeLessThan(deployBranchAt);
+  });
+
+  it("should expose destroy-all as an explicit non-default action", () => {
+    const actionBlock = template.match(/ {2}Action:\n[\s\S]*?\n\n/)?.[0];
+    expect(actionBlock).toBeTruthy();
+    expect(actionBlock).toContain("Default: deploy");
+    expect(actionBlock).toContain("- destroy");
+    expect(actionBlock).toContain("- destroy-all");
+  });
+
+  it("should fail closed when a CodeBuild override supplies an unsupported action", () => {
+    expect(template).toContain(`elif [ "\${ACTION}" = "deploy" ]; then`);
+    expect(template).toContain(`echo "Unsupported ACTION: \${ACTION}"`);
+    expect(template).not.toMatch(/else\n\s+# `make deploy`/);
+  });
+
+  it("should manage the launcher CodeBuild log group with delete-on-stack-removal", () => {
+    expect(template).toMatch(
+      /LauncherLogGroup:\n\s+Type: AWS::Logs::LogGroup\n\s+DeletionPolicy: Delete\n\s+UpdateReplacePolicy: Delete/,
+    );
+    expect(template).toMatch(
+      /LogGroupName: !Sub \/tenkacloud\/codebuild\/lite-launcher-\$\{Environment\}/,
+    );
+    const logsConfig = template.match(/ {6}LogsConfig:\n[\s\S]*?TimeoutInMinutes:/)?.[0];
+    expect(logsConfig).toBeTruthy();
+    expect(logsConfig).toMatch(/GroupName: !Ref LauncherLogGroup/);
+    expect(logsConfig).not.toMatch(
+      /GroupName: !Sub \/aws\/codebuild\/tenkacloud-lite-\$\{Environment\}/,
+    );
+    expect(template).toMatch(/Name: TENKACLOUD_LITE_MANAGED_LAUNCHER_LOG_GROUP\s+Value: "1"/);
   });
 });

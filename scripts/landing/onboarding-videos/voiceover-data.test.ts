@@ -110,7 +110,7 @@ describe("cleanup-tenkacloud-lite Zundamon voice-over", () => {
   it("should cover both cleanup actions without leaking checkpoint values", () => {
     const joined = JSON.stringify(script);
 
-    expect(joined).toContain("ACTION=destroy");
+    expect(joined).toContain("ACTION=destroy-all");
     expect(joined).toContain("launcher");
     expect(joined).not.toContain("checkpoint");
     expect(joined).not.toContain("成功コード");
@@ -130,7 +130,7 @@ describe("cleanup-tenkacloud-lite Zundamon voice-over", () => {
     expect(order?.layout).toBe("explainer");
     expect(order?.heading.ja).toContain("launcherを最後");
     expect(order?.ja).toContain("復旧経路");
-    expect(action?.ja).toContain("ACTION=destroy");
+    expect(action?.ja).toContain("ACTION=destroy-all");
     expect(action?.captionPlacement).toBe("top-right");
     expect(wait?.ja).toContain("tenkacloud-lite");
     expect(wait?.ja).toContain("tenkacloud-lite-problem-deploy");

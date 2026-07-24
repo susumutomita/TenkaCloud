@@ -309,28 +309,37 @@ export const ONBOARDING_VIDEOS: readonly OnboardingVideo[] = [
       {
         badge: "STEP 2",
         durationS: 8,
-        titleJa: "ACTION を destroy に変更",
-        titleEn: "Set ACTION to destroy",
-        bulletsJa: ["環境変数 ACTION=destroy を指定", "確認してビルドを開始する"],
-        bulletsEn: ["Set the ACTION=destroy environment override", "Review, then start the build"],
+        titleJa: "ACTION を destroy-all に変更",
+        titleEn: "Set ACTION to destroy-all",
+        bulletsJa: ["環境変数 ACTION=destroy-all を指定", "完全削除を確認して開始する"],
+        bulletsEn: [
+          "Set the ACTION=destroy-all environment override",
+          "Confirm complete removal, then start",
+        ],
       },
       {
         badge: "STEP 3",
         durationS: 8,
         titleJa: "削除完了ログを確認",
         titleEn: "Confirm teardown in the logs",
-        bulletsJa: ["Lite スタックが順番に削除される", "成功ログのチェックポイントを控える"],
-        bulletsEn: ["Lite stacks are removed in order", "Copy the checkpoint from the success log"],
+        bulletsJa: ["DynamoDB とログも完全削除される", "成功ログのチェックポイントを控える"],
+        bulletsEn: [
+          "DynamoDB data and logs are removed too",
+          "Copy the checkpoint from the success log",
+        ],
       },
       {
         badge: "STEP 4",
         durationS: 8,
         titleJa: "launcher スタックも削除",
         titleEn: "Delete the launcher stack too",
-        bulletsJa: ["CloudFormation で launcher を削除", "CodeBuild project と IAM Role も消える"],
+        bulletsJa: [
+          "CloudFormation で launcher を削除",
+          "CodeBuild project、IAM Role、ログも消える",
+        ],
         bulletsEn: [
           "Delete the launcher in CloudFormation",
-          "Its CodeBuild project and IAM Role go too",
+          "Its CodeBuild project, IAM Role, and logs go too",
         ],
       },
       {

@@ -192,7 +192,7 @@ export const RECORDED_LITE_EDITS: readonly RecordedLiteEdit[] = [
         startS: 527,
         endS: 529.8,
         speed: 0.5,
-        // ACTION=destroy と入力する領域へ寄り、直下のメールと repository URL を外す。
+        // ACTION override の入力領域へ寄り、直下のメールと repository URL を外す。
         focus: { x: 100, y: 30, width: 540, height: 304 },
       },
       {

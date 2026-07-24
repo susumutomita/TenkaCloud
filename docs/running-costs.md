@@ -218,7 +218,7 @@ Cost Explorer data can lag behind the deployment. Record the functional run imme
 
 ### 9. Tear down deliberately
 
-After saving evidence, delete the problem stack in the competitor account, remove the competitor bootstrap stack, and then run `make destroy ENV=development` if the entire Lite environment is disposable. Destruction is intentionally not part of any `turso-live-*` helper: each deletion must be reviewed by the operator who owns the accounts.
+After saving evidence, delete the problem stack in the competitor account, remove the competitor bootstrap stack, and then run `make destroy-all ENV=development` if the entire Lite environment is disposable. Use `make destroy` only when retaining the DynamoDB history is intentional. Destruction is intentionally not part of any `turso-live-*` helper: each deletion must be reviewed by the operator who owns the accounts.
 
 ## Migrating an existing stack
 
@@ -240,7 +240,7 @@ Rolling back `turso` → `dynamodb` loses any write that only ever reached the S
 | CodeBuild (problem deploy) | part of ~$2.55 | **Resolved** — the Lambda deploy path is the default (#2353); no CodeBuild project in Lite mode |
 | CodeBuild (SaaS tenant provisioning) | part of ~$2.55 | SaaS-mode only; not present in Lite mode |
 | KMS customer-managed key | $0 | **Resolved** — AWS-managed key via a CDK Aspect |
-| Retained tables after `destroy` | cumulative | **Resolved** — `make destroy` now warns and prints delete commands (#2445) |
+| Retained tables after `destroy` | cumulative | `make destroy` intentionally preserves and reports them; `make destroy-all` removes only the exact tables owned by the two Lite stacks (#2765) |
 
 > **Free Tier note.** New-style AWS Free Tier accounts (2025-07 onward) are credit-based: there is **no** always-free 25 RCU/WCU DynamoDB allowance. Credits can make the visible bill read $0, but Usage still accrues from the first hour and becomes a real charge once the credits run out.
 
