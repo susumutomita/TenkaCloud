@@ -48,6 +48,12 @@ export const REPORTED_WORKSPACES = [
   // Issue #2292 Phase 3 foundation. Move to GATED_WORKSPACES once its first
   // auth/storage branch suite reaches 100%.
   "apps/always-on-control-plane",
+  // Issue #2756: developer-portal's tests now run in CI (packages shard) for the first
+  // time, but its authoring-tool scripts (generate-catalog.ts / generate-reference.ts /
+  // check-internal-links.ts) sit at ~53% lines / ~24% branches — a real gap, not a few
+  // stray branches, so it starts report-only (段階導入) rather than gated. Move to
+  // GATED_WORKSPACES once those scripts' coverage reaches 100%.
+  "apps/developer-portal",
 ] as const;
 
 interface Metric {
