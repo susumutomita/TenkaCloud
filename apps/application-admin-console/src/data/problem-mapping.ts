@@ -122,11 +122,20 @@ export function isLocalOnlyProblemRuntime(runtime: ConsoleRuntime): boolean {
 }
 
 /**
- * [#2167] The non-AWS providers that have a working deploy adapter and therefore
- * become selectable in the event picker once the operator enables multi-cloud
- * (`features.nonAwsRuntime`) and registers that team's cloud credentials. Derived
- * from `RESERVED_RUNTIMES` (deduped by provider) so the set tracks the roadmap as
- * engines ship — there is no second hand-maintained provider list to drift.
+ * [#2167, tightened by #2757] The non-AWS providers that are actually deployable
+ * end-to-end and therefore become selectable in the event picker once the operator
+ * enables multi-cloud (`features.nonAwsRuntime`) and registers that team's cloud
+ * credentials. Gated on `capability.executable`, not `capability.adapterWired`:
+ * every declared row ships adapter/credential wiring (`adapterWired` is `true` for
+ * all of them), but wiring alone does not mean the materialize-and-deploy path is
+ * expected to work — `azure/bicep` and `gcp/infra-manager` are adapter-wired
+ * previews with `executable: false` (Bicep/Terraform materialization still open),
+ * while `sakura/apprun` is `executable: true`. Adapter-wired-but-not-executable
+ * rows stay visible in the developer-portal / landing runtime-matrix pages (which
+ * read `RUNTIME_CAPABILITIES` directly for their preview surface) but must never
+ * reach this picker's "selectable" set. Derived from `RUNTIME_CAPABILITIES`
+ * (deduped by provider) so the set tracks the roadmap as engines graduate from
+ * preview to executable — there is no second hand-maintained provider list to drift.
  */
 export const NON_AWS_SELECTABLE_PROVIDERS: readonly string[] = [
   ...new Set(
@@ -134,22 +143,28 @@ export const NON_AWS_SELECTABLE_PROVIDERS: readonly string[] = [
       (capability) =>
         capability.executionMode === "cloud" &&
         capability.selection === "feature-gated" &&
-        capability.adapterWired,
+        capability.executable,
     ).map((capability) => capability.provider),
   ),
 ];
 
 /**
- * [#2167] Picker selectability — distinct from {@link isExecutableProblemRuntime}
- * (which governs cost analysis, AWS/CloudFormation only). A problem is selectable in
- * the event picker when:
+ * [#2167, tightened by #2757] Picker selectability — distinct from
+ * {@link isExecutableProblemRuntime} (which governs cost analysis, AWS/CloudFormation
+ * only). A problem is selectable in the event picker when:
  *   - it is the always-executable AWS/CloudFormation runtime, OR
- *   - it is a recognized adapter-wired `(provider, engine)` pair AND that provider is in
- *     `enabledProviders` (today: the whole non-AWS set when `features.nonAwsRuntime`
- *     is on; later, the set of providers with registered team credentials).
+ *   - it is a recognized, **executable** `(provider, engine)` pair AND that provider is
+ *     in `enabledProviders` (today: the whole non-AWS executable set when
+ *     `features.nonAwsRuntime` is on; later, the set of providers with registered team
+ *     credentials).
  * A provider being enabled does NOT make an unrecognized `(provider, engine)` pair
  * selectable — the engine must still be one the platform has an adapter for, so a
  * typo'd runtime stays disabled rather than offered for a deploy that would fail.
+ * Requiring `executable` (rather than just `adapterWired`) additionally keeps a
+ * deploy-impossible-but-adapter-wired preview runtime (e.g. `azure/bicep`,
+ * `gcp/infra-manager`) disabled here even when its provider is otherwise enabled —
+ * that preview-only surface belongs to the developer-portal / landing runtime-matrix
+ * pages, not the normal event-creation flow.
  */
 export function isProviderSelectable(
   runtime: ConsoleRuntime,
@@ -161,7 +176,7 @@ export function isProviderSelectable(
   if (isExecutableProblemRuntime(runtime)) return true;
   const capability = findRuntimeCapability(runtime.provider, runtime.engine);
   return (
-    capability?.adapterWired === true &&
+    capability?.executable === true &&
     capability.selection === "feature-gated" &&
     enabledProviders.has(runtime.provider)
   );

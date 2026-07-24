@@ -6,10 +6,15 @@ import type { AppConfig } from "../../src/config";
 import type { ProblemSummary } from "../../src/data/problems";
 
 /**
- * #2563 v1: 非 AWS single-provider event の EventCreate flow。 gcp 問題のみ選択で
- * credential 列に切替わり、 submit payload は awsAccountId ではなく
- * nonAwsCredentialTeamSlug を運ぶ。 deploy 促し modal は bulk 非対応 (deploy-now 無し)。
- * AWS + 非 AWS の混在は mixed error + submit 不可。 mock 構成は EventCreate.flow と同一。
+ * #2563 v1, tightened by #2757: 非 AWS single-provider event の EventCreate flow。
+ * sakura/apprun (executable な reserved provider) 問題のみ選択で credential 列に
+ * 切替わり、 submit payload は awsAccountId ではなく nonAwsCredentialTeamSlug を
+ * 運ぶ。 deploy 促し modal は bulk 非対応 (deploy-now 無し)。 AWS + 非 AWS の混在は
+ * mixed error + submit 不可。 mock 構成は EventCreate.flow と同一。
+ *
+ * #2757 で picker の選択可否は `capability.executable` 基準に変わったため、 元々
+ * gcp/infra-manager (adapter-wired preview, executable: false) を使っていたこの
+ * flow test は sakura/apprun (executable: true) に差し替えた。
  */
 const {
   mockApiClient,
@@ -64,8 +69,8 @@ const account: CompetitorAccountSummary = {
 
 const problem = (over: Partial<ProblemSummary> = {}): ProblemSummary =>
   ({
-    id: "pg1",
-    name: "GCP Problem",
+    id: "ps1",
+    name: "Sakura Problem",
     category: "Challenge",
     status: "ready",
     shortDescription: "s",
@@ -74,7 +79,7 @@ const problem = (over: Partial<ProblemSummary> = {}): ProblemSummary =>
     tags: [],
     defaultRegion: "us-east-1",
     supportedRegions: ["us-east-1", "ap-northeast-1"],
-    runtime: { provider: "gcp", engine: "infra-manager" },
+    runtime: { provider: "sakura", engine: "apprun" },
     ...over,
   }) as ProblemSummary;
 
@@ -84,13 +89,13 @@ const renderPage = () => render(<EventCreatePage config={config} />);
 const w = (c: HTMLElement) => createWrapper(c);
 const problemSelect = (c: HTMLElement) => w(c).findMultiselect('[data-testid="problem-select"]');
 
-/** name 入力 + teamCount=1 + gcp 問題 pg1 選択 (credential slug は default team-1 のまま)。 */
+/** name 入力 + teamCount=1 + sakura 問題 ps1 選択 (credential slug は default team-1 のまま)。 */
 function fillNonAwsForm(container: HTMLElement) {
   w(container).findAllInputs()[1]?.setInputValue("1");
-  w(container).findAllInputs()[0]?.setInputValue("GCP Event");
+  w(container).findAllInputs()[0]?.setInputValue("Sakura Event");
   const ms = problemSelect(container);
   ms?.openDropdown();
-  ms?.selectOptionByValue("pg1");
+  ms?.selectOptionByValue("ps1");
 }
 
 beforeEach(() => {
@@ -110,10 +115,11 @@ beforeEach(() => {
       name: "Composite Problem",
       runtime: {
         kind: "composite",
+        // #2757: every target must be executable for the composite option itself to
+        // be selectable; gcp/infra-manager and azure/bicep are adapter-wired previews
+        // (executable: false), so only aws + sakura keep this composite selectable.
         targets: [
           { id: "aws", provider: "aws", engine: "cloudformation" },
-          { id: "gcp", provider: "gcp", engine: "infra-manager" },
-          { id: "azure", provider: "azure", engine: "bicep" },
           { id: "sakura", provider: "sakura", engine: "apprun" },
         ],
       },
@@ -130,7 +136,7 @@ beforeEach(() => {
 afterEach(() => vi.clearAllMocks());
 
 describe("EventCreatePage non-AWS flow (#2563)", () => {
-  it("should submit nonAwsCredentialTeamSlug instead of awsAccountId for a gcp-only event", async () => {
+  it("should submit nonAwsCredentialTeamSlug instead of awsAccountId for a sakura-only event", async () => {
     const { container } = renderPage();
     fillNonAwsForm(container);
     // 非 AWS mode: credential 列が出て AWS account Select は無い。
@@ -174,7 +180,9 @@ describe("EventCreatePage non-AWS flow (#2563)", () => {
     ms?.selectOptionByValue("pcm1");
 
     expect(screen.getByText("event_create.col_aws_account")).toBeInTheDocument();
-    expect(screen.getAllByText("event_create.col_non_aws_credential")).toHaveLength(3);
+    // Composite targets are aws + sakura only (#2757: gcp/azure stay non-selectable
+    // adapter-wired previews), so exactly one non-AWS credential column renders.
+    expect(screen.getAllByText("event_create.col_non_aws_credential")).toHaveLength(1);
     const accountSelect = w(container).findAllSelects()[0];
     accountSelect?.openDropdown();
     accountSelect?.selectOptionByValue(account.awsAccountId, { expandToViewport: true });
