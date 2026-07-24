@@ -207,6 +207,16 @@ describe("buildCompositeDetail", () => {
     );
   });
 
+  it("should normalize an unrecognized runtimeProvider to aws", async () => {
+    ddbSend.mockResolvedValueOnce({
+      Items: [targetRow({ runtimeProvider: "oracle-cloud" })],
+    });
+
+    const detail = await buildCompositeDetail(shared, PARENT_ID);
+
+    expect(detail.targets[0]?.provider).toBe("aws");
+  });
+
   it("should return a controlled error for malformed target outputs", async () => {
     ddbSend.mockResolvedValueOnce({
       Items: [targetRow({ status: "COMPLETE", stackOutputs: "{not-valid-json" })],
@@ -216,6 +226,159 @@ describe("buildCompositeDetail", () => {
     await expect(buildCompositeDetail(shared, PARENT_ID)).rejects.toBeInstanceOf(
       CompositeOutputsError,
     );
+  });
+});
+
+describe("buildCompositeDetail dataflow metadata (#2747)", () => {
+  let ddbSend: ReturnType<typeof vi.fn>;
+  let shared: DeploySharedResources;
+
+  beforeEach(() => {
+    ({ shared, ddbSend } = buildShared());
+  });
+
+  it("should add dataflow fields only for a target row carrying the graph contract", async () => {
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        targetRow({
+          targetId: "edge",
+          status: "PENDING",
+          compositeExecutionWave: 1,
+          compositeDependsOn: ["upstream"],
+          compositeInputs: { Param: { fromTarget: "upstream", output: "Endpoint" } },
+        }),
+      ],
+    });
+
+    const detail = await buildCompositeDetail(shared, PARENT_ID);
+
+    expect(detail.targets[0]).toMatchObject({
+      executionWave: 1,
+      dependsOn: ["upstream"],
+      inputParameters: ["Param"],
+    });
+  });
+
+  it("should default dependsOn to empty when dataflow metadata carries no dependency array", async () => {
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        targetRow({
+          targetId: "edge",
+          status: "PENDING",
+          compositeInputs: { Param: { fromTarget: "upstream", output: "Endpoint" } },
+        }),
+      ],
+    });
+
+    const detail = await buildCompositeDetail(shared, PARENT_ID);
+
+    expect(detail.targets[0]?.dependsOn).toEqual([]);
+    expect(detail.targets[0]?.dependencyState).toBe("ready");
+  });
+
+  it("should default executionWave to 0 when dataflow metadata is present without a wave", async () => {
+    ddbSend.mockResolvedValueOnce({
+      Items: [targetRow({ targetId: "edge", status: "COMPLETE", compositeDependsOn: [] })],
+    });
+
+    const detail = await buildCompositeDetail(shared, PARENT_ID);
+
+    expect(detail.targets[0]?.executionWave).toBe(0);
+    expect(detail.targets[0]?.dependencyState).toBe("complete");
+  });
+
+  it("should classify dependencyState complete for a COMPLETE target", async () => {
+    ddbSend.mockResolvedValueOnce({
+      Items: [targetRow({ targetId: "edge", status: "COMPLETE", compositeDependsOn: [] })],
+    });
+    const detail = await buildCompositeDetail(shared, PARENT_ID);
+    expect(detail.targets[0]?.dependencyState).toBe("complete");
+  });
+
+  it("should classify dependencyState blocked for a terminally-failed target", async () => {
+    ddbSend.mockResolvedValueOnce({
+      Items: [targetRow({ targetId: "edge", status: "FAILED", compositeDependsOn: [] })],
+    });
+    const detail = await buildCompositeDetail(shared, PARENT_ID);
+    expect(detail.targets[0]?.dependencyState).toBe("blocked");
+  });
+
+  it("should classify dependencyState running for a non-PENDING, non-terminal target", async () => {
+    ddbSend.mockResolvedValueOnce({
+      Items: [targetRow({ targetId: "edge", status: "IN_PROGRESS", compositeDependsOn: [] })],
+    });
+    const detail = await buildCompositeDetail(shared, PARENT_ID);
+    expect(detail.targets[0]?.dependencyState).toBe("running");
+  });
+
+  it("should classify dependencyState blocked for a PENDING target with a failed dependency", async () => {
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        targetRow({
+          jobId: "01HTARGETup",
+          targetId: "upstream",
+          targetOrdinal: 0,
+          status: "FAILED",
+        }),
+        targetRow({
+          jobId: "01HTARGETdown",
+          targetId: "downstream",
+          targetOrdinal: 1,
+          status: "PENDING",
+          compositeDependsOn: ["upstream"],
+        }),
+      ],
+    });
+    const detail = await buildCompositeDetail(shared, PARENT_ID);
+    expect(detail.targets.find((t) => t.targetId === "downstream")?.dependencyState).toBe(
+      "blocked",
+    );
+  });
+
+  it("should classify dependencyState waiting for a PENDING target with an incomplete dependency", async () => {
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        targetRow({
+          jobId: "01HTARGETup",
+          targetId: "upstream",
+          targetOrdinal: 0,
+          status: "IN_PROGRESS",
+        }),
+        targetRow({
+          jobId: "01HTARGETdown",
+          targetId: "downstream",
+          targetOrdinal: 1,
+          status: "PENDING",
+          compositeDependsOn: ["upstream"],
+        }),
+      ],
+    });
+    const detail = await buildCompositeDetail(shared, PARENT_ID);
+    expect(detail.targets.find((t) => t.targetId === "downstream")?.dependencyState).toBe(
+      "waiting",
+    );
+  });
+
+  it("should classify dependencyState ready for a PENDING target whose dependencies are all COMPLETE", async () => {
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        targetRow({
+          jobId: "01HTARGETup",
+          targetId: "upstream",
+          targetOrdinal: 0,
+          status: "COMPLETE",
+        }),
+        targetRow({
+          jobId: "01HTARGETdown",
+          targetId: "downstream",
+          targetOrdinal: 1,
+          status: "PENDING",
+          compositeDependsOn: ["upstream"],
+        }),
+      ],
+    });
+    const detail = await buildCompositeDetail(shared, PARENT_ID);
+    expect(detail.targets.find((t) => t.targetId === "downstream")?.dependencyState).toBe("ready");
   });
 });
 

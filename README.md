@@ -126,17 +126,25 @@ See [docs/local-play.md](./docs/local-play.md) for every subcommand.
 
 Deploy from the AWS Console — a CloudFormation stack creates a CodeBuild project that git-clones this repo and runs the deploy for you, **no local install, no GitHub connection**.
 
+> **Design intent — an event-scoped, temporary environment.** The default lifecycle is *create a launcher for one event, deploy, run the event, tear it down* — not a permanently-running SaaS that auto-updates itself. Nothing stops you from leaving it up between events, but every step below (including teardown) is written for the per-event model. See [`infrastructure/templates/README.md`](./infrastructure/templates/README.md#cloudformation-console-lite-mode-deployment-pipeline) for the full launcher/build/destroy responsibility split and the per-parameter rebuild policy, and [`docs/operations/event-runbook.md`](./docs/operations/event-runbook.md) for the day-of-event flow.
+
 1. Download [`infrastructure/templates/lite-pipeline.yaml`](./infrastructure/templates/lite-pipeline.yaml).
 2. Open the [CloudFormation create-stack page](https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-1#/stacks/create/template) in `ap-northeast-1` → **Upload a template file** → upload it → stack name **`tenkacloud-lite-launcher`**.
 3. In the **Required** parameter group, set **`TenantAdminEmail`** to your Admin Console login email — every other group is pre-filled and safe to leave alone. *(To ship your own problems, open **Advanced: repository sources** and set `ProblemsRepoUrl` — see [Add your own problems](#add-your-own-problems).)*
 4. Check **acknowledge IAM** (the console explains why: the build's CodeBuild role needs broad permissions to deploy every TenkaCloud stack) and create the stack.
 5. Open the CodeBuild project from the stack's **`StartBuildConsoleUrl`** output and press **Start build**.
 
+There is no one-click *Launch Stack* badge above: CloudFormation's `templateURL` only accepts an S3 URL, and a GitHub raw URL fails validation (`TemplateURL must be a supported URL`). **Upload a template file** (step 2) is the recorded, supported one-click-equivalent for a self-hosted OSS project with no vendor-hosted S3 bucket to publish the template to.
+
+**Why `Start build` stays a manual step:** creating the launcher stack never auto-starts a deploy. That is deliberate, not leftover manual toil — it keeps the AWS-billed action behind an explicit switch, gives you a checkpoint to confirm `RepoRef` / `ProblemsRepoRef` / capacity before spending money, and means an accidental CloudFormation stack update on the launcher never silently redeploys. Treat **Start build** as the switch that turns the event environment on.
+
 After ~15-30 minutes the build finishes. Scroll to the end of the CodeBuild build log you're already watching — the deploy prints a `✓ Lite mode deploy complete` block whose **Access URLs:** section lists the **Application Admin Console** and **Participant Portal** URLs directly, followed by **Next steps:** and **Teardown:** guidance. If you'd rather read them from CloudFormation, the same two URLs are also in the **Outputs** of the `tenkacloud-lite` and `tenkacloud-lite-problem-deploy` stacks that the build creates.
 
 **Complete teardown:** in the same CodeBuild project, choose **Start build with overrides**, set `ACTION` to `destroy-all`, and start it. This removes the Lite stacks plus their retained DynamoDB tables and problem-deploy logs. Then delete the `tenkacloud-lite-launcher` stack to remove its CodeBuild project, role, and log group. Use `ACTION=destroy` only when you intentionally want to preserve DynamoDB history.
 
 If the launcher predates `destroy-all`, update its CloudFormation stack with the latest `lite-pipeline.yaml` first. Do not pass `destroy-all` to an older launcher: its old buildspec treats unknown actions as deploy.
+
+Re-running the same launcher for a later event works (the buildspec re-clones both repos on every build), but the recommended flow is a fresh launcher per event: fix `RepoRef` / `ProblemsRepoRef` to a rehearsed tag or commit SHA before the real event, and delete the launcher once you tear down. See the parameter rebuild table and the rehearsal-to-production flow in [`infrastructure/templates/README.md`](./infrastructure/templates/README.md#cloudformation-console-lite-mode-deployment-pipeline) and [`docs/operations/event-runbook.md`](./docs/operations/event-runbook.md).
 
 ## Supported environments
 

@@ -25,7 +25,6 @@
  * watches DescribeStacks until terminal and writes the DDB status transitions.
  */
 
-import { randomInt } from "node:crypto";
 import {
   Capability,
   CloudFormationClient,
@@ -67,98 +66,25 @@ import {
   safeProgressInfo,
 } from "./job-progress-log.js";
 
+// [Issue #986 SOLID split] Parameter-override building lives in its own module; re-exported here
+// so this file's public API (and the existing test import path) stay unchanged.
+export {
+  type BuildParameterOverridesArgs,
+  buildParameterOverrides,
+  type CfnParameter,
+  generateRandomAlphanumeric,
+  RANDOM_PASSWORD_TOKEN,
+} from "./parameter-overrides.js";
+
+import {
+  buildParameterOverrides,
+  type CfnParameter,
+  generateRandomAlphanumeric,
+} from "./parameter-overrides.js";
+
 // ---------------------------------------------------------------------------
 // Pure helpers (fully unit-tested, no AWS SDK calls)
 // ---------------------------------------------------------------------------
-
-/**
- * `metadata.json` `cfnParameters` value token that means "generate a fresh 32-char secret at
- * deploy time" (mirrors `deploy-battles.sh`). Used for DbPassword-style parameters so no secret
- * is committed to the repo.
- */
-export const RANDOM_PASSWORD_TOKEN = "__RANDOM_PASSWORD__" as const;
-
-const ALPHANUMERIC = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-
-/**
- * 32-char `[A-Za-z0-9]` (mirrors `tr -dc 'A-Za-z0-9' | head -c 32`).
- *
- * Uses `crypto.randomInt(max)` (rejection sampling internally) rather than
- * `randomBytes(n) % 62` — the latter is biased because 256 is not a multiple of
- * 62, so indices 0-7 would be drawn slightly more often (CodeQL: "biased random
- * numbers from a cryptographically secure source"). `randomInt` is uniform.
- */
-export function generateRandomAlphanumeric(length = 32): string {
-  const chars: string[] = [];
-  for (let i = 0; i < length; i++) {
-    chars.push(ALPHANUMERIC.charAt(randomInt(ALPHANUMERIC.length)));
-  }
-  return chars.join("");
-}
-
-export interface CfnParameter {
-  readonly ParameterKey: string;
-  readonly ParameterValue: string;
-}
-
-export interface BuildParameterOverridesArgs {
-  /** `metadata.json` `cfnParameters` (problem-author declared). */
-  readonly cfnParameters: Readonly<Record<string, string>>;
-  readonly namePrefix: string;
-  /** Platform (TenkaCloud) account id — the competitor template trusts it for cross-account. */
-  readonly tenkaCloudAccountId: string;
-  /**
-   * The CFn `ExternalId` **parameter** value (distinct from the AssumeRole ExternalId). Mirrors
-   * `PROBLEM_EXTERNAL_ID` in the shell path, which the state machine sets to the deploy jobId.
-   * Must be >= 16 chars (competitor-bootstrap.yaml `MinLength`).
-   */
-  readonly externalId: string;
-  /** Token generator for `__RANDOM_PASSWORD__` (injected for deterministic tests). */
-  readonly generateToken: () => string;
-  /** Problem template body, used to detect an optional `AllowedCidr` CFn parameter. */
-  readonly templateBody?: string;
-  /** Score-engine / operator-attacker egress CIDRs configured by the platform operator. */
-  readonly deployAllowedCidrs?: readonly string[];
-  /** Precomputed decision, passed by createStackForDeployment to avoid parsing the template twice. */
-  readonly allowedCidrOverride?: AllowedCidrOverrideDecision;
-}
-
-/**
- * Build the CloudFormation `Parameters` array. Order + content mirror `build_parameter_overrides`
- * in `deploy-battles.sh`: the three always-injected params first, then the problem's declared
- * `cfnParameters` with `__RANDOM_PASSWORD__` resolved.
- */
-export function buildParameterOverrides(args: BuildParameterOverridesArgs): CfnParameter[] {
-  if (args.externalId.length < 16) {
-    throw new Error("problem ExternalId (CFn parameter) must be at least 16 characters");
-  }
-  const allowedCidrOverride =
-    args.allowedCidrOverride ??
-    (args.templateBody
-      ? resolveAllowedCidrOverride({
-          templateBody: args.templateBody,
-          deployAllowedCidrs: args.deployAllowedCidrs,
-        })
-      : ({ kind: "not-declared" } as const));
-  const overrides: CfnParameter[] = [
-    { ParameterKey: "NamePrefix", ParameterValue: args.namePrefix },
-    { ParameterKey: "TenkaCloudAccountId", ParameterValue: args.tenkaCloudAccountId },
-    { ParameterKey: "ExternalId", ParameterValue: args.externalId },
-  ];
-  if (allowedCidrOverride.kind === "configured") {
-    overrides.push({
-      ParameterKey: "AllowedCidr",
-      ParameterValue: allowedCidrOverride.parameterValue,
-    });
-  }
-  for (const [key, value] of Object.entries(args.cfnParameters)) {
-    if (!key) continue;
-    if (allowedCidrOverride.kind === "configured" && key === "AllowedCidr") continue;
-    const resolved = value === RANDOM_PASSWORD_TOKEN ? args.generateToken() : value;
-    overrides.push({ ParameterKey: key, ParameterValue: resolved });
-  }
-  return overrides;
-}
 
 export interface CfnTag {
   readonly Key: string;
@@ -608,6 +534,7 @@ export async function createStackForDeployment(
     templateBody: artifacts.templateBody,
     deployAllowedCidrs: deps.deployAllowedCidrs,
     allowedCidrOverride,
+    boundParameters: detail.parameters,
   });
   const tags = buildStackTags({
     namePrefix: detail.namePrefix,

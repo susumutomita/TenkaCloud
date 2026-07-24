@@ -24,6 +24,10 @@
 
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import type {
+  CompositeInputBinding,
+  CompositeOutputDeclaration,
+} from "@tenkacloud/problem-runtime";
+import type {
   DeploymentsCompositePort,
   DeploymentsQueryPort,
 } from "../../control-data/deployments-repository.js";
@@ -121,6 +125,15 @@ export interface CreateCompositeTargetInput {
   readonly displayTeamName?: string;
   readonly accountGroupId?: string;
   readonly problemSetId?: string;
+  /**
+   * [Composite Runtime / Issue #2747] Dependency + output-binding graph metadata from the
+   * validated plan (`CompositeDeploymentPlanTarget`). Immutable target identity: see
+   * `composite-materialization.ts` and {@link immutableTargetFieldsMatch}.
+   */
+  readonly executionWave?: number;
+  readonly dependsOn?: readonly string[];
+  readonly inputs?: Readonly<Record<string, CompositeInputBinding>>;
+  readonly outputs?: Readonly<Record<string, CompositeOutputDeclaration>>;
 }
 
 /**
@@ -342,7 +355,32 @@ function buildCompositeTargetItem(
     ...(input.displayTeamName ? { displayTeamName: input.displayTeamName } : {}),
     ...(input.accountGroupId ? { accountGroupId: input.accountGroupId } : {}),
     ...(input.problemSetId ? { problemSetId: input.problemSetId } : {}),
+    ...(input.executionWave !== undefined ? { compositeExecutionWave: input.executionWave } : {}),
+    ...(input.dependsOn && input.dependsOn.length > 0
+      ? { compositeDependsOn: input.dependsOn }
+      : {}),
+    ...(input.inputs && Object.keys(input.inputs).length > 0
+      ? { compositeInputs: input.inputs }
+      : {}),
+    ...(input.outputs && Object.keys(input.outputs).length > 0
+      ? { compositeOutputs: input.outputs }
+      : {}),
   };
+}
+
+/** Order-sensitive dependsOn equality (declaration order is stable, so order matters). */
+function sameDependsOn(
+  left: readonly string[] | undefined,
+  right: readonly string[] | undefined,
+): boolean {
+  const a = left ?? [];
+  const b = right ?? [];
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+}
+
+/** Structural equality for the frozen `inputs` / `outputs` binding records. */
+function sameJson(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left ?? null) === JSON.stringify(right ?? null);
 }
 
 function immutableTargetFieldsMatch(
@@ -355,6 +393,10 @@ function immutableTargetFieldsMatch(
     existing.targetOrdinal === next.targetOrdinal &&
     existing.runtimeProvider === next.runtimeProvider &&
     existing.runtimeEngine === next.runtimeEngine &&
-    existing.runtimeEntry === next.runtimeEntry
+    existing.runtimeEntry === next.runtimeEntry &&
+    existing.compositeExecutionWave === next.compositeExecutionWave &&
+    sameDependsOn(existing.compositeDependsOn, next.compositeDependsOn) &&
+    sameJson(existing.compositeInputs, next.compositeInputs) &&
+    sameJson(existing.compositeOutputs, next.compositeOutputs)
   );
 }

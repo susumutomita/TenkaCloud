@@ -9,16 +9,14 @@ import {
 } from "../../api/deploy-client";
 import type { TFn } from "./types";
 
-/**
- * [Composite Runtime / Issue #2074] Composite (multi-cloud) parent の per-target
- * status を表示する。`item.composite` が存在する composite parent でだけ
- * DeploymentDetail から描画され、legacy single-provider deployment では
- * 一切レンダリングされない (= 旧 UI を byte 互換に保つ)。
- *
- * Backend (`buildCompositeDetail`, #2073) が credential / role / login-key を
- * 落とした whitelist だけを返すため、ここで扱う target 行は display-only であり
- * 認可入力には決して使わない。
- */
+const DEPENDENCY_INDICATOR = {
+  ready: "pending",
+  waiting: "pending",
+  running: "in-progress",
+  complete: "success",
+  blocked: "error",
+} as const;
+
 export function CompositeTargetsSection({
   composite,
   t,
@@ -62,6 +60,34 @@ export function CompositeTargetsSection({
             cell: (item) => <code>{item.engine}</code>,
           },
           {
+            id: "dependencyState",
+            header: t("deployment_detail.composite_col_dependency_state"),
+            cell: (item) =>
+              item.dependencyState ? (
+                <StatusIndicator type={DEPENDENCY_INDICATOR[item.dependencyState]}>
+                  {t(`deployment_detail.composite_dependency_${item.dependencyState}`)}
+                </StatusIndicator>
+              ) : (
+                t("deployment_detail.composite_dependency_legacy")
+              ),
+          },
+          {
+            id: "dependsOn",
+            header: t("deployment_detail.composite_col_dependencies"),
+            cell: (item) =>
+              item.dependsOn && item.dependsOn.length > 0
+                ? item.dependsOn.join(", ")
+                : t("common.none"),
+          },
+          {
+            id: "inputs",
+            header: t("deployment_detail.composite_col_bound_inputs"),
+            cell: (item) =>
+              item.inputParameters && item.inputParameters.length > 0
+                ? item.inputParameters.join(", ")
+                : t("common.none"),
+          },
+          {
             id: "status",
             header: t("deployment_detail.composite_col_status"),
             cell: (item) => (
@@ -79,9 +105,7 @@ export function CompositeTargetsSection({
                 : t("deployment_detail.composite_failure_reason_none"),
           },
         ]}
-        ariaLabels={{
-          tableLabel: t("deployment_detail.composite_targets_header"),
-        }}
+        ariaLabels={{ tableLabel: t("deployment_detail.composite_targets_header") }}
       />
     </Container>
   );

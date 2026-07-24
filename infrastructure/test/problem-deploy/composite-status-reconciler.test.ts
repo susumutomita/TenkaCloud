@@ -336,4 +336,40 @@ describe("reconcileDeployStatusMaintenance ordering (#2068)", () => {
     // completion scan (#2072) — both composite scans run after the per-target step.
     expect(order).toEqual(["per-target", "composite-scan", "composite-scan"]);
   });
+
+  it("should run DAG continuation after per-target reconciliation and before parent aggregation (#2747)", async () => {
+    const fake = makeFake();
+    const order: string[] = [];
+    const origSend = fake.deps.ddb.send as ReturnType<typeof vi.fn>;
+    origSend.mockImplementation(async (cmd: unknown) => {
+      if (cmd instanceof ScanCommand) order.push("composite-scan");
+      return { Items: [] };
+    });
+
+    await reconcileDeployStatusMaintenance(
+      fake.deps,
+      NEXT_ISO,
+      async () => {
+        order.push("per-target");
+      },
+      async () => {
+        order.push("dispatch-ready-targets");
+      },
+    );
+
+    expect(order).toEqual([
+      "per-target",
+      "dispatch-ready-targets",
+      "composite-scan",
+      "composite-scan",
+    ]);
+  });
+
+  it("should default DAG continuation to a no-op when the caller omits it", async () => {
+    const fake = makeFake();
+    // The pre-#2747 3-arg call shape must keep working unchanged.
+    await expect(
+      reconcileDeployStatusMaintenance(fake.deps, NEXT_ISO, async () => {}),
+    ).resolves.toBeUndefined();
+  });
 });

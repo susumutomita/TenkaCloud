@@ -54,34 +54,52 @@ describe("buildCompositeDeploymentPlan (#2062)", () => {
   it("should include AWS, GCP, Azure, and Sakura targets", () => {
     const plan = buildCompositeDeploymentPlan(FOUR_PROVIDER);
     expect(plan.runtimeKind).toBe("composite");
+    // [#2747] Every target here is independent (no `dependsOn`), so each carries
+    // `executionWave: 0` and empty `dependsOn` / `inputs` / `outputs` dataflow metadata.
     expect(plan.targets).toEqual([
       {
         targetId: "aws-api",
         targetOrdinal: 0,
+        executionWave: 0,
         provider: "aws",
         engine: "cloudformation",
         entry: "aws/template.yaml",
+        dependsOn: [],
+        inputs: {},
+        outputs: {},
       },
       {
         targetId: "gcp-worker",
         targetOrdinal: 1,
+        executionWave: 0,
         provider: "gcp",
         engine: "infra-manager",
         entry: "gs://bucket/worker",
+        dependsOn: [],
+        inputs: {},
+        outputs: {},
       },
       {
         targetId: "azure-edge",
         targetOrdinal: 2,
+        executionWave: 0,
         provider: "azure",
         engine: "bicep",
         entry: "azure/main.bicep",
+        dependsOn: [],
+        inputs: {},
+        outputs: {},
       },
       {
         targetId: "sakura-svc",
         targetOrdinal: 3,
+        executionWave: 0,
         provider: "sakura",
         engine: "apprun",
         entry: "sakura/service.json",
+        dependsOn: [],
+        inputs: {},
+        outputs: {},
       },
     ]);
   });
@@ -148,5 +166,41 @@ describe("buildCompositeDeploymentPlan (#2062)", () => {
     const a = buildCompositeDeploymentPlan(FOUR_PROVIDER);
     const b = buildCompositeDeploymentPlan(JSON.parse(JSON.stringify(FOUR_PROVIDER)));
     expect(a).toEqual(b);
+  });
+
+  /**
+   * [#2747] `buildCompositeDeploymentPlan` is a defensive second gate — `normalizeRuntime`
+   * (index.ts `validateCompositeGraph`) already rejects cycles / unknown dependencies before a
+   * descriptor reaches the planner in the real deploy path, but the planner is exported and
+   * callable directly (as these tests do), so it must reject the same shapes on its own.
+   */
+  it("should reject a dependency cycle reached only through the planner (defensive gate)", () => {
+    expect(() =>
+      buildCompositeDeploymentPlan({
+        kind: "composite",
+        targets: [
+          { id: "a", provider: "aws", engine: "cloudformation", entry: "a.yaml", dependsOn: ["b"] },
+          { id: "b", provider: "gcp", engine: "infra-manager", entry: "b", dependsOn: ["a"] },
+        ],
+      }),
+    ).toThrow(/dependency cycle includes/);
+  });
+
+  it("should reject an unknown dependency reached only through the planner (defensive gate)", () => {
+    expect(() =>
+      buildCompositeDeploymentPlan({
+        kind: "composite",
+        targets: [
+          {
+            id: "a",
+            provider: "aws",
+            engine: "cloudformation",
+            entry: "a.yaml",
+            dependsOn: ["missing"],
+          },
+          { id: "b", provider: "gcp", engine: "infra-manager", entry: "b" },
+        ],
+      }),
+    ).toThrow(/unknown dependency missing/);
   });
 });

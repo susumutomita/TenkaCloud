@@ -327,7 +327,10 @@ describe("dispatchCompositeDeployment (#2066)", () => {
     const result = await dispatchCompositeDeployment(makeDeps(fake, adapters), PARENT);
 
     expect(adapters.aws.deploy).not.toHaveBeenCalled();
-    expect(result.targets.find((t) => t.targetId === "aws-api")?.outcome).toBe("dispatch_failed");
+    // [#2747] A non-PENDING, non-FAILED target (already dispatched by a prior tick) is
+    // `already_active` — a deliberate split from `dispatch_failed`, which now means "the
+    // provider call itself failed" (see the "continues dispatching ... adapter failure" test).
+    expect(result.targets.find((t) => t.targetId === "aws-api")?.outcome).toBe("already_active");
     expect(rowStatus(fake, "t-aws")).toBe("IN_PROGRESS"); // untouched, not re-FAILED
   });
 

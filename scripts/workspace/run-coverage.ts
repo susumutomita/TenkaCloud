@@ -35,9 +35,10 @@ export interface CoverageWorkspace {
   readonly shard: ShardName;
 }
 
-// Issue #2513: the single source of truth for which workspaces `test:coverage` covers.
-// Order + membership must stay identical to the (now-retired) root package.json chain —
-// scripts/workspace/run-coverage.test.ts hardcodes the expected 17-dir list to catch accidental drops.
+// Issue #2513 / #2756: the single source of truth for which workspaces `test:coverage` covers.
+// Order + membership must stay identical to the (now-retired) root package.json chain plus
+// developer-portal (#2756) — scripts/workspace/run-coverage.test.ts hardcodes the expected
+// 18-dir list to catch accidental drops.
 export const COVERAGE_WORKSPACES: readonly CoverageWorkspace[] = [
   { dir: "infrastructure", filter: "@TenkaCloud/infrastructure", shard: "infrastructure" },
   { dir: "apps/admin-console", filter: "@TenkaCloud/admin-console", shard: "spas" },
@@ -72,6 +73,11 @@ export const COVERAGE_WORKSPACES: readonly CoverageWorkspace[] = [
     filter: "@tenkacloud/always-on-control-plane",
     shard: "packages",
   },
+  // Issue #2756: developer-portal already has a working vitest.config.ts and 18 test files,
+  // but its tests never ran in CI (the ci job runs no tests; only this coverage matrix does).
+  // Placed on the packages shard, which already hosts the odd-one-out
+  // apps/always-on-control-plane and is the fastest shard to absorb the addition.
+  { dir: "apps/developer-portal", filter: "@TenkaCloud/developer-portal", shard: "packages" },
 ];
 
 // shard → dirs, derived from COVERAGE_WORKSPACES so the two can never drift apart.

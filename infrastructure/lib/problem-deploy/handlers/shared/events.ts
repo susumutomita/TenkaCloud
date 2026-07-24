@@ -133,6 +133,15 @@ export const DeployCreateRequestedDetailSchema = z.object({
    * 環境では undefined のままで、 既存の local-path 経路で動作する。
    */
   challengePayloadUrl: z.string().url().optional(),
+  /**
+   * [Composite Runtime / Issue #2747] Bound Composite input values (downstream parameter name ->
+   * resolved upstream output value), computed by `composite-dispatch.ts` before dispatch and
+   * forwarded verbatim by `aws-cfn-adapter.ts`. Absent for every single-provider (non-Composite)
+   * deploy — those events are byte-identical to pre-#2747. The Lambda deploy path
+   * (`cfn-deploy-handler/create-stack.ts`, `deployViaLambda=true`) merges these into the CFn
+   * `Parameters` it builds; the default CodeBuild path does not yet consume this field.
+   */
+  parameters: z.record(z.string(), z.string()).optional(),
 });
 export type DeployCreateRequestedDetail = z.infer<typeof DeployCreateRequestedDetailSchema>;
 

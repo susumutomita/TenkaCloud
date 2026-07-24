@@ -178,6 +178,48 @@ describe("composite deployment repository (#2061)", () => {
     expect(target.problemSetId).toBe("set-1");
   });
 
+  it("[#2747] stores the dependency + output-binding graph metadata on the target", async () => {
+    const fake = makeFakeDdb();
+    const target = await createCompositeTarget(
+      fake.deps,
+      targetInput({
+        executionWave: 2,
+        dependsOn: ["aws-api"],
+        inputs: { Endpoint: { fromTarget: "aws-api", output: "Endpoint" } },
+        outputs: { Endpoint: { sensitivity: "public" } },
+      }),
+    );
+
+    expect(target.compositeExecutionWave).toBe(2);
+    expect(target.compositeDependsOn).toEqual(["aws-api"]);
+    expect(target.compositeInputs).toEqual({
+      Endpoint: { fromTarget: "aws-api", output: "Endpoint" },
+    });
+    expect(target.compositeOutputs).toEqual({ Endpoint: { sensitivity: "public" } });
+  });
+
+  it("[#2747] omits the dependency + output-binding graph metadata when absent (legacy shape)", async () => {
+    const fake = makeFakeDdb();
+    const target = await createCompositeTarget(fake.deps, targetInput());
+
+    expect(target).not.toHaveProperty("compositeExecutionWave");
+    expect(target).not.toHaveProperty("compositeDependsOn");
+    expect(target).not.toHaveProperty("compositeInputs");
+    expect(target).not.toHaveProperty("compositeOutputs");
+  });
+
+  it("[#2747] omits an empty dependsOn / inputs / outputs the same as absent", async () => {
+    const fake = makeFakeDdb();
+    const target = await createCompositeTarget(
+      fake.deps,
+      targetInput({ dependsOn: [], inputs: {}, outputs: {} }),
+    );
+
+    expect(target).not.toHaveProperty("compositeDependsOn");
+    expect(target).not.toHaveProperty("compositeInputs");
+    expect(target).not.toHaveProperty("compositeOutputs");
+  });
+
   it("stores AWS GCP Azure and Sakura targets as independent META rows", async () => {
     const fake = makeFakeDdb();
     await createCompositeParent(fake.deps, parentInput({ targetCount: 4 }));
@@ -343,6 +385,39 @@ describe("composite deployment repository (#2061)", () => {
     expect(retry).toEqual(first);
     // The second call detected the existing row and did not issue a second Put.
     expect(fake.putCount("DEPLOYMENT#target-aws")).toBe(1);
+  });
+
+  it("retries an identical target write idempotently with a non-empty dependsOn graph (#2747)", async () => {
+    const fake = makeFakeDdb();
+    await createCompositeParent(fake.deps, parentInput());
+    // dependsOn is non-empty on both sides so the retry's order-sensitive `sameDependsOn`
+    // comparison actually walks elements instead of short-circuiting on two empty arrays.
+    const withDependsOn = targetInput({ dependsOn: ["upstream-a", "upstream-b"] });
+    const first = await createCompositeTarget(fake.deps, withDependsOn);
+    const retry = await createCompositeTarget(fake.deps, withDependsOn);
+
+    expect(retry).toEqual(first);
+    expect(fake.putCount("DEPLOYMENT#target-aws")).toBe(1);
+  });
+
+  it("rejects a target retry with a different dependsOn graph (#2747)", async () => {
+    const fake = makeFakeDdb();
+    await createCompositeParent(fake.deps, parentInput());
+    await createCompositeTarget(fake.deps, targetInput({ dependsOn: ["upstream-a"] }));
+
+    await expect(
+      createCompositeTarget(fake.deps, targetInput({ dependsOn: ["upstream-b"] })),
+    ).rejects.toBeInstanceOf(CompositeTargetConflictError);
+  });
+
+  it("rejects a target retry with a different-length dependsOn graph (#2747)", async () => {
+    const fake = makeFakeDdb();
+    await createCompositeParent(fake.deps, parentInput());
+    await createCompositeTarget(fake.deps, targetInput({ dependsOn: ["upstream-a"] }));
+
+    await expect(
+      createCompositeTarget(fake.deps, targetInput({ dependsOn: ["upstream-a", "upstream-b"] })),
+    ).rejects.toBeInstanceOf(CompositeTargetConflictError);
   });
 
   it("rejects a target retry with different immutable fields", async () => {

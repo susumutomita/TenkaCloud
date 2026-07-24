@@ -83,6 +83,24 @@ describe("AzureBicepRuntimeAdapter (ADR-027 #1410)", () => {
     });
   });
 
+  it("should merge bound Composite parameters into the Deployment Stack params (#2747)", async () => {
+    const { ctx } = makeCtx(client);
+    await new AzureBicepRuntimeAdapter(ctx, runtime).deploy({
+      ...deployInput,
+      parameters: { tenkacloudUpstreamEndpoint: "https://aws.example" },
+    });
+    expect(client.upsertStack).toHaveBeenCalledWith({
+      name: "tc-team-a-azure-fn",
+      templateRef: "main.bicep",
+      parameters: {
+        tenkacloudNamePrefix: "tc-team-a-azure-fn",
+        tenkacloudProblemId: "azure-fn",
+        tenkacloudTeam: "team-a",
+        tenkacloudUpstreamEndpoint: "https://aws.example",
+      },
+    });
+  });
+
   it("should collect stack outputs / map status / destroy", async () => {
     const { ctx } = makeCtx(client);
     const a = new AzureBicepRuntimeAdapter(ctx, runtime);

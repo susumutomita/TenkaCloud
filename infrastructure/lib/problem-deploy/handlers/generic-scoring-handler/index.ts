@@ -12,6 +12,7 @@ import {
   resolveEventsRepository,
 } from "../event-handler/shared.js";
 import { applyKindResult } from "./apply-kind-result.js";
+import { dispatchCompositeReadyTargets } from "./composite-ready-dispatch.js";
 import { reconcileDeployStatusMaintenance } from "./composite-status-reconciler.js";
 import { maybeFireConditionDisruptions } from "./condition-disruption-fire.js";
 import { createCoordinationTickPass, parseCoordinationProblemIds } from "./coordination-tick.js";
@@ -116,15 +117,26 @@ export async function handler(event: GenericScoringTickEvent = {}): Promise<void
 
   // [ADR-026/027/032 / #1410-1412] 非 AWS runtime (sakura/azure/gcp) deployment の status / outputs を
   // adapter.getStatus / collectOutputs で reconcile (= State Machine が無いので tick が進める)。 採点と並列。
-  // [#2068] その後に Composite parent の status を target 群から集約 reconcile する (= per-target の後)。
+  // [#2747] その直後に Composite DAG の後続 wave を dispatch する (= 直前で refresh した target
+  // status を見て、 依存が揃った target を起動する)。 [#2068] その後に Composite parent の status
+  // を target 群から集約 reconcile する (= per-target の後)。
   const runtimeReconcilePromise = runtimeEventId
     ? Promise.resolve()
-    : reconcileDeployStatusMaintenance(shared, nowIso, () =>
-        reconcileRuntimeStatuses(shared, nowIso).catch((err) => {
-          console.warn("[generic-scoring] reconcileRuntimeStatuses failed", {
-            message: err instanceof Error ? err.message : String(err),
-          });
-        }),
+    : reconcileDeployStatusMaintenance(
+        shared,
+        nowIso,
+        () =>
+          reconcileRuntimeStatuses(shared, nowIso).catch((err) => {
+            console.warn("[generic-scoring] reconcileRuntimeStatuses failed", {
+              message: err instanceof Error ? err.message : String(err),
+            });
+          }),
+        () =>
+          dispatchCompositeReadyTargets(shared, nowMs).catch((err) => {
+            console.warn("[generic-scoring] dispatchCompositeReadyTargets failed", {
+              message: err instanceof Error ? err.message : String(err),
+            });
+          }),
       ).catch((err) => {
         console.warn("[generic-scoring] reconcileCompositeParents failed", {
           message: err instanceof Error ? err.message : String(err),

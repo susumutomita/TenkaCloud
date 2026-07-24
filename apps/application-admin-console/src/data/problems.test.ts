@@ -136,16 +136,18 @@ describe("isLocalOnlyProblemRuntime (#2168)", () => {
   });
 });
 
-describe("NON_AWS_SELECTABLE_PROVIDERS / enabledNonAwsProviders (#2167)", () => {
-  it("should list the non-AWS providers that have a working adapter", () => {
-    expect([...NON_AWS_SELECTABLE_PROVIDERS].sort()).toEqual(["azure", "gcp", "sakura"]);
+describe("NON_AWS_SELECTABLE_PROVIDERS / enabledNonAwsProviders (#2167, tightened by #2757)", () => {
+  it("should list only the non-AWS providers that are actually executable", () => {
+    // azure/bicep and gcp/infra-manager are adapter-wired previews (executable: false);
+    // only sakura/apprun is executable today. See packages/problem-runtime/src/capabilities.ts.
+    expect([...NON_AWS_SELECTABLE_PROVIDERS].sort()).toEqual(["sakura"]);
   });
 
-  it("should enable every non-AWS provider when the flag is on", () => {
+  it("should enable only the executable non-AWS providers when the flag is on", () => {
     const enabled = enabledNonAwsProviders(true);
     expect(enabled.has("sakura")).toBe(true);
-    expect(enabled.has("azure")).toBe(true);
-    expect(enabled.has("gcp")).toBe(true);
+    expect(enabled.has("azure")).toBe(false);
+    expect(enabled.has("gcp")).toBe(false);
   });
 
   it("should enable no providers when the flag is off", () => {
@@ -153,14 +155,14 @@ describe("NON_AWS_SELECTABLE_PROVIDERS / enabledNonAwsProviders (#2167)", () => 
   });
 });
 
-describe("isProviderSelectable (#2167)", () => {
+describe("isProviderSelectable (#2167, tightened by #2757)", () => {
   it("should always allow aws/cloudformation regardless of enabled set", () => {
     expect(isProviderSelectable({ provider: "aws", engine: "cloudformation" }, new Set())).toBe(
       true,
     );
   });
 
-  it("should allow a reserved runtime only when its provider is enabled", () => {
+  it("should allow an executable reserved runtime only when its provider is enabled", () => {
     const runtime = { provider: "sakura", engine: "apprun" };
     expect(isProviderSelectable(runtime, new Set())).toBe(false);
     expect(isProviderSelectable(runtime, new Set(["sakura"]))).toBe(true);
@@ -170,6 +172,18 @@ describe("isProviderSelectable (#2167)", () => {
     expect(isProviderSelectable({ provider: "gcp", engine: "cdktf" }, new Set(["gcp"]))).toBe(
       false,
     );
+  });
+
+  it("should reject an adapter-wired-but-not-executable runtime even when enabled (#2757 regression)", () => {
+    // azure/bicep and gcp/infra-manager both ship adapter wiring (adapterWired: true)
+    // but are not executable yet. Enabling the provider must not resurrect the old
+    // adapterWired-gated selectability — guards against reintroducing that predicate.
+    expect(isProviderSelectable({ provider: "azure", engine: "bicep" }, new Set(["azure"]))).toBe(
+      false,
+    );
+    expect(
+      isProviderSelectable({ provider: "gcp", engine: "infra-manager" }, new Set(["gcp"])),
+    ).toBe(false);
   });
 });
 

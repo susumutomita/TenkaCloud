@@ -15,17 +15,18 @@
  * handler が束縛する)。 = #1419 executor と同じ「logic を注入境界で組み、 実 I/O は後で配線」方針。
  */
 
-import type {
-  ProblemRuntime,
-  ProblemRuntimeAdapter,
-  RuntimeCollectOutputsInput,
-  RuntimeDeployInput,
-  RuntimeDeployResult,
-  RuntimeDestroyInput,
-  RuntimeDestroyResult,
-  RuntimeOutputs,
-  RuntimeStatus,
-  RuntimeStatusInput,
+import {
+  mergeCompositeParameters,
+  type ProblemRuntime,
+  type ProblemRuntimeAdapter,
+  type RuntimeCollectOutputsInput,
+  type RuntimeDeployInput,
+  type RuntimeDeployResult,
+  type RuntimeDestroyInput,
+  type RuntimeDestroyResult,
+  type RuntimeOutputs,
+  type RuntimeStatus,
+  type RuntimeStatusInput,
 } from "./adapter.js";
 
 /** Sakura API の静的キー (Access Token + Secret)。 SSM SecureString から取得 (ADR-026 D3)。 */
@@ -103,17 +104,18 @@ export class SakuraAppRunRuntimeAdapter implements ProblemRuntimeAdapter {
 
   async deploy(input: RuntimeDeployInput): Promise<RuntimeDeployResult> {
     const client = await this.resolveClient();
+    const platformEnv = {
+      TENKACLOUD_NAME_PREFIX: input.namePrefix,
+      TENKACLOUD_PROBLEM_ID: input.problemId,
+      TENKACLOUD_TEAM: input.teamSlug,
+      ...(input.challengePayloadUrl
+        ? { TENKACLOUD_CHALLENGE_PAYLOAD_URL: input.challengePayloadUrl }
+        : {}),
+    };
     await client.upsertApplication({
       name: input.namePrefix,
       image: this.runtime.entry, // ADR-026: runtime.entry = container image reference
-      env: {
-        TENKACLOUD_NAME_PREFIX: input.namePrefix,
-        TENKACLOUD_PROBLEM_ID: input.problemId,
-        TENKACLOUD_TEAM: input.teamSlug,
-        ...(input.challengePayloadUrl
-          ? { TENKACLOUD_CHALLENGE_PAYLOAD_URL: input.challengePayloadUrl }
-          : {}),
-      },
+      env: mergeCompositeParameters(platformEnv, input.parameters),
     });
     return { status: "deploying" };
   }
