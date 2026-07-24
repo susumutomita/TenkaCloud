@@ -90,8 +90,8 @@ const RUNTIME_CAPABILITY_ROWS = [
     "cloud",
     "feature-gated",
     "preview",
-    [2745, 2081],
-    "Adapter and WIF wiring ship, but Terraform source/output handling and live acceptance remain open.",
+    [2081],
+    "Adapter, WIF wiring, and Terraform source materialization to GCS ship; only live acceptance remains open.",
   ],
   [
     "sakura",

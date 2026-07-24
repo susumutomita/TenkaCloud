@@ -42,6 +42,13 @@
  *
  * No secret is logged here (the presigned URL carries a signature): this module emits no logs and
  * never includes the URL in an error message.
+ *
+ * [Issue #2745] {@link fetchChallengePayloadDirectory} extends the same bounded fetch + unzip
+ * primitive to pull an arbitrary DIRECTORY of files out of the payload — a Terraform /
+ * Infrastructure Manager root module is usually several files (`main.tf`, `variables.tf`, ...),
+ * unlike the two fixed filenames above. It shares {@link defaultHttpGet} and the same zip-bomb
+ * bounds (a)-(b); only the entry filter and the returned shape differ (an unbounded set of
+ * `{relativePath, bytes}` files instead of two named strings).
  */
 
 import { unzipSync } from "fflate";
@@ -134,6 +141,69 @@ async function defaultHttpGet(url: string, maxBytes: number): Promise<Uint8Array
   return new Uint8Array(await response.arrayBuffer());
 }
 
+/** Resolved size/count caps for one fetch, with overrides applied ((a)/(b) shared by both readers). */
+interface PayloadLimits {
+  readonly maxPayloadBytes: number;
+  readonly maxDecompressedBytes: number;
+  readonly maxEntryCount: number;
+  readonly maxEntryBytes: number;
+}
+
+function resolvePayloadLimits(deps: FetchChallengePayloadDeps): PayloadLimits {
+  return {
+    maxPayloadBytes: deps.maxPayloadBytes ?? MAX_PAYLOAD_BYTES,
+    maxDecompressedBytes: deps.maxDecompressedBytes ?? MAX_DECOMPRESSED_BYTES,
+    maxEntryCount: deps.maxEntryCount ?? MAX_ENTRY_COUNT,
+    maxEntryBytes: deps.maxEntryBytes ?? MAX_ENTRY_BYTES,
+  };
+}
+
+/**
+ * (a) Download the payload and re-check the ACTUAL byte length against `maxPayloadBytes` — bounds
+ * an injected fetcher too, and covers a server that under-declared (or omitted) Content-Length.
+ * Shared by {@link fetchChallengePayloadArtifacts} and {@link fetchChallengePayloadDirectory}.
+ */
+async function downloadBoundedPayload(
+  url: string,
+  deps: FetchChallengePayloadDeps,
+  limits: PayloadLimits,
+): Promise<Uint8Array> {
+  const httpGet = deps.httpGet ?? ((u: string) => defaultHttpGet(u, limits.maxPayloadBytes));
+  const bytes = await httpGet(url);
+  if (bytes.byteLength > limits.maxPayloadBytes) {
+    throw new Error(
+      `challenge payload is ${bytes.byteLength} bytes, exceeding the ${limits.maxPayloadBytes}-byte cap`,
+    );
+  }
+  return bytes;
+}
+
+/**
+ * (b) Backstops on an already-filtered, small inflated entry set (the `unzipSync` `filter` is the
+ * PRIMARY decompress bound in both callers — it inflates only target entries within
+ * `maxEntryBytes` each, so a zip-bomb hidden in a non-target or over-cap entry never inflates at
+ * all): entry count, then a running decompressed-size sum. Shared by both readers.
+ */
+function enforceEntryBackstops(
+  entries: Readonly<Record<string, Uint8Array>>,
+  entryNames: readonly string[],
+  limits: Pick<PayloadLimits, "maxEntryCount" | "maxDecompressedBytes">,
+  buildCountExceededMessage: (count: number, cap: number) => string,
+): void {
+  if (entryNames.length > limits.maxEntryCount) {
+    throw new Error(buildCountExceededMessage(entryNames.length, limits.maxEntryCount));
+  }
+  let decompressedTotal = 0;
+  for (const name of entryNames) {
+    decompressedTotal += entries[name].byteLength;
+    if (decompressedTotal > limits.maxDecompressedBytes) {
+      throw new Error(
+        `challenge payload decompressed size exceeds the ${limits.maxDecompressedBytes}-byte cap`,
+      );
+    }
+  }
+}
+
 /**
  * Fetch + unzip a private problem's `payload.zip` from its presigned URL and return the two files
  * the deploy needs. The template entry is the one whose key is exactly `template.yaml` or ends in
@@ -144,48 +214,20 @@ export async function fetchChallengePayloadArtifacts(
   url: string,
   deps: FetchChallengePayloadDeps = {},
 ): Promise<ChallengePayloadArtifacts> {
-  const maxPayloadBytes = deps.maxPayloadBytes ?? MAX_PAYLOAD_BYTES;
-  const maxDecompressedBytes = deps.maxDecompressedBytes ?? MAX_DECOMPRESSED_BYTES;
-  const maxEntryCount = deps.maxEntryCount ?? MAX_ENTRY_COUNT;
-  const maxEntryBytes = deps.maxEntryBytes ?? MAX_ENTRY_BYTES;
-  const httpGet = deps.httpGet ?? ((u: string) => defaultHttpGet(u, maxPayloadBytes));
+  const limits = resolvePayloadLimits(deps);
+  const bytes = await downloadBoundedPayload(url, deps, limits);
 
-  const bytes = await httpGet(url);
-  // (a) Hard cap on the actual downloaded bytes BEFORE unzip — bounds an injected fetcher too, and
-  // covers a server that under-declared (or omitted) Content-Length.
-  if (bytes.byteLength > maxPayloadBytes) {
-    throw new Error(
-      `challenge payload is ${bytes.byteLength} bytes, exceeding the ${maxPayloadBytes}-byte cap`,
-    );
-  }
-
-  // (b) PRIMARY decompress bound: inflate ONLY the two target entries, and only if the zip's
-  // directory header declares each within `maxEntryBytes`. `filter` runs per-entry BEFORE that
-  // entry is decompressed, so a zip-bomb hidden in a non-target entry (or an over-cap target entry)
-  // is never inflated at all — unlike an unfiltered `unzipSync`, which eagerly inflates everything
-  // into memory before any size check could run. (Residual: a target entry whose header understates
-  // its true size could still inflate; the compressed cap (a) + the first-party payload bound that
-  // narrow self-DoS.)
+  // (b) PRIMARY decompress bound — see enforceEntryBackstops docblock.
   const entries = unzipSync(bytes, {
-    filter: (file) => isTargetEntry(file.name) && file.originalSize <= maxEntryBytes,
+    filter: (file) => isTargetEntry(file.name) && file.originalSize <= limits.maxEntryBytes,
   });
   const entryNames = Object.keys(entries);
-
-  // (b) Backstops on the (already filtered, small) inflated set: entry count, then a running sum.
-  if (entryNames.length > maxEntryCount) {
-    throw new Error(
-      `challenge payload has ${entryNames.length} entries, exceeding the ${maxEntryCount} cap`,
-    );
-  }
-  let decompressedTotal = 0;
-  for (const name of entryNames) {
-    decompressedTotal += entries[name].byteLength;
-    if (decompressedTotal > maxDecompressedBytes) {
-      throw new Error(
-        `challenge payload decompressed size exceeds the ${maxDecompressedBytes}-byte cap`,
-      );
-    }
-  }
+  enforceEntryBackstops(
+    entries,
+    entryNames,
+    limits,
+    (count, cap) => `challenge payload has ${count} entries, exceeding the ${cap} cap`,
+  );
 
   const templateKey = entryNames.find(
     (key) => key === TEMPLATE_ENTRY || key.endsWith(`/${TEMPLATE_ENTRY}`),
@@ -207,4 +249,84 @@ export async function fetchChallengePayloadArtifacts(
     templateBody: decoder.decode(entries[templateKey]),
     metadataText: decoder.decode(metadataEntry),
   };
+}
+
+/** One file recovered from underneath a payload directory entry, path-relative to that entry. */
+export interface ChallengePayloadDirectoryFile {
+  readonly relativePath: string;
+  readonly bytes: Uint8Array;
+}
+
+/**
+ * True when `name` (a full in-zip path) contains `entryDir` as a whole path-segment prefix
+ * anywhere in its ancestry — i.e. a file living inside `.../{entryDir}/...`. A leading-segment
+ * match (`entryDir` at the very start) or a `/`-preceded match (nested under an unknown organizer
+ * root folder, same "any depth" allowance {@link isTargetEntry} makes) both count; a sibling like
+ * `targets/gcp-old/main.tf` never matches `targets/gcp` because the character after the shared
+ * prefix is `-`, not `/`.
+ */
+function isUnderEntryDir(name: string, entryDir: string): boolean {
+  const marker = `${entryDir}/`;
+  const idx = name.indexOf(marker);
+  if (idx === -1) return false;
+  return idx === 0 || name[idx - 1] === "/";
+}
+
+/** Strip the matched `.../{entryDir}/` prefix, leaving the path relative to that directory. */
+function relativeToEntryDir(name: string, entryDir: string): string {
+  const marker = `${entryDir}/`;
+  const idx = name.indexOf(marker);
+  return name.slice(idx + marker.length);
+}
+
+/**
+ * Fetch + unzip a private problem's payload and return every file living under a declared
+ * directory entry (a Terraform / Infrastructure Manager root module, unlike the two fixed
+ * filenames {@link fetchChallengePayloadArtifacts} reads). `entryDir` is the problem-relative
+ * directory path (e.g. `targets/gcp`, matching `runtime.entry` / a composite target's `entry`);
+ * it must not be empty, absolute, or contain a `..` segment (defense-in-depth — the caller
+ * validates the same, but this module never trusts a single layer). Returns files sorted by
+ * `relativePath` for a deterministic caller-side zip. Missing directory (zero matching files)
+ * throws (fail loud — never a silently empty blueprint).
+ */
+export async function fetchChallengePayloadDirectory(
+  url: string,
+  entryDir: string,
+  deps: FetchChallengePayloadDeps = {},
+): Promise<readonly ChallengePayloadDirectoryFile[]> {
+  if (
+    entryDir.length === 0 ||
+    entryDir.startsWith("/") ||
+    entryDir.split("/").includes("..") ||
+    entryDir.includes("\\")
+  ) {
+    throw new Error(`challenge payload directory entry '${entryDir}' is not a valid relative path`);
+  }
+  const limits = resolvePayloadLimits(deps);
+  const bytes = await downloadBoundedPayload(url, deps, limits);
+
+  // (b) PRIMARY decompress bound — see enforceEntryBackstops docblock. Matched against an
+  // arbitrary directory instead of two fixed filenames; directory marker entries (`name` ending
+  // in `/`) never carry file content and are skipped.
+  const entries = unzipSync(bytes, {
+    filter: (file) =>
+      !file.name.endsWith("/") &&
+      isUnderEntryDir(file.name, entryDir) &&
+      file.originalSize <= limits.maxEntryBytes,
+  });
+  const entryNames = Object.keys(entries);
+  if (entryNames.length === 0) {
+    throw new Error(`challenge payload does not contain any file under '${entryDir}/'`);
+  }
+  enforceEntryBackstops(
+    entries,
+    entryNames,
+    limits,
+    (count, cap) =>
+      `challenge payload has ${count} entries under '${entryDir}/', exceeding the ${cap} cap`,
+  );
+
+  return entryNames
+    .map((name) => ({ relativePath: relativeToEntryDir(name, entryDir), bytes: entries[name] }))
+    .sort((a, b) => a.relativePath.localeCompare(b.relativePath));
 }

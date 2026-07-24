@@ -69,4 +69,46 @@ describe("gcp-credential-store (ADR-032 #1411)", () => {
     expect(await getGcpCredential(makeDeps(send), "t", "team")).toBeUndefined();
     await expect(deleteGcpCredential(makeDeps(send), "t", "team")).resolves.toBeUndefined();
   });
+
+  /**
+   * [Issue #2745] `artifactBucket` is an optional field for the GCS blueprint materializer.
+   */
+  describe("artifactBucket (#2745)", () => {
+    it("should round-trip a credential that declares artifactBucket", async () => {
+      let stored: string | undefined;
+      const send = vi
+        .fn()
+        .mockImplementation(
+          (cmd: { constructor: { name: string }; input?: { Value?: string } }) => {
+            if (cmd.constructor.name === "PutParameterCommand") {
+              stored = cmd.input?.Value;
+              return Promise.resolve({});
+            }
+            return Promise.resolve({ Parameter: { Value: stored } });
+          },
+        );
+      const deps = makeDeps(send);
+      const withBucket = { ...CRED, artifactBucket: "team-a-gcp-artifacts" };
+      await putGcpCredential(deps, "t", "team", withBucket);
+      expect(await getGcpCredential(deps, "t", "team")).toEqual(withBucket);
+    });
+
+    it("should keep parsing a pre-existing credential with no artifactBucket (backward compatible)", async () => {
+      const send = vi.fn().mockResolvedValue({ Parameter: { Value: JSON.stringify(CRED) } });
+      const parsed = await getGcpCredential(makeDeps(send), "t", "team");
+      expect(parsed).toEqual(CRED);
+      expect(parsed?.artifactBucket).toBeUndefined();
+    });
+
+    it("should drop a non-string/empty artifactBucket without failing the whole parse", async () => {
+      for (const badValue of [123, "", null]) {
+        const send = vi.fn().mockResolvedValue({
+          Parameter: { Value: JSON.stringify({ ...CRED, artifactBucket: badValue }) },
+        });
+        const parsed = await getGcpCredential(makeDeps(send), "t", "team");
+        expect(parsed).toBeDefined();
+        expect(parsed?.artifactBucket).toBeUndefined();
+      }
+    });
+  });
 });

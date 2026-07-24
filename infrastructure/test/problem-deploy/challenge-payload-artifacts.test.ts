@@ -2,6 +2,7 @@ import { strToU8, zipSync } from "fflate";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   fetchChallengePayloadArtifacts,
+  fetchChallengePayloadDirectory,
   MAX_PAYLOAD_BYTES,
 } from "../../lib/problem-deploy/challenge-payload-artifacts.js";
 
@@ -185,5 +186,130 @@ describe("fetchChallengePayloadArtifacts (#2291)", () => {
     );
     // Body was never read (rejected on the declared length first).
     expect(arrayBuffer).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * [Issue #2745] `fetchChallengePayloadDirectory` extends the same bounded fetch + unzip primitive
+ * to pull a DIRECTORY of files out of a private payload (a GCP Terraform root module, unlike the
+ * two fixed filenames above).
+ */
+describe("fetchChallengePayloadDirectory (#2745)", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const MAIN_TF = 'resource "google_storage_bucket" "x" {}';
+  const VARS_TF = 'variable "y" {}';
+
+  it("should return every file under the declared directory, sorted by relative path", async () => {
+    const zip = payloadZip({
+      "targets/gcp/main.tf": MAIN_TF,
+      "targets/gcp/variables.tf": VARS_TF,
+    });
+    const files = await fetchChallengePayloadDirectory("https://s3.example/p", "targets/gcp", {
+      httpGet: async () => zip,
+    });
+    expect(files.map((f) => f.relativePath)).toEqual(["main.tf", "variables.tf"]);
+    expect(new TextDecoder().decode(files[0].bytes)).toBe(MAIN_TF);
+  });
+
+  it("should match a directory nested under an unknown organizer root folder (any depth)", async () => {
+    const zip = payloadZip({ "four-corners/targets/gcp/main.tf": MAIN_TF });
+    const files = await fetchChallengePayloadDirectory("https://s3.example/p", "targets/gcp", {
+      httpGet: async () => zip,
+    });
+    expect(files).toEqual([{ relativePath: "main.tf", bytes: strToU8(MAIN_TF) }]);
+  });
+
+  it("should not match a sibling directory that merely shares the entry's prefix", async () => {
+    // "targets/gcp-old" must never satisfy an entry of "targets/gcp".
+    const zip = payloadZip({ "targets/gcp-old/main.tf": MAIN_TF });
+    await expect(
+      fetchChallengePayloadDirectory("https://s3.example/p", "targets/gcp", {
+        httpGet: async () => zip,
+      }),
+    ).rejects.toThrow(/does not contain any file under 'targets\/gcp\/'/);
+  });
+
+  it("should reject an absolute, traversal, or empty directory entry before any I/O", async () => {
+    const httpGet = vi.fn();
+    await expect(
+      fetchChallengePayloadDirectory("https://s3.example/p", "/etc/passwd", { httpGet }),
+    ).rejects.toThrow(/not a valid relative path/);
+    await expect(
+      fetchChallengePayloadDirectory("https://s3.example/p", "../secrets", { httpGet }),
+    ).rejects.toThrow(/not a valid relative path/);
+    await expect(
+      fetchChallengePayloadDirectory("https://s3.example/p", "", { httpGet }),
+    ).rejects.toThrow(/not a valid relative path/);
+    expect(httpGet).not.toHaveBeenCalled();
+  });
+
+  it("should throw when the directory has no matching files (fail loud, never an empty archive)", async () => {
+    const zip = payloadZip({ "targets/azure/main.bicep": "resource x {}" });
+    await expect(
+      fetchChallengePayloadDirectory("https://s3.example/p", "targets/gcp", {
+        httpGet: async () => zip,
+      }),
+    ).rejects.toThrow(/does not contain any file under 'targets\/gcp\/'/);
+  });
+
+  it("should skip directory marker entries (zero-length names ending in '/')", async () => {
+    // zipSync from fflate does not itself emit directory markers for flat data, so build the zip
+    // by hand with an explicit empty directory entry alongside a real file.
+    const zip = zipSync({
+      "targets/gcp/": new Uint8Array(0),
+      "targets/gcp/main.tf": strToU8(MAIN_TF),
+    });
+    const files = await fetchChallengePayloadDirectory("https://s3.example/p", "targets/gcp", {
+      httpGet: async () => zip,
+    });
+    expect(files).toEqual([{ relativePath: "main.tf", bytes: strToU8(MAIN_TF) }]);
+  });
+
+  it("should reject an oversized payload before unzip (shares the same cap as fetchChallengePayloadArtifacts)", async () => {
+    const httpGet = vi.fn(async () => new Uint8Array(11));
+    await expect(
+      fetchChallengePayloadDirectory("https://s3.example/p", "targets/gcp", {
+        httpGet,
+        maxPayloadBytes: 10,
+      }),
+    ).rejects.toThrow(/exceeding the 10-byte cap/);
+  });
+
+  it("should reject too many matched entries under the directory", async () => {
+    const zip = payloadZip({
+      "targets/gcp/a.tf": MAIN_TF,
+      "targets/gcp/b.tf": VARS_TF,
+      "targets/gcp/c.tf": MAIN_TF,
+    });
+    await expect(
+      fetchChallengePayloadDirectory("https://s3.example/p", "targets/gcp", {
+        httpGet: async () => zip,
+        maxEntryCount: 2,
+      }),
+    ).rejects.toThrow(/exceeding the 2 cap/);
+  });
+
+  it("should reject a directory whose decompressed size exceeds the cap", async () => {
+    const zip = payloadZip({ "targets/gcp/main.tf": MAIN_TF });
+    await expect(
+      fetchChallengePayloadDirectory("https://s3.example/p", "targets/gcp", {
+        httpGet: async () => zip,
+        maxDecompressedBytes: 1,
+      }),
+    ).rejects.toThrow(/decompressed size exceeds the 1-byte cap/);
+  });
+
+  it("should drop (never inflate) an entry whose declared size exceeds the per-entry cap", async () => {
+    const zip = payloadZip({
+      "targets/gcp/main.tf": "x".repeat(4096),
+      "targets/gcp/small.tf": VARS_TF,
+    });
+    const files = await fetchChallengePayloadDirectory("https://s3.example/p", "targets/gcp", {
+      httpGet: async () => zip,
+      maxEntryBytes: 1024,
+    });
+    // main.tf was dropped pre-inflation (over cap); small.tf still comes through.
+    expect(files).toEqual([{ relativePath: "small.tf", bytes: strToU8(VARS_TF) }]);
   });
 });

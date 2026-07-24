@@ -47,6 +47,13 @@ export interface BuildApiLambdasArgs {
   readonly capacityRunbookDocumentName?: string;
   readonly capacityRunbookAutomationRoleArn?: string;
   readonly deployViaLambda?: boolean;
+  /**
+   * [Issue #2745] The materialized `problems/` tree bucket name — threaded into `DeployApiLambda`
+   * so a public `gcp/infra-manager` problem's Terraform root module can be read (see
+   * `deploy-api-lambda.ts` prop docs). Always present at the stack level (`sourceBucketName` is a
+   * required `ProblemDeployBackendStackProps` field), so this is required too.
+   */
+  readonly sourceBucketName: string;
 }
 
 export interface ApiLambdasOutputs {
@@ -120,6 +127,8 @@ export function buildApiLambdas(scope: Construct, args: BuildApiLambdasArgs): Ap
     // Issue #2019 / ADR-017: TrustBridge enforcement mode (undefined → lambda
     // defaults to shadow = no-op)。
     cloudActionEnforcementMode: args.cloudActionEnforcementMode,
+    // [Issue #2745] materialized problems/ tree bucket — public gcp/infra-manager Terraform read.
+    sourceBucketName: args.sourceBucketName,
   });
 
   // Issue #910 (#895 Phase 2.C.2.b): bulk batch payload S3 bucket。 EventApiLambda の

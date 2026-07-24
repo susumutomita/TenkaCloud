@@ -232,9 +232,9 @@ export const REFERENCE_DATA: ReferenceData = {
       executionMode: "cloud",
       selection: "feature-gated",
       maturity: "preview",
-      blockingIssues: [2745, 2081],
+      blockingIssues: [2081],
       evidence:
-        "Adapter and WIF wiring ship, but Terraform source/output handling and live acceptance remain open.",
+        "Adapter, WIF wiring, and Terraform source materialization to GCS ship; only live acceptance remains open.",
     },
     {
       provider: "sakura",

@@ -1,5 +1,6 @@
 import type { GcpStsClient } from "@TenkaCloud/trust-bridge";
 import type { EventBridgeClient } from "@aws-sdk/client-eventbridge";
+import type { S3Client } from "@aws-sdk/client-s3";
 import type { SSMClient } from "@aws-sdk/client-ssm";
 import { createAzureDeploymentStacksRestClient } from "../../runtime-clients/azure-deployment-stacks-rest-client.js";
 import {
@@ -11,6 +12,7 @@ import {
   formatGcpSubjectToken,
   type GcpAwsSubjectTokenSigner,
 } from "../../runtime-clients/gcp-aws-subject-token.js";
+import { materializeGcpBlueprint } from "../../runtime-clients/gcp-blueprint-materializer.js";
 import { createGcpInfraManagerRestClient } from "../../runtime-clients/gcp-infra-manager-rest-client.js";
 import { createGcpStsRestClient } from "../../runtime-clients/gcp-sts-rest-client.js";
 import { createSakuraAppRunRestClient } from "../../runtime-clients/sakura-apprun-rest-client.js";
@@ -50,6 +52,16 @@ export interface AdapterDependencyConfig {
   readonly gcpStsClient?: GcpStsClient;
   readonly gcpSubjectTokenSigner?: GcpAwsSubjectTokenSigner;
   readonly awsRegion?: string;
+  /**
+   * [Issue #2745] Public-problem Terraform source read for `gcp/infra-manager`: the materialized
+   * `problems/` tree S3 client + its bucket name. Reuses the SAME `s3` field `DeployContext`
+   * already carries for the ADR-008 private-payload presigned URL, so wiring this costs no new
+   * Lambda dependency — only a wider IAM read grant (see `deploy-api-lambda.ts`). Absent (as in
+   * Lite mode / no `SOURCE_BUCKET_NAME`) + no `challengePayloadUrl` on the deploy → the
+   * materializer fails loud with an actionable diagnostic (never a silent empty blueprint).
+   */
+  readonly s3?: Pick<S3Client, "send">;
+  readonly sourceBucketName?: string;
 }
 
 /** GCP の OAuth2 scope (= cloud-platform full)。 */
@@ -138,6 +150,9 @@ function buildAzureAdapterContext(
  * WIF config を SSM から引き未登録なら loud throw、 **署名鍵レス**で AWS subject token (= 署名済
  * GetCallerIdentity) を作り → GCP STS で federated token → SA impersonation で短命 access token を得る。
  * client は同 config の project/location/service account で Infra Manager REST client を束ねる。
+ * materializeBlueprint は同じ config の artifactBucket + 同じ access token で GCS へ Terraform blueprint
+ * zip を upload する (`gcp-blueprint-materializer.ts`、 #2745) — `entry` の public 問題読み取りは同 team の
+ * `s3`/`sourceBucketName` (materialized `problems/` tree) が配線されているときだけ動く。
  */
 function buildGcpAdapterContext(
   ssm: Pick<SSMClient, "send">,
@@ -147,12 +162,15 @@ function buildGcpAdapterContext(
   stsClient: GcpStsClient,
   signer: GcpAwsSubjectTokenSigner,
   awsRegion: string,
+  s3: Pick<S3Client, "send"> | undefined,
+  sourceBucketName: string | undefined,
 ): NonNullable<AdapterDependencies["gcp"]> {
   let resolved:
     | {
         readonly projectId: string;
         readonly location: string;
         readonly serviceAccountEmail: string;
+        readonly artifactBucket?: string;
       }
     | undefined;
   return {
@@ -168,6 +186,7 @@ function buildGcpAdapterContext(
         projectId: config.projectId,
         location: config.location,
         serviceAccountEmail: config.serviceAccountEmail,
+        ...(config.artifactBucket ? { artifactBucket: config.artifactBucket } : {}),
       };
       // ADR-032: AWS identity を subject にした署名済 GetCallerIdentity (鍵レス)。
       const signed = await signer.sign({ region: awsRegion, wifAudience: config.wifAudience });
@@ -195,6 +214,30 @@ function buildGcpAdapterContext(
         serviceAccountEmail: resolved.serviceAccountEmail,
         location: resolved.location,
       });
+    },
+    materializeBlueprint: (credential, input) => {
+      if (!resolved) {
+        throw new Error(
+          "GCP adapter context: getCredential must resolve before materializeBlueprint",
+        );
+      }
+      return materializeGcpBlueprint(
+        {
+          tenantId: input.tenantId,
+          teamSlug: input.teamSlug,
+          problemId: input.problemId,
+          source: {
+            problemDir: input.problemDir,
+            entry: input.entry,
+            ...(input.challengePayloadUrl
+              ? { challengePayloadUrl: input.challengePayloadUrl }
+              : {}),
+          },
+          accessToken: credential.accessToken,
+          artifactBucket: resolved.artifactBucket,
+        },
+        { s3, sourceBucketName },
+      );
     },
   };
 }
@@ -245,6 +288,8 @@ export function buildAdapterDependencies(
         config.gcpStsClient ?? createGcpStsRestClient(),
         config.gcpSubjectTokenSigner ?? createSigV4SubjectTokenSigner(),
         config.awsRegion ?? process.env.AWS_REGION ?? "us-east-1",
+        config.s3,
+        config.sourceBucketName,
       ),
     };
   }

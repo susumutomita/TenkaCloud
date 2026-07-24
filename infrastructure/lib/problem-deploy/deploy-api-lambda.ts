@@ -114,6 +114,16 @@ export interface DeployApiLambdaProps {
    * instead of running AssumeRole / CloudFormation.
    */
   readonly cloudActionEnforcementMode?: "shadow" | "enforce";
+  /**
+   * [Issue #2745] The materialized `problems/` tree bucket (same bucket `CfnDeployLambda` reads,
+   * `problem-deploy-backend-stack.ts`'s `sourceBucketName`). A **public** `gcp/infra-manager`
+   * problem's Terraform root module is read from here (`gcp-blueprint-materializer.ts`); a
+   * **private** problem's presigned `challengePayloadUrl` path needs no bucket read at all. Always
+   * passed (the bucket already exists unconditionally in every environment) — only whether the
+   * `problems/` tree is actually MATERIALIZED there is gated on `CDK_PARAM_DEPLOY_VIA_LAMBDA`
+   * (`build-deploy-pipeline.ts`); an unmaterialized tree fails the read loud, it is never silent.
+   */
+  readonly sourceBucketName: string;
 }
 
 /**
@@ -176,6 +186,9 @@ export class DeployApiLambda extends Construct {
         // Issue #2019 / ADR-017: TrustBridge high-risk enforcement mode。 default
         // "shadow" (= 既存挙動、 全 deploy が従来経路)。 "enforce" で opt-in。
         CLOUD_ACTION_ENFORCEMENT_MODE: props.cloudActionEnforcementMode ?? "shadow",
+        // [Issue #2745] materialized problems/ tree bucket — read by gcp-blueprint-materializer.ts
+        // for a public gcp/infra-manager problem's Terraform root module.
+        SOURCE_BUCKET_NAME: props.sourceBucketName,
         NODE_OPTIONS: "--enable-source-maps",
       },
       // Issue #1308: BATTLE_PROBLEMS_CATALOG は問題が増えるたび growing し 4 KB Lambda env
@@ -272,6 +285,31 @@ export class DeployApiLambda extends Construct {
     // ADR-008 Phase 3 (Issue #642): private 問題 payload の S3 GetObject 権限。
     // bucket 未指定なら no-op (= dormant、 最小権限維持)。
     grantChallengePayloadRead(this, this.fn, props.challengePayloadBucketName);
+
+    // [Issue #2745] materialized problems/ tree read — a PUBLIC gcp/infra-manager problem's
+    // Terraform root module (gcp-blueprint-materializer.ts). `s3:GetObject` on every object (same
+    // scope CfnDeployLambda already has, cfn-deploy-lambda.ts); `s3:ListBucket` is additionally
+    // scoped to the two valid `problemDir` prefix shapes (events.ts `isProblemDir`:
+    // `problems/<category>/<id>` core catalog, `pack-problems/<packId>/<version>/<category>/<id>`
+    // installed pack) via condition — least privilege, the materializer only ever lists under one
+    // problem's own directory, never the whole bucket.
+    this.fn.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ["s3:GetObject"],
+        resources: [`arn:aws:s3:::${props.sourceBucketName}/*`],
+      }),
+    );
+    this.fn.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ["s3:ListBucket"],
+        resources: [`arn:aws:s3:::${props.sourceBucketName}`],
+        conditions: {
+          StringLike: { "s3:prefix": ["problems/*", "pack-problems/*"] },
+        },
+      }),
+    );
 
     // [Issue #2560] Turso SecureString read — EventApiLambda と同じ pattern。
     // `tursoAuthTokenParameterName` 未配線 (= dynamodb backend) なら no-op。

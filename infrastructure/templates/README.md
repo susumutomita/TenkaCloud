@@ -279,7 +279,7 @@ Team Cloud Credentials パネルが現れます。
 | --- | --- | --- |
 | Sakura | コントロールパネルで API キーを発行する | `{accessToken, accessTokenSecret}` |
 | Azure | `az ad sp create-for-rbac` で Entra アプリと RBAC を作成する | `{azureTenantId, clientId, clientSecret, subscriptionId, resourceGroup}` |
-| GCP | `gcloud` で Workload Identity プールとサービスアカウントを作成する（keyless） | `{wifAudience, serviceAccountEmail, projectId, location}` |
+| GCP | `gcloud` で Workload Identity プールとサービスアカウントを作成する（keyless） | `{wifAudience, serviceAccountEmail, projectId, location, artifactBucket}` |
 
 ### 3. 登録して使う
 
@@ -287,6 +287,13 @@ Team Cloud Credentials パネルが現れます。
 作成の問題 picker でその provider の問題が選択可能になります。鍵を更新するときは同じ team に
 登録し直すと上書きされ、不要になったら「失効」で削除できます。secret は登録時に送るだけで、
 一覧 / status には表示されません。
+
+GCP の `artifactBucket`（任意 field、Issue #2745）は Terraform blueprint zip を upload する
+team 所有の GCS bucket 名です。事前に `gcloud storage buckets create` で作成し、登録した
+`serviceAccountEmail` に書き込み権限（`roles/storage.objectAdmin` 等）を付与してください。
+platform の CDK が作る bucket ではなく、team 自身が作成・課金・保持ポリシーを管理する bucket です。
+未登録のまま `gcp/infra-manager` 問題を deploy しようとすると、materializer が
+「register artifactBucket」という診断で fail-closed します。
 
 ## 関連
 

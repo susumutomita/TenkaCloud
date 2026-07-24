@@ -493,6 +493,12 @@ export interface DeploySharedResources {
   ) => ProblemRuntimeDescriptor | undefined;
   readonly challengePayloadBucket: string | undefined;
   readonly s3: S3Client;
+  /**
+   * [Issue #2745] 問題 source (`problems/` materialized tree) を持つ bucket 名。 `s3` (上記) が同じ
+   * client を読取に再利用する。 未設定 (Lite / SOURCE_BUCKET_NAME 未配線) なら public 問題の GCP
+   * Terraform source 読取だけが利用不可 (= private 問題の challengePayloadUrl 経路は影響なし)。
+   */
+  readonly sourceBucketName: string | undefined;
   /** [ADR-026 / #1412] per-team Sakura API key store の読取 client。 */
   readonly ssm: SSMClient;
   /** [ADR-026 / #1412] AppRun REST base URL の override (env)。 未設定なら本番 AppRun 共用型。 */
@@ -535,6 +541,11 @@ export function buildSharedResources(runtime: ControlDataRuntime): DeploySharedR
     ),
     challengePayloadBucket,
     s3: new S3Client({}),
+    // [Issue #2745] materialized problems/ tree bucket — same env `SOURCE_BUCKET_NAME` the
+    // CfnDeploy Lambda reads (create-stack.ts); empty when unset (Lite mode default) so
+    // startup never fails-fast on it (mirrors the tableName / competitorAccountsTableName
+    // `?? ""`-style relaxations above).
+    sourceBucketName: process.env.SOURCE_BUCKET_NAME || undefined,
     ssm: new SSMClient({}),
     sakuraAppRunBaseUrl: process.env.SAKURA_APPRUN_BASE_URL || undefined,
     deployQuota: parseDeployQuota(process.env.DEPLOY_QUOTA_BY_TIER),
