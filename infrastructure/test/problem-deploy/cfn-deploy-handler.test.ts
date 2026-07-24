@@ -196,6 +196,73 @@ describe("buildParameterOverrides (#2291)", () => {
     expect(params).toContainEqual({ ParameterKey: "Keep", ParameterValue: "kept" });
   });
 
+  it("should append Composite-bound parameters after the problem's own cfnParameters (#2747)", () => {
+    const params = buildParameterOverrides({
+      cfnParameters: { Fixed: "keep-me" },
+      namePrefix: "tc-x-y",
+      tenkaCloudAccountId: "111122223333",
+      externalId: VALID_JOB_ID,
+      generateToken: () => "TOK",
+      boundParameters: { GcpEndpoint: "https://gcp.example" },
+    });
+    expect(params).toContainEqual({
+      ParameterKey: "GcpEndpoint",
+      ParameterValue: "https://gcp.example",
+    });
+    expect(params.map((p) => p.ParameterKey)).toEqual([
+      "NamePrefix",
+      "TenkaCloudAccountId",
+      "ExternalId",
+      "Fixed",
+      "GcpEndpoint",
+    ]);
+  });
+
+  it("should skip an empty Composite-bound parameter key (#2747)", () => {
+    const params = buildParameterOverrides({
+      cfnParameters: {},
+      namePrefix: "tc-x-y",
+      tenkaCloudAccountId: "111122223333",
+      externalId: VALID_JOB_ID,
+      generateToken: () => "TOK",
+      boundParameters: { "": "dropped", GcpEndpoint: "https://gcp.example" },
+    });
+    expect(params.some((p) => p.ParameterKey === "")).toBe(false);
+    expect(params).toContainEqual({
+      ParameterKey: "GcpEndpoint",
+      ParameterValue: "https://gcp.example",
+    });
+  });
+
+  it("should reject a bound parameter whose name collides with a platform-injected parameter (#2747)", () => {
+    expect(() =>
+      buildParameterOverrides({
+        cfnParameters: {},
+        namePrefix: "tc-x-y",
+        tenkaCloudAccountId: "111122223333",
+        externalId: VALID_JOB_ID,
+        generateToken: () => "TOK",
+        boundParameters: { NamePrefix: "attacker-controlled" },
+      }),
+    ).toThrow(/collides with a platform-injected parameter name/);
+  });
+
+  it("should omit Composite-bound parameters entirely when absent (= single-provider byte-compat)", () => {
+    const params = buildParameterOverrides({
+      cfnParameters: { Fixed: "keep-me" },
+      namePrefix: "tc-x-y",
+      tenkaCloudAccountId: "111122223333",
+      externalId: VALID_JOB_ID,
+      generateToken: () => "TOK",
+    });
+    expect(params.map((p) => p.ParameterKey)).toEqual([
+      "NamePrefix",
+      "TenkaCloudAccountId",
+      "ExternalId",
+      "Fixed",
+    ]);
+  });
+
   it("should inject the scoped AllowedCidr when configured and the template declares it", () => {
     const params = buildParameterOverrides({
       cfnParameters: { AllowedCidr: "0.0.0.0/0", FlagSeed: "fixed" },
@@ -619,6 +686,36 @@ describe("createStackForDeployment cross-account (#2291)", () => {
         credentials: expect.objectContaining({ AccessKeyId: "AKIA_TEST" }),
       }),
     );
+  });
+
+  it("should forward Composite-bound detail.parameters into CreateStack (#2747)", async () => {
+    const cfn = fakeCfn({ describeResponses: [{ notFound: true }], commands: [] });
+    const deps = crossAccountDeps(cfn);
+    await createStackForDeployment(
+      { detail: validDetail({ parameters: { GcpEndpoint: "https://gcp.example" } }) },
+      deps,
+    );
+
+    const createCmd = cfn.send.mock.calls
+      .map((c) => c[0])
+      .find((c) => c instanceof CreateStackCommand);
+    const input = (createCmd as CreateStackCommand).input;
+    expect(input.Parameters).toContainEqual({
+      ParameterKey: "GcpEndpoint",
+      ParameterValue: "https://gcp.example",
+    });
+  });
+
+  it("should fail loudly instead of deploying when detail.parameters collides with a reserved name (#2747)", async () => {
+    const cfn = fakeCfn({ describeResponses: [{ notFound: true }], commands: [] });
+    const deps = crossAccountDeps(cfn);
+    await expect(
+      createStackForDeployment(
+        { detail: validDetail({ parameters: { ExternalId: "attacker-controlled" } }) },
+        deps,
+      ),
+    ).rejects.toThrow(/collides with a platform-injected parameter name/);
+    expect(cfn.send.mock.calls.some((c) => c[0] instanceof CreateStackCommand)).toBe(false);
   });
 
   it("should pass scoped AllowedCidr to CreateStack when configured and the template declares it", async () => {

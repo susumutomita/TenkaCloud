@@ -112,6 +112,13 @@ export interface DeployResponse {
 export type CompositeTargetProvider = "aws" | "gcp" | "azure" | "sakura";
 
 /**
+ * [Composite Runtime / Issue #2747] Where a target sits in its parent's dependency graph, mirrors
+ * `CompositeDependencyState` in `composite-detail.ts`. Absent (`dependencyState` undefined) on a
+ * target row that predates #2747 (no dependency/binding metadata was ever persisted for it).
+ */
+export type CompositeDependencyState = "ready" | "waiting" | "running" | "complete" | "blocked";
+
+/**
  * One composite child target, as projected by the backend `buildCompositeDetail`
  * (#2073). Display-only: the backend strips every credential / role / login-key
  * field, so a target row is never an auth input on the frontend.
@@ -126,6 +133,14 @@ export interface CompositeTargetSummary {
   readonly updatedAt: string;
   readonly failureReason?: string;
   readonly outputs?: Readonly<Record<string, string>>;
+  /** [#2747] Execution wave (0-based); undefined on a legacy (pre-#2747) target row. */
+  readonly executionWave?: number;
+  /** [#2747] Undefined on a legacy target row that carries no dependency graph metadata. */
+  readonly dependencyState?: CompositeDependencyState;
+  /** [#2747] Explicit prerequisite target ids. Undefined on a legacy target row. */
+  readonly dependsOn?: readonly string[];
+  /** [#2747] Bound input parameter names (values never sent to the frontend). */
+  readonly inputParameters?: readonly string[];
 }
 
 /**

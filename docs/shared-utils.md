@@ -48,6 +48,12 @@ Reused by operator CLIs and deploy scripts; import directly by relative path.
 | `retained-tables.ts` | Post-destroy RETAIN-table enumeration for billing warnings (#2444) |
 | `scale-event-capacity.ts` | Event-window capacity scaling logic |
 
+## Infrastructure shared modules (`infrastructure/lib/problem-deploy/handlers/shared/`)
+
+| Module | What it provides |
+| ------ | ---------------- |
+| `runtime/adapter.ts` | `mergeCompositeParameters` / `optionalParametersField` — the Composite-bound-parameter merge idioms shared by every `ProblemRuntimeAdapter` (`aws-cfn-adapter.ts`, `azure-bicep-adapter.ts`, `gcp-infra-manager-adapter.ts`, `sakura-apprun-adapter.ts`) and `prepared-dispatch.ts` (#2747) |
+
 ## Where a new helper belongs
 
 - Shared across ≥2 SPAs (or SPA + Lambda): a `packages/*` workspace — extend the

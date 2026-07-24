@@ -154,22 +154,29 @@ export async function reconcileCompositeParents(
  * Run the scheduled status maintenance in dependency order:
  *   1. the existing per-target non-AWS reconciliation (injected, so the ordering
  *      is testable),
- *   2. the composite parent DEPLOY-status reconciliation (#2068) — a parent is
+ *   2. [#2747] continue the Composite DAG — dispatch any target whose dependencies just
+ *      became COMPLETE from the just-refreshed statuses (injected; no-op when omitted so
+ *      existing 3-arg callers are unaffected),
+ *   3. the composite parent DEPLOY-status reconciliation (#2068) — a parent is
  *      aggregated from already-refreshed target statuses, then
- *   3. the composite parent TEARDOWN completion reconciliation (#2072) — a
+ *   4. the composite parent TEARDOWN completion reconciliation (#2072) — a
  *      DELETING parent is finalized to DELETED once every target is deleted-like.
  *
  * Teardown runs after the deploy reconciliation: the two operate on disjoint
  * parent statuses (PENDING/IN_PROGRESS vs DELETING), so order is not a
  * correctness constraint between them — but both must run AFTER the per-target
- * step so they see refreshed target states.
+ * step so they see refreshed target states. DAG continuation runs between the
+ * per-target step and parent aggregation so a parent's derived status already
+ * reflects any target the same tick just dispatched.
  */
 export async function reconcileDeployStatusMaintenance(
   deps: CompositeParentReconcileDeps,
   nowIso: string,
   reconcilePerTarget: () => Promise<void>,
+  dispatchReadyTargets: () => Promise<void> = async () => {},
 ): Promise<void> {
   await reconcilePerTarget();
+  await dispatchReadyTargets();
   await reconcileCompositeParents(deps, nowIso);
   await reconcileCompositeParentTeardowns(deps, nowIso);
 }

@@ -303,6 +303,45 @@ describe("AwsCloudFormationRuntimeAdapter", () => {
     expect(detail).not.toHaveProperty("competitorRoleArn");
     expect(detail).not.toHaveProperty("externalIdParameterName");
     expect(detail).not.toHaveProperty("challengePayloadUrl");
+    expect(detail).not.toHaveProperty("parameters");
+  });
+
+  it("should forward bound Composite parameters in the published detail (#2747)", async () => {
+    const { adapter, eventsSend } = build();
+    await adapter.deploy({
+      jobId: "01HJOB",
+      correlationId: "01HJOB",
+      tenantId: "tenant-acme",
+      problemId: "hello-world",
+      problemDir: "problems/challenges/hello-world",
+      teamSlug: "alpha-team",
+      namePrefix: "tc-hello-world-alpha-team",
+      region: "ap-northeast-1",
+      awsAccountId: "123456789012",
+      parameters: { GcpEndpoint: "https://gcp.example" },
+    });
+    const cmd = eventsSend.mock.calls[0]?.[0] as PutEventsCommand;
+    const detail = JSON.parse(cmd.input.Entries?.[0]?.Detail ?? "{}");
+    expect(detail.parameters).toEqual({ GcpEndpoint: "https://gcp.example" });
+  });
+
+  it("should omit `parameters` from the detail when empty (= single-provider byte-compat)", async () => {
+    const { adapter, eventsSend } = build();
+    await adapter.deploy({
+      jobId: "01HJOB",
+      correlationId: "01HJOB",
+      tenantId: "tenant-acme",
+      problemId: "hello-world",
+      problemDir: "problems/challenges/hello-world",
+      teamSlug: "alpha-team",
+      namePrefix: "tc-hello-world-alpha-team",
+      region: "ap-northeast-1",
+      awsAccountId: "123456789012",
+      parameters: {},
+    });
+    const cmd = eventsSend.mock.calls[0]?.[0] as PutEventsCommand;
+    const detail = JSON.parse(cmd.input.Entries?.[0]?.Detail ?? "{}");
+    expect(detail).not.toHaveProperty("parameters");
   });
 
   it("should return status=pending after a successful publish", async () => {

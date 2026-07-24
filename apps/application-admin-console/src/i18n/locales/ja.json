@@ -2,6 +2,9 @@
   "locale": {
     "name": "日本語"
   },
+  "common": {
+    "none": "—"
+  },
   "demo": {
     "banner_header": "デモモード — シミュレーション (実 AWS なし)",
     "banner_body": "これは AWS 不要のデモです。データはブラウザ内のシミュレーションで、実際のデプロイや AWS リソースの作成・課金は一切ありません。",
@@ -676,6 +679,15 @@
     "composite_col_status": "Status",
     "composite_col_failure_reason": "失敗理由",
     "composite_failure_reason_none": "—",
+    "composite_col_dependency_state": "依存状態",
+    "composite_col_dependencies": "依存先",
+    "composite_col_bound_inputs": "束縛された入力",
+    "composite_dependency_ready": "準備完了",
+    "composite_dependency_waiting": "待機中",
+    "composite_dependency_running": "実行中",
+    "composite_dependency_complete": "完了",
+    "composite_dependency_blocked": "ブロック中",
+    "composite_dependency_legacy": "対象外",
     "provenance_header": "問題パックの出所",
     "provenance_description": "この問題はインストール済みの問題パックから提供され、 イベントのカタログスナップショットに固定されています。",
     "label_pack_id": "パック ID",

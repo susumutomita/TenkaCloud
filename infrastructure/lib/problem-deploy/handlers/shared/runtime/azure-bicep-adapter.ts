@@ -14,17 +14,18 @@
  * する。 具体 ARM REST 実装 + WIF exchange は実 account で検証する別レイヤ (#1419 / Sakura と同方針)。
  */
 
-import type {
-  ProblemRuntime,
-  ProblemRuntimeAdapter,
-  RuntimeCollectOutputsInput,
-  RuntimeDeployInput,
-  RuntimeDeployResult,
-  RuntimeDestroyInput,
-  RuntimeDestroyResult,
-  RuntimeOutputs,
-  RuntimeStatus,
-  RuntimeStatusInput,
+import {
+  mergeCompositeParameters,
+  type ProblemRuntime,
+  type ProblemRuntimeAdapter,
+  type RuntimeCollectOutputsInput,
+  type RuntimeDeployInput,
+  type RuntimeDeployResult,
+  type RuntimeDestroyInput,
+  type RuntimeDestroyResult,
+  type RuntimeOutputs,
+  type RuntimeStatus,
+  type RuntimeStatusInput,
 } from "./adapter.js";
 
 /** WIF 交換で得た短命 OAuth token (trust-bridge azure-federated-credential 由来)。 */
@@ -87,17 +88,18 @@ export class AzureBicepRuntimeAdapter implements ProblemRuntimeAdapter {
 
   async deploy(input: RuntimeDeployInput): Promise<RuntimeDeployResult> {
     const client = await this.resolveClient();
+    const platformParameters = {
+      tenkacloudNamePrefix: input.namePrefix,
+      tenkacloudProblemId: input.problemId,
+      tenkacloudTeam: input.teamSlug,
+      ...(input.challengePayloadUrl
+        ? { tenkacloudChallengePayloadUrl: input.challengePayloadUrl }
+        : {}),
+    };
     await client.upsertStack({
       name: input.namePrefix,
       templateRef: this.runtime.entry, // ADR-027: runtime.entry = Bicep template reference
-      parameters: {
-        tenkacloudNamePrefix: input.namePrefix,
-        tenkacloudProblemId: input.problemId,
-        tenkacloudTeam: input.teamSlug,
-        ...(input.challengePayloadUrl
-          ? { tenkacloudChallengePayloadUrl: input.challengePayloadUrl }
-          : {}),
-      },
+      parameters: mergeCompositeParameters(platformParameters, input.parameters),
     });
     return { status: "deploying" };
   }

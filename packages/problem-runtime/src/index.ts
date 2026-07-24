@@ -1,9 +1,9 @@
 /**
  * @tenkacloud/problem-runtime — single source of truth for problem runtime
- * classification (ADR-023 / ADR-026 / ADR-027).
+ * classification and Composite Runtime dataflow (ADR-023 / ADR-026 / ADR-027).
  *
- * The functions are pure and dependency-free so the Lambda esbuild bundle and
- * the bun-run CLI can both consume the TypeScript source directly.
+ * The functions are pure and dependency-free so Lambda bundles, the SDK, authoring
+ * tools, and local play consume the same contract.
  */
 
 export interface SingleRuntimeDescriptor {
@@ -12,11 +12,32 @@ export interface SingleRuntimeDescriptor {
   readonly entry: string;
 }
 
+export type CompositeOutputSensitivity = "public" | "sensitive";
+
+/** One output a target may expose to another target. */
+export interface CompositeOutputDeclaration {
+  readonly sensitivity: CompositeOutputSensitivity;
+}
+
+/** Explicit provider-neutral input binding from one upstream target output. */
+export interface CompositeInputBinding {
+  readonly fromTarget: string;
+  readonly output: string;
+  /** Required when the upstream output is classified as sensitive. */
+  readonly allowSensitive?: boolean;
+}
+
 export interface CompositeRuntimeTarget {
   readonly id: string;
   readonly provider: string;
   readonly engine: string;
   readonly entry: string;
+  /** Explicit prerequisites. Declaration order never implies dependency. */
+  readonly dependsOn?: readonly string[];
+  /** Downstream provider parameter name -> upstream output binding. */
+  readonly inputs?: Readonly<Record<string, CompositeInputBinding>>;
+  /** Outputs this target permits downstream targets to reference. */
+  readonly outputs?: Readonly<Record<string, CompositeOutputDeclaration>>;
 }
 
 export interface CompositeRuntimeDescriptor {
@@ -46,63 +67,69 @@ export class RuntimeValidationError extends Error {
   }
 }
 
-/**
- * Loose metadata shape accepted by {@link normalizeRuntime}. Both callers feed
- * already-`JSON.parse`d metadata (from EventBridge / catalog payloads or
- * `metadata.json`) without a Zod schema upfront, so every field is `unknown`.
- */
 export type RuntimeMetadataInput = {
   readonly id?: unknown;
   readonly runtime?: unknown;
   readonly cfnTemplate?: unknown;
 };
 
-/** The always-executable provider/engine (ADR-023 D4) — needs no per-team provider credential. */
 export const EXECUTABLE_PROVIDER = "aws" as const;
 export const EXECUTABLE_ENGINE = "cloudformation" as const;
-
-/** Default deploy body filename when neither `runtime.entry` nor `cfnTemplate` is declared. */
 export const DEFAULT_ENTRY = "template.yaml" as const;
 
 const COMPOSITE_TARGET_ID_PATTERN = /^[a-z][a-z0-9-]{0,31}$/;
+const COMPOSITE_OUTPUT_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_.-]{0,127}$/;
+const AWS_PARAMETER_PATTERN = /^[A-Za-z][A-Za-z0-9]{0,254}$/;
+const IDENTIFIER_PARAMETER_PATTERN = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
 export const MIN_COMPOSITE_TARGETS = 2;
 export const MAX_COMPOSITE_TARGETS = 8;
 
 /**
- * [ADR-026 / ADR-027] Provider/engine pairs the metadata layer recognizes as
- * real roadmap providers. Their adapters ship with the platform (#1410-#1412),
- * but a deployment is executable only when the deploy handler wired that
- * provider's **account-gated context** (per-team credential + client). Absent
- * that context, the "reserved" classification lets the deploy worker and the
- * validator point authors/operators at the credential setup guide instead of
- * failing generically as a typo.
- *
- * [Issue #2562] `as const` (not a widened `string[]`) so {@link ReservedProvider}
- * can derive a literal union type from this single array — this is the one
- * place the non-AWS provider set is declared; every other consumer (frontend
- * picker, backend composite-target resolver) imports the derived value/type
- * instead of hand-listing `"sakura" | "azure" | "gcp"` again.
+ * [#2747] Platform-injected parameter/variable/env names per provider — the identifiers each
+ * runtime adapter (`infrastructure/lib/problem-deploy/handlers/shared/runtime/*-adapter.ts`) sets
+ * itself on every deploy (name prefix / problem id / team / challenge payload url). A Composite
+ * `inputs` binding naming one of these would silently collide with (or be silently shadowed by)
+ * the platform's own value depending on merge order — reject it at plan-validation time instead,
+ * before any cloud mutation, so authors get one clear error rather than provider-dependent
+ * clobbering behavior. Casing mirrors each adapter's own convention (AWS CFn PascalCase, GCP
+ * Terraform snake_case, Azure Bicep camelCase, Sakura env-var SCREAMING_SNAKE_CASE).
  */
+export const RESERVED_COMPOSITE_PARAMETER_NAMES: Readonly<Record<string, readonly string[]>> = {
+  aws: ["NamePrefix", "TenkaCloudAccountId", "ExternalId", "AllowedCidr"],
+  gcp: [
+    "tenkacloud_name_prefix",
+    "tenkacloud_problem_id",
+    "tenkacloud_team",
+    "tenkacloud_challenge_payload_url",
+  ],
+  azure: [
+    "tenkacloudNamePrefix",
+    "tenkacloudProblemId",
+    "tenkacloudTeam",
+    "tenkacloudChallengePayloadUrl",
+  ],
+  sakura: [
+    "TENKACLOUD_NAME_PREFIX",
+    "TENKACLOUD_PROBLEM_ID",
+    "TENKACLOUD_TEAM",
+    "TENKACLOUD_CHALLENGE_PAYLOAD_URL",
+  ],
+};
+
+function isReservedParameterName(provider: string, parameterName: string): boolean {
+  return (RESERVED_COMPOSITE_PARAMETER_NAMES[provider] ?? []).includes(parameterName);
+}
+
 export const RESERVED_RUNTIMES = [
-  { provider: "sakura", engine: "apprun" }, // ADR-026
-  { provider: "azure", engine: "bicep" }, // ADR-027
-  { provider: "gcp", engine: "infra-manager" }, // ADR-027
+  { provider: "sakura", engine: "apprun" },
+  { provider: "azure", engine: "bicep" },
+  { provider: "gcp", engine: "infra-manager" },
 ] as const;
 
-/** [Issue #2562] The non-AWS provider literal union, derived from {@link RESERVED_RUNTIMES}. */
 export type ReservedProvider = (typeof RESERVED_RUNTIMES)[number]["provider"];
 
-/**
- * [ADR-023 / #2054] Provider/engine pairs delivered as a **local container**
- * (`make local`, the AWS-free local-play path), not deployed to a cloud account.
- * They are a deliberate, recognized runtime — distinct from an "unknown" typo —
- * but intentionally **not cloud-executable**, so the deploy worker still rejects
- * a cloud deploy of them (loudly, before any mutation).
- */
 export const CONTAINER_RUNTIMES: readonly { readonly provider: string; readonly engine: string }[] =
-  [
-    { provider: "docker", engine: "compose" }, // ADR-023 local-play
-  ];
+  [{ provider: "docker", engine: "compose" }];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -123,6 +150,10 @@ function singleRuntimeFrom(runtime: Record<string, unknown>): SingleRuntimeDescr
   return { provider: runtime.provider, engine: runtime.engine, entry: runtime.entry };
 }
 
+function issue(problemId: string, path: string, message: string): RuntimeValidationIssue {
+  return { problemId, path, message };
+}
+
 function pushTargetStringIssue(
   issues: RuntimeValidationIssue[],
   problemId: string,
@@ -131,50 +162,331 @@ function pushTargetStringIssue(
   key: "provider" | "engine" | "entry",
 ): void {
   if (typeof target[key] !== "string" || target[key].length === 0) {
-    issues.push({
-      problemId,
-      path: `${path}.${key}`,
-      message: `${key} must be a non-empty string`,
-    });
+    issues.push(issue(problemId, `${path}.${key}`, `${key} must be a non-empty string`));
   }
 }
 
-function validateCompositeTarget(
+function parameterPattern(provider: string): RegExp {
+  return provider === "aws" ? AWS_PARAMETER_PATTERN : IDENTIFIER_PARAMETER_PATTERN;
+}
+
+function validateOutputDeclarations(
+  raw: unknown,
+  problemId: string,
+  path: string,
+): RuntimeValidationIssue[] {
+  const issues: RuntimeValidationIssue[] = [];
+  if (raw === undefined) return issues;
+  if (!isRecord(raw)) return [issue(problemId, path, "outputs must be an object")];
+  for (const [name, declaration] of Object.entries(raw)) {
+    if (!COMPOSITE_OUTPUT_NAME_PATTERN.test(name)) {
+      issues.push(issue(problemId, `${path}.${name}`, "output name is invalid"));
+      continue;
+    }
+    if (!isRecord(declaration)) {
+      issues.push(issue(problemId, `${path}.${name}`, "output declaration must be an object"));
+      continue;
+    }
+    if (declaration.sensitivity !== "public" && declaration.sensitivity !== "sensitive") {
+      issues.push(
+        issue(problemId, `${path}.${name}.sensitivity`, "sensitivity must be public or sensitive"),
+      );
+    }
+  }
+  return issues;
+}
+
+function validateDependsOn(
+  raw: unknown,
+  problemId: string,
+  path: string,
+): RuntimeValidationIssue[] {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) return [issue(problemId, path, "dependsOn must be an array")];
+  const issues: RuntimeValidationIssue[] = [];
+  const seen = new Set<string>();
+  raw.forEach((dependency, index) => {
+    if (typeof dependency !== "string" || !COMPOSITE_TARGET_ID_PATTERN.test(dependency)) {
+      issues.push(issue(problemId, `${path}[${index}]`, "dependency must be a valid target id"));
+    } else if (seen.has(dependency)) {
+      issues.push(issue(problemId, `${path}[${index}]`, `duplicate dependency ${dependency}`));
+    } else {
+      seen.add(dependency);
+    }
+  });
+  return issues;
+}
+
+/**
+ * Validate one downstream parameter name: it must match the target provider's identifier shape
+ * and must not collide with a platform-injected reserved name (#2747).
+ */
+function validateParameterName(
+  parameterName: string,
+  provider: string,
+  problemId: string,
+  path: string,
+): RuntimeValidationIssue[] {
+  const issues: RuntimeValidationIssue[] = [];
+  if (!parameterPattern(provider).test(parameterName)) {
+    issues.push(
+      issue(
+        problemId,
+        `${path}.${parameterName}`,
+        `parameter name is invalid for provider ${provider || "<unknown>"}`,
+      ),
+    );
+  }
+  if (isReservedParameterName(provider, parameterName)) {
+    issues.push(
+      issue(
+        problemId,
+        `${path}.${parameterName}`,
+        `parameter name ${parameterName} is reserved for provider ${provider} (platform-injected)`,
+      ),
+    );
+  }
+  return issues;
+}
+
+/** Validate one binding's shape: `fromTarget` / `output` / optional `allowSensitive`. */
+function validateBindingShape(
+  binding: Record<string, unknown>,
+  problemId: string,
+  path: string,
+): RuntimeValidationIssue[] {
+  const issues: RuntimeValidationIssue[] = [];
+  if (
+    typeof binding.fromTarget !== "string" ||
+    !COMPOSITE_TARGET_ID_PATTERN.test(binding.fromTarget)
+  ) {
+    issues.push(issue(problemId, `${path}.fromTarget`, "fromTarget must be a valid target id"));
+  }
+  if (typeof binding.output !== "string" || !COMPOSITE_OUTPUT_NAME_PATTERN.test(binding.output)) {
+    issues.push(issue(problemId, `${path}.output`, "output name is invalid"));
+  }
+  if (binding.allowSensitive !== undefined && typeof binding.allowSensitive !== "boolean") {
+    issues.push(issue(problemId, `${path}.allowSensitive`, "allowSensitive must be boolean"));
+  }
+  return issues;
+}
+
+function validateInputsShape(
+  raw: unknown,
+  provider: string,
+  problemId: string,
+  path: string,
+): RuntimeValidationIssue[] {
+  if (raw === undefined) return [];
+  if (!isRecord(raw)) return [issue(problemId, path, "inputs must be an object")];
+  const issues: RuntimeValidationIssue[] = [];
+  for (const [parameterName, binding] of Object.entries(raw)) {
+    issues.push(...validateParameterName(parameterName, provider, problemId, path));
+    if (!isRecord(binding)) {
+      issues.push(issue(problemId, `${path}.${parameterName}`, "binding must be an object"));
+      continue;
+    }
+    issues.push(...validateBindingShape(binding, problemId, `${path}.${parameterName}`));
+  }
+  return issues;
+}
+
+function validateCompositeTargetShape(
   target: unknown,
   index: number,
   problemId: string,
   seen: Set<string>,
-): readonly RuntimeValidationIssue[] {
+): RuntimeValidationIssue[] {
   const issues: RuntimeValidationIssue[] = [];
   const path = `runtime.targets[${index}]`;
-  if (!isRecord(target)) {
-    return [{ problemId, path, message: "target must be an object" }];
-  }
+  if (!isRecord(target)) return [issue(problemId, path, "target must be an object")];
   if ("kind" in target) {
-    issues.push({
-      problemId,
-      path: `${path}.kind`,
-      message: "nested composite targets are not allowed",
-    });
+    issues.push(issue(problemId, `${path}.kind`, "nested composite targets are not allowed"));
   }
   if ("targets" in target) {
-    issues.push({
-      problemId,
-      path: `${path}.targets`,
-      message: "nested composite targets are not allowed",
-    });
+    issues.push(issue(problemId, `${path}.targets`, "nested composite targets are not allowed"));
   }
   for (const key of ["provider", "engine", "entry"] as const) {
     pushTargetStringIssue(issues, problemId, path, target, key);
   }
   if (typeof target.id !== "string" || !COMPOSITE_TARGET_ID_PATTERN.test(target.id)) {
-    issues.push({ problemId, path: `${path}.id`, message: "id must match ^[a-z][a-z0-9-]{0,31}$" });
+    issues.push(issue(problemId, `${path}.id`, "id must match ^[a-z][a-z0-9-]{0,31}$"));
   } else if (seen.has(target.id)) {
-    issues.push({ problemId, path: `${path}.id`, message: `duplicate target id ${target.id}` });
+    issues.push(issue(problemId, `${path}.id`, `duplicate target id ${target.id}`));
   } else {
     seen.add(target.id);
   }
+  issues.push(...validateDependsOn(target.dependsOn, problemId, `${path}.dependsOn`));
+  issues.push(
+    ...validateInputsShape(
+      target.inputs,
+      typeof target.provider === "string" ? target.provider : "",
+      problemId,
+      `${path}.inputs`,
+    ),
+  );
+  issues.push(...validateOutputDeclarations(target.outputs, problemId, `${path}.outputs`));
   return issues;
+}
+
+function dependencyIdsOf(target: Record<string, unknown>): readonly string[] {
+  return Array.isArray(target.dependsOn)
+    ? target.dependsOn.filter((value): value is string => typeof value === "string")
+    : [];
+}
+
+function validateTargetDependencyReferences(
+  target: Record<string, unknown>,
+  dependencies: readonly string[],
+  byId: ReadonlyMap<string, Record<string, unknown>>,
+  problemId: string,
+  path: string,
+): RuntimeValidationIssue[] {
+  const issues: RuntimeValidationIssue[] = [];
+  for (const dependency of dependencies) {
+    if (dependency === target.id) {
+      issues.push(issue(problemId, `${path}.dependsOn`, "target cannot depend on itself"));
+    } else if (!byId.has(dependency)) {
+      issues.push(issue(problemId, `${path}.dependsOn`, `unknown dependency ${dependency}`));
+    }
+  }
+  return issues;
+}
+
+/** Validate one target's single input binding against the upstream graph (existence / declared-dependency / declared-output / sensitivity). */
+function validateGraphBinding(
+  parameterName: string,
+  rawBinding: Record<string, unknown>,
+  dependencies: readonly string[],
+  byId: ReadonlyMap<string, Record<string, unknown>>,
+  problemId: string,
+  path: string,
+): RuntimeValidationIssue[] {
+  const fromTarget = rawBinding.fromTarget;
+  const output = rawBinding.output;
+  if (typeof fromTarget !== "string" || typeof output !== "string") return [];
+  const bindingPath = `${path}.inputs.${parameterName}`;
+
+  if (!byId.has(fromTarget)) {
+    return [issue(problemId, `${bindingPath}.fromTarget`, `unknown upstream target ${fromTarget}`)];
+  }
+  const issues: RuntimeValidationIssue[] = [];
+  if (!dependencies.includes(fromTarget)) {
+    issues.push(
+      issue(
+        problemId,
+        `${bindingPath}.fromTarget`,
+        `binding source ${fromTarget} must also appear in dependsOn`,
+      ),
+    );
+  }
+
+  const declarations = byId.get(fromTarget)?.outputs;
+  if (!isRecord(declarations) || !isRecord(declarations[output])) {
+    issues.push(
+      issue(
+        problemId,
+        `${bindingPath}.output`,
+        `upstream target ${fromTarget} does not declare output ${output}`,
+      ),
+    );
+    return issues;
+  }
+  const sensitivity = (declarations[output] as Record<string, unknown>).sensitivity;
+  if (sensitivity === "sensitive" && rawBinding.allowSensitive !== true) {
+    issues.push(
+      issue(
+        problemId,
+        `${bindingPath}.allowSensitive`,
+        `sensitive output ${fromTarget}.${output} requires allowSensitive: true`,
+      ),
+    );
+  }
+  return issues;
+}
+
+function validateTargetBindingReferences(
+  target: Record<string, unknown>,
+  dependencies: readonly string[],
+  byId: ReadonlyMap<string, Record<string, unknown>>,
+  problemId: string,
+  path: string,
+): RuntimeValidationIssue[] {
+  if (!isRecord(target.inputs)) return [];
+  const issues: RuntimeValidationIssue[] = [];
+  for (const [parameterName, rawBinding] of Object.entries(target.inputs)) {
+    if (!isRecord(rawBinding)) continue;
+    issues.push(
+      ...validateGraphBinding(parameterName, rawBinding, dependencies, byId, problemId, path),
+    );
+  }
+  return issues;
+}
+
+function validateGraphReferences(
+  targets: readonly Record<string, unknown>[],
+  byId: ReadonlyMap<string, Record<string, unknown>>,
+  problemId: string,
+): RuntimeValidationIssue[] {
+  const issues: RuntimeValidationIssue[] = [];
+  targets.forEach((target, index) => {
+    if (typeof target.id !== "string" || !byId.has(target.id)) return;
+    const path = `runtime.targets[${index}]`;
+    const dependencies = dependencyIdsOf(target);
+    issues.push(...validateTargetDependencyReferences(target, dependencies, byId, problemId, path));
+    issues.push(...validateTargetBindingReferences(target, dependencies, byId, problemId, path));
+  });
+  return issues;
+}
+
+/** DFS cycle detection over the `dependsOn` graph, reporting one issue per cycle discovered. */
+function detectDependencyCycles(
+  byId: ReadonlyMap<string, Record<string, unknown>>,
+  problemId: string,
+): RuntimeValidationIssue[] {
+  const issues: RuntimeValidationIssue[] = [];
+  const state = new Map<string, "visiting" | "visited">();
+  const stack: string[] = [];
+  // Takes the target object itself, not just its id: the only lookup that can miss is a
+  // `dependsOn` reference outside `byId`, already guarded by `byId.has(dependency)` before
+  // recursing — so this never needs (and cannot hit) a "missing from byId" fallback.
+  const visit = (target: Record<string, unknown>): void => {
+    const targetId = target.id as string;
+    if (state.get(targetId) === "visited") return;
+    if (state.get(targetId) === "visiting") {
+      const start = stack.indexOf(targetId);
+      const cycle = [...stack.slice(start), targetId];
+      issues.push(issue(problemId, "runtime.targets", `dependency cycle: ${cycle.join(" -> ")}`));
+      return;
+    }
+    state.set(targetId, "visiting");
+    stack.push(targetId);
+    for (const dependencyId of dependencyIdsOf(target)) {
+      const dependency = byId.get(dependencyId);
+      if (dependency) visit(dependency);
+    }
+    stack.pop();
+    state.set(targetId, "visited");
+  };
+  for (const target of byId.values()) visit(target);
+  return issues;
+}
+
+function validateCompositeGraph(
+  targets: readonly Record<string, unknown>[],
+  problemId: string,
+): RuntimeValidationIssue[] {
+  const byId = new Map<string, Record<string, unknown>>();
+  targets.forEach((target) => {
+    if (typeof target.id === "string" && COMPOSITE_TARGET_ID_PATTERN.test(target.id)) {
+      if (!byId.has(target.id)) byId.set(target.id, target);
+    }
+  });
+
+  return [
+    ...validateGraphReferences(targets, byId, problemId),
+    ...detectDependencyCycles(byId, problemId),
+  ];
 }
 
 function validateCompositeRuntime(
@@ -183,27 +495,54 @@ function validateCompositeRuntime(
 ): readonly RuntimeValidationIssue[] {
   const issues: RuntimeValidationIssue[] = [];
   if (!Array.isArray(runtime.targets)) {
-    return [{ problemId, path: "runtime.targets", message: "composite runtime requires targets" }];
+    return [issue(problemId, "runtime.targets", "composite runtime requires targets")];
   }
   if (runtime.targets.length < MIN_COMPOSITE_TARGETS) {
-    issues.push({
-      problemId,
-      path: "runtime.targets",
-      message: "composite runtime requires at least 2 targets",
-    });
+    issues.push(
+      issue(problemId, "runtime.targets", "composite runtime requires at least 2 targets"),
+    );
   }
   if (runtime.targets.length > MAX_COMPOSITE_TARGETS) {
-    issues.push({
-      problemId,
-      path: "runtime.targets",
-      message: "composite runtime allows at most 8 targets",
-    });
+    issues.push(issue(problemId, "runtime.targets", "composite runtime allows at most 8 targets"));
   }
   const seen = new Set<string>();
   runtime.targets.forEach((target, index) => {
-    issues.push(...validateCompositeTarget(target, index, problemId, seen));
+    issues.push(...validateCompositeTargetShape(target, index, problemId, seen));
   });
+  if (runtime.targets.every(isRecord)) {
+    issues.push(...validateCompositeGraph(runtime.targets, problemId));
+  }
   return issues;
+}
+
+function normalizedOutputs(
+  raw: unknown,
+): Readonly<Record<string, CompositeOutputDeclaration>> | undefined {
+  if (!isRecord(raw)) return undefined;
+  const result: Record<string, CompositeOutputDeclaration> = {};
+  for (const [name, declaration] of Object.entries(raw)) {
+    result[name] = {
+      sensitivity: (declaration as Record<string, unknown>)
+        .sensitivity as CompositeOutputSensitivity,
+    };
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+function normalizedInputs(
+  raw: unknown,
+): Readonly<Record<string, CompositeInputBinding>> | undefined {
+  if (!isRecord(raw)) return undefined;
+  const result: Record<string, CompositeInputBinding> = {};
+  for (const [parameter, binding] of Object.entries(raw)) {
+    const record = binding as Record<string, unknown>;
+    result[parameter] = {
+      fromTarget: record.fromTarget as string,
+      output: record.output as string,
+      ...(record.allowSensitive === true ? { allowSensitive: true } : {}),
+    };
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
 }
 
 function compositeRuntimeFrom(
@@ -219,19 +558,16 @@ function compositeRuntimeFrom(
       provider: target.provider as string,
       engine: target.engine as string,
       entry: target.entry as string,
+      ...(Array.isArray(target.dependsOn) && target.dependsOn.length > 0
+        ? { dependsOn: [...(target.dependsOn as string[])] }
+        : {}),
+      ...(normalizedInputs(target.inputs) ? { inputs: normalizedInputs(target.inputs) } : {}),
+      ...(normalizedOutputs(target.outputs) ? { outputs: normalizedOutputs(target.outputs) } : {}),
     })),
   };
 }
 
-/**
- * Normalize a problem's runtime descriptor. Precedence:
- *   1. An explicit single `runtime` object → used as-is, but only if `provider` /
- *      `engine` / `entry` are all strings; otherwise the input is malformed and
- *      we return `undefined` (callers treat that as a loud failure).
- *   2. An explicit composite runtime → validated and returned with target order preserved.
- *   3. Legacy `cfnTemplate` (string) → `aws` / `cloudformation` / `<cfnTemplate>`.
- *   4. Neither declared → `aws` / `cloudformation` / `template.yaml`.
- */
+/** Normalize a problem's runtime descriptor. */
 export function normalizeRuntime(meta: RuntimeMetadataInput): ProblemRuntimeDescriptor | undefined {
   const runtime = meta.runtime;
   if (runtime !== undefined && runtime !== null) {
@@ -255,7 +591,6 @@ export function isSingleRuntime(
   return !isCompositeRuntime(runtime);
 }
 
-/** True when the runtime is the one executable combination (`aws/cloudformation`). */
 export function isExecutableRuntime(runtime: ProblemRuntimeDescriptor): boolean {
   return (
     isSingleRuntime(runtime) &&
@@ -264,7 +599,6 @@ export function isExecutableRuntime(runtime: ProblemRuntimeDescriptor): boolean 
   );
 }
 
-/** True when the runtime is a planned-but-not-yet-executable roadmap pair. */
 export function isReservedRuntime(runtime: ProblemRuntimeDescriptor): boolean {
   return (
     isSingleRuntime(runtime) &&
@@ -272,7 +606,6 @@ export function isReservedRuntime(runtime: ProblemRuntimeDescriptor): boolean {
   );
 }
 
-/** True when the runtime is a recognized local container runtime (ADR-023 local-play). */
 export function isContainerRuntime(runtime: ProblemRuntimeDescriptor): boolean {
   return (
     isSingleRuntime(runtime) &&
@@ -282,12 +615,6 @@ export function isContainerRuntime(runtime: ProblemRuntimeDescriptor): boolean {
 
 export type RuntimeSupport = "executable" | "reserved" | "container" | "unknown" | "composite";
 
-/**
- * Classify a runtime: executable (aws/cloudformation) / reserved (planned
- * roadmap provider) / container (local-play docker/compose) / composite /
- * unknown (likely a typo). Only "executable" and "composite" are cloud-deployed;
- * "reserved" and "container" are recognized-but-rejected, "unknown" is a typo.
- */
 export function classifyRuntimeSupport(runtime: ProblemRuntimeDescriptor): RuntimeSupport {
   if (isCompositeRuntime(runtime)) return "composite";
   if (isExecutableRuntime(runtime)) return "executable";
@@ -296,7 +623,6 @@ export function classifyRuntimeSupport(runtime: ProblemRuntimeDescriptor): Runti
   return "unknown";
 }
 
-// [Composite Runtime / Issue #2062] Deterministic deployment planner.
 export {
   buildCompositeDeploymentPlan,
   COMPOSITE_PROVIDERS,

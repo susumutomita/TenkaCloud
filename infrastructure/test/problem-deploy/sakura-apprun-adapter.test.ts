@@ -111,6 +111,25 @@ describe("SakuraAppRunRuntimeAdapter (ADR-026 #1412)", () => {
     );
   });
 
+  it("should merge bound Composite parameters into the AppRun env (#2747)", async () => {
+    const { ctx } = makeCtx(client);
+    await new SakuraAppRunRuntimeAdapter(ctx, runtime).deploy({
+      ...deployInput,
+      parameters: { TENKACLOUD_UPSTREAM_ENDPOINT: "https://aws.example" },
+    });
+    expect(client.upsertApplication).toHaveBeenCalledWith({
+      name: "tc-team-a-sakura-uptime",
+      image: "registry.example/tenkacloud/uptime-app:latest",
+      env: {
+        TENKACLOUD_NAME_PREFIX: "tc-team-a-sakura-uptime",
+        TENKACLOUD_PROBLEM_ID: "sakura-uptime",
+        TENKACLOUD_TEAM: "team-a",
+        TENKACLOUD_CHALLENGE_PAYLOAD_URL: "https://payload.example/x",
+        TENKACLOUD_UPSTREAM_ENDPOINT: "https://aws.example",
+      },
+    });
+  });
+
   it("should collect the public URL as BaseUrl, or {} when not ready", async () => {
     const { ctx } = makeCtx(client);
     const a = new SakuraAppRunRuntimeAdapter(ctx, runtime);
