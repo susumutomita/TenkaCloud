@@ -31,6 +31,10 @@ on:
         description: 質問タイプの変更を許可する (entry ID が作り直され、 既存の LP が壊れる)
         type: boolean
         default: false
+      allow_delete:
+        description: 定義に無い質問 (orphan) の削除を許可する (回答列ごと失われる)
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -92,6 +96,7 @@ jobs:
           FORM_SYNC_TOKEN: ${{ secrets.FORM_SYNC_TOKEN }}
           DRY_RUN: ${{ inputs.dry_run || 'false' }}
           ALLOW_TYPE_CHANGE: ${{ inputs.allow_type_change || 'false' }}
+          ALLOW_DELETE: ${{ inputs.allow_delete || 'false' }}
         run: |
           # -X POST を付けないこと。 Apps Script の Web アプリは 302 で GET 専用の
           # 応答 URL へ飛ばすため、 POST を強制するとリダイレクト先が 404 になる。
@@ -100,6 +105,7 @@ jobs:
             --data-urlencode "token=$FORM_SYNC_TOKEN" \
             --data-urlencode "dryRun=$DRY_RUN" \
             --data-urlencode "allowTypeChange=$ALLOW_TYPE_CHANGE" \
+            --data-urlencode "allowDelete=$ALLOW_DELETE" \
             -o sync-result.json
 
           # Web アプリは HTTP ステータスを選べないので、 成否は本文の ok で判定する。
@@ -115,6 +121,7 @@ jobs:
             echo "- dryRun: $(jq -r '.dryRun' sync-result.json)"
             echo "- destination: $(jq -r '.destination' sync-result.json)"
             echo "- notification: $(jq -r '.notification' sync-result.json)"
+            echo "- removed: $(jq -r '.removed | join(", ") // "(none)"' sync-result.json)"
             echo
             echo "| key | action | type |"
             echo "| --- | --- | --- |"

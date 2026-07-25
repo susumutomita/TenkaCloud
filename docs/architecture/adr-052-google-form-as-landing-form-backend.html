@@ -124,6 +124,17 @@
         inline form is <strong>not shown</strong>. The page falls back to the pre-existing link to the hosted
         Google Form and logs the reason to the console.
       </li>
+      <li>
+        Every sync explicitly turns off <em>require login</em>, <em>limit to one response per user</em>, and
+        <em>collect email address</em>. Any one of them causes Google to reject an anonymous post, and
+        <code>no-cors</code> hides that rejection — so rather than trusting whoever last opened the form's
+        settings page, the script pins all three on every run.
+      </li>
+      <li>
+        Questions present on the form but absent from the definition (<code>orphan</code>) are reported in the
+        plan but never deleted by default. Deleting one discards its answer column, so it happens only when
+        explicitly allowed.
+      </li>
     </ol>
 
     <h2>3. Data flow</h2>

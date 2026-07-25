@@ -88,6 +88,13 @@ const FORM_DEFINITION = {
   ],
 };
 
+/** 対応する質問タイプ。 増やすときは addItem_ / configureItem_ / sampleResponse_ も足す。 */
+const SUPPORTED_TYPES = {
+  TEXT: true,
+  PARAGRAPH_TEXT: true,
+  MULTIPLE_CHOICE: true,
+};
+
 /** entry ID を逆引きするときに入れる、 検証を通る当たり障りのないサンプル値。 */
 const SAMPLE_VALUE = {
   TEXT: "sample",
@@ -109,7 +116,9 @@ function syncForm(options) {
   const opts = options || {};
   const dryRun = opts.dryRun === true;
   const allowTypeChange = opts.allowTypeChange === true;
+  const allowDelete = opts.allowDelete === true;
 
+  validateDefinition_();
   const form = openForm_();
   const plan = buildPlan_(form);
 
@@ -129,9 +138,12 @@ function syncForm(options) {
 
   let destination = "dry-run";
   let notification = "dry-run";
+  let removed = [];
   if (!dryRun) {
     applyMetadata_(form);
     applyPlan_(form, plan);
+    if (allowDelete) removed = removeOrphans_(form, plan);
+    applyOrder_(form);
     destination = ensureDestination_(form);
     notification = ensureSubmitTrigger_(form);
   }
@@ -143,9 +155,46 @@ function syncForm(options) {
     plan: plan,
     destination: destination,
     notification: notification,
+    removed: removed,
     formResponseUrl: config.formResponseUrl,
     fields: config.fields,
   };
+}
+
+/**
+ * 定義そのものの整合性を、 フォームに触る前に検査する。
+ *
+ * タイトルは既存質問との突き合わせキーなので、 重複すると別の質問を更新して
+ * しまう。 壊れた定義で同期して無音で壊すより、 ここで大きく失敗させる。
+ */
+function validateDefinition_() {
+  const fields = FORM_DEFINITION.fields;
+  if (!fields || fields.length === 0) {
+    throw new Error("フォーム定義にフィールドがありません");
+  }
+  const seenKeys = {};
+  const seenTitles = {};
+  fields.forEach(function (field) {
+    if (!field.key || !field.title) {
+      throw new Error("フィールドには key と title が必要です: " + JSON.stringify(field));
+    }
+    if (seenKeys[field.key]) {
+      throw new Error("key が重複しています: " + field.key);
+    }
+    if (seenTitles[field.title]) {
+      throw new Error(
+        "title が重複しています (既存質問の突き合わせキーなので一意が必要): " + field.title,
+      );
+    }
+    seenKeys[field.key] = true;
+    seenTitles[field.title] = true;
+    if (!SUPPORTED_TYPES[field.type]) {
+      throw new Error("未対応の質問タイプです: " + field.type + " (" + field.key + ")");
+    }
+    if (field.type === "MULTIPLE_CHOICE" && (!field.choices || field.choices.length === 0)) {
+      throw new Error("選択式の質問には choices が必要です: " + field.key);
+    }
+  });
 }
 
 /**
@@ -167,6 +216,7 @@ function doPost(e) {
     const result = syncForm({
       dryRun: params.dryRun === "true",
       allowTypeChange: params.allowTypeChange === "true",
+      allowDelete: params.allowDelete === "true",
     });
     return jsonOutput_(Object.assign({ ok: true }, result));
   } catch (error) {
@@ -212,7 +262,7 @@ function onFormSubmitNotify(e) {
  */
 function buildPlan_(form) {
   const items = form.getItems();
-  return FORM_DEFINITION.fields.map(function (field) {
+  const defined = FORM_DEFINITION.fields.map(function (field) {
     const existing = findItemByTitle_(items, field.title);
     if (!existing) {
       return {
@@ -239,6 +289,63 @@ function buildPlan_(form) {
       action: "update",
     };
   });
+
+  // 定義に無い質問。 手でフォームに足されたものが該当する。 既定では触らない
+  // (削除は回答列ごと失う破壊的操作なので、 allowDelete を明示したときだけ)。
+  // 計画には必ず出るので、 dry-run で存在に気づける。
+  const definedTitles = FORM_DEFINITION.fields.map(function (field) {
+    return field.title;
+  });
+  const orphans = items
+    .filter(function (item) {
+      return definedTitles.indexOf(item.getTitle()) === -1;
+    })
+    .map(function (item) {
+      return {
+        key: "(未定義)",
+        title: item.getTitle(),
+        type: String(item.getType()),
+        action: "orphan",
+      };
+    });
+
+  return defined.concat(orphans);
+}
+
+/**
+ * 定義に無い質問を削除する。 allowDelete を渡したときだけ呼ばれる。
+ *
+ * @param {GoogleAppsScript.Forms.Form} form
+ * @param {Array<Object>} plan
+ * @return {Array<string>} 削除した質問のタイトル
+ */
+function removeOrphans_(form, plan) {
+  const removed = [];
+  plan
+    .filter(function (step) {
+      return step.action === "orphan";
+    })
+    .forEach(function (step) {
+      const item = findItemByTitle_(form.getItems(), step.title);
+      if (!item) return;
+      form.deleteItem(item);
+      removed.push(step.title);
+    });
+  return removed;
+}
+
+/**
+ * 定義された質問を定義順に並べ替える。 移動は entry ID を保つ。
+ *
+ * 定義に無い質問はそのまま後ろへ送られる。
+ *
+ * @param {GoogleAppsScript.Forms.Form} form
+ */
+function applyOrder_(form) {
+  FORM_DEFINITION.fields.forEach(function (field, index) {
+    const item = findItemByTitle_(form.getItems(), field.title);
+    if (item && item.getIndex() !== index) form.moveItem(item.getIndex(), index);
+  });
 }
 
 /**
@@ -249,18 +356,22 @@ function buildPlan_(form) {
  * @param {Array<Object>} plan
  */
 function applyPlan_(form, plan) {
-  plan.forEach(function (step) {
-    const field = fieldByKey_(step.key);
-    if (step.action === "recreate") {
-      const stale = findItemByTitle_(form.getItems(), field.title);
-      if (stale) form.deleteItem(stale);
-    }
-    const item =
-      step.action === "update"
-        ? findItemByTitle_(form.getItems(), field.title)
-        : addItem_(form, field);
-    configureItem_(item, field);
-  });
+  plan
+    .filter(function (step) {
+      return step.action !== "orphan";
+    })
+    .forEach(function (step) {
+      const field = fieldByKey_(step.key);
+      if (step.action === "recreate") {
+        const stale = findItemByTitle_(form.getItems(), field.title);
+        if (stale) form.deleteItem(stale);
+      }
+      const item =
+        step.action === "update"
+          ? findItemByTitle_(form.getItems(), field.title)
+          : addItem_(form, field);
+      configureItem_(item, field);
+    });
 }
 
 /**
@@ -272,6 +383,32 @@ function applyMetadata_(form) {
   form.setTitle(FORM_DEFINITION.title);
   form.setDescription(FORM_DEFINITION.description);
   form.setConfirmationMessage(FORM_DEFINITION.confirmationMessage);
+
+  // LP から匿名で POST できることがこの方式の前提。 ログイン必須・1 人 1 回制限・
+  // メールアドレス収集のいずれかが有効だと Google 側で弾かれるが、 no-cors POST では
+  // 弾かれたこと自体を検知できない。 同期のたびに明示的に無効へ戻す。
+  form.setLimitOneResponsePerUser(false);
+  form.setAllowResponseEdits(false);
+  try {
+    form.setRequireLogin(false);
+  } catch (error) {
+    Logger.log(
+      "WARN: setRequireLogin(false) に失敗しました。 Workspace の共有ポリシーで組織外の回答が禁止されている可能性があります: " +
+        describeError_(error),
+    );
+  }
+  try {
+    form.setEmailCollectionType(FormApp.EmailCollectionType.DO_NOT_COLLECT);
+  } catch (error) {
+    try {
+      form.setCollectEmail(false);
+    } catch (fallbackError) {
+      Logger.log(
+        "WARN: メールアドレス収集を無効化できませんでした。 有効なままだと匿名送信が弾かれます: " +
+          describeError_(fallbackError),
+      );
+    }
+  }
 }
 
 /**
