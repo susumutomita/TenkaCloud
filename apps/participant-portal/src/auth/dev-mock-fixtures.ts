@@ -16,6 +16,7 @@ import {
   LOCAL_DRILL_JOB_ID,
   WHAT_IS_DRILL_PROBLEM_ID,
 } from "../dev-mock/flag-submit";
+import { createCustomChallengeDrillFixture } from "./custom-challenge-drill-fixture";
 import { createLiteCleanupDrillFixture } from "./lite-cleanup-drill-fixture";
 
 /**
@@ -32,7 +33,8 @@ import { createLiteCleanupDrillFixture } from "./lite-cleanup-drill-fixture";
  *   3. 「TenkaCloud Lite を片付ける」 — ACTION override と launcher 削除
  *   4. 「ローカルモードで遊ぶ」 — Docker / Codespaces。起動コマンドをそのまま提出
  *   5. 「AIエージェントでMac起動」 — LP のプロンプトからローカル起動確認までの実演
- *   (旧来の「クエスト」2 問は削除済み — チュートリアル 5 問で完結させ、 余計な問題で
+ *   6. 「独自問題を追加する」 — Problem Pack に 2 問目を足し、 解く側から作る側へ (#2781)
+ *   (旧来の「クエスト」2 問は削除済み — チュートリアル 6 問で完結させ、 余計な問題で
  *    迷わせない。 完走後の導線はローカル / Lite の実在ドリルへ直接つなぐ)
  *
  * オンボーディングドリルは「本文は概要 → 詰まったら提出欄ごとのヒントでステップバイステップ手順」の
@@ -688,6 +690,10 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
       deployLog: { cursor: "", entries: [] },
       createdAt: iso(-25 * MIN),
     },
+    createCustomChallengeDrillFixture({
+      expiresAt: DEPLOY_EXPIRES_AT,
+      createdAt: iso(-25 * MIN),
+    }),
   ],
   eventGate: { kind: "ok" },
 };
@@ -752,14 +758,14 @@ export const DEV_MOCK_NOTIFICATIONS: NotificationsResponse = {
     {
       notificationId: "notif-003",
       title: "オンボーディングチュートリアルを開放",
-      body: "「TenkaCloud とは?」から始めて「自分の TenkaCloud Lite を立てる」へ進み、最後は「TenkaCloud Lite を片付ける」で課金停止まで完走できます。AWS なしで遊ぶなら「ローカルモードで遊ぶ」、AI に任せるなら「AIエージェントでMac起動」も。詰まったら各提出欄のヒント(ペナルティなし)へ。",
+      body: "「TenkaCloud とは?」から始めて「自分の TenkaCloud Lite を立てる」へ進み、「TenkaCloud Lite を片付ける」で課金停止まで完走できます。AWS なしで遊ぶなら「ローカルモードで遊ぶ」、AI に任せるなら「AIエージェントでMac起動」も。仕上げは「独自問題を追加する」で、解く側から作る側へ。詰まったら各提出欄のヒント(ペナルティなし)へ。",
       severity: "info",
       occurredAt: iso(-2 * MIN),
     },
     {
       notificationId: "notif-001",
       title: "競技開始",
-      body: "TenkaCloud のデモを開始しました。5 問のオンボーディングチュートリアルが出題されています。解いて flag を提出しよう!",
+      body: "TenkaCloud のデモを開始しました。6 問のオンボーディングチュートリアルが出題されています。解いて flag を提出しよう!",
       severity: "info",
       occurredAt: iso(-25 * MIN),
     },

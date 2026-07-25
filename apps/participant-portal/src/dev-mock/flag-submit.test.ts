@@ -10,8 +10,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   AI_AGENT_LOCAL_DRILL_PROBLEM_ID,
   CANONICAL_MOCK_FLAG,
+  CUSTOM_CHALLENGE_PROBLEM_COUNT_FLAG_ID,
+  CUSTOM_CHALLENGE_PROBLEM_ID,
+  CUSTOM_CHALLENGE_VERIFIED_FLAG_ID,
   evaluateMockFlag,
   evaluateMockSubFlag,
+  isStrictDrillProblem,
   resetMockScoring,
   WHAT_IS_DRILL_PROBLEM_ID,
 } from "./flag-submit";
@@ -227,5 +231,109 @@ describe("evaluateMockSubFlag (AI-agent local Mac tutorial)", () => {
     expect(evaluateMockSubFlag(AI_AGENT_LOCAL_DRILL_PROBLEM_ID, "unknown", "5175", 100).kind).toBe(
       "wrong",
     );
+  });
+});
+
+describe("evaluateMockSubFlag (#2781 add-custom-challenge drill)", () => {
+  it("should accept the validated problem count for the first checkpoint", () => {
+    expect(
+      evaluateMockSubFlag(
+        CUSTOM_CHALLENGE_PROBLEM_ID,
+        CUSTOM_CHALLENGE_PROBLEM_COUNT_FLAG_ID,
+        " 2 ",
+        100,
+      ).kind,
+    ).toBe("ok");
+  });
+
+  it("should reject a count that means the author replaced hello-world instead of adding to it", () => {
+    expect(
+      evaluateMockSubFlag(
+        CUSTOM_CHALLENGE_PROBLEM_ID,
+        CUSTOM_CHALLENGE_PROBLEM_COUNT_FLAG_ID,
+        "1",
+        100,
+      ).kind,
+    ).toBe("wrong");
+  });
+
+  it("should accept the verifier checkpoint for an author-chosen problem id, case-insensitively", () => {
+    expect(
+      evaluateMockSubFlag(
+        CUSTOM_CHALLENGE_PROBLEM_ID,
+        CUSTOM_CHALLENGE_VERIFIED_FLAG_ID,
+        " TC{CUSTOM-CHALLENGE:my-first-problem} ",
+        100,
+      ).kind,
+    ).toBe("ok");
+    expect(
+      evaluateMockSubFlag(
+        CUSTOM_CHALLENGE_PROBLEM_ID,
+        CUSTOM_CHALLENGE_VERIFIED_FLAG_ID,
+        "tc{custom-challenge:s3lab}",
+        100,
+      ).kind,
+    ).toBe("ok");
+  });
+
+  it("should reject the scaffold and golden ids so copying without authoring never scores", () => {
+    for (const reserved of ["hello-world", "HELLO-WORLD", "golden-basic-find-the-flag"]) {
+      expect(
+        evaluateMockSubFlag(
+          CUSTOM_CHALLENGE_PROBLEM_ID,
+          CUSTOM_CHALLENGE_VERIFIED_FLAG_ID,
+          `TC{CUSTOM-CHALLENGE:${reserved}}`,
+          100,
+        ).kind,
+      ).toBe("wrong");
+    }
+  });
+
+  it("should reject malformed checkpoints, generic flags, and Easter eggs", () => {
+    for (const bad of [
+      CANONICAL_MOCK_FLAG,
+      "42",
+      "TC{CUSTOM-CHALLENGE:}",
+      "TC{CUSTOM-CHALLENGE:Bad_Id}",
+      "TC{CUSTOM-CHALLENGE:trailing-}",
+      "custom-challenge:my-problem",
+      "TC{CUSTOM-CHALLENGE:my-problem} extra",
+    ]) {
+      expect(
+        evaluateMockSubFlag(
+          CUSTOM_CHALLENGE_PROBLEM_ID,
+          CUSTOM_CHALLENGE_VERIFIED_FLAG_ID,
+          bad,
+          100,
+        ).kind,
+      ).toBe("wrong");
+    }
+  });
+});
+
+describe("isStrictDrillProblem (#2781 derivation)", () => {
+  it("should treat every quiz-answer drill as strict, including the AI-agent tutorial", () => {
+    // #2781: ai-agent-local-mac は厳密採点なのに列挙漏れで緩い案内が出ていた回帰の pin。
+    for (const problemId of [
+      WHAT_IS_DRILL_PROBLEM_ID,
+      AI_AGENT_LOCAL_DRILL_PROBLEM_ID,
+      LOCAL_DRILL_PROBLEM_ID,
+      CUSTOM_CHALLENGE_PROBLEM_ID,
+    ]) {
+      expect(isStrictDrillProblem(problemId)).toBe(true);
+    }
+  });
+
+  it("should keep the checkpoint-only drills strict even though they have no quiz answers", () => {
+    expect(isStrictDrillProblem(LITE_DRILL_PROBLEM_ID)).toBe(true);
+    expect(isStrictDrillProblem(LITE_CLEANUP_DRILL_PROBLEM_ID)).toBe(true);
+  });
+
+  it("should not treat ordinary demo problems or Object prototype keys as strict drills", () => {
+    expect(isStrictDrillProblem("some-demo-problem")).toBe(false);
+    // Object.hasOwn を使わないと `in` が prototype key を拾って true になる。
+    for (const key of ["toString", "constructor", "hasOwnProperty", "__proto__"]) {
+      expect(isStrictDrillProblem(key)).toBe(false);
+    }
   });
 });

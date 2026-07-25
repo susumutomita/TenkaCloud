@@ -54,7 +54,7 @@
     "markdownlint-cli2": "^0.22.1",
     "marked": "^18.0.6",
     "textlint": "^15.7.1",
-    "textlint-filter-rule-comments": "^1.0.1",
+    "textlint-filter-rule-comments": "^1.3.0",
     "textlint-rule-no-mixed-zenkaku-and-hankaku-alphabet": "^1.0.1",
     "textlint-rule-no-mixed-zenkaku-and-hankaku-number": "^1.0.0",
     "textlint-rule-preset-ja-spacing": "^2.4.3",
