@@ -29,7 +29,8 @@
     "auto_refresh_off": "Auto refresh: Off",
     "auto_refresh_on": "Auto refresh: On",
     "change_team_name": "Change team name",
-    "sign_out": "Sign out"
+    "sign_out": "Sign out",
+    "course_tracks": "Course tracks"
   },
   "switcher": {
     "aria_label": "Language switcher"
@@ -471,5 +472,27 @@
     "network": "Network error. Please retry; if it persists, contact your operator.",
     "network_with_correlation": "Network error. Please retry; if it persists, share this correlation id with your operator: {correlationId}",
     "unknown": "Something went wrong. Please retry."
+  },
+  "course_track": {
+    "header": "Course tracks",
+    "header_description": "Your learning path in week and chapter order. A problem with unmet prerequisites drops out of the recommended order, but you can still open it.",
+    "empty": "No problem is part of a course track yet. You can still work through them from the problem list.",
+    "track_progress": "{solved} of {total} problems complete",
+    "track_checkpoint_label": "Checkpoints across the track",
+    "checkpoint_label": "Checkpoints",
+    "checkpoints": "{solved} of {total} closed",
+    "recommended_next": "Suggested next: {name}",
+    "start_recommended": "Go to next problem",
+    "all_done": "Every problem in this track is complete.",
+    "solved": "Complete",
+    "recommended": "Suggested next",
+    "problem_meta": "Difficulty {difficulty} · about {duration}",
+    "prerequisite_unmet": "Easier after solving: {problems}",
+    "source_label": "Course material:",
+    "role_diagnostic": "Prerequisite check",
+    "role_mechanism": "Mechanism",
+    "role_assignment_companion": "Assignment companion",
+    "role_transfer": "Transfer",
+    "role_synthesis": "Synthesis"
   }
 }

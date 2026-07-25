@@ -10,6 +10,37 @@
  * build-time discovery で admin-console と Portal を同 source に揃える (= drift 防止)。
  */
 
+// Issue #2786: curriculum / 講座対応 / 教育グラフの投影は責務が違うので別 module。
+import type {
+  ParticipantGraphNode,
+  ParticipantGraphRelation,
+  ProblemCourseAlignment,
+  ProblemCourseMetadataInput,
+  ProblemTrackPosition,
+} from "./problem-course-projection";
+import {
+  toCourseAlignment,
+  toParticipantGraphNodes,
+  toParticipantGraphRelations,
+  toTrackPosition,
+} from "./problem-course-projection";
+
+// 既存 import を壊さないよう、 catalog entry が使う型と投影関数はここから re-export する。
+export type {
+  ParticipantGraphNode,
+  ParticipantGraphNodeType,
+  ParticipantGraphRelation,
+  ParticipantRelationType,
+  ProblemCourseAlignment,
+  ProblemTrackPosition,
+} from "./problem-course-projection";
+export {
+  toCourseAlignment,
+  toParticipantGraphNodes,
+  toParticipantGraphRelations,
+  toTrackPosition,
+} from "./problem-course-projection";
+
 export type ProblemCategory = "Battle" | "Challenge";
 export type ProblemStatus = "ready" | "draft" | "deprecated";
 /** ADR-008 / Issue #574: 問題実装の公開境界。 public = 本体 repo に payload を持つ教材問題、
@@ -115,9 +146,21 @@ export interface ProblemCatalogEntry {
   };
   /** ADR-026 / ADR-027: 問題が deploy される cloud (provider) と engine。 未宣言は aws/cloudformation。 */
   readonly runtime: { readonly provider: string; readonly engine: string };
+  /** Issue #2786: curriculum 内の位置。 未宣言の問題は track に属さない。 */
+  readonly track?: ProblemTrackPosition;
+  /** Issue #2786: 外部講座との対応 (participant-safe な部分のみ)。 embargoed は不在になる。 */
+  readonly courseAlignment?: ProblemCourseAlignment;
+  /** Issue #2786: participant-safe な graph node (learning objective / concept のみ)。 */
+  readonly graphNodes: readonly ParticipantGraphNode[];
+  /** Issue #2786: participant-safe な relation (teaches / covers / requires のみ)。 */
+  readonly graphRelations: readonly ParticipantGraphRelation[];
 }
 
-interface ProblemMetadata {
+/**
+ * Issue #2786: curriculum / 講座対応 / graph の入力 field は投影 module が所有する
+ * (`ProblemCourseMetadataInput`)。 ここで再宣言すると同じ shape が 2 か所に増える。
+ */
+interface ProblemMetadata extends ProblemCourseMetadataInput {
   $schema?: string;
   id: string;
   name: string;
@@ -229,6 +272,7 @@ function omitUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
 export function metadataToEntry(metadata: ProblemMetadata): ProblemCatalogEntry {
   const dashboardSlots = metadata.dashboard?.slots;
   const publicI18n = sanitizeI18n(metadata.i18n);
+  const graphNodes = toParticipantGraphNodes(metadata);
   return {
     id: metadata.id,
     name: metadata.name,
@@ -296,6 +340,17 @@ export function metadataToEntry(metadata: ProblemMetadata): ProblemCatalogEntry 
       provider: metadata.runtime?.provider ?? "aws",
       engine: metadata.runtime?.engine ?? "cloudformation",
     },
+    // Issue #2786: curriculum 位置と講座対応。 どちらも宣言が無ければ field ごと省略する
+    // (= track 未設定の既存問題の entry shape を変えない)。
+    ...omitUndefined({
+      track: toTrackPosition(metadata.track),
+      courseAlignment: toCourseAlignment(metadata.courseAlignment),
+    }),
+    graphNodes,
+    graphRelations: toParticipantGraphRelations(
+      metadata.relations,
+      new Set(graphNodes.map((n) => n.id)),
+    ),
   };
 }
 
@@ -325,6 +380,14 @@ const PROBLEM_CATALOG: readonly ProblemCatalogEntry[] = Object.values(metadataMo
 const PROBLEM_CATALOG_BY_ID: ReadonlyMap<string, ProblemCatalogEntry> = new Map(
   PROBLEM_CATALOG.map((p) => [p.id, p]),
 );
+
+/**
+ * Issue #2786: catalog 全件。 course track view は「deploy された問題」ではなく
+ * 「curriculum に載っている問題」を並べるので、 team view ではなく catalog を起点にする。
+ */
+export function listProblemCatalog(): readonly ProblemCatalogEntry[] {
+  return PROBLEM_CATALOG;
+}
 
 /** `problemId` (= metadata.json の `id` field) で問題を引く。無ければ undefined。 */
 export function findProblemMetadata(problemId: string): ProblemCatalogEntry | undefined {

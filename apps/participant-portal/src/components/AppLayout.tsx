@@ -277,7 +277,11 @@ export function buildSideNavItems(
     {
       type: "section",
       text: t("nav.quests_section"),
-      items: [{ type: "link", href: "/problems", text: t("nav.problems") }],
+      items: [
+        { type: "link", href: "/problems", text: t("nav.problems") },
+        // Issue #2786: track 未設定の問題しか無い環境でも空状態を出すだけなので常時出す。
+        { type: "link", href: "/course-tracks", text: t("nav.course_tracks") },
+      ],
     },
   ];
   if (!isLocal) {

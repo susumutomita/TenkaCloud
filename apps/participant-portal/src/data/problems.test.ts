@@ -3,6 +3,7 @@ import {
   buildDiagramMap,
   findProblemDiagramUrl,
   findProblemMetadata,
+  listProblemCatalog,
   metadataToEntry,
   type ProblemCatalogEntry,
   resolveLocalizedNarrative,
@@ -322,5 +323,219 @@ describe("problem architecture diagram (#1929 Phase 1c)", () => {
 
   it("should return undefined for a problem without a bundled diagram", () => {
     expect(findProblemDiagramUrl("does-not-exist")).toBeUndefined();
+  });
+});
+
+/**
+ * Issue #2786: curriculum 位置と講座対応の投影。
+ *
+ * ここは fairness contract の一部である。`assessment_criteria` は「何が採点されるか」を
+ * 問題を開く前に列挙し、`misconceptions` は「よくある誤り」の形で答えの方向を示すため、
+ * どちらも participant bundle に載せない。`spoilerPolicy` は authoring 情報なので出さない。
+ */
+describe("metadataToEntry (course track projection #2786)", () => {
+  const COURSE_FIXTURE = {
+    ...FAIRNESS_FIXTURE,
+    id: "ac26-demo",
+    track: { id: "advanced-cryptography-2026", order: 310, chapter: "Week 3 / 有限体" },
+    courseAlignment: {
+      courseId: "advanced-cryptography-program",
+      edition: "2026",
+      week: 3,
+      role: "mechanism",
+      spoilerPolicy: "independent-reimplementation",
+      sources: [
+        { repository: "org/course", ref: "a".repeat(40), path: "week3/README.md", kind: "lecture" },
+      ],
+    },
+    nodes: {
+      learning_objectives: [{ id: "lo.ac26-demo.invert", description: "逆元を求められる" }],
+      concepts: [{ id: "concept.finite-field", description: "有限体" }],
+      assessment_criteria: [{ id: "assessment.ac26-demo.x", description: "SPOILER: 採点条件" }],
+      misconceptions: [{ id: "misconception.y", description: "SPOILER: よくある誤り" }],
+      audiences: [{ id: "audience.z", description: "対象者" }],
+    },
+    relations: [
+      { type: "teaches", source: "problem.ac26-demo", target: "lo.ac26-demo.invert" },
+      { type: "covers", source: "problem.ac26-demo", target: "concept.finite-field" },
+      { type: "requires", source: "problem.ac26-demo", target: "concept.modular-arithmetic" },
+      { type: "assesses", source: "problem.ac26-demo", target: "assessment.ac26-demo.x" },
+      { type: "related_to", source: "misconception.y", target: "concept.finite-field" },
+    ],
+  } as Parameters<typeof metadataToEntry>[0];
+
+  it("should carry the track position through", () => {
+    expect(metadataToEntry(COURSE_FIXTURE).track).toEqual({
+      id: "advanced-cryptography-2026",
+      order: 310,
+      chapter: "Week 3 / 有限体",
+    });
+  });
+
+  it("should omit track entirely for a problem that declares none", () => {
+    expect(metadataToEntry(FAIRNESS_FIXTURE).track).toBeUndefined();
+  });
+
+  it("should reject a partial track rather than emit one with a missing field", () => {
+    // 半端な track を通すと grouping key や順序が欠けた row が UI に並ぶ。
+    for (const track of [
+      { id: "t", order: 10 },
+      { id: "t", chapter: "C" },
+      { order: 10, chapter: "C" },
+      { id: "t", order: Number.NaN, chapter: "C" },
+    ]) {
+      expect(metadataToEntry({ ...FAIRNESS_FIXTURE, track } as never).track).toBeUndefined();
+    }
+  });
+
+  it("should project course alignment without the spoiler policy", () => {
+    const alignment = metadataToEntry(COURSE_FIXTURE).courseAlignment;
+    expect(alignment).toMatchObject({
+      courseId: "advanced-cryptography-program",
+      week: 3,
+      role: "mechanism",
+    });
+    expect(JSON.stringify(alignment)).not.toContain("spoilerPolicy");
+    expect(JSON.stringify(alignment)).not.toContain("independent-reimplementation");
+  });
+
+  it("should drop an embargoed alignment entirely rather than ship a flag", () => {
+    // client が flag を無視しても漏れないようにする (= 不在が唯一の安全な表現)。
+    const embargoed = metadataToEntry({
+      ...COURSE_FIXTURE,
+      courseAlignment: { ...COURSE_FIXTURE.courseAlignment, spoilerPolicy: "embargoed" },
+    } as never);
+    expect(embargoed.courseAlignment).toBeUndefined();
+  });
+
+  it("should reject an alignment missing a required field", () => {
+    for (const patch of [
+      { courseId: undefined },
+      { edition: undefined },
+      { role: undefined },
+      { week: undefined },
+    ]) {
+      const out = metadataToEntry({
+        ...COURSE_FIXTURE,
+        courseAlignment: { ...COURSE_FIXTURE.courseAlignment, ...patch },
+      } as never);
+      expect(out.courseAlignment).toBeUndefined();
+    }
+  });
+
+  it("should keep pinned sources and skip malformed ones", () => {
+    const out = metadataToEntry({
+      ...COURSE_FIXTURE,
+      courseAlignment: {
+        ...COURSE_FIXTURE.courseAlignment,
+        sources: [
+          { repository: "org/course", ref: "b".repeat(40), path: "week3/x.md", kind: "assignment" },
+          { repository: "org/course", path: "no-ref.md", kind: "lecture" },
+        ],
+      },
+    } as never);
+    expect(out.courseAlignment?.sources).toEqual([
+      { repository: "org/course", ref: "b".repeat(40), path: "week3/x.md", kind: "assignment" },
+    ]);
+  });
+
+  it("should default sources to an empty list when the alignment declares none", () => {
+    const out = metadataToEntry({
+      ...COURSE_FIXTURE,
+      courseAlignment: { ...COURSE_FIXTURE.courseAlignment, sources: undefined },
+    } as never);
+    expect(out.courseAlignment?.sources).toEqual([]);
+  });
+
+  it("should project only learning objectives and concepts as graph nodes", () => {
+    const nodes = metadataToEntry(COURSE_FIXTURE).graphNodes;
+    expect(nodes.map((n) => n.id)).toEqual([
+      "problem.ac26-demo",
+      "lo.ac26-demo.invert",
+      "concept.finite-field",
+    ]);
+  });
+
+  it("should never carry assessment criteria or misconceptions into the bundle", () => {
+    const serialized = JSON.stringify(metadataToEntry(COURSE_FIXTURE));
+    expect(serialized).not.toContain("assessment.");
+    expect(serialized).not.toContain("misconception.");
+    expect(serialized).not.toContain("audience.");
+    expect(serialized).not.toContain("SPOILER");
+  });
+
+  it("should label a node by its id when it has no description", () => {
+    const out = metadataToEntry({
+      ...COURSE_FIXTURE,
+      nodes: { concepts: [{ id: "concept.bare" }] },
+    } as never);
+    expect(out.graphNodes.find((n) => n.id === "concept.bare")?.label).toBe("concept.bare");
+  });
+
+  it("should skip a node with no id", () => {
+    const out = metadataToEntry({
+      ...COURSE_FIXTURE,
+      nodes: { concepts: [{ description: "nameless" }] },
+    } as never);
+    expect(out.graphNodes.map((n) => n.id)).toEqual(["problem.ac26-demo"]);
+  });
+
+  it("should project only teaches, covers and requires relations", () => {
+    const relations = metadataToEntry(COURSE_FIXTURE).graphRelations;
+    expect(relations.map((r) => r.type).sort()).toEqual(["covers", "requires", "teaches"]);
+  });
+
+  it("should drop a relation pointing at a node kind that was withheld", () => {
+    // 参照先が無い edge を残すと UI が「未解決の前提」として表示してしまう。
+    const out = metadataToEntry({
+      ...COURSE_FIXTURE,
+      relations: [{ type: "requires", source: "problem.ac26-demo", target: "misconception.y" }],
+    } as never);
+    expect(out.graphRelations).toEqual([]);
+  });
+
+  it("should keep a requires edge that points at another problem", () => {
+    const out = metadataToEntry({
+      ...COURSE_FIXTURE,
+      relations: [{ type: "requires", source: "problem.ac26-demo", target: "problem.other" }],
+    } as never);
+    expect(out.graphRelations).toEqual([
+      { type: "requires", source: "problem.ac26-demo", target: "problem.other" },
+    ]);
+  });
+
+  it("should drop a relation whose source is not a node of this problem", () => {
+    const out = metadataToEntry({
+      ...COURSE_FIXTURE,
+      relations: [
+        { type: "requires", source: "lo.someone-else.x", target: "concept.finite-field" },
+      ],
+    } as never);
+    expect(out.graphRelations).toEqual([]);
+  });
+
+  it("should drop a malformed relation instead of throwing", () => {
+    const out = metadataToEntry({
+      ...COURSE_FIXTURE,
+      relations: [{ type: "requires" }, { source: "problem.ac26-demo", target: "concept.x" }],
+    } as never);
+    expect(out.graphRelations).toEqual([]);
+  });
+
+  it("should give an untracked problem an empty graph rather than undefined", () => {
+    const out = metadataToEntry(FAIRNESS_FIXTURE);
+    expect(out.graphRelations).toEqual([]);
+    expect(out.graphNodes).toEqual([{ id: "problem.demo", type: "problem", label: "Demo" }]);
+  });
+});
+
+describe("listProblemCatalog (#2786)", () => {
+  it("should return the whole build-time catalog, sorted and consistent with lookup by id", () => {
+    // course track view は「deploy された問題」ではなく「curriculum に載っている問題」を
+    // 並べるので、 team view ではなく catalog 全件を起点にする。
+    const catalog = listProblemCatalog();
+    expect(catalog.length).toBeGreaterThan(0);
+    expect(catalog.map((p) => p.id)).toEqual([...catalog.map((p) => p.id)].sort());
+    for (const entry of catalog) expect(findProblemMetadata(entry.id)).toBe(entry);
   });
 });
