@@ -1,4 +1,8 @@
 (() => {
+  // 現在表示中の言語。 applyLang が唯一の書き手で、 DOM の外 (= フォームの
+  // 状態メッセージなど) から辞書を引くときに使う。
+  var activeLang = "ja";
+
   var SEO_METADATA = {
     ja: {
       title: "TenkaCloud | AWSクラウド実戦演習・競技プラットフォーム",
@@ -373,6 +377,23 @@
       "ent.cta1": "お問い合わせ",
       "ent.cta2": "GitHub を見る",
       "contact.cta": "お問い合わせフォーム",
+      "form.name": "お名前",
+      "form.organization": "会社・組織名",
+      "form.email": "メールアドレス",
+      "form.topic": "お問い合わせ種別",
+      "form.topic.plan": "プラン・見積もりの相談",
+      "form.topic.training": "企業内の研修・演習での利用",
+      "form.topic.custom": "カスタム問題の追加開発",
+      "form.topic.other": "その他",
+      "form.message": "お問い合わせ内容",
+      "form.submit": "送信する",
+      "form.sending": "送信しています…",
+      "form.required": "必須項目を入力してください。",
+      "form.invalidEmail": "メールアドレスの形式で入力してください。",
+      "form.sent":
+        "送信しました。 2 営業日以内に返信します。 返信が届かない場合はお手数ですが Google フォームからもう一度お送りください。",
+      "form.failed":
+        "送信できませんでした。 ネットワークを確認するか、 Google フォームからお送りください。",
       "contact.fineprint":
         'フォームの回答は Google フォーム (= Google が管理) に保存され、 お問い合わせ対応と見積もり提示のみに利用します (= <a href="./privacy.html">プライバシーポリシー</a>)。',
 
@@ -637,6 +658,23 @@
       "ent.cta1": "Get in touch",
       "ent.cta2": "View on GitHub",
       "contact.cta": "Open the contact form",
+      "form.name": "Name",
+      "form.organization": "Company or team",
+      "form.email": "Email",
+      "form.topic": "What is this about",
+      "form.topic.plan": "Plans and quotes",
+      "form.topic.training": "Internal training and drills",
+      "form.topic.custom": "Custom problem development",
+      "form.topic.other": "Something else",
+      "form.message": "Your message",
+      "form.submit": "Send",
+      "form.sending": "Sending…",
+      "form.required": "Please fill in the required fields.",
+      "form.invalidEmail": "Please enter a valid email address.",
+      "form.sent":
+        "Thanks — we'll reply within two business days. If you don't hear back, please resend through the Google Form.",
+      "form.failed":
+        "We couldn't send that. Check your connection, or use the Google Form instead.",
       "contact.fineprint":
         'Responses are stored in a Google Form (managed by Google) and used only for replying and quoting (see <a href="./privacy.en.html">Privacy Policy</a>).',
 
@@ -684,6 +722,7 @@
   }
 
   function applyLang(lang) {
+    activeLang = lang;
     document.documentElement.lang = lang;
     applySeoMetadata(lang);
     var dict = I18N[lang];
@@ -820,10 +859,125 @@
     });
   });
 
+  /**
+   * #contact のインラインフォームを Google フォームに接続する。
+   *
+   * 送信先の `entry.<数字>` は Google が採番するため手書きできない。
+   * form/sync.gs が同期のたびに逆引きして landing/contact-form-config.json を
+   * 再生成し、 ここが実行時にそれを読む。 だからフォームを編集しても LP は
+   * 追従する。
+   *
+   * 設定が無い / 壊れている / DOM の項目とズレているときはインラインフォームを
+   * 出さず、 従来の Google フォームリンクをそのまま残す。 送信は no-cors POST で
+   * 応答を読めない (= 失敗を検知できない) ので、 壊れたフォームを見せるくらいなら
+   * ホストされたフォームへ送ってもらうほうが安全。
+   */
+  function initContactForm() {
+    var form = document.querySelector("[data-contact-form]");
+    if (!form || !window.TenkaContactForm) return;
+
+    var statusEl = form.querySelector("[data-contact-form-status]");
+    var submitButton = form.querySelector("[data-contact-form-submit]");
+    var inputs = Array.prototype.slice.call(form.querySelectorAll("[data-form-field]"));
+
+    function fieldKey(input) {
+      return input.getAttribute("data-form-field");
+    }
+
+    function setStatus(key, tone) {
+      statusEl.textContent = I18N[activeLang][key] || "";
+      statusEl.setAttribute("data-tone", tone);
+    }
+
+    function readValues() {
+      var values = {};
+      inputs.forEach((input) => {
+        values[fieldKey(input)] = input.value;
+      });
+      return values;
+    }
+
+    function markProblems(problems) {
+      var flagged = problems.map((problem) => problem.key);
+      inputs.forEach((input) => {
+        if (flagged.indexOf(fieldKey(input)) === -1) {
+          input.removeAttribute("aria-invalid");
+        } else {
+          input.setAttribute("aria-invalid", "true");
+        }
+      });
+    }
+
+    function handleSubmit(config, event) {
+      event.preventDefault();
+      var values = readValues();
+      var problems = window.TenkaContactForm.validate(config, values);
+      markProblems(problems);
+      if (problems.length > 0) {
+        setStatus(
+          problems.some((problem) => problem.reason === "email")
+            ? "form.invalidEmail"
+            : "form.required",
+          "error",
+        );
+        return;
+      }
+      submitButton.disabled = true;
+      setStatus("form.sending", "pending");
+      window.TenkaContactForm.submit(config, values, {
+        fetch: window.fetch.bind(window),
+      })
+        .then(() => {
+          form.reset();
+          // no-cors なので Google 側が受け付けたかは確認できない。 文面も
+          // 「届かなければホストされたフォームで再送を」 と正直に書いてある。
+          setStatus("form.sent", "ok");
+        })
+        .catch((error) => {
+          console.error("[contact-form] submission failed:", error);
+          setStatus("form.failed", "error");
+        })
+        .then(() => {
+          submitButton.disabled = false;
+        });
+    }
+
+    function activate(config) {
+      var domKeys = inputs.map(fieldKey).sort().join(",");
+      var configKeys = Object.keys(config.fields).sort().join(",");
+      if (domKeys !== configKeys) {
+        throw new Error(
+          "contact form fields drifted from the synced config: DOM=[" +
+            domKeys +
+            "] config=[" +
+            configKeys +
+            "]",
+        );
+      }
+      form.addEventListener("submit", (event) => handleSubmit(config, event));
+      form.hidden = false;
+      form.classList.add("contact-form-ready");
+    }
+
+    fetch("./contact-form-config.json", { cache: "no-cache" })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`contact-form-config.json: HTTP ${response.status}`);
+        }
+        return response.json();
+      })
+      .then((raw) => activate(window.TenkaContactForm.parseConfig(raw)))
+      .catch((error) => {
+        console.error("[contact-form] falling back to the hosted Google Form:", error);
+      });
+  }
+
   var initialLang = detectInitialLang();
   applyLang(initialLang);
   reflectLangInUrl(initialLang);
+  initContactForm();
 
-  // Contact is a Google Form (linked from #contact in index.html). No backend, no
-  // mailto -- responses live in Google, so the static landing holds no PII.
+  // Contact posts straight to a Google Form (see landing/contact-form.js and
+  // form/sync.gs). No backend, no mailto -- responses live in Google, so the
+  // static landing still holds no PII of its own.
 })();

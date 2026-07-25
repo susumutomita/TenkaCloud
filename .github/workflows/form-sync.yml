@@ -1,0 +1,154 @@
+name: form-sync
+
+# landing/ のお問い合わせフォームは Google フォームをバックエンドにしている。
+# LP は自前 HTML から formResponse へ直接 POST するため、 質問ごとの
+# `entry.<数字>` が必要になる。 この ID は Google が採番するので手書きできず、
+# フォームを触るとズレる。 ズレても no-cors POST では失敗を検知できないため、
+# 送信が無音で消える。
+#
+# そこでフォーム定義を form/sync.gs に集約し、 この workflow が
+#   clasp push -> Web アプリを同一 URL で再デプロイ -> syncForm() 実行
+#   -> entry ID を逆引きして landing/contact-form-config.json を再生成
+# まで通す。 LP は実行時にこの JSON を読むので、 フォーム変更に自動追従する。
+#
+# 配信は Cloudflare Pages の Git 連携が main への push を拾うため、
+# この workflow にデプロイ job は無い。 PR がマージされた時点で反映される。
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "form/**"
+      - ".github/workflows/form-sync.yml"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: フォームを変更せず、 実行計画と現在の entry ID だけを表示する
+        type: boolean
+        default: true
+      allow_type_change:
+        description: 質問タイプの変更を許可する (entry ID が作り直され、 既存の LP が壊れる)
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: form-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    environment: google-form
+    steps:
+      - name: Check out the code
+        # actions/checkout v4.3.1
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Setup Node.js
+        # actions/setup-node v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 20
+
+      # Supply chain security: safe-chain 自体を lifecycle script 経由で
+      # 踏まないよう --ignore-scripts と version 固定を明示する (ci.yml と同じ流儀)。
+      - name: Setup safe-chain
+        run: |
+          npm install -g --ignore-scripts @aikidosec/safe-chain@1.5.3
+          safe-chain setup-ci
+
+      - name: Install clasp
+        env:
+          npm_config_ignore_scripts: "true"
+        run: npm install -g --ignore-scripts @google/clasp@2.5.0
+
+      - name: Restore clasp credentials
+        env:
+          CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
+          FORM_SCRIPT_ID: ${{ secrets.FORM_SCRIPT_ID }}
+        run: |
+          printf '%s' "$CLASPRC_JSON" > ~/.clasprc.json
+          printf '{"scriptId":"%s","rootDir":"."}' "$FORM_SCRIPT_ID" > form/.clasp.json
+
+      - name: Push and redeploy the Apps Script web app
+        working-directory: form
+        env:
+          FORM_WEBAPP_URL: ${{ secrets.FORM_WEBAPP_URL }}
+        run: |
+          clasp push -f
+          # 同じ deployment ID に上書きデプロイすると Web アプリの URL が変わらない。
+          # URL は .../macros/s/<deploymentId>/exec の形。
+          DEPLOYMENT_ID=$(printf '%s' "$FORM_WEBAPP_URL" | sed -E 's#.*/s/([^/]+)/exec.*#\1#')
+          clasp deploy -i "$DEPLOYMENT_ID" -d "form-sync $GITHUB_SHA"
+
+      - name: Run syncForm through the web app
+        env:
+          FORM_WEBAPP_URL: ${{ secrets.FORM_WEBAPP_URL }}
+          FORM_SYNC_TOKEN: ${{ secrets.FORM_SYNC_TOKEN }}
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
+          ALLOW_TYPE_CHANGE: ${{ inputs.allow_type_change || 'false' }}
+        run: |
+          # -X POST を付けないこと。 Apps Script の Web アプリは 302 で GET 専用の
+          # 応答 URL へ飛ばすため、 POST を強制するとリダイレクト先が 404 になる。
+          # --data だけなら「初回 POST -> リダイレクト後 GET」で正しく応答が返る。
+          curl -sSL "$FORM_WEBAPP_URL" \
+            --data-urlencode "token=$FORM_SYNC_TOKEN" \
+            --data-urlencode "dryRun=$DRY_RUN" \
+            --data-urlencode "allowTypeChange=$ALLOW_TYPE_CHANGE" \
+            -o sync-result.json
+
+          # Web アプリは HTTP ステータスを選べないので、 成否は本文の ok で判定する。
+          jq -e '.ok == true' sync-result.json > /dev/null || {
+            echo "::error::syncForm failed"
+            jq . sync-result.json || cat sync-result.json
+            exit 1
+          }
+
+          {
+            echo "### form-sync"
+            echo
+            echo "- dryRun: $(jq -r '.dryRun' sync-result.json)"
+            echo "- destination: $(jq -r '.destination' sync-result.json)"
+            echo "- notification: $(jq -r '.notification' sync-result.json)"
+            echo
+            echo "| key | action | type |"
+            echo "| --- | --- | --- |"
+            jq -r '.plan[] | "| \(.key) | \(.action) | \(.type) |"' sync-result.json
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          jq -e '.formResponseUrl and (.fields | length > 0)' sync-result.json > /dev/null || {
+            echo "::error::syncForm returned no entry map"
+            exit 1
+          }
+          jq '{formResponseUrl, fields}' sync-result.json > landing/contact-form-config.json
+
+      - name: Open a PR with the regenerated entry map
+        if: ${{ inputs.dry_run != true }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -z "$(git status --porcelain landing/contact-form-config.json)" ]; then
+            echo "entry map is unchanged; nothing to publish."
+            exit 0
+          fi
+          # main は PR 必須のため、 CI からの直接 push ではなくブランチ + PR で反映する。
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          BRANCH="ci/contact-form-config-${GITHUB_RUN_ID}"
+          git switch -c "$BRANCH"
+          git add landing/contact-form-config.json
+          git commit -m "chore(landing): regenerate the contact form entry map"
+          git push -u origin "$BRANCH"
+          gh pr create \
+            --title "chore(landing): regenerate the contact form entry map" \
+            --body "form-sync workflow (run ${GITHUB_RUN_ID}) が Google フォームの entry ID を再取得しました。マージすると Cloudflare Pages が LP を再配信します。"
+          # 完全自動で反映したい場合は、 リポジトリ変数 FORM_SYNC_AUTO_MERGE を true にする。
+          # 既定では人がレビューしてからマージする。
+          if [ "${{ vars.FORM_SYNC_AUTO_MERGE }}" = "true" ]; then
+            gh pr merge --squash --delete-branch
+          fi

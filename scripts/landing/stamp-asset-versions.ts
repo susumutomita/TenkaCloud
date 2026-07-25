@@ -24,23 +24,38 @@ export function assetVersion(content: string | Buffer): string {
   return createHash("sha1").update(content).digest("hex").slice(0, 10);
 }
 
-export function stampHtml(html: string, cssVersion: string, jsVersion: string): string {
-  return html
-    .replaceAll(/(\.\/styles\/main\.css)\?v=[^"]*/g, `$1?v=${cssVersion}`)
-    .replaceAll(/(\.\/app\.js)\?v=[^"]*/g, `$1?v=${jsVersion}`);
+/**
+ * ハッシュを刻む対象。 HTML から `./<path>?v=…` で参照されるものを列挙する。
+ * 新しいアセットを HTML に足したらここにも足す (= 足し忘れるとキャッシュ
+ * バスターが効かず、 古い JS/CSS が配信され続ける)。
+ */
+export const STAMPED_ASSETS = ["styles/main.css", "app.js", "contact-form.js"] as const;
+
+export type AssetVersions = Record<string, string>;
+
+export function stampHtml(html: string, versions: AssetVersions): string {
+  return Object.entries(versions).reduce((stamped, [asset, version]) => {
+    const escaped = asset.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return stamped.replaceAll(new RegExp(`(\\./${escaped})\\?v=[^"]*`, "g"), `$1?v=${version}`);
+  }, html);
+}
+
+export function currentVersions(): AssetVersions {
+  return Object.fromEntries(
+    STAMPED_ASSETS.map((asset) => [asset, assetVersion(readFileSync(join(landing, asset)))]),
+  );
 }
 
 function main() {
-  const cssVersion = assetVersion(readFileSync(join(landing, "styles/main.css")));
-  const jsVersion = assetVersion(readFileSync(join(landing, "app.js")));
+  const versions = currentVersions();
   const targets = readdirSync(landing).filter((name) => name.endsWith(".html"));
   for (const name of targets) {
     const path = join(landing, name);
     const before = readFileSync(path, "utf8");
-    const after = stampHtml(before, cssVersion, jsVersion);
+    const after = stampHtml(before, versions);
     if (after !== before) {
       writeFileSync(path, after);
-      console.log(`stamped ${name} (css=${cssVersion}, js=${jsVersion})`);
+      console.log(`stamped ${name} (${JSON.stringify(versions)})`);
     }
   }
 }

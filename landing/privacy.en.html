@@ -36,7 +36,7 @@
   <h2>1. Information we collect</h2>
   <p>To provide the Service and respond to inquiries, we may collect the following.</p>
   <ul>
-    <li><strong>Inquiry information</strong>: name, organization, contact email, and the body of your inquiry (collected via a Google Form).</li>
+    <li><strong>Inquiry information</strong>: name, organization, contact email, inquiry type, and the body of your inquiry (collected via a Google Form). The form is presented on this site, but what you enter is sent from your browser straight to Google's servers and never passes through the Service's own infrastructure.</li>
     <li><strong>Operator account information</strong>: the email address and username of operators who sign in to the Service (System Admin / Tenant Admin / Operator). Stored in Amazon Cognito, our identity provider.</li>
     <li><strong>Operation audit logs</strong>: a record of operator actions, including the actor identifier (Cognito sub) and username (= email), the action / target / outcome, the source <strong>IP address</strong> and User-Agent, and the timestamp. Kept for security auditing and unauthorized-access investigation.</li>
     <li><strong>Event operation data</strong>: participant data (= team name / display name), submission logs, and scoring history for events you run on the Service. Stored on the Service's SaaS infrastructure (= AWS) and automatically deleted 7 days after the event ends. Note that we do not create individual participant accounts (name / email); teams authenticate with a short-lived per-team key, so no information directly identifying an individual participant is collected.</li>

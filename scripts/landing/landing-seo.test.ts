@@ -202,25 +202,26 @@ describe("landing hero quest card (Issue #2711)", () => {
  * スタンプし忘れた PR を CI で落とす。
  */
 describe("landing asset cache busting (content-hash stamped)", () => {
-  const { assetVersion, stampHtml } = require("./stamp-asset-versions") as {
-    assetVersion: (content: string) => string;
-    stampHtml: (html: string, css: string, js: string) => string;
+  const { stampHtml, currentVersions, STAMPED_ASSETS } = require("./stamp-asset-versions") as {
+    stampHtml: (html: string, versions: Record<string, string>) => string;
+    currentVersions: () => Record<string, string>;
+    STAMPED_ASSETS: readonly string[];
   };
-  const cssVersion = assetVersion(read("landing/styles/main.css"));
-  const jsVersion = assetVersion(read("landing/app.js"));
+  const versions = currentVersions();
 
-  it("should reference main.css and app.js with their current content hashes", () => {
+  it("should reference every stamped asset with its current content hash", () => {
     for (const page of ["landing/index.html", "landing/index.en.html"]) {
       const html = read(page);
-      expect(html).toContain(`./styles/main.css?v=${cssVersion}`);
-      expect(html).toContain(`./app.js?v=${jsVersion}`);
+      for (const asset of STAMPED_ASSETS) {
+        expect(html).toContain(`./${asset}?v=${versions[asset]}`);
+      }
       expect(html).not.toMatch(/\.\/styles\/main\.css\?v=(?!${"x"})[0-9]{8}-/);
     }
   });
 
   it("should stamp idempotently", () => {
     const html = read("landing/index.html");
-    expect(stampHtml(html, cssVersion, jsVersion)).toBe(html);
+    expect(stampHtml(html, versions)).toBe(html);
   });
 });
 
