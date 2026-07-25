@@ -8,6 +8,9 @@ import {
 import { describe, expect, it } from "vitest";
 import {
   AI_AGENT_LOCAL_DRILL_PROBLEM_ID,
+  CUSTOM_CHALLENGE_PROBLEM_COUNT_FLAG_ID,
+  CUSTOM_CHALLENGE_PROBLEM_ID,
+  CUSTOM_CHALLENGE_VERIFIED_FLAG_ID,
   evaluateMockSubFlag,
   WHAT_IS_DRILL_PROBLEM_ID,
 } from "../dev-mock/flag-submit";
@@ -32,15 +35,16 @@ describe("dev-mock fixtures", () => {
     LITE_CLEANUP_DRILL_PROBLEM_ID,
     LOCAL_DRILL_PROBLEM_ID,
     AI_AGENT_LOCAL_DRILL_PROBLEM_ID,
+    CUSTOM_CHALLENGE_PROBLEM_ID,
   ];
   const drills = DEV_MOCK_TEAM_VIEW.problems.filter((p) =>
     ONBOARDING_DRILL_IDS.includes(p.problemId),
   );
 
-  it("should pin the onboarding drills first, in journey order (#2711)", () => {
-    expect(DEV_MOCK_TEAM_VIEW.problems.slice(0, 5).map((p) => p.problemId)).toEqual(
-      ONBOARDING_DRILL_IDS,
-    );
+  it("should pin the onboarding drills first, in journey order (#2711, #2781)", () => {
+    expect(
+      DEV_MOCK_TEAM_VIEW.problems.slice(0, ONBOARDING_DRILL_IDS.length).map((p) => p.problemId),
+    ).toEqual(ONBOARDING_DRILL_IDS);
   });
 
   it("should give the tutorial the 4-step shape with the mode choice at step 3 (#2711)", () => {
@@ -78,7 +82,7 @@ describe("dev-mock fixtures", () => {
   });
 
   it("should ship every onboarding problem as an unsolved multi-flag drill", () => {
-    expect(drills).toHaveLength(5);
+    expect(drills).toHaveLength(6);
     for (const drill of drills) {
       expect(drill.scoring?.kind).toBe("multi-flag");
       expect(drill.score).toBe(0);
@@ -331,7 +335,8 @@ describe("dev-mock fixtures", () => {
         continue;
       }
       // 正しいYouTube版ができるまでは、リポジトリへ動画を置かず非表示にする。
-      expect(drill.problemId).toBe(LOCAL_DRILL_PROBLEM_ID);
+      // add-custom-challenge は手を動かす作業ドリルで、収録予定の動画も無い。
+      expect([LOCAL_DRILL_PROBLEM_ID, CUSTOM_CHALLENGE_PROBLEM_ID]).toContain(drill.problemId);
       expect(drill.videoUrl).toBeUndefined();
       expect(drill.i18n?.en?.videoUrl).toBeUndefined();
     }
@@ -351,5 +356,36 @@ describe("dev-mock fixtures", () => {
     expect(bodies).toContain("自分の TenkaCloud Lite を立てる");
     expect(bodies).toContain("TenkaCloud Lite を片付ける");
     expect(bodies).toContain("AIエージェントでMac起動");
+    expect(bodies).toContain("独自問題を追加する");
+  });
+
+  // Issue #2781: 最終問題は「解く」ではなく「作る」。 既存問題の置換ではなく 2 問目の
+  // 追加を要求し、 雛形のままの id では checkpoint が通らないことを契約として pin する。
+  it("should end the journey with an authoring drill that adds a second problem", () => {
+    const drill = drills.find((problem) => problem.problemId === CUSTOM_CHALLENGE_PROBLEM_ID);
+    expect(drill?.scoring?.flags?.map((flag) => flag.id)).toEqual([
+      CUSTOM_CHALLENGE_PROBLEM_COUNT_FLAG_ID,
+      CUSTOM_CHALLENGE_VERIFIED_FLAG_ID,
+    ]);
+    for (const body of [drill?.description, drill?.i18n?.en?.description]) {
+      expect(body).toContain("hello-world");
+    }
+    // 雛形を消して 1 問にするのではなく足すので、 validator が通す数は 2。
+    expect(
+      evaluateMockSubFlag(
+        CUSTOM_CHALLENGE_PROBLEM_ID,
+        CUSTOM_CHALLENGE_PROBLEM_COUNT_FLAG_ID,
+        "2",
+        100,
+      ).kind,
+    ).toBe("ok");
+    expect(
+      evaluateMockSubFlag(
+        CUSTOM_CHALLENGE_PROBLEM_ID,
+        CUSTOM_CHALLENGE_VERIFIED_FLAG_ID,
+        "TC{CUSTOM-CHALLENGE:hello-world}",
+        100,
+      ).kind,
+    ).toBe("wrong");
   });
 });

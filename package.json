@@ -13,6 +13,7 @@
   ],
   "scripts": {
     "tenkacloud": "bun run scripts/tenkacloud.ts",
+    "onboarding:verify-custom-challenge": "bun run scripts/onboarding/verify-custom-challenge.ts",
     "build": "bun run scripts/workspace/run-workspaces.ts build",
     "build:pages": "bun run generate:landing-locales && bun run generate:landing-docs && bun run stamp:landing-assets && bun run --filter @TenkaCloud/participant-portal build:pages && mkdir -p landing/portal-demo && cp -r apps/participant-portal/dist/. landing/portal-demo/ && bun run --filter @TenkaCloud/application-admin-console build:pages && mkdir -p landing/admin-demo && cp -r apps/application-admin-console/dist/. landing/admin-demo/",
     "typecheck": "bun run scripts/workspace/run-workspaces.ts typecheck",
