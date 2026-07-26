@@ -381,6 +381,7 @@
       "form.organization": "会社・組織名",
       "form.email": "メールアドレス",
       "form.topic": "お問い合わせ種別",
+      "form.topic.placeholder": "選択してください",
       "form.topic.plan": "プラン・見積もりの相談",
       "form.topic.training": "企業内の研修・演習での利用",
       "form.topic.custom": "カスタム問題の追加開発",
@@ -662,6 +663,7 @@
       "form.organization": "Company or team",
       "form.email": "Email",
       "form.topic": "What is this about",
+      "form.topic.placeholder": "Please choose",
       "form.topic.plan": "Plans and quotes",
       "form.topic.training": "Internal training and drills",
       "form.topic.custom": "Custom problem development",
@@ -879,13 +881,22 @@
     var statusEl = form.querySelector("[data-contact-form-status]");
     var submitButton = form.querySelector("[data-contact-form-submit]");
     var inputs = Array.prototype.slice.call(form.querySelectorAll("[data-form-field]"));
+    var sending = false;
 
     function fieldKey(input) {
       return input.getAttribute("data-form-field");
     }
 
+    function errorEl(input) {
+      return document.getElementById(input.getAttribute("aria-describedby"));
+    }
+
+    function text(key) {
+      return I18N[activeLang][key] || "";
+    }
+
     function setStatus(key, tone) {
-      statusEl.textContent = I18N[activeLang][key] || "";
+      statusEl.textContent = key ? text(key) : "";
       statusEl.setAttribute("data-tone", tone);
     }
 
@@ -897,19 +908,40 @@
       return values;
     }
 
+    function clearProblem(input) {
+      input.removeAttribute("aria-invalid");
+      var target = errorEl(input);
+      if (target) target.textContent = "";
+    }
+
+    /**
+     * 不備を項目ごとに表示する。 まとめて 1 行出すだけだと、 どの欄が悪いのかが
+     * 支援技術にも視覚にも伝わらない (WCAG 2.1 SC 3.3.1)。 色だけに頼らないよう
+     * 文言も併記する (SC 1.4.1)。
+     */
     function markProblems(problems) {
-      var flagged = problems.map((problem) => problem.key);
-      inputs.forEach((input) => {
-        if (flagged.indexOf(fieldKey(input)) === -1) {
-          input.removeAttribute("aria-invalid");
-        } else {
-          input.setAttribute("aria-invalid", "true");
+      inputs.forEach(clearProblem);
+      problems.forEach((problem) => {
+        var input = inputs.filter((candidate) => fieldKey(candidate) === problem.key)[0];
+        if (!input) return;
+        input.setAttribute("aria-invalid", "true");
+        var target = errorEl(input);
+        if (target) {
+          target.textContent = text(
+            problem.reason === "email" ? "form.invalidEmail" : "form.required",
+          );
         }
       });
+      if (problems.length === 0) return;
+      // 最初の不備へフォーカスを移す。 送信ボタンに留まると、 支援技術の
+      // 利用者はどこを直せばよいか辿り直すことになる。
+      var first = inputs.filter((candidate) => fieldKey(candidate) === problems[0].key)[0];
+      if (first) first.focus();
     }
 
     function handleSubmit(config, event) {
       event.preventDefault();
+      if (sending) return;
       var values = readValues();
       var problems = window.TenkaContactForm.validate(config, values);
       markProblems(problems);
@@ -922,6 +954,7 @@
         );
         return;
       }
+      sending = true;
       submitButton.disabled = true;
       setStatus("form.sending", "pending");
       window.TenkaContactForm.submit(config, values, {
@@ -929,6 +962,7 @@
       })
         .then(() => {
           form.reset();
+          inputs.forEach(clearProblem);
           // no-cors なので Google 側が受け付けたかは確認できない。 文面も
           // 「届かなければホストされたフォームで再送を」 と正直に書いてある。
           setStatus("form.sent", "ok");
@@ -938,11 +972,19 @@
           setStatus("form.failed", "error");
         })
         .then(() => {
+          sending = false;
           submitButton.disabled = false;
         });
     }
 
-    function activate(config) {
+    /**
+     * 同期された設定と DOM が食い違っていないかを確かめる。
+     *
+     * 項目の顔ぶれだけでなく、 入力欄の種類 (kind) と選択肢まで突き合わせる。
+     * ここを見ないと、 sync.gs で選択肢を 1 つ改名しただけで LP が古い文字列を
+     * 送り続け、 no-cors のせいで誰も気づけない。
+     */
+    function assertMatchesConfig(config) {
       var domKeys = inputs.map(fieldKey).sort().join(",");
       var configKeys = Object.keys(config.fields).sort().join(",");
       if (domKeys !== configKeys) {
@@ -954,6 +996,38 @@
             "]",
         );
       }
+      inputs.forEach((input) => {
+        assertField(input, config.fields[fieldKey(input)]);
+      });
+    }
+
+    var EXPECTED_TAG = { choice: "select", paragraph: "textarea", text: "input" };
+
+    /** 1 項目について、 入力欄の種類と選択肢が設定と一致するかを見る。 */
+    function assertField(input, field) {
+      var tag = input.tagName.toLowerCase();
+      if (tag !== EXPECTED_TAG[field.kind]) {
+        throw new Error(
+          `contact form control drifted for ${fieldKey(input)}: DOM=${tag} config=${field.kind}`,
+        );
+      }
+      if (field.kind !== "choice") return;
+      var options = Array.prototype.slice
+        .call(input.options)
+        .map((option) => option.value)
+        .filter((value) => value !== "");
+      if (options.join("\u0000") === field.choices.join("\u0000")) return;
+      throw new Error(
+        `contact form choices drifted for ${fieldKey(input)}: DOM=[${options.join(", ")}] config=[${field.choices.join(", ")}]`,
+      );
+    }
+
+    function activate(config) {
+      assertMatchesConfig(config);
+      inputs.forEach((input) => {
+        input.addEventListener("input", () => clearProblem(input));
+        input.addEventListener("change", () => clearProblem(input));
+      });
       form.addEventListener("submit", (event) => handleSubmit(config, event));
       form.hidden = false;
       form.classList.add("contact-form-ready");

@@ -12,11 +12,20 @@
  *   逆引きして landing/contact-form-config.json を再生成する。 LP は実行時に
  *   その JSON を読むので、 フォーム変更に自動追従する。
  *
- * 冪等性:
- *   syncForm() は既存の質問をタイトルで突き合わせ、 その場で更新する
- *   (= 削除して作り直さない)。 質問タイプを変えない限り entry ID は維持される。
- *   タイプ変更は entry ID を壊すため、 既定では計画段階で失敗させ、
- *   allowTypeChange を明示したときだけ実行する。
+ * 質問の同一性:
+ *   タイトルではなくアイテム ID で追跡する。 対応表はスクリプトプロパティ
+ *   ITEM_IDS に持ち、 未登録のときだけタイトルで拾って登録する。 タイトルは
+ *   文面調整で変わりうるが、 タイトルを同一性にすると 「文言を直しただけ」 で
+ *   質問が作り直され entry ID が変わってしまう。 それは送信が無音で消える
+ *   代表的な経路なので、 ID を正本にする。
+ *
+ * 安全側の既定:
+ *   - dryRun では一切変更せず、 計画と現在の entry ID だけを返す。 未作成の
+ *     質問があっても例外にしない (= 計画を見たいときほど落ちる、 を避ける)。
+ *   - 質問タイプの変更は entry ID を作り直すので allowTypeChange が要る。
+ *   - 定義に無い質問 (orphan) は既定では触らない。 ただし必須の orphan は
+ *     LP からの送信を Google が丸ごと拒否するため、 実同期を止める。
+ *   - フォーム側でタイトルが重複していると人が読む計画が信用できないので止める。
  *
  * 実行経路:
  *   .github/workflows/form-sync.yml が clasp push した後、 Web アプリ (doPost)
@@ -28,6 +37,7 @@
  *   SYNC_TOKEN               doPost の共有シークレット (必須)
  *   RESPONSE_SPREADSHEET_ID  回答先スプレッドシートの ID (任意)
  *   NOTIFY_EMAILS            送信通知の宛先。 カンマ区切り (任意)
+ *   ITEM_IDS                 key -> アイテム ID の対応表。 同期が自動で書く
  */
 
 const SCRIPT_PROPERTY = {
@@ -35,11 +45,12 @@ const SCRIPT_PROPERTY = {
   SYNC_TOKEN: "SYNC_TOKEN",
   RESPONSE_SPREADSHEET_ID: "RESPONSE_SPREADSHEET_ID",
   NOTIFY_EMAILS: "NOTIFY_EMAILS",
+  ITEM_IDS: "ITEM_IDS",
 };
 
 /**
  * フォーム定義の正本。 `key` は LP 側が参照する安定した論理名で、 `title` を
- * 日本語で書き換えても LP のコードは壊れない。 entry ID は key に対して配る。
+ * 書き換えても (アイテム ID で追跡するため) entry ID は変わらない。
  */
 const FORM_DEFINITION = {
   title: "TenkaCloud お問い合わせ",
@@ -48,18 +59,8 @@ const FORM_DEFINITION = {
   confirmationMessage:
     "送信しました。 内容を確認のうえ 2 営業日以内に返信します。",
   fields: [
-    {
-      key: "name",
-      title: "お名前",
-      type: "TEXT",
-      required: true,
-    },
-    {
-      key: "organization",
-      title: "会社・組織名",
-      type: "TEXT",
-      required: false,
-    },
+    { key: "name", title: "お名前", type: "TEXT", required: true },
+    { key: "organization", title: "会社・組織名", type: "TEXT", required: false },
     {
       key: "email",
       title: "メールアドレス",
@@ -79,20 +80,42 @@ const FORM_DEFINITION = {
         "その他",
       ],
     },
-    {
-      key: "message",
-      title: "お問い合わせ内容",
-      type: "PARAGRAPH_TEXT",
-      required: true,
-    },
+    { key: "message", title: "お問い合わせ内容", type: "PARAGRAPH_TEXT", required: true },
   ],
 };
 
-/** 対応する質問タイプ。 増やすときは addItem_ / configureItem_ / sampleResponse_ も足す。 */
+/**
+ * 対応する質問タイプ。 `kind` は LP が入力欄の種類を決めるために配る値で、
+ * LP 側は key 名ではなくこの kind を見る (= key を変えても壊れない)。
+ */
 const SUPPORTED_TYPES = {
-  TEXT: true,
-  PARAGRAPH_TEXT: true,
-  MULTIPLE_CHOICE: true,
+  TEXT: { kind: "text" },
+  PARAGRAPH_TEXT: { kind: "paragraph" },
+  MULTIPLE_CHOICE: { kind: "choice" },
+};
+
+/** 質問ではないアイテム。 orphan 判定や必須判定の対象から外す。 */
+const LAYOUT_TYPES = {
+  SECTION_HEADER: true,
+  IMAGE: true,
+  PAGE_BREAK: true,
+  VIDEO: true,
+};
+
+/** 型ごとの isRequired 読み出し。 orphan が必須かどうかの判定に使う。 */
+const REQUIRED_READERS = {
+  TEXT: function (item) { return item.asTextItem().isRequired(); },
+  PARAGRAPH_TEXT: function (item) { return item.asParagraphTextItem().isRequired(); },
+  MULTIPLE_CHOICE: function (item) { return item.asMultipleChoiceItem().isRequired(); },
+  LIST: function (item) { return item.asListItem().isRequired(); },
+  CHECKBOX: function (item) { return item.asCheckboxItem().isRequired(); },
+  SCALE: function (item) { return item.asScaleItem().isRequired(); },
+  DATE: function (item) { return item.asDateItem().isRequired(); },
+  DATETIME: function (item) { return item.asDateTimeItem().isRequired(); },
+  TIME: function (item) { return item.asTimeItem().isRequired(); },
+  DURATION: function (item) { return item.asDurationItem().isRequired(); },
+  GRID: function (item) { return item.asGridItem().isRequired(); },
+  CHECKBOX_GRID: function (item) { return item.asCheckboxGridItem().isRequired(); },
 };
 
 /** entry ID を逆引きするときに入れる、 検証を通る当たり障りのないサンプル値。 */
@@ -109,8 +132,8 @@ const SAMPLE_VALUE = {
 /**
  * フォームを定義どおりに同期し、 entry マップを返す。
  *
- * @param {{dryRun?: boolean, allowTypeChange?: boolean}} options
- * @return {Object} 同期結果 (計画 / entry マップ / 回答先 / 通知先)
+ * @param {{dryRun?: boolean, allowTypeChange?: boolean, allowDelete?: boolean}} options
+ * @return {Object} 同期結果
  */
 function syncForm(options) {
   const opts = options || {};
@@ -120,19 +143,23 @@ function syncForm(options) {
 
   validateDefinition_();
   const form = openForm_();
-  const plan = buildPlan_(form);
-
-  const breaking = plan.filter(function (step) {
-    return step.action === "recreate";
+  const itemIds = loadItemIds_();
+  const plan = buildPlan_(form, itemIds);
+  const blockers = collectBlockers_(plan, {
+    allowTypeChange: allowTypeChange,
+    allowDelete: allowDelete,
   });
-  if (breaking.length > 0 && !allowTypeChange) {
+
+  // dryRun では何も変更せず、 計画と blocker を必ず返す。 ここで例外にすると
+  // 「計画を見たいときほど何も見えない」 という最悪の挙動になる。
+  if (!dryRun && blockers.length > 0) {
     throw new Error(
-      "質問タイプの変更は entry ID を壊します。 意図した変更なら allowTypeChange を指定してください: " +
-        breaking
-          .map(function (step) {
-            return step.key + " (" + step.currentType + " -> " + step.type + ")";
+      "同期を中止しました: " +
+        blockers
+          .map(function (blocker) {
+            return blocker.kind + " (" + blocker.detail + ")";
           })
-          .join(", "),
+          .join(" / "),
     );
   }
 
@@ -141,21 +168,24 @@ function syncForm(options) {
   let removed = [];
   if (!dryRun) {
     applyMetadata_(form);
-    applyPlan_(form, plan);
+    applyPlan_(form, plan, itemIds);
     if (allowDelete) removed = removeOrphans_(form, plan);
-    applyOrder_(form);
+    applyOrder_(form, itemIds);
+    saveItemIds_(itemIds);
     destination = ensureDestination_(form);
     notification = ensureSubmitTrigger_(form);
   }
 
-  const config = buildConfig_(form);
+  const config = buildConfig_(form, itemIds, dryRun);
   return {
     dryRun: dryRun,
     formId: form.getId(),
     plan: plan,
+    blockers: blockers,
     destination: destination,
     notification: notification,
     removed: removed,
+    unresolved: config.unresolved,
     formResponseUrl: config.formResponseUrl,
     fields: config.fields,
   };
@@ -164,8 +194,8 @@ function syncForm(options) {
 /**
  * 定義そのものの整合性を、 フォームに触る前に検査する。
  *
- * タイトルは既存質問との突き合わせキーなので、 重複すると別の質問を更新して
- * しまう。 壊れた定義で同期して無音で壊すより、 ここで大きく失敗させる。
+ * key はフロントとの契約、 title は初回の突き合わせキーなので、 どちらも
+ * 重複していると別の質問を書き換えてしまう。
  */
 function validateDefinition_() {
   const fields = FORM_DEFINITION.fields;
@@ -178,13 +208,9 @@ function validateDefinition_() {
     if (!field.key || !field.title) {
       throw new Error("フィールドには key と title が必要です: " + JSON.stringify(field));
     }
-    if (seenKeys[field.key]) {
-      throw new Error("key が重複しています: " + field.key);
-    }
+    if (seenKeys[field.key]) throw new Error("key が重複しています: " + field.key);
     if (seenTitles[field.title]) {
-      throw new Error(
-        "title が重複しています (既存質問の突き合わせキーなので一意が必要): " + field.title,
-      );
+      throw new Error("title が重複しています: " + field.title);
     }
     seenKeys[field.key] = true;
     seenTitles[field.title] = true;
@@ -203,15 +229,22 @@ function validateDefinition_() {
  * Web アプリは HTTP ステータスを選べないため、 成否は常に 200 の本文
  * (`ok` フィールド) で返す。 呼び出し側はステータスではなく `ok` を見る。
  *
+ * 同時実行はフォームを壊すので LockService で直列化する。 CI 側の
+ * concurrency は CI 同士しか止められない (= 手動実行と push が重なりうる)。
+ *
  * @param {GoogleAppsScript.Events.DoPost} e
  * @return {GoogleAppsScript.Content.TextOutput}
  */
 function doPost(e) {
+  const lock = LockService.getScriptLock();
   try {
     const expected = requiredProperty_(SCRIPT_PROPERTY.SYNC_TOKEN);
     const params = (e && e.parameter) || {};
     if (!timingSafeEquals_(expected, params.token || "")) {
       return jsonOutput_({ ok: false, error: "unauthorized" });
+    }
+    if (!lock.tryLock(30000)) {
+      return jsonOutput_({ ok: false, error: "別の同期が実行中です" });
     }
     const result = syncForm({
       dryRun: params.dryRun === "true",
@@ -221,12 +254,17 @@ function doPost(e) {
     return jsonOutput_(Object.assign({ ok: true }, result));
   } catch (error) {
     return jsonOutput_({ ok: false, error: describeError_(error) });
+  } finally {
+    try {
+      lock.releaseLock();
+    } catch (releaseError) {
+      Logger.log("WARN: ロック解放に失敗しました: " + describeError_(releaseError));
+    }
   }
 }
 
 /**
  * フォーム送信のたびに走り、 回答内容を NOTIFY_EMAILS 宛に送る。
- * ScriptApp のインストール型トリガーから呼ばれる。
  *
  * @param {GoogleAppsScript.Events.FormsOnFormSubmit} e
  */
@@ -236,9 +274,7 @@ function onFormSubmitNotify(e) {
 
   const lines = e.response.getItemResponses().map(function (itemResponse) {
     return (
-      itemResponse.getItem().getTitle() +
-      ": " +
-      formatAnswer_(itemResponse.getResponse())
+      itemResponse.getItem().getTitle() + ": " + formatAnswer_(itemResponse.getResponse())
     );
   });
 
@@ -250,28 +286,26 @@ function onFormSubmitNotify(e) {
 }
 
 /* ------------------------------------------------------------------ *
- * 同期の内訳
+ * 計画
  * ------------------------------------------------------------------ */
 
 /**
- * 現在のフォームと定義を突き合わせ、 実行計画を組み立てる。
- * ここでは一切変更しないので、 dry-run でそのまま差分レビューに使える。
+ * 現在のフォームと定義を突き合わせて実行計画を組み立てる。 一切変更しない。
  *
  * @param {GoogleAppsScript.Forms.Form} form
+ * @param {Object} itemIds key -> アイテム ID
  * @return {Array<Object>}
  */
-function buildPlan_(form) {
-  const items = form.getItems();
+function buildPlan_(form, itemIds) {
+  const questions = form.getItems().filter(isQuestionItem_);
+  const matchedIds = {};
+
   const defined = FORM_DEFINITION.fields.map(function (field) {
-    const existing = findItemByTitle_(items, field.title);
+    const existing = findItemForField_(form, questions, field, itemIds);
     if (!existing) {
-      return {
-        key: field.key,
-        title: field.title,
-        type: field.type,
-        action: "create",
-      };
+      return { key: field.key, title: field.title, type: field.type, action: "create" };
     }
+    matchedIds[String(existing.getId())] = true;
     const currentType = String(existing.getType());
     if (currentType !== field.type) {
       return {
@@ -287,18 +321,15 @@ function buildPlan_(form) {
       title: field.title,
       type: field.type,
       action: "update",
+      currentTitle: existing.getTitle(),
     };
   });
 
-  // 定義に無い質問。 手でフォームに足されたものが該当する。 既定では触らない
-  // (削除は回答列ごと失う破壊的操作なので、 allowDelete を明示したときだけ)。
-  // 計画には必ず出るので、 dry-run で存在に気づける。
-  const definedTitles = FORM_DEFINITION.fields.map(function (field) {
-    return field.title;
-  });
-  const orphans = items
+  // 定義に無い質問。 既定では触らないが、 必須なら LP からの送信を Google が
+  // 丸ごと拒否するため、 required を計画に載せて実同期を止める材料にする。
+  const orphans = questions
     .filter(function (item) {
-      return definedTitles.indexOf(item.getTitle()) === -1;
+      return !matchedIds[String(item.getId())];
     })
     .map(function (item) {
       return {
@@ -306,6 +337,7 @@ function buildPlan_(form) {
         title: item.getTitle(),
         type: String(item.getType()),
         action: "orphan",
+        required: isRequiredItem_(item),
       };
     });
 
@@ -313,69 +345,102 @@ function buildPlan_(form) {
 }
 
 /**
- * 定義に無い質問を削除する。 allowDelete を渡したときだけ呼ばれる。
+ * 実同期を止めるべき状態を列挙する。 dryRun ではこれを表示するだけにする。
  *
- * @param {GoogleAppsScript.Forms.Form} form
  * @param {Array<Object>} plan
- * @return {Array<string>} 削除した質問のタイトル
+ * @param {{allowTypeChange: boolean, allowDelete: boolean}} allowances
+ * @return {Array<Object>}
  */
-function removeOrphans_(form, plan) {
-  const removed = [];
+function collectBlockers_(plan, allowances) {
+  const blockers = [];
+
+  if (!allowances.allowTypeChange) {
+    plan
+      .filter(function (step) {
+        return step.action === "recreate";
+      })
+      .forEach(function (step) {
+        blockers.push({
+          kind: "type-change",
+          detail:
+            step.key + ": " + step.currentType + " -> " + step.type + " (entry ID が作り直される)",
+          allowedBy: "allowTypeChange",
+        });
+      });
+  }
+
+  // 必須の orphan があると、 LP はその entry を送らないので Google が全ての
+  // 送信を拒否する。 no-cors では拒否が見えないため、 問い合わせが全滅する。
+  if (!allowances.allowDelete) {
+    plan
+      .filter(function (step) {
+        return step.action === "orphan" && step.required === true;
+      })
+      .forEach(function (step) {
+        blockers.push({
+          kind: "required-orphan",
+          detail:
+            step.title + " が必須のままフォームに残っている (LP からの送信が全て拒否される)",
+          allowedBy: "allowDelete (または任意に変更)",
+        });
+      });
+  }
+
+  const seen = {};
   plan
     .filter(function (step) {
-      return step.action === "orphan";
+      return step.action !== "create";
     })
     .forEach(function (step) {
-      const item = findItemByTitle_(form.getItems(), step.title);
-      if (!item) return;
-      form.deleteItem(item);
-      removed.push(step.title);
+      const title = step.currentTitle || step.title;
+      if (seen[title]) {
+        blockers.push({
+          kind: "duplicate-title",
+          detail: "フォーム側にタイトルが重複した質問がある: " + title,
+          allowedBy: "(手で解消する)",
+        });
+      }
+      seen[title] = true;
     });
-  return removed;
+
+  return blockers;
 }
 
-/**
- * 定義された質問を定義順に並べ替える。 移動は entry ID を保つ。
- *
- * 定義に無い質問はそのまま後ろへ送られる。
- *
- * @param {GoogleAppsScript.Forms.Form} form
- */
-function applyOrder_(form) {
-  FORM_DEFINITION.fields.forEach(function (field, index) {
-    const item = findItemByTitle_(form.getItems(), field.title);
-    if (item && item.getIndex() !== index) form.moveItem(item.getIndex(), index);
-  });
-}
+/* ------------------------------------------------------------------ *
+ * 適用
+ * ------------------------------------------------------------------ */
 
 /**
- * 計画をフォームへ適用する。 update は既存アイテムをその場で書き換えるため
- * entry ID を保つ。 recreate だけが entry ID を作り直す。
+ * 計画をフォームへ適用し、 key -> アイテム ID を更新する。
  *
  * @param {GoogleAppsScript.Forms.Form} form
  * @param {Array<Object>} plan
+ * @param {Object} itemIds
  */
-function applyPlan_(form, plan) {
+function applyPlan_(form, plan, itemIds) {
   plan
     .filter(function (step) {
       return step.action !== "orphan";
     })
     .forEach(function (step) {
       const field = fieldByKey_(step.key);
+      let item = null;
       if (step.action === "recreate") {
-        const stale = findItemByTitle_(form.getItems(), field.title);
+        const stale = itemById_(form, itemIds[field.key]);
         if (stale) form.deleteItem(stale);
+        delete itemIds[field.key];
       }
-      const item =
-        step.action === "update"
-          ? findItemByTitle_(form.getItems(), field.title)
-          : addItem_(form, field);
+      if (step.action === "update") {
+        item = itemById_(form, itemIds[field.key]);
+      }
+      if (!item) item = addItem_(form, field);
       configureItem_(item, field);
+      itemIds[field.key] = String(item.getId());
     });
 }
 
 /**
- * フォーム本体のタイトル・説明・確認メッセージを定義に合わせる。
+ * フォーム本体の設定を定義に合わせる。
  *
  * @param {GoogleAppsScript.Forms.Form} form
  */
@@ -409,6 +474,49 @@ function applyMetadata_(form) {
       );
     }
   }
+}
+
+/**
+ * 定義に無い質問を削除する。 allowDelete を渡したときだけ呼ばれる。
+ *
+ * @param {GoogleAppsScript.Forms.Form} form
+ * @param {Array<Object>} plan
+ * @return {Array<string>} 削除した質問のタイトル
+ */
+function removeOrphans_(form, plan) {
+  const targets = {};
+  plan
+    .filter(function (step) {
+      return step.action === "orphan";
+    })
+    .forEach(function (step) {
+      targets[step.title] = true;
+    });
+
+  const removed = [];
+  form
+    .getItems()
+    .filter(function (item) {
+      return isQuestionItem_(item) && targets[item.getTitle()] === true;
+    })
+    .forEach(function (item) {
+      form.deleteItem(item);
+      removed.push(item.getTitle());
+    });
+  return removed;
+}
+
+/**
+ * 定義された質問を定義順に並べ替える。 移動は entry ID を変えない。
+ *
+ * @param {GoogleAppsScript.Forms.Form} form
+ * @param {Object} itemIds
+ */
+function applyOrder_(form, itemIds) {
+  FORM_DEFINITION.fields.forEach(function (field, index) {
+    const item = itemById_(form, itemIds[field.key]);
+    if (item && item.getIndex() !== index) form.moveItem(item.getIndex(), index);
+  });
 }
 
 /**
@@ -455,17 +563,15 @@ function configureItem_(item, field) {
 }
 
 /**
- * 回答先スプレッドシートを設定する。 既に同じ宛先ならそのままにする。
+ * 回答先スプレッドシートを設定する。
  * getDestinationType() は未設定だと例外を投げる (= 値を返さない) ので、
- * 現在値の取得は必ず try で包む。
+ * 現在値の取得は getDestinationId() まで含めて try で包む。
  *
  * @param {GoogleAppsScript.Forms.Form} form
- * @return {string} 実行結果の説明
+ * @return {string}
  */
 function ensureDestination_(form) {
-  const spreadsheetId = optionalProperty_(
-    SCRIPT_PROPERTY.RESPONSE_SPREADSHEET_ID,
-  );
+  const spreadsheetId = optionalProperty_(SCRIPT_PROPERTY.RESPONSE_SPREADSHEET_ID);
   if (!spreadsheetId) return "skipped: RESPONSE_SPREADSHEET_ID is not set";
 
   if (currentDestinationId_(form) === spreadsheetId) return "unchanged";
@@ -474,25 +580,23 @@ function ensureDestination_(form) {
 }
 
 /**
- * 回答先スプレッドシートの ID。 未設定なら null。
- *
  * @param {GoogleAppsScript.Forms.Form} form
  * @return {?string}
  */
 function currentDestinationId_(form) {
   try {
     form.getDestinationType();
+    return form.getDestinationId();
   } catch (error) {
     return null;
   }
-  return form.getDestinationId();
 }
 
 /**
  * 送信通知トリガーが 1 つだけ存在する状態にする。
  *
  * @param {GoogleAppsScript.Forms.Form} form
- * @return {string} 実行結果の説明
+ * @return {string}
  */
 function ensureSubmitTrigger_(form) {
   if (notifyRecipients_().length === 0) {
@@ -518,49 +622,56 @@ function ensureSubmitTrigger_(form) {
  * ------------------------------------------------------------------ */
 
 /**
- * LP へ配る設定を組み立てる。 これがそのまま
- * landing/contact-form-config.json になる。
+ * LP へ配る設定を組み立てる。
+ *
+ * `kind` と `validation` まで配るのは、 LP 側が key 名で入力欄の種類や検証を
+ * 決めないようにするため。 key 名に依存すると、 key を変えた瞬間に検証が
+ * 黙って外れる。
  *
  * @param {GoogleAppsScript.Forms.Form} form
+ * @param {Object} itemIds
+ * @param {boolean} tolerateMissing dryRun では未作成の質問を許容する
  * @return {Object}
  */
-function buildConfig_(form) {
-  const items = form.getItems();
+function buildConfig_(form, itemIds, tolerateMissing) {
+  const questions = form.getItems().filter(isQuestionItem_);
   const fields = {};
+  const unresolved = [];
+
   FORM_DEFINITION.fields.forEach(function (field) {
-    const item = findItemByTitle_(items, field.title);
-    if (!item) return;
+    const item = findItemForField_(form, questions, field, itemIds);
+    const entryId = item ? entryIdForItem_(form, item, field) : null;
+    if (!entryId) {
+      unresolved.push(field.key);
+      return;
+    }
     fields[field.key] = {
-      entryId: entryIdForItem_(form, item, field),
+      entryId: entryId,
       title: field.title,
       required: field.required === true,
+      kind: SUPPORTED_TYPES[field.type].kind,
+      validation: field.validation ? String(field.validation).toLowerCase() : null,
       choices: field.choices || null,
     };
   });
 
-  const missing = FORM_DEFINITION.fields
-    .filter(function (field) {
-      return !fields[field.key] || !fields[field.key].entryId;
-    })
-    .map(function (field) {
-      return field.key;
-    });
-  if (missing.length > 0) {
-    throw new Error("entry ID を解決できませんでした: " + missing.join(", "));
+  if (unresolved.length > 0 && !tolerateMissing) {
+    throw new Error("entry ID を解決できませんでした: " + unresolved.join(", "));
   }
 
   return {
     formResponseUrl: responseUrl_(form),
     fields: fields,
+    unresolved: unresolved,
   };
 }
 
 /**
  * 対象アイテムだけを埋めたプレフィル URL から entry ID を取り出す。
  *
- * 1 アイテムずつ URL を作るのは、 複数アイテムをまとめて埋めると
- * どの entry がどの質問かを値から突き合わせる必要があり、 選択肢が
- * 重複したときに曖昧になるため。 質問数は数個なので回数は問題にならない。
+ * 1 アイテムずつ URL を作るのは、 複数アイテムをまとめて埋めるとどの entry が
+ * どの質問かを値から突き合わせる必要があり、 選択肢が重複したときに曖昧に
+ * なるため。 質問数は数個なので回数は問題にならない。
  *
  * @param {GoogleAppsScript.Forms.Form} form
  * @param {GoogleAppsScript.Forms.Item} item
@@ -568,6 +679,7 @@ function buildConfig_(form) {
  * @return {?string}
  */
 function entryIdForItem_(form, item, field) {
+  if (String(item.getType()) !== field.type) return null;
   const itemResponse = sampleResponse_(item, field);
   if (!itemResponse) return null;
   const url = form.createResponse().withItemResponse(itemResponse).toPrefilledUrl();
@@ -589,8 +701,7 @@ function sampleResponse_(item, field) {
   if (field.type === "MULTIPLE_CHOICE") {
     return item.asMultipleChoiceItem().createResponse(field.choices[0]);
   }
-  const value =
-    field.validation === "EMAIL" ? SAMPLE_VALUE.EMAIL : SAMPLE_VALUE.TEXT;
+  const value = field.validation === "EMAIL" ? SAMPLE_VALUE.EMAIL : SAMPLE_VALUE.TEXT;
   return item.asTextItem().createResponse(value);
 }
 
@@ -605,19 +716,94 @@ function responseUrl_(form) {
 }
 
 /* ------------------------------------------------------------------ *
+ * 質問の同一性
+ * ------------------------------------------------------------------ */
+
+/**
+ * key に対応するアイテムを返す。 まず記録済みのアイテム ID、 次にタイトル。
+ *
+ * タイトルで拾えるのは対応表がまだ無いとき (= 既存フォームへの初回適用) で、
+ * 一度 ID を記録すればタイトルを変えても追跡できる。
+ *
+ * @param {GoogleAppsScript.Forms.Form} form
+ * @param {Array<GoogleAppsScript.Forms.Item>} questions
+ * @param {Object} field
+ * @param {Object} itemIds
+ * @return {?GoogleAppsScript.Forms.Item}
+ */
+function findItemForField_(form, questions, field, itemIds) {
+  const known = itemById_(form, itemIds[field.key]);
+  if (known) return known;
+  const matched = questions.filter(function (item) {
+    return item.getTitle() === field.title;
+  });
+  return matched.length > 0 ? matched[0] : null;
+}
+
+/**
+ * @param {GoogleAppsScript.Forms.Form} form
+ * @param {?string} id
+ * @return {?GoogleAppsScript.Forms.Item}
+ */
+function itemById_(form, id) {
+  if (!id) return null;
+  try {
+    return form.getItemById(Number(id));
+  } catch (error) {
+    return null;
+  }
+}
+
+/**
+ * @return {Object} key -> アイテム ID
+ */
+function loadItemIds_() {
+  const raw = optionalProperty_(SCRIPT_PROPERTY.ITEM_IDS);
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch (error) {
+    Logger.log("WARN: ITEM_IDS を読めませんでした。 タイトルで突き合わせます: " + describeError_(error));
+    return {};
+  }
+}
+
+/**
+ * @param {Object} itemIds
+ */
+function saveItemIds_(itemIds) {
+  PropertiesService.getScriptProperties().setProperty(
+    SCRIPT_PROPERTY.ITEM_IDS,
+    JSON.stringify(itemIds),
+  );
+}
+
+/* ------------------------------------------------------------------ *
  * 小物
  * ------------------------------------------------------------------ */
 
 /**
- * @param {Array<GoogleAppsScript.Forms.Item>} items
- * @param {string} title
- * @return {?GoogleAppsScript.Forms.Item}
+ * @param {GoogleAppsScript.Forms.Item} item
+ * @return {boolean}
  */
-function findItemByTitle_(items, title) {
-  const matched = items.filter(function (item) {
-    return item.getTitle() === title;
-  });
-  return matched.length > 0 ? matched[0] : null;
+function isQuestionItem_(item) {
+  return !LAYOUT_TYPES[String(item.getType())];
+}
+
+/**
+ * @param {GoogleAppsScript.Forms.Item} item
+ * @return {boolean}
+ */
+function isRequiredItem_(item) {
+  const reader = REQUIRED_READERS[String(item.getType())];
+  if (!reader) return false;
+  try {
+    return reader(item) === true;
+  } catch (error) {
+    Logger.log("WARN: 必須判定に失敗しました (" + item.getTitle() + "): " + describeError_(error));
+    return false;
+  }
 }
 
 /**
@@ -672,20 +858,19 @@ function notifyRecipients_() {
 }
 
 /**
- * 長さと内容の差を早期 return で漏らさない比較。 トークン照合に使う。
+ * 長さが違えば必ず false、 同じ長さなら全文字を比較してから結果を返す。
  *
  * @param {string} expected
  * @param {string} provided
  * @return {boolean}
  */
 function timingSafeEquals_(expected, provided) {
-  let diff = expected.length ^ provided.length;
-  const length = Math.max(expected.length, provided.length);
-  for (let index = 0; index < length; index += 1) {
-    diff |= expected.charCodeAt(index % expected.length || 0) ^
-      provided.charCodeAt(index % (provided.length || 1) || 0);
+  if (expected.length !== provided.length) return false;
+  let diff = 0;
+  for (let index = 0; index < expected.length; index += 1) {
+    diff |= expected.charCodeAt(index) ^ provided.charCodeAt(index);
   }
-  return diff === 0 && expected.length === provided.length;
+  return diff === 0;
 }
 
 /**

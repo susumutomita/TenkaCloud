@@ -10,6 +10,9 @@
  * 「壊れると送信が無音で消える」部分をテストで固定するため。 DOM 配線と
  * 多言語化は landing/app.js が持つ。
  *
+ * 入力欄の種類や検証は設定の `kind` / `validation` から決める。 key 名で
+ * 分岐すると、 key を変えた瞬間に検証が黙って外れる。
+ *
  * 送信は no-cors POST なので応答を読めない (= 失敗を検知できない)。 だからこそ
  * 設定不備は送信前に例外で落とし、 フォームを出さずに従来の Google フォーム
  * リンクを残す。 黙って壊れたフォームを見せない。
@@ -24,6 +27,7 @@
   var ENTRY_ID_PATTERN = /^entry\.\d+$/;
   var RESPONSE_URL_PATTERN = /^https:\/\/docs\.google\.com\/forms\/d\/e\/[\w-]+\/formResponse$/;
   var EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  var KINDS = { text: true, paragraph: true, choice: true };
 
   /**
    * 設定 JSON を検証して返す。 形が想定と違えば例外にする。
@@ -54,6 +58,17 @@
           `contact form config has an invalid entry id for ${key}: ${String(field?.entryId)}`,
         );
       }
+      if (!KINDS[String(field.kind)]) {
+        throw new Error(
+          `contact form config has an unknown kind for ${key}: ${String(field.kind)}`,
+        );
+      }
+      if (
+        field.kind === "choice" &&
+        (!Array.isArray(field.choices) || field.choices.length === 0)
+      ) {
+        throw new Error(`contact form config has no choices for ${key}`);
+      }
     });
     return { formResponseUrl: raw.formResponseUrl, fields: raw.fields };
   }
@@ -77,7 +92,7 @@
         problems.push({ key: key, reason: "required" });
         return;
       }
-      if (key === "email" && value !== "" && !EMAIL_PATTERN.test(value)) {
+      if (field.validation === "email" && value !== "" && !EMAIL_PATTERN.test(value)) {
         problems.push({ key: key, reason: "email" });
       }
     });
@@ -88,7 +103,9 @@
    * 入力値を entry ID 付きの送信ペアへ変換する。
    *
    * 設定に無いキーは黙って捨てず例外にする。 捨てると「LP に項目はあるのに
-   * 保存されない」壊れ方になり、 no-cors では誰も気づけない。
+   * 保存されない」壊れ方になり、 no-cors では誰も気づけない。 必須項目が空の
+   * まま来た場合も同じ理由で例外にする (= 呼び出し側が検証を飛ばしても、
+   * Google に黙って捨てられる送信を作らない)。
    *
    * @param {{fields: Object}} config
    * @param {Object} values
@@ -100,9 +117,17 @@
     if (unknown.length > 0) {
       throw new Error(`contact form config has no entry id for: ${unknown.join(", ")}`);
     }
-    return provided
+    var pairs = provided
       .map((key) => [config.fields[key].entryId, String(values[key]).trim()])
       .filter((pair) => pair[1] !== "");
+
+    var missing = Object.keys(config.fields).filter(
+      (key) => config.fields[key].required && String(values?.[key] || "").trim() === "",
+    );
+    if (missing.length > 0) {
+      throw new Error(`contact form is missing required values for: ${missing.join(", ")}`);
+    }
+    return pairs;
   }
 
   /**

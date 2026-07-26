@@ -124,7 +124,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" />
-<link rel="stylesheet" href="./styles/main.css?v=be8a146056" />
+<link rel="stylesheet" href="./styles/main.css?v=0a1b566b74" />
 </head>
 <body>
 
@@ -608,31 +608,37 @@
       <p data-i18n="ent.enterprise">If you are considering TenkaCloud for enterprise or internal training use, please feel free to contact us. TenkaCloud is open source, but we would love to learn more about real-world training needs, custom exercise requirements, and how organizations want to run hands-on operations/security drills.</p>
       <form class="contact-form" data-contact-form hidden novalidate>
         <div class="contact-form-grid">
-          <label class="contact-field">
-            <span class="contact-field-label"><span data-i18n="form.name">Name</span><em class="contact-required" aria-hidden="true">*</em></span>
-            <input type="text" data-form-field="name" autocomplete="name" />
-          </label>
-          <label class="contact-field">
-            <span class="contact-field-label"><span data-i18n="form.organization">Company or team</span></span>
-            <input type="text" data-form-field="organization" autocomplete="organization" />
-          </label>
-          <label class="contact-field contact-field-wide">
-            <span class="contact-field-label"><span data-i18n="form.email">Email</span><em class="contact-required" aria-hidden="true">*</em></span>
-            <input type="email" data-form-field="email" autocomplete="email" />
-          </label>
-          <label class="contact-field contact-field-wide">
-            <span class="contact-field-label"><span data-i18n="form.topic">What is this about</span><em class="contact-required" aria-hidden="true">*</em></span>
-            <select data-form-field="topic">
+          <div class="contact-field">
+            <label class="contact-field-label" for="contact-name"><span data-i18n="form.name">Name</span><em class="contact-required" aria-hidden="true">*</em></label>
+            <input type="text" id="contact-name" data-form-field="name" autocomplete="name" required aria-required="true" aria-describedby="contact-name-error" />
+            <span class="contact-field-error" id="contact-name-error" data-contact-field-error></span>
+          </div>
+          <div class="contact-field">
+            <label class="contact-field-label" for="contact-organization"><span data-i18n="form.organization">Company or team</span></label>
+            <input type="text" id="contact-organization" data-form-field="organization" autocomplete="organization" aria-describedby="contact-organization-error" />
+            <span class="contact-field-error" id="contact-organization-error" data-contact-field-error></span>
+          </div>
+          <div class="contact-field contact-field-wide">
+            <label class="contact-field-label" for="contact-email"><span data-i18n="form.email">Email</span><em class="contact-required" aria-hidden="true">*</em></label>
+            <input type="email" id="contact-email" data-form-field="email" autocomplete="email" required aria-required="true" aria-describedby="contact-email-error" />
+            <span class="contact-field-error" id="contact-email-error" data-contact-field-error></span>
+          </div>
+          <div class="contact-field contact-field-wide">
+            <label class="contact-field-label" for="contact-topic"><span data-i18n="form.topic">What is this about</span><em class="contact-required" aria-hidden="true">*</em></label>
+            <select id="contact-topic" data-form-field="topic" required aria-required="true" aria-describedby="contact-topic-error">
+              <option value="" data-i18n="form.topic.placeholder">Please choose</option>
               <option value="プラン・見積もりの相談" data-i18n="form.topic.plan">Plans and quotes</option>
               <option value="企業内の研修・演習での利用" data-i18n="form.topic.training">Internal training and drills</option>
               <option value="カスタム問題の追加開発" data-i18n="form.topic.custom">Custom problem development</option>
               <option value="その他" data-i18n="form.topic.other">Something else</option>
             </select>
-          </label>
-          <label class="contact-field contact-field-wide">
-            <span class="contact-field-label"><span data-i18n="form.message">Your message</span><em class="contact-required" aria-hidden="true">*</em></span>
-            <textarea rows="5" data-form-field="message"></textarea>
-          </label>
+            <span class="contact-field-error" id="contact-topic-error" data-contact-field-error></span>
+          </div>
+          <div class="contact-field contact-field-wide">
+            <label class="contact-field-label" for="contact-message"><span data-i18n="form.message">Your message</span><em class="contact-required" aria-hidden="true">*</em></label>
+            <textarea rows="5" id="contact-message" data-form-field="message" required aria-required="true" aria-describedby="contact-message-error"></textarea>
+            <span class="contact-field-error" id="contact-message-error" data-contact-field-error></span>
+          </div>
         </div>
         <div class="contact-form-actions">
           <button type="submit" class="btn-primary" data-contact-form-submit data-i18n="form.submit">Send</button>
@@ -640,7 +646,7 @@
         <p class="contact-form-status" data-contact-form-status role="status" aria-live="polite"></p>
       </form>
       <div class="btns" style="margin-top:1.6rem">
-        <a class="btn-primary" href="https://forms.gle/djVprYmq3hFgJA7P9" target="_blank" rel="noopener noreferrer" data-contact-fallback-link><span data-i18n="contact.cta">Open the contact form</span> →</a>
+        <a class="btn-primary" href="https://forms.gle/djVprYmq3hFgJA7P9" target="_blank" rel="noopener noreferrer"><span data-i18n="contact.cta">Open the contact form</span> →</a>
         <a class="btn-ghost" href="https://github.com/susumutomita/TenkaCloud/discussions" target="_blank" rel="noopener noreferrer">GitHub Discussions →</a>
       </div>
       <p class="contact-fineprint" data-i18n="contact.fineprint">Responses are stored in a Google Form (managed by Google) and used only for replying and quoting (see <a href="./privacy.en.html">Privacy Policy</a>).</p>
@@ -702,8 +708,8 @@
 </footer>
 
 <script src="./ink-bg.js" defer></script>
-<script src="./contact-form.js?v=ee80017171" defer></script>
-<script src="./app.js?v=ba1a3393b1" defer></script>
+<script src="./contact-form.js?v=7301ba7ae8" defer></script>
+<script src="./app.js?v=b56d1b3853" defer></script>
 
 </body>
 </html>

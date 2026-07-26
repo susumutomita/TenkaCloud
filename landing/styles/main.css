@@ -867,6 +867,11 @@ section .lead {
   border-color: rgba(255,255,255,0.4);
 }
 .contact-field [aria-invalid="true"] { border-color: #ff9b8a; }
+/* 不備は色だけでなく文言でも示す (WCAG 2.1 SC 1.4.1)。 空のときも高さを
+   確保しておき、 エラー表示でレイアウトが跳ねないようにする。 */
+.contact-field-error {
+  font-size: 11px; line-height: 1.5; color: #ff9b8a; min-height: 1.4em;
+}
 .contact-form-actions { margin-top: 16px; text-align: center; }
 .contact-form-actions .btn-primary {
   height: 35px; padding: 0 24px;

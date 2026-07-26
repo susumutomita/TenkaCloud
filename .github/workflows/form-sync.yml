@@ -11,6 +11,15 @@ name: form-sync
 #   -> entry ID を逆引きして landing/contact-form-config.json を再生成
 # まで通す。 LP は実行時にこの JSON を読むので、 フォーム変更に自動追従する。
 #
+# 安全側の既定 (どちらも 「初回の実行がいきなり本番同期になる」 のを防ぐため):
+#   - push で発火した実行は必ず dry run。 実際にフォームを変更するのは
+#     workflow_dispatch で dry_run を外したときだけ。 workflow_dispatch は
+#     デフォルトブランチに存在する workflow しか起動できないので、 これが
+#     無いと 「この PR のマージ自体が初回の本番同期」 になってしまう。
+#   - Google 側 (Apps Script プロジェクト + secrets) の準備が済むまでは
+#     push 実行そのものを止める。 準備できたらリポジトリ変数
+#     FORM_SYNC_ENABLED を true にする。 手動実行はこの変数に関係なく可能。
+#
 # 配信は Cloudflare Pages の Git 連携が main への push を拾うため、
 # この workflow にデプロイ job は無い。 PR がマージされた時点で反映される。
 
@@ -19,8 +28,9 @@ on:
     branches:
       - main
     paths:
+      # workflow 自身は含めない。 コメントの typo 修正でフォーム同期が走るのは
+      # 意図しない副作用になる。
       - "form/**"
-      - ".github/workflows/form-sync.yml"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -32,7 +42,7 @@ on:
         type: boolean
         default: false
       allow_delete:
-        description: 定義に無い質問 (orphan) の削除を許可する (回答列ごと失われる)
+        description: 定義に無い質問 (orphan) の削除を許可する
         type: boolean
         default: false
 
@@ -48,6 +58,13 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     environment: google-form
+    if: ${{ github.event_name == 'workflow_dispatch' || vars.FORM_SYNC_ENABLED == 'true' }}
+    env:
+      # push では dry_run 入力が存在しないため、 常に dry run に倒す。
+      DRY_RUN: ${{ github.event_name != 'workflow_dispatch' || inputs.dry_run }}
+      ALLOW_TYPE_CHANGE: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_type_change }}
+      ALLOW_DELETE: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_delete }}
+      CONFIG_PATH: landing/contact-form-config.json
     steps:
       - name: Check out the code
         # actions/checkout v4.3.1
@@ -66,6 +83,8 @@ jobs:
           npm install -g --ignore-scripts @aikidosec/safe-chain@1.5.3
           safe-chain setup-ci
 
+      # clasp は 2.x 系に固定する。 v3 で認証情報の形式が変わったため、
+      # CLASPRC_JSON は 2.x の `clasp login` が作ったものでなければならない。
       - name: Install clasp
         env:
           npm_config_ignore_scripts: "true"
@@ -75,7 +94,20 @@ jobs:
         env:
           CLASPRC_JSON: ${{ secrets.CLASPRC_JSON }}
           FORM_SCRIPT_ID: ${{ secrets.FORM_SCRIPT_ID }}
+          FORM_WEBAPP_URL: ${{ secrets.FORM_WEBAPP_URL }}
+          FORM_SYNC_TOKEN: ${{ secrets.FORM_SYNC_TOKEN }}
         run: |
+          # 未設定のまま進むと clasp の認証エラーという無関係な顔で落ちるので、
+          # ここで何が足りないかを名指しする。
+          missing=""
+          for name in CLASPRC_JSON FORM_SCRIPT_ID FORM_WEBAPP_URL FORM_SYNC_TOKEN; do
+            eval "value=\${$name}"
+            [ -n "$value" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::google-form environment に secrets が未設定です:$missing (手順は form/README.md)"
+            exit 1
+          fi
           printf '%s' "$CLASPRC_JSON" > ~/.clasprc.json
           printf '{"scriptId":"%s","rootDir":"."}' "$FORM_SCRIPT_ID" > form/.clasp.json
 
@@ -87,6 +119,13 @@ jobs:
           clasp push -f
           # 同じ deployment ID に上書きデプロイすると Web アプリの URL が変わらない。
           # URL は .../macros/s/<deploymentId>/exec の形。
+          case "$FORM_WEBAPP_URL" in
+            */s/*/exec*) ;;
+            *)
+              echo "::error::FORM_WEBAPP_URL が .../s/<deploymentId>/exec の形ではありません"
+              exit 1
+              ;;
+          esac
           DEPLOYMENT_ID=$(printf '%s' "$FORM_WEBAPP_URL" | sed -E 's#.*/s/([^/]+)/exec.*#\1#')
           clasp deploy -i "$DEPLOYMENT_ID" -d "form-sync $GITHUB_SHA"
 
@@ -94,9 +133,6 @@ jobs:
         env:
           FORM_WEBAPP_URL: ${{ secrets.FORM_WEBAPP_URL }}
           FORM_SYNC_TOKEN: ${{ secrets.FORM_SYNC_TOKEN }}
-          DRY_RUN: ${{ inputs.dry_run || 'false' }}
-          ALLOW_TYPE_CHANGE: ${{ inputs.allow_type_change || 'false' }}
-          ALLOW_DELETE: ${{ inputs.allow_delete || 'false' }}
         run: |
           # -X POST を付けないこと。 Apps Script の Web アプリは 302 で GET 専用の
           # 応答 URL へ飛ばすため、 POST を強制するとリダイレクト先が 404 になる。
@@ -108,6 +144,28 @@ jobs:
             --data-urlencode "allowDelete=$ALLOW_DELETE" \
             -o sync-result.json
 
+          # 計画は成否判定より先に書く。 後に置くと、 計画を最も見たい失敗時に
+          # 何も表示されない。
+          if jq -e 'has("plan")' sync-result.json > /dev/null 2>&1; then
+            {
+              echo "### form-sync (dryRun=$DRY_RUN)"
+              echo
+              echo "| key | action | type | 備考 |"
+              echo "| --- | --- | --- | --- |"
+              jq -r '.plan[] | "| \(.key) | \(.action) | \(.type) | \(if .required then "必須" elif .currentType then "現在: \(.currentType)" else "" end) |"' sync-result.json
+              echo
+              echo "- destination: $(jq -r '.destination // "-"' sync-result.json)"
+              echo "- notification: $(jq -r '.notification // "-"' sync-result.json)"
+              echo "- removed: $(jq -r 'if (.removed // []) | length == 0 then "(none)" else (.removed | join(", ")) end' sync-result.json)"
+              echo "- entry 未解決: $(jq -r 'if (.unresolved // []) | length == 0 then "(none)" else (.unresolved | join(", ")) end' sync-result.json)"
+              if jq -e '(.blockers // []) | length > 0' sync-result.json > /dev/null; then
+                echo
+                echo "#### 実同期を止める要因"
+                jq -r '.blockers[] | "- **\(.kind)** \(.detail) — 解除するには \(.allowedBy)"' sync-result.json
+              fi
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
           # Web アプリは HTTP ステータスを選べないので、 成否は本文の ok で判定する。
           jq -e '.ok == true' sync-result.json > /dev/null || {
             echo "::error::syncForm failed"
@@ -115,31 +173,24 @@ jobs:
             exit 1
           }
 
-          {
-            echo "### form-sync"
-            echo
-            echo "- dryRun: $(jq -r '.dryRun' sync-result.json)"
-            echo "- destination: $(jq -r '.destination' sync-result.json)"
-            echo "- notification: $(jq -r '.notification' sync-result.json)"
-            echo "- removed: $(jq -r '.removed | join(", ") // "(none)"' sync-result.json)"
-            echo
-            echo "| key | action | type |"
-            echo "| --- | --- | --- |"
-            jq -r '.plan[] | "| \(.key) | \(.action) | \(.type) |"' sync-result.json
-          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "dry run のためフォームは変更していません。 計画はジョブサマリーを参照してください。"
+            exit 0
+          fi
 
-          jq -e '.formResponseUrl and (.fields | length > 0)' sync-result.json > /dev/null || {
-            echo "::error::syncForm returned no entry map"
+          jq -e '(.unresolved | length) == 0 and .formResponseUrl and (.fields | length > 0)' \
+            sync-result.json > /dev/null || {
+            echo "::error::syncForm returned an incomplete entry map"
             exit 1
           }
-          jq '{formResponseUrl, fields}' sync-result.json > landing/contact-form-config.json
+          jq '{formResponseUrl, fields}' sync-result.json > "$CONFIG_PATH"
 
       - name: Open a PR with the regenerated entry map
-        if: ${{ inputs.dry_run != true }}
+        if: ${{ env.DRY_RUN != 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [ -z "$(git status --porcelain landing/contact-form-config.json)" ]; then
+          if [ -z "$(git status --porcelain "$CONFIG_PATH")" ]; then
             echo "entry map is unchanged; nothing to publish."
             exit 0
           fi
@@ -148,14 +199,22 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           BRANCH="ci/contact-form-config-${GITHUB_RUN_ID}"
           git switch -c "$BRANCH"
-          git add landing/contact-form-config.json
+          git add "$CONFIG_PATH"
           git commit -m "chore(landing): regenerate the contact form entry map"
           git push -u origin "$BRANCH"
+          # 注意: GITHUB_TOKEN で作った PR は他の workflow を起動しないため、
+          # この PR には ci が走らない。 必須チェックがあるとマージできないので、
+          # 自動化したい場合は PAT / GitHub App token に差し替える。
+          # PR 本文は printf で組み立てる。 YAML のブロックスカラー内で
+          # インデントの無い行を書くとスカラーが途中で終わってしまう。
+          BODY=$(printf '%s\n\n%s' \
+            "form-sync workflow (run ${GITHUB_RUN_ID}) が Google フォームの entry ID を再取得しました。マージすると Cloudflare Pages が LP を再配信します。" \
+            "注意: この PR は GITHUB_TOKEN で作成されているため CI が起動しません。内容 (entry ID の差分) を目視で確認してからマージしてください。")
           gh pr create \
             --title "chore(landing): regenerate the contact form entry map" \
-            --body "form-sync workflow (run ${GITHUB_RUN_ID}) が Google フォームの entry ID を再取得しました。マージすると Cloudflare Pages が LP を再配信します。"
+            --body "$BODY"
           # 完全自動で反映したい場合は、 リポジトリ変数 FORM_SYNC_AUTO_MERGE を true にする。
-          # 既定では人がレビューしてからマージする。
+          # デフォルトでは人がレビューしてからマージする。
           if [ "${{ vars.FORM_SYNC_AUTO_MERGE }}" = "true" ]; then
-            gh pr merge --squash --delete-branch
+            gh pr merge --squash --delete-branch --auto
           fi

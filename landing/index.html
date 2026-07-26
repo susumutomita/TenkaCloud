@@ -123,7 +123,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" />
-<link rel="stylesheet" href="./styles/main.css?v=be8a146056" />
+<link rel="stylesheet" href="./styles/main.css?v=0a1b566b74" />
 </head>
 <body>
 
@@ -607,31 +607,37 @@
       <p data-i18n="ent.enterprise">企業内での研修・演習・評価・独自教材の提供などで利用を検討される場合は、ぜひ一度お声がけください。TenkaCloud はオープンソースとして公開していますが、実際の現場で求められる題材、運用方法、閉じた環境での利用要件を伺いながら、プロダクトと教材の両方を改善していきたいと考えています。</p>
       <form class="contact-form" data-contact-form hidden novalidate>
         <div class="contact-form-grid">
-          <label class="contact-field">
-            <span class="contact-field-label"><span data-i18n="form.name">お名前</span><em class="contact-required" aria-hidden="true">*</em></span>
-            <input type="text" data-form-field="name" autocomplete="name" />
-          </label>
-          <label class="contact-field">
-            <span class="contact-field-label"><span data-i18n="form.organization">会社・組織名</span></span>
-            <input type="text" data-form-field="organization" autocomplete="organization" />
-          </label>
-          <label class="contact-field contact-field-wide">
-            <span class="contact-field-label"><span data-i18n="form.email">メールアドレス</span><em class="contact-required" aria-hidden="true">*</em></span>
-            <input type="email" data-form-field="email" autocomplete="email" />
-          </label>
-          <label class="contact-field contact-field-wide">
-            <span class="contact-field-label"><span data-i18n="form.topic">お問い合わせ種別</span><em class="contact-required" aria-hidden="true">*</em></span>
-            <select data-form-field="topic">
+          <div class="contact-field">
+            <label class="contact-field-label" for="contact-name"><span data-i18n="form.name">お名前</span><em class="contact-required" aria-hidden="true">*</em></label>
+            <input type="text" id="contact-name" data-form-field="name" autocomplete="name" required aria-required="true" aria-describedby="contact-name-error" />
+            <span class="contact-field-error" id="contact-name-error" data-contact-field-error></span>
+          </div>
+          <div class="contact-field">
+            <label class="contact-field-label" for="contact-organization"><span data-i18n="form.organization">会社・組織名</span></label>
+            <input type="text" id="contact-organization" data-form-field="organization" autocomplete="organization" aria-describedby="contact-organization-error" />
+            <span class="contact-field-error" id="contact-organization-error" data-contact-field-error></span>
+          </div>
+          <div class="contact-field contact-field-wide">
+            <label class="contact-field-label" for="contact-email"><span data-i18n="form.email">メールアドレス</span><em class="contact-required" aria-hidden="true">*</em></label>
+            <input type="email" id="contact-email" data-form-field="email" autocomplete="email" required aria-required="true" aria-describedby="contact-email-error" />
+            <span class="contact-field-error" id="contact-email-error" data-contact-field-error></span>
+          </div>
+          <div class="contact-field contact-field-wide">
+            <label class="contact-field-label" for="contact-topic"><span data-i18n="form.topic">お問い合わせ種別</span><em class="contact-required" aria-hidden="true">*</em></label>
+            <select id="contact-topic" data-form-field="topic" required aria-required="true" aria-describedby="contact-topic-error">
+              <option value="" data-i18n="form.topic.placeholder">選択してください</option>
               <option value="プラン・見積もりの相談" data-i18n="form.topic.plan">プラン・見積もりの相談</option>
               <option value="企業内の研修・演習での利用" data-i18n="form.topic.training">企業内の研修・演習での利用</option>
               <option value="カスタム問題の追加開発" data-i18n="form.topic.custom">カスタム問題の追加開発</option>
               <option value="その他" data-i18n="form.topic.other">その他</option>
             </select>
-          </label>
-          <label class="contact-field contact-field-wide">
-            <span class="contact-field-label"><span data-i18n="form.message">お問い合わせ内容</span><em class="contact-required" aria-hidden="true">*</em></span>
-            <textarea rows="5" data-form-field="message"></textarea>
-          </label>
+            <span class="contact-field-error" id="contact-topic-error" data-contact-field-error></span>
+          </div>
+          <div class="contact-field contact-field-wide">
+            <label class="contact-field-label" for="contact-message"><span data-i18n="form.message">お問い合わせ内容</span><em class="contact-required" aria-hidden="true">*</em></label>
+            <textarea rows="5" id="contact-message" data-form-field="message" required aria-required="true" aria-describedby="contact-message-error"></textarea>
+            <span class="contact-field-error" id="contact-message-error" data-contact-field-error></span>
+          </div>
         </div>
         <div class="contact-form-actions">
           <button type="submit" class="btn-primary" data-contact-form-submit data-i18n="form.submit">送信する</button>
@@ -639,7 +645,7 @@
         <p class="contact-form-status" data-contact-form-status role="status" aria-live="polite"></p>
       </form>
       <div class="btns" style="margin-top:1.6rem">
-        <a class="btn-primary" href="https://forms.gle/djVprYmq3hFgJA7P9" target="_blank" rel="noopener noreferrer" data-contact-fallback-link><span data-i18n="contact.cta">お問い合わせフォーム</span> →</a>
+        <a class="btn-primary" href="https://forms.gle/djVprYmq3hFgJA7P9" target="_blank" rel="noopener noreferrer"><span data-i18n="contact.cta">お問い合わせフォーム</span> →</a>
         <a class="btn-ghost" href="https://github.com/susumutomita/TenkaCloud/discussions" target="_blank" rel="noopener noreferrer">GitHub Discussions →</a>
       </div>
       <p class="contact-fineprint" data-i18n="contact.fineprint">フォームの回答は Google フォーム (= Google が管理) に保存され、 お問い合わせ対応と見積もり提示のみに利用します (= <a href="./privacy.html">プライバシーポリシー</a>)。</p>
@@ -701,8 +707,8 @@
 </footer>
 
 <script src="./ink-bg.js" defer></script>
-<script src="./contact-form.js?v=ee80017171" defer></script>
-<script src="./app.js?v=ba1a3393b1" defer></script>
+<script src="./contact-form.js?v=7301ba7ae8" defer></script>
+<script src="./app.js?v=b56d1b3853" defer></script>
 
 </body>
 </html>

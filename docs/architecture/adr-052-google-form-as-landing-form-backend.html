@@ -109,10 +109,12 @@
         Google Forms editor. Changes to it go through pull request review like any other code.
       </li>
       <li>
-        <code>syncForm()</code> is idempotent and updates questions <em>in place</em> (matched by title) rather
-        than deleting and recreating them, so identifiers survive every change except a question-type change.
-        A type change is refused unless the caller passes <code>allowTypeChange</code>, because it is the one
-        operation that necessarily invalidates an identifier.
+        <code>syncForm()</code> is idempotent and updates questions <em>in place</em> rather than deleting and
+        recreating them, so identifiers survive. Question identity is the Apps Script item id, recorded in a
+        script property; titles are only used to adopt a form the first time. Keying on titles instead would
+        mean that editing a question's wording re-creates it under a fresh identifier — the single most likely
+        edit silently breaking submissions. A question-type change still invalidates an identifier and is
+        refused unless the caller passes <code>allowTypeChange</code>.
       </li>
       <li>
         On each sync, the identifiers are recovered by reverse-engineering a pre-filled URL and written to
@@ -133,7 +135,20 @@
       <li>
         Questions present on the form but absent from the definition (<code>orphan</code>) are reported in the
         plan but never deleted by default. Deleting one discards its answer column, so it happens only when
-        explicitly allowed.
+        explicitly allowed. A <strong>required</strong> orphan, however, blocks a real sync outright: the page
+        never fills it, so Google would reject every submission — invisibly, under <code>no-cors</code>. The
+        same refusal applies to duplicate titles on the form, which make the plan unreadable.
+      </li>
+      <li>
+        A push to <code>main</code> only ever runs a <em>dry</em> sync. Mutation requires an explicit manual
+        dispatch. Without that rule the very first run of this machinery would be the merge that introduced
+        it — <code>workflow_dispatch</code> can only start a workflow that already exists on the default
+        branch, so no dry run could precede it.
+      </li>
+      <li>
+        The config carries each field's control kind and validation, and the page drives its behavior off
+        those rather than off field names. Keying on a name like <code>email</code> means renaming the field
+        silently removes its format check.
       </li>
     </ol>
 
@@ -290,11 +305,19 @@
       is symmetric: delete the config file and the page returns to the link.
     </p>
     <p>
-      Because the workflow's first run acts on a form that already exists and already holds responses, the
-      <code>workflow_dispatch</code> entry point defaults to <code>dry_run: true</code>. A dry run reports the
-      plan — which questions would be created, updated, or recreated — and the identifiers as they stand, without
-      modifying anything. The intended sequence is one dispatched dry run, a review of the plan in the job
-      summary, and only then a real sync.
+      Because the workflow's first run acts on a form that already exists and already holds responses, mutation
+      is gated three ways. A push only ever runs a dry sync; <code>workflow_dispatch</code> defaults to
+      <code>dry_run: true</code>; and until the Google-side project and secrets exist, the repository variable
+      <code>FORM_SYNC_ENABLED</code> keeps push runs from starting at all. A dry run reports the plan and the
+      identifiers as they stand without modifying anything, and — importantly — without failing when the plan
+      contains creations, so the preview works precisely when the definition and the live form disagree.
+    </p>
+    <p>
+      Adopting an existing hand-built form is the case worth stating plainly: its question titles will usually
+      not match the definition, so the first plan reads "create everything, orphan everything". That grows a
+      second set of questions beside the originals rather than bringing the originals under management. The dry
+      run exists to surface exactly this before it happens; the operator then either aligns the definition's
+      titles to the live form or starts a fresh form.
     </p>
 
     <h2>9. Related</h2>
