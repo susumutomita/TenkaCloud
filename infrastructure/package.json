@@ -68,7 +68,7 @@
     "@tenkacloud/saml-utils": "workspace:*",
     "ajv": "8.20.0",
     "ajv-formats": "^3.0.1",
-    "aws-cdk-lib": "^2.256.1",
+    "aws-cdk-lib": "^2.262.1",
     "constructs": "^10.6.0",
     "dotenv": "^17.4.2",
     "esbuild": "^0.28.1",
