@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "defaultBinary": "symphony",
+  "workspaceRootEnv": "SYMPHONY_WORKSPACE_ROOT",
+  "logsRootEnv": "SYMPHONY_LOGS_ROOT",
+  "repositories": [
+    {
+      "id": "platform",
+      "repository": "susumutomita/TenkaCloud",
+      "workflow": ".symphony/workflows/platform.WORKFLOW.md",
+      "workspace": "platform",
+      "port": 4311
+    },
+    {
+      "id": "simulator",
+      "repository": "susumutomita/TenkaCloudSimulator",
+      "workflow": ".symphony/workflows/simulator.WORKFLOW.md",
+      "workspace": "simulator",
+      "port": 4312
+    },
+    {
+      "id": "challenge",
+      "repository": "susumutomita/TenkaCloudChallenge",
+      "workflow": ".symphony/workflows/challenge.WORKFLOW.md",
+      "workspace": "challenge",
+      "port": 4313
+    },
+    {
+      "id": "passport",
+      "repository": "susumutomita/TenkaCloudPassport",
+      "workflow": ".symphony/workflows/passport.WORKFLOW.md",
+      "workspace": "passport",
+      "port": 4314
+    }
+  ]
+}
