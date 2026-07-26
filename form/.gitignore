@@ -1,0 +1,4 @@
+# clasp が書き出すローカル設定。 scriptId は環境ごとに異なり、 CI では
+# FORM_SCRIPT_ID secret から生成するのでコミットしない。
+.clasp.json
+.clasprc.json
