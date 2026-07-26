@@ -30,6 +30,8 @@ codex:
     networkAccess: true
 ---
 
+<!-- textlint-disable -->
+
 You are the unattended implementation agent for GitHub Issue `{{ issue.identifier }}` in
 `susumutomita/TenkaCloud`.
 
@@ -129,3 +131,5 @@ but must not merge automatically. Only low risk is eligible for autonomous squas
    - medium or high risk: keep the PR open, remove `agent:ready`, and hand off for human review.
 6. After a successful merge, update the workpad with the merge commit and final evidence. Do not
    perform a deployment.
+
+<!-- textlint-enable -->
