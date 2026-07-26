@@ -81,6 +81,10 @@ function applyFlag(options: SetupOptions, arg: string, next: string | undefined)
   throw new Error(`未知の引数です: ${arg}\n${USAGE}`);
 }
 
+/**
+ * コマンドライン引数を読む。 既定は「カレントリポジトリ」「google-form
+ * Environment」「dry run まで走らせる」。
+ */
 export function parseArgs(argv: readonly string[]): SetupOptions {
   const options: SetupOptions = {
     repo: null,
@@ -124,6 +128,12 @@ export function readScriptId(raw: string | null): string | null {
   return scriptId;
 }
 
+/**
+ * `clasp create` の出力から scriptId を取り出す。
+ *
+ * 取れなかったときに空文字などへ倒すと、 以後の push とデプロイが
+ * 別プロジェクトを指したまま進む。 見つからなければ落とす。
+ */
 export function parseScriptId(stdout: string): string {
   const matched = stdout.match(/script\.google\.com\/d\/([\w-]+)/);
   if (!matched) {
@@ -132,6 +142,12 @@ export function parseScriptId(stdout: string): string {
   return matched[1];
 }
 
+/**
+ * `clasp deploy` の出力から deploymentId を取り出す。
+ *
+ * これが誤ると Web アプリの URL が別のデプロイを指し、 CI は 「認証は通るのに
+ * 同期が効かない」 という診断しづらい壊れ方をする。 見つからなければ落とす。
+ */
 export function parseDeploymentId(stdout: string): string {
   // clasp 2.x は "- <deploymentId> @<version>." の行に出す。
   for (const line of stdout.split("\n")) {
@@ -141,10 +157,12 @@ export function parseDeploymentId(stdout: string): string {
   throw new Error(`clasp deploy の出力から deployment id を取り出せません:\n${stdout}`);
 }
 
+/** workflow が `FORM_WEBAPP_URL` として期待する `exec` URL を組み立てる。 */
 export function webAppUrl(deploymentId: string): string {
   return `https://script.google.com/macros/s/${deploymentId}/exec`;
 }
 
+/** 操作者に開いてもらう Apps Script エディタの URL。 */
 export function editorUrl(scriptId: string): string {
   return `https://script.google.com/d/${scriptId}/edit`;
 }

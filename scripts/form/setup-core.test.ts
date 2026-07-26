@@ -155,7 +155,7 @@ describe("parseBootstrapPayload", () => {
 
   it("should name the bootstrap function when the pasted text is not JSON at all", () => {
     expect(() => parseBootstrapPayload("Exception: You do not have permission")).toThrow(
-      new RegExp(BOOTSTRAP_FUNCTION),
+      BOOTSTRAP_FUNCTION,
     );
   });
 

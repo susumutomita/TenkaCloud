@@ -58,8 +58,11 @@ typecheck: ## Type-check every TypeScript workspace | 全workspaceのTypeScript�
 	bun run typecheck
 test: ## Run tests in every workspace | 全workspaceのテストを実行
 	bun run test
+# Options go through FORM_SETUP_ARGS; make would otherwise parse --repo itself.
+# e.g. make form-setup FORM_SETUP_ARGS="--repo owner/name --skip-workflow"
+FORM_SETUP_ARGS ?=
 form-setup: ## Provision the Google Form backend end to end | お問い合わせフォームのGoogle側を一括構築
-	bun run form:setup
+	bun run form:setup $(FORM_SETUP_ARGS)
 test-coverage: ## Run all coverage shards sequentially | 全coverage shardを直列実行
 	bun run test:coverage
 # Issue #2515: fast path for script/CLI-only changes (scripts/**/*.ts, infrastructure/test/scripts/*)
