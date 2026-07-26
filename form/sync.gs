@@ -500,6 +500,11 @@ function assertAnonymousResponses_(form) {
   if (unlessReadable_(function () { return form.requiresLogin() === true; })) {
     problems.push("ログイン必須を解除できていない (組織外から回答できない)");
   }
+  // 読み出しは has... で、 設定は set... と名前が揃っていない。 get... は存在せず、
+  // 誤った名前で呼ぶと例外になり、 fail closed の設計上あらゆる同期が止まる。
+  if (unlessReadable_(function () { return form.hasLimitOneResponsePerUser() === true; })) {
+    problems.push("1 人 1 回制限を解除できていない (回答者の識別が要求され送信が拒否される)");
+  }
   if (unlessReadable_(function () { return collectsEmail_(form); })) {
     problems.push("メールアドレス収集が有効なまま (匿名送信が弾かれる)");
   }
