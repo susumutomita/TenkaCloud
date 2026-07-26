@@ -181,7 +181,7 @@
         "@aws-sdk/client-scheduler": "^3.1079.0",
         "@aws-sdk/client-sfn": "^3.1090.0",
         "@aws-sdk/credential-provider-node": "^3.972.42",
-        "@cdklabs/sbt-aws": "0.3.9",
+        "@cdklabs/sbt-aws": "0.9.5",
         "@libsql/client": "^0.17.4",
         "@smithy/protocol-http": "^5.5.10",
         "@smithy/signature-v4": "^5.4.3",
@@ -414,10 +414,6 @@
 
     "@aws-cdk/asset-node-proxy-agent-v6": ["@aws-cdk/asset-node-proxy-agent-v6@2.1.1", "", {}, "sha512-We4bmHaowOPHr+IQR4/FyTGjRfjgBj4ICMjtqmJeBDWad3Q/6St12NT07leNtyuukv2qMhtSZJQorD8KpKTwRA=="],
 
-    "@aws-cdk/aws-kinesisfirehose-alpha": ["@aws-cdk/aws-kinesisfirehose-alpha@2.140.0-alpha.0", "", { "peerDependencies": { "aws-cdk-lib": "^2.140.0", "constructs": "^10.0.0" } }, "sha512-0/MSuI26A6DaILC9KUDj++6XSnIOsuEWqq5rpMCQQ3J6crU76IGa7pSX6SOs3jcDCnyiCjydpDUy2eEoqyM19Q=="],
-
-    "@aws-cdk/aws-kinesisfirehose-destinations-alpha": ["@aws-cdk/aws-kinesisfirehose-destinations-alpha@2.140.0-alpha.0", "", { "peerDependencies": { "@aws-cdk/aws-kinesisfirehose-alpha": "2.140.0-alpha.0", "aws-cdk-lib": "^2.140.0", "constructs": "^10.0.0" } }, "sha512-5fJJmMM8yOVZxxaIK0e9riyqfjWsNwAJ0awI4ms/IYGR43eV/7BfVW9TgRwm4k7JiCYcYMfim6z83Ili0bHgkA=="],
-
     "@aws-cdk/aws-lambda-python-alpha": ["@aws-cdk/aws-lambda-python-alpha@2.140.0-alpha.0", "", { "peerDependencies": { "aws-cdk-lib": "^2.140.0", "constructs": "^10.0.0" } }, "sha512-tJ4GK4fIGjfHEN38NTYnxiovCB7xoR4sZRQtN9XefzpJKKllKxYMXLMF1PRRiOpewLjEtgupN5JG8Kfl/SRxcQ=="],
 
     "@aws-cdk/cloud-assembly-api": ["@aws-cdk/cloud-assembly-api@2.2.4", "", { "dependencies": { "jsonschema": "^1.5.0", "semver": "^7.8.0" }, "peerDependencies": { "@aws-cdk/cloud-assembly-schema": ">=53.25.0" } }, "sha512-ob4M97DuBQ3HpwtUD6Wosuc731pPbqQuNGZuZfRBEcaOwEsJFwbXkZJC0M4JaDUqi2c50uLHkR346v6wIn5GDg=="],
@@ -570,7 +566,7 @@
 
     "@cacheable/utils": ["@cacheable/utils@2.3.2", "", { "dependencies": { "hashery": "^1.2.0", "keyv": "^5.5.4" } }, "sha512-8kGE2P+HjfY8FglaOiW+y8qxcaQAfAhVML+i66XJR3YX5FtyDqn6Txctr3K2FrbxLKixRRYYBWMbuGciOhYNDg=="],
 
-    "@cdklabs/sbt-aws": ["@cdklabs/sbt-aws@0.3.9", "", { "dependencies": { "@aws-cdk/aws-kinesisfirehose-alpha": "2.140.0-alpha.0", "@aws-cdk/aws-kinesisfirehose-destinations-alpha": "2.140.0-alpha.0", "@aws-cdk/aws-lambda-python-alpha": "^2.114.1-alpha.0", "cdk-nag": "^2.27.230" }, "peerDependencies": { "aws-cdk-lib": "^2.140.0", "constructs": "^10.0.5" } }, "sha512-6KAahpO7GLtL6JPSv1BRQ8PNVHCgurQeJ2QLhBWawpnPegQLfbAjHW2QlY2thy5PiPasY5QyuLkL4dLHAZb2jw=="],
+    "@cdklabs/sbt-aws": ["@cdklabs/sbt-aws@0.9.5", "", { "dependencies": { "@aws-cdk/aws-lambda-python-alpha": "2.195.0-alpha.0", "cdk-nag": "^2.35.96" }, "peerDependencies": { "aws-cdk-lib": "^2.195.0", "constructs": "^10.4.2" } }, "sha512-JXinV3aFdZZ/NHlEzWKNCTbGlyPmqN3a+xvByHKK+C7+vRyN01oB5De+kG1vcDTt/S5ggrqX9IkGoAL/1LZZbQ=="],
 
     "@cloudflare/kv-asset-handler": ["@cloudflare/kv-asset-handler@0.5.0", "", {}, "sha512-jxQYkj8dSIzc0cD6cMMNdOc1UVjqSqu8BZdor5s8cGjW2I8BjODt/kWPVdY+u9zj3ms75Q5qaZgnxUad83+eAg=="],
 
@@ -3048,7 +3044,7 @@
 
     "@babel/traverse/@babel/types": ["@babel/types@7.29.7", "", { "dependencies": { "@babel/helper-string-parser": "^7.29.7", "@babel/helper-validator-identifier": "^7.29.7" } }, "sha512-4zBIxpPzowiZpusoFkyGVwakdRJUyuH5PxQ/PrqghfdFWWasvnCdPfQXHrenDai+gyLARulZjZowCOj6fjT4pA=="],
 
-    "@cdklabs/sbt-aws/@aws-cdk/aws-lambda-python-alpha": ["@aws-cdk/aws-lambda-python-alpha@2.114.1-alpha.0", "", { "peerDependencies": { "aws-cdk-lib": "^2.114.1", "constructs": "^10.0.0" } }, "sha512-ozpcGNBrNjfrEOkTC8gpTJu9g1PCKV62NNGV3kE3hOkqjphss9ytwKjIfUIvS+yjqy8D8/BHM0btJKrNur0RoQ=="],
+    "@cdklabs/sbt-aws/@aws-cdk/aws-lambda-python-alpha": ["@aws-cdk/aws-lambda-python-alpha@2.195.0-alpha.0", "", { "peerDependencies": { "aws-cdk-lib": "^2.195.0", "constructs": "^10.0.0" } }, "sha512-PVEklq84j2eBeOzLewEGG3/KOicsZj6NxFfyVICBnuZnWlk58SSETX0VmgZ+CWKLJKZJx84rqowvtSZsYHiw9Q=="],
 
     "@cdklabs/sbt-aws/cdk-nag": ["cdk-nag@2.38.2", "", { "peerDependencies": { "aws-cdk-lib": "^2.176.0", "constructs": "^10.5.1" } }, "sha512-Ddim1r8IwAPQn95KB2owbHoU4YHveHg4PfM+k7TdcANqfVmoHem6cTFMpcIuoDM16BkQQ+xshxYxZgcAoeVKGw=="],
 
