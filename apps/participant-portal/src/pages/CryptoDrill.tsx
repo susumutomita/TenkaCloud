@@ -9,6 +9,7 @@
  * インデックスの 2 経路で、狭い画面では番号インデックスが折り返す。
  */
 
+import Alert from "@cloudscape-design/components/alert";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import Container from "@cloudscape-design/components/container";
@@ -76,6 +77,12 @@ export function CryptoDrillPage() {
       <Header variant="h1" description={localize(SHA256_DRILL.summary, locale)}>
         {drillTitle}
       </Header>
+
+      {/* 進捗はこの端末の localStorage にあり、 採点はスコアに影響しない。 競技者が
+       *  「解いたのにスコアが増えない」と誤解しないよう、 画面上で先に言う。 */}
+      <Alert type="info" header={t("crypto_drill.self_study_header")}>
+        {t("crypto_drill.self_study_body")}
+      </Alert>
 
       <Container header={<Header variant="h2">{t("crypto_drill.progress_header")}</Header>}>
         <SpaceBetween size="s">

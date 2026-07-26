@@ -68,6 +68,12 @@ describe("CryptoDrillPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("should tell the learner up front that the drill does not affect their score", () => {
+    render(<CryptoDrillPage />);
+    expect(screen.getByText("crypto_drill.self_study_header")).toBeInTheDocument();
+    expect(screen.getByText("crypto_drill.self_study_body")).toBeInTheDocument();
+  });
+
   it("should open at the first section and offer a jump button per section", () => {
     render(<CryptoDrillPage />);
     expect(
