@@ -50,6 +50,7 @@
     "@vitest/coverage-v8": "^4.1.10",
     "husky": "^9.1.7",
     "jscpd": "^5.0.12",
+    "jsdom": "^29.1.1",
     "knip": "^6.27.0",
     "markdownlint-cli2": "^0.22.1",
     "marked": "^18.0.6",

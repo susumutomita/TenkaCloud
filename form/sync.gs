@@ -339,6 +339,10 @@ function buildPlan_(form, itemIds) {
         key: "(未定義)",
         title: item.getTitle(),
         type: String(item.getType()),
+        // 削除はタイトルではなく ID で行う。 管理下の質問を orphan と同じ
+        // タイトルへ改名した同期では、 タイトル一致で消すと改名したばかりの
+        // 管理下の質問まで巻き添えで消える。
+        itemId: String(item.getId()),
         action: "orphan",
         required: isRequiredItem_(item),
       };
@@ -374,37 +378,43 @@ function collectBlockers_(plan, allowances) {
 
   // 必須の orphan があると、 LP はその entry を送らないので Google が全ての
   // 送信を拒否する。 no-cors では拒否が見えないため、 問い合わせが全滅する。
+  // 必須かどうか判定できない ("unknown") 型も同じ扱いにする。 安全側に倒さないと、
+  // 未対応型の必須 orphan が黙って通ってしまう。
   if (!allowances.allowDelete) {
     plan
       .filter(function (step) {
-        return step.action === "orphan" && step.required === true;
+        return step.action === "orphan" && step.required !== false;
       })
       .forEach(function (step) {
         blockers.push({
           kind: "required-orphan",
           detail:
-            step.title + " が必須のままフォームに残っている (LP からの送信が全て拒否される)",
+            step.title +
+            (step.required === "unknown"
+              ? " が必須かどうか判定できない型 (" + step.type + ") でフォームに残っている"
+              : " が必須のままフォームに残っている") +
+            " (LP からの送信が全て拒否される可能性がある)",
           allowedBy: "allowDelete (または任意に変更)",
         });
       });
   }
 
+  // 突き合わせるのは 「同期後のタイトル」。 現在のタイトルで見ると、 管理下の
+  // 質問を orphan と同じタイトルへ改名する同期で衝突を見逃し、 削除時に巻き添えが
+  // 出る。 create も同期後は実在するので対象に含める。
   const seen = {};
-  plan
-    .filter(function (step) {
-      return step.action !== "create";
-    })
-    .forEach(function (step) {
-      const title = step.currentTitle || step.title;
-      if (seen[title]) {
-        blockers.push({
-          kind: "duplicate-title",
-          detail: "フォーム側にタイトルが重複した質問がある: " + title,
-          allowedBy: "(手で解消する)",
-        });
-      }
-      seen[title] = true;
-    });
+  plan.forEach(function (step) {
+    // step.title は同期後のタイトル。 orphan はそのまま、 管理下の質問は
+    // これへ改名される。
+    if (seen[step.title]) {
+      blockers.push({
+        kind: "duplicate-title",
+        detail: "同期後にタイトルが重複する質問がある: " + step.title,
+        allowedBy: "(手で解消する)",
+      });
+    }
+    seen[step.title] = true;
+  });
 
   return blockers;
 }
@@ -460,10 +470,7 @@ function applyMetadata_(form) {
   try {
     form.setRequireLogin(false);
   } catch (error) {
-    Logger.log(
-      "WARN: setRequireLogin(false) に失敗しました。 Workspace の共有ポリシーで組織外の回答が禁止されている可能性があります: " +
-        describeError_(error),
-    );
+    Logger.log("setRequireLogin(false) が例外を返しました: " + describeError_(error));
   }
   try {
     form.setEmailCollectionType(FormApp.EmailCollectionType.DO_NOT_COLLECT);
@@ -471,11 +478,66 @@ function applyMetadata_(form) {
     try {
       form.setCollectEmail(false);
     } catch (fallbackError) {
-      Logger.log(
-        "WARN: メールアドレス収集を無効化できませんでした。 有効なままだと匿名送信が弾かれます: " +
-          describeError_(fallbackError),
-      );
+      Logger.log("メール収集の無効化が例外を返しました: " + describeError_(fallbackError));
     }
+  }
+  assertAnonymousResponses_(form);
+}
+
+/**
+ * 匿名回答の前提が実際に満たされたかを読み戻して確かめ、 満たせないなら止める。
+ *
+ * setter の例外だけを見て判断しない。 個人アカウントでは setRequireLogin が
+ * 例外を返しつつ実際にはログイン不要、 という組み合わせがあり得るため、
+ * 「結果の状態」 が唯一の判断材料になる。 逆に読み出し自体が失敗したときは
+ * 確認できないので止める側に倒す。 ここを素通りさせると 「同期は成功したのに
+ * 問い合わせが 1 件も届かない」 という、 no-cors では絶対に気づけない壊れ方をする。
+ *
+ * @param {GoogleAppsScript.Forms.Form} form
+ */
+function assertAnonymousResponses_(form) {
+  const problems = [];
+  if (unlessReadable_(function () { return form.requiresLogin() === true; })) {
+    problems.push("ログイン必須を解除できていない (組織外から回答できない)");
+  }
+  if (unlessReadable_(function () { return collectsEmail_(form); })) {
+    problems.push("メールアドレス収集が有効なまま (匿名送信が弾かれる)");
+  }
+  if (problems.length === 0) return;
+  throw new Error(
+    "匿名回答の前提を満たせないため同期を中止しました: " +
+      problems.join(" / ") +
+      "。 Workspace の共有ポリシーかフォームの設定を見直してください。",
+  );
+}
+
+/**
+ * 状態を読む。 読めなければ 「まずい状態かもしれない」 として true を返す。
+ *
+ * @param {function(): boolean} read
+ * @return {boolean}
+ */
+function unlessReadable_(read) {
+  try {
+    return read() === true;
+  } catch (error) {
+    Logger.log("状態を確認できませんでした: " + describeError_(error));
+    return true;
+  }
+}
+
+/**
+ * メールアドレス収集が有効かどうか。 新旧どちらの API でも読めるようにする。
+ *
+ * @param {GoogleAppsScript.Forms.Form} form
+ * @return {boolean}
+ */
+function collectsEmail_(form) {
+  try {
+    return form.getEmailCollectionType() !== FormApp.EmailCollectionType.DO_NOT_COLLECT;
+  } catch (error) {
+    Logger.log("getEmailCollectionType が使えないため collectsEmail を見ます: " + describeError_(error));
+    return form.collectsEmail() === true;
   }
 }
 
@@ -487,20 +549,22 @@ function applyMetadata_(form) {
  * @return {Array<string>} 削除した質問のタイトル
  */
 function removeOrphans_(form, plan) {
-  const targets = {};
+  // ID で消す。 タイトルで消すと、 管理下の質問を orphan と同じタイトルへ改名した
+  // 直後の同期で、 改名したばかりの質問まで一緒に消える。
+  const targetIds = {};
   plan
     .filter(function (step) {
       return step.action === "orphan";
     })
     .forEach(function (step) {
-      targets[step.title] = true;
+      targetIds[step.itemId] = true;
     });
 
   const removed = [];
   form
     .getItems()
     .filter(function (item) {
-      return isQuestionItem_(item) && targets[item.getTitle()] === true;
+      return isQuestionItem_(item) && targetIds[String(item.getId())] === true;
     })
     .forEach(function (item) {
       form.deleteItem(item);
@@ -544,7 +608,11 @@ function addItem_(form, field) {
 function configureItem_(item, field) {
   item.setTitle(field.title);
   if (field.type === "PARAGRAPH_TEXT") {
-    item.asParagraphTextItem().setRequired(field.required === true);
+    const paragraph = item.asParagraphTextItem();
+    // 先に検証を消す。 定義から validation を外しても古い規則が残ると、
+    // 設定上は素通りのはずの値を Google が拒否し、 no-cors でそれが見えない。
+    paragraph.setValidation(null);
+    paragraph.setRequired(field.required === true);
     return;
   }
   if (field.type === "MULTIPLE_CHOICE") {
@@ -554,6 +622,7 @@ function configureItem_(item, field) {
     return;
   }
   const text = item.asTextItem();
+  text.setValidation(null);
   text.setRequired(field.required === true);
   if (field.validation === "EMAIL") {
     text.setValidation(
@@ -800,12 +869,15 @@ function isQuestionItem_(item) {
  */
 function isRequiredItem_(item) {
   const reader = REQUIRED_READERS[String(item.getType())];
-  if (!reader) return false;
+  // 判定できないときは false ではなく "unknown" を返す。 false に倒すと、
+  // FILE_UPLOAD のような未対応型の必須 orphan が blocker をすり抜けて残り、
+  // Google が LP からの送信を全て拒否する。 no-cors では拒否が見えない。
+  if (!reader) return "unknown";
   try {
     return reader(item) === true;
   } catch (error) {
     Logger.log("WARN: 必須判定に失敗しました (" + item.getTitle() + "): " + describeError_(error));
-    return false;
+    return "unknown";
   }
 }
 

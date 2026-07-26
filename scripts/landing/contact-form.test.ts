@@ -324,16 +324,163 @@ describe("landing contact form wiring", () => {
    * まとめ表示と項目ごとの文言は別の文にする。 同じ文を 2 箇所へ出すと、
    * 1 項目だけ直したときにどちらを指しているのか判別できない。
    */
-  it("should show a summary message distinct from the per-field ones", () => {
-    expect(app).toContain('setStatus("form.hasErrors", "error")');
-    // ja / en の両方に訳が要る。 片方だけだと切り替えた瞬間に空文字になる。
+  it("should translate the summary message into both languages", () => {
+    // 片方だけだと、 言語を切り替えた瞬間に警告が空文字になる。
     expect([...app.matchAll(/"form\.hasErrors":/g)]).toHaveLength(2);
-    expect(app).not.toContain('setStatus("form.required"');
-    expect(app).not.toContain('setStatus("form.invalidEmail"');
+  });
+});
+
+/**
+ * ここだけは本物の DOM で動かす。 landing/app.js はブラウザ専用の IIFE なので、
+ * ソース文字列の一致で確かめても 「その関数が呼ばれたら実際どうなるか」 は何も
+ * 保証できない。 送信の成否が no-cors で見えない以上、 送信前の入力検証こそが
+ * 唯一の防波堤で、 それが本当に働くことは実物で確かめる必要がある。
+ */
+describe("landing contact form behaviour", () => {
+  const CONFIG = {
+    formResponseUrl: "https://docs.google.com/forms/d/e/1FAIpQLSfake0Example/formResponse",
+    fields: {
+      name: field({ entryId: "entry.100", title: "お名前", required: true }),
+      organization: field({ entryId: "entry.200", title: "会社・組織名" }),
+      email: field({
+        entryId: "entry.300",
+        title: "メールアドレス",
+        required: true,
+        validation: "email",
+      }),
+      topic: field({
+        entryId: "entry.400",
+        title: "お問い合わせ種別",
+        required: true,
+        kind: "choice",
+        choices: [
+          "プラン・見積もりの相談",
+          "企業内の研修・演習での利用",
+          "カスタム問題の追加開発",
+          "その他",
+        ],
+      }),
+      message: field({
+        entryId: "entry.500",
+        title: "お問い合わせ内容",
+        required: true,
+        kind: "paragraph",
+      }),
+    },
+  };
+
+  /**
+   * index.html を実 DOM に載せ、 contact-form.js と app.js をその window の中で
+   * 評価する。 設定の取得だけを差し替え、 それ以外は本番と同じ経路を通す。
+   */
+  async function mount(config: unknown) {
+    const { JSDOM } = (await import("jsdom")) as typeof import("jsdom");
+    // 言語は URL で固定する。 既定は navigator.language 依存なので、 実行環境の
+    // ロケールでテストの期待文言が変わってしまう。
+    const dom = new JSDOM(read("landing/index.html"), {
+      url: "https://tenkacloud.com/?lang=ja",
+      runScripts: "outside-only",
+    });
+    const { window } = dom;
+    Object.defineProperty(window, "fetch", {
+      configurable: true,
+      value: () => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(config) }),
+    });
+    window.eval(read("landing/contact-form.js"));
+    window.eval(read("landing/app.js"));
+    // 設定取得は 2 段の then を挟むので、 マイクロタスクを流し切ってから触る。
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    return window;
+  }
+
+  const control = (window: Window, key: string) =>
+    window.document.querySelector(`[data-form-field="${key}"]`) as
+      | HTMLInputElement
+      | HTMLSelectElement
+      | HTMLTextAreaElement;
+
+  const banner = (window: Window) =>
+    window.document.querySelector("[data-contact-form-status]") as HTMLElement;
+
+  function fill(window: Window, key: string, value: string) {
+    const el = control(window, key);
+    el.value = value;
+    el.dispatchEvent(new window.Event("input", { bubbles: true }));
+    el.dispatchEvent(new window.Event("change", { bubbles: true }));
+  }
+
+  function submit(window: Window) {
+    const form = window.document.querySelector("[data-contact-form]") as HTMLFormElement;
+    form.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
+  }
+
+  it("should reveal the inline form only after the config validates", async () => {
+    const window = await mount(CONFIG);
+    const form = window.document.querySelector("[data-contact-form]") as HTMLFormElement;
+    expect(form.hidden).toBe(false);
+    expect(form.classList.contains("contact-form-ready")).toBe(true);
   });
 
-  it("should retract the summary message once every problem is corrected", () => {
-    expect(app).toContain("function syncErrorBanner()");
-    expect(app).toContain("syncErrorBanner();");
+  it("should keep the inline form hidden when the config cannot be loaded", async () => {
+    const window = await mount({ formResponseUrl: "https://example.com/nope", fields: {} });
+    const form = window.document.querySelector("[data-contact-form]") as HTMLFormElement;
+    expect(form.hidden).toBe(true);
+  });
+
+  it("should mark every empty required field and move focus to the first one", async () => {
+    const window = await mount(CONFIG);
+    submit(window);
+
+    expect(control(window, "name").getAttribute("aria-invalid")).toBe("true");
+    expect(control(window, "organization").hasAttribute("aria-invalid")).toBe(false);
+    expect(window.document.getElementById("contact-name-error")?.textContent).toBe(
+      "必須項目を入力してください。",
+    );
+    expect(window.document.activeElement).toBe(control(window, "name"));
+  });
+
+  it("should reject a malformed email before the no-cors POST hides the failure", async () => {
+    const window = await mount(CONFIG);
+    fill(window, "email", "not-an-email");
+    submit(window);
+
+    expect(window.document.getElementById("contact-email-error")?.textContent).toBe(
+      "メールアドレスの形式で入力してください。",
+    );
+  });
+
+  it("should retract the summary message once every problem is corrected", async () => {
+    const window = await mount(CONFIG);
+    submit(window);
+    expect(banner(window).textContent).toBe(
+      "入力に不備があります。 各項目の説明を確認してください。",
+    );
+
+    fill(window, "name", "富田");
+    // まだ他の必須が空なので、 まとめ表示は残る。
+    expect(banner(window).textContent).not.toBe("");
+
+    fill(window, "email", "taro@example.com");
+    fill(window, "topic", "その他");
+    fill(window, "message", "相談したいことがあります。");
+    expect(banner(window).textContent).toBe("");
+  });
+
+  it("should refuse to run when the synced config disagrees with the markup", async () => {
+    // 同期側だけ必須が外れた設定。 実行時に気づけないと、 LP は必須のはずの欄を
+    // 空のまま送り、 Google に弾かれた事実が no-cors で消える。
+    const drifted = structuredClone(CONFIG) as typeof CONFIG;
+    drifted.fields.name.required = false;
+    const window = await mount(drifted);
+    const form = window.document.querySelector("[data-contact-form]") as HTMLFormElement;
+    expect(form.hidden).toBe(true);
+  });
+
+  it("should refuse to run when a choice value drifts from the synced config", async () => {
+    const drifted = structuredClone(CONFIG) as typeof CONFIG;
+    drifted.fields.topic.choices = ["まったく別の選択肢"];
+    const window = await mount(drifted);
+    const form = window.document.querySelector("[data-contact-form]") as HTMLFormElement;
+    expect(form.hidden).toBe(true);
   });
 });

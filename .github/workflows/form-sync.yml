@@ -155,7 +155,7 @@ jobs:
               echo
               echo "| key | action | type | 備考 |"
               echo "| --- | --- | --- | --- |"
-              jq -r '.plan[] | "| \(.key) | \(.action) | \(.type) | \(if .required then "必須" elif .currentType then "現在: \(.currentType)" else "" end) |"' sync-result.json
+              jq -r '.plan[] | "| \(.key) | \(.action) | \(.type) | \(if .required == true then "必須" elif .required == "unknown" then "必須か不明" elif .currentType then "現在: \(.currentType)" else "" end) |"' sync-result.json
               echo
               echo "- destination: $(jq -r '.destination // "-"' sync-result.json)"
               echo "- notification: $(jq -r '.notification // "-"' sync-result.json)"
