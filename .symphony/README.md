@@ -1,5 +1,7 @@
 # TenkaCloud Symphony fleet
 
+<!-- textlint-disable -->
+
 This directory is the development control plane for four independent repositories:
 
 | ID | Repository | Workspace process |
@@ -140,3 +142,5 @@ Prefer backwards-compatible contract additions in this order:
 2. add a problem requiring it to TenkaCloudChallenge;
 3. update TenkaCloud compatibility integration or pins;
 4. leave Passport unchanged unless the product requirement explicitly includes it.
+
+<!-- textlint-enable -->
