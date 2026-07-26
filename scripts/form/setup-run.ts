@@ -60,10 +60,12 @@ interface RunOptions {
   interactive?: boolean;
 }
 
+/** 大きな区切りの見出しを出す。 */
 function step(io: SetupIo, message: string): void {
   io.write(`\n▶ ${message}\n`);
 }
 
+/** 見出しにぶら下がる補足を出す。 */
 function note(io: SetupIo, message: string): void {
   io.write(`  ${message}\n`);
 }
@@ -124,6 +126,7 @@ function requireCommand(io: SetupIo, command: string, install: string): void {
   }
 }
 
+/** `--repo` が指定されていれば gh へ転送する。 無ければ gh の解決に任せる。 */
 function repoArgs(options: SetupOptions): string[] {
   return options.repo ? ["--repo", options.repo] : [];
 }

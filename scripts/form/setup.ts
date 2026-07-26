@@ -24,6 +24,7 @@ import { createInterface } from "node:readline/promises";
 import { parseArgs } from "./setup-core";
 import { runSetup, type SetupIo } from "./setup-run";
 
+/** 実物の `SetupIo` を組み立てて手順を走らせる。 */
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
   const rl = createInterface({ input: process.stdin, output: process.stdout });

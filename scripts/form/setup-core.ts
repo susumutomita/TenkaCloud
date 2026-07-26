@@ -26,6 +26,7 @@ const SCRIPT_ID_PATTERN = /^[\w-]{20,}$/;
 const DEPLOYMENT_ID_PATTERN = /[\w-]{30,}/;
 const WEB_APP_URL_PATTERN = /^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/;
 
+/** CLI の実行条件。 `parseArgs` が引数から組み立てる。 */
 export interface SetupOptions {
   /** `owner/name`。 null なら gh がカレントリポジトリを解決する。 */
   repo: string | null;
@@ -35,6 +36,7 @@ export interface SetupOptions {
   skipWorkflow: boolean;
 }
 
+/** `bootstrap()` が返す、 検証済みの Google 側の識別子。 */
 export interface BootstrapPayload {
   formId: string;
   syncToken: string;
@@ -43,6 +45,7 @@ export interface BootstrapPayload {
   notifyEmails: string | null;
 }
 
+/** GitHub Environment へ書き込む secret 1 件。 */
 export interface SecretEntry {
   name: string;
   value: string;
@@ -192,6 +195,12 @@ function assertLandingAcceptsUrl(formResponseUrl: string): void {
   }
 }
 
+/**
+ * エディタから貼り付けられた `bootstrap()` の出力を読み、 検証して返す。
+ *
+ * ここを緩めると、 誤った値のまま secrets が書かれる。 それが表に出るのは
+ * 実際に問い合わせが消えたときなので、 疑わしい入力は全部ここで落とす。
+ */
 export function parseBootstrapPayload(raw: string): BootstrapPayload {
   const trimmed = raw.trim();
   if (trimmed.length === 0) {
@@ -245,6 +254,12 @@ export function parseBootstrapPayload(raw: string): BootstrapPayload {
   };
 }
 
+/**
+ * workflow が読む 4 つの secret を、 書き込む順に並べて返す。
+ *
+ * 1 つでも欠けたり空だったりすると CI は 「secrets はあるのに中身が無い」 と
+ * いう、 未設定より診断しづらい状態になる。 揃っていなければ計画を作らない。
+ */
 export function buildSecretPlan(values: {
   clasprcJson: string;
   scriptId: string;
