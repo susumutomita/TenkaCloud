@@ -40,6 +40,50 @@ ID を記録した後はタイトルを変えても同じ質問を追い続け�
 
 ## 初回セットアップ
 
+新規に立ち上げる場合は `make form-setup` がここから下の作業をまとめて行います。
+既存フォームをコード管理下に置く場合だけ、 先に「0. 既存フォームに適用するのか」を
+読んでください。
+
+```bash
+make form-setup
+```
+
+このスクリプトが行うこと。
+
+1. `clasp` と `gh` の存在と認証を確認する
+2. 未ログインなら `clasp login` を促す (ブラウザでの Google 認可)
+3. `form/.clasp.json` が無ければ Apps Script プロジェクトを作る (あれば再利用)
+4. `clasp push` と Web アプリのデプロイを行い、 `exec` URL を組み立てる
+5. Apps Script エディタで `bootstrap` を 1 回実行するよう促し、 その出力を受け取る
+6. GitHub Environment `google-form` を作り、 4 つの secrets を書き込む
+7. リポジトリ変数 `FORM_SYNC_ENABLED` を `true` にする
+8. 初回の dry run (`form-sync`) を起動する
+
+何度実行しても壊れません。 既存のスクリプト ID と `SYNC_TOKEN` は再利用し、
+secrets は上書きされます。 `--repo owner/name` でリポジトリを、
+`--environment <name>` で Environment を変えられます。 `--skip-workflow` を付けると
+最後の dry run を起動しません。
+
+人手が残るのは 2 か所だけで、 どちらも Google の認可が要るため自動化できません。
+
+- `clasp login` のブラウザ認可
+- エディタでの `bootstrap` の実行。 フォーム本体・回答スプレッドシート・
+  `SYNC_TOKEN` はこの 1 回で作られる
+
+`bootstrap` はスクリプトプロパティを書くため Google の認可が要り、 それを CI から
+行うには GCP プロジェクトの関連付けと API 実行可能デプロイが必要になります。
+`syncForm` を Web アプリ経由にしているのと同じ理由で、 そこは避けています。
+
+`bootstrap` も冪等です。 特に `SYNC_TOKEN` は既にあれば作り直しません。 作り直すと
+GitHub 側の secret と食い違い、 以後の同期がすべて認証エラーになります。
+
+スクリプトは受け取った `formResponseUrl` を、 LP が実行時に使う検証器
+(`landing/contact-form.js` の `parseConfig`) にそのまま通します。 組織ドメイン付きの
+URL (`docs.google.com/a/<domain>/forms/...`) はここで弾かれるので、 secrets を書く前に
+気づけます。
+
+### 手作業で行う場合
+
 ### 0. 既存フォームに適用するのか、 新規に作るのかを決める
 
 既存の Google フォームは GUI で作られており、 質問のタイトルが `sync.gs` の
@@ -200,10 +244,13 @@ PR はデフォルトでは自動マージしません。 なお、 この PR �
 ## 一度は人が確かめること
 
 `sync.gs` は Google のランタイム内でしか動かず、 オフラインでテストできません。
-LP 側のロジックはテストで固定していますが、 次の 3 点は実物でしか確認できません。
+LP 側のロジックはテストで固定していますが、 次の 2 点は実物でしか確認できません。
 初回の実同期のあとに一度だけ通してください。
 
 1. LP のフォームから送信し、 回答スプレッドシートに行が増えること
 2. 通知メールが届くこと
-3. Workspace のフォームで公開 URL が `docs.google.com/forms/d/e/...` の形であること
-   (組織ドメイン付きの URL だと LP 側の検証が弾き、 フォームを表示しない)
+
+公開 URL の形 (`docs.google.com/forms/d/e/...`) は `make form-setup` が
+`bootstrap` の出力を LP の検証器へ通して確認するため、 目視の対象から外れています。
+手作業でセットアップした場合だけ、 組織ドメイン付きの URL になっていないかを
+確かめてください。

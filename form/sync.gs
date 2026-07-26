@@ -224,6 +224,72 @@ function validateDefinition_() {
 }
 
 /**
+ * Google 側の初期構築を 1 回で済ませる。 エディタから手で実行する入口。
+ *
+ * scripts/form/setup.ts から呼べないのは、 スクリプトプロパティの書き込みに
+ * Google の認可が要るため。 clasp run で叩くには GCP プロジェクトの関連付けと
+ * API 実行可能デプロイが必要で、 それは syncForm が Web アプリ経由なのと
+ * 同じ理由で避けている。 だからここだけは人が 1 回押す。
+ *
+ * 冪等にしてあるので、 途中で失敗しても再実行してよい。 特に SYNC_TOKEN は
+ * 既にあれば作り直さない。 作り直すと GitHub 側の secret と食い違い、 以後の
+ * 同期が全て 401 になる。
+ *
+ * 出力はそのまま setup.ts に貼り付ける JSON。
+ *
+ * @return {string} 貼り付け用の JSON
+ */
+function bootstrap() {
+  const properties = PropertiesService.getScriptProperties();
+
+  let formId = optionalProperty_(SCRIPT_PROPERTY.FORM_ID);
+  if (!formId) {
+    const created = FormApp.create(FORM_DEFINITION.title);
+    formId = created.getId();
+    properties.setProperty(SCRIPT_PROPERTY.FORM_ID, formId);
+  }
+  const form = FormApp.openById(formId);
+
+  if (!optionalProperty_(SCRIPT_PROPERTY.SYNC_TOKEN)) {
+    properties.setProperty(SCRIPT_PROPERTY.SYNC_TOKEN, generateSyncToken_());
+  }
+
+  if (!optionalProperty_(SCRIPT_PROPERTY.RESPONSE_SPREADSHEET_ID)) {
+    const spreadsheet = SpreadsheetApp.create(FORM_DEFINITION.title + " 回答");
+    properties.setProperty(SCRIPT_PROPERTY.RESPONSE_SPREADSHEET_ID, spreadsheet.getId());
+  }
+
+  if (!optionalProperty_(SCRIPT_PROPERTY.NOTIFY_EMAILS)) {
+    // 通知先が空だと ensureSubmitTrigger_ が skipped になり、 問い合わせに
+    // 気づけない。 既定は実行者自身にしておく。
+    const self = Session.getEffectiveUser().getEmail();
+    if (self) properties.setProperty(SCRIPT_PROPERTY.NOTIFY_EMAILS, self);
+  }
+
+  const payload = {
+    formId: formId,
+    syncToken: requiredProperty_(SCRIPT_PROPERTY.SYNC_TOKEN),
+    // LP が実際に POST する URL。 setup.ts が LP の検証器へ通して確かめる。
+    formResponseUrl: responseUrl_(form),
+    responseSpreadsheetId: optionalProperty_(SCRIPT_PROPERTY.RESPONSE_SPREADSHEET_ID),
+    notifyEmails: optionalProperty_(SCRIPT_PROPERTY.NOTIFY_EMAILS),
+    editUrl: form.getEditUrl(),
+  };
+  const json = JSON.stringify(payload);
+  Logger.log(json);
+  return json;
+}
+
+/**
+ * doPost の共有シークレットを作る。 32 桁の hex。
+ *
+ * @return {string}
+ */
+function generateSyncToken_() {
+  return Utilities.getUuid().replace(/-/g, "");
+}
+
+/**
  * CI から叩かれる Web アプリのエンドポイント。
  *
  * Web アプリは HTTP ステータスを選べないため、 成否は常に 200 の本文
