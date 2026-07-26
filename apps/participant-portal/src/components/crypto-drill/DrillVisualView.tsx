@@ -12,6 +12,7 @@ import Box from "@cloudscape-design/components/box";
 import Table, { type TableProps } from "@cloudscape-design/components/table";
 import type {
   BitLane,
+  DiffRow,
   DrillVisual,
   LocaleCode,
   RoundRow,
@@ -114,7 +115,7 @@ function WordRows({
 }
 
 /** 差分表示。2 行目以降は 1 行目と違う 16 進桁を強調する。 */
-function HashDiff({ rows }: { readonly rows: readonly { label: string; hex: string }[] }) {
+function HashDiff({ rows }: { readonly rows: readonly DiffRow[] }) {
   const [first] = rows;
   return (
     <div>

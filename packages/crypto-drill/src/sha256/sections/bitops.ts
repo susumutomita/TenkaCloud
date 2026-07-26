@@ -259,8 +259,8 @@ export const smallSigmaSection: DrillSection = {
         ),
         hint(
           2,
-          "σ1(0xffffffff) は 0xffffffff にならない。SHR^10 の上位 10 bit が 0 になり、XOR でそこだけ 1 が残る。",
-          "σ1(0xffffffff) is not 0xffffffff: SHR^10 zeroes the top 10 bits, so the XOR leaves ones only there.",
+          "σ1(0xffffffff) は 0xffffffff にならない。全 1 の入力では ROTR^17 と ROTR^19 がどちらも全 1 になり、XOR で打ち消し合って 0 になる。残るのは SHR^10(0xffffffff) だけで、上位 10 bit が 0、1 が立つのは下位 22 bit である。",
+          "σ1(0xffffffff) is not 0xffffffff: for an all-ones input both ROTR^17 and ROTR^19 are also all ones, so they cancel to zero under XOR. Only SHR^10(0xffffffff) survives, leaving the top 10 bits zero and the ones in the low 22 bits.",
         ),
         hint(
           3,

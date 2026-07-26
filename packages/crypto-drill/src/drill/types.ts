@@ -27,8 +27,8 @@ export type AnswerFormat = "hex" | "binary" | "decimal" | "text";
 /**
  * 1 つの解答欄。
  *
- * 1 課題に複数の `DrillCase` を持たせるのが「実装できたか」を測る手段である。任意の入力
- * 6 個に正しく答えるには、手計算より自分のコードを書いた方が速い状態を作る。
+ * 1 課題に複数の `DrillCase` を持たせるのは、手計算より自分のコードを書いた方が速い状態を
+ * 作って学習を促すためである。実装したことの証明にはならない (期待値は bundle から読める)。
  */
 export interface DrillCase {
   readonly id: string;

@@ -29,6 +29,32 @@ beforeEach(() => {
   window.localStorage.clear();
 });
 
+/** 常に throw する storage メソッド。 */
+function throws(message: string): () => never {
+  return () => {
+    throw new Error(message);
+  };
+}
+
+/**
+ * `window.localStorage` を差し替えて body を動かし、必ず元へ戻す。
+ *
+ * body は非同期でも良い。 await せずに finally で戻すと、 差し替えが body の最初の await で
+ * 解除されてしまう (最初にこれで write 失敗のテストが通らなかった)。
+ */
+async function withLocalStorage(
+  stub: Partial<Storage>,
+  body: () => void | Promise<void>,
+): Promise<void> {
+  const original = window.localStorage;
+  Object.defineProperty(window, "localStorage", { configurable: true, value: stub });
+  try {
+    await body();
+  } finally {
+    Object.defineProperty(window, "localStorage", { configurable: true, value: original });
+  }
+}
+
 /** 節 1 の全課題を localStorage 上で達成済みにする。 */
 function completeFirstSection() {
   const first = SHA256_DRILL.sections[0];
@@ -72,6 +98,35 @@ describe("CryptoDrillPage", () => {
     render(<CryptoDrillPage />);
     expect(screen.getByText("crypto_drill.self_study_header")).toBeInTheDocument();
     expect(screen.getByText("crypto_drill.self_study_body")).toBeInTheDocument();
+  });
+
+  it("should not warn about persistence while storage works", () => {
+    render(<CryptoDrillPage />);
+    expect(screen.queryByText("crypto_drill.no_persistence_header")).not.toBeInTheDocument();
+  });
+
+  it("should warn the learner when storage cannot be read at all", async () => {
+    // private window を模す。 module は呼び出し時に global の localStorage を読むので、
+    // メソッドを spy するのではなく object ごと差し替える。
+    await withLocalStorage(
+      { getItem: throws("private window"), setItem: throws("private window") },
+      () => {
+        render(<CryptoDrillPage />);
+        expect(screen.getByText("crypto_drill.no_persistence_header")).toBeInTheDocument();
+        expect(screen.getByText("crypto_drill.no_persistence_body")).toBeInTheDocument();
+      },
+    );
+  });
+
+  it("should warn the learner as soon as a write fails, not after a reload", async () => {
+    // 読めるが書けない (quota 超過)。 reload まで気づけない状態にしないことを pin する。
+    await withLocalStorage({ getItem: () => null, setItem: throws("quota exceeded") }, async () => {
+      render(<CryptoDrillPage />);
+      expect(screen.queryByText("crypto_drill.no_persistence_header")).not.toBeInTheDocument();
+      const task = SHA256_DRILL.sections[0].tasks[0];
+      await userEvent.click(screen.getByTestId(`grade-${task.id}`));
+      expect(screen.getByText("crypto_drill.no_persistence_header")).toBeInTheDocument();
+    });
   });
 
   it("should open at the first section and offer a jump button per section", () => {

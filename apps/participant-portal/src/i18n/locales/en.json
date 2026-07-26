@@ -533,6 +533,8 @@
     "previous": "Previous section",
     "next": "Next section",
     "self_study_header": "A self-study drill — it does not affect your score",
-    "self_study_body": "Your progress is stored only in this browser and never counts toward your team's score or rank. Grading happens on your own device, so it is not a basis for completion or certification."
+    "self_study_body": "Your progress is stored only in this browser and never counts toward your team's score or rank. Grading happens on your own device, so it is not a basis for completion or certification.",
+    "no_persistence_header": "Progress cannot be saved on this device",
+    "no_persistence_body": "Browser storage is unavailable (a private window or a full quota, for example), so your progress is kept only while this page stays open. Closing the tab or reloading starts you over."
   }
 }

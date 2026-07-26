@@ -103,6 +103,10 @@ export function gradeCase(
   }
   const normalized = normalizeAnswer(raw, drillCase.format);
   if (!normalized.ok) return { ...base, verdict: "malformed", normalized: normalized.value };
+  // 基数前置だけ (`0x` / `0b`) や区切り記号だけを入れた場合、正規化後は空になる。
+  // これは「値を書いていない」状態なので `incorrect` ではなく `empty` として扱う
+  // (「値が違う」と言われると、学習者は自分の計算を疑って時間を使ってしまう)。
+  if (normalized.value === "") return { ...base, verdict: "empty", normalized: "" };
   const verdict = normalized.value === drillCase.expected ? "correct" : "incorrect";
   return { ...base, verdict, normalized: normalized.value };
 }

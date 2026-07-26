@@ -31,7 +31,11 @@ import { useCallback, useMemo, useState } from "react";
 import "../components/crypto-drill/crypto-drill.css";
 import { DrillSectionView } from "../components/crypto-drill/DrillSectionView";
 import { useI18n } from "../i18n";
-import { loadDrillProgress, saveDrillProgress } from "../lib/crypto-drill-storage";
+import {
+  type LoadedDrillProgress,
+  loadDrillProgress,
+  saveDrillProgress,
+} from "../lib/crypto-drill-storage";
 
 /** 開始位置は「最初の未達成の節」。全部終わっていれば最初の節へ戻す。 */
 export function initialSectionIndex(progress: DrillProgress): number {
@@ -42,11 +46,15 @@ export function initialSectionIndex(progress: DrillProgress): number {
 
 export function CryptoDrillPage() {
   const { t, locale } = useI18n();
-  const [progress, setProgress] = useState<DrillProgress>(() => loadDrillProgress(SHA256_DRILL.id));
-  const [index, setIndex] = useState<number>(() => initialSectionIndex(progress));
+  const [loaded] = useState<LoadedDrillProgress>(() => loadDrillProgress(SHA256_DRILL.id));
+  const [progress, setProgress] = useState<DrillProgress>(loaded.progress);
+  const [index, setIndex] = useState<number>(() => initialSectionIndex(loaded.progress));
+  // storage が使えない端末 (private window / quota 超過) では進捗が残らない。 一度でも
+  // 読み書きに失敗したら学習者へ伝える: 15 節進めた後の reload で初めて気づくのは損失が大きい。
+  const [canPersist, setCanPersist] = useState<boolean>(loaded.persisted);
 
   const persist = useCallback((next: DrillProgress) => {
-    saveDrillProgress(next);
+    if (!saveDrillProgress(next)) setCanPersist(false);
     setProgress(next);
   }, []);
 
@@ -83,6 +91,12 @@ export function CryptoDrillPage() {
       <Alert type="info" header={t("crypto_drill.self_study_header")}>
         {t("crypto_drill.self_study_body")}
       </Alert>
+
+      {!canPersist && (
+        <Alert type="warning" header={t("crypto_drill.no_persistence_header")}>
+          {t("crypto_drill.no_persistence_body")}
+        </Alert>
+      )}
 
       <Container header={<Header variant="h2">{t("crypto_drill.progress_header")}</Header>}>
         <SpaceBetween size="s">

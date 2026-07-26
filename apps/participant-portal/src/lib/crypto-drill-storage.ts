@@ -24,31 +24,53 @@ export function drillStorageKey(drillId: string): string {
   return `${STORAGE_KEY_PREFIX}:${drillId}`;
 }
 
+/** 読み出し結果。`persisted` が false なら storage が使えていない。 */
+export interface LoadedDrillProgress {
+  readonly progress: DrillProgress;
+  /**
+   * storage を読めたか。false は「private window 等で保存が効かない」ことを意味し、
+   * 画面はこれを見て学習者へ警告を出す。壊れた値・別ドリルの値・未保存は storage 自体は
+   * 読めているので true (= 保存は今後も効く)。
+   */
+  readonly persisted: boolean;
+}
+
 /**
  * 保存済みの進捗を読む。未保存・壊れた値・別ドリルの値はすべて空の進捗を返す
  * (静かに部分復元して達成状況を捏造しない)。
+ *
+ * storage が使えないときも throw せず空の進捗で続行するが、その事実は `persisted: false`
+ * として返す。黙って毎回リセットすると、学習者は 15 節進めた後の reload で初めて
+ * 進捗が消えていたことに気づく。
  */
 export function loadDrillProgress(
   drillId: string,
   storage: Pick<Storage, "getItem"> = localStorage,
-): DrillProgress {
+): LoadedDrillProgress {
   try {
     const raw = storage.getItem(drillStorageKey(drillId));
-    if (raw === null) return emptyProgress(drillId);
-    return parseProgress(raw, drillId) ?? emptyProgress(drillId);
+    if (raw === null) return { progress: emptyProgress(drillId), persisted: true };
+    return { progress: parseProgress(raw, drillId) ?? emptyProgress(drillId), persisted: true };
   } catch {
-    return emptyProgress(drillId);
+    return { progress: emptyProgress(drillId), persisted: false };
   }
 }
 
-/** 進捗を保存する。失敗しても throw しない。 */
+/**
+ * 進捗を保存する。失敗しても throw しないが、保存できたかを返す。
+ *
+ * 失敗しても学習は続けられるべきなので例外にはしない (private window でドリルが
+ * 使えなくなる方が学習者にとって損失が大きい)。代わりに false を返し、呼び出し側が
+ * 「この端末では進捗を保存できない」と表示する。
+ */
 export function saveDrillProgress(
   progress: DrillProgress,
   storage: Pick<Storage, "setItem"> = localStorage,
-): void {
+): boolean {
   try {
     storage.setItem(drillStorageKey(progress.drillId), serializeProgress(progress));
+    return true;
   } catch {
-    // private window / quota 超過。 セッション内の進捗だけで続行する。
+    return false;
   }
 }

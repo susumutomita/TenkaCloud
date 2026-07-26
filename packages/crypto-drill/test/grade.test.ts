@@ -87,6 +87,23 @@ describe("gradeCase", () => {
     expect(gradeCase(target, "00000000").verdict).toBe("incorrect");
   });
 
+  it("should treat a bare base prefix or separators as empty, not as a wrong value", () => {
+    // `0x` だけを入れた状態で「値が違う」と言われると、 学習者は自分の計算を疑ってしまう。
+    for (const raw of ["0x", "0X", "_", "  -  "]) {
+      const result = gradeCase(target, raw);
+      expect(result.verdict, `${raw} should be empty`).toBe("empty");
+      expect(result.normalized).toBe("");
+    }
+    const binaryCase = answerCase({
+      id: "bin",
+      ja: "2 進",
+      en: "binary",
+      expected: "01100001",
+      format: "binary",
+    });
+    expect(gradeCase(binaryCase, "0b").verdict).toBe("empty");
+  });
+
   it("should accept the expected value with tolerated notation", () => {
     const result = gradeCase(target, "0x61_62_63_80");
     expect(result.verdict).toBe("correct");

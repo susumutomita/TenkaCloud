@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { bigSigma0, bigSigma1, ch, maj, smallSigma0, smallSigma1 } from "../src/sha256/functions";
-import { toHex32 } from "../src/sha256/word";
+import { rotr32, shr32, toBinary32, toHex32 } from "../src/sha256/word";
 
 describe("SHA-256 bit functions", () => {
   it("should let Ch pick y where x is 1 and z where x is 0", () => {
@@ -45,5 +45,16 @@ describe("SHA-256 bit functions", () => {
     expect(bigSigma1(0xffffffff)).toBe(0xffffffff);
     expect(smallSigma0(0xffffffff)).not.toBe(0xffffffff);
     expect(smallSigma1(0xffffffff)).not.toBe(0xffffffff);
+  });
+
+  it("should reduce σ1 of all-ones to SHR^10 alone, leaving ones only in the low 22 bits", () => {
+    // 節 5 のヒント 2 が説明している導出そのもの: 全 1 では ROTR^17 と ROTR^19 が
+    // どちらも全 1 なので XOR で消え、 SHR^10 だけが残る。 ヒントの記述が逆向きに
+    // なっていないことをここで固定する (教材の誤りは学習者の検算を狂わせる)。
+    expect(rotr32(0xffffffff, 17)).toBe(0xffffffff);
+    expect(rotr32(0xffffffff, 19)).toBe(0xffffffff);
+    expect(smallSigma1(0xffffffff)).toBe(shr32(0xffffffff, 10));
+    expect(toHex32(smallSigma1(0xffffffff))).toBe("003fffff");
+    expect(toBinary32(smallSigma1(0xffffffff))).toBe("00000000001111111111111111111111");
   });
 });
