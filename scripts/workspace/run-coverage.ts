@@ -68,6 +68,7 @@ export const COVERAGE_WORKSPACES: readonly CoverageWorkspace[] = [
     shard: "packages",
   },
   { dir: "packages/problem-test-harness", filter: "@tenkacloud/problem-test", shard: "packages" },
+  { dir: "packages/crypto-drill", filter: "@tenkacloud/crypto-drill", shard: "packages" },
   {
     dir: "apps/always-on-control-plane",
     filter: "@tenkacloud/always-on-control-plane",

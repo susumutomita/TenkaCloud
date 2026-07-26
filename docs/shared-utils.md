@@ -24,6 +24,7 @@ Import these with `workspace:*` from any app or from `infrastructure`.
 | ------- | ---------------- |
 | `@tenkacloud/auth-client` | Cognito Hosted UI OAuth 2.0 Code + PKCE client shared by the admin SPAs |
 | `@tenkacloud/coordination-plugin-sdk` | ADR-028 inter-team coordination plugin contract (state machine + 5 hooks) |
+| `@tenkacloud/crypto-drill` | Step-by-step cryptography drill format (types / grading / progress / staged hints) plus the SHA-256 reference trace and its 15 sections |
 | `@tenkacloud/format` | Pure formatters for SPAs — `formatRelativeTime` (ja/en) |
 | `@tenkacloud/portal-contracts` | Participant portal API wire contract — one definition for backend handler + SPA |
 | `@tenkacloud/portal-plugin-sdk` | Type definitions for participant-portal problem plugins (ADR-012 Phase 5) |

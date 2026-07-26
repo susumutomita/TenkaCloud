@@ -12,10 +12,11 @@ TenkaCloud/
 │   ├── participant-portal/                  # Competitor portal (dev :5175)
 │   ├── developer-portal/                    # Pack-author-facing docs/tools SPA
 │   └── always-on-control-plane/             # Cloudflare Worker (ADR-049) — not a Vite SPA; see Always-On mode below
-├── packages/                                # Shared workspace libraries, 12 packages (auth-client, saml-utils,
+├── packages/                                # Shared workspace libraries, 13 packages (auth-client, saml-utils,
 │   │                                         # problem-runtime, problem-sdk, format,
 │   │                                         # coordination-plugin-sdk, portal-contracts, web-kit,
-│   │                                         # portal-plugin-sdk, problem-cost, problem-test-harness, trust-bridge)
+│   │                                         # portal-plugin-sdk, problem-cost, problem-test-harness, trust-bridge,
+│   │                                         # crypto-drill)
 ├── infrastructure/                          # CDK (SBT 0.3.9) — every backend is a Lambda
 │   ├── bin/infrastructure.ts                # Stack wiring entry point
 │   ├── lib/                                 # 25 subdirs (`ls infrastructure/lib`); the significant ones:

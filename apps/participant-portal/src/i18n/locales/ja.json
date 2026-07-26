@@ -30,7 +30,9 @@
     "auto_refresh_on": "自動更新: ON",
     "change_team_name": "チーム名を変更",
     "sign_out": "サインアウト",
-    "course_tracks": "講座トラック"
+    "course_tracks": "講座トラック",
+    "learn_section": "学習",
+    "sha256_drill": "SHA-256 ドリル"
   },
   "switcher": {
     "aria_label": "言語切替 / Language"
@@ -49,7 +51,10 @@
     "no_problems_body": "このチームには deploy 済みの問題がありません。operator にお問い合わせください。",
     "quests_quick_link_header": "問題に挑戦",
     "quests_quick_link_body": "{count} 問が deploy 済です。 問題一覧から挑戦してください。",
-    "quests_quick_link_button": "問題一覧を開く"
+    "quests_quick_link_button": "問題一覧を開く",
+    "learn_drill_header": "AWS 無しで始める学習ドリル",
+    "learn_drill_body": "SHA-256 の内部を 15 節に分けて、 計算・実装・自動採点で理解する。 問題の deploy を待たずに始められる。",
+    "learn_drill_button": "SHA-256 ドリルを開く"
   },
   "login": {
     "header": "TenkaCloud Participant Portal",
@@ -494,5 +499,38 @@
     "role_assignment_companion": "課題の補助",
     "role_transfer": "別設定への転用",
     "role_synthesis": "複数週の統合"
+  },
+  "crypto_drill": {
+    "progress_header": "現在位置",
+    "progress_label": "{done} / {total} 節が達成済み",
+    "section_heading": "節 {order}: {title}",
+    "reading_header": "問題説明",
+    "figure_header": "図解",
+    "explanation_header": "解説と次のステップ",
+    "next_step_label": "次のステップ",
+    "starter_header": "手元で実行する雛形",
+    "starter_note": "このコードはブラウザ上では実行しない。 自分の環境で走らせて、 出力を下の欄へ貼る。",
+    "expected_format": "{format}・{width} 桁",
+    "format_hex": "16 進",
+    "format_binary": "2 進",
+    "format_decimal": "10 進",
+    "format_text": "自由記述",
+    "grade": "採点する",
+    "passed": "全問正解",
+    "not_yet": "まだ通っていない欄がある",
+    "verdict_correct": "正解",
+    "verdict_incorrect": "値が違う",
+    "verdict_malformed": "記法が違う",
+    "verdict_empty": "未入力",
+    "read_as": "入力は「{value}」として読んだ",
+    "reveal_hint": "ヒントを見る ({shown} / {total})",
+    "hint_level": "ヒント {level}",
+    "coach_hint": "AI にヒントをもらう",
+    "coach_explain": "AI に解説してもらう",
+    "coach_prompt_label": "AI へ貼るプロンプト",
+    "coach_prompt_note": "この内容を自分の Claude Code へ貼る。 正解値は含まれないので、 答えではなくヒントが返る。",
+    "task_done": "達成",
+    "previous": "前の節",
+    "next": "次の節"
   }
 }

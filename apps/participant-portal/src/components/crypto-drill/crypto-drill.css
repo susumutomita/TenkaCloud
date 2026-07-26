@@ -1,0 +1,53 @@
+/*
+ * 学習ドリルの図解用スタイル。
+ *
+ * bit 列や 64 ラウンドの表は Cloudscape のコンポーネントで表現できない (等幅で桁を揃え、
+ * 横方向にだけスクロールさせる必要がある) ため、ここだけ素の CSS を持つ。
+ *
+ * モバイル方針: 図は必ず `overflow-x: auto` の器の中でだけ横に伸びる。ページ本体が横スクロール
+ * すると、狭い画面で本文が読めなくなる。
+ */
+
+.tc-drill-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tc-drill-bits {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+  line-height: 1.6;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.tc-drill-bit-group {
+  margin-right: 0.5em;
+}
+
+.tc-drill-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+.tc-drill-starter {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8125rem;
+  margin: 0;
+  white-space: pre;
+}
+
+/* 差分ハイライト。 色だけに頼らず太字も併用する (色覚特性への配慮)。 */
+.tc-drill-diff-changed {
+  background-color: #fff7cd;
+  font-weight: 700;
+}
+
+/* 節インデックスは狭い画面で折り返す番号ボタンの並び。 */
+.tc-drill-index {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}

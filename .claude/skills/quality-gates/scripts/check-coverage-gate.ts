@@ -40,6 +40,9 @@ export const GATED_WORKSPACES = [
   "packages/format",
   "packages/coordination-plugin-sdk",
   "packages/web-kit",
+  // crypto-drill ships at 100% (pure logic + declarative drill content, no
+  // AWS / DOM seam), so it is gated from the start rather than staged in report-only.
+  "packages/crypto-drill",
 ] as const;
 
 /** gate しないが現在値を表示する workspace (owner lane、 100% への道筋表示用)。 */

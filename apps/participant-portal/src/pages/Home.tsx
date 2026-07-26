@@ -77,6 +77,17 @@ export function HomePage({ config }: { config: AppConfig }) {
         </Container>
       )}
 
+      {/* 学習ドリルは AWS に依存しないので、 問題が deploy されていない競技者にも
+       *  常に出す (= 待ち時間が「何もできない時間」にならない)。 */}
+      <Container header={<Header variant="h2">{t("home.learn_drill_header")}</Header>}>
+        <SpaceBetween size="m">
+          <Box>{t("home.learn_drill_body")}</Box>
+          <Button onClick={() => navigate("/learn/sha256")} data-testid="home-learn-drill">
+            {t("home.learn_drill_button")}
+          </Button>
+        </SpaceBetween>
+      </Container>
+
       {view && view.problems.length === 0 && (
         // Issue #1366: 「問題が無い」 という空状態。 Container + 本文だけだと「次に何をするか」 が
         // 分からないので DESIGN-SYSTEM 8 章準拠の EmptyState に置換。 primary action は scoreboard へ

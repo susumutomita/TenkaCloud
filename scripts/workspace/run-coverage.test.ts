@@ -20,7 +20,7 @@ import {
 
 const root = join(import.meta.dir, "../..");
 
-// Issue #2513 / #2756: hardcode the expected set so an accidental drop from the 18-workspace
+// Issue #2513 / #2756 + crypto-drill: hardcode the expected set so an accidental drop from the 19-workspace
 // chain (e.g. someone forgetting to port a workspace when editing this file) fails loudly
 // instead of silently shrinking the coverage matrix.
 const EXPECTED_DIRS = [
@@ -40,12 +40,13 @@ const EXPECTED_DIRS = [
   "packages/web-kit",
   "packages/portal-plugin-sdk",
   "packages/problem-test-harness",
+  "packages/crypto-drill",
   "apps/always-on-control-plane",
   "apps/developer-portal",
 ];
 
 describe("COVERAGE_WORKSPACES", () => {
-  it("should match the 18 workspaces currently in the coverage matrix", () => {
+  it("should match the 19 workspaces currently in the coverage matrix", () => {
     expect(COVERAGE_WORKSPACES.map((ws) => ws.dir)).toEqual(EXPECTED_DIRS);
   });
 
@@ -105,6 +106,7 @@ describe("SHARDS", () => {
       "packages/web-kit",
       "packages/portal-plugin-sdk",
       "packages/problem-test-harness",
+      "packages/crypto-drill",
       "apps/always-on-control-plane",
       "apps/developer-portal",
     ]);
@@ -190,6 +192,7 @@ describe("resolveLcovPaths", () => {
       "./packages/web-kit/coverage/lcov.info",
       "./packages/portal-plugin-sdk/coverage/lcov.info",
       "./packages/problem-test-harness/coverage/lcov.info",
+      "./packages/crypto-drill/coverage/lcov.info",
       "./apps/always-on-control-plane/coverage/lcov.info",
       "./apps/developer-portal/coverage/lcov.info",
     ]);

@@ -102,6 +102,13 @@ describe("HomePage", () => {
     expect(mockNav).toHaveBeenCalledWith("/problems");
   });
 
+  it("should offer the learning drill even when no problem is deployed", () => {
+    mockTeamView.mockReturnValue(tv({ view: view({ problems: [] }) }));
+    renderHome();
+    fireEvent.click(screen.getByTestId("home-learn-drill"));
+    expect(mockNav).toHaveBeenCalledWith("/learn/sha256");
+  });
+
   it("should hide the score chart in mock mode", () => {
     mockIsMock.mockReturnValue(true);
     mockTeamView.mockReturnValue(tv({ view: view() }));

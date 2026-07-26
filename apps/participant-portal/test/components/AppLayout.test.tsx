@@ -383,6 +383,13 @@ describe("buildSideNavItems (Issue #2474 local nav pruning)", () => {
     expect(linkHrefs(sectionByText(items, "nav.event_section"))).toContain("/notifications");
   });
 
+  it("should offer the learning drill in every cloud mode, since it needs no AWS", () => {
+    for (const cloudMode of ["local", "mock", "real"] as const) {
+      const items = buildSideNavItems(0, (k) => k, cloudMode, "ja");
+      expect(linkHrefs(sectionByText(items, "nav.learn_section"))).toEqual(["/learn/sha256"]);
+    }
+  });
+
   it("should append a language section with #locale- links in every cloud mode (#2711 follow-up)", () => {
     for (const cloudMode of ["local", "mock", "real"] as const) {
       const items = buildSideNavItems(0, (k) => k, cloudMode, "ja");

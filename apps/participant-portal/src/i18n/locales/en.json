@@ -30,7 +30,9 @@
     "auto_refresh_on": "Auto refresh: On",
     "change_team_name": "Change team name",
     "sign_out": "Sign out",
-    "course_tracks": "Course tracks"
+    "course_tracks": "Course tracks",
+    "learn_section": "Learn",
+    "sha256_drill": "SHA-256 drill"
   },
   "switcher": {
     "aria_label": "Language switcher"
@@ -49,7 +51,10 @@
     "no_problems_body": "This team has no deployed problems. Please contact the operator.",
     "quests_quick_link_header": "Take on the problems",
     "quests_quick_link_body": "{count} problem(s) deployed. Open the Quests list to start.",
-    "quests_quick_link_button": "Open Quests"
+    "quests_quick_link_button": "Open Quests",
+    "learn_drill_header": "A learning drill that needs no AWS",
+    "learn_drill_body": "Fifteen sections take you inside SHA-256 through hand calculation, your own implementation, and auto-grading. Start without waiting for a problem to deploy.",
+    "learn_drill_button": "Open the SHA-256 drill"
   },
   "login": {
     "header": "TenkaCloud Participant Portal",
@@ -494,5 +499,38 @@
     "role_assignment_companion": "Assignment companion",
     "role_transfer": "Transfer",
     "role_synthesis": "Synthesis"
+  },
+  "crypto_drill": {
+    "progress_header": "Where you are",
+    "progress_label": "{done} of {total} sections complete",
+    "section_heading": "Section {order}: {title}",
+    "reading_header": "Read this first",
+    "figure_header": "Figure",
+    "explanation_header": "Explanation and next step",
+    "next_step_label": "Next step",
+    "starter_header": "Starter to run locally",
+    "starter_note": "This code is not executed in the browser. Run it in your own environment and paste the output below.",
+    "expected_format": "{format}, {width} digits",
+    "format_hex": "hex",
+    "format_binary": "binary",
+    "format_decimal": "decimal",
+    "format_text": "free text",
+    "grade": "Check my answer",
+    "passed": "All correct",
+    "not_yet": "Some answers are not there yet",
+    "verdict_correct": "Correct",
+    "verdict_incorrect": "Wrong value",
+    "verdict_malformed": "Wrong notation",
+    "verdict_empty": "Empty",
+    "read_as": "Read your input as “{value}”",
+    "reveal_hint": "Show a hint ({shown} / {total})",
+    "hint_level": "Hint {level}",
+    "coach_hint": "Ask AI for a hint",
+    "coach_explain": "Ask AI to explain",
+    "coach_prompt_label": "Prompt to paste into your AI",
+    "coach_prompt_note": "Paste this into your own Claude Code. It carries no expected values, so you get a hint rather than the answer.",
+    "task_done": "Done",
+    "previous": "Previous section",
+    "next": "Next section"
   }
 }

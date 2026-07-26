@@ -5,6 +5,7 @@ import { RequireAuth } from "./auth/RequireAuth";
 import { ShellLayout } from "./components/AppLayout";
 import type { AppConfig } from "./config";
 import { CourseTracksPage } from "./pages/CourseTracks";
+import { CryptoDrillPage } from "./pages/CryptoDrill";
 import { LoginPage } from "./pages/Login";
 import { NotificationsPage } from "./pages/Notifications";
 import { ProblemDetailPage } from "./pages/ProblemDetail";
@@ -50,6 +51,8 @@ export function App({ config }: { config: AppConfig }) {
         <Route path="/problems" element={guarded(config, <QuestsPage />)} />
         {/* Issue #2786: 週・章順の学習経路。 /problems の flat 一覧と併存する。 */}
         <Route path="/course-tracks" element={guarded(config, <CourseTracksPage />)} />
+        {/* AWS を 1 つも deploy していなくても進められる学習ドリル。 */}
+        <Route path="/learn/sha256" element={guarded(config, <CryptoDrillPage />)} />
         <Route
           path="/problems/:jobId"
           element={guarded(config, <ProblemDetailPage config={config} />)}

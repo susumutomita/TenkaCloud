@@ -283,6 +283,13 @@ export function buildSideNavItems(
         { type: "link", href: "/course-tracks", text: t("nav.course_tracks") },
       ],
     },
+    // AWS 非依存の学習ドリル。 local / mock / real すべてで同じように使えるので
+    // cloudMode で出し分けない (= deploy 前の competitor が最初に触れる導線になる)。
+    {
+      type: "section",
+      text: t("nav.learn_section"),
+      items: [{ type: "link", href: "/learn/sha256", text: t("nav.sha256_drill") }],
+    },
   ];
   if (!isLocal) {
     sections.push({

@@ -141,6 +141,7 @@
       "dependencies": {
         "@cloudscape-design/components": "^3.0.1308",
         "@cloudscape-design/global-styles": "^1.0.61",
+        "@tenkacloud/crypto-drill": "workspace:*",
         "@tenkacloud/format": "workspace:*",
         "@tenkacloud/portal-contracts": "workspace:*",
         "@tenkacloud/portal-plugin-sdk": "workspace:*",
@@ -240,6 +241,17 @@
     "packages/coordination-plugin-sdk": {
       "name": "@tenkacloud/coordination-plugin-sdk",
       "version": "0.1.0",
+      "devDependencies": {
+        "typescript": "^6.0.3",
+        "vitest": "^4.1.9",
+      },
+    },
+    "packages/crypto-drill": {
+      "name": "@tenkacloud/crypto-drill",
+      "version": "0.1.0",
+      "dependencies": {
+        "zod": "^3.25.76",
+      },
       "devDependencies": {
         "typescript": "^6.0.3",
         "vitest": "^4.1.9",
@@ -1167,6 +1179,8 @@
     "@tenkacloud/auth-client": ["@tenkacloud/auth-client@workspace:packages/auth-client"],
 
     "@tenkacloud/coordination-plugin-sdk": ["@tenkacloud/coordination-plugin-sdk@workspace:packages/coordination-plugin-sdk"],
+
+    "@tenkacloud/crypto-drill": ["@tenkacloud/crypto-drill@workspace:packages/crypto-drill"],
 
     "@tenkacloud/format": ["@tenkacloud/format@workspace:packages/format"],
 
