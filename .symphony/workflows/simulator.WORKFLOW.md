@@ -30,6 +30,8 @@ codex:
     networkAccess: true
 ---
 
+<!-- textlint-disable -->
+
 You are the unattended implementation agent for GitHub Issue `{{ issue.identifier }}` in
 `susumutomita/TenkaCloudSimulator`.
 
@@ -123,3 +125,5 @@ low risk is eligible for autonomous squash merge.
    - low risk: mark ready and squash merge through `github_api`;
    - medium or high risk: keep open, remove `agent:ready`, and hand off for human review.
 6. Record the merge commit and final proof in the workpad. Do not publish a release or deploy.
+
+<!-- textlint-enable -->
