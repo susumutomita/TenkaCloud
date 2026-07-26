@@ -60,6 +60,8 @@ interface Harness {
   io: SetupIo;
   /** スタブが記録した呼び出しの行。 */
   log(): string[];
+  /** CLI が操作者へ表示した内容。 */
+  output(): string;
 }
 
 function writeExecutable(path: string, body: string): void {
@@ -88,6 +90,7 @@ function harness(overrides: { withClaspJson?: boolean; ghSecretFails?: boolean }
     );
   }
 
+  const printed: string[] = [];
   return {
     io: {
       repoRoot,
@@ -99,12 +102,15 @@ function harness(overrides: { withClaspJson?: boolean; ghSecretFails?: boolean }
         ...(overrides.ghSecretFails ? { FORM_SETUP_GH_SECRET_FAILS: "1" } : {}),
       },
       prompt: () => Promise.resolve(BOOTSTRAP_JSON),
-      write: () => {},
+      write: (text) => {
+        printed.push(text);
+      },
     },
     log: () =>
       readFileSync(logPath, "utf8")
         .split("\n")
         .filter((line) => line.length > 0),
+    output: () => printed.join(""),
   };
 }
 
@@ -198,5 +204,14 @@ describe("runSetup", () => {
     for (const line of log().filter((entry) => entry.startsWith("gh secret set "))) {
       expect(line).toContain("--repo owner/name");
     }
+  });
+
+  it("should close by pointing at the next steps and the form URL", async () => {
+    const { io, output } = harness();
+    await runSetup(options(), io);
+    expect(output()).toContain("完了しました");
+    expect(output()).toContain(
+      "https://docs.google.com/forms/d/e/1FAIpQLScSampleFormKey123/formResponse",
+    );
   });
 });
