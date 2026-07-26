@@ -185,11 +185,7 @@ export function validateWorkflowText(
     /make install_ci/,
     `${repository.id}: after_create must install the frozen dependency graph`,
   );
-  requirePattern(
-    source,
-    /make agent-gate/,
-    `${repository.id}: workflow must use make agent-gate`,
-  );
+  requirePattern(source, /make agent-gate/, `${repository.id}: workflow must use make agent-gate`);
   requirePattern(
     source,
     /codex exec review --base origin\/main/,

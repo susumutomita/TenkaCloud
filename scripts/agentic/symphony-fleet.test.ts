@@ -5,10 +5,10 @@ import { join, resolve } from "node:path";
 import {
   buildChildEnvironment,
   buildLaunchSpecs,
-  findMissingPrerequisites,
-  FleetConfigError,
   type FleetConfig,
+  FleetConfigError,
   type FleetRepository,
+  findMissingPrerequisites,
   loadFleet,
   parseCliArguments,
   parseFleetConfig,
@@ -114,7 +114,9 @@ describe("workflow validation", () => {
       "Run codex exec review --base origin/main and resolve actionable findings.\n",
       "",
     );
-    expect(() => validateWorkflowText(config, platform, source)).toThrow(/independent Codex review/);
+    expect(() => validateWorkflowText(config, platform, source)).toThrow(
+      /independent Codex review/,
+    );
   });
 
   it("should reject a workflow that omits the destructive-action boundary", () => {
