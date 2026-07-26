@@ -391,6 +391,7 @@
       "form.sending": "送信しています…",
       "form.required": "必須項目を入力してください。",
       "form.invalidEmail": "メールアドレスの形式で入力してください。",
+      "form.hasErrors": "入力に不備があります。 各項目の説明を確認してください。",
       "form.sent":
         "送信しました。 2 営業日以内に返信します。 返信が届かない場合はお手数ですが Google フォームからもう一度お送りください。",
       "form.failed":
@@ -673,6 +674,7 @@
       "form.sending": "Sending…",
       "form.required": "Please fill in the required fields.",
       "form.invalidEmail": "Please enter a valid email address.",
+      "form.hasErrors": "Some entries need attention. Check the message under each field.",
       "form.sent":
         "Thanks — we'll reply within two business days. If you don't hear back, please resend through the Google Form.",
       "form.failed":
@@ -882,6 +884,10 @@
     var submitButton = form.querySelector("[data-contact-form-submit]");
     var inputs = Array.prototype.slice.call(form.querySelectorAll("[data-form-field]"));
     var sending = false;
+    // いま不備が出ている項目の key。 まとめ表示 (statusEl) を引っ込めてよいかの
+    // 判断に使う。
+    var problemKeys = [];
+    var statusKey = "";
 
     function fieldKey(input) {
       return input.getAttribute("data-form-field");
@@ -896,6 +902,7 @@
     }
 
     function setStatus(key, tone) {
+      statusKey = key;
       statusEl.textContent = key ? text(key) : "";
       statusEl.setAttribute("data-tone", tone);
     }
@@ -912,6 +919,17 @@
       input.removeAttribute("aria-invalid");
       var target = errorEl(input);
       if (target) target.textContent = "";
+      problemKeys = problemKeys.filter((key) => key !== fieldKey(input));
+    }
+
+    /**
+     * 不備がすべて解消したら、 まとめ表示も引っ込める。 残したままだと 「直したのに
+     * エラーが出続ける」 状態になり、 aria-live を読む利用者には現状が分からない。
+     * 送信失敗 (form.failed) は入力の不備ではないので消さない。
+     */
+    function syncErrorBanner() {
+      if (statusKey !== "form.hasErrors" || problemKeys.length > 0) return;
+      setStatus("", "");
     }
 
     /**
@@ -932,6 +950,7 @@
           );
         }
       });
+      problemKeys = problems.map((problem) => problem.key);
       if (problems.length === 0) return;
       // 最初の不備へフォーカスを移す。 送信ボタンに留まると、 支援技術の
       // 利用者はどこを直せばよいか辿り直すことになる。
@@ -946,12 +965,9 @@
       var problems = window.TenkaContactForm.validate(config, values);
       markProblems(problems);
       if (problems.length > 0) {
-        setStatus(
-          problems.some((problem) => problem.reason === "email")
-            ? "form.invalidEmail"
-            : "form.required",
-          "error",
-        );
+        // まとめ表示は項目ごとの文言と別にする。 同じ文言を 2 箇所へ出すと、
+        // 1 項目だけ直したときにどちらを指しているのか判別できない。
+        setStatus("form.hasErrors", "error");
         return;
       }
       sending = true;
@@ -1011,6 +1027,14 @@
           `contact form control drifted for ${fieldKey(input)}: DOM=${tag} config=${field.kind}`,
         );
       }
+      // 必須の食い違いも落とす。 フォーム側だけ必須になると、 LP は空のまま
+      // 送れてしまい Google に弾かれる。 no-cors なので誰も気づけない。
+      var domRequired = input.hasAttribute("required");
+      if (domRequired !== field.required) {
+        throw new Error(
+          `contact form required flag drifted for ${fieldKey(input)}: DOM=${domRequired} config=${field.required}`,
+        );
+      }
       if (field.kind !== "choice") return;
       var options = Array.prototype.slice
         .call(input.options)
@@ -1025,8 +1049,12 @@
     function activate(config) {
       assertMatchesConfig(config);
       inputs.forEach((input) => {
-        input.addEventListener("input", () => clearProblem(input));
-        input.addEventListener("change", () => clearProblem(input));
+        var correct = () => {
+          clearProblem(input);
+          syncErrorBanner();
+        };
+        input.addEventListener("input", correct);
+        input.addEventListener("change", correct);
       });
       form.addEventListener("submit", (event) => handleSubmit(config, event));
       form.hidden = false;

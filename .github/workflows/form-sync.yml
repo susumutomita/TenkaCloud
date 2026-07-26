@@ -96,13 +96,14 @@ jobs:
           FORM_SCRIPT_ID: ${{ secrets.FORM_SCRIPT_ID }}
           FORM_WEBAPP_URL: ${{ secrets.FORM_WEBAPP_URL }}
           FORM_SYNC_TOKEN: ${{ secrets.FORM_SYNC_TOKEN }}
+        shell: bash
         run: |
           # 未設定のまま進むと clasp の認証エラーという無関係な顔で落ちるので、
-          # ここで何が足りないかを名指しする。
+          # ここで何が足りないかを名指しする。 間接展開 (${!name}) を使うのは、
+          # eval だと secret の中身がシェルに解釈されてしまうため。
           missing=""
           for name in CLASPRC_JSON FORM_SCRIPT_ID FORM_WEBAPP_URL FORM_SYNC_TOKEN; do
-            eval "value=\${$name}"
-            [ -n "$value" ] || missing="$missing $name"
+            [ -n "${!name}" ] || missing="$missing $name"
           done
           if [ -n "$missing" ]; then
             echo "::error::google-form environment に secrets が未設定です:$missing (手順は form/README.md)"
@@ -137,7 +138,9 @@ jobs:
           # -X POST を付けないこと。 Apps Script の Web アプリは 302 で GET 専用の
           # 応答 URL へ飛ばすため、 POST を強制するとリダイレクト先が 404 になる。
           # --data だけなら「初回 POST -> リダイレクト後 GET」で正しく応答が返る。
-          curl -sSL "$FORM_WEBAPP_URL" \
+          # --max-time が無いと、 Apps Script 側が応答しないときに job タイムアウト
+          # (既定 6 時間) まで concurrency group を占有してしまう。
+          curl -sSL --max-time 300 "$FORM_WEBAPP_URL" \
             --data-urlencode "token=$FORM_SYNC_TOKEN" \
             --data-urlencode "dryRun=$DRY_RUN" \
             --data-urlencode "allowTypeChange=$ALLOW_TYPE_CHANGE" \
@@ -189,6 +192,9 @@ jobs:
         if: ${{ env.DRY_RUN != 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
+          # 変数は env 経由で渡す。 run の中に ${{ }} を直接書くとスクリプトが
+          # 変数の中身で書き換わる (template injection)。
+          AUTO_MERGE: ${{ vars.FORM_SYNC_AUTO_MERGE }}
         run: |
           if [ -z "$(git status --porcelain "$CONFIG_PATH")" ]; then
             echo "entry map is unchanged; nothing to publish."
@@ -215,6 +221,6 @@ jobs:
             --body "$BODY"
           # 完全自動で反映したい場合は、 リポジトリ変数 FORM_SYNC_AUTO_MERGE を true にする。
           # デフォルトでは人がレビューしてからマージする。
-          if [ "${{ vars.FORM_SYNC_AUTO_MERGE }}" = "true" ]; then
+          if [ "$AUTO_MERGE" = "true" ]; then
             gh pr merge --squash --delete-branch --auto
           fi

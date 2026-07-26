@@ -215,7 +215,9 @@ describe("landing asset cache busting (content-hash stamped)", () => {
       for (const asset of STAMPED_ASSETS) {
         expect(html).toContain(`./${asset}?v=${versions[asset]}`);
       }
-      expect(html).not.toMatch(/\.\/styles\/main\.css\?v=(?!${"x"})[0-9]{8}-/);
+      // 手動日付バスター (`?v=20260625-2`) の残骸を落とす。 内容ハッシュは
+      // 16 進 10 桁でハイフンを含まないため、 この形にはならない。
+      expect(html).not.toMatch(/\.\/styles\/main\.css\?v=[0-9]{8}-/);
     }
   });
 

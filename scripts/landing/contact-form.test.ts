@@ -303,4 +303,37 @@ describe("landing contact form wiring", () => {
       expect(control).toContain(`aria-describedby="${id}-error"`);
     }
   });
+
+  /**
+   * 必須の食い違いは選択肢のズレと同じ壊れ方をする。 フォーム側だけ必須になると
+   * LP は空欄のまま送れてしまい、 Google に弾かれた事実は no-cors に隠れる。
+   * 実行時の assertField も見るが、 同期が済むまでは働かないのでここで落とす。
+   */
+  it("should keep required flags identical to the form definition", () => {
+    const defined = [...sync.matchAll(/key: "(\w+)",[\s\S]{0,200}?required: (true|false)/g)].map(
+      (match) => [match[1], match[2] === "true"] as const,
+    );
+    expect(defined.length).toBe(5);
+    for (const [key, required] of defined) {
+      const control = String(index.match(new RegExp(`data-form-field="${key}"[^>]*`))?.[0]);
+      expect([key, / required\b/.test(control)]).toEqual([key, required]);
+    }
+  });
+
+  /**
+   * まとめ表示と項目ごとの文言は別の文にする。 同じ文を 2 箇所へ出すと、
+   * 1 項目だけ直したときにどちらを指しているのか判別できない。
+   */
+  it("should show a summary message distinct from the per-field ones", () => {
+    expect(app).toContain('setStatus("form.hasErrors", "error")');
+    // ja / en の両方に訳が要る。 片方だけだと切り替えた瞬間に空文字になる。
+    expect([...app.matchAll(/"form\.hasErrors":/g)]).toHaveLength(2);
+    expect(app).not.toContain('setStatus("form.required"');
+    expect(app).not.toContain('setStatus("form.invalidEmail"');
+  });
+
+  it("should retract the summary message once every problem is corrected", () => {
+    expect(app).toContain("function syncErrorBanner()");
+    expect(app).toContain("syncErrorBanner();");
+  });
 });

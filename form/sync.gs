@@ -237,13 +237,15 @@ function validateDefinition_() {
  */
 function doPost(e) {
   const lock = LockService.getScriptLock();
+  let acquired = false;
   try {
     const expected = requiredProperty_(SCRIPT_PROPERTY.SYNC_TOKEN);
     const params = (e && e.parameter) || {};
     if (!timingSafeEquals_(expected, params.token || "")) {
       return jsonOutput_({ ok: false, error: "unauthorized" });
     }
-    if (!lock.tryLock(30000)) {
+    acquired = lock.tryLock(30000);
+    if (!acquired) {
       return jsonOutput_({ ok: false, error: "別の同期が実行中です" });
     }
     const result = syncForm({
@@ -255,11 +257,9 @@ function doPost(e) {
   } catch (error) {
     return jsonOutput_({ ok: false, error: describeError_(error) });
   } finally {
-    try {
-      lock.releaseLock();
-    } catch (releaseError) {
-      Logger.log("WARN: ロック解放に失敗しました: " + describeError_(releaseError));
-    }
+    // 取っていないロックを解放しようとすると、 認証失敗や競合で弾いた要求のたびに
+    // 紛らわしい WARN が出る。
+    if (acquired) lock.releaseLock();
   }
 }
 
@@ -305,7 +305,8 @@ function buildPlan_(form, itemIds) {
     if (!existing) {
       return { key: field.key, title: field.title, type: field.type, action: "create" };
     }
-    matchedIds[String(existing.getId())] = true;
+    const itemId = String(existing.getId());
+    matchedIds[itemId] = true;
     const currentType = String(existing.getType());
     if (currentType !== field.type) {
       return {
@@ -313,6 +314,7 @@ function buildPlan_(form, itemIds) {
         title: field.title,
         type: field.type,
         currentType: currentType,
+        itemId: itemId,
         action: "recreate",
       };
     }
@@ -320,6 +322,7 @@ function buildPlan_(form, itemIds) {
       key: field.key,
       title: field.title,
       type: field.type,
+      itemId: itemId,
       action: "update",
       currentTitle: existing.getTitle(),
     };
@@ -424,14 +427,14 @@ function applyPlan_(form, plan, itemIds) {
     })
     .forEach(function (step) {
       const field = fieldByKey_(step.key);
-      let item = null;
+      // 計画時に解決したアイテムを使う。 ここで itemIds だけを引くと、 対応表が
+      // 空の初回同期でタイトル一致した既存の質問を見失い、 同じ質問をもう 1 つ
+      // 作ってしまう。 元の質問は orphan として残り、 必須なら送信が全滅する。
+      let item = itemById_(form, step.itemId || itemIds[field.key]);
       if (step.action === "recreate") {
-        const stale = itemById_(form, itemIds[field.key]);
-        if (stale) form.deleteItem(stale);
+        if (item) form.deleteItem(item);
         delete itemIds[field.key];
-      }
-      if (step.action === "update") {
-        item = itemById_(form, itemIds[field.key]);
+        item = null;
       }
       if (!item) item = addItem_(form, field);
       configureItem_(item, field);
