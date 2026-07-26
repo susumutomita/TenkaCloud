@@ -33,6 +33,9 @@ export interface LaunchSpec {
   readonly repository: string;
   readonly command: readonly string[];
   readonly logsRoot: string;
+  readonly port: number;
+  readonly workspaceRoot: string;
+  readonly workspaceRootEnv: string;
 }
 
 export class FleetConfigError extends Error {
@@ -60,7 +63,7 @@ function requiredString(
 
 function requiredPort(record: Readonly<Record<string, unknown>>, context: string): number {
   const value = record.port;
-  if (!Number.isInteger(value) || typeof value !== "number" || value < 1 || value > 65_535) {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > 65_535) {
     throw new FleetConfigError(`${context}.port must be an integer in 1..65535`);
   }
   return value;
@@ -139,7 +142,6 @@ export function validateWorkflowText(
   source: string,
 ): void {
   const escapedRepository = escapeRegExp(repository.repository);
-  const escapedWorkspace = escapeRegExp(repository.workspace);
   const escapedWorkspaceEnv = escapeRegExp(config.workspaceRootEnv);
   const cloneUrl = `git@github.com:${repository.repository}.git`;
 
@@ -170,8 +172,8 @@ export function validateWorkflowText(
   );
   requirePattern(
     source,
-    new RegExp(`^\\s*root:\\s*\\$${escapedWorkspaceEnv}/${escapedWorkspace}\\s*$`, "m"),
-    `${repository.id}: workspace root must be $${config.workspaceRootEnv}/${repository.workspace}`,
+    new RegExp(`^\\s*root:\\s*\\$${escapedWorkspaceEnv}\\s*$`, "m"),
+    `${repository.id}: workspace root must be $${config.workspaceRootEnv}`,
   );
   requirePattern(
     source,
@@ -187,6 +189,11 @@ export function validateWorkflowText(
     source,
     /make agent-gate/,
     `${repository.id}: workflow must use make agent-gate`,
+  );
+  requirePattern(
+    source,
+    /codex exec review --base origin\/main/,
+    `${repository.id}: workflow must run an independent Codex review`,
   );
   requirePattern(
     source,
@@ -331,7 +338,8 @@ export function findMissingPrerequisites(
   }
 
   for (const command of [binary, "codex", "git", "ssh"]) {
-    if (which(command) === null || which(command) === undefined) missing.push(`command:${command}`);
+    const executable = which(command);
+    if (executable === null || executable === undefined) missing.push(`command:${command}`);
   }
   return missing;
 }
@@ -343,15 +351,15 @@ export function buildLaunchSpecs(
   environment: Readonly<Record<string, string | undefined>>,
   repositoryIds: readonly string[] = [],
 ): readonly LaunchSpec[] {
-  const workspaceRoot = environment[config.workspaceRootEnv]?.trim();
-  if (!workspaceRoot || !isAbsolute(workspaceRoot)) {
+  const fleetWorkspaceRoot = environment[config.workspaceRootEnv]?.trim();
+  if (!fleetWorkspaceRoot || !isAbsolute(fleetWorkspaceRoot)) {
     throw new FleetConfigError(`${config.workspaceRootEnv} must be an absolute path`);
   }
   const configuredLogsRoot = environment[config.logsRootEnv]?.trim();
   if (configuredLogsRoot && !isAbsolute(configuredLogsRoot)) {
     throw new FleetConfigError(`${config.logsRootEnv} must be an absolute path`);
   }
-  const logsRoot = configuredLogsRoot || resolve(workspaceRoot, "../logs");
+  const logsRoot = configuredLogsRoot || resolve(fleetWorkspaceRoot, "../logs");
   const binary = environment.SYMPHONY_BIN?.trim() || config.defaultBinary;
 
   return selectRepositories(config, repositoryIds).map((repository) => {
@@ -360,6 +368,9 @@ export function buildLaunchSpecs(
       id: repository.id,
       repository: repository.repository,
       logsRoot: repositoryLogsRoot,
+      port: repository.port,
+      workspaceRoot: resolve(fleetWorkspaceRoot, repository.workspace),
+      workspaceRootEnv: config.workspaceRootEnv,
       command: [
         binary,
         resolve(root, repository.workflow),
@@ -372,6 +383,19 @@ export function buildLaunchSpecs(
   });
 }
 
+/** Build a child environment without leaking JavaScript undefined values to spawn. */
+export function buildChildEnvironment(
+  environment: Readonly<Record<string, string | undefined>>,
+  spec: LaunchSpec,
+): Record<string, string> {
+  const childEnvironment: Record<string, string> = {};
+  for (const [key, value] of Object.entries(environment)) {
+    if (value !== undefined) childEnvironment[key] = value;
+  }
+  childEnvironment[spec.workspaceRootEnv] = spec.workspaceRoot;
+  return childEnvironment;
+}
+
 /** Render a reviewable launch plan without requiring auth, Codex, or Symphony. */
 export function renderLaunchPlan(
   config: FleetConfig,
@@ -380,8 +404,8 @@ export function renderLaunchPlan(
 ): string {
   const repositories = selectRepositories(config, repositoryIds);
   const lines = [
-    `workspace root: $${config.workspaceRootEnv}`,
-    `logs root: $${config.logsRootEnv} (optional; defaults beside the workspace root)`,
+    `fleet workspace root: $${config.workspaceRootEnv}`,
+    `logs root: $${config.logsRootEnv} (optional; defaults beside the fleet workspace root)`,
     `binary: \${SYMPHONY_BIN:-${config.defaultBinary}}`,
     "",
   ];
@@ -390,7 +414,7 @@ export function renderLaunchPlan(
       `[${repository.id}] ${repository.repository}`,
       `  workflow: ${resolve(root, repository.workflow)}`,
       `  port: ${repository.port}`,
-      `  workspace: $${config.workspaceRootEnv}/${repository.workspace}`,
+      `  child $${config.workspaceRootEnv}: $${config.workspaceRootEnv}/${repository.workspace}`,
       `  logs: $${config.logsRootEnv}/${repository.id}`,
     );
   }
@@ -407,13 +431,17 @@ export async function runFleet(
   root: string,
   environment: Readonly<Record<string, string | undefined>>,
 ): Promise<number> {
-  for (const spec of specs) await mkdir(spec.logsRoot, { recursive: true });
+  if (specs.length === 0) throw new FleetConfigError("cannot run an empty Symphony fleet");
+  for (const spec of specs) {
+    await mkdir(spec.logsRoot, { recursive: true });
+    await mkdir(spec.workspaceRoot, { recursive: true });
+  }
 
   const children = specs.map((spec) => {
-    console.log(`starting ${spec.id} (${spec.repository}) on ${spec.command[3]}`);
-    return Bun.spawn(spec.command, {
+    console.log(`starting ${spec.id} (${spec.repository}) on port ${spec.port}`);
+    return Bun.spawn([...spec.command], {
       cwd: root,
-      env: { ...environment },
+      env: buildChildEnvironment(environment, spec),
       stdin: "ignore",
       stdout: "inherit",
       stderr: "inherit",
@@ -421,7 +449,7 @@ export async function runFleet(
   });
 
   let stopping = false;
-  const stopChildren = (signal: number): void => {
+  const stopChildren = (signal: NodeJS.Signals): void => {
     if (stopping) return;
     stopping = true;
     for (const child of children) {
@@ -432,8 +460,8 @@ export async function runFleet(
       }
     }
   };
-  const onInterrupt = (): void => stopChildren(2);
-  const onTerminate = (): void => stopChildren(15);
+  const onInterrupt = (): void => stopChildren("SIGINT");
+  const onTerminate = (): void => stopChildren("SIGTERM");
   process.once("SIGINT", onInterrupt);
   process.once("SIGTERM", onTerminate);
 
@@ -443,7 +471,7 @@ export async function runFleet(
     );
     const spec = specs[firstExit.index];
     console.error(`${spec?.id ?? "unknown"} exited with code ${firstExit.code}; stopping fleet`);
-    stopChildren(15);
+    stopChildren("SIGTERM");
     await Promise.allSettled(children.map((child) => child.exited));
     return firstExit.code === 0 ? 1 : firstExit.code;
   } finally {
@@ -459,7 +487,8 @@ async function main(): Promise<void> {
 
   if (arguments_.command === "validate") {
     selectRepositories(config, arguments_.repositoryIds);
-    console.log(`validated ${arguments_.repositoryIds.length || config.repositories.length} workflow(s)`);
+    const count = arguments_.repositoryIds.length || config.repositories.length;
+    console.log(`validated ${count} workflow(s)`);
     return;
   }
   if (arguments_.command === "print") {
