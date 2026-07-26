@@ -28,10 +28,10 @@
     "generate:landing-docs": "bun run scripts/landing/generate-landing-docs.ts",
     "stamp:landing-assets": "bun run scripts/landing/stamp-asset-versions.ts",
     "lint:md": "markdownlint-cli2 '**/*.md' '#**/node_modules' '#references' '#client' '#src' '#**/cdk.out/**' '#**/cdk.out.test/**' '#**/dist' '#problems/**' '#.cache/**'",
-    "lint:text": "textlint '**/*.md' '!problems/**' '!.symphony/workflows/**'",
+    "lint:text": "textlint '**/*.md' '!problems/**'",
     "lint:format": "biome check",
     "fix:md": "markdownlint-cli2 --fix '**/*.md' '#**/node_modules' '#references' '#client' '#src' '#**/cdk.out/**' '#**/cdk.out.test/**' '#**/dist' '#problems/**' '#.cache/**'",
-    "fix:text": "textlint --fix '**/*.md' '!problems/**' '!.symphony/workflows/**'",
+    "fix:text": "textlint --fix '**/*.md'",
     "fix:format": "biome check --write",
     "prepare": "husky"
   },
