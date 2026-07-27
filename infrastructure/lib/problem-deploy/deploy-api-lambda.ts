@@ -130,9 +130,7 @@ export function deployApiBundlingDefine(
   props: Pick<DeployApiLambdaProps, "problemsCatalog" | "problemRuntimes">,
 ): Record<string, string> {
   return {
-    "process.env.BATTLE_PROBLEMS_CATALOG": JSON.stringify(
-      JSON.stringify(props.problemsCatalog),
-    ),
+    "process.env.BATTLE_PROBLEMS_CATALOG": JSON.stringify(JSON.stringify(props.problemsCatalog)),
     "process.env.BATTLE_PROBLEMS_RUNTIMES": JSON.stringify(
       JSON.stringify(props.problemRuntimes ?? {}),
     ),

@@ -6,8 +6,7 @@ import { describe, expect, it } from "vitest";
 const REPO_ROOT = join(__dirname, "..", "..", "..");
 const INFRASTRUCTURE_DIR = join(REPO_ROOT, "infrastructure");
 const LOCAL_CDK = join(REPO_ROOT, "node_modules", "aws-cdk", "bin", "cdk");
-const EXPECTED_MAKE_COMMAND =
-  "cd infrastructure && JSII_DEPRECATED=quiet ../scripts/run-cdk.sh";
+const EXPECTED_MAKE_COMMAND = "cd infrastructure && JSII_DEPRECATED=quiet ../scripts/run-cdk.sh";
 const CDK_SHELL_SCRIPTS = [
   "scripts/install.sh",
   "scripts/cleanup.sh",
@@ -76,9 +75,9 @@ describe("repository-local CDK CLI contract", () => {
     expect(packageJson.scripts.synth).toContain("../scripts/run-cdk.sh synth");
 
     const runner = readFileSync(join(REPO_ROOT, "scripts", "run-cdk.sh"), "utf8");
-    expect(runner).toContain('${SCRIPT_DIR}/../node_modules/aws-cdk/bin/cdk');
-    expect(runner).toContain('${SCRIPT_DIR}/../cdk/node_modules/aws-cdk/bin/cdk');
-    expect(runner).not.toContain("${PWD}");
+    expect(runner).toContain("$" + "{SCRIPT_DIR}/../node_modules/aws-cdk/bin/cdk");
+    expect(runner).toContain("$" + "{SCRIPT_DIR}/../cdk/node_modules/aws-cdk/bin/cdk");
+    expect(runner).not.toContain("$" + "{PWD}");
 
     for (const scriptPath of CDK_SHELL_SCRIPTS) {
       const source = readFileSync(join(REPO_ROOT, scriptPath), "utf8");
@@ -87,12 +86,7 @@ describe("repository-local CDK CLI contract", () => {
     }
 
     const tenantPipeline = readFileSync(
-      join(
-        INFRASTRUCTURE_DIR,
-        "lib",
-        "tenant-pipeline",
-        "serverless-saas-pipeline.ts",
-      ),
+      join(INFRASTRUCTURE_DIR, "lib", "tenant-pipeline", "serverless-saas-pipeline.ts"),
       "utf8",
     );
     expect(tenantPipeline).not.toContain("npm install -g aws-cdk");
