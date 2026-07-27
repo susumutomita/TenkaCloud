@@ -126,6 +126,19 @@ export interface DeployApiLambdaProps {
   readonly sourceBucketName: string;
 }
 
+export function deployApiBundlingDefine(
+  props: Pick<DeployApiLambdaProps, "problemsCatalog" | "problemRuntimes">,
+): Record<string, string> {
+  return {
+    "process.env.BATTLE_PROBLEMS_CATALOG": JSON.stringify(
+      JSON.stringify(props.problemsCatalog),
+    ),
+    "process.env.BATTLE_PROBLEMS_RUNTIMES": JSON.stringify(
+      JSON.stringify(props.problemRuntimes ?? {}),
+    ),
+  };
+}
+
 /**
  * 問題 deploy 起動用 Lambda。
  *
@@ -165,7 +178,6 @@ export class DeployApiLambda extends Construct {
         ...(props.defaultTenantId ? { DEFAULT_TENANT_ID: props.defaultTenantId } : {}),
         // ADR-008 Phase 3 (Issue #642): visibility + bucket env、 default は dormant
         BATTLE_PROBLEMS_VISIBILITY: JSON.stringify(props.problemsVisibility),
-        BATTLE_PROBLEMS_RUNTIMES: JSON.stringify(props.problemRuntimes ?? {}),
         CHALLENGE_PAYLOAD_BUCKET: props.challengePayloadBucketName ?? "",
         // Issue #950: audit log table 名 (未配線なら空文字、 handler の writeAuditEvent が no-op)
         ADMIN_AUDIT_LOG_TABLE_NAME: props.adminAuditLogTable?.tableName ?? "",
@@ -196,11 +208,7 @@ export class DeployApiLambda extends Construct {
       // (GenericScoring / ParticipantPortal) と同じ esbuild define で build 時に literal 置換
       // し env を 0 化する。 handler は process.env を読む既存 code のまま (= build 後に literal
       // JSON 文字列が埋まる)。 tests は process.env 経由で fixture を注入するので影響なし。
-      bundlingDefine: {
-        "process.env.BATTLE_PROBLEMS_CATALOG": JSON.stringify(
-          JSON.stringify(props.problemsCatalog),
-        ),
-      },
+      bundlingDefine: deployApiBundlingDefine(props),
     });
 
     // 必要な権限: DDB CRUD + EventBus PutEvents + CompetitorAccounts Read。

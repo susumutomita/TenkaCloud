@@ -1,5 +1,6 @@
 import { Match } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
+import { deployApiBundlingDefine } from "../lib/problem-deploy/deploy-api-lambda";
 import { eventApiBundlingDefine } from "../lib/problem-deploy/event-api-lambda";
 import {
   synthDefault,
@@ -30,6 +31,22 @@ describe("ProblemDeployBackendStack (MVP-1) — Deploy API Lambda (invoked from 
     expect(props.Properties?.Architectures).toEqual(["arm64"]);
     const vars = props.Properties?.Environment?.Variables ?? {};
     expect(vars.BATTLE_PROBLEMS_CATALOG).toBeUndefined();
+    expect(vars.BATTLE_PROBLEMS_RUNTIMES).toBeUndefined();
+  });
+
+  it("DeployApi bundling define should include the runtime catalog", () => {
+    const define = deployApiBundlingDefine({
+      problemsCatalog: { "hello-world": "problems/challenges/hello-world" },
+      problemRuntimes: {
+        "battle-non-aws": { provider: "sakura", engine: "apprun", entry: "template.yaml" },
+      },
+    });
+
+    expect(JSON.parse(define["process.env.BATTLE_PROBLEMS_RUNTIMES"])).toBe(
+      JSON.stringify({
+        "battle-non-aws": { provider: "sakura", engine: "apprun", entry: "template.yaml" },
+      }),
+    );
   });
 
   it("DeployApi env DEPLOY_QUOTA_BY_TIER should default to empty (quota disabled, #1766)", () => {
