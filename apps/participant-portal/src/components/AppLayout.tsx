@@ -15,7 +15,7 @@ import { useLocation, useNavigate } from "react-router";
 import type { LeaderboardResponse, ParticipantTeamView } from "../api/portal-client";
 import { useAuth } from "../auth/AuthProvider";
 import { TeamViewProvider, useTeamView } from "../auth/TeamViewProvider";
-import type { AppConfig, CloudMode } from "../config";
+import { type AppConfig, type CloudMode, showsCourseTracks } from "../config";
 import { problemProvider } from "../data/providers";
 import { type LocaleCode, SUPPORTED_LOCALES, useI18n } from "../i18n";
 import { CountdownTimer } from "./CountdownTimer";
@@ -279,8 +279,10 @@ export function buildSideNavItems(
       text: t("nav.quests_section"),
       items: [
         { type: "link", href: "/problems", text: t("nav.problems") },
-        // Issue #2786: track 未設定の問題しか無い環境でも空状態を出すだけなので常時出す。
-        { type: "link", href: "/course-tracks", text: t("nav.course_tracks") },
+        // 講座トラックは自習経路なので local だけ (判定は `showsCourseTracks`)。
+        ...(showsCourseTracks(cloudMode)
+          ? [{ type: "link" as const, href: "/course-tracks", text: t("nav.course_tracks") }]
+          : []),
       ],
     },
   ];

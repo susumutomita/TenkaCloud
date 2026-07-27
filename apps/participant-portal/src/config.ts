@@ -15,6 +15,25 @@
 export type AppMode = "dev-mock" | "backend";
 export type CloudMode = "real" | "mock" | "local";
 
+/**
+ * 講座トラック (週・章順の自習経路) を出すモードか。
+ *
+ * Issue #2786 では「track 未設定なら空状態を出すだけ」という理由で常時表示にしていたが、
+ * それは空かどうかの話で、誰に向けた画面かの話ではなかった。LP から辿れる公開デモは
+ * `cloudMode === "mock"` で動くため、AC26 を受講していない人が最初に触る画面に講座前提の
+ * 学習経路が並んでいた。
+ *
+ * 出すのは `local` — `make local` の単独ドリル、つまり自習している人の環境だけ。実イベント
+ * (`real`) を含めないのは、そこで解く問題は主催者が選んで出すものであり、受講者ごとの
+ * 学習経路とは別物だから。
+ *
+ * nav と route の両方がこれを見る。link を隠すだけでは URL が生きたままになり、共有された
+ * `/course-tracks` を踏めば同じ画面に着く。
+ */
+export function showsCourseTracks(cloudMode: CloudMode): boolean {
+  return cloudMode === "local";
+}
+
 export interface AppConfig {
   readonly apiBaseUrl: string;
   readonly eventTitle: string;
