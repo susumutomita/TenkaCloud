@@ -3631,7 +3631,7 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — codebuild 
         "Arn",
       ],
     },
-    "Runtime": "nodejs22.x",
+    "Runtime": "nodejs24.x",
     "Timeout": 900,
   },
   "DeployApiFunctionC6EAEF11": {
@@ -7646,7 +7646,7 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — lambda-dep
         "Arn",
       ],
     },
-    "Runtime": "nodejs22.x",
+    "Runtime": "nodejs24.x",
     "Timeout": 900,
   },
   "DeployApiFunctionC6EAEF11": {
@@ -11616,7 +11616,7 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — lite mode 
         "Arn",
       ],
     },
-    "Runtime": "nodejs22.x",
+    "Runtime": "nodejs24.x",
     "Timeout": 900,
   },
   "DeployApiFunctionC6EAEF11": {
@@ -14550,7 +14550,7 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — pure-sql t
         "Arn",
       ],
     },
-    "Runtime": "nodejs22.x",
+    "Runtime": "nodejs24.x",
     "Timeout": 900,
   },
   "DeployApiFunctionC6EAEF11": {
