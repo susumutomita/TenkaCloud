@@ -155,7 +155,6 @@ export class ServerlessSaaSPipeline extends cdk.Stack {
             "runtime-versions": {
               nodejs: TENANT_PIPELINE_CODEBUILD_NODE_VERSION,
             },
-            commands: ["npm install -g aws-cdk"],
           },
           build: {
             // #690: CodeBuild の default shell は dash (POSIX sh) で `set -o pipefail` を

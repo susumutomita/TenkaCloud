@@ -17,7 +17,7 @@
 #
 # 副作用 (= idempotent):
 #   - `tenkacloud-source-<account>-<region>` bucket を作成 (= 存在しない場合)
-#   - `apps/application-admin-console/dist` と `apps/participant-portal/dist` を build
+#   - CDK app が参照する3 SPAの `dist` を build
 #   - `<bucket>/source.zip` を upload
 set -euo pipefail
 
@@ -124,10 +124,10 @@ aws s3api put-bucket-lifecycle-configuration \
 cd "${TENKACLOUD_ROOT}"
 
 # apps build (= source.zip 内 dist 同梱のため必須)
-echo "[prepare-source-bundle] building apps/application-admin-console..."
-(cd apps/application-admin-console && bun install --ignore-scripts && bun run build) >/dev/null
-echo "[prepare-source-bundle] building apps/participant-portal..."
-(cd apps/participant-portal && bun install --ignore-scripts && bun run build) >/dev/null
+for app in admin-console application-admin-console participant-portal; do
+  echo "[prepare-source-bundle] building apps/${app}..."
+  (cd "apps/${app}" && bun install --ignore-scripts && bun run build) >/dev/null
+done
 
 # Keep local packaging separate from AWS orchestration so fixture tests can
 # validate the archive contract without credentials. The work directory is

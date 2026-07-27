@@ -11,7 +11,7 @@ import { buildSecurityHeadersPolicy } from "./security/cloudfront-headers.js";
  * Issue #1031: admin-console-hosting は **CloudFront 配信側だけ** を担い、 runtime-config.json
  * の生成は `AdminConsoleRuntimeConfigStack` に分離した。 これにより依存方向を 1 方向
  * (= 本 stack → control-plane / admin-console-insight → runtime-config) に揃え、
- * `bun cdk deploy --all` 1 発で install.sh が完結する。
+ * `bun run cdk -- deploy --all` 1 発で install.sh が完結する。
  *
  * CSP は backend URL を **wildcard pattern** で許可する。 これによりバックエンド URL の
  * cross-stack ref を本 stack から外して循環依存を解消する。 trade-off:

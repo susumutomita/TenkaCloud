@@ -21,9 +21,9 @@ describe("scripts/install.sh (Issue #1031: single-phase deploy)", () => {
   const prepareBundle = readFileSync(PREPARE_BUNDLE_SH_PATH, "utf8");
   const packageBundle = readFileSync(PACKAGE_BUNDLE_SH_PATH, "utf8");
 
-  it("should deploy all stacks in one shot via `bun cdk deploy --all` (#1031)", () => {
+  it("should deploy all stacks in one shot via the repository-local CDK CLI (#1031)", () => {
     // bash の \ 継続を許容するため、 `--all` と `--require-approval never` を別 line 検査で。
-    expect(source).toMatch(/bun cdk deploy --all\b/);
+    expect(source).toMatch(/bun run cdk -- deploy --all\b/);
     expect(source).toContain("--require-approval never");
   });
 
@@ -67,11 +67,13 @@ describe("scripts/install.sh (Issue #1031: single-phase deploy)", () => {
 
   // Issue #1029 / PR-1028: pooled stack の lifecycle は SBT pipeline 一本化。
   it("install.sh should not cdk deploy tenkacloud-tenant-template-pooled (SBT pipeline consolidation)", () => {
-    // `bun cdk deploy --all` は `--exclusively` で all を意味するため、 pooled stack を **直接
+    // `bun run cdk -- deploy --all` は `--exclusively` で all を意味するため、 pooled stack を **直接
     // 名指しで deploy しない** ことのみ pin する。 `--all` は app 上 instantiate された stack を
     // 全て deploy するため、 wire.ts で pooled stack を生成する限り CDK が立てに行く。 pooled
     // stack の SBT pipeline 一本化は wire.ts 側 + `--exclusively` flag で扱う方針。
-    expect(source).not.toMatch(/bun cdk deploy[^\n-][^\n]*tenkacloud-tenant-template-pooled/);
+    expect(source).not.toMatch(
+      /bun run cdk -- deploy[^\n-][^\n]*tenkacloud-tenant-template-pooled/,
+    );
   });
 
   it("install.sh repo-root variable should be unified to **all-uppercase** TENKACLOUD_ROOT (no PascalCase)", () => {

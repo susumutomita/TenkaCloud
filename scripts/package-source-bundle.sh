@@ -164,8 +164,9 @@ with open(path, "w") as target:
     json.dump(package, target, indent=2)
 PY
 
-copy_dist "application-admin-console"
-copy_dist "participant-portal"
+for app in admin-console application-admin-console participant-portal; do
+  copy_dist "${app}"
+done
 
 staging_kib="$(du -sk "${SOURCE_BUNDLE_STAGING_DIR}" | awk '{print $1}')"
 max_staging_kib="$((SOURCE_BUNDLE_MAX_STAGING_MB * 1024))"
