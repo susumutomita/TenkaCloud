@@ -10,6 +10,10 @@ beforeEach(() => {
   window.localStorage.clear();
 });
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 describe("liteDrillCheckpointCode (#2696)", () => {
   it("should return the checkpoint code when the console runs in Lite mode (tenantId=local)", () => {
     expect(liteDrillCheckpointCode({ tenantId: "local" }, "competitorVerified")).toBe(
@@ -39,35 +43,25 @@ describe("liteDrillCheckpointCode (#2696)", () => {
   });
 
   describe("when localStorage throws (private mode / disabled storage)", () => {
-    // Spies must be (re)created per-test: a spy created once at describe-body-eval time is
-    // torn down by the first test's afterEach, so a second test's mockImplementation would
-    // mutate an already-restored (detached) spy and silently exercise the real, non-throwing
-    // localStorage instead — the assertion would then pass even with no try/catch in the
-    // source (2026-07-21 review finding: this made the write-failure test vacuous).
-    let getItem: ReturnType<typeof vi.spyOn>;
-    let setItem: ReturnType<typeof vi.spyOn>;
-
-    beforeEach(() => {
-      getItem = vi.spyOn(Storage.prototype, "getItem");
-      setItem = vi.spyOn(Storage.prototype, "setItem");
-    });
-
-    afterEach(() => {
-      getItem.mockRestore();
-      setItem.mockRestore();
-    });
+    // Mock the property read performed by the production code. Node.js also exposes a global
+    // Storage in recent releases, so spying on Storage.prototype can intercept the wrong
+    // implementation and leave these catch branches untested.
 
     it("should fail open (treat the checkpoint as not-yet-shown) rather than throw", () => {
-      getItem.mockImplementation(() => {
-        throw new Error("SecurityError");
-      });
+      vi.spyOn(window, "localStorage", "get").mockReturnValue({
+        getItem: () => {
+          throw new Error("SecurityError");
+        },
+      } as unknown as Storage);
       expect(hasLiteDrillCheckpointBeenShown("competitorVerified")).toBe(false);
     });
 
     it("should swallow a write failure rather than throw", () => {
-      setItem.mockImplementation(() => {
-        throw new Error("QuotaExceededError");
-      });
+      vi.spyOn(window, "localStorage", "get").mockReturnValue({
+        setItem: () => {
+          throw new Error("QuotaExceededError");
+        },
+      } as unknown as Storage);
       expect(() => markLiteDrillCheckpointShown("competitorVerified")).not.toThrow();
     });
   });

@@ -35,7 +35,7 @@ Import these with `workspace:*` from any app or from `infrastructure`.
 | `@TenkaCloud/trust-bridge` | Cross-cloud authority transfer (signed CloudActionIntent → short-lived credentials, ADR-017) |
 | `@tenkacloud/web-kit` | Shared SPA UI primitives — `createCoreApiClient`, `AuthProvider`/`useAuth`, `EmptyState`, boot error rendering |
 
-## Script-side pure-logic modules (`scripts/lib/`)
+## Script-side shared helpers (`scripts/` and `scripts/lib/`)
 
 Reused by operator CLIs and deploy scripts; import directly by relative path.
 
@@ -46,6 +46,7 @@ Reused by operator CLIs and deploy scripts; import directly by relative path.
 | `iam-description-ascii.ts` | IAM Description ASCII/Latin-1 gate logic (#664) |
 | `landing/onboarding-videos/render.ts` | Onboarding video renderer helpers: HTML escaping, binary resolution, checked command execution, and guarded temporary-workspace cleanup |
 | `retained-tables.ts` | Post-destroy RETAIN-table enumeration for billing warnings (#2444) |
+| `scripts/run-cdk.sh` | Exact repository-local AWS CDK CLI resolution for normal checkouts and packaged `cdk` workspaces |
 | `scale-event-capacity.ts` | Event-window capacity scaling logic |
 | `tenant-registration-backfill.ts` | Dry-run-first SBT 0.9.5 legacy tenant inventory planning and atomic registration backfill |
 

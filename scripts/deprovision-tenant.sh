@@ -88,17 +88,10 @@ if [[ $TIER == "PLATINUM" ]]; then
     --query 'Item.stackName.S')
 
   echo "Stack name from $TENANT_STACK_MAPPING_TABLE is  $STACK_NAME"
-  # Clone the serverless reference solution repository (idempotent — 再実行で
-  # "destination path already exists" にならないよう、既存 dir があればそのまま使う)。
-  # cdk destroy は CFn 既存 stack に対して動くので、ローカル CDK code は最低限あれば十分。
-  export CDK_PARAM_CODE_COMMIT_REPOSITORY_NAME="aws-saas-factory-ref-solution-serverless-saas"
-  if [ ! -d "$CDK_PARAM_CODE_COMMIT_REPOSITORY_NAME" ]; then
-    git clone codecommit://$CDK_PARAM_CODE_COMMIT_REPOSITORY_NAME
-  else
-    echo "Repository already cloned: $CDK_PARAM_CODE_COMMIT_REPOSITORY_NAME (skip clone)"
-  fi
-  cd $CDK_PARAM_CODE_COMMIT_REPOSITORY_NAME/server
-  npm install
+  # provision/update と同じ source bundle の CDK workspace を使う。外部の旧SaaS reference
+  # repositoryにはTenkaCloudのstack定義もpinned CLIもないため、destroy経路に使わない。
+  cd cdk
+  bun install
 
   export CDK_PARAM_SYSTEM_ADMIN_EMAIL="NA"
   export CDK_PARAM_COMMIT_ID="NA"
@@ -113,7 +106,7 @@ if [[ $TIER == "PLATINUM" ]]; then
   export CDK_PARAM_DEPROVISIONING_DETAIL_TYPE="NA"
 
   echo "undeploying tenant template $STACK_NAME"
-  bun cdk destroy "$STACK_NAME" --force
+  bun run cdk -- destroy "$STACK_NAME" --force
 
 else
   # Read tenant details from the cloudformation stack output parameters

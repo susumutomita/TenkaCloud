@@ -24,17 +24,17 @@ describe("tenant lifecycle scripts", () => {
     }
   });
 
-  it("tenant lifecycle scripts should run CDK via bun", () => {
+  it("tenant lifecycle scripts should run the repository-local CDK CLI via bun", () => {
     expect(readRepoFile("scripts/provision-tenant.sh")).toContain(
-      'bun cdk deploy "$STACK_NAME" --require-approval never',
+      'bun run cdk -- deploy "$STACK_NAME" --require-approval never',
     );
     // update-tenant.sh は `${STACK_NAME}` (braces) で wait_for_stack_idle と一致させている。
     // 形が違う provision-tenant / deprovision-tenant は他で test 済。
     expect(readRepoFile("scripts/update-tenant.sh")).toMatch(
-      /bun cdk deploy "\$\{?STACK_NAME\}?" --exclusively --require-approval never/,
+      /bun run cdk -- deploy "\$\{?STACK_NAME\}?" --exclusively --require-approval never/,
     );
     expect(readRepoFile("scripts/deprovision-tenant.sh")).toContain(
-      'bun cdk destroy "$STACK_NAME" --force',
+      'bun run cdk -- destroy "$STACK_NAME" --force',
     );
   });
 
@@ -56,6 +56,14 @@ describe("tenant lifecycle scripts", () => {
 
     expect(unzipIndex).toBeGreaterThan(0);
     expect(sourceIndex).toBeGreaterThan(unzipIndex);
+  });
+
+  it("deprovision script should destroy from the bundled TenkaCloud CDK workspace", () => {
+    const script = readRepoFile("scripts/deprovision-tenant.sh");
+
+    expect(script).toContain("cd cdk\n  bun install");
+    expect(script).not.toContain("aws-saas-factory-ref-solution-serverless-saas");
+    expect(script).not.toMatch(/\bnpm install\b/);
   });
 
   it("should pin .nvmrc to Node 22 or higher", () => {
@@ -119,7 +127,7 @@ describe("tenant lifecycle scripts", () => {
     expect(script).toContain(`wait_for_stack_idle "\${STACK_NAME}"`);
     // poll は cdk deploy より **前** に呼ばれていること (= race を防ぐ順序)
     const waitIdx = script.indexOf(`wait_for_stack_idle "\${STACK_NAME}"`);
-    const deployIdx = script.indexOf("bun cdk deploy");
+    const deployIdx = script.indexOf("bun run cdk -- deploy");
     expect(waitIdx).toBeGreaterThan(0);
     expect(deployIdx).toBeGreaterThan(waitIdx);
   });

@@ -18,7 +18,7 @@ import { afterEach, describe, expect, it } from "vitest";
  * / partial-delete state" -- a promise with zero machine verification before this file.
  *
  * cleanup.sh is a real, long-running script that shells out to `aws` (many subcommands)
- * and `bun cdk destroy`. Both are faked on PATH (mirrors delete-battles-account-check.test.ts
+ * and `bun run cdk -- destroy`. Both are faked on PATH (mirrors delete-battles-account-check.test.ts
  * / battles-common-assume-role.test.ts); the script itself is NOT modified (per the issue's
  * "変更しないこと"). All scenario data flows through child env, never interpolated into a
  * shell command string, to avoid injection.
@@ -157,11 +157,11 @@ esac
   writeFileSync(join(binDir, "aws"), fakeAws);
   chmodSync(join(binDir, "aws"), 0o755);
 
-  // Fake `bun`: cleanup.sh's only real `bun` calls are `bun cdk destroy ...` (bun install is
+  // Fake `bun`: cleanup.sh's only real `bun` calls are `bun run cdk -- destroy ...` (bun install is
   // guarded by `[[ ! -d node_modules ]]`, which is false in this checked-out repo).
   const fakeBun = `#!/usr/bin/env bash
 echo "$@" >> "$BUN_CALL_LOG"
-if [ "$1" = "cdk" ] && [ "$2" = "destroy" ]; then
+if [ "$1" = "run" ] && [ "$2" = "cdk" ] && [ "$4" = "destroy" ]; then
   exit 0
 fi
 if [ "$1" = "install" ]; then
@@ -226,9 +226,9 @@ describe("cleanup.sh idempotency (#2204)", { timeout: 30_000 }, () => {
       "cloudformation delete-stack --stack-name tenkacloud-admin-console-hosting",
     );
     expect(bunCalls).toContain(
-      "cdk destroy tenkacloud-tenant-template-01hzx0k3m3k9zqhb3mrqhba1b2 --force",
+      "run cdk -- destroy tenkacloud-tenant-template-01hzx0k3m3k9zqhb3mrqhba1b2 --force",
     );
-    expect(bunCalls).toContain("cdk destroy --all --force");
+    expect(bunCalls).toContain("run cdk -- destroy --all --force");
     expect(awsCalls).toContain(
       "ssm delete-parameter --name /development/tenants/01hzx0k3m3k9zqhb3mrqhba1b2/external-id",
     );
@@ -252,7 +252,7 @@ describe("cleanup.sh idempotency (#2204)", { timeout: 30_000 }, () => {
     expect(awsCalls).not.toContain("s3api delete-bucket");
     // The already-gone resources are skipped, but the still-present ones are still cleaned up.
     expect(bunCalls).toContain(
-      "cdk destroy tenkacloud-tenant-template-01hzx0k3m3k9zqhb3mrqhba1b2 --force",
+      "run cdk -- destroy tenkacloud-tenant-template-01hzx0k3m3k9zqhb3mrqhba1b2 --force",
     );
     expect(awsCalls).toContain(
       "ssm delete-parameter --name /development/tenants/01hzx0k3m3k9zqhb3mrqhba1b2/external-id",
@@ -276,8 +276,8 @@ describe("cleanup.sh idempotency (#2204)", { timeout: 30_000 }, () => {
     expect(awsCalls).not.toContain("ssm delete-parameter");
     // cdk destroy --all still runs unconditionally (it's the idempotent backstop for the
     // CDK-managed pooled stack), but no per-tenant destroy is issued when none exist.
-    expect(bunCalls).toContain("cdk destroy --all --force");
-    expect(bunCalls).not.toContain("cdk destroy tenkacloud-tenant-template-");
+    expect(bunCalls).toContain("run cdk -- destroy --all --force");
+    expect(bunCalls).not.toContain("run cdk -- destroy tenkacloud-tenant-template-");
     expect(stdout).toContain("cleanup complete.");
   });
 

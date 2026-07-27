@@ -93,4 +93,4 @@ wait_for_stack_idle() {
 }
 
 wait_for_stack_idle "${STACK_NAME}"
-bun cdk deploy "${STACK_NAME}" --exclusively --require-approval never
+bun run cdk -- deploy "${STACK_NAME}" --exclusively --require-approval never

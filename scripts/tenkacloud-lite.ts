@@ -352,7 +352,7 @@ function printFailureGuide(io: CliIO, phase: string): void {
       "[lite] よくある原因と対処:",
       "[lite]   - credentials expired       → aws sso login / 新しい session を取得",
       "[lite]   - role 不足                  → 必要な IAM permission を付与",
-      "[lite]   - bootstrap 未実行           → cd infrastructure && bun run cdk bootstrap",
+      "[lite]   - bootstrap 未実行           → cd infrastructure && bun run cdk -- bootstrap",
       "[lite]   - region 不一致 (.env と現環境) → AWS_REGION を .env と一致させる",
       "",
     ].join("\n"),
