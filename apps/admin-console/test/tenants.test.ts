@@ -194,6 +194,24 @@ describe("listTenants", () => {
     expect(res[0].isActive).toBe(false);
   });
 
+  it("should preserve legacy isActive when sbtaws_active is absent", async () => {
+    const { api, get } = buildApiMock();
+    get.mockResolvedValueOnce([
+      {
+        tenantId: "legacy",
+        tenantName: "Legacy",
+        email: "legacy@example.com",
+        tier: "basic",
+        tenantStatus: "Complete",
+        isActive: true,
+      },
+    ]);
+
+    const res = await listTenants(api);
+
+    expect(res[0].isActive).toBe(true);
+  });
+
   it("should fail closed when SBT repeats a pagination token", async () => {
     const { api, get } = buildApiMock();
     get.mockResolvedValue({
