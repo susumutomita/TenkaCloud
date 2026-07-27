@@ -6,6 +6,7 @@
       "name": "tenkacloud",
       "dependencies": {
         "@libsql/client": "^0.17.4",
+        "@tenkacloud/coordination-plugin-sdk": "workspace:*",
       },
       "devDependencies": {
         "@biomejs/biome": "^2.5.3",
@@ -193,7 +194,7 @@
         "@tenkacloud/saml-utils": "workspace:*",
         "ajv": "8.20.0",
         "ajv-formats": "^3.0.1",
-        "aws-cdk-lib": "^2.262.1",
+        "aws-cdk-lib": "2.262.1",
         "constructs": "^10.6.0",
         "dotenv": "^17.4.2",
         "esbuild": "^0.28.1",
@@ -202,6 +203,7 @@
         "winston": "^3.19.0",
       },
       "devDependencies": {
+        "@aws-cdk/cloud-assembly-schema": "54.14.0",
         "@aws-sdk/client-cloudformation": "^3.1079.0",
         "@aws-sdk/client-cloudwatch": "^3.1085.0",
         "@aws-sdk/client-cognito-identity-provider": "^3.1079.0",

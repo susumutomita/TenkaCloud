@@ -33,17 +33,12 @@ export JSII_DEPRECATED=quiet
 # Participant Portal を ProblemDeployBackendStack に含める (= CDK 側で条件付き作成)。
 export CDK_PARAM_ENABLE_PARTICIPANT_PORTAL="true"
 
-# SPA dist/ build — BucketDeployment.Source.asset が dist/ を要求するため CDK synth 前に必須。
-# Issue #1031: 旧 install.sh は Phase 2 で host 側 build していたが、 全 stack 1 発 deploy する
-# 都合で先回り build する。 URL 系は build に焼かず runtime-config.json 経由 (= URL 非依存 bundle)。
-for app in admin-console application-admin-console participant-portal; do
-  echo "[install] building apps/${app}..."
-  (cd "${TENKACLOUD_ROOT}/apps/${app}" && bun install && bun run build) >/dev/null
-done
+# prepare-source-bundle.sh builds all three SPA dist directories before packaging,
+# which also satisfies the following local CDK synth/deploy asset lookup.
 
 cd "${TENKACLOUD_ROOT}/infrastructure"
 bun install
-bun cdk bootstrap
+bun run cdk -- bootstrap
 
 # ============================================================================
 # Single-phase deploy (Issue #1031): admin-console-hosting → control-plane / 他 backend →
@@ -59,7 +54,7 @@ echo ""
 echo "=============================================="
 echo "Deploying all stacks (cdk deploy --all)"
 echo "=============================================="
-bun cdk deploy --all \
+bun run cdk -- deploy --all \
   --exclusively \
   --require-approval never \
   --concurrency 4

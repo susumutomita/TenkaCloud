@@ -17,7 +17,7 @@ export const metadata = { title: "デプロイモードと起動経路" };
 
 新規テナントのプロビジョニングと、パイプラインによるロールアウトは**別々の経路**です。旧ドキュメントが取り違えていたのがこの区別です。
 
-- テナント作成イベント (`onboardingRequest`) を SBT の `BashJobRunner` が受け取り、`provision-tenant.sh` を実行します。デフォルトではテナントは**プール型**（プール型スタックを共有）で、`PLATINUM` ティアのテナントだけが専用のサイロスタックを直接デプロイされます (`bun cdk deploy tenkacloud-tenant-template-<id>`)。
+- テナント作成イベント (`onboardingRequest`) を SBT の `BashJobRunner` が受け取り、`provision-tenant.sh` を実行します。デフォルトではテナントは**プール型**（プール型スタックを共有）で、`PLATINUM` ティアのテナントだけが専用のサイロスタックを直接デプロイされます (`bun run cdk -- deploy tenkacloud-tenant-template-<id>`)。
 
 つまり、テナントを 1 つ作成しても CodePipeline は実行されません。実行されるのはプロビジョニングジョブです。
 

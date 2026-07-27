@@ -82,7 +82,7 @@ distinction the old docs got wrong.</p>
 <li>A tenant creation event (<code>onboardingRequest</code>) is picked up by the SBT
 <code>BashJobRunner</code>, which runs <code>provision-tenant.sh</code>. By default the tenant is
 <strong>pooled</strong> (it shares the pooled stack); only a <code>PLATINUM</code> tier tenant gets a
-dedicated silo stack deployed directly (<code>bun cdk deploy tenkacloud-tenant-template-&lt;id&gt;</code>).</li>
+dedicated silo stack deployed directly (<code>bun run cdk -- deploy tenkacloud-tenant-template-&lt;id&gt;</code>).</li>
 </ul>
 <p>So creating one tenant does not run the CodePipeline; it runs a provisioning job.</p>
 <h2>What the SaaS pipeline is for</h2>

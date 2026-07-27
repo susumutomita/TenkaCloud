@@ -49,7 +49,7 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
   // Issue #1031: admin-console-hosting を最初に立てる (= 依存なし、 wildcard CSP)。
   // 後続 control-plane / admin-console-insight が `distributionDomainName` を cross-stack ref で
   // 受け取る (= adminConsoleOrigin)。 これで install.sh の Phase 1/2/3 の env-var dance を
-  // 撤廃でき、 `bun cdk deploy --all` 1 発で全 stack が立つ。
+  // 撤廃でき、 `bun run cdk -- deploy --all` 1 発で全 stack が立つ。
   const adminConsoleHostingStack = new AdminConsoleHostingStack(
     app,
     stackId("tenkacloud-admin-console-hosting", config.environment),

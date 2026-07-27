@@ -68,7 +68,7 @@
 <h2>新しいテナントがプロビジョニングされる流れ</h2>
 <p>新規テナントのプロビジョニングと、パイプラインによるロールアウトは<strong>別々の経路</strong>です。旧ドキュメントが取り違えていたのがこの区別です。</p>
 <ul>
-<li>テナント作成イベント (<code>onboardingRequest</code>) を SBT の <code>BashJobRunner</code> が受け取り、<code>provision-tenant.sh</code> を実行します。デフォルトではテナントは<strong>プール型</strong>（プール型スタックを共有）で、<code>PLATINUM</code> ティアのテナントだけが専用のサイロスタックを直接デプロイされます (<code>bun cdk deploy tenkacloud-tenant-template-&lt;id&gt;</code>)。</li>
+<li>テナント作成イベント (<code>onboardingRequest</code>) を SBT の <code>BashJobRunner</code> が受け取り、<code>provision-tenant.sh</code> を実行します。デフォルトではテナントは<strong>プール型</strong>（プール型スタックを共有）で、<code>PLATINUM</code> ティアのテナントだけが専用のサイロスタックを直接デプロイされます (<code>bun run cdk -- deploy tenkacloud-tenant-template-&lt;id&gt;</code>)。</li>
 </ul>
 <p>つまり、テナントを 1 つ作成しても CodePipeline は実行されません。実行されるのはプロビジョニングジョブです。</p>
 <h2>SaaS パイプラインの役割</h2>

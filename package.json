@@ -43,6 +43,7 @@
   "author": "Susumu Tomita (https://susumutomita.netlify.app/)",
   "license": "Apache-2.0",
   "dependencies": {
+    "@tenkacloud/coordination-plugin-sdk": "workspace:*",
     "@libsql/client": "^0.17.4"
   },
   "devDependencies": {

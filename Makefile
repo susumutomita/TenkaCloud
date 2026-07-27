@@ -1,6 +1,6 @@
-# The infrastructure workspace also exports a `cdk` bin, so Bun does not link the
-# aws-cdk dependency into node_modules/.bin. Invoke the pinned package explicitly.
-CDK      := cd infrastructure && JSII_DEPRECATED=quiet ../node_modules/aws-cdk/bin/cdk
+# The infrastructure workspace also exports a `cdk` bin. Route every command
+# through the shared resolver so neither that bin nor a global CLI can win.
+CDK      := cd infrastructure && JSII_DEPRECATED=quiet ../scripts/run-cdk.sh
 APPROVAL := --require-approval broadening
 
 # SBT 0.3.9 内部が aws-cdk-lib の deprecated な `advancedSecurityMode` 等を使っているため、

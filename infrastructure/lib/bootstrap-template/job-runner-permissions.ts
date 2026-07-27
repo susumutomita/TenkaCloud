@@ -7,7 +7,7 @@ import { Effect, PolicyDocument, PolicyStatement } from "aws-cdk-lib/aws-iam";
  * SBT's reference-arch example passes `Action:* Resource:*` to the BashJobRunner, which makes
  * each provisioning CodeBuild role an account administrator driven by EventBridge-supplied input.
  * TenkaCloud's scripts only ever:
- *   - run `bun cdk deploy/destroy` — which, with the modern role-based CDK bootstrap, delegates
+ *   - run `bun run cdk -- deploy/destroy` — which, with the modern role-based CDK bootstrap, delegates
  *     all resource creation to the `cdk-*` bootstrap roles (job runner only needs `sts:AssumeRole`
  *     to them; the `cdk-…-cfn-exec-role` is what actually creates resources),
  *   - read the source bundle from `tenkacloud-source-<account>-<region>`,

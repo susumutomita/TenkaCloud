@@ -22,7 +22,13 @@ function makeFixture(): { root: string; workDir: string } {
   write(
     root,
     "package.json",
-    JSON.stringify({ name: "fixture", workspaces: ["infrastructure", "packages/*"] }),
+    JSON.stringify({
+      name: "fixture",
+      workspaces: ["infrastructure", "packages/*"],
+      dependencies: {
+        "@tenkacloud/coordination-plugin-sdk": "workspace:*",
+      },
+    }),
   );
   write(root, "infrastructure/lib/index.ts");
   write(root, "infrastructure/cdk.out/test-synth/worker/large-generated-file");
@@ -30,6 +36,7 @@ function makeFixture(): { root: string; workDir: string } {
   write(root, "scripts/runtime.sh");
   write(root, "problems/challenges/demo/metadata.json", "{}");
   write(root, "packages/runtime/src/index.ts");
+  write(root, "apps/admin-console/dist/index.html");
   write(root, "apps/application-admin-console/dist/index.html");
   write(root, "apps/participant-portal/dist/index.html");
   write(root, "unknown-generated-root/should-not-ship.txt");
@@ -100,6 +107,7 @@ describe("scripts/package-source-bundle.sh (#1552)", () => {
     expect(files).toContain("scripts/runtime.sh");
     expect(files).toContain("problems/challenges/demo/metadata.json");
     expect(files).toContain("packages/runtime/src/index.ts");
+    expect(files).toContain("apps/admin-console/dist/index.html");
     expect(files).toContain("apps/application-admin-console/dist/index.html");
     expect(files).toContain("apps/participant-portal/dist/index.html");
     expect(files.some((file) => file.includes("cdk.out"))).toBe(false);
@@ -112,7 +120,12 @@ describe("scripts/package-source-bundle.sh (#1552)", () => {
       encoding: "utf8",
     });
     expect(packageJson.status).toBe(0);
-    expect(JSON.parse(packageJson.stdout).workspaces).toEqual(["cdk", "packages/*"]);
+    expect(JSON.parse(packageJson.stdout)).toMatchObject({
+      workspaces: ["cdk", "packages/*"],
+      dependencies: {
+        "@tenkacloud/coordination-plugin-sdk": "workspace:*",
+      },
+    });
   });
 
   it("should include .tenkacloud/pack-store in the bundle when installed packs exist", () => {
