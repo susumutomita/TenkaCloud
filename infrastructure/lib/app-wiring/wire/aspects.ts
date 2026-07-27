@@ -41,8 +41,16 @@ export function applyGlobalAspects(app: cdk.App, config: AppConfig): void {
  * Free Tier 枠 (25 RCU/WCU) を圧迫する。 対象 stack に `DynamoDbLowCapacity` Aspect を付け、 全
  * `CfnTable` を `config.dynamoReadCapacity` / `config.dynamoWriteCapacity` (default 1/1) に揃える。
  */
-export function applyDynamoLowCapacity(scope: cdk.Stack, config: AppConfig): void {
+export function applyDynamoLowCapacity(
+  scope: cdk.Stack,
+  config: AppConfig,
+  options: { convertSbtTenantRegistrationTable?: boolean } = {},
+): void {
   cdk.Aspects.of(scope).add(
-    new DynamoDbLowCapacity(config.dynamoReadCapacity, config.dynamoWriteCapacity),
+    new DynamoDbLowCapacity(config.dynamoReadCapacity, config.dynamoWriteCapacity, {
+      convertOnDemand: options.convertSbtTenantRegistrationTable
+        ? (table) => table.node.path.includes("/tenantRegistrationTable/TenantRegistrationTable/")
+        : undefined,
+    }),
   );
 }

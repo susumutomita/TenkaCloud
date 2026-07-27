@@ -101,7 +101,7 @@ export function TenantListPage({ config }: { config: AppConfig }) {
     /* v8 ignore next */
     if (!api || !pendingDeprovision) return;
     try {
-      await deleteTenant(api, pendingDeprovision.tenantId);
+      await deleteTenant(api, pendingDeprovision);
       setPendingDeprovision(null);
       await refresh();
     } catch (err) {

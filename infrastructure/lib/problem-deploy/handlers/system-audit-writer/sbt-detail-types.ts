@@ -5,15 +5,15 @@
  * されない」 / 「フィルタで落ちて届かない」 が無音で起きる構造だった。
  *
  * detail-type 自体は SBT (`@cdklabs/sbt-aws` の event-manager) が発する外部契約なので、
- * 追加・改名するときは SBT 側の DetailType enum と突き合わせること。
+ * 追加・改名するときは SBT 側の EventManager.events と突き合わせること。
  */
 export const SBT_ONBOARDING_DETAIL_TYPES = [
-  "onboardingRequest",
-  "onboardingSuccess",
-  "onboardingFailure",
-  "offboardingRequest",
-  "offboardingSuccess",
-  "offboardingFailure",
+  "sbt_aws_onboardingRequest",
+  "sbt_aws_provisionSuccess",
+  "sbt_aws_provisionFailure",
+  "sbt_aws_offboardingRequest",
+  "sbt_aws_deprovisionSuccess",
+  "sbt_aws_deprovisionFailure",
 ] as const;
 
 export type SbtOnboardingDetailType = (typeof SBT_ONBOARDING_DETAIL_TYPES)[number];

@@ -34,7 +34,7 @@ describe("system-audit-writer handler", () => {
   it("should write a full SBT onboarding row (actorUsername / target / extra present)", async () => {
     await handler(
       ev(
-        "onboardingSuccess",
+        "sbt_aws_provisionSuccess",
         {
           tenantId: "tenant-9",
           tier: "PREMIUM",
@@ -60,7 +60,7 @@ describe("system-audit-writer handler", () => {
   });
 
   it("should write a minimal row, omitting absent optional fields", async () => {
-    await handler(ev("onboardingRequest", {})); // no actor / target / tier / tenantName
+    await handler(ev("sbt_aws_onboardingRequest", {})); // no actor / target / tier / tenantName
     const arg = mocks.writeAuditEvent.mock.calls[0][0];
     expect(arg.actor).toBe("sbt-control-plane"); // fallback
     expect(arg).not.toHaveProperty("actorUsername");
@@ -70,12 +70,16 @@ describe("system-audit-writer handler", () => {
 
   it("should swallow an Error from writeAuditEvent (no throw)", async () => {
     mocks.writeAuditEvent.mockRejectedValueOnce(new Error("ddb down"));
-    await expect(handler(ev("onboardingFailure", { tenantId: "t" }))).resolves.toBeUndefined();
+    await expect(
+      handler(ev("sbt_aws_provisionFailure", { tenantId: "t" })),
+    ).resolves.toBeUndefined();
   });
 
   it("should swallow a non-Error rejection (String(err) branch)", async () => {
     mocks.writeAuditEvent.mockRejectedValueOnce("plain string failure");
-    await expect(handler(ev("offboardingSuccess", { tenantId: "t" }))).resolves.toBeUndefined();
+    await expect(
+      handler(ev("sbt_aws_deprovisionSuccess", { tenantId: "t" })),
+    ).resolves.toBeUndefined();
   });
 
   it("should write a CodeBuild FAILED row, defaulting time and omitting region/build-id", async () => {

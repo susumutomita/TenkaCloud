@@ -1,14 +1,15 @@
 import { resolve } from "node:path";
 import {
-  BashJobRunner,
-  type BashJobRunnerProps,
   CoreApplicationPlane,
-  DetailType,
+  DeprovisioningScriptJob,
   EventManager,
+  ProvisioningScriptJob,
+  type TenantLifecycleScriptJobProps,
 } from "@cdklabs/sbt-aws";
 import { Stack, type StackProps } from "aws-cdk-lib";
 import { AttributeType, BillingMode, Table } from "aws-cdk-lib/aws-dynamodb";
 import { EventBus } from "aws-cdk-lib/aws-events";
+import { type CfnStateMachine, JsonPath, TaskInput } from "aws-cdk-lib/aws-stepfunctions";
 import type { Construct } from "constructs";
 import type { ApiKeySSMParameterNames } from "../interfaces/api-key-ssm-parameter-names.js";
 import { TenantStatusReconciler } from "../tenant-status-reconciler/tenant-status-reconciler.js";
@@ -46,10 +47,48 @@ interface BootstrapTemplateStackProps extends StackProps {
   tenantMappingTableWriteCapacity?: number;
 }
 
+interface SbtFailureEventTask {
+  readonly props: {
+    readonly entries: Array<{ detail: TaskInput }>;
+  };
+  readonly containingGraph?: {
+    toGraphJson(): Record<string, unknown>;
+  };
+}
+
+/**
+ * SBT 0.9.5's lifecycle wrappers emit failure `jobOutput` as a flat
+ * `{ tenantStatus }`, while TenantRegistrationService sends that object directly to
+ * PATCH /tenant-registrations/{id}, whose contract accepts only the nested
+ * `{ tenantData, tenantRegistrationData }` shape. Re-render the formal ScriptJob's ASL
+ * with the correct failure payload. The pinned child id and structural synth test make a
+ * future upstream change fail loudly instead of silently leaving registrations In progress.
+ */
+function patchLifecycleFailureOutput(job: ProvisioningScriptJob | DeprovisioningScriptJob): void {
+  const failureTask = job.node.findChild(
+    "notifyFailureEventBridgeTask",
+  ) as unknown as SbtFailureEventTask;
+  const failureEntry = failureTask.props.entries[0];
+  if (!failureEntry || !failureTask.containingGraph) {
+    throw new Error("SBT lifecycle failure task shape changed; refusing to synthesize");
+  }
+  failureEntry.detail = TaskInput.fromObject({
+    tenantRegistrationId: JsonPath.stringAt("$.detail.tenantRegistrationId"),
+    jobOutput: {
+      tenantData: { tenantStatus: "Failed" },
+      tenantRegistrationData: { registrationStatus: "Failed" },
+    },
+  });
+
+  const stateMachineResource = job.provisioningStateMachine.node.defaultChild as CfnStateMachine;
+  stateMachineResource.definitionString = undefined;
+  stateMachineResource.definition = failureTask.containingGraph.toGraphJson();
+}
+
 export class BootstrapTemplateStack extends Stack {
   public readonly tenantMappingTable: Table;
   /**
-   * Issue #814 Phase 2: SBT BashJobRunner が立てる deprovisioning state machine の ARN。
+   * Issue #814 Phase 2: SBT DeprovisioningScriptJob が立てる state machine の ARN。
    * admin-insight Lambda が \`states:ListExecutions\` で実行履歴を取得し、 admin-console の
    * 「Deprovisioning Jobs」 タブで参加者運営に見せるために cross-stack 参照する。
    */
@@ -79,13 +118,13 @@ export class BootstrapTemplateStack extends Stack {
         : {}),
     });
 
-    // #1382: SBT reference-arch の BashJobRunner は example で `Action:* Resource:*` を渡すが、
+    // #1382: SBT reference-arch の ScriptJob は example で `Action:* Resource:*` を渡すが、
     // TenkaCloud の provision/deprovision script が実際に必要とする最小権限へ絞る
     // (= SBT construct 自体は不変、 渡す permissions のみ TenkaCloud 固有に scope)。 詳細・前提は
     // buildTenantJobRunnerPermissions の docblock 参照。 cross-account 化 (#857) で更に縮む。
     const jobRunnerPermissions = buildTenantJobRunnerPermissions(this.account, this.region);
 
-    const provisioningJobRunnerProps: BashJobRunnerProps = {
+    const provisioningJobRunnerProps: TenantLifecycleScriptJobProps = {
       eventManager: eventManager,
       permissions: jobRunnerPermissions,
       script: composeTenantScript(
@@ -93,13 +132,18 @@ export class BootstrapTemplateStack extends Stack {
       ),
       postScript: "",
       environmentStringVariablesFromIncomingEvent: ["tenantId", "tier", "tenantName", "email"],
-      environmentVariablesToOutgoingEvent: [
-        "tenantConfig",
-        "tenantStatus",
-        "prices", // added so we don't lose it for targets beyond provisioning (ex. billing)
-        "tenantName", // added so we don't lose it for targets beyond provisioning (ex. billing)
-        "email", // added so we don't lose it for targets beyond provisioning (ex. billing)
-      ],
+      environmentVariablesToOutgoingEvent: {
+        tenantData: [
+          "tenantId",
+          "tenantConfig",
+          "tenantStatus",
+          "prices", // added so we don't lose it for targets beyond provisioning (ex. billing)
+          "tenantName", // added so we don't lose it for targets beyond provisioning (ex. billing)
+          "email", // added so we don't lose it for targets beyond provisioning (ex. billing)
+          "tier",
+        ],
+        tenantRegistrationData: ["registrationStatus"],
+      },
       scriptEnvironmentVariables: {
         // CDK_PARAM_SYSTEM_ADMIN_EMAIL is required because as part of deploying the bootstrap-template
         // the control plane is also deployed. To ensure the operation does not error out, this value
@@ -109,22 +153,21 @@ export class BootstrapTemplateStack extends Stack {
         // reads it directly instead of recomputing a divergent (no-hash) name.
         CDK_PARAM_S3_BUCKET_NAME: sourceBucketName,
       },
-      outgoingEvent: DetailType.PROVISION_SUCCESS,
-      incomingEvent: DetailType.ONBOARDING_REQUEST,
     };
 
     // #1382: provisioning と同じ least-privilege scope を共有する (deprovision は cdk destroy +
     // tenant user/group の削除なので、 provisioning の superset で過不足ない)。
-    const deprovisioningJobRunnerProps: BashJobRunnerProps = {
+    const deprovisioningJobRunnerProps: TenantLifecycleScriptJobProps = {
       eventManager: eventManager,
       permissions: jobRunnerPermissions,
       script: composeTenantScript(
         resolve(import.meta.dirname, "../../../scripts/deprovision-tenant.sh"),
       ),
-      environmentStringVariablesFromIncomingEvent: ["tenantId"],
-      environmentVariablesToOutgoingEvent: ["tenantStatus"],
-      outgoingEvent: DetailType.DEPROVISION_SUCCESS,
-      incomingEvent: DetailType.OFFBOARDING_REQUEST,
+      environmentStringVariablesFromIncomingEvent: ["tenantId", "tier"],
+      environmentVariablesToOutgoingEvent: {
+        tenantData: ["tenantId", "tenantStatus"],
+        tenantRegistrationData: ["registrationStatus"],
+      },
       scriptEnvironmentVariables: {
         TENANT_STACK_MAPPING_TABLE: this.tenantMappingTable.tableName,
         // CDK_PARAM_SYSTEM_ADMIN_EMAIL is required because as part of deploying the bootstrap-template
@@ -137,16 +180,18 @@ export class BootstrapTemplateStack extends Stack {
       },
     };
 
-    const provisioningJobRunner: BashJobRunner = new BashJobRunner(
+    const provisioningJobRunner = new ProvisioningScriptJob(
       this,
       "provisioningJobRunner",
       provisioningJobRunnerProps,
     );
-    const deprovisioningJobRunner: BashJobRunner = new BashJobRunner(
+    const deprovisioningJobRunner = new DeprovisioningScriptJob(
       this,
       "deprovisioningJobRunner",
       deprovisioningJobRunnerProps,
     );
+    patchLifecycleFailureOutput(provisioningJobRunner);
+    patchLifecycleFailureOutput(deprovisioningJobRunner);
 
     // Issue #814 Phase 2: deprovisioning Step Functions SM ARN を public export し、
     // admin-insight Lambda が ListExecutions で執行履歴を引けるようにする。
@@ -155,7 +200,7 @@ export class BootstrapTemplateStack extends Stack {
 
     new CoreApplicationPlane(this, "CoreApplicationPlane", {
       eventManager: eventManager,
-      jobRunnersList: [provisioningJobRunner, deprovisioningJobRunner],
+      scriptJobs: [provisioningJobRunner, deprovisioningJobRunner],
     });
 
     // #1384: TenantApiKey は API キー値を平文で受け取らない (API Gateway が auto-generate)。

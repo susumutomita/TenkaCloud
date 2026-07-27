@@ -80,7 +80,11 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
   // SBT が ControlPlane 内部で作る TenantDetails table は default 5/5 (CDK Table の
   // 既定値) なので Free Tier 枠 (25 RCU/WCU) を圧迫する。Aspect で全 CfnTable を
   // dynamoReadCapacity / dynamoWriteCapacity (default 1/1) に揃える。
-  applyDynamoLowCapacity(controlPlaneStack, config);
+  applyDynamoLowCapacity(controlPlaneStack, config, {
+    // SBT 0.9.5 hard-codes only this new internal table to PAY_PER_REQUEST. TenkaCloud's
+    // PROVISIONED environments convert that exact construct path to configured capacity.
+    convertSbtTenantRegistrationTable: config.isDynamoProvisioned,
+  });
 
   // ADR-003 Phase 2 / catalog split: TenkaCloudChallenge repo の publish.yml が S3 に
   // payload を push するための bucket + OIDC IAM Role を立てる。 config.challengePayload が

@@ -104,6 +104,7 @@ const cfg = (over: Partial<AppConfig> = {}): AppConfig =>
 
 const activeSilo = {
   tenantId: "t-silo",
+  tenantRegistrationId: "r-silo",
   tenantName: "Silo Co",
   email: "silo@x.test",
   tier: "PLATINUM",
@@ -314,7 +315,7 @@ describe("TenantListPage deprovision + errors", () => {
     await screen.findByText("Silo Co");
     fireEvent.click(screen.getByText("tenant_list.deprovision_action"));
     fireEvent.click(screen.getByText("tenant_list.deprovision_modal_confirm"));
-    await waitFor(() => expect(h.mockDeleteTenant).toHaveBeenCalledWith({}, "t-silo"));
+    await waitFor(() => expect(h.mockDeleteTenant).toHaveBeenCalledWith({}, activeSilo));
     expect(h.mockListTenants).toHaveBeenCalledTimes(2); // initial + after delete
   });
 

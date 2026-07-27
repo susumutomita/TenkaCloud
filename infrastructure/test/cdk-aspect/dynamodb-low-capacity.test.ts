@@ -43,6 +43,25 @@ describe("DynamoDbLowCapacity aspect", () => {
     }
   });
 
+  it("should convert selected third-party PAY_PER_REQUEST tables to PROVISIONED capacity", () => {
+    const app = new App();
+    const stack = new Stack(app, "ThirdPartyOnDemandStack");
+    new Table(stack, "ThirdPartyOnDemand", {
+      partitionKey: { name: "pk", type: AttributeType.STRING },
+      billingMode: BillingMode.PAY_PER_REQUEST,
+    });
+    Aspects.of(app).add(
+      new DynamoDbLowCapacity(1, 1, {
+        convertOnDemand: (table) => table.node.path.includes("ThirdPartyOnDemand"),
+      }),
+    );
+    const template = Template.fromStack(stack);
+    template.hasResourceProperties("AWS::DynamoDB::Table", {
+      BillingMode: "PROVISIONED",
+      ProvisionedThroughput: { ReadCapacityUnits: 1, WriteCapacityUnits: 1 },
+    });
+  });
+
   it("should overwrite each GlobalSecondaryIndex throughput when CfnTable exposes a concrete array", () => {
     // L1 CfnTable で GSI を直接 array として渡すと aspect の Array.isArray 分岐に入る。
     // L2 Table.addGlobalSecondaryIndex は IResolvable を返すため aspect が触らない (設計どおり)。

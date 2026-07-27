@@ -41,7 +41,7 @@ lives:
 | `quality/` | Code-quality ratchets: `check-duplication.ts` + `duplication-baseline.json` (jscpd baseline gate, `make dup-check` — fails only when duplication grows past the baseline); `check-infra-critical-coverage.ts` + `infra-critical-paths.ts` + `infra-critical-coverage-baseline.json` (infrastructure high-risk file coverage ratchet, `make infra-coverage-check` — fails only when coverage drops below baseline for a registered AssumeRole/ExternalId, tenant-isolation, deploy-state-machine, scoring, delete-lifecycle, or auth-boundary file, #2758) |
 | `landing/` | Landing-site generators: `generate-landing-docs.ts`, `generate-landing-locales.ts` (both support `--check`), `landing-seo.test.ts`, and `onboarding-videos/` (YouTube upload masters render only to an explicit external output directory) |
 | `onboard/` | First-run onboarding helpers behind `tenkacloud-onboard.ts`: `diagnose.ts`, `plan.ts`, `report.ts`, `onboard-bootstrap.sh`, `codespaces-setup.sh` (devcontainer `postCreateCommand`) |
-| `ops/` | Operator utilities for a running deployment: `env-init.ts` (`make env-check` wizard), `turso-live-guide.ts` (`make turso-live-guide` / read-only preflight and CFn verification), `scale-event-capacity.ts` + `capacity-model.ts` (DDB capacity), `disruption-live-fire.ts`, `report-retained-tables.ts` (used by `cleanup.sh`), `participant-portal-runtime-config.ts` (`make dev` mock config), `print-source-bundle-lifecycle.ts` |
+| `ops/` | Operator utilities for a running deployment: `env-init.ts` (`make env-check` wizard), `turso-live-guide.ts` (`make turso-live-guide` / read-only preflight and CFn verification), `scale-event-capacity.ts` + `capacity-model.ts` (DDB capacity), `backfill-tenant-registrations.ts` (one-time SBT 0.9.5 migration), `disruption-live-fire.ts`, `report-retained-tables.ts` (used by `cleanup.sh`), `participant-portal-runtime-config.ts` (`make dev` mock config), `print-source-bundle-lifecycle.ts` |
 | `local-play/` | Modules behind `tenkacloud-local.ts` (container runner, manifest, readiness, scoring API) |
 | `cli/` | Unified CLI command adapters and process boundary behind `tenkacloud.ts` |
 | `lib/` | Shared helpers for the top-level shell scripts and `ops/` CLIs (`battles-common.sh`, `names.sh`, capacity/disruption/retained-tables logic) |
@@ -58,3 +58,27 @@ lives:
 Tests for scripts live either next to the script (`bun test`, wired into the
 root `test` script) or under `infrastructure/test/scripts/` (vitest, runs in
 the `infrastructure` workspace — `make test-scripts` is the fast path).
+
+## SBT 0.9.5 tenant-registration backfill
+
+Follow the complete
+[SBT 0.9.5 migration runbook](../docs/operations/sbt-0.9.5-tenant-registration-migration.md).
+After the staged Control Plane deployment, pass the exact deployed table,
+account, region, and environment identifiers. The first invocation is always a
+read-only inventory and plan:
+
+```bash
+bun run scripts/ops/backfill-tenant-registrations.ts \
+  --tenant-details-table=<exact-tenant-details-table-name> \
+  --tenant-registration-table=<exact-tenant-registration-table-name> \
+  --expected-account=<12-digit-account-id> \
+  --expected-region=<aws-region> \
+  --environment=<environment-tag>
+```
+
+Resolve every reported blocker and review the deterministic
+`legacy-<tenantId>` mappings before repeating the same command with `--apply`.
+Each apply uses one DynamoDB transaction to create the registration and link
+the existing tenant. A final dry-run must report `createCount: 0` and no
+blockers. Do not use `--apply` before the SBT 0.9.5 table exists, and do not
+substitute a table from another environment.

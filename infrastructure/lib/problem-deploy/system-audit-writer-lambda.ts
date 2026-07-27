@@ -128,7 +128,7 @@ export class SystemAuditWriterLambda extends Construct {
       );
     }
 
-    // SBT `DetailType` enum (= event-manager.d.ts) のうち audit に意味があるものを listen。
+    // SBT 0.9.5 `EventManager.events` のうち audit に意味があるものを listen。
     // user / api-key 系の SBT events は別 issue で扱う (本 issue は tenant CRUD に絞る)。
     this.rule = new Rule(this, "Rule", {
       eventBus: props.eventBus,

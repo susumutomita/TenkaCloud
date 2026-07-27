@@ -72,6 +72,13 @@ const LOCALHOST_CORS_ORIGINS = [
   "http://localhost:4180",
 ];
 
+// SBT 0.3.9 contained the `tenantManagementServicves` typo in its construct path. 0.9.5
+// fixes that path, which would otherwise make CDK emit a new logical id and CloudFormation
+// replace the stateful TenantDetails table. Pin the historical id until a separately staged
+// data migration intentionally replaces the table.
+const LEGACY_TENANT_DETAILS_LOGICAL_ID =
+  "ControlPlanetenantManagementServicvestenantManagementTableTenantDetails974E95B8";
+
 export class ControlPlaneStack extends cdk.Stack {
   public readonly regApiGatewayUrl: string;
   public readonly eventBusArn: string;
@@ -125,6 +132,12 @@ export class ControlPlaneStack extends cdk.Stack {
         maxAge: cdk.Duration.seconds(300),
       },
     });
+
+    const tenantDetailsTable = controlPlane.node
+      .findChild("tenantManagementService")
+      .node.findChild("tenantManagementTable")
+      .node.findChild("TenantDetails").node.defaultChild as cdk.aws_dynamodb.CfnTable;
+    tenantDetailsTable.overrideLogicalId(LEGACY_TENANT_DETAILS_LOGICAL_ID);
 
     // SBT 内蔵 UserPoolUserClient の callbackUrls を escape hatch で上書きして
     // CloudFront URL を許可する。
