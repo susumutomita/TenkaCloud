@@ -50,8 +50,8 @@ export interface GitIO {
   readonly readGitlink: (ref: string) => string | undefined;
   /** parent repo の merge-base(refA, refB) commit を返す。 解決不能なら undefined。 */
   readonly mergeBase: (refA: string, refB: string) => string | undefined;
-  /** submodule に main/PR/merge-base の commit を揃える (= ancestry 判定の前提)。 */
-  readonly fetchSubmodule: () => void;
+  /** submodule に main/PR/merge-base の commit と祖先を揃える (= ancestry 判定の前提)。 */
+  readonly fetchSubmodule: (...pins: readonly string[]) => void;
   /** submodule 内で `git merge-base --is-ancestor a b` 相当。 */
   readonly isAncestor: (maybeAncestor: string, descendant: string) => boolean;
   readonly log: (message: string) => void;
@@ -79,7 +79,7 @@ export function checkSubmoduleNotBehind(baseRef: string, io: GitIO): boolean {
   const mergeBasePin = mergeBaseCommit ? io.readGitlink(mergeBaseCommit) : undefined;
 
   // pin が main と違い、 かつ merge-base から動かしている可能性があるときだけ history を揃える。
-  io.fetchSubmodule();
+  io.fetchSubmodule(mainPin, prPin, ...(mergeBasePin ? [mergeBasePin] : []));
   const verdict = classifyPinChange(mainPin, prPin, mergeBasePin, io.isAncestor);
 
   if (verdict === "untouched") {
@@ -119,11 +119,25 @@ function realGitIO(): GitIO {
     // `git rev-parse <ref>:problems` は gitlink (= submodule commit) を返す。
     readGitlink: (ref) => tryGit(["rev-parse", `${ref}:${SUBMODULE_PATH}`]),
     mergeBase: (refA, refB) => tryGit(["merge-base", refA, refB]),
-    fetchSubmodule: () => {
+    fetchSubmodule: (...pins) => {
+      const uniquePins = [...new Set(pins)];
+      const isShallow =
+        tryGit(["-C", SUBMODULE_PATH, "rev-parse", "--is-shallow-repository"]) === "true";
       try {
-        execFileSync("git", ["-C", SUBMODULE_PATH, "fetch", "--quiet", "origin"], {
-          stdio: "ignore",
-        });
+        execFileSync(
+          "git",
+          [
+            "-C",
+            SUBMODULE_PATH,
+            "fetch",
+            "--quiet",
+            "--no-tags",
+            ...(isShallow ? ["--unshallow"] : []),
+            "origin",
+            ...uniquePins,
+          ],
+          { stdio: "ignore" },
+        );
       } catch {
         // fetch 失敗は致命ではない (= 既に必要 commit を持つ可能性)。 ancestry 判定に委ねる。
       }
