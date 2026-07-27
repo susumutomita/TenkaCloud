@@ -52,7 +52,7 @@ describe("liteDrillCheckpointCode (#2696)", () => {
         getItem: () => {
           throw new Error("SecurityError");
         },
-      } as Storage);
+      } as unknown as Storage);
       expect(hasLiteDrillCheckpointBeenShown("competitorVerified")).toBe(false);
     });
 
@@ -61,7 +61,7 @@ describe("liteDrillCheckpointCode (#2696)", () => {
         setItem: () => {
           throw new Error("QuotaExceededError");
         },
-      } as Storage);
+      } as unknown as Storage);
       expect(() => markLiteDrillCheckpointShown("competitorVerified")).not.toThrow();
     });
   });
