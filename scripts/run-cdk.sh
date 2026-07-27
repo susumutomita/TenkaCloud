@@ -7,8 +7,8 @@ set -euo pipefail
 # never silently select an incompatible cloud-assembly schema.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CDK_CANDIDATES=(
-  "${PWD}/node_modules/aws-cdk/bin/cdk"
   "${SCRIPT_DIR}/../node_modules/aws-cdk/bin/cdk"
+  "${SCRIPT_DIR}/../cdk/node_modules/aws-cdk/bin/cdk"
 )
 
 for candidate in "${CDK_CANDIDATES[@]}"; do

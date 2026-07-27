@@ -76,8 +76,9 @@ describe("repository-local CDK CLI contract", () => {
     expect(packageJson.scripts.synth).toContain("../scripts/run-cdk.sh synth");
 
     const runner = readFileSync(join(REPO_ROOT, "scripts", "run-cdk.sh"), "utf8");
-    expect(runner).toContain('${PWD}/node_modules/aws-cdk/bin/cdk');
     expect(runner).toContain('${SCRIPT_DIR}/../node_modules/aws-cdk/bin/cdk');
+    expect(runner).toContain('${SCRIPT_DIR}/../cdk/node_modules/aws-cdk/bin/cdk');
+    expect(runner).not.toContain("${PWD}");
 
     for (const scriptPath of CDK_SHELL_SCRIPTS) {
       const source = readFileSync(join(REPO_ROOT, scriptPath), "utf8");
