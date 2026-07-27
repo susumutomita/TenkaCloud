@@ -831,6 +831,63 @@ section .lead {
 .contact-fineprint { font-size: 11px; color: rgba(255,255,255,0.58); margin: 0; line-height: 1.6; }
 .contact-fineprint a { color: rgba(255,255,255,0.86); text-decoration: underline; }
 
+/* インラインのお問い合わせフォーム。 設定 (= entry ID) が読めるまで hidden の
+   ままで、 その間は従来の Google フォームリンクだけが見えている。 */
+.contact-form[hidden] { display: none; }
+.contact-form {
+  max-width: 560px; margin: 26px auto 0; text-align: left;
+}
+.contact-form-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+}
+.contact-field { display: flex; flex-direction: column; gap: 6px; }
+.contact-field-wide { grid-column: 1 / -1; }
+.contact-field-label {
+  font-size: 11px; font-weight: 800; letter-spacing: .02em;
+  color: rgba(255,255,255,0.72);
+}
+.contact-required { color: #ff9b8a; font-style: normal; margin-left: 4px; }
+.contact-field input,
+.contact-field select,
+.contact-field textarea {
+  width: 100%; box-sizing: border-box;
+  padding: 10px 12px;
+  font: inherit; font-size: 13px; line-height: 1.5;
+  color: var(--paper);
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 8px;
+}
+.contact-field textarea { resize: vertical; min-height: 108px; }
+.contact-field select option { color: #111; }
+.contact-field input:focus,
+.contact-field select:focus,
+.contact-field textarea:focus {
+  outline: 2px solid rgba(255,255,255,0.55); outline-offset: 1px;
+  border-color: rgba(255,255,255,0.4);
+}
+.contact-field [aria-invalid="true"] { border-color: #ff9b8a; }
+/* 不備は色だけでなく文言でも示す (WCAG 2.1 SC 1.4.1)。 空のときも高さを
+   確保しておき、 エラー表示でレイアウトが跳ねないようにする。 */
+.contact-field-error {
+  font-size: 11px; line-height: 1.5; color: #ff9b8a; min-height: 1.4em;
+}
+.contact-form-actions { margin-top: 16px; text-align: center; }
+.contact-form-actions .btn-primary {
+  height: 35px; padding: 0 24px;
+  background: var(--paper); color: var(--ink);
+  border-radius: 999px;
+  font-size: 12px; font-weight: 800; border: none; cursor: pointer;
+}
+.contact-form-actions .btn-primary[disabled] { opacity: .55; cursor: progress; }
+.contact-form-status {
+  margin: 12px 0 0; min-height: 1.6em;
+  font-size: 12px; line-height: 1.6; text-align: center;
+  color: rgba(255,255,255,0.72);
+}
+.contact-form-status[data-tone="ok"] { color: #9ae6b4; }
+.contact-form-status[data-tone="error"] { color: #ff9b8a; }
+
 /* ============== FOOTER ============== */
 footer { padding: 28px 0 24px; background: var(--paper-3); color: var(--ink-3); }
 footer .wrap {
@@ -911,6 +968,7 @@ footer .footer-legal-links { display: inline-flex; flex-wrap: wrap; gap: 0 6px; 
   section { padding: 36px 0; }
   /* ent-cta inner padding を mobile で詰める */
   .ent-cta { padding: 28px 22px; }
+  .contact-form-grid { grid-template-columns: 1fr; }
   .ent-cta h2 { font-size: clamp(22px, 6vw, 30px); }
   /* nav-right brand 隠す (= ロゴはあるので冗長) */
   .nav-brand-sub { display: none; }

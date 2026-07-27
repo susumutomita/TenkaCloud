@@ -15,7 +15,7 @@ import { useLocation, useNavigate } from "react-router";
 import type { LeaderboardResponse, ParticipantTeamView } from "../api/portal-client";
 import { useAuth } from "../auth/AuthProvider";
 import { TeamViewProvider, useTeamView } from "../auth/TeamViewProvider";
-import type { AppConfig, CloudMode } from "../config";
+import { type AppConfig, type CloudMode, showsCourseTracks } from "../config";
 import { problemProvider } from "../data/providers";
 import { type LocaleCode, SUPPORTED_LOCALES, useI18n } from "../i18n";
 import { CountdownTimer } from "./CountdownTimer";
@@ -277,7 +277,13 @@ export function buildSideNavItems(
     {
       type: "section",
       text: t("nav.quests_section"),
-      items: [{ type: "link", href: "/problems", text: t("nav.problems") }],
+      items: [
+        { type: "link", href: "/problems", text: t("nav.problems") },
+        // 講座トラックは自習経路なので local だけ (判定は `showsCourseTracks`)。
+        ...(showsCourseTracks(cloudMode)
+          ? [{ type: "link" as const, href: "/course-tracks", text: t("nav.course_tracks") }]
+          : []),
+      ],
     },
   ];
   if (!isLocal) {

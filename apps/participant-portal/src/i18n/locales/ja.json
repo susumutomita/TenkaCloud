@@ -29,7 +29,8 @@
     "auto_refresh_off": "自動更新: OFF",
     "auto_refresh_on": "自動更新: ON",
     "change_team_name": "チーム名を変更",
-    "sign_out": "サインアウト"
+    "sign_out": "サインアウト",
+    "course_tracks": "講座トラック"
   },
   "switcher": {
     "aria_label": "言語切替 / Language"
@@ -471,5 +472,27 @@
     "network": "通信エラー。 もう一度試して、それでも続くようなら運営に連絡してください。",
     "network_with_correlation": "通信エラー。 もう一度試して、それでも続くようなら以下の correlation id を運営に伝えてください: {correlationId}",
     "unknown": "問題が発生しました。 もう一度試してください。"
+  },
+  "course_track": {
+    "header": "講座トラック",
+    "header_description": "週・章の順に並べた学習経路。前提が足りない問題は推奨順から外れますが、開くことはできます。",
+    "empty": "講座トラックに登録された問題がまだありません。問題一覧から個別に進められます。",
+    "track_progress": "{solved} / {total} 問 完了",
+    "track_checkpoint_label": "トラック全体の checkpoint",
+    "checkpoint_label": "checkpoint",
+    "checkpoints": "{solved} / {total} 達成",
+    "recommended_next": "次に解くとよい問題: {name}",
+    "start_recommended": "次の問題へ",
+    "all_done": "このトラックの問題はすべて完了しています。",
+    "solved": "完了",
+    "recommended": "次におすすめ",
+    "problem_meta": "難易度 {difficulty} ・ 目安 {duration}",
+    "prerequisite_unmet": "先に解いておくと理解しやすい問題: {problems}",
+    "source_label": "対応する講座教材:",
+    "role_diagnostic": "前提確認",
+    "role_mechanism": "仕組みの観察",
+    "role_assignment_companion": "課題の補助",
+    "role_transfer": "別設定への転用",
+    "role_synthesis": "複数週の統合"
   }
 }

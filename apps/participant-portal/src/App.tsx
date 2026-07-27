@@ -3,7 +3,8 @@ import { Navigate, Route, Routes } from "react-router";
 import { AuthProvider } from "./auth/AuthProvider";
 import { RequireAuth } from "./auth/RequireAuth";
 import { ShellLayout } from "./components/AppLayout";
-import type { AppConfig } from "./config";
+import { type AppConfig, showsCourseTracks } from "./config";
+import { CourseTracksPage } from "./pages/CourseTracks";
 import { LoginPage } from "./pages/Login";
 import { NotificationsPage } from "./pages/Notifications";
 import { ProblemDetailPage } from "./pages/ProblemDetail";
@@ -47,6 +48,12 @@ export function App({ config }: { config: AppConfig }) {
         />
         <Route path="/notifications" element={guarded(config, <NotificationsPage />)} />
         <Route path="/problems" element={guarded(config, <QuestsPage />)} />
+        {/* Issue #2786: 週・章順の学習経路。 /problems の flat 一覧と併存する。
+            自習経路なので local だけに出す — nav の link を消すだけでは URL が生きたまま
+            残るので、route ごと登録しない (未登録 path は下の catch-all で `/` に戻る)。 */}
+        {showsCourseTracks(config.cloudMode) && (
+          <Route path="/course-tracks" element={guarded(config, <CourseTracksPage />)} />
+        )}
         <Route
           path="/problems/:jobId"
           element={guarded(config, <ProblemDetailPage config={config} />)}
