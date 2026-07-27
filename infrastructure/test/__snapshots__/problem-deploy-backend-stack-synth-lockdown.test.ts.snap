@@ -3445,7 +3445,6 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — codebuild 
     "ADMIN_AUDIT_LOG_TABLE_NAME": {
       "Ref": "AdminAuditLogTable670D7986",
     },
-    "BATTLE_PROBLEMS_RUNTIMES": "{}",
     "BATTLE_PROBLEMS_VISIBILITY": "{}",
     "CHALLENGE_PAYLOAD_BUCKET": "",
     "CLOUD_ACTION_ENFORCEMENT_MODE": "shadow",
@@ -7420,7 +7419,6 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — lambda-dep
     "ADMIN_AUDIT_LOG_TABLE_NAME": {
       "Ref": "AdminAuditLogTable670D7986",
     },
-    "BATTLE_PROBLEMS_RUNTIMES": "{}",
     "BATTLE_PROBLEMS_VISIBILITY": "{}",
     "CHALLENGE_PAYLOAD_BUCKET": "",
     "CLOUD_ACTION_ENFORCEMENT_MODE": "shadow",
@@ -11424,7 +11422,6 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — lite mode 
     "ADMIN_AUDIT_LOG_TABLE_NAME": {
       "Ref": "AdminAuditLogTable670D7986",
     },
-    "BATTLE_PROBLEMS_RUNTIMES": "{}",
     "BATTLE_PROBLEMS_VISIBILITY": "{}",
     "CHALLENGE_PAYLOAD_BUCKET": "",
     "CLOUD_ACTION_ENFORCEMENT_MODE": "shadow",
@@ -14399,7 +14396,6 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — pure-sql t
   "CustomS3AutoDeleteObjectsCustomResourceProviderHandler9D90184F": {},
   "DeployApiFunctionC6EAEF11": {
     "ADMIN_AUDIT_LOG_TABLE_NAME": "",
-    "BATTLE_PROBLEMS_RUNTIMES": "{}",
     "BATTLE_PROBLEMS_VISIBILITY": "{}",
     "CHALLENGE_PAYLOAD_BUCKET": "",
     "CLOUD_ACTION_ENFORCEMENT_MODE": "shadow",
