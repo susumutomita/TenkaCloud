@@ -136,3 +136,4 @@ fi
 
 # Create JSON response of output parameters
 export tenantStatus="Deleted"
+export registrationStatus="Deleted"

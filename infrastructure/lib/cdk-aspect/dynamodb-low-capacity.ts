@@ -2,6 +2,14 @@ import type { IAspect } from "aws-cdk-lib";
 import { CfnTable } from "aws-cdk-lib/aws-dynamodb";
 import type { IConstruct } from "constructs";
 
+export interface DynamoDbLowCapacityOptions {
+  /**
+   * Third-party tables which are safe to convert from on-demand billing.
+   * Unselected PAY_PER_REQUEST tables remain byte-for-byte unchanged.
+   */
+  readonly convertOnDemand?: (table: CfnTable) => boolean;
+}
+
 /**
  * 全ての DynamoDB Table の provisioned throughput を強制的に低 capacity に揃える Aspect。
  *
@@ -23,13 +31,17 @@ export class DynamoDbLowCapacity implements IAspect {
   constructor(
     private readonly readCapacity: number,
     private readonly writeCapacity: number,
+    private readonly options: DynamoDbLowCapacityOptions = {},
   ) {}
 
   public visit(node: IConstruct): void {
     if (!(node instanceof CfnTable)) return;
 
-    // PAY_PER_REQUEST (on-demand) のテーブルは throughput を持たないので触らない
-    if (node.billingMode === "PAY_PER_REQUEST") return;
+    // PAY_PER_REQUEST は明示された third-party table だけ変換する。無差別変換はしない。
+    if (node.billingMode === "PAY_PER_REQUEST") {
+      if (!this.options.convertOnDemand?.(node)) return;
+      node.billingMode = "PROVISIONED";
+    }
 
     const throughput = {
       readCapacityUnits: this.readCapacity,

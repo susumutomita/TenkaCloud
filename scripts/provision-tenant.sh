@@ -32,7 +32,7 @@ bun install
 
 # Parse tenant details from the input message from step function
 export CDK_PARAM_TENANT_ID=$tenantId
-# admin-console から POST /tenants 時に渡された tenantName。runtime-config.json
+# admin-console から POST /tenant-registrations 時に渡された tenantName。runtime-config.json
 # 経由で application-admin-console の画面表示に使う (#48)。
 export CDK_PARAM_TENANT_NAME=$tenantName
 # Issue #1029 follow-up: tier は admin-console から大文字 (PLATINUM) で渡ってくる場合と
@@ -90,7 +90,7 @@ APPLICATION_ADMIN_CONSOLE_URL=$(aws cloudformation describe-stacks --stack-name 
 # したとき UsernameExistsException で死なないよう、既存 user は skip)。
 # Issue #748: custom:tenantName を一緒に埋める (= application-admin-console の Home 画面が
 # JWT claim から「ようこそ {tenantName} さん」を表示する。 未設定だと ULID にフォールバックする)。
-# CDK_PARAM_TENANT_NAME は SBT BashJobRunner 経由で `$.detail.tenantName` から伝搬。
+# CDK_PARAM_TENANT_NAME は SBT ProvisioningScriptJob 経由で `$.detail.tenantName` から伝搬。
 # 空のときは Cognito 属性に空文字を入れる (= 画面側で "(未設定)" 表示にフォールバック)。
 if aws cognito-idp admin-get-user --user-pool-id "$SAAS_APP_USERPOOL_ID" --username "$TENANT_ADMIN_USERNAME" >/dev/null 2>&1; then
   echo "Tenant admin user already exists: $TENANT_ADMIN_USERNAME (update custom:tenantName)"
@@ -150,3 +150,4 @@ export tenantConfig=$(jq --arg SAAS_APP_USERPOOL_ID "$SAAS_APP_USERPOOL_ID" \
     "provisioningAccountId":$PROVISIONING_ACCOUNT_ID
   }')
 export tenantStatus="Complete"
+export registrationStatus="Complete"

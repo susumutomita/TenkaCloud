@@ -48,6 +48,7 @@ Reused by operator CLIs and deploy scripts; import directly by relative path.
 | `retained-tables.ts` | Post-destroy RETAIN-table enumeration for billing warnings (#2444) |
 | `scripts/run-cdk.sh` | Exact repository-local AWS CDK CLI resolution for normal checkouts and packaged `cdk` workspaces |
 | `scale-event-capacity.ts` | Event-window capacity scaling logic |
+| `tenant-registration-backfill.ts` | Dry-run-first SBT 0.9.5 legacy tenant inventory planning and atomic registration backfill |
 
 ## Infrastructure shared modules (`infrastructure/lib/problem-deploy/`)
 

@@ -13,9 +13,9 @@ export type Tier = "basic" | "advanced" | "platinum";
 /**
  * Tenant の provisioning 状態。provision-tenant.sh / deprovision-tenant.sh が
  * 実際に書き込む文字列リテラルを正本とする:
- *   - "In progress" — SBT が POST /tenants で初期値として書く (createTenant 参照)
- *   - "Complete"   — provision-tenant.sh:134 で BashJobRunner が export
- *   - "Failed"     — BashJobRunner が exit non-zero のとき (SBT 内蔵)
+ *   - "In progress" — SBT が POST /tenant-registrations で初期値として書く
+ *   - "Complete"   — provision-tenant.sh が ProvisioningScriptJob へ export
+ *   - "Failed"     — ProvisioningScriptJob が exit non-zero のとき (SBT 内蔵)
  *   - "Deleted"    — deprovision-tenant.sh:136 で export
  * 比較は大文字 / 小文字非依存 (SBT が経路によって case を変えるため安全側に倒す)。
  */
@@ -31,7 +31,7 @@ export type StatusBadgeColor = "green" | "blue" | "red" | "grey";
 /**
  * `tenantStatus` 文字列 → Badge 色のマッピング。`provision-tenant.sh` が
  * `tenantStatus="Complete"`、`deprovision-tenant.sh` が `tenantStatus="Deleted"`、
- * SBT 初期化が `"In progress"`、BashJobRunner 失敗時が `"Failed"` を書くので
+ * SBT 初期化が `"In progress"`、ProvisioningScriptJob 失敗時が `"Failed"` を書くので
  * それを正本に色を決める。SBT 経路によって case が揺れるため case-insensitive。
  *
  * 既知でない値 (空 / undefined / 想定外文字列) は grey にフォールバックする
@@ -76,11 +76,17 @@ export function tierBadgeColor(tier: string | undefined): StatusBadgeColor {
 
 export interface Tenant {
   tenantId: string;
+  /**
+   * SBT v0.9.5 の lifecycle 操作を識別する ID。旧 tenant は backfill 完了まで未設定のため、
+   * list では optional のまま保持し、delete は欠落時に fail closed する。
+   */
+  tenantRegistrationId?: string;
   tenantName: string;
   email: string;
   tier: Tier;
   tenantStatus: TenantStatus;
   isActive?: boolean;
+  sbtaws_active?: boolean;
   isSuspended?: boolean;
   /**
    * provision-tenant.sh が cdk deploy 後に CFn output を JSON で詰めて DynamoDB に
@@ -159,35 +165,88 @@ export interface CreateTenantRequest {
 }
 
 export async function listTenants(api: ApiClient): Promise<Tenant[]> {
-  const res = await api.get<{ data?: Tenant[] } | Tenant[]>("tenants");
-  return Array.isArray(res) ? res : (res.data ?? []);
+  const tenants: Tenant[] = [];
+  const seenTokens = new Set<string>();
+  let nextToken: string | undefined;
+  do {
+    const path = `tenants?limit=100${
+      nextToken ? `&next_token=${encodeURIComponent(nextToken)}` : ""
+    }`;
+    const res = await api.get<{ data?: Tenant[]; next_token?: string } | Tenant[]>(path);
+    if (Array.isArray(res)) return res.map(normalizeTenant);
+    tenants.push(...(res.data ?? []).map(normalizeTenant));
+    nextToken = res.next_token;
+    if (nextToken) {
+      if (seenTokens.has(nextToken)) {
+        throw new Error(`SBT returned repeated pagination token ${nextToken}`);
+      }
+      seenTokens.add(nextToken);
+    }
+  } while (nextToken);
+  return tenants;
+}
+
+function normalizeTenant(tenant: Tenant): Tenant {
+  return {
+    ...tenant,
+    isActive:
+      typeof tenant.sbtaws_active === "boolean"
+        ? tenant.sbtaws_active
+        : typeof tenant.isActive === "boolean"
+          ? tenant.isActive
+          : undefined,
+  };
 }
 
 /**
- * Tenant を新規作成する (SBT v0.3.9 準拠)。
+ * Tenant を新規作成する (SBT v0.9.5 tenant-registration contract)。
  *
- * POST /tenants は:
- *   1. tenant-details DDB に put_item
- *   2. EventBridge に ONBOARDING event を発火 (bootstrap-template の BashJobRunner が起動)
- * までを tenant-management Lambda が一気通貫で行う。
- *
- * Request body は flat shape:
- *   { tenantName, email, tier, tenantStatus }
- * (ref の `client/Admin/src/app/views/tenants/create/create.component.ts` と同じ)
+ * POST /tenant-registrations が registration row と tenant row を作り、
+ * `sbt_aws_onboardingRequest` を発火する。tenant と registration の更新先を SBT が
+ * 区別できるよう request body は 2 つの data object に分ける。
  */
 export async function createTenant(api: ApiClient, req: CreateTenantRequest): Promise<Tenant> {
-  const body = { ...req, tenantStatus: "In progress" as TenantStatus };
-  const res = await api.post<{ data: Tenant }>("tenants", body);
-  return res.data;
+  const tenantStatus: TenantStatus = "In progress";
+  const body = {
+    tenantData: { ...req, tenantStatus },
+    tenantRegistrationData: { registrationStatus: "In progress" },
+  };
+  const res = await api.post<{
+    data: { tenantId: string; tenantRegistrationId: string; message?: string };
+  }>("tenant-registrations", body);
+  const tenantId = res.data.tenantId?.trim();
+  const tenantRegistrationId = res.data.tenantRegistrationId?.trim();
+  if (!tenantId || !tenantRegistrationId) {
+    throw new Error(
+      "SBT tenant-registration response must include tenantId and tenantRegistrationId",
+    );
+  }
+  return {
+    ...req,
+    tenantStatus,
+    tenantId,
+    tenantRegistrationId,
+    isActive: true,
+    sbtaws_active: true,
+  };
 }
 
 /**
  * Tenant を削除する。
  *
- * 現状 DELETE /tenants/{id} を叩くと isActive を false にするだけ (ref SBT 0.3.9 の挙動)。
- * テナント stack を実際に destroy するのは ref の cleanup.sh や deprovisioning 処理の話で、
- * admin-console からの単体削除は sbtaws_active フラグのみ。
+ * SBT v0.9.5 は tenantRegistrationId を lifecycle job identifier として使う。
+ * legacy tenant を tenantId で旧 endpoint に送る fallback は deprovisioning を起動しないため
+ * 禁止し、backfill が未実施なら明示エラーにする。
  */
-export async function deleteTenant(api: ApiClient, tenantId: string): Promise<void> {
-  await api.del(`tenants/${encodeURIComponent(tenantId)}`);
+export async function deleteTenant(
+  api: ApiClient,
+  tenant: Pick<Tenant, "tenantId" | "tenantRegistrationId">,
+): Promise<void> {
+  const tenantRegistrationId = tenant.tenantRegistrationId?.trim();
+  if (!tenantRegistrationId) {
+    throw new Error(
+      `Tenant ${tenant.tenantId} has no tenantRegistrationId; run the SBT 0.9.5 tenant-registration backfill before deprovisioning`,
+    );
+  }
+  await api.del(`tenant-registrations/${encodeURIComponent(tenantRegistrationId)}`);
 }

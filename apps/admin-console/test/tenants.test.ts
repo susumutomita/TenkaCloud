@@ -25,16 +25,13 @@ function buildApiMock(overrides: Partial<ApiClient> = {}): {
 }
 
 describe("createTenant", () => {
-  describe("when starting onboarding via SBT v0.3.9 POST /tenants", () => {
-    it("should send a POST to /tenants", async () => {
+  describe("when starting onboarding via the SBT v0.9.5 tenant-registration API", () => {
+    it("should send a POST to /tenant-registrations", async () => {
       const { api, post } = buildApiMock();
       post.mockResolvedValueOnce({
         data: {
           tenantId: "t-1",
-          tenantName: "ACME 株式会社",
-          email: "a@b.com",
-          tier: "basic",
-          tenantStatus: "In progress",
+          tenantRegistrationId: "r-1",
         },
       });
 
@@ -42,18 +39,15 @@ describe("createTenant", () => {
 
       expect(post).toHaveBeenCalledOnce();
       const [path] = post.mock.calls[0];
-      expect(path).toBe("tenants");
+      expect(path).toBe("tenant-registrations");
     });
 
-    it("should send the body as a flat shape (tenantName / email / tier / tenantStatus)", async () => {
+    it("should separate tenant data from tenant-registration data", async () => {
       const { api, post } = buildApiMock();
       post.mockResolvedValueOnce({
         data: {
           tenantId: "t-1",
-          tenantName: "ACME 株式会社",
-          email: "a@b.com",
-          tier: "basic",
-          tenantStatus: "In progress",
+          tenantRegistrationId: "r-1",
         },
       });
 
@@ -61,49 +55,70 @@ describe("createTenant", () => {
 
       const [, body] = post.mock.calls[0];
       expect(body).toEqual({
-        tenantName: "ACME 株式会社",
-        email: "a@b.com",
-        tier: "basic",
-        tenantStatus: "In progress",
+        tenantData: {
+          tenantName: "ACME 株式会社",
+          email: "a@b.com",
+          tier: "basic",
+          tenantStatus: "In progress",
+        },
+        tenantRegistrationData: {
+          registrationStatus: "In progress",
+        },
       });
     });
 
-    it("should fix the initial tenantStatus value as 'In progress'", async () => {
+    it("should fix both initial status values as 'In progress'", async () => {
       const { api, post } = buildApiMock();
       post.mockResolvedValueOnce({
         data: {
           tenantId: "t-1",
-          tenantName: "X",
-          email: "a@b.com",
-          tier: "platinum",
-          tenantStatus: "In progress",
+          tenantRegistrationId: "r-1",
         },
       });
 
       await createTenant(api, { tenantName: "X", email: "a@b.com", tier: "platinum" });
 
-      const [, body] = post.mock.calls[0] as [string, { tenantStatus: string }];
-      expect(body.tenantStatus).toBe("In progress");
+      const [, body] = post.mock.calls[0] as [
+        string,
+        {
+          tenantData: { tenantStatus: string };
+          tenantRegistrationData: { registrationStatus: string };
+        },
+      ];
+      expect(body.tenantData.tenantStatus).toBe("In progress");
+      expect(body.tenantRegistrationData.registrationStatus).toBe("In progress");
     });
   });
 
   describe("when the server returns data", () => {
-    it("should return the tenant inside data", async () => {
+    it("should compose the tenant from the request and returned lifecycle identifiers", async () => {
       const { api, post } = buildApiMock();
       post.mockResolvedValueOnce({
         data: {
           tenantId: "t-1",
-          tenantName: "X",
-          email: "a@b.com",
-          tier: "basic",
-          tenantStatus: "In progress",
+          tenantRegistrationId: "r-1",
         },
       });
 
       const res = await createTenant(api, { tenantName: "X", email: "a@b.com", tier: "basic" });
 
       expect(res.tenantId).toBe("t-1");
+      expect(res.tenantRegistrationId).toBe("r-1");
+      expect(res.tenantName).toBe("X");
       expect(res.tenantStatus).toBe("In progress");
+    });
+
+    it("should fail closed when SBT omits a lifecycle identifier", async () => {
+      const { api, post } = buildApiMock();
+      post.mockResolvedValueOnce({
+        data: {
+          tenantId: "t-1",
+        },
+      });
+
+      await expect(
+        createTenant(api, { tenantName: "X", email: "a@b.com", tier: "basic" }),
+      ).rejects.toThrow("tenantRegistrationId");
     });
   });
 
@@ -121,6 +136,92 @@ describe("createTenant", () => {
 });
 
 describe("listTenants", () => {
+  it("should follow SBT pagination and normalize sbtaws_active without dropping registration ids", async () => {
+    const { api, get } = buildApiMock();
+    get
+      .mockResolvedValueOnce({
+        data: [
+          {
+            tenantId: "t-1",
+            tenantRegistrationId: "r-1",
+            tenantName: "A",
+            email: "a@b.com",
+            tier: "basic",
+            tenantStatus: "Complete",
+            sbtaws_active: false,
+          },
+        ],
+        next_token: "t-1",
+      })
+      .mockResolvedValueOnce({
+        data: [
+          {
+            tenantId: "t-2",
+            tenantRegistrationId: "r-2",
+            tenantName: "B",
+            email: "b@b.com",
+            tier: "advanced",
+            tenantStatus: "Complete",
+            sbtaws_active: true,
+          },
+        ],
+      });
+
+    const res = await listTenants(api);
+
+    expect(get).toHaveBeenNthCalledWith(1, "tenants?limit=100");
+    expect(get).toHaveBeenNthCalledWith(2, "tenants?limit=100&next_token=t-1");
+    expect(res.map((tenant) => tenant.tenantRegistrationId)).toEqual(["r-1", "r-2"]);
+    expect(res.map((tenant) => tenant.isActive)).toEqual([false, true]);
+  });
+
+  it("should prefer the authoritative sbtaws_active value over legacy isActive", async () => {
+    const { api, get } = buildApiMock();
+    get.mockResolvedValueOnce([
+      {
+        tenantId: "t-1",
+        tenantName: "A",
+        email: "a@b.com",
+        tier: "basic",
+        tenantStatus: "Complete",
+        isActive: true,
+        sbtaws_active: false,
+      },
+    ]);
+
+    const res = await listTenants(api);
+
+    expect(res[0].isActive).toBe(false);
+  });
+
+  it("should preserve legacy isActive when sbtaws_active is absent", async () => {
+    const { api, get } = buildApiMock();
+    get.mockResolvedValueOnce([
+      {
+        tenantId: "legacy",
+        tenantName: "Legacy",
+        email: "legacy@example.com",
+        tier: "basic",
+        tenantStatus: "Complete",
+        isActive: true,
+      },
+    ]);
+
+    const res = await listTenants(api);
+
+    expect(res[0].isActive).toBe(true);
+  });
+
+  it("should fail closed when SBT repeats a pagination token", async () => {
+    const { api, get } = buildApiMock();
+    get.mockResolvedValue({
+      data: [],
+      next_token: "repeated",
+    });
+
+    await expect(listTenants(api)).rejects.toThrow("repeated pagination token");
+  });
+
   describe("when the server returns `{data: [...]}`", () => {
     it("should return the data array", async () => {
       const { api, get } = buildApiMock();
@@ -175,14 +276,28 @@ describe("listTenants", () => {
 });
 
 describe("deleteTenant", () => {
-  describe("when calling SBT's /tenants DELETE", () => {
-    it("should URL-encode the `tenants/<id>` path", async () => {
+  describe("when calling SBT's tenant-registration DELETE", () => {
+    it("should URL-encode the `tenant-registrations/<registration-id>` path", async () => {
       const { api, del } = buildApiMock();
       del.mockResolvedValueOnce(undefined);
 
-      await deleteTenant(api, "tenant with space");
+      await deleteTenant(api, {
+        tenantId: "tenant-id",
+        tenantRegistrationId: "registration with space",
+      });
 
-      expect(del).toHaveBeenCalledWith("tenants/tenant%20with%20space");
+      expect(del).toHaveBeenCalledWith("tenant-registrations/registration%20with%20space");
+    });
+
+    it("should fail closed without making a request when a legacy tenant lacks registration id", async () => {
+      const { api, del } = buildApiMock();
+
+      await expect(
+        deleteTenant(api, { tenantId: "legacy-tenant", tenantRegistrationId: " " }),
+      ).rejects.toMatchObject({
+        message: expect.stringContaining("legacy-tenant"),
+      });
+      expect(del).not.toHaveBeenCalled();
     });
   });
 });

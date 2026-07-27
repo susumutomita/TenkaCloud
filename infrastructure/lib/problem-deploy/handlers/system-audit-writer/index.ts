@@ -24,8 +24,16 @@ import { isSbtOnboardingDetailType, type SbtOnboardingDetailType } from "./sbt-d
 
 interface SbtTenantEventDetail {
   readonly tenantId?: string;
+  readonly tenantRegistrationId?: string;
   readonly tenantName?: string;
   readonly tier?: string;
+  readonly jobOutput?: {
+    readonly tenantData?: {
+      readonly tenantId?: string;
+      readonly tenantName?: string;
+      readonly tier?: string;
+    };
+  };
   /** SBT が actor を載せている場合の path 候補。 環境次第で位置が違うので複数 fallback。 */
   readonly sub?: string;
   readonly cognitoUsername?: string;
@@ -39,12 +47,12 @@ interface SbtTenantEventDetail {
 const SBT_DETAIL_TYPE_TO_ACTION: Readonly<
   Record<SbtOnboardingDetailType, { action: string; outcome: string }>
 > = {
-  onboardingRequest: { action: "tenant_create_requested", outcome: "success" },
-  onboardingSuccess: { action: "tenant_create_succeeded", outcome: "success" },
-  onboardingFailure: { action: "tenant_create_failed", outcome: "error" },
-  offboardingRequest: { action: "tenant_delete_requested", outcome: "success" },
-  offboardingSuccess: { action: "tenant_delete_succeeded", outcome: "success" },
-  offboardingFailure: { action: "tenant_delete_failed", outcome: "error" },
+  sbt_aws_onboardingRequest: { action: "tenant_create_requested", outcome: "success" },
+  sbt_aws_provisionSuccess: { action: "tenant_create_succeeded", outcome: "success" },
+  sbt_aws_provisionFailure: { action: "tenant_create_failed", outcome: "error" },
+  sbt_aws_offboardingRequest: { action: "tenant_delete_requested", outcome: "success" },
+  sbt_aws_deprovisionSuccess: { action: "tenant_delete_succeeded", outcome: "success" },
+  sbt_aws_deprovisionFailure: { action: "tenant_delete_failed", outcome: "error" },
 };
 
 export type SbtTenantEventDetailType = SbtOnboardingDetailType;
@@ -81,6 +89,19 @@ export function resolveActor(detail: SbtTenantEventDetail): {
   const actor = detail.sub ?? detail.actor ?? FALLBACK_ACTOR;
   const actorUsername = detail.cognitoUsername ?? detail.username;
   return actorUsername ? { actor, actorUsername } : { actor };
+}
+
+function resolveTenantEventDetail(detail: SbtTenantEventDetail): {
+  readonly tenantId?: string;
+  readonly tenantName?: string;
+  readonly tier?: string;
+} {
+  const tenantData = detail.jobOutput?.tenantData;
+  return {
+    tenantId: detail.tenantId ?? tenantData?.tenantId ?? detail.tenantRegistrationId,
+    tenantName: detail.tenantName ?? tenantData?.tenantName,
+    tier: detail.tier ?? tenantData?.tier,
+  };
 }
 
 interface CodeBuildStateChangeDetail {
@@ -133,15 +154,16 @@ export function mapEventToAudit(
   if (!isSbtOnboardingDetailType(detailType)) return null;
   const mapping = SBT_DETAIL_TYPE_TO_ACTION[detailType];
   const { actor, actorUsername } = resolveActor(tenantDetail);
+  const resolvedTenant = resolveTenantEventDetail(tenantDetail);
   const occurredAtMs = event.time ? new Date(event.time).getTime() : Date.now();
   const extra: Record<string, string> = {};
-  if (tenantDetail.tier) extra.tier = tenantDetail.tier;
-  if (tenantDetail.tenantName) extra.tenantName = tenantDetail.tenantName;
+  if (resolvedTenant.tier) extra.tier = resolvedTenant.tier;
+  if (resolvedTenant.tenantName) extra.tenantName = resolvedTenant.tenantName;
   return {
     tenantId: "SYSTEM",
     action: mapping.action,
     outcome: mapping.outcome === "error" ? "error" : "success",
-    target: tenantDetail.tenantId,
+    target: resolvedTenant.tenantId,
     actor,
     actorUsername,
     occurredAtMs,

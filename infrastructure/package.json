@@ -57,7 +57,7 @@
     "@aws-sdk/client-scheduler": "^3.1079.0",
     "@aws-sdk/client-sfn": "^3.1090.0",
     "@aws-sdk/credential-provider-node": "^3.972.42",
-    "@cdklabs/sbt-aws": "0.3.9",
+    "@cdklabs/sbt-aws": "0.9.5",
     "@libsql/client": "^0.17.4",
     "@smithy/protocol-http": "^5.5.10",
     "@smithy/signature-v4": "^5.4.3",

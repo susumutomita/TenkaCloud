@@ -31,7 +31,10 @@ function buildEvent(
 describe("system-audit-writer (Issue #1034)", () => {
   describe("mapEventToAudit", () => {
     it("should write onboardingRequest as tenant_create_requested + success into the SYSTEM scope", () => {
-      const event = buildEvent("onboardingRequest", { tenantId: "t-01", tier: "STANDARD" });
+      const event = buildEvent("sbt_aws_onboardingRequest", {
+        tenantId: "t-01",
+        tier: "STANDARD",
+      });
       const row = mapEventToAudit(event);
       expect(row).not.toBeNull();
       expect(row?.tenantId).toBe("SYSTEM");
@@ -42,24 +45,24 @@ describe("system-audit-writer (Issue #1034)", () => {
     });
 
     it("should fall onboardingFailure to outcome=error", () => {
-      const row = mapEventToAudit(buildEvent("onboardingFailure", { tenantId: "t-02" }));
+      const row = mapEventToAudit(buildEvent("sbt_aws_provisionFailure", { tenantId: "t-02" }));
       expect(row?.outcome).toBe("error");
       expect(row?.action).toBe("tenant_create_failed");
     });
 
     it("offboardingRequest should return tenant_delete_requested", () => {
-      const row = mapEventToAudit(buildEvent("offboardingRequest", { tenantId: "t-03" }));
+      const row = mapEventToAudit(buildEvent("sbt_aws_offboardingRequest", { tenantId: "t-03" }));
       expect(row?.action).toBe("tenant_delete_requested");
       expect(row?.outcome).toBe("success");
     });
 
-    it("offboardingSuccess should return tenant_delete_succeeded", () => {
-      const row = mapEventToAudit(buildEvent("offboardingSuccess", { tenantId: "t-03" }));
+    it("sbt_aws_deprovisionSuccess should return tenant_delete_succeeded", () => {
+      const row = mapEventToAudit(buildEvent("sbt_aws_deprovisionSuccess", { tenantId: "t-03" }));
       expect(row?.action).toBe("tenant_delete_succeeded");
     });
 
     it("should fall offboardingFailure to outcome=error", () => {
-      const row = mapEventToAudit(buildEvent("offboardingFailure", { tenantId: "t-03" }));
+      const row = mapEventToAudit(buildEvent("sbt_aws_deprovisionFailure", { tenantId: "t-03" }));
       expect(row?.outcome).toBe("error");
       expect(row?.action).toBe("tenant_delete_failed");
     });
@@ -73,16 +76,50 @@ describe("system-audit-writer (Issue #1034)", () => {
 
     it("should extract occurredAtMs from event.time (preserving EventBridge's recorded occurrence time)", () => {
       const row = mapEventToAudit(
-        buildEvent("onboardingSuccess", { tenantId: "t-04" }, "2026-04-01T12:34:56.000Z"),
+        buildEvent("sbt_aws_provisionSuccess", { tenantId: "t-04" }, "2026-04-01T12:34:56.000Z"),
       );
       expect(row?.occurredAtMs).toBe(new Date("2026-04-01T12:34:56.000Z").getTime());
     });
 
     it("should include tenantName / tier in extra when present", () => {
       const row = mapEventToAudit(
-        buildEvent("onboardingSuccess", { tenantId: "t-05", tenantName: "Acme", tier: "PLATINUM" }),
+        buildEvent("sbt_aws_provisionSuccess", {
+          tenantId: "t-05",
+          tenantName: "Acme",
+          tier: "PLATINUM",
+        }),
       );
       expect(row?.extra).toEqual({ tenantName: "Acme", tier: "PLATINUM" });
+    });
+
+    it("should read tenant fields from the SBT 0.9.5 ScriptJob jobOutput envelope", () => {
+      const row = mapEventToAudit(
+        buildEvent("sbt_aws_provisionSuccess", {
+          tenantRegistrationId: "registration-1",
+          jobOutput: {
+            tenantData: {
+              tenantId: "tenant-1",
+              tenantName: "Acme",
+              tier: "PLATINUM",
+            },
+            tenantRegistrationData: { registrationStatus: "Complete" },
+          },
+        }),
+      );
+
+      expect(row?.target).toBe("tenant-1");
+      expect(row?.extra).toEqual({ tenantName: "Acme", tier: "PLATINUM" });
+    });
+
+    it("should retain the registration id as a failure target when no tenant id is emitted", () => {
+      const row = mapEventToAudit(
+        buildEvent("sbt_aws_provisionFailure", {
+          tenantRegistrationId: "registration-1",
+          jobOutput: { tenantStatus: "Failed to provision tenant." },
+        }),
+      );
+
+      expect(row?.target).toBe("registration-1");
     });
   });
 
