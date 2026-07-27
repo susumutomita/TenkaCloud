@@ -39,7 +39,10 @@ describe("liteDrillCheckpointCode (#2696)", () => {
   });
 
   describe("when localStorage throws (private mode / disabled storage)", () => {
-    // Spies must be (re)created per-test: a spy created once at describe-body-eval time is
+    // Spies must be (re)created per-test on the jsdom window's storage: Node.js also exposes
+    // a global Storage in recent releases, so spying on Storage.prototype can intercept the
+    // wrong implementation and leave the source's catch branch untested.
+    // A spy created once at describe-body-eval time is
     // torn down by the first test's afterEach, so a second test's mockImplementation would
     // mutate an already-restored (detached) spy and silently exercise the real, non-throwing
     // localStorage instead — the assertion would then pass even with no try/catch in the
@@ -48,8 +51,8 @@ describe("liteDrillCheckpointCode (#2696)", () => {
     let setItem: ReturnType<typeof vi.spyOn>;
 
     beforeEach(() => {
-      getItem = vi.spyOn(Storage.prototype, "getItem");
-      setItem = vi.spyOn(Storage.prototype, "setItem");
+      getItem = vi.spyOn(window.localStorage, "getItem");
+      setItem = vi.spyOn(window.localStorage, "setItem");
     });
 
     afterEach(() => {
