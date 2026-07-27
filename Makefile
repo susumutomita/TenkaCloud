@@ -1,4 +1,6 @@
-CDK      := cd infrastructure && JSII_DEPRECATED=quiet bun run cdk
+# The infrastructure workspace also exports a `cdk` bin, so Bun does not link the
+# aws-cdk dependency into node_modules/.bin. Invoke the pinned package explicitly.
+CDK      := cd infrastructure && JSII_DEPRECATED=quiet ../node_modules/aws-cdk/bin/cdk
 APPROVAL := --require-approval broadening
 
 # SBT 0.3.9 内部が aws-cdk-lib の deprecated な `advancedSecurityMode` 等を使っているため、
@@ -348,11 +350,11 @@ dev: ## Start all three SPA dev servers without AWS | 3つのSPA dev serverをAW
 #     This is the "infra changes carry extra care" verification step AGENTS.md's Role
 #     split section points agents at.
 synth: ## Synthesize every CDK stack with bundling | 全CDK stackをbundle込みでsynth
-	$(CDK) synth --all --quiet
+	$(CDK) synth --quiet
 
 check-synth: export CDK_SKIP_BUNDLING := 1
 check-synth: ## Run fast CDK synth and the IAM ASCII check | 高速CDK synthとIAM ASCII検査を実行
-	$(CDK) synth --all --quiet
+	$(CDK) synth --quiet
 	bun run .claude/skills/quality-gates/scripts/check-synth-iam-ascii.ts
 
 # ===== Local play (Docker, no AWS) | ローカル演習（Docker、AWS不要） =====
@@ -521,7 +523,7 @@ deploy-always-on-command: ## Deploy the Always-On OIDC command seam | Always-On 
 
 synth-always-on-command: export CDK_SKIP_BUNDLING := 1
 synth-always-on-command: ## Synthesize the Always-On OIDC command seam | Always-On OIDC command seamをsynth
-	$(CDK) synth --app "$(ALWAYS_ON_COMMAND_APP)" --all --quiet
+	$(CDK) synth --app "$(ALWAYS_ON_COMMAND_APP)" --quiet
 
 destroy-always-on-command: ## Delete the Always-On OIDC command seam | Always-On OIDC command seamを削除
 	@if [ -z "$${CDK_PARAM_ALWAYS_ON_ISSUER_URL}" ] || [ -z "$${CDK_PARAM_EVENT_BUS_ARN}" ]; then \
