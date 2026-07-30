@@ -6,8 +6,8 @@
     "title": "TenkaCloud 競技者ポータル",
     "loading": "状態を取得中…",
     "no_session": "セッションがありません。再ログインしてください。",
-    "mock_cloud_header": "Mock cloud mode",
-    "mock_cloud_body": "このイベントは local mock cloud adapter で動作しています。実 AWS リソースは作成されません。",
+    "mock_cloud_header": "ブラウザ体験版",
+    "mock_cloud_body": "これはブラウザだけで動く体験版です。実際の AWS リソースや料金は発生しません。",
     "local_cloud_header": "Local cloud mode",
     "local_cloud_body": "このイベントはローカルの Docker 問題コンテナで動作しています。実 AWS リソースは使われません。",
     "fetch_status_failed": "状態の取得に失敗しました"
@@ -420,6 +420,58 @@
     "tutorial_next_body": "AWS なしで手元の Mac で遊ぶ「ローカルモードで遊ぶ」か、自分の AWS アカウントに本物を立てる「自分の TenkaCloud Lite を立てる」へ進みましょう。",
     "tutorial_local_button": "「ローカルモードで遊ぶ」へ",
     "tutorial_lite_button": "「自分の TenkaCloud Lite を立てる」へ"
+  },
+  "onboarding_tutorial": {
+    "panel_title": "4つのミッション",
+    "panel_description": "1画面1問。間違えても減点はありません。",
+    "progress": "ステップ {current} / {total}",
+    "cleared": "{solved} クリア",
+    "progress_aria": "オンボーディングの進捗",
+    "mission": "ミッション {current}",
+    "points": "+{points} pt",
+    "correct_header": "正解。+{points} pt",
+    "wrong_header": "惜しい。もう一度選ぼう",
+    "wrong_body": "この場面で必要な行動を、短い説明から選んでください。間違えても減点はありません。",
+    "next_button": "次のミッションへ",
+    "step_1": {
+      "title": "公開したサイトに、急に人が集まった",
+      "scenario": "手元では動いていたサイトが、公開した途端に止まりました。認証や公開範囲も含め、本番に近い場所で直す必要があります。",
+      "question": "TenkaCloud が練習の舞台にするのは？",
+      "cloud_label": "本物のクラウド",
+      "cloud_description": "実際のクラウド環境で、動かしながら直す",
+      "paper_label": "紙のクイズ",
+      "paper_description": "選択問題を読むだけで終える",
+      "success": "TenkaCloud は、本物のクラウドを舞台に、手を動かして直すための演習・競技プラットフォームです。"
+    },
+    "step_2": {
+      "title": "今日は、全チームで同時に競う",
+      "scenario": "同じクラウド演習でも、イベントで同時に競う日と、一人で好きな時間に進める日があります。",
+      "question": "全チームがリアルタイムで競う遊び方は？",
+      "battle_label": "Battle",
+      "battle_description": "同じ時間に競い、順位が動く",
+      "challenge_label": "Challenge",
+      "challenge_description": "自分のペースで一問ずつ解く",
+      "success": "正解です。Battle は同時対戦、Challenge は自分のペースで進める演習です。"
+    },
+    "step_3": {
+      "title": "次にやりたいことを選ぶ",
+      "scenario": "遊ぶだけなら AWS アカウントは不要です。自分のイベントを開くときだけ、自分の AWS 環境を使います。",
+      "question": "このあと、どちらを試しますか？ どちらも正解です。",
+      "local_label": "AWS なしで、まず遊ぶ",
+      "local_description": "手元のPCまたはブラウザ開発環境で始める",
+      "local_success": "これはローカルモードです。まず遊ぶ人向けで、AWS の料金はかかりません。",
+      "lite_label": "自分の AWS でイベントを開く",
+      "lite_description": "自分の環境に TenkaCloud を立てて主催する",
+      "lite_success": "これは Lite モードです。自分の AWS に TenkaCloud を立て、イベントを主催します。"
+    },
+    "step_4": {
+      "title": "最初の得点を取る",
+      "scenario": "TenkaCloud では、問題を解いた証拠を flag という短いコードで提出します。練習用の flag は TC{HELLO-TENKACLOUD} です。",
+      "question": "練習用 flag を提出して、スコアを動かしましょう。",
+      "submit_label": "練習用 flag を提出する",
+      "submit_description": "TC{HELLO-TENKACLOUD}",
+      "success": "これが TenkaCloud の基本ループです。状況を読み、手を動かし、flag を提出すると、得点がすぐ反映されます。"
+    }
   },
   "score_timeline": {
     "header": "スコア推移",

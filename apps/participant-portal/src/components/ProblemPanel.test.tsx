@@ -435,6 +435,27 @@ describe("ProblemPanel render branches", () => {
     expect(screen.queryByTestId("flag-panel")).not.toBeInTheDocument();
   });
 
+  it("should keep the intro tutorial focused by hiding its long statement and deployment facts", () => {
+    renderPanel({
+      problemId: "what-is-tenkacloud",
+      status: "COMPLETE",
+      description: "Battle Lite SaaS Always-On Docker Codespaces DynamoDB Turso",
+      scoring: {
+        kind: "multi-flag",
+        points: 400,
+        flags: [
+          { id: "tenka-what", label: "Step 1", points: 100, solved: false },
+          { id: "battle-challenge", label: "Step 2", points: 100, solved: false },
+          { id: "choose-mode", label: "Step 3", points: 100, solved: false },
+          { id: "first-flag", label: "Step 4", points: 100, solved: false },
+        ],
+      },
+    });
+    expect(screen.getByTestId("multi-flag-panel")).toBeInTheDocument();
+    expect(screen.queryByText(/Battle Lite SaaS/)).not.toBeInTheDocument();
+    expect(screen.queryByText("ap-northeast-1")).not.toBeInTheDocument();
+  });
+
   it("should render the multi-flag panel even when flags is omitted", () => {
     // scoring.flags 不在でも panel は出す (= `flags ?? []` の fallback 分岐を pin)。
     renderPanel({

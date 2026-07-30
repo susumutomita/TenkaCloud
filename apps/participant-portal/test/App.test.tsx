@@ -76,7 +76,7 @@ describe("App", () => {
       expect(
         await screen.findByRole("heading", { level: 1, name: /ようこそ/ }),
       ).toBeInTheDocument();
-      expect(screen.getByText(/実 AWS リソースは作成されません/)).toBeInTheDocument();
+      expect(screen.getByText(/実際の AWS リソースや料金は発生しません/)).toBeInTheDocument();
     });
   });
 

@@ -15,6 +15,7 @@ import type {
   ProblemLifecycleStatus,
 } from "../api/portal-client";
 import { useAppConfig } from "../config-context";
+import { WHAT_IS_DRILL_PROBLEM_ID } from "../dev-mock/flag-submit";
 import { useLang, useT } from "../i18n";
 import { describeAgo, type SupportedLang } from "../lib/format";
 import { AttackProbesPanel } from "./AttackProbesPanel";
@@ -83,12 +84,60 @@ function visibleStackOutputs(problem: ParticipantProblemView): Record<string, st
  * 直接使わない。不在の field は出さないので、AWS mode (問題文未配信) では section 全体が
  * 描画されず、既存挙動のまま。
  */
-function ProblemStatement({ problem, t }: { problem: ParticipantProblemView; t: ProblemPanelT }) {
-  if (!hasProblemStatement(problem)) return null;
+function ProblemStatement({
+  hidden,
+  problem,
+  t,
+}: {
+  hidden: boolean;
+  problem: ParticipantProblemView;
+  t: ProblemPanelT;
+}) {
+  if (hidden || !hasProblemStatement(problem)) return null;
   return (
     <Container header={<Header variant="h3">{t("problem_panel.statement_heading")}</Header>}>
       <Markdown source={problem.description} />
     </Container>
+  );
+}
+
+function ProblemFacts({
+  hidden,
+  problem,
+  health,
+  now,
+  lang,
+  t,
+}: {
+  hidden: boolean;
+  problem: ParticipantProblemView;
+  health: { readonly type: StatusIndicatorProps.Type; readonly label: string } | null;
+  now: number;
+  lang: SupportedLang;
+  t: ProblemPanelT;
+}) {
+  if (hidden) return null;
+  return (
+    <KeyValuePairs
+      items={[
+        { label: t("problem_panel.region_label"), value: <code>{problem.region}</code> },
+        { label: t("problem_panel.current_score_label"), value: `${problem.score} pt` },
+        // Issue #1917: uptime のみ。 「Score が下がった = サービスが degraded/down」 を
+        // 同じ行群で結びつけ、 減点理由を競技者が把握できるようにする (per-endpoint は非露出)。
+        ...(health
+          ? [
+              {
+                label: t("problem_panel.health_label"),
+                value: <StatusIndicator type={health.type}>{health.label}</StatusIndicator>,
+              },
+            ]
+          : []),
+        {
+          label: t("problem_panel.last_scored_label"),
+          value: describeAgo(problem.lastScoredAt, now, lang),
+        },
+      ]}
+    />
   );
 }
 
@@ -177,6 +226,8 @@ export function ProblemPanel({
   const isStale = isStaleProblem(problem, now);
   const flagScoring = getCompleteFlagScoring(problem);
   const multiFlagScoring = getCompleteMultiFlagScoring(problem);
+  const isIntroTutorial =
+    problem.problemId === WHAT_IS_DRILL_PROBLEM_ID && multiFlagScoring !== undefined;
   const stackOutputs = splitStackOutputs(visibleStackOutputs(problem));
   // [#2392 Phase 2] local-play on-demand container。 lifecycle 不在 = AWS mode = running 扱い。
   const lifecycleStatus = problem.lifecycle?.status;
@@ -186,13 +237,19 @@ export function ProblemPanel({
   const health = problem.applicationStatus
     ? describeApplicationStatus(problem.applicationStatus, t)
     : null;
+  let panelTitle = resolveProblemTitle(problem);
+  let panelDescription = `${kindLabel} / ${problem.score} pt`;
+  if (isIntroTutorial) {
+    panelTitle = t("onboarding_tutorial.panel_title");
+    panelDescription = t("onboarding_tutorial.panel_description");
+  }
 
   return (
     <Container
       header={
         <Header
           variant="h2"
-          description={`${kindLabel} / ${problem.score} pt`}
+          description={panelDescription}
           actions={
             lifecycleStatus !== undefined ? (
               <StatusIndicator type={LIFECYCLE_STATUS_TYPE[lifecycleStatus]}>
@@ -205,7 +262,7 @@ export function ProblemPanel({
             )
           }
         >
-          {resolveProblemTitle(problem)}
+          {panelTitle}
         </Header>
       }
     >
@@ -222,7 +279,7 @@ export function ProblemPanel({
             「何の問題か」 を表示できる。 instructions は ProblemInfoSection 側の唯一の描画経路に
             一本化した(#2473)ので、ここでは description のみ。 AWS mode は未配信なので不在時は
             何も出さない。 */}
-        <ProblemStatement problem={problem} t={t} />
+        <ProblemStatement hidden={isIntroTutorial} problem={problem} t={t} />
         <ProblemWriteup problem={problem} t={t} />
         {/* [#2392 Phase 2] on-demand start / stop control。 lifecycle 不在 (= AWS mode) は出さない。 */}
         {lifecycleStatus !== undefined && (
@@ -240,25 +297,13 @@ export function ProblemPanel({
         {/* Audit #3: Job ID (= 内部 ULID) は競技者に見せない。 Region は問題ごとに異なる
             (operator が問題単位で deploy 先を選ぶ) ため、 どの region に建っているかを明示する
             (= 「Event region」 1 つだけだと混乱する、 運用フィードバック)。 */}
-        <KeyValuePairs
-          items={[
-            { label: t("problem_panel.region_label"), value: <code>{problem.region}</code> },
-            { label: t("problem_panel.current_score_label"), value: `${problem.score} pt` },
-            // Issue #1917: uptime のみ。 「Score が下がった = サービスが degraded/down」 を
-            // 同じ行群で結びつけ、 減点理由を競技者が把握できるようにする (per-endpoint は非露出)。
-            ...(health
-              ? [
-                  {
-                    label: t("problem_panel.health_label"),
-                    value: <StatusIndicator type={health.type}>{health.label}</StatusIndicator>,
-                  },
-                ]
-              : []),
-            {
-              label: t("problem_panel.last_scored_label"),
-              value: describeAgo(problem.lastScoredAt, now, lang),
-            },
-          ]}
+        <ProblemFacts
+          hidden={isIntroTutorial}
+          problem={problem}
+          health={health}
+          now={now}
+          lang={lang}
+          t={t}
         />
 
         {/* Issue #2422: uptime-multi の attack-probe 結果。 「green なのに満点でない理由」を

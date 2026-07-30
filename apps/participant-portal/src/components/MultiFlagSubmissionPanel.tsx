@@ -7,7 +7,7 @@ import FormField from "@cloudscape-design/components/form-field";
 import Header from "@cloudscape-design/components/header";
 import Input from "@cloudscape-design/components/input";
 import SpaceBetween from "@cloudscape-design/components/space-between";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import {
   type HintRevealMode,
@@ -28,6 +28,112 @@ import { useLang, useT } from "../i18n";
 import { CelebrationOverlay } from "./CelebrationOverlay";
 import { formatProblemPanelActionError } from "./ProblemPanel.helpers";
 import { HintsPanel } from "./ProblemPanelFlagSubmission";
+import "./OnboardingTutorial.css";
+
+interface TutorialChoiceSpec {
+  readonly value: string;
+  readonly correct: boolean;
+  readonly labelKey: string;
+  readonly descriptionKey: string;
+  readonly successKey: string;
+}
+
+interface TutorialStepSpec {
+  readonly titleKey: string;
+  readonly scenarioKey: string;
+  readonly questionKey: string;
+  readonly choices: readonly TutorialChoiceSpec[];
+}
+
+const TUTORIAL_STEP_SPECS: Readonly<Record<string, TutorialStepSpec>> = {
+  "tenka-what": {
+    titleKey: "onboarding_tutorial.step_1.title",
+    scenarioKey: "onboarding_tutorial.step_1.scenario",
+    questionKey: "onboarding_tutorial.step_1.question",
+    choices: [
+      {
+        value: "real cloud",
+        correct: true,
+        labelKey: "onboarding_tutorial.step_1.cloud_label",
+        descriptionKey: "onboarding_tutorial.step_1.cloud_description",
+        successKey: "onboarding_tutorial.step_1.success",
+      },
+      {
+        value: "paper",
+        correct: false,
+        labelKey: "onboarding_tutorial.step_1.paper_label",
+        descriptionKey: "onboarding_tutorial.step_1.paper_description",
+        successKey: "onboarding_tutorial.step_1.success",
+      },
+    ],
+  },
+  "battle-challenge": {
+    titleKey: "onboarding_tutorial.step_2.title",
+    scenarioKey: "onboarding_tutorial.step_2.scenario",
+    questionKey: "onboarding_tutorial.step_2.question",
+    choices: [
+      {
+        value: "battle",
+        correct: true,
+        labelKey: "onboarding_tutorial.step_2.battle_label",
+        descriptionKey: "onboarding_tutorial.step_2.battle_description",
+        successKey: "onboarding_tutorial.step_2.success",
+      },
+      {
+        value: "challenge",
+        correct: false,
+        labelKey: "onboarding_tutorial.step_2.challenge_label",
+        descriptionKey: "onboarding_tutorial.step_2.challenge_description",
+        successKey: "onboarding_tutorial.step_2.success",
+      },
+    ],
+  },
+  "choose-mode": {
+    titleKey: "onboarding_tutorial.step_3.title",
+    scenarioKey: "onboarding_tutorial.step_3.scenario",
+    questionKey: "onboarding_tutorial.step_3.question",
+    choices: [
+      {
+        value: "local",
+        correct: true,
+        labelKey: "onboarding_tutorial.step_3.local_label",
+        descriptionKey: "onboarding_tutorial.step_3.local_description",
+        successKey: "onboarding_tutorial.step_3.local_success",
+      },
+      {
+        value: "lite",
+        correct: true,
+        labelKey: "onboarding_tutorial.step_3.lite_label",
+        descriptionKey: "onboarding_tutorial.step_3.lite_description",
+        successKey: "onboarding_tutorial.step_3.lite_success",
+      },
+    ],
+  },
+  "first-flag": {
+    titleKey: "onboarding_tutorial.step_4.title",
+    scenarioKey: "onboarding_tutorial.step_4.scenario",
+    questionKey: "onboarding_tutorial.step_4.question",
+    choices: [
+      {
+        value: "TC{HELLO-TENKACLOUD}",
+        correct: true,
+        labelKey: "onboarding_tutorial.step_4.submit_label",
+        descriptionKey: "onboarding_tutorial.step_4.submit_description",
+        successKey: "onboarding_tutorial.step_4.success",
+      },
+    ],
+  },
+};
+
+export function isWhatIsTutorialShape(flags: readonly MultiFlagEntryView[]): boolean {
+  return (
+    flags.length === 4 &&
+    flags.every((flag, index) => {
+      const expected = ["tenka-what", "battle-challenge", "choose-mode", "first-flag"][index];
+      return flag.id === expected && TUTORIAL_STEP_SPECS[flag.id] !== undefined;
+    })
+  );
+}
 
 /**
  * Issue #1796: multi-flag kind の提出パネル。 1 問題に N 個の独立 flag を持ち、 競技者が各 flag を
@@ -72,6 +178,23 @@ export function MultiFlagSubmissionPanel({
   const solvedCount = flags.filter(isSolved).length;
   const allSolved = flags.length > 0 && solvedCount === flags.length;
 
+  if (problemId === WHAT_IS_DRILL_PROBLEM_ID && isWhatIsTutorialShape(flags)) {
+    return (
+      <WhatIsTutorialWizard
+        apiBaseUrl={apiBaseUrl}
+        sessionToken={sessionToken}
+        problemId={problemId}
+        flags={flags}
+        isSolved={isSolved}
+        onMockSolved={(flagId) => {
+          setMockSolvedIds((current) => new Set([...current, flagId]));
+          saveMockSolvedFlagId(problemId, flagId);
+        }}
+        onScored={onScored}
+      />
+    );
+  }
+
   return (
     <SpaceBetween size="s">
       <Alert
@@ -96,8 +219,192 @@ export function MultiFlagSubmissionPanel({
           revealOrder={revealOrder}
         />
       ))}
-      {problemId === WHAT_IS_DRILL_PROBLEM_ID && allSolved && <WhatIsTutorialComplete />}
     </SpaceBetween>
+  );
+}
+
+function WhatIsTutorialWizard({
+  apiBaseUrl,
+  sessionToken,
+  problemId,
+  flags,
+  isSolved,
+  onMockSolved,
+  onScored,
+}: {
+  apiBaseUrl: string;
+  sessionToken: string;
+  problemId: string;
+  flags: readonly MultiFlagEntryView[];
+  isSolved: (flag: MultiFlagEntryView) => boolean;
+  onMockSolved: (flagId: string) => void;
+  onScored: () => Promise<void>;
+}) {
+  const t = useT();
+  const isMock = useIsMock();
+  const initialUnsolved = flags.findIndex((flag) => !isSolved(flag));
+  const [activeIndex, setActiveIndex] = useState(
+    initialUnsolved === -1 ? flags.length - 1 : initialUnsolved,
+  );
+  const [outcomes, setOutcomes] = useState<Readonly<Record<string, SubmitFlagOutcome | undefined>>>(
+    {},
+  );
+  const [successKeys, setSuccessKeys] = useState<Readonly<Record<string, string>>>({});
+  const [submittingFlagId, setSubmittingFlagId] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    if (activeIndex > 0) headingRef.current?.focus();
+  }, [activeIndex]);
+
+  const completed = (flag: MultiFlagEntryView): boolean => {
+    const outcome = outcomes[flag.id];
+    return isSolved(flag) || outcome?.kind === "ok" || outcome?.kind === "already_scored";
+  };
+  const completedCount = flags.filter(completed).length;
+  const allSolved = completedCount === flags.length;
+  const activeFlag = flags[activeIndex];
+  const activeSpec = TUTORIAL_STEP_SPECS[activeFlag.id];
+  const activeOutcome = outcomes[activeFlag.id];
+  const activeCompleted = completed(activeFlag);
+  const progress = Math.round((completedCount / flags.length) * 100);
+
+  const submitChoice = async (choice: TutorialChoiceSpec): Promise<void> => {
+    if (submittingFlagId || activeCompleted) return;
+    setSubmittingFlagId(activeFlag.id);
+    setSubmitError(null);
+    try {
+      const result = isMock
+        ? evaluateMockSubFlag(problemId, activeFlag.id, choice.value, activeFlag.points)
+        : await submitFlag(apiBaseUrl, sessionToken, problemId, choice.value, activeFlag.id);
+      setOutcomes((current) => ({ ...current, [activeFlag.id]: result }));
+      if (result.kind === "ok") {
+        setSuccessKeys((current) => ({ ...current, [activeFlag.id]: choice.successKey }));
+        if (isMock) onMockSolved(activeFlag.id);
+        else await onScored();
+      } else if (result.kind === "already_scored") {
+        await onScored();
+      }
+    } catch (err) {
+      setSubmitError(formatProblemPanelActionError(t, err, "problem_panel.submit_error_prefix"));
+    } finally {
+      setSubmittingFlagId(null);
+    }
+  };
+
+  const selectChoice = (choice: TutorialChoiceSpec): void => {
+    if (choice.correct) {
+      void submitChoice(choice);
+      return;
+    }
+    setOutcomes((current) => ({
+      ...current,
+      [activeFlag.id]: { kind: "wrong", scoreDelta: 0, totalScore: 0, wrongCount: 1 },
+    }));
+  };
+
+  return (
+    <div className="tc-onboarding" data-testid="what-is-tutorial">
+      {activeOutcome?.kind === "ok" && <CelebrationOverlay visible />}
+      <div className="tc-onboarding__progress">
+        <div className="tc-onboarding__progress-label">
+          <span>
+            {t("onboarding_tutorial.progress", { current: activeIndex + 1, total: flags.length })}
+          </span>
+          <span>
+            {t("onboarding_tutorial.cleared", { solved: completedCount, total: flags.length })}
+          </span>
+        </div>
+        <div
+          className="tc-onboarding__progress-track"
+          role="progressbar"
+          aria-label={t("onboarding_tutorial.progress_aria")}
+          aria-valuemin={0}
+          aria-valuemax={flags.length}
+          aria-valuenow={completedCount}
+        >
+          <span style={{ width: `${progress}%` }} />
+        </div>
+      </div>
+
+      <section className="tc-onboarding__step" aria-labelledby={`tutorial-${activeFlag.id}`}>
+        <p className="tc-onboarding__eyebrow">
+          {t("onboarding_tutorial.mission", { current: activeIndex + 1 })}
+          <span className="tc-onboarding__points">
+            {t("onboarding_tutorial.points", { points: activeFlag.points })}
+          </span>
+        </p>
+        <h3
+          id={`tutorial-${activeFlag.id}`}
+          className="tc-onboarding__title"
+          ref={headingRef}
+          tabIndex={-1}
+        >
+          {t(activeSpec.titleKey)}
+        </h3>
+        <p className="tc-onboarding__scenario">{t(activeSpec.scenarioKey)}</p>
+
+        <div className="tc-onboarding__question">
+          <p className="tc-onboarding__question-label">{t(activeSpec.questionKey)}</p>
+          <div className="tc-onboarding__choices">
+            {activeSpec.choices.map((choice) => (
+              <button
+                className="tc-onboarding__choice"
+                type="button"
+                key={choice.value}
+                disabled={submittingFlagId !== null || activeCompleted}
+                onClick={() => selectChoice(choice)}
+              >
+                <span className="tc-onboarding__choice-copy">
+                  <strong>{t(choice.labelKey)}</strong>
+                  <span>{t(choice.descriptionKey)}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="tc-onboarding__feedback" aria-live="polite">
+          {activeOutcome?.kind === "wrong" && (
+            <Alert type="warning" header={t("onboarding_tutorial.wrong_header")}>
+              {t("onboarding_tutorial.wrong_body")}
+            </Alert>
+          )}
+          {activeOutcome?.kind === "already_scored" && (
+            <Alert type="info" header={t("problem_panel.already_scored_header")}>
+              {t("problem_panel.already_scored_body", { total: activeOutcome.totalScore })}
+            </Alert>
+          )}
+          {submitError && (
+            <Alert type="error" header={t("problem_panel.submit_failed_header")}>
+              {submitError}
+            </Alert>
+          )}
+          {activeCompleted && activeOutcome?.kind !== "already_scored" && (
+            <Alert
+              type="success"
+              header={t("onboarding_tutorial.correct_header", { points: activeFlag.points })}
+            >
+              {t(successKeys[activeFlag.id] ?? activeSpec.choices[0].successKey)}
+            </Alert>
+          )}
+        </div>
+
+        {activeCompleted && !allSolved && (
+          <div className="tc-onboarding__next">
+            <Button
+              variant="primary"
+              onClick={() => setActiveIndex((current) => Math.min(current + 1, flags.length - 1))}
+            >
+              {t("onboarding_tutorial.next_button")}
+            </Button>
+          </div>
+        )}
+      </section>
+
+      {allSolved && <WhatIsTutorialComplete />}
+    </div>
   );
 }
 

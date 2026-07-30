@@ -12,7 +12,11 @@ import {
   WHAT_IS_DRILL_PROBLEM_ID,
 } from "../dev-mock/flag-submit";
 import { I18nProvider } from "../i18n";
-import { MultiFlagSubmissionPanel, subFlagFieldPresentation } from "./MultiFlagSubmissionPanel";
+import {
+  isWhatIsTutorialShape,
+  MultiFlagSubmissionPanel,
+  subFlagFieldPresentation,
+} from "./MultiFlagSubmissionPanel";
 
 /**
  * Issue #1796: MultiFlagSubmissionPanel を実 provider (AppConfigProvider + I18nProvider) で
@@ -215,7 +219,7 @@ describe("MultiFlagSubmissionPanel", () => {
     expect(apiMocks.submitFlag).not.toHaveBeenCalled();
   });
 
-  it("should reach 4/4 in mock mode and hand off to the local and Lite drills", async () => {
+  it("should show one tutorial page at a time and reach 4/4 through choice buttons", async () => {
     const user = userEvent.setup();
     const tutorialFlags = [
       { id: "tenka-what", label: "Step 1", points: 100, solved: false },
@@ -225,16 +229,27 @@ describe("MultiFlagSubmissionPanel", () => {
     ];
     renderPanel({ problemId: WHAT_IS_DRILL_PROBLEM_ID, flags: tutorialFlags }, "dev-mock");
 
-    const answers = ["real cloud", "battle", "lite", "TC{HELLO-TENKACLOUD}"];
-    for (const [index, answer] of answers.entries()) {
-      await user.type(screen.getAllByRole("textbox")[0], answer.replaceAll("{", "{{"));
-      await user.click(screen.getAllByRole("button", { name: /^Submit/ })[0]);
-      await waitFor(() =>
-        expect(screen.queryAllByRole("textbox")).toHaveLength(answers.length - index - 1),
-      );
-    }
+    expect(screen.getByText("Step 1 of 4")).toBeInTheDocument();
+    expect(screen.getByText("Your site breaks when real users arrive")).toBeInTheDocument();
+    expect(screen.queryByText("Every team competes at the same time")).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
 
-    expect(screen.getByText("Flags solved: 4 / 4")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /The real cloud/ }));
+    expect(await screen.findByText("Correct. +100 pt")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Next mission" }));
+
+    expect(screen.getByText("Step 2 of 4")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Battle/ }));
+    await user.click(await screen.findByRole("button", { name: "Next mission" }));
+
+    expect(screen.getByText("Step 3 of 4")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Play first, with no AWS account/ }));
+    await user.click(await screen.findByRole("button", { name: "Next mission" }));
+
+    expect(screen.getByText("Step 4 of 4")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Submit the practice flag/ }));
+
+    expect(await screen.findByText("4 cleared")).toBeInTheDocument();
     expect(screen.getByText("🎉 You have the TenkaCloud basics")).toBeInTheDocument();
     expect(screen.getByText("Next: run it for real")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Go to “Play local mode”" }));
@@ -243,6 +258,24 @@ describe("MultiFlagSubmissionPanel", () => {
       screen.getByRole("button", { name: "Go to “Deploy your own TenkaCloud Lite”" }),
     );
     expect(screen.getByTestId("router-path")).toHaveTextContent(`/problems/${LITE_DRILL_JOB_ID}`);
+    expect(apiMocks.submitFlag).not.toHaveBeenCalled();
+  });
+
+  it("should keep the learner on the current page after a wrong choice without a penalty", async () => {
+    const user = userEvent.setup();
+    const tutorialFlags = [
+      { id: "tenka-what", label: "Step 1", points: 100, solved: false },
+      { id: "battle-challenge", label: "Step 2", points: 100, solved: false },
+      { id: "choose-mode", label: "Step 3", points: 100, solved: false },
+      { id: "first-flag", label: "Step 4", points: 100, solved: false },
+    ];
+    renderPanel({ problemId: WHAT_IS_DRILL_PROBLEM_ID, flags: tutorialFlags });
+
+    await user.click(screen.getByRole("button", { name: /A paper quiz/ }));
+    expect(await screen.findByText("Close. Pick again")).toBeInTheDocument();
+    expect(screen.getByText("Step 1 of 4")).toBeInTheDocument();
+    expect(screen.getByText("0 cleared")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Next mission" })).not.toBeInTheDocument();
     expect(apiMocks.submitFlag).not.toHaveBeenCalled();
   });
 
@@ -263,6 +296,20 @@ describe("MultiFlagSubmissionPanel", () => {
     renderPanel({ problemId: WHAT_IS_DRILL_PROBLEM_ID, flags: tutorialFlags }, "dev-mock");
     expect(screen.getByText("🎉 Step 1 — solved")).toBeInTheDocument();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  });
+});
+
+describe("isWhatIsTutorialShape", () => {
+  it("should require the four supported steps in journey order", () => {
+    const tutorialFlags = [
+      { id: "tenka-what", label: "Step 1", points: 100, solved: false },
+      { id: "battle-challenge", label: "Step 2", points: 100, solved: false },
+      { id: "choose-mode", label: "Step 3", points: 100, solved: false },
+      { id: "first-flag", label: "Step 4", points: 100, solved: false },
+    ];
+    expect(isWhatIsTutorialShape(tutorialFlags)).toBe(true);
+    expect(isWhatIsTutorialShape([...tutorialFlags].reverse())).toBe(false);
+    expect(isWhatIsTutorialShape(tutorialFlags.slice(0, 3))).toBe(false);
   });
 });
 
