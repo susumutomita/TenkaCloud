@@ -4,28 +4,33 @@ export const metadata = { title: "Run an event end to end" };
 
 # Run an event end to end <MaturityBadge level="preview" />
 
-This is the operator walkthrough: from a freshly deployed platform to a competitor
-solving a problem in their own cloud account. It is the prose form of the
-single-pass flow the platform guarantees (tenant creation → application console →
-problem deploy → participant join).
+This operator walkthrough presents Lite as the current event procedure. SaaS
+tenant creation and multi-cloud are separated as architecture reference.
 
-## Create a tenant
+## Run an event with Lite
 
-In SaaS mode, a System Admin creates a tenant from the `admin-console` (the control
-plane front end). Tenant creation emits `onboardingRequest`; the tenant is
-provisioned as pooled by default, or as a dedicated silo stack for the PLATINUM
-tier. The tenant admin then receives the `application-admin-console` URL for their
-plane. In Lite mode there is a single local tenant and you go straight to the
-application console.
+1. Sign in to Lite's Application Admin Console.
+2. Create an event, a test team, and the problem selection.
+3. Connect a test competitor AWS account with the procedure below.
+4. Start a problem and open its endpoint.
+5. Solve it, submit a real `TC{...}` flag, and confirm the score.
+6. Reset it and confirm a second start.
+7. Stop it and confirm the problem stack is gone from the competitor account.
+8. Give participants the Participant Portal URL, team key, and start time.
+
+## Create a SaaS tenant (architecture reference)
+
+The repository contains code for a System Admin to create a tenant from
+`admin-console`. There is no recent recorded fresh-AWS run from tenant creation
+through scoring and teardown. Re-verify it in a dedicated environment rather
+than treating this section as a production procedure.
 
 ## Connect a competitor account
 
-Each competing team deploys a one-time CloudFormation template
-(`infrastructure/templates/competitor-bootstrap.yaml`) into their own AWS account.
-It creates a least-privilege IAM role whose trust policy is pinned to the
-TenkaCloud control-plane account id **and** the tenant's **ExternalId**, so only
-TenkaCloud — and only for that tenant — can assume it. The team shares the
-resulting role ARN back to the operator. The full competitor-side steps live in the
+Each team deploys `infrastructure/templates/competitor-bootstrap.yaml` once in
+its AWS account. Use the same ExternalId configured by the organizer: 16–128
+ASCII letters, digits, and `_ = , . @ : / -`. Share the resulting role ARN,
+never an administrator credential or secret key. The full competitor-side steps live in the
 [competitor setup guide](https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/README.md).
 
 ## Deploy a problem
@@ -38,17 +43,11 @@ ExternalId and runs CloudFormation in their account. Watch status by polling the
 deployment until it reaches a terminal state, then tear it down from the same
 console when the event ends.
 
-## Enable multi-cloud
+## Enable multi-cloud (architecture reference)
 
-To run Sakura / Azure / GCP problems, set `features: { "nonAwsRuntime": true }` in
-`runtime-config.json`. A Team Cloud Credentials panel then appears on the Competitor
-Accounts page; register each team's provider credentials there (the panel writes
-them to SSM SecureString via the API — operators never touch SSM directly). Once a
-provider's credentials are registered, that provider's problems become selectable in
-the event picker. The provider-by-provider credential steps and which fields go in
-the panel are in the [competitor setup guide](https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/README.md),
-and the support state of each runtime is the
-[runtime capability matrix](/developers/docs/reference/runtime-matrix/).
+Sakura, Azure, and GCP are not uniformly executable. Check the
+[runtime capability matrix](/developers/docs/reference/runtime-matrix/) first,
+then use only a runtime explicitly marked executable in a dedicated test event.
 
 Related: [deploy modes and launch paths](/developers/docs/operate/deploy-paths/)
 and the [platform architecture](/developers/docs/concepts/architecture/).

@@ -31,15 +31,15 @@
 </header>
 <div class="wrap docs-grid">
 <aside class="docs-nav"><a class="docs-home-link" href="/docs/index.en.html">Docs home</a>
-<section><h5>Getting started</h5><ul>
-<li><a href="/docs/getting-started/index.en.html">Getting started</a></li>
-</ul></section>
 <section><h5>Role manuals</h5><ul>
 <li><a href="/docs/manual/index.en.html">Manuals by role</a></li>
 <li><a href="/docs/manual/developer/index.en.html">Developer manual</a></li>
 <li><a href="/docs/manual/organizer/index.en.html">Competition organizer manual</a></li>
 <li><a href="/docs/manual/participant/index.en.html">Competition participant manual</a></li>
 <li><a href="/docs/manual/problem-author/index.en.html" aria-current="page">Problem author manual</a></li>
+</ul></section>
+<section><h5>Getting started</h5><ul>
+<li><a href="/docs/getting-started/index.en.html">Getting started</a></li>
 </ul></section>
 <section><h5>Concepts</h5><ul>
 <li><a href="/docs/concepts/problem-packs/index.en.html">Problem packs</a></li>
@@ -58,6 +58,8 @@
 <li><a href="/docs/reference/problem-metadata/index.en.html">Problem metadata reference</a></li>
 <li><a href="/docs/reference/runtime-matrix/index.en.html">Runtime capability matrix</a></li>
 <li><a href="/docs/reference/cli/index.en.html">CLI reference</a></li>
+<li><a href="/docs/reference/lite-settings/index.en.html">Lite setting reference</a></li>
+<li><a href="/docs/reference/lite-messages/index.en.html">Lite settings message reference</a></li>
 <li><a href="/docs/reference/security-provenance/index.en.html">Security and provenance model</a></li>
 <li><a href="/docs/reference/validation-errors/index.en.html">Validation error reference</a></li>
 </ul></section>
@@ -69,9 +71,21 @@
 the scenario, deployable environment, verifier, scoring metadata, and hints.
 You do not need to operate a TenkaCloud tenant or change platform code.</p>
 <h2>Your goal</h2>
-<p>A fresh checkout can validate the pack, an author can rehearse the problem in
-local mode when its runtime supports it, and a participant can understand the
-goal without knowing the implementation.</p>
+<p>A pack is ready to publish only when another person can reproduce all three
+outcomes:</p>
+<ol>
+<li><code>make pack-validate</code> succeeds from a fresh checkout.</li>
+<li>For a supported local runtime, the author rehearses the complete path from
+start through flag submission.</li>
+<li>Someone who did not build the problem can explain the goal and first action
+from the participant-facing statement alone.</li>
+</ol>
+<p><img src="/docs/assets/problem-author-flow.en.svg" alt="Decision flow from authoring a problem pack to publication"></p>
+<p>When local execution is unsupported, record <code>Not run</code> instead of inferring a
+result. Verify in a supported test environment or tell the organizer that the
+runtime remains unverified. If the independent reader cannot understand the
+problem, rewrite its situation, goal, first action, and completion condition
+before changing the environment.</p>
 <h2>Create and validate a pack</h2>
 <pre><code class="language-bash">make pack-init ARGS=&quot;./my-first-pack&quot;
 make pack-validate ARGS=&quot;./my-first-pack&quot;
@@ -141,6 +155,9 @@ the problem is understandable or solvable.</p>
 <li>Test one wrong flag, reset, stop, and a second start.</li>
 <li>Ask someone who did not author the problem to complete the same path.</li>
 </ol>
+<p>Do not show that final tester the implementation, verifier, or correct flag.
+Publish only when they can explain what happened, what must be fixed, where to
+start, and what proves completion—and then reach the real flag submission.</p>
 <p>Local mode is for problems that declare a supported local runtime. It is not a
 WordPress tutorial or a substitute for the participant onboarding. A WordPress
 problem, if desired, belongs here as its own local problem with its own

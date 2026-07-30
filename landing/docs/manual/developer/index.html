@@ -31,15 +31,15 @@
 </header>
 <div class="wrap docs-grid">
 <aside class="docs-nav"><a class="docs-home-link" href="/docs/">Docs ホーム</a>
-<section><h5>はじめに</h5><ul>
-<li><a href="/docs/getting-started/">はじめに</a></li>
-</ul></section>
 <section><h5>役割別マニュアル</h5><ul>
 <li><a href="/docs/manual/">役割から選ぶマニュアル</a></li>
 <li><a href="/docs/manual/developer/" aria-current="page">開発者マニュアル</a></li>
 <li><a href="/docs/manual/organizer/">競技開催者マニュアル</a></li>
 <li><a href="/docs/manual/participant/">競技参加者マニュアル</a></li>
 <li><a href="/docs/manual/problem-author/">問題作成者マニュアル</a></li>
+</ul></section>
+<section><h5>はじめに</h5><ul>
+<li><a href="/docs/getting-started/">はじめに</a></li>
 </ul></section>
 <section><h5>コンセプト</h5><ul>
 <li><a href="/docs/concepts/problem-packs/">問題パック</a></li>
@@ -58,6 +58,8 @@
 <li><a href="/docs/reference/problem-metadata/">問題メタデータ</a></li>
 <li><a href="/docs/reference/runtime-matrix/">ランタイム対応マトリクス</a></li>
 <li><a href="/docs/reference/cli/">CLI リファレンス</a></li>
+<li><a href="/docs/reference/lite-settings/">Lite設定項目リファレンス</a></li>
+<li><a href="/docs/reference/lite-messages/">Lite設定メッセージ一覧</a></li>
 <li><a href="/docs/reference/security-provenance/">セキュリティと来歴モデル</a></li>
 <li><a href="/docs/reference/validation-errors/">検証エラーリファレンス</a></li>
 </ul></section>
@@ -137,9 +139,10 @@ greenでも、実AWSデプロイやブラウザ操作まで証明したことに
 TenkaCloudへ接続しないでください。</p>
 <p>statelessなMCP 2026-07-28への対応は
 <a href="https://github.com/susumutomita/TenkaCloud/issues/2819">Issue #2819</a>で別に追跡しています。
-最初にread-onlyの権限境界、requestごとのprotocol/capability negotiation、認証と
-同意、negative security testを定義する必要があります。lockfileに推移依存packageが
-あることは、製品としての対応を意味しません。</p>
+新仕様のstateless core、versioned extension（MCP AppsやTasks）、OAuth 2.0/OIDCを
+前提にした認証強化を別々に評価します。最初にread-onlyの権限境界、requestごとの
+protocol/capability negotiation、認証と同意、negative security testを定義する必要が
+あります。lockfileに推移依存packageがあることは、製品としての対応を意味しません。</p>
 <h2>レビュー依頼前の確認</h2>
 <ul>
 <li>新しい挙動を確認する範囲の絞られたテストがある。</li>

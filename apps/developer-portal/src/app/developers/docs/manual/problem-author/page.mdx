@@ -10,9 +10,22 @@ You do not need to operate a TenkaCloud tenant or change platform code.
 
 ## Your goal
 
-A fresh checkout can validate the pack, an author can rehearse the problem in
-local mode when its runtime supports it, and a participant can understand the
-goal without knowing the implementation.
+A pack is ready to publish only when another person can reproduce all three
+outcomes:
+
+1. `make pack-validate` succeeds from a fresh checkout.
+2. For a supported local runtime, the author rehearses the complete path from
+   start through flag submission.
+3. Someone who did not build the problem can explain the goal and first action
+   from the participant-facing statement alone.
+
+![Decision flow from authoring a problem pack to publication](/docs/assets/problem-author-flow.en.svg)
+
+When local execution is unsupported, record `Not run` instead of inferring a
+result. Verify in a supported test environment or tell the organizer that the
+runtime remains unverified. If the independent reader cannot understand the
+problem, rewrite its situation, goal, first action, and completion condition
+before changing the environment.
 
 ## Create and validate a pack
 
@@ -68,6 +81,10 @@ the problem is understandable or solvable.
 5. Submit the exact flag through the Participant Portal.
 6. Test one wrong flag, reset, stop, and a second start.
 7. Ask someone who did not author the problem to complete the same path.
+
+Do not show that final tester the implementation, verifier, or correct flag.
+Publish only when they can explain what happened, what must be fixed, where to
+start, and what proves completion—and then reach the real flag submission.
 
 Local mode is for problems that declare a supported local runtime. It is not a
 WordPress tutorial or a substitute for the participant onboarding. A WordPress

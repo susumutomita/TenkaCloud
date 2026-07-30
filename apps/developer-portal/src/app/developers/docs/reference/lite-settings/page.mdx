@@ -1,0 +1,80 @@
+import { MaturityBadge } from "@/components/MaturityBadge";
+
+export const metadata = { title: "Lite setting reference" };
+
+# Lite setting reference <MaturityBadge level="preview" />
+
+This page defines the values used to deploy and operate Lite. For the task
+sequence, use the [competition organizer manual](/developers/docs/manual/organizer/).
+
+## How to read the tables
+
+- **Purpose** states what changes.
+- **Format and range** states accepted characters, choices, or numeric range.
+- **If omitted** states the default behavior.
+- **Invalid input** states where processing stops. Look up exact text in the
+  [Lite settings message reference](/developers/docs/reference/lite-messages/).
+
+“No TenkaCloud length limit” means the repository does not perform a dedicated
+length check. It does not override a limit imposed by AWS or an external service.
+
+## First setup
+
+| Setting | Purpose | Format and range | If omitted | Example | Invalid input |
+| --- | --- | --- | --- | --- | --- |
+| `TENANT_ADMIN_EMAIL` | First organizer sign-in | The console launcher accepts a non-space `name@domain.suffix` shape. No TenkaCloud length limit | Setup stops | `organizer@example.com` | CloudFormation checks console input; `make env-init` checks for `@` |
+| `AWS_ACCOUNT_ID` | Guard against deploying to the wrong account | Exactly 12 ASCII digits | The console launcher derives it from the active account; explicit value is recommended for a manual setup | `123456789012` | The Turso preflight stops when it is not 12 digits |
+| `AWS_REGION` | AWS Region that contains TenkaCloud | A Region such as `ap-northeast-1`. `make env-init` checks `two letters-word-one digit`. No length limit | Depends on the AWS CLI default | `ap-northeast-1` | The wizard reports a format error; a later AWS command can also fail |
+| `CDK_PARAM_DEPLOY_EXTERNAL_ID` | Match TenkaCloud to a competitor-account role | **16–128 characters** from ASCII letters, digits, `_ = , . @ : / -` | A same-account trial can run; cross-account deployment cannot | `tc-school-2026-a91f` | Problem deployment stops below 16 characters; competitor CloudFormation checks the same bounds |
+
+## Control-data storage
+
+| Setting | Purpose | Format and range | If omitted | Example | Invalid input |
+| --- | --- | --- | --- | --- | --- |
+| `CDK_PARAM_CONTROL_DATA_BACKEND` | Store events, teams, and scores | `dynamodb` or `turso`, case-insensitive | `dynamodb` | `dynamodb` | Any other value stops CDK synth |
+| `CDK_PARAM_TURSO_DATABASE_URL` | Turso database endpoint | Non-empty URL string; no TenkaCloud URL or length validation | Required when Turso is selected | `https://db-org.turso.io` | Empty stops `make env-check-lite`; malformed input fails at the external connection |
+| `CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME` | Name of the SSM parameter that stores the Turso token | Non-empty parameter name, not the token itself | Required when Turso is selected | `/TenkaCloud/development/turso/auth-token` | Empty stops `make env-check-lite`; a missing parameter fails at AWS access |
+
+DynamoDB and Turso do not synchronize. Export required data before changing the
+backend and keep the existing data until the new path is verified.
+
+## DynamoDB and logs
+
+| Setting | Purpose | Format and range | If omitted | Example | Invalid input |
+| --- | --- | --- | --- | --- | --- |
+| `DYNAMODB_BILLING_MODE` | DynamoDB billing mode | `PROVISIONED` or `PAY_PER_REQUEST` | `PROVISIONED` | `PROVISIONED` | Current code treats an unknown value as `PROVISIONED`; no dedicated error |
+| `CDK_PARAM_DYNAMODB_READ_CAPACITY` | Read capacity for every table and GSI | Console launcher integer `1`–`200` | `1` | `5` | Console rejects out-of-range input; the `.env` path has no dedicated range error |
+| `CDK_PARAM_DYNAMODB_WRITE_CAPACITY` | Write capacity for every table and GSI | Console launcher integer `1`–`200` | `1` | `5` | Console rejects out-of-range input; the `.env` path has no dedicated range error |
+| `CDK_PARAM_LOG_RETENTION_DAYS` | CloudWatch Logs retention | One of `1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1827, 3653` | `1` | `30` | Unsupported positive values stop CDK synth; zero, negative, and non-numeric input fall back to `1` |
+
+Increasing capacity also increases cost. Measure the need in a test event and
+return it to `1` afterward.
+
+## Scoring and cost warning email
+
+| Setting | Purpose | Format and range | If omitted | Example | Invalid input |
+| --- | --- | --- | --- | --- | --- |
+| `CDK_PARAM_OPS_ALERT_EMAIL` | Receive scoring-error, scoring-stopped, and monthly-cost warnings | Non-empty email string; no TenkaCloud format or length validation | No warning email setup | `ops@example.com` | No dedicated error; AWS can fail to create the subscription or no confirmation arrives |
+| `CDK_PARAM_OPS_MONTHLY_COST_LIMIT_USD` | Monthly actual-spend threshold in USD | Number greater than 0; no maximum | `10` when email is set | `25` | Zero, negative, or non-numeric input stops CDK synth |
+| `CDK_PARAM_OPS_BUDGET_THRESHOLD_PERCENT` | Percentage of the amount that triggers the warning | Number greater than 0 and at most 100 | `100` | `80` | Out-of-range or non-numeric input stops CDK synth |
+
+The recipient must confirm the AWS subscription email. This setting does not
+report every failure in problem start, stop, or cleanup.
+
+## Problem deployment and feature switches
+
+| Setting | Purpose | Format and range | If omitted | Example | Invalid input |
+| --- | --- | --- | --- | --- | --- |
+| `CDK_PARAM_DEPLOY_ALLOWED_CIDRS` | Source networks passed to compatible problems | Comma-separated IPv4 or IPv6 CIDRs; no count or length limit | No allowlist value is passed | `198.51.100.10/32,203.0.113.0/24` | Invalid IP, slash, or prefix stops CDK synth |
+| `CDK_PARAM_DEPLOY_VIA_LAMBDA` | Roll back from Lambda deployment to legacy CodeBuild | Only lowercase `false` selects legacy CodeBuild | Lambda | `false` | Every other value, including `FALSE`, `0`, and `no`, selects Lambda; no error |
+| `CDK_PARAM_FEATURES` | Enable or disable optional UI and runtime features | JSON object with boolean values; no length limit | No `features` key | `{"samlSso":true}` | Non-JSON, non-object, or non-boolean values stop CDK synth |
+| `CDK_PARAM_AUDIT_LOG_ENABLED` | Stop recording administrator actions | Only lowercase `false` stops recording | Record actions | `false` | Every other value records actions; no error |
+| `CDK_PARAM_SOURCE_BUCKET_VERSIONING` | Keep previous SaaS source-bundle versions | `true`, `enabled`, or `1`, case-insensitive | Suspended | `true` | Every other value silently selects suspended |
+
+Leave deployment, feature, and audit switches unset for an ordinary Lite event.
+
+## Related pages
+
+- [Competition organizer manual](/developers/docs/manual/organizer/)
+- [Lite settings message reference](/developers/docs/reference/lite-messages/)
+- [Deploy modes and launch paths](/developers/docs/operate/deploy-paths/)

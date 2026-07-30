@@ -29,14 +29,14 @@ TenkaCloudの問題を解く人のためのマニュアルです。AWSの構成�
 を使います。ローカルモードはDockerで分離された問題環境を作り、AWSへ接続しません。
 
 ```bash
-bun run tenkacloud local
+make local
 ```
 
 Participant Portalが開いたら、画面から問題を選んで開始します。終了時は問題画面の
 **停止**を押すか、ローカルセッション全体を終了します。
 
 ```bash
-bun run tenkacloud local down
+make local-down
 ```
 
 開催中の競技へ参加する場合は、開催者から明示されない限りDockerを設定する必要は

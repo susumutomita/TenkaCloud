@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ProblemVideoSection } from "./ProblemVideoSection";
@@ -12,6 +13,14 @@ vi.mock("../i18n", () => ({
 }));
 
 describe("ProblemVideoSection", () => {
+  it("should keep the video before the problem and scoring panel on the detail page", () => {
+    const detailSource = readFileSync("src/pages/ProblemDetail.tsx", "utf8");
+    const videoIndex = detailSource.indexOf("<PlacedProblemVideo");
+    const panelIndex = detailSource.indexOf("<ProblemPanel");
+    expect(videoIndex).toBeGreaterThan(-1);
+    expect(panelIndex).toBeGreaterThan(videoIndex);
+  });
+
   it("should render a same-origin video with controls and a baked-caption note", () => {
     const { container } = render(<ProblemVideoSection videoUrl="/videos/onboarding/example.mp4" />);
     const video = container.querySelector("video");

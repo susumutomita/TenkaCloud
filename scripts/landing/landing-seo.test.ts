@@ -116,6 +116,34 @@ describe("landing page SEO", () => {
   });
 });
 
+describe("documentation home by role", () => {
+  const japanese = read("landing/docs/index.html");
+  const english = read("landing/docs/index.en.html");
+
+  it("should use a role-neutral title and lead with all four manuals", () => {
+    expect(japanese).toContain("<h1>TenkaCloud ドキュメント</h1>");
+    expect(japanese).not.toContain("<h1>開発者ドキュメント</h1>");
+    expect(japanese).toContain("開発者マニュアル");
+    expect(japanese).toContain("競技開催者マニュアル");
+    expect(japanese).toContain("競技参加者マニュアル");
+    expect(japanese).toContain("問題作成者マニュアル");
+    expect(japanese.indexOf("<h2>役割別マニュアル</h2>")).toBeLessThan(
+      japanese.indexOf("<h2>はじめに</h2>"),
+    );
+
+    expect(english).toContain("<h1>TenkaCloud documentation</h1>");
+    expect(english).not.toContain("<h1>Developer docs</h1>");
+  });
+
+  it("should publish the problem-author flow diagram and Lite references", () => {
+    const author = read("landing/docs/manual/problem-author/index.html");
+    expect(author).toContain("/docs/assets/problem-author-flow.ja.svg");
+    expect(read("landing/docs/assets/problem-author-flow.ja.svg")).toContain("<title");
+    expect(read("landing/docs/reference/lite-settings/index.html")).toContain("16〜128文字");
+    expect(read("landing/docs/reference/lite-messages/index.html")).toContain("システムの処置");
+  });
+});
+
 /**
  * Issue #2711 (design 6a, supersedes the #2707 start-direct buttons): the hero
  * shows exactly one participant entry — a quest card for the tutorial problem

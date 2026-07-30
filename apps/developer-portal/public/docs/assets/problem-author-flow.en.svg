@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="600" viewBox="0 0 1200 600" role="img" aria-labelledby="title desc">
+  <title id="title">Decision flow from authoring a problem pack to publication</title>
+  <desc id="desc">Validate from a fresh checkout, rehearse with a supported local runtime, and publish only when an independent tester understands the goal from the problem statement. Record unsupported local runtimes as Not run.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0 0 L10 5 L0 10 Z" fill="#466582"/>
+    </marker>
+    <style>
+      .bg{fill:#f7f9fc}.box{fill:#fff;stroke:#9aaaba;stroke-width:2}.decision{fill:#edf6ff;stroke:#0972d3;stroke-width:2}.good{fill:#ecfdf3;stroke:#16803c;stroke-width:2}.warn{fill:#fff8e6;stroke:#b7791f;stroke-width:2}.line{fill:none;stroke:#466582;stroke-width:2.5;marker-end:url(#arrow)}.loop{fill:none;stroke:#8b5cf6;stroke-width:2.5;stroke-dasharray:7 6;marker-end:url(#arrow)}.title{font:700 22px -apple-system,BlinkMacSystemFont,"Noto Sans",sans-serif;fill:#101828}.text{font:16px -apple-system,BlinkMacSystemFont,"Noto Sans",sans-serif;fill:#344054}.label{font:700 15px -apple-system,BlinkMacSystemFont,"Noto Sans",sans-serif;fill:#344054}.small{font:14px -apple-system,BlinkMacSystemFont,"Noto Sans",sans-serif;fill:#475467}
+    </style>
+  </defs>
+  <rect class="bg" width="1200" height="600" rx="24"/>
+  <text class="title" x="48" y="48">Author → validate → rehearse → independent test → publish</text>
+
+  <rect class="box" x="48" y="92" width="210" height="104" rx="16"/>
+  <text class="label" x="72" y="124">1. Fresh checkout</text>
+  <text class="text" x="72" y="154">Install dependencies</text>
+  <text class="small" x="72" y="179">No hidden workspace state</text>
+
+  <rect class="box" x="322" y="92" width="210" height="104" rx="16"/>
+  <text class="label" x="346" y="124">2. Validate the pack</text>
+  <text class="text" x="346" y="154">make pack-validate</text>
+  <text class="small" x="346" y="179">Fix failures, then rerun</text>
+
+  <path class="decision" d="M700 82 L810 144 L700 206 L590 144 Z"/>
+  <text class="label" x="643" y="137">Local runtime</text>
+  <text class="label" x="661" y="161">supported?</text>
+
+  <rect class="good" x="894" y="92" width="258" height="104" rx="16"/>
+  <text class="label" x="918" y="124">3A. Local rehearsal</text>
+  <text class="text" x="918" y="154">Start → investigate → submit</text>
+  <text class="small" x="918" y="179">Also stop, restart, and miss</text>
+
+  <rect class="warn" x="572" y="278" width="256" height="112" rx="16"/>
+  <text class="label" x="596" y="310">3B. If unsupported</text>
+  <text class="text" x="596" y="340">Record “Not run”</text>
+  <text class="small" x="596" y="366">Use a supported test environment,</text>
+  <text class="small" x="596" y="385">or tell the organizer it is unverified</text>
+
+  <rect class="box" x="894" y="278" width="258" height="112" rx="16"/>
+  <text class="label" x="918" y="310">4. Participant-role test</text>
+  <text class="text" x="918" y="340">Give only the statement</text>
+  <text class="small" x="918" y="366">Hide implementation, verifier,</text>
+  <text class="small" x="918" y="385">and the correct flag</text>
+
+  <path class="decision" d="M742 446 L852 508 L742 570 L632 508 Z"/>
+  <text class="label" x="681" y="501">Can they explain the</text>
+  <text class="label" x="688" y="525">goal and first action?</text>
+
+  <rect class="warn" x="322" y="456" width="238" height="104" rx="16"/>
+  <text class="label" x="346" y="488">5A. Rewrite the statement</text>
+  <text class="small" x="346" y="518">Clarify situation, goal, first</text>
+  <text class="small" x="346" y="542">action, and completion proof</text>
+
+  <rect class="good" x="914" y="456" width="238" height="104" rx="16"/>
+  <text class="label" x="938" y="488">5B. Publish</text>
+  <text class="text" x="938" y="518">Increment the version</text>
+  <text class="small" x="938" y="542">Pin the full commit SHA</text>
+
+  <path class="line" d="M258 144 H322"/>
+  <path class="line" d="M532 144 H590"/>
+  <path class="line" d="M810 144 H894"/>
+  <text class="small" x="838" y="130">Yes</text>
+  <path class="line" d="M700 206 V278"/>
+  <text class="small" x="712" y="246">No</text>
+  <path class="line" d="M1023 196 V278"/>
+  <path class="line" d="M828 334 H894"/>
+  <path class="line" d="M1023 390 V416 H852 V508"/>
+  <path class="line" d="M852 508 H914"/>
+  <text class="small" x="869" y="494">Yes</text>
+  <path class="line" d="M632 508 H560"/>
+  <text class="small" x="580" y="494">No</text>
+  <path class="loop" d="M441 456 V420 H1023 V390"/>
+</svg>

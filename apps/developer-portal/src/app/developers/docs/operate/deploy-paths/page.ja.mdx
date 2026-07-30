@@ -4,16 +4,21 @@ export const metadata = { title: "デプロイモードと起動経路" };
 
 # デプロイモードと起動経路 <MaturityBadge level="preview" />
 
-初めて運用する方がつまずきやすい疑問が 2 つあります。「プラットフォームは実際どうやってデプロイするのか」と「CodePipeline がデフォルトなら、いつ実行されるのか」です。このページはその見取り図です。プラットフォーム自体は**手動の CLI** ステップでデプロイします。CodePipeline は**テナントスタックをロールアウトする**ためのものであり、プラットフォームを立ち上げるためのものではありません。
+LiteとSaaSは、対象利用者、入口、使うAWSサービス、現在の検証状態が異なります。
+Liteの実行手順は[競技開催者マニュアル](/developers/docs/manual/organizer/)を使います。
+このページのSaaS節はコード構成の参考であり、最近の実環境で確認済みの導入手順ではありません。
 
 ## 2 つのデプロイモード
 
-- **Lite モード** — `make deploy`。1 人の主催者が 1 つのイベントを運営するためのモードです。SBT コントロールプレーン、テナントパイプライン、System Admin の招待をすべてスキップし、`infrastructure/bin/tenkacloud-lite.ts` 経由で 2 つのスタックだけをデプロイします。AppPlaneCore (`tenantId="local"`) と、problem-deploy バックエンド / Participant Portal です。**Lite モードに CodePipeline はありません。** 完全削除は `make destroy-all`、DynamoDB 履歴を残す場合は `make destroy` です。
-- **SaaS モード** — `make deploy-saas` (`scripts/install.sh`、3 フェーズ)。プール型の BASIC / ADVANCED ティア、サイロ型の PLATINUM ティア、System Admin の招待を含む、完全なマルチテナント運用です。破棄は `make destroy-saas` です。
+- **Lite モード** — 1つの運営グループが自分のAWSで競技を開くモードです。推奨入口の`lite-pipeline.yaml`はCloudFormationでCodeBuildを作り、CodeBuildが`make deploy`を実行します。AWS CodePipelineは使いません。ローカルcheckoutから`make deploy`を直接実行することもできます。
+- **SaaS モード** — 複数組織へテナントを提供するコード構成です。`make deploy-saas`、プール型・サイロ型テナント、System Admin、既存テナント更新用CodePipelineがありますが、最近の新規AWS環境で導入から削除までを通した記録はありません。
 
-どちらのモードもオペレーターがシェルから実行します。CI がデプロイすることはありません。
+Liteは現在の開催手順、SaaSは専用環境で再検証が必要な構成参考として扱います。
 
 ## 新しいテナントがプロビジョニングされる流れ
+
+> **SaaS構成参考:** ここから「SaaSパイプラインの役割」までは、現在のLite開催では
+> 使用しません。
 
 新規テナントのプロビジョニングと、パイプラインによるロールアウトは**別々の経路**です。旧ドキュメントが取り違えていたのがこの区別です。
 

@@ -1,0 +1,150 @@
+import { MaturityBadge } from "@/components/MaturityBadge";
+
+export const metadata = { title: "Lite settings message reference" };
+
+# Lite settings message reference <MaturityBadge level="preview" />
+
+This page describes the main Lite setup messages as **displayed text, cause,
+system action, and operator action**. For generic AWS CLI, CloudFormation, and
+CodeBuild messages, use the service log that emitted them.
+
+Lite setting messages do not yet have stable message IDs. Do not branch
+automation on these strings; use this list for human diagnosis.
+
+## Before deployment
+
+### `ERROR: infrastructure/environments/&lt;ENV&gt;/.env が存在しません。`
+
+- **Cause**: The manual setup has no environment file.
+- **System action**: Exits before `make deploy`.
+- **Operator action**: Run `make env-init ENV=&lt;ENV&gt;`.
+
+### `ERROR: TENANT_ADMIN_EMAIL が ... にありません`
+
+- **Cause**: There is no address for the first organizer invitation.
+- **System action**: Exits before `make deploy`.
+- **Operator action**: Add `TENANT_ADMIN_EMAIL=organizer@example.com` to `.env`.
+
+### `email アドレス形式にしてください (= xxx@yyy)`
+
+- **Cause**: The value entered in `make env-init` has no `@`.
+- **System action**: Does not write the file and asks again.
+- **Operator action**: Enter an address that can receive the invitation.
+
+### `AWS region 形式にしてください (= ap-northeast-1 等)`
+
+- **Cause**: The Region entered in `make env-init` does not match the expected shape.
+- **System action**: Does not write the file and asks again.
+- **Operator action**: Enter the AWS Region name you will use.
+
+### `16〜128文字で、半角英数字と _ = , . @ : / - を使ってください`
+
+- **Cause**: The ExternalId is too short, too long, or contains an unsupported character.
+- **System action**: Does not write `.env` and asks again.
+- **Operator action**: Enter an unpredictable 16–128 character value and keep it private.
+
+## Database
+
+### `CDK_PARAM_CONTROL_DATA_BACKEND must be one of dynamodb|turso, got: <value>`
+
+- **Cause**: The backend is neither `dynamodb` nor `turso`.
+- **System action**: Stops CDK synth without changing AWS.
+- **Operator action**: Correct the value in `.env`.
+
+### `ERROR: CDK_PARAM_CONTROL_DATA_BACKEND=turso には以下が ... に必要です:`
+
+- **Cause**: Turso is selected but the URL or SSM parameter name is missing.
+- **System action**: Exits before `make deploy` and lists each missing setting.
+- **Operator action**: Run `make turso-live ENV=&lt;ENV&gt;` and follow the prompts.
+
+### `CDK_PARAM_TURSO_DATABASE_URL and CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME are required when CDK_PARAM_CONTROL_DATA_BACKEND is turso.`
+
+- **Cause**: The same missing values reached CDK synth.
+- **System action**: Stops CDK synth without changing AWS.
+- **Operator action**: Set both the URL and SSM parameter name. Do not put the token itself in `.env`.
+
+## Numbers and JSON
+
+### `Unsupported CloudWatch Logs retention: <days> days. CDK_PARAM_LOG_RETENTION_DAYS must be one of: <list>.`
+
+- **Cause**: The retention is not supported by CloudWatch Logs.
+- **System action**: Stops CDK synth.
+- **Operator action**: Choose a value from the [setting reference](/developers/docs/reference/lite-settings/#dynamodb-and-logs).
+
+### `CDK_PARAM_OPS_MONTHLY_COST_LIMIT_USD must be a positive number (got: <value>)`
+
+- **Cause**: The monthly amount is zero, negative, or not numeric.
+- **System action**: Stops CDK synth.
+- **Operator action**: Use a positive USD amount such as `10` or `25`.
+
+### `CDK_PARAM_OPS_BUDGET_THRESHOLD_PERCENT must be a positive number and <= 100 (got: <value>)`
+
+- **Cause**: The notification percentage is outside 0–100 or not numeric.
+- **System action**: Stops CDK synth.
+- **Operator action**: Use a number greater than 0 and at most 100.
+
+### `CDK_PARAM_FEATURES は JSON object で指定してください (got: <value>)`
+
+- **Cause**: The value is invalid JSON, an array, string, number, or `null`.
+- **System action**: Stops CDK synth.
+- **Operator action**: Use a JSON object such as `{"samlSso":true}`.
+
+### `CDK_PARAM_FEATURES の "<key>" は boolean で指定してください (got: <value>)`
+
+- **Cause**: A feature value is not `true` or `false`.
+- **System action**: Stops CDK synth.
+- **Operator action**: Use the boolean `true`, not the string `"true"`.
+
+## Network
+
+### `CDK_PARAM_DEPLOY_ALLOWED_CIDRS entries must be CIDR blocks, got: <value>`
+
+- **Cause**: The entry has no `/` between the address and prefix.
+- **System action**: Stops CDK synth.
+- **Operator action**: Use a value such as `198.51.100.10/32`.
+
+### `CDK_PARAM_DEPLOY_ALLOWED_CIDRS CIDR has an invalid IP address: <value>`
+
+- **Cause**: The text before `/` is not IPv4 or IPv6.
+- **System action**: Stops CDK synth.
+- **Operator action**: Correct the address.
+
+### `CDK_PARAM_DEPLOY_ALLOWED_CIDRS CIDR has an invalid prefix: <value>`
+
+- **Cause**: The text after `/` is not numeric.
+- **System action**: Stops CDK synth.
+- **Operator action**: Use 0–32 for IPv4 or 0–128 for IPv6.
+
+### `CDK_PARAM_DEPLOY_ALLOWED_CIDRS CIDR prefix must be between 0 and <32 or 128>: <value>`
+
+- **Cause**: The prefix is outside the range for the address family.
+- **System action**: Stops CDK synth.
+- **Operator action**: Use 0–32 for IPv4 or 0–128 for IPv6.
+
+## During deployment
+
+### `[lite] ✗ CFn stack deploy で失敗しました。`
+
+- **Cause**: CDK or CloudFormation could not create a Lite stack. The specific AWS error appears immediately before this line.
+- **System action**: Exits before printing access URLs.
+- **Operator action**: Find the first preceding AWS error. If necessary, run `make destroy` before retrying.
+
+### `[lite] admin-create-user failed.`
+
+- **Cause**: The first organizer could not be created in Cognito.
+- **System action**: Keeps Lite deployed and prints a manual creation command.
+- **Operator action**: Check the User Pool and IAM permission, then run the printed `aws cognito-idp admin-create-user` command.
+
+## Settings without a dedicated error
+
+These settings do not stop on every unintended value:
+
+- `DYNAMODB_BILLING_MODE`: an unknown value becomes `PROVISIONED`.
+- `CDK_PARAM_SOURCE_BUCKET_VERSIONING`: any non-enable value becomes `Suspended`.
+- `CDK_PARAM_DEPLOY_VIA_LAMBDA`: every value except lowercase `false` selects Lambda.
+- `CDK_PARAM_AUDIT_LOG_ENABLED`: every value except lowercase `false` enables audit records.
+- `CDK_PARAM_OPS_ALERT_EMAIL`: no TenkaCloud email format or length check exists.
+
+Compare these values against the
+[Lite setting reference](/developers/docs/reference/lite-settings/) because an
+unintended value might not stop processing.

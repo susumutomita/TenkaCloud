@@ -40,11 +40,36 @@ const PARTICIPANT_MANUAL_JA_SOURCE = readFileSync(
   "src/app/developers/docs/manual/participant/page.ja.mdx",
   "utf8",
 );
+const PROBLEM_AUTHOR_MANUAL_SOURCE = readFileSync(
+  "src/app/developers/docs/manual/problem-author/page.mdx",
+  "utf8",
+);
+const PROBLEM_AUTHOR_MANUAL_JA_SOURCE = readFileSync(
+  "src/app/developers/docs/manual/problem-author/page.ja.mdx",
+  "utf8",
+);
+const LITE_SETTINGS_SOURCE = readFileSync(
+  "src/app/developers/docs/reference/lite-settings/page.mdx",
+  "utf8",
+);
+const LITE_SETTINGS_JA_SOURCE = readFileSync(
+  "src/app/developers/docs/reference/lite-settings/page.ja.mdx",
+  "utf8",
+);
+const LITE_MESSAGES_SOURCE = readFileSync(
+  "src/app/developers/docs/reference/lite-messages/page.mdx",
+  "utf8",
+);
+const LITE_MESSAGES_JA_SOURCE = readFileSync(
+  "src/app/developers/docs/reference/lite-messages/page.ja.mdx",
+  "utf8",
+);
 
 describe("docs registry — role manuals (#2818)", () => {
   it("should expose exactly the role chooser and four manuals in their own section", () => {
     const section = DOC_SECTIONS.find((candidate) => candidate.title === "Role manuals");
     expect(section?.pages.map((page) => page.href)).toEqual(ROLE_MANUAL_HREFS);
+    expect(DOC_SECTIONS[0]?.title).toBe("Role manuals");
   });
 
   it("should expose every role manual as a known internal route", () => {
@@ -65,14 +90,13 @@ describe("docs registry — role manuals (#2818)", () => {
   });
 
   it("should document the actual backend switch and its safety boundary in both languages", () => {
-    for (const source of [ORGANIZER_MANUAL_SOURCE, ORGANIZER_MANUAL_JA_SOURCE]) {
+    for (const source of [LITE_SETTINGS_SOURCE, LITE_SETTINGS_JA_SOURCE]) {
       expect(source).toContain("CDK_PARAM_CONTROL_DATA_BACKEND");
       expect(source).toContain("CDK_PARAM_TURSO_DATABASE_URL");
       expect(source).toContain("CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME");
-      expect(source).toContain("make turso-live ENV=development");
-      expect(source).toContain("RETAIN");
+      expect(source).toMatch(/do not synchronize|同期されません/);
     }
-    expect(ORGANIZER_MANUAL_SOURCE).toContain("not yet been live-verified");
+    expect(ORGANIZER_MANUAL_SOURCE).toContain("has not been");
     expect(ORGANIZER_MANUAL_JA_SOURCE).toContain("ライブ検証は未実施");
   });
 
@@ -88,6 +112,73 @@ describe("docs registry — role manuals (#2818)", () => {
     expect(PARTICIPANT_MANUAL_JA_SOURCE).toContain(
       "アプリと必要なソフトをまとめ、同じ練習環境を再現しやすくする仕組み",
     );
+  });
+
+  it("should use the public Make targets in the participant manual", () => {
+    for (const source of [PARTICIPANT_MANUAL_SOURCE, PARTICIPANT_MANUAL_JA_SOURCE]) {
+      expect(source).toContain("make local");
+      expect(source).toContain("make local-down");
+      expect(source).not.toContain("bun run tenkacloud local");
+    }
+  });
+
+  it("should separate the executable Lite path from unverified SaaS guidance", () => {
+    for (const source of [ORGANIZER_MANUAL_SOURCE, ORGANIZER_MANUAL_JA_SOURCE]) {
+      expect(source).toContain("lite-pipeline.yaml");
+      expect(source).toContain("CodeBuild");
+      expect(source).toContain("CodePipeline");
+      expect(source).toMatch(/no recent|最近の/);
+      expect(source).toContain("/developers/docs/reference/lite-settings/");
+      expect(source).toContain("/developers/docs/reference/lite-messages/");
+    }
+  });
+
+  it("should show the problem-author publication decision flow in both languages", () => {
+    expect(PROBLEM_AUTHOR_MANUAL_SOURCE).toContain("/docs/assets/problem-author-flow.en.svg");
+    expect(PROBLEM_AUTHOR_MANUAL_JA_SOURCE).toContain("/docs/assets/problem-author-flow.ja.svg");
+    for (const source of [PROBLEM_AUTHOR_MANUAL_SOURCE, PROBLEM_AUTHOR_MANUAL_JA_SOURCE]) {
+      expect(source).toContain("Not run");
+      expect(source).toContain("make pack-validate");
+    }
+  });
+});
+
+describe("docs registry — Lite technical references", () => {
+  const referenceHrefs = [
+    "/developers/docs/reference/lite-settings/",
+    "/developers/docs/reference/lite-messages/",
+  ];
+
+  it("should register the setting contract and message catalog", () => {
+    for (const href of referenceHrefs) expect(allRoutes()).toContain(href);
+    expect(findDocBySlug("reference/lite-settings")).toBeDefined();
+    expect(findDocBySlug("reference/lite-messages")).toBeDefined();
+  });
+
+  it("should define ExternalId format and the exact wizard message", () => {
+    for (const source of [LITE_SETTINGS_SOURCE, LITE_SETTINGS_JA_SOURCE]) {
+      expect(source).toContain("16");
+      expect(source).toContain("128");
+      expect(source).toContain("_ = , . @ : / -");
+    }
+    for (const source of [LITE_MESSAGES_SOURCE, LITE_MESSAGES_JA_SOURCE]) {
+      expect(source).toContain("16〜128文字で、半角英数字と _ = , . @ : / - を使ってください");
+      expect(source).toMatch(/System action|システムの処置/);
+      expect(source).toMatch(/Operator action|利用者の処置/);
+    }
+  });
+
+  it("should make settings and errors findable in Japanese and English", () => {
+    expect(
+      searchIndex("ExternalId 16 128").some(
+        (result) => result.href === "/developers/docs/reference/lite-settings/",
+      ),
+    ).toBe(true);
+    expect(
+      searchIndex("設定 メッセージ 要因 処置").some(
+        (result) => result.href === "/developers/docs/reference/lite-messages/",
+      ),
+    ).toBe(true);
   });
 });
 

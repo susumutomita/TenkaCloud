@@ -31,15 +31,15 @@
 </header>
 <div class="wrap docs-grid">
 <aside class="docs-nav"><a class="docs-home-link" href="/docs/">Docs ホーム</a>
-<section><h5>はじめに</h5><ul>
-<li><a href="/docs/getting-started/">はじめに</a></li>
-</ul></section>
 <section><h5>役割別マニュアル</h5><ul>
 <li><a href="/docs/manual/">役割から選ぶマニュアル</a></li>
 <li><a href="/docs/manual/developer/">開発者マニュアル</a></li>
 <li><a href="/docs/manual/organizer/">競技開催者マニュアル</a></li>
 <li><a href="/docs/manual/participant/">競技参加者マニュアル</a></li>
 <li><a href="/docs/manual/problem-author/">問題作成者マニュアル</a></li>
+</ul></section>
+<section><h5>はじめに</h5><ul>
+<li><a href="/docs/getting-started/">はじめに</a></li>
 </ul></section>
 <section><h5>コンセプト</h5><ul>
 <li><a href="/docs/concepts/problem-packs/">問題パック</a></li>
@@ -58,6 +58,8 @@
 <li><a href="/docs/reference/problem-metadata/">問題メタデータ</a></li>
 <li><a href="/docs/reference/runtime-matrix/">ランタイム対応マトリクス</a></li>
 <li><a href="/docs/reference/cli/">CLI リファレンス</a></li>
+<li><a href="/docs/reference/lite-settings/">Lite設定項目リファレンス</a></li>
+<li><a href="/docs/reference/lite-messages/">Lite設定メッセージ一覧</a></li>
 <li><a href="/docs/reference/security-provenance/">セキュリティと来歴モデル</a></li>
 <li><a href="/docs/reference/validation-errors/">検証エラーリファレンス</a></li>
 </ul></section>
@@ -65,15 +67,35 @@
 <main class="doc">
 <article>
 <h1>イベントをエンドツーエンドで運営する <span class="doc-badge doc-badge--preview">Preview</span></h1>
-<p>これは運営者向けのウォークスルーです。デプロイ直後のプラットフォームから、競技者が自分のクラウドアカウントで問題を解くところまでを通して案内します。プラットフォームが保証する一気通貫のフロー（テナント作成 → アプリケーションコンソール → 問題デプロイ → 参加者の合流）を文章にしたものです。</p>
-<h2>テナントを作成する</h2>
-<p>SaaS モードでは、System Admin が <code>admin-console</code>（コントロールプレーンのフロントエンド）からテナントを作成します。テナント作成は <code>onboardingRequest</code> を発行し、テナントはデフォルトでプール型として、PLATINUM ティアの場合は専用のサイロスタックとしてプロビジョニングされます。その後、テナント管理者は自分のプレーン用の <code>application-admin-console</code> URL を受け取ります。Lite モードではローカルテナントが 1 つあるだけなので、そのままアプリケーションコンソールに進みます。</p>
+<p>これは運営者向けのウォークスルーです。現在開催手順として案内するのはLiteです。
+SaaSのテナント作成とマルチクラウドは末尾に分離し、コード構成の参考として説明します。</p>
+<h2>Liteで競技を運営する</h2>
+<ol>
+<li>LiteのApplication Admin Consoleへログインする。</li>
+<li>イベント、テストチーム、問題を作る。</li>
+<li>下記の手順でテスト競技者AWSアカウントを接続する。</li>
+<li>問題を起動し、接続先を開く。</li>
+<li>問題を解いて本物の<code>TC{...}</code>を提出し、得点を確認する。</li>
+<li>リセットして再起動できることを確認する。</li>
+<li>停止し、競技者AWSの問題スタックが削除されたことを確認する。</li>
+<li>Participant PortalのURL、team key、開始時刻を参加者へ渡す。</li>
+</ol>
+<h2>SaaSでテナントを作成する（構成参考）</h2>
+<p>SaaS モードでは、System Admin が <code>admin-console</code>からテナントを作成するコードがあります。
+しかし、最近の新規AWS環境でテナント作成から採点・削除までを通した記録はありません。
+本番手順として使用せず、専用環境で再検証してください。</p>
 <h2>競技者アカウントを接続する</h2>
-<p>参加する各チームは、ワンタイムの CloudFormation テンプレート (<code>infrastructure/templates/competitor-bootstrap.yaml</code>) を自分の AWS アカウントにデプロイします。これにより最小権限の IAM ロールが作成されます。その信頼ポリシーは TenkaCloud コントロールプレーンのアカウント id <strong>と</strong>テナントの <strong>ExternalId</strong> の両方に固定されているため、TenkaCloud だけが、しかもそのテナントに限って、このロールを AssumeRole できます。チームは作成されたロール ARN を運営者に共有します。競技者側の手順の全体は<a href="https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/README.md">競技者セットアップガイド</a>にあります。</p>
+<p>参加する各チームは、CloudFormationテンプレート
+<code>infrastructure/templates/competitor-bootstrap.yaml</code>を自分のAWSアカウントへ
+1回デプロイします。<code>ExternalId</code>は開催者が設定した値と同じ、16〜128文字の半角英数字と
+<code>_ = , . @ : / -</code>を使います。作成されたロールARNを開催者へ共有します。秘密鍵や
+AWS管理者認証情報は共有しません。詳細は<a href="https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/README.md">競技者セットアップガイド</a>にあります。</p>
 <h2>問題をデプロイする</h2>
 <p><code>application-admin-console</code> でイベントを作成し、カタログから問題を選び（ピッカーに表示されるのはクラウドにデプロイ可能な問題だけです。ローカル専用のコンテナ問題は除外され、非 AWS の問題はマルチクラウドを有効にすると表示されます）、各チームのアカウントとリージョンを割り当てて、デプロイします。各デプロイは ExternalId を使ってチームのロールを AssumeRole し、チームのアカウントで CloudFormation を実行します。デプロイメントが終了状態に達するまでポーリングでステータスを見守り、イベントが終わったら同じコンソールから撤収します。</p>
-<h2>マルチクラウドを有効にする</h2>
-<p>Sakura / Azure / GCP の問題を実行するには、<code>runtime-config.json</code> に <code>features: { &quot;nonAwsRuntime&quot;: true }</code> を設定します。すると Competitor Accounts ページに Team Cloud Credentials パネルが表示されるので、そこで各チームのプロバイダー認証情報を登録します（パネルは API 経由で SSM SecureString に書き込みます。運営者が SSM を直接触ることはありません）。プロバイダーの認証情報を登録すると、そのプロバイダーの問題がイベントピッカーで選択できるようになります。プロバイダーごとの認証情報の手順とパネルに入力するフィールドは<a href="https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/README.md">競技者セットアップガイド</a>に、各ランタイムのサポート状況は<a href="/docs/reference/runtime-matrix/">ランタイム対応マトリクス</a>にあります。</p>
+<h2>マルチクラウドを有効にする（構成参考）</h2>
+<p>Sakura / Azure / GCPは一律に実行可能とは限りません。先に
+<a href="/docs/reference/runtime-matrix/">ランタイム対応マトリクス</a>で対象問題の
+状態を確認し、実行可能と記載されたruntimeだけを専用のテストイベントで検証します。</p>
 <p>関連: <a href="/docs/operate/deploy-paths/">デプロイモードと起動経路</a>、<a href="/docs/concepts/architecture/">プラットフォームアーキテクチャ</a>。</p>
 
 </article>

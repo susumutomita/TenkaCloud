@@ -27,8 +27,9 @@ import { createLiteCleanupDrillFixture } from "./lite-cleanup-drill-fixture";
  * production (= backend mode) では参照されない (= caller 側で `if (isBackend) return` ガード)。
  *
  * 出題構成 (Issue #2707 → #2711: LP ヒーローから始める自己解説型オンボーディング):
- *   1. 「TenkaCloud とは?」 — 4 ステップのチュートリアル (#2711 デザイン 6b)。 モードの
- *      3 択 (ローカル / Lite / SaaS) はステップ 3 で初めて提示する
+ *   1. 「TenkaCloud とは?」 — 動画の内容と実際の問題操作をつなぐ 6 ステップ。
+ *      real cloud、Battle / Challenge、Local / Lite / SaaS を確認してから、
+ *      問題文を読む → 起動する → 調査・修正する → flag を提出して得点する
  *   2. 「自分の TenkaCloud Lite を立てる」 — 実 AWS デプロイ (#2696、 lite-drill 契約)
  *   3. 「TenkaCloud Lite を片付ける」 — ACTION override と launcher 削除
  *   4. 「ローカルモードで遊ぶ」 — Docker / Codespaces。起動コマンドをそのまま提出
@@ -71,55 +72,59 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
       // オンボーディング動画は、リポジトリを肥大化させないよう YouTube で配信する。
       videoUrl: "https://www.youtube.com/embed/mcL_O17QVsA",
       name: "はじめての TenkaCloud",
-      // #2814: 専門用語を「なぜ必要か → 名前」の順で説明する。知識クイズを採点せず、
-      // 最後の合言葉だけを実際の scoring 経路へ送る。個別の問題はオンボーディングに
-      // 混ぜず、完了後のローカルモード問題として案内する。
+      // 動画で説明する製品の仕組みを省略せず、そのあとに実際の問題操作を続ける。
+      // 最後の合言葉だけを実際の scoring 経路へ送り、個別の学習問題は完了後の
+      // ローカルモード問題として案内する。
       description: [
-        "Webサイトやアプリは、作って終わりではない。公開後も動き続け、更新や障害に対応できる必要がある。この4ステップでは、必要な言葉とTenkaCloudで問題を解く実際の流れを一緒に体験する。",
+        "動画のあと、動画で説明したTenkaCloudの仕組みと、問題を起動して得点する実際の操作を6ステップでつなげて体験する。",
         "",
-        "#### 先に知っておく4つの言葉",
+        "#### この画面で確かめること",
         "",
-        "- **サーバー**: サイトを24時間動かすコンピューター",
-        "- **クラウド**: サーバーや保存場所を、必要な分だけ借りる仕組み",
-        "- **Docker**: アプリ・設定・必要なソフトをひとまとめにし、同じサイト環境を別のパソコンでも再現しやすくする仕組み",
-        "- **flag (合言葉)**: 問題を解けた証拠としてTenkaCloudへ提出する短い文字列",
+        "1. TenkaCloudは紙の知識クイズではなく、実際に動く環境で調査や修正を練習する",
+        "2. Battleは同時に得点を競い、Challengeは自分のペースで進める",
+        "3. Local、Lite、SaaSの違いと、DockerがLocalで必要になる理由",
+        "4. 問題文の「状況・ゴール・最初の操作・完了条件」を読む",
+        "5. 問題を起動し、表示された環境を調べたり直したりする",
+        "6. 見つけた`TC{...}`形式のflagを提出して得点する",
         "",
-        "#### TenkaCloudで問題を解く流れ",
+        "#### はじめて出てくる言葉",
         "",
-        "1. 問題を開く: 何が起きたかとゴールを読む",
-        "2. Startを押して、その問題だけの練習環境を起動する",
-        "3. 練習環境を調べたり直したりして、`TC{...}`の形の合言葉を見つける",
-        "4. 合言葉をTenkaCloudへ提出して得点する",
+        "- **クラウド**: インターネット越しに、サーバーや保存場所を必要な分だけ使う仕組み",
+        "- **Docker**: アプリ、設定、必要なソフトをひとまとめにし、同じ練習環境を手元のパソコンでも再現しやすくする仕組み。Localを選ぶときに使う",
+        "- **問題環境**: その問題専用に起動する、壊しても本番のサービスへ影響しない練習場所",
+        "- **flag**: 問題を解けた証拠として提出する`TC{...}`形式の文字列",
         "",
-        "このブラウザ体験版では見本データを使う。最後の提出と採点は実際のTenkaCloudと同じ流れで、完了後はローカルモードで本物の問題を試せる。",
+        "このブラウザ体験版では起動済みの見本環境を使う。最後の提出と採点は実際のTenkaCloudと同じ流れで、完了後は独立したローカルモード問題で本物の環境を試せる。",
       ].join("\n"),
       instructions:
-        "動画を見たあと、TenkaCloudで問題を解く4ステップを進める。最初の3ステップは理解の確認で、点数が動くのは最後の合言葉提出だけ。",
+        "動画を見たあと、動画で説明した仕組みから実際の問題操作まで6ステップを進める。最初の5ステップは流れの確認で、点数が動くのは最後のflag提出だけ。",
       i18n: {
         en: {
           name: "Your first TenkaCloud walkthrough",
           videoUrl: "https://www.youtube.com/embed/6qMzFcP5dgw",
           description: [
-            "A website or app is not finished when it is built. After launch, it must keep running and be ready for updates and incidents. These four steps introduce the words you need and the real TenkaCloud problem flow.",
+            "After the video, connect the TenkaCloud concepts it introduced to the real start-investigate-submit flow in six steps.",
             "",
-            "#### Four words to know first",
+            "#### What this walkthrough checks",
             "",
-            "- **Server**: a computer that keeps the site available around the clock",
-            "- **Cloud**: a way to rent servers and storage as needed",
-            "- **Docker**: packages an app, its settings, and the software it needs so the same site environment can be recreated on another computer",
-            "- **Flag (passphrase)**: a short value you submit to TenkaCloud as proof that you solved a problem",
+            "1. TenkaCloud uses real running environments, not a paper knowledge quiz",
+            "2. Battle is a simultaneous score competition; Challenge is self-paced",
+            "3. The difference between Local, Lite, and SaaS, and why Local uses Docker",
+            "4. How to read the situation, goal, first action, and completion condition",
+            "5. How to start a problem and investigate or repair its environment",
+            "6. How to submit the `TC{...}` flag you found and score",
             "",
-            "#### How a TenkaCloud problem works",
+            "#### Terms introduced here",
             "",
-            "1. Open the problem and read what happened and what success means",
-            "2. Press Start to create a practice environment for that problem",
-            "3. Investigate or repair the practice environment and find a passphrase in the form `TC{...}`",
-            "4. Submit the passphrase to TenkaCloud and score",
+            "- **Cloud**: a way to use servers and storage over the internet as needed",
+            "- **Docker**: packages an app, settings, and required software so Local mode can recreate the same practice environment on your computer",
+            "- **Problem environment**: an isolated practice area created for one problem, safe to investigate or repair without affecting a production service",
+            "- **Flag**: a `TC{...}` value submitted as proof that you solved the problem",
             "",
-            "This browser walkthrough uses sample data. The final submit-and-score action follows the real TenkaCloud flow; after it, you can try a real problem in local mode.",
+            "This browser walkthrough uses a prepared sample environment. The final submit-and-score action follows the real TenkaCloud flow; afterward, use the separate local-mode problem for a real environment.",
           ].join("\n"),
           instructions:
-            "Watch the video, then follow the four steps used to solve a TenkaCloud problem. The first three confirm the flow; only the final passphrase submission changes the score.",
+            "Watch the video, then follow all six steps from the concepts it introduced through the real problem flow. The first five confirm the flow; only the final flag submission changes the score.",
         },
       },
       region: "ap-northeast-1",
@@ -133,13 +138,13 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
         flags: [
           {
             id: "first-flag",
-            label: "4. 問題で見つけた合言葉を提出",
+            label: "6. 問題で見つけたflagを提出",
             points: 100,
             solved: false,
-            i18n: { en: { label: "4. Submit the passphrase found in the problem" } },
+            i18n: { en: { label: "6. Submit the flag found in the problem" } },
             hints: [
               {
-                id: "whatis-h4",
+                id: "whatis-h6",
                 penalty: 0,
                 revealed: false,
                 content:

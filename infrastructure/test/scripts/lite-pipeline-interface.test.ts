@@ -153,3 +153,19 @@ describe("lite-pipeline.yaml cost + IAM console messaging (Issue #2696)", () => 
     expect(folded.length).toBeLessThan(1024);
   });
 });
+
+describe("lite-pipeline.yaml ExternalId input contract", () => {
+  const externalIdBlock = template.match(
+    /\n {2}DeployExternalId:\n([\s\S]*?)\n {2}ControlDataBackend:\n/,
+  )?.[1];
+
+  it("should accept an empty same-account trial value or the competitor bootstrap contract", () => {
+    expect(externalIdBlock).toBeTruthy();
+    expect(externalIdBlock).toContain("AllowedPattern: '^$|^[A-Za-z0-9_=,.@:/-]{16,128}$'");
+  });
+
+  it("should explain the exact range and character set in the CloudFormation error", () => {
+    expect(externalIdBlock).toContain("16-128 ASCII letters");
+    expect(externalIdBlock).toContain("_ = , . @ : / -");
+  });
+});

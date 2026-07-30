@@ -31,15 +31,15 @@
 </header>
 <div class="wrap docs-grid">
 <aside class="docs-nav"><a class="docs-home-link" href="/docs/index.en.html">Docs home</a>
-<section><h5>Getting started</h5><ul>
-<li><a href="/docs/getting-started/index.en.html">Getting started</a></li>
-</ul></section>
 <section><h5>Role manuals</h5><ul>
 <li><a href="/docs/manual/index.en.html">Manuals by role</a></li>
 <li><a href="/docs/manual/developer/index.en.html">Developer manual</a></li>
 <li><a href="/docs/manual/organizer/index.en.html" aria-current="page">Competition organizer manual</a></li>
 <li><a href="/docs/manual/participant/index.en.html">Competition participant manual</a></li>
 <li><a href="/docs/manual/problem-author/index.en.html">Problem author manual</a></li>
+</ul></section>
+<section><h5>Getting started</h5><ul>
+<li><a href="/docs/getting-started/index.en.html">Getting started</a></li>
 </ul></section>
 <section><h5>Concepts</h5><ul>
 <li><a href="/docs/concepts/problem-packs/index.en.html">Problem packs</a></li>
@@ -58,6 +58,8 @@
 <li><a href="/docs/reference/problem-metadata/index.en.html">Problem metadata reference</a></li>
 <li><a href="/docs/reference/runtime-matrix/index.en.html">Runtime capability matrix</a></li>
 <li><a href="/docs/reference/cli/index.en.html">CLI reference</a></li>
+<li><a href="/docs/reference/lite-settings/index.en.html">Lite setting reference</a></li>
+<li><a href="/docs/reference/lite-messages/index.en.html">Lite settings message reference</a></li>
 <li><a href="/docs/reference/security-provenance/index.en.html">Security and provenance model</a></li>
 <li><a href="/docs/reference/validation-errors/index.en.html">Validation error reference</a></li>
 </ul></section>
@@ -65,224 +67,195 @@
 <main class="doc">
 <article>
 <h1>Competition organizer manual <span class="doc-badge doc-badge--preview">Preview</span></h1>
-<p>Use this manual when you deploy TenkaCloud, prepare an event, invite people, or
-change an environment setting. You do not need to understand the platform&#39;s
-source code or write a problem pack.</p>
-<h2>Your goal</h2>
-<p>An organizer can open the Admin Console, each participant can open the correct
-Participant Portal, and every problem can be started, scored, and stopped.</p>
-<h2>Choose the operating mode first</h2>
+<p>This manual is for someone who prepares TenkaCloud in their own AWS account and
+runs an event. Its executable instructions cover <strong>Lite mode</strong>, the path that
+can currently be offered to organizers. SaaS is kept separate in
+<a href="#saas-operating-status">SaaS operating status</a>.</p>
+<h2>What this manual helps you do</h2>
+<ul>
+<li>Decide whether your use case calls for Lite or SaaS.</li>
+<li>Prepare TenkaCloud with the Lite deployment pipeline.</li>
+<li>Confirm the Application Admin Console and Participant Portal.</li>
+<li>Rehearse problem start, scoring, reset, and stop with a test team.</li>
+<li>Find the input contract and exact error guidance before changing a setting.</li>
+</ul>
+<h2>Choose Lite or SaaS by use case</h2>
 <table>
 <thead>
 <tr>
+<th>Use case</th>
 <th>Mode</th>
-<th>Choose it when…</th>
-<th>Command</th>
+<th>Why</th>
+<th>Current guidance</th>
 </tr>
 </thead>
 <tbody><tr>
-<td>Lite</td>
-<td>One organizer runs one TenkaCloud environment</td>
-<td><code>make deploy ENV=&lt;environment&gt;</code></td>
+<td>One organizing group runs an event for a company, school, or meetup in its own AWS account</td>
+<td><strong>Lite</strong></td>
+<td>You need one TenkaCloud environment, not a tenant service</td>
+<td><strong>Recommended path in this manual</strong></td>
 </tr>
 <tr>
+<td>A problem author rehearses a complete event in their own AWS account</td>
+<td><strong>Lite</strong></td>
+<td>The same environment can exercise the organizer and participant screens</td>
+<td><strong>Recommended path in this manual</strong></td>
+</tr>
+<tr>
+<td>A service operator continuously provides separate administrators and tenants to multiple companies or schools</td>
 <td>SaaS</td>
-<td>A platform operator serves multiple tenant organizations</td>
-<td><code>make deploy-saas ENV=&lt;environment&gt;</code></td>
+<td>You need tenant lifecycle and multi-tenant rollout</td>
+<td><strong>No recent end-to-end live verification; not provided as an organizer procedure</strong></td>
+</tr>
+<tr>
+<td>You operate TenkaCloud itself as a multi-tenant SaaS</td>
+<td>SaaS</td>
+<td>You need System Admin, pooled and silo tenants, and fleet updates</td>
+<td><strong>Code exists, but it is not the current self-service setup path</strong></td>
 </tr>
 </tbody></table>
-<p>Start with Lite unless you are deliberately operating a multi-tenant service.
-For the complete deployment paths, read
-<a href="/docs/operate/deploy-paths/index.en.html">Deploy modes and launch paths</a>.</p>
-<h2>The event checklist</h2>
+<p>Choose Lite when in doubt. Even when a use case belongs to SaaS, do not use the
+SaaS path for a live event unless your team has verified it in a real
+environment and can operate incident recovery.</p>
+<h2>The Lite deployment pipeline</h2>
+<p>“Deployment pipeline” here means a CloudFormation template that creates one
+CodeBuild project. CodeBuild then fetches the source, installs the required
+software, runs <code>make deploy</code>, and prints the access URLs in sequence. It does
+<strong>not</strong> use the AWS product named CodePipeline.</p>
+<p>The source is
+<a href="https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/lite-pipeline.yaml"><code>infrastructure/templates/lite-pipeline.yaml</code></a>.</p>
+<h3>Deploy from the AWS console (recommended)</h3>
 <ol>
-<li>Choose a dedicated AWS account and region.</li>
-<li>Create <code>infrastructure/environments/&lt;environment&gt;/.env</code> from that
-environment&#39;s <code>.env.example</code>.</li>
-<li>Fill the required account and administrator values.</li>
-<li>Choose the control-data database before the first real event.</li>
-<li>Deploy, open the Admin Console, and confirm the invited organizer account.</li>
+<li>Open <a href="/docs/getting-started/index.en.html#lite-console-launcher">Getting started: Lite console launcher</a>.</li>
+<li>Sign in to AWS and enter <code>TenantAdminEmail</code> in CloudFormation.</li>
+<li>Read the IAM acknowledgement and create the stack.</li>
+<li>Open the CodeBuild link in the stack output and press <strong>Start build</strong>.</li>
+<li>Wait for the build status to become <code>Succeeded</code>.</li>
+<li>Copy the Application Admin Console and Participant Portal URLs from the end of the log.</li>
+<li>Use the invitation sent to <code>TenantAdminEmail</code> for the first sign-in.</li>
+</ol>
+<p>If the build fails, find the first <code>ERROR</code> in the CodeBuild log. Do not delete
+the launcher first. Look up the same text in the
+<a href="/docs/reference/lite-messages/index.en.html">Lite settings message reference</a>.</p>
+<h3>Deploy from a local checkout</h3>
+<p>Use this path only when you can operate the repository:</p>
+<pre><code class="language-bash">make env-init ENV=development
+make deploy ENV=development
+</code></pre>
+<p><code>make env-init</code> asks for required values and creates
+<code>infrastructure/environments/development/.env</code>. Editing <code>.env</code> does not update
+a running environment; run <code>make deploy</code> after reviewing the change.</p>
+<h2>The Lite event flow</h2>
+<ol>
+<li>Sign in to the Application Admin Console as the organizer.</li>
+<li>Activate the problem pack you will use.</li>
 <li>Create the event, teams, and problem selection.</li>
-<li>Rehearse start, endpoint access, flag scoring, reset, and stop with a test
-team.</li>
-<li>Send participants only the Participant Portal URL, team key, start time, and
+<li>Register a test competitor AWS account.</li>
+<li>Start a problem for the test team and open its endpoint.</li>
+<li>Submit a real <code>TC{...}</code> value and confirm the score changes.</li>
+<li>Reset the problem and confirm a new environment can start.</li>
+<li>Stop the problem and confirm its stack is gone from the competitor account.</li>
+<li>Give participants only the Participant Portal URL, team key, start time, and
 <a href="/docs/manual/participant/index.en.html">participant manual</a>.</li>
 </ol>
-<p>The complete console workflow is in
+<p>For screen-level details, see
 <a href="/docs/operate/run-an-event/index.en.html">Run an event end to end</a>.</p>
-<h2>Where settings live</h2>
-<p>Environment settings live in:</p>
-<pre><code class="language-text">infrastructure/environments/&lt;environment&gt;/.env
-</code></pre>
-<p>The selected environment comes from <code>ENV</code>. For example:</p>
-<pre><code class="language-bash">make deploy ENV=development
-make deploy ENV=production
-</code></pre>
-<p>Changing <code>.env</code> does not update a running environment by itself. Review the
-change, then run the appropriate deploy command. Keep credentials and tokens
-out of Git.</p>
-<h3>Required identity settings</h3>
+<h2>Choose where control data is stored</h2>
+<p>Control data means events, teams, problem state, endpoints, scores, organizer
+accounts, and audit records. It is separate from a participant&#39;s problem
+environment.</p>
 <table>
 <thead>
 <tr>
-<th>Setting</th>
-<th>Meaning</th>
-<th>When to set it</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>TENANT_ADMIN_EMAIL</code></td>
-<td>First Lite organizer invitation</td>
-<td>Lite; falls back to <code>SYSTEM_ADMIN_EMAIL</code></td>
-</tr>
-<tr>
-<td><code>SYSTEM_ADMIN_EMAIL</code></td>
-<td>SaaS system administrator invitation</td>
-<td>SaaS</td>
-</tr>
-<tr>
-<td><code>AWS_ACCOUNT_ID</code></td>
-<td>Guard against deploying to the wrong AWS account</td>
-<td>Recommended for every environment</td>
-</tr>
-<tr>
-<td><code>AWS_REGION</code></td>
-<td>AWS region for the deployment</td>
-<td>Set when the AWS CLI default is not the intended region</td>
-</tr>
-</tbody></table>
-<h2>Choose the control-data database</h2>
-<p>Control data means event definitions, teams, deployments, endpoints, competitor
-accounts, disruptions, audit logs, and SAML identity-provider records. It is not
-the participant&#39;s problem environment.</p>
-<table>
-<thead>
-<tr>
-<th>Value</th>
+<th>Choice</th>
 <th>Storage</th>
-<th>Choose it when…</th>
+<th>Use it when</th>
 </tr>
 </thead>
 <tbody><tr>
-<td>unset or <code>dynamodb</code></td>
+<td><code>dynamodb</code> (default)</td>
 <td>AWS DynamoDB</td>
-<td>You want the default AWS-native path</td>
+<td>You are preparing your first event and want an AWS-native path</td>
 </tr>
 <tr>
 <td><code>turso</code></td>
 <td>Turso/libSQL</td>
-<td>You explicitly want the zero-DynamoDB Lite profile</td>
+<td>You deliberately want no DynamoDB tables and can live-verify the path yourself</td>
 </tr>
 </tbody></table>
-<p>Set the backend with:</p>
-<pre><code class="language-dotenv">CDK_PARAM_CONTROL_DATA_BACKEND=dynamodb
-</code></pre>
-<p>For Turso, all three settings are required:</p>
-<pre><code class="language-dotenv">CDK_PARAM_CONTROL_DATA_BACKEND=turso
-CDK_PARAM_TURSO_DATABASE_URL=https://&lt;database&gt;-&lt;organization&gt;.turso.io
-CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME=/TenkaCloud/&lt;environment&gt;/turso/auth-token
-</code></pre>
-<p>The token itself must be stored as an AWS Systems Manager Parameter Store
-<code>SecureString</code>. Never paste it into <code>.env</code>. The guided setup is:</p>
-<pre><code class="language-bash">make turso-live ENV=development
-</code></pre>
-<h3>Do not treat switching as a checkbox</h3>
-<ul>
-<li>DynamoDB and Turso do not synchronize data.</li>
-<li>Choose the backend before the first real event whenever possible.</li>
-<li>Switching an existing stack from DynamoDB to Turso starts from the data
-available in the Turso database.</li>
-<li>The existing DynamoDB tables use <code>RETAIN</code>. CloudFormation can remove them
-from the stack without deleting them, so they can continue to incur cost.</li>
-<li>Export and verify required data before switching. Review retained tables
-manually only after the new environment is confirmed.</li>
-<li>Switching back to DynamoDB cannot recover writes that existed only in Turso.</li>
-</ul>
-<p>The Turso path is implemented and covered by unit and CDK synth tests, but it
-has <strong>not yet been live-verified</strong> against a real Turso database, fresh AWS
-deployment, and resulting bill. Read <a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/running-costs.md">Running costs</a>
-before relying on it for an event.</p>
-<h2>Common parameters</h2>
-<p>Leave a setting unset unless you can explain the operational result.</p>
+<p>The Turso path is covered by unit tests and CDK synth, but it has not been
+live-verified as a complete real-Turso, fresh-AWS, and billing flow. Use
+<code>dynamodb</code> for the first real event.</p>
+<p>Changing the backend later does not migrate data. DynamoDB and Turso do not
+synchronize, and retained DynamoDB tables can continue to incur cost.</p>
+<h2>Change settings</h2>
+<p>A first-time Lite setup asks for three values:</p>
 <table>
 <thead>
 <tr>
 <th>Setting</th>
-<th>Default</th>
-<th>What it changes</th>
+<th>Input</th>
+<th>Example</th>
 </tr>
 </thead>
 <tbody><tr>
-<td><code>DYNAMODB_BILLING_MODE</code></td>
-<td><code>PROVISIONED</code></td>
-<td>DynamoDB billing mode; <code>PAY_PER_REQUEST</code> is also supported</td>
+<td><code>TENANT_ADMIN_EMAIL</code></td>
+<td>Email address for the first organizer sign-in</td>
+<td><code>organizer@example.com</code></td>
 </tr>
 <tr>
-<td><code>DYNAMODB_READ_CAPACITY</code> / <code>DYNAMODB_WRITE_CAPACITY</code></td>
-<td><code>1</code> / <code>1</code></td>
-<td>Provisioned capacity; only used with <code>PROVISIONED</code></td>
+<td><code>AWS_REGION</code></td>
+<td>AWS Region that will contain TenkaCloud</td>
+<td><code>ap-northeast-1</code></td>
 </tr>
 <tr>
-<td><code>CDK_PARAM_LOG_RETENTION_DAYS</code></td>
-<td><code>1</code></td>
-<td>CloudWatch Logs retention; only AWS-supported values are accepted</td>
-</tr>
-<tr>
-<td><code>CDK_PARAM_OPS_ALERT_EMAIL</code></td>
-<td>unset</td>
-<td>Creates operations alert resources when an address is provided</td>
-</tr>
-<tr>
-<td><code>CDK_PARAM_OPS_MONTHLY_COST_LIMIT_USD</code></td>
-<td>unset</td>
-<td>Monthly cost threshold used with operations alerts</td>
-</tr>
-<tr>
-<td><code>CDK_PARAM_SOURCE_BUCKET_VERSIONING</code></td>
-<td><code>false</code></td>
-<td>Enables or suspends source bucket versioning</td>
-</tr>
-<tr>
-<td><code>CDK_PARAM_DEPLOY_QUOTA_BY_TIER</code></td>
-<td>unset</td>
-<td>Per-tier concurrent deploy limits as JSON</td>
-</tr>
-<tr>
-<td><code>CDK_PARAM_DEPLOY_ALLOWED_CIDRS</code></td>
-<td>unset</td>
-<td>Comma-separated ingress allowlist for compatible problems</td>
-</tr>
-<tr>
-<td><code>CDK_PARAM_DEPLOY_VIA_LAMBDA</code></td>
-<td><code>true</code></td>
-<td>Uses Lambda for problem deploys; <code>false</code> selects the legacy CodeBuild path</td>
-</tr>
-<tr>
-<td><code>CDK_PARAM_FEATURES</code></td>
-<td>unset</td>
-<td>Boolean feature map as JSON</td>
-</tr>
-<tr>
-<td><code>CDK_PARAM_AUDIT_LOG_ENABLED</code></td>
-<td><code>true</code></td>
-<td>Enables the admin audit log</td>
+<td><code>CDK_PARAM_DEPLOY_EXTERNAL_ID</code></td>
+<td>Matching value used when TenkaCloud enters a competitor AWS account; 16–128 ASCII letters, digits, and <code>_ = , . @ : / -</code></td>
+<td><code>tc-school-2026-a91f</code></td>
 </tr>
 </tbody></table>
-<p>The environment&#39;s <code>.env.example</code> is the parameter catalog. It documents
-accepted values and interactions next to each setting; copy only the settings
-you intend to override.</p>
+<p>The <a href="/docs/reference/lite-settings/index.en.html">Lite setting reference</a> lists
+the purpose, format, default, character or numeric limits, example, and invalid
+input behavior for the remaining settings. The
+<a href="/docs/reference/lite-messages/index.en.html">Lite settings message reference</a>
+lists each emitted message with its cause and operator action.</p>
+<h3>Scoring and cost warning email</h3>
+<p>When <code>CDK_PARAM_OPS_ALERT_EMAIL</code> is set, AWS sends a subscription confirmation
+email. After confirmation, email is sent for exactly these three conditions:</p>
+<ol>
+<li>The scoring function records at least one error in five minutes.</li>
+<li>The scoring function has no invocation for five consecutive minutes.</li>
+<li>Actual monthly AWS spend exceeds <code>CDK_PARAM_OPS_MONTHLY_COST_LIMIT_USD</code>.</li>
+</ol>
+<p>This does not notify every failure in problem start, stop, or cleanup. When the
+email setting is absent, these three warnings are not sent.</p>
 <h2>Before participants arrive</h2>
 <ul>
-<li>Use a test team with the same permissions and region as participants.</li>
-<li>Confirm every endpoint opens from the expected network.</li>
-<li>Submit one real flag and confirm the score changes.</li>
-<li>Reset and stop a problem, then confirm resources are gone.</li>
-<li>Check the event clock, team key delivery, support contact, and incident path.</li>
-<li>Do not send AWS administrator credentials, <code>.env</code>, or database tokens to
-participants.</li>
+<li>A test team used the same permissions and Region as participants.</li>
+<li>Every endpoint opened from the expected network.</li>
+<li>A real flag changed the score.</li>
+<li>Reset created a fresh problem environment.</li>
+<li>Stop removed the problem stack from the competitor account.</li>
+<li>The event time, team-key delivery, and support contact are decided.</li>
+<li>AWS administrator credentials, <code>.env</code>, and database tokens are not shared.</li>
 </ul>
-<p>If you need to change how a parameter works in the source code, switch roles
-and use the <a href="/docs/manual/developer/index.en.html">developer manual</a>.</p>
+<h2>Teardown</h2>
+<p>Remove Lite first and the launcher CloudFormation stack last:</p>
+<pre><code class="language-bash">make destroy-all ENV=development
+</code></pre>
+<p>For a console deployment, run the launcher&#39;s CodeBuild project with
+<code>ACTION=destroy-all</code>. Deleting the launcher first removes the same automation
+path used to clean up Lite.</p>
+<h2>SaaS operating status</h2>
+<p>The repository contains <code>make deploy-saas</code>, the SBT control plane, tenant
+provisioning code, and the <code>tenkacloud-saas-pipeline</code> that updates existing
+tenants. However, there is no recent recorded run that takes a fresh AWS
+environment through setup, tenant creation, problem start, scoring, and
+teardown.</p>
+<p>This manual therefore does not present SaaS commands as an alternative Lite
+procedure. Use <a href="/docs/operate/deploy-paths/index.en.html">Deploy modes and launch paths</a>
+only as an architecture reference, then verify the full flow in a dedicated
+environment before evaluating SaaS.</p>
 
 </article>
 </main>

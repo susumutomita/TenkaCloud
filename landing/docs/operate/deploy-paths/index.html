@@ -31,15 +31,15 @@
 </header>
 <div class="wrap docs-grid">
 <aside class="docs-nav"><a class="docs-home-link" href="/docs/">Docs ホーム</a>
-<section><h5>はじめに</h5><ul>
-<li><a href="/docs/getting-started/">はじめに</a></li>
-</ul></section>
 <section><h5>役割別マニュアル</h5><ul>
 <li><a href="/docs/manual/">役割から選ぶマニュアル</a></li>
 <li><a href="/docs/manual/developer/">開発者マニュアル</a></li>
 <li><a href="/docs/manual/organizer/">競技開催者マニュアル</a></li>
 <li><a href="/docs/manual/participant/">競技参加者マニュアル</a></li>
 <li><a href="/docs/manual/problem-author/">問題作成者マニュアル</a></li>
+</ul></section>
+<section><h5>はじめに</h5><ul>
+<li><a href="/docs/getting-started/">はじめに</a></li>
 </ul></section>
 <section><h5>コンセプト</h5><ul>
 <li><a href="/docs/concepts/problem-packs/">問題パック</a></li>
@@ -58,6 +58,8 @@
 <li><a href="/docs/reference/problem-metadata/">問題メタデータ</a></li>
 <li><a href="/docs/reference/runtime-matrix/">ランタイム対応マトリクス</a></li>
 <li><a href="/docs/reference/cli/">CLI リファレンス</a></li>
+<li><a href="/docs/reference/lite-settings/">Lite設定項目リファレンス</a></li>
+<li><a href="/docs/reference/lite-messages/">Lite設定メッセージ一覧</a></li>
 <li><a href="/docs/reference/security-provenance/">セキュリティと来歴モデル</a></li>
 <li><a href="/docs/reference/validation-errors/">検証エラーリファレンス</a></li>
 </ul></section>
@@ -65,14 +67,20 @@
 <main class="doc">
 <article>
 <h1>デプロイモードと起動経路 <span class="doc-badge doc-badge--preview">Preview</span></h1>
-<p>初めて運用する方がつまずきやすい疑問が 2 つあります。「プラットフォームは実際どうやってデプロイするのか」と「CodePipeline がデフォルトなら、いつ実行されるのか」です。このページはその見取り図です。プラットフォーム自体は<strong>手動の CLI</strong> ステップでデプロイします。CodePipeline は<strong>テナントスタックをロールアウトする</strong>ためのものであり、プラットフォームを立ち上げるためのものではありません。</p>
+<p>LiteとSaaSは、対象利用者、入口、使うAWSサービス、現在の検証状態が異なります。
+Liteの実行手順は<a href="/docs/manual/organizer/">競技開催者マニュアル</a>を使います。
+このページのSaaS節はコード構成の参考であり、最近の実環境で確認済みの導入手順ではありません。</p>
 <h2>2 つのデプロイモード</h2>
 <ul>
-<li><strong>Lite モード</strong> — <code>make deploy</code>。1 人の主催者が 1 つのイベントを運営するためのモードです。SBT コントロールプレーン、テナントパイプライン、System Admin の招待をすべてスキップし、<code>infrastructure/bin/tenkacloud-lite.ts</code> 経由で 2 つのスタックだけをデプロイします。AppPlaneCore (<code>tenantId=&quot;local&quot;</code>) と、problem-deploy バックエンド / Participant Portal です。<strong>Lite モードに CodePipeline はありません。</strong> 完全削除は <code>make destroy-all</code>、DynamoDB 履歴を残す場合は <code>make destroy</code> です。</li>
-<li><strong>SaaS モード</strong> — <code>make deploy-saas</code> (<code>scripts/install.sh</code>、3 フェーズ)。プール型の BASIC / ADVANCED ティア、サイロ型の PLATINUM ティア、System Admin の招待を含む、完全なマルチテナント運用です。破棄は <code>make destroy-saas</code> です。</li>
+<li><strong>Lite モード</strong> — 1つの運営グループが自分のAWSで競技を開くモードです。推奨入口の<code>lite-pipeline.yaml</code>はCloudFormationでCodeBuildを作り、CodeBuildが<code>make deploy</code>を実行します。AWS CodePipelineは使いません。ローカルcheckoutから<code>make deploy</code>を直接実行することもできます。</li>
+<li><strong>SaaS モード</strong> — 複数組織へテナントを提供するコード構成です。<code>make deploy-saas</code>、プール型・サイロ型テナント、System Admin、既存テナント更新用CodePipelineがありますが、最近の新規AWS環境で導入から削除までを通した記録はありません。</li>
 </ul>
-<p>どちらのモードもオペレーターがシェルから実行します。CI がデプロイすることはありません。</p>
+<p>Liteは現在の開催手順、SaaSは専用環境で再検証が必要な構成参考として扱います。</p>
 <h2>新しいテナントがプロビジョニングされる流れ</h2>
+<blockquote>
+<p><strong>SaaS構成参考:</strong> ここから「SaaSパイプラインの役割」までは、現在のLite開催では
+使用しません。</p>
+</blockquote>
 <p>新規テナントのプロビジョニングと、パイプラインによるロールアウトは<strong>別々の経路</strong>です。旧ドキュメントが取り違えていたのがこの区別です。</p>
 <ul>
 <li>テナント作成イベント (<code>onboardingRequest</code>) を SBT の <code>BashJobRunner</code> が受け取り、<code>provision-tenant.sh</code> を実行します。デフォルトではテナントは<strong>プール型</strong>（プール型スタックを共有）で、<code>PLATINUM</code> ティアのテナントだけが専用のサイロスタックを直接デプロイされます (<code>bun run cdk -- deploy tenkacloud-tenant-template-&lt;id&gt;</code>)。</li>
