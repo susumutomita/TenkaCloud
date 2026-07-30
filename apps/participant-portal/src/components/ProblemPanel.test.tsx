@@ -442,13 +442,8 @@ describe("ProblemPanel render branches", () => {
       description: "Battle Lite SaaS Always-On Docker Codespaces DynamoDB Turso",
       scoring: {
         kind: "multi-flag",
-        points: 400,
-        flags: [
-          { id: "tenka-what", label: "Step 1", points: 100, solved: false },
-          { id: "battle-challenge", label: "Step 2", points: 100, solved: false },
-          { id: "choose-mode", label: "Step 3", points: 100, solved: false },
-          { id: "first-flag", label: "Step 4", points: 100, solved: false },
-        ],
+        points: 100,
+        flags: [{ id: "first-flag", label: "Step 4", points: 100, solved: false }],
       },
     });
     expect(screen.getByTestId("multi-flag-panel")).toBeInTheDocument();

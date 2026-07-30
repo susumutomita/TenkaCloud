@@ -112,51 +112,12 @@ export const LITE_DRILL_JOB_ID = "01HZX0KZZ3DR0PW9M4Q7XV2C5D";
 export const LOCAL_DRILL_JOB_ID = "01HZX0M1L0CALPLAYTENKA0002";
 
 /**
- * Issue #2707 / #2711: クイズ型 sub-flag の許容解。 問題文 (description) を読めば導ける
- * 単語を、 表記揺れ (英/日) 込みで列挙する。 判定は trim + 小文字化の完全一致。
- *
- * what-is-tenkacloud の 4 ステップ (#2711 デザイン 6b):
- *   1. tenka-what      — TenkaCloud とは (本文に答えがある読解クイズ)
- *   2. battle-challenge — Battle と Challenge の区別
- *   3. choose-mode      — モードを選ぶ。 ローカル / Lite / SaaS (+ 文脈で触れる
- *                         Always-On) のどれを選んでも正解 (= クイズではなく選択。
- *                         詳細はヒントに)
- *   4. first-flag       — 本文に印字された flag をそのまま提出する採点体験
+ * 厳密ドリルの許容解。#2814 の what-is-tenkacloud は知識クイズを採点しない。
+ * WordPress の引き渡しを題材にした最初の 3 ステップは client-side の理解確認だけで、
+ * 実際の scoring 経路には最後の `first-flag` だけを送る。
  */
 const QUIZ_ANSWERS: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> = {
   [WHAT_IS_DRILL_PROBLEM_ID]: {
-    "tenka-what": [
-      "本物のクラウド",
-      "本物のクラウドアカウント",
-      "クラウド",
-      "real cloud",
-      "real cloud accounts",
-      "the real cloud",
-      "aws",
-    ],
-    "battle-challenge": ["battle", "バトル"],
-    "choose-mode": [
-      "local",
-      "ローカル",
-      "ローカルモード",
-      "local mode",
-      "lite",
-      "ライト",
-      "lite モード",
-      "lite mode",
-      "saas",
-      "サース",
-      "saas モード",
-      "saas mode",
-      // 本文で文脈として触れる Always-On も実在モードなので正解として受け付ける
-      "always-on",
-      "alwayson",
-      "always on",
-      "always-on モード",
-      // Codespaces はローカルモードの実行環境の 1 つなので正解のまま受け付ける
-      "codespaces",
-      "コードスペース",
-    ],
     "first-flag": ["tc{hello-tenkacloud}"],
   },
   [LOCAL_DRILL_PROBLEM_ID]: {

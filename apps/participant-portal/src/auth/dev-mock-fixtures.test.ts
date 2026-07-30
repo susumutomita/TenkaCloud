@@ -24,9 +24,9 @@ import {
  * Issue #2696 / #2707 / #2711: LP デモの固定出題 (オンボーディングドリル + 2 クエスト) の
  * 整合性を pin する。 ドリルの sub-flag id が判定側 (`evaluateMockSubFlag`) と揃って
  * いなければ永遠に wrong を返すし、 ヒントの無いドリルは「本文は概要 → ヒントで
- * ステップバイステップ」 という構造契約を破る。 #2711 で問題 1 は what-is-tenkacloud
- * (4 ステップ、 モード 3 択はステップ 3) になり、 AI/Mac 実演はローカルモード問題と
- * 混ぜずに独立した 4 問目として置く。
+ * ステップバイステップ」 という構造契約を破る。 #2814 では問題 1 を、
+ * 実際の TenkaCloud と同じ「問題を開く → 練習環境を起動 → 合言葉を見つける →
+ * 提出して採点」の 4 ステップにする。 点数が動くのは実際の flag 提出だけ。
  */
 describe("dev-mock fixtures", () => {
   const ONBOARDING_DRILL_IDS = [
@@ -47,38 +47,26 @@ describe("dev-mock fixtures", () => {
     ).toEqual(ONBOARDING_DRILL_IDS);
   });
 
-  it("should give the tutorial the 4-step shape with the mode choice at step 3 (#2711)", () => {
+  it("should teach the real solve-and-score journey without mixing in a specific problem (#2814)", () => {
     const tutorial = drills.find((p) => p.problemId === WHAT_IS_DRILL_PROBLEM_ID);
-    expect(tutorial?.scoring?.flags?.map((f) => f.id)).toEqual([
-      "tenka-what",
-      "battle-challenge",
-      "choose-mode",
-      "first-flag",
-    ]);
-    // モードの 3 択はステップ 3 のセクションで初めて出す (それ以前の本文に出さない)。
+    expect(tutorial?.scoring?.flags?.map((f) => f.id)).toEqual(["first-flag"]);
     const body = tutorial?.description ?? "";
-    const step3At = body.indexOf("ステップ 3");
-    expect(step3At).toBeGreaterThan(-1);
-    expect(body.slice(0, step3At)).not.toContain("ローカルモード");
-    expect(body.slice(0, step3At)).not.toContain("SaaS");
-    expect(body.slice(0, step3At)).not.toContain("Codespaces");
-    // 実在するモード (ローカル / Lite / SaaS + 文脈として Always-On) を提示し、
-    // 実在しないモード名を出さない。
-    const step3 = body.slice(step3At);
-    expect(step3).toContain("ローカルモード");
-    expect(step3).toContain("Lite モード");
-    expect(step3).toContain("SaaS モード");
-    expect(step3).toContain("Always-On モード");
-    expect(tutorial?.i18n?.en?.description).toContain("Always-On mode");
-    expect(body).not.toContain("deploy-local");
-    expect(tutorial?.i18n?.en?.description).not.toContain("deploy-local");
-    // どのモードを選んでも正解 (= クイズではなく選択)。
-    for (const answer of ["local", "lite", "saas", "always-on", "codespaces"]) {
-      expect(
-        evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, "choose-mode", answer, 100).kind,
-        `choose-mode should accept "${answer}"`,
-      ).toBe("ok");
-    }
+    expect(body).toContain("サーバー");
+    expect(body).toContain("サイトを24時間動かすコンピューター");
+    expect(body).toContain("クラウド");
+    expect(body).toContain("必要な分だけ借りる仕組み");
+    expect(body).toContain("Docker");
+    expect(body).toContain("同じサイト環境を別のパソコンでも再現");
+    expect(body).toContain("問題を開く");
+    expect(body).toContain("合言葉");
+    expect(body).toContain("提出して得点");
+    expect(body).toContain("見本データ");
+    expect(body).not.toContain("WordPress");
+    expect(body).not.toContain("CloudFormation");
+    expect(tutorial?.i18n?.en?.description).toContain("sample data");
+    expect(
+      evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, "first-flag", "TC{HELLO-TENKACLOUD}", 100).kind,
+    ).toBe("ok");
   });
 
   it("should ship every onboarding problem as an unsolved multi-flag drill", () => {
@@ -260,11 +248,9 @@ describe("dev-mock fixtures", () => {
     expect(drill?.i18n?.en?.videoUrl).toBe("https://www.youtube.com/embed/6qMzFcP5dgw");
   });
 
-  // 2026-07-21 PO feedback: 旧版は Mac 前提の一行説明だった。ローカルモードは
-  // Docker が動くマシンなら OS を問わず、かつ GitHub Codespaces でも動く。丁寧な
-  // オンボーディング教材として、何か・特性・必要環境・起動手順・クラウド版との違い・
-  // コストを説明する構造に書き直す (Mac 前提をやめる)。
-  it("should teach local mode end to end: what, prerequisites, commands, cloud difference, cost", () => {
+  // #2814: 非エンジニアにも Docker / container / terminal を目的から説明し、
+  // 実在する WordPress 問題へ迷わず進めることを pin する。
+  it("should explain the required terms and route to the real WordPress problem", () => {
     const drill = drills.find((problem) => problem.problemId === LOCAL_DRILL_PROBLEM_ID);
     for (const body of [drill?.description, drill?.i18n?.en?.description]) {
       expect(body).toContain("`make local`");
@@ -274,7 +260,10 @@ describe("dev-mock fixtures", () => {
       expect(body).toContain("5175");
       expect(body).toContain("$7");
       expect(body).toContain("WSL2");
-      expect(body).toContain("sqli-demo");
+      expect(body).toContain("wp-exposed-backup");
+      expect(body).toContain("WordPress");
+      expect(body).toMatch(/コンテナ|Container/);
+      expect(body).toMatch(/ターミナル|Terminal/);
       // 正規の入口は make local (起動後に Portal で問題を選ぶ)。内部実装の
       // `bun run tenkacloud local --problem ...` を競技者向け本文に出さない。
       expect(body).not.toContain("bun run tenkacloud");

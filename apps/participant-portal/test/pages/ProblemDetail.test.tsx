@@ -226,7 +226,7 @@ describe("ProblemDetailPage", () => {
     expect(container.querySelector('video[src="/videos/onboarding/demo-en.mp4"]')).not.toBeNull();
   });
 
-  it("should lead the intro with its friendly name and place the optional video after the tutorial", () => {
+  it("should lead the intro with its friendly name and place the operation video before the tutorial", () => {
     mockTeamView.mockReturnValue(
       teamView({
         view: viewWith({
@@ -247,7 +247,7 @@ describe("ProblemDetailPage", () => {
     const panel = screen.getByTestId("problem-panel");
     const video = container.querySelector('video[src="/videos/onboarding/what-is.mp4"]');
     expect(video).not.toBeNull();
-    expect(panel.compareDocumentPosition(video as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+    expect(video?.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
   });
