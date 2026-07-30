@@ -25,7 +25,6 @@ import {
   resolveLocalizedNarrative,
 } from "../data/problems";
 import { providerLabel } from "../data/providers";
-import { WHAT_IS_DRILL_PROBLEM_ID } from "../dev-mock/flag-submit";
 import { useProblemEndpoints } from "../hooks/useProblemEndpoints";
 import { useI18n, useT } from "../i18n";
 import {
@@ -72,20 +71,9 @@ function problemEndpointsRequest(
   };
 }
 
-function PlacedProblemVideo({
-  canRender,
-  introTutorial,
-  placement,
-  videoUrl,
-}: {
-  canRender: boolean;
-  introTutorial: boolean;
-  placement: "before" | "after";
-  videoUrl?: string;
-}) {
+function PlacedProblemVideo({ canRender, videoUrl }: { canRender: boolean; videoUrl?: string }) {
   if (!canRender || !videoUrl) return null;
-  const shouldRender = introTutorial ? placement === "after" : placement === "before";
-  return shouldRender ? <ProblemVideoSection videoUrl={videoUrl} /> : null;
+  return <ProblemVideoSection videoUrl={videoUrl} />;
 }
 
 export function isProblemDetailLocked(eventGate: ProblemDetailGate | undefined): boolean {
@@ -128,7 +116,6 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
     () => (problem ? localizeProblem(problem, locale) : undefined),
     [problem, locale],
   );
-  const isIntroTutorial = problem?.problemId === WHAT_IS_DRILL_PROBLEM_ID;
   // #550: problem.problemId から build-time catalog で metadata を引いて narrative を表示。
   // backend を経由せず Portal が直接 metadata.json を bundle に持つ (admin-console と同 source、
   // ADR-003 で DDB API 化したらここを差し替える)。catalog 不在 (= 旧 problem 等) は undefined。
@@ -202,12 +189,7 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
 
       {/* #2707 P0-1: 冒頭の短い operation 動画。 videoUrl を持つ問題のみ。
        *   lock 中 (scoring_not_started / prerequisite) は本文と同様に出さない。 */}
-      <PlacedProblemVideo
-        canRender={canRenderBody}
-        introTutorial={isIntroTutorial}
-        placement="before"
-        videoUrl={localizedProblem?.videoUrl}
-      />
+      <PlacedProblemVideo canRender={canRenderBody} videoUrl={localizedProblem?.videoUrl} />
 
       {/* #550: 競技者向けに problem の narrative を 1 section にまとめる。
        *   metadata 不在 (= 旧 problem 等) は section ごと skip。
@@ -232,15 +214,6 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
           onScored={refresh}
         />
       )}
-
-      {/* Issue #2814: the intro tutorial must open on one short choice, not a large video.
-       * Keep the existing walkthrough available after the interactive four-step flow. */}
-      <PlacedProblemVideo
-        canRender={canRenderBody}
-        introTutorial={isIntroTutorial}
-        placement="after"
-        videoUrl={localizedProblem?.videoUrl}
-      />
 
       {/* Issue #607 ADR-012 Phase 3.A UI: endpoints[] が宣言された Battle 問題で override 登録
        *   form を表示。 endpoints 空 / 不在の問題 (= flag-only Challenge 等) は内部で skip。

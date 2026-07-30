@@ -77,6 +77,23 @@
   line-height: 1.75;
 }
 
+.tc-onboarding__term {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 14px 16px;
+  border-left: 4px solid #0972d3;
+  border-radius: 0 8px 8px 0;
+  background: #f1f8ff;
+  color: #354150;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.tc-onboarding__term strong {
+  color: #075fa9;
+}
+
 .tc-onboarding__question {
   display: grid;
   gap: 12px;
@@ -157,6 +174,16 @@
 
 .tc-onboarding__feedback:empty {
   display: none;
+}
+
+.tc-onboarding__submission {
+  display: grid;
+  gap: 16px;
+}
+
+.tc-onboarding__submit-action {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .tc-onboarding__next {

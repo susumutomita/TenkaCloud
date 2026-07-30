@@ -35,104 +35,114 @@ interface TutorialChoiceSpec {
   readonly correct: boolean;
   readonly labelKey: string;
   readonly descriptionKey: string;
-  readonly successKey: string;
 }
 
 interface TutorialStepSpec {
+  readonly id: string;
   readonly titleKey: string;
   readonly scenarioKey: string;
+  readonly termKey: string;
   readonly questionKey: string;
   readonly choices: readonly TutorialChoiceSpec[];
+  readonly successKey: string;
+  readonly submitsFlag?: boolean;
 }
 
-const TUTORIAL_STEP_SPECS: Readonly<Record<string, TutorialStepSpec>> = {
-  "tenka-what": {
+const PRACTICE_FLAG_ID = "first-flag";
+const PRACTICE_FLAG_VALUE = "TC{HELLO-TENKACLOUD}";
+
+const TUTORIAL_STEP_SPECS: readonly TutorialStepSpec[] = [
+  {
+    id: "published-site",
     titleKey: "onboarding_tutorial.step_1.title",
     scenarioKey: "onboarding_tutorial.step_1.scenario",
+    termKey: "onboarding_tutorial.step_1.term",
     questionKey: "onboarding_tutorial.step_1.question",
     choices: [
       {
-        value: "real cloud",
+        value: "keep-running",
         correct: true,
-        labelKey: "onboarding_tutorial.step_1.cloud_label",
-        descriptionKey: "onboarding_tutorial.step_1.cloud_description",
-        successKey: "onboarding_tutorial.step_1.success",
+        labelKey: "onboarding_tutorial.step_1.correct_label",
+        descriptionKey: "onboarding_tutorial.step_1.correct_description",
       },
       {
-        value: "paper",
+        value: "design-files-only",
         correct: false,
-        labelKey: "onboarding_tutorial.step_1.paper_label",
-        descriptionKey: "onboarding_tutorial.step_1.paper_description",
-        successKey: "onboarding_tutorial.step_1.success",
+        labelKey: "onboarding_tutorial.step_1.wrong_label",
+        descriptionKey: "onboarding_tutorial.step_1.wrong_description",
       },
     ],
+    successKey: "onboarding_tutorial.step_1.success",
   },
-  "battle-challenge": {
+  {
+    id: "safe-copy",
     titleKey: "onboarding_tutorial.step_2.title",
     scenarioKey: "onboarding_tutorial.step_2.scenario",
+    termKey: "onboarding_tutorial.step_2.term",
     questionKey: "onboarding_tutorial.step_2.question",
     choices: [
       {
-        value: "battle",
+        value: "practice-copy",
         correct: true,
-        labelKey: "onboarding_tutorial.step_2.battle_label",
-        descriptionKey: "onboarding_tutorial.step_2.battle_description",
-        successKey: "onboarding_tutorial.step_2.success",
+        labelKey: "onboarding_tutorial.step_2.correct_label",
+        descriptionKey: "onboarding_tutorial.step_2.correct_description",
       },
       {
-        value: "challenge",
+        value: "edit-live",
         correct: false,
-        labelKey: "onboarding_tutorial.step_2.challenge_label",
-        descriptionKey: "onboarding_tutorial.step_2.challenge_description",
-        successKey: "onboarding_tutorial.step_2.success",
+        labelKey: "onboarding_tutorial.step_2.wrong_label",
+        descriptionKey: "onboarding_tutorial.step_2.wrong_description",
       },
     ],
+    successKey: "onboarding_tutorial.step_2.success",
   },
-  "choose-mode": {
+  {
+    id: "problem-environment",
     titleKey: "onboarding_tutorial.step_3.title",
     scenarioKey: "onboarding_tutorial.step_3.scenario",
+    termKey: "onboarding_tutorial.step_3.term",
     questionKey: "onboarding_tutorial.step_3.question",
     choices: [
       {
-        value: "local",
+        value: "open-problem-environment",
         correct: true,
-        labelKey: "onboarding_tutorial.step_3.local_label",
-        descriptionKey: "onboarding_tutorial.step_3.local_description",
-        successKey: "onboarding_tutorial.step_3.local_success",
+        labelKey: "onboarding_tutorial.step_3.correct_label",
+        descriptionKey: "onboarding_tutorial.step_3.correct_description",
       },
       {
-        value: "lite",
-        correct: true,
-        labelKey: "onboarding_tutorial.step_3.lite_label",
-        descriptionKey: "onboarding_tutorial.step_3.lite_description",
-        successKey: "onboarding_tutorial.step_3.lite_success",
+        value: "guess-answer",
+        correct: false,
+        labelKey: "onboarding_tutorial.step_3.wrong_label",
+        descriptionKey: "onboarding_tutorial.step_3.wrong_description",
       },
     ],
+    successKey: "onboarding_tutorial.step_3.success",
   },
-  "first-flag": {
+  {
+    id: PRACTICE_FLAG_ID,
     titleKey: "onboarding_tutorial.step_4.title",
     scenarioKey: "onboarding_tutorial.step_4.scenario",
+    termKey: "onboarding_tutorial.step_4.term",
     questionKey: "onboarding_tutorial.step_4.question",
-    choices: [
-      {
-        value: "TC{HELLO-TENKACLOUD}",
-        correct: true,
-        labelKey: "onboarding_tutorial.step_4.submit_label",
-        descriptionKey: "onboarding_tutorial.step_4.submit_description",
-        successKey: "onboarding_tutorial.step_4.success",
-      },
-    ],
+    choices: [],
+    successKey: "onboarding_tutorial.step_4.success",
+    submitsFlag: true,
   },
-};
+];
 
 export function isWhatIsTutorialShape(flags: readonly MultiFlagEntryView[]): boolean {
-  return (
-    flags.length === 4 &&
-    flags.every((flag, index) => {
-      const expected = ["tenka-what", "battle-challenge", "choose-mode", "first-flag"][index];
-      return flag.id === expected && TUTORIAL_STEP_SPECS[flag.id] !== undefined;
-    })
-  );
+  return flags.length === 1 && flags[0]?.id === PRACTICE_FLAG_ID;
+}
+
+function tutorialSuccessHeader(
+  spec: TutorialStepSpec,
+  points: number,
+  t: (key: string, params?: Readonly<Record<string, string | number>>) => string,
+): string {
+  if (spec.submitsFlag) {
+    return t("onboarding_tutorial.correct_header", { points });
+  }
+  return t("onboarding_tutorial.step_complete_header");
 }
 
 /**
@@ -242,15 +252,18 @@ function WhatIsTutorialWizard({
 }) {
   const t = useT();
   const isMock = useIsMock();
-  const initialUnsolved = flags.findIndex((flag) => !isSolved(flag));
+  const scoringFlag = flags[0];
+  const restoredComplete = isSolved(scoringFlag);
   const [activeIndex, setActiveIndex] = useState(
-    initialUnsolved === -1 ? flags.length - 1 : initialUnsolved,
+    restoredComplete ? TUTORIAL_STEP_SPECS.length - 1 : 0,
   );
-  const [outcomes, setOutcomes] = useState<Readonly<Record<string, SubmitFlagOutcome | undefined>>>(
-    {},
+  const [completedSteps, setCompletedSteps] = useState<ReadonlySet<number>>(() =>
+    restoredComplete ? new Set(TUTORIAL_STEP_SPECS.map((_, index) => index)) : new Set(),
   );
-  const [successKeys, setSuccessKeys] = useState<Readonly<Record<string, string>>>({});
-  const [submittingFlagId, setSubmittingFlagId] = useState<string | null>(null);
+  const [wrongStep, setWrongStep] = useState<number | null>(null);
+  const [outcome, setOutcome] = useState<SubmitFlagOutcome | undefined>();
+  const [practiceFlag, setPracticeFlag] = useState(PRACTICE_FLAG_VALUE);
+  const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const submittingRef = useRef(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -259,31 +272,27 @@ function WhatIsTutorialWizard({
     if (activeIndex > 0) headingRef.current?.focus();
   }, [activeIndex]);
 
-  const completed = (flag: MultiFlagEntryView): boolean => {
-    const outcome = outcomes[flag.id];
-    return isSolved(flag) || outcome?.kind === "ok" || outcome?.kind === "already_scored";
-  };
-  const completedCount = flags.filter(completed).length;
-  const allSolved = completedCount === flags.length;
-  const activeFlag = flags[activeIndex];
-  const activeSpec = TUTORIAL_STEP_SPECS[activeFlag.id];
-  const activeOutcome = outcomes[activeFlag.id];
-  const activeCompleted = completed(activeFlag);
-  const progress = Math.round((completedCount / flags.length) * 100);
+  const finalSubmitted =
+    restoredComplete || outcome?.kind === "ok" || outcome?.kind === "already_scored";
+  const completedCount = finalSubmitted ? TUTORIAL_STEP_SPECS.length : completedSteps.size;
+  const allSolved = completedCount === TUTORIAL_STEP_SPECS.length;
+  const activeSpec = TUTORIAL_STEP_SPECS[activeIndex];
+  const activeCompleted = activeSpec.submitsFlag ? finalSubmitted : completedSteps.has(activeIndex);
+  const progress = Math.round((completedCount / TUTORIAL_STEP_SPECS.length) * 100);
 
-  const submitChoice = async (choice: TutorialChoiceSpec): Promise<void> => {
+  const submitPracticeFlag = async (): Promise<void> => {
     if (submittingRef.current) return;
+    if (practiceFlag.trim().length === 0) return;
     submittingRef.current = true;
-    setSubmittingFlagId(activeFlag.id);
+    setSubmitting(true);
     setSubmitError(null);
     try {
       const result = isMock
-        ? evaluateMockSubFlag(problemId, activeFlag.id, choice.value, activeFlag.points)
-        : await submitFlag(apiBaseUrl, sessionToken, problemId, choice.value, activeFlag.id);
-      setOutcomes((current) => ({ ...current, [activeFlag.id]: result }));
+        ? evaluateMockSubFlag(problemId, scoringFlag.id, practiceFlag, scoringFlag.points)
+        : await submitFlag(apiBaseUrl, sessionToken, problemId, practiceFlag, scoringFlag.id);
+      setOutcome(result);
       if (result.kind === "ok") {
-        setSuccessKeys((current) => ({ ...current, [activeFlag.id]: choice.successKey }));
-        if (isMock) onMockSolved(activeFlag.id);
+        if (isMock) onMockSolved(scoringFlag.id);
         else await onScored();
       } else if (result.kind === "already_scored") {
         await onScored();
@@ -292,31 +301,35 @@ function WhatIsTutorialWizard({
       setSubmitError(formatProblemPanelActionError(t, err, "problem_panel.submit_error_prefix"));
     } finally {
       submittingRef.current = false;
-      setSubmittingFlagId(null);
+      setSubmitting(false);
     }
   };
 
   const selectChoice = (choice: TutorialChoiceSpec): void => {
-    if (choice.correct) {
-      void submitChoice(choice);
+    if (!choice.correct) {
+      setWrongStep(activeIndex);
       return;
     }
-    setOutcomes((current) => ({
-      ...current,
-      [activeFlag.id]: { kind: "wrong", scoreDelta: 0, totalScore: 0, wrongCount: 1 },
-    }));
+    setWrongStep(null);
+    setCompletedSteps((current) => new Set([...current, activeIndex]));
   };
 
   return (
     <div className="tc-onboarding" data-testid="what-is-tutorial">
-      {activeOutcome?.kind === "ok" && <CelebrationOverlay visible />}
+      {outcome?.kind === "ok" && <CelebrationOverlay visible />}
       <div className="tc-onboarding__progress">
         <div className="tc-onboarding__progress-label">
           <span>
-            {t("onboarding_tutorial.progress", { current: activeIndex + 1, total: flags.length })}
+            {t("onboarding_tutorial.progress", {
+              current: activeIndex + 1,
+              total: TUTORIAL_STEP_SPECS.length,
+            })}
           </span>
           <span>
-            {t("onboarding_tutorial.cleared", { solved: completedCount, total: flags.length })}
+            {t("onboarding_tutorial.cleared", {
+              solved: completedCount,
+              total: TUTORIAL_STEP_SPECS.length,
+            })}
           </span>
         </div>
         <div
@@ -324,22 +337,24 @@ function WhatIsTutorialWizard({
           role="progressbar"
           aria-label={t("onboarding_tutorial.progress_aria")}
           aria-valuemin={0}
-          aria-valuemax={flags.length}
+          aria-valuemax={TUTORIAL_STEP_SPECS.length}
           aria-valuenow={completedCount}
         >
           <span style={{ width: `${progress}%` }} />
         </div>
       </div>
 
-      <section className="tc-onboarding__step" aria-labelledby={`tutorial-${activeFlag.id}`}>
+      <section className="tc-onboarding__step" aria-labelledby={`tutorial-${activeSpec.id}`}>
         <p className="tc-onboarding__eyebrow">
-          {t("onboarding_tutorial.mission", { current: activeIndex + 1 })}
-          <span className="tc-onboarding__points">
-            {t("onboarding_tutorial.points", { points: activeFlag.points })}
-          </span>
+          {t("onboarding_tutorial.step", { current: activeIndex + 1 })}
+          {activeSpec.submitsFlag && (
+            <span className="tc-onboarding__points">
+              {t("onboarding_tutorial.points", { points: scoringFlag.points })}
+            </span>
+          )}
         </p>
         <h3
-          id={`tutorial-${activeFlag.id}`}
+          id={`tutorial-${activeSpec.id}`}
           className="tc-onboarding__title"
           ref={headingRef}
           tabIndex={-1}
@@ -347,36 +362,78 @@ function WhatIsTutorialWizard({
           {t(activeSpec.titleKey)}
         </h3>
         <p className="tc-onboarding__scenario">{t(activeSpec.scenarioKey)}</p>
+        <p className="tc-onboarding__term">
+          <strong>{t("onboarding_tutorial.term_label")}</strong>
+          <span>{t(activeSpec.termKey)}</span>
+        </p>
 
         <div className="tc-onboarding__question">
           <p className="tc-onboarding__question-label">{t(activeSpec.questionKey)}</p>
-          <div className="tc-onboarding__choices">
-            {activeSpec.choices.map((choice) => (
-              <button
-                className="tc-onboarding__choice"
-                type="button"
-                key={choice.value}
-                disabled={submittingFlagId !== null || activeCompleted}
-                onClick={() => selectChoice(choice)}
+          {activeSpec.submitsFlag ? (
+            <form
+              className="tc-onboarding__submission"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void submitPracticeFlag();
+              }}
+            >
+              <FormField
+                label={t("onboarding_tutorial.step_4.field_label")}
+                description={t("onboarding_tutorial.step_4.field_description")}
               >
-                <span className="tc-onboarding__choice-copy">
-                  <strong>{t(choice.labelKey)}</strong>
-                  <span>{t(choice.descriptionKey)}</span>
-                </span>
-              </button>
-            ))}
-          </div>
+                <Input
+                  value={practiceFlag}
+                  onChange={(event) => setPracticeFlag(event.detail.value)}
+                  disabled={submitting || activeCompleted}
+                />
+              </FormField>
+              <div className="tc-onboarding__submit-action">
+                <Button
+                  variant="primary"
+                  formAction="submit"
+                  loading={submitting}
+                  disabled={activeCompleted}
+                >
+                  {t("onboarding_tutorial.step_4.submit_button", {
+                    points: scoringFlag.points,
+                  })}
+                </Button>
+              </div>
+            </form>
+          ) : (
+            <div className="tc-onboarding__choices">
+              {activeSpec.choices.map((choice) => (
+                <button
+                  className="tc-onboarding__choice"
+                  type="button"
+                  key={choice.value}
+                  disabled={activeCompleted}
+                  onClick={() => selectChoice(choice)}
+                >
+                  <span className="tc-onboarding__choice-copy">
+                    <strong>{t(choice.labelKey)}</strong>
+                    <span>{t(choice.descriptionKey)}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="tc-onboarding__feedback" aria-live="polite">
-          {activeOutcome?.kind === "wrong" && (
+          {wrongStep === activeIndex && (
             <Alert type="warning" header={t("onboarding_tutorial.wrong_header")}>
               {t("onboarding_tutorial.wrong_body")}
             </Alert>
           )}
-          {activeOutcome?.kind === "already_scored" && (
+          {outcome?.kind === "wrong" && activeSpec.submitsFlag && (
+            <Alert type="warning" header={t("onboarding_tutorial.submission_wrong_header")}>
+              {t("onboarding_tutorial.submission_wrong_body")}
+            </Alert>
+          )}
+          {outcome?.kind === "already_scored" && (
             <Alert type="info" header={t("problem_panel.already_scored_header")}>
-              {t("problem_panel.already_scored_body", { total: activeOutcome.totalScore })}
+              {t("problem_panel.already_scored_body", { total: outcome.totalScore })}
             </Alert>
           )}
           {submitError && (
@@ -384,12 +441,9 @@ function WhatIsTutorialWizard({
               {submitError}
             </Alert>
           )}
-          {activeCompleted && activeOutcome?.kind !== "already_scored" && (
-            <Alert
-              type="success"
-              header={t("onboarding_tutorial.correct_header", { points: activeFlag.points })}
-            >
-              {t(successKeys[activeFlag.id] ?? activeSpec.choices[0].successKey)}
+          {activeCompleted && outcome?.kind !== "already_scored" && (
+            <Alert type="success" header={tutorialSuccessHeader(activeSpec, scoringFlag.points, t)}>
+              {t(activeSpec.successKey)}
             </Alert>
           )}
         </div>
@@ -398,7 +452,10 @@ function WhatIsTutorialWizard({
           <div className="tc-onboarding__next">
             <Button
               variant="primary"
-              onClick={() => setActiveIndex((current) => Math.min(current + 1, flags.length - 1))}
+              onClick={() => {
+                setWrongStep(null);
+                setActiveIndex((current) => Math.min(current + 1, TUTORIAL_STEP_SPECS.length - 1));
+              }}
             >
               {t("onboarding_tutorial.next_button")}
             </Button>
