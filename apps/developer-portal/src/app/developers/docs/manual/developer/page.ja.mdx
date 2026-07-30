@@ -1,0 +1,85 @@
+import { MaturityBadge } from "@/components/MaturityBadge";
+
+export const metadata = { title: "開発者マニュアル" };
+
+# 開発者マニュアル <MaturityBadge level="stable" />
+
+TenkaCloud本体、インフラコード、共通パッケージ、各Portal、リポジトリのツールを変更
+する人のためのマニュアルです。本体のコードを変えずに競技をデプロイする作業は
+競技開催者の役割です。
+
+## あなたのゴール
+
+プラットフォームの契約を壊さず、必要なリポジトリ検査に通る、範囲の明確な変更を
+1つ作ります。
+
+## リポジトリを準備する
+
+```bash
+bun install
+git submodule update --init problems
+make doctor
+```
+
+`make doctor`は不足しているローカル要件を表示しますが、自動インストールや設定変更
+は行いません。[Getting started](/developers/docs/getting-started/)から必要な実行経路
+だけを選びます。
+
+## 変更前に担当場所を見つける
+
+| パス | 担当 |
+| --- | --- |
+| `apps/` | 管理者・参加者・開発者向けWebアプリ |
+| `infrastructure/` | AWS CDK stack、環境設定、デプロイ経路 |
+| `packages/` | 共通contract、SDK、runtime adapter、CLI |
+| `scripts/` | リポジトリ検査、デプロイ補助、生成物 |
+| `problems/` | commitを固定した公式問題カタログsubmodule |
+
+契約を変える前に、最寄りのテストとリポジトリ内の指示を読みます。
+[プラットフォーム構成](/developers/docs/concepts/architecture/)はplane間の責務とevent
+契約を説明しています。
+
+## 変更の流れ
+
+1. テスト可能な完了条件を持つGitHub Issueから始める。
+2. 最小の担当moduleと既存テストを見つける。
+3. 実装と利用者向け文書を同時に更新する。
+4. 作業中は範囲を絞ったテストを実行する。
+5. Pull Request前に`make harness`と`make before-commit`を実行する。
+6. 最終差分を確認し、対象ファイルだけをstageする。
+
+`.env`、認証情報、生成されたsecret、無関係な変更をcommitしません。単体テストが
+greenでも、実AWSデプロイやブラウザ操作まで証明したことにはなりません。未確認の
+境界は正確に報告します。
+
+## コード変更か環境設定か
+
+- 対応済みの値へ開催者が変えるだけなら、既存の`.env`パラメータを使い、説明を
+  更新します。[競技開催者マニュアル](/developers/docs/manual/organizer/)を参照。
+- 受け付ける値、検証、生成リソース、実行時の挙動を変えるなら、担当コード、テスト、
+  `.env.example`、マニュアルを同じPull Requestで更新します。
+- データベース保存先の変更では、データ移行とロールバックの境界を明示します。
+  暗黙のdual writeを追加しません。
+
+## MCPの対応状況
+
+TenkaCloudは現時点でMCP serverまたはclient連携を提供していません。まだMCP clientを
+TenkaCloudへ接続しないでください。
+
+statelessなMCP 2026-07-28への対応は
+[Issue #2819](https://github.com/susumutomita/TenkaCloud/issues/2819)で別に追跡しています。
+最初にread-onlyの権限境界、requestごとのprotocol/capability negotiation、認証と
+同意、negative security testを定義する必要があります。lockfileに推移依存packageが
+あることは、製品としての対応を意味しません。
+
+## レビュー依頼前の確認
+
+- 新しい挙動を確認する範囲の絞られたテストがある。
+- 利用者向けの英語と日本語が一致している。
+- 生成物と索引が最新である。
+- link、type、format、関係するbuildが通る。
+- 未実施のライブ検証を**Not run**と書く。
+- IssueとPull Requestがコード差分だけでなく利用者への影響を説明している。
+
+問題内容を変更する作業はpackの担当です。その場合は
+[問題作成者マニュアル](/developers/docs/manual/problem-author/)を使ってください。

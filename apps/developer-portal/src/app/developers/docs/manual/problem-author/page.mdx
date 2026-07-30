@@ -1,0 +1,93 @@
+import { MaturityBadge } from "@/components/MaturityBadge";
+
+export const metadata = { title: "Problem author manual" };
+
+# Problem author manual <MaturityBadge level="stable" />
+
+Use this manual when you create or maintain the content participants solve:
+the scenario, deployable environment, verifier, scoring metadata, and hints.
+You do not need to operate a TenkaCloud tenant or change platform code.
+
+## Your goal
+
+A fresh checkout can validate the pack, an author can rehearse the problem in
+local mode when its runtime supports it, and a participant can understand the
+goal without knowing the implementation.
+
+## Create and validate a pack
+
+```bash
+make pack-init ARGS="./my-first-pack"
+make pack-validate ARGS="./my-first-pack"
+```
+
+The [first pack tutorial](/developers/docs/tutorials/first-pack/) follows one
+minimal pack from scaffold to validation, immutable Git pin, install,
+activation, and removal.
+
+## Author the participant experience
+
+Every problem should answer these questions before introducing technical
+detail:
+
+1. What happened in the scenario?
+2. What observable result must the participant produce?
+3. What is the first safe action?
+4. Where will the participant work: a URL, shell, cloud console, or local app?
+5. What exact evidence becomes the `TC{...}` flag?
+6. How can the participant reset or stop the environment?
+
+Explain a term at first use if a participant needs it to act. Avoid testing
+whether they memorized words such as cloud, container, Docker, region, or
+database unless that concept is the learning objective.
+
+## The problem contract
+
+| Part | Responsibility |
+| --- | --- |
+| `tenkacloud-pack.json` | Pack identity, version, license, problem root, runtimes, dependencies |
+| `metadata.json` | Problem ID, runtime, template, scoring, endpoints, phases, disruptions |
+| Runtime entry | Creates the isolated environment the participant actually uses |
+| Verifier or scoring rule | Decides whether the submitted evidence is correct |
+| README / statement | Scenario, goal, first action, success condition, cleanup |
+| Hints | Progressive help without revealing the final answer too early |
+
+Use the generated [pack manifest](/developers/docs/reference/pack-manifest/) and
+[problem metadata](/developers/docs/reference/problem-metadata/) references
+instead of guessing field names.
+
+## Rehearse the real interaction
+
+Validation checks the contract and referenced files, but it does not prove that
+the problem is understandable or solvable.
+
+1. Start from a clean local or test environment.
+2. Follow only the participant-facing statement.
+3. Start the deployed or local problem environment.
+4. Perform the intended investigation or repair.
+5. Submit the exact flag through the Participant Portal.
+6. Test one wrong flag, reset, stop, and a second start.
+7. Ask someone who did not author the problem to complete the same path.
+
+Local mode is for problems that declare a supported local runtime. It is not a
+WordPress tutorial or a substitute for the participant onboarding. A WordPress
+problem, if desired, belongs here as its own local problem with its own
+learning objective and verifier.
+
+## Publish safely
+
+- Increment the pack version for a new immutable release.
+- Validate before committing.
+- Pin installation to the full 40-character Git commit SHA.
+- Do not put secrets, mutable remote assets, or install-time scripts in a pack.
+- Keep author-only answers out of participant-visible metadata and endpoints.
+- Give organizers a separate rehearsal note for required accounts, region,
+  expected start time, teardown, and costs.
+
+The [security and provenance model](/developers/docs/reference/security-provenance/)
+defines what a pack may contain. Validator messages are listed in
+[validation errors](/developers/docs/reference/validation-errors/).
+
+If the pack requires a new platform capability rather than problem content,
+open a platform Issue and switch to the
+[developer manual](/developers/docs/manual/developer/).

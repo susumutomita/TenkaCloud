@@ -1,0 +1,147 @@
+import { MaturityBadge } from "@/components/MaturityBadge";
+
+export const metadata = { title: "競技開催者マニュアル" };
+
+# 競技開催者マニュアル <MaturityBadge level="preview" />
+
+TenkaCloudをデプロイする、競技を準備する、人を招待する、環境設定を変える人の
+ためのマニュアルです。プラットフォームのソースコードや問題パックの書き方を
+理解する必要はありません。
+
+## あなたのゴール
+
+開催者がAdmin Consoleを開け、各参加者が正しいParticipant Portalを開け、すべての
+問題を開始・採点・停止できる状態にします。
+
+## 最初に運用モードを選ぶ
+
+| モード | 選ぶ条件 | コマンド |
+| --- | --- | --- |
+| Lite | 1人の開催者が1つのTenkaCloud環境を運用する | `make deploy ENV=<environment>` |
+| SaaS | 運営者が複数の組織へテナントを提供する | `make deploy-saas ENV=<environment>` |
+
+マルチテナントサービスを意図的に運用するのでなければ、まずLiteを使います。経路の
+違いは[デプロイモードと起動経路](/developers/docs/operate/deploy-paths/)を参照してください。
+
+## 競技開催のチェックリスト
+
+1. 専用のAWSアカウントとリージョンを決める。
+2. `infrastructure/environments/<environment>/.env.example`から同じ場所に
+   `.env`を作る。
+3. 必須のアカウント情報と管理者情報を埋める。
+4. 最初の本番競技より前に、管理データ用データベースを選ぶ。
+5. デプロイし、Admin Consoleと招待された開催者アカウントを確認する。
+6. 競技、チーム、使用する問題を作る。
+7. テストチームで開始、接続先、flag採点、リセット、停止を通しでリハーサルする。
+8. 参加者にはParticipant PortalのURL、team key、開始時刻、
+   [競技参加者マニュアル](/developers/docs/manual/participant/)だけを渡す。
+
+画面上の一連の手順は
+[競技を最初から最後まで運営する](/developers/docs/operate/run-an-event/)にあります。
+
+## 設定を書く場所
+
+環境設定は次のファイルに書きます。
+
+```text
+infrastructure/environments/<environment>/.env
+```
+
+使う環境は`ENV`で選びます。
+
+```bash
+make deploy ENV=development
+make deploy ENV=production
+```
+
+`.env`を書き換えただけでは稼働中の環境は変わりません。変更内容を確認してから、
+対象のデプロイコマンドを実行します。認証情報やトークンはGitへ入れません。
+
+### 必須の識別設定
+
+| 設定 | 意味 | 設定する場面 |
+| --- | --- | --- |
+| `TENANT_ADMIN_EMAIL` | Liteで最初に招待する開催者 | Lite。未設定時は`SYSTEM_ADMIN_EMAIL`へフォールバック |
+| `SYSTEM_ADMIN_EMAIL` | SaaSのシステム管理者 | SaaS |
+| `AWS_ACCOUNT_ID` | 別のAWSアカウントへ誤ってデプロイするのを防ぐ | すべての環境で推奨 |
+| `AWS_REGION` | デプロイ先のAWSリージョン | AWS CLIの既定値と違う場合 |
+
+## 管理データ用データベースを選ぶ
+
+管理データとは、競技、チーム、デプロイ、接続先、競技者アカウント、妨害、監査ログ、
+SAML IdPの情報です。参加者が操作する問題環境とは別物です。
+
+| 値 | 保存先 | 選ぶ条件 |
+| --- | --- | --- |
+| 未設定または`dynamodb` | AWS DynamoDB | 既定のAWS内完結経路を使う |
+| `turso` | Turso/libSQL | DynamoDBテーブルを作らないLite構成を明示的に使う |
+
+保存先は次の設定で選びます。
+
+```dotenv
+CDK_PARAM_CONTROL_DATA_BACKEND=dynamodb
+```
+
+Tursoを使う場合は3つすべてが必要です。
+
+```dotenv
+CDK_PARAM_CONTROL_DATA_BACKEND=turso
+CDK_PARAM_TURSO_DATABASE_URL=https://<database>-<organization>.turso.io
+CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME=/TenkaCloud/<environment>/turso/auth-token
+```
+
+トークン本体はAWS Systems Manager Parameter Storeの`SecureString`へ保存します。
+`.env`へ貼り付けてはいけません。案内付きの設定手順は次です。
+
+```bash
+make turso-live ENV=development
+```
+
+### 切り替えを単純なスイッチだと考えない
+
+- DynamoDBとTursoのデータは同期されません。
+- 可能な限り最初の本番競技より前に保存先を決めます。
+- 既存環境をDynamoDBからTursoへ変えると、Turso側に存在するデータから始まります。
+- 既存のDynamoDBテーブルは`RETAIN`です。CloudFormationの管理対象から外れても削除
+  されず、料金が続く可能性があります。
+- 切り替え前に必要なデータをエクスポートし、新環境の確認後に残存テーブルを個別に
+  確認します。
+- Tursoだけに書かれたデータは、DynamoDBへ戻しても復元されません。
+
+Turso経路は実装済みで、単体テストとCDK synthでは確認されていますが、実Turso、
+新規AWSデプロイ、実際の請求を組み合わせた**ライブ検証は未実施**です。競技で使う
+前に[Running costs](https://github.com/susumutomita/TenkaCloud/blob/main/docs/running-costs.md)
+を読んでください。
+
+## よく変更するパラメータ
+
+運用結果を説明できない設定は、まず未設定のままにします。
+
+| 設定 | 既定値 | 変わるもの |
+| --- | --- | --- |
+| `DYNAMODB_BILLING_MODE` | `PROVISIONED` | DynamoDBの課金モード。`PAY_PER_REQUEST`も選択可能 |
+| `DYNAMODB_READ_CAPACITY` / `DYNAMODB_WRITE_CAPACITY` | `1` / `1` | `PROVISIONED`時の読み書き容量 |
+| `CDK_PARAM_LOG_RETENTION_DAYS` | `1` | CloudWatch Logsの保持日数。AWS対応値だけを受け付ける |
+| `CDK_PARAM_OPS_ALERT_EMAIL` | 未設定 | メールを指定すると運用アラート用リソースを作る |
+| `CDK_PARAM_OPS_MONTHLY_COST_LIMIT_USD` | 未設定 | 運用アラートで使う月額費用のしきい値 |
+| `CDK_PARAM_SOURCE_BUCKET_VERSIONING` | `false` | ソース用S3 bucketのversioningを有効化・停止する |
+| `CDK_PARAM_DEPLOY_QUOTA_BY_TIER` | 未設定 | tier別の同時デプロイ上限をJSONで指定する |
+| `CDK_PARAM_DEPLOY_ALLOWED_CIDRS` | 未設定 | 対応する問題へ渡す接続元CIDRをカンマ区切りで指定する |
+| `CDK_PARAM_DEPLOY_VIA_LAMBDA` | `true` | 問題デプロイをLambdaで実行。`false`は旧CodeBuild経路 |
+| `CDK_PARAM_FEATURES` | 未設定 | 機能の有効・無効をJSONで指定する |
+| `CDK_PARAM_AUDIT_LOG_ENABLED` | `true` | 管理操作の監査ログを有効にする |
+
+各環境の`.env.example`がパラメータ一覧です。受け付ける値と相互作用が設定の近くに
+書かれているため、上書きしたい設定だけを`.env`へコピーします。
+
+## 参加者を入れる前に
+
+- 参加者と同じ権限・リージョンのテストチームを使う。
+- 想定ネットワークからすべての接続先を開けるか確認する。
+- 本物のflagを1つ提出し、得点が変わることを確認する。
+- 問題をリセット・停止し、リソースがなくなることを確認する。
+- 競技時刻、team key配布、問い合わせ先、障害時の連絡経路を確認する。
+- AWS管理者認証情報、`.env`、データベーストークンを参加者へ渡さない。
+
+パラメータの解釈そのものをソースコードで変える場合は役割を切り替え、
+[開発者マニュアル](/developers/docs/manual/developer/)を使ってください。

@@ -1,0 +1,57 @@
+import { MaturityBadge } from "@/components/MaturityBadge";
+
+export const metadata = { title: "Manuals by role" };
+
+# Manuals by role <MaturityBadge level="stable" />
+
+Start with the job you are doing today. You do not need to read the whole
+TenkaCloud documentation set before taking your first action.
+
+## Choose your role
+
+### Developer
+
+Choose this when you change the TenkaCloud platform itself. Your first success
+is a focused change that passes the repository checks.
+[Open the developer manual →](/developers/docs/manual/developer/)
+
+### Competition organizer
+
+Choose this when you deploy TenkaCloud or run an event. Your first success is
+that organizers and participants can open the correct consoles.
+[Open the organizer manual →](/developers/docs/manual/organizer/)
+
+### Competition participant
+
+Choose this when you solve a problem and submit a flag. Your first success is
+that the portal accepts your `TC{...}` value and updates the score.
+[Open the participant manual →](/developers/docs/manual/participant/)
+
+### Problem author
+
+Choose this when you create or maintain problem content. Your first success is
+that a pack validates and the problem can be rehearsed locally.
+[Open the problem author manual →](/developers/docs/manual/problem-author/)
+
+## How the roles fit together
+
+The organizer prepares an event and gives participants access. Problem authors
+provide the exercises used by that event. Developers maintain the TenkaCloud
+platform that connects those workflows.
+
+A person may hold more than one role, but each task still has one owner. For
+example, changing `CDK_PARAM_CONTROL_DATA_BACKEND` is an organizer task;
+changing the code that interprets the setting is a developer task.
+
+## If you are unsure
+
+- You received a Participant Portal link or team key: choose **participant**.
+- You received an Admin Console invitation: choose **organizer**.
+- You are editing `metadata.json`, a template, verifier, or hints: choose
+  **problem author**.
+- You are editing `apps/`, `infrastructure/`, `packages/`, or platform scripts:
+  choose **developer**.
+
+Do not begin with the architecture or parameter reference unless your current
+role requires it. Each role manual links to those details at the point where
+they become useful.

@@ -1,0 +1,87 @@
+import { MaturityBadge } from "@/components/MaturityBadge";
+
+export const metadata = { title: "Developer manual" };
+
+# Developer manual <MaturityBadge level="stable" />
+
+Use this manual when you change the TenkaCloud platform, its infrastructure
+code, shared packages, portals, or repository tooling. Deploying an event
+without changing platform code is an organizer task.
+
+## Your goal
+
+Make one focused, reviewable change that preserves the platform contracts and
+passes the relevant repository checks.
+
+## Prepare the repository
+
+```bash
+bun install
+git submodule update --init problems
+make doctor
+```
+
+`make doctor` reports missing local prerequisites without installing or
+changing them. Use [Getting started](/developers/docs/getting-started/) only for
+the runtime path you need.
+
+## Find the owner before editing
+
+| Path | Responsibility |
+| --- | --- |
+| `apps/` | Admin, participant, and developer web applications |
+| `infrastructure/` | AWS CDK stacks, environment configuration, deploy workflows |
+| `packages/` | Shared contracts, SDKs, runtime adapters, and CLI code |
+| `scripts/` | Repository checks, deploy helpers, and generated artifacts |
+| `problems/` | Pinned official problem catalog submodule |
+
+Read the nearest tests and repository instructions before changing a contract.
+The [platform architecture](/developers/docs/concepts/architecture/) explains
+the plane boundaries and cross-plane events.
+
+## Change workflow
+
+1. Start from a GitHub Issue with a testable completion condition.
+2. Identify the narrowest owning module and its existing tests.
+3. Change the implementation and user-facing documentation together.
+4. Run focused tests while iterating.
+5. Run `make harness` and `make before-commit` before opening a pull request.
+6. Inspect the final diff and stage only the intended files.
+
+Do not commit `.env`, credentials, generated secrets, or unrelated changes.
+Green unit tests do not prove a live AWS deploy or browser flow; report those
+verification boundaries honestly.
+
+## Code change or environment setting?
+
+- If an organizer only needs a different supported value, document and use the
+  existing `.env` parameter. See the
+  [organizer manual](/developers/docs/manual/organizer/).
+- If the accepted values, validation, synthesized resources, or runtime
+  behavior must change, update the owning code, tests, `.env.example`, and
+  manuals in the same pull request.
+- A database backend change must preserve the explicit data-migration and
+  rollback boundary. Do not introduce silent dual writes.
+
+## MCP status
+
+TenkaCloud does not currently expose an MCP server or client integration. Do
+not configure an MCP client against TenkaCloud yet.
+
+Support for the stateless MCP 2026-07-28 protocol is tracked separately in
+[Issue #2819](https://github.com/susumutomita/TenkaCloud/issues/2819). That work
+must define a read-only capability boundary first, per-request protocol and
+capability negotiation, authentication and consent, and negative security
+tests. A transitive package in the lockfile is not product support.
+
+## Before requesting review
+
+- The new behavior has a focused test.
+- User-facing English and Japanese text agree.
+- Generated artifacts and indexes are up to date.
+- Links, types, formatting, and relevant builds pass.
+- Live checks that were not run are stated as **Not run**.
+- The Issue and pull request explain the user impact, not only the code diff.
+
+Problem content belongs in a pack. If that is your task, use the
+[problem author manual](/developers/docs/manual/problem-author/) instead.

@@ -64,6 +64,17 @@ const SECTIONS: readonly DocSection[] = [
     pages: [{ slug: "getting-started", mdx: "getting-started/page.mdx" }],
   },
   {
+    title: "Role manuals",
+    jaTitle: "役割別マニュアル",
+    pages: [
+      { slug: "manual", mdx: "manual/page.mdx" },
+      { slug: "manual/developer", mdx: "manual/developer/page.mdx" },
+      { slug: "manual/organizer", mdx: "manual/organizer/page.mdx" },
+      { slug: "manual/participant", mdx: "manual/participant/page.mdx" },
+      { slug: "manual/problem-author", mdx: "manual/problem-author/page.mdx" },
+    ],
+  },
+  {
     title: "Concepts",
     jaTitle: "コンセプト",
     pages: [

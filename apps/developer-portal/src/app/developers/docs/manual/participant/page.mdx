@@ -1,0 +1,83 @@
+import { MaturityBadge } from "@/components/MaturityBadge";
+
+export const metadata = { title: "Competition participant manual" };
+
+# Competition participant manual <MaturityBadge level="stable" />
+
+This manual is for someone solving a TenkaCloud problem. You do not need to
+understand AWS architecture, databases, deployment parameters, or how the
+problem was authored.
+
+## Your goal
+
+Open one problem, start its isolated environment, investigate or repair it,
+find proof in the form `TC{...}`, and submit that complete value in the
+Participant Portal.
+
+## The five-step solve flow
+
+1. Open **Problems** and choose one available problem.
+2. Read the situation, goal, first suggested action, and completion condition.
+3. Press **Start problem** and wait until the problem environment is running.
+4. Open the displayed endpoint or console and investigate the running system.
+5. Paste the complete `TC{...}` flag into the submission field and submit it.
+
+A score change or a solved marker is the success signal. A TenkaCloud problem
+is not a quiz that asks you to guess a word from the title.
+
+## Local practice without a cloud account
+
+Use [local drills in Getting started](/developers/docs/getting-started/#local-drills)
+when you want to practice on your own machine. Local mode uses Docker to create
+an isolated problem environment and does not contact AWS.
+
+```bash
+bun run tenkacloud local
+```
+
+The command opens the Participant Portal. Choose and start a problem there.
+When finished, press **Stop** on the problem page, or stop the complete local
+session:
+
+```bash
+bun run tenkacloud local down
+```
+
+In a hosted competition, do not install or configure Docker unless the
+organizer explicitly tells you to. Use the Participant Portal URL and team key
+provided by the organizer.
+
+## Terms you will see
+
+| Term | Plain meaning |
+| --- | --- |
+| Server | A computer that keeps a website or application available |
+| Cloud | A way to use servers and storage supplied by a provider |
+| Docker | A way to package an application and its dependencies so a matching practice environment can be recreated |
+| Problem environment | The isolated running system created for one problem |
+| Endpoint | A URL or address where you access that system |
+| Flag | The complete `TC{...}` proof that the problem verifier can score |
+| Hint | Optional help. The portal shows any score cost before you reveal it |
+| Reset | Discard the current practice state and create it again |
+
+## If something does not work
+
+| Symptom | What to check |
+| --- | --- |
+| **Start** is disabled | The event may not have started, or the environment may still be deploying |
+| Start ends in an error | Retry once. In a hosted event, send the displayed error to the organizer |
+| The endpoint does not open | Wait for **Running**, then use the endpoint shown on the problem page |
+| The flag is rejected | Copy from `TC{` through the closing `}` with no missing characters |
+| The page was reopened and looks stale | Refresh the portal before starting a second environment |
+| You want a clean attempt | Use **Reset** when available, or **Stop** and then **Start** |
+
+Never send your team key or a private competition flag to another team. If the
+problem text and running environment disagree, report the problem ID and the
+visible error; do not include credentials.
+
+## What to read next
+
+- For the supported local runtime and lifecycle details, see
+  [Local play](https://github.com/susumutomita/TenkaCloud/blob/main/docs/local-play.md).
+- To understand how problems are structured, switch roles and read the
+  [Problem author manual](/developers/docs/manual/problem-author/).
