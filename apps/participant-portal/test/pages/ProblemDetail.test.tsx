@@ -226,6 +226,32 @@ describe("ProblemDetailPage", () => {
     expect(container.querySelector('video[src="/videos/onboarding/demo-en.mp4"]')).not.toBeNull();
   });
 
+  it("should lead the intro with its friendly name and place the optional video after the tutorial", () => {
+    mockTeamView.mockReturnValue(
+      teamView({
+        view: viewWith({
+          problems: [
+            problem({
+              problemId: "what-is-tenkacloud",
+              name: "What is TenkaCloud?",
+              videoUrl: "/videos/onboarding/what-is.mp4",
+            }),
+          ],
+        }),
+      }),
+    );
+    const { container } = renderPage();
+    expect(
+      screen.getByRole("heading", { level: 1, name: "What is TenkaCloud?" }),
+    ).toBeInTheDocument();
+    const panel = screen.getByTestId("problem-panel");
+    const video = container.querySelector('video[src="/videos/onboarding/what-is.mp4"]');
+    expect(video).not.toBeNull();
+    expect(panel.compareDocumentPosition(video as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+
   it("should lock the body and show the start time when scoring has not started", () => {
     mockTeamView.mockReturnValue(
       teamView({

@@ -6,8 +6,8 @@
     "title": "TenkaCloud Participant Portal",
     "loading": "Loading…",
     "no_session": "No active session. Please sign in again.",
-    "mock_cloud_header": "Mock cloud mode",
-    "mock_cloud_body": "This event is using a local mock cloud adapter. No real AWS resources are created.",
+    "mock_cloud_header": "Browser demo",
+    "mock_cloud_body": "This demo runs entirely in your browser. It creates no real AWS resources or charges.",
     "local_cloud_header": "Local cloud mode",
     "local_cloud_body": "This event runs a local Docker problem container. No real AWS resources are used.",
     "fetch_status_failed": "Failed to fetch status"
@@ -420,6 +420,58 @@
     "tutorial_next_body": "Continue with “Play local mode” (no AWS, on your own machine) or “Deploy your own TenkaCloud Lite” (your own AWS account).",
     "tutorial_local_button": "Go to “Play local mode”",
     "tutorial_lite_button": "Go to “Deploy your own TenkaCloud Lite”"
+  },
+  "onboarding_tutorial": {
+    "panel_title": "Four short missions",
+    "panel_description": "One question per screen. Wrong choices have no penalty.",
+    "progress": "Step {current} of {total}",
+    "cleared": "{solved} cleared",
+    "progress_aria": "Onboarding progress",
+    "mission": "Mission {current}",
+    "points": "+{points} pt",
+    "correct_header": "Correct. +{points} pt",
+    "wrong_header": "Close. Pick again",
+    "wrong_body": "Choose the action that fits this short situation. Wrong choices have no penalty.",
+    "next_button": "Next mission",
+    "step_1": {
+      "title": "Your site breaks when real users arrive",
+      "scenario": "It worked on your laptop, then failed after launch. You need to fix authentication and exposure in an environment that behaves like production.",
+      "question": "Where does TenkaCloud put the practice?",
+      "cloud_label": "The real cloud",
+      "cloud_description": "Run and fix the system in a real cloud environment",
+      "paper_label": "A paper quiz",
+      "paper_description": "Read multiple-choice questions without operating anything",
+      "success": "TenkaCloud is a practice and competition platform where you learn by operating and fixing systems on the real cloud."
+    },
+    "step_2": {
+      "title": "Every team competes at the same time",
+      "scenario": "The same cloud exercise can run as a live event or as a problem you solve whenever you want.",
+      "question": "Which format is the live, head-to-head event?",
+      "battle_label": "Battle",
+      "battle_description": "Compete live while the ranking moves",
+      "challenge_label": "Challenge",
+      "challenge_description": "Solve one problem at a time, at your own pace",
+      "success": "Correct. Battle is live competition; Challenge is self-paced practice."
+    },
+    "step_3": {
+      "title": "Choose what you want to do next",
+      "scenario": "You do not need an AWS account just to play. You only use your own AWS environment when you want to host an event.",
+      "question": "What do you want to try next? Both choices are correct.",
+      "local_label": "Play first, with no AWS account",
+      "local_description": "Start on your computer or in a browser development environment",
+      "local_success": "This is Local mode. It is the fastest way to play, with no AWS charges.",
+      "lite_label": "Host an event in my AWS account",
+      "lite_description": "Deploy TenkaCloud into your environment and run it",
+      "lite_success": "This is Lite mode. You deploy TenkaCloud into your AWS account and host the event."
+    },
+    "step_4": {
+      "title": "Score your first points",
+      "scenario": "In TenkaCloud, you submit a short code called a flag to prove that you solved a problem. The practice flag is TC{HELLO-TENKACLOUD}.",
+      "question": "Submit the practice flag and move the score.",
+      "submit_label": "Submit the practice flag",
+      "submit_description": "TC{HELLO-TENKACLOUD}",
+      "success": "That is the TenkaCloud loop: read the situation, operate the system, submit the flag, and see the score update immediately."
+    }
   },
   "score_timeline": {
     "header": "Score timeline",
