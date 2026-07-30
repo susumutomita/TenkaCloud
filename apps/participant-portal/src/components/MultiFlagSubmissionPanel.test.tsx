@@ -273,6 +273,9 @@ describe("MultiFlagSubmissionPanel", () => {
     expect(await screen.findByText("4 cleared")).toBeInTheDocument();
     expect(screen.getByText("🎉 You have the TenkaCloud basics")).toBeInTheDocument();
     expect(screen.getByText("Next: try a real problem in local mode")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Open participant manual (opens in a new tab)" }),
+    ).toHaveAttribute("href", "https://tenkacloud.com/docs/manual/participant/");
     await user.click(screen.getByRole("button", { name: "Try local mode" }));
     expect(screen.getByTestId("router-path")).toHaveTextContent(`/problems/${LOCAL_DRILL_JOB_ID}`);
     await user.click(

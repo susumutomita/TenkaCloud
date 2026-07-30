@@ -418,6 +418,8 @@
     "tutorial_complete_body": "Websites and apps need a place to run and someone to operate them. TenkaCloud lets you solve a real problem in a safe practice environment, submit the passphrase you found, and confirm the result.",
     "tutorial_next_header": "Next: try a real problem in local mode",
     "tutorial_next_body": "Local mode starts a problem environment on your own computer, so you can move from this browser walkthrough to a real running problem.",
+    "tutorial_manual_button": "Open participant manual",
+    "tutorial_manual_aria": "Open participant manual (opens in a new tab)",
     "tutorial_local_button": "Try local mode",
     "tutorial_lite_button": "Go to “Deploy your own TenkaCloud Lite”"
   },

@@ -50,6 +50,7 @@ interface TutorialStepSpec {
 
 const PRACTICE_FLAG_ID = "first-flag";
 const PRACTICE_FLAG_VALUE = "TC{HELLO-TENKACLOUD}";
+const PARTICIPANT_MANUAL_URL = "https://tenkacloud.com/docs/manual/participant/";
 
 const TUTORIAL_STEP_SPECS: readonly TutorialStepSpec[] = [
   {
@@ -482,6 +483,14 @@ function WhatIsTutorialComplete() {
           {t("multi_flag.tutorial_next_body")}
         </Alert>
         <SpaceBetween size="xs" direction="horizontal">
+          <Button
+            href={PARTICIPANT_MANUAL_URL}
+            target="_blank"
+            iconName="external"
+            ariaLabel={t("multi_flag.tutorial_manual_aria")}
+          >
+            {t("multi_flag.tutorial_manual_button")}
+          </Button>
           <Button variant="primary" onClick={() => navigate(`/problems/${LOCAL_DRILL_JOB_ID}`)}>
             {t("multi_flag.tutorial_local_button")}
           </Button>

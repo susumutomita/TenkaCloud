@@ -1,0 +1,88 @@
+import { MaturityBadge } from "@/components/MaturityBadge";
+
+export const metadata = { title: "問題作成者マニュアル" };
+
+# 問題作成者マニュアル <MaturityBadge level="stable" />
+
+参加者が解く内容、つまり状況、実際に動く問題環境、verifier、採点metadata、hintを
+作成・保守する人のためのマニュアルです。TenkaCloud tenantの運用やplatform codeの
+変更は必要ありません。
+
+## あなたのゴール
+
+新しいcheckoutでpackを検証でき、対応runtimeなら作成者がlocal modeでリハーサルでき、
+参加者が実装を知らなくてもゴールを理解できる状態にします。
+
+## packを作成して検証する
+
+```bash
+make pack-init ARGS="./my-first-pack"
+make pack-validate ARGS="./my-first-pack"
+```
+
+[最初のpackチュートリアル](/developers/docs/tutorials/first-pack/)では、最小構成の
+packを雛形作成、検証、不変Git commitへの固定、install、tenantへの有効化、削除まで
+通して扱います。
+
+## 参加者の体験を書く
+
+技術詳細より前に、各問題が次の質問へ答えるようにします。
+
+1. 状況の中で何が起きたか。
+2. 参加者が作る、目で確認できる結果は何か。
+3. 最初に行う安全な操作は何か。
+4. URL、shell、cloud console、local appのどこで操作するか。
+5. どの証拠が`TC{...}`形式のflagになるか。
+6. 問題環境をどうリセット・停止するか。
+
+行動に必要な用語は初出時に説明します。cloud、container、Docker、region、database
+などの概念自体が学習目標でない限り、単語の暗記を採点しません。
+
+## 問題を構成する契約
+
+| 部分 | 担当 |
+| --- | --- |
+| `tenkacloud-pack.json` | packのID、version、license、problem root、runtime、dependency |
+| `metadata.json` | 問題ID、runtime、template、scoring、endpoint、phase、disruption |
+| runtime entry | 参加者が実際に使う分離された環境を作る |
+| verifierまたは採点rule | 提出された証拠が正しいか判定する |
+| README / 問題文 | 状況、ゴール、最初の操作、成功条件、後片付け |
+| hint | 最終解答を早く見せすぎない段階的な助け |
+
+field名を推測せず、生成済みの
+[pack manifest](/developers/docs/reference/pack-manifest/)と
+[problem metadata](/developers/docs/reference/problem-metadata/)を参照してください。
+
+## 実際の操作をリハーサルする
+
+validationは契約と参照fileを検査しますが、問題が理解でき、解けることまでは証明
+しません。
+
+1. 初期状態のlocal環境またはtest環境を使う。
+2. 参加者に見える問題文だけを読む。
+3. deployされた問題環境またはlocal問題環境を起動する。
+4. 意図した調査または修正を行う。
+5. 正確なflagをParticipant Portalから提出する。
+6. 誤ったflag、リセット、停止、2回目の起動も試す。
+7. 問題を作っていない人に同じ流れを完了してもらう。
+
+local modeは対応するlocal runtimeを宣言した問題のためのものです。WordPressの
+チュートリアルでも、参加者オンボーディングの代替でもありません。WordPress問題を
+作る場合は、独立した学習目標とverifierを持つlocal問題としてここで扱います。
+
+## 安全に公開する
+
+- 不変releaseごとにpack versionを上げる。
+- commit前にvalidateする。
+- install時は完全な40文字のGit commit SHAへ固定する。
+- secret、変更可能なremote asset、install時に動くscriptをpackへ入れない。
+- 作成者だけが知る答えを参加者向けmetadataやendpointへ出さない。
+- 必要account、region、想定起動時間、停止方法、費用は開催者向けメモへ分ける。
+
+packに含められるものは
+[securityとprovenance](/developers/docs/reference/security-provenance/)、
+validator messageは[validation error](/developers/docs/reference/validation-errors/)
+を参照してください。
+
+問題内容ではなく新しいplatform機能が必要なら、platform Issueを作り、
+[開発者マニュアル](/developers/docs/manual/developer/)へ切り替えます。

@@ -418,6 +418,8 @@
     "tutorial_complete_body": "Webサイトやアプリには、動かす場所と運用が必要です。TenkaCloudでは、安全な練習環境で実際の問題を解き、見つけた合言葉を提出して学びを確かめます。",
     "tutorial_next_header": "次は、ローカルモードで本物の問題を試そう",
     "tutorial_next_body": "ローカルモードでは、自分のパソコンに問題環境を起動し、ブラウザ体験版ではなく実際に動く問題へ挑戦できます。",
+    "tutorial_manual_button": "競技参加者マニュアルを開く",
+    "tutorial_manual_aria": "競技参加者マニュアルを新しいタブで開く",
     "tutorial_local_button": "ローカルモードを試す",
     "tutorial_lite_button": "「自分の TenkaCloud Lite を立てる」へ"
   },

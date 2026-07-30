@@ -17,6 +17,79 @@ const USE_EXISTING_PACK_SOURCE = readFileSync(
   "src/app/developers/docs/operate/use-existing-pack/page.mdx",
   "utf8",
 );
+const ROLE_MANUAL_HREFS = [
+  "/developers/docs/manual/",
+  "/developers/docs/manual/developer/",
+  "/developers/docs/manual/organizer/",
+  "/developers/docs/manual/participant/",
+  "/developers/docs/manual/problem-author/",
+] as const;
+const ORGANIZER_MANUAL_SOURCE = readFileSync(
+  "src/app/developers/docs/manual/organizer/page.mdx",
+  "utf8",
+);
+const ORGANIZER_MANUAL_JA_SOURCE = readFileSync(
+  "src/app/developers/docs/manual/organizer/page.ja.mdx",
+  "utf8",
+);
+const PARTICIPANT_MANUAL_SOURCE = readFileSync(
+  "src/app/developers/docs/manual/participant/page.mdx",
+  "utf8",
+);
+const PARTICIPANT_MANUAL_JA_SOURCE = readFileSync(
+  "src/app/developers/docs/manual/participant/page.ja.mdx",
+  "utf8",
+);
+
+describe("docs registry — role manuals (#2818)", () => {
+  it("should expose exactly the role chooser and four manuals in their own section", () => {
+    const section = DOC_SECTIONS.find((candidate) => candidate.title === "Role manuals");
+    expect(section?.pages.map((page) => page.href)).toEqual(ROLE_MANUAL_HREFS);
+  });
+
+  it("should expose every role manual as a known internal route", () => {
+    const routes = allRoutes();
+    for (const href of ROLE_MANUAL_HREFS) expect(routes).toContain(href);
+  });
+
+  it("should find organizer database and parameter guidance in both languages", () => {
+    const english = searchIndex("organizer database parameters DynamoDB Turso");
+    expect(english.some((result) => result.href === "/developers/docs/manual/organizer/")).toBe(
+      true,
+    );
+
+    const japanese = searchIndex("競技開催者 データベース パラメータ");
+    expect(japanese.some((result) => result.href === "/developers/docs/manual/organizer/")).toBe(
+      true,
+    );
+  });
+
+  it("should document the actual backend switch and its safety boundary in both languages", () => {
+    for (const source of [ORGANIZER_MANUAL_SOURCE, ORGANIZER_MANUAL_JA_SOURCE]) {
+      expect(source).toContain("CDK_PARAM_CONTROL_DATA_BACKEND");
+      expect(source).toContain("CDK_PARAM_TURSO_DATABASE_URL");
+      expect(source).toContain("CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME");
+      expect(source).toContain("make turso-live ENV=development");
+      expect(source).toContain("RETAIN");
+    }
+    expect(ORGANIZER_MANUAL_SOURCE).toContain("not yet been live-verified");
+    expect(ORGANIZER_MANUAL_JA_SOURCE).toContain("ライブ検証は未実施");
+  });
+
+  it("should keep WordPress out of participant onboarding", () => {
+    expect(PARTICIPANT_MANUAL_SOURCE).not.toMatch(/wordpress/i);
+    expect(PARTICIPANT_MANUAL_JA_SOURCE).not.toMatch(/wordpress/i);
+  });
+
+  it("should explain Docker in plain language for participants", () => {
+    expect(PARTICIPANT_MANUAL_SOURCE).toContain(
+      "A way to package an application and its dependencies so a matching practice environment can be recreated",
+    );
+    expect(PARTICIPANT_MANUAL_JA_SOURCE).toContain(
+      "アプリと必要なソフトをまとめ、同じ練習環境を再現しやすくする仕組み",
+    );
+  });
+});
 
 describe("docs registry — first pack tutorial", () => {
   it("should register the first pack tutorial page", () => {

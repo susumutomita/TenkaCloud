@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 /**
  * Issue #2696 PR 4 (P0 checkbox 1): the top-level README CTA used to be a flat
- * link row (Landing page / Demo portal / Quickstart / Add your own problems).
+ * link row (Landing page / role manuals / Demo portal / Quickstart / Add your own problems).
  * The onboarding audit requires the FIRST thing after the intro paragraph to
  * present exactly two primary onboarding choices:
  *   A. Play first (recommended, no AWS, ~5 min) -> GitHub Codespaces
@@ -52,12 +52,12 @@ describe("README top CTA presents the two-choice onboarding split (Issue #2696 P
     expect(block).toMatch(/AWS account.*billed.*~30 min/i);
   });
 
-  it("should keep the secondary links (Landing page / Demo portal / Quickstart / Add your own problems) below the two-choice block in README.md", () => {
+  it("should keep the secondary links (including role manuals) below the two-choice block in README.md", () => {
     const secondaryRow = readmeEn.indexOf("[Landing page]");
     const hostChoice = readmeEn.indexOf("Host your own event");
     expect(secondaryRow).toBeGreaterThan(hostChoice);
     expect(readmeEn).toContain(
-      "[Landing page](https://tenkacloud.com) · [Demo portal](https://tenkacloud.com/portal-demo/?demo=1) · [Quickstart](#quickstart) · [Add your own problems](#add-your-own-problems)",
+      "[Landing page](https://tenkacloud.com) · [Manuals by role](https://tenkacloud.com/docs/manual/index.en.html) · [Demo portal](https://tenkacloud.com/portal-demo/?demo=1) · [Quickstart](#quickstart) · [Add your own problems](#add-your-own-problems)",
     );
   });
 
@@ -92,12 +92,12 @@ describe("README top CTA presents the two-choice onboarding split (Issue #2696 P
     expect(block).toMatch(/AWS アカウント.*課金あり.*約 30 分/);
   });
 
-  it("should keep the secondary links below the two-choice block in README.ja.md", () => {
+  it("should keep the secondary links, including role manuals, below the two-choice block in README.ja.md", () => {
     const secondaryRow = readmeJa.indexOf("[ランディングページ]");
     const hostChoice = readmeJa.indexOf("自分のイベントを開く");
     expect(secondaryRow).toBeGreaterThan(hostChoice);
     expect(readmeJa).toContain(
-      "[ランディングページ](https://tenkacloud.com) · [デモポータル](https://tenkacloud.com/portal-demo/?demo=1) · [クイックスタート](#クイックスタート) · [自分の問題を追加する](#自分の問題を追加する)",
+      "[ランディングページ](https://tenkacloud.com) · [役割別マニュアル](https://tenkacloud.com/docs/manual/) · [デモポータル](https://tenkacloud.com/portal-demo/?demo=1) · [クイックスタート](#クイックスタート) · [自分の問題を追加する](#自分の問題を追加する)",
     );
   });
 });
