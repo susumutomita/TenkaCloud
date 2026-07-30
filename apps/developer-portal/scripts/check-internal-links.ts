@@ -32,10 +32,7 @@ const HREF_PATTERNS = [
   /\]\((\/[^)]*)\)/g,
 ];
 
-function collectFiles(
-  dir: string,
-  include: (name: string) => boolean = () => true,
-): string[] {
+function collectFiles(dir: string, include: (name: string) => boolean = () => true): string[] {
   const out: string[] = [];
   for (const name of readdirSync(dir)) {
     const full = join(dir, name);
@@ -52,9 +49,7 @@ function collectFiles(
 // build-time link contract so an MDX image can be checked without pretending it
 // is an application route.
 function collectPublicRoutes(dir: string): string[] {
-  return collectFiles(dir).map(
-    (full) => `/${relative(PUBLIC_DIR, full).replaceAll("\\", "/")}`,
-  );
+  return collectFiles(dir).map((full) => `/${relative(PUBLIC_DIR, full).replaceAll("\\", "/")}`);
 }
 
 // Extracts every internal href from one file's source.
