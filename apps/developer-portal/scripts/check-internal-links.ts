@@ -32,13 +32,16 @@ const HREF_PATTERNS = [
   /\]\((\/[^)]*)\)/g,
 ];
 
-function collectFiles(dir: string): string[] {
+function collectFiles(
+  dir: string,
+  include: (name: string) => boolean = () => true,
+): string[] {
   const out: string[] = [];
   for (const name of readdirSync(dir)) {
     const full = join(dir, name);
     if (statSync(full).isDirectory()) {
-      out.push(...collectFiles(full));
-    } else if (/\.(tsx?|mdx)$/.test(name)) {
+      out.push(...collectFiles(full, include));
+    } else if (include(name)) {
       out.push(full);
     }
   }
@@ -49,16 +52,9 @@ function collectFiles(dir: string): string[] {
 // build-time link contract so an MDX image can be checked without pretending it
 // is an application route.
 function collectPublicRoutes(dir: string): string[] {
-  const out: string[] = [];
-  for (const name of readdirSync(dir)) {
-    const full = join(dir, name);
-    if (statSync(full).isDirectory()) {
-      out.push(...collectPublicRoutes(full));
-    } else {
-      out.push(`/${relative(PUBLIC_DIR, full).replaceAll("\\", "/")}`);
-    }
-  }
-  return out;
+  return collectFiles(dir).map(
+    (full) => `/${relative(PUBLIC_DIR, full).replaceAll("\\", "/")}`,
+  );
 }
 
 // Extracts every internal href from one file's source.
@@ -98,7 +94,7 @@ export function findBrokenLinks(files: string[], validRoutes: readonly string[])
 }
 
 function main(): void {
-  const files = collectFiles(APP_DIR);
+  const files = collectFiles(APP_DIR, (name) => /\.(tsx?|mdx)$/.test(name));
   const problems = findBrokenLinks(files, ALL_VALID);
   if (problems.length > 0) {
     console.error(`Broken internal links found (${problems.length}):`);
