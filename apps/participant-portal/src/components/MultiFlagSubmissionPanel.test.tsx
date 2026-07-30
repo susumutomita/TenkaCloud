@@ -260,9 +260,14 @@ describe("MultiFlagSubmissionPanel", () => {
     await user.click(await screen.findByRole("button", { name: "Next step" }));
 
     expect(screen.getByText("Step 4 of 4")).toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "Passphrase found in the problem" })).toHaveValue(
-      "TC{HELLO-TENKACLOUD}",
-    );
+    const practiceFlagInput = screen.getByRole("textbox", {
+      name: "Passphrase found in the problem",
+    });
+    expect(practiceFlagInput).toHaveValue("TC{HELLO-TENKACLOUD}");
+    await user.clear(practiceFlagInput);
+    await user.click(screen.getByRole("button", { name: "Submit and score +100 pt" }));
+    expect(screen.getByText("3 cleared")).toBeInTheDocument();
+    await user.type(practiceFlagInput, "TC{{HELLO-TENKACLOUD}");
     await user.click(screen.getByRole("button", { name: "Submit and score +100 pt" }));
 
     expect(await screen.findByText("4 cleared")).toBeInTheDocument();
