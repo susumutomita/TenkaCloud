@@ -128,6 +128,10 @@ Parameters:
     Type: String
     Default: ""
     NoEcho: true
+    AllowedPattern: '^$|^[A-Za-z0-9_=,.@:/-]{16,128}$'
+    ConstraintDescription: >-
+      Leave empty for a same-account Lite trial, or enter 16-128 ASCII letters,
+      digits, and _ = , . @ : / -.
     Description: >-
       Optional CDK_PARAM_DEPLOY_EXTERNAL_ID for AssumeRole into competitor accounts
       (problem deploy backend). Leave empty for a local-only Lite trial.

@@ -31,8 +31,13 @@ import { MATURITY_LABELS, type Maturity } from "../../apps/developer-portal/src/
 const REPO_ROOT = resolve(import.meta.dirname, "../..");
 const MDX_ROOT = join(REPO_ROOT, "apps/developer-portal/src/app/developers/docs");
 const OUT_ROOT = join(REPO_ROOT, "landing/docs");
+const PUBLIC_DOCS_ROOT = join(REPO_ROOT, "apps/developer-portal/public/docs");
 const GITHUB_REPO = "https://github.com/susumutomita/TenkaCloud";
 const SITE_ORIGIN = "https://tenkacloud.com";
+const DOC_ASSETS = [
+  "assets/problem-author-flow.ja.svg",
+  "assets/problem-author-flow.en.svg",
+] as const;
 
 /**
  * Locale model mirrors the hand-built landing: the path root serves Japanese
@@ -59,11 +64,6 @@ interface DocSection {
 // listed here — main() fails loudly on drift so new docs can't silently vanish.
 const SECTIONS: readonly DocSection[] = [
   {
-    title: "Getting started",
-    jaTitle: "はじめに",
-    pages: [{ slug: "getting-started", mdx: "getting-started/page.mdx" }],
-  },
-  {
     title: "Role manuals",
     jaTitle: "役割別マニュアル",
     pages: [
@@ -73,6 +73,11 @@ const SECTIONS: readonly DocSection[] = [
       { slug: "manual/participant", mdx: "manual/participant/page.mdx" },
       { slug: "manual/problem-author", mdx: "manual/problem-author/page.mdx" },
     ],
+  },
+  {
+    title: "Getting started",
+    jaTitle: "はじめに",
+    pages: [{ slug: "getting-started", mdx: "getting-started/page.mdx" }],
   },
   {
     title: "Concepts",
@@ -104,6 +109,8 @@ const SECTIONS: readonly DocSection[] = [
       { slug: "reference/problem-metadata", mdx: "reference/problem-metadata/page.mdx" },
       { slug: "reference/runtime-matrix", mdx: "reference/runtime-matrix/page.mdx" },
       { slug: "reference/cli", mdx: "reference/cli/page.mdx" },
+      { slug: "reference/lite-settings", mdx: "reference/lite-settings/page.mdx" },
+      { slug: "reference/lite-messages", mdx: "reference/lite-messages/page.mdx" },
       { slug: "reference/security-provenance", mdx: "reference/security-provenance/page.mdx" },
       { slug: "reference/validation-errors", mdx: "reference/validation-errors/page.mdx" },
     ],
@@ -402,12 +409,12 @@ ${args.article}
 
 const HOME_COPY = {
   ja: {
-    title: "開発者ドキュメント",
-    lede: `問題パックの作成から、イベント運営、スキーマ / CLI リファレンスまで。ソースは <a href="${GITHUB_REPO}" target="_blank" rel="noopener noreferrer">GitHub</a> のリポジトリと同期しています。API reference と examples は当面 GitHub 側を参照してください。`,
+    title: "TenkaCloud ドキュメント",
+    lede: `開発者・競技開催者・競技参加者・問題作成者の4つの役割から、今日行う作業に合うマニュアルを選べます。まず「役割から選ぶマニュアル」を開いてください。ソースは <a href="${GITHUB_REPO}" target="_blank" rel="noopener noreferrer">GitHub</a> のリポジトリと同期しています。`,
   },
   en: {
-    title: "Developer docs",
-    lede: `From authoring problem packs to running events, plus the schema / CLI reference. The source is kept in sync with the <a href="${GITHUB_REPO}" target="_blank" rel="noopener noreferrer">GitHub</a> repository; for the API reference and examples, use GitHub for now.`,
+    title: "TenkaCloud documentation",
+    lede: `Choose the manual for the work you are doing today: developer, competition organizer, competition participant, or problem author. Start with “Manuals by role.” The source is kept in sync with the <a href="${GITHUB_REPO}" target="_blank" rel="noopener noreferrer">GitHub</a> repository.`,
   },
 } as const;
 
@@ -459,6 +466,13 @@ function assertRegistryParity(): void {
 async function generate(): Promise<Map<string, string>> {
   assertRegistryParity();
   const files = new Map<string, string>();
+  for (const asset of DOC_ASSETS) {
+    const sourcePath = join(PUBLIC_DOCS_ROOT, asset);
+    if (!existsSync(sourcePath)) {
+      throw new Error(`missing docs asset: ${sourcePath.replace(`${REPO_ROOT}/`, "")}`);
+    }
+    files.set(join(OUT_ROOT, asset), readFileSync(sourcePath, "utf8"));
+  }
   for (const locale of LOCALES) {
     files.set(outPath(null, locale), docsHome(locale));
     for (const section of SECTIONS) {

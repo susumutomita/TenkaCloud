@@ -4,26 +4,29 @@ export const metadata = { title: "Deploy modes and launch paths" };
 
 # Deploy modes and launch paths <MaturityBadge level="preview" />
 
-Two questions trip up first-time operators: "how do I actually deploy the
-platform?" and "the CodePipeline is the default — so when does it run?" This page
-is the map. The platform itself is deployed by a **manual CLI** step; the
-CodePipeline is for **rolling out tenant stacks**, not for standing up the platform.
+Lite and SaaS differ in audience, entry point, AWS services, and verification
+status. Use the [competition organizer manual](/developers/docs/manual/organizer/)
+for the executable Lite procedure. The SaaS sections here describe repository
+architecture; they are not a recently live-verified setup procedure.
 
 ## Two deploy modes
 
-- **Lite mode** — `make deploy`. A single organizer running one event. It skips the
-  SBT control plane, tenant pipeline, and System Admin invitation entirely and
-  deploys just two stacks via `infrastructure/bin/tenkacloud-lite.ts`:
-  AppPlaneCore (`tenantId="local"`) plus the problem-deploy backend / participant
-  portal. **There is no CodePipeline in Lite mode.** Complete removal is
-  `make destroy-all`; use `make destroy` only to preserve DynamoDB history.
-- **SaaS mode** — `make deploy-saas` (`scripts/install.sh`, three phases). Full
-  multi-tenant operation: pooled BASIC / ADVANCED tiers, the PLATINUM silo tier,
-  and System Admin invitations. Teardown is `make destroy-saas`.
+- **Lite mode** — One organizing group runs an event in its own AWS account. The
+  recommended `lite-pipeline.yaml` entry point uses CloudFormation to create
+  CodeBuild, which runs `make deploy`. It does not use AWS CodePipeline. A local
+  checkout can also run `make deploy` directly.
+- **SaaS mode** — Repository architecture for serving tenants to multiple
+  organizations. It contains `make deploy-saas`, pooled and silo tenants, System
+  Admin, and a CodePipeline for existing-tenant updates, but no recent recorded
+  fresh-AWS run covers setup through teardown.
 
-Both modes are run by an operator from a shell. CI never deploys.
+Treat Lite as the current organizer procedure. Re-verify SaaS in a dedicated
+environment before evaluating it.
 
 ## How a new tenant is provisioned
+
+> **SaaS architecture reference:** This and the next section are not used by a
+> current Lite event.
 
 New-tenant provisioning and pipeline rollout are **different paths** — this is the
 distinction the old docs got wrong.

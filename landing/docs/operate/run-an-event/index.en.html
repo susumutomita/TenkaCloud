@@ -31,15 +31,15 @@
 </header>
 <div class="wrap docs-grid">
 <aside class="docs-nav"><a class="docs-home-link" href="/docs/index.en.html">Docs home</a>
-<section><h5>Getting started</h5><ul>
-<li><a href="/docs/getting-started/index.en.html">Getting started</a></li>
-</ul></section>
 <section><h5>Role manuals</h5><ul>
 <li><a href="/docs/manual/index.en.html">Manuals by role</a></li>
 <li><a href="/docs/manual/developer/index.en.html">Developer manual</a></li>
 <li><a href="/docs/manual/organizer/index.en.html">Competition organizer manual</a></li>
 <li><a href="/docs/manual/participant/index.en.html">Competition participant manual</a></li>
 <li><a href="/docs/manual/problem-author/index.en.html">Problem author manual</a></li>
+</ul></section>
+<section><h5>Getting started</h5><ul>
+<li><a href="/docs/getting-started/index.en.html">Getting started</a></li>
 </ul></section>
 <section><h5>Concepts</h5><ul>
 <li><a href="/docs/concepts/problem-packs/index.en.html">Problem packs</a></li>
@@ -58,6 +58,8 @@
 <li><a href="/docs/reference/problem-metadata/index.en.html">Problem metadata reference</a></li>
 <li><a href="/docs/reference/runtime-matrix/index.en.html">Runtime capability matrix</a></li>
 <li><a href="/docs/reference/cli/index.en.html">CLI reference</a></li>
+<li><a href="/docs/reference/lite-settings/index.en.html">Lite setting reference</a></li>
+<li><a href="/docs/reference/lite-messages/index.en.html">Lite settings message reference</a></li>
 <li><a href="/docs/reference/security-provenance/index.en.html">Security and provenance model</a></li>
 <li><a href="/docs/reference/validation-errors/index.en.html">Validation error reference</a></li>
 </ul></section>
@@ -65,24 +67,29 @@
 <main class="doc">
 <article>
 <h1>Run an event end to end <span class="doc-badge doc-badge--preview">Preview</span></h1>
-<p>This is the operator walkthrough: from a freshly deployed platform to a competitor
-solving a problem in their own cloud account. It is the prose form of the
-single-pass flow the platform guarantees (tenant creation → application console →
-problem deploy → participant join).</p>
-<h2>Create a tenant</h2>
-<p>In SaaS mode, a System Admin creates a tenant from the <code>admin-console</code> (the control
-plane front end). Tenant creation emits <code>onboardingRequest</code>; the tenant is
-provisioned as pooled by default, or as a dedicated silo stack for the PLATINUM
-tier. The tenant admin then receives the <code>application-admin-console</code> URL for their
-plane. In Lite mode there is a single local tenant and you go straight to the
-application console.</p>
+<p>This operator walkthrough presents Lite as the current event procedure. SaaS
+tenant creation and multi-cloud are separated as architecture reference.</p>
+<h2>Run an event with Lite</h2>
+<ol>
+<li>Sign in to Lite&#39;s Application Admin Console.</li>
+<li>Create an event, a test team, and the problem selection.</li>
+<li>Connect a test competitor AWS account with the procedure below.</li>
+<li>Start a problem and open its endpoint.</li>
+<li>Solve it, submit a real <code>TC{...}</code> flag, and confirm the score.</li>
+<li>Reset it and confirm a second start.</li>
+<li>Stop it and confirm the problem stack is gone from the competitor account.</li>
+<li>Give participants the Participant Portal URL, team key, and start time.</li>
+</ol>
+<h2>Create a SaaS tenant (architecture reference)</h2>
+<p>The repository contains code for a System Admin to create a tenant from
+<code>admin-console</code>. There is no recent recorded fresh-AWS run from tenant creation
+through scoring and teardown. Re-verify it in a dedicated environment rather
+than treating this section as a production procedure.</p>
 <h2>Connect a competitor account</h2>
-<p>Each competing team deploys a one-time CloudFormation template
-(<code>infrastructure/templates/competitor-bootstrap.yaml</code>) into their own AWS account.
-It creates a least-privilege IAM role whose trust policy is pinned to the
-TenkaCloud control-plane account id <strong>and</strong> the tenant&#39;s <strong>ExternalId</strong>, so only
-TenkaCloud — and only for that tenant — can assume it. The team shares the
-resulting role ARN back to the operator. The full competitor-side steps live in the
+<p>Each team deploys <code>infrastructure/templates/competitor-bootstrap.yaml</code> once in
+its AWS account. Use the same ExternalId configured by the organizer: 16–128
+ASCII letters, digits, and <code>_ = , . @ : / -</code>. Share the resulting role ARN,
+never an administrator credential or secret key. The full competitor-side steps live in the
 <a href="https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/README.md">competitor setup guide</a>.</p>
 <h2>Deploy a problem</h2>
 <p>In the <code>application-admin-console</code>, create an event, pick problems from the catalog
@@ -92,16 +99,10 @@ team&#39;s account and region, and deploy. Each deploy assumes the team&#39;s ro
 ExternalId and runs CloudFormation in their account. Watch status by polling the
 deployment until it reaches a terminal state, then tear it down from the same
 console when the event ends.</p>
-<h2>Enable multi-cloud</h2>
-<p>To run Sakura / Azure / GCP problems, set <code>features: { &quot;nonAwsRuntime&quot;: true }</code> in
-<code>runtime-config.json</code>. A Team Cloud Credentials panel then appears on the Competitor
-Accounts page; register each team&#39;s provider credentials there (the panel writes
-them to SSM SecureString via the API — operators never touch SSM directly). Once a
-provider&#39;s credentials are registered, that provider&#39;s problems become selectable in
-the event picker. The provider-by-provider credential steps and which fields go in
-the panel are in the <a href="https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/README.md">competitor setup guide</a>,
-and the support state of each runtime is the
-<a href="/docs/reference/runtime-matrix/index.en.html">runtime capability matrix</a>.</p>
+<h2>Enable multi-cloud (architecture reference)</h2>
+<p>Sakura, Azure, and GCP are not uniformly executable. Check the
+<a href="/docs/reference/runtime-matrix/index.en.html">runtime capability matrix</a> first,
+then use only a runtime explicitly marked executable in a dedicated test event.</p>
 <p>Related: <a href="/docs/operate/deploy-paths/index.en.html">deploy modes and launch paths</a>
 and the <a href="/docs/concepts/architecture/index.en.html">platform architecture</a>.</p>
 

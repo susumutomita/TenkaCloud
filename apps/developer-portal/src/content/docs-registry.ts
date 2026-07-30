@@ -33,7 +33,8 @@ export const DOC_PAGES: readonly DocPage[] = [
     slug: "getting-started",
     href: "/developers/docs/getting-started/",
     title: "Getting started",
-    description: "Step-by-step deploys for every mode: local drills, Codespaces, Lite, SaaS.",
+    description:
+      "Local drills and Lite setup, plus a clearly marked unverified SaaS architecture path.",
     maturity: "stable",
     section: "Start here",
     headings: [
@@ -44,7 +45,7 @@ export const DOC_PAGES: readonly DocPage[] = [
       { id: "control-data-backend", text: "Choosing the control-data backend: DynamoDB or Turso" },
       { id: "saas", text: "SaaS mode — multi-tenant" },
     ],
-    body: "Step-by-step deployment guide for every TenkaCloud mode. Local container drills with Docker, instant scoring, and the participant portal, zero-install GitHub Codespaces, Lite mode on AWS via the CloudFormation console launcher or the CLI with make deploy, the DynamoDB versus Turso control-data backend switch (CDK_PARAM_CONTROL_DATA_BACKEND), and the full multi-tenant SaaS mode with make deploy-saas. 全モードのステップバイステップ・デプロイ手順。ローカルドリル (Docker)、Codespaces、Lite (コンソールランチャー / CLI)、DynamoDB と Turso の切り替え、マルチテナント SaaS。",
+    body: "Getting started with local container drills through make local, zero-install GitHub Codespaces, and the currently recommended Lite deployment pipeline: a CloudFormation launcher creates CodeBuild, which runs make deploy and exposes the Admin Console and Participant Portal. The DynamoDB versus Turso control-data backend switch uses CDK_PARAM_CONTROL_DATA_BACKEND. SaaS code and architecture exist, but no recent fresh-environment end-to-end verification is recorded, so SaaS is not presented as a current self-service procedure. はじめに。ローカルドリル、Codespaces、Lite導入パイプライン、Participant Portal、DynamoDBとTursoの切り替え。SaaSは最近の一連の実環境確認がないため、現在の導入手順としては案内しない。",
   },
   {
     slug: "manual",
@@ -87,14 +88,15 @@ export const DOC_PAGES: readonly DocPage[] = [
     maturity: "preview",
     section: "Role manuals",
     headings: [
-      { id: "choose-the-operating-mode-first", text: "Choose the operating mode first" },
-      { id: "the-event-checklist", text: "The event checklist" },
-      { id: "where-settings-live", text: "Where settings live" },
-      { id: "choose-the-control-data-database", text: "Choose the control-data database" },
-      { id: "common-parameters", text: "Common parameters" },
+      { id: "choose-lite-or-saas-by-use-case", text: "Choose Lite or SaaS by use case" },
+      { id: "the-lite-deployment-pipeline", text: "The Lite deployment pipeline" },
+      { id: "the-lite-event-flow", text: "The Lite event flow" },
+      { id: "choose-where-control-data-is-stored", text: "Choose where control data is stored" },
+      { id: "change-settings", text: "Change settings" },
       { id: "before-participants-arrive", text: "Before participants arrive" },
+      { id: "saas-operating-status", text: "SaaS operating status" },
     ],
-    body: "Competition organizer manual for Lite and SaaS event operations. Shows where infrastructure environments .env settings live, ENV selection, administrator email and AWS account settings, DynamoDB versus Turso database switching with CDK_PARAM_CONTROL_DATA_BACKEND, SSM SecureString token handling, retained table and unsynchronized data warnings, DYNAMODB_BILLING_MODE, capacity, log retention, alerts, quotas, CIDRs, Lambda deploys, features, audit log, rehearsal, scoring, reset, and stop. 競技開催者マニュアル。データベース切り替え、パラメータ、設定ファイル、Turso未ライブ検証、競技リハーサル。",
+    body: "Competition organizer manual with an executable Lite procedure and a separate SaaS status section. Choose by use case; deploy Lite through the CloudFormation plus CodeBuild launcher or make deploy; rehearse start, scoring, reset, stop, and teardown. The linked Lite setting and message references define database parameters, format, range, default, invalid-input behavior, displayed text, cause, system action, and operator action. Control data can use DynamoDB or an explicitly unverified Turso path. SaaS code exists but has no recent recorded fresh-environment end-to-end verification and is not presented as a current organizer procedure. 競技開催者マニュアル。Liteの実行手順とSaaSの未検証状態を分離し、用途比較、導入パイプライン、データベース、パラメータ、設定値、エラー文言、採点と料金の警告条件を説明する。",
   },
   {
     slug: "manual/participant",
@@ -111,7 +113,7 @@ export const DOC_PAGES: readonly DocPage[] = [
       { id: "words-you-will-see", text: "Words you will see" },
       { id: "when-something-goes-wrong", text: "When something goes wrong" },
     ],
-    body: "Competition participant manual for the real TenkaCloud flow: choose a problem, read the goal and first action, start an isolated environment, open its endpoint, investigate or repair it, submit the full TC flag, reset, and stop. Plain-language glossary for server, cloud, Docker, problem environment, endpoint, flag, hint, and reset. 競技参加者マニュアル。実問題の開始、接続、調査、flag提出、採点、リセット、停止と、サーバー・クラウド・Dockerのやさしい説明。",
+    body: "Competition participant manual for the real TenkaCloud flow: choose a problem, read the goal and first action, start an isolated environment, open its endpoint, investigate or repair it, submit the full TC flag, reset, and stop. Local practice uses the public make local and make local-down commands. Plain-language glossary for server, cloud, Docker, problem environment, endpoint, flag, hint, and reset. 競技参加者マニュアル。実問題の開始、接続、調査、flag提出、採点、リセット、停止、make localとmake local-down、サーバー・クラウド・Dockerのやさしい説明。",
   },
   {
     slug: "manual/problem-author",
@@ -128,7 +130,7 @@ export const DOC_PAGES: readonly DocPage[] = [
       { id: "rehearse-the-real-interaction", text: "Rehearse the real interaction" },
       { id: "publish-safely", text: "Publish safely" },
     ],
-    body: "Problem author manual for pack init and pack validate, participant-friendly scenarios, metadata.json, runtime entry, verifier and scoring rules, README, hints, local rehearsal, reset and stop, immutable 40-character Git commit pins, and safe publishing. WordPress belongs only as an independent local problem when it has its own learning objective and verifier; it is not onboarding content. 問題作成者マニュアル。問題文、実環境、metadata、verifier、hint、ローカルリハーサル、pack検証と安全な公開。",
+    body: "Problem author manual with a visual publication decision flow: validate from a fresh checkout, rehearse start through flag submission when the local runtime is supported, record Not run when it is unsupported, and use an independent participant-role test before publication. Also covers participant-friendly scenarios, metadata.json, runtime entry, verifier, scoring, hints, reset, stop, immutable commit pins, and safe publishing. WordPress belongs only as an independent local problem, never onboarding content. 問題作成者マニュアル。fresh checkoutでの検証、対応runtimeの実演、未対応時のNot run、第三者の参加者役確認をフロー図で示す。",
   },
   {
     slug: "concepts/problem-packs",
@@ -162,7 +164,8 @@ export const DOC_PAGES: readonly DocPage[] = [
     slug: "operate/deploy-paths",
     href: "/developers/docs/operate/deploy-paths/",
     title: "Deploy modes and launch paths",
-    description: "Lite vs SaaS, how tenants are provisioned, and what the CodePipeline is for.",
+    description:
+      "The supported Lite launcher and the separate, currently unverified SaaS architecture.",
     maturity: "preview",
     section: "Operate",
     headings: [
@@ -171,14 +174,14 @@ export const DOC_PAGES: readonly DocPage[] = [
       { id: "what-the-saas-pipeline-is-for", text: "What the SaaS pipeline is for" },
       { id: "how-a-problem-deploys", text: "How a problem deploys" },
     ],
-    body: "Deploy modes and launch paths. Lite mode (make deploy) deploys two stacks via tenkacloud-lite.ts with no CodePipeline; SaaS mode (make deploy-saas, three phases) stands up the SBT control plane. The platform is deployed by a manual CLI step; CI never deploys. A new tenant is provisioned by the SBT BashJobRunner running provision-tenant.sh on onboardingRequest (pooled by default, a silo stack for PLATINUM) — not by the pipeline. The tenkacloud-saas-pipeline CodePipeline rolls out tenant stacks across existing tenants from an S3 source.zip via a Step Functions WaveIterator and CodeBuild. A problem deploy goes console Deploy to Deploy API to EventBridge DeployCreateRequested to Step Functions CodeBuild to cross-account CloudFormation CreateStack with the ExternalId. デプロイモードと起動経路の地図。手動 CLI (Lite make deploy / SaaS make deploy-saas) と自動 (CodePipeline によるテナント rollout) を区別する。新規テナント払い出しは provision-tenant.sh、既存テナント rollout は tenkacloud-saas-pipeline、問題デプロイは DeployCreateRequested から CodeBuild とクロスアカウント CFn。",
+    body: "Deploy modes and launch paths. The current Lite deployment pipeline is a CloudFormation launcher that creates CodeBuild and runs make deploy; despite its filename, it does not use AWS CodePipeline. A local checkout can run make deploy directly. SaaS code includes make deploy-saas, SBT tenant provisioning, and the tenkacloud-saas-pipeline CodePipeline for existing-tenant rollout, but this tenant rollout path has no recent recorded fresh-environment end-to-end verification and is architecture reference rather than current setup guidance. デプロイモードと起動経路。LiteはCloudFormationとCodeBuildの導入パイプライン。SaaSはコード構成の参考だが、最近の新規環境での一連の確認がなく現在の導入手順ではない。",
   },
   {
     slug: "operate/run-an-event",
     href: "/developers/docs/operate/run-an-event/",
     title: "Run an event end to end",
     description:
-      "Create a tenant, connect competitor accounts, deploy problems, and enable multi-cloud.",
+      "Run the current Lite event flow; SaaS tenant and multi-cloud sections are architecture reference.",
     maturity: "preview",
     section: "Operate",
     headings: [
@@ -187,7 +190,7 @@ export const DOC_PAGES: readonly DocPage[] = [
       { id: "deploy-a-problem", text: "Deploy a problem" },
       { id: "enable-multi-cloud", text: "Enable multi-cloud" },
     ],
-    body: "Run an event end to end, the operator walkthrough. Create a tenant from the admin-console (onboardingRequest; pooled or PLATINUM silo) and hand the application-admin-console URL to the tenant admin. Connect a competitor account by deploying competitor-bootstrap.yaml, a least-privilege IAM role pinned to the control-plane account id and the tenant ExternalId. Deploy a problem from the application-admin-console event create wizard: pick catalog problems, assign each team account and region, deploy via cross-account CloudFormation, poll status, and tear down. Enable multi-cloud by setting features.nonAwsRuntime in runtime-config.json, then register each team's Sakura, Azure, or GCP credentials in the Team Cloud Credentials panel, which writes them to SSM SecureString via the API so operators never touch SSM directly. イベントを通しで運営する手順。テナント作成、競技者アカウント接続 (competitor-bootstrap.yaml + ExternalId)、問題デプロイ (event 作成 → picker → デプロイ → status ポーリング → teardown)、マルチクラウド有効化 (nonAwsRuntime + Team Cloud Credentials パネル)。",
+    body: "Run an event end to end. For the current Lite path, sign in to the Application Admin Console, connect a test competitor account with competitor-bootstrap.yaml and the same 16-128 character ExternalId, create an event, start a problem, submit a real flag, reset, stop, and verify teardown. SaaS tenant creation and multi-cloud sections describe repository architecture only; they are not recently live-verified organizer procedures. イベント運営。現在のLite経路でテスト競技者アカウント接続、問題起動、flag提出、リセット、停止、削除まで確認する。SaaSテナントとマルチクラウドは構成参考であり最近のライブ検証済み手順ではない。",
   },
   {
     slug: "operate/use-existing-pack",
@@ -212,6 +215,43 @@ export const DOC_PAGES: readonly DocPage[] = [
   // declarations, the pack CLI usage strings, and the validator error-code
   // registry. The drift check fails the build when those sources change without a
   // regenerate.
+  {
+    slug: "reference/lite-settings",
+    href: "/developers/docs/reference/lite-settings/",
+    title: "Lite setting reference",
+    description:
+      "Purpose, format, length or range, default, example, and invalid behavior for Lite settings.",
+    maturity: "preview",
+    section: "Reference",
+    headings: [
+      { id: "first-setup", text: "First setup" },
+      { id: "control-data-storage", text: "Control-data storage" },
+      { id: "dynamodb-and-logs", text: "DynamoDB and logs" },
+      { id: "scoring-and-cost-warning-email", text: "Scoring and cost warning email" },
+      {
+        id: "problem-deployment-and-feature-switches",
+        text: "Problem deployment and feature switches",
+      },
+    ],
+    body: "Lite setting reference for every commonly changed value: purpose, accepted format, character or numeric range, default, example, and invalid-input behavior. ExternalId is empty only for a same-account trial or 16-128 ASCII letters, digits, and _ = , . @ : / -. Covers DynamoDB versus Turso, capacities, log retention, scoring and cost warning email, CIDRs, deployment switches, features, and audit records. Lite設定項目リファレンス。用途、形式、文字数・数値範囲、省略時、例、不正値の動作を定義する。",
+  },
+  {
+    slug: "reference/lite-messages",
+    href: "/developers/docs/reference/lite-messages/",
+    title: "Lite settings message reference",
+    description: "Exact displayed text with cause, system action, and operator action.",
+    maturity: "preview",
+    section: "Reference",
+    headings: [
+      { id: "before-deployment", text: "Before deployment" },
+      { id: "database", text: "Database" },
+      { id: "numbers-and-json", text: "Numbers and JSON" },
+      { id: "network", text: "Network" },
+      { id: "during-deployment", text: "During deployment" },
+      { id: "settings-without-a-dedicated-error", text: "Settings without a dedicated error" },
+    ],
+    body: "Lite settings message reference. Each entry records the exact displayed text, cause, system action, and operator action. Includes env-init email, Region, and ExternalId errors; DynamoDB or Turso selection errors; number, JSON, CIDR, CloudFormation, and Cognito failures; and an explicit list of settings that have no dedicated validation message. Lite設定メッセージ一覧。文言、要因、システムの動作、運営者の処置と、専用エラーがない設定を明記する。",
+  },
   {
     slug: "reference/pack-manifest",
     href: "/developers/docs/reference/pack-manifest/",
@@ -317,12 +357,12 @@ export const DOC_PAGES: readonly DocPage[] = [
 export const DOC_SECTIONS: readonly DocSection[] = buildSections(DOC_PAGES);
 
 function buildSections(pages: readonly DocPage[]): readonly DocSection[] {
-  const order: string[] = [];
+  const order: string[] = ["Role manuals", "Start here"];
   const grouped = new Map<string, DocPage[]>();
   for (const page of pages) {
     if (!grouped.has(page.section)) {
       grouped.set(page.section, []);
-      order.push(page.section);
+      if (!order.includes(page.section)) order.push(page.section);
     }
     grouped.get(page.section)?.push(page);
   }

@@ -31,15 +31,15 @@
 </header>
 <div class="wrap docs-grid">
 <aside class="docs-nav"><a class="docs-home-link" href="/docs/">Docs ホーム</a>
-<section><h5>はじめに</h5><ul>
-<li><a href="/docs/getting-started/">はじめに</a></li>
-</ul></section>
 <section><h5>役割別マニュアル</h5><ul>
 <li><a href="/docs/manual/">役割から選ぶマニュアル</a></li>
 <li><a href="/docs/manual/developer/">開発者マニュアル</a></li>
 <li><a href="/docs/manual/organizer/" aria-current="page">競技開催者マニュアル</a></li>
 <li><a href="/docs/manual/participant/">競技参加者マニュアル</a></li>
 <li><a href="/docs/manual/problem-author/">問題作成者マニュアル</a></li>
+</ul></section>
+<section><h5>はじめに</h5><ul>
+<li><a href="/docs/getting-started/">はじめに</a></li>
 </ul></section>
 <section><h5>コンセプト</h5><ul>
 <li><a href="/docs/concepts/problem-packs/">問題パック</a></li>
@@ -58,6 +58,8 @@
 <li><a href="/docs/reference/problem-metadata/">問題メタデータ</a></li>
 <li><a href="/docs/reference/runtime-matrix/">ランタイム対応マトリクス</a></li>
 <li><a href="/docs/reference/cli/">CLI リファレンス</a></li>
+<li><a href="/docs/reference/lite-settings/">Lite設定項目リファレンス</a></li>
+<li><a href="/docs/reference/lite-messages/">Lite設定メッセージ一覧</a></li>
 <li><a href="/docs/reference/security-provenance/">セキュリティと来歴モデル</a></li>
 <li><a href="/docs/reference/validation-errors/">検証エラーリファレンス</a></li>
 </ul></section>
@@ -65,217 +67,187 @@
 <main class="doc">
 <article>
 <h1>競技開催者マニュアル <span class="doc-badge doc-badge--preview">Preview</span></h1>
-<p>TenkaCloudをデプロイする、競技を準備する、人を招待する、環境設定を変える人の
-ためのマニュアルです。プラットフォームのソースコードや問題パックの書き方を
-理解する必要はありません。</p>
-<h2>あなたのゴール</h2>
-<p>開催者がAdmin Consoleを開け、各参加者が正しいParticipant Portalを開け、すべての
-問題を開始・採点・停止できる状態にします。</p>
-<h2>最初に運用モードを選ぶ</h2>
+<p>TenkaCloudを自分のAWSアカウントへ用意し、競技を開く人のためのマニュアルです。
+このページの実行手順は、現在開催者へ案内できる <strong>Liteモード</strong>を対象にします。
+SaaSモードは手順へ混ぜず、末尾の<a href="#saas%E9%81%8B%E7%94%A8%E3%81%AE%E7%8F%BE%E7%8A%B6">「SaaS運用の現状」</a>で分けて説明します。</p>
+<h2>このマニュアルを読むとできること</h2>
+<ul>
+<li>自分の用途がLiteとSaaSのどちらに当たるか判断する。</li>
+<li>Liteの導入パイプラインを使ってTenkaCloudを用意する。</li>
+<li>Admin ConsoleとParticipant Portalを確認する。</li>
+<li>テストチームで問題の開始、採点、リセット、停止をリハーサルする。</li>
+<li>設定を変更するとき、入力形式とエラーの調べ方が分かる。</li>
+</ul>
+<h2>LiteとSaaSを利用場面で選ぶ</h2>
 <table>
 <thead>
 <tr>
-<th>モード</th>
-<th>選ぶ条件</th>
-<th>コマンド</th>
+<th>利用場面</th>
+<th>選ぶモード</th>
+<th>理由</th>
+<th>現在の案内状態</th>
 </tr>
 </thead>
 <tbody><tr>
-<td>Lite</td>
-<td>1人の開催者が1つのTenkaCloud環境を運用する</td>
-<td><code>make deploy ENV=&lt;environment&gt;</code></td>
+<td>自社、学校、勉強会など、1つの運営グループが自分のAWSで競技を開く</td>
+<td><strong>Lite</strong></td>
+<td>テナント提供機能が不要で、導入パイプラインから1つのTenkaCloud環境を用意できる</td>
+<td><strong>このマニュアルの推奨経路</strong></td>
 </tr>
 <tr>
+<td>問題作成者が自分のAWSで本番に近い大会をリハーサルする</td>
+<td><strong>Lite</strong></td>
+<td>問題パックを有効化し、開催者と参加者の画面を同じ環境で確認できる</td>
+<td><strong>このマニュアルの推奨経路</strong></td>
+</tr>
+<tr>
+<td>複数の会社・学校へ、それぞれ別の管理者とテナントを継続的に提供する</td>
 <td>SaaS</td>
-<td>運営者が複数の組織へテナントを提供する</td>
-<td><code>make deploy-saas ENV=&lt;environment&gt;</code></td>
+<td>組織ごとのテナント管理と、複数テナントへの更新配布が必要</td>
+<td><strong>最近の実環境での一連の確認なし。開催手順としては案内しない</strong></td>
+</tr>
+<tr>
+<td>TenkaCloud自体をマルチテナントSaaSとして運営する</td>
+<td>SaaS</td>
+<td>System Admin、プール型・サイロ型テナント、全テナント更新が必要</td>
+<td><strong>コードはあるが、現在のセルフサービス導入経路ではない</strong></td>
 </tr>
 </tbody></table>
-<p>マルチテナントサービスを意図的に運用するのでなければ、まずLiteを使います。経路の
-違いは<a href="/docs/operate/deploy-paths/">デプロイモードと起動経路</a>を参照してください。</p>
-<h2>競技開催のチェックリスト</h2>
+<p>判断に迷う場合はLiteを選びます。SaaSに該当する利用場面でも、実環境で検証して
+障害対応できる運営チームがいなければ本番競技には使わないでください。</p>
+<h2>Liteの導入パイプライン</h2>
+<p>ここでいう「導入パイプライン」は、CloudFormationでCodeBuildを1つ作り、その
+CodeBuildがソースの取得、必要ソフトの導入、<code>make deploy</code>、接続先URLの表示までを
+順番に実行する仕組みです。AWSの製品名である <strong>CodePipelineは使いません</strong>。</p>
+<p>生成元は
+<a href="https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/lite-pipeline.yaml"><code>infrastructure/templates/lite-pipeline.yaml</code></a>
+です。</p>
+<h3>画面から導入する（推奨）</h3>
 <ol>
-<li>専用のAWSアカウントとリージョンを決める。</li>
-<li><code>infrastructure/environments/&lt;environment&gt;/.env.example</code>から同じ場所に
-<code>.env</code>を作る。</li>
-<li>必須のアカウント情報と管理者情報を埋める。</li>
-<li>最初の本番競技より前に、管理データ用データベースを選ぶ。</li>
-<li>デプロイし、Admin Consoleと招待された開催者アカウントを確認する。</li>
-<li>競技、チーム、使用する問題を作る。</li>
-<li>テストチームで開始、接続先、flag採点、リセット、停止を通しでリハーサルする。</li>
-<li>参加者にはParticipant PortalのURL、team key、開始時刻、
-<a href="/docs/manual/participant/">競技参加者マニュアル</a>だけを渡す。</li>
+<li><a href="/docs/getting-started/#lite-console-launcher">Getting startedの「Liteモード — コンソールランチャー」</a>を開く。</li>
+<li>AWSへサインインし、CloudFormationの画面で<code>TenantAdminEmail</code>を入力する。</li>
+<li>スタックを作成する。画面に表示されるIAM権限の確認内容を読み、同意する。</li>
+<li>出力されたCodeBuildへのリンクを開き、<strong>Start build</strong>を押す。</li>
+<li>ビルドが<code>Succeeded</code>になるまで待つ。</li>
+<li>ログ末尾に表示されるApplication Admin ConsoleとParticipant PortalのURLを控える。</li>
+<li><code>TenantAdminEmail</code>へ届いた招待メールから初回ログインする。</li>
 </ol>
-<p>画面上の一連の手順は
-<a href="/docs/operate/run-an-event/">競技を最初から最後まで運営する</a>にあります。</p>
-<h2>設定を書く場所</h2>
-<p>環境設定は次のファイルに書きます。</p>
-<pre><code class="language-text">infrastructure/environments/&lt;environment&gt;/.env
+<p>失敗した場合は、CodeBuildログで最初の<code>ERROR</code>を確認します。launcherを先に削除せず、
+<a href="/docs/reference/lite-messages/">Lite設定メッセージ一覧</a>から同じ文言を探してください。</p>
+<h3>手元のコマンドで導入する</h3>
+<p>リポジトリを操作できる場合だけ、次を使います。</p>
+<pre><code class="language-bash">make env-init ENV=development
+make deploy ENV=development
 </code></pre>
-<p>使う環境は<code>ENV</code>で選びます。</p>
-<pre><code class="language-bash">make deploy ENV=development
-make deploy ENV=production
-</code></pre>
-<p><code>.env</code>を書き換えただけでは稼働中の環境は変わりません。変更内容を確認してから、
-対象のデプロイコマンドを実行します。認証情報やトークンはGitへ入れません。</p>
-<h3>必須の識別設定</h3>
+<p><code>make env-init</code>は必要な値を質問し、
+<code>infrastructure/environments/development/.env</code>を作ります。<code>.env</code>を書き換えただけでは
+稼働中の環境は変わりません。変更後に<code>make deploy</code>を実行します。</p>
+<h2>Lite競技開催の流れ</h2>
+<ol>
+<li>Application Admin Consoleへ開催者としてログインする。</li>
+<li>使用する問題パックを有効化する。</li>
+<li>競技、チーム、使用する問題を作る。</li>
+<li>テスト用の競技者AWSアカウントを登録する。</li>
+<li>テストチームで問題を開始し、接続先を開く。</li>
+<li>本物の<code>TC{...}</code>を提出し、得点が増えることを確認する。</li>
+<li>問題をリセットし、もう一度開始できることを確認する。</li>
+<li>問題を停止し、競技者AWSアカウントのスタックが削除されたことを確認する。</li>
+<li>参加者へParticipant PortalのURL、team key、開始時刻、
+<a href="/docs/manual/participant/">競技参加者マニュアル</a>を渡す。</li>
+</ol>
+<p>画面操作の詳細は
+<a href="/docs/operate/run-an-event/">競技を最初から最後まで運営する</a>を参照してください。</p>
+<h2>管理データの保存先を選ぶ</h2>
+<p>管理データとは、競技、チーム、問題の起動状態、接続先、得点、開催者アカウント、
+監査記録です。参加者が操作する問題環境とは別です。</p>
 <table>
 <thead>
 <tr>
-<th>設定</th>
-<th>意味</th>
-<th>設定する場面</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>TENANT_ADMIN_EMAIL</code></td>
-<td>Liteで最初に招待する開催者</td>
-<td>Lite。未設定時は<code>SYSTEM_ADMIN_EMAIL</code>へフォールバック</td>
-</tr>
-<tr>
-<td><code>SYSTEM_ADMIN_EMAIL</code></td>
-<td>SaaSのシステム管理者</td>
-<td>SaaS</td>
-</tr>
-<tr>
-<td><code>AWS_ACCOUNT_ID</code></td>
-<td>別のAWSアカウントへ誤ってデプロイするのを防ぐ</td>
-<td>すべての環境で推奨</td>
-</tr>
-<tr>
-<td><code>AWS_REGION</code></td>
-<td>デプロイ先のAWSリージョン</td>
-<td>AWS CLIの既定値と違う場合</td>
-</tr>
-</tbody></table>
-<h2>管理データ用データベースを選ぶ</h2>
-<p>管理データとは、競技、チーム、デプロイ、接続先、競技者アカウント、妨害、監査ログ、
-SAML IdPの情報です。参加者が操作する問題環境とは別物です。</p>
-<table>
-<thead>
-<tr>
-<th>値</th>
+<th>選択</th>
 <th>保存先</th>
-<th>選ぶ条件</th>
+<th>使う場面</th>
 </tr>
 </thead>
 <tbody><tr>
-<td>未設定または<code>dynamodb</code></td>
+<td><code>dynamodb</code>（既定）</td>
 <td>AWS DynamoDB</td>
-<td>既定のAWS内完結経路を使う</td>
+<td>まず競技を開く。AWS内で完結させる</td>
 </tr>
 <tr>
 <td><code>turso</code></td>
 <td>Turso/libSQL</td>
-<td>DynamoDBテーブルを作らないLite構成を明示的に使う</td>
+<td>DynamoDBテーブルを作らない構成を、自分でライブ検証できる</td>
 </tr>
 </tbody></table>
-<p>保存先は次の設定で選びます。</p>
-<pre><code class="language-dotenv">CDK_PARAM_CONTROL_DATA_BACKEND=dynamodb
-</code></pre>
-<p>Tursoを使う場合は3つすべてが必要です。</p>
-<pre><code class="language-dotenv">CDK_PARAM_CONTROL_DATA_BACKEND=turso
-CDK_PARAM_TURSO_DATABASE_URL=https://&lt;database&gt;-&lt;organization&gt;.turso.io
-CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME=/TenkaCloud/&lt;environment&gt;/turso/auth-token
-</code></pre>
-<p>トークン本体はAWS Systems Manager Parameter Storeの<code>SecureString</code>へ保存します。
-<code>.env</code>へ貼り付けてはいけません。案内付きの設定手順は次です。</p>
-<pre><code class="language-bash">make turso-live ENV=development
-</code></pre>
-<h3>切り替えを単純なスイッチだと考えない</h3>
-<ul>
-<li>DynamoDBとTursoのデータは同期されません。</li>
-<li>可能な限り最初の本番競技より前に保存先を決めます。</li>
-<li>既存環境をDynamoDBからTursoへ変えると、Turso側に存在するデータから始まります。</li>
-<li>既存のDynamoDBテーブルは<code>RETAIN</code>です。CloudFormationの管理対象から外れても削除
-されず、料金が続く可能性があります。</li>
-<li>切り替え前に必要なデータをエクスポートし、新環境の確認後に残存テーブルを個別に
-確認します。</li>
-<li>Tursoだけに書かれたデータは、DynamoDBへ戻しても復元されません。</li>
-</ul>
-<p>Turso経路は実装済みで、単体テストとCDK synthでは確認されていますが、実Turso、
-新規AWSデプロイ、実際の請求を組み合わせた<strong>ライブ検証は未実施</strong>です。競技で使う
-前に<a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/running-costs.md">Running costs</a>
-を読んでください。</p>
-<h2>よく変更するパラメータ</h2>
-<p>運用結果を説明できない設定は、まず未設定のままにします。</p>
+<p>Turso経路は単体テストとCDK synthでは確認されていますが、実Turso、新規AWSデプロイ、
+請求までを組み合わせたライブ検証は未実施です。最初の本番競技では<code>dynamodb</code>を推奨します。</p>
+<p>保存先を後から切り替えてもデータは自動移行されません。DynamoDBとTursoは同期されず、
+DynamoDBのテーブルは保持されて料金が続く場合があります。</p>
+<h2>設定値を変更する</h2>
+<p>初心者が最初に入力するのは次の3項目です。</p>
 <table>
 <thead>
 <tr>
 <th>設定</th>
-<th>既定値</th>
-<th>変わるもの</th>
+<th>何を入力するか</th>
+<th>例</th>
 </tr>
 </thead>
 <tbody><tr>
-<td><code>DYNAMODB_BILLING_MODE</code></td>
-<td><code>PROVISIONED</code></td>
-<td>DynamoDBの課金モード。<code>PAY_PER_REQUEST</code>も選択可能</td>
+<td><code>TENANT_ADMIN_EMAIL</code></td>
+<td>初回ログインする開催者のメールアドレス</td>
+<td><code>organizer@example.com</code></td>
 </tr>
 <tr>
-<td><code>DYNAMODB_READ_CAPACITY</code> / <code>DYNAMODB_WRITE_CAPACITY</code></td>
-<td><code>1</code> / <code>1</code></td>
-<td><code>PROVISIONED</code>時の読み書き容量</td>
+<td><code>AWS_REGION</code></td>
+<td>TenkaCloudを置くAWSリージョン</td>
+<td><code>ap-northeast-1</code></td>
 </tr>
 <tr>
-<td><code>CDK_PARAM_LOG_RETENTION_DAYS</code></td>
-<td><code>1</code></td>
-<td>CloudWatch Logsの保持日数。AWS対応値だけを受け付ける</td>
-</tr>
-<tr>
-<td><code>CDK_PARAM_OPS_ALERT_EMAIL</code></td>
-<td>未設定</td>
-<td>メールを指定すると運用アラート用リソースを作る</td>
-</tr>
-<tr>
-<td><code>CDK_PARAM_OPS_MONTHLY_COST_LIMIT_USD</code></td>
-<td>未設定</td>
-<td>運用アラートで使う月額費用のしきい値</td>
-</tr>
-<tr>
-<td><code>CDK_PARAM_SOURCE_BUCKET_VERSIONING</code></td>
-<td><code>false</code></td>
-<td>ソース用S3 bucketのversioningを有効化・停止する</td>
-</tr>
-<tr>
-<td><code>CDK_PARAM_DEPLOY_QUOTA_BY_TIER</code></td>
-<td>未設定</td>
-<td>tier別の同時デプロイ上限をJSONで指定する</td>
-</tr>
-<tr>
-<td><code>CDK_PARAM_DEPLOY_ALLOWED_CIDRS</code></td>
-<td>未設定</td>
-<td>対応する問題へ渡す接続元CIDRをカンマ区切りで指定する</td>
-</tr>
-<tr>
-<td><code>CDK_PARAM_DEPLOY_VIA_LAMBDA</code></td>
-<td><code>true</code></td>
-<td>問題デプロイをLambdaで実行。<code>false</code>は旧CodeBuild経路</td>
-</tr>
-<tr>
-<td><code>CDK_PARAM_FEATURES</code></td>
-<td>未設定</td>
-<td>機能の有効・無効をJSONで指定する</td>
-</tr>
-<tr>
-<td><code>CDK_PARAM_AUDIT_LOG_ENABLED</code></td>
-<td><code>true</code></td>
-<td>管理操作の監査ログを有効にする</td>
+<td><code>CDK_PARAM_DEPLOY_EXTERNAL_ID</code></td>
+<td>TenkaCloudが競技者AWSへ接続するときの照合用文字列。16〜128文字の半角英数字と<code>_ = , . @ : / -</code></td>
+<td><code>tc-school-2026-a91f</code></td>
 </tr>
 </tbody></table>
-<p>各環境の<code>.env.example</code>がパラメータ一覧です。受け付ける値と相互作用が設定の近くに
-書かれているため、上書きしたい設定だけを<code>.env</code>へコピーします。</p>
-<h2>参加者を入れる前に</h2>
+<p>そのほかの設定は、目的、入力形式、既定値、文字数・数値範囲、例、不正値を入れた場合の
+動作を<a href="/docs/reference/lite-settings/">Lite設定項目リファレンス</a>にまとめています。
+画面やコマンドに出る文言は
+<a href="/docs/reference/lite-messages/">Lite設定メッセージ一覧</a>で「文言・要因・処置」の
+順に調べられます。</p>
+<h3>採点と料金の警告メール</h3>
+<p><code>CDK_PARAM_OPS_ALERT_EMAIL</code>にメールアドレスを入れると、AWSから購読確認メールが
+届きます。承認後、次の3条件だけがメール通知の対象になります。</p>
+<ol>
+<li>採点処理が直近5分で1回以上エラーになった。</li>
+<li>採点処理が5分連続で実行されていない。</li>
+<li>当月の実利用額が<code>CDK_PARAM_OPS_MONTHLY_COST_LIMIT_USD</code>の米ドル額を超えた。</li>
+</ol>
+<p>問題の開始・停止処理や、片付け処理の一般的な失敗をすべて通知する機能ではありません。
+メールアドレスを設定しない場合、この3種類の通知は届きません。</p>
+<h2>参加者を入れる前の確認</h2>
 <ul>
-<li>参加者と同じ権限・リージョンのテストチームを使う。</li>
-<li>想定ネットワークからすべての接続先を開けるか確認する。</li>
-<li>本物のflagを1つ提出し、得点が変わることを確認する。</li>
-<li>問題をリセット・停止し、リソースがなくなることを確認する。</li>
-<li>競技時刻、team key配布、問い合わせ先、障害時の連絡経路を確認する。</li>
-<li>AWS管理者認証情報、<code>.env</code>、データベーストークンを参加者へ渡さない。</li>
+<li>参加者と同じ権限・リージョンのテストチームを使った。</li>
+<li>想定ネットワークからすべての接続先を開けた。</li>
+<li>本物のflagを提出し、得点が変わった。</li>
+<li>リセット後に新しい問題環境が起動した。</li>
+<li>停止後に競技者AWSの問題スタックが削除された。</li>
+<li>競技時刻、team keyの配布方法、問い合わせ先を決めた。</li>
+<li>AWS管理者認証情報、<code>.env</code>、データベーストークンを参加者へ渡していない。</li>
 </ul>
-<p>パラメータの解釈そのものをソースコードで変える場合は役割を切り替え、
-<a href="/docs/manual/developer/">開発者マニュアル</a>を使ってください。</p>
+<h2>終了と削除</h2>
+<p>競技後は、まずLite本体を削除し、最後にlauncherのCloudFormationスタックを削除します。</p>
+<pre><code class="language-bash">make destroy-all ENV=development
+</code></pre>
+<p>画面から導入した場合は、launcherのCodeBuildで<code>ACTION=destroy-all</code>を実行します。
+launcherを先に削除すると、同じ導入パイプラインからLite本体を片付けられません。</p>
+<h2>SaaS運用の現状</h2>
+<p>SaaS向けの<code>make deploy-saas</code>、SBTコントロールプレーン、テナント払い出し処理、
+既存テナントへ更新を配る<code>tenkacloud-saas-pipeline</code>のコードは存在します。しかし、
+最近の新規AWS環境で、導入、テナント作成、問題起動、採点、削除までを通した確認は
+記録されていません。</p>
+<p>そのため、このマニュアルではSaaSのコマンドをLiteの代替手順として案内しません。
+SaaSを評価する場合は<a href="/docs/operate/deploy-paths/">デプロイモードと起動経路</a>を
+構成の参考にし、専用の検証環境で一連の動作を確認してから使用してください。</p>
 
 </article>
 </main>

@@ -13,8 +13,9 @@
  *     SCHEMA を別 file 化しない (= source of truth は .env.example 1 つ)。
  *   - prompt は stdin / stdout で行う標準的な readline。 process がパイプされている
  *     場合 (= 非 TTY) はデフォルト値で書き出し (= CI / dev container でも壊れない)。
- *   - 値検証は最小限。 email は @ を含む、 region は ap-northeast-1 形式、
- *     ExternalId は 2 chars 以上。 厳しくしすぎて user を tabber に追い込まない。
+ *   - 値検証はデプロイ先の契約と一致させる。 email は @ を含む、region は
+ *     ap-northeast-1 形式、ExternalId は competitor-bootstrap.yaml と同じ
+ *     16〜128文字・ASCII許可文字だけを受け付ける。
  *
  * テスト容易性:
  *   - generateEnvContent / parseExampleKeys を pure 関数で export。
@@ -74,7 +75,10 @@ export const PROMPTS: readonly EnvKeyPrompt[] = [
       "ExternalId (= competitor AWS account への AssumeRole で confused-deputy 攻撃を防ぐ secret、 任意の文字列)",
     defaultValue: "tenkacloud-lite-default",
     required: true,
-    validate: (v) => (v.length >= 2 ? undefined : "2 文字以上にしてください"),
+    validate: (v) =>
+      /^[A-Za-z0-9_=,.@:/-]{16,128}$/.test(v)
+        ? undefined
+        : "16〜128文字で、半角英数字と _ = , . @ : / - を使ってください",
   },
 ];
 

@@ -31,15 +31,15 @@
 </header>
 <div class="wrap docs-grid">
 <aside class="docs-nav"><a class="docs-home-link" href="/docs/index.en.html">Docs home</a>
-<section><h5>Getting started</h5><ul>
-<li><a href="/docs/getting-started/index.en.html">Getting started</a></li>
-</ul></section>
 <section><h5>Role manuals</h5><ul>
 <li><a href="/docs/manual/index.en.html">Manuals by role</a></li>
 <li><a href="/docs/manual/developer/index.en.html">Developer manual</a></li>
 <li><a href="/docs/manual/organizer/index.en.html">Competition organizer manual</a></li>
 <li><a href="/docs/manual/participant/index.en.html">Competition participant manual</a></li>
 <li><a href="/docs/manual/problem-author/index.en.html">Problem author manual</a></li>
+</ul></section>
+<section><h5>Getting started</h5><ul>
+<li><a href="/docs/getting-started/index.en.html">Getting started</a></li>
 </ul></section>
 <section><h5>Concepts</h5><ul>
 <li><a href="/docs/concepts/problem-packs/index.en.html">Problem packs</a></li>
@@ -58,6 +58,8 @@
 <li><a href="/docs/reference/problem-metadata/index.en.html">Problem metadata reference</a></li>
 <li><a href="/docs/reference/runtime-matrix/index.en.html">Runtime capability matrix</a></li>
 <li><a href="/docs/reference/cli/index.en.html">CLI reference</a></li>
+<li><a href="/docs/reference/lite-settings/index.en.html">Lite setting reference</a></li>
+<li><a href="/docs/reference/lite-messages/index.en.html">Lite settings message reference</a></li>
 <li><a href="/docs/reference/security-provenance/index.en.html">Security and provenance model</a></li>
 <li><a href="/docs/reference/validation-errors/index.en.html">Validation error reference</a></li>
 </ul></section>
@@ -65,24 +67,28 @@
 <main class="doc">
 <article>
 <h1>Deploy modes and launch paths <span class="doc-badge doc-badge--preview">Preview</span></h1>
-<p>Two questions trip up first-time operators: &quot;how do I actually deploy the
-platform?&quot; and &quot;the CodePipeline is the default — so when does it run?&quot; This page
-is the map. The platform itself is deployed by a <strong>manual CLI</strong> step; the
-CodePipeline is for <strong>rolling out tenant stacks</strong>, not for standing up the platform.</p>
+<p>Lite and SaaS differ in audience, entry point, AWS services, and verification
+status. Use the <a href="/docs/manual/organizer/index.en.html">competition organizer manual</a>
+for the executable Lite procedure. The SaaS sections here describe repository
+architecture; they are not a recently live-verified setup procedure.</p>
 <h2>Two deploy modes</h2>
 <ul>
-<li><strong>Lite mode</strong> — <code>make deploy</code>. A single organizer running one event. It skips the
-SBT control plane, tenant pipeline, and System Admin invitation entirely and
-deploys just two stacks via <code>infrastructure/bin/tenkacloud-lite.ts</code>:
-AppPlaneCore (<code>tenantId=&quot;local&quot;</code>) plus the problem-deploy backend / participant
-portal. <strong>There is no CodePipeline in Lite mode.</strong> Complete removal is
-<code>make destroy-all</code>; use <code>make destroy</code> only to preserve DynamoDB history.</li>
-<li><strong>SaaS mode</strong> — <code>make deploy-saas</code> (<code>scripts/install.sh</code>, three phases). Full
-multi-tenant operation: pooled BASIC / ADVANCED tiers, the PLATINUM silo tier,
-and System Admin invitations. Teardown is <code>make destroy-saas</code>.</li>
+<li><strong>Lite mode</strong> — One organizing group runs an event in its own AWS account. The
+recommended <code>lite-pipeline.yaml</code> entry point uses CloudFormation to create
+CodeBuild, which runs <code>make deploy</code>. It does not use AWS CodePipeline. A local
+checkout can also run <code>make deploy</code> directly.</li>
+<li><strong>SaaS mode</strong> — Repository architecture for serving tenants to multiple
+organizations. It contains <code>make deploy-saas</code>, pooled and silo tenants, System
+Admin, and a CodePipeline for existing-tenant updates, but no recent recorded
+fresh-AWS run covers setup through teardown.</li>
 </ul>
-<p>Both modes are run by an operator from a shell. CI never deploys.</p>
+<p>Treat Lite as the current organizer procedure. Re-verify SaaS in a dedicated
+environment before evaluating it.</p>
 <h2>How a new tenant is provisioned</h2>
+<blockquote>
+<p><strong>SaaS architecture reference:</strong> This and the next section are not used by a
+current Lite event.</p>
+</blockquote>
 <p>New-tenant provisioning and pipeline rollout are <strong>different paths</strong> — this is the
 distinction the old docs got wrong.</p>
 <ul>

@@ -4,22 +4,42 @@ export const metadata = { title: "イベントをエンドツーエンドで運�
 
 # イベントをエンドツーエンドで運営する <MaturityBadge level="preview" />
 
-これは運営者向けのウォークスルーです。デプロイ直後のプラットフォームから、競技者が自分のクラウドアカウントで問題を解くところまでを通して案内します。プラットフォームが保証する一気通貫のフロー（テナント作成 → アプリケーションコンソール → 問題デプロイ → 参加者の合流）を文章にしたものです。
+これは運営者向けのウォークスルーです。現在開催手順として案内するのはLiteです。
+SaaSのテナント作成とマルチクラウドは末尾に分離し、コード構成の参考として説明します。
 
-## テナントを作成する
+## Liteで競技を運営する
 
-SaaS モードでは、System Admin が `admin-console`（コントロールプレーンのフロントエンド）からテナントを作成します。テナント作成は `onboardingRequest` を発行し、テナントはデフォルトでプール型として、PLATINUM ティアの場合は専用のサイロスタックとしてプロビジョニングされます。その後、テナント管理者は自分のプレーン用の `application-admin-console` URL を受け取ります。Lite モードではローカルテナントが 1 つあるだけなので、そのままアプリケーションコンソールに進みます。
+1. LiteのApplication Admin Consoleへログインする。
+2. イベント、テストチーム、問題を作る。
+3. 下記の手順でテスト競技者AWSアカウントを接続する。
+4. 問題を起動し、接続先を開く。
+5. 問題を解いて本物の`TC{...}`を提出し、得点を確認する。
+6. リセットして再起動できることを確認する。
+7. 停止し、競技者AWSの問題スタックが削除されたことを確認する。
+8. Participant PortalのURL、team key、開始時刻を参加者へ渡す。
+
+## SaaSでテナントを作成する（構成参考）
+
+SaaS モードでは、System Admin が `admin-console`からテナントを作成するコードがあります。
+しかし、最近の新規AWS環境でテナント作成から採点・削除までを通した記録はありません。
+本番手順として使用せず、専用環境で再検証してください。
 
 ## 競技者アカウントを接続する
 
-参加する各チームは、ワンタイムの CloudFormation テンプレート (`infrastructure/templates/competitor-bootstrap.yaml`) を自分の AWS アカウントにデプロイします。これにより最小権限の IAM ロールが作成されます。その信頼ポリシーは TenkaCloud コントロールプレーンのアカウント id **と**テナントの **ExternalId** の両方に固定されているため、TenkaCloud だけが、しかもそのテナントに限って、このロールを AssumeRole できます。チームは作成されたロール ARN を運営者に共有します。競技者側の手順の全体は[競技者セットアップガイド](https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/README.md)にあります。
+参加する各チームは、CloudFormationテンプレート
+`infrastructure/templates/competitor-bootstrap.yaml`を自分のAWSアカウントへ
+1回デプロイします。`ExternalId`は開催者が設定した値と同じ、16〜128文字の半角英数字と
+`_ = , . @ : / -`を使います。作成されたロールARNを開催者へ共有します。秘密鍵や
+AWS管理者認証情報は共有しません。詳細は[競技者セットアップガイド](https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/README.md)にあります。
 
 ## 問題をデプロイする
 
 `application-admin-console` でイベントを作成し、カタログから問題を選び（ピッカーに表示されるのはクラウドにデプロイ可能な問題だけです。ローカル専用のコンテナ問題は除外され、非 AWS の問題はマルチクラウドを有効にすると表示されます）、各チームのアカウントとリージョンを割り当てて、デプロイします。各デプロイは ExternalId を使ってチームのロールを AssumeRole し、チームのアカウントで CloudFormation を実行します。デプロイメントが終了状態に達するまでポーリングでステータスを見守り、イベントが終わったら同じコンソールから撤収します。
 
-## マルチクラウドを有効にする
+## マルチクラウドを有効にする（構成参考）
 
-Sakura / Azure / GCP の問題を実行するには、`runtime-config.json` に `features: { "nonAwsRuntime": true }` を設定します。すると Competitor Accounts ページに Team Cloud Credentials パネルが表示されるので、そこで各チームのプロバイダー認証情報を登録します（パネルは API 経由で SSM SecureString に書き込みます。運営者が SSM を直接触ることはありません）。プロバイダーの認証情報を登録すると、そのプロバイダーの問題がイベントピッカーで選択できるようになります。プロバイダーごとの認証情報の手順とパネルに入力するフィールドは[競技者セットアップガイド](https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/README.md)に、各ランタイムのサポート状況は[ランタイム対応マトリクス](/developers/docs/reference/runtime-matrix/)にあります。
+Sakura / Azure / GCPは一律に実行可能とは限りません。先に
+[ランタイム対応マトリクス](/developers/docs/reference/runtime-matrix/)で対象問題の
+状態を確認し、実行可能と記載されたruntimeだけを専用のテストイベントで検証します。
 
 関連: [デプロイモードと起動経路](/developers/docs/operate/deploy-paths/)、[プラットフォームアーキテクチャ](/developers/docs/concepts/architecture/)。

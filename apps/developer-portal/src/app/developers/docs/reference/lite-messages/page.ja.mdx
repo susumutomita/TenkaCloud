@@ -1,0 +1,149 @@
+import { MaturityBadge } from "@/components/MaturityBadge";
+
+export const metadata = { title: "Lite設定メッセージ一覧" };
+
+# Lite設定メッセージ一覧 <MaturityBadge level="preview" />
+
+Liteの設定と導入でTenkaCloudが出す主なメッセージを、**表示文言・要因・システムの処置・
+利用者の処置**の順で説明します。AWS CLI、CloudFormation、CodeBuildが出す一般的な
+メッセージは、そのサービスの実行ログを参照してください。
+
+現行のLite設定メッセージには安定したメッセージIDがありません。自動処理で文言を
+判定せず、人がログを調べるための一覧として使用してください。
+
+## 導入前の確認
+
+### `ERROR: infrastructure/environments/&lt;ENV&gt;/.env が存在しません。`
+
+- **要因**: 手動導入に必要な環境設定ファイルがありません。
+- **システムの処置**: `make deploy`を開始せず終了します。
+- **利用者の処置**: `make env-init ENV=&lt;ENV&gt;`を実行してファイルを作ります。
+
+### `ERROR: TENANT_ADMIN_EMAIL が ... にありません`
+
+- **要因**: 最初の開催者へ招待メールを送る宛先がありません。
+- **システムの処置**: `make deploy`を開始せず終了します。
+- **利用者の処置**: `.env`へ`TENANT_ADMIN_EMAIL=organizer@example.com`を追加します。
+
+### `email アドレス形式にしてください (= xxx@yyy)`
+
+- **要因**: `make env-init`で入力したメールアドレスに`@`がありません。
+- **システムの処置**: ファイルを書かず、同じ項目をもう一度質問します。
+- **利用者の処置**: 受信できるメールアドレスを入力します。
+
+### `AWS region 形式にしてください (= ap-northeast-1 等)`
+
+- **要因**: `make env-init`へ入力したリージョンが想定形式ではありません。
+- **システムの処置**: ファイルを書かず、同じ項目をもう一度質問します。
+- **利用者の処置**: 利用するAWSリージョン名を入力します。
+
+### `16〜128文字で、半角英数字と _ = , . @ : / - を使ってください`
+
+- **要因**: ExternalIdが短すぎる、長すぎる、または許可されない文字を含みます。
+- **システムの処置**: `.env`を作らず、同じ項目をもう一度質問します。
+- **利用者の処置**: 予測されにくい16〜128文字の値を入力し、参加者へ公開しません。
+
+## データベース
+
+### `CDK_PARAM_CONTROL_DATA_BACKEND must be one of dynamodb|turso, got: <値>`
+
+- **要因**: 保存先へ`dynamodb`と`turso`以外を指定しました。
+- **システムの処置**: CDK synthを停止し、AWSへ変更しません。
+- **利用者の処置**: `.env`の値をどちらかへ直します。
+
+### `ERROR: CDK_PARAM_CONTROL_DATA_BACKEND=turso には以下が ... に必要です:`
+
+- **要因**: Tursoを選んだのに、URLまたはSSM Parameter Storeの名前がありません。
+- **システムの処置**: `make deploy`を開始せず、不足している設定名を続けて表示します。
+- **利用者の処置**: `make turso-live ENV=&lt;ENV&gt;`を実行して案内に従います。
+
+### `CDK_PARAM_TURSO_DATABASE_URL and CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME are required when CDK_PARAM_CONTROL_DATA_BACKEND is turso.`
+
+- **要因**: 上記と同じ不足がCDK synthまで到達しました。
+- **システムの処置**: CDK synthを停止し、AWSへ変更しません。
+- **利用者の処置**: URLとSSM Parameter Storeの名前を両方設定します。トークン本体を`.env`へ書きません。
+
+## 数値とJSON
+
+### `Unsupported CloudWatch Logs retention: <日数> days. CDK_PARAM_LOG_RETENTION_DAYS must be one of: <一覧>.`
+
+- **要因**: CloudWatch Logsが受け付けない保持日数を指定しました。
+- **システムの処置**: CDK synthを停止します。
+- **利用者の処置**: [設定項目リファレンス](/developers/docs/reference/lite-settings/#dynamodbとログ)の一覧から選びます。
+
+### `CDK_PARAM_OPS_MONTHLY_COST_LIMIT_USD must be a positive number (got: <値>)`
+
+- **要因**: 月額の警告基準が0、負数、または数字以外です。
+- **システムの処置**: CDK synthを停止します。
+- **利用者の処置**: `10`や`25`のような0より大きい米ドル額へ直します。
+
+### `CDK_PARAM_OPS_BUDGET_THRESHOLD_PERCENT must be a positive number and <= 100 (got: <値>)`
+
+- **要因**: 通知率が0以下、100超、または数字以外です。
+- **システムの処置**: CDK synthを停止します。
+- **利用者の処置**: 0より大きく100以下の数へ直します。
+
+### `CDK_PARAM_FEATURES は JSON object で指定してください (got: <値>)`
+
+- **要因**: 値がJSONではない、配列、文字列、数値、または`null`です。
+- **システムの処置**: CDK synthを停止します。
+- **利用者の処置**: `{"samlSso":true}`のようなJSON objectへ直します。
+
+### `CDK_PARAM_FEATURES の "<キー>" は boolean で指定してください (got: <値>)`
+
+- **要因**: 機能の値に`true`または`false`以外を指定しました。
+- **システムの処置**: CDK synthを停止します。
+- **利用者の処置**: `"true"`のような文字列ではなく、引用符なしの`true`または`false`へ直します。
+
+## ネットワーク
+
+### `CDK_PARAM_DEPLOY_ALLOWED_CIDRS entries must be CIDR blocks, got: <値>`
+
+- **要因**: IPアドレスとprefixを区切る`/`がありません。
+- **システムの処置**: CDK synthを停止します。
+- **利用者の処置**: `198.51.100.10/32`の形式へ直します。
+
+### `CDK_PARAM_DEPLOY_ALLOWED_CIDRS CIDR has an invalid IP address: <値>`
+
+- **要因**: `/`の前がIPv4またはIPv6アドレスではありません。
+- **システムの処置**: CDK synthを停止します。
+- **利用者の処置**: IPアドレスの各桁を確認します。
+
+### `CDK_PARAM_DEPLOY_ALLOWED_CIDRS CIDR has an invalid prefix: <値>`
+
+- **要因**: `/`の後ろが数字ではありません。
+- **システムの処置**: CDK synthを停止します。
+- **利用者の処置**: IPv4なら`0`〜`32`、IPv6なら`0`〜`128`の数字にします。
+
+### `CDK_PARAM_DEPLOY_ALLOWED_CIDRS CIDR prefix must be between 0 and <32または128>: <値>`
+
+- **要因**: prefixがIP種別の範囲外です。
+- **システムの処置**: CDK synthを停止します。
+- **利用者の処置**: IPv4は`0`〜`32`、IPv6は`0`〜`128`へ直します。
+
+## 導入中
+
+### `[lite] ✗ CFn stack deploy で失敗しました。`
+
+- **要因**: CDKまたはCloudFormationがLiteスタックを作れませんでした。詳細な原因は直前のログにあります。
+- **システムの処置**: 接続先URLの表示へ進まず終了します。
+- **利用者の処置**: 直前にある最初のAWSエラーを確認し、必要なら`make destroy`で中途半端なスタックを片付けてから再実行します。
+
+### `[lite] admin-create-user failed.`
+
+- **要因**: 最初の開催者ユーザーをCognitoに作れませんでした。
+- **システムの処置**: Lite本体は残し、手動作成コマンドを表示します。
+- **利用者の処置**: ログに表示されたUser PoolとIAM権限を確認し、案内された`aws cognito-idp admin-create-user`を実行します。
+
+## 専用メッセージがない設定
+
+次の設定は、誤入力を専用エラーで止めません。
+
+- `DYNAMODB_BILLING_MODE`: 未知の値は`PROVISIONED`として扱います。
+- `CDK_PARAM_SOURCE_BUCKET_VERSIONING`: 有効値以外は`Suspended`として扱います。
+- `CDK_PARAM_DEPLOY_VIA_LAMBDA`: 小文字の`false`以外はLambda経路です。
+- `CDK_PARAM_AUDIT_LOG_ENABLED`: 小文字の`false`以外は監査記録を有効にします。
+- `CDK_PARAM_OPS_ALERT_EMAIL`: TenkaCloud独自のメール形式・文字数検査はありません。
+
+意図と違っても処理が止まらないため、値をコピーせず
+[Lite設定項目リファレンス](/developers/docs/reference/lite-settings/)の形式と照合してください。

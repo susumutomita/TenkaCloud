@@ -70,9 +70,11 @@ not configure an MCP client against TenkaCloud yet.
 
 Support for the stateless MCP 2026-07-28 protocol is tracked separately in
 [Issue #2819](https://github.com/susumutomita/TenkaCloud/issues/2819). That work
-must define a read-only capability boundary first, per-request protocol and
-capability negotiation, authentication and consent, and negative security
-tests. A transitive package in the lockfile is not product support.
+evaluates the stateless core, versioned extensions such as MCP Apps and Tasks,
+and the strengthened OAuth 2.0/OIDC authentication model separately. It must
+define a read-only capability boundary first, per-request protocol and capability
+negotiation, authentication and consent, and negative security tests. A transitive
+package in the lockfile is not product support.
 
 ## Before requesting review
 

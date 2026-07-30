@@ -30,9 +30,9 @@ describe("HomePage (Japanese, /)", () => {
     expect(isKnownRoute("/catalog/")).toBe(true);
   });
 
-  it("should offer a developer-docs CTA that resolves to a known route", () => {
+  it("should offer a role-neutral documentation CTA that resolves to a known route", () => {
     render(<HomePage />);
-    const cta = screen.getByRole("link", { name: "開発者向けドキュメント" });
+    const cta = screen.getByRole("link", { name: "ドキュメント" });
     expect(cta).toHaveAttribute("href", "/developers/");
     expect(isKnownRoute("/developers/")).toBe(true);
   });

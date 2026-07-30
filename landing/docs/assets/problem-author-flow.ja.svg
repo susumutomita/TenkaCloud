@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="600" viewBox="0 0 1200 600" role="img" aria-labelledby="title desc">
+  <title id="title">問題パックを作成して公開するまでの判定フロー</title>
+  <desc id="desc">新しいcheckoutで検証し、対応するlocal runtimeでリハーサルし、第三者が問題文だけでゴールを理解できた場合に公開する。未対応runtimeはNot runと記録し、理解できない場合は問題文を書き直す。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0 0 L10 5 L0 10 Z" fill="#466582"/>
+    </marker>
+    <style>
+      .bg{fill:#f7f9fc}.box{fill:#fff;stroke:#9aaaba;stroke-width:2}.decision{fill:#edf6ff;stroke:#0972d3;stroke-width:2}.good{fill:#ecfdf3;stroke:#16803c;stroke-width:2}.warn{fill:#fff8e6;stroke:#b7791f;stroke-width:2}.line{fill:none;stroke:#466582;stroke-width:2.5;marker-end:url(#arrow)}.loop{fill:none;stroke:#8b5cf6;stroke-width:2.5;stroke-dasharray:7 6;marker-end:url(#arrow)}.title{font:700 22px -apple-system,BlinkMacSystemFont,"Noto Sans JP",sans-serif;fill:#101828}.text{font:16px -apple-system,BlinkMacSystemFont,"Noto Sans JP",sans-serif;fill:#344054}.label{font:700 15px -apple-system,BlinkMacSystemFont,"Noto Sans JP",sans-serif;fill:#344054}.small{font:14px -apple-system,BlinkMacSystemFont,"Noto Sans JP",sans-serif;fill:#475467}
+    </style>
+  </defs>
+  <rect class="bg" width="1200" height="600" rx="24"/>
+  <text class="title" x="48" y="48">作成 → 検証 → 実演 → 第三者確認 → 公開</text>
+
+  <rect class="box" x="48" y="92" width="210" height="104" rx="16"/>
+  <text class="label" x="72" y="124">1. 新しいcheckout</text>
+  <text class="text" x="72" y="154">依存関係を導入</text>
+  <text class="small" x="72" y="179">作業済み環境に依存しない</text>
+
+  <rect class="box" x="322" y="92" width="210" height="104" rx="16"/>
+  <text class="label" x="346" y="124">2. packを検証</text>
+  <text class="text" x="346" y="154">make pack-validate</text>
+  <text class="small" x="346" y="179">失敗したら修正して再検証</text>
+
+  <path class="decision" d="M700 82 L810 144 L700 206 L590 144 Z"/>
+  <text class="label" x="641" y="137">local runtime</text>
+  <text class="label" x="658" y="161">対応済み?</text>
+
+  <rect class="good" x="894" y="92" width="258" height="104" rx="16"/>
+  <text class="label" x="918" y="124">3A. localで実演</text>
+  <text class="text" x="918" y="154">起動 → 調査 → flag提出</text>
+  <text class="small" x="918" y="179">停止・再起動・誤答も確認</text>
+
+  <rect class="warn" x="572" y="278" width="256" height="112" rx="16"/>
+  <text class="label" x="596" y="310">3B. 未対応の場合</text>
+  <text class="text" x="596" y="340">結果を「Not run」と記録</text>
+  <text class="small" x="596" y="366">対応test環境で確認、または</text>
+  <text class="small" x="596" y="385">開催者へ未確認と明示</text>
+
+  <rect class="box" x="894" y="278" width="258" height="112" rx="16"/>
+  <text class="label" x="918" y="310">4. 参加者役で確認</text>
+  <text class="text" x="918" y="340">問題文だけを渡す</text>
+  <text class="small" x="918" y="366">実装・verifier・正解flagは</text>
+  <text class="small" x="918" y="385">見せない</text>
+
+  <path class="decision" d="M742 446 L852 508 L742 570 L632 508 Z"/>
+  <text class="label" x="685" y="501">ゴールと最初の</text>
+  <text class="label" x="683" y="525">操作を説明できる?</text>
+
+  <rect class="warn" x="322" y="456" width="238" height="104" rx="16"/>
+  <text class="label" x="346" y="488">5A. 問題文を書き直す</text>
+  <text class="small" x="346" y="518">状況・ゴール・最初の操作</text>
+  <text class="small" x="346" y="542">完了条件を明確にする</text>
+
+  <rect class="good" x="914" y="456" width="238" height="104" rx="16"/>
+  <text class="label" x="938" y="488">5B. 公開</text>
+  <text class="text" x="938" y="518">versionを上げる</text>
+  <text class="small" x="938" y="542">完全なcommit SHAへ固定</text>
+
+  <path class="line" d="M258 144 H322"/>
+  <path class="line" d="M532 144 H590"/>
+  <path class="line" d="M810 144 H894"/>
+  <text class="small" x="837" y="130">はい</text>
+  <path class="line" d="M700 206 V278"/>
+  <text class="small" x="712" y="246">いいえ</text>
+  <path class="line" d="M1023 196 V278"/>
+  <path class="line" d="M828 334 H894"/>
+  <path class="line" d="M1023 390 V416 H852 V508"/>
+  <path class="line" d="M852 508 H914"/>
+  <text class="small" x="869" y="494">はい</text>
+  <path class="line" d="M632 508 H560"/>
+  <text class="small" x="580" y="494">いいえ</text>
+  <path class="loop" d="M441 456 V420 H1023 V390"/>
+</svg>

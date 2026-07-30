@@ -24,9 +24,10 @@ import {
  * Issue #2696 / #2707 / #2711: LP デモの固定出題 (オンボーディングドリル + 2 クエスト) の
  * 整合性を pin する。 ドリルの sub-flag id が判定側 (`evaluateMockSubFlag`) と揃って
  * いなければ永遠に wrong を返すし、 ヒントの無いドリルは「本文は概要 → ヒントで
- * ステップバイステップ」 という構造契約を破る。 #2814 では問題 1 を、
- * 実際の TenkaCloud と同じ「問題を開く → 練習環境を起動 → 合言葉を見つける →
- * 提出して採点」の 4 ステップにする。 点数が動くのは実際の flag 提出だけ。
+ * ステップバイステップ」 という構造契約を破る。問題 1 は動画の real cloud、
+ * Battle / Challenge、Local / Lite / SaaS を省略せず、実際の「問題文を読む →
+ * 問題環境を起動 → 調査・修正 → flag を提出して採点」へつなぐ。点数が動くのは
+ * 実際の flag 提出だけ。
  */
 describe("dev-mock fixtures", () => {
   const ONBOARDING_DRILL_IDS = [
@@ -47,23 +48,25 @@ describe("dev-mock fixtures", () => {
     ).toEqual(ONBOARDING_DRILL_IDS);
   });
 
-  it("should teach the real solve-and-score journey without mixing in a specific problem (#2814)", () => {
+  it("should connect every video topic to the real solve-and-score journey", () => {
     const tutorial = drills.find((p) => p.problemId === WHAT_IS_DRILL_PROBLEM_ID);
     expect(tutorial?.scoring?.flags?.map((f) => f.id)).toEqual(["first-flag"]);
     const body = tutorial?.description ?? "";
-    expect(body).toContain("サーバー");
-    expect(body).toContain("サイトを24時間動かすコンピューター");
     expect(body).toContain("クラウド");
-    expect(body).toContain("必要な分だけ借りる仕組み");
     expect(body).toContain("Docker");
-    expect(body).toContain("同じサイト環境を別のパソコンでも再現");
-    expect(body).toContain("問題を開く");
-    expect(body).toContain("合言葉");
+    expect(body).toContain("Battle");
+    expect(body).toContain("Challenge");
+    expect(body).toContain("Local");
+    expect(body).toContain("Lite");
+    expect(body).toContain("SaaS");
+    expect(body).toContain("問題文");
+    expect(body).toContain("問題環境");
+    expect(body).toContain("flag");
     expect(body).toContain("提出して得点");
-    expect(body).toContain("見本データ");
+    expect(body).toContain("見本環境");
     expect(body).not.toContain("WordPress");
     expect(body).not.toContain("CloudFormation");
-    expect(tutorial?.i18n?.en?.description).toContain("sample data");
+    expect(tutorial?.i18n?.en?.description).toContain("prepared sample environment");
     expect(
       evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, "first-flag", "TC{HELLO-TENKACLOUD}", 100).kind,
     ).toBe("ok");

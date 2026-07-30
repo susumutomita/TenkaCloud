@@ -5,8 +5,8 @@ export const metadata = { title: "Getting started" };
 # Getting started <MaturityBadge level="stable" />
 
 TenkaCloud runs in several modes. Pick the row that matches what you want to do
-today — every section below is a complete, copy-paste path from zero to a
-running platform, in increasing order of commitment.
+today. Local, Codespaces, and Lite are executable procedures. SaaS is an
+architecture reference, not a currently supported self-service setup path.
 
 If you already know whether you are developing the platform, organizing an
 event, participating, or authoring problems, start from the
@@ -18,7 +18,7 @@ event, participating, or authoring problems, start from the
 | 2 | GitHub Codespaces | A GitHub account, **nothing installed** | The same local drills, entirely in your browser | ~3 min |
 | 3 | Lite on AWS — console launcher | An AWS account, **nothing installed** | Single-organizer platform (Admin Console + Participant Portal) | ~20–30 min |
 | 4 | Lite on AWS — CLI | An AWS account + local toolchain | Same as 3, deployed and iterated from your shell | ~20 min |
-| 5 | SaaS on AWS | An AWS account + local toolchain | Full multi-tenant platform (pooled + silo tiers, System Admin) | ~45 min |
+| 5 | SaaS on AWS | A dedicated test environment and an operations team that can recover failures | Multi-tenant architecture for multiple organizations | **No recent end-to-end live verification** |
 
 Conceptual background for modes 4–5 (what each stack is, how tenants provision)
 lives in [deploy modes and launch paths](/developers/docs/operate/deploy-paths/).
@@ -158,6 +158,10 @@ These are the only two values — pick the backend per environment before your
 first real event (the two stores never sync, so a later switch is a data
 migration, not a flag flip).
 
+The Turso path has unit-test and CDK-synth coverage, but no recorded live run
+combines a real Turso database, a fresh AWS deployment, and billing behavior.
+Use DynamoDB for a first production event.
+
 Opting in to Turso is four steps: create a Turso database, store its auth token
 in SSM as a `SecureString`, add three lines to your `.env`
 (`CDK_PARAM_CONTROL_DATA_BACKEND=turso` plus `CDK_PARAM_TURSO_DATABASE_URL` and
@@ -174,6 +178,11 @@ SaaS mode stands up the full multi-tenant platform: the SBT control plane with
 System Admin invitations, pooled BASIC/ADVANCED tenants, and dedicated PLATINUM
 silo stacks. Choose it when more than one organization runs events on the same
 deployment; otherwise Lite mode is the right default.
+
+> **Current status:** `make deploy-saas` and its supporting code exist, but no
+> recent recorded fresh-AWS run covers setup, tenant creation, problem start,
+> scoring, and teardown. The following is architecture reference, not a
+> production-verified organizer procedure.
 
 **Prerequisites:** the same toolchain as mode 4, plus `SYSTEM_ADMIN_EMAIL` and
 `AWS_ACCOUNT_ID` in `infrastructure/environments/<env>/.env`.

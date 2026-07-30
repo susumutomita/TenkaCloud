@@ -31,15 +31,15 @@
 </header>
 <div class="wrap docs-grid">
 <aside class="docs-nav"><a class="docs-home-link" href="/docs/index.en.html">Docs home</a>
-<section><h5>Getting started</h5><ul>
-<li><a href="/docs/getting-started/index.en.html">Getting started</a></li>
-</ul></section>
 <section><h5>Role manuals</h5><ul>
 <li><a href="/docs/manual/index.en.html">Manuals by role</a></li>
 <li><a href="/docs/manual/developer/index.en.html">Developer manual</a></li>
 <li><a href="/docs/manual/organizer/index.en.html">Competition organizer manual</a></li>
 <li><a href="/docs/manual/participant/index.en.html" aria-current="page">Competition participant manual</a></li>
 <li><a href="/docs/manual/problem-author/index.en.html">Problem author manual</a></li>
+</ul></section>
+<section><h5>Getting started</h5><ul>
+<li><a href="/docs/getting-started/index.en.html">Getting started</a></li>
 </ul></section>
 <section><h5>Concepts</h5><ul>
 <li><a href="/docs/concepts/problem-packs/index.en.html">Problem packs</a></li>
@@ -58,6 +58,8 @@
 <li><a href="/docs/reference/problem-metadata/index.en.html">Problem metadata reference</a></li>
 <li><a href="/docs/reference/runtime-matrix/index.en.html">Runtime capability matrix</a></li>
 <li><a href="/docs/reference/cli/index.en.html">CLI reference</a></li>
+<li><a href="/docs/reference/lite-settings/index.en.html">Lite setting reference</a></li>
+<li><a href="/docs/reference/lite-messages/index.en.html">Lite settings message reference</a></li>
 <li><a href="/docs/reference/security-provenance/index.en.html">Security and provenance model</a></li>
 <li><a href="/docs/reference/validation-errors/index.en.html">Validation error reference</a></li>
 </ul></section>
@@ -86,12 +88,12 @@ is not a quiz that asks you to guess a word from the title.</p>
 <p>Use <a href="/docs/getting-started/index.en.html#local-drills">local drills in Getting started</a>
 when you want to practice on your own machine. Local mode uses Docker to create
 an isolated problem environment and does not contact AWS.</p>
-<pre><code class="language-bash">bun run tenkacloud local
+<pre><code class="language-bash">make local
 </code></pre>
 <p>The command opens the Participant Portal. Choose and start a problem there.
 When finished, press <strong>Stop</strong> on the problem page, or stop the complete local
 session:</p>
-<pre><code class="language-bash">bun run tenkacloud local down
+<pre><code class="language-bash">make local-down
 </code></pre>
 <p>In a hosted competition, do not install or configure Docker unless the
 organizer explicitly tells you to. Use the Participant Portal URL and team key

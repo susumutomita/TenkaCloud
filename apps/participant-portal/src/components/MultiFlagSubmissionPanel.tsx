@@ -54,20 +54,20 @@ const PARTICIPANT_MANUAL_URL = "https://tenkacloud.com/docs/manual/participant/"
 
 const TUTORIAL_STEP_SPECS: readonly TutorialStepSpec[] = [
   {
-    id: "published-site",
+    id: "real-cloud",
     titleKey: "onboarding_tutorial.step_1.title",
     scenarioKey: "onboarding_tutorial.step_1.scenario",
     termKey: "onboarding_tutorial.step_1.term",
     questionKey: "onboarding_tutorial.step_1.question",
     choices: [
       {
-        value: "keep-running",
+        value: "real-cloud-practice",
         correct: true,
         labelKey: "onboarding_tutorial.step_1.correct_label",
         descriptionKey: "onboarding_tutorial.step_1.correct_description",
       },
       {
-        value: "design-files-only",
+        value: "word-quiz",
         correct: false,
         labelKey: "onboarding_tutorial.step_1.wrong_label",
         descriptionKey: "onboarding_tutorial.step_1.wrong_description",
@@ -76,20 +76,20 @@ const TUTORIAL_STEP_SPECS: readonly TutorialStepSpec[] = [
     successKey: "onboarding_tutorial.step_1.success",
   },
   {
-    id: "safe-copy",
+    id: "battle-challenge",
     titleKey: "onboarding_tutorial.step_2.title",
     scenarioKey: "onboarding_tutorial.step_2.scenario",
     termKey: "onboarding_tutorial.step_2.term",
     questionKey: "onboarding_tutorial.step_2.question",
     choices: [
       {
-        value: "practice-copy",
+        value: "battle",
         correct: true,
         labelKey: "onboarding_tutorial.step_2.correct_label",
         descriptionKey: "onboarding_tutorial.step_2.correct_description",
       },
       {
-        value: "edit-live",
+        value: "challenge",
         correct: false,
         labelKey: "onboarding_tutorial.step_2.wrong_label",
         descriptionKey: "onboarding_tutorial.step_2.wrong_description",
@@ -98,35 +98,85 @@ const TUTORIAL_STEP_SPECS: readonly TutorialStepSpec[] = [
     successKey: "onboarding_tutorial.step_2.success",
   },
   {
-    id: "problem-environment",
+    id: "choose-mode",
     titleKey: "onboarding_tutorial.step_3.title",
     scenarioKey: "onboarding_tutorial.step_3.scenario",
     termKey: "onboarding_tutorial.step_3.term",
     questionKey: "onboarding_tutorial.step_3.question",
     choices: [
       {
-        value: "open-problem-environment",
+        value: "local",
         correct: true,
-        labelKey: "onboarding_tutorial.step_3.correct_label",
-        descriptionKey: "onboarding_tutorial.step_3.correct_description",
+        labelKey: "onboarding_tutorial.step_3.local_label",
+        descriptionKey: "onboarding_tutorial.step_3.local_description",
       },
       {
-        value: "guess-answer",
-        correct: false,
-        labelKey: "onboarding_tutorial.step_3.wrong_label",
-        descriptionKey: "onboarding_tutorial.step_3.wrong_description",
+        value: "lite",
+        correct: true,
+        labelKey: "onboarding_tutorial.step_3.lite_label",
+        descriptionKey: "onboarding_tutorial.step_3.lite_description",
+      },
+      {
+        value: "saas",
+        correct: true,
+        labelKey: "onboarding_tutorial.step_3.saas_label",
+        descriptionKey: "onboarding_tutorial.step_3.saas_description",
       },
     ],
     successKey: "onboarding_tutorial.step_3.success",
   },
   {
-    id: PRACTICE_FLAG_ID,
+    id: "read-problem",
     titleKey: "onboarding_tutorial.step_4.title",
     scenarioKey: "onboarding_tutorial.step_4.scenario",
     termKey: "onboarding_tutorial.step_4.term",
     questionKey: "onboarding_tutorial.step_4.question",
-    choices: [],
+    choices: [
+      {
+        value: "read-goal",
+        correct: true,
+        labelKey: "onboarding_tutorial.step_4.correct_label",
+        descriptionKey: "onboarding_tutorial.step_4.correct_description",
+      },
+      {
+        value: "guess-from-title",
+        correct: false,
+        labelKey: "onboarding_tutorial.step_4.wrong_label",
+        descriptionKey: "onboarding_tutorial.step_4.wrong_description",
+      },
+    ],
     successKey: "onboarding_tutorial.step_4.success",
+  },
+  {
+    id: "start-environment",
+    titleKey: "onboarding_tutorial.step_5.title",
+    scenarioKey: "onboarding_tutorial.step_5.scenario",
+    termKey: "onboarding_tutorial.step_5.term",
+    questionKey: "onboarding_tutorial.step_5.question",
+    choices: [
+      {
+        value: "start-and-investigate",
+        correct: true,
+        labelKey: "onboarding_tutorial.step_5.correct_label",
+        descriptionKey: "onboarding_tutorial.step_5.correct_description",
+      },
+      {
+        value: "submit-without-start",
+        correct: false,
+        labelKey: "onboarding_tutorial.step_5.wrong_label",
+        descriptionKey: "onboarding_tutorial.step_5.wrong_description",
+      },
+    ],
+    successKey: "onboarding_tutorial.step_5.success",
+  },
+  {
+    id: PRACTICE_FLAG_ID,
+    titleKey: "onboarding_tutorial.step_6.title",
+    scenarioKey: "onboarding_tutorial.step_6.scenario",
+    termKey: "onboarding_tutorial.step_6.term",
+    questionKey: "onboarding_tutorial.step_6.question",
+    choices: [],
+    successKey: "onboarding_tutorial.step_6.success",
     submitsFlag: true,
   },
 ];
@@ -179,7 +229,7 @@ export function MultiFlagSubmissionPanel({
   const t = useT();
   const isMock = useIsMock();
   // dev-mock has no backend refetch to persist solved flags. Keep the solved ids
-  // at panel level (so the progress counter can reach 4/4 and reveal the
+  // at panel level (so the progress counter can reach the last step and reveal the
   // completion handoff) and mirror them into the sessionStorage progress store —
   // without it, navigating away unmounts the panel and the demo looks reset.
   const [mockSolvedIds, setMockSolvedIds] = useState<ReadonlySet<string>>(() =>
@@ -379,8 +429,8 @@ function WhatIsTutorialWizard({
               }}
             >
               <FormField
-                label={t("onboarding_tutorial.step_4.field_label")}
-                description={t("onboarding_tutorial.step_4.field_description")}
+                label={t("onboarding_tutorial.step_6.field_label")}
+                description={t("onboarding_tutorial.step_6.field_description")}
               >
                 <Input
                   value={practiceFlag}
@@ -395,7 +445,7 @@ function WhatIsTutorialWizard({
                   loading={submitting}
                   disabled={activeCompleted}
                 >
-                  {t("onboarding_tutorial.step_4.submit_button", {
+                  {t("onboarding_tutorial.step_6.submit_button", {
                     points: scoringFlag.points,
                   })}
                 </Button>

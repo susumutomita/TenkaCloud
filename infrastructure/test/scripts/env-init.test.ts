@@ -91,7 +91,12 @@ describe("scripts/ops/env-init (#1345 Lite mode first-run wizard)", () => {
     expect(region?.validate?.("ap-northeast-1")).toBeUndefined();
 
     const externalId = PROMPTS.find((p) => p.key === "CDK_PARAM_DEPLOY_EXTERNAL_ID");
-    expect(externalId?.validate?.("a")).toBeDefined();
+    expect(externalId?.validate?.("a".repeat(15))).toBe(
+      "16〜128文字で、半角英数字と _ = , . @ : / - を使ってください",
+    );
+    expect(externalId?.validate?.("a".repeat(129))).toBeDefined();
+    expect(externalId?.validate?.("unsupported space")).toBeDefined();
+    expect(externalId?.validate?.("a".repeat(16))).toBeUndefined();
     expect(externalId?.validate?.("tenkacloud-lite-default")).toBeUndefined();
   });
 
@@ -129,7 +134,7 @@ describe("scripts/ops/env-init (#1345 Lite mode first-run wizard)", () => {
     const answers = new Map<string, string>([
       ["TENANT_ADMIN_EMAIL", "user@org.example"],
       ["AWS_REGION", "us-east-1"],
-      ["CDK_PARAM_DEPLOY_EXTERNAL_ID", "my-external-id"],
+      ["CDK_PARAM_DEPLOY_EXTERNAL_ID", "my-external-id-2026"],
     ]);
 
     const result = await runEnvInit({
@@ -149,7 +154,7 @@ describe("scripts/ops/env-init (#1345 Lite mode first-run wizard)", () => {
     expect(content).toContain("TENANT_ADMIN_EMAIL=user@org.example");
     expect(content).toContain("SYSTEM_ADMIN_EMAIL=user@org.example"); // derived
     expect(content).toContain("AWS_REGION=us-east-1");
-    expect(content).toContain("CDK_PARAM_DEPLOY_EXTERNAL_ID=my-external-id");
+    expect(content).toContain("CDK_PARAM_DEPLOY_EXTERNAL_ID=my-external-id-2026");
     expect(content).toContain("# TenkaCloud .env example"); // comments preserved
   });
 

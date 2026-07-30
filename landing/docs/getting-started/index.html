@@ -31,15 +31,15 @@
 </header>
 <div class="wrap docs-grid">
 <aside class="docs-nav"><a class="docs-home-link" href="/docs/">Docs ホーム</a>
-<section><h5>はじめに</h5><ul>
-<li><a href="/docs/getting-started/" aria-current="page">はじめに</a></li>
-</ul></section>
 <section><h5>役割別マニュアル</h5><ul>
 <li><a href="/docs/manual/">役割から選ぶマニュアル</a></li>
 <li><a href="/docs/manual/developer/">開発者マニュアル</a></li>
 <li><a href="/docs/manual/organizer/">競技開催者マニュアル</a></li>
 <li><a href="/docs/manual/participant/">競技参加者マニュアル</a></li>
 <li><a href="/docs/manual/problem-author/">問題作成者マニュアル</a></li>
+</ul></section>
+<section><h5>はじめに</h5><ul>
+<li><a href="/docs/getting-started/" aria-current="page">はじめに</a></li>
 </ul></section>
 <section><h5>コンセプト</h5><ul>
 <li><a href="/docs/concepts/problem-packs/">問題パック</a></li>
@@ -58,6 +58,8 @@
 <li><a href="/docs/reference/problem-metadata/">問題メタデータ</a></li>
 <li><a href="/docs/reference/runtime-matrix/">ランタイム対応マトリクス</a></li>
 <li><a href="/docs/reference/cli/">CLI リファレンス</a></li>
+<li><a href="/docs/reference/lite-settings/">Lite設定項目リファレンス</a></li>
+<li><a href="/docs/reference/lite-messages/">Lite設定メッセージ一覧</a></li>
 <li><a href="/docs/reference/security-provenance/">セキュリティと来歴モデル</a></li>
 <li><a href="/docs/reference/validation-errors/">検証エラーリファレンス</a></li>
 </ul></section>
@@ -66,8 +68,8 @@
 <article>
 <h1>はじめに <span class="doc-badge doc-badge--stable">Stable</span></h1>
 <p>TenkaCloud にはいくつかの実行モードがあります。今日やりたいことに合う行を
-選んでください。以下の各セクションはいずれも、ゼロから稼働するプラットフォームまでを
-コピー＆ペーストだけで進められる完結した手順で、下に行くほど本格的な構成になります。</p>
+選んでください。ローカル、Codespaces、Liteは実行手順です。SaaSはコード構成を
+説明する参考情報であり、現在のセルフサービス導入手順ではありません。</p>
 <p>プラットフォーム開発、競技開催、競技参加、問題作成のどれを行うか決まっている場合は、
 <a href="/docs/manual/">役割別マニュアル</a>から始めてください。</p>
 <table>
@@ -111,9 +113,9 @@
 <tr>
 <td>5</td>
 <td>AWS 上の SaaS モード</td>
-<td>AWS アカウント + ローカルツールチェーン</td>
-<td>フルマルチテナントプラットフォーム（pooled + silo ティア、System Admin）</td>
-<td>約 45 分</td>
+<td>専用の検証環境と障害対応できる運営チーム</td>
+<td>複数組織向けのマルチテナント構成</td>
+<td><strong>最近の一連の実環境確認なし</strong></td>
 </tr>
 </tbody></table>
 <p>モード 4〜5 の概念的な背景（各スタックが何であるか、テナントがどのように
@@ -254,6 +256,8 @@ make deploy
 <p>設定値はこの 2 つだけです。2 つのストアが同期することはないため、最初の本番
 イベントの前に環境ごとにバックエンドを決めてください（後からの切り替えは
 フラグの変更ではなくデータ移行になります）。</p>
+<p>Turso経路は単体テストとCDK synthでは確認されていますが、実Turso、新規AWSデプロイ、
+請求までを組み合わせたライブ検証は未実施です。最初の本番競技ではDynamoDBを選んでください。</p>
 <p>Turso へのオプトインは 4 ステップです。Turso データベースを作成し、その認証
 トークンを <code>SecureString</code> として SSM に保存し、<code>.env</code> に 3 行
 （<code>CDK_PARAM_CONTROL_DATA_BACKEND=turso</code> に加えて
@@ -272,6 +276,11 @@ make deploy
 専用の PLATINUM silo スタックが立ち上がります。複数の組織が同じ
 デプロイメント上でイベントを運営する場合に選択してください。そうでなければ
 Lite モードが適切なデフォルトです。</p>
+<blockquote>
+<p><strong>現在の状態:</strong> <code>make deploy-saas</code>と関連コードは存在しますが、最近の新規AWS環境で、
+導入、テナント作成、問題起動、採点、削除までを通した確認は記録されていません。
+以下は構成を読むための参考であり、本番開催向けの確認済み手順ではありません。</p>
+</blockquote>
 <p><strong>前提条件:</strong> モード 4 と同じツールチェーンに加え、
 <code>infrastructure/environments/&lt;env&gt;/.env</code> に <code>SYSTEM_ADMIN_EMAIL</code> と
 <code>AWS_ACCOUNT_ID</code> が必要です。</p>
