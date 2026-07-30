@@ -252,6 +252,7 @@ function WhatIsTutorialWizard({
   const [successKeys, setSuccessKeys] = useState<Readonly<Record<string, string>>>({});
   const [submittingFlagId, setSubmittingFlagId] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const submittingRef = useRef(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
@@ -271,7 +272,8 @@ function WhatIsTutorialWizard({
   const progress = Math.round((completedCount / flags.length) * 100);
 
   const submitChoice = async (choice: TutorialChoiceSpec): Promise<void> => {
-    if (submittingFlagId || activeCompleted) return;
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setSubmittingFlagId(activeFlag.id);
     setSubmitError(null);
     try {
@@ -289,6 +291,7 @@ function WhatIsTutorialWizard({
     } catch (err) {
       setSubmitError(formatProblemPanelActionError(t, err, "problem_panel.submit_error_prefix"));
     } finally {
+      submittingRef.current = false;
       setSubmittingFlagId(null);
     }
   };
