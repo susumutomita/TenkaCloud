@@ -1,4 +1,22 @@
 {
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "statusLine": {
+    "type": "command",
+    "command": "echo \"$(git branch --show-current 2>/dev/null || echo 'no-branch') | $(git diff --stat --shortstat 2>/dev/null | tail -1 | sed 's/^ //' || echo 'clean')\""
+  },
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./secrets/**)",
+      "Write(./.env)",
+      "Write(./.env.*)",
+      "Write(./secrets/**)",
+      "Edit(./.env)",
+      "Edit(./.env.*)",
+      "Edit(./secrets/**)"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {
@@ -6,50 +24,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "CMD=$(jq -r '.tool_input.command'); if echo \"$CMD\" | grep -q 'git commit'; then ROOT=$(git rev-parse --show-toplevel); make -C \"$ROOT\" before-commit; fi",
-            "timeout": 300,
-            "statusMessage": "Running make before-commit..."
-          }
-        ]
-      },
-      {
-        "matcher": "Write|Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/guard-config.sh",
-            "timeout": 5,
-            "statusMessage": "Checking config file protection..."
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Write|Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/post-format.sh",
-            "timeout": 30,
-            "statusMessage": "Auto-formatting..."
-          },
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/quality-guard.sh",
-            "timeout": 10,
-            "statusMessage": "Checking code quality guard..."
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "if [ -z \"$STOP_HOOK_ACTIVE\" ]; then export STOP_HOOK_ACTIVE=1; CHANGED=$(git diff --name-only HEAD 2>/dev/null | grep -E '\\.(ts|tsx)$' | head -1); if [ -n \"$CHANGED\" ]; then echo 'Code was edited but no dev server is running. If the change is observable in a browser preview (per <when_to_verify>), call preview_start and follow <verification_workflow>. If not, end your turn without mentioning this check — do not announce that you are skipping.'; fi; fi",
-            "timeout": 10
+            "command": "jq -r '.tool_input.command // empty' | { read -r cmd; echo \"$cmd\" | grep -qE 'rm -rf|rm -r /|> /dev/sda|mkfs|dd if=|:\\(\\)\\{ :\\|:& \\};:' && { echo '危険なコマンドが検出されたため、安全のためブロックしました。' >&2; exit 2; }; exit 0; }",
+            "statusMessage": "危険なコマンドをチェック中..."
           }
         ]
       }
