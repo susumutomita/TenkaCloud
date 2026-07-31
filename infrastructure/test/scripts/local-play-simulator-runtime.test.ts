@@ -2287,9 +2287,10 @@ describe("provider-neutral local runtime", () => {
   it("should retain ownership when an injected process ignores SIGTERM", async () => {
     const root = mkdtempSync(join(tmpdir(), "tc-simulator-ignore-sigterm-"));
     const fixture = join(root, "ignore-sigterm.mjs");
+    const readyPath = join(root, "ignore-sigterm.ready");
     writeFileSync(
       fixture,
-      'process.on("SIGTERM", () => {}); process.on("SIGUSR1", () => process.exit(0)); setInterval(() => {}, 1000);\n',
+      `import { writeFileSync } from "node:fs"; process.on("SIGTERM", () => {}); process.on("SIGUSR1", () => process.exit(0)); writeFileSync(${JSON.stringify(readyPath)}, "ready"); setInterval(() => {}, 1000);\n`,
     );
     const options = runtimeOptions(root);
     const launcher = await launchSimulator({
@@ -2303,7 +2304,14 @@ describe("provider-neutral local runtime", () => {
       throw new Error("test requires an owned process launcher");
     }
     try {
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      // launchSimulator returns once the supervisor has registered the child PID. Under a
+      // loaded test shard, the child module may not yet have installed its SIGTERM handler;
+      // signalling during that gap makes this test pass the signal through and exit normally.
+      const readyDeadline = Date.now() + 3_000;
+      while (!existsSync(readyPath) && Date.now() < readyDeadline) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      expect(existsSync(readyPath)).toBe(true);
       await expect(stopSimulatorLauncher(launcher, options.env, 50)).rejects.toThrow(
         "did not stop within 50ms",
       );

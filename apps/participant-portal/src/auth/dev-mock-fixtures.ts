@@ -72,19 +72,18 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
       // オンボーディング動画は、リポジトリを肥大化させないよう YouTube で配信する。
       videoUrl: "https://www.youtube.com/embed/mcL_O17QVsA",
       name: "はじめての TenkaCloud",
-      // 動画で説明する製品の仕組みを省略せず、そのあとに実際の問題操作を続ける。
-      // 最後の合言葉だけを実際の scoring 経路へ送り、個別の学習問題は完了後の
-      // ローカルモード問題として案内する。
+      // 動画で説明する製品の仕組みを省略せず、そのあとに標準の multi-flag UI で
+      // 入力・ヒント公開・採点を体験する。独自クイズ UI は使わない。
       description: [
-        "動画のあと、動画で説明したTenkaCloudの仕組みと、問題を起動して得点する実際の操作を6ステップでつなげて体験する。",
+        "動画のあと、動画で説明したTenkaCloudの仕組みを3問で振り返り、問題文・ヒント・接続先・flag提出をTenkaCloudの実際の問題画面で体験する。",
         "",
         "#### この画面で確かめること",
         "",
         "1. TenkaCloudは紙の知識クイズではなく、実際に動く環境で調査や修正を練習する",
         "2. Battleは同時に得点を競い、Challengeは自分のペースで進める",
         "3. Local、Lite、SaaSの違いと、DockerがLocalで必要になる理由",
-        "4. 問題文の「状況・ゴール・最初の操作・完了条件」を読む",
-        "5. 問題を起動し、表示された環境を調べたり直したりする",
+        "4. 困ったら「ヒントを公開する」を押し、確認画面からヒントを開く",
+        "5. 問題がRunningになったら接続先を開き、環境を調べたり直したりする",
         "6. 見つけた`TC{...}`形式のflagを提出して得点する",
         "",
         "#### はじめて出てくる言葉",
@@ -94,24 +93,24 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
         "- **問題環境**: その問題専用に起動する、壊しても本番のサービスへ影響しない練習場所",
         "- **flag**: 問題を解けた証拠として提出する`TC{...}`形式の文字列",
         "",
-        "このブラウザ体験版では起動済みの見本環境を使う。最後の提出と採点は実際のTenkaCloudと同じ流れで、完了後は独立したローカルモード問題で本物の環境を試せる。",
+        "下の6問はすべて、実際のTenkaCloudと同じflag入力・ヒント公開・採点の仕組みを使う。4問目ではヒントを実際に開いて答えを確認する。完了後は独立したローカルモード問題で本物の環境を試せる。",
       ].join("\n"),
       instructions:
-        "動画を見たあと、動画で説明した仕組みから実際の問題操作まで6ステップを進める。最初の5ステップは流れの確認で、点数が動くのは最後のflag提出だけ。",
+        "動画を見たあと、6つの提出欄を順番に進める。わからないときは各欄の「ヒントを公開する」を押す。4問目では必ずヒントを開き、TenkaCloudのヒント公開操作を体験する。",
       i18n: {
         en: {
           name: "Your first TenkaCloud walkthrough",
           videoUrl: "https://www.youtube.com/embed/6qMzFcP5dgw",
           description: [
-            "After the video, connect the TenkaCloud concepts it introduced to the real start-investigate-submit flow in six steps.",
+            "After the video, review three TenkaCloud concepts, then use the real problem UI to practise reading, revealing a hint, opening an endpoint, and submitting a flag.",
             "",
             "#### What this walkthrough checks",
             "",
             "1. TenkaCloud uses real running environments, not a paper knowledge quiz",
             "2. Battle is a simultaneous score competition; Challenge is self-paced",
             "3. The difference between Local, Lite, and SaaS, and why Local uses Docker",
-            "4. How to read the situation, goal, first action, and completion condition",
-            "5. How to start a problem and investigate or repair its environment",
+            "4. How to select Reveal hint and confirm the reveal when you get stuck",
+            "5. How to open the endpoint after the problem is Running and investigate or repair it",
             "6. How to submit the `TC{...}` flag you found and score",
             "",
             "#### Terms introduced here",
@@ -121,10 +120,10 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
             "- **Problem environment**: an isolated practice area created for one problem, safe to investigate or repair without affecting a production service",
             "- **Flag**: a `TC{...}` value submitted as proof that you solved the problem",
             "",
-            "This browser walkthrough uses a prepared sample environment. The final submit-and-score action follows the real TenkaCloud flow; afterward, use the separate local-mode problem for a real environment.",
+            "All six checks use the same flag input, hint reveal, and scoring mechanisms as a real TenkaCloud problem. Check 4 deliberately asks you to reveal a hint. Afterward, use the separate local-mode problem for a real environment.",
           ].join("\n"),
           instructions:
-            "Watch the video, then follow all six steps from the concepts it introduced through the real problem flow. The first five confirm the flow; only the final flag submission changes the score.",
+            "Watch the video, then complete all six flag rows in order. Use Reveal hint whenever you get stuck. On check 4, reveal the hint so you experience the real hint flow.",
         },
       },
       region: "ap-northeast-1",
@@ -137,6 +136,118 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
         kind: "multi-flag",
         flags: [
           {
+            id: "tenka-what",
+            label: "1. TenkaCloudが練習に使う場所は？",
+            points: 100,
+            solved: false,
+            i18n: { en: { label: "1. Where does TenkaCloud run its practice environments?" } },
+            hints: [
+              {
+                id: "whatis-h1",
+                penalty: 0,
+                revealed: false,
+                content:
+                  "動画では、紙のクイズではなく「本物のクラウド」を練習の舞台にすると説明している。答えは「本物のクラウド」。",
+                i18n: {
+                  en: {
+                    content:
+                      'The video says that TenkaCloud uses the real cloud, rather than a paper quiz. Submit "real cloud".',
+                  },
+                },
+              },
+            ],
+          },
+          {
+            id: "battle-challenge",
+            label: "2. 同時に得点を競う形式は？",
+            points: 100,
+            solved: false,
+            i18n: { en: { label: "2. Which format is a simultaneous score competition?" } },
+            hints: [
+              {
+                id: "whatis-h2",
+                penalty: 0,
+                revealed: false,
+                content:
+                  "Battleは同時に得点を競う形式。Challengeは自分のペースで進める形式。答えは「Battle」。",
+                i18n: {
+                  en: {
+                    content:
+                      'Battle is the simultaneous score competition; Challenge is self-paced. Submit "Battle".',
+                  },
+                },
+              },
+            ],
+          },
+          {
+            id: "choose-mode",
+            label: "3. 手元のパソコンだけで試すモードは？",
+            points: 100,
+            solved: false,
+            i18n: { en: { label: "3. Which mode runs only on your own computer?" } },
+            hints: [
+              {
+                id: "whatis-h3",
+                penalty: 0,
+                revealed: false,
+                content:
+                  "LocalはDockerを使い、手元のパソコンで問題環境を動かす。Liteは自分のAWS、SaaSは運営側の環境を使う。答えは「Local」。",
+                i18n: {
+                  en: {
+                    content:
+                      'Local uses Docker to run the problem environment on your computer. Lite uses your AWS account; SaaS uses the hosted environment. Submit "Local".',
+                  },
+                },
+              },
+            ],
+          },
+          {
+            id: "read-problem",
+            label: "4. ヒントを開き、問題で最初に読むものを提出",
+            points: 100,
+            solved: false,
+            i18n: {
+              en: { label: "4. Reveal the hint and submit what you read first in a problem" },
+            },
+            hints: [
+              {
+                id: "whatis-h4",
+                penalty: 0,
+                revealed: false,
+                content:
+                  "ヒントを公開できた。問題では、起動や操作の前に状況・ゴール・完了条件が書かれた「問題文」を読む。答えは「問題文」。",
+                i18n: {
+                  en: {
+                    content:
+                      'You revealed the hint. Before starting or operating anything, read the problem statement for the situation, goal, and completion condition. Submit "problem statement".',
+                  },
+                },
+              },
+            ],
+          },
+          {
+            id: "open-endpoint",
+            label: "5. 問題がRunningになったあとに開くものは？",
+            points: 100,
+            solved: false,
+            i18n: { en: { label: "5. What do you open after the problem becomes Running?" } },
+            hints: [
+              {
+                id: "whatis-h5",
+                penalty: 0,
+                revealed: false,
+                content:
+                  "Runningになったら「接続先」を開き、用意された環境を調べたり直したりする。答えは「接続先」。",
+                i18n: {
+                  en: {
+                    content:
+                      'Once the problem is Running, open its endpoint and investigate or repair the environment. Submit "endpoint".',
+                  },
+                },
+              },
+            ],
+          },
+          {
             id: "first-flag",
             label: "6. 問題で見つけたflagを提出",
             points: 100,
@@ -148,11 +259,11 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
                 penalty: 0,
                 revealed: false,
                 content:
-                  "この体験版の合言葉は `TC{HELLO-TENKACLOUD}`。実際の問題では、練習環境を調べて見つけた `TC{...}` 全体を提出する。",
+                  "この体験版の合言葉は「TC{HELLO-TENKACLOUD}」。実際の問題では、練習環境を調べて見つけたTC{...}全体を提出する。",
                 i18n: {
                   en: {
                     content:
-                      "The passphrase in this walkthrough is `TC{HELLO-TENKACLOUD}`. In a real problem, submit the full `TC{...}` value you found in the practice environment.",
+                      'The passphrase in this walkthrough is "TC{HELLO-TENKACLOUD}". In a real problem, submit the full TC{...} value you found in the practice environment.',
                   },
                 },
               },

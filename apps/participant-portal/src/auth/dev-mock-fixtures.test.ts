@@ -26,8 +26,8 @@ import {
  * いなければ永遠に wrong を返すし、 ヒントの無いドリルは「本文は概要 → ヒントで
  * ステップバイステップ」 という構造契約を破る。問題 1 は動画の real cloud、
  * Battle / Challenge、Local / Lite / SaaS を省略せず、実際の「問題文を読む →
- * 問題環境を起動 → 調査・修正 → flag を提出して採点」へつなぐ。点数が動くのは
- * 実際の flag 提出だけ。
+ * 問題環境を起動 → 調査・修正 → flag を提出して採点」へつなぐ。6 問すべてが
+ * 標準の multi-flag 入力・ヒント公開・採点を使う。
  */
 describe("dev-mock fixtures", () => {
   const ONBOARDING_DRILL_IDS = [
@@ -50,7 +50,14 @@ describe("dev-mock fixtures", () => {
 
   it("should connect every video topic to the real solve-and-score journey", () => {
     const tutorial = drills.find((p) => p.problemId === WHAT_IS_DRILL_PROBLEM_ID);
-    expect(tutorial?.scoring?.flags?.map((f) => f.id)).toEqual(["first-flag"]);
+    expect(tutorial?.scoring?.flags?.map((f) => f.id)).toEqual([
+      "tenka-what",
+      "battle-challenge",
+      "choose-mode",
+      "read-problem",
+      "open-endpoint",
+      "first-flag",
+    ]);
     const body = tutorial?.description ?? "";
     expect(body).toContain("クラウド");
     expect(body).toContain("Docker");
@@ -63,13 +70,20 @@ describe("dev-mock fixtures", () => {
     expect(body).toContain("問題環境");
     expect(body).toContain("flag");
     expect(body).toContain("提出して得点");
-    expect(body).toContain("見本環境");
+    expect(body).toContain("ヒントを公開する");
     expect(body).not.toContain("WordPress");
     expect(body).not.toContain("CloudFormation");
-    expect(tutorial?.i18n?.en?.description).toContain("prepared sample environment");
-    expect(
-      evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, "first-flag", "TC{HELLO-TENKACLOUD}", 100).kind,
-    ).toBe("ok");
+    expect(tutorial?.i18n?.en?.description).toContain("same flag input, hint reveal");
+    for (const [flagId, answer] of [
+      ["tenka-what", "real cloud"],
+      ["battle-challenge", "battle"],
+      ["choose-mode", "local"],
+      ["read-problem", "problem statement"],
+      ["open-endpoint", "endpoint"],
+      ["first-flag", "TC{HELLO-TENKACLOUD}"],
+    ] as const) {
+      expect(evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, flagId, answer, 100).kind).toBe("ok");
+    }
   });
 
   it("should ship every onboarding problem as an unsolved multi-flag drill", () => {

@@ -6,6 +6,7 @@ import Form from "@cloudscape-design/components/form";
 import FormField from "@cloudscape-design/components/form-field";
 import Header from "@cloudscape-design/components/header";
 import Input from "@cloudscape-design/components/input";
+import ProgressBar from "@cloudscape-design/components/progress-bar";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
@@ -25,175 +26,39 @@ import {
 } from "../dev-mock/flag-submit";
 import { loadMockSolvedFlagIds, saveMockSolvedFlagId } from "../dev-mock/progress-store";
 import { useLang, useT } from "../i18n";
+import { trackOnboardingEvent } from "../onboarding-analytics";
 import { CelebrationOverlay } from "./CelebrationOverlay";
 import { formatProblemPanelActionError } from "./ProblemPanel.helpers";
 import { HintsPanel } from "./ProblemPanelFlagSubmission";
-import "./OnboardingTutorial.css";
 
-interface TutorialChoiceSpec {
-  readonly value: string;
-  readonly correct: boolean;
-  readonly labelKey: string;
-  readonly descriptionKey: string;
-}
-
-interface TutorialStepSpec {
-  readonly id: string;
-  readonly titleKey: string;
-  readonly scenarioKey: string;
-  readonly termKey: string;
-  readonly questionKey: string;
-  readonly choices: readonly TutorialChoiceSpec[];
-  readonly successKey: string;
-  readonly submitsFlag?: boolean;
-}
-
-const PRACTICE_FLAG_ID = "first-flag";
-const PRACTICE_FLAG_VALUE = "TC{HELLO-TENKACLOUD}";
 const PARTICIPANT_MANUAL_URL = "https://tenkacloud.com/docs/manual/participant/";
 
-const TUTORIAL_STEP_SPECS: readonly TutorialStepSpec[] = [
-  {
-    id: "real-cloud",
-    titleKey: "onboarding_tutorial.step_1.title",
-    scenarioKey: "onboarding_tutorial.step_1.scenario",
-    termKey: "onboarding_tutorial.step_1.term",
-    questionKey: "onboarding_tutorial.step_1.question",
-    choices: [
-      {
-        value: "real-cloud-practice",
-        correct: true,
-        labelKey: "onboarding_tutorial.step_1.correct_label",
-        descriptionKey: "onboarding_tutorial.step_1.correct_description",
-      },
-      {
-        value: "word-quiz",
-        correct: false,
-        labelKey: "onboarding_tutorial.step_1.wrong_label",
-        descriptionKey: "onboarding_tutorial.step_1.wrong_description",
-      },
-    ],
-    successKey: "onboarding_tutorial.step_1.success",
-  },
-  {
-    id: "battle-challenge",
-    titleKey: "onboarding_tutorial.step_2.title",
-    scenarioKey: "onboarding_tutorial.step_2.scenario",
-    termKey: "onboarding_tutorial.step_2.term",
-    questionKey: "onboarding_tutorial.step_2.question",
-    choices: [
-      {
-        value: "battle",
-        correct: true,
-        labelKey: "onboarding_tutorial.step_2.correct_label",
-        descriptionKey: "onboarding_tutorial.step_2.correct_description",
-      },
-      {
-        value: "challenge",
-        correct: false,
-        labelKey: "onboarding_tutorial.step_2.wrong_label",
-        descriptionKey: "onboarding_tutorial.step_2.wrong_description",
-      },
-    ],
-    successKey: "onboarding_tutorial.step_2.success",
-  },
-  {
-    id: "choose-mode",
-    titleKey: "onboarding_tutorial.step_3.title",
-    scenarioKey: "onboarding_tutorial.step_3.scenario",
-    termKey: "onboarding_tutorial.step_3.term",
-    questionKey: "onboarding_tutorial.step_3.question",
-    choices: [
-      {
-        value: "local",
-        correct: true,
-        labelKey: "onboarding_tutorial.step_3.local_label",
-        descriptionKey: "onboarding_tutorial.step_3.local_description",
-      },
-      {
-        value: "lite",
-        correct: true,
-        labelKey: "onboarding_tutorial.step_3.lite_label",
-        descriptionKey: "onboarding_tutorial.step_3.lite_description",
-      },
-      {
-        value: "saas",
-        correct: true,
-        labelKey: "onboarding_tutorial.step_3.saas_label",
-        descriptionKey: "onboarding_tutorial.step_3.saas_description",
-      },
-    ],
-    successKey: "onboarding_tutorial.step_3.success",
-  },
-  {
-    id: "read-problem",
-    titleKey: "onboarding_tutorial.step_4.title",
-    scenarioKey: "onboarding_tutorial.step_4.scenario",
-    termKey: "onboarding_tutorial.step_4.term",
-    questionKey: "onboarding_tutorial.step_4.question",
-    choices: [
-      {
-        value: "read-goal",
-        correct: true,
-        labelKey: "onboarding_tutorial.step_4.correct_label",
-        descriptionKey: "onboarding_tutorial.step_4.correct_description",
-      },
-      {
-        value: "guess-from-title",
-        correct: false,
-        labelKey: "onboarding_tutorial.step_4.wrong_label",
-        descriptionKey: "onboarding_tutorial.step_4.wrong_description",
-      },
-    ],
-    successKey: "onboarding_tutorial.step_4.success",
-  },
-  {
-    id: "start-environment",
-    titleKey: "onboarding_tutorial.step_5.title",
-    scenarioKey: "onboarding_tutorial.step_5.scenario",
-    termKey: "onboarding_tutorial.step_5.term",
-    questionKey: "onboarding_tutorial.step_5.question",
-    choices: [
-      {
-        value: "start-and-investigate",
-        correct: true,
-        labelKey: "onboarding_tutorial.step_5.correct_label",
-        descriptionKey: "onboarding_tutorial.step_5.correct_description",
-      },
-      {
-        value: "submit-without-start",
-        correct: false,
-        labelKey: "onboarding_tutorial.step_5.wrong_label",
-        descriptionKey: "onboarding_tutorial.step_5.wrong_description",
-      },
-    ],
-    successKey: "onboarding_tutorial.step_5.success",
-  },
-  {
-    id: PRACTICE_FLAG_ID,
-    titleKey: "onboarding_tutorial.step_6.title",
-    scenarioKey: "onboarding_tutorial.step_6.scenario",
-    termKey: "onboarding_tutorial.step_6.term",
-    questionKey: "onboarding_tutorial.step_6.question",
-    choices: [],
-    successKey: "onboarding_tutorial.step_6.success",
-    submitsFlag: true,
-  },
-];
+export type OnboardingVariant = "list" | "step";
+const ONBOARDING_VARIANT_STORAGE_KEY = "tenkacloud.onboarding.variant.v1";
 
-export function isWhatIsTutorialShape(flags: readonly MultiFlagEntryView[]): boolean {
-  return flags.length === 1 && flags[0]?.id === PRACTICE_FLAG_ID;
+export function onboardingVariantFromSearch(search: string): OnboardingVariant | undefined {
+  const value = new URLSearchParams(search).get("onboarding");
+  return value === "list" || value === "step" ? value : undefined;
 }
 
-function tutorialSuccessHeader(
-  spec: TutorialStepSpec,
-  points: number,
-  t: (key: string, params?: Readonly<Record<string, string | number>>) => string,
-): string {
-  if (spec.submitsFlag) {
-    return t("onboarding_tutorial.correct_header", { points });
-  }
-  return t("onboarding_tutorial.step_complete_header");
+export function resolveOnboardingVariant({
+  search,
+  storage,
+  sample = Math.random,
+}: {
+  search: string;
+  storage: Pick<Storage, "getItem" | "setItem">;
+  sample?: () => number;
+}): OnboardingVariant {
+  const forced = onboardingVariantFromSearch(search);
+  if (forced) return forced;
+
+  const stored = storage.getItem(ONBOARDING_VARIANT_STORAGE_KEY);
+  if (stored === "list" || stored === "step") return stored;
+
+  const assigned = sample() < 0.5 ? "list" : "step";
+  storage.setItem(ONBOARDING_VARIANT_STORAGE_KEY, assigned);
+  return assigned;
 }
 
 /**
@@ -217,6 +82,7 @@ export function MultiFlagSubmissionPanel({
   flags,
   onScored,
   revealOrder,
+  onboardingVariant,
 }: {
   apiBaseUrl: string;
   sessionToken: string;
@@ -225,6 +91,8 @@ export function MultiFlagSubmissionPanel({
   onScored: () => Promise<void>;
   /** 問題 `scoring.hintReveal`; `"flat"` で各 sub-flag の hint 順序ゲートを外す。 */
   revealOrder?: HintRevealMode;
+  /** #2822 A/B preview: list = 動画と同じ一覧、step = 標準 UI を 1 flag ずつ表示。 */
+  onboardingVariant?: OnboardingVariant;
 }) {
   const t = useT();
   const isMock = useIsMock();
@@ -238,283 +106,139 @@ export function MultiFlagSubmissionPanel({
   const isSolved = (flag: MultiFlagEntryView) => flag.solved || mockSolvedIds.has(flag.id);
   const solvedCount = flags.filter(isSolved).length;
   const allSolved = flags.length > 0 && solvedCount === flags.length;
-
-  if (problemId === WHAT_IS_DRILL_PROBLEM_ID && isWhatIsTutorialShape(flags)) {
-    return (
-      <WhatIsTutorialWizard
-        apiBaseUrl={apiBaseUrl}
-        sessionToken={sessionToken}
-        problemId={problemId}
-        flags={flags}
-        isSolved={isSolved}
-        onMockSolved={(flagId) => {
-          setMockSolvedIds((current) => new Set([...current, flagId]));
-          saveMockSolvedFlagId(problemId, flagId);
-        }}
-        onScored={onScored}
-      />
-    );
-  }
-
-  return (
-    <SpaceBetween size="s">
-      <Alert
-        type={allSolved ? "success" : "info"}
-        header={t("multi_flag.progress_header", { solved: solvedCount, total: flags.length })}
-      >
-        {allSolved ? t("multi_flag.all_solved_body") : t("multi_flag.progress_body")}
-      </Alert>
-      {flags.map((flag) => (
-        <SubFlagRow
-          key={flag.id}
-          apiBaseUrl={apiBaseUrl}
-          sessionToken={sessionToken}
-          problemId={problemId}
-          flag={flag}
-          solved={isSolved(flag)}
-          onMockSolved={(flagId) => {
-            setMockSolvedIds((current) => new Set([...current, flagId]));
-            saveMockSolvedFlagId(problemId, flagId);
-          }}
-          onScored={onScored}
-          revealOrder={revealOrder}
-        />
-      ))}
-    </SpaceBetween>
+  const [resolvedOnboardingVariant] = useState<OnboardingVariant>(() =>
+    problemId === WHAT_IS_DRILL_PROBLEM_ID
+      ? (onboardingVariant ??
+        resolveOnboardingVariant({
+          search: window.location.search,
+          storage: window.localStorage,
+        }))
+      : "list",
   );
-}
-
-function WhatIsTutorialWizard({
-  apiBaseUrl,
-  sessionToken,
-  problemId,
-  flags,
-  isSolved,
-  onMockSolved,
-  onScored,
-}: {
-  apiBaseUrl: string;
-  sessionToken: string;
-  problemId: string;
-  flags: readonly MultiFlagEntryView[];
-  isSolved: (flag: MultiFlagEntryView) => boolean;
-  onMockSolved: (flagId: string) => void;
-  onScored: () => Promise<void>;
-}) {
-  const t = useT();
-  const isMock = useIsMock();
-  const scoringFlag = flags[0];
-  const restoredComplete = isSolved(scoringFlag);
-  const [activeIndex, setActiveIndex] = useState(
-    restoredComplete ? TUTORIAL_STEP_SPECS.length - 1 : 0,
+  const onboardingStartedAt = useRef(Date.now());
+  const initialSolvedCount = useRef(solvedCount);
+  const wrongAttempts = useRef(0);
+  const revealedHints = useRef(new Set<string>());
+  const viewedSteps = useRef(new Set<string>());
+  const completionTracked = useRef(false);
+  const assignmentSource = useRef(
+    onboardingVariant !== undefined || onboardingVariantFromSearch(window.location.search)
+      ? "forced"
+      : "assigned",
   );
-  const [completedSteps, setCompletedSteps] = useState<ReadonlySet<number>>(() =>
-    restoredComplete ? new Set(TUTORIAL_STEP_SPECS.map((_, index) => index)) : new Set(),
-  );
-  const [wrongStep, setWrongStep] = useState<number | null>(null);
-  const [outcome, setOutcome] = useState<SubmitFlagOutcome | undefined>();
-  const [practiceFlag, setPracticeFlag] = useState(PRACTICE_FLAG_VALUE);
-  const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const submittingRef = useRef(false);
-  const headingRef = useRef<HTMLHeadingElement>(null);
+  const activeFlag = flags.find((flag) => !isSolved(flag));
+  const visibleFlags = resolvedOnboardingVariant === "step" && activeFlag ? [activeFlag] : flags;
+  const progress = flags.length === 0 ? 0 : Math.round((solvedCount / flags.length) * 100);
 
   useEffect(() => {
-    if (activeIndex > 0) headingRef.current?.focus();
-  }, [activeIndex]);
+    if (problemId !== WHAT_IS_DRILL_PROBLEM_ID) return;
+    trackOnboardingEvent("onboarding_view", {
+      onboarding_variant: resolvedOnboardingVariant,
+      assignment_source: assignmentSource.current,
+      total_steps: flags.length,
+    });
+  }, [flags.length, problemId, resolvedOnboardingVariant]);
 
-  const finalSubmitted =
-    restoredComplete || outcome?.kind === "ok" || outcome?.kind === "already_scored";
-  const completedCount = finalSubmitted ? TUTORIAL_STEP_SPECS.length : completedSteps.size;
-  const allSolved = completedCount === TUTORIAL_STEP_SPECS.length;
-  const activeSpec = TUTORIAL_STEP_SPECS[activeIndex];
-  const activeCompleted = activeSpec.submitsFlag ? finalSubmitted : completedSteps.has(activeIndex);
-  const progress = Math.round((completedCount / TUTORIAL_STEP_SPECS.length) * 100);
-
-  const submitPracticeFlag = async (): Promise<void> => {
-    if (submittingRef.current) return;
-    if (practiceFlag.trim().length === 0) return;
-    submittingRef.current = true;
-    setSubmitting(true);
-    setSubmitError(null);
-    try {
-      const result = isMock
-        ? evaluateMockSubFlag(problemId, scoringFlag.id, practiceFlag, scoringFlag.points)
-        : await submitFlag(apiBaseUrl, sessionToken, problemId, practiceFlag, scoringFlag.id);
-      setOutcome(result);
-      if (result.kind === "ok") {
-        if (isMock) onMockSolved(scoringFlag.id);
-        else await onScored();
-      } else if (result.kind === "already_scored") {
-        await onScored();
-      }
-    } catch (err) {
-      setSubmitError(formatProblemPanelActionError(t, err, "problem_panel.submit_error_prefix"));
-    } finally {
-      submittingRef.current = false;
-      setSubmitting(false);
+  useEffect(() => {
+    if (problemId !== WHAT_IS_DRILL_PROBLEM_ID) return;
+    for (const flag of visibleFlags) {
+      if (viewedSteps.current.has(flag.id)) continue;
+      viewedSteps.current.add(flag.id);
+      trackOnboardingEvent("onboarding_step_view", {
+        onboarding_variant: resolvedOnboardingVariant,
+        assignment_source: assignmentSource.current,
+        onboarding_step: flag.id,
+        step_index: flags.indexOf(flag) + 1,
+      });
     }
-  };
+  }, [flags, problemId, resolvedOnboardingVariant, visibleFlags]);
 
-  const selectChoice = (choice: TutorialChoiceSpec): void => {
-    if (!choice.correct) {
-      setWrongStep(activeIndex);
+  useEffect(() => {
+    if (
+      problemId !== WHAT_IS_DRILL_PROBLEM_ID ||
+      !allSolved ||
+      completionTracked.current ||
+      initialSolvedCount.current === flags.length
+    ) {
       return;
     }
-    setWrongStep(null);
-    setCompletedSteps((current) => new Set([...current, activeIndex]));
-  };
+    completionTracked.current = true;
+    trackOnboardingEvent("onboarding_complete", {
+      onboarding_variant: resolvedOnboardingVariant,
+      assignment_source: assignmentSource.current,
+      elapsed_ms: Date.now() - onboardingStartedAt.current,
+      hint_count: revealedHints.current.size,
+      wrong_attempt_count: wrongAttempts.current,
+    });
+  }, [allSolved, flags.length, problemId, resolvedOnboardingVariant]);
 
   return (
-    <div className="tc-onboarding" data-testid="what-is-tutorial">
-      {outcome?.kind === "ok" && <CelebrationOverlay visible />}
-      <div className="tc-onboarding__progress">
-        <div className="tc-onboarding__progress-label">
-          <span>
-            {t("onboarding_tutorial.progress", {
-              current: activeIndex + 1,
-              total: TUTORIAL_STEP_SPECS.length,
+    <div data-onboarding-variant={resolvedOnboardingVariant}>
+      <SpaceBetween size="s">
+        {resolvedOnboardingVariant === "step" && !allSolved ? (
+          <ProgressBar
+            value={progress}
+            label={t("onboarding_tutorial.progress", {
+              current: Math.min(solvedCount + 1, flags.length),
+              total: flags.length,
             })}
-          </span>
-          <span>
-            {t("onboarding_tutorial.cleared", {
-              solved: completedCount,
-              total: TUTORIAL_STEP_SPECS.length,
-            })}
-          </span>
-        </div>
-        <div
-          className="tc-onboarding__progress-track"
-          role="progressbar"
-          aria-label={t("onboarding_tutorial.progress_aria")}
-          aria-valuemin={0}
-          aria-valuemax={TUTORIAL_STEP_SPECS.length}
-          aria-valuenow={completedCount}
-        >
-          <span style={{ width: `${progress}%` }} />
-        </div>
-      </div>
-
-      <section className="tc-onboarding__step" aria-labelledby={`tutorial-${activeSpec.id}`}>
-        <p className="tc-onboarding__eyebrow">
-          {t("onboarding_tutorial.step", { current: activeIndex + 1 })}
-          {activeSpec.submitsFlag && (
-            <span className="tc-onboarding__points">
-              {t("onboarding_tutorial.points", { points: scoringFlag.points })}
-            </span>
-          )}
-        </p>
-        <h3
-          id={`tutorial-${activeSpec.id}`}
-          className="tc-onboarding__title"
-          ref={headingRef}
-          tabIndex={-1}
-        >
-          {t(activeSpec.titleKey)}
-        </h3>
-        <p className="tc-onboarding__scenario">{t(activeSpec.scenarioKey)}</p>
-        <p className="tc-onboarding__term">
-          <strong>{t("onboarding_tutorial.term_label")}</strong>
-          <span>{t(activeSpec.termKey)}</span>
-        </p>
-
-        <div className="tc-onboarding__question">
-          <p className="tc-onboarding__question-label">{t(activeSpec.questionKey)}</p>
-          {activeSpec.submitsFlag ? (
-            <form
-              className="tc-onboarding__submission"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void submitPracticeFlag();
-              }}
-            >
-              <FormField
-                label={t("onboarding_tutorial.step_6.field_label")}
-                description={t("onboarding_tutorial.step_6.field_description")}
-              >
-                <Input
-                  value={practiceFlag}
-                  onChange={(event) => setPracticeFlag(event.detail.value)}
-                  disabled={submitting || activeCompleted}
-                />
-              </FormField>
-              <div className="tc-onboarding__submit-action">
-                <Button
-                  variant="primary"
-                  formAction="submit"
-                  loading={submitting}
-                  disabled={activeCompleted}
-                >
-                  {t("onboarding_tutorial.step_6.submit_button", {
-                    points: scoringFlag.points,
-                  })}
-                </Button>
-              </div>
-            </form>
-          ) : (
-            <div className="tc-onboarding__choices">
-              {activeSpec.choices.map((choice) => (
-                <button
-                  className="tc-onboarding__choice"
-                  type="button"
-                  key={choice.value}
-                  disabled={activeCompleted}
-                  onClick={() => selectChoice(choice)}
-                >
-                  <span className="tc-onboarding__choice-copy">
-                    <strong>{t(choice.labelKey)}</strong>
-                    <span>{t(choice.descriptionKey)}</span>
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="tc-onboarding__feedback" aria-live="polite">
-          {wrongStep === activeIndex && (
-            <Alert type="warning" header={t("onboarding_tutorial.wrong_header")}>
-              {t("onboarding_tutorial.wrong_body")}
-            </Alert>
-          )}
-          {outcome?.kind === "wrong" && activeSpec.submitsFlag && (
-            <Alert type="warning" header={t("onboarding_tutorial.submission_wrong_header")}>
-              {t("onboarding_tutorial.submission_wrong_body")}
-            </Alert>
-          )}
-          {outcome?.kind === "already_scored" && (
-            <Alert type="info" header={t("problem_panel.already_scored_header")}>
-              {t("problem_panel.already_scored_body", { total: outcome.totalScore })}
-            </Alert>
-          )}
-          {submitError && (
-            <Alert type="error" header={t("problem_panel.submit_failed_header")}>
-              {submitError}
-            </Alert>
-          )}
-          {activeCompleted && outcome?.kind !== "already_scored" && (
-            <Alert type="success" header={tutorialSuccessHeader(activeSpec, scoringFlag.points, t)}>
-              {t(activeSpec.successKey)}
-            </Alert>
-          )}
-        </div>
-
-        {activeCompleted && !allSolved && (
-          <div className="tc-onboarding__next">
-            <Button
-              variant="primary"
-              onClick={() => {
-                setWrongStep(null);
-                setActiveIndex((current) => Math.min(current + 1, TUTORIAL_STEP_SPECS.length - 1));
-              }}
-            >
-              {t("onboarding_tutorial.next_button")}
-            </Button>
-          </div>
+            description={t("onboarding_tutorial.cleared", { solved: solvedCount })}
+          />
+        ) : (
+          <Alert
+            type={allSolved ? "success" : "info"}
+            header={t("multi_flag.progress_header", { solved: solvedCount, total: flags.length })}
+          >
+            {allSolved ? t("multi_flag.all_solved_body") : t("multi_flag.progress_body")}
+          </Alert>
         )}
-      </section>
-
-      {allSolved && <WhatIsTutorialComplete />}
+        {visibleFlags.map((flag) => (
+          <SubFlagRow
+            key={flag.id}
+            apiBaseUrl={apiBaseUrl}
+            sessionToken={sessionToken}
+            problemId={problemId}
+            flag={flag}
+            solved={isSolved(flag)}
+            onMockSolved={(flagId) => {
+              setMockSolvedIds((current) => new Set([...current, flagId]));
+              saveMockSolvedFlagId(problemId, flagId);
+            }}
+            onScored={onScored}
+            revealOrder={revealOrder}
+            onHintRevealed={(hintId) => {
+              if (problemId !== WHAT_IS_DRILL_PROBLEM_ID) return;
+              revealedHints.current.add(hintId);
+              trackOnboardingEvent("onboarding_hint_reveal", {
+                onboarding_variant: resolvedOnboardingVariant,
+                assignment_source: assignmentSource.current,
+                onboarding_step: flag.id,
+                step_index: flags.indexOf(flag) + 1,
+              });
+            }}
+            onSubmitted={(outcome) => {
+              if (problemId !== WHAT_IS_DRILL_PROBLEM_ID) return;
+              if (outcome.kind === "wrong") wrongAttempts.current += 1;
+              trackOnboardingEvent("onboarding_submit", {
+                onboarding_variant: resolvedOnboardingVariant,
+                assignment_source: assignmentSource.current,
+                onboarding_step: flag.id,
+                onboarding_result: outcome.kind,
+                step_index: flags.indexOf(flag) + 1,
+              });
+              if (outcome.kind === "ok") {
+                trackOnboardingEvent("onboarding_step_complete", {
+                  onboarding_variant: resolvedOnboardingVariant,
+                  assignment_source: assignmentSource.current,
+                  onboarding_step: flag.id,
+                  step_index: flags.indexOf(flag) + 1,
+                });
+              }
+            }}
+          />
+        ))}
+        {problemId === WHAT_IS_DRILL_PROBLEM_ID && allSolved && <WhatIsTutorialComplete />}
+      </SpaceBetween>
     </div>
   );
 }
@@ -590,6 +314,8 @@ function SubFlagRow({
   onMockSolved,
   onScored,
   revealOrder,
+  onHintRevealed,
+  onSubmitted,
 }: {
   apiBaseUrl: string;
   sessionToken: string;
@@ -599,6 +325,8 @@ function SubFlagRow({
   onMockSolved: (flagId: string) => void;
   onScored: () => Promise<void>;
   revealOrder?: HintRevealMode;
+  onHintRevealed?: (hintId: string) => void;
+  onSubmitted?: (outcome: SubmitFlagOutcome) => void;
 }) {
   const t = useT();
   const lang = useLang();
@@ -637,6 +365,7 @@ function SubFlagRow({
         ? evaluateMockSubFlag(problemId, flag.id, value, flag.points)
         : await submitFlag(apiBaseUrl, sessionToken, problemId, value, flag.id);
       setOutcome(result);
+      onSubmitted?.(result);
       switch (result.kind) {
         case "ok":
           if (isMock) onMockSolved(flag.id);
@@ -712,6 +441,7 @@ function SubFlagRow({
           hints={flag.hints}
           onRevealed={onScored}
           revealOrder={revealOrder}
+          onRevealTracked={onHintRevealed}
         />
       )}
     </SpaceBetween>

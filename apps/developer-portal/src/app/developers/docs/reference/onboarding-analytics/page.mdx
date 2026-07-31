@@ -1,0 +1,89 @@
+import { MaturityBadge } from "@/components/MaturityBadge";
+
+export const metadata = { title: "Onboarding A/B analytics" };
+
+# Onboarding A/B analytics <MaturityBadge level="preview" />
+
+This reference defines how the public browser demo compares two presentations
+of the same TenkaCloud onboarding problem:
+
+- `list`: all six standard flag rows are visible, matching the video.
+- `step`: one standard flag row is visible at a time.
+
+Both variants use the same flag input, hint confirmation, hint reveal, and
+scoring components. The experiment changes presentation only.
+
+## Assignment
+
+The browser demo assigns a new visitor to `list` or `step` with a 50/50 split
+and stores the choice in `tenkacloud.onboarding.variant.v1` in localStorage.
+The same browser therefore keeps the same variant.
+
+For review, append `?onboarding=list` or `?onboarding=step`. Forced previews
+send `assignment_source=forced`; exclude them from the experiment report.
+Normal assignments send `assignment_source=assigned`.
+
+## Events
+
+Only the production browser demo loads the existing TenkaCloud GA4 property.
+The production participant portal does not load this measurement.
+
+| Event | When | Parameters |
+| --- | --- | --- |
+| `onboarding_view` | The six-step area is shown | `onboarding_variant`, `assignment_source`, `total_steps` |
+| `onboarding_step_view` | A step is visible for the first time | `onboarding_variant`, `assignment_source`, `onboarding_step`, `step_index` |
+| `onboarding_hint_reveal` | A hint was successfully revealed | variant, source, step, index |
+| `onboarding_submit` | A submission returns a result | variant, source, step, index, `onboarding_result` |
+| `onboarding_step_complete` | A step is scored correctly | variant, source, step, index |
+| `onboarding_complete` | All six steps are complete | variant, source, `elapsed_ms`, `hint_count`, `wrong_attempt_count` |
+
+Answer text, flag values, team keys, and hint text are never included.
+
+## Configure GA4
+
+In **Admin → Data display → Custom definitions**, create event-scoped custom
+dimensions for:
+
+| Dimension name | Event parameter |
+| --- | --- |
+| Onboarding variant | `onboarding_variant` |
+| Assignment source | `assignment_source` |
+| Onboarding step | `onboarding_step` |
+| Onboarding result | `onboarding_result` |
+
+Use Realtime or DebugView first to confirm the events. Custom dimensions can
+take 24–48 hours before they are available in reports.
+
+## Build the drop-off funnel
+
+In **Explore → Funnel exploration**, create a closed funnel and filter
+`Assignment source` to `assigned`.
+
+1. `onboarding_view`
+2. `onboarding_step_complete` where `onboarding_step = tenka-what`
+3. `onboarding_step_complete` where `onboarding_step = battle-challenge`
+4. `onboarding_step_complete` where `onboarding_step = choose-mode`
+5. `onboarding_step_complete` where `onboarding_step = read-problem`
+6. `onboarding_step_complete` where `onboarding_step = open-endpoint`
+7. `onboarding_step_complete` where `onboarding_step = first-flag`
+8. `onboarding_complete`
+
+Set the breakdown to **Onboarding variant** and enable **Show elapsed time**.
+The table then shows the completion and drop-off percentage at each step for
+`list` and `step`.
+
+Use hint reveal and wrong submissions as guardrails:
+
+- Lower hint use is not automatically better; a visible, trusted hint can
+  improve completion.
+- Prefer the variant with higher completion and no worse wrong-submission rate.
+- If completion is close, use elapsed time and participant interviews.
+- Do not declare a winner from a small sample or stop as soon as one variant
+  moves ahead.
+
+## Privacy boundary
+
+The [privacy policy](/privacy/) discloses browser-demo interaction measurement.
+If the event schema starts carrying answer content or is enabled in a real
+participant portal, stop the rollout and review the data contract and policy
+before collection.

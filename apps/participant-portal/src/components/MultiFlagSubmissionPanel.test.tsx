@@ -1,5 +1,5 @@
 import { LITE_DRILL_CHECKPOINTS, LITE_DRILL_PROBLEM_ID } from "@tenkacloud/portal-contracts";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type * as React from "react";
 import { MemoryRouter, useLocation } from "react-router";
@@ -13,8 +13,9 @@ import {
 } from "../dev-mock/flag-submit";
 import { I18nProvider } from "../i18n";
 import {
-  isWhatIsTutorialShape,
   MultiFlagSubmissionPanel,
+  onboardingVariantFromSearch,
+  resolveOnboardingVariant,
   subFlagFieldPresentation,
 } from "./MultiFlagSubmissionPanel";
 
@@ -73,7 +74,13 @@ function renderPanel(
   overrides: Partial<React.ComponentProps<typeof MultiFlagSubmissionPanel>> = {},
   mode: "backend" | "dev-mock" = "backend",
 ) {
-  return render(withProviders(<MultiFlagSubmissionPanel {...baseProps} {...overrides} />, mode));
+  const stableOverrides =
+    overrides.problemId === WHAT_IS_DRILL_PROBLEM_ID && overrides.onboardingVariant === undefined
+      ? { ...overrides, onboardingVariant: "list" as const }
+      : overrides;
+  return render(
+    withProviders(<MultiFlagSubmissionPanel {...baseProps} {...stableOverrides} />, mode),
+  );
 }
 
 beforeEach(() => {
@@ -86,6 +93,8 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.clearAllMocks();
+  delete window.gtag;
+  delete window.dataLayer;
   window.localStorage.clear();
   window.sessionStorage.clear();
 });
@@ -220,85 +229,143 @@ describe("MultiFlagSubmissionPanel", () => {
   });
 
   const TUTORIAL_FLAGS = [
-    { id: "first-flag", label: "Submit the flag", points: 100, solved: false },
+    { id: "tenka-what", label: "1. Practice environment", points: 100, solved: false },
+    { id: "battle-challenge", label: "2. Competition format", points: 100, solved: false },
+    { id: "choose-mode", label: "3. Runtime mode", points: 100, solved: false },
+    { id: "read-problem", label: "4. Reveal a hint", points: 100, solved: false },
+    { id: "open-endpoint", label: "5. Open the endpoint", points: 100, solved: false },
+    { id: "first-flag", label: "6. Submit the flag", points: 100, solved: false },
+  ].map((flag, index) => ({
+    ...flag,
+    hints: [
+      {
+        id: `tutorial-h${index + 1}`,
+        penalty: 0,
+        revealed: false,
+        content:
+          index === 3 ? "Read the problem statement before starting." : `Hint for ${flag.label}`,
+      },
+    ],
+  }));
+
+  const TUTORIAL_ANSWERS = [
+    "real cloud",
+    "battle",
+    "local",
+    "problem statement",
+    "endpoint",
+    "TC{HELLO-TENKACLOUD}",
   ];
 
-  async function advanceTutorialToSubmission(user: ReturnType<typeof userEvent.setup>) {
-    await user.click(
-      screen.getByRole("button", { name: /Investigate and repair a running environment/ }),
-    );
-    await user.click(screen.getByRole("button", { name: "Next step" }));
-    await user.click(screen.getByRole("button", { name: /^Battle/ }));
-    await user.click(screen.getByRole("button", { name: "Next step" }));
-    await user.click(screen.getByRole("button", { name: /^Local/ }));
-    await user.click(screen.getByRole("button", { name: "Next step" }));
-    await user.click(
-      screen.getByRole("button", {
-        name: /Situation, goal, first action, and completion condition/,
-      }),
-    );
-    await user.click(screen.getByRole("button", { name: "Next step" }));
-    await user.click(
-      screen.getByRole("button", { name: /Open the endpoint and investigate or repair it/ }),
-    );
-    await user.click(screen.getByRole("button", { name: "Next step" }));
+  async function solveTutorial(user: ReturnType<typeof userEvent.setup>) {
+    for (const [index, answer] of TUTORIAL_ANSWERS.entries()) {
+      const input = screen.getAllByRole("textbox")[0];
+      await user.type(input, answer.replaceAll("{", "{{"));
+      await user.click(screen.getAllByRole("button", { name: /^Submit/ })[0]);
+      await screen.findByText(`Flags solved: ${index + 1} / 6`);
+    }
   }
 
-  it("should teach the TenkaCloud flow one page at a time and score only the final submission", async () => {
+  it("should use the standard six-flag problem UI instead of a bespoke choice quiz", () => {
+    renderPanel({ problemId: WHAT_IS_DRILL_PROBLEM_ID, flags: TUTORIAL_FLAGS }, "dev-mock");
+
+    expect(screen.getByText("Flags solved: 0 / 6")).toBeInTheDocument();
+    expect(screen.getAllByRole("textbox")).toHaveLength(6);
+    expect(screen.getAllByRole("button", { name: "Reveal hint" })).toHaveLength(6);
+    expect(screen.queryByText("Next step")).not.toBeInTheDocument();
+  });
+
+  it("should offer a one-at-a-time variant without replacing real flag, hint, or scoring controls", async () => {
+    const user = userEvent.setup();
+    renderPanel(
+      {
+        problemId: WHAT_IS_DRILL_PROBLEM_ID,
+        flags: TUTORIAL_FLAGS,
+        onboardingVariant: "step",
+      },
+      "dev-mock",
+    );
+
+    expect(screen.getByText("Step 1 of 6")).toBeInTheDocument();
+    expect(screen.getByText("0 cleared")).toBeInTheDocument();
+    expect(screen.getAllByRole("textbox")).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Reveal hint" })).toHaveLength(1);
+
+    await user.type(screen.getByRole("textbox"), "real cloud");
+    await user.click(screen.getByRole("button", { name: /^Submit/ }));
+
+    expect(await screen.findByText("Step 2 of 6")).toBeInTheDocument();
+    expect(screen.getByText("1 cleared")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "2. Competition format" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Reveal hint" })).toHaveLength(1);
+  });
+
+  it("should provide the real hint confirmation and reveal experience", async () => {
     const user = userEvent.setup();
     renderPanel({ problemId: WHAT_IS_DRILL_PROBLEM_ID, flags: TUTORIAL_FLAGS }, "dev-mock");
 
-    expect(screen.getByText("Step 1 of 6")).toBeInTheDocument();
+    await user.click(screen.getAllByRole("button", { name: "Reveal hint" })[3]);
+    expect(screen.getAllByText("Reveal hint 1?").length).toBeGreaterThan(0);
     expect(
-      screen.getByText("TenkaCloud uses the real cloud as the practice field"),
+      screen.getByText("No penalty for this hint. Revealing will display the content."),
     ).toBeInTheDocument();
-    expect(screen.getByText(/A server is a computer that runs a site/)).toBeInTheDocument();
-    expect(screen.queryByText("Choose where to run it")).not.toBeInTheDocument();
-    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    await user.click(screen.getAllByRole("button", { name: "Reveal" })[3]);
 
-    await user.click(
-      screen.getByRole("button", { name: /Investigate and repair a running environment/ }),
+    expect(
+      await screen.findByText(/Read the problem statement before starting/),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("Hints (1 / 1 revealed)").length).toBeGreaterThan(0);
+  });
+
+  it("should measure the real hint and scoring flow without sending the submitted answer", async () => {
+    const user = userEvent.setup();
+    const gtag = vi.fn();
+    window.gtag = gtag;
+    renderPanel(
+      {
+        problemId: WHAT_IS_DRILL_PROBLEM_ID,
+        flags: TUTORIAL_FLAGS,
+        onboardingVariant: "step",
+      },
+      "dev-mock",
     );
-    expect(await screen.findByText("Step complete")).toBeInTheDocument();
-    expect(apiMocks.submitFlag).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "Next step" }));
 
-    expect(screen.getByText("Step 2 of 6")).toBeInTheDocument();
-    expect(screen.getByText(/Battle and Challenge/)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /^Battle/ }));
-    await user.click(await screen.findByRole("button", { name: "Next step" }));
+    await user.click(screen.getByRole("button", { name: "Reveal hint" }));
+    await user.click(screen.getByRole("button", { name: "Reveal" }));
+    await user.type(screen.getByRole("textbox"), "real cloud");
+    await user.click(screen.getByRole("button", { name: /^Submit/ }));
+    await screen.findByText("Step 2 of 6");
 
-    expect(screen.getByText("Step 3 of 6")).toBeInTheDocument();
-    expect(screen.getByText(/Docker packages an app/)).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /^Local/ }));
-    await user.click(await screen.findByRole("button", { name: "Next step" }));
-
-    expect(screen.getByText("Step 4 of 6")).toBeInTheDocument();
-    await user.click(
-      screen.getByRole("button", {
-        name: /Situation, goal, first action, and completion condition/,
+    expect(gtag).toHaveBeenCalledWith(
+      "event",
+      "onboarding_hint_reveal",
+      expect.objectContaining({
+        onboarding_variant: "step",
+        onboarding_step: "tenka-what",
+        step_index: 1,
       }),
     );
-    await user.click(await screen.findByRole("button", { name: "Next step" }));
-
-    expect(screen.getByText("Step 5 of 6")).toBeInTheDocument();
-    await user.click(
-      screen.getByRole("button", { name: /Open the endpoint and investigate or repair it/ }),
+    expect(gtag).toHaveBeenCalledWith(
+      "event",
+      "onboarding_step_complete",
+      expect.objectContaining({
+        onboarding_variant: "step",
+        onboarding_step: "tenka-what",
+        step_index: 1,
+      }),
     );
-    await user.click(await screen.findByRole("button", { name: "Next step" }));
+    expect(JSON.stringify(gtag.mock.calls)).not.toContain("real cloud");
+  });
 
-    expect(screen.getByText("Step 6 of 6")).toBeInTheDocument();
-    const practiceFlagInput = screen.getByRole("textbox", {
-      name: "Flag found in the problem",
-    });
-    expect(practiceFlagInput).toHaveValue("TC{HELLO-TENKACLOUD}");
-    await user.clear(practiceFlagInput);
-    await user.click(screen.getByRole("button", { name: "Submit and score +100 pt" }));
-    expect(screen.getByText("5 cleared")).toBeInTheDocument();
-    await user.type(practiceFlagInput, "TC{{HELLO-TENKACLOUD}");
-    await user.click(screen.getByRole("button", { name: "Submit and score +100 pt" }));
+  it("should score all six rows through the real multi-flag path and show the handoff", async () => {
+    const user = userEvent.setup();
+    renderPanel({ problemId: WHAT_IS_DRILL_PROBLEM_ID, flags: TUTORIAL_FLAGS }, "dev-mock");
 
-    expect(await screen.findByText("6 cleared")).toBeInTheDocument();
+    await solveTutorial(user);
+
+    expect(
+      screen.getByText("All flags solved. This problem is fully cleared!"),
+    ).toBeInTheDocument();
     expect(screen.getByText("🎉 You have the TenkaCloud basics")).toBeInTheDocument();
     expect(screen.getByText("Next: try a real problem in local mode")).toBeInTheDocument();
     expect(
@@ -313,158 +380,51 @@ describe("MultiFlagSubmissionPanel", () => {
     expect(apiMocks.submitFlag).not.toHaveBeenCalled();
   });
 
-  it("should keep the learner on the current page after a wrong choice without a penalty", async () => {
-    const user = userEvent.setup();
-    renderPanel({ problemId: WHAT_IS_DRILL_PROBLEM_ID, flags: TUTORIAL_FLAGS });
-
-    await user.click(screen.getByRole("button", { name: /Guess a word from the description/ }));
-    expect(await screen.findByText("Not quite. Try the other action")).toBeInTheDocument();
-    expect(screen.getByText("Step 1 of 6")).toBeInTheDocument();
-    expect(screen.getByText("0 cleared")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Next step" })).not.toBeInTheDocument();
-    expect(apiMocks.submitFlag).not.toHaveBeenCalled();
-  });
-
-  it("should submit only the practice flag to the backend and refresh the score", async () => {
-    const user = userEvent.setup();
-    const onScored = vi.fn().mockResolvedValue(undefined);
-    apiMocks.submitFlag.mockResolvedValueOnce({
-      kind: "ok",
-      scoreDelta: 100,
-      totalScore: 100,
-    });
-    renderPanel({
-      problemId: WHAT_IS_DRILL_PROBLEM_ID,
-      flags: TUTORIAL_FLAGS,
-      onScored,
-    });
-
-    await advanceTutorialToSubmission(user);
-    expect(apiMocks.submitFlag).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "Submit and score +100 pt" }));
-
-    expect(await screen.findByText("Correct. +100 pt")).toBeInTheDocument();
-    expect(apiMocks.submitFlag).toHaveBeenCalledWith(
-      "https://api.example.com",
-      "team-key",
-      WHAT_IS_DRILL_PROBLEM_ID,
-      "TC{HELLO-TENKACLOUD}",
-      "first-flag",
-    );
-    expect(onScored).toHaveBeenCalledOnce();
-  });
-
-  it("should show already-scored, wrong, and backend-error outcomes on the real submission step", async () => {
-    const user = userEvent.setup();
-    const onScored = vi.fn().mockResolvedValue(undefined);
-    apiMocks.submitFlag.mockResolvedValueOnce({ kind: "already_scored", totalScore: 100 });
-    const alreadyScored = renderPanel({
-      problemId: WHAT_IS_DRILL_PROBLEM_ID,
-      flags: TUTORIAL_FLAGS,
-      onScored,
-    });
-
-    await advanceTutorialToSubmission(user);
-    await user.click(screen.getByRole("button", { name: "Submit and score +100 pt" }));
-    expect(await screen.findByText("Already submitted")).toBeInTheDocument();
-    expect(onScored).toHaveBeenCalledOnce();
-    alreadyScored.unmount();
-
-    apiMocks.submitFlag.mockResolvedValueOnce({
-      kind: "wrong",
-      scoreDelta: 0,
-      totalScore: 0,
-      wrongCount: 1,
-    });
-    const rejectedAnswer = renderPanel({
-      problemId: WHAT_IS_DRILL_PROBLEM_ID,
-      flags: TUTORIAL_FLAGS,
-    });
-    await advanceTutorialToSubmission(user);
-    await user.click(screen.getByRole("button", { name: "Submit and score +100 pt" }));
-    expect(await screen.findByText("The flag did not match")).toBeInTheDocument();
-    rejectedAnswer.unmount();
-
-    apiMocks.submitFlag.mockRejectedValueOnce(new Error("offline"));
-    renderPanel({ problemId: WHAT_IS_DRILL_PROBLEM_ID, flags: TUTORIAL_FLAGS });
-    await advanceTutorialToSubmission(user);
-    await user.click(screen.getByRole("button", { name: "Submit and score +100 pt" }));
-    expect(await screen.findByText("Submission failed")).toBeInTheDocument();
-  });
-
-  it("should ignore a second score action while the first backend submission is pending", async () => {
-    const user = userEvent.setup();
-    let resolveSubmission:
-      | ((outcome: { kind: "ok"; scoreDelta: number; totalScore: number }) => void)
-      | undefined;
-    apiMocks.submitFlag.mockReturnValueOnce(
-      new Promise((resolve) => {
-        resolveSubmission = resolve;
-      }),
-    );
-    renderPanel({
-      problemId: WHAT_IS_DRILL_PROBLEM_ID,
-      flags: TUTORIAL_FLAGS,
-    });
-    await advanceTutorialToSubmission(user);
-    const scoreButton = screen.getByRole("button", { name: "Submit and score +100 pt" });
-
-    act(() => {
-      scoreButton.click();
-      scoreButton.click();
-    });
-    expect(apiMocks.submitFlag).toHaveBeenCalledOnce();
-
-    await act(async () => {
-      resolveSubmission?.({ kind: "ok", scoreDelta: 100, totalScore: 100 });
-    });
-    expect(await screen.findByText("Correct. +100 pt")).toBeInTheDocument();
-  });
-
-  it("should explain the last solved step when restored progress is already complete", () => {
-    const tutorialFlags = [{ ...TUTORIAL_FLAGS[0], solved: true }];
-    renderPanel({ problemId: WHAT_IS_DRILL_PROBLEM_ID, flags: tutorialFlags });
-
-    expect(screen.getByText("6 cleared")).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "Read the problem, start the environment, find the flag by investigating it, and submit to score. That is the real TenkaCloud loop.",
-      ),
-    ).toBeInTheDocument();
-  });
-
-  it("should restore mock-solved flags after unmount so the demo does not look reset", async () => {
-    // 2026-07-21 デモ報告: 解いた後に問題を開き直すと進捗が消えて見えた。
-    // sessionStorage の進捗 store から solved を復元することを pin する。
+  it("should restore all mock-solved rows after reopening the problem", async () => {
     const user = userEvent.setup();
     const first = renderPanel(
       { problemId: WHAT_IS_DRILL_PROBLEM_ID, flags: TUTORIAL_FLAGS },
       "dev-mock",
     );
-    await advanceTutorialToSubmission(user);
-    await user.click(screen.getByRole("button", { name: "Submit and score +100 pt" }));
-    expect(await screen.findByText("6 cleared")).toBeInTheDocument();
+    await solveTutorial(user);
     first.unmount();
 
     renderPanel({ problemId: WHAT_IS_DRILL_PROBLEM_ID, flags: TUTORIAL_FLAGS }, "dev-mock");
-    expect(screen.getByText("6 cleared")).toBeInTheDocument();
+    expect(screen.getByText("Flags solved: 6 / 6")).toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
     expect(screen.getByText("🎉 You have the TenkaCloud basics")).toBeInTheDocument();
   });
 });
 
-describe("isWhatIsTutorialShape", () => {
-  it("should require exactly the one real scoring flag", () => {
-    const tutorialFlags = [
-      { id: "first-flag", label: "Submit the flag", points: 100, solved: false },
-    ];
-    expect(isWhatIsTutorialShape(tutorialFlags)).toBe(true);
-    expect(isWhatIsTutorialShape([])).toBe(false);
+describe("onboarding variant assignment", () => {
+  it("should accept only explicit list and step preview parameters", () => {
+    expect(onboardingVariantFromSearch("?onboarding=list")).toBe("list");
+    expect(onboardingVariantFromSearch("?onboarding=step")).toBe("step");
+    expect(onboardingVariantFromSearch("?onboarding=unknown")).toBeUndefined();
+    expect(onboardingVariantFromSearch("")).toBeUndefined();
+  });
+
+  it("should split new visitors, persist the assignment, and let preview URLs override it", () => {
+    const storage = new Map<string, string>();
+    const store = {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+    };
+
+    expect(resolveOnboardingVariant({ search: "", storage: store, sample: () => 0.1 })).toBe(
+      "list",
+    );
+    expect(resolveOnboardingVariant({ search: "", storage: store, sample: () => 0.9 })).toBe(
+      "list",
+    );
     expect(
-      isWhatIsTutorialShape([
-        ...tutorialFlags,
-        { id: "quiz-answer", label: "Quiz answer", points: 100, solved: false },
-      ]),
-    ).toBe(false);
+      resolveOnboardingVariant({ search: "?onboarding=step", storage: store, sample: () => 0.1 }),
+    ).toBe("step");
+
+    storage.clear();
+    expect(resolveOnboardingVariant({ search: "", storage: store, sample: () => 0.9 })).toBe(
+      "step",
+    );
   });
 });
 

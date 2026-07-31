@@ -112,12 +112,16 @@ export const LITE_DRILL_JOB_ID = "01HZX0KZZ3DR0PW9M4Q7XV2C5D";
 export const LOCAL_DRILL_JOB_ID = "01HZX0M1L0CALPLAYTENKA0002";
 
 /**
- * 厳密ドリルの許容解。#2814 の what-is-tenkacloud は知識クイズを採点しない。
- * WordPress の引き渡しを題材にした最初の 3 ステップは client-side の理解確認だけで、
- * 実際の scoring 経路には最後の `first-flag` だけを送る。
+ * 厳密ドリルの許容解。#2822 の what-is-tenkacloud は独自の client-side クイズを使わず、
+ * 6 ステップすべてを標準の multi-flag 入力・ヒント公開・採点経路で体験する。
  */
 const QUIZ_ANSWERS: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> = {
   [WHAT_IS_DRILL_PROBLEM_ID]: {
+    "tenka-what": ["本物のクラウド", "real cloud"],
+    "battle-challenge": ["battle", "バトル"],
+    "choose-mode": ["local", "ローカル", "local mode", "ローカルモード"],
+    "read-problem": ["問題文", "problem statement"],
+    "open-endpoint": ["接続先", "endpoint"],
     "first-flag": ["tc{hello-tenkacloud}"],
   },
   [LOCAL_DRILL_PROBLEM_ID]: {
