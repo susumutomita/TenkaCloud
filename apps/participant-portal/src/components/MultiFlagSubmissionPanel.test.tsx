@@ -97,6 +97,7 @@ afterEach(() => {
   delete window.dataLayer;
   window.localStorage.clear();
   window.sessionStorage.clear();
+  window.history.replaceState(null, "", "/");
 });
 
 describe("MultiFlagSubmissionPanel", () => {
@@ -123,6 +124,12 @@ describe("MultiFlagSubmissionPanel", () => {
     expect(
       screen.getByText("All flags solved. This problem is fully cleared!"),
     ).toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  });
+
+  it("should render zero progress when a problem has no flags", () => {
+    renderPanel({ flags: [] });
+    expect(screen.getByText("Flags solved: 0 / 0")).toBeInTheDocument();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
 
@@ -300,6 +307,26 @@ describe("MultiFlagSubmissionPanel", () => {
     expect(screen.getAllByRole("button", { name: "Reveal hint" })).toHaveLength(1);
   });
 
+  it("should resolve a forced preview variant when no variant prop is provided", () => {
+    window.history.replaceState(null, "", "/?onboarding=step");
+    render(
+      withProviders(
+        <MultiFlagSubmissionPanel
+          {...baseProps}
+          problemId={WHAT_IS_DRILL_PROBLEM_ID}
+          flags={TUTORIAL_FLAGS}
+        />,
+        "dev-mock",
+      ),
+    );
+
+    expect(screen.getByText("Step 1 of 6")).toBeInTheDocument();
+    expect(document.querySelector("[data-onboarding-variant]")).toHaveAttribute(
+      "data-onboarding-variant",
+      "step",
+    );
+  });
+
   it("should provide the real hint confirmation and reveal experience", async () => {
     const user = userEvent.setup();
     renderPanel({ problemId: WHAT_IS_DRILL_PROBLEM_ID, flags: TUTORIAL_FLAGS }, "dev-mock");
@@ -355,6 +382,77 @@ describe("MultiFlagSubmissionPanel", () => {
       }),
     );
     expect(JSON.stringify(gtag.mock.calls)).not.toContain("real cloud");
+  });
+
+  it("should suppress duplicate step views and track a wrong attempt", async () => {
+    const user = userEvent.setup();
+    const gtag = vi.fn();
+    window.gtag = gtag;
+    const props = {
+      problemId: WHAT_IS_DRILL_PROBLEM_ID,
+      flags: TUTORIAL_FLAGS,
+      onboardingVariant: "step" as const,
+    };
+    const view = renderPanel(props, "dev-mock");
+
+    view.rerender(
+      withProviders(
+        <MultiFlagSubmissionPanel {...baseProps} {...props} flags={[...TUTORIAL_FLAGS]} />,
+        "dev-mock",
+      ),
+    );
+    await waitFor(() => {
+      const firstStepViews = gtag.mock.calls.filter(
+        ([, eventName, parameters]) =>
+          eventName === "onboarding_step_view" &&
+          parameters.onboarding_step === TUTORIAL_FLAGS[0].id,
+      );
+      expect(firstStepViews).toHaveLength(1);
+    });
+
+    await user.type(screen.getByRole("textbox"), "not the answer");
+    await user.click(screen.getByRole("button", { name: /^Submit/ }));
+    expect(await screen.findByText(/Wrong \(-10 pt\)/)).toBeInTheDocument();
+    expect(gtag).toHaveBeenCalledWith(
+      "event",
+      "onboarding_submit",
+      expect.objectContaining({
+        onboarding_variant: "step",
+        onboarding_result: "wrong",
+      }),
+    );
+  });
+
+  it("should not emit onboarding analytics from an ordinary multi-flag problem", async () => {
+    const user = userEvent.setup();
+    const gtag = vi.fn();
+    window.gtag = gtag;
+    renderPanel(
+      {
+        flags: [
+          {
+            ...FLAGS[0],
+            hints: [
+              {
+                id: "ordinary-hint",
+                penalty: 0,
+                revealed: false,
+                content: "Ordinary hint",
+              },
+            ],
+          },
+        ],
+      },
+      "dev-mock",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Reveal hint" }));
+    await user.click(screen.getByRole("button", { name: "Reveal" }));
+    await user.type(screen.getByRole("textbox"), "wrong");
+    await user.click(screen.getByRole("button", { name: /^Submit/ }));
+    expect(await screen.findByText(/Wrong \(-10 pt\)/)).toBeInTheDocument();
+    expect(gtag).not.toHaveBeenCalled();
+    expect(apiMocks.submitFlag).not.toHaveBeenCalled();
   });
 
   it("should score all six rows through the real multi-flag path and show the handoff", async () => {
