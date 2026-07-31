@@ -191,21 +191,23 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
           },
           {
             id: "open-endpoint",
-            label: "5. 問題がRunningになったあとに開くものは？",
+            label: "5. 接続先を開き、接続確認コードを提出",
             points: 100,
             solved: false,
-            i18n: { en: { label: "5. What do you open after the problem becomes Running?" } },
+            i18n: {
+              en: { label: "5. Open the endpoint and submit its connection code" },
+            },
             hints: [
               {
                 id: "whatis-h5",
                 penalty: 0,
                 revealed: false,
                 content:
-                  "Runningになったら「接続先」を開き、用意された環境を調べたり直したりする。答えは「接続先」。",
+                  "問題パネル上部の「練習環境の接続先」を開き、ページの「接続確認コード」に表示された値全体を提出する。答えは接続先で確認できるため、ヒントには表示しません。",
                 i18n: {
                   en: {
                     content:
-                      'Once the problem is Running, open its endpoint and investigate or repair the environment. Submit "endpoint".',
+                      "Open the Practice environment endpoint above the steps, then submit the complete value under Connection code. The hint does not reveal that value because it is available at the endpoint.",
                   },
                 },
               },
@@ -223,11 +225,11 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
                 penalty: 0,
                 revealed: false,
                 content:
-                  "この体験版の合言葉は「TC{HELLO-TENKACLOUD}」。実際の問題では、練習環境を調べて見つけたTC{...}全体を提出する。",
+                  "ステップ5と同じ接続先を開き、「完了証拠」に表示された`TC{`から最後の`}`までを含む値全体を提出する。",
                 i18n: {
                   en: {
                     content:
-                      'The passphrase in this walkthrough is "TC{HELLO-TENKACLOUD}". In a real problem, submit the full TC{...} value you found in the practice environment.',
+                      "Open the same endpoint as step 5, then submit the complete value under Completion proof, including TC{ and the final }.",
                   },
                 },
               },

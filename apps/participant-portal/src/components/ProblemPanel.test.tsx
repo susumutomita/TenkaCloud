@@ -451,6 +451,25 @@ describe("ProblemPanel render branches", () => {
     expect(screen.queryByText("ap-northeast-1")).not.toBeInTheDocument();
   });
 
+  it("should expose a same-origin practice endpoint for the intro tutorial", () => {
+    renderPanel({
+      problemId: "what-is-tenkacloud",
+      status: "COMPLETE",
+      scoring: {
+        kind: "multi-flag",
+        points: 200,
+        flags: [
+          { id: "open-endpoint", label: "Step 5", points: 100, solved: false },
+          { id: "first-flag", label: "Step 6", points: 100, solved: false },
+        ],
+      },
+    });
+
+    const link = screen.getByRole("link", { name: /onboarding-practice\.html/ });
+    expect(link).toHaveAttribute("href", expect.stringMatching(/\/onboarding-practice\.html$/));
+    expect(link).toHaveAttribute("target", "_blank");
+  });
+
   it("should render the multi-flag panel even when flags is omitted", () => {
     // scoring.flags 不在でも panel は出す (= `flags ?? []` の fallback 分岐を pin)。
     renderPanel({

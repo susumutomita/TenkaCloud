@@ -64,6 +64,14 @@ const LIFECYCLE_STATUS_TYPE: Record<ProblemLifecycleStatus, StatusIndicatorProps
 };
 
 const COUNTDOWN_REFRESH_MS = 30_000;
+const ONBOARDING_PRACTICE_ENDPOINT_FILE = "onboarding-practice.html";
+
+function onboardingPracticeEndpointUrl(): string {
+  return new URL(
+    `${import.meta.env.BASE_URL}${ONBOARDING_PRACTICE_ENDPOINT_FILE}`,
+    window.location.origin,
+  ).href;
+}
 
 /** Defense in depth: runtime control material is never a participant stack output. */
 function visibleStackOutputs(problem: ParticipantProblemView): Record<string, string> {
@@ -73,6 +81,19 @@ function visibleStackOutputs(problem: ParticipantProblemView): Record<string, st
       key.split(".").every((segment) => !segment.startsWith("Simulator")),
     ),
   );
+}
+
+function problemStackOutputs(
+  problem: ParticipantProblemView,
+  isIntroTutorial: boolean,
+  t: ProblemPanelT,
+): Record<string, string> {
+  const outputs = visibleStackOutputs(problem);
+  if (!isIntroTutorial) return outputs;
+  return {
+    ...outputs,
+    [t("onboarding_tutorial.practice_endpoint_label")]: onboardingPracticeEndpointUrl(),
+  };
 }
 
 /**
@@ -228,7 +249,7 @@ export function ProblemPanel({
   const multiFlagScoring = getCompleteMultiFlagScoring(problem);
   const isIntroTutorial =
     problem.problemId === WHAT_IS_DRILL_PROBLEM_ID && multiFlagScoring !== undefined;
-  const stackOutputs = splitStackOutputs(visibleStackOutputs(problem));
+  const stackOutputs = splitStackOutputs(problemStackOutputs(problem, isIntroTutorial, t));
   // [#2392 Phase 2] local-play on-demand container。 lifecycle 不在 = AWS mode = running 扱い。
   const lifecycleStatus = problem.lifecycle?.status;
   const playable = isProblemPlayable(problem);

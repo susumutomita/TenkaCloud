@@ -416,7 +416,7 @@
     "submit_button": "提出 (+{points} pt)",
     "flag_field_label": "{label} (デプロイ出力値)",
     "tutorial_complete_header": "🎉 TenkaCloud の基本をつかみました",
-    "tutorial_complete_body": "動画の3つの内容を振り返り、TenkaCloudの実際のflag入力・ヒント公開・採点を体験しました。次は動く問題環境へ進みます。",
+    "tutorial_complete_body": "動画の3つの内容を振り返り、接続先を開いて確認コードとflagを見つけ、ヒント公開・採点まで体験しました。次は動く問題環境へ進みます。",
     "tutorial_next_header": "次は、ローカルモードで本物の問題を試そう",
     "tutorial_next_body": "ローカルモードでは、自分のパソコンに問題環境を起動し、ブラウザ体験版ではなく実際に動く問題へ挑戦できます。",
     "tutorial_manual_button": "競技参加者マニュアルを開く",
@@ -426,7 +426,8 @@
   },
   "onboarding_tutorial": {
     "panel_title": "動画から実操作へ・6つのステップ",
-    "panel_description": "動画の内容を3問で振り返ったあと、実際のTenkaCloudと同じflag入力・ヒント公開・採点を6つの提出欄で体験します。",
+    "panel_description": "動画の内容を3問で振り返ったあと、実際のTenkaCloudと同じ接続先・flag入力・ヒント公開・採点を6つのステップで体験します。",
+    "practice_endpoint_label": "練習環境の接続先",
     "progress": "ステップ {current} / {total}",
     "cleared": "{solved} クリア",
     "progress_aria": "オンボーディングの進捗",
@@ -488,7 +489,7 @@
     },
     "step_5": {
       "title": "Startして問題環境を調べる",
-      "scenario": "Startを押すと、この問題のための分離された環境が起動します。Runningになったら、表示された接続先やコンソールを開きます。",
+      "scenario": "Startを押すと、この問題のための分離された環境が起動します。Runningになったら、表示された接続先を開き、接続確認コードを探します。",
       "term": "問題環境は、1つの問題を安全に試すために分離した実行場所です。接続先は、その環境を開くURLやアドレスです。",
       "question": "Runningになったあとの行動は？",
       "correct_label": "接続先を開いて調査・修正する",
@@ -499,7 +500,7 @@
     },
     "step_6": {
       "title": "見つけたflagを提出して得点する",
-      "scenario": "ゴールを達成すると、`TC{...}`の形の完了証拠が見つかります。この体験版では`TC{HELLO-TENKACLOUD}`が入力済みです。",
+      "scenario": "ゴールを達成すると、`TC{...}`の形の完了証拠が見つかります。この体験版では、練習環境の接続先に完了証拠が表示されます。",
       "term": "この完了証拠をflagと呼びます。提出すると問題の確認処理が正解かを判定し、得点へ反映します。",
       "question": "問題で見つけたflagを提出してください。",
       "field_label": "問題で見つけたflag",
