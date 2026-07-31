@@ -21,6 +21,12 @@ import {
   executeDeployCommand,
 } from "./deploy-commands.js";
 import {
+  ORGANIZER_MCP_RESOURCE_METADATA_PATH,
+  organizerMcpAuthenticationChallenge,
+  organizerMcpResourceMetadata,
+  serveMcp,
+} from "./mcp.js";
+import {
   buildOpenIdConfiguration,
   JWKS_PATH,
   OPENID_CONFIGURATION_PATH,
@@ -168,6 +174,46 @@ export function createApp(options: AppOptions = {}): Hono<AppEnvironment> {
   );
   app.get(JWKS_PATH, async (context) =>
     context.json({ keys: [await publicJwkFromEnvironment(context.env)] }),
+  );
+
+  // MCP 2026-07-28 is deliberately split by role. Public author/developer
+  // endpoints expose only deterministic, read-only material. Organizer and
+  // participant endpoints reuse the same authentication boundaries as the
+  // corresponding HTTP APIs; a client-supplied role can never expand access.
+  app.post("/mcp/developer", (context) =>
+    serveMcp(context.req.raw, context.env.CONTROL_DB, { role: "developer" }),
+  );
+  app.post("/mcp/problem-author", (context) =>
+    serveMcp(context.req.raw, context.env.CONTROL_DB, { role: "problem-author" }),
+  );
+
+  app.get(ORGANIZER_MCP_RESOURCE_METADATA_PATH, (context) =>
+    organizerMcpResourceMetadata(context.req.raw, context.env.AUTH0_ISSUER),
+  );
+  app.use("/mcp/organizer", async (context, next) => {
+    await next();
+    if (context.res.status === StatusCodes.UNAUTHORIZED) {
+      context.res.headers.set(
+        "WWW-Authenticate",
+        organizerMcpAuthenticationChallenge(context.req.raw),
+      );
+    }
+  });
+  app.use("/mcp/organizer", options.organizerJwt ?? auth0JwtMiddleware());
+  app.use("/mcp/organizer", options.organizerProjection ?? organizerProjectionMiddleware);
+  app.post("/mcp/organizer", requireOrganizerRole(READING_ROLES), (context) =>
+    serveMcp(context.req.raw, context.env.CONTROL_DB, {
+      role: "organizer",
+      organizer: context.get("organizer"),
+    }),
+  );
+
+  app.use("/mcp/participant", options.teamAuth ?? teamBearerMiddleware);
+  app.post("/mcp/participant", (context) =>
+    serveMcp(context.req.raw, context.env.CONTROL_DB, {
+      role: "participant",
+      team: context.get("team"),
+    }),
   );
 
   app.use("/v1/system/*", options.systemAuth ?? systemAdminMiddleware);

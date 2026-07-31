@@ -94,6 +94,46 @@
 <p>1人が複数の役割を持つ場合もありますが、1つの作業には1つの役割があります。
 たとえば、<code>CDK_PARAM_CONTROL_DATA_BACKEND</code>を変更するのは競技開催者の作業で、
 その設定を解釈するコードを変更するのは開発者の作業です。</p>
+<h2>MCPを接続するときも役割を選ぶ</h2>
+<p>MCPは、AIクライアントからTenkaCloudの許可された読み取り機能を呼ぶための接続方法です。
+1つの万能接続へrole名を渡す方式ではありません。作業に対応するURLを選びます。</p>
+<table>
+<thead>
+<tr>
+<th>役割</th>
+<th>MCP endpoint</th>
+<th>認証</th>
+<th>現在できること</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>開発者</td>
+<td><code>/mcp/developer</code></td>
+<td>なし</td>
+<td>用語の説明、対応runtime一覧</td>
+</tr>
+<tr>
+<td>競技開催者</td>
+<td><code>/mcp/organizer</code></td>
+<td>開催者のAuth0 access token</td>
+<td>自分のtenantのevent一覧</td>
+</tr>
+<tr>
+<td>競技参加者</td>
+<td><code>/mcp/participant</code></td>
+<td>自分のteam key</td>
+<td>自分のteamの集計得点</td>
+</tr>
+<tr>
+<td>問題作成者</td>
+<td><code>/mcp/problem-author</code></td>
+<td>なし</td>
+<td>pack manifestとproblem metadataの純粋な検証</td>
+</tr>
+</tbody></table>
+<p>開催者と参加者の接続先を入れ替えても権限は引き継がれません。flag、team key、
+他teamの非公開情報、他tenantのeventは返しません。各endpointの設定は対応する
+役割別マニュアルを参照してください。</p>
 <h2>どれを選ぶか迷ったら</h2>
 <ul>
 <li>Participant PortalのURLやteam keyを受け取った: <strong>競技参加者</strong></li>

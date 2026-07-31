@@ -94,6 +94,16 @@ make pack-validate ARGS=&quot;./my-first-pack&quot;
 <p>The <a href="/docs/tutorials/first-pack/index.en.html">first pack tutorial</a> follows one
 minimal pack from scaffold to validation, immutable Git pin, install,
 activation, and removal.</p>
+<h3>Preflight JSON through MCP</h3>
+<p>An MCP 2026-07-28 client can connect to
+<code>{ALWAYS_ON_CONTROL_PLANE_ORIGIN}/mcp/problem-author</code> without authentication
+and call <code>validate_pack_manifest</code> or <code>validate_problem_metadata</code>.</p>
+<p>Both tools validate only the supplied JSON, purely and deterministically,
+against the same Problem SDK contract. They do not access a filesystem,
+network, cloud environment, environment variable, or credential. Equal input
+produces equal diagnostics. They cannot prove that referenced files exist, a
+template starts, local mode works, or a flag can be submitted. Always finish
+with <code>make pack-validate</code> and the real rehearsal before publishing.</p>
 <h2>Author the participant experience</h2>
 <p>Every problem should answer these questions before introducing technical
 detail:</p>

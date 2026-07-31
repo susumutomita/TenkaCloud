@@ -22,6 +22,37 @@ This is a foundation slice of issue #2292. SPA migration, Auth0 tenant
 provisioning automation, sign-in Log Streams, live D1/Turso volume comparison,
 and the DNS rollback exercise remain open.
 
+## MCP 2026-07-28 endpoints
+
+The Worker serves four strict, sessionless MCP endpoints:
+
+| Endpoint | Authentication | Initial read-only surface |
+| --- | --- | --- |
+| `POST /mcp/developer` | none | concept explanations and runtime capabilities |
+| `POST /mcp/problem-author` | none | pure pack-manifest and problem-metadata validation |
+| `POST /mcp/organizer` | organizer Auth0 bearer | events in the authenticated tenant |
+| `POST /mcp/participant` | team-key bearer | the authenticated team's aggregate score |
+
+Clients must use revision `2026-07-28`, call `server/discover`, and send the
+standard `MCP-Protocol-Version`, `Mcp-Method`, `Mcp-Name`, and `_meta`
+envelope. Legacy `initialize` and `Mcp-Session-Id` are rejected. Organizer and
+participant credentials are verified by the existing HTTP middleware and then
+removed before the Request reaches the MCP SDK.
+
+The organizer endpoint publishes RFC 9728 Protected Resource Metadata at
+`/.well-known/oauth-protected-resource/mcp/organizer` and references it from a
+`401` `WWW-Authenticate` challenge. The current Auth0 deployment uses
+pre-registered OAuth clients. It does not expose Dynamic Client Registration.
+Client ID Metadata Documents may be used only when the configured authorization
+server explicitly advertises support; an Auth0 issuer value alone is not proof
+of CIMD support.
+
+There are no deploy, teardown, setting-change, flag-submission, or hint-reveal
+tools. A future long-running mutation must use Tasks plus explicit
+multi-round-trip confirmation. See
+[ADR-053](../architecture/adr-053-stateless-mcp-role-boundaries.html) for the
+role matrix, cache policy, and negative-test contract.
+
 ## Reconciliation on Workers Cron (Phase 5, #2294)
 
 In Always-On mode the control plane runs on Workers, so event-status transitions

@@ -76,11 +76,15 @@ interface SemverParts {
 /** Parse an exact `major.minor.patch[-prerelease][+build]` SemVer. Build is dropped. */
 function parseExactSemver(value: string): SemverParts | undefined {
   if (!isExactSemver(value)) return undefined;
-  const withoutBuild = value.split("+")[0];
+  const withoutBuild = value.split("+")[0] as string;
   const dash = withoutBuild.indexOf("-");
   const core = dash === -1 ? withoutBuild : withoutBuild.slice(0, dash);
   const prereleaseRaw = dash === -1 ? "" : withoutBuild.slice(dash + 1);
-  const [major, minor, patch] = core.split(".").map((n) => Number.parseInt(n, 10));
+  const [major, minor, patch] = core.split(".").map((n) => Number.parseInt(n, 10)) as [
+    number,
+    number,
+    number,
+  ];
   const prerelease = prereleaseRaw.length > 0 ? prereleaseRaw.split(".") : [];
   return { major, minor, patch, prerelease };
 }
@@ -105,7 +109,7 @@ function comparePrerelease(a: readonly string[], b: readonly string[]): number {
   if (b.length === 0) return -1;
   const len = Math.min(a.length, b.length);
   for (let i = 0; i < len; i++) {
-    const cmp = comparePrereleaseIdentifier(a[i], b[i]);
+    const cmp = comparePrereleaseIdentifier(a[i] as string, b[i] as string);
     if (cmp !== 0) return cmp;
   }
   return a.length - b.length;
@@ -201,7 +205,7 @@ function comparatorSatisfied(comparator: string, version: SemverParts): boolean 
   const match = comparator.match(/^(>=|<=|>|<|=|\^|~)?(.+)$/);
   if (!match) return false;
   const op = match[1] ?? "";
-  const token = match[2];
+  const token = match[2] as string;
   if (op === "^" || op === "~") return caretTildeSatisfied(op, token, version);
   return inequalitySatisfied(op, token, version);
 }
@@ -211,8 +215,8 @@ function clauseSatisfied(clause: string, version: SemverParts): boolean {
   const normalized = normalizeWhitespace(clause);
   const hyphen = normalized.split(" - ");
   if (hyphen.length === 2) {
-    const lower = tokenBounds(hyphen[0]).lower;
-    const upper = tokenBounds(hyphen[1]).upper;
+    const lower = tokenBounds(hyphen[0] as string).lower;
+    const upper = tokenBounds(hyphen[1] as string).upper;
     return compareSemver(version, lower) >= 0 && compareSemver(version, upper) < 0;
   }
   return normalized.split(" ").every((comparator) => comparatorSatisfied(comparator, version));

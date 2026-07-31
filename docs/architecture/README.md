@@ -28,6 +28,10 @@ ADRs that already exist, but every **new** ADR from here forward uses 3 digits.
 | [adr-035](./adr-035-feature-flags.html) | Feature flags | Accepted |
 | [adr-048](./adr-048-composite-target-participant-access.html) | Managed participant access for composite targets (AWS / GCP / Azure / Sakura) | Accepted |
 | [adr-049](./adr-049-always-on-cloudflare-control-plane.html) | Always-on control plane on Cloudflare, on-demand AWS event runtime | Accepted |
+| [adr-050](./adr-050-oidc-command-seam.html) | AWS-native OIDC federation for the Cloudflare → AWS command seam | Accepted |
+| [adr-051](./adr-051-local-multicloud-simulator.html) | Provider-neutral local cloud simulation | Accepted |
+| [adr-052](./adr-052-google-form-as-landing-form-backend.html) | Google Form as the landing page's form backend | Accepted |
+| [adr-053](./adr-053-stateless-mcp-role-boundaries.html) | Stateless MCP 2026-07-28 with role-bound endpoints | Accepted |
 
 ## Referenced-but-not-yet-drafted ADR numbers
 

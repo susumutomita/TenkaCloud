@@ -94,6 +94,47 @@ platform that connects those workflows.</p>
 <p>A person may hold more than one role, but each task still has one owner. For
 example, changing <code>CDK_PARAM_CONTROL_DATA_BACKEND</code> is an organizer task;
 changing the code that interprets the setting is a developer task.</p>
+<h2>Choose a role for MCP connections too</h2>
+<p>MCP lets an AI client call an explicitly allowed, read-only TenkaCloud
+operation. There is no universal endpoint that trusts a role name supplied by
+the client. Select the URL for the job:</p>
+<table>
+<thead>
+<tr>
+<th>Role</th>
+<th>MCP endpoint</th>
+<th>Authentication</th>
+<th>Current capability</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Developer</td>
+<td><code>/mcp/developer</code></td>
+<td>None</td>
+<td>Plain-language concepts and supported runtimes</td>
+</tr>
+<tr>
+<td>Organizer</td>
+<td><code>/mcp/organizer</code></td>
+<td>Organizer Auth0 access token</td>
+<td>Events in the authenticated tenant</td>
+</tr>
+<tr>
+<td>Participant</td>
+<td><code>/mcp/participant</code></td>
+<td>The team&#39;s team key</td>
+<td>Aggregate score for the authenticated team</td>
+</tr>
+<tr>
+<td>Problem author</td>
+<td><code>/mcp/problem-author</code></td>
+<td>None</td>
+<td>Pure pack-manifest and problem-metadata validation</td>
+</tr>
+</tbody></table>
+<p>Organizer and participant endpoints do not share authority. The server never
+returns flags, team keys, another team&#39;s private data, or another tenant&#39;s
+events. See the matching role manual for connection details.</p>
 <h2>If you are unsure</h2>
 <ul>
 <li>You received a Participant Portal link or team key: choose <strong>participant</strong>.</li>

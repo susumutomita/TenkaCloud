@@ -272,7 +272,8 @@ describe("MultiFlagSubmissionPanel", () => {
   async function solveTutorial(user: ReturnType<typeof userEvent.setup>) {
     for (const [index, answer] of TUTORIAL_ANSWERS.entries()) {
       const input = screen.getAllByRole("textbox")[0];
-      await user.type(input, answer.replaceAll("{", "{{"));
+      await user.click(input);
+      await user.paste(answer);
       await user.click(screen.getAllByRole("button", { name: /^Submit/ })[0]);
       await screen.findByText(`Flags solved: ${index + 1} / 6`);
     }
@@ -541,8 +542,9 @@ describe("Lite deploy drill (issue #2696)", () => {
   it("should solve a drill step in dev-mock mode only with its checkpoint code", async () => {
     const user = userEvent.setup();
     renderPanel({ problemId: LITE_DRILL_PROBLEM_ID, flags: DRILL_FLAGS }, "dev-mock");
-    // userEvent.type は `{` を修飾記法として解釈するため、 literal brace は `{{` に escape する。
-    await user.type(screen.getByRole("textbox"), CHECKPOINT.code.replaceAll("{", "{{"));
+    const input = screen.getByRole("textbox");
+    await user.click(input);
+    await user.paste(CHECKPOINT.code);
     await user.click(screen.getByRole("button", { name: /^Submit/ }));
     expect(await screen.findByText("🎉 1. Launcher スタック作成 — solved")).toBeInTheDocument();
     expect(apiMocks.submitFlag).not.toHaveBeenCalled();
