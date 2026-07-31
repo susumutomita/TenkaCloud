@@ -73,17 +73,30 @@ describe("dev-mock fixtures", () => {
     expect(body).toContain("ヒントを公開する");
     expect(body).not.toContain("WordPress");
     expect(body).not.toContain("CloudFormation");
-    expect(tutorial?.i18n?.en?.description).toContain("same flag input, hint reveal");
+    expect(tutorial?.i18n?.en?.description).toContain(
+      "same endpoint display, flag input, hint reveal",
+    );
     for (const [flagId, answer] of [
       ["tenka-what", "real cloud"],
       ["battle-challenge", "battle"],
       ["choose-mode", "local"],
       ["read-problem", "problem statement"],
-      ["open-endpoint", "endpoint"],
+      ["open-endpoint", "CONNECTED"],
       ["first-flag", "TC{HELLO-TENKACLOUD}"],
     ] as const) {
       expect(evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, flagId, answer, 100).kind).toBe("ok");
     }
+  });
+
+  it("should make the final flag discoverable from the practice endpoint without revealing it in the hint", () => {
+    const tutorial = drills.find((p) => p.problemId === WHAT_IS_DRILL_PROBLEM_ID);
+    const firstFlag = tutorial?.scoring?.flags?.find((flag) => flag.id === "first-flag");
+    const hint = firstFlag?.hints?.[0];
+
+    expect(hint?.content).toContain("接続先");
+    expect(hint?.content).not.toContain("TC{HELLO-TENKACLOUD}");
+    expect(hint?.i18n?.en?.content).toContain("endpoint");
+    expect(hint?.i18n?.en?.content).not.toContain("TC{HELLO-TENKACLOUD}");
   });
 
   it("should ship every onboarding problem as an unsolved multi-flag drill", () => {

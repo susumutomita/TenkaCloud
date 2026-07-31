@@ -7,8 +7,8 @@ export const DEV_MOCK_ONBOARDING_DESCRIPTION_JA = [
   "2. Battleは同時に得点を競い、Challengeは自分のペースで進める",
   "3. Local、Lite、SaaSの違いと、DockerがLocalで必要になる理由",
   "4. 困ったら「ヒントを公開する」を押し、確認画面からヒントを開く",
-  "5. 問題がRunningになったら接続先を開き、環境を調べたり直したりする",
-  "6. 見つけた`TC{...}`形式のflagを提出して得点する",
+  "5. 問題がRunningになったら接続先を開き、表示された接続確認コードを提出する",
+  "6. 同じ接続先で見つけた`TC{...}`形式のflagを提出して得点する",
   "",
   "#### はじめて出てくる言葉",
   "",
@@ -17,7 +17,7 @@ export const DEV_MOCK_ONBOARDING_DESCRIPTION_JA = [
   "- **問題環境**: その問題専用に起動する、壊しても本番のサービスへ影響しない練習場所",
   "- **flag**: 問題を解けた証拠として提出する`TC{...}`形式の文字列",
   "",
-  "下の6問はすべて、実際のTenkaCloudと同じflag入力・ヒント公開・採点の仕組みを使う。4問目ではヒントを実際に開いて答えを確認する。完了後は独立したローカルモード問題で本物の環境を試せる。",
+  "下の6問はすべて、実際のTenkaCloudと同じ接続先表示・flag入力・ヒント公開・採点の仕組みを使う。4問目ではヒントを実際に開き、5問目では練習環境の接続先を開く。完了後は独立したローカルモード問題で本物の環境を試せる。",
 ].join("\n");
 
 export const DEV_MOCK_ONBOARDING_INSTRUCTIONS_JA =
@@ -32,8 +32,8 @@ export const DEV_MOCK_ONBOARDING_DESCRIPTION_EN = [
   "2. Battle is a simultaneous score competition; Challenge is self-paced",
   "3. The difference between Local, Lite, and SaaS, and why Local uses Docker",
   "4. How to select Reveal hint and confirm the reveal when you get stuck",
-  "5. How to open the endpoint after the problem is Running and investigate or repair it",
-  "6. How to submit the `TC{...}` flag you found and score",
+  "5. How to open the endpoint after the problem is Running and submit its connection code",
+  "6. How to submit the `TC{...}` flag found at the same endpoint and score",
   "",
   "#### Terms introduced here",
   "",
@@ -42,7 +42,7 @@ export const DEV_MOCK_ONBOARDING_DESCRIPTION_EN = [
   "- **Problem environment**: an isolated practice area created for one problem, safe to investigate or repair without affecting a production service",
   "- **Flag**: a `TC{...}` value submitted as proof that you solved the problem",
   "",
-  "All six checks use the same flag input, hint reveal, and scoring mechanisms as a real TenkaCloud problem. Check 4 deliberately asks you to reveal a hint. Afterward, use the separate local-mode problem for a real environment.",
+  "All six checks use the same endpoint display, flag input, hint reveal, and scoring mechanisms as a real TenkaCloud problem. Check 4 deliberately asks you to reveal a hint, and check 5 asks you to open the practice endpoint. Afterward, use the separate local-mode problem for a real environment.",
 ].join("\n");
 
 export const DEV_MOCK_ONBOARDING_INSTRUCTIONS_EN =

@@ -240,7 +240,12 @@ describe("MultiFlagSubmissionPanel", () => {
     { id: "battle-challenge", label: "2. Competition format", points: 100, solved: false },
     { id: "choose-mode", label: "3. Runtime mode", points: 100, solved: false },
     { id: "read-problem", label: "4. Reveal a hint", points: 100, solved: false },
-    { id: "open-endpoint", label: "5. Open the endpoint", points: 100, solved: false },
+    {
+      id: "open-endpoint",
+      label: "5. Submit the endpoint connection code",
+      points: 100,
+      solved: false,
+    },
     { id: "first-flag", label: "6. Submit the flag", points: 100, solved: false },
   ].map((flag, index) => ({
     ...flag,
@@ -260,7 +265,7 @@ describe("MultiFlagSubmissionPanel", () => {
     "battle",
     "local",
     "problem statement",
-    "endpoint",
+    "CONNECTED",
     "TC{HELLO-TENKACLOUD}",
   ];
 
@@ -465,6 +470,7 @@ describe("MultiFlagSubmissionPanel", () => {
       screen.getByText("All flags solved. This problem is fully cleared!"),
     ).toBeInTheDocument();
     expect(screen.getByText("🎉 You have the TenkaCloud basics")).toBeInTheDocument();
+    expect(screen.getByText(/opened the practice endpoint/)).toBeInTheDocument();
     expect(screen.getByText("Next: try a real problem in local mode")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "Open participant manual (opens in a new tab)" }),

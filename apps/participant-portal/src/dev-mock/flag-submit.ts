@@ -121,7 +121,7 @@ const QUIZ_ANSWERS: Readonly<Record<string, Readonly<Record<string, readonly str
     "battle-challenge": ["battle", "バトル"],
     "choose-mode": ["local", "ローカル", "local mode", "ローカルモード"],
     "read-problem": ["問題文", "problem statement"],
-    "open-endpoint": ["接続先", "endpoint"],
+    "open-endpoint": ["connected"],
     "first-flag": ["tc{hello-tenkacloud}"],
   },
   [LOCAL_DRILL_PROBLEM_ID]: {

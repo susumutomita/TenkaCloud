@@ -416,7 +416,7 @@
     "submit_button": "Submit (+{points} pt)",
     "flag_field_label": "{label} (deployment output value)",
     "tutorial_complete_header": "🎉 You have the TenkaCloud basics",
-    "tutorial_complete_body": "You reviewed the three concepts from the video and used TenkaCloud’s real flag input, hint reveal, and scoring flow. The next step is a running problem environment.",
+    "tutorial_complete_body": "You reviewed the three concepts from the video, opened the practice endpoint, found its connection code and flag, then used the hint reveal and scoring flow. The next step is a running problem environment.",
     "tutorial_next_header": "Next: try a real problem in local mode",
     "tutorial_next_body": "Local mode starts a problem environment on your own computer, so you can move from this browser walkthrough to a real running problem.",
     "tutorial_manual_button": "Open participant manual",
@@ -426,7 +426,8 @@
   },
   "onboarding_tutorial": {
     "panel_title": "Six steps from video to real action",
-    "panel_description": "Review three concepts from the video, then use the same flag input, hint reveal, and scoring controls as a real TenkaCloud problem.",
+    "panel_description": "Review three concepts from the video, then use the same endpoint, flag input, hint reveal, and scoring controls as a real TenkaCloud problem.",
+    "practice_endpoint_label": "Practice environment endpoint",
     "progress": "Step {current} of {total}",
     "cleared": "{solved} cleared",
     "progress_aria": "Onboarding progress",
@@ -488,7 +489,7 @@
     },
     "step_5": {
       "title": "Start and investigate the problem environment",
-      "scenario": "Start creates an isolated environment for this problem. When it reaches Running, open the displayed endpoint or console.",
+      "scenario": "Start creates an isolated environment for this problem. When it reaches Running, open the displayed endpoint and find its connection code.",
       "term": "A problem environment is an isolated place for one exercise. An endpoint is the URL or address used to open it.",
       "question": "What do you do after it reaches Running?",
       "correct_label": "Open the endpoint and investigate or repair it",
@@ -499,7 +500,7 @@
     },
     "step_6": {
       "title": "Submit the flag you found and score",
-      "scenario": "Completing the goal reveals proof in the form `TC{...}`. This walkthrough has prefilled `TC{HELLO-TENKACLOUD}`.",
+      "scenario": "Completing the goal reveals proof in the form `TC{...}`. In this walkthrough, the completion proof is shown at the practice environment endpoint.",
       "term": "TenkaCloud calls this proof a flag. The problem verifier checks it and updates the score.",
       "question": "Submit the flag found in the problem.",
       "field_label": "Flag found in the problem",

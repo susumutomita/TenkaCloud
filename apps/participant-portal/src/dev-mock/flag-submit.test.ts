@@ -124,7 +124,7 @@ describe("evaluateMockSubFlag (#2822 what-is-tenkacloud tutorial)", () => {
       ["battle-challenge", "BATTLE"],
       ["choose-mode", "Local mode"],
       ["read-problem", "problem statement"],
-      ["open-endpoint", "endpoint"],
+      ["open-endpoint", "CONNECTED"],
       ["first-flag", " TC{HELLO-TENKACLOUD} "],
     ] as const) {
       expect(evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, flagId, answer, 100).kind).toBe("ok");
