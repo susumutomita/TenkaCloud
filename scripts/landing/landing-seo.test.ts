@@ -296,6 +296,20 @@ describe("demo deep-link reload recovery (Cloudflare implicit SPA fallback)", ()
   });
 });
 
+describe("portal demo runtime config (Issue #2828)", () => {
+  it("should generate the mock runtime config in the deployed portal-demo directory", () => {
+    const packageJson = JSON.parse(read("package.json")) as {
+      scripts?: Record<string, string>;
+    };
+    const buildPages = packageJson.scripts?.["build:pages"] ?? "";
+
+    expect(buildPages).toContain(
+      "scripts/ops/participant-portal-runtime-config.ts --cloud-mode mock",
+    );
+    expect(buildPages).toContain("--out landing/portal-demo/runtime-config.json");
+  });
+});
+
 /**
  * AI エージェント向け導線: llms-full.txt (自己完結ブリーフィング) と、 #extend 内の
  * 貼り付けプロンプト。 プロンプトは LLM 向けなので言語切替しない (data-i18n なし)。
