@@ -109,6 +109,10 @@ const SECTIONS: readonly DocSection[] = [
       { slug: "reference/problem-metadata", mdx: "reference/problem-metadata/page.mdx" },
       { slug: "reference/runtime-matrix", mdx: "reference/runtime-matrix/page.mdx" },
       { slug: "reference/cli", mdx: "reference/cli/page.mdx" },
+      {
+        slug: "reference/onboarding-analytics",
+        mdx: "reference/onboarding-analytics/page.mdx",
+      },
       { slug: "reference/lite-settings", mdx: "reference/lite-settings/page.mdx" },
       { slug: "reference/lite-messages", mdx: "reference/lite-messages/page.mdx" },
       { slug: "reference/security-provenance", mdx: "reference/security-provenance/page.mdx" },

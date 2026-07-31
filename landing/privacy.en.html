@@ -31,7 +31,7 @@
 <main class="wrap">
   <h1>Privacy Policy</h1>
   <p class="lede">How personal information is handled when you use TenkaCloud (the "Service"). The Japanese version at <a href="./privacy.html">/privacy.html</a> is the legally binding original; this English version is provided for reference.</p>
-  <p class="meta">Last updated: 2026-05-23 · Operator: BULL LLC (合同会社BULL)</p>
+  <p class="meta">Last updated: 2026-07-31 · Operator: BULL LLC (合同会社BULL)</p>
 
   <h2>1. Information we collect</h2>
   <p>To provide the Service and respond to inquiries, we may collect the following.</p>
@@ -41,6 +41,7 @@
     <li><strong>Operation audit logs</strong>: a record of operator actions, including the actor identifier (Cognito sub) and username (= email), the action / target / outcome, the source <strong>IP address</strong> and User-Agent, and the timestamp. Kept for security auditing and unauthorized-access investigation.</li>
     <li><strong>Event operation data</strong>: participant data (= team name / display name), submission logs, and scoring history for events you run on the Service. Stored on the Service's SaaS infrastructure (= AWS) and automatically deleted 7 days after the event ends. Note that we do not create individual participant accounts (name / email); teams authenticate with a short-lived per-team key, so no information directly identifying an individual participant is collected.</li>
     <li><strong>Access logs</strong>: IP address, User-Agent, referrer, etc. for visitors to the landing page and the portal. Retained per the standard logging policies of GitHub Pages / Amazon CloudFront.</li>
+    <li><strong>Browser demo interaction data</strong>: onboarding display variant, step shown, hint reveal, submission result, and elapsed time to completion. Answer text, flags, and team keys are not sent to Google Analytics.</li>
   </ul>
 
   <h2>2. Purpose of use</h2>
@@ -56,7 +57,7 @@
   <ul>
     <li>Amazon Web Services, Inc. (= SaaS infrastructure provider)</li>
     <li>GitHub, Inc. (= landing page delivery and OSS repository host)</li>
-    <li>Google LLC (= stores responses to the contact form (Google Form))</li>
+    <li>Google LLC (= contact-form response storage and analytics for the landing page and browser demo)</li>
   </ul>
 
   <h2>4. Retention</h2>
@@ -72,7 +73,7 @@
   <p>To request disclosure, correction, or deletion of your personal information, please contact us via the <a href="#contact">contact channel below</a>. After identity verification, we will respond promptly in accordance with applicable laws.</p>
 
   <h2>6. Cookies / tracking</h2>
-  <p>The landing page uses Google Analytics 4 (gtag.js) to measure traffic. It sets Google Analytics cookies (e.g. _ga) and sends usage data — pages viewed, approximate region, device/browser — to Google LLC, which processes it on our behalf, solely for aggregate traffic analysis (not to identify individuals). The participant portal (= portal-demo / production portal) uses localStorage for session management. You can opt out via your browser settings or Google's opt-out add-on (= as of 2026-06).</p>
+  <p>The landing page and browser demo (<code>portal-demo</code>) use Google Analytics 4 (gtag.js) for traffic analysis and onboarding improvement and set Google Analytics cookies (e.g. _ga). In addition to pages viewed, approximate region, and device/browser, the demo sends the assigned display variant, step ID, hint reveal, submission result, and elapsed time to Google LLC, which processes the data on our behalf. Answer text, flags, and team keys are not sent; the data is used only for aggregate journey analysis. The production participant portal does not load this Google Analytics measurement. The demo uses localStorage for A/B assignment and session management. You can opt out via your browser settings or Google's opt-out add-on (= as of 2026-07).</p>
 
   <h2>7. Revisions</h2>
   <p>This Policy may be revised in response to changes in law or in the Service. Material revisions will be notified by posting to this page.</p>

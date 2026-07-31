@@ -211,6 +211,7 @@ export function HintsPanel({
   problemId,
   hints,
   onRevealed,
+  onRevealTracked,
   revealOrder,
 }: {
   apiBaseUrl: string;
@@ -218,6 +219,8 @@ export function HintsPanel({
   problemId: string;
   hints: readonly ParticipantHintView[];
   onRevealed: () => Promise<void>;
+  /** 公開成功時の計測 hook。回答や hint 本文は渡さず id だけ通知する。 */
+  onRevealTracked?: (hintId: string) => void;
   /**
    * Issue #1315 ← 問題 `scoring.hintReveal`: hint 公開順。 `"flat"` のとき順序ゲート
    * (predecessor lock) を外し、 全 hint を任意順で開封できる。 未指定 / `"sequential"`
@@ -249,6 +252,7 @@ export function HintsPanel({
     if (revealing) return;
     if (isMock) {
       setMockRevealed((prev) => new Set([...prev, hintId]));
+      onRevealTracked?.(hintId);
       setPendingReveal(null);
       return;
     }
@@ -256,6 +260,7 @@ export function HintsPanel({
     setRevealError(null);
     try {
       await revealHint(apiBaseUrl, sessionToken, problemId, hintId);
+      onRevealTracked?.(hintId);
       await onRevealed();
     } catch (err) {
       setRevealError(formatRevealError(t, err, hints));
@@ -303,7 +308,9 @@ export function HintsPanel({
                   <Box>
                     <strong>{t("problem_panel.hint_label", { index: i + 1 })}</strong>{" "}
                     <span style={{ color: h.penalty > 0 ? "#b54708" : "#475467" }}>
-                      {t("problem_panel.hint_penalty_note", { penalty: h.penalty })}
+                      {h.penalty > 0
+                        ? t("problem_panel.hint_penalty_note", { penalty: h.penalty })
+                        : t("problem_panel.hint_no_penalty_note")}
                     </span>{" "}
                     <Button
                       variant="normal"

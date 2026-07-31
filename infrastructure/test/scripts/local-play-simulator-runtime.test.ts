@@ -63,6 +63,12 @@ const PROCESS_FIXTURE = resolve(
   "fixtures",
   "simulator-conformance-process.mjs",
 );
+const IGNORE_SIGTERM_PROCESS_FIXTURE = resolve(
+  import.meta.dirname,
+  "..",
+  "fixtures",
+  "simulator-ignore-sigterm.mjs",
+);
 
 const runningRuntimes: SimulatorLocalRuntime[] = [];
 
@@ -2286,24 +2292,30 @@ describe("provider-neutral local runtime", () => {
 
   it("should retain ownership when an injected process ignores SIGTERM", async () => {
     const root = mkdtempSync(join(tmpdir(), "tc-simulator-ignore-sigterm-"));
-    const fixture = join(root, "ignore-sigterm.mjs");
-    writeFileSync(
-      fixture,
-      'process.on("SIGTERM", () => {}); process.on("SIGUSR1", () => process.exit(0)); setInterval(() => {}, 1000);\n',
-    );
     const options = runtimeOptions(root);
     const launcher = await launchSimulator({
       ...options,
       env: {
         ...options.env,
-        TENKACLOUD_SIMULATOR_ARGS: JSON.stringify([fixture]),
+        TENKACLOUD_SIMULATOR_ARGS: JSON.stringify([IGNORE_SIGTERM_PROCESS_FIXTURE]),
       },
     });
     if (launcher.kind !== "process" || launcher.pid === undefined) {
       throw new Error("test requires an owned process launcher");
     }
     try {
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      // launchSimulator returns once the supervisor has registered the child PID. Under a
+      // loaded test shard, the child module may not yet have installed its SIGTERM handler;
+      // signalling during that gap makes this test pass the signal through and exit normally.
+      const readyDeadline = Date.now() + 3_000;
+      while (
+        (!existsSync(options.logPath) ||
+          !readFileSync(options.logPath, "utf8").includes("TENKACLOUD_IGNORE_SIGTERM_READY")) &&
+        Date.now() < readyDeadline
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      expect(readFileSync(options.logPath, "utf8")).toContain("TENKACLOUD_IGNORE_SIGTERM_READY");
       await expect(stopSimulatorLauncher(launcher, options.env, 50)).rejects.toThrow(
         "did not stop within 50ms",
       );

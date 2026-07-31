@@ -17,6 +17,12 @@ import {
   WHAT_IS_DRILL_PROBLEM_ID,
 } from "../dev-mock/flag-submit";
 import { createCustomChallengeDrillFixture } from "./custom-challenge-drill-fixture";
+import {
+  DEV_MOCK_ONBOARDING_DESCRIPTION_EN,
+  DEV_MOCK_ONBOARDING_DESCRIPTION_JA,
+  DEV_MOCK_ONBOARDING_INSTRUCTIONS_EN,
+  DEV_MOCK_ONBOARDING_INSTRUCTIONS_JA,
+} from "./dev-mock-onboarding-content";
 import { createLiteCleanupDrillFixture } from "./lite-cleanup-drill-fixture";
 
 /**
@@ -72,59 +78,16 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
       // オンボーディング動画は、リポジトリを肥大化させないよう YouTube で配信する。
       videoUrl: "https://www.youtube.com/embed/mcL_O17QVsA",
       name: "はじめての TenkaCloud",
-      // 動画で説明する製品の仕組みを省略せず、そのあとに実際の問題操作を続ける。
-      // 最後の合言葉だけを実際の scoring 経路へ送り、個別の学習問題は完了後の
-      // ローカルモード問題として案内する。
-      description: [
-        "動画のあと、動画で説明したTenkaCloudの仕組みと、問題を起動して得点する実際の操作を6ステップでつなげて体験する。",
-        "",
-        "#### この画面で確かめること",
-        "",
-        "1. TenkaCloudは紙の知識クイズではなく、実際に動く環境で調査や修正を練習する",
-        "2. Battleは同時に得点を競い、Challengeは自分のペースで進める",
-        "3. Local、Lite、SaaSの違いと、DockerがLocalで必要になる理由",
-        "4. 問題文の「状況・ゴール・最初の操作・完了条件」を読む",
-        "5. 問題を起動し、表示された環境を調べたり直したりする",
-        "6. 見つけた`TC{...}`形式のflagを提出して得点する",
-        "",
-        "#### はじめて出てくる言葉",
-        "",
-        "- **クラウド**: インターネット越しに、サーバーや保存場所を必要な分だけ使う仕組み",
-        "- **Docker**: アプリ、設定、必要なソフトをひとまとめにし、同じ練習環境を手元のパソコンでも再現しやすくする仕組み。Localを選ぶときに使う",
-        "- **問題環境**: その問題専用に起動する、壊しても本番のサービスへ影響しない練習場所",
-        "- **flag**: 問題を解けた証拠として提出する`TC{...}`形式の文字列",
-        "",
-        "このブラウザ体験版では起動済みの見本環境を使う。最後の提出と採点は実際のTenkaCloudと同じ流れで、完了後は独立したローカルモード問題で本物の環境を試せる。",
-      ].join("\n"),
-      instructions:
-        "動画を見たあと、動画で説明した仕組みから実際の問題操作まで6ステップを進める。最初の5ステップは流れの確認で、点数が動くのは最後のflag提出だけ。",
+      // 動画で説明する製品の仕組みを省略せず、そのあとに標準の multi-flag UI で
+      // 入力・ヒント公開・採点を体験する。独自クイズ UI は使わない。
+      description: DEV_MOCK_ONBOARDING_DESCRIPTION_JA,
+      instructions: DEV_MOCK_ONBOARDING_INSTRUCTIONS_JA,
       i18n: {
         en: {
           name: "Your first TenkaCloud walkthrough",
           videoUrl: "https://www.youtube.com/embed/6qMzFcP5dgw",
-          description: [
-            "After the video, connect the TenkaCloud concepts it introduced to the real start-investigate-submit flow in six steps.",
-            "",
-            "#### What this walkthrough checks",
-            "",
-            "1. TenkaCloud uses real running environments, not a paper knowledge quiz",
-            "2. Battle is a simultaneous score competition; Challenge is self-paced",
-            "3. The difference between Local, Lite, and SaaS, and why Local uses Docker",
-            "4. How to read the situation, goal, first action, and completion condition",
-            "5. How to start a problem and investigate or repair its environment",
-            "6. How to submit the `TC{...}` flag you found and score",
-            "",
-            "#### Terms introduced here",
-            "",
-            "- **Cloud**: a way to use servers and storage over the internet as needed",
-            "- **Docker**: packages an app, settings, and required software so Local mode can recreate the same practice environment on your computer",
-            "- **Problem environment**: an isolated practice area created for one problem, safe to investigate or repair without affecting a production service",
-            "- **Flag**: a `TC{...}` value submitted as proof that you solved the problem",
-            "",
-            "This browser walkthrough uses a prepared sample environment. The final submit-and-score action follows the real TenkaCloud flow; afterward, use the separate local-mode problem for a real environment.",
-          ].join("\n"),
-          instructions:
-            "Watch the video, then follow all six steps from the concepts it introduced through the real problem flow. The first five confirm the flow; only the final flag submission changes the score.",
+          description: DEV_MOCK_ONBOARDING_DESCRIPTION_EN,
+          instructions: DEV_MOCK_ONBOARDING_INSTRUCTIONS_EN,
         },
       },
       region: "ap-northeast-1",
@@ -137,6 +100,118 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
         kind: "multi-flag",
         flags: [
           {
+            id: "tenka-what",
+            label: "1. TenkaCloudが練習に使う場所は？",
+            points: 100,
+            solved: false,
+            i18n: { en: { label: "1. Where does TenkaCloud run its practice environments?" } },
+            hints: [
+              {
+                id: "whatis-h1",
+                penalty: 0,
+                revealed: false,
+                content:
+                  "動画では、紙のクイズではなく「本物のクラウド」を練習の舞台にすると説明している。答えは「本物のクラウド」。",
+                i18n: {
+                  en: {
+                    content:
+                      'The video says that TenkaCloud uses the real cloud, rather than a paper quiz. Submit "real cloud".',
+                  },
+                },
+              },
+            ],
+          },
+          {
+            id: "battle-challenge",
+            label: "2. 同時に得点を競う形式は？",
+            points: 100,
+            solved: false,
+            i18n: { en: { label: "2. Which format is a simultaneous score competition?" } },
+            hints: [
+              {
+                id: "whatis-h2",
+                penalty: 0,
+                revealed: false,
+                content:
+                  "Battleは同時に得点を競う形式。Challengeは自分のペースで進める形式。答えは「Battle」。",
+                i18n: {
+                  en: {
+                    content:
+                      'Battle is the simultaneous score competition; Challenge is self-paced. Submit "Battle".',
+                  },
+                },
+              },
+            ],
+          },
+          {
+            id: "choose-mode",
+            label: "3. 手元のパソコンだけで試すモードは？",
+            points: 100,
+            solved: false,
+            i18n: { en: { label: "3. Which mode runs only on your own computer?" } },
+            hints: [
+              {
+                id: "whatis-h3",
+                penalty: 0,
+                revealed: false,
+                content:
+                  "LocalはDockerを使い、手元のパソコンで問題環境を動かす。Liteは自分のAWS、SaaSは運営側の環境を使う。答えは「Local」。",
+                i18n: {
+                  en: {
+                    content:
+                      'Local uses Docker to run the problem environment on your computer. Lite uses your AWS account; SaaS uses the hosted environment. Submit "Local".',
+                  },
+                },
+              },
+            ],
+          },
+          {
+            id: "read-problem",
+            label: "4. ヒントを開き、問題で最初に読むものを提出",
+            points: 100,
+            solved: false,
+            i18n: {
+              en: { label: "4. Reveal the hint and submit what you read first in a problem" },
+            },
+            hints: [
+              {
+                id: "whatis-h4",
+                penalty: 0,
+                revealed: false,
+                content:
+                  "ヒントを公開できた。問題では、起動や操作の前に状況・ゴール・完了条件が書かれた「問題文」を読む。答えは「問題文」。",
+                i18n: {
+                  en: {
+                    content:
+                      'You revealed the hint. Before starting or operating anything, read the problem statement for the situation, goal, and completion condition. Submit "problem statement".',
+                  },
+                },
+              },
+            ],
+          },
+          {
+            id: "open-endpoint",
+            label: "5. 問題がRunningになったあとに開くものは？",
+            points: 100,
+            solved: false,
+            i18n: { en: { label: "5. What do you open after the problem becomes Running?" } },
+            hints: [
+              {
+                id: "whatis-h5",
+                penalty: 0,
+                revealed: false,
+                content:
+                  "Runningになったら「接続先」を開き、用意された環境を調べたり直したりする。答えは「接続先」。",
+                i18n: {
+                  en: {
+                    content:
+                      'Once the problem is Running, open its endpoint and investigate or repair the environment. Submit "endpoint".',
+                  },
+                },
+              },
+            ],
+          },
+          {
             id: "first-flag",
             label: "6. 問題で見つけたflagを提出",
             points: 100,
@@ -148,11 +223,11 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
                 penalty: 0,
                 revealed: false,
                 content:
-                  "この体験版の合言葉は `TC{HELLO-TENKACLOUD}`。実際の問題では、練習環境を調べて見つけた `TC{...}` 全体を提出する。",
+                  "この体験版の合言葉は「TC{HELLO-TENKACLOUD}」。実際の問題では、練習環境を調べて見つけたTC{...}全体を提出する。",
                 i18n: {
                   en: {
                     content:
-                      "The passphrase in this walkthrough is `TC{HELLO-TENKACLOUD}`. In a real problem, submit the full `TC{...}` value you found in the practice environment.",
+                      'The passphrase in this walkthrough is "TC{HELLO-TENKACLOUD}". In a real problem, submit the full TC{...} value you found in the practice environment.',
                   },
                 },
               },

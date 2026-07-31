@@ -1,0 +1,85 @@
+import { MaturityBadge } from "@/components/MaturityBadge";
+
+export const metadata = { title: "オンボーディングA/B計測" };
+
+# オンボーディングA/B計測 <MaturityBadge level="preview" />
+
+公開ブラウザ体験版では、同じTenkaCloudオンボーディング問題を次の2通りで表示します。
+
+- `list`: 動画と同じように、標準の6つのflag提出欄を一覧表示する。
+- `step`: 標準のflag提出欄を1問ずつ表示する。
+
+どちらも同じflag入力、ヒント公開の確認画面、ヒント本文、採点処理を使います。
+変えるのは見せ方だけです。
+
+## 割り当て
+
+初めてブラウザ体験版を開いた人を`list`または`step`へ50%ずつ割り当て、
+結果をlocalStorageの`tenkacloud.onboarding.variant.v1`に保存します。
+同じブラウザでは同じ表示を続けます。
+
+レビュー時はURLに`?onboarding=list`または`?onboarding=step`を付けます。
+強制表示は`assignment_source=forced`、通常の割り当ては
+`assignment_source=assigned`として送るため、実験集計からレビュー操作を除外できます。
+
+## イベント
+
+既存のTenkaCloud GA4プロパティを読み込むのは公開ブラウザ体験版だけです。
+本番の競技参加者ポータルでは読み込みません。
+
+| イベント | 送信する時点 | パラメータ |
+| --- | --- | --- |
+| `onboarding_view` | 6問の領域を表示した | `onboarding_variant`, `assignment_source`, `total_steps` |
+| `onboarding_step_view` | そのステップを初めて表示した | `onboarding_variant`, `assignment_source`, `onboarding_step`, `step_index` |
+| `onboarding_hint_reveal` | ヒント公開に成功した | 表示種別、割り当て元、ステップ、番号 |
+| `onboarding_submit` | 提出結果が返った | 表示種別、割り当て元、ステップ、番号、`onboarding_result` |
+| `onboarding_step_complete` | そのステップを正解した | 表示種別、割り当て元、ステップ、番号 |
+| `onboarding_complete` | 6問を完了した | 表示種別、割り当て元、`elapsed_ms`, `hint_count`, `wrong_attempt_count` |
+
+回答文字列、flag、チームキー、ヒント本文は送信しません。
+
+## GA4の設定
+
+**管理 → データの表示 → カスタム定義**で、次のイベントスコープの
+カスタムディメンションを作成します。
+
+| ディメンション名 | イベントパラメータ |
+| --- | --- |
+| Onboarding variant | `onboarding_variant` |
+| Assignment source | `assignment_source` |
+| Onboarding step | `onboarding_step` |
+| Onboarding result | `onboarding_result` |
+
+最初にリアルタイムまたはDebugViewでイベント到着を確認します。
+カスタムディメンションがレポートで使えるまで24〜48時間かかることがあります。
+
+## 離脱ファネルを作る
+
+**探索 → ファネルデータ探索**でクローズドファネルを作り、
+`Assignment source`を`assigned`に絞ります。
+
+1. `onboarding_view`
+2. `onboarding_step_complete`かつ`onboarding_step = tenka-what`
+3. `onboarding_step_complete`かつ`onboarding_step = battle-challenge`
+4. `onboarding_step_complete`かつ`onboarding_step = choose-mode`
+5. `onboarding_step_complete`かつ`onboarding_step = read-problem`
+6. `onboarding_step_complete`かつ`onboarding_step = open-endpoint`
+7. `onboarding_step_complete`かつ`onboarding_step = first-flag`
+8. `onboarding_complete`
+
+内訳に**Onboarding variant**を指定し、**経過時間を表示**を有効にします。
+`list`と`step`について、各段階の完了率と離脱率を比較できます。
+
+ヒント公開と誤答は安全指標として読みます。
+
+- ヒント利用率が低ければ良いとは限りません。ヒントを見つけて安心して使えた結果、
+  完走率が上がることもあります。
+- まず完走率が高く、誤答率を悪化させない表示を優先します。
+- 完走率が近い場合は、完了時間と参加者への聞き取りで判断します。
+- 少人数の途中経過だけで勝者を決めず、片方が先行した時点で実験を止めません。
+
+## プライバシー境界
+
+[プライバシーポリシー](/privacy/)にブラウザ体験版の操作計測を記載しています。
+回答内容を送る変更、または本番の競技参加者ポータルで計測する変更を行う場合は、
+収集前にデータ契約とポリシーを見直してください。

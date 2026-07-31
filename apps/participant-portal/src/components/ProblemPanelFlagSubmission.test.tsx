@@ -299,6 +299,8 @@ describe("HintsPanel reveal flow", () => {
   it("should show the no-penalty confirmation copy for a free hint", async () => {
     const user = userEvent.setup();
     renderPanel({ hints: [{ id: "hint-1", penalty: 0, revealed: false }] });
+    expect(screen.getByText("(penalty-free)")).toBeInTheDocument();
+    expect(screen.queryByText("(-0 pt to reveal)")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Reveal hint" }));
     expect(
       await screen.findByText("No penalty for this hint. Revealing will display the content."),

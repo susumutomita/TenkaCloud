@@ -117,17 +117,23 @@ describe("evaluateMockSubFlag (Lite cleanup drill)", () => {
   });
 });
 
-describe("evaluateMockSubFlag (#2814 what-is-tenkacloud tutorial)", () => {
-  it("should score only the practice flag submission with paste tolerance", () => {
-    expect(
-      evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, "first-flag", " TC{HELLO-TENKACLOUD} ", 100)
-        .kind,
-    ).toBe("ok");
+describe("evaluateMockSubFlag (#2822 what-is-tenkacloud tutorial)", () => {
+  it("should score all six standard multi-flag steps with paste tolerance", () => {
+    for (const [flagId, answer] of [
+      ["tenka-what", " real cloud "],
+      ["battle-challenge", "BATTLE"],
+      ["choose-mode", "Local mode"],
+      ["read-problem", "problem statement"],
+      ["open-endpoint", "endpoint"],
+      ["first-flag", " TC{HELLO-TENKACLOUD} "],
+    ] as const) {
+      expect(evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, flagId, answer, 100).kind).toBe("ok");
+    }
   });
 
-  it("should reject obsolete quiz steps, Easter eggs, and unknown step ids", () => {
+  it("should reject wrong answers, Easter eggs, and unknown step ids", () => {
     expect(
-      evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, "tenka-what", "real cloud", 100).kind,
+      evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, "tenka-what", "paper quiz", 100).kind,
     ).toBe("wrong");
     expect(evaluateMockSubFlag(WHAT_IS_DRILL_PROBLEM_ID, "first-flag", "42", 100).kind).toBe(
       "wrong",

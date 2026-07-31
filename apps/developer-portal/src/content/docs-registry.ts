@@ -216,6 +216,22 @@ export const DOC_PAGES: readonly DocPage[] = [
   // registry. The drift check fails the build when those sources change without a
   // regenerate.
   {
+    slug: "reference/onboarding-analytics",
+    href: "/developers/docs/reference/onboarding-analytics/",
+    title: "Onboarding A/B analytics",
+    description: "GA4 event schema, A/B assignment, drop-off funnel setup, and privacy boundary.",
+    maturity: "preview",
+    section: "Reference",
+    headings: [
+      { id: "assignment", text: "Assignment" },
+      { id: "events", text: "Events" },
+      { id: "configure-ga4", text: "Configure GA4" },
+      { id: "build-the-drop-off-funnel", text: "Build the drop-off funnel" },
+      { id: "privacy-boundary", text: "Privacy boundary" },
+    ],
+    body: "Onboarding A/B analytics reference for the public browser demo. Defines the list and one-step variants, persistent 50/50 assignment, forced preview URLs, GA4 event names and parameters, custom dimensions, closed funnel steps, drop-off analysis, elapsed time, hint and wrong-submission guardrails, and the privacy boundary that excludes answers, flags, team keys, hint text, and production participant portals. オンボーディングA/BテストのGA4計測仕様、割り当て、離脱ファネル、プライバシー境界。",
+  },
+  {
     slug: "reference/lite-settings",
     href: "/developers/docs/reference/lite-settings/",
     title: "Lite setting reference",
