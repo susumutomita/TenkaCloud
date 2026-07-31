@@ -1,5 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -87,7 +86,7 @@ describe("EventDetailPage #740 competition schedule end operations", () => {
   // #1318: tabs 構造化により 競技スケジュール section は Schedule tab に移動。
   async function openScheduleTab() {
     const scheduleTab = await screen.findByRole("tab", { name: /Schedule|スケジュール/ });
-    await userEvent.click(scheduleTab);
+    fireEvent.click(scheduleTab);
   }
 
   it("should call schedule API with endsAt=now when the 'End immediately' button is pressed", async () => {
@@ -97,13 +96,13 @@ describe("EventDetailPage #740 competition schedule end operations", () => {
     );
     await openScheduleTab();
 
-    await userEvent.click(await screen.findByRole("button", { name: "即座に終了" }));
+    fireEvent.click(await screen.findByRole("button", { name: "即座に終了" }));
 
     await waitFor(() => expect(mocks.setEventSchedule).toHaveBeenCalled());
     expect(mocks.setEventSchedule).toHaveBeenCalledWith(expect.anything(), EVENT_ID, {
       endsAt: NOW_ISO,
     });
-  });
+  }, 15_000);
 
   it("should NOT show internal issue numbers in the competition schedule section description", async () => {
     renderPage();

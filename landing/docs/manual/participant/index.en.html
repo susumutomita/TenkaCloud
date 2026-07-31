@@ -140,6 +140,16 @@ provided by the organizer.</p>
 <td>Discard the current practice state and create it again</td>
 </tr>
 </tbody></table>
+<h2>Participant MCP is score lookup only</h2>
+<p>Most participants do not need to configure MCP. Start problems, reveal hints,
+and submit flags in the Participant Portal. Only when the organizer explicitly
+provides an Always-On MCP endpoint should you connect to
+<code>{ALWAYS_ON_CONTROL_PLANE_ORIGIN}/mcp/participant</code> with your team key as the
+Bearer token.</p>
+<p>The current <code>get_my_score</code> tool returns only your team name, event ID,
+aggregate score, and solved-checkpoint count. It does not return correct flags,
+hint answers, the team key, submissions, or another team&#39;s name or score. Put
+the team key in the client&#39;s secret storage, never in a prompt or log.</p>
 <h2>If something does not work</h2>
 <table>
 <thead>

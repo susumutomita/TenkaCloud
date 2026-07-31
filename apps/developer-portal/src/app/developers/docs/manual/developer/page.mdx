@@ -63,18 +63,55 @@ verification boundaries honestly.
 - A database backend change must preserve the explicit data-migration and
   rollback boundary. Do not introduce silent dual writes.
 
-## MCP status
+## MCP 2026-07-28
 
-TenkaCloud does not currently expose an MCP server or client integration. Do
-not configure an MCP client against TenkaCloud yet.
+The TenkaCloud Always-On control plane exposes sessionless MCP 2026-07-28
+endpoints. MCP is a common format through which an AI client calls an explicitly
+allowed TenkaCloud capability. The developer endpoint exposes only
+plain-language concept help and the recognized runtime list.
 
-Support for the stateless MCP 2026-07-28 protocol is tracked separately in
-[Issue #2819](https://github.com/susumutomita/TenkaCloud/issues/2819). That work
-evaluates the stateless core, versioned extensions such as MCP Apps and Tasks,
-and the strengthened OAuth 2.0/OIDC authentication model separately. It must
-define a read-only capability boundary first, per-request protocol and capability
-negotiation, authentication and consent, and negative security tests. A transitive
-package in the lockfile is not product support.
+Connect to `{ALWAYS_ON_CONTROL_PLANE_ORIGIN}/mcp/developer`. The client must
+call `server/discover` first and send all of the following on each request:
+
+- `MCP-Protocol-Version: 2026-07-28`
+- `Mcp-Method` equal to the JSON body method
+- `Mcp-Name` equal to the target of `tools/call` or `resources/read`
+- protocol version, client info, and client capabilities in `_meta`
+
+The endpoint does not use `initialize`, `Mcp-Session-Id`, or sticky routing. A
+legacy-only client cannot connect. Public list results carry a five-minute
+public cache hint; authenticated results carry a zero-duration private hint.
+A request body larger than 32 KiB is rejected before a tool runs.
+
+| Endpoint | Boundary |
+| --- | --- |
+| `/mcp/developer` | Public and read-only: `explain_concept`, `list_runtime_capabilities` |
+| `/mcp/problem-author` | Public and read-only: pure validation of supplied JSON |
+| `/mcp/organizer` | Existing middleware verifies the Auth0 issuer, audience, organization, tenant, and role |
+| `/mcp/participant` | Team-key authentication fixes the request to one team ID and event ID |
+
+When the organizer endpoint returns `401 Unauthorized`, follow the
+`resource_metadata` link in `WWW-Authenticate` to discover the protected
+resource. The current Auth0 setup uses an OAuth client registered in advance by
+an administrator. TenkaCloud does not expose Dynamic Client Registration (DCR);
+use a Client ID Metadata Document (CIMD) only when the configured authorization
+server explicitly advertises `client_id_metadata_document_supported`.
+
+Deploy, teardown, and setting changes are not synchronous MCP tools. A future
+mutation must use the Tasks extension for a durable handle, cancellation, and
+idempotency, and use a multi-round-trip request for explicit confirmation.
+Until then, use the existing UI and operating procedures.
+
+The MCP host must show the tool name and arguments and obtain your approval
+before every tool call. All current tools advertise read-only, non-destructive,
+and idempotent annotations, but the HTTP server cannot prove that a remote
+client displayed its local approval screen. Do not connect a client that calls
+tools without this confirmation step.
+
+`apps/always-on-control-plane` owns the serving implementation and
+`packages/problem-sdk` owns the problem-validation contract. Negative tests
+cover protocol headers, cross-role authentication mix-ups, and leakage of
+another tenant, team, flag, or credential.
 
 ## Before requesting review
 

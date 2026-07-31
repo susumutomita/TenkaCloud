@@ -129,6 +129,34 @@ email. After confirmation, email is sent for exactly these three conditions:
 This does not notify every failure in problem start, stop, or cleanup. When the
 email setting is absent, these three warnings are not sent.
 
+## Organizer MCP
+
+The organizer MCP endpoint belongs to the Always-On control plane. It is
+**not automatically added by the Lite deployment pipeline described on this
+page**. The Application Admin Console remains the normal operating surface for
+a Lite event.
+
+An operator validating Always-On mode can connect to
+`{ALWAYS_ON_CONTROL_PLANE_ORIGIN}/mcp/organizer` and provide an organizer Auth0
+access token as `Authorization: Bearer ...`. Store that token in the client's
+secret facility; never paste it into a configuration file, prompt, Issue, or
+log.
+
+Before authentication, the client follows the `resource_metadata` link in the
+`401 Unauthorized` response's `WWW-Authenticate` header. The current setup
+requires an OAuth client registered with Auth0 in advance. TenkaCloud does not
+provide a DCR endpoint. Use CIMD only when the configured authorization server
+explicitly advertises support.
+
+The only current tool is `list_events`. It returns events belonging to the
+authenticated tenant and cannot create, change, deploy, stop, or delete
+anything. It also omits other tenants' events, team keys, flags, and scoring
+secrets. The MCP client must support revision 2026-07-28, call
+`server/discover`, and send the per-request protocol headers and `_meta`
+envelope. The MCP host must show the tool name and arguments and obtain the
+organizer's approval before every call. Do not use a client that skips that
+confirmation.
+
 ## Before participants arrive
 
 - A test team used the same permissions and Region as participants.

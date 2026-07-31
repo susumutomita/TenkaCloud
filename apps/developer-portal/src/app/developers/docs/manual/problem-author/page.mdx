@@ -38,6 +38,19 @@ The [first pack tutorial](/developers/docs/tutorials/first-pack/) follows one
 minimal pack from scaffold to validation, immutable Git pin, install,
 activation, and removal.
 
+### Preflight JSON through MCP
+
+An MCP 2026-07-28 client can connect to
+`{ALWAYS_ON_CONTROL_PLANE_ORIGIN}/mcp/problem-author` without authentication
+and call `validate_pack_manifest` or `validate_problem_metadata`.
+
+Both tools validate only the supplied JSON, purely and deterministically,
+against the same Problem SDK contract. They do not access a filesystem,
+network, cloud environment, environment variable, or credential. Equal input
+produces equal diagnostics. They cannot prove that referenced files exist, a
+template starts, local mode works, or a flag can be submitted. Always finish
+with `make pack-validate` and the real rehearsal before publishing.
+
 ## Author the participant experience
 
 Every problem should answer these questions before introducing technical

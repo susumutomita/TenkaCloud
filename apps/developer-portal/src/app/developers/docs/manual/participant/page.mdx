@@ -60,6 +60,19 @@ provided by the organizer.
 | Hint | Optional help. The portal shows any score cost before you reveal it |
 | Reset | Discard the current practice state and create it again |
 
+## Participant MCP is score lookup only
+
+Most participants do not need to configure MCP. Start problems, reveal hints,
+and submit flags in the Participant Portal. Only when the organizer explicitly
+provides an Always-On MCP endpoint should you connect to
+`{ALWAYS_ON_CONTROL_PLANE_ORIGIN}/mcp/participant` with your team key as the
+Bearer token.
+
+The current `get_my_score` tool returns only your team name, event ID,
+aggregate score, and solved-checkpoint count. It does not return correct flags,
+hint answers, the team key, submissions, or another team's name or score. Put
+the team key in the client's secret storage, never in a prompt or log.
+
 ## If something does not work
 
 | Symptom | What to check |

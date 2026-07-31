@@ -15,18 +15,20 @@
   },
   "dependencies": {
     "@TenkaCloud/trust-bridge": "workspace:*",
+    "@modelcontextprotocol/server": "^2.0.0",
     "@tenkacloud/auth-client": "workspace:*",
+    "@tenkacloud/problem-sdk": "workspace:*",
     "aws4fetch": "^1.0.20",
     "hono": "^4.12.31",
     "http-status-codes": "^2.3.0",
-    "zod": "^3.25.76"
+    "zod": "^4.2.0"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.18.0",
     "@cloudflare/workers-types": "^5.20260703.1",
-    "@vitest/coverage-istanbul": "^4.1.10",
+    "@vitest/coverage-istanbul": "4.1.9",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.9",
+    "vitest": "4.1.9",
     "wrangler": "^4.107.0"
   }
 }

@@ -293,6 +293,31 @@ export class ControlStore {
   }
 
   /**
+   * Return one authenticated participant's aggregate score without ever
+   * materializing the full leaderboard, flags, login-key hashes, submissions,
+   * or another team's row.
+   */
+  async participantScore(eventId: string, teamId: string): Promise<Record<string, unknown> | null> {
+    return await this.db
+      .prepare(
+        `SELECT summary.event_id AS eventId,
+                summary.team_id AS teamId,
+                team.display_name AS displayName,
+                summary.score + COALESCE(runtime.points, 0) AS score,
+                summary.solved_checkpoints AS solvedCheckpoints,
+                MAX(summary.updated_at, COALESCE(runtime.updated_at, '')) AS updatedAt
+           FROM score_summary AS summary
+           JOIN teams AS team
+             ON team.event_id = summary.event_id AND team.team_id = summary.team_id
+           LEFT JOIN runtime_score AS runtime
+             ON runtime.event_id = summary.event_id AND runtime.team_id = summary.team_id
+          WHERE summary.event_id = ? AND summary.team_id = ?`,
+      )
+      .bind(eventId, teamId)
+      .first<Record<string, unknown>>();
+  }
+
+  /**
    * Export a control-store scoring snapshot for a tenant-owned event before reconciliation prunes
    * it (ADR-049 Phase 5 / #2294). Per-tick runtime score events stay in the AWS event runtime and
    * are not represented here. Returns `null` when the event is not owned by the tenant.

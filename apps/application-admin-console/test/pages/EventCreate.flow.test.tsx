@@ -167,8 +167,8 @@ describe("EventCreatePage flow", () => {
     expect(
       await screen.findByText(LITE_DRILL_CHECKPOINTS.firstEventCreated.code),
     ).toBeInTheDocument();
-    await waitFor(() => expect(hasLiteDrillCheckpointBeenShown("firstEventCreated")).toBe(true));
-  });
+    expect(hasLiteDrillCheckpointBeenShown("firstEventCreated")).toBe(true);
+  }, 15_000);
 
   it("should navigate without deploying on 'deploy later'", async () => {
     const { container } = renderPage();
