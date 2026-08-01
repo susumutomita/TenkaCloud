@@ -35,7 +35,7 @@ TenkaCloud は AWS 上の multi-tenant cloud competition platform です。Contr
 
 モデルが自分で成否を判定できる検証を先に見つけます。変更に最も近い unit、CDK assertion、API integration、browser preview、local problem play、synth を使います。
 
-通常の PR gate は次の2コマンドです。
+通常の PR gate は次の 2 コマンドです。
 
 ```bash
 make harness
