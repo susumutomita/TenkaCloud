@@ -94,8 +94,8 @@ export interface ContainerProblem {
   /** `docker compose -p` project name, derived from the problem id. */
   readonly composeProjectName: string;
   /**
-   * Zero or more loopback URLs surfaced in the portal for the participant to attack.
-   * Verifier-only/code-editing problems legitimately expose no challenge surface.
+   * Participant-facing loopback URLs surfaced in the portal. The normalized record
+   * is empty when verifier-only metadata omits optional `challengeEndpoints`.
    */
   readonly challengeEndpoints: Readonly<Record<string, string>>;
   /** Loopback `/verify` endpoint the container exposes for scoring delegation. */
@@ -189,8 +189,12 @@ function normalizeEndpoints(value: unknown): Readonly<Record<string, string>> {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new Error("runtime.challengeEndpoints must be an object");
   }
+  const entries = Object.entries(value);
+  if (entries.length === 0) {
+    throw new Error("runtime.challengeEndpoints must declare at least one endpoint");
+  }
   const endpoints: Record<string, string> = {};
-  for (const [label, raw] of Object.entries(value)) {
+  for (const [label, raw] of entries) {
     endpoints[label] = loopbackUrl(raw, `runtime.challengeEndpoints.${label}`);
   }
   return endpoints;
