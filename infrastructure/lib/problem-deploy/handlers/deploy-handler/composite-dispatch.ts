@@ -115,8 +115,8 @@ function baseResult(target: CompositeTargetDeploymentRecord) {
   return { targetId: target.targetId, targetDeploymentId: target.jobId };
 }
 
-function terminalDependencyFailure(status: string): boolean {
-  return ["FAILED", "DELETING", "DELETED", "EXPIRED", "AUTO_DELETED"].includes(status);
+function terminalDependencyFailure(status: string | undefined): boolean {
+  return ["FAILED", "DELETING", "DELETED", "EXPIRED", "AUTO_DELETED"].includes(status as string);
 }
 
 function normalizedDependencies(target: CompositeTargetDeploymentRecord): readonly string[] {
@@ -190,11 +190,8 @@ async function evaluateDependencyGate(
     return { done: true, result: { ...base, outcome: "blocked" } };
   }
 
-  // The `missingDependency` check above already returned if any `targetId` here were absent from
-  // `byId`, so this lookup is guaranteed to hit — a non-null assertion here compiles to a plain
-  // property access (no extra runtime branch), unlike an `if (!x) throw` guard.
   const failedDependencies = dependencies.filter((targetId) =>
-    terminalDependencyFailure(byId.get(targetId)!.status),
+    terminalDependencyFailure(byId.get(targetId)?.status),
   );
   if (failedDependencies.length > 0) {
     await markTargetFailed(

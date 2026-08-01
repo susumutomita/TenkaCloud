@@ -167,6 +167,29 @@ export function createSakuraAppRunRestClient(
       .sort((left, right) => left.id.localeCompare(right.id));
   }
 
+  async function patchExistingApplication(
+    spec: SakuraAppRunSpec,
+    existing: SakuraApiApplication,
+  ): Promise<"done" | "retry"> {
+    const path = applicationPath(existing.id);
+    const patched = await request<unknown>("PATCH", path, patchBody(spec));
+    if (patched.kind === "ok") return "done";
+    if (patched.kind === "conflict") {
+      throw new Error(`Sakura AppRun API PATCH ${path} conflicted`);
+    }
+    return "retry";
+  }
+
+  async function createApplication(spec: SakuraAppRunSpec): Promise<"done" | "retry"> {
+    const created = await request<unknown>("POST", "/applications", createBody(spec));
+    if (created.kind === "ok") return "done";
+    if (created.kind === "not-found") {
+      throw new Error("Sakura AppRun API POST /applications returned not-found");
+    }
+    // POST 409 means another worker created the same name. Re-list and PATCH it.
+    return "retry";
+  }
+
   function component(spec: SakuraAppRunSpec) {
     return {
       name: DEFAULT_COMPONENT_NAME,
@@ -205,24 +228,10 @@ export function createSakuraAppRunRestClient(
     async upsertApplication(spec: SakuraAppRunSpec): Promise<void> {
       for (let attempt = 0; attempt < UPSERT_MAX_ATTEMPTS; attempt += 1) {
         const existing = (await findByName(spec.name))[0];
-        if (existing) {
-          const patched = await request<unknown>(
-            "PATCH",
-            applicationPath(existing.id),
-            patchBody(spec),
-          );
-          if (patched.kind === "ok") return;
-          if (patched.kind === "conflict") {
-            throw new Error(`Sakura AppRun API PATCH ${applicationPath(existing.id)} conflicted`);
-          }
-          continue;
-        }
-        const created = await request<unknown>("POST", "/applications", createBody(spec));
-        if (created.kind === "ok") return;
-        if (created.kind === "not-found") {
-          throw new Error("Sakura AppRun API POST /applications returned not-found");
-        }
-        // POST 409 means another worker created the same name. Re-list and PATCH it.
+        const outcome = existing
+          ? await patchExistingApplication(spec, existing)
+          : await createApplication(spec);
+        if (outcome === "done") return;
       }
       throw new Error("Sakura AppRun application upsert did not converge");
     },
