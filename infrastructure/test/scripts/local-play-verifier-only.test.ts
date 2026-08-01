@@ -46,12 +46,9 @@ const VERIFIER_ONLY_METADATA = {
   },
 };
 
-const COMPOSE = [
-  "services:",
-  "  verifier:",
-  "    ports:",
-  '      - "127.0.0.1:18091:18091"',
-].join("\n");
+const COMPOSE = ["services:", "  verifier:", "    ports:", '      - "127.0.0.1:18091:18091"'].join(
+  "\n",
+);
 
 function verifierOnlyFs(metadata: object = VERIFIER_ONLY_METADATA): ManifestFs {
   const files: Record<string, string> = {
