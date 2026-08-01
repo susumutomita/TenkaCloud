@@ -115,8 +115,8 @@ function baseResult(target: CompositeTargetDeploymentRecord) {
   return { targetId: target.targetId, targetDeploymentId: target.jobId };
 }
 
-function terminalDependencyFailure(status: string): boolean {
-  return ["FAILED", "DELETING", "DELETED", "EXPIRED", "AUTO_DELETED"].includes(status);
+function terminalDependencyFailure(status: string | undefined): boolean {
+  return ["FAILED", "DELETING", "DELETED", "EXPIRED", "AUTO_DELETED"].includes(status as string);
 }
 
 function normalizedDependencies(target: CompositeTargetDeploymentRecord): readonly string[] {
@@ -191,7 +191,7 @@ async function evaluateDependencyGate(
   }
 
   const failedDependencies = dependencies.filter((targetId) =>
-    terminalDependencyFailure(byId.get(targetId)?.status ?? "UNKNOWN"),
+    terminalDependencyFailure(byId.get(targetId)?.status),
   );
   if (failedDependencies.length > 0) {
     await markTargetFailed(
