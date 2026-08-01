@@ -52,10 +52,10 @@ infra 変更では `make check-synth` と `Template.fromStack` assertion を使�
 
 PR 本文には次を含めます。
 
-- Summary
-- Validation
-- Regression analysis
-- Physical impact
-- 残る risk / 未検証事項
+- 変更内容を `Summary` に記載する。
+- 実行した検証を `Validation` に記載する。
+- 回帰確認を `Regression analysis` に記載する。
+- 物理変更を `Physical impact` に記載する。
+- 残る risk と未検証事項を記載する。
 
 `/change`、`/review`、`/security-review`、`/simplify` などは必要なときだけ使う任意の補助であり、決定論的 gate の代わりでも必須入口でもありません。
