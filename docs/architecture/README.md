@@ -2,8 +2,8 @@
 
 ADRs are the source of truth for TenkaCloud's design decisions. They are authored as
 self-contained HTML (`adr-<number>-<slug>.html`), not Markdown — see
-[CLAUDE.md](../../CLAUDE.md#adr-conventions) for the authoring rules
-(self-contained, no chat context, no rolling-update metadata).
+[CLAUDE.md](../../CLAUDE.md) and [ADR-054](./adr-054-minimal-agent-harness.html) for the current
+agent-harness and authoring context.
 
 ## Numbering convention
 
@@ -32,6 +32,7 @@ ADRs that already exist, but every **new** ADR from here forward uses 3 digits.
 | [adr-051](./adr-051-local-multicloud-simulator.html) | Provider-neutral local cloud simulation | Accepted |
 | [adr-052](./adr-052-google-form-as-landing-form-backend.html) | Google Form as the landing page's form backend | Accepted |
 | [adr-053](./adr-053-stateless-mcp-role-boundaries.html) | Stateless MCP 2026-07-28 with role-bound endpoints | Accepted |
+| [adr-054](./adr-054-minimal-agent-harness.html) | Minimal agent harness with verifiable autonomy | Accepted |
 
 ## Referenced-but-not-yet-drafted ADR numbers
 
@@ -51,9 +52,9 @@ following are known and intentionally out of scope for that issue's first pass:
 2. Copy the structure of an existing ADR (background → decision → consequences → alternatives
    considered → migration) — see [adr-048](./adr-048-composite-target-participant-access.html) for
    a fully-worked example with tables and pill/badge styling you can reuse.
-3. Write it to stand alone: no "Claude proposes / user owns" role-split notes, no chat
-   transcript excerpts, no unresolved TODOs. An OSS reader with no prior context must be able
-   to understand the background, the decision, and the impact from the ADR alone.
+3. Write it to stand alone: no role-split notes, no chat transcript excerpts, no unresolved
+   placeholders. An OSS reader with no prior context must be able to understand the background,
+   the decision, and the impact from the ADR alone.
 4. Add a row to the table above.
 5. `make harness` runs the `adr-must-be-html` / `adr-self-contained` invariant checks; existing
    violations are baselined at `.claude/harness/baselines/adr-self-contained.json` so only new
