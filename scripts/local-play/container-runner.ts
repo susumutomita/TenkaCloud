@@ -111,11 +111,17 @@ export class ContainerRunner {
         false,
         projectDirectory,
       );
-      await Promise.all(
-        Object.entries(remappedProblem.challengeEndpoints).map(([label, url]) =>
+      // The verifier is the mandatory scoring seam for every container problem.
+      // Waiting only on optional challenge surfaces made verifier-only problems
+      // report "running" before POST /verify was actually ready (or wait on
+      // nothing at all). Always gate startup on verifyUrl, then on any additional
+      // participant-facing endpoints the problem declares.
+      await Promise.all([
+        this.deps.waitForReachable(remappedProblem.verifyUrl, "verify endpoint"),
+        ...Object.entries(remappedProblem.challengeEndpoints).map(([label, url]) =>
           this.deps.waitForReachable(url, `challenge endpoint ${label}`),
         ),
-      );
+      ]);
     } catch (startError) {
       try {
         this.stop(unit);
