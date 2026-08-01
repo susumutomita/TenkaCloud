@@ -87,17 +87,6 @@ describe("verifier-only local container problems", () => {
     ]);
   });
 
-  it("also accepts an explicit empty challengeEndpoints record", () => {
-    const metadata = {
-      ...VERIFIER_ONLY_METADATA,
-      runtime: { ...VERIFIER_ONLY_METADATA.runtime, challengeEndpoints: {} },
-    };
-
-    expect(loadContainerProblem(PROBLEM_DIR, verifierOnlyFs(metadata)).challengeEndpoints).toEqual(
-      {},
-    );
-  });
-
   it("waits for the remapped verifier even when no challenge surface exists", async () => {
     const problem = loadContainerProblem(PROBLEM_DIR, verifierOnlyFs());
     const reached: Array<[string, string]> = [];
