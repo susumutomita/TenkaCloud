@@ -93,7 +93,10 @@ export interface ContainerProblem {
   readonly composePath: string;
   /** `docker compose -p` project name, derived from the problem id. */
   readonly composeProjectName: string;
-  /** Loopback URL(s) the participant attacks, surfaced in the portal. */
+  /**
+   * Zero or more loopback URLs surfaced in the portal for the participant to attack.
+   * Verifier-only/code-editing problems legitimately expose no challenge surface.
+   */
   readonly challengeEndpoints: Readonly<Record<string, string>>;
   /** Loopback `/verify` endpoint the container exposes for scoring delegation. */
   readonly verifyUrl: string;
@@ -179,15 +182,15 @@ function loopbackUrl(value: unknown, field: string): string {
 }
 
 function normalizeEndpoints(value: unknown): Readonly<Record<string, string>> {
+  // A verifier-only problem (for example, a code-editing cryptography lab) has no
+  // participant-facing network surface. `verifyUrl` remains mandatory and is the
+  // readiness/scoring seam, so omitting this optional record is safe and explicit.
+  if (value === undefined) return {};
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new Error("runtime.challengeEndpoints must be an object");
   }
-  const entries = Object.entries(value);
-  if (entries.length === 0) {
-    throw new Error("runtime.challengeEndpoints must declare at least one endpoint");
-  }
   const endpoints: Record<string, string> = {};
-  for (const [label, raw] of entries) {
+  for (const [label, raw] of Object.entries(value)) {
     endpoints[label] = loopbackUrl(raw, `runtime.challengeEndpoints.${label}`);
   }
   return endpoints;
