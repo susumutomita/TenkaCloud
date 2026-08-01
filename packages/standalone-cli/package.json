@@ -1,0 +1,34 @@
+{
+  "name": "@tenkacloud/cli",
+  "version": "0.1.0",
+  "description": "Installable TenkaCloud operator CLI",
+  "type": "module",
+  "bin": {
+    "tenkacloud": "src/cli.mjs"
+  },
+  "files": [
+    "src",
+    "runtime"
+  ],
+  "scripts": {
+    "prepack": "node scripts/assemble-runtime.mjs",
+    "test": "node --test test/*.test.mjs",
+    "typecheck": "node --check src/cli.mjs && node --check src/config.mjs && node --check src/problems.mjs && node --check src/runtime.mjs"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "keywords": [
+    "tenkacloud",
+    "aws",
+    "ctf",
+    "gameday"
+  ],
+  "license": "Apache-2.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "bun": "1.3.14"
+  }
+}
