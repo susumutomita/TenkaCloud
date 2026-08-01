@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { cp, mkdir, readFile, rm } from "node:fs/promises";
+import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,11 +26,20 @@ function resolveBunBinary() {
   }
 }
 
+function run(command, args, cwd, stdio = "inherit") {
+  const result = spawnSync(command, args, { cwd, stdio, env: process.env });
+  if (result.error) throw result.error;
+  if ((result.status ?? 1) !== 0) {
+    throw new Error(`${command} ${args.join(" ")} failed with exit code ${result.status ?? 1}.`);
+  }
+}
+
 export async function prepareRuntime(config, options = {}) {
   const source = options.runtimeSource ?? path.join(packageRoot, "runtime");
   const version = options.version ?? (await packageVersion());
   const destination = options.runtimeDestination ?? path.join(cacheRoot(options.env), "runtime", version);
   const marker = path.join(destination, ".tenkacloud-runtime-version");
+  const dependenciesMarker = path.join(destination, ".tenkacloud-dependencies-ready");
 
   let currentVersion;
   try {
@@ -42,7 +51,14 @@ export async function prepareRuntime(config, options = {}) {
     await rm(destination, { recursive: true, force: true });
     await mkdir(destination, { recursive: true, mode: 0o700 });
     await cp(source, destination, { recursive: true, dereference: false });
-    await BunWriteFile(marker, `${version}\n`);
+    await writeFile(marker, `${version}\n`, { mode: 0o600 });
+  }
+
+  try {
+    await readFile(dependenciesMarker, "utf8");
+  } catch {
+    run(resolveBunBinary(), ["install", "--frozen-lockfile", "--ignore-scripts"], destination);
+    await writeFile(dependenciesMarker, "ready\n", { mode: 0o600 });
   }
 
   const problemsDestination = path.join(destination, "problems");
@@ -55,15 +71,9 @@ export async function prepareRuntime(config, options = {}) {
   return destination;
 }
 
-async function BunWriteFile(file, content) {
-  const { writeFile } = await import("node:fs/promises");
-  await writeFile(file, content, { mode: 0o600 });
-}
-
 export async function runBundledCommand(config, args, options = {}) {
   const runtime = await prepareRuntime(config, options);
-  const command = resolveBunBinary();
-  const result = spawnSync(command, ["run", "scripts/tenkacloud-lite.ts", ...args], {
+  const result = spawnSync(resolveBunBinary(), ["run", "scripts/tenkacloud-lite.ts", ...args], {
     cwd: runtime,
     stdio: "inherit",
     env: {
