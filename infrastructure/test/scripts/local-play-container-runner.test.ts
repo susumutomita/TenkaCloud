@@ -59,10 +59,7 @@ describe("ContainerRunner: start (#2392 Phase 2)", () => {
     expect(compose).toEqual([
       ["up", "/p/sqli-demo/local/docker-compose.yml", "tc-local-sqli-demo", undefined],
     ]);
-    expect(reached).toEqual([
-      "http://127.0.0.1:18081/verify",
-      "http://127.0.0.1:18080/",
-    ]);
+    expect(reached).toEqual(["http://127.0.0.1:18081/verify", "http://127.0.0.1:18080/"]);
     expect(started.problem.challengeEndpoints).toEqual({ Web: "http://127.0.0.1:18080/" });
     expect(started.problem.verifyUrl).toBe("http://127.0.0.1:18081/verify");
     expect(started.unit).toMatchObject({ composePath: "/p/sqli-demo/local/docker-compose.yml" });
@@ -82,10 +79,7 @@ describe("ContainerRunner: start (#2392 Phase 2)", () => {
       ["up", "/local/tc-local-sqli-demo.compose.yml", "tc-local-sqli-demo", "/p/sqli-demo/local"],
     ]);
     // waits on the remapped verifier and challenge surface; returned URLs follow the offset
-    expect(reached).toEqual([
-      "http://127.0.0.1:18181/verify",
-      "http://127.0.0.1:18180/",
-    ]);
+    expect(reached).toEqual(["http://127.0.0.1:18181/verify", "http://127.0.0.1:18180/"]);
     expect(started.problem.challengeEndpoints).toEqual({ Web: "http://127.0.0.1:18180/" });
     expect(started.problem.verifyUrl).toBe("http://127.0.0.1:18181/verify");
     // The instructions prose moves onto the same block as the surface it quotes.
