@@ -223,6 +223,28 @@ export async function startProblemViaApi(
   }
 }
 
+interface ProblemLifecycle {
+  readonly status?: string;
+  readonly lastError?: string;
+}
+
+async function fetchProblemLifecycle(
+  apiBaseUrl: string,
+  problemId: string,
+  participantToken: string,
+): Promise<ProblemLifecycle | undefined> {
+  const response = await fetch(`${apiBaseUrl}/portal/me`, {
+    headers: { authorization: `Bearer ${participantToken}` },
+  });
+  if (!response.ok) {
+    throw new Error(`failed to poll problem "${problemId}" (HTTP ${response.status})`);
+  }
+  const body = (await response.json()) as {
+    problems?: { problemId: string; lifecycle?: ProblemLifecycle }[];
+  };
+  return body.problems?.find((problem) => problem.problemId === problemId)?.lifecycle;
+}
+
 /**
  * Container 問題の start は 202 (async) で返る — 初回はcompose の暗黙イメージ
  * ビルド (数分かかり得る) が走るため。 CLI の pre-start はブラウザと違い proxy に
@@ -240,16 +262,7 @@ export async function waitForProblemRunning(
   const now = options.now ?? Date.now;
   const deadline = now() + timeoutMs;
   for (;;) {
-    const response = await fetch(`${apiBaseUrl}/portal/me`, {
-      headers: { authorization: `Bearer ${participantToken}` },
-    });
-    if (!response.ok) {
-      throw new Error(`failed to poll problem "${problemId}" (HTTP ${response.status})`);
-    }
-    const body = (await response.json()) as {
-      problems?: { problemId: string; lifecycle?: { status?: string; lastError?: string } }[];
-    };
-    const lifecycle = body.problems?.find((p) => p.problemId === problemId)?.lifecycle;
+    const lifecycle = await fetchProblemLifecycle(apiBaseUrl, problemId, participantToken);
     // lifecycle 不在 (= AWS mode 相当の view) は常時 playable 扱い → 待つ必要なし。
     if (!lifecycle || lifecycle.status === "running") return;
     if (lifecycle.status === "error") {

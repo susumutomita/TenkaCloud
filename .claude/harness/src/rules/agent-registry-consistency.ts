@@ -158,6 +158,10 @@ function checkProseRuleListDrift(
 export const agentRegistryConsistency: Rule = {
   id: "agent-registry-consistency",
   severity: "error",
+  // This rule is an intentionally linear registry audit: each invariant reports its own precise
+  // source location, and splitting the audit would make the shared finding context harder to keep
+  // consistent. The individual validation helpers above remain complexity-bounded.
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: registry audit orchestration
   check(ctx: RuleContext): readonly Finding[] {
     if (!ctx.files.some(relevantChange)) return [];
 
