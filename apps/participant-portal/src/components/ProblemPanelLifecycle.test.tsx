@@ -149,6 +149,44 @@ describe("ProblemPanel on-demand lifecycle (#2392 Phase 2)", () => {
     expect(onScored).toHaveBeenCalledTimes(3);
   });
 
+  it("should enter starting from the action's own 202 when the refetch shows nothing new", async () => {
+    // Issue #2845. The refetch right after Start changes only `lifecycle`, and
+    // `viewIsUnchanged` dropped that field, so the parent kept the previous view
+    // and this panel never saw `starting`. Here the parent deliberately reports
+    // nothing new: the panel must still enter `starting`, because that is what
+    // arms the poll below and the poll is the only route back to `running`.
+    const user = userEvent.setup();
+    const onScored = vi.fn().mockResolvedValue(undefined);
+    apiMocks.startProblem.mockResolvedValue({ status: "starting" });
+    renderPanel({ lifecycle: { status: "stopped" } }, onScored);
+
+    await user.click(screen.getByRole("button", { name: "Start" }));
+    await waitFor(() => expect(screen.getAllByText("Starting…").length).toBeGreaterThan(0));
+    // No Start button left to press a second time, which is the reported bug.
+    expect(screen.queryByRole("button", { name: "Start" })).not.toBeInTheDocument();
+  });
+
+  it("should hand control back to the server once it reports a new lifecycle", async () => {
+    const user = userEvent.setup();
+    apiMocks.startProblem.mockResolvedValue({ status: "starting" });
+    const { rerender } = renderPanel({ lifecycle: { status: "stopped" } });
+
+    await user.click(screen.getByRole("button", { name: "Start" }));
+    await waitFor(() => expect(screen.getAllByText("Starting…").length).toBeGreaterThan(0));
+
+    rerender(
+      withProviders(
+        <ProblemPanel
+          problem={{ ...baseProblem, lifecycle: { status: "running" } }}
+          apiBaseUrl="https://api.example.com"
+          sessionToken="team-key"
+          onScored={async () => undefined}
+        />,
+      ),
+    );
+    await waitFor(() => expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument());
+  });
+
   it("should surface the error state with a message and a retry Start button", () => {
     renderPanel({ lifecycle: { status: "error" } });
 

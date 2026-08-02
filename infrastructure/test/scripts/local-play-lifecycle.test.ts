@@ -185,6 +185,46 @@ describe("ProblemLifecycle: concurrency cap + LRU eviction (#2392 Phase 2)", () 
     expect(lc.statusOf("b")).toBe("stopped");
     expect(lc.statusOf("c")).toBe("running");
   });
+
+  it("should report starting while eviction is still in flight", async () => {
+    // Issue #2845: `start` answers 202 with `statusOf(problemId)`. The status was
+    // only claimed after the eviction await, so at capacity the body said
+    // "stopped" for the problem the caller had just started — a literal wrong
+    // answer, not a stale one, and the portal had nothing else to go on.
+    let releaseEviction: (() => void) | undefined;
+    const evictionStarted = Promise.withResolvers<void>();
+    const { deps } = makeDeps({
+      stopContainer: vi.fn(async () => {
+        evictionStarted.resolve();
+        await new Promise<void>((resolve) => {
+          releaseEviction = resolve;
+        });
+      }),
+    });
+    const lc = new ProblemLifecycle(["a", "b"], deps, { maxRunning: 1 });
+    await lc.ensureRunning("a");
+
+    const pending = lc.ensureRunning("b");
+    await evictionStarted.promise;
+    expect(lc.statusOf("b")).toBe("starting");
+
+    releaseEviction?.();
+    await pending;
+    expect(lc.statusOf("b")).toBe("running");
+  });
+
+  it("should leave a problem in error, not starting, when eviction fails", async () => {
+    const { deps } = makeDeps({
+      stopContainer: vi.fn(async () => {
+        throw new Error("docker compose down failed");
+      }),
+    });
+    const lc = new ProblemLifecycle(["a", "b"], deps, { maxRunning: 1 });
+    await lc.ensureRunning("a");
+
+    await expect(lc.ensureRunning("b")).rejects.toThrow(/docker compose down failed/);
+    expect(lc.statusOf("b")).toBe("error");
+  });
 });
 
 describe("ProblemLifecycle: explicit stop / stop-all (#2392 Phase 2, #2512)", () => {
