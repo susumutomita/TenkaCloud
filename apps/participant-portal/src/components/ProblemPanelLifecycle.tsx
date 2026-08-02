@@ -66,12 +66,27 @@ export function ProblemLifecyclePanel({
   const simulatedCloud = runtimeKind === "simulated-cloud";
   const copy = simulatedCloud ? SIMULATOR_COPY : DOCKER_COPY;
 
+  // Issue #2845: the status the action itself reported, held until the next
+  // refetch supersedes it. Relying only on the refetch made a single missed
+  // transition strand the panel: `starting` is what arms the poll below, so
+  // failing to observe it removed every path back to `running`.
+  const [reportedStatus, setReportedStatus] = useState<ProblemLifecycleStatus | null>(null);
+  // The server's word wins as soon as it moves; the override only covers the gap
+  // between the action returning and the refetch landing. Adjusted during render
+  // rather than in an effect so the stale value is never painted once.
+  const [lastServerStatus, setLastServerStatus] = useState<ProblemLifecycleStatus>(status);
+  if (status !== lastServerStatus) {
+    setLastServerStatus(status);
+    setReportedStatus(null);
+  }
+  const effectiveStatus = reportedStatus ?? status;
+
   const refreshStartingRuntime = useCallback(async () => {
     await onScored();
   }, [onScored]);
 
   usePolling(refreshStartingRuntime, LOCAL_LIFECYCLE_POLL_INTERVAL_MS, {
-    enabled: status === "starting",
+    enabled: effectiveStatus === "starting",
     immediate: false,
   });
 
@@ -79,9 +94,11 @@ export function ProblemLifecyclePanel({
     setBusy(true);
     setActionError(null);
     try {
-      await action(apiBaseUrl, sessionToken, problemId);
+      const reported = await action(apiBaseUrl, sessionToken, problemId);
+      setReportedStatus(reported.status);
       await onScored();
     } catch (err) {
+      setReportedStatus(null);
       setActionError(formatProblemPanelActionError(t, err, "problem_panel.validation_error"));
     } finally {
       setBusy(false);
@@ -106,9 +123,9 @@ export function ProblemLifecyclePanel({
   };
 
   const control =
-    status === "starting" ? (
+    effectiveStatus === "starting" ? (
       <StatusIndicator type="loading">{t("problem_panel.lifecycle_starting")}</StatusIndicator>
-    ) : status === "running" ? (
+    ) : effectiveStatus === "running" ? (
       <SpaceBetween direction="horizontal" size="xs" alignItems="center">
         <Button loading={busy} onClick={() => void runAction(stopProblem)}>
           {t("problem_panel.lifecycle_stop_button")}
@@ -127,7 +144,7 @@ export function ProblemLifecyclePanel({
           {t(copy.runningBody)}
         </Box>
       </SpaceBetween>
-    ) : status === "error" && cleanupRequired ? (
+    ) : effectiveStatus === "error" && cleanupRequired ? (
       <SpaceBetween direction="horizontal" size="xs" alignItems="center">
         <Button loading={busy} onClick={() => void runAction(stopProblem)}>
           {t("problem_panel.lifecycle_cleanup_button")}
@@ -149,7 +166,7 @@ export function ProblemLifecyclePanel({
 
   return (
     <SpaceBetween size="s">
-      {status === "error" && (
+      {effectiveStatus === "error" && (
         <Alert type="error" header={t(copy.errorHeader)}>
           <SpaceBetween size="xs">
             <Box>{t(copy.errorBody)}</Box>
