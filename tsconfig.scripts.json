@@ -23,5 +23,11 @@
     "allowImportingTsExtensions": true
   },
   "include": ["scripts/**/*.ts"],
-  "exclude": ["scripts/**/*.test.ts", "scripts/**/*.spec.ts", "**/node_modules/**", "**/dist/**", "**/cdk.out/**"]
+  "exclude": [
+    "scripts/**/*.test.ts",
+    "scripts/**/*.spec.ts",
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/cdk.out/**"
+  ]
 }
