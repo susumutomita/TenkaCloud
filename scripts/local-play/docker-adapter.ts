@@ -94,8 +94,7 @@ export function composeArgs(
   // contexts and volume mounts still resolve. Omitted (identity) for the first
   // problem, which runs from its own compose file.
   if (projectDirectory) base.push("--project-directory", projectDirectory);
-  return action === "up"
-    ? [...base, "up", "-d"]
+  // [#2851] Always ask Compose to build. Docker layer caching keeps unchanged starts cheap,\n  // while changed problem sources and submodule pins can no longer reuse a stale image.\n  return action === "up"\n    ? [...base, "up", "-d", "--build"]
     : [...base, "down", "--volumes", "--remove-orphans"];
 }
 
