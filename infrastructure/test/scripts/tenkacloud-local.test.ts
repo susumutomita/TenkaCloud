@@ -430,7 +430,7 @@ describe("generateSecretEnv", () => {
 });
 
 describe("composeArgs", () => {
-  it("should build a detached `up` invocation", () => {
+  it("should build a detached `up` invocation that rebuilds edited problems (#2851)", () => {
     expect(composeArgs("/p/local/docker-compose.yml", "tc-local-sqli-demo", "up")).toEqual([
       "compose",
       "-f",
@@ -439,6 +439,7 @@ describe("composeArgs", () => {
       "tc-local-sqli-demo",
       "up",
       "-d",
+      "--build",
     ]);
   });
 
@@ -466,6 +467,7 @@ describe("composeArgs", () => {
       "/p/b/local",
       "up",
       "-d",
+      "--build",
     ]);
   });
 });
@@ -562,6 +564,7 @@ describe("composeArgsForCli", () => {
       "tc-local-sqli-demo",
       "up",
       "-d",
+      "--build",
     ]);
   });
 
