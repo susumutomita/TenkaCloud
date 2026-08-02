@@ -6,6 +6,7 @@ Install and operate TenkaCloud without cloning the monorepo.
 npm install -g @tenkacloud/cli
 tenkacloud init
 aws login
+tenkacloud doctor
 tenkacloud deploy
 ```
 
@@ -13,10 +14,11 @@ tenkacloud deploy
 
 - problem directory
 - expected AWS account ID
+- allowed AWS operator role ARN
 - AWS region
 - environment name
 
-AWS credentials are never stored by this package. Every cloud command runs `aws sts get-caller-identity` first and refuses to continue when the logged-in account differs from the configured account.
+AWS credentials are never stored by this package. Every cloud command runs `aws sts get-caller-identity` first and refuses to continue unless both the account and assumed IAM role match the configured values. IAM users and unexpected roles are rejected before the bundled runtime is invoked.
 
 ## Commands
 
@@ -29,6 +31,10 @@ tenkacloud destroy
 tenkacloud destroy --purge-retained-data
 tenkacloud config path
 ```
+
+## Problem directory boundary
+
+The complete problem tree is inspected before copying. Symbolic links at any depth, paths that resolve outside the configured root, and special files such as sockets, FIFOs, or devices are rejected. The copied staging tree is inspected again before it atomically replaces the runtime problem directory.
 
 ## Runtime packaging
 
