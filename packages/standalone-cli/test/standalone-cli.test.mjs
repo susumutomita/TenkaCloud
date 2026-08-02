@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
+import { mkdir, mkdtemp, readdir, readFile, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { loadConfig, saveConfig } from "../src/config.mjs";
 import { validateProblemsDirectory } from "../src/problems.mjs";
-import { assertAwsIdentity, normalizeAwsPrincipalArn } from "../src/runtime.mjs";
+import { assertAwsIdentity, normalizeAwsPrincipalArn, prepareRuntime } from "../src/runtime.mjs";
 
 async function tempDirectory() {
   return mkdtemp(path.join(os.tmpdir(), "tenkacloud-cli-"));
@@ -134,4 +135,66 @@ test("assertAwsIdentity should reject IAM users", () => {
       })),
     /must be an assumed IAM role/,
   );
+});
+
+test("validateProblemsDirectory should reject a symlinked problems root", async () => {
+  // Reached by its own message rather than by the directory check, which is what
+  // tells the operator the path is a link instead of claiming it is missing.
+  const target = await tempDirectory();
+  await createProblem(target, "real");
+  const link = path.join(await tempDirectory(), "problems-link");
+  await symlink(target, link);
+  await assert.rejects(
+    () => validateProblemsDirectory(link),
+    /Problems directory must not be a symbolic link/,
+  );
+});
+
+test("validateProblemsDirectory should reject FIFOs and other non-regular files", async () => {
+  const root = await tempDirectory();
+  const problem = await createProblem(root, "special-file");
+  const created = spawnSync("mkfifo", [path.join(problem, "queue")]);
+  assert.equal(created.status, 0, `mkfifo failed: ${created.stderr ?? created.error?.message}`);
+  await assert.rejects(
+    () => validateProblemsDirectory(root),
+    /Only regular files and directories are allowed/,
+  );
+});
+
+test("prepareRuntime should keep the validated tree when a later sync is refused", async () => {
+  const workspace = await tempDirectory();
+  const runtimeSource = path.join(workspace, "source");
+  const runtimeDestination = path.join(workspace, "runtime");
+  const problemsDirectory = path.join(workspace, "problems");
+  await mkdir(runtimeSource, { recursive: true });
+  await createProblem(problemsDirectory, "hello-world");
+
+  // Stand the runtime up as already-current so the sync is the only step that
+  // runs: no bundled-runtime copy and no dependency install to reach out for.
+  await mkdir(runtimeDestination, { recursive: true });
+  await writeFile(path.join(runtimeDestination, ".tenkacloud-runtime-version"), "test\n");
+  await writeFile(path.join(runtimeDestination, ".tenkacloud-dependencies-ready"), "ready\n");
+
+  const config = { ...operatorConfig, problemsDirectory, awsRegion: "ap-northeast-1" };
+  const options = { runtimeSource, runtimeDestination, version: "test" };
+  await prepareRuntime(config, options);
+  const synced = path.join(runtimeDestination, "problems", "hello-world", "metadata.json");
+  assert.equal(JSON.parse(await readFile(synced, "utf8")).id, "hello-world");
+
+  // Now point a link at the caller's home directory, the way an escape would be
+  // staged between two runs, and ask for the runtime again.
+  await symlink(os.homedir(), path.join(problemsDirectory, "hello-world", "escape"));
+  await assert.rejects(() => prepareRuntime(config, options), /Symbolic links are not allowed/);
+
+  // The refusal must not have cost the operator the tree that was already
+  // validated. This holds because the source is scanned before anything is
+  // copied — which also means these two assertions do not exercise the catch
+  // block's staging cleanup, since on this path no staging directory is ever
+  // created. Reaching that block needs the source to pass and the copy to fail,
+  // which is the TOCTOU race it exists for and not a state a test can stage.
+  assert.equal(JSON.parse(await readFile(synced, "utf8")).id, "hello-world");
+  const leftovers = (await readdir(runtimeDestination)).filter((entry) =>
+    entry.startsWith(".problems-staging-"),
+  );
+  assert.deepEqual(leftovers, []);
 });
