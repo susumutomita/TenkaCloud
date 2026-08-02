@@ -13,6 +13,7 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ContainerRunner } from "./container-runner";
+import type { TerminalProcess } from "./problem-terminal";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -110,6 +111,39 @@ export function composeArgsForCli(
   return cli.command === "docker-compose" ? args.slice(1) : args;
 }
 
+/**
+ * [#2846] `compose exec` argv for attaching a shell to a running service.
+ *
+ * `-T` disables TTY allocation. This process's stdin is a pipe, and `compose exec`
+ * with a TTY refuses to start against one ("the input device is not a TTY"). Commands
+ * and output still flow both ways; what is lost is line editing, a shell prompt, and
+ * anything curses-based. A real TTY needs a pty on this side (`node-pty`), a native
+ * module deliberately not taken on yet.
+ */
+export function composeExecArgs(
+  composePath: string,
+  projectName: string,
+  service: string,
+  command: readonly string[],
+  projectDirectory?: string,
+): string[] {
+  const base = ["compose", "-f", composePath, "-p", projectName];
+  if (projectDirectory) base.push("--project-directory", projectDirectory);
+  return [...base, "exec", "-T", service, ...command];
+}
+
+export function composeExecArgsForCli(
+  cli: ComposeCli,
+  composePath: string,
+  projectName: string,
+  service: string,
+  command: readonly string[],
+  projectDirectory?: string,
+): string[] {
+  const args = composeExecArgs(composePath, projectName, service, command, projectDirectory);
+  return cli.command === "docker-compose" ? args.slice(1) : args;
+}
+
 // The real cause sits at the END of compose stderr; long pull/build logs stay
 // in the serve log, only this tail travels into the thrown error.
 const COMPOSE_STDERR_TAIL_LINES = 20;
@@ -164,6 +198,68 @@ export function runCompose(
   if (!allowFailure && result.status !== 0) {
     throw new Error(composeFailureMessage(`${cli.command} ${args.join(" ")}`, stderr));
   }
+}
+
+/**
+ * [#2846] POSIX `sh`, not `bash -i`. Every problem base image has `/bin/sh`, and
+ * without a TTY an interactive bash spends its first three lines complaining about
+ * job control it cannot have. Reading commands from the pipe is what we actually
+ * want: one line in, its output back.
+ */
+const CONTAINER_SHELL_COMMAND = ["/bin/sh"] as const;
+
+/** The compose coordinates needed to exec into one problem's container. */
+export interface ComposeExecTarget {
+  readonly composePath: string;
+  readonly composeProjectName: string;
+  readonly projectDirectory?: string;
+}
+
+/**
+ * [#2846] Real shell adapter behind {@link ProblemTerminals}: `compose exec` into a
+ * running service and expose it as the registry's process contract.
+ *
+ * stderr is merged into the data stream rather than dropped — the participant needs
+ * a traceback as much as a result, and a terminal that silently swallows stderr
+ * makes a failing command look like a hanging one.
+ */
+export function spawnContainerShell(
+  target: ComposeExecTarget,
+  service: string,
+  handlers: {
+    readonly onData: (chunk: string) => void;
+    readonly onExit: (code: number | null) => void;
+  },
+): TerminalProcess {
+  const cli = resolveComposeCli();
+  const args = composeExecArgsForCli(
+    cli,
+    target.composePath,
+    target.composeProjectName,
+    service,
+    CONTAINER_SHELL_COMMAND,
+    target.projectDirectory,
+  );
+  const child = spawn(cli.command, args, { cwd: REPO_ROOT, stdio: ["pipe", "pipe", "pipe"] });
+  child.stdout?.setEncoding("utf8");
+  child.stderr?.setEncoding("utf8");
+  child.stdout?.on("data", handlers.onData);
+  child.stderr?.on("data", handlers.onData);
+  // `error` fires instead of `close` when the CLI itself cannot be spawned. Report
+  // the reason through the same stream the participant is already reading.
+  child.on("error", (error) => {
+    handlers.onData(`${error.message}\n`);
+    handlers.onExit(null);
+  });
+  child.on("close", (code) => handlers.onExit(code));
+  return {
+    write: (data) => {
+      child.stdin?.write(data);
+    },
+    kill: () => {
+      child.kill("SIGKILL");
+    },
+  };
 }
 
 /** A 256-bit hex secret. One per declared `secretEnv` name, generated per deploy. */

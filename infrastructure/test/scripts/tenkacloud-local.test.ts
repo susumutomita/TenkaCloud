@@ -23,6 +23,8 @@ import { codespacesForwardedOrigin } from "../../../scripts/local-play/codespace
 import {
   composeArgs,
   composeArgsForCli,
+  composeExecArgs,
+  composeExecArgsForCli,
   composeFailureMessage,
   generateSecretEnv,
   openPrivateAppendLog,
@@ -465,6 +467,81 @@ describe("composeArgs", () => {
       "up",
       "-d",
     ]);
+  });
+});
+
+describe("composeExecArgs (#2846)", () => {
+  it("should attach a shell to a named service without a TTY", () => {
+    // -T is not optional: this process's stdin is a pipe, and `compose exec` with a
+    // TTY refuses to start against one.
+    expect(
+      composeExecArgs("/p/local/docker-compose.yml", "tc-local-ac26", "verifier", [
+        "/bin/bash",
+        "-i",
+      ]),
+    ).toEqual([
+      "compose",
+      "-f",
+      "/p/local/docker-compose.yml",
+      "-p",
+      "tc-local-ac26",
+      "exec",
+      "-T",
+      "verifier",
+      "/bin/bash",
+      "-i",
+    ]);
+  });
+
+  it("should pin --project-directory for a port-remapped copy, as `up` does", () => {
+    expect(
+      composeExecArgs("/tmp/tc-local-b.compose.yml", "tc-local-b", "app", ["sh"], "/p/b/local"),
+    ).toEqual([
+      "compose",
+      "-f",
+      "/tmp/tc-local-b.compose.yml",
+      "-p",
+      "tc-local-b",
+      "--project-directory",
+      "/p/b/local",
+      "exec",
+      "-T",
+      "app",
+      "sh",
+    ]);
+  });
+
+  it("should omit the compose subcommand for standalone docker-compose", () => {
+    expect(
+      composeExecArgsForCli(
+        { command: "docker-compose", prefix: [], label: "docker-compose" },
+        "/p/local/docker-compose.yml",
+        "tc-local-ac26",
+        "verifier",
+        ["sh"],
+      ),
+    ).toEqual([
+      "-f",
+      "/p/local/docker-compose.yml",
+      "-p",
+      "tc-local-ac26",
+      "exec",
+      "-T",
+      "verifier",
+      "sh",
+    ]);
+  });
+
+  it("should keep the compose subcommand for the Docker CLI plugin", () => {
+    expect(
+      composeExecArgsForCli(
+        { command: "docker", prefix: ["compose"], label: "docker compose" },
+        "/p/local/docker-compose.yml",
+        "tc-local-ac26",
+        "verifier",
+        ["sh"],
+      )[0],
+    ).toBe("compose");
   });
 });
 
