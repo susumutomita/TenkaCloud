@@ -2,287 +2,99 @@
   "version": 1,
   "description": "Approved set of npm packages with install-time lifecycle scripts (preinstall/install/postinstall/preprepare/prepare/postprepare). Bun's trustedDependencies model already blocks execution by default; this baseline pins the attack surface so any NEW package or NEW lifecycle hook in CI requires explicit human review. Update via: bun run scripts/audit-dependencies.ts --update",
   "entries": {
-    "@codemirror/autocomplete": [
-      "prepare"
-    ],
-    "@codemirror/commands": [
-      "prepare"
-    ],
-    "@codemirror/lang-css": [
-      "prepare"
-    ],
-    "@codemirror/lang-html": [
-      "prepare"
-    ],
-    "@codemirror/lang-javascript": [
-      "prepare"
-    ],
-    "@codemirror/lang-json": [
-      "prepare"
-    ],
-    "@codemirror/lang-xml": [
-      "prepare"
-    ],
-    "@codemirror/lang-yaml": [
-      "prepare"
-    ],
-    "@codemirror/language": [
-      "prepare"
-    ],
-    "@codemirror/lint": [
-      "prepare"
-    ],
-    "@codemirror/state": [
-      "prepare"
-    ],
-    "@codemirror/view": [
-      "prepare"
-    ],
-    "@eslint/eslintrc": [
-      "prepare"
-    ],
-    "@humanfs/core": [
-      "prepare"
-    ],
-    "@humanfs/node": [
-      "prepare"
-    ],
-    "@humanfs/types": [
-      "prepare"
-    ],
-    "@humanwhocodes/module-importer": [
-      "prepare"
-    ],
-    "@humanwhocodes/retry": [
-      "prepare"
-    ],
-    "@isaacs/balanced-match": [
-      "prepare"
-    ],
-    "@isaacs/brace-expansion": [
-      "prepare"
-    ],
-    "@lezer/common": [
-      "prepare"
-    ],
-    "@lezer/css": [
-      "prepare"
-    ],
-    "@lezer/highlight": [
-      "prepare"
-    ],
-    "@lezer/html": [
-      "prepare"
-    ],
-    "@lezer/javascript": [
-      "prepare"
-    ],
-    "@lezer/json": [
-      "prepare"
-    ],
-    "@lezer/lr": [
-      "prepare"
-    ],
-    "@lezer/xml": [
-      "prepare"
-    ],
-    "@lezer/yaml": [
-      "prepare"
-    ],
-    "@marijn/find-cluster-break": [
-      "prepare"
-    ],
-    "@sindresorhus/is": [
-      "prepare"
-    ],
-    "@so-ric/colorspace": [
-      "prepare"
-    ],
-    "@swc/core": [
-      "postinstall"
-    ],
-    "@textlint-ja/textlint-rule-preset-ai-writing": [
-      "prepare"
-    ],
-    "@textlint-rule/textlint-rule-no-invalid-control-character": [
-      "prepare"
-    ],
-    "@textlint-rule/textlint-rule-no-unmatched-pair": [
-      "prepare"
-    ],
-    "@textlint/regexp-string-matcher": [
-      "prepare"
-    ],
-    "acorn": [
-      "prepare"
-    ],
-    "acorn-walk": [
-      "prepare"
-    ],
-    "analyze-desumasu-dearu": [
-      "prepare"
-    ],
-    "aria-hidden": [
-      "prepare"
-    ],
-    "astring": [
-      "prepare"
-    ],
-    "aws4fetch": [
-      "prepare"
-    ],
-    "balanced-match": [
-      "prepare"
-    ],
-    "brace-expansion": [
-      "prepare"
-    ],
-    "crelt": [
-      "prepare"
-    ],
-    "dompurify": [
-      "prepare"
-    ],
-    "esbuild": [
-      "postinstall"
-    ],
-    "eventsource": [
-      "prepare"
-    ],
-    "express-rate-limit": [
-      "prepare"
-    ],
-    "fd-package-json": [
-      "prepare"
-    ],
-    "focus-trap": [
-      "prepare"
-    ],
-    "formatly": [
-      "prepare"
-    ],
-    "fuse.js": [
-      "prepare"
-    ],
-    "glob": [
-      "prepare"
-    ],
-    "globals": [
-      "prepare"
-    ],
-    "hashery": [
-      "prepare"
-    ],
-    "hookified": [
-      "prepare"
-    ],
-    "inline-style-parser": [
-      "prepare"
-    ],
-    "istanbul-reports": [
-      "prepare"
-    ],
-    "jsdom": [
-      "prepare"
-    ],
-    "keyv": [
-      "prepare"
-    ],
-    "kuromojin": [
-      "prepare"
-    ],
-    "lru-cache": [
-      "prepare"
-    ],
-    "minipass": [
-      "prepare"
-    ],
-    "path-scurry": [
-      "prepare"
-    ],
-    "path-to-regexp": [
-      "prepare"
-    ],
-    "rc-config-loader": [
-      "prepare"
-    ],
-    "rollup": [
-      "prepare"
-    ],
-    "sentence-splitter": [
-      "prepare"
-    ],
-    "set-cookie-parser": [
-      "prepare"
-    ],
-    "style-mod": [
-      "prepare"
-    ],
-    "style-to-js": [
-      "prepare"
-    ],
-    "style-to-object": [
-      "prepare"
-    ],
-    "tabbable": [
-      "prepare"
-    ],
-    "textlint-rule-ja-no-mixed-period": [
-      "prepare"
-    ],
-    "textlint-rule-ja-no-redundant-expression": [
-      "prepare"
-    ],
-    "textlint-rule-max-ten": [
-      "prepare"
-    ],
-    "textlint-rule-no-doubled-joshi": [
-      "prepare"
-    ],
-    "textlint-rule-no-dropping-the-ra": [
-      "prepare"
-    ],
-    "textlint-rule-no-mix-dearu-desumasu": [
-      "prepare"
-    ],
-    "textlint-rule-preset-jtf-style": [
-      "prepare"
-    ],
-    "textlint-rule-sentence-length": [
-      "prepare"
-    ],
-    "textlint-util-to-string": [
-      "prepare"
-    ],
-    "tinyexec": [
-      "prepare"
-    ],
-    "ts-api-utils": [
-      "prepare"
-    ],
-    "ts-node": [
-      "prepare"
-    ],
-    "undici": [
-      "prepare"
-    ],
-    "vue-demi": [
-      "postinstall"
-    ],
-    "w3c-keyname": [
-      "prepare"
-    ],
-    "walk-up-path": [
-      "prepare"
-    ],
-    "web-worker": [
-      "prepare"
-    ],
-    "whatwg-url": [
-      "prepare"
-    ],
-    "workerd": [
-      "postinstall"
-    ]
+    "@codemirror/autocomplete": ["prepare"],
+    "@codemirror/commands": ["prepare"],
+    "@codemirror/lang-css": ["prepare"],
+    "@codemirror/lang-html": ["prepare"],
+    "@codemirror/lang-javascript": ["prepare"],
+    "@codemirror/lang-json": ["prepare"],
+    "@codemirror/lang-xml": ["prepare"],
+    "@codemirror/lang-yaml": ["prepare"],
+    "@codemirror/language": ["prepare"],
+    "@codemirror/lint": ["prepare"],
+    "@codemirror/state": ["prepare"],
+    "@codemirror/view": ["prepare"],
+    "@eslint/eslintrc": ["prepare"],
+    "@humanfs/core": ["prepare"],
+    "@humanfs/node": ["prepare"],
+    "@humanfs/types": ["prepare"],
+    "@humanwhocodes/module-importer": ["prepare"],
+    "@humanwhocodes/retry": ["prepare"],
+    "@isaacs/balanced-match": ["prepare"],
+    "@isaacs/brace-expansion": ["prepare"],
+    "@lezer/common": ["prepare"],
+    "@lezer/css": ["prepare"],
+    "@lezer/highlight": ["prepare"],
+    "@lezer/html": ["prepare"],
+    "@lezer/javascript": ["prepare"],
+    "@lezer/json": ["prepare"],
+    "@lezer/lr": ["prepare"],
+    "@lezer/xml": ["prepare"],
+    "@lezer/yaml": ["prepare"],
+    "@marijn/find-cluster-break": ["prepare"],
+    "@sindresorhus/is": ["prepare"],
+    "@so-ric/colorspace": ["prepare"],
+    "@swc/core": ["postinstall"],
+    "@textlint-ja/textlint-rule-preset-ai-writing": ["prepare"],
+    "@textlint-rule/textlint-rule-no-invalid-control-character": ["prepare"],
+    "@textlint-rule/textlint-rule-no-unmatched-pair": ["prepare"],
+    "@textlint/regexp-string-matcher": ["prepare"],
+    "acorn": ["prepare"],
+    "acorn-walk": ["prepare"],
+    "analyze-desumasu-dearu": ["prepare"],
+    "aria-hidden": ["prepare"],
+    "astring": ["prepare"],
+    "aws4fetch": ["prepare"],
+    "balanced-match": ["prepare"],
+    "brace-expansion": ["prepare"],
+    "crelt": ["prepare"],
+    "dompurify": ["prepare"],
+    "esbuild": ["postinstall"],
+    "eventsource": ["prepare"],
+    "express-rate-limit": ["prepare"],
+    "fd-package-json": ["prepare"],
+    "focus-trap": ["prepare"],
+    "formatly": ["prepare"],
+    "fuse.js": ["prepare"],
+    "glob": ["prepare"],
+    "globals": ["prepare"],
+    "hashery": ["prepare"],
+    "hookified": ["prepare"],
+    "inline-style-parser": ["prepare"],
+    "istanbul-reports": ["prepare"],
+    "jsdom": ["prepare"],
+    "keyv": ["prepare"],
+    "kuromojin": ["prepare"],
+    "lru-cache": ["prepare"],
+    "minipass": ["prepare"],
+    "path-scurry": ["prepare"],
+    "path-to-regexp": ["prepare"],
+    "rc-config-loader": ["prepare"],
+    "rollup": ["prepare"],
+    "sentence-splitter": ["prepare"],
+    "set-cookie-parser": ["prepare"],
+    "style-mod": ["prepare"],
+    "style-to-js": ["prepare"],
+    "style-to-object": ["prepare"],
+    "tabbable": ["prepare"],
+    "textlint-rule-ja-no-mixed-period": ["prepare"],
+    "textlint-rule-ja-no-redundant-expression": ["prepare"],
+    "textlint-rule-max-ten": ["prepare"],
+    "textlint-rule-no-doubled-joshi": ["prepare"],
+    "textlint-rule-no-dropping-the-ra": ["prepare"],
+    "textlint-rule-no-mix-dearu-desumasu": ["prepare"],
+    "textlint-rule-preset-jtf-style": ["prepare"],
+    "textlint-rule-sentence-length": ["prepare"],
+    "textlint-util-to-string": ["prepare"],
+    "tinyexec": ["prepare"],
+    "ts-api-utils": ["prepare"],
+    "ts-node": ["prepare"],
+    "undici": ["prepare"],
+    "vue-demi": ["postinstall"],
+    "w3c-keyname": ["prepare"],
+    "walk-up-path": ["prepare"],
+    "web-worker": ["prepare"],
+    "whatwg-url": ["prepare"],
+    "workerd": ["postinstall"]
   }
 }
