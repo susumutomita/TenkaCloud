@@ -3,10 +3,8 @@ import { cp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createRequire } from "node:module";
 import { validateProblemsDirectory } from "./problems.mjs";
 
-const require = createRequire(import.meta.url);
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 function cacheRoot(env = process.env) {
@@ -19,12 +17,27 @@ async function packageVersion() {
   return packageJson.version;
 }
 
-function resolveBunBinary() {
-  try {
-    return require.resolve("bun/bin/bun.exe");
-  } catch {
-    return "bun";
+/**
+ * The bundled runtime is TypeScript, so running it needs Bun.
+ *
+ * This package deliberately does not depend on the `bun` npm package. That
+ * package ships a stub and downloads the real binary from a `postinstall`, so
+ * in any checkout installed with `--ignore-scripts` the stub stays a stub. It
+ * also puts that stub on `node_modules/.bin`, which shadows the real toolchain
+ * for every `#!/usr/bin/env bun` script in the monorepo, and it registers a new
+ * install-time script that `scripts/security/audit-dependencies.ts` is written
+ * to reject. Resolving from PATH keeps the dependency graph free of
+ * install-time scripts and says so plainly when Bun is missing.
+ */
+export function resolveBunBinary(env = process.env) {
+  const probe = spawnSync("bun", ["--version"], { encoding: "utf8", env });
+  if (probe.error || (probe.status ?? 1) !== 0) {
+    throw new Error(
+      "Bun is required to run the bundled TenkaCloud runtime, but no 'bun' was found on PATH.\n" +
+        "Install it with 'npm install -g bun' or from https://bun.sh, then run this command again.",
+    );
   }
+  return "bun";
 }
 
 function run(command, args, cwd, stdio = "inherit") {

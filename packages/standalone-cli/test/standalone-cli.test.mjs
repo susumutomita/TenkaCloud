@@ -6,7 +6,12 @@ import path from "node:path";
 import test from "node:test";
 import { loadConfig, saveConfig } from "../src/config.mjs";
 import { validateProblemsDirectory } from "../src/problems.mjs";
-import { assertAwsIdentity, normalizeAwsPrincipalArn, prepareRuntime } from "../src/runtime.mjs";
+import {
+  assertAwsIdentity,
+  normalizeAwsPrincipalArn,
+  prepareRuntime,
+  resolveBunBinary,
+} from "../src/runtime.mjs";
 
 async function tempDirectory() {
   return mkdtemp(path.join(os.tmpdir(), "tenkacloud-cli-"));
@@ -197,4 +202,15 @@ test("prepareRuntime should keep the validated tree when a later sync is refused
     entry.startsWith(".problems-staging-"),
   );
   assert.deepEqual(leftovers, []);
+});
+
+test("resolveBunBinary should name the missing prerequisite instead of failing on spawn", () => {
+  // Without a dependency on the `bun` npm package the binary comes from PATH,
+  // so an operator who has not installed it must be told that, not handed an
+  // ENOENT from part-way through a deploy.
+  assert.throws(
+    () => resolveBunBinary({ PATH: path.join(os.tmpdir(), "tenkacloud-no-bun-here") }),
+    /no 'bun' was found on PATH/,
+  );
+  assert.equal(resolveBunBinary(), "bun");
 });
