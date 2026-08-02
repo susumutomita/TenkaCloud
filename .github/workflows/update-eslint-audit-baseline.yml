@@ -1,0 +1,30 @@
+name: update-eslint-audit-baseline
+
+on:
+  push:
+    branches: [agent/strengthen-typescript-eslint]
+
+permissions:
+  contents: write
+
+jobs:
+  update-baseline:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: agent/strengthen-typescript-eslint
+          persist-credentials: true
+      - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: '1.3.11'
+      - run: bun install --frozen-lockfile --ignore-scripts
+      - run: bun scripts/security/audit-dependencies.ts --update
+      - run: |
+          rm .github/workflows/update-eslint-audit-baseline.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add scripts/security/audit-baseline.json .github/workflows/update-eslint-audit-baseline.yml
+          git commit -m 'Approve ESLint dependency lifecycle baseline'
+          git push
