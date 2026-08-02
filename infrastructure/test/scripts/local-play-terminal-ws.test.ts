@@ -30,6 +30,8 @@ const PROBLEM: ContainerProblem = {
   challengeEndpoints: {},
   verifyUrl: "http://127.0.0.1:18091/verify",
   secretEnv: ["FLAG_SEED"],
+  // [#2850] The terminal is per-problem opt-in; the socket tests need an opted-in problem.
+  terminal: { service: "verifier" },
   scoring: { kind: "verify", points: 100, wrongAnswerPenalty: 0, hints: [] },
 };
 
@@ -256,7 +258,7 @@ describe("terminal WebSocket transport (#2846)", () => {
   });
 });
 
-describe("compose shell spawner (#2846)", () => {
+describe("compose shell spawner (#2846/#2850)", () => {
   const unit = {
     problemId: PROBLEM.problemId,
     composePath: "/tmp/tc/remapped.compose.yml",
@@ -264,13 +266,24 @@ describe("compose shell spawner (#2846)", () => {
     secretEnv: PROBLEM.secretEnv,
     projectDirectory: "/catalog/sha256-bytes-padding/local",
   };
+  const units = new Map([[PROBLEM.problemId, unit]]);
+  const services = new Map([[PROBLEM.problemId, "verifier"]]);
   const shell: TerminalProcess = { write: () => {}, kill: () => {} };
   const handlers = { onData: () => {}, onExit: () => {} };
 
-  it("should exec into the first declared service of the problem's live compose unit", () => {
+  it("should exec into the metadata-declared service once its participant build is verified", () => {
+    const inspected: ComposeExecTarget[] = [];
     const calls: Array<{ target: ComposeExecTarget; service: string }> = [];
-    const spawn = createProblemShellSpawner(new Map([[PROBLEM.problemId, unit]]), {
-      listServices: () => ["verifier"],
+    const spawn = createProblemShellSpawner(units, services, {
+      inspectConfig: (target) => {
+        inspected.push(target);
+        // A multi-service config: the shell must pick the declared service, not
+        // whichever name sorts first ("db" would).
+        return new Map([
+          ["db", {}],
+          ["verifier", { buildTarget: "participant" }],
+        ]);
+      },
       spawnShell: (target, service) => {
         calls.push({ target, service });
         return shell;
@@ -279,31 +292,54 @@ describe("compose shell spawner (#2846)", () => {
 
     spawn(PROBLEM.problemId, handlers);
 
-    expect(calls).toEqual([
-      {
-        service: "verifier",
-        target: {
-          composePath: unit.composePath,
-          composeProjectName: unit.composeProjectName,
-          secretEnv: unit.secretEnv,
-          projectDirectory: unit.projectDirectory,
-        },
-      },
-    ]);
+    const expectedTarget = {
+      composePath: unit.composePath,
+      composeProjectName: unit.composeProjectName,
+      secretEnv: unit.secretEnv,
+      projectDirectory: unit.projectDirectory,
+    };
+    // The verification reads the same live unit the shell then enters.
+    expect(inspected).toEqual([expectedTarget]);
+    expect(calls).toEqual([{ service: "verifier", target: expectedTarget }]);
   });
 
   it("should throw for a problem with no recorded container unit", () => {
-    const spawn = createProblemShellSpawner(new Map(), { listServices: () => ["verifier"] });
+    const spawn = createProblemShellSpawner(new Map(), services, {
+      inspectConfig: () => new Map([["verifier", { buildTarget: "participant" }]]),
+    });
     // `ProblemTerminals` turns the throw into `spawn_failed`; a session attached to a
     // container that is not there would look alive and do nothing.
     expect(() => spawn(PROBLEM.problemId, handlers)).toThrow(/no running container recorded/);
   });
 
-  it("should throw when the compose file declares no service", () => {
-    const spawn = createProblemShellSpawner(new Map([[PROBLEM.problemId, unit]]), {
-      listServices: () => [],
+  it("should refuse a problem that never opted into a terminal", () => {
+    const inspectConfig = () => {
+      throw new Error("inspectConfig must not run for an undeclared problem");
+    };
+    const spawn = createProblemShellSpawner(units, new Map(), { inspectConfig });
+    expect(() => spawn(PROBLEM.problemId, handlers)).toThrow(/does not declare runtime\.terminal/);
+  });
+
+  it("should refuse a declared service that is not in the live compose config", () => {
+    const spawn = createProblemShellSpawner(units, services, {
+      inspectConfig: () => new Map([["db", { buildTarget: "participant" }]]),
       spawnShell: () => shell,
     });
-    expect(() => spawn(PROBLEM.problemId, handlers)).toThrow(/declares no service/);
+    expect(() => spawn(PROBLEM.problemId, handlers)).toThrow(/is not in its compose config/);
+  });
+
+  it.each([
+    ["a non-participant build target", { buildTarget: "author" }],
+    ["an image with no build section", {}],
+  ])("should refuse a terminal service running %s", (_label, build) => {
+    // The participant stage is the machine-checkable guarantee that the image excludes
+    // author-only material; anything else must never receive a shell.
+    const spawn = createProblemShellSpawner(units, services, {
+      inspectConfig: () => new Map([["verifier", build]]),
+      spawnShell: () => shell,
+    });
+    expect(() => spawn(PROBLEM.problemId, handlers)).toThrow(
+      /must build with target "participant"/,
+    );
   });
 });

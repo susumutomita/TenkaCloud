@@ -129,6 +129,9 @@ function problemView(
     lifecycle: {
       status,
       runtimeKind: "docker" as const,
+      // [#2850] Present only when the problem's metadata opts into the container
+      // terminal; the portal renders the terminal panel from this flag alone.
+      ...(problem.terminal ? { terminal: true as const } : {}),
       ...(cleanupRequired ? { cleanupRequired: true as const } : {}),
       // 非同期 start (202) の失敗理由。 compose stderr は loopback URL を含み得るので
       // browserText (= Codespaces の forwarded origin 書き換え) を通す。

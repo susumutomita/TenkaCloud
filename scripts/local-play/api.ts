@@ -335,6 +335,11 @@ function handleConsoleHandoffPost(
  * participant token is spent here, on a normal authenticated request, and exchanged for
  * a short-lived single-use ticket the upgrade can carry in its query string. Container
  * problems only: a simulated-cloud problem has no container to exec into.
+ *
+ * [#2850] The terminal is per-problem opt-in: only a problem whose metadata declares
+ * `runtime.terminal` may mint a ticket. A shell reads whatever the target image holds,
+ * so the default for every other problem — multi-service stacks, images carrying
+ * author-only material — is no ticket, hence no upgrade, hence no shell.
  */
 function handleTerminalHandoffPost(
   request: LocalPlayRequest,
@@ -346,8 +351,12 @@ function handleTerminalHandoffPost(
   const unauthorized = participantAuthError(request, state);
   if (unauthorized) return unauthorized;
   const problemId = decodePathSegment(match[1]);
-  if (problemId === undefined || !state.runtimes.has(problemId)) {
+  const runtime = problemId === undefined ? undefined : state.runtimes.get(problemId);
+  if (problemId === undefined || runtime === undefined) {
     return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_problem" } };
+  }
+  if (!runtime.problem.terminal) {
+    return { status: StatusCodes.NOT_FOUND, body: { error: "terminal_not_supported" } };
   }
   if (state.lifecycle.statusOf(problemId) !== "running") {
     return { status: StatusCodes.CONFLICT, body: { error: "not_running" } };

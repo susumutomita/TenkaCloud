@@ -293,16 +293,30 @@ export function spawnContainerShell(
 }
 
 /**
- * [#2846] The services a problem's compose file declares, in `compose config --services`
- * order (compose sorts them alphabetically, it is not file order).
+ * [#2850] What the terminal needs to know about one compose service before a shell may
+ * enter it: whether the service exists in the resolved config, and which image build
+ * target it runs. Everything else in the config is irrelevant to that decision.
  */
-export type ComposeServiceLister = (target: ComposeExecTarget) => readonly string[];
+export interface ComposeServiceBuild {
+  /** `build.target` of the service; undefined when the service has no build section. */
+  readonly buildTarget?: string;
+}
 
-export const listComposeServices: ComposeServiceLister = (target) => {
+export type ComposeConfigInspector = (
+  target: ComposeExecTarget,
+) => ReadonlyMap<string, ComposeServiceBuild>;
+
+/**
+ * [#2850] Resolve the unit's compose config (`compose config --format json`) and report
+ * each declared service's build target. This reads the same file `compose up` ran from —
+ * the port-remapped copy when one exists — so what is verified is the configuration the
+ * running container was actually created with, not the catalog original.
+ */
+export const inspectComposeConfig: ComposeConfigInspector = (target) => {
   const cli = resolveComposeCli();
   const base = ["compose", "-f", target.composePath, "-p", target.composeProjectName];
   if (target.projectDirectory) base.push("--project-directory", target.projectDirectory);
-  base.push("config", "--services");
+  base.push("config", "--format", "json");
   const args = cli.command === "docker-compose" ? base.slice(1) : base;
   const result = spawnSync(cli.command, args, {
     cwd: REPO_ROOT,
@@ -313,50 +327,85 @@ export const listComposeServices: ComposeServiceLister = (target) => {
     const stderr = [result.stderr ?? "", result.error?.message ?? ""].filter(Boolean).join("\n");
     throw new Error(composeFailureMessage(`${cli.command} ${args.join(" ")}`, stderr));
   }
-  return (result.stdout ?? "")
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line !== "");
+  let config: unknown;
+  try {
+    config = JSON.parse(result.stdout ?? "");
+  } catch (error) {
+    throw new Error(`compose config for ${target.composeProjectName} is not valid JSON`, {
+      cause: error,
+    });
+  }
+  const services = (config as { services?: unknown }).services;
+  if (typeof services !== "object" || services === null || Array.isArray(services)) {
+    throw new Error(`compose config for ${target.composeProjectName} declares no services`);
+  }
+  const byName = new Map<string, ComposeServiceBuild>();
+  for (const [name, raw] of Object.entries(services)) {
+    const build = (raw as { build?: { target?: unknown } } | null)?.build;
+    const buildTarget = build?.target;
+    byName.set(name, typeof buildTarget === "string" ? { buildTarget } : {});
+  }
+  return byName;
 };
 
 export interface ProblemShellDeps {
-  readonly listServices?: ComposeServiceLister;
+  readonly inspectConfig?: ComposeConfigInspector;
   readonly spawnShell?: typeof spawnContainerShell;
 }
 
 /**
- * [#2846] The `serve` process's shell seam for {@link ProblemTerminals}: resolve the
- * problem's live compose unit and `exec` a shell into it.
+ * [#2846/#2850] The `serve` process's shell seam for {@link ProblemTerminals}: resolve
+ * the problem's live compose unit and `exec` a shell into it.
  *
  * `units` is the running-container ledger `serve` already maintains, so a problem with
  * no recorded unit throws — which the registry reports as `spawn_failed` rather than
  * handing back a session attached to nothing.
  *
- * The shell target is the FIRST declared service. Every problem in the track this
- * terminal exists for (the AC26 companion series, the sha256 series) declares exactly
- * one, so the choice is unambiguous there; a multi-service problem gets whichever name
- * sorts first, which is not necessarily the one worth a shell.
+ * The shell target is the service the problem's metadata declared in
+ * `runtime.terminal.service` — the terminal is per-problem opt-in, and a problem with
+ * no declaration is refused here even if a ticket somehow reached attach. Before the
+ * shell spawns, the unit's resolved compose config must show that service building with
+ * `target: participant`: that stage is the catalog's machine-checkable guarantee that
+ * the image excludes author-only material (`reference/`, mutations, hidden tests), and
+ * a shell into any other image would read whatever that image holds. Both checks fail
+ * closed — no fallback service, no unverified image.
  *
  * Docker is touched only here, on attach — never while merely listing problems.
  */
 export function createProblemShellSpawner(
   units: ReadonlyMap<string, LocalComposeUnit>,
+  terminalServices: ReadonlyMap<string, string>,
   deps: ProblemShellDeps = {},
 ): (problemId: string, handlers: ContainerShellHandlers) => TerminalProcess {
-  const listServices = deps.listServices ?? listComposeServices;
+  const inspectConfig = deps.inspectConfig ?? inspectComposeConfig;
   const spawnShell = deps.spawnShell ?? spawnContainerShell;
   return (problemId, handlers) => {
     const unit = units.get(problemId);
     if (!unit) throw new Error(`no running container recorded for problem ${problemId}`);
+    const service = terminalServices.get(problemId);
+    if (service === undefined) {
+      throw new Error(
+        `problem ${problemId} does not declare runtime.terminal — the terminal is per-problem opt-in`,
+      );
+    }
     const target: ComposeExecTarget = {
       composePath: unit.composePath,
       composeProjectName: unit.composeProjectName,
       secretEnv: unit.secretEnv,
       ...(unit.projectDirectory ? { projectDirectory: unit.projectDirectory } : {}),
     };
-    const service = listServices(target)[0];
-    if (service === undefined) {
-      throw new Error(`compose file for problem ${problemId} declares no service`);
+    const declared = inspectConfig(target).get(service);
+    if (declared === undefined) {
+      throw new Error(
+        `terminal service "${service}" of problem ${problemId} is not in its compose config`,
+      );
+    }
+    if (declared.buildTarget !== "participant") {
+      throw new Error(
+        `terminal service "${service}" of problem ${problemId} must build with ` +
+          `target "participant" (got ${declared.buildTarget ?? "no build target"}) — ` +
+          "the participant stage is the guarantee that the image holds no author-only material",
+      );
     }
     return spawnShell(target, service, handlers);
   };

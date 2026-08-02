@@ -41,12 +41,18 @@ function problem(problemId: string, port: number): ContainerProblem {
     challengeEndpoints: {},
     verifyUrl: `http://127.0.0.1:${port}/verify`,
     secretEnv: ["FLAG_SEED"],
+    // [#2850] The terminal is per-problem opt-in; these fixtures opt in.
+    terminal: { service: "verifier" },
     scoring: { kind: "verify", points: 100, wrongAnswerPenalty: 0, hints: [] },
   };
 }
 
 const PROBLEM = problem("sha256-bytes-padding", 18091);
 const OTHER = problem("ac26-w1-constraint-lab", 18093);
+/** A docker problem whose metadata never declared `runtime.terminal`. */
+const UNDECLARED: ContainerProblem = (({ terminal: _terminal, ...rest }) => rest)(
+  problem("wp-exposed-backup", 18095),
+);
 
 const SIMULATED: SimulatedCloudProblem = {
   problemId: "hello-multicloud",
@@ -71,7 +77,11 @@ interface FakeShell {
 function stateWith(options: CreateStateOptions = {}) {
   const shells: FakeShell[] = [];
   const state = createLocalPlayState(
-    { problems: [PROBLEM, OTHER], simulatedProblems: [SIMULATED], participantToken: TOKEN },
+    {
+      problems: [PROBLEM, OTHER, UNDECLARED],
+      simulatedProblems: [SIMULATED],
+      participantToken: TOKEN,
+    },
     {
       spawnShell: (_problemId, handlers) => {
         const written: string[] = [];
@@ -169,6 +179,30 @@ describe("terminal handoff endpoint (#2846)", () => {
 
     expect(response.status).toBe(StatusCodes.NOT_FOUND);
     expect(response.body).toEqual({ error: "unknown_problem" });
+  });
+
+  it("should refuse a docker problem that never opted into a terminal (#2850)", async () => {
+    // Running is not enough: without the metadata opt-in there is no ticket, so the
+    // upgrade — and therefore the shell — is unreachable for this problem.
+    const { state } = stateWith();
+    await state.lifecycle.ensureRunning(UNDECLARED.problemId);
+
+    const response = await handleLocalPlayRequest(handoff(UNDECLARED.problemId), state, NOW);
+
+    expect(response.status).toBe(StatusCodes.NOT_FOUND);
+    expect(response.body).toEqual({ error: "terminal_not_supported" });
+    expect(state.terminalHandoffs.size).toBe(0);
+  });
+
+  it("should refuse an attach for a problem outside the terminal registry (#2850)", async () => {
+    // Defense in depth behind the ticket gate: even a ticket forged for an undeclared
+    // problem would meet `unknown_problem` at the registry.
+    const { state } = stateWith();
+    await state.lifecycle.ensureRunning(UNDECLARED.problemId);
+
+    expect(
+      state.terminals.attach(UNDECLARED.problemId, { onData: () => {}, onExit: () => {} }),
+    ).toEqual({ ok: false, reason: "unknown_problem" });
   });
 
   it("should refuse a container problem that is not running", async () => {

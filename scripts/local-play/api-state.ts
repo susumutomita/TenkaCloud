@@ -359,9 +359,14 @@ export function createLocalPlayState(
   const units = new Map<string, LocalComposeUnit>();
   // [#2846] terminals ↔ lifecycle is mutually recursive (a shell may only attach to a
   // `running` container; a stopping container must kill its shells), so the back edge
-  // is a closure over `lifecycle` rather than a constructor argument. Only container
-  // problems are shell-able — a simulated-cloud problem has no container to exec into.
-  const terminals = new ProblemTerminals(new Set(catalog.keys()), {
+  // is a closure over `lifecycle` rather than a constructor argument. [#2850] Only
+  // problems whose metadata opts into `runtime.terminal` are shell-able — a
+  // simulated-cloud problem has no container to exec into, and a container problem
+  // that never declared a terminal must be refused even here, behind the ticket gate.
+  const terminalProblemIds = new Set(
+    [...catalog.values()].filter((problem) => problem.terminal).map((p) => p.problemId),
+  );
+  const terminals = new ProblemTerminals(terminalProblemIds, {
     spawnShell: options.spawnShell ?? fakeSpawnShell,
     statusOf: (problemId) => lifecycle.statusOf(problemId),
   });

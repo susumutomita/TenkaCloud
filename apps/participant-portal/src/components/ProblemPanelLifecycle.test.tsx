@@ -401,10 +401,18 @@ describe("ProblemPanel on-demand lifecycle (#2392 Phase 2)", () => {
   });
 
   describe("container terminal (#2846)", () => {
-    it("should show the container terminal for a running docker-runtime problem", () => {
-      renderPanel({ lifecycle: { status: "running", runtimeKind: "docker" } });
+    it("should show the container terminal for a running docker problem that opted in", () => {
+      renderPanel({ lifecycle: { status: "running", runtimeKind: "docker", terminal: true } });
 
       expect(screen.getByTestId("terminal-panel")).toBeInTheDocument();
+    });
+
+    it("should not show the container terminal for a docker problem without the opt-in (#2850)", () => {
+      // The terminal is per-problem opt-in: a docker runtime alone earns no shell, and
+      // the handoff endpoint would 404 anyway — rendering the panel would dead-end.
+      renderPanel({ lifecycle: { status: "running", runtimeKind: "docker" } });
+
+      expect(screen.queryByTestId("terminal-panel")).not.toBeInTheDocument();
     });
 
     it("should not show the container terminal for a running simulated-cloud problem", () => {
@@ -415,7 +423,9 @@ describe("ProblemPanel on-demand lifecycle (#2392 Phase 2)", () => {
 
     it("should not show the container terminal while the docker container is stopped/starting/error", () => {
       for (const status of ["stopped", "starting", "error"] as const) {
-        const { unmount } = renderPanel({ lifecycle: { status, runtimeKind: "docker" } });
+        const { unmount } = renderPanel({
+          lifecycle: { status, runtimeKind: "docker", terminal: true },
+        });
         expect(screen.queryByTestId("terminal-panel")).not.toBeInTheDocument();
         unmount();
       }
