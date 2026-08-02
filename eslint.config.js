@@ -1,6 +1,7 @@
 import sonarjs from "eslint-plugin-sonarjs";
 import tseslint from "typescript-eslint";
 
+// Keep the initial typed-lint scope bounded to repository automation scripts.
 const typedSourceFiles = ["scripts/**/*.ts"];
 const testFiles = ["**/*.test.ts", "**/*.spec.ts"];
 
