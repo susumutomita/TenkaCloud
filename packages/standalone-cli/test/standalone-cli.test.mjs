@@ -76,12 +76,56 @@ test("validateProblemsDirectory should reject nested symbolic links", async () =
   await assert.rejects(() => validateProblemsDirectory(root), /Symbolic links are not allowed/);
 });
 
-test("normalizeAwsPrincipalArn should preserve role paths and discard the session name", () => {
+test("normalizeAwsPrincipalArn should take the role name STS reports and drop the session", () => {
+  assert.equal(
+    normalizeAwsPrincipalArn("arn:aws:sts::123456789012:assumed-role/TenkaCloudOperator/alice"),
+    "arn:aws:iam::123456789012:role/TenkaCloudOperator",
+  );
+  // STS never puts the role's IAM path in an assumed-role ARN, so an extra
+  // segment is not a pathed role — it is a shape this function must not invent
+  // an identity from.
   assert.equal(
     normalizeAwsPrincipalArn(
-      "arn:aws:sts::123456789012:assumed-role/platform/TenkaCloudOperator/alice-session",
+      "arn:aws:sts::123456789012:assumed-role/platform/TenkaCloudOperator/alice",
     ),
-    "arn:aws:iam::123456789012:role/platform/TenkaCloudOperator",
+    undefined,
+  );
+});
+
+test("assertAwsIdentity should accept a configured role that carries an IAM path", () => {
+  // The lockout this prevents: a real role at `role/platform/TenkaCloudOperator`
+  // is reported by STS as `assumed-role/TenkaCloudOperator/<session>`, so a
+  // verbatim comparison refuses the operator every time. IAM role names are
+  // unique per account, so matching on the name is exact, not lax.
+  const identity = assertAwsIdentity(
+    { ...operatorConfig, allowedRoleArn: "arn:aws:iam::123456789012:role/platform/TenkaCloudOperator" },
+    () => ({
+      status: 0,
+      stdout: JSON.stringify({
+        Account: "123456789012",
+        Arn: "arn:aws:sts::123456789012:assumed-role/TenkaCloudOperator/session-9",
+      }),
+      stderr: "",
+    }),
+  );
+  assert.equal(identity.RoleArn, "arn:aws:iam::123456789012:role/TenkaCloudOperator");
+});
+
+test("assertAwsIdentity should still refuse a different role that shares no name", () => {
+  assert.throws(
+    () =>
+      assertAwsIdentity(
+        { ...operatorConfig, allowedRoleArn: "arn:aws:iam::123456789012:role/platform/TenkaCloudOperator" },
+        () => ({
+          status: 0,
+          stdout: JSON.stringify({
+            Account: "123456789012",
+            Arn: "arn:aws:sts::123456789012:assumed-role/AdministratorAccess/x",
+          }),
+          stderr: "",
+        }),
+      ),
+    /AWS role mismatch/,
   );
 });
 
