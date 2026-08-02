@@ -5,9 +5,9 @@ import Container from "@cloudscape-design/components/container";
 import Form from "@cloudscape-design/components/form";
 import FormField from "@cloudscape-design/components/form-field";
 import Header from "@cloudscape-design/components/header";
-import Input from "@cloudscape-design/components/input";
 import ProgressBar from "@cloudscape-design/components/progress-bar";
 import SpaceBetween from "@cloudscape-design/components/space-between";
+import Textarea from "@cloudscape-design/components/textarea";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import {
@@ -67,7 +67,7 @@ export function resolveOnboardingVariant({
  * 並べた構造で、 solved 表示 / 提出欄 / 状態 alert を flag 単位で持つ。
  *
  * - solved な flag: 「解答済 (+N pt)」 の success Alert
- * - 未 solved な flag: label 付き Input + submit Button (= per-flag の submitting state)
+ * - 未 solved な flag: label 付き Textarea + submit Button (= per-flag の submitting state)
  * - dev-mock mode では backend を叩かず `evaluateMockSubFlag` で local 評価する
  *   (Lite deploy ドリル #2696 は sub-flag ごとのチェックポイントコード一致を要求)
  * - 正解後は `onScored()` で /portal/me を refetch し、 server truth (= solved 状態) を読み直す
@@ -96,10 +96,6 @@ export function MultiFlagSubmissionPanel({
 }) {
   const t = useT();
   const isMock = useIsMock();
-  // dev-mock has no backend refetch to persist solved flags. Keep the solved ids
-  // at panel level (so the progress counter can reach the last step and reveal the
-  // completion handoff) and mirror them into the sessionStorage progress store —
-  // without it, navigating away unmounts the panel and the demo looks reset.
   const [mockSolvedIds, setMockSolvedIds] = useState<ReadonlySet<string>>(() =>
     isMock ? loadMockSolvedFlagIds(problemId) : new Set(),
   );
@@ -247,8 +243,6 @@ function WhatIsTutorialComplete() {
   const t = useT();
   const navigate = useNavigate();
 
-  // #2711 follow-up: 完走後の導線は実在ドリル 2 本に絞る (旧クエスト「欠けた数」は
-  // 削除済み)。 primary は AWS 不要のローカルモード、 次点で Lite 実デプロイ。
   return (
     <Container header={<Header variant="h3">{t("multi_flag.tutorial_complete_header")}</Header>}>
       <SpaceBetween size="m">
@@ -277,12 +271,6 @@ function WhatIsTutorialComplete() {
   );
 }
 
-/**
- * #2711 follow-up: 提出欄の label / description / placeholder を strict ドリルか否かで出し分ける
- * pure helper。 厳密ドリル (= what-is / local / lite) はクイズ回答欄なので 「(deployment output
- * value)」 接尾辞と 「部分一致 / Easter egg OK」 の demo helper が誤案内になる — 素の label +
- * 正直な drill 文言に差し替える。
- */
 export function subFlagFieldPresentation(
   strict: boolean,
   isMock: boolean,
@@ -330,10 +318,7 @@ function SubFlagRow({
 }) {
   const t = useT();
   const lang = useLang();
-  // [#2252] i18n.en.checks 由来の label 訳 (multi-verify)。 無ければ ja label に fallback。
   const label = lang === "en" && flag.i18n?.en?.label ? flag.i18n.en.label : flag.label;
-  // dev-mock mode のとき submit を backend に投げず evaluateMockSubFlag で local 評価する
-  // (= 単一 flag kind の FlagSubmissionPanel と同方針。 ドリル問題のみ per-flag 判定)。
   const isMock = useIsMock();
   const field = subFlagFieldPresentation(isStrictDrillProblem(problemId), isMock, label, t);
   const [value, setValue] = useState("");
@@ -341,8 +326,6 @@ function SubFlagRow({
   const [outcome, setOutcome] = useState<SubmitFlagOutcome | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // 正解直後 (mock / backend 共通): 祝祭 + 獲得スコア。 server 由来の solved 表示も同じ success
-  // Alert に倒すので、 「refetch が空振りして solved に切り替わらない」 mock mode も吸収できる。
   if (solved || outcome?.kind === "ok") {
     return (
       <>
@@ -392,11 +375,13 @@ function SubFlagRow({
           }
         >
           <FormField label={field.label} description={field.description}>
-            <Input
+            <Textarea
               value={value}
               onChange={(e) => setValue(e.detail.value)}
               placeholder={field.placeholder}
               disabled={submitting}
+              rows={6}
+              ariaLabel={field.label}
             />
           </FormField>
         </Form>
@@ -431,8 +416,6 @@ function SubFlagRow({
           {submitError}
         </Alert>
       )}
-      {/* [#2252] multi-verify: per-check progressive hints。 flat reveal route を再利用。
-          revealOrder="flat" のとき各 check の hint 順序ゲートを外す。 */}
       {flag.hints && flag.hints.length > 0 && (
         <HintsPanel
           apiBaseUrl={apiBaseUrl}
