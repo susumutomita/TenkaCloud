@@ -17,3 +17,11 @@ export const POLL_INTERVAL_MS = 30_000;
  * を引き起こす。Score / Leaderboard と同じ tick (30 秒) には乗せない。
  */
 export const NOTIFICATIONS_POLL_INTERVAL_MS = 60_000;
+
+/**
+ * Local-play runtime startup polling. This is intentionally separate from the opt-in
+ * AWS-backed status polling above: lifecycle fields only exist in local mode, and the
+ * browser must observe the asynchronous Docker build completing before it can expose
+ * the problem endpoints.
+ */
+export const LOCAL_LIFECYCLE_POLL_INTERVAL_MS = 1_000;
