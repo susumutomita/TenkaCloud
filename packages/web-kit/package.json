@@ -20,11 +20,11 @@
     "marked": "^18.0.6"
   },
   "peerDependencies": {
-    "@cloudscape-design/components": "^3.0.1334",
+    "@cloudscape-design/components": "^3.0.1338",
     "react": "^19.2.7"
   },
   "devDependencies": {
-    "@cloudscape-design/components": "^3.0.1334",
+    "@cloudscape-design/components": "^3.0.1338",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/react": "^19.2.17",
