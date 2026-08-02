@@ -1,9 +1,10 @@
 import { spawnSync } from "node:child_process";
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
+import { validateProblemsDirectory } from "./problems.mjs";
 
 const require = createRequire(import.meta.url);
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -34,10 +35,42 @@ function run(command, args, cwd, stdio = "inherit") {
   }
 }
 
+export function normalizeAwsPrincipalArn(arn) {
+  if (typeof arn !== "string") return undefined;
+  const assumedRole = /^arn:(aws|aws-us-gov|aws-cn):sts::(\d{12}):assumed-role\/(.+)\/[^/]+$/.exec(
+    arn,
+  );
+  if (!assumedRole) return undefined;
+  return `arn:${assumedRole[1]}:iam::${assumedRole[2]}:role/${assumedRole[3]}`;
+}
+
+async function syncProblems(config, destination) {
+  await validateProblemsDirectory(config.problemsDirectory);
+  const problemsDestination = path.join(destination, "problems");
+  const staging = path.join(
+    destination,
+    `.problems-staging-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+  );
+  try {
+    await cp(config.problemsDirectory, staging, {
+      recursive: true,
+      dereference: false,
+      errorOnExist: false,
+    });
+    await validateProblemsDirectory(staging);
+    await rm(problemsDestination, { recursive: true, force: true });
+    await rename(staging, problemsDestination);
+  } catch (error) {
+    await rm(staging, { recursive: true, force: true });
+    throw error;
+  }
+}
+
 export async function prepareRuntime(config, options = {}) {
   const source = options.runtimeSource ?? path.join(packageRoot, "runtime");
   const version = options.version ?? (await packageVersion());
-  const destination = options.runtimeDestination ?? path.join(cacheRoot(options.env), "runtime", version);
+  const destination =
+    options.runtimeDestination ?? path.join(cacheRoot(options.env), "runtime", version);
   const marker = path.join(destination, ".tenkacloud-runtime-version");
   const dependenciesMarker = path.join(destination, ".tenkacloud-dependencies-ready");
 
@@ -61,13 +94,7 @@ export async function prepareRuntime(config, options = {}) {
     await writeFile(dependenciesMarker, "ready\n", { mode: 0o600 });
   }
 
-  const problemsDestination = path.join(destination, "problems");
-  await rm(problemsDestination, { recursive: true, force: true });
-  await cp(config.problemsDirectory, problemsDestination, {
-    recursive: true,
-    dereference: false,
-    errorOnExist: false,
-  });
+  await syncProblems(config, destination);
   return destination;
 }
 
@@ -116,5 +143,16 @@ export function assertAwsIdentity(config, runner = runAws) {
       `AWS account mismatch. Configured=${config.awsAccountId}, logged-in=${parsed.Account}. No resources were modified.`,
     );
   }
-  return parsed;
+  const principalRoleArn = normalizeAwsPrincipalArn(parsed.Arn);
+  if (!principalRoleArn) {
+    throw new Error(
+      `AWS principal must be an assumed IAM role. Received=${parsed.Arn ?? "unknown"}. No resources were modified.`,
+    );
+  }
+  if (principalRoleArn !== config.allowedRoleArn) {
+    throw new Error(
+      `AWS role mismatch. Configured=${config.allowedRoleArn}, logged-in=${principalRoleArn}. No resources were modified.`,
+    );
+  }
+  return { ...parsed, RoleArn: principalRoleArn };
 }
