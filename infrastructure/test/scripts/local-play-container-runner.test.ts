@@ -30,12 +30,14 @@ const problem = (): ContainerProblem =>
 
 function makeDeps(over: Partial<ContainerRunnerDeps> = {}) {
   const compose: Array<[string, string, string, string | undefined]> = [];
+  const composeEnvs: NodeJS.ProcessEnv[] = [];
   const reached: string[] = [];
   const temps: Array<[string, string]> = [];
   const removed: string[] = [];
   const deps: ContainerRunnerDeps = {
-    runCompose: vi.fn((composePath, _p, action, _e, _a, projectDirectory) => {
+    runCompose: vi.fn((composePath, _p, action, env, _a, projectDirectory) => {
       compose.push([action, composePath, _p, projectDirectory]);
+      composeEnvs.push(env);
     }),
     waitForReachable: vi.fn(async (url: string) => {
       reached.push(url);
@@ -47,7 +49,7 @@ function makeDeps(over: Partial<ContainerRunnerDeps> = {}) {
     log: vi.fn(),
     ...over,
   };
-  return { deps, compose, reached, temps, removed };
+  return { deps, compose, composeEnvs, reached, temps, removed };
 }
 
 describe("ContainerRunner: start (#2392 Phase 2)", () => {
@@ -117,7 +119,7 @@ describe("ContainerRunner: start (#2392 Phase 2)", () => {
 
 describe("ContainerRunner: stop (#2392 Phase 2)", () => {
   it("should compose-down and remove the temp compose when remapped", async () => {
-    const { deps, compose, removed } = makeDeps();
+    const { deps, compose, composeEnvs, removed } = makeDeps();
     const runner = new ContainerRunner("/local", deps);
     const { unit } = await runner.start(problem(), 100);
     compose.length = 0; // ignore the up call
@@ -125,6 +127,7 @@ describe("ContainerRunner: stop (#2392 Phase 2)", () => {
     expect(compose).toEqual([
       ["down", "/local/tc-local-sqli-demo.compose.yml", "tc-local-sqli-demo", "/p/sqli-demo/local"],
     ]);
+    expect(composeEnvs[1]?.FLAG_SEED).toBe("tenkacloud-local-cleanup");
     expect(removed).toEqual(["/local/tc-local-sqli-demo.compose.yml"]);
   });
 

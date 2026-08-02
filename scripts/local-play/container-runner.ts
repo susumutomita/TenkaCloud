@@ -44,6 +44,10 @@ export class ContainerStartOwnershipError extends AggregateError {
   }
 }
 
+/** Compose still interpolates required variables during `down`, even though no
+ * container is started. Keep cleanup independent from the deploy secret. */
+const CLEANUP_SECRET_VALUE = "tenkacloud-local-cleanup";
+
 export interface ContainerRunnerDeps {
   readonly runCompose: (
     composePath: string,
@@ -145,8 +149,10 @@ export class ContainerRunner {
   /** Physical compose down; the ownership record and temp compose still remain retryable. */
   stopPhysical(unit: LocalComposeUnit): void {
     const env: NodeJS.ProcessEnv = { ...process.env };
-    // Blank the per-deploy secret names so compose interpolation does not warn on down.
-    for (const name of unit.secretEnv) env[name] = "";
+    // Compose treats an empty value as missing for `${NAME:?message}`. A
+    // non-secret placeholder is enough for interpolation; `down` never starts
+    // a container or evaluates the challenge's secret.
+    for (const name of unit.secretEnv) env[name] = CLEANUP_SECRET_VALUE;
     this.deps.runCompose(
       unit.composePath,
       unit.composeProjectName,

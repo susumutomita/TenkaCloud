@@ -130,12 +130,12 @@ Before the first environment deployment:
    metadata fail closed rather than trusting the caller's hostname. Set it to
    the custom domain if one is bound; the generated `*.workers.dev` hostname is
    rejected unless it is itself the configured origin.
-2. Run `bun run deploy --env staging` from the Worker directory. Wrangler
+1. Run `bun run deploy --env staging` from the Worker directory. Wrangler
    creates the environment-specific D1 database and writes its ID to the config.
-3. Apply migrations with
+1. Apply migrations with
    `bunx wrangler d1 migrations apply CONTROL_DB --env staging --remote`.
-4. Commit the generated non-secret D1 resource IDs.
-5. Repeat for production only after staging acceptance.
+1. Commit the generated non-secret D1 resource IDs.
+1. Repeat for production only after staging acceptance.
 
 Do not put Auth0 client secrets or Cloudflare tokens in `wrangler.jsonc`.
 Deployment uses the repository/environment secrets
