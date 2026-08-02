@@ -437,6 +437,7 @@ describe("composeArgs", () => {
       "tc-local-sqli-demo",
       "up",
       "-d",
+      "--build",
     ]);
   });
 
@@ -464,6 +465,7 @@ describe("composeArgs", () => {
       "/p/b/local",
       "up",
       "-d",
+      "--build",
     ]);
   });
 });
@@ -485,6 +487,7 @@ describe("composeArgsForCli", () => {
       "tc-local-sqli-demo",
       "up",
       "-d",
+      "--build",
     ]);
   });
 
