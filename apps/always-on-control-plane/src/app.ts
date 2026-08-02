@@ -180,40 +180,56 @@ export function createApp(options: AppOptions = {}): Hono<AppEnvironment> {
   // endpoints expose only deterministic, read-only material. Organizer and
   // participant endpoints reuse the same authentication boundaries as the
   // corresponding HTTP APIs; a client-supplied role can never expand access.
+  // Host, Origin, and the advertised resource URL all come from
+  // MCP_CANONICAL_ORIGIN, never from the request being validated.
   app.post("/mcp/developer", (context) =>
-    serveMcp(context.req.raw, context.env.CONTROL_DB, { role: "developer" }),
+    serveMcp(
+      context.req.raw,
+      context.env.CONTROL_DB,
+      { role: "developer" },
+      context.env.MCP_CANONICAL_ORIGIN,
+    ),
   );
   app.post("/mcp/problem-author", (context) =>
-    serveMcp(context.req.raw, context.env.CONTROL_DB, { role: "problem-author" }),
+    serveMcp(
+      context.req.raw,
+      context.env.CONTROL_DB,
+      { role: "problem-author" },
+      context.env.MCP_CANONICAL_ORIGIN,
+    ),
   );
 
   app.get(ORGANIZER_MCP_RESOURCE_METADATA_PATH, (context) =>
-    organizerMcpResourceMetadata(context.req.raw, context.env.AUTH0_ISSUER),
+    organizerMcpResourceMetadata(context.env.MCP_CANONICAL_ORIGIN, context.env.AUTH0_ISSUER),
   );
   app.use("/mcp/organizer", async (context, next) => {
     await next();
     if (context.res.status === StatusCodes.UNAUTHORIZED) {
       context.res.headers.set(
         "WWW-Authenticate",
-        organizerMcpAuthenticationChallenge(context.req.raw),
+        organizerMcpAuthenticationChallenge(context.env.MCP_CANONICAL_ORIGIN),
       );
     }
   });
   app.use("/mcp/organizer", options.organizerJwt ?? auth0JwtMiddleware());
   app.use("/mcp/organizer", options.organizerProjection ?? organizerProjectionMiddleware);
   app.post("/mcp/organizer", requireOrganizerRole(READING_ROLES), (context) =>
-    serveMcp(context.req.raw, context.env.CONTROL_DB, {
-      role: "organizer",
-      organizer: context.get("organizer"),
-    }),
+    serveMcp(
+      context.req.raw,
+      context.env.CONTROL_DB,
+      { role: "organizer", organizer: context.get("organizer") },
+      context.env.MCP_CANONICAL_ORIGIN,
+    ),
   );
 
   app.use("/mcp/participant", options.teamAuth ?? teamBearerMiddleware);
   app.post("/mcp/participant", (context) =>
-    serveMcp(context.req.raw, context.env.CONTROL_DB, {
-      role: "participant",
-      team: context.get("team"),
-    }),
+    serveMcp(
+      context.req.raw,
+      context.env.CONTROL_DB,
+      { role: "participant", team: context.get("team") },
+      context.env.MCP_CANONICAL_ORIGIN,
+    ),
   );
 
   app.use("/v1/system/*", options.systemAuth ?? systemAdminMiddleware);

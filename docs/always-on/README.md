@@ -121,6 +121,15 @@ Wrangler automatic provisioning is enabled by omitting the D1 resource ID.
 Before the first environment deployment:
 
 1. Replace the Auth0 placeholders in `wrangler.jsonc`.
+1. Replace `MCP_CANONICAL_ORIGIN` with the HTTPS origin that environment is
+   actually served on, for example `https://control.tenkacloud.example`. It is
+   the fixed allowlist for MCP `Host` and `Origin` validation and the resource
+   URL advertised in protected-resource metadata, so it is never derived from
+   the incoming request. The shipped value is an unusable placeholder: while it
+   is still in place every `/mcp/*` route and the organizer protected-resource
+   metadata fail closed rather than trusting the caller's hostname. Set it to
+   the custom domain if one is bound; the generated `*.workers.dev` hostname is
+   rejected unless it is itself the configured origin.
 2. Run `bun run deploy --env staging` from the Worker directory. Wrangler
    creates the environment-specific D1 database and writes its ID to the config.
 3. Apply migrations with

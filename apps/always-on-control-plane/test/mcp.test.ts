@@ -2,7 +2,11 @@ import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
 import { organizerForTest, teamForTest } from "../src/auth.js";
-import { mcpRequestWithoutCredentials, organizerMcpResourceMetadata } from "../src/mcp.js";
+import {
+  canonicalMcpOrigin,
+  mcpRequestWithoutCredentials,
+  organizerMcpResourceMetadata,
+} from "../src/mcp.js";
 
 const PROTOCOL_VERSION = "2026-07-28";
 const CLIENT_META = {
@@ -26,7 +30,11 @@ function modernRequest(
   method: string,
   params: Record<string, unknown> = {},
   name?: string,
-  init: { readonly origin?: string; readonly protocolVersion?: string } = {},
+  init: {
+    readonly origin?: string;
+    readonly protocolVersion?: string;
+    readonly host?: string;
+  } = {},
 ): RequestInit {
   const protocolVersion = init.protocolVersion ?? PROTOCOL_VERSION;
   return {
@@ -34,7 +42,7 @@ function modernRequest(
     headers: {
       accept: "application/json",
       "content-type": "application/json",
-      host: "control.example",
+      host: init.host ?? "control.example",
       "MCP-Protocol-Version": protocolVersion,
       "Mcp-Method": method,
       ...(name ? { "Mcp-Name": name } : {}),
@@ -400,47 +408,22 @@ describe("MCP 2026-07-28 stateless role endpoints (#2819)", () => {
       authorization_servers: [env.AUTH0_ISSUER],
       resource_name: "TenkaCloud organizer MCP",
     });
-    expect(() =>
-      organizerMcpResourceMetadata(
-        new Request("https://control.example/mcp/organizer"),
-        "http://issuer.example/",
-      ),
-    ).toThrow("AUTH0_ISSUER must be an HTTPS issuer URL");
-    expect(() =>
-      organizerMcpResourceMetadata(
-        new Request("https://control.example/mcp/organizer"),
-        "ftp://localhost/",
-      ),
-    ).toThrow("AUTH0_ISSUER must be an HTTPS issuer URL");
-    expect(() =>
-      organizerMcpResourceMetadata(
-        new Request("https://control.example/mcp/organizer"),
-        "https://user:password@issuer.example/",
-      ),
-    ).toThrow("AUTH0_ISSUER must be an HTTPS issuer URL");
-    expect(() =>
-      organizerMcpResourceMetadata(
-        new Request("https://control.example/mcp/organizer"),
-        "https://issuer.example/?unexpected=true",
-      ),
-    ).toThrow("AUTH0_ISSUER must be an HTTPS issuer URL");
-    expect(() =>
-      organizerMcpResourceMetadata(
-        new Request("https://control.example/mcp/organizer"),
-        "https://issuer.example/#unexpected",
-      ),
-    ).toThrow("AUTH0_ISSUER must be an HTTPS issuer URL");
+    for (const issuer of [
+      "http://issuer.example/",
+      "ftp://localhost/",
+      "https://user:password@issuer.example/",
+      "https://issuer.example/?unexpected=true",
+      "https://issuer.example/#unexpected",
+    ]) {
+      expect(() => organizerMcpResourceMetadata("https://control.example", issuer)).toThrow(
+        "AUTH0_ISSUER must be an HTTPS issuer URL",
+      );
+    }
     expect(
-      organizerMcpResourceMetadata(
-        new Request("http://localhost:8787/mcp/organizer"),
-        "http://localhost:8787/",
-      ).status,
+      organizerMcpResourceMetadata("http://localhost:8787", "http://localhost:8787/").status,
     ).toBe(200);
     expect(
-      organizerMcpResourceMetadata(
-        new Request("http://127.0.0.1:8787/mcp/organizer"),
-        "http://127.0.0.1:8787/",
-      ).status,
+      organizerMcpResourceMetadata("http://127.0.0.1:8787", "http://127.0.0.1:8787/").status,
     ).toBe(200);
 
     const organizer = {
@@ -600,5 +583,102 @@ describe("MCP 2026-07-28 stateless role endpoints (#2819)", () => {
     expect(output).toContain("always-on.mcp.request");
     expect(output).toContain("explain_concept");
     expect(output).not.toContain("MUST_NOT_LOG");
+  });
+});
+
+describe("MCP canonical origin pinning (#2831)", () => {
+  const CANONICAL = "https://control.example";
+
+  it("should reject an absent, placeholder, or non-canonical origin setting", () => {
+    const rejected: readonly (readonly [string, string | undefined])[] = [
+      ["unset", undefined],
+      ["empty", ""],
+      ["blank", "   "],
+      ["not a URL", "control.example"],
+      ["plain HTTP on a routable host", "http://control.example"],
+      ["a username", "https://operator@control.example"],
+      ["a password only", "https://:secret@control.example"],
+      ["a path", "https://control.example/mcp"],
+      ["a query", "https://control.example/?tenant=a"],
+      ["a fragment", "https://control.example/#mcp"],
+    ];
+    for (const [label, value] of rejected) {
+      expect(() => canonicalMcpOrigin(value), label).toThrow("MCP_CANONICAL_ORIGIN must be");
+    }
+    // The shipped staging/production values are deliberately unusable, so a
+    // deploy that forgets to set the real origin serves nothing.
+    expect(() => canonicalMcpOrigin("https://replace-me.example.invalid")).toThrow(
+      "MCP_CANONICAL_ORIGIN is still the deployment placeholder",
+    );
+  });
+
+  it("should accept an HTTPS origin and the loopback development hosts", () => {
+    expect(canonicalMcpOrigin(` ${CANONICAL} `).hostname).toBe("control.example");
+    expect(canonicalMcpOrigin("http://localhost:8787").hostname).toBe("localhost");
+    expect(canonicalMcpOrigin("http://127.0.0.1:8787").hostname).toBe("127.0.0.1");
+    expect(canonicalMcpOrigin("http://[::1]:8787").hostname).toBe("[::1]");
+  });
+
+  it("should reject a request whose own Host is the allowlist it would have supplied", async () => {
+    // The defect this pins: deriving the allowlist from `request.url` made
+    // every Host self-approving, so an alternate Worker hostname passed.
+    const alternate = await createApp().request(
+      "https://tenkacloud-always-on-control-plane.workers.dev/mcp/developer",
+      modernRequest("server/discover", {}, undefined, {
+        host: "tenkacloud-always-on-control-plane.workers.dev",
+      }),
+      env,
+    );
+    expect(alternate.status).toBe(403);
+  });
+
+  it("should accept the canonical hostname on any port and reject a foreign Origin", async () => {
+    // Both SDK checks are port-agnostic by design; the hostname is the pin.
+    const otherPort = await createApp().request(
+      "https://control.example:8443/mcp/developer",
+      modernRequest("server/discover", {}, undefined, { host: "control.example:8443" }),
+      env,
+    );
+    expect(otherPort.status).toBe(200);
+
+    const sameOrigin = await createApp().request(
+      `${CANONICAL}/mcp/developer`,
+      modernRequest("server/discover", {}, undefined, { origin: CANONICAL }),
+      env,
+    );
+    expect(sameOrigin.status).toBe(200);
+
+    const foreignOrigin = await createApp().request(
+      `${CANONICAL}/mcp/developer`,
+      modernRequest("server/discover", {}, undefined, { origin: "https://attacker.example" }),
+      env,
+    );
+    expect(foreignOrigin.status).toBe(403);
+  });
+
+  it("should advertise the configured resource URL rather than the requested one", async () => {
+    expect(
+      await organizerMcpResourceMetadata("https://mcp.tenkacloud.example", env.AUTH0_ISSUER).json(),
+    ).toMatchObject({ resource: "https://mcp.tenkacloud.example/mcp/organizer" });
+
+    const app = createApp();
+    const metadata = await app.request(
+      "https://attacker.example/.well-known/oauth-protected-resource/mcp/organizer",
+      { headers: { host: "attacker.example" } },
+      env,
+    );
+    await expect(metadata.json()).resolves.toMatchObject({
+      resource: `${CANONICAL}/mcp/organizer`,
+    });
+
+    const challenged = await app.request(
+      "https://attacker.example/mcp/organizer",
+      modernRequest("tools/list", {}, undefined, { host: "attacker.example" }),
+      env,
+    );
+    expect(challenged.status).toBe(401);
+    expect(challenged.headers.get("WWW-Authenticate")).toContain(
+      `resource_metadata="${CANONICAL}/.well-known/oauth-protected-resource/mcp/organizer"`,
+    );
   });
 });

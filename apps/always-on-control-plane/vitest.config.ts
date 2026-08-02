@@ -9,6 +9,9 @@ export default defineConfig({
       miniflare: {
         bindings: {
           TEST_MIGRATIONS: await readD1Migrations(path.join(import.meta.dirname, "migrations")),
+          // The deployed environments ship an unusable placeholder on purpose,
+          // so the suite configures the canonical origin its requests use.
+          MCP_CANONICAL_ORIGIN: "https://control.example",
         },
       },
     })),
