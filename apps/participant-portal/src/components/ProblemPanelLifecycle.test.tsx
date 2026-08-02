@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -147,6 +147,59 @@ describe("ProblemPanel on-demand lifecycle (#2392 Phase 2)", () => {
     });
 
     expect(onScored).toHaveBeenCalledTimes(3);
+  });
+
+  it("should enter Starting from the accepted start even when the refetched view still reports stopped", async () => {
+    // Repro (#2845): 202 が約束するのは 「start を受理した」 ことだけで、 `starting` は
+    // refetch でしか届かない。 その refetch がまだ "stopped" を返す場合 (server が evict
+    // 待ちで中断している / 更新が落ちた)、 旧実装は Start ボタンを描き直し、 "starting"
+    // gate の polling も有効にならず、 2 回目の click まで画面が固まっていた。
+    vi.useFakeTimers();
+    const onScored = vi.fn().mockResolvedValue(undefined);
+    apiMocks.startProblem.mockResolvedValue({ status: "starting" });
+    // 親 view は "stopped" のまま動かない (= refetch が遷移を届けなかった状況)。
+    renderPanel({ lifecycle: { status: "stopped" } }, onScored);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Start" }));
+    });
+
+    expect(screen.getAllByText("Starting…").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: "Start" })).not.toBeInTheDocument();
+
+    // そして自力で polling し、 2 回目の click を待たずに running を観測しにいく。
+    const afterClick = onScored.mock.calls.length;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_000);
+    });
+    expect(onScored.mock.calls.length).toBeGreaterThan(afterClick);
+  });
+
+  it("should fall back to the Start button when the accepted start ends in failure", async () => {
+    // 楽観表示は server が stopped 以外を報告するまで。 失敗 (error) が届いたら
+    // 素直に error 分岐へ戻り、 再試行できる状態になる。
+    const onScored = vi.fn().mockResolvedValue(undefined);
+    apiMocks.startProblem.mockResolvedValue({ status: "starting" });
+    const { rerender } = renderPanel({ lifecycle: { status: "stopped" } }, onScored);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Start" }));
+    });
+    expect(screen.getAllByText("Starting…").length).toBeGreaterThan(0);
+
+    rerender(
+      withProviders(
+        <ProblemPanel
+          problem={{ ...baseProblem, lifecycle: { status: "error", lastError: "build failed" } }}
+          apiBaseUrl="https://api.example.com"
+          sessionToken="team-key"
+          onScored={onScored}
+        />,
+      ),
+    );
+
+    expect(screen.getByText("build failed")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
   });
 
   it("should surface the error state with a message and a retry Start button", () => {
