@@ -3,7 +3,8 @@ import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
-import { useState } from "react";
+import { usePolling } from "@tenkacloud/web-kit";
+import { useCallback, useState } from "react";
 import type { ProblemLifecycleStatus, ProblemRuntimeKind } from "../api/portal-client";
 import {
   issueProblemConsoleHandoff,
@@ -11,6 +12,7 @@ import {
   startProblem,
   stopProblem,
 } from "../api/portal-client";
+import { LOCAL_LIFECYCLE_POLL_INTERVAL_MS } from "../constants/polling";
 import { useT } from "../i18n";
 import { formatProblemPanelActionError } from "./ProblemPanel.helpers";
 
@@ -63,6 +65,15 @@ export function ProblemLifecyclePanel({
   const [actionError, setActionError] = useState<string | null>(null);
   const simulatedCloud = runtimeKind === "simulated-cloud";
   const copy = simulatedCloud ? SIMULATOR_COPY : DOCKER_COPY;
+
+  const refreshStartingRuntime = useCallback(async () => {
+    await onScored();
+  }, [onScored]);
+
+  usePolling(refreshStartingRuntime, LOCAL_LIFECYCLE_POLL_INTERVAL_MS, {
+    enabled: status === "starting",
+    immediate: false,
+  });
 
   const runAction = async (action: LifecycleAction) => {
     setBusy(true);

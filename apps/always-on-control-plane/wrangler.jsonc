@@ -29,6 +29,11 @@
     "AUTH0_AUDIENCE": "https://api.tenkacloud.dev",
     "AUTH0_CLIENT_ID": "replace-me",
     "AUTH0_ROLES_CLAIM": "https://tenkacloud.dev/roles",
+    // The one origin this Worker answers on. MCP Host/Origin validation and the
+    // advertised protected-resource URL come from here, never from the request.
+    // `wrangler dev` serves the loopback origin below; every deployed
+    // environment must replace its placeholder or the MCP routes fail closed.
+    "MCP_CANONICAL_ORIGIN": "http://localhost:8787",
     // ADR-050 OIDC command seam: role/bus from `make deploy-always-on-command` outputs;
     // PROBLEMS_CATALOG is the JSON problemId -> problemDir map offered in Always-On events.
     "COMMAND_ROLE_ARN": "arn:aws:iam::000000000000:role/tenkacloud-alwayson-command",
@@ -52,6 +57,7 @@
         "AUTH0_AUDIENCE": "https://staging-api.tenkacloud.dev",
         "AUTH0_CLIENT_ID": "replace-me-staging",
         "AUTH0_ROLES_CLAIM": "https://tenkacloud.dev/roles",
+        "MCP_CANONICAL_ORIGIN": "https://replace-me-staging.example.invalid",
         "COMMAND_ROLE_ARN": "arn:aws:iam::000000000000:role/tenkacloud-alwayson-command",
         "COMMAND_AWS_REGION": "ap-northeast-1",
         "COMMAND_EVENT_BUS_ARN": "arn:aws:events:ap-northeast-1:000000000000:event-bus/replace-me",
@@ -73,6 +79,7 @@
         "AUTH0_AUDIENCE": "https://api.tenkacloud.dev",
         "AUTH0_CLIENT_ID": "replace-me",
         "AUTH0_ROLES_CLAIM": "https://tenkacloud.dev/roles",
+        "MCP_CANONICAL_ORIGIN": "https://replace-me.example.invalid",
         "COMMAND_ROLE_ARN": "arn:aws:iam::000000000000:role/tenkacloud-alwayson-command",
         "COMMAND_AWS_REGION": "ap-northeast-1",
         "COMMAND_EVENT_BUS_ARN": "arn:aws:events:ap-northeast-1:000000000000:event-bus/replace-me",

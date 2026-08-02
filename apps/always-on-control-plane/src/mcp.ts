@@ -337,11 +337,81 @@ function principalId(principal: McpPrincipal): string {
   return "public";
 }
 
-function transportRejection(request: Request): Response | undefined {
-  const requestHostname = new URL(request.url).hostname;
+const LOOPBACK_HOSTNAMES = new Set(["localhost", "127.0.0.1", "[::1]"]);
+const CONFIG_PLACEHOLDER = "replace-me";
+
+interface UrlSettingPolicy {
+  /** Completes the sentence "<setting> must be ...". */
+  readonly description: string;
+  /** Reject anything past the origin, so the value cannot smuggle a path. */
+  readonly bareOrigin?: boolean;
+  /** Reject the shipped `replace-me` value, so an unconfigured deploy fails. */
+  readonly rejectPlaceholder?: boolean;
+}
+
+/**
+ * Parse an operator-supplied URL setting under one policy: HTTPS (a loopback
+ * host may use HTTP so `wrangler dev` works), no embedded credentials, no
+ * query, and no fragment.
+ *
+ * Configuration is not request input. A value that fails the policy is a
+ * deployment mistake, so this throws and the route fails closed rather than
+ * falling back to something derived from the caller.
+ */
+function configuredUrl(setting: string, raw: string | undefined, policy: UrlSettingPolicy): URL {
+  const value = raw?.trim() ?? "";
+  let url: URL | undefined;
+  try {
+    url = value.length > 0 ? new URL(value) : undefined;
+  } catch {
+    url = undefined;
+  }
+  const isLoopback = url !== undefined && LOOPBACK_HOSTNAMES.has(url.hostname);
+  if (
+    url === undefined ||
+    !(url.protocol === "https:" || (url.protocol === "http:" && isLoopback)) ||
+    url.username.length > 0 ||
+    url.password.length > 0 ||
+    url.search.length > 0 ||
+    url.hash.length > 0 ||
+    (policy.bareOrigin === true && url.pathname !== "/")
+  ) {
+    throw new Error(`${setting} must be ${policy.description}`);
+  }
+  // Only the canonical origin rejects the placeholder. An unset AUTH0_ISSUER
+  // already fails loudly on the first JWKS fetch, but nothing downstream ever
+  // dials the canonical origin, so an unreplaced value would otherwise become
+  // a silently wrong allowlist and a silently wrong advertised resource URL.
+  if (policy.rejectPlaceholder === true && url.hostname.includes(CONFIG_PLACEHOLDER)) {
+    throw new Error(`${setting} is still the deployment placeholder`);
+  }
+  return url;
+}
+
+/**
+ * The one origin this deployment answers on, from configuration.
+ *
+ * Deriving it from the incoming request would make Host and Origin validation
+ * self-referential and would let a caller choose the `resource` URL advertised
+ * in protected-resource metadata and authentication challenges.
+ */
+export function canonicalMcpOrigin(configured: string | undefined): URL {
+  return configuredUrl("MCP_CANONICAL_ORIGIN", configured, {
+    description: "an HTTPS origin URL without credentials, path, query, or fragment",
+    bareOrigin: true,
+    rejectPlaceholder: true,
+  });
+}
+
+/**
+ * Both SDK checks compare hostnames port-agnostically, so a request that
+ * reaches the canonical hostname on another port is still accepted; the
+ * hostname is what pins the deployment.
+ */
+function transportRejection(request: Request, canonical: URL): Response | undefined {
+  const allowed = [canonical.hostname];
   return (
-    hostHeaderValidationResponse(request, [requestHostname]) ??
-    originValidationResponse(request, [requestHostname])
+    hostHeaderValidationResponse(request, allowed) ?? originValidationResponse(request, allowed)
   );
 }
 
@@ -353,35 +423,22 @@ export function mcpRequestWithoutCredentials(request: Request): Request {
   return new Request(request, { headers });
 }
 
-function organizerMcpResourceUrl(request: Request): URL {
-  return new URL("/mcp/organizer", request.url);
+function organizerMcpResourceUrl(canonicalOrigin: string | undefined): URL {
+  return new URL("/mcp/organizer", canonicalMcpOrigin(canonicalOrigin));
 }
 
 function authorizationServerUrl(issuer: string): string {
-  const issuerUrl = new URL(issuer);
-  const isLoopback =
-    issuerUrl.hostname === "localhost" ||
-    issuerUrl.hostname === "127.0.0.1" ||
-    issuerUrl.hostname === "[::1]";
-  const isAllowedProtocol =
-    issuerUrl.protocol === "https:" || (issuerUrl.protocol === "http:" && isLoopback);
-  if (
-    !isAllowedProtocol ||
-    issuerUrl.username.length > 0 ||
-    issuerUrl.password.length > 0 ||
-    issuerUrl.hash.length > 0 ||
-    issuerUrl.search.length > 0
-  ) {
-    throw new Error(
-      "AUTH0_ISSUER must be an HTTPS issuer URL without credentials, query, or fragment",
-    );
-  }
-  return issuerUrl.href;
+  return configuredUrl("AUTH0_ISSUER", issuer, {
+    description: "an HTTPS issuer URL without credentials, query, or fragment",
+  }).href;
 }
 
-export function organizerMcpResourceMetadata(request: Request, issuer: string): Response {
+export function organizerMcpResourceMetadata(
+  canonicalOrigin: string | undefined,
+  issuer: string,
+): Response {
   const metadata: OAuthProtectedResourceMetadata = {
-    resource: organizerMcpResourceUrl(request).href,
+    resource: organizerMcpResourceUrl(canonicalOrigin).href,
     authorization_servers: [authorizationServerUrl(issuer)],
     resource_name: "TenkaCloud organizer MCP",
     resource_documentation: "https://www.tenkacloud.com/docs/manual/organizer/",
@@ -394,9 +451,9 @@ export function organizerMcpResourceMetadata(request: Request, issuer: string): 
   });
 }
 
-export function organizerMcpAuthenticationChallenge(request: Request): string {
+export function organizerMcpAuthenticationChallenge(canonicalOrigin: string | undefined): string {
   return `Bearer realm="tenkacloud-organizer", resource_metadata="${getOAuthProtectedResourceMetadataUrl(
-    organizerMcpResourceUrl(request),
+    organizerMcpResourceUrl(canonicalOrigin),
   )}"`;
 }
 
@@ -411,8 +468,9 @@ export async function serveMcp(
   request: Request,
   db: D1Database,
   principal: McpPrincipal,
+  canonicalOrigin: string | undefined,
 ): Promise<Response> {
-  const rejected = transportRejection(request);
+  const rejected = transportRejection(request, canonicalMcpOrigin(canonicalOrigin));
   if (rejected) return rejected;
 
   const handler = createMcpHandler(() => createRoleServer(db, principal), {

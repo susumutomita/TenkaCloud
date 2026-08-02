@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -100,6 +100,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.clearAllMocks();
   window.localStorage.clear();
 });
@@ -134,6 +135,18 @@ describe("ProblemPanel on-demand lifecycle (#2392 Phase 2)", () => {
     expect(screen.queryByRole("button", { name: "Start" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Stop" })).not.toBeInTheDocument();
     expect(screen.queryByTestId("flag-panel")).not.toBeInTheDocument();
+  });
+
+  it("should refresh a starting runtime until its next lifecycle state arrives", async () => {
+    vi.useFakeTimers();
+    const onScored = vi.fn().mockResolvedValue(undefined);
+    renderPanel({ lifecycle: { status: "starting" } }, onScored);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_000);
+    });
+
+    expect(onScored).toHaveBeenCalledTimes(3);
   });
 
   it("should surface the error state with a message and a retry Start button", () => {
