@@ -3,10 +3,8 @@ import { cp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createRequire } from "node:module";
 import { validateProblemsDirectory } from "./problems.mjs";
 
-const require = createRequire(import.meta.url);
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 function cacheRoot(env = process.env) {
@@ -19,12 +17,27 @@ async function packageVersion() {
   return packageJson.version;
 }
 
-function resolveBunBinary() {
-  try {
-    return require.resolve("bun/bin/bun.exe");
-  } catch {
-    return "bun";
+/**
+ * The bundled runtime is TypeScript, so running it needs Bun.
+ *
+ * This package deliberately does not depend on the `bun` npm package. That
+ * package ships a stub and downloads the real binary from a `postinstall`, so
+ * in any checkout installed with `--ignore-scripts` the stub stays a stub. It
+ * also puts that stub on `node_modules/.bin`, which shadows the real toolchain
+ * for every `#!/usr/bin/env bun` script in the monorepo, and it registers a new
+ * install-time script that `scripts/security/audit-dependencies.ts` is written
+ * to reject. Resolving from PATH keeps the dependency graph free of
+ * install-time scripts and says so plainly when Bun is missing.
+ */
+export function resolveBunBinary(env = process.env) {
+  const probe = spawnSync("bun", ["--version"], { encoding: "utf8", env });
+  if (probe.error || (probe.status ?? 1) !== 0) {
+    throw new Error(
+      "Bun is required to run the bundled TenkaCloud runtime, but no 'bun' was found on PATH.\n" +
+        "Install it with 'npm install -g bun' or from https://bun.sh, then run this command again.",
+    );
   }
+  return "bun";
 }
 
 function run(command, args, cwd, stdio = "inherit") {
@@ -35,13 +48,38 @@ function run(command, args, cwd, stdio = "inherit") {
   }
 }
 
+/**
+ * Reduce an STS assumed-role ARN to the IAM role ARN behind it.
+ *
+ * STS reports `assumed-role/<role-name>/<session-name>` — the role *name* only,
+ * never the role's IAM path. Neither segment can contain a slash, so both are
+ * matched as such.
+ */
 export function normalizeAwsPrincipalArn(arn) {
   if (typeof arn !== "string") return undefined;
-  const assumedRole = /^arn:(aws|aws-us-gov|aws-cn):sts::(\d{12}):assumed-role\/(.+)\/[^/]+$/.exec(
-    arn,
-  );
+  const assumedRole =
+    /^arn:(aws|aws-us-gov|aws-cn):sts::(\d{12}):assumed-role\/([^/]+)\/[^/]+$/.exec(arn);
   if (!assumedRole) return undefined;
   return `arn:${assumedRole[1]}:iam::${assumedRole[2]}:role/${assumedRole[3]}`;
+}
+
+/**
+ * Reduce the configured role ARN to the same shape.
+ *
+ * An operator may legitimately configure a role that carries an IAM path, such
+ * as `arn:aws:iam::123456789012:role/platform/TenkaCloudOperator`. STS never
+ * echoes that path back, so comparing the two verbatim refuses a correctly
+ * configured operator with "AWS role mismatch" every time. Dropping the path
+ * loses no authority: IAM role names are unique within an account, so partition
+ * plus account plus name identifies exactly one role.
+ */
+export function normalizeAllowedRoleArn(arn) {
+  if (typeof arn !== "string") return undefined;
+  const role = /^arn:(aws|aws-us-gov|aws-cn):iam::(\d{12}):role\/(.+)$/.exec(arn);
+  if (!role) return undefined;
+  const name = role[3].split("/").filter(Boolean).pop();
+  if (!name) return undefined;
+  return `arn:${role[1]}:iam::${role[2]}:role/${name}`;
 }
 
 async function syncProblems(config, destination) {
@@ -149,7 +187,13 @@ export function assertAwsIdentity(config, runner = runAws) {
       `AWS principal must be an assumed IAM role. Received=${parsed.Arn ?? "unknown"}. No resources were modified.`,
     );
   }
-  if (principalRoleArn !== config.allowedRoleArn) {
+  const allowedRoleArn = normalizeAllowedRoleArn(config.allowedRoleArn);
+  if (!allowedRoleArn) {
+    throw new Error(
+      `Configured allowedRoleArn is not an IAM role ARN: ${config.allowedRoleArn ?? "unset"}. No resources were modified.`,
+    );
+  }
+  if (principalRoleArn !== allowedRoleArn) {
     throw new Error(
       `AWS role mismatch. Configured=${config.allowedRoleArn}, logged-in=${principalRoleArn}. No resources were modified.`,
     );

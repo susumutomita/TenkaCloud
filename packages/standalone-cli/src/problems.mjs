@@ -31,11 +31,15 @@ async function validateTree(root, resolvedRoot, current = root) {
 export async function validateProblemsDirectory(directory) {
   const root = path.resolve(directory);
   const rootStat = await lstat(root).catch(() => undefined);
+  // The symlink test has to come first. `lstat` on a link-to-directory reports
+  // `isDirectory() === false`, so with the order reversed the directory check
+  // fired instead and a symlinked root was refused as "does not exist" — the
+  // right outcome for the wrong reason, and an unreachable branch below it.
+  if (rootStat?.isSymbolicLink()) {
+    throw new Error(`Problems directory must not be a symbolic link: ${root}`);
+  }
   if (!rootStat?.isDirectory()) {
     throw new Error(`Problems directory does not exist or is not a directory: ${root}`);
-  }
-  if (rootStat.isSymbolicLink()) {
-    throw new Error(`Problems directory must not be a symbolic link: ${root}`);
   }
 
   const resolvedRoot = await realpath(root);
