@@ -346,6 +346,13 @@
         "vitest": "^4.1.9",
       },
     },
+    "packages/standalone-cli": {
+      "name": "@tenkacloud/cli",
+      "version": "0.1.0",
+      "bin": {
+        "tenkacloud": "src/cli.mjs",
+      },
+    },
     "packages/trust-bridge": {
       "name": "@TenkaCloud/trust-bridge",
       "version": "0.1.0",
@@ -1199,6 +1206,8 @@
     "@tenkacloud/always-on-control-plane": ["@tenkacloud/always-on-control-plane@workspace:apps/always-on-control-plane"],
 
     "@tenkacloud/auth-client": ["@tenkacloud/auth-client@workspace:packages/auth-client"],
+
+    "@tenkacloud/cli": ["@tenkacloud/cli@workspace:packages/standalone-cli"],
 
     "@tenkacloud/coordination-plugin-sdk": ["@tenkacloud/coordination-plugin-sdk@workspace:packages/coordination-plugin-sdk"],
 

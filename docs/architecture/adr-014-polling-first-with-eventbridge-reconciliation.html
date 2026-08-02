@@ -47,10 +47,21 @@
       <tr><th>Layer</th><th>Rule</th></tr>
       <tr>
         <td>Frontend</td>
-        <td><strong>Polling only. Introducing SSE or WebSocket is prohibited.</strong> All polling goes through the
-          shared <code>usePolling</code> hook (<code>@tenkacloud/web-kit</code>); apps do not hand-roll data-fetch
-          timers. Intervals are named constants per surface (e.g. <code>constants/polling.ts</code> in the tenant
-          admin console), not inline numbers.</td>
+        <td><strong>Polling only for server-state freshness on AWS-backed surfaces; introducing SSE or WebSocket
+          there is prohibited</strong> — <em>because</em> those backends are request-scoped Lambdas behind API
+          Gateway HTTP API and the platform is sized for the AWS Free Tier. A persistent connection needs an API
+          Gateway WebSocket API, a connection-registry table charged against the DynamoDB 1/1 provisioned-capacity
+          rule, and fan-out code; SSE instead pins a Lambda instance per open client for its full duration. All
+          polling goes through the shared <code>usePolling</code> hook (<code>@tenkacloud/web-kit</code>); apps do
+          not hand-roll data-fetch timers. Intervals are named constants per surface (e.g.
+          <code>constants/polling.ts</code> in the tenant admin console), not inline numbers.
+          <br><br>
+          <strong>Out of scope: local play</strong> (<code>scripts/local-play</code>). It runs as one long-lived
+          local <code>node:http</code> process with SQLite on the participant's own machine — no Lambda, no
+          DynamoDB, no API Gateway, no per-connection cost — so not one of the reasons above applies. Interactive
+          transports there (for example a shell attached to a problem container) are judged on their own merits
+          and are not barred by this ADR. This rule is a consequence of the AWS runtime, not a stylistic
+          preference: where that runtime does not impose it, it does not bind.</td>
       </tr>
       <tr>
         <td>Backend</td>

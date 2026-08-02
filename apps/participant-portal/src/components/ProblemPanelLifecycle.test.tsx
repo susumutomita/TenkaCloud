@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -151,6 +151,71 @@ describe("ProblemPanel on-demand lifecycle (#2392 Phase 2)", () => {
     });
 
     expect(onScored).toHaveBeenCalledTimes(3);
+  });
+
+  it("should keep polling from the accepted start when the refetch still reports stopped", async () => {
+    vi.useFakeTimers();
+    const onScored = vi.fn().mockResolvedValue(undefined);
+    apiMocks.startProblem.mockResolvedValue({ status: "starting" });
+    renderPanel({ lifecycle: { status: "stopped" } }, onScored);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Start" }));
+    });
+
+    expect(screen.getAllByText("Starting…").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: "Start" })).not.toBeInTheDocument();
+
+    const refreshesAfterClick = onScored.mock.calls.length;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_000);
+    });
+    expect(onScored.mock.calls.length).toBeGreaterThan(refreshesAfterClick);
+  });
+
+  it("should hand control back to the server once it reports a new lifecycle", async () => {
+    const user = userEvent.setup();
+    apiMocks.startProblem.mockResolvedValue({ status: "starting" });
+    const { rerender } = renderPanel({ lifecycle: { status: "stopped" } });
+
+    await user.click(screen.getByRole("button", { name: "Start" }));
+    await waitFor(() => expect(screen.getAllByText("Starting…").length).toBeGreaterThan(0));
+
+    rerender(
+      withProviders(
+        <ProblemPanel
+          problem={{ ...baseProblem, lifecycle: { status: "running" } }}
+          apiBaseUrl="https://api.example.com"
+          sessionToken="team-key"
+          onScored={async () => undefined}
+        />,
+      ),
+    );
+    await waitFor(() => expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument());
+  });
+
+  it("should expose a failed accepted start for retry when the server reports an error", async () => {
+    const user = userEvent.setup();
+    const onScored = vi.fn().mockResolvedValue(undefined);
+    apiMocks.startProblem.mockResolvedValue({ status: "starting" });
+    const { rerender } = renderPanel({ lifecycle: { status: "stopped" } }, onScored);
+
+    await user.click(screen.getByRole("button", { name: "Start" }));
+    await waitFor(() => expect(screen.getAllByText("Starting…").length).toBeGreaterThan(0));
+
+    rerender(
+      withProviders(
+        <ProblemPanel
+          problem={{ ...baseProblem, lifecycle: { status: "error", lastError: "build failed" } }}
+          apiBaseUrl="https://api.example.com"
+          sessionToken="team-key"
+          onScored={onScored}
+        />,
+      ),
+    );
+
+    expect(screen.getByText("build failed")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
   });
 
   it("should surface the error state with a message and a retry Start button", () => {
