@@ -2,6 +2,8 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
+const ROLE_ARN_RE = /^arn:(aws|aws-us-gov|aws-cn):iam::(\d{12}):role\/(.+)$/;
+
 export function configDirectory(env = process.env, platform = process.platform) {
   if (env.TENKACLOUD_CONFIG_DIR) return path.resolve(env.TENKACLOUD_CONFIG_DIR);
   if (platform === "win32") {
@@ -18,7 +20,13 @@ export function validateConfig(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("TenkaCloud configuration must be a JSON object.");
   }
-  const required = ["problemsDirectory", "awsAccountId", "awsRegion", "environment"];
+  const required = [
+    "problemsDirectory",
+    "awsAccountId",
+    "awsRegion",
+    "environment",
+    "allowedRoleArn",
+  ];
   for (const key of required) {
     if (typeof value[key] !== "string" || value[key].trim() === "") {
       throw new Error(`TenkaCloud configuration field '${key}' is required.`);
@@ -30,11 +38,20 @@ export function validateConfig(value) {
   if (!/^[a-z]{2}(?:-gov)?-[a-z]+-\d$/.test(value.awsRegion)) {
     throw new Error("awsRegion is not a valid AWS region name.");
   }
+  const allowedRoleArn = value.allowedRoleArn.trim();
+  const roleMatch = ROLE_ARN_RE.exec(allowedRoleArn);
+  if (!roleMatch) {
+    throw new Error("allowedRoleArn must be an IAM role ARN.");
+  }
+  if (roleMatch[2] !== value.awsAccountId) {
+    throw new Error("allowedRoleArn must belong to awsAccountId.");
+  }
   return {
     problemsDirectory: path.resolve(value.problemsDirectory),
     awsAccountId: value.awsAccountId,
     awsRegion: value.awsRegion,
     environment: value.environment,
+    allowedRoleArn,
   };
 }
 
