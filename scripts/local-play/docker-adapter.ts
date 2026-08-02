@@ -94,8 +94,12 @@ export function composeArgs(
   // contexts and volume mounts still resolve. Omitted (identity) for the first
   // problem, which runs from its own compose file.
   if (projectDirectory) base.push("--project-directory", projectDirectory);
+  // [#2851] `up -d` alone reuses an already-built image even when the problem's
+  // build context changed, so edited problems kept starting from stale images.
+  // `--build` re-runs the build for services with a `build:` section (layer
+  // cache keeps the no-change case fast) and leaves image-only services alone.
   return action === "up"
-    ? [...base, "up", "-d"]
+    ? [...base, "up", "-d", "--build"]
     : [...base, "down", "--volumes", "--remove-orphans"];
 }
 
