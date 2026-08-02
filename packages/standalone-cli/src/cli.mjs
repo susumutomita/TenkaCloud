@@ -28,16 +28,22 @@ async function promptInit() {
     const problemsDirectory = await rl.question("Problems directory: ");
     await validateProblemsDirectory(problemsDirectory.trim());
     const awsAccountId = await rl.question("AWS account ID (12 digits): ");
-    const awsRegion = (await rl.question("AWS region [ap-northeast-1]: ")).trim() || "ap-northeast-1";
-    const environment = (await rl.question("Environment [development]: ")).trim() || "development";
+    const allowedRoleArn = await rl.question(
+      "Allowed AWS operator role ARN (for example arn:aws:iam::123456789012:role/TenkaCloudOperator): ",
+    );
+    const awsRegion =
+      (await rl.question("AWS region [ap-northeast-1]: ")).trim() || "ap-northeast-1";
+    const environment =
+      (await rl.question("Environment [development]: ")).trim() || "development";
     const file = await saveConfig({
       problemsDirectory: path.resolve(problemsDirectory.trim()),
       awsAccountId: awsAccountId.trim(),
+      allowedRoleArn: allowedRoleArn.trim(),
       awsRegion,
       environment,
     });
     console.log(`Saved TenkaCloud configuration: ${file}`);
-    console.log("Next: aws login && tenkacloud deploy");
+    console.log("Next: aws login && tenkacloud doctor && tenkacloud deploy");
     return 0;
   } finally {
     rl.close();
@@ -51,6 +57,7 @@ async function doctor() {
   console.log(`Configuration: ${configPath()}`);
   console.log(`Problems: ${problems.problems.length} (${problems.root})`);
   console.log(`AWS account: ${identity.Account}`);
+  console.log(`AWS role: ${identity.RoleArn}`);
   console.log(`AWS region: ${config.awsRegion}`);
   console.log("TenkaCloud is ready to deploy.");
   return 0;
