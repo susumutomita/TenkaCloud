@@ -385,6 +385,16 @@ export function isProblemPlayable(problem: ParticipantProblemView): boolean {
 }
 
 /**
+ * [#2846] container terminal は docker runtime の問題にだけ出す。 simulated-cloud (= console
+ * handoff で足りる) と AWS mode (lifecycle 不在、 この endpoint 自体が存在しない) には出さない。
+ * stopped/starting/error は呼び出し側の `playable` 判定で既に play surface ごと隠れるため、
+ * ここでは runtimeKind だけを見れば足りる。
+ */
+export function shouldShowContainerTerminal(problem: ParticipantProblemView): boolean {
+  return problem.lifecycle?.runtimeKind === "docker";
+}
+
+/**
  * #1975: パネル title は人間可読な name を優先し、 不在時 (= AWS mode で問題文未配信) は
  * problemId に fall back する。
  */

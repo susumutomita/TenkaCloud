@@ -82,6 +82,7 @@ const STOP_RE = /^\/portal\/me\/problems\/([^/]+)\/stop$/;
 const RESET_RE = /^\/portal\/me\/problems\/([^/]+)\/reset$/;
 const CONSOLE_HANDOFF_RE = /^\/portal\/me\/problems\/([^/]+)\/console-handoff$/;
 const CONSOLE_RE = /^\/portal\/me\/problems\/([^/]+)\/console$/;
+const TERMINAL_HANDOFF_RE = /^\/portal\/me\/problems\/([^/]+)\/terminal-handoff$/;
 const SCORE_RE = /^\/portal\/me\/problems\/([^/]+)\/score$/;
 const ENDPOINTS_RE = /^\/portal\/me\/problems\/([^/]+)\/endpoints$/;
 const ENDPOINT_RE = /^\/portal\/me\/problems\/([^/]+)\/endpoints\/([^/]+)$/;
@@ -89,6 +90,8 @@ const DISRUPTION_RE = /^\/local\/operator\/problems\/([^/]+)\/disruptions\/([^/]
 const SNAPSHOT_RE = /^\/local\/operator\/problems\/([^/]+)\/snapshots\/([^/]+)\/(export|import)$/;
 const REVEAL_RE = /^\/portal\/me\/problems\/([^/]+)\/hints\/([^/]+)\/reveal$/;
 const CONSOLE_HANDOFF_TTL_MS = 30_000;
+/** [#2846] Long enough for one browser upgrade, short enough that a leaked ticket is dead. */
+const TERMINAL_HANDOFF_TTL_MS = 30_000;
 
 /** Decode one percent-escaped path segment; undefined when malformed (→ 404, not 500). */
 function decodePathSegment(raw: string): string | undefined {
@@ -99,6 +102,33 @@ function decodePathSegment(raw: string): string | undefined {
   }
 }
 
+/**
+ * Both console handoff handlers (mint + redeem) gate on the same thing: the path
+ * segment must name a simulated-cloud problem whose world is deployed and running.
+ * Returns the error response to emit, or the resolved problem + live deployment.
+ */
+function resolveRunningSimulatedConsole(
+  state: LocalPlayState,
+  rawSegment: string,
+):
+  | { readonly response: LocalPlayResponse }
+  | {
+      readonly problemId: string;
+      readonly deployment: NonNullable<SimulatedProblemRuntime["deployment"]>;
+    } {
+  const problemId = decodePathSegment(rawSegment);
+  const runtime = problemId ? state.simulatedRuntimes.get(problemId) : undefined;
+  if (problemId === undefined || !runtime) {
+    return {
+      response: { status: StatusCodes.NOT_FOUND, body: { error: "unknown_simulated_problem" } },
+    };
+  }
+  if (state.lifecycle.statusOf(problemId) !== "running" || !runtime.deployment) {
+    return { response: { status: StatusCodes.CONFLICT, body: { error: "not_running" } } };
+  }
+  return { problemId, deployment: runtime.deployment };
+}
+
 async function handleConsoleHandoffGet(
   request: LocalPlayRequest,
   state: LocalPlayState,
@@ -106,28 +136,23 @@ async function handleConsoleHandoffGet(
 ): Promise<LocalPlayResponse | undefined> {
   const match = CONSOLE_RE.exec(request.path);
   if (!match) return undefined;
-  const problemId = decodePathSegment(match[1]);
-  const runtime = problemId ? state.simulatedRuntimes.get(problemId) : undefined;
-  if (!runtime) {
-    return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_simulated_problem" } };
-  }
-  if (state.lifecycle.statusOf(problemId) !== "running" || !runtime.deployment) {
-    return { status: StatusCodes.CONFLICT, body: { error: "not_running" } };
-  }
+  const resolved = resolveRunningSimulatedConsole(state, match[1]);
+  if ("response" in resolved) return resolved.response;
+  const { problemId, deployment } = resolved;
   const ticket = request.query.ticket;
   const handoff = ticket ? state.consoleHandoffs.get(ticket) : undefined;
   if (ticket) state.consoleHandoffs.delete(ticket);
   if (
     !handoff ||
     handoff.problemId !== problemId ||
-    handoff.deploymentId !== runtime.deployment.deploymentId ||
+    handoff.deploymentId !== deployment.deploymentId ||
     handoff.expiresAtMs <= now
   ) {
     return { status: StatusCodes.UNAUTHORIZED, body: { error: "invalid_console_handoff" } };
   }
   const consoleUrl = state.simulator
     ? await state.simulator.consoleUrl(problemId)
-    : runtime.deployment.consoleUrl;
+    : deployment.consoleUrl;
   return {
     status: StatusCodes.SEE_OTHER,
     body: undefined,
@@ -221,6 +246,8 @@ function handlePost(
   }
   const consoleHandoff = handleConsoleHandoffPost(request, state, now);
   if (consoleHandoff) return consoleHandoff;
+  const terminalHandoff = handleTerminalHandoffPost(request, state, now);
+  if (terminalHandoff) return terminalHandoff;
   const lifecycle = handleLifecyclePost(request.path, state, now);
   if (lifecycle) return lifecycle;
   const simulator = handleSimulatorPost(request, state);
@@ -236,6 +263,40 @@ function handlePost(
   return revealHint(problemId, hintId, state, iso);
 }
 
+/**
+ * Bearer guard shared by the handoff mints (console / terminal): both endpoints spend
+ * the participant token on a normal authenticated request and exchange it for a ticket,
+ * so they gate identically. 401 response when the token does not match, undefined when
+ * the request may proceed.
+ */
+function participantAuthError(
+  request: LocalPlayRequest,
+  state: LocalPlayState,
+): LocalPlayResponse | undefined {
+  if (request.authorization !== `Bearer ${state.participantToken}`) {
+    return { status: StatusCodes.UNAUTHORIZED, body: { error: "unauthorized" } };
+  }
+  return undefined;
+}
+
+/**
+ * Mint a single-use handoff ticket. Issuing is the only writer of these maps, so the
+ * sweep here is what keeps never-redeemed tickets from accumulating; redemption deletes
+ * unconditionally on lookup.
+ */
+function mintHandoffTicket<Entry extends { readonly expiresAtMs: number }>(
+  handoffs: Map<string, Entry>,
+  entry: Entry,
+  now: number,
+): string {
+  for (const [issued, handoff] of handoffs) {
+    if (handoff.expiresAtMs <= now) handoffs.delete(issued);
+  }
+  const ticket = randomBytes(32).toString("base64url");
+  handoffs.set(ticket, entry);
+  return ticket;
+}
+
 function handleConsoleHandoffPost(
   request: LocalPlayRequest,
   state: LocalPlayState,
@@ -243,31 +304,62 @@ function handleConsoleHandoffPost(
 ): LocalPlayResponse | undefined {
   const match = CONSOLE_HANDOFF_RE.exec(request.path);
   if (!match) return undefined;
-  if (request.authorization !== `Bearer ${state.participantToken}`) {
-    return { status: StatusCodes.UNAUTHORIZED, body: { error: "unauthorized" } };
-  }
-  const problemId = decodePathSegment(match[1]);
-  const runtime = problemId ? state.simulatedRuntimes.get(problemId) : undefined;
-  if (!runtime) {
-    return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_simulated_problem" } };
-  }
-  if (state.lifecycle.statusOf(problemId) !== "running" || !runtime.deployment) {
-    return { status: StatusCodes.CONFLICT, body: { error: "not_running" } };
-  }
-  for (const [ticket, handoff] of state.consoleHandoffs) {
-    if (handoff.expiresAtMs <= now) state.consoleHandoffs.delete(ticket);
-  }
-  const ticket = randomBytes(32).toString("base64url");
-  state.consoleHandoffs.set(ticket, {
-    problemId,
-    deploymentId: runtime.deployment.deploymentId,
-    expiresAtMs: now + CONSOLE_HANDOFF_TTL_MS,
-  });
+  const unauthorized = participantAuthError(request, state);
+  if (unauthorized) return unauthorized;
+  const resolved = resolveRunningSimulatedConsole(state, match[1]);
+  if ("response" in resolved) return resolved.response;
+  const { problemId, deployment } = resolved;
+  const ticket = mintHandoffTicket(
+    state.consoleHandoffs,
+    {
+      problemId,
+      deploymentId: deployment.deploymentId,
+      expiresAtMs: now + CONSOLE_HANDOFF_TTL_MS,
+    },
+    now,
+  );
   return {
     status: StatusCodes.OK,
     body: {
       handoffPath: `portal/me/problems/${encodeURIComponent(problemId)}/console?${new URLSearchParams({ ticket })}`,
     },
+    headers: { "cache-control": "no-store" },
+  };
+}
+
+/**
+ * [#2846] POST /portal/me/problems/:id/terminal-handoff — mint the one ticket the
+ * terminal WebSocket upgrade will accept.
+ *
+ * A browser cannot set an Authorization header on a WebSocket handshake, so the
+ * participant token is spent here, on a normal authenticated request, and exchanged for
+ * a short-lived single-use ticket the upgrade can carry in its query string. Container
+ * problems only: a simulated-cloud problem has no container to exec into.
+ */
+function handleTerminalHandoffPost(
+  request: LocalPlayRequest,
+  state: LocalPlayState,
+  now: number,
+): LocalPlayResponse | undefined {
+  const match = TERMINAL_HANDOFF_RE.exec(request.path);
+  if (!match) return undefined;
+  const unauthorized = participantAuthError(request, state);
+  if (unauthorized) return unauthorized;
+  const problemId = decodePathSegment(match[1]);
+  if (problemId === undefined || !state.runtimes.has(problemId)) {
+    return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_problem" } };
+  }
+  if (state.lifecycle.statusOf(problemId) !== "running") {
+    return { status: StatusCodes.CONFLICT, body: { error: "not_running" } };
+  }
+  const ticket = mintHandoffTicket(
+    state.terminalHandoffs,
+    { problemId, expiresAtMs: now + TERMINAL_HANDOFF_TTL_MS },
+    now,
+  );
+  return {
+    status: StatusCodes.OK,
+    body: { ticket, expiresInMs: TERMINAL_HANDOFF_TTL_MS },
     headers: { "cache-control": "no-store" },
   };
 }

@@ -12,7 +12,7 @@ import {
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { ContainerRunner } from "./container-runner";
+import { ContainerRunner, type LocalComposeUnit } from "./container-runner";
 import type { TerminalProcess } from "./problem-terminal";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -213,7 +213,25 @@ export interface ComposeExecTarget {
   readonly composePath: string;
   readonly composeProjectName: string;
   readonly projectDirectory?: string;
+  /** Declared `secretEnv` names; see {@link composeInterpolationEnv} for why they matter. */
+  readonly secretEnv?: readonly string[];
 }
+
+/**
+ * [#2846] Compose still interpolates `${NAME:?...}` when it merely *reads* the file, so
+ * `exec` and `config` fail with "required variable is missing" unless every declared
+ * `secretEnv` name is set — and the per-deploy secrets live only in the `up` invocation
+ * that generated them. A placeholder is enough and is not a leak: the exec'd process
+ * inherits the *container's* environment (the real secret, set at creation), never this
+ * value. `ContainerRunner.stopPhysical` does the same for `down`.
+ */
+function composeInterpolationEnv(secretEnv: readonly string[] = []): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  for (const name of secretEnv) env[name] = COMPOSE_INTERPOLATION_PLACEHOLDER;
+  return env;
+}
+
+const COMPOSE_INTERPOLATION_PLACEHOLDER = "tenkacloud-local-exec";
 
 /**
  * [#2846] Real shell adapter behind {@link ProblemTerminals}: `compose exec` into a
@@ -223,13 +241,17 @@ export interface ComposeExecTarget {
  * a traceback as much as a result, and a terminal that silently swallows stderr
  * makes a failing command look like a hanging one.
  */
+export interface ContainerShellHandlers {
+  /** Merged stdout/stderr from the shell. */
+  readonly onData: (chunk: string) => void;
+  /** Fires once when the shell ends, for any reason. */
+  readonly onExit: (code: number | null) => void;
+}
+
 export function spawnContainerShell(
   target: ComposeExecTarget,
   service: string,
-  handlers: {
-    readonly onData: (chunk: string) => void;
-    readonly onExit: (code: number | null) => void;
-  },
+  handlers: ContainerShellHandlers,
 ): TerminalProcess {
   const cli = resolveComposeCli();
   const args = composeExecArgsForCli(
@@ -240,7 +262,11 @@ export function spawnContainerShell(
     CONTAINER_SHELL_COMMAND,
     target.projectDirectory,
   );
-  const child = spawn(cli.command, args, { cwd: REPO_ROOT, stdio: ["pipe", "pipe", "pipe"] });
+  const child = spawn(cli.command, args, {
+    cwd: REPO_ROOT,
+    env: composeInterpolationEnv(target.secretEnv),
+    stdio: ["pipe", "pipe", "pipe"],
+  });
   child.stdout?.setEncoding("utf8");
   child.stderr?.setEncoding("utf8");
   child.stdout?.on("data", handlers.onData);
@@ -259,6 +285,76 @@ export function spawnContainerShell(
     kill: () => {
       child.kill("SIGKILL");
     },
+  };
+}
+
+/**
+ * [#2846] The services a problem's compose file declares, in `compose config --services`
+ * order (compose sorts them alphabetically, it is not file order).
+ */
+export type ComposeServiceLister = (target: ComposeExecTarget) => readonly string[];
+
+export const listComposeServices: ComposeServiceLister = (target) => {
+  const cli = resolveComposeCli();
+  const base = ["compose", "-f", target.composePath, "-p", target.composeProjectName];
+  if (target.projectDirectory) base.push("--project-directory", target.projectDirectory);
+  base.push("config", "--services");
+  const args = cli.command === "docker-compose" ? base.slice(1) : base;
+  const result = spawnSync(cli.command, args, {
+    cwd: REPO_ROOT,
+    env: composeInterpolationEnv(target.secretEnv),
+    encoding: "utf8",
+  });
+  if (result.status !== 0) {
+    const stderr = [result.stderr ?? "", result.error?.message ?? ""].filter(Boolean).join("\n");
+    throw new Error(composeFailureMessage(`${cli.command} ${args.join(" ")}`, stderr));
+  }
+  return (result.stdout ?? "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "");
+};
+
+export interface ProblemShellDeps {
+  readonly listServices?: ComposeServiceLister;
+  readonly spawnShell?: typeof spawnContainerShell;
+}
+
+/**
+ * [#2846] The `serve` process's shell seam for {@link ProblemTerminals}: resolve the
+ * problem's live compose unit and `exec` a shell into it.
+ *
+ * `units` is the running-container ledger `serve` already maintains, so a problem with
+ * no recorded unit throws — which the registry reports as `spawn_failed` rather than
+ * handing back a session attached to nothing.
+ *
+ * The shell target is the FIRST declared service. Every problem in the track this
+ * terminal exists for (the AC26 companion series, the sha256 series) declares exactly
+ * one, so the choice is unambiguous there; a multi-service problem gets whichever name
+ * sorts first, which is not necessarily the one worth a shell.
+ *
+ * Docker is touched only here, on attach — never while merely listing problems.
+ */
+export function createProblemShellSpawner(
+  units: ReadonlyMap<string, LocalComposeUnit>,
+  deps: ProblemShellDeps = {},
+): (problemId: string, handlers: ContainerShellHandlers) => TerminalProcess {
+  const listServices = deps.listServices ?? listComposeServices;
+  const spawnShell = deps.spawnShell ?? spawnContainerShell;
+  return (problemId, handlers) => {
+    const unit = units.get(problemId);
+    if (!unit) throw new Error(`no running container recorded for problem ${problemId}`);
+    const target: ComposeExecTarget = {
+      composePath: unit.composePath,
+      composeProjectName: unit.composeProjectName,
+      secretEnv: unit.secretEnv,
+      ...(unit.projectDirectory ? { projectDirectory: unit.projectDirectory } : {}),
+    };
+    const service = listServices(target)[0];
+    if (service === undefined) {
+      throw new Error(`compose file for problem ${problemId} declares no service`);
+    }
+    return spawnShell(target, service, handlers);
   };
 }
 

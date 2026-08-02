@@ -37,13 +37,17 @@ vi.mock("../api/portal-client", async (importOriginal) => {
   };
 });
 
-// FlagSubmissionPanel / MultiFlagSubmissionPanel は個別 test で 100% 済。 ここでは
-// 「play surface が出る / 差し替わる」 の分岐だけ testid で pin する。
+// FlagSubmissionPanel / MultiFlagSubmissionPanel / ProblemTerminalPanel は個別 test で
+// 100% 済。 ここでは 「play surface が出る / 差し替わる」 「terminal が docker running だけに
+// 出る」 の分岐だけ testid で pin する。
 vi.mock("./ProblemPanelFlagSubmission", () => ({
   FlagSubmissionPanel: () => <div data-testid="flag-panel" />,
 }));
 vi.mock("./MultiFlagSubmissionPanel", () => ({
   MultiFlagSubmissionPanel: () => <div data-testid="multi-flag-panel" />,
+}));
+vi.mock("./ProblemTerminalPanel", () => ({
+  ProblemTerminalPanel: () => <div data-testid="terminal-panel" />,
 }));
 
 function withProviders(node: React.ReactNode) {
@@ -326,6 +330,31 @@ describe("ProblemPanel on-demand lifecycle (#2392 Phase 2)", () => {
     expect(screen.getByTestId("flag-panel")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Start" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Stop" })).not.toBeInTheDocument();
+    // Issue #2846: the container terminal endpoint is local-play only; AWS mode
+    // (no lifecycle field at all) must never render it.
+    expect(screen.queryByTestId("terminal-panel")).not.toBeInTheDocument();
+  });
+
+  describe("container terminal (#2846)", () => {
+    it("should show the container terminal for a running docker-runtime problem", () => {
+      renderPanel({ lifecycle: { status: "running", runtimeKind: "docker" } });
+
+      expect(screen.getByTestId("terminal-panel")).toBeInTheDocument();
+    });
+
+    it("should not show the container terminal for a running simulated-cloud problem", () => {
+      renderPanel({ lifecycle: { status: "running", runtimeKind: "simulated-cloud" } });
+
+      expect(screen.queryByTestId("terminal-panel")).not.toBeInTheDocument();
+    });
+
+    it("should not show the container terminal while the docker container is stopped/starting/error", () => {
+      for (const status of ["stopped", "starting", "error"] as const) {
+        const { unmount } = renderPanel({ lifecycle: { status, runtimeKind: "docker" } });
+        expect(screen.queryByTestId("terminal-panel")).not.toBeInTheDocument();
+        unmount();
+      }
+    });
   });
 
   it("should render the multi-flag play surface when running (multi-flag kind)", () => {

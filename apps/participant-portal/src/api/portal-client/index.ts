@@ -15,6 +15,8 @@
  *   - sso.ts          — `getConsoleSigninUrl` / `getCliCredentials`
  *   - endpoints.ts    — endpoint override CRUD (3 fns)
  *   - problems.ts     — `getDeployLogs` / `getBattleAttacks`
+ *   - terminal.ts     — `issueProblemTerminalHandoff` / `problemTerminalUrl` (local-play
+ *     container shell, #2846)
  *
  * 新規 caller も index 経由を推奨 (= 個別ファイルに依存せず concern 移動に追随できる)。
  */
@@ -28,4 +30,5 @@ export * from "./problems";
 export * from "./scoring";
 export * from "./sso";
 export * from "./team";
+export * from "./terminal";
 export * from "./types";

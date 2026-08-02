@@ -29,6 +29,8 @@ export interface LocalServeShutdownDeps {
   readonly closeServer: () => Promise<void>;
   readonly scoringCycle?: Promise<void>;
   readonly persistState?: () => Promise<void>;
+  /** [#2846] Kill every container shell before its container is torn down. */
+  readonly closeTerminals?: () => void;
   readonly stopAll: () => Promise<void>;
   readonly closeSimulator: () => Promise<void>;
   readonly closeStateStore?: () => Promise<void>;
@@ -46,6 +48,13 @@ export async function shutdownLocalServe(deps: LocalServeShutdownDeps): Promise<
   await Promise.all([serverClosed, scoringSettled]);
   try {
     await deps.persistState?.();
+  } catch (error) {
+    errors.push(error);
+  }
+  try {
+    // Shells die before the containers they are attached to; `closeAll` is idempotent,
+    // so it does not matter that closing the server already reclaimed most of them.
+    deps.closeTerminals?.();
   } catch (error) {
     errors.push(error);
   }
