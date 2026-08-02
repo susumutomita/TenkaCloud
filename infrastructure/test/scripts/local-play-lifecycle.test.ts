@@ -186,23 +186,26 @@ describe("ProblemLifecycle: concurrency cap + LRU eviction (#2392 Phase 2)", () 
     expect(lc.statusOf("c")).toBe("running");
   });
 
-  it("should report starting while eviction is still in flight (Issue #2845)", async () => {
-    // POST /start answers 202 with `statusOf()` without awaiting the start. While the
-    // entry was still evicting, that snapshot read a literal "stopped" — the portal
-    // takes that as "nothing happened" and leaves the Start button up.
+  it("should report starting while eviction is still in flight", async () => {
+    // Issue #2845: `start` answers 202 with `statusOf(problemId)`. The status was
+    // only claimed after the eviction await, so at capacity the body said
+    // "stopped" for the problem the caller had just started — a literal wrong
+    // answer, not a stale one, and the portal had nothing else to go on.
     let releaseEviction: (() => void) | undefined;
-    const evicting = new Promise<void>((resolve) => {
-      releaseEviction = resolve;
-    });
+    const evictionStarted = Promise.withResolvers<void>();
     const { deps } = makeDeps({
       stopContainer: vi.fn(async () => {
-        await evicting;
+        evictionStarted.resolve();
+        await new Promise<void>((resolve) => {
+          releaseEviction = resolve;
+        });
       }),
     });
     const lc = new ProblemLifecycle(["a", "b"], deps, { maxRunning: 1 });
     await lc.ensureRunning("a");
 
-    const pending = lc.ensureRunning("b"); // at cap → suspends inside evictLru
+    const pending = lc.ensureRunning("b");
+    await evictionStarted.promise;
     expect(lc.statusOf("b")).toBe("starting");
 
     releaseEviction?.();
@@ -210,16 +213,16 @@ describe("ProblemLifecycle: concurrency cap + LRU eviction (#2392 Phase 2)", () 
     expect(lc.statusOf("b")).toBe("running");
   });
 
-  it("should surface an eviction failure instead of staying stuck in starting", async () => {
+  it("should leave a problem in error, not starting, when eviction fails", async () => {
     const { deps } = makeDeps({
       stopContainer: vi.fn(async () => {
-        throw new Error("docker rm refused");
+        throw new Error("docker compose down failed");
       }),
     });
     const lc = new ProblemLifecycle(["a", "b"], deps, { maxRunning: 1 });
     await lc.ensureRunning("a");
 
-    await expect(lc.ensureRunning("b")).rejects.toThrow(/docker rm refused/);
+    await expect(lc.ensureRunning("b")).rejects.toThrow(/docker compose down failed/);
     expect(lc.statusOf("b")).toBe("error");
   });
 });

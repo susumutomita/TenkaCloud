@@ -35,10 +35,12 @@ export function viewIsUnchanged(
       JSON.stringify(p.scoring) !== JSON.stringify(n.scoring) ||
       p.failureReason !== n.failureReason ||
       p.deployLog?.cursor !== n.deployLog?.cursor ||
-      // Issue #2845: local-play の on-demand container 状態も比較対象。 起動直後の refetch は
-      // `lifecycle.status` (stopped → starting) しか変わらず、 ここに無いと 「変化なし」 と
-      // 判定されて setView が prev を返し、 UI が永久に stopped のままになる。 status だけでなく
-      // lastError / cleanupRequired / runtimeKind も拾うため object 全体を比較する。
+      // Issue #2845: `lifecycle` was missing here, and it is the only field the
+      // refetch right after Start changes (`stopped` -> `starting`). Treating
+      // that as "unchanged" made `TeamViewProvider` keep `prev`, so the panel
+      // never rendered `starting` and the 1s poll gated on `status === "starting"`
+      // never armed — leaving no path back to `running` at all. Compared as JSON
+      // like `stackOutputs` above so a new sub-field cannot be dropped silently.
       JSON.stringify(p.lifecycle) !== JSON.stringify(n.lifecycle) ||
       JSON.stringify(p.stackOutputs) !== JSON.stringify(n.stackOutputs)
     ) {

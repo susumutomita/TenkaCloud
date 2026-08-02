@@ -138,23 +138,23 @@ export class ProblemLifecycle {
   }
 
   private async startEntry(problemId: string, entry: Entry): Promise<number> {
-    // [#2845] Mark "starting" before the first await. Eviction suspends this function,
-    // and POST /start answers 202 with `statusOf()` in the meantime — leaving the flag
-    // until after eviction makes that response report a literal "stopped", which the
-    // portal reads as "nothing happened".
+    // Issue #2845: claim `starting` before the first await. `start` returns 202
+    // with `statusOf(problemId)` in the body, and while eviction was awaited
+    // that still read `stopped` — reporting "not started" at the one moment the
+    // caller has just started it. Only reachable when every slot is taken, which
+    // is exactly when eviction makes the window wide.
     entry.status = "starting";
-    let offset: number;
+    let offset: number | undefined;
     try {
       if (this.freeOffsets.length === 0) await this.evictLru(problemId);
       // Always take the lowest free offset so port assignment is deterministic
       // (and a freed slot is reused before climbing higher).
       this.freeOffsets.sort((a, b) => a - b);
-      const free = this.freeOffsets.shift();
-      if (free === undefined) throw new Error("at capacity: no running problem to evict");
-      offset = free;
+      offset = this.freeOffsets.shift();
+      if (offset === undefined) throw new Error("at capacity: no running problem to evict");
     } catch (error) {
-      // Owning no port slot yet, so there is nothing to retain: surface the failure
-      // instead of leaving the entry stuck in "starting" forever.
+      // Claiming `starting` early means an eviction failure must not leave the
+      // entry stuck there; it owns nothing at this point, so no cleanup is due.
       entry.status = "error";
       entry.error = error instanceof Error ? error.message : String(error);
       throw error;

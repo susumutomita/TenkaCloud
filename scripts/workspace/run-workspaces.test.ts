@@ -167,15 +167,16 @@ describe("repo parity (the reviewable seam)", () => {
     "packages/problem-sdk",
     "packages/problem-test-harness",
     "packages/saml-utils",
+    "packages/standalone-cli",
     "packages/trust-bridge",
     "packages/web-kit",
   ];
 
-  const allEighteen = ["infrastructure", ...appsAlphabetical, ...packagesAlphabetical];
+  const allNineteen = ["infrastructure", ...appsAlphabetical, ...packagesAlphabetical];
 
-  it("should discover exactly 18 workspaces from the root package.json", () => {
-    expect(workspaces).toHaveLength(18);
-    expect(workspaces.map((w) => w.dir).sort()).toEqual([...allEighteen].sort());
+  it("should discover exactly 19 workspaces from the root package.json", () => {
+    expect(workspaces).toHaveLength(19);
+    expect(workspaces.map((w) => w.dir).sort()).toEqual([...allNineteen].sort());
   });
 
   it("should plan build as infrastructure + every apps/* workspace (packages/* excluded)", () => {
@@ -183,13 +184,13 @@ describe("repo parity (the reviewable seam)", () => {
     expect(plan.included.map((w) => w.dir)).toEqual(["infrastructure", ...appsAlphabetical]);
   });
 
-  it("should plan typecheck across all 18 workspaces", () => {
+  it("should plan typecheck across all 19 workspaces", () => {
     const plan = planTask("typecheck", workspaces);
-    expect(plan.included.map((w) => w.dir)).toEqual(allEighteen);
+    expect(plan.included.map((w) => w.dir)).toEqual(allNineteen);
   });
 
-  it("should plan test across all 18 workspaces", () => {
+  it("should plan test across all 19 workspaces", () => {
     const plan = planTask("test", workspaces);
-    expect(plan.included.map((w) => w.dir)).toEqual(allEighteen);
+    expect(plan.included.map((w) => w.dir)).toEqual(allNineteen);
   });
 });

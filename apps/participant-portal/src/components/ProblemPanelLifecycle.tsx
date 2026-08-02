@@ -4,7 +4,7 @@ import Button from "@cloudscape-design/components/button";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import { usePolling } from "@tenkacloud/web-kit";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import type { ProblemLifecycleStatus, ProblemRuntimeKind } from "../api/portal-client";
 import {
   issueProblemConsoleHandoff,
@@ -63,22 +63,23 @@ export function ProblemLifecyclePanel({
   const t = useT();
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [startAccepted, setStartAccepted] = useState(false);
   const simulatedCloud = runtimeKind === "simulated-cloud";
   const copy = simulatedCloud ? SIMULATOR_COPY : DOCKER_COPY;
 
-  /**
-   * [#2845] container の start は 202 で返り、 `starting` への遷移は refetch 経由でしか届かない。
-   * その 1 回を取りこぼすと (server が evict 待ちでまだ stopped を返す / refetch が失敗する)
-   * polling の enable 条件も満たされず、 永久に stopped 表示のまま固まる。 start を受理した
-   * 事実を local state に残し、 server が stopped 以外を報告するまで starting を表示する。
-   */
-  const effectiveStatus: ProblemLifecycleStatus =
-    startAccepted && status === "stopped" ? "starting" : status;
-
-  useEffect(() => {
-    if (status !== "stopped") setStartAccepted(false);
-  }, [status]);
+  // Issue #2845: the status the action itself reported, held until the next
+  // refetch supersedes it. Relying only on the refetch made a single missed
+  // transition strand the panel: `starting` is what arms the poll below, so
+  // failing to observe it removed every path back to `running`.
+  const [reportedStatus, setReportedStatus] = useState<ProblemLifecycleStatus | null>(null);
+  // The server's word wins as soon as it moves; the override only covers the gap
+  // between the action returning and the refetch landing. Adjusted during render
+  // rather than in an effect so the stale value is never painted once.
+  const [lastServerStatus, setLastServerStatus] = useState<ProblemLifecycleStatus>(status);
+  if (status !== lastServerStatus) {
+    setLastServerStatus(status);
+    setReportedStatus(null);
+  }
+  const effectiveStatus = reportedStatus ?? status;
 
   const refreshStartingRuntime = useCallback(async () => {
     await onScored();
@@ -89,14 +90,15 @@ export function ProblemLifecyclePanel({
     immediate: false,
   });
 
-  const runAction = async (action: LifecycleAction, startsRuntime = false) => {
+  const runAction = async (action: LifecycleAction) => {
     setBusy(true);
     setActionError(null);
     try {
-      await action(apiBaseUrl, sessionToken, problemId);
-      if (startsRuntime) setStartAccepted(true);
+      const reported = await action(apiBaseUrl, sessionToken, problemId);
+      setReportedStatus(reported.status);
       await onScored();
     } catch (err) {
+      setReportedStatus(null);
       setActionError(formatProblemPanelActionError(t, err, "problem_panel.validation_error"));
     } finally {
       setBusy(false);
@@ -153,7 +155,7 @@ export function ProblemLifecyclePanel({
       </SpaceBetween>
     ) : (
       <SpaceBetween direction="horizontal" size="xs" alignItems="center">
-        <Button variant="primary" loading={busy} onClick={() => void runAction(startProblem, true)}>
+        <Button variant="primary" loading={busy} onClick={() => void runAction(startProblem)}>
           {t("problem_panel.lifecycle_start_button")}
         </Button>
         <Box variant="small" color="text-status-inactive">
@@ -164,7 +166,7 @@ export function ProblemLifecyclePanel({
 
   return (
     <SpaceBetween size="s">
-      {status === "error" && (
+      {effectiveStatus === "error" && (
         <Alert type="error" header={t(copy.errorHeader)}>
           <SpaceBetween size="xs">
             <Box>{t(copy.errorBody)}</Box>
