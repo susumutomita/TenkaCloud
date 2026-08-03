@@ -17,7 +17,8 @@
     "form:setup": "bun run scripts/form/setup.ts",
     "build": "bun run scripts/workspace/run-workspaces.ts build",
     "build:pages": "bun run generate:landing-locales && bun run generate:landing-docs && bun run stamp:landing-assets && bun run --filter @TenkaCloud/participant-portal build:pages && mkdir -p landing/portal-demo && cp -r apps/participant-portal/dist/. landing/portal-demo/ && bun run scripts/ops/participant-portal-runtime-config.ts --cloud-mode mock --event-title 'TenkaCloud Battle Demo' --out landing/portal-demo/runtime-config.json && bun run --filter @TenkaCloud/application-admin-console build:pages && mkdir -p landing/admin-demo && cp -r apps/application-admin-console/dist/. landing/admin-demo/",
-    "typecheck": "bun run scripts/workspace/run-workspaces.ts typecheck",
+    "typecheck": "bun run typecheck:scripts && bun run scripts/workspace/run-workspaces.ts typecheck",
+    "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json",
     "synth": "bun run --filter @TenkaCloud/infrastructure synth",
     "test": "bun run scripts/landing/generate-landing-locales.ts --check && bun run scripts/landing/generate-landing-docs.ts --check && bun test ./scripts/landing/landing-seo.test.ts ./scripts/landing/contact-form.test.ts ./scripts/form/setup-core.test.ts ./scripts/form/setup-run.test.ts ./scripts/workspace/run-coverage.test.ts ./scripts/workspace/run-workspaces.test.ts && bun run scripts/workspace/run-workspaces.ts test",
     "test:coverage": "bun run scripts/workspace/run-coverage.ts",
@@ -26,6 +27,8 @@
     "generate:landing-locales": "bun run scripts/landing/generate-landing-locales.ts",
     "generate:landing-docs": "bun run scripts/landing/generate-landing-docs.ts",
     "stamp:landing-assets": "bun run scripts/landing/stamp-asset-versions.ts",
+    "lint": "bun run lint:format && bun run lint:ts",
+    "lint:ts": "eslint scripts --max-warnings 0",
     "lint:md": "markdownlint-cli2 '**/*.md' '#**/node_modules' '#references' '#client' '#src' '#**/cdk.out/**' '#**/cdk.out.test/**' '#**/dist' '#problems/**' '#.cache/**'",
     "lint:text": "textlint '**/*.md' '!problems/**'",
     "lint:format": "biome check",
@@ -49,7 +52,10 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.3",
     "@textlint-ja/textlint-rule-preset-ai-writing": "^1.7.0",
+    "@types/bun": "^1.3.14",
     "@vitest/coverage-v8": "4.1.9",
+    "eslint": "^9.39.2",
+    "eslint-plugin-sonarjs": "^3.0.7",
     "husky": "^9.1.7",
     "jscpd": "^5.0.12",
     "jsdom": "^29.1.1",
@@ -62,7 +68,9 @@
     "textlint-rule-no-mixed-zenkaku-and-hankaku-number": "^1.0.0",
     "textlint-rule-preset-ja-spacing": "^2.4.3",
     "textlint-rule-preset-ja-technical-writing": "^12.0.2",
-    "textlint-rule-spellcheck-tech-word": "^5.0.0"
+    "textlint-rule-spellcheck-tech-word": "^5.0.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.2"
   },
   "overrides": {
     "@biomejs/biome": "2.5.3",

@@ -14,7 +14,7 @@
     "test:coverage": "vitest run --coverage --coverage.reporter=lcov --coverage.reporter=text --coverage.reportsDirectory=./coverage --coverage.exclude='dist/**' --coverage.exclude='**/*.test.ts*'"
   },
   "dependencies": {
-    "@cloudscape-design/components": "^3.0.1334",
+    "@cloudscape-design/components": "^3.0.1338",
     "@cloudscape-design/global-styles": "^1.0.61",
     "@tenkacloud/format": "workspace:*",
     "@tenkacloud/portal-contracts": "workspace:*",
@@ -32,7 +32,7 @@
     "@testing-library/user-event": "^14.6.1",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.4",
-    "@vitejs/plugin-react-swc": "^4.3.1",
+    "@vitejs/plugin-react-swc": "^4.3.3",
     "jsdom": "^29.1.1",
     "typescript": "~6.0.3",
     "vite": "^7.3.3",
