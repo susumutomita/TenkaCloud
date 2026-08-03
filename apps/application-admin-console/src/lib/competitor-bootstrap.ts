@@ -24,12 +24,6 @@ const DEFAULT_STACK_NAME = "tenkacloud-competitor-bootstrap";
  */
 export const COMPETITOR_BOOTSTRAP_TEMPLATE_URL_FALLBACK = `https://raw.githubusercontent.com/${TEMPLATE_REPO}/${TEMPLATE_BRANCH}/${TEMPLATE_PATH}`;
 
-/**
- * @deprecated #718: const は dev fallback。 production では runtime-config の
- * `competitorBootstrapTemplateUrl` を参照し、 builder 関数に渡すこと。
- */
-export const COMPETITOR_BOOTSTRAP_TEMPLATE_URL = COMPETITOR_BOOTSTRAP_TEMPLATE_URL_FALLBACK;
-
 function resolveTemplateUrl(templateUrl: string | undefined): string {
   return templateUrl && templateUrl.length > 0
     ? templateUrl

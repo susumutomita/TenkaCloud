@@ -1,15 +1,11 @@
 /**
- * [Issue #2527 Slice 1] SQL backend port — the injected executor contract and the
- * CONTROL_DATA_BACKEND selector. Not a domain module: this is the adapter-facing
- * seam the SQL repositories are built on.
+ * [Issue #2527 Slice 1] SQL backend port — the injected executor contract. Not a
+ * domain module: this is the adapter-facing seam the SQL repositories are built on.
  *
  * Extracted verbatim from the former all-aggregate `control-data/types.ts` so each
  * aggregate's domain contract lives in its own module. `../types.ts` re-exports this
  * module as a temporary compatibility barrel while consumers migrate to direct imports.
  */
-
-/** Backend selector value carried by the `CONTROL_DATA_BACKEND` flag. */
-export type ControlDataBackend = "dynamodb" | "turso";
 
 /** Positional bind parameter accepted by {@link SqlExecutor}. */
 export type SqlParam = string | number | bigint | null;

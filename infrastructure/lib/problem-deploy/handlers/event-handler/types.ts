@@ -9,10 +9,7 @@ import { ProgressionGateConfigSchema } from "../shared/progression-gate.js";
 
 // [Issue #2527 Slice 1 step 2] The domain module owns these shapes; this handler
 // re-exports them so existing importers keep their import path.
-export type {
-  EventProblemTarget,
-  EventStatus,
-} from "../../control-data/domain/events.js";
+export type { EventProblemTarget } from "../../control-data/domain/events.js";
 
 /**
  * 1 競技イベント (= ADR-004 の Event aggregate) の DDB 行 shape。
@@ -266,7 +263,6 @@ export const ScheduleEventRequestSchema = z
   .refine((v) => !(v.startsAt !== undefined && v.startNow === true), {
     message: "startsAt と startNow は同時指定不可",
   });
-export type ScheduleEventRequest = z.infer<typeof ScheduleEventRequestSchema>;
 
 export const TeamSummarySchema = z.object({
   teamId: z.string(),

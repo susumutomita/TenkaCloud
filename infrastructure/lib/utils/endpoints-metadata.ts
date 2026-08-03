@@ -12,7 +12,6 @@ import { decodeLargeEnvValue } from "./env-encoding.js";
 
 export {
   type ProblemEndpointSlot,
-  type ProblemEndpointSlotDefault,
   parseEndpointSlot,
   resolveDefaultUrl,
 } from "@tenkacloud/problem-sdk/internal";

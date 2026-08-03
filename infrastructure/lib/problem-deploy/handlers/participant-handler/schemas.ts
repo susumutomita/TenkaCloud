@@ -61,11 +61,6 @@ const OptionalIntFromQuery = z
   .transform((v) => (v === undefined ? undefined : Number(v)))
   .refine((v) => v === undefined || Number.isFinite(v), { message: "not_a_number" });
 
-const RequiredIntFromQuery = z
-  .string()
-  .transform((v) => Number(v))
-  .refine((v) => Number.isFinite(v), { message: "not_a_number" });
-
 /* ────────── body schemas ────────── */
 
 /**
@@ -76,7 +71,6 @@ const RequiredIntFromQuery = z
 export const PatchMeBodySchema = z.object({
   teamName: z.string(),
 });
-export type PatchMeBody = z.infer<typeof PatchMeBodySchema>;
 
 /**
  * POST /portal/me/submit-flag — { problemId, flag, flagId? }。 旧 index.ts は service に渡す前に
@@ -90,7 +84,6 @@ export const SubmitFlagBodySchema = z.object({
   flag: z.string().min(1).max(200),
   flagId: z.string().min(1).max(64).optional(),
 });
-export type SubmitFlagBody = z.infer<typeof SubmitFlagBodySchema>;
 
 /**
  * POST /portal/me/cast-event — inter-team dispatch primitive
@@ -106,7 +99,6 @@ export const CastEventBodySchema = z.object({
   kind: z.string().regex(CAST_EVENT_KIND_RE, "invalid_kind"),
   payload: z.union([z.record(z.string(), z.unknown()), z.null(), z.undefined()]).optional(),
 });
-export type CastEventBody = z.infer<typeof CastEventBodySchema>;
 
 /**
  * POST /portal/me/coordination/op — body は { op }。 op の意味論 (alliance / route / 等) は
@@ -116,7 +108,6 @@ export type CastEventBody = z.infer<typeof CastEventBodySchema>;
 export const CoordinationOpBodySchema = z.object({
   op: z.unknown(),
 });
-export type CoordinationOpBody = z.infer<typeof CoordinationOpBodySchema>;
 
 /**
  * POST /portal/me/problems/:problemId/endpoints/:slot — body は { url }。
@@ -126,14 +117,12 @@ export type CoordinationOpBody = z.infer<typeof CoordinationOpBodySchema>;
 export const UpsertEndpointBodySchema = z.object({
   url: z.string(),
 });
-export type UpsertEndpointBody = z.infer<typeof UpsertEndpointBodySchema>;
 
 /* ────────── query schemas ────────── */
 
 export const SsoQuerySchema = z.object({
   jobId: JobIdSchema,
 });
-export type SsoQuery = z.infer<typeof SsoQuerySchema>;
 
 /**
  * [Composite Runtime / Issue #2077] Path params for the composite-target AWS
@@ -145,27 +134,23 @@ export const CompositeTargetAccessParamSchema = z.object({
   parentDeploymentId: JobIdSchema,
   targetDeploymentId: JobIdSchema,
 });
-export type CompositeTargetAccessParam = z.infer<typeof CompositeTargetAccessParamSchema>;
 
 export const NotificationsQuerySchema = z.object({
   /** undefined は handler 側で default (NOTIFICATIONS_DEFAULT_LIMIT) を適用する。 */
   limit: OptionalIntFromQuery,
 });
-export type NotificationsQuery = z.infer<typeof NotificationsQuerySchema>;
 
 export const EventInboxQuerySchema = z.object({
   jobId: JobIdSchema,
   /** undefined のときは handler 側で `Date.now() - INBOX_SINCE_MS_MAX` を default。 */
   sinceMs: OptionalIntFromQuery,
 });
-export type EventInboxQuery = z.infer<typeof EventInboxQuerySchema>;
 
 export const BattleAttacksQuerySchema = z.object({
   jobId: JobIdSchema,
   /** undefined のときは BATTLE_ATTACKS_SINCE_MIN_DEFAULT を handler 側で default。 */
   sinceMin: OptionalIntFromQuery,
 });
-export type BattleAttacksQuery = z.infer<typeof BattleAttacksQuerySchema>;
 
 export const DeployLogsQuerySchema = z.object({
   jobId: JobIdSchema,
@@ -173,29 +158,19 @@ export const DeployLogsQuerySchema = z.object({
   limit: z.string().optional(),
   nextToken: z.string().optional(),
 });
-export type DeployLogsQuery = z.infer<typeof DeployLogsQuerySchema>;
 
 /* ────────── path-param schemas ────────── */
 
 export const ProblemIdParamSchema = z.object({
   problemId: ProblemIdSchema,
 });
-export type ProblemIdParam = z.infer<typeof ProblemIdParamSchema>;
 
 export const ProblemSlotParamSchema = z.object({
   problemId: ProblemIdSchema,
   slot: SlotSchema,
 });
-export type ProblemSlotParam = z.infer<typeof ProblemSlotParamSchema>;
 
 export const ProblemHintParamSchema = z.object({
   problemId: ProblemIdSchema,
   hintId: HintIdSchema,
 });
-export type ProblemHintParam = z.infer<typeof ProblemHintParamSchema>;
-
-/** Re-export so unit tests can pin RequiredIntFromQuery if needed in the future. */
-export const __internal = {
-  OptionalIntFromQuery,
-  RequiredIntFromQuery,
-};

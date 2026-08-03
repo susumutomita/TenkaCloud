@@ -13,7 +13,7 @@ import { useT } from "../../i18n";
 import {
   buildLaunchStackUrl,
   buildShareablePayload,
-  COMPETITOR_BOOTSTRAP_TEMPLATE_URL,
+  COMPETITOR_BOOTSTRAP_TEMPLATE_URL_FALLBACK,
 } from "../../lib/competitor-bootstrap";
 
 /** How long the "Copied" confirmation stays lit after copying the full payload. */
@@ -30,7 +30,9 @@ export function SecretRevealModal({ secret, onDismiss, templateUrl }: SecretReve
   const [allCopied, setAllCopied] = useState(false);
   if (!secret) return null;
   const effectiveTemplateUrl =
-    templateUrl && templateUrl.length > 0 ? templateUrl : COMPETITOR_BOOTSTRAP_TEMPLATE_URL;
+    templateUrl && templateUrl.length > 0
+      ? templateUrl
+      : COMPETITOR_BOOTSTRAP_TEMPLATE_URL_FALLBACK;
   const payload = buildShareablePayload({
     tenkaCloudAccountId: secret.tenkaCloudAccountId,
     externalId: secret.externalId,

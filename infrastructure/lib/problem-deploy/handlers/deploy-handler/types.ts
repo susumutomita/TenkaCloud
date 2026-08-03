@@ -13,12 +13,6 @@ export type {
   HintRevealRecord,
 } from "../../control-data/domain/deployments.js";
 export type { DeploymentProvenance } from "../shared/deployment-provenance.js";
-export {
-  type DeployCreateRequestedDetail,
-  DeployCreateRequestedDetailSchema,
-  EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED,
-  EVENT_SOURCE,
-} from "../shared/events.js";
 
 export const DeploymentStatusSchema = z.enum([
   "PENDING",
@@ -72,7 +66,6 @@ export const DeployRequestSchema = z.object({
   accountGroupId: z.string().optional(),
   problemSetId: z.string().optional(),
 });
-export type DeployRequest = z.infer<typeof DeployRequestSchema>;
 
 /**
  * [Composite Runtime / Issue #2075] Request body for a `runtime.kind=composite`

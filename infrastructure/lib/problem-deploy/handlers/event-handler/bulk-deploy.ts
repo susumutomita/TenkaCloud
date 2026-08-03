@@ -19,4 +19,3 @@
  */
 
 export { bulkDeployEvent } from "./bulk-deploy/orchestrator.js";
-export type { BulkDeployOutcome, BulkDeployResult } from "./bulk-deploy/types.js";

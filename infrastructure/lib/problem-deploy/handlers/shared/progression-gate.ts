@@ -12,7 +12,6 @@ import { DELETED_LIKE_STATUSES, PROBLEM_ID_RE } from "./constants.js";
 // re-exports the types so existing importers keep their import path.
 export type {
   ProgressionGateConfig,
-  ProgressionGateTeamOverride,
   ProgressionGateTeamPolicy,
 } from "../../control-data/domain/events.js";
 

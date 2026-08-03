@@ -70,9 +70,7 @@ import {
 // [Issue #986 SOLID split] Parameter-override building lives in its own module; re-exported here
 // so this file's public API (and the existing test import path) stay unchanged.
 export {
-  type BuildParameterOverridesArgs,
   buildParameterOverrides,
-  type CfnParameter,
   generateRandomAlphanumeric,
   RANDOM_PASSWORD_TOKEN,
 } from "./parameter-overrides.js";

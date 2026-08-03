@@ -4,20 +4,8 @@ import { SqlNotificationsRepository } from "./sql-notifications-repository.js";
 import type { NotificationsRepository, SqlExecutor } from "./types.js";
 
 export { DynamoDbNotificationsRepository } from "./dynamodb-notifications-repository.js";
-export {
-  NOTIFICATIONS_SCHEMA_SQL,
-  SqlNotificationsRepository,
-} from "./sql-notifications-repository.js";
-export type {
-  ControlDataBackend,
-  NotificationRecord,
-  NotificationsPage,
-  NotificationsRepository,
-  SqlExecutor,
-  SqlParam,
-  SqlRow,
-  SqlRunResult,
-} from "./types.js";
+export { SqlNotificationsRepository } from "./sql-notifications-repository.js";
+export type { NotificationRecord, NotificationsRepository, SqlExecutor } from "./types.js";
 
 /**
  * Dependencies for {@link createNotificationsRepository}. Only the fields the

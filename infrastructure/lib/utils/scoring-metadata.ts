@@ -15,24 +15,17 @@ import {
 import { decodeLargeEnvValue } from "./env-encoding.js";
 
 export {
-  type AttackDetectionCategory,
   type AttackDetectionScoringMetadata,
   type CompositeProbeScoringMetadata,
   type CompositeProbeTarget,
   type FlagScoringMetadata,
-  type HintRevealMode,
   type MultiFlagEntry,
-  type MultiFlagScoringMetadata,
-  type PhasedPollingBonus,
-  type PhasedPollingPlatformRule,
-  type PhasedPollingResponsePenalty,
   type PhasedPollingScoringMetadata,
   type ProblemScoringMetadata,
   type ProgressiveHint,
   parseScoringMetadata,
   type UptimeFlatEndpoint,
   type UptimeFlatScoringMetadata,
-  type UptimeMultiProbedSlot,
   type UptimeMultiScoringMetadata,
 } from "@tenkacloud/problem-sdk/internal";
 

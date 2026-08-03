@@ -15,7 +15,3 @@ export const MATURITY_DESCRIPTIONS: Record<Maturity, string> = {
   preview: "Available for evaluation. May change before it stabilizes.",
   planned: "On the roadmap. Not yet implemented.",
 };
-
-export function isMaturity(value: string): value is Maturity {
-  return value === "stable" || value === "preview" || value === "planned";
-}

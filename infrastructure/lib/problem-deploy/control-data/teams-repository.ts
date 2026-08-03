@@ -9,18 +9,10 @@ export {
   SqlTeamsRepository,
   TEAM_LOGIN_KEY_SCRUB_MIGRATION_ID,
   TEAM_LOGIN_KEY_SCRUB_SQL,
-  TEAMS_SCHEMA_SQL,
 } from "./sql-teams-repository.js";
 export type {
-  ControlDataBackend,
   SqlExecutor,
-  SqlParam,
-  SqlRow,
-  SqlRunResult,
   TeamDeploymentRecord,
-  TeamLoginCredential,
-  TeamLoginKeyRotationInput,
-  TeamLoginKeyRotationOutcome,
   TeamRecord,
   TeamsRepository,
 } from "./types.js";

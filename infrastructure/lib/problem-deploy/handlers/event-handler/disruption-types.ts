@@ -2,7 +2,6 @@
  * Issue #888: Red Team Disruption Injection の API / store の共通 type 定義。
  */
 
-import type { ProblemDisruptionEntry } from "../../../utils/discover-problems-catalog.js";
 import type { DisruptionFireScope } from "../../control-data/domain/disruptions.js";
 
 // [Issue #2527 Slice 1 step 2] The domain module owns these shapes; this handler
@@ -57,7 +56,3 @@ export type DisruptionFireOutcome =
   | { kind: "invalid_parameters"; reason: string }
   | { kind: "invalid_scope"; reason: string }
   | { kind: "no_targets" };
-
-export interface DisruptionCatalogEntry extends ProblemDisruptionEntry {
-  readonly problemId: string;
-}

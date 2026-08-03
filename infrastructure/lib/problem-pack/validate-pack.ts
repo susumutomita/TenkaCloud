@@ -8,11 +8,6 @@
  * lifecycle) compile unchanged.
  */
 
-export type {
-  PackDiagnostic,
-  PackDiagnosticCode,
-  PackProblem,
-} from "@tenkacloud/problem-sdk/internal";
 export {
   PACK_MANIFEST_FILENAME,
   type PackValidationResult,

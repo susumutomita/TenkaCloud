@@ -4,17 +4,8 @@ import { SqlCompetitorAccountsRepository } from "./sql-competitor-accounts-repos
 import type { CompetitorAccountsRepository, SqlExecutor } from "./types.js";
 
 export { DynamoDbCompetitorAccountsRepository } from "./dynamodb-competitor-accounts-repository.js";
-export {
-  COMPETITOR_ACCOUNTS_SCHEMA_SQL,
-  COMPETITOR_ACCOUNTS_SCHEMA_STATEMENTS,
-  SqlCompetitorAccountsRepository,
-} from "./sql-competitor-accounts-repository.js";
-export type {
-  CompetitorAccountMutationOutcome,
-  CompetitorAccountRecord,
-  CompetitorAccountsRepository,
-  CreateCompetitorAccountOutcome,
-} from "./types.js";
+export { SqlCompetitorAccountsRepository } from "./sql-competitor-accounts-repository.js";
+export type { CompetitorAccountsRepository } from "./types.js";
 
 /**
  * Dependencies for {@link createCompetitorAccountsRepository}. Only the fields

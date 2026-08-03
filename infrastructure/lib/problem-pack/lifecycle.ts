@@ -56,16 +56,7 @@ import { validatePackDirectory } from "./validate-pack.js";
  * for the local {@link installPack}. The implementation lives in `git-source.ts`
  * because it owns the network transport boundary and its injectable fetcher.
  */
-export {
-  type GitArchiveFetcher,
-  type GitArchiveRequest,
-  type GitSource,
-  type InstallGitPackFailureReason,
-  type InstallGitPackOptions,
-  type InstallGitPackResult,
-  installGitPack,
-  parseGitSource,
-} from "./git-source.js";
+export { installGitPack } from "./git-source.js";
 
 /** Options for {@link installPack}. */
 export interface InstallPackOptions {

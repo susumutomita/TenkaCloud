@@ -1,12 +1,9 @@
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import { getPrerequisiteBlockByEventId } from "../participant-handler/challenge-access.js";
 import { type ParticipantSharedResources, queryTeamItems } from "../participant-handler/shared.js";
-import { isSsrfSafeUrl, unwrapIPv6MappedIPv4 } from "../shared/ssrf-guard.js";
+import { isSsrfSafeUrl } from "../shared/ssrf-guard.js";
 import { type ResolvedEndpoint, resolveEndpoints } from "./resolve.js";
 import { deleteOverride, putOverride, queryOverrides } from "./store.js";
-
-/** @deprecated re-export for existing tests; the SSRF guard now lives in `shared/ssrf-guard.ts`. */
-export const __testing_unwrapIPv6MappedIPv4 = unwrapIPv6MappedIPv4;
 
 /**
  * Endpoint registry (ADR-012 Phase 3.A) の business logic。
@@ -278,6 +275,3 @@ export async function deleteProblemEndpointOverride(
     }),
   };
 }
-
-// Test 用に DeploymentItem を引きたいケースのために re-export。
-export type { DeploymentItem };

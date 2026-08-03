@@ -13,7 +13,9 @@
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join } from "node:path";
-import { isAllowedCharCode } from "./lib/iam-description-ascii";
+// Gate logic は scripts/lib/ の共有実装 (docs/shared-utils.md) が単一の正。
+// infrastructure/test の synth assertion も同じ scanner を使う (= 判定ドリフト防止)。
+import { isAllowedCharCode } from "../../../../scripts/lib/iam-description-ascii";
 
 /**
  * プラットフォームが gate するのは自前の infrastructure/templates/ のみ。

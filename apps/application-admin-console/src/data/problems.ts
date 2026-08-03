@@ -27,7 +27,6 @@ export {
 export type {
   ProblemCategory,
   ProblemCostEstimateSummary,
-  ProblemCostResourceSummary,
   ProblemDetail,
   ProblemMetadata,
   ProblemRuntimeSummary,
