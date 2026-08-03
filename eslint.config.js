@@ -39,7 +39,12 @@ export default [
     languageOptions: {
       parser: tseslint.parser,
       parserOptions: {
-        project: ["./tsconfig.scripts.json"],
+        // Type-aware lint needs every linted file to belong to the program. `tsconfig.scripts.json`
+        // is the *typecheck gate* scope and #2861 narrowed it to a single file, so sharing it made
+        // the parser reject every other script with "The file was not found in any of the provided
+        // project(s)" (#2862 — 97 of the 148 findings). Lint therefore gets its own project that
+        // inherits the same compilerOptions but spans all of scripts/.
+        project: ["./tsconfig.eslint.json"],
         tsconfigRootDir: import.meta.dirname,
       },
     },
