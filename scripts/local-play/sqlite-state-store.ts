@@ -21,8 +21,8 @@ export async function openSqliteLocalPlayStateStore(path: string): Promise<Local
   const { Database } = await import("bun:sqlite");
   const database = new Database(path, { create: true, strict: true });
   chmodSync(path, 0o600);
-  database.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL;");
-  database.exec(`
+  database.run("PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL;");
+  database.run(`
     CREATE TABLE IF NOT EXISTS local_play_state (
       session_id TEXT PRIMARY KEY CHECK (session_id = 'default'),
       snapshot_json TEXT NOT NULL,

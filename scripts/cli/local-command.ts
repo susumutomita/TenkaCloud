@@ -35,6 +35,10 @@ function optionValue(args: readonly string[], index: number, option: string): st
 export function parseLocalCommand(args: readonly string[]): ParsedLocalCommand {
   const parsed: LocalCommandAccumulator = { database: "sqlite", positionals: [] };
   for (let index = 0; index < args.length; index += 1) {
+    // `consumeLocalArgument` returns the index of the last argv entry it consumed, which is
+    // one further along for `--option value` pairs than for bare flags. Advancing the counter
+    // from its return value is the point of the call, not an accident.
+    // eslint-disable-next-line sonarjs/updated-loop-counter -- variable-width argv consumption
     index = consumeLocalArgument(args, index, parsed);
   }
   return {

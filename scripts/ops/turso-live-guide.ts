@@ -187,13 +187,13 @@ function verifyStack(stackName: string, region: string, run: CommandRunner): Sta
   ]);
   const status = statusResult.stdout.trim();
   const statusOk = statusResult.status === 0 && stackStatusIsComplete(status);
-  lines.push(
-    statusOk
-      ? `✓ ${stackName}: ${status}`
-      : statusResult.status === 0
-        ? `✗ ${stackName}: status=${status || "unknown"}`
-        : commandFailure(`${stackName} status`, statusResult),
-  );
+  if (statusOk) {
+    lines.push(`✓ ${stackName}: ${status}`);
+  } else if (statusResult.status === 0) {
+    lines.push(`✗ ${stackName}: status=${status || "unknown"}`);
+  } else {
+    lines.push(commandFailure(`${stackName} status`, statusResult));
+  }
 
   const countResult = run("aws", [
     "cloudformation",
@@ -237,11 +237,12 @@ export function runCloudFormationVerification(
   const totalTables = countsKnown ? counts.reduce((sum, count) => sum + count, 0) : undefined;
   const ok = results.every((result) => result.ok) && totalTables === 0;
 
-  lines.push(
-    totalTables === undefined
-      ? "✗ DynamoDB tables: count unavailable"
-      : `${totalTables === 0 ? "✓" : "✗"} DynamoDB tables: ${totalTables}`,
-  );
+  if (totalTables === undefined) {
+    lines.push("✗ DynamoDB tables: count unavailable");
+  } else {
+    const mark = totalTables === 0 ? "✓" : "✗";
+    lines.push(`${mark} DynamoDB tables: ${totalTables}`);
+  }
   if (ok) {
     lines.push("✓ CloudFormation acceptance passed");
   } else {

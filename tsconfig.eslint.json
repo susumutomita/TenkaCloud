@@ -1,4 +1,7 @@
 {
   "extends": "./tsconfig.scripts.json",
+  "compilerOptions": {
+    "noUncheckedIndexedAccess": true
+  },
   "include": ["scripts/**/*.ts"]
 }

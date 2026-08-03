@@ -187,6 +187,10 @@ interface TimingResult {
 function runWorkspace(ws: CoverageWorkspace): TimingResult {
   console.log(`\n▶ ${ws.dir}`);
   const start = performance.now();
+  // Re-entering the same `bun` that is already running this file. mise pins the
+  // version, and the process is only ever started by a developer or the CI runner —
+  // both own their own PATH.
+  // eslint-disable-next-line sonarjs/no-os-command-from-path -- re-entrant bun call
   const result = spawnSync("bun", ["run", "--filter", ws.filter, "test:coverage"], {
     cwd: REPO_ROOT,
     stdio: "inherit",
@@ -255,6 +259,10 @@ function printSummary(results: readonly TimingResult[]): void {
 }
 
 function runFixCoveragePaths(): number {
+  // Re-entering the same `bun` that is already running this file. mise pins the
+  // version, and the process is only ever started by a developer or the CI runner —
+  // both own their own PATH.
+  // eslint-disable-next-line sonarjs/no-os-command-from-path -- re-entrant bun call
   const result = spawnSync("bun", ["run", "scripts/workspace/fix-coverage-paths.ts"], {
     cwd: REPO_ROOT,
     stdio: "inherit",

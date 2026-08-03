@@ -18,20 +18,25 @@ import {
   DEPLOY_TENKACLOUD_LITE_ZUNDAMON_VOICEOVER,
 } from "./voiceover-data";
 
+// Path fixtures use `/render-work` rather than `/tmp`: the functions under test
+// (`localizedVideoPath` / `localeWorkVideoPath` / `assertUnvoicedRecordedBase`) are pure
+// string transforms and never touch the filesystem, so the literal only has to look like an
+// absolute path — and a publicly writable one reads as a real target to a reviewer (and to
+// sonarjs/publicly-writable-directories).
 describe("recorded Lite Zundamon renderer", () => {
   it("should keep Japanese on the canonical URL and give English its own asset", () => {
-    expect(localizedVideoPath("/tmp/deploy-tenkacloud-lite.mp4", "ja")).toBe(
-      "/tmp/deploy-tenkacloud-lite.mp4",
+    expect(localizedVideoPath("/render-work/deploy-tenkacloud-lite.mp4", "ja")).toBe(
+      "/render-work/deploy-tenkacloud-lite.mp4",
     );
-    expect(localizedVideoPath("/tmp/deploy-tenkacloud-lite.mp4", "en")).toBe(
-      "/tmp/deploy-tenkacloud-lite.en.mp4",
+    expect(localizedVideoPath("/render-work/deploy-tenkacloud-lite.mp4", "en")).toBe(
+      "/render-work/deploy-tenkacloud-lite.en.mp4",
     );
   });
 
   it("should render each locale from an immutable source video", () => {
-    const source = "/tmp/deploy-tenkacloud-lite-source.mp4";
-    const ja = localeWorkVideoPath("/tmp", "deploy-tenkacloud-lite", "ja");
-    const en = localeWorkVideoPath("/tmp", "deploy-tenkacloud-lite", "en");
+    const source = "/render-work/deploy-tenkacloud-lite-source.mp4";
+    const ja = localeWorkVideoPath("/render-work", "deploy-tenkacloud-lite", "ja");
+    const en = localeWorkVideoPath("/render-work", "deploy-tenkacloud-lite", "en");
     expect(ja).not.toBe(source);
     expect(en).not.toBe(source);
     expect(ja).not.toBe(en);
@@ -46,12 +51,12 @@ describe("recorded Lite Zundamon renderer", () => {
   });
 
   it("should reject a completed voice-over video as the next source", () => {
-    expect(() => assertUnvoicedRecordedBase("VOICEVOX:ずんだもん", "/tmp/deploy.mp4")).toThrow(
-      "Run render-recorded-lite.ts again first",
-    );
-    expect(() => assertUnvoicedRecordedBase("", "/tmp/deploy.mp4")).not.toThrow();
     expect(() =>
-      assertUnvoicedRecordedBase("macOS Samantha English narration", "/tmp/deploy.en.mp4"),
+      assertUnvoicedRecordedBase("VOICEVOX:ずんだもん", "/render-work/deploy.mp4"),
+    ).toThrow("Run render-recorded-lite.ts again first");
+    expect(() => assertUnvoicedRecordedBase("", "/render-work/deploy.mp4")).not.toThrow();
+    expect(() =>
+      assertUnvoicedRecordedBase("macOS Samantha English narration", "/render-work/deploy.en.mp4"),
     ).toThrow("Run render-recorded-lite.ts again first");
   });
 

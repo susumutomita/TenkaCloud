@@ -213,6 +213,10 @@ export function resolveBin(envName: string, candidates: readonly string[]): stri
   for (const c of candidates) {
     if (c.includes("/")) {
       if (existsSync(c)) return c;
+      // Resolving a bare binary name through PATH is exactly what this branch is for:
+      // `candidates` carries bare names so a developer's own ffmpeg / chromium install is
+      // found. Absolute candidates take the branch above, and the env override outranks both.
+      // eslint-disable-next-line sonarjs/no-os-command-from-path -- developer-local toolchain
     } else if (spawnSync("which", [c]).status === 0) {
       return c;
     }

@@ -149,7 +149,9 @@ describe("parseBootstrapPayload", () => {
   });
 
   it("should reject a missing form id", () => {
-    const { formId: _dropped, ...withoutFormId } = validPayload;
+    // shorthand rest-sibling omit: the renamed form (`formId: _dropped`) reads as a real
+    // unused binding to sonarjs/no-unused-vars, the shorthand one is recognised as an omit.
+    const { formId, ...withoutFormId } = validPayload;
     expect(() => parseBootstrapPayload(JSON.stringify(withoutFormId))).toThrow(/formId/);
   });
 

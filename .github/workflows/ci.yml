@@ -112,6 +112,14 @@ jobs:
         run: |
           make lint-format
 
+      # #2862: type-aware ESLint (scripts/). Biome は format と構文寄りの rule を見るが、型情報が
+      # 要る検査 (no-floating-promises / await-thenable / sonarjs の型ベース rule) はここでしか
+      # 走らない。 #2861 で gate 自体は入っていたが Makefile からも CI からも呼ばれておらず、
+      # 一度も実行されていなかった。 local は `make lint` (= before-commit) 経由。
+      - name: ESLint (type-aware, scripts/)
+        run: |
+          make lint-ts
+
       - name: Type check
         run: |
           make typecheck

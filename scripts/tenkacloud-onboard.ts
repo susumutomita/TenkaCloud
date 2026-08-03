@@ -65,6 +65,11 @@ function isInteractive(): boolean {
 /** Run a remediation command through the shell (commands may be pipelines). */
 function runRemediation(command: string): boolean {
   console.log(`\n$ ${command}`);
+  // `command` is never user input: it comes from the fixed `commands` literals in
+  // scripts/onboard/plan.ts, several of which are shell pipelines (`curl -fsSL … | sh`)
+  // and therefore need `shell: true`. The operator sees each command echoed above and
+  // confirms it before it runs.
+  // eslint-disable-next-line sonarjs/os-command -- fixed command table, operator-confirmed
   return spawnSync(command, { shell: true, stdio: "inherit" }).status === 0;
 }
 

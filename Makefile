@@ -13,7 +13,7 @@ HELP_LANG ?= en
 HELP_RENDERER := scripts/ops/make-help.awk
 
 .PHONY: help help-en help-ja install install_ci submodule-latest build typecheck test test-coverage test-scripts audit-deps before-commit ci-local \
-        lint lint-md lint-text lint-format \
+        lint lint-md lint-text lint-format lint-ts \
         fix fix-md fix-text fix-format format \
         harness harness-test tech-debt dead-code \
         pack-init pack-validate pack-install pack-activate pack-deactivate pack-list \
@@ -137,13 +137,17 @@ ci-local: ## Run the full GitHub Actions gate locally | GitHub Actions相当の�
 	$(MAKE) validate-problems
 	$(MAKE) lint-text
 	$(MAKE) lint-format
+	$(MAKE) lint-ts
 	$(MAKE) typecheck
 	$(MAKE) test-coverage
 	bun run .claude/skills/quality-gates/scripts/run.ts coverage-gate
 	$(MAKE) build
 
 # ===== Lint / Fix | Lint / 修正 =====
-lint: lint-md lint-text lint-format ## Check Markdown, prose, and code formatting | Markdown・文章・code formatを検査
+# Issue #2862: `lint:ts` は #2861 で package.json に入ったが Makefile からも CI からも呼ばれず、
+# 一度も走っていなかった (= 走らせたら parser error で 97 file が無検査だった)。`lint` に足して
+# `before-commit` (GATE_CHECKS) 経路に載せ、CI 側は下の "ESLint (type-aware)" step で個別に呼ぶ。
+lint: lint-md lint-text lint-format lint-ts ## Check Markdown, prose, code formatting, and typed TS lint | Markdown・文章・code format・型付きTS lintを検査
 fix: fix-md fix-text fix-format ## Fix all automatically repairable lint issues | lint可能な問題を一括修正
 format: fix ## Apply the same automatic fixes as make fix | fixと同じ一括整形を実行
 
@@ -153,6 +157,8 @@ lint-text: ## Check Japanese and technical-writing conventions | 日本語・技
 	bun run lint:text
 lint-format: ## Check code formatting with Biome | Biomeでcode formatを検査
 	bun run lint:format
+lint-ts: ## Check scripts/ with type-aware ESLint | scripts/を型情報付きESLintで検査
+	bun run lint:ts
 fix-md: ## Automatically fix Markdown violations | Markdown規約違反を自動修正
 	bun run fix:md
 fix-text: ## Automatically fix prose violations | 文章規約違反を自動修正

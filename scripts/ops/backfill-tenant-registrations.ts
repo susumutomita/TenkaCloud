@@ -122,7 +122,7 @@ function validateTableTarget(
   if (target.tableName !== expectedName) {
     throw new Error(`DynamoDB returned table ${target.tableName}, expected ${expectedName}`);
   }
-  const arnMatch = target.tableArn.match(/^arn:[^:]+:dynamodb:([^:]+):(\d{12}):table\/([^/]+)$/);
+  const arnMatch = /^arn:[^:]+:dynamodb:([^:]+):(\d{12}):table\/([^/]+)$/.exec(target.tableArn);
   if (!arnMatch) throw new Error(`Table ${target.tableName} returned an invalid ARN`);
   if (arnMatch[1] !== args.expectedRegion || arnMatch[2] !== args.expectedAccountId) {
     throw new Error(
