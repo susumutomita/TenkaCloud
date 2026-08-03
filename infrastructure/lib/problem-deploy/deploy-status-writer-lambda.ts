@@ -38,9 +38,10 @@ export class DeployStatusWriterLambda extends Construct {
       entry: path.resolve(import.meta.dirname, "handlers/deploy-status-writer-handler/index.ts"),
       timeout: Duration.seconds(15),
       // Issue #2655: 1024MB でも live 実測で Runtime.OutOfMemory (Max Memory Used 1023MB)、
-      // 2048MB では Max Memory Used 1259MB で init と handler validation が完了した。#2654 の
-      // runtime bundle 根本修正と #2650 の再測定が終わるまでは、再 deploy で既知 OOM 値へ
-      // rollback しないよう live-verified safety value を IaC の source of truth にする。
+      // 2048MB では Max Memory Used 1259MB で init と handler validation が完了した。
+      // #2864 で runtime bundle の根本修正 (`@aws-sdk/*` external 化、 1,131,725 → 283,647 bytes)
+      // が入ったが、 memory を下げてよい根拠は live 再測定 (#2650) でしか得られないため、
+      // 再測定が終わるまでは live-verified safety value 2048 を据え置く (= 推測で下げない)。
       memorySize: 2048,
       environment: {
         // This Lambda is only synthesized when pureSql (see build-deploy-pipeline.ts), so in

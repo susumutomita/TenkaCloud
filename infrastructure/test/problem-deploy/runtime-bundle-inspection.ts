@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
 import { build } from "esbuild";
+import { LAMBDA_EXTERNAL_MODULES } from "../../lib/utils/lambda-runtime";
 
 export interface RuntimeBundleInspection {
   readonly bytes: number;
@@ -17,6 +18,9 @@ export async function inspectRuntimeBundle(entry: string): Promise<RuntimeBundle
     target: "node22",
     write: false,
     outfile: "index.js",
+    // Issue #2864: `defineNodejsFunction` の `externalModules` と同じ定数を参照し、
+    // 実 bundling とガードの設定ドリフトを防ぐ。
+    external: [...LAMBDA_EXTERNAL_MODULES],
   });
 
   const output = result.outputFiles?.find((file) => file.path.endsWith("index.js"));
