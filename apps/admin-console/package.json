@@ -13,7 +13,7 @@
     "test:coverage": "vitest run --coverage --coverage.reporter=lcov --coverage.reporter=text --coverage.reportsDirectory=./coverage --coverage.exclude='dist/**' --coverage.exclude='**/*.test.ts*'"
   },
   "dependencies": {
-    "@cloudscape-design/components": "^3.0.1334",
+    "@cloudscape-design/components": "^3.0.1338",
     "@cloudscape-design/global-styles": "^1.0.61",
     "@tenkacloud/auth-client": "workspace:*",
     "@tenkacloud/format": "workspace:*",
