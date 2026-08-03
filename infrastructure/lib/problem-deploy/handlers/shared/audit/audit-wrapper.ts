@@ -1,11 +1,6 @@
 import type { Context } from "hono";
 import { type AuditOutcome, extractAuditContext, writeAuditEvent } from "../audit-log.js";
-import {
-  type AuditResourceType,
-  diffSnapshots,
-  type RedactedSnapshot,
-  redactForAudit,
-} from "./redact.js";
+import { type AuditResourceType, diffSnapshots, type RedactedSnapshot } from "./redact.js";
 
 /**
  * Issue #1292: mutating route の handler を 1 行で包み、 audit 行を fire-and-forget 書き込む
@@ -154,4 +149,3 @@ export async function withAuditSuccess<T>(
 }
 
 export type { AuditResourceType };
-export { redactForAudit };

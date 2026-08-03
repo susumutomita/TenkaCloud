@@ -4,20 +4,8 @@ import { SqlDisruptionsRepository } from "./sql-disruptions-repository.js";
 import type { DisruptionsRepository, SqlExecutor } from "./types.js";
 
 export { DynamoDbDisruptionsRepository } from "./dynamodb-disruptions-repository.js";
-export {
-  DISRUPTIONS_SCHEMA_SQL,
-  DISRUPTIONS_SCHEMA_STATEMENTS,
-  SqlDisruptionsRepository,
-} from "./sql-disruptions-repository.js";
-export type {
-  DisruptionAuditPage,
-  DisruptionClaimOutcome,
-  DisruptionExecutionClaimInput,
-  DisruptionExecutionPhase,
-  DisruptionRecurringMutationOutcome,
-  DisruptionRecurringRecord,
-  DisruptionsRepository,
-} from "./types.js";
+export { SqlDisruptionsRepository } from "./sql-disruptions-repository.js";
+export type { DisruptionsRepository } from "./types.js";
 
 /**
  * Dependencies for {@link createDisruptionsRepository}. Only the fields the selected backend

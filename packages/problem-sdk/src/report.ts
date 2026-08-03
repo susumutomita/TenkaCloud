@@ -132,13 +132,25 @@ export function computeContentDigest(dir: string): string {
   return hash.digest("hex");
 }
 
-interface CollectedFile {
+/** One included pack file: its pack-relative POSIX path and its absolute path. */
+export interface CollectedPackFile {
   readonly relPath: string;
   readonly absPath: string;
 }
 
-function collectFiles(root: string, dir: string): CollectedFile[] {
-  const out: CollectedFile[] = [];
+/**
+ * Walk a pack directory with the digest's exclusion rules (`.git` /
+ * `node_modules` / `dist` / hidden entries / symlinks), unsorted. Exported (via
+ * `/internal` only) for the Core snapshot installer, so the copied file set is
+ * EXACTLY the digested file set — one walk implementation, no drift (#2866).
+ */
+export function collectPackFiles(dir: string): CollectedPackFile[] {
+  const root = path.resolve(dir);
+  return collectFiles(root, root);
+}
+
+function collectFiles(root: string, dir: string): CollectedPackFile[] {
+  const out: CollectedPackFile[] = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     if (isExcludedName(entry.name)) continue;
     if (entry.isSymbolicLink()) continue;

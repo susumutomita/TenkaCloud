@@ -8,8 +8,8 @@
 
 /**
  * [#2439] TenantFeatureFlags の domain shape(tenantId / flags / updatedAt / updatedBy)。
- * [Issue #2527 Slice 1 step 2] Source of truth; the physical row
- * (`handlers/shared/tenant-feature-flags.ts`'s `TenantFeatureFlagsItem`) adds PK/SK.
+ * [Issue #2527 Slice 1 step 2] Source of truth; the physical FLAGS row
+ * (`handlers/shared/tenant-feature-flags.ts`) adds PK/SK on top of these fields.
  */
 export type TenantFeatureFlagsRecord = {
   readonly tenantId: string;

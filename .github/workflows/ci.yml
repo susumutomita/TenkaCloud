@@ -72,20 +72,15 @@ jobs:
         run: |
           make dup-check
 
-      # knip dead-code scan: report-only ("知らせるだけ"). knip reports everything that
-      # exists right now, not the delta this PR introduced, so gating on it would punish
-      # PRs for pre-existing debt (contrast dup-check above, which is delta-exact via the
-      # baseline ratchet and therefore CAN gate). Findings go to the job summary; humans
-      # judge whether a finding is real and whether this PR made it worse. `|| true` keeps
-      # a knip crash from blocking CI — this step is advisory by design.
-      - name: Dead-code scan (knip, report-only)
+      # knip dead-code gate (#2866). Previously report-only: knip reports everything that
+      # exists, not the PR's delta, so gating would have punished PRs for the 168 findings
+      # of pre-existing debt. #2866 cleared the backlog to zero, so from here on any finding
+      # IS this PR's delta and the scan gates like dup-check above (same "clear, then wire"
+      # sequence as the #2862 ESLint gate). Typical false positive: a new entrypoint missing
+      # from knip.json's workspace entry globs — fix the glob, don't relax the gate.
+      - name: Dead-code gate (knip)
         run: |
-          {
-            echo '## Dead-code scan (knip, report-only)'
-            echo '```'
-            bun run --silent dead-code 2>/dev/null || true
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          make dead-code
 
       # Submodule pin guard: reject PRs that roll the problems/ gitlink backward or
       # sideways (the ping-pong where an old-pin branch reverts a newer pin, e.g. #1927).

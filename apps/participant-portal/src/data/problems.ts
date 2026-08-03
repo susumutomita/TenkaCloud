@@ -25,20 +25,12 @@ import {
   toTrackPosition,
 } from "./problem-course-projection";
 
-// 既存 import を壊さないよう、 catalog entry が使う型と投影関数はここから re-export する。
+// 既存 import を壊さないよう、 catalog entry が使う型はここから re-export する。
 export type {
   ParticipantGraphNode,
-  ParticipantGraphNodeType,
   ParticipantGraphRelation,
-  ParticipantRelationType,
   ProblemCourseAlignment,
   ProblemTrackPosition,
-} from "./problem-course-projection";
-export {
-  toCourseAlignment,
-  toParticipantGraphNodes,
-  toParticipantGraphRelations,
-  toTrackPosition,
 } from "./problem-course-projection";
 
 export type ProblemCategory = "Battle" | "Challenge";

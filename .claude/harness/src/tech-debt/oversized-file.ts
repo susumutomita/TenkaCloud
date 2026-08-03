@@ -1,4 +1,5 @@
 import type { Finding, Rule, RuleContext } from "../types.ts";
+import { isProductionSource } from "./production-scope.ts";
 
 /**
  * Issue #2527 Slice 7: oversized production files as trackable tech debt.
@@ -26,31 +27,8 @@ import type { Finding, Rule, RuleContext } from "../types.ts";
 const WARNING_THRESHOLD = 400;
 const ERROR_THRESHOLD = 800;
 
-const INCLUDE_PATH_PREFIXES = [
-  "infrastructure/lib/",
-  "infrastructure/bin/",
-  "apps/admin-console/src/",
-  "apps/application-admin-console/src/",
-  "apps/participant-portal/src/",
-  "scripts/",
-  "packages/portal-plugin-sdk/src/",
-  "packages/trust-bridge/src/",
-] as const;
-
-const EXCLUDE_PATTERNS = [
-  /\.test\.tsx?$/,
-  /\/node_modules\//,
-  /\/dist\//,
-  /\/cdk\.out\//,
-  /\/__generated__\//,
-  /\/__mocks__\//,
-];
-
-function shouldInspect(path: string): boolean {
-  if (!/\.tsx?$/.test(path)) return false;
-  if (EXCLUDE_PATTERNS.some((re) => re.test(path))) return false;
-  return INCLUDE_PATH_PREFIXES.some((prefix) => path.startsWith(prefix));
-}
+// スコープ定義は high-coupling と共通 (production-scope.ts、 #2866)。
+const shouldInspect = isProductionSource;
 
 export function countLines(source: string): number {
   if (source === "") return 0;

@@ -19,8 +19,6 @@ export const IntentMessageSchema = z
   })
   .strict();
 
-export type IntentMessage = z.infer<typeof IntentMessageSchema>;
-
 export interface ParsedIntentMessage {
   readonly token: string;
   readonly templateBytes: Uint8Array;

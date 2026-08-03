@@ -4,7 +4,11 @@ import type {
 } from "../../control-data/deployments-repository.js";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
 import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
-import type { ScoreEventItem } from "../shared/score-event.js";
+import {
+  type PublicScoreEventView,
+  type ScoreEventItem,
+  toPublicScoreEventView,
+} from "../shared/score-event.js";
 import {
   type ParticipantSharedResources,
   queryTeamItems,
@@ -28,15 +32,13 @@ import {
  * 出さない field:
  *   - teamLoginKey / tenantId / awsAccountId / expiresAt / 内部 PK/SK
  *   (= 公開 shape に存在しないので構造的に漏洩しない)
+ *
+ * [#2866] 1 event の view shape と mapping (許可 source / result の集合含む) は
+ * operator 側 `event-handler/team-score-events.ts` と共通なので
+ * `shared/score-event.ts` の {@link PublicScoreEventView} /
+ * `toPublicScoreEventView` に 1 本化した。
  */
-export interface TeamScoreEventView {
-  readonly jobId: string;
-  readonly problemId: string;
-  readonly source: "uptime" | "flag" | "flag-wrong" | "hint" | "gate-bonus";
-  readonly points: number;
-  readonly result: "ok" | "wrong";
-  readonly occurredAt: string;
-}
+export type TeamScoreEventView = PublicScoreEventView;
 
 export interface TeamScoreEvents {
   readonly teamId: string;
@@ -200,45 +202,10 @@ async function collectTeamEvents(
         maxPages: MAX_PAGES_PER_DEPLOYMENT,
       });
       for (const it of rows as Partial<ScoreEventItem>[]) {
-        const v = toView(it);
+        const v = toPublicScoreEventView(it);
         if (v) collected.push(v);
       }
     }),
   );
   return collected;
-}
-
-/**
- * ScoreEventItem (DDB row) → TeamScoreEventView (公開 shape)。
- *
- * leaderboard 合計と chart 累積を一致させるため、 scoring に影響する 5 source
- * (uptime / flag / flag-wrong / hint / gate-bonus) を通す。 marker 用 `attack-detected`
- * (= result=down) は累計 score に影響しないので除外 (= chart に並べない)。
- * gate-bonus (#2283) は Gate 完了 bonus — score に加算されるので除外すると合計とズレる。
- */
-const ALLOWED_SOURCES = new Set<TeamScoreEventView["source"]>([
-  "uptime",
-  "flag",
-  "flag-wrong",
-  "hint",
-  "gate-bonus",
-]);
-const ALLOWED_RESULTS = new Set<TeamScoreEventView["result"]>(["ok", "wrong"]);
-
-function toView(item: Partial<ScoreEventItem>): TeamScoreEventView | undefined {
-  if (typeof item.jobId !== "string") return undefined;
-  if (typeof item.problemId !== "string") return undefined;
-  if (typeof item.source !== "string") return undefined;
-  if (!ALLOWED_SOURCES.has(item.source as TeamScoreEventView["source"])) return undefined;
-  if (typeof item.result !== "string") return undefined;
-  if (!ALLOWED_RESULTS.has(item.result as TeamScoreEventView["result"])) return undefined;
-  if (typeof item.occurredAt !== "string") return undefined;
-  return {
-    jobId: item.jobId,
-    problemId: item.problemId,
-    source: item.source as TeamScoreEventView["source"],
-    points: Number(item.points ?? 0),
-    result: item.result as TeamScoreEventView["result"],
-    occurredAt: item.occurredAt,
-  };
 }

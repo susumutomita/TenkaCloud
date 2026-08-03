@@ -4,18 +4,11 @@ import { SqlDeploymentsRepository } from "./sql-deployments-repository.js";
 import type { DeploymentsRepository, SqlExecutor } from "./types.js";
 
 export { DynamoDbDeploymentsRepository } from "./dynamodb-deployments-repository.js";
-export {
-  DEPLOYMENTS_SCHEMA_SQL,
-  DEPLOYMENTS_SCHEMA_STATEMENTS,
-  SqlDeploymentsRepository,
-} from "./sql-deployments-repository.js";
+export { SqlDeploymentsRepository } from "./sql-deployments-repository.js";
 export type {
   BulkDeploymentCreateEntry,
   CompositeParentDeploymentRecord,
   CompositeTargetDeploymentRecord,
-  ControlDataBackend,
-  CoordinationStateRecord,
-  DeploymentKindScoringResult,
   DeploymentMutationOutcome,
   DeploymentRecord,
   DeploymentSchedulePatch,
@@ -25,12 +18,9 @@ export type {
   DeploymentsCompositePort,
   DeploymentsCoordinationPort,
   DeploymentsLifecyclePort,
-  DeploymentsPage,
   DeploymentsQueryPort,
   DeploymentsRepository,
   DeploymentsScoringPort,
-  InboxEventRecord,
-  ScoreEventRecord,
 } from "./types.js";
 
 /**

@@ -102,16 +102,20 @@ infra-coverage-check: ## Fail when critical-path infra coverage drops below base
 infra-coverage-baseline: ## Re-freeze the critical-path coverage baseline (justify decreases in the PR) | critical-path coverage baselineを現状で更新
 	bun run scripts/quality/check-infra-critical-coverage.ts --update
 
-# knip デッドコードスキャン。 knip は「この PR で増えた分」ではなく「現時点の全量」しか出せない
-# ため、 CI ゲートにはせず報告のみ (= 知らせるだけ)。 rules は knip.json で warn 化済みなので
-# 検出があっても exit 0。 出しどころ: CI job summary + ローカルのこのターゲット。
-dead-code: ## Report unused files/exports found by knip (never fails) | knipで未使用コード検出(報告のみ)
+# knip デッドコードスキャン (#2866 でゲート化)。 knip は「この PR で増えた分」ではなく全量を
+# 出すため、 残債 168 件があった間は報告のみだった。 #2866 で全量を 0 に清算したので、 以後の
+# 検出 = その PR が持ち込んだ分となりゲートにできる (#2862 の ESLint gate と同じ「清算してから
+# 配線」)。 rules は knip.json で error 化済み、 検出があれば exit 1 (~1s)。 false positive の
+# 典型は「新しい entrypoint が knip.json の workspace entry glob に無い」ケースで、 正しい修正は
+# entry glob の追加 (gate の無効化ではない)。 既知の盲点: root workspace は scripts/** を entry
+# 扱いにしているため scripts/ 内の未使用 export は検出対象外 (未使用 file は検出される)。
+dead-code: ## Fail on unused files/exports found by knip | knipで未使用コード検出(ゲート)
 	bun run dead-code
 # Pre-PR gate for the product BODY, run by the pre-commit hook. 品質ゲート (HTTP magic number /
 # template / coverage / IAM ASCII / merge / submodule) は本体と混ぜないため
 # .claude/skills/quality-gates へ分離済み — pre-commit フックが before-commit とは別呼び出しで
 # runner を走らせ、CI は --ci グループを走らせる。
-GATE_CHECKS := harness lint test
+GATE_CHECKS := harness lint dead-code test
 
 before-commit: $(GATE_CHECKS) ## Run lint and all tests before committing | commit前のlintと全テストを実行
 
@@ -133,6 +137,7 @@ ci-local: ## Run the full GitHub Actions gate locally | GitHub Actions相当の�
 	git -C problems fetch --no-tags --unshallow origin 2>/dev/null || git -C problems fetch --no-tags origin || true
 	$(MAKE) audit-deps
 	$(MAKE) dup-check
+	$(MAKE) dead-code
 	bun run .claude/skills/quality-gates/scripts/run.ts submodule-not-behind
 	$(MAKE) validate-problems
 	$(MAKE) lint-text

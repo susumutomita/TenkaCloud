@@ -14,11 +14,13 @@
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+// Gate logic は scripts/lib/ の共有実装 (docs/shared-utils.md) が単一の正。
+// infrastructure/test の synth assertion も同じ scanner を使う (= 判定ドリフト防止)。
 import {
   formatCodePoint,
   type IamDescriptionFinding,
   scanTemplateForIamDescriptions,
-} from "./lib/iam-description-ascii";
+} from "../../../../scripts/lib/iam-description-ascii";
 
 const DEFAULT_OUTDIR = "infrastructure/cdk.out";
 

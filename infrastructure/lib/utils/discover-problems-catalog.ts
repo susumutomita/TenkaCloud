@@ -7,11 +7,8 @@ import {
 } from "@tenkacloud/problem-runtime";
 import { type ProblemEndpointSlot, parseEndpointSlot } from "./endpoints-metadata.js";
 import {
-  DISRUPTION_ACTION_KINDS,
-  DISRUPTION_EFFECT_MAX_DURATION_SECONDS,
   type DisruptionAction,
   type DisruptionActionKind,
-  type DisruptionActionRevert,
   type DisruptionEffect,
   type DisruptionTrigger,
   type ProblemDisruptionEntry,
@@ -19,7 +16,6 @@ import {
   parseDisruptionAction,
   parseDisruptionEffect,
   parseDisruptionEntry,
-  parseDisruptionRecurrence,
   parseDisruptionsCatalogEnv,
   parseDisruptionTriggers,
   parsePhaseEntry,
@@ -32,18 +28,14 @@ export type { ProblemEndpointSlot, ProblemScoringMetadata, ProblemWriteup };
 // metadata-parser.ts に移した pure parser / 型は、 従来 import 元 (この catalog file) から
 // 引き続き import できるよう re-export する (= 既存 importer の互換維持)。
 export {
-  DISRUPTION_ACTION_KINDS,
-  DISRUPTION_EFFECT_MAX_DURATION_SECONDS,
   type DisruptionAction,
   type DisruptionActionKind,
-  type DisruptionActionRevert,
   type DisruptionEffect,
   type DisruptionTrigger,
   type ProblemDisruptionEntry,
   type ProblemPhaseEntry,
   parseDisruptionAction,
   parseDisruptionEffect,
-  parseDisruptionRecurrence,
   parseDisruptionsCatalogEnv,
   parseDisruptionTriggers,
 };

@@ -4,23 +4,14 @@ import { SqlEventsRepository } from "./sql-events-repository.js";
 import type { EventsRepository, SqlExecutor } from "./types.js";
 
 export { DynamoDbEventsRepository } from "./dynamodb-events-repository.js";
-export { EVENTS_SCHEMA_SQL, SqlEventsRepository } from "./sql-events-repository.js";
+export { SqlEventsRepository } from "./sql-events-repository.js";
 export type {
-  ClearProgressionGateOutcome,
-  ControlDataBackend,
-  CreateEventWithTeamsOutcome,
-  EventMutationOutcome,
   EventRecord,
   EventSchedulePatch,
   EventScoringMeta,
-  EventsPage,
   EventsRepository,
   ScheduleFiredKind,
   SqlExecutor,
-  SqlParam,
-  SqlRow,
-  SqlRunResult,
-  SqlStatement,
 } from "./types.js";
 
 /**

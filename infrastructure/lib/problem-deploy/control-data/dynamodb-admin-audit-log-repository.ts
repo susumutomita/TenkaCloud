@@ -1,11 +1,6 @@
-import {
-  DeleteCommand,
-  type DynamoDBDocumentClient,
-  PutCommand,
-  QueryCommand,
-  ScanCommand,
-} from "@aws-sdk/lib-dynamodb";
+import { type DynamoDBDocumentClient, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { queryAllItemsBounded } from "../handlers/shared/ddb-paginate.js";
+import { sweepExpiredRows } from "./dynamodb-ttl-sweep.js";
 import type { AdminAuditLogPage, AdminAuditLogRepository, AdminAuditRow } from "./types.js";
 
 /**
@@ -128,33 +123,14 @@ export class DynamoDbAdminAuditLogRepository implements AdminAuditLogRepository 
   }
 
   async pruneExpired(nowEpochSeconds: number): Promise<number> {
-    // DynamoDB removes expired rows natively via the `ttl` TTL attribute; this manual sweep
-    // exists so the seam is uniform with the SQLite backends (no native TTL, ADR-049 §5.2). It is
-    // idempotent and only ever deletes rows DynamoDB's own TTL would also drop (mirrors
-    // `DynamoDbDisruptionsRepository.pruneExpired`).
-    let deleted = 0;
-    let exclusiveStartKey: Record<string, unknown> | undefined;
-    do {
-      const out = await this.ddb.send(
-        new ScanCommand({
-          TableName: this.tableName,
-          FilterExpression: "#ttl > :zero AND #ttl <= :now",
-          ExpressionAttributeNames: { "#ttl": "ttl" },
-          ExpressionAttributeValues: { ":zero": 0, ":now": nowEpochSeconds },
-          ...(exclusiveStartKey ? { ExclusiveStartKey: exclusiveStartKey } : {}),
-        }),
-      );
-      for (const item of (out.Items ?? []) as Record<string, unknown>[]) {
-        await this.ddb.send(
-          new DeleteCommand({
-            TableName: this.tableName,
-            Key: { PK: item.PK, SK: item.SK },
-          }),
-        );
-        deleted += 1;
-      }
-      exclusiveStartKey = out.LastEvaluatedKey as Record<string, unknown> | undefined;
-    } while (exclusiveStartKey);
-    return deleted;
+    // The `ttl` attribute is a DynamoDB reserved word, hence the `#ttl` alias.
+    // Sweep rationale + loop live in `sweepExpiredRows` (shared, #2866).
+    return sweepExpiredRows({
+      ddb: this.ddb,
+      tableName: this.tableName,
+      nowEpochSeconds,
+      filterExpression: "#ttl > :zero AND #ttl <= :now",
+      expressionAttributeNames: { "#ttl": "ttl" },
+    });
   }
 }

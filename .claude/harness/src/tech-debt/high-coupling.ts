@@ -1,4 +1,5 @@
 import type { Finding, Rule, RuleContext } from "../types.ts";
+import { isProductionSource } from "./production-scope.ts";
 
 /**
  * Issue #1227: high-coupling detector.
@@ -23,31 +24,8 @@ const WARNING_THRESHOLD = 16;
 const HIGH_THRESHOLD = 26;
 const VERY_HIGH_THRESHOLD = 41;
 
-const INCLUDE_PATH_PREFIXES = [
-  "infrastructure/lib/",
-  "infrastructure/bin/",
-  "apps/admin-console/src/",
-  "apps/application-admin-console/src/",
-  "apps/participant-portal/src/",
-  "scripts/",
-  "packages/portal-plugin-sdk/src/",
-  "packages/trust-bridge/src/",
-] as const;
-
-const EXCLUDE_PATTERNS = [
-  /\.test\.tsx?$/,
-  /\/node_modules\//,
-  /\/dist\//,
-  /\/cdk\.out\//,
-  /\/__generated__\//,
-  /\/__mocks__\//,
-];
-
-function shouldInspect(path: string): boolean {
-  if (!/\.tsx?$/.test(path)) return false;
-  if (EXCLUDE_PATTERNS.some((re) => re.test(path))) return false;
-  return INCLUDE_PATH_PREFIXES.some((prefix) => path.startsWith(prefix));
-}
+// スコープ定義は oversized-file と共通 (production-scope.ts、 #2866)。
+const shouldInspect = isProductionSource;
 
 // 行頭が `import` で始まるスタティック import 文を数える。 文字列内 / コメント内の "import"
 // を誤検出しないため、 行頭 + ホワイトスペース後 + キーワード `import` のみカウントする。

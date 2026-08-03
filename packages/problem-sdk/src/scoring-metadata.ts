@@ -20,7 +20,8 @@
  *   - `composite-probe`   — one probe per composite target (#2070)
  *
  * Issue #2225: each kind's types + parser now live in `scoring-metadata/<kind>.ts`
- * (mechanical split, no logic change). This module re-exports every symbol and
+ * (mechanical split, no logic change). This module re-exports every consumed
+ * symbol (#2866 dropped the never-imported `MultiVerifyCheck` re-export) and
  * owns only the discriminated union + the `parseScoringMetadata` dispatcher, so
  * every existing import path (`from "./scoring-metadata.js"` /
  * `from "@tenkacloud/problem-sdk"`) is unchanged.
@@ -55,10 +56,10 @@ export type {
 export type { FlagScoringMetadata } from "./scoring-metadata/flag.js";
 export type { HintRevealMode, ProgressiveHint } from "./scoring-metadata/hints.js";
 export type { MultiFlagEntry, MultiFlagScoringMetadata } from "./scoring-metadata/multi-flag.js";
-export type {
-  MultiVerifyCheck,
-  MultiVerifyScoringMetadata,
-} from "./scoring-metadata/multi-verify.js";
+// `MultiVerifyCheck` is deliberately not re-exported: the platform never scores
+// multi-verify (container-judged, scripts/local-play only), so no consumer names
+// the check type — reach it as `MultiVerifyScoringMetadata["checks"][number]` (#2866).
+export type { MultiVerifyScoringMetadata } from "./scoring-metadata/multi-verify.js";
 export type {
   PhasedPollingBonus,
   PhasedPollingPlatformRule,

@@ -9,16 +9,9 @@
  * compiles unchanged.
  */
 
-export type {
-  PackManifest,
-  PackManifestIssue,
-  PackManifestParseResult,
-  ProviderEngineCapability,
-} from "@tenkacloud/problem-sdk/internal";
+export type { PackManifest, ProviderEngineCapability } from "@tenkacloud/problem-sdk/internal";
 export {
   PACK_PROVIDERS,
-  PACK_SCHEMA_VERSION,
-  PackManifestSchema,
   parsePackManifest,
   satisfiesCoreRange,
 } from "@tenkacloud/problem-sdk/internal";

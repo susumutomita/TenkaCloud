@@ -4,12 +4,8 @@ import { SqlAdminAuditLogRepository } from "./sql-admin-audit-log-repository.js"
 import type { AdminAuditLogRepository, SqlExecutor } from "./types.js";
 
 export { DynamoDbAdminAuditLogRepository } from "./dynamodb-admin-audit-log-repository.js";
-export {
-  ADMIN_AUDIT_LOG_SCHEMA_SQL,
-  ADMIN_AUDIT_LOG_SCHEMA_STATEMENTS,
-  SqlAdminAuditLogRepository,
-} from "./sql-admin-audit-log-repository.js";
-export type { AdminAuditLogPage, AdminAuditLogRepository, AdminAuditRow } from "./types.js";
+export { SqlAdminAuditLogRepository } from "./sql-admin-audit-log-repository.js";
+export type { AdminAuditLogRepository } from "./types.js";
 
 /**
  * Dependencies for {@link createAdminAuditLogRepository}. Only the fields the selected backend

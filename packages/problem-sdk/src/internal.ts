@@ -53,6 +53,9 @@ export {
 } from "./metadata-parser.js";
 export { type ProblemMetadataView, validateMetadataSections } from "./metadata-sections.js";
 export type { PackProblem } from "./problem-metadata.js";
+// Pack-file walk shared with the Core snapshot installer, so the copied file set
+// is exactly the digested file set (#2866).
+export { type CollectedPackFile, collectPackFiles } from "./report.js";
 export { isExistingDirectory, isInside, readDirNames, resolveInside } from "./safe-path.js";
 // Pure scoring-metadata section parsers + types.
 export {

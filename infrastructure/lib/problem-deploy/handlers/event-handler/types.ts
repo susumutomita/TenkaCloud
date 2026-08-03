@@ -6,13 +6,11 @@ import type {
 } from "../../control-data/domain/events.js";
 import type { TeamRecord } from "../../control-data/domain/teams.js";
 import { ProgressionGateConfigSchema } from "../shared/progression-gate.js";
+import { PUBLIC_SCORE_EVENT_RESULTS, PUBLIC_SCORE_EVENT_SOURCES } from "../shared/score-event.js";
 
 // [Issue #2527 Slice 1 step 2] The domain module owns these shapes; this handler
 // re-exports them so existing importers keep their import path.
-export type {
-  EventProblemTarget,
-  EventStatus,
-} from "../../control-data/domain/events.js";
+export type { EventProblemTarget } from "../../control-data/domain/events.js";
 
 /**
  * 1 競技イベント (= ADR-004 の Event aggregate) の DDB 行 shape。
@@ -266,7 +264,6 @@ export const ScheduleEventRequestSchema = z
   .refine((v) => !(v.startsAt !== undefined && v.startNow === true), {
     message: "startsAt と startNow は同時指定不可",
   });
-export type ScheduleEventRequest = z.infer<typeof ScheduleEventRequestSchema>;
 
 export const TeamSummarySchema = z.object({
   teamId: z.string(),
@@ -310,12 +307,15 @@ export type EventDeploymentSummary = z.infer<typeof EventDeploymentSummarySchema
  * (= `/portal/leaderboard/score-events`) と同じ shape にする (gate-bonus は #2283 の
  * Gate 完了 bonus — score に加算されるので除外すると合計と chart がズレる)。
  */
+// [#2866] source / result の許可集合は shared/score-event.ts が単一の情報源
+// (participant 側 leaderboard-score-events と共通)。 enum をここに手書きで
+// 複製すると片側だけ更新して合計がズレる (#2283 の再発) ため tuple を import する。
 export const TeamScoreEventViewSchema = z.object({
   jobId: z.string(),
   problemId: z.string(),
-  source: z.enum(["uptime", "flag", "flag-wrong", "hint", "gate-bonus"]),
+  source: z.enum(PUBLIC_SCORE_EVENT_SOURCES),
   points: z.number(),
-  result: z.enum(["ok", "wrong"]),
+  result: z.enum(PUBLIC_SCORE_EVENT_RESULTS),
   occurredAt: z.string(),
 });
 export type TeamScoreEventView = z.infer<typeof TeamScoreEventViewSchema>;

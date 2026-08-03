@@ -4,12 +4,8 @@ import { SqlSamlIdpsRepository } from "./sql-saml-idps-repository.js";
 import type { SamlIdpsRepository, SqlExecutor } from "./types.js";
 
 export { DynamoDbSamlIdpsRepository } from "./dynamodb-saml-idps-repository.js";
-export {
-  SAML_IDPS_SCHEMA_SQL,
-  SAML_IDPS_SCHEMA_STATEMENTS,
-  SqlSamlIdpsRepository,
-} from "./sql-saml-idps-repository.js";
-export type { SamlIdpRecord, SamlIdpsRepository } from "./types.js";
+export { SqlSamlIdpsRepository } from "./sql-saml-idps-repository.js";
+export type { SamlIdpsRepository } from "./types.js";
 
 /**
  * Dependencies for {@link createSamlIdpsRepository}. Only the fields the

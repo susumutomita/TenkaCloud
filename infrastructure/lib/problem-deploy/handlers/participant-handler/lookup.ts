@@ -35,16 +35,7 @@ import { getSolvedFlagIds } from "./submit-flag.js";
  * 検出する)。 本 module は既存 caller (routes / tests) 向けに re-export し、 backend が必ず
  * 埋める field だけ下の intersection で optionality を tighten する。
  */
-export type {
-  ApplicationStatus,
-  ApplicationStatusOverall,
-  DeploymentLogEntry,
-  DeploymentLogView,
-  MultiFlagEntryView,
-  ParticipantHintView,
-  ParticipantScoringInfo,
-  ParticipantTeamView,
-} from "@tenkacloud/portal-contracts";
+export type { ParticipantTeamView } from "@tenkacloud/portal-contracts";
 
 /**
  * backend が構成する 1 problem view。 wire contract 上は旧 backend 互換のため optional な

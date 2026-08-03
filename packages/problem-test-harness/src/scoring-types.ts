@@ -20,12 +20,14 @@ type ByKind<K extends ProblemScoringMetadata["kind"]> = Extract<
   { kind: K }
 >;
 
-export type FlagScoringMetadata = ByKind<"flag">;
+// Only the kinds the scorer needs a NAMED narrowing for are aliased here.
+// `flag` / `phased-polling` / `attack-detection` are narrowed inline by the
+// `runScorer` switch (they only read one field), so they carry no alias — knip
+// flagged the unused trio and #2866 removed it. Re-derive with `ByKind` if a
+// future scorer path needs one.
 export type MultiFlagScoringMetadata = ByKind<"multi-flag">;
 export type UptimeFlatScoringMetadata = ByKind<"uptime-flat" | "uptime">;
 export type UptimeMultiScoringMetadata = ByKind<"uptime-multi">;
-export type PhasedPollingScoringMetadata = ByKind<"phased-polling">;
-export type AttackDetectionScoringMetadata = ByKind<"attack-detection">;
 export type CompositeProbeScoringMetadata = ByKind<"composite-probe">;
 
 /** One composite-probe target, narrowed from the public union member. */

@@ -35,7 +35,6 @@ export const FeatureFlagsPatchSchema = z
   .refine((flags) => Object.keys(flags).length <= MAX_FLAG_KEYS, {
     message: `too many flag keys (max ${MAX_FLAG_KEYS})`,
   });
-export type FeatureFlagsPatch = z.infer<typeof FeatureFlagsPatchSchema>;
 
 /**
  * Read the tenant's stored flag overrides. No row yet (never saved) → `{}` (all registry

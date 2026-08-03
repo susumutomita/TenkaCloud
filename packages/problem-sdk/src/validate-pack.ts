@@ -36,7 +36,11 @@ import { validateMetadataSections } from "./metadata-sections.js";
 import type { PackProblem } from "./problem-metadata.js";
 import { isExistingDirectory, readDirNames, resolveInside } from "./safe-path.js";
 
-export type { PackDiagnostic, PackDiagnosticCode } from "./diagnostics.js";
+// PackDiagnostic is re-exported for direct importers of this module (it is the
+// element type of `PackValidationResult.diagnostics`). `PackDiagnosticCode` is
+// deliberately NOT re-exported here — every consumer takes it from
+// `./diagnostics.js` / `/internal`, so the extra path was knip-flagged dead (#2866).
+export type { PackDiagnostic } from "./diagnostics.js";
 
 /** The pack manifest filename — the only entrypoint of a problem pack. */
 export const PACK_MANIFEST_FILENAME = "tenkacloud-pack.json";

@@ -66,12 +66,3 @@ export interface CreateCompetitorAccountResponse extends CompetitorAccountSummar
   /** 競技者に伝える TenkaCloud 側の AWS Account ID (CFn template の Parameter として要る)。 */
   tenkaCloudAccountId: string;
 }
-
-export interface ListCompetitorAccountsResponse {
-  items: readonly CompetitorAccountSummary[];
-}
-
-export interface VerifyCompetitorAccountResponse extends CompetitorAccountSummary {
-  /** STS AssumeRole が成功した時点の ISO 8601 (= `verifiedAt`)。 */
-  verifiedAt: string;
-}

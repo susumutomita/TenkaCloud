@@ -4,12 +4,8 @@ import { SqlSamlConfigRepository } from "./sql-saml-config-repository.js";
 import type { SamlConfigRepository, SqlExecutor } from "./types.js";
 
 export { DynamoDbSamlConfigRepository } from "./dynamodb-saml-config-repository.js";
-export {
-  SAML_CONFIG_SCHEMA_SQL,
-  SAML_CONFIG_SCHEMA_STATEMENTS,
-  SqlSamlConfigRepository,
-} from "./sql-saml-config-repository.js";
-export type { SamlConfigRecord, SamlConfigRepository } from "./types.js";
+export { SqlSamlConfigRepository } from "./sql-saml-config-repository.js";
+export type { SamlConfigRepository } from "./types.js";
 
 /**
  * Dependencies for {@link createSamlConfigRepository}. Only the fields the

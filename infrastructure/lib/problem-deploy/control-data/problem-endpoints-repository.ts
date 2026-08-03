@@ -4,12 +4,8 @@ import { SqlProblemEndpointsRepository } from "./sql-problem-endpoints-repositor
 import type { ProblemEndpointsRepository, SqlExecutor } from "./types.js";
 
 export { DynamoDbProblemEndpointsRepository } from "./dynamodb-problem-endpoints-repository.js";
-export {
-  PROBLEM_ENDPOINTS_SCHEMA_SQL,
-  PROBLEM_ENDPOINTS_SCHEMA_STATEMENTS,
-  SqlProblemEndpointsRepository,
-} from "./sql-problem-endpoints-repository.js";
-export type { ProblemEndpointRecord, ProblemEndpointsRepository } from "./types.js";
+export { SqlProblemEndpointsRepository } from "./sql-problem-endpoints-repository.js";
+export type { ProblemEndpointsRepository } from "./types.js";
 
 /**
  * Dependencies for {@link createProblemEndpointsRepository}. Only the fields the

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildLaunchStackUrl,
   buildShareablePayload,
-  COMPETITOR_BOOTSTRAP_TEMPLATE_URL,
+  COMPETITOR_BOOTSTRAP_TEMPLATE_URL_FALLBACK,
 } from "../../src/lib/competitor-bootstrap";
 
 describe("buildLaunchStackUrl", () => {
@@ -21,7 +21,7 @@ describe("buildLaunchStackUrl", () => {
   it("should pre-fill templateURL with the public repo raw URL", () => {
     const url = buildLaunchStackUrl(baseInput);
     const decoded = decodeURIComponent(url);
-    expect(decoded).toContain(COMPETITOR_BOOTSTRAP_TEMPLATE_URL);
+    expect(decoded).toContain(COMPETITOR_BOOTSTRAP_TEMPLATE_URL_FALLBACK);
   });
 
   it("should embed the 3 Parameter values as CFn pre-fill query strings", () => {
@@ -46,7 +46,7 @@ describe("buildLaunchStackUrl", () => {
       buildLaunchStackUrl({ ...baseInput, templateUrl: injected }),
     );
     expect(decoded).toContain(injected);
-    expect(decoded).not.toContain(COMPETITOR_BOOTSTRAP_TEMPLATE_URL);
+    expect(decoded).not.toContain(COMPETITOR_BOOTSTRAP_TEMPLATE_URL_FALLBACK);
   });
 });
 
@@ -66,7 +66,7 @@ describe("buildShareablePayload", () => {
 
   it("should include both the CFn template raw URL and the Quick-create URL", () => {
     const payload = buildShareablePayload(input);
-    expect(payload).toContain(COMPETITOR_BOOTSTRAP_TEMPLATE_URL);
+    expect(payload).toContain(COMPETITOR_BOOTSTRAP_TEMPLATE_URL_FALLBACK);
     expect(payload).toContain("quickcreate");
   });
 
@@ -77,9 +77,9 @@ describe("buildShareablePayload", () => {
   });
 });
 
-describe("COMPETITOR_BOOTSTRAP_TEMPLATE_URL", () => {
+describe("COMPETITOR_BOOTSTRAP_TEMPLATE_URL_FALLBACK", () => {
   it("should point to a public repo raw URL (= accessible to competitors)", () => {
-    expect(COMPETITOR_BOOTSTRAP_TEMPLATE_URL).toMatch(
+    expect(COMPETITOR_BOOTSTRAP_TEMPLATE_URL_FALLBACK).toMatch(
       /^https:\/\/raw\.githubusercontent\.com\/.+\/competitor-bootstrap\.yaml$/,
     );
   });

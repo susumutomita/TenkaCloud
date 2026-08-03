@@ -4,19 +4,8 @@ import { SqlFeatureFlagsRepository } from "./sql-feature-flags-repository.js";
 import type { FeatureFlagsRepository, SqlExecutor } from "./types.js";
 
 export { DynamoDbFeatureFlagsRepository } from "./dynamodb-feature-flags-repository.js";
-export {
-  FEATURE_FLAGS_SCHEMA_SQL,
-  SqlFeatureFlagsRepository,
-} from "./sql-feature-flags-repository.js";
-export type {
-  ControlDataBackend,
-  FeatureFlagsRepository,
-  SqlExecutor,
-  SqlParam,
-  SqlRow,
-  SqlRunResult,
-  TenantFeatureFlagsRecord,
-} from "./types.js";
+export { SqlFeatureFlagsRepository } from "./sql-feature-flags-repository.js";
+export type { FeatureFlagsRepository, SqlExecutor, TenantFeatureFlagsRecord } from "./types.js";
 
 /**
  * Dependencies for {@link createFeatureFlagsRepository}. Only the fields the

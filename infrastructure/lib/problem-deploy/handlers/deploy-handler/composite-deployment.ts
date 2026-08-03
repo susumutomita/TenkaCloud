@@ -94,9 +94,3 @@ export function isCompositeParentItem(item: unknown): item is CompositeParentDep
   const row = item as { runtimeKind?: unknown; SK?: unknown } | undefined;
   return row?.runtimeKind === COMPOSITE_RUNTIME_KIND && row?.SK === "META";
 }
-
-/** True when a row is a composite target (it links back to a parent). */
-export function isCompositeTargetItem(item: unknown): item is CompositeTargetDeploymentItem {
-  const row = item as { parentDeploymentId?: unknown; SK?: unknown } | undefined;
-  return typeof row?.parentDeploymentId === "string" && row?.SK === "META";
-}
