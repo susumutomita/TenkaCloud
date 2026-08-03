@@ -274,17 +274,20 @@ export class ParticipantPortalLambda extends Construct {
 
     this.fn = defineNodejsFunction(this, {
       entry: path.resolve(import.meta.dirname, "handlers/participant-handler/index.ts"),
-      // 巨大 bundle (= externalModules:[] で AWS SDK / Hono / zod を全部内包、 約 33MB) の
+      // 巨大 bundle (= 当時 externalModules:[] で AWS SDK / Hono / zod を全部内包、 約 33MB) の
       // cold start init が Lambda の 10s INIT 予算を超えると、 init が invoke phase に持ち越され
       // function timeout に達して 502 (`INIT_REPORT ... Phase: invoke Status: timeout`)。 sign-in が
       // 502 になる症状の原因。 旧 10s は全 handler 中で最短で最も脆かった。 29s に広げて、 万一
-      // init が invoke に持ち越しても完走できる余裕を持たせる。
+      // init が invoke に持ち越しても完走できる余裕を持たせる。 #2864 で bundle は 387,263 bytes
+      // まで縮んだが、 短縮は live での cold start 再測定を伴って別途判断する (= 推測で縮めない)。
       timeout: Duration.seconds(29),
-      // Issue #672: bundle が 33MB と巨大 (= AWS SDK / Hono / zod 等が含まれる)。 256MB は OOM、
-      // 512MB は OOM しないが ARM の CPU 割当が memory 比例のため cold start init が遅く、 10s INIT
-      // 予算を超えて 502 になることがあった。 1024MB に拡張して CPU を倍増し、 init を予算内に収める
-      // (steady state の Max Memory Used は 136MB 程度なので memory 容量目的ではなく CPU 目的)。
-      // 抜本策は bundle 縮小 (= Node 22 runtime 同梱の @aws-sdk を externalModules 化) で別 issue。
+      // Issue #672: bundle が 33MB と巨大 (= AWS SDK / Hono / zod 等が含まれる) だった時代の値。
+      // 256MB は OOM、 512MB は OOM しないが ARM の CPU 割当が memory 比例のため cold start init が
+      // 遅く、 10s INIT 予算を超えて 502 になることがあった。 1024MB に拡張して CPU を倍増し、 init を
+      // 予算内に収める (steady state の Max Memory Used は 136MB 程度なので memory 容量目的ではなく
+      // CPU 目的)。 抜本策としていた bundle 縮小 (= Node 22 runtime 同梱の @aws-sdk を
+      // externalModules 化) は #2864 で実施済 (3,000,031 → 387,263 bytes)。 縮小後も CPU 割当は
+      // memory 比例のままなので、 引き下げは live 再測定の根拠が出るまで行わない。
       memorySize: 1024,
       role,
       environment: {

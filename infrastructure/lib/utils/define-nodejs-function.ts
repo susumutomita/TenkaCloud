@@ -6,6 +6,7 @@ import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { LogGroup } from "aws-cdk-lib/aws-logs";
 import type { Construct } from "constructs";
 import {
+  LAMBDA_EXTERNAL_MODULES,
   LAMBDA_NODEJS_BUNDLING_TARGET,
   LAMBDA_NODEJS_RUNTIME,
   LAMBDA_SOURCE_MAP_ENABLED,
@@ -70,7 +71,10 @@ export function defineNodejsFunction(
       minify: true,
       target: LAMBDA_NODEJS_BUNDLING_TARGET,
       sourceMap: LAMBDA_SOURCE_MAP_ENABLED,
-      externalModules: [],
+      // Issue #2864: `@aws-sdk/*` は runtime 同梱 SDK を使い bundle しない (旧: `[]` = 全内包)。
+      // `@smithy/*` は runtime から解決できないため bundle に残す。 根拠と実測は
+      // `LAMBDA_EXTERNAL_MODULES` の doc comment を参照。
+      externalModules: [...LAMBDA_EXTERNAL_MODULES],
       ...(props.bundlingDefine ? { define: props.bundlingDefine } : {}),
     },
   });
