@@ -20,6 +20,9 @@ import { type AwsResult, reportRetainedTables } from "../lib/retained-tables";
 
 function defaultAwsRunner(args: readonly string[]): Promise<AwsResult> {
   return new Promise((resolveFn) => {
+    // The AWS CLI has no fixed install path (brew / apt / pip / asdf all differ), so PATH
+    // resolution is the only portable option for an operator-run reporting script.
+    // eslint-disable-next-line sonarjs/no-os-command-from-path -- operator-run tooling
     const proc = spawn("aws", [...args]);
     let stdout = "";
     let stderr = "";

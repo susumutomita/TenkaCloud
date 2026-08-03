@@ -235,6 +235,10 @@ function main(): void {
   const total = plan.included.length;
   plan.included.forEach((workspace, index) => {
     console.log(`[run-workspaces] (${index + 1}/${total}) ${workspace.dir} — ${plan.task}`);
+    // Re-entering the same `bun` that is already running this file. mise pins the
+    // version, and the process is only ever started by a developer or the CI runner —
+    // both own their own PATH.
+    // eslint-disable-next-line sonarjs/no-os-command-from-path -- re-entrant bun call
     const result = spawnSync("bun", ["run", plan.task], {
       cwd: join(rootDir, workspace.dir),
       stdio: "inherit",

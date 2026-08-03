@@ -132,7 +132,7 @@ export function parseDiskUsePercent(dfStdout: string): number | null {
   const lines = dfStdout.trim().split("\n");
   for (const line of lines) {
     if (!/\s\/\s*$/.test(line)) continue; // the row whose mount point is "/"
-    const match = line.match(/(\d+)%/);
+    const match = /(?<!\d)(\d+)%/.exec(line);
     if (match) return Number(match[1]);
   }
   return null;

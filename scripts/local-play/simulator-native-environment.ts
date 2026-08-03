@@ -45,7 +45,8 @@ export function nativeTargets(problem: SimulatedCloudProblem): readonly NativeTa
 }
 
 function shellLiteral(value: string): string {
-  return `'${value.replaceAll("'", `'"'"'`)}'`;
+  const escapedQuote = `'"'"'`;
+  return `'${value.replaceAll("'", escapedQuote)}'`;
 }
 
 function profileValues(

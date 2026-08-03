@@ -151,6 +151,9 @@ interface RawMetadata {
   readonly instructions?: unknown;
   readonly writeup?: unknown;
   // [ADR-023] container delivery is declared via the catalog's `runtime` field.
+  // `| null` is not decoration: this shape describes raw `JSON.parse` output, where any field
+  // can legitimately be `null`, and `typeof null === "object"` means the guard on it below is
+  // the only thing standing between a null `runtime` and a property read on null.
   readonly runtime?: {
     readonly provider?: unknown;
     readonly engine?: unknown;
@@ -159,7 +162,7 @@ interface RawMetadata {
     readonly verifyUrl?: unknown;
     readonly secretEnv?: unknown;
     readonly terminal?: unknown;
-  };
+  } | null;
   readonly scoring?: {
     readonly kind?: unknown;
     readonly points?: unknown;

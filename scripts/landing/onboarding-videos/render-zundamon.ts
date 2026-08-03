@@ -255,6 +255,11 @@ async function synthesizeVoicevoxCue(
 function synthesizeEnglishCue(text: string, outputPath: string): string {
   const voice = process.env.ENGLISH_TTS_VOICE?.trim() || "Samantha";
   const aiffPath = outputPath.replace(/\.wav$/, ".aiff");
+  // `say` is the macOS system TTS binary. It lives on a developer's own Mac and no
+  // absolute path for it is stable across macOS releases, so PATH resolution is the only
+  // portable option. Anyone able to prepend a directory to this PATH can already run
+  // arbitrary code as this user.
+  // eslint-disable-next-line sonarjs/no-os-command-from-path -- developer-local toolchain
   const say = spawnSync("say", ["-v", voice, "-r", "175", "-o", aiffPath, text], {
     encoding: "utf8",
   });
@@ -423,9 +428,8 @@ async function renderLocale(
     localizedCaptionPath(baseVideoPath, locale),
     buildWebVtt(script.cues, locale, timeline.starts, timeline.videoDurationS),
   );
-  console.log(
-    `wrote ${outputPath} (${locale}, ${locale === "ja" ? "VOICEVOX:ずんだもん" : `macOS ${englishVoice}`})`,
-  );
+  const voiceLabel = locale === "ja" ? "VOICEVOX:ずんだもん" : `macOS ${englishVoice}`;
+  console.log(`wrote ${outputPath} (${locale}, ${voiceLabel})`);
 }
 
 async function main(): Promise<void> {

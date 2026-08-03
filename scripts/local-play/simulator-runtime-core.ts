@@ -294,13 +294,21 @@ export abstract class SimulatorRuntimeCore {
 
   protected async _withOperation<T>(operation: () => Promise<T>): Promise<T> {
     const previous = this._operationTail;
-    let release = (): void => {};
+    let release = (): void => {
+      // Replaced synchronously by the executor below; never actually called.
+    };
     const active = new Promise<void>((resolve) => {
       release = resolve;
     });
-    const tail = previous.catch(() => {}).then(() => active);
+    const tail = previous
+      .catch(() => {
+        // Serialisation only: a failed predecessor must not poison the queue.
+      })
+      .then(() => active);
     this._operationTail = tail;
-    await previous.catch(() => {});
+    await previous.catch(() => {
+      // Wait for the predecessor to settle; its failure belongs to its own caller.
+    });
     try {
       return await operation();
     } finally {
@@ -311,13 +319,21 @@ export abstract class SimulatorRuntimeCore {
 
   protected async _withLifecycle<T>(operation: () => Promise<T>): Promise<T> {
     const previous = this._lifecycleTail;
-    let release = (): void => {};
+    let release = (): void => {
+      // Replaced synchronously by the executor below; never actually called.
+    };
     const active = new Promise<void>((resolve) => {
       release = resolve;
     });
-    const tail = previous.catch(() => {}).then(() => active);
+    const tail = previous
+      .catch(() => {
+        // Serialisation only: a failed predecessor must not poison the queue.
+      })
+      .then(() => active);
     this._lifecycleTail = tail;
-    await previous.catch(() => {});
+    await previous.catch(() => {
+      // Wait for the predecessor to settle; its failure belongs to its own caller.
+    });
     try {
       return await operation();
     } finally {

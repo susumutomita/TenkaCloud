@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { Duplex } from "node:stream";
 import { getReasonPhrase, StatusCodes } from "http-status-codes";
-import { type WebSocket, WebSocketServer } from "ws";
+import { type RawData, type WebSocket, WebSocketServer } from "ws";
 import { handleLocalPlayRequest } from "./api";
 import {
   type CreateStateOptions,
@@ -184,14 +184,51 @@ function rejectUpgrade(socket: Duplex, status: number): void {
   socket.destroy();
 }
 
+/**
+ * `ws` types a frame as `Buffer | ArrayBuffer | Buffer[]`. With the default `binaryType`
+ * ("nodebuffer") this server only ever receives a `Buffer`, but the other two members would
+ * stringify through `Object.prototype.toString` ("[object ArrayBuffer]") if that ever changed,
+ * so the decode is explicit for all three (@typescript-eslint/no-base-to-string).
+ */
+function terminalFrameText(raw: RawData): string {
+  if (Buffer.isBuffer(raw)) return raw.toString("utf8");
+  if (Array.isArray(raw)) return Buffer.concat(raw).toString("utf8");
+  return Buffer.from(raw).toString("utf8");
+}
+
+/**
+ * [#2846] An upgraded socket keeps `server.close` from calling back, so the terminals are
+ * reclaimed first: kill the shells, drop the sockets, then the listener. Both teardown calls
+ * are needed, for different runtimes — `terminate()` is what reclaims the socket under Node
+ * (which detaches an upgraded connection and no longer tracks it), and `closeAllConnections()`
+ * is what reclaims it under Bun 1.3.11, where the upgraded connection stays on the server's
+ * list and `terminate()` alone leaves `close` hanging forever. Local play `serve` runs on Bun
+ * and would never finish Ctrl-C.
+ */
+function closeServerAndTerminals(
+  server: Server,
+  wss: WebSocketServer,
+  terminalSockets: Set<WebSocket>,
+  state: LocalPlayState,
+): Promise<void> {
+  return new Promise((done) => {
+    state.terminals.closeAll();
+    for (const accepted of terminalSockets) accepted.terminate();
+    terminalSockets.clear();
+    wss.close();
+    server.closeAllConnections();
+    server.close(() => done());
+  });
+}
+
 function terminalSocketFor(socket: WebSocket): TerminalSocketLike {
   return {
     send: (payload) => socket.send(payload),
     close: () => socket.close(),
     onMessage: (handler) => {
-      // A binary frame stringifies into something that cannot parse as an input frame,
+      // A binary frame decodes into something that cannot parse as an input frame,
       // which the bridge already treats as a protocol violation and closes on.
-      socket.on("message", (raw) => handler(raw.toString()));
+      socket.on("message", (raw) => handler(terminalFrameText(raw)));
     },
     onClose: (handler) => {
       socket.on("close", () => handler());
@@ -249,7 +286,12 @@ export async function startLocalPlayServer(
   const persist = (): Promise<void> => {
     if (!stateStore) return Promise.resolve();
     const snapshot = snapshotLocalPlayState(state);
-    saveQueue = saveQueue.catch(() => {}).then(() => stateStore.save(snapshot));
+    saveQueue = saveQueue
+      .catch(() => {
+        // Only the ordering matters here: a failed earlier save must not cancel this one,
+        // and its rejection was already surfaced to whoever awaited that call.
+      })
+      .then(() => stateStore.save(snapshot));
     return saveQueue;
   };
   let stateStoreClosed = false;
@@ -294,23 +336,7 @@ export async function startLocalPlayServer(
         port: boundPort,
         state,
         persist,
-        close: () =>
-          new Promise((done) => {
-            // [#2846] An upgraded socket keeps `server.close` from calling back, so the
-            // terminals are reclaimed first: kill the shells, drop the sockets, then the
-            // listener. Both teardown calls are needed, for different runtimes —
-            // `terminate()` is what reclaims the socket under Node (which detaches an
-            // upgraded connection and no longer tracks it), and `closeAllConnections()`
-            // is what reclaims it under Bun 1.3.11, where the upgraded connection stays
-            // on the server's list and `terminate()` alone leaves `close` hanging
-            // forever. Local play `serve` runs on Bun and would never finish Ctrl-C.
-            state.terminals.closeAll();
-            for (const accepted of terminalSockets) accepted.terminate();
-            terminalSockets.clear();
-            wss.close();
-            server.closeAllConnections();
-            server.close(() => done());
-          }),
+        close: () => closeServerAndTerminals(server, wss, terminalSockets, state),
         closeStateStore,
       });
     });

@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { StatusCodes } from "http-status-codes";
+import { compareCodePoints } from "../lib/code-point-order";
 import type { LocalPlayState } from "./api-state";
 import { parseLoopbackUrl } from "./loopback";
 import type { SimulatorNativeRoute } from "./simulator-native-environment";
@@ -121,7 +122,10 @@ function declareInjectedRoutingHeaders(headers: Headers): void {
   if (!match) return;
   const signedHeaders = new Set((match[2] ?? "").split(";"));
   for (const header of SIMULATOR_ROUTING_HEADERS) signedHeaders.add(header);
-  headers.set("authorization", `${match[1]}${[...signedHeaders].sort().join(";")}${match[3]}`);
+  headers.set(
+    "authorization",
+    `${match[1]}${[...signedHeaders].sort(compareCodePoints).join(";")}${match[3]}`,
+  );
 }
 
 function writeProxyError(response: ServerResponse, status: number, error: string): void {

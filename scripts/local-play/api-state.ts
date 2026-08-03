@@ -353,7 +353,12 @@ export function createLocalPlayState(
   }
   const { runtimes, simulatedRuntimes, catalog } = createRuntimeCollections(deployment);
   const startContainer = options.startContainer ?? fakeStartContainer;
-  const stopContainer = options.stopContainer ?? (() => {});
+  const stopContainer =
+    options.stopContainer ??
+    (() => {
+      // Default for callers with no container runtime (tests, simulator-only sessions):
+      // there is nothing to tear down, so "stopped" is already true.
+    });
   const now = options.now ?? Date.now;
   /** Teardown handle per running problem (the lifecycle only knows ids + offsets). */
   const units = new Map<string, LocalComposeUnit>();

@@ -56,6 +56,7 @@
 | Gate | Principle | Timing | Purpose |
 | --- | --- | --- | --- |
 | Biome | `PRINCIPLE_EVIDENCE_OVER_CONFIDENCE` | edit / pre-commit / CI | syntax、format、unsafe construct |
+| type-aware ESLint | `PRINCIPLE_EVIDENCE_OVER_CONFIDENCE` | pre-commit / CI | scripts の型情報が要る検査 |
 | textlint / markdownlint | `PRINCIPLE_ONE_PASS_PRODUCT_SLICE` | pre-commit / CI | public documentation quality |
 | Vitest | `PRINCIPLE_EVIDENCE_OVER_CONFIDENCE` | local / CI | behavior and regression |
 | coverage gate | `PRINCIPLE_COMPLETION_REQUIRES_AUDIT` | CI | agent-owned workspace coverage |

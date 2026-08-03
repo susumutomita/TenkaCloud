@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { copyFileSync, existsSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { compareCodePoints } from "./lib/code-point-order";
 import { scoreSimulatedProblem } from "./local-play/api-scoring";
 import type { LocalPlayDeployment } from "./local-play/api-state";
 import {
@@ -335,7 +336,7 @@ async function serve(deploymentPath: string): Promise<void> {
         (problem) => problem.simulationOverlay?.workloads?.map((workload) => workload.image) ?? [],
       ),
     ),
-  ].sort();
+  ].sort(compareCodePoints);
 
   // [#2392 Phase 2] On-demand docker: the API's lifecycle drives the real
   // ContainerRunner, and every start/stop is mirrored to units.json so `down`
@@ -438,7 +439,9 @@ async function serve(deploymentPath: string): Promise<void> {
   };
   process.once("SIGINT", () => void shutdown());
   process.once("SIGTERM", () => void shutdown());
-  await new Promise<void>(() => {});
+  await new Promise<void>(() => {
+    // Park forever: the process only leaves through the SIGINT / SIGTERM handlers above.
+  });
 }
 
 async function status(): Promise<void> {
@@ -533,7 +536,8 @@ async function snapshot(
   if (!response.ok) {
     throw new Error(`Simulator snapshot ${action} failed (HTTP ${response.status})`);
   }
-  console.log(`Simulator snapshot ${action}ed: ${join(p.localDir, "snapshots", `${name}.json`)}`);
+  const snapshotPath = join(p.localDir, "snapshots", `${name}.json`);
+  console.log(`Simulator snapshot ${action}ed: ${snapshotPath}`);
 }
 
 async function down(): Promise<void> {
@@ -571,6 +575,10 @@ async function down(): Promise<void> {
     restoreRuntimeConfig(p.runtimeConfigBackupPath, p.runtimeConfigPath, false);
   }
   console.log("Local play stopped and progress cleared.");
+}
+
+function describeTarget(target: { readonly provider: string; readonly engine: string }): string {
+  return `${target.provider}/${target.engine}`;
 }
 
 /**
@@ -615,7 +623,7 @@ function listProblems(): void {
     for (const s of simulated) {
       const runtime =
         "kind" in s.runtime
-          ? `composite(${s.runtime.targets.map((target) => `${target.provider}/${target.engine}`).join("+")})`
+          ? `composite(${s.runtime.targets.map(describeTarget).join("+")})`
           : `${s.runtime.provider}/${s.runtime.engine}`;
       console.log(
         `  ${s.problemId.padEnd(simIdWidth)}  ${s.category.padEnd(simCategoryWidth)}  ${runtime.padEnd(24)}  ${s.name}`,

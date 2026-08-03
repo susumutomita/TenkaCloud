@@ -1,4 +1,5 @@
 import { StatusCodes } from "http-status-codes";
+import { compareCodePoints } from "../lib/code-point-order";
 import type { SimulatedProblemRuntime } from "./api-state";
 import {
   jobIdOf,
@@ -102,7 +103,7 @@ function problemView(
   // `instructions` / `shortDescription` are participant-facing. The en overlay
   // drops it for the same reason; this mirrors `sanitizeI18n()` in
   // apps/participant-portal/src/data/problems.ts (the build-time projection).
-  const { description: _adminOnlyEnDescription, ...englishOverlay } = problem.i18n?.en ?? {};
+  const { description, ...englishOverlay } = problem.i18n?.en ?? {};
   const englishWriteup = complete ? problem.writeupI18n : undefined;
   const englishText = {
     ...englishOverlay,
@@ -269,6 +270,11 @@ function simulatorScoringView(runtime: SimulatedProblemRuntime) {
   return undefined;
 }
 
+function rollupHealth(healthyCount: number, totalCount: number): string {
+  if (healthyCount === totalCount) return "healthy";
+  return healthyCount > 0 ? "degraded" : "down";
+}
+
 function simulatorApplicationStatus(raw: string | undefined) {
   if (!raw) return undefined;
   let value: unknown;
@@ -289,12 +295,12 @@ function simulatorApplicationStatus(raw: string | undefined) {
   if (entries.length === 0) return undefined;
   const healthyCount = entries.filter((entry) => entry.ok).length;
   return {
-    overall: healthyCount === entries.length ? "healthy" : healthyCount > 0 ? "degraded" : "down",
+    overall: rollupHealth(healthyCount, entries.length),
     healthyCount,
     totalCount: entries.length,
     checkedAt: entries
       .map((entry) => entry.checkedAt)
-      .sort()
+      .sort(compareCodePoints)
       .at(-1),
   };
 }

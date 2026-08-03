@@ -138,7 +138,7 @@ export function readScriptId(raw: string | null): string | null {
  * 別プロジェクトを指したまま進む。 見つからなければ落とす。
  */
 export function parseScriptId(stdout: string): string {
-  const matched = stdout.match(/script\.google\.com\/d\/([\w-]+)/);
+  const matched = /script\.google\.com\/d\/([\w-]+)/.exec(stdout);
   if (!matched) {
     throw new Error(`clasp create の出力から script id を取り出せません:\n${stdout}`);
   }
@@ -154,7 +154,7 @@ export function parseScriptId(stdout: string): string {
 export function parseDeploymentId(stdout: string): string {
   // clasp 2.x は "- <deploymentId> @<version>." の行に出す。
   for (const line of stdout.split("\n")) {
-    const matched = line.match(/^-\s+(\S+)\s+@/);
+    const matched = /^-\s+(\S+)\s+@/.exec(line);
     if (matched && DEPLOYMENT_ID_PATTERN.test(matched[1])) return matched[1];
   }
   throw new Error(`clasp deploy の出力から deployment id を取り出せません:\n${stdout}`);

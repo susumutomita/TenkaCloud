@@ -9,6 +9,7 @@ import {
   type SingleRuntimeDescriptor,
 } from "@tenkacloud/problem-runtime";
 import { z } from "zod";
+import { compareCodePoints } from "../lib/code-point-order";
 import { SIMULATOR_PROTOCOL_VERSION, type SimulatorCapabilities } from "./simulator-client";
 
 export {
@@ -389,7 +390,10 @@ function overlayArtifactEntries(
     entries.set(item.targetId, targetEntries);
   }
   return new Map(
-    [...entries].map(([targetId, targetEntries]) => [targetId, [...targetEntries].sort()]),
+    [...entries].map(([targetId, targetEntries]) => [
+      targetId,
+      [...targetEntries].sort(compareCodePoints),
+    ]),
   );
 }
 

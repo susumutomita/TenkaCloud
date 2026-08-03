@@ -221,7 +221,7 @@ describe("codecov.yml (Issue #2666)", () => {
 
   it("should set every after_n_builds to the shard count so status waits for all shards", () => {
     const values = [
-      ...readFileSync(codecovPath, "utf8").matchAll(/^\s*after_n_builds:\s*(\d+)/gm),
+      ...readFileSync(codecovPath, "utf8").matchAll(/^[ \t]*after_n_builds:[ \t]*(\d+)/gm),
     ].map((m) => Number(m[1]));
     expect(values.length).toBeGreaterThan(0);
     for (const n of values) {

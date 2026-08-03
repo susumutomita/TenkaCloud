@@ -275,9 +275,8 @@ export async function waitForProblemRunning(
     // lifecycle 不在 (= AWS mode 相当の view) は常時 playable 扱い → 待つ必要なし。
     if (!lifecycle || lifecycle.status === "running") return;
     if (lifecycle.status === "error") {
-      throw new Error(
-        `problem "${problemId}" failed to start${lifecycle.lastError ? `: ${lifecycle.lastError}` : ""}`,
-      );
+      const reason = lifecycle.lastError ? `: ${lifecycle.lastError}` : "";
+      throw new Error(`problem "${problemId}" failed to start${reason}`);
     }
     if (now() >= deadline) {
       throw new Error(
@@ -307,11 +306,11 @@ export async function printRunningEndpoints(
     headers: { authorization: `Bearer ${participantToken}` },
   });
   const body = (await response.json()) as {
-    problems?: Array<{
+    problems?: {
       name: string;
       stackOutputs: Record<string, string>;
       lifecycle?: { status?: string };
-    }>;
+    }[];
   };
   for (const problem of body.problems ?? []) {
     if (problem.lifecycle?.status !== "running") continue;

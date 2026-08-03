@@ -360,8 +360,8 @@ function printFailureGuide(io: CliIO, phase: string): void {
 }
 
 interface PostDeployGuideInput {
-  readonly consoleUrl?: string | undefined;
-  readonly portalUrl?: string | undefined;
+  readonly consoleUrl?: string;
+  readonly portalUrl?: string;
   readonly tenantAdminEmail: string;
   readonly tenantAdminCreated: boolean;
 }
@@ -434,7 +434,7 @@ async function ensureTenantAdminUser(email: string, io: CliIO): Promise<number> 
     return 1;
   }
   // `https://<prefix>.auth.<region>.amazoncognito.com` から prefix を抽出。
-  const match = domainUrl.match(/^https?:\/\/([^.]+)\.auth\./);
+  const match = /^https?:\/\/([^.]+)\.auth\./.exec(domainUrl);
   if (!match?.[1]) {
     io.stderr(`[lite] failed to parse CognitoDomainUrl: ${domainUrl}\n`);
     return 1;

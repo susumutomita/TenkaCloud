@@ -13,6 +13,7 @@ import {
 } from "node:fs";
 import { createServer } from "node:net";
 import { isAbsolute, join } from "node:path";
+import { compareCodePoints } from "../lib/code-point-order";
 import { isLoopbackUrl } from "./loopback";
 import { observeProcessIdentity, processIdentityFromStartTime } from "./process-identity";
 import { readPrivateJson, unlinkIfExists, writePrivateText } from "./session-state";
@@ -93,9 +94,9 @@ function normalizedWorkloadImages(images: readonly string[] | undefined): readon
   ) {
     throw new Error("Simulator workload images must be digest-pinned catalog references");
   }
-  return [
-    ...new Set([...(requested.length > 0 ? [WORKLOAD_PROXY_IMAGE] : []), ...requested]),
-  ].sort();
+  return [...new Set([...(requested.length > 0 ? [WORKLOAD_PROXY_IMAGE] : []), ...requested])].sort(
+    compareCodePoints,
+  );
 }
 
 function workloadEnvironment(
@@ -187,7 +188,7 @@ function processRegistration(value: unknown): SimulatorProcessRegistration {
     !Number.isSafeInteger(value.pid) ||
     Number(value.pid) < 1 ||
     typeof value.startTime !== "string" ||
-    !/^[A-Za-z]{3} [A-Za-z]{3} [ 0-9][0-9] [0-9:]{8} [0-9]{4}$/.test(value.startTime.trim())
+    !/^[A-Za-z]{3} [A-Za-z]{3} [ \d]\d [\d:]{8} \d{4}$/.test(value.startTime.trim())
   ) {
     throw new Error("Simulator process launch registration is invalid");
   }
@@ -197,7 +198,7 @@ function processRegistration(value: unknown): SimulatorProcessRegistration {
     (!Number.isSafeInteger(value.childPid) ||
       Number(value.childPid) < 1 ||
       typeof value.childStartTime !== "string" ||
-      !/^[A-Za-z]{3} [A-Za-z]{3} [ 0-9][0-9] [0-9:]{8} [0-9]{4}$/.test(value.childStartTime.trim()))
+      !/^[A-Za-z]{3} [A-Za-z]{3} [ \d]\d [\d:]{8} \d{4}$/.test(value.childStartTime.trim()))
   ) {
     throw new Error("Simulator child process launch registration is invalid");
   }

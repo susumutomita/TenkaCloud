@@ -139,11 +139,18 @@ function requiredLabel(required: boolean): string {
   return required ? "Required" : "Optional";
 }
 
+function tableCell(cell: string): string {
+  return `<td>${cell}</td>`;
+}
+
+/** Repo-relative path for operator-facing messages (absolute paths are noise in a log). */
+function repoRelative(path: string): string {
+  return path.replace(`${REPO_ROOT}/`, "");
+}
+
 function table(headers: readonly string[], rows: readonly (readonly string[])[]): string {
   const head = headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("");
-  const body = rows
-    .map((cells) => `<tr>${cells.map((c) => `<td>${c}</td>`).join("")}</tr>`)
-    .join("\n");
+  const body = rows.map((cells) => `<tr>${cells.map(tableCell).join("")}</tr>`).join("\n");
   return `<table class="reference-table"><thead><tr>${head}</tr></thead><tbody>\n${body}\n</tbody></table>`;
 }
 
@@ -235,7 +242,7 @@ function transformMdx(
   const kept: string[] = [];
   for (const line of source.split("\n")) {
     if (/^import\s/.test(line)) continue;
-    const meta = line.match(/^export const metadata = \{ title: "([^"]+)" \};?$/);
+    const meta = /^export const metadata = \{ title: "([^"]+)" \};?$/.exec(line);
     if (meta) {
       title = meta[1];
       continue;
@@ -257,7 +264,7 @@ function transformMdx(
     }
     return render();
   });
-  const leftover = markdown.match(/<[A-Z][A-Za-z]*[\s>/]/);
+  const leftover = /<[A-Z][A-Za-z]*[\s>/]/.exec(markdown);
   if (leftover) {
     throw new Error(`${mdxPath}: unhandled JSX remains: ${leftover[0]}`);
   }
@@ -266,7 +273,7 @@ function transformMdx(
   // surfaces go to GitHub. English pages must link the .en variants, or one
   // click would silently switch the reader to Japanese.
   markdown = markdown.replace(
-    /\]\(\/developers\/docs\/([^)#?]*?)\/?((#|\?)[^)]*)?\)/g,
+    /\]\(\/developers\/docs\/([^)#?]*?)\/?([#?][^)]*)?\)/g,
     (_m, path: string, hash: string | undefined) =>
       `](${docsUrl(path.length > 0 ? path : null, locale)}${hash ?? ""})`,
   );
@@ -351,7 +358,7 @@ function pageTitle(page: DocPage, locale: Locale): string {
   const cached = titleCache.get(key);
   if (cached) return cached;
   const source = readMdxSource(page, locale);
-  const meta = source.match(/^export const metadata = \{ title: "([^"]+)" \};?$/m);
+  const meta = /^export const metadata = \{ title: "([^"]+)" \};?$/m.exec(source);
   const title = meta ? meta[1] : page.slug;
   titleCache.set(key, title);
   return title;
@@ -473,7 +480,7 @@ async function generate(): Promise<Map<string, string>> {
   for (const asset of DOC_ASSETS) {
     const sourcePath = join(PUBLIC_DOCS_ROOT, asset);
     if (!existsSync(sourcePath)) {
-      throw new Error(`missing docs asset: ${sourcePath.replace(`${REPO_ROOT}/`, "")}`);
+      throw new Error(`missing docs asset: ${repoRelative(sourcePath)}`);
     }
     files.set(join(OUT_ROOT, asset), readFileSync(sourcePath, "utf8"));
   }
@@ -496,7 +503,7 @@ async function main(): Promise<void> {
     if (check) {
       const current = existsSync(path) ? readFileSync(path, "utf8") : "";
       if (current !== content) {
-        console.error(`stale: ${path.replace(`${REPO_ROOT}/`, "")}`);
+        console.error(`stale: ${repoRelative(path)}`);
         drift += 1;
       }
     } else {

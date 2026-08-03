@@ -6,12 +6,15 @@ export function processIdentityFromStartTime(pid: number, startTime: string): st
 }
 
 export function parseProcessObservation(value: string): string | undefined {
-  const match = /^(?<state>\S+)\s+(?<startTime>.+)$/.exec(value.trim());
+  const match = /^(?<state>\S+)\s+(?<startTime>\S.*)$/.exec(value.trim());
   if (!match?.groups || match.groups.state.startsWith("Z")) return undefined;
   return match.groups.startTime.trim();
 }
 
 export function observeProcessStartTime(pid: number): string | undefined {
+  // `ps` is in /bin on macOS and /usr/bin on Linux, so an absolute path would break one
+  // of the two. This is local-play tooling running on the developer's own machine.
+  // eslint-disable-next-line sonarjs/no-os-command-from-path -- developer-local tooling
   const result = spawnSync("ps", ["-p", String(pid), "-o", "stat=", "-o", "lstart="], {
     encoding: "utf8",
     env: { ...process.env, LC_ALL: "C" },
