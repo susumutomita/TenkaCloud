@@ -27,7 +27,7 @@
     "@types/mdx": "^2.0.13",
     "gray-matter": "^4.0.3",
     "next": "16.2.11",
-    "react": "^19.2.7",
+    "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },
   "devDependencies": {

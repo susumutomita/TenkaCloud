@@ -37,7 +37,7 @@
         "@tenkacloud/format": "workspace:*",
         "@tenkacloud/web-kit": "workspace:*",
         "http-status-codes": "^2.3.0",
-        "react": "^19.2.7",
+        "react": "^19.2.8",
         "react-dom": "^19.2.8",
         "react-router": "^8.3.0",
       },
@@ -89,7 +89,7 @@
         "@tenkacloud/problem-runtime": "workspace:*",
         "@tenkacloud/web-kit": "workspace:*",
         "http-status-codes": "^2.3.0",
-        "react": "^19.2.7",
+        "react": "^19.2.8",
         "react-dom": "^19.2.8",
         "react-router": "^8.3.0",
         "yaml": "^1.10.3",
@@ -120,7 +120,7 @@
         "@types/mdx": "^2.0.13",
         "gray-matter": "^4.0.3",
         "next": "16.2.11",
-        "react": "^19.2.7",
+        "react": "^19.2.8",
         "react-dom": "^19.2.8",
       },
       "devDependencies": {
@@ -149,7 +149,7 @@
         "@tenkacloud/portal-plugin-sdk": "workspace:*",
         "@tenkacloud/web-kit": "workspace:*",
         "http-status-codes": "^2.3.0",
-        "react": "^19.2.7",
+        "react": "^19.2.8",
         "react-dom": "^19.2.8",
         "react-router": "^8.3.0",
         "zod": "^3.25.76",
@@ -270,7 +270,7 @@
       "version": "0.1.0",
       "devDependencies": {
         "@types/react": "^19.2.17",
-        "react": "^19.2.7",
+        "react": "^19.2.8",
         "typescript": "^6.0.3",
         "vitest": "^4.1.9",
       },
@@ -379,14 +379,14 @@
         "@types/react-dom": "^19.2.4",
         "@vitejs/plugin-react-swc": "^4.3.1",
         "jsdom": "^29.1.1",
-        "react": "^19.2.7",
+        "react": "^19.2.8",
         "react-dom": "^19.2.8",
         "typescript": "~6.0.3",
         "vitest": "^4.1.9",
       },
       "peerDependencies": {
         "@cloudscape-design/components": "^3.0.1334",
-        "react": "^19.2.7",
+        "react": "^19.2.8",
       },
     },
   },
@@ -2377,7 +2377,7 @@
 
     "rc-config-loader": ["rc-config-loader@4.1.4", "", { "dependencies": { "debug": "^4.4.3", "js-yaml": "^4.1.1", "json5": "^2.2.3", "require-from-string": "^2.0.2" } }, "sha512-3GiwEzklkbXTDp52UR5nT8iXgYAx1V9ZG/kDZT7p60u2GCv2XTwQq4NzinMoMpNtXhmt3WkhYXcj6HH8HdwCEQ=="],
 
-    "react": ["react@19.2.7", "", {}, "sha512-HNe9WslTbXmFK8o8cmwgAeJFSBvt1bPdHCVKtaaV+WlAN36mpT4hcRpwbf3fY56ar2oIXzsBpOAiIRHAdY0OlQ=="],
+    "react": ["react@19.2.8", "", {}, "sha512-PWaYA1L/q9u2u7xYQi+Y3L3Yfnie7XyLeaJICV1MGD6LprsBxcAqGjYyr0eY3p+QdsA+x/Irkt4Qif8D63+Sbw=="],
 
     "react-dom": ["react-dom@19.2.8", "", { "dependencies": { "scheduler": "^0.27.0" }, "peerDependencies": { "react": "^19.2.8" } }, "sha512-rVprimfGBG3DR+Tq0IQG2DT5PxKth1WIGDmj5yPmlzr4YBe7uyE+Du4oVqTDXZSHGGGXRtTJEGSSePyQCMBglQ=="],
 
