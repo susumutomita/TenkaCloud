@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import ts from "typescript";
 
-type SeoMetadata = {
+interface SeoMetadata {
   title: string;
   description: string;
   socialDescription: string;
@@ -11,12 +11,9 @@ type SeoMetadata = {
   alternateLocale: string;
   imageAlt: string;
   softwareDescription: string;
-};
+}
 
-type TranslationValue =
-  | string
-  | Array<[string, string]>
-  | Array<{ n: string; u: string; l: string }>;
+type TranslationValue = string | [string, string][] | { n: string; u: string; l: string }[];
 
 const root = join(import.meta.dir, "../..");
 const indexPath = join(root, "landing/index.html");
@@ -206,14 +203,14 @@ export function generateEnglishLanding(): string {
     }
   }
 
-  const bullets = translations["trust.bullets"] as Array<[string, string]>;
+  const bullets = translations["trust.bullets"] as [string, string][];
   html = html.replace(
     '<ul id="trust-bullets"></ul>',
     `<ul id="trust-bullets">${bullets
       .map(([title, body]) => `<li><span><b>${title}</b> ${body}</span></li>`)
       .join("")}</ul>`,
   );
-  const stats = translations.stats as Array<{ n: string; u: string; l: string }>;
+  const stats = translations.stats as { n: string; u: string; l: string }[];
   html = html.replace(
     '<div class="stats" id="stats-grid"></div>',
     `<div class="stats" id="stats-grid">${stats

@@ -6,24 +6,29 @@ import { join } from "node:path";
 const root = join(import.meta.dir, "../..");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 
-type Field = { entryId: string; required?: boolean; kind: string; choices?: string[] | null };
+interface Field {
+  entryId: string;
+  required?: boolean;
+  kind: string;
+  choices?: string[] | null;
+}
 
-type ContactFormModule = {
+interface ContactFormModule {
   parseConfig: (raw: unknown) => { formResponseUrl: string; fields: Record<string, unknown> };
   validate: (
     config: { fields: Record<string, Field & { validation?: string | null }> },
     values: Record<string, string>,
-  ) => Array<{ key: string; reason: string }>;
+  ) => { key: string; reason: string }[];
   buildPayload: (
     config: { fields: Record<string, Field> },
     values: Record<string, string>,
-  ) => Array<[string, string]>;
+  ) => [string, string][];
   submit: (
     config: { formResponseUrl: string; fields: Record<string, Field> },
     values: Record<string, string>,
     runtime: { fetch: typeof fetch },
   ) => Promise<unknown>;
-};
+}
 
 const contactForm = createRequire(import.meta.url)(
   join(root, "landing/contact-form.js"),
@@ -216,7 +221,7 @@ describe("landing contact form submission", () => {
   };
 
   it("should POST the entry-keyed form data to the Google Form endpoint", async () => {
-    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const calls: { url: string; init: RequestInit }[] = [];
     const recordingFetch = (async (url: string, init: RequestInit) => {
       calls.push({ url, init });
       return new Response(null, { status: 200 });

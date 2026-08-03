@@ -25,10 +25,8 @@ function round(n: number): string {
 
 function formatRow(base: Omit<CapacityInputs, "teams">, teams: number): string {
   const m = modelDeploymentsTable({ ...base, teams });
-  const flag =
-    m.readThrottles || m.writeThrottles
-      ? `YES (${m.readThrottles ? "R" : ""}${m.writeThrottles ? "W" : ""})`
-      : "no";
+  const throttled = [m.readThrottles ? "R" : "", m.writeThrottles ? "W" : ""].join("");
+  const flag = throttled === "" ? "no" : `YES (${throttled})`;
   return (
     `  ${String(teams).padStart(5)} | ${String(m.deployments).padStart(11)} | ` +
     `${round(m.totalReadsPerSec).padStart(8)} | ${round(m.readCapacityUnits).padStart(4)} | ` +

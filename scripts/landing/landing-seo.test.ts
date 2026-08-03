@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { currentVersions, STAMPED_ASSETS, stampHtml } from "./stamp-asset-versions";
 
 const root = join(import.meta.dir, "../..");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
@@ -230,11 +231,6 @@ describe("landing hero quest card (Issue #2711)", () => {
  * スタンプし忘れた PR を CI で落とす。
  */
 describe("landing asset cache busting (content-hash stamped)", () => {
-  const { stampHtml, currentVersions, STAMPED_ASSETS } = require("./stamp-asset-versions") as {
-    stampHtml: (html: string, versions: Record<string, string>) => string;
-    currentVersions: () => Record<string, string>;
-    STAMPED_ASSETS: readonly string[];
-  };
   const versions = currentVersions();
 
   it("should reference every stamped asset with its current content hash", () => {
@@ -245,7 +241,7 @@ describe("landing asset cache busting (content-hash stamped)", () => {
       }
       // 手動日付バスター (`?v=20260625-2`) の残骸を落とす。 内容ハッシュは
       // 16 進 10 桁でハイフンを含まないため、 この形にはならない。
-      expect(html).not.toMatch(/\.\/styles\/main\.css\?v=[0-9]{8}-/);
+      expect(html).not.toMatch(/\.\/styles\/main\.css\?v=\d{8}-/);
     }
   });
 
@@ -379,7 +375,6 @@ describe("AI-agent briefing and paste-able prompt", () => {
  */
 describe("30-second product video placement (#2696 P1)", () => {
   it("should ship the self-hosted 30s assets", () => {
-    const { existsSync } = require("node:fs") as typeof import("node:fs");
     for (const path of [
       "landing/videos/lp/tenkacloud-30s.mp4",
       "landing/videos/lp/tenkacloud-30s-vertical.mp4",

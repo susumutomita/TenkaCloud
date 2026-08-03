@@ -80,14 +80,19 @@ export const COVERAGE_WORKSPACES: readonly CoverageWorkspace[] = [
   { dir: "apps/developer-portal", filter: "@TenkaCloud/developer-portal", shard: "packages" },
 ];
 
-// shard → dirs, derived from COVERAGE_WORKSPACES so the two can never drift apart.
-export const SHARDS: Readonly<Record<ShardName, readonly string[]>> = SHARD_NAMES.reduce(
-  (acc, shard) => {
-    acc[shard] = COVERAGE_WORKSPACES.filter((ws) => ws.shard === shard).map((ws) => ws.dir);
-    return acc;
-  },
-  {} as Record<ShardName, readonly string[]>,
-);
+function shardDirs(shard: ShardName): readonly string[] {
+  return COVERAGE_WORKSPACES.filter((ws) => ws.shard === shard).map((ws) => ws.dir);
+}
+
+// shard → dirs, derived from COVERAGE_WORKSPACES so the two can never drift apart. The keys are
+// written out instead of reduced from SHARD_NAMES because `{} as Record<ShardName, …>` claims a
+// shape the empty object does not have: drop a shard from the reduce and the assertion still
+// says the key is there. Spelled out, `Record<ShardName, …>` makes a new shard a type error here.
+export const SHARDS: Readonly<Record<ShardName, readonly string[]>> = {
+  infrastructure: shardDirs("infrastructure"),
+  spas: shardDirs("spas"),
+  packages: shardDirs("packages"),
+};
 
 function isShardName(value: string): value is ShardName {
   return (SHARD_NAMES as readonly string[]).includes(value);
@@ -187,6 +192,10 @@ interface TimingResult {
 function runWorkspace(ws: CoverageWorkspace): TimingResult {
   console.log(`\n▶ ${ws.dir}`);
   const start = performance.now();
+  // Re-entering the same `bun` that is already running this file. mise pins the
+  // version, and the process is only ever started by a developer or the CI runner —
+  // both own their own PATH.
+  // eslint-disable-next-line sonarjs/no-os-command-from-path -- re-entrant bun call
   const result = spawnSync("bun", ["run", "--filter", ws.filter, "test:coverage"], {
     cwd: REPO_ROOT,
     stdio: "inherit",
@@ -255,6 +264,10 @@ function printSummary(results: readonly TimingResult[]): void {
 }
 
 function runFixCoveragePaths(): number {
+  // Re-entering the same `bun` that is already running this file. mise pins the
+  // version, and the process is only ever started by a developer or the CI runner —
+  // both own their own PATH.
+  // eslint-disable-next-line sonarjs/no-os-command-from-path -- re-entrant bun call
   const result = spawnSync("bun", ["run", "scripts/workspace/fix-coverage-paths.ts"], {
     cwd: REPO_ROOT,
     stdio: "inherit",

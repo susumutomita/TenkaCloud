@@ -235,17 +235,18 @@ function responseHeaderAllowed(key: string): boolean {
   );
 }
 
+/** Normalise `getHeader()`'s three shapes (absent / single / list) into a list. */
+function existingHeaderValues(existing: number | string | string[] | undefined): string[] {
+  if (Array.isArray(existing)) return existing.map(String);
+  return existing === undefined ? [] : [String(existing)];
+}
+
 function setForwardedResponseHeader(response: ServerResponse, key: string, value: string): void {
   if (key !== "content-security-policy") {
     response.setHeader(key, value);
     return;
   }
-  const existing = response.getHeader(key);
-  const policies = Array.isArray(existing)
-    ? existing.map(String)
-    : existing === undefined
-      ? []
-      : [String(existing)];
+  const policies = existingHeaderValues(response.getHeader(key));
   response.setHeader(key, [value, ...policies]);
 }
 
@@ -544,6 +545,23 @@ async function closeDataPlaneServer(
 }
 
 /** Start one isolated loopback origin for exactly one problem target. */
+/**
+ * Make a close function idempotent: repeat calls join the in-flight teardown, and a failed
+ * teardown is forgotten so a later caller can retry instead of being handed the same rejection
+ * forever.
+ */
+function onceCloser(close: () => Promise<void>): () => Promise<void> {
+  let closing: Promise<void> | undefined;
+  return () => {
+    if (closing) return closing;
+    closing = close().catch((error: unknown) => {
+      closing = undefined;
+      throw error;
+    });
+    return closing;
+  };
+}
+
 export function startSimulatorDataPlaneListener(
   resolveRoute: () => Promise<SimulatorDataPlaneRoute>,
   fetchFn: typeof fetch = fetch,
@@ -587,21 +605,13 @@ export function startSimulatorDataPlaneListener(
         return;
       }
       const port = address.port;
-      let closing: Promise<void> | undefined;
       accept({
         port,
         origin: `http://127.0.0.1:${port}`,
-        close: () => {
-          if (closing) return closing;
+        close: onceCloser(() => {
           closeRequested = true;
-          closing = closeDataPlaneServer(server, sockets, closeController, activeHandlers).catch(
-            (error) => {
-              closing = undefined;
-              throw error;
-            },
-          );
-          return closing;
-        },
+          return closeDataPlaneServer(server, sockets, closeController, activeHandlers);
+        }),
       });
     });
   });

@@ -24,6 +24,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { compareCodePoints } from "../lib/code-point-order";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const BASELINE_PATH = join(REPO_ROOT, "scripts", "quality", "duplication-baseline.json");
@@ -90,7 +91,7 @@ export function compareToBaseline(
   const areas = new Set([...Object.keys(actual), ...Object.keys(baseline)]);
   const regressions: AreaDelta[] = [];
   const improvements: AreaDelta[] = [];
-  for (const area of [...areas].sort()) {
+  for (const area of [...areas].sort(compareCodePoints)) {
     const a = actual[area] ?? 0;
     const b = baseline[area] ?? 0;
     if (a > b) regressions.push({ area, baseline: b, actual: a });

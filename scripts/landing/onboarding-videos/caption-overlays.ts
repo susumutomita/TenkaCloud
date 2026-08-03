@@ -2,19 +2,24 @@ import { escapeHtml } from "./render";
 import type { RecordedLiteEdit } from "./render-recorded-lite";
 import type { VoiceoverCue, VoiceoverLocale } from "./voiceover-data";
 
+function headingFontSizeFor(cleanup: boolean, japanese: boolean): number {
+  if (cleanup && japanese) return 48;
+  return japanese ? 58 : 54;
+}
+
+function cleanupFooter(japanese: boolean): string {
+  return japanese ? "Lite本体を先に削除 · launcherは最後" : "Delete Lite first · launcher last";
+}
+
 function buildIntroOverlayHtml(cue: VoiceoverCue, locale: VoiceoverLocale): string {
   const details = cue.details?.[locale] ?? [];
   const columns = Math.max(1, Math.min(4, details.length));
   const note = cue.note ? `<div class="stack-note">${escapeHtml(cue.note[locale])}</div>` : "";
-  const headingFontSize =
-    cue.theme === "cleanup" && locale === "ja" ? 48 : locale === "ja" ? 58 : 54;
-  const headingMaxWidth = cue.theme === "cleanup" && locale === "ja" ? 1100 : 930;
-  const footer =
-    cue.theme === "cleanup"
-      ? locale === "ja"
-        ? "Lite本体を先に削除 · launcherは最後"
-        : "Delete Lite first · launcher last"
-      : "Single tenant · One organizer · One event";
+  const japanese = locale === "ja";
+  const cleanup = cue.theme === "cleanup";
+  const headingFontSize = headingFontSizeFor(cleanup, japanese);
+  const headingMaxWidth = cleanup && japanese ? 1100 : 930;
+  const footer = cleanup ? cleanupFooter(japanese) : "Single tenant · One organizer · One event";
   return `<!doctype html>
 <html><head><meta charset="utf-8"><style>
 html, body { margin: 0; width: 1280px; height: 720px; overflow: hidden; background: #071426; }

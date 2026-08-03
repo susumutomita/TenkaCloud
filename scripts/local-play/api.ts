@@ -235,12 +235,15 @@ function handlePatch(
   return teamView(state, now);
 }
 
+/** A route handler either answers (sync or async) or declines by returning `undefined`. */
+type MaybeHandled = Promise<LocalPlayResponse> | LocalPlayResponse | undefined;
+
 function handlePost(
   request: LocalPlayRequest,
   state: LocalPlayState,
   iso: string,
   now: number,
-): Promise<LocalPlayResponse> | LocalPlayResponse | undefined {
+): MaybeHandled {
   if (request.path === "/portal/me/submit-flag") {
     return submitFlag(request, state, iso);
   }

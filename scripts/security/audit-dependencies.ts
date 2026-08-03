@@ -30,6 +30,7 @@
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { compareCodePoints } from "../lib/code-point-order";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "../..");
@@ -216,7 +217,7 @@ function loadBaseline(): BaselineSnapshot | undefined {
 function saveBaseline(findings: readonly Finding[]): void {
   const entries: Record<string, readonly LifecycleKey[]> = {};
   for (const f of [...findings].sort((a, b) => a.packageName.localeCompare(b.packageName))) {
-    entries[f.packageName] = [...f.scriptKeys].sort();
+    entries[f.packageName] = [...f.scriptKeys].sort(compareCodePoints);
   }
   const snapshot: BaselineSnapshot = {
     version: 1,
@@ -242,12 +243,12 @@ function diffAgainstBaseline(findings: readonly Finding[], baseline: BaselineSna
   for (const [name, keys] of currentByName.entries()) {
     const prior = baseline.entries[name];
     if (!prior) {
-      added.push({ name, scriptKeys: [...keys].sort() });
+      added.push({ name, scriptKeys: [...keys].sort(compareCodePoints) });
     } else {
       const priorSet = new Set(prior);
       const newlyAdded = keys.filter((k) => !priorSet.has(k));
       if (newlyAdded.length > 0) {
-        newHooks.push({ name, added: [...newlyAdded].sort() });
+        newHooks.push({ name, added: [...newlyAdded].sort(compareCodePoints) });
       }
     }
   }

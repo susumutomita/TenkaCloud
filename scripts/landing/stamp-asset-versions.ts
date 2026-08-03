@@ -21,6 +21,10 @@ const root = join(import.meta.dir, "../..");
 const landing = join(root, "landing");
 
 export function assetVersion(content: string | Buffer): string {
+  // Cache-buster fingerprint, not a security control: the digest only has to change when
+  // the asset's bytes change, and it ends up in a `?v=` query string. Collision
+  // resistance buys nothing here.
+  // eslint-disable-next-line sonarjs/hashing -- non-cryptographic content fingerprint
   return createHash("sha1").update(content).digest("hex").slice(0, 10);
 }
 

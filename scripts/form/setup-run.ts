@@ -71,6 +71,14 @@ function note(io: SetupIo, message: string): void {
 }
 
 /**
+ * 非 interactive 時の stdio。 stdout/stderr は常に pipe。 stdin は `input` を渡すときだけ
+ * pipe にし、 渡さないなら継承したままにして子側の TTY 検出を壊さない。
+ */
+function pipedStdio(hasInput: boolean): ["inherit" | "pipe", "pipe", "pipe"] {
+  return [hasInput ? "pipe" : "inherit", "pipe", "pipe"];
+}
+
+/**
  * 外部コマンドを実行し、 失敗したらその場で落とす。 握りつぶさない。
  *
  * `interactive` のときだけ stdio を丸ごと継承する。 `clasp login` は認可 URL を
@@ -88,11 +96,7 @@ function run(
     env: io.env,
     input: options.input,
     encoding: "utf8",
-    stdio: options.interactive
-      ? "inherit"
-      : options.input === undefined
-        ? ["inherit", "pipe", "pipe"]
-        : ["pipe", "pipe", "pipe"],
+    stdio: options.interactive ? "inherit" : pipedStdio(options.input !== undefined),
   });
   if (result.error) {
     throw new Error(`${command} を実行できません: ${result.error.message}`);

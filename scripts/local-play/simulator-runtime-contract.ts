@@ -12,7 +12,7 @@ import type {
   SimulatorSessionWriteHooks,
 } from "./simulator-session-record";
 
-export interface LocalSimulatorDeployment extends SimulatorSessionDeploymentRecord {}
+export type LocalSimulatorDeployment = SimulatorSessionDeploymentRecord;
 
 export interface SimulatorDataPlaneRoute {
   readonly upstreamBaseUrl: string;

@@ -197,11 +197,7 @@ function assertRecordedUnitShape(unit: Record<string, unknown>): void {
   ) {
     throw new Error("Recorded compose unit is invalid");
   }
-  if (
-    unit.secretEnv.some(
-      (name) => typeof name !== "string" || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name),
-    )
-  ) {
+  if (unit.secretEnv.some((name) => typeof name !== "string" || !/^[A-Za-z_]\w*$/.test(name))) {
     throw new Error("Recorded compose unit is invalid");
   }
 }

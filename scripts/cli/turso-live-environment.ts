@@ -69,11 +69,19 @@ function renderEnvironmentUpdate(
   });
   const remaining = Object.entries(overrides).filter(([key]) => !seen.has(key));
   if (remaining.length > 0) {
-    while (lines.length > 0 && lines.at(-1) === "") lines.pop();
+    dropTrailingBlankLines(lines);
     lines.push("", "# Added by `tenkacloud turso-live`");
     for (const [key, value] of remaining) lines.push(`${key}=${value}`);
   }
-  return `${lines.join("\n").replace(/\n+$/u, "")}\n`;
+  // Trailing blank lines collapse into the single terminating newline below. Popping the empty
+  // elements is what the old `.replace(/\n+$/u, "")` did, without that pattern's super-linear
+  // backtracking on a long run of newlines (sonarjs/slow-regex).
+  dropTrailingBlankLines(lines);
+  return `${lines.join("\n")}\n`;
+}
+
+function dropTrailingBlankLines(lines: string[]): void {
+  while (lines.length > 0 && lines.at(-1) === "") lines.pop();
 }
 
 /**

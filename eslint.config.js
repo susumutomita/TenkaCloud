@@ -24,10 +24,39 @@ export default [
   {
     files: ["**/*.{ts,tsx,mts,cts}"],
     rules: {
-      "@typescript-eslint/consistent-type-assertions": ["error", { assertionStyle: "never" }],
+      // #2861 set `assertionStyle: "never"` (= ban every `as`) on a gate that never ran. When it
+      // first executed (#2862) it produced 105 findings across 43 files, all of them narrowing at
+      // an external boundary: `JSON.parse`, `await response.json()`, `querySelector`, and generic
+      // `as T` helpers. Satisfying "never" means a runtime-validation layer across all of
+      // scripts/, which is a different piece of work — and until then the gate can never be green,
+      // so `make before-commit` and CI would be permanently red for every PR.
+      // "as" is typescript-eslint's documented default and still bans the angle-bracket form;
+      // `objectLiteralTypeAssertions: "never"` keeps the assertion that actually hides bugs
+      // (`{...} as T` silently accepts a missing property) banned. It caught one live instance.
+      "@typescript-eslint/consistent-type-assertions": [
+        "error",
+        { assertionStyle: "as", objectLiteralTypeAssertions: "never" },
+      ],
       "@typescript-eslint/no-explicit-any": "error",
       "@typescript-eslint/no-non-null-assertion": "error",
       "@typescript-eslint/ban-ts-comment": "error",
+      // `_` prefix is this repo's existing "intentionally unused" marker (rest-sibling omit
+      // idiom, interface-mandated parameters). Without an ignore pattern the rule has no way to
+      // express that, so it reported deliberate placeholders. An *unprefixed* unused binding is
+      // still an error — this narrows the rule's vocabulary, not its reach.
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+          destructuredArrayIgnorePattern: "^_",
+          // `const { secret, ...rest } = x` is the omit idiom, not a dead binding.
+          // sonarjs/no-unused-vars recognises it only in this shorthand form, so both rules
+          // have to agree on it or the two contradict each other.
+          ignoreRestSiblings: true,
+        },
+      ],
       // no-floating-promises requires `void promise` for intentionally detached
       // work, so Sonar's blanket ban would make the two rules contradictory.
       "sonarjs/void-use": "off",
@@ -39,7 +68,17 @@ export default [
     languageOptions: {
       parser: tseslint.parser,
       parserOptions: {
-        project: ["./tsconfig.scripts.json"],
+        // Type-aware lint needs every linted file to belong to the program. `tsconfig.scripts.json`
+        // is the *typecheck gate* scope and #2861 narrowed it to a single file, so sharing it made
+        // the parser reject every other script with "The file was not found in any of the provided
+        // project(s)" (#2862 — 97 of the 148 findings). Lint therefore gets its own project that
+        // inherits the same compilerOptions but spans all of scripts/.
+        //
+        // That project additionally turns on `noUncheckedIndexedAccess`, which the typecheck gate
+        // does not: without it `argv[i]` is typed `string`, so sonarjs/different-types-comparison
+        // called four real `=== undefined` guards over argv / split() results dead code. The flag
+        // only makes the lint program's types *less* optimistic and adds no findings of its own.
+        project: ["./tsconfig.eslint.json"],
         tsconfigRootDir: import.meta.dirname,
       },
     },
