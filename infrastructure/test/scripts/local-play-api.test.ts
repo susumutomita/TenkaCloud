@@ -140,6 +140,28 @@ describe("local-play API", () => {
     expect(problem.recommended).toBe(true);
   });
 
+  it("should mark lifecycle.terminal only for a problem whose metadata opted in (#2850)", async () => {
+    const declared = { ...PROBLEM, problemId: "shell-lab", terminal: { service: "verifier" } };
+    const state = createLocalPlayState({ problems: [PROBLEM, declared] }, { verify: neverVerify });
+    await state.lifecycle.ensureRunning(PROBLEM.problemId);
+    await state.lifecycle.ensureRunning(declared.problemId);
+
+    const res = await handleLocalPlayRequest(get("/portal/me"), state, NOW);
+    const body = res.body as {
+      problems: Array<{ problemId: string; lifecycle: Record<string, unknown> }>;
+    };
+    const byId = new Map(body.problems.map((problem) => [problem.problemId, problem]));
+
+    // The portal renders the terminal panel from this flag alone, so an undeclared
+    // problem must not carry it — a panel there would dead-end on a 404 handoff.
+    expect(byId.get("shell-lab")?.lifecycle).toEqual({
+      status: "running",
+      runtimeKind: "docker",
+      terminal: true,
+    });
+    expect(byId.get("sqli-demo")?.lifecycle).toEqual({ status: "running", runtimeKind: "docker" });
+  });
+
   it("should not recommend an ordinary container problem", async () => {
     const ordinaryProblem: ContainerProblem = { ...PROBLEM, problemId: "csrf-demo" };
     const state = createLocalPlayState({ problems: [ordinaryProblem] }, { verify: neverVerify });

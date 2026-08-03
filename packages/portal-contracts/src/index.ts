@@ -274,6 +274,14 @@ export interface ParticipantProblemView {
     readonly status: "stopped" | "starting" | "running" | "error";
     /** Enables runtime-specific controls without exposing runtime credentials or URLs. */
     readonly runtimeKind?: ProblemRuntimeKind;
+    /**
+     * [#2850] Local-play only: present when this problem's metadata explicitly opts
+     * into the container terminal (`runtime.terminal`). The terminal is an
+     * authorization surface — a shell reads whatever the target image holds — so the
+     * portal renders the terminal panel only on this flag, never on `runtimeKind`
+     * alone. AWS mode never sends it.
+     */
+    readonly terminal?: true;
     /** A failed operation still owns local resources; Stop retries cleanup before restart. */
     readonly cleanupRequired?: true;
     /**

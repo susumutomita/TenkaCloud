@@ -1,5 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { StatusCodes } from "http-status-codes";
+import type { Duplex } from "node:stream";
+import { getReasonPhrase, StatusCodes } from "http-status-codes";
+import { type WebSocket, WebSocketServer } from "ws";
 import { handleLocalPlayRequest } from "./api";
 import {
   type CreateStateOptions,
@@ -14,6 +16,12 @@ import {
   restoreLocalPlayState,
   snapshotLocalPlayState,
 } from "./state-store";
+import {
+  bridgeTerminalSocket,
+  consumeTerminalTicket,
+  parseTerminalUpgrade,
+  type TerminalSocketLike,
+} from "./terminal-transport";
 
 export { corsHeaders } from "./cors";
 
@@ -167,6 +175,69 @@ function handleRouteError(
   } else response.end();
 }
 
+/**
+ * [#2846] Refuse a WebSocket upgrade. There is no `ServerResponse` at this point in the
+ * handshake, so the status line goes onto the raw socket by hand before it is dropped.
+ */
+function rejectUpgrade(socket: Duplex, status: number): void {
+  socket.write(`HTTP/1.1 ${status} ${getReasonPhrase(status)}\r\nConnection: close\r\n\r\n`);
+  socket.destroy();
+}
+
+function terminalSocketFor(socket: WebSocket): TerminalSocketLike {
+  return {
+    send: (payload) => socket.send(payload),
+    close: () => socket.close(),
+    onMessage: (handler) => {
+      // A binary frame stringifies into something that cannot parse as an input frame,
+      // which the bridge already treats as a protocol violation and closes on.
+      socket.on("message", (raw) => handler(raw.toString()));
+    },
+    onClose: (handler) => {
+      socket.on("close", () => handler());
+    },
+  };
+}
+
+/**
+ * [#2846] GET /portal/me/problems/:id/terminal?ticket=... — the only upgrade this server
+ * accepts. Origin and ticket are both checked before `handleUpgrade`, so a rejected
+ * request never becomes a WebSocket.
+ */
+function handleTerminalUpgrade(
+  context: {
+    readonly wss: WebSocketServer;
+    readonly sockets: Set<WebSocket>;
+    readonly state: LocalPlayState;
+  },
+  request: IncomingMessage,
+  socket: Duplex,
+  head: Buffer,
+): void {
+  // A WebSocket handshake is not subject to CORS, so the origin guard is applied by
+  // hand here. A non-browser client (CLI, test) sends no Origin at all and is judged
+  // on its ticket alone — the same rule the HTTP routes use.
+  const origin = request.headers.origin;
+  if (origin !== undefined && !isAllowedCorsOrigin(origin)) {
+    rejectUpgrade(socket, StatusCodes.FORBIDDEN);
+    return;
+  }
+  const upgrade = parseTerminalUpgrade(new URL(request.url ?? "/", "http://127.0.0.1"));
+  if (!upgrade) {
+    rejectUpgrade(socket, StatusCodes.NOT_FOUND);
+    return;
+  }
+  if (!consumeTerminalTicket(context.state, upgrade, Date.now())) {
+    rejectUpgrade(socket, StatusCodes.UNAUTHORIZED);
+    return;
+  }
+  context.wss.handleUpgrade(request, socket, head, (accepted) => {
+    context.sockets.add(accepted);
+    accepted.on("close", () => context.sockets.delete(accepted));
+    bridgeTerminalSocket(terminalSocketFor(accepted), context.state, upgrade.problemId);
+  });
+}
+
 export async function startLocalPlayServer(
   port: number,
   deployment: LocalPlayDeployment,
@@ -203,6 +274,13 @@ export async function startLocalPlayServer(
       handleRouteError(error, request, response);
     });
   });
+  // [#2846] `noServer` mode: local play already owns exactly one listener, and routing
+  // the upgrade by hand is what lets ticket + origin be checked before a socket exists.
+  const terminalSockets = new Set<WebSocket>();
+  const wss = new WebSocketServer({ noServer: true });
+  server.on("upgrade", (request, socket, head) => {
+    handleTerminalUpgrade({ wss, sockets: terminalSockets, state }, request, socket, head);
+  });
   return new Promise((resolve, reject) => {
     const rejectStartup = (error: Error): void => {
       void closeStateStore().finally(() => reject(error));
@@ -218,6 +296,19 @@ export async function startLocalPlayServer(
         persist,
         close: () =>
           new Promise((done) => {
+            // [#2846] An upgraded socket keeps `server.close` from calling back, so the
+            // terminals are reclaimed first: kill the shells, drop the sockets, then the
+            // listener. Both teardown calls are needed, for different runtimes —
+            // `terminate()` is what reclaims the socket under Node (which detaches an
+            // upgraded connection and no longer tracks it), and `closeAllConnections()`
+            // is what reclaims it under Bun 1.3.11, where the upgraded connection stays
+            // on the server's list and `terminate()` alone leaves `close` hanging
+            // forever. Local play `serve` runs on Bun and would never finish Ctrl-C.
+            state.terminals.closeAll();
+            for (const accepted of terminalSockets) accepted.terminate();
+            terminalSockets.clear();
+            wss.close();
+            server.closeAllConnections();
             server.close(() => done());
           }),
         closeStateStore,

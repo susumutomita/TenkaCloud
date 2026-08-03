@@ -155,6 +155,50 @@ describe("loadContainerProblem", () => {
     });
   });
 
+  it("should have no terminal unless runtime.terminal opts in (#2850)", () => {
+    // The terminal is an authorization surface: absent declaration = no shell, ever.
+    expect(loadContainerProblem(DIR, fixture())).not.toHaveProperty("terminal");
+  });
+
+  it("should parse a declared runtime.terminal service (#2850)", () => {
+    const problem = loadContainerProblem(
+      DIR,
+      fixture({ runtime: { ...VALID_METADATA.runtime, terminal: { service: "verifier" } } }),
+    );
+    expect(problem.terminal).toEqual({ service: "verifier" });
+  });
+
+  it.each([
+    ["a non-object", "verifier"],
+    ["an array", ["verifier"]],
+  ])("should reject runtime.terminal that is %s (#2850)", (_label, terminal) => {
+    expect(() =>
+      loadContainerProblem(DIR, fixture({ runtime: { ...VALID_METADATA.runtime, terminal } })),
+    ).toThrow(/runtime.terminal must be an object/);
+  });
+
+  it("should reject runtime.terminal without a service (#2850)", () => {
+    expect(() =>
+      loadContainerProblem(DIR, fixture({ runtime: { ...VALID_METADATA.runtime, terminal: {} } })),
+    ).toThrow(/runtime.terminal.service must be a non-empty string/);
+  });
+
+  it.each([
+    "-rm",
+    "a b",
+    "svc/../up",
+    "",
+  ])("should reject the unsafe terminal service name %j (#2850)", (service) => {
+    // A leading "-" would read as a compose CLI flag; whitespace and path
+    // separators are not compose service names at all.
+    expect(() =>
+      loadContainerProblem(
+        DIR,
+        fixture({ runtime: { ...VALID_METADATA.runtime, terminal: { service } } }),
+      ),
+    ).toThrow(/runtime.terminal.service/);
+  });
+
   it("should reject a non-verify scoring kind", () => {
     expect(() =>
       loadContainerProblem(DIR, fixture({ scoring: { kind: "flag", points: 10 } })),

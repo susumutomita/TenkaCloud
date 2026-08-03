@@ -7,6 +7,7 @@ import {
 import type { ContainerProblem } from "./manifest";
 import { remapContainerProblem } from "./port-remap";
 import { ProblemLifecycle } from "./problem-lifecycle";
+import { ProblemTerminals, type TerminalDeps, type TerminalProcess } from "./problem-terminal";
 import type { SimulatedCloudProblem } from "./simulator";
 import type { LocalSimulatorDeployment, LocalSimulatorRuntimePort } from "./simulator-runtime";
 import {
@@ -120,6 +121,21 @@ export interface LocalPlayState {
       readonly expiresAtMs: number;
     }
   >;
+  /**
+   * [#2846] Short-lived, single-use tickets that exchange an authenticated POST for one
+   * terminal WebSocket upgrade. Same shape and lifetime as {@link consoleHandoffs}: the
+   * upgrade carries no Authorization header a browser can set, so the ticket *is* the
+   * credential and must not survive its first redemption.
+   */
+  readonly terminalHandoffs: Map<
+    string,
+    {
+      readonly problemId: string;
+      readonly expiresAtMs: number;
+    }
+  >;
+  /** [#2846] Interactive container shells, keyed by problem. Never outlive their container. */
+  readonly terminals: ProblemTerminals;
   /** Score events across all problems (each carries its own problemId). */
   readonly scoreEvents: LocalPlayScoreEvent[];
   readonly verify: VerifyFn;
@@ -164,6 +180,8 @@ export interface CreateStateOptions {
   readonly startContainer?: StartProblemContainer;
   /** Docker stop seam; `serve` injects the real `ContainerRunner`. */
   readonly stopContainer?: StopProblemContainer;
+  /** [#2846] Container-shell seam; `serve` injects the real `compose exec` spawner. */
+  readonly spawnShell?: TerminalDeps["spawnShell"];
   /** Real provider-neutral Simulator lifecycle port. Required only when a cloud problem is started. */
   readonly simulator?: LocalSimulatorRuntimePort;
   /** Server-owned directory for Simulator snapshots; never accepted from an HTTP request. */
@@ -192,6 +210,16 @@ function fakeStartContainer(problem: ContainerProblem, offset: number): Promise<
       secretEnv: problem.secretEnv,
     },
   });
+}
+
+/**
+ * [#2846] Default shell seam: there is no container to exec into. `attach` turns the
+ * throw into `spawn_failed`, so a test (or a misconfigured process) that never injected
+ * a real spawner gets a refused terminal rather than a silently dead one. 本番の `serve`
+ * は必ず実 `compose exec` アダプタを注入する。
+ */
+function fakeSpawnShell(problemId: string): TerminalProcess {
+  throw new Error(`no container shell adapter configured for problem ${problemId}`);
 }
 
 interface RuntimeCollections {
@@ -238,6 +266,7 @@ interface LifecycleContext extends RuntimeCollections {
   readonly stopContainer: StopProblemContainer;
   readonly now: () => number;
   readonly units: Map<string, LocalComposeUnit>;
+  readonly terminals: ProblemTerminals;
 }
 
 function resetSimulatedRuntime(
@@ -295,6 +324,11 @@ async function startLifecycleProblem(
 }
 
 async function stopLifecycleProblem(context: LifecycleContext, problemId: string): Promise<void> {
+  // [#2846] Explicit stop and LRU eviction both land here, and both reclaim the
+  // container. A shell must never outlive it, so the sessions die first — after the
+  // container is gone they would sit writing into a socket the participant still
+  // believes is live.
+  context.terminals.closeProblem(problemId);
   const simulatedRuntime = context.simulatedRuntimes.get(problemId);
   if (simulatedRuntime) {
     if (context.simulator) await context.simulator.stop(problemId);
@@ -323,6 +357,19 @@ export function createLocalPlayState(
   const now = options.now ?? Date.now;
   /** Teardown handle per running problem (the lifecycle only knows ids + offsets). */
   const units = new Map<string, LocalComposeUnit>();
+  // [#2846] terminals ↔ lifecycle is mutually recursive (a shell may only attach to a
+  // `running` container; a stopping container must kill its shells), so the back edge
+  // is a closure over `lifecycle` rather than a constructor argument. [#2850] Only
+  // problems whose metadata opts into `runtime.terminal` are shell-able — a
+  // simulated-cloud problem has no container to exec into, and a container problem
+  // that never declared a terminal must be refused even here, behind the ticket gate.
+  const terminalProblemIds = new Set(
+    [...catalog.values()].filter((problem) => problem.terminal).map((p) => p.problemId),
+  );
+  const terminals = new ProblemTerminals(terminalProblemIds, {
+    spawnShell: options.spawnShell ?? fakeSpawnShell,
+    statusOf: (problemId) => lifecycle.statusOf(problemId),
+  });
   const lifecycleContext: LifecycleContext = {
     runtimes,
     simulatedRuntimes,
@@ -332,6 +379,7 @@ export function createLocalPlayState(
     stopContainer,
     now,
     units,
+    terminals,
   };
   const lifecycle = new ProblemLifecycle(
     [...catalog.keys(), ...simulatedRuntimes.keys()],
@@ -352,6 +400,8 @@ export function createLocalPlayState(
     simulatedRuntimes,
     simulatorScoringInFlight: new Map(),
     consoleHandoffs: new Map(),
+    terminalHandoffs: new Map(),
+    terminals,
     scoreEvents: [],
     verify: options.verify ?? verifySubmission,
     browserText: options.browserText ?? ((text) => text),
