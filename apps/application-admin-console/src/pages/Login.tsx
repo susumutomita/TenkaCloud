@@ -19,6 +19,9 @@
  *   2) idle     : title + subtitle + email 入力 (= SAML 設定済時の初期状態)
  *   3) error    : beginLogin throw 時の fallback alert + mailto link
  *                 (= button を再表示し再 sign-in 試行を許可)
+ *
+ * [#2866] admin-console の Login.tsx と似るのは意図的 (plane ごとに独立した SPA、
+ * app boundary 優先で共有しない)。 共通部分は web-kit の ConsoleAuthShell に既に抽出済。
  */
 
 import { ConsoleAuthShell } from "@tenkacloud/web-kit";

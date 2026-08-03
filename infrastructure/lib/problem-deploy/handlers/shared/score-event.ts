@@ -72,3 +72,60 @@ export function buildScoreEventItem(
     ...record,
   };
 }
+
+/**
+ * [#2866] 公開 score-event view — operator (event-handler `team-score-events`) と
+ * participant (participant-handler `leaderboard-score-events`) の両 endpoint が返す
+ * 1 event の公開 shape。 両 handler が同一の ALLOWED_SOURCES / toView を持っていて
+ * ドリフト事故 (#2283: gate-bonus を片側だけ除外すると operator 画面と leaderboard の
+ * 合計がズレる) の温床だったため、 値集合と mapping をここに 1 本化した。
+ *
+ * 公開 source は 5 種のみ: scoring に影響する uptime / flag / flag-wrong / hint /
+ * gate-bonus。 marker 用 `attack-detected` (= result=down) は累計 score に影響しない
+ * ので通さない (= chart に並べない)。
+ */
+export const PUBLIC_SCORE_EVENT_SOURCES = [
+  "uptime",
+  "flag",
+  "flag-wrong",
+  "hint",
+  "gate-bonus",
+] as const;
+export const PUBLIC_SCORE_EVENT_RESULTS = ["ok", "wrong"] as const;
+
+export interface PublicScoreEventView {
+  readonly jobId: string;
+  readonly problemId: string;
+  readonly source: (typeof PUBLIC_SCORE_EVENT_SOURCES)[number];
+  readonly points: number;
+  readonly result: (typeof PUBLIC_SCORE_EVENT_RESULTS)[number];
+  readonly occurredAt: string;
+}
+
+const PUBLIC_SOURCE_SET = new Set<string>(PUBLIC_SCORE_EVENT_SOURCES);
+const PUBLIC_RESULT_SET = new Set<string>(PUBLIC_SCORE_EVENT_RESULTS);
+
+/**
+ * ScoreEventItem (DDB row) → {@link PublicScoreEventView}。 許可外 source / result や
+ * 欠損 field の row は undefined (= 公開しない)。 内部 field (teamLoginKey / tenantId /
+ * awsAccountId / expiresAt / PK / SK) は公開 shape に存在しないので構造的に漏洩しない。
+ */
+export function toPublicScoreEventView(
+  item: Partial<ScoreEventItem>,
+): PublicScoreEventView | undefined {
+  if (typeof item.jobId !== "string") return undefined;
+  if (typeof item.problemId !== "string") return undefined;
+  if (typeof item.source !== "string") return undefined;
+  if (!PUBLIC_SOURCE_SET.has(item.source)) return undefined;
+  if (typeof item.result !== "string") return undefined;
+  if (!PUBLIC_RESULT_SET.has(item.result)) return undefined;
+  if (typeof item.occurredAt !== "string") return undefined;
+  return {
+    jobId: item.jobId,
+    problemId: item.problemId,
+    source: item.source as PublicScoreEventView["source"],
+    points: Number(item.points ?? 0),
+    result: item.result as PublicScoreEventView["result"],
+    occurredAt: item.occurredAt,
+  };
+}

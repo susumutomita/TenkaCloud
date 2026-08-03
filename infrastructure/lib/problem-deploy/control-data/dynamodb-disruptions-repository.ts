@@ -1,14 +1,13 @@
 import {
-  DeleteCommand,
   type DynamoDBDocumentClient,
   GetCommand,
   PutCommand,
   QueryCommand,
-  ScanCommand,
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
 import type { DisruptionAuditRow } from "../handlers/event-handler/disruption-types.js";
 import { createCursorCodec } from "../handlers/shared/cursor-codec.js";
+import { sweepExpiredRows } from "./dynamodb-ttl-sweep.js";
 import type {
   DisruptionAuditPage,
   DisruptionClaimOutcome,
@@ -298,34 +297,15 @@ export class DynamoDbDisruptionsRepository implements DisruptionsRepository {
   }
 
   async pruneExpired(nowEpochSeconds: number): Promise<number> {
-    // DynamoDB removes expired rows natively via the `expiresAt` TTL attribute; this manual
-    // sweep exists so the seam is uniform with the SQLite backends (no native TTL, ADR-049
-    // §5.2). It is idempotent and only ever deletes rows DynamoDB's own TTL would also drop, so
-    // it is safe on the DDB backend too (mirrors `DynamoDbEventsRepository.pruneExpired`). One
-    // Scan covers every row shape (audit / fire-claim / recurring / exec-claim) since they all
-    // share this physical table.
-    let deleted = 0;
-    let exclusiveStartKey: Record<string, unknown> | undefined;
-    do {
-      const out = await this.ddb.send(
-        new ScanCommand({
-          TableName: this.tableName,
-          FilterExpression: "expiresAt > :zero AND expiresAt <= :now",
-          ExpressionAttributeValues: { ":zero": 0, ":now": nowEpochSeconds },
-          ...(exclusiveStartKey ? { ExclusiveStartKey: exclusiveStartKey } : {}),
-        }),
-      );
-      for (const item of (out.Items ?? []) as Record<string, unknown>[]) {
-        await this.ddb.send(
-          new DeleteCommand({
-            TableName: this.tableName,
-            Key: { PK: item.PK, SK: item.SK },
-          }),
-        );
-        deleted += 1;
-      }
-      exclusiveStartKey = out.LastEvaluatedKey as Record<string, unknown> | undefined;
-    } while (exclusiveStartKey);
-    return deleted;
+    // Sweep rationale (native TTL vs seam uniformity, ADR-049 §5.2) + loop live
+    // in `sweepExpiredRows` (shared, #2866). One Scan covers every row shape
+    // (audit / fire-claim / recurring / exec-claim) since they all share this
+    // physical table.
+    return sweepExpiredRows({
+      ddb: this.ddb,
+      tableName: this.tableName,
+      nowEpochSeconds,
+      filterExpression: "expiresAt > :zero AND expiresAt <= :now",
+    });
   }
 }

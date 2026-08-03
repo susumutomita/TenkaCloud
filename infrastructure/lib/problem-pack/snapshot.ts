@@ -26,9 +26,10 @@
  * may be deleted and the snapshot stays valid.
  */
 
-import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { computeContentDigest } from "@tenkacloud/problem-sdk";
+import { collectPackFiles } from "@tenkacloud/problem-sdk/internal";
 import { validatePackDirectory } from "./validate-pack.js";
 
 /** The lock file at the root of a snapshot store. Records every installed pack. */
@@ -36,9 +37,6 @@ export const LOCK_FILENAME = "packs-lock.json";
 
 /** Directory under the store root that holds the immutable snapshot trees. */
 export const SNAPSHOTS_DIRNAME = "snapshots";
-
-/** Directory / file names excluded from snapshots and the content digest. */
-const EXCLUDED_DIR_NAMES = new Set([".git", "node_modules", "dist"]);
 
 /**
  * Where an installed pack came from. `"local"` is a directory on disk (#2090);
@@ -164,63 +162,13 @@ export type InstallLocalPackResult =
 /** Stable failure reasons so callers / CLIs can switch on the outcome. */
 export type InstallFailureReason = "INVALID_PACK" | "DIGEST_CONFLICT";
 
-/**
- * Compute a deterministic content digest of a pack directory.
- *
- * The digest is a hex SHA-256 over a canonical encoding: every included file,
- * in sorted POSIX-relative-path order, contributes its path and its bytes. The
- * walk excludes `.git`, `node_modules`, `dist`, hidden (dot-prefixed) entries,
- * and symlinks (neither symlinked files nor symlinked directories are followed
- * or counted). Identical content therefore always yields an identical digest,
- * independent of directory iteration order or timestamps.
- */
-export function computeContentDigest(dir: string): string {
-  const root = path.resolve(dir);
-  const files = collectFiles(root, root).sort((a, b) => (a.relPath < b.relPath ? -1 : 1));
-  const hash = createHash("sha256");
-  for (const file of files) {
-    // Length-prefix the path so no two distinct (path, bytes) layouts can collide.
-    const pathBytes = Buffer.from(file.relPath, "utf-8");
-    hash.update(`${pathBytes.length}:`);
-    hash.update(pathBytes);
-    const content = fs.readFileSync(file.absPath);
-    hash.update(`${content.length}:`);
-    hash.update(content);
-  }
-  return hash.digest("hex");
-}
-
-/** Internal: one included file with its store-relative (POSIX) path. */
-interface CollectedFile {
-  readonly relPath: string;
-  readonly absPath: string;
-}
-
-function collectFiles(root: string, dir: string): CollectedFile[] {
-  const out: CollectedFile[] = [];
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (isExcludedName(entry.name)) continue;
-    // Skip symlinks entirely — never follow or count them (security + determinism).
-    if (entry.isSymbolicLink()) continue;
-    const abs = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      out.push(...collectFiles(root, abs));
-    } else if (entry.isFile()) {
-      out.push({ relPath: toPosixRelative(root, abs), absPath: abs });
-    }
-    // Anything else (sockets / FIFOs / devices) is ignored.
-  }
-  return out;
-}
-
-/** Excluded if it is a known build/VCS dir or a hidden (dot-prefixed) entry. */
-function isExcludedName(name: string): boolean {
-  return name.startsWith(".") || EXCLUDED_DIR_NAMES.has(name);
-}
-
-function toPosixRelative(root: string, abs: string): string {
-  return path.relative(root, abs).split(path.sep).join("/");
-}
+// [#2866] The digest + file walk moved to `@tenkacloud/problem-sdk` (report.ts) —
+// it was a verbatim clone. The SDK version is byte-identical for an existing
+// directory (same canonical encoding, same exclusions), and additionally
+// hashes empty input instead of throwing for a missing one (unreachable here:
+// every caller digests a directory that just validated). Re-exported so
+// existing `from "./snapshot.js"` import sites are unchanged.
+export { computeContentDigest };
 
 /**
  * Install a validated local pack into the snapshot store and update the lock.
@@ -346,10 +294,8 @@ export function writeLock(storeDir: string, lock: PackLockFile): void {
  * depends on nothing outside `destDir` and survives deletion of the source.
  */
 function copySnapshot(sourceDir: string, destDir: string): void {
-  const root = path.resolve(sourceDir);
-  const files = collectFiles(root, root);
-  for (const file of files) {
-    const target = path.join(destDir, ...toPosixRelative(root, file.absPath).split("/"));
+  for (const file of collectPackFiles(sourceDir)) {
+    const target = path.join(destDir, ...file.relPath.split("/"));
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.copyFileSync(file.absPath, target);
   }

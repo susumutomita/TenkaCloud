@@ -13,6 +13,10 @@
  *
  * directory (domain → provider[]) の供給元 (runtime-config) は本モジュールの関心外 —
  * 注入された directory に対する決定だけを行う (= テスト容易性 + 関心の分離、 ProtoShip と同方針)。
+ *
+ * [#2866] application-admin-console の同名 module と意図的に重複 (挙動は完全同一)。
+ * cross-SPA 依存を増やさず app boundary を保つ方針のため統合しない — 詳細は向こうの
+ * header と scripts/quality/check-duplication.ts の方針コメントを参照。
  */
 
 /** email ドメイン → 接続済み SAML provider 名の配列。 */

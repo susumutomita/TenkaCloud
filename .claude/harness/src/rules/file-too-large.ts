@@ -30,6 +30,9 @@ import type { Finding, Rule, RuleContext } from "../types.ts";
 const WARNING_LINES = 500;
 const ERROR_LINES = 800;
 
+// tech-debt/production-scope.ts と似ているが意図的に別物: この gate (STAGED file 検査) は
+// `infrastructure/bin/` を含まない。 共通化するとゲートの検査対象が広がる (= 挙動変更) ため
+// #2866 では統合しない。
 const INCLUDE_PATH_PREFIXES = [
   "infrastructure/lib/",
   "apps/admin-console/src/",

@@ -1,15 +1,15 @@
 {
-  ".claude": 532,
+  ".claude": 304,
   "apps/admin-console": 1119,
   "apps/always-on-control-plane": 26,
-  "apps/application-admin-console": 1393,
+  "apps/application-admin-console": 1388,
   "apps/developer-portal": 32,
-  "apps/participant-portal": 322,
-  "infrastructure": 5183,
+  "apps/participant-portal": 285,
+  "infrastructure": 4477,
   "packages/portal-contracts": 22,
   "packages/portal-plugin-sdk": 7,
-  "packages/problem-sdk": 108,
+  "packages/problem-sdk": 40,
   "packages/trust-bridge": 88,
   "packages/web-kit": 26,
-  "scripts": 420
+  "scripts": 302
 }

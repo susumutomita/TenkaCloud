@@ -1,5 +1,5 @@
 import type { DeploymentsScoringPort } from "../../control-data/deployments-repository.js";
-import type { ScoreEventItem } from "../shared/score-event.js";
+import { type ScoreEventItem, toPublicScoreEventView } from "../shared/score-event.js";
 import { type EventSharedResources, resolveDeploymentsRepository } from "./shared.js";
 import type { TeamScoreEvents, TeamScoreEventView } from "./types.js";
 
@@ -87,39 +87,10 @@ async function collectEventsForDeployments(
         maxPages: MAX_PAGES_PER_DEPLOYMENT,
       });
       for (const it of rows as Partial<ScoreEventItem>[]) {
-        const v = toView(it);
+        const v = toPublicScoreEventView(it);
         if (v) collected.push(v);
       }
     }),
   );
   return collected;
-}
-
-const ALLOWED_SOURCES = new Set<TeamScoreEventView["source"]>([
-  "uptime",
-  "flag",
-  "flag-wrong",
-  "hint",
-  // #2283: Gate 完了 bonus は score に加算されるので、 除外すると leaderboard 合計と
-  // chart 累積がズレる。 公開 source に含める。
-  "gate-bonus",
-]);
-const ALLOWED_RESULTS = new Set<TeamScoreEventView["result"]>(["ok", "wrong"]);
-
-function toView(item: Partial<ScoreEventItem>): TeamScoreEventView | undefined {
-  if (typeof item.jobId !== "string") return undefined;
-  if (typeof item.problemId !== "string") return undefined;
-  if (typeof item.source !== "string") return undefined;
-  if (!ALLOWED_SOURCES.has(item.source as TeamScoreEventView["source"])) return undefined;
-  if (typeof item.result !== "string") return undefined;
-  if (!ALLOWED_RESULTS.has(item.result as TeamScoreEventView["result"])) return undefined;
-  if (typeof item.occurredAt !== "string") return undefined;
-  return {
-    jobId: item.jobId,
-    problemId: item.problemId,
-    source: item.source as TeamScoreEventView["source"],
-    points: Number(item.points ?? 0),
-    result: item.result as TeamScoreEventView["result"],
-    occurredAt: item.occurredAt,
-  };
 }

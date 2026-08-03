@@ -17,6 +17,9 @@
  * 増やすだけだったため、 mount 直後に `beginLogin()` を発火させて Cognito Hosted UI に
  * 直接 redirect する。 SAML 設定済の場合は picker を出すために中間 page が必要なので
  * 既存 UX を維持する。
+ *
+ * [#2866] application-admin-console の Login.tsx と似るのは意図的 (plane ごとに独立した
+ * SPA、 app boundary 優先で共有しない)。 共通部分は web-kit の ConsoleAuthShell に既に抽出済。
  */
 
 import { ConsoleAuthShell } from "@tenkacloud/web-kit";
