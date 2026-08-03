@@ -405,7 +405,19 @@
     "lifecycle_simulator_running_body": "simulated cloud は稼働中です。API、CLI、Console の操作は同じ world に反映されます。",
     "lifecycle_simulator_error_header": "Simulator エラー",
     "lifecycle_simulator_error_body": "simulated cloud でエラーが発生しました。もう一度起動してください。",
-    "lifecycle_simulator_action_failed_header": "Simulator 操作に失敗しました"
+    "lifecycle_simulator_action_failed_header": "Simulator 操作に失敗しました",
+    "terminal_header": "コンテナターミナル",
+    "terminal_connect_button": "接続",
+    "terminal_connecting": "接続中…",
+    "terminal_send_button": "送信",
+    "terminal_disconnect_button": "切断",
+    "terminal_reconnect_button": "再接続",
+    "terminal_input_placeholder": "コマンドを入力して Enter",
+    "terminal_exited_with_code": "シェルが終了しました (code {code})",
+    "terminal_exited_no_code": "シェルが終了しました",
+    "terminal_not_running_error": "コンテナが起動していません。起動してから接続してください。",
+    "terminal_connect_failed_error": "接続に失敗しました。もう一度お試しください。",
+    "terminal_error_header": "ターミナル接続エラー"
   },
   "multi_flag": {
     "progress_header": "解答した flag: {solved} / {total}",

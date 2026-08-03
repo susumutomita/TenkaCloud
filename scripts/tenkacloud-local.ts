@@ -15,6 +15,7 @@ import { ContainerStartOwnershipError, type LocalComposeUnit } from "./local-pla
 import { parseProblemIds } from "./local-play/deployment-plan";
 import {
   createContainerRunner,
+  createProblemShellSpawner,
   startDetachedServe,
   waitForReachable,
 } from "./local-play/docker-adapter";
@@ -375,6 +376,20 @@ async function serve(deploymentPath: string): Promise<void> {
     stopContainer: (unit) => {
       stopPersistedContainerUnit(runner, units, persistUnits, unit);
     },
+    // [#2846] The container shell behind the portal terminal. It reads the same `units`
+    // ledger the lifecycle writes, so a problem that is not actually running has no unit
+    // to exec into and the attach is refused instead of hanging. [#2850] The shell may
+    // only enter the service each problem's metadata opted in with (`runtime.terminal`);
+    // the spawner additionally verifies the live compose config builds that service with
+    // `target: participant` before any exec.
+    spawnShell: createProblemShellSpawner(
+      units,
+      new Map(
+        deployment.problems.flatMap((problem) =>
+          problem.terminal ? [[problem.problemId, problem.terminal.service] as const] : [],
+        ),
+      ),
+    ),
     simulator,
     simulatorSnapshotDir: join(p.localDir, "snapshots"),
     stateStore,
@@ -411,6 +426,7 @@ async function serve(deploymentPath: string): Promise<void> {
       closeServer: server.close,
       ...(scoringCycle ? { scoringCycle } : {}),
       persistState: server.persist,
+      closeTerminals: () => server.state.terminals.closeAll(),
       stopAll: () => server.state.lifecycle.stopAll(),
       closeSimulator: () => simulator.close(),
       closeStateStore: server.closeStateStore,

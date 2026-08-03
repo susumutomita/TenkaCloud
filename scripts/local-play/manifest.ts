@@ -76,6 +76,26 @@ export interface ContainerMultiVerifyScoring {
 
 export type ContainerScoring = ContainerVerifyScoring | ContainerMultiVerifyScoring;
 
+/**
+ * [#2846/#2850] Explicit per-problem opt-in for the portal container terminal.
+ *
+ * A shell reaches whatever the named service's image holds, so attaching one is an
+ * authorization decision the problem author must make, not a default the platform
+ * assumes. Problems that do not declare `runtime.terminal` get no terminal: no portal
+ * panel, no handoff ticket, no attach. The named service is the only one a shell may
+ * enter — there is no fallback to "the first compose service", which on a
+ * multi-service problem is merely whichever name sorts first alphabetically.
+ *
+ * Declaring is necessary but not sufficient: at attach time the docker adapter
+ * verifies against the live compose config that the named service builds with
+ * `target: participant` (the catalog convention whose participant stage excludes
+ * `reference/` and other author-only material) and refuses the shell otherwise.
+ */
+export interface ContainerTerminal {
+  /** The compose service a shell may attach to. */
+  readonly service: string;
+}
+
 export interface ContainerProblem {
   readonly problemId: string;
   readonly name: string;
@@ -102,6 +122,8 @@ export interface ContainerProblem {
   readonly verifyUrl: string;
   /** Env var names filled with a per-deploy random secret (e.g. FLAG_SEED). */
   readonly secretEnv: readonly string[];
+  /** [#2850] Portal terminal opt-in; absent = this problem has no terminal. */
+  readonly terminal?: ContainerTerminal;
   readonly scoring: ContainerScoring;
 }
 
@@ -136,6 +158,7 @@ interface RawMetadata {
     readonly challengeEndpoints?: unknown;
     readonly verifyUrl?: unknown;
     readonly secretEnv?: unknown;
+    readonly terminal?: unknown;
   };
   readonly scoring?: {
     readonly kind?: unknown;
@@ -204,6 +227,30 @@ function normalizeSecretEnv(value: unknown): readonly string[] {
   if (value === undefined) return [];
   if (!Array.isArray(value)) throw new Error("runtime.secretEnv must be an array");
   return value.map((raw, index) => requiredString(raw, `runtime.secretEnv[${index}]`));
+}
+
+/**
+ * Compose service-name shape, additionally required to start alphanumeric so the value
+ * can never be read as a CLI flag when handed to `compose exec <service>` as argv.
+ */
+const TERMINAL_SERVICE_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
+
+/** [#2850] `runtime.terminal` opt-in: absent = no terminal; declared = service required. */
+function normalizeTerminal(value: unknown): ContainerTerminal | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error("runtime.terminal must be an object");
+  }
+  const service = requiredString(
+    (value as { service?: unknown }).service,
+    "runtime.terminal.service",
+  );
+  if (!TERMINAL_SERVICE_RE.test(service)) {
+    throw new Error(
+      `runtime.terminal.service must match ${TERMINAL_SERVICE_RE} (got "${service}")`,
+    );
+  }
+  return { service };
 }
 
 function normalizeHints(
@@ -425,6 +472,7 @@ export function loadContainerProblem(
     throw new Error(`compose file was not found: ${composePath}`);
   }
 
+  const terminal = normalizeTerminal(runtime.terminal);
   const overlay = parseEnglishOverlay(metadata.i18n);
   const containerScoring =
     kind === "verify"
@@ -447,6 +495,7 @@ export function loadContainerProblem(
     challengeEndpoints: normalizeEndpoints(runtime.challengeEndpoints),
     verifyUrl: loopbackUrl(runtime.verifyUrl, "runtime.verifyUrl"),
     secretEnv: normalizeSecretEnv(runtime.secretEnv),
+    ...(terminal ? { terminal } : {}),
     scoring: containerScoring,
   };
 }

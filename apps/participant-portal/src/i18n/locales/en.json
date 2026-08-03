@@ -405,7 +405,19 @@
     "lifecycle_simulator_running_body": "The simulated cloud is running. API, CLI, and Console operations share this world.",
     "lifecycle_simulator_error_header": "Simulator error",
     "lifecycle_simulator_error_body": "The simulated cloud hit an error. Start it again to retry.",
-    "lifecycle_simulator_action_failed_header": "Simulator operation failed"
+    "lifecycle_simulator_action_failed_header": "Simulator operation failed",
+    "terminal_header": "Container terminal",
+    "terminal_connect_button": "Connect",
+    "terminal_connecting": "Connecting…",
+    "terminal_send_button": "Send",
+    "terminal_disconnect_button": "Disconnect",
+    "terminal_reconnect_button": "Reconnect",
+    "terminal_input_placeholder": "Type a command and press Enter",
+    "terminal_exited_with_code": "The shell exited (code {code})",
+    "terminal_exited_no_code": "The shell exited",
+    "terminal_not_running_error": "The container is not running. Start it, then connect.",
+    "terminal_connect_failed_error": "Failed to connect. Try again.",
+    "terminal_error_header": "Terminal connection error"
   },
   "multi_flag": {
     "progress_header": "Flags solved: {solved} / {total}",

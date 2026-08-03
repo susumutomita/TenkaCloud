@@ -33,10 +33,12 @@ import {
   localizeProblem,
   type ProblemPanelT,
   resolveProblemTitle,
+  shouldShowContainerTerminal,
   splitStackOutputs,
 } from "./ProblemPanel.helpers";
 import { FlagSubmissionPanel } from "./ProblemPanelFlagSubmission";
 import { ProblemLifecyclePanel } from "./ProblemPanelLifecycle";
+import { ProblemTerminalPanel } from "./ProblemTerminalPanel";
 
 const STATUS_TYPE: Record<DeploymentStatus, StatusIndicatorProps.Type> = {
   PENDING: "pending",
@@ -158,6 +160,31 @@ function ProblemFacts({
           value: describeAgo(problem.lastScoredAt, now, lang),
         },
       ]}
+    />
+  );
+}
+
+/**
+ * [#2846] container terminal。 docker runtime (= AC26 companion track の network-surface
+ * 無し問題を含む local-play container) の running 問題にだけ出す。 simulated-cloud (= console
+ * handoff で足りる) / AWS mode (lifecycle 不在) には出さない。 `ProblemStatement` などと同じ
+ * 「早期 null return」 の流儀に揃え、 gating の `&&` を `ProblemPanel` 本体から追い出す。
+ */
+function ContainerTerminal({
+  problem,
+  apiBaseUrl,
+  sessionToken,
+}: {
+  problem: ParticipantProblemView;
+  apiBaseUrl: string;
+  sessionToken: string;
+}) {
+  if (!shouldShowContainerTerminal(problem)) return null;
+  return (
+    <ProblemTerminalPanel
+      apiBaseUrl={apiBaseUrl}
+      sessionToken={sessionToken}
+      problemId={problem.problemId}
     />
   );
 }
@@ -338,6 +365,11 @@ export function ProblemPanel({
             (stale な) endpoint と提出 UI を隠し、 上の start control に差し替える。 */}
         {playable && (
           <>
+            <ContainerTerminal
+              problem={problem}
+              apiBaseUrl={apiBaseUrl}
+              sessionToken={sessionToken}
+            />
             {stackOutputs.accessUrlEntries.length > 0 && (
               <Container header={<Header variant="h3">{t("problem_panel.outputs_header")}</Header>}>
                 <KeyValuePairs
