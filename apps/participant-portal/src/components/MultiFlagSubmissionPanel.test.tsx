@@ -107,6 +107,21 @@ describe("MultiFlagSubmissionPanel", () => {
     expect(screen.getByText("Flags solved: 0 / 2")).toBeInTheDocument();
   });
 
+  /**
+   * この panel は AWS の multi-flag (値が CFn output) と container の verify (デプロイ自体が
+   * 無い) の両方に出る。 label に "(デプロイ出力値)" を足すと後者では嘘になり、 実際に
+   * ac26-bridge-experiment で「実行前に最終値を予測する (デプロイ出力値)」= 何を貼ればいいのか
+   * 分からない、 という詰まり方をした。 label は出題者が書いた文字列だけを出す。
+   * 単一 flag kind (`problem_panel.flag_field_label`) は必ず CFn output なので対象外。
+   */
+  it("should label each input with the authored text only, claiming no deployment output", () => {
+    renderPanel();
+    for (const flag of FLAGS) {
+      expect(screen.getByLabelText(flag.label)).toBeInTheDocument();
+    }
+    expect(screen.queryByText(/deployment output|デプロイ出力値/)).not.toBeInTheDocument();
+  });
+
   it("should show a solved alert and no input for an already-solved flag", () => {
     renderPanel({
       flags: [{ ...FLAGS[0], solved: true }, FLAGS[1]],
@@ -581,7 +596,8 @@ describe("Lite deploy drill (issue #2696)", () => {
   it("should keep the demo helper and labeled field for non-drill problems in dev-mock", () => {
     renderPanel({}, "dev-mock");
     expect(screen.getAllByText(/Easter eggs like/).length).toBeGreaterThan(0);
-    expect(screen.getByText("Ep01: Reachability (deployment output value)")).toBeInTheDocument();
+    // label は出題者が書いた文字列そのまま (「(deployment output value)」 は付けない)。
+    expect(screen.getByText("Ep01: Reachability")).toBeInTheDocument();
     expect(screen.queryByText(/Only the exact value from the text/)).not.toBeInTheDocument();
   });
 

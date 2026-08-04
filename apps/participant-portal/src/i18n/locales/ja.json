@@ -426,7 +426,7 @@
     "solved_header": "🎉 {label} — 解答済",
     "solved_body": "この flag で +{points} pt を獲得しました。",
     "submit_button": "提出 (+{points} pt)",
-    "flag_field_label": "{label} (デプロイ出力値)",
+    "flag_field_label": "{label}",
     "tutorial_complete_header": "🎉 TenkaCloud の基本をつかみました",
     "tutorial_complete_body": "動画の3つの内容を振り返り、接続先を開いて確認コードとflagを見つけ、ヒント公開・採点まで体験しました。次は動く問題環境へ進みます。",
     "tutorial_next_header": "次は、ローカルモードで本物の問題を試そう",
