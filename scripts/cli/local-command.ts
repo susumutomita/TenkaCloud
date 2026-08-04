@@ -1,7 +1,15 @@
 import { existsSync } from "node:fs";
+import { createServer } from "node:net";
 import { join } from "node:path";
 import { runLocalPlayCommand } from "../tenkacloud-local";
 import type { ProcessRunner } from "./process";
+
+/**
+ * [#2872] The participant portal's dev-server port. Hard-coded rather than derived because
+ * `local-play/cors.ts` (LOCAL_PORTAL_ORIGINS) and `local-play/codespaces-links.ts` pin the
+ * same number; making it configurable means moving all three together.
+ */
+export const PORTAL_PORT = 5175;
 
 export interface LocalCommandDeps {
   readonly repoRoot: string;
@@ -9,6 +17,25 @@ export interface LocalCommandDeps {
   readonly runLocal: (args: readonly string[]) => Promise<void>;
   readonly fileExists: (path: string) => boolean;
   readonly log: (message: string) => void;
+  /** [#2872] False when the portal port is already taken. Injected so tests need no socket. */
+  readonly isPortFree: (port: number) => Promise<boolean>;
+}
+
+/**
+ * [#2872] Bind-and-release probe on the loopback address the portal will use.
+ *
+ * A dev server from a previous session keeps the port — including one whose git worktree has
+ * since been deleted, which is how this was found. Without the probe that collision surfaces
+ * only after `local up` has started the API and written its ownership state, leaving the API
+ * running behind a command that reported failure.
+ */
+export async function isPortFree(port: number): Promise<boolean> {
+  return await new Promise((resolve) => {
+    const probe = createServer();
+    probe.once("error", () => resolve(false));
+    probe.once("listening", () => probe.close(() => resolve(true)));
+    probe.listen(port, "127.0.0.1");
+  });
 }
 
 export interface ParsedLocalCommand {
@@ -145,6 +172,17 @@ export async function runLocalCommand(
       running = false;
     }
   }
+  // [#2872] Check the portal port BEFORE `up`. `up` starts the API and records ownership in
+  // state.json; discovering the collision afterwards left the API running behind a command
+  // that exited non-zero, and the next `make local` then refused with "already running".
+  if (!(await deps.isPortFree(PORTAL_PORT))) {
+    deps.log(
+      `Participant Portal port ${PORTAL_PORT} is already in use, so the portal cannot start.\n` +
+        `Find the listener with:  lsof -nP -iTCP:${PORTAL_PORT} -sTCP:LISTEN\n` +
+        "A dev server from an earlier session keeps the port even if its checkout is gone.",
+    );
+    return 1;
+  }
   if (!running) {
     deps.log(
       parsed.problem
@@ -158,6 +196,14 @@ export async function runLocalCommand(
     env: process.env,
     inherit: true,
   });
+  // [#2872] The port was free a moment ago, so a failure here is something else (a crashed
+  // vite, a lost dependency). Either way `make local` promised "API and portal"; leaving a
+  // half-session behind is what made the next run report "already running". Only tear down a
+  // session this invocation started — `local portal` attaches to someone else's API.
+  if (result.status !== 0 && !running && command !== "portal") {
+    deps.log("Participant Portal failed to start; stopping the local API it was started with.");
+    await deps.runLocal(["down"]);
+  }
   return result.status;
 }
 
@@ -171,5 +217,6 @@ export function defaultLocalCommandDeps(
     runLocal: runLocalPlayCommand,
     fileExists: existsSync,
     log: console.log,
+    isPortFree,
   };
 }

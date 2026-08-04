@@ -14,6 +14,7 @@ function localDeps(overrides: Partial<LocalCommandDeps> = {}): LocalCommandDeps 
     runLocal: vi.fn(async () => {}),
     fileExists: vi.fn(() => true),
     log: vi.fn(),
+    isPortFree: vi.fn(async () => true),
     ...overrides,
   };
 }
@@ -52,6 +53,56 @@ describe("TenkaCloud CLI (#2633)", () => {
     await expect(runLocalCommand(["list"], deps)).resolves.toBe(0);
     expect(deps.runLocal).toHaveBeenCalledWith(["list"]);
     expect(deps.processRunner.run).not.toHaveBeenCalled();
+  });
+
+  // [#2872] `up` starts the API and records ownership in state.json. Discovering the port
+  // collision after that left the API running behind a command that exited non-zero, and the
+  // next `make local` then refused with "already running" — the failure that actually
+  // happened, caused by a dev server whose git worktree had already been deleted.
+  it("should refuse before starting the API when the portal port is taken", async () => {
+    const calls: string[][] = [];
+    const deps = localDeps({
+      isPortFree: vi.fn(async () => false),
+      runLocal: vi.fn(async (args) => {
+        calls.push([...args]);
+        if (args[0] === "status") throw new Error("not running");
+      }),
+    });
+
+    await expect(runLocalCommand([], deps)).resolves.toBe(1);
+    expect(calls).not.toContainEqual(["up", ""]);
+    expect(deps.processRunner.run).not.toHaveBeenCalled();
+    expect(deps.log).toHaveBeenCalledWith(expect.stringContaining("lsof -nP -iTCP:5175"));
+  });
+
+  it("should stop the API it started when the portal fails anyway", async () => {
+    const calls: string[][] = [];
+    const deps = localDeps({
+      processRunner: { run: vi.fn(() => ({ status: 1, stdout: "", stderr: "" })) },
+      runLocal: vi.fn(async (args) => {
+        calls.push([...args]);
+        if (args[0] === "status") throw new Error("not running");
+      }),
+    });
+
+    await expect(runLocalCommand([], deps)).resolves.toBe(1);
+    // `make local` promises "API and portal"; a half-session is what wedges the next run.
+    expect(calls).toEqual([["status"], ["up", ""], ["down"]]);
+  });
+
+  it("should leave an API it did not start alone when the portal fails", async () => {
+    // `local portal` attaches to a session someone else owns — tearing that down on a portal
+    // failure would stop containers the operator is still using.
+    const calls: string[][] = [];
+    const deps = localDeps({
+      processRunner: { run: vi.fn(() => ({ status: 1, stdout: "", stderr: "" })) },
+      runLocal: vi.fn(async (args) => {
+        calls.push([...args]);
+      }),
+    });
+
+    await expect(runLocalCommand(["portal"], deps)).resolves.toBe(1);
+    expect(calls).toEqual([["status"]]);
   });
 
   it("should install the pinned official Turso binary when the CLI is missing", async () => {
