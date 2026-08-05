@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildCourseAlignmentTracks,
   buildCourseTracks,
   type CourseProblemView,
   evaluatePrerequisites,
   type ProblemProgress,
   recommendNext,
+  recommendNextInCourseOrder,
   resolvePrerequisiteProblemIds,
   toProblemProgress,
 } from "./course-track";
@@ -264,6 +266,43 @@ describe("recommendNext", () => {
   });
 });
 
+describe("recommendNextInCourseOrder (#2882)", () => {
+  function view(overrides: Partial<CourseProblemView>): CourseProblemView {
+    return {
+      problemId: "x",
+      name: "x",
+      chapter: "Week 1",
+      order: 10,
+      difficulty: 1,
+      estimatedDuration: "10 分",
+      learningGoals: [],
+      progress: progress("x", false),
+      prerequisiteState: "met",
+      unmetPrerequisites: [],
+      sources: [],
+      ...overrides,
+    } as CourseProblemView;
+  }
+
+  it("should keep the syllabus order instead of postponing an earlier synthesis", () => {
+    const synthesis = view({ problemId: "week-2-synthesis", order: 250, role: "synthesis" });
+    const later = view({ problemId: "week-3-mechanism", order: 310, role: "mechanism" });
+    expect(recommendNextInCourseOrder([later, synthesis])?.problemId).toBe("week-2-synthesis");
+  });
+
+  it("should skip an unmet prerequisite without locking the rest of the course", () => {
+    const blocked = view({ problemId: "blocked", order: 10, prerequisiteState: "unmet" });
+    const open = view({ problemId: "open", order: 20 });
+    expect(recommendNextInCourseOrder([blocked, open])?.problemId).toBe("open");
+  });
+
+  it("should break an equal syllabus order by problem id", () => {
+    const second = view({ problemId: "b", order: 10 });
+    const first = view({ problemId: "a", order: 10 });
+    expect(recommendNextInCourseOrder([second, first])?.problemId).toBe("a");
+  });
+});
+
 describe("buildCourseTracks", () => {
   it("should exclude every problem that declares no track", () => {
     const untracked = entry({ id: "legacy" });
@@ -398,6 +437,49 @@ describe("buildCourseTracks", () => {
     expect(view?.sources).toEqual([
       { repository: "org/repo", ref: "a".repeat(40), path: "week1/README.md" },
     ]);
+  });
+});
+
+describe("buildCourseAlignmentTracks (#2882)", () => {
+  it("should group aligned problems by course and into seven week-style chapters", () => {
+    const catalog = Array.from({ length: 7 }, (_, index) =>
+      tracked(`week-${index + 1}`, (index + 1) * 100, `Fine-grained chapter ${index + 1}`, {
+        ...alignment("mechanism", index + 1),
+      }),
+    );
+    const tracks = buildCourseAlignmentTracks(catalog, []);
+
+    expect(tracks).toHaveLength(1);
+    expect(tracks[0]?.trackId).toBe("advanced-cryptography-program");
+    expect(tracks[0]?.chapters.map((chapter) => chapter.chapter)).toEqual([
+      "Week 1",
+      "Week 2",
+      "Week 3",
+      "Week 4",
+      "Week 5",
+      "Week 6",
+      "Week 7",
+    ]);
+  });
+
+  it("should exclude unaligned problems even when they declare a generic track", () => {
+    const aligned = tracked("aligned", 10, "Detailed chapter", alignment("mechanism"));
+    const unaligned = tracked("unaligned", 20, "Other track");
+    const ids = buildCourseAlignmentTracks(
+      [aligned, unaligned],
+      [progress("aligned", false), progress("unaligned", false)],
+    ).flatMap((track) =>
+      track.chapters.flatMap((chapter) => chapter.problems.map((problem) => problem.problemId)),
+    );
+
+    expect(ids).toEqual(["aligned"]);
+  });
+
+  it("should still order an aligned problem that has no generic track", () => {
+    const alignedWithoutTrack = entry({ id: "aligned-only", ...alignment("diagnostic", 3) });
+    const track = buildCourseAlignmentTracks([alignedWithoutTrack], [])[0];
+    expect(track?.chapters[0]?.chapter).toBe("Week 3");
+    expect(track?.recommendedNext?.problemId).toBe("aligned-only");
   });
 });
 
