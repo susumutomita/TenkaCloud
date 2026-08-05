@@ -111,6 +111,10 @@
   "quests": {
     "header": "Problems (Quests)",
     "header_description": "Catalog of problems deployed to your team. Each card links directly to its access URL.",
+    "course_guidance_header": "Course learning path",
+    "course_guidance_description": "Work through these problems in week order. Use ‘Go to next problem’ to open the one problem to work on now.",
+    "other_problems_header": "Other problems",
+    "other_problems_description": "Problems outside the course remain available to choose individually, just as before.",
     "filter_all": "All",
     "filter_battle": "Battle",
     "filter_challenge": "Challenge",

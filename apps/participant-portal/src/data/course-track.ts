@@ -252,26 +252,33 @@ export function recommendNext(
 }
 
 /**
- * catalog と progress から track view を組み立てる。
+ * 講座シラバス向けの「次の 1 問」。`courseAlignment.week` と `track.order` が講義順の
+ * 正本なので、role を横断して並べ替えず、開始可能な未完了問題を先頭から 1 件だけ返す。
  *
- * `track` を宣言しない問題は 1 件も現れない (= 既存の flat な一覧の対象であり続ける)。
- * chapter の並びは、その chapter に属する問題の最小 `order` で決める — chapter 名の
- * 文字列順に頼ると「Week 10」が「Week 2」より前に来る。
+ * 汎用 track の `recommendNext` は synthesis を最後まで温存する。一方 AC26 のような
+ * 週次講座で同じ規則を使うと、Week 2 の synthesis を飛ばして Week 3 へ進んでしまうため、
+ * course-aligned view では厳密なシラバス順を使い分ける。
  */
-export function buildCourseTracks(
+export function recommendNextInCourseOrder(
+  problems: readonly CourseProblemView[],
+): CourseProblemView | undefined {
+  return [...problems]
+    .filter((problem) => !problem.progress.solved && problem.prerequisiteState !== "unmet")
+    .sort((a, b) => a.order - b.order || a.problemId.localeCompare(b.problemId))[0];
+}
+
+interface CourseTrackMember {
+  readonly entry: ProblemCatalogEntry;
+  readonly track: ProblemTrack;
+}
+
+function assembleCourseTracks(
   catalog: readonly ProblemCatalogEntry[],
   progress: readonly ProblemProgress[],
+  byTrackId: ReadonlyMap<string, readonly CourseTrackMember[]>,
+  recommender: (problems: readonly CourseProblemView[]) => CourseProblemView | undefined,
 ): readonly CourseTrackView[] {
   const progressById = new Map(progress.map((p) => [p.problemId, p]));
-
-  // `track` を持つ問題だけを、その track と一緒に取り出す。 track の有無で分岐する箇所を
-  // ここ 1 か所に閉じることで、 以降は track が必ず存在する前提で書ける。
-  const byTrackId = new Map<string, { entry: ProblemCatalogEntry; track: ProblemTrack }[]>();
-  for (const entry of catalog) {
-    const track = entry.track;
-    if (track === undefined) continue;
-    byTrackId.set(track.id, [...(byTrackId.get(track.id) ?? []), { entry, track }]);
-  }
 
   return [...byTrackId.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
@@ -281,9 +288,8 @@ export function buildCourseTracks(
         .map(({ entry, track }) => toProblemView(entry, track, catalog, progressById))
         .sort((a, b) => a.order - b.order || a.problemId.localeCompare(b.problemId));
 
-      // chapter の並びは、 その chapter の最小 order で決める。 views は既に order 昇順なので
-      // 初出の順がそのまま chapter の順になる。 chapter 名の文字列順に頼ると
-      // 「Week 10」が「Week 2」より前に来る。
+      // chapter の並びは、 その chapter に属する問題の最小 order で決める。 views は既に
+      // order 昇順なので、初出の順がそのまま chapter の順になる。
       const chapterNames: string[] = [];
       for (const view of views) {
         if (!chapterNames.includes(view.chapter)) chapterNames.push(view.chapter);
@@ -293,7 +299,7 @@ export function buildCourseTracks(
         problems: views.filter((v) => v.chapter === chapter),
       }));
 
-      const recommended = recommendNext(views);
+      const recommended = recommender(views);
       return {
         trackId,
         ...(entries.find((e) => e.courseAlignment)?.courseAlignment?.edition !== undefined
@@ -307,6 +313,61 @@ export function buildCourseTracks(
         ...(recommended ? { recommendedNext: recommended } : {}),
       } as CourseTrackView;
     });
+}
+
+/**
+ * catalog と progress から track view を組み立てる。
+ *
+ * `track` を宣言しない問題は 1 件も現れない (= 既存の flat な一覧の対象であり続ける)。
+ * chapter の並びは、その chapter に属する問題の最小 `order` で決める — chapter 名の
+ * 文字列順に頼ると「Week 10」が「Week 2」より前に来る。
+ */
+export function buildCourseTracks(
+  catalog: readonly ProblemCatalogEntry[],
+  progress: readonly ProblemProgress[],
+): readonly CourseTrackView[] {
+  // `track` を持つ問題だけを、その track と一緒に取り出す。 track の有無で分岐する箇所を
+  // ここ 1 か所に閉じることで、 以降は track が必ず存在する前提で書ける。
+  const byTrackId = new Map<string, CourseTrackMember[]>();
+  for (const entry of catalog) {
+    const track = entry.track;
+    if (track === undefined) continue;
+    byTrackId.set(track.id, [...(byTrackId.get(track.id) ?? []), { entry, track }]);
+  }
+
+  return assembleCourseTracks(catalog, progress, byTrackId, recommendNext);
+}
+
+/**
+ * Issue #2882: 外部講座に対応づけられた問題を course / week で束ねる。
+ *
+ * `track.chapter` は 1 問ごとの小節まで細かく、AC26 では 31 問がほぼ 31 section に分かれる。
+ * 問題一覧の入口では `courseAlignment.courseId` を course、`week` を 7 つの章として使う。
+ * alignment が無い問題はここへ混ぜず、従来の flat catalog に残せるようにする。
+ *
+ * alignment だけを宣言した将来の問題も落とさない。track.order が無ければ week を第一 key、
+ * problem id を tie-breaker にして deterministic に並べる。
+ */
+export function buildCourseAlignmentTracks(
+  catalog: readonly ProblemCatalogEntry[],
+  progress: readonly ProblemProgress[],
+): readonly CourseTrackView[] {
+  const byCourseId = new Map<string, CourseTrackMember[]>();
+  for (const entry of catalog) {
+    const alignment = entry.courseAlignment;
+    if (alignment === undefined) continue;
+    const track: ProblemTrack = {
+      id: alignment.courseId,
+      order: entry.track?.order ?? alignment.week * 10_000,
+      chapter: `Week ${alignment.week}`,
+    };
+    byCourseId.set(alignment.courseId, [
+      ...(byCourseId.get(alignment.courseId) ?? []),
+      { entry, track },
+    ]);
+  }
+
+  return assembleCourseTracks(catalog, progress, byCourseId, recommendNextInCourseOrder);
 }
 
 function toProblemView(

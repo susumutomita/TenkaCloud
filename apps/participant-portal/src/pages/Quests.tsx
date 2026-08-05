@@ -16,8 +16,10 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import type { ParticipantProblemView, ParticipantScoringInfo } from "../api/portal-client";
 import { useTeamView } from "../auth/TeamViewProvider";
-import { useIsMock } from "../config-context";
-import { findProblemMetadata } from "../data/problems";
+import { showsCourseTracks } from "../config";
+import { useAppConfig, useIsMock } from "../config-context";
+import { buildCourseAlignmentTracks, toProblemProgress } from "../data/course-track";
+import { findProblemMetadata, listProblemCatalog } from "../data/problems";
 import { useT } from "../i18n";
 import { categoryOf } from "../lib/category";
 import {
@@ -26,6 +28,7 @@ import {
   isGateAwaitingCompletion,
   isPrerequisiteLocked,
 } from "../lib/progression";
+import { CourseTrackCard } from "./CourseTracks";
 
 /**
  * 競技者向けの 「解答状態」 (= 解けた / 解けてない)。 #821 / #822 で導入、 issue #34 で
@@ -138,9 +141,36 @@ export function QuestsPage() {
   const navigate = useNavigate();
   const t = useT();
   const isMock = useIsMock();
+  const config = useAppConfig();
   const [filter, setFilter] = useState<CategoryFilter>("all");
 
   const allProblems = useMemo(() => view?.problems ?? [], [view]);
+  const showCourseGuidance = showsCourseTracks(config.cloudMode);
+  const catalog = useMemo(() => listProblemCatalog(), []);
+  const courseTracks = useMemo(
+    () =>
+      showCourseGuidance ? buildCourseAlignmentTracks(catalog, toProblemProgress(allProblems)) : [],
+    [allProblems, catalog, showCourseGuidance],
+  );
+  const courseProblemIds = useMemo(
+    () =>
+      new Set(
+        courseTracks.flatMap((track) =>
+          track.chapters.flatMap((chapter) => chapter.problems.map((problem) => problem.problemId)),
+        ),
+      ),
+    [courseTracks],
+  );
+
+  // Issue #2882: local self-study では course-aligned 問題を週別 track に移す。alignment を
+  // 持たない問題と catalog に無い stale problem はこの従来一覧に必ず残す。
+  const catalogProblems = useMemo(
+    () =>
+      showCourseGuidance
+        ? allProblems.filter((problem) => !courseProblemIds.has(problem.problemId))
+        : allProblems,
+    [allProblems, courseProblemIds, showCourseGuidance],
+  );
 
   // Issue #2283: Progression Gate。 progression 不在 (= Gate 設定なし / feature flag OFF)
   // なら以降の badge / hint は一切出ない (= 従来表示)。
@@ -152,15 +182,15 @@ export function QuestsPage() {
 
   const counts = useMemo(() => {
     return {
-      all: allProblems.length,
-      battle: allProblems.filter((p) => categoryOf(p.scoring) === "battle").length,
-      challenge: allProblems.filter((p) => categoryOf(p.scoring) === "challenge").length,
+      all: catalogProblems.length,
+      battle: catalogProblems.filter((p) => categoryOf(p.scoring) === "battle").length,
+      challenge: catalogProblems.filter((p) => categoryOf(p.scoring) === "challenge").length,
     };
-  }, [allProblems]);
+  }, [catalogProblems]);
 
   const categoryFiltered = useMemo(() => {
-    return allProblems.filter((p) => filter === "all" || categoryOf(p.scoring) === filter);
-  }, [allProblems, filter]);
+    return catalogProblems.filter((p) => filter === "all" || categoryOf(p.scoring) === filter);
+  }, [catalogProblems, filter]);
 
   const { unsolved, cleared } = useMemo(() => {
     const u: ParticipantProblemView[] = [];
@@ -247,6 +277,33 @@ export function QuestsPage() {
           {error}
         </Alert>
       )}
+
+      {courseTracks.length > 0 ? (
+        <SpaceBetween size="m" data-testid="course-guidance">
+          <Header variant="h2" description={t("quests.course_guidance_description")}>
+            {t("quests.course_guidance_header")}
+          </Header>
+          {courseTracks.map((track) => (
+            <CourseTrackCard
+              key={track.trackId}
+              track={track}
+              onOpen={(problemId) => {
+                const deployed = allProblems.find((problem) => problem.problemId === problemId);
+                navigate(
+                  deployed ? `/problems/${encodeURIComponent(deployed.jobId)}` : "/problems",
+                );
+              }}
+              t={t}
+            />
+          ))}
+        </SpaceBetween>
+      ) : null}
+
+      {courseTracks.length > 0 ? (
+        <Header variant="h2" description={t("quests.other_problems_description")}>
+          {t("quests.other_problems_header")}
+        </Header>
+      ) : null}
 
       <SegmentedControl
         selectedId={filter}

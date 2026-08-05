@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ParticipantProblemView } from "../../src/api/portal-client";
+import type { ProblemCatalogEntry } from "../../src/data/problems";
 
 /**
  * Quests: pure helper `renderSubmissionState` の全 status 分岐と、 QuestsPage component の
@@ -8,21 +9,30 @@ import type { ParticipantProblemView } from "../../src/api/portal-client";
  * category・difficulty badge + Link navigate) を pin する。 共有 hook と findProblemMetadata は
  * mock、 categoryOf (lib/category) は実物。
  */
-const { mockTeamView, mockNav, mockIsMock, mockFindMeta } = vi.hoisted(() => ({
-  mockTeamView: vi.fn(),
-  mockNav: vi.fn(),
-  mockIsMock: vi.fn(),
-  mockFindMeta: vi.fn(),
-}));
+const { mockTeamView, mockNav, mockIsMock, mockAppConfig, mockFindMeta, mockListCatalog } =
+  vi.hoisted(() => ({
+    mockTeamView: vi.fn(),
+    mockNav: vi.fn(),
+    mockIsMock: vi.fn(),
+    mockAppConfig: vi.fn(),
+    mockFindMeta: vi.fn(),
+    mockListCatalog: vi.fn(),
+  }));
 
 vi.mock("react-router", () => ({ useNavigate: () => mockNav }));
 vi.mock("../../src/auth/TeamViewProvider", () => ({ useTeamView: mockTeamView }));
-vi.mock("../../src/config-context", () => ({ useIsMock: mockIsMock }));
+vi.mock("../../src/config-context", () => ({
+  useAppConfig: mockAppConfig,
+  useIsMock: mockIsMock,
+}));
 vi.mock("../../src/i18n", () => ({
   useT: () => (key: string, params?: Readonly<Record<string, string | number>>) =>
     params ? `${key}|${JSON.stringify(params)}` : key,
 }));
-vi.mock("../../src/data/problems", () => ({ findProblemMetadata: mockFindMeta }));
+vi.mock("../../src/data/problems", () => ({
+  findProblemMetadata: mockFindMeta,
+  listProblemCatalog: mockListCatalog,
+}));
 
 const { renderSubmissionState, questCardTitle, QuestsPage } = await import(
   "../../src/pages/Quests"
@@ -40,6 +50,35 @@ function problem(partial: Partial<ParticipantProblemView>): ParticipantProblemVi
     score: 0,
     deployLog: { cursor: "", entries: [] },
     ...partial,
+  };
+}
+
+function alignedCatalogEntry(id: string, name: string): ProblemCatalogEntry {
+  return {
+    id,
+    name,
+    category: "Challenge",
+    status: "ready",
+    visibility: "public",
+    difficulty: 1,
+    estimatedDuration: "20 min",
+    shortDescription: "course problem",
+    learningGoals: [],
+    tags: [],
+    endpoints: [],
+    phases: [],
+    disruptions: [],
+    runtime: { provider: "docker", engine: "compose" },
+    track: { id: "ac26", order: 10, chapter: "Fine-grained chapter" },
+    courseAlignment: {
+      courseId: "advanced-cryptography-program",
+      edition: "2026",
+      week: 1,
+      role: "diagnostic",
+      sources: [],
+    },
+    graphNodes: [],
+    graphRelations: [],
   };
 }
 
@@ -148,6 +187,8 @@ beforeAll(() => {
 
 beforeEach(() => {
   mockIsMock.mockReturnValue(false);
+  mockAppConfig.mockReturnValue({ cloudMode: "mock" });
+  mockListCatalog.mockReturnValue([]);
   mockNav.mockClear();
   mockFindMeta.mockReset();
   // difficulty badge: 既知 problem は metadata あり、 それ以外は undefined (= badge 無し)。
@@ -173,6 +214,48 @@ describe("questCardTitle (issue #2189: card must show the display name, not the 
 });
 
 describe("QuestsPage", () => {
+  it("#2882: should show one course next step and keep all 40 unaligned problems", () => {
+    mockAppConfig.mockReturnValue({ cloudMode: "local" });
+    const aligned = problem({
+      problemId: "course-first",
+      jobId: "job-course-first",
+      scoring: { kind: "flag", flagSubmitted: false },
+    });
+    const unaligned = Array.from({ length: 40 }, (_, index) =>
+      problem({
+        problemId: `legacy-${index + 1}`,
+        jobId: `job-legacy-${index + 1}`,
+        scoring: { kind: "flag", flagSubmitted: false },
+      }),
+    );
+    mockListCatalog.mockReturnValue([alignedCatalogEntry("course-first", "Course first")]);
+    mockTeamView.mockReturnValue({ view: { problems: [aligned, ...unaligned] }, error: null });
+
+    render(<QuestsPage />);
+
+    expect(screen.getByTestId("course-guidance")).toBeInTheDocument();
+    expect(screen.getByTestId("course-recommended")).toHaveTextContent("Course first");
+    expect(screen.getByTestId("course-problem-course-first")).toBeInTheDocument();
+    expect(screen.getByText("Week 1")).toBeInTheDocument();
+    expect(screen.getByText("legacy-1")).toBeInTheDocument();
+    expect(screen.getByText("legacy-40")).toBeInTheDocument();
+    expect(screen.getAllByText(/quests\.filter_all \(40\)/).length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByText("course_track.start_recommended"));
+    expect(mockNav).toHaveBeenCalledWith("/problems/job-course-first");
+  });
+
+  it("#2882: should return to the deployed catalog when the suggested course problem is absent", () => {
+    mockAppConfig.mockReturnValue({ cloudMode: "local" });
+    mockListCatalog.mockReturnValue([alignedCatalogEntry("course-first", "Course first")]);
+    mockTeamView.mockReturnValue({ view: { problems: [] }, error: null });
+
+    render(<QuestsPage />);
+    fireEvent.click(screen.getByText("course_track.start_recommended"));
+
+    expect(mockNav).toHaveBeenCalledWith("/problems");
+  });
+
   it("should show the problem's display name (not its raw id) on the quest card", () => {
     mockFindMeta.mockImplementation((id: string) =>
       id === "ctf-unsolved" ? { difficulty: 3, name: "スタッフ専用ログイン" } : undefined,

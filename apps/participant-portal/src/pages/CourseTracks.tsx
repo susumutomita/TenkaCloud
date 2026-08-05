@@ -124,7 +124,7 @@ function ProblemRow({
   );
 }
 
-function TrackCard({
+export function CourseTrackCard({
   track,
   onOpen,
   t,
@@ -239,7 +239,12 @@ export function CourseTracksPage() {
         </Alert>
       ) : (
         tracks.map((track) => (
-          <TrackCard key={track.trackId} track={track} onOpen={openProblem} t={t} />
+          <CourseTrackCard
+            key={`${track.trackId}:${track.edition ?? ""}`}
+            track={track}
+            onOpen={openProblem}
+            t={t}
+          />
         ))
       )}
     </SpaceBetween>
