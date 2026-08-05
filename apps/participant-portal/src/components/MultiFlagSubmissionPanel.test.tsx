@@ -1,5 +1,5 @@
 import { LITE_DRILL_CHECKPOINTS, LITE_DRILL_PROBLEM_ID } from "@tenkacloud/portal-contracts";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type * as React from "react";
 import { MemoryRouter, useLocation } from "react-router";
@@ -105,6 +105,36 @@ describe("MultiFlagSubmissionPanel", () => {
     renderPanel();
     expect(screen.getAllByRole("textbox")).toHaveLength(2);
     expect(screen.getByText("Flags solved: 0 / 2")).toBeInTheDocument();
+  });
+
+  /**
+   * [#2876] コードを提出する checkpoint を 1 行 `<Input>` に出すと、 貼り付け時にブラウザが
+   * 改行を落とす。 正しい解答が構文エラーになって不正解 + ペナルティになり、 参加者は自分の
+   * コードを疑い続ける (ac26 トラックは 215 中 203 の checkpoint がソース提出)。
+   * `input: "multiline"` の欄は textarea を出し、 改行を保つ。
+   */
+  it("should keep newlines in a checkpoint that submits source code", async () => {
+    const source = "def advance(start, step):\n    return (start + step) % 7\n";
+    renderPanel({
+      flags: [{ ...FLAGS[0], input: "multiline" as const }],
+    });
+
+    const box = screen.getByLabelText(FLAGS[0].label);
+    expect(box.tagName).toBe("TEXTAREA");
+
+    fireEvent.change(box, { target: { value: source } });
+    fireEvent.click(screen.getByRole("button", { name: /Submit/ }));
+
+    await waitFor(() => expect(apiMocks.submitFlag).toHaveBeenCalled());
+    const submitted = apiMocks.submitFlag.mock.calls.at(-1);
+    expect(String(submitted?.[3])).toContain("\n");
+    expect(String(submitted?.[3])).toBe(source);
+  });
+
+  it("should keep the one-line field for a checkpoint that submits a plain value", () => {
+    renderPanel();
+    // input 未宣言 = 従来どおり。 既存問題の見た目を変えない。
+    expect(screen.getByLabelText(FLAGS[0].label).tagName).toBe("INPUT");
   });
 
   /**

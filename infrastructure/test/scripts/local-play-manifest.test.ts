@@ -495,6 +495,28 @@ describe("loadContainerProblem: multi-verify (issue #2252)", () => {
     });
   });
 
+  /**
+   * [#2876] `input` は見た目の好みではなく提出値の形の契約。 コードを提出する checkpoint を
+   * 1 行 input に出すと貼り付けで改行が落ち、 正しい解答が構文エラーになって不正解になる。
+   * 未宣言は従来どおり (送らない) で既存問題に影響しない。 不正値は落とす — 黙って 1 行に
+   * 戻すと、 作者が守ろうとした checkpoint でバグが復活するため。
+   */
+  it("should carry the submitted-value shape through to the container problem", () => {
+    const problem = loadContainerProblem(
+      DIR,
+      multiVerify([check({ input: "multiline" }), other()]),
+    );
+    expect(problem.scoring).toMatchObject({
+      checks: [{ id: "public-backup", input: "multiline" }, { id: "exposed-config" }],
+    });
+    // 未宣言の check には生やさない。
+    expect(problem.scoring.checks?.[1]).not.toHaveProperty("input");
+
+    expect(() =>
+      loadContainerProblem(DIR, multiVerify([check({ input: "multi-line" }), other()])),
+    ).toThrow(/input must be "text" or "multiline"/);
+  });
+
   it("should parse a top-level hintReveal:'flat' for the whole multi-verify problem", () => {
     const problem = loadContainerProblem(
       DIR,

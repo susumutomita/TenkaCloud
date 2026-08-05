@@ -8,6 +8,7 @@ import Header from "@cloudscape-design/components/header";
 import Input from "@cloudscape-design/components/input";
 import ProgressBar from "@cloudscape-design/components/progress-bar";
 import SpaceBetween from "@cloudscape-design/components/space-between";
+import Textarea from "@cloudscape-design/components/textarea";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import {
@@ -392,12 +393,28 @@ function SubFlagRow({
           }
         >
           <FormField label={field.label} description={field.description}>
-            <Input
-              value={value}
-              onChange={(e) => setValue(e.detail.value)}
-              placeholder={field.placeholder}
-              disabled={submitting}
-            />
+            {/*
+              [#2876] コードを貼る checkpoint は textarea。 1 行 `<Input>` に複数行を貼ると
+              ブラウザが改行を落とし、 正しい解答が黙って構文エラーになって不正解 +
+              ペナルティになる (ac26 トラックは 215 中 203 の checkpoint がソース提出)。
+              形の宣言はカタログの `scoring.checks[].input` 由来で、 未宣言は従来どおり 1 行。
+            */}
+            {flag.input === "multiline" ? (
+              <Textarea
+                value={value}
+                onChange={(e) => setValue(e.detail.value)}
+                placeholder={field.placeholder}
+                disabled={submitting}
+                rows={12}
+              />
+            ) : (
+              <Input
+                value={value}
+                onChange={(e) => setValue(e.detail.value)}
+                placeholder={field.placeholder}
+                disabled={submitting}
+              />
+            )}
           </FormField>
         </Form>
       </form>

@@ -62,6 +62,8 @@ function multiVerifyScoringView(
       points: check.points,
       solved: runtime.solved.has(check.id),
       ...(check.i18n ? { i18n: check.i18n } : {}),
+      // [#2876] コードを貼る欄かどうか。 portal はこれを見て textarea に切り替える。
+      ...(check.input ? { input: check.input } : {}),
       ...(check.hints.length > 0 ? { hints: hintViews(runtime, check.hints) } : {}),
     })),
   };

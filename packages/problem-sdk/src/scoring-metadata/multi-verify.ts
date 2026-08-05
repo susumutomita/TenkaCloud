@@ -25,6 +25,12 @@ export interface MultiVerifyCheck {
   readonly points: number;
   readonly wrongAnswerPenalty?: number;
   readonly hints?: readonly ProgressiveHint[];
+  /**
+   * [#2876] Shape of the submitted value. `"multiline"` = the answer is source code,
+   * so the portal renders a textarea; a single-line input drops the newlines on paste
+   * and turns a correct answer into a wrong one. Absent = `"text"` (one line).
+   */
+  readonly input?: "text" | "multiline";
 }
 
 /**
@@ -99,6 +105,7 @@ function parseMultiVerifyCheck(value: unknown): MultiVerifyCheck | undefined {
     points?: unknown;
     wrongAnswerPenalty?: unknown;
     hints?: unknown;
+    input?: unknown;
   };
   const id = optionalNonEmptyString(c.id);
   const label = optionalNonEmptyString(c.label);
@@ -122,11 +129,16 @@ function parseMultiVerifyCheck(value: unknown): MultiVerifyCheck | undefined {
     const hintIds = new Set(hints.map((hint) => hint.id));
     if (hintIds.size !== hints.length) return undefined;
   }
+  // [#2876] Never fall back to the one-line field on a bad value: a typo would
+  // silently reinstate the paste-eats-newlines bug on a checkpoint the author
+  // explicitly declared as code. Same never-partial-drop policy as the rest.
+  if (c.input !== undefined && c.input !== "text" && c.input !== "multiline") return undefined;
   return {
     id,
     label,
     points: c.points,
     wrongAnswerPenalty: clampWrongAnswerPenalty(c.wrongAnswerPenalty),
     ...(hints ? { hints } : {}),
+    ...(c.input !== undefined ? { input: c.input } : {}),
   };
 }

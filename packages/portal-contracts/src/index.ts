@@ -85,6 +85,16 @@ export interface MultiFlagEntryView {
   readonly hints?: readonly ParticipantHintView[];
   /** [#2252] `i18n.en.checks[]` 由来の label 訳。 配点・ID は翻訳側に重複させない。 */
   readonly i18n?: { readonly en?: { readonly label?: string } };
+  /**
+   * [#2876] 提出値の形。 `"multiline"` は複数行のソースコードを貼る欄で、 portal は
+   * 1 行 `<Input>` ではなく `<Textarea>` を出す。 未指定は `"text"` (= 1 行) と同じで、
+   * 既存問題に影響しない。
+   *
+   * 1 行 input は貼り付け時にブラウザが改行を落とすため、 コードを提出する checkpoint に
+   * 使うと**正しい解答が黙って壊れて不正解になる** (ac26 トラックでは 215 中 203 の
+   * checkpoint がソースを提出する)。 だから形は「見た目の好み」ではなく契約。
+   */
+  readonly input?: "text" | "multiline";
 }
 
 /**

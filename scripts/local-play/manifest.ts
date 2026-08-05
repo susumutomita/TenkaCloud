@@ -63,6 +63,13 @@ export interface ContainerCheck {
   readonly hints: readonly ContainerHint[];
   /** `metadata.i18n.en.checks[]` translation of `label`, matched by id. */
   readonly i18n?: { readonly en?: { readonly label: string } };
+  /**
+   * [#2876] Shape of the submitted value. `"multiline"` means the answer is source
+   * code, so the portal must render a textarea — a single-line input silently drops
+   * the newlines on paste and turns a correct answer into a wrong one. Absent =
+   * `"text"`, so problems that never declared it keep the one-line field.
+   */
+  readonly input?: "text" | "multiline";
 }
 
 export interface ContainerMultiVerifyScoring {
@@ -579,6 +586,7 @@ function parseOneCheck(
     points?: unknown;
     wrongAnswerPenalty?: unknown;
     hints?: unknown;
+    input?: unknown;
   };
   const id = requiredString(check.id, `scoring.checks[${index}].id`);
   if (!CHECK_ID_RE.test(id)) {
@@ -620,6 +628,7 @@ function parseOneCheck(
     }
     seenHintIds.add(hint.id);
   }
+  const input = parseCheckInput(check.input, index);
   return {
     id,
     label,
@@ -627,5 +636,19 @@ function parseOneCheck(
     wrongAnswerPenalty,
     hints,
     ...(overlay?.label !== undefined ? { i18n: { en: { label: overlay.label } } } : {}),
+    ...(input !== undefined ? { input } : {}),
   };
+}
+
+/**
+ * [#2876] Fail closed on an unknown shape rather than falling back to the one-line
+ * field: a typo like `input: "multi-line"` would otherwise silently reinstate the
+ * paste-eats-newlines bug on exactly the checkpoint an author tried to protect.
+ */
+function parseCheckInput(raw: unknown, index: number): ContainerCheck["input"] {
+  if (raw === undefined) return undefined;
+  if (raw !== "text" && raw !== "multiline") {
+    throw new Error(`scoring.checks[${index}].input must be "text" or "multiline"`);
+  }
+  return raw;
 }
