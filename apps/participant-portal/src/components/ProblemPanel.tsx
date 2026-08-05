@@ -19,6 +19,7 @@ import { WHAT_IS_DRILL_PROBLEM_ID } from "../dev-mock/flag-submit";
 import { useLang, useT } from "../i18n";
 import { describeAgo, type SupportedLang } from "../lib/format";
 import { AttackProbesPanel } from "./AttackProbesPanel";
+import { ContainerWorkbenchPanel } from "./ContainerWorkbenchPanel";
 import { MultiFlagSubmissionPanel } from "./MultiFlagSubmissionPanel";
 import {
   buildAutoDeleteNotice,
@@ -73,6 +74,45 @@ function onboardingPracticeEndpointUrl(): string {
     `${import.meta.env.BASE_URL}${ONBOARDING_PRACTICE_ENDPOINT_FILE}`,
     window.location.origin,
   ).href;
+}
+
+function MultiFlagPlaySurface({
+  localDocker,
+  apiBaseUrl,
+  sessionToken,
+  problemId,
+  scoring,
+  onScored,
+}: {
+  readonly localDocker: boolean;
+  readonly apiBaseUrl: string;
+  readonly sessionToken: string;
+  readonly problemId: string;
+  readonly scoring: NonNullable<ReturnType<typeof getCompleteMultiFlagScoring>>;
+  readonly onScored: () => Promise<void>;
+}) {
+  if (localDocker) {
+    return (
+      <ContainerWorkbenchPanel
+        apiBaseUrl={apiBaseUrl}
+        sessionToken={sessionToken}
+        problemId={problemId}
+        flags={scoring.flags ?? []}
+        onScored={onScored}
+        revealOrder={scoring.hintReveal}
+      />
+    );
+  }
+  return (
+    <MultiFlagSubmissionPanel
+      apiBaseUrl={apiBaseUrl}
+      sessionToken={sessionToken}
+      problemId={problemId}
+      flags={scoring.flags ?? []}
+      onScored={onScored}
+      revealOrder={scoring.hintReveal}
+    />
+  );
 }
 
 /** Defense in depth: runtime control material is never a participant stack output. */
@@ -420,13 +460,13 @@ export function ProblemPanel({
               />
             )}
             {multiFlagScoring && (
-              <MultiFlagSubmissionPanel
+              <MultiFlagPlaySurface
+                localDocker={problem.lifecycle?.runtimeKind === "docker"}
                 apiBaseUrl={apiBaseUrl}
                 sessionToken={sessionToken}
                 problemId={problem.problemId}
-                flags={multiFlagScoring.flags ?? []}
+                scoring={multiFlagScoring}
                 onScored={onScored}
-                revealOrder={multiFlagScoring.hintReveal}
               />
             )}
           </>

@@ -434,7 +434,23 @@
     "tutorial_manual_button": "Open participant manual",
     "tutorial_manual_aria": "Open participant manual (opens in a new tab)",
     "tutorial_local_button": "Try local mode",
-    "tutorial_lite_button": "Go to “Deploy your own TenkaCloud Lite”"
+    "tutorial_lite_button": "Go to “Deploy your own TenkaCloud Lite”",
+    "editor_source_description": "This checkpoint submits the current source from the editors above."
+  },
+  "workbench": {
+    "heading": "Problem editor",
+    "loading": "Checking for a problem editor…",
+    "unavailable_header": "Problem editor unavailable",
+    "load_error": "Failed to load the problem editor",
+    "inspect_button": "Inspect evidence",
+    "test_button": "Run public tests",
+    "reset_button": "Restore starter",
+    "inspect_heading": "Problem-specific evidence",
+    "test_passed": "Public tests passed",
+    "test_failed": "Public tests have not passed yet",
+    "action_failed": "Problem editor action failed",
+    "inspect_error": "Failed to inspect the evidence",
+    "test_error": "Failed to run the public tests"
   },
   "onboarding_tutorial": {
     "panel_title": "Six steps from video to real action",

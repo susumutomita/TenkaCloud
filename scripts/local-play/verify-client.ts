@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { readCappedResponseText } from "./bounded-response";
 import { parseLoopbackUrl } from "./loopback";
 
 /**
@@ -49,32 +50,6 @@ export interface VerifyOptions {
   readonly checkpointId?: string;
 }
 
-async function readCappedText(response: Response, maxBytes: number): Promise<string> {
-  const body = response.body;
-  if (!body) return response.text();
-  const reader = body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    if (!value) continue;
-    total += value.byteLength;
-    if (total > maxBytes) {
-      await reader.cancel();
-      throw new Error(`problem container /verify response exceeds ${maxBytes} bytes`);
-    }
-    chunks.push(value);
-  }
-  const merged = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    merged.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return new TextDecoder().decode(merged);
-}
-
 export async function verifySubmission(
   verifyUrl: string,
   submission: string,
@@ -110,7 +85,11 @@ export async function verifySubmission(
     throw new Error(`problem container /verify returned HTTP ${response.status}`);
   }
 
-  const text = await readCappedText(response, MAX_RESPONSE_BYTES);
+  const text = await readCappedResponseText(
+    response,
+    MAX_RESPONSE_BYTES,
+    () => new Error(`problem container /verify response exceeds ${MAX_RESPONSE_BYTES} bytes`),
+  );
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);

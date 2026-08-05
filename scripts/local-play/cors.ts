@@ -2,7 +2,12 @@ import { type CodespacesEnv, codespacesForwardedOrigin } from "./codespaces-orig
 
 export type { CodespacesEnv } from "./codespaces-origin";
 
-const LOCAL_PORTAL_ORIGINS = new Set(["http://localhost:5175", "http://127.0.0.1:5175"]);
+const LOCAL_PORTAL_ORIGINS = new Set([
+  "http://localhost:5175",
+  "http://127.0.0.1:5175",
+  // eslint-disable-next-line sonarjs/no-clear-text-protocols -- exact local-only IPv6 origin
+  "http://[::1]:5175",
+]);
 
 /** Accept only the exact local or current Codespaces Participant Portal origin. */
 export function isAllowedCorsOrigin(origin: string, env: CodespacesEnv = process.env): boolean {

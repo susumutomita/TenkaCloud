@@ -434,7 +434,23 @@
     "tutorial_manual_button": "競技参加者マニュアルを開く",
     "tutorial_manual_aria": "競技参加者マニュアルを新しいタブで開く",
     "tutorial_local_button": "ローカルモードを試す",
-    "tutorial_lite_button": "「自分の TenkaCloud Lite を立てる」へ"
+    "tutorial_lite_button": "「自分の TenkaCloud Lite を立てる」へ",
+    "editor_source_description": "このチェックポイントには、上のエディタにある現在のソースコードを提出します。"
+  },
+  "workbench": {
+    "heading": "問題エディタ",
+    "loading": "問題エディタを確認しています…",
+    "unavailable_header": "問題エディタを読み込めません",
+    "load_error": "問題エディタの読み込みに失敗しました",
+    "inspect_button": "証拠を確認",
+    "test_button": "公開テストを実行",
+    "reset_button": "初期状態に戻す",
+    "inspect_heading": "問題固有の証拠",
+    "test_passed": "公開テストに合格しました",
+    "test_failed": "公開テストに未合格です",
+    "action_failed": "問題エディタの操作に失敗しました",
+    "inspect_error": "証拠の取得に失敗しました",
+    "test_error": "公開テストの実行に失敗しました"
   },
   "onboarding_tutorial": {
     "panel_title": "動画から実操作へ・6つのステップ",

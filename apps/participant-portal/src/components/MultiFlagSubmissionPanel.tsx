@@ -84,6 +84,7 @@ export function MultiFlagSubmissionPanel({
   onScored,
   revealOrder,
   onboardingVariant,
+  prepareSubmission,
 }: {
   apiBaseUrl: string;
   sessionToken: string;
@@ -94,6 +95,12 @@ export function MultiFlagSubmissionPanel({
   revealOrder?: HintRevealMode;
   /** #2822 A/B preview: list = 動画と同じ一覧、step = 標準 UI を 1 flag ずつ表示。 */
   onboardingVariant?: OnboardingVariant;
+  /**
+   * Local container editor hook. When present, every checkpoint submission is
+   * prepared from the current editor files plus all direct-answer values. Multiline
+   * checkpoint inputs are replaced by the shared source editors.
+   */
+  prepareSubmission?: (flagId: string, values: Readonly<Record<string, string>>) => Promise<string>;
 }) {
   const t = useT();
   const isMock = useIsMock();
@@ -104,6 +111,7 @@ export function MultiFlagSubmissionPanel({
   const [mockSolvedIds, setMockSolvedIds] = useState<ReadonlySet<string>>(() =>
     isMock ? loadMockSolvedFlagIds(problemId) : new Set(),
   );
+  const [submissionValues, setSubmissionValues] = useState<Readonly<Record<string, string>>>({});
   const isSolved = (flag: MultiFlagEntryView) => flag.solved || mockSolvedIds.has(flag.id);
   const solvedCount = flags.filter(isSolved).length;
   const allSolved = flags.length > 0 && solvedCount === flags.length;
@@ -207,6 +215,12 @@ export function MultiFlagSubmissionPanel({
             }}
             onScored={onScored}
             revealOrder={revealOrder}
+            value={submissionValues[flag.id] ?? ""}
+            values={submissionValues}
+            onValueChange={(value) =>
+              setSubmissionValues((current) => ({ ...current, [flag.id]: value }))
+            }
+            prepareSubmission={prepareSubmission}
             onHintRevealed={(hintId) => {
               if (problemId !== WHAT_IS_DRILL_PROBLEM_ID) return;
               revealedHints.current.add(hintId);
@@ -306,6 +320,31 @@ export function subFlagFieldPresentation(
   };
 }
 
+interface SubFlagRowProps {
+  apiBaseUrl: string;
+  sessionToken: string;
+  problemId: string;
+  flag: MultiFlagEntryView;
+  solved: boolean;
+  onMockSolved: (flagId: string) => void;
+  onScored: () => Promise<void>;
+  revealOrder?: HintRevealMode;
+  onHintRevealed?: (hintId: string) => void;
+  onSubmitted?: (outcome: SubmitFlagOutcome) => void;
+  value: string;
+  values: Readonly<Record<string, string>>;
+  onValueChange: (value: string) => void;
+  prepareSubmission?: (flagId: string, values: Readonly<Record<string, string>>) => Promise<string>;
+}
+
+function canSubmitSubFlag(
+  value: string,
+  input: MultiFlagEntryView["input"],
+  prepareSubmission: SubFlagRowProps["prepareSubmission"],
+): boolean {
+  return value.trim().length > 0 || (prepareSubmission !== undefined && input === "multiline");
+}
+
 function SubFlagRow({
   apiBaseUrl,
   sessionToken,
@@ -317,18 +356,11 @@ function SubFlagRow({
   revealOrder,
   onHintRevealed,
   onSubmitted,
-}: {
-  apiBaseUrl: string;
-  sessionToken: string;
-  problemId: string;
-  flag: MultiFlagEntryView;
-  solved: boolean;
-  onMockSolved: (flagId: string) => void;
-  onScored: () => Promise<void>;
-  revealOrder?: HintRevealMode;
-  onHintRevealed?: (hintId: string) => void;
-  onSubmitted?: (outcome: SubmitFlagOutcome) => void;
-}) {
+  value,
+  values,
+  onValueChange,
+  prepareSubmission,
+}: SubFlagRowProps) {
   const t = useT();
   const lang = useLang();
   // [#2252] i18n.en.checks 由来の label 訳 (multi-verify)。 無ければ ja label に fallback。
@@ -337,7 +369,6 @@ function SubFlagRow({
   // (= 単一 flag kind の FlagSubmissionPanel と同方針。 ドリル問題のみ per-flag 判定)。
   const isMock = useIsMock();
   const field = subFlagFieldPresentation(isStrictDrillProblem(problemId), isMock, label, t);
-  const [value, setValue] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [outcome, setOutcome] = useState<SubmitFlagOutcome | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -357,14 +388,15 @@ function SubFlagRow({
 
   const handleSubmit = async (e: { preventDefault: () => void }) => {
     e.preventDefault();
-    if (value.trim().length === 0 || submitting) return;
+    if (!canSubmitSubFlag(value, flag.input, prepareSubmission) || submitting) return;
     setSubmitting(true);
     setSubmitError(null);
     setOutcome(null);
     try {
+      const submission = prepareSubmission ? await prepareSubmission(flag.id, values) : value;
       const result = isMock
-        ? evaluateMockSubFlag(problemId, flag.id, value, flag.points)
-        : await submitFlag(apiBaseUrl, sessionToken, problemId, value, flag.id);
+        ? evaluateMockSubFlag(problemId, flag.id, submission, flag.points)
+        : await submitFlag(apiBaseUrl, sessionToken, problemId, submission, flag.id);
       setOutcome(result);
       onSubmitted?.(result);
       switch (result.kind) {
@@ -393,10 +425,12 @@ function SubFlagRow({
           }
         >
           <FormField label={field.label} description={field.description}>
-            {flag.input === "multiline" ? (
+            {prepareSubmission !== undefined && flag.input === "multiline" ? (
+              <Box color="text-body-secondary">{t("multi_flag.editor_source_description")}</Box>
+            ) : flag.input === "multiline" ? (
               <Textarea
                 value={value}
-                onChange={(e) => setValue(e.detail.value)}
+                onChange={(e) => onValueChange(e.detail.value)}
                 placeholder={field.placeholder}
                 disabled={submitting}
                 rows={10}
@@ -404,7 +438,7 @@ function SubFlagRow({
             ) : (
               <Input
                 value={value}
-                onChange={(e) => setValue(e.detail.value)}
+                onChange={(e) => onValueChange(e.detail.value)}
                 placeholder={field.placeholder}
                 disabled={submitting}
               />
