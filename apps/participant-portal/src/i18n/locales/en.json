@@ -426,7 +426,7 @@
     "solved_header": "🎉 {label} — solved",
     "solved_body": "You earned +{points} pt for this flag.",
     "submit_button": "Submit (+{points} pt)",
-    "flag_field_label": "{label} (deployment output value)",
+    "flag_field_label": "{label}",
     "tutorial_complete_header": "🎉 You have the TenkaCloud basics",
     "tutorial_complete_body": "You reviewed the three concepts from the video, opened the practice endpoint, found its connection code and flag, then used the hint reveal and scoring flow. The next step is a running problem environment.",
     "tutorial_next_header": "Next: try a real problem in local mode",
