@@ -10,6 +10,7 @@ import {
 import { ContainerStartOwnershipError } from "../../../scripts/local-play/container-runner";
 import type { ContainerProblem } from "../../../scripts/local-play/manifest";
 import { PORT_STRIDE } from "../../../scripts/local-play/port-remap";
+import { WorkbenchClientError } from "../../../scripts/local-play/workbench-client";
 
 const PROBLEM: ContainerProblem = {
   problemId: "sqli-demo",
@@ -138,6 +139,59 @@ describe("local-play API", () => {
     expect(problem.scoring).not.toHaveProperty("hintReveal");
     // The documented Docker reference problem is the local-mode starting point.
     expect(problem.recommended).toBe(true);
+  });
+
+  it("should proxy a running container editor contract through its remapped verify URL", async () => {
+    const workbench = vi.fn(async () => ({
+      id: PROBLEM.problemId,
+      name: PROBLEM.name,
+      description: "Edit the starter.",
+      submittedFiles: ["solution.py"],
+      checkpoints: [{ id: "implement", label: "Implement", kind: "code" }],
+    }));
+    const state = createLocalPlayState({ problems: [PROBLEM] }, { workbench });
+    await state.lifecycle.ensureRunning(PROBLEM.problemId);
+    const response = await handleLocalPlayRequest(
+      get(`/portal/me/problems/${PROBLEM.problemId}/workbench/config`),
+      state,
+      NOW,
+    );
+    expect(response.status).toBe(StatusCodes.OK);
+    expect(workbench).toHaveBeenCalledWith(PROBLEM.verifyUrl, "config", undefined);
+  });
+
+  it("should refuse editor access while stopped and map an absent contract to 404", async () => {
+    const workbench = vi.fn(async () => {
+      throw new WorkbenchClientError("not_supported", "missing");
+    });
+    const state = createLocalPlayState({ problems: [PROBLEM] }, { workbench });
+    const path = `/portal/me/problems/${PROBLEM.problemId}/workbench/config`;
+    const stopped = await handleLocalPlayRequest(get(path), state, NOW);
+    expect(stopped).toEqual({ status: StatusCodes.CONFLICT, body: { error: "not_running" } });
+    expect(workbench).not.toHaveBeenCalled();
+    await state.lifecycle.ensureRunning(PROBLEM.problemId);
+    const unsupported = await handleLocalPlayRequest(get(path), state, NOW);
+    expect(unsupported).toEqual({
+      status: StatusCodes.NOT_FOUND,
+      body: { error: "workbench_not_supported" },
+    });
+  });
+
+  it("should reject an editor config that names a different problem", async () => {
+    const state = createLocalPlayState(
+      { problems: [PROBLEM] },
+      { workbench: async () => ({ id: "other" }) },
+    );
+    await state.lifecycle.ensureRunning(PROBLEM.problemId);
+    const response = await handleLocalPlayRequest(
+      get(`/portal/me/problems/${PROBLEM.problemId}/workbench/config`),
+      state,
+      NOW,
+    );
+    expect(response).toEqual({
+      status: StatusCodes.BAD_GATEWAY,
+      body: { error: "invalid_workbench_response" },
+    });
   });
 
   it("should mark lifecycle.terminal only for a problem whose metadata opted in (#2850)", async () => {

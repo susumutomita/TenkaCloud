@@ -70,6 +70,9 @@ describe("local-play CORS", () => {
     expect(corsHeaders("http://127.0.0.1:5175")["access-control-allow-origin"]).toBe(
       "http://127.0.0.1:5175",
     );
+    expect(corsHeaders("http://[::1]:5175")["access-control-allow-origin"]).toBe(
+      "http://[::1]:5175",
+    );
   });
 
   it("should reflect the same Codespace participant portal origin", () => {

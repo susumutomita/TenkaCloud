@@ -16,6 +16,7 @@ import {
   simulatorScoringContract,
 } from "./simulator-scoring";
 import { type VerifyContext, type VerifyResult, verifySubmission } from "./verify-client";
+import { requestWorkbench, type WorkbenchFn } from "./workbench-client";
 
 /**
  * [#2527 Slice 6] The local scoring API's contract + session state, extracted verbatim
@@ -139,6 +140,8 @@ export interface LocalPlayState {
   /** Score events across all problems (each carries its own problemId). */
   readonly scoreEvents: LocalPlayScoreEvent[];
   readonly verify: VerifyFn;
+  /** Authenticated proxy seam for the running container's generic editor contract. */
+  readonly workbench: WorkbenchFn;
   /** Browser-facing rewrite for loopback URLs in problem prose / endpoint outputs. */
   readonly browserText: (text: string) => string;
   /** [#2392 Phase 2] On-demand container lifecycle (cap / LRU eviction; explicit stop only, #2512). */
@@ -170,6 +173,8 @@ export const jobIdOf = (problemId: string) => `local-${problemId}`;
 export interface CreateStateOptions {
   readonly teamName?: string;
   readonly verify?: VerifyFn;
+  /** Injectable editor client for API tests; production uses the loopback-only client. */
+  readonly workbench?: WorkbenchFn;
   /** [#2392 Phase 2] Max simultaneously-running containers (default {@link DEFAULT_MAX_RUNNING}). */
   readonly maxRunning?: number;
   /** Clock injected so cap / LRU-eviction behavior is deterministic in tests. */
@@ -409,6 +414,7 @@ export function createLocalPlayState(
     terminals,
     scoreEvents: [],
     verify: options.verify ?? verifySubmission,
+    workbench: options.workbench ?? requestWorkbench,
     browserText: options.browserText ?? ((text) => text),
     lifecycle,
     ...(options.simulator ? { simulator: options.simulator } : {}),

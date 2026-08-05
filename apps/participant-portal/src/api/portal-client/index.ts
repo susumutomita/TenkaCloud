@@ -32,3 +32,4 @@ export * from "./sso";
 export * from "./team";
 export * from "./terminal";
 export * from "./types";
+export * from "./workbench";

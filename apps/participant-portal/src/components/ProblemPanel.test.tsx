@@ -34,6 +34,9 @@ vi.mock("./ProblemPanelFlagSubmission", () => ({
 vi.mock("./MultiFlagSubmissionPanel", () => ({
   MultiFlagSubmissionPanel: () => <div data-testid="multi-flag-panel" />,
 }));
+vi.mock("./ContainerWorkbenchPanel", () => ({
+  ContainerWorkbenchPanel: () => <div data-testid="container-workbench-panel" />,
+}));
 
 function withI18n(node: React.ReactNode, cloudMode: CloudMode = "real") {
   return (
@@ -433,6 +436,43 @@ describe("ProblemPanel render branches", () => {
     });
     expect(screen.getByTestId("multi-flag-panel")).toBeInTheDocument();
     expect(screen.queryByTestId("flag-panel")).not.toBeInTheDocument();
+  });
+
+  it("should render the Portal container editor for a running local Docker problem", () => {
+    renderPanel(
+      {
+        status: "COMPLETE",
+        lifecycle: { status: "running", runtimeKind: "docker" },
+        scoring: {
+          kind: "multi-flag",
+          points: 60,
+          flags: [
+            {
+              id: "implement",
+              label: "Implement",
+              points: 60,
+              solved: false,
+              input: "multiline",
+            },
+          ],
+        },
+      },
+      "local",
+    );
+    expect(screen.getByTestId("container-workbench-panel")).toBeInTheDocument();
+    expect(screen.queryByTestId("multi-flag-panel")).not.toBeInTheDocument();
+  });
+
+  it("should tolerate legacy local multi-flag metadata without a flags list", () => {
+    renderPanel(
+      {
+        status: "COMPLETE",
+        lifecycle: { status: "running", runtimeKind: "docker" },
+        scoring: { kind: "multi-flag", points: 0 },
+      },
+      "local",
+    );
+    expect(screen.getByTestId("container-workbench-panel")).toBeInTheDocument();
   });
 
   it("should keep the intro tutorial focused by hiding its long statement and deployment facts", () => {

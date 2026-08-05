@@ -14,6 +14,7 @@ import {
 import { leaderboard, teamView } from "./api-views";
 import { parseLoopbackUrl } from "./loopback";
 import { participantSimulatorOutputs, simulatorOutput } from "./simulator-scoring";
+import { type WorkbenchAction, WorkbenchClientError } from "./workbench-client";
 
 /**
  * [#2527 Slice 6] The local scoring API's HTTP routing + on-demand lifecycle commands.
@@ -89,6 +90,8 @@ const ENDPOINT_RE = /^\/portal\/me\/problems\/([^/]+)\/endpoints\/([^/]+)$/;
 const DISRUPTION_RE = /^\/local\/operator\/problems\/([^/]+)\/disruptions\/([^/]+)\/fire$/;
 const SNAPSHOT_RE = /^\/local\/operator\/problems\/([^/]+)\/snapshots\/([^/]+)\/(export|import)$/;
 const REVEAL_RE = /^\/portal\/me\/problems\/([^/]+)\/hints\/([^/]+)\/reveal$/;
+const WORKBENCH_RE =
+  /^\/portal\/me\/problems\/([^/]+)\/workbench\/(config|starter|inspect|test|prepare)$/;
 const CONSOLE_HANDOFF_TTL_MS = 30_000;
 /** [#2846] Long enough for one browser upgrade, short enough that a leaked ticket is dead. */
 const TERMINAL_HANDOFF_TTL_MS = 30_000;
@@ -171,6 +174,8 @@ async function handleGet(
 ): Promise<LocalPlayResponse | undefined> {
   const consoleHandoff = await handleConsoleHandoffGet(request, state, now);
   if (consoleHandoff) return consoleHandoff;
+  const workbench = WORKBENCH_RE.exec(request.path);
+  if (workbench) return handleWorkbench(request, workbench, state);
   const endpoints = ENDPOINTS_RE.exec(request.path);
   if (endpoints) {
     const problemId = decodePathSegment(endpoints[1]);
@@ -247,6 +252,8 @@ function handlePost(
   if (request.path === "/portal/me/submit-flag") {
     return submitFlag(request, state, iso);
   }
+  const workbench = WORKBENCH_RE.exec(request.path);
+  if (workbench) return handleWorkbench(request, workbench, state);
   const consoleHandoff = handleConsoleHandoffPost(request, state, now);
   if (consoleHandoff) return consoleHandoff;
   const terminalHandoff = handleTerminalHandoffPost(request, state, now);
@@ -264,6 +271,61 @@ function handlePost(
     return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_hint" } };
   }
   return revealHint(problemId, hintId, state, iso);
+}
+
+const WORKBENCH_GET_ACTIONS = new Set<WorkbenchAction>(["config", "starter", "inspect"]);
+
+/**
+ * Proxy one allowlisted editor operation to a running container. The public route is
+ * already protected by the server's `/portal/` bearer gate; this layer additionally
+ * refuses unknown, stopped, simulated, and method-mismatched targets.
+ */
+async function handleWorkbench(
+  request: LocalPlayRequest,
+  match: RegExpExecArray,
+  state: LocalPlayState,
+): Promise<LocalPlayResponse> {
+  const problemId = decodePathSegment(match[1]);
+  const action = match[2] as WorkbenchAction;
+  const runtime = problemId === undefined ? undefined : state.runtimes.get(problemId);
+  if (!problemId || !runtime) {
+    return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_problem" } };
+  }
+  if (state.lifecycle.statusOf(problemId) !== "running") {
+    return { status: StatusCodes.CONFLICT, body: { error: "not_running" } };
+  }
+  const expectedMethod = WORKBENCH_GET_ACTIONS.has(action) ? "GET" : "POST";
+  if (request.method !== expectedMethod) {
+    return { status: StatusCodes.METHOD_NOT_ALLOWED, body: { error: "method_not_allowed" } };
+  }
+  try {
+    const body = await state.workbench(runtime.problem.verifyUrl, action, request.body);
+    return workbenchSuccess(action, problemId, body);
+  } catch (error) {
+    if (error instanceof WorkbenchClientError && error.code === "not_supported") {
+      return { status: StatusCodes.NOT_FOUND, body: { error: "workbench_not_supported" } };
+    }
+    return {
+      status: StatusCodes.BAD_GATEWAY,
+      body: {
+        error:
+          error instanceof WorkbenchClientError && error.code === "invalid_response"
+            ? "invalid_workbench_response"
+            : "workbench_unavailable",
+      },
+    };
+  }
+}
+
+function workbenchSuccess(
+  action: WorkbenchAction,
+  problemId: string,
+  body: unknown,
+): LocalPlayResponse {
+  if (action === "config" && (body as { id?: unknown }).id !== problemId) {
+    return { status: StatusCodes.BAD_GATEWAY, body: { error: "invalid_workbench_response" } };
+  }
+  return { status: StatusCodes.OK, body };
 }
 
 /**
