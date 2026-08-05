@@ -456,6 +456,7 @@ describe("local-play API: multi-verify (issue #2252)", () => {
         {
           id: "public-backup",
           label: "公開バックアップ",
+          input: "multiline",
           points: 50,
           wrongAnswerPenalty: 5,
           hints: [{ id: "h-backup", content: "公開パスを確認する", penalty: 2 }],
@@ -497,12 +498,19 @@ describe("local-play API: multi-verify (issue #2252)", () => {
         {
           id: "public-backup",
           label: "公開バックアップ",
+          input: "multiline",
           points: 50,
           solved: false,
           i18n: { en: { label: "Public backup" } },
           hints: [{ id: "h-backup", penalty: 2, revealed: false }],
         },
-        { id: "weak-admin-pw", label: "弱い管理者パスワード", points: 70, solved: false },
+        {
+          id: "weak-admin-pw",
+          label: "弱い管理者パスワード",
+          input: undefined,
+          points: 70,
+          solved: false,
+        },
       ],
     });
   });

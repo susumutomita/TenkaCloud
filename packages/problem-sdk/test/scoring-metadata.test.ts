@@ -472,6 +472,15 @@ describe("parseScoringMetadata: multi-verify (issue #2252)", () => {
     });
   });
 
+  it("should carry a valid Portal input shape and reject unknown shapes", () => {
+    expect(
+      parseScoringMetadata(valid([validCheck({ input: "multiline" }), secondCheck()])),
+    ).toMatchObject({ checks: [{ input: "multiline" }, expect.any(Object)] });
+    expect(
+      parseScoringMetadata(valid([validCheck({ input: "rich-text" }), secondCheck()])),
+    ).toBeUndefined();
+  });
+
   it("should reject fewer than 2 or more than 8 checks (fail-closed)", () => {
     expect(parseScoringMetadata({ kind: "multi-verify", checks: [] })).toBeUndefined();
     expect(parseScoringMetadata({ kind: "multi-verify" })).toBeUndefined();

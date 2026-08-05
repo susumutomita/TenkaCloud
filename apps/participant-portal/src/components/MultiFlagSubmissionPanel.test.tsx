@@ -176,6 +176,33 @@ describe("MultiFlagSubmissionPanel", () => {
     expect(await screen.findByText("🎉 Ep02: TCP/IP — solved")).toBeInTheDocument();
   });
 
+  it("should preserve newlines for multiline checks and keep legacy checks single-line", async () => {
+    const user = userEvent.setup();
+    apiMocks.submitFlag.mockResolvedValue({
+      kind: "wrong",
+      scoreDelta: 0,
+      totalScore: 0,
+      wrongCount: 1,
+    });
+    renderPanel({ flags: [{ ...FLAGS[0], input: "multiline" }, FLAGS[1]] });
+
+    const fields = screen.getAllByRole("textbox");
+    expect(fields[0].tagName).toBe("TEXTAREA");
+    expect(fields[1].tagName).toBe("INPUT");
+
+    await user.type(fields[0], "def advance():{enter}  return 1");
+    await user.click(screen.getAllByRole("button", { name: /^Submit/ })[0]);
+    await waitFor(() =>
+      expect(apiMocks.submitFlag).toHaveBeenCalledWith(
+        "https://api.example.com",
+        "team-key",
+        "net-evo",
+        "def advance():\n  return 1",
+        "ep01",
+      ),
+    );
+  });
+
   it("should not submit an empty flag", async () => {
     const user = userEvent.setup();
     renderPanel();

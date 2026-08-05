@@ -8,6 +8,7 @@ import Header from "@cloudscape-design/components/header";
 import Input from "@cloudscape-design/components/input";
 import ProgressBar from "@cloudscape-design/components/progress-bar";
 import SpaceBetween from "@cloudscape-design/components/space-between";
+import Textarea from "@cloudscape-design/components/textarea";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import {
@@ -392,12 +393,22 @@ function SubFlagRow({
           }
         >
           <FormField label={field.label} description={field.description}>
-            <Input
-              value={value}
-              onChange={(e) => setValue(e.detail.value)}
-              placeholder={field.placeholder}
-              disabled={submitting}
-            />
+            {flag.input === "multiline" ? (
+              <Textarea
+                value={value}
+                onChange={(e) => setValue(e.detail.value)}
+                placeholder={field.placeholder}
+                disabled={submitting}
+                rows={10}
+              />
+            ) : (
+              <Input
+                value={value}
+                onChange={(e) => setValue(e.detail.value)}
+                placeholder={field.placeholder}
+                disabled={submitting}
+              />
+            )}
           </FormField>
         </Form>
       </form>

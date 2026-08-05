@@ -22,6 +22,8 @@ export interface MultiVerifyCheck {
   readonly id: string;
   /** Competitor-facing label. Must not spoil the vulnerability (authoring rule). */
   readonly label: string;
+  /** Portal input shape. Unset / `text` keeps the backward-compatible single-line field. */
+  readonly input?: "text" | "multiline";
   readonly points: number;
   readonly wrongAnswerPenalty?: number;
   readonly hints?: readonly ProgressiveHint[];
@@ -49,6 +51,14 @@ const MULTI_VERIFY_CHECK_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const MULTI_VERIFY_LABEL_MAX = 80;
 const MULTI_VERIFY_MIN_CHECKS = 2;
 const MULTI_VERIFY_MAX_CHECKS = 8;
+
+function isCheckpointInput(value: unknown): value is MultiVerifyCheck["input"] {
+  return value === undefined || value === "text" || value === "multiline";
+}
+
+function checkpointInputView(input: MultiVerifyCheck["input"]) {
+  return input === undefined ? {} : { input };
+}
 
 /**
  * Issue #2252: narrow the multi-verify kind. Same never-partial-drop policy as
@@ -96,6 +106,7 @@ function parseMultiVerifyCheck(value: unknown): MultiVerifyCheck | undefined {
   const c = value as {
     id?: unknown;
     label?: unknown;
+    input?: unknown;
     points?: unknown;
     wrongAnswerPenalty?: unknown;
     hints?: unknown;
@@ -105,6 +116,7 @@ function parseMultiVerifyCheck(value: unknown): MultiVerifyCheck | undefined {
   if (!id || !MULTI_VERIFY_CHECK_ID.test(id) || !label || label.length > MULTI_VERIFY_LABEL_MAX) {
     return undefined;
   }
+  if (!isCheckpointInput(c.input)) return undefined;
   if (typeof c.points !== "number" || !Number.isInteger(c.points) || c.points <= 0) {
     return undefined;
   }
@@ -125,6 +137,7 @@ function parseMultiVerifyCheck(value: unknown): MultiVerifyCheck | undefined {
   return {
     id,
     label,
+    ...checkpointInputView(c.input),
     points: c.points,
     wrongAnswerPenalty: clampWrongAnswerPenalty(c.wrongAnswerPenalty),
     ...(hints ? { hints } : {}),

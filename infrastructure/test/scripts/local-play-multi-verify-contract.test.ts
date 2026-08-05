@@ -90,6 +90,16 @@ const FIXTURES: Fixture[] = [
     ],
     valid: true,
   },
+  {
+    name: "text and multiline Portal input shapes",
+    checks: [check({ input: "multiline" }), check2({ input: "text" })],
+    valid: true,
+  },
+  {
+    name: "unknown Portal input shape",
+    checks: [check({ input: "rich-text" }), check2()],
+    valid: false,
+  },
   { name: "one check (below min)", checks: [check()], valid: false },
   { name: "zero checks", checks: [], valid: false },
   {
