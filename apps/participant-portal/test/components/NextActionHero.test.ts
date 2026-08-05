@@ -259,3 +259,50 @@ describe("computeNextActionState", () => {
     expect(state).toEqual({ kind: "defending" });
   });
 });
+
+describe("next action follows the course track", () => {
+  const checkpoint = (id: string, solved: boolean) => ({ id, label: id, points: 10, solved });
+
+  it("keeps a partly solved checkpoint problem in the unsolved set", () => {
+    const partly = problem({
+      problemId: "p",
+      jobId: "j",
+      score: 10,
+      scoring: { kind: "multi-flag", flags: [checkpoint("a", true), checkpoint("b", false)] },
+    });
+    expect(isProblemUnsolved(partly)).toBe(true);
+  });
+
+  it("treats a checkpoint problem as solved only once every checkpoint is in", () => {
+    const done = problem({
+      problemId: "p",
+      jobId: "j",
+      score: 20,
+      scoring: { kind: "multi-flag", flags: [checkpoint("a", true), checkpoint("b", true)] },
+    });
+    expect(isProblemUnsolved(done)).toBe(false);
+  });
+
+  it("recommends the track's next problem instead of the first one listed", () => {
+    const problems = [
+      problem({ problemId: "ac26-bridge-properties", jobId: "j1" }),
+      problem({ problemId: "stackstack-onboarding", jobId: "j2" }),
+    ];
+    expect(pickNextProblem(problems)?.problemId).toBe("ac26-bridge-properties");
+    expect(pickNextProblem(problems, "stackstack-onboarding")?.problemId).toBe(
+      "stackstack-onboarding",
+    );
+  });
+
+  it("ignores a recommendation the participant has already solved", () => {
+    const problems = [
+      problem({ problemId: "a", jobId: "j1" }),
+      problem({
+        problemId: "b",
+        jobId: "j2",
+        scoring: { kind: "flag", flagSubmitted: true },
+      }),
+    ];
+    expect(pickNextProblem(problems, "b")?.problemId).toBe("a");
+  });
+});
