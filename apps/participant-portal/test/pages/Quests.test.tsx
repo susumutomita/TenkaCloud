@@ -147,6 +147,79 @@ describe("renderSubmissionState scoring badge", () => {
     expect(s.label).toBe("[quests.submission_cleared]");
   });
 
+  it("#2885: should show an untouched multi-flag problem as unsolved", () => {
+    const s = renderSubmissionState(
+      problem({
+        scoring: {
+          kind: "multi-flag",
+          flags: [
+            { id: "a", label: "A", points: 20, solved: false },
+            { id: "b", label: "B", points: 30, solved: false },
+          ],
+        },
+      }),
+      pseudoT,
+    );
+    expect(s).toEqual({ type: "pending", label: "[quests.submission_unsolved]" });
+  });
+
+  it("#2885: should show solved and total counts for a partial multi-flag problem", () => {
+    const s = renderSubmissionState(
+      problem({
+        scoring: {
+          kind: "multi-flag",
+          flags: [
+            { id: "a", label: "A", points: 20, solved: true },
+            { id: "b", label: "B", points: 30, solved: false },
+          ],
+        },
+      }),
+      pseudoT,
+    );
+    expect(s).toEqual({
+      type: "info",
+      label: "[quests.submission_in_progress_with_count|solved=1,total=2]",
+    });
+  });
+
+  it("#2885: should show a fully solved multi-flag problem as cleared with total points", () => {
+    const s = renderSubmissionState(
+      problem({
+        scoring: {
+          kind: "multi-flag",
+          points: 50,
+          flags: [
+            { id: "a", label: "A", points: 20, solved: true },
+            { id: "b", label: "B", points: 30, solved: true },
+          ],
+        },
+      }),
+      pseudoT,
+    );
+    expect(s).toEqual({
+      type: "success",
+      label: "[quests.submission_cleared_with_points|points=50]",
+    });
+  });
+
+  it("#2885: should use the plain cleared label when multi-flag total points are absent", () => {
+    const s = renderSubmissionState(
+      problem({
+        scoring: {
+          kind: "multi-flag",
+          flags: [{ id: "a", label: "A", points: 20, solved: true }],
+        },
+      }),
+      pseudoT,
+    );
+    expect(s).toEqual({ type: "success", label: "[quests.submission_cleared]" });
+  });
+
+  it("#2885: should treat a legacy multi-flag view without flags as unsolved", () => {
+    const s = renderSubmissionState(problem({ scoring: { kind: "multi-flag" } }), pseudoT);
+    expect(s).toEqual({ type: "pending", label: "[quests.submission_unsolved]" });
+  });
+
   it("should fall through to 'in progress' info for non-flag uptime scoring", () => {
     const s = renderSubmissionState(
       problem({ status: "COMPLETE", scoring: { kind: "uptime" }, score: 60 }),
@@ -338,6 +411,50 @@ describe("QuestsPage", () => {
     expect(screen.getByText("quests.empty_unsolved")).toBeInTheDocument();
     // 解決済 section に cleared card。
     expect(screen.getByText("ctf-cleared")).toBeInTheDocument();
+  });
+
+  it("#2885: should move only a fully solved multi-flag problem to the cleared section", () => {
+    const partial = problem({
+      problemId: "multi-partial",
+      jobId: "job-multi-partial",
+      scoring: {
+        kind: "multi-flag",
+        flags: [
+          { id: "a", label: "A", points: 20, solved: true },
+          { id: "b", label: "B", points: 30, solved: false },
+        ],
+      },
+    });
+    const complete = problem({
+      problemId: "multi-complete",
+      jobId: "job-multi-complete",
+      scoring: {
+        kind: "multi-flag",
+        points: 50,
+        flags: [
+          { id: "a", label: "A", points: 20, solved: true },
+          { id: "b", label: "B", points: 30, solved: true },
+        ],
+      },
+    });
+    const legacyWithoutFlags = problem({
+      problemId: "multi-legacy",
+      jobId: "job-multi-legacy",
+      scoring: { kind: "multi-flag" },
+    });
+    mockTeamView.mockReturnValue({
+      view: { problems: [partial, complete, legacyWithoutFlags] },
+      error: null,
+    });
+
+    render(<QuestsPage />);
+
+    expect(screen.queryByText("quests.empty_unsolved")).not.toBeInTheDocument();
+    expect(screen.getByText("multi-partial")).toBeInTheDocument();
+    expect(screen.getByText("multi-complete")).toBeInTheDocument();
+    expect(screen.getByText("multi-legacy")).toBeInTheDocument();
+    expect(screen.getByText(/quests\.submission_in_progress_with_count/)).toBeInTheDocument();
+    expect(screen.getByText(/quests\.submission_cleared_with_points/)).toBeInTheDocument();
   });
 
   // Local play's fixed intro drill (sqli-demo): the backend

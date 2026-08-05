@@ -142,6 +142,7 @@
     "submission_cleared_with_points": "クリア (+{points} pt)",
     "submission_unsolved": "未解答",
     "submission_in_progress": "挑戦中",
+    "submission_in_progress_with_count": "挑戦中 ({solved}/{total})",
     "locked_badge": "ロック中",
     "locked_unlock_condition": "「{gateName}」を完了すると解放",
     "gate_start_here": "最初にここから",

@@ -36,19 +36,15 @@ import { CourseTrackCard } from "./CourseTracks";
  */
 type TFn = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
-/**
- * Issue #1349: 採点状態 badge を unit test 可能な pure function に分離。 各
- * problem の `status` (= deploy 進捗) と `scoring.flagSubmitted` / `score` を見て、
- * 4 状態 (未着手 / Deploy 中 / 着手中 / 解答済) を返す。 解答済 (= flag 提出済) は
- * `scoring.points` があれば 「+Npt」 を末尾に付ける (= 何点 取れたかを一目で出す)。
- */
-export function renderSubmissionState(
-  problem: ParticipantProblemView,
-  t: TFn,
-): {
+interface SubmissionState {
   readonly type: StatusIndicatorProps.Type;
   readonly label: string;
-} {
+}
+
+function renderDeploymentState(
+  problem: ParticipantProblemView,
+  t: TFn,
+): SubmissionState | undefined {
   if (problem.status === "FAILED") return { type: "error", label: t("quests.submission_failed") };
   if (problem.status === "EXPIRED") {
     return { type: "warning", label: t("quests.status_label.EXPIRED") };
@@ -68,16 +64,48 @@ export function renderSubmissionState(
   if (problem.status === "APPROVAL_PENDING") {
     return { type: "in-progress", label: t("quests.status_label.PENDING") };
   }
-  if (problem.scoring?.kind === "flag") {
-    if (problem.scoring.flagSubmitted) {
-      const points = problem.scoring.points;
-      const label =
-        points !== undefined
-          ? t("quests.submission_cleared_with_points", { points })
-          : t("quests.submission_cleared");
-      return { type: "success", label };
-    }
+  return undefined;
+}
+
+function renderClearedState(points: number | undefined, t: TFn): SubmissionState {
+  const label =
+    points !== undefined
+      ? t("quests.submission_cleared_with_points", { points })
+      : t("quests.submission_cleared");
+  return { type: "success", label };
+}
+
+function renderMultiFlagState(scoring: ParticipantScoringInfo, t: TFn): SubmissionState {
+  const flags = scoring.flags ?? [];
+  const solved = flags.filter((flag) => flag.solved).length;
+  if (solved === 0) {
     return { type: "pending", label: t("quests.submission_unsolved") };
+  }
+  if (solved === flags.length) return renderClearedState(scoring.points, t);
+  return {
+    type: "info",
+    label: t("quests.submission_in_progress_with_count", { solved, total: flags.length }),
+  };
+}
+
+/**
+ * Issue #1349: 採点状態 badge を unit test 可能な pure function に分離。 各
+ * problem の `status` (= deploy 進捗) と scoring の提出状態を見て、
+ * 4 状態 (未着手 / Deploy 中 / 着手中 / 解答済) を返す。 解答済 (= flag 提出済) は
+ * `scoring.points` があれば 「+Npt」 を末尾に付ける (= 何点 取れたかを一目で出す)。
+ */
+export function renderSubmissionState(problem: ParticipantProblemView, t: TFn): SubmissionState {
+  const deploymentState = renderDeploymentState(problem, t);
+  if (deploymentState) return deploymentState;
+  if (problem.scoring?.kind === "flag") {
+    if (problem.scoring.flagSubmitted) return renderClearedState(problem.scoring.points, t);
+    return { type: "pending", label: t("quests.submission_unsolved") };
+  }
+  // Issue #2885: local container の multi-verify は participant view では multi-flag。
+  // runtime が COMPLETE でも、checkpoint を 1 件も出していなければ「挑戦中」ではなく
+  // 「未解答」。一部だけ解いたときに初めて進捗を表示し、全件でクリア扱いにする。
+  if (problem.scoring?.kind === "multi-flag") {
+    return renderMultiFlagState(problem.scoring, t);
   }
   return { type: "info", label: t("quests.submission_in_progress") };
 }
@@ -117,11 +145,18 @@ function difficultyBadge(problemId: string, t: TFn): React.ReactElement | null {
 }
 
 /**
- * Issue #1000: 「解決済み」 か 「未解決」 か。 Challenge (flag) は flagSubmitted で判定、
- * Battle は採点が継続するので "unsolved" 軸に寄せる (= 取りこぼし防止、 #9 と同じ方針)。
+ * Issue #1000 / #2885: 「解決済み」 か 「未解決」 か。単一 flag は flagSubmitted、
+ * multi-flag は全 checkpoint の solved で判定する。Battle は採点が継続するので
+ * "unsolved" 軸に寄せる (= 取りこぼし防止、 #9 と同じ方針)。
  */
 function isCleared(problem: ParticipantProblemView): boolean {
-  return problem.scoring?.kind === "flag" && problem.scoring.flagSubmitted === true;
+  const scoring = problem.scoring;
+  if (scoring?.kind === "flag") return scoring.flagSubmitted === true;
+  if (scoring?.kind === "multi-flag") {
+    const flags = scoring.flags ?? [];
+    return flags.length > 0 && flags.every((flag) => flag.solved);
+  }
+  return false;
 }
 
 /**

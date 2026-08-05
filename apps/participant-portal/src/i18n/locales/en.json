@@ -142,6 +142,7 @@
     "submission_cleared_with_points": "Cleared (+{points} pt)",
     "submission_unsolved": "Unsolved",
     "submission_in_progress": "In progress",
+    "submission_in_progress_with_count": "In progress ({solved}/{total})",
     "locked_badge": "Locked",
     "locked_unlock_condition": "Unlocks after completing \"{gateName}\"",
     "gate_start_here": "Start here",
