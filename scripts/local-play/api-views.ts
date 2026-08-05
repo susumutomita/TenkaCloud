@@ -59,6 +59,7 @@ function multiVerifyScoringView(
     flags: checks.map((check) => ({
       id: check.id,
       label: check.label,
+      input: check.input,
       points: check.points,
       solved: runtime.solved.has(check.id),
       ...(check.i18n ? { i18n: check.i18n } : {}),

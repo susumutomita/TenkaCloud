@@ -58,6 +58,8 @@ export interface ContainerVerifyScoring {
 export interface ContainerCheck {
   readonly id: string;
   readonly label: string;
+  /** Portal input shape. Unset / `text` is the backward-compatible default. */
+  readonly input?: "text" | "multiline";
   readonly points: number;
   readonly wrongAnswerPenalty: number;
   readonly hints: readonly ContainerHint[];
@@ -75,6 +77,10 @@ export interface ContainerMultiVerifyScoring {
 }
 
 export type ContainerScoring = ContainerVerifyScoring | ContainerMultiVerifyScoring;
+
+function isContainerCheckInput(value: unknown): value is ContainerCheck["input"] {
+  return value === undefined || value === "text" || value === "multiline";
+}
 
 /**
  * [#2846/#2850] Explicit per-problem opt-in for the portal container terminal.
@@ -576,6 +582,7 @@ function parseOneCheck(
   const check = raw as {
     id?: unknown;
     label?: unknown;
+    input?: unknown;
     points?: unknown;
     wrongAnswerPenalty?: unknown;
     hints?: unknown;
@@ -595,6 +602,9 @@ function parseOneCheck(
     throw new Error(
       `scoring.checks[${index}].label must be ${CHECK_LABEL_MAX} characters or fewer`,
     );
+  }
+  if (!isContainerCheckInput(check.input)) {
+    throw new Error(`scoring.checks[${index}].input must be "text" or "multiline"`);
   }
   const points = nonNegativeNumber(check.points, `scoring.checks[${index}].points`);
   if (points <= 0 || !Number.isInteger(points)) {
@@ -623,6 +633,7 @@ function parseOneCheck(
   return {
     id,
     label,
+    ...(check.input !== undefined ? { input: check.input } : {}),
     points,
     wrongAnswerPenalty,
     hints,

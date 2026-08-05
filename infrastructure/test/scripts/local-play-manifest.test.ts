@@ -495,6 +495,19 @@ describe("loadContainerProblem: multi-verify (issue #2252)", () => {
     });
   });
 
+  it("should preserve a multiline input declaration and reject unknown input shapes", () => {
+    const problem = loadContainerProblem(
+      DIR,
+      multiVerify([check({ input: "multiline" }), other({ input: "text" })]),
+    );
+    expect(problem.scoring).toMatchObject({
+      checks: [{ input: "multiline" }, { input: "text" }],
+    });
+    expect(() =>
+      loadContainerProblem(DIR, multiVerify([check({ input: "rich-text" }), other()])),
+    ).toThrow(/input must be "text" or "multiline"/);
+  });
+
   it("should parse a top-level hintReveal:'flat' for the whole multi-verify problem", () => {
     const problem = loadContainerProblem(
       DIR,

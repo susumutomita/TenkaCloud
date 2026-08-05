@@ -75,6 +75,8 @@ export type HintRevealMode = "sequential" | "flat";
 export interface MultiFlagEntryView {
   readonly id: string;
   readonly label: string;
+  /** #2876: multiline preserves source-code newlines; absent / text stays one-line. */
+  readonly input?: "text" | "multiline";
   readonly points: number;
   readonly solved: boolean;
   /**
