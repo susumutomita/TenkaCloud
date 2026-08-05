@@ -76,6 +76,34 @@ export function renderSubmissionState(
     }
     return { type: "pending", label: t("quests.submission_unsolved") };
   }
+  /**
+   * [#2885] checkpoint 制の問題 (multi-flag / container の multi-verify) は解いた数から出す。
+   * これが無いと `kind !== "flag"` が全部この関数の末尾に落ち、 **一度も起動していない問題まで
+   * 「挑戦中」**になる。 local モードは deploy 済 = `status: "COMPLETE"` から始まるので、
+   * 実際には 1 件も触っていないのに一覧のほぼ全部が「挑戦中」と表示されていた。
+   *
+   * 出すのは「提出したか」であって「コンテナが動いているか」ではない。 バッジが答えるべき問いは
+   * 「自分はこれをどこまでやったか」。
+   */
+  const flags = problem.scoring?.flags;
+  if (flags && flags.length > 0) {
+    const solved = flags.filter((flag) => flag.solved).length;
+    if (solved === 0) return { type: "pending", label: t("quests.submission_unsolved") };
+    if (solved === flags.length) {
+      const points = problem.scoring?.points;
+      return {
+        type: "success",
+        label:
+          points !== undefined
+            ? t("quests.submission_cleared_with_points", { points })
+            : t("quests.submission_cleared"),
+      };
+    }
+    return {
+      type: "in-progress",
+      label: t("quests.submission_partial", { solved, total: flags.length }),
+    };
+  }
   return { type: "info", label: t("quests.submission_in_progress") };
 }
 
@@ -118,7 +146,11 @@ function difficultyBadge(problemId: string, t: TFn): React.ReactElement | null {
  * Battle は採点が継続するので "unsolved" 軸に寄せる (= 取りこぼし防止、 #9 と同じ方針)。
  */
 function isCleared(problem: ParticipantProblemView): boolean {
-  return problem.scoring?.kind === "flag" && problem.scoring.flagSubmitted === true;
+  if (problem.scoring?.kind === "flag") return problem.scoring.flagSubmitted === true;
+  // [#2885] checkpoint 制は「全 checkpoint 提出済」で解決済み。 これが無いと、 全部解いた
+  // container 問題が未解決 section に残り続ける (バッジと section が別々の真実を持つ)。
+  const flags = problem.scoring?.flags;
+  return flags !== undefined && flags.length > 0 && flags.every((flag) => flag.solved);
 }
 
 /**

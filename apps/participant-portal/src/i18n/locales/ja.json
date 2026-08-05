@@ -49,7 +49,11 @@
     "no_problems_body": "このチームには deploy 済みの問題がありません。operator にお問い合わせください。",
     "quests_quick_link_header": "問題に挑戦",
     "quests_quick_link_body": "{count} 問が deploy 済です。 問題一覧から挑戦してください。",
-    "quests_quick_link_button": "問題一覧を開く"
+    "quests_quick_link_button": "問題一覧を開く",
+    "course_next_header": "次にやる問題",
+    "course_next_body": "講座トラックの続きは「{name}」です。トラック画面で現在地と残りを確認できます。",
+    "course_next_body_week": "講座トラックの続きは Week {week} の「{name}」です。トラック画面で現在地と残りを確認できます。",
+    "course_next_button": "講座トラックを開く"
   },
   "login": {
     "header": "TenkaCloud Participant Portal",
@@ -138,6 +142,7 @@
     "submission_cleared_with_points": "クリア (+{points} pt)",
     "submission_unsolved": "未解答",
     "submission_in_progress": "挑戦中",
+    "submission_partial": "挑戦中 ({solved}/{total})",
     "locked_badge": "ロック中",
     "locked_unlock_condition": "「{gateName}」を完了すると解放",
     "gate_start_here": "最初にここから",

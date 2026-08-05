@@ -278,11 +278,13 @@ export function buildSideNavItems(
       type: "section",
       text: t("nav.quests_section"),
       items: [
-        { type: "link", href: "/problems", text: t("nav.problems") },
-        // 講座トラックは自習経路なので local だけ (判定は `showsCourseTracks`)。
+        // [#2882] 講座トラックは自習経路なので local だけ (判定は `showsCourseTracks`)。
+        // local では**先に**置く: 後ろだと学習者は先に出るフラットな一覧に着き、 71 件を前に
+        // 「何をやればいいか分からない」で止まる。 並び順そのものが導線になっている。
         ...(showsCourseTracks(cloudMode)
           ? [{ type: "link" as const, href: "/course-tracks", text: t("nav.course_tracks") }]
           : []),
+        { type: "link", href: "/problems", text: t("nav.problems") },
       ],
     },
   ];

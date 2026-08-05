@@ -49,7 +49,11 @@
     "no_problems_body": "This team has no deployed problems. Please contact the operator.",
     "quests_quick_link_header": "Take on the problems",
     "quests_quick_link_body": "{count} problem(s) deployed. Open the Quests list to start.",
-    "quests_quick_link_button": "Open Quests"
+    "quests_quick_link_button": "Open Quests",
+    "course_next_header": "What to do next",
+    "course_next_body": "Next on the course track is “{name}”. The track page shows where you are and what is left.",
+    "course_next_body_week": "Next on the course track is “{name}”, in Week {week}. The track page shows where you are and what is left.",
+    "course_next_button": "Open the course track"
   },
   "login": {
     "header": "TenkaCloud Participant Portal",
@@ -138,6 +142,7 @@
     "submission_cleared_with_points": "Cleared (+{points} pt)",
     "submission_unsolved": "Unsolved",
     "submission_in_progress": "In progress",
+    "submission_partial": "In progress ({solved}/{total})",
     "locked_badge": "Locked",
     "locked_unlock_condition": "Unlocks after completing \"{gateName}\"",
     "gate_start_here": "Start here",
