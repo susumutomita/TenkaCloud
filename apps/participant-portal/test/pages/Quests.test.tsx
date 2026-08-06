@@ -33,6 +33,54 @@ vi.mock("../../src/data/problems", () => ({
   findProblemMetadata: mockFindMeta,
   listProblemCatalog: mockListCatalog,
 }));
+vi.mock("@cloudscape-design/components/text-filter", () => ({
+  default: ({
+    filteringAriaLabel,
+    filteringPlaceholder,
+    filteringText,
+    onChange,
+  }: {
+    filteringAriaLabel: string;
+    filteringPlaceholder: string;
+    filteringText: string;
+    onChange: (event: { detail: { filteringText: string } }) => void;
+  }) => (
+    <input
+      aria-label={filteringAriaLabel}
+      placeholder={filteringPlaceholder}
+      value={filteringText}
+      onChange={(event) => onChange({ detail: { filteringText: event.currentTarget.value } })}
+    />
+  ),
+}));
+vi.mock("@cloudscape-design/components/select", () => ({
+  default: ({
+    ariaLabel,
+    onChange,
+    options,
+    selectedOption,
+  }: {
+    ariaLabel: string;
+    onChange: (event: { detail: { selectedOption: { label: string; value: string } } }) => void;
+    options: readonly { label: string; value: string }[];
+    selectedOption: { label: string; value: string };
+  }) => (
+    <select
+      aria-label={ariaLabel}
+      value={selectedOption.value}
+      onChange={(event) => {
+        const option = options.find((candidate) => candidate.value === event.currentTarget.value);
+        if (option) onChange({ detail: { selectedOption: option } });
+      }}
+    >
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  ),
+}));
 
 const { renderSubmissionState, questCardTitle, QuestsPage } = await import(
   "../../src/pages/Quests"
@@ -396,6 +444,71 @@ describe("QuestsPage", () => {
     fireEvent.click(screen.getAllByText(/quests\.filter_battle \(1\)/)[0]);
     expect(screen.getByText("uptime-battle")).toBeInTheDocument();
     expect(screen.queryByText("ctf-unsolved")).not.toBeInTheDocument();
+  });
+
+  it("should search problem titles, descriptions, and tags", () => {
+    mockListCatalog.mockReturnValue([
+      {
+        ...alignedCatalogEntry("ctf-unsolved", "Database Login"),
+        shortDescription: "Find the unsafe query",
+        tags: ["SQL", "authentication"],
+      },
+      alignedCatalogEntry("uptime-battle", "Keep It Running"),
+    ]);
+    mockFindMeta.mockImplementation((id: string) =>
+      id === "ctf-unsolved" ? { difficulty: 1, name: "Database Login" } : undefined,
+    );
+    mockTeamView.mockReturnValue({ view: { problems: [flagUnsolved, battle] }, error: null });
+    render(<QuestsPage />);
+
+    const search = screen.getByLabelText("quests.search_label");
+    fireEvent.change(search, { target: { value: "authentication" } });
+
+    expect(screen.getByText("Database Login")).toBeInTheDocument();
+    expect(screen.queryByText("uptime-battle")).not.toBeInTheDocument();
+  });
+
+  it("should combine difficulty and answer-status filters", () => {
+    mockListCatalog.mockReturnValue([
+      { ...alignedCatalogEntry("ctf-unsolved", "Unsolved"), difficulty: 3 },
+      { ...alignedCatalogEntry("ctf-cleared", "Cleared"), difficulty: 3 },
+      { ...alignedCatalogEntry("uptime-battle", "Battle"), difficulty: 4 },
+    ]);
+    mockTeamView.mockReturnValue({
+      view: { problems: [flagUnsolved, flagCleared, battle] },
+      error: null,
+    });
+    render(<QuestsPage />);
+
+    fireEvent.change(screen.getByLabelText("quests.difficulty_filter_label"), {
+      target: { value: "3" },
+    });
+    fireEvent.change(screen.getByLabelText("quests.answer_status_filter_label"), {
+      target: { value: "cleared" },
+    });
+
+    expect(screen.getByText("ctf-cleared")).toBeInTheDocument();
+    expect(screen.queryByText("ctf-unsolved")).not.toBeInTheDocument();
+    expect(screen.queryByText("uptime-battle")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("quests.difficulty_filter_label"), {
+      target: { value: "all" },
+    });
+    expect(screen.getByText("ctf-cleared")).toBeInTheDocument();
+  });
+
+  it("should show one explicit empty state when active filters match no problems", () => {
+    mockListCatalog.mockReturnValue([alignedCatalogEntry("ctf-unsolved", "Database Login")]);
+    mockTeamView.mockReturnValue({ view: { problems: [flagUnsolved] }, error: null });
+    render(<QuestsPage />);
+
+    fireEvent.change(screen.getByLabelText("quests.search_label"), {
+      target: { value: "does-not-exist" },
+    });
+
+    expect(screen.getByText("quests.filter_empty_header")).toBeInTheDocument();
+    expect(screen.getByText("quests.filter_empty_body")).toBeInTheDocument();
+    expect(screen.queryByText("quests.empty_unsolved")).not.toBeInTheDocument();
   });
 
   it("should show the empty-cleared box when there are no cleared problems", () => {
