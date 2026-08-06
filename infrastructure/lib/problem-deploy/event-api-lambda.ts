@@ -229,11 +229,11 @@ export function eventApiBundlingDefine(props: {
   readonly problemsProvenance?: Readonly<Record<string, unknown>>;
   readonly problemRuntimes?: Readonly<Record<string, unknown>>;
 }): Record<string, string> {
+  // BATTLE_PROBLEMS_EDUCATION_GRAPH はここに無い。 実測 309 KiB で Linux の argv
+  // 1 引数上限 (128 KiB) を超え、 CI の bundling を E2BIG で殺した (#2891)。
+  // eventApiBundledData 経由で bundle 同梱ファイルになり、 readCatalogBlob が読む。
   return {
     "process.env.BATTLE_PROBLEMS_CATALOG": JSON.stringify(JSON.stringify(props.problemsCatalog)),
-    "process.env.BATTLE_PROBLEMS_EDUCATION_GRAPH": JSON.stringify(
-      JSON.stringify(props.problemsEducationGraph ?? {}),
-    ),
     "process.env.BATTLE_PROBLEMS_DISRUPTIONS": JSON.stringify(
       JSON.stringify(props.problemsDisruptions),
     ),
@@ -246,6 +246,15 @@ export function eventApiBundlingDefine(props: {
     "process.env.BATTLE_PROBLEMS_RUNTIMES": JSON.stringify(
       JSON.stringify(props.problemRuntimes ?? {}),
     ),
+  };
+}
+
+/** カタログと共に育つ blob。 argv (define) ではなく bundle 同梱ファイルで運ぶ (#2891)。 */
+export function eventApiBundledData(props: {
+  readonly problemsEducationGraph?: Readonly<Record<string, unknown>>;
+}): Record<string, string> {
+  return {
+    BATTLE_PROBLEMS_EDUCATION_GRAPH: JSON.stringify(props.problemsEducationGraph ?? {}),
   };
 }
 
@@ -328,6 +337,7 @@ export class EventApiLambda extends Construct {
       // まま (= build 後に literal JSON 文字列が埋まる)。 tests は process.env 経由で fixture を
       // 注入するので影響なし。
       bundlingDefine: eventApiBundlingDefine(props),
+      bundledData: eventApiBundledData(props),
     });
 
     // Events / Teams への RW (Phase 1 の CRUD)、Deployments への RW (Phase 2a の

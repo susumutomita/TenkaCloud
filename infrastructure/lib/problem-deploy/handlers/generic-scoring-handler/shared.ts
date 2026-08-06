@@ -7,6 +7,7 @@ import {
   parseDisruptionsCatalogEnv,
 } from "../../../utils/discover-problems-catalog.js";
 import { type ProblemEndpointSlot, parseEndpointsEnv } from "../../../utils/endpoints-metadata.js";
+import { readCatalogBlob } from "../../../utils/read-catalog-blob.js";
 import { type ProblemScoringMetadata, parseScoringEnv } from "../../../utils/scoring-metadata.js";
 import type { DeploymentsRepository } from "../../control-data/deployments-repository.js";
 import type { DisruptionsRepository } from "../../control-data/disruptions-repository.js";
@@ -42,7 +43,7 @@ export function buildSharedResources(runtime: ControlDataRuntime): GenericScorin
     eventsTableName: process.env.EVENTS_TABLE_NAME ?? "",
     endpointsTableName: process.env.PROBLEM_ENDPOINTS_TABLE_NAME ?? "",
     competitorAccountsTableName: process.env.COMPETITOR_ACCOUNTS_TABLE_NAME ?? "",
-    problemsScoring: parseScoringEnv(process.env.BATTLE_PROBLEMS_SCORING),
+    problemsScoring: parseScoringEnv(readCatalogBlob("BATTLE_PROBLEMS_SCORING")),
     problemsEndpoints: parseEndpointsEnv(process.env.PROBLEM_ENDPOINTS),
     problemsDisruptions: parseDisruptionsCatalogEnv(process.env.BATTLE_PROBLEMS_DISRUPTIONS),
     problemsCatalog: parseProblemsCatalog(process.env.BATTLE_PROBLEMS_CATALOG),

@@ -3,6 +3,7 @@ import { SSMClient } from "@aws-sdk/client-ssm";
 import { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { getEnv } from "../../../helper-functions.js";
 import { type ProblemEndpointSlot, parseEndpointsEnv } from "../../../utils/endpoints-metadata.js";
+import { readCatalogBlob } from "../../../utils/read-catalog-blob.js";
 import { type ProblemScoringMetadata, parseScoringEnv } from "../../../utils/scoring-metadata.js";
 import { type ProblemWriteup, parseWriteupsEnv } from "../../../utils/writeup-metadata.js";
 import type {
@@ -75,8 +76,8 @@ export function buildParticipantSharedResources(
     ddb: DynamoDBDocumentClient.from(new DynamoDBClient({})),
     ssm: new SSMClient({}),
     env: getEnv("DEPLOY_ENVIRONMENT"),
-    problemsScoring: parseScoringEnv(process.env.BATTLE_PROBLEMS_SCORING),
-    problemsWriteups: parseWriteupsEnv(process.env.BATTLE_PROBLEMS_WRITEUPS),
+    problemsScoring: parseScoringEnv(readCatalogBlob("BATTLE_PROBLEMS_SCORING")),
+    problemsWriteups: parseWriteupsEnv(readCatalogBlob("BATTLE_PROBLEMS_WRITEUPS")),
     problemsEndpoints: parseEndpointsEnv(process.env.PROBLEM_ENDPOINTS),
   };
 }

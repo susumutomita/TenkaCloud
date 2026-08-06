@@ -223,10 +223,11 @@ export class GenericScoringLambda extends Construct {
       // stackstack 追加で deploy 不可になった。 esbuild define で
       // process.env.X を build 時に固定 JSON 文字列にし env を 0 化する。
       // tests は process.env 経由で fixture を注入するので影響なし。
+      // BATTLE_PROBLEMS_SCORING は実測 130 KiB で argv の 1 引数上限を跨いだ (#2891)。
+      bundledData: {
+        BATTLE_PROBLEMS_SCORING: JSON.stringify(props.problemsScoring),
+      },
       bundlingDefine: {
-        "process.env.BATTLE_PROBLEMS_SCORING": JSON.stringify(
-          JSON.stringify(props.problemsScoring),
-        ),
         "process.env.PROBLEM_ENDPOINTS": JSON.stringify(JSON.stringify(props.problemsEndpoints)),
         "process.env.BATTLE_PROBLEMS_PHASES": JSON.stringify(JSON.stringify(props.problemsPhases)),
         // #1422: condition-triggered disruption catalog を build 時 literal 置換 (env 4KB 回避)。

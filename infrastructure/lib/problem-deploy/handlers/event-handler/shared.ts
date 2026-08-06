@@ -12,6 +12,7 @@ import {
   type ProblemsEducationGraph,
   parseProblemsEducationGraph,
 } from "../../../utils/education-graph.js";
+import { readCatalogBlob } from "../../../utils/read-catalog-blob.js";
 import type { AdminAuditLogRepository } from "../../control-data/admin-audit-log-repository.js";
 import { selectBackend } from "../../control-data/backend-config.js";
 import type {
@@ -180,7 +181,7 @@ export function buildEventSharedResources(runtime: ControlDataRuntime): EventSha
     scheduler: new SchedulerClient({}),
     problemsCatalog: parseProblemsCatalog(process.env.BATTLE_PROBLEMS_CATALOG),
     problemsEducationGraph: parseProblemsEducationGraph(
-      process.env.BATTLE_PROBLEMS_EDUCATION_GRAPH,
+      readCatalogBlob("BATTLE_PROBLEMS_EDUCATION_GRAPH"),
     ),
     problemsDisruptions: parseProblemsDisruptions(process.env.BATTLE_PROBLEMS_DISRUPTIONS),
     resolveProblemRuntimeDescriptor: makeProblemRuntimeDescriptorResolver(
