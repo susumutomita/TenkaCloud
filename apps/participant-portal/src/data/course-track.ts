@@ -332,10 +332,30 @@ export function buildCourseTracks(
   for (const entry of catalog) {
     const track = entry.track;
     if (track === undefined) continue;
-    byTrackId.set(track.id, [...(byTrackId.get(track.id) ?? []), { entry, track }]);
+    byTrackId.set(track.id, [
+      ...(byTrackId.get(track.id) ?? []),
+      { entry, track: chapterOf(entry, track) },
+    ]);
   }
 
   return assembleCourseTracks(catalog, progress, byTrackId, recommendNext);
+}
+
+/**
+ * 章の見出しを決める。
+ *
+ * `track.chapter` は 1 問ごとの小節まで細かく、AC26 では 31 問が 26 章に散る。折りたたみが
+ * 1 問ずつ並ぶだけで一覧の体をなさず、受講者は「いま何週目か」を掴めない。`courseAlignment`
+ * を持つ問題は週で束ね、7 章にする (= 講座が進む単位と同じ)。
+ *
+ * alignment を持たない track (`ipa-web-security` / `automotive-security` 等) は数問しかなく、
+ * `IPA §1.5 XSS` のような小節見出しがそのまま索引として働くので、従来どおり `track.chapter`
+ * を使う。
+ */
+function chapterOf(entry: ProblemCatalogEntry, track: ProblemTrack): ProblemTrack {
+  const week = entry.courseAlignment?.week;
+  if (week === undefined) return track;
+  return { ...track, chapter: `Week ${week}` };
 }
 
 /**

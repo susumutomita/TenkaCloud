@@ -111,10 +111,8 @@
   "quests": {
     "header": "問題一覧 (Quests)",
     "header_description": "自チームに deploy された問題のカタログ。各カードからアクセス先 URL に直接遷移できます。",
-    "course_guidance_header": "講座の学習ルート",
-    "course_guidance_description": "週の順に進める問題です。「次の問題へ」から、いま取り組む1問を始められます。",
     "other_problems_header": "その他の問題",
-    "other_problems_description": "講座に属さない問題も、これまでどおり個別に選んで取り組めます。",
+    "other_problems_description": "講座に属さない問題です。講座の学習ルートは「講座トラック」にまとまっています。",
     "filter_all": "すべて",
     "filter_battle": "Battle",
     "filter_challenge": "Challenge",
@@ -153,7 +151,8 @@
     "difficulty_2": "初級",
     "difficulty_3": "中級",
     "difficulty_4": "上級",
-    "difficulty_5": "エキスパート"
+    "difficulty_5": "エキスパート",
+    "course_tracks_link": "講座トラックを開く"
   },
   "notifications": {
     "header": "Notifications",

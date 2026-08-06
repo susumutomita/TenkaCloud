@@ -371,6 +371,30 @@ describe("buildCourseTracks", () => {
     expect(view).toMatchObject({ week: 3, role: "mechanism" });
   });
 
+  // AC26 では `track.chapter` が 1 問ごとの小節で、31 問が 26 章に散っていた。折りたたみが
+  // 1 問ずつ並ぶだけで「いま何週目か」が掴めないので、alignment を持つ問題は週で束ねる。
+  it("should group course-aligned problems by week instead of their per-problem chapter", () => {
+    const w1a = tracked("w1a", 10, "AC26 §1.1 predict", alignment("mechanism", 1));
+    const w1b = tracked("w1b", 20, "AC26 §1.2 constrain", alignment("diagnostic", 1));
+    const w2 = tracked("w2", 30, "AC26 §2.1 shares", alignment("mechanism", 2));
+
+    const chapters = buildCourseTracks([w1a, w1b, w2], [])[0]?.chapters ?? [];
+
+    expect(chapters.map((chapter) => chapter.chapter)).toEqual(["Week 1", "Week 2"]);
+    expect(chapters[0]?.problems.map((p) => p.problemId)).toEqual(["w1a", "w1b"]);
+  });
+
+  // alignment を持たない track (ipa-web-security 等) は数問しかなく、`IPA §1.5 XSS` の
+  // ような小節見出しがそのまま索引として働くので、従来どおりの章立てを残す。
+  it("should keep the declared chapter for a track with no course alignment", () => {
+    const xss = tracked("xss", 10, "IPA §1.5 XSS");
+    const csrf = tracked("csrf", 20, "IPA §1.6 CSRF");
+
+    const chapters = buildCourseTracks([xss, csrf], [])[0]?.chapters ?? [];
+
+    expect(chapters.map((chapter) => chapter.chapter)).toEqual(["IPA §1.5 XSS", "IPA §1.6 CSRF"]);
+  });
+
   it("should omit week and role for a tracked problem with no course alignment", () => {
     const view = buildCourseTracks([tracked("a", 10, "W1")], [])[0]?.chapters[0]?.problems[0];
     expect(view?.week).toBeUndefined();
