@@ -29,15 +29,18 @@ The steps below are for a **fresh** stack. See [Migrating an existing stack](#mi
    turso db tokens create tenkacloud-lite
    ```
 
-   `db show --http-url` prints something like `https://tenkacloud-lite-<organization>.turso.io`. The Lambda uses the HTTP-only libSQL client, so the live runbook standardizes on the provider's HTTP URL and removes URL protocol conversion from the experiment. Keep the token from `db tokens create` for the next step.
+   `db show --http-url` prints something like `https://tenkacloud-lite-<organization>.turso.io`. The Lambda uses the HTTP-only libSQL client, so the live runbook standardizes on the provider's HTTP URL and removes URL protocol conversion from the experiment. Keep the token from `db tokens create` for the next step without pasting it into a command line.
 
 2. **Store the token in SSM as a `SecureString`** — never write it into `.env`:
 
    ```bash
-   aws ssm put-parameter \
+   read -rs TURSO_TOKEN
+   printf '%s' "$TURSO_TOKEN" | aws ssm put-parameter \
      --name /TenkaCloud/development/turso/auth-token \
      --type SecureString \
-     --value "<token from step 1>"
+     --value file:///dev/stdin \
+     --region ap-northeast-1
+   unset TURSO_TOKEN
    ```
 
 3. **Add three lines to `infrastructure/environments/<env>/.env`** (copy from the matching `.env.example` first if you have not already):
@@ -96,10 +99,10 @@ Put the token in SSM `SecureString` in the same AWS region as the Lite deploymen
 
 ```bash
 read -rs TURSO_TOKEN
-aws ssm put-parameter \
+printf '%s' "$TURSO_TOKEN" | aws ssm put-parameter \
   --name /TenkaCloud/development/turso/auth-token \
   --type SecureString \
-  --value "$TURSO_TOKEN" \
+  --value file:///dev/stdin \
   --region ap-northeast-1
 unset TURSO_TOKEN
 ```
