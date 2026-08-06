@@ -86,6 +86,20 @@ function isSimulatedProblemComplete(runtime: SimulatedProblemRuntime): boolean {
   return false;
 }
 
+function localScoringView(runtime: ProblemRuntime, complete: boolean) {
+  const scoring = runtime.problem.scoring;
+  if (scoring.kind === "verify") {
+    return {
+      kind: "flag" as const,
+      points: scoring.points,
+      flagSubmitted: complete,
+      hints: hintViews(runtime, scoring.hints),
+      ...(scoring.hintReveal ? { hintReveal: scoring.hintReveal } : {}),
+    };
+  }
+  return multiVerifyScoringView(runtime, scoring.checks, scoring.totalPoints, scoring.hintReveal);
+}
+
 function problemView(
   runtime: ProblemRuntime,
   now: number,
@@ -149,21 +163,7 @@ function problemView(
     ...(complete ? { lastResult: "ok" as const } : {}),
     // Participant-facing view: single submission box ("flag") for verify, the
     // existing multi-flag shape for multi-verify. Scoring stays delegated.
-    scoring:
-      problem.scoring.kind === "verify"
-        ? {
-            kind: "flag",
-            points: problem.scoring.points,
-            flagSubmitted: complete,
-            hints: hintViews(runtime, problem.scoring.hints),
-            ...(problem.scoring.hintReveal ? { hintReveal: problem.scoring.hintReveal } : {}),
-          }
-        : multiVerifyScoringView(
-            runtime,
-            problem.scoring.checks,
-            problem.scoring.totalPoints,
-            problem.scoring.hintReveal,
-          ),
+    scoring: localScoringView(runtime, complete),
     deployLog: { cursor: "", entries: [] },
     createdAt: new Date(now).toISOString(),
   };
