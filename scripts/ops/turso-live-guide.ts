@@ -285,7 +285,7 @@ export function renderTursoLiveGuide(environment: string): string {
     "",
     "3. token を同じ region の SSM SecureString に保存",
     "   read -rs TURSO_TOKEN",
-    `   aws ssm put-parameter --name /TenkaCloud/${environment}/turso/auth-token --type SecureString --value "$TURSO_TOKEN" --region <AWS_REGION>`,
+    `   printf '%s' "$TURSO_TOKEN" | aws ssm put-parameter --name /TenkaCloud/${environment}/turso/auth-token --type SecureString --value file:///dev/stdin --region <AWS_REGION>`,
     "   unset TURSO_TOKEN",
     "",
     `4. ${envFile} を設定`,
