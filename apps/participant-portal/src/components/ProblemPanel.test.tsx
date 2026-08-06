@@ -506,7 +506,13 @@ describe("ProblemPanel render branches", () => {
     });
 
     const link = screen.getByRole("link", { name: /onboarding-practice\.html/ });
-    expect(link).toHaveAttribute("href", expect.stringMatching(/\/onboarding-practice\.html$/));
+    // The practice page is static, so the portal's locale travels in the link
+    // (the suite pins locale=en in beforeEach); the page itself falls back to
+    // localStorage only for direct visits.
+    expect(link).toHaveAttribute(
+      "href",
+      expect.stringMatching(/\/onboarding-practice\.html\?lang=en$/),
+    );
     expect(link).toHaveAttribute("target", "_blank");
   });
 

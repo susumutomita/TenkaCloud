@@ -4,43 +4,78 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex,nofollow" />
-    <title>TenkaCloud 練習環境</title>
+    <title>TenkaCloud 練習環境 / Practice Environment</title>
     <link rel="stylesheet" href="./onboarding-practice.css" />
+    <script>
+      // The portal appends ?lang= to the link it shows, so a learner lands here in
+      // the language they were already reading. A direct visit falls back to the
+      // portal's persisted locale (same origin), then the browser language, then
+      // Japanese (the portal's default). Without JavaScript nothing is stamped and
+      // both languages stay visible, which was this page's pre-i18n behaviour.
+      (function () {
+        var supported = ["ja", "en"];
+        var lang = new URLSearchParams(location.search).get("lang");
+        if (supported.indexOf(lang) < 0) {
+          try {
+            lang = localStorage.getItem("tenkacloud.portal.locale");
+          } catch (ignored) {
+            lang = null;
+          }
+        }
+        if (supported.indexOf(lang) < 0) {
+          lang = (navigator.language || "").slice(0, 2) === "en" ? "en" : "ja";
+        }
+        document.documentElement.lang = lang;
+        document.documentElement.dataset.lang = lang;
+      })();
+    </script>
   </head>
   <body>
     <main>
       <header>
         <p class="eyebrow">TenkaCloud Challenge</p>
-        <h1>練習環境に接続できました</h1>
-        <p>
+        <h1 data-lang="ja">練習環境に接続できました</h1>
+        <h1 data-lang="en">You reached the practice environment</h1>
+        <p data-lang="ja">
           これはオンボーディング用の問題環境です。表示された値をコピーし、TenkaCloudポータルの問題画面へ戻って提出してください。
+        </p>
+        <p data-lang="en">
+          This is the onboarding problem environment. Copy the values shown below, then return to
+          the TenkaCloud portal's problem page and submit them.
         </p>
       </header>
 
       <section aria-labelledby="connection-heading">
-        <h2 id="connection-heading">接続確認コード</h2>
-        <p>ステップ5では、次の値をそのまま提出します。</p>
+        <h2 id="connection-heading">
+          <span data-lang="ja">接続確認コード</span>
+          <span data-lang="en">Connection code</span>
+        </h2>
+        <p data-lang="ja">ステップ5では、次の値をそのまま提出します。</p>
+        <p data-lang="en">For step 5, submit the following value exactly as shown.</p>
         <code class="value">CONNECTED</code>
       </section>
 
       <section aria-labelledby="proof-heading">
-        <h2 id="proof-heading">完了証拠</h2>
-        <p>ステップ6では、<code>TC{</code>から最後の<code>}</code>までを含む値全体を提出します。</p>
+        <h2 id="proof-heading">
+          <span data-lang="ja">完了証拠</span>
+          <span data-lang="en">Completion proof</span>
+        </h2>
+        <p data-lang="ja">
+          ステップ6では、<code>TC{</code>から最後の<code>}</code>までを含む値全体を提出します。
+        </p>
+        <p data-lang="en">
+          For step 6, submit the whole value, from <code>TC{</code> through the final
+          <code>}</code>.
+        </p>
         <code class="value">TC{HELLO-TENKACLOUD}</code>
       </section>
 
-      <p class="return">
+      <p class="return" data-lang="ja">
         このタブを閉じるか、TenkaCloudポータルの問題画面へ戻って続けてください。
       </p>
-
-      <section lang="en" aria-labelledby="english-heading">
-        <h2 id="english-heading">English</h2>
-        <p>
-          You reached the practice environment. Return to the TenkaCloud problem and submit
-          <code>CONNECTED</code> for step 5, then the complete <code>TC{...}</code> value for step
-          6.
-        </p>
-      </section>
+      <p class="return" data-lang="en">
+        Close this tab, or return to the TenkaCloud portal's problem page to continue.
+      </p>
     </main>
   </body>
 </html>

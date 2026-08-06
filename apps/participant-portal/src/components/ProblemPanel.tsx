@@ -16,7 +16,7 @@ import type {
 } from "../api/portal-client";
 import { useAppConfig } from "../config-context";
 import { WHAT_IS_DRILL_PROBLEM_ID } from "../dev-mock/flag-submit";
-import { useLang, useT } from "../i18n";
+import { type LocaleCode, useLang, useT } from "../i18n";
 import { describeAgo, type SupportedLang } from "../lib/format";
 import { AttackProbesPanel } from "./AttackProbesPanel";
 import { ContainerWorkbenchPanel } from "./ContainerWorkbenchPanel";
@@ -69,11 +69,16 @@ const LIFECYCLE_STATUS_TYPE: Record<ProblemLifecycleStatus, StatusIndicatorProps
 const COUNTDOWN_REFRESH_MS = 30_000;
 const ONBOARDING_PRACTICE_ENDPOINT_FILE = "onboarding-practice.html";
 
-function onboardingPracticeEndpointUrl(): string {
-  return new URL(
+function onboardingPracticeEndpointUrl(lang: LocaleCode): string {
+  const url = new URL(
     `${import.meta.env.BASE_URL}${ONBOARDING_PRACTICE_ENDPOINT_FILE}`,
     window.location.origin,
-  ).href;
+  );
+  // The practice page is static and lives outside the React tree, so the
+  // locale travels in the link; the page falls back to the shared
+  // localStorage locale only for direct visits.
+  url.searchParams.set("lang", lang);
+  return url.href;
 }
 
 function MultiFlagPlaySurface({
@@ -129,12 +134,13 @@ function problemStackOutputs(
   problem: ParticipantProblemView,
   isIntroTutorial: boolean,
   t: ProblemPanelT,
+  lang: LocaleCode,
 ): Record<string, string> {
   const outputs = visibleStackOutputs(problem);
   if (!isIntroTutorial) return outputs;
   return {
     ...outputs,
-    [t("onboarding_tutorial.practice_endpoint_label")]: onboardingPracticeEndpointUrl(),
+    [t("onboarding_tutorial.practice_endpoint_label")]: onboardingPracticeEndpointUrl(lang),
   };
 }
 
@@ -316,7 +322,7 @@ export function ProblemPanel({
   const multiFlagScoring = getCompleteMultiFlagScoring(problem);
   const isIntroTutorial =
     problem.problemId === WHAT_IS_DRILL_PROBLEM_ID && multiFlagScoring !== undefined;
-  const stackOutputs = splitStackOutputs(problemStackOutputs(problem, isIntroTutorial, t));
+  const stackOutputs = splitStackOutputs(problemStackOutputs(problem, isIntroTutorial, t, lang));
   // [#2392 Phase 2] local-play on-demand container。 lifecycle 不在 = AWS mode = running 扱い。
   const lifecycleStatus = problem.lifecycle?.status;
   const playable = isProblemPlayable(problem);
