@@ -87,3 +87,14 @@ p {
     padding: 24px 20px;
   }
 }
+
+/* Language toggle. The inline script stamps data-lang on <html> from ?lang=,
+   the portal's persisted locale, or the browser language. Without JavaScript
+   nothing is stamped and both languages stay visible. */
+html[data-lang="ja"] [data-lang="en"] {
+  display: none;
+}
+
+html[data-lang="en"] [data-lang="ja"] {
+  display: none;
+}
