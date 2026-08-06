@@ -111,6 +111,10 @@
   "quests": {
     "header": "問題一覧 (Quests)",
     "header_description": "自チームに deploy された問題のカタログ。各カードからアクセス先 URL に直接遷移できます。",
+    "local_start_header": "初めてなら、講座トラックから始めましょう",
+    "local_start_course_body": "講座トラックは問題を週・前提関係の順に並べ、現在の進捗から次の 1 問を選びます。順番に学びたい場合はこちらです。",
+    "local_start_other_body": "試したい技術や目的が決まっている場合は、下の「その他の問題」を検索・絞り込みして選べます。講座に含まれる問題との重複はありません。",
+    "local_next_problem": "次の 1 問へ: {name}",
     "other_problems_header": "その他の問題",
     "other_problems_description": "講座に属さない問題です。講座の学習ルートは「講座トラック」にまとまっています。",
     "filter_all": "すべて",

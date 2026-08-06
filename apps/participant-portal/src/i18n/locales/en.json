@@ -111,6 +111,10 @@
   "quests": {
     "header": "Problems (Quests)",
     "header_description": "Catalog of problems deployed to your team. Each card links directly to its access URL.",
+    "local_start_header": "New here? Start with a course track",
+    "local_start_course_body": "Course tracks order problems by week and prerequisites, then choose your next problem from your current progress. Use this path to learn in sequence.",
+    "local_start_other_body": "If you already have a technology or goal in mind, search and filter Other problems below. Problems in the course are not duplicated there.",
+    "local_next_problem": "Open your next problem: {name}",
     "other_problems_header": "Other problems",
     "other_problems_description": "Problems outside the course. The course learning path lives on the Course tracks page.",
     "filter_all": "All",
