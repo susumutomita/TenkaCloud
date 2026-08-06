@@ -77,7 +77,9 @@ function doctor(): number {
   const result = diagnose(diagnoseInput());
   console.log(formatDiagnosis(result));
   if (isReady(result)) {
-    console.log("\nAll prerequisites are satisfied — run `tenkacloud local`.");
+    // `make local` (not `bun run tenkacloud local`): only the make target
+    // self-installs workspace dependencies, which this diagnosis does not cover.
+    console.log("\nAll prerequisites are satisfied — run `make local`.");
     return 0;
   }
   console.log(
@@ -145,7 +147,7 @@ async function preflight(autoYes: boolean): Promise<number> {
 
   const after = diagnose(diagnoseInput());
   if (isReady(after)) {
-    console.log("\n✓ All prerequisites satisfied.");
+    console.log("\n✓ All prerequisites satisfied. Next: run `make local`.");
     return 0;
   }
   const remaining = planRemediation(after, { platform });
