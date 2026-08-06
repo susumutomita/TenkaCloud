@@ -3,15 +3,18 @@ import Badge from "@cloudscape-design/components/badge";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import Cards from "@cloudscape-design/components/cards";
+import ColumnLayout from "@cloudscape-design/components/column-layout";
 import Container from "@cloudscape-design/components/container";
 import ExpandableSection from "@cloudscape-design/components/expandable-section";
 import Header from "@cloudscape-design/components/header";
 import Link from "@cloudscape-design/components/link";
 import SegmentedControl from "@cloudscape-design/components/segmented-control";
+import Select from "@cloudscape-design/components/select";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import StatusIndicator, {
   type StatusIndicatorProps,
 } from "@cloudscape-design/components/status-indicator";
+import TextFilter from "@cloudscape-design/components/text-filter";
 import type * as React from "react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
@@ -29,6 +32,14 @@ import {
   isGateAwaitingCompletion,
   isPrerequisiteLocked,
 } from "../lib/progression";
+import {
+  filterQuestProblems,
+  isQuestCleared,
+  type QuestAnswerStatusFilter,
+  type QuestCategoryFilter,
+  type QuestDifficultyFilter,
+  type QuestSearchMetadata,
+} from "./Quests.filters";
 
 /**
  * 競技者向けの 「解答状態」 (= 解けた / 解けてない)。 #821 / #822 で導入、 issue #34 で
@@ -110,8 +121,6 @@ export function renderSubmissionState(problem: ParticipantProblemView, t: TFn): 
   return { type: "info", label: t("quests.submission_in_progress") };
 }
 
-type CategoryFilter = "all" | "battle" | "challenge";
-
 function categoryBadge(scoring: ParticipantScoringInfo | undefined, uncategorizedLabel: string) {
   const cat = categoryOf(scoring);
   if (cat === "battle") return <Badge color="red">Battle</Badge>;
@@ -145,21 +154,6 @@ function difficultyBadge(problemId: string, t: TFn): React.ReactElement | null {
 }
 
 /**
- * Issue #1000 / #2885: 「解決済み」 か 「未解決」 か。単一 flag は flagSubmitted、
- * multi-flag は全 checkpoint の solved で判定する。Battle は採点が継続するので
- * "unsolved" 軸に寄せる (= 取りこぼし防止、 #9 と同じ方針)。
- */
-function isCleared(problem: ParticipantProblemView): boolean {
-  const scoring = problem.scoring;
-  if (scoring?.kind === "flag") return scoring.flagSubmitted === true;
-  if (scoring?.kind === "multi-flag") {
-    const flags = scoring.flags ?? [];
-    return flags.length > 0 && flags.every((flag) => flag.solved);
-  }
-  return false;
-}
-
-/**
  * 自チーム向け deploy 済問題のカタログ画面 (sidebar 「問題一覧」)。Home に対する
  * compact な navigation focus 版で、各問題の status / score / アクセス先 URL を
  * カード表示する。
@@ -177,11 +171,18 @@ export function QuestsPage() {
   const t = useT();
   const isMock = useIsMock();
   const config = useAppConfig();
-  const [filter, setFilter] = useState<CategoryFilter>("all");
+  const [filter, setFilter] = useState<QuestCategoryFilter>("all");
+  const [query, setQuery] = useState("");
+  const [difficulty, setDifficulty] = useState<QuestDifficultyFilter>("all");
+  const [answerStatus, setAnswerStatus] = useState<QuestAnswerStatusFilter>("all");
 
   const allProblems = useMemo(() => view?.problems ?? [], [view]);
   const showCourseGuidance = showsCourseTracks(config.cloudMode);
   const catalog = useMemo(() => listProblemCatalog(), []);
+  const metadataByProblemId = useMemo<ReadonlyMap<string, QuestSearchMetadata>>(
+    () => new Map(catalog.map((metadata) => [metadata.id, metadata])),
+    [catalog],
+  );
   const courseTracks = useMemo(
     () =>
       showCourseGuidance ? buildCourseAlignmentTracks(catalog, toProblemProgress(allProblems)) : [],
@@ -223,19 +224,55 @@ export function QuestsPage() {
     };
   }, [catalogProblems]);
 
-  const categoryFiltered = useMemo(() => {
-    return catalogProblems.filter((p) => filter === "all" || categoryOf(p.scoring) === filter);
-  }, [catalogProblems, filter]);
+  const filteredProblems = useMemo(
+    () =>
+      filterQuestProblems(
+        catalogProblems,
+        { category: filter, query, difficulty, answerStatus },
+        metadataByProblemId,
+      ),
+    [answerStatus, catalogProblems, difficulty, filter, metadataByProblemId, query],
+  );
+  const hasActiveFilters =
+    filter !== "all" || query.trim().length > 0 || difficulty !== "all" || answerStatus !== "all";
 
   const { unsolved, cleared } = useMemo(() => {
     const u: ParticipantProblemView[] = [];
     const c: ParticipantProblemView[] = [];
-    for (const p of categoryFiltered) {
-      if (isCleared(p)) c.push(p);
+    for (const p of filteredProblems) {
+      if (isQuestCleared(p)) c.push(p);
       else u.push(p);
     }
     return { unsolved: u, cleared: c };
-  }, [categoryFiltered]);
+  }, [filteredProblems]);
+
+  const difficultyOptions = [
+    { value: "all", label: t("quests.difficulty_filter_all") },
+    ...([1, 2, 3, 4, 5] as const).map((value) => ({
+      value: String(value),
+      label: t(`quests.difficulty_${value}`),
+    })),
+  ];
+  const difficultyLabels: Record<QuestDifficultyFilter, string> = {
+    all: t("quests.difficulty_filter_all"),
+    1: t("quests.difficulty_1"),
+    2: t("quests.difficulty_2"),
+    3: t("quests.difficulty_3"),
+    4: t("quests.difficulty_4"),
+    5: t("quests.difficulty_5"),
+  };
+  const answerStatusOptions = [
+    { value: "all", label: t("quests.answer_status_filter_all") },
+    { value: "unsolved", label: t("quests.submission_unsolved") },
+    { value: "in-progress", label: t("quests.submission_in_progress") },
+    { value: "cleared", label: t("quests.submission_cleared") },
+  ];
+  const answerStatusLabels: Record<QuestAnswerStatusFilter, string> = {
+    all: t("quests.answer_status_filter_all"),
+    unsolved: t("quests.submission_unsolved"),
+    "in-progress": t("quests.submission_in_progress"),
+    cleared: t("quests.submission_cleared"),
+  };
 
   const renderCard = useMemo(
     () => ({
@@ -331,50 +368,95 @@ export function QuestsPage() {
         </Header>
       ) : null}
 
-      <SegmentedControl
-        selectedId={filter}
-        onChange={({ detail }) => setFilter(detail.selectedId as CategoryFilter)}
-        options={[
-          { id: "all", text: `${t("quests.filter_all")} (${counts.all})` },
-          { id: "battle", text: `${t("quests.filter_battle")} (${counts.battle})` },
-          { id: "challenge", text: `${t("quests.filter_challenge")} (${counts.challenge})` },
-        ]}
-        label={t("quests.filter_label")}
-      />
-
-      {/* Issue #1000: 未解決 section を常時 expand で先頭に並べる。 Cards 自身の
-       *   loading / empty slot に委ねる (= 旧 ternary は loading 中も emptyUnsolved を
-       *   出してしまい spinner が死んでいた)。 */}
-      <Container
-        header={<Header counter={`(${unsolved.length})`}>{t("quests.section_unsolved")}</Header>}
-      >
-        <Cards<ParticipantProblemView>
-          items={unsolved}
-          loading={!isMock && !view && !error}
-          loadingText={t("quests.loading_text")}
-          cardDefinition={renderCard}
-          cardsPerRow={[{ cards: 1 }, { minWidth: 600, cards: 2 }]}
-          empty={emptyUnsolved}
+      <SpaceBetween size="s">
+        <SegmentedControl
+          selectedId={filter}
+          onChange={({ detail }) => setFilter(detail.selectedId as QuestCategoryFilter)}
+          options={[
+            { id: "all", text: `${t("quests.filter_all")} (${counts.all})` },
+            { id: "battle", text: `${t("quests.filter_battle")} (${counts.battle})` },
+            { id: "challenge", text: `${t("quests.filter_challenge")} (${counts.challenge})` },
+          ]}
+          label={t("quests.filter_label")}
         />
-      </Container>
+        <TextFilter
+          filteringText={query}
+          onChange={({ detail }) => setQuery(detail.filteringText)}
+          filteringAriaLabel={t("quests.search_label")}
+          filteringPlaceholder={t("quests.search_placeholder")}
+          countText={t("quests.filter_results", { count: filteredProblems.length })}
+        />
+        <ColumnLayout columns={2}>
+          <Select
+            ariaLabel={t("quests.difficulty_filter_label")}
+            selectedOption={{ value: String(difficulty), label: difficultyLabels[difficulty] }}
+            options={difficultyOptions}
+            onChange={({ detail }) => {
+              const value = detail.selectedOption.value;
+              setDifficulty(
+                value === "all" ? "all" : (Number(value) as Exclude<QuestDifficultyFilter, "all">),
+              );
+            }}
+          />
+          <Select
+            ariaLabel={t("quests.answer_status_filter_label")}
+            selectedOption={{ value: answerStatus, label: answerStatusLabels[answerStatus] }}
+            options={answerStatusOptions}
+            onChange={({ detail }) =>
+              setAnswerStatus(detail.selectedOption.value as QuestAnswerStatusFilter)
+            }
+          />
+        </ColumnLayout>
+      </SpaceBetween>
 
-      {/* Issue #1000: 解決済み section は collapsible、 初期 collapsed (= 視線を未解決に集中) */}
-      <ExpandableSection
-        headerText={`${t("quests.section_cleared")} (${cleared.length})`}
-        variant="container"
-        defaultExpanded={false}
-      >
-        <Cards<ParticipantProblemView>
-          items={cleared}
-          cardDefinition={renderCard}
-          cardsPerRow={[{ cards: 1 }, { minWidth: 600, cards: 2 }]}
-          empty={
-            <Box textAlign="center" padding="m" color="text-status-inactive">
-              {t("quests.empty_cleared")}
+      {view && hasActiveFilters && filteredProblems.length === 0 ? (
+        <Container>
+          <Box textAlign="center" padding="l">
+            <Box variant="strong">{t("quests.filter_empty_header")}</Box>
+            <Box variant="small" color="text-status-inactive" padding={{ top: "s" }}>
+              {t("quests.filter_empty_body")}
             </Box>
-          }
-        />
-      </ExpandableSection>
+          </Box>
+        </Container>
+      ) : (
+        <>
+          {/* Issue #1000: 未解決 section を常時 expand で先頭に並べる。 Cards 自身の
+           *   loading / empty slot に委ねる (= 旧 ternary は loading 中も emptyUnsolved を
+           *   出してしまい spinner が死んでいた)。 */}
+          <Container
+            header={
+              <Header counter={`(${unsolved.length})`}>{t("quests.section_unsolved")}</Header>
+            }
+          >
+            <Cards<ParticipantProblemView>
+              items={unsolved}
+              loading={!isMock && !view && !error}
+              loadingText={t("quests.loading_text")}
+              cardDefinition={renderCard}
+              cardsPerRow={[{ cards: 1 }, { minWidth: 600, cards: 2 }]}
+              empty={emptyUnsolved}
+            />
+          </Container>
+
+          {/* Issue #1000: 解決済み section は collapsible、 初期 collapsed (= 視線を未解決に集中) */}
+          <ExpandableSection
+            headerText={`${t("quests.section_cleared")} (${cleared.length})`}
+            variant="container"
+            defaultExpanded={false}
+          >
+            <Cards<ParticipantProblemView>
+              items={cleared}
+              cardDefinition={renderCard}
+              cardsPerRow={[{ cards: 1 }, { minWidth: 600, cards: 2 }]}
+              empty={
+                <Box textAlign="center" padding="m" color="text-status-inactive">
+                  {t("quests.empty_cleared")}
+                </Box>
+              }
+            />
+          </ExpandableSection>
+        </>
+      )}
     </SpaceBetween>
   );
 }
