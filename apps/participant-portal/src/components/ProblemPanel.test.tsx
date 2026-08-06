@@ -552,6 +552,59 @@ describe("ProblemPanel render branches", () => {
     expect(screen.queryByText(/tenka-drill/)).not.toBeInTheDocument();
   });
 
+  it.each([
+    ["cloud", "real"],
+    ["local multi-verify", "local"],
+  ] as const)("should link a fully solved %s problem to its released writeup", (_label, cloudMode) => {
+    renderPanel(
+      {
+        status: "COMPLETE",
+        writeup: "Root cause and remediation",
+        scoring: {
+          kind: "multi-flag",
+          points: 100,
+          flags: [
+            { id: "one", label: "One", points: 50, solved: true },
+            { id: "two", label: "Two", points: 50, solved: true },
+          ],
+        },
+      },
+      cloudMode,
+    );
+
+    expect(
+      screen.getByRole("link", {
+        name: "2/2 solved. Review the cause and remediation in the explanation",
+      }),
+    ).toHaveAttribute("href", "#problem-writeup");
+    expect(
+      screen.getByText("Root cause and remediation").closest("#problem-writeup"),
+    ).toHaveAttribute("tabindex", "-1");
+  });
+
+  it("should keep the hosted spoiler and single-flag behavior unchanged", () => {
+    const hosted = renderPanel({
+      status: "COMPLETE",
+      writeup: undefined,
+      scoring: {
+        kind: "multi-flag",
+        points: 50,
+        flags: [{ id: "one", label: "One", points: 50, solved: true }],
+      },
+    });
+    expect(screen.queryByRole("link", { name: /explanation/i })).not.toBeInTheDocument();
+    expect(document.querySelector("#problem-writeup")).toBeNull();
+    hosted.unmount();
+
+    renderPanel({
+      status: "COMPLETE",
+      writeup: "Single-flag writeup",
+      scoring: { kind: "flag", flagSubmitted: true, points: 100 },
+    });
+    expect(screen.queryByRole("link", { name: /solved.*explanation/i })).not.toBeInTheDocument();
+    expect(screen.getByTestId("flag-panel")).toBeInTheDocument();
+  });
+
   it("should render URL outputs in the access panel and move internal outputs to details", () => {
     renderPanel({
       status: "COMPLETE",

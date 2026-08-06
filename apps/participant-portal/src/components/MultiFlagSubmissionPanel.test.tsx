@@ -1,5 +1,5 @@
 import { LITE_DRILL_CHECKPOINTS, LITE_DRILL_PROBLEM_ID } from "@tenkacloud/portal-contracts";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type * as React from "react";
 import { MemoryRouter, useLocation } from "react-router";
@@ -25,18 +25,25 @@ import {
  * wrong alert / dev-mock 経路を pin する。 submitFlag だけ mock し、 evaluateMockFlag・i18n は実物。
  */
 
-const apiMocks = vi.hoisted(() => ({ submitFlag: vi.fn() }));
+const apiMocks = vi.hoisted(() => ({ revealHint: vi.fn(), submitFlag: vi.fn() }));
 
 vi.mock("../api/portal-client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../api/portal-client")>();
-  return { ...actual, submitFlag: apiMocks.submitFlag };
+  return {
+    ...actual,
+    revealHint: apiMocks.revealHint,
+    submitFlag: apiMocks.submitFlag,
+  };
 });
+
+type TestEnvironment = "backend" | "dev-mock" | "local";
 
 function LocationProbe() {
   return <output data-testid="router-path">{useLocation().pathname}</output>;
 }
 
-function withProviders(node: React.ReactNode, mode: "backend" | "dev-mock" = "backend") {
+function withProviders(node: React.ReactNode, environment: TestEnvironment = "backend") {
+  const mode = environment === "dev-mock" ? "dev-mock" : "backend";
   return (
     <AppConfigProvider
       config={{
@@ -44,7 +51,7 @@ function withProviders(node: React.ReactNode, mode: "backend" | "dev-mock" = "ba
         eventTitle: "Test event",
         eventRegion: "ap-northeast-1",
         mode,
-        cloudMode: mode === "backend" ? "real" : "mock",
+        cloudMode: environment === "local" ? "local" : mode === "backend" ? "real" : "mock",
       }}
     >
       <I18nProvider>
@@ -72,19 +79,20 @@ const baseProps = {
 
 function renderPanel(
   overrides: Partial<React.ComponentProps<typeof MultiFlagSubmissionPanel>> = {},
-  mode: "backend" | "dev-mock" = "backend",
+  environment: TestEnvironment = "backend",
 ) {
   const stableOverrides =
     overrides.problemId === WHAT_IS_DRILL_PROBLEM_ID && overrides.onboardingVariant === undefined
       ? { ...overrides, onboardingVariant: "list" as const }
       : overrides;
   return render(
-    withProviders(<MultiFlagSubmissionPanel {...baseProps} {...stableOverrides} />, mode),
+    withProviders(<MultiFlagSubmissionPanel {...baseProps} {...stableOverrides} />, environment),
   );
 }
 
 beforeEach(() => {
   window.localStorage.setItem("tenkacloud.portal.locale", "en");
+  apiMocks.revealHint.mockReset();
   apiMocks.submitFlag.mockReset();
   // dev-mock の累積スコアと sessionStorage 進捗をテスト間で持ち越さない。
   resetMockScoring();
@@ -676,5 +684,126 @@ describe("multi-verify extensions (issue #2252)", () => {
     window.localStorage.setItem("tenkacloud.portal.locale", "ja");
     renderPanel({ flags: HINTED_FLAGS });
     expect(screen.getByText(/公開バックアップ/)).toBeInTheDocument();
+  });
+
+  it("should keep a solved cloud checkpoint as a collapsed keyboard review row", async () => {
+    renderPanel({
+      flags: [
+        {
+          ...HINTED_FLAGS[0],
+          solved: true,
+          hints: [
+            {
+              id: "revealed-cloud-hint",
+              penalty: 2,
+              revealed: true,
+              content: "Inspect the public object metadata.",
+            },
+          ],
+        },
+      ],
+    });
+
+    const review = screen.getByRole("button", {
+      name: "Public backup, solved, 1 revealed hint. Review this checkpoint",
+    });
+    expect(review).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+
+    review.focus();
+    fireEvent.keyUp(review, { key: "Enter", code: "Enter", keyCode: 13 });
+
+    expect(review).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Solved (+50 pt) · 1 revealed hint")).toBeInTheDocument();
+    expect(screen.getByText("Inspect the public object metadata.")).toBeInTheDocument();
+    expect(screen.getByText("Penalty already applied: -2 pt")).toBeInTheDocument();
+  });
+
+  it("should review only revealed local hints without score or reveal mutations", async () => {
+    const user = userEvent.setup();
+    const onScored = vi.fn().mockResolvedValue(undefined);
+    apiMocks.submitFlag.mockResolvedValue({
+      kind: "ok",
+      scoreDelta: 50,
+      totalScore: 46,
+      flagId: "public-backup",
+    });
+    renderPanel(
+      {
+        flags: [
+          {
+            ...HINTED_FLAGS[0],
+            hints: [
+              {
+                id: "revealed-one",
+                penalty: 0,
+                revealed: true,
+                content: "Check which backup path is public.",
+              },
+              {
+                id: "revealed-two",
+                penalty: 4,
+                revealed: true,
+                content: "Compare the active and backup configuration.",
+              },
+              {
+                id: "unrevealed-three",
+                penalty: 8,
+                revealed: false,
+                content: "UNREVEALED SECRET MUST NOT RENDER",
+              },
+            ],
+          },
+        ],
+        onScored,
+      },
+      "local",
+    );
+
+    await user.type(screen.getByRole("textbox"), "participant answer");
+    await user.click(screen.getByRole("button", { name: /^Submit/ }));
+    const review = await screen.findByRole("button", {
+      name: "Public backup, solved, 2 revealed hints. Review this checkpoint",
+    });
+    expect(onScored).toHaveBeenCalledTimes(1);
+
+    review.focus();
+    fireEvent.keyDown(review, { key: " ", code: "Space", keyCode: 32 });
+    fireEvent.keyUp(review, { key: " ", code: "Space", keyCode: 32 });
+
+    expect(review).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Check which backup path is public.")).toBeInTheDocument();
+    expect(screen.getByText("No penalty applied")).toBeInTheDocument();
+    expect(screen.getByText("Compare the active and backup configuration.")).toBeInTheDocument();
+    expect(screen.queryByText("UNREVEALED SECRET MUST NOT RENDER")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Reveal hint/i })).not.toBeInTheDocument();
+    expect(apiMocks.revealHint).not.toHaveBeenCalled();
+    expect(onScored).toHaveBeenCalledTimes(1);
+  });
+
+  it("should provide the same solved review structure in Japanese", () => {
+    window.localStorage.setItem("tenkacloud.portal.locale", "ja");
+    renderPanel({
+      flags: [
+        {
+          ...HINTED_FLAGS[0],
+          solved: true,
+          hints: [
+            {
+              id: "revealed-ja-hint",
+              penalty: 0,
+              revealed: true,
+              content: "公開済みヒント本文",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(
+      screen.getByRole("button", {
+        name: "公開バックアップ、解答済み、公開済みヒント1件。このチェックポイントを振り返る",
+      }),
+    ).toHaveAttribute("aria-expanded", "false");
   });
 });
