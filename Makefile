@@ -386,7 +386,7 @@ ONBOARD_FLAGS := $(if $(YES),--yes,)
 doctor:
 	@command -v bun >/dev/null 2>&1 || { \
 	  echo "Bun is required for diagnostics."; \
-	  echo "  Install: (macOS) brew install oven-sh/bun/bun   (Linux) curl -fsSL https://bun.sh/install | bash"; \
+	  echo "  Install (macOS / Linux): bash scripts/onboard/install-bun.sh"; \
 	  exit 1; }
 	@bun run tenkacloud doctor
 

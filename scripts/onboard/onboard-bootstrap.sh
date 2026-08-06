@@ -48,14 +48,12 @@ fi
 
 # 2) bun — the gateway to every other script. If absent, offer a consented install.
 if ! command -v bun >/dev/null 2>&1; then
-  case "$(uname -s)" in
-    Darwin) bun_cmd="brew install oven-sh/bun/bun" ;;
-    *) bun_cmd="curl -fsSL https://bun.sh/install | bash" ;;
-  esac
+  bun_installer="$repo_root/scripts/onboard/install-bun.sh"
+  bun_cmd="bash scripts/onboard/install-bun.sh"
   echo "Bun is required (it runs every TenkaCloud script and installs dependencies)."
   echo "  Install command: $bun_cmd"
   if consent "Install Bun now?"; then
-    sh -c "$bun_cmd"
+    bash "$bun_installer"
     # The installer drops bun into ~/.bun/bin and edits the shell profile, but
     # THIS shell's PATH is unchanged — without this export the re-check below
     # fails right after a successful install (seen in Codespaces postCreate,
@@ -66,7 +64,7 @@ if ! command -v bun >/dev/null 2>&1; then
   if ! command -v bun >/dev/null 2>&1; then
     echo ""
     echo "Bun is still not on PATH. Install it, then re-run \`make local-onboard\`:"
-    echo "  $bun_cmd"
+    echo "  bash scripts/onboard/install-bun.sh"
     echo "  (if bun is managed by mise: mise trust && mise install)"
     exit 1
   fi
