@@ -403,7 +403,16 @@ local-onboard:
 # fresh clone / Codespace that never ran `make install`, the portal's vite is
 # absent and local play used to die with "run make install first". Install once
 # (only when vite is missing — a no-op on a warm tree), then continue.
+# Issue #2907: this must run BEFORE any `bun run tenkacloud ...` — the CLI's
+# static import graph pulls in external packages, so on a fresh clone module
+# resolution fails before the CLI's own self-heal can execute. Checking bun here
+# also turns "bun: command not found" into the actionable next command.
 ensure-deps:
+	@command -v bun >/dev/null 2>&1 || { \
+	  echo "Bun is required for local play but was not found."; \
+	  echo "  Run the guided setup first: make local-onboard"; \
+	  echo "  Or install Bun directly:    bash scripts/onboard/install-bun.sh"; \
+	  exit 1; }
 	@if [ ! -x node_modules/.bin/vite ] && [ ! -x apps/participant-portal/node_modules/.bin/vite ]; then \
 	  echo "Dependencies are not installed (vite is missing) — running 'make install' first."; \
 	  $(MAKE) install; \
@@ -411,13 +420,18 @@ ensure-deps:
 
 # Issue #2054 / #2392 / #2511: start the detached local scoring API, then the
 # browser portal. `local-up` remains the API-only escape hatch for scripts.
+# Issue #2907: every entry point that reaches the Bun CLI self-heals via
+# ensure-deps first, so `make local-onboard` → `make local` needs no extra step.
 local: ## Start the local drill API and portal | ローカル問題演習のAPIとportalを起動
+	@$(MAKE) ensure-deps
 	@bun run tenkacloud local $(if $(PROBLEM),--problem "$(PROBLEM)",) $(if $(LOCAL_API_PORT),--api-port "$(LOCAL_API_PORT)",)
 
 local-up:
+	@$(MAKE) ensure-deps
 	@bun run tenkacloud local up $(if $(PROBLEM),--problem "$(PROBLEM)",) $(if $(LOCAL_API_PORT),--api-port "$(LOCAL_API_PORT)",)
 
 local-portal:
+	@$(MAKE) ensure-deps
 	@bun run tenkacloud local portal
 
 local-down: ## Stop local play and clear all persisted progress | local playを停止して全進捗を消去
