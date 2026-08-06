@@ -27,7 +27,6 @@ const OPTIONAL_KEYS = [
   "BATTLE_PROBLEMS_SCORING",
   "PROBLEM_ENDPOINTS",
   "BATTLE_PROBLEMS_CATALOG",
-  "BATTLE_PROBLEMS_EDUCATION_GRAPH",
   "BATTLE_PROBLEMS_DISRUPTIONS",
   "BATTLE_PROBLEMS_PROVENANCE",
   "BULK_DEPLOY_PAYLOAD_BUCKET",
@@ -52,7 +51,6 @@ describe("buildEventSharedResources", () => {
     expect(s.bulkDeployPayloadBucket).toBe(""); // BULK_DEPLOY_PAYLOAD_BUCKET ?? ""
     expect(s.useBulkDistributedMap).toBe(false); // flag absent → false
     expect(s.problemsDisruptions).toEqual({}); // BATTLE_PROBLEMS_DISRUPTIONS absent → {}
-    expect(s.problemsEducationGraph).toEqual({});
     expect(s.problemsProvenance).toEqual({}); // BATTLE_PROBLEMS_PROVENANCE absent → {}
     expect(s.ddb).toBeDefined();
     expect(s.events).toBeDefined();
@@ -108,28 +106,6 @@ describe("buildEventSharedResources", () => {
   it("should fall back to {} when BATTLE_PROBLEMS_DISRUPTIONS is invalid JSON", () => {
     process.env.BATTLE_PROBLEMS_DISRUPTIONS = "{not json";
     expect(buildEventSharedResources(makeTestControlDataRuntime()).problemsDisruptions).toEqual({});
-  });
-
-  it("should decode the synth-baked education graph and fail closed on malformed JSON", () => {
-    const graph = {
-      p1: {
-        problemId: "p1",
-        name: { ja: "P1" },
-        shortDescription: { ja: "short" },
-        learningGoals: { ja: [] },
-        nodes: [],
-        relations: [],
-      },
-    };
-    process.env.BATTLE_PROBLEMS_EDUCATION_GRAPH = JSON.stringify(graph);
-    expect(buildEventSharedResources(makeTestControlDataRuntime()).problemsEducationGraph).toEqual(
-      graph,
-    );
-
-    process.env.BATTLE_PROBLEMS_EDUCATION_GRAPH = "{broken";
-    expect(buildEventSharedResources(makeTestControlDataRuntime()).problemsEducationGraph).toEqual(
-      {},
-    );
   });
 
   it("should fall back to {} and warn when BATTLE_PROBLEMS_PROVENANCE has an invalid shape", () => {

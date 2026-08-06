@@ -8,11 +8,6 @@ import { z } from "zod";
 import { getEnv } from "../../../helper-functions.js";
 import type { EffectiveCatalogProvenance } from "../../../problem-pack/effective-catalog.js";
 import type { ProblemDisruptionEntry } from "../../../utils/discover-problems-catalog.js";
-import {
-  type ProblemsEducationGraph,
-  parseProblemsEducationGraph,
-} from "../../../utils/education-graph.js";
-import { readCatalogBlob } from "../../../utils/read-catalog-blob.js";
 import type { AdminAuditLogRepository } from "../../control-data/admin-audit-log-repository.js";
 import { selectBackend } from "../../control-data/backend-config.js";
 import type {
@@ -95,8 +90,6 @@ export interface EventSharedResources {
   /** [ADR-037 Slice 2] recurring disruption の早期解除 (DeleteSchedule) 用 aws-scheduler client。 */
   readonly scheduler: SchedulerClient;
   readonly problemsCatalog: Readonly<Record<string, string>>;
-  /** Issue #2604: spoiler-safe education graph projection baked in at synth time. */
-  readonly problemsEducationGraph?: ProblemsEducationGraph;
   /** Issue #888: problem metadata.json の `disruptions[]` 宣言 (problemId 毎)。 */
   readonly problemsDisruptions: Readonly<Record<string, readonly ProblemDisruptionEntry[]>>;
   /**
@@ -180,9 +173,6 @@ export function buildEventSharedResources(runtime: ControlDataRuntime): EventSha
     s3: new S3Client({}),
     scheduler: new SchedulerClient({}),
     problemsCatalog: parseProblemsCatalog(process.env.BATTLE_PROBLEMS_CATALOG),
-    problemsEducationGraph: parseProblemsEducationGraph(
-      readCatalogBlob("BATTLE_PROBLEMS_EDUCATION_GRAPH"),
-    ),
     problemsDisruptions: parseProblemsDisruptions(process.env.BATTLE_PROBLEMS_DISRUPTIONS),
     resolveProblemRuntimeDescriptor: makeProblemRuntimeDescriptorResolver(
       process.env.BATTLE_PROBLEMS_RUNTIMES,

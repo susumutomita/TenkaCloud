@@ -34,7 +34,6 @@ import {
   discoverProblemsScoring,
   discoverProblemsVisibility,
 } from "../../lib/utils/discover-problems-catalog";
-import { discoverProblemsEducationGraph } from "../../lib/utils/education-graph";
 
 let root: string;
 
@@ -89,7 +88,6 @@ function writeRepresentativeCatalog(): void {
 function baselineBundle(problemsRoot: string) {
   return {
     catalog: discoverProblemsCatalog(problemsRoot),
-    educationGraph: discoverProblemsEducationGraph(problemsRoot),
     scoring: discoverProblemsScoring(problemsRoot),
     endpoints: discoverProblemsEndpoints(problemsRoot),
     phases: discoverProblemsPhases(problemsRoot),
@@ -117,7 +115,6 @@ describe("LocalCatalogSource (#2092)", () => {
     const bundle = new LocalCatalogSource().loadBundle(root);
 
     expect(bundle.catalog).toEqual(baseline.catalog);
-    expect(bundle.educationGraph).toEqual(baseline.educationGraph);
     expect(bundle.scoring).toEqual(baseline.scoring);
     expect(bundle.endpoints).toEqual(baseline.endpoints);
     expect(bundle.phases).toEqual(baseline.phases);
@@ -147,7 +144,6 @@ describe("LocalCatalogSource (#2092)", () => {
 
     // Each projection the backend stacks consume must be present.
     expect(bundle).toHaveProperty("catalog");
-    expect(bundle).toHaveProperty("educationGraph");
     expect(bundle).toHaveProperty("scoring");
     expect(bundle).toHaveProperty("writeups");
     expect(bundle).toHaveProperty("endpoints");
@@ -383,45 +379,6 @@ describe("SnapshotCatalogSource (#2092)", () => {
     expect((bundle.coordinationBundles as Record<string, string>)["pack-projection"]).toBe(
       "export default {};",
     );
-  });
-
-  it("should keep education graph core-only even when a pack injects an unvalidated projection", () => {
-    writeRepresentativeCatalog();
-    const core = new LocalCatalogSource().loadBundle(root);
-    const bundle = new SnapshotCatalogSource({
-      snapshots: [
-        {
-          manifest: {
-            schemaVersion: 1,
-            id: "com.example.unvalidated-education-pack",
-            version: "1.0.0",
-            core: "^1.0.0",
-            title: "Unvalidated education pack",
-            description: "Attempts to inject metadata outside the pack validator contract.",
-            license: "Apache-2.0",
-            problemsRoot: "problems",
-            requiredRuntimes: [{ provider: "aws", engine: "cloudformation" }],
-          },
-          contentDigest: "9".repeat(64),
-          problems: [
-            {
-              problemId: "pack-education",
-              directory: "pack-problems/com.example.unvalidated-education-pack/1.0.0/challenges/x",
-              projections: {
-                educationGraph: {
-                  problemId: "pack-education",
-                  nodes: "malformed",
-                  relations: [{ type: "teaches", source: "x", target: "missing" }],
-                },
-              },
-            },
-          ],
-        },
-      ],
-    }).loadBundle(root);
-
-    expect(bundle.educationGraph).toEqual(core.educationGraph);
-    expect((bundle.educationGraph as Record<string, unknown>)["pack-education"]).toBeUndefined();
   });
 
   it("should fail loud when a pack projection declares private visibility", () => {

@@ -26,43 +26,6 @@ const PROBLEM_PACK_GUIDANCE_KEYS = [
   "problems.pack_guidance_empty_hint",
 ] as const;
 
-const EDUCATION_GRAPH_KEYS = [
-  "nav.education_graph",
-  "education_graph.header",
-  "education_graph.description",
-  "education_graph.graph_heading",
-  "education_graph.graph_description",
-  "education_graph.problem_select_label",
-  "education_graph.problem_select_placeholder",
-  "education_graph.loading_graph",
-  "education_graph.graph_load_error",
-  "education_graph.admin_only_error",
-  "education_graph.graph_empty",
-  "education_graph.nodes_heading",
-  "education_graph.nodes_label",
-  "education_graph.node_type_problem",
-  "education_graph.node_type_learning_objective",
-  "education_graph.node_type_concept",
-  "education_graph.node_type_assessment_criterion",
-  "education_graph.node_type_misconception",
-  "education_graph.node_type_audience",
-  "education_graph.relations_heading",
-  "education_graph.relations_label",
-  "education_graph.relation_teaches",
-  "education_graph.relation_covers",
-  "education_graph.relation_requires",
-  "education_graph.relation_assesses",
-  "education_graph.relation_related_to",
-  "education_graph.materials_heading",
-  "education_graph.materials_description",
-  "education_graph.loading_materials",
-  "education_graph.materials_load_error",
-  "education_graph.materials_empty",
-  "education_graph.no_problem_projections",
-  "education_graph.quiz_answer",
-  "education_graph.quiz_explanation",
-] as const;
-
 describe("i18n homegrown (Issue #583 Phase 1.A)", () => {
   beforeEach(() => {
     if (typeof window !== "undefined") window.localStorage.clear();
@@ -118,13 +81,6 @@ describe("i18n homegrown (Issue #583 Phase 1.A)", () => {
 
   it("should define the problem-pack guidance keys in both ja and en", () => {
     for (const key of PROBLEM_PACK_GUIDANCE_KEYS) {
-      expect(_testInternals.resolveKey(_testInternals.LOCALE_DICTIONARIES.ja, key)).toBeTruthy();
-      expect(_testInternals.resolveKey(_testInternals.LOCALE_DICTIONARIES.en, key)).toBeTruthy();
-    }
-  });
-
-  it("should define the education graph keys in both ja and en", () => {
-    for (const key of EDUCATION_GRAPH_KEYS) {
       expect(_testInternals.resolveKey(_testInternals.LOCALE_DICTIONARIES.ja, key)).toBeTruthy();
       expect(_testInternals.resolveKey(_testInternals.LOCALE_DICTIONARIES.en, key)).toBeTruthy();
     }

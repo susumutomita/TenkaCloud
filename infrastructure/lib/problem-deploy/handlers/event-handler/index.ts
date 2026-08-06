@@ -10,7 +10,6 @@ import { registerAuditLogRoutes } from "./routes/audit-log.js";
 import { registerBulkDeployRoutes } from "./routes/bulk-deploy.js";
 import { registerCapacityRoutes } from "./routes/capacity.js";
 import { registerDisruptionRoutes } from "./routes/disruptions.js";
-import { registerEducationGraphRoutes } from "./routes/education-graph.js";
 import { registerEventRoutes } from "./routes/events.js";
 import { registerFeatureFlagsRoutes } from "./routes/feature-flags.js";
 import { registerLifecycleRoutes } from "./routes/lifecycle.js";
@@ -110,8 +109,6 @@ registerProgressionGateRoutes(app, shared);
 registerNotificationRoutes(app, shared);
 registerBulkDeployRoutes(app, shared);
 registerDisruptionRoutes(app, shared);
-// Issue #2604: read-only TenantAdmin education graph + deterministic material projections.
-registerEducationGraphRoutes(app, shared);
 // Issue #1292: Tenant Admin 向け audit log read routes (= /admin/audit-log + /export)。
 registerAuditLogRoutes(app, shared);
 // Issue #2231 (ADR-035): per-tenant runtime feature-flag toggle (= /admin/feature-flags)。

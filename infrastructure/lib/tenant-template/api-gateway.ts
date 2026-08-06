@@ -262,17 +262,6 @@ export class ApiGateway extends Construct {
       .addMethod("GET", eventIntegration, deployMethodOptions);
     admin.addResource("feature-flags").addMethod("PUT", eventIntegration, deployMethodOptions);
 
-    // Issue #2604: education graph + deterministic video/text/quiz projections.
-    // Both routes use the existing EventApi integration and Tenant Cognito authorizer;
-    // no new endpoint URL or runtime-config field is needed.
-    const educationGraph = admin.addResource("education-graph");
-    educationGraph.addMethod("GET", eventIntegration, deployMethodOptions);
-    educationGraph
-      .addResource("problems")
-      .addResource("{problemId}")
-      .addResource("materials")
-      .addMethod("GET", eventIntegration, deployMethodOptions);
-
     // Issue #1312: per-tenant SAML IdP CRUD route。 Application Plane (silo / Lite) のみ有効。
     //   /tenant/idp                  GET=list / POST=create
     //   /tenant/idp/{idpId}          GET=detail / PATCH=update / DELETE=remove

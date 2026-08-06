@@ -10,7 +10,6 @@ import { buildProblemDeployBackendBaseProps } from "../../lib/app-wiring/problem
 
 const fullBundle = {
   catalog: { p1: { title: "P1" } },
-  educationGraph: { p1: { problemId: "p1", nodes: [], relations: [] } },
   scoring: { p1: { kind: "flag" } },
   writeups: { p1: { ja: "解説", en: "Explanation" } },
   endpoints: { p1: [{ name: "api" }] },
@@ -48,7 +47,6 @@ describe("buildProblemDeployBackendBaseProps", () => {
       sourceBucketName: "source-bucket",
       sourceObjectKey: "source.zip",
       problemsCatalog: fullBundle.catalog,
-      problemsEducationGraph: fullBundle.educationGraph,
       problemsScoring: fullBundle.scoring,
       problemsWriteups: fullBundle.writeups,
       problemsEndpoints: fullBundle.endpoints,
@@ -94,7 +92,6 @@ describe("buildProblemDeployBackendBaseProps", () => {
     );
 
     expect(props.problemsPhases).toEqual({});
-    expect(props.problemsEducationGraph).toEqual({});
     expect(props.problemsWriteups).toEqual({});
     expect(props.problemsVisibility).toEqual({});
     expect(props.problemRuntimes).toEqual({});

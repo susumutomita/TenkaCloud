@@ -34,13 +34,6 @@ export const FEATURE_REGISTRY = {
     stability: "experimental",
     defaultEnabled: false,
   },
-  educationGraph: {
-    // The 教育グラフ page renders a dense all-to-all dependency graph that is hard to read at
-    // catalog scale, so it is hidden by default and opt-in per tenant from this Settings page.
-    description: "Education knowledge graph — the problem ↔ learning-objective dependency map.",
-    stability: "experimental",
-    defaultEnabled: false,
-  },
 } as const satisfies FeatureRegistry;
 
 export type AppFeatures = ResolvedFeatures<typeof FEATURE_REGISTRY>;

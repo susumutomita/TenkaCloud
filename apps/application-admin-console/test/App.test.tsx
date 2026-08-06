@@ -56,51 +56,6 @@ function stubLoginExchange(claims: Record<string, string>) {
           { status: 200, headers: { "content-type": "application/json" } },
         );
       }
-      if (url.includes("/admin/education-graph/problems/api-idor-demo/materials")) {
-        return new Response(
-          JSON.stringify({
-            problemId: "api-idor-demo",
-            locale: "ja",
-            materials: {
-              videoScript: {
-                title: "動画台本: 認証とオブジェクト認可",
-                segments: [{ heading: "導入", narration: "認証と認可は別です。" }],
-              },
-              textLesson: {
-                title: "テキスト教材",
-                sections: [{ heading: "認可", body: "所有者を確認します。" }],
-              },
-              quiz: {
-                title: "クイズ",
-                questions: [
-                  { id: "q1", prompt: "何を確認する?", answer: "所有者", explanation: "認可" },
-                ],
-              },
-            },
-          }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        );
-      }
-      if (url.includes("/admin/education-graph")) {
-        return new Response(
-          JSON.stringify({
-            locale: "ja",
-            nodes: [
-              {
-                id: "problem.api-idor-demo",
-                type: "problem",
-                label: "管理者のメモ",
-                problemId: "api-idor-demo",
-              },
-            ],
-            relations: [],
-            problems: [
-              { id: "api-idor-demo", name: "管理者のメモ", nodeId: "problem.api-idor-demo" },
-            ],
-          }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        );
-      }
       return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
     }),
   );
@@ -207,24 +162,6 @@ describe("App", () => {
       // tenantName 表示が完了するまで待つ
       await screen.findByRole("heading", { level: 1, name: /ACME 株式会社/ });
       expect(screen.queryByText(/Shared Pooled Tenant/)).toBeNull();
-    });
-  });
-
-  describe("education graph route", () => {
-    it("should route a signed-in TenantAdmin to the graph and material projections", async () => {
-      sessionStorage.setItem("TenkaCloud.application_admin.login_return_path", "/education-graph");
-      stubLoginExchange({
-        email: "admin@example.com",
-        "custom:tenantId": "t-acme",
-        "custom:tenantName": "ACME 株式会社",
-        "custom:userRole": "TenantAdmin",
-      });
-      renderApp(CALLBACK_PATH);
-
-      expect(
-        await screen.findByRole("heading", { level: 1, name: "教育ナレッジグラフ" }),
-      ).toBeInTheDocument();
-      expect(await screen.findByText("動画台本: 認証とオブジェクト認可")).toBeInTheDocument();
     });
   });
 });

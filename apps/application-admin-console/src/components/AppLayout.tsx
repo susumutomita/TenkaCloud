@@ -5,7 +5,7 @@ import { type ShellUserMenu, ShellLayout as WebKitShellLayout } from "@tenkaclou
 import { Fragment, type ReactNode, useReducer } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { useAuth } from "../auth/AuthProvider";
-import { decodeIdToken, hasTenantAdminRole } from "../auth/claims";
+import { decodeIdToken } from "../auth/claims";
 import { type LocaleCode, SUPPORTED_LOCALES, useI18n } from "../i18n";
 
 /** Issue #583 Phase 1.C: locale switcher display 名 map (= 各 locale.json と同期)。 */
@@ -28,15 +28,12 @@ const LOCALE_NAME: Record<LocaleCode, string> = {
 export function ShellLayout({
   children,
   samlSsoEnabled = false,
-  educationGraphEnabled = false,
   demoMode = false,
   demoParticipantUrl,
 }: {
   children: ReactNode;
   /** Feature-flagged: show the Identity providers (SAML SSO) nav item only when enabled. */
   samlSsoEnabled?: boolean;
-  /** Feature-flagged (default OFF): show the 教育グラフ nav item only when enabled. */
-  educationGraphEnabled?: boolean;
   /** Issue #1954: no-AWS demo mode の常時バナーを出す。 */
   demoMode?: boolean;
   /** Issue #1954: 参加者 demo (participant-portal) への hand-off 先 base URL。 */
@@ -86,20 +83,7 @@ export function ShellLayout({
         {
           type: "section",
           text: t("nav.content_section"),
-          items: [
-            { type: "link", href: "/problems", text: t("nav.problems") },
-            // 教育グラフは既定 OFF の feature flag で gate (設定画面で ON にしたときだけ表示)。
-            // TenantAdmin 限定は据え置き。
-            ...(educationGraphEnabled && hasTenantAdminRole(claims)
-              ? [
-                  {
-                    type: "link" as const,
-                    href: "/education-graph",
-                    text: t("nav.education_graph"),
-                  },
-                ]
-              : []),
-          ],
+          items: [{ type: "link", href: "/problems", text: t("nav.problems") }],
         },
         // 管理系 (監査ログ / IdP) は日常運用メニューと混ざると見つけにくいので、 1 つの
         // category section にまとめて flat な羅列を解消する。
