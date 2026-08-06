@@ -1,3 +1,6 @@
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { Duration } from "aws-cdk-lib";
 import { RemovalPolicy } from "aws-cdk-lib";
 import type { IRole } from "aws-cdk-lib/aws-iam";
@@ -45,12 +48,44 @@ export interface DefineNodejsFunctionProps {
   readonly reservedConcurrentExecutions?: number;
   /** esbuild `define` (例: #1308 の 4KB env 上限回避の literal 置換)。未指定なら define なし。 */
   readonly bundlingDefine?: Record<string, string>;
+  /**
+   * bundle に `catalog-data/<name>.json` として同梱する JSON blob (#2891)。
+   * runtime は `readCatalogBlob(name)` で読む。
+   *
+   * `bundlingDefine` は esbuild の argv に載るため、 Linux の 1 引数上限 128 KiB を
+   * 超える値を積むと CI だけが `spawnSync bun E2BIG` で死ぬ (macOS にこの上限は無く、
+   * ローカル synth では再現しない)。 カタログと共に育つ blob はこちらに置く。
+   */
+  readonly bundledData?: Record<string, string>;
 }
+
+/**
+ * 1 つの define 値に許す上限。 Linux の MAX_ARG_STRLEN (128 KiB) の手前で、 名前入りで
+ * synth を落とす — E2BIG は どの define が犯人かを言わないまま CI を殺すため。
+ */
+export const MAX_DEFINE_VALUE_BYTES = 100 * 1024;
 
 export function defineNodejsFunction(
   scope: Construct,
   props: DefineNodejsFunctionProps,
 ): NodejsFunction {
+  for (const [key, value] of Object.entries(props.bundlingDefine ?? {})) {
+    if (Buffer.byteLength(value, "utf8") > MAX_DEFINE_VALUE_BYTES) {
+      throw new Error(
+        `bundlingDefine["${key}"] is ${Buffer.byteLength(value, "utf8")} bytes — esbuild receives it as one argv entry, and Linux caps a single argument at 128 KiB (spawnSync E2BIG, #2891). Move it to bundledData and read it with readCatalogBlob().`,
+      );
+    }
+  }
+  const bundledDataEntries = Object.entries(props.bundledData ?? {});
+  let bundledDataDir: string | undefined;
+  if (bundledDataEntries.length > 0) {
+    // 一時 dir に書き、 afterBundling で bundle へ copy する。 asset hash は bundle
+    // "出力" の内容から計算されるので、 一時 dir のパスが毎回違っても hash は安定する。
+    bundledDataDir = mkdtempSync(join(tmpdir(), "tc-bundled-data-"));
+    for (const [name, json] of bundledDataEntries) {
+      writeFileSync(join(bundledDataDir, `${name}.json`), json, "utf8");
+    }
+  }
   return new NodejsFunction(scope, "Function", {
     ...(props.functionName ? { functionName: props.functionName } : {}),
     ...(props.role ? { role: props.role } : {}),
@@ -76,6 +111,21 @@ export function defineNodejsFunction(
       // `LAMBDA_EXTERNAL_MODULES` の doc comment を参照。
       externalModules: [...LAMBDA_EXTERNAL_MODULES],
       ...(props.bundlingDefine ? { define: props.bundlingDefine } : {}),
+      ...(bundledDataDir
+        ? {
+            commandHooks: {
+              beforeBundling: () => [],
+              beforeInstall: () => [],
+              afterBundling: (_inputDir: string, outputDir: string) => [
+                `mkdir -p "${outputDir}/catalog-data"`,
+                ...bundledDataEntries.map(
+                  ([name]) =>
+                    `cp "${join(bundledDataDir, `${name}.json`)}" "${outputDir}/catalog-data/"`,
+                ),
+              ],
+            },
+          }
+        : {}),
     },
   });
 }

@@ -319,13 +319,13 @@ export class ParticipantPortalLambda extends Construct {
       // esbuild define で build 時に literal 置換し env を 0 化する。 handler は
       // process.env を読む既存コードのまま (= build 後に literal JSON が埋まる)。
       bundlingDefine: {
-        "process.env.BATTLE_PROBLEMS_SCORING": JSON.stringify(
-          JSON.stringify(props.problemsScoring),
-        ),
-        "process.env.BATTLE_PROBLEMS_WRITEUPS": JSON.stringify(
-          JSON.stringify(props.problemsWriteups ?? {}),
-        ),
         "process.env.PROBLEM_ENDPOINTS": JSON.stringify(JSON.stringify(props.problemsEndpoints)),
+      },
+      // scoring / writeups はカタログと共に育ち、 実測 130 / 239 KiB で argv の
+      // 1 引数上限 128 KiB を跨いだ (#2891)。 define ではなく bundle 同梱ファイルで運ぶ。
+      bundledData: {
+        BATTLE_PROBLEMS_SCORING: JSON.stringify(props.problemsScoring),
+        BATTLE_PROBLEMS_WRITEUPS: JSON.stringify(props.problemsWriteups ?? {}),
       },
     });
 

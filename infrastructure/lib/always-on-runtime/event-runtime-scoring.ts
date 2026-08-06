@@ -75,10 +75,11 @@ export class EventRuntimeScoring extends Construct {
         RUNTIME_FEED_TOKEN_PARAMETER_NAME: runtimeFeedTokenParameter.parameterName,
         NODE_OPTIONS: "--enable-source-maps",
       },
+      // BATTLE_PROBLEMS_SCORING は実測 130 KiB で argv の 1 引数上限を跨いだ (#2891)。
+      bundledData: {
+        BATTLE_PROBLEMS_SCORING: JSON.stringify(props.problemsScoring),
+      },
       bundlingDefine: {
-        "process.env.BATTLE_PROBLEMS_SCORING": JSON.stringify(
-          JSON.stringify(props.problemsScoring),
-        ),
         "process.env.PROBLEM_ENDPOINTS": JSON.stringify(JSON.stringify(props.problemsEndpoints)),
         "process.env.BATTLE_PROBLEMS_PHASES": JSON.stringify(JSON.stringify(props.problemsPhases)),
         "process.env.BATTLE_PROBLEMS_DISRUPTIONS": JSON.stringify(
