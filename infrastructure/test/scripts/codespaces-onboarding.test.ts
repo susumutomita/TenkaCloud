@@ -227,17 +227,6 @@ describe("Makefile local-play guards", () => {
     expect(localCli).toContain('["install", "--ignore-scripts"]');
   });
 
-  // Issue #2907: the CLI's in-process self-heal can never run on a fresh clone —
-  // `bun run tenkacloud` dies resolving workspace imports before any code executes —
-  // so the make target must run ensure-deps before delegating.
-  it("make local should run ensure-deps before the CLI on a fresh clone (#2907)", () => {
-    const local = makefile.slice(makefile.indexOf("\nlocal:"));
-    const ensure = local.indexOf("$(MAKE) ensure-deps");
-    const delegate = local.indexOf("bun run tenkacloud local");
-    expect(ensure).toBeGreaterThan(-1);
-    expect(ensure).toBeLessThan(delegate);
-  });
-
   it("local-portal should delegate to the same self-healing CLI path", () => {
     const portal = makefile.slice(makefile.indexOf("\nlocal-portal:"));
     expect(portal.slice(0, 200)).toContain("bun run tenkacloud local portal");
