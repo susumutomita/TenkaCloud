@@ -69,8 +69,9 @@ export function HomePage({ config }: { config: AppConfig }) {
       {!isMock && !view && !error && <LoadingState label={t("app.loading")} />}
 
       {/* Issue #1349: 「次にやること」 hero を一等地に置く (= 3 状態 = not_started /
-       *  running / ended)。 視線は header → next action → 累計スコア → 推移 → 一覧 の順。 */}
+       *  running / ended)。 #2900: real の running だけは直下の問題一覧導線と重複するため隠す。 */}
       <NextActionHero
+        cloudMode={config.cloudMode}
         view={view}
         leaderboard={leaderboard}
         preferredNextProblemId={courseNext?.problemId}

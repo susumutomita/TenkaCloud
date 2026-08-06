@@ -17,7 +17,9 @@ vi.mock("../../src/i18n", () => ({
     params ? `${key}|${JSON.stringify(params)}` : key,
 }));
 
-const { NextActionHero } = await import("../../src/components/NextActionHero");
+const { NextActionHero, shouldShowNextActionHero } = await import(
+  "../../src/components/NextActionHero"
+);
 
 const view = (over: Partial<ParticipantTeamView>): ParticipantTeamView =>
   ({ eventGate: undefined, problems: [], ...over }) as unknown as ParticipantTeamView;
@@ -49,14 +51,52 @@ const UPTIME_UP = {
 afterEach(() => vi.clearAllMocks());
 
 describe("NextActionHero (render)", () => {
+  it("should keep all states in mock and local modes", () => {
+    for (const cloudMode of ["mock", "local"] as const) {
+      expect(shouldShowNextActionHero(cloudMode, "running")).toBe(true);
+      expect(shouldShowNextActionHero(cloudMode, "ended")).toBe(true);
+    }
+  });
+
+  it("should hide only the duplicated running state in real competitions", () => {
+    expect(shouldShowNextActionHero("real", "running")).toBe(false);
+    for (const stateKind of ["not_started", "ended", "all_cleared", "defending"] as const) {
+      expect(shouldShowNextActionHero("real", stateKind)).toBe(true);
+    }
+  });
+
+  it("should suppress a real running hero while retaining the real ended summary", () => {
+    const running = render(
+      <NextActionHero
+        cloudMode="real"
+        view={view({ problems: [UNSOLVED] as never })}
+        leaderboard={null}
+      />,
+    );
+    expect(running.container.textContent).toBe("");
+    running.unmount();
+
+    const ended = render(
+      <NextActionHero
+        cloudMode="real"
+        view={view({ eventGate: { kind: "scoring_ended" } })}
+        leaderboard={null}
+      />,
+    );
+    expect(ended.container.textContent).toContain("next_action.ended_no_rank");
+  });
+
   it("should render nothing when there is no team view", () => {
-    const { container } = render(<NextActionHero view={null} leaderboard={null} />);
+    const { container } = render(
+      <NextActionHero cloudMode="mock" view={null} leaderboard={null} />,
+    );
     expect(container.textContent).toBe("");
   });
 
   it("should show the not-started countdown (with and without a startsAt)", () => {
     const withStart = render(
       <NextActionHero
+        cloudMode="mock"
         view={view({
           eventGate: { kind: "scoring_not_started", startsAt: "2999-01-01T00:00:00Z" },
         })}
@@ -68,6 +108,7 @@ describe("NextActionHero (render)", () => {
 
     const noStart = render(
       <NextActionHero
+        cloudMode="mock"
         view={view({ eventGate: { kind: "scoring_not_started" } })}
         leaderboard={null}
       />,
@@ -78,6 +119,7 @@ describe("NextActionHero (render)", () => {
   it("should show the ended summary with a final rank and without one", () => {
     const withRank = render(
       <NextActionHero
+        cloudMode="mock"
         view={view({ eventGate: { kind: "scoring_ended" } })}
         leaderboard={board({ entries: [{ isMyTeam: true, rank: 3 }] as never })}
       />,
@@ -86,28 +128,46 @@ describe("NextActionHero (render)", () => {
     withRank.unmount();
 
     const noRank = render(
-      <NextActionHero view={view({ eventGate: { kind: "scoring_ended" } })} leaderboard={null} />,
+      <NextActionHero
+        cloudMode="mock"
+        view={view({ eventGate: { kind: "scoring_ended" } })}
+        leaderboard={null}
+      />,
     );
     expect(noRank.container.textContent).toContain("next_action.ended_no_rank");
   });
 
   it("should show all-cleared when every problem is a submitted flag", () => {
     const { container } = render(
-      <NextActionHero view={view({ problems: [SOLVED] as never })} leaderboard={null} />,
+      <NextActionHero
+        cloudMode="mock"
+        view={view({ problems: [SOLVED] as never })}
+        leaderboard={null}
+      />,
     );
     expect(container.textContent).toContain("next_action.all_cleared");
   });
 
   it("should show defending (not all-cleared) for a scoring uptime Battle problem", () => {
     const { container } = render(
-      <NextActionHero view={view({ problems: [UPTIME_UP] as never })} leaderboard={null} />,
+      <NextActionHero
+        cloudMode="mock"
+        view={view({ problems: [UPTIME_UP] as never })}
+        leaderboard={null}
+      />,
     );
     expect(container.textContent).toContain("next_action.defending");
     expect(container.textContent).not.toContain("next_action.all_cleared");
   });
 
   it("should suggest the next problem and navigate to it on click", () => {
-    render(<NextActionHero view={view({ problems: [UNSOLVED] as never })} leaderboard={null} />);
+    render(
+      <NextActionHero
+        cloudMode="mock"
+        view={view({ problems: [UNSOLVED] as never })}
+        leaderboard={null}
+      />,
+    );
     expect(screen.getByText(/next_action\.running_pick/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "next_action.running_open_button" }));
     expect(mockNavigate).toHaveBeenCalledWith("/problems/job-1");
@@ -122,7 +182,13 @@ describe("NextActionHero (render)", () => {
       score: 0,
       scoring: { kind: "uptime" },
     };
-    render(<NextActionHero view={view({ problems: [inProgress] as never })} leaderboard={null} />);
+    render(
+      <NextActionHero
+        cloudMode="mock"
+        view={view({ problems: [inProgress] as never })}
+        leaderboard={null}
+      />,
+    );
     expect(screen.getByText(/next_action\.running_pick/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "next_action.running_open_button" }));
     expect(mockNavigate).toHaveBeenCalledWith("/problems/job-3");
@@ -131,7 +197,7 @@ describe("NextActionHero (render)", () => {
   it("should show the no-ready-problem running state when there is nothing to open", () => {
     // problems が空 → running 状態だが nextProblem 無し → button を出さず no_ready ラベル。
     const { container } = render(
-      <NextActionHero view={view({ problems: [] })} leaderboard={null} />,
+      <NextActionHero cloudMode="mock" view={view({ problems: [] })} leaderboard={null} />,
     );
     expect(container.textContent).toContain("next_action.running_no_ready");
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
