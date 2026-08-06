@@ -93,7 +93,7 @@ Codespaces plays **cloud-independent drills only** — self-contained Docker con
 
 ### Try it locally (no AWS)
 
-`tenkacloud local` is the primary local drill entry point: it starts the local scoring API and the Participant Portal, then you pick and start a drill from the portal screen. Progress is stored by default in the private local SQLite file `.tenkacloud/local/local-play.sqlite`; local play has no DynamoDB or AWS SDK dependency. `make local` remains a compatibility wrapper.
+`make local` is the primary local drill entry point: it starts the local scoring API and the Participant Portal, then you pick and start a drill from the portal screen. Progress is stored by default in the private local SQLite file `.tenkacloud/local/local-play.sqlite`; local play has no DynamoDB or AWS SDK dependency. `tenkacloud local` is the underlying CLI it wraps — handy once your checkout already has its dependencies installed.
 
 **Recommended for a fresh clone — self-healing, no Bun preinstall required:**
 
@@ -101,10 +101,10 @@ Codespaces plays **cloud-independent drills only** — self-contained Docker con
 git clone https://github.com/susumutomita/TenkaCloud.git
 cd TenkaCloud
 make local-onboard
-bun run tenkacloud local
+make local
 ```
 
-`make local-onboard` asks for consent before installing anything it needs — Bun itself if missing, the `problems/` submodule, and a Docker diagnosis — then reports readiness; it installs nothing without asking. Pass `YES=1` (`make local-onboard YES=1`) to pre-approve every install for unattended runs (this is the path GitHub Codespaces uses). Once it reports all prerequisites satisfied, `bun run tenkacloud local` starts the local scoring API and Participant Portal.
+`make local-onboard` asks for consent before installing anything it needs — Bun itself if missing, the `problems/` submodule, and a Docker diagnosis — then reports readiness; it installs nothing without asking. Pass `YES=1` (`make local-onboard YES=1`) to pre-approve every install for unattended runs (this is the path GitHub Codespaces uses). Once it reports all prerequisites satisfied, `make local` starts the local scoring API and Participant Portal — on the first run it also installs the workspace dependencies for you.
 
 <details>
 <summary>What it does under the hood / manual alternative</summary>

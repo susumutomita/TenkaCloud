@@ -386,7 +386,8 @@ ONBOARD_FLAGS := $(if $(YES),--yes,)
 doctor:
 	@command -v bun >/dev/null 2>&1 || { \
 	  echo "Bun is required for diagnostics."; \
-	  echo "  Install: (macOS) brew install oven-sh/bun/bun   (Linux) curl -fsSL https://bun.sh/install | bash"; \
+	  echo "  Install (any OS, incl. macOS): curl -fsSL https://bun.sh/install | bash"; \
+	  echo "  Homebrew alternative (macOS):  brew install oven-sh/bun/bun"; \
 	  exit 1; }
 	@bun run tenkacloud doctor
 
@@ -403,16 +404,22 @@ local-onboard:
 # fresh clone / Codespace that never ran `make install`, the portal's vite is
 # absent and local play used to die with "run make install first". Install once
 # (only when vite is missing — a no-op on a warm tree), then continue.
+# The PATH prefix mirrors local-onboard: a bun that local-onboard just installed
+# lives in ~/.bun/bin, invisible to this still-open shell's PATH.
 ensure-deps:
 	@if [ ! -x node_modules/.bin/vite ] && [ ! -x apps/participant-portal/node_modules/.bin/vite ]; then \
 	  echo "Dependencies are not installed (vite is missing) — running 'make install' first."; \
-	  $(MAKE) install; \
+	  PATH="$$HOME/.bun/bin:$$PATH" $(MAKE) install; \
 	fi
 
 # Issue #2054 / #2392 / #2511: start the detached local scoring API, then the
 # browser portal. `local-up` remains the API-only escape hatch for scripts.
+# Issue #2907: ensure-deps runs first — the CLI's own dependency self-heal cannot
+# fire on a fresh clone because `bun run tenkacloud` dies resolving workspace
+# imports (`@tenkacloud/problem-sdk`) before any of its code executes.
 local: ## Start the local drill API and portal | ローカル問題演習のAPIとportalを起動
-	@bun run tenkacloud local $(if $(PROBLEM),--problem "$(PROBLEM)",) $(if $(LOCAL_API_PORT),--api-port "$(LOCAL_API_PORT)",)
+	@$(MAKE) ensure-deps
+	@PATH="$$HOME/.bun/bin:$$PATH" bun run tenkacloud local $(if $(PROBLEM),--problem "$(PROBLEM)",) $(if $(LOCAL_API_PORT),--api-port "$(LOCAL_API_PORT)",)
 
 local-up:
 	@bun run tenkacloud local up $(if $(PROBLEM),--problem "$(PROBLEM)",) $(if $(LOCAL_API_PORT),--api-port "$(LOCAL_API_PORT)",)

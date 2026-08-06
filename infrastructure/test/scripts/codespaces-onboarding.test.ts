@@ -178,6 +178,17 @@ describe("scripts/onboard/onboard-bootstrap.sh", () => {
     expect(pathExport).toBeGreaterThan(install);
     expect(recheck).toBeGreaterThan(pathExport);
   });
+
+  // Issue #2907: a real macOS onboarding failed because `brew install oven-sh/bun/bun`
+  // broke on an old Xcode / Command Line Tools while the official installer worked.
+  // The bootstrap must fall back instead of aborting with brew's error.
+  it("should fall back to the official Bun installer when the first route fails (#2907)", () => {
+    expect(bootstrap).toContain('bun_official_cmd="curl -fsSL https://bun.sh/install | bash"');
+    const brewAttempt = bootstrap.indexOf('if ! sh -c "$bun_cmd"; then');
+    const fallback = bootstrap.indexOf('sh -c "$bun_official_cmd"', brewAttempt);
+    expect(brewAttempt).toBeGreaterThan(-1);
+    expect(fallback).toBeGreaterThan(brewAttempt);
+  });
 });
 
 describe("Makefile local-play guards", () => {
@@ -194,6 +205,17 @@ describe("Makefile local-play guards", () => {
     expect(local.slice(0, 400)).toContain("bun run tenkacloud local");
     expect(localCli).toContain("await ensurePortalDependencies(deps)");
     expect(localCli).toContain('["install", "--ignore-scripts"]');
+  });
+
+  // Issue #2907: the CLI's in-process self-heal can never run on a fresh clone —
+  // `bun run tenkacloud` dies resolving workspace imports before any code executes —
+  // so the make target must run ensure-deps before delegating.
+  it("make local should run ensure-deps before the CLI on a fresh clone (#2907)", () => {
+    const local = makefile.slice(makefile.indexOf("\nlocal:"));
+    const ensure = local.indexOf("$(MAKE) ensure-deps");
+    const delegate = local.indexOf("bun run tenkacloud local");
+    expect(ensure).toBeGreaterThan(-1);
+    expect(ensure).toBeLessThan(delegate);
   });
 
   it("local-portal should delegate to the same self-healing CLI path", () => {

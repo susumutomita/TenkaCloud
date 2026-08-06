@@ -40,6 +40,12 @@ describe("stepFor", () => {
     expect(stepFor(check("bun", "missing"), "darwin").commands[0]).toContain("brew install");
     expect(stepFor(check("bun", "missing"), "linux").commands[0]).toContain("bun.sh/install");
   });
+
+  // Issue #2907: on a mac with an old Xcode / CLT the brew route fails for reasons
+  // that are not Bun's; the step must surface the official-installer escape hatch.
+  it("should give the macOS bun step an official-installer fallback note (#2907)", () => {
+    expect(stepFor(check("bun", "missing"), "darwin").notes).toContain("bun.sh/install");
+  });
 });
 
 describe("stepFor on unsupported platforms (win32 / BSD / anything not darwin or linux)", () => {

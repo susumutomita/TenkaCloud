@@ -47,15 +47,28 @@ if [ -f "$repo_root/mise.toml" ] && command -v mise >/dev/null 2>&1; then
 fi
 
 # 2) bun — the gateway to every other script. If absent, offer a consented install.
+# The official installer is the single canonical URL (also printed by `make doctor`).
+bun_official_cmd="curl -fsSL https://bun.sh/install | bash"
 if ! command -v bun >/dev/null 2>&1; then
   case "$(uname -s)" in
     Darwin) bun_cmd="brew install oven-sh/bun/bun" ;;
-    *) bun_cmd="curl -fsSL https://bun.sh/install | bash" ;;
+    *) bun_cmd="$bun_official_cmd" ;;
   esac
   echo "Bun is required (it runs every TenkaCloud script and installs dependencies)."
   echo "  Install command: $bun_cmd"
   if consent "Install Bun now?"; then
-    sh -c "$bun_cmd"
+    # Issue #2907: on macOS the Homebrew route can fail for reasons that are not
+    # Bun's (e.g. an old Xcode / Command Line Tools). Fall back to the official
+    # installer, which ships a prebuilt binary and needs neither.
+    if ! sh -c "$bun_cmd"; then
+      if [ "$bun_cmd" != "$bun_official_cmd" ]; then
+        echo ""
+        echo "That install command failed (on macOS this is often an old Xcode /"
+        echo "Command Line Tools, not a Bun problem). Trying the official installer:"
+        echo "  $bun_official_cmd"
+        sh -c "$bun_official_cmd" || true
+      fi
+    fi
     # The installer drops bun into ~/.bun/bin and edits the shell profile, but
     # THIS shell's PATH is unchanged — without this export the re-check below
     # fails right after a successful install (seen in Codespaces postCreate,
@@ -66,7 +79,7 @@ if ! command -v bun >/dev/null 2>&1; then
   if ! command -v bun >/dev/null 2>&1; then
     echo ""
     echo "Bun is still not on PATH. Install it, then re-run \`make local-onboard\`:"
-    echo "  $bun_cmd"
+    echo "  $bun_official_cmd"
     echo "  (if bun is managed by mise: mise trust && mise install)"
     exit 1
   fi
