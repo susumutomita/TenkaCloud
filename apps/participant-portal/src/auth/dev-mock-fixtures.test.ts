@@ -19,6 +19,7 @@ import {
   DEV_MOCK_NOTIFICATIONS,
   DEV_MOCK_TEAM_VIEW,
 } from "./dev-mock-fixtures";
+import { LOCAL_ONBOARDING_COMMANDS } from "./local-onboarding-contract";
 
 /**
  * Issue #2696 / #2707 / #2711: LP デモの固定出題 (オンボーディングドリル + 2 クエスト) の
@@ -284,7 +285,9 @@ describe("dev-mock fixtures", () => {
     const drill = drills.find((problem) => problem.problemId === LOCAL_DRILL_PROBLEM_ID);
     for (const body of [drill?.description, drill?.i18n?.en?.description]) {
       expect(body).toContain("`make local`");
-      expect(body).toContain("make local-onboard");
+      expect(body).not.toContain("make install");
+      expect(body).not.toContain("bun link");
+      expect(body).not.toContain("bun run");
       expect(body).toContain("Codespaces");
       expect(body).toContain("Docker");
       expect(body).toContain("5175");
@@ -294,9 +297,15 @@ describe("dev-mock fixtures", () => {
       expect(body).toContain("WordPress");
       expect(body).toMatch(/コンテナ|Container/);
       expect(body).toMatch(/ターミナル|Terminal/);
-      // 正規の入口は make local (起動後に Portal で問題を選ぶ)。内部実装の
-      // `bun run tenkacloud local --problem ...` を競技者向け本文に出さない。
-      expect(body).not.toContain("bun run tenkacloud");
+      const commands = body
+        ?.split("\n")
+        .map((line) => line.match(/^\d+\. `([^`]+)`$/)?.[1])
+        .filter((command): command is string => command !== undefined);
+      expect(commands?.slice(0, LOCAL_ONBOARDING_COMMANDS.length)).toEqual(
+        LOCAL_ONBOARDING_COMMANDS,
+      );
+      expect(body).toMatch(/automatically|自動/);
+      expect(body).toMatch(/fallback|失敗/);
     }
     expect(drill?.description).not.toContain("手元の Mac");
     expect(drill?.i18n?.en?.description).not.toContain("your Mac");
@@ -310,25 +319,6 @@ describe("dev-mock fixtures", () => {
       for (const text of texts) {
         expect(text, `local drill flag ${flag.id} still assumes a Mac`).not.toContain("Mac");
       }
-    }
-  });
-
-  // Issue #2907: fresh clone 手順の正本を pin する。clone → cd → make local-onboard →
-  // make local の一本道を日英同順で固定し、Bun 前提の make install / bun link を
-  // 初見者本文に出さない (実際に非エンジニアが clone 直後の make install で詰まった)。
-  it("should pin the fresh-clone launch sequence: clone → cd → onboard → local (#2907)", () => {
-    const drill = drills.find((problem) => problem.problemId === LOCAL_DRILL_PROBLEM_ID);
-    for (const body of [drill?.description ?? "", drill?.i18n?.en?.description ?? ""]) {
-      const clone = body.indexOf("git clone --recurse-submodules");
-      const cd = body.indexOf("`cd TenkaCloud`");
-      const onboard = body.indexOf("`make local-onboard`");
-      const local = body.indexOf("`make local`", onboard);
-      expect(clone).toBeGreaterThan(-1);
-      expect(cd).toBeGreaterThan(clone);
-      expect(onboard).toBeGreaterThan(cd);
-      expect(local).toBeGreaterThan(onboard);
-      expect(body).not.toContain("make install");
-      expect(body).not.toContain("bun link");
     }
   });
 

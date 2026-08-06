@@ -1,4 +1,6 @@
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -25,6 +27,7 @@ const bootstrap = readFileSync(
   join(REPO_ROOT, "scripts", "onboard", "onboard-bootstrap.sh"),
   "utf8",
 );
+const bunInstaller = readFileSync(join(REPO_ROOT, "scripts", "onboard", "install-bun.sh"), "utf8");
 const startLocalScript = readFileSync(
   join(REPO_ROOT, "scripts", "onboard", "codespaces-start-local.sh"),
   "utf8",
@@ -171,7 +174,7 @@ describe("scripts/onboard/codespaces-start-local.sh", () => {
 
 describe("scripts/onboard/onboard-bootstrap.sh", () => {
   it("should put a just-installed bun onto this shell's PATH before re-checking", () => {
-    const install = bootstrap.indexOf('sh -c "$bun_cmd"');
+    const install = bootstrap.indexOf('bash "$bun_installer"');
     const pathExport = bootstrap.indexOf('export PATH="$BUN_INSTALL/bin:$PATH"');
     const recheck = bootstrap.lastIndexOf("command -v bun");
     expect(install).toBeGreaterThan(-1);
@@ -179,15 +182,32 @@ describe("scripts/onboard/onboard-bootstrap.sh", () => {
     expect(recheck).toBeGreaterThan(pathExport);
   });
 
-  // Issue #2907: a real macOS onboarding failed because `brew install oven-sh/bun/bun`
-  // broke on an old Xcode / Command Line Tools while the official installer worked.
-  // The bootstrap must fall back instead of aborting with brew's error.
-  it("should fall back to the official Bun installer when the first route fails (#2907)", () => {
-    expect(bootstrap).toContain('bun_official_cmd="curl -fsSL https://bun.sh/install | bash"');
-    const brewAttempt = bootstrap.indexOf('if ! sh -c "$bun_cmd"; then');
-    const fallback = bootstrap.indexOf('sh -c "$bun_official_cmd"', brewAttempt);
-    expect(brewAttempt).toBeGreaterThan(-1);
-    expect(fallback).toBeGreaterThan(brewAttempt);
+  it("should delegate Bun installation to the one official installer source", () => {
+    expect(bootstrap).toContain('bun_installer="$repo_root/scripts/onboard/install-bun.sh"');
+    expect(bootstrap).toContain('bun_cmd="bash scripts/onboard/install-bun.sh"');
+    expect(bootstrap).not.toContain("bun.sh/install");
+    expect(bunInstaller).toContain("https://bun.com/install");
+  });
+
+  it("should give a Bun-free fresh shell an executable first recovery command", () => {
+    const bin = mkdtempSync(join(tmpdir(), "tenkacloud-bun-free-path-"));
+    try {
+      symlinkSync("/usr/bin/dirname", join(bin, "dirname"));
+      symlinkSync("/usr/bin/uname", join(bin, "uname"));
+      const result = spawnSync(
+        "/bin/sh",
+        [join(REPO_ROOT, "scripts/onboard/onboard-bootstrap.sh")],
+        {
+          env: { PATH: bin },
+          encoding: "utf8",
+        },
+      );
+      expect(result.status).toBe(1);
+      expect(result.stdout).toContain("bash scripts/onboard/install-bun.sh");
+      expect(result.stdout).not.toContain("make install");
+    } finally {
+      rmSync(bin, { recursive: true, force: true });
+    }
   });
 });
 

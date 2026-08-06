@@ -55,6 +55,24 @@ or operation is unsupported.
 
 ## Run it
 
+For a fresh clone, use the same participant path documented in both READMEs and
+the Portal onboarding drill:
+
+```bash
+git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
+cd TenkaCloud
+make local-onboard
+make local
+```
+
+On macOS, Linux, and Windows through WSL2, `make local-onboard` diagnoses Bun,
+the catalog submodule, Docker Compose, and the Docker daemon before `make local`
+starts the Portal. GitHub Codespaces performs that setup and starts the Portal
+automatically; run the **▷ ローカルプレイ開始** task only as a fallback when
+automatic startup reports a failure.
+
+The developer CLI exposes advanced launch options:
+
 ```bash
 tenkacloud local                         # scoring API + portal; local SQLite persistence
 tenkacloud local --problem sqli-demo     # pre-start one problem, then open the portal

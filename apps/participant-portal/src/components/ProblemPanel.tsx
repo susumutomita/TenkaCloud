@@ -11,6 +11,7 @@ import StatusIndicator, {
 import { Markdown, useNowMs } from "@tenkacloud/web-kit";
 import type {
   DeploymentStatus,
+  MultiFlagEntryView,
   ParticipantProblemView,
   ProblemLifecycleStatus,
 } from "../api/portal-client";
@@ -36,7 +37,6 @@ import {
   resolveProblemTitle,
   shouldShowContainerTerminal,
   splitStackOutputs,
-  WRITEUP_SECTION_ID,
 } from "./ProblemPanel.helpers";
 import { FlagSubmissionPanel } from "./ProblemPanelFlagSubmission";
 import { ProblemLifecyclePanel } from "./ProblemPanelLifecycle";
@@ -69,6 +69,7 @@ const LIFECYCLE_STATUS_TYPE: Record<ProblemLifecycleStatus, StatusIndicatorProps
 
 const COUNTDOWN_REFRESH_MS = 30_000;
 const ONBOARDING_PRACTICE_ENDPOINT_FILE = "onboarding-practice.html";
+const PROBLEM_WRITEUP_SECTION_ID = "problem-writeup";
 
 function onboardingPracticeEndpointUrl(lang: LocaleCode): string {
   const url = new URL(
@@ -89,7 +90,6 @@ function MultiFlagPlaySurface({
   problemId,
   scoring,
   onScored,
-  writeupAvailable,
 }: {
   readonly localDocker: boolean;
   readonly apiBaseUrl: string;
@@ -97,7 +97,6 @@ function MultiFlagPlaySurface({
   readonly problemId: string;
   readonly scoring: NonNullable<ReturnType<typeof getCompleteMultiFlagScoring>>;
   readonly onScored: () => Promise<void>;
-  readonly writeupAvailable: boolean;
 }) {
   if (localDocker) {
     return (
@@ -108,7 +107,6 @@ function MultiFlagPlaySurface({
         flags={scoring.flags ?? []}
         onScored={onScored}
         revealOrder={scoring.hintReveal}
-        writeupAvailable={writeupAvailable}
       />
     );
   }
@@ -120,7 +118,6 @@ function MultiFlagPlaySurface({
       flags={scoring.flags ?? []}
       onScored={onScored}
       revealOrder={scoring.hintReveal}
-      writeupAvailable={writeupAvailable}
     />
   );
 }
@@ -247,8 +244,7 @@ function ProblemWriteup({ problem, t }: { problem: ParticipantProblemView; t: Pr
   const isLocal = useAppConfig().cloudMode === "local";
   if (!problem.writeup?.trim()) return null;
   return (
-    // [#2908] anchor: 全問クリア表示の「解説で振り返る」link がここへ飛ぶ。
-    <div id={WRITEUP_SECTION_ID}>
+    <div id={PROBLEM_WRITEUP_SECTION_ID} tabIndex={-1}>
       <Container header={<Header variant="h3">{t("problem_panel.writeup_heading")}</Header>}>
         <Markdown source={problem.writeup} />
         {/* Local-only pointer to the `tenka-drill` skill: no AI runs in the portal;
@@ -262,6 +258,27 @@ function ProblemWriteup({ problem, t }: { problem: ParticipantProblemView; t: Pr
         )}
       </Container>
     </div>
+  );
+}
+
+function ProblemWriteupHandoff({
+  problem,
+  flags,
+  t,
+}: {
+  readonly problem: ParticipantProblemView;
+  readonly flags: readonly MultiFlagEntryView[];
+  readonly t: ProblemPanelT;
+}) {
+  if (!problem.writeup?.trim() || flags.length === 0 || flags.some((flag) => !flag.solved)) {
+    return null;
+  }
+  return (
+    <Alert type="success">
+      <a href={`#${PROBLEM_WRITEUP_SECTION_ID}`}>
+        {t("problem_panel.writeup_handoff", { solved: flags.length, total: flags.length })}
+      </a>
+    </Alert>
   );
 }
 
@@ -384,6 +401,7 @@ export function ProblemPanel({
             一本化した(#2473)ので、ここでは description のみ。 AWS mode は未配信なので不在時は
             何も出さない。 */}
         <ProblemStatement hidden={isIntroTutorial} problem={problem} t={t} />
+        <ProblemWriteupHandoff problem={problem} flags={multiFlagScoring?.flags ?? []} t={t} />
         <ProblemWriteup problem={problem} t={t} />
         {/* [#2392 Phase 2] on-demand start / stop control。 lifecycle 不在 (= AWS mode) は出さない。 */}
         {lifecycleStatus !== undefined && (
@@ -483,7 +501,6 @@ export function ProblemPanel({
                 problemId={problem.problemId}
                 scoring={multiFlagScoring}
                 onScored={onScored}
-                writeupAvailable={Boolean(problem.writeup?.trim())}
               />
             )}
           </>

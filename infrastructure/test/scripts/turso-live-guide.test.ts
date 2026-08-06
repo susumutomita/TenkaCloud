@@ -41,6 +41,9 @@ describe("scripts/ops/turso-live-guide (#2617)", () => {
     expect(guide).toContain("Disruptions");
     expect(guide).toContain("監査ログ");
     expect(guide).toContain("docs/running-costs.md");
+    expect(guide).toContain("--value file:///dev/stdin");
+    expect(guide).toContain("printf '%s' \"$TURSO_TOKEN\" | aws ssm put-parameter");
+    expect(guide).not.toContain('--value "$TURSO_TOKEN"');
     expect(guide.indexOf("事前確認")).toBeLessThan(guide.indexOf("tenkacloud turso-live deploy"));
     expect(guide.indexOf("tenkacloud turso-live deploy")).toBeLessThan(
       guide.indexOf("8. Application Admin Console で主要フロー"),
@@ -201,7 +204,18 @@ describe("scripts/ops/turso-live-guide (#2617)", () => {
     expect(runningCosts).toContain("make turso-live ENV=development");
     expect(runningCosts).toContain("including Codespaces");
     expect(runningCosts).toContain("avoids Homebrew and external tap dependencies");
+    expect(runningCosts.match(/--value file:\/\/\/dev\/stdin/g)).toHaveLength(2);
+    expect(runningCosts).not.toContain('--value "$TURSO_TOKEN"');
+    expect(runningCosts).not.toContain('--value "<token from step 1>"');
     expect(envExample).toContain("tenkacloud turso-live");
+  });
+
+  it("should link the data boundary and live caveat to documents that still exist", () => {
+    const alwaysOn = readFileSync(join(REPO_ROOT, "docs/always-on/README.md"), "utf8");
+
+    expect(alwaysOn).not.toContain("CLAUDE.md#data-isolation");
+    expect(alwaysOn).toContain("adr-049-always-on-cloudflare-control-plane.html");
+    expect(alwaysOn).toContain("running-costs.md#first-live-e2e-verification-runbook");
   });
 
   it("should default make help to English and provide an explicit Japanese view", () => {

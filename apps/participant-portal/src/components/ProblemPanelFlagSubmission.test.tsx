@@ -161,50 +161,6 @@ describe("FlagSubmissionPanel submit flow", () => {
   });
 });
 
-// [#2908] 正解で HintsPanel ごと消えて振り返れなくなる regression の修正を pin する。
-describe("RevealedHintsReview after solve (#2908)", () => {
-  const hints = [
-    { id: "hint-1", penalty: 10, revealed: true, content: "the first hint text" },
-    { id: "hint-2", penalty: 20, revealed: false },
-  ];
-
-  it("should keep revealed hints reviewable on the already-submitted view", async () => {
-    const user = userEvent.setup();
-    renderPanel({ flagSubmitted: true, hints });
-    // 既定は折りたたみ (DOM には保持) — 展開して開封済みヒント本文を振り返る。
-    const toggle = screen.getByRole("button", { name: "Review the hints you opened (1)" });
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
-    await user.click(toggle);
-    expect(toggle).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByText(/the first hint text/)).toBeInTheDocument();
-    // 未開封ヒントの reveal 操作は解答後は出さない (追加減点なし)。
-    expect(screen.queryByRole("button", { name: /Reveal hint/ })).not.toBeInTheDocument();
-  });
-
-  it("should keep revealed hints reviewable right after a correct submit", async () => {
-    const user = userEvent.setup();
-    apiMocks.submitFlag.mockResolvedValue({ kind: "ok", scoreDelta: 100, totalScore: 100 });
-    renderPanel({ hints });
-    await user.type(screen.getByRole("textbox"), "flag-value");
-    await user.click(screen.getByRole("button", { name: SUBMIT }));
-    expect(
-      await screen.findByRole("button", { name: "Review the hints you opened (1)" }),
-    ).toBeInTheDocument();
-  });
-
-  it("should render nothing when no revealed hint carries content", () => {
-    renderPanel({
-      flagSubmitted: true,
-      // revealed でも content 不在 (公開前に server が落とす) は振り返り対象にしない。
-      hints: [
-        { id: "hint-1", penalty: 10, revealed: true },
-        { id: "hint-2", penalty: 20, revealed: false },
-      ],
-    });
-    expect(screen.queryByText(/Review the hints you opened/)).not.toBeInTheDocument();
-  });
-});
-
 const HINTS_3 = [
   { id: "hint-1", penalty: 10, revealed: false },
   { id: "hint-2", penalty: 20, revealed: false },

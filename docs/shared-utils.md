@@ -45,6 +45,7 @@ Reused by operator CLIs and deploy scripts; import directly by relative path.
 | `disruption-live-fire.ts` | Disruption live-fire pure logic (fire → probe → auto-revert, #1419/#1666) |
 | `iam-description-ascii.ts` | IAM Description ASCII/Latin-1 gate logic (#664) |
 | `landing/onboarding-videos/render.ts` | Onboarding video renderer helpers: HTML escaping, binary resolution, checked command execution, and guarded temporary-workspace cleanup |
+| `onboard/install-bun.sh` | Canonical Bun official-installer invocation shared by fresh-clone onboarding, remediation plans, and CodeBuild runtime setup |
 | `retained-tables.ts` | Post-destroy RETAIN-table enumeration for billing warnings (#2444) |
 | `scripts/run-cdk.sh` | Exact repository-local AWS CDK CLI resolution for normal checkouts and packaged `cdk` workspaces |
 | `scale-event-capacity.ts` | Event-window capacity scaling logic |

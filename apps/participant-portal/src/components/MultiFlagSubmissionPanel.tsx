@@ -2,11 +2,11 @@ import Alert from "@cloudscape-design/components/alert";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import Container from "@cloudscape-design/components/container";
+import ExpandableSection from "@cloudscape-design/components/expandable-section";
 import Form from "@cloudscape-design/components/form";
 import FormField from "@cloudscape-design/components/form-field";
 import Header from "@cloudscape-design/components/header";
 import Input from "@cloudscape-design/components/input";
-import Link from "@cloudscape-design/components/link";
 import ProgressBar from "@cloudscape-design/components/progress-bar";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Textarea from "@cloudscape-design/components/textarea";
@@ -30,8 +30,8 @@ import { loadMockSolvedFlagIds, saveMockSolvedFlagId } from "../dev-mock/progres
 import { useLang, useT } from "../i18n";
 import { trackOnboardingEvent } from "../onboarding-analytics";
 import { CelebrationOverlay } from "./CelebrationOverlay";
-import { formatProblemPanelActionError, WRITEUP_SECTION_ID } from "./ProblemPanel.helpers";
-import { HintsPanel, RevealedHintsReview } from "./ProblemPanelFlagSubmission";
+import { formatProblemPanelActionError } from "./ProblemPanel.helpers";
+import { HintsPanel } from "./ProblemPanelFlagSubmission";
 
 const PARTICIPANT_MANUAL_URL = "https://tenkacloud.com/docs/manual/participant/";
 
@@ -86,7 +86,6 @@ export function MultiFlagSubmissionPanel({
   revealOrder,
   onboardingVariant,
   prepareSubmission,
-  writeupAvailable,
 }: {
   apiBaseUrl: string;
   sessionToken: string;
@@ -103,8 +102,6 @@ export function MultiFlagSubmissionPanel({
    * checkpoint inputs are replaced by the shared source editors.
    */
   prepareSubmission?: (flagId: string, values: Readonly<Record<string, string>>) => Promise<string>;
-  /** [#2908] writeup が公開済みのとき、全問クリア表示から解説 section へ誘導する。 */
-  writeupAvailable?: boolean;
 }) {
   const t = useT();
   const isMock = useIsMock();
@@ -203,12 +200,6 @@ export function MultiFlagSubmissionPanel({
             header={t("multi_flag.progress_header", { solved: solvedCount, total: flags.length })}
           >
             {allSolved ? t("multi_flag.all_solved_body") : t("multi_flag.progress_body")}
-            {/* [#2908] 全問クリア直後に、上部で公開済みの writeup へつなぐ。 */}
-            {allSolved && writeupAvailable && (
-              <Box margin={{ top: "xxs" }}>
-                <Link href={`#${WRITEUP_SECTION_ID}`}>{t("multi_flag.review_writeup_link")}</Link>
-              </Box>
-            )}
           </Alert>
         )}
         {visibleFlags.map((flag) => (
@@ -355,6 +346,67 @@ function canSubmitSubFlag(
   return value.trim().length > 0 || (prepareSubmission !== undefined && input === "multiline");
 }
 
+function revealedHintCountLabel(
+  count: number,
+  t: (key: string, params?: Readonly<Record<string, string | number>>) => string,
+): string {
+  return t(
+    count === 1 ? "multi_flag.review_hint_count_one" : "multi_flag.review_hint_count_other",
+    { count },
+  );
+}
+
+function SolvedSubFlagReview({
+  flag,
+  label,
+  celebrate,
+}: {
+  readonly flag: MultiFlagEntryView;
+  readonly label: string;
+  readonly celebrate: boolean;
+}) {
+  const t = useT();
+  const revealedHints = (flag.hints ?? []).flatMap((hint, index) =>
+    hint.revealed ? [{ hint, index }] : [],
+  );
+  const hintCount = revealedHintCountLabel(revealedHints.length, t);
+
+  return (
+    <>
+      {celebrate && <CelebrationOverlay visible />}
+      <ExpandableSection
+        variant="container"
+        defaultExpanded={false}
+        headingTagOverride="h3"
+        headerText={t("multi_flag.solved_header", { label })}
+        headerDescription={t("multi_flag.review_summary", {
+          points: flag.points,
+          hintCount,
+        })}
+        headerAriaLabel={t("multi_flag.review_aria", { label, hintCount })}
+      >
+        {revealedHints.length === 0 ? (
+          <Box color="text-body-secondary">{t("multi_flag.review_no_hints")}</Box>
+        ) : (
+          <SpaceBetween size="s">
+            {revealedHints.map(({ hint, index }) => (
+              <Box key={hint.id}>
+                <strong>{t("problem_panel.hint_label_colon", { index: index + 1 })}</strong>{" "}
+                <span style={{ color: hint.penalty > 0 ? "#b54708" : "#475467" }}>
+                  {hint.penalty > 0
+                    ? t("multi_flag.review_hint_penalty", { penalty: hint.penalty })
+                    : t("multi_flag.review_hint_no_penalty")}
+                </span>
+                {hint.content && <Box margin={{ top: "xxs" }}>{hint.content}</Box>}
+              </Box>
+            ))}
+          </SpaceBetween>
+        )}
+      </ExpandableSection>
+    </>
+  );
+}
+
 function SubFlagRow({
   apiBaseUrl,
   sessionToken,
@@ -384,18 +436,10 @@ function SubFlagRow({
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   // 正解直後 (mock / backend 共通): 祝祭 + 獲得スコア。 server 由来の solved 表示も同じ success
-  // Alert に倒すので、 「refetch が空振りして solved に切り替わらない」 mock mode も吸収できる。
-  // [#2908] 開封済みヒントは解答後も振り返れるよう read-only で残す。
+  // review row に倒すので、 「refetch が空振りして solved に切り替わらない」 mock mode も吸収できる。
+  // review は revealed=true の hint だけを表示し、 reveal / score API を呼ぶ操作を持たない。
   if (solved || outcome?.kind === "ok") {
-    return (
-      <>
-        {outcome?.kind === "ok" && <CelebrationOverlay visible />}
-        <Alert type="success" header={t("multi_flag.solved_header", { label })}>
-          {t("multi_flag.solved_body", { points: flag.points })}
-        </Alert>
-        <RevealedHintsReview hints={flag.hints ?? []} />
-      </>
-    );
+    return <SolvedSubFlagReview flag={flag} label={label} celebrate={outcome?.kind === "ok"} />;
   }
 
   const handleSubmit = async (e: { preventDefault: () => void }) => {

@@ -36,15 +36,13 @@ describe("stepFor", () => {
     expect(stepFor(check("docker-daemon", "action-needed"), "darwin").kind).toBe("manual-only");
   });
 
-  it("should install bun via brew on macOS and the official installer elsewhere", () => {
-    expect(stepFor(check("bun", "missing"), "darwin").commands[0]).toContain("brew install");
-    expect(stepFor(check("bun", "missing"), "linux").commands[0]).toContain("bun.sh/install");
-  });
-
-  // Issue #2907: on a mac with an old Xcode / CLT the brew route fails for reasons
-  // that are not Bun's; the step must surface the official-installer escape hatch.
-  it("should give the macOS bun step an official-installer fallback note (#2907)", () => {
-    expect(stepFor(check("bun", "missing"), "darwin").notes).toContain("bun.sh/install");
+  it("should use the repository's official Bun installer on macOS and Linux", () => {
+    expect(stepFor(check("bun", "missing"), "darwin").commands).toEqual([
+      "bash scripts/onboard/install-bun.sh",
+    ]);
+    expect(stepFor(check("bun", "missing"), "linux").commands).toEqual([
+      "bash scripts/onboard/install-bun.sh",
+    ]);
   });
 });
 

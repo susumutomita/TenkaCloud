@@ -1,9 +1,11 @@
 import { LITE_DRILL_CHECKPOINTS, LITE_DRILL_PROBLEM_ID } from "@tenkacloud/portal-contracts";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type * as React from "react";
+import { type ComponentProps, type ReactNode, useState } from "react";
 import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import wpExposedBackup from "../../../../problems/challenges/wp-exposed-backup/metadata.json";
+import type { MultiFlagEntryView } from "../api/portal-client";
 import { AppConfigProvider } from "../config-context";
 import {
   LITE_DRILL_JOB_ID,
@@ -25,18 +27,28 @@ import {
  * wrong alert / dev-mock 経路を pin する。 submitFlag だけ mock し、 evaluateMockFlag・i18n は実物。
  */
 
-const apiMocks = vi.hoisted(() => ({ submitFlag: vi.fn() }));
+const apiMocks = vi.hoisted(() => ({
+  revealHint: vi.fn(),
+  submitFlag: vi.fn(),
+}));
 
 vi.mock("../api/portal-client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../api/portal-client")>();
-  return { ...actual, submitFlag: apiMocks.submitFlag };
+  return {
+    ...actual,
+    revealHint: apiMocks.revealHint,
+    submitFlag: apiMocks.submitFlag,
+  };
 });
+
+type TestEnvironment = "backend" | "dev-mock" | "local";
 
 function LocationProbe() {
   return <output data-testid="router-path">{useLocation().pathname}</output>;
 }
 
-function withProviders(node: React.ReactNode, mode: "backend" | "dev-mock" = "backend") {
+function withProviders(node: ReactNode, environment: TestEnvironment = "backend") {
+  const mode = environment === "dev-mock" ? "dev-mock" : "backend";
   return (
     <AppConfigProvider
       config={{
@@ -44,7 +56,7 @@ function withProviders(node: React.ReactNode, mode: "backend" | "dev-mock" = "ba
         eventTitle: "Test event",
         eventRegion: "ap-northeast-1",
         mode,
-        cloudMode: mode === "backend" ? "real" : "mock",
+        cloudMode: environment === "local" ? "local" : mode === "backend" ? "real" : "mock",
       }}
     >
       <I18nProvider>
@@ -71,20 +83,21 @@ const baseProps = {
 } as const;
 
 function renderPanel(
-  overrides: Partial<React.ComponentProps<typeof MultiFlagSubmissionPanel>> = {},
-  mode: "backend" | "dev-mock" = "backend",
+  overrides: Partial<ComponentProps<typeof MultiFlagSubmissionPanel>> = {},
+  environment: TestEnvironment = "backend",
 ) {
   const stableOverrides =
     overrides.problemId === WHAT_IS_DRILL_PROBLEM_ID && overrides.onboardingVariant === undefined
       ? { ...overrides, onboardingVariant: "list" as const }
       : overrides;
   return render(
-    withProviders(<MultiFlagSubmissionPanel {...baseProps} {...stableOverrides} />, mode),
+    withProviders(<MultiFlagSubmissionPanel {...baseProps} {...stableOverrides} />, environment),
   );
 }
 
 beforeEach(() => {
   window.localStorage.setItem("tenkacloud.portal.locale", "en");
+  apiMocks.revealHint.mockReset();
   apiMocks.submitFlag.mockReset();
   // dev-mock の累積スコアと sessionStorage 進捗をテスト間で持ち越さない。
   resetMockScoring();
@@ -140,62 +153,6 @@ describe("MultiFlagSubmissionPanel", () => {
       screen.getByText("All flags solved. This problem is fully cleared!"),
     ).toBeInTheDocument();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
-  });
-
-  // [#2908] 正解した瞬間に開封済みヒントごと消える regression の修正を pin する。
-  it("should keep revealed hints reviewable after a flag is solved (#2908)", async () => {
-    const user = userEvent.setup();
-    renderPanel({
-      flags: [
-        {
-          ...FLAGS[0],
-          solved: true,
-          hints: [
-            { id: "h1", penalty: 0, revealed: true, content: "check robots.txt first" },
-            { id: "h2", penalty: 10, revealed: false },
-          ],
-        },
-        FLAGS[1],
-      ],
-    });
-    // 既定は折りたたみ (DOM には保持) — 展開して開封済みヒント本文を振り返る。
-    const toggle = screen.getByRole("button", { name: "Review the hints you opened (1)" });
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
-    await user.click(toggle);
-    expect(toggle).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByText(/check robots.txt first/)).toBeInTheDocument();
-    // 未開封ヒントは解答後に新規開封できない (追加減点は発生しない)。
-    expect(screen.queryByRole("button", { name: /Reveal hint/ })).not.toBeInTheDocument();
-  });
-
-  it("should render no review section for a solved flag without revealed hints (#2908)", () => {
-    renderPanel({
-      flags: [
-        { ...FLAGS[0], solved: true, hints: [{ id: "h1", penalty: 10, revealed: false }] },
-        FLAGS[1],
-      ],
-    });
-    expect(screen.queryByText(/Review the hints you opened/)).not.toBeInTheDocument();
-  });
-
-  it("should link to the writeup section on full clear when a writeup exists (#2908)", () => {
-    renderPanel({
-      flags: FLAGS.map((f) => ({ ...f, solved: true })),
-      writeupAvailable: true,
-    });
-    const link = screen.getByRole("link", {
-      name: "Review the cause and how to prevent it in the explanation",
-    });
-    expect(link).toHaveAttribute("href", "#problem-writeup");
-  });
-
-  it("should not link to the writeup while it is unreleased (#2908)", () => {
-    renderPanel({ flags: FLAGS.map((f) => ({ ...f, solved: true })) });
-    expect(
-      screen.queryByRole("link", {
-        name: "Review the cause and how to prevent it in the explanation",
-      }),
-    ).not.toBeInTheDocument();
   });
 
   it("should render zero progress when a problem has no flags", () => {
@@ -732,5 +689,273 @@ describe("multi-verify extensions (issue #2252)", () => {
     window.localStorage.setItem("tenkacloud.portal.locale", "ja");
     renderPanel({ flags: HINTED_FLAGS });
     expect(screen.getByText(/公開バックアップ/)).toBeInTheDocument();
+  });
+
+  it("should keep a solved cloud checkpoint as a collapsed keyboard review row", async () => {
+    renderPanel({
+      flags: [
+        {
+          ...HINTED_FLAGS[0],
+          solved: true,
+          hints: [
+            {
+              id: "revealed-cloud-hint",
+              penalty: 2,
+              revealed: true,
+              content: "Inspect the public object metadata.",
+            },
+          ],
+        },
+      ],
+    });
+
+    const review = screen.getByRole("button", {
+      name: "Public backup, solved, 1 revealed hint. Review this checkpoint",
+    });
+    expect(review).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+
+    review.focus();
+    fireEvent.keyUp(review, { key: "Enter", code: "Enter", keyCode: 13 });
+
+    expect(review).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Solved (+50 pt) · 1 revealed hint")).toBeInTheDocument();
+    expect(screen.getByText("Inspect the public object metadata.")).toBeInTheDocument();
+    expect(screen.getByText("Penalty already applied: -2 pt")).toBeInTheDocument();
+  });
+
+  it("should review only revealed local hints without score or reveal mutations", async () => {
+    const user = userEvent.setup();
+    const onScored = vi.fn().mockResolvedValue(undefined);
+    apiMocks.submitFlag.mockResolvedValue({
+      kind: "ok",
+      scoreDelta: 50,
+      totalScore: 46,
+      flagId: "public-backup",
+    });
+    renderPanel(
+      {
+        flags: [
+          {
+            ...HINTED_FLAGS[0],
+            hints: [
+              {
+                id: "revealed-one",
+                penalty: 0,
+                revealed: true,
+                content: "Check which backup path is public.",
+              },
+              {
+                id: "revealed-two",
+                penalty: 4,
+                revealed: true,
+                content: "Compare the active and backup configuration.",
+              },
+              {
+                id: "unrevealed-three",
+                penalty: 8,
+                revealed: false,
+                content: "UNREVEALED SECRET MUST NOT RENDER",
+              },
+            ],
+          },
+        ],
+        onScored,
+      },
+      "local",
+    );
+
+    await user.type(screen.getByRole("textbox"), "participant answer");
+    await user.click(screen.getByRole("button", { name: /^Submit/ }));
+    const review = await screen.findByRole("button", {
+      name: "Public backup, solved, 2 revealed hints. Review this checkpoint",
+    });
+    expect(onScored).toHaveBeenCalledTimes(1);
+
+    review.focus();
+    fireEvent.keyDown(review, { key: " ", code: "Space", keyCode: 32 });
+    fireEvent.keyUp(review, { key: " ", code: "Space", keyCode: 32 });
+
+    expect(review).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Check which backup path is public.")).toBeInTheDocument();
+    expect(screen.getByText("No penalty applied")).toBeInTheDocument();
+    expect(screen.getByText("Compare the active and backup configuration.")).toBeInTheDocument();
+    expect(screen.queryByText("UNREVEALED SECRET MUST NOT RENDER")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Reveal hint/i })).not.toBeInTheDocument();
+    expect(apiMocks.revealHint).not.toHaveBeenCalled();
+    expect(onScored).toHaveBeenCalledTimes(1);
+  });
+
+  it("should complete wp-exposed-backup and retain all four checkpoint hint histories", async () => {
+    const user = userEvent.setup();
+    const englishChecks = new Map(
+      wpExposedBackup.i18n.en.checks.map((check) => [check.id, check] as const),
+    );
+    const hintContent = new Map(
+      wpExposedBackup.i18n.en.checks.flatMap((check) =>
+        check.hints.map((hint) => [hint.id, hint.content] as const),
+      ),
+    );
+    let serverScore = 0;
+    let serverFlags: readonly MultiFlagEntryView[] = wpExposedBackup.scoring.checks.map(
+      (check) => ({
+        id: check.id,
+        label: check.label,
+        points: check.points,
+        solved: false,
+        i18n: { en: { label: englishChecks.get(check.id)?.label } },
+        hints: check.hints.map((hint) => ({
+          id: hint.id,
+          penalty: hint.penalty,
+          revealed: false,
+        })),
+      }),
+    );
+
+    apiMocks.revealHint.mockImplementation(
+      async (_apiBaseUrl, _sessionToken, problemId: string, hintId: string) => {
+        expect(problemId).toBe(wpExposedBackup.id);
+        let revealedContent: string | undefined;
+        let penaltyApplied = 0;
+        serverFlags = serverFlags.map((flag) => ({
+          ...flag,
+          hints: flag.hints?.map((hint) => {
+            if (hint.id !== hintId) return hint;
+            revealedContent = hintContent.get(hintId);
+            if (!revealedContent) throw new Error(`missing fixture content for ${hintId}`);
+            if (!hint.revealed) {
+              penaltyApplied = hint.penalty;
+              serverScore -= hint.penalty;
+            }
+            return {
+              ...hint,
+              revealed: true,
+              content: revealedContent,
+              revealedAt: "2026-08-06T00:00:00.000Z",
+            };
+          }),
+        }));
+        if (!revealedContent) throw new Error(`unknown hint ${hintId}`);
+        return {
+          kind: penaltyApplied === 0 ? "already_revealed" : "ok",
+          content: revealedContent,
+          penaltyApplied,
+          totalScore: serverScore,
+        };
+      },
+    );
+    apiMocks.submitFlag.mockImplementation(
+      async (_apiBaseUrl, _sessionToken, problemId: string, _answer: string, flagId?: string) => {
+        expect(problemId).toBe(wpExposedBackup.id);
+        const flag = serverFlags.find((candidate) => candidate.id === flagId);
+        if (!flag || !flagId) throw new Error(`unknown checkpoint ${flagId}`);
+        if (flag.solved) {
+          return { kind: "already_scored" as const, totalScore: serverScore, flagId };
+        }
+        serverScore += flag.points;
+        serverFlags = serverFlags.map((candidate) =>
+          candidate.id === flagId ? { ...candidate, solved: true } : candidate,
+        );
+        return {
+          kind: "ok" as const,
+          scoreDelta: flag.points,
+          totalScore: serverScore,
+          flagId,
+        };
+      },
+    );
+
+    function LocalWpReviewHarness() {
+      const [flags, setFlags] = useState(serverFlags);
+      const refresh = async () => setFlags(serverFlags);
+      return (
+        <MultiFlagSubmissionPanel
+          apiBaseUrl="http://127.0.0.1:51238"
+          sessionToken="local-team-key"
+          problemId={wpExposedBackup.id}
+          flags={flags}
+          onScored={refresh}
+          revealOrder="flat"
+        />
+      );
+    }
+
+    render(withProviders(<LocalWpReviewHarness />, "local"));
+    expect(await screen.findAllByRole("button", { name: "Reveal hint" })).toHaveLength(12);
+
+    for (let remaining = 12; remaining > 0; remaining -= 1) {
+      await user.click(screen.getAllByRole("button", { name: "Reveal hint" })[0]);
+      const confirmation = screen
+        .getAllByRole("dialog", { name: /Reveal hint/, hidden: true })
+        .find((dialog) => !dialog.className.includes("awsui_hidden"));
+      expect(confirmation).toBeDefined();
+      await user.click(
+        within(confirmation as HTMLElement).getByRole("button", { name: /^Reveal$/ }),
+      );
+      await waitFor(() =>
+        expect(screen.queryAllByRole("button", { name: "Reveal hint" })).toHaveLength(
+          remaining - 1,
+        ),
+      );
+    }
+
+    for (const check of wpExposedBackup.i18n.en.checks) {
+      const field = screen.getByLabelText(check.label);
+      await user.type(field, `answer-for-${check.id}`);
+      const form = field.closest("form");
+      expect(form).not.toBeNull();
+      await user.click(within(form as HTMLFormElement).getByRole("button", { name: /^Submit/ }));
+      expect(
+        await screen.findByRole("button", {
+          name: `${check.label}, solved, 3 revealed hints. Review this checkpoint`,
+        }),
+      ).toHaveAttribute("aria-expanded", "false");
+    }
+
+    expect(screen.getByText("Flags solved: 4 / 4")).toBeInTheDocument();
+    const scoreBeforeReview = serverScore;
+    const revealCallsBeforeReview = apiMocks.revealHint.mock.calls.length;
+    const submitCallsBeforeReview = apiMocks.submitFlag.mock.calls.length;
+
+    for (const review of screen.getAllByRole("button", {
+      name: /solved, 3 revealed hints\. Review this checkpoint$/,
+    })) {
+      await user.click(review);
+      expect(review).toHaveAttribute("aria-expanded", "true");
+    }
+    for (const content of hintContent.values()) {
+      expect(screen.getByText(content)).toBeInTheDocument();
+    }
+    expect(screen.queryByRole("button", { name: "Reveal hint" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(serverScore).toBe(scoreBeforeReview);
+    expect(apiMocks.revealHint).toHaveBeenCalledTimes(revealCallsBeforeReview);
+    expect(apiMocks.submitFlag).toHaveBeenCalledTimes(submitCallsBeforeReview);
+  }, 15_000);
+
+  it("should provide the same solved review structure in Japanese", () => {
+    window.localStorage.setItem("tenkacloud.portal.locale", "ja");
+    renderPanel({
+      flags: [
+        {
+          ...HINTED_FLAGS[0],
+          solved: true,
+          hints: [
+            {
+              id: "revealed-ja-hint",
+              penalty: 0,
+              revealed: true,
+              content: "公開済みヒント本文",
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(
+      screen.getByRole("button", {
+        name: "公開バックアップ、解答済み、公開済みヒント1件。このチェックポイントを振り返る",
+      }),
+    ).toHaveAttribute("aria-expanded", "false");
   });
 });

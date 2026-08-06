@@ -24,6 +24,7 @@ import {
   DEV_MOCK_ONBOARDING_INSTRUCTIONS_JA,
 } from "./dev-mock-onboarding-content";
 import { createLiteCleanupDrillFixture } from "./lite-cleanup-drill-fixture";
+import { LOCAL_ONBOARDING_COMMANDS } from "./local-onboarding-contract";
 
 /**
  * `mode === "dev-mock"` のとき backend が存在しないので、 portal の各画面が空 state に
@@ -476,17 +477,14 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
         "",
         "#### 起動方法",
         "",
-        "1. `git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git`",
-        "2. `cd TenkaCloud`(clone しただけではディレクトリは移動していない)",
-        "3. `make local-onboard` — Bun 本体・問題カタログ・Docker の前提を診断し、足りないものは同意を取ってから導入してくれる(Bun の事前インストールは不要。診断だけしたいときは `make doctor`)",
-        "4. `make local` — ローカル採点 API と Portal を起動する(初回は必要な依存関係も自動で導入される)",
+        ...LOCAL_ONBOARDING_COMMANDS.map((command, index) => `${index + 1}. \`${command}\``),
         "5. ready 表示に `Participant Portal ... 5175` と出たら、ブラウザで Portal を開く",
         "6. ログイン画面が出たら、**チームキーは自動で入力済み**なので、そのまま「サインイン」を押すだけ(自分でキーを打つ必要はない。`make local` ごとに変わる使い捨てのチームキーが Portal に自動で渡される)",
         "7. 問題一覧から **「前任者の忘れ物」** (`wp-exposed-backup`) を選び、Startを押す",
         "8. 起動したWordPressサイトを開き、まず `/robots.txt` を確認する。公開フォルダに残されたバックアップや設定ファイルの控えを探す",
         "9. 見つけた `TC{...}` の合言葉を、対応する提出欄へ送る",
         "",
-        "Codespaces で遊ぶ場合は https://codespaces.new/susumutomita/TenkaCloud から作成するだけでよい。ローカルモードは自動で起動し、ポート 5175 の Portal プレビューがブラウザへ転送される。自動起動がタイムアウトしたときだけ、ターミナルで `make local` を実行し直す。",
+        "Codespaces で遊ぶ場合は https://codespaces.new/susumutomita/TenkaCloud から作成する。ローカルプレイとPortalは自動起動する。自動起動に失敗した場合だけ、コマンドパレットから「▷ ローカルプレイ開始」を実行する。ポートはブラウザへ自動転送される。",
         "",
         "#### クラウドで動かす場合との違い",
         "",
@@ -522,17 +520,14 @@ export const DEV_MOCK_TEAM_VIEW: ParticipantTeamView = {
             "",
             "#### How to start",
             "",
-            "1. `git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git`",
-            "2. `cd TenkaCloud` (cloning does not change your directory)",
-            "3. `make local-onboard` — diagnoses the prerequisites (Bun itself, the problem catalog, Docker) and installs what is missing only after asking (no Bun preinstall needed; `make doctor` diagnoses without installing)",
-            "4. `make local` — starts the local scoring API and the Portal (the first run also installs the workspace dependencies)",
+            ...LOCAL_ONBOARDING_COMMANDS.map((command, index) => `${index + 1}. \`${command}\``),
             "5. When the ready output shows `Participant Portal ... 5175`, open the Portal in your browser",
             "6. On the login screen the **team key is already filled in** — just press **Sign in** (no need to type a key; local mode hands the Portal a throwaway team key that changes on every `make local`)",
             '7. Pick **"The Predecessor\'s Leftovers"** (`wp-exposed-backup`) from the problem list and press Start',
             "8. Open the WordPress site and check `/robots.txt` first. Look for backups or configuration copies left in a public folder",
             "9. Submit each `TC{...}` passphrase you find to its matching field",
             "",
-            "On Codespaces, just create one from https://codespaces.new/susumutomita/TenkaCloud — local mode starts automatically and the port-5175 Portal preview is forwarded to your browser. Only if the auto-start times out, run `make local` in its terminal.",
+            'On Codespaces, create one from https://codespaces.new/susumutomita/TenkaCloud. Local play and the Portal start automatically. Only if automatic startup fails, run the "▷ ローカルプレイ開始" fallback task from the command palette. The port forwards to your browser automatically.',
             "",
             "#### How this differs from running in the cloud",
             "",

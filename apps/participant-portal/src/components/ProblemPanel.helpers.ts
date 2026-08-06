@@ -174,13 +174,6 @@ export function shouldRefreshAfterFlagSubmit(result: SubmitFlagOutcome): boolean
 }
 
 /**
- * [#2908] Anchor id of the writeup section, shared by the all-solved handoff link.
- * Lives here (not in ProblemPanel.tsx) so MultiFlagSubmissionPanel can import it
- * without an import cycle through ProblemPanel.
- */
-export const WRITEUP_SECTION_ID = "problem-writeup";
-
-/**
  * #2054 i18n: resolve a revealed hint's content for the current locale. The en
  * override lives in `i18n.en.content` (present only once revealed, mirroring
  * `content`); ja is the canonical `content`. Empty/missing → canonical.

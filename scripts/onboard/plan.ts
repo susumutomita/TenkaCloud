@@ -56,9 +56,6 @@ export interface ResolveOptions {
   readonly autoYes: boolean;
 }
 
-/** The one canonical Bun install URL (mirrored by `make doctor` and the bootstrap). */
-const BUN_OFFICIAL_INSTALL = "curl -fsSL https://bun.sh/install | bash";
-
 function bunStep(platform: Platform): RemediationStep {
   if (platform === "other") {
     return {
@@ -70,20 +67,13 @@ function bunStep(platform: Platform): RemediationStep {
       notes: UNSUPPORTED_PLATFORM_NOTE,
     };
   }
-  const commands =
-    platform === "darwin" ? ["brew install oven-sh/bun/bun"] : [BUN_OFFICIAL_INSTALL];
   return {
     id: "bun",
     title: "Install Bun",
     why: "Bun runs every TenkaCloud script and installs workspace dependencies.",
     kind: "software-install",
-    commands,
-    notes:
-      platform === "darwin"
-        ? "Installs the bun binary onto your machine (~40 MB). If Homebrew fails " +
-          "(often an old Xcode / Command Line Tools, not a Bun problem), use the " +
-          `official installer instead: ${BUN_OFFICIAL_INSTALL}`
-        : "Installs the bun binary onto your machine (~40 MB).",
+    commands: ["bash scripts/onboard/install-bun.sh"],
+    notes: "Installs the bun binary onto your machine (~40 MB).",
   };
 }
 

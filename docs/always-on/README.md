@@ -89,9 +89,11 @@ problem-deploy-backend deploy (ADR-049 §5.1, issue #2435,
 makes CDK skip synthesizing the SaaS/Lite control-data DynamoDB tables
 entirely — zero standing capacity on that path — while this Always-On Worker
 keeps D1 regardless of that flag, per the §16 role split above. See
-[CLAUDE.md](../../CLAUDE.md#data-isolation) for the full table list and the
-current live-verification caveat (implemented and unit/synth-tested, not yet
-exercised as a live deploy against a real Turso database).
+[ADR-049 §17.2](../architecture/adr-049-always-on-cloudflare-control-plane.html)
+for the table ownership boundary and the
+[live E2E runbook](../running-costs.md#first-live-e2e-verification-runbook) for
+the current caveat (implemented and unit/synth-tested, not yet exercised as a
+live deploy against a real Turso database).
 
 Sources:
 
