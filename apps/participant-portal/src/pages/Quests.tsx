@@ -1,6 +1,7 @@
 import Alert from "@cloudscape-design/components/alert";
 import Badge from "@cloudscape-design/components/badge";
 import Box from "@cloudscape-design/components/box";
+import Button from "@cloudscape-design/components/button";
 import Cards from "@cloudscape-design/components/cards";
 import Container from "@cloudscape-design/components/container";
 import ExpandableSection from "@cloudscape-design/components/expandable-section";
@@ -28,7 +29,6 @@ import {
   isGateAwaitingCompletion,
   isPrerequisiteLocked,
 } from "../lib/progression";
-import { CourseTrackCard } from "./CourseTracks";
 
 /**
  * 競技者向けの 「解答状態」 (= 解けた / 解けてない)。 #821 / #822 で導入、 issue #34 で
@@ -313,29 +313,20 @@ export function QuestsPage() {
         </Alert>
       )}
 
+      {/* 学習ルートそのものはここに出さない — 置き場は `/course-tracks`。 一覧の一等地を週別
+       *  track が占めると、 この画面が「一覧」 でも「学習経路」 でもなくなり、 講座を取っていない
+       *  人には無関係な塊が最初に来る。 ここには「講座の問題は別画面にある」 という事実と、 その
+       *  行き先だけを置く (= 除外した問題が消えたように見えるのを防ぐ)。 */}
       {courseTracks.length > 0 ? (
-        <SpaceBetween size="m" data-testid="course-guidance">
-          <Header variant="h2" description={t("quests.course_guidance_description")}>
-            {t("quests.course_guidance_header")}
-          </Header>
-          {courseTracks.map((track) => (
-            <CourseTrackCard
-              key={track.trackId}
-              track={track}
-              onOpen={(problemId) => {
-                const deployed = allProblems.find((problem) => problem.problemId === problemId);
-                navigate(
-                  deployed ? `/problems/${encodeURIComponent(deployed.jobId)}` : "/problems",
-                );
-              }}
-              t={t}
-            />
-          ))}
-        </SpaceBetween>
-      ) : null}
-
-      {courseTracks.length > 0 ? (
-        <Header variant="h2" description={t("quests.other_problems_description")}>
+        <Header
+          variant="h2"
+          description={t("quests.other_problems_description")}
+          actions={
+            <Button data-testid="course-tracks-link" onClick={() => navigate("/course-tracks")}>
+              {t("quests.course_tracks_link")}
+            </Button>
+          }
+        >
           {t("quests.other_problems_header")}
         </Header>
       ) : null}

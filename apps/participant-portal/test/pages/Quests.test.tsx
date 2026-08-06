@@ -287,7 +287,7 @@ describe("questCardTitle (issue #2189: card must show the display name, not the 
 });
 
 describe("QuestsPage", () => {
-  it("#2882: should show one course next step and keep all 40 unaligned problems", () => {
+  it("#2882: should keep all 40 unaligned problems and leave the course problem to /course-tracks", () => {
     mockAppConfig.mockReturnValue({ cloudMode: "local" });
     const aligned = problem({
       problemId: "course-first",
@@ -306,27 +306,27 @@ describe("QuestsPage", () => {
 
     render(<QuestsPage />);
 
-    expect(screen.getByTestId("course-guidance")).toBeInTheDocument();
-    expect(screen.getByTestId("course-recommended")).toHaveTextContent("Course first");
-    expect(screen.getByTestId("course-problem-course-first")).toBeInTheDocument();
-    expect(screen.getByText("Week 1")).toBeInTheDocument();
+    // 学習ルートそのものは出さない (置き場は /course-tracks)。 一覧が持つのは行き先だけ。
+    expect(screen.queryByTestId("course-guidance")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("course-recommended")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("course-problem-course-first")).not.toBeInTheDocument();
+    expect(screen.queryByText("Week 1")).not.toBeInTheDocument();
+
+    // 講座の問題は一覧から外れたままで、 それ以外の 40 問はこれまでどおり全部出る。
     expect(screen.getByText("legacy-1")).toBeInTheDocument();
     expect(screen.getByText("legacy-40")).toBeInTheDocument();
     expect(screen.getAllByText(/quests\.filter_all \(40\)/).length).toBeGreaterThan(0);
-
-    fireEvent.click(screen.getByText("course_track.start_recommended"));
-    expect(mockNav).toHaveBeenCalledWith("/problems/job-course-first");
   });
 
-  it("#2882: should return to the deployed catalog when the suggested course problem is absent", () => {
+  it("should send the participant to /course-tracks for the course learning path", () => {
     mockAppConfig.mockReturnValue({ cloudMode: "local" });
     mockListCatalog.mockReturnValue([alignedCatalogEntry("course-first", "Course first")]);
     mockTeamView.mockReturnValue({ view: { problems: [] }, error: null });
 
     render(<QuestsPage />);
-    fireEvent.click(screen.getByText("course_track.start_recommended"));
+    fireEvent.click(screen.getByTestId("course-tracks-link"));
 
-    expect(mockNav).toHaveBeenCalledWith("/problems");
+    expect(mockNav).toHaveBeenCalledWith("/course-tracks");
   });
 
   it("should show the problem's display name (not its raw id) on the quest card", () => {
