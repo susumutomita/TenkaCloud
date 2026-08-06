@@ -21,8 +21,6 @@ export function buildProblemDeployBackendBaseProps(config: AppConfig) {
     sourceBucketName: config.s3SourceBucket,
     sourceObjectKey: config.sourceZip,
     problemsCatalog: config.problems.catalog as ProblemDeployBackendProps["problemsCatalog"],
-    problemsEducationGraph: (config.problems.educationGraph ??
-      {}) as ProblemDeployBackendProps["problemsEducationGraph"],
     problemsScoring: config.problems.scoring as ProblemDeployBackendProps["problemsScoring"],
     problemsWriteups: (config.problems.writeups ??
       {}) as ProblemDeployBackendProps["problemsWriteups"],

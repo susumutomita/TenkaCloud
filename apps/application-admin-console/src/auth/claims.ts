@@ -72,11 +72,6 @@ export function resolveTenantConsoleAccess(claims: IdTokenClaims | null): Tenant
   return { role: "viewer", canMutateTenant: false };
 }
 
-/** True only for the TenantAdmin role required by `/admin/education-graph*`. */
-export function hasTenantAdminRole(claims: IdTokenClaims | null): boolean {
-  return claims?.["custom:userRole"]?.trim() === "TenantAdmin";
-}
-
 export function decodeIdToken(idToken: string): IdTokenClaims | null {
   const parts = idToken.split(".");
   if (parts.length !== 3) return null;

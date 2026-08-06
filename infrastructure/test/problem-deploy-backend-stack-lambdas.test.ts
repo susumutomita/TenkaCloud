@@ -1,10 +1,7 @@
 import { Match } from "aws-cdk-lib/assertions";
 import { describe, expect, it } from "vitest";
 import { deployApiBundlingDefine } from "../lib/problem-deploy/deploy-api-lambda";
-import {
-  eventApiBundledData,
-  eventApiBundlingDefine,
-} from "../lib/problem-deploy/event-api-lambda";
+import { eventApiBundlingDefine } from "../lib/problem-deploy/event-api-lambda";
 import {
   synthDefault,
   synthWithControlDataBackendTurso,
@@ -103,7 +100,6 @@ describe("ProblemDeployBackendStack (MVP-1) — Deploy API Lambda (invoked from 
     // pin: env から消えていること
     expect(vars.BATTLE_PROBLEMS_CATALOG).toBeUndefined();
     expect(vars.BATTLE_PROBLEMS_DISRUPTIONS).toBeUndefined();
-    expect(vars.BATTLE_PROBLEMS_EDUCATION_GRAPH).toBeUndefined();
     // pin: 残しておく env が消えていないこと (= regression 防止)
     expect(vars.EVENTS_TABLE_NAME).toBeDefined();
     expect(vars.DISRUPTIONS_TABLE_NAME).toBeDefined();
@@ -132,29 +128,6 @@ describe("ProblemDeployBackendStack (MVP-1) — Deploy API Lambda (invoked from 
         },
       }),
     );
-  });
-
-  it("EventApi carries the education graph as bundled data, never as a define (#2891)", () => {
-    const graph = {
-      "api-idor-demo": {
-        problemId: "api-idor-demo",
-        name: { ja: "管理者のメモ" },
-        shortDescription: { ja: "認可を学ぶ" },
-        nodes: [],
-        relations: [],
-      },
-    };
-    // #2604 は define 経由だったが、 実カタログで 309 KiB に育ち Linux の argv
-    // 1 引数上限 (128 KiB) を超えて CI の bundling を E2BIG で殺した (#2891)。
-    // 以後 education graph が define に現れたら、 それ自体が退行。
-    const define = eventApiBundlingDefine({
-      problemsCatalog: { "api-idor-demo": "problems/challenges/api-idor-demo" },
-      problemsDisruptions: {},
-    });
-    expect(define["process.env.BATTLE_PROBLEMS_EDUCATION_GRAPH"]).toBeUndefined();
-
-    const bundled = eventApiBundledData({ problemsEducationGraph: graph });
-    expect(JSON.parse(bundled.BATTLE_PROBLEMS_EDUCATION_GRAPH)).toEqual(graph);
   });
 
   it("EventApi Lambda total env size should stay under 3 KB (1 KB margin under the 4 KB hard limit, #1308)", () => {

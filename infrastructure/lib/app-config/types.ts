@@ -274,8 +274,6 @@ export interface AppConfig {
 
 export interface ProblemsCatalogBundle {
   readonly catalog: unknown;
-  /** Issue #2604: spoiler-safe education graph metadata by problem id. */
-  readonly educationGraph?: unknown;
   readonly scoring: unknown;
   /** Issue #2191: `{problemId: {ja,en}}` post-solve explanations, backend-only. */
   readonly writeups?: unknown;

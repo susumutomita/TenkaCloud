@@ -11,7 +11,6 @@ import { CallbackPage } from "./pages/Callback";
 import { CompetitorAccountsPage } from "./pages/CompetitorAccounts";
 import { DeploymentDetailPage } from "./pages/DeploymentDetail";
 import { DeploymentsPage } from "./pages/Deployments";
-import { EducationGraphPage } from "./pages/EducationGraph";
 import { EventCreatePage } from "./pages/EventCreate";
 import { EventDetailPage } from "./pages/EventDetail";
 import { EventListPage } from "./pages/EventList";
@@ -39,7 +38,6 @@ function guarded(element: React.ReactNode, config: AppConfig) {
     <RequireAuth>
       <ShellLayout
         samlSsoEnabled={config.features?.samlSso}
-        educationGraphEnabled={config.features?.educationGraph}
         demoMode={config.mode === "demo"}
         // The banner only renders the link when demoMode is true, so passing the URL
         // unconditionally is safe (and avoids an untested non-demo ternary branch).
@@ -82,10 +80,6 @@ function AppRoutes({ baseConfig }: { baseConfig: AppConfig }) {
       <Route path="/callback" element={<CallbackPage config={config} />} />
       <Route path="/" element={guarded(<HomePage />, config)} />
       <Route path="/problems" element={guarded(<ProblemsPage />, config)} />
-      <Route
-        path="/education-graph"
-        element={guarded(<EducationGraphPage config={config} />, config)}
-      />
       <Route
         path="/problems/:problemId"
         element={guarded(<ProblemDetailPage config={config} />, config)}

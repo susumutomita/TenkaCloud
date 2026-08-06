@@ -59,7 +59,6 @@ describe("loadConfig", () => {
         nonAwsRuntime: false,
         redTeam: true,
         challengePrerequisiteGate: false,
-        educationGraph: false,
       });
     });
 
@@ -85,7 +84,6 @@ describe("loadConfig", () => {
         nonAwsRuntime: true,
         redTeam: false,
         challengePrerequisiteGate: false,
-        educationGraph: false,
       });
     });
   });
@@ -115,7 +113,6 @@ describe("loadConfig", () => {
         nonAwsRuntime: false,
         redTeam: true,
         challengePrerequisiteGate: false,
-        educationGraph: false,
       });
     });
 
@@ -127,7 +124,6 @@ describe("loadConfig", () => {
         nonAwsRuntime: false,
         redTeam: true,
         challengePrerequisiteGate: false,
-        educationGraph: false,
       });
     });
 
@@ -139,7 +135,6 @@ describe("loadConfig", () => {
         nonAwsRuntime: false,
         redTeam: true,
         challengePrerequisiteGate: false,
-        educationGraph: false,
       });
       const arr = await loadConfig({ ...env, VITE_FEATURES: "[1,2]" });
       expect(arr.features).toEqual({
@@ -147,7 +142,6 @@ describe("loadConfig", () => {
         nonAwsRuntime: false,
         redTeam: true,
         challengePrerequisiteGate: false,
-        educationGraph: false,
       });
     });
   });

@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "./client";
 import { createDemoApiClient, demoRouteKey, resetDemoStore } from "./demo-client";
-import type { EducationGraphResponse, EducationMaterialsResponse } from "./education-graph-client";
 import type {
   BulkResult,
   CreateEventResponse,
@@ -146,69 +145,5 @@ describe("demo client — unsupported routes throw NOT_IMPLEMENTED", () => {
     await expect(client.patch("events/x", {})).rejects.toBeInstanceOf(ApiError);
     await expect(client.del("events/x")).rejects.toBeInstanceOf(ApiError);
     await expect(client.delJson("events/x")).rejects.toBeInstanceOf(ApiError);
-  });
-});
-
-describe("demo client — education graph", () => {
-  it("should default a missing locale to Japanese like the backend", async () => {
-    const graph = await client.get<EducationGraphResponse>("/admin/education-graph");
-    const projected = await client.get<EducationMaterialsResponse>(
-      "/admin/education-graph/problems/api-idor-demo/materials",
-    );
-
-    expect(graph.locale).toBe("ja");
-    expect(projected.locale).toBe("ja");
-  });
-
-  it("should serve the graph and localized material projections without AWS", async () => {
-    const graph = await client.get<EducationGraphResponse>("/admin/education-graph?locale=ja");
-    expect(graph.locale).toBe("ja");
-    expect(graph.problems).toContainEqual(
-      expect.objectContaining({ id: "api-idor-demo", nodeId: "problem.api-idor-demo" }),
-    );
-    expect(graph.nodes.map((node) => node.id)).toEqual(
-      expect.arrayContaining([
-        "lo.api-idor-demo.detect-object-authorization-gap",
-        "assessment.api-idor-demo.identify-object-authorization-failure",
-      ]),
-    );
-
-    const ja = await client.get<EducationMaterialsResponse>(
-      "/admin/education-graph/problems/api-idor-demo/materials?locale=ja",
-    );
-    const en = await client.get<EducationMaterialsResponse>(
-      "/admin/education-graph/problems/api-idor-demo/materials?locale=en",
-    );
-    expect(ja.locale).toBe("ja");
-    expect(en.locale).toBe("en");
-    expect(ja.materials.videoScript.title).not.toBe(en.materials.videoScript.title);
-  });
-
-  it("should localize every demo-only graph label in English", async () => {
-    const graph = await client.get<EducationGraphResponse>("/admin/education-graph?locale=en");
-    const labels = new Map(graph.nodes.map((node) => [node.id, node.label] as const));
-
-    expect(graph.locale).toBe("en");
-    expect(labels.get("problem.api-idor-demo")).toBe("The Admin's Note");
-    expect(labels.get("lo.api-idor-demo.detect-object-authorization-gap")).toBe(
-      "Find broken object-level authorization",
-    );
-    expect(labels.get("concept.authorization")).toBe("Object authorization");
-    expect(labels.get("assessment.api-idor-demo.identify-object-authorization-failure")).toBe(
-      "Reject access to another user's data",
-    );
-    expect(labels.get("misconception.authenticated-means-authorized")).toBe(
-      "The misconception that authentication grants access to every object",
-    );
-    expect(labels.get("audience.software-engineer")).toBe("Software engineer");
-  });
-
-  it("should reject an unknown problem or locale instead of returning a silent fixture", async () => {
-    await expect(
-      client.get("/admin/education-graph/problems/nope/materials?locale=ja"),
-    ).rejects.toThrow(/not found/i);
-    await expect(
-      client.get("/admin/education-graph/problems/api-idor-demo/materials?locale=fr"),
-    ).rejects.toThrow(/locale/i);
   });
 });

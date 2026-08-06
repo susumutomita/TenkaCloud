@@ -43,8 +43,6 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
    * `problemDir` を解決する。Phase 2 (ADR-003) で DDB catalog に置換。
    */
   readonly problemsCatalog: Readonly<Record<string, string>>;
-  /** Issue #2604: spoiler-safe education graph projection by problem id. */
-  readonly problemsEducationGraph?: Readonly<Record<string, unknown>>;
   /**
    * `problemId → scoring` の map (`{ kind: "flag", flagOutputKey, points, ... }`)。
    * Participant Portal Lambda が submit-flag 採点に使う。`scoring` を持たない問題は
@@ -382,7 +380,6 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       environmentName: props.environmentName,
       defaultTenantId: props.defaultTenantId,
       problemsCatalog: props.problemsCatalog,
-      problemsEducationGraph: props.problemsEducationGraph,
       problemsVisibility: props.problemsVisibility,
       problemRuntimes: props.problemRuntimes,
       challengePayloadBucketName: props.challengePayloadBucketName,

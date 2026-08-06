@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decodeIdToken, hasTenantAdminRole, resolveTenantConsoleAccess } from "../src/auth/claims";
+import { decodeIdToken, resolveTenantConsoleAccess } from "../src/auth/claims";
 
 /**
  * Cognito id_token payload デコード util。 署名検証は API GW authorizer 側なので
@@ -87,16 +87,5 @@ describe("resolveTenantConsoleAccess", () => {
       false,
     );
     expect(resolveTenantConsoleAccess(null).canMutateTenant).toBe(false);
-  });
-});
-
-describe("hasTenantAdminRole", () => {
-  it("should mirror the backend's exact custom:userRole TenantAdmin check", () => {
-    expect(hasTenantAdminRole({ "custom:userRole": "TenantAdmin" })).toBe(true);
-    expect(hasTenantAdminRole({ "custom:userRole": " TenantAdmin " })).toBe(true);
-    expect(hasTenantAdminRole({ "custom:userRole": "tenantadmin" })).toBe(false);
-    expect(hasTenantAdminRole({ "cognito:groups": ["TenantAdmin"] })).toBe(false);
-    expect(hasTenantAdminRole({ "custom:userRole": "TenantOperator" })).toBe(false);
-    expect(hasTenantAdminRole(null)).toBe(false);
   });
 });

@@ -256,29 +256,6 @@ describe("tenant ApiGateway", () => {
     });
   });
 
-  it("should bind the education graph and material projection GET routes (#2604)", () => {
-    const graphResource = Object.entries(
-      tpl.findResources("AWS::ApiGateway::Resource", {
-        Properties: { PathPart: "education-graph" },
-      }),
-    )[0]?.[0];
-    const materialsResource = Object.entries(
-      tpl.findResources("AWS::ApiGateway::Resource", {
-        Properties: { PathPart: "materials" },
-      }),
-    )[0]?.[0];
-    expect(graphResource).toBeDefined();
-    expect(materialsResource).toBeDefined();
-    tpl.hasResourceProperties("AWS::ApiGateway::Method", {
-      HttpMethod: "GET",
-      ResourceId: { Ref: graphResource },
-    });
-    tpl.hasResourceProperties("AWS::ApiGateway::Method", {
-      HttpMethod: "GET",
-      ResourceId: { Ref: materialsResource },
-    });
-  });
-
   it("should bind GET /feature-flags and PUT /admin/feature-flags to the EventApi integration (#2231)", () => {
     // Regression: the EventApi handler serves both routes, but they were missing from the
     // Gateway, so the console's Feature Flags page 403'd at the Gateway before reaching the

@@ -147,7 +147,6 @@ describe("CompetitorAccountsPage", () => {
           nonAwsRuntime: true,
           redTeam: false,
           challengePrerequisiteGate: false,
-          educationGraph: false,
         },
       }),
     );
