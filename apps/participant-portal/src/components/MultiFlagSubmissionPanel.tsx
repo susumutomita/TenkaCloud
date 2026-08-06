@@ -6,6 +6,7 @@ import Form from "@cloudscape-design/components/form";
 import FormField from "@cloudscape-design/components/form-field";
 import Header from "@cloudscape-design/components/header";
 import Input from "@cloudscape-design/components/input";
+import Link from "@cloudscape-design/components/link";
 import ProgressBar from "@cloudscape-design/components/progress-bar";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Textarea from "@cloudscape-design/components/textarea";
@@ -29,8 +30,8 @@ import { loadMockSolvedFlagIds, saveMockSolvedFlagId } from "../dev-mock/progres
 import { useLang, useT } from "../i18n";
 import { trackOnboardingEvent } from "../onboarding-analytics";
 import { CelebrationOverlay } from "./CelebrationOverlay";
-import { formatProblemPanelActionError } from "./ProblemPanel.helpers";
-import { HintsPanel } from "./ProblemPanelFlagSubmission";
+import { formatProblemPanelActionError, WRITEUP_SECTION_ID } from "./ProblemPanel.helpers";
+import { HintsPanel, RevealedHintsReview } from "./ProblemPanelFlagSubmission";
 
 const PARTICIPANT_MANUAL_URL = "https://tenkacloud.com/docs/manual/participant/";
 
@@ -85,6 +86,7 @@ export function MultiFlagSubmissionPanel({
   revealOrder,
   onboardingVariant,
   prepareSubmission,
+  writeupAvailable,
 }: {
   apiBaseUrl: string;
   sessionToken: string;
@@ -101,6 +103,8 @@ export function MultiFlagSubmissionPanel({
    * checkpoint inputs are replaced by the shared source editors.
    */
   prepareSubmission?: (flagId: string, values: Readonly<Record<string, string>>) => Promise<string>;
+  /** [#2908] writeup が公開済みのとき、全問クリア表示から解説 section へ誘導する。 */
+  writeupAvailable?: boolean;
 }) {
   const t = useT();
   const isMock = useIsMock();
@@ -199,6 +203,12 @@ export function MultiFlagSubmissionPanel({
             header={t("multi_flag.progress_header", { solved: solvedCount, total: flags.length })}
           >
             {allSolved ? t("multi_flag.all_solved_body") : t("multi_flag.progress_body")}
+            {/* [#2908] 全問クリア直後に、上部で公開済みの writeup へつなぐ。 */}
+            {allSolved && writeupAvailable && (
+              <Box margin={{ top: "xxs" }}>
+                <Link href={`#${WRITEUP_SECTION_ID}`}>{t("multi_flag.review_writeup_link")}</Link>
+              </Box>
+            )}
           </Alert>
         )}
         {visibleFlags.map((flag) => (
@@ -375,6 +385,7 @@ function SubFlagRow({
 
   // 正解直後 (mock / backend 共通): 祝祭 + 獲得スコア。 server 由来の solved 表示も同じ success
   // Alert に倒すので、 「refetch が空振りして solved に切り替わらない」 mock mode も吸収できる。
+  // [#2908] 開封済みヒントは解答後も振り返れるよう read-only で残す。
   if (solved || outcome?.kind === "ok") {
     return (
       <>
@@ -382,6 +393,7 @@ function SubFlagRow({
         <Alert type="success" header={t("multi_flag.solved_header", { label })}>
           {t("multi_flag.solved_body", { points: flag.points })}
         </Alert>
+        <RevealedHintsReview hints={flag.hints ?? []} />
       </>
     );
   }

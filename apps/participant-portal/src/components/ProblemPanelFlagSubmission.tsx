@@ -1,6 +1,7 @@
 import Alert from "@cloudscape-design/components/alert";
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
+import ExpandableSection from "@cloudscape-design/components/expandable-section";
 import Form from "@cloudscape-design/components/form";
 import FormField from "@cloudscape-design/components/form-field";
 import Input from "@cloudscape-design/components/input";
@@ -68,6 +69,7 @@ export function FlagSubmissionPanel({
         >
           {t("problem_panel.ok_alert_body", { total: outcome.totalScore })}
         </Alert>
+        <RevealedHintsReview hints={hints} />
       </>
     );
   }
@@ -75,9 +77,12 @@ export function FlagSubmissionPanel({
   if (flagSubmitted) {
     // audit #6: reload 後など server 由来の 「提出済み」 表示。 事務的ではなく祝祭的 message。
     return (
-      <Alert type="success" header={t("problem_panel.celebrate_header", { points })}>
-        {t("problem_panel.celebrate_body")}
-      </Alert>
+      <>
+        <Alert type="success" header={t("problem_panel.celebrate_header", { points })}>
+          {t("problem_panel.celebrate_body")}
+        </Alert>
+        <RevealedHintsReview hints={hints} />
+      </>
     );
   }
 
@@ -173,6 +178,39 @@ export function FlagSubmissionPanel({
 
 function canSubmitFlag(flag: string, submitting: boolean): boolean {
   return flag.trim().length > 0 && !submitting;
+}
+
+/**
+ * [#2908] 解答済み表示の下に残す、開封済みヒントの read-only 振り返り。
+ *
+ * 正解した瞬間に HintsPanel ごと DOM から消え、開いたヒントを振り返れなくなる
+ * regression の修正。server (scripts/local-play/api-views.ts) は解答後も revealed
+ * hint の content / revealedAt を返し続けるので、開封済みの部分集合だけを描画する。
+ * 未開封 hint は content 自体が API から届かないため、ここから新規開封はできず、
+ * 追加減点も発生しない。既定は折りたたみ (クリック / キーボードで展開)。
+ */
+export function RevealedHintsReview({ hints }: { hints: readonly ParticipantHintView[] }) {
+  const t = useT();
+  const revealed = hints.filter((hint) => hint.revealed && hint.content?.trim());
+  if (revealed.length === 0) return null;
+  return (
+    <ExpandableSection
+      headerText={t("problem_panel.hint_review_header", { count: revealed.length })}
+      variant="footer"
+    >
+      <SpaceBetween size="xs">
+        {revealed.map((hint) => (
+          <Box key={hint.id}>
+            {/* 番号は解答前の HintsPanel と同じ「全 hint 中の位置」で振る。 */}
+            <strong>
+              {t("problem_panel.hint_label_colon", { index: hints.indexOf(hint) + 1 })}
+            </strong>{" "}
+            {hint.content}
+          </Box>
+        ))}
+      </SpaceBetween>
+    </ExpandableSection>
+  );
 }
 
 /**

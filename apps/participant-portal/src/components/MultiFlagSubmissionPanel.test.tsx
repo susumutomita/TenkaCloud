@@ -142,6 +142,62 @@ describe("MultiFlagSubmissionPanel", () => {
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
 
+  // [#2908] 正解した瞬間に開封済みヒントごと消える regression の修正を pin する。
+  it("should keep revealed hints reviewable after a flag is solved (#2908)", async () => {
+    const user = userEvent.setup();
+    renderPanel({
+      flags: [
+        {
+          ...FLAGS[0],
+          solved: true,
+          hints: [
+            { id: "h1", penalty: 0, revealed: true, content: "check robots.txt first" },
+            { id: "h2", penalty: 10, revealed: false },
+          ],
+        },
+        FLAGS[1],
+      ],
+    });
+    // 既定は折りたたみ (DOM には保持) — 展開して開封済みヒント本文を振り返る。
+    const toggle = screen.getByRole("button", { name: "Review the hints you opened (1)" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText(/check robots.txt first/)).toBeInTheDocument();
+    // 未開封ヒントは解答後に新規開封できない (追加減点は発生しない)。
+    expect(screen.queryByRole("button", { name: /Reveal hint/ })).not.toBeInTheDocument();
+  });
+
+  it("should render no review section for a solved flag without revealed hints (#2908)", () => {
+    renderPanel({
+      flags: [
+        { ...FLAGS[0], solved: true, hints: [{ id: "h1", penalty: 10, revealed: false }] },
+        FLAGS[1],
+      ],
+    });
+    expect(screen.queryByText(/Review the hints you opened/)).not.toBeInTheDocument();
+  });
+
+  it("should link to the writeup section on full clear when a writeup exists (#2908)", () => {
+    renderPanel({
+      flags: FLAGS.map((f) => ({ ...f, solved: true })),
+      writeupAvailable: true,
+    });
+    const link = screen.getByRole("link", {
+      name: "Review the cause and how to prevent it in the explanation",
+    });
+    expect(link).toHaveAttribute("href", "#problem-writeup");
+  });
+
+  it("should not link to the writeup while it is unreleased (#2908)", () => {
+    renderPanel({ flags: FLAGS.map((f) => ({ ...f, solved: true })) });
+    expect(
+      screen.queryByRole("link", {
+        name: "Review the cause and how to prevent it in the explanation",
+      }),
+    ).not.toBeInTheDocument();
+  });
+
   it("should render zero progress when a problem has no flags", () => {
     renderPanel({ flags: [] });
     expect(screen.getByText("Flags solved: 0 / 0")).toBeInTheDocument();

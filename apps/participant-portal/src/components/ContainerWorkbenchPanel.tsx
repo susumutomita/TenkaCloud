@@ -87,6 +87,7 @@ export function ContainerWorkbenchPanel({
   flags,
   onScored,
   revealOrder,
+  writeupAvailable,
 }: {
   readonly apiBaseUrl: string;
   readonly sessionToken: string;
@@ -94,6 +95,8 @@ export function ContainerWorkbenchPanel({
   readonly flags: readonly MultiFlagEntryView[];
   readonly onScored: () => Promise<void>;
   readonly revealOrder?: "flat" | "sequential";
+  /** [#2908] writeup 公開済みのとき全問クリア表示から解説へ誘導する (透過渡し)。 */
+  readonly writeupAvailable?: boolean;
 }) {
   const t = useT();
   const flagContract = JSON.stringify(
@@ -169,6 +172,7 @@ export function ContainerWorkbenchPanel({
         flags={flags}
         onScored={onScored}
         revealOrder={revealOrder}
+        writeupAvailable={writeupAvailable}
       />
     );
   }
@@ -297,6 +301,7 @@ export function ContainerWorkbenchPanel({
         onScored={onScored}
         revealOrder={revealOrder}
         prepareSubmission={prepareSubmission}
+        writeupAvailable={writeupAvailable}
       />
     </SpaceBetween>
   );

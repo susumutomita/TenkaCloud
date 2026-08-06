@@ -36,6 +36,7 @@ import {
   resolveProblemTitle,
   shouldShowContainerTerminal,
   splitStackOutputs,
+  WRITEUP_SECTION_ID,
 } from "./ProblemPanel.helpers";
 import { FlagSubmissionPanel } from "./ProblemPanelFlagSubmission";
 import { ProblemLifecyclePanel } from "./ProblemPanelLifecycle";
@@ -88,6 +89,7 @@ function MultiFlagPlaySurface({
   problemId,
   scoring,
   onScored,
+  writeupAvailable,
 }: {
   readonly localDocker: boolean;
   readonly apiBaseUrl: string;
@@ -95,6 +97,7 @@ function MultiFlagPlaySurface({
   readonly problemId: string;
   readonly scoring: NonNullable<ReturnType<typeof getCompleteMultiFlagScoring>>;
   readonly onScored: () => Promise<void>;
+  readonly writeupAvailable: boolean;
 }) {
   if (localDocker) {
     return (
@@ -105,6 +108,7 @@ function MultiFlagPlaySurface({
         flags={scoring.flags ?? []}
         onScored={onScored}
         revealOrder={scoring.hintReveal}
+        writeupAvailable={writeupAvailable}
       />
     );
   }
@@ -116,6 +120,7 @@ function MultiFlagPlaySurface({
       flags={scoring.flags ?? []}
       onScored={onScored}
       revealOrder={scoring.hintReveal}
+      writeupAvailable={writeupAvailable}
     />
   );
 }
@@ -242,16 +247,21 @@ function ProblemWriteup({ problem, t }: { problem: ParticipantProblemView; t: Pr
   const isLocal = useAppConfig().cloudMode === "local";
   if (!problem.writeup?.trim()) return null;
   return (
-    <Container header={<Header variant="h3">{t("problem_panel.writeup_heading")}</Header>}>
-      <Markdown source={problem.writeup} />
-      {/* Local-only pointer to the `tenka-drill` skill: no AI runs in the portal;
-          the learner digs deeper in their own Claude Code (their subscription). */}
-      {isLocal && (
-        <Box variant="small" color="text-status-inactive" margin={{ top: "s" }}>
-          {t("problem_panel.writeup_drill_hint", { command: `/tenka-drill ${problem.problemId}` })}
-        </Box>
-      )}
-    </Container>
+    // [#2908] anchor: 全問クリア表示の「解説で振り返る」link がここへ飛ぶ。
+    <div id={WRITEUP_SECTION_ID}>
+      <Container header={<Header variant="h3">{t("problem_panel.writeup_heading")}</Header>}>
+        <Markdown source={problem.writeup} />
+        {/* Local-only pointer to the `tenka-drill` skill: no AI runs in the portal;
+            the learner digs deeper in their own Claude Code (their subscription). */}
+        {isLocal && (
+          <Box variant="small" color="text-status-inactive" margin={{ top: "s" }}>
+            {t("problem_panel.writeup_drill_hint", {
+              command: `/tenka-drill ${problem.problemId}`,
+            })}
+          </Box>
+        )}
+      </Container>
+    </div>
   );
 }
 
@@ -473,6 +483,7 @@ export function ProblemPanel({
                 problemId={problem.problemId}
                 scoring={multiFlagScoring}
                 onScored={onScored}
+                writeupAvailable={Boolean(problem.writeup?.trim())}
               />
             )}
           </>
