@@ -377,6 +377,40 @@ describe("QuestsPage", () => {
     expect(mockNav).toHaveBeenCalledWith("/course-tracks");
   });
 
+  it("should explain the two local learning paths and open the recommended first problem", () => {
+    mockAppConfig.mockReturnValue({ cloudMode: "local" });
+    const aligned = problem({
+      problemId: "course-first",
+      jobId: "job-course-first",
+      scoring: { kind: "flag", flagSubmitted: false },
+    });
+    mockListCatalog.mockReturnValue([alignedCatalogEntry("course-first", "Course first")]);
+    mockTeamView.mockReturnValue({ view: { problems: [aligned] }, error: null });
+
+    render(<QuestsPage />);
+
+    const guidance = screen.getByTestId("local-start-guidance");
+    expect(guidance).toHaveTextContent("quests.local_start_course_body");
+    expect(guidance).toHaveTextContent("quests.local_start_other_body");
+    expect(guidance).toHaveTextContent("Course first");
+
+    fireEvent.click(screen.getByTestId("local-next-problem"));
+    expect(mockNav).toHaveBeenCalledWith("/problems/job-course-first");
+  });
+
+  it.each([
+    "mock",
+    "real",
+  ] as const)("should not show local start guidance in %s mode", (cloudMode) => {
+    mockAppConfig.mockReturnValue({ cloudMode });
+    mockListCatalog.mockReturnValue([alignedCatalogEntry("course-first", "Course first")]);
+    mockTeamView.mockReturnValue({ view: { problems: [] }, error: null });
+
+    render(<QuestsPage />);
+
+    expect(screen.queryByTestId("local-start-guidance")).not.toBeInTheDocument();
+  });
+
   it("should show the problem's display name (not its raw id) on the quest card", () => {
     mockFindMeta.mockImplementation((id: string) =>
       id === "ctf-unsolved" ? { difficulty: 3, name: "スタッフ専用ログイン" } : undefined,

@@ -188,6 +188,12 @@ export function QuestsPage() {
       showCourseGuidance ? buildCourseAlignmentTracks(catalog, toProblemProgress(allProblems)) : [],
     [allProblems, catalog, showCourseGuidance],
   );
+  const recommendedCourseProblem = courseTracks.find(
+    (track) => track.recommendedNext,
+  )?.recommendedNext;
+  const recommendedCourseJobId = recommendedCourseProblem
+    ? allProblems.find((problem) => problem.problemId === recommendedCourseProblem.problemId)?.jobId
+    : undefined;
   const courseProblemIds = useMemo(
     () =>
       new Set(
@@ -350,22 +356,42 @@ export function QuestsPage() {
         </Alert>
       )}
 
-      {/* 学習ルートそのものはここに出さない — 置き場は `/course-tracks`。 一覧の一等地を週別
-       *  track が占めると、 この画面が「一覧」 でも「学習経路」 でもなくなり、 講座を取っていない
-       *  人には無関係な塊が最初に来る。 ここには「講座の問題は別画面にある」 という事実と、 その
-       *  行き先だけを置く (= 除外した問題が消えたように見えるのを防ぐ)。 */}
+      {/* 学習ルートそのものはここに出さない — 置き場は `/course-tracks`。#2898 では local の
+       * 初見参加者が「講座」と「その他」のどちらを選ぶか判断でき、推奨 1 問へ 1 click で
+       * 到達できる案内だけを置く。一覧を週別 track で再び埋めない。 */}
       {courseTracks.length > 0 ? (
-        <Header
-          variant="h2"
-          description={t("quests.other_problems_description")}
-          actions={
-            <Button data-testid="course-tracks-link" onClick={() => navigate("/course-tracks")}>
-              {t("quests.course_tracks_link")}
-            </Button>
-          }
-        >
-          {t("quests.other_problems_header")}
-        </Header>
+        <SpaceBetween size="l">
+          <Alert
+            type="info"
+            header={t("quests.local_start_header")}
+            data-testid="local-start-guidance"
+          >
+            <SpaceBetween size="s">
+              <Box>{t("quests.local_start_course_body")}</Box>
+              <SpaceBetween size="xs" direction="horizontal">
+                {recommendedCourseProblem && recommendedCourseJobId ? (
+                  <Button
+                    variant="primary"
+                    data-testid="local-next-problem"
+                    onClick={() =>
+                      navigate(`/problems/${encodeURIComponent(recommendedCourseJobId)}`)
+                    }
+                  >
+                    {t("quests.local_next_problem", { name: recommendedCourseProblem.name })}
+                  </Button>
+                ) : null}
+                <Button data-testid="course-tracks-link" onClick={() => navigate("/course-tracks")}>
+                  {t("quests.course_tracks_link")}
+                </Button>
+              </SpaceBetween>
+              <Box color="text-body-secondary">{t("quests.local_start_other_body")}</Box>
+            </SpaceBetween>
+          </Alert>
+
+          <Header variant="h2" description={t("quests.other_problems_description")}>
+            {t("quests.other_problems_header")}
+          </Header>
+        </SpaceBetween>
       ) : null}
 
       <SpaceBetween size="s">
