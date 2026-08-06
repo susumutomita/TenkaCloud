@@ -28,8 +28,14 @@ vi.mock("../../src/i18n", () => {
   return { useT: () => t };
 });
 vi.mock("../../src/components/NextActionHero", () => ({
-  NextActionHero: ({ preferredNextProblemId }: { preferredNextProblemId?: string }) => {
-    mockHeroProps(preferredNextProblemId);
+  NextActionHero: ({
+    cloudMode,
+    preferredNextProblemId,
+  }: {
+    cloudMode: AppConfig["cloudMode"];
+    preferredNextProblemId?: string;
+  }) => {
+    mockHeroProps({ cloudMode, preferredNextProblemId });
     return <div data-testid="next-action" />;
   },
 }));
@@ -50,7 +56,13 @@ vi.mock("../../src/pages/TeamScorePanel", () => ({
 
 const { HomePage } = await import("../../src/pages/Home");
 
-const config = { eventTitle: "Test Event", apiBaseUrl: "https://api.example.com" } as AppConfig;
+const config: AppConfig = {
+  eventTitle: "Test Event",
+  eventRegion: "ap-northeast-1",
+  apiBaseUrl: "https://api.example.com",
+  mode: "backend",
+  cloudMode: "real",
+};
 // biome-ignore lint/suspicious/noExplicitAny: 最小 view fixture。
 const view = (over: Record<string, any> = {}): any => ({
   team: { teamName: "Alpha", teamNameSetByCompetitor: true },
@@ -82,6 +94,10 @@ describe("HomePage", () => {
     expect(screen.getByTestId("next-action")).toBeInTheDocument();
     expect(screen.getByTestId("team-score-panel")).toBeInTheDocument();
     expect(screen.getByTestId("score-chart")).toBeInTheDocument(); // backend + session + problems
+    expect(mockHeroProps).toHaveBeenCalledWith({
+      cloudMode: "real",
+      preferredNextProblemId: undefined,
+    });
   });
 
   it("should show the loading state and fall the team name back to the session", () => {
@@ -156,13 +172,19 @@ describe("HomePage course-track recommendation", () => {
   it("should hand the hero the first track that still recommends a problem", () => {
     mockBuildCourseTracks.mockReturnValue([track("finished"), track("ac26", "what-is-tenkacloud")]);
     render(<HomePage config={localConfig} />);
-    expect(mockHeroProps).toHaveBeenCalledWith("what-is-tenkacloud");
+    expect(mockHeroProps).toHaveBeenCalledWith({
+      cloudMode: "local",
+      preferredNextProblemId: "what-is-tenkacloud",
+    });
   });
 
   it("should hand the hero no recommendation once every track is finished", () => {
     mockBuildCourseTracks.mockReturnValue([track("finished")]);
     render(<HomePage config={localConfig} />);
-    expect(mockHeroProps).toHaveBeenCalledWith(undefined);
+    expect(mockHeroProps).toHaveBeenCalledWith({
+      cloudMode: "local",
+      preferredNextProblemId: undefined,
+    });
   });
 
   it("should build the tracks with empty progress while the team view is still loading", () => {
@@ -174,6 +196,9 @@ describe("HomePage course-track recommendation", () => {
   it("should not consult the course tracks outside local mode", () => {
     renderHome(); // 既定 config は cloudMode 未設定 (= local ではない)
     expect(mockBuildCourseTracks).not.toHaveBeenCalled();
-    expect(mockHeroProps).toHaveBeenCalledWith(undefined);
+    expect(mockHeroProps).toHaveBeenCalledWith({
+      cloudMode: "real",
+      preferredNextProblemId: undefined,
+    });
   });
 });

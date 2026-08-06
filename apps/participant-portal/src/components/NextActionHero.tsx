@@ -9,6 +9,7 @@ import type {
   ParticipantProblemView,
   ParticipantTeamView,
 } from "../api/portal-client";
+import type { CloudMode } from "../config";
 import { useT } from "../i18n";
 import { computeCountdownState } from "./CountdownTimer";
 
@@ -41,6 +42,18 @@ export type NextActionState =
   //   「解き終わり」 は無く、 競技終了まで防衛を続ける (= Battle はまだ進行中)。
   | { readonly kind: "all_cleared" }
   | { readonly kind: "defending" };
+
+/**
+ * Issue #2900: a real event already has the problem-list quick link directly below this panel, so
+ * only the generic running recommendation is duplicate. Event-boundary and completion states keep
+ * their unique information. Mock showcases and local self-study retain every state.
+ */
+export function shouldShowNextActionHero(
+  cloudMode: CloudMode,
+  stateKind: NextActionState["kind"],
+): boolean {
+  return cloudMode !== "real" || stateKind !== "running";
+}
 
 /**
  * 「次にやるべき問題」 を選ぶ pure function。
@@ -119,10 +132,12 @@ export function computeNextActionState(args: {
 }
 
 export function NextActionHero({
+  cloudMode,
   view,
   leaderboard,
   preferredNextProblemId,
 }: {
+  cloudMode: CloudMode;
   view: ParticipantTeamView | null;
   leaderboard: LeaderboardResponse | null;
   /** [#2882] 講座トラックが決めた次の 1 問 (local のみ)。 */
@@ -136,7 +151,7 @@ export function NextActionHero({
     nowMs: Date.now(),
     preferredNextProblemId,
   });
-  if (!state) return null;
+  if (!state || !shouldShowNextActionHero(cloudMode, state.kind)) return null;
 
   if (state.kind === "not_started") {
     return (
