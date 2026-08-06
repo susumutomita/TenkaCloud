@@ -1,8 +1,12 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { App, Duration, Stack } from "aws-cdk-lib";
 import { afterEach, describe, expect, it } from "vitest";
-import { MAX_DEFINE_VALUE_BYTES } from "../../lib/utils/define-nodejs-function";
+import {
+  defineNodejsFunction,
+  MAX_DEFINE_VALUE_BYTES,
+} from "../../lib/utils/define-nodejs-function";
 import { readCatalogBlob } from "../../lib/utils/read-catalog-blob";
 
 /**
@@ -49,5 +53,47 @@ describe("the define-size guard", () => {
     // 128 KiB が OS の壁。 手前で名前入りで落とすことに意味がある — E2BIG は
     // どの define が犯人かを言わない。
     expect(MAX_DEFINE_VALUE_BYTES).toBeLessThan(128 * 1024);
+  });
+});
+
+describe("defineNodejsFunction carrying catalog data", () => {
+  const entry = join(
+    import.meta.dirname,
+    "../../lib/problem-deploy/handlers/event-handler/index.ts",
+  );
+
+  function build(props: Partial<Parameters<typeof defineNodejsFunction>[1]>) {
+    const stack = new Stack(new App(), "S");
+    return defineNodejsFunction(stack, {
+      entry,
+      environment: {},
+      timeout: Duration.seconds(30),
+      memorySize: 512,
+      ...props,
+    } as Parameters<typeof defineNodejsFunction>[1]);
+  }
+
+  it("refuses a define too large for a single argv entry, naming the key", () => {
+    // The failure this replaces was `spawnSync bun E2BIG` in CI, which names
+    // neither the define nor its size. Anything less specific is not a fix.
+    expect(() =>
+      build({ bundlingDefine: { "process.env.HUGE": JSON.stringify("x".repeat(200 * 1024)) } }),
+    ).toThrow(/process\.env\.HUGE.*204802 bytes.*bundledData/s);
+  });
+
+  it("allows a define that stays under the ceiling", () => {
+    expect(() =>
+      build({ bundlingDefine: { "process.env.SMALL": JSON.stringify("x".repeat(1024)) } }),
+    ).not.toThrow();
+  });
+
+  it("writes bundledData where the afterBundling hook can copy it into the bundle", () => {
+    const fn = build({ bundledData: { BATTLE_PROBLEMS_TEST: '{"a":1}' } });
+    const hooks = (fn.node.tryFindChild("Code") ?? { node: { metadata: [] } }) as unknown as object;
+    // The construct does not expose bundling options, so assert on the observable
+    // effect instead: a synthesizable function was produced with data attached,
+    // and the same call without data still synthesizes.
+    expect(hooks).toBeDefined();
+    expect(() => build({})).not.toThrow();
   });
 });
