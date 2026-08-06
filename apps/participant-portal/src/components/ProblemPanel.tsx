@@ -11,6 +11,7 @@ import StatusIndicator, {
 import { Markdown, useNowMs } from "@tenkacloud/web-kit";
 import type {
   DeploymentStatus,
+  MultiFlagEntryView,
   ParticipantProblemView,
   ProblemLifecycleStatus,
 } from "../api/portal-client";
@@ -68,6 +69,7 @@ const LIFECYCLE_STATUS_TYPE: Record<ProblemLifecycleStatus, StatusIndicatorProps
 
 const COUNTDOWN_REFRESH_MS = 30_000;
 const ONBOARDING_PRACTICE_ENDPOINT_FILE = "onboarding-practice.html";
+const PROBLEM_WRITEUP_SECTION_ID = "problem-writeup";
 
 function onboardingPracticeEndpointUrl(lang: LocaleCode): string {
   const url = new URL(
@@ -242,16 +244,41 @@ function ProblemWriteup({ problem, t }: { problem: ParticipantProblemView; t: Pr
   const isLocal = useAppConfig().cloudMode === "local";
   if (!problem.writeup?.trim()) return null;
   return (
-    <Container header={<Header variant="h3">{t("problem_panel.writeup_heading")}</Header>}>
-      <Markdown source={problem.writeup} />
-      {/* Local-only pointer to the `tenka-drill` skill: no AI runs in the portal;
-          the learner digs deeper in their own Claude Code (their subscription). */}
-      {isLocal && (
-        <Box variant="small" color="text-status-inactive" margin={{ top: "s" }}>
-          {t("problem_panel.writeup_drill_hint", { command: `/tenka-drill ${problem.problemId}` })}
-        </Box>
-      )}
-    </Container>
+    <div id={PROBLEM_WRITEUP_SECTION_ID} tabIndex={-1}>
+      <Container header={<Header variant="h3">{t("problem_panel.writeup_heading")}</Header>}>
+        <Markdown source={problem.writeup} />
+        {/* Local-only pointer to the `tenka-drill` skill: no AI runs in the portal;
+            the learner digs deeper in their own Claude Code (their subscription). */}
+        {isLocal && (
+          <Box variant="small" color="text-status-inactive" margin={{ top: "s" }}>
+            {t("problem_panel.writeup_drill_hint", {
+              command: `/tenka-drill ${problem.problemId}`,
+            })}
+          </Box>
+        )}
+      </Container>
+    </div>
+  );
+}
+
+function ProblemWriteupHandoff({
+  problem,
+  flags,
+  t,
+}: {
+  readonly problem: ParticipantProblemView;
+  readonly flags: readonly MultiFlagEntryView[];
+  readonly t: ProblemPanelT;
+}) {
+  if (!problem.writeup?.trim() || flags.length === 0 || flags.some((flag) => !flag.solved)) {
+    return null;
+  }
+  return (
+    <Alert type="success">
+      <a href={`#${PROBLEM_WRITEUP_SECTION_ID}`}>
+        {t("problem_panel.writeup_handoff", { solved: flags.length, total: flags.length })}
+      </a>
+    </Alert>
   );
 }
 
@@ -374,6 +401,7 @@ export function ProblemPanel({
             一本化した(#2473)ので、ここでは description のみ。 AWS mode は未配信なので不在時は
             何も出さない。 */}
         <ProblemStatement hidden={isIntroTutorial} problem={problem} t={t} />
+        <ProblemWriteupHandoff problem={problem} flags={multiFlagScoring?.flags ?? []} t={t} />
         <ProblemWriteup problem={problem} t={t} />
         {/* [#2392 Phase 2] on-demand start / stop control。 lifecycle 不在 (= AWS mode) は出さない。 */}
         {lifecycleStatus !== undefined && (
