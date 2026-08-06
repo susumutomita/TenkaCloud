@@ -8,12 +8,15 @@ import type { AppConfig } from "../../src/config";
  * pin する。 共有 hook は mock、 子 (NextActionHero/ScoreTimelineChart/TeamScorePanel) は stub、
  * design-system は実物。
  */
-const { mockAuth, mockTeamView, mockIsMock, mockNav } = vi.hoisted(() => ({
-  mockAuth: vi.fn(),
-  mockTeamView: vi.fn(),
-  mockIsMock: vi.fn(),
-  mockNav: vi.fn(),
-}));
+const { mockAuth, mockTeamView, mockIsMock, mockNav, mockHeroProps, mockBuildCourseTracks } =
+  vi.hoisted(() => ({
+    mockAuth: vi.fn(),
+    mockTeamView: vi.fn(),
+    mockIsMock: vi.fn(),
+    mockNav: vi.fn(),
+    mockHeroProps: vi.fn(),
+    mockBuildCourseTracks: vi.fn(),
+  }));
 
 vi.mock("react-router", () => ({ useNavigate: () => mockNav }));
 vi.mock("../../src/auth/AuthProvider", () => ({ useAuth: mockAuth }));
@@ -25,7 +28,18 @@ vi.mock("../../src/i18n", () => {
   return { useT: () => t };
 });
 vi.mock("../../src/components/NextActionHero", () => ({
-  NextActionHero: () => <div data-testid="next-action" />,
+  NextActionHero: ({ preferredNextProblemId }: { preferredNextProblemId?: string }) => {
+    mockHeroProps(preferredNextProblemId);
+    return <div data-testid="next-action" />;
+  },
+}));
+// 講座トラックの中身は course-track / problems 側の test が pin する。 ここで見たいのは
+// 「HomePage がどのトラックの推薦を hero に渡すか」 だけなので、 実カタログ (= import.meta.glob
+// 経由の 71 問) は挟まず、 トラック構築を stub して分岐だけを test する。
+vi.mock("../../src/data/problems", () => ({ listProblemCatalog: () => [] }));
+vi.mock("../../src/data/course-track", () => ({
+  buildCourseTracks: mockBuildCourseTracks,
+  toProblemProgress: (problems: readonly unknown[]) => problems,
 }));
 vi.mock("../../src/components/ScoreTimelineChart", () => ({
   ScoreTimelineChart: () => <div data-testid="score-chart" />,
@@ -56,6 +70,7 @@ beforeEach(() => {
   mockIsMock.mockReturnValue(false);
   mockNav.mockClear();
   mockTeamView.mockReturnValue(tv({ view: view() }));
+  mockBuildCourseTracks.mockReturnValue([]);
 });
 
 afterEach(() => vi.clearAllMocks());
@@ -117,5 +132,48 @@ describe("HomePage", () => {
     expect(screen.queryByTestId("score-chart")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "home.quests_quick_link_button" }));
     expect(mockNav).toHaveBeenCalledWith("/scoreboard");
+  });
+});
+
+/**
+ * [#2882] 「次にやること」 が講座トラックの順に従うこと。 推薦を組むのは local だけ
+ * (`showsCourseTracks`) で、 mock (= LP から辿る公開デモ) と real (= 本番イベント) では
+ * hero はカタログ既定の順のままにする — その 2 つは受講者ごとの学習経路を持たないから。
+ */
+describe("HomePage course-track recommendation", () => {
+  const localConfig = { ...config, cloudMode: "local" } as AppConfig;
+  // biome-ignore lint/suspicious/noExplicitAny: 最小 track fixture (recommendedNext の有無だけ見る)。
+  const track = (trackId: string, recommendedNext?: string): any => ({
+    trackId,
+    chapters: [],
+    totalProblems: 0,
+    solvedProblems: 0,
+    totalCheckpoints: 0,
+    solvedCheckpoints: 0,
+    recommendedNext: recommendedNext === undefined ? undefined : { problemId: recommendedNext },
+  });
+
+  it("should hand the hero the first track that still recommends a problem", () => {
+    mockBuildCourseTracks.mockReturnValue([track("finished"), track("ac26", "what-is-tenkacloud")]);
+    render(<HomePage config={localConfig} />);
+    expect(mockHeroProps).toHaveBeenCalledWith("what-is-tenkacloud");
+  });
+
+  it("should hand the hero no recommendation once every track is finished", () => {
+    mockBuildCourseTracks.mockReturnValue([track("finished")]);
+    render(<HomePage config={localConfig} />);
+    expect(mockHeroProps).toHaveBeenCalledWith(undefined);
+  });
+
+  it("should build the tracks with empty progress while the team view is still loading", () => {
+    mockTeamView.mockReturnValue(tv({ view: null }));
+    render(<HomePage config={localConfig} />);
+    expect(mockBuildCourseTracks).toHaveBeenCalledWith([], []);
+  });
+
+  it("should not consult the course tracks outside local mode", () => {
+    renderHome(); // 既定 config は cloudMode 未設定 (= local ではない)
+    expect(mockBuildCourseTracks).not.toHaveBeenCalled();
+    expect(mockHeroProps).toHaveBeenCalledWith(undefined);
   });
 });

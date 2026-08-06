@@ -278,11 +278,13 @@ export function buildSideNavItems(
       type: "section",
       text: t("nav.quests_section"),
       items: [
-        { type: "link", href: "/problems", text: t("nav.problems") },
         // 講座トラックは自習経路なので local だけ (判定は `showsCourseTracks`)。
+        // 一覧を先に置く順は採らない — 2 項目しかない並びでは順番が案内そのもので、
+        // 先に出るほうに着いた学習者は 71 件のフラットな一覧の前で止まる。
         ...(showsCourseTracks(cloudMode)
           ? [{ type: "link" as const, href: "/course-tracks", text: t("nav.course_tracks") }]
           : []),
+        { type: "link", href: "/problems", text: t("nav.problems") },
       ],
     },
   ];

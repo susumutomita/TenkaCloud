@@ -4,13 +4,17 @@ import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import { EmptyState, ErrorState, LoadingState } from "@tenkacloud/web-kit";
+import { useMemo } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "../auth/AuthProvider";
 import { useTeamView } from "../auth/TeamViewProvider";
 import { NextActionHero } from "../components/NextActionHero";
 import { ScoreTimelineChart } from "../components/ScoreTimelineChart";
 import type { AppConfig } from "../config";
+import { showsCourseTracks } from "../config";
 import { useIsMock } from "../config-context";
+import { buildCourseTracks, toProblemProgress } from "../data/course-track";
+import { listProblemCatalog } from "../data/problems";
 import { useT } from "../i18n";
 import { TeamScorePanel } from "./TeamScorePanel";
 
@@ -38,6 +42,17 @@ export function HomePage({ config }: { config: AppConfig }) {
   const teamNameRaw = view?.team.teamName ?? auth.session?.teamName ?? "(unknown)";
   const teamName = truncateTeamName(teamNameRaw);
 
+  /**
+   * 難易度順・表示順で選ぶ方向は採らない — どちらもカタログ全体を母数にするので、 講座を
+   * 順に進めている人には無関係な問題が「次にやること」に出る (実際にチュートリアルの途中で
+   * 別トラックの問題が推薦された)。 トラックが next を持っているなら、 それがその人の次。
+   */
+  const courseNext = useMemo(() => {
+    if (!showsCourseTracks(config.cloudMode)) return undefined;
+    const tracks = buildCourseTracks(listProblemCatalog(), toProblemProgress(view?.problems ?? []));
+    return tracks.find((track) => track.recommendedNext)?.recommendedNext;
+  }, [config.cloudMode, view?.problems]);
+
   return (
     <SpaceBetween size="l">
       <Header
@@ -55,7 +70,11 @@ export function HomePage({ config }: { config: AppConfig }) {
 
       {/* Issue #1349: 「次にやること」 hero を一等地に置く (= 3 状態 = not_started /
        *  running / ended)。 視線は header → next action → 累計スコア → 推移 → 一覧 の順。 */}
-      <NextActionHero view={view} leaderboard={leaderboard} />
+      <NextActionHero
+        view={view}
+        leaderboard={leaderboard}
+        preferredNextProblemId={courseNext?.problemId}
+      />
 
       {view && <TeamScorePanel view={view} leaderboard={leaderboard} />}
 

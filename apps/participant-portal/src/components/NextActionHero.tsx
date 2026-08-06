@@ -52,14 +52,26 @@ export type NextActionState =
 export function isProblemUnsolved(p: ParticipantProblemView): boolean {
   if (p.status !== "COMPLETE" && p.status !== "IN_PROGRESS" && p.status !== "PENDING") return false;
   if (p.scoring?.kind === "flag") return p.scoring.flagSubmitted !== true;
+  // [#2885] checkpoint 制は「全部出したか」で見る。 `score === 0` だけだと、 1 個でも通した
+  // 時点で解答済扱いになり、 残り 4 個ある問題が「次にやること」から消える。
+  const flags = p.scoring?.flags;
+  if (flags && flags.length > 0) return !flags.every((flag) => flag.solved);
   return p.score === 0;
 }
 
 export function pickNextProblem(
   problems: readonly ParticipantProblemView[],
+  preferredProblemId?: string,
 ): ParticipantProblemView | undefined {
   const unsolved = problems.filter(isProblemUnsolved);
   if (unsolved.length === 0) return undefined;
+  // [#2882] 講座トラックを進めている人には、 トラックが決めた次の 1 問がある。 表示順の先頭は
+  // カタログ全体の並びであって、 その人の学習順ではない (実際、 チュートリアルの途中で
+  // 無関係な問題が「次にやること」に出た)。 トラックの推薦が未解答なら、 それを優先する。
+  if (preferredProblemId !== undefined) {
+    const preferred = unsolved.find((p) => p.problemId === preferredProblemId);
+    if (preferred) return preferred;
+  }
   // Issue #1349: COMPLETE (= deploy 完了済) を優先、 deploy 中はやることが無いので後ろ。
   const ready = unsolved.filter((p) => p.status === "COMPLETE");
   const pool = ready.length > 0 ? ready : unsolved;
@@ -73,8 +85,10 @@ export function computeNextActionState(args: {
   readonly view: ParticipantTeamView | null;
   readonly leaderboard: LeaderboardResponse | null;
   readonly nowMs: number;
+  /** [#2882] 講座トラックが決めた次の 1 問。 未解答ならこれを優先する。 */
+  readonly preferredNextProblemId?: string;
 }): NextActionState | null {
-  const { view, leaderboard, nowMs } = args;
+  const { view, leaderboard, nowMs, preferredNextProblemId } = args;
   if (!view) return null;
   const gate = view.eventGate;
   if (gate?.kind === "scoring_not_started") {
@@ -100,20 +114,28 @@ export function computeNextActionState(args: {
     const allClearable = view.problems.every((p) => p.scoring?.kind === "flag");
     return allClearable ? { kind: "all_cleared" } : { kind: "defending" };
   }
-  const next = pickNextProblem(view.problems);
+  const next = pickNextProblem(view.problems, preferredNextProblemId);
   return { kind: "running", unsolvedCount: unsolved.length, nextProblem: next };
 }
 
 export function NextActionHero({
   view,
   leaderboard,
+  preferredNextProblemId,
 }: {
   view: ParticipantTeamView | null;
   leaderboard: LeaderboardResponse | null;
+  /** [#2882] 講座トラックが決めた次の 1 問 (local のみ)。 */
+  preferredNextProblemId?: string;
 }) {
   const t = useT();
   const navigate = useNavigate();
-  const state = computeNextActionState({ view, leaderboard, nowMs: Date.now() });
+  const state = computeNextActionState({
+    view,
+    leaderboard,
+    nowMs: Date.now(),
+    preferredNextProblemId,
+  });
   if (!state) return null;
 
   if (state.kind === "not_started") {
