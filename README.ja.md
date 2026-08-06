@@ -95,18 +95,18 @@ Codespaces でプレイできるのは **クラウド非依存のドリルのみ
 
 ### ローカルで試す(AWS 不要)
 
-`tenkacloud local` がローカルドリルの主入口です。ローカル採点 API と Participant Portal を起動し、開いた画面からドリルを選べます。進捗はデフォルトでローカルの非公開 SQLite ファイル `.tenkacloud/local/local-play.sqlite` に保存され、DynamoDB と AWS SDK には依存しません。`make local` は互換ラッパーとして残しています。
+`make local` が参加者向けの主入口です。ローカル採点 API と Participant Portal を起動し、開いた画面からドリルを選べます。進捗はデフォルトでローカルの非公開 SQLite ファイル `.tenkacloud/local/local-play.sqlite` に保存され、DynamoDB と AWS SDK には依存しません。開発者向けの高度なオプションでは `tenkacloud local` CLI も利用できます。
 
 **クローン直後にはこちらを推奨(自己修復型、Bun の事前インストール不要):**
 
 ```bash
-git clone https://github.com/susumutomita/TenkaCloud.git
+git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
 cd TenkaCloud
 make local-onboard
-bun run tenkacloud local
+make local
 ```
 
-`make local-onboard` は、必要なものをインストールする前に必ず同意を求めます — Bun 本体(未インストールの場合)、`problems/` submodule、Docker の診断 — その上で準備状況を報告します。同意なしに何かをインストールすることはありません。無人実行では `make local-onboard YES=1` ですべてのインストールを事前承認できます(GitHub Codespaces もこの経路を使っています)。すべての前提条件が揃ったと報告されたら、`bun run tenkacloud local` でローカル採点 API と Participant Portal が起動します。
+`make local-onboard` は、必要なものをインストールする前に必ず同意を求めます — Bun 本体(未インストールの場合)、`problems/` submodule、Docker の診断 — その上で準備状況を報告します。同意なしに何かをインストールすることはありません。無人実行では `make local-onboard YES=1` ですべてのインストールを事前承認できます(GitHub Codespaces もこの経路を使っています)。すべての前提条件が揃ったと報告されたら、`make local` でローカル採点 API と Participant Portal が起動します。
 
 <details>
 <summary>内部で行っていること / 手動での代替手順</summary>

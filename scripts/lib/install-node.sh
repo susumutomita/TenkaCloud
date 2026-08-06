@@ -34,7 +34,7 @@ install_bun_from_package_manager() {
   fi
 
   if [ "$installed_bun_version" != "$bun_version" ]; then
-    curl -fsSL https://bun.sh/install | bash -s "bun-v${bun_version}"
+    bash scripts/onboard/install-bun.sh "$bun_version"
     export BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"
     export PATH="$BUN_INSTALL/bin:$PATH"
     hash -r 2>/dev/null || true

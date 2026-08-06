@@ -67,16 +67,12 @@ function bunStep(platform: Platform): RemediationStep {
       notes: UNSUPPORTED_PLATFORM_NOTE,
     };
   }
-  const commands =
-    platform === "darwin"
-      ? ["brew install oven-sh/bun/bun"]
-      : ["curl -fsSL https://bun.sh/install | bash"];
   return {
     id: "bun",
     title: "Install Bun",
     why: "Bun runs every TenkaCloud script and installs workspace dependencies.",
     kind: "software-install",
-    commands,
+    commands: ["bash scripts/onboard/install-bun.sh"],
     notes: "Installs the bun binary onto your machine (~40 MB).",
   };
 }
