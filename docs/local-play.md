@@ -17,6 +17,12 @@ The boundary is recorded in
 > framing are still being brought up to catalog quality, so `tenkacloud local` neither
 > lists nor serves them unless you opt in with `TENKACLOUD_LOCAL_SIMULATOR=1`.
 > Docker drill problems are unaffected and remain on by default.
+>
+> This opt-in works on the **developer path only** (`make local-dev` /
+> `tenkacloud local`). `compose.local.yaml` deliberately does not forward
+> `TENKACLOUD_LOCAL_SIMULATOR` into the container, so setting it in front of
+> `make local` has no effect — containerizing a second Docker-socket consumer
+> inside an already-DooD control plane needs its own design pass (ADR-055 §3).
 
 ## How it works
 
@@ -83,6 +89,15 @@ networking** (Desktop >=4.34). `make local`/`make local-status` detect a
 container that came up healthy but is unreachable from the host and fail
 loud with this exact instruction, rather than reporting a false success —
 native Linux Docker Engine and Codespaces need no such setting.
+
+Reach the Portal at `localhost`, `127.0.0.1`, or `[::1]` on the port it is
+serving (`LOCAL_API_PORT`, default 5175), or through Codespaces' own port
+forwarding. Those are the only origins `/runtime-config.json` will hand the
+session key to (ADR-055 §2.2) — a tunnel that changes the port
+(`ssh -L 8080:127.0.0.1:5175`), a custom reverse proxy, or setting
+`LOCAL_API_PORT` to 80/443 (where browsers omit the port from `Host`) all get
+a `403 untrusted_host` instead. Match the port end to end and this does not
+come up.
 
 For hot-reload development (no container rebuild per change), run the same
 stack directly on the host instead:

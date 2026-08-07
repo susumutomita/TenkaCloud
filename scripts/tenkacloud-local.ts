@@ -684,7 +684,9 @@ function usage(): string {
     "  down             Stop local services and clear all persisted progress",
     "",
     "Simulated-cloud (multicloud Simulator) problems are experimental and hidden by",
-    "default; opt in with TENKACLOUD_LOCAL_SIMULATOR=1 (e.g. TENKACLOUD_LOCAL_SIMULATOR=1 make local).",
+    "default; opt in with TENKACLOUD_LOCAL_SIMULATOR=1 on the developer path",
+    "(e.g. TENKACLOUD_LOCAL_SIMULATOR=1 make local-dev). The Docker participant path",
+    "(make local) does not forward this variable into the container — see ADR-055.",
   ].join("\n");
 }
 

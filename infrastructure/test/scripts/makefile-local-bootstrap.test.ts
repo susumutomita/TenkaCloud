@@ -64,3 +64,42 @@ describe("make local is Docker-only and never reaches the Bun CLI (Issue #2906)"
     });
   }
 });
+
+/**
+ * [#2906 round-4 audit] The launcher's host-side reachability probe is what turns a
+ * "container healthy but invisible to the host" Docker Desktop misconfiguration into a
+ * loud failure instead of a Portal URL that loads nothing. Three properties of that probe
+ * were each wrong on the first attempt and each fail *silently* if reintroduced, so they
+ * are pinned here rather than left to review:
+ *   - proxy bypass: curl/wget honour http_proxy even for loopback, so without this an
+ *     entirely healthy stack probes as unreachable in any proxied shell — a deterministic
+ *     false failure that then blames Docker Desktop for it;
+ *   - bounded wget: `-T` bounds one attempt, not the command (GNU wget retries 20x);
+ *   - identity: port 5175 is also the host/dev path's default, so a leftover dev process
+ *     answers the probe and would be reported as success — the exact false success the
+ *     probe exists to catch.
+ */
+describe("docker-launcher host reachability probe (Issue #2906)", () => {
+  const launcher = readFileSync(join(REPO_ROOT, "scripts", "local", "docker-launcher.sh"), "utf8");
+  const probe = launcher.slice(
+    launcher.indexOf("host_reachable() {"),
+    launcher.indexOf("docker_desktop_host_networking_hint()"),
+  );
+
+  it("should bypass any HTTP proxy so a proxied shell cannot fake unreachability", () => {
+    expect(probe).toContain("--noproxy");
+    expect(probe).toMatch(/http_proxy=\s+HTTP_PROXY=/);
+  });
+
+  it("should bound the wget fallback instead of letting it retry with backoff", () => {
+    expect(probe).toContain("--tries");
+  });
+
+  it("should confirm which server answered, not merely that one did", () => {
+    expect(probe).toContain('"mode":"local"');
+  });
+
+  it("should treat a host with neither curl nor wget as unknown, not as failure", () => {
+    expect(probe).toMatch(/return 2/);
+  });
+});

@@ -90,13 +90,46 @@ wait_for_portal() {
 # distinguish from a real success. This probes from the HOST side instead, using
 # whichever of curl/wget happens to be present (best-effort only — neither is a
 # stated prerequisite of this launcher, so their absence is not itself a failure).
+#
+# Three non-obvious requirements, each of which this probe got wrong at first and
+# which a regression here would silently reintroduce:
+#
+#  1. NEVER go through an HTTP proxy. curl and wget both honour http_proxy for
+#     http:// URLs even when the target is loopback, so in any shell that exports
+#     a proxy without a matching no_proxy (ordinary in corporate environments)
+#     an entirely healthy stack probes as unreachable — a deterministic false
+#     failure on the participant entry point, made worse by the Docker Desktop
+#     hint below then blaming the wrong thing. `--noproxy '*'` and the inline
+#     `http_proxy= ...` overrides are what keep this pointed at real loopback.
+#  2. Bound the wget path. `-T 5` bounds one attempt, not the command: GNU wget
+#     retries up to 20 times with backoff, so a filtered/dropping route blocks
+#     for minutes instead of failing. `--tries=1` is what actually bounds it.
+#     (The common Docker-Desktop-misconfigured case is ECONNREFUSED, which fails
+#     instantly either way — this is for the silent-drop case.)
+#  3. Check WHAT answered, not merely that something did. Port 5175 is also the
+#     host/dev path's own default (Vite, and `local-up`'s detached serve), so a
+#     leftover dev process answers this probe happily while the container remains
+#     invisible to the host — reporting success for the exact false-success case
+#     this function exists to catch. Matching `"mode":"local"` from /healthz
+#     (scripts/local-play/api.ts) confirms it is this engine answering, the same
+#     standard scripts/onboard/codespaces-start-local.sh already applies via its
+#     <title> grep.
 host_reachable() {
   url="http://127.0.0.1:${PORTAL_PORT}/healthz"
   if command -v curl >/dev/null 2>&1; then
-    curl -sf --max-time 5 "$url" >/dev/null 2>&1 && return 0 || return 1
+    curl -sf --noproxy '*' --max-time 5 "$url" 2>/dev/null | grep -q '"mode":"local"' && return 0
+    return 1
   fi
   if command -v wget >/dev/null 2>&1; then
-    wget -q -T 5 -O /dev/null "$url" >/dev/null 2>&1 && return 0 || return 1
+    # `--tries` is GNU wget only — busybox wget rejects it as an unknown option and
+    # would exit non-zero, turning this fallback into the very false failure the
+    # proxy fix above removes. Probe for it instead of assuming either flavour.
+    wget_tries=""
+    if wget --help 2>&1 | grep -q -- '--tries'; then wget_tries="--tries=1"; fi
+    # shellcheck disable=SC2086 -- $wget_tries is a single flag or empty, by construction
+    http_proxy= HTTP_PROXY= https_proxy= HTTPS_PROXY= all_proxy= ALL_PROXY= \
+      wget -q -T 5 $wget_tries -O - "$url" 2>/dev/null | grep -q '"mode":"local"' && return 0
+    return 1
   fi
   return 2 # neither tool available — genuinely unknown, not a failure signal
 }
@@ -141,20 +174,44 @@ cmd_up() {
 #     container already died (crash, OOM, a manual `docker kill`).
 #  2. A host-side sweep by container name, run UNCONDITIONALLY — every
 #     per-problem container/network this platform starts is named with the
-#     `tc-local-` compose-project prefix (scripts/local-play/docker-adapter.ts),
+#     `tc-local-` compose-project prefix (scripts/local-play/manifest.ts),
 #     so this reclaims orphans left behind specifically when step 1 could not
 #     run, without depending on the control-plane container being alive.
 # `compose down -v` unconditionally removes the control-plane's own named
 # volume last, so "clear all progress" holds even when step 1 was skipped.
+#
+# [#2906 round-4 audit] The `tc-local-` prefix is shared with the host/dev path:
+# `make local-dev` starts per-problem containers under the SAME names (they run
+# the same engine), and its own session state lives on disk rather than in this
+# stack's volume. Sweeping blindly while such a session exists would force-remove
+# a running dev session's containers from underneath it, leave its state.json
+# describing containers that no longer exist, leave its serve process alive, and
+# leave its SQLite progress untouched — while printing "progress cleared". That
+# is a destructive false success, so the sweep is skipped and the situation
+# reported instead when a host/dev session is present.
+host_dev_state_file() {
+  printf '%s/state.json' "${TENKACLOUD_LOCAL_DIR:-$repo_root/.tenkacloud/local}"
+}
+
 cmd_down() {
   require_docker
   $COMPOSE exec -T local bun run scripts/tenkacloud-local.ts down 2>/dev/null || true
+  if [ -f "$(host_dev_state_file)" ]; then
+    $COMPOSE down --remove-orphans -v
+    echo "Docker local play stopped and its progress volume removed."
+    echo
+    echo "A host/dev session (make local-dev) is also present — its problem containers," >&2
+    echo "  its serve process, and its own saved progress were left untouched, because" >&2
+    echo "  this command cannot tell them apart from the Docker path's by name alone." >&2
+    echo "  Stop that one with: bun run scripts/tenkacloud-local.ts down" >&2
+    return 0
+  fi
   # [Finding 4, #2906 audit] Docker's --filter name= is an unanchored
   # substring match, not a prefix match — "^tc-local-" anchors it so this
   # never touches an unrelated container that merely CONTAINS that string
   # (e.g. a participant's own "btc-local-node"). Every per-problem container
   # this platform starts is actually named with this prefix
-  # (scripts/local-play/docker-adapter.ts); nothing else may be.
+  # (scripts/local-play/manifest.ts's composeProjectName); nothing else may be.
   orphans=$(docker ps -aq --filter "name=^tc-local-" 2>/dev/null || true)
   if [ -n "$orphans" ]; then
     echo "Reclaiming per-problem containers the control plane could not stop itself..."

@@ -205,6 +205,35 @@
       version floor and setting up front, so an affected participant reads it before hitting the
       failure at all.
     </p>
+    <p>
+      That probe itself then needed three corrections a fourth audit pass found, each of which
+      fails <em>silently</em> if reintroduced, and each now pinned by a regression test:
+      it must <strong>bypass any HTTP proxy</strong> (<code>curl</code> and <code>wget</code>
+      honour <code>http_proxy</code> even for a loopback URL, so in any proxied shell without a
+      matching <code>no_proxy</code> a perfectly healthy stack probed as unreachable — a
+      deterministic false failure that then blamed Docker Desktop for it; reproduced and fixed
+      via <code>--noproxy '*'</code> and inline proxy-variable clearing); it must
+      <strong>bound the <code>wget</code> fallback</strong> (<code>-T</code> bounds one attempt,
+      not the command — GNU wget retries with backoff, so <code>--tries=1</code> is what actually
+      bounds it, probed for at runtime because busybox wget rejects that flag); and it must
+      <strong>confirm which server answered</strong>, not merely that one did — port 5175 is also
+      the host/dev path's own default, so a leftover <code>make local-dev</code> process answers
+      the probe happily while the container stays invisible to the host, reporting success for
+      precisely the case the probe exists to catch. Matching <code>"mode":"local"</code> from
+      <code>/healthz</code> applies the same standard
+      <code>scripts/onboard/codespaces-start-local.sh</code> already used via its
+      <code>&lt;title&gt;</code> check.
+    </p>
+    <p>
+      The same audit pass found <code>make local-down</code> dishonest in one configuration: the
+      <code>tc-local-</code> prefix is shared with the host/dev path, so running it while a
+      <code>make local-dev</code> session existed force-removed that session's problem containers
+      from underneath it, left its serve process alive and its SQLite progress untouched, and
+      still printed "progress cleared". It now detects a host/dev session (its
+      <code>state.json</code>), skips the blind sweep, and says exactly what it did and did not
+      stop — a destructive false success replaced with an accurate report and the command that
+      actually clears the other session.
+    </p>
 
     <h3>2.3 Docker-outside-of-Docker for sibling problem containers</h3>
     <p>
