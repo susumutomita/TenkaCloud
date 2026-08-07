@@ -100,15 +100,15 @@
       </tbody>
     </table>
 
-    <h3>2.1 Same-origin API + Portal</h3>
+    <h3>2.1 Same-origin API + Portal, and a request-derived <code>runtime-config.json</code></h3>
     <p>
       The Portal's prebuilt <code>dist/</code> is served as static files from the same server
       and port as the API (a new <code>portalDistDir</code> option on
       <code>startLocalPlayServer</code>, active only in the container — the host/dev path is
-      untouched). <code>/runtime-config.json</code> is now a dynamic route built in-process from
-      the bound port instead of a file the CLI writes and the dev server serves statically —
-      the container has no Vite dev server to serve it. This also collapses the cross-port CORS
-      setup the two-process host model needed into same-origin, with one caveat: the
+      untouched). <code>/runtime-config.json</code> is now a dynamic route built in-process
+      instead of a file the CLI writes and the dev server serves statically — the container has
+      no Vite dev server to serve it. This also collapses the cross-port CORS setup the
+      two-process host model needed into same-origin, with one caveat: the
       <code>/local/operator/</code> Origin-header check that a cross-port setup made airtight
       for every method now relies on the Bearer-token check alone for a same-origin request with
       no Origin header (a plain top-level GET can omit it). No operator route accepts GET today
@@ -116,8 +116,97 @@
       future operator GET route must carry the same check explicitly; it can no longer lean on
       Origin rejection alone.
     </p>
+    <p>
+      The dynamic route builds <code>apiBaseUrl</code> from the <em>incoming request's own</em>
+      <code>Host</code> / <code>X-Forwarded-Proto</code> headers, not a fixed
+      <code>http://127.0.0.1:&lt;port&gt;</code> computed once at startup. Same-origin serving
+      means whatever origin just successfully answered this GET is, by construction, an origin
+      the browser can already reach — <code>127.0.0.1:&lt;port&gt;</code> for a plain local run,
+      or a reverse proxy's forwarded HTTPS origin (GitHub Codespaces' port forwarding) when one
+      sits in front. The old two-port host/dev model needed a Codespaces-specific
+      <code>/__tenkacloud-local-api</code> proxy-prefix rewrite (<code>codespaces-links.ts</code>)
+      to reach a <em>different</em> port than the Portal's; the container has no second port to
+      reach, so that rewrite does not apply here and is not used on this path. Codespaces' own
+      forwarded-Origin CORS check (<code>cors.ts</code>) still needs <code>CODESPACE_NAME</code> /
+      <code>GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN</code> passed through from the host shell
+      (<code>compose.local.yaml</code>) — a separate concern (validating the browser's incoming
+      Origin) from what URL the config hands back.
+    </p>
 
-    <h3>2.2 Docker-outside-of-Docker for sibling problem containers</h3>
+    <h3>2.2 Network reachability: a container's own <code>127.0.0.1</code> is not the host's</h3>
+    <p>
+      A per-problem sibling container publishes its challenge surface and <code>/verify</code>
+      to the HOST's loopback (<code>docker-adapter.ts</code>, e.g.
+      <code>127.0.0.1:18080:8080</code>) — unchanged, and correct for the participant's browser,
+      which runs on the real host. But orchestration calls the control-plane container makes to
+      that <em>same</em> address — readiness polling
+      (<code>docker-adapter.ts</code>'s <code>waitForReachable</code>), flag submission
+      (<code>verify-client.ts</code>), and the workbench/terminal proxy
+      (<code>workbench-client.ts</code>) — originate from <em>inside</em> the control-plane
+      container now, and a container's <code>127.0.0.1</code> is its own network namespace, not
+      the host's. Docker's sibling-container pattern does not implicitly share loopback between
+      a DooD controller and what it starts; this is a distinct hazard from §2.3's daemon-side
+      path problem, on the network axis instead of the filesystem axis, and an earlier draft of
+      this design missed it entirely — caught by adversarial review before merge.
+    </p>
+    <p>
+      An earlier draft tried <code>host.docker.internal</code>
+      (<code>extra_hosts: host.docker.internal:host-gateway</code> on Linux Engine) with a
+      <code>containerReachableUrl(url)</code> rewrite at those three call sites. A second
+      adversarial audit pass rejected it: a per-problem sibling container publishes its port
+      bound specifically to the HOST's <code>127.0.0.1</code>, not <code>0.0.0.0</code> — a
+      deliberate security choice (the challenge surface must not be LAN-reachable) — and on
+      native Linux Docker Engine (including GitHub Codespaces' docker-in-docker) a
+      loopback-bound publish is unreachable from <em>any other network namespace</em>, gateway
+      IP or not. That is not a missing route; it is what binding to <code>127.0.0.1</code>
+      instead of <code>0.0.0.0</code> is <em>for</em>. <code>host.docker.internal</code> would
+      have worked only on Docker Desktop, silently failing on exactly the Linux Engine /
+      Codespaces path this project's own dev environment uses.
+    </p>
+    <p>
+      The fix actually shipped: <code>network_mode: host</code> on the control-plane service
+      (<code>compose.local.yaml</code>) puts the container directly in the host's network
+      namespace, so its <code>127.0.0.1</code> genuinely <em>is</em> the host's — restoring the
+      exact relationship the pre-#2906 host Bun process had, rather than routing around a
+      namespace boundary. This made <code>containerReachableUrl</code> and the
+      <code>TENKACLOUD_LOCAL_BIND_HOST</code>-gated rewrite in
+      <code>scripts/local-play/loopback.ts</code> unnecessary — removed entirely, along with the
+      matching call sites in <code>docker-adapter.ts</code>'s <code>waitForReachable</code>,
+      <code>verify-client.ts</code>, and <code>workbench-client.ts</code>; those now dial the
+      already loopback-validated URL unmodified, same as the host/dev path. The server's own
+      listener bind stays hardcoded to <code>127.0.0.1</code> (not configurable) precisely
+      <em>because</em> host networking is in play: binding <code>0.0.0.0</code> here would leak
+      the control-plane API onto the LAN once this container's network stack <em>is</em> the
+      host's. Host networking requires Docker Desktop &gt;=4.34 on macOS/Windows (it was
+      Linux-Engine-only before that); it is native on Linux Engine and WSL2's Docker Engine,
+      including Codespaces. It adds no privilege beyond what §2.3's Docker-socket mount already
+      grants — a process holding <code>docker.sock</code> could start a
+      <code>--network host</code> sibling itself regardless. The browser-facing URLs shown in
+      the Portal (<code>challengeEndpoints</code>, <code>verifyUrl</code> as displayed) are
+      unaffected either way — the browser was never inside Docker and always dialed the real
+      host-published <code>127.0.0.1</code> address.
+    </p>
+    <p>
+      <strong>Docker Desktop host networking is opt-in, not automatic.</strong> A third
+      adversarial audit pass on this fix flagged that Docker Desktop (macOS/Windows) requires
+      enabling host networking once, under Settings → Resources → Network (Desktop &gt;=4.34) —
+      unlike Linux Engine and Codespaces, where it needs no setting. When it is not enabled, the
+      container still starts, and its own compose healthcheck (which runs <em>inside</em> that
+      same container, so it always sees its own loopback regardless of whether host networking
+      is actually active) still reports healthy — the exact "healthy but unreachable" false
+      success this ADR's other guardrails (§2's overall goal of not converting failure into a
+      silent green light) exist to prevent. <code>scripts/local/docker-launcher.sh</code>'s
+      <code>host_reachable()</code> now probes <code>/healthz</code> from the HOST side (using
+      whichever of <code>curl</code>/<code>wget</code> happens to be present — best-effort only,
+      neither is a stated prerequisite) immediately after the container reports healthy; a
+      healthy-but-unreachable container fails <code>make local</code>/<code>make
+      local-status</code> loud with the exact Settings path to fix, instead of printing a
+      Portal URL nothing can load. README/README.ja/docs/local-play.md now document the Desktop
+      version floor and setting up front, so an affected participant reads it before hitting the
+      failure at all.
+    </p>
+
+    <h3>2.3 Docker-outside-of-Docker for sibling problem containers</h3>
     <p>
       The control-plane container still needs to start/stop per-problem containers — the exact
       same <code>docker compose</code> shell-out
@@ -144,7 +233,7 @@
       volume operations — close to the full Engine API surface — so a proxy narrow enough to
       matter would also be narrow enough to break problem startup.</p>
 
-    <h3>2.3 Every relative bind mount in a problem's compose file must resolve on the HOST</h3>
+    <h3>2.4 Every relative bind mount in a problem's compose file must resolve on the HOST</h3>
     <p>
       This is the sharp edge of docker-outside-of-docker: <code>docker compose</code> running
       inside the control-plane container resolves a problem's relative volume binds (13 catalog
@@ -168,7 +257,7 @@
       <code>docker-adapter.ts</code>/<code>container-runner.ts</code> at all.
     </p>
 
-    <h3>2.4 <code>problems/</code> submodule fetch stays host-side</h3>
+    <h3>2.5 <code>problems/</code> submodule fetch stays host-side</h3>
     <p>
       <code>autoInitProblemsSubmodule()</code> shells out to <code>git submodule update --init
       problems</code> — meaningless inside a container that has no <code>.git</code> history for
@@ -180,7 +269,7 @@
       <code>git</code> that would not work anyway.
     </p>
 
-    <h3>2.5 Teardown does not depend on the control plane being alive</h3>
+    <h3>2.6 Teardown does not depend on the control plane being alive</h3>
     <p>
       <code>make local-down</code> must reclaim every TenkaCloud-owned resource even when the
       control-plane container already crashed. <code>docker-launcher.sh down</code> therefore
@@ -190,11 +279,18 @@
       control plane can still answer, <strong>and unconditionally</strong> a host-side sweep by
       container name (every per-problem container/network is named with the
       <code>tc-local-</code> compose-project prefix) that reclaims orphans the first path could
-      not reach. <code>compose down -v</code> removes the control plane's own named data volume
-      last, so "clear all progress" holds either way.
+      not reach. The sweep's <code>docker ... --filter name=</code> is anchored
+      (<code>^tc-local-</code>) — Docker's name filter is an unanchored substring match, and an
+      earlier draft's unanchored filter could have force-removed an unrelated host container
+      that merely contained that string (e.g. a participant's own
+      <code>btc-local-node</code>), caught by adversarial review before merge.
+      <code>compose down -v</code> removes the control plane's own named data volume last, so
+      "clear all progress" holds either way. <code>make local-status</code> similarly cannot
+      depend on that same host-oriented <code>state.json</code> the containerized entrypoint
+      never writes — it polls the compose healthcheck via <code>docker inspect</code> instead.
     </p>
 
-    <h3>2.6 Pinned, auditable Docker Compose version</h3>
+    <h3>2.7 Pinned, auditable Docker Compose version</h3>
     <p>
       The control-plane image fetches a specific Docker Compose release binary
       (<code>v2.40.2</code> at minimum) rather than whatever version <code>apk add
@@ -206,7 +302,7 @@
       processed is not an acceptable floor.
     </p>
 
-    <h3>2.7 Build-time supply-chain hygiene carries over unchanged</h3>
+    <h3>2.8 Build-time supply-chain hygiene carries over unchanged</h3>
     <p>
       The image build runs <code>bun install --frozen-lockfile --ignore-scripts</code> — the
       same flag <code>make install</code> already requires repo-wide as a standing defense
@@ -220,9 +316,11 @@
     <ul>
       <li class="tag-ok">A participant needs only Git, Make, Docker Engine, and Docker Compose v2 — no Bun, Node, node_modules, Homebrew, or Xcode Command Line Tools.</li>
       <li class="tag-ok">SQLite progress moves from a host bind path to a named Docker volume, surviving container restarts the same way.</li>
-      <li class="tag-ok">GitHub Codespaces needs no change — Docker-in-Docker is already provisioned in <code>.devcontainer/devcontainer.json</code>.</li>
+      <li class="tag-ok">GitHub Codespaces needs no devcontainer change — Docker-in-Docker is already provisioned in <code>.devcontainer/devcontainer.json</code>.</li>
+      <li class="tag-warn">GitHub Codespaces DOES need onboarding-script changes (round 2 audit finding): <code>make local</code> now triggers a real <code>docker compose build</code> (full workspace install + Portal build inside the image) instead of a warm <code>vite</code> restart, which blew through <code>codespaces-start-local.sh</code>'s old 120s postStart deadline on a fresh Codespace. Fixed by having <code>codespaces-setup.sh</code> (postCreate) pre-build the image so the postStart build is normally a cache hit, plus raising the deadline to 240s as a margin.</li>
       <li class="tag-warn">The control-plane container holds a Docker socket mount — see §2.2. Accepted for this single-user, loopback-only tool; not a pattern to generalize to any multi-tenant surface.</li>
       <li class="tag-warn">The Docker path fixes the combined API+Portal port (default 5175, overridable via <code>LOCAL_API_PORT</code>) instead of the host path's automatic free-port selection — a `docker compose up` failure on a busy port is loud, not silently avoided.</li>
+      <li class="tag-warn">Docker Desktop (macOS/Windows) requires enabling host networking once (Settings → Resources → Network, Desktop &gt;=4.34) — see §2.2. <code>make local</code>/<code>make local-status</code> detect and fail loud on a healthy-but-unreachable container instead of reporting false success, but the manual setting itself cannot be automated from inside the container.</li>
       <li class="tag-bad">Known limitation, this PR: <code>PROBLEM=&lt;id&gt;</code> pre-start (supported on <code>make local-dev</code>) is not yet wired on the Docker path — every problem starts on demand from the Portal. Tracked as follow-up.</li>
       <li class="tag-bad">Known limitation, this PR: the experimental, opt-in TenkaCloud Simulator runtime (cloud/Composite problems, <code>TENKACLOUD_LOCAL_SIMULATOR=1</code>, off by default) stays on <code>make local-dev</code> only. Containerizing a second Docker-socket consumer inside an already-DooD container needs its own design pass, out of scope here.</li>
     </ul>
@@ -232,9 +330,11 @@
       <thead><tr><th>Alternative</th><th>Rejected because</th></tr></thead>
       <tbody>
         <tr><td>Host-side watcher process polls a file/queue the container writes desired container state to, avoiding the Docker socket mount entirely</td><td>Reintroduces exactly the "something must run continuously on the host" problem this ADR removes, while adding IPC latency and a new class of race condition (watcher crash, stale command file) — for a local, loopback-only, single-user tool the marginal safety of avoiding DooD does not clear that cost.</td></tr>
-        <tr><td><code>docker-socket-proxy</code> sidecar scoping the Engine API surface</td><td>See §2.2 — Compose's own operation set is already close to the full API; a proxy narrow enough to add real defense is narrow enough to break problem startup.</td></tr>
-        <tr><td>Bake the entire monorepo into the image at a fixed path (<code>/app</code>) and bind-mount only <code>problems/</code> there</td><td>This is what broke §2.3 in the first draft of this design (caught by adversarial review before merge) — the daemon-side path mismatch silently produces empty mounts for every problem with a relative bind.</td></tr>
+        <tr><td><code>docker-socket-proxy</code> sidecar scoping the Engine API surface</td><td>See §2.3 — Compose's own operation set is already close to the full API; a proxy narrow enough to add real defense is narrow enough to break problem startup.</td></tr>
+        <tr><td>Bake the entire monorepo into the image at a fixed path (<code>/app</code>) and bind-mount only <code>problems/</code> there</td><td>This is what broke §2.4 in the first draft of this design (caught by adversarial review before merge) — the daemon-side path mismatch silently produces empty mounts for every problem with a relative bind.</td></tr>
         <tr><td>Publish a pre-built, registry-hosted control-plane image instead of building from source on first <code>make local</code></td><td>No registry publishing pipeline exists yet for this repo, and every per-problem image already builds from source on first use — consistent with the existing model. Tracked as a possible follow-up once a release pipeline exists.</td></tr>
+        <tr><td>A shared user-defined bridge network with container-name DNS instead of host networking, for §2.2</td><td>Would require every one of the ~60 catalog problems' compose files to additionally join that network and would need dual addressing (container-DNS for internal orchestration, host-published-port for the browser) instead of one network-mode change on one service. Also does not fix the underlying issue: problems still publish to the HOST's <code>127.0.0.1</code> by design, which a bridge network does not reach either.</td></tr>
+        <tr><td><code>host.docker.internal</code> + <code>extra_hosts: host-gateway</code>, for §2.2 (tried first, shipped, then reverted after a second adversarial audit)</td><td>Works on Docker Desktop only. On native Linux Docker Engine — including this project's own GitHub Codespaces dev environment — a port published bound to <code>127.0.0.1</code> is unreachable from any other network namespace regardless of gateway routing, so the "fix" silently no-opped on exactly the platform this repo develops on. <code>network_mode: host</code> fixes the actual cause (separate network namespaces) instead of adding a route across them.</td></tr>
       </tbody>
     </table>
 
@@ -263,8 +363,13 @@
     <ul>
       <li>An actual <code>docker build</code> of <code>docker/local-control-plane/Dockerfile</code> and a full <code>docker compose up</code> against it (GitHub Actions runners have Docker Hub access; a CI-facing check exercises this even though this session could not).</li>
       <li>A live fresh-clone run on macOS, Linux, and WSL2 with no Bun/Node/<code>node_modules</code> present.</li>
-      <li>End-to-end play of a relative-bind-mount problem (e.g. <code>wp-exposed-backup</code>) through the Docker path specifically, confirming §2.3's fix in a real daemon, not just <code>docker compose config</code>'s static interpolation.</li>
-      <li>That <code>127.0.0.1:5175:5175</code> publish is genuinely loopback-only across Docker Desktop (Mac/Windows) and rootless Docker, not only Linux Docker Engine.</li>
+      <li><strong>Highest priority</strong>: starting one full problem (e.g. the pinned intro drill) through the Docker path end to end — readiness, challenge-surface load in a real browser, and a real <code>/verify</code> submission — confirming §2.2's <code>network_mode: host</code> fix actually lets the control-plane container reach a sibling container's <code>127.0.0.1</code>-published port on a real Docker daemon, not just that <code>docker compose config</code> resolves the expected YAML shape in a unit test. This gap was caught only on a <em>second</em> Fable adversarial-audit pass, after a first fix (<code>host.docker.internal</code> + <code>extra_hosts</code>) had already shipped and later turned out to be Docker-Desktop-only — a reminder that this item stays highest priority until it is exercised against a real daemon, on Linux Engine specifically, not just Docker Desktop.</li>
+      <li>End-to-end play of a relative-bind-mount problem (e.g. <code>wp-exposed-backup</code>) through the Docker path specifically, confirming §2.4's fix in a real daemon, not just <code>docker compose config</code>'s static interpolation.</li>
+      <li>That <code>network_mode: host</code> genuinely behaves as documented on Docker Desktop >=4.34 (macOS/Windows) as well as Linux Engine — this session can only confirm the compose file's shape, not runtime behavior on any platform.</li>
+      <li>That Docker Desktop's host-networking opt-in setting (Settings → Resources → Network, §2.2) is accurately described — this session's knowledge of Desktop's exact UI path and version floor is unverified against <code>docs.docker.com</code> (blocked by this session's network policy), and, more importantly, that <code>docker-launcher.sh</code>'s <code>host_reachable()</code> post-check actually fires and shows the right message on a real Desktop install with the setting off, rather than just passing its unit tests against a mocked reachability probe.</li>
+      <li>That the Codespaces postCreate image pre-build (round 2 fix for the build-time-vs-120s-deadline gap) actually keeps <code>codespaces-start-local.sh</code>'s postStart build a fast cache hit on a real fresh Codespace — this session confirmed the code paths and updated the deadline, but has no way to time an actual Codespaces container lifecycle.</li>
+      <li>A live GitHub Codespaces run confirming the request-derived <code>runtime-config.json</code> (§2.1) and the passed-through CORS env vars actually let the forwarded Portal reach the API with no manual step.</li>
+      <li>A live run with <code>LOCAL_API_PORT</code> overridden away from its default, confirming the CORS fix in <code>cors.ts</code>/<code>server.ts</code> (round 2 audit warning: the allowlist previously hardcoded port 5175, which would have silently rejected same-origin POSTs under a non-default port in container mode) actually passes end to end in a browser — unit-tested in this session (<code>local-play-server-cors.test.ts</code>), but not exercised against a real running container.</li>
     </ul>
 
     <h2>8. Related</h2>
