@@ -28,6 +28,48 @@ require_docker() {
     echo "  Start Docker Desktop (or the docker service), then retry." >&2
     exit 1
   fi
+  resolve_docker_socket
+}
+
+# [#2906 review] The control-plane container talks to the daemon over a bind-
+# mounted socket, so the path mounted must be the socket the ACTIVE context
+# actually uses — not a hardcoded /var/run/docker.sock. Docker's official
+# rootless setup puts it at $XDG_RUNTIME_DIR/docker.sock (e.g.
+# /run/user/1000/docker.sock); there, every check above still passes, because the
+# CLI follows the context, but the container would receive a path that does not
+# exist and could not start a single problem container. The container side always
+# sees /var/run/docker.sock, so only the host side of the mount varies.
+#
+# A non-Unix endpoint (tcp://, ssh://) cannot work here at all: there is no
+# socket to mount, and the daemon would also resolve this repo's bind-mount paths
+# against a different machine's filesystem (the same daemon-side path problem
+# TENKACLOUD_PROBLEMS_HOST_PATH exists for). That is rejected with an actionable
+# message rather than accepted and failed later.
+resolve_docker_socket() {
+  endpoint=$(docker context inspect -f '{{.Endpoints.docker.Host}}' 2>/dev/null || true)
+  [ -n "$endpoint" ] || endpoint="${DOCKER_HOST:-unix:///var/run/docker.sock}"
+  case "$endpoint" in
+    unix://*)
+      TENKACLOUD_DOCKER_SOCKET="${endpoint#unix://}"
+      ;;
+    *)
+      echo "'make local' needs a local Docker daemon reachable over a Unix socket," >&2
+      echo "  but the active Docker context uses: $endpoint" >&2
+      echo "  The control plane bind-mounts the daemon socket to start problem" >&2
+      echo "  containers, and a remote daemon would also resolve this repository's" >&2
+      echo "  paths on the wrong machine." >&2
+      echo "  Switch to a local context (e.g. docker context use default), or use" >&2
+      echo "  the host developer path instead: make local-onboard && make local-dev" >&2
+      exit 1
+      ;;
+  esac
+  if [ ! -S "$TENKACLOUD_DOCKER_SOCKET" ]; then
+    echo "The active Docker context points at $TENKACLOUD_DOCKER_SOCKET," >&2
+    echo "  but no socket exists there. Start the daemon for this context, or" >&2
+    echo "  switch contexts (docker context ls) and retry." >&2
+    exit 1
+  fi
+  export TENKACLOUD_DOCKER_SOCKET
 }
 
 # [Finding 2, #2906 audit] `problems/` self-heal must run HOST-side: the
@@ -261,13 +303,11 @@ cmd_down() {
   # this platform starts is actually named with this prefix
   # (scripts/local-play/manifest.ts's composeProjectName); nothing else may be.
   #
-  # [#2906 review] Plain `for` loops, NOT `xargs -r`: `-r`/`--no-run-if-empty` is
-  # a GNU extension that macOS's BSD xargs rejects outright ("illegal option --
-  # r"). With the `|| true` that keeps this best-effort, that rejection would be
-  # swallowed and every orphan would survive while the command still printed
-  # "progress cleared" — a dishonest success, on macOS, in the crash-recovery
-  # path, for a change whose whole origin was a macOS participant. The `-n`
-  # guards above already handle the empty case, which is all `-r` bought here.
+  # [#2906 review] Plain `for` loops rather than `xargs`: each id is removed with
+  # its own invocation, so one failure cannot abort the rest, and an empty list is
+  # a no-op without depending on `xargs -r` (which is not in POSIX, so its
+  # availability varies by implementation and version). The `-n` guards already
+  # cover the empty case.
   orphans=$(docker ps -aq --filter "name=^tc-local-" 2>/dev/null || true)
   if [ -n "$orphans" ]; then
     echo "Reclaiming per-problem containers the control plane could not stop itself..."
@@ -275,6 +315,25 @@ cmd_down() {
       docker rm -f "$orphan" >/dev/null 2>&1 || true
     done
   fi
+  # [#2906 review] Volumes too, and they are the reason this whole branch exists.
+  # A problem's own named volumes (e.g. wp-exposed-backup's db_data/wp_data) are
+  # created under its `tc-local-<problemId>` compose project, so neither the
+  # container sweep above nor the `$COMPOSE down -v` below — which only knows the
+  # control-plane project in compose.local.yaml — reclaims them. Left behind, they
+  # are silently reused by the next run, so a participant resumes a mutated
+  # challenge while this command claims progress was cleared: a stale WordPress
+  # database is exactly the state wp-exposed-backup's answer depends on.
+  # Selected by the `com.docker.compose.project` label rather than by volume name,
+  # so this does not depend on Compose's `<project>_<volume>` name mangling.
+  # Must run AFTER the container sweep: a volume still in use cannot be removed.
+  orphan_volumes=$(docker volume ls -q --filter "label=com.docker.compose.project" 2>/dev/null || true)
+  for orphan_volume in $orphan_volumes; do
+    volume_project=$(docker volume inspect \
+      -f '{{index .Labels "com.docker.compose.project"}}' "$orphan_volume" 2>/dev/null || true)
+    case "$volume_project" in
+      tc-local-*) docker volume rm -f "$orphan_volume" >/dev/null 2>&1 || true ;;
+    esac
+  done
   orphan_networks=$(docker network ls --filter "name=^tc-local-" -q 2>/dev/null || true)
   if [ -n "$orphan_networks" ]; then
     for orphan_network in $orphan_networks; do

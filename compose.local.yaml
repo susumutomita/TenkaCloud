@@ -41,8 +41,13 @@ services:
     # this socket into the portal's own responses or into any per-problem
     # container. See ADR-055 for the full trust-boundary writeup, including
     # why a docker-socket-proxy sidecar was considered and rejected here.
+    # The HOST side is whichever socket the active Docker context uses, resolved
+    # by docker-launcher.sh — rootless Docker puts it under $XDG_RUNTIME_DIR, not
+    # /var/run, and hardcoding the rootful path there produced a container that
+    # passed every preflight check and then could not start a single problem.
+    # The CONTAINER side stays fixed, so nothing inside the image varies.
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      - ${TENKACLOUD_DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
       - tenkacloud-local-data:/data
       # Read-only, and at the SAME absolute path on both sides — see the
       # Dockerfile/catalog-loader.ts comments this mirrors.

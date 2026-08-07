@@ -1,4 +1,6 @@
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -105,35 +107,97 @@ describe("docker-launcher host reachability probe (Issue #2906)", () => {
 });
 
 /**
- * [#2906 review] The crash-recovery teardown had two ways to quietly stop working,
- * both of which end in `make local-down` printing "progress cleared" over surviving
- * containers — the dishonest-success shape this change exists to remove:
- *   - `xargs -r` is a GNU extension. macOS's BSD xargs exits with "illegal option --
- *     r", the `|| true` swallows it, and every orphan survives. macOS is the platform
- *     this whole change came from, so this is pinned rather than trusted to review.
- *   - Treating a leftover `state.json` as a live `make local-dev` session disables the
- *     host-side sweep permanently after any past dev-session crash. Liveness must be
- *     established from the recorded PID and process identity (the same
- *     sha256("<pid>:<ps lstart>") the Bun side records, so PID reuse is rejected).
+ * [#2906 review] The crash-recovery teardown — the branch that runs precisely when the
+ * control plane died and its graceful in-container `down` could not — has several ways
+ * to quietly stop reclaiming things while `make local-down` still prints "progress
+ * cleared". That dishonest success is the shape this whole change exists to remove, and
+ * none of it is visible in normal operation, so the behaviour is exercised rather than
+ * eyeballed: the sweep is run against a stub `docker` and the calls it makes are
+ * asserted, for both an empty and a populated orphan list.
  */
 describe("docker-launcher crash-recovery teardown (Issue #2906)", () => {
   const launcher = readFileSync(join(REPO_ROOT, "scripts", "local", "docker-launcher.sh"), "utf8");
-  /** Comment lines explain what this file must NOT do, so match code only. */
-  const code = launcher
-    .split("\n")
-    .filter((line) => !line.trim().startsWith("#"))
-    .join("\n");
 
-  it("should not use GNU-only xargs flags that BSD/macOS xargs rejects", () => {
-    expect(code).not.toMatch(/xargs\s+-r\b/);
-    expect(code).not.toContain("--no-run-if-empty");
+  /**
+   * Run cmd_down's host-side sweep with `docker` replaced by a recorder. Returns the
+   * argv of every docker call the sweep made, so both "removed what it should" and
+   * "made no call at all when there was nothing to remove" are observable.
+   */
+  function runSweep(orphans: {
+    containers: string[];
+    volumes: { name: string; project: string }[];
+    networks: string[];
+  }): string[] {
+    const dir = mkdtempSync(join(tmpdir(), "tc-sweep-"));
+    try {
+      const log = join(dir, "calls.log");
+      const projects = join(dir, "projects");
+      writeFileSync(
+        projects,
+        `${orphans.volumes.map((v) => `${v.name} ${v.project}`).join("\n")}\n`,
+      );
+      writeFileSync(
+        join(dir, "docker"),
+        [
+          "#!/bin/sh",
+          `echo "$@" >> "${log}"`,
+          'case "$1 $2" in',
+          `  "ps -aq") printf '%s\\n' ${orphans.containers.map((c) => `'${c}'`).join(" ")} ;;`,
+          `  "volume ls") printf '%s\\n' ${orphans.volumes.map((v) => `'${v.name}'`).join(" ") || "''"} ;;`,
+          `  "network ls") printf '%s\\n' ${orphans.networks.map((n) => `'${n}'`).join(" ") || "''"} ;;`,
+          '  "volume inspect") ;;', // handled below by arg position
+          "esac",
+          // `docker volume inspect -f <fmt> <name>` → print that volume's project label
+          'if [ "$1 $2" = "volume inspect" ]; then',
+          '  for a in "$@"; do last="$a"; done',
+          `  awk -v n="$last" '$1==n {print $2}' "${projects}"`,
+          "fi",
+          "exit 0",
+        ].join("\n"),
+        { mode: 0o755 },
+      );
+      // Only the sweep body: everything before it needs a real daemon. The end
+      // marker also appears in the live-dev-session branch above, so search for it
+      // from the sweep's own start rather than from the top of the file.
+      const sweepStart = launcher.indexOf('orphans=$(docker ps -aq --filter "name=^tc-local-"');
+      expect(sweepStart, "sweep start marker not found in launcher").toBeGreaterThan(-1);
+      const sweepEnd = launcher.indexOf("$COMPOSE down --remove-orphans -v", sweepStart);
+      expect(sweepEnd, "sweep end marker not found after start").toBeGreaterThan(sweepStart);
+      const sweep = launcher.slice(sweepStart, sweepEnd);
+      execFileSync("sh", ["-eu", "-c", sweep], {
+        env: { ...process.env, PATH: `${dir}:${process.env.PATH}` },
+        stdio: "ignore",
+      });
+      return existsSync(log) ? readFileSync(log, "utf8").split("\n").filter(Boolean) : [];
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  it("should remove every orphan container, volume, and network it finds", () => {
+    const calls = runSweep({
+      containers: ["c1", "c2"],
+      volumes: [{ name: "tc-local-wp_db_data", project: "tc-local-wp" }],
+      networks: ["n1"],
+    });
+    expect(calls).toContain("rm -f c1");
+    expect(calls).toContain("rm -f c2");
+    expect(calls).toContain("volume rm -f tc-local-wp_db_data");
+    expect(calls).toContain("network rm n1");
   });
 
-  it("should remove each orphan container and network with a POSIX loop", () => {
-    expect(launcher).toMatch(/for orphan in \$orphans; do\s+docker rm -f "\$orphan"/);
-    expect(launcher).toMatch(
-      /for orphan_network in \$orphan_networks; do\s+docker network rm "\$orphan_network"/,
-    );
+  it("should leave volumes belonging to another compose project alone", () => {
+    const calls = runSweep({
+      containers: [],
+      volumes: [{ name: "someone-elses_data", project: "someone-elses-app" }],
+      networks: [],
+    });
+    expect(calls.some((c) => c.startsWith("volume rm"))).toBe(false);
+  });
+
+  it("should make no removal call when there is nothing to reclaim", () => {
+    const calls = runSweep({ containers: [], volumes: [], networks: [] });
+    expect(calls.some((c) => c.includes("rm"))).toBe(false);
   });
 
   it("should decide a dev session is live from PID liveness, not file existence", () => {
@@ -144,6 +208,17 @@ describe("docker-launcher crash-recovery teardown (Issue #2906)", () => {
     expect(liveness).toContain("ps -p");
     expect(liveness).toMatch(/Z\*\)/); // a zombie is not a live session
     expect(liveness).toContain("processIdentity"); // reject PID reuse like the Bun side
+  });
+
+  it("should mount the active context's socket, not a hardcoded rootful path", () => {
+    // Rootless Docker's socket lives under $XDG_RUNTIME_DIR; a hardcoded
+    // /var/run/docker.sock passes every preflight and then cannot start a problem.
+    const compose = readFileSync(join(REPO_ROOT, "compose.local.yaml"), "utf8");
+    // Built by concatenation so this file contains no literal shell placeholder.
+    const socketMount = ["$", "{TENKACLOUD_DOCKER_SOCKET:-/var/run/docker.sock}"].join("");
+    expect(compose).toContain(`${socketMount}:/var/run/docker.sock`);
+    expect(launcher).toContain("docker context inspect");
+    expect(launcher).toContain("TENKACLOUD_DOCKER_SOCKET");
   });
 
   it("should gate the sweep on that liveness check rather than on the state file", () => {
