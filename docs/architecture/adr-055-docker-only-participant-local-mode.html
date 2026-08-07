@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ADR-055 — Docker-only participant local mode</title>
+    <style>
+      :root {
+        --ink: #1b2733;
+        --muted: #5b6b7b;
+        --line: #d7dee6;
+        --bg: #ffffff;
+        --soft: #f4f7fa;
+        --ok: #1a7f43;
+        --warn: #b35a00;
+        --bad: #c0392b;
+        --code: #0b3d62;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0 auto;
+        max-width: 1040px;
+        padding: 2.2rem 1.4rem 5rem;
+        font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        color: var(--ink);
+        background: var(--bg);
+      }
+      h1 { font-size: 1.8rem; line-height: 1.25; margin: 0 0 0.4rem; }
+      h2 { font-size: 1.3rem; margin: 2.4rem 0 0.6rem; border-bottom: 2px solid var(--line); padding-bottom: 0.3rem; }
+      h3 { font-size: 1.06rem; margin: 1.5rem 0 0.4rem; color: var(--code); }
+      p, li { color: var(--ink); }
+      code { font-family: "SF Mono", "JetBrains Mono", "Fira Code", ui-monospace, Menlo, Consolas, monospace; font-size: 0.88em; background: var(--soft); padding: 0.08em 0.36em; border-radius: 4px; color: var(--code); }
+      pre { background: #0e1c2b; color: #e7eef6; padding: 1rem 1.1rem; border-radius: 8px; overflow-x: auto; font-size: 0.84rem; line-height: 1.55; }
+      pre code { background: none; color: inherit; padding: 0; }
+      table { border-collapse: collapse; width: 100%; margin: 0.8rem 0 1rem; font-size: 0.92rem; }
+      th, td { border: 1px solid var(--line); padding: 0.5rem 0.65rem; text-align: left; vertical-align: top; }
+      th { background: var(--soft); font-weight: 600; }
+      caption { caption-side: bottom; color: var(--muted); font-size: 0.82rem; padding-top: 0.4rem; text-align: left; }
+      .meta { display: flex; flex-wrap: wrap; gap: 0.5rem 1.4rem; margin: 0.6rem 0 1.4rem; color: var(--muted); font-size: 0.9rem; }
+      .badge { display: inline-block; padding: 0.12em 0.6em; border-radius: 999px; font-size: 0.78rem; font-weight: 600; }
+      .b-accepted { background: #e2f4e8; color: var(--ok); }
+      .tag-ok { color: var(--ok); font-weight: 600; }
+      .tag-warn { color: var(--warn); font-weight: 600; }
+      .tag-bad { color: var(--bad); font-weight: 600; }
+      .lede { background: var(--soft); border-left: 4px solid var(--code); padding: 0.9rem 1.1rem; border-radius: 0 8px 8px 0; }
+      details { border: 1px solid var(--line); border-radius: 8px; padding: 0.5rem 0.9rem; margin: 0.7rem 0; background: var(--soft); }
+      summary { cursor: pointer; font-weight: 600; }
+      footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.84rem; }
+    </style>
+  </head>
+  <body>
+    <h1>ADR-055 — Docker-only participant local mode</h1>
+    <div class="meta">
+      <span><strong>Status:</strong> <span class="badge b-accepted">Accepted</span></span>
+      <span><strong>Date:</strong> 2026-08-07</span>
+      <span><strong>Issue:</strong> #2906</span>
+      <span><strong>Supersedes:</strong> none</span>
+    </div>
+
+    <p class="lede">
+      Participant local play (<code>make local</code>) ran the scoring API and the Participant
+      Portal as host Bun/Vite processes, with only the per-problem challenge containers on
+      Docker. A non-engineer field tester on macOS needed five recovery steps — a missing Bun,
+      a Homebrew/Xcode install failure, a second manual <code>make install</code> — to reach a
+      product whose problems already run entirely in Docker. This ADR moves the control plane
+      (API + Portal) into a container too, so the participant path needs only Docker Engine and
+      Docker Compose v2 on the host.
+    </p>
+
+    <h2>1. Context</h2>
+    <p>
+      <code>scripts/tenkacloud-local.ts</code> already delegates each problem's challenge
+      surface to Docker Compose (<code>scripts/local-play/docker-adapter.ts</code>). The
+      control plane around it — the scoring API (<code>scripts/local-play/server.ts</code>) and
+      the Participant Portal (<code>vite dev</code>) — ran directly on the host, so a Docker
+      product still required Bun, Node, and a full workspace <code>node_modules</code> install
+      before a participant reached anything. Issue #2907 and PR #2912/#2913 fixed the immediate
+      onboarding-instruction drift (self-healing <code>make local</code>, an official Bun
+      installer instead of Homebrew) but left the underlying dependency in place, as
+      <code>apps/participant-portal/src/auth/local-onboarding-contract.ts</code> already noted:
+      <em>"Participant-facing fresh-clone contract while local play still needs Bun ...
+      Issue #2906 can replace this one value with the Docker-only sequence."</em>
+    </p>
+
+    <h2>2. Decision</h2>
+    <p>
+      Containerize the control plane into one image
+      (<code>docker/local-control-plane/Dockerfile</code>) that serves the API and the prebuilt
+      Portal static build from the same Bun HTTP server on one port, orchestrated by
+      <code>compose.local.yaml</code> and a POSIX launcher
+      (<code>scripts/local/docker-launcher.sh</code>) that <code>make local</code> calls. The
+      developer hot-reload path survives unchanged as <code>make local-dev</code>
+      (<code>make local-onboard</code> → Bun/Vite on the host).
+    </p>
+    <table>
+      <thead><tr><th>Path</th><th>Entry point</th><th>Host prerequisites</th></tr></thead>
+      <tbody>
+        <tr><td>Participant (default)</td><td><code>make local</code></td><td>Git, Make, Docker Engine, Docker Compose v2</td></tr>
+        <tr><td>Developer (hot reload)</td><td><code>make local-onboard &amp;&amp; make local-dev</code></td><td>+ Bun, Node, <code>node_modules</code></td></tr>
+      </tbody>
+    </table>
+
+    <h3>2.1 Same-origin API + Portal</h3>
+    <p>
+      The Portal's prebuilt <code>dist/</code> is served as static files from the same server
+      and port as the API (a new <code>portalDistDir</code> option on
+      <code>startLocalPlayServer</code>, active only in the container — the host/dev path is
+      untouched). <code>/runtime-config.json</code> is now a dynamic route built in-process from
+      the bound port instead of a file the CLI writes and the dev server serves statically —
+      the container has no Vite dev server to serve it. This also collapses the cross-port CORS
+      setup the two-process host model needed into same-origin, with one caveat: the
+      <code>/local/operator/</code> Origin-header check that a cross-port setup made airtight
+      for every method now relies on the Bearer-token check alone for a same-origin request with
+      no Origin header (a plain top-level GET can omit it). No operator route accepts GET today
+      — pinned by a regression test — and the token check is unconditional regardless, but a
+      future operator GET route must carry the same check explicitly; it can no longer lean on
+      Origin rejection alone.
+    </p>
+
+    <h3>2.2 Docker-outside-of-Docker for sibling problem containers</h3>
+    <p>
+      The control-plane container still needs to start/stop per-problem containers — the exact
+      same <code>docker compose</code> shell-out
+      (<code>scripts/local-play/docker-adapter.ts</code>) the host process already performs
+      today, now issued from inside a container against the host's Docker socket
+      (<code>/var/run/docker.sock</code> bind-mounted in, the standard sibling-container
+      pattern — Portainer, Testcontainers, GitLab's Docker executor use the same approach). The
+      socket is mounted only into the control-plane container, never into the Portal's
+      responses or any per-problem container.
+    </p>
+    <p>
+      This is <strong>not a newly granted privilege</strong> — a local participant account able
+      to run <code>make local</code> already has host Docker access, and the host Bun process
+      already reaches that same socket via the same shell-out today. It <strong>is a more
+      homogeneous, more automatable path</strong> to that same privilege: today's equivalent
+      capability requires an attacker to locate the Docker socket in whatever shape the host
+      happens to expose it; after this change it is always the same fixed mount, reachable by
+      any code execution inside the control-plane container. For a single-user, non-multi-tenant
+      local tool this is judged an acceptable trade against the alternative (below), but it is
+      the honest framing, not "no new risk."
+    </p>
+    <p>A scoped <code>docker-socket-proxy</code> sidecar was considered and rejected: Compose
+      <code>up</code>/<code>down</code> needs container create/start/stop/remove, network, and
+      volume operations — close to the full Engine API surface — so a proxy narrow enough to
+      matter would also be narrow enough to break problem startup.</p>
+
+    <h3>2.3 Every relative bind mount in a problem's compose file must resolve on the HOST</h3>
+    <p>
+      This is the sharp edge of docker-outside-of-docker: <code>docker compose</code> running
+      inside the control-plane container resolves a problem's relative volume binds (13 catalog
+      problems have one, including <code>wp-exposed-backup</code>'s <code>wpinit</code> init
+      script) to an absolute path from <em>its own</em> filesystem view, then sends that path
+      string to the Engine API — but the daemon on the other end of the socket is a HOST
+      process, and resolves that same string against the <em>host's</em> filesystem. If those
+      two views disagree, Compose does not error; it silently creates an empty directory at the
+      unresolved host path and mounts that instead, so the problem container starts
+      successfully with none of its intended content — a silent failure mode, not a loud one.
+    </p>
+    <p>
+      The fix: <code>problems/</code> is bind-mounted into the control-plane container at the
+      identical absolute path it has on the host (<code>docker-launcher.sh</code> passes its own
+      <code>$(pwd)/problems</code> as <code>TENKACLOUD_REPO_ROOT</code>/
+      <code>TENKACLOUD_PROBLEMS_HOST_PATH</code>), and
+      <code>scripts/local-play/catalog-loader.ts</code>'s <code>problemSearchRoots</code>
+      resolves the problems directory from that host-real path instead of the container's own
+      <code>/app</code> when the env var is set. Every path Compose hands the daemon for a
+      per-problem project is therefore already correct on both sides, without touching
+      <code>docker-adapter.ts</code>/<code>container-runner.ts</code> at all.
+    </p>
+
+    <h3>2.4 <code>problems/</code> submodule fetch stays host-side</h3>
+    <p>
+      <code>autoInitProblemsSubmodule()</code> shells out to <code>git submodule update --init
+      problems</code> — meaningless inside a container that has no <code>.git</code> history for
+      it. <code>docker-launcher.sh</code> checks and fetches the submodule on the host, with the
+      same consent-before-install UX as <code>make local-onboard</code>, before ever starting
+      the container. <code>.gitmodules</code> is excluded from the image build context
+      (<code>.dockerignore</code>) so the container-side self-heal path — unreachable in
+      practice — fails its own existence check immediately rather than shelling out to a
+      <code>git</code> that would not work anyway.
+    </p>
+
+    <h3>2.5 Teardown does not depend on the control plane being alive</h3>
+    <p>
+      <code>make local-down</code> must reclaim every TenkaCloud-owned resource even when the
+      control-plane container already crashed. <code>docker-launcher.sh down</code> therefore
+      runs two independent reclaim paths: a best-effort in-container
+      <code>tenkacloud-local.ts down</code> (the exact existing host teardown logic, unchanged —
+      stops every problem container it has a record of and clears persisted progress) when the
+      control plane can still answer, <strong>and unconditionally</strong> a host-side sweep by
+      container name (every per-problem container/network is named with the
+      <code>tc-local-</code> compose-project prefix) that reclaims orphans the first path could
+      not reach. <code>compose down -v</code> removes the control plane's own named data volume
+      last, so "clear all progress" holds either way.
+    </p>
+
+    <h3>2.6 Pinned, auditable Docker Compose version</h3>
+    <p>
+      The control-plane image fetches a specific Docker Compose release binary
+      (<code>v2.40.2</code> at minimum) rather than whatever version <code>apk add
+      docker-cli-compose</code> happens to resolve from the base image's package index.
+      CVE-2025-62725 (fixed in 2.40.2, CVSS 8.9) is a path-traversal-to-host-write bug in an
+      OCI-artifact compose feature — and this container's whole job is processing compose files
+      from <code>problems/</code>, a catalog that accepts outside contributions. An unpinned,
+      possibly-vulnerable Compose binary sitting exactly where untrusted compose files get
+      processed is not an acceptable floor.
+    </p>
+
+    <h3>2.7 Build-time supply-chain hygiene carries over unchanged</h3>
+    <p>
+      The image build runs <code>bun install --frozen-lockfile --ignore-scripts</code> — the
+      same flag <code>make install</code> already requires repo-wide as a standing defense
+      against the mini-shai-hulud-class attack (Flatt Security, 2026-05-12; Bun does not honor
+      <code>npm_config_ignore_scripts</code> or <code>.npmrc</code>'s <code>ignore-scripts</code>,
+      so every invocation must set it explicitly). A build step that forgets this flag would
+      quietly reopen a risk this repository already closed.
+    </p>
+
+    <h2>3. Consequences</h2>
+    <ul>
+      <li class="tag-ok">A participant needs only Git, Make, Docker Engine, and Docker Compose v2 — no Bun, Node, node_modules, Homebrew, or Xcode Command Line Tools.</li>
+      <li class="tag-ok">SQLite progress moves from a host bind path to a named Docker volume, surviving container restarts the same way.</li>
+      <li class="tag-ok">GitHub Codespaces needs no change — Docker-in-Docker is already provisioned in <code>.devcontainer/devcontainer.json</code>.</li>
+      <li class="tag-warn">The control-plane container holds a Docker socket mount — see §2.2. Accepted for this single-user, loopback-only tool; not a pattern to generalize to any multi-tenant surface.</li>
+      <li class="tag-warn">The Docker path fixes the combined API+Portal port (default 5175, overridable via <code>LOCAL_API_PORT</code>) instead of the host path's automatic free-port selection — a `docker compose up` failure on a busy port is loud, not silently avoided.</li>
+      <li class="tag-bad">Known limitation, this PR: <code>PROBLEM=&lt;id&gt;</code> pre-start (supported on <code>make local-dev</code>) is not yet wired on the Docker path — every problem starts on demand from the Portal. Tracked as follow-up.</li>
+      <li class="tag-bad">Known limitation, this PR: the experimental, opt-in TenkaCloud Simulator runtime (cloud/Composite problems, <code>TENKACLOUD_LOCAL_SIMULATOR=1</code>, off by default) stays on <code>make local-dev</code> only. Containerizing a second Docker-socket consumer inside an already-DooD container needs its own design pass, out of scope here.</li>
+    </ul>
+
+    <h2>4. Alternatives considered</h2>
+    <table>
+      <thead><tr><th>Alternative</th><th>Rejected because</th></tr></thead>
+      <tbody>
+        <tr><td>Host-side watcher process polls a file/queue the container writes desired container state to, avoiding the Docker socket mount entirely</td><td>Reintroduces exactly the "something must run continuously on the host" problem this ADR removes, while adding IPC latency and a new class of race condition (watcher crash, stale command file) — for a local, loopback-only, single-user tool the marginal safety of avoiding DooD does not clear that cost.</td></tr>
+        <tr><td><code>docker-socket-proxy</code> sidecar scoping the Engine API surface</td><td>See §2.2 — Compose's own operation set is already close to the full API; a proxy narrow enough to add real defense is narrow enough to break problem startup.</td></tr>
+        <tr><td>Bake the entire monorepo into the image at a fixed path (<code>/app</code>) and bind-mount only <code>problems/</code> there</td><td>This is what broke §2.3 in the first draft of this design (caught by adversarial review before merge) — the daemon-side path mismatch silently produces empty mounts for every problem with a relative bind.</td></tr>
+        <tr><td>Publish a pre-built, registry-hosted control-plane image instead of building from source on first <code>make local</code></td><td>No registry publishing pipeline exists yet for this repo, and every per-problem image already builds from source on first use — consistent with the existing model. Tracked as a possible follow-up once a release pipeline exists.</td></tr>
+      </tbody>
+    </table>
+
+    <h2>5. Migration</h2>
+    <ul>
+      <li><code>LOCAL_ONBOARDING_COMMANDS</code> (<code>apps/participant-portal/src/auth/local-onboarding-contract.ts</code>) is the single source of truth for the fresh-clone sequence; README.md, README.ja.md, <code>docs/local-play.md</code>, and the onboarding drill fixture are pinned to it by tests.</li>
+      <li>No data migration: local-play state is ephemeral participant progress with no server-side record, so a fresh named volume on first <code>make local</code> is equivalent to any other local-play reset.</li>
+      <li>Rollback is a plain revert — zero CloudFormation diff, zero AWS resources, no shared/production system touched.</li>
+    </ul>
+
+    <h2>6. Non-goals</h2>
+    <ul>
+      <li>Removing the developer Bun/Vite path — <code>make local-dev</code> stays.</li>
+      <li>Converting CI or the build system to Docker-only.</li>
+      <li>Changing AWS Lite/SaaS execution.</li>
+      <li>Auto-installing Docker itself.</li>
+      <li>Native Windows support (WSL2 + Docker Desktop only, matching the platform's existing WSL2-only Windows story).</li>
+    </ul>
+
+    <h2>7. Unverified in the authoring environment</h2>
+    <p>
+      This ADR's design was authored and unit-tested in a sandboxed session with no Docker Hub
+      registry access (an intentional network policy, not a defect), so the following are
+      one-time verifications pending, not claims of having been exercised:
+    </p>
+    <ul>
+      <li>An actual <code>docker build</code> of <code>docker/local-control-plane/Dockerfile</code> and a full <code>docker compose up</code> against it (GitHub Actions runners have Docker Hub access; a CI-facing check exercises this even though this session could not).</li>
+      <li>A live fresh-clone run on macOS, Linux, and WSL2 with no Bun/Node/<code>node_modules</code> present.</li>
+      <li>End-to-end play of a relative-bind-mount problem (e.g. <code>wp-exposed-backup</code>) through the Docker path specifically, confirming §2.3's fix in a real daemon, not just <code>docker compose config</code>'s static interpolation.</li>
+      <li>That <code>127.0.0.1:5175:5175</code> publish is genuinely loopback-only across Docker Desktop (Mac/Windows) and rootless Docker, not only Linux Docker Engine.</li>
+    </ul>
+
+    <h2>8. Related</h2>
+    <ul>
+      <li>#2906 — this ADR's tracking issue.</li>
+      <li>#2907 / PR #2912 / PR #2913 — the immediately preceding onboarding-instruction fixes this ADR builds on.</li>
+      <li>#2696 — unify the first-time local→Lite mode path.</li>
+      <li>ADR-051 — provider-neutral local cloud simulation (the Simulator runtime this ADR leaves on the developer path).</li>
+    </ul>
+
+    <footer>
+      ADR-055 · TenkaCloud architecture decision record · Status: Accepted · 2026-08-07
+    </footer>
+  </body>
+</html>
