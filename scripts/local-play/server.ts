@@ -1,4 +1,6 @@
+import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { extname, join, normalize, sep } from "node:path";
 import type { Duplex } from "node:stream";
 import { getReasonPhrase, StatusCodes } from "http-status-codes";
 import { type RawData, type WebSocket, WebSocketServer } from "ws";
@@ -9,6 +11,7 @@ import {
   type LocalPlayDeployment,
   type LocalPlayState,
 } from "./api-state";
+import { buildLocalRuntimeConfig } from "./codespaces-links";
 import { corsHeaders, isAllowedCorsOrigin } from "./cors";
 import { proxySimulatorNativeRequest } from "./simulator-native-proxy";
 import {
@@ -45,6 +48,15 @@ export interface LocalPlayServer {
 
 export interface StartLocalPlayServerOptions extends CreateStateOptions {
   readonly stateStore?: LocalPlayStateStore;
+  /**
+   * [#2906] Directory holding the prebuilt Participant Portal (`apps/participant-portal/dist`)
+   * to serve alongside the API on this same port. Unset on the host/dev path — Vite serves
+   * the portal itself there, and `serve()` writes `runtime-config.json` as a file instead
+   * (see `tenkacloud-local.ts`). Set only by the containerized entrypoint.
+   */
+  readonly portalDistDir?: string;
+  /** Listener bind address. Defaults to loopback-only, matching every path before this. */
+  readonly bindHost?: string;
 }
 
 async function readJsonBody(request: IncomingMessage): Promise<unknown> {
@@ -81,15 +93,86 @@ function writeJson(
   response.end(body === undefined ? undefined : JSON.stringify(body));
 }
 
+/**
+ * [#2906] Container-only static asset serving for the prebuilt Participant Portal.
+ * Unset `portalDistDir` (the host/dev path, where Vite serves the portal itself)
+ * skips every branch below at the single call site in `route()`.
+ */
+const STATIC_MIME_TYPES: Readonly<Record<string, string>> = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".ico": "image/x-icon",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+  ".webmanifest": "application/manifest+json",
+  ".txt": "text/plain; charset=utf-8",
+  ".map": "application/json; charset=utf-8",
+};
+
+/**
+ * Resolve `pathname` against `distDir`, refusing anything that would escape it
+ * (an encoded `..` segment) and falling back to `index.html` for a request with
+ * no on-disk match — the usual SPA deep-link contract, and how a request for `/`
+ * itself is served.
+ */
+function resolveStaticFilePath(distDir: string, pathname: string): string | undefined {
+  const decoded = decodeURIComponent(pathname);
+  const candidate = normalize(join(distDir, decoded));
+  if (candidate !== distDir && !candidate.startsWith(distDir + sep)) return undefined;
+  if (existsSync(candidate) && statSync(candidate).isFile()) return candidate;
+  const indexPath = join(distDir, "index.html");
+  return existsSync(indexPath) ? indexPath : undefined;
+}
+
+function serveStaticAsset(response: ServerResponse, distDir: string, pathname: string): boolean {
+  const filePath = resolveStaticFilePath(distDir, pathname);
+  if (!filePath) return false;
+  const contentType = STATIC_MIME_TYPES[extname(filePath)] ?? "application/octet-stream";
+  response.writeHead(StatusCodes.OK, { "content-type": contentType });
+  createReadStream(filePath).pipe(response);
+  return true;
+}
+
+/** Requests the containerized portal build must never fall through to static-file serving for. */
+function isReservedApiPath(pathname: string): boolean {
+  return (
+    pathname === "/healthz" ||
+    pathname.startsWith("/portal/") ||
+    pathname.startsWith("/local/") ||
+    pathname === "/runtime-config.json"
+  );
+}
+
+interface PortalStaticOptions {
+  readonly distDir: string;
+  readonly runtimeConfigJson: string;
+}
+
 async function route(
   request: IncomingMessage,
   response: ServerResponse,
   state: LocalPlayState,
   persist: () => Promise<void>,
+  portalStatic?: PortalStaticOptions,
 ): Promise<void> {
   const origin = request.headers.origin;
   const cors = corsHeaders(origin);
   const url = new URL(request.url ?? "/", "http://127.0.0.1");
+  if (portalStatic && request.method === "GET" && !isReservedApiPath(url.pathname)) {
+    if (serveStaticAsset(response, portalStatic.distDir, url.pathname)) return;
+  }
+  if (portalStatic && request.method === "GET" && url.pathname === "/runtime-config.json") {
+    response.writeHead(StatusCodes.OK, { "content-type": "application/json; charset=utf-8" });
+    response.end(portalStatic.runtimeConfigJson);
+    return;
+  }
   if (rejectForbiddenRequest(request, response, state, url, origin)) return;
   if (await proxySimulatorNativeRequest(request, response, state)) return;
   if (request.method === "OPTIONS") {
@@ -311,8 +394,11 @@ export async function startLocalPlayServer(
     await stateStore?.close();
     throw error;
   }
+  // [#2906] Built once the bound port is known (below) so `route()` can serve every
+  // request's runtime-config.json from memory instead of touching disk per request.
+  let portalStatic: PortalStaticOptions | undefined;
   const server: Server = createServer((request, response) => {
-    void route(request, response, state, persist).catch((error) => {
+    void route(request, response, state, persist, portalStatic).catch((error) => {
       handleRouteError(error, request, response);
     });
   });
@@ -328,10 +414,23 @@ export async function startLocalPlayServer(
       void closeStateStore().finally(() => reject(error));
     };
     server.once("error", rejectStartup);
-    server.listen(port, "127.0.0.1", () => {
+    server.listen(port, options.bindHost ?? "127.0.0.1", () => {
       server.off("error", rejectStartup);
       const address = server.address();
       const boundPort = typeof address === "object" && address ? address.port : port;
+      if (options.portalDistDir) {
+        // The browser reaches this container on loopback regardless of the internal
+        // bind host (compose publishes the port to 127.0.0.1 on the host) — the
+        // config participants' browsers use must say so, not the internal 0.0.0.0.
+        const runtimeConfig = buildLocalRuntimeConfig(
+          `http://127.0.0.1:${boundPort}`,
+          state.participantToken,
+        );
+        portalStatic = {
+          distDir: options.portalDistDir,
+          runtimeConfigJson: JSON.stringify(runtimeConfig),
+        };
+      }
       resolve({
         port: boundPort,
         state,

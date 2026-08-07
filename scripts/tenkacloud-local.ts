@@ -304,6 +304,32 @@ async function up(problemArg: string): Promise<void> {
   }
 }
 
+/**
+ * [#2906] Container entrypoint. `up` detaches `serve` as a tracked background
+ * process and returns — the right shape for a host CLI command, the wrong shape
+ * for a container's PID 1, which must stay in the foreground so `docker stop` /
+ * `docker compose down` deliver SIGTERM to it directly (that signal is what
+ * `serve`'s own shutdown handler uses to stop every running problem container
+ * and persist state — see the `process.once("SIGTERM", ...)` below). This
+ * collapses `up`'s catalog-loading + deployment setup with an in-process `serve`
+ * call, skipping the detach/PID-tracking/pre-start machinery that only a host
+ * multi-invocation CLI session needs. Problems always start on demand from the
+ * portal (no PROBLEM= pre-start) — same as a warm `tenkacloud local up` session
+ * with none pre-started.
+ */
+async function containerServe(): Promise<void> {
+  const paths = privateLocalPaths();
+  await reclaimPreviousLocalSession(paths);
+  const plan = await prepareLocalStartup("", paths);
+  const deployment: LocalPlayDeployment = {
+    problems: plan.catalog,
+    simulatedProblems: plan.simulatedCatalog,
+    participantToken: randomBytes(32).toString("base64url"),
+  };
+  writePrivateJson(paths.deploymentPath, deployment);
+  await serve(paths.deploymentPath);
+}
+
 async function serve(deploymentPath: string): Promise<void> {
   if (!existsSync(deploymentPath)) {
     throw new Error(`Local deployment state was not found: ${deploymentPath}`);
@@ -394,6 +420,14 @@ async function serve(deploymentPath: string): Promise<void> {
     simulator,
     simulatorSnapshotDir: join(p.localDir, "snapshots"),
     stateStore,
+    // [#2906] Unset on the host/dev path — only the containerized entrypoint
+    // (containerServe, below) sets these, so `up`'s detached `serve` is unaffected.
+    ...(process.env.TENKACLOUD_LOCAL_PORTAL_DIST
+      ? { portalDistDir: process.env.TENKACLOUD_LOCAL_PORTAL_DIST }
+      : {}),
+    ...(process.env.TENKACLOUD_LOCAL_BIND_HOST
+      ? { bindHost: process.env.TENKACLOUD_LOCAL_BIND_HOST }
+      : {}),
   });
 
   // [#2512] No idle sweeper: a started container keeps running until the
@@ -640,6 +674,7 @@ function usage(): string {
     "  list             List local-play problems (id / category / name)",
     "  up [problemIds]  Start the detached local API; PROBLEM=a,b,c pre-starts those containers",
     "  serve <path>     Run the local Participant API (used internally by up)",
+    "  container-serve  Run the local Participant API in the foreground (the container entrypoint)",
     "  status           Check the local Participant API",
     "  evaluate <flag>  Submit a flag through the local scoring API",
     "  reset <problem>  Delete and recreate one local runtime",
@@ -695,6 +730,9 @@ export async function runLocalPlayCommand(args: readonly string[]): Promise<void
     case "serve":
       if (!argument) throw new Error("serve requires a deployment state path");
       await serve(argument);
+      break;
+    case "container-serve":
+      await containerServe();
       break;
     case "status":
       await status();

@@ -250,4 +250,29 @@ describe("local-play CORS", () => {
       await server.close();
     }
   });
+
+  /**
+   * [#2906 audit finding] Cross-port dev serving meant a browser request always carried
+   * an Origin header, so the Origin check alone defended every operator route regardless
+   * of method. Same-origin container serving removes that guarantee (a same-origin GET
+   * navigation may omit Origin), so the Bearer-token requirement below — unconditional
+   * for every method, not just POST — is what must hold on its own. Pin it explicitly so
+   * a future operator GET route can't ship without carrying the same check.
+   */
+  it("should reject an unauthenticated GET with no Origin on an operator route (#2906 same-origin audit)", async () => {
+    const server = await startLocalPlayServer(0, {
+      problems: [PROBLEM],
+      participantToken: "a".repeat(43),
+    });
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:${server.port}/local/operator/problems/unknown/disruptions/test/fire`,
+        { method: "GET" },
+      );
+      expect(response.status).toBe(StatusCodes.UNAUTHORIZED);
+      expect(await response.json()).toEqual({ error: "unauthorized" });
+    } finally {
+      await server.close();
+    }
+  });
 });

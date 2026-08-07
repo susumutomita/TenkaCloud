@@ -14,9 +14,25 @@ import { listLocalPlayProblems, loadContainerProblem, resolveProblemDir } from "
  * The catalog groups, searched in order. Problems live only in the
  * TenkaCloudChallenge catalog (the `problems/` submodule) — never in the
  * platform repo (ADR-008 / ADR-012).
+ *
+ * [#2906 / ADR-055] `TENKACLOUD_PROBLEMS_HOST_PATH`, set only by the
+ * containerized entrypoint, overrides `<repoRoot>/problems` with the REAL
+ * host-absolute path `problems/` is bind-mounted at. Every per-problem
+ * compose file's relative bind mounts get resolved by `docker compose`
+ * running inside the control-plane container, but the socket it talks to is
+ * the HOST daemon — the daemon resolves whatever absolute path string it
+ * receives against its OWN (host) filesystem, not the container's. Search
+ * roots derived from the container-local `/app/problems` would therefore
+ * name a path that does not exist on the host, and Compose silently creates
+ * an empty directory there instead of erroring — breaking every problem
+ * with a relative bind (confirmed for 13 catalog problems including
+ * wp-exposed-backup's `wpinit` init script). The host launcher
+ * (`scripts/local/docker-launcher.sh`) mounts `problems/` at this identical
+ * absolute path specifically so paths built from it stay daemon-resolvable.
  */
 export function problemSearchRoots(repoRoot: string): string[] {
-  return [join(repoRoot, "problems", "challenges"), join(repoRoot, "problems", "battles")];
+  const problemsRoot = process.env.TENKACLOUD_PROBLEMS_HOST_PATH || join(repoRoot, "problems");
+  return [join(problemsRoot, "challenges"), join(problemsRoot, "battles")];
 }
 
 /**
