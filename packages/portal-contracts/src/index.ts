@@ -22,6 +22,11 @@
 export * from "./lite-drill.js";
 export * from "./local-drill.js";
 
+// #2925 / #2926: 問題カタログの fairness projection。 participant-portal の build-time glob と
+// local-play control plane の runtime catalog endpoint が同じ投影を通るよう、 ここが唯一の定義。
+export * from "./problem-catalog.js";
+export * from "./problem-course-projection.js";
+
 export type DeploymentStatus =
   | "PENDING"
   // Issue #2019 / ADR-017: held by TrustBridge enforcement pending operator

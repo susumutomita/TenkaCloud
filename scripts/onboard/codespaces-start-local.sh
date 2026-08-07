@@ -14,15 +14,11 @@ set -eu
 
 repo_root=$(cd "$(dirname "$0")/../.." && pwd)
 
-# A bun that codespaces-setup.sh installed lives in ~/.bun/bin, which this fresh
-# lifecycle shell's PATH predates — prefix it so `make local` finds bun (same
-# ordering rule pinned for codespaces-setup.sh / onboard-bootstrap.sh).
-export BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"
-export PATH="$BUN_INSTALL/bin:$PATH"
-
 log="${HOME}/tenkacloud-local-play.log"
 
-# Detach so the (long-running) vite portal keeps serving past this shell.
+# Detach so the (long-running) control-plane container keeps serving past this shell.
+# [#2906 round 2] `make local` is the Docker-only launcher (scripts/local/docker-
+# launcher.sh) now, not a bare `bun` process — no PATH/bun setup needed here.
 nohup make -C "$repo_root" local >"$log" 2>&1 &
 start_pid=$!
 
@@ -36,7 +32,14 @@ portal_url="http://127.0.0.1:5175"
 # that accepts the connection but never sends a response would make a bare curl block
 # forever, so the loop would never reach its timeout. `date +%s` keeps the total
 # bounded regardless of how long any single probe takes.
-deadline=$(( $(date +%s) + 120 ))
+# [#2906 round 2] `make local` now runs `docker compose build && docker compose up -d`
+# (docker-launcher.sh), not a warm `vite dev` restart — codespaces-setup.sh's postCreate
+# pre-builds the image so this build is normally a fast cache hit, but a cold/evicted
+# cache, plus `up -d` and the container healthcheck's own start_period + retries
+# (compose.local.yaml), can still take noticeably longer than the old two-second vite
+# start this deadline was originally sized for. 240s keeps a real margin over that
+# worst case while still failing loud well within a learner's patience.
+deadline=$(( $(date +%s) + 240 ))
 while [ "$(date +%s)" -lt "$deadline" ]; do
   if ! kill -0 "$start_pid" 2>/dev/null; then
     echo "ERROR: local play exited during startup — the Participant Portal will not open." >&2
@@ -55,11 +58,12 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
   sleep 2
 done
 
-# Portal never answered within the (generous) window. postCreate already installed
-# deps, so a warm vite start is seconds — reaching here means the start is wedged or
-# broken. The background process is LEFT RUNNING (it may still come up and forward
-# 5175), but the timeout is surfaced as a failure (exit non-zero) rather than a green
-# "success" hiding an empty preview.
+# Portal never answered within the (generous, build-cost-inclusive) window. postCreate
+# already pre-built the image, so this is normally still fast — reaching here means the
+# build cache did not stick, the daemon is unusually slow, or the start is genuinely
+# wedged/broken. The background process is LEFT RUNNING (it may still come up and
+# forward 5175), but the timeout is surfaced as a failure (exit non-zero) rather than a
+# green "success" hiding an empty preview.
 echo "ERROR: the Participant Portal did not answer on 5175 within the startup window." >&2
 echo "Local play is still running in the background and may yet come up; if not, check the log." >&2
 echo "Last 40 log lines ($log):" >&2

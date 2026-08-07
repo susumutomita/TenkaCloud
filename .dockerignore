@@ -1,0 +1,58 @@
+# [#2906 / ADR-055] Build context for docker/local-control-plane/Dockerfile.
+#
+# `problems/` and `.gitmodules` are deliberately excluded, not merely large:
+# `problems/` is bind-mounted read-only at runtime (see docker-launcher.sh) so
+# the container always serves whatever the participant's own clone actually
+# has, and excluding `.gitmodules` makes `autoInitProblemsSubmodule()`
+# (scripts/local-play/catalog-loader.ts) a clean no-op inside the image instead
+# of shelling out to a `git` that has no `.git` history to work with.
+.git
+.gitmodules
+problems/
+
+node_modules
+**/node_modules
+**/dist
+**/coverage
+**/cdk.out
+**/.turbo
+.tenkacloud/
+
+# [#2906 audit finding] A host/dev session (`make local-dev`) writes this file
+# with that session's live participant token — `COPY . .` would otherwise bake
+# a developer's leftover session credential into the image. The container
+# path never reads it (server.ts serves /runtime-config.json dynamically), so
+# excluding it is pure hygiene, not a functional requirement.
+apps/participant-portal/public/runtime-config.json
+apps/participant-portal/public/runtime-config.backup.json
+
+# [#2906 round-2 audit finding] .gitignore ignores .env / .env.* (a developer's
+# working tree may hold real secrets there — Turso tokens etc., AGENTS.md
+# treats these as sensitive) but that alone does not stop `COPY . .` from
+# baking them into this image; only .dockerignore does. The image never runs
+# outside this machine (tenkacloud-local:dev, no push/registry path in this
+# repo), but `docker save`/layer inspection would otherwise leak them, and
+# this file already applies exactly this standard to runtime-config.json above.
+#
+# `**/.env` is NOT redundant with `.env`, and dropping it silently reopens the
+# hole this section exists to close. .dockerignore patterns are anchored at the
+# context root (they are NOT .gitignore semantics), so a bare `.env` matches the
+# ROOT .env and nothing else — a workspace-level `infrastructure/.env` or
+# `apps/*/.env` still lands in the image. Verified empirically against Docker
+# Engine 29.3.1 with `docker build --output type=local` on a fixture tree: with
+# `.env` alone, `sub/.env`, `sub/deep/.env`, and `apps/portal/.env` were all
+# still present in the build result; adding `**/.env` excluded every depth while
+# `!**/.env.example` still kept the examples at every depth.
+.env
+**/.env
+**/.env.*
+!**/.env.example
+
+# NOTE: every `workspaces` member (package.json: infrastructure, apps/*,
+# packages/*) is deliberately kept in the build context even though this
+# image only RUNS scripts/ and apps/participant-portal — `bun install
+# --frozen-lockfile` resolves the lockfile against the full workspace graph,
+# and excluding a member's source (as opposed to its build artifacts above)
+# is unverified in this environment (no live `docker build` access here, see
+# the PR's Known limitations) and risks a partial-workspace install that
+# silently resolves differently from every other `bun install` in this repo.

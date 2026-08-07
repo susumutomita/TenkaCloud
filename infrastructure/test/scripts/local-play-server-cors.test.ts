@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { StatusCodes } from "http-status-codes";
 import { describe, expect, it, vi } from "vitest";
 import type { ContainerProblem } from "../../../scripts/local-play/manifest";
@@ -248,6 +251,77 @@ describe("local-play CORS", () => {
       expect(await cli.json()).toEqual({ error: "unknown_disruption" });
     } finally {
       await server.close();
+    }
+  });
+
+  /**
+   * [#2906 audit finding] Cross-port dev serving meant a browser request always carried
+   * an Origin header, so the Origin check alone defended every operator route regardless
+   * of method. Same-origin container serving removes that guarantee (a same-origin GET
+   * navigation may omit Origin), so the Bearer-token requirement below — unconditional
+   * for every method, not just POST — is what must hold on its own. Pin it explicitly so
+   * a future operator GET route can't ship without carrying the same check.
+   */
+  it("should reject an unauthenticated GET with no Origin on an operator route (#2906 same-origin audit)", async () => {
+    const server = await startLocalPlayServer(0, {
+      problems: [PROBLEM],
+      participantToken: "a".repeat(43),
+    });
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:${server.port}/local/operator/problems/unknown/disruptions/test/fire`,
+        { method: "GET" },
+      );
+      expect(response.status).toBe(StatusCodes.UNAUTHORIZED);
+      expect(await response.json()).toEqual({ error: "unauthorized" });
+    } finally {
+      await server.close();
+    }
+  });
+
+  /**
+   * [#2906 audit finding, round 2] Before this fix, the CORS allowlist's direct-origin
+   * check was hardcoded to port 5175 regardless of what the server actually bound —
+   * harmless on the host/dev path (the Portal there is Vite, always on its own fixed
+   * port, independent of the API's own port), but wrong once Portal and API share one
+   * port in container mode: a `LOCAL_API_PORT` override would silently reject every
+   * same-origin POST from the Portal. `server.port` here is an OS-assigned port that
+   * (with overwhelming likelihood) is not 5175, so this pins that the allowlist now
+   * tracks the container's actual bound port instead of the old fixed literal.
+   */
+  it("should allow a same-origin POST whose Origin matches the container's own non-default bound port", async () => {
+    const distDir = mkdtempSync(join(tmpdir(), "tenkacloud-portal-dist-cors-"));
+    writeFileSync(join(distDir, "index.html"), "<!doctype html>");
+    const startContainer = vi.fn(async () => ({
+      problem: PROBLEM,
+      unit: {
+        problemId: PROBLEM.problemId,
+        composePath: PROBLEM.composePath,
+        composeProjectName: PROBLEM.composeProjectName,
+        secretEnv: PROBLEM.secretEnv,
+      },
+    }));
+    const server = await startLocalPlayServer(
+      0,
+      { problems: [PROBLEM], participantToken: "a".repeat(43) },
+      { startContainer, portalDistDir: distDir },
+    );
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:${server.port}/portal/me/problems/${PROBLEM.problemId}/start`,
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${"a".repeat(43)}`,
+            origin: `http://127.0.0.1:${server.port}`,
+          },
+        },
+      );
+      expect(response.status).toBe(StatusCodes.ACCEPTED);
+      expect(startContainer).toHaveBeenCalledTimes(1);
+    } finally {
+      await server.close();
+      rmSync(distDir, { recursive: true, force: true });
     }
   });
 });

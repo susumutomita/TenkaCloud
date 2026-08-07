@@ -89,40 +89,43 @@ Codespaces plays **cloud-independent drills only** — self-contained Docker con
 
 > Stay inside the codespace: drill links go through the port `5175` preview URL; a raw `127.0.0.1` URL pasted into a browser tab on your own machine will not work.
 >
-> **Optional manual re-run:** the automatic start has a two-minute window. If it times out (the Codespaces startup log says so), run the **"▷ ローカルプレイ開始"** task yourself (Command Palette → **Tasks: Run Task**, or `Cmd/Ctrl+Shift+B`) — it runs `make local` for you.
+> **Optional manual re-run:** the automatic start has a four-minute window (the container image is pre-built during setup, so this is normally fast). If it times out (the Codespaces startup log says so), run the **"▷ ローカルプレイ開始"** task yourself (Command Palette → **Tasks: Run Task**, or `Cmd/Ctrl+Shift+B`) — it runs `make local` for you.
 
 ### Try it locally (no AWS)
 
-`make local` is the participant entry point: it starts the local scoring API and the Participant Portal, then you pick and start a drill from the portal screen. Progress is stored by default in the private local SQLite file `.tenkacloud/local/local-play.sqlite`; local play has no DynamoDB or AWS SDK dependency. The `tenkacloud local` CLI remains available for developers and advanced options.
+`make local` is the participant entry point: it starts the local scoring API and the Participant Portal in a Docker container, then you pick and start a drill from the portal screen. Progress is stored in a Docker-managed volume; local play has no DynamoDB or AWS SDK dependency.
 
-**Recommended for a fresh clone — self-healing, no Bun preinstall required:**
+**Prerequisites: Git, Make, Docker Engine, Docker Compose v2 — no Bun, Node, or `node_modules` on your machine.**
+
+```bash
+git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
+cd TenkaCloud
+make local
+```
+
+`make local` checks Docker is installed and running, fetches the `problems/` submodule if it's missing, builds/starts the local-play container, and prints the Portal URL once it's ready. `make local-down` stops it and clears progress; `make local-status` checks whether it's running.
+
+> **Docker Desktop (macOS/Windows) users:** the local-play container runs with host networking, which Docker Desktop requires you to enable once — **Settings → Resources → Network → Enable host networking** (Desktop 4.34+). `make local` fails loud with this exact instruction if it detects the container came up without it; native Linux Docker Engine and Codespaces need no such setting.
+
+<details>
+<summary>For developers: the Bun/Vite hot-reload path</summary>
+
+`make local-dev` runs the same local-play stack directly on the host with Bun and Vite (hot reload, no container rebuild per change) instead of Docker:
 
 ```bash
 git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
 cd TenkaCloud
 make local-onboard
-make local
+make local-dev
 ```
 
-`make local-onboard` asks for consent before installing anything it needs — Bun itself if missing, the `problems/` submodule, and a Docker diagnosis — then reports readiness; it installs nothing without asking. Pass `YES=1` (`make local-onboard YES=1`) to pre-approve every install for unattended runs (this is the path GitHub Codespaces uses). Once it reports all prerequisites satisfied, `make local` starts the local scoring API and Participant Portal.
+`make local-onboard` asks for consent before installing anything it needs — Bun itself if missing, the `problems/` submodule, and a Docker diagnosis — then reports readiness; it installs nothing without asking. Pass `YES=1` (`make local-onboard YES=1`) to pre-approve every install for unattended runs.
 
-<details>
-<summary>What it does under the hood / manual alternative</summary>
-
-```bash
-git clone https://github.com/susumutomita/TenkaCloud.git
-cd TenkaCloud
-make install
-git submodule update --init problems
-bun link
-tenkacloud local
-```
-
-Without the one-time `bun link`, use `bun run tenkacloud local`. Run `tenkacloud local list` to list every drill id, or pre-start one with `tenkacloud local --problem <id>`. The optional remote state backend is selected explicitly with `--database turso` and `TENKACLOUD_LOCAL_TURSO_URL` / `TENKACLOUD_LOCAL_TURSO_AUTH_TOKEN`; SQLite remains the default.
+Even lower-level: `make install && git submodule update --init problems && bun link && tenkacloud local` (or `bun run tenkacloud local` without `bun link`). Run `tenkacloud local list` to list every drill id, or pre-start one with `tenkacloud local --problem <id>`. The optional remote state backend is selected explicitly with `--database turso` and `TENKACLOUD_LOCAL_TURSO_URL` / `TENKACLOUD_LOCAL_TURSO_AUTH_TOKEN`; SQLite remains the default.
 
 </details>
 
-See [docs/local-play.md](./docs/local-play.md) for every subcommand.
+See [docs/local-play.md](./docs/local-play.md) for every subcommand and [ADR-055](./docs/architecture/adr-055-docker-only-participant-local-mode.html) for the container/host boundary this is built on.
 
 ### Deploy on AWS
 

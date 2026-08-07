@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import type { ProblemCatalogEntry } from "@tenkacloud/portal-contracts";
 import {
   ContainerStartOwnershipError,
   type LocalComposeUnit,
@@ -150,6 +151,13 @@ export interface LocalPlayState {
   /** Server-owned directory for operator snapshot export/import. */
   readonly simulatorSnapshotDir?: string;
   readonly participantToken: string;
+  /**
+   * [#2925 / #2926] The participant-facing problem catalog served at
+   * `/portal/problem-catalog`. Already projected through `metadataToEntry`, so no raw
+   * `metadata.json` field (notably the spoiler-bearing `description`) can reach the wire.
+   * Empty for sessions that never loaded one (unit tests, simulator-only).
+   */
+  readonly problemCatalog: readonly ProblemCatalogEntry[];
   teamName: string;
 }
 
@@ -191,6 +199,12 @@ export interface CreateStateOptions {
   readonly simulator?: LocalSimulatorRuntimePort;
   /** Server-owned directory for Simulator snapshots; never accepted from an HTTP request. */
   readonly simulatorSnapshotDir?: string;
+  /**
+   * [#2925 / #2926] Participant-facing catalog served at `/portal/problem-catalog`,
+   * already projected by `metadataToEntry`. `serve` loads it from the bind-mounted
+   * `problems/`; tests and simulator-only sessions may omit it (route answers empty).
+   */
+  readonly problemCatalog?: readonly ProblemCatalogEntry[];
 }
 
 /**
@@ -420,6 +434,7 @@ export function createLocalPlayState(
     ...(options.simulator ? { simulator: options.simulator } : {}),
     ...(options.simulatorSnapshotDir ? { simulatorSnapshotDir: options.simulatorSnapshotDir } : {}),
     participantToken,
+    problemCatalog: options.problemCatalog ?? [],
     teamName: options.teamName ?? "Local Player",
   };
 }

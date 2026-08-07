@@ -11,8 +11,10 @@ import { describe, expect, it } from "vitest";
  *      `cmd && cmd` chain — a bun installed mid-chain is invisible to the
  *      later links (PATH was resolved before the install) and the chain used
  *      to abort, leaving no dependencies and no problems/ submodule.
- *   2. Both the setup script and the bootstrap export ~/.bun/bin onto PATH
- *      right after a possible bun install, before anything calls `bun`.
+ *   2. The setup script and the bootstrap export ~/.bun/bin onto PATH right
+ *      after a possible bun install, before anything calls `bun` (Issue #2906:
+ *      the start-local script no longer needs this — `make local` is
+ *      Docker-only now, so it stopped calling `bun` at all).
  *   3. `make local-portal` fails with an actionable message when vite is
  *      missing instead of the bare `vite: command not found` (exit 127).
  */
@@ -63,8 +65,9 @@ describe("devcontainer postCreate", () => {
 
   it("should request an 8-core / 32gb machine so make-local containers actually start", () => {
     // 4-core / 16gb machines OOM-killed the docker-in-docker problem containers
-    // (`make local` = dockerd + 3 dev servers + per-problem containers) — the
-    // Codespace attached but the drill surface never came up.
+    // (`make local` = the docker-outside-of-docker control-plane container plus
+    // per-problem containers, Issue #2906) — the Codespace attached but the
+    // drill surface never came up.
     const { hostRequirements } = JSON.parse(devcontainer) as {
       hostRequirements: { cpus: number; memory: string };
     };
@@ -106,8 +109,22 @@ describe("scripts/onboard/codespaces-setup.sh", () => {
     );
   });
 
-  it("should install workspace dependencies (vite for the portal)", () => {
+  it("should install workspace dependencies (vite for the developer make local-dev path)", () => {
     expect(setupScript).toContain('make -C "$repo_root" install');
+  });
+
+  it("should pre-build the local-play image so postStart's build is a cache hit (#2906 round 2)", () => {
+    // Without this, codespaces-start-local.sh's `make local` runs `docker compose build`
+    // cold on a fresh Codespace (full workspace install + Portal build inside the image) —
+    // that blew through the old 120s postStart deadline and surfaced as a false startup
+    // failure. Docker layer caching persists postCreate -> postStart within the same
+    // container, so pre-building here makes that build fast by the time postStart needs it.
+    expect(setupScript).toContain(
+      'TENKACLOUD_REPO_ROOT="$repo_root" docker compose -f compose.local.yaml build',
+    );
+    // Best-effort, like the agent-CLI install above: a transient build failure here must
+    // not brick Codespace creation via `set -eu`.
+    expect(setupScript).toMatch(/\|\| echo "\[codespaces-setup\] WARN: pre-building/);
   });
 
   it("should preinstall the claude and codex CLIs without letting a failure abort setup", () => {
@@ -136,11 +153,13 @@ describe("scripts/onboard/codespaces-start-local.sh", () => {
     expect(startLocalScript).toMatch(/nohup make -C "\$repo_root" local .*&\s*$/m);
   });
 
-  it("should export ~/.bun/bin onto PATH before invoking make (make local needs bun)", () => {
-    const pathExport = startLocalScript.indexOf('export PATH="$BUN_INSTALL/bin:$PATH"');
-    const makeRun = startLocalScript.indexOf("nohup make");
-    expect(pathExport).toBeGreaterThan(-1);
-    expect(makeRun).toBeGreaterThan(pathExport);
+  it("should not need bun on PATH — `make local` is Docker-only (#2906 round 2)", () => {
+    // Unlike codespaces-setup.sh (which still installs/uses Bun for the rest of the dev
+    // environment), this script's only job is `make local`, which is a pure POSIX-shell +
+    // Docker launcher now (scripts/local/docker-launcher.sh) — no bun invocation left here
+    // to put on PATH for.
+    expect(startLocalScript).not.toContain("BUN_INSTALL");
+    expect(startLocalScript).not.toContain('export PATH="$BUN_INSTALL/bin:$PATH"');
   });
 
   it("should stop on the first failure so a broken start is loud", () => {
@@ -220,8 +239,10 @@ describe("Makefile local-play guards", () => {
     expect(makefile).toMatch(/\$\(MAKE\) install/);
   });
 
-  it("make local should delegate to the self-healing unified CLI", () => {
-    const local = makefile.slice(makefile.indexOf("\nlocal:"));
+  it("make local-dev should delegate to the self-healing unified CLI", () => {
+    // Issue #2906: `local-dev` inherited the pre-#2906 `local` recipe body — the
+    // Docker-only participant `make local` is pinned separately (makefile-local-bootstrap.test.ts).
+    const local = makefile.slice(makefile.indexOf("\nlocal-dev:"));
     expect(local.slice(0, 400)).toContain("bun run tenkacloud local");
     expect(localCli).toContain("await ensurePortalDependencies(deps)");
     expect(localCli).toContain('["install", "--ignore-scripts"]');

@@ -16,11 +16,11 @@
   "forwardPorts": [3199, 5175, 18080, 18180, 18280],
   "portsAttributes": {
     "3199": {
-      "label": "Participant API (make local)",
+      "label": "Participant Portal dev-mock API (bun run dev, not make local)",
       "onAutoForward": "silent"
     },
     "5175": {
-      "label": "Participant Portal (make local)",
+      "label": "Participant Portal + local-play API (make local)",
       "onAutoForward": "openPreview"
     },
     "18080-18580": {

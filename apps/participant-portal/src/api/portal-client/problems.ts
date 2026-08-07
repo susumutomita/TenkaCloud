@@ -1,5 +1,32 @@
+import type { ProblemCatalogEntry } from "@tenkacloud/portal-contracts";
 import { portalFetch } from "./fetch";
 import type { BattleAttacksResponse, DeployLogsResponse } from "./types";
+
+/**
+ * [#2925 / #2926] `GET /portal/problem-catalog` — the participant-facing problem catalog,
+ * served by the local control plane from the `problems/` clone it bind-mounts.
+ *
+ * Only local mode calls this. In AWS mode the portal keeps its build-time catalog, which is
+ * built from a submodule checkout that is present at image-build time there. The Docker
+ * local image deliberately excludes `problems/` (it must serve the participant's own clone),
+ * so its build-time glob is empty and this is the only source.
+ *
+ * Entries arrive already projected through `metadataToEntry` on the server, so the
+ * spoiler-bearing `description` and non-`publicHint` phases/disruptions never cross the wire.
+ */
+export async function getProblemCatalog(
+  apiBaseUrl: string,
+  teamLoginKey: string,
+  options: { signal?: AbortSignal } = {},
+): Promise<readonly ProblemCatalogEntry[]> {
+  const response = (await portalFetch<{ entries?: readonly ProblemCatalogEntry[] }>(
+    apiBaseUrl,
+    "portal/problem-catalog",
+    teamLoginKey,
+    { ...(options.signal ? { signal: options.signal } : {}) },
+  )) as { entries?: readonly ProblemCatalogEntry[] };
+  return response.entries ?? [];
+}
 
 /**
  * 1 problem に閉じた inspection / telemetry endpoints。

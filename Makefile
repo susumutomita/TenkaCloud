@@ -390,17 +390,17 @@ doctor:
 	  exit 1; }
 	@bun run tenkacloud doctor
 
-# Issue #2119: optional guided setup. This is the only local-play target that
-# offers to trust mise, install Bun, initialize the problems/ submodule, or help
-# with Docker setup. Keep `make local` itself lightweight and non-installing.
+# Issue #2119: optional guided setup for the DEVELOPER Bun/Vite path
+# (`make local-dev`). The participant path (`make local`, Issue #2906) is
+# Docker-only and needs none of this — see scripts/local/docker-launcher.sh.
 local-onboard:
 	@sh scripts/onboard/onboard-bootstrap.sh $(ONBOARD_FLAGS)
 	@# The bootstrap may have JUST installed bun into ~/.bun/bin; this recipe line
 	@# runs in a fresh shell whose PATH predates that install, so prefix it.
 	@PATH="$$HOME/.bun/bin:$$PATH" bun run scripts/tenkacloud-onboard.ts preflight $(ONBOARD_FLAGS)
 
-# Self-heal missing dependencies so `make local` is a single entry point: on a
-# fresh clone / Codespace that never ran `make install`, the portal's vite is
+# Self-heal missing dependencies so `make local-dev` is a single entry point: on
+# a fresh clone / Codespace that never ran `make install`, the portal's vite is
 # absent and local play used to die with "run make install first". Install once
 # (only when vite is missing — a no-op on a warm tree), then continue.
 # Issue #2907: this must run BEFORE any `bun run tenkacloud ...` — the CLI's
@@ -418,11 +418,23 @@ ensure-deps:
 	  $(MAKE) install; \
 	fi
 
-# Issue #2054 / #2392 / #2511: start the detached local scoring API, then the
-# browser portal. `local-up` remains the API-only escape hatch for scripts.
-# Issue #2907: every entry point that reaches the Bun CLI self-heals via
-# ensure-deps first, so `make local-onboard` → `make local` needs no extra step.
-local: ## Start the local drill API and portal | ローカル問題演習のAPIとportalを起動
+# Issue #2906: the participant entry point. Docker Engine + Docker Compose v2
+# only — no Bun, Node, or node_modules on the host. See
+# scripts/local/docker-launcher.sh and compose.local.yaml.
+local: ## Start the local drill API and portal via Docker (participant path) | Docker でローカル問題演習を起動(参加者向け)
+	@sh scripts/local/docker-launcher.sh up
+
+local-down: ## Stop local play and clear all persisted progress | local playを停止して全進捗を消去
+	@sh scripts/local/docker-launcher.sh down
+
+local-status:
+	@sh scripts/local/docker-launcher.sh status
+
+# Issue #2054 / #2392 / #2511 / #2906: the DEVELOPER path — the same
+# local-play engine, run directly on the host with Bun/Vite (hot reload, no
+# container rebuild per change) instead of Docker. Run `make local-onboard`
+# first on a fresh clone.
+local-dev: ## Start local play on the host with Bun/Vite (developer path, hot reload) | ホストで Bun/Vite により起動(開発者向け・ホットリロード)
 	@$(MAKE) ensure-deps
 	@bun run tenkacloud local $(if $(PROBLEM),--problem "$(PROBLEM)",) $(if $(LOCAL_API_PORT),--api-port "$(LOCAL_API_PORT)",)
 
@@ -433,12 +445,6 @@ local-up:
 local-portal:
 	@$(MAKE) ensure-deps
 	@bun run tenkacloud local portal
-
-local-down: ## Stop local play and clear all persisted progress | local playを停止して全進捗を消去
-	@bun run tenkacloud local down
-
-local-status:
-	@bun run tenkacloud local status
 
 # Issue #2188: list local-play problems (id / category / display name) for
 # players who want to pre-start one by id.

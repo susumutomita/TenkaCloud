@@ -1,0 +1,16 @@
+{
+  // イメージ build 用の型検査。 `tsconfig.json` (= 開発 / CI 用) との違いは test を含まない
+  // ことだけである。
+  //
+  // なぜ分けるか: `problems/` は `.dockerignore` で意図的に除外されている (実行時に read-only
+  // で bind-mount する設計)。 つまりイメージの中に `problems/` は存在しない。 一方 test は
+  // 実カタログの metadata.json を静的 import して UI を pin することがあり、 それ自体は正しい
+  // (#2914)。 両方を同じ tsc に通すと、 イメージに入れないと決めたものを解決させることになり
+  // `make local` が落ちる。
+  //
+  // test の型は失われない。 `bun run typecheck` と CI は `tsconfig.json` を使うので、 そちらで
+  // 従来どおり全部検査される。 ここで外しているのは「イメージを作るのに要らない検査」だけ。
+  "extends": "./tsconfig.json",
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "test", "**/*.test.ts", "**/*.test.tsx"]
+}

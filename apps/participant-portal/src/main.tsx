@@ -5,6 +5,7 @@ import { BrowserRouter } from "react-router";
 import { App } from "./App";
 import { loadConfig } from "./config";
 import { AppConfigProvider } from "./config-context";
+import { applyRuntimeProblemCatalog } from "./data/catalog-source";
 import { I18nProvider } from "./i18n";
 import { initializeBrowserDemoAnalytics } from "./onboarding-analytics";
 
@@ -17,7 +18,10 @@ if (!root) throw new Error("#root element missing from index.html");
 const ROUTER_BASENAME = import.meta.env.BASE_URL.replace(/\/$/, "") || "/";
 
 loadConfig()
-  .then((config) => {
+  .then(async (config) => {
+    // [#2925 / #2926] local mode はカタログを control plane から取る。 render 前に解決させる
+    // ことで、 カタログを読む画面は従来どおり同期 API のままでよい。
+    await applyRuntimeProblemCatalog(config);
     initializeBrowserDemoAnalytics({ mode: config.mode, production: import.meta.env.PROD });
     createRoot(root).render(
       <StrictMode>

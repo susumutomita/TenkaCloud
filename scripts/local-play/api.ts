@@ -196,6 +196,14 @@ async function handleGet(
       };
     case "/portal/me":
       return teamView(state, now);
+    // [#2925 / #2926] The participant-facing problem catalog. The portal used to get this
+    // from a build-time glob over `problems/`, which the Docker image deliberately excludes
+    // (it serves the participant's own bind-mounted clone instead), leaving every
+    // catalog-derived surface blank. Entries are pre-projected by `metadataToEntry` — the
+    // same fairness projection the build-time path uses — so `description` and non-public
+    // phases/disruptions are already gone before anything reaches this response.
+    case "/portal/problem-catalog":
+      return { status: StatusCodes.OK, body: { entries: state.problemCatalog } };
     case "/portal/me/score-events":
       return { status: StatusCodes.OK, body: { entries: state.scoreEvents } };
     case "/portal/leaderboard":

@@ -33,6 +33,7 @@ ADRs that already exist, but every **new** ADR from here forward uses 3 digits.
 | [adr-052](./adr-052-google-form-as-landing-form-backend.html) | Google Form as the landing page's form backend | Accepted |
 | [adr-053](./adr-053-stateless-mcp-role-boundaries.html) | Stateless MCP 2026-07-28 with role-bound endpoints | Accepted |
 | [adr-054](./adr-054-minimal-agent-harness.html) | Minimal agent harness with verifiable autonomy | Accepted |
+| [adr-055](./adr-055-docker-only-participant-local-mode.html) | Docker-only participant local mode | Accepted |
 
 ## Referenced-but-not-yet-drafted ADR numbers
 

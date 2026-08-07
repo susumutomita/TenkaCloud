@@ -1,7 +1,10 @@
+import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { extname, join, normalize, sep } from "node:path";
 import type { Duplex } from "node:stream";
 import { getReasonPhrase, StatusCodes } from "http-status-codes";
 import { type RawData, type WebSocket, WebSocketServer } from "ws";
+import { buildRuntimeConfig } from "../ops/participant-portal-runtime-config";
 import { handleLocalPlayRequest } from "./api";
 import {
   type CreateStateOptions,
@@ -9,7 +12,7 @@ import {
   type LocalPlayDeployment,
   type LocalPlayState,
 } from "./api-state";
-import { corsHeaders, isAllowedCorsOrigin } from "./cors";
+import { corsHeaders, isAllowedCorsOrigin, isTrustedRuntimeConfigHost } from "./cors";
 import { proxySimulatorNativeRequest } from "./simulator-native-proxy";
 import {
   type LocalPlayStateStore,
@@ -45,6 +48,13 @@ export interface LocalPlayServer {
 
 export interface StartLocalPlayServerOptions extends CreateStateOptions {
   readonly stateStore?: LocalPlayStateStore;
+  /**
+   * [#2906] Directory holding the prebuilt Participant Portal (`apps/participant-portal/dist`)
+   * to serve alongside the API on this same port. Unset on the host/dev path — Vite serves
+   * the portal itself there, and `serve()` writes `runtime-config.json` as a file instead
+   * (see `tenkacloud-local.ts`). Set only by the containerized entrypoint.
+   */
+  readonly portalDistDir?: string;
 }
 
 async function readJsonBody(request: IncomingMessage): Promise<unknown> {
@@ -81,16 +91,151 @@ function writeJson(
   response.end(body === undefined ? undefined : JSON.stringify(body));
 }
 
+/**
+ * [#2906] Container-only static asset serving for the prebuilt Participant Portal.
+ * Unset `portalDistDir` (the host/dev path, where Vite serves the portal itself)
+ * skips every branch below at the single call site in `route()`.
+ */
+const STATIC_MIME_TYPES: Readonly<Record<string, string>> = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".ico": "image/x-icon",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+  ".webmanifest": "application/manifest+json",
+  ".txt": "text/plain; charset=utf-8",
+  ".map": "application/json; charset=utf-8",
+};
+
+/**
+ * Resolve `pathname` against `distDir`, refusing anything that would escape it
+ * (an encoded `..` segment) and falling back to `index.html` for a request with
+ * no on-disk match — the usual SPA deep-link contract, and how a request for `/`
+ * itself is served.
+ */
+function resolveStaticFilePath(distDir: string, pathname: string): string | undefined {
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(pathname);
+  } catch {
+    // A malformed %-escape (e.g. "/%zz") — fall through to the API router's
+    // ordinary 404 rather than a 500 (URIError is not a real server error).
+    return undefined;
+  }
+  const candidate = normalize(join(distDir, decoded));
+  if (candidate !== distDir && !candidate.startsWith(distDir + sep)) return undefined;
+  if (existsSync(candidate) && statSync(candidate).isFile()) return candidate;
+  const indexPath = join(distDir, "index.html");
+  return existsSync(indexPath) ? indexPath : undefined;
+}
+
+function serveStaticAsset(response: ServerResponse, distDir: string, pathname: string): boolean {
+  const filePath = resolveStaticFilePath(distDir, pathname);
+  if (!filePath) return false;
+  const contentType = STATIC_MIME_TYPES[extname(filePath)] ?? "application/octet-stream";
+  response.writeHead(StatusCodes.OK, { "content-type": contentType });
+  createReadStream(filePath).pipe(response);
+  return true;
+}
+
+/** Requests the containerized portal build must never fall through to static-file serving for. */
+function isReservedApiPath(pathname: string): boolean {
+  return (
+    pathname === "/healthz" ||
+    pathname.startsWith("/portal/") ||
+    pathname.startsWith("/local/") ||
+    pathname === "/runtime-config.json"
+  );
+}
+
+interface PortalStaticOptions {
+  readonly distDir: string;
+  readonly participantToken: string;
+}
+
+/**
+ * [#2906] Build `/runtime-config.json` from what the incoming request's OWN
+ * Host / X-Forwarded-Proto headers say the browser used to reach this server
+ * — not a value computed once at startup. Same-origin API + Portal means the
+ * origin that just answered this GET is, by construction, an origin the
+ * browser can already reach: `127.0.0.1:<port>` for a plain local run, or the
+ * forwarded HTTPS origin when a proxy (GitHub Codespaces' port forwarding)
+ * sits in front. Building it from the request instead of from a fixed
+ * `http://127.0.0.1:<port>` is what makes Codespaces work with zero
+ * Codespaces-specific code here: the old two-port host/dev model needed a
+ * `/__tenkacloud-local-api` proxy prefix rewrite (codespaces-links.ts) to
+ * reach a *different* port; the container has no second port to reach.
+ *
+ * The caller (`tryServePortalStatic`) has already checked `isTrustedRuntimeConfigHost`
+ * before calling this — see that check for why an untrusted Host must never reach here.
+ */
+function containerRuntimeConfig(request: IncomingMessage, participantToken: string) {
+  const forwardedProto = request.headers["x-forwarded-proto"];
+  const proto = (Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto) ?? "http";
+  const hostHeader = request.headers.host ?? "127.0.0.1";
+  return {
+    ...buildRuntimeConfig({
+      cloudMode: "local",
+      portalMode: "backend",
+      apiBaseUrl: `${proto}://${hostHeader}`,
+      eventTitle: "TenkaCloud Local",
+      eventRegion: "local",
+      out: "",
+      print: false,
+    }),
+    localTeamLoginKey: participantToken,
+  };
+}
+
+/** Returns true when it fully handled the request (static asset or dynamic runtime-config.json). */
+function tryServePortalStatic(
+  request: IncomingMessage,
+  response: ServerResponse,
+  url: URL,
+  portalStatic: PortalStaticOptions | undefined,
+  corsApiPort: number | undefined,
+): boolean {
+  if (!portalStatic || request.method !== "GET") return false;
+  if (url.pathname === "/runtime-config.json") {
+    // [#2906 round-2 audit] This route is unauthenticated by design (it bootstraps a
+    // fresh page load) and returns the participant token — the Host check below is
+    // the only gate on who can read it. See isTrustedRuntimeConfigHost's doc comment
+    // for the DNS-rebinding scenario this closes.
+    const hostHeader = request.headers.host ?? "";
+    if (!isTrustedRuntimeConfigHost(hostHeader, undefined, corsApiPort)) {
+      writeJson(response, StatusCodes.FORBIDDEN, { error: "untrusted_host" }, {});
+      return true;
+    }
+    response.writeHead(StatusCodes.OK, { "content-type": "application/json; charset=utf-8" });
+    response.end(JSON.stringify(containerRuntimeConfig(request, portalStatic.participantToken)));
+    return true;
+  }
+  if (!isReservedApiPath(url.pathname)) {
+    return serveStaticAsset(response, portalStatic.distDir, url.pathname);
+  }
+  return false;
+}
+
 async function route(
   request: IncomingMessage,
   response: ServerResponse,
   state: LocalPlayState,
   persist: () => Promise<void>,
+  corsApiPort: number | undefined,
+  portalStatic?: PortalStaticOptions,
 ): Promise<void> {
   const origin = request.headers.origin;
-  const cors = corsHeaders(origin);
+  const cors = corsHeaders(origin, undefined, corsApiPort);
   const url = new URL(request.url ?? "/", "http://127.0.0.1");
-  if (rejectForbiddenRequest(request, response, state, url, origin)) return;
+  if (tryServePortalStatic(request, response, url, portalStatic, corsApiPort)) return;
+  if (rejectForbiddenRequest(request, response, state, url, origin, corsApiPort)) return;
   if (await proxySimulatorNativeRequest(request, response, state)) return;
   if (request.method === "OPTIONS") {
     writeJson(response, StatusCodes.NO_CONTENT, undefined, cors);
@@ -130,8 +275,9 @@ function rejectForbiddenRequest(
   state: LocalPlayState,
   url: URL,
   origin: string | undefined,
+  corsApiPort: number | undefined,
 ): boolean {
-  if (origin !== undefined && !isAllowedCorsOrigin(origin)) {
+  if (origin !== undefined && !isAllowedCorsOrigin(origin, undefined, corsApiPort)) {
     writeJson(response, StatusCodes.FORBIDDEN, { error: "browser_origin_forbidden" }, {});
     return true;
   }
@@ -163,6 +309,7 @@ function handleRouteError(
   error: unknown,
   request: IncomingMessage,
   response: ServerResponse,
+  corsApiPort: number | undefined,
 ): void {
   const publicError = classifyLocalPlayRouteError(error);
   if (!response.headersSent) {
@@ -170,7 +317,7 @@ function handleRouteError(
       response,
       publicError.status,
       { error: publicError.error },
-      corsHeaders(request.headers.origin),
+      corsHeaders(request.headers.origin, undefined, corsApiPort),
     );
   } else response.end();
 }
@@ -246,6 +393,7 @@ function handleTerminalUpgrade(
     readonly wss: WebSocketServer;
     readonly sockets: Set<WebSocket>;
     readonly state: LocalPlayState;
+    readonly corsApiPort: number | undefined;
   },
   request: IncomingMessage,
   socket: Duplex,
@@ -255,7 +403,7 @@ function handleTerminalUpgrade(
   // hand here. A non-browser client (CLI, test) sends no Origin at all and is judged
   // on its ticket alone — the same rule the HTTP routes use.
   const origin = request.headers.origin;
-  if (origin !== undefined && !isAllowedCorsOrigin(origin)) {
+  if (origin !== undefined && !isAllowedCorsOrigin(origin, undefined, context.corsApiPort)) {
     rejectUpgrade(socket, StatusCodes.FORBIDDEN);
     return;
   }
@@ -311,9 +459,20 @@ export async function startLocalPlayServer(
     await stateStore?.close();
     throw error;
   }
+  // [#2906] Built once the bound port is known (below) so `route()` can serve every
+  // request's runtime-config.json from memory instead of touching disk per request.
+  let portalStatic: PortalStaticOptions | undefined;
+  // [#2906 audit finding, round 2] Only the container path (portalDistDir set) makes
+  // CORS's "direct local origin" allowlist track this server's own bound port — the
+  // host/dev path's Portal (Vite, vite.config.ts) always serves from its own fixed
+  // port regardless of the API's own (often OS-auto-assigned) port, so leaving this
+  // `undefined` there keeps cors.ts's fixed default, unchanged from before this fix.
+  // In container mode Portal and API are the same origin by construction, so this is
+  // what makes a `LOCAL_API_PORT` override still pass the same-origin CORS check.
+  let corsApiPort: number | undefined;
   const server: Server = createServer((request, response) => {
-    void route(request, response, state, persist).catch((error) => {
-      handleRouteError(error, request, response);
+    void route(request, response, state, persist, corsApiPort, portalStatic).catch((error) => {
+      handleRouteError(error, request, response, corsApiPort);
     });
   });
   // [#2846] `noServer` mode: local play already owns exactly one listener, and routing
@@ -321,7 +480,12 @@ export async function startLocalPlayServer(
   const terminalSockets = new Set<WebSocket>();
   const wss = new WebSocketServer({ noServer: true });
   server.on("upgrade", (request, socket, head) => {
-    handleTerminalUpgrade({ wss, sockets: terminalSockets, state }, request, socket, head);
+    handleTerminalUpgrade(
+      { wss, sockets: terminalSockets, state, corsApiPort },
+      request,
+      socket,
+      head,
+    );
   });
   return new Promise((resolve, reject) => {
     const rejectStartup = (error: Error): void => {
@@ -332,6 +496,10 @@ export async function startLocalPlayServer(
       server.off("error", rejectStartup);
       const address = server.address();
       const boundPort = typeof address === "object" && address ? address.port : port;
+      if (options.portalDistDir) {
+        portalStatic = { distDir: options.portalDistDir, participantToken: state.participantToken };
+        corsApiPort = boundPort;
+      }
       resolve({
         port: boundPort,
         state,

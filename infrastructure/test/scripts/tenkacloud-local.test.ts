@@ -410,6 +410,23 @@ describe("problemSearchRoots", () => {
       "/repo/problems/battles",
     ]);
   });
+
+  it("should use TENKACLOUD_PROBLEMS_HOST_PATH instead of <repoRoot>/problems when set (#2906)", () => {
+    const prior = process.env.TENKACLOUD_PROBLEMS_HOST_PATH;
+    process.env.TENKACLOUD_PROBLEMS_HOST_PATH = "/home/participant/TenkaCloud/problems";
+    try {
+      // The container's own repoRoot ("/app") must NOT leak into a path a
+      // per-problem compose file's relative bind mount gets resolved against —
+      // the host daemon can only resolve a path that matches ITS OWN filesystem.
+      expect(problemSearchRoots("/app")).toEqual([
+        "/home/participant/TenkaCloud/problems/challenges",
+        "/home/participant/TenkaCloud/problems/battles",
+      ]);
+    } finally {
+      if (prior === undefined) delete process.env.TENKACLOUD_PROBLEMS_HOST_PATH;
+      else process.env.TENKACLOUD_PROBLEMS_HOST_PATH = prior;
+    }
+  });
 });
 
 describe("generateSecretEnv", () => {

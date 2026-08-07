@@ -8,6 +8,7 @@ import type { LocalPlayDeployment } from "./local-play/api-state";
 import {
   autoInitProblemsSubmodule,
   loadLocalPlayCatalog,
+  loadProblemCatalogEntries,
   pinIntroDrillFirst,
   problemSearchRoots,
 } from "./local-play/catalog-loader";
@@ -304,6 +305,47 @@ async function up(problemArg: string): Promise<void> {
   }
 }
 
+/**
+ * [#2906] Container entrypoint. `up` detaches `serve` as a tracked background
+ * process and returns — the right shape for a host CLI command, the wrong shape
+ * for a container's PID 1, which must stay in the foreground so `docker stop` /
+ * `docker compose down` deliver SIGTERM to it directly (that signal is what
+ * `serve`'s own shutdown handler uses to stop every running problem container
+ * and persist state — see the `process.once("SIGTERM", ...)` below). This
+ * collapses `up`'s catalog-loading + deployment setup with an in-process `serve`
+ * call, skipping the detach/PID-tracking/pre-start machinery that only a host
+ * multi-invocation CLI session needs. Problems always start on demand from the
+ * portal (no PROBLEM= pre-start) — same as a warm `tenkacloud local up` session
+ * with none pre-started.
+ */
+async function containerServe(): Promise<void> {
+  const paths = privateLocalPaths();
+  await reclaimPreviousLocalSession(paths);
+  const plan = await prepareLocalStartup("", paths);
+  const deployment: LocalPlayDeployment = {
+    problems: plan.catalog,
+    simulatedProblems: plan.simulatedCatalog,
+    participantToken: randomBytes(32).toString("base64url"),
+  };
+  writePrivateJson(paths.deploymentPath, deployment);
+  await serve(paths.deploymentPath);
+}
+
+/**
+ * [#2925 / #2926] Project the on-disk `problems/` catalog for `/portal/problem-catalog`.
+ *
+ * A problem whose metadata.json cannot be projected is reported rather than dropped in
+ * silence: from the portal it would be indistinguishable from a problem nobody wrote, and
+ * the participant would simply see a course track missing a week.
+ */
+function loadServedProblemCatalog() {
+  const { entries, skipped } = loadProblemCatalogEntries(problemSearchRoots(REPO_ROOT));
+  for (const { problemId, reason } of skipped) {
+    console.warn(`Skipped ${problemId} in the portal catalog: ${reason}`);
+  }
+  return entries;
+}
+
 async function serve(deploymentPath: string): Promise<void> {
   if (!existsSync(deploymentPath)) {
     throw new Error(`Local deployment state was not found: ${deploymentPath}`);
@@ -394,6 +436,19 @@ async function serve(deploymentPath: string): Promise<void> {
     simulator,
     simulatorSnapshotDir: join(p.localDir, "snapshots"),
     stateStore,
+    // [#2925 / #2926] The participant-facing catalog the portal renders narrative,
+    // course tracks and plugin slots from. Read from the bind-mounted `problems/` at
+    // serve time because the Docker image deliberately does not carry it, which left
+    // the portal's build-time glob empty and those surfaces blank.
+    problemCatalog: loadServedProblemCatalog(),
+    // [#2906] Unset on the host/dev path — only the containerized entrypoint
+    // (containerServe, below) sets this, so `up`'s detached `serve` is unaffected.
+    // The container binds 127.0.0.1 the same as the host/dev default (it runs
+    // with `network_mode: host` — see compose.local.yaml — so that address
+    // genuinely IS the host's loopback, not a separate namespace to bridge).
+    ...(process.env.TENKACLOUD_LOCAL_PORTAL_DIST
+      ? { portalDistDir: process.env.TENKACLOUD_LOCAL_PORTAL_DIST }
+      : {}),
   });
 
   // [#2512] No idle sweeper: a started container keeps running until the
@@ -640,6 +695,7 @@ function usage(): string {
     "  list             List local-play problems (id / category / name)",
     "  up [problemIds]  Start the detached local API; PROBLEM=a,b,c pre-starts those containers",
     "  serve <path>     Run the local Participant API (used internally by up)",
+    "  container-serve  Run the local Participant API in the foreground (the container entrypoint)",
     "  status           Check the local Participant API",
     "  evaluate <flag>  Submit a flag through the local scoring API",
     "  reset <problem>  Delete and recreate one local runtime",
@@ -649,7 +705,9 @@ function usage(): string {
     "  down             Stop local services and clear all persisted progress",
     "",
     "Simulated-cloud (multicloud Simulator) problems are experimental and hidden by",
-    "default; opt in with TENKACLOUD_LOCAL_SIMULATOR=1 (e.g. TENKACLOUD_LOCAL_SIMULATOR=1 make local).",
+    "default; opt in with TENKACLOUD_LOCAL_SIMULATOR=1 on the developer path",
+    "(e.g. TENKACLOUD_LOCAL_SIMULATOR=1 make local-dev). The Docker participant path",
+    "(make local) does not forward this variable into the container — see ADR-055.",
   ].join("\n");
 }
 
@@ -695,6 +753,9 @@ export async function runLocalPlayCommand(args: readonly string[]): Promise<void
     case "serve":
       if (!argument) throw new Error("serve requires a deployment state path");
       await serve(argument);
+      break;
+    case "container-serve":
+      await containerServe();
       break;
     case "status":
       await status();
