@@ -241,8 +241,16 @@ describe("scripts/ops/turso-live-guide (#2617)", () => {
     expect(english).toMatch(
       /^\s+turso-live\s+Start the interactive Turso\/AWS live verification wizard/m,
     );
-    expect(english).toMatch(/^\s+local\s+Start the local drill API and portal/m);
+    // Issue #2906: `local` is now the Docker-only participant path;
+    // `local-dev` (new) is the developer Bun/Vite hot-reload path and is
+    // deliberately visible in help too, unlike the other `local-*` internals.
+    expect(english).toMatch(
+      /^\s+local\s+Start the local drill API and portal via Docker \(participant path\)/m,
+    );
     expect(english).toMatch(/^\s+local-down\s+Stop local play and clear all persisted progress/m);
+    expect(english).toMatch(
+      /^\s+local-dev\s+Start local play on the host with Bun\/Vite \(developer path, hot reload\)/m,
+    );
     for (const hiddenLocalTarget of [
       "doctor",
       "local-onboard",
@@ -264,7 +272,10 @@ describe("scripts/ops/turso-live-guide (#2617)", () => {
     expect(japanese).toContain("セットアップ / ビルド");
     expect(japanese).toMatch(/^\s+install\s+開発依存関係を安全設定でインストール/m);
     expect(japanese).toMatch(/^\s+turso-live\s+Turso\/AWSの初回live検証wizardを開始/m);
-    expect(japanese).toMatch(/^\s+local\s+ローカル問題演習のAPIとportalを起動/m);
+    expect(japanese).toMatch(/^\s+local\s+Docker でローカル問題演習を起動\(参加者向け\)/m);
+    expect(japanese).toMatch(
+      /^\s+local-dev\s+ホストで Bun\/Vite により起動\(開発者向け・ホットリロード\)/m,
+    );
     expect(japanese).not.toContain("Install development dependencies safely");
     for (const help of [english, japanese]) {
       expect(help).not.toMatch(/(?:Issue\s*)?#\d+/);

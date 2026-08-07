@@ -29,5 +29,24 @@ bun run "$repo_root/scripts/tenkacloud-onboard.ts" preflight --yes
     && npm install -g @anthropic-ai/claude-code @openai/codex
 ) || echo "[codespaces-setup] WARN: agent CLI install failed — run manually: npm install -g @anthropic-ai/claude-code @openai/codex"
 
-# Dependencies for every workspace — `make local` needs vite for the portal.
+# Dependencies for every workspace — `make local-dev` needs vite for the portal.
 make -C "$repo_root" install
+
+# [#2906 round 2] Pre-build the participant control-plane image now, at container
+# CREATE time, not at every container START. Without this, codespaces-start-local.sh's
+# postStartCommand runs `make local` cold — a `docker compose build` (full workspace
+# `bun install --frozen-lockfile` + Portal `vite build` inside the image, see
+# docker/local-control-plane/Dockerfile) on top of the `docker compose up` + healthcheck
+# wait that script's timeout was actually sized for — and reliably blows through its
+# 120s deadline on a fresh Codespace with no Docker layer cache, surfacing as a false
+# startup failure even though local play would have come up eventually. Docker layer
+# caching persists across postCreate -> postStart within the same container/filesystem,
+# so this makes that build a fast cache hit by the time postStart's `make local` needs
+# it. Best-effort like the agent-CLI install above: Docker itself is preflighted by
+# `tenkacloud-onboard.ts preflight` just above, but a transient build failure here must
+# not brick Codespace creation — codespaces-start-local.sh still runs the real build (and
+# fails loud) if this pre-warm did not stick.
+(
+  cd "$repo_root" \
+    && TENKACLOUD_REPO_ROOT="$repo_root" docker compose -f compose.local.yaml build
+) || echo "[codespaces-setup] WARN: pre-building the local-play image failed — 'make local' will build it (slower) on first start."
