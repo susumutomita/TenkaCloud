@@ -15,6 +15,25 @@ services:
     container_name: tenkacloud-local
     init: true
     restart: "no"
+    # [#2906 audit finding, round 2] host.docker.internal (built into Docker
+    # Desktop; extra_hosts:host-gateway on Linux) was the first fix attempted
+    # here and does NOT work: a per-problem sibling container publishes its
+    # port bound to the HOST's 127.0.0.1 specifically (loopback-only, by
+    # design — see the security note on the "local" network problems'
+    # compose files inherit), and a loopback-bound publish is unreachable
+    # from ANY other network namespace on Linux Engine, gateway IP or not —
+    # this is not a missing route, it is what binding to 127.0.0.1 instead of
+    # 0.0.0.0 is FOR. `network_mode: host` instead puts this container in the
+    # HOST's own network namespace, so its 127.0.0.1 genuinely IS the host's
+    # — the same relationship the pre-#2906 host Bun process had, restored.
+    # This container already holds the Docker socket (below), which is
+    # already root-equivalent host access (ADR-055 §2.3) — host networking
+    # adds no privilege beyond what that mount already grants; a process with
+    # docker.sock could start a `--network host` sibling itself regardless.
+    # Requires Docker Desktop >=4.34 on macOS/Windows (host networking was
+    # Linux Engine-only before that); native on Linux Engine and WSL2's
+    # Docker Engine, including GitHub Codespaces' docker-in-docker.
+    network_mode: host
     # Docker-outside-of-Docker: this container starts/stops PER-PROBLEM
     # sibling containers through the host daemon, exactly like the host Bun
     # process does today (scripts/local-play/docker-adapter.ts, unchanged) —
@@ -30,13 +49,21 @@ services:
       - ${TENKACLOUD_REPO_ROOT:?set by scripts/local/docker-launcher.sh}/problems:${TENKACLOUD_REPO_ROOT:?}/problems:ro
     environment:
       TENKACLOUD_PROBLEMS_HOST_PATH: ${TENKACLOUD_REPO_ROOT:?}/problems
-    ports:
-      # Loopback-only on the host, matching every local-play path before this
-      # one — the container's own listener binds 0.0.0.0 (Dockerfile), but
-      # Docker only ever answers this publish rule on 127.0.0.1.
-      - "127.0.0.1:${LOCAL_API_PORT:-5175}:5175"
+      # No `ports:` publish rule under `network_mode: host` — the app binds
+      # directly to this port on the host's own loopback (server.ts's default
+      # bind is already 127.0.0.1, same as the host/dev path — nothing
+      # container-specific to configure), so this is now the ONLY place an
+      # override takes effect (docker-launcher.sh passes LOCAL_API_PORT
+      # through from the same environment variable a participant would set).
+      LOCAL_API_PORT: ${LOCAL_API_PORT:-5175}
+      # Passed through only when set (GitHub Codespaces sets both on the host
+      # shell docker-launcher.sh runs in) — CORS's Codespaces-forwarded-origin
+      # check (scripts/local-play/cors.ts) needs them to recognize the
+      # forwarded Portal origin as legitimate. Harmless/unset everywhere else.
+      CODESPACE_NAME: ${CODESPACE_NAME:-}
+      GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN: ${GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN:-}
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:5175/healthz"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:${LOCAL_API_PORT:-5175}/healthz"]
       interval: 5s
       timeout: 3s
       retries: 20

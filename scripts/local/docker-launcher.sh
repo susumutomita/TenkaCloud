@@ -61,15 +61,50 @@ ensure_problems_submodule() {
   fi
 }
 
+# [Finding 5, #2906 audit] Polls the CONTAINER's own compose healthcheck via
+# `docker inspect` rather than curl-ing the published port from the host —
+# `curl` is not one of this launcher's stated prerequisites (Docker + Compose
+# only), and a curl-less host was silently misreported as "did not answer"
+# even when the stack was actually healthy.
+container_health() {
+  docker inspect -f '{{.State.Health.Status}}' tenkacloud-local 2>/dev/null || echo "unknown"
+}
+
 wait_for_portal() {
   deadline=$(($(date +%s) + 120))
   while [ "$(date +%s)" -lt "$deadline" ]; do
-    if curl -sf --max-time 3 "http://127.0.0.1:${PORTAL_PORT}/healthz" >/dev/null 2>&1; then
-      return 0
-    fi
+    [ "$(container_health)" = "healthy" ] && return 0
     sleep 2
   done
   return 1
+}
+
+# [#2906 round-2 audit] `network_mode: host` (compose.local.yaml) is what makes the
+# container's OWN 127.0.0.1 the same as the host's — but on Docker Desktop
+# (macOS/Windows) host networking is an opt-in Settings > Resources > Network toggle,
+# off by default, and requires Desktop >=4.34. When it is not enabled, the container
+# still starts and its INTERNAL healthcheck (which runs inside that same container,
+# so it always sees its own loopback regardless of host networking) still reports
+# "healthy" — but the host genuinely cannot reach the published address, which is
+# exactly the "healthy but unreachable" false-success `container_health` alone cannot
+# distinguish from a real success. This probes from the HOST side instead, using
+# whichever of curl/wget happens to be present (best-effort only — neither is a
+# stated prerequisite of this launcher, so their absence is not itself a failure).
+host_reachable() {
+  url="http://127.0.0.1:${PORTAL_PORT}/healthz"
+  if command -v curl >/dev/null 2>&1; then
+    curl -sf --max-time 5 "$url" >/dev/null 2>&1 && return 0 || return 1
+  fi
+  if command -v wget >/dev/null 2>&1; then
+    wget -q -T 5 -O /dev/null "$url" >/dev/null 2>&1 && return 0 || return 1
+  fi
+  return 2 # neither tool available — genuinely unknown, not a failure signal
+}
+
+docker_desktop_host_networking_hint() {
+  echo "  This usually means Docker Desktop's host networking is not enabled." >&2
+  echo "  Docker Desktop >=4.34 required; enable it under Settings > Resources > Network," >&2
+  echo "  then retry 'make local'. See: https://docs.docker.com/engine/network/drivers/host/" >&2
 }
 
 cmd_up() {
@@ -82,13 +117,21 @@ cmd_up() {
   $COMPOSE build
   $COMPOSE up -d
   echo "Waiting for the Participant Portal to answer..."
-  if wait_for_portal; then
-    echo "TenkaCloud local play is up: http://127.0.0.1:${PORTAL_PORT}"
-  else
+  if ! wait_for_portal; then
     echo "The Participant Portal did not answer within the startup window." >&2
     echo "Check the logs: docker compose -f compose.local.yaml logs local" >&2
     exit 1
   fi
+  reachable_result=0
+  host_reachable || reachable_result=$?
+  if [ "$reachable_result" -eq 1 ]; then
+    echo "The control-plane container reports healthy, but this host cannot reach" >&2
+    echo "  http://127.0.0.1:${PORTAL_PORT} — the container is running without actually" >&2
+    echo "  being visible to the host." >&2
+    docker_desktop_host_networking_hint
+    exit 1
+  fi
+  echo "TenkaCloud local play is up: http://127.0.0.1:${PORTAL_PORT}"
 }
 
 # [Finding 1, #2906 audit] Two independent reclaim paths, not one:
@@ -106,12 +149,18 @@ cmd_up() {
 cmd_down() {
   require_docker
   $COMPOSE exec -T local bun run scripts/tenkacloud-local.ts down 2>/dev/null || true
-  orphans=$(docker ps -aq --filter "name=tc-local-" 2>/dev/null || true)
+  # [Finding 4, #2906 audit] Docker's --filter name= is an unanchored
+  # substring match, not a prefix match — "^tc-local-" anchors it so this
+  # never touches an unrelated container that merely CONTAINS that string
+  # (e.g. a participant's own "btc-local-node"). Every per-problem container
+  # this platform starts is actually named with this prefix
+  # (scripts/local-play/docker-adapter.ts); nothing else may be.
+  orphans=$(docker ps -aq --filter "name=^tc-local-" 2>/dev/null || true)
   if [ -n "$orphans" ]; then
     echo "Reclaiming per-problem containers the control plane could not stop itself..."
     echo "$orphans" | xargs -r docker rm -f >/dev/null 2>&1 || true
   fi
-  orphan_networks=$(docker network ls --filter "name=tc-local-" -q 2>/dev/null || true)
+  orphan_networks=$(docker network ls --filter "name=^tc-local-" -q 2>/dev/null || true)
   if [ -n "$orphan_networks" ]; then
     echo "$orphan_networks" | xargs -r docker network rm >/dev/null 2>&1 || true
   fi
@@ -119,13 +168,35 @@ cmd_down() {
   echo "Local play stopped and progress cleared."
 }
 
+# [Finding 3, #2906 audit] `tenkacloud-local.ts status` (the host/dev CLI
+# command) requires state.json, which only `up`'s host-oriented detach path
+# writes — containerServe() (the container's entrypoint) deliberately skips
+# it, so exec-ing that command here always failed even while fully healthy.
+# Probe the container's own compose healthcheck instead.
 cmd_status() {
   require_docker
-  if $COMPOSE exec -T local bun run scripts/tenkacloud-local.ts status 2>/dev/null; then
-    return 0
-  fi
-  echo "Local play is not running (or not reachable)." >&2
-  exit 1
+  case "$(container_health)" in
+    healthy)
+      status_reachable_result=0
+      host_reachable || status_reachable_result=$?
+      if [ "$status_reachable_result" -eq 1 ]; then
+        echo "Local play's container reports healthy, but this host cannot reach" >&2
+        echo "  http://127.0.0.1:${PORTAL_PORT}." >&2
+        docker_desktop_host_networking_hint
+        exit 1
+      fi
+      echo "Local play is running: http://127.0.0.1:${PORTAL_PORT}"
+      return 0
+      ;;
+    starting)
+      echo "Local play is starting up (health check not yet passing)." >&2
+      exit 1
+      ;;
+    *)
+      echo "Local play is not running (or not reachable)." >&2
+      exit 1
+      ;;
+  esac
 }
 
 case "${1:-}" in

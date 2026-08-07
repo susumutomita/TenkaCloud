@@ -54,12 +54,18 @@ RUN apk add --no-cache docker-cli \
 
 COPY --from=build /app /app
 
-ENV TENKACLOUD_LOCAL_BIND_HOST=0.0.0.0
+# [#2906 audit finding, round 2] No bind-host override needed: server.ts's
+# default listener bind is already loopback-only (127.0.0.1), identical to
+# the host/dev path — and correct here specifically because this container
+# runs with `network_mode: host` (compose.local.yaml), so its 127.0.0.1
+# genuinely IS the host's loopback, not a separate namespace. Binding 0.0.0.0
+# would leak straight onto the LAN once this container IS the host's own
+# network stack — this is why that override was deliberately removed rather
+# than left configurable.
 ENV TENKACLOUD_LOCAL_DIR=/data
 ENV TENKACLOUD_LOCAL_PORTAL_DIST=/app/apps/participant-portal/dist
 ENV LOCAL_API_PORT=5175
 VOLUME ["/data"]
-EXPOSE 5175
 
 # Runs in the FOREGROUND as this container's PID 1 (not `up`'s host-oriented
 # detach-and-track-by-PID model — see containerServe() in
