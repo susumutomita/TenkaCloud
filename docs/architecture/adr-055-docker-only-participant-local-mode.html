@@ -432,7 +432,49 @@
       does not share.
     </p>
 
-    <h3>7.2 Still unverified</h3>
+    <h3>7.2 Actually using the running portal found the exclusion had a second consumer</h3>
+    <p>
+      Once §7.1's fixes let <code>make local</code> come up, navigating the portal it serves
+      surfaced a third defect of the same family, and a larger one: the Participant Portal built
+      its problem catalog from a <em>build-time</em>
+      <code>import.meta.glob("problems/*/*/metadata.json")</code>. §2.4 excludes
+      <code>problems/</code> from the image on purpose, so in the image that glob resolves to
+      nothing. Measured in the running container: zero catalog strings in <code>dist</code>, and
+      no <code>/app/problems</code> at all.
+    </p>
+    <p>
+      The problem <em>list</em> still rendered — it comes from the runtime API, which reads the
+      bind-mounted clone — which is precisely what made this hard to see: the portal looked
+      alive. Everything sourced from the catalog was gone: problem descriptions and
+      instructions (#2925), the entire course-track view (#2926), learning goals, the endpoint
+      override form, per-problem diagrams, and the portal plugin system, whose loader keys off
+      <code>dashboardSlots</code>.
+    </p>
+    <p>
+      The fix is not to stop excluding <code>problems/</code> — the exclusion is what lets a
+      participant add a problem to their own clone and see it without rebuilding the image.
+      It is to give the catalog a runtime source: the control plane already mounts
+      <code>problems/</code>, so it now projects that directory through
+      <code>metadataToEntry</code> and serves the result at
+      <code>GET /portal/problem-catalog</code>, and the portal hydrates from it during boot in
+      local mode (AWS mode keeps the build-time glob, which is correct there because that image
+      <em>is</em> built from a submodule checkout). The projection itself moved to
+      <code>@tenkacloud/portal-contracts</code> so both consumers run the same fairness
+      contract — duplicating it would let one path forget to drop the spoiler-bearing
+      <code>description</code>, which is the exact silent drift that package exists to prevent.
+      The route sits under <code>/portal/</code> and so inherits the participant-token gate
+      already applied to every other participant read.
+    </p>
+    <p>
+      Worth recording as a review lesson rather than a code fact: §7.1 concluded the control
+      plane "comes up and answers", and treated that as the remaining risk being about
+      <em>container reachability</em>. It was not. A second consumer of the same excluded
+      directory sat one layer up, in a workspace this ADR had not been reasoning about at all,
+      and only opening the portal and reading a problem could find it. "The stack starts" and
+      "a participant can use it" are different claims, and only the second one is the goal.
+    </p>
+
+    <h3>7.3 Still unverified</h3>
     <p>
       These remain one-time verifications pending, not claims of having been exercised:
     </p>
@@ -440,6 +482,7 @@
       <li>A live fresh-clone run on Linux and WSL2 with no Bun/Node/<code>node_modules</code> present (macOS/Colima is now covered by §7.1).</li>
       <li><strong>Highest priority</strong>: starting one full problem (e.g. the pinned intro drill) through the Docker path end to end — readiness, challenge-surface load in a real browser, and a real <code>/verify</code> submission — confirming §2.2's <code>network_mode: host</code> fix actually lets the control-plane container reach a sibling container's <code>127.0.0.1</code>-published port on a real Docker daemon. §7.1's run confirms the control plane itself comes up and answers, which is necessary but not sufficient: it does not start a sibling container, so the reachability claim that two adversarial-audit rounds already got wrong is still untested against a live daemon.</li>
       <li>End-to-end play of a relative-bind-mount problem (e.g. <code>wp-exposed-backup</code>) through the Docker path specifically, confirming §2.4's fix in a real daemon, not just <code>docker compose config</code>'s static interpolation.</li>
+      <li>That §7.2's runtime catalog actually repopulates the portal in a real browser against a real image — problem instructions rendering, the course track showing its weeks, and a <code>dashboardSlots</code> plugin loading. This session verified the projection, the route, the boot-time hydration and their failure modes as unit tests, and confirmed the container can read the bind-mounted <code>problems/</code> (the existing problem list already proves that path), but the browser boot itself was not run here. Note that §7.2 is itself the counterexample to trusting that kind of reasoning, so this belongs on the list rather than in §7.2's prose.</li>
       <li>That <code>network_mode: host</code> genuinely behaves as documented on Docker Desktop >=4.34 (macOS/Windows) as well as Linux Engine. Note that §7.1's macOS finding is a caution here rather than a reassurance: a VM-backed daemon resolves things on its own side, which is exactly the class of assumption <code>network_mode: host</code> also makes.</li>
       <li>That Docker Desktop's host-networking opt-in setting (Settings → Resources → Network, §2.2) is accurately described — this session's knowledge of Desktop's exact UI path and version floor is unverified against <code>docs.docker.com</code> (blocked by this session's network policy), and, more importantly, that <code>docker-launcher.sh</code>'s <code>host_reachable()</code> post-check actually fires and shows the right message on a real Desktop install with the setting off, rather than just passing its unit tests against a mocked reachability probe.</li>
       <li>That the Codespaces postCreate image pre-build (round 2 fix for the build-time-vs-120s-deadline gap) actually keeps <code>codespaces-start-local.sh</code>'s postStart build a fast cache hit on a real fresh Codespace — this session confirmed the code paths and updated the deadline, but has no way to time an actual Codespaces container lifecycle.</li>

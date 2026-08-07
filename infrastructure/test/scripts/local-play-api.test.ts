@@ -1350,3 +1350,47 @@ describe("local-play API: on-demand container lifecycle (#2392 Phase 2)", () => 
     expect(stopped).toEqual([]);
   });
 });
+
+/**
+ * [#2925 / #2926] The catalog route. The portal used to build its catalog from a
+ * build-time glob over `problems/`, which the Docker image deliberately excludes so it can
+ * serve the participant's own bind-mounted clone. That left the glob empty in the image and
+ * every catalog-derived surface blank — instructions, learning goals, endpoint overrides,
+ * course tracks, plugin slots. This route is the runtime source that replaces it.
+ */
+describe("GET /portal/problem-catalog (#2925 / #2926)", () => {
+  const ENTRY = {
+    id: "wp-exposed-backup",
+    name: "Exposed backup",
+    category: "Challenge" as const,
+    status: "ready" as const,
+    visibility: "public" as const,
+    difficulty: 2 as const,
+    estimatedDuration: "30 min",
+    shortDescription: "short",
+    learningGoals: [],
+    tags: [],
+    endpoints: [],
+    phases: [],
+    disruptions: [],
+    runtime: { provider: "docker", engine: "compose" },
+    graphNodes: [],
+    graphRelations: [],
+  };
+
+  it("should serve the catalog it was configured with", async () => {
+    const state = createLocalPlayState({ problems: [PROBLEM] }, { problemCatalog: [ENTRY] });
+    const res = await handleLocalPlayRequest(get("/portal/problem-catalog"), state, NOW);
+    expect(res.status).toBe(StatusCodes.OK);
+    expect(res.body).toEqual({ entries: [ENTRY] });
+  });
+
+  it("should answer with an empty catalog rather than 404 when none was configured", async () => {
+    // A session with no catalog (unit tests, simulator-only) must still answer, so the
+    // portal distinguishes "no problems" from "this control plane has no such route".
+    const state = createLocalPlayState({ problems: [PROBLEM] });
+    const res = await handleLocalPlayRequest(get("/portal/problem-catalog"), state, NOW);
+    expect(res.status).toBe(StatusCodes.OK);
+    expect(res.body).toEqual({ entries: [] });
+  });
+});

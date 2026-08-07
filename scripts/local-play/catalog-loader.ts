@@ -1,6 +1,11 @@
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import {
+  metadataToEntry,
+  type ProblemCatalogEntry,
+  type ProblemMetadata,
+} from "@tenkacloud/portal-contracts";
 import type { CommandSucceeds } from "./docker-adapter";
 import { listLocalPlayProblems, loadContainerProblem, resolveProblemDir } from "./manifest";
 
@@ -79,6 +84,95 @@ export function pinIntroDrillFirst<T extends { readonly problemId: string }>(
   if (introIndex <= 0) return [...items];
   const intro = items[introIndex] as T;
   return [intro, ...items.slice(0, introIndex), ...items.slice(introIndex + 1)];
+}
+
+/** Injection seam for {@link loadProblemCatalogEntries} (tests supply a fake tree). */
+export interface CatalogFs {
+  readonly existsSync: (path: string) => boolean;
+  readonly readFileSync: (path: string) => string;
+  readonly readDirNames: (path: string) => readonly string[];
+}
+
+const CATALOG_FS: CatalogFs = {
+  existsSync,
+  readFileSync: (path) => readFileSync(path, "utf8"),
+  readDirNames: (path) =>
+    existsSync(path) ? readdirSync(path, { withFileTypes: true }).map((entry) => entry.name) : [],
+};
+
+/** One problem directory that has a metadata.json but could not be projected. */
+export interface SkippedCatalogEntry {
+  readonly problemId: string;
+  readonly reason: string;
+}
+
+export interface ProblemCatalogSource {
+  readonly entries: readonly ProblemCatalogEntry[];
+  /**
+   * Directories that hold a metadata.json but produced no entry. Surfaced rather than
+   * dropped: a silently missing problem looks identical to a problem that was never
+   * authored, and the participant would just see a shorter course track.
+   */
+  readonly skipped: readonly SkippedCatalogEntry[];
+}
+
+/**
+ * [#2925 / #2926] Project every problem under `roots` into the participant-facing catalog
+ * the portal renders from.
+ *
+ * This is the runtime twin of the portal's build-time `import.meta.glob`, and it exists
+ * because the Docker image cannot carry `problems/`: `.dockerignore` excludes it on purpose
+ * so the container serves the participant's OWN clone (bind-mounted read-only at run time),
+ * which means a participant who adds a problem sees it without rebuilding the image. The
+ * glob is therefore empty in the image, and every catalog-derived surface — instructions,
+ * learning goals, endpoint overrides, course tracks, plugin slots — went blank with it.
+ *
+ * Deliberately NOT `listLocalPlayProblems`: that answers "what can I launch right now"
+ * (container problems only). The course track is a curriculum view and must include problems
+ * the participant has not deployed, and AWS-only ones, or the learning path loses everything
+ * ahead of where the learner currently stands (#2926).
+ *
+ * Validation is intentionally thin — only a usable `id` is required. Rejecting more here
+ * would make a problem visible in AWS mode and invisible in local mode, which is the very
+ * class of divergence this shared projection removes; schema conformance is the catalog
+ * repository's own validator's job.
+ */
+export function loadProblemCatalogEntries(
+  roots: readonly string[],
+  fs: CatalogFs = CATALOG_FS,
+): ProblemCatalogSource {
+  const entries: ProblemCatalogEntry[] = [];
+  const skipped: SkippedCatalogEntry[] = [];
+  for (const root of roots) {
+    for (const problemId of fs.readDirNames(root)) {
+      const metadataPath = join(root, problemId, "metadata.json");
+      if (!fs.existsSync(metadataPath)) continue;
+      const projected = projectCatalogEntry(metadataPath, fs);
+      if (projected.ok) entries.push(projected.entry);
+      else skipped.push({ problemId, reason: projected.reason });
+    }
+  }
+  return {
+    entries: [...entries].sort((a, b) => a.id.localeCompare(b.id)),
+    skipped,
+  };
+}
+
+type ProjectedCatalogEntry =
+  | { readonly ok: true; readonly entry: ProblemCatalogEntry }
+  | { readonly ok: false; readonly reason: string };
+
+/** One metadata.json → its catalog entry, or why it could not be projected. */
+function projectCatalogEntry(metadataPath: string, fs: CatalogFs): ProjectedCatalogEntry {
+  try {
+    const metadata = JSON.parse(fs.readFileSync(metadataPath)) as ProblemMetadata;
+    if (typeof metadata.id !== "string" || metadata.id.length === 0) {
+      return { ok: false, reason: "metadata.json has no usable id" };
+    }
+    return { ok: true, entry: metadataToEntry(metadata) };
+  } catch (error) {
+    return { ok: false, reason: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 /** Load the full local-play catalog, self-healing an uninitialized problems/ submodule first. */

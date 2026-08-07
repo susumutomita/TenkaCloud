@@ -3,6 +3,7 @@ import {
   getBattleAttacks,
   getCliCredentials,
   getConsoleSigninUrl,
+  getProblemCatalog,
   getScoreEvents,
   issueProblemConsoleHandoff,
   resetProblem,
@@ -157,5 +158,35 @@ describe("getBattleAttacks", () => {
     const fetchMock = mockFetch({ attacks: [] });
     await getBattleAttacks(API, KEY, "JOB1", 15);
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain("sinceMin=15");
+  });
+});
+
+/**
+ * [#2925 / #2926] The runtime catalog endpoint. Only local mode calls it — the Docker image
+ * excludes `problems/` on purpose, so the portal's build-time glob is empty there and this
+ * is the sole source for problem narrative, course tracks and plugin slots.
+ */
+describe("getProblemCatalog", () => {
+  it("should GET the catalog endpoint with the participant bearer and return its entries", async () => {
+    const fetchMock = mockFetch({ entries: [{ id: "wp-exposed-backup" }] });
+    const result = await getProblemCatalog(API, KEY);
+    expect(result).toEqual([{ id: "wp-exposed-backup" }]);
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    expect(String(url)).toContain("/portal/problem-catalog");
+    expect((init as RequestInit)?.method ?? "GET").toBe("GET");
+    expect((init as RequestInit)?.headers).toMatchObject({ authorization: `Bearer ${KEY}` });
+  });
+
+  it("should treat a response with no entries field as an empty catalog", async () => {
+    mockFetch({});
+    expect(await getProblemCatalog(API, KEY)).toEqual([]);
+  });
+
+  it("should forward an abort signal so boot can be cancelled", async () => {
+    const fetchMock = mockFetch({ entries: [] });
+    const controller = new AbortController();
+    await getProblemCatalog(API, KEY, { signal: controller.signal });
+    const [, init] = fetchMock.mock.calls[0] ?? [];
+    expect((init as RequestInit)?.signal).toBe(controller.signal);
   });
 });

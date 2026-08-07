@@ -8,6 +8,7 @@ import type { LocalPlayDeployment } from "./local-play/api-state";
 import {
   autoInitProblemsSubmodule,
   loadLocalPlayCatalog,
+  loadProblemCatalogEntries,
   pinIntroDrillFirst,
   problemSearchRoots,
 } from "./local-play/catalog-loader";
@@ -330,6 +331,21 @@ async function containerServe(): Promise<void> {
   await serve(paths.deploymentPath);
 }
 
+/**
+ * [#2925 / #2926] Project the on-disk `problems/` catalog for `/portal/problem-catalog`.
+ *
+ * A problem whose metadata.json cannot be projected is reported rather than dropped in
+ * silence: from the portal it would be indistinguishable from a problem nobody wrote, and
+ * the participant would simply see a course track missing a week.
+ */
+function loadServedProblemCatalog() {
+  const { entries, skipped } = loadProblemCatalogEntries(problemSearchRoots(REPO_ROOT));
+  for (const { problemId, reason } of skipped) {
+    console.warn(`Skipped ${problemId} in the portal catalog: ${reason}`);
+  }
+  return entries;
+}
+
 async function serve(deploymentPath: string): Promise<void> {
   if (!existsSync(deploymentPath)) {
     throw new Error(`Local deployment state was not found: ${deploymentPath}`);
@@ -420,6 +436,11 @@ async function serve(deploymentPath: string): Promise<void> {
     simulator,
     simulatorSnapshotDir: join(p.localDir, "snapshots"),
     stateStore,
+    // [#2925 / #2926] The participant-facing catalog the portal renders narrative,
+    // course tracks and plugin slots from. Read from the bind-mounted `problems/` at
+    // serve time because the Docker image deliberately does not carry it, which left
+    // the portal's build-time glob empty and those surfaces blank.
+    problemCatalog: loadServedProblemCatalog(),
     // [#2906] Unset on the host/dev path — only the containerized entrypoint
     // (containerServe, below) sets this, so `up`'s detached `serve` is unaffected.
     // The container binds 127.0.0.1 the same as the host/dev default (it runs
