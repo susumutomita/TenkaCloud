@@ -185,6 +185,33 @@ function pathWithin(path: string, root: string): boolean {
   return absolute === absoluteRoot || absolute.startsWith(`${absoluteRoot}${sep}`);
 }
 
+/**
+ * 記録された compose path を照合してよい根。
+ *
+ * `REPO_ROOT` だけでは containerized entrypoint で成立しない。 記録される compose path は
+ * **ホスト絶対パス**でなければならず (daemon は受け取った文字列を自分の = ホストの filesystem
+ * で解決する — `catalog-loader.ts` の `problemSearchRoots` と同じ理由)、 一方 `REPO_ROOT` は
+ * module の位置から導くのでコンテナ内では `/app` になる。 結果、 正しく記録されたホストパスが
+ * 「リポジトリ外」 と判定され、 **問題を 1 つでも起動した session は二度と起動できなくなる**。
+ *
+ * `TENKACLOUD_PROBLEMS_HOST_PATH` は launcher が `problems/` を bind-mount した実際の絶対
+ * パスで、 コンテナ内でも同一パスに見えている (`compose.local.yaml`)。 ここを根に加えるのが
+ * 正しい照合であって、 検査を外すことではない — 許すのは「実際に問題が置かれている場所」
+ * だけで、 改竄された state が任意の compose を指す経路は塞いだままにする。
+ */
+function recordedPathRoots(): string[] {
+  const problemsHostPath = process.env.TENKACLOUD_PROBLEMS_HOST_PATH;
+  if (!problemsHostPath || !isAbsolute(problemsHostPath)) return [REPO_ROOT];
+  // 同じ場所を 2 度見ない (= 非コンテナ実行では両者が一致する)。
+  return pathWithin(problemsHostPath, REPO_ROOT)
+    ? [REPO_ROOT]
+    : [REPO_ROOT, resolve(problemsHostPath)];
+}
+
+function pathWithinAnyRoot(path: string): boolean {
+  return recordedPathRoots().some((root) => pathWithin(path, root));
+}
+
 function assertRecordedUnitShape(unit: Record<string, unknown>): void {
   if (
     typeof unit.problemId !== "string" ||
@@ -207,7 +234,7 @@ function assertRecordedProjectDirectory(unit: Record<string, unknown>): void {
     unit.projectDirectory !== undefined &&
     (typeof unit.projectDirectory !== "string" ||
       !isAbsolute(unit.projectDirectory) ||
-      !pathWithin(unit.projectDirectory, REPO_ROOT))
+      !pathWithinAnyRoot(unit.projectDirectory))
   ) {
     throw new Error("Recorded compose project directory is outside the repository");
   }
@@ -215,7 +242,7 @@ function assertRecordedProjectDirectory(unit: Record<string, unknown>): void {
 
 function assertRecordedComposePath(unit: Record<string, unknown>, localDir: string): void {
   if (unit.remappedComposePath === undefined) {
-    if (!pathWithin(String(unit.composePath), REPO_ROOT)) {
+    if (!pathWithinAnyRoot(String(unit.composePath))) {
       throw new Error("Recorded compose path is outside the repository");
     }
     return;
