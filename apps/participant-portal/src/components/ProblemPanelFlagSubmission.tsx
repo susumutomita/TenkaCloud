@@ -58,16 +58,35 @@ export function FlagSubmissionPanel({
   // している限りこの画面を維持するので submit form は再表示されない。 これが mock mode の
   // 「refetch が空振りして提出済みに切り替わらない」 ケースも吸収するため、 旧 mockCleared
   // state は不要になった (= 重複した状態を撤去)。
+  // [#2929] 解答後もヒント欄を残す。 以前はここで早期 return しており、 開封したヒントが
+  // 解答した瞬間に画面から消えていた。 消えていたのは「学習の記録」だけでなく **スコアの
+  // 説明** でもある: 減点は reveal 時点で確定済みなので、 ヒント欄が消えると
+  // 「🎉 +100 pt」 と 「合計 80 pt」 だけが並び、 差額 20 pt の理由がどこにも無くなる。
+  const solvedHints = hints.length > 0 && (
+    <HintsPanel
+      apiBaseUrl={apiBaseUrl}
+      sessionToken={sessionToken}
+      problemId={problemId}
+      hints={hints}
+      onRevealed={onScored}
+      revealOrder={revealOrder}
+      solved
+    />
+  );
+
   if (outcome?.kind === "ok") {
     return (
       <>
         <CelebrationOverlay visible />
-        <Alert
-          type="success"
-          header={t("problem_panel.ok_alert_header", { delta: outcome.scoreDelta })}
-        >
-          {t("problem_panel.ok_alert_body", { total: outcome.totalScore })}
-        </Alert>
+        <SpaceBetween size="s">
+          <Alert
+            type="success"
+            header={t("problem_panel.ok_alert_header", { delta: outcome.scoreDelta })}
+          >
+            {t("problem_panel.ok_alert_body", { total: outcome.totalScore })}
+          </Alert>
+          {solvedHints}
+        </SpaceBetween>
       </>
     );
   }
@@ -75,9 +94,12 @@ export function FlagSubmissionPanel({
   if (flagSubmitted) {
     // audit #6: reload 後など server 由来の 「提出済み」 表示。 事務的ではなく祝祭的 message。
     return (
-      <Alert type="success" header={t("problem_panel.celebrate_header", { points })}>
-        {t("problem_panel.celebrate_body")}
-      </Alert>
+      <SpaceBetween size="s">
+        <Alert type="success" header={t("problem_panel.celebrate_header", { points })}>
+          {t("problem_panel.celebrate_body")}
+        </Alert>
+        {solvedHints}
+      </SpaceBetween>
     );
   }
 
@@ -205,6 +227,47 @@ function formatRevealError(
  * 成功時に親 (= onScored) を呼んで score / hint 状態を refetch する (= optimistic に状態
  * 更新せず、 server truth を読み直す)。 失敗時は inline error を表示。
  */
+/**
+ * [#2929] A hint the participant can only read, never act on: either already revealed, or
+ * left unopened on a problem that is now solved. Split out of {@link HintsPanel}'s row so
+ * the interactive branch (order gate, confirm modal, in-flight state) stays legible.
+ *
+ * An unopened hint is *not* disclosed once solved. The penalty is charged at reveal time,
+ * so opening it for free afterwards would cost the participant who resisted it nothing but
+ * their advantage.
+ */
+function ReadOnlyHint({
+  hint,
+  index,
+  lang,
+}: {
+  hint: ParticipantHintView;
+  index: number;
+  lang: Parameters<typeof describeAgo>[2];
+}) {
+  const t = useT();
+  if (!hint.revealed) {
+    return (
+      <Box color="text-status-inactive">
+        <strong>{t("problem_panel.hint_label", { index: index + 1 })}</strong>{" "}
+        {t("problem_panel.hint_left_unopened")}
+      </Box>
+    );
+  }
+  return (
+    <Box>
+      <strong>{t("problem_panel.hint_label_colon", { index: index + 1 })}</strong> {hint.content}
+      {hint.revealedAt && (
+        <Box variant="small" color="text-status-info" margin={{ top: "xxs" }}>
+          {t("problem_panel.hint_revealed_ago", {
+            ago: describeAgo(hint.revealedAt, Date.now(), lang),
+          })}
+        </Box>
+      )}
+    </Box>
+  );
+}
+
 export function HintsPanel({
   apiBaseUrl,
   sessionToken,
@@ -213,6 +276,7 @@ export function HintsPanel({
   onRevealed,
   onRevealTracked,
   revealOrder,
+  solved,
 }: {
   apiBaseUrl: string;
   sessionToken: string;
@@ -221,6 +285,13 @@ export function HintsPanel({
   onRevealed: () => Promise<void>;
   /** 公開成功時の計測 hook。回答や hint 本文は渡さず id だけ通知する。 */
   onRevealTracked?: (hintId: string) => void;
+  /**
+   * [#2929] 解答済みの復習表示。 開封したヒントは読めるまま残し、 未開封は **開かずに
+   * 閉じる** — 解答後の減点には意味が無いので、 「解いたら全部見える」 にすると開封を
+   * 遅らせた人が損をするだけになる。 減点合計もここで示し、 「+100 pt なのに合計 80 pt」
+   * の差額を参加者が自分で説明できるようにする。
+   */
+  solved?: boolean;
   /**
    * Issue #1315 ← 問題 `scoring.hintReveal`: hint 公開順。 `"flat"` のとき順序ゲート
    * (predecessor lock) を外し、 全 hint を任意順で開封できる。 未指定 / `"sequential"`
@@ -273,13 +344,26 @@ export function HintsPanel({
   const revealedCount = effectiveHints.filter((h) => h.revealed).length;
   // flat モードでは順序ゲートを一切かけない (= どの hint も独立に開封できる)。
   const flat = revealOrder === "flat";
+  // [#2929] 開封で既に引かれた合計。 減点は reveal 時点で確定しているので、 解答後に
+  // 表示すべきなのは「これから引かれる額」ではなく「もう引かれた額」である。
+  const revealedPenalty = effectiveHints
+    .filter((h) => h.revealed)
+    .reduce((total, h) => total + h.penalty, 0);
   return (
     <>
       <Alert
         type="info"
-        header={t("problem_panel.hint_header", { revealed: revealedCount, total: hints.length })}
+        header={t(solved ? "problem_panel.hint_header_solved" : "problem_panel.hint_header", {
+          revealed: revealedCount,
+          total: hints.length,
+        })}
       >
         <SpaceBetween size="xs">
+          {solved && revealedPenalty > 0 && (
+            <Box color="text-status-warning">
+              {t("problem_panel.hint_penalty_total", { penalty: revealedPenalty })}
+            </Box>
+          )}
           {effectiveHints.map((h, i) => {
             // Issue #1315: progressive hint 順序制約。 Hint N (index i) は Hint 1..i が
             // すべて revealed=true のときのみ button 有効。 backend (409 hint_out_of_order)
@@ -292,18 +376,8 @@ export function HintsPanel({
               : undefined;
             return (
               <Box key={h.id}>
-                {h.revealed ? (
-                  <Box>
-                    <strong>{t("problem_panel.hint_label_colon", { index: i + 1 })}</strong>{" "}
-                    {h.content}
-                    {h.revealedAt && (
-                      <Box variant="small" color="text-status-info" margin={{ top: "xxs" }}>
-                        {t("problem_panel.hint_revealed_ago", {
-                          ago: describeAgo(h.revealedAt, Date.now(), lang),
-                        })}
-                      </Box>
-                    )}
-                  </Box>
+                {h.revealed || solved ? (
+                  <ReadOnlyHint hint={h} index={i} lang={lang} />
                 ) : (
                   <Box>
                     <strong>{t("problem_panel.hint_label", { index: i + 1 })}</strong>{" "}

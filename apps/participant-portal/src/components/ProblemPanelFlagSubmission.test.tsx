@@ -321,3 +321,72 @@ describe("HintsPanel reveal flow", () => {
     expect(apiMocks.revealHint).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * [#2929] Solving a problem used to erase its hints: the panel early-returned on the
+ * cleared state and never reached the hint list. What vanished was not only the study
+ * record but the *explanation of the score* — hint penalties are deducted at reveal time,
+ * so with the hints gone the screen showed "🎉 +100 pt" beside "total 80 pt" and nothing
+ * accounting for the 20.
+ *
+ * Unopened hints stay shut afterwards on purpose: a penalty has no meaning once the
+ * problem is solved, so revealing them for free would only punish the participant who
+ * held out.
+ */
+describe("FlagSubmissionPanel hint review after solving (#2929)", () => {
+  const HINTS = [
+    { id: "h1", penalty: 20, revealed: true, content: "Look at the backup file" },
+    { id: "h2", penalty: 30, revealed: false },
+  ] as const;
+
+  it("should still show a revealed hint's content after the flag is submitted", () => {
+    renderPanel({ flagSubmitted: true, hints: HINTS });
+    expect(screen.getByText(/Look at the backup file/)).toBeInTheDocument();
+  });
+
+  it("should account for the deduction so the total can be explained", () => {
+    renderPanel({ flagSubmitted: true, hints: HINTS });
+    // Only the opened hint counts — h2 was never revealed, so it never cost anything.
+    expect(screen.getByText(/-20 pt/)).toBeInTheDocument();
+  });
+
+  it("should leave an unopened hint closed, with no way to reveal it for free", () => {
+    renderPanel({ flagSubmitted: true, hints: HINTS });
+    expect(screen.getByText(/Left unopened/)).toBeInTheDocument();
+    // "Reveal hint" is the per-hint affordance; the modal's confirm button is just
+    // "Reveal" and is always mounted, so the exact name matters here.
+    expect(screen.queryByRole("button", { name: "Reveal hint" })).not.toBeInTheDocument();
+  });
+
+  it("should omit the deduction line when no hint was ever opened", () => {
+    const untouched = [{ id: "h1", penalty: 20, revealed: false }] as const;
+    renderPanel({ flagSubmitted: true, hints: untouched });
+    expect(screen.queryByText(/-20 pt/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Left unopened/)).toBeInTheDocument();
+  });
+
+  it("should keep the celebration alert alongside the hints", () => {
+    renderPanel({ flagSubmitted: true, hints: HINTS });
+    expect(screen.getByText(/Look at the backup file/)).toBeInTheDocument();
+    // The cleared state itself must not be replaced by the hint list.
+    expect(screen.getByText(/100/)).toBeInTheDocument();
+  });
+
+  it("should show the hints immediately after a successful submit, not only on reload", () => {
+    // The "+100 / total 80" screen is the one where the mismatch was visible.
+    apiMocks.submitFlag.mockResolvedValue({ kind: "ok", scoreDelta: 100, totalScore: 80 });
+    renderPanel({ hints: HINTS });
+    return (async () => {
+      await userEvent.type(screen.getByRole("textbox"), "FLAG{x}");
+      await userEvent.click(screen.getByRole("button", { name: SUBMIT }));
+      await waitFor(() => expect(screen.getByText(/Look at the backup file/)).toBeInTheDocument());
+      expect(screen.getByText(/-20 pt/)).toBeInTheDocument();
+    })();
+  });
+
+  it("should render nothing extra for a solved problem that has no hints at all", () => {
+    renderPanel({ flagSubmitted: true, hints: [] });
+    expect(screen.queryByText(/Left unopened/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/already deducted/)).not.toBeInTheDocument();
+  });
+});
