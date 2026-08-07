@@ -421,12 +421,12 @@ async function serve(deploymentPath: string): Promise<void> {
     simulatorSnapshotDir: join(p.localDir, "snapshots"),
     stateStore,
     // [#2906] Unset on the host/dev path — only the containerized entrypoint
-    // (containerServe, below) sets these, so `up`'s detached `serve` is unaffected.
+    // (containerServe, below) sets this, so `up`'s detached `serve` is unaffected.
+    // The container binds 127.0.0.1 the same as the host/dev default (it runs
+    // with `network_mode: host` — see compose.local.yaml — so that address
+    // genuinely IS the host's loopback, not a separate namespace to bridge).
     ...(process.env.TENKACLOUD_LOCAL_PORTAL_DIST
       ? { portalDistDir: process.env.TENKACLOUD_LOCAL_PORTAL_DIST }
-      : {}),
-    ...(process.env.TENKACLOUD_LOCAL_BIND_HOST
-      ? { bindHost: process.env.TENKACLOUD_LOCAL_BIND_HOST }
       : {}),
   });
 
