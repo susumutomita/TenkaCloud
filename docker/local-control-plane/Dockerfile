@@ -28,6 +28,38 @@ COPY . .
 RUN bun install --frozen-lockfile --ignore-scripts
 RUN bun run --filter @TenkaCloud/participant-portal build
 
+# 実行時の依存だけを別に解決する。 build stage の node_modules を持ち込むと、 この control
+# plane が一度も読まないものが image に載る — 実測で 1.8GB のうち 1GB 以上が別アプリと
+# ビルド道具だった (next 410MB = developer-portal、 aws-cdk-lib 144MB = infrastructure、
+# @cloudflare 128MB = always-on-control-plane、 @biomejs 109MB = linter)。 portal の
+# frontend 依存 (cloudscape / ace-builds 等) も dist に bundle 済みで、 実行時には要らない。
+#
+# workspace を `packages/*` だけに絞って install し直す。 root の dependencies は 3 つしか
+# 無く (`@libsql/client` / `@tenkacloud/coordination-plugin-sdk` / `ws`)、 control plane が
+# import する `@tenkacloud/*` は packages/ にある。 `infrastructure` と `apps/*` を
+# workspace から外すことが、 上の 1GB を落とす操作そのものになる。
+#
+# devDependencies も落とす。 `--production` は使えない — bun 1.3 では frozen lockfile を
+# 含意し、 workspace 集合を変えた時点で必ず失敗する (`CI=false` でも `--no-frozen-lockfile`
+# でも外せない)。 package.json から消すほうが、 同じ結果を素の install で得られる。
+#
+# 版の出所は build stage と同じ bun.lock なので、 解決結果が食い違うことはない。 供給鎖の
+# 担保は `--ignore-scripts` 側が持つ (build stage と同じ理由)。
+FROM oven/bun:1.3.11-alpine AS runtime-deps
+WORKDIR /app
+COPY bun.lock ./
+COPY package.json ./package.json.full
+COPY packages ./packages
+# `workspaces` を packages/* だけに書き換える。 他の field はそのまま残す。
+RUN bun --eval ' \
+      const pkg = JSON.parse(await Bun.file("package.json.full").text()); \
+      pkg.workspaces = ["packages/*"]; \
+      delete pkg.devDependencies; \
+      await Bun.write("package.json", JSON.stringify(pkg, null, 2)); \
+    ' \
+  && rm package.json.full \
+  && bun install --ignore-scripts
+
 FROM oven/bun:1.3.11-alpine AS runtime
 WORKDIR /app
 
@@ -52,7 +84,24 @@ RUN apk add --no-cache docker-cli \
   && chmod +x /usr/local/lib/docker/cli-plugins/docker-compose \
   && docker compose version
 
-COPY --from=build /app /app
+# build stage の /app を丸ごと持ち込まない。 実行時に読むものだけを名指しで入れる。
+# 以前は `COPY --from=build /app /app` で、 image 3.71GB のうち 2.6GB がこの 1 レイヤー
+# だった — tmp/ 390MB、 sampleimages/ 33MB、 docs/、 landing/、 infrastructure/、 そして
+# 他アプリの node_modules まで、 この control plane が一度も開かないものが載っていた。
+#
+# 入れるもの: control plane の engine (scripts/)、 それが import する workspace
+# (packages/)、 配信する portal の成果物 (dist)、 そして runtime-deps stage で production
+# だけに絞った node_modules。
+COPY --from=runtime-deps /app/node_modules /app/node_modules
+COPY --from=runtime-deps /app/package.json /app/package.json
+COPY packages /app/packages
+COPY scripts /app/scripts
+# scripts/local-play/ は採点カーネルを infrastructure/lib から import する (attack-detection /
+# uptime-multi / phased-polling 等の scoring kind、 scoring-kernel、 stack-names)。 AWS 経路と
+# ローカル経路で採点実装を二重に持たないための共有であって、 CDK を実行するわけではない。
+# `lib/` だけで 3.9MB — `infrastructure/` 全体 (cdk.out を含めて 6.4GB) とは別物。
+COPY infrastructure/lib /app/infrastructure/lib
+COPY --from=build /app/apps/participant-portal/dist /app/apps/participant-portal/dist
 
 # [#2906 audit finding, round 2] No bind-host override needed: server.ts's
 # default listener bind is already loopback-only (127.0.0.1), identical to

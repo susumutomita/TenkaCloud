@@ -18,6 +18,16 @@ node_modules
 **/.turbo
 .tenkacloud/
 
+# この image が作るのは control plane と participant portal だけ。 workspace ですら無い
+# (= `bun install` がその package.json を読まない) 木を context に載せる理由が無い。
+# 実測: tmp/ 389MB、 sampleimages/ 33MB、 docs/ 8.3MB、 landing/ 5.0MB。
+# `infrastructure` と `apps/*` は workspace なので同じ扱いにはできない — `bun install
+# --frozen-lockfile` がそれぞれの package.json を要求する。 中身の重い cdk.out は上で除外済み。
+tmp/
+sampleimages/
+docs/
+landing/
+
 # [#2906 audit finding] A host/dev session (`make local-dev`) writes this file
 # with that session's live participant token — `COPY . .` would otherwise bake
 # a developer's leftover session credential into the image. The container

@@ -159,4 +159,101 @@ describe("local-play private session state", () => {
       rmdirSync(directory);
     }
   });
+
+  /**
+   * containerized entrypoint (`make local`) では、記録される compose path は **ホスト絶対
+   * パス**でなければならない — daemon は受け取った文字列を自分の (= ホストの) filesystem で
+   * 解決するため。一方 `REPO_ROOT` は module の位置から導くのでコンテナ内では `/app` になる。
+   *
+   * 照合根を `REPO_ROOT` だけにすると、正しく記録されたホストパスが「リポジトリ外」と判定され、
+   * **問題を 1 つでも起動した session が二度と起動できなくなる** (実機で観測: コンテナが
+   * `Recorded compose path is outside the repository` で exit 1)。
+   *
+   * `TENKACLOUD_PROBLEMS_HOST_PATH` は launcher が `problems/` を bind-mount した実際の絶対
+   * パスで、コンテナ内でも同一パスに見えている。ここを根に加えるのが正しい照合であって、
+   * 検査を外すことではない。
+   */
+  describe("containerized entrypoint (TENKACLOUD_PROBLEMS_HOST_PATH)", () => {
+    const HOST_PROBLEMS = "/Users/someone/product/TenkaCloud/problems";
+
+    function withProblemsHostPath<T>(value: string | undefined, run: () => T): T {
+      const previous = process.env.TENKACLOUD_PROBLEMS_HOST_PATH;
+      if (value === undefined) delete process.env.TENKACLOUD_PROBLEMS_HOST_PATH;
+      else process.env.TENKACLOUD_PROBLEMS_HOST_PATH = value;
+      try {
+        return run();
+      } finally {
+        if (previous === undefined) delete process.env.TENKACLOUD_PROBLEMS_HOST_PATH;
+        else process.env.TENKACLOUD_PROBLEMS_HOST_PATH = previous;
+      }
+    }
+
+    function writeUnit(paths: LocalPaths, composePath: string): void {
+      writeFileSync(
+        paths.unitsPath,
+        JSON.stringify({
+          units: [
+            {
+              problemId: "ac26-w1-underconstraint",
+              composePath,
+              composeProjectName: "tc-local-ac26-w1-underconstraint",
+              secretEnv: ["FLAG_SEED"],
+            },
+          ],
+        }),
+        "utf8",
+      );
+    }
+
+    it("should accept a host path under the bind-mounted problems root", () => {
+      const directory = mkdtempSync(join(tmpdir(), "tenkacloud-private-state-"));
+      const paths = localPaths(directory);
+      writeUnit(
+        paths,
+        `${HOST_PROBLEMS}/challenges/ac26-w1-underconstraint/local/docker-compose.yml`,
+      );
+      try {
+        const recorded = withProblemsHostPath(HOST_PROBLEMS, () =>
+          readRecordedUnits(paths.unitsPath, paths.localDir),
+        );
+        expect(recorded.units).toHaveLength(1);
+        expect(recorded.units[0]?.problemId).toBe("ac26-w1-underconstraint");
+      } finally {
+        unlinkSync(paths.unitsPath);
+        rmdirSync(directory);
+      }
+    });
+
+    it("should still reject a path outside both the repository and that problems root", () => {
+      const directory = mkdtempSync(join(tmpdir(), "tenkacloud-private-state-"));
+      const paths = localPaths(directory);
+      writeUnit(paths, "/tmp/attacker-compose.yml");
+      try {
+        expect(() =>
+          withProblemsHostPath(HOST_PROBLEMS, () =>
+            readRecordedUnits(paths.unitsPath, paths.localDir),
+          ),
+        ).toThrow("outside the repository");
+      } finally {
+        unlinkSync(paths.unitsPath);
+        rmdirSync(directory);
+      }
+    });
+
+    it("should ignore a relative override rather than widening to the process cwd", () => {
+      const directory = mkdtempSync(join(tmpdir(), "tenkacloud-private-state-"));
+      const paths = localPaths(directory);
+      writeUnit(paths, `${HOST_PROBLEMS}/challenges/x/local/docker-compose.yml`);
+      try {
+        expect(() =>
+          withProblemsHostPath("problems", () =>
+            readRecordedUnits(paths.unitsPath, paths.localDir),
+          ),
+        ).toThrow("outside the repository");
+      } finally {
+        unlinkSync(paths.unitsPath);
+        rmdirSync(directory);
+      }
+    });
+  });
 });
