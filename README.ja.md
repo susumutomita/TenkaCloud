@@ -91,40 +91,43 @@ Codespaces でプレイできるのは **クラウド非依存のドリルのみ
 
 > Codespaces の中にとどまってください。ドリルへのリンクはポート `5175` のプレビュー URL 経由で解決されます。自分の PC のブラウザタブに生の `127.0.0.1` の URL を貼り付けても、自分の PC 自体を指すだけで動作しません。
 >
-> **任意の手動再実行:** 自動起動には 2 分の待機ウィンドウがあります。タイムアウトした場合(Codespaces の起動ログにその旨が表示されます)は、**「▷ ローカルプレイ開始」** タスクを自分で実行してください(コマンドパレット → **Tasks: Run Task**、または `Cmd/Ctrl+Shift+B`)— これが代わりに `make local` を実行してくれる。
+> **任意の手動再実行:** 自動起動には 4 分の待機ウィンドウがあります(コンテナイメージはセットアップ時にあらかじめビルド済みのため、通常は高速です)。タイムアウトした場合(Codespaces の起動ログにその旨が表示されます)は、**「▷ ローカルプレイ開始」** タスクを自分で実行してください(コマンドパレット → **Tasks: Run Task**、または `Cmd/Ctrl+Shift+B`)— これが代わりに `make local` を実行してくれる。
 
 ### ローカルで試す(AWS 不要)
 
-`make local` が参加者向けの主入口です。ローカル採点 API と Participant Portal を起動し、開いた画面からドリルを選べます。進捗はデフォルトでローカルの非公開 SQLite ファイル `.tenkacloud/local/local-play.sqlite` に保存され、DynamoDB と AWS SDK には依存しません。開発者向けの高度なオプションでは `tenkacloud local` CLI も利用できます。
+`make local` が参加者向けの主入口です。ローカル採点 API と Participant Portal を Docker コンテナ内で起動し、開いた画面からドリルを選べます。進捗は Docker が管理する volume に保存され、DynamoDB と AWS SDK には依存しません。
 
-**クローン直後にはこちらを推奨(自己修復型、Bun の事前インストール不要):**
+**前提条件は Git・Make・Docker Engine・Docker Compose v2 のみです。Bun・Node・`node_modules` はホストに不要です。**
+
+```bash
+git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
+cd TenkaCloud
+make local
+```
+
+`make local` は Docker のインストールと起動状態を確認し、`problems/` submodule が未取得なら取得し、local-play コンテナを build・起動して、準備ができたら Portal の URL を表示します。`make local-down` で停止して進捗を消去、`make local-status` で起動状況を確認できます。
+
+> **Docker Desktop (macOS/Windows) を使う場合:** local-play コンテナは host networking で動作します。Docker Desktop では初回だけ **設定 → Resources → Network → Enable host networking**(Desktop 4.34 以降)を有効化してください。有効化されないままコンテナが起動した場合、`make local` はこの手順そのものを表示して失敗します。ネイティブの Linux Docker Engine と Codespaces ではこの設定は不要です。
+
+<details>
+<summary>開発者向け: Bun / Vite のホットリロード経路</summary>
+
+`make local-dev` は同じ local-play スタックを Docker を使わずホスト上で Bun / Vite で直接実行します(変更のたびにコンテナを再ビルドせずホットリロードできます)。
 
 ```bash
 git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
 cd TenkaCloud
 make local-onboard
-make local
+make local-dev
 ```
 
-`make local-onboard` は、必要なものをインストールする前に必ず同意を求めます — Bun 本体(未インストールの場合)、`problems/` submodule、Docker の診断 — その上で準備状況を報告します。同意なしに何かをインストールすることはありません。無人実行では `make local-onboard YES=1` ですべてのインストールを事前承認できます(GitHub Codespaces もこの経路を使っています)。すべての前提条件が揃ったと報告されたら、`make local` でローカル採点 API と Participant Portal が起動します。
+`make local-onboard` は、必要なものをインストールする前に必ず同意を求めます — Bun 本体(未インストールの場合)、`problems/` submodule、Docker の診断 — その上で準備状況を報告します。同意なしに何かをインストールすることはありません。無人実行では `make local-onboard YES=1` ですべてのインストールを事前承認できます。
 
-<details>
-<summary>内部で行っていること / 手動での代替手順</summary>
-
-```bash
-git clone https://github.com/susumutomita/TenkaCloud.git
-cd TenkaCloud
-make install
-git submodule update --init problems
-bun link
-tenkacloud local
-```
-
-`bun link` を行わない場合は `bun run tenkacloud local` でも実行できます。ドリル一覧は `tenkacloud local list`、1 つを事前起動する場合は `tenkacloud local --problem <id>` です。リモート保存を使う場合だけ `--database turso` と `TENKACLOUD_LOCAL_TURSO_URL` / `TENKACLOUD_LOCAL_TURSO_AUTH_TOKEN` を明示します。デフォルトは常に SQLite です。
+さらに低レベルには `make install && git submodule update --init problems && bun link && tenkacloud local`(`bun link` を行わない場合は `bun run tenkacloud local`)でも実行できます。ドリル一覧は `tenkacloud local list`、1 つを事前起動する場合は `tenkacloud local --problem <id>` です。リモート保存を使う場合だけ `--database turso` と `TENKACLOUD_LOCAL_TURSO_URL` / `TENKACLOUD_LOCAL_TURSO_AUTH_TOKEN` を明示します。デフォルトは常に SQLite です。
 
 </details>
 
-全サブコマンドは [docs/local-play.md](./docs/local-play.md)(英語)を参照してください。
+全サブコマンドは [docs/local-play.md](./docs/local-play.md)(英語)、コンテナ/ホスト境界の設計は [ADR-055](./docs/architecture/adr-055-docker-only-participant-local-mode.html) を参照してください。
 
 ### AWS にデプロイする
 

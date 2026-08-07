@@ -4,11 +4,14 @@ import { describe, expect, it } from "vitest";
 import { LOCAL_ONBOARDING_COMMANDS } from "../../../apps/participant-portal/src/auth/local-onboarding-contract";
 
 /**
- * Issue #2696 PR 1: `make local-onboard` (Makefile:341-345) is a self-healing,
- * Bun-optional fresh-clone entry point that already existed but was referenced
- * nowhere in either README's local Quickstart. This file pins that both READMEs
- * now promote it inside the "Try it locally" / "ローカルで試す" section, ahead of
- * the manual command sequence it wraps.
+ * Issue #2906: the participant fresh-clone path is Docker-only (Git, Make,
+ * Docker Engine, Docker Compose v2 — no Bun/Node/node_modules), pinned via
+ * LOCAL_ONBOARDING_COMMANDS. `make local-onboard` (Makefile) now only matters
+ * for the developer Bun/Vite hot-reload path (`make local-dev`), so this file
+ * pins that it lives inside — not ahead of — the collapsed developer
+ * `<details>` block in both READMEs, and that the primary section states the
+ * Docker-only prerequisites plainly. (Supersedes the Issue #2696 version of
+ * this file, which pinned the previous self-healing-Bun story.)
  */
 
 const REPO_ROOT = join(__dirname, "..", "..", "..");
@@ -33,13 +36,13 @@ function firstBashCommands(markdown: string): readonly string[] {
     .filter((line) => line.length > 0);
 }
 
-describe("README local quickstart references make local-onboard (Issue #2696)", () => {
-  it("should reference make local-onboard inside the Try it locally section of README.md", () => {
+describe("README local quickstart is Docker-only, make local-onboard is developer-only (Issue #2906)", () => {
+  it("should scope make local-onboard to the developer details block in README.md", () => {
     const section = extractSection(readmeEn, "### Try it locally (no AWS)", "### Deploy on AWS");
     expect(section).toContain("make local-onboard");
   });
 
-  it("should reference make local-onboard inside the ローカルで試す section of README.ja.md", () => {
+  it("should scope make local-onboard to the developer details block in README.ja.md", () => {
     const section = extractSection(
       readmeJa,
       "### ローカルで試す(AWS 不要)",
@@ -48,15 +51,15 @@ describe("README local quickstart references make local-onboard (Issue #2696)", 
     expect(section).toContain("make local-onboard");
   });
 
-  it("should present make local-onboard before the manual-alternative <details> block in README.md", () => {
+  it("should present make local-onboard INSIDE the developer <details> block in README.md, not the primary path", () => {
     const section = extractSection(readmeEn, "### Try it locally (no AWS)", "### Deploy on AWS");
     const onboardIndex = section.indexOf("make local-onboard");
     const detailsIndex = section.indexOf("<details>");
     expect(detailsIndex).toBeGreaterThan(-1);
-    expect(onboardIndex).toBeLessThan(detailsIndex);
+    expect(onboardIndex).toBeGreaterThan(detailsIndex);
   });
 
-  it("should present make local-onboard before the manual-alternative <details> block in README.ja.md", () => {
+  it("should present make local-onboard INSIDE the developer <details> block in README.ja.md, not the primary path", () => {
     const section = extractSection(
       readmeJa,
       "### ローカルで試す(AWS 不要)",
@@ -65,19 +68,19 @@ describe("README local quickstart references make local-onboard (Issue #2696)", 
     const onboardIndex = section.indexOf("make local-onboard");
     const detailsIndex = section.indexOf("<details>");
     expect(detailsIndex).toBeGreaterThan(-1);
-    expect(onboardIndex).toBeLessThan(detailsIndex);
+    expect(onboardIndex).toBeGreaterThan(detailsIndex);
   });
 
-  it("should describe make local-onboard as working without Bun preinstalled in both READMEs", () => {
+  it("should state the Docker-only prerequisites (no Bun/Node/node_modules) in both READMEs", () => {
     const enSection = extractSection(readmeEn, "### Try it locally (no AWS)", "### Deploy on AWS");
-    expect(enSection).toMatch(/no Bun preinstall required/i);
+    expect(enSection).toMatch(/no Bun, Node, or `node_modules`/i);
 
     const jaSection = extractSection(
       readmeJa,
       "### ローカルで試す(AWS 不要)",
       "### AWS にデプロイする",
     );
-    expect(jaSection).toMatch(/Bun の事前インストール不要/);
+    expect(jaSection).toMatch(/Bun・Node・`node_modules` はホストに不要/);
   });
 
   it("should keep the fresh-clone command contract identical in both READMEs", () => {

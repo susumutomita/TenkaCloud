@@ -61,17 +61,39 @@ the Portal onboarding drill:
 ```bash
 git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
 cd TenkaCloud
-make local-onboard
 make local
 ```
 
-On macOS, Linux, and Windows through WSL2, `make local-onboard` diagnoses Bun,
-the catalog submodule, Docker Compose, and the Docker daemon before `make local`
-starts the Portal. GitHub Codespaces performs that setup and starts the Portal
-automatically; run the **▷ ローカルプレイ開始** task only as a fallback when
+`make local` needs only Git, Make, Docker Engine, and Docker Compose v2 on the
+host — no Bun, Node, or `node_modules` (see
+[ADR-055](./architecture/adr-055-docker-only-participant-local-mode.html) for
+the container/host boundary). It checks Docker is installed and running,
+fetches the `problems/` catalog submodule if it's missing, then builds/starts
+the local-play container and prints the Portal URL once it answers.
+`make local-down` stops it and clears progress; `make local-status` reports
+whether it's running. GitHub Codespaces performs the equivalent setup and
+starts the Portal automatically (Docker-in-Docker is already provisioned
+there); run the **▷ ローカルプレイ開始** task only as a fallback when
 automatic startup reports a failure.
 
-The developer CLI exposes advanced launch options:
+On Docker Desktop (macOS/Windows) the container runs with host networking
+(`network_mode: host` in `compose.local.yaml`, ADR-055 §2.2), which Desktop
+requires enabling once under **Settings → Resources → Network → Enable host
+networking** (Desktop >=4.34). `make local`/`make local-status` detect a
+container that came up healthy but is unreachable from the host and fail
+loud with this exact instruction, rather than reporting a false success —
+native Linux Docker Engine and Codespaces need no such setting.
+
+For hot-reload development (no container rebuild per change), run the same
+stack directly on the host instead:
+
+```bash
+make local-onboard   # diagnoses/installs Bun, the submodule, and Docker, with consent
+make local-dev       # host Bun + Vite, same local-play engine as the container
+```
+
+The developer CLI exposes advanced launch options once `make local-onboard`
+has run:
 
 ```bash
 tenkacloud local                         # scoring API + portal; local SQLite persistence
@@ -82,11 +104,12 @@ tenkacloud local down                    # stop runtimes and clear all progress
 Run `bun link` once to install the repository's `tenkacloud` executable, or
 prefix any command with `bun run` (for example, `bun run tenkacloud local`).
 The default backend is the embedded SQLite file
-`.tenkacloud/local/local-play.sqlite`, with owner-only permissions. It retains
-team progress and scores while local play is running and across unexpected API
-restarts. An explicit `tenkacloud local down` clears that progress. The store
-never persists the participant token, process/container ownership, or a running
-Simulator world.
+`.tenkacloud/local/local-play.sqlite` on the host dev path (a named Docker
+volume on the `make local` container path), with owner-only permissions. It
+retains team progress and scores while local play is running and across
+unexpected API restarts. An explicit `tenkacloud local down` (or
+`make local-down`) clears that progress. The store never persists the
+participant token, process/container ownership, or a running Simulator world.
 Use the remote backend only when explicitly requested:
 
 ```bash
