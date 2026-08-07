@@ -383,18 +383,64 @@
       <li>Native Windows support (WSL2 + Docker Desktop only, matching the platform's existing WSL2-only Windows story).</li>
     </ul>
 
-    <h2>7. Unverified in the authoring environment</h2>
+    <h2>7. Verified on real hardware, and what remains unverified</h2>
+
+    <h3>7.1 The first real run found two defects no amount of reading had</h3>
     <p>
-      This ADR's design was authored and unit-tested in a sandboxed session with no Docker Hub
-      registry access (an intentional network policy, not a defect), so the following are
-      one-time verifications pending, not claims of having been exercised:
+      This design was authored and unit-tested in a sandboxed session with no Docker Hub
+      registry access, so <code>docker build</code> and <code>docker compose up</code> could
+      never be executed there. The first real <code>make local</code> — on macOS aarch64 with
+      Colima — failed twice before it succeeded, and both failures were invisible to every
+      check that session could run:
     </p>
     <ul>
-      <li>An actual <code>docker build</code> of <code>docker/local-control-plane/Dockerfile</code> and a full <code>docker compose up</code> against it (GitHub Actions runners have Docker Hub access; a CI-facing check exercises this even though this session could not).</li>
-      <li>A live fresh-clone run on macOS, Linux, and WSL2 with no Bun/Node/<code>node_modules</code> present.</li>
-      <li><strong>Highest priority</strong>: starting one full problem (e.g. the pinned intro drill) through the Docker path end to end — readiness, challenge-surface load in a real browser, and a real <code>/verify</code> submission — confirming §2.2's <code>network_mode: host</code> fix actually lets the control-plane container reach a sibling container's <code>127.0.0.1</code>-published port on a real Docker daemon, not just that <code>docker compose config</code> resolves the expected YAML shape in a unit test. This gap was caught only on a <em>second</em> Fable adversarial-audit pass, after a first fix (<code>host.docker.internal</code> + <code>extra_hosts</code>) had already shipped and later turned out to be Docker-Desktop-only — a reminder that this item stays highest priority until it is exercised against a real daemon, on Linux Engine specifically, not just Docker Desktop.</li>
+      <li>
+        <strong>The image build depended on the very directory the image excludes.</strong>
+        §2.4 keeps <code>problems/</code> out of the image deliberately (bind-mounted read-only
+        at run time), so it does not exist during the build. But the Portal's
+        <code>build</code> script type-checked its tests, and a test statically imports the real
+        catalog's <code>metadata.json</code> to pin the UI against it (#2914) — so the build asked
+        TypeScript to resolve a path the image is defined not to contain, and failed with
+        <code>TS2307</code> plus a cascade of derived errors. Split by adding
+        <code>apps/participant-portal/tsconfig.build.json</code> (src only) and pointing
+        <code>build</code> at it; <code>typecheck</code> and CI still check tests against the
+        default config, so no type coverage is lost. The test's import is correct and unchanged
+        — what was wrong was letting the image build depend on it.
+      </li>
+      <li>
+        <strong>The socket path §2.3 mounts is resolved daemon-side, not host-side.</strong>
+        The launcher derived the mount source from the active Docker context's endpoint, which
+        is right on Linux (including rootless) because the daemon shares the CLI's filesystem.
+        On macOS it is wrong for every common installation: Docker Desktop, Colima, and Rancher
+        Desktop all run the daemon inside a VM, so a bind-mount source is resolved <em>there</em>.
+        Passing Colima's host-side proxy socket produced
+        <code>error while creating mount source path ... operation not supported</code> — not
+        "missing" (<code>$HOME</code> is visible to the VM over virtiofs) but unmountable as a
+        socket. Darwin now resolves to the VM-internal <code>/var/run/docker.sock</code>, and
+        returns before the host-side <code>-S</code> existence check, which can never pass on
+        macOS for the same reason. An explicit <code>TENKACLOUD_DOCKER_SOCKET</code> now takes
+        priority over all detection, as an escape hatch for setups this logic does not anticipate.
+      </li>
+    </ul>
+    <p>
+      Both are pinned by tests that assert the <em>resolved value</em> rather than grepping the
+      script's source, and both were confirmed to catch the regression by reverting each fix and
+      observing the failures. The run then reached HTTP 200 on
+      <code>http://127.0.0.1:5175</code> with the container healthy and the socket visible
+      inside it. Note the shape of both defects: each was a case where CI stayed green because
+      CI checks out the submodule and runs on Linux — the two conditions the participant path
+      does not share.
+    </p>
+
+    <h3>7.2 Still unverified</h3>
+    <p>
+      These remain one-time verifications pending, not claims of having been exercised:
+    </p>
+    <ul>
+      <li>A live fresh-clone run on Linux and WSL2 with no Bun/Node/<code>node_modules</code> present (macOS/Colima is now covered by §7.1).</li>
+      <li><strong>Highest priority</strong>: starting one full problem (e.g. the pinned intro drill) through the Docker path end to end — readiness, challenge-surface load in a real browser, and a real <code>/verify</code> submission — confirming §2.2's <code>network_mode: host</code> fix actually lets the control-plane container reach a sibling container's <code>127.0.0.1</code>-published port on a real Docker daemon. §7.1's run confirms the control plane itself comes up and answers, which is necessary but not sufficient: it does not start a sibling container, so the reachability claim that two adversarial-audit rounds already got wrong is still untested against a live daemon.</li>
       <li>End-to-end play of a relative-bind-mount problem (e.g. <code>wp-exposed-backup</code>) through the Docker path specifically, confirming §2.4's fix in a real daemon, not just <code>docker compose config</code>'s static interpolation.</li>
-      <li>That <code>network_mode: host</code> genuinely behaves as documented on Docker Desktop >=4.34 (macOS/Windows) as well as Linux Engine — this session can only confirm the compose file's shape, not runtime behavior on any platform.</li>
+      <li>That <code>network_mode: host</code> genuinely behaves as documented on Docker Desktop >=4.34 (macOS/Windows) as well as Linux Engine. Note that §7.1's macOS finding is a caution here rather than a reassurance: a VM-backed daemon resolves things on its own side, which is exactly the class of assumption <code>network_mode: host</code> also makes.</li>
       <li>That Docker Desktop's host-networking opt-in setting (Settings → Resources → Network, §2.2) is accurately described — this session's knowledge of Desktop's exact UI path and version floor is unverified against <code>docs.docker.com</code> (blocked by this session's network policy), and, more importantly, that <code>docker-launcher.sh</code>'s <code>host_reachable()</code> post-check actually fires and shows the right message on a real Desktop install with the setting off, rather than just passing its unit tests against a mocked reachability probe.</li>
       <li>That the Codespaces postCreate image pre-build (round 2 fix for the build-time-vs-120s-deadline gap) actually keeps <code>codespaces-start-local.sh</code>'s postStart build a fast cache hit on a real fresh Codespace — this session confirmed the code paths and updated the deadline, but has no way to time an actual Codespaces container lifecycle.</li>
       <li>A live GitHub Codespaces run confirming the request-derived <code>runtime-config.json</code> (§2.1) and the passed-through CORS env vars actually let the forwarded Portal reach the API with no manual step.</li>
