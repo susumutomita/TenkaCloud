@@ -7,7 +7,7 @@ import {
 } from "./container-runner";
 import type { ContainerProblem } from "./manifest";
 import { remapContainerProblem } from "./port-remap";
-import { ProblemLifecycle } from "./problem-lifecycle";
+import { type LifecycleDeps, ProblemLifecycle } from "./problem-lifecycle";
 import { ProblemTerminals, type TerminalDeps, type TerminalProcess } from "./problem-terminal";
 import type { SimulatedCloudProblem } from "./simulator";
 import type { LocalSimulatorDeployment, LocalSimulatorRuntimePort } from "./simulator-runtime";
@@ -200,6 +200,11 @@ export interface CreateStateOptions {
   /** Server-owned directory for Simulator snapshots; never accepted from an HTTP request. */
   readonly simulatorSnapshotDir?: string;
   /**
+   * [#2927] Reports host ports a problem's offset would need that something else already
+   * holds, so a previous session's leftover container is skipped rather than crashed into.
+   */
+  readonly portConflicts?: LifecycleDeps["portConflicts"];
+  /**
    * [#2925 / #2926] Participant-facing catalog served at `/portal/problem-catalog`,
    * already projected by `metadataToEntry`. `serve` loads it from the bind-mounted
    * `problems/`; tests and simulator-only sessions may omit it (route answers empty).
@@ -362,6 +367,28 @@ async function stopLifecycleProblem(context: LifecycleContext, problemId: string
   if (problem && runtime) runtime.problem = problem;
 }
 
+/**
+ * The lifecycle's injected side. Split out of {@link createLocalPlayState} so the factory
+ * stays readable — and so the [#2927] port probe, which only `serve` supplies, is optional
+ * in exactly one place instead of being another conditional in a long object literal.
+ */
+function buildLifecycleDeps(
+  context: LifecycleContext,
+  now: () => number,
+  portConflicts: LifecycleDeps["portConflicts"],
+): LifecycleDeps {
+  return {
+    // 起動: catalog 原本を offset へ remap して runtime に差し替える /
+    // start the catalog original on its offset block and swap it in.
+    startContainer: (problemId, offset) => startLifecycleProblem(context, problemId, offset),
+    // 停止: unit を破棄して catalog 原本へ戻す / tear the unit down and
+    // restore the catalog original (stale offset URLs must not linger).
+    stopContainer: (problemId) => stopLifecycleProblem(context, problemId),
+    now,
+    ...(portConflicts ? { portConflicts } : {}),
+  };
+}
+
 export function createLocalPlayState(
   deployment: LocalPlayDeployment,
   options: CreateStateOptions = {},
@@ -407,16 +434,7 @@ export function createLocalPlayState(
   };
   const lifecycle = new ProblemLifecycle(
     [...catalog.keys(), ...simulatedRuntimes.keys()],
-    {
-      // 起動: catalog 原本を offset へ remap して runtime に差し替える /
-      // start the catalog original on its offset block and swap it in.
-      startContainer: (problemId, offset) =>
-        startLifecycleProblem(lifecycleContext, problemId, offset),
-      // 停止: unit を破棄して catalog 原本へ戻す / tear the unit down and
-      // restore the catalog original (stale offset URLs must not linger).
-      stopContainer: (problemId) => stopLifecycleProblem(lifecycleContext, problemId),
-      now,
-    },
+    buildLifecycleDeps(lifecycleContext, now, options.portConflicts),
     { maxRunning: options.maxRunning ?? DEFAULT_MAX_RUNNING },
   );
   return {

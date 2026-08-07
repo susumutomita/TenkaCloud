@@ -20,11 +20,12 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import type { ParticipantProblemView, ParticipantScoringInfo } from "../api/portal-client";
 import { useTeamView } from "../auth/TeamViewProvider";
+import { hasSolvedAnyProblem, nextProblemDisplayName } from "../components/NextActionHero";
 import { showsCourseTracks } from "../config";
 import { useAppConfig, useIsMock } from "../config-context";
 import { buildCourseAlignmentTracks, toProblemProgress } from "../data/course-track";
 import { findProblemMetadata, listProblemCatalog } from "../data/problems";
-import { useT } from "../i18n";
+import { useI18n, useT } from "../i18n";
 import { categoryOf } from "../lib/category";
 import {
   gateProblemDisplayName,
@@ -154,6 +155,72 @@ function difficultyBadge(problemId: string, t: TFn): React.ReactElement | null {
 }
 
 /**
+ * [#2928] The local "where do I start" card. Extracted from `QuestsPage` so the branch
+ * between the pinned intro drill and the course track lives in one readable place rather
+ * than as nested ternaries inside an already-large render.
+ *
+ * When the platform has pinned an intro drill and the participant has solved nothing, that
+ * drill is the primary action; the course track stays reachable as the secondary button.
+ * Otherwise this is exactly the pre-#2928 card.
+ */
+function LocalStartGuidance({
+  t,
+  navigate,
+  introProblem,
+  courseProblemName,
+  courseJobId,
+  locale,
+}: {
+  t: TFn;
+  navigate: (to: string) => void;
+  introProblem: ParticipantProblemView | undefined;
+  courseProblemName: string | undefined;
+  courseJobId: string | undefined;
+  locale: "ja" | "en";
+}) {
+  const showCourseCta = !introProblem && courseProblemName !== undefined && courseJobId;
+  return (
+    <Alert
+      type="info"
+      header={t(introProblem ? "quests.local_start_intro_header" : "quests.local_start_header")}
+      data-testid="local-start-guidance"
+    >
+      <SpaceBetween size="s">
+        <Box>
+          {t(introProblem ? "quests.local_start_intro_body" : "quests.local_start_course_body")}
+        </Box>
+        <SpaceBetween size="xs" direction="horizontal">
+          {introProblem ? (
+            <Button
+              variant="primary"
+              data-testid="local-intro-problem"
+              onClick={() => navigate(`/problems/${encodeURIComponent(introProblem.jobId)}`)}
+            >
+              {t("quests.local_intro_problem", {
+                name: nextProblemDisplayName(introProblem, locale),
+              })}
+            </Button>
+          ) : null}
+          {showCourseCta ? (
+            <Button
+              variant="primary"
+              data-testid="local-next-problem"
+              onClick={() => navigate(`/problems/${encodeURIComponent(courseJobId)}`)}
+            >
+              {t("quests.local_next_problem", { name: courseProblemName })}
+            </Button>
+          ) : null}
+          <Button data-testid="course-tracks-link" onClick={() => navigate("/course-tracks")}>
+            {t("quests.course_tracks_link")}
+          </Button>
+        </SpaceBetween>
+        <Box color="text-body-secondary">{t("quests.local_start_other_body")}</Box>
+      </SpaceBetween>
+    </Alert>
+  );
+}
+
+/**
  * 自チーム向け deploy 済問題のカタログ画面 (sidebar 「問題一覧」)。Home に対する
  * compact な navigation focus 版で、各問題の status / score / アクセス先 URL を
  * カード表示する。
@@ -169,6 +236,7 @@ export function QuestsPage() {
   const { view, error } = useTeamView();
   const navigate = useNavigate();
   const t = useT();
+  const { locale } = useI18n();
   const isMock = useIsMock();
   const config = useAppConfig();
   const [filter, setFilter] = useState<QuestCategoryFilter>("all");
@@ -194,6 +262,17 @@ export function QuestsPage() {
   const recommendedCourseJobId = recommendedCourseProblem
     ? allProblems.find((problem) => problem.problemId === recommendedCourseProblem.problemId)?.jobId
     : undefined;
+  // [#2928] 「初めてなら」 の送り先。 唯一の講座トラックは大学院レベルの暗号講座なので、
+  // 初見の人をそこへ送るのは案内として逆だった。 まだ 1 問も解いていない人には、 platform が
+  // pin した入門ドリル (`recommended: true`) を主導線に置き、 講座トラックは併記に下げる。
+  // 1 問でも解けば従来の案内へ戻る (= 講座を進めている人の導線を変えない)。
+  const introProblem = useMemo(
+    () =>
+      hasSolvedAnyProblem(allProblems)
+        ? undefined
+        : allProblems.find((problem) => problem.recommended === true),
+    [allProblems],
+  );
   const courseProblemIds = useMemo(
     () =>
       new Set(
@@ -361,32 +440,14 @@ export function QuestsPage() {
        * 到達できる案内だけを置く。一覧を週別 track で再び埋めない。 */}
       {courseTracks.length > 0 ? (
         <SpaceBetween size="l">
-          <Alert
-            type="info"
-            header={t("quests.local_start_header")}
-            data-testid="local-start-guidance"
-          >
-            <SpaceBetween size="s">
-              <Box>{t("quests.local_start_course_body")}</Box>
-              <SpaceBetween size="xs" direction="horizontal">
-                {recommendedCourseProblem && recommendedCourseJobId ? (
-                  <Button
-                    variant="primary"
-                    data-testid="local-next-problem"
-                    onClick={() =>
-                      navigate(`/problems/${encodeURIComponent(recommendedCourseJobId)}`)
-                    }
-                  >
-                    {t("quests.local_next_problem", { name: recommendedCourseProblem.name })}
-                  </Button>
-                ) : null}
-                <Button data-testid="course-tracks-link" onClick={() => navigate("/course-tracks")}>
-                  {t("quests.course_tracks_link")}
-                </Button>
-              </SpaceBetween>
-              <Box color="text-body-secondary">{t("quests.local_start_other_body")}</Box>
-            </SpaceBetween>
-          </Alert>
+          <LocalStartGuidance
+            t={t}
+            navigate={navigate}
+            introProblem={introProblem}
+            courseProblemName={recommendedCourseProblem?.name}
+            courseJobId={recommendedCourseJobId}
+            locale={locale}
+          />
 
           <Header variant="h2" description={t("quests.other_problems_description")}>
             {t("quests.other_problems_header")}

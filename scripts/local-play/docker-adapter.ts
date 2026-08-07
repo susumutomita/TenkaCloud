@@ -13,6 +13,8 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ContainerRunner, type LocalComposeUnit } from "./container-runner";
+import { remapComposeHostPorts } from "./port-remap";
+import type { PortConflict } from "./problem-lifecycle";
 import type { TerminalProcess } from "./problem-terminal";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -450,6 +452,71 @@ function unlinkIfExists(path: string): void {
  * primitives. `serve` injects it into the API; `up` / `down` use it to reclaim
  * recorded units.
  */
+/**
+ * [#2927] Which container, if any, publishes `port` on the host right now.
+ *
+ * `docker ps --filter publish=<port>` asks the daemon rather than this session's own
+ * bookkeeping, which is the whole point: the offset pool only knows slots taken *within
+ * this session*, so a container a previous session left running is invisible to it.
+ * Undefined means the port is free (or the daemon could not be asked, in which case the
+ * start proceeds and compose reports the real failure — a probe outage must not become a
+ * refusal to start).
+ */
+export function describePortHolder(port: number): string | undefined {
+  // Same trust position as every other docker invocation in this file (the participant's
+  // own CLI on their own machine); the others resolve through a variable so only this
+  // literal is flagged.
+  const result = spawnSync(
+    // eslint-disable-next-line sonarjs/no-os-command-from-path -- developer-local tooling
+    "docker",
+    ["ps", "--filter", `publish=${port}`, "--format", "{{.Names}}"],
+    { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+  );
+  if (result.status !== 0) return undefined;
+  const [first] = result.stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return first;
+}
+
+/**
+ * [#2927] The lifecycle's port-availability probe, built from the catalog: it resolves the
+ * host ports a problem would publish at `offset` and asks the daemon who holds them.
+ * Ports this session already owns are not reported (the caller only sees foreign holders).
+ */
+export function createPortConflictProbe(
+  composePathOf: (problemId: string) => string | undefined,
+  deps: {
+    readonly readCompose?: (path: string) => string;
+    readonly holderOf?: (port: number) => string | undefined;
+  } = {},
+): (problemId: string, offset: number) => readonly PortConflict[] {
+  const readCompose = deps.readCompose ?? ((path: string) => readFileSync(path, "utf8"));
+  const holderOf = deps.holderOf ?? describePortHolder;
+  return (problemId, offset) => {
+    const composePath = composePathOf(problemId);
+    if (!composePath) return [];
+    let portMap: ReadonlyMap<number, number>;
+    try {
+      portMap = remapComposeHostPorts(readCompose(composePath), offset).portMap;
+    } catch {
+      // Unreadable compose is this problem's own failure to report, not a port verdict.
+      return [];
+    }
+    // Any holder blocks the bind, whoever it belongs to. The lifecycle only asks about
+    // offsets its own pool considers free, so a container found here is by construction
+    // not one this session is knowingly running — it is a previous session's leftover, or
+    // an unrelated project.
+    const conflicts: PortConflict[] = [];
+    for (const hostPort of portMap.values()) {
+      const holder = holderOf(hostPort);
+      if (holder !== undefined) conflicts.push({ port: hostPort, heldBy: holder });
+    }
+    return conflicts;
+  };
+}
+
 export function createContainerRunner(localDir: string): ContainerRunner {
   return new ContainerRunner(localDir, {
     runCompose,

@@ -28,6 +28,9 @@ vi.mock("../../src/config-context", () => ({
 vi.mock("../../src/i18n", () => ({
   useT: () => (key: string, params?: Readonly<Record<string, string | number>>) =>
     params ? `${key}|${JSON.stringify(params)}` : key,
+  // [#2928] The hero and the quest guidance resolve a problem's display name, which is
+  // locale-aware, so the stub must expose the locale too.
+  useI18n: () => ({ locale: "ja" }),
 }));
 vi.mock("../../src/data/problems", () => ({
   findProblemMetadata: mockFindMeta,
@@ -396,6 +399,67 @@ describe("QuestsPage", () => {
 
     fireEvent.click(screen.getByTestId("local-next-problem"));
     expect(mockNav).toHaveBeenCalledWith("/problems/job-course-first");
+  });
+
+  /**
+   * [#2928] The only course track is a graduate-level cryptography programme, so "new here?
+   * start with a course track" pointed a first-time participant at the hardest thing in the
+   * catalog. When the platform has pinned an intro drill and the participant has solved
+   * nothing, the drill is the primary action and the track drops to the secondary one.
+   */
+  it("should send a first-time participant to the pinned intro drill, not the course track", () => {
+    mockAppConfig.mockReturnValue({ cloudMode: "local" });
+    const intro = problem({
+      problemId: "sqli-demo",
+      jobId: "job-intro",
+      name: "スタッフ専用ログイン",
+      recommended: true,
+      scoring: { kind: "flag", flagSubmitted: false },
+    });
+    const aligned = problem({
+      problemId: "course-first",
+      jobId: "job-course-first",
+      scoring: { kind: "flag", flagSubmitted: false },
+    });
+    mockListCatalog.mockReturnValue([alignedCatalogEntry("course-first", "Course first")]);
+    mockTeamView.mockReturnValue({ view: { problems: [aligned, intro] }, error: null });
+
+    render(<QuestsPage />);
+
+    const guidance = screen.getByTestId("local-start-guidance");
+    expect(guidance).toHaveTextContent("quests.local_start_intro_body");
+    expect(guidance).toHaveTextContent("スタッフ専用ログイン");
+    // The course track stays reachable, just not as the headline for a newcomer.
+    expect(screen.queryByTestId("local-next-problem")).not.toBeInTheDocument();
+    expect(screen.getByTestId("course-tracks-link")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("local-intro-problem"));
+    expect(mockNav).toHaveBeenCalledWith("/problems/job-intro");
+  });
+
+  it("should return to the course-track guidance once the participant has solved anything", () => {
+    mockAppConfig.mockReturnValue({ cloudMode: "local" });
+    const intro = problem({
+      problemId: "sqli-demo",
+      jobId: "job-intro",
+      name: "スタッフ専用ログイン",
+      recommended: true,
+      scoring: { kind: "flag", flagSubmitted: true },
+    });
+    const aligned = problem({
+      problemId: "course-first",
+      jobId: "job-course-first",
+      scoring: { kind: "flag", flagSubmitted: false },
+    });
+    mockListCatalog.mockReturnValue([alignedCatalogEntry("course-first", "Course first")]);
+    mockTeamView.mockReturnValue({ view: { problems: [aligned, intro] }, error: null });
+
+    render(<QuestsPage />);
+
+    const guidance = screen.getByTestId("local-start-guidance");
+    expect(guidance).toHaveTextContent("quests.local_start_course_body");
+    expect(screen.queryByTestId("local-intro-problem")).not.toBeInTheDocument();
+    expect(screen.getByTestId("local-next-problem")).toBeInTheDocument();
   });
 
   it.each([
