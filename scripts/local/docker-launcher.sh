@@ -188,19 +188,67 @@ cmd_up() {
 # describing containers that no longer exist, leave its serve process alive, and
 # leave its SQLite progress untouched — while printing "progress cleared". That
 # is a destructive false success, so the sweep is skipped and the situation
-# reported instead when a host/dev session is present.
+# reported instead when a host/dev session is LIVE.
+#
+# [#2906 review] "Live" must mean live, not "state.json exists". A dev session
+# that was kill -9'd, crashed, or lost to a reboot leaves that file behind, and
+# treating the leftover as active would disable this crash-safe sweep from then
+# on — the exact recovery path it exists to provide, silently switched off by a
+# past unrelated crash. The Bun side already solves this with a recorded PID plus
+# a processIdentity that is sha256("<pid>:<ps lstart>") (scripts/local-play/
+# process-identity.ts), which rejects PID reuse; the check below reproduces that
+# in POSIX shell rather than approximating it, because the launcher must not
+# depend on Bun. Zombies count as dead, matching parseProcessObservation.
 host_dev_state_file() {
   printf '%s/state.json' "${TENKACLOUD_LOCAL_DIR:-$repo_root/.tenkacloud/local}"
+}
+
+# Read one top-level string/number field out of state.json without a JSON parser.
+host_dev_state_field() {
+  sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\{0,1\}\([^,\"}]*\)\"\{0,1\}.*/\1/p" \
+    "$(host_dev_state_file)" 2>/dev/null | head -n 1
+}
+
+sha256_of() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    printf '%s' "$1" | sha256sum | cut -d' ' -f1
+  elif command -v shasum >/dev/null 2>&1; then
+    printf '%s' "$1" | shasum -a 256 | cut -d' ' -f1
+  else
+    return 1
+  fi
+}
+
+host_dev_session_is_live() {
+  [ -f "$(host_dev_state_file)" ] || return 1
+  pid=$(host_dev_state_field pid)
+  case "$pid" in
+    '' | *[!0-9]*) return 1 ;; # missing or malformed — cannot be a live session
+  esac
+  observed=$(LC_ALL=C ps -p "$pid" -o stat= -o lstart= 2>/dev/null) || return 1
+  [ -n "$observed" ] || return 1
+  state=${observed%%[[:space:]]*}
+  case "$state" in
+    Z*) return 1 ;; # already exited, just not reaped
+  esac
+  start_time=$(printf '%s' "${observed#"$state"}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+  recorded=$(host_dev_state_field processIdentity)
+  # No recorded identity (older session) or no hashing tool: fall back to plain
+  # liveness. That is weaker against PID reuse but still strictly better than
+  # file existence, and it errs toward NOT destroying a possibly-live session.
+  [ -n "$recorded" ] || return 0
+  current=$(sha256_of "${pid}:${start_time}") || return 0
+  [ "$current" = "$recorded" ]
 }
 
 cmd_down() {
   require_docker
   $COMPOSE exec -T local bun run scripts/tenkacloud-local.ts down 2>/dev/null || true
-  if [ -f "$(host_dev_state_file)" ]; then
+  if host_dev_session_is_live; then
     $COMPOSE down --remove-orphans -v
     echo "Docker local play stopped and its progress volume removed."
     echo
-    echo "A host/dev session (make local-dev) is also present — its problem containers," >&2
+    echo "A host/dev session (make local-dev) is RUNNING — its problem containers," >&2
     echo "  its serve process, and its own saved progress were left untouched, because" >&2
     echo "  this command cannot tell them apart from the Docker path's by name alone." >&2
     echo "  Stop that one with: bun run scripts/tenkacloud-local.ts down" >&2
@@ -212,14 +260,26 @@ cmd_down() {
   # (e.g. a participant's own "btc-local-node"). Every per-problem container
   # this platform starts is actually named with this prefix
   # (scripts/local-play/manifest.ts's composeProjectName); nothing else may be.
+  #
+  # [#2906 review] Plain `for` loops, NOT `xargs -r`: `-r`/`--no-run-if-empty` is
+  # a GNU extension that macOS's BSD xargs rejects outright ("illegal option --
+  # r"). With the `|| true` that keeps this best-effort, that rejection would be
+  # swallowed and every orphan would survive while the command still printed
+  # "progress cleared" — a dishonest success, on macOS, in the crash-recovery
+  # path, for a change whose whole origin was a macOS participant. The `-n`
+  # guards above already handle the empty case, which is all `-r` bought here.
   orphans=$(docker ps -aq --filter "name=^tc-local-" 2>/dev/null || true)
   if [ -n "$orphans" ]; then
     echo "Reclaiming per-problem containers the control plane could not stop itself..."
-    echo "$orphans" | xargs -r docker rm -f >/dev/null 2>&1 || true
+    for orphan in $orphans; do
+      docker rm -f "$orphan" >/dev/null 2>&1 || true
+    done
   fi
   orphan_networks=$(docker network ls --filter "name=^tc-local-" -q 2>/dev/null || true)
   if [ -n "$orphan_networks" ]; then
-    echo "$orphan_networks" | xargs -r docker network rm >/dev/null 2>&1 || true
+    for orphan_network in $orphan_networks; do
+      docker network rm "$orphan_network" >/dev/null 2>&1 || true
+    done
   fi
   $COMPOSE down --remove-orphans -v
   echo "Local play stopped and progress cleared."

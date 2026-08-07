@@ -103,3 +103,51 @@ describe("docker-launcher host reachability probe (Issue #2906)", () => {
     expect(probe).toMatch(/return 2/);
   });
 });
+
+/**
+ * [#2906 review] The crash-recovery teardown had two ways to quietly stop working,
+ * both of which end in `make local-down` printing "progress cleared" over surviving
+ * containers — the dishonest-success shape this change exists to remove:
+ *   - `xargs -r` is a GNU extension. macOS's BSD xargs exits with "illegal option --
+ *     r", the `|| true` swallows it, and every orphan survives. macOS is the platform
+ *     this whole change came from, so this is pinned rather than trusted to review.
+ *   - Treating a leftover `state.json` as a live `make local-dev` session disables the
+ *     host-side sweep permanently after any past dev-session crash. Liveness must be
+ *     established from the recorded PID and process identity (the same
+ *     sha256("<pid>:<ps lstart>") the Bun side records, so PID reuse is rejected).
+ */
+describe("docker-launcher crash-recovery teardown (Issue #2906)", () => {
+  const launcher = readFileSync(join(REPO_ROOT, "scripts", "local", "docker-launcher.sh"), "utf8");
+  /** Comment lines explain what this file must NOT do, so match code only. */
+  const code = launcher
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("#"))
+    .join("\n");
+
+  it("should not use GNU-only xargs flags that BSD/macOS xargs rejects", () => {
+    expect(code).not.toMatch(/xargs\s+-r\b/);
+    expect(code).not.toContain("--no-run-if-empty");
+  });
+
+  it("should remove each orphan container and network with a POSIX loop", () => {
+    expect(launcher).toMatch(/for orphan in \$orphans; do\s+docker rm -f "\$orphan"/);
+    expect(launcher).toMatch(
+      /for orphan_network in \$orphan_networks; do\s+docker network rm "\$orphan_network"/,
+    );
+  });
+
+  it("should decide a dev session is live from PID liveness, not file existence", () => {
+    const liveness = launcher.slice(
+      launcher.indexOf("host_dev_session_is_live() {"),
+      launcher.indexOf("cmd_down() {"),
+    );
+    expect(liveness).toContain("ps -p");
+    expect(liveness).toMatch(/Z\*\)/); // a zombie is not a live session
+    expect(liveness).toContain("processIdentity"); // reject PID reuse like the Bun side
+  });
+
+  it("should gate the sweep on that liveness check rather than on the state file", () => {
+    expect(launcher).toContain("if host_dev_session_is_live; then");
+    expect(launcher).not.toMatch(/if \[ -f "\$\(host_dev_state_file\)" \]; then/);
+  });
+});
