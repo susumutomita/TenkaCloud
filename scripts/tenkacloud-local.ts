@@ -17,6 +17,7 @@ import { ContainerStartOwnershipError, type LocalComposeUnit } from "./local-pla
 import { parseProblemIds } from "./local-play/deployment-plan";
 import {
   createContainerRunner,
+  createPortConflictProbe,
   createProblemShellSpawner,
   startDetachedServe,
   waitForReachable,
@@ -436,6 +437,14 @@ async function serve(deploymentPath: string): Promise<void> {
     simulator,
     simulatorSnapshotDir: join(p.localDir, "snapshots"),
     stateStore,
+    // [#2927] Ask the daemon which host ports are really taken before claiming an offset.
+    // The offset pool only knows this session's slots, so a container a previous session
+    // left running is invisible to it — that is how two problems hardcoding 18080 made a
+    // 45-hour-old container block a fresh start with only the daemon's raw message.
+    portConflicts: createPortConflictProbe(
+      (problemId) =>
+        deployment.problems.find((problem) => problem.problemId === problemId)?.composePath,
+    ),
     // [#2925 / #2926] The participant-facing catalog the portal renders narrative,
     // course tracks and plugin slots from. Read from the bind-mounted `problems/` at
     // serve time because the Docker image deliberately does not carry it, which left

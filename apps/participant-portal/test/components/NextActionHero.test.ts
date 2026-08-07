@@ -6,7 +6,9 @@ import type {
 } from "../../src/api/portal-client";
 import {
   computeNextActionState,
+  hasSolvedAnyProblem,
   isProblemUnsolved,
+  nextProblemDisplayName,
   pickNextProblem,
 } from "../../src/components/NextActionHero";
 
@@ -304,5 +306,125 @@ describe("next action follows the course track", () => {
       }),
     ];
     expect(pickNextProblem(problems, "b")?.problemId).toBe("a");
+  });
+});
+
+/**
+ * [#2928] The very first screen a `make local` participant sees sent them to a
+ * graduate-level cryptography problem, identified by its raw problem id. The intro drill
+ * was already pinned by the platform (`recommended: true`, ADR-012's reference
+ * implementation) and already delivered by the API — the hero simply never looked at it.
+ *
+ * These pin the three separable parts, because each fails independently and silently:
+ * choosing the drill, standing down once the participant has progress, and showing a name.
+ */
+describe("pickNextProblem intro drill (#2928)", () => {
+  const intro = problem({
+    problemId: "sqli-demo",
+    jobId: "job-intro",
+    name: "スタッフ専用ログイン",
+    recommended: true,
+    scoring: { kind: "flag", flagSubmitted: false } as never,
+  });
+  const advanced = problem({
+    problemId: "ac26-bridge-experiment",
+    jobId: "job-adv",
+    name: "予測してから走らせる",
+    scoring: { kind: "flag", flagSubmitted: false } as never,
+  });
+  const solved = problem({
+    problemId: "already-done",
+    jobId: "job-done",
+    name: "解いた問題",
+    scoring: { kind: "flag", flagSubmitted: true } as never,
+  });
+
+  it("should pick the pinned intro drill on the very first visit, not the display-order head", () => {
+    // Display order puts the AC26 problem first — that is exactly what shipped.
+    expect(pickNextProblem([advanced, intro])?.problemId).toBe("sqli-demo");
+  });
+
+  it("should prefer the intro drill over the course-track recommendation on the first visit", () => {
+    // A track recommendation for someone with zero progress is just "week 1, item 1",
+    // not a choice made for them.
+    expect(pickNextProblem([advanced, intro], "ac26-bridge-experiment")?.problemId).toBe(
+      "sqli-demo",
+    );
+  });
+
+  it("should hand back to the course-track recommendation once anything is solved", () => {
+    expect(pickNextProblem([solved, advanced, intro], "ac26-bridge-experiment")?.problemId).toBe(
+      "ac26-bridge-experiment",
+    );
+  });
+
+  it("should fall back to display order once anything is solved and no track recommends", () => {
+    expect(pickNextProblem([solved, advanced, intro])?.problemId).toBe("ac26-bridge-experiment");
+  });
+
+  it("should change nothing when no problem is flagged recommended (a real event)", () => {
+    expect(pickNextProblem([advanced, solved])?.problemId).toBe("ac26-bridge-experiment");
+  });
+
+  it("should still offer the drill when it is the only unsolved problem left", () => {
+    expect(pickNextProblem([solved, intro])?.problemId).toBe("sqli-demo");
+  });
+});
+
+describe("hasSolvedAnyProblem (#2928)", () => {
+  it("should not count a failed or deleted deploy as solved", () => {
+    // `!isProblemUnsolved(p)` is true for these, so the obvious negation would decide the
+    // participant had progress and silently withdraw the intro drill.
+    for (const status of ["FAILED", "DELETED", "EXPIRED"] as const) {
+      const broken = problem({ problemId: "p", jobId: "j", status });
+      expect(hasSolvedAnyProblem([broken])).toBe(false);
+    }
+  });
+
+  it("should count a submitted flag as solved", () => {
+    const done = problem({
+      problemId: "p",
+      jobId: "j",
+      scoring: { kind: "flag", flagSubmitted: true } as never,
+    });
+    expect(hasSolvedAnyProblem([done])).toBe(true);
+  });
+
+  it("should be false for an empty and for an entirely unsolved set", () => {
+    expect(hasSolvedAnyProblem([])).toBe(false);
+    const open = problem({
+      problemId: "p",
+      jobId: "j",
+      scoring: { kind: "flag", flagSubmitted: false } as never,
+    });
+    expect(hasSolvedAnyProblem([open])).toBe(false);
+  });
+});
+
+describe("nextProblemDisplayName (#2928)", () => {
+  it("should show the problem name rather than the id", () => {
+    const p = problem({ problemId: "sqli-demo", jobId: "j", name: "スタッフ専用ログイン" });
+    expect(nextProblemDisplayName(p, "ja")).toBe("スタッフ専用ログイン");
+  });
+
+  it("should apply the en override when the locale is en", () => {
+    const p = problem({
+      problemId: "sqli-demo",
+      jobId: "j",
+      name: "スタッフ専用ログイン",
+      i18n: { en: { name: "Staff-only login" } } as never,
+    });
+    expect(nextProblemDisplayName(p, "en")).toBe("Staff-only login");
+    expect(nextProblemDisplayName(p, "ja")).toBe("スタッフ専用ログイン");
+  });
+
+  it("should fall back to ja when en declares no name override", () => {
+    const p = problem({ problemId: "sqli-demo", jobId: "j", name: "スタッフ専用ログイン" });
+    expect(nextProblemDisplayName(p, "en")).toBe("スタッフ専用ログイン");
+  });
+
+  it("should fall back to the id only when the contract-optional name is absent", () => {
+    const p = problem({ problemId: "sqli-demo", jobId: "j" });
+    expect(nextProblemDisplayName(p, "ja")).toBe("sqli-demo");
   });
 });

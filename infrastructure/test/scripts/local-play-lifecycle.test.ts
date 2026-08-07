@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { PORT_STRIDE } from "../../../scripts/local-play/port-remap";
 import {
   type LifecycleDeps,
+  PortsUnavailableError,
   ProblemLifecycle,
 } from "../../../scripts/local-play/problem-lifecycle";
 
@@ -347,5 +348,107 @@ describe("ProblemLifecycle: explicit stop / stop-all (#2392 Phase 2, #2512)", ()
     await expect(lc.stopAll()).resolves.toBeUndefined();
     expect(attempted).toEqual(["a", "b", "a"]);
     expect(lc.snapshot().every((value) => value.status === "stopped")).toBe(true);
+  });
+});
+
+/**
+ * [#2927] A previous session's containers keep publishing their host ports. The offset pool
+ * only tracks slots taken *within one session*, so it reported slot 0 free, compose tried to
+ * bind a port a 45-hour-old container still held, and the participant saw only the daemon's
+ * "Bind for 127.0.0.1:18080 failed: port is already allocated".
+ *
+ * Nothing is stopped or removed here on purpose: running several problems at once is
+ * legitimate and this session cannot distinguish its own leftovers from work in progress.
+ * So the lifecycle steps over blocked offsets, and when none are usable it says what is
+ * holding the port and how to free it.
+ */
+describe("port conflicts with a previous session (#2927)", () => {
+  function lifecycleWith(
+    conflictsByOffset: Readonly<Record<number, readonly { port: number; heldBy?: string }[]>>,
+    maxRunning = 3,
+  ) {
+    const started: number[] = [];
+    const lifecycle = new ProblemLifecycle(
+      ["p1", "p2"],
+      {
+        startContainer: async (_id, offset) => {
+          started.push(offset);
+        },
+        stopContainer: async () => {},
+        now: () => 1,
+        portConflicts: (_problemId, offset) => conflictsByOffset[offset] ?? [],
+      },
+      { maxRunning },
+    );
+    return { lifecycle, started };
+  }
+
+  it("should step over an offset a previous session's container still holds", async () => {
+    // Slot 0 is "free" as far as this session knows, but 18080 is taken.
+    const { lifecycle, started } = lifecycleWith({
+      0: [{ port: 18080, heldBy: "tc-local-stackstack-onboarding-web-1" }],
+    });
+    await lifecycle.ensureRunning("p1");
+    expect(started).toEqual([PORT_STRIDE]);
+    expect(lifecycle.statusOf("p1")).toBe("running");
+  });
+
+  it("should keep the skipped offset in the pool rather than burning the slot", async () => {
+    const { lifecycle, started } = lifecycleWith({
+      0: [{ port: 18080, heldBy: "tc-local-old" }],
+    });
+    await lifecycle.ensureRunning("p1");
+    await lifecycle.ensureRunning("p2");
+    // p2 takes the next free offset; slot 0 stays in the pool (it may be freed later).
+    expect(started).toEqual([PORT_STRIDE, PORT_STRIDE * 2]);
+  });
+
+  it("should name the blocking container and the recovery command when nothing is usable", async () => {
+    const { lifecycle } = lifecycleWith(
+      {
+        0: [{ port: 18080, heldBy: "tc-local-stackstack-onboarding-web-1" }],
+        [PORT_STRIDE]: [{ port: 19080, heldBy: "tc-local-wp-exposed-backup-wp-1" }],
+      },
+      2,
+    );
+    await expect(lifecycle.ensureRunning("p1")).rejects.toThrow(PortsUnavailableError);
+    const error = await lifecycle.ensureRunning("p1").catch((e: unknown) => e as Error);
+    expect(error.message).toContain("18080");
+    expect(error.message).toContain("tc-local-stackstack-onboarding-web-1");
+    // The one command that actually frees it — the daemon's own message names neither.
+    expect(error.message).toContain("docker stop");
+    expect(error.message).toContain("make local-down");
+  });
+
+  it("should still report the port when Docker cannot name the holder", async () => {
+    const { lifecycle } = lifecycleWith({ 0: [{ port: 18080 }] }, 1);
+    const error = await lifecycle.ensureRunning("p1").catch((e: unknown) => e as Error);
+    expect(error.message).toContain("18080");
+    expect(error.message).toContain("another process");
+    // No container to name, so no docker stop line that would be a lie.
+    expect(error.message).not.toContain("docker stop");
+  });
+
+  it("should behave exactly as before when no probe is wired", async () => {
+    const started: number[] = [];
+    const lifecycle = new ProblemLifecycle(
+      ["p1"],
+      {
+        startContainer: async (_id, offset) => {
+          started.push(offset);
+        },
+        stopContainer: async () => {},
+        now: () => 1,
+      },
+      { maxRunning: 2 },
+    );
+    await lifecycle.ensureRunning("p1");
+    expect(started).toEqual([0]);
+  });
+
+  it("should take the lowest offset when the probe reports nothing blocked", async () => {
+    const { lifecycle, started } = lifecycleWith({});
+    await lifecycle.ensureRunning("p1");
+    expect(started).toEqual([0]);
   });
 });

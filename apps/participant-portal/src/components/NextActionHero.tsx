@@ -10,7 +10,7 @@ import type {
   ParticipantTeamView,
 } from "../api/portal-client";
 import type { CloudMode } from "../config";
-import { useT } from "../i18n";
+import { useI18n, useT } from "../i18n";
 import { computeCountdownState } from "./CountdownTimer";
 
 /**
@@ -72,12 +72,53 @@ export function isProblemUnsolved(p: ParticipantProblemView): boolean {
   return p.score === 0;
 }
 
+/**
+ * [#2928] 「この人はまだ 1 問も解いていないか」。
+ *
+ * `!isProblemUnsolved(p)` の否定では判定できない。 あちらは FAILED / DELETED 等の
+ * 採点対象外 status でも false を返すので、 deploy に失敗した問題が 1 つあるだけで
+ * 「解いた人」 と誤判定され、 入門ドリルの推薦が黙って無効になる。 採点対象の status
+ * であることを先に確かめてから 「未解答ではない」 を見る。
+ */
+export function hasSolvedAnyProblem(problems: readonly ParticipantProblemView[]): boolean {
+  return problems.some(
+    (p) =>
+      (p.status === "COMPLETE" || p.status === "IN_PROGRESS" || p.status === "PENDING") &&
+      !isProblemUnsolved(p),
+  );
+}
+
+/**
+ * [#2928] 表示名。 `name` は contract 上 optional (backend が未提供の期間がある) なので、
+ * 不在時は problemId へ fall back する — ただし **それは fallback であって既定ではない**。
+ * 生 ID が一等地に出ていたのがこの Issue の症状の半分である。
+ */
+export function nextProblemDisplayName(
+  problem: ParticipantProblemView,
+  locale: "ja" | "en",
+): string {
+  const localized = locale === "en" ? problem.i18n?.en?.name : undefined;
+  return localized ?? problem.name ?? problem.problemId;
+}
+
 export function pickNextProblem(
   problems: readonly ParticipantProblemView[],
   preferredProblemId?: string,
 ): ParticipantProblemView | undefined {
   const unsolved = problems.filter(isProblemUnsolved);
   if (unsolved.length === 0) return undefined;
+  // [#2928] まだ 1 問も解いていない人には、 platform が「ここから始めろ」 と pin した
+  // 入門ドリル (`recommended: true`、 ADR-012 の reference implementation) を出す。
+  //
+  // 講座トラックの推薦 (`preferredProblemId`) より前に置くのは意図的である。 進捗ゼロの
+  // 人に対するトラック推薦は「その人向けに選ばれた 1 問」 ではなく単に週 1 の先頭であり、
+  // 実際それが大学院レベルの暗号課題を初回の一等地に出していた。 1 問でも解けばこの分岐は
+  // 消え、 以降は従来どおりトラック推薦が優先される。 `recommended` を持つ問題が無い
+  // 環境 (= real event) では何も変わらない。
+  if (!hasSolvedAnyProblem(problems)) {
+    const intro = unsolved.find((p) => p.recommended === true);
+    if (intro) return intro;
+  }
   // [#2882] 講座トラックを進めている人には、 トラックが決めた次の 1 問がある。 表示順の先頭は
   // カタログ全体の並びであって、 その人の学習順ではない (実際、 チュートリアルの途中で
   // 無関係な問題が「次にやること」に出た)。 トラックの推薦が未解答なら、 それを優先する。
@@ -144,6 +185,7 @@ export function NextActionHero({
   preferredNextProblemId?: string;
 }) {
   const t = useT();
+  const { locale } = useI18n();
   const navigate = useNavigate();
   const state = computeNextActionState({
     view,
@@ -244,7 +286,7 @@ export function NextActionHero({
       <SpaceBetween size="m">
         <Box variant="awsui-value-large" color="text-status-info">
           {nextProblem
-            ? t("next_action.running_pick", { problemId: nextProblem.problemId })
+            ? t("next_action.running_pick", { name: nextProblemDisplayName(nextProblem, locale) })
             : t("next_action.running_no_ready")}
         </Box>
         {nextProblem && (

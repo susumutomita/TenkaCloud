@@ -18,6 +18,13 @@ import { PORT_STRIDE } from "./port-remap";
 
 export type ProblemStatus = "stopped" | "starting" | "running" | "stopping" | "error";
 
+/** [#2927] A host port this session wants, and the container already holding it. */
+export interface PortConflict {
+  readonly port: number;
+  /** Container name holding it, when Docker could tell us. */
+  readonly heldBy?: string;
+}
+
 export interface LifecycleDeps {
   /** Bring a problem's container up on the assigned host-port offset. */
   readonly startContainer: (problemId: string, offset: number) => Promise<void>;
@@ -25,6 +32,55 @@ export interface LifecycleDeps {
   readonly stopContainer: (problemId: string, offset: number) => Promise<void>;
   /** Monotonic clock (ms). Injected so LRU eviction is deterministic in tests. */
   readonly now: () => number;
+  /**
+   * [#2927] Which of `problemId`'s host ports at `offset` are already taken by something
+   * this session does not own. Empty (or absent dep) means "go ahead".
+   *
+   * The offset pool alone cannot answer this: it tracks slots *within one session*, so a
+   * container left running by a previous session is invisible to it and slot 0 looks free.
+   * Two catalog problems hardcode `127.0.0.1:18080`, so a 45-hour-old container from a
+   * previous run made a new problem unstartable with only the daemon's raw
+   * "port is already allocated" to go on.
+   */
+  readonly portConflicts?: (problemId: string, offset: number) => readonly PortConflict[];
+}
+
+/**
+ * [#2927] Every offset this session may use is blocked by containers it does not own.
+ *
+ * Deliberately does not stop anything: a participant running several problems at once is
+ * legitimate, and this session cannot tell "my own leftovers" from "what they are working
+ * on". So it reports precisely what is holding the port and the one command that frees it,
+ * and lets the participant decide. The daemon's own message names neither.
+ */
+export class PortsUnavailableError extends Error {
+  constructor(
+    readonly problemId: string,
+    readonly conflicts: readonly PortConflict[],
+  ) {
+    super(PortsUnavailableError.describe(problemId, conflicts));
+    this.name = "PortsUnavailableError";
+  }
+
+  private static describe(problemId: string, conflicts: readonly PortConflict[]): string {
+    const named = conflicts.filter((c) => c.heldBy !== undefined);
+    const lines = [
+      `Cannot start "${problemId}": every host port block it could use is already in use.`,
+    ];
+    for (const conflict of conflicts) {
+      lines.push(
+        conflict.heldBy !== undefined
+          ? `  port ${conflict.port} is held by container ${conflict.heldBy}`
+          : `  port ${conflict.port} is held by another process`,
+      );
+    }
+    if (named.length > 0) {
+      const names = [...new Set(named.map((c) => c.heldBy))].join(" ");
+      lines.push(`Free them with:  docker stop ${names}`);
+      lines.push("Or reclaim everything this project owns with:  make local-down");
+    }
+    return lines.join("\n");
+  }
 }
 
 export interface LifecycleOptions {
@@ -137,6 +193,30 @@ export class ProblemLifecycle {
     }
   }
 
+  /**
+   * [#2927] Take the lowest free offset whose host ports are actually available, keeping
+   * the offsets it had to skip in the pool (they may free up, and they still count toward
+   * the cap). Throws {@link PortsUnavailableError} — naming what holds each port — when
+   * every free offset is blocked, rather than letting compose fail with the daemon's
+   * bare message. Returns undefined only when the pool itself is empty (the cap path).
+   */
+  private takeUsableOffset(problemId: string): number | undefined {
+    const probe = this.deps.portConflicts;
+    if (!probe) return this.freeOffsets.shift();
+    const blocked: PortConflict[] = [];
+    for (let i = 0; i < this.freeOffsets.length; i++) {
+      const candidate = this.freeOffsets[i] as number;
+      const conflicts = probe(problemId, candidate);
+      if (conflicts.length === 0) {
+        this.freeOffsets.splice(i, 1);
+        return candidate;
+      }
+      blocked.push(...conflicts);
+    }
+    if (blocked.length > 0) throw new PortsUnavailableError(problemId, blocked);
+    return undefined;
+  }
+
   private async startEntry(problemId: string, entry: Entry): Promise<number> {
     // Issue #2845: claim `starting` before the first await. `start` returns 202
     // with `statusOf(problemId)` in the body, and while eviction was awaited
@@ -150,7 +230,10 @@ export class ProblemLifecycle {
       // Always take the lowest free offset so port assignment is deterministic
       // (and a freed slot is reused before climbing higher).
       this.freeOffsets.sort((a, b) => a - b);
-      offset = this.freeOffsets.shift();
+      // [#2927] ...but skip an offset whose host ports a previous session's container is
+      // still holding. Without this the pool hands out slot 0, compose fails on
+      // "port is already allocated", and the participant is told nothing useful.
+      offset = this.takeUsableOffset(problemId);
       if (offset === undefined) throw new Error("at capacity: no running problem to evict");
     } catch (error) {
       // Claiming `starting` early means an eviction failure must not leave the

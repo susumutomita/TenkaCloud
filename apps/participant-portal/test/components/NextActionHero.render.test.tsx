@@ -15,6 +15,9 @@ vi.mock("react-router", async (importOriginal) => {
 vi.mock("../../src/i18n", () => ({
   useT: () => (key: string, params?: Readonly<Record<string, string | number>>) =>
     params ? `${key}|${JSON.stringify(params)}` : key,
+  // [#2928] The hero and the quest guidance resolve a problem's display name, which is
+  // locale-aware, so the stub must expose the locale too.
+  useI18n: () => ({ locale: "ja" }),
 }));
 
 const { NextActionHero, shouldShowNextActionHero } = await import(
@@ -201,5 +204,47 @@ describe("NextActionHero (render)", () => {
     );
     expect(container.textContent).toContain("next_action.running_no_ready");
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * [#2928] The pre-existing assertion here matched only the i18n key
+ * (`/next_action\.running_pick/`), so it could not see that the panel was interpolating the
+ * raw problem id. That blind spot is why a participant's first screen read
+ * "まず ac26-bridge-experiment を解く". These assert on the interpolated payload.
+ */
+describe("NextActionHero display name (#2928)", () => {
+  const named = {
+    problemId: "sqli-demo",
+    jobId: "job-intro",
+    name: "スタッフ専用ログイン",
+    status: "COMPLETE",
+    score: 0,
+    scoring: { kind: "flag", flagSubmitted: false },
+  };
+
+  it("should interpolate the problem name and never the raw id", () => {
+    render(
+      <NextActionHero
+        cloudMode="mock"
+        view={view({ problems: [named] as never })}
+        leaderboard={null}
+      />,
+    );
+    const pick = screen.getByText(/next_action\.running_pick/);
+    expect(pick.textContent).toContain("スタッフ専用ログイン");
+    expect(pick.textContent).not.toContain("sqli-demo");
+  });
+
+  it("should fall back to the id when the contract-optional name is absent", () => {
+    const { name: _dropped, ...unnamed } = named;
+    render(
+      <NextActionHero
+        cloudMode="mock"
+        view={view({ problems: [unnamed] as never })}
+        leaderboard={null}
+      />,
+    );
+    expect(screen.getByText(/next_action\.running_pick/).textContent).toContain("sqli-demo");
   });
 });
