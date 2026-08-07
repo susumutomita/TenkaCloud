@@ -46,6 +46,12 @@ require_docker() {
 # TENKACLOUD_PROBLEMS_HOST_PATH exists for). That is rejected with an actionable
 # message rather than accepted and failed later.
 resolve_docker_socket() {
+  # 明示指定が最優先。 ここで想定できていない Docker 構成の逃げ道を必ず残す (= 検出を
+  # 賢くするより、 人が上書きできるほうが確実に速い)。
+  if [ -n "${TENKACLOUD_DOCKER_SOCKET:-}" ]; then
+    export TENKACLOUD_DOCKER_SOCKET
+    return
+  fi
   endpoint=$(docker context inspect -f '{{.Endpoints.docker.Host}}' 2>/dev/null || true)
   [ -n "$endpoint" ] || endpoint="${DOCKER_HOST:-unix:///var/run/docker.sock}"
   case "$endpoint" in
@@ -63,6 +69,21 @@ resolve_docker_socket() {
       exit 1
       ;;
   esac
+  # macOS では daemon は必ず VM の中にいる (Docker Desktop / Colima / Rancher Desktop の
+  # どれでも同じ)。 bind-mount の source は **daemon 側** = VM 内で解決されるため、 context が
+  # 指すホスト側の proxy socket を渡すと、 daemon は VM 内に存在しないパスを掘ろうとして
+  #   error while creating mount source path '/Users/<me>/.colima/default/docker.sock':
+  #   mkdir ...: operation not supported
+  # で起動に失敗する ($HOME は virtiofs で VM に見えているので「無い」 のではなく、 socket を
+  # bind-mount できないため)。 VM 内の正規パスへ倒す。
+  #
+  # 上のホスト側 socket 存在チェックも macOS では成立しない。 /var/run/docker.sock は VM の中
+  # にしか無く、 ホストからは見えないので `-S` は必ず false になる。 だから判定より前に返す。
+  if [ "$(uname -s)" = "Darwin" ]; then
+    TENKACLOUD_DOCKER_SOCKET=/var/run/docker.sock
+    export TENKACLOUD_DOCKER_SOCKET
+    return
+  fi
   if [ ! -S "$TENKACLOUD_DOCKER_SOCKET" ]; then
     echo "The active Docker context points at $TENKACLOUD_DOCKER_SOCKET," >&2
     echo "  but no socket exists there. Start the daemon for this context, or" >&2
