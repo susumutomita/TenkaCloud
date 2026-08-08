@@ -59,6 +59,9 @@ export const REPORTED_WORKSPACES = [
   // is not, so it starts report-only like every other new workspace here. Move it to
   // GATED_WORKSPACES once the entrypoint is covered too.
   "packages/tcloud",
+  // Issue #2936 Phase 1: contracts only, no runner yet. Report-only until the offline
+  // vertical slice lands and the package has something to be 100% covered against.
+  "packages/ai-eval",
 ] as const;
 
 interface Metric {

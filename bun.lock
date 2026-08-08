@@ -240,6 +240,14 @@
         "zod": "^3.25.76",
       },
     },
+    "packages/ai-eval": {
+      "name": "@tenkacloud/ai-eval",
+      "version": "0.1.0",
+      "devDependencies": {
+        "typescript": "^6.0.3",
+        "vitest": "^4.1.9",
+      },
+    },
     "packages/auth-client": {
       "name": "@tenkacloud/auth-client",
       "version": "0.1.0",
@@ -1251,6 +1259,8 @@
     "@tanstack/virtual-core": ["@tanstack/virtual-core@3.17.2", "", {}, "sha512-w43MvWvmShpb6kIC9MOoLyUkLmRTLPjt61bHWs+X29hACSpX+n8DvgZ3qM7cUfflKlRRcHR9KVJE6TmcqnQvcA=="],
 
     "@tanstack/vue-virtual": ["@tanstack/vue-virtual@3.13.30", "", { "dependencies": { "@tanstack/virtual-core": "3.17.2" }, "peerDependencies": { "vue": "^2.7.0 || ^3.0.0" } }, "sha512-5IpTZf5US81z9CHaRm2imVC44WDU1V/pd8mN1OIvIerRmo6C179UN+vnzlO/dx9Fpt9X7Rjl7fyvolPhPgtfqg=="],
+
+    "@tenkacloud/ai-eval": ["@tenkacloud/ai-eval@workspace:packages/ai-eval"],
 
     "@tenkacloud/always-on-control-plane": ["@tenkacloud/always-on-control-plane@workspace:apps/always-on-control-plane"],
 
