@@ -67,6 +67,36 @@ afterEach(() => {
   }
 });
 
+/**
+ * Regression: `tenkacloud-saas-pipeline` failed its Source stage on every run with
+ * "The source artifact bucket '<bucket>' is not versioned." install.sh creates this bucket AND
+ * the CodePipeline whose S3SourceAction reads it, but the bucket defaulted to Suspended
+ * versioning — a self-contradiction that made the pipeline structurally unable to succeed.
+ * The cost rationale for Suspended (unbounded old versions of the same source.zip key) is
+ * already handled by the lifecycle policy applied immediately after.
+ */
+describe("scripts/prepare-source-bundle.sh bucket versioning", () => {
+  const script = readFileSync(PREPARE_SCRIPT, "utf8");
+
+  it("should enable versioning by default (CodePipeline S3 sources require it)", () => {
+    expect(script).toMatch(/^\s*\*\) VERSIONING_STATUS="Enabled" ;;$/m);
+    expect(script).not.toMatch(/^\s*\*\) VERSIONING_STATUS="Suspended" ;;$/m);
+  });
+
+  it("should still allow an explicit opt-out for a pipeline-less deployment", () => {
+    expect(script).toMatch(/^\s*false \| suspended \| 0\) VERSIONING_STATUS="Suspended" ;;$/m);
+  });
+
+  it("should bound old versions with a lifecycle policy so Enabled cannot grow unbounded", () => {
+    expect(script).toContain("put-bucket-lifecycle-configuration");
+    // The policy itself is emitted by scripts/ops/print-source-bundle-lifecycle.ts; the point
+    // here is that it is applied in the same run that turns versioning on.
+    expect(script.indexOf('VERSIONING_STATUS="Enabled"')).toBeLessThan(
+      script.indexOf("put-bucket-lifecycle-configuration"),
+    );
+  });
+});
+
 // bash + aws CLI shim を spawn する実 I/O テスト。全 suite 並列時は fork 飽和で
 // default 5s を超え flake するため、明示 timeout を持つ (package-source-bundle と同型)。
 // The resolve-only seam (PREPARE_SOURCE_BUNDLE_RESOLVE_ONLY=1) exits before the
