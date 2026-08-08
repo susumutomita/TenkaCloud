@@ -265,11 +265,9 @@ describe("resolveAppConfig", () => {
     expect(env.CDK_PARAM_SYSTEM_ADMIN_ROLE_NAME).toBe("SystemAdmin");
   });
 
-  // Issue #952 / PR-957 CodeRabbit follow-up: schema は `monthlyCostLimitUsd` に数値文字列を
-  // 許容する (`${MONTHLY_COST_LIMIT_USD:-50}` で `"50"` が JSON に入る) ため、 resolve は
-  // string を Number として扱う必要がある。 env override は process.env 直読みのため本
-  // test では config.json default (= "50") が正しく Number 化されることだけを pin する。
-  it("monthlyCostLimitUsd should normalize string '50' from config.json to number 50", () => {
+  // Issue #2961: cost guardrails are opt-in. The config default is the numeric
+  // string "0", and resolve must normalize it without silently enabling a budget.
+  it("monthlyCostLimitUsd should normalize the disabled default to number 0", () => {
     const cfg = resolveAppConfig({
       env: baseEnv(),
       binDir: BIN_DIR,
@@ -277,7 +275,7 @@ describe("resolveAppConfig", () => {
       dotenvConfig: noopDotenv,
       discoverProblems: stubProblems,
     });
-    expect(cfg.monthlyCostLimitUsd).toBe(50);
+    expect(cfg.monthlyCostLimitUsd).toBe(0);
     expect(typeof cfg.monthlyCostLimitUsd).toBe("number");
   });
 
