@@ -108,6 +108,32 @@ describe("tenant lifecycle scripts", () => {
     }
   });
 
+  // Regression (2026-08-08 siloverify): deprovision installed `git-remote-codecommit`, a leftover
+  // from the AWS SaaS reference architecture's CodeCommit-based tenant pipeline. TenkaCloud pulls
+  // source from S3 (fetch-source-bundle) and no lifecycle script uses a git remote at all, so the
+  // package was never used. Once errexit (#2935) made the step fatal and #2940 raised setuptools to
+  // 82.x, the image's old pip could no longer build that legacy setup.py package
+  // ("canonicalize_version() got an unexpected keyword argument 'strip_trailing_zero'"), and tenant
+  // deletion for EVERY tier died before reaching `cdk destroy`. Assert we do not reintroduce a pip
+  // install the scripts have no consumer for.
+  it("tenant lifecycle scripts should not install the unused CodeCommit git remote helper", () => {
+    for (const scriptPath of lifecycleScripts) {
+      // Match executable lines only — the scripts carry a comment explaining why this package is
+      // deliberately absent, and that explanation must not itself trip the assertion.
+      const executableLines = readRepoFile(scriptPath)
+        .split("\n")
+        .filter((line) => !line.trimStart().startsWith("#"));
+
+      for (const line of executableLines) {
+        expect(line, `${scriptPath} installs git-remote-codecommit again`).not.toContain(
+          "git-remote-codecommit",
+        );
+        // The install is only justifiable if something actually speaks codecommit:// — nothing does.
+        expect(line, `${scriptPath} grew a codecommit remote`).not.toContain("codecommit://");
+      }
+    }
+  });
+
   it("tenant lifecycle scripts should not use the legacy package runner", () => {
     const legacyPackageRunnerPattern = new RegExp(`\\b${"np"}x\\b`);
 
