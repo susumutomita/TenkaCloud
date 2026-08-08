@@ -87,7 +87,15 @@ if [[ $TIER == "PLATINUM" ]]; then
   export CDK_PARAM_DEPROVISIONING_DETAIL_TYPE=$CDK_PARAM_OFFBOARDING_DETAIL_TYPE
   export CDK_PARAM_PROVISIONING_EVENT_SOURCE="sbt-application-plane-api"
   export CDK_PARAM_APPLICATION_NAME_PLANE_SOURCE="sbt-application-plane-api"
-  bun run cdk -- deploy "$STACK_NAME" --require-approval never
+  # synth は app 全体を構築するので、 何もしないと deploy 対象ですらない ControlPlaneStack の
+  # Python Lambda まで Docker build しに行き、 CodeBuild 上でその build が落ちて silo deploy が
+  # 丸ごと失敗する (2026-08-08 testsilo: `pip install pipenv poetry` が exit 255)。 bundle 対象を
+  # これから deploy する stack だけに絞る。
+  export CDK_BUNDLING_STACKS="$STACK_NAME"
+  # `--exclusively` は CDK_BUNDLING_STACKS と必ず対。 これが無いと依存 stack (= 例えば
+  # tenkacloud-problem-deploy) が deploy 対象に含まれ、 bundle を skip した **stub asset** の
+  # まま本番 stack を上書きしてしまう。
+  bun run cdk -- deploy "$STACK_NAME" --exclusively --require-approval never
 fi
 
 # Read tenant details from the cloudformation stack output parameters

@@ -62,6 +62,30 @@ describe("tenant lifecycle scripts", () => {
     expect(firstGuardAt).toBeLessThan(statusWriteBackAt);
   });
 
+  // The silo deploy died Docker-building ControlPlaneStack's Python Lambda — a stack it was not
+  // deploying — because synth constructs the whole app. Bundling must be scoped to the stack
+  // being deployed, and that scoping is only safe together with `--exclusively`: without it,
+  // dependency stacks join the deployment set carrying stub assets.
+  it("cdk deploy from CodeBuild should scope bundling and deploy exclusively", () => {
+    for (const scriptPath of ["scripts/provision-tenant.sh", "scripts/update-tenant.sh"]) {
+      const script = readRepoFile(scriptPath);
+
+      expect(script, `${scriptPath} does not scope bundling`).toMatch(
+        /^\s*export CDK_BUNDLING_STACKS="\$\{?STACK_NAME\}?"$/m,
+      );
+      // Every cdk deploy in these scripts must carry --exclusively.
+      const deployLines = script
+        .split("\n")
+        .filter((line) => line.includes("bun run cdk -- deploy"));
+      expect(deployLines.length, `${scriptPath} has no cdk deploy`).toBeGreaterThan(0);
+      for (const line of deployLines) {
+        expect(line, `${scriptPath}: scoped bundling without --exclusively`).toContain(
+          "--exclusively",
+        );
+      }
+    }
+  });
+
   it("tenant lifecycle scripts should not use the legacy package runner", () => {
     const legacyPackageRunnerPattern = new RegExp(`\\b${"np"}x\\b`);
 
@@ -72,7 +96,7 @@ describe("tenant lifecycle scripts", () => {
 
   it("tenant lifecycle scripts should run the repository-local CDK CLI via bun", () => {
     expect(readRepoFile("scripts/provision-tenant.sh")).toContain(
-      'bun run cdk -- deploy "$STACK_NAME" --require-approval never',
+      'bun run cdk -- deploy "$STACK_NAME" --exclusively --require-approval never',
     );
     // update-tenant.sh は `${STACK_NAME}` (braces) で wait_for_stack_idle と一致させている。
     // 形が違う provision-tenant / deprovision-tenant は他で test 済。

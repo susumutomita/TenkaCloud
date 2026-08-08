@@ -98,4 +98,8 @@ wait_for_stack_idle() {
 }
 
 wait_for_stack_idle "${STACK_NAME}"
+# provision-tenant.sh と同じ理由: synth は app 全体を構築するため、 絞らないと deploy 対象外の
+# ControlPlaneStack の Python Lambda まで CodeBuild 上で Docker build しに行って落ちる。
+# `--exclusively` は既に付いているので stub asset が他 stack へ流れる心配はない。
+export CDK_BUNDLING_STACKS="${STACK_NAME}"
 bun run cdk -- deploy "${STACK_NAME}" --exclusively --require-approval never
