@@ -62,6 +62,12 @@ interface Scenario {
   readonly env?: string;
   /** `aws sts get-caller-identity` fails the way an expired SSO session really fails. */
   readonly stsExpired?: boolean;
+  /**
+   * Pre-set (already exported) CDK params, the way `make` does: Makefile `-include`s the
+   * .env and then bares an `export`, so every .env variable reaches the script's environment
+   * before it runs -- with its quoting intact.
+   */
+  readonly preExportedCdkParams?: Readonly<Record<string, string>>;
 }
 
 function run(scenario: Scenario): RunResult {
@@ -263,6 +269,7 @@ exit 0
       FAKE_S3_BUCKETS: s3Buckets.join(" "),
       FAKE_TENANT_STACKS: tenantStacks.join(" "),
       FAKE_ORPHAN_SSM_PARAMS: orphanSsmParams.join(" "),
+      ...(scenario.preExportedCdkParams ?? {}),
     },
   });
   return {
@@ -475,6 +482,36 @@ describe("cleanup.sh idempotency (#2204)", { timeout: 30_000 }, () => {
     expect(cdkParamEnv).not.toContain("{samlSso:true}");
     // ... and neither must the .env-derived variable in any form.
     expect(cdkParamEnv).not.toContain("CDK_PARAM_FEATURES");
+  });
+
+  // 4b. The same defect has a second route, and killing only the first leaves it alive.
+  //     Makefile `-include`s the .env then bares an `export`, so `make destroy-saas` hands
+  //     cleanup.sh an already-exported, correctly-quoted CDK_PARAM_FEATURES. Re-assigning an
+  //     exported variable keeps the export attribute, so a plain `source` (even without
+  //     `set -a`) still propagates bash's quote-stripped value. Measured:
+  //       make-exported : {"samlSso":true}
+  //       after source  : {samlSso:true}
+  //     cleanup.sh must therefore pass a pre-exported param through untouched.
+  it("should pass make-exported CDK params through to cdk unmangled", () => {
+    const envName = "tenkacloud-cleanup-test-env-make-export";
+    const envDir = join(REPO_ROOT, "infrastructure", "environments", envName);
+    mkdirSync(envDir, { recursive: true });
+    fixtureDirs.push(envDir);
+    writeFileSync(
+      join(envDir, ".env"),
+      ["SYSTEM_ADMIN_EMAIL=admin@example.com", 'CDK_PARAM_FEATURES={"samlSso":true}', ""].join(
+        "\n",
+      ),
+    );
+
+    const { status, stderr, cdkParamEnv } = run({
+      env: envName,
+      preExportedCdkParams: { CDK_PARAM_FEATURES: '{"samlSso":true}' },
+    });
+
+    expect(status, stderr).toBe(0);
+    expect(cdkParamEnv).toContain('CDK_PARAM_FEATURES={"samlSso":true}');
+    expect(cdkParamEnv).not.toContain("{samlSso:true}");
   });
 
   // 5. `export ACCOUNT_ID="$(aws sts ...)"` lets export's exit status win (SC2155), so an

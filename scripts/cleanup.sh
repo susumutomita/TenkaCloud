@@ -86,32 +86,50 @@ TenkaCloud_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ENV="${ENV:-development}"
 ENV_FILE="${TenkaCloud_ROOT}/infrastructure/environments/${ENV}/.env"
 
-# `.env` は **export せずに** 読む (= `set -a` を使わない)。
+# `.env` は **source しない**。 理由は 2 段構えで、 片方だけ潰しても再発する。
 #
-# bash の `source` は `KEY={"a":true}` の double quote を剥がすため、 JSON 値を持つ
-# CDK_PARAM_* (実在: `CDK_PARAM_FEATURES={"samlSso":true}`) が `{a:true}` に化ける。
-# `set -a` でこれを export すると、 bin/infrastructure.ts 側の dotenv loader は
-# 「既に環境に在る」と見なして上書きせず (= `injected env (0)`)、 resolveAppConfig の
-# JSON parse が落ちて synth ごと死ぬ。 結果 `cdk destroy --all` は stack を 1 つも
-# 消せないまま失敗する。
+#   1. bash の代入は `KEY={"a":true}` を囲む double quote を剥がす。 実測:
+#        make が export した値 -> {"samlSso":true}
+#        bash で source した値 -> {samlSso:true}
+#   2. Makefile は `-include $(ENV_FILE)` の直後に裸の `export` を置いている (= 全 make
+#      変数を export)。 つまり `.env` 由来の変数は **既に環境に入った状態** で本スクリプト
+#      に渡る。 export 済みの変数へ代入し直すと export 属性は維持されるので、 `set -a` を
+#      外しただけでは 1. の化けた値がそのまま子プロセスへ伝播する。
 #
-# CDK app は自分で同じ `.env` を読むので、 ここから中継する必要はない。 このスクリプト
-# 自身が要るのは SYSTEM_ADMIN_EMAIL だけ。 ただし aws CLI の宛先 (profile / region) は
-# 従来どおり `.env` に従わせたいので、 その 3 つだけ明示的に export する。
-if [[ -f "${ENV_FILE}" ]]; then
-  # shellcheck disable=SC1090
-  source "${ENV_FILE}"
-  for aws_var in AWS_PROFILE AWS_REGION AWS_DEFAULT_REGION; do
-    if [[ -n "${!aws_var:-}" ]]; then
-      export "${aws_var?}"
-    fi
-  done
-fi
+# 化けた `CDK_PARAM_FEATURES` を受け取った cdk 側は、 dotenv loader が「既に環境に在る」
+# と見なして上書きせず (= `injected env (0)`)、 resolveAppConfig が JSON parse で落ちて
+# synth ごと死ぬ。 その結果 `cdk destroy --all` は stack を 1 つも消せない。
+#
+# よって `.env` を丸ごと読み込まず、 このスクリプト自身が要る key だけを直接引く。 CDK app
+# は自分で同じ `.env` を読むので中継は不要で、 make 経由なら make が正しい値を渡してくる。
+read_env_value() {
+  local key="$1" value
+  [[ -f "${ENV_FILE}" ]] || return 0
+  value=$(sed -n "s/^[[:space:]]*${key}=//p" "${ENV_FILE}" | tail -1)
+  # 値全体を囲む quote だけ剥がす (dotenv と同じ扱い)。 中身の quote は保つ。
+  if ((${#value} >= 2)); then
+    case "${value}" in
+      \"*\" | \'*\') value="${value:1:${#value}-2}" ;;
+    esac
+  fi
+  printf '%s' "${value}"
+}
 
-if [[ -z "${SYSTEM_ADMIN_EMAIL:-}" ]]; then
+SYSTEM_ADMIN_EMAIL="${SYSTEM_ADMIN_EMAIL:-$(read_env_value SYSTEM_ADMIN_EMAIL)}"
+if [[ -z "${SYSTEM_ADMIN_EMAIL}" ]]; then
   echo "ERROR: SYSTEM_ADMIN_EMAIL is not set (check ${ENV_FILE})" >&2
   exit 1
 fi
+
+# aws CLI の宛先は従来どおり `.env` に従わせる (環境に無いときだけ `.env` で補う)。
+for aws_var in AWS_PROFILE AWS_REGION AWS_DEFAULT_REGION; do
+  if [[ -z "${!aws_var:-}" ]]; then
+    aws_value="$(read_env_value "${aws_var}")"
+    if [[ -n "${aws_value}" ]]; then
+      export "${aws_var}=${aws_value}"
+    fi
+  fi
+done
 
 # `export VAR="$(cmd)"` は export の終了ステータスが勝つため cmd の失敗を握り潰す (SC2155)。
 # 実害: AWS session が切れていても ACCOUNT_ID="" のまま先へ進み、 空 account id から
