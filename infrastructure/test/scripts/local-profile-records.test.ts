@@ -135,4 +135,34 @@ describe("docs/local-play-requirements.md", () => {
   it("should point at the re-runnable benchmark rather than only at prose", () => {
     expect(doc).toContain("make local-measure");
   });
+
+  /**
+   * [Issue #2909] 動作要件表は「必要スペック」だけでは足りない。不足したときに **何が見えるか**
+   * が書いていないと、利用者は資源枯渇と壊れた問題を区別できない。
+   *
+   * とくに build cache の肥大は、disk error ではなく原因不明の build 失敗として現れ、しかも
+   * host の `df` には出ない (macOS / Windows では image と cache が VM のディスクにある)。
+   * この 1 行が表から落ちると、実際に踏んだ人が原因に辿り着けなくなる。
+   */
+  it("should document what a shortage looks like, not only what is required", () => {
+    expect(doc).toContain("## Failure symptoms");
+    expect(doc).toContain("docker builder prune -af");
+    // 実際に観測した行と、機構だけ書いた行を区別していること。
+    expect(doc).toMatch(/\| Observed \|/);
+  });
+
+  it("should not present an unobserved symptom as if it had been measured", () => {
+    const table = doc.slice(
+      doc.indexOf("## Failure symptoms"),
+      doc.indexOf("## Checking your own"),
+    );
+    const rows = table.split("\n").filter((line) => line.startsWith("| ") && line.includes(" | "));
+    // header と separator を除いた各行が Observed 欄を Yes / No で始めること。空欄や
+    // 「たぶん」で濁すと、測っていない挙動を測ったように読ませてしまう。
+    const dataRows = rows.filter((line) => !line.includes("---") && !line.includes("Symptom |"));
+    expect(dataRows.length).toBeGreaterThan(0);
+    for (const row of dataRows) {
+      expect(row, row).toMatch(/\| (Yes|No)\b/);
+    }
+  });
 });
