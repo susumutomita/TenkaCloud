@@ -67,19 +67,6 @@ interface IdentityProviderProps {
 }
 
 /**
- * Cognito UserPool domain は region 内 global unique なので、複数 AWS account / 複数 env
- * での衝突を避けるために env / tenantId / accountId 全てを prefix に入れる。
- *
- * フォーマット: `TenkaCloud-${env}-${tenantId}-${accountId}`
- *   - env: 11 字 (production) まで想定
- *   - tenantId: pooled (6) または ULID (26)
- *   - accountId: 12 字
- *   - hyphens 含む合計上限 63 字 → ULID + production でも 60 字でぎり収まる
- *
- * env / tenantId / accountId のいずれかが空文字 (synth-only context など) のときは
- * placeholder で synth が通るようにフォールバックする。
- */
-/**
  * Issue #861: production では localhost callback URL を含めない (= phishing 経路で localhost
  * dev tool に redirect される攻撃面を縮減)。 development / staging では dev 経路を維持。
  *
@@ -95,7 +82,30 @@ export function buildAllowedRedirectUrls(
   return [primaryUrl, devUrl];
 }
 
-function buildCognitoDomainPrefix(
+/** Cognito が `CreateUserPoolDomain` の `domain` に課す固定上限 (実測で確認)。 */
+const COGNITO_DOMAIN_PREFIX_MAX_LENGTH = 63;
+
+/**
+ * 上限を超えるときだけ、 tenantId ではなく **周りの固定部分** を削って収める。
+ *
+ * 目的は **pooled の既存 domain を絶対に動かさないこと**。 `buildCognitoDomainPrefix` は
+ * pooled と silo で共有されており、 書式を無条件に変えると
+ * `tenkacloud-development-pooled-672726205532` (42 字、 稼働中) が別名になり
+ * `AWS::Cognito::UserPoolDomain` が **REPLACE** されて、 pooled tenant の Hosted UI ログイン
+ * URL が変わってしまう。 だから「収まるならそのまま」を厳守する。
+ *
+ * 畳むときは environment を先頭 3 字 (development→dev / staging→sta / production→pro) にし、
+ * tenantId からは区切り文字だけを外す。 UUID (36 字) はハイフンが落ちて 32 字になり、
+ * `tenkacloud-`(11) + `dev`(3) + `-`(1) + 32 + `-`(1) + accountId(12) = 60 字で収まる。
+ * ULID (26 字) も同様。 tenantId を **一切失わない** ので衝突は原理的に起こらず、 domain から
+ * どの tenant のものか読み取れる。 同じ入力なら常に同じ prefix になる (= 再 deploy で REPLACE
+ * されない) ことが要件で、 純関数にしてあるのはそのため。
+ *
+ * hash に落とさないのは意図的。 tenantId は秘密ではなく単なる識別子で、 ここで必要なのは
+ * 「短く・一意・決定的」だけであり、 digest を挟むと domain から tenant を引けなくなるうえ、
+ * 48bit まで縮めた分だけ衝突余地を作ることになる。
+ */
+export function buildCognitoDomainPrefix(
   environment: string,
   tenantId: string,
   accountId: string,
@@ -104,7 +114,22 @@ function buildCognitoDomainPrefix(
   const tid = tenantId.toLowerCase();
   const acct = accountId || "synthplaceholder";
   // Cognito domain prefix は lowercase + 数字 + ハイフンのみ許容。
-  return `tenkacloud-${env}-${tid}-${acct}`;
+  const preferred = `tenkacloud-${env}-${tid}-${acct}`;
+  if (preferred.length <= COGNITO_DOMAIN_PREFIX_MAX_LENGTH) return preferred;
+
+  // SBT は tenantId に UUID (36 字) を発行する。 `tenkacloud-`(11) + `development`(11) +
+  // `-`(1) + 36 + `-`(1) + accountId(12) = 72 字 > 63 で、 silo tenant は Cognito に
+  // 弾かれていた ("Member must have length less than or equal to 63")。 pooled は
+  // tenantId="pooled" (6 字) で 42 字に収まるため、 この経路には入らない。
+  const compose = (segment: string): string => `tenkacloud-${env.slice(0, 3)}-${segment}-${acct}`;
+  const compactTid = tid.replace(/[^a-z0-9]/g, "");
+  // UUID / ULID はここで必ず budget 内に収まるので truncate は起きない。 それより長い
+  // tenantId を将来 SBT が発行した場合に備えた最後の保険で、 乱数部が末尾にある UUID / ULID
+  // の性質に合わせて後ろから残す (先頭を残すと ULID は時刻部だけになり衝突しうる)。
+  const budget = COGNITO_DOMAIN_PREFIX_MAX_LENGTH - compose("").length;
+  return compose(
+    compactTid.length <= budget ? compactTid : compactTid.slice(compactTid.length - budget),
+  );
 }
 
 /**
