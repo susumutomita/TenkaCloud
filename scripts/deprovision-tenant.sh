@@ -10,7 +10,9 @@ set -o pipefail
 sudo yum update -y
 sudo yum install -y jq
 sudo yum install -y python3-pip
-sudo python3 -m pip install --upgrade setuptools
+# `--ignore-installed`: rpm 管理の setuptools を uninstall しようとして必ず失敗するため
+# (詳細は provision-tenant.sh の同じ箇所)。 errexit 下では deprovision がここで止まる。
+sudo python3 -m pip install --upgrade --ignore-installed setuptools
 sudo python3 -m pip install git-remote-codecommit
 
 # Source-bundle fetch preamble is shared with provision-tenant.sh and inlined here

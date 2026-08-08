@@ -21,7 +21,16 @@ set -o pipefail
 sudo yum update -y
 sudo yum install -y jq
 sudo yum install -y python3-pip
-sudo python3 -m pip install --upgrade setuptools
+# `--ignore-installed`: CodeBuild の base image では setuptools が rpm 管理下にあり、 素の
+# `--upgrade` は uninstall 段階で必ず失敗する:
+#
+#   ERROR: Cannot uninstall setuptools 59.6.0, RECORD file not found.
+#   Hint: The package was installed by rpm.
+#
+# `set -e` が効いていなかった間はこの失敗が無視されて先へ進んでいた (= 誰も気付かなかった)。
+# errexit を入れた途端、 provisioning が cdk deploy まで到達せずここで止まるようになったので、
+# uninstall を経由しない形にして実際に成功させる。 握り潰して先へ進めるのは、 元の欠陥に戻る。
+sudo python3 -m pip install --upgrade --ignore-installed setuptools
 
 # Enable nocasematch option
 shopt -s nocasematch
