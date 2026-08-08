@@ -440,6 +440,30 @@ describe("#2948 T-7 / T-8: env fallback never rescues a machine principal", () =
     const denied = await app.request("/not-allowlisted", undefined, machineEnv());
     expect(denied.status).toBe(403);
   });
+
+  it("should hand an unrecognizable token on an allowlisted route to the blanket role check", async () => {
+    // machine でも human でもない token (access token だが bind scope が無い) が、たまたま
+    // allowlist 上の route を叩いた場合。guard はここで 403 を投げず `next()` する。principal を
+    // 解決できていない以上、guard には拒否理由を名指しする材料が無いので、role を持たない
+    // request として blanket `requireRole` に落とし、そちらが 403 を出すのが正しい経路になる。
+    // guard を「判らないものは通す」に見せる分岐なので、通した先が本当に落ちることまで見る。
+    const app = new Hono();
+    app.onError(buildAuthErrorHandler({ logPrefix: "[test]" }));
+    app.use("*", createMachineGuardMiddleware());
+    app.use(
+      "*",
+      createRoleCheckMiddleware({ healthzPath: "/healthz", roles: TENANT_BLANKET_ROLES }),
+    );
+    app.get("/deployments", (c) => c.json({ reached: true }));
+
+    const res = await app.request(
+      "/deployments",
+      undefined,
+      envWithClaims({ token_use: "access", client_id: "no-bind-scope" }),
+    );
+    expect(res.status).toBe(403);
+    expect((await res.json()) as { error: string }).toMatchObject({ error: "forbidden_role" });
+  });
 });
 
 describe("#2948 T-11: machine mutations and denials reach the admin audit log", () => {

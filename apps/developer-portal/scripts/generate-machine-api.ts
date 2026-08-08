@@ -168,14 +168,35 @@ export function listMachineApiOperations(): MachineApiOperationRow[] {
 `);
 }
 
-function main(argv: readonly string[]): number {
-  const check = argv.includes("--check");
-  const spec = readSpec(SPEC_PATH);
+/**
+ * 読み書きする 3 つの path。既定は repository の実ファイルで、test は temp dir を渡す。
+ * path を引数にしておかないと `main` は「実際の生成物を上書きする」以外の呼び方ができず、
+ * version gate と drift 判定という **落ちてほしい経路**を検証できない。
+ */
+export interface GeneratorPaths {
+  readonly specPath: string;
+  readonly baselinePath: string;
+  readonly outputPath: string;
+}
 
-  const baseline = readSpec(BASELINE_PATH);
+export const DEFAULT_PATHS: GeneratorPaths = {
+  specPath: SPEC_PATH,
+  baselinePath: BASELINE_PATH,
+  outputPath: OUTPUT_PATH,
+};
+
+export function main(
+  argv: readonly string[],
+  paths: GeneratorPaths = DEFAULT_PATHS,
+  out: Pick<Console, "log" | "error"> = console,
+): number {
+  const check = argv.includes("--check");
+  const spec = readSpec(paths.specPath);
+
+  const baseline = readSpec(paths.baselinePath);
   const breaking = findBreakingChanges(baseline, spec);
   if (breaking.length > 0 && baseline.info.version === spec.info.version) {
-    console.error(
+    out.error(
       `machine API spec に破壊的変更がありますが info.version が ${spec.info.version} のままです:\n` +
         breaking.map((line) => `  - ${line}`).join("\n") +
         "\ninfo.version を上げ、src/content/machine-api-baseline.json を更新してください。",
@@ -187,24 +208,24 @@ function main(argv: readonly string[]): number {
   if (check) {
     let current: string;
     try {
-      current = readFileSync(OUTPUT_PATH, "utf8");
+      current = readFileSync(paths.outputPath, "utf8");
     } catch {
-      console.error("src/content/machine-api.generated.ts がありません。生成してください。");
+      out.error("src/content/machine-api.generated.ts がありません。生成してください。");
       return 1;
     }
     if (current !== rendered) {
-      console.error(
+      out.error(
         "src/content/machine-api.generated.ts が docs/api/machine-api.openapi.json と一致しません。" +
           " `bun run generate:machine-api` を実行して commit してください。",
       );
       return 1;
     }
-    console.log("OK: machine API reference は上流の spec と一致しています。");
+    out.log("OK: machine API reference は上流の spec と一致しています。");
     return 0;
   }
 
-  writeFileSync(OUTPUT_PATH, rendered, "utf8");
-  console.log("wrote src/content/machine-api.generated.ts");
+  writeFileSync(paths.outputPath, rendered, "utf8");
+  out.log("wrote src/content/machine-api.generated.ts");
   return 0;
 }
 

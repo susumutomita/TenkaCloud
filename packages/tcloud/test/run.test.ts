@@ -13,6 +13,7 @@ import {
   run,
 } from "../src/run";
 import {
+  defaultCommandRunner,
   expiryFromExpiresIn,
   MacKeychainTokenStore,
   MemoryTokenStore,
@@ -395,6 +396,29 @@ describe("token store selection", () => {
   it("should treat a corrupted keychain entry as a cache miss", () => {
     const store = new SecretToolTokenStore(() => ({ status: 0, stdout: "not json" }));
     expect(store.read("k", 1_000)).toBeUndefined();
+  });
+
+  it.each([
+    ["accessToken が string でない", JSON.stringify({ accessToken: 1, expiresAtMs: 9_000 })],
+    ["expiresAtMs が number でない", JSON.stringify({ accessToken: "t", expiresAtMs: "9000" })],
+    ["どちらも欠けている", JSON.stringify({ unrelated: true })],
+    ["object ですらない", JSON.stringify("just-a-string")],
+  ])("should treat a keychain entry whose %s as a cache miss", (_label, stdout) => {
+    // JSON として読めても shape が違えば使わない。ここを通すと `accessToken` に number が
+    // 入ったまま Authorization header へ渡り、原因の判りにくい 401 になる。
+    const store = new SecretToolTokenStore(() => ({ status: 0, stdout }));
+    expect(store.read("k", 1_000)).toBeUndefined();
+  });
+
+  it("should actually run a command through the default runner", () => {
+    // 既定の runner だけが本物の process を起動する。ここを test double で置き換えたままに
+    // すると、上の store の test が全部通っても実機で 1 度も動かない可能性が残る。
+    expect(defaultCommandRunner("printf", ["%s", "hello"])).toEqual({
+      status: 0,
+      stdout: "hello",
+    });
+    // stdin を渡す経路 (secret-tool store が使う) も同じ関数で通す。
+    expect(defaultCommandRunner("cat", [], "piped").stdout).toBe("piped");
   });
 
   it("should round-trip through secret-tool", () => {
