@@ -18,6 +18,17 @@ export const apiIdFromExecuteApiUrl = (apiUrl: string): string =>
   cdk.Fn.select(0, cdk.Fn.split(".", cdk.Fn.select(2, cdk.Fn.split("/", apiUrl))));
 
 /**
+ * Budget email subscriptions are opt-in. systemAdminEmail identifies the platform
+ * administrator; it is not consent to receive every budget confirmation.
+ */
+export function budgetNotificationEmails(
+  config: Pick<AppConfig, "systemAdminEmail" | "budgetAlarmEmails">,
+): string[] | undefined {
+  const recipients = Array.from(new Set(config.budgetAlarmEmails ?? []));
+  return recipients.length > 0 ? recipients : undefined;
+}
+
+/**
  * Issue #952 epic / cost guardrails: 月次 AWS Budget + Free Tier 使用量アラームを立てる。
  * limit / alarm 通知先は config から。 `monthlyCostLimitUsd` が 0 / 未指定なら何も立てない
  * (= legacy 互換、 CFn 物理差分 0 件)。
@@ -36,9 +47,7 @@ export function addCostGuardrails(args: {
   const budget = new CostBudget(args.observabilityStack, "CostBudget", {
     budgetNamePrefix: `tenkacloud-${config.environment}`,
     monthlyLimitUsd: config.monthlyCostLimitUsd,
-    notificationEmails: Array.from(
-      new Set([config.systemAdminEmail, ...(config.budgetAlarmEmails ?? [])]),
-    ),
+    notificationEmails: budgetNotificationEmails(config),
     costAllocationTags: { Project: ["TenkaCloud"] },
   });
   new FreeTierAlarms(args.observabilityStack, "FreeTierAlarms", {
