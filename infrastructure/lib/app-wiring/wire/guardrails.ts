@@ -36,9 +36,15 @@ export function addCostGuardrails(args: {
   const budget = new CostBudget(args.observabilityStack, "CostBudget", {
     budgetNamePrefix: `tenkacloud-${config.environment}`,
     monthlyLimitUsd: config.monthlyCostLimitUsd,
-    notificationEmails: Array.from(
-      new Set([config.systemAdminEmail, ...(config.budgetAlarmEmails ?? [])]),
-    ),
+    // Issue #2961: `budgetAlarmEmails` に明示的に書かれた宛先だけを購読する。
+    //
+    // 以前はここに `systemAdminEmail` を無条件で足していた。`systemAdminEmail` は
+    // 「システム管理者の連絡先」であって「予算アラートを受け取りたい人」ではなく、この 2 つを
+    // 同一視していたのが原因で、deploy のたびに SNS の購読確認メールが届いていた。
+    // stack を作り直すと topic は別物になるので確認メールは再送され、未確認の購読は
+    // `SubscriptionArn` が実 ARN ではなく `PendingConfirmation` のため **API でも手でも消せない**。
+    // 作らないようにするしか手が無いので、既定では作らない。
+    notificationEmails: config.budgetAlarmEmails,
     costAllocationTags: { Project: ["TenkaCloud"] },
   });
   new FreeTierAlarms(args.observabilityStack, "FreeTierAlarms", {

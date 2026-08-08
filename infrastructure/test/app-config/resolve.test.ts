@@ -266,10 +266,34 @@ describe("resolveAppConfig", () => {
   });
 
   // Issue #952 / PR-957 CodeRabbit follow-up: schema は `monthlyCostLimitUsd` に数値文字列を
-  // 許容する (`${MONTHLY_COST_LIMIT_USD:-50}` で `"50"` が JSON に入る) ため、 resolve は
-  // string を Number として扱う必要がある。 env override は process.env 直読みのため本
-  // test では config.json default (= "50") が正しく Number 化されることだけを pin する。
-  it("monthlyCostLimitUsd should normalize string '50' from config.json to number 50", () => {
+  // 許容する (`${MONTHLY_COST_LIMIT_USD:-0}` で `"50"` のような string が JSON に入る) ため、
+  // resolve は string を Number として扱う必要がある。
+  //
+  // Issue #2961 で config.json の既定が 0 (= OFF) になったので、正規化そのものを見るには
+  // 値を与える必要がある。展開は `loadConfig` が process.env を直読みするのでそちらに置く。
+  it("monthlyCostLimitUsd should normalize a numeric string from config.json to a number", () => {
+    const previous = process.env.MONTHLY_COST_LIMIT_USD;
+    process.env.MONTHLY_COST_LIMIT_USD = "50";
+    try {
+      const cfg = resolveAppConfig({
+        env: baseEnv(),
+        binDir: BIN_DIR,
+        fs: fsAlwaysMissing,
+        dotenvConfig: noopDotenv,
+        discoverProblems: stubProblems,
+      });
+      expect(cfg.monthlyCostLimitUsd).toBe(50);
+      expect(typeof cfg.monthlyCostLimitUsd).toBe("number");
+    } finally {
+      if (previous === undefined) delete process.env.MONTHLY_COST_LIMIT_USD;
+      else process.env.MONTHLY_COST_LIMIT_USD = previous;
+    }
+  });
+
+  // Issue #2961: 何も設定しなければコスト監視は立たない。0 は「limit 0 ドル」ではなく無効を意味し、
+  // `parsed > 0` の判定で undefined に倒れる。ここが 0 以外に戻ると、購読確認メールが deploy の
+  // たびに届く状態に逆戻りする。
+  it("monthlyCostLimitUsd should be undefined by default so cost monitoring stays opt-in", () => {
     const cfg = resolveAppConfig({
       env: baseEnv(),
       binDir: BIN_DIR,
@@ -277,8 +301,7 @@ describe("resolveAppConfig", () => {
       dotenvConfig: noopDotenv,
       discoverProblems: stubProblems,
     });
-    expect(cfg.monthlyCostLimitUsd).toBe(50);
-    expect(typeof cfg.monthlyCostLimitUsd).toBe("number");
+    expect(cfg.monthlyCostLimitUsd).toBeUndefined();
   });
 
   it("should keep ops monitoring disabled when CDK_PARAM_OPS_ALERT_EMAIL is unset", () => {
