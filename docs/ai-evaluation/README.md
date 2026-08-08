@@ -70,6 +70,28 @@ canary は tenant / event / セッションの小さい割合に限定し、kill
 - **cost / latency の閾値に実測の裏付けが無い。** 閾値は呼び出し側が渡す形にしてあり、デフォルト値を置いていないのは、根拠のない数字をデフォルトとして配らないためである。
 - **fairness pair の判定は「不一致率」までで、原因分析はしない。**
 
+## 残りの Phase (一件一責務の分解)
+
+Issue 2936 は Initiative なので、Phase 1 の次は一件一責務へ分解する。ここでは **分解そのものを
+成果物として書き残す**。Issue として起票するかどうかは repository owner の判断に委ねる (未着手の
+Issue を増やすこと自体がコストになるため、勝手には起票していない)。
+
+| # | 責務 | 完了条件 | 依存 |
+| --- | --- | --- | --- |
+| A | offline runner | Issue 2911 の 1 scenario を Simulator / local mode で最後まで走らせ、`RunResult` を生成する | Phase 1 |
+| B | 決定論的 scorer | problem score / checkpoint / service health / policy violation / forbidden side effect / timeout / cost / latency を採点する。既存の Problem Pack scoring を再利用し、AI 専用の重複 scorer を作らない | A |
+| C | evidence と factuality | claim を tool call ID / request ID / state snapshot / score event / health probe へ結びつけ、unsupported claim 率と citation support 率を出す | A |
+| D | golden dataset 100 件 | coverage matrix の 12 区分を実際に埋める。judge calibration set は分離する | Phase 1 |
+| E | 校正済み judge | judge model / prompt / rubric を version 固定し、human-labeled set との一致を測る。校正未達を `judgeCalibrated: false` として扱う | D |
+| F | CLI と CI gate | `tenkacloud eval run` / `eval gate`、JSON と人間向け report、PR では smoke suite・merge では full suite | A-E |
+| G | human review queue | judge と scorer の不一致、low confidence、high severity、fairness pair 不一致を blind label へ送り、adjudication を dataset へ戻す | E |
+| H | dashboard と alert | target / model / prompt / dataset / evaluator version 別の可視化と閾値 alert。既存の observability 経路を再利用する | F |
+| I | shadow と canary | read-only gateway と dry-run projection、canary の kill switch と自動 rollback、rollback 理由の audit | F |
+
+A から C までが最初の vertical slice で、ここまで揃って初めて「1 scenario が end-to-end で評価
+できる」と言える。D と E が揃うまで release gate は `undecidable` を返し続ける — それは実装の
+未完成ではなく、契約が意図した通りの状態になる。
+
 ## 関連
 
 - Issue 2911 — Agent-only GameDay の制約・監査・採点 (最初の評価対象)
