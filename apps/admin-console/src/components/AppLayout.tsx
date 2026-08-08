@@ -1,5 +1,5 @@
 import { ShellLayout as WebKitShellLayout } from "@tenkacloud/web-kit";
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode, useReducer } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { useAuth } from "../auth/AuthProvider";
 import { type LocaleCode, SUPPORTED_LOCALES, useI18n } from "../i18n";
@@ -22,6 +22,12 @@ export function ShellLayout({
   const location = useLocation();
   const navigate = useNavigate();
   const { locale, setLocale, t } = useI18n();
+  // 手動更新 (= ヘッダの「最新の状態に更新」)。 各 page は自前の refresh / usePolling を持つが
+  // 呼び出し口を page ごとの Header に足すと導線が page 単位でばらつくため、 shell 共通の
+  // TopNavigation utility に 1 つだけ置き、 route content を remount して再 fetch させる。
+  // ADR-011 の polling opt-in 方針 (SSE / WebSocket は使わない、 自動更新は既定 OFF、 手動更新を
+  // 用意する) に沿った導線で、 application-admin-console の shell と同一実装。
+  const [contentRevision, refreshContent] = useReducer((revision: number) => revision + 1, 0);
 
   return (
     <WebKitShellLayout<LocaleCode>
@@ -53,6 +59,7 @@ export function ShellLayout({
         auth.logout();
         navigate("/login");
       }}
+      refreshAction={{ label: t("nav.refresh_latest"), onRefresh: refreshContent }}
       locale={locale}
       setLocale={setLocale}
       t={t}
@@ -60,7 +67,7 @@ export function ShellLayout({
       localeNames={LOCALE_NAME}
       localeSwitcherAriaLabel="言語切替 / Language"
     >
-      {children}
+      <Fragment key={contentRevision}>{children}</Fragment>
     </WebKitShellLayout>
   );
 }
