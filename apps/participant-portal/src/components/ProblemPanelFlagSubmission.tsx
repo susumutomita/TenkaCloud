@@ -6,7 +6,7 @@ import FormField from "@cloudscape-design/components/form-field";
 import Input from "@cloudscape-design/components/input";
 import Modal from "@cloudscape-design/components/modal";
 import SpaceBetween from "@cloudscape-design/components/space-between";
-import { useState } from "react";
+import { memo, useState } from "react";
 import {
   type HintRevealMode,
   type ParticipantHintView,
@@ -268,7 +268,14 @@ function ReadOnlyHint({
   );
 }
 
-export function HintsPanel({
+/**
+ * Issue #2946: `memo` で囲む。 この panel は Cloudscape の Alert + hint 行 + confirm Modal を
+ * 持ち、 1 回の render が数 ms かかる。 multi-flag 問題では checkpoint 行ごとに 1 つ並ぶので、
+ * 素の関数のままだと親の再 render (= 入力欄への 1 打鍵) が全 checkpoint の HintsPanel を
+ * 巻き込み、 打鍵コストが checkpoint 数に比例して増える。 props はすべて安定参照で渡す
+ * (`onRevealed` / `onRevealTracked` は呼び出し側で `useCallback` 済み)。
+ */
+export const HintsPanel = memo(function HintsPanel({
   apiBaseUrl,
   sessionToken,
   problemId,
@@ -462,4 +469,4 @@ export function HintsPanel({
       </Modal>
     </>
   );
-}
+});
