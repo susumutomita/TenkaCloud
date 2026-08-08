@@ -67,7 +67,8 @@ export class InvalidRetryRequestError extends Error {
  * only the dynamic `(got N)` / `(got <value>)` suffixes are dropped (they were never
  * asserted and echoing the offending value back is unnecessary).
  */
-const RetryRequestSchema = z.object({
+/** #2949 / #2955: OpenAPI generator が request body schema の正本として読む。 */
+export const RetryRequestSchema = z.object({
   failedJobIds: z
     .array(z.string().regex(JOB_ID_RE, "failedJobIds must all be ULID strings"))
     .min(1, "failedJobIds must not be empty")

@@ -145,6 +145,21 @@ export type DeploymentRecord = {
 
   createdAt: string;
   updatedAt: string;
+  /**
+   * [Issue #2946] このデプロイが **一度でも `COMPLETE` に到達した** ことの恒久 marker。
+   *
+   * 現在値の `status` からは復元できない。成功した deploy は撤去で `DELETING` → `DELETED`
+   * (あるいは `EXPIRED` / `AUTO_DELETED`) に遷移するが、`bulk-delete.ts` の
+   * `prepareBulkTeardownEntry` は `DELETING` / `DELETED` だけを skip するので **`FAILED` も
+   * teardown 経路で `DELETED` になりうる**。つまり `DELETED` は「成功後の撤去」と「失敗後の
+   * 撤去」の両方を含み、status だけでは「健全に回しているテナント」と「一度も成功していない
+   * テナント」を区別できない。
+   *
+   * 最初に `COMPLETE` へ遷移したときだけ書き、以後は上書きしない。teardown 系の遷移でも
+   * 消さない。**既存行には存在しないので遡及はできない** — 集計側は「不明」と「0 件」を
+   * 混同してはならない。
+   */
+  completedAt?: string;
   /** TTL 属性 (epoch seconds)。auto-teardown のキー。 */
   expiresAt: number;
 

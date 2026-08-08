@@ -41,7 +41,9 @@
     "tenants_error_header": "テナント一覧の取得に失敗しました",
     "insight_error_header": "デプロイ集計の取得に失敗しました",
     "insight_not_available_header": "デプロイ集計を利用できません",
-    "insight_not_available_body": "この環境では AdminInsight API が未配線 (runtime-config の adminInsightApiUrl が空) か、SystemAdmin 権限がありません。テナント数と Tier 分布は引き続き表示されます。"
+    "insight_not_available_body": "この環境では AdminInsight API が未配線 (runtime-config の adminInsightApiUrl が空) か、SystemAdmin 権限がありません。テナント数と Tier 分布は引き続き表示されます。",
+    "col_ever_completed_deploys": "累計成功デプロイ",
+    "ever_completed_deploys_note": "一度でも成功したデプロイの累計。撤去しても 0 に戻らない。この列が導入される前のデプロイは数に入らないため、「—」は 0 件ではなく不明を意味する。"
   },
   "operations": {
     "title": "運用ダッシュボード",

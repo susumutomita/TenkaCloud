@@ -51,7 +51,14 @@ const tenants: Tenant[] = [
 ];
 
 const insight: Record<string, TenantInsightSummary> = {
-  "t-a": insightItem({ tenantId: "t-a", activeDeploys: 2, completedDeploys: 4, failedDeploys: 1 }),
+  "t-a": insightItem({
+    tenantId: "t-a",
+    activeDeploys: 2,
+    completedDeploys: 4,
+    failedDeploys: 1,
+    everCompletedDeploys: 7,
+  }),
+  // [Issue #2946] everCompletedDeploys を返さない旧 backend の応答。0 と偽らず null になる。
   "t-b": insightItem({ tenantId: "t-b", activeDeploys: 3, completedDeploys: 1, failedDeploys: 0 }),
 };
 
@@ -153,6 +160,7 @@ describe("buildUsageRows", () => {
         activeDeploys: 2,
         completedDeploys: 4,
         failedDeploys: 1,
+        everCompletedDeploys: 7,
       },
       {
         tenantId: "t-b",
@@ -162,6 +170,7 @@ describe("buildUsageRows", () => {
         activeDeploys: 3,
         completedDeploys: 1,
         failedDeploys: 0,
+        everCompletedDeploys: null,
       },
       {
         tenantId: "t-c",
@@ -171,6 +180,7 @@ describe("buildUsageRows", () => {
         activeDeploys: 0,
         completedDeploys: 0,
         failedDeploys: 0,
+        everCompletedDeploys: null,
       },
     ]);
   });
@@ -182,6 +192,7 @@ describe("buildUsageRows", () => {
       expect(row.activeDeploys).toBeNull();
       expect(row.completedDeploys).toBeNull();
       expect(row.failedDeploys).toBeNull();
+      expect(row.everCompletedDeploys).toBeNull();
     }
   });
 
@@ -254,5 +265,47 @@ describe("sortUsageRows", () => {
     const before = rows.map((r) => r.tenantId);
     sortUsageRows(rows, "activeDeploys", true);
     expect(rows.map((r) => r.tenantId)).toEqual(before);
+  });
+});
+
+/**
+ * [Issue #2946] 撤去後に「健全なテナント」と「何もしていないテナント」を区別する列。
+ *
+ * 現在値の 2 列は撤去で揃って 0 になるため、この列だけがその区別を担う。「不明」を 0 と
+ * 描かないことが要件そのもの (旧 backend の応答と、本当に 0 件のテナントは違う)。
+ */
+describe("everCompletedDeploys (#2946)", () => {
+  it("should keep a non-zero cumulative count for a tenant whose deployments were all torn down", () => {
+    const tornDown: Record<string, TenantInsightSummary> = {
+      "t-a": insightItem({
+        tenantId: "t-a",
+        activeDeploys: 0,
+        failedDeploys: 0,
+        everCompletedDeploys: 4,
+      }),
+    };
+    const row = buildUsageRows(tenants, tornDown)[0];
+    expect(row?.activeDeploys).toBe(0);
+    expect(row?.failedDeploys).toBe(0);
+    expect(row?.everCompletedDeploys).toBe(4);
+  });
+
+  it("should distinguish a backend that omits the field from a tenant that genuinely has zero", () => {
+    const mixed: Record<string, TenantInsightSummary> = {
+      "t-a": insightItem({ tenantId: "t-a", everCompletedDeploys: 0 }),
+      "t-b": insightItem({ tenantId: "t-b" }),
+    };
+    const rows = buildUsageRows(tenants, mixed);
+    expect(rows[0]?.everCompletedDeploys).toBe(0);
+    expect(rows[1]?.everCompletedDeploys).toBeNull();
+  });
+
+  it("should sort by the cumulative column, treating unknown as zero only for ordering", () => {
+    const mixed: Record<string, TenantInsightSummary> = {
+      "t-a": insightItem({ tenantId: "t-a", everCompletedDeploys: 1 }),
+      "t-b": insightItem({ tenantId: "t-b", everCompletedDeploys: 5 }),
+    };
+    const sorted = sortUsageRows(buildUsageRows(tenants, mixed), "everCompletedDeploys", true);
+    expect(sorted.map((row) => row.tenantId)).toEqual(["t-b", "t-a", "t-c"]);
   });
 });

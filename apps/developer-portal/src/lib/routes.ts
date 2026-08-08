@@ -12,6 +12,8 @@ export const STATIC_ROUTES: readonly string[] = [
   "/catalog/",
   "/developers/",
   "/developers/api/",
+  // Issue #2950: the machine (M2M) API reference, JA primary + EN mirror.
+  "/developers/api/machine/",
   "/developers/examples/",
   "/developers/changelog/",
   // Legal pages migrated from the static landing (ADR-0003).
@@ -25,6 +27,7 @@ export const STATIC_ROUTES: readonly string[] = [
   "/en/privacy/",
   "/en/terms/",
   "/en/legal/",
+  "/en/developers/api/machine/",
 ];
 
 export function allRoutes(): readonly string[] {

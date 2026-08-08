@@ -7,6 +7,7 @@ import { createDefaultControlDataRuntime } from "../../control-data/runtime-repo
 import { buildAuthErrorHandler, createRoleCheckMiddleware } from "../shared/auth-wiring.js";
 import { ULID_RE as JOB_ID_RE, PROBLEM_ID_RE } from "../shared/constants.js";
 import { parseSchema } from "../shared/http-parse.js";
+import { createMachineGuardMiddleware } from "../shared/machine-principal.js";
 import {
   asCompositeDescriptor,
   type CompositeRuntimeDescriptor,
@@ -19,8 +20,9 @@ import {
   requireTenantNotSuspended,
   resolveTenantId,
   TENANT_ADMIN_ROLE,
+  TENANT_BLANKET_ROLES,
+  TENANT_MACHINE_ROLE,
   TENANT_OPERATOR_ROLE,
-  TENANT_ROLES,
 } from "./auth.js";
 import { CompositeAwsInputRequiredError, startCompositeDeployment } from "./composite-deploy.js";
 import { buildCompositeDeployDeps } from "./composite-deploy-wiring.js";
@@ -35,6 +37,7 @@ import {
   UnknownProblemError,
   UnverifiedCompetitorAccountError,
 } from "./deploy.js";
+import { recordDeployAudit, recordRetryAudit } from "./deploy-audit.js";
 import { DeployQuotaExceededError, type QuotaTier, resolveQuotaTier } from "./deploy-quota.js";
 import { getDeployment, listDeployments } from "./list.js";
 import { InvalidRetryRequestError, retryDeployments, validateRetryRequest } from "./retry.js";
@@ -99,13 +102,21 @@ app.use(
 // は CloudWatch Logs の `[deploy] uncaught handler error` 行で詳細を引く。
 app.onError(buildAuthErrorHandler({ logPrefix: "[deploy]" }));
 
+// #2948 / ADR-0005: machine guard は blanket role check **より前** に mount する。allowlist 外の
+// route と capability 不足を role 解決の前に落とし、拒否を監査に残すため。human 経路 (=
+// `custom:tenantId` claim を持つ ID token) はこの middleware を素通りする。
+app.use("*", createMachineGuardMiddleware());
+
 // ADR-020 Phase B.1 (#948): blanket middleware は **「tenant 内のいずれかの role を持つ
 // 認証済 user」** であることだけ要求する (= Admin / Operator / Viewer のいずれか)。 各 route の
 // 1 行目で `requireRole(c, [...])` を呼び、 destructive 操作には Admin 限定 / mutate には
 // Admin + Operator のように **route 単位で** 絞り込む (= Viewer も dropdown populate のため
 // GET には pass、 旧 broken-glass 規律で 403 になっていた regression を解消)。
 // healthz は authn / authz どちらも skip (= API GW 側で auth bypass 設定)。
-app.use("*", createRoleCheckMiddleware({ healthzPath: "/healthz", roles: TENANT_ROLES }));
+// #2948: blanket だけ `TENANT_BLANKET_ROLES` (= human 3 値 + `TenantMachine`) にする。
+// per-route の `requireRole` は human 3 値のままなので、machine は allowlist に明示追加した
+// route 以外では **この行を通ったあと** に必ず落ちる。
+app.use("*", createRoleCheckMiddleware({ healthzPath: "/healthz", roles: TENANT_BLANKET_ROLES }));
 
 app.get("/healthz", (c) => c.json({ ok: true }));
 
@@ -224,7 +235,10 @@ async function handleCompositeDeploy(
 }
 
 app.post("/problems/:problemId/deploy", async (c) => {
-  requireRole(c, [TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE]);
+  // #2948: machine principal が到達できる **唯一の mutating route**。`TENANT_MACHINE_ROLE` を
+  // per-route allowlist に足すのはここ 1 箇所だけで、test `machine-role-allowlist-sites` が
+  // source-level でその数を pin する。
+  requireRole(c, [TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE, TENANT_MACHINE_ROLE]);
   const problemId = c.req.param("problemId");
   if (!problemId || !PROBLEM_ID_RE.test(problemId)) {
     return c.json({ error: "invalid_problem_id" }, StatusCodes.BAD_REQUEST);
@@ -238,7 +252,8 @@ app.post("/problems/:problemId/deploy", async (c) => {
     return c.json({ error: "invalid_body" }, StatusCodes.BAD_REQUEST);
   }
 
-  const ctx = buildContext(shared, resolveTenantId(c));
+  const tenantId = resolveTenantId(c);
+  const ctx = buildContext(shared, tenantId);
   // #1766: quota tier は JWT claim から route で解決し、enforcement 自体は
   // startDeployment / startCompositeDeployment 内で行う (PR-1803 review)。
   const quotaTier = resolveQuotaTier(c);
@@ -250,7 +265,14 @@ app.post("/problems/:problemId/deploy", async (c) => {
   const descriptor = ctx.resolveProblemRuntimeDescriptor?.(problemId);
   const composite = asCompositeDescriptor(descriptor);
   if (composite) {
-    return handleCompositeDeploy(c, ctx, problemId, composite, quotaTier, body);
+    const response = await handleCompositeDeploy(c, ctx, problemId, composite, quotaTier, body);
+    await recordDeployAudit(
+      c,
+      tenantId,
+      problemId,
+      response.status === StatusCodes.ACCEPTED ? "success" : "error",
+    );
+    return response;
   }
 
   // [Issue #2561] A non-AWS single-provider problem (gcp/azure/sakura) needs
@@ -273,8 +295,10 @@ app.post("/problems/:problemId/deploy", async (c) => {
       problemId,
       quotaTier,
     });
+    await recordDeployAudit(c, tenantId, problemId, "success");
     return c.json(response, StatusCodes.ACCEPTED);
   } catch (err) {
+    await recordDeployAudit(c, tenantId, problemId, "error");
     return mapDeployError(c, problemId, err);
   }
 });
@@ -392,7 +416,11 @@ app.get("/deployments/:jobId/stack-progress", async (c) => {
  * 出力: \`{ items: [{ jobId, action: \"requeued\" | \"skipped\", reason? }, ...] }\`
  */
 app.post("/deployments/retry", async (c) => {
-  requireRole(c, [TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE]);
+  // #2955 Phase 2: machine principal に開く 2 本目の mutating route。`retry.ts` が publish する
+  // のは `DeployCreateRequested` だけで、deploy route と同じ pipeline に閉じている
+  // (= scheduler / reconciler へは届かない)。root cause は `MACHINE_ROUTE_SCOPES` の
+  // `reachability` field に宣言してある。
+  requireRole(c, [TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE, TENANT_MACHINE_ROLE]);
   requireTenantNotSuspended(c);
   let body: unknown;
   try {
@@ -409,10 +437,14 @@ app.post("/deployments/retry", async (c) => {
     }
     throw err;
   }
+  const retryTenantId = resolveTenantId(c);
   try {
-    const result = await retryDeployments(shared, resolveTenantId(c), request);
+    const result = await retryDeployments(shared, retryTenantId, request);
+    // #2955: 再投入は deploy と同じく mutating なので、同じ粒度で監査に残す。
+    await recordRetryAudit(c, retryTenantId, result.items.length, "success");
     return c.json(result, StatusCodes.OK);
   } catch (err) {
+    await recordRetryAudit(c, retryTenantId, request.failedJobIds.length, "error");
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[deploy] retryDeployments failed", { message });
     return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);

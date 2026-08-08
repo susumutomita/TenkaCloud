@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "next dev --port 5176",
-    "prebuild": "tsx scripts/generate-reference.ts --check && tsx scripts/check-internal-links.ts",
+    "prebuild": "tsx scripts/generate-reference.ts --check && tsx scripts/generate-machine-api.ts --check && tsx scripts/check-internal-links.ts",
     "build": "next build",
     "start": "next start --port 5176",
     "typecheck": "tsc --noEmit",
@@ -15,7 +15,9 @@
     "generate:catalog": "tsx scripts/generate-catalog.ts",
     "check:catalog": "tsx scripts/generate-catalog.ts --check",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage --coverage.reporter=lcov --coverage.reporter=text --coverage.reportsDirectory=./coverage --coverage.exclude='dist/**' --coverage.exclude='.next/**' --coverage.exclude='**/*.test.ts*'"
+    "test:coverage": "vitest run --coverage --coverage.reporter=lcov --coverage.reporter=text --coverage.reportsDirectory=./coverage --coverage.exclude='dist/**' --coverage.exclude='.next/**' --coverage.exclude='**/*.test.ts*'",
+    "generate:machine-api": "tsx scripts/generate-machine-api.ts",
+    "check:machine-api": "tsx scripts/generate-machine-api.ts --check"
   },
   "dependencies": {
     "@mdx-js/loader": "^3.1.0",

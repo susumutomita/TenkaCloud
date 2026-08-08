@@ -1,0 +1,368 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "TenkaCloud Machine API",
+    "version": "1.0.0",
+    "description": "Machine-to-machine surface of the TenkaCloud Tenant API (ADR-0005 Phase 1). A machine principal holds the role `TenantMachine`, which no destructive route accepts, so the operations below are the complete surface reachable with a machine credential. This reference is generated from the platform's own route table and validation schemas.",
+    "license": {
+      "name": "Apache-2.0",
+      "identifier": "Apache-2.0"
+    }
+  },
+  "servers": [
+    {
+      "url": "{machineApiBaseUrl}",
+      "description": "Per-tenant machine API base URL. Take it from the tenant stack output `MachineApiUrl`. There is no shared production host.",
+      "variables": {
+        "machineApiBaseUrl": {
+          "default": "https://example.invalid/prod",
+          "description": "Replace with your tenant's MachineApiUrl output."
+        }
+      }
+    }
+  ],
+  "paths": {
+    "/deployments": {
+      "get": {
+        "operationId": "getDeployments",
+        "summary": "List deployments for the calling tenant",
+        "description": "Returns the tenant's deployment jobs, newest first. The tenant is taken from the token's binding scope; there is no tenant parameter.",
+        "tags": ["deployments"],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "The token is missing, expired, or lacks the required scope."
+          },
+          "403": {
+            "description": "The machine credential is not allowed to call this route (`forbidden_machine_route`) or its role is rejected (`forbidden_role`)."
+          },
+          "404": {
+            "description": "Not found within the calling tenant."
+          }
+        },
+        "security": [
+          {
+            "TenkaCloudMachineOAuth": ["tenkacloud/ops.read"]
+          }
+        ],
+        "x-tenkacloud-capability": "read"
+      }
+    },
+    "/deployments/{jobId}": {
+      "get": {
+        "operationId": "getDeploymentsByJobId",
+        "summary": "Get one deployment",
+        "description": "Returns a single deployment job owned by the calling tenant.",
+        "tags": ["deployments"],
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Deployment job id (ULID)."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "The token is missing, expired, or lacks the required scope."
+          },
+          "403": {
+            "description": "The machine credential is not allowed to call this route (`forbidden_machine_route`) or its role is rejected (`forbidden_role`)."
+          },
+          "404": {
+            "description": "Not found within the calling tenant."
+          }
+        },
+        "security": [
+          {
+            "TenkaCloudMachineOAuth": ["tenkacloud/ops.read"]
+          }
+        ],
+        "x-tenkacloud-capability": "read"
+      }
+    },
+    "/deployments/{jobId}/stack-progress": {
+      "get": {
+        "operationId": "getDeploymentsByJobIdStackProgress",
+        "summary": "Get CloudFormation progress for a deployment",
+        "description": "Returns stack events and resources for the job. Separate from the job itself because the CloudFormation calls are slow and may throttle.",
+        "tags": ["deployments"],
+        "parameters": [
+          {
+            "name": "jobId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Deployment job id (ULID)."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "The token is missing, expired, or lacks the required scope."
+          },
+          "403": {
+            "description": "The machine credential is not allowed to call this route (`forbidden_machine_route`) or its role is rejected (`forbidden_role`)."
+          },
+          "404": {
+            "description": "Not found within the calling tenant."
+          }
+        },
+        "security": [
+          {
+            "TenkaCloudMachineOAuth": ["tenkacloud/ops.read"]
+          }
+        ],
+        "x-tenkacloud-capability": "read"
+      }
+    },
+    "/problems/{problemId}/deployments": {
+      "get": {
+        "operationId": "getProblemsByProblemIdDeployments",
+        "summary": "List deployments of one problem",
+        "description": "Returns the tenant's deployment jobs for a single problem.",
+        "tags": ["deployments"],
+        "parameters": [
+          {
+            "name": "problemId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Problem id from the catalog."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "The token is missing, expired, or lacks the required scope."
+          },
+          "403": {
+            "description": "The machine credential is not allowed to call this route (`forbidden_machine_route`) or its role is rejected (`forbidden_role`)."
+          },
+          "404": {
+            "description": "Not found within the calling tenant."
+          }
+        },
+        "security": [
+          {
+            "TenkaCloudMachineOAuth": ["tenkacloud/ops.read"]
+          }
+        ],
+        "x-tenkacloud-capability": "read"
+      }
+    },
+    "/events": {
+      "get": {
+        "operationId": "getEvents",
+        "summary": "List events",
+        "description": "Returns the tenant's competition events.",
+        "tags": ["events"],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "The token is missing, expired, or lacks the required scope."
+          },
+          "403": {
+            "description": "The machine credential is not allowed to call this route (`forbidden_machine_route`) or its role is rejected (`forbidden_role`)."
+          },
+          "404": {
+            "description": "Not found within the calling tenant."
+          }
+        },
+        "security": [
+          {
+            "TenkaCloudMachineOAuth": ["tenkacloud/ops.read"]
+          }
+        ],
+        "x-tenkacloud-capability": "read"
+      }
+    },
+    "/events/{eventId}": {
+      "get": {
+        "operationId": "getEventsByEventId",
+        "summary": "Get one event",
+        "description": "Returns a single event. Team login keys are never included on this path for a machine principal.",
+        "tags": ["events"],
+        "parameters": [
+          {
+            "name": "eventId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Event id (ULID)."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "The token is missing, expired, or lacks the required scope."
+          },
+          "403": {
+            "description": "The machine credential is not allowed to call this route (`forbidden_machine_route`) or its role is rejected (`forbidden_role`)."
+          },
+          "404": {
+            "description": "Not found within the calling tenant."
+          }
+        },
+        "security": [
+          {
+            "TenkaCloudMachineOAuth": ["tenkacloud/ops.read"]
+          }
+        ],
+        "x-tenkacloud-capability": "read"
+      }
+    },
+    "/problems/{problemId}/deploy": {
+      "post": {
+        "operationId": "postProblemsByProblemIdDeploy",
+        "summary": "Start a deployment",
+        "description": "Starts a deployment of one problem for one team and returns the job id. This is the only mutating operation available to a machine principal.",
+        "tags": ["deployments"],
+        "parameters": [
+          {
+            "name": "problemId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Problem id from the catalog."
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "region": {
+                    "type": "string",
+                    "pattern": "^[a-z]{2}-[a-z]+-\\d+$"
+                  },
+                  "awsAccountId": {
+                    "type": "string",
+                    "pattern": "^\\d{12}$"
+                  },
+                  "teamName": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 40,
+                    "pattern": "^[A-Za-z0-9 _-]+$"
+                  },
+                  "accountGroupId": {
+                    "type": "string"
+                  },
+                  "problemSetId": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false,
+                "required": ["region", "awsAccountId", "teamName"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "202": {
+            "description": "Deployment accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "jobId": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "PENDING",
+                        "APPROVAL_PENDING",
+                        "IN_PROGRESS",
+                        "COMPLETE",
+                        "FAILED",
+                        "DELETING",
+                        "DELETED",
+                        "EXPIRED",
+                        "AUTO_DELETED"
+                      ]
+                    },
+                    "namePrefix": {
+                      "type": "string"
+                    },
+                    "teamLoginKey": {
+                      "type": "string"
+                    },
+                    "expiresAt": {
+                      "type": "number"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": ["jobId", "status", "namePrefix", "teamLoginKey", "expiresAt"]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The token is missing, expired, or lacks the required scope."
+          },
+          "403": {
+            "description": "The machine credential is not allowed to call this route (`forbidden_machine_route`) or its role is rejected (`forbidden_role`)."
+          },
+          "404": {
+            "description": "Not found within the calling tenant."
+          }
+        },
+        "security": [
+          {
+            "TenkaCloudMachineOAuth": ["tenkacloud/ops.deploy"]
+          }
+        ],
+        "x-tenkacloud-capability": "deploy"
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "TenkaCloudMachineOAuth": {
+        "type": "oauth2",
+        "description": "Cognito client credentials. The access token lives for 15 minutes. Every token must also carry the tenant binding scope `tc-tenant-<tenantId>/bind`; a token without exactly one binding scope is rejected.",
+        "flows": {
+          "clientCredentials": {
+            "tokenUrl": "{cognitoDomain}/oauth2/token",
+            "scopes": {
+              "tenkacloud/ops.read": "Read deployments and events.",
+              "tenkacloud/ops.deploy": "Start a deployment."
+            }
+          }
+        }
+      }
+    }
+  }
+}

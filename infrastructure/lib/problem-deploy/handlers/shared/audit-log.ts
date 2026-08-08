@@ -6,6 +6,7 @@ import {
   createDefaultControlDataRuntime,
 } from "../../control-data/runtime-repositories.js";
 import type { AdminAuditRow } from "../../control-data/types.js";
+import { MACHINE_ACTOR_PREFIX } from "./machine-scopes.js";
 
 /**
  * Issue #950 (ADR-020 Phase D): admin 操作の append-only 監査ログを書き込む shared helper。
@@ -226,9 +227,19 @@ export function extractAuditContext(c: {
     | { jwt?: { claims?: Record<string, unknown> }; claims?: Record<string, unknown> }
     | undefined;
   const claims = authorizer?.jwt?.claims ?? authorizer?.claims;
-  const sub = typeof claims?.sub === "string" ? claims.sub : "unknown";
+  // #2948 / ADR-0005: machine (M2M) access token には `cognito:username` が無く、`sub` がある
+  // 保証も無い。`token_use === "access"` を machine の目印にし、actor を `m2m:<client_id>` に
+  // 固定する。`client_id` すら無ければ `m2m:unknown` (= 裸の "unknown" と衝突させないことで、
+  // audit 検索で human 不明行と machine 不明行を取り違えない)。
+  const isMachineToken = claims?.token_use === "access";
+  const clientId = typeof claims?.client_id === "string" ? claims.client_id.trim() : "";
+  const sub = isMachineToken
+    ? `${MACHINE_ACTOR_PREFIX}${clientId.length > 0 ? clientId : "unknown"}`
+    : typeof claims?.sub === "string"
+      ? claims.sub
+      : "unknown";
   const cognitoUsername =
-    typeof claims?.["cognito:username"] === "string"
+    !isMachineToken && typeof claims?.["cognito:username"] === "string"
       ? (claims["cognito:username"] as string)
       : undefined;
   // HTTP API v2 → requestContext.http.* ; REST API v1 (= tenant API) → requestContext.identity.*。

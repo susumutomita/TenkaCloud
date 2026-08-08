@@ -1,35 +1,13 @@
-import type {
-  APIGatewayProxyEventV2WithJWTAuthorizer,
-  APIGatewayProxyWithCognitoAuthorizerEvent,
-} from "aws-lambda";
 import type { Context } from "hono";
+import { extractClaims, type JwtClaims } from "../shared/jwt-claims.js";
+import { getMachinePrincipal } from "../shared/machine-principal.js";
 
-type JwtClaimValue = string | number | boolean | string[];
-type JwtClaims = { readonly [name: string]: JwtClaimValue };
-
+export type { JwtClaims };
 /**
- * tenant API は REST API + `CognitoUserPoolsAuthorizer`、 admin-insight などは HTTP API +
- * JWT Authorizer。 claims が出る位置が違うので両方を見る。
- *  - REST API + Cognito: `event.requestContext.authorizer.claims`
- *  - HTTP API V2 + JWT:  `event.requestContext.authorizer.jwt.claims`
- *
- * Hono が乗っているのは aws-lambda adapter (= raw event は `c.env.event` で参照可)。 どちらの
- * authorizer 形式でも handler が同じ claim を引けるようにする。
+ * claim 抽出の実装は `shared/jwt-claims.ts` に移した (#2948: machine guard との import cycle を
+ * 避けるため)。既存 caller のために同じ名前で re-export する。
  */
-type AuthorizerEvent =
-  | APIGatewayProxyEventV2WithJWTAuthorizer
-  | APIGatewayProxyWithCognitoAuthorizerEvent;
-
-export function extractClaims(c: Context): JwtClaims | undefined {
-  const event = (c.env as { event?: AuthorizerEvent } | undefined)?.event;
-  const authorizer = event?.requestContext?.authorizer;
-  if (!authorizer) return undefined;
-  const v2 = (authorizer as { jwt?: { claims?: unknown } }).jwt?.claims;
-  if (v2 && typeof v2 === "object") return v2 as JwtClaims;
-  const v1 = (authorizer as { claims?: unknown }).claims;
-  if (v1 && typeof v1 === "object") return v1 as JwtClaims;
-  return undefined;
-}
+export { extractClaims };
 
 export function extractTenantIdFromClaims(claims: JwtClaims | undefined): string | undefined {
   if (!claims) return undefined;
@@ -66,9 +44,19 @@ export class MissingTenantClaimError extends Error {
   }
 }
 
+/**
+ * #2948: tenant の解決順は **JWT claim → machine principal → env fallback** で固定する。
+ *
+ * machine 分岐は terminal である。machine principal が解決できた request は
+ * `DEFAULT_TENANT_ID` env に落ちない (= 誤って env を設定した環境で machine token が別 tenant を
+ * 名乗るのを防ぐ)。principal は guard middleware が publish した値だけを読み、claims を
+ * ここで再 parse しない (= 検証済みの経路を 1 本に保つ)。
+ */
 export function resolveTenantId(c: Context): string {
   const fromJwt = extractTenantIdFromClaims(extractClaims(c));
   if (fromJwt) return fromJwt;
+  const machine = getMachinePrincipal(c);
+  if (machine) return machine.tenantId;
   const fromEnv = process.env.DEFAULT_TENANT_ID;
   if (fromEnv) return fromEnv;
   throw new MissingTenantClaimError();
@@ -127,6 +115,27 @@ export const TENANT_VIEWER_ROLE = "TenantViewer";
 export const TENANT_ROLES = [TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE, TENANT_VIEWER_ROLE] as const;
 export type TenantRole = (typeof TENANT_ROLES)[number];
 
+/**
+ * #2948 / ADR-0005: machine (M2M) principal の role。
+ *
+ * **`TenantOperator` を投影しない** ことが本設計の中核である。`requireRole` は
+ * `allowedRoles.includes(role)` の strict 判定なので、既存のどの allowlist にも含まれない
+ * `TenantMachine` は destructive route 全部で無条件に落ちる — guard middleware を丸ごと削除
+ * しても、である。
+ *
+ * `TENANT_ROLES` / `TenantRole` 型は **human 3 値のまま広げない**。SPA の
+ * `resolveTenantConsoleAccess` など human 前提の consumer に machine 値を流し込まないため。
+ * blanket middleware だけが `TENANT_BLANKET_ROLES` を使う。
+ */
+export const TENANT_MACHINE_ROLE = "TenantMachine";
+
+/**
+ * blanket (= 「認証済みの誰か」) 判定専用の role 集合。per-route の `requireRole` には
+ * 使わない。`TENANT_MACHINE_ROLE` を per-route allowlist に足してよいのは、machine から
+ * 到達させると決めた route だけである (Phase 1 では `POST /problems/:problemId/deploy` の 1 本)。
+ */
+export const TENANT_BLANKET_ROLES = [...TENANT_ROLES, TENANT_MACHINE_ROLE] as const;
+
 export function extractUserRoleFromClaims(claims: JwtClaims | undefined): string | undefined {
   if (!claims) return undefined;
   const raw = claims["custom:userRole"];
@@ -143,10 +152,15 @@ export function extractTenantSuspendedFromClaims(claims: JwtClaims | undefined):
 
 /**
  * `custom:userRole` claim を取り出す。 JWT 不在経路 (= test) では env fallback。
+ *
+ * #2948: 解決順は `resolveTenantId` と同じく **JWT claim → machine principal → env fallback**
+ * で、machine 分岐は terminal。machine principal が解決できた request は必ず
+ * `TenantMachine` になり、`DEFAULT_USER_ROLE` env には落ちない。
  */
 export function resolveUserRole(c: Context): string | undefined {
   const fromJwt = extractUserRoleFromClaims(extractClaims(c));
   if (fromJwt) return fromJwt;
+  if (getMachinePrincipal(c)) return TENANT_MACHINE_ROLE;
   const fromEnv = process.env.DEFAULT_USER_ROLE;
   return fromEnv && fromEnv.length > 0 ? fromEnv : undefined;
 }

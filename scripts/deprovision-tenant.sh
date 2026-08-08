@@ -98,6 +98,47 @@ delete_items_if_exists() {
   done
 }
 
+# Issue #2952: machine (M2M) credential の回収。
+#
+# `tc-tenant-<tenantId>` bind resource server と `tc-m2m-<tenantId>*` app client は **CFn 管理外**
+# である (ADR-0005 §5: CFn 管理にすると次の `cdk deploy` が scope list を空へ reconcile して
+# 発行済み token を全滅させるため)。したがって `cdk destroy` でも回収されない。pooled tier では
+# UserPool が他 tenant と共有で残り続けるので、ここで消さないと **削除済み tenant の
+# credential が有効なまま残る**。silo でも UserPool が retain された場合に同じことが起きる。
+#
+# 冪等: 対象が無ければ何もしない。回収そのものは tenant 削除の成否を左右しないほど軽い操作
+# だが、失敗を握り潰すと「消えていないのに Deleted」になるので errexit のまま通す。
+BIND_RESOURCE_SERVER_PREFIX="tc-tenant-"
+MACHINE_CLIENT_NAME_PREFIX="tc-m2m-"
+
+reap_machine_credentials() {
+  USER_POOL_ID="$1"
+  TENANT="$2"
+  if [ -z "$USER_POOL_ID" ] || [ "$USER_POOL_ID" = "None" ]; then
+    echo "machine credential reaping skipped: user pool id not resolved"
+    return 0
+  fi
+
+  MACHINE_CLIENT_IDS=$(aws cognito-idp list-user-pool-clients \
+    --user-pool-id "$USER_POOL_ID" --max-results 60 \
+    --query "UserPoolClients[?starts_with(ClientName, '${MACHINE_CLIENT_NAME_PREFIX}${TENANT}')].ClientId" \
+    --output text)
+  for MACHINE_CLIENT_ID in $MACHINE_CLIENT_IDS; do
+    aws cognito-idp delete-user-pool-client --user-pool-id "$USER_POOL_ID" --client-id "$MACHINE_CLIENT_ID"
+    echo "Deleted machine app client: $MACHINE_CLIENT_ID"
+  done
+
+  BIND_RESOURCE_SERVER_ID="${BIND_RESOURCE_SERVER_PREFIX}${TENANT}"
+  if aws cognito-idp describe-resource-server --user-pool-id "$USER_POOL_ID" \
+    --identifier "$BIND_RESOURCE_SERVER_ID" >/dev/null 2>&1; then
+    aws cognito-idp delete-resource-server --user-pool-id "$USER_POOL_ID" \
+      --identifier "$BIND_RESOURCE_SERVER_ID"
+    echo "Deleted bind resource server: $BIND_RESOURCE_SERVER_ID"
+  fi
+  # 発行済み access token は TTL (15 分) の残り時間だけまだ有効。
+  echo "machine credentials for $TENANT are revoked; already-issued tokens expire within 15 minutes"
+}
+
 # Un deploy the tenant template for platinum tier(silo)
 if [[ $TIER == "PLATINUM" ]]; then
 
@@ -107,6 +148,13 @@ if [[ $TIER == "PLATINUM" ]]; then
     --query 'Item.stackName.S')
 
   echo "Stack name from $TENANT_STACK_MAPPING_TABLE is  $STACK_NAME"
+
+  # Issue #2952: destroy の前に回収する。stack を消したあとでは UserPool id を引けない。
+  SILO_USERPOOL_ID=$(aws cloudformation describe-stacks --stack-name "$(echo "$STACK_NAME" | tr -d '"')" \
+    --query "Stacks[0].Outputs[?OutputKey=='$USER_POOL_OUTPUT_PARAM_NAME'].OutputValue" \
+    --output text 2>/dev/null || echo "")
+  reap_machine_credentials "$SILO_USERPOOL_ID" "$CDK_PARAM_TENANT_ID"
+
   # provision/update と同じ source bundle の CDK workspace を使う。外部の旧SaaS reference
   # repositoryにはTenkaCloudのstack定義もpinned CLIもないため、destroy経路に使わない。
   cd cdk
@@ -132,6 +180,10 @@ else
   SAAS_APP_USERPOOL_ID=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query "Stacks[0].Outputs[?OutputKey=='$USER_POOL_OUTPUT_PARAM_NAME'].OutputValue" --output text)
   PRODUCT_TABLE_NAME=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query "Stacks[0].Outputs[?OutputKey=='$PRODUCT_TABLE_OUTPUT_PARAM_NAME'].OutputValue" --output text)
   ORDER_TABLE_NAME=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query "Stacks[0].Outputs[?OutputKey=='$ORDER_TABLE_OUTPUT_PARAM_NAME'].OutputValue" --output text)
+
+  # Issue #2952: pooled tier は UserPool を全 non-PLATINUM tenant で共有するため、ここで回収
+  # しないと削除済み tenant の machine credential が共有 pool 上に残り続ける。
+  reap_machine_credentials "$SAAS_APP_USERPOOL_ID" "$CDK_PARAM_TENANT_ID"
 
   ## Delete tenant users and tenant user groups
   # Get a list of all users in the user group

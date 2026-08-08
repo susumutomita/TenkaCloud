@@ -63,8 +63,29 @@ const { ExternalIdMissingError, AssumeRoleSanityCheckFailedError } = await impor
   "../../lib/problem-deploy/handlers/competitor-accounts-handler/verify"
 );
 
+const { bindScope, capabilityScope, MACHINE_CAPABILITIES } = await import(
+  "../../lib/problem-deploy/handlers/shared/machine-scopes"
+);
+
 const ACCT = "123456789012";
 const validCreate = { awsAccountId: ACCT, competitorRoleName: "TenkaCloud-deploy-Role" };
+
+/** Cognito authorizer が machine token に付ける claims。 */
+function machineEnv() {
+  return {
+    event: {
+      requestContext: {
+        authorizer: {
+          claims: {
+            token_use: "access",
+            client_id: "machine-client-1",
+            scope: `${MACHINE_CAPABILITIES.map(capabilityScope).join(" ")} ${bindScope("01JABCDEF0123456789ABCDEF")}`,
+          },
+        },
+      },
+    },
+  };
+}
 const json = (method: string, path: string, body?: unknown) =>
   app.request(path, {
     method,
@@ -138,6 +159,42 @@ describe("healthz + /admin/* role middleware", () => {
     const res = await app.request("/admin/tenant-saml-config");
     expect(res.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
     expect((await res.json()).error).toBe("internal_error");
+  });
+
+  // #2948: この Lambda は competitor AWS account の登録と削除だけを持つ。machine allowlist
+  // (`MACHINE_ROUTE_SCOPES`) に 1 route も載せていないので、どんな capability を持つ machine
+  // token でも全 route が届かない。env fallback (`DEFAULT_USER_ROLE=TenantAdmin`) が効いている
+  // 状態で試すのが要点で、「fallback が machine token を human へ昇格させない」ことを見ている。
+  it.each([
+    ["POST", "/admin/competitor-accounts"],
+    ["GET", "/admin/competitor-accounts"],
+    ["DELETE", `/admin/competitor-accounts/${ACCT}`],
+  ])("should deny a machine token on %s %s", async (method, path) => {
+    const res = await app.request(
+      path,
+      {
+        method,
+        headers: { "content-type": "application/json" },
+        body: method === "GET" ? undefined : JSON.stringify(validCreate),
+      },
+      machineEnv(),
+    );
+    expect(res.status).toBe(StatusCodes.FORBIDDEN);
+    expect((await res.json()).error).toBe("forbidden_machine_route");
+    expect(mocks.createCompetitorAccount).not.toHaveBeenCalled();
+    expect(mocks.deleteCompetitorAccount).not.toHaveBeenCalled();
+  });
+
+  it("should not invent a tenant audit row for a machine denial it cannot attribute", async () => {
+    // bind scope が無い token は tenant を特定できない。403 は返すが audit 行は書かない。
+    const res = await app.request(
+      "/admin/competitor-accounts",
+      {},
+      { event: { requestContext: { authorizer: { claims: { token_use: "access" } } } } },
+    );
+    expect(res.status).toBe(StatusCodes.FORBIDDEN);
+    expect((await res.json()).error).toBe("forbidden_machine_route");
+    expect(mocks.writeAuditEvent).not.toHaveBeenCalled();
   });
 });
 

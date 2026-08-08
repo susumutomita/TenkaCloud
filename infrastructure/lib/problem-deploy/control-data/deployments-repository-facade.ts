@@ -42,6 +42,9 @@ export abstract class DeploymentsRepositoryFacade implements DeploymentsReposito
     this.parts.query.listByTenantPage(...args);
   readonly countActiveByTenant: DeploymentsQueryPort["countActiveByTenant"] = (...args) =>
     this.parts.query.countActiveByTenant(...args);
+  readonly countEverCompletedByTenant: DeploymentsQueryPort["countEverCompletedByTenant"] = (
+    ...args
+  ) => this.parts.query.countEverCompletedByTenant(...args);
   readonly listByTenantAndEvent: DeploymentsQueryPort["listByTenantAndEvent"] = (...args) =>
     this.parts.query.listByTenantAndEvent(...args);
   readonly listDeploymentKeysByEvent: DeploymentsQueryPort["listDeploymentKeysByEvent"] = (

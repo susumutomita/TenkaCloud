@@ -14,7 +14,12 @@ import {
   TENANT_ROLES,
 } from "../deploy-handler/auth.js";
 import { extractAuditContext, writeAuditEvent } from "../shared/audit-log.js";
+import { respondMachineRouteDenied } from "../shared/auth-wiring.js";
 import { parseJsonBody } from "../shared/http-parse.js";
+import {
+  createMachineGuardMiddleware,
+  MachineRouteDeniedError,
+} from "../shared/machine-principal.js";
 import { secureApiHeaders } from "../shared/secure-headers.js";
 import { routeDelete, routeGet, routePut } from "./saml-routes.js";
 import { buildCompetitorAccountsSharedResources } from "./shared.js";
@@ -81,7 +86,14 @@ app.use(
 );
 
 // 想定外 throw を 500 JSON で返す (= CORS headers 付きで browser が body を読める、PR-559 同様)。
-app.onError((err, c) => {
+app.onError(async (err, c) => {
+  // #2948: machine guard の拒否。この Lambda で guard は **load-bearing ではない** —
+  // `/admin/*` blanket は `TENANT_ROLES` のままなので、machine principal は guard が無くても
+  // `ForbiddenRoleError` で fail-closed になる。guard を mount する目的は「より早く落とし、
+  // 拒否理由を audit に残す」ことだけである。
+  if (err instanceof MachineRouteDeniedError) {
+    return respondMachineRouteDenied(err, c, "[competitor-accounts]");
+  }
   if (err instanceof MissingTenantClaimError) {
     console.warn("[competitor-accounts] missing tenantId claim", { path: c.req.path });
     return c.json(
@@ -144,6 +156,10 @@ app.onError((err, c) => {
 // 必要、 Viewer も verified accounts を見る)。 SAML 設定 / user 管理 は GET も含めて Admin only
 // (= sensitive config / user 一覧)。
 // healthz は role check 自体を skip。
+// #2948: machine guard を blanket より前に mount する (= 拒否理由を audit に残す)。
+// blanket は `TENANT_ROLES` のまま **widen しない**。
+app.use("*", createMachineGuardMiddleware());
+
 app.use("/admin/*", async (c, next) => {
   if (c.req.path.endsWith("/healthz")) {
     return next();

@@ -54,6 +54,14 @@ export const REPORTED_WORKSPACES = [
   // stray branches, so it starts report-only (段階導入) rather than gated. Move to
   // GATED_WORKSPACES once those scripts' coverage reaches 100%.
   "apps/developer-portal",
+  // Issue #2951: the tcloud CLI is new. Its pure modules are covered, but the thin
+  // side-effect entrypoint (src/cli.ts: keychain probing, config file I/O, process.exit)
+  // is not, so it starts report-only like every other new workspace here. Move it to
+  // GATED_WORKSPACES once the entrypoint is covered too.
+  "packages/tcloud",
+  // Issue #2936 Phase 1: contracts only, no runner yet. Report-only until the offline
+  // vertical slice lands and the package has something to be 100% covered against.
+  "packages/ai-eval",
 ] as const;
 
 interface Metric {

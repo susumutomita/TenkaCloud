@@ -60,6 +60,7 @@ describe("summarizeTenants edge branches", () => {
       activeDeploys: 0,
       completedDeploys: 0,
       failedDeploys: 0,
+      everCompletedDeploys: 0,
       totalEvents: 0,
     });
   });

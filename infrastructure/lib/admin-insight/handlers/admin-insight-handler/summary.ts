@@ -9,10 +9,11 @@ import {
  * 1 tenant 分の deploy / event 集計。ADR-011 Phase 1 API の正本 shape:
  *   {
  *     tenantId,
- *     activeDeploys,    // status ∈ {PENDING, IN_PROGRESS} の Deployments 件数
- *     completedDeploys, // status === "COMPLETE" の Deployments 件数
- *     failedDeploys,    // status === "FAILED" の Deployments 件数
- *     totalEvents,      // Events GSI1 (TENANT#<id>) で得られる総件数
+ *     activeDeploys,        // status ∈ {PENDING, IN_PROGRESS} の Deployments 件数
+ *     completedDeploys,     // status === "COMPLETE" の Deployments 件数 (現在値)
+ *     failedDeploys,        // status === "FAILED" の Deployments 件数
+ *     everCompletedDeploys, // 一度でも COMPLETE に到達した累計 (撤去後も残る、#2946)
+ *     totalEvents,          // Events GSI1 (TENANT#<id>) で得られる総件数
  *   }
  *
  * `name` / `tier` は SBT TenantDetails 管轄なので本 backend では返さない。frontend が
@@ -34,6 +35,14 @@ export interface TenantSummary {
    */
   readonly completedDeploys: number;
   readonly failedDeploys: number;
+  /**
+   * [Issue #2946] 一度でも `COMPLETE` に到達した deployment の累計。撤去しても 0 に戻らない。
+   *
+   * 現在値の 3 列 (`activeDeploys` / `failedDeploys` / 現在 COMPLETE) は撤去すると揃って 0 に
+   * なるため、「成功する deploy を何度も回している健全なテナント」と「一度も deploy して
+   * いないテナント」が区別できなかった。この列はその区別のためだけにある。
+   */
+  readonly everCompletedDeploys: number;
   readonly totalEvents: number;
 }
 
@@ -64,14 +73,21 @@ const FAILED_DEPLOY_STATUSES = ["FAILED"];
 async function countTenantDeployments(
   shared: AdminInsightSharedResources,
   tenantId: string,
-): Promise<{ activeDeploys: number; completedDeploys: number; failedDeploys: number }> {
+): Promise<{
+  activeDeploys: number;
+  completedDeploys: number;
+  failedDeploys: number;
+  everCompletedDeploys: number;
+}> {
   const repository: DeploymentsQueryPort = await resolveDeploymentsRepository(shared);
-  const [activeDeploys, completedDeploys, failedDeploys] = await Promise.all([
+  const [activeDeploys, completedDeploys, failedDeploys, everCompletedDeploys] = await Promise.all([
     repository.countActiveByTenant(tenantId, ACTIVE_DEPLOY_STATUSES),
     repository.countActiveByTenant(tenantId, COMPLETED_DEPLOY_STATUSES),
     repository.countActiveByTenant(tenantId, FAILED_DEPLOY_STATUSES),
+    // [Issue #2946] marker ベースの累計。撤去後も残る唯一の列。
+    repository.countEverCompletedByTenant(tenantId),
   ]);
-  return { activeDeploys, completedDeploys, failedDeploys };
+  return { activeDeploys, completedDeploys, failedDeploys, everCompletedDeploys };
 }
 
 /**
@@ -119,6 +135,7 @@ export async function summarizeTenants(
         activeDeploys: deploys.activeDeploys,
         completedDeploys: deploys.completedDeploys,
         failedDeploys: deploys.failedDeploys,
+        everCompletedDeploys: deploys.everCompletedDeploys,
         totalEvents,
       };
     }),

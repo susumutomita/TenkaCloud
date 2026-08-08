@@ -207,6 +207,10 @@ How much machine local play needs is published as three run profiles
 (`make doctor PROFILE=recommended`), and use `make local-measure` to
 re-run the benchmark and contribute a record for your own platform.
 
+What a shortage looks like — including the build-cache growth that surfaces as an
+unexplained `docker build` failure rather than as a disk error — is in the same
+document under [Failure symptoms](./local-play-requirements.md#failure-symptoms).
+
 Without `--problem`, `tenkacloud local` pre-starts no problem containers. It starts the
 loopback scoring API and browser portal so you can deploy/start a problem from
 the portal screen. Use `--problem <id>` when you want the CLI to
