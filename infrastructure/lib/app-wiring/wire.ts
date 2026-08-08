@@ -74,6 +74,11 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
       // Issue #1335 Phase 1: opt-in SAML SSO (= 未設定なら空配列で no-op)。
       samlIdps: config.controlPlaneSamlIdps,
       samlAdminAllowlist: config.controlPlaneSamlAdminAllowlist,
+      // #2941: `/admin/idp` CRUD Lambda の repository seam backend。 default "dynamodb" では
+      // system scope の SamlIdpsTable を synth し、 turso では table を作らず SQL executor 直結。
+      controlDataBackend: config.controlDataBackend,
+      tursoDatabaseUrl: config.tursoDatabaseUrl,
+      tursoAuthTokenParameterName: config.tursoAuthTokenParameterName,
     },
   );
 
