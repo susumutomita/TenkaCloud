@@ -1,4 +1,9 @@
-#!/bin/bash -xe
+#!/bin/bash
+# `-xe` は shebang でなく実文で set する。 CodeBuild は本 script を buildspec へ inline し、
+# 1 つのコマンドブロックとして実行するので shebang は解釈されない (詳細は provision-tenant.sh
+# の同じ箇所)。 shebang 任せだとトレースも errexit も効かない。
+set -e
+set -x
 # pipefail: `curl ... | sudo bash -` の curl 失敗を silent に続行させない (#560 の延長)。
 set -o pipefail
 

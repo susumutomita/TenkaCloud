@@ -16,6 +16,52 @@ describe("tenant lifecycle scripts", () => {
     "scripts/deprovision-tenant.sh",
   ];
 
+  // Regression: a platinum (silo) tenant was registered as "Complete" with every endpoint
+  // empty. CodeBuild inlines these scripts into the buildspec and runs each as ONE command
+  // block in an already-running shell, so `#!/bin/bash -e` is parsed as a comment and `set -e`
+  // never takes effect — the block's exit status is that of its last statement
+  // (`export tenantStatus="Complete"`). `cdk deploy` failed, four `describe-stacks` calls
+  // failed, two Cognito calls failed, and CodeBuild still reported BUILD SUCCEEDED.
+  // The flags must therefore be real statements, not shebang arguments.
+  it("tenant lifecycle scripts should enable errexit as a statement, not via the shebang", () => {
+    for (const scriptPath of lifecycleScripts) {
+      const script = readRepoFile(scriptPath);
+      const [shebang = ""] = script.split("\n");
+
+      // CodeBuild ignores the shebang, so flags carried there are silently inert.
+      expect(shebang, `${scriptPath} carries flags on its shebang`).toBe("#!/bin/bash");
+      expect(script, `${scriptPath} never sets errexit`).toMatch(/^set -e$/m);
+      expect(script, `${scriptPath} never sets pipefail`).toMatch(/^set -o pipefail$/m);
+    }
+  });
+
+  // `describe-stacks --query ... --output text` returns an EMPTY string with exit 0 when the
+  // stack exists but the OutputKey does not, so errexit alone cannot catch it. Without an
+  // explicit check the empty values flow straight into the tenantConfig write-back.
+  it("provision-tenant.sh should refuse to complete on an empty stack output", () => {
+    const script = readRepoFile("scripts/provision-tenant.sh");
+
+    expect(script).toContain("require_stack_output()");
+    for (const outputVar of [
+      "$USER_POOL_OUTPUT_PARAM_NAME",
+      "$APP_CLIENT_ID_OUTPUT_PARAM_NAME",
+      "$API_GATEWAY_URL_OUTPUT_PARAM_NAME",
+      "$APPLICATION_ADMIN_CONSOLE_URL_OUTPUT_PARAM_NAME",
+    ]) {
+      expect(script, `${outputVar} is not validated`).toContain(
+        `require_stack_output "${outputVar}"`,
+      );
+    }
+    // The guard has to run before the status write-back, or it guards nothing. Anchor to the
+    // start of a line so the prose in the header comment is not mistaken for the statement.
+    const firstGuardAt = script.search(/^require_stack_output "\$USER_POOL_OUTPUT_PARAM_NAME"/m);
+    const statusWriteBackAt = script.search(/^export tenantStatus="Complete"$/m);
+
+    expect(firstGuardAt).toBeGreaterThanOrEqual(0);
+    expect(statusWriteBackAt).toBeGreaterThanOrEqual(0);
+    expect(firstGuardAt).toBeLessThan(statusWriteBackAt);
+  });
+
   it("tenant lifecycle scripts should not use the legacy package runner", () => {
     const legacyPackageRunnerPattern = new RegExp(`\\b${"np"}x\\b`);
 
