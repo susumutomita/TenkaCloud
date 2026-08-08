@@ -53,6 +53,10 @@ interface Scenario {
   readonly orphanSsmParams?: readonly string[];
   /** [#2959] `aws dynamodb list-tables` が返す table 名。 */
   readonly dynamoTables?: readonly string[];
+  /** [#2960] `aws logs describe-log-groups` が返す log group 名。 */
+  readonly logGroups?: readonly string[];
+  /** [#2960] delete-log-group が失敗し、その後も見える log group 名。 */
+  readonly logGroupDeleteFailures?: readonly string[];
   /** [#2959] delete-table が失敗し、その後も describe-table で見える table 名。 */
   readonly dynamoDeleteFailures?: readonly string[];
   /** `cdk destroy --all` exits non-zero (e.g. synth failure) instead of tearing stacks down. */
@@ -86,6 +90,8 @@ function run(scenario: Scenario): RunResult {
   const tenantStacks = scenario.tenantStacks ?? [];
   const orphanSsmParams = scenario.orphanSsmParams ?? [];
   const dynamoTables = scenario.dynamoTables ?? [];
+  const logGroups = scenario.logGroups ?? [];
+  const logGroupDeleteFailures = scenario.logGroupDeleteFailures ?? [];
   const dynamoDeleteFailures = scenario.dynamoDeleteFailures ?? [];
 
   // Fake `aws`: covers exactly the subcommands cleanup.sh issues. Cognito UserPool / API
@@ -190,7 +196,30 @@ case "$1 $2" in
     exit 0
     ;;
   "logs describe-log-groups")
-    echo ""
+    lg_prefix="$(find_flag_value --log-group-name-prefix "$@")"
+    for g in \${FAKE_LOG_GROUPS}; do
+      case "$g" in
+        "$lg_prefix"*)
+          # 削除済みのものは返さない (= 冪等性と 「already gone」 判定のため)。
+          if [ -f "$LG_DELETE_LOG" ] && grep -qx "$g" "$LG_DELETE_LOG" 2>/dev/null; then
+            for f in \${FAKE_LG_DELETE_FAILS}; do
+              [ "$f" = "$g" ] && printf '%s\\t' "$g"
+            done
+            continue
+          fi
+          printf '%s\\t' "$g"
+          ;;
+      esac
+    done
+    echo
+    exit 0
+    ;;
+  "logs delete-log-group")
+    lg_name="$(find_flag_value --log-group-name "$@")"
+    echo "$lg_name" >> "$LG_DELETE_LOG"
+    for f in \${FAKE_LG_DELETE_FAILS}; do
+      [ "$f" = "$lg_name" ] && exit 255
+    done
     exit 0
     ;;
   "cognito-idp list-user-pools")
@@ -261,6 +290,7 @@ exit 0
   const sourceBucket = `tenkacloud-source-${FAKE_ACCOUNT_ID}-${FAKE_REGION}`;
   const orderedCallLog = join(dir, "ordered-calls.log");
   const ddbDeleteLog = join(dir, "ddb-deletes.log");
+  const lgDeleteLog = join(dir, "lg-deletes.log");
   const cdkParamEnvLog = join(dir, "cdk-param-env.log");
   // The runner's own environment must not decide the outcome of the CDK_PARAM_* assertions:
   // strip anything a developer shell may have exported before handing env to the script.
@@ -301,6 +331,9 @@ exit 0
       FAKE_ORPHAN_SSM_PARAMS: orphanSsmParams.join(" "),
       DDB_DELETE_LOG: ddbDeleteLog,
       FAKE_DYNAMODB_TABLES: dynamoTables.join(" "),
+      LG_DELETE_LOG: lgDeleteLog,
+      FAKE_LOG_GROUPS: logGroups.join(" "),
+      FAKE_LG_DELETE_FAILS: logGroupDeleteFailures.join(" "),
       FAKE_DDB_DELETE_FAILS: dynamoDeleteFailures.join(" "),
       ...(scenario.preExportedCdkParams ?? {}),
     },
@@ -314,6 +347,7 @@ exit 0
     orderedCalls: existsSync(orderedCallLog) ? readFileSync(orderedCallLog, "utf8") : "",
     cdkParamEnv: existsSync(cdkParamEnvLog) ? readFileSync(cdkParamEnvLog, "utf8") : "",
     ddbDeletes: existsSync(ddbDeleteLog) ? readFileSync(ddbDeleteLog, "utf8") : "",
+    lgDeletes: existsSync(lgDeleteLog) ? readFileSync(lgDeleteLog, "utf8") : "",
   };
 }
 
@@ -610,6 +644,72 @@ describe("cleanup.sh idempotency (#2204)", { timeout: 30_000 }, () => {
       const { status, stdout } = run({ dynamoTables: ["tenkacloud-gone-Events"] });
       expect(status).toBe(0);
       expect(stdout).not.toContain("cleanup INCOMPLETE");
+    });
+  });
+
+  // 7. [#2960] destroy 後に log group が 48 個残り、 うち 29 個が無期限保持だった。 旧実装の
+  //    sweep はハードコード 1 件しか見ておらず、 48 個はどれも一致しないので素通りしていた。
+  //    `/aws/lambda/*` は Lambda サービスが暗黙に作るので CFn の所有物ではなく、 stack を
+  //    消しても消えない = 掃除する主体がここ以外に居ない。
+  describe("orphaned CloudWatch log groups (#2960)", () => {
+    it("should delete the lambda log groups CloudFormation never owned", () => {
+      const { lgDeletes, stdout } = run({
+        logGroups: [
+          "/aws/lambda/tenkacloud-control-plane-AWS679f53fac002430cb0da5b-abc",
+          "/aws/lambda/tenkacloud-problem-deploy-DeployApi-def",
+        ],
+      });
+      expect(lgDeletes).toContain(
+        "/aws/lambda/tenkacloud-control-plane-AWS679f53fac002430cb0da5b-abc",
+      );
+      expect(lgDeletes).toContain("/aws/lambda/tenkacloud-problem-deploy-DeployApi-def");
+      expect(stdout).toContain("deleted 2 orphaned log group(s)");
+    });
+
+    it("should delete the CDK-authored tenkacloud- log groups", () => {
+      const { lgDeletes } = run({
+        logGroups: ["tenkacloud-problem-deploy-DeployCreateLogGroup123"],
+      });
+      expect(lgDeletes).toContain("tenkacloud-problem-deploy-DeployCreateLogGroup123");
+    });
+
+    it("should delete the SBT CodeBuild log groups", () => {
+      const { lgDeletes } = run({
+        logGroups: [
+          "/aws/codebuild/provisioningJobRunnercodebuildProject-xyz",
+          "/aws/codebuild/deprovisioningJobRunnercode-uvw",
+          "/aws/codebuild/CdkCodeBuildProjectABC",
+        ],
+      });
+      expect(lgDeletes).toContain("/aws/codebuild/provisioningJobRunnercodebuildProject-xyz");
+      expect(lgDeletes).toContain("/aws/codebuild/deprovisioningJobRunnercode-uvw");
+      expect(lgDeletes).toContain("/aws/codebuild/CdkCodeBuildProjectABC");
+    });
+
+    it("should never touch a log group belonging to something else", () => {
+      // 誤爆はコスト超過より取り返しがつかない。 アカウント共通のものや他プロジェクトの
+      // Lambda log group を巻き込まないことを直接見る。
+      const { lgDeletes, stdout } = run({
+        logGroups: [
+          "/aws/apigateway/welcome",
+          "/aws/lambda/some-other-project-handler",
+          "other-service-logs",
+        ],
+      });
+      expect(lgDeletes).toBe("");
+      expect(stdout).toContain("deleted 0 orphaned log group(s)");
+    });
+
+    it("should collect a real delete failure and exit non-zero", () => {
+      const { status, stdout } = run({
+        logGroups: ["/aws/lambda/tenkacloud-problem-deploy-DeployApi-def"],
+        logGroupDeleteFailures: ["/aws/lambda/tenkacloud-problem-deploy-DeployApi-def"],
+      });
+      expect(status).not.toBe(0);
+      expect(stdout).toContain("cleanup INCOMPLETE");
+      expect(stdout).toContain(
+        "logs delete-log-group /aws/lambda/tenkacloud-problem-deploy-DeployApi-def",
+      );
     });
   });
 });

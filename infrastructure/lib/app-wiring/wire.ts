@@ -59,7 +59,14 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
       customDomain: config.customDomains?.adminConsole,
     },
   );
-  cdk.Aspects.of(adminConsoleHostingStack).add(new DestroyPolicySetter());
+  // Issue #2960 x #2959: `retainDataTables` を選んだ利用者の意思を Aspect が握り潰さない
+  // ための除外 type。CDK 既定の RETAIN と明示 RETAIN は cfnOptions では区別できないので、
+  // config を知っている側 (ここ) が type で名指しする。
+  const destroyPolicySkipTypes = config.retainDataTables ? ["AWS::DynamoDB::Table"] : [];
+  const destroyPolicySetter = () =>
+    new DestroyPolicySetter({ skipResourceTypes: destroyPolicySkipTypes });
+
+  cdk.Aspects.of(adminConsoleHostingStack).add(destroyPolicySetter());
   const adminConsoleOrigin = `https://${adminConsoleHostingStack.distributionDomainName}`;
 
   const controlPlaneStack = new ControlPlaneStack(
@@ -82,6 +89,10 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
       tursoAuthTokenParameterName: config.tursoAuthTokenParameterName,
     },
   );
+  // Issue #2960: destroy 後に CDK 既定 RETAIN の resource (LogGroup / UserPool / Bucket) が
+  // 残り、log group だけで 48 個が孤児になっていた。 Aspect は明示 Retain を尊重するので
+  // (#2959 の opt-in と両立する)、 全 stack に当てて既定 RETAIN の取りこぼしを塞ぐ。
+  cdk.Aspects.of(controlPlaneStack).add(destroyPolicySetter());
 
   // SBT が ControlPlane 内部で作る TenantDetails table は default 5/5 (CDK Table の
   // 既定値) なので Free Tier 枠 (25 RCU/WCU) を圧迫する。Aspect で全 CfnTable を
@@ -122,6 +133,10 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
     },
   );
   applyDynamoLowCapacity(problemDeployBackendStack, config);
+  // Issue #2960: destroy 後に CDK 既定 RETAIN の resource (LogGroup / UserPool / Bucket) が
+  // 残り、log group だけで 48 個が孤児になっていた。 Aspect は明示 Retain を尊重するので
+  // (#2959 の opt-in と両立する)、 全 stack に当てて既定 RETAIN の取りこぼしを塞ぐ。
+  cdk.Aspects.of(problemDeployBackendStack).add(destroyPolicySetter());
 
   // Issue #814 Phase 2: bootstrap を adminConsoleInsight より先に instantiate する。
   // adminConsoleInsight が bootstrap の `deprovisioningStateMachineArn` を受け取り、
@@ -151,7 +166,7 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
         : undefined,
     },
   );
-  cdk.Aspects.of(bootstrapTemplateStack).add(new DestroyPolicySetter());
+  cdk.Aspects.of(bootstrapTemplateStack).add(destroyPolicySetter());
 
   const tenantTemplateStack = new TenantTemplateStack(
     app,
@@ -188,7 +203,7 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
   );
   cdk.Tags.of(tenantTemplateStack).add("TenantId", config.tenantId);
   cdk.Tags.of(tenantTemplateStack).add("IsPooledDeploy", String(config.isPooledDeploy));
-  cdk.Aspects.of(tenantTemplateStack).add(new DestroyPolicySetter());
+  cdk.Aspects.of(tenantTemplateStack).add(destroyPolicySetter());
 
   // Issue #1340 Phase 2: tenant SAML が有効なときだけ per-tenant SignInAuditLambda を立てる
   // (= 未設定 / pooled tier 経路では空配列 → AdminConsoleInsightStack は何も attach しない、
@@ -241,6 +256,10 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
       tursoAuthTokenParameterName: config.tursoAuthTokenParameterName,
     },
   );
+  // Issue #2960: destroy 後に CDK 既定 RETAIN の resource (LogGroup / UserPool / Bucket) が
+  // 残り、log group だけで 48 個が孤児になっていた。 Aspect は明示 Retain を尊重するので
+  // (#2959 の opt-in と両立する)、 全 stack に当てて既定 RETAIN の取りこぼしを塞ぐ。
+  cdk.Aspects.of(adminConsoleInsightStack).add(destroyPolicySetter());
 
   const serverlessSaaSPipeline = new ServerlessSaaSPipeline(
     app,
@@ -254,7 +273,7 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
       sourceZip: config.sourceZip,
     },
   );
-  cdk.Aspects.of(serverlessSaaSPipeline).add(new DestroyPolicySetter());
+  cdk.Aspects.of(serverlessSaaSPipeline).add(destroyPolicySetter());
 
   const observabilityStack = new ObservabilityStack(
     app,
@@ -324,6 +343,10 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
       },
     },
   );
+  // Issue #2960: destroy 後に CDK 既定 RETAIN の resource (LogGroup / UserPool / Bucket) が
+  // 残り、log group だけで 48 個が孤児になっていた。 Aspect は明示 Retain を尊重するので
+  // (#2959 の opt-in と両立する)、 全 stack に当てて既定 RETAIN の取りこぼしを塞ぐ。
+  cdk.Aspects.of(observabilityStack).add(destroyPolicySetter());
 
   // Issue #952 epic / cost guardrails: 月次 AWS Budget を立てる。 limit / alarm 通知先は config から。
   // limit が 0 / 未指定なら budget は立てない (= legacy 互換)。詳細は wire/guardrails.ts。
@@ -364,7 +387,7 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
       features: config.features,
     },
   );
-  cdk.Aspects.of(adminConsoleRuntimeConfigStack).add(new DestroyPolicySetter());
+  cdk.Aspects.of(adminConsoleRuntimeConfigStack).add(destroyPolicySetter());
 
   // 全 stack を生成し終えた後で deploy 順序の `addDependency()` 群を 1 ヶ所に集約適用する。
   // 旧コードは各 stack 生成直後に inline で呼んでいたが、 同じ依存 edge を同じ順で張るため
@@ -417,7 +440,13 @@ function createChallengePayloadStack(
         : {}),
     },
   );
-  cdk.Aspects.of(stack).add(new DestroyPolicySetter());
+  // この stack は DynamoDB table を持たないが、除外条件は 1 箇所から導出しておく
+  // (将来 table が増えたときに、ここだけ #2959 の opt-in を無視する状態を作らない)。
+  cdk.Aspects.of(stack).add(
+    new DestroyPolicySetter({
+      skipResourceTypes: config.retainDataTables ? ["AWS::DynamoDB::Table"] : [],
+    }),
+  );
   return stack;
 }
 

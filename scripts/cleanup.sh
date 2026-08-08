@@ -252,14 +252,60 @@ done
 # 同名 API key が複数 region にまたがる可能性は低いので current region のみ scan。
 # 旧コードが LogGroup を hardcoded 名で作っていた残骸を削除 (= #653 / StepFunctionLogging 経路)。
 # 現在は CFn auto-name に切替済だが、 過去 deploy の残骸が出てくると AlreadyExists で 2 回目 deploy が落ちる。
-log "scanning for orphan LogGroups (legacy hardcoded names)..."
-for orphan_lg in "/aws/vendedlogs/states/StepFunctionLogging"; do
-  if aws logs describe-log-groups --log-group-name-prefix "${orphan_lg}" --query 'logGroups[?logGroupName==`'"${orphan_lg}"'`].logGroupName' --output text 2>/dev/null | grep -q .; then
-    log "  deleting orphan log group ${orphan_lg}"
-    aws logs delete-log-group --log-group-name "${orphan_lg}" 2>/dev/null \
-      || log "    skip (already gone or in-use)"
-  fi
+# Issue #2960: 旧実装はこのループの要素が 1 件 (`/aws/vendedlogs/states/StepFunctionLogging`)
+# しか無く、 実測で残っていた 48 個はどれも一致しないので素通りしていた。 同 file の SSM
+# parameter 掃除は prefix 走査で正しく書けているので、 log group だけ実装が取り残されていた。
+#
+# `/aws/lambda/*` は **CFn の所有物ではない**。 Lambda 関数の log group は初回実行時に Lambda
+# サービスが暗黙に作るので、 stack を消しても消えない。 掃除する主体がどこにも居ないのが問題
+# なので、 ここで拾う。
+#
+# 対象 prefix は次の 3 系統。 いずれも `tenkacloud` を含む名前だけを消し、 含まないものには
+# 触らない (`/aws/apigateway/welcome` のようなアカウント共通のものを巻き込まない)。
+LOG_GROUP_PREFIXES=(
+  "/aws/lambda/tenkacloud"
+  "tenkacloud-"
+  "/aws/codebuild/provisioningJobRunner"
+  "/aws/codebuild/deprovisioningJobRunner"
+  "/aws/codebuild/CdkCodeBuildProject"
+)
+log "scanning for orphan LogGroups (${#LOG_GROUP_PREFIXES[@]} prefixes)..."
+DELETED_LOG_GROUP_COUNT=0
+for lg_prefix in "${LOG_GROUP_PREFIXES[@]}"; do
+  orphan_names=$(aws logs describe-log-groups --log-group-name-prefix "${lg_prefix}" \
+    --query 'logGroups[].logGroupName' --output text 2>/dev/null || true)
+  for lg_name in ${orphan_names}; do
+    # SBT の CodeBuild 系は名前に tenkacloud を含まないことがあるので、 prefix 一致で拾った
+    # ものはそのまま対象にする。 ただし prefix が `tenkacloud` 系でない場合に限り、 他人の
+    # log group を巻き込まないよう名前側の確認をもう一段入れる。
+    case "${lg_prefix}" in
+      /aws/codebuild/*)
+        ;;
+      *)
+        case "${lg_name}" in
+          *tenkacloud*|*TenkaCloud*) ;;
+          *) continue ;;
+        esac
+        ;;
+    esac
+    log "  deleting orphan log group ${lg_name}"
+    if aws logs delete-log-group --log-group-name "${lg_name}" >/dev/null 2>&1; then
+      DELETED_LOG_GROUP_COUNT=$((DELETED_LOG_GROUP_COUNT + 1))
+    else
+      # `--output text` は tab 区切りの 1 行で返るので、 名前単位に割ってから完全一致で見る
+      # (部分一致だと似た名前の log group を 「まだ居る」 と誤判定する)。
+      if aws logs describe-log-groups --log-group-name-prefix "${lg_name}" \
+        --query 'logGroups[].logGroupName' --output text 2>/dev/null \
+        | tr '\t' '\n' | grep -qx "${lg_name}"; then
+        log "    FAILED to delete ${lg_name}"
+        CLEANUP_FAILURES+=("logs delete-log-group ${lg_name}")
+      else
+        log "    already gone"
+      fi
+    fi
+  done
 done
+log "  deleted ${DELETED_LOG_GROUP_COUNT} orphaned log group(s)"
 
 # SSM Parameter Store の per-tenant ExternalId (= `/{env}/tenants/{tenantId}/external-id`)
 # は competitor-accounts handler が runtime で `PutParameterCommand` で書き込む (= CFn 管理外)
