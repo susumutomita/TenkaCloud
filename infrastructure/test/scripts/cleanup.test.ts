@@ -24,8 +24,11 @@ import { afterEach, describe, expect, it } from "vitest";
  * shell command string, to avoid injection.
  */
 
-const CLEANUP_SCRIPT = resolve(__dirname, "..", "..", "..", "scripts", "cleanup.sh");
+const REPO_ROOT = resolve(__dirname, "..", "..", "..");
+const CLEANUP_SCRIPT = resolve(REPO_ROOT, "scripts", "cleanup.sh");
 const tempDirs: string[] = [];
+/** `.env` fixtures written inside the repo (cleanup.sh resolves ENV_FILE relative to it). */
+const fixtureDirs: string[] = [];
 
 interface RunResult {
   readonly status: number | null;
@@ -33,6 +36,10 @@ interface RunResult {
   readonly stdout: string;
   readonly awsCalls: string;
   readonly bunCalls: string;
+  /** `aws` + `bun` invocations in a single ordered log, for step-ordering assertions. */
+  readonly orderedCalls: string;
+  /** `CDK_PARAM_*` variables as the `bun`/cdk child process actually saw them. */
+  readonly cdkParamEnv: string;
 }
 
 interface Scenario {
@@ -44,6 +51,15 @@ interface Scenario {
   readonly tenantStacks?: readonly string[];
   /** Full SSM parameter names (already `/external-id`-suffixed) to report as orphans. */
   readonly orphanSsmParams?: readonly string[];
+  /** `cdk destroy --all` exits non-zero (e.g. synth failure) instead of tearing stacks down. */
+  readonly cdkDestroyAllFails?: boolean;
+  /**
+   * CFn cancels the admin-console-hosting delete and reverts the stack to CREATE_COMPLETE
+   * (what really happens while another stack still imports one of its exports).
+   */
+  readonly adminConsoleHostingDeleteCanceled?: boolean;
+  /** `ENV` to run under; the caller is responsible for the matching `.env` fixture. */
+  readonly env?: string;
 }
 
 function run(scenario: Scenario): RunResult {
@@ -64,6 +80,7 @@ function run(scenario: Scenario): RunResult {
   // the issue's own scope is "最低3シナリオ(冪等性) + SSM orphan 対象選択".
   const fakeAws = `#!/usr/bin/env bash
 echo "$@" >> "$AWS_CALL_LOG"
+echo "aws $@" >> "$ORDERED_CALL_LOG"
 
 find_flag_value() {
   local flag="$1"
@@ -110,11 +127,28 @@ case "$1 $2" in
   "cloudformation describe-stacks")
     name="$(find_flag_value --stack-name "$@")"
     if [ "$name" = "tenkacloud-admin-console-hosting" ]; then
-      [ "\${FAKE_ADMIN_CONSOLE_HOSTING_EXISTS:-0}" = "1" ] && exit 0 || exit 255
+      [ "\${FAKE_ADMIN_CONSOLE_HOSTING_EXISTS:-0}" = "1" ] || exit 255
+      # Before the delete is issued the stack is simply there. Afterwards it either
+      # disappears (describe-stacks fails, = the real DELETE_COMPLETE observation) or,
+      # when CFn cancels the delete, reverts to CREATE_COMPLETE and stays forever.
+      if [ -f "\$DELETE_MARKER" ]; then
+        if [ "\${FAKE_ADMIN_CONSOLE_HOSTING_DELETE_CANCELED:-0}" = "1" ]; then
+          echo "CREATE_COMPLETE"
+          exit 0
+        fi
+        exit 255
+      fi
+      echo "CREATE_COMPLETE"
+      exit 0
     fi
     exit 255
     ;;
   "cloudformation delete-stack")
+    touch "\$DELETE_MARKER"
+    exit 0
+    ;;
+  "cloudformation describe-stack-events")
+    echo "\${FAKE_DELETE_CANCEL_REASON}"
     exit 0
     ;;
   "cloudformation wait")
@@ -159,9 +193,18 @@ esac
 
   // Fake `bun`: cleanup.sh's only real `bun` calls are `bun run cdk -- destroy ...` (bun install is
   // guarded by `[[ ! -d node_modules ]]`, which is false in this checked-out repo).
+  // The child also records the CDK_PARAM_* it inherited: cleanup.sh must NOT relay
+  // .env-derived CDK params into cdk (bash `source` mangles JSON values), so this log
+  // is what pins that contract.
   const fakeBun = `#!/usr/bin/env bash
 echo "$@" >> "$BUN_CALL_LOG"
+echo "bun $@" >> "$ORDERED_CALL_LOG"
+env | grep '^CDK_PARAM_' >> "$FAKE_CDK_PARAM_ENV_LOG" || true
 if [ "$1" = "run" ] && [ "$2" = "cdk" ] && [ "$4" = "destroy" ]; then
+  if [ "$5" = "--all" ] && [ "\${FAKE_CDK_DESTROY_ALL_FAILS:-0}" = "1" ]; then
+    echo "synth failed" >&2
+    exit 1
+  fi
   exit 0
 fi
 if [ "$1" = "install" ]; then
@@ -175,21 +218,41 @@ exit 0
   const FAKE_ACCOUNT_ID = "123456789012";
   const FAKE_REGION = "ap-northeast-1";
   const sourceBucket = `tenkacloud-source-${FAKE_ACCOUNT_ID}-${FAKE_REGION}`;
+  const orderedCallLog = join(dir, "ordered-calls.log");
+  const cdkParamEnvLog = join(dir, "cdk-param-env.log");
+  // The runner's own environment must not decide the outcome of the CDK_PARAM_* assertions:
+  // strip anything a developer shell may have exported before handing env to the script.
+  const childEnv: NodeJS.ProcessEnv = { ...process.env };
+  for (const key of Object.keys(childEnv)) {
+    if (key.startsWith("CDK_PARAM_")) {
+      delete childEnv[key];
+    }
+  }
+
   const result = spawnSync("bash", [CLEANUP_SCRIPT], {
     encoding: "utf8",
     cwd: resolve(__dirname, "..", "..", ".."),
     env: {
-      ...process.env,
+      ...childEnv,
       PATH: `${binDir}:${process.env.PATH ?? ""}`,
       AWS_CALL_LOG: callLog,
       BUN_CALL_LOG: bunCallLog,
-      ENV: "tenkacloud-cleanup-test-env-does-not-exist",
+      ORDERED_CALL_LOG: orderedCallLog,
+      FAKE_CDK_PARAM_ENV_LOG: cdkParamEnvLog,
+      DELETE_MARKER: join(dir, "deleted-admin-console-hosting"),
+      ENV: scenario.env ?? "tenkacloud-cleanup-test-env-does-not-exist",
       SYSTEM_ADMIN_EMAIL: "admin@example.com",
       FAKE_REGION: "ap-northeast-1",
       FAKE_ACCOUNT_ID: "123456789012",
       FAKE_SOURCE_BUCKET: sourceBucket,
       FAKE_SOURCE_BUCKET_EXISTS: scenario.sourceBucketExists ? "1" : "0",
       FAKE_ADMIN_CONSOLE_HOSTING_EXISTS: scenario.adminConsoleHostingStackExists ? "1" : "0",
+      FAKE_ADMIN_CONSOLE_HOSTING_DELETE_CANCELED: scenario.adminConsoleHostingDeleteCanceled
+        ? "1"
+        : "0",
+      FAKE_DELETE_CANCEL_REASON:
+        "Cannot delete export tenkacloud-admin-console-hosting:ExportsOutputFnGetAttDistributionDomainName as it is in use by tenkacloud-admin-console-insight and tenkacloud-control-plane.",
+      FAKE_CDK_DESTROY_ALL_FAILS: scenario.cdkDestroyAllFails ? "1" : "0",
       FAKE_S3_BUCKETS: s3Buckets.join(" "),
       FAKE_TENANT_STACKS: tenantStacks.join(" "),
       FAKE_ORPHAN_SSM_PARAMS: orphanSsmParams.join(" "),
@@ -201,11 +264,16 @@ exit 0
     stdout: result.stdout,
     awsCalls: existsSync(callLog) ? readFileSync(callLog, "utf8") : "",
     bunCalls: existsSync(bunCallLog) ? readFileSync(bunCallLog, "utf8") : "",
+    orderedCalls: existsSync(orderedCallLog) ? readFileSync(orderedCallLog, "utf8") : "",
+    cdkParamEnv: existsSync(cdkParamEnvLog) ? readFileSync(cdkParamEnvLog, "utf8") : "",
   };
 }
 
 afterEach(() => {
   for (const dir of tempDirs.splice(0)) {
+    rmSync(dir, { force: true, recursive: true });
+  }
+  for (const dir of fixtureDirs.splice(0)) {
     rmSync(dir, { force: true, recursive: true });
   }
 });
@@ -320,5 +388,85 @@ describe("cleanup.sh idempotency (#2204)", { timeout: 30_000 }, () => {
     expect(bunCalls).toContain("scripts/ops/report-retained-tables.ts");
     // The warning check runs before the completion banner (advisory is the final step).
     expect(stdout).toContain("cleanup complete.");
+  });
+
+  // ---- Regression: `make destroy-saas` once finished with "cleanup complete." + exit 0
+  // while every backend stack was still deployed. Three defects made that possible. ----
+
+  // 1. `cdk destroy --all` failing was swallowed into a single log line, so a total no-op
+  //    teardown was indistinguishable from a successful one.
+  it("should fail loudly when cdk destroy --all cannot tear the backend stacks down", () => {
+    const { status, stdout } = run({ cdkDestroyAllFails: true });
+
+    expect(status).not.toBe(0);
+    expect(stdout).toContain("cdk destroy --all failed");
+    expect(stdout).toContain("STILL DEPLOYED");
+    expect(stdout).toContain("cleanup INCOMPLETE");
+    // Nothing was torn down, so the script must not claim completion.
+    expect(stdout).not.toContain("cleanup complete.");
+  });
+
+  // 2. The admin-console-hosting CFN-direct delete ran BEFORE `cdk destroy --all`, but
+  //    control-plane / admin-console-insight import its CloudFront domain export -- CFn
+  //    cancels a delete whose exports are still in use, so that ordering could never work
+  //    from a fully deployed state.
+  it("should delete admin-console-hosting only after cdk destroy --all released its exports", () => {
+    const { orderedCalls } = run({ adminConsoleHostingStackExists: true });
+
+    const destroyAllAt = orderedCalls.indexOf("bun run cdk -- destroy --all --force");
+    const hostingDeleteAt = orderedCalls.indexOf(
+      "aws cloudformation delete-stack --stack-name tenkacloud-admin-console-hosting",
+    );
+
+    expect(destroyAllAt).toBeGreaterThanOrEqual(0);
+    expect(hostingDeleteAt).toBeGreaterThanOrEqual(0);
+    expect(destroyAllAt).toBeLessThan(hostingDeleteAt);
+  });
+
+  // 3. `aws cloudformation wait stack-delete-complete` does not treat "delete canceled,
+  //    stack reverted to CREATE_COMPLETE" as terminal, so it polled for the full 60 minutes
+  //    while nothing happened. The replacement bails as soon as the stack leaves
+  //    DELETE_IN_PROGRESS and prints what CloudFormation actually said.
+  it("should stop waiting and surface the reason when CFn cancels the hosting delete", () => {
+    const { status, stdout, awsCalls } = run({
+      adminConsoleHostingStackExists: true,
+      adminConsoleHostingDeleteCanceled: true,
+    });
+
+    expect(stdout).toContain("delete did not proceed (status=CREATE_COMPLETE)");
+    expect(stdout).toContain("as it is in use by tenkacloud-admin-console-insight");
+    expect(stdout).toContain("cleanup INCOMPLETE");
+    expect(status).not.toBe(0);
+    // The blocking `aws cloudformation wait` is gone for good.
+    expect(awsCalls).not.toContain("cloudformation wait");
+  });
+
+  // 4. The root cause of the no-op: `set -a; source .env` strips the double quotes from
+  //    `CDK_PARAM_FEATURES={"samlSso":true}`, exporting `{samlSso:true}`. cdk's own dotenv
+  //    loader then refuses to override the already-set (mangled) value and synth dies on
+  //    JSON.parse -- taking the whole `cdk destroy --all` with it. cleanup.sh must not relay
+  //    .env-derived CDK params at all; the CDK app reads the same file itself.
+  it("should not relay .env CDK_PARAM_* into cdk (bash source mangles JSON values)", () => {
+    const envName = "tenkacloud-cleanup-test-env-fixture";
+    const envDir = join(REPO_ROOT, "infrastructure", "environments", envName);
+    mkdirSync(envDir, { recursive: true });
+    fixtureDirs.push(envDir);
+    writeFileSync(
+      join(envDir, ".env"),
+      ["SYSTEM_ADMIN_EMAIL=admin@example.com", 'CDK_PARAM_FEATURES={"samlSso":true}', ""].join(
+        "\n",
+      ),
+    );
+
+    const { status, stderr, cdkParamEnv } = run({ env: envName });
+
+    expect(status, stderr).toBe(0);
+    // cdk really was invoked with the params cleanup.sh owns (otherwise the checks below
+    // would pass vacuously).
+    expect(cdkParamEnv).toContain("CDK_PARAM_SYSTEM_ADMIN_EMAIL=admin@example.com");
+    // The mangled value must never reach the child ...
+    expect(cdkParamEnv).not.toContain("{samlSso:true}");
+    // ... and neither must the .env-derived variable in any form.
+    expect(cdkParamEnv).not.toContain("CDK_PARAM_FEATURES");
   });
 });

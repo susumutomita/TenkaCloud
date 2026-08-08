@@ -13,6 +13,53 @@ set -eo pipefail
 
 log() { echo "[$(date +%H:%M:%S)] $*"; }
 
+# 失敗した step を貯めて最後にまとめて非 0 で落ちる。 個々の step は idempotent なので
+# 1 つ失敗しても残りは走らせる価値があるが、 「1 つも消えていないのに exit 0 + cleanup
+# complete.」で終わるのは偽の成功であり、 実際に teardown が丸ごと no-op になったまま
+# 気付けなかった事故がある (= cdk destroy --all の失敗が log 1 行に握り潰されていた)。
+CLEANUP_FAILURES=()
+
+# stack の削除完了を待つ。 `aws cloudformation wait stack-delete-complete` は使わない:
+# CFn は「export が他 stack に import 済み」等の理由で delete を受理した直後にキャンセルし、
+# stack を元の status (= CREATE_COMPLETE 等) に戻すことがある。 wait はこの復帰 status を
+# 終端と見なさず 30s x 120 = 最大 60 分ポーリングし続けるため、 teardown が固まったように
+# 見えるだけで何も進まない。 DELETE_IN_PROGRESS を抜けた時点で打ち切り、 CFn が返した理由を
+# そのまま surface する。 待ち時間の総量は従来 (= 60 分) を維持する。
+wait_stack_deleted() {
+  local stack_name="$1"
+  local attempts=240
+  local interval=15
+  local status reason attempt
+  for ((attempt = 0; attempt < attempts; attempt++)); do
+    # 消えた stack は describe-stacks が ValidationError で落ちる (= 削除完了)。
+    if ! status=$(aws cloudformation describe-stacks --stack-name "${stack_name}" \
+      --query 'Stacks[0].StackStatus' --output text 2>/dev/null); then
+      return 0
+    fi
+    case "${status}" in
+      DELETE_COMPLETE)
+        return 0
+        ;;
+      DELETE_IN_PROGRESS)
+        sleep "${interval}"
+        ;;
+      *)
+        log "  ${stack_name} delete did not proceed (status=${status})"
+        reason=$(aws cloudformation describe-stack-events --stack-name "${stack_name}" \
+          --max-items 5 \
+          --query "StackEvents[?ResourceStatusReason != null].ResourceStatusReason | [0]" \
+          --output text 2>/dev/null || true)
+        if [[ -n "${reason}" && "${reason}" != "None" ]]; then
+          log "    CFn: ${reason}"
+        fi
+        return 1
+        ;;
+    esac
+  done
+  log "  ${stack_name} still DELETE_IN_PROGRESS after $((attempts * interval))s"
+  return 1
+}
+
 # versioned bucket を完全に空にする。`aws s3 rm --recursive` は current version
 # しか消さない → `aws s3 rb --force` が BucketNotEmpty で落ちる。versions と
 # delete markers を全部列挙して delete-objects で消す。
@@ -39,11 +86,26 @@ TenkaCloud_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ENV="${ENV:-development}"
 ENV_FILE="${TenkaCloud_ROOT}/infrastructure/environments/${ENV}/.env"
 
+# `.env` は **export せずに** 読む (= `set -a` を使わない)。
+#
+# bash の `source` は `KEY={"a":true}` の double quote を剥がすため、 JSON 値を持つ
+# CDK_PARAM_* (実在: `CDK_PARAM_FEATURES={"samlSso":true}`) が `{a:true}` に化ける。
+# `set -a` でこれを export すると、 bin/infrastructure.ts 側の dotenv loader は
+# 「既に環境に在る」と見なして上書きせず (= `injected env (0)`)、 resolveAppConfig の
+# JSON parse が落ちて synth ごと死ぬ。 結果 `cdk destroy --all` は stack を 1 つも
+# 消せないまま失敗する。
+#
+# CDK app は自分で同じ `.env` を読むので、 ここから中継する必要はない。 このスクリプト
+# 自身が要るのは SYSTEM_ADMIN_EMAIL だけ。 ただし aws CLI の宛先 (profile / region) は
+# 従来どおり `.env` に従わせたいので、 その 3 つだけ明示的に export する。
 if [[ -f "${ENV_FILE}" ]]; then
-  set -a
   # shellcheck disable=SC1090
   source "${ENV_FILE}"
-  set +a
+  for aws_var in AWS_PROFILE AWS_REGION AWS_DEFAULT_REGION; do
+    if [[ -n "${!aws_var:-}" ]]; then
+      export "${aws_var?}"
+    fi
+  done
 fi
 
 if [[ -z "${SYSTEM_ADMIN_EMAIL:-}" ]]; then
@@ -96,19 +158,6 @@ done < <(aws s3 ls 2>/dev/null | awk '{print $3}' | grep -E "$bucket_patterns" |
 # 生成 Lambda は存在しない)。GameDay deploy pipeline で生成される CFn stack は
 # CFn 管理下なので cdk destroy --all で消える。
 
-# tenkacloud-admin-console-hosting は bin/infrastructure.ts が CDK_PARAM_CONTROL_PLANE_* と
-# apps/admin-console/dist/ を要求するため cdk destroy では synth が落ちる。CFN 直 delete で迂回。
-if aws cloudformation describe-stacks --stack-name tenkacloud-admin-console-hosting >/dev/null 2>&1; then
-  log "deleting tenkacloud-admin-console-hosting via CloudFormation..."
-  aws cloudformation delete-stack --stack-name tenkacloud-admin-console-hosting
-  # wait は timeout / DELETE_FAILED の両方で non-zero。どちらも後段の cdk destroy --all が
-  # 再試行 + CFN エラーを surface するので、ここでは warn だけで先に進める。
-  aws cloudformation wait stack-delete-complete --stack-name tenkacloud-admin-console-hosting \
-    || log "  stack-delete wait did not succeed; later steps will surface the cause"
-else
-  log "tenkacloud-admin-console-hosting not found; skip"
-fi
-
 # 動的 tenant stack (pipeline 経由で provision された tenant 単位 stack) を先に destroy。
 # pooled は CDK app 内なので最後の cdk destroy --all で一緒に消える。
 log "checking for dynamic tenant stacks..."
@@ -124,12 +173,36 @@ tenant_stacks=$(aws cloudformation list-stacks \
 for stack_name in $tenant_stacks; do
   tenant_id="${stack_name#tenkacloud-tenant-template-}"
   log "  destroying ${stack_name} (tenant_id=${tenant_id})"
-  CDK_PARAM_TENANT_ID="$tenant_id" bun run cdk -- destroy "$stack_name" --force \
-    || log "    skip (already gone or conflict)"
+  if ! CDK_PARAM_TENANT_ID="$tenant_id" bun run cdk -- destroy "$stack_name" --force; then
+    log "    ERROR: ${stack_name} destroy failed"
+    CLEANUP_FAILURES+=("${stack_name} destroy")
+  fi
 done
 
 log "cdk destroy --all (backend stacks)..."
-bun run cdk -- destroy --all --force || log "  (some stacks not destroyed; review AWS console)"
+if ! bun run cdk -- destroy --all --force; then
+  log "  ERROR: cdk destroy --all failed -- backend stacks are STILL DEPLOYED"
+  CLEANUP_FAILURES+=("cdk destroy --all")
+fi
+
+# admin-console-hosting は CDK app 内の stack なので通常は上の `cdk destroy --all` で消える。
+# ここはその経路が使えなかった場合 (= synth 不能 / CDK app 外に取り残された等) の fallback
+# として CFN 直 delete を試す。
+#
+# 実行位置が `cdk destroy --all` の **後** なのは意図的。 本 stack の CloudFront
+# distributionDomainName は control-plane / admin-console-insight が cross-stack ref で
+# import しており、 それらより先に消そうとすると CFn が
+#   Cannot delete export ... as it is in use by tenkacloud-admin-console-insight and ...
+# で delete を即キャンセルする (= 先に置くとフル deploy 状態では必ず失敗する)。
+if aws cloudformation describe-stacks --stack-name tenkacloud-admin-console-hosting >/dev/null 2>&1; then
+  log "deleting leftover tenkacloud-admin-console-hosting via CloudFormation..."
+  aws cloudformation delete-stack --stack-name tenkacloud-admin-console-hosting
+  if ! wait_stack_deleted tenkacloud-admin-console-hosting; then
+    CLEANUP_FAILURES+=("tenkacloud-admin-console-hosting delete")
+  fi
+else
+  log "tenkacloud-admin-console-hosting not found; skip"
+fi
 
 # install.sh が作る source bucket は CDK 管理外なので手動で空 → delete-bucket。
 # 実デプロイは HASHED 形式を作るが、pre-#1749 の legacy 形式が残っている環境もあるので
@@ -240,5 +313,14 @@ fi
 log "checking for RETAIN-orphaned DynamoDB tables (billing warning only)..."
 bun run "${TenkaCloud_ROOT}/scripts/ops/report-retained-tables.ts" \
   || log "  retained-table check skipped (non-fatal)"
+
+if ((${#CLEANUP_FAILURES[@]} > 0)); then
+  log "cleanup INCOMPLETE -- the following steps failed:"
+  for failure in "${CLEANUP_FAILURES[@]}"; do
+    log "  - ${failure}"
+  done
+  log "AWS resources are still deployed. Fix the errors above and re-run make destroy-saas."
+  exit 1
+fi
 
 log "cleanup complete."
