@@ -266,8 +266,8 @@ describe("resolveAppConfig", () => {
   });
 
   // Issue #2961: cost guardrails are opt-in. The config default is the numeric
-  // string "0", and resolve must normalize it without silently enabling a budget.
-  it("monthlyCostLimitUsd should normalize the disabled default to number 0", () => {
+  // string "0", and resolve normalizes disabled values to undefined.
+  it("monthlyCostLimitUsd should keep the disabled default undefined", () => {
     const cfg = resolveAppConfig({
       env: baseEnv(),
       binDir: BIN_DIR,
@@ -275,8 +275,7 @@ describe("resolveAppConfig", () => {
       dotenvConfig: noopDotenv,
       discoverProblems: stubProblems,
     });
-    expect(cfg.monthlyCostLimitUsd).toBe(0);
-    expect(typeof cfg.monthlyCostLimitUsd).toBe("number");
+    expect(cfg.monthlyCostLimitUsd).toBeUndefined();
   });
 
   it("should keep ops monitoring disabled when CDK_PARAM_OPS_ALERT_EMAIL is unset", () => {
