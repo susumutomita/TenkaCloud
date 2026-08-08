@@ -1,6 +1,7 @@
 import { Stack } from "aws-cdk-lib";
 import {
   AuthorizationType,
+  type CfnAuthorizer,
   CognitoUserPoolsAuthorizer,
   Integration,
   IntegrationType,
@@ -60,6 +61,26 @@ interface ApiGatewayProps {
    * localhost を CORS allowOrigins から除外する (= phishing 経路で localhost への redirect を弾く)。
    */
   environment?: string;
+  /**
+   * Issue #2953: human authorizer の `identityValidationExpression` (opt-in、未指定で NO-OP)。
+   *
+   * `COGNITO_USER_POOLS` authorizer の本 property は、受け取った token の **`aud` claim** を
+   * 正規表現に照合し、一致しなければ Lambda / backend に渡さず 401 を返す。Cognito の
+   * **ID token は `aud` を持ち (= app client id)、access token は持たない** (代わりに
+   * `client_id` を持つ)。よって human の app client id を pin すると、machine の access token は
+   * `aud` 不在で照合に失敗し gateway 段で 401 になる。
+   *
+   * **Issue 本文の `^$` は反転している**。`^$` は「`aud` が空であること」を要求するので、
+   * 通るのは access token のほうで ID token が全部 401 になる (= 全 console が即死する)。
+   * 受け入れ条件が「ID token 200 / access token 401」である以上、正しい式は
+   * 「human app client id に一致すること」であり、ここではそれを使う。この読み替えは live
+   * pre-flight で確定させる前提であり、既定は OFF のままにしてある。
+   *
+   * 稼働中 authorizer の UPDATE なので、有効化は非本番 stage の live 検証を済ませてから
+   * `features.humanAuthorizerRejectsAccessTokens` を立てて行う。rollback は同 flag を落として
+   * 再 deploy するだけで、authorizer は元の (照合なし) 状態に戻る。
+   */
+  humanAudienceValidationExpression?: string;
 }
 
 /**
@@ -105,6 +126,13 @@ export class ApiGateway extends Construct {
       cognitoUserPools: [props.userPool],
       authorizerName: `TenantAuth-${props.tenantId}`,
     });
+
+    // Issue #2953: CDK L2 は `identityValidationExpression` を公開していないため escape hatch で
+    // 設定する。未指定なら property 自体を書かない (= 既存 authorizer の CFn 物理差分 0 件)。
+    if (props.humanAudienceValidationExpression) {
+      const cfnAuthorizer = authorizer.node.defaultChild as CfnAuthorizer;
+      cfnAuthorizer.identityValidationExpression = props.humanAudienceValidationExpression;
+    }
 
     const deployIntegration = new LambdaIntegration(props.deployApiLambda);
     const deployMethodOptions = {

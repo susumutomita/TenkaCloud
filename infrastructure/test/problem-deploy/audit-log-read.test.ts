@@ -79,6 +79,69 @@ describe("listTenantAuditEntries (#1292)", () => {
     expect(out.items.map((i) => i.action)).toEqual(["delete_event"]);
   });
 
+  // #2954: machine actor は `m2m:<clientId>` で client id が発行のたびに変わる。完全一致だけだと
+  // 「machine が起こした操作を全部見る」ができないため、末尾 `*` を prefix 一致にした。
+  it("should treat a trailing * in principal as a prefix match (so m2m:* selects every machine actor)", async () => {
+    const { repository } = buildMock([
+      {
+        PK: "TENANT#t-1",
+        SK: "AUDIT#A",
+        actor: "m2m:client-a",
+        action: "deploy_problem",
+        outcome: "success",
+        occurredAt: "2026-05-20T12:00:00.000Z",
+      },
+      {
+        PK: "TENANT#t-1",
+        SK: "AUDIT#B",
+        actor: "m2m:client-b",
+        action: "deploy_problem",
+        outcome: "forbidden",
+        occurredAt: "2026-05-21T12:00:00.000Z",
+      },
+      {
+        PK: "TENANT#t-1",
+        SK: "AUDIT#C",
+        actor: "cognito-sub-1",
+        actorUsername: "operator@example.com",
+        action: "deploy_problem",
+        outcome: "success",
+        occurredAt: "2026-05-22T12:00:00.000Z",
+      },
+    ]);
+    const out = await listTenantAuditEntries(
+      { repository },
+      { tenantId: "t-1", principal: "m2m:*" },
+    );
+    expect(out.items.map((i) => i.actor)).toEqual(["m2m:client-a", "m2m:client-b"]);
+  });
+
+  it("should keep principal an exact match when it has no trailing * (human path unchanged)", async () => {
+    const { repository } = buildMock([
+      {
+        PK: "TENANT#t-1",
+        SK: "AUDIT#A",
+        actor: "m2m:client-a",
+        action: "deploy_problem",
+        outcome: "success",
+        occurredAt: "2026-05-20T12:00:00.000Z",
+      },
+      {
+        PK: "TENANT#t-1",
+        SK: "AUDIT#B",
+        actor: "m2m:client-ab",
+        action: "deploy_problem",
+        outcome: "success",
+        occurredAt: "2026-05-21T12:00:00.000Z",
+      },
+    ]);
+    const out = await listTenantAuditEntries(
+      { repository },
+      { tenantId: "t-1", principal: "m2m:client-a" },
+    );
+    expect(out.items.map((i) => i.actor)).toEqual(["m2m:client-a"]);
+  });
+
   it("should propagate base64 nextCursor when LastEvaluatedKey is returned", async () => {
     const lastKey = { PK: "TENANT#t-1", SK: "AUDIT#01HX" };
     const { repository } = buildMock([], lastKey);

@@ -449,6 +449,23 @@ export function isMachineTokenPathEnabled(
   return features?.[MACHINE_TOKEN_PATH_FEATURE_KEY] === true;
 }
 
+/**
+ * Issue #2953: human TenantAPI authorizer で access token を弾く opt-in flag key。
+ *
+ * **default OFF**。稼働中の authorizer の UPDATE であり、読み違えていれば全 tenant の console が
+ * 401 になる。#2948 の `TenantMachine` role により緊急性は無くなっているので、非本番 stage の
+ * live pre-flight (ID token 200 / access token 401) を済ませてから立てる。
+ */
+export const HUMAN_AUTHORIZER_REJECTS_ACCESS_TOKENS_FEATURE_KEY =
+  "humanAuthorizerRejectsAccessTokens";
+
+/** `features.humanAuthorizerRejectsAccessTokens` を読む唯一の accessor。未設定 / false は OFF。 */
+export function isHumanAuthorizerAudiencePinEnabled(
+  features: Readonly<Record<string, boolean>> | undefined,
+): boolean {
+  return features?.[HUMAN_AUTHORIZER_REJECTS_ACCESS_TOKENS_FEATURE_KEY] === true;
+}
+
 export function resolveFeatures(
   env: NodeJS.ProcessEnv,
 ): Readonly<Record<string, boolean>> | undefined {
