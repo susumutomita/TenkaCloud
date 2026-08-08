@@ -150,6 +150,17 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
     problemEndpointsRequest(config, sessionToken, problem, canRenderEndpoints),
   );
   const scoringNotStartedAt = getScoringNotStartedStartsAt(view?.eventGate);
+  // [Challenge #402] deploy が見つからないとき、それが「まだ deploy していない」のか
+  // 「そもそも local play では起動できない AWS 専用問題」なのかを区別する。後者は
+  // `local/` を持たない問題で、local play の jobId は `local-<problemId>` (api-state.ts の
+  // `jobIdOf`) なので、問題が見つからなくても catalog を引ける。
+  // `localPlayable !== false` で判定する — `undefined` は「判定していない」(AWS mode の
+  // 投影は `local/` を見られない) であって「起動できない」ではない。
+  const awsOnly = useMemo(() => {
+    if (problem || config.cloudMode !== "local" || !jobId) return false;
+    const problemId = jobId.startsWith("local-") ? jobId.slice("local-".length) : jobId;
+    return findProblemMetadata(problemId)?.localPlayable === false;
+  }, [problem, config.cloudMode, jobId]);
 
   if (!jobId) return <Navigate to="/problems" replace />;
 
@@ -171,6 +182,7 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
        *   が担保されているため、 eventId 不在 / gate 取得失敗時も同じく lock 表示になる。
        *   競技公平性 (= 開始前に hints / 問題文を読んで準備するのを防ぐ) のため必須。 */}
       <ProblemDetailStatusAlerts
+        awsOnly={awsOnly}
         error={error}
         bonusPending={bonusPending}
         gateName={gateName}
@@ -252,6 +264,7 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
 }
 
 function ProblemDetailStatusAlerts({
+  awsOnly,
   error,
   bonusPending,
   gateName,
@@ -267,6 +280,7 @@ function ProblemDetailStatusAlerts({
   t,
   view,
 }: {
+  awsOnly: boolean;
   error: string | null;
   bonusPending: boolean;
   gateName: string;
@@ -289,7 +303,15 @@ function ProblemDetailStatusAlerts({
           {error}
         </Alert>
       )}
-      {!problem && view && (
+      {!problem && view && awsOnly && (
+        // [Challenge #402] `local/` を持たない問題は `make local` では起動できない。以前は
+        // 「deploy されていません。operator にお問い合わせください」と出ていたが、local play の
+        // operator は本人なので何もできず、行き止まりだと分かるまでに時間がかかっていた。
+        <Alert type="info" header={t("problem_detail.aws_only_header")}>
+          <Box variant="p">{t("problem_detail.aws_only_body")}</Box>
+        </Alert>
+      )}
+      {!problem && view && !awsOnly && (
         <Alert type="warning" header={t("problem_detail.deploy_missing_header")}>
           <Box variant="p">{t("problem_detail.deploy_missing_body", { jobId })}</Box>
         </Alert>

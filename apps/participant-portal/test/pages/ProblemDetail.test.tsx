@@ -191,6 +191,55 @@ describe("ProblemDetailPage", () => {
     expect(screen.queryByTestId("problem-panel")).not.toBeInTheDocument();
   });
 
+  /**
+   * [TenkaCloudChallenge #402] カタログには出るのに起動できない問題があり、開いて
+   * 「deploy されていません。operator にお問い合わせください」に当たって初めて分かる
+   * 行き止まりだった。local play の operator は本人なので、その案内では何も打つ手がない。
+   */
+  describe("AWS-only problems in local play (#402)", () => {
+    const localConfig = { ...config, cloudMode: "local" } as AppConfig;
+
+    it("should name the real reason instead of telling the player to contact an operator", () => {
+      mockParams.mockReturnValue({ jobId: "local-wp2shell-friday-night-patch" });
+      mockTeamView.mockReturnValue(teamView({ view: viewWith({ problems: [] }) }));
+      // jobId は `local-<problemId>` (api-state.ts の jobIdOf) なので、deploy が無くても
+      // catalog を引ける。
+      mockFindMeta.mockReturnValue({ ...meta(), localPlayable: false });
+      render(<ProblemDetailPage config={localConfig} />);
+      expect(screen.getByText("problem_detail.aws_only_header")).toBeInTheDocument();
+      expect(screen.queryByText("problem_detail.deploy_missing_header")).not.toBeInTheDocument();
+    });
+
+    it("should keep the ordinary not-deployed warning for a problem that can run locally", () => {
+      mockParams.mockReturnValue({ jobId: "local-sqli-demo" });
+      mockTeamView.mockReturnValue(teamView({ view: viewWith({ problems: [] }) }));
+      mockFindMeta.mockReturnValue({ ...meta(), localPlayable: true });
+      render(<ProblemDetailPage config={localConfig} />);
+      expect(screen.getByText("problem_detail.deploy_missing_header")).toBeInTheDocument();
+      expect(screen.queryByText("problem_detail.aws_only_header")).not.toBeInTheDocument();
+    });
+
+    it("should not treat an unknown localPlayable as AWS-only", () => {
+      // AWS mode の投影は `local/` を見られないので undefined になる。これを false 扱いすると
+      // 本番で全問に「ローカル実行不可」が出る。
+      mockParams.mockReturnValue({ jobId: "local-sqli-demo" });
+      mockTeamView.mockReturnValue(teamView({ view: viewWith({ problems: [] }) }));
+      mockFindMeta.mockReturnValue(meta());
+      render(<ProblemDetailPage config={localConfig} />);
+      expect(screen.queryByText("problem_detail.aws_only_header")).not.toBeInTheDocument();
+    });
+
+    it("should not claim AWS-only outside local mode", () => {
+      // SaaS/AWS mode では deploy されていないだけかもしれない。local play 固有の案内を出さない。
+      mockParams.mockReturnValue({ jobId: "local-wp2shell-friday-night-patch" });
+      mockTeamView.mockReturnValue(teamView({ view: viewWith({ problems: [] }) }));
+      mockFindMeta.mockReturnValue({ ...meta(), localPlayable: false });
+      renderPage();
+      expect(screen.queryByText("problem_detail.aws_only_header")).not.toBeInTheDocument();
+      expect(screen.getByText("problem_detail.deploy_missing_header")).toBeInTheDocument();
+    });
+  });
+
   it("should show the onboarding video section only when the problem ships a videoUrl (#2707)", () => {
     mockTeamView.mockReturnValue(
       teamView({

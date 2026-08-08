@@ -159,6 +159,20 @@ function difficultyBadge(problemId: string, t: TFn): React.ReactElement | null {
 }
 
 /**
+ * [TenkaCloudChallenge #402] local play では起動できない問題に印を付ける。
+ *
+ * カタログからは消さない — #2926 が「学習パスの先が見えること」を理由に AWS 専用問題を
+ * 意図的に含めている。ただし印が無いと、開いて行き止まりに当たるまで分からなかった。
+ *
+ * `localPlayable !== false` で判定する。`undefined` は「判定していない」(AWS mode の投影は
+ * `local/` を見られない) であって「起動できない」ではないので、AWS mode で全問に印が付かない。
+ */
+function awsOnlyBadge(problemId: string, t: TFn): React.ReactElement | null {
+  if (findProblemMetadata(problemId)?.localPlayable !== false) return null;
+  return <Badge color="severity-medium">{t("quests.aws_only_badge")}</Badge>;
+}
+
+/**
  * [#2928] The local "where do I start" card. Extracted from `QuestsPage` so the branch
  * between the pinned intro drill and the course track lives in one readable place rather
  * than as nested ternaries inside an already-large render.
@@ -394,6 +408,7 @@ export function QuestsPage() {
               )}
               {categoryBadge(problem.scoring, t("quests.category_uncategorized"))}
               {difficultyBadge(problem.problemId, t)}
+              {awsOnlyBadge(problem.problemId, t)}
               {gatePending && <Badge color="green">{t("quests.gate_start_here")}</Badge>}
               {bonusPending && progression && (
                 <Badge color="blue">
