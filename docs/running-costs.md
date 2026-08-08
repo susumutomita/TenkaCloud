@@ -13,6 +13,15 @@ TenkaCloud runs in one of two profiles, selected by the `CDK_PARAM_CONTROL_DATA_
 | **AWS-native** (default, unset or `dynamodb`) | Teams / companies who want everything inside AWS | DynamoDB (provisioned 1/1), 8 tables + 8 GSIs | Lambda `CreateStack` (default) |
 | **Zero-cost** (opt-in, `turso`) | Individuals, trials, personal events | Turso (libSQL) — 0 DynamoDB tables / 0 GSIs in the Lite synth | Lambda `CreateStack` (default) |
 
+### Cost budget guardrails are opt-in
+
+The legacy AWS Budget and Free Tier alarm bundle is disabled by default in every environment.
+Set `MONTHLY_COST_LIMIT_USD` to a positive value only when you intentionally want the budget,
+SNS topic, and CloudWatch alarms. The system administrator address is not automatically
+subscribed: add `budgetAlarmEmails` to the selected environment's `config.json` only for
+recipients who explicitly want confirmation and alert email. With the limit unset or `0`,
+CloudFormation contains none of those resources.
+
 Lite mode (`make deploy`) is already the lean path. The problem-deploy backend runs on **Lambda `CreateStack`/`UpdateStack` by default** (no CodeBuild project), and the KMS customer-managed key was removed in favor of the AWS-managed key. What is left standing on the default profile is DynamoDB: eight tables plus eight GSIs pinned at PROVISIONED 1/1, which bill even while idle. The eight tables are **Events, Teams, Deployments, ProblemEndpoints, CompetitorAccounts, Disruptions, AdminAuditLog, and SamlIdps**.
 
 Opting into `CONTROL_DATA_BACKEND=turso` removes all eight of those tables — CDK does not synthesize any of them, which is what actually removes the standing cost, not just the read/write path. The SAML IdP CRUD API (`/tenant/idp*`) keeps working on the Turso profile: the Lambda is decoupled from table presence and resolves the repository through the same seam as the other seven tables, so opting into `turso` yields a Lite synth with **zero `AWS::DynamoDB::Table` resources**.
