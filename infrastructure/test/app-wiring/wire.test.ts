@@ -41,7 +41,10 @@ const stubProblems = () => ({
   visibility: [],
 });
 
-function buildApp(envOverrides: Record<string, string> = {}): cdk.App {
+function buildApp(
+  envOverrides: Record<string, string> = {},
+  configOverrides: { monthlyCostLimitUsd?: number } = {},
+): cdk.App {
   const config = resolveAppConfig({
     env: {
       CDK_PARAM_SYSTEM_ADMIN_EMAIL: "admin@example.com",
@@ -57,6 +60,7 @@ function buildApp(envOverrides: Record<string, string> = {}): cdk.App {
     dotenvConfig: () => undefined,
     discoverProblems: stubProblems,
   });
+  Object.assign(config, configOverrides);
   // SBT の Python Lambda bundling (要 Docker) を construct 時に走らせないため、
   // bundling を全 stack で skip する (asset は placeholder になる。 synth はしない)。
   const app = new cdk.App({ context: { "aws:cdk:bundling-stacks": [] } });
@@ -114,7 +118,7 @@ describe("buildTenkaCloudApp", () => {
   });
 
   it("should create the budget without an email subscription when explicitly enabled (#2961)", () => {
-    const app = buildApp({ MONTHLY_COST_LIMIT_USD: "50" });
+    const app = buildApp({}, { monthlyCostLimitUsd: 50 });
     const stack = app.node.findChild("tenkacloud-observability") as cdk.Stack;
     const template = Template.fromStack(stack);
 
@@ -196,8 +200,13 @@ describe("buildTenkaCloudApp", () => {
     // Default (portal disabled): the ternary's [] arm — no participant-portal alarm.
     expect(alarmIds(buildApp())).not.toContain("LambdaInvocationsparticipantportal");
     // Portal enabled: the label-bearing arm produces the deterministic construct ID.
-    expect(alarmIds(buildApp({ CDK_PARAM_ENABLE_PARTICIPANT_PORTAL: "true" }))).toContain(
-      "LambdaInvocationsparticipantportal",
-    );
+    expect(
+      alarmIds(
+        buildApp(
+          { CDK_PARAM_ENABLE_PARTICIPANT_PORTAL: "true" },
+          { monthlyCostLimitUsd: 50 },
+        ),
+      ),
+    ).toContain("LambdaInvocationsparticipantportal");
   });
 });
