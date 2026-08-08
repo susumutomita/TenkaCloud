@@ -125,3 +125,26 @@ export async function fetchStateMachineExecutions(
   const path = `admin/insight/state-machine-executions${qs ? `?${qs}` : ""}`;
   return adminInsightGet<ListStateMachineExecutionsResponse>(config, idToken, path);
 }
+
+/**
+ * `GET /admin/insight/provisioning-executions` を叩いて SBT ProvisioningScriptJob の Step Functions
+ * execution 履歴を取得する。
+ *
+ * テナントのプロビジョニングが実際に走るのはこの state machine で、 Provisioning Jobs 画面が長らく
+ * 見ていた CodePipeline (`tenkacloud-saas-pipeline`) とは別経路。 そのため 3 テナントを同時に
+ * provisioning しても画面には 1 件も出ず、 代わりに無関係な pipeline の失敗だけが「プロビジョニング
+ * 失敗」として表示されていた (2026-08-08 に運用者が誤認)。
+ *
+ * 503 (= not_configured、 旧 stack 互換) は `null`。
+ */
+export async function fetchProvisioningExecutions(
+  config: AppConfig,
+  idToken: string,
+  options: { limit?: number } = {},
+): Promise<ListStateMachineExecutionsResponse | null> {
+  const params = new URLSearchParams();
+  if (options.limit !== undefined) params.set("limit", String(options.limit));
+  const qs = params.toString();
+  const path = `admin/insight/provisioning-executions${qs ? `?${qs}` : ""}`;
+  return adminInsightGet<ListStateMachineExecutionsResponse>(config, idToken, path);
+}

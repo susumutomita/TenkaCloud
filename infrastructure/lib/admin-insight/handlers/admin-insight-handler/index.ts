@@ -257,6 +257,40 @@ app.get("/admin/insight/pipeline-executions", async (c) => {
 
 // ====== Issue #814 Phase 2: Deprovisioning Jobs (Step Functions executions) ======
 
+/**
+ * テナントのプロビジョニングが実際に走るのは SBT ProvisioningScriptJob の state machine で、
+ * 「プロビジョニング Jobs」 画面が長らく見ていた CodePipeline とは別経路。 そのため 3 テナントを
+ * 同時に provisioning しても画面には 1 件も出ず、 代わりに無関係な pipeline の失敗だけが
+ * 「プロビジョニング失敗」として表示されていた (2026-08-08 に運用者が誤認)。
+ * deprovisioning と対称の route を生やして、 実体を見せる。
+ */
+app.get("/admin/insight/provisioning-executions", async (c) => {
+  const forbidden = auditAndAuthorize(c, "/admin/insight/provisioning-executions");
+  if (forbidden) return forbidden;
+
+  const parsedLimit = parseLimit(c.req.query("limit"));
+  if (!parsedLimit) {
+    return c.json({ error: "invalid_limit" }, StatusCodes.BAD_REQUEST);
+  }
+
+  try {
+    const region = process.env.AWS_REGION ?? "ap-northeast-1";
+    const arn = process.env.PROVISIONING_STATE_MACHINE_ARN || undefined;
+    const response = await listStateMachineExecutions(
+      { client: defaultSfnClient, region, stateMachineArn: arn },
+      { limit: parsedLimit.limit },
+    );
+    if (response.kind === "not_configured") {
+      return c.json({ error: "not_configured" }, StatusCodes.SERVICE_UNAVAILABLE);
+    }
+    return c.json(response, StatusCodes.OK);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[admin-insight] listProvisioningExecutions failed", { message });
+    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
+  }
+});
+
 app.get("/admin/insight/state-machine-executions", async (c) => {
   const forbidden = auditAndAuthorize(c, "/admin/insight/state-machine-executions");
   if (forbidden) return forbidden;

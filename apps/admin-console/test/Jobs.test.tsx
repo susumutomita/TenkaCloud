@@ -3,7 +3,14 @@ import { StatusCodes } from "http-status-codes";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AdminInsightApiError } from "../src/api/admin-drill-down";
 import type { AppConfig } from "../src/config";
-import { colorFor, DeprovisioningJobsTab, formatElapsed, JobsPage } from "../src/pages/Jobs";
+import {
+  colorFor,
+  DeprovisioningJobsTab,
+  formatElapsed,
+  JobsPage,
+  PipelineJobsTab,
+  ProvisioningJobsTab,
+} from "../src/pages/Jobs";
 
 /**
  * Issue #1418: 未テストだった admin Provisioning Jobs page を 100% に引き上げる。
@@ -11,10 +18,11 @@ import { colorFor, DeprovisioningJobsTab, formatElapsed, JobsPage } from "../src
  * DeprovisioningJobsTab は useAuth / admin-drill-down API / i18n を mock して render 分岐
  * (loading / not-configured / forbidden / error+dismiss / table) を網羅する。
  */
-const { mockAuth, mockFetchPipeline, mockFetchSfn } = vi.hoisted(() => ({
+const { mockAuth, mockFetchPipeline, mockFetchSfn, mockFetchProvisioning } = vi.hoisted(() => ({
   mockAuth: vi.fn(),
   mockFetchPipeline: vi.fn(),
   mockFetchSfn: vi.fn(),
+  mockFetchProvisioning: vi.fn(),
 }));
 
 vi.mock("../src/auth/AuthProvider", () => ({ useAuth: mockAuth }));
@@ -35,6 +43,7 @@ vi.mock("../src/api/admin-drill-down", () => {
     AdminInsightApiError,
     fetchPipelineExecutions: mockFetchPipeline,
     fetchStateMachineExecutions: mockFetchSfn,
+    fetchProvisioningExecutions: mockFetchProvisioning,
   };
 });
 vi.mock("../src/i18n", () => {
@@ -79,31 +88,31 @@ describe("Jobs helpers", () => {
   });
 });
 
-describe("JobsPage", () => {
+describe("PipelineJobsTab", () => {
   beforeEach(() => mockAuth.mockReturnValue(loggedIn));
 
   it("should show the loading spinner while no token / no data yet", () => {
     mockAuth.mockReturnValue({ tokens: undefined });
-    render(<JobsPage config={config} />);
+    render(<PipelineJobsTab config={config} />);
     expect(screen.getByText("jobs_page.loading")).toBeInTheDocument();
     expect(mockFetchPipeline).not.toHaveBeenCalled();
   });
 
   it("should render the not-configured alert when the API returns null", async () => {
     mockFetchPipeline.mockResolvedValue(null);
-    render(<JobsPage config={config} />);
+    render(<PipelineJobsTab config={config} />);
     expect(await screen.findByText("jobs_page.not_configured_header")).toBeInTheDocument();
   });
 
   it("should render the forbidden alert on a 403 AdminInsightApiError", async () => {
     mockFetchPipeline.mockRejectedValue(new AdminInsightApiError(StatusCodes.FORBIDDEN, "denied"));
-    render(<JobsPage config={config} />);
+    render(<PipelineJobsTab config={config} />);
     expect(await screen.findByText("jobs_page.forbidden_header")).toBeInTheDocument();
   });
 
   it("should show a dismissible error alert on a non-403 failure", async () => {
     mockFetchPipeline.mockRejectedValue(new Error("network down"));
-    render(<JobsPage config={config} />);
+    render(<PipelineJobsTab config={config} />);
     expect(await screen.findByText("jobs_page.error_header")).toBeInTheDocument();
     expect(screen.getByText("network down")).toBeInTheDocument();
     // error 状態では table data が無く、 alert の dismiss button が唯一の button。
@@ -131,7 +140,7 @@ describe("JobsPage", () => {
         },
       ],
     });
-    render(<JobsPage config={config} />);
+    render(<PipelineJobsTab config={config} />);
     expect(await screen.findByText(/exec-1234567/)).toBeInTheDocument();
     expect(screen.getByText("Succeeded")).toBeInTheDocument();
     expect(screen.getByText("Running")).toBeInTheDocument();
@@ -140,9 +149,96 @@ describe("JobsPage", () => {
   it("should re-fetch on the 60s polling interval", async () => {
     vi.useFakeTimers();
     mockFetchPipeline.mockResolvedValue({ pipelineName: "p", items: [] });
-    render(<JobsPage config={config} />);
+    render(<PipelineJobsTab config={config} />);
     await vi.advanceTimersByTimeAsync(60_000);
     expect(mockFetchPipeline).toHaveBeenCalledTimes(2); // initial + 1 interval tick
+  });
+});
+
+/**
+ * Regression: the Provisioning tab used to render CodePipeline executions, so three tenants
+ * provisioning concurrently produced an empty table while an unrelated pipeline failure showed
+ * up as "provisioning failed". The tab must read the SBT provisioning state machine, and the
+ * page must not collapse to a single pipeline-shaped view.
+ */
+describe("ProvisioningJobsTab", () => {
+  beforeEach(() => mockAuth.mockReturnValue(loggedIn));
+
+  it("should read the provisioning state machine, not the deploy pipeline", async () => {
+    mockFetchProvisioning.mockResolvedValue({
+      stateMachineArn: "arn:aws:states:ap-northeast-1:1:stateMachine:provisioningJobRunner",
+      items: [
+        {
+          executionArn: "arn:aws:states:ap-northeast-1:1:execution:sm:abc",
+          name: "tenant-basic",
+          status: "SUCCEEDED",
+          startTimeIso: "2026-08-08T05:03:01Z",
+          stopTimeIso: "2026-08-08T05:06:01Z",
+          consoleUrl: "https://console/exec",
+        },
+      ],
+    });
+
+    render(<ProvisioningJobsTab config={config} />);
+
+    expect(await screen.findByText("tenant-basic")).toBeInTheDocument();
+    expect(screen.getByText("SUCCEEDED")).toBeInTheDocument();
+    expect(mockFetchProvisioning).toHaveBeenCalled();
+    expect(mockFetchPipeline).not.toHaveBeenCalled();
+  });
+
+  it("should surface a 403 as forbidden rather than an empty table", async () => {
+    mockFetchProvisioning.mockRejectedValue(
+      new AdminInsightApiError(StatusCodes.FORBIDDEN, "denied"),
+    );
+    render(<ProvisioningJobsTab config={config} />);
+    expect(await screen.findByText("jobs_page.forbidden_header")).toBeInTheDocument();
+  });
+
+  it("should surface a non-403 failure instead of showing nothing", async () => {
+    mockFetchProvisioning.mockRejectedValue(new Error("network down"));
+    render(<ProvisioningJobsTab config={config} />);
+    expect(await screen.findByText("jobs_page.fetch_failed_header")).toBeInTheDocument();
+    expect(screen.getByText("network down")).toBeInTheDocument();
+  });
+
+  it("should fall back to the console link when the state machine is not configured", async () => {
+    mockFetchProvisioning.mockResolvedValue(null);
+    render(<ProvisioningJobsTab config={config} />);
+    expect(await screen.findByText("jobs_page.not_configured_header")).toBeInTheDocument();
+  });
+
+  it("should not fetch before a token is available", () => {
+    mockAuth.mockReturnValue({ tokens: undefined });
+    render(<ProvisioningJobsTab config={config} />);
+    expect(mockFetchProvisioning).not.toHaveBeenCalled();
+  });
+});
+
+describe("JobsPage", () => {
+  beforeEach(() => mockAuth.mockReturnValue(loggedIn));
+
+  // The pipeline being unavailable must not blank the whole page — that would hide the
+  // provisioning tab, which is the one that shows real tenant activity.
+  it("should keep showing the provisioning tab when the pipeline is not configured", async () => {
+    mockFetchPipeline.mockResolvedValue(null);
+    mockFetchProvisioning.mockResolvedValue({
+      stateMachineArn: "arn:sm",
+      items: [
+        {
+          executionArn: "arn:exec",
+          name: "tenant-platinum",
+          status: "RUNNING",
+          startTimeIso: "2026-08-08T05:03:44Z",
+          stopTimeIso: undefined,
+          consoleUrl: "https://console/exec",
+        },
+      ],
+    });
+
+    render(<JobsPage config={config} />);
+
+    expect(await screen.findByText("tenant-platinum")).toBeInTheDocument();
   });
 });
 
