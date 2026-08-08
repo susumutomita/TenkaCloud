@@ -5,12 +5,14 @@ import { Construct } from "constructs";
 /**
  * Issue #1312: SAML IdP CRUD 用の DDB Table。
  *
- * Application Plane (per-tenant) IdP store。 1 行 = 1 (scope, idpId)。
+ * IdP store。 1 行 = 1 (scope, idpId)。 両 plane が **別 stack に別 table** を立てて使う
+ * (= storage は共有しない。 scope 値だけが plane を区別する)。
  *
  *   PK: `pk` (string) — scope 識別子
  *     - Application Plane (tenant scope): `tenantId` (例: `local` / ULID)
- *     - Control Plane (system scope): `SYSTEM` (本 Construct では未使用、 Application Plane 専用)
- *   SK: `sk` (string) — `idpId` (テナント内一意)
+ *     - Control Plane (system scope): `SYSTEM` (#2941 で `ControlPlaneStack` が本 Construct を
+ *       instantiate し、 `/admin/idp` CRUD Lambda の store にする)
+ *   SK: `sk` (string) — `idpId` (scope 内一意)
  *
  * 属性名は `infrastructure/lib/control-plane/handlers/idp-handler/ddb-store.ts` の lower-case
  * `pk` / `sk` field 配置と整合させる (= handler 側 PutCommand / GetCommand の Key 名と一致)。

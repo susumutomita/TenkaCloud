@@ -1,4 +1,4 @@
-import { CognitoAuth, ControlPlane } from "@cdklabs/sbt-aws";
+import { CognitoAuth, ControlPlane, type ControlPlaneAPI } from "@cdklabs/sbt-aws";
 import * as cdk from "aws-cdk-lib";
 import type {
   CfnUserPool,
@@ -11,6 +11,7 @@ import type {
 import { EventBus, Rule } from "aws-cdk-lib/aws-events";
 import { LogGroup, RetentionDays } from "aws-cdk-lib/aws-logs";
 import type { Construct } from "constructs";
+import { ControlPlaneIdpApi } from "./control-plane/control-plane-idp-api.js";
 import { buildInviteEmailBody, INVITE_EMAIL_SUBJECT } from "./control-plane/invite-message.js";
 import { applyControlPlaneManagedLogin } from "./control-plane/managed-login.js";
 import {
@@ -24,6 +25,7 @@ import {
   type IdpDirectory,
   type SamlIdpConfig,
 } from "./control-plane/saml-identity-providers.js";
+import { SamlIdpsTable } from "./problem-deploy/saml-idps-table.js";
 import type { CustomDomainConfig } from "./security/cloudfront-custom-domain.js";
 import { attachCognitoCustomLoginDomain } from "./security/cognito-custom-domain.js";
 
@@ -51,6 +53,17 @@ interface ControlPlaneStackProps extends cdk.StackProps {
    * のみ意味を持つ。 空配列 = federated sign-in 全拒否 (fail-safe)。
    */
   samlAdminAllowlist?: readonly string[];
+  /**
+   * ADR-049 §5.1 / Issue #2290: control-plane data backend (`dynamodb` | `turso`)。
+   * `/admin/idp` CRUD Lambda が repository seam をどちらに解決するかを決める。 未指定 (=
+   * `dynamodb`) なら Lambda env を足さず、 system scope の `SamlIdpsTable` を synth する。
+   * `turso` では table を **synth せず** SQL executor に直結する (= Lite と同条件)。
+   */
+  controlDataBackend?: string;
+  /** Public remote libSQL URL (turso backend のみ)。 */
+  tursoDatabaseUrl?: string;
+  /** libSQL auth token を持つ SSM SecureString parameter 名 (turso backend のみ)。 */
+  tursoAuthTokenParameterName?: string;
 }
 
 /**
@@ -236,6 +249,36 @@ export class ControlPlaneStack extends cdk.Stack {
       // SAML 有効時のみ Pre sign-up allowlist を attach。 空配列でも attach する (fail-safe)。
       attachFederatedAdminAllowlist(this, userPool, props.samlAdminAllowlist ?? []);
     }
+
+    // Issue #1293 の CDK 配線 (#2941): System Admin 向け SAML IdP CRUD API (`/admin/idp*`)。
+    //
+    // 上の `attachSamlIdentityProviders` は **synth 時 config** (`CDK_PARAM_SAML_IDPS`) から
+    // provider を静的に作る経路で、 runtime に IdP を足す口が無かった。 handler / test は #1293 で
+    // 揃っていたが construct から一度も instantiate されておらず、 admin-console の「ID プロバイダ」
+    // 画面は `GET /admin/idp` → 未マッチ 404 (CORS header 無し) → `Failed to fetch` になっていた。
+    // したがって `samlIdps` の設定有無では gate しない — runtime CRUD は静的 config が空の状態から
+    // IdP を登録するための API なので、 静的 config を前提にすると存在意義が消える。
+    //
+    // route は SBT の ControlPlane API に相乗りさせる。 SBT は `controlPlaneApi` (= ControlPlaneAPI)
+    // を public field として expose しないため findChild で取り出す (= 上の tenantDetailsTable と
+    // 同じ escape hatch)。 `as ControlPlaneAPI` にしているのは、 SBT 側が construct 名を変えたとき
+    // synth 時ではなく tsc で落とすため。
+    const controlPlaneApi = controlPlane.node.findChild("controlPlaneApi") as ControlPlaneAPI;
+    // [Issue #2442 / Phase C5 と同条件] 純 SQL backend では table を synth しない (= standing cost 0)。
+    // API 自体は backend に関わらず常に提供する。
+    const pureSql = props.controlDataBackend === "turso";
+    const samlIdpsTable = pureSql ? undefined : new SamlIdpsTable(this, "SamlIdps");
+    new ControlPlaneIdpApi(this, "ControlPlaneIdpApi", {
+      httpApi: controlPlaneApi.api,
+      // SBT の HttpApi は defaultAuthorizer を持たない (corsPreflight のみ) ため明示的に渡す。
+      // 渡し忘れると `/admin/idp` が無認証で公開される。
+      authorizer: controlPlaneApi.jwtAuthorizer,
+      userPool: cognitoAuth.userPool,
+      samlIdpsTable: samlIdpsTable?.table,
+      controlDataBackend: props.controlDataBackend,
+      tursoDatabaseUrl: props.tursoDatabaseUrl,
+      tursoAuthTokenParameterName: props.tursoAuthTokenParameterName,
+    });
 
     this.eventBusArn = controlPlane.eventManager.busArn;
     this.regApiGatewayUrl = controlPlane.controlPlaneAPIGatewayUrl;
