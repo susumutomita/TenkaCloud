@@ -14,7 +14,8 @@
     "jobs": "プロビジョニング Jobs",
     "audit_log": "監査ログ",
     "identity_providers": "ID プロバイダ",
-    "operations": "運用ダッシュボード"
+    "operations": "運用ダッシュボード",
+    "refresh_latest": "最新の状態に更新"
   },
   "usage": {
     "title": "利用量",

@@ -14,7 +14,8 @@
     "jobs": "Provisioning Jobs",
     "audit_log": "Audit log",
     "identity_providers": "Identity providers",
-    "operations": "Operations"
+    "operations": "Operations",
+    "refresh_latest": "Refresh latest state"
   },
   "usage": {
     "title": "Usage",
