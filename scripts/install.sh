@@ -44,11 +44,24 @@ bun run cdk -- bootstrap
 # Single-phase deploy (Issue #1031): admin-console-hosting → control-plane / 他 backend →
 # admin-console-runtime-config の依存グラフを CDK が解決して 1 発で全 stack を立てる。
 #
-# pooled stack (`tenkacloud-tenant-template-pooled`) は SBT pipeline (CodeBuild) で
-# create / update する設計のため install.sh からは deploy しない (Issue #1029 / PR-1028)。
-# runtime-config の pooledApplicationAdminConsoleUrl は初回 install では空文字 fallback、
-# 第 1 tenant 作成後の再 install で SBT が立てた pooled stack の URL が cross-stack ref で
-# 焼かれる。
+# pooled stack (`tenkacloud-tenant-template-pooled`) も本 deploy に含まれる。 wire.ts が CDK
+# app 上に instantiate している (= `cdk list` に出る) ので `--all` の選択対象になる。
+# `--exclusively` は「選択した stack の依存を勝手に足さない」 flag なので、 全 stack を選ぶ
+# `--all` との併用では no-op。
+#
+# これは意図した挙動:
+#   - `AdminConsoleRuntimeConfigStack` が pooled stack の `applicationAdminConsoleUrl` を
+#     cross-stack ref で読む (wire.ts) ため、 pooled stack 抜きでは runtime-config を立てられない
+#   - pooled tier の `provision-tenant.sh` は stack を deploy せず describe-stacks で CFn output
+#     を読むだけなので、 第 1 tenant 作成の時点で stack が存在している必要がある
+# したがって runtime-config の `pooledApplicationAdminConsoleUrl` は tenant 0 件の初回 install
+# でも populated になる (2026-08-08 ap-northeast-1 の clean deploy で実測)。
+#
+# 履歴: Issue #1029 / PR-1028 当時の install.sh は stack 名を列挙して deploy しており、 SBT
+# pipeline (CodeBuild) と同じ pooled stack を同時に触る race を避けるため列挙から外していた
+# (PR #1030)。 Issue #1031 (PR #1064) で全 stack 1 発 deploy に統合した時点で pooled は選択
+# 対象に戻っている。 SBT pipeline 側の race guard は update-tenant.sh の `wait_for_stack_idle`
+# (PR-1028) が担当する。
 # ============================================================================
 echo ""
 echo "=============================================="

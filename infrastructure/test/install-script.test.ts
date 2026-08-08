@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
  *   - 単一 deploy 文 1 つで全 stack を立てる
  *   - 旧 env-var injection (CDK_PARAM_ADMIN_CONSOLE_ORIGIN) を行わない
  *   - DRY (= prepare-source-bundle.sh への委譲) を保つ
- *   - pooled stack を直 deploy しない (= SBT pipeline 一本化、 Issue #1029)
+ *   - stack 名を名指しした deploy 行を復活させない (= 単一 deploy 文を保つ)
  * を pin する。
  */
 
@@ -65,12 +65,13 @@ describe("scripts/install.sh (Issue #1031: single-phase deploy)", () => {
     expect(source).not.toContain(`cp -R problems "\${STAGING}/problems"`);
   });
 
-  // Issue #1029 / PR-1028: pooled stack の lifecycle は SBT pipeline 一本化。
-  it("install.sh should not cdk deploy tenkacloud-tenant-template-pooled (SBT pipeline consolidation)", () => {
-    // `bun run cdk -- deploy --all` は `--exclusively` で all を意味するため、 pooled stack を **直接
-    // 名指しで deploy しない** ことのみ pin する。 `--all` は app 上 instantiate された stack を
-    // 全て deploy するため、 wire.ts で pooled stack を生成する限り CDK が立てに行く。 pooled
-    // stack の SBT pipeline 一本化は wire.ts 側 + `--exclusively` flag で扱う方針。
+  // Issue #1031: 単一 deploy 文を保つ (= 旧 Phase 構造の stack 名列挙に戻さない)。
+  it("install.sh should not name tenkacloud-tenant-template-pooled in a cdk deploy argument list", () => {
+    // 注意: 本 assertion は「pooled stack が deploy されない」ことの pin **ではない**。
+    // wire.ts が pooled stack を CDK app 上に instantiate している (= `cdk list` に出る) ため、
+    // 全 stack を選ぶ deploy 文はこれを含む。 `--exclusively` は選択 stack の依存を足さない
+    // flag で、 全選択との併用では no-op。 ここで pin しているのは、 Issue #1029 / PR-1028 当時
+    // のような **stack 名を名指しした deploy 行** を install.sh に復活させないこと。
     expect(source).not.toMatch(
       /bun run cdk -- deploy[^\n-][^\n]*tenkacloud-tenant-template-pooled/,
     );
