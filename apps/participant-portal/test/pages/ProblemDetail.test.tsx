@@ -229,6 +229,19 @@ describe("ProblemDetailPage", () => {
       expect(screen.queryByText("problem_detail.aws_only_header")).not.toBeInTheDocument();
     });
 
+    it("should fall back to the raw jobId when it carries no local- prefix", () => {
+      // local play の jobId は `local-<problemId>` (api-state.ts の jobIdOf) だが、その規約が
+      // 変わっても catalog を引く経路が壊れないことを固定する。prefix を無条件に切り落とすと、
+      // 規約変更の日に問題 ID の先頭 6 文字が消えて誰も気付かない。
+      mockParams.mockReturnValue({ jobId: "wp2shell-friday-night-patch" });
+      mockTeamView.mockReturnValue(teamView({ view: viewWith({ problems: [] }) }));
+      mockFindMeta.mockImplementation((id: string) =>
+        id === "wp2shell-friday-night-patch" ? { ...meta(), localPlayable: false } : undefined,
+      );
+      render(<ProblemDetailPage config={localConfig} />);
+      expect(screen.getByText("problem_detail.aws_only_header")).toBeInTheDocument();
+    });
+
     it("should not claim AWS-only outside local mode", () => {
       // SaaS/AWS mode では deploy されていないだけかもしれない。local play 固有の案内を出さない。
       mockParams.mockReturnValue({ jobId: "local-wp2shell-friday-night-patch" });
