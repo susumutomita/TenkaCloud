@@ -15,7 +15,7 @@ HELP_RENDERER := scripts/ops/make-help.awk
 .PHONY: help help-en help-ja install install_ci submodule-latest build typecheck test test-coverage test-scripts audit-deps before-commit ci-local \
         lint lint-md lint-text lint-format lint-ts \
         fix fix-md fix-text fix-format format \
-        harness harness-test tech-debt dead-code \
+        harness harness-test tech-debt dead-code ever-better-diagnose \
         pack-init pack-validate pack-install pack-activate pack-deactivate pack-list \
         form-setup \
         env-check env-check-lite env-init turso-live turso-live-guide turso-live-preflight turso-live-verify-cfn turso-reset \
@@ -179,6 +179,45 @@ harness-test: ## Run the harness unit tests | harness自身のunit testを実行
 	cd .claude/harness && bun vitest run
 tech-debt: ## Generate the technical-debt backlog | tech debt backlogを生成
 	$(HARNESS)/tech-debt.ts
+
+# ever-better (https://github.com/isamu/ever-better) の read-only 診断のみを配線する。
+# 何をするツールか: リポジトリの品質ツール構成を検出し、(a) 不足している層、(b) 600行超の file 数、
+# (c) `eslint --print-config` で「実際に適用される設定」を引いて off / warn-only になっている
+# high-value rule を報告する。(c) は config の source を読むのではなく実効値を引くため、
+# preset 同士の上書きで黙って off になった rule を検出できる (= このレポの「synth 出力を機械
+# チェック」と同じ発想)。
+#
+# 意図的に GATE_CHECKS と .github/workflows/ci.yml のどちらにも載せない:
+#   - 2026-08-08 公開の新規 package で download 実績ゼロ・3時間半で 0.1.0→0.4.0 の4版・
+#     単独 maintainer。公開後72時間は無条件に unpublish 可能で、その窓を抜けた後も「public な
+#     dependent が無く download が少なく単独 owner」の条件を満たす限り unpublish 対象のまま
+#     (このレポは private なので dependent には数えられない)。gate のロジックが消え得るものに
+#     依存する状態を作らない。runtime dependency は 0 件・MIT・install 時の lifecycle script
+#     なし (`prepack` のみ = publish 時) で supply-chain 面の素性は良いが、それは「消えない」
+#     保証ではない。devDependency である以上 `bun install` は解決を要するので、その分の露出は
+#     残る (= 放置されたらこの target と依存ごと削除する、が撤退手順)。
+#   - report-only なので exit code に意味を持たせていない。ゲート化するなら freeze / check が
+#     必要で、それは ESLint の実行範囲を scripts/ からリポジトリ全体へ広げる別作業
+#     (実測: `eslint .` = 1,612 errors / 551 files) の判断とセットになる。
+#
+# `ever-better bootstrap` は実行しないこと: Prettier を入れる (このレポの formatter は Biome)、
+# ESLint 10 を要求する (このレポは ^9 + typescript-eslint ^8)、生成する workflow が
+# `npx --yes` を使う (このレポの npx 禁止に反する)、dependabot.yml / .gitattributes /
+# 3プラットフォーム workflow を勝手に書く。
+#
+# このレポでの既知の false positive (追いかけないための記録。いずれも detector が root 直下の
+# 慣習を前提にしているため):
+#   - "No TypeScript"  … 同じ出力の中で 99% TypeScript と報告しており自己矛盾。root に
+#                         tsconfig.json が無く tsconfig.scripts.json / 各 workspace 側にある。
+#   - "No formatter"   … Prettier の有無だけを見ており Biome を知らない。
+#   - "No test runner" … vitest が root devDependency でなく workspace 側にある。
+#   - "CI does not run lint" … CI の step が全て `run: make <target>` なので直接の tool 呼び出しを
+#                         見つけられず `[no known steps]` になる。実際は lint-text / lint-format /
+#                         lint-ts を実行している。
+#
+# `--json` や他の subcommand を試す場合は ./node_modules/.bin/ever-better を直接呼ぶ。
+ever-better-diagnose: ## Report quality-tooling gaps and non-enforcing ESLint rules (read-only) | 品質ツールの不足と無効化されたESLint ruleを報告(読み取り専用)
+	./node_modules/.bin/ever-better diagnose
 
 # ===== Problem catalog validation | 問題カタログ検証 =====
 # Run the catalog authoring-contract validator (schema + the bilingual-README invariant from
