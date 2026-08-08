@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ADR-0005 — Scope-bound machine tokens for the Tenant API</title>
+    <style>
+      :root {
+        --ink: #17212b;
+        --muted: #5d6975;
+        --line: #d5dde5;
+        --soft: #f4f7fa;
+        --blue: #0969da;
+        --ok: #1a7f37;
+        --warn: #9a6700;
+        --bad: #cf222e;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0 auto;
+        max-width: 1040px;
+        padding: 2.2rem 1.4rem 5rem;
+        font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: var(--ink);
+      }
+      h1 { font-size: 1.8rem; line-height: 1.25; margin: 0 0 .4rem; }
+      h2 { font-size: 1.3rem; margin: 2.2rem 0 .6rem; border-bottom: 2px solid var(--line); padding-bottom: .3rem; }
+      h3 { font-size: 1.05rem; margin: 1.5rem 0 .4rem; color: var(--blue); }
+      code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; background: var(--soft); padding: .08em .35em; border-radius: 4px; }
+      pre { background: var(--soft); border: 1px solid var(--line); border-radius: 8px; padding: .8rem 1rem; overflow-x: auto; font-size: .86rem; }
+      table { border-collapse: collapse; width: 100%; margin: .8rem 0; font-size: .92rem; }
+      th, td { border: 1px solid var(--line); padding: .55rem .65rem; text-align: left; vertical-align: top; }
+      th { background: var(--soft); }
+      caption { caption-side: bottom; color: var(--muted); font-size: .82rem; padding-top: .4rem; text-align: left; }
+      .meta { display: flex; flex-wrap: wrap; gap: .5rem 1.4rem; color: var(--muted); margin: .6rem 0 1.4rem; font-size: .9rem; }
+      .badge { display: inline-block; border-radius: 999px; padding: .12em .6em; background: #dafbe1; color: var(--ok); font-size: .78rem; font-weight: 700; }
+      .lede { background: var(--soft); border-left: 4px solid var(--blue); border-radius: 0 8px 8px 0; padding: .9rem 1.1rem; }
+      .ok { color: var(--ok); font-weight: 700; }
+      .warn { color: var(--warn); font-weight: 700; }
+      .bad { color: var(--bad); font-weight: 700; }
+      footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .84rem; }
+    </style>
+  </head>
+  <body>
+    <h1>ADR-0005 — Scope-bound machine tokens for the Tenant API</h1>
+    <div class="meta">
+      <span><strong>Status:</strong> <span class="badge">Accepted</span></span>
+      <span><strong>Date:</strong> 2026-08-08</span>
+      <span><strong>Issue:</strong> 2939 (epic), 2948 (Phase 1)</span>
+      <span><strong>Relates:</strong> ADR-0004, ADR-018, ADR-020</span>
+    </div>
+
+    <p class="lede">
+      The Tenant API — 46 routes that run a competition — could only be called by a human
+      signing into Cognito through a browser. This ADR adds a machine-to-machine path that a
+      CLI, a CI job, or an agent operator can use, without widening what a machine can reach.
+      The decisive choice is that a machine principal is given a brand-new role value,
+      <code>TenantMachine</code>, that appears in no existing <code>requireRole</code>
+      allowlist. Destructive routes are therefore unreachable for a machine token even if the
+      guard middleware is deleted outright.
+    </p>
+
+    <h2>1. Context</h2>
+    <p>
+      The tenant Cognito UserPool had exactly one app client, and its
+      <code>AllowedOAuthFlows</code> was <code>code</code> only. There was no
+      <code>client_credentials</code> flow, so every operating action required a browser login.
+      The Control Plane (SBT) side already had a MachineClient; only the tenant side had the
+      gap. There was also no OpenAPI artifact in the repository, so the 46-route surface was
+      only discoverable by querying API Gateway directly.
+    </p>
+    <p>
+      Three candidate designs were explored and adversarially reviewed. The same critical
+      finding landed on all three: a machine access token can pass the existing human
+      <code>TenantAPI</code> authorizer, which binds only the user pool and pins neither the
+      client id nor a scope. All three designs then relied on a handler middleware as the only
+      barrier, and that middleware fired on the <em>presence</em> of a machine marker — so a
+      missing marker failed open.
+    </p>
+
+    <h2>2. Decision</h2>
+    <p>
+      Bind the tenant through the scope string itself, and give the machine principal a role
+      that no route accepts.
+    </p>
+    <ol>
+      <li>
+        <strong>New role value.</strong> <code>TENANT_MACHINE_ROLE = "TenantMachine"</code>.
+        <code>TENANT_ROLES</code> stays the three human values so that human-only consumers
+        (the console's <code>resolveTenantConsoleAccess</code>, for example) are not widened.
+        A separate <code>TENANT_BLANKET_ROLES</code> exists for blanket middleware only.
+      </li>
+      <li>
+        <strong>Tenant binding is a scope string.</strong> <code>tc-tenant-&lt;tenantId&gt;/bind</code>.
+        No lookup table, no side table, no IAM or KMS grant, no per-request I/O.
+      </li>
+      <li>
+        <strong>Capabilities are scope strings.</strong> <code>tenkacloud/ops.read</code> and
+        <code>tenkacloud/ops.deploy</code> in Phase 1. <code>ops.write</code>,
+        <code>disruptions.fire</code>, and <code>audit.read</code> are reserved but not declared.
+      </li>
+      <li>
+        <strong>A separate REST API.</strong> <code>TenantMachineAPI-&lt;tenantId&gt;</code> carries
+        the 7 allowlisted methods with a per-method <code>authorizationScopes</code>. Paths are
+        byte-identical to the human API. The human API is not modified, because attaching
+        <code>authorizationScopes</code> to its methods would break the console, which sends an
+        ID token.
+      </li>
+      <li>
+        <strong>The handler guard is fail-closed and is the second barrier.</strong> It fires
+        when a request is <em>not confirmably human</em>, not when a machine marker is present.
+      </li>
+      <li>
+        <strong>No pre-token-generation trigger.</strong> ADR-018 and the existing regression
+        guard in <code>build-app-plane-core.test.ts</code> stay green.
+      </li>
+    </ol>
+
+    <h3>2.1 Why the new role is the load-bearing part</h3>
+    <p>
+      <code>requireRole</code> is a strict <code>allowedRoles.includes(role)</code> test. Every
+      destructive route asks for <code>TenantAdmin</code> or <code>TenantAdmin +
+      TenantOperator</code>. <code>TenantMachine</code> is in neither list, so
+      <code>POST /events/{id}/disruptions/fire</code>,
+      <code>POST /events/{id}/teams/{teamId}/rotate-login-key</code>,
+      <code>DELETE /deployments/{jobId}</code>, <code>PATCH /events/{id}/schedule</code>,
+      <code>POST /events/{id}/end</code>, <code>DELETE /events/{eventId}</code>, every
+      <code>/admin/*</code> route, and
+      <code>GET /events/{eventId}?withTeamLoginKeys=true</code> all reject a machine token
+      unconditionally. The test suite asserts this holds with the guard middleware removed.
+    </p>
+
+    <h2>3. Phase 1 surface (frozen)</h2>
+    <table>
+      <thead>
+        <tr><th>Method and path</th><th>Required capability</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>GET /deployments</code></td><td><code>tenkacloud/ops.read</code></td></tr>
+        <tr><td><code>GET /deployments/{jobId}</code></td><td><code>tenkacloud/ops.read</code></td></tr>
+        <tr><td><code>GET /deployments/{jobId}/stack-progress</code></td><td><code>tenkacloud/ops.read</code></td></tr>
+        <tr><td><code>GET /problems/{problemId}/deployments</code></td><td><code>tenkacloud/ops.read</code></td></tr>
+        <tr><td><code>GET /events</code></td><td><code>tenkacloud/ops.read</code></td></tr>
+        <tr><td><code>GET /events/{eventId}</code></td><td><code>tenkacloud/ops.read</code></td></tr>
+        <tr><td><code>POST /problems/{problemId}/deploy</code></td><td><code>tenkacloud/ops.deploy</code></td></tr>
+      </tbody>
+      <caption>
+        The single source of truth is <code>MACHINE_ROUTE_SCOPES</code> in
+        <code>handlers/shared/machine-scopes.ts</code>. The CDK method generation and the handler
+        guard read the same array, so the two cannot drift.
+      </caption>
+    </table>
+
+    <h2>4. Default OFF is cryptographic, not conventional</h2>
+    <p>
+      The path is gated by <code>features.machineTokenPath</code>, default off. When it is off
+      the capability resource server does not exist, so Cognito cannot issue a
+      <code>tenkacloud/*</code> scope at all, so the handler's machine branch is unreachable.
+      This is a different kind of safety from "the configuration namespace is empty".
+    </p>
+
+    <h2>5. What is deliberately outside CloudFormation</h2>
+    <p>
+      The per-tenant bind resource server (<code>tc-tenant-&lt;tenantId&gt;</code>) and the
+      machine app clients (<code>tc-m2m-*</code>) are created at runtime by
+      <code>scripts/issue-machine-client.sh</code>, not by CDK. If CloudFormation owned the bind
+      resource server, the next <code>cdk deploy</code> would reconcile its scope list to empty
+      and invalidate every issued token. The same property gives a deploy-free kill switch:
+      deleting the bind resource server stops Cognito issuing the binding scope. The cost is
+      that these resources do not appear in <code>cdk diff</code> and are not reclaimed by
+      <code>cdk destroy</code>; reclamation lives in <code>scripts/deprovision-tenant.sh</code>.
+    </p>
+
+    <h2>6. Consequences</h2>
+    <table>
+      <thead><tr><th>Consequence</th><th>Assessment</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Destructive routes are unreachable for machines by role, not only by allowlist.</td>
+          <td class="ok">The guard becomes defence in depth rather than the only barrier.</td>
+        </tr>
+        <tr>
+          <td>The human console path is byte-identical; no authorizer or user pool client changes.</td>
+          <td class="ok">No risk of logging out tenant admins.</td>
+        </tr>
+        <tr>
+          <td>Machine reads are not in the admin audit log; only mutations and denials are.</td>
+          <td class="warn">
+            The repository has no precedent for read auditing. Machine reads are observable
+            through the machine API access log. The "complete audit" that issue 2911 asks for is
+            therefore <em>partially</em> achieved in Phase 1, and is written up that way.
+          </td>
+        </tr>
+        <tr>
+          <td>Tenant suspension does not gate machine principals.</td>
+          <td class="warn">
+            Suspension is inert platform-wide today, so claiming machines are gated by it would
+            be false. Stated rather than implied.
+          </td>
+        </tr>
+        <tr>
+          <td>Two REST APIs per tenant instead of one.</td>
+          <td class="warn">
+            Accepted. Merging them would require putting scopes on human methods, which breaks
+            the ID-token console.
+          </td>
+        </tr>
+        <tr>
+          <td>Projecting <code>TenantOperator</code> onto machine principals.</td>
+          <td class="bad">
+            Rejected. It makes the middleware the only barrier, which is exactly the failure all
+            three candidate designs shared.
+          </td>
+        </tr>
+        <tr>
+          <td>Binding the tenant through an SSM namespace.</td>
+          <td class="bad">Rejected. It adds per-request I/O and a second source of truth.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>7. Relationship to ADR-0004</h2>
+    <p>
+      This is a new ADR rather than a phase of ADR-0004. ADR-0004 is the contract for public API
+      documentation and a safe interactive sandbox. This decision concerns operator
+      machine-to-machine access to real tenant data, and the threat model differs: there is no
+      sandbox, the credentials are real, and the blast radius is a live competition.
+    </p>
+
+    <footer>
+      Phase 1 issue: 2948. Follow-up issues: 2949 (OpenAPI generation), 2950 (published
+      reference), 2951 (<code>tcloud</code> CLI), 2952 (credential lifecycle), 2953 (human
+      authorizer hardening), 2954 (machine observability), 2955 (Phase 2 write surface).
+    </footer>
+  </body>
+</html>

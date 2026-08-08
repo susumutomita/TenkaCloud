@@ -6,6 +6,8 @@ import {
   requireRole,
   TenantSuspendedError,
 } from "../deploy-handler/auth.js";
+import { extractAuditContext, writeAuditEvent } from "./audit-log.js";
+import { MachineRouteDeniedError, machineActor } from "./machine-principal.js";
 
 /**
  * Shared auth-error onError handler + role-check middleware for the tenant-facing
@@ -36,8 +38,55 @@ export type AuthErrorHandler = (err: Error, c: Context) => Response | Promise<Re
  * (e.g. `"[deploy]"` / `"[events]"`); it is the only difference between the two
  * call sites.
  */
+/**
+ * #2948 / ADR-0005: machine principal の拒否を 403 `forbidden_machine_route` にして監査に残す。
+ *
+ * human 経路の挙動は一切変わらない (= `MachineRouteDeniedError` は machine token でしか
+ * 発生しない)。拒否は #2911 が要求する監査の一部なので、principal が判っているときだけ
+ * audit 行を書く。principal を解決できなかった拒否 (`not_a_machine_principal`) は tenant も
+ * actor も特定できないため CloudWatch Logs の 1 行に留める (= 偽の tenant 行を作らない)。
+ *
+ * 独自 `onError` を持つ competitor-accounts-handler からも同じ実装を呼ぶ。
+ */
+export async function respondMachineRouteDenied(
+  err: MachineRouteDeniedError,
+  c: Context,
+  logPrefix: string,
+): Promise<Response> {
+  console.warn(`${logPrefix} machine route denied`, {
+    path: err.path,
+    method: err.method,
+    reason: err.reason,
+    clientId: err.principal?.clientId,
+  });
+  if (err.principal) {
+    const auditContext = extractAuditContext(c);
+    await writeAuditEvent({
+      tenantId: err.principal.tenantId,
+      actor: machineActor(err.principal),
+      action: `${err.method} ${err.path}`,
+      outcome: "forbidden",
+      target: err.reason,
+      ipAddress: auditContext.ipAddress,
+      userAgent: auditContext.userAgent,
+      occurredAtMs: Date.now(),
+    });
+  }
+  return c.json(
+    {
+      error: "forbidden_machine_route",
+      message:
+        "この machine credential では、この操作を実行できません (route allowlist または capability の不足)",
+    },
+    StatusCodes.FORBIDDEN,
+  );
+}
+
 export function buildAuthErrorHandler({ logPrefix }: { logPrefix: string }): AuthErrorHandler {
-  return (err, c) => {
+  return async (err, c) => {
+    if (err instanceof MachineRouteDeniedError) {
+      return respondMachineRouteDenied(err, c, logPrefix);
+    }
     // Issue #686: a JWT without custom:tenantId is a 401 fail-closed (= avoid silent
     // "unknown-tenant" writes). The frontend renders "please re-login" via
     // FriendlyErrorAlert.

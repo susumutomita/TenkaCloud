@@ -3,8 +3,9 @@ import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
 import { cors } from "hono/cors";
 import { createDefaultControlDataRuntime } from "../../control-data/runtime-repositories.js";
-import { TENANT_ADMIN_ROLE, TENANT_ROLES } from "../deploy-handler/auth.js";
+import { TENANT_ADMIN_ROLE, TENANT_BLANKET_ROLES, TENANT_ROLES } from "../deploy-handler/auth.js";
 import { buildAuthErrorHandler, createRoleCheckMiddleware } from "../shared/auth-wiring.js";
+import { createMachineGuardMiddleware } from "../shared/machine-principal.js";
 import { secureApiHeaders } from "../shared/secure-headers.js";
 import { registerAuditLogRoutes } from "./routes/audit-log.js";
 import { registerBulkDeployRoutes } from "./routes/bulk-deploy.js";
@@ -73,12 +74,22 @@ app.use(
 // は CloudWatch Logs の `[events] uncaught handler error` 行で詳細を引く。
 app.onError(buildAuthErrorHandler({ logPrefix: "[events]" }));
 
+// #2948 / ADR-0005: machine guard は全 route の先頭で発火させる (= blanket が /events/* /
+// /feature-flags / /admin/* に分かれているため、"*" に 1 本置くのが唯一の網羅的な位置)。
+app.use("*", createMachineGuardMiddleware());
+
 // ADR-020 Phase B.1 (#948): /events/* は 「tenant 内の認証済 user」 (= Admin / Operator /
 // Viewer のいずれか) を要求し、 destructive / mutate 操作は各 route の 1 行目で `requireRole(c,
 // [...])` を呼んで absolute に絞る。 GET 系 (= list / detail / disruption catalog / audit) は
 // 3 role 全部 OK (= Viewer も event 観覧可)。
 // healthz は skip。
-app.use("/events/*", createRoleCheckMiddleware({ healthzPath: "/healthz", roles: TENANT_ROLES }));
+// #2948: **`/events/*` blanket だけ** `TENANT_BLANKET_ROLES` にする。Phase 1 allowlist の
+// `GET /events` / `GET /events/{eventId}` を通すためで、他の /events/* route は per-route の
+// `requireRole` (human 3 値) で落ちる。`/feature-flags` と `/admin/*` は下で変更しない。
+app.use(
+  "/events/*",
+  createRoleCheckMiddleware({ healthzPath: "/healthz", roles: TENANT_BLANKET_ROLES }),
+);
 
 // Issue #2231: /feature-flags (GET) is readable by any authenticated tenant role, same
 // gate as /events/* — `config.features` must resolve for TenantOperator / TenantViewer too
