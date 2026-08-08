@@ -18,6 +18,9 @@ const MIRROR_PAIRS: readonly (readonly [string, string])[] = [
   ["/privacy/", "/en/privacy/"],
   ["/terms/", "/en/terms/"],
   ["/legal/", "/en/legal/"],
+  // Issue #2950: the machine API reference is bilingual, so the switch has a real
+  // counterpart here instead of falling back to the other locale's home.
+  ["/developers/api/machine/", "/en/developers/api/machine/"],
 ];
 
 // Normalize to a trailing-slash path so matching is consistent with routes.ts
