@@ -72,10 +72,14 @@ describe("DeploymentsTable GSI3 (#2061)", () => {
     expect(gsis.map((g) => g.IndexName).sort()).toEqual(["GSI1", "GSI2", "GSI3"]);
   });
 
-  it("keeps TTL on expiresAt and RETAIN removal policy", () => {
+  // [Issue #2959] 既定は RETAIN から DESTROY へ反転した。 残った table が PROVISIONED 容量で
+  // 課金され続けるほうが実害が大きい、という運用判断による。 RETAIN は
+  // `CDK_PARAM_RETAIN_DATA_TABLES=true` の opt-in になり、両方向の assertion は
+  // `test/problem-deploy/data-table-removal-policy.test.ts` が 8 table 分まとめて持つ。
+  it("keeps TTL on expiresAt and defaults to a destroyable removal policy", () => {
     tpl.hasResourceProperties("AWS::DynamoDB::Table", {
       TimeToLiveSpecification: { AttributeName: "expiresAt", Enabled: true },
     });
-    tpl.hasResource("AWS::DynamoDB::Table", { DeletionPolicy: "Retain" });
+    tpl.hasResource("AWS::DynamoDB::Table", { DeletionPolicy: "Delete" });
   });
 });

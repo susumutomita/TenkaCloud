@@ -43,7 +43,10 @@ vi.mock("../../src/components/NextActionHero", () => ({
 // 「HomePage がどのトラックの推薦を hero に渡すか」 だけなので、 実カタログ (= import.meta.glob
 // 経由の 71 問) は挟まず、 トラック構築を stub して分岐だけを test する。
 vi.mock("../../src/data/problems", () => ({ listProblemCatalog: () => [] }));
-vi.mock("../../src/data/course-track", () => ({
+// [Issue #2965] トラック構築だけを stub し、「どのトラックの推薦を採るか」の判定は **実物**を
+// 使う。ここを stub すると、辞書順で暗号トラックが勝つ以前のバグが test 上は再現しなくなる。
+vi.mock("../../src/data/course-track", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../src/data/course-track")>()),
   buildCourseTracks: mockBuildCourseTracks,
   toProblemProgress: (problems: readonly unknown[]) => problems,
 }));
@@ -175,6 +178,20 @@ describe("HomePage course-track recommendation", () => {
     expect(mockHeroProps).toHaveBeenCalledWith({
       cloudMode: "local",
       preferredNextProblemId: "what-is-tenkacloud",
+    });
+  });
+
+  it("should skip a track excluded from the default recommendation", () => {
+    // #2965: 辞書順で先頭に来る大学院レベルの暗号トラックが、初学者の「次にやること」に
+    // 出ていた。除外したトラックは hero に届かない。
+    mockBuildCourseTracks.mockReturnValue([
+      track("advanced-cryptography-2026", "ac26-bridge-experiment"),
+      track("ipa-web-security", "ipa-1"),
+    ]);
+    render(<HomePage config={localConfig} />);
+    expect(mockHeroProps).toHaveBeenCalledWith({
+      cloudMode: "local",
+      preferredNextProblemId: "ipa-1",
     });
   });
 
