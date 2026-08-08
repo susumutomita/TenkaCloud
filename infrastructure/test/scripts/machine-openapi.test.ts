@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
+import { renderSpecFile } from "../../../scripts/openapi/generate";
 import {
   buildMachineApiSpec,
   CAPABILITY_EXTENSION,
@@ -139,7 +140,9 @@ describe("#2949: the spec never carries credential material", () => {
 describe("#2949: the committed artifact is in sync", () => {
   it("should match the generator byte for byte", () => {
     const committed = readFileSync(resolve(REPO_ROOT, "docs/api/machine-api.openapi.json"), "utf8");
-    expect(committed).toBe(serializeSpec(buildMachineApiSpec()));
+    // 生成器が実際に書き出す関数と比べる。`serializeSpec` 単体と比べると biome 整形段を
+    // 素通りして、この test が緑のまま `make lint` が落ちる状態が作れてしまう。
+    expect(committed).toBe(renderSpecFile());
   });
 });
 

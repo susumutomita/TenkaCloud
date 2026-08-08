@@ -127,12 +127,14 @@ describe("DynamoDB backend: the same marker contract", () => {
   it("should write completedAt exactly once with if_not_exists", async () => {
     const sent: Record<string, unknown>[] = [];
     await makeRepo(sent).markCreateSucceeded("job-1", "stack-1", "{}", undefined, COMPLETED_AT);
-    const update = String(sent[0]?.UpdateExpression);
+    const command = sent[0];
+    expect(command).toBeDefined();
     // `if_not_exists` でないと、この経路の再入で最初の到達時刻が上書きされる。
-    expect(update).toContain("completedAt = if_not_exists(completedAt, :completedAt)");
-    expect((sent[0]?.ExpressionAttributeValues as Record<string, unknown>)[":completedAt"]).toBe(
-      COMPLETED_AT,
+    expect(String(command?.UpdateExpression)).toContain(
+      "completedAt = if_not_exists(completedAt, :completedAt)",
     );
+    const values = command?.ExpressionAttributeValues as Record<string, unknown> | undefined;
+    expect(values?.[":completedAt"]).toBe(COMPLETED_AT);
   });
 
   it("should count by marker presence rather than by current status", async () => {

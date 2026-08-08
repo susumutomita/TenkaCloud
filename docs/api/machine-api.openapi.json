@@ -27,9 +27,7 @@
         "operationId": "getDeployments",
         "summary": "List deployments for the calling tenant",
         "description": "Returns the tenant's deployment jobs, newest first. The tenant is taken from the token's binding scope; there is no tenant parameter.",
-        "tags": [
-          "deployments"
-        ],
+        "tags": ["deployments"],
         "responses": {
           "200": {
             "description": "OK"
@@ -46,9 +44,7 @@
         },
         "security": [
           {
-            "TenkaCloudMachineOAuth": [
-              "tenkacloud/ops.read"
-            ]
+            "TenkaCloudMachineOAuth": ["tenkacloud/ops.read"]
           }
         ],
         "x-tenkacloud-capability": "read"
@@ -59,9 +55,7 @@
         "operationId": "getDeploymentsByJobId",
         "summary": "Get one deployment",
         "description": "Returns a single deployment job owned by the calling tenant.",
-        "tags": [
-          "deployments"
-        ],
+        "tags": ["deployments"],
         "parameters": [
           {
             "name": "jobId",
@@ -89,9 +83,7 @@
         },
         "security": [
           {
-            "TenkaCloudMachineOAuth": [
-              "tenkacloud/ops.read"
-            ]
+            "TenkaCloudMachineOAuth": ["tenkacloud/ops.read"]
           }
         ],
         "x-tenkacloud-capability": "read"
@@ -102,9 +94,7 @@
         "operationId": "getDeploymentsByJobIdStackProgress",
         "summary": "Get CloudFormation progress for a deployment",
         "description": "Returns stack events and resources for the job. Separate from the job itself because the CloudFormation calls are slow and may throttle.",
-        "tags": [
-          "deployments"
-        ],
+        "tags": ["deployments"],
         "parameters": [
           {
             "name": "jobId",
@@ -132,9 +122,7 @@
         },
         "security": [
           {
-            "TenkaCloudMachineOAuth": [
-              "tenkacloud/ops.read"
-            ]
+            "TenkaCloudMachineOAuth": ["tenkacloud/ops.read"]
           }
         ],
         "x-tenkacloud-capability": "read"
@@ -145,9 +133,7 @@
         "operationId": "getProblemsByProblemIdDeployments",
         "summary": "List deployments of one problem",
         "description": "Returns the tenant's deployment jobs for a single problem.",
-        "tags": [
-          "deployments"
-        ],
+        "tags": ["deployments"],
         "parameters": [
           {
             "name": "problemId",
@@ -175,9 +161,7 @@
         },
         "security": [
           {
-            "TenkaCloudMachineOAuth": [
-              "tenkacloud/ops.read"
-            ]
+            "TenkaCloudMachineOAuth": ["tenkacloud/ops.read"]
           }
         ],
         "x-tenkacloud-capability": "read"
@@ -188,9 +172,7 @@
         "operationId": "getEvents",
         "summary": "List events",
         "description": "Returns the tenant's competition events.",
-        "tags": [
-          "events"
-        ],
+        "tags": ["events"],
         "responses": {
           "200": {
             "description": "OK"
@@ -207,9 +189,7 @@
         },
         "security": [
           {
-            "TenkaCloudMachineOAuth": [
-              "tenkacloud/ops.read"
-            ]
+            "TenkaCloudMachineOAuth": ["tenkacloud/ops.read"]
           }
         ],
         "x-tenkacloud-capability": "read"
@@ -220,9 +200,7 @@
         "operationId": "getEventsByEventId",
         "summary": "Get one event",
         "description": "Returns a single event. Team login keys are never included on this path for a machine principal.",
-        "tags": [
-          "events"
-        ],
+        "tags": ["events"],
         "parameters": [
           {
             "name": "eventId",
@@ -250,9 +228,7 @@
         },
         "security": [
           {
-            "TenkaCloudMachineOAuth": [
-              "tenkacloud/ops.read"
-            ]
+            "TenkaCloudMachineOAuth": ["tenkacloud/ops.read"]
           }
         ],
         "x-tenkacloud-capability": "read"
@@ -263,9 +239,7 @@
         "operationId": "postProblemsByProblemIdDeploy",
         "summary": "Start a deployment",
         "description": "Starts a deployment of one problem for one team and returns the job id.",
-        "tags": [
-          "deployments"
-        ],
+        "tags": ["deployments"],
         "parameters": [
           {
             "name": "problemId",
@@ -306,11 +280,7 @@
                   }
                 },
                 "additionalProperties": false,
-                "required": [
-                  "region",
-                  "awsAccountId",
-                  "teamName"
-                ]
+                "required": ["region", "awsAccountId", "teamName"]
               }
             }
           }
@@ -354,13 +324,7 @@
                     }
                   },
                   "additionalProperties": false,
-                  "required": [
-                    "jobId",
-                    "status",
-                    "namePrefix",
-                    "teamLoginKey",
-                    "expiresAt"
-                  ]
+                  "required": ["jobId", "status", "namePrefix", "teamLoginKey", "expiresAt"]
                 }
               }
             }
@@ -377,9 +341,7 @@
         },
         "security": [
           {
-            "TenkaCloudMachineOAuth": [
-              "tenkacloud/ops.deploy"
-            ]
+            "TenkaCloudMachineOAuth": ["tenkacloud/ops.deploy"]
           }
         ],
         "x-tenkacloud-capability": "deploy"
@@ -390,9 +352,7 @@
         "operationId": "postDeploymentsRetry",
         "summary": "Re-queue failed deployments",
         "description": "Re-queues deployment jobs that ended in FAILED onto the same pipeline a fresh deploy uses. Idempotent: rows that succeeded, are still running, or belong to another tenant are skipped and reported rather than touched.",
-        "tags": [
-          "deployments"
-        ],
+        "tags": ["deployments"],
         "requestBody": {
           "required": true,
           "content": {
@@ -409,9 +369,7 @@
                   }
                 },
                 "additionalProperties": false,
-                "required": [
-                  "failedJobIds"
-                ]
+                "required": ["failedJobIds"]
               }
             }
           }
@@ -432,9 +390,7 @@
         },
         "security": [
           {
-            "TenkaCloudMachineOAuth": [
-              "tenkacloud/ops.write"
-            ]
+            "TenkaCloudMachineOAuth": ["tenkacloud/ops.write"]
           }
         ],
         "x-tenkacloud-capability": "write"
