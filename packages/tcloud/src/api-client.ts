@@ -67,8 +67,17 @@ export interface DeploymentSummary {
   readonly [key: string]: unknown;
 }
 
+/**
+ * base URL の末尾 `/` を落として path を繋ぐ。
+ *
+ * 正規表現 (`/\/+$/`) を使わないのは、baseUrl が設定ファイルや環境変数から来る外部入力で、
+ * `/` が大量に並ぶ入力に対して backtracking で時間を食う形になるためである (CodeQL の
+ * polynomial-redos)。線形の走査で同じ結果を出す。
+ */
 function joinUrl(baseUrl: string, path: string): string {
-  return `${baseUrl.replace(/\/+$/, "")}${path}`;
+  let end = baseUrl.length;
+  while (end > 0 && baseUrl.charAt(end - 1) === "/") end -= 1;
+  return `${baseUrl.slice(0, end)}${path}`;
 }
 
 export class MachineApiClient {
