@@ -971,7 +971,9 @@ describe("multi-verify extensions (issue #2252)", () => {
     expect(serverScore).toBe(scoreBeforeReview);
     expect(apiMocks.revealHint).toHaveBeenCalledTimes(revealCallsBeforeReview);
     expect(apiMocks.submitFlag).toHaveBeenCalledTimes(submitCallsBeforeReview);
-  }, 15_000);
+    // この 1 本だけ workspace 既定 (15s) より重い: 12 hint の開封 + 4 checkpoint の提出 +
+    // 4 件の振り返り展開を 1 test で通す。 実測 idle 約 4.0s。
+  }, 30_000);
 
   it("should provide the same solved review structure in Japanese", () => {
     window.localStorage.setItem("tenkacloud.portal.locale", "ja");
