@@ -4,7 +4,6 @@ import { handle } from "hono/aws-lambda";
 import { cors } from "hono/cors";
 import { StatusCodes } from "http-status-codes";
 import { createDefaultControlDataRuntime } from "../../control-data/runtime-repositories.js";
-import { extractAuditContext, writeAuditEvent } from "../shared/audit-log.js";
 import { buildAuthErrorHandler, createRoleCheckMiddleware } from "../shared/auth-wiring.js";
 import { ULID_RE as JOB_ID_RE, PROBLEM_ID_RE } from "../shared/constants.js";
 import { parseSchema } from "../shared/http-parse.js";
@@ -38,6 +37,7 @@ import {
   UnknownProblemError,
   UnverifiedCompetitorAccountError,
 } from "./deploy.js";
+import { recordDeployAudit, recordRetryAudit } from "./deploy-audit.js";
 import { DeployQuotaExceededError, type QuotaTier, resolveQuotaTier } from "./deploy-quota.js";
 import { getDeployment, listDeployments } from "./list.js";
 import { InvalidRetryRequestError, retryDeployments, validateRetryRequest } from "./retry.js";
@@ -234,32 +234,6 @@ async function handleCompositeDeploy(
   }
 }
 
-/**
- * #2948: deploy 開始を admin audit log に残す。machine 経路の唯一の mutating route なので、
- * ここが「CI / agent が何をデプロイしたか」の正本になる。human の deploy も同じ行を書く
- * (= 経路で監査の粒度を変えない)。`extractAuditContext` が actor を human の `sub` か
- * `m2m:<clientId>` に振り分ける。best-effort write なので deploy の成否には影響しない。
- */
-async function recordDeployAudit(
-  c: Context,
-  tenantId: string,
-  problemId: string,
-  outcome: "success" | "error",
-): Promise<void> {
-  const auditContext = extractAuditContext(c);
-  await writeAuditEvent({
-    tenantId,
-    actor: auditContext.actor,
-    actorUsername: auditContext.actorUsername,
-    action: "deploy_problem",
-    outcome,
-    target: problemId,
-    ipAddress: auditContext.ipAddress,
-    userAgent: auditContext.userAgent,
-    occurredAtMs: Date.now(),
-  });
-}
-
 app.post("/problems/:problemId/deploy", async (c) => {
   // #2948: machine principal が到達できる **唯一の mutating route**。`TENANT_MACHINE_ROLE` を
   // per-route allowlist に足すのはここ 1 箇所だけで、test `machine-role-allowlist-sites` が
@@ -441,27 +415,6 @@ app.get("/deployments/:jobId/stack-progress", async (c) => {
  * 入力: \`{ failedJobIds: ["01HX...", ...] }\`、 最大 750 件
  * 出力: \`{ items: [{ jobId, action: \"requeued\" | \"skipped\", reason? }, ...] }\`
  */
-/** #2955: retry も deploy と同じ形の audit 行を書く。target は再投入した件数。 */
-async function recordRetryAudit(
-  c: Context,
-  tenantId: string,
-  jobCount: number,
-  outcome: "success" | "error",
-): Promise<void> {
-  const auditContext = extractAuditContext(c);
-  await writeAuditEvent({
-    tenantId,
-    actor: auditContext.actor,
-    actorUsername: auditContext.actorUsername,
-    action: "retry_deployments",
-    outcome,
-    target: String(jobCount),
-    ipAddress: auditContext.ipAddress,
-    userAgent: auditContext.userAgent,
-    occurredAtMs: Date.now(),
-  });
-}
-
 app.post("/deployments/retry", async (c) => {
   // #2955 Phase 2: machine principal に開く 2 本目の mutating route。`retry.ts` が publish する
   // のは `DeployCreateRequested` だけで、deploy route と同じ pipeline に閉じている
