@@ -202,10 +202,7 @@ describe("buildTenkaCloudApp", () => {
     // Portal enabled: the label-bearing arm produces the deterministic construct ID.
     expect(
       alarmIds(
-        buildApp(
-          { CDK_PARAM_ENABLE_PARTICIPANT_PORTAL: "true" },
-          { monthlyCostLimitUsd: 50 },
-        ),
+        buildApp({ CDK_PARAM_ENABLE_PARTICIPANT_PORTAL: "true" }, { monthlyCostLimitUsd: 50 }),
       ),
     ).toContain("LambdaInvocationsparticipantportal");
   });
