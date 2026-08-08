@@ -4,7 +4,6 @@ import {
   CognitoUserPoolsAuthorizer,
   Integration,
   IntegrationType,
-  LambdaIntegration,
   RestApi,
 } from "aws-cdk-lib/aws-apigateway";
 import type { IUserPool } from "aws-cdk-lib/aws-cognito";
@@ -24,7 +23,7 @@ interface ApiGatewayProps {
   userPool: IUserPool;
   /**
    * `ProblemDeployBackendStack.deployApiLambda` のクロススタック参照。Deploy 系 routes が
-   * `LambdaIntegration` で本 Lambda を invoke する。
+   * `proxyIntegrationFor` 経由で本 Lambda を invoke する。
    */
   deployApiLambda: IFunction;
   /**
@@ -74,6 +73,45 @@ interface ApiGatewayProps {
 export class ApiGateway extends Construct {
   public readonly restApi: RestApi;
 
+  /**
+   * 1 つの Lambda を「1 statement だけ」で invoke 可能にする integration を作る。
+   *
+   * `LambdaIntegration` は method ごとに `AWS::Lambda::Permission` を 1 本足すが、 Lambda の
+   * resource policy は **20,480 byte 固定上限**で、 しかもこの Lambda 群は Application Plane
+   * (`tenkacloud-problem-deploy`) の **共有 function** なので、 全 tenant の API の permission が
+   * 同じ policy に積み上がる。
+   *
+   * 実測 (2026-08-08、 pooled tenant のみが存在する状態):
+   *   CompetitorAccountsApi  12,662 byte / 26 statement  ← 全部 pooled の API 由来
+   *   DeployApi               5,795 byte / 12 statement
+   *   EventApi                  495 byte /  1 statement  ← 既に本 pattern を適用済
+   *
+   * この状態で silo (platinum) tenant を 1 つ足すと admin routes 分が乗って 20,674 byte となり、
+   * **最初の 1 tenant すら deploy できない** (scale 限界ではなくゼロ)。 実際に siloverify が
+   * `The final policy size (20674) is bigger than the limit (20480)` で ROLLBACK した。
+   *
+   * そこで wildcard permission 1 本 + 低レベル `AWS_PROXY` integration にする。 wire 上の挙動は
+   * `LambdaIntegration` と同一で、 生成される permission だけが method 数と無関係に 1 本になる。
+   *
+   * permission は **この stack (= API 側)** に `CfnPermission` で置く。 `fn.addPermission` は
+   * Lambda 側の stack に置かれ、 そこから API の ARN を参照すると既存の cross-stack 依存
+   * (API stack → Lambda stack) が逆流して synth が DependencyCycle で落ちる。
+   */
+  private proxyIntegrationFor(id: string, fn: IFunction): Integration {
+    new CfnPermission(this, id, {
+      action: "lambda:InvokeFunction",
+      functionName: fn.functionArn,
+      principal: "apigateway.amazonaws.com",
+      sourceArn: this.restApi.arnForExecuteApi(),
+    });
+    const stack = Stack.of(this);
+    return new Integration({
+      type: IntegrationType.AWS_PROXY,
+      integrationHttpMethod: "POST",
+      uri: `arn:${stack.partition}:apigateway:${stack.region}:lambda:path/2015-03-31/functions/${fn.functionArn}/invocations`,
+    });
+  }
+
   constructor(scope: Construct, id: string, props: ApiGatewayProps) {
     super(scope, id);
 
@@ -106,7 +144,10 @@ export class ApiGateway extends Construct {
       authorizerName: `TenantAuth-${props.tenantId}`,
     });
 
-    const deployIntegration = new LambdaIntegration(props.deployApiLambda);
+    const deployIntegration = this.proxyIntegrationFor(
+      "ApiGatewayInvokeDeployRoutes",
+      props.deployApiLambda,
+    );
     const deployMethodOptions = {
       authorizer,
       authorizationType: AuthorizationType.COGNITO,
@@ -137,30 +178,13 @@ export class ApiGateway extends Construct {
     // /events/{eventId}/end            POST  = Event を ENDED 状態にし採点を停止 (Issue #494)
     // /events/{eventId}/notifications  POST  = 運営 → 競技者 通知 1 件作成 (ADR-006、#553)
     // /events/{eventId}/lock-scoring   POST  = 採点を lock (表彰フェーズ)、DELETE = unlock (#558)
-    // The EventApi Lambda serves ~40 routes. CDK's LambdaIntegration adds one
-    // AWS::Lambda::Permission per method, but a Lambda resource policy is capped at
-    // 20KB — with that many methods the policy overflowed at deploy time ("The final
-    // policy size ... is bigger than the limit (20480)"), which is what blocked adding
-    // the /feature-flags routes. Grant a single wildcard invoke permission and use a
-    // low-level AWS_PROXY integration (identical wire behaviour to LambdaIntegration)
-    // so no per-method permission is generated for this Lambda.
-    // Scope the permission to THIS stack (the API's stack) via CfnPermission rather than
-    // `eventApiLambda.addPermission` (which would attach it to the Lambda's own stack). The
-    // Lambda lives in a different stack, so a Lambda-stack permission that references this
-    // API's ARN reverses the existing cross-stack dependency and CFn synth fails with a
-    // DependencyCycle. Attaching it here references the Lambda ARN in the existing direction
-    // (API stack → Lambda stack), exactly as LambdaIntegration's per-method permissions do.
-    new CfnPermission(this, "ApiGatewayInvokeEventRoutes", {
-      action: "lambda:InvokeFunction",
-      functionName: props.eventApiLambda.functionArn,
-      principal: "apigateway.amazonaws.com",
-      sourceArn: this.restApi.arnForExecuteApi(),
-    });
-    const eventIntegration = new Integration({
-      type: IntegrationType.AWS_PROXY,
-      integrationHttpMethod: "POST",
-      uri: `arn:${Stack.of(this).partition}:apigateway:${Stack.of(this).region}:lambda:path/2015-03-31/functions/${props.eventApiLambda.functionArn}/invocations`,
-    });
+    // EventApi は ~40 route を持つので、 最初にこの pattern が必要になったのはここだった
+    // (per-method permission では /feature-flags を足した時点で 20KB を超えた)。 現在は他の
+    // Lambda も同じ理由で同じ扱いにしてある — 詳細は `proxyIntegrationFor` を正本とする。
+    const eventIntegration = this.proxyIntegrationFor(
+      "ApiGatewayInvokeEventRoutes",
+      props.eventApiLambda,
+    );
     const events = this.restApi.root.addResource("events");
     events.addMethod("GET", eventIntegration, deployMethodOptions);
     events.addMethod("POST", eventIntegration, deployMethodOptions);
@@ -198,7 +222,10 @@ export class ApiGateway extends Construct {
     //   /admin/competitor-accounts/{awsAccountId}                      DELETE=remove (last row なら SSM 鍵も掃除)
     //   /admin/competitor-accounts/{awsAccountId}/verify               POST=STS AssumeRole sanity check
     //   /admin/competitor-accounts/{awsAccountId}/rotate-external-id   POST=ExternalId rotation (Issue #596 / Phase 3.1)
-    const competitorAccountsIntegration = new LambdaIntegration(props.competitorAccountsApiLambda);
+    const competitorAccountsIntegration = this.proxyIntegrationFor(
+      "ApiGatewayInvokeCompetitorAccountsRoutes",
+      props.competitorAccountsApiLambda,
+    );
     const admin = this.restApi.root.addResource("admin");
     const competitorAccounts = admin.addResource("competitor-accounts");
     competitorAccounts.addMethod("GET", competitorAccountsIntegration, deployMethodOptions);
@@ -271,7 +298,10 @@ export class ApiGateway extends Construct {
     // pooled tier (= UserPool 共有) で誤起動すると cross-tenant 副作用が出るため、 handler の
     // `IDP_TIER_GUARD` env が `"silo"` 以外なら 503 を返す fail-closed guard で防ぐ。
     if (props.samlIdpLambda) {
-      const idpIntegration = new LambdaIntegration(props.samlIdpLambda);
+      const idpIntegration = this.proxyIntegrationFor(
+        "ApiGatewayInvokeSamlIdpRoutes",
+        props.samlIdpLambda,
+      );
       const tenant = this.restApi.root.addResource("tenant");
       const idp = tenant.addResource("idp");
       idp.addMethod("GET", idpIntegration, deployMethodOptions);
