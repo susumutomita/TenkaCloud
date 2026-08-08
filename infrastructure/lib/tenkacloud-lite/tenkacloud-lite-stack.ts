@@ -2,6 +2,7 @@ import { CfnOutput, Stack, type StackProps } from "aws-cdk-lib";
 import type { IFunction } from "aws-cdk-lib/aws-lambda";
 import type { Construct } from "constructs";
 import { buildAppPlaneCore } from "../app-plane-core/index.js";
+import { dataTableRemovalPolicy } from "../problem-deploy/data-table-removal-policy.js";
 import { SamlIdpsTable } from "../problem-deploy/saml-idps-table.js";
 import type { SamlIdpConfig } from "../tenant-template/saml-identity-providers.js";
 
@@ -62,6 +63,12 @@ export interface TenkaCloudLiteStackProps extends StackProps {
    * 条件)。 default 未指定 / `dynamodb` は既存 CFn と byte 互換。
    */
   readonly controlDataBackend?: string;
+
+  /**
+   * [Issue #2959] control-data DDB table を stack 削除後も残すか。未指定 / false は
+   * DESTROY (= 既定)。`AppConfig.retainDataTables` をそのまま渡す。
+   */
+  readonly retainDataTables?: boolean;
   /** [Issue #2442 / Phase C5] Public remote libSQL URL — `controlDataBackend` が turso のとき必須。 */
   readonly tursoDatabaseUrl?: string;
   /** [Issue #2442 / Phase C5] Turso auth token を格納する SSM SecureString parameter 名。 */
@@ -118,7 +125,11 @@ export class TenkaCloudLiteStack extends Stack {
     // 条件。 IdP CRUD API 自体は `attachSamlIdpLambda: true` を常に渡すため table の有無に
     // 関わらず提供され続ける (= repository seam 経由で SQL executor に直結する)。
     const pureSql = props.controlDataBackend === "turso";
-    const samlIdps = pureSql ? undefined : new SamlIdpsTable(this, "SamlIdps");
+    const samlIdps = pureSql
+      ? undefined
+      : new SamlIdpsTable(this, "SamlIdps", {
+          removalPolicy: dataTableRemovalPolicy(props.retainDataTables),
+        });
 
     const appPlane = buildAppPlaneCore(this, {
       features: props.features,

@@ -8,7 +8,18 @@ set -eu
 repo_root=$(cd "$(dirname "$0")/../.." && pwd)
 cd "$repo_root"
 export TENKACLOUD_REPO_ROOT="$repo_root"
-COMPOSE="docker compose -f compose.local.yaml"
+# [Issue #2963] compose project 名を固定する。
+#
+# 指定しないと compose はカレントディレクトリ名を project 名にする。このリポジトリは worktree を
+# 常用するので、primary clone では `tenkacloud`、`.claude/worktrees/foo-abc123` からは
+# `foo-abc123` になる。一方 container 名 (`tenkacloud-local`) と volume 名
+# (`tenkacloud-local-data`) は compose.local.yaml で固定されているため、project だけが食い違い、
+# 「volume は別 project の持ち物」警告と container 名衝突を必ず踏む。
+#
+# local play はホストに 1 つだけ在ればよいものなので、project 名も 1 つに固定するのが素直。
+COMPOSE_PROJECT="tenkacloud-local"
+COMPOSE="docker compose -p ${COMPOSE_PROJECT} -f compose.local.yaml"
+CONTROL_PLANE_CONTAINER="tenkacloud-local"
 PORTAL_PORT="${LOCAL_API_PORT:-5175}"
 
 require_docker() {
@@ -203,6 +214,37 @@ docker_desktop_host_networking_hint() {
   echo "  then retry 'make local'. See: https://docs.docker.com/engine/network/drivers/host/" >&2
 }
 
+# [Issue #2963] 固定名 container が **別の compose project** の持ち物として既に存在する場合に
+# 引き取る。
+#
+# project 名を固定した後でも、固定前に別ディレクトリから起動した container は残っている。
+# compose はそれを自分のものと見なさないので、`up` は docker daemon の Conflict エラーをそのまま
+# 出して終わる。生の Conflict ログからは何をすればいいか読み取れないので、ここで回収する。
+#
+# 消して困るものは container 側に無い: local play の状態は named volume
+# `tenkacloud-local-data` に載っており、volume はここでは触らない。同じ image から作り直すだけ。
+reclaim_foreign_control_plane_container() {
+  existing_project=$(docker inspect \
+    -f '{{index .Config.Labels "com.docker.compose.project"}}' \
+    "$CONTROL_PLANE_CONTAINER" 2>/dev/null || true)
+  # container が無い (= inspect が失敗) なら何もしない。通常の初回起動。
+  [ -n "$existing_project" ] || return 0
+  # 既に自分の project のものなら compose に任せる (再利用 / 作り直しは compose が判断する)。
+  [ "$existing_project" != "$COMPOSE_PROJECT" ] || return 0
+
+  echo "Found an existing '${CONTROL_PLANE_CONTAINER}' container from compose project" >&2
+  echo "  '${existing_project}' (started from a different directory, e.g. another git worktree)." >&2
+  echo "  Removing it and recreating under '${COMPOSE_PROJECT}'." >&2
+  echo "  Your local play data is in the '${CONTROL_PLANE_CONTAINER}-data' volume and is kept." >&2
+  if ! docker rm -f "$CONTROL_PLANE_CONTAINER" >/dev/null 2>&1; then
+    echo "Could not remove the conflicting container '${CONTROL_PLANE_CONTAINER}'." >&2
+    echo "  Remove it yourself and retry:" >&2
+    echo "    docker rm -f ${CONTROL_PLANE_CONTAINER}" >&2
+    echo "    make local" >&2
+    exit 1
+  fi
+}
+
 cmd_up() {
   if [ -n "${PROBLEM:-}" ]; then
     echo "Note: PROBLEM=<id> pre-start is not yet supported on the Docker path (#2906 follow-up)." >&2
@@ -210,6 +252,7 @@ cmd_up() {
   fi
   require_docker
   ensure_problems_submodule
+  reclaim_foreign_control_plane_container
   $COMPOSE build
   $COMPOSE up -d
   echo "Waiting for the Participant Portal to answer..."

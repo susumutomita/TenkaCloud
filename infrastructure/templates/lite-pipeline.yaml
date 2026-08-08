@@ -27,7 +27,8 @@ Description: >-
 #
 # Teardown: "Start build with overrides" + ACTION=destroy-all removes stack-owned retained
 # data and the two app stacks, then delete the launcher stack created from this template.
-# ACTION=destroy preserves DynamoDB history. The deploy itself creates the platform (Lambda +
+# ACTION=destroy removes the stacks; DynamoDB tables go with them unless the deploy set
+# RetainDataTables=true (#2959). The deploy itself creates the platform (Lambda +
 # Cognito + DynamoDB + S3 + CloudFront + ...); a handful of Lite deploys cost under a dollar.
 #
 # IAM Role / Policy "Description" fields only accept ASCII (0x20-0x7E) + Latin-1 (0xA1-0xFF);
@@ -62,6 +63,7 @@ Metadata:
           - DeployExternalId
           - DynamoReadCapacity
           - DynamoWriteCapacity
+          - RetainDataTables
           - BunVersion
           - CodeBuildTimeoutMinutes
     ParameterLabels:
@@ -88,9 +90,12 @@ Parameters:
       - destroy
       - destroy-all
     Description: >-
-      What this build does. `deploy` stands up Lite; `destroy` removes stacks while
-      preserving DynamoDB history; `destroy-all` permanently removes stack-owned
-      retained data and then the stacks. The cleanup tutorial uses ACTION=destroy-all.
+      What this build does. `deploy` stands up Lite; `destroy` removes the stacks;
+      `destroy-all` additionally removes stack-owned retained data first. The cleanup
+      tutorial uses ACTION=destroy-all. Note that `destroy` no longer preserves DynamoDB
+      history by default (#2959): tables are deployed with DeletionPolicy: Delete unless
+      the deploy set RetainDataTables=true, so they go away with the stacks. That default
+      exists because retained tables keep billing and nothing cleans them up.
 
   TenantAdminEmail:
     Type: String
@@ -189,6 +194,21 @@ Parameters:
       (CDK_PARAM_DYNAMODB_WRITE_CAPACITY). Same default/cost/ceiling/behavior notes as
       DynamoReadCapacity, including being ignored when ControlDataBackend is turso.
 
+  RetainDataTables:
+    Type: String
+    Default: "false"
+    AllowedValues:
+      - "false"
+      - "true"
+    Description: >-
+      Whether DynamoDB tables survive stack deletion (CDK_PARAM_RETAIN_DATA_TABLES).
+      Default false, so ACTION=destroy removes them along with the stacks. Set true only
+      if you want the history kept: retained tables keep billing at their provisioned
+      capacity forever, and nothing deletes them for you - you have to run
+      `aws dynamodb delete-table` by hand. This is read at DEPLOY time and baked into the
+      stack template, so flipping it later has no effect on a stack that is already
+      deployed; re-deploy first, then destroy.
+
   BunVersion:
     Type: String
     Default: 1.3.11
@@ -273,6 +293,9 @@ Resources:
           - Name: DYNAMO_WRITE_CAPACITY
             Value: !Ref DynamoWriteCapacity
             Type: PLAINTEXT
+          - Name: RETAIN_DATA_TABLES
+            Value: !Ref RetainDataTables
+            Type: PLAINTEXT
           - Name: BUN_VERSION
             Value: !Ref BunVersion
             Type: PLAINTEXT
@@ -336,6 +359,9 @@ Resources:
                     # backend synthesizes zero DynamoDB tables so the value is ignored.
                     echo "CDK_PARAM_DYNAMODB_READ_CAPACITY=${DYNAMO_READ_CAPACITY}"
                     echo "CDK_PARAM_DYNAMODB_WRITE_CAPACITY=${DYNAMO_WRITE_CAPACITY}"
+                    # Retention knob (#2959). Default "false" -> tables carry DeletionPolicy:
+                    # Delete, so ACTION=destroy leaves nothing billing behind.
+                    echo "CDK_PARAM_RETAIN_DATA_TABLES=${RETAIN_DATA_TABLES}"
                   } > "${ENV_DIR}/.env"
                 - echo "Wrote ${ENV_DIR}/.env (TENANT_ADMIN_EMAIL / AWS_ACCOUNT_ID / AWS_REGION)"
                 # Bootstrap is only needed to deploy (idempotent); skip it for both teardown modes.
@@ -357,12 +383,12 @@ Resources:
                     # Public onboarding checkpoint: complete teardown only, never preserve mode.
                     echo "Cleanup checkpoint: TC{LITE-CLEANUP-COMPLETE}"
                   elif [ "${ACTION}" = "destroy" ]; then
-                    echo "ACTION=destroy -> removing Lite stacks while preserving DynamoDB history"
+                    echo "ACTION=destroy -> removing Lite stacks (DynamoDB tables go with them unless RetainDataTables=true was set at deploy time)"
                     if ! TENKACLOUD_LITE_DOWN_YES=1 make destroy ENV="${ENVIRONMENT}"; then
                       echo "Lite teardown failed."
                       exit 1
                     fi
-                    echo "DynamoDB history was retained; no complete-cleanup checkpoint is emitted."
+                    echo "No complete-cleanup checkpoint is emitted for ACTION=destroy. If this stack was deployed with RetainDataTables=true, the tables are still there and still billing."
                   elif [ "${ACTION}" = "deploy" ]; then
                     # `make deploy` builds the SPAs (ships the cloned catalog) then runs the Lite deploy.
                     make deploy ENV="${ENVIRONMENT}"
@@ -473,7 +499,8 @@ Outputs:
   StartBuildConsoleUrl:
     Description: >-
       Open the CodeBuild project: "Start build" deploys; "Start build with overrides" with
-      ACTION=destroy-all completely removes Lite; ACTION=destroy preserves DynamoDB history.
+      ACTION=destroy-all completely removes Lite; ACTION=destroy removes the stacks, taking
+      the DynamoDB tables with them unless the deploy set RetainDataTables=true.
     Value: !Sub https://${AWS::Region}.console.aws.amazon.com/codesuite/codebuild/projects/tenkacloud-lite-${Environment}?region=${AWS::Region}
 
   # Issue #2696: onboarding drill checkpoint 1 ("launcher created"). Deliberately a fixed,

@@ -171,11 +171,21 @@ describe("buildTenkaCloudApp", () => {
       const freeTier = observability?.node.tryFindChild("FreeTierAlarms");
       return freeTier ? freeTier.node.children.map((child) => child.node.id) : [];
     };
-    // Default (portal disabled): the ternary's [] arm — no participant-portal alarm.
-    expect(alarmIds(buildApp())).not.toContain("LambdaInvocationsparticipantportal");
-    // Portal enabled: the label-bearing arm produces the deterministic construct ID.
-    expect(alarmIds(buildApp({ CDK_PARAM_ENABLE_PARTICIPANT_PORTAL: "true" }))).toContain(
-      "LambdaInvocationsparticipantportal",
-    );
+    // Issue #2961: FreeTierAlarms は budget と同じ opt-in の内側にあるので、この test の主題
+    // (portal の有無で alarm が増えるか) を見るには先に budget を有効化する必要がある。
+    // 展開は `loadConfig` が process.env を直読みするのでそちらに置く。
+    const previous = process.env.MONTHLY_COST_LIMIT_USD;
+    process.env.MONTHLY_COST_LIMIT_USD = "50";
+    try {
+      // Default (portal disabled): the ternary's [] arm — no participant-portal alarm.
+      expect(alarmIds(buildApp())).not.toContain("LambdaInvocationsparticipantportal");
+      // Portal enabled: the label-bearing arm produces the deterministic construct ID.
+      expect(alarmIds(buildApp({ CDK_PARAM_ENABLE_PARTICIPANT_PORTAL: "true" }))).toContain(
+        "LambdaInvocationsparticipantportal",
+      );
+    } finally {
+      if (previous === undefined) delete process.env.MONTHLY_COST_LIMIT_USD;
+      else process.env.MONTHLY_COST_LIMIT_USD = previous;
+    }
   });
 });

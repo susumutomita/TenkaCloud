@@ -941,7 +941,11 @@ describe("multi-verify extensions (issue #2252)", () => {
 
     for (const check of wpExposedBackup.i18n.en.checks) {
       const field = screen.getByLabelText(check.label);
-      await user.type(field, `answer-for-${check.id}`);
+      // `type` は 1 文字ずつ event を回すので、この loop だけで 4 checkpoint x 約 20 文字 =
+      // 80 回の再描画になっていた。ここで見たいのは「回答を入れて提出したら solved になる」で
+      // あって打鍵そのものではないので、`solveTutorial` と同じ paste の書き方に揃える (#2957)。
+      await user.click(field);
+      await user.paste(`answer-for-${check.id}`);
       const form = field.closest("form");
       expect(form).not.toBeNull();
       await user.click(within(form as HTMLFormElement).getByRole("button", { name: /^Submit/ }));

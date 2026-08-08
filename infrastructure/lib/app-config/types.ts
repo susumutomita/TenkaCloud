@@ -170,6 +170,16 @@ export interface AppConfig {
   readonly deployViaLambda: boolean;
 
   /**
+   * Issue #2959: control-data DynamoDB table を stack 削除後も残すか
+   * (`CDK_PARAM_RETAIN_DATA_TABLES`)。**default false (= DESTROY)**。
+   *
+   * 他の boolean parameter と向きが逆で、明示 `"true"` のときだけ RETAIN になる。以前は
+   * 8 table すべてが RETAIN 固定で、destroy 後に残った table が PROVISIONED 1 RCU / 1 WCU で
+   * 課金され続けていた。environment による分岐は入れない (= 「本番だけ消えない」を作らない)。
+   */
+  readonly retainDataTables: boolean;
+
+  /**
    * Issue #2311 (ADR-049 cost-zero): 監査ログ出力を deploy 時に on/off する
    * (`CDK_PARAM_AUDIT_LOG_ENABLED`)。監査行 1 write = 1 WCU 固定 table への 1 write のため、
    * 書き込みコストとのトレードオフで organizer が停止できる。**default true** (未設定 /

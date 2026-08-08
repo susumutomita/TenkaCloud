@@ -1,6 +1,6 @@
-import { RemovalPolicy } from "aws-cdk-lib";
 import { AttributeType, BillingMode, Table } from "aws-cdk-lib/aws-dynamodb";
 import { Construct } from "constructs";
+import { type DataTableProps, dataTableRemovalPolicy } from "./data-table-removal-policy.js";
 
 /**
  * 1 競技イベント (= 1 Event) を 1 行で記録する DynamoDB テーブル (ADR-004 Phase 1)。
@@ -22,12 +22,13 @@ import { Construct } from "constructs";
  * Capacity / lifecycle:
  *   provisioned 1/1 (DynamoDbLowCapacity Aspect でさらに均す)。training / 競技イベント
  *   中の用途で QPS 極小、コスト 0 原則を優先する。
- *   削除方針: RETAIN。stack delete でユーザの event 履歴を意図せず消さない。
+ *   削除方針: 既定 DESTROY (#2959)。`CDK_PARAM_RETAIN_DATA_TABLES=true` のときだけ RETAIN。
+ *   消し忘れた table が PROVISIONED 容量で課金され続けるほうが実害が大きい、という判断による。
  */
 export class EventsTable extends Construct {
   public readonly table: Table;
 
-  constructor(scope: Construct, id: string) {
+  constructor(scope: Construct, id: string, props: DataTableProps = {}) {
     super(scope, id);
     this.table = new Table(this, "Table", {
       partitionKey: { name: "PK", type: AttributeType.STRING },
@@ -35,7 +36,7 @@ export class EventsTable extends Construct {
       billingMode: BillingMode.PROVISIONED,
       readCapacity: 1,
       writeCapacity: 1,
-      removalPolicy: RemovalPolicy.RETAIN,
+      removalPolicy: props.removalPolicy ?? dataTableRemovalPolicy(undefined),
       pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: false },
       timeToLiveAttribute: "expiresAt",
     });

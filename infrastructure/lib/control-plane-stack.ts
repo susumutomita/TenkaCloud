@@ -25,6 +25,7 @@ import {
   type IdpDirectory,
   type SamlIdpConfig,
 } from "./control-plane/saml-identity-providers.js";
+import { dataTableRemovalPolicy } from "./problem-deploy/data-table-removal-policy.js";
 import { SamlIdpsTable } from "./problem-deploy/saml-idps-table.js";
 import type { CustomDomainConfig } from "./security/cloudfront-custom-domain.js";
 import { attachCognitoCustomLoginDomain } from "./security/cognito-custom-domain.js";
@@ -60,6 +61,8 @@ interface ControlPlaneStackProps extends cdk.StackProps {
    * `turso` では table を **synth せず** SQL executor に直結する (= Lite と同条件)。
    */
   controlDataBackend?: string;
+  /** [Issue #2959] SamlIdps table を stack 削除後も残すか。未指定は DESTROY。 */
+  retainDataTables?: boolean;
   /** Public remote libSQL URL (turso backend のみ)。 */
   tursoDatabaseUrl?: string;
   /** libSQL auth token を持つ SSM SecureString parameter 名 (turso backend のみ)。 */
@@ -267,7 +270,11 @@ export class ControlPlaneStack extends cdk.Stack {
     // [Issue #2442 / Phase C5 と同条件] 純 SQL backend では table を synth しない (= standing cost 0)。
     // API 自体は backend に関わらず常に提供する。
     const pureSql = props.controlDataBackend === "turso";
-    const samlIdpsTable = pureSql ? undefined : new SamlIdpsTable(this, "SamlIdps");
+    const samlIdpsTable = pureSql
+      ? undefined
+      : new SamlIdpsTable(this, "SamlIdps", {
+          removalPolicy: dataTableRemovalPolicy(props.retainDataTables),
+        });
     new ControlPlaneIdpApi(this, "ControlPlaneIdpApi", {
       httpApi: controlPlaneApi.api,
       // SBT の HttpApi は defaultAuthorizer を持たない (corsPreflight のみ) ため明示的に渡す。

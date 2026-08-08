@@ -415,6 +415,16 @@ export interface LocalPlayProblemSummary {
  * load as a container problem (AWS-only, malformed, no compose entry) are
  * skipped rather than failing the whole listing — `make local list` shows
  * "what you *can* play", not a validation report.
+ *
+ * ## `status` で絞らないのは意図である (#2965)
+ *
+ * カタログは現在 ready 23 / draft 44 で、**pin された入門ドリル `sqli-demo` 自身が draft**。
+ * ここで `status === "ready"` に絞ると、local play から 67 問中 44 問が消え、最初の 1 問すら
+ * 出なくなる。local play は出題者が手元で確認する場でもあるので、draft が見えるのが正しい。
+ *
+ * つまり「draft を出す」は決定であって未整理の副作用ではない。SaaS 側の participant 向け
+ * 公開範囲は `visibility` が担っており、そちらとは別の軸である。この決定は
+ * `test/scripts/local-play-draft-visibility.test.ts` が固定する。
  */
 export function listLocalPlayProblems(
   roots: readonly string[],

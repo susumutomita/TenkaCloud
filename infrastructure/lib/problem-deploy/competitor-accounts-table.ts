@@ -1,6 +1,6 @@
-import { RemovalPolicy } from "aws-cdk-lib";
 import { AttributeType, BillingMode, Table } from "aws-cdk-lib/aws-dynamodb";
 import { Construct } from "constructs";
+import { type DataTableProps, dataTableRemovalPolicy } from "./data-table-removal-policy.js";
 
 /**
  * tenant 単位で「deploy 許可されている競技者 AWS account」を 1 行で記録する DDB テーブル
@@ -27,7 +27,7 @@ import { Construct } from "constructs";
 export class CompetitorAccountsTable extends Construct {
   public readonly table: Table;
 
-  constructor(scope: Construct, id: string) {
+  constructor(scope: Construct, id: string, props: DataTableProps = {}) {
     super(scope, id);
     this.table = new Table(this, "Table", {
       partitionKey: { name: "PK", type: AttributeType.STRING },
@@ -35,7 +35,7 @@ export class CompetitorAccountsTable extends Construct {
       billingMode: BillingMode.PROVISIONED,
       readCapacity: 1,
       writeCapacity: 1,
-      removalPolicy: RemovalPolicy.RETAIN,
+      removalPolicy: props.removalPolicy ?? dataTableRemovalPolicy(undefined),
       pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: false },
     });
   }

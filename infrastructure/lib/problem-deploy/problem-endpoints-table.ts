@@ -1,6 +1,6 @@
-import { RemovalPolicy } from "aws-cdk-lib";
 import { AttributeType, BillingMode, Table } from "aws-cdk-lib/aws-dynamodb";
 import { Construct } from "constructs";
+import { type DataTableProps, dataTableRemovalPolicy } from "./data-table-removal-policy.js";
 
 /**
  * ADR-012 Phase 3.A: Endpoint registry の per (tenant, team, problem, slot) 行を 1 行に
@@ -24,12 +24,13 @@ import { Construct } from "constructs";
  * memory: provisioned 1/1 (DynamoDbLowCapacity Aspect で再均し)。override の write 頻度は
  * 競技者 1 人 1 回 / 競技中 (= 極小)、GET は per-page-load (= 数 RCU/s) 想定。
  *
- * 削除方針: RETAIN。competitor の override 履歴を stack delete で意図せず消さない。
+ * 削除方針: 既定 DESTROY (#2959)。`CDK_PARAM_RETAIN_DATA_TABLES=true` のときだけ RETAIN。
+ * 消し忘れた table が PROVISIONED 容量で課金され続けるほうが実害が大きい、という判断による。
  */
 export class ProblemEndpointsTable extends Construct {
   public readonly table: Table;
 
-  constructor(scope: Construct, id: string) {
+  constructor(scope: Construct, id: string, props: DataTableProps = {}) {
     super(scope, id);
     this.table = new Table(this, "Table", {
       partitionKey: { name: "PK", type: AttributeType.STRING },
@@ -37,7 +38,7 @@ export class ProblemEndpointsTable extends Construct {
       billingMode: BillingMode.PROVISIONED,
       readCapacity: 1,
       writeCapacity: 1,
-      removalPolicy: RemovalPolicy.RETAIN,
+      removalPolicy: props.removalPolicy ?? dataTableRemovalPolicy(undefined),
       pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: false },
     });
   }
