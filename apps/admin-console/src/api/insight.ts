@@ -8,6 +8,13 @@ import type { AppConfig } from "../config";
 export interface TenantInsightSummary {
   readonly tenantId: string;
   readonly activeDeploys: number;
+  /**
+   * status === "COMPLETE" の件数。 **optional なのは deploy skew 対策**: admin-insight Lambda と
+   * この SPA (S3 + CloudFront) は別々に deploy されるため、SPA が先に出た環境では backend が本
+   * field を返さない。 `?? 0` で潰すと「成功しているのに 0」という、まさにこの列が直そうとしている
+   * 誤読を再現してしまうので、未報告は `undefined` のまま扱い UI は "—" を出す。
+   */
+  readonly completedDeploys?: number;
   readonly failedDeploys: number;
   /**
    * [Issue #2946] 一度でも COMPLETE に到達した累計。撤去しても 0 に戻らない。

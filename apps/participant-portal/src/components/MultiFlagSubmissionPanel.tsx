@@ -10,7 +10,7 @@ import Input from "@cloudscape-design/components/input";
 import ProgressBar from "@cloudscape-design/components/progress-bar";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Textarea from "@cloudscape-design/components/textarea";
-import { useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import {
   type HintRevealMode,
@@ -113,6 +113,8 @@ export function MultiFlagSubmissionPanel({
     isMock ? loadMockSolvedFlagIds(problemId) : new Set(),
   );
   const [submissionValues, setSubmissionValues] = useState<Readonly<Record<string, string>>>({});
+  // 正解ごとに +1 して overlay を remount する (0 のあいだは描画しない)。
+  const [celebrationCount, setCelebrationCount] = useState(0);
   const isSolved = (flag: MultiFlagEntryView) => flag.solved || mockSolvedIds.has(flag.id);
   const solvedCount = flags.filter(isSolved).length;
   const allSolved = flags.length > 0 && solvedCount === flags.length;
@@ -139,6 +141,109 @@ export function MultiFlagSubmissionPanel({
   const activeFlag = flags.find((flag) => !isSolved(flag));
   const visibleFlags = resolvedOnboardingVariant === "step" && activeFlag ? [activeFlag] : flags;
   const progress = flags.length === 0 ? 0 : Math.round((solvedCount / flags.length) * 100);
+
+  /**
+   * Issue #2946: 打鍵ごとに全 checkpoint 行を作り直さないための安定参照。
+   *
+   * `submissionValues` は panel 直下に持つ (= `prepareSubmission` が「全欄の現在値」を必要と
+   * する) ので、 1 打鍵ごとに新しい object になる。 これを行にそのまま渡すと、 打鍵のたびに
+   * 全 `SubFlagRow` (Cloudscape の Form + Input + Modal 付き HintsPanel) が再 render され、
+   * 1 打鍵のコストが checkpoint 数に比例して伸びていた (実測: 1 checkpoint 25.6ms →
+   * 12 checkpoint 91.1ms / 打鍵)。 値の読み出しは submit 時だけなので ref 越しの getter に
+   * 変え、 行に渡す callback も `useCallback` で固定して `SubFlagRow` の memo を効かせる。
+   */
+  const submissionValuesRef = useRef(submissionValues);
+  useEffect(() => {
+    submissionValuesRef.current = submissionValues;
+  }, [submissionValues]);
+  const getSubmissionValues = useCallback(() => submissionValuesRef.current, []);
+
+  // 親から渡る callback / flags は再 render で identity が変わりうるので、 行に渡す前に
+  // ref 経由の安定 wrapper に包む。 wrapper が呼ぶのは常に最新の実体。
+  const onScoredRef = useRef(onScored);
+  const prepareSubmissionRef = useRef(prepareSubmission);
+  const flagsRef = useRef(flags);
+  const variantRef = useRef(resolvedOnboardingVariant);
+  const problemIdRef = useRef(problemId);
+  useEffect(() => {
+    onScoredRef.current = onScored;
+    prepareSubmissionRef.current = prepareSubmission;
+    flagsRef.current = flags;
+    variantRef.current = resolvedOnboardingVariant;
+    problemIdRef.current = problemId;
+  });
+
+  const handleScored = useCallback(() => onScoredRef.current(), []);
+  // `prepareSubmission` の有無は行の描画分岐 (multiline を editor に差し替えるか) を変えるので、
+  // 「未指定なら undefined のまま」 を保ったまま安定参照にする。
+  const hasPrepareSubmission = prepareSubmission !== undefined;
+  const handlePrepareSubmission = useMemo(
+    () =>
+      hasPrepareSubmission
+        ? (flagId: string, values: Readonly<Record<string, string>>) => {
+            /* v8 ignore next */
+            if (!prepareSubmissionRef.current) throw new Error("prepareSubmission went missing");
+            return prepareSubmissionRef.current(flagId, values);
+          }
+        : undefined,
+    [hasPrepareSubmission],
+  );
+
+  const handleValueChange = useCallback((flagId: string, value: string) => {
+    setSubmissionValues((current) => ({ ...current, [flagId]: value }));
+  }, []);
+
+  const handleMockSolved = useCallback((flagId: string) => {
+    setMockSolvedIds((current) => new Set([...current, flagId]));
+    saveMockSolvedFlagId(problemIdRef.current, flagId);
+  }, []);
+
+  const stepIndexOf = useCallback(
+    (flagId: string) => flagsRef.current.findIndex((flag) => flag.id === flagId) + 1,
+    [],
+  );
+
+  const handleHintRevealed = useCallback(
+    (flagId: string, hintId: string) => {
+      if (problemIdRef.current !== WHAT_IS_DRILL_PROBLEM_ID) return;
+      revealedHints.current.add(hintId);
+      trackOnboardingEvent("onboarding_hint_reveal", {
+        onboarding_variant: variantRef.current,
+        assignment_source: assignmentSource.current,
+        onboarding_step: flagId,
+        step_index: stepIndexOf(flagId),
+      });
+    },
+    [stepIndexOf],
+  );
+
+  const handleSubmitted = useCallback(
+    (flagId: string, outcome: SubmitFlagOutcome) => {
+      // 祝祭は panel に 1 つだけ持つ。 以前は checkpoint 行ごとに overlay を描いていたので、
+      // 続けて解くと画面全体を覆う confetti 層が checkpoint 数だけ積み上がり (60 粒 ×
+      // 行数、 同じ `@keyframes` を持つ <style> も行数分)、 演出としても過剰だった。
+      // 1 つを解答ごとに remount して流し直す (= CelebrationOverlay が元から想定する形)。
+      if (outcome.kind === "ok") setCelebrationCount((current) => current + 1);
+      if (problemIdRef.current !== WHAT_IS_DRILL_PROBLEM_ID) return;
+      if (outcome.kind === "wrong") wrongAttempts.current += 1;
+      trackOnboardingEvent("onboarding_submit", {
+        onboarding_variant: variantRef.current,
+        assignment_source: assignmentSource.current,
+        onboarding_step: flagId,
+        onboarding_result: outcome.kind,
+        step_index: stepIndexOf(flagId),
+      });
+      if (outcome.kind === "ok") {
+        trackOnboardingEvent("onboarding_step_complete", {
+          onboarding_variant: variantRef.current,
+          assignment_source: assignmentSource.current,
+          onboarding_step: flagId,
+          step_index: stepIndexOf(flagId),
+        });
+      }
+    },
+    [stepIndexOf],
+  );
 
   useEffect(() => {
     if (problemId !== WHAT_IS_DRILL_PROBLEM_ID) return;
@@ -184,6 +289,7 @@ export function MultiFlagSubmissionPanel({
 
   return (
     <div data-onboarding-variant={resolvedOnboardingVariant}>
+      {celebrationCount > 0 && <CelebrationOverlay key={celebrationCount} visible />}
       <SpaceBetween size="s">
         {resolvedOnboardingVariant === "step" && !allSolved ? (
           <ProgressBar
@@ -210,47 +316,15 @@ export function MultiFlagSubmissionPanel({
             problemId={problemId}
             flag={flag}
             solved={isSolved(flag)}
-            onMockSolved={(flagId) => {
-              setMockSolvedIds((current) => new Set([...current, flagId]));
-              saveMockSolvedFlagId(problemId, flagId);
-            }}
-            onScored={onScored}
+            onMockSolved={handleMockSolved}
+            onScored={handleScored}
             revealOrder={revealOrder}
             value={submissionValues[flag.id] ?? ""}
-            values={submissionValues}
-            onValueChange={(value) =>
-              setSubmissionValues((current) => ({ ...current, [flag.id]: value }))
-            }
-            prepareSubmission={prepareSubmission}
-            onHintRevealed={(hintId) => {
-              if (problemId !== WHAT_IS_DRILL_PROBLEM_ID) return;
-              revealedHints.current.add(hintId);
-              trackOnboardingEvent("onboarding_hint_reveal", {
-                onboarding_variant: resolvedOnboardingVariant,
-                assignment_source: assignmentSource.current,
-                onboarding_step: flag.id,
-                step_index: flags.indexOf(flag) + 1,
-              });
-            }}
-            onSubmitted={(outcome) => {
-              if (problemId !== WHAT_IS_DRILL_PROBLEM_ID) return;
-              if (outcome.kind === "wrong") wrongAttempts.current += 1;
-              trackOnboardingEvent("onboarding_submit", {
-                onboarding_variant: resolvedOnboardingVariant,
-                assignment_source: assignmentSource.current,
-                onboarding_step: flag.id,
-                onboarding_result: outcome.kind,
-                step_index: flags.indexOf(flag) + 1,
-              });
-              if (outcome.kind === "ok") {
-                trackOnboardingEvent("onboarding_step_complete", {
-                  onboarding_variant: resolvedOnboardingVariant,
-                  assignment_source: assignmentSource.current,
-                  onboarding_step: flag.id,
-                  step_index: flags.indexOf(flag) + 1,
-                });
-              }
-            }}
+            getValues={getSubmissionValues}
+            onValueChange={handleValueChange}
+            prepareSubmission={handlePrepareSubmission}
+            onHintRevealed={handleHintRevealed}
+            onSubmitted={handleSubmitted}
           />
         ))}
         {problemId === WHAT_IS_DRILL_PROBLEM_ID && allSolved && <WhatIsTutorialComplete />}
@@ -321,6 +395,12 @@ export function subFlagFieldPresentation(
   };
 }
 
+/**
+ * Issue #2946: すべての callback は panel 側で `useCallback` 固定され、 行を特定する情報は
+ * 引数 (`flagId`) で渡る。 行ごとの closure を prop にすると memo が毎 render で外れるため。
+ * 現在値の読み出しも object ではなく `getValues` getter 経由にして、 他の行の打鍵で
+ * この行の props が変わらないようにしている。
+ */
 interface SubFlagRowProps {
   apiBaseUrl: string;
   sessionToken: string;
@@ -330,11 +410,11 @@ interface SubFlagRowProps {
   onMockSolved: (flagId: string) => void;
   onScored: () => Promise<void>;
   revealOrder?: HintRevealMode;
-  onHintRevealed?: (hintId: string) => void;
-  onSubmitted?: (outcome: SubmitFlagOutcome) => void;
+  onHintRevealed?: (flagId: string, hintId: string) => void;
+  onSubmitted?: (flagId: string, outcome: SubmitFlagOutcome) => void;
   value: string;
-  values: Readonly<Record<string, string>>;
-  onValueChange: (value: string) => void;
+  getValues: () => Readonly<Record<string, string>>;
+  onValueChange: (flagId: string, value: string) => void;
   prepareSubmission?: (flagId: string, values: Readonly<Record<string, string>>) => Promise<string>;
 }
 
@@ -359,11 +439,9 @@ function revealedHintCountLabel(
 function SolvedSubFlagReview({
   flag,
   label,
-  celebrate,
 }: {
   readonly flag: MultiFlagEntryView;
   readonly label: string;
-  readonly celebrate: boolean;
 }) {
   const t = useT();
   const revealedHints = (flag.hints ?? []).flatMap((hint, index) =>
@@ -372,42 +450,39 @@ function SolvedSubFlagReview({
   const hintCount = revealedHintCountLabel(revealedHints.length, t);
 
   return (
-    <>
-      {celebrate && <CelebrationOverlay visible />}
-      <ExpandableSection
-        variant="container"
-        defaultExpanded={false}
-        headingTagOverride="h3"
-        headerText={t("multi_flag.solved_header", { label })}
-        headerDescription={t("multi_flag.review_summary", {
-          points: flag.points,
-          hintCount,
-        })}
-        headerAriaLabel={t("multi_flag.review_aria", { label, hintCount })}
-      >
-        {revealedHints.length === 0 ? (
-          <Box color="text-body-secondary">{t("multi_flag.review_no_hints")}</Box>
-        ) : (
-          <SpaceBetween size="s">
-            {revealedHints.map(({ hint, index }) => (
-              <Box key={hint.id}>
-                <strong>{t("problem_panel.hint_label_colon", { index: index + 1 })}</strong>{" "}
-                <span style={{ color: hint.penalty > 0 ? "#b54708" : "#475467" }}>
-                  {hint.penalty > 0
-                    ? t("multi_flag.review_hint_penalty", { penalty: hint.penalty })
-                    : t("multi_flag.review_hint_no_penalty")}
-                </span>
-                {hint.content && <Box margin={{ top: "xxs" }}>{hint.content}</Box>}
-              </Box>
-            ))}
-          </SpaceBetween>
-        )}
-      </ExpandableSection>
-    </>
+    <ExpandableSection
+      variant="container"
+      defaultExpanded={false}
+      headingTagOverride="h3"
+      headerText={t("multi_flag.solved_header", { label })}
+      headerDescription={t("multi_flag.review_summary", {
+        points: flag.points,
+        hintCount,
+      })}
+      headerAriaLabel={t("multi_flag.review_aria", { label, hintCount })}
+    >
+      {revealedHints.length === 0 ? (
+        <Box color="text-body-secondary">{t("multi_flag.review_no_hints")}</Box>
+      ) : (
+        <SpaceBetween size="s">
+          {revealedHints.map(({ hint, index }) => (
+            <Box key={hint.id}>
+              <strong>{t("problem_panel.hint_label_colon", { index: index + 1 })}</strong>{" "}
+              <span style={{ color: hint.penalty > 0 ? "#b54708" : "#475467" }}>
+                {hint.penalty > 0
+                  ? t("multi_flag.review_hint_penalty", { penalty: hint.penalty })
+                  : t("multi_flag.review_hint_no_penalty")}
+              </span>
+              {hint.content && <Box margin={{ top: "xxs" }}>{hint.content}</Box>}
+            </Box>
+          ))}
+        </SpaceBetween>
+      )}
+    </ExpandableSection>
   );
 }
 
-function SubFlagRow({
+const SubFlagRow = memo(function SubFlagRow({
   apiBaseUrl,
   sessionToken,
   problemId,
@@ -419,7 +494,7 @@ function SubFlagRow({
   onHintRevealed,
   onSubmitted,
   value,
-  values,
+  getValues,
   onValueChange,
   prepareSubmission,
 }: SubFlagRowProps) {
@@ -434,12 +509,18 @@ function SubFlagRow({
   const [submitting, setSubmitting] = useState(false);
   const [outcome, setOutcome] = useState<SubmitFlagOutcome | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // HintsPanel の memo を保つため、 flagId を閉じ込める wrapper も安定参照で渡す。
+  const flagId = flag.id;
+  const handleRevealTracked = useCallback(
+    (hintId: string) => onHintRevealed?.(flagId, hintId),
+    [flagId, onHintRevealed],
+  );
 
   // 正解直後 (mock / backend 共通): 祝祭 + 獲得スコア。 server 由来の solved 表示も同じ success
   // review row に倒すので、 「refetch が空振りして solved に切り替わらない」 mock mode も吸収できる。
   // review は revealed=true の hint だけを表示し、 reveal / score API を呼ぶ操作を持たない。
   if (solved || outcome?.kind === "ok") {
-    return <SolvedSubFlagReview flag={flag} label={label} celebrate={outcome?.kind === "ok"} />;
+    return <SolvedSubFlagReview flag={flag} label={label} />;
   }
 
   const handleSubmit = async (e: { preventDefault: () => void }) => {
@@ -449,12 +530,12 @@ function SubFlagRow({
     setSubmitError(null);
     setOutcome(null);
     try {
-      const submission = prepareSubmission ? await prepareSubmission(flag.id, values) : value;
+      const submission = prepareSubmission ? await prepareSubmission(flag.id, getValues()) : value;
       const result = isMock
         ? evaluateMockSubFlag(problemId, flag.id, submission, flag.points)
         : await submitFlag(apiBaseUrl, sessionToken, problemId, submission, flag.id);
       setOutcome(result);
-      onSubmitted?.(result);
+      onSubmitted?.(flag.id, result);
       switch (result.kind) {
         case "ok":
           if (isMock) onMockSolved(flag.id);
@@ -486,7 +567,7 @@ function SubFlagRow({
             ) : flag.input === "multiline" ? (
               <Textarea
                 value={value}
-                onChange={(e) => onValueChange(e.detail.value)}
+                onChange={(e) => onValueChange(flag.id, e.detail.value)}
                 placeholder={field.placeholder}
                 disabled={submitting}
                 rows={10}
@@ -494,7 +575,7 @@ function SubFlagRow({
             ) : (
               <Input
                 value={value}
-                onChange={(e) => onValueChange(e.detail.value)}
+                onChange={(e) => onValueChange(flag.id, e.detail.value)}
                 placeholder={field.placeholder}
                 disabled={submitting}
               />
@@ -542,9 +623,9 @@ function SubFlagRow({
           hints={flag.hints}
           onRevealed={onScored}
           revealOrder={revealOrder}
-          onRevealTracked={onHintRevealed}
+          onRevealTracked={handleRevealTracked}
         />
       )}
     </SpaceBetween>
   );
-}
+});

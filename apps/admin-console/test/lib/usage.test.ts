@@ -28,6 +28,7 @@ const tenant = (over: Partial<Tenant>): Tenant => ({
 const insightItem = (over: Partial<TenantInsightSummary>): TenantInsightSummary => ({
   tenantId: "t-x",
   activeDeploys: 0,
+  completedDeploys: 0,
   failedDeploys: 0,
   totalEvents: 0,
   ...over,
@@ -53,11 +54,12 @@ const insight: Record<string, TenantInsightSummary> = {
   "t-a": insightItem({
     tenantId: "t-a",
     activeDeploys: 2,
+    completedDeploys: 4,
     failedDeploys: 1,
     everCompletedDeploys: 7,
   }),
   // [Issue #2946] everCompletedDeploys を返さない旧 backend の応答。0 と偽らず null になる。
-  "t-b": insightItem({ tenantId: "t-b", activeDeploys: 3, failedDeploys: 0 }),
+  "t-b": insightItem({ tenantId: "t-b", activeDeploys: 3, completedDeploys: 1, failedDeploys: 0 }),
 };
 
 describe("isDeprovisionedTenant", () => {
@@ -156,6 +158,7 @@ describe("buildUsageRows", () => {
         tier: "basic",
         tenantStatus: "Complete",
         activeDeploys: 2,
+        completedDeploys: 4,
         failedDeploys: 1,
         everCompletedDeploys: 7,
       },
@@ -165,6 +168,7 @@ describe("buildUsageRows", () => {
         tier: "PLATINUM",
         tenantStatus: "Complete",
         activeDeploys: 3,
+        completedDeploys: 1,
         failedDeploys: 0,
         everCompletedDeploys: null,
       },
@@ -174,6 +178,7 @@ describe("buildUsageRows", () => {
         tier: "basic",
         tenantStatus: "Deleted",
         activeDeploys: 0,
+        completedDeploys: 0,
         failedDeploys: 0,
         everCompletedDeploys: null,
       },
@@ -185,9 +190,22 @@ describe("buildUsageRows", () => {
     expect(rows).toHaveLength(3);
     for (const row of rows) {
       expect(row.activeDeploys).toBeNull();
+      expect(row.completedDeploys).toBeNull();
       expect(row.failedDeploys).toBeNull();
       expect(row.everCompletedDeploys).toBeNull();
     }
+  });
+
+  // deploy skew: admin-insight Lambda が旧版で completedDeploys を返さない環境。 0 に潰すと
+  // 「成功しているのに 0」= この列が直そうとしている誤読そのものになるので null (= "—") にする。
+  it("should keep completedDeploys null when the backend does not report the field", () => {
+    const legacy: Record<string, TenantInsightSummary> = {
+      "t-a": { tenantId: "t-a", activeDeploys: 1, failedDeploys: 0, totalEvents: 0 },
+    };
+    const rows = buildUsageRows(tenants, legacy);
+    expect(rows[0]).toMatchObject({ activeDeploys: 1, completedDeploys: null });
+    // 一方、 取得済みで対象 tenant の行が無い場合は 0 件が正しい (未報告ではない)。
+    expect(rows[1]).toMatchObject({ activeDeploys: 0, completedDeploys: 0 });
   });
 });
 
@@ -217,6 +235,20 @@ describe("sortUsageRows", () => {
       "Gamma Org",
       "Beta Org",
       "Alpha Org",
+    ]);
+  });
+
+  it("should sort numerically by completedDeploys in both directions", () => {
+    // completedDeploys: t-a=4, t-b=1, t-c=0 (insight に居ない)
+    expect(sortUsageRows(rows, "completedDeploys", true).map((r) => r.tenantId)).toEqual([
+      "t-a",
+      "t-b",
+      "t-c",
+    ]);
+    expect(sortUsageRows(rows, "completedDeploys", false).map((r) => r.tenantId)).toEqual([
+      "t-c",
+      "t-b",
+      "t-a",
     ]);
   });
 

@@ -93,8 +93,20 @@ const tenants = [
 ];
 
 const insight = {
-  "t-a": { tenantId: "t-a", activeDeploys: 2, failedDeploys: 1, totalEvents: 3 },
-  "t-b": { tenantId: "t-b", activeDeploys: 3, failedDeploys: 0, totalEvents: 3 },
+  "t-a": {
+    tenantId: "t-a",
+    activeDeploys: 2,
+    completedDeploys: 4,
+    failedDeploys: 1,
+    totalEvents: 3,
+  },
+  "t-b": {
+    tenantId: "t-b",
+    activeDeploys: 3,
+    completedDeploys: 1,
+    failedDeploys: 0,
+    totalEvents: 3,
+  },
 };
 
 /** body 内の出現位置で表示順を比較する (tenant 名は table 行にしか出ない)。 */
@@ -115,6 +127,26 @@ const awaitInsightApplied = async (totalActiveDeploys: string) => {
     ).toBeInTheDocument(),
   );
 };
+
+/** 列見出しの並びから列 index を引く (= 列順を hardcode せず、 列追加で壊れないようにする)。 */
+const columnIndexOf = (headerKey: string): number => {
+  const headers = Array.from(document.querySelectorAll("thead th"));
+  const index = headers.findIndex((th) => th.textContent?.includes(headerKey));
+  expect(index).toBeGreaterThanOrEqual(0);
+  return index;
+};
+
+/** tenant 名の cell から行を引く (= 同じ行の別 cell を読むための anchor)。 */
+const findRowByTenantName = async (tenantName: string): Promise<HTMLElement> => {
+  const row = (await screen.findByText(tenantName)).closest("tr");
+  if (!row) throw new Error(`expected a table row for ${tenantName}`);
+  return row as HTMLElement;
+};
+
+/** 完了デプロイ列の表示文字列 ("—" を含む)。 */
+const completedCellText = (row: HTMLElement): string =>
+  row.querySelectorAll("td")[columnIndexOf("usage.col_completed_deploys")]?.textContent?.trim() ??
+  "";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -182,6 +214,37 @@ describe("UsagePage per-tenant table", () => {
     await awaitInsightApplied("5");
     expect(positionOf("Beta Org")).toBeLessThan(positionOf("Alpha Org"));
     expect(positionOf("Alpha Org")).toBeLessThan(positionOf("Gamma Org"));
+  });
+
+  /**
+   * 2026-08-08 SaaS モード動作確認の再現。 実行中 / 失敗の 2 列だけだと、 成功した deploy が
+   * 2 件ある tenant も何もしていない tenant も 0 / 0 になり operator が区別できなかった。
+   * 完了列があれば「2」と「0」で分かれる。
+   */
+  it("should distinguish a healthy tenant from an idle one when nothing is active or failed", async () => {
+    h.mockFetchInsight.mockResolvedValue({
+      "t-a": { tenantId: "t-a", activeDeploys: 0, completedDeploys: 2, failedDeploys: 0 },
+      "t-b": { tenantId: "t-b", activeDeploys: 0, completedDeploys: 0, failedDeploys: 0 },
+    });
+    render(<UsagePage config={cfg()} />);
+    await screen.findByText("Alpha Org");
+    await awaitInsightApplied("0"); // active 合計 = 0 (= 旧 UI が両方 0 に見えた状態)
+
+    const healthy = await findRowByTenantName("Alpha Org");
+    const idle = await findRowByTenantName("Beta Org");
+    expect(completedCellText(healthy)).toBe("2");
+    expect(completedCellText(idle)).toBe("0");
+  });
+
+  it("should render an em-dash completed count when the backend does not report the field", async () => {
+    // admin-insight Lambda が旧版の環境 (SPA 先行 deploy)。 0 と表示してはいけない。
+    h.mockFetchInsight.mockResolvedValue({
+      "t-a": { tenantId: "t-a", activeDeploys: 1, failedDeploys: 0, totalEvents: 0 },
+    });
+    render(<UsagePage config={cfg()} />);
+    await screen.findByText("Alpha Org");
+    await awaitInsightApplied("1");
+    expect(completedCellText(await findRowByTenantName("Alpha Org"))).toBe("—");
   });
 
   it("should re-sort rows when the tenant name column header is clicked", async () => {

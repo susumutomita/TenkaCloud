@@ -289,4 +289,31 @@ describe("tenant ApiGateway", () => {
       ResourceId: { Ref: adminFeatureFlagsId },
     });
   });
+
+  // Regression (2026-08-08 siloverify): every route bound with `LambdaIntegration` emits its own
+  // AWS::Lambda::Permission, and these Lambdas are SHARED Application-Plane functions, so each
+  // tenant API's statements pile into the same 20,480-byte resource policy. Measured live with
+  // only the pooled tenant present, CompetitorAccountsApi already held 26 statements / 12,662
+  // bytes; the first silo tenant's admin routes pushed it to 20,674 and CloudFormation rolled the
+  // whole tenant stack back ("The final policy size (20674) is bigger than the limit (20480)").
+  //
+  // Assert the count directly rather than the mechanism: one wildcard permission per backing
+  // Lambda, never one per method. Counting is what actually protects the cap — a future route
+  // added with LambdaIntegration would slip past any "uses AWS_PROXY" style assertion.
+  it("should grant one invoke permission per backing Lambda, not one per method", () => {
+    const permissions = tpl.findResources("AWS::Lambda::Permission");
+    const methodCount = Object.keys(tpl.findResources("AWS::ApiGateway::Method")).length;
+
+    // The harness wires 3 backing Lambdas (deploy / event / competitor-accounts); samlIdpLambda
+    // is optional and absent here.
+    expect(Object.keys(permissions)).toHaveLength(3);
+    // Sanity: there really are far more methods than permissions, so this is a meaningful bound.
+    expect(methodCount).toBeGreaterThan(20);
+
+    for (const permission of Object.values(permissions)) {
+      // Wildcard over the whole API rather than a per-method ARN.
+      expect(permission.Properties?.SourceArn).toBeDefined();
+      expect(JSON.stringify(permission.Properties?.SourceArn)).toContain("execute-api");
+    }
+  });
 });
