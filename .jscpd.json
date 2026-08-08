@@ -11,6 +11,7 @@
     "**/test/**",
     "**/__tests__/**",
     "apps/developer-portal/src/content/reference-data.ts",
+    "apps/developer-portal/src/content/machine-api.generated.ts",
     "problems/**",
     "packs/**",
     "landing/**"

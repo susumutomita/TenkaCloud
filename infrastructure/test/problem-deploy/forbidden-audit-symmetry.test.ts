@@ -26,6 +26,11 @@ const { buildAuthErrorHandler, createRoleCheckMiddleware } = await import(
   "../../lib/problem-deploy/handlers/shared/auth-wiring"
 );
 const { TENANT_ADMIN_ROLE } = await import("../../lib/problem-deploy/handlers/deploy-handler/auth");
+const { MachineRouteDeniedError } = await import(
+  "../../lib/problem-deploy/handlers/shared/machine-principal"
+);
+type MachinePrincipal =
+  import("../../lib/problem-deploy/handlers/shared/machine-principal").MachinePrincipal;
 
 const ORIGINAL_ROLE = process.env.DEFAULT_USER_ROLE;
 const ORIGINAL_TENANT = process.env.DEFAULT_TENANT_ID;
@@ -125,6 +130,55 @@ describe("#2954: a human role denial writes an audit row on the deploy and event
   it("should not write a row for healthz (no auth is applied there)", async () => {
     const res = await appWithAdminOnlyRoute("[deploy]").request("/healthz");
     expect(res.status).toBe(StatusCodes.OK);
+    expect(auditMocks.writeAuditEvent).not.toHaveBeenCalled();
+  });
+});
+
+describe("#2948: a machine route denial audits only when the principal is known", () => {
+  function appWithMachineDenial(principal: MachinePrincipal | undefined): Hono {
+    const app = new Hono();
+    app.onError(buildAuthErrorHandler({ logPrefix: "[deploy]" }));
+    app.delete("/deployments/:jobId", () => {
+      throw new MachineRouteDeniedError(
+        principal ? "route_not_allowlisted" : "not_a_machine_principal",
+        "DELETE",
+        "/deployments/01H8XGJWBWBAQ4N6RZHM4S2KMV",
+        principal,
+      );
+    });
+    return app;
+  }
+
+  it("should write a forbidden row against the bound tenant when the principal resolved", async () => {
+    const res = await appWithMachineDenial({
+      tenantId: "tenant-1",
+      clientId: "client-a",
+      capabilities: ["read"],
+    }).request("/deployments/01H8XGJWBWBAQ4N6RZHM4S2KMV", { method: "DELETE" });
+    expect(res.status).toBe(StatusCodes.FORBIDDEN);
+    expect(await res.json()).toMatchObject({ error: "forbidden_machine_route" });
+    expect(auditMocks.writeAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: "tenant-1",
+        actor: "m2m:client-a",
+        action: "DELETE /deployments/01H8XGJWBWBAQ4N6RZHM4S2KMV",
+        outcome: "forbidden",
+        target: "route_not_allowlisted",
+      }),
+    );
+  });
+
+  it("should refuse to invent a tenant row when the principal could not be resolved", async () => {
+    // `not_a_machine_principal` は tenant も actor も特定できない拒否。ここで `unknown` 行を
+    // 書くと、admin console の Audit Log に **どのテナントのものでもない** 行が並ぶ。human 側の
+    // 拒否 (上の describe) が `tenantId: "unknown"` を書くのとは意図的に非対称にしてある:
+    // human は自テナントのコンソールから来ていることが判っているが、machine は判っていない。
+    const res = await appWithMachineDenial(undefined).request(
+      "/deployments/01H8XGJWBWBAQ4N6RZHM4S2KMV",
+      { method: "DELETE" },
+    );
+    expect(res.status).toBe(StatusCodes.FORBIDDEN);
+    expect(await res.json()).toMatchObject({ error: "forbidden_machine_route" });
     expect(auditMocks.writeAuditEvent).not.toHaveBeenCalled();
   });
 });

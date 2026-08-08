@@ -6,10 +6,7 @@
  * そもそも machine に開いていないのかを判別できない。ここで言葉にする。
  */
 
-export type ApiFetch = (
-  input: string,
-  init: { method: string; headers: Record<string, string>; body?: string },
-) => Promise<{ ok: boolean; status: number; text: () => Promise<string> }>;
+import type { FetchLike } from "./auth.js";
 
 export class ApiError extends Error {
   constructor(
@@ -58,7 +55,8 @@ export function explainApiError(status: number, code: string | undefined): strin
 export interface MachineApiClientOptions {
   readonly baseUrl: string;
   readonly accessToken: string;
-  readonly fetchImpl: ApiFetch;
+  // token endpoint と machine API で同じ関数を使い回せることが要点なので、型も 1 つに保つ。
+  readonly fetchImpl: FetchLike;
 }
 
 export interface DeploymentSummary {
