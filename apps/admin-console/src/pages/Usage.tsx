@@ -251,6 +251,16 @@ export function UsagePage({ config }: { config: AppConfig }) {
             cell: (row) => deployCell(row.activeDeploys),
             sortingField: "activeDeploys",
           },
+          // 実行中 / 失敗の 2 列だけだと、 成功して稼働中の tenant も何もしていない tenant も
+          // 0 / 0 になり operator が区別できない (2026-08-08 SaaS モード動作確認で誤認された)。
+          // App Plane の deployment 明細を持ち込むのは plane 境界違反なので、 集計値の列を足す
+          // (docs/architecture/principles.md)。
+          {
+            id: "completedDeploys",
+            header: t("usage.col_completed_deploys"),
+            cell: (row) => deployCell(row.completedDeploys),
+            sortingField: "completedDeploys",
+          },
           {
             id: "failedDeploys",
             header: t("usage.col_failed_deploys"),

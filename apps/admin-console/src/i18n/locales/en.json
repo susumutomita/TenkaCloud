@@ -34,6 +34,7 @@
     "col_tier": "Tier",
     "col_status": "Status",
     "col_active_deploys": "Active deploys",
+    "col_completed_deploys": "Completed deploys",
     "col_failed_deploys": "Failed deploys",
     "loading": "Loading…",
     "retry": "Retry",

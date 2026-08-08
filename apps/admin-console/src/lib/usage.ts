@@ -33,6 +33,13 @@ export interface UsageRow {
   readonly tier: string;
   readonly tenantStatus: string;
   readonly activeDeploys: number | null;
+  /**
+   * status === "COMPLETE" の件数。 null になる 2 経路があり、 どちらも UI は "—" を出す:
+   *   - insight 自体が未取得 (他の deploy 列と同じ)
+   *   - insight は取得できたが backend が本 field を返さない (= Lambda がまだ旧版)
+   * 後者を 0 に潰さないのが重要 ([[TenantInsightSummary.completedDeploys]] のコメント参照)。
+   */
+  readonly completedDeploys: number | null;
   readonly failedDeploys: number | null;
 }
 
@@ -42,6 +49,7 @@ export type UsageSortField =
   | "tier"
   | "tenantStatus"
   | "activeDeploys"
+  | "completedDeploys"
   | "failedDeploys";
 
 /**
@@ -98,6 +106,16 @@ export function computeTierDistribution(tenants: readonly Tenant[]): readonly Ti
     .sort((a, b) => b.count - a.count || a.tier.localeCompare(b.tier));
 }
 
+/**
+ * 完了件数だけは「map に居ない tenant」と「item にこの field が無い backend」を区別する。
+ *   - summary 無し (= 取得済みだが対象 tenant の行が無い) → 0 件が正しい
+ *   - summary 有り + field 無し (= admin-insight Lambda が旧版) → 不明。 0 と言ってはいけない
+ */
+function completedFromSummary(summary: TenantInsightSummary | undefined): number | null {
+  if (!summary) return 0;
+  return summary.completedDeploys ?? null;
+}
+
 /** tenant 一覧と insight 集計を tenantId で join して table 行を作る。 */
 export function buildUsageRows(
   tenants: readonly Tenant[],
@@ -111,6 +129,7 @@ export function buildUsageRows(
       tier: tenant.tier,
       tenantStatus: tenant.tenantStatus,
       activeDeploys: insight === null ? null : (summary?.activeDeploys ?? 0),
+      completedDeploys: insight === null ? null : completedFromSummary(summary),
       failedDeploys: insight === null ? null : (summary?.failedDeploys ?? 0),
     };
   });

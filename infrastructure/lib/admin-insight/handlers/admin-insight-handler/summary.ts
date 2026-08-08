@@ -9,9 +9,10 @@ import {
  * 1 tenant 分の deploy / event 集計。ADR-011 Phase 1 API の正本 shape:
  *   {
  *     tenantId,
- *     activeDeploys,   // status ∈ {PENDING, IN_PROGRESS} の Deployments 件数
- *     failedDeploys,   // status === "FAILED" の Deployments 件数
- *     totalEvents,     // Events GSI1 (TENANT#<id>) で得られる総件数
+ *     activeDeploys,    // status ∈ {PENDING, IN_PROGRESS} の Deployments 件数
+ *     completedDeploys, // status === "COMPLETE" の Deployments 件数
+ *     failedDeploys,    // status === "FAILED" の Deployments 件数
+ *     totalEvents,      // Events GSI1 (TENANT#<id>) で得られる総件数
  *   }
  *
  * `name` / `tier` は SBT TenantDetails 管轄なので本 backend では返さない。frontend が
@@ -21,6 +22,17 @@ import {
 export interface TenantSummary {
   readonly tenantId: string;
   readonly activeDeploys: number;
+  /**
+   * status === "COMPLETE" の件数。 active / failed だけでは「成功して稼働中の tenant」と
+   * 「まだ何もしていない tenant」がどちらも 0 / 0 になり operator が区別できない (2026-08-08 の
+   * SaaS モード動作確認で実際に誤認された) ため足した *現在値* の集計。
+   *
+   * **撤去済みは含まない**: teardown された deployment は DELETING / DELETED / EXPIRED /
+   * AUTO_DELETED へ遷移するので、成功後に撤去すると再び 0 に戻る。 過去に成功したかどうかを
+   * 累計で見せるには status 以外の marker が必要になる (FAILED 行も teardown 経路で DELETED に
+   * なりうるので、現在の status から「かつて成功した」は復元できない)。
+   */
+  readonly completedDeploys: number;
   readonly failedDeploys: number;
   readonly totalEvents: number;
 }
@@ -30,6 +42,7 @@ export interface TenantsSummaryResponse {
 }
 
 const ACTIVE_DEPLOY_STATUSES = ["PENDING", "IN_PROGRESS"];
+const COMPLETED_DEPLOY_STATUSES = ["COMPLETE"];
 const FAILED_DEPLOY_STATUSES = ["FAILED"];
 
 /**
@@ -40,20 +53,25 @@ const FAILED_DEPLOY_STATUSES = ["FAILED"];
  * active/failed 両方を集計) だったが、pure SQL backend (turso) では Deployments table
  * 自体が synth されず `shared.deploymentsTableName` が空文字になるため即死していた。
  * `countActiveByTenant` は deploy-quota.ts (#2441 Phase B1) で既に全 backend 実装済みの
- * 汎用カウントメソッドなので、それを active/failed の 2 回呼ぶ形に寄せる。default backend
- * (dynamodb) は 1 回の full-item Query が `Select=COUNT` の 2 回の Query に分かれる差分のみ
+ * 汎用カウントメソッドなので、それを active/completed/failed の 3 回呼ぶ形に寄せる。default
+ * backend (dynamodb) は 1 回の full-item Query が `Select=COUNT` の 3 回の Query に分かれる差分のみ
  * (該当 API は operator の低頻度ダッシュボード呼び出しで、ホットパスではない)。
+ *
+ * 3 status の合計は tenant の全 deployment 数にはならない (APPROVAL_PENDING と teardown 系の
+ * DELETING / DELETED / EXPIRED / AUTO_DELETED はどのカウントにも入らない)。 UI もそれらを
+ * 合計として見せない。
  */
 async function countTenantDeployments(
   shared: AdminInsightSharedResources,
   tenantId: string,
-): Promise<{ activeDeploys: number; failedDeploys: number }> {
+): Promise<{ activeDeploys: number; completedDeploys: number; failedDeploys: number }> {
   const repository: DeploymentsQueryPort = await resolveDeploymentsRepository(shared);
-  const [activeDeploys, failedDeploys] = await Promise.all([
+  const [activeDeploys, completedDeploys, failedDeploys] = await Promise.all([
     repository.countActiveByTenant(tenantId, ACTIVE_DEPLOY_STATUSES),
+    repository.countActiveByTenant(tenantId, COMPLETED_DEPLOY_STATUSES),
     repository.countActiveByTenant(tenantId, FAILED_DEPLOY_STATUSES),
   ]);
-  return { activeDeploys, failedDeploys };
+  return { activeDeploys, completedDeploys, failedDeploys };
 }
 
 /**
@@ -99,6 +117,7 @@ export async function summarizeTenants(
       return {
         tenantId,
         activeDeploys: deploys.activeDeploys,
+        completedDeploys: deploys.completedDeploys,
         failedDeploys: deploys.failedDeploys,
         totalEvents,
       };
