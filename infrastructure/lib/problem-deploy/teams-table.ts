@@ -1,6 +1,6 @@
-import { RemovalPolicy } from "aws-cdk-lib";
 import { AttributeType, BillingMode, Table } from "aws-cdk-lib/aws-dynamodb";
 import { Construct } from "constructs";
+import { type DataTableProps, dataTableRemovalPolicy } from "./data-table-removal-policy.js";
 
 /**
  * 1 競技イベントに参加する 1 チームを 1 行で記録する DynamoDB テーブル (ADR-004 Phase 1)。
@@ -32,7 +32,7 @@ import { Construct } from "constructs";
 export class TeamsTable extends Construct {
   public readonly table: Table;
 
-  constructor(scope: Construct, id: string) {
+  constructor(scope: Construct, id: string, props: DataTableProps = {}) {
     super(scope, id);
     this.table = new Table(this, "Table", {
       partitionKey: { name: "PK", type: AttributeType.STRING },
@@ -40,7 +40,7 @@ export class TeamsTable extends Construct {
       billingMode: BillingMode.PROVISIONED,
       readCapacity: 1,
       writeCapacity: 1,
-      removalPolicy: RemovalPolicy.RETAIN,
+      removalPolicy: props.removalPolicy ?? dataTableRemovalPolicy(undefined),
       pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: false },
       timeToLiveAttribute: "expiresAt",
     });

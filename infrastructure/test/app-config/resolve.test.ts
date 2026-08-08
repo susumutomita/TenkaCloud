@@ -290,6 +290,28 @@ describe("resolveAppConfig", () => {
     }
   });
 
+  // Issue #2959: RETAIN は opt-in。他の boolean parameter と向きが逆なので、"true" 以外
+  // (未設定 / "false" / "1" / "TRUE") がすべて DESTROY 側に倒れることを見る。ここが緩むと
+  // 「消えるつもりが残る」= destroy 後に PROVISIONED 課金が続く元の問題に戻る。
+  it.each([
+    ["unset", undefined, false],
+    ["false", "false", false],
+    ["1", "1", false],
+    ["TRUE", "TRUE", false],
+    ["true", "true", true],
+  ])("retainDataTables should be %s -> %s", (_label, value, expected) => {
+    const env = baseEnv();
+    if (value !== undefined) env.CDK_PARAM_RETAIN_DATA_TABLES = value;
+    const cfg = resolveAppConfig({
+      env,
+      binDir: BIN_DIR,
+      fs: fsAlwaysMissing,
+      dotenvConfig: noopDotenv,
+      discoverProblems: stubProblems,
+    });
+    expect(cfg.retainDataTables).toBe(expected);
+  });
+
   // Issue #2961: 何も設定しなければコスト監視は立たない。0 は「limit 0 ドル」ではなく無効を意味し、
   // `parsed > 0` の判定で undefined に倒れる。ここが 0 以外に戻ると、購読確認メールが deploy の
   // たびに届く状態に逆戻りする。

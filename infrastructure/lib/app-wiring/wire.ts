@@ -77,6 +77,7 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
       // #2941: `/admin/idp` CRUD Lambda の repository seam backend。 default "dynamodb" では
       // system scope の SamlIdpsTable を synth し、 turso では table を作らず SQL executor 直結。
       controlDataBackend: config.controlDataBackend,
+      retainDataTables: config.retainDataTables,
       tursoDatabaseUrl: config.tursoDatabaseUrl,
       tursoAuthTokenParameterName: config.tursoAuthTokenParameterName,
     },

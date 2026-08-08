@@ -3,6 +3,7 @@ import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import type { Construct } from "constructs";
 import { AdminAuditLogTable } from "./admin-audit-log-table.js";
 import { CompetitorAccountsTable } from "./competitor-accounts-table.js";
+import { dataTableRemovalPolicy } from "./data-table-removal-policy.js";
 import { DeploymentsTable } from "./deployments-table.js";
 import { DisruptionsTable } from "./disruptions-table.js";
 import { EventCapacityRunbook } from "./event-capacity-runbook.js";
@@ -17,6 +18,11 @@ export interface BuildControlDataTablesArgs {
    * `dynamodb` (default) では従来どおりテーブルを作る。
    */
   readonly pureSql: boolean;
+  /**
+   * [Issue #2959] table を stack 削除後も残すか。未指定 / false は DESTROY (= 既定)。
+   * `AppConfig.retainDataTables` をそのまま渡す。
+   */
+  readonly retainDataTables?: boolean;
 }
 
 export interface ControlDataTablesOutputs {
@@ -55,6 +61,8 @@ export function buildControlDataTables(
   args: BuildControlDataTablesArgs,
 ): ControlDataTablesOutputs {
   const { pureSql } = args;
+  // [Issue #2959] 8 table 共通の削除方針。既定 DESTROY、opt-in で RETAIN。
+  const tableProps = { removalPolicy: dataTableRemovalPolicy(args.retainDataTables) };
 
   // ADR-004 Phase 1: Event / Team の 2 Table を Deployments と並列に持つ。
   // Phase 2 で Bulk Deploy / Bulk Teardown を State Machine 経由で動かす。
@@ -67,9 +75,9 @@ export function buildControlDataTables(
   // 最大のコスト源 (テーブル+GSI=4ユニット常時) をゼロにする。62 handler サイト + SFN 書き戻し
   // (Phase B PR-1〜5) が既に repository seam を経由しているため、pure SQL では本 table への
   // 参照が残らない (壊れる参照は呼び出し側で個別に条件化)。
-  const deployments = pureSql ? undefined : new DeploymentsTable(scope, "Deployments");
-  const events = pureSql ? undefined : new EventsTable(scope, "Events");
-  const teams = pureSql ? undefined : new TeamsTable(scope, "Teams");
+  const deployments = pureSql ? undefined : new DeploymentsTable(scope, "Deployments", tableProps);
+  const events = pureSql ? undefined : new EventsTable(scope, "Events", tableProps);
+  const teams = pureSql ? undefined : new TeamsTable(scope, "Teams", tableProps);
   // ADR-012 Phase 3.A: Endpoint registry。per (tenant, team, problem, slot) で override
   // URL を保管する。default URL は read-through で deployment.stackOutputs から算出。
   //
@@ -77,7 +85,9 @@ export function buildControlDataTables(
   // Deployments と同条件で **synth しない**。62 handler サイトが repository seam
   // (`resolveProblemEndpointsRepository`) 経由で読み書きするため、pure SQL では本 table への
   // 参照が残らない。
-  const endpoints = pureSql ? undefined : new ProblemEndpointsTable(scope, "ProblemEndpoints");
+  const endpoints = pureSql
+    ? undefined
+    : new ProblemEndpointsTable(scope, "ProblemEndpoints", tableProps);
   // Issue #459 / ADR-002 Phase 2.1: tenant ↔ 競技者 AWS account の許可表。
   // 1 行 = 1 (tenantId, awsAccountId)。verified=false は deploy 不可。
   //
@@ -86,13 +96,13 @@ export function buildControlDataTables(
   // (`resolveCompetitorAccountsRepository` / `resolveSamlConfigRepository`) 経由で読み書きする。
   const competitorAccounts = pureSql
     ? undefined
-    : new CompetitorAccountsTable(scope, "CompetitorAccounts");
+    : new CompetitorAccountsTable(scope, "CompetitorAccounts", tableProps);
   // Issue #888: Red Team Disruption Injection の audit log + idempotency
   //
   // [Issue #2442 / Phase C3] 純 SQL backend では同条件で **synth しない**。4 handler サイト
   // (disruption-fire.ts / disruption-recurring.ts / executor-store.ts / generic-scoring index.ts)
   // が repository seam (`resolveDisruptionsRepository`) 経由で読み書きする。
-  const disruptions = pureSql ? undefined : new DisruptionsTable(scope, "Disruptions");
+  const disruptions = pureSql ? undefined : new DisruptionsTable(scope, "Disruptions", tableProps);
   // Issue #950 (ADR-020 Phase D): admin 操作の append-only 監査ログ。 6 handler Lambda +
   // admin-insight Lambda が read/write する。 TTL 90 日で自動 GC (= env `AUDIT_RETENTION_DAYS`
   // で 365 / SOC2 enterprise 用に上げる)。
@@ -101,7 +111,9 @@ export function buildControlDataTables(
   // (deploy-api / event-api / competitor-accounts-api / system-audit-writer / sign-in-audit /
   // admin-insight) は全て repository seam (`writeAuditEvent` / `resolveAdminAuditLogRepository`)
   // 経由で読み書きする。
-  const adminAuditLog = pureSql ? undefined : new AdminAuditLogTable(scope, "AdminAuditLog");
+  const adminAuditLog = pureSql
+    ? undefined
+    : new AdminAuditLogTable(scope, "AdminAuditLog", tableProps);
 
   // Issue #2410 Slice 1: イベント中の DynamoDB キャパシティを運営が明示的に上げ下げする
   // SSM Automation Runbook。event-hot 5 テーブル (Deployments / Events / Teams /

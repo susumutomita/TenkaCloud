@@ -127,6 +127,12 @@ export interface ProblemDeployBackendStackProps extends cdk.StackProps {
    * ときだけ各 Lambda env に `CONTROL_DATA_BACKEND` を注入する。
    */
   readonly controlDataBackend?: string;
+
+  /**
+   * [Issue #2959] control-data DDB table を stack 削除後も残すか。未指定 / false は
+   * DESTROY (= 既定)。`AppConfig.retainDataTables` をそのまま渡す。
+   */
+  readonly retainDataTables?: boolean;
   /** Public remote libSQL URL. Required when controlDataBackend is turso. */
   readonly tursoDatabaseUrl?: string;
   /** SSM SecureString parameter name containing the remote libSQL auth token. */
@@ -341,7 +347,10 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     };
 
     // [#2527 Slice 5] Subsystem: control-data tables + capacity runbook + table-name outputs。
-    const tables = buildControlDataTables(this, { pureSql });
+    const tables = buildControlDataTables(this, {
+      pureSql,
+      retainDataTables: props.retainDataTables,
+    });
     // ADR-011 #590: AdminConsoleInsightStack に cross-stack で渡すため expose する。
     this.deploymentsTable = tables.deployments?.table;
     this.eventsTable = tables.events?.table;

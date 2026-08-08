@@ -97,6 +97,10 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
   // Issue #2311: 監査ログ出力の on/off。default true (未設定 / "true" は従来どおり出力 →
   // リグレッションなし)。明示 "false" のときだけ監査 Lambda 群を no-op 化する。
   const auditLogEnabled = env.CDK_PARAM_AUDIT_LOG_ENABLED !== "false";
+  // Issue #2959: control-data DDB table を stack 削除後も残すか。**default false (= DESTROY)**。
+  // 他の boolean parameter と向きが逆で、明示 "true" のときだけ RETAIN になる。消し忘れた
+  // table の PROVISIONED 課金が残り続けるほうが実害が大きい、という運用判断による。
+  const retainDataTables = env.CDK_PARAM_RETAIN_DATA_TABLES === "true";
   // Issue #2290: control-plane data backend の選択。default "dynamodb" (未設定 / "dynamodb" は
   // 在来 DDB 経路で Lambda env を足さない = byte 互換)。dynamodb/turso 以外は synth 時に throw。
   const controlDataBackend = resolveControlDataBackend(env);
@@ -168,6 +172,7 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
     useBulkDistributedMap,
     deployViaLambda,
     auditLogEnabled,
+    retainDataTables,
     controlDataBackend,
     tursoDatabaseUrl,
     tursoAuthTokenParameterName,

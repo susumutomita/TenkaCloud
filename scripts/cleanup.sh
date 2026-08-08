@@ -333,13 +333,40 @@ else
   log "  no orphan api keys found"
 fi
 
-# Issue #2444: 全 DynamoDB テーブルは RemovalPolicy.RETAIN (履歴保全のため意図的) なので、
-# ここまでの destroy 後もテーブルは残り、 PROVISIONED 1/1 の standing cost を出し続ける。
-# 残存テーブルを列挙して billing 警告を出す (削除はしない — 誤削除防止)。 report スクリプトは
-# 常に exit 0 だが、 万一 bun 不在等で失敗しても cleanup の冪等性 / exit code は壊さない。
-log "checking for RETAIN-orphaned DynamoDB tables (billing warning only)..."
-bun run "${TenkaCloud_ROOT}/scripts/ops/report-retained-tables.ts" \
-  || log "  retained-table check skipped (non-fatal)"
+# Issue #2444 → #2959: かつては「列挙して billing 警告を出すだけ」だった。 その運用の実測結果が
+# 「8 table + GSI 7 本 = 15 ユニット組を 3 か月弱払い続けていた」なので、 既定を削除に変えた。
+#
+# #2959 で RemovalPolicy 自体も既定 DESTROY になったが、 それは **これから deploy し直す stack**
+# にしか効かない。 過去に RETAIN で deploy されて既に stack が消えている table は、 パラメータを
+# 足しても孤児のまま残る。 この sweep はその積み残しを回収する唯一の経路になる。
+#
+# 対象は `tenkacloud` prefix を持つ table だけ (scripts/lib/retained-tables.ts と同じ規則)。
+# 他プロジェクトの table を巻き込まないことが最優先で、 迷ったら消さない。
+log "scanning for orphaned DynamoDB tables (tenkacloud prefix)..."
+ORPHAN_TABLES=$(aws dynamodb list-tables --query 'TableNames[]' --output text 2>/dev/null || true)
+DELETED_TABLE_COUNT=0
+if [ -n "${ORPHAN_TABLES}" ]; then
+  for table_name in ${ORPHAN_TABLES}; do
+    # prefix 一致しないものは他プロジェクトの table。 触らない。
+    case "$(printf '%s' "${table_name}" | tr '[:upper:]' '[:lower:]')" in
+      tenkacloud*) ;;
+      *) continue ;;
+    esac
+    log "  deleting orphan DynamoDB table ${table_name}"
+    if aws dynamodb delete-table --table-name "${table_name}" >/dev/null 2>&1; then
+      DELETED_TABLE_COUNT=$((DELETED_TABLE_COUNT + 1))
+    else
+      # 既に消えている / 削除中は成功扱いにする (冪等)。 それ以外は握り潰さず collect する。
+      if aws dynamodb describe-table --table-name "${table_name}" >/dev/null 2>&1; then
+        log "    FAILED to delete ${table_name}"
+        CLEANUP_FAILURES+=("dynamodb delete-table ${table_name}")
+      else
+        log "    already gone"
+      fi
+    fi
+  done
+fi
+log "  deleted ${DELETED_TABLE_COUNT} orphaned DynamoDB table(s)"
 
 if ((${#CLEANUP_FAILURES[@]} > 0)); then
   log "cleanup INCOMPLETE -- the following steps failed:"
