@@ -100,12 +100,21 @@ else
 fi
 
 # versioning は create-only ではなく **毎回** 適用する idempotent toggle (= 既存 bucket も flip する)。
-# 既定は Suspended: 同 key に source.zip を PUT し続ける bucket で旧 version が無限蓄積し容量が
-# 際限なく増えるのを防ぐ (cost-zero 原則)。 CDK_PARAM_SOURCE_BUCKET_VERSIONING を true / enabled / 1
-# (大文字小文字無視) にしたときだけ Enabled に倒す。
+#
+# 既定は Enabled。 この bucket は serverless-saas-pipeline.ts の `S3SourceAction` の source なので、
+# CodePipeline が versioning を必須にする。 Suspended だと pipeline の Source stage が
+#   The source artifact bucket '<bucket>' is not versioned.
+# で即失敗し、 tenant 更新用の pipeline が構造的に一度も通らない (2026-08-08 に実測)。
+# install.sh は同じ実行の中でこの bucket を用意し pipeline も立てるので、 Suspended 既定は
+# 自己矛盾だった。
+#
+# 旧既定 Suspended の理由 (同 key へ source.zip を PUT し続けて旧 version が無限蓄積する) は、
+# すぐ下で適用する lifecycle policy が既に解決している (NoncurrentDays=1 / NewerNoncurrentVersions=5)。
+# 明示的に false / suspended / 0 を渡したときだけ Suspended に倒せるが、 pipeline を使う構成では
+# 選んではいけない。
 case "$(printf '%s' "${CDK_PARAM_SOURCE_BUCKET_VERSIONING:-}" | tr '[:upper:]' '[:lower:]')" in
-  true | enabled | 1) VERSIONING_STATUS="Enabled" ;;
-  *) VERSIONING_STATUS="Suspended" ;;
+  false | suspended | 0) VERSIONING_STATUS="Suspended" ;;
+  *) VERSIONING_STATUS="Enabled" ;;
 esac
 echo "[prepare-source-bundle] setting bucket versioning: ${VERSIONING_STATUS}"
 aws s3api put-bucket-versioning --bucket "${CDK_PARAM_S3_BUCKET_NAME}" \

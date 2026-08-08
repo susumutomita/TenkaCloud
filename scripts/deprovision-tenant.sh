@@ -1,4 +1,8 @@
-#!/bin/bash -e
+#!/bin/bash
+# `set -e` は shebang でなく実文で set する。 CodeBuild は本 script を buildspec へ inline し、
+# 1 つのコマンドブロックとして実行するので shebang は解釈されない (詳細は provision-tenant.sh
+# の同じ箇所)。 deprovision で握り潰すと「消えていないのに Deleted」になる。
+set -e
 # pipefail: runtime bootstrap の curl 失敗を silent に続行させない。
 set -o pipefail
 

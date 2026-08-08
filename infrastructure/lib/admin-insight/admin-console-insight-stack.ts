@@ -54,6 +54,12 @@ export interface AdminConsoleInsightStackProps extends cdk.StackProps {
    */
   readonly deprovisioningStateMachineArn?: string;
   /**
+   * SBT ProvisioningScriptJob の state machine ARN。 テナントのプロビジョニングが実際に走る経路で、
+   * 「プロビジョニング Jobs」 画面が見ていた CodePipeline とは別物。 未指定なら route は
+   * `not_configured` を返す (= legacy 互換)。
+   */
+  readonly provisioningStateMachineArn?: string;
+  /**
    * Issue #950 (ADR-020 Phase D): admin 操作の audit log table。 ProblemDeployBackendStack で
    * 作成された Table を cross-stack read で渡す。 未指定なら admin-insight の audit route は 503
    * (= 旧 stack 互換)。
@@ -146,6 +152,9 @@ export class AdminConsoleInsightStack extends cdk.Stack {
       teamsTable: props.teamsTable,
       ...(props.deprovisioningStateMachineArn
         ? { deprovisioningStateMachineArn: props.deprovisioningStateMachineArn }
+        : {}),
+      ...(props.provisioningStateMachineArn
+        ? { provisioningStateMachineArn: props.provisioningStateMachineArn }
         : {}),
       // Issue #950: admin audit log table の read-only access
       ...(props.adminAuditLogTable ? { adminAuditLogTable: props.adminAuditLogTable } : {}),
@@ -259,6 +268,15 @@ export class AdminConsoleInsightStack extends cdk.Stack {
     // SBT BashJobRunner の deprovisioning state machine の execution 履歴を返す。
     httpApi.addRoutes({
       path: "/admin/insight/state-machine-executions",
+      methods: [HttpMethod.GET],
+      integration,
+    });
+
+    // Provisioning Jobs が実体 (= SBT ProvisioningScriptJob の state machine) を見るための route。
+    // handler / IAM だけ足して route 登録を忘れると、 API GW の未マッチ 404 に CORS が付かず
+    // ブラウザには "Failed to fetch" としか出ない (PR-683 で実際に起きた)。 必ず対で足す。
+    httpApi.addRoutes({
+      path: "/admin/insight/provisioning-executions",
       methods: [HttpMethod.GET],
       integration,
     });

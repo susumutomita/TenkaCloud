@@ -16,6 +16,76 @@ describe("tenant lifecycle scripts", () => {
     "scripts/deprovision-tenant.sh",
   ];
 
+  // Regression: a platinum (silo) tenant was registered as "Complete" with every endpoint
+  // empty. CodeBuild inlines these scripts into the buildspec and runs each as ONE command
+  // block in an already-running shell, so `#!/bin/bash -e` is parsed as a comment and `set -e`
+  // never takes effect — the block's exit status is that of its last statement
+  // (`export tenantStatus="Complete"`). `cdk deploy` failed, four `describe-stacks` calls
+  // failed, two Cognito calls failed, and CodeBuild still reported BUILD SUCCEEDED.
+  // The flags must therefore be real statements, not shebang arguments.
+  it("tenant lifecycle scripts should enable errexit as a statement, not via the shebang", () => {
+    for (const scriptPath of lifecycleScripts) {
+      const script = readRepoFile(scriptPath);
+      const [shebang = ""] = script.split("\n");
+
+      // CodeBuild ignores the shebang, so flags carried there are silently inert.
+      expect(shebang, `${scriptPath} carries flags on its shebang`).toBe("#!/bin/bash");
+      expect(script, `${scriptPath} never sets errexit`).toMatch(/^set -e$/m);
+      expect(script, `${scriptPath} never sets pipefail`).toMatch(/^set -o pipefail$/m);
+    }
+  });
+
+  // `describe-stacks --query ... --output text` returns an EMPTY string with exit 0 when the
+  // stack exists but the OutputKey does not, so errexit alone cannot catch it. Without an
+  // explicit check the empty values flow straight into the tenantConfig write-back.
+  it("provision-tenant.sh should refuse to complete on an empty stack output", () => {
+    const script = readRepoFile("scripts/provision-tenant.sh");
+
+    expect(script).toContain("require_stack_output()");
+    for (const outputVar of [
+      "$USER_POOL_OUTPUT_PARAM_NAME",
+      "$APP_CLIENT_ID_OUTPUT_PARAM_NAME",
+      "$API_GATEWAY_URL_OUTPUT_PARAM_NAME",
+      "$APPLICATION_ADMIN_CONSOLE_URL_OUTPUT_PARAM_NAME",
+    ]) {
+      expect(script, `${outputVar} is not validated`).toContain(
+        `require_stack_output "${outputVar}"`,
+      );
+    }
+    // The guard has to run before the status write-back, or it guards nothing. Anchor to the
+    // start of a line so the prose in the header comment is not mistaken for the statement.
+    const firstGuardAt = script.search(/^require_stack_output "\$USER_POOL_OUTPUT_PARAM_NAME"/m);
+    const statusWriteBackAt = script.search(/^export tenantStatus="Complete"$/m);
+
+    expect(firstGuardAt).toBeGreaterThanOrEqual(0);
+    expect(statusWriteBackAt).toBeGreaterThanOrEqual(0);
+    expect(firstGuardAt).toBeLessThan(statusWriteBackAt);
+  });
+
+  // The silo deploy died Docker-building ControlPlaneStack's Python Lambda — a stack it was not
+  // deploying — because synth constructs the whole app. Bundling must be scoped to the stack
+  // being deployed, and that scoping is only safe together with `--exclusively`: without it,
+  // dependency stacks join the deployment set carrying stub assets.
+  it("cdk deploy from CodeBuild should scope bundling and deploy exclusively", () => {
+    for (const scriptPath of ["scripts/provision-tenant.sh", "scripts/update-tenant.sh"]) {
+      const script = readRepoFile(scriptPath);
+
+      expect(script, `${scriptPath} does not scope bundling`).toMatch(
+        /^\s*export CDK_BUNDLING_STACKS="\$\{?STACK_NAME\}?"$/m,
+      );
+      // Every cdk deploy in these scripts must carry --exclusively.
+      const deployLines = script
+        .split("\n")
+        .filter((line) => line.includes("bun run cdk -- deploy"));
+      expect(deployLines.length, `${scriptPath} has no cdk deploy`).toBeGreaterThan(0);
+      for (const line of deployLines) {
+        expect(line, `${scriptPath}: scoped bundling without --exclusively`).toContain(
+          "--exclusively",
+        );
+      }
+    }
+  });
+
   it("tenant lifecycle scripts should not use the legacy package runner", () => {
     const legacyPackageRunnerPattern = new RegExp(`\\b${"np"}x\\b`);
 
@@ -26,7 +96,7 @@ describe("tenant lifecycle scripts", () => {
 
   it("tenant lifecycle scripts should run the repository-local CDK CLI via bun", () => {
     expect(readRepoFile("scripts/provision-tenant.sh")).toContain(
-      'bun run cdk -- deploy "$STACK_NAME" --require-approval never',
+      'bun run cdk -- deploy "$STACK_NAME" --exclusively --require-approval never',
     );
     // update-tenant.sh は `${STACK_NAME}` (braces) で wait_for_stack_idle と一致させている。
     // 形が違う provision-tenant / deprovision-tenant は他で test 済。

@@ -35,6 +35,8 @@ exports[`buildTenkaCloudApp synth regression (issue #2192) > should keep every s
   "AdminInsightHttpApiGETadmininsightcostAdminInsightLambdaIntegrationPermissionB3D3D45C",
   "AdminInsightHttpApiGETadmininsightpipelineexecutionsAdminInsightLambdaIntegrationPermissionEFAA9283",
   "AdminInsightHttpApiGETadmininsightpipelineexecutionsD5E88DE5",
+  "AdminInsightHttpApiGETadmininsightprovisioningexecutionsAdminInsightLambdaIntegrationPermission543A7D56",
+  "AdminInsightHttpApiGETadmininsightprovisioningexecutionsB6E7EB30",
   "AdminInsightHttpApiGETadmininsightstatemachineexecutionsAdminInsightLambdaIntegrationPermission37B76CC1",
   "AdminInsightHttpApiGETadmininsightstatemachineexecutionsD3BD0ECC",
   "AdminInsightHttpApiGETadmininsighttenantssummary36B90DE8",

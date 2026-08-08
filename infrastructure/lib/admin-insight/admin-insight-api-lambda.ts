@@ -45,6 +45,13 @@ export interface AdminInsightApiLambdaProps {
    */
   readonly deprovisioningStateMachineArn?: string;
   /**
+   * SBT ProvisioningScriptJob の state machine ARN。 テナントのプロビジョニングが実際に走るのは
+   * ここで、 「プロビジョニング Jobs」 画面が見ていた CodePipeline とは別経路 (= 3 テナントを
+   * provisioning しても画面に 1 件も出なかった原因)。 deprovisioning と同じ扱いで、 指定時のみ
+   * env + `states:ListExecutions` を付与する。
+   */
+  readonly provisioningStateMachineArn?: string;
+  /**
    * Issue #950 (ADR-020 Phase D): admin audit log table。 指定時は SystemAdmin が
    * /admin/insight/audit route で cross-tenant に audit を読めるようになる (= read-only)。
    * 未指定なら route は 503 を返す (= 旧 stack 互換)。
@@ -125,6 +132,7 @@ export class AdminInsightApiLambda extends Construct {
         // Issue #814 Phase 2: deprovisioning Step Functions ARN を env に渡す (= 未指定なら空)。
         // handler は env の有無で route を 503 にするか実 SFN.ListExecutions を呼ぶか分岐する。
         DEPROVISIONING_STATE_MACHINE_ARN: props.deprovisioningStateMachineArn ?? "",
+        PROVISIONING_STATE_MACHINE_ARN: props.provisioningStateMachineArn ?? "",
         // Issue #950 (ADR-020 Phase D): admin audit log table 名 (= read-only 経由で表示)
         ADMIN_AUDIT_LOG_TABLE_NAME: props.adminAuditLogTable?.tableName ?? "",
         // Issue #2311: 監査ログ feature flag (無効時のみ AUDIT_LOG_ENABLED="false" を注入)。
@@ -191,21 +199,27 @@ export class AdminInsightApiLambda extends Construct {
     // Issue #814 Phase 2: Deprovisioning Jobs route の Step Functions ListExecutions 権限。
     // 指定された SBT BashJobRunner の state machine ARN に scope する。 未指定なら付与しない
     // (= 旧 stack の互換維持)。 DescribeExecution は将来の "Failed step 詳細" 用に同梱。
-    if (props.deprovisioningStateMachineArn) {
+    // provisioning / deprovisioning とも同じ形の grant なので、 片方だけ追加して権限を落とす事故を
+    // 避けるため 1 か所にまとめる。 未指定の ARN は grant しない (= 旧 stack の互換維持)。
+    for (const stateMachineArn of [
+      props.deprovisioningStateMachineArn,
+      props.provisioningStateMachineArn,
+    ]) {
+      if (!stateMachineArn) {
+        continue;
+      }
       this.fn.addToRolePolicy(
         new PolicyStatement({
           effect: Effect.ALLOW,
           actions: ["states:ListExecutions", "states:DescribeExecution"],
           resources: [
-            props.deprovisioningStateMachineArn,
+            stateMachineArn,
             // DescribeExecution は execution ARN を要求する。 同 state machine 配下の全 execution
             // を許可するため `<sm-arn>:*` で wildcard。
-            `${props.deprovisioningStateMachineArn}:*`,
+            `${stateMachineArn}:*`,
             // execution ARN は実際には `arn:aws:states:<region>:<acct>:execution:<sm-name>:<id>` 形式で
             // state-machine の prefix と異なる。 両方含めて grant。
-            props.deprovisioningStateMachineArn
-              .replace(":stateMachine:", ":execution:")
-              .concat(":*"),
+            stateMachineArn.replace(":stateMachine:", ":execution:").concat(":*"),
           ],
         }),
       );

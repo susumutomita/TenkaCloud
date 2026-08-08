@@ -182,7 +182,7 @@
   },
   "jobs_page": {
     "header": "Provisioning Jobs",
-    "description": "tenkacloud-saas-pipeline の最近 50 件の execution。60 秒ごとに自動更新します。",
+    "description": "テナントのプロビジョニングと撤去の実行履歴です。60 秒ごとに自動更新します。",
     "not_configured_header": "AdminInsight API が未配線です",
     "not_configured_body": "本環境では admin-insight API URL が runtime-config に設定されていません。Phase 2 deploy を完了してください。",
     "forbidden_header": "権限がありません",
@@ -198,6 +198,7 @@
     "open_console_aria": "Execution {executionId} を AWS Console で開く",
     "tab_provisioning": "Provisioning",
     "tab_deprovisioning": "Deprovisioning",
+    "tab_pipeline": "デプロイ Pipeline",
     "deprovisioning_phase1_header": "Deprovisioning Jobs API が未配線です",
     "deprovisioning_phase1_body": "本環境では admin-insight Lambda に deprovisioning state machine ARN が渡されていません。最新の 'make deploy' を実行してください。",
     "deprovisioning_open_console": "AWS Console で Step Functions を開く",

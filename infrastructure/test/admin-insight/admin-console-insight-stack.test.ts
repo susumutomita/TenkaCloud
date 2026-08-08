@@ -39,6 +39,8 @@ function synthInsightStack(adminConsoleOrigin?: string, costBudgetName?: string)
     eventsTable: events,
     teamsTable: teams,
     adminConsoleOrigin,
+    provisioningStateMachineArn:
+      "arn:aws:states:ap-northeast-1:123456789012:stateMachine:provisioningJobRunner",
     ...(costBudgetName ? { costBudgetName } : {}),
   });
   return Template.fromStack(stack);
@@ -207,6 +209,47 @@ describe("AdminConsoleInsightStack (ADR-011 Phase 1.A)", () => {
   });
 
   describe("#1392: dead system-users routes + unused Cognito Admin* IAM removed", () => {
+    // Regression: the Provisioning Jobs page read CodePipeline executions, so real tenant
+    // provisioning was invisible. The tab now reads the SBT provisioning state machine, which
+    // needs BOTH the route registration and the env/IAM below — PR-683 shipped a handler + IAM
+    // without the route, and the resulting unmatched-404 carries no CORS header, so the browser
+    // reports only "Failed to fetch".
+    it("should register the provisioning-executions route", () => {
+      const tpl = synthInsightStack();
+      const routes = tpl.findResources("AWS::ApiGatewayV2::Route", {
+        Properties: { RouteKey: "GET /admin/insight/provisioning-executions" },
+      });
+      expect(Object.keys(routes)).toHaveLength(1);
+    });
+
+    it("should pass the provisioning state machine ARN to the Lambda env", () => {
+      const tpl = synthInsightStack();
+      tpl.hasResourceProperties("AWS::Lambda::Function", {
+        Environment: {
+          Variables: Match.objectLike({
+            PROVISIONING_STATE_MACHINE_ARN:
+              "arn:aws:states:ap-northeast-1:123456789012:stateMachine:provisioningJobRunner",
+          }),
+        },
+      });
+    });
+
+    it("should grant ListExecutions on the provisioning state machine", () => {
+      const tpl = synthInsightStack();
+      tpl.hasResourceProperties("AWS::IAM::Policy", {
+        PolicyDocument: {
+          Statement: Match.arrayWith([
+            Match.objectLike({
+              Action: ["states:ListExecutions", "states:DescribeExecution"],
+              Resource: Match.arrayWith([
+                "arn:aws:states:ap-northeast-1:123456789012:stateMachine:provisioningJobRunner",
+              ]),
+            }),
+          ]),
+        },
+      });
+    });
+
     it("should NOT register any /admin/insight/system-users route (handler was removed)", () => {
       const tpl = synthInsightStack();
       tpl.resourcePropertiesCountIs(

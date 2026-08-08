@@ -182,7 +182,7 @@
   },
   "jobs_page": {
     "header": "Provisioning Jobs",
-    "description": "Recent 50 executions of tenkacloud-saas-pipeline. Refreshes every 60 seconds.",
+    "description": "Execution history for tenant provisioning and deprovisioning. Refreshes every 60 seconds.",
     "not_configured_header": "AdminInsight API is not configured",
     "not_configured_body": "The admin-insight API URL is not set in runtime-config. Complete Phase 2 deploy.",
     "forbidden_header": "Not authorised",
@@ -198,6 +198,7 @@
     "open_console_aria": "Open execution {executionId} in AWS Console",
     "tab_provisioning": "Provisioning",
     "tab_deprovisioning": "Deprovisioning",
+    "tab_pipeline": "Deploy pipeline",
     "deprovisioning_phase1_header": "Deprovisioning Jobs API is not wired",
     "deprovisioning_phase1_body": "The admin-insight Lambda has not received the deprovisioning state machine ARN. Run the latest 'make deploy'.",
     "deprovisioning_open_console": "Open Step Functions in AWS Console",

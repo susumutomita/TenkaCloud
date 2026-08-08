@@ -94,6 +94,17 @@ export class BootstrapTemplateStack extends Stack {
    */
   public readonly deprovisioningStateMachineArn: string;
 
+  /**
+   * SBT ProvisioningScriptJob が立てる state machine の ARN。
+   *
+   * 「プロビジョニング Jobs」 画面は長らく CodePipeline (`tenkacloud-saas-pipeline`) の execution
+   * だけを見ていたが、 テナントのプロビジョニングが実際に走るのは **この state machine** で、
+   * pipeline とは別経路。 そのため 3 テナントを同時に provisioning しても画面には 1 件も出ず、
+   * 代わりに無関係な pipeline の失敗だけが「プロビジョニング失敗」として出ていた
+   * (2026-08-08 に運用者が誤認)。 deprovisioning と対称に cross-stack 参照する。
+   */
+  public readonly provisioningStateMachineArn: string;
+
   constructor(scope: Construct, id: string, props: BootstrapTemplateStackProps) {
     super(scope, id, props);
 
@@ -197,6 +208,8 @@ export class BootstrapTemplateStack extends Stack {
     // admin-insight Lambda が ListExecutions で執行履歴を引けるようにする。
     this.deprovisioningStateMachineArn =
       deprovisioningJobRunner.provisioningStateMachine.stateMachineArn;
+    this.provisioningStateMachineArn =
+      provisioningJobRunner.provisioningStateMachine.stateMachineArn;
 
     new CoreApplicationPlane(this, "CoreApplicationPlane", {
       eventManager: eventManager,

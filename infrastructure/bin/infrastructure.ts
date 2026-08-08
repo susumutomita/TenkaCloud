@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import * as cdk from "aws-cdk-lib";
+import { resolveBundlingStacks } from "../lib/app-config/bundling-context.js";
 import { resolveAppConfig } from "../lib/app-config/index.js";
 import { buildTenkaCloudApp } from "../lib/app-wiring/index.js";
 import { assertSaasSynthHasNoActivePacks } from "../lib/problem-pack/saas-pack-guard.js";
@@ -25,8 +26,10 @@ const app = new cdk.App();
 // `aws:cdk:bundling-stacks` を空にして全 stack のバンドルを skip する (= 検証は通り Docker 不要)。
 // CLI の `-c` は `aws:` prefix を拒否するため context は code 側で設定する。 実バンドルは
 // `make synth` / `make deploy` (env 無し) で従来どおり走る。
-if (process.env.CDK_SKIP_BUNDLING === "1") {
-  app.node.setContext("aws:cdk:bundling-stacks", []);
+// 解決規則と各 env の意味は resolveBundlingStacks の doc comment を正本とする。
+const bundlingStacks = resolveBundlingStacks(process.env);
+if (bundlingStacks) {
+  app.node.setContext("aws:cdk:bundling-stacks", bundlingStacks);
 }
 
 // Issue #2459: SaaS mode passes no `catalogSource` to `resolveAppConfig`, so any pack

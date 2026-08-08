@@ -1,4 +1,9 @@
-#!/bin/bash -xe
+#!/bin/bash
+# `-xe` は shebang でなく実文で set する。 CodeBuild は本 script を buildspec へ inline し、
+# 1 つのコマンドブロックとして実行するので shebang は解釈されない (詳細は provision-tenant.sh
+# の同じ箇所)。 shebang 任せだとトレースも errexit も効かない。
+set -e
+set -x
 # pipefail: `curl ... | sudo bash -` の curl 失敗を silent に続行させない (#560 の延長)。
 set -o pipefail
 
@@ -93,4 +98,8 @@ wait_for_stack_idle() {
 }
 
 wait_for_stack_idle "${STACK_NAME}"
+# provision-tenant.sh と同じ理由: synth は app 全体を構築するため、 絞らないと deploy 対象外の
+# ControlPlaneStack の Python Lambda まで CodeBuild 上で Docker build しに行って落ちる。
+# `--exclusively` は既に付いているので stub asset が他 stack へ流れる心配はない。
+export CDK_BUNDLING_STACKS="${STACK_NAME}"
 bun run cdk -- deploy "${STACK_NAME}" --exclusively --require-approval never

@@ -1,4 +1,18 @@
-#!/bin/bash -e
+#!/bin/bash
+# `set -e` を shebang に書いてはいけない。 CodeBuild は本 script を buildspec へ inline し、
+# **1 つのコマンドブロック**として既に動いている shell に流し込むため、 shebang は解釈されず
+# ただのコメントになる (build log の `Running command #!/bin/bash -e` が実物)。 結果 `-e` は
+# 一度も有効にならず、 block の終了ステータスは最後の `export tenantStatus="Complete"` の 0 に
+# なる。
+#
+# 実害 (2026-08-08 testsilo): silo の `cdk deploy` が Docker bundling 失敗で落ち、 続く
+# describe-stacks が 4 本とも "Stack ... does not exist" で失敗し、 Cognito 呼び出しも空の
+# UserPoolId で ParamValidation に落ちたのに、 CodeBuild は BUILD SUCCEEDED を返した。
+# Step Functions も SUCCEEDED になり、 tenant は endpoint が全部空文字のまま "Complete" として
+# 登録された (= 中身の無い platinum tenant)。
+#
+# よって shebang に頼らず実文として set する。
+set -e
 # pipefail: `curl ... | sudo bash -` の curl 失敗を silent に続行させない (NodeSource bootstrap
 # が壊れた download で古い node のまま動いて debug 困難になるのを防ぐ、#560 の延長)。
 set -o pipefail
@@ -73,7 +87,15 @@ if [[ $TIER == "PLATINUM" ]]; then
   export CDK_PARAM_DEPROVISIONING_DETAIL_TYPE=$CDK_PARAM_OFFBOARDING_DETAIL_TYPE
   export CDK_PARAM_PROVISIONING_EVENT_SOURCE="sbt-application-plane-api"
   export CDK_PARAM_APPLICATION_NAME_PLANE_SOURCE="sbt-application-plane-api"
-  bun run cdk -- deploy "$STACK_NAME" --require-approval never
+  # synth は app 全体を構築するので、 何もしないと deploy 対象ですらない ControlPlaneStack の
+  # Python Lambda まで Docker build しに行き、 CodeBuild 上でその build が落ちて silo deploy が
+  # 丸ごと失敗する (2026-08-08 testsilo: `pip install pipenv poetry` が exit 255)。 bundle 対象を
+  # これから deploy する stack だけに絞る。
+  export CDK_BUNDLING_STACKS="$STACK_NAME"
+  # `--exclusively` は CDK_BUNDLING_STACKS と必ず対。 これが無いと依存 stack (= 例えば
+  # tenkacloud-problem-deploy) が deploy 対象に含まれ、 bundle を skip した **stub asset** の
+  # まま本番 stack を上書きしてしまう。
+  bun run cdk -- deploy "$STACK_NAME" --exclusively --require-approval never
 fi
 
 # Read tenant details from the cloudformation stack output parameters
@@ -85,6 +107,23 @@ API_GATEWAY_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --
 # (admin-console ではこの URL は表示しない方針 — pooled は install.sh の最終出力で
 # operator が確認する)。
 APPLICATION_ADMIN_CONSOLE_URL=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query "Stacks[0].Outputs[?OutputKey=='$APPLICATION_ADMIN_CONSOLE_URL_OUTPUT_PARAM_NAME'].OutputValue" --output text)
+
+# `describe-stacks --query ... --output text` は stack が在っても **OutputKey が無ければ空文字を
+# exit 0 で返す**。 `set -e` では捕まらないので明示的に検査する。 ここを素通りさせると、
+# endpoint が全部空の tenantConfig を "Complete" として書き戻してしまう (= 中身の無い tenant)。
+require_stack_output() {
+  local output_key="$1"
+  local value="$2"
+  if [[ -z "${value}" || "${value}" == "None" ]]; then
+    echo "ERROR: stack '${STACK_NAME}' の output '${output_key}' が空です。" >&2
+    echo "       tenant provisioning を中断します (= tenant を Complete にしない)。" >&2
+    exit 1
+  fi
+}
+require_stack_output "$USER_POOL_OUTPUT_PARAM_NAME" "$SAAS_APP_USERPOOL_ID"
+require_stack_output "$APP_CLIENT_ID_OUTPUT_PARAM_NAME" "$SAAS_APP_CLIENT_ID"
+require_stack_output "$API_GATEWAY_URL_OUTPUT_PARAM_NAME" "$API_GATEWAY_URL"
+require_stack_output "$APPLICATION_ADMIN_CONSOLE_URL_OUTPUT_PARAM_NAME" "$APPLICATION_ADMIN_CONSOLE_URL"
 
 # Create tenant admin user (idempotent — provisioning が中途で失敗 → SBT が再実行
 # したとき UsernameExistsException で死なないよう、既存 user は skip)。

@@ -12,6 +12,7 @@ import type { PipelineExecutionItem, StateMachineExecutionItem } from "../api/ad
 import { JobsTable } from "../components/JobsTable";
 import type { AppConfig } from "../config";
 import { useDeprovisioningJobs } from "../hooks/useDeprovisioningJobs";
+import { useProvisioningExecutions } from "../hooks/useProvisioningExecutions";
 import { useProvisioningJobs } from "../hooks/useProvisioningJobs";
 import { interpolate, useT } from "../i18n";
 import { colorFor, formatElapsed } from "../lib/jobs-format";
@@ -29,6 +30,46 @@ import { colorFor, formatElapsed } from "../lib/jobs-format";
 export { colorFor, formatElapsed } from "../lib/jobs-format";
 
 export function JobsPage({ config }: { config: AppConfig }) {
+  const t = useT();
+
+  return (
+    <SpaceBetween size="l">
+      <Header variant="h1" description={t("jobs_page.description")}>
+        {t("jobs_page.header")}
+      </Header>
+
+      <Tabs
+        tabs={[
+          {
+            id: "provisioning",
+            label: t("jobs_page.tab_provisioning"),
+            content: <ProvisioningJobsTab config={config} />,
+          },
+          {
+            id: "deprovisioning",
+            label: t("jobs_page.tab_deprovisioning"),
+            content: <DeprovisioningJobsTab config={config} />,
+          },
+          {
+            id: "pipeline",
+            label: t("jobs_page.tab_pipeline"),
+            content: <PipelineJobsTab config={config} />,
+          },
+        ]}
+      />
+    </SpaceBetween>
+  );
+}
+
+/**
+ * Issue #658: `tenkacloud-saas-pipeline` (= ServerlessSaaSPipeline) の execution 履歴タブ。
+ *
+ * これは tenant template を deploy するための pipeline であって、 テナントのプロビジョニング本体では
+ * ない。 以前は Provisioning タブがこれを表示していたため、 テナントを provisioning しても一覧が空の
+ * まま、 かつ deploy 時に自動起動して失敗した pipeline execution が「プロビジョニング失敗」に見えて
+ * いた。 実体は ProvisioningJobsTab に移し、 pipeline はこのタブに残してある。
+ */
+export function PipelineJobsTab({ config }: { config: AppConfig }) {
   const t = useT();
   const { items, error, forbidden, notConfigured, dismissError } = useProvisioningJobs(config);
 
@@ -77,6 +118,8 @@ export function JobsPage({ config }: { config: AppConfig }) {
     [t],
   );
 
+  // pipeline タブ固有の状態。 かつては page 全体を差し替えていたが、 それだと pipeline が未設定 /
+  // 権限なしのときに Provisioning タブ (= テナントプロビジョニングの実体) まで巻き添えで消える。
   if (notConfigured) {
     return (
       <Alert type="info" header={t("jobs_page.not_configured_header")}>
@@ -93,7 +136,7 @@ export function JobsPage({ config }: { config: AppConfig }) {
     );
   }
 
-  const provisioningContent = (
+  return (
     <SpaceBetween size="m">
       {error && (
         <Alert
@@ -125,48 +168,52 @@ export function JobsPage({ config }: { config: AppConfig }) {
       )}
     </SpaceBetween>
   );
-
-  return (
-    <SpaceBetween size="l">
-      <Header variant="h1" description={t("jobs_page.description")}>
-        {t("jobs_page.header")}
-      </Header>
-
-      <Tabs
-        tabs={[
-          {
-            id: "provisioning",
-            label: t("jobs_page.tab_provisioning"),
-            content: provisioningContent,
-          },
-          {
-            id: "deprovisioning",
-            label: t("jobs_page.tab_deprovisioning"),
-            content: <DeprovisioningJobsTab config={config} />,
-          },
-        ]}
-      />
-    </SpaceBetween>
-  );
 }
 
 /**
- * Issue #814 Phase 2: Deprovisioning Jobs (= SBT BashJobRunner の `deprovisioningJobRunner` が動かす
- * Step Functions State Machine の execution 履歴) を表示するタブ。
+ * Provisioning Jobs (= SBT `provisioningJobRunner` が動かす Step Functions State Machine の
+ * execution 履歴) を表示するタブ。
  *
- * admin-insight Lambda が \`GET /admin/insight/state-machine-executions\` で
- * deprovisioning SM の ListExecutions を返す。 503 (= not_configured、 旧 stack 互換) は
- * legacy placeholder にフォールバック。 fetch / polling / 状態管理は `useDeprovisioningJobs` hook。
+ * このタブは以前 `tenkacloud-saas-pipeline` (CodePipeline) の execution を表示していたが、 それは
+ * tenant template を deploy するための pipeline であって、 テナントのプロビジョニング本体ではない。
+ * そのため 3 テナントを同時に provisioning しても一覧は空のままで、 代わりに deploy 時に自動起動して
+ * 失敗した無関係な pipeline execution だけが「プロビジョニング失敗」として出ていた (2026-08-08 に
+ * 運用者が誤認)。 pipeline の履歴は別タブに残してある。
  */
-export function DeprovisioningJobsTab({ config }: { config: AppConfig }) {
+/**
+ * Step Functions の execution 一覧タブ本体。 Provisioning / Deprovisioning は取得元 hook と文言が
+ * 違うだけで、 表・loading・403・エラー・未設定フォールバックの描画は同一。 片方を copy-paste すると
+ * 「片方だけ直して片方が古いまま」になるので 1 か所に集約する (dup-check #2635 と同じ方針)。
+ */
+interface StateMachineExecutionsTabProps {
+  readonly state: {
+    readonly items: readonly StateMachineExecutionItem[] | null;
+    readonly error: string | null;
+    readonly forbidden: boolean;
+    readonly notConfigured: boolean;
+    readonly sfnListUrl: string;
+  };
+  /** 未設定フォールバックの alert 見出し / 本文の i18n key。 */
+  readonly notConfiguredHeaderKey: string;
+  readonly notConfiguredBodyKey: string;
+  /** 0 件のときに出す文言の i18n key。 */
+  readonly emptyKey: string;
+}
+
+function StateMachineExecutionsTab({
+  state,
+  notConfiguredHeaderKey,
+  notConfiguredBodyKey,
+  emptyKey,
+}: StateMachineExecutionsTabProps) {
   const t = useT();
-  const { items, error, forbidden, notConfigured, sfnListUrl } = useDeprovisioningJobs(config);
+  const { items, error, forbidden, notConfigured, sfnListUrl } = state;
 
   if (notConfigured) {
     return (
       <SpaceBetween size="m">
-        <Alert type="info" header={t("jobs_page.deprovisioning_phase1_header")}>
-          {t("jobs_page.deprovisioning_phase1_body")}
+        <Alert type="info" header={t(notConfiguredHeaderKey)}>
+          {t(notConfiguredBodyKey)}
         </Alert>
         <Box>
           <Link
@@ -226,7 +273,7 @@ export function DeprovisioningJobsTab({ config }: { config: AppConfig }) {
         empty={
           items && items.length === 0 ? (
             <Box textAlign="center" padding="m">
-              <Box variant="strong">{t("jobs_page.empty_deprovisioning")}</Box>
+              <Box variant="strong">{t(emptyKey)}</Box>
             </Box>
           ) : (
             <Spinner />
@@ -234,5 +281,45 @@ export function DeprovisioningJobsTab({ config }: { config: AppConfig }) {
         }
       />
     </SpaceBetween>
+  );
+}
+
+/**
+ * Provisioning Jobs (= SBT `provisioningJobRunner` が動かす Step Functions State Machine の
+ * execution 履歴) を表示するタブ。
+ *
+ * このタブは以前 `tenkacloud-saas-pipeline` (CodePipeline) の execution を表示していたが、 それは
+ * tenant template を deploy するための pipeline であって、 テナントのプロビジョニング本体ではない。
+ * そのため 3 テナントを同時に provisioning しても一覧は空のままで、 代わりに deploy 時に自動起動して
+ * 失敗した無関係な pipeline execution だけが「プロビジョニング失敗」として出ていた (2026-08-08 に
+ * 運用者が誤認)。 pipeline の履歴は別タブに残してある。
+ */
+export function ProvisioningJobsTab({ config }: { config: AppConfig }) {
+  return (
+    <StateMachineExecutionsTab
+      state={useProvisioningExecutions(config)}
+      notConfiguredHeaderKey="jobs_page.not_configured_header"
+      notConfiguredBodyKey="jobs_page.not_configured_body"
+      emptyKey="jobs_page.empty"
+    />
+  );
+}
+
+/**
+ * Issue #814 Phase 2: Deprovisioning Jobs (= SBT BashJobRunner の `deprovisioningJobRunner` が動かす
+ * Step Functions State Machine の execution 履歴) を表示するタブ。
+ *
+ * admin-insight Lambda が `GET /admin/insight/state-machine-executions` で deprovisioning SM の
+ * ListExecutions を返す。 503 (= not_configured、 旧 stack 互換) は legacy placeholder に
+ * フォールバック。 fetch / polling / 状態管理は `useDeprovisioningJobs` hook。
+ */
+export function DeprovisioningJobsTab({ config }: { config: AppConfig }) {
+  return (
+    <StateMachineExecutionsTab
+      state={useDeprovisioningJobs(config)}
+      notConfiguredHeaderKey="jobs_page.deprovisioning_phase1_header"
+      notConfiguredBodyKey="jobs_page.deprovisioning_phase1_body"
+      emptyKey="jobs_page.empty_deprovisioning"
+    />
   );
 }
