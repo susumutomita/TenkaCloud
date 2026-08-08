@@ -86,6 +86,28 @@ describe("tenant lifecycle scripts", () => {
     }
   });
 
+  // Regression: with errexit finally active, `pip install --upgrade setuptools` aborted every
+  // provisioning run before it reached `cdk deploy` — CodeBuild's base image has setuptools under
+  // rpm, so the uninstall step fails with "RECORD file not found". It had been failing silently
+  // for as long as the shebang swallowed it. `--ignore-installed` skips the uninstall so the step
+  // actually succeeds; suppressing the failure instead would walk straight back into the original
+  // defect.
+  it("should install setuptools without the uninstall step rpm makes impossible", () => {
+    for (const scriptPath of ["scripts/provision-tenant.sh", "scripts/deprovision-tenant.sh"]) {
+      const script = readRepoFile(scriptPath);
+      const setuptoolsLines = script
+        .split("\n")
+        .filter((line) => line.includes("pip install") && line.includes("setuptools"));
+
+      expect(setuptoolsLines.length, `${scriptPath} no longer installs setuptools`).toBe(1);
+      expect(setuptoolsLines[0], `${scriptPath} would hit the rpm uninstall failure`).toContain(
+        "--ignore-installed",
+      );
+      // Suppressing the failure would restore the silent-success defect this all started from.
+      expect(setuptoolsLines[0], `${scriptPath} swallows the failure`).not.toMatch(/\|\|\s*true/);
+    }
+  });
+
   it("tenant lifecycle scripts should not use the legacy package runner", () => {
     const legacyPackageRunnerPattern = new RegExp(`\\b${"np"}x\\b`);
 
