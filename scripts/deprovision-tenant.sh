@@ -13,7 +13,20 @@ sudo yum install -y python3-pip
 # `--ignore-installed`: rpm 管理の setuptools を uninstall しようとして必ず失敗するため
 # (詳細は provision-tenant.sh の同じ箇所)。 errexit 下では deprovision がここで止まる。
 sudo python3 -m pip install --upgrade --ignore-installed setuptools
-sudo python3 -m pip install git-remote-codecommit
+# `git-remote-codecommit` はここに置かない。 本 script は git remote を一切使わず (`git clone` も
+# `codecommit://` remote も無い)、 source は S3 の source.zip から取る (fetch-source-bundle)。
+# AWS SaaS reference architecture が tenant pipeline を CodeCommit で回していた名残で、
+# TenkaCloud では最初から未使用だった。
+#
+# 実害 (2026-08-08 siloverify): #2935 の errexit で「未使用だが失敗する step」が fatal になり、
+# さらに #2940 が setuptools を 82.0.1 へ上げたことで、 image 同梱の古い pip が legacy
+# setup.py package の metadata を組めなくなった:
+#
+#   TypeError: canonicalize_version() got an unexpected keyword argument 'strip_trailing_zero'
+#
+# これで **全 tier の tenant 削除**が `cdk destroy` に到達する前に落ちるようになっていた
+# (errexit が効く前は失敗が握り潰され、 後続の実削除処理はそのまま走っていたので露見しなかった)。
+# 使っていない依存を入れ直すのではなく、 入れるのをやめるのが根治。
 
 # Source-bundle fetch preamble is shared with provision-tenant.sh and inlined here
 # at synth time from scripts/lib/fetch-source-bundle.sh (#2217). It resolves
