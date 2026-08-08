@@ -37,8 +37,8 @@ export interface CoverageWorkspace {
 
 // Issue #2513 / #2756: the single source of truth for which workspaces `test:coverage` covers.
 // Order + membership must stay identical to the (now-retired) root package.json chain plus
-// developer-portal (#2756) — scripts/workspace/run-coverage.test.ts hardcodes the expected
-// 18-dir list to catch accidental drops.
+// developer-portal (#2756) and tcloud (#2951) — scripts/workspace/run-coverage.test.ts hardcodes
+// the expected 19-dir list to catch accidental drops.
 export const COVERAGE_WORKSPACES: readonly CoverageWorkspace[] = [
   { dir: "infrastructure", filter: "@TenkaCloud/infrastructure", shard: "infrastructure" },
   { dir: "apps/admin-console", filter: "@TenkaCloud/admin-console", shard: "spas" },
@@ -78,6 +78,9 @@ export const COVERAGE_WORKSPACES: readonly CoverageWorkspace[] = [
   // Placed on the packages shard, which already hosts the odd-one-out
   // apps/always-on-control-plane and is the fastest shard to absorb the addition.
   { dir: "apps/developer-portal", filter: "@TenkaCloud/developer-portal", shard: "packages" },
+  // Issue #2951: the tcloud operator CLI. Its tests are pure (fetch / clock / config I/O are
+  // injected), so it lands on the packages shard alongside the other dependency-light packages.
+  { dir: "packages/tcloud", filter: "@tenkacloud/tcloud", shard: "packages" },
 ];
 
 function shardDirs(shard: ShardName): readonly string[] {

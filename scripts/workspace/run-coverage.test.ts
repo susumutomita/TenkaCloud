@@ -20,7 +20,7 @@ import {
 
 const root = join(import.meta.dir, "../..");
 
-// Issue #2513 / #2756: hardcode the expected set so an accidental drop from the 18-workspace
+// Issue #2513 / #2756 / #2951: hardcode the expected set so an accidental drop from the 19-workspace
 // chain (e.g. someone forgetting to port a workspace when editing this file) fails loudly
 // instead of silently shrinking the coverage matrix.
 const EXPECTED_DIRS = [
@@ -42,10 +42,11 @@ const EXPECTED_DIRS = [
   "packages/problem-test-harness",
   "apps/always-on-control-plane",
   "apps/developer-portal",
+  "packages/tcloud",
 ];
 
 describe("COVERAGE_WORKSPACES", () => {
-  it("should match the 18 workspaces currently in the coverage matrix", () => {
+  it("should match the 19 workspaces currently in the coverage matrix", () => {
     expect(COVERAGE_WORKSPACES.map((ws) => ws.dir)).toEqual(EXPECTED_DIRS);
   });
 
@@ -107,6 +108,7 @@ describe("SHARDS", () => {
       "packages/problem-test-harness",
       "apps/always-on-control-plane",
       "apps/developer-portal",
+      "packages/tcloud",
     ]);
   });
 
@@ -192,6 +194,7 @@ describe("resolveLcovPaths", () => {
       "./packages/problem-test-harness/coverage/lcov.info",
       "./apps/always-on-control-plane/coverage/lcov.info",
       "./apps/developer-portal/coverage/lcov.info",
+      "./packages/tcloud/coverage/lcov.info",
     ]);
   });
 });

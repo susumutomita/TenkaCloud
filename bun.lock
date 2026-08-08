@@ -359,6 +359,17 @@
         "tenkacloud": "src/cli.mjs",
       },
     },
+    "packages/tcloud": {
+      "name": "@tenkacloud/tcloud",
+      "version": "0.1.0",
+      "bin": {
+        "tcloud": "src/cli.ts",
+      },
+      "devDependencies": {
+        "typescript": "^6.0.3",
+        "vitest": "^4.1.9",
+      },
+    },
     "packages/trust-bridge": {
       "name": "@TenkaCloud/trust-bridge",
       "version": "0.1.0",
@@ -1264,6 +1275,8 @@
     "@tenkacloud/problem-test": ["@tenkacloud/problem-test@workspace:packages/problem-test-harness"],
 
     "@tenkacloud/saml-utils": ["@tenkacloud/saml-utils@workspace:packages/saml-utils"],
+
+    "@tenkacloud/tcloud": ["@tenkacloud/tcloud@workspace:packages/tcloud"],
 
     "@tenkacloud/web-kit": ["@tenkacloud/web-kit@workspace:packages/web-kit"],
 
