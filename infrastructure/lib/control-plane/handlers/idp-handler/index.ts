@@ -11,15 +11,16 @@
  * [Issue #2442 / Phase C5]: goes through `createSeamIdpStore`
  * (`CONTROL_DATA_BACKEND`-aware) rather than unconditionally forcing DynamoDB;
  * the table name is optional so cold start does not fail-fast when it is
- * absent. This Lambda is not wired into any CDK stack today (Control Plane
- * scope is unused — see `saml-idps-table.ts`), so the relaxation only keeps
- * this file consistent with its Application Plane sibling.
+ * absent (pure SQL backends never synthesize `SamlIdpsTable`).
  *
  * Cognito: `CONTROL_PLANE_USER_POOL_ID` env names the SBT ControlPlane UserPool.
  *
- * [USER-REVIEW]: the CDK addition that creates the table + grants the Lambda
- * `cognito-idp:Create/Update/DeleteIdentityProvider` against this UserPool is
- * left for the maintainer per AGENTS.md role split.
+ * CDK wiring (#2941): `control-plane/control-plane-idp-api.ts` creates this
+ * Lambda, grants the Cognito IdP CRUD actions, and registers the `/admin/idp*`
+ * routes on the SBT ControlPlane HttpApi with its JWT authorizer. Until that
+ * landed the handler existed but no route did, so the admin console's Identity
+ * Providers page only ever saw `Failed to fetch` (API Gateway does not attach
+ * CORS headers to an unmatched 404).
  */
 
 import { CognitoIdentityProviderClient } from "@aws-sdk/client-cognito-identity-provider";
