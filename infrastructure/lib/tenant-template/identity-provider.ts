@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { aws_cognito, Duration, Stack } from "aws-cdk-lib";
 import { Construct } from "constructs";
 import type { IdentityDetails } from "../interfaces/identity-details.js";
@@ -87,7 +86,7 @@ export function buildAllowedRedirectUrls(
 const COGNITO_DOMAIN_PREFIX_MAX_LENGTH = 63;
 
 /**
- * tenantId が長すぎて上限を超えるときだけ、 衝突しない短い代替へ畳む。
+ * 上限を超えるときだけ、 tenantId ではなく **周りの固定部分** を削って収める。
  *
  * 目的は **pooled の既存 domain を絶対に動かさないこと**。 `buildCognitoDomainPrefix` は
  * pooled と silo で共有されており、 書式を無条件に変えると
@@ -95,9 +94,16 @@ const COGNITO_DOMAIN_PREFIX_MAX_LENGTH = 63;
  * `AWS::Cognito::UserPoolDomain` が **REPLACE** されて、 pooled tenant の Hosted UI ログイン
  * URL が変わってしまう。 だから「収まるならそのまま」を厳守する。
  *
- * 畳むときは tenantId を sha256 の先頭 12 字へ落とす。 tenantId は UUID/ULID で衝突しないので、
- * その hash も実用上衝突しない (12 hex = 48bit)。 同じ tenantId なら常に同じ prefix になる
- * (= 再 deploy で REPLACE されない) ことが要件で、 純関数にしてあるのはそのため。
+ * 畳むときは environment を先頭 3 字 (development→dev / staging→sta / production→pro) にし、
+ * tenantId からは区切り文字だけを外す。 UUID (36 字) はハイフンが落ちて 32 字になり、
+ * `tenkacloud-`(11) + `dev`(3) + `-`(1) + 32 + `-`(1) + accountId(12) = 60 字で収まる。
+ * ULID (26 字) も同様。 tenantId を **一切失わない** ので衝突は原理的に起こらず、 domain から
+ * どの tenant のものか読み取れる。 同じ入力なら常に同じ prefix になる (= 再 deploy で REPLACE
+ * されない) ことが要件で、 純関数にしてあるのはそのため。
+ *
+ * hash に落とさないのは意図的。 tenantId は秘密ではなく単なる識別子で、 ここで必要なのは
+ * 「短く・一意・決定的」だけであり、 digest を挟むと domain から tenant を引けなくなるうえ、
+ * 48bit まで縮めた分だけ衝突余地を作ることになる。
  */
 export function buildCognitoDomainPrefix(
   environment: string,
@@ -115,8 +121,15 @@ export function buildCognitoDomainPrefix(
   // `-`(1) + 36 + `-`(1) + accountId(12) = 72 字 > 63 で、 silo tenant は Cognito に
   // 弾かれていた ("Member must have length less than or equal to 63")。 pooled は
   // tenantId="pooled" (6 字) で 42 字に収まるため、 この経路には入らない。
-  const shortTid = createHash("sha256").update(tid).digest("hex").slice(0, 12);
-  return `tenkacloud-${env}-${shortTid}-${acct}`;
+  const compose = (segment: string): string => `tenkacloud-${env.slice(0, 3)}-${segment}-${acct}`;
+  const compactTid = tid.replace(/[^a-z0-9]/g, "");
+  // UUID / ULID はここで必ず budget 内に収まるので truncate は起きない。 それより長い
+  // tenantId を将来 SBT が発行した場合に備えた最後の保険で、 乱数部が末尾にある UUID / ULID
+  // の性質に合わせて後ろから残す (先頭を残すと ULID は時刻部だけになり衝突しうる)。
+  const budget = COGNITO_DOMAIN_PREFIX_MAX_LENGTH - compose("").length;
+  return compose(
+    compactTid.length <= budget ? compactTid : compactTid.slice(compactTid.length - budget),
+  );
 }
 
 /**

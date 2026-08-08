@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { buildCognitoDomainPrefix } from "../../lib/tenant-template/identity-provider";
 
@@ -60,12 +59,40 @@ describe("buildCognitoDomainPrefix", () => {
     expect(a).not.toBe(b);
   });
 
-  it("should shorten via a stable hash of the tenantId", () => {
+  it("should shorten by dropping separators and abbreviating the environment", () => {
+    // 縮めるのは環境名と区切り文字だけで、 tenantId 自体は 1 文字も落とさない。 domain から
+    // どの tenant のものか読み取れることと、 縮約による衝突余地を作らないことが要件。
     const uuid = "e6d84953-426b-481c-9c89-bb1027fc54a4";
-    const expected = createHash("sha256").update(uuid).digest("hex").slice(0, 12);
     expect(buildCognitoDomainPrefix("development", uuid, ACCOUNT_ID)).toBe(
-      `tenkacloud-development-${expected}-${ACCOUNT_ID}`,
+      `tenkacloud-dev-e6d84953426b481c9c89bb1027fc54a4-${ACCOUNT_ID}`,
     );
+  });
+
+  it("should keep the full tenantId so two tenants can never share a domain", () => {
+    // hash 縮約をやめた核心。 UUID の全 bit が残るので、 別 tenant が同じ prefix になる経路が
+    // 原理的に存在しない (hash 先頭 12 字なら 48bit まで縮んでいた)。
+    const uuid = "e6d84953-426b-481c-9c89-bb1027fc54a4";
+    expect(buildCognitoDomainPrefix("development", uuid, ACCOUNT_ID)).toContain(
+      uuid.replaceAll("-", ""),
+    );
+  });
+
+  it("should give each environment a distinct abbreviation", () => {
+    const uuid = "e6d84953-426b-481c-9c89-bb1027fc54a4";
+    const prefixes = ["development", "staging", "production"].map((env) =>
+      buildCognitoDomainPrefix(env, uuid, ACCOUNT_ID),
+    );
+    expect(new Set(prefixes).size).toBe(3);
+  });
+
+  it("should truncate from the tail if a tenantId ever exceeds the remaining budget", () => {
+    // UUID / ULID では到達しない保険経路。 到達したときに (a) 上限を守り、 (b) 乱数部が末尾に
+    // ある ID の性質どおり後ろを残すことを固定する。
+    const longTid = `${"a".repeat(40)}0123456789abcdef`;
+    const prefix = buildCognitoDomainPrefix("development", longTid, ACCOUNT_ID);
+
+    expect(prefix.length).toBe(COGNITO_LIMIT);
+    expect(prefix).toContain("0123456789abcdef");
   });
 
   it("should only use lowercase letters, digits and hyphens", () => {
