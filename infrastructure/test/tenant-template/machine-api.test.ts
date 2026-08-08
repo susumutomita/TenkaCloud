@@ -4,7 +4,11 @@ import { AttributeType, BillingMode, Table } from "aws-cdk-lib/aws-dynamodb";
 import { Code, Function as LambdaFunction, Runtime } from "aws-cdk-lib/aws-lambda";
 import { describe, expect, it } from "vitest";
 import { MACHINE_TOKEN_PATH_FEATURE_KEY } from "../../lib/app-config/index";
-import { MACHINE_ROUTE_SCOPES } from "../../lib/problem-deploy/handlers/shared/machine-scopes";
+import {
+  CAPABILITY_SCOPE_NAMES,
+  MACHINE_CAPABILITIES,
+  MACHINE_ROUTE_SCOPES,
+} from "../../lib/problem-deploy/handlers/shared/machine-scopes";
 import { TenantTemplateStack } from "../../lib/tenant-template/tenant-template-stack";
 
 /**
@@ -141,14 +145,16 @@ describe("#2948 T-12 / T-13: features.machineTokenPath OFF is a physical no-op",
 describe("#2948 T-14 — T-17: features.machineTokenPath ON creates only the machine surface", () => {
   const template = makeTemplate(flagOn);
 
-  it("should create exactly one resource server with the two Phase 1 capability scopes", () => {
+  it("should create exactly one resource server carrying every declared capability scope", () => {
     template.resourceCountIs("AWS::Cognito::UserPoolResourceServer", 1);
     const resourceServer = Object.values(
       template.findResources("AWS::Cognito::UserPoolResourceServer"),
     )[0] as CfnResource;
     expect(resourceServer.Properties?.Identifier).toBe("tenkacloud");
     const scopes = resourceServer.Properties?.Scopes as ReadonlyArray<{ ScopeName: string }>;
-    expect(scopes.map((scope) => scope.ScopeName).sort()).toEqual(["ops.deploy", "ops.read"]);
+    expect(scopes.map((scope) => scope.ScopeName).sort()).toEqual(
+      MACHINE_CAPABILITIES.map((capability) => CAPABILITY_SCOPE_NAMES[capability]).sort(),
+    );
   });
 
   it("should leave the UserPool and the human UserPoolClient untouched", () => {

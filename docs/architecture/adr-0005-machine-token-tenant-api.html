@@ -130,7 +130,7 @@
       unconditionally. The test suite asserts this holds with the guard middleware removed.
     </p>
 
-    <h2>3. Phase 1 surface (frozen)</h2>
+    <h2>3. Reachable surface</h2>
     <table>
       <thead>
         <tr><th>Method and path</th><th>Required capability</th></tr>
@@ -143,6 +143,7 @@
         <tr><td><code>GET /events</code></td><td><code>tenkacloud/ops.read</code></td></tr>
         <tr><td><code>GET /events/{eventId}</code></td><td><code>tenkacloud/ops.read</code></td></tr>
         <tr><td><code>POST /problems/{problemId}/deploy</code></td><td><code>tenkacloud/ops.deploy</code></td></tr>
+        <tr><td><code>POST /deployments/retry</code> (Phase 2)</td><td><code>tenkacloud/ops.write</code></td></tr>
       </tbody>
       <caption>
         The single source of truth is <code>MACHINE_ROUTE_SCOPES</code> in
@@ -150,6 +151,30 @@
         guard read the same array, so the two cannot drift.
       </caption>
     </table>
+
+    <h3>3.1 Phase 2 — the write surface (issue 2955)</h3>
+    <p>
+      Phase 2 adds one operation, <code>POST /deployments/retry</code>, under a separate
+      capability <code>tenkacloud/ops.write</code>. Re-queueing a failed job is deliberately not
+      folded into <code>ops.deploy</code>: "create something new" and "retry what failed" are
+      handed out separately, and a read-only credential must not be able to do either.
+    </p>
+    <p>
+      That route already existed in the handler but had no API Gateway resource, so it had never
+      been reachable — by a machine or by a human. It is wired on both APIs in the same change,
+      because a surface that differs by caller is a surface nobody can reason about.
+    </p>
+    <p>
+      Phase 2 also turns the review question into data. Every entry in
+      <code>MACHINE_ROUTE_SCOPES</code> now carries a required <code>reachability</code> field
+      (<code>none</code>, <code>deploy-pipeline</code>, or <code>scheduler</code>) plus the
+      file-level evidence for the claim. Omitting it is a type error; declaring
+      <code>scheduler</code> fails a test. This exists because one of the rejected candidate
+      designs proposed <code>PATCH /events/{eventId}/schedule</code>, which looks like a
+      single-field write and in fact drives competition progression through a scheduler. The
+      question "what asynchronous work can this reach?" is now impossible to skip rather than
+      merely written down somewhere.
+    </p>
 
     <h2>4. Default OFF is cryptographic, not conventional</h2>
     <p>

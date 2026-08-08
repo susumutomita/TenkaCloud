@@ -29,8 +29,10 @@ describe("machine API artifact", () => {
     const operations = listMachineApiOperations();
     expect(operations.length).toBeGreaterThan(0);
     for (const operation of operations) {
-      expect(["read", "deploy"]).toContain(operation.capability);
-      expect(operation.scope).toMatch(/^tenkacloud\/ops\.(read|deploy)$/);
+      // capability の集合そのものは上流 (machine-scopes.ts) が決める。ここで固定値を書くと
+      // capability を足すたびに portal 側が理由なく落ちるので、形だけを検証する。
+      expect(operation.capability).toMatch(/^[a-z]+$/);
+      expect(operation.scope).toBe(`tenkacloud/ops.${operation.capability}`);
     }
   });
 

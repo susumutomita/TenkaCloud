@@ -11,6 +11,7 @@ import {
 import { UnsupportedZodTypeError, zodToJsonSchema } from "../../../scripts/openapi/zod-json-schema";
 import {
   capabilityScope,
+  MACHINE_CAPABILITIES,
   MACHINE_ROUTE_SCOPES,
 } from "../../lib/problem-deploy/handlers/shared/machine-scopes";
 
@@ -57,7 +58,7 @@ describe("#2949: generated spec matches the route source of truth", () => {
     for (const methods of Object.values(spec.paths)) {
       for (const operation of Object.values(methods)) {
         expect(operation[CAPABILITY_EXTENSION]).toBeDefined();
-        expect(["read", "deploy"]).toContain(operation[CAPABILITY_EXTENSION]);
+        expect(MACHINE_CAPABILITIES).toContain(operation[CAPABILITY_EXTENSION]);
       }
     }
   });
@@ -84,14 +85,14 @@ describe("#2949: generated spec matches the route source of truth", () => {
     expect(fallback).not.toMatch(/amazonaws\.com|tenkacloud\.(com|dev|io)/);
   });
 
-  it("should declare only the two Phase 1 scopes on the security scheme", () => {
+  it("should declare exactly the capability scopes the contract defines", () => {
     const schemes = spec.components.securitySchemes as Record<
       string,
       { flows: { clientCredentials: { scopes: Record<string, string> } } }
     >;
     expect(
       Object.keys(schemes.TenkaCloudMachineOAuth?.flows.clientCredentials.scopes ?? {}),
-    ).toEqual([capabilityScope("read"), capabilityScope("deploy")]);
+    ).toEqual(MACHINE_CAPABILITIES.map(capabilityScope));
   });
 });
 

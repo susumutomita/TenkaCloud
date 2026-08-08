@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "TenkaCloud Machine API",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "description": "Machine-to-machine surface of the TenkaCloud Tenant API (ADR-0005 Phase 1). A machine principal holds the role `TenantMachine`, which no destructive route accepts, so the operations below are the complete surface reachable with a machine credential. This reference is generated from the platform's own route table and validation schemas.",
     "license": {
       "name": "Apache-2.0",
@@ -262,7 +262,7 @@
       "post": {
         "operationId": "postProblemsByProblemIdDeploy",
         "summary": "Start a deployment",
-        "description": "Starts a deployment of one problem for one team and returns the job id. This is the only mutating operation available to a machine principal.",
+        "description": "Starts a deployment of one problem for one team and returns the job id.",
         "tags": [
           "deployments"
         ],
@@ -384,6 +384,61 @@
         ],
         "x-tenkacloud-capability": "deploy"
       }
+    },
+    "/deployments/retry": {
+      "post": {
+        "operationId": "postDeploymentsRetry",
+        "summary": "Re-queue failed deployments",
+        "description": "Re-queues deployment jobs that ended in FAILED onto the same pipeline a fresh deploy uses. Idempotent: rows that succeeded, are still running, or belong to another tenant are skipped and reported rather than touched.",
+        "tags": [
+          "deployments"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "failedJobIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[0-9A-HJKMNP-TV-Z]{26}$"
+                    }
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "failedJobIds"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "description": "The token is missing, expired, or lacks the required scope."
+          },
+          "403": {
+            "description": "The machine credential is not allowed to call this route (`forbidden_machine_route`) or its role is rejected (`forbidden_role`)."
+          },
+          "404": {
+            "description": "Not found within the calling tenant."
+          }
+        },
+        "security": [
+          {
+            "TenkaCloudMachineOAuth": [
+              "tenkacloud/ops.write"
+            ]
+          }
+        ],
+        "x-tenkacloud-capability": "write"
+      }
     }
   },
   "components": {
@@ -396,7 +451,8 @@
             "tokenUrl": "{cognitoDomain}/oauth2/token",
             "scopes": {
               "tenkacloud/ops.read": "Read deployments and events.",
-              "tenkacloud/ops.deploy": "Start a deployment."
+              "tenkacloud/ops.deploy": "Start a deployment.",
+              "tenkacloud/ops.write": "Re-queue failed deployments."
             }
           }
         }

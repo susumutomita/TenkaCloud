@@ -31,6 +31,7 @@ afterEach(() => {
 
 const deployMocks = vi.hoisted(() => ({
   startDeployment: vi.fn(),
+  retryDeployments: vi.fn(),
   listDeployments: vi.fn(),
   getDeployment: vi.fn(),
   requestTeardown: vi.fn(),
@@ -63,6 +64,16 @@ vi.mock("../../lib/problem-deploy/handlers/deploy-handler/list", () => ({
 vi.mock("../../lib/problem-deploy/handlers/deploy-handler/delete", () => ({
   requestTeardown: deployMocks.requestTeardown,
 }));
+vi.mock("../../lib/problem-deploy/handlers/deploy-handler/retry", async () => {
+  const actual = await vi.importActual<
+    typeof import("../../lib/problem-deploy/handlers/deploy-handler/retry")
+  >("../../lib/problem-deploy/handlers/deploy-handler/retry");
+  return {
+    retryDeployments: deployMocks.retryDeployments,
+    validateRetryRequest: actual.validateRetryRequest,
+    InvalidRetryRequestError: actual.InvalidRetryRequestError,
+  };
+});
 vi.mock("../../lib/problem-deploy/handlers/deploy-handler/stack-progress", () => ({
   getStackProgress: deployMocks.getStackProgress,
   defaultCfnClient: vi.fn(),
@@ -148,9 +159,10 @@ const { createMachineGuardMiddleware } = await import(
 const { buildAuthErrorHandler, createRoleCheckMiddleware } = await import(
   "../../lib/problem-deploy/handlers/shared/auth-wiring"
 );
-const { bindScope, capabilityScope, MACHINE_ROUTE_SCOPES } = await import(
+const { bindScope, capabilityScope, MACHINE_CAPABILITIES, MACHINE_ROUTE_SCOPES } = await import(
   "../../lib/problem-deploy/handlers/shared/machine-scopes"
 );
+type MachineCapability = (typeof MACHINE_CAPABILITIES)[number];
 
 const TENANT = "01JABCDEF0123456789ABCDEF";
 const ULID = "01H8XGJWBWBAQ4N6RZHM4S2KMV";
@@ -161,7 +173,7 @@ function envWithClaims(claims: Record<string, string>) {
   return { event: { requestContext: { authorizer: { claims } } } };
 }
 
-function machineEnv(capabilities: readonly ("read" | "deploy")[] = ["read", "deploy"]) {
+function machineEnv(capabilities: readonly MachineCapability[] = MACHINE_CAPABILITIES) {
   return envWithClaims({
     token_use: "access",
     client_id: "machine-client-1",
@@ -189,6 +201,7 @@ beforeEach(() => {
   deployMocks.getDeployment.mockResolvedValue({ jobId: ULID, status: "IN_PROGRESS" });
   deployMocks.requestTeardown.mockResolvedValue({ kind: "already_deleted" });
   deployMocks.getStackProgress.mockResolvedValue({ kind: "not_found" });
+  deployMocks.retryDeployments.mockResolvedValue({ items: [] });
 
   eventMocks.listEvents.mockResolvedValue({ items: [] });
   eventMocks.getEventDetail.mockResolvedValue({ id: ULID });
@@ -492,5 +505,59 @@ describe("#2948 T-11: machine mutations and denials reach the admin audit log", 
         outcome: "success",
       }),
     );
+  });
+});
+
+describe("#2955: POST /deployments/retry is the second machine mutating route", () => {
+  const RETRY_BODY = JSON.stringify({ failedJobIds: [ULID] });
+
+  it("should allow a machine token that carries the write capability", async () => {
+    const res = await deployApp.request(
+      "/deployments/retry",
+      { method: "POST", body: RETRY_BODY, headers: JSON_HEADERS },
+      machineEnv(["read", "write"]),
+    );
+    expect(res.status).toBe(200);
+    expect(deployMocks.retryDeployments).toHaveBeenCalledWith(
+      expect.anything(),
+      TENANT,
+      expect.objectContaining({ failedJobIds: [ULID] }),
+    );
+  });
+
+  it("should reject a deploy-only token (write is a separate capability on purpose)", async () => {
+    const res = await deployApp.request(
+      "/deployments/retry",
+      { method: "POST", body: RETRY_BODY, headers: JSON_HEADERS },
+      machineEnv(["read", "deploy"]),
+    );
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as { error: string }).error).toBe("forbidden_machine_route");
+    expect(deployMocks.retryDeployments).not.toHaveBeenCalled();
+  });
+
+  it("should write a retry_deployments audit row", async () => {
+    await deployApp.request(
+      "/deployments/retry",
+      { method: "POST", body: RETRY_BODY, headers: JSON_HEADERS },
+      machineEnv(["read", "write"]),
+    );
+    expect(auditMocks.writeAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: TENANT,
+        actor: "m2m:machine-client-1",
+        action: "retry_deployments",
+        outcome: "success",
+      }),
+    );
+  });
+
+  it("should keep working for a human TenantOperator", async () => {
+    const res = await deployApp.request(
+      "/deployments/retry",
+      { method: "POST", body: RETRY_BODY, headers: JSON_HEADERS },
+      humanEnv("TenantOperator"),
+    );
+    expect(res.status).toBe(200);
   });
 });

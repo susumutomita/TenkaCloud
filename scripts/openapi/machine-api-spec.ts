@@ -1,3 +1,4 @@
+import { RetryRequestSchema } from "../../infrastructure/lib/problem-deploy/handlers/deploy-handler/retry.ts";
 import {
   DeployRequestSchema,
   DeployResponseSchema,
@@ -100,8 +101,12 @@ const OPERATION_SUMMARIES: Readonly<Record<string, { summary: string; descriptio
   },
   "POST /problems/{problemId}/deploy": {
     summary: "Start a deployment",
+    description: "Starts a deployment of one problem for one team and returns the job id.",
+  },
+  "POST /deployments/retry": {
+    summary: "Re-queue failed deployments",
     description:
-      "Starts a deployment of one problem for one team and returns the job id. This is the only mutating operation available to a machine principal.",
+      "Re-queues deployment jobs that ended in FAILED onto the same pipeline a fresh deploy uses. Idempotent: rows that succeeded, are still running, or belong to another tenant are skipped and reported rather than touched.",
   },
 };
 
@@ -146,6 +151,7 @@ function buildOperation(route: MachineRouteScope): OpenApiOperation {
   }
   const parameters = pathParametersFor(route);
   const isDeploy = route.capability === "deploy";
+  const isRetry = route.apigwPath === "/deployments/retry";
   return {
     operationId: operationIdFor(route),
     summary: copy.summary,
@@ -158,6 +164,16 @@ function buildOperation(route: MachineRouteScope): OpenApiOperation {
             required: true as const,
             content: {
               "application/json": { schema: zodToJsonSchema(DeployRequestSchema) },
+            },
+          },
+        }
+      : {}),
+    ...(isRetry
+      ? {
+          requestBody: {
+            required: true as const,
+            content: {
+              "application/json": { schema: zodToJsonSchema(RetryRequestSchema) },
             },
           },
         }
@@ -199,7 +215,7 @@ export function buildMachineApiSpec(): OpenApiDocument {
     openapi: OPENAPI_VERSION,
     info: {
       title: "TenkaCloud Machine API",
-      version: "1.0.0",
+      version: "1.1.0",
       description:
         "Machine-to-machine surface of the TenkaCloud Tenant API (ADR-0005 Phase 1). " +
         "A machine principal holds the role `TenantMachine`, which no destructive route accepts, " +
@@ -235,6 +251,7 @@ export function buildMachineApiSpec(): OpenApiDocument {
               scopes: {
                 [capabilityScope("read")]: "Read deployments and events.",
                 [capabilityScope("deploy")]: "Start a deployment.",
+                [capabilityScope("write")]: "Re-queue failed deployments.",
               },
             },
           },

@@ -2,7 +2,7 @@
 #
 # Issue #2948 / ADR-0005 Phase 1: tenant の machine (M2M) credential を発行 / 一覧 / 失効する。
 #
-#   issue-machine-client.sh create --user-pool-id <id> --tenant <tenantId> --preset read|deploy
+#   issue-machine-client.sh create --user-pool-id <id> --tenant <tenantId> --preset read|deploy|write
 #   issue-machine-client.sh list   --user-pool-id <id> --tenant <tenantId>
 #   issue-machine-client.sh revoke --user-pool-id <id> --client-id <clientId>
 #   issue-machine-client.sh revoke-tenant --user-pool-id <id> --tenant <tenantId>
@@ -128,7 +128,9 @@ resolve_preset_scopes() {
   case "$PRESET" in
     read) printf '%s/ops.read' "$CAPABILITY_RESOURCE_SERVER_ID" ;;
     deploy) printf '%s/ops.read %s/ops.deploy' "$CAPABILITY_RESOURCE_SERVER_ID" "$CAPABILITY_RESOURCE_SERVER_ID" ;;
-    *) die "--preset は read か deploy です (got: ${PRESET})" ;;
+    # #2955: 失敗した deploy の再投入だけを許す preset。新規 deploy はできない。
+    write) printf '%s/ops.read %s/ops.write' "$CAPABILITY_RESOURCE_SERVER_ID" "$CAPABILITY_RESOURCE_SERVER_ID" ;;
+    *) die "--preset は read / deploy / write のいずれかです (got: ${PRESET})" ;;
   esac
 }
 

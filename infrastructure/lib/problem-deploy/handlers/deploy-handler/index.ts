@@ -441,8 +441,33 @@ app.get("/deployments/:jobId/stack-progress", async (c) => {
  * 入力: \`{ failedJobIds: ["01HX...", ...] }\`、 最大 750 件
  * 出力: \`{ items: [{ jobId, action: \"requeued\" | \"skipped\", reason? }, ...] }\`
  */
+/** #2955: retry も deploy と同じ形の audit 行を書く。target は再投入した件数。 */
+async function recordRetryAudit(
+  c: Context,
+  tenantId: string,
+  jobCount: number,
+  outcome: "success" | "error",
+): Promise<void> {
+  const auditContext = extractAuditContext(c);
+  await writeAuditEvent({
+    tenantId,
+    actor: auditContext.actor,
+    actorUsername: auditContext.actorUsername,
+    action: "retry_deployments",
+    outcome,
+    target: String(jobCount),
+    ipAddress: auditContext.ipAddress,
+    userAgent: auditContext.userAgent,
+    occurredAtMs: Date.now(),
+  });
+}
+
 app.post("/deployments/retry", async (c) => {
-  requireRole(c, [TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE]);
+  // #2955 Phase 2: machine principal に開く 2 本目の mutating route。`retry.ts` が publish する
+  // のは `DeployCreateRequested` だけで、deploy route と同じ pipeline に閉じている
+  // (= scheduler / reconciler へは届かない)。root cause は `MACHINE_ROUTE_SCOPES` の
+  // `reachability` field に宣言してある。
+  requireRole(c, [TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE, TENANT_MACHINE_ROLE]);
   requireTenantNotSuspended(c);
   let body: unknown;
   try {
@@ -459,10 +484,14 @@ app.post("/deployments/retry", async (c) => {
     }
     throw err;
   }
+  const retryTenantId = resolveTenantId(c);
   try {
-    const result = await retryDeployments(shared, resolveTenantId(c), request);
+    const result = await retryDeployments(shared, retryTenantId, request);
+    // #2955: 再投入は deploy と同じく mutating なので、同じ粒度で監査に残す。
+    await recordRetryAudit(c, retryTenantId, result.items.length, "success");
     return c.json(result, StatusCodes.OK);
   } catch (err) {
+    await recordRetryAudit(c, retryTenantId, request.failedJobIds.length, "error");
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[deploy] retryDeployments failed", { message });
     return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);

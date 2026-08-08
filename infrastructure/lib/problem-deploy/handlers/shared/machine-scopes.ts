@@ -11,6 +11,7 @@
  * ```text
  * tenkacloud/ops.read       capability: read    (CFn 管理の resource server)
  * tenkacloud/ops.deploy     capability: deploy  (CFn 管理の resource server)
+ * tenkacloud/ops.write      capability: write   (CFn 管理の resource server、#2955)
  * tc-tenant-<tenantId>/bind tenant binding      (runtime 作成、CFn 管理外)
  * ```
  *
@@ -22,9 +23,9 @@
  *    全滅させる。
  * 2. 逆に言えば `delete-resource-server` が **deploy 不要の kill switch** になる。
  *
- * ## Phase 1 で凍結した route allowlist
+ * ## route allowlist
  *
- * 7 route。destructive 操作 (`DELETE /deployments/{jobId}` / `disruptions/fire` /
+ * Phase 1 が 7 route、#2955 (Phase 2) が `POST /deployments/retry` を足して 8 route。destructive 操作 (`DELETE /deployments/{jobId}` / `disruptions/fire` /
  * `rotate-login-key` / `/admin/*` ほか) は allowlist に**無い**うえに、`TenantMachine` role
  * がどの `requireRole` allowlist にも含まれないため **構造的にも** 到達不能である。この
  * middleware は唯一の防壁ではなく 2 枚目の防壁である。
@@ -49,16 +50,21 @@ export const MACHINE_CLIENT_NAME_PREFIX = "tc-m2m-";
 export const MACHINE_ACCESS_TOKEN_VALIDITY_MINUTES = 15;
 
 /**
- * Phase 1 の capability。`ops.write` / `disruptions.fire` / `audit.read` は名前を予約するが
- * Phase 1 では resource server に宣言しない (= Cognito がそもそも発行できない)。
+ * capability。`disruptions.fire` / `audit.read` は名前を予約するが宣言しない (= Cognito が
+ * そもそも発行できない)。
+ *
+ * `write` は #2955 (Phase 2) で追加した。deploy pipeline を **再投入** する操作専用で、
+ * `deploy` とは別の scope にしてある。read 用 credential が誤って再投入できないことと、
+ * 「新規に作る」と「失敗したものをやり直す」を別々に配れることが理由である。
  */
-export const MACHINE_CAPABILITIES = ["read", "deploy"] as const;
+export const MACHINE_CAPABILITIES = ["read", "deploy", "write"] as const;
 export type MachineCapability = (typeof MACHINE_CAPABILITIES)[number];
 
 /** capability → resource server 内の scope 名。 */
 export const CAPABILITY_SCOPE_NAMES: Readonly<Record<MachineCapability, string>> = {
   read: "ops.read",
   deploy: "ops.deploy",
+  write: "ops.write",
 };
 
 /** capability → 完全修飾 scope 文字列 (`tenkacloud/ops.read`)。 */
@@ -76,6 +82,28 @@ export function bindScope(tenantId: string): string {
   return `${bindResourceServerId(tenantId)}/${BIND_SCOPE_NAME}`;
 }
 
+/**
+ * #2955 の証拠ゲート: route を machine に開くとき、その route が **どの非同期経路に届くか** を
+ * データとして宣言させる。
+ *
+ * 設計 C が `PATCH /events/{id}/schedule` で踏んだ罠がこれである。同期的には「値を 1 つ書く
+ * だけ」に見える route が、scheduler を経由して競技の進行そのものを動かしていた。宣言を必須の
+ * field にしておけば、route を足す人は必ずこの問いに答えることになり、レビュアーは diff の
+ * 1 行として見ることになる。
+ *
+ * - `none`             — 同期的な read / write だけで終わり、event も job も発生しない。
+ * - `deploy-pipeline`  — `DeployCreateRequested` を publish し、deploy worker が動く。
+ *                        machine に許してよい唯一の非同期経路 (Phase 1 の deploy と同型)。
+ * - `scheduler`        — 競技進行 / 定期実行 / reconciler に届く。**machine には開かない。**
+ */
+export type MachineRouteReachability = "none" | "deploy-pipeline" | "scheduler";
+
+/** machine に開いてよい reachability。`scheduler` はここに無い。 */
+export const ALLOWED_MACHINE_REACHABILITY: readonly MachineRouteReachability[] = [
+  "none",
+  "deploy-pipeline",
+];
+
 export interface MachineRouteScope {
   /** HTTP method (大文字)。 */
   readonly method: "GET" | "POST";
@@ -85,11 +113,15 @@ export interface MachineRouteScope {
   readonly honoPath: string;
   /** この route を呼ぶのに必要な capability。 */
   readonly capability: MachineCapability;
+  /** この route が届く非同期経路。`scheduler` は test が拒否する。 */
+  readonly reachability: MachineRouteReachability;
+  /** 上記の判断根拠 (repo 内の file:line)。レビュー時に確認できる形で残す。 */
+  readonly reachabilityEvidence: string;
 }
 
 /**
- * Phase 1 の route allowlist (7 本、凍結)。CDK の method 生成と handler の guard が
- * **同じ配列** を読むため、片方だけ増える drift が構造的に起きない。
+ * route allowlist。CDK の method 生成と handler の guard が **同じ配列** を読むため、片方だけ
+ * 増える drift が構造的に起きない。route を足すときは `reachability` の宣言が必須である。
  */
 export const MACHINE_ROUTE_SCOPES: readonly MachineRouteScope[] = [
   {
@@ -97,42 +129,68 @@ export const MACHINE_ROUTE_SCOPES: readonly MachineRouteScope[] = [
     apigwPath: "/deployments",
     honoPath: "/deployments",
     capability: "read",
+    reachability: "none",
+    reachabilityEvidence: "deploy-handler/list.ts — repository query only, publishes nothing",
   },
   {
     method: "GET",
     apigwPath: "/deployments/{jobId}",
     honoPath: "/deployments/:jobId",
     capability: "read",
+    reachability: "none",
+    reachabilityEvidence: "deploy-handler/list.ts — repository query only, publishes nothing",
   },
   {
     method: "GET",
     apigwPath: "/deployments/{jobId}/stack-progress",
     honoPath: "/deployments/:jobId/stack-progress",
     capability: "read",
+    reachability: "none",
+    reachabilityEvidence:
+      "deploy-handler/stack-progress.ts — CloudFormation Describe* reads only, no mutation",
   },
   {
     method: "GET",
     apigwPath: "/problems/{problemId}/deployments",
     honoPath: "/problems/:problemId/deployments",
     capability: "read",
+    reachability: "none",
+    reachabilityEvidence: "deploy-handler/list.ts — repository query only, publishes nothing",
   },
   {
     method: "GET",
     apigwPath: "/events",
     honoPath: "/events",
     capability: "read",
+    reachability: "none",
+    reachabilityEvidence: "event-handler/list.ts — repository query only, publishes nothing",
   },
   {
     method: "GET",
     apigwPath: "/events/{eventId}",
     honoPath: "/events/:eventId",
     capability: "read",
+    reachability: "none",
+    reachabilityEvidence: "event-handler/list.ts — repository query only, publishes nothing",
   },
   {
     method: "POST",
     apigwPath: "/problems/{problemId}/deploy",
     honoPath: "/problems/:problemId/deploy",
     capability: "deploy",
+    reachability: "deploy-pipeline",
+    reachabilityEvidence:
+      "deploy-handler/deploy.ts — publishes DeployCreateRequested; no scheduler or event-progression path",
+  },
+  {
+    // #2955 Phase 2. Re-queues FAILED rows onto the same deploy pipeline the route above uses.
+    method: "POST",
+    apigwPath: "/deployments/retry",
+    honoPath: "/deployments/retry",
+    capability: "write",
+    reachability: "deploy-pipeline",
+    reachabilityEvidence:
+      "deploy-handler/retry.ts — publishes EVENT_DETAIL_TYPE_DEPLOY_CREATE_REQUESTED only; FAILED rows only, cross-tenant rows skipped",
   },
 ] as const;
 

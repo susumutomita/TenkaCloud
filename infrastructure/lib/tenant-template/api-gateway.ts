@@ -150,6 +150,12 @@ export class ApiGateway extends Construct {
     // /deployments/{jobId} — 1 件の取得 / 削除
     const deployments = this.restApi.root.addResource("deployments");
     deployments.addMethod("GET", deployIntegration, deployMethodOptions);
+    // Issue #2955: `POST /deployments/retry` は handler 側 (#911) に最初からあったが、
+    // gateway resource が無いため **human からも一度も到達できなかった**。machine 側に開くのに
+    // 合わせて human 側も同時に配線する (= 経路ごとに到達できる surface が食い違う状態を残さない)。
+    // `{jobId}` より前に登録する必要は無い (API Gateway は literal segment を greedy path
+    // parameter より優先して解決する)。
+    deployments.addResource("retry").addMethod("POST", deployIntegration, deployMethodOptions);
     const deployment = deployments.addResource("{jobId}");
     deployment.addMethod("GET", deployIntegration, deployMethodOptions);
     deployment.addMethod("DELETE", deployIntegration, deployMethodOptions);

@@ -8,7 +8,7 @@ Issue 2948 / 2952 / 2954、ADR-0005。CLI・CI・agent operator が Tenant API �
 - OFF のとき capability resource server が存在しないため、Cognito は `tenkacloud/*` scope をそもそも発行できない。設定が空だから安全なのではなく、発行できないから安全である。
 - machine principal の role は `TenantMachine` で、既存のどの `requireRole` allowlist にも含まれない。したがって破壊的操作は allowlist の外側であるだけでなく、role の上でも到達不能である。
 - access token の TTL は 15 分。**失効は即時ではない**。どの失効操作も、発行済み token が最大 15 分だけ生き残る。
-- 到達できる operation は 7 本だけで、正本は `infrastructure/lib/problem-deploy/handlers/shared/machine-scopes.ts` の `MACHINE_ROUTE_SCOPES` である。
+- 到達できる operation は 8 本だけで、正本は `infrastructure/lib/problem-deploy/handlers/shared/machine-scopes.ts` の `MACHINE_ROUTE_SCOPES` である。各 route は自分が届く非同期経路を `reachability` field で宣言しており、`scheduler` を宣言した route は test が拒否する。
 
 ## credential を発行する
 
@@ -16,11 +16,11 @@ Issue 2948 / 2952 / 2954、ADR-0005。CLI・CI・agent operator が Tenant API �
 scripts/issue-machine-client.sh create \
   --user-pool-id <tenant UserPool ID> \
   --tenant <tenantId> \
-  --preset read|deploy \
+  --preset read|deploy|write \
   --region ap-northeast-1
 ```
 
-- `read` preset は `tenkacloud/ops.read` のみ。`deploy` preset は read に加えて `tenkacloud/ops.deploy` を持つ。
+- `read` preset は `tenkacloud/ops.read` のみ。`deploy` preset は read に加えて `tenkacloud/ops.deploy` を持つ。`write` preset は read に加えて `tenkacloud/ops.write` を持ち、失敗した deploy の再投入だけができる (新規 deploy はできない)。
 - client secret は **1 回だけ標準出力に出る**。ファイルにも SSM にも保存されない。受け取った側が secret manager へ入れる。
 - 出力を取りこぼしたら、その client は捨てて発行し直す。secret を後から読む経路は無い。
 - tenant 向けの self-service 表示は無い。secret を `tenantConfig` 経由で SPA に載せてはならない。
@@ -75,8 +75,9 @@ scripts/issue-machine-client.sh revoke-tenant --user-pool-id <id> --tenant <tena
 | 操作 | 記録先 | 引き方 |
 | --- | --- | --- |
 | deploy (mutation) | admin audit log | `action=deploy_problem`、`actor=m2m:<clientId>` |
+| retry (mutation) | admin audit log | `action=retry_deployments`、`actor=m2m:<clientId>` |
 | guard による拒否 | admin audit log | `outcome=forbidden`、`target` に拒否理由 |
-| read (GET 7 本のうち 6 本) | machine API の access log | CloudWatch Logs の該当 LogGroup |
+| read (8 本のうち GET 6 本) | machine API の access log | CloudWatch Logs の該当 LogGroup |
 
 admin console の Audit Log 画面と CSV export では、`principal` に末尾 `*` を付けると prefix 一致になる。`m2m:*` と入れると machine principal の行だけが残る。client id は発行のたびに変わるため、完全一致だけでは machine 全体を引けない。
 
