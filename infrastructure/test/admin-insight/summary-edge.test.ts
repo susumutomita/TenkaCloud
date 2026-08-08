@@ -54,6 +54,7 @@ describe("summarizeTenants edge branches", () => {
       tenantId: "t1",
       activeDeploys: 0,
       failedDeploys: 0,
+      everCompletedDeploys: 0,
       totalEvents: 0,
     });
   });

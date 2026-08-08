@@ -252,8 +252,10 @@ describe("DynamoDbDeploymentsRepository writes — status transitions", () => {
       "updated",
     );
     expect(updates(commands)[0].input).toMatchObject({
+      // [Issue #2946] `completedAt` は `if_not_exists` で一度だけ書く。
       UpdateExpression:
-        "SET #status = :status, updatedAt = :updatedAt, stackId = :stackId, stackOutputs = :stackOutputs, buildId = :buildId",
+        "SET #status = :status, updatedAt = :updatedAt, stackId = :stackId, stackOutputs = :stackOutputs" +
+        ", completedAt = if_not_exists(completedAt, :completedAt), buildId = :buildId",
       ExpressionAttributeNames: { "#status": "status" },
       ExpressionAttributeValues: {
         ":status": "COMPLETE",
@@ -267,8 +269,10 @@ describe("DynamoDbDeploymentsRepository writes — status transitions", () => {
     reset();
     await expectOutcome(repo.markCreateSucceeded("j1", "stack-2", "[]", undefined, AT), "updated");
     expect(updates(commands)[0].input).toMatchObject({
+      // [Issue #2946] buildId 無しの経路でも `completedAt` は書く。
       UpdateExpression:
-        "SET #status = :status, updatedAt = :updatedAt, stackId = :stackId, stackOutputs = :stackOutputs",
+        "SET #status = :status, updatedAt = :updatedAt, stackId = :stackId, stackOutputs = :stackOutputs" +
+        ", completedAt = if_not_exists(completedAt, :completedAt)",
       ExpressionAttributeValues: {
         ":status": "COMPLETE",
         ":updatedAt": AT,

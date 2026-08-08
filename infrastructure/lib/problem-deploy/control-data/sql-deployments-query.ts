@@ -62,6 +62,23 @@ export class SqlDeploymentsQuery implements DeploymentsQueryPort {
     return Number(row?.cnt ?? 0);
   }
 
+  /**
+   * [Issue #2946] `completedAt` は `payload` (このバックエンドの record of truth) から読む。
+   *
+   * 専用の列と index を足すほうが速いが、schema は `CREATE TABLE IF NOT EXISTS` だけで
+   * 適用され ALTER の経路が無いため、列を増やすと **既存の Turso データベースに列が生えない
+   * まま INSERT の列数だけ増えて実行時に壊れる**。移行機構の導入は別作業なので、ここでは
+   * payload を読む。呼び出し元は operator の低頻度ダッシュボードで、ホットパスではない。
+   */
+  async countEverCompletedByTenant(tenantId: string): Promise<number> {
+    const row = await this.core.sql.get(
+      "SELECT COUNT(*) AS cnt FROM deployments WHERE list_tenant_id = ? " +
+        "AND json_extract(payload, '$.completedAt') IS NOT NULL",
+      [tenantId],
+    );
+    return Number(row?.cnt ?? 0);
+  }
+
   async listByTenantAndEvent(
     tenantId: string,
     eventId: string,

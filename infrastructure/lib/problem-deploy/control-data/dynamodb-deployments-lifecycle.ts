@@ -49,8 +49,12 @@ export class DynamoDbDeploymentsLifecycle implements DeploymentsLifecyclePort {
     buildId: string | undefined,
     at: string,
   ): Promise<DeploymentMutationOutcome> {
+    // [Issue #2946] `completedAt` は `if_not_exists` で **一度だけ** 書く。CFn の再 reconcile
+    // などでこの経路が再入しても最初の到達時刻が動かない。以後の teardown 遷移はこの属性に
+    // 触れないので、撤去後も「一度は成功した」事実が残る。
     const updateExpression =
       "SET #status = :status, updatedAt = :updatedAt, stackId = :stackId, stackOutputs = :stackOutputs" +
+      ", completedAt = if_not_exists(completedAt, :completedAt)" +
       (buildId !== undefined ? ", buildId = :buildId" : "");
     await this.core.ddb.send(
       new UpdateCommand({
@@ -63,6 +67,7 @@ export class DynamoDbDeploymentsLifecycle implements DeploymentsLifecyclePort {
           ":updatedAt": at,
           ":stackId": stackId,
           ":stackOutputs": stackOutputs,
+          ":completedAt": at,
           ...(buildId !== undefined ? { ":buildId": buildId } : {}),
         },
       }),

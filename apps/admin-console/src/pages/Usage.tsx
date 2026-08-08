@@ -257,6 +257,16 @@ export function UsagePage({ config }: { config: AppConfig }) {
             cell: (row) => deployCell(row.failedDeploys),
             sortingField: "failedDeploys",
           },
+          {
+            // [Issue #2946] 現在値の 2 列は撤去すると揃って 0 になる。この列だけが撤去後も
+            // 残るので、「成功する deploy を回しているテナント」と「一度も deploy していない
+            // テナント」を区別できる。`null` は不明であって 0 件成功ではない (deployCell が
+            // "—" を出す)。
+            id: "everCompletedDeploys",
+            header: t("usage.col_ever_completed_deploys"),
+            cell: (row) => deployCell(row.everCompletedDeploys),
+            sortingField: "everCompletedDeploys",
+          },
         ]}
       />
     </SpaceBetween>

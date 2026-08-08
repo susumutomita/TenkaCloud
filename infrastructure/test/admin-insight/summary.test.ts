@@ -27,11 +27,17 @@ function mockDeploymentsAndEventsCounts(counts: {
   readonly active: number;
   readonly failed: number;
   readonly events: number;
+  /** [Issue #2946] marker ベースの累計 (`attribute_exists(completedAt)`)。 */
+  readonly everCompleted?: number;
 }): ReturnType<typeof vi.fn> {
   return vi.fn().mockImplementation(async (cmd: QueryCommand) => {
     const tableName = cmd.input.TableName;
     if (tableName === "TestEvents") return { Count: counts.events };
     if (tableName === "TestDeployments") {
+      // [Issue #2946] 累計 query は status ではなく marker の存在で絞る。
+      if (cmd.input.FilterExpression === "attribute_exists(completedAt)") {
+        return { Count: counts.everCompleted ?? 0 };
+      }
       const values = Object.values(cmd.input.ExpressionAttributeValues ?? {});
       if (values.includes("FAILED")) return { Count: counts.failed };
       return { Count: counts.active };
@@ -44,7 +50,12 @@ describe("summarizeTenants", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("single tenant: should correctly aggregate active/failed deploy + total events", async () => {
-    const send = mockDeploymentsAndEventsCounts({ active: 3, failed: 1, events: 7 });
+    const send = mockDeploymentsAndEventsCounts({
+      active: 3,
+      failed: 1,
+      events: 7,
+      everCompleted: 5,
+    });
     const shared = buildShared(send);
     const result = await summarizeTenants(shared, ["tenant-a"]);
     expect(result.items).toHaveLength(1);
@@ -52,6 +63,7 @@ describe("summarizeTenants", () => {
       tenantId: "tenant-a",
       activeDeploys: 3, // PENDING + IN_PROGRESS × 2
       failedDeploys: 1,
+      everCompletedDeploys: 5,
       totalEvents: 7,
     });
   });
@@ -60,9 +72,9 @@ describe("summarizeTenants", () => {
     const send = mockDeploymentsAndEventsCounts({ active: 0, failed: 0, events: 0 });
     const shared = buildShared(send);
     await summarizeTenants(shared, ["tenant-a", "tenant-a", "tenant-a"]);
-    // 1 tenant あたり Deployments (active + failed の 2 query) + Events query = 3 invocation。
-    // 重複除去が効いていれば 3 回しか送らない。
-    expect(send).toHaveBeenCalledTimes(3);
+    // 1 tenant あたり Deployments 3 query (active / failed / [#2946] 累計) + Events query = 4。
+    // 重複除去が効いていれば 4 回しか送らない。
+    expect(send).toHaveBeenCalledTimes(4);
   });
 
   it("should preserve input order (after dedupe) in results", async () => {

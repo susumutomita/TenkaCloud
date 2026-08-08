@@ -51,6 +51,9 @@ export class SqlDeploymentsLifecycle implements DeploymentsLifecyclePort {
       record.updatedAt = at;
       record.stackId = stackId;
       record.stackOutputs = stackOutputs;
+      // [Issue #2946] 最初の到達時だけ書く (`??=`)。read-modify-write なので `payload` から
+      // 復元した既存値がそのまま残り、teardown 系の書き込みでも消えない。
+      record.completedAt ??= at;
       if (buildId !== undefined) record.buildId = buildId;
     });
   }

@@ -34,6 +34,14 @@ export interface UsageRow {
   readonly tenantStatus: string;
   readonly activeDeploys: number | null;
   readonly failedDeploys: number | null;
+  /**
+   * [Issue #2946] 一度でも成功した deploy の累計。撤去しても 0 に戻らないので、「健全に
+   * 回しているテナント」と「一度も deploy していないテナント」を撤去後も区別できる。
+   *
+   * `null` は **不明** (insight 未取得、または field を返さない旧 backend) であって
+   * 「成功 0 件」ではない。両者を同じ 0 として描かない。
+   */
+  readonly everCompletedDeploys: number | null;
 }
 
 /** table の sort 対象 field (UsageRow の column keys)。 */
@@ -42,7 +50,8 @@ export type UsageSortField =
   | "tier"
   | "tenantStatus"
   | "activeDeploys"
-  | "failedDeploys";
+  | "failedDeploys"
+  | "everCompletedDeploys";
 
 /**
  * deprovision 済み tenant の判定 (TenantList page の表示規約と同一):
@@ -112,6 +121,8 @@ export function buildUsageRows(
       tenantStatus: tenant.tenantStatus,
       activeDeploys: insight === null ? null : (summary?.activeDeploys ?? 0),
       failedDeploys: insight === null ? null : (summary?.failedDeploys ?? 0),
+      // `?? 0` を使わない: field 不在は「不明」で、0 件成功とは違う (#2946)。
+      everCompletedDeploys: insight === null ? null : (summary?.everCompletedDeploys ?? null),
     };
   });
 }

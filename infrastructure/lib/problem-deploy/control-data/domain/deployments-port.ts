@@ -80,6 +80,23 @@ export interface DeploymentsQueryPort {
   ): Promise<number>;
 
   /**
+   * [Issue #2946] Deployments for this tenant that **ever reached `COMPLETE`**,
+   * counted by the presence of the `completedAt` marker rather than by current
+   * `status`.
+   *
+   * Current status cannot answer this. A successful deployment is torn down to
+   * `DELETING` → `DELETED` / `EXPIRED` / `AUTO_DELETED`, and a FAILED one can
+   * reach `DELETED` through the same teardown path, so `DELETED` covers both
+   * "succeeded then removed" and "failed then removed".
+   *
+   * Rows written before the marker existed have no `completedAt`, so this count
+   * is **not retroactive**. Callers must not present it as "this tenant has
+   * succeeded 0 times" for a tenant whose deployments all predate the marker —
+   * see `everCompletedDeploysCoverage` on the summary.
+   */
+  countEverCompletedByTenant(tenantId: string): Promise<number>;
+
+  /**
    * Every deployment for a `(tenant, event)` pair (GSI1 + `FilterExpression`
    * `eventId = :ev`, full-page drain, full record). Sites:
    * `participant-handler/{leaderboard,leaderboard-score-events}` +
