@@ -95,7 +95,7 @@ Codespaces plays **cloud-independent drills only** — self-contained Docker con
 
 `make local` is the participant entry point: it starts the local scoring API and the Participant Portal in a Docker container, then you pick and start a drill from the portal screen. Progress is stored in a Docker-managed volume; local play has no DynamoDB or AWS SDK dependency.
 
-**Prerequisites: Git, Make, Docker Engine, Docker Compose v2 — no Bun, Node, or `node_modules` on your machine.**
+**Prerequisites: Git, Make, Docker Engine, Docker Compose v2 — no Bun, Node, or `node_modules` on your machine.** For CPU, memory, Docker allocation and free disk, see [the run profiles](./docs/local-play-requirements.md).
 
 ```bash
 git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
@@ -156,6 +156,12 @@ Re-running the same launcher for a later event works (the buildspec re-clones bo
 - **macOS, Linux, or WSL2** — supported for local play (`make local` / `tenkacloud local`) and for AWS deploys (`make deploy` Lite mode, `make deploy-saas` SaaS mode).
 - **Native Windows without WSL2** — not supported for local play; use GitHub Codespaces (above) or install WSL2 first.
 - **Browser only, no local install** — use GitHub Codespaces (above).
+
+**How much machine you need** depends on how many problems you run at once, so it
+is published as three profiles (`minimum` / `recommended` / `full`) with the
+measurements behind them — see
+[docs/local-play-requirements.md](./docs/local-play-requirements.md). Check your
+own machine against a profile with `make doctor PROFILE=recommended`.
 
 ## Running costs
 

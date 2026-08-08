@@ -127,7 +127,11 @@ lives in <a href="/docs/operate/deploy-paths/index.en.html">deploy modes and lau
 local scoring API. Nothing touches AWS and nothing costs money.</p>
 <p><strong>Prerequisites:</strong> <a href="https://bun.sh">Bun</a> 1.3.11 and a running Docker daemon
 (Docker Desktop, or colima on macOS). <code>make doctor</code> diagnoses your setup without
-installing anything; <code>make local-onboard</code> is the guided installer if you prefer.</p>
+installing anything; <code>make local-onboard</code> is the guided installer if you prefer.
+CPU, memory, Docker allocation and free disk are published as three run profiles
+with the measurements behind them in
+<a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/local-play-requirements.md"><code>docs/local-play-requirements.md</code></a>;
+<code>make doctor PROFILE=recommended</code> compares this machine against one of them.</p>
 <pre><code class="language-bash">git clone https://github.com/susumutomita/TenkaCloud.git
 cd TenkaCloud
 make install

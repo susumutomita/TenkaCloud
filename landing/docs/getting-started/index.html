@@ -128,7 +128,10 @@ Docker コンテナとして動作します。AWS には一切触れず、費用
 <p><strong>前提条件:</strong> <a href="https://bun.sh">Bun</a> 1.3.11 と、起動中の Docker デーモン
 （Docker Desktop、macOS では colima も可）。<code>make doctor</code> は何もインストール
 せずにセットアップ状況を診断します。ガイド付きインストーラーを使いたい場合は
-<code>make local-onboard</code> を実行してください。</p>
+<code>make local-onboard</code> を実行してください。CPU・メモリ・Docker への割り当て・
+空きディスクは 3 つの実行プロファイルとして実測値付きで
+<a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/local-play-requirements.md"><code>docs/local-play-requirements.md</code></a>
+に公開しています。<code>make doctor PROFILE=recommended</code> で手元のマシンと比較できます。</p>
 <pre><code class="language-bash">git clone https://github.com/susumutomita/TenkaCloud.git
 cd TenkaCloud
 make install

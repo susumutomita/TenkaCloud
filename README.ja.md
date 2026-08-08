@@ -97,7 +97,7 @@ Codespaces でプレイできるのは **クラウド非依存のドリルのみ
 
 `make local` が参加者向けの主入口です。ローカル採点 API と Participant Portal を Docker コンテナ内で起動し、開いた画面からドリルを選べます。進捗は Docker が管理する volume に保存され、DynamoDB と AWS SDK には依存しません。
 
-**前提条件は Git・Make・Docker Engine・Docker Compose v2 のみです。Bun・Node・`node_modules` はホストに不要です。**
+**前提条件は Git・Make・Docker Engine・Docker Compose v2 のみです。Bun・Node・`node_modules` はホストに不要です。** CPU・メモリ・Docker への割り当て・空きディスクの目安は[動作要件プロファイル](./docs/local-play-requirements.md)を参照してください。
 
 ```bash
 git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
@@ -158,6 +158,8 @@ AWS コンソールからデプロイします。CloudFormation スタックが 
 - **macOS・Linux・WSL2** — ローカルプレイ(`make local` / `tenkacloud local`)と AWS デプロイ(`make deploy` の Lite mode、`make deploy-saas` の SaaS mode)の両方に対応する。
 - **WSL2 を使わないネイティブ Windows** — ローカルプレイは非対応。上記の GitHub Codespaces を使うか、先に WSL2 を導入する。
 - **ブラウザのみでローカルインストール不要な場合** — 上記の GitHub Codespaces を使う。
+
+**必要なマシンスペック**は同時に起動する問題数で変わるため、`minimum` / `recommended` / `full` の 3 プロファイルとして実測値付きで公開しています。[docs/local-play-requirements.md](./docs/local-play-requirements.md) を参照してください。手元のマシンがどのプロファイルを満たすかは `make doctor PROFILE=recommended` で確認できます。
 
 ## 運用コスト
 
