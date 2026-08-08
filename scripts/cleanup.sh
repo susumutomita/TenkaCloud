@@ -113,8 +113,17 @@ if [[ -z "${SYSTEM_ADMIN_EMAIL:-}" ]]; then
   exit 1
 fi
 
-export REGION="$(aws configure get region)"
-export ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+# `export VAR="$(cmd)"` は export の終了ステータスが勝つため cmd の失敗を握り潰す (SC2155)。
+# 実害: AWS session が切れていても ACCOUNT_ID="" のまま先へ進み、 空 account id から
+# 組み立てた bucket 名で sweep を続けてしまう。 assign と export を分け、 空なら即止める。
+REGION="$(aws configure get region || true)"
+ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text 2>/dev/null || true)"
+if [[ -z "${REGION}" || -z "${ACCOUNT_ID}" ]]; then
+  echo "ERROR: AWS の region / account を解決できません (region='${REGION}' account='${ACCOUNT_ID}')。" >&2
+  echo "       認証が切れている可能性があります。 aws login で再認証してから再実行してください。" >&2
+  exit 1
+fi
+export REGION ACCOUNT_ID
 # Bucket-name construction is centralized in scripts/lib/names.sh (#2194). The real
 # deployed bucket is the per-environment HASHED form; the legacy no-hash name only
 # lingers from pre-#1749 deploys. Sweep BOTH at teardown so neither is orphaned.

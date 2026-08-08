@@ -60,6 +60,8 @@ interface Scenario {
   readonly adminConsoleHostingDeleteCanceled?: boolean;
   /** `ENV` to run under; the caller is responsible for the matching `.env` fixture. */
   readonly env?: string;
+  /** `aws sts get-caller-identity` fails the way an expired SSO session really fails. */
+  readonly stsExpired?: boolean;
 }
 
 function run(scenario: Scenario): RunResult {
@@ -98,6 +100,10 @@ case "$1 $2" in
     exit 0
     ;;
   "sts get-caller-identity")
+    if [ "\${FAKE_STS_EXPIRED:-0}" = "1" ]; then
+      echo "aws: [ERROR]: Your session has expired. Please reauthenticate using 'aws login'." >&2
+      exit 255
+    fi
     echo "\${FAKE_ACCOUNT_ID}"
     exit 0
     ;;
@@ -253,6 +259,7 @@ exit 0
       FAKE_DELETE_CANCEL_REASON:
         "Cannot delete export tenkacloud-admin-console-hosting:ExportsOutputFnGetAttDistributionDomainName as it is in use by tenkacloud-admin-console-insight and tenkacloud-control-plane.",
       FAKE_CDK_DESTROY_ALL_FAILS: scenario.cdkDestroyAllFails ? "1" : "0",
+      FAKE_STS_EXPIRED: scenario.stsExpired ? "1" : "0",
       FAKE_S3_BUCKETS: s3Buckets.join(" "),
       FAKE_TENANT_STACKS: tenantStacks.join(" "),
       FAKE_ORPHAN_SSM_PARAMS: orphanSsmParams.join(" "),
@@ -468,5 +475,23 @@ describe("cleanup.sh idempotency (#2204)", { timeout: 30_000 }, () => {
     expect(cdkParamEnv).not.toContain("{samlSso:true}");
     // ... and neither must the .env-derived variable in any form.
     expect(cdkParamEnv).not.toContain("CDK_PARAM_FEATURES");
+  });
+
+  // 5. `export ACCOUNT_ID="$(aws sts ...)"` lets export's exit status win (SC2155), so an
+  //    expired session left ACCOUNT_ID empty and the sweep carried on against bucket names
+  //    built from an empty account id. Observed live: cleanup.sh logged "emptying related
+  //    buckets" immediately after "Your session has expired".
+  it("should stop immediately when the AWS session has expired", () => {
+    const { status, stderr, awsCalls } = run({
+      stsExpired: true,
+      s3Buckets: ["tenkacloud-tenant-template-pooled-hostingbucket-abc"],
+      adminConsoleHostingStackExists: true,
+    });
+
+    expect(status).not.toBe(0);
+    expect(stderr).toContain("aws login");
+    // Nothing may be swept with an unresolved account id.
+    expect(awsCalls).not.toContain("s3 ls");
+    expect(awsCalls).not.toContain("cloudformation delete-stack");
   });
 });
