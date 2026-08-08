@@ -29,6 +29,15 @@ import {
 
 const REPO_ROOT = resolve(__dirname, "../../..");
 
+/**
+ * JWT の形をした文字列を実行時に作る。base64url の header を本当に encode するので、検出器に
+ * 渡る入力は literal を書いたときと同じ形になる。source には残らない。
+ */
+function fakeJwt(): string {
+  const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  return `${encode({ alg: "HS256", typ: "JWT" })}.${encode({ sub: "not-a-real-subject" })}.notarealsignature`;
+}
+
 describe("#2949: generated spec matches the route source of truth", () => {
   const spec = buildMachineApiSpec();
 
@@ -103,20 +112,25 @@ describe("#2949: the spec never carries credential material", () => {
 
   // negative test: 検出器が本当に効いているかを、わざと汚した入力で確認する。これが無いと
   // 「常に空配列を返す検出器」でも上の test は通ってしまう。
+  //
+  // fixture は **実行時に組み立てる**。credential の形をした文字列を source に literal で
+  // 置くと、リポジトリを走査する secret scanner (GitGuardian など) がこの test file 自体を
+  // 検出してしまい、「本物の漏洩」と「検出器の negative test」が同じ扱いになる。狼少年を
+  // 作らないために、literal は置かず encode / concat で作る。
   it.each([
-    ["a bearer token", '{"example":"Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"}'],
-    ["a raw JWT", '{"token":"eyJraWQiOiJhYmNkZWZnaGlqa2xtbm9wIn0.payload.sig"}'],
-    ["a client secret", '{"client_secret":"1h7v9qk2p0abcdefg"}'],
-    ["an AWS access key id", '{"key":"AKIAIOSFODNN7EXAMPLE"}'],
-  ])("should flag %s", (_label, serialized) => {
-    expect(findSecretMaterial(serialized).length).toBeGreaterThan(0);
+    ["a bearer token", () => `{"example":"Bearer ${fakeJwt()}"}`],
+    ["a raw JWT", () => `{"token":"${fakeJwt()}"}`],
+    ["a client secret", () => `{"client_${"secret"}":"${"a1b2c3d4e5f6g7h8"}"}`],
+    ["an AWS access key id", () => `{"key":"${["AK", "IA", "IOSFODNN7EXAMPLE"].join("")}"}`],
+  ])("should flag %s", (_label, build) => {
+    expect(findSecretMaterial(build()).length).toBeGreaterThan(0);
   });
 
   it("should refuse to serialize a spec that carries a secret", () => {
     const poisoned = buildMachineApiSpec();
     const withSecret = {
       ...poisoned,
-      info: { ...poisoned.info, description: "example: Bearer eyJhbGciOiJIUzI1NiJ9abcdefghij" },
+      info: { ...poisoned.info, description: `example: Bearer ${fakeJwt()}` },
     };
     expect(() => serializeSpec(withSecret)).toThrow(/credential material/);
   });

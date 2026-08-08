@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { findSecretMaterial } from "../../../../scripts/openapi/machine-api-spec";
 import { listMachineApiOperations, MACHINE_API_SPEC } from "./machine-api.generated";
 import { MACHINE_API_COPY } from "./machine-api-copy";
 
@@ -46,10 +47,10 @@ describe("machine API artifact", () => {
   });
 
   it("should embed no credential material", () => {
-    const serialized = JSON.stringify(MACHINE_API_SPEC).toLowerCase();
-    for (const forbidden of ["bearer ", "client_secret", "password", "akia"]) {
-      expect(serialized).not.toContain(forbidden);
-    }
+    // 検出そのものは上流の `findSecretMaterial` に委ねる。ここに独自の needle 一覧を literal で
+    // 書くと (a) 上流と drift し、(b) credential の形をした文字列がこの file に残って
+    // repository の secret scanner が誤検知する。判定器は 1 つに保つ。
+    expect(findSecretMaterial(JSON.stringify(MACHINE_API_SPEC))).toEqual([]);
   });
 });
 
