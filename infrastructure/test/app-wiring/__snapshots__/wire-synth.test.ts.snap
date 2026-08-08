@@ -238,37 +238,7 @@ exports[`buildTenkaCloudApp synth regression (issue #2192) > should keep every s
 
 exports[`buildTenkaCloudApp synth regression (issue #2192) > should keep every stack's logical ID set (REPLACE/DELETE guard) > tenkacloud-observability 1`] = `
 [
-  "CostBudgetBudgetAlarmTopic5C499DBF",
-  "CostBudgetBudgetAlarmTopicadminexamplecom46E82E90",
-  "CostBudgetMonthlyCostBudgetCC662698",
   "Dashboard9E4231ED",
-  "FreeTierAlarmsApiGateway5xxadmininsight29AFF1278",
-  "FreeTierAlarmsApiGateway5xxcontrolplane0E693340F",
-  "FreeTierAlarmsApiGateway5xxtenant19FF0D2DE",
-  "FreeTierAlarmsDdbReadCapacitycompetitoraccounts43547F92",
-  "FreeTierAlarmsDdbReadCapacitydeploymentsB3FC5588",
-  "FreeTierAlarmsDdbReadCapacityevents65C0C5D5",
-  "FreeTierAlarmsDdbReadCapacityproblemendpoints1FD752C5",
-  "FreeTierAlarmsDdbReadCapacityteams67FD7A5F",
-  "FreeTierAlarmsDdbReadCapacitytenantmapping2E6F59C4",
-  "FreeTierAlarmsDdbWriteCapacitycompetitoraccountsEDBEA0EE",
-  "FreeTierAlarmsDdbWriteCapacitydeploymentsE5A9B328",
-  "FreeTierAlarmsDdbWriteCapacityevents8EF97849",
-  "FreeTierAlarmsDdbWriteCapacityproblemendpoints96B85229",
-  "FreeTierAlarmsDdbWriteCapacityteams89578035",
-  "FreeTierAlarmsDdbWriteCapacitytenantmappingD64BD459",
-  "FreeTierAlarmsLambdaErrorsadmininsightE424C69E",
-  "FreeTierAlarmsLambdaErrorscompetitoraccounts81B64A98",
-  "FreeTierAlarmsLambdaErrorsdeployapi1C2A640F",
-  "FreeTierAlarmsLambdaErrorseventapiD4B1CDDB",
-  "FreeTierAlarmsLambdaErrorsexternalidaudit49075C19",
-  "FreeTierAlarmsLambdaErrorsgenericscoring7B0FDE71",
-  "FreeTierAlarmsLambdaInvocationsadmininsightF1E0048A",
-  "FreeTierAlarmsLambdaInvocationscompetitoraccounts31E79F92",
-  "FreeTierAlarmsLambdaInvocationsdeployapi161409EE",
-  "FreeTierAlarmsLambdaInvocationseventapi81FD6473",
-  "FreeTierAlarmsLambdaInvocationsexternalidaudit42AC1C62",
-  "FreeTierAlarmsLambdaInvocationsgenericscoring7B5F5325",
 ]
 `;
 
