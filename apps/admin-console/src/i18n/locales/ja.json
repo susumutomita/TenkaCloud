@@ -34,6 +34,7 @@
     "col_tier": "Tier",
     "col_status": "状態",
     "col_active_deploys": "実行中デプロイ",
+    "col_completed_deploys": "完了デプロイ",
     "col_failed_deploys": "失敗デプロイ",
     "loading": "読み込み中…",
     "retry": "再試行",
