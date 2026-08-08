@@ -3,6 +3,13 @@ import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
+import {
+  BIND_RESOURCE_SERVER_PREFIX,
+  BIND_SCOPE_NAME,
+  CAPABILITY_RESOURCE_SERVER_ID,
+  MACHINE_ACCESS_TOKEN_VALIDITY_MINUTES,
+  MACHINE_CLIENT_NAME_PREFIX,
+} from "../../lib/problem-deploy/handlers/shared/machine-scopes";
 
 /**
  * Issue #2952: machine (M2M) credential のライフサイクル。
@@ -161,6 +168,38 @@ describe("#2952: both deprovision branches reap", () => {
 
   it("should call the reaper in the pooled branch (the shared pool outlives the tenant)", () => {
     expect(script).toContain('reap_machine_credentials "$SAAS_APP_USERPOOL_ID"');
+  });
+});
+
+describe("#2952: the shell scripts and the TypeScript contract agree on the naming", () => {
+  const issueScript = readFileSync(join(REPO_ROOT, "scripts/issue-machine-client.sh"), "utf8");
+  const deprovisionScript = readFileSync(join(REPO_ROOT, "scripts/deprovision-tenant.sh"), "utf8");
+
+  // 名前は handler の guard (`tc-tenant-<id>/bind` を parse する側) と shell (発行 / 回収する側) の
+  // 両方に現れる。片方だけ変えると、発行はできるのに token が machine principal として解決され
+  // ない、あるいは回収が空振りする。TypeScript 側の定数を正本にして両 script を照合する。
+  it.each([
+    ["issue-machine-client.sh", issueScript],
+    ["deprovision-tenant.sh", deprovisionScript],
+  ])("should use the shared prefixes in %s", (_name, script) => {
+    expect(script).toContain(`BIND_RESOURCE_SERVER_PREFIX="${BIND_RESOURCE_SERVER_PREFIX}"`);
+    expect(script).toContain(`MACHINE_CLIENT_NAME_PREFIX="${MACHINE_CLIENT_NAME_PREFIX}"`);
+  });
+
+  it("should issue tokens with the TTL the contract declares", () => {
+    expect(issueScript).toContain(
+      `ACCESS_TOKEN_VALIDITY_MINUTES=${MACHINE_ACCESS_TOKEN_VALIDITY_MINUTES}`,
+    );
+    expect(deprovisionScript).toContain(
+      `expire within ${MACHINE_ACCESS_TOKEN_VALIDITY_MINUTES} minutes`,
+    );
+  });
+
+  it("should name the capability resource server the handler expects", () => {
+    expect(issueScript).toContain(
+      `CAPABILITY_RESOURCE_SERVER_ID="${CAPABILITY_RESOURCE_SERVER_ID}"`,
+    );
+    expect(issueScript).toContain(`BIND_SCOPE_NAME="${BIND_SCOPE_NAME}"`);
   });
 });
 

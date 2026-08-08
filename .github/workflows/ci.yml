@@ -64,6 +64,12 @@ jobs:
       - name: Test architecture harness
         run: make harness-test
 
+      # Issue #2949: the machine API reference is generated from MACHINE_ROUTE_SCOPES and the
+      # handler's zod schemas. A PR that adds a route but forgets to regenerate would publish a
+      # reference that lies about the surface, so the drift check is a gate, not a report.
+      - name: OpenAPI drift gate
+        run: make openapi-check
+
       # jscpd baseline ratchet: zero-duplication is NOT the goal (apps are split by
       # responsibility, so some intentional similarity is baselined). This fails only when
       # a PR grows duplication past scripts/quality/duplication-baseline.json — i.e. new
