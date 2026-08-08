@@ -1,11 +1,35 @@
 /*
- * Cloudscape intentionally lets the identity flex item shrink before its
- * responsive state moves utilities into the overflow menu. A long localized
- * console title therefore receives CSS ellipsis even on a wide desktop header.
- * Keep the visible identity at its intrinsic width; Cloudscape's own measured
- * responsive states still hide the title or collapse utilities when the whole
- * header genuinely cannot fit.
+ * Cloudscape の TopNavigation は identity を flex item として縮めるため、 日本語のように 1 文字が
+ * 広い console title が ellipsis で「管理コン...」と切れる。
+ *
+ * 以前は identity の div にだけ `flex-shrink: 0` を当てていたが、 それでは足りなかった。 実測
+ * (viewport 1280px、 余白が十分にある wide state) で:
+ *
+ *   awsui_identity      div : flex-shrink 0  (= 旧 CSS が効いている)
+ *   awsui_identity-link a   : flex-shrink 1  ← ここで縮む
+ *   awsui_title         span: flex-shrink 1, overflow hidden, width 102px / scrollWidth 124px
+ *
+ * 幅が足りているのに切れていたので、 link と title も縮まないように止める。 3 つ揃って初めて
+ * intrinsic width が維持される。
+ *
+ * Cloudscape の class 名は build ごとに hash suffix が変わるので前方一致で指定する。 この結合は
+ * 壊れても静かに「また切れる」だけなので、 shell-layout.test で実際に描画して検証する。
  */
 .tenkacloud-shell-top-navigation header > div > :first-child {
   flex-shrink: 0;
+}
+
+.tenkacloud-shell-top-navigation header [class*="awsui_identity-link"] {
+  flex-shrink: 0;
+}
+
+.tenkacloud-shell-top-navigation header [class*="awsui_title"] {
+  flex-shrink: 0;
+  /*
+   * 縮まなくなれば通常は ellipsis に到達しないが、 本当に幅が足りない極端に狭い viewport では
+   * Cloudscape 自身の narrow state が utilities を overflow menu に畳んで場所を作る。 その手前で
+   * 文字が欠けないよう clip ではなく素の表示に戻す。
+   */
+  overflow: visible;
+  text-overflow: clip;
 }

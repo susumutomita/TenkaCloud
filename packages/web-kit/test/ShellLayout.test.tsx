@@ -13,6 +13,8 @@
  *   - localeNames に無い code は code 自身に fallback する (UI を壊さない)
  */
 
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import createWrapper from "@cloudscape-design/components/test-utils/dom";
 import { fireEvent, render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
@@ -64,6 +66,36 @@ describe("ShellLayout", () => {
     expect(title?.textContent).not.toContain("TenkaCloud");
     expect(topNav.findLogo()?.getElement()).toHaveAttribute("alt", "TenkaCloud");
     expect(topNav.getElement().closest(".tenkacloud-shell-top-navigation")).not.toBeNull();
+  });
+
+  /**
+   * The console title rendered as 「管理コン...」 in the deployed admin console. jsdom has no
+   * layout engine, so truncation itself cannot be asserted here — it was measured in a real
+   * browser: at viewport 1280px (wide state, plenty of room) the title span was 102px against a
+   * 124px scrollWidth, i.e. Cloudscape shrinks the identity regardless of available space.
+   *
+   * Stopping the shrink needs all THREE levels; the earlier fix set only the outermost and the
+   * title still ellipsed. This pins the rules so removing one silently brings the truncation back.
+   */
+  it("should stop Cloudscape from shrinking the identity at every level (#2662)", () => {
+    const css = readFileSync(resolve(__dirname, "..", "src", "shell-layout.css"), "utf8").replace(
+      /\/\*[\s\S]*?\*\//g,
+      "",
+    );
+
+    for (const selector of [
+      "header > div > :first-child",
+      'header [class*="awsui_identity-link"]',
+      'header [class*="awsui_title"]',
+    ]) {
+      const block = css.match(
+        new RegExp(
+          `\\.tenkacloud-shell-top-navigation ${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\{([^}]*)\\}`,
+        ),
+      );
+      expect(block, `no rule for ${selector}`).not.toBeNull();
+      expect(block?.[1], `${selector} does not pin flex-shrink`).toMatch(/flex-shrink:\s*0/);
+    }
   });
 
   it("should render the TenkaCloud brand lockup when the product title is omitted", () => {
