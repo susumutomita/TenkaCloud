@@ -180,98 +180,40 @@ export function PipelineJobsTab({ config }: { config: AppConfig }) {
  * 失敗した無関係な pipeline execution だけが「プロビジョニング失敗」として出ていた (2026-08-08 に
  * 運用者が誤認)。 pipeline の履歴は別タブに残してある。
  */
-export function ProvisioningJobsTab({ config }: { config: AppConfig }) {
-  const t = useT();
-  const { items, error, forbidden, notConfigured, sfnListUrl } = useProvisioningExecutions(config);
-
-  if (notConfigured) {
-    return (
-      <SpaceBetween size="m">
-        <Alert type="info" header={t("jobs_page.not_configured_header")}>
-          {t("jobs_page.not_configured_body")}
-        </Alert>
-        <Box>
-          <Link external href={sfnListUrl}>
-            {t("jobs_page.deprovisioning_open_console")}
-          </Link>
-        </Box>
-      </SpaceBetween>
-    );
-  }
-
-  return (
-    <SpaceBetween size="m">
-      {forbidden && (
-        <Alert type="error" header={t("jobs_page.forbidden_header")}>
-          {t("jobs_page.forbidden_body")}
-        </Alert>
-      )}
-      {error && !forbidden && (
-        <Alert type="error" header={t("jobs_page.fetch_failed_header")}>
-          {error}
-        </Alert>
-      )}
-      <JobsTable<StateMachineExecutionItem>
-        items={items ?? []}
-        loading={items === null && !forbidden && !error}
-        loadingText={t("jobs_page.loading")}
-        columnDefinitions={[
-          {
-            id: "name",
-            header: t("jobs_page.col_execution_id"),
-            cell: (e) => (
-              <Link external href={e.consoleUrl}>
-                <code>{e.name}</code>
-              </Link>
-            ),
-          },
-          {
-            id: "status",
-            header: t("jobs_page.col_status"),
-            cell: (e) => <Badge color={colorFor(e.status)}>{e.status}</Badge>,
-          },
-          {
-            id: "started",
-            header: t("jobs_page.col_started"),
-            cell: (e) => e.startTimeIso ?? "—",
-          },
-          {
-            id: "elapsed",
-            header: t("jobs_page.col_elapsed"),
-            cell: (e) => formatElapsed(e.startTimeIso, e.stopTimeIso),
-          },
-        ]}
-        empty={
-          items && items.length === 0 ? (
-            <Box textAlign="center" padding="m">
-              <Box variant="strong">{t("jobs_page.empty")}</Box>
-            </Box>
-          ) : (
-            <Spinner />
-          )
-        }
-      />
-    </SpaceBetween>
-  );
+/**
+ * Step Functions の execution 一覧タブ本体。 Provisioning / Deprovisioning は取得元 hook と文言が
+ * 違うだけで、 表・loading・403・エラー・未設定フォールバックの描画は同一。 片方を copy-paste すると
+ * 「片方だけ直して片方が古いまま」になるので 1 か所に集約する (dup-check #2635 と同じ方針)。
+ */
+interface StateMachineExecutionsTabProps {
+  readonly state: {
+    readonly items: readonly StateMachineExecutionItem[] | null;
+    readonly error: string | null;
+    readonly forbidden: boolean;
+    readonly notConfigured: boolean;
+    readonly sfnListUrl: string;
+  };
+  /** 未設定フォールバックの alert 見出し / 本文の i18n key。 */
+  readonly notConfiguredHeaderKey: string;
+  readonly notConfiguredBodyKey: string;
+  /** 0 件のときに出す文言の i18n key。 */
+  readonly emptyKey: string;
 }
 
-/**
- * Issue #814 Phase 2: Deprovisioning Jobs (= SBT BashJobRunner の `deprovisioningJobRunner` が動かす
- * Step Functions State Machine の execution 履歴) を表示するタブ。
- *
- * admin-insight Lambda が \`GET /admin/insight/state-machine-executions\` で
- * deprovisioning SM の ListExecutions を返す。 503 (= not_configured、 旧 stack 互換) は
- * legacy placeholder にフォールバック。 fetch / polling / 状態管理は `useDeprovisioningJobs` hook。
- */
-export function DeprovisioningJobsTab({ config }: { config: AppConfig }) {
+function StateMachineExecutionsTab({
+  state,
+  notConfiguredHeaderKey,
+  notConfiguredBodyKey,
+  emptyKey,
+}: StateMachineExecutionsTabProps) {
   const t = useT();
-  const { items, error, forbidden, notConfigured, sfnListUrl } = useDeprovisioningJobs(config);
+  const { items, error, forbidden, notConfigured, sfnListUrl } = state;
 
   if (notConfigured) {
     return (
       <SpaceBetween size="m">
-        <Alert type="info" header={t("jobs_page.deprovisioning_phase1_header")}>
-          {t("jobs_page.deprovisioning_phase1_body")}
+        <Alert type="info" header={t(notConfiguredHeaderKey)}>
+          {t(notConfiguredBodyKey)}
         </Alert>
         <Box>
           <Link
@@ -331,7 +273,7 @@ export function DeprovisioningJobsTab({ config }: { config: AppConfig }) {
         empty={
           items && items.length === 0 ? (
             <Box textAlign="center" padding="m">
-              <Box variant="strong">{t("jobs_page.empty_deprovisioning")}</Box>
+              <Box variant="strong">{t(emptyKey)}</Box>
             </Box>
           ) : (
             <Spinner />
@@ -339,5 +281,45 @@ export function DeprovisioningJobsTab({ config }: { config: AppConfig }) {
         }
       />
     </SpaceBetween>
+  );
+}
+
+/**
+ * Provisioning Jobs (= SBT `provisioningJobRunner` が動かす Step Functions State Machine の
+ * execution 履歴) を表示するタブ。
+ *
+ * このタブは以前 `tenkacloud-saas-pipeline` (CodePipeline) の execution を表示していたが、 それは
+ * tenant template を deploy するための pipeline であって、 テナントのプロビジョニング本体ではない。
+ * そのため 3 テナントを同時に provisioning しても一覧は空のままで、 代わりに deploy 時に自動起動して
+ * 失敗した無関係な pipeline execution だけが「プロビジョニング失敗」として出ていた (2026-08-08 に
+ * 運用者が誤認)。 pipeline の履歴は別タブに残してある。
+ */
+export function ProvisioningJobsTab({ config }: { config: AppConfig }) {
+  return (
+    <StateMachineExecutionsTab
+      state={useProvisioningExecutions(config)}
+      notConfiguredHeaderKey="jobs_page.not_configured_header"
+      notConfiguredBodyKey="jobs_page.not_configured_body"
+      emptyKey="jobs_page.empty"
+    />
+  );
+}
+
+/**
+ * Issue #814 Phase 2: Deprovisioning Jobs (= SBT BashJobRunner の `deprovisioningJobRunner` が動かす
+ * Step Functions State Machine の execution 履歴) を表示するタブ。
+ *
+ * admin-insight Lambda が `GET /admin/insight/state-machine-executions` で deprovisioning SM の
+ * ListExecutions を返す。 503 (= not_configured、 旧 stack 互換) は legacy placeholder に
+ * フォールバック。 fetch / polling / 状態管理は `useDeprovisioningJobs` hook。
+ */
+export function DeprovisioningJobsTab({ config }: { config: AppConfig }) {
+  return (
+    <StateMachineExecutionsTab
+      state={useDeprovisioningJobs(config)}
+      notConfiguredHeaderKey="jobs_page.deprovisioning_phase1_header"
+      notConfiguredBodyKey="jobs_page.deprovisioning_phase1_body"
+      emptyKey="jobs_page.empty_deprovisioning"
+    />
   );
 }

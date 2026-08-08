@@ -119,11 +119,27 @@ export async function fetchStateMachineExecutions(
   idToken: string,
   options: { limit?: number } = {},
 ): Promise<ListStateMachineExecutionsResponse | null> {
+  return getExecutions(config, idToken, "admin/insight/state-machine-executions", options);
+}
+
+/**
+ * `ListExecutions` 系 route の共通 GET。 route 名以外は完全に同じなので、 provisioning /
+ * deprovisioning で copy-paste しない。
+ */
+async function getExecutions(
+  config: AppConfig,
+  idToken: string,
+  route: string,
+  options: { limit?: number },
+): Promise<ListStateMachineExecutionsResponse | null> {
   const params = new URLSearchParams();
   if (options.limit !== undefined) params.set("limit", String(options.limit));
   const qs = params.toString();
-  const path = `admin/insight/state-machine-executions${qs ? `?${qs}` : ""}`;
-  return adminInsightGet<ListStateMachineExecutionsResponse>(config, idToken, path);
+  return adminInsightGet<ListStateMachineExecutionsResponse>(
+    config,
+    idToken,
+    `${route}${qs ? `?${qs}` : ""}`,
+  );
 }
 
 /**
@@ -142,9 +158,5 @@ export async function fetchProvisioningExecutions(
   idToken: string,
   options: { limit?: number } = {},
 ): Promise<ListStateMachineExecutionsResponse | null> {
-  const params = new URLSearchParams();
-  if (options.limit !== undefined) params.set("limit", String(options.limit));
-  const qs = params.toString();
-  const path = `admin/insight/provisioning-executions${qs ? `?${qs}` : ""}`;
-  return adminInsightGet<ListStateMachineExecutionsResponse>(config, idToken, path);
+  return getExecutions(config, idToken, "admin/insight/provisioning-executions", options);
 }

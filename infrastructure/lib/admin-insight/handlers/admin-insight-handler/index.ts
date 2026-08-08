@@ -255,70 +255,61 @@ app.get("/admin/insight/pipeline-executions", async (c) => {
   }
 });
 
-// ====== Issue #814 Phase 2: Deprovisioning Jobs (Step Functions executions) ======
+// ====== Issue #814 Phase 2: Step Functions executions (provisioning / deprovisioning) ======
+
+/**
+ * `ListExecutions` を返す 2 route (provisioning / deprovisioning) は、 読む env が違うだけで
+ * 認可・limit 検証・not_configured の 503 マップ・例外処理まで同一。 copy-paste すると片方だけ直して
+ * もう片方が古いまま残るので 1 か所に集約する。
+ *
+ * `envVarName` を引数で受けるのは、 module 読み込み時ではなく request 時に `process.env` を読むため
+ * (= Lambda の env 差し替えや test の stub が効く)。
+ */
+function registerStateMachineExecutionsRoute(path: string, envVarName: string): void {
+  app.get(path, async (c) => {
+    const forbidden = auditAndAuthorize(c, path);
+    if (forbidden) return forbidden;
+
+    const parsedLimit = parseLimit(c.req.query("limit"));
+    if (!parsedLimit) {
+      return c.json({ error: "invalid_limit" }, StatusCodes.BAD_REQUEST);
+    }
+
+    try {
+      const region = process.env.AWS_REGION ?? "ap-northeast-1";
+      const arn = process.env[envVarName] || undefined;
+      const response = await listStateMachineExecutions(
+        { client: defaultSfnClient, region, stateMachineArn: arn },
+        { limit: parsedLimit.limit },
+      );
+      if (response.kind === "not_configured") {
+        // Lambda env が未設定の旧 stack 互換 (= 503 Service Unavailable)。 frontend は legacy
+        // placeholder にフォールバックする。
+        return c.json({ error: "not_configured" }, StatusCodes.SERVICE_UNAVAILABLE);
+      }
+      return c.json(response, StatusCodes.OK);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "unknown error";
+      console.error("[admin-insight] listStateMachineExecutions failed", { path, message });
+      return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
+    }
+  });
+}
 
 /**
  * テナントのプロビジョニングが実際に走るのは SBT ProvisioningScriptJob の state machine で、
  * 「プロビジョニング Jobs」 画面が長らく見ていた CodePipeline とは別経路。 そのため 3 テナントを
  * 同時に provisioning しても画面には 1 件も出ず、 代わりに無関係な pipeline の失敗だけが
  * 「プロビジョニング失敗」として表示されていた (2026-08-08 に運用者が誤認)。
- * deprovisioning と対称の route を生やして、 実体を見せる。
  */
-app.get("/admin/insight/provisioning-executions", async (c) => {
-  const forbidden = auditAndAuthorize(c, "/admin/insight/provisioning-executions");
-  if (forbidden) return forbidden;
-
-  const parsedLimit = parseLimit(c.req.query("limit"));
-  if (!parsedLimit) {
-    return c.json({ error: "invalid_limit" }, StatusCodes.BAD_REQUEST);
-  }
-
-  try {
-    const region = process.env.AWS_REGION ?? "ap-northeast-1";
-    const arn = process.env.PROVISIONING_STATE_MACHINE_ARN || undefined;
-    const response = await listStateMachineExecutions(
-      { client: defaultSfnClient, region, stateMachineArn: arn },
-      { limit: parsedLimit.limit },
-    );
-    if (response.kind === "not_configured") {
-      return c.json({ error: "not_configured" }, StatusCodes.SERVICE_UNAVAILABLE);
-    }
-    return c.json(response, StatusCodes.OK);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "unknown error";
-    console.error("[admin-insight] listProvisioningExecutions failed", { message });
-    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
-  }
-});
-
-app.get("/admin/insight/state-machine-executions", async (c) => {
-  const forbidden = auditAndAuthorize(c, "/admin/insight/state-machine-executions");
-  if (forbidden) return forbidden;
-
-  const parsedLimit = parseLimit(c.req.query("limit"));
-  if (!parsedLimit) {
-    return c.json({ error: "invalid_limit" }, StatusCodes.BAD_REQUEST);
-  }
-
-  try {
-    const region = process.env.AWS_REGION ?? "ap-northeast-1";
-    const arn = process.env.DEPROVISIONING_STATE_MACHINE_ARN || undefined;
-    const response = await listStateMachineExecutions(
-      { client: defaultSfnClient, region, stateMachineArn: arn },
-      { limit: parsedLimit.limit },
-    );
-    if (response.kind === "not_configured") {
-      // Lambda env が未設定の旧 stack 互換 (= 503 Service Unavailable)。 frontend は legacy
-      // placeholder にフォールバックする。
-      return c.json({ error: "not_configured" }, StatusCodes.SERVICE_UNAVAILABLE);
-    }
-    return c.json(response, StatusCodes.OK);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "unknown error";
-    console.error("[admin-insight] listStateMachineExecutions failed", { message });
-    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
-  }
-});
+registerStateMachineExecutionsRoute(
+  "/admin/insight/provisioning-executions",
+  "PROVISIONING_STATE_MACHINE_ARN",
+);
+registerStateMachineExecutionsRoute(
+  "/admin/insight/state-machine-executions",
+  "DEPROVISIONING_STATE_MACHINE_ARN",
+);
 
 // ====== SystemAdmin user 管理 routes (旧 Issue #949) は廃止 ======
 //
