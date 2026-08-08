@@ -75,15 +75,26 @@ export class CostBudget extends Construct {
     ];
 
     // Cost allocation tag filter を CfnBudget の costFilters に変換する。
-    //   - AWS Budgets は user-defined tag を `user:<Key>$<Value>` 形式の key で参照する
-    //   - 同一 key に複数 value (e.g. multiple Project values) を持たせるなら配列で羅列
-    //   - 未指定なら全リソースを集計 (= 既存挙動と互換、 ただし wire.ts default で
-    //     `Project=TenkaCloud` を渡す前提)
-    const tagFilters: Record<string, readonly string[]> = {};
+    //
+    // AWS Budgets の costFilters の **key は固定語彙**で、 tag は `TagKeyValue` 1 つに集約
+    // する。 tag 名を key にすると deploy 時に 400 で落ちる:
+    //
+    //   Unable to create/update budget - user:Project is not in the supported in cost budget
+    //   dimension set: [PurchaseType, UsageTypeGroup, Service, Operation, UsageType,
+    //   BillingEntity, CostCategory, LinkedAccount, TagKeyValue, LegalEntityName,
+    //   InvoicingEntity, AZ, Region, InstanceType]
+    //
+    // `user:<Key>$<Value>` は **value 側**の書式である (Cost Explorer の dimension 名を
+    // key に持ってくる形と混同しやすい)。 複数 tag / 複数 value はすべて同じ配列に並べる。
+    //
+    // 未指定なら costFilters ごと省き、 全リソースを集計する (= wire.ts が既定で
+    // `Project=TenkaCloud` を渡すので、 実際に空になるのは明示的に外した場合だけ)。
+    const tagFilterValues: string[] = [];
     for (const [tagKey, values] of Object.entries(props.costAllocationTags ?? {})) {
-      const filterKey = `user:${tagKey}`;
-      tagFilters[filterKey] = values.map((v) => `${tagKey}$${v}`);
+      for (const value of values) tagFilterValues.push(`user:${tagKey}$${value}`);
     }
+    const tagFilters: Record<string, readonly string[]> =
+      tagFilterValues.length > 0 ? { TagKeyValue: tagFilterValues } : {};
 
     this.budget = new aws_budgets.CfnBudget(this, "MonthlyCostBudget", {
       budget: {
