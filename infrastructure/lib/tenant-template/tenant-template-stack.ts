@@ -62,10 +62,12 @@ interface TenantTemplateStackProps extends StackProps {
   participantPortalUrl?: string;
   /**
    * #718: 競技者向け CFn bootstrap template (competitor-bootstrap.yaml) の public S3 URL。
-   * `AdminConsoleHostingStack` の `competitorBootstrapTemplateUrl` をクロススタック参照で受け、
-   * application-admin-console の runtime-config に注入する。
-   * Phase 1 deploy 時 (AdminConsoleHostingStack 未存在) は undefined、 Phase 3 で
-   * install.sh が tenant-template-pooled を再 deploy するときに埋まる。
+   * #1053 で hosting が `ProblemDeployBackendStack` へ移り、 wire.ts が同 stack の
+   * `competitorBootstrapTemplateUrl` をクロススタック参照で渡す。 値は application-admin-console
+   * の runtime-config に注入される。
+   * optional なのは problem-deploy を配線しない構成 (= 本 stack を直接 instantiate する unit
+   * test) のためで、 install.sh の deploy では常に cross-stack ref が入る (#1031 で Phase 1/2/3
+   * の再 deploy dance は廃止済み)。
    */
   competitorBootstrapTemplateUrl?: string;
   /**

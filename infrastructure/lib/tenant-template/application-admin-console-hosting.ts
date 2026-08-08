@@ -52,11 +52,12 @@ interface RuntimeConfigProps {
   /**
    * #718: 競技者向け CFn bootstrap template (competitor-bootstrap.yaml) の public S3 URL。
    * CFn `TemplateURL` は S3 / SSM の URL しか受け付けず、 GitHub raw URL は reject される
-   * (= "TemplateURL must be a supported URL")。 AdminConsoleHostingStack の
-   * CompetitorBootstrapTemplateBucket が deploy 時に同 yaml を upload した URL を注入する。
-   * Phase 1 deploy 時点では Phase 2 stack が未存在のため optional (undefined) で、
-   * Phase 3 で install.sh が tenant-template-pooled を再 deploy するときに値が埋まる。
-   * 未設定なら frontend は GitHub raw URL に fallback する (= dev / 初回 deploy 用)。
+   * (= "TemplateURL must be a supported URL")。 #1053 以降は `ProblemDeployBackendStack` の
+   * `CompetitorBootstrapHosting` が deploy 時に同 yaml を upload した URL を、 呼び出し元が
+   * クロススタック参照で注入する。
+   * optional なのは problem-deploy を配線しない構成 (= 本 construct を直接 instantiate する
+   * unit test) のためで、 install.sh / Lite の deploy では常に値が入る。
+   * 未設定なら frontend は GitHub raw URL に fallback する (= dev 用)。
    */
   readonly competitorBootstrapTemplateUrl?: string;
   /**
