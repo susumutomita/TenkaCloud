@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "recordId": "2026-08-08-macos-arm64-colima",
+  "capturedAt": "2026-08-08T00:04:56Z",
+  "capturedBy": "manual",
+  "platformKey": "macos-arm64",
+  "release": "v1.1.0",
+  "host": {
+    "cpus": 4,
+    "memoryBytes": 4090956349,
+    "freeDiskBytes": null,
+    "serverVersion": "29.6.1",
+    "composeVersion": "5.3.1",
+    "operatingSystem": "Ubuntu 24.04.4 LTS (colima VM)",
+    "architecture": "aarch64",
+    "description": "MacBook Air M5 / 32 GB, 10 logical CPUs; Docker via colima with its default 4 CPU / 3.81 GiB VM"
+  },
+  "observations": [
+    {
+      "scenario": "control-plane-only",
+      "profileId": null,
+      "containerCount": 1,
+      "totalMemBytes": 124780544,
+      "totalCpuPercent": null,
+      "containers": [{ "name": "tenkacloud-local", "memBytes": 124780544, "cpuPercent": null }]
+    },
+    {
+      "scenario": "minimum: control plane + one lightweight single-container problem (sqli-demo)",
+      "profileId": "minimum",
+      "containerCount": 2,
+      "totalMemBytes": 142606336,
+      "totalCpuPercent": null,
+      "containers": []
+    },
+    {
+      "scenario": "two lightweight problems at once (sqli-demo + stackstack-onboarding)",
+      "profileId": null,
+      "containerCount": 3,
+      "totalMemBytes": 164626432,
+      "totalCpuPercent": null,
+      "containers": []
+    }
+  ],
+  "timings": [],
+  "images": [{ "reference": "tenkacloud-local:dev", "sizeBytes": 755000000 }],
+  "unmeasured": [
+    "multi-container problems (wp-exposed-backup runs 4 services)",
+    "three problems running at once (the DEFAULT_MAX_RUNNING limit)",
+    "cold and warm start durations",
+    "free disk required for a first run (control-plane image + problem images + BuildKit cache)",
+    "30-60 minutes of continuous use",
+    "resource reclaim across repeated start / stop / reset",
+    "the TenkaCloud Simulator (experimental profile)",
+    "macOS x86_64, Linux x86_64, WSL2 and Codespaces"
+  ],
+  "notes": [
+    "Transcribed by hand from the Issue #2909 measurement comment, at the precision reported there (memory to the MiB, the Docker VM allocation to 2 decimal places of a GiB). capturedBy is 'manual' rather than 'measure-profile' because this run predates the script.",
+    "Per-container CPU was not recorded in that run, so every cpuPercent is null rather than 0.",
+    "The per-container breakdown is empty for the two problem scenarios on purpose: the run reported per-container memory rounded (control plane 119 MiB, each problem 16 MiB) and those rounded figures do not sum to the reported totals of 136 MiB and 157 MiB. The totals are what was read, so only the totals are recorded as data.",
+    "The control plane dominates: 119 MiB of the 136 MiB minimum profile. A lightweight single-container problem adds 16-20 MiB, so raising the concurrency limit is not what makes memory tight for lightweight problems.",
+    "tenkacloud-local:dev was 3.71 GB at v1.0.0 and 755 MB at v1.1.0; the build context transferred dropped from 1.02 GB to 1.11 MB over the same change.",
+    "BuildKit cache is not included in the image size and is not reclaimed on its own. It reached 58 GB during this session and filled the VM disk, after which image export failed with 'rpc error: EOF' — which reads as an unexplained build failure. 'docker builder prune -af' reclaims it."
+  ]
+}

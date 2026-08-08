@@ -200,6 +200,13 @@ installing Bun, initializing the submodule, Docker Compose help) — add
 `YES=1` to pre-approve every install for unattended use. Both wrap
 `scripts/tenkacloud-onboard.ts`.
 
+How much machine local play needs is published as three run profiles
+(`minimum` / `recommended` / `full`) with the measurements behind them, in
+[local-play-requirements.md](./local-play-requirements.md). Add
+`PROFILE=<id>` to compare this machine against one of them
+(`make doctor PROFILE=recommended`), and use `make local-measure` to
+re-run the benchmark and contribute a record for your own platform.
+
 Without `--problem`, `tenkacloud local` pre-starts no problem containers. It starts the
 loopback scoring API and browser portal so you can deploy/start a problem from
 the portal screen. Use `--problem <id>` when you want the CLI to

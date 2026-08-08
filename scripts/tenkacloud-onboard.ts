@@ -8,6 +8,13 @@
  * non-interactive run (no TTY / CI) without `--yes`, nothing is installed — the
  * missing prerequisites are reported as the failure reason.
  *
+ * [Issue #2909] `--profile <minimum|recommended|full>` additionally compares the
+ * resources Docker actually has against what that profile has been measured in.
+ * The comparison is advisory: it never changes the exit code, because being below
+ * an unmeasured size is untested, not broken. `--probe-disk` opts in to the one
+ * check that is not read-only (it pulls busybox to read the Docker VM's free
+ * space); without it the disk item reports `unknown` and prints the command.
+ *
  * This file is deliberately a thin orchestrator: the detection interpretation,
  * the remediation plan, the consent policy, and the formatting are pure,
  * unit-tested modules under `scripts/onboard/`.
@@ -18,6 +25,13 @@ import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
+import {
+  DOCKER_INFO_FORMAT,
+  parseDiskAvailableBytes,
+  parseDockerInfo,
+} from "./local/docker-metrics";
+import { evaluateProfile, formatPreflight, type PreflightFacts } from "./local/profile-preflight";
+import { findProfile, isProfileId, type ProfileId } from "./local/profiles";
 import {
   blockingChecks,
   type CommandRunner,
@@ -73,9 +87,81 @@ function runRemediation(command: string): boolean {
   return spawnSync(command, { shell: true, stdio: "inherit" }).status === 0;
 }
 
-function doctor(): number {
+/**
+ * [Issue #2909] Read `--profile <id>` out of argv.
+ *
+ * An unrecognised id is an error rather than a silent fallback to the default:
+ * a typo would otherwise report a different profile's numbers under the name the
+ * operator asked for.
+ */
+export function parseProfileFlag(args: readonly string[]): ProfileId | undefined {
+  const index = args.indexOf("--profile");
+  if (index === -1) return undefined;
+  const value = args[index + 1];
+  if (value === undefined || value.startsWith("-")) {
+    throw new Error("--profile needs a value (minimum, recommended, or full)");
+  }
+  if (!isProfileId(value)) {
+    throw new Error(`Unknown profile "${value}" (expected minimum, recommended, or full)`);
+  }
+  return value;
+}
+
+/**
+ * The subcommand, defaulting to `doctor`.
+ *
+ * `--profile <id>`'s value is a bare word, so a naive "first non-flag argument"
+ * search would read `recommended` as the command and fail with "Unknown command"
+ * on a valid invocation.
+ */
+export function resolveCommand(args: readonly string[]): string {
+  return (
+    args.find((arg, index) => !arg.startsWith("-") && args[index - 1] !== "--profile") ?? "doctor"
+  );
+}
+
+/**
+ * Resource facts for the profile comparison. Everything unreadable stays
+ * `undefined` so `profile-preflight.ts` reports `unknown` rather than passing a
+ * host it could not measure.
+ */
+export function collectPreflightFacts(run: CommandRunner, probeDisk: boolean): PreflightFacts {
+  const info = parseDockerInfo(run.run("docker", ["info", "--format", DOCKER_INFO_FORMAT]).stdout);
+  if (!probeDisk) {
+    return { dockerCpus: info.cpus, dockerMemoryBytes: info.memoryBytes };
+  }
+  // Not read-only: this pulls busybox, which is why it is opt-in. The host's own
+  // free space is the wrong number on macOS/Windows, where images live in a VM.
+  const probe = run.run("docker", ["run", "--rm", "busybox", "df", "-P", "/"]);
+  return {
+    dockerCpus: info.cpus,
+    dockerMemoryBytes: info.memoryBytes,
+    freeDiskBytes: probe.code === 0 ? parseDiskAvailableBytes(probe.stdout) : undefined,
+  };
+}
+
+/**
+ * Advisory only — deliberately does not affect the exit code. A machine below
+ * every measured configuration is untested, not known-broken, and failing the
+ * doctor on it would block a setup that may work fine.
+ */
+function reportProfile(profileId: ProfileId, probeDisk: boolean): void {
+  const profile = findProfile(profileId);
+  if (!profile) return;
+  console.log("");
+  console.log(
+    formatPreflight(evaluateProfile(profile, collectPreflightFacts(nodeRunner, probeDisk))),
+  );
+  if (!probeDisk) {
+    console.log("  (Pass --probe-disk to also measure Docker VM free space; it pulls busybox.)");
+  }
+  console.log("  Profile definitions: docs/local-play-requirements.md");
+}
+
+function doctor(profileId: ProfileId | undefined, probeDisk: boolean): number {
   const result = diagnose(diagnoseInput());
   console.log(formatDiagnosis(result));
+  if (profileId) reportProfile(profileId, probeDisk);
   if (isReady(result)) {
     // `make local` (not `bun run tenkacloud local`): only the make target
     // self-installs workspace dependencies, which this diagnosis does not cover.
@@ -163,10 +249,12 @@ async function preflight(autoYes: boolean): Promise<number> {
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const autoYes = args.includes("--yes") || args.includes("-y");
-  const command = args.find((arg) => !arg.startsWith("-")) ?? "doctor";
+  const profileId = parseProfileFlag(args);
+  const probeDisk = args.includes("--probe-disk");
+  const command = resolveCommand(args);
   switch (command) {
     case "doctor":
-      process.exitCode = doctor();
+      process.exitCode = doctor(profileId, probeDisk);
       break;
     case "preflight":
       process.exitCode = await preflight(autoYes);

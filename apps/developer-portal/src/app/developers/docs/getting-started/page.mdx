@@ -31,6 +31,10 @@ local scoring API. Nothing touches AWS and nothing costs money.
 **Prerequisites:** [Bun](https://bun.sh) 1.3.11 and a running Docker daemon
 (Docker Desktop, or colima on macOS). `make doctor` diagnoses your setup without
 installing anything; `make local-onboard` is the guided installer if you prefer.
+CPU, memory, Docker allocation and free disk are published as three run profiles
+with the measurements behind them in
+[`docs/local-play-requirements.md`](https://github.com/susumutomita/TenkaCloud/blob/main/docs/local-play-requirements.md);
+`make doctor PROFILE=recommended` compares this machine against one of them.
 
 ```bash
 git clone https://github.com/susumutomita/TenkaCloud.git

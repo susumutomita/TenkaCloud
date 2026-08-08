@@ -24,7 +24,7 @@ HELP_RENDERER := scripts/ops/make-help.awk
         deploy-always-on-command destroy-always-on-command synth-always-on-command \
         deploy-always-on-runtime archive-always-on-runtime destroy-always-on-runtime synth-always-on-runtime \
         dev synth check-synth \
-        doctor local-onboard local local-up local-portal local-down local-status local-list local-evaluate local-reset local-snapshot-export local-snapshot-import local-disrupt ensure-deps
+        doctor local-onboard local local-up local-portal local-down local-status local-list local-evaluate local-reset local-snapshot-export local-snapshot-import local-disrupt local-measure ensure-deps
 
 # ===== Help | ヘルプ =====
 help: ## Show command help (default: English) | コマンド一覧を表示（既定: 英語）
@@ -383,12 +383,28 @@ ONBOARD_FLAGS := $(if $(YES),--yes,)
 
 # Issue #2119: report-only prerequisite diagnosis (mise trust / submodule / bun /
 # Docker Compose / daemon). Installs nothing.
+# Issue #2909: `make doctor PROFILE=recommended` additionally compares the
+# resources Docker actually has against that profile's measured configuration.
+# `PROBE_DISK=1` opts in to the one non-read-only check (it pulls busybox to read
+# the Docker VM's free space, which the host's own `df` cannot see on macOS).
+DOCTOR_FLAGS := $(if $(PROFILE),--profile $(PROFILE),)$(if $(PROBE_DISK), --probe-disk,)
 doctor:
 	@command -v bun >/dev/null 2>&1 || { \
 	  echo "Bun is required for diagnostics."; \
 	  echo "  Install (macOS / Linux): bash scripts/onboard/install-bun.sh"; \
 	  exit 1; }
-	@bun run tenkacloud doctor
+	@bun run tenkacloud doctor $(DOCTOR_FLAGS)
+
+# Issue #2909: re-runnable resource benchmark. Starts the profile's problems
+# through the already-running local-play API, samples only TenkaCloud-owned
+# containers, stops them, asserts they were reclaimed, and writes a record under
+# docs/measurements/local-mode/. Requires `make local` to be running first.
+#   make local-measure PROFILE=minimum PROBLEMS=sqli-demo PHASE=warm
+local-measure: ## Measure a local-mode resource profile and write a JSON record | ローカル動作要件を実測しJSONへ記録
+	@$(MAKE) ensure-deps
+	@PROFILE="$(PROFILE)" PROBLEMS="$(PROBLEMS)" PHASE="$(PHASE)" RELEASE="$(RELEASE)" \
+	  HOST_DESCRIPTION="$(HOST_DESCRIPTION)" OUT="$(OUT)" \
+	  bun run scripts/local/measure-profile.ts
 
 # Issue #2119: optional guided setup for the DEVELOPER Bun/Vite path
 # (`make local-dev`). The participant path (`make local`, Issue #2906) is
