@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as cdk from "aws-cdk-lib";
+import { Template } from "aws-cdk-lib/assertions";
 import { beforeAll, describe, expect, it } from "vitest";
 import { resolveAppConfig } from "../../lib/app-config/resolve";
 import { buildTenkaCloudApp } from "../../lib/app-wiring/wire";
@@ -99,6 +100,27 @@ describe("buildTenkaCloudApp", () => {
     ensurePlaceholderDist("admin-console");
     ensurePlaceholderDist("application-admin-console");
     ensurePlaceholderDist("participant-portal");
+  });
+
+  it("should synthesize no legacy budget, topic, subscription, or free-tier alarms by default (#2961)", () => {
+    const app = buildApp();
+    const stack = app.node.findChild("tenkacloud-observability") as cdk.Stack;
+    const template = Template.fromStack(stack);
+
+    template.resourceCountIs("AWS::Budgets::Budget", 0);
+    template.resourceCountIs("AWS::SNS::Topic", 0);
+    template.resourceCountIs("AWS::SNS::Subscription", 0);
+    template.resourceCountIs("AWS::CloudWatch::Alarm", 0);
+  });
+
+  it("should create the budget without an email subscription when explicitly enabled (#2961)", () => {
+    const app = buildApp({ MONTHLY_COST_LIMIT_USD: "50" });
+    const stack = app.node.findChild("tenkacloud-observability") as cdk.Stack;
+    const template = Template.fromStack(stack);
+
+    template.resourceCountIs("AWS::Budgets::Budget", 1);
+    template.resourceCountIs("AWS::SNS::Topic", 1);
+    template.resourceCountIs("AWS::SNS::Subscription", 0);
   });
 
   it("should create exactly the SaaS stack set with unsuffixed IDs in development", () => {
