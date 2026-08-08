@@ -23,7 +23,11 @@ import { useTeamView } from "../auth/TeamViewProvider";
 import { hasSolvedAnyProblem, nextProblemDisplayName } from "../components/NextActionHero";
 import { showsCourseTracks } from "../config";
 import { useAppConfig, useIsMock } from "../config-context";
-import { buildCourseAlignmentTracks, toProblemProgress } from "../data/course-track";
+import {
+  buildCourseAlignmentTracks,
+  recommendedNextAcrossTracks,
+  toProblemProgress,
+} from "../data/course-track";
 import { findProblemMetadata, listProblemCatalog } from "../data/problems";
 import { useI18n, useT } from "../i18n";
 import { categoryOf } from "../lib/category";
@@ -256,9 +260,9 @@ export function QuestsPage() {
       showCourseGuidance ? buildCourseAlignmentTracks(catalog, toProblemProgress(allProblems)) : [],
     [allProblems, catalog, showCourseGuidance],
   );
-  const recommendedCourseProblem = courseTracks.find(
-    (track) => track.recommendedNext,
-  )?.recommendedNext;
+  // [Issue #2965] Home と同じ選択規則を使う。先頭を取ると track id の辞書順で「どの講座を
+  // 勧めるか」が決まり、2 つの画面が別々の基準で別々の答えを出す状態になる。
+  const recommendedCourseProblem = recommendedNextAcrossTracks(courseTracks);
   const recommendedCourseJobId = recommendedCourseProblem
     ? allProblems.find((problem) => problem.problemId === recommendedCourseProblem.problemId)?.jobId
     : undefined;

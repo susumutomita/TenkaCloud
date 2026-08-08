@@ -90,7 +90,13 @@ export const DEFAULT_RECOMMENDATION_TRACK_PRIORITY: readonly string[] = [
  */
 export const TRACKS_EXCLUDED_FROM_DEFAULT_RECOMMENDATION: ReadonlySet<string> = new Set([
   // 大学院レベルの暗号講座。単体の講座として成立しており、入門者の既定導線ではない。
+  //
+  // 同じ講座が 2 つの id で現れる。Home は `track.id`、Quests は `courseAlignment.courseId` を
+  // キーにトラックを組み立てており、この講座では前者が `-2026`、後者が `-program` になっている。
+  // **両方を書かないと片方の画面だけ除外が効かない。** id を 1 つに揃えるのが本筋だが、それは
+  // problem metadata 側の変更なので、ここでは両方を除外して画面間の食い違いを先に止める。
   "advanced-cryptography-2026",
+  "advanced-cryptography-program",
 ]);
 
 /** 既定の推薦対象か。除外されていても track 画面からは到達できる。 */
