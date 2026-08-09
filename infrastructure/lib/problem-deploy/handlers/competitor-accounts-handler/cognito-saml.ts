@@ -17,7 +17,7 @@ import {
  *   - `attachSamlToClient`: SupportedIdentityProviders に追加 (= 既に居れば no-op)
  *   - `detachSamlFromClient`: 削除 (= 居なければ no-op)、 COGNITO は必ず残す
  *   - `enforceSamlOnlyOnClient`: COGNITO を抜き、 ExplicitAuthFlows を SAML 互換に絞る
- *   - `allowCognitoOnClient`: COGNITO を戻す、 ExplicitAuthFlows を password / SRP 含めて復元
+ *   - `allowCognitoOnClient`: COGNITO を戻す、 ExplicitAuthFlows を SRP / REFRESH_TOKEN へ復元
  *
  * 全関数で `userPoolId` と `userPoolClientId` を引数で受ける (= JWT から runtime 抽出した値を
  * handler 側で渡す)。 wildcard IAM だが runtime guard で self-pool に限定する設計。
@@ -140,8 +140,16 @@ export async function attachSamlToClient(
 
 /**
  * UserPoolClient の SupportedIdentityProviders から SAML を取り除き、 COGNITO を必ず含むよう
- * 復元する (= SAML 削除時の lock-out 防止)。 ExplicitAuthFlows は password + SRP を戻す
- * (= 標準的な user pool client の default fallback)。
+ * 復元する (= SAML 削除時の lock-out 防止)。 ExplicitAuthFlows は SRP + REFRESH_TOKEN を戻す。
+ *
+ * `ALLOW_USER_PASSWORD_AUTH` は戻さない。 これは username / password をそのまま
+ * `InitiateAuth` へ送る Cognito 版の ROPC で、 RFC 9700 (BCP 240) が **MUST NOT** と規定した
+ * grant にあたる。 復元の目的は「SAML を外したときに誰も入れなくなるのを防ぐ」ことで、 それは
+ * `ALLOW_USER_SRP_AUTH` だけで果たせる — SRP は同じくパスワードで sign-in できるが、 パスワード
+ * 自体をサーバへ送らない。 つまり ROPC を戻す必要はもとから無かった。
+ *
+ * リポジトリ内に `USER_PASSWORD_AUTH` で認証している経路は無い (検索済み)。 有効化していたのは
+ * ここだけで、 SAML を外すたびに使われない ROPC が復活していた。
  */
 export async function allowCognitoOnClient(
   deps: CognitoSamlDeps,
@@ -155,11 +163,7 @@ export async function allowCognitoOnClient(
       UserPoolId: deps.userPoolId,
       ClientId: deps.userPoolClientId,
       SupportedIdentityProviders: next,
-      ExplicitAuthFlows: [
-        "ALLOW_USER_SRP_AUTH",
-        "ALLOW_REFRESH_TOKEN_AUTH",
-        "ALLOW_USER_PASSWORD_AUTH",
-      ],
+      ExplicitAuthFlows: ["ALLOW_USER_SRP_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"],
       CallbackURLs: [...current.callbackUrls],
       LogoutURLs: [...current.logoutUrls],
       AllowedOAuthFlows: [...current.allowedOAuthFlows] as (

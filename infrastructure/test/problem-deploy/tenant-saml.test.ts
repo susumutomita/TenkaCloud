@@ -248,7 +248,7 @@ describe("enforceSamlOnlyOnClient", () => {
 });
 
 describe("allowCognitoOnClient", () => {
-  it("SAML を外し COGNITO を必ず復元 + ExplicitAuthFlows を password/SRP 含めて復元", async () => {
+  it("SAML を外し COGNITO を必ず復元 + ExplicitAuthFlows を SRP/REFRESH_TOKEN で復元", async () => {
     const { send, deps } = makeCognitoDeps();
     send.mockResolvedValueOnce({
       UserPoolClient: {
@@ -262,7 +262,36 @@ describe("allowCognitoOnClient", () => {
     const cmd = send.mock.calls[1][0] as UpdateUserPoolClientCommand;
     expect(cmd.input.SupportedIdentityProviders).toContain("COGNITO");
     expect(cmd.input.SupportedIdentityProviders).not.toContain("AcmeSAML");
-    expect(cmd.input.ExplicitAuthFlows).toContain("ALLOW_USER_PASSWORD_AUTH");
+    expect(cmd.input.ExplicitAuthFlows).toEqual([
+      "ALLOW_USER_SRP_AUTH",
+      "ALLOW_REFRESH_TOKEN_AUTH",
+    ]);
+  });
+
+  it("ROPC (USER_PASSWORD_AUTH) を復元しない", async () => {
+    // この test は以前 `toContain("ALLOW_USER_PASSWORD_AUTH")` で**復元されること**を
+    // 固定していた。 意図を反転させた理由を残す。
+    //
+    // `ALLOW_USER_PASSWORD_AUTH` は username / password をそのまま `InitiateAuth` へ送る
+    // Cognito 版の ROPC で、 RFC 9700 (BCP 240, 2025) が MUST NOT と規定した grant にあたる。
+    // 復元の目的は「SAML を外したときに誰も入れなくなるのを防ぐ」ことで、 それは
+    // `ALLOW_USER_SRP_AUTH` だけで果たせる (同じくパスワードで sign-in できるが、 パスワード
+    // 自体をサーバへ送らない)。 リポジトリ内に USER_PASSWORD_AUTH で認証する経路は無く、
+    // SAML を外すたびに使われない ROPC が復活していた。
+    const { send, deps } = makeCognitoDeps();
+    send.mockResolvedValueOnce({
+      UserPoolClient: {
+        SupportedIdentityProviders: ["AcmeSAML"],
+        // 直前の状態に ROPC が残っていても、 復元先には持ち込まない。
+        ExplicitAuthFlows: ["ALLOW_REFRESH_TOKEN_AUTH", "ALLOW_USER_PASSWORD_AUTH"],
+        CallbackURLs: [],
+      },
+    });
+    send.mockResolvedValueOnce({});
+    await allowCognitoOnClient(deps, "AcmeSAML");
+    const cmd = send.mock.calls[1][0] as UpdateUserPoolClientCommand;
+    expect(cmd.input.ExplicitAuthFlows).not.toContain("ALLOW_USER_PASSWORD_AUTH");
+    // lock-out 防止という本来の目的は満たされていること。
     expect(cmd.input.ExplicitAuthFlows).toContain("ALLOW_USER_SRP_AUTH");
   });
 });
