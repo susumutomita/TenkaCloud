@@ -240,6 +240,14 @@
         "zod": "^3.25.76",
       },
     },
+    "packages/ai-eval": {
+      "name": "@tenkacloud/ai-eval",
+      "version": "0.1.0",
+      "devDependencies": {
+        "typescript": "^6.0.3",
+        "vitest": "^4.1.9",
+      },
+    },
     "packages/auth-client": {
       "name": "@tenkacloud/auth-client",
       "version": "0.1.0",
@@ -357,6 +365,17 @@
       "version": "0.1.0",
       "bin": {
         "tenkacloud": "src/cli.mjs",
+      },
+    },
+    "packages/tcloud": {
+      "name": "@tenkacloud/tcloud",
+      "version": "0.1.0",
+      "bin": {
+        "tcloud": "src/cli.ts",
+      },
+      "devDependencies": {
+        "typescript": "^6.0.3",
+        "vitest": "^4.1.9",
       },
     },
     "packages/trust-bridge": {
@@ -1241,6 +1260,8 @@
 
     "@tanstack/vue-virtual": ["@tanstack/vue-virtual@3.13.30", "", { "dependencies": { "@tanstack/virtual-core": "3.17.2" }, "peerDependencies": { "vue": "^2.7.0 || ^3.0.0" } }, "sha512-5IpTZf5US81z9CHaRm2imVC44WDU1V/pd8mN1OIvIerRmo6C179UN+vnzlO/dx9Fpt9X7Rjl7fyvolPhPgtfqg=="],
 
+    "@tenkacloud/ai-eval": ["@tenkacloud/ai-eval@workspace:packages/ai-eval"],
+
     "@tenkacloud/always-on-control-plane": ["@tenkacloud/always-on-control-plane@workspace:apps/always-on-control-plane"],
 
     "@tenkacloud/auth-client": ["@tenkacloud/auth-client@workspace:packages/auth-client"],
@@ -1264,6 +1285,8 @@
     "@tenkacloud/problem-test": ["@tenkacloud/problem-test@workspace:packages/problem-test-harness"],
 
     "@tenkacloud/saml-utils": ["@tenkacloud/saml-utils@workspace:packages/saml-utils"],
+
+    "@tenkacloud/tcloud": ["@tenkacloud/tcloud@workspace:packages/tcloud"],
 
     "@tenkacloud/web-kit": ["@tenkacloud/web-kit@workspace:packages/web-kit"],
 

@@ -97,6 +97,10 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
   // Issue #2311: 監査ログ出力の on/off。default true (未設定 / "true" は従来どおり出力 →
   // リグレッションなし)。明示 "false" のときだけ監査 Lambda 群を no-op 化する。
   const auditLogEnabled = env.CDK_PARAM_AUDIT_LOG_ENABLED !== "false";
+  // Issue #2959: control-data DDB table を stack 削除後も残すか。**default false (= DESTROY)**。
+  // 他の boolean parameter と向きが逆で、明示 "true" のときだけ RETAIN になる。消し忘れた
+  // table の PROVISIONED 課金が残り続けるほうが実害が大きい、という運用判断による。
+  const retainDataTables = env.CDK_PARAM_RETAIN_DATA_TABLES === "true";
   // Issue #2290: control-plane data backend の選択。default "dynamodb" (未設定 / "dynamodb" は
   // 在来 DDB 経路で Lambda env を足さない = byte 互換)。dynamodb/turso 以外は synth 時に throw。
   const controlDataBackend = resolveControlDataBackend(env);
@@ -168,6 +172,7 @@ export function resolveAppConfig(input: ResolveAppConfigInput): AppConfig {
     useBulkDistributedMap,
     deployViaLambda,
     auditLogEnabled,
+    retainDataTables,
     controlDataBackend,
     tursoDatabaseUrl,
     tursoAuthTokenParameterName,
@@ -427,6 +432,45 @@ function resolveDeployQuotaByTier(env: NodeJS.ProcessEnv) {
  * (= SPA 側 `resolveFeatureFlags` は tolerant だが、deploy 入力の誤りは synth で止める)。
  * 未設定は undefined (= runtime-config に `features` key を書かない)。
  */
+/**
+ * Issue #2948 / ADR-0005: machine (M2M) token 経路の deploy 時 opt-in flag key。
+ *
+ * 既存の `CDK_PARAM_FEATURES` 機構に相乗りする (= 新しい env / 新しい仕組みを足さない)。
+ * ON にするのは `CDK_PARAM_FEATURES='{"machineTokenPath":true}'`。
+ * **default は OFF** で、key 自体が無いときの CFn テンプレは旧版と byte 互換である。
+ */
+export const MACHINE_TOKEN_PATH_FEATURE_KEY = "machineTokenPath";
+
+/**
+ * `features.machineTokenPath` を読む唯一の accessor。未設定 / false は OFF。
+ *
+ * OFF のとき capability resource server が存在しないため Cognito が `tenkacloud/*` scope を
+ * 発行できず、handler 側の machine 分岐は到達不能になる (= 「設定が空だから安全」ではなく
+ * 「発行できないから安全」)。
+ */
+export function isMachineTokenPathEnabled(
+  features: Readonly<Record<string, boolean>> | undefined,
+): boolean {
+  return features?.[MACHINE_TOKEN_PATH_FEATURE_KEY] === true;
+}
+
+/**
+ * Issue #2953: human TenantAPI authorizer で access token を弾く opt-in flag key。
+ *
+ * **default OFF**。稼働中の authorizer の UPDATE であり、読み違えていれば全 tenant の console が
+ * 401 になる。#2948 の `TenantMachine` role により緊急性は無くなっているので、非本番 stage の
+ * live pre-flight (ID token 200 / access token 401) を済ませてから立てる。
+ */
+export const HUMAN_AUTHORIZER_REJECTS_ACCESS_TOKENS_FEATURE_KEY =
+  "humanAuthorizerRejectsAccessTokens";
+
+/** `features.humanAuthorizerRejectsAccessTokens` を読む唯一の accessor。未設定 / false は OFF。 */
+export function isHumanAuthorizerAudiencePinEnabled(
+  features: Readonly<Record<string, boolean>> | undefined,
+): boolean {
+  return features?.[HUMAN_AUTHORIZER_REJECTS_ACCESS_TOKENS_FEATURE_KEY] === true;
+}
+
 export function resolveFeatures(
   env: NodeJS.ProcessEnv,
 ): Readonly<Record<string, boolean>> | undefined {

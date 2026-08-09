@@ -195,6 +195,18 @@ describe("extractClaims (REST API vs HTTP API authorizer 形式)", () => {
     const c = { env: { event: { requestContext: {} } } } as unknown as Context;
     expect(extractClaims(c)).toBeUndefined();
   });
+
+  it.each([
+    ["jwt.claims が object でない", { jwt: { claims: "not-an-object" } }],
+    ["claims が object でない", { claims: 42 }],
+    ["どちらの形でもない", { lambda: { something: "else" } }],
+  ])("authorizer はあるが %s なら undefined を返す", (_label, authorizer) => {
+    // authorizer が居るのに claims を取り出せない形は、部分的に信用せず「claims 無し」に
+    // 倒す。ここで壊れた object をそのまま返すと、下流の `custom:tenantId` 判定が
+    // undefined を読んで machine guard の human 判定へ落ちる。
+    const c = { env: { event: { requestContext: { authorizer } } } } as unknown as Context;
+    expect(extractClaims(c)).toBeUndefined();
+  });
 });
 
 /* ---- ADR-020 / Issue #926 Phase B: role enum + requireRole ---- */

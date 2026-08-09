@@ -41,7 +41,9 @@
     "tenants_error_header": "Failed to load tenants",
     "insight_error_header": "Failed to load deploy aggregates",
     "insight_not_available_header": "Deploy aggregates are unavailable",
-    "insight_not_available_body": "The AdminInsight API is not wired for this environment (runtime-config adminInsightApiUrl is empty) or your account is not a SystemAdmin. Tenant counts and the tier distribution are still shown."
+    "insight_not_available_body": "The AdminInsight API is not wired for this environment (runtime-config adminInsightApiUrl is empty) or your account is not a SystemAdmin. Tenant counts and the tier distribution are still shown.",
+    "col_ever_completed_deploys": "Ever completed",
+    "ever_completed_deploys_note": "Deployments that ever reached COMPLETE. Unlike the current-value columns it does not return to zero after teardown. Deployments made before this column existed are not counted, so an em dash means unknown, not zero."
   },
   "operations": {
     "title": "Operations dashboard",

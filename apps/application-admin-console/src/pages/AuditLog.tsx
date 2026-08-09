@@ -221,7 +221,9 @@ export function AuditLogPage({ config }: { config: AppConfig }) {
           <Input
             value={filters.principal}
             onChange={(e) => setFilters((f) => ({ ...f, principal: e.detail.value }))}
-            placeholder="principal (sub / username)"
+            // #2954: 末尾 `*` は prefix 一致。machine principal は `m2m:<clientId>` で client id が
+            // 発行ごとに変わるため、`m2m:*` で「machine が起こした操作」を 1 query で引ける。
+            placeholder="principal (sub / username / m2m:*)"
           />
           <Input
             value={filters.action}

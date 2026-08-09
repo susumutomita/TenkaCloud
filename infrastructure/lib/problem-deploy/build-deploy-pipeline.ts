@@ -8,6 +8,7 @@ import { Bucket } from "aws-cdk-lib/aws-s3";
 import { BucketDeployment, Source } from "aws-cdk-lib/aws-s3-deployment";
 import type { Construct } from "constructs";
 import type { PackAsset } from "../app-config/types.js";
+import { deploymentLogGroup } from "../utils/deployment-log-group.js";
 import { BulkDeployCreateStateMachine } from "./bulk-deploy-create-state-machine.js";
 import { CfnDeployLambda } from "./cfn-deploy-lambda.js";
 import { DeployCodeBuildProject } from "./deploy-codebuild-project.js";
@@ -164,6 +165,7 @@ export function buildDeployPipeline(
     // deletes every object in the destination that is not part of this asset — that would wipe
     // source.zip and break the CodeBuild deploy/delete path. Never remove prune:false here.
     new BucketDeployment(scope, "ProblemArtifacts", {
+      logGroup: deploymentLogGroup(scope, "ProblemArtifactsLogs"),
       sources: [
         Source.asset(path.resolve(import.meta.dirname, "../../../problems"), {
           // Exclude the catalog's dev dependencies: large and irrelevant to the deploy body.
@@ -201,6 +203,7 @@ export function buildDeployPipeline(
     // packs never clobber the core tree or each other.
     for (const asset of args.packAssets ?? []) {
       new BucketDeployment(scope, `PackArtifacts-${packAssetConstructId(asset)}`, {
+        logGroup: deploymentLogGroup(scope, `PackArtifactsLogs-${packAssetConstructId(asset)}`),
         sources: [Source.asset(asset.problemsRootAbs, { exclude: ["node_modules"] })],
         destinationBucket: sourceBucket,
         destinationKeyPrefix: `pack-problems/${asset.packId}/${asset.version}`,

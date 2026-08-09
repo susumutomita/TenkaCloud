@@ -207,7 +207,7 @@ describe("AuditLogPage", () => {
       target: { value: " 2026 " },
     });
     fireEvent.change(screen.getByPlaceholderText("to (ISO8601)"), { target: { value: " 2027 " } });
-    fireEvent.change(screen.getByPlaceholderText("principal (sub / username)"), {
+    fireEvent.change(screen.getByPlaceholderText("principal (sub / username / m2m:*)"), {
       target: { value: " alice " },
     });
     fireEvent.change(screen.getByPlaceholderText("action"), { target: { value: " CreateEvent " } });
@@ -237,7 +237,7 @@ describe("AuditLogPage", () => {
       fireEvent.change(screen.getByPlaceholderText(ph), { target: { value: v } });
     set("from (ISO8601)", "f1");
     set("to (ISO8601)", "t1");
-    set("principal (sub / username)", "p1");
+    set("principal (sub / username / m2m:*)", "p1");
     set("action", "a1");
     expect(screen.getByPlaceholderText("action")).toHaveValue("a1");
   });

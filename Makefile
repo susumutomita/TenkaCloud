@@ -12,7 +12,7 @@ export JSII_DEPRECATED := quiet
 HELP_LANG ?= en
 HELP_RENDERER := scripts/ops/make-help.awk
 
-.PHONY: help help-en help-ja install install_ci submodule-latest build typecheck test test-coverage test-scripts audit-deps before-commit ci-local \
+.PHONY: help help-en help-ja install install_ci submodule-latest build typecheck test test-coverage test-scripts audit-deps before-commit ci-local openapi openapi-check \
         lint lint-md lint-text lint-format lint-ts \
         fix fix-md fix-text fix-format format \
         harness harness-test tech-debt dead-code ever-better-diagnose \
@@ -115,7 +115,7 @@ dead-code: ## Fail on unused files/exports found by knip | knipで未使用コ�
 # template / coverage / IAM ASCII / merge / submodule) は本体と混ぜないため
 # .claude/skills/quality-gates へ分離済み — pre-commit フックが before-commit とは別呼び出しで
 # runner を走らせ、CI は --ci グループを走らせる。
-GATE_CHECKS := harness lint dead-code test
+GATE_CHECKS := harness openapi-check lint dead-code test
 
 before-commit: $(GATE_CHECKS) ## Run lint and all tests before committing | commit前のlintと全テストを実行
 
@@ -179,6 +179,15 @@ harness-test: ## Run the harness unit tests | harness自身のunit testを実行
 	cd .claude/harness && bun vitest run
 tech-debt: ## Generate the technical-debt backlog | tech debt backlogを生成
 	$(HARNESS)/tech-debt.ts
+
+# ===== OpenAPI | OpenAPI =====
+# Issue #2949: machine API surface の spec は `MACHINE_ROUTE_SCOPES` と handler の zod schema から
+# 生成する。手書きの path も手書きの schema も無いので、route を足して生成物を更新し忘れた PR は
+# `openapi-check` が落とす。`openapi-check` は GATE_CHECKS に入れてあり before-commit で走る。
+openapi: ## Generate the machine API OpenAPI spec | machine API の OpenAPI spec を生成
+	bun run scripts/openapi/generate.ts
+openapi-check: ## Fail when the committed OpenAPI spec drifts from the source of truth | OpenAPI 生成物の drift を検査
+	bun run scripts/openapi/generate.ts --check
 
 # ever-better (https://github.com/isamu/ever-better) の read-only 診断のみを配線する。
 # 何をするツールか: リポジトリの品質ツール構成を検出し、(a) 不足している層、(b) 600行超の file 数、
@@ -375,6 +384,13 @@ deploy: env-check-lite build ## Deploy Lite mode to AWS | Lite modeをAWSへdepl
 #   4. client/client-template deploy (CloudFront + S3 for Admin/Application UI)
 deploy-saas: env-check ## Deploy multi-tenant SaaS mode to AWS | multi-tenant SaaS modeをAWSへdeploy
 	@cd scripts && bash install.sh "$${SYSTEM_ADMIN_EMAIL}"
+#: CDK が construct 内部で singleton として作る provider Lambda (S3AutoDeleteObjects /
+#: AWSCDKOpenIdConnectProvider) は log 設定の prop を公開していないので、 その log group は
+#: 無期限保持のまま生まれる (#2960)。 deploy 直後に backstop を当てて拾う。
+	bash scripts/enforce-log-retention.sh
+
+enforce-log-retention: env-check ## Fill in retention on tenkacloud log groups that have none | retention 未設定の log group に retention を当てる
+	bash scripts/enforce-log-retention.sh
 
 destroy: env-check-lite ## Delete Lite-mode AWS resources | Lite modeのAWS resourceを削除
 	bun run scripts/tenkacloud-lite.ts down

@@ -103,12 +103,31 @@ export async function exportTenantAuditCsv(
   return formatCsv(collected);
 }
 
+/**
+ * #2954: `principal` は既定で完全一致だが、末尾 `*` を付けると prefix 一致になる。
+ *
+ * これが要るのは machine (M2M) principal のためである。machine の actor は
+ * `m2m:<clientId>` で、client id は credential を発行するたびに変わる。完全一致しか無いと
+ * 「machine が起こした操作を全部見る」ができず、client id を全部集めて 1 本ずつ引くしかない。
+ * `principal=m2m:*` の 1 query で引けるようにする。human の完全一致挙動は不変。
+ */
+function matchesPrincipal(candidate: string | undefined, filter: string): boolean {
+  if (candidate === undefined) return false;
+  if (filter.endsWith("*")) return candidate.startsWith(filter.slice(0, -1));
+  return candidate === filter;
+}
+
 function passFilters(item: TenantAuditItem, input: TenantAuditListInput): boolean {
   if (input.from && item.occurredAt < input.from) return false;
   if (input.to && item.occurredAt > input.to) return false;
   if (input.action && item.action !== input.action) return false;
   if (input.principal) {
-    if (item.actor !== input.principal && item.actorUsername !== input.principal) return false;
+    if (
+      !matchesPrincipal(item.actor, input.principal) &&
+      !matchesPrincipal(item.actorUsername, input.principal)
+    ) {
+      return false;
+    }
   }
   return true;
 }

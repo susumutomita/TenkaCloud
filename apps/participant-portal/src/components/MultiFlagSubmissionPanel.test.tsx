@@ -329,7 +329,12 @@ describe("MultiFlagSubmissionPanel", () => {
       const input = screen.getAllByRole("textbox")[0];
       await user.click(input);
       await user.paste(answer);
-      await user.click(screen.getAllByRole("button", { name: /^Submit/ })[0]);
+      // 提出ボタンは 「いま入力した行の form の中」 から引く。 document 全体を
+      // accessible name で走査すると全 button の名前計算が毎 step 走り、 この helper が
+      // 一番重い query になっていた (#2946)。 行を跨がない分だけ狙いも正確になる。
+      const form = input.closest("form");
+      expect(form).not.toBeNull();
+      await user.click(within(form as HTMLFormElement).getByRole("button", { name: /^Submit/ }));
       await screen.findByText(`Flags solved: ${index + 1} / 6`);
     }
   }
@@ -538,6 +543,41 @@ describe("MultiFlagSubmissionPanel", () => {
     );
     expect(screen.getByTestId("router-path")).toHaveTextContent(`/problems/${LITE_DRILL_JOB_ID}`);
     expect(apiMocks.submitFlag).not.toHaveBeenCalled();
+  });
+
+  /**
+   * #2946: 祝祭 overlay は panel に 1 つだけ。 以前は解答済み行ごとに描いていたので、
+   * 続けて解くと画面全体を覆う confetti 層 (60 粒 + 同名 `@keyframes` の <style>) が
+   * checkpoint 数だけ積み上がっていた。 演出は解答ごとに流し直すが、 同時に存在するのは
+   * 常に 1 つで、 3 秒後に自分で消える。
+   */
+  it("should replay one celebration per solve instead of stacking one per solved row", async () => {
+    const user = userEvent.setup();
+    const { container } = renderPanel(
+      { problemId: WHAT_IS_DRILL_PROBLEM_ID, flags: TUTORIAL_FLAGS },
+      "dev-mock",
+    );
+    // overlay は装飾なので aria-hidden。 role / name では引けないため、 自前 keyframes を
+    // 持つ <style> の数 = overlay の数として数える (= 同名 keyframes の重複も同時に pin)。
+    // 3 秒後の fade-out 自体は CelebrationOverlay.test.tsx が持つ。
+    const overlays = () =>
+      Array.from(container.querySelectorAll("style")).filter((style) =>
+        style.textContent?.includes("tc-celebrate-fall"),
+      );
+    const particles = () => container.querySelectorAll('span[style*="tc-celebrate-fall"]');
+    expect(overlays()).toHaveLength(0);
+
+    for (const [index, answer] of TUTORIAL_ANSWERS.slice(0, 3).entries()) {
+      const input = screen.getAllByRole("textbox")[0];
+      await user.click(input);
+      await user.paste(answer);
+      const form = input.closest("form");
+      await user.click(within(form as HTMLFormElement).getByRole("button", { name: /^Submit/ }));
+      await screen.findByText(`Flags solved: ${index + 1} / 6`);
+      // 解くたびに流れ直すが、同時に出るのは 1 つだけ (行数分は積まない)。
+      expect(overlays()).toHaveLength(1);
+      expect(particles()).toHaveLength(60);
+    }
   });
 
   it("should restore all mock-solved rows after reopening the problem", async () => {
@@ -901,7 +941,11 @@ describe("multi-verify extensions (issue #2252)", () => {
 
     for (const check of wpExposedBackup.i18n.en.checks) {
       const field = screen.getByLabelText(check.label);
-      await user.type(field, `answer-for-${check.id}`);
+      // `type` は 1 文字ずつ event を回すので、この loop だけで 4 checkpoint x 約 20 文字 =
+      // 80 回の再描画になっていた。ここで見たいのは「回答を入れて提出したら solved になる」で
+      // あって打鍵そのものではないので、`solveTutorial` と同じ paste の書き方に揃える (#2957)。
+      await user.click(field);
+      await user.paste(`answer-for-${check.id}`);
       const form = field.closest("form");
       expect(form).not.toBeNull();
       await user.click(within(form as HTMLFormElement).getByRole("button", { name: /^Submit/ }));
@@ -931,7 +975,9 @@ describe("multi-verify extensions (issue #2252)", () => {
     expect(serverScore).toBe(scoreBeforeReview);
     expect(apiMocks.revealHint).toHaveBeenCalledTimes(revealCallsBeforeReview);
     expect(apiMocks.submitFlag).toHaveBeenCalledTimes(submitCallsBeforeReview);
-  }, 15_000);
+    // この 1 本だけ workspace 既定 (15s) より重い: 12 hint の開封 + 4 checkpoint の提出 +
+    // 4 件の振り返り展開を 1 test で通す。 実測 idle 約 4.0s。
+  }, 30_000);
 
   it("should provide the same solved review structure in Japanese", () => {
     window.localStorage.setItem("tenkacloud.portal.locale", "ja");

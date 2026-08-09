@@ -233,6 +233,16 @@ function evalUpdateValue(item: Item, rawValue: string, names: Names, values: Val
     }
     return [...base, ...append];
   }
+  // [Issue #2946] bare `if_not_exists(attr, :value)` — write-once semantics. The deployment
+  // completion marker uses it so the first COMPLETE timestamp is never moved by a re-entry of
+  // the success path. Modelled here so the parity tests exercise the real behaviour rather
+  // than a stubbed one.
+  const ifNotExists = rawValue.match(/^if_not_exists\(([^,]+),\s*(:[A-Za-z0-9_]+)\)$/);
+  if (ifNotExists) {
+    const attr = resolveName(ifNotExists[1]?.trim() ?? "", names);
+    const fallback = values?.[ifNotExists[2] ?? ""];
+    return item[attr] === undefined ? fallback : item[attr];
+  }
   throw new Error(`FakeDdb: unsupported SET value "${rawValue}"`);
 }
 

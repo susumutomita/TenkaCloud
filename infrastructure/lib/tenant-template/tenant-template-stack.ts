@@ -8,9 +8,18 @@ import {
   PhysicalResourceId,
 } from "aws-cdk-lib/custom-resources";
 import type { Construct } from "constructs";
+import { isMachineTokenPathEnabled } from "../app-config/index.js";
 import { buildAppPlaneCore } from "../app-plane-core/index.js";
 import type { ApiKeySSMParameterNames } from "../interfaces/api-key-ssm-parameter-names.js";
+import {
+  bindScope,
+  capabilityScope,
+  MACHINE_CAPABILITIES,
+} from "../problem-deploy/handlers/shared/machine-scopes.js";
 import type { CustomDomainConfig } from "../security/cloudfront-custom-domain.js";
+import { deploymentLogGroup } from "../utils/deployment-log-group.js";
+import { MachineApiGateway } from "./machine-api-gateway.js";
+import { MachineIdentity } from "./machine-identity.js";
 import type { SamlIdpConfig } from "./saml-identity-providers.js";
 
 interface TenantTemplateStackProps extends StackProps {
@@ -172,7 +181,36 @@ export class TenantTemplateStack extends Stack {
     this.tenantUserPoolId = identityProvider.tenantUserPool.userPoolId;
     this.samlIdpDirectory = appPlaneCore.samlIdpDirectory;
 
+    // Issue #2948 / ADR-0005 Phase 1: machine (M2M) token 経路。default OFF。
+    // ON のときだけ capability resource server と machine 専用 RestApi を CREATE する。
+    // 既存 UserPool / human UserPoolClient / human TenantAPI には一切触らない (= NO-OP)。
+    if (isMachineTokenPathEnabled(props.features)) {
+      const machineIdentity = new MachineIdentity(this, "MachineIdentity", {
+        userPool: identityProvider.tenantUserPool,
+      });
+      const machineApiGateway = new MachineApiGateway(this, "MachineApiGateway", {
+        tenantId: props.tenantId,
+        userPool: identityProvider.tenantUserPool,
+        deployApiLambda: props.deployApiLambda,
+        eventApiLambda: props.eventApiLambda,
+        capabilityScopes: machineIdentity.capabilityScopes,
+      });
+
+      new CfnOutput(this, "MachineApiUrl", {
+        value: machineApiGateway.restApi.url,
+        description: `テナント ${props.tenantId} 向け machine (M2M) API のベース URL`,
+      });
+      // 発行 script と CLI が要求する scope を 1 行で読めるようにする。secret ではない。
+      new CfnOutput(this, "MachineOAuthScopes", {
+        value: [...MACHINE_CAPABILITIES.map(capabilityScope), bindScope(props.tenantId)].join(" "),
+        description: `テナント ${props.tenantId} の machine credential が要求できる OAuth scope`,
+      });
+    }
+
     new AwsCustomResource(this, "CreateTenantMapping", {
+      // 明示 LogGroup が無いと、 この custom resource の Lambda が作る log group は初回実行時に
+      // Lambda サービスが暗黙生成し、 retention 未設定 (= 無期限保持) になる (#2960)。
+      logGroup: deploymentLogGroup(this, "CreateTenantMappingLogs"),
       installLatestAwsSdk: true,
       onCreate: {
         service: "DynamoDB",

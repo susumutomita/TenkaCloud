@@ -3,6 +3,7 @@ import * as cdk from "aws-cdk-lib";
 import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3";
 import { BucketDeployment, Source } from "aws-cdk-lib/aws-s3-deployment";
 import { Construct } from "constructs";
+import { deploymentLogGroup } from "../utils/deployment-log-group.js";
 
 /**
  * Issue #1053: 競技者向け CFn bootstrap template (`competitor-bootstrap.yaml`) の public S3 host。
@@ -48,6 +49,7 @@ export class CompetitorBootstrapHosting extends Construct {
     });
 
     new BucketDeployment(this, "Deployment", {
+      logGroup: deploymentLogGroup(this, "DeploymentLogs"),
       sources: [
         Source.asset(path.join(import.meta.dirname, "..", "..", "templates"), {
           exclude: ["*", "!competitor-bootstrap.yaml"],

@@ -59,6 +59,8 @@ export function buildProblemDeployBackendBaseProps(config: AppConfig) {
     // ことで SaaS (wire.ts) と Lite (bin/tenkacloud-lite.ts) の両モードへ同一に届く (= Lite mode
     // での flag 切替配線)。default "dynamodb" は Lambda env を足さず CFn byte 互換。
     controlDataBackend: config.controlDataBackend,
+    // Issue #2959: control-data DDB table の削除方針。既定 DESTROY、opt-in で RETAIN。
+    retainDataTables: config.retainDataTables,
     tursoDatabaseUrl: config.tursoDatabaseUrl,
     tursoAuthTokenParameterName: config.tursoAuthTokenParameterName,
     opsMonitoring: config.opsMonitoring,

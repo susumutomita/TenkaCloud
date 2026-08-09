@@ -13,7 +13,11 @@ import { ScoreTimelineChart } from "../components/ScoreTimelineChart";
 import type { AppConfig } from "../config";
 import { showsCourseTracks } from "../config";
 import { useIsMock } from "../config-context";
-import { buildCourseTracks, toProblemProgress } from "../data/course-track";
+import {
+  buildCourseTracks,
+  recommendedNextAcrossTracks,
+  toProblemProgress,
+} from "../data/course-track";
 import { listProblemCatalog } from "../data/problems";
 import { useT } from "../i18n";
 import { TeamScorePanel } from "./TeamScorePanel";
@@ -50,7 +54,9 @@ export function HomePage({ config }: { config: AppConfig }) {
   const courseNext = useMemo(() => {
     if (!showsCourseTracks(config.cloudMode)) return undefined;
     const tracks = buildCourseTracks(listProblemCatalog(), toProblemProgress(view?.problems ?? []));
-    return tracks.find((track) => track.recommendedNext)?.recommendedNext;
+    // [Issue #2965] 先頭を取ると track id の辞書順で「どの講座を勧めるか」が決まってしまい、
+    // 1 問解いた直後の初学者に大学院レベルの暗号の問題が出ていた。選択は明示的な優先順で行う。
+    return recommendedNextAcrossTracks(tracks);
   }, [config.cloudMode, view?.problems]);
 
   return (

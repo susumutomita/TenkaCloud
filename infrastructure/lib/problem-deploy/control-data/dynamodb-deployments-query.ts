@@ -92,6 +92,32 @@ export class DynamoDbDeploymentsQuery implements DeploymentsQueryPort {
     return active;
   }
 
+  /**
+   * [Issue #2946] `attribute_exists(completedAt)` を GSI1 に対して `Select=COUNT` で drain する。
+   * GSI の追加は不要 (= standing cost が増えない)。marker の有無だけを見るので、撤去で status が
+   * `DELETED` になった行も数え続ける。
+   */
+  async countEverCompletedByTenant(tenantId: string): Promise<number> {
+    let completed = 0;
+    let exclusiveStartKey: Record<string, unknown> | undefined;
+    do {
+      const out = await this.core.ddb.send(
+        new QueryCommand({
+          TableName: this.core.tableName,
+          IndexName: "GSI1",
+          KeyConditionExpression: "GSI1PK = :pk",
+          FilterExpression: "attribute_exists(completedAt)",
+          ExpressionAttributeValues: { ":pk": `TENANT#${tenantId}` },
+          Select: "COUNT",
+          ExclusiveStartKey: exclusiveStartKey,
+        }),
+      );
+      completed += out.Count ?? 0;
+      exclusiveStartKey = out.LastEvaluatedKey as Record<string, unknown> | undefined;
+    } while (exclusiveStartKey);
+    return completed;
+  }
+
   async listByTenantAndEvent(
     tenantId: string,
     eventId: string,

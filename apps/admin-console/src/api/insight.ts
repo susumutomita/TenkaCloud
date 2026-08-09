@@ -16,6 +16,13 @@ export interface TenantInsightSummary {
    */
   readonly completedDeploys?: number;
   readonly failedDeploys: number;
+  /**
+   * [Issue #2946] 一度でも COMPLETE に到達した累計。撤去しても 0 に戻らない。
+   *
+   * optional なのは、この field を返さない旧 backend に対して **0 と偽らない** ため。
+   * 未提供は「不明」であって「成功 0 件」ではない (UI は "—" を出す)。
+   */
+  readonly everCompletedDeploys?: number;
   readonly totalEvents: number;
 }
 

@@ -78,6 +78,23 @@ These apply to every profile and are why `recommended` is "partially measured":
 - resource reclaim across repeated start / stop / reset
 - the TenkaCloud Simulator
 
+## Failure symptoms
+
+What a shortage actually looks like, so a participant can tell resource exhaustion
+apart from a broken problem. Only rows marked observed have been seen on a real
+machine; the rest name the mechanism without claiming a measurement.
+
+| Symptom | Cause | Observed | The one thing to do |
+| --- | --- | --- | --- |
+| `docker build` fails with `rpc error: code = Unknown desc = EOF` while writing the image | BuildKit ran out of space in the Docker VM. The build cache accumulates across builds and is not reclaimed by removing images | Yes — the cache reached 58 GB and the host still showed tens of GB free, so `df` on the host did not reveal it | `docker builder prune -af` |
+| A problem container exits immediately after start, or the runtime reports the process was killed | Docker VM memory exhausted (OOM kill). The control plane alone accounts for most of local play's footprint, so this is usually several problems at once rather than one heavy problem | No | Stop other problems (`make local-down`), or raise the Docker VM memory allocation |
+| A problem never becomes ready and start times out | Image pull or first build is still running on a slow link, or the VM is thrashing | No | Re-run after the pull completes; check `docker stats` for a container pinned at high CPU |
+| `make doctor` reports UNKNOWN for Docker memory or disk | The value could not be read, or no measurement exists for that profile yet | Yes | `make local-measure PROFILE=<id>` and contribute the record |
+
+The build-cache row is the one worth reading twice. It presents as an unexplained
+build failure rather than as a disk error, the host's own `df` does not show it on
+macOS or Windows, and it is the only entry here that has actually bitten someone.
+
 ## Checking your own machine
 
 ```bash

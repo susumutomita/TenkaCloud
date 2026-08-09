@@ -63,6 +63,75 @@ export interface CourseChapterView {
   readonly problems: readonly CourseProblemView[];
 }
 
+/**
+ * Issue #2965: 「次にやること」がどのトラックから出るかを **明示的に**決める。
+ *
+ * これを入れる前は `assembleCourseTracks` が track id を `localeCompare` で並べ、Home が
+ * その先頭を取っていた。つまり「どのトラックを勧めるか」が id の文字列順で決まっていて、
+ * `advanced-cryptography-2026` が `automotive-security` にも `ipa-web-security` にも辞書順で
+ * 勝つ。結果、1 問解いた直後の初学者に大学院レベルの法演算の問題が出ていた。学習設計上の
+ * 意図ではなく、ソート順の副作用だった。
+ *
+ * ここに書かれていないトラックは、この配列の後ろに従来どおりの順で続く。
+ *
+ * **`_start` のように辞書順で勝つ id を付けて解決してはならない。** それはこのバグの再発経路
+ * そのもので、次に別のトラックが増えたときに同じ壊れ方をする。
+ */
+export const DEFAULT_RECOMMENDATION_TRACK_PRIORITY: readonly string[] = [
+  // TenkaCloudChallenge #397: 「未経験の人が StackStack を解けるようになる」が
+  // プラットフォームの目標なので、既定導線はそのルートを先頭に置く。
+  "stackstack-route",
+  "ipa-web-security",
+  "automotive-security",
+];
+
+/**
+ * 既定の推薦対象から外すトラック。
+ *
+ * **到達不能にはしない。** 「講座トラック」画面からは通常どおり見えて始められる。独立した講座を
+ * 既定の導線から外すだけで、消す話ではない。
+ */
+export const TRACKS_EXCLUDED_FROM_DEFAULT_RECOMMENDATION: ReadonlySet<string> = new Set([
+  // 大学院レベルの暗号講座。単体の講座として成立しており、入門者の既定導線ではない。
+  //
+  // 同じ講座が 2 つの id で現れる。Home は `track.id`、Quests は `courseAlignment.courseId` を
+  // キーにトラックを組み立てており、この講座では前者が `-2026`、後者が `-program` になっている。
+  // **両方を書かないと片方の画面だけ除外が効かない。** id を 1 つに揃えるのが本筋だが、それは
+  // problem metadata 側の変更なので、ここでは両方を除外して画面間の食い違いを先に止める。
+  "advanced-cryptography-2026",
+  "advanced-cryptography-program",
+]);
+
+/** 既定の推薦対象か。除外されていても track 画面からは到達できる。 */
+export function isRecommendableTrack(trackId: string): boolean {
+  return !TRACKS_EXCLUDED_FROM_DEFAULT_RECOMMENDATION.has(trackId);
+}
+
+/**
+ * 既定推薦の探索順。優先リストに載っているものが先で、その中の順序はリスト順。載っていない
+ * ものは後ろに回り、互いの順序は呼び出し側が渡した並びを保つ (= 安定ソート)。
+ */
+export function compareByRecommendationPriority(leftTrackId: string, rightTrackId: string): number {
+  const rank = (trackId: string): number => {
+    const index = DEFAULT_RECOMMENDATION_TRACK_PRIORITY.indexOf(trackId);
+    return index === -1 ? DEFAULT_RECOMMENDATION_TRACK_PRIORITY.length : index;
+  };
+  return rank(leftTrackId) - rank(rightTrackId);
+}
+
+/**
+ * 「次にやること」に出す 1 問を選ぶ。Home と Quests の両方がこれを使うことで、
+ * 片方だけ別の基準で選ぶ状態を作らない。
+ */
+export function recommendedNextAcrossTracks(
+  tracks: readonly CourseTrackView[],
+): CourseProblemView | undefined {
+  return [...tracks]
+    .filter((track) => isRecommendableTrack(track.trackId))
+    .sort((a, b) => compareByRecommendationPriority(a.trackId, b.trackId))
+    .find((track) => track.recommendedNext)?.recommendedNext;
+}
+
 export interface CourseTrackView {
   readonly trackId: string;
   readonly edition?: string;

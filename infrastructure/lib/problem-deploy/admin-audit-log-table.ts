@@ -1,6 +1,6 @@
-import { RemovalPolicy } from "aws-cdk-lib";
 import { AttributeType, BillingMode, Table } from "aws-cdk-lib/aws-dynamodb";
 import { Construct } from "constructs";
+import { type DataTableProps, dataTableRemovalPolicy } from "./data-table-removal-policy.js";
 
 /**
  * Issue #950 (ADR-020 Phase D): admin 操作の append-only 監査ログ DDB Table。
@@ -28,12 +28,14 @@ import { Construct } from "constructs";
  * provisioned 1/1 (DynamoDbLowCapacity Aspect で更に均す)。 audit write は admin 操作毎の 1 行で
  * 極低 QPS、 read は監査画面の paginate のみ。 Free Tier 25 RCU/WCU に十分収まる。
  *
- * 削除方針: RETAIN。 stack delete で audit 履歴を意図せず消さない (= 監査要件)。 必要なら手動。
+ * 削除方針: 既定 DESTROY (#2959)。`CDK_PARAM_RETAIN_DATA_TABLES=true` のときだけ RETAIN。
+ * 消し忘れた table が PROVISIONED 容量で課金され続けるほうが実害が大きい、という判断による。
+ * 監査要件で履歴を残したい環境は opt-in で RETAIN にする。
  */
 export class AdminAuditLogTable extends Construct {
   public readonly table: Table;
 
-  constructor(scope: Construct, id: string) {
+  constructor(scope: Construct, id: string, props: DataTableProps = {}) {
     super(scope, id);
     this.table = new Table(this, "Table", {
       partitionKey: { name: "PK", type: AttributeType.STRING },
@@ -41,7 +43,7 @@ export class AdminAuditLogTable extends Construct {
       billingMode: BillingMode.PROVISIONED,
       readCapacity: 1,
       writeCapacity: 1,
-      removalPolicy: RemovalPolicy.RETAIN,
+      removalPolicy: props.removalPolicy ?? dataTableRemovalPolicy(undefined),
       pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: false },
       // env `AUDIT_RETENTION_DAYS` (= 90 default / SOC2 365 等) を caller が ttl に書く。
       timeToLiveAttribute: "ttl",

@@ -1,6 +1,7 @@
 import type { Stack } from "aws-cdk-lib";
 import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import type { IFunction } from "aws-cdk-lib/aws-lambda";
+import { isHumanAuthorizerAudiencePinEnabled } from "../app-config/index.js";
 import type { ApiKeySSMParameterNames } from "../interfaces/api-key-ssm-parameter-names.js";
 import { SamlIdpLambda } from "../problem-deploy/saml-idp-lambda.js";
 import type { CustomDomainConfig } from "../security/cloudfront-custom-domain.js";
@@ -240,11 +241,20 @@ export function buildAppPlaneCore(scope: Stack, props: AppPlaneCoreProps): AppPl
     );
   }
 
+  // Issue #2953: opt-in で human authorizer に `aud` の照合を入れる。human の ID token は
+  // `aud` に app client id を持ち、machine の access token は `aud` を持たないため、client id を
+  // pin すると access token が gateway 段で 401 になる。既定 OFF (= property を書かない) なので
+  // 既存 authorizer の CFn 物理差分は 0 件。
+  const humanAudienceValidationExpression = isHumanAuthorizerAudiencePinEnabled(props.features)
+    ? `^${identityProvider.tenantUserPoolClient.userPoolClientId}$`
+    : undefined;
+
   const apiGateway = new ApiGateway(scope, "ApiGateway", {
     tenantId: props.tenantId,
     isPooledDeploy: props.isPooledDeploy,
     idpDetails: identityProvider.identityDetails,
     userPool: identityProvider.tenantUserPool,
+    ...(humanAudienceValidationExpression ? { humanAudienceValidationExpression } : {}),
     deployApiLambda: props.deployApiLambda,
     eventApiLambda: props.eventApiLambda,
     competitorAccountsApiLambda: props.competitorAccountsApiLambda,

@@ -18,17 +18,6 @@ export const apiIdFromExecuteApiUrl = (apiUrl: string): string =>
   cdk.Fn.select(0, cdk.Fn.split(".", cdk.Fn.select(2, cdk.Fn.split("/", apiUrl))));
 
 /**
- * Budget email subscriptions are opt-in. systemAdminEmail identifies the platform
- * administrator; it is not consent to receive every budget confirmation.
- */
-export function budgetNotificationEmails(
-  config: Pick<AppConfig, "systemAdminEmail" | "budgetAlarmEmails">,
-): string[] | undefined {
-  const recipients = Array.from(new Set(config.budgetAlarmEmails ?? []));
-  return recipients.length > 0 ? recipients : undefined;
-}
-
-/**
  * Issue #952 epic / cost guardrails: 月次 AWS Budget + Free Tier 使用量アラームを立てる。
  * limit / alarm 通知先は config から。 `monthlyCostLimitUsd` が 0 / 未指定なら何も立てない
  * (= legacy 互換、 CFn 物理差分 0 件)。
@@ -47,7 +36,15 @@ export function addCostGuardrails(args: {
   const budget = new CostBudget(args.observabilityStack, "CostBudget", {
     budgetNamePrefix: `tenkacloud-${config.environment}`,
     monthlyLimitUsd: config.monthlyCostLimitUsd,
-    notificationEmails: budgetNotificationEmails(config),
+    // Issue #2961: `budgetAlarmEmails` に明示的に書かれた宛先だけを購読する。
+    //
+    // 以前はここに `systemAdminEmail` を無条件で足していた。`systemAdminEmail` は
+    // 「システム管理者の連絡先」であって「予算アラートを受け取りたい人」ではなく、この 2 つを
+    // 同一視していたのが原因で、deploy のたびに SNS の購読確認メールが届いていた。
+    // stack を作り直すと topic は別物になるので確認メールは再送され、未確認の購読は
+    // `SubscriptionArn` が実 ARN ではなく `PendingConfirmation` のため **API でも手でも消せない**。
+    // 作らないようにするしか手が無いので、既定では作らない。
+    notificationEmails: config.budgetAlarmEmails,
     costAllocationTags: { Project: ["TenkaCloud"] },
   });
   new FreeTierAlarms(args.observabilityStack, "FreeTierAlarms", {

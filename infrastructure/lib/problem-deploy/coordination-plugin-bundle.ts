@@ -5,6 +5,7 @@ import { RemovalPolicy } from "aws-cdk-lib";
 import { BlockPublicAccess, Bucket, BucketEncryption, type IBucket } from "aws-cdk-lib/aws-s3";
 import { BucketDeployment, Source } from "aws-cdk-lib/aws-s3-deployment";
 import { Construct } from "constructs";
+import { deploymentLogGroup } from "../utils/deployment-log-group.js";
 
 export interface CoordinationPluginBundleProps {
   /**
@@ -45,6 +46,7 @@ export class CoordinationPluginBundle extends Construct {
     }
 
     new BucketDeployment(this, "Deploy", {
+      logGroup: deploymentLogGroup(this, "DeployLogs"),
       sources: [Source.asset(staging)],
       destinationBucket: this.bucket,
     });

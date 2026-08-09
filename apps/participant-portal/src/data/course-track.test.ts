@@ -3,11 +3,15 @@ import {
   buildCourseAlignmentTracks,
   buildCourseTracks,
   type CourseProblemView,
+  type CourseTrackView,
   evaluatePrerequisites,
+  isRecommendableTrack,
   type ProblemProgress,
+  recommendedNextAcrossTracks,
   recommendNext,
   recommendNextInCourseOrder,
   resolvePrerequisiteProblemIds,
+  TRACKS_EXCLUDED_FROM_DEFAULT_RECOMMENDATION,
   toProblemProgress,
 } from "./course-track";
 import type { ProblemCatalogEntry } from "./problems";
@@ -552,5 +556,92 @@ describe("toProblemProgress", () => {
     // deploy 直後に flags が空で返ることがある。 その一瞬を「0/0 達成 = 完了」にしない。
     const [progress] = toProblemProgress([{ problemId: "p", scoring: { flags: [] } }]);
     expect(progress).toMatchObject({ solved: false, totalCheckpoints: 0 });
+  });
+});
+
+/**
+ * Issue #2965: 「次にやること」がどのトラックから出るかは、track id の文字列順で決まっていた。
+ *
+ * `assembleCourseTracks` が id を `localeCompare` で並べ、Home がその先頭を取っていたため、
+ * `advanced-cryptography-2026` が `automotive-security` にも `ipa-web-security` にも辞書順で
+ * 勝つ。結果、1 問解いた直後の初学者に大学院レベルの法演算の問題が出ていた。学習設計上の
+ * 意図ではなく、ソート順の副作用だった。
+ */
+describe("recommendedNextAcrossTracks (issue #2965)", () => {
+  function trackView(trackId: string, problemId: string): CourseTrackView {
+    const next = {
+      problemId,
+      name: problemId,
+      chapter: "Week 1",
+      order: 10,
+      solved: false,
+      locked: false,
+      solvedCheckpoints: 0,
+      totalCheckpoints: 1,
+      prerequisiteProblemIds: [],
+    } as unknown as CourseProblemView;
+    return {
+      trackId,
+      chapters: [{ chapter: "Week 1", problems: [next] }],
+      totalProblems: 1,
+      solvedProblems: 0,
+      totalCheckpoints: 1,
+      solvedCheckpoints: 0,
+      recommendedNext: next,
+    };
+  }
+
+  it("should not let the lexically first track win", () => {
+    // 起票時の実データそのもの。辞書順なら advanced-cryptography-2026 が勝つ。
+    const tracks = [
+      trackView("advanced-cryptography-2026", "ac26-bridge-experiment"),
+      trackView("automotive-security", "auto-1"),
+      trackView("ipa-web-security", "ipa-1"),
+    ];
+    expect(recommendedNextAcrossTracks(tracks)?.problemId).toBe("ipa-1");
+  });
+
+  it("should send a new player down the StackStack route (Challenge #397)", () => {
+    // プラットフォームの目標が「未経験の人が StackStack を解けるようになる」なので、
+    // StackStack ルートが他のどのトラックより先に来る。辞書順なら
+    // advanced-cryptography-2026 が、優先リストが古ければ ipa-web-security が勝つ。
+    const tracks = [
+      trackView("advanced-cryptography-2026", "ac26-bridge-experiment"),
+      trackView("ipa-web-security", "ipa-1"),
+      trackView("stackstack-route", "stackstack-onboarding"),
+    ];
+    expect(recommendedNextAcrossTracks(tracks)?.problemId).toBe("stackstack-onboarding");
+  });
+
+  it("should not depend on the order the tracks arrive in", () => {
+    // 入力順を変えても結果が変わらないこと。ここが揺れると「たまたま今は正しい」になる。
+    const forward = [
+      trackView("ipa-web-security", "ipa-1"),
+      trackView("automotive-security", "auto-1"),
+    ];
+    const reversed = [...forward].reverse();
+    expect(recommendedNextAcrossTracks(forward)?.problemId).toBe("ipa-1");
+    expect(recommendedNextAcrossTracks(reversed)?.problemId).toBe("ipa-1");
+  });
+
+  it("should keep an excluded track out of the default recommendation", () => {
+    // 除外したトラックしか候補が無ければ、何も勧めない。無関係な問題を出すより無言が正しい。
+    const tracks = [trackView("advanced-cryptography-2026", "ac26-bridge-experiment")];
+    expect(recommendedNextAcrossTracks(tracks)).toBeUndefined();
+  });
+
+  it("should keep an excluded track reachable rather than hidden", () => {
+    // 「既定導線から外す」であって「消す」ではない。track 画面の母数には残る。
+    expect(isRecommendableTrack("advanced-cryptography-2026")).toBe(false);
+    expect(TRACKS_EXCLUDED_FROM_DEFAULT_RECOMMENDATION.has("advanced-cryptography-2026")).toBe(
+      true,
+    );
+    expect(isRecommendableTrack("ipa-web-security")).toBe(true);
+  });
+
+  it("should fall back to a non-prioritised track when the prioritised ones have nothing left", () => {
+    const finished = { ...trackView("ipa-web-security", "ipa-1"), recommendedNext: undefined };
+    const other = trackView("zz-late-track", "zz-1");
+    expect(recommendedNextAcrossTracks([finished, other])?.problemId).toBe("zz-1");
   });
 });

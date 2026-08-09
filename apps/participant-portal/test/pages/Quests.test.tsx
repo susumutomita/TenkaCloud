@@ -104,7 +104,16 @@ function problem(partial: Partial<ParticipantProblemView>): ParticipantProblemVi
   };
 }
 
-function alignedCatalogEntry(id: string, name: string): ProblemCatalogEntry {
+/**
+ * [Issue #2965] courseId は引数で受ける。既定は既定推薦の対象になる講座にしてある。
+ * 大学院レベルの暗号講座 (`advanced-cryptography-program`) は既定導線から外れたので、
+ * それを既定値にすると「導線の仕組み」を見たい test まで巻き込んで落ちる。
+ */
+function alignedCatalogEntry(
+  id: string,
+  name: string,
+  courseId = "ipa-web-security",
+): ProblemCatalogEntry {
   return {
     id,
     name,
@@ -122,7 +131,7 @@ function alignedCatalogEntry(id: string, name: string): ProblemCatalogEntry {
     runtime: { provider: "docker", engine: "compose" },
     track: { id: "ac26", order: 10, chapter: "Fine-grained chapter" },
     courseAlignment: {
-      courseId: "advanced-cryptography-program",
+      courseId,
       edition: "2026",
       week: 1,
       role: "diagnostic",
@@ -437,6 +446,31 @@ describe("QuestsPage", () => {
     expect(mockNav).toHaveBeenCalledWith("/problems/job-intro");
   });
 
+  /**
+   * [#2965] Home と Quests は別のキーでトラックを組み立てている (`track.id` と
+   * `courseAlignment.courseId`)。同じ暗号講座がその 2 つで別の id を名乗るため、片方だけ除外
+   * すると画面によって案内が食い違う。ここでは Quests 側の id で除外が効くことを見る。
+   */
+  it("should not headline the excluded graduate cryptography course", () => {
+    mockAppConfig.mockReturnValue({ cloudMode: "local" });
+    const aligned = problem({
+      problemId: "course-first",
+      jobId: "job-course-first",
+      scoring: { kind: "flag", flagSubmitted: false },
+    });
+    mockListCatalog.mockReturnValue([
+      alignedCatalogEntry("course-first", "Course first", "advanced-cryptography-program"),
+    ]);
+    mockTeamView.mockReturnValue({ view: { problems: [aligned] }, error: null });
+
+    render(<QuestsPage />);
+
+    // 既定の「次の 1 問」には出さない。
+    expect(screen.queryByTestId("local-next-problem")).not.toBeInTheDocument();
+    // 消したわけではないので、講座トラックへの導線は残る。
+    expect(screen.getByTestId("course-tracks-link")).toBeInTheDocument();
+  });
+
   it("should return to the course-track guidance once the participant has solved anything", () => {
     mockAppConfig.mockReturnValue({ cloudMode: "local" });
     const intro = problem({
@@ -525,6 +559,36 @@ describe("QuestsPage", () => {
     // (SegmentedControl は segment + responsive select の 2 箇所に text を出す)
     expect(screen.getAllByText(/quests\.filter_all \(4\)/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/quests\.filter_battle \(1\)/).length).toBeGreaterThan(0);
+  });
+
+  /**
+   * [TenkaCloudChallenge #402] local play では起動できない問題に印を付ける。カタログからは
+   * 消さない (#2926 が学習パスの先を見せるために意図的に含めている) ので、印が無いと開いて
+   * 行き止まりに当たるまで分からなかった。
+   */
+  it("should badge a problem that cannot run locally", () => {
+    mockFindMeta.mockImplementation((id: string) =>
+      id === "ctf-unsolved" ? { difficulty: 3, localPlayable: false } : undefined,
+    );
+    mockTeamView.mockReturnValue({ view: { problems: [flagUnsolved] }, error: null });
+    render(<QuestsPage />);
+    expect(screen.getByText("quests.aws_only_badge")).toBeInTheDocument();
+  });
+
+  it("should not badge a problem that can run locally", () => {
+    mockFindMeta.mockImplementation((id: string) =>
+      id === "ctf-unsolved" ? { difficulty: 3, localPlayable: true } : undefined,
+    );
+    mockTeamView.mockReturnValue({ view: { problems: [flagUnsolved] }, error: null });
+    render(<QuestsPage />);
+    expect(screen.queryByText("quests.aws_only_badge")).not.toBeInTheDocument();
+  });
+
+  it("should not badge when localPlayable is unknown (AWS mode cannot see local/)", () => {
+    // undefined を false 扱いすると、本番で全問に「AWS 専用」が付く。
+    mockTeamView.mockReturnValue({ view: { problems: [flagUnsolved] }, error: null });
+    render(<QuestsPage />);
+    expect(screen.queryByText("quests.aws_only_badge")).not.toBeInTheDocument();
   });
 
   it("should navigate to the problem detail when a card link is followed", () => {
