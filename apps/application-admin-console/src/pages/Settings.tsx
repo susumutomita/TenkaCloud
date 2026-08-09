@@ -51,9 +51,16 @@ export function SettingsPage({ config }: { config: AppConfig }) {
     };
   }, [apiClient, t]);
 
+  // Issue #2984: a key with no stored per-tenant override must fall back to the
+  // deploy-time-resolved value (`config.features`, which already layers registry default →
+  // runtime-config.json override — see `resolveFeatureFlags` / `useEffectiveFeatures`), not
+  // straight to the hardcoded registry default. Otherwise this page can show a flag as OFF
+  // while the nav (`AppLayout`) and the gated page itself (e.g. `IdentityProviders`), which
+  // both read `config.features?.<key>`, correctly show it as ON.
   const resolveEnabled = useCallback(
-    (key: FlagKey): boolean => flags?.[key] ?? FEATURE_REGISTRY[key].defaultEnabled,
-    [flags],
+    (key: FlagKey): boolean =>
+      flags?.[key] ?? config.features?.[key] ?? FEATURE_REGISTRY[key].defaultEnabled,
+    [flags, config.features],
   );
 
   const handleToggle = useCallback(

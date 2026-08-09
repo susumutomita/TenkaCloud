@@ -70,6 +70,28 @@ describe("SettingsPage", () => {
     expect(toggles.some((el) => (el as HTMLInputElement).checked)).toBe(true);
   });
 
+  it("should fall back to the deploy-time config.features value (not the registry default) when a key has no stored override", async () => {
+    // Issue #2984: e.g. a Lite deploy with a `CDK_PARAM_FEATURES` override that turns samlSso
+    // ON, but no tenant admin has ever saved a per-tenant override for it yet. Nav / the
+    // IdentityProviders page both read `config.features?.samlSso`, so Settings must agree.
+    mockUseApiClient.mockReturnValue(
+      fakeApiClient({ get: vi.fn().mockResolvedValue({ flags: {} }) }),
+    );
+    const configWithDeployTimeOverride = {
+      features: {
+        samlSso: true,
+        nonAwsRuntime: false,
+        redTeam: true,
+        challengePrerequisiteGate: false,
+      },
+    } as unknown as AppConfig;
+    render(<SettingsPage config={configWithDeployTimeOverride} />);
+
+    await screen.findByText("samlSso");
+    const samlToggle = screen.getAllByRole("checkbox")[0] as HTMLInputElement;
+    expect(samlToggle.checked).toBe(true);
+  });
+
   it("should show a load error when GET /feature-flags fails", async () => {
     mockUseApiClient.mockReturnValue(
       fakeApiClient({ get: vi.fn().mockRejectedValue(new Error("boom")) }),
