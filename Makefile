@@ -384,6 +384,13 @@ deploy: env-check-lite build ## Deploy Lite mode to AWS | Lite modeをAWSへdepl
 #   4. client/client-template deploy (CloudFront + S3 for Admin/Application UI)
 deploy-saas: env-check ## Deploy multi-tenant SaaS mode to AWS | multi-tenant SaaS modeをAWSへdeploy
 	@cd scripts && bash install.sh "$${SYSTEM_ADMIN_EMAIL}"
+#: CDK が construct 内部で singleton として作る provider Lambda (S3AutoDeleteObjects /
+#: AWSCDKOpenIdConnectProvider) は log 設定の prop を公開していないので、 その log group は
+#: 無期限保持のまま生まれる (#2960)。 deploy 直後に backstop を当てて拾う。
+	bash scripts/enforce-log-retention.sh
+
+enforce-log-retention: env-check ## Fill in retention on tenkacloud log groups that have none | retention 未設定の log group に retention を当てる
+	bash scripts/enforce-log-retention.sh
 
 destroy: env-check-lite ## Delete Lite-mode AWS resources | Lite modeのAWS resourceを削除
 	bun run scripts/tenkacloud-lite.ts down

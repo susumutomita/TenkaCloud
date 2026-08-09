@@ -8,6 +8,7 @@ import {
   ViewerProtocolPolicy,
 } from "aws-cdk-lib/aws-cloudfront";
 import { S3BucketOrigin } from "aws-cdk-lib/aws-cloudfront-origins";
+import type { LogGroup } from "aws-cdk-lib/aws-logs";
 import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3";
 import { BucketDeployment, CacheControl, Source } from "aws-cdk-lib/aws-s3-deployment";
 import type { Construct } from "constructs";
@@ -15,6 +16,7 @@ import {
   buildCustomDomainDistributionProps,
   type CustomDomainConfig,
 } from "../security/cloudfront-custom-domain.js";
+import { deploymentLogGroup } from "../utils/deployment-log-group.js";
 
 /**
  * Issue #2207: SPA hosting (S3 private + OAI + CloudFront + SPA fallback + dist deployment) の
@@ -81,6 +83,7 @@ export function buildSpaHosting(scope: Construct, props: SpaHostingProps): SpaHo
   });
 
   new BucketDeployment(scope, "SiteDeployment", {
+    logGroup: spaDeploymentLogGroup(scope),
     sources: [
       props.sourceExclude
         ? Source.asset(props.distDir, { exclude: [...props.sourceExclude] })
@@ -97,6 +100,23 @@ export function buildSpaHosting(scope: Construct, props: SpaHostingProps): SpaHo
 }
 
 /**
+ * この scope の `BucketDeployment` provider が使う LogGroup (#2960)。
+ *
+ * `SiteDeployment` と `RuntimeConfigDeployment` は同じ stack にあるとき同じ provider Lambda を
+ * 共有する (`tenant-template-pooled` がその形)。 別々の LogGroup を渡すと効くのは片方だけで、
+ * もう片方は誰も使わない log group として stack に残る — 掃除されない resource を減らす変更で
+ * 掃除されない resource を増やすことになる。 だから scope ごとに 1 つだけ作って共有する。
+ *
+ * ID が `SiteDeploymentLogs` ではなく `BucketDeploymentLogs` なのは、 `runtime-config` だけを
+ * 配る stack (`admin-console-runtime-config`) にも同じ関数から作られるため。 site を配っていない
+ * stack に `SiteDeploymentLogs` という名前の log group が現れると、 読んだ人が実態を誤解する。
+ */
+function spaDeploymentLogGroup(scope: Construct): LogGroup {
+  const existing = scope.node.tryFindChild("BucketDeploymentLogs");
+  return (existing as LogGroup | undefined) ?? deploymentLogGroup(scope, "BucketDeploymentLogs");
+}
+
+/**
  * Issue #867: `runtime-config.json` を **絶対にキャッシュさせず** (no-store / no-cache /
  * must-revalidate)、 deploy 毎に CloudFront invalidation する。 古い設定が残ると
  * テナント設定の混線 / participant 全員の画面故障につながるため、 この cache 方針は
@@ -109,6 +129,7 @@ export function deployRuntimeConfigJson(
   data: Record<string, unknown>,
 ): void {
   new BucketDeployment(scope, "RuntimeConfigDeployment", {
+    logGroup: spaDeploymentLogGroup(scope),
     sources: [Source.jsonData("runtime-config.json", data)],
     destinationBucket: target.siteBucket,
     distribution: target.distribution,
