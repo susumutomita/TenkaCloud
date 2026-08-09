@@ -26,6 +26,8 @@ function buildIO(opts: {
   readonly inheritExitCode?: number;
   readonly capture?: (cmd: string, args: readonly string[]) => SpawnCaptureResult;
   readonly confirmAnswer?: boolean;
+  /** Issue 2992: Turso control-data 削除の結果を差し替える。 */
+  readonly tursoPurgeExitCode?: number;
 }): {
   readonly io: CliIO;
   readonly stdout: string[];
@@ -53,6 +55,10 @@ function buildIO(opts: {
     spawnCapture: async (cmd, args) => {
       calls.push({ cmd, args: [...args], mode: "capture" });
       return opts.capture ? opts.capture(cmd, [...args]) : { code: 0, stdout: "", stderr: "" };
+    },
+    purgeTursoControlData: async () => {
+      calls.push({ cmd: "turso-reset", args: [], mode: "capture" });
+      return opts.tursoPurgeExitCode ?? 0;
     },
     confirm: async (q) => {
       confirms.push(q);
@@ -293,6 +299,7 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
     const io: CliIO = {
       stdout: () => undefined,
       stderr: () => undefined,
+      purgeTursoControlData: async () => 0,
       spawnInherit: async (cmd: string, args: readonly string[]) => {
         calls.push({ cmd, args });
         if (firstCall) {
@@ -1062,5 +1069,96 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
         restore();
       }
     });
+  });
+});
+
+/**
+ * Turso backend の control-data teardown (Issue 2992)。
+ *
+ * DynamoDB backend では table が stack の持ち物なので、 stack を消せば control-data も消える。
+ * Turso backend は database が AWS の外にあるため、 stack を全部消しても event / team /
+ * deployment の行がそのまま残る。 実測で destroy 完了後に残っていた。
+ *
+ * ここで固定するのは 2 点。 destroy-all では実際に消すこと。 通常の destroy では消さない
+ * 代わりに黙らないこと。 後者が無いと、 運営は「全部消えた」と読んで気づけない。
+ */
+describe("down: Turso control-data (Issue 2992)", () => {
+  const TURSO_ENV = {
+    CDK_PARAM_CONTROL_DATA_BACKEND: "turso",
+    TENKACLOUD_LITE_DOWN_YES: "1",
+  } as const;
+
+  /**
+   * `--purge-retained-data` は先に stack-owned resource を列挙する。 stub が無いと
+   * discovery が失敗して exit 1 になり、 Turso の検証がその手前で潰れる。 ここでは
+   * Turso 側だけを見たいので、 AWS 資源は「無い」と答える。
+   */
+  const noStackResources = (_cmd: string, args: readonly string[]) =>
+    args.includes("list-stack-resources")
+      ? { code: 0, stdout: JSON.stringify({ StackResourceSummaries: [] }), stderr: "" }
+      : { code: 0, stdout: "", stderr: "" };
+
+  /** env を差し替えて down を走らせ、必ず元に戻す。 */
+  async function runDown(args: readonly string[], env: Record<string, string>, io: CliIO) {
+    const saved = new Map<string, string | undefined>();
+    for (const [key, value] of Object.entries(env)) {
+      saved.set(key, process.env[key]);
+      process.env[key] = value;
+    }
+    try {
+      return await main(["down", ...args], io);
+    } finally {
+      for (const [key, value] of saved) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  }
+
+  it("destroy-all should purge Turso control-data before deleting the stacks", async () => {
+    const { io, calls } = buildIO({ confirmAnswer: true, capture: noStackResources });
+    const code = await runDown(["--yes", "--purge-retained-data"], { ...TURSO_ENV }, io);
+    expect(code).toBe(0);
+    const purgeIndex = calls.findIndex((c) => c.cmd === "turso-reset");
+    expect(purgeIndex).toBeGreaterThanOrEqual(0);
+    // stack 削除より前であること。 auth token は stack が作る SSM parameter から読むので、
+    // 先に stack を消すと認証手段ごと消えて削除できなくなる。
+    const firstDestroy = calls.findIndex((c) => c.args.includes("destroy"));
+    expect(firstDestroy).toBeGreaterThanOrEqual(0);
+    expect(purgeIndex).toBeLessThan(firstDestroy);
+  });
+
+  it("destroy-all should abort when the Turso purge fails", async () => {
+    // 消せていないのに成功扱いにすると、 運営は片付いたと信じて残骸に気づけない。
+    const { io, calls } = buildIO({
+      confirmAnswer: true,
+      capture: noStackResources,
+      tursoPurgeExitCode: 3,
+    });
+    const code = await runDown(["--yes", "--purge-retained-data"], { ...TURSO_ENV }, io);
+    expect(code).toBe(3);
+    expect(calls.some((c) => c.args.includes("destroy"))).toBe(false);
+  });
+
+  it("plain destroy should not purge, but must say the rows survive", async () => {
+    const { io, calls, stdout } = buildIO({ confirmAnswer: true });
+    const code = await runDown(["--yes"], { ...TURSO_ENV }, io);
+    expect(code).toBe(0);
+    expect(calls.some((c) => c.cmd === "turso-reset")).toBe(false);
+    const text = stdout.join("");
+    expect(text).toContain("turso-reset");
+    expect(text).toContain("残ります");
+  });
+
+  it("should stay silent about Turso on a DynamoDB-backend teardown", async () => {
+    const { io, calls, stdout } = buildIO({ confirmAnswer: true });
+    const code = await runDown(
+      ["--yes"],
+      { CDK_PARAM_CONTROL_DATA_BACKEND: "dynamodb", TENKACLOUD_LITE_DOWN_YES: "1" },
+      io,
+    );
+    expect(code).toBe(0);
+    expect(calls.some((c) => c.cmd === "turso-reset")).toBe(false);
+    expect(stdout.join("")).not.toContain("turso-reset");
   });
 });
