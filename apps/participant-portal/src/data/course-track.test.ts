@@ -601,6 +601,18 @@ describe("recommendedNextAcrossTracks (issue #2965)", () => {
     expect(recommendedNextAcrossTracks(tracks)?.problemId).toBe("ipa-1");
   });
 
+  it("should send a new player down the StackStack route (Challenge #397)", () => {
+    // プラットフォームの目標が「未経験の人が StackStack を解けるようになる」なので、
+    // StackStack ルートが他のどのトラックより先に来る。辞書順なら
+    // advanced-cryptography-2026 が、優先リストが古ければ ipa-web-security が勝つ。
+    const tracks = [
+      trackView("advanced-cryptography-2026", "ac26-bridge-experiment"),
+      trackView("ipa-web-security", "ipa-1"),
+      trackView("stackstack-route", "stackstack-onboarding"),
+    ];
+    expect(recommendedNextAcrossTracks(tracks)?.problemId).toBe("stackstack-onboarding");
+  });
+
   it("should not depend on the order the tracks arrive in", () => {
     // 入力順を変えても結果が変わらないこと。ここが揺れると「たまたま今は正しい」になる。
     const forward = [

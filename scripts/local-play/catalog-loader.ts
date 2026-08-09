@@ -145,11 +145,21 @@ export function loadProblemCatalogEntries(
   const skipped: SkippedCatalogEntry[] = [];
   for (const root of roots) {
     for (const problemId of fs.readDirNames(root)) {
-      const metadataPath = join(root, problemId, "metadata.json");
+      const problemDir = join(root, problemId);
+      const metadataPath = join(problemDir, "metadata.json");
       if (!fs.existsSync(metadataPath)) continue;
       const projected = projectCatalogEntry(metadataPath, fs);
-      if (projected.ok) entries.push(projected.entry);
-      else skipped.push({ problemId, reason: projected.reason });
+      if (projected.ok) {
+        // [Challenge #402] `local/` を持たない問題は `make local` では起動できない。
+        // カタログからは消さない (#2926 が学習パスの先を見せるために意図的に含めている) ので、
+        // 起動できるかどうかを entry に載せてポータル側が明示できるようにする。
+        // runtime フィールドの有無では判定しない — `hello-multicloud` は runtime を持つが
+        // `kind: "composite"` (4 クラウドの実 deploy 定義のみ) で `local/` を持たない。
+        entries.push({
+          ...projected.entry,
+          localPlayable: fs.existsSync(join(problemDir, "local")),
+        });
+      } else skipped.push({ problemId, reason: projected.reason });
     }
   }
   return {

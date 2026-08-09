@@ -78,6 +78,9 @@ export interface CourseChapterView {
  * そのもので、次に別のトラックが増えたときに同じ壊れ方をする。
  */
 export const DEFAULT_RECOMMENDATION_TRACK_PRIORITY: readonly string[] = [
+  // TenkaCloudChallenge #397: 「未経験の人が StackStack を解けるようになる」が
+  // プラットフォームの目標なので、既定導線はそのルートを先頭に置く。
+  "stackstack-route",
   "ipa-web-security",
   "automotive-security",
 ];

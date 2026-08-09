@@ -157,6 +157,23 @@ export interface ProblemCatalogEntry {
   readonly graphNodes: readonly ParticipantGraphNode[];
   /** Issue #2786: participant-safe な relation (teaches / covers / requires のみ)。 */
   readonly graphRelations: readonly ParticipantGraphRelation[];
+  /**
+   * [TenkaCloudChallenge #402] local play で起動できる問題か。
+   *
+   * `false` は「この問題は実 AWS (または他クラウド) への deploy が要り、`make local` では
+   * 起動できない」。`local/` ディレクトリ (docker-compose.yml と app 実装) を持たない問題が
+   * これにあたる。実測された 6 問は `cloudflare-api-security` / `hello-multicloud` /
+   * `hello-world` / `http-query` / `wp2shell-friday-night-patch` / `x402-paywall`。
+   *
+   * **カタログから消さずに印を付ける**のは、#2926 が「学習パスの先が見えること」を理由に
+   * AWS 専用問題を意図的にカタログへ含めているため。消すとその決定を黙って覆すことになる。
+   * 一方で印が無いと、開けるのに起動できない行き止まりに当たって初めて分かる。
+   *
+   * `undefined` は「判定していない」。AWS mode の投影は `local/` を見られないのでこうなる。
+   * **`undefined` を `false` として扱わないこと** — AWS mode で全問に「ローカル実行不可」の
+   * 印が付く。
+   */
+  readonly localPlayable?: boolean;
 }
 
 /**

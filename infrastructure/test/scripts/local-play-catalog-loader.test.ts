@@ -134,6 +134,75 @@ describe("loadProblemCatalogEntries (#2925 / #2926)", () => {
     expect(skipped).toEqual([]);
   });
 
+  /**
+   * [TenkaCloudChallenge #402] カタログに出るのに起動できない問題があり、開いて
+   * 「deploy されていません。operator にお問い合わせください」に当たって初めて分かる、
+   * という行き止まりがあった。local play の operator は本人なので、その案内では何もできない。
+   *
+   * カタログから消す対処は採らない。#2926 が「学習パスの先が見えること」を理由に AWS 専用
+   * 問題を意図的に含めているので、消すとその決定を黙って覆すことになる。代わりに
+   * 起動できるかどうかを entry に載せ、ポータルが理由を名指しできるようにする。
+   */
+  describe("localPlayable (#402)", () => {
+    /** metadata.json に加えて `local/` の有無も表現できる fake tree。 */
+    function fsWithLocalDirs(
+      tree: Readonly<Record<string, Readonly<Record<string, string>>>>,
+      withLocal: readonly string[],
+    ) {
+      const base = fakeFs(tree);
+      const localDirs = new Set<string>();
+      for (const [root, problems] of Object.entries(tree)) {
+        for (const problemId of Object.keys(problems)) {
+          if (withLocal.includes(problemId)) localDirs.add(`${root}/${problemId}/local`);
+        }
+      }
+      return { ...base, existsSync: (p: string) => base.existsSync(p) || localDirs.has(p) };
+    }
+
+    const TREE = {
+      [CHALLENGES]: {
+        "sqli-demo": metadata("sqli-demo"),
+        "wp2shell-friday-night-patch": metadata("wp2shell-friday-night-patch"),
+      },
+    };
+
+    it("should mark a problem that ships a local/ directory as playable", () => {
+      const { entries } = loadProblemCatalogEntries(
+        [CHALLENGES],
+        fsWithLocalDirs(TREE, ["sqli-demo"]),
+      );
+      expect(entries.find((e) => e.id === "sqli-demo")?.localPlayable).toBe(true);
+    });
+
+    it("should mark an AWS-only problem as not playable rather than dropping it", () => {
+      // 消えていないこと自体が #2926 の維持。印だけが増える。
+      const { entries } = loadProblemCatalogEntries(
+        [CHALLENGES],
+        fsWithLocalDirs(TREE, ["sqli-demo"]),
+      );
+      const awsOnly = entries.find((e) => e.id === "wp2shell-friday-night-patch");
+      expect(
+        awsOnly,
+        "AWS 専用問題がカタログから消えている (#2926 の決定を覆している)",
+      ).toBeDefined();
+      expect(awsOnly?.localPlayable).toBe(false);
+    });
+
+    it("should not depend on the runtime field, which hello-multicloud does declare", () => {
+      // `hello-multicloud` は runtime を持つが kind: "composite" (4 クラウドの実 deploy 定義)
+      // で local/ を持たない。runtime の有無で判定するとこの 1 問を取りこぼす。
+      const tree = {
+        [CHALLENGES]: {
+          "hello-multicloud": metadata("hello-multicloud", {
+            runtime: { provider: "aws", engine: "cloudformation" },
+          }),
+        },
+      };
+      const { entries } = loadProblemCatalogEntries([CHALLENGES], fsWithLocalDirs(tree, []));
+      expect(entries[0]?.localPlayable).toBe(false);
+    });
+  });
+
   it("should include problems that are not locally playable (the course track needs them)", () => {
     // An AWS-only problem has no local/docker-compose.yml, so `listLocalPlayProblems`
     // drops it. The learning path must still show it or everything ahead of the
@@ -233,6 +302,9 @@ describe("runtime catalog wire payload carries nothing participant-hostile (#292
     "instructions",
     "interTeamCoordination",
     "learningGoals",
+    // [Challenge #402] 「この問題は local play では起動できない」。参加者に見せてよいどころか、
+    // 見せないと開いてから行き止まりに当たるまで分からない情報なので allowlist に入れる。
+    "localPlayable",
     "name",
     "phases",
     "runtime",

@@ -561,6 +561,36 @@ describe("QuestsPage", () => {
     expect(screen.getAllByText(/quests\.filter_battle \(1\)/).length).toBeGreaterThan(0);
   });
 
+  /**
+   * [TenkaCloudChallenge #402] local play では起動できない問題に印を付ける。カタログからは
+   * 消さない (#2926 が学習パスの先を見せるために意図的に含めている) ので、印が無いと開いて
+   * 行き止まりに当たるまで分からなかった。
+   */
+  it("should badge a problem that cannot run locally", () => {
+    mockFindMeta.mockImplementation((id: string) =>
+      id === "ctf-unsolved" ? { difficulty: 3, localPlayable: false } : undefined,
+    );
+    mockTeamView.mockReturnValue({ view: { problems: [flagUnsolved] }, error: null });
+    render(<QuestsPage />);
+    expect(screen.getByText("quests.aws_only_badge")).toBeInTheDocument();
+  });
+
+  it("should not badge a problem that can run locally", () => {
+    mockFindMeta.mockImplementation((id: string) =>
+      id === "ctf-unsolved" ? { difficulty: 3, localPlayable: true } : undefined,
+    );
+    mockTeamView.mockReturnValue({ view: { problems: [flagUnsolved] }, error: null });
+    render(<QuestsPage />);
+    expect(screen.queryByText("quests.aws_only_badge")).not.toBeInTheDocument();
+  });
+
+  it("should not badge when localPlayable is unknown (AWS mode cannot see local/)", () => {
+    // undefined を false 扱いすると、本番で全問に「AWS 専用」が付く。
+    mockTeamView.mockReturnValue({ view: { problems: [flagUnsolved] }, error: null });
+    render(<QuestsPage />);
+    expect(screen.queryByText("quests.aws_only_badge")).not.toBeInTheDocument();
+  });
+
   it("should navigate to the problem detail when a card link is followed", () => {
     mockTeamView.mockReturnValue({ view: { problems: [flagUnsolved] }, error: null });
     render(<QuestsPage />);
