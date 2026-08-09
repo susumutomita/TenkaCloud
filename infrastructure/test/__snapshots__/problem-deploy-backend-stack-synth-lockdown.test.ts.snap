@@ -3600,6 +3600,11 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — codebuild 
         "Ref": "CompetitorBootstrapHostingDeploymentAwsCliLayer8D3AB487",
       },
     ],
+    "LoggingConfig": {
+      "LogGroup": {
+        "Ref": "CompetitorBootstrapHostingDeploymentLogs86C5BC2C",
+      },
+    },
     "Role": {
       "Fn::GetAtt": [
         "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756CServiceRole89A01265",
@@ -3867,6 +3872,7 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — codebuild 
   "CompetitorBootstrapHostingBucketPolicyFA5A3F04",
   "CompetitorBootstrapHostingDeploymentAwsCliLayer8D3AB487",
   "CompetitorBootstrapHostingDeploymentCustomResource0FC3A573",
+  "CompetitorBootstrapHostingDeploymentLogs86C5BC2C",
   "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756C81C01536",
   "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756CServiceRole89A01265",
   "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756CServiceRoleDefaultPolicy88902FDF",
@@ -7597,6 +7603,11 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — lambda-dep
         "Ref": "ProblemArtifactsAwsCliLayerB6913F4C",
       },
     ],
+    "LoggingConfig": {
+      "LogGroup": {
+        "Ref": "ProblemArtifactsLogs9CD05026",
+      },
+    },
     "MemorySize": 256,
     "Role": {
       "Fn::GetAtt": [
@@ -7614,6 +7625,11 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — lambda-dep
         "Ref": "CompetitorBootstrapHostingDeploymentAwsCliLayer8D3AB487",
       },
     ],
+    "LoggingConfig": {
+      "LogGroup": {
+        "Ref": "CompetitorBootstrapHostingDeploymentLogs86C5BC2C",
+      },
+    },
     "Role": {
       "Fn::GetAtt": [
         "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756CServiceRole89A01265",
@@ -7887,6 +7903,7 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — lambda-dep
   "CompetitorBootstrapHostingBucketPolicyFA5A3F04",
   "CompetitorBootstrapHostingDeploymentAwsCliLayer8D3AB487",
   "CompetitorBootstrapHostingDeploymentCustomResource0FC3A573",
+  "CompetitorBootstrapHostingDeploymentLogs86C5BC2C",
   "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756C256MiB5F7BD223",
   "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756C256MiBServiceRoleDefaultPolicyE5468F0E",
   "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756C256MiBServiceRoleF991ED9F",
@@ -7947,6 +7964,7 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — lambda-dep
   "GenericScoringScheduleAllowEventRuleTestStackGenericScoringFunctionA02E5594AF7F91BC",
   "ProblemArtifactsAwsCliLayerB6913F4C",
   "ProblemArtifactsCustomResource256MiB0BA85DBF",
+  "ProblemArtifactsLogs9CD05026",
   "ProblemEndpointsTableEB12A2E1",
   "SystemAuditWriterCodeBuildFailureRule0847123D",
   "SystemAuditWriterCodeBuildFailureRuleAllowEventRuleTestStackSystemAuditWriterFunctionD2FD4CDFDED92DEA",
@@ -11583,6 +11601,11 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — lite mode 
         "Ref": "CompetitorBootstrapHostingDeploymentAwsCliLayer8D3AB487",
       },
     ],
+    "LoggingConfig": {
+      "LogGroup": {
+        "Ref": "CompetitorBootstrapHostingDeploymentLogs86C5BC2C",
+      },
+    },
     "Role": {
       "Fn::GetAtt": [
         "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756CServiceRole89A01265",
@@ -11850,6 +11873,7 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — lite mode 
   "CompetitorBootstrapHostingBucketPolicyFA5A3F04",
   "CompetitorBootstrapHostingDeploymentAwsCliLayer8D3AB487",
   "CompetitorBootstrapHostingDeploymentCustomResource0FC3A573",
+  "CompetitorBootstrapHostingDeploymentLogs86C5BC2C",
   "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756C81C01536",
   "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756CServiceRole89A01265",
   "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756CServiceRoleDefaultPolicy88902FDF",
@@ -14516,6 +14540,11 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — pure-sql t
         "Ref": "CompetitorBootstrapHostingDeploymentAwsCliLayer8D3AB487",
       },
     ],
+    "LoggingConfig": {
+      "LogGroup": {
+        "Ref": "CompetitorBootstrapHostingDeploymentLogs86C5BC2C",
+      },
+    },
     "Role": {
       "Fn::GetAtt": [
         "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756CServiceRole89A01265",
@@ -14765,6 +14794,7 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — pure-sql t
   "CompetitorBootstrapHostingBucketPolicyFA5A3F04",
   "CompetitorBootstrapHostingDeploymentAwsCliLayer8D3AB487",
   "CompetitorBootstrapHostingDeploymentCustomResource0FC3A573",
+  "CompetitorBootstrapHostingDeploymentLogs86C5BC2C",
   "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756C81C01536",
   "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756CServiceRole89A01265",
   "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756CServiceRoleDefaultPolicy88902FDF",
