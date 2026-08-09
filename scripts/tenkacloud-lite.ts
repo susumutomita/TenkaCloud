@@ -38,11 +38,14 @@ import {
   resolveLiteEnvironment,
   resolveLiteStackNames,
 } from "../infrastructure/lib/tenkacloud-lite/stack-names";
+import { systemProcessRunner } from "./cli/process";
 import {
   parseStackOwnedCleanupResources,
   purgeLiteStackOwnedResources,
 } from "./lib/lite-complete-teardown";
+import { planTursoTeardown } from "./lib/lite-turso-teardown";
 import { reportRetainedTables } from "./lib/retained-tables";
+import { runTursoReset, tursoPipelinePost } from "./ops/turso-reset";
 
 export { parseStackOwnedCleanupResources };
 
@@ -83,6 +86,12 @@ export interface CliIO {
    * scripted answer を返す stub に差し替える。
    */
   readonly confirm: (question: string) => Promise<boolean>;
+  /**
+   * Issue #2992: Turso backend の control-data を全行削除する (スキーマは維持)。 実体は
+   * `make turso-reset` と同じ `runTursoReset` で、 destroy 側にロジックを複製しない。
+   * 非 turso 環境では呼ばれない (`planTursoTeardown` が判定する)。
+   */
+  readonly purgeTursoControlData: () => Promise<number>;
   /**
    * `cdk destroy` synths the app, which stages the SPA dist dirs as BucketDeployment
    * assets even though teardown never builds the SPAs. Ensure each dir exists (empty is
@@ -515,6 +524,19 @@ async function cmdDown(args: readonly string[], io: CliIO): Promise<number> {
     if (purgeCode !== 0) return purgeCode;
   }
 
+  // Issue #2992: Turso backend の control-data は AWS の外にあるので、 stack を消しても
+  // 残る。 stack 削除の *前* に消すこと — auth token は stack が作る SSM parameter から
+  // 読むため、 先に stack を消すと認証手段ごと消えて手も足も出なくなる。
+  const tursoPlan = planTursoTeardown(process.env, purgeRetainedData);
+  if (tursoPlan.kind === "purge") {
+    // teardown 全体の confirm は既に取ってあるので、 ここで二度目を聞かない (assumeYes)。
+    const tursoCode = await io.purgeTursoControlData();
+    if (tursoCode !== 0) {
+      io.stderr("[lite] Turso control-data の削除に失敗しました。 teardown を中止します。\n");
+      return tursoCode;
+    }
+  }
+
   // `cdk destroy` synths the app the same way `cdk deploy` does, so the shared CDK app
   // still requires CDK_PARAM_SYSTEM_ADMIN_EMAIL. Derive it from the tenant admin email so
   // `make destroy` works with only TENANT_ADMIN_EMAIL set (the Lite .env the CodeBuild
@@ -548,6 +570,9 @@ async function cmdDown(args: readonly string[], io: CliIO): Promise<number> {
     io.stdout("[lite] complete teardown succeeded; stack-owned retained data was removed.\n");
   } else {
     await reportRetainedTables((args) => io.spawnCapture("aws", args), io.stdout);
+    // DynamoDB backend は上の残存 table 警告で気づけるが、 Turso backend はそこに現れない。
+    // 何も言わないと「全部消えた」と読めてしまうので、 明示する。
+    if (tursoPlan.kind === "warn") io.stdout(tursoPlan.message);
   }
   return 0;
 }
@@ -656,6 +681,20 @@ export function defaultIO(): CliIO {
     ensureDir: (dir) => {
       mkdirSync(dir, { recursive: true });
     },
+    // Issue #2992: `make turso-reset` と同じ実装を呼ぶ。 assumeYes は teardown 全体の
+    // confirm を既に取っているため (ここで二度聞かない)。 interactive:false と合わせて、
+    // CodeBuild launcher からの非対話 teardown でも同じ経路が通る。
+    purgeTursoControlData: () =>
+      runTursoReset({
+        env: process.env,
+        environment: LITE_ENVIRONMENT,
+        processRunner: systemProcessRunner,
+        httpPost: tursoPipelinePost,
+        confirm: async () => true,
+        log: (message) => process.stdout.write(`${message}\n`),
+        interactive: false,
+        assumeYes: true,
+      }),
     confirm: async (question) => {
       // 非 TTY (= CI / pipe) では false を返して safety net とする。
       // bypass したい場合は呼び出し側で --yes / TENKACLOUD_LITE_DOWN_YES=1 を渡す。
