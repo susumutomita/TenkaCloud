@@ -123,7 +123,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" />
-<link rel="stylesheet" href="./styles/main.css?v=0a1b566b74" />
+<link rel="stylesheet" href="./styles/main.css?v=4dc0575463" />
 </head>
 <body>
 
@@ -512,6 +512,26 @@
   </div>
 </section>
 
+<!-- 書籍。 両版を並べて出すのが要点で、フッターの 1 行では読者から見て
+     「自分の言語の版しか存在しない」 ように見えていた (Issue #2974)。 -->
+<section id="book">
+  <div class="wrap audience-intro">
+    <div class="eyebrow" data-i18n="book.eyebrow">本で読む</div>
+    <h2 data-i18n="book.h2">作り方を、一冊にまとめてあります。</h2>
+    <p class="lead" data-i18n="book.lead">ローカル Challenge、AWS Challenge、AWS Battle を簡単な順に一から作り、 複数チームで遊べる競技として動かすまでを扱う本です。 TenkaCloud を題材にしていますが、 読むのに AWS アカウントも TenkaCloud の導入も要りません。 日本語版と英語版があります。</p>
+    <div class="book-editions">
+      <a class="book-edition" href="https://zenn.dev/bull/books/cloud-competition" target="_blank" rel="noopener noreferrer" data-cta="book-ja">
+        <span class="book-edition-title" data-i18n="book.jaTitle">自分で作るクラウド競技</span>
+        <span class="book-edition-meta"><span data-i18n="book.jaLang">日本語版</span> · Zenn</span>
+      </a>
+      <a class="book-edition" href="https://leanpub.com/build-your-own-cloud-competition" target="_blank" rel="noopener noreferrer" data-cta="book-en">
+        <span class="book-edition-title">Build Your Own Cloud Competition</span>
+        <span class="book-edition-meta"><span data-i18n="book.enLang">英語版</span> · Leanpub</span>
+      </a>
+    </div>
+  </div>
+</section>
+
 <section id="offerings" class="alt">
   <div class="wrap audience-intro">
     <div class="eyebrow" data-i18n="offerings.eyebrow">Commercial offerings</div>
@@ -709,7 +729,7 @@
 
 <script src="./ink-bg.js" defer></script>
 <script src="./contact-form.js?v=7301ba7ae8" defer></script>
-<script src="./app.js?v=c2cc150562" defer></script>
+<script src="./app.js?v=8fd35e7a3a" defer></script>
 
 </body>
 </html>
