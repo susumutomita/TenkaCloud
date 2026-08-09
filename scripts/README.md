@@ -41,7 +41,7 @@ lives:
 | `quality/` | Code-quality ratchets: `check-duplication.ts` + `duplication-baseline.json` (jscpd baseline gate, `make dup-check` — fails only when duplication grows past the baseline); `check-infra-critical-coverage.ts` + `infra-critical-paths.ts` + `infra-critical-coverage-baseline.json` (infrastructure high-risk file coverage ratchet, `make infra-coverage-check` — fails only when coverage drops below baseline for a registered AssumeRole/ExternalId, tenant-isolation, deploy-state-machine, scoring, delete-lifecycle, or auth-boundary file, #2758) |
 | `landing/` | Landing-site generators: `generate-landing-docs.ts`, `generate-landing-locales.ts` (both support `--check`), `landing-seo.test.ts`, and `onboarding-videos/` (YouTube upload masters render only to an explicit external output directory) |
 | `onboard/` | First-run onboarding helpers behind `tenkacloud-onboard.ts`: `diagnose.ts`, `plan.ts`, `report.ts`, `onboard-bootstrap.sh`, `codespaces-setup.sh` (devcontainer `postCreateCommand`) |
-| `ops/` | Operator utilities for a running deployment: `env-init.ts` (`make env-check` wizard), `turso-live-guide.ts` (`make turso-live-guide` / read-only preflight and CFn verification), `scale-event-capacity.ts` + `capacity-model.ts` (DDB capacity), `backfill-tenant-registrations.ts` (one-time SBT 0.9.5 migration), `disruption-live-fire.ts`, `report-retained-tables.ts` (used by `cleanup.sh`), `participant-portal-runtime-config.ts` (`make dev` mock config), `print-source-bundle-lifecycle.ts` |
+| `ops/` | Operator utilities for a running deployment: `env-init.ts` (`make env-check` wizard), `turso-live-guide.ts` (`make turso-live-guide` / read-only preflight and CFn verification), `scan-lite-residual-resources.ts` (read-only Lite residual proof foundation, #2977), `scale-event-capacity.ts` + `capacity-model.ts` (DDB capacity), `backfill-tenant-registrations.ts` (one-time SBT 0.9.5 migration), `disruption-live-fire.ts`, `report-retained-tables.ts` (used by `cleanup.sh`), `participant-portal-runtime-config.ts` (`make dev` mock config), `print-source-bundle-lifecycle.ts` |
 | `local-play/` | Modules behind `tenkacloud-local.ts` (container runner, manifest, readiness, scoring API) |
 | `cli/` | Unified CLI command adapters and process boundary behind `tenkacloud.ts` |
 | `lib/` | Shared helpers for the top-level shell scripts and `ops/` CLIs (`battles-common.sh`, `names.sh`, capacity/disruption/retained-tables logic) |
@@ -58,6 +58,69 @@ lives:
 Tests for scripts live either next to the script (`bun test`, wired into the
 root `test` script) or under `infrastructure/test/scripts/` (vitest, runs in
 the `infrastructure` workspace — `make test-scripts` is the fast path).
+
+## Lite residual-resource scanner foundation (#2977)
+
+`ops/scan-lite-residual-resources.ts` inventories CloudFormation, DynamoDB,
+S3, CloudWatch Logs, SNS, Budgets, and CodeBuild after an STS account
+preflight. It only uses identity, list, describe, and tag reads; it has no
+delete or other mutation path. Do not use its existence as evidence that the
+full #2977 golden path driver is complete: launcher, deploy/destroy, and
+release-manifest integration remain separate work.
+
+Capture a strict ownership JSON artifact before teardown. It must contain the
+same run/account/region/environment, the immutable release identity, and all
+seven exact resource-ID arrays (stack, table, bucket, log-group, budget, and
+project names; SNS topic ARNs):
+
+```json
+{
+  "evidenceVersion": 1,
+  "runId": "<correlation-id>",
+  "mode": "lite",
+  "environment": "development",
+  "accountId": "<12-digit-account-id>",
+  "region": "ap-northeast-1",
+  "releaseIdentity": {
+    "releaseVersion": "1.2.3-rc.1",
+    "platformCommit": "<40-character-lowercase-git-commit>",
+    "catalogCommit": "<40-character-lowercase-git-commit>",
+    "simulatorImage": "<repository>@sha256:<64-character-lowercase-digest>"
+  },
+  "resources": {
+    "cloudformation": [],
+    "dynamodb": [],
+    "s3": [],
+    "logs": [],
+    "sns": [],
+    "budgets": [],
+    "codebuild": []
+  }
+}
+```
+
+Run the scanner directly so every safety-critical value is explicit:
+
+```bash
+bun run scripts/ops/scan-lite-residual-resources.ts \
+  --run-id=<correlation-id> \
+  --environment=development \
+  --expected-account=<12-digit-account-id> \
+  --expected-region=ap-northeast-1 \
+  --release-version=1.2.3-rc.1 \
+  --platform-commit=<40-character-lowercase-git-commit> \
+  --catalog-commit=<40-character-lowercase-git-commit> \
+  --simulator-image=<repository>@sha256:<64-character-lowercase-digest> \
+  --ownership-file=<pre-teardown-ownership.json>
+```
+
+The command emits a versioned JSON report. Exit `0` means every supported
+inventory passed, `1` means owned residual resources were found, and `2`
+means the result is undecidable (for example, access denied, expired
+credentials, malformed output, or evidence mismatch). Invalid arguments or
+ownership schema exit `64` before AWS access. There is intentionally no Make
+target: the explicit run and release identity values are part of the safety
+boundary.
 
 ## SBT 0.9.5 tenant-registration backfill
 
