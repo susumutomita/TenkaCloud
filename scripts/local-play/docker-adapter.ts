@@ -1,5 +1,4 @@
 import { spawn, spawnSync } from "node:child_process";
-import { randomBytes } from "node:crypto";
 import {
   closeSync,
   constants,
@@ -15,6 +14,7 @@ import { fileURLToPath } from "node:url";
 import { ContainerRunner, type LocalComposeUnit } from "./container-runner";
 import { remapComposeHostPorts } from "./port-remap";
 import type { PortConflict } from "./problem-lifecycle";
+import { deriveSecretEnv, loadOrCreateMasterSecret } from "./problem-secrets";
 import type { TerminalProcess } from "./problem-terminal";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -413,14 +413,20 @@ export function createProblemShellSpawner(
   };
 }
 
-/** A 256-bit hex secret. One per declared `secretEnv` name, generated per deploy. */
+/**
+ * A 256-bit hex secret per declared `secretEnv` name, derived from this deployment's
+ * master secret and the problem id.
+ *
+ * It used to be a fresh random draw on every `compose up`, which meant an evicted and
+ * restarted container handed the participant different evidence than the one they had
+ * been reasoning about — see `problem-secrets.ts` for the measurements (Issue #2975).
+ */
 export function generateSecretEnv(
+  localDir: string,
+  problemId: string,
   names: readonly string[],
-  randomHex: () => string = () => randomBytes(32).toString("hex"),
 ): Record<string, string> {
-  const env: Record<string, string> = {};
-  for (const name of names) env[name] = randomHex();
-  return env;
+  return deriveSecretEnv(loadOrCreateMasterSecret(localDir), problemId, names);
 }
 
 export async function waitForReachable(
@@ -521,7 +527,7 @@ export function createContainerRunner(localDir: string): ContainerRunner {
   return new ContainerRunner(localDir, {
     runCompose,
     waitForReachable: (url, label) => waitForReachable(url, label),
-    generateSecretEnv,
+    generateSecretEnv: (problemId, names) => generateSecretEnv(localDir, problemId, names),
     readCompose: (path) => readFileSync(path, "utf8"),
     writeTempCompose: (path, content) => writeFileSync(path, content, "utf8"),
     removeTempCompose: unlinkIfExists,
