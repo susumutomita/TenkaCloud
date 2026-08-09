@@ -20,6 +20,7 @@ const template = readFileSync(
   join(__dirname, "..", "..", "templates", "lite-pipeline.yaml"),
   "utf8",
 );
+const repoRoot = join(__dirname, "..", "..", "..");
 
 function paramBlock(name: string): string {
   const block = template.match(new RegExp(`  ${name}:\\n[\\s\\S]*?\\n\\n`))?.[0];
@@ -65,7 +66,7 @@ describe("lite-pipeline.yaml RetainDataTables wiring (Issue #2959)", () => {
   });
 
   it("should emit it into the .env the CDK deploy reads", () => {
-    expect(template).toContain('echo "CDK_PARAM_RETAIN_DATA_TABLES=${RETAIN_DATA_TABLES}"');
+    expect(template).toContain(`echo "CDK_PARAM_RETAIN_DATA_TABLES=\${RETAIN_DATA_TABLES}"`);
   });
 });
 
@@ -82,5 +83,51 @@ describe("lite-pipeline.yaml destroy wording (Issue #2959)", () => {
   it("should point at RetainDataTables wherever it talks about keeping history", () => {
     const actionBlock = paramBlock("Action");
     expect(actionBlock).toContain("RetainDataTables");
+  });
+
+  it("should keep public Lite teardown guidance aligned with the default removal policy", () => {
+    const publicGuidancePaths = [
+      "README.md",
+      "README.ja.md",
+      "infrastructure/templates/README.md",
+      "docs/operations/event-runbook.md",
+      "docs/running-costs.md",
+      "docs/architecture/adr-016-lite-mode-single-tenant.html",
+      "scripts/tenkacloud-lite.ts",
+      "apps/developer-portal/src/app/developers/docs/getting-started/page.mdx",
+      "apps/developer-portal/src/app/developers/docs/getting-started/page.ja.mdx",
+      "infrastructure/environments/development/.env.example",
+      "infrastructure/environments/production/.env.example",
+      "landing/docs/getting-started/index.en.html",
+      "landing/docs/getting-started/index.html",
+    ];
+    const staleClaims = [
+      "ACTION=destroy (DynamoDB 履歴を残す場合)",
+      "`destroy`（DynamoDB 履歴保持）",
+      "make destroy       — stack を削除し、DynamoDB 履歴は保持",
+      "DDB 履歴は保持",
+      "Use `make destroy` only when retaining the DynamoDB history is intentional",
+      "tables all use `RemovalPolicy.RETAIN`",
+      "8 DynamoDB tables above use RemovalPolicy.RETAIN",
+      "make destroy</code> removes the stacks while retaining DynamoDB",
+    ];
+
+    for (const path of publicGuidancePaths) {
+      const content = readFileSync(join(repoRoot, path), "utf8");
+      for (const staleClaim of staleClaims) {
+        expect(content, `${path}: ${staleClaim}`).not.toContain(staleClaim);
+      }
+    }
+
+    expect(readFileSync(join(repoRoot, "README.md"), "utf8")).toContain("RetainDataTables=true");
+    expect(readFileSync(join(repoRoot, "docs/running-costs.md"), "utf8")).toContain(
+      "CDK_PARAM_RETAIN_DATA_TABLES=true",
+    );
+    expect(
+      readFileSync(
+        join(repoRoot, "apps/developer-portal/src/app/developers/docs/getting-started/page.mdx"),
+        "utf8",
+      ),
+    ).toContain("deletes DynamoDB tables by default");
   });
 });

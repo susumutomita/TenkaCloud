@@ -19,5 +19,9 @@
     "noEmit": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["scripts/security/audit-dependencies.ts"]
+  "include": [
+    "scripts/security/audit-dependencies.ts",
+    "scripts/release/manifest.ts",
+    "scripts/release/generate-release-report.ts"
+  ]
 }

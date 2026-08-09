@@ -28,6 +28,9 @@ jobs:
         # actions/checkout v4.3.1
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
+          # Release-manifest parity verifies the platform display tag and its historical
+          # catalog gitlink, so the CI gate needs the tagged commit rather than only PR HEAD.
+          fetch-depth: 0
           submodules: true
 
       - name: Setup Bun
@@ -64,6 +67,12 @@ jobs:
       - name: Test architecture harness
         run: make harness-test
 
+      # Issue #2979: validate the machine manifest and reject generated-report drift early.
+      # The repo-root tests below also enforce launcher / Simulator / toolchain parity and the
+      # three-consecutive-Golden-Path certification rule.
+      - name: Release manifest and report drift gate
+        run: make release-check
+
       # Issue #2949: the machine API reference is generated from MACHINE_ROUTE_SCOPES and the
       # handler's zod schemas. A PR that adds a route but forgets to regenerate would publish a
       # reference that lies about the surface, so the drift check is a gate, not a report.
@@ -90,12 +99,15 @@ jobs:
 
       # Submodule pin guard: reject PRs that roll the problems/ gitlink backward or
       # sideways (the ping-pong where an old-pin branch reverts a newer pin, e.g. #1927).
-      # Shallow checkout has no origin/main / submodule history, so fetch both first.
+      # Pull-request checkout does not guarantee origin/main or full submodule history, so fetch
+      # both first (the superproject is full-depth for the release-manifest tag/gitlink gate).
       # 品質ゲートは本体と分離し .claude/skills/quality-gates へ移設済み (runner を直接呼ぶ)。
       - name: Submodule pin guard (problems must not roll back)
         run: |
           git fetch --no-tags origin main:refs/remotes/origin/main
-          git -C problems fetch --no-tags --unshallow origin 2>/dev/null || git -C problems fetch --no-tags origin || true
+          # Release-manifest parity resolves an optional catalog display tag and checks the exact
+          # catalog commit object locally, so retain tags when deepening the submodule checkout.
+          git -C problems fetch --tags --unshallow origin 2>/dev/null || git -C problems fetch --tags origin || true
           bun run .claude/skills/quality-gates/scripts/run.ts submodule-not-behind
 
       # #2254: enforce the catalog authoring contract (schema + bilingual-README invariant) against

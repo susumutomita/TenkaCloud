@@ -103,7 +103,7 @@ const COMMANDS: Record<string, CommandSpec> = {
     run: cmdUp,
   },
   down: {
-    help: "Lite stack 2 個を destroy する。DDB 履歴は保持。--purge-retained-data で完全削除。",
+    help: "Lite stack 2 個を destroy する。DDB もdefault削除。--purge-retained-data で保持分も削除。",
     run: cmdDown,
   },
   "portal-url": {
@@ -408,8 +408,8 @@ function printPostDeployGuide(io: CliIO, input: PostDeployGuideInput): void {
     "  (他のコードは CloudFormation Outputs と Admin Console の各操作成功時に表示される)",
     "",
     "Teardown:",
-    "  make destroy       — stack を削除し、DynamoDB 履歴は保持",
-    "  make destroy-all   — stack 所有のDynamoDB履歴とCodeBuild logsも完全削除",
+    "  make destroy       — stack を削除（DynamoDB もデフォルトで削除）",
+    "  make destroy-all   — 明示的に保持したDynamoDB履歴とCodeBuild logsも完全削除",
     "",
     "Docs:",
     "  - README.md (Quickstart)     — 30-min first-run の全体像",
@@ -540,10 +540,10 @@ async function cmdDown(args: readonly string[], io: CliIO): Promise<number> {
     "--force",
   ]);
   if (code2 !== 0) return code2;
-  // Issue #2444: 全 DDB テーブルは RemovalPolicy.RETAIN なので destroy 後も残り、
-  // PROVISIONED 1/1 の standing cost を出し続ける。 残存テーブルを列挙して警告する
-  // (削除はしない — RETAIN は意図的)。 list 失敗は警告に留め destroy の exit code は
-  // 変えない (reportRetainedTables は throw せず戻り値も持たない)。
+  // Issue #2444 / #2959: 明示的に CDK_PARAM_RETAIN_DATA_TABLES=true で deploy した
+  // DDB table や旧 stack の RETAIN table は destroy 後も課金される。残存 table を列挙して
+  // 警告する（削除はしない）。list 失敗は警告に留め destroy の exit code は変えない
+  // (reportRetainedTables は throw せず戻り値も持たない)。
   if (purgeRetainedData) {
     io.stdout("[lite] complete teardown succeeded; stack-owned retained data was removed.\n");
   } else {
@@ -564,8 +564,8 @@ async function confirmTeardown(
     (purgeRetainedData
       ? "[lite] make destroy-all は Lite stack と、stack が所有する DynamoDB の全履歴を完全削除します。\n" +
         "[lite] このデータは復元できません。stack に紐づく CloudWatch log group も削除します。\n"
-      : "[lite] make destroy は Lite stack を削除しますが、DynamoDB の履歴は RETAIN されます。\n" +
-        "[lite] 完全削除して課金も止める場合は make destroy-all を使ってください。\n") +
+      : "[lite] make destroy は Lite stack を削除します。DynamoDB table もデフォルトで削除されます。\n" +
+        "[lite] CDK_PARAM_RETAIN_DATA_TABLES=true で deploy 済みの場合だけ、table と課金が残ります。\n") +
       "[lite] Cognito UserPool / S3 / CloudFront など stack 管理 resource も削除されます。\n" +
       "[lite] 続行しますか? (y/N): ",
   );

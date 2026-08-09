@@ -1,5 +1,9 @@
 # Issue #2765 — TenkaCloud Lite complete teardown
 
+> Historical plan: #2959 later changed Lite DynamoDB to default deletion. Current behavior is
+> `CDK_PARAM_RETAIN_DATA_TABLES=false`; retaining history requires an explicit deploy with `true`.
+> The data-preserving assumptions below describe the original #2765 design and are superseded.
+
 ## Framing
 
 - User outcome: a beginner can completely remove a TenkaCloud Lite deployment without manually
