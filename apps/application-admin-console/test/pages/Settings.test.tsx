@@ -32,7 +32,7 @@ function fakeApiClient(over: Partial<ApiClient> = {}): ApiClient {
   } as unknown as ApiClient;
 }
 
-const renderPage = () => render(<SettingsPage config={config} />);
+const renderPage = (override: AppConfig = config) => render(<SettingsPage config={override} />);
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -202,5 +202,53 @@ describe("SettingsPage", () => {
 
     expect(await screen.findByText("settings.save_error")).toBeInTheDocument();
     await waitFor(() => expect(samlToggle.checked).toBe(false));
+  });
+});
+
+/**
+ * deploy-time override の尊重 (Issue 2984)。
+ *
+ * Lite の初期セットアップは `runtime-config.json` の `features` で `samlSso` を有効化する。
+ * この画面はそれを見ずに registry 既定値へ落ちていたため、機能が実際に動いていて左ナビにも
+ * 「ID プロバイダ」が出ているのに、トグルだけが OFF と表示されていた。
+ *
+ * 実際に gate している 2 経路 (AppLayout の nav と IdentityProviders のガード) はどちらも
+ * `config.features` を見ているので、食い違っていたのはこの画面の表示だけ。security bypass
+ * ではないが、tenant admin が「無効になっている」と誤認する。
+ */
+describe("SettingsPage deploy-time overrides (Issue 2984)", () => {
+  /** テナント別 override が 1 つも保存されていない状態。 */
+  const noStoredOverrides = () => fakeApiClient({ get: vi.fn().mockResolvedValue({ flags: {} }) });
+
+  function toggleFor(label: string): HTMLInputElement {
+    // Cloudscape の Toggle は label と input が同じ wrapper に入る。
+    const row = screen.getByText(label).closest("div");
+    const input = row?.parentElement?.querySelector('input[type="checkbox"]');
+    expect(input, `${label} のトグルが見つからない`).not.toBeNull();
+    return input as HTMLInputElement;
+  }
+
+  it("は deploy 時に有効化された機能を ON と表示する", async () => {
+    mockUseApiClient.mockReturnValue(noStoredOverrides());
+    renderPage({ features: { samlSso: true } } as unknown as AppConfig);
+    await screen.findByText("samlSso");
+    expect(toggleFor("samlSso").checked).toBe(true);
+  });
+
+  it("は deploy 時に無効化された機能を OFF と表示する", async () => {
+    // registry 既定が true の key を deploy 側で落としている場合。逆向きも効くこと。
+    mockUseApiClient.mockReturnValue(noStoredOverrides());
+    renderPage({ features: { redTeam: false } } as unknown as AppConfig);
+    await screen.findByText("redTeam");
+    expect(toggleFor("redTeam").checked).toBe(false);
+  });
+
+  it("は保存済みのテナント別 override を deploy-time override より優先する", async () => {
+    mockUseApiClient.mockReturnValue(
+      fakeApiClient({ get: vi.fn().mockResolvedValue({ flags: { samlSso: false } }) }),
+    );
+    renderPage({ features: { samlSso: true } } as unknown as AppConfig);
+    await screen.findByText("samlSso");
+    expect(toggleFor("samlSso").checked).toBe(false);
   });
 });
