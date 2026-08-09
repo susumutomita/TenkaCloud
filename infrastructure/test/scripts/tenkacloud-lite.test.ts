@@ -8,6 +8,7 @@ import {
   parseStackOwnedCleanupResources,
   type SpawnCaptureResult,
 } from "../../../scripts/tenkacloud-lite";
+import { resolveLiteEnvironment } from "../../lib/tenkacloud-lite/stack-names";
 
 /**
  * Issue #778 ADR-016 Phase 4: TenkaCloud Lite CLI runner の挙動 pin。
@@ -26,6 +27,8 @@ function buildIO(opts: {
   readonly inheritExitCode?: number;
   readonly capture?: (cmd: string, args: readonly string[]) => SpawnCaptureResult;
   readonly confirmAnswer?: boolean;
+  /** Issue #2992: `make turso-reset` 相当の呼び出しを実際の aws / Turso API へ逃がさず観測する。 */
+  readonly tursoResetCode?: number;
 }): {
   readonly io: CliIO;
   readonly stdout: string[];
@@ -33,12 +36,14 @@ function buildIO(opts: {
   readonly calls: SpawnCall[];
   readonly confirms: string[];
   readonly ensuredDirs: string[];
+  readonly tursoResetCalls: { readonly env: NodeJS.ProcessEnv; readonly environment: string }[];
 } {
   const stdout: string[] = [];
   const stderr: string[] = [];
   const calls: SpawnCall[] = [];
   const confirms: string[] = [];
   const ensuredDirs: string[] = [];
+  const tursoResetCalls: { readonly env: NodeJS.ProcessEnv; readonly environment: string }[] = [];
   const io: CliIO = {
     stdout: (text) => {
       stdout.push(text);
@@ -63,8 +68,12 @@ function buildIO(opts: {
     ensureDir: (dir) => {
       ensuredDirs.push(dir);
     },
+    runTursoReset: async (env, environment) => {
+      tursoResetCalls.push({ env, environment });
+      return opts.tursoResetCode ?? 0;
+    },
   };
-  return { io, stdout, stderr, calls, confirms, ensuredDirs };
+  return { io, stdout, stderr, calls, confirms, ensuredDirs, tursoResetCalls };
 }
 
 function tenantAdminUpCapture(opts: {
@@ -771,6 +780,86 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
         process.env.TENKACLOUD_LITE_MANAGED_LAUNCHER_LOG_GROUP = previous;
       }
     }
+  });
+
+  // Issue #2992: Turso は CloudFormation の管轄外の外部 DB なので、DynamoDB backend 向けの
+  // stack-owned discovery では見つからない。 controlDataBackend=turso のときは
+  // `io.runTursoReset` を明示的に呼んで掃除する。
+  describe("down + controlDataBackend=turso (#2992)", () => {
+    function withTursoBackend<T>(fn: () => Promise<T>): Promise<T> {
+      const previous = process.env.CDK_PARAM_CONTROL_DATA_BACKEND;
+      process.env.CDK_PARAM_CONTROL_DATA_BACKEND = "turso";
+      return fn().finally(() => {
+        if (previous === undefined) delete process.env.CDK_PARAM_CONTROL_DATA_BACKEND;
+        else process.env.CDK_PARAM_CONTROL_DATA_BACKEND = previous;
+      });
+    }
+
+    // stack-owned discovery (DynamoDB purge の下ごしらえ) が空応答を JSON として解釈できず
+    // 早期 return しないよう、他の --purge-retained-data テスト同様 list-stack-resources に
+    // 空の StackResourceSummaries を返す。
+    const noOwnedResourcesCapture = (_cmd: string, args: readonly string[]): SpawnCaptureResult =>
+      args.includes("list-stack-resources")
+        ? { code: 0, stdout: JSON.stringify({ StackResourceSummaries: [] }), stderr: "" }
+        : { code: 0, stdout: "", stderr: "" };
+
+    it("down --purge-retained-data should also purge Turso control-data after both stacks are destroyed", () =>
+      withTursoBackend(async () => {
+        const { io, stdout, tursoResetCalls } = buildIO({
+          inheritExitCode: 0,
+          tursoResetCode: 0,
+          capture: noOwnedResourcesCapture,
+        });
+        const code = await main(["down", "--purge-retained-data", "--yes"], io);
+        expect(code).toBe(0);
+        expect(tursoResetCalls).toHaveLength(1);
+        expect(tursoResetCalls[0]?.environment).toBe(resolveLiteEnvironment(process.env));
+        expect(stdout.join("")).toContain("complete teardown succeeded");
+      }));
+
+    it("down --purge-retained-data should fail with the Turso reset's exit code and skip the success message", () =>
+      withTursoBackend(async () => {
+        const { io, stdout, tursoResetCalls } = buildIO({
+          inheritExitCode: 0,
+          tursoResetCode: 1,
+          capture: noOwnedResourcesCapture,
+        });
+        const code = await main(["down", "--purge-retained-data", "--yes"], io);
+        expect(code).toBe(1);
+        expect(tursoResetCalls).toHaveLength(1);
+        expect(stdout.join("")).not.toContain("complete teardown succeeded");
+      }));
+
+    it("plain down (no --purge-retained-data) should warn about Turso instead of purging it", () =>
+      withTursoBackend(async () => {
+        const { io, stdout, tursoResetCalls } = buildIO({ inheritExitCode: 0 });
+        const code = await main(["down", "--yes"], io);
+        expect(code).toBe(0);
+        expect(tursoResetCalls).toHaveLength(0);
+        expect(stdout.join("")).toContain("Turso control-data was NOT deleted");
+        expect(stdout.join("")).toContain("make turso-reset");
+      }));
+
+    it("down --purge-retained-data should mention Turso in the confirmation prompt", () =>
+      withTursoBackend(async () => {
+        const { io, confirms } = buildIO({ inheritExitCode: 0, confirmAnswer: false });
+        const code = await main(["down", "--purge-retained-data"], io);
+        expect(code).toBe(0);
+        expect(confirms.join("")).toContain("Turso の control-data");
+      }));
+  });
+
+  it("down --purge-retained-data should not call runTursoReset when controlDataBackend is dynamodb (default)", async () => {
+    const { io, tursoResetCalls } = buildIO({
+      inheritExitCode: 0,
+      capture: (_cmd, args) =>
+        args.includes("list-stack-resources")
+          ? { code: 0, stdout: JSON.stringify({ StackResourceSummaries: [] }), stderr: "" }
+          : { code: 0, stdout: "", stderr: "" },
+    });
+    const code = await main(["down", "--purge-retained-data", "--yes"], io);
+    expect(code).toBe(0);
+    expect(tursoResetCalls).toHaveLength(0);
   });
 
   // Regression: `cdk destroy` synths the shared CDK app (bin/tenkacloud-lite.ts ->
