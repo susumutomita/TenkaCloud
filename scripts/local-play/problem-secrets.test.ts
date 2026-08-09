@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { deriveSecretEnv, loadOrCreateMasterSecret } from "./problem-secrets.ts";
+import { deriveSecretEnv, loadOrCreateMasterSecret } from "./problem-secrets";
 
 /**
  * Issue #2975 — an evicted container must come back with the same answers.

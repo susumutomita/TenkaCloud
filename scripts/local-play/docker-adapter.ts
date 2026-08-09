@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 import { ContainerRunner, type LocalComposeUnit } from "./container-runner";
 import { remapComposeHostPorts } from "./port-remap";
 import type { PortConflict } from "./problem-lifecycle";
-import { deriveSecretEnv, loadOrCreateMasterSecret } from "./problem-secrets.ts";
+import { deriveSecretEnv, loadOrCreateMasterSecret } from "./problem-secrets";
 import type { TerminalProcess } from "./problem-terminal";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
