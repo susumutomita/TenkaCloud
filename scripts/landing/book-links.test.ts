@@ -51,8 +51,11 @@ describe("書籍導線 (#2971)", () => {
     expect(text, `${surface} に英語版へのリンクがない`).toContain(EN_BOOK);
   });
 
-  it("ランディングページは閲覧言語に合う販売先を主導線にする", () => {
-    // 日本語ページから Leanpub へ送る (またはその逆) と、読めない版へ送ることになる。
+  it("ランディングページの既定言語が、その言語の販売先を指す", () => {
+    // 出荷される file の既定値だけを見る。実際に表示される販売先は app.js が
+    // 閲覧者のロケールで差し替えるので、これは runtime の挙動の証明ではない
+    // (それは下の test が扱う)。ここが守るのは「JS が動かなかったとき、または
+    // ロケール検出の前に見えている href」が読めない版を指さないこと。
     // `index.en.html` は生成物なので、ここが落ちるときは app.js の翻訳か生成漏れ。
     expect(read("landing/index.html")).toContain(JA_BOOK);
     expect(read("landing/index.html")).not.toContain(EN_BOOK);
@@ -65,6 +68,24 @@ describe("書籍導線 (#2971)", () => {
     const app = read("landing/app.js");
     expect(app).toContain(`"footer.r3Href": "${JA_BOOK}"`);
     expect(app).toContain(`"footer.r3Href": "${EN_BOOK}"`);
+  });
+
+  it("app.js のロケール切り替えが、閲覧言語に合う販売先へ差し替える", () => {
+    // 2026-08-09 に実ブラウザ (Chromium) で測った結果を契約として固定する。
+    //
+    //   /                    locale ja-JP -> Zenn
+    //   /                    locale en-US -> Leanpub
+    //   /?lang=ja            locale en-US -> Zenn      (明示指定が勝つ)
+    //   /index.en.html       locale ja-JP -> Leanpub   (英語ページは英語のまま)
+    //
+    // つまり販売先は file ではなく読者の言語に従う。翻訳表からどちらかの
+    // href が消えると、その言語の読者が読めない版へ送られる。
+    const app = read("landing/app.js");
+    const jaBlock = app.slice(app.indexOf('"footer.r3Href"'));
+    expect(jaBlock.startsWith(`"footer.r3Href": "${JA_BOOK}"`)).toBe(true);
+    const enIndex = app.indexOf('"footer.r3Href"', app.indexOf('"footer.r3Href"') + 1);
+    expect(enIndex).toBeGreaterThan(0);
+    expect(app.slice(enIndex).startsWith(`"footer.r3Href": "${EN_BOOK}"`)).toBe(true);
   });
 
   it("書籍が現行仕様の正本ではないことを、どの面でも明示する", () => {
