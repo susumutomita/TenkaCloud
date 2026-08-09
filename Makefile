@@ -60,6 +60,14 @@ typecheck: ## Type-check every TypeScript workspace | 全workspaceのTypeScript�
 	bun run typecheck
 test: ## Run tests in every workspace | 全workspaceのテストを実行
 	bun run test
+# The repo-root tests that live outside every workspace: the landing generators' --check mode and
+# the seams under scripts/ (workspace planning, coverage registry, form setup). CI's test surface is
+# the coverage shards, which only ever enter a workspace — so before this target existed these ran
+# nowhere in CI, and scripts/workspace/run-workspaces.test.ts sat red on main after #2964 added two
+# workspaces without updating it. `make test` still runs them first; this is the same list, callable
+# on its own so CI can run it without also running every workspace's suite twice.
+test-root: ## Run the repo-root script tests only | repo直下のscript testだけを実行
+	bun run test:root
 # Options go through FORM_SETUP_ARGS; make would otherwise parse --repo itself.
 # e.g. make form-setup FORM_SETUP_ARGS="--repo owner/name --skip-workflow"
 FORM_SETUP_ARGS ?=

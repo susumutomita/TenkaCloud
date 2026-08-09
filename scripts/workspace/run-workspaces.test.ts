@@ -13,7 +13,12 @@ import { discoverWorkspaces, planTask, TASKS, type WorkspaceInfo } from "./run-w
  * them: the repo-parity test below is the thing a reviewer diffs when a
  * workspace is added, removed, or moved between the build/typecheck/test
  * sets. (`test:coverage` is owned by scripts/workspace/run-coverage.ts, #2513, whose
- * own test pins the 17-dir COVERAGE_WORKSPACES list.)
+ * own COVERAGE_WORKSPACES registry is a separate list.)
+ *
+ * The parity list is written out rather than derived: deriving it from the same
+ * discovery call it checks would make the test agree with whatever the repo happens
+ * to contain, which is the one thing it exists not to do. Adding a workspace is meant
+ * to fail here once, so that a human confirms which of build/typecheck/test it joins.
  */
 
 const repoRoot = join(import.meta.dir, "../..");
@@ -157,6 +162,7 @@ describe("repo parity (the reviewable seam)", () => {
   ];
 
   const packagesAlphabetical = [
+    "packages/ai-eval",
     "packages/auth-client",
     "packages/coordination-plugin-sdk",
     "packages/format",
@@ -168,15 +174,16 @@ describe("repo parity (the reviewable seam)", () => {
     "packages/problem-test-harness",
     "packages/saml-utils",
     "packages/standalone-cli",
+    "packages/tcloud",
     "packages/trust-bridge",
     "packages/web-kit",
   ];
 
-  const allNineteen = ["infrastructure", ...appsAlphabetical, ...packagesAlphabetical];
+  const allWorkspaces = ["infrastructure", ...appsAlphabetical, ...packagesAlphabetical];
 
-  it("should discover exactly 19 workspaces from the root package.json", () => {
-    expect(workspaces).toHaveLength(19);
-    expect(workspaces.map((w) => w.dir).sort()).toEqual([...allNineteen].sort());
+  it("should discover exactly 21 workspaces from the root package.json", () => {
+    expect(workspaces).toHaveLength(21);
+    expect(workspaces.map((w) => w.dir).sort()).toEqual([...allWorkspaces].sort());
   });
 
   it("should plan build as infrastructure + every apps/* workspace (packages/* excluded)", () => {
@@ -184,13 +191,13 @@ describe("repo parity (the reviewable seam)", () => {
     expect(plan.included.map((w) => w.dir)).toEqual(["infrastructure", ...appsAlphabetical]);
   });
 
-  it("should plan typecheck across all 19 workspaces", () => {
+  it("should plan typecheck across every workspace", () => {
     const plan = planTask("typecheck", workspaces);
-    expect(plan.included.map((w) => w.dir)).toEqual(allNineteen);
+    expect(plan.included.map((w) => w.dir)).toEqual(allWorkspaces);
   });
 
-  it("should plan test across all 19 workspaces", () => {
+  it("should plan test across every workspace", () => {
     const plan = planTask("test", workspaces);
-    expect(plan.included.map((w) => w.dir)).toEqual(allNineteen);
+    expect(plan.included.map((w) => w.dir)).toEqual(allWorkspaces);
   });
 });

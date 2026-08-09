@@ -121,6 +121,16 @@ jobs:
         run: |
           make lint-ts
 
+      # #2964 follow-up: CI's only test surface is the `coverage` job's shards, and every shard
+      # enters a workspace. The tests that live at the repo root — the landing generators' --check
+      # mode and the seams under scripts/ — therefore ran nowhere in CI. That is how two workspaces
+      # (packages/ai-eval, packages/tcloud) were added while scripts/workspace/run-workspaces.test.ts,
+      # whose entire job is to fail when a workspace is added, sat red on main and nothing said so.
+      # `make before-commit` catches it locally; this makes CI say the same thing.
+      - name: Repo-root script tests (#2964)
+        run: |
+          make test-root
+
       - name: Type check
         run: |
           make typecheck
