@@ -15,12 +15,20 @@ TenkaCloud runs in one of two profiles, selected by the `CDK_PARAM_CONTROL_DATA_
 
 ### Cost budget guardrails are opt-in
 
-The legacy AWS Budget and Free Tier alarm bundle is disabled by default in every environment.
-Set `MONTHLY_COST_LIMIT_USD` to a positive value only when you intentionally want the budget,
-SNS topic, and CloudWatch alarms. The system administrator address is not automatically
-subscribed: add `budgetAlarmEmails` to the selected environment's `config.json` only for
-recipients who explicitly want confirmation and alert email. With the limit unset or `0`,
-CloudFormation contains none of those resources.
+The AWS Budget and the Free Tier alarms that hang off it are **off in every environment unless
+you ask for them**. Set `MONTHLY_COST_LIMIT_USD` to a positive value to get the budget, its SNS
+topic and the alarms; leave it unset or `0` and the synthesized template contains none of them.
+
+Off is the default because of the SNS confirmation email, not because the guardrail is unwanted.
+Every deploy that recreated the stack produced a new topic, so AWS re-sent a subscription
+confirmation — and a subscription nobody confirms carries `PendingConfirmation` instead of a real
+`SubscriptionArn`, which means **neither the API nor the console can delete it**. It only expires
+on AWS's own schedule. Not creating it is the only way to not accumulate it.
+
+The system administrator address is never subscribed on your behalf. `systemAdminEmail` says who
+runs the platform, which is a different question from who wants budget mail; list recipients
+explicitly in the environment's `config.json` under `budgetAlarmEmails`. Watching the numbers in
+the Billing console is a perfectly good arrangement — set the limit and leave the list empty.
 
 Lite mode (`make deploy`) is already the lean path. The problem-deploy backend runs on **Lambda `CreateStack`/`UpdateStack` by default** (no CodeBuild project), and the KMS customer-managed key was removed in favor of the AWS-managed key. What is left standing on the default profile is DynamoDB: eight tables plus eight GSIs pinned at PROVISIONED 1/1, which bill even while idle. The eight tables are **Events, Teams, Deployments, ProblemEndpoints, CompetitorAccounts, Disruptions, AdminAuditLog, and SamlIdps**.
 
