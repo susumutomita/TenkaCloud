@@ -110,8 +110,9 @@ temporary password mailed to `TenantAdminEmail`.
 **Complete teardown:** in the same CodeBuild project, use
 **Start build with overrides** with `ACTION=destroy-all`. This also removes the
 DynamoDB tables and problem-deploy logs owned by the Lite stacks. After it
-succeeds, delete the `tenkacloud-lite-launcher` stack itself. Use
-`ACTION=destroy` only when you intentionally want to preserve DynamoDB history.
+succeeds, delete the `tenkacloud-lite-launcher` stack itself. A normal
+`ACTION=destroy` also deletes DynamoDB tables by default. To preserve history,
+deploy with `RetainDataTables=true` before running `ACTION=destroy`.
 If the launcher predates `destroy-all`, update its CloudFormation stack with the
 latest template first. Never pass `destroy-all` to the older buildspec because
 it treats unknown actions as deploy.

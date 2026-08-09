@@ -229,8 +229,9 @@ make deploy
 <p>コマンドが完了すると、Admin Console と Participant Portal の URL が表示
 されます。環境の切り替えは <code>make deploy ENV=production</code> で行い（環境ごとに
 専用の <code>infrastructure/environments/&lt;env&gt;/.env</code> があります）。完全削除は
-<code>make destroy-all</code>、DynamoDB 履歴を残すスタック削除は
-<code>make destroy</code> で行います。</p>
+<code>make destroy-all</code> で行います。通常の <code>make destroy</code> でも DynamoDB テーブルは
+デフォルトで削除されます。履歴を残す場合は、先に
+<code>CDK_PARAM_RETAIN_DATA_TABLES=true</code> でデプロイしてから <code>make destroy</code> を実行してください。</p>
 <h3>コントロールデータのバックエンドを選ぶ: DynamoDB か Turso か</h3>
 <p>Lite モードはコントロールデータ（イベント、チーム、デプロイメント、スコア）を
 2 つのバックエンドのいずれかに保存します。選択は <code>.env</code> の

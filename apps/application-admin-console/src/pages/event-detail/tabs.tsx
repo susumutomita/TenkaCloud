@@ -132,7 +132,9 @@ export function TeamsTab({
 export function ScoreboardTab({ detail }: EventTabContentProps) {
   return (
     <>
-      {detail.scoreEventsByTeam && <TeamScoreEventsPanel teams={detail.scoreEventsByTeam} />}
+      {detail.scoreEventsByTeam && (
+        <TeamScoreEventsPanel teams={detail.scoreEventsByTeam} startsAt={detail.startsAt} />
+      )}
       {detail.scoreEventsByTeam && <TeamRankingPanel teams={detail.scoreEventsByTeam} />}
     </>
   );

@@ -23,6 +23,8 @@
     "scripts/security/audit-dependencies.ts",
     "scripts/lib/lite-residual-scan.ts",
     "scripts/lib/lite-residual-scan-aws.ts",
-    "scripts/ops/scan-lite-residual-resources.ts"
+    "scripts/ops/scan-lite-residual-resources.ts",
+    "scripts/release/manifest.ts",
+    "scripts/release/generate-release-report.ts"
   ]
 }

@@ -51,9 +51,21 @@ export function SettingsPage({ config }: { config: AppConfig }) {
     };
   }, [apiClient, t]);
 
+  // Fallback order matters, and it has to match what actually gates the feature.
+  //
+  // A per-tenant override wins when one is stored. When none is, the effective value is
+  // the deploy-time override from `runtime-config.json` (`config.features`) — that is what
+  // `AppLayout` uses to decide whether the nav shows "ID プロバイダ", and what
+  // `IdentityProviders` uses to gate the page. Only when neither exists does the
+  // hardcoded registry default apply.
+  //
+  // Reading `config.features` here was missing, so a tenant that had `samlSso` enabled at
+  // deploy time (the Lite setup path) saw this toggle rendered OFF while the feature was
+  // live and reachable — the screen contradicted the thing it is supposed to describe.
   const resolveEnabled = useCallback(
-    (key: FlagKey): boolean => flags?.[key] ?? FEATURE_REGISTRY[key].defaultEnabled,
-    [flags],
+    (key: FlagKey): boolean =>
+      flags?.[key] ?? config.features?.[key] ?? FEATURE_REGISTRY[key].defaultEnabled,
+    [flags, config.features],
   );
 
   const handleToggle = useCallback(

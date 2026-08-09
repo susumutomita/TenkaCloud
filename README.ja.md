@@ -133,11 +133,20 @@ make local-dev
 
 AWS コンソールからデプロイします。CloudFormation スタックが CodeBuild プロジェクトを作成し、このリポジトリを Git clone してデプロイまで代行してくれます。**ローカルへのインストールも GitHub 連携も不要です**。
 
+launcher の repository 初期値は [`release manifest`](./release/tenkacloud-release.json) に記録した
+platform / catalog の immutable な組み合わせです。
+[`自動生成 release report`](./release/tenkacloud-release.md) が示す現在の区分は
+**candidate / unverified** です。`main` の移動による内容変更は防ぎますが、Golden Path の証拠が
+無い状態を認定済みとは扱いません。launcher stack のどちらかの ref parameter を `main` にした
+場合は、Output と build log に **development / unreleased** と表示します。CodeBuild でその 1 回
+だけ環境変数を override した場合、実際の選択は build log に表示されますが、CloudFormation
+Output は stack に保存された parameter の区分を示し続けます。
+
 > **設計意図: イベント単位の一時環境。** デフォルトのライフサイクルは「1 イベント用に launcher を作り、デプロイし、イベントを実施し、撤去する」であり、自動で更新され続ける常設 SaaS ではありません。イベントの合間も稼働させたままで構いませんが、以下の手順(撤去を含む)はすべてイベント単位の運用を前提に書いています。launcher・build・destroy の責務分担とパラメータ別の再ビルド方針は [`infrastructure/templates/README.md`](./infrastructure/templates/README.md#cloudformation-console-lite-mode-deployment-pipeline)、当日の運用フローは [`docs/operations/event-runbook.md`](./docs/operations/event-runbook.md) を参照してください。
 
 1. [`infrastructure/templates/lite-pipeline.yaml`](./infrastructure/templates/lite-pipeline.yaml) をダウンロードする。
 2. `ap-northeast-1` の [CloudFormation のスタック作成ページ](https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-1#/stacks/create/template) を開き、**Upload a template file** でアップロード、スタック名は **`tenkacloud-lite-launcher`** とする。
-3. パラメータグループ **Required** の **`TenantAdminEmail`** に、Admin Console のログイン用メールアドレスを設定する — それ以外のグループは初期値のままで構わない。(自分の問題カタログを使いたい場合は **Advanced: repository sources** グループの `ProblemsRepoUrl` も設定してください — [自分の問題を追加する](#自分の問題を追加する) を参照。)
+3. パラメータグループ **Required** の **`TenantAdminEmail`** に、Admin Console のログイン用メールアドレスを設定する。ほかのグループには初期値が入っており、repository の初期値は上記 release report の immutable candidate である。(自分の問題カタログを使いたい場合は **Advanced: repository sources** グループの `ProblemsRepoUrl` も設定してください — [自分の問題を追加する](#自分の問題を追加する) を参照。)
 4. **acknowledge IAM** にチェックし、スタックを作成する(ビルド用の CodeBuild ロールが全スタックをデプロイできる強い権限を必要とするため、コンソールにその理由が表示される)。
 5. スタックの **`StartBuildConsoleUrl`** 出力から CodeBuild プロジェクトを開き、**Start build** を押す。
 
@@ -147,11 +156,11 @@ AWS コンソールからデプロイします。CloudFormation スタックが 
 
 15〜30 分ほどでビルドが完了します。すでに見ている CodeBuild のビルドログを一番下までスクロールしてください — デプロイの最後に `✓ Lite mode deploy complete` ブロックが出力され、その **Access URLs:** セクションに **Application Admin Console** と **Participant Portal** の URL がそのまま載っており、続けて **Next steps:** と **Teardown:** の案内も表示されます。CloudFormation 側で確認したい場合は、同じ 2 つの URL がビルドが作成する `tenkacloud-lite` / `tenkacloud-lite-problem-deploy` 各スタックの **Outputs** にも載っています。
 
-**完全削除する場合:** 同じ CodeBuild プロジェクトで **Start build with overrides** を選び、環境変数 `ACTION` に `destroy-all` を設定して実行してください。Lite の 2 スタックに加え、保持された DynamoDB テーブルと問題デプロイ用ログも削除されます。その後 `tenkacloud-lite-launcher` スタック自体を削除すると、CodeBuild プロジェクト、IAM Role、launcher のログも消えます。DynamoDB 履歴を意図的に残す場合だけ `ACTION=destroy` を使います。
+**完全削除する場合:** 同じ CodeBuild プロジェクトで **Start build with overrides** を選び、環境変数 `ACTION` に `destroy-all` を設定して実行してください。Lite の 2 スタックに加え、明示的に保持した DynamoDB テーブルと問題デプロイ用ログも削除されます。その後 `tenkacloud-lite-launcher` スタック自体を削除すると、CodeBuild プロジェクト、IAM Role、launcher のログも消えます。通常の `ACTION=destroy` でも DynamoDB テーブルはデフォルトで削除されます。履歴を残す場合は、デプロイ時に `RetainDataTables=true` を指定してください。
 
 `destroy-all` 追加前に作成した launcher は、先に CloudFormation のスタック更新で最新版の `lite-pipeline.yaml` を適用してください。旧 buildspec は未知の ACTION を deploy として扱うため、旧 launcher に `destroy-all` を直接指定してはいけません。
 
-同じ launcher を次のイベントでも再利用すること自体は可能です(ビルドのたびに両方の repo を re-clone するため)。ただし推奨する運用は、イベントごとに launcher を作り直すことです — 本番の前に `RepoRef` / `ProblemsRepoRef` をリハーサル済みの tag またはコミット SHA へ固定し、撤去したら launcher も削除します。パラメータ別の再ビルド表とリハーサルから本番までの流れは [`infrastructure/templates/README.md`](./infrastructure/templates/README.md#cloudformation-console-lite-mode-deployment-pipeline) と [`docs/operations/event-runbook.md`](./docs/operations/event-runbook.md) を参照してください。
+同じ launcher を次のイベントでも再利用すること自体は可能です(ビルドのたびに両方の repo を re-clone するため)。ただし推奨する運用は、イベントごとに launcher を作り直すことです。初期値は manifest の完全な commit SHA に固定済みです。より新しい `main` または branch をリハーサルする場合は、通過した platform / catalog の完全な commit SHA を記録し、本番ではその 2 値を使ってください。撤去後は launcher も削除します。パラメータ別の再ビルド表とリハーサルから本番までの流れは [`infrastructure/templates/README.md`](./infrastructure/templates/README.md#cloudformation-console-lite-mode-deployment-pipeline) と [`docs/operations/event-runbook.md`](./docs/operations/event-runbook.md) を参照してください。
 
 ## 対応環境
 

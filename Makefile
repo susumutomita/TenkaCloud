@@ -12,7 +12,7 @@ export JSII_DEPRECATED := quiet
 HELP_LANG ?= en
 HELP_RENDERER := scripts/ops/make-help.awk
 
-.PHONY: help help-en help-ja install install_ci submodule-latest build typecheck test test-coverage test-scripts audit-deps before-commit ci-local openapi openapi-check \
+.PHONY: help help-en help-ja install install_ci submodule-latest build typecheck test test-coverage test-scripts audit-deps before-commit ci-local openapi openapi-check release-report release-check \
         lint lint-md lint-text lint-format lint-ts \
         fix fix-md fix-text fix-format format \
         harness harness-test tech-debt dead-code ever-better-diagnose \
@@ -68,6 +68,10 @@ test: ## Run tests in every workspace | 全workspaceのテストを実行
 # on its own so CI can run it without also running every workspace's suite twice.
 test-root: ## Run the repo-root script tests only | repo直下のscript testだけを実行
 	bun run test:root
+release-report: ## Generate the human release report | 人間向けrelease reportを生成
+	bun run release:report
+release-check: ## Validate the release manifest and generated report | release manifestと生成reportを検証
+	bun run release:check
 # Options go through FORM_SETUP_ARGS; make would otherwise parse --repo itself.
 # e.g. make form-setup FORM_SETUP_ARGS="--repo owner/name --skip-workflow"
 FORM_SETUP_ARGS ?=
@@ -142,7 +146,7 @@ ci-local: ## Run the full GitHub Actions gate locally | GitHub Actions相当の�
 	bun run .claude/harness/bin/architecture.ts --fail-on=error
 	$(MAKE) harness-test
 	git fetch --no-tags origin main:refs/remotes/origin/main
-	git -C problems fetch --no-tags --unshallow origin 2>/dev/null || git -C problems fetch --no-tags origin || true
+	git -C problems fetch --tags --unshallow origin 2>/dev/null || git -C problems fetch --tags origin || true
 	$(MAKE) audit-deps
 	$(MAKE) dup-check
 	$(MAKE) dead-code
@@ -151,6 +155,7 @@ ci-local: ## Run the full GitHub Actions gate locally | GitHub Actions相当の�
 	$(MAKE) lint-text
 	$(MAKE) lint-format
 	$(MAKE) lint-ts
+	$(MAKE) test-root
 	$(MAKE) typecheck
 	$(MAKE) test-coverage
 	bun run .claude/skills/quality-gates/scripts/run.ts coverage-gate

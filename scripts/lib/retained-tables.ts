@@ -2,14 +2,14 @@
  * Issue #2444: destroy 後に残存する RETAIN テーブルを列挙して billing 警告を出すための
  * pure logic module。
  *
- * 背景: TenkaCloud の DynamoDB テーブルは全て `RemovalPolicy.RETAIN` (履歴保全のため
- * 意図的) なので、 `make destroy` (tenkacloud-lite down) / `make destroy-saas`
- * (cleanup.sh) を実行してもテーブルは残り、 `DynamoDbLowCapacity` aspect が強制する
- * PROVISIONED 1 RCU / 1 WCU の standing cost を出し続ける。 deploy/destroy を繰り返すと
+ * 背景: 現在の Lite DynamoDB は default `RemovalPolicy.DESTROY` だが、明示的な
+ * `CDK_PARAM_RETAIN_DATA_TABLES=true` や旧 stack では `RemovalPolicy.RETAIN` になりうる。
+ * その table は `make destroy` 後も残り、`DynamoDbLowCapacity` aspect が設定した
+ * PROVISIONED 1 RCU / 1 WCU の standing cost を出し続ける。deploy/destroy を繰り返すと
  * orphan が蓄積して「消したのに課金され続ける」状態に気づけない (トラッカー #2435)。
  *
- * 本 module は残存テーブルを **列挙して警告するだけ** で、 削除は一切しない (RETAIN は
- * 意図的なので誤削除を防ぐ)。 依存ゼロの pure module にしてあり、 AWS SDK も CDK も
+ * 本 module は残存テーブルを **列挙して警告するだけ** で、削除は一切しない（明示的に
+ * 保持した履歴や他環境の誤削除を防ぐ）。依存ゼロの pure module にしてあり、AWS SDK も CDK も
  * 引き込まない。 aws CLI は `AwsRunner` seam 経由で注入するので unit test は AWS を
  * 触らずに全経路を観測できる。
  */

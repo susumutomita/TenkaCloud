@@ -131,11 +131,20 @@ See [docs/local-play.md](./docs/local-play.md) for every subcommand and [ADR-055
 
 Deploy from the AWS Console — a CloudFormation stack creates a CodeBuild project that git-clones this repo and runs the deploy for you, **no local install, no GitHub connection**.
 
+The launcher's repository defaults are the immutable platform/catalog pair recorded in the
+[`release manifest`](./release/tenkacloud-release.json). The
+[`generated release report`](./release/tenkacloud-release.md) currently classifies that pair as
+**candidate / unverified**: pinning it prevents a moving `main` from changing the deployment, but
+does not turn missing Golden Path evidence into certification. If either launcher stack ref
+parameter is `main`, the launcher output and build log label it **development / unreleased**. A
+one-build CodeBuild environment override changes only that build log; CloudFormation Outputs keep
+describing the stack's saved parameters.
+
 > **Design intent — an event-scoped, temporary environment.** The default lifecycle is *create a launcher for one event, deploy, run the event, tear it down* — not a permanently-running SaaS that auto-updates itself. Nothing stops you from leaving it up between events, but every step below (including teardown) is written for the per-event model. See [`infrastructure/templates/README.md`](./infrastructure/templates/README.md#cloudformation-console-lite-mode-deployment-pipeline) for the full launcher/build/destroy responsibility split and the per-parameter rebuild policy, and [`docs/operations/event-runbook.md`](./docs/operations/event-runbook.md) for the day-of-event flow.
 
 1. Download [`infrastructure/templates/lite-pipeline.yaml`](./infrastructure/templates/lite-pipeline.yaml).
 2. Open the [CloudFormation create-stack page](https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-1#/stacks/create/template) in `ap-northeast-1` → **Upload a template file** → upload it → stack name **`tenkacloud-lite-launcher`**.
-3. In the **Required** parameter group, set **`TenantAdminEmail`** to your Admin Console login email — every other group is pre-filled and safe to leave alone. *(To ship your own problems, open **Advanced: repository sources** and set `ProblemsRepoUrl` — see [Add your own problems](#add-your-own-problems).)*
+3. In the **Required** parameter group, set **`TenantAdminEmail`** to your Admin Console login email. The other groups are pre-filled; the repository defaults are the immutable candidate shown in the release report above. *(To ship your own problems, open **Advanced: repository sources** and set `ProblemsRepoUrl` — see [Add your own problems](#add-your-own-problems).)*
 4. Check **acknowledge IAM** (the console explains why: the build's CodeBuild role needs broad permissions to deploy every TenkaCloud stack) and create the stack.
 5. Open the CodeBuild project from the stack's **`StartBuildConsoleUrl`** output and press **Start build**.
 
@@ -145,11 +154,11 @@ There is no one-click *Launch Stack* badge above: CloudFormation's `templateURL`
 
 After ~15-30 minutes the build finishes. Scroll to the end of the CodeBuild build log you're already watching — the deploy prints a `✓ Lite mode deploy complete` block whose **Access URLs:** section lists the **Application Admin Console** and **Participant Portal** URLs directly, followed by **Next steps:** and **Teardown:** guidance. If you'd rather read them from CloudFormation, the same two URLs are also in the **Outputs** of the `tenkacloud-lite` and `tenkacloud-lite-problem-deploy` stacks that the build creates.
 
-**Complete teardown:** in the same CodeBuild project, choose **Start build with overrides**, set `ACTION` to `destroy-all`, and start it. This removes the Lite stacks plus their retained DynamoDB tables and problem-deploy logs. Then delete the `tenkacloud-lite-launcher` stack to remove its CodeBuild project, role, and log group. Use `ACTION=destroy` only when you intentionally want to preserve DynamoDB history.
+**Complete teardown:** in the same CodeBuild project, choose **Start build with overrides**, set `ACTION` to `destroy-all`, and start it. This removes the Lite stacks, any explicitly retained DynamoDB tables, and problem-deploy logs. Then delete the `tenkacloud-lite-launcher` stack to remove its CodeBuild project, role, and log group. A normal `ACTION=destroy` also deletes DynamoDB tables by default; history survives only when the stack was deployed with `RetainDataTables=true`.
 
 If the launcher predates `destroy-all`, update its CloudFormation stack with the latest `lite-pipeline.yaml` first. Do not pass `destroy-all` to an older launcher: its old buildspec treats unknown actions as deploy.
 
-Re-running the same launcher for a later event works (the buildspec re-clones both repos on every build), but the recommended flow is a fresh launcher per event: fix `RepoRef` / `ProblemsRepoRef` to a rehearsed tag or commit SHA before the real event, and delete the launcher once you tear down. See the parameter rebuild table and the rehearsal-to-production flow in [`infrastructure/templates/README.md`](./infrastructure/templates/README.md#cloudformation-console-lite-mode-deployment-pipeline) and [`docs/operations/event-runbook.md`](./docs/operations/event-runbook.md).
+Re-running the same launcher for a later event works (the buildspec re-clones both repos on every build), but the recommended flow is a fresh launcher per event. The defaults are already fixed to the manifest's exact commits. If you rehearse newer code from `main` or a branch, record the exact platform and catalog commits that passed rehearsal and use those full SHAs for the real event; delete the launcher once you tear down. See the parameter rebuild table and the rehearsal-to-production flow in [`infrastructure/templates/README.md`](./infrastructure/templates/README.md#cloudformation-console-lite-mode-deployment-pipeline) and [`docs/operations/event-runbook.md`](./docs/operations/event-runbook.md).
 
 ## Supported environments
 

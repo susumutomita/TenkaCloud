@@ -38,11 +38,14 @@ import {
   resolveLiteEnvironment,
   resolveLiteStackNames,
 } from "../infrastructure/lib/tenkacloud-lite/stack-names";
+import { systemProcessRunner } from "./cli/process";
 import {
   parseStackOwnedCleanupResources,
   purgeLiteStackOwnedResources,
 } from "./lib/lite-complete-teardown";
+import { planTursoTeardown } from "./lib/lite-turso-teardown";
 import { reportRetainedTables } from "./lib/retained-tables";
+import { runTursoReset, tursoPipelinePost } from "./ops/turso-reset";
 
 export { parseStackOwnedCleanupResources };
 
@@ -84,6 +87,12 @@ export interface CliIO {
    */
   readonly confirm: (question: string) => Promise<boolean>;
   /**
+   * Issue #2992: Turso backend の control-data を全行削除する (スキーマは維持)。 実体は
+   * `make turso-reset` と同じ `runTursoReset` で、 destroy 側にロジックを複製しない。
+   * 非 turso 環境では呼ばれない (`planTursoTeardown` が判定する)。
+   */
+  readonly purgeTursoControlData: () => Promise<number>;
+  /**
    * `cdk destroy` synths the app, which stages the SPA dist dirs as BucketDeployment
    * assets even though teardown never builds the SPAs. Ensure each dir exists (empty is
    * fine -- content is irrelevant for delete) so synth does not throw CannotFindAsset.
@@ -103,7 +112,7 @@ const COMMANDS: Record<string, CommandSpec> = {
     run: cmdUp,
   },
   down: {
-    help: "Lite stack 2 個を destroy する。DDB 履歴は保持。--purge-retained-data で完全削除。",
+    help: "Lite stack 2 個を destroy する。DDB もdefault削除。--purge-retained-data で保持分も削除。",
     run: cmdDown,
   },
   "portal-url": {
@@ -408,8 +417,8 @@ function printPostDeployGuide(io: CliIO, input: PostDeployGuideInput): void {
     "  (他のコードは CloudFormation Outputs と Admin Console の各操作成功時に表示される)",
     "",
     "Teardown:",
-    "  make destroy       — stack を削除し、DynamoDB 履歴は保持",
-    "  make destroy-all   — stack 所有のDynamoDB履歴とCodeBuild logsも完全削除",
+    "  make destroy       — stack を削除（DynamoDB もデフォルトで削除）",
+    "  make destroy-all   — 明示的に保持したDynamoDB履歴とCodeBuild logsも完全削除",
     "",
     "Docs:",
     "  - README.md (Quickstart)     — 30-min first-run の全体像",
@@ -515,6 +524,19 @@ async function cmdDown(args: readonly string[], io: CliIO): Promise<number> {
     if (purgeCode !== 0) return purgeCode;
   }
 
+  // Issue #2992: Turso backend の control-data は AWS の外にあるので、 stack を消しても
+  // 残る。 stack 削除の *前* に消すこと — auth token は stack が作る SSM parameter から
+  // 読むため、 先に stack を消すと認証手段ごと消えて手も足も出なくなる。
+  const tursoPlan = planTursoTeardown(process.env, purgeRetainedData);
+  if (tursoPlan.kind === "purge") {
+    // teardown 全体の confirm は既に取ってあるので、 ここで二度目を聞かない (assumeYes)。
+    const tursoCode = await io.purgeTursoControlData();
+    if (tursoCode !== 0) {
+      io.stderr("[lite] Turso control-data の削除に失敗しました。 teardown を中止します。\n");
+      return tursoCode;
+    }
+  }
+
   // `cdk destroy` synths the app the same way `cdk deploy` does, so the shared CDK app
   // still requires CDK_PARAM_SYSTEM_ADMIN_EMAIL. Derive it from the tenant admin email so
   // `make destroy` works with only TENANT_ADMIN_EMAIL set (the Lite .env the CodeBuild
@@ -540,14 +562,17 @@ async function cmdDown(args: readonly string[], io: CliIO): Promise<number> {
     "--force",
   ]);
   if (code2 !== 0) return code2;
-  // Issue #2444: 全 DDB テーブルは RemovalPolicy.RETAIN なので destroy 後も残り、
-  // PROVISIONED 1/1 の standing cost を出し続ける。 残存テーブルを列挙して警告する
-  // (削除はしない — RETAIN は意図的)。 list 失敗は警告に留め destroy の exit code は
-  // 変えない (reportRetainedTables は throw せず戻り値も持たない)。
+  // Issue #2444 / #2959: 明示的に CDK_PARAM_RETAIN_DATA_TABLES=true で deploy した
+  // DDB table や旧 stack の RETAIN table は destroy 後も課金される。残存 table を列挙して
+  // 警告する（削除はしない）。list 失敗は警告に留め destroy の exit code は変えない
+  // (reportRetainedTables は throw せず戻り値も持たない)。
   if (purgeRetainedData) {
     io.stdout("[lite] complete teardown succeeded; stack-owned retained data was removed.\n");
   } else {
     await reportRetainedTables((args) => io.spawnCapture("aws", args), io.stdout);
+    // DynamoDB backend は上の残存 table 警告で気づけるが、 Turso backend はそこに現れない。
+    // 何も言わないと「全部消えた」と読めてしまうので、 明示する。
+    if (tursoPlan.kind === "warn") io.stdout(tursoPlan.message);
   }
   return 0;
 }
@@ -564,8 +589,8 @@ async function confirmTeardown(
     (purgeRetainedData
       ? "[lite] make destroy-all は Lite stack と、stack が所有する DynamoDB の全履歴を完全削除します。\n" +
         "[lite] このデータは復元できません。stack に紐づく CloudWatch log group も削除します。\n"
-      : "[lite] make destroy は Lite stack を削除しますが、DynamoDB の履歴は RETAIN されます。\n" +
-        "[lite] 完全削除して課金も止める場合は make destroy-all を使ってください。\n") +
+      : "[lite] make destroy は Lite stack を削除します。DynamoDB table もデフォルトで削除されます。\n" +
+        "[lite] CDK_PARAM_RETAIN_DATA_TABLES=true で deploy 済みの場合だけ、table と課金が残ります。\n") +
       "[lite] Cognito UserPool / S3 / CloudFront など stack 管理 resource も削除されます。\n" +
       "[lite] 続行しますか? (y/N): ",
   );
@@ -656,6 +681,20 @@ export function defaultIO(): CliIO {
     ensureDir: (dir) => {
       mkdirSync(dir, { recursive: true });
     },
+    // Issue #2992: `make turso-reset` と同じ実装を呼ぶ。 assumeYes は teardown 全体の
+    // confirm を既に取っているため (ここで二度聞かない)。 interactive:false と合わせて、
+    // CodeBuild launcher からの非対話 teardown でも同じ経路が通る。
+    purgeTursoControlData: () =>
+      runTursoReset({
+        env: process.env,
+        environment: LITE_ENVIRONMENT,
+        processRunner: systemProcessRunner,
+        httpPost: tursoPipelinePost,
+        confirm: async () => true,
+        log: (message) => process.stdout.write(`${message}\n`),
+        interactive: false,
+        assumeYes: true,
+      }),
     confirm: async (question) => {
       // 非 TTY (= CI / pipe) では false を返して safety net とする。
       // bypass したい場合は呼び出し側で --yes / TENKACLOUD_LITE_DOWN_YES=1 を渡す。

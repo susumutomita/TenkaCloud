@@ -7,12 +7,22 @@ interface ChangelogEntry {
   readonly date: string;
   readonly title: string;
   readonly notes: readonly string[];
+  readonly reportUrl?: string;
 }
 
 // Changelog (ADR-0003 §5: /developers/changelog). Release history tied to the
 // pack / SDK version axes. Generated from release entries in a follow-up; seeded
 // here so the route is real.
 const ENTRIES: readonly ChangelogEntry[] = [
+  {
+    date: "2026-08-09",
+    title: "Immutable release candidate contract",
+    notes: [
+      "The Lite launcher now pins the platform, problem catalog, Simulator image, and toolchain as one manifest-backed candidate.",
+      "This candidate remains unverified until the required Golden Path and cleanup evidence is attached; it is not a certified release.",
+    ],
+    reportUrl: "https://github.com/susumutomita/TenkaCloud/blob/main/release/tenkacloud-release.md",
+  },
   {
     date: "2026-06-29",
     title: "Developer platform foundation",
@@ -39,6 +49,7 @@ export default function ChangelogPage() {
               <li key={note}>{note}</li>
             ))}
           </ul>
+          {entry.reportUrl ? <a href={entry.reportUrl}>Read the current release report →</a> : null}
         </section>
       ))}
     </div>

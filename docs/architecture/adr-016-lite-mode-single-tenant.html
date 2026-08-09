@@ -61,9 +61,10 @@
       <li><strong><code>tenantId === "local"</code> is the only Lite signal the frontend may use</strong>, and only
         for cosmetic/degrade decisions (e.g. hiding SaaS-only operations). Business logic remains tenant-generic.</li>
       <li><strong>Lite is the default.</strong> <code>make deploy</code> runs Lite; multi-tenant operators opt in
-        with <code>make deploy-saas</code>. <code>make destroy</code> removes the stacks while retaining DynamoDB
-        history; explicit <code>make destroy-all</code> derives exact physical ids from those stacks and removes
-        the retained Lite data before stack teardown.</li>
+        with <code>make deploy-saas</code>. <code>make destroy</code> removes the stacks and deletes DynamoDB by
+        default; retaining history requires a prior deploy with
+        <code>CDK_PARAM_RETAIN_DATA_TABLES=true</code>. Explicit <code>make destroy-all</code> derives exact physical
+        ids from those stacks and removes any retained Lite data before stack teardown.</li>
     </ul>
 
     <h2>Consequences</h2>

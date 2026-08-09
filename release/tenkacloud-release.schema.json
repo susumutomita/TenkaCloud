@@ -1,0 +1,474 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/susumutomita/TenkaCloud/blob/main/release/tenkacloud-release.schema.json",
+  "title": "TenkaCloud release manifest",
+  "description": "Immutable source bill of materials, compatibility claims, and Golden Path evidence for one TenkaCloud release.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schemaVersion",
+    "release",
+    "sources",
+    "artifacts",
+    "toolchain",
+    "compatibility",
+    "verification",
+    "knownLimitations"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "./tenkacloud-release.schema.json"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "release": {
+      "$ref": "#/$defs/release"
+    },
+    "sources": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["platform", "catalog"],
+      "properties": {
+        "platform": {
+          "$ref": "#/$defs/sourceRef"
+        },
+        "catalog": {
+          "$ref": "#/$defs/sourceRef"
+        }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["simulatorImage"],
+      "properties": {
+        "simulatorImage": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._/-]*(?::[A-Za-z0-9._-]+)?@sha256:[a-f0-9]{64}$"
+        }
+      }
+    },
+    "toolchain": {
+      "$ref": "#/$defs/toolchain"
+    },
+    "compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["qualificationTargets", "supportedModes", "contracts"],
+      "properties": {
+        "qualificationTargets": {
+          "type": "array",
+          "description": "Mode/region pairs collecting qualification evidence. This is not a certification claim.",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/supportedMode"
+          }
+        },
+        "supportedModes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/supportedMode"
+          }
+        },
+        "contracts": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/contractVersion"
+          }
+        }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["goldenPathRuns"],
+      "properties": {
+        "goldenPathRuns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/goldenPathRun"
+          }
+        }
+      }
+    },
+    "knownLimitations": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "status"],
+      "properties": {
+        "version": {
+          "type": "string",
+          "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?(?:\\+[0-9A-Za-z][0-9A-Za-z.-]*)?$"
+        },
+        "status": {
+          "enum": ["candidate", "certified"]
+        }
+      }
+    },
+    "sourceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "commit"],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://"
+        },
+        "commit": {
+          "type": "string",
+          "description": "Authoritative immutable source identity. A tag, branch, HEAD, or abbreviated SHA is invalid here.",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "tag": {
+          "type": "string",
+          "description": "Optional display label only; the commit remains authoritative.",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]*$"
+        }
+      }
+    },
+    "toolchain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bun", "node", "awsCdk"],
+      "properties": {
+        "bun": {
+          "$ref": "#/$defs/exactSemver"
+        },
+        "node": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["development", "launcher"],
+          "properties": {
+            "development": {
+              "$ref": "#/$defs/exactMajor"
+            },
+            "launcher": {
+              "$ref": "#/$defs/exactMajor"
+            }
+          }
+        },
+        "awsCdk": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["cli", "library"],
+          "properties": {
+            "cli": {
+              "$ref": "#/$defs/exactSemver"
+            },
+            "library": {
+              "$ref": "#/$defs/exactSemver"
+            }
+          }
+        }
+      }
+    },
+    "exactSemver": {
+      "type": "string",
+      "description": "An exact version. Ranges, dist-tags, and mutable aliases are not allowed.",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?(?:\\+[0-9A-Za-z][0-9A-Za-z.-]*)?$"
+    },
+    "exactMajor": {
+      "type": "string",
+      "description": "An exact Node.js major version.",
+      "pattern": "^(0|[1-9][0-9]*)$"
+    },
+    "supportedMode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "regions"],
+      "properties": {
+        "mode": {
+          "$ref": "#/$defs/mode"
+        },
+        "regions": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/region"
+          }
+        }
+      }
+    },
+    "contractVersion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "goldenPathRun": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runId",
+        "mode",
+        "region",
+        "completedAt",
+        "result",
+        "evidenceUrl",
+        "evidenceSha256",
+        "bom",
+        "runner",
+        "freshEnvironment",
+        "residualScan"
+      ],
+      "properties": {
+        "runId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mode": {
+          "$ref": "#/$defs/mode"
+        },
+        "region": {
+          "$ref": "#/$defs/region"
+        },
+        "completedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "result": {
+          "enum": ["passed", "failed"]
+        },
+        "evidenceUrl": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://"
+        },
+        "evidenceSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "bom": {
+          "$ref": "#/$defs/evidenceBom"
+        },
+        "runner": {
+          "$ref": "#/$defs/runnerRef"
+        },
+        "freshEnvironment": {
+          "$ref": "#/$defs/freshEnvironmentEvidence"
+        },
+        "residualScan": {
+          "$ref": "#/$defs/residualScan"
+        }
+      }
+    },
+    "evidenceBom": {
+      "type": "object",
+      "description": "Exact immutable release identity exercised by this Golden Path run.",
+      "additionalProperties": false,
+      "required": [
+        "releaseVersion",
+        "platformCommit",
+        "catalogCommit",
+        "simulatorImage",
+        "toolchain"
+      ],
+      "properties": {
+        "releaseVersion": {
+          "$ref": "#/$defs/exactSemver"
+        },
+        "platformCommit": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "catalogCommit": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "simulatorImage": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._/-]*(?::[A-Za-z0-9._-]+)?@sha256:[a-f0-9]{64}$"
+        },
+        "toolchain": {
+          "$ref": "#/$defs/toolchain"
+        }
+      }
+    },
+    "residualScan": {
+      "type": "object",
+      "description": "Versioned residual-resource scanner evidence for cleanup after this run.",
+      "additionalProperties": false,
+      "required": ["reportVersion", "runId", "decision", "evidenceUrl", "evidenceSha256"],
+      "properties": {
+        "reportVersion": {
+          "const": 1
+        },
+        "runId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "decision": {
+          "enum": ["passed", "failed", "undecidable"]
+        },
+        "evidenceUrl": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://"
+        },
+        "evidenceSha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "freshEnvironmentEvidence": {
+      "type": "object",
+      "description": "Evidence that this run started from a distinct clean environment.",
+      "additionalProperties": false,
+      "required": ["environmentId", "decision", "evidenceUrl", "evidenceSha256"],
+      "properties": {
+        "environmentId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "decision": {
+          "enum": ["passed", "failed", "undecidable"]
+        },
+        "evidenceUrl": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://"
+        },
+        "evidenceSha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "runnerRef": {
+      "type": "object",
+      "description": "Immutable source identity of the workflow or tool that produced this evidence.",
+      "additionalProperties": false,
+      "required": ["repository", "commit"],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://"
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        }
+      }
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "mode": {
+      "enum": ["lite", "saas-pooled", "saas-silo"]
+    },
+    "region": {
+      "type": "string",
+      "pattern": "^[a-z]{2}(?:-gov)?-[a-z]+-[0-9]+$"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "release": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "const": "candidate"
+              }
+            },
+            "required": ["status"]
+          }
+        },
+        "required": ["release"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "release": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "string",
+                "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)-candidate(?:\\.[0-9A-Za-z-]+)*(?:\\+[0-9A-Za-z][0-9A-Za-z.-]*)?$"
+              }
+            }
+          },
+          "compatibility": {
+            "type": "object",
+            "properties": {
+              "supportedModes": {
+                "type": "array",
+                "maxItems": 0
+              }
+            }
+          },
+          "knownLimitations": {
+            "type": "array",
+            "minItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "type": "object",
+        "properties": {
+          "release": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "const": "certified"
+              }
+            },
+            "required": ["status"]
+          }
+        },
+        "required": ["release"]
+      },
+      "then": {
+        "type": "object",
+        "properties": {
+          "compatibility": {
+            "type": "object",
+            "properties": {
+              "supportedModes": {
+                "type": "array",
+                "minItems": 1
+              }
+            }
+          },
+          "verification": {
+            "type": "object",
+            "properties": {
+              "goldenPathRuns": {
+                "type": "array",
+                "minItems": 3
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

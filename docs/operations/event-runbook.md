@@ -31,26 +31,28 @@ CodeBuild Start build (ACTION=deploy)
   ↓
 TenkaCloud Lite 環境作成
   ↓
-リハーサル (RepoRef / ProblemsRepoRef は main のままでよい)
+manifest の immutable candidate でリハーサル
   ↓
-リハーサル完了後、RepoRef / ProblemsRepoRef を tag またはコミット SHA へ固定
+より新しい main / branch を試す場合は development / unreleased 表示を確認
+  ↓
+リハーサル完了後、通過した RepoRef / ProblemsRepoRef の完全な commit SHA を記録・固定
   ↓
 本番開催 (原則、再ビルドしない)
   ↓
-終了後: ACTION=destroy-all (完全撤去) または ACTION=destroy (DynamoDB 履歴を残す場合)
+終了後: ACTION=destroy-all (完全撤去) または ACTION=destroy (通常撤去)
   ↓
 launcher stack 削除
 ```
 
-常設利用を禁止するものではないが、イベントごとに launcher を作り直し、終了後に destroy することをデフォルトの運用として推奨する。同じ launcher をイベントをまたいで使い回すこと自体は可能(CodeBuild は毎回両 repo を re-clone するため)だが、本番前の ref 固定と撤去のタイミングが曖昧になりやすいので、イベントごとの新規 launcher を推奨する。
+常設利用を禁止するものではないが、イベントごとに launcher を作り直し、終了後に destroy することをデフォルトの運用として推奨する。同じ launcher をイベントをまたいで使い回すこと自体は可能(CodeBuild は毎回両 repo を re-clone するため)だが、本番前の ref 固定と撤去のタイミングが曖昧になりやすいので、イベントごとの新規 launcher を推奨する。launcher の初期値、認定状態、既知の制限は [`release/tenkacloud-release.md`](../../release/tenkacloud-release.md) を正本とし、candidate / unverified を certified と読み替えない。
 
 ### 再ビルドケース別の方針
 
 | ケース | 内容 | 方針 |
 | --- | --- | --- |
-| A. TenkaCloud 本体のみ更新 (UI / API / CDK 修正) | `RepoRef` の指す branch へ push された変更 | `RepoRef` が同じ branch なら Start build の再実行で最新 commit が反映される (差分は CFn UPDATE)。本番直前に `main` の最新を無条件で当てる運用は非推奨。リハーサル後は tag / commit SHA へ固定する |
+| A. TenkaCloud 本体のみ更新 (UI / API / CDK 修正) | `RepoRef` の指す branch へ push された変更 | `RepoRef` が同じ branch なら Start build の再実行で最新 commit が反映される (差分は CFn UPDATE)。`main` を選ぶと development / unreleased と表示される。本番直前に `main` の最新を無条件で当てず、リハーサル後は完全な commit SHA へ固定する |
 | B. Problem Catalog へ問題を追加・修正 | `metadata.json` 追加、`template.yaml` 修正、portal component 追加、flag / scoring rule 変更 | 問題を追加しただけなら Start build の再実行で catalog / portal が更新される。community catalog (core 問題) の provenance は event 作成時に pin されないため、再ビルド後は**既存 event の picker にも新しい catalog がそのまま反映される**。問題テンプレートを変更した場合、既に deploy 済みの team の problem stack へ反映するには、その team に対する deploy を再実行する — 健全な stack には in-place `UpdateStack` が、終端状態 (`CREATE_FAILED` 等) の stack には delete + recreate が自動で選択される (`classifyDeployAction`, `infrastructure/lib/problem-deploy/handlers/cfn-deploy-handler/create-stack.ts`)。開催中の問題変更は原則非推奨 — 参加者間の公平性を壊しうる |
-| C. 独自 Problem Repo の ref 変更 | `ProblemsRepoRef` の変更 | 推奨はイベントごとに launcher stack を作成し、`ProblemsRepoRef` は検証済み tag またはコミット SHA へ固定すること。イベント途中で ref を変更しない。一時的な override (Start build with overrides) は launcher のデフォルト値を変えないので、恒久的に固定したい場合は launcher stack を Update stack する |
+| C. 独自 Problem Repo の ref 変更 | `ProblemsRepoRef` の変更 | 推奨はイベントごとに launcher stack を作成し、`ProblemsRepoRef` は検証済みの完全な commit SHA へ固定すること。イベント途中で ref を変更しない。一時的な override (Start build with overrides) は launcher のデフォルト値を変えないので、恒久的に固定したい場合は launcher stack を Update stack する |
 | D. 管理者メール・capacity・backend 変更 | `TenantAdminEmail` / `DynamoReadCapacity` / `DynamoWriteCapacity` / `ControlDataBackend` など | パラメータごとの override 可否・既存データへの影響は [`infrastructure/templates/README.md`](../../infrastructure/templates/README.md#cloudformation-console-lite-mode-deployment-pipeline) の表を参照。`ControlDataBackend` の切替は既存データを同期しないため特に注意する |
 
 ## 前日準備
@@ -151,8 +153,8 @@ Participant Portal のログインはチームログイン鍵そのものを bea
 - [ ] **各チームの問題スタックを削除**: `aws cloudformation delete-stack --stack-name <チームスタック名>`。問題によっては参加者が作った managed リソース (Lambda / ECS / App Runner / ALB / ECR / SG など) がスタック外に残る (例: microservice-migration-battle)。各問題の `OPERATOR.md` の「After the event」に従い、`${NamePrefix}` prefix / `TenkaCloud:NamePrefix` タグで掃く。
 - [ ] Battle 問題のログイン鍵は TTL で自動失効するが、早期に無効化したい場合はデプロイを削除する。
 - [ ] Always-On の場合: `make archive-always-on-runtime` でスコアを退避してから `make destroy-always-on-runtime`。per-event runtime を消せば AWS 常時課金が 0 に戻る (消し忘れは翌朝の自動掃除で拾われない — nightly sweeper は撤去済みなので必ずここで消す)。D1 は互換期間中は消さない。
-- [ ] **Lite はデフォルトでイベントごとに撤去する**(Issue #2760): 完全削除は `make destroy-all` (Console 経由なら CodeBuild を **Start build with overrides** で `ACTION=destroy-all` を指定して再実行)。DynamoDB 履歴を意図的に残したいときだけ `make destroy` / `ACTION=destroy` を使う — この場合は履歴が残る分の provisioned capacity 課金が止まらないことを理解した上で選ぶ。常設運用(イベントをまたいで同じ環境を稼働させ続ける)は default ではなく明示的な選択であり、その場合はこのチェックリストの本項目をスキップしてよい。SaaS は `make destroy-saas` (`scripts/cleanup.sh`、部分削除からでも冪等)。
-- [ ] **destroy 後の残存確認**: CloudFormation で `tenkacloud-lite` / `tenkacloud-lite-problem-deploy` の 2 スタックが `DELETE_COMPLETE` になっていること。`ACTION=destroy` (履歴保持) を使った場合は `RemovalPolicy.RETAIN` の DynamoDB テーブルが意図的に残る — 次にこの launcher から再デプロイする前に `ACTION=destroy-all` で完全削除するか、残ったテーブルを手動で消しておく(消し忘れは孤立テーブルとして課金され続ける、`scripts/lib/retained-tables.ts` の警告対象)。
+- [ ] **Lite はデフォルトでイベントごとに撤去する**(Issue #2760): 完全削除は `make destroy-all` (Console 経由なら CodeBuild を **Start build with overrides** で `ACTION=destroy-all` を指定して再実行)。通常の `make destroy` / `ACTION=destroy` でも、デフォルトの `RetainDataTables=false` なら DynamoDB テーブルは stack とともに削除される。履歴を残す場合はデプロイ時（または destroy 前の再デプロイ時）に `RetainDataTables=true` を指定し、残る provisioned capacity 課金を理解した上で `destroy` を使う。常設運用(イベントをまたいで同じ環境を稼働させ続ける)は default ではなく明示的な選択であり、その場合はこのチェックリストの本項目をスキップしてよい。SaaS は `make destroy-saas` (`scripts/cleanup.sh`、部分削除からでも冪等)。
+- [ ] **destroy 後の残存確認**: CloudFormation で `tenkacloud-lite` / `tenkacloud-lite-problem-deploy` の 2 スタックが `DELETE_COMPLETE` になっていること。`RetainDataTables=true` でデプロイしてから `ACTION=destroy` を使った場合だけ、`RemovalPolicy.RETAIN` の DynamoDB テーブルが意図的に残る — 次にこの launcher から再デプロイする前に `ACTION=destroy-all` で完全削除するか、残ったテーブルを手動で消しておく(消し忘れは孤立テーブルとして課金され続ける、`scripts/lib/retained-tables.ts` の警告対象)。
 - [ ] **launcher stack の削除**: 本体 2 スタックの撤去を確認したら `tenkacloud-lite-launcher` を削除し、CodeBuild プロジェクト・IAM Role・launcher 専用ロググループも消す。次のイベントは新しい launcher stack を作るのがデフォルト運用(同じ launcher の使い回しも可能だが、上の再デプロイ注意点を踏まえる)。
 
 ## リハーサル振り返り

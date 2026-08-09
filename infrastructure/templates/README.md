@@ -144,6 +144,16 @@ Issue #2760 は CloudFormation Quick Create URL / Deploy to AWS badge の追加�
 Open Question 7（配布先を S3 / CloudFront / GitHub Release のどれにするか）への回答でもあり、
 GitHub Release アセットとしての配布も現時点では行っていない。
 
+launcher の platform / catalog 初期値は、repo 直下の
+[`release/tenkacloud-release.json`](../../release/tenkacloud-release.json) にある完全な commit SHA
+と一致させる。人間向けの現在地は、同じ manifest から生成した
+[`release/tenkacloud-release.md`](../../release/tenkacloud-release.md) を参照する。現在の pair は
+**candidate / unverified** であり、immutable であることと認定済みであることは別です。stack
+parameter のどちらかの ref に `main` を指定すると **development / unreleased**、manifest 以外の
+組み合わせは **custom / unverified** として Output と build log に表示される。CodeBuild の
+one-build override を使った場合、build log は実際の ref を分類するが、Output は stack に保存された
+parameter の分類のままです。
+
 ### デプロイ手順
 
 1. README の [Quickstart](../../README.md#quickstart) から `lite-pipeline.yaml` を download する
@@ -155,11 +165,11 @@ GitHub Release アセットとしての配布も現時点では行っていな�
 | パラメータ | 必須 | 説明 |
 | --- | --- | --- |
 | `Environment` | 任意 | `development` / `staging` / `production`。対応する config.json / .env を使う |
-| `Action` | 任意 | `deploy`（デフォルト）/ `destroy`（DynamoDB 履歴保持）/ `destroy-all`（完全削除）。撤去は後述 |
+| `Action` | 任意 | `deploy`（デフォルト）/ `destroy`（stack 削除。DynamoDB もデフォルトで削除）/ `destroy-all`（明示的に保持したデータとログを含む完全削除）。撤去は後述 |
 | `TenantAdminEmail` | 必須 | Application Admin Console の初期ユーザー宛先 |
 | `ProblemsRepoUrl` | 任意 | 載せる問題カタログ repo。デフォルトは公式 TenkaCloudChallenge。自分の fork を指定すれば自分の問題で deploy できる |
-| `ProblemsRepoRef` | 任意 | カタログの branch / tag。デフォルト `main` |
-| `RepoUrl` / `RepoRef` | 任意 | 本体 repo と branch / tag（デフォルトは公式 repo の `main`）。fork のときだけ上書き |
+| `ProblemsRepoRef` | 任意 | カタログの branch / tag / 完全な commit SHA。デフォルトは release manifest の catalog commit |
+| `RepoUrl` / `RepoRef` | 任意 | 本体 repo と branch / tag / 完全な commit SHA（デフォルトは release manifest の platform commit）。fork のときだけ上書き |
 | `DeployExternalId` | 任意 | 競技者アカウントへ AssumeRole する場合のみ |
 | `ControlDataBackend` | 任意 | `dynamodb`（デフォルト、全テーブル DynamoDB）/ `turso`（DynamoDB テーブルを一切 synth しない SQL backend）。既存 stack での切替は破壊的になりうる（下の再ビルド方針を参照） |
 | `TursoDatabaseUrl` | `ControlDataBackend=turso` のときのみ必須 | Turso の `libsql://` database URL |
@@ -191,7 +201,7 @@ launcher stack 自体はビルドの起動口を用意するだけです。触�
 | CodeBuild **Start build with overrides** | その 1 回のビルドだけ任意の環境変数を上書きする。launcher stack 自体は変更されない | その 1 ビルドのみ |
 | CodeBuild **Start build**（override なし） | 何も変えず、launcher stack に保存されたデフォルト値どおりに実行する | — |
 
-`RepoRef` をリハーサル後の tag に固定する・`TenantAdminEmail` を恒久的に変えるなど「今後ずっと
+`RepoRef` をリハーサル後の commit SHA に固定する・`TenantAdminEmail` を恒久的に変えるなど「今後ずっと
 この値にしたい」ときは launcher stack の Update stack を使う。`ACTION=destroy-all` の実行、
 `Environment` を変えて同じ launcher から別イベントを動かす、といった単発の変更は Start build
 with overrides で済ませ、launcher のデフォルト値は触らない。
@@ -206,7 +216,7 @@ with overrides で済ませ、launcher のデフォルト値は触らない。
 | `Environment` | 可（その回だけ別 env で走らせられる） | 別の env 名は別のスタック名（development だけ suffix なし、他は `-<env>`）になり、同一 AWS アカウント内で並行する**別の Lite デプロイ**になる。1 つの launcher から複数イベントを並行運用する手段にもなるが、デフォルト運用はイベントごとに launcher を分けることを推奨する |
 | `Action` | 可（むしろ override 前提） | `deploy` / `destroy` / `destroy-all` の選択そのもの。デフォルト値を `destroy` 系のまま launcher に保存すると、次の無指定 Start build が誤って撤去を実行するのでデフォルト値は `deploy` のままにする |
 | `TenantAdminEmail` | 可 | 同じ email なら `ensureTenantAdminUser` が既存ユーザーを検出して **skip**（冪等）。別 email に変えて再実行すると、古いユーザーは削除・置換されず**新しい Tenant Admin がもう 1 人追加される**（重複作成） |
-| `RepoUrl` / `RepoRef` | 可 | CodeBuild は毎回リポジトリを新規に `git clone` し直すので取得内容は必ず更新される。`cdk deploy` は差分を CFn UPDATE として適用する（stateful resource の置換が起きうる）。本番直前に `main` の最新を無条件で当てる運用は非推奨 — リハーサル後は tag / commit SHA へ固定する |
+| `RepoUrl` / `RepoRef` | 可 | CodeBuild は branch / tag と完全な commit SHA の双方を fail-closed に取得する。manifest の初期値は不変だが、`main` / branch は再実行時に移動しうる。one-build override では build log が実 ref を分類し、CloudFormation Output は stack に保存した ref の分類のままになる。`cdk deploy` は差分を CFn UPDATE として適用する（stateful resource の置換が起きうる）。本番直前に `main` の最新を無条件で当てず、リハーサルを通過した完全な commit SHA へ固定する |
 | `ProblemsRepoUrl` / `ProblemsRepoRef` | 可 | 同上でカタログ・portal 資材が再ビルドされる。community catalog（= 「core」問題）の provenance は event 作成時に `{source:"core"}` としてしか記録されず、内容の digest は pin されない。そのため再ビルド後は**既存 event の問題 picker にも新しい catalog がそのまま反映される**。Problem Pack 経由の問題だけは `packId` / `packVersion` / `contentDigest` が event 作成時に不変 pin される（`infrastructure/lib/problem-pack/event-pin.ts` の `createEventSnapshot` / `resolveDeploymentProvenance`）ので、pack を更新しても既存 event の解決済み provenance は変わらない |
 | `DeployExternalId` | 可 | AssumeRole の trust に影響する。競技者側 `competitor-bootstrap.yaml` の ExternalId と一致させる必要がある |
 | `ControlDataBackend` | 可（ただし極めて破壊的） | `dynamodb` ⇔ `turso` の切替を既にデータが入っている stack に対して行うと、**切替後は空のバックエンドから始まり旧データは同期されない**（#2677 で dual-write bridge は廃止済み）。詳細は [`docs/running-costs.md`](../../docs/running-costs.md) の「Migrating an existing stack」を参照 |
@@ -219,11 +229,12 @@ with overrides で済ませ、launcher のデフォルト値は触らない。
 影響範囲を確認し、対応内容・時刻・対象チームを event log に残す。当日の運用フローは
 [`docs/operations/event-runbook.md`](../../docs/operations/event-runbook.md) を参照。
 
-**同じ launcher から destroy 後に再デプロイすること自体は可能だが、注意が必要。** DynamoDB
-テーブルは明示的な `TableName` を持たず CloudFormation が物理名を自動生成するため、
-`ACTION=destroy`（履歴保持）の後に同じ launcher で再度 deploy しても新しいテーブルが衝突なく
-作られる — が、**前回の RETAIN テーブルは孤立したまま残り、課金され続ける**
-（`scripts/lib/retained-tables.ts` が警告するのはこの孤立分）。再デプロイの前に必ず
+**同じ launcher から destroy 後に再デプロイすること自体は可能。** デフォルトの
+`RetainDataTables=false` でデプロイした stack は、`ACTION=destroy` でも DynamoDB テーブルを削除する。
+履歴を残す場合は、デプロイ時（または destroy 前の再デプロイ時）に
+`RetainDataTables=true` を指定する。この場合、CloudFormation が自動生成した物理名のため次の deploy
+とは衝突しないが、**前回の RETAIN テーブルは孤立したまま残り、課金され続ける**
+（`scripts/lib/retained-tables.ts` が警告するのはこの孤立分）。再デプロイの前に
 `ACTION=destroy-all` で完全削除するか、孤立テーブルを手動で削除すること。
 
 ### 撤去 (teardown)
@@ -237,7 +248,8 @@ CodeBuild プロジェクト）と、ビルドが作る `tenkacloud-lite` / `ten
 DynamoDB テーブルと問題デプロイ用ログを物理 ID で特定して完全削除し、続けて 2 スタックを正しい
 順序（cross-stack 参照の都合で `tenkacloud-lite` → `tenkacloud-lite-problem-deploy`）で削除する。
 その後 `tenkacloud-lite-launcher` スタックを削除すれば CodeBuild プロジェクト、IAM Role、
-launcher のロググループも消える。DynamoDB 履歴を残したい場合だけ `ACTION=destroy` を使う。
+launcher のロググループも消える。DynamoDB 履歴を残すには、先に
+`RetainDataTables=true` でデプロイし、その後 `ACTION=destroy` を使う。
 
 > **既存 launcher の更新:** `destroy-all` を追加する前のテンプレートで作成した launcher は、
 > CloudFormation の **Update stack** から最新版の `lite-pipeline.yaml` をアップロードして更新して
@@ -246,8 +258,9 @@ launcher のロググループも消える。DynamoDB 履歴を残したい場�
 
 **手動（Console から）:** CloudFormation で **`tenkacloud-lite` を先に削除** → DELETE_COMPLETE
 を待って **`tenkacloud-lite-problem-deploy`** を削除 → 最後に `tenkacloud-lite-launcher`。逆順
-だと `Export ... cannot be deleted as it is in use` で止まる。この手順では
-`RemovalPolicy.RETAIN` の DynamoDB テーブルが残るため完全削除にはならない。名前の前方一致で
+だと `Export ... cannot be deleted as it is in use` で止まる。デフォルトの
+`RetainDataTables=false` なら DynamoDB テーブルも stack とともに消える。
+`RetainDataTables=true` でデプロイしていた場合だけテーブルが残るため、名前の前方一致で
 手動削除せず、完全削除には上の `ACTION=destroy-all` を使う。
 
 ### コストの注意
@@ -255,7 +268,8 @@ launcher のロググループも消える。DynamoDB 履歴を残したい場�
 問題テンプレート (`problems/**/template.yaml`) は AWS 無料枠 0 円に収めているが、この
 デプロイは CodeBuild (build-minute 課金) を使うため厳密な 0 円ではない（月数回のデプロイで
 1 ドル未満）。使い終えたら `ACTION=destroy-all` と launcher スタック削除まで完了させる。
-`ACTION=destroy` だけでは保持された DynamoDB の provisioned capacity 課金は止まらない。
+`RetainDataTables=true` でデプロイした場合、`ACTION=destroy` だけでは保持された DynamoDB の
+provisioned capacity 課金は止まらない。
 
 ## マルチクラウド（非 AWS）の team 認証情報セットアップ
 
