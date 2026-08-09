@@ -174,39 +174,50 @@ function validatePageToken(
   };
 }
 
-function parseTagArray(value: unknown, field: string, missingIsEmpty = true): TagsResult {
+function requiredTagFieldMissing(field: string): TagsResult {
+  return { tags: undefined, errors: [malformed(field, `${field} field is required`)] };
+}
+
+function parseTagEntries(
+  value: unknown,
+  field: string,
+  keyField: "Key" | "key",
+  valueField: "Value" | "value",
+  missingIsEmpty = true,
+): TagsResult {
   if (value === undefined) {
-    return missingIsEmpty
-      ? { tags: {}, errors: [] }
-      : { tags: undefined, errors: [malformed(field, `${field} field is required`)] };
+    return missingIsEmpty ? { tags: {}, errors: [] } : requiredTagFieldMissing(field);
   }
   if (!Array.isArray(value)) {
     return { tags: undefined, errors: [malformed(field, `${field} must be an array`)] };
   }
   const tags: Record<string, string> = {};
   for (const item of value) {
+    const key = isRecord(item) ? item[keyField] : undefined;
+    const tagValue = isRecord(item) ? item[valueField] : undefined;
     if (
-      !isRecord(item) ||
-      typeof item.Key !== "string" ||
-      item.Key === "" ||
-      typeof item.Value !== "string" ||
-      tags[item.Key] !== undefined
+      typeof key !== "string" ||
+      key === "" ||
+      typeof tagValue !== "string" ||
+      tags[key] !== undefined
     ) {
       return {
         tags: undefined,
         errors: [malformed(field, `${field} contains an invalid or duplicate tag`)],
       };
     }
-    tags[item.Key] = item.Value;
+    tags[key] = tagValue;
   }
   return { tags, errors: [] };
 }
 
+function parseTagArray(value: unknown, field: string, missingIsEmpty = true): TagsResult {
+  return parseTagEntries(value, field, "Key", "Value", missingIsEmpty);
+}
+
 function parseTagMap(value: unknown, field: string, missingIsEmpty = true): TagsResult {
   if (value === undefined) {
-    return missingIsEmpty
-      ? { tags: {}, errors: [] }
-      : { tags: undefined, errors: [malformed(field, `${field} field is required`)] };
+    return missingIsEmpty ? { tags: {}, errors: [] } : requiredTagFieldMissing(field);
   }
   if (!isRecord(value) || Object.values(value).some((item) => typeof item !== "string")) {
     return { tags: undefined, errors: [malformed(field, `${field} must be a string map`)] };
@@ -219,34 +230,17 @@ function parseTagMap(value: unknown, field: string, missingIsEmpty = true): Tags
 }
 
 function parseCodeBuildTagArray(value: unknown, field: string): TagsResult {
-  if (value === undefined) return { tags: {}, errors: [] };
-  if (!Array.isArray(value)) {
-    return { tags: undefined, errors: [malformed(field, `${field} must be an array`)] };
-  }
-  const tags: Record<string, string> = {};
-  for (const item of value) {
-    if (
-      !isRecord(item) ||
-      typeof item.key !== "string" ||
-      item.key === "" ||
-      typeof item.value !== "string" ||
-      tags[item.key] !== undefined
-    ) {
-      return {
-        tags: undefined,
-        errors: [malformed(field, `${field} contains an invalid or duplicate tag`)],
-      };
-    }
-    tags[item.key] = item.value;
-  }
-  return { tags, errors: [] };
+  return parseTagEntries(value, field, "key", "value");
 }
 
-async function readTagArray(
+type TagParser = (value: unknown, field: string, missingIsEmpty: boolean) => TagsResult;
+
+async function readTags(
   runAws: AwsCliRunner,
   operation: string,
   args: readonly string[],
   field: string,
+  parser: TagParser,
   noTagSetIsEmpty = false,
 ): Promise<TagsResult> {
   const result = await safelyRun(runAws, [...args, "--output", "json", "--no-cli-pager"]);
@@ -262,8 +256,17 @@ async function readTagArray(
   }
   // A successful dedicated tag API must return its documented field. S3's no-tag case is the
   // explicit NoSuchTagSet error handled above; a successful `{}` is malformed, not an empty set.
-  const tags = parseTagArray(record[field], operation, false);
-  return tags;
+  return parser(record[field], operation, false);
+}
+
+async function readTagArray(
+  runAws: AwsCliRunner,
+  operation: string,
+  args: readonly string[],
+  field: string,
+  noTagSetIsEmpty = false,
+): Promise<TagsResult> {
+  return readTags(runAws, operation, args, field, parseTagArray, noTagSetIsEmpty);
 }
 
 async function readTagMap(
@@ -272,16 +275,7 @@ async function readTagMap(
   args: readonly string[],
   field: string,
 ): Promise<TagsResult> {
-  const result = await safelyRun(runAws, [...args, "--output", "json", "--no-cli-pager"]);
-  if (result.code !== 0) {
-    return { tags: undefined, errors: [commandFailure(operation, result)] };
-  }
-  const record = parseJsonObject(result.stdout);
-  if (!record) {
-    return { tags: undefined, errors: [malformed(operation, "response must be a JSON object")] };
-  }
-  const tags = parseTagMap(record[field], operation, false);
-  return tags;
+  return readTags(runAws, operation, args, field, parseTagMap);
 }
 
 function nonEmptyString(record: Record<string, unknown>, key: string): string | undefined {

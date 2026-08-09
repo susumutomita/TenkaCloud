@@ -512,6 +512,33 @@ function allNotRunServices(
   };
 }
 
+function blockedScanReport(
+  input: LiteResidualScanInput,
+  now: () => Date,
+  startedAt: string,
+  observedAccountId: string | null,
+  decision: "failed" | "undecidable",
+  decisionReasons: readonly string[],
+  error: AwsCommandError,
+): LiteResidualScanReport {
+  return {
+    reportVersion: LITE_RESIDUAL_SCAN_REPORT_VERSION,
+    runId: input.runId,
+    mode: "lite",
+    environment: input.environment,
+    expectedAccountId: input.expectedAccountId,
+    observedAccountId,
+    region: input.region,
+    startedAt,
+    completedAt: now().toISOString(),
+    releaseIdentity: input.releaseIdentity,
+    ownershipEvidence: input.ownership,
+    decision,
+    decisionReasons,
+    services: allNotRunServices(error),
+  };
+}
+
 function finalDecision(
   services: Readonly<Record<LiteResidualService, LiteResidualServiceReport>>,
 ): LiteResidualDecision {
@@ -545,23 +572,15 @@ export async function scanLiteResidualResources(
   const startedAt = now().toISOString();
   const preflight = await deps.inventory.getCallerIdentity(input.region);
   if (!preflight.ok) {
-    const services = allNotRunServices(preflight.error);
-    return {
-      reportVersion: LITE_RESIDUAL_SCAN_REPORT_VERSION,
-      runId: input.runId,
-      mode: "lite",
-      environment: input.environment,
-      expectedAccountId: input.expectedAccountId,
-      observedAccountId: null,
-      region: input.region,
+    return blockedScanReport(
+      input,
+      now,
       startedAt,
-      completedAt: now().toISOString(),
-      releaseIdentity: input.releaseIdentity,
-      ownershipEvidence: input.ownership,
-      decision: "undecidable",
-      decisionReasons: ["AWS identity preflight failed; no resource inventory was trusted"],
-      services,
-    };
+      null,
+      "undecidable",
+      ["AWS identity preflight failed; no resource inventory was trusted"],
+      preflight.error,
+    );
   }
 
   if (preflight.identity.accountId !== input.expectedAccountId) {
@@ -570,22 +589,15 @@ export async function scanLiteResidualResources(
       operation: "sts get-caller-identity",
       message: `active account ${preflight.identity.accountId} does not match expected ${input.expectedAccountId}`,
     };
-    return {
-      reportVersion: LITE_RESIDUAL_SCAN_REPORT_VERSION,
-      runId: input.runId,
-      mode: "lite",
-      environment: input.environment,
-      expectedAccountId: input.expectedAccountId,
-      observedAccountId: preflight.identity.accountId,
-      region: input.region,
+    return blockedScanReport(
+      input,
+      now,
       startedAt,
-      completedAt: now().toISOString(),
-      releaseIdentity: input.releaseIdentity,
-      ownershipEvidence: input.ownership,
-      decision: "failed",
-      decisionReasons: [error.message],
-      services: allNotRunServices(error),
-    };
+      preflight.identity.accountId,
+      "failed",
+      [error.message],
+      error,
+    );
   }
 
   const mismatchReasons = ownershipMismatchReasons(input, preflight.identity.accountId);
@@ -595,22 +607,15 @@ export async function scanLiteResidualResources(
       operation: "ownership evidence validation",
       message: mismatchReasons.join("; "),
     };
-    return {
-      reportVersion: LITE_RESIDUAL_SCAN_REPORT_VERSION,
-      runId: input.runId,
-      mode: "lite",
-      environment: input.environment,
-      expectedAccountId: input.expectedAccountId,
-      observedAccountId: preflight.identity.accountId,
-      region: input.region,
+    return blockedScanReport(
+      input,
+      now,
       startedAt,
-      completedAt: now().toISOString(),
-      releaseIdentity: input.releaseIdentity,
-      ownershipEvidence: input.ownership,
-      decision: "undecidable",
-      decisionReasons: mismatchReasons,
-      services: allNotRunServices(error),
-    };
+      preflight.identity.accountId,
+      "undecidable",
+      mismatchReasons,
+      error,
+    );
   }
 
   const identity = preflight.identity;

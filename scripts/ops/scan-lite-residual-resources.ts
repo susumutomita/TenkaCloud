@@ -20,6 +20,7 @@
  */
 
 import { readFileSync } from "node:fs";
+import { addExactValueArgument } from "../cli/exact-value-arguments";
 import {
   type LiteResidualOwnershipEvidence,
   type LiteResidualReleaseIdentity,
@@ -57,20 +58,9 @@ export interface LiteResidualScanCliArgs {
   readonly ownershipFile: string;
 }
 
-function addExactValue(argument: string, values: Map<string, string>): void {
-  const separator = argument.indexOf("=");
-  const key = separator > 0 ? argument.slice(0, separator) : argument;
-  if (!VALUE_FLAGS.has(key)) throw new Error(`unknown argument: ${argument}`);
-  if (separator < 1) throw new Error(`${key} requires =<exact-value>`);
-  if (values.has(key)) throw new Error(`${key} was provided more than once`);
-  const value = argument.slice(separator + 1).trim();
-  if (!value) throw new Error(`${key} requires a non-empty exact value`);
-  values.set(key, value);
-}
-
 export function parseLiteResidualScanCliArgs(argv: readonly string[]): LiteResidualScanCliArgs {
   const values = new Map<string, string>();
-  for (const argument of argv) addExactValue(argument, values);
+  for (const argument of argv) addExactValueArgument(argument, VALUE_FLAGS, values);
   const runId = values.get("--run-id");
   const environment = values.get("--environment");
   const expectedAccountId = values.get("--expected-account");

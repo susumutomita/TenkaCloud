@@ -17,6 +17,7 @@ import {
 } from "@aws-sdk/client-dynamodb";
 import { GetCallerIdentityCommand, STSClient } from "@aws-sdk/client-sts";
 import { DynamoDBDocumentClient, ScanCommand, type ScanCommandOutput } from "@aws-sdk/lib-dynamodb";
+import { addExactValueArgument } from "../cli/exact-value-arguments";
 import {
   applyTenantRegistrationBackfill,
   planTenantRegistrationBackfill,
@@ -40,17 +41,6 @@ const VALUE_FLAGS = new Set([
   "--environment",
 ]);
 
-function addExactValue(argument: string, values: Map<string, string>): void {
-  const separator = argument.indexOf("=");
-  const key = separator > 0 ? argument.slice(0, separator) : argument;
-  if (!VALUE_FLAGS.has(key)) throw new Error(`Unknown argument: ${argument}`);
-  if (separator < 1) throw new Error(`${key} requires =<exact-value>`);
-  if (values.has(key)) throw new Error(`${key} was provided more than once`);
-  const value = argument.slice(separator + 1).trim();
-  if (!value) throw new Error(`${key} requires a non-empty exact value`);
-  values.set(key, value);
-}
-
 export function parseTenantRegistrationBackfillArgs(argv: readonly string[]): BackfillArgs {
   const values = new Map<string, string>();
   let apply = false;
@@ -60,7 +50,7 @@ export function parseTenantRegistrationBackfillArgs(argv: readonly string[]): Ba
       apply = true;
       continue;
     }
-    addExactValue(argument, values);
+    addExactValueArgument(argument, VALUE_FLAGS, values, "Unknown argument");
   }
   const tenantDetailsTableName = values.get("--tenant-details-table");
   const tenantRegistrationTableName = values.get("--tenant-registration-table");

@@ -695,6 +695,15 @@ describe("Lite residual scanner CLI (#2977)", () => {
     });
     expect(() => parseLiteResidualScanCliArgs([])).toThrow("are required");
     expect(() => parseLiteResidualScanCliArgs(["--unknown=x"])).toThrow("unknown argument");
+    expect(() => parseLiteResidualScanCliArgs([...argv, `--run-id=${RUN_ID}-duplicate`])).toThrow(
+      "--run-id was provided more than once",
+    );
+    expect(() => parseLiteResidualScanCliArgs(["--run-id", ...argv.slice(1)])).toThrow(
+      "--run-id requires =<exact-value>",
+    );
+    expect(() => parseLiteResidualScanCliArgs(["--run-id=   ", ...argv.slice(1)])).toThrow(
+      "--run-id requires a non-empty exact value",
+    );
   });
 
   it("writes one JSON report and returns the report decision exit code", async () => {
