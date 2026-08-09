@@ -124,7 +124,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" />
-<link rel="stylesheet" href="./styles/main.css?v=0a1b566b74" />
+<link rel="stylesheet" href="./styles/main.css?v=4dc0575463" />
 </head>
 <body>
 
@@ -513,6 +513,26 @@
   </div>
 </section>
 
+<!-- 書籍。 両版を並べて出すのが要点で、フッターの 1 行では読者から見て
+     「自分の言語の版しか存在しない」 ように見えていた (Issue #2974)。 -->
+<section id="book">
+  <div class="wrap audience-intro">
+    <div class="eyebrow" data-i18n="book.eyebrow">Read the book</div>
+    <h2 data-i18n="book.h2">The whole method, in one book.</h2>
+    <p class="lead" data-i18n="book.lead">Build a local Challenge, an AWS Challenge, and an AWS Battle in increasing order of difficulty, then run them as a competition several teams can play. It is written around TenkaCloud, but reading it needs neither an AWS account nor a TenkaCloud install. Available in English and Japanese.</p>
+    <div class="book-editions">
+      <a class="book-edition" href="https://zenn.dev/bull/books/cloud-competition" target="_blank" rel="noopener noreferrer" data-cta="book-ja">
+        <span class="book-edition-title" data-i18n="book.jaTitle">自分で作るクラウド競技</span>
+        <span class="book-edition-meta"><span data-i18n="book.jaLang">Japanese</span> · Zenn</span>
+      </a>
+      <a class="book-edition" href="https://leanpub.com/build-your-own-cloud-competition" target="_blank" rel="noopener noreferrer" data-cta="book-en">
+        <span class="book-edition-title">Build Your Own Cloud Competition</span>
+        <span class="book-edition-meta"><span data-i18n="book.enLang">English</span> · Leanpub</span>
+      </a>
+    </div>
+  </div>
+</section>
+
 <section id="offerings" class="alt">
   <div class="wrap audience-intro">
     <div class="eyebrow" data-i18n="offerings.eyebrow">Commercial offerings</div>
@@ -710,7 +730,7 @@
 
 <script src="./ink-bg.js" defer></script>
 <script src="./contact-form.js?v=7301ba7ae8" defer></script>
-<script src="./app.js?v=c2cc150562" defer></script>
+<script src="./app.js?v=41f9d0c3e9" defer></script>
 
 </body>
 </html>

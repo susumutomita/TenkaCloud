@@ -305,6 +305,22 @@ section .lead {
 }
 .extend-cta .more { font-size: 13px; color: #0066cc; text-decoration: none; }
 .extend-cta .more:hover { text-decoration: underline; }
+/* #2974: 書籍の版を並べる。 両版を同じ重みで出すのが目的なので、片方を primary に
+   しない。 並び順は index.html の 1 箇所だけで決まる (index.en.html は
+   generate-landing-locales.ts の生成物)。 */
+.book-editions {
+  margin-top: 22px; display: grid; gap: 12px; justify-content: center;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 320px));
+}
+.book-edition {
+  display: flex; flex-direction: column; gap: 4px; padding: 14px 16px;
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--paper);
+  text-decoration: none; color: inherit; text-align: left;
+  transition: border-color .15s ease, transform .15s ease;
+}
+.book-edition:hover { border-color: var(--blue); transform: translateY(-1px); }
+.book-edition-title { font-size: 14px; font-weight: 600; color: var(--ink); }
+.book-edition-meta { font-size: 12px; color: var(--ink-3); }
 /* #2711 follow-up: AI エージェント貼り付けプロンプト (#extend 内)。 */
 .agent-prompt {
   margin: 26px auto 0; padding: 16px 18px 18px;

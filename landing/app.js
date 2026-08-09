@@ -308,6 +308,14 @@
       "extend.agent_video_title": "AI エージェントで TenkaCloud を Mac にワンショット起動",
       "extend.agent_tutorial": "チュートリアルで確認する →",
 
+      "book.eyebrow": "本で読む",
+      "book.h2": "作り方を、一冊にまとめてあります。",
+      "book.lead":
+        "ローカル Challenge、AWS Challenge、AWS Battle を簡単な順に一から作り、 複数チームで遊べる競技として動かすまでを扱う本です。 TenkaCloud を題材にしていますが、 読むのに AWS アカウントも TenkaCloud の導入も要りません。 日本語版と英語版があります。",
+      "book.jaTitle": "自分で作るクラウド競技",
+      "book.jaLang": "日本語版",
+      "book.enLang": "英語版",
+
       "offerings.eyebrow": "商用プラン",
       "offerings.h2": "プロダクト化された 3 つの提供形態。",
       "offerings.lead":
@@ -592,6 +600,14 @@
       "extend.agent_video_embed_src": "https://www.youtube.com/embed/GDu9FhWrQns",
       "extend.agent_video_title": "Launch TenkaCloud on a Mac with one AI prompt",
       "extend.agent_tutorial": "Check it in the tutorial →",
+
+      "book.eyebrow": "Read the book",
+      "book.h2": "The whole method, in one book.",
+      "book.lead":
+        "Build a local Challenge, an AWS Challenge, and an AWS Battle in increasing order of difficulty, then run them as a competition several teams can play. It is written around TenkaCloud, but reading it needs neither an AWS account nor a TenkaCloud install. Available in English and Japanese.",
+      "book.jaTitle": "自分で作るクラウド競技",
+      "book.jaLang": "Japanese",
+      "book.enLang": "English",
 
       "offerings.eyebrow": "Commercial offerings",
       "offerings.h2": "Three productized offerings — formally documented.",

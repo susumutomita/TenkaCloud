@@ -51,16 +51,48 @@ describe("書籍導線 (#2971)", () => {
     expect(text, `${surface} に英語版へのリンクがない`).toContain(EN_BOOK);
   });
 
-  it("ランディングページの既定言語が、その言語の販売先を指す", () => {
+  /** The one footer anchor, whose href app.js swaps per locale. */
+  function footerBookLink(surface: string): string {
+    const line = read(surface)
+      .split("\n")
+      .find((candidate) => candidate.includes('data-i18n="footer.r3"'));
+    expect(line, `${surface} に footer.r3 の書籍リンクがない`).toBeDefined();
+    return line as string;
+  }
+
+  it("フッターの 1 リンクは、既定言語のまま読める版を指す", () => {
     // 出荷される file の既定値だけを見る。実際に表示される販売先は app.js が
     // 閲覧者のロケールで差し替えるので、これは runtime の挙動の証明ではない
     // (それは下の test が扱う)。ここが守るのは「JS が動かなかったとき、または
     // ロケール検出の前に見えている href」が読めない版を指さないこと。
-    // `index.en.html` は生成物なので、ここが落ちるときは app.js の翻訳か生成漏れ。
-    expect(read("landing/index.html")).toContain(JA_BOOK);
-    expect(read("landing/index.html")).not.toContain(EN_BOOK);
-    expect(read("landing/index.en.html")).toContain(EN_BOOK);
-    expect(read("landing/index.en.html")).not.toContain(JA_BOOK);
+    //
+    // 対象は footer の 1 リンクに限る。以前はページ全体を見ていたが、それは
+    // 「ページ上に 1 版しか出てこない」ことまで固定してしまっていた。両版を
+    // 並べて出す #book セクション (下の test) はその制約の下では書けない。
+    expect(footerBookLink("landing/index.html")).toContain(JA_BOOK);
+    expect(footerBookLink("landing/index.html")).not.toContain(EN_BOOK);
+    expect(footerBookLink("landing/index.en.html")).toContain(EN_BOOK);
+    expect(footerBookLink("landing/index.en.html")).not.toContain(JA_BOOK);
+  });
+
+  it.each([
+    ["landing/index.html"],
+    ["landing/index.en.html"],
+  ])("%s の書籍セクションは、両方の版を並べて出す", (surface) => {
+    // Issue #2974 の実質。フッターの 1 行だけだった頃は、日本語ページからは
+    // Zenn 版しか、英語ページからは Leanpub 版しか見えず、読者から見て
+    // 「自分の言語の版しか存在しない」ように読めていた。並べるのが目的なので、
+    // 両方あることと、どちらがどの言語かが書かれていることを固定する。
+    const text = read(surface);
+    const section = text.slice(text.indexOf('<section id="book">'));
+    expect(section, `${surface} に #book セクションがない`).toContain("</section>");
+    const body = section.slice(0, section.indexOf("</section>"));
+    expect(body, `${surface} の書籍セクションに日本語版がない`).toContain(JA_BOOK);
+    expect(body, `${surface} の書籍セクションに英語版がない`).toContain(EN_BOOK);
+    // 言語表示は data-i18n で差し替わるので、キーの存在で固定する。URL だけ
+    // 並べても、どちらが自分の読める版かは分からない。
+    expect(body).toContain('data-i18n="book.jaLang"');
+    expect(body).toContain('data-i18n="book.enLang"');
   });
 
   it("app.js は href も翻訳対象として両方の URL を持つ", () => {
