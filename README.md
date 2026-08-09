@@ -216,6 +216,15 @@ Live, end-to-end verification of the pack flow has not been run yet (#2459 close
 
 If you are considering TenkaCloud for enterprise or internal training use — hands-on security/operations drills, evaluation or onboarding exercises, custom/private problem sets, or instructor-led workshops — please feel free to reach out via the [contact form](https://forms.gle/djVprYmq3hFgJA7P9) or [GitHub Discussions](https://github.com/susumutomita/TenkaCloud/discussions). TenkaCloud is open source, but we would love to learn more about real-world training needs.
 
+## Book
+
+**[Build Your Own Cloud Competition](https://leanpub.com/build-your-own-cloud-competition)** — the design decisions and implementation
+journey behind TenkaCloud. 日本語版: **[『自分で作るクラウド競技』](https://zenn.dev/bull/books/cloud-competition)**.
+
+The book covers why the platform is shaped the way it is; the repository is the source of truth
+for how it currently works. Where the two disagree, the repository is right — the book is a
+record of the reasoning, not an API reference.
+
 ## Documentation
 
 - [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) — local terminal deploys, SaaS mode, and [Always-On mode](./DEPLOYMENT_GUIDE.md#always-on-mode-adr-049) (zero always-on compute between events; operator runbook: [docs/always-on/README.md](./docs/always-on/README.md))

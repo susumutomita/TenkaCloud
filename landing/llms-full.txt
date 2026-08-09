@@ -153,3 +153,8 @@ code in the same PR.
   drills print teardown steps for a reason.
 
 (End of briefing.)
+
+## Book
+
+- [Build Your Own Cloud Competition (English)](https://leanpub.com/build-your-own-cloud-competition): the design decisions and implementation journey behind TenkaCloud, written by its author. Background reading, **not** a specification — the repository is the source of truth for current behaviour, and the book may describe an earlier shape of the system.
+- [『自分で作るクラウド競技』(日本語)](https://zenn.dev/bull/books/cloud-competition): the same material in Japanese. Same caveat: read it for why, read the repository for what.
