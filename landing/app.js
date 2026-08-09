@@ -406,6 +406,10 @@
       "footer.p1": "問題カタログ",
       "footer.r0": "ドキュメント",
       "footer.r2": "Changelog",
+      // 書籍は日英で別の販売先にある。href も翻訳対象にして、閲覧言語に合うほうへ送る。
+      // 現行仕様の正本はリポジトリ内のドキュメントで、書籍は設計判断と構築過程を読む資料。
+      "footer.r3": "書籍『自分で作るクラウド競技』",
+      "footer.r3Href": "https://zenn.dev/bull/books/cloud-competition",
       "footer.legal": "© 2026 合同会社BULL · TenkaCloud · Apache License 2.0",
       "footer.privacy": "プライバシーポリシー",
       "footer.terms": "利用規約",
@@ -690,6 +694,8 @@
       "footer.p1": "Problems",
       "footer.r0": "Docs",
       "footer.r2": "Changelog",
+      "footer.r3": "Book: Build Your Own Cloud Competition",
+      "footer.r3Href": "https://leanpub.com/build-your-own-cloud-competition",
       "footer.legal": "© 2026 BULL LLC (合同会社BULL) · TenkaCloud · Apache License 2.0",
       "footer.privacy": "Privacy Policy",
       "footer.terms": "Terms of Service",

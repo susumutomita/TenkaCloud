@@ -214,6 +214,14 @@ Problem Pack の一連の流れ(init から「コンソールに表示される�
 
 TenkaCloud をエンタープライズや社内研修の用途 — ハンズオン形式のセキュリティ・運用ドリル、評価・オンボーディング演習、カスタム/非公開の問題セット、講師付きワークショップなど — で検討されている場合は、[お問い合わせフォーム](https://forms.gle/djVprYmq3hFgJA7P9) または [GitHub Discussions](https://github.com/susumutomita/TenkaCloud/discussions) からお気軽にご連絡ください。TenkaCloud はオープンソースとして公開していますが、実際の現場で求められる研修ニーズや、カスタム演習の要件についてもっと知りたいと考えています。
 
+## 書籍
+
+**[『自分で作るクラウド競技』](https://zenn.dev/bull/books/cloud-competition)** — TenkaCloud の設計思想と、クラウド競技基盤をゼロから
+作る過程を解説しています。English: **[Build Your Own Cloud Competition](https://leanpub.com/build-your-own-cloud-competition)**。
+
+書籍はプラットフォームが今の形になった理由を扱い、現行仕様の正本はこのリポジトリのドキュメントです。
+両者が食い違う場合はリポジトリが正しく、書籍は判断の記録であって API リファレンスではありません。
+
 ## ドキュメント
 
 - [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md)(英語)— ローカル端末からのデプロイ、SaaS mode、そしてイベント間で常時稼働の AWS リソースをゼロにする [Always-On mode](./DEPLOYMENT_GUIDE.md#always-on-mode-adr-049)(運用者向けランブック: [docs/always-on/README.md](./docs/always-on/README.md))

@@ -14,6 +14,11 @@ This file follows the [llms.txt](https://llmstxt.org/) convention. Links point t
 - [Landing page — English](https://tenkacloud.com/index.en.html): product overview, Battle / Challenge modes, pricing, and deployment model
 - [README](https://github.com/susumutomita/TenkaCloud/blob/main/README.md): project overview, quick start, and command reference
 
+## Book
+
+- [Build Your Own Cloud Competition (English)](https://leanpub.com/build-your-own-cloud-competition): the design decisions and implementation journey behind TenkaCloud, written by its author. Background reading, **not** a specification — the repository is the source of truth for current behaviour, and the book may describe an earlier shape of the system.
+- [『自分で作るクラウド競技』(日本語)](https://zenn.dev/bull/books/cloud-competition): the same material in Japanese. Same caveat: read it for why, read the repository for what.
+
 ## Contributing & extending
 
 - [CONTRIBUTING](https://github.com/susumutomita/TenkaCloud/blob/main/CONTRIBUTING.md): setup, development flow, gates, and community roles
