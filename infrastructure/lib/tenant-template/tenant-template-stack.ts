@@ -17,6 +17,7 @@ import {
   MACHINE_CAPABILITIES,
 } from "../problem-deploy/handlers/shared/machine-scopes.js";
 import type { CustomDomainConfig } from "../security/cloudfront-custom-domain.js";
+import { deploymentLogGroup } from "../utils/deployment-log-group.js";
 import { MachineApiGateway } from "./machine-api-gateway.js";
 import { MachineIdentity } from "./machine-identity.js";
 import type { SamlIdpConfig } from "./saml-identity-providers.js";
@@ -207,6 +208,9 @@ export class TenantTemplateStack extends Stack {
     }
 
     new AwsCustomResource(this, "CreateTenantMapping", {
+      // 明示 LogGroup が無いと、 この custom resource の Lambda が作る log group は初回実行時に
+      // Lambda サービスが暗黙生成し、 retention 未設定 (= 無期限保持) になる (#2960)。
+      logGroup: deploymentLogGroup(this, "CreateTenantMappingLogs"),
       installLatestAwsSdk: true,
       onCreate: {
         service: "DynamoDB",

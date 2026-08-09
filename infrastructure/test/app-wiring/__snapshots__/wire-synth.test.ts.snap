@@ -2,6 +2,7 @@
 
 exports[`buildTenkaCloudApp synth regression (issue #2192) > should keep every stack's logical ID set (REPLACE/DELETE guard) > tenkacloud-admin-console-hosting 1`] = `
 [
+  "BucketDeploymentLogs348D796B",
   "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756C81C01536",
   "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756CServiceRole89A01265",
   "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756CServiceRoleDefaultPolicy88902FDF",
@@ -61,6 +62,7 @@ exports[`buildTenkaCloudApp synth regression (issue #2192) > should keep every s
 
 exports[`buildTenkaCloudApp synth regression (issue #2192) > should keep every stack's logical ID set (REPLACE/DELETE guard) > tenkacloud-admin-console-runtime-config 1`] = `
 [
+  "BucketDeploymentLogs348D796B",
   "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756C81C01536",
   "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756CServiceRole89A01265",
   "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756CServiceRoleDefaultPolicy88902FDF",
@@ -272,6 +274,7 @@ exports[`buildTenkaCloudApp synth regression (issue #2192) > should keep every s
   "CompetitorBootstrapHostingBucketPolicyFA5A3F04",
   "CompetitorBootstrapHostingDeploymentAwsCliLayer8D3AB487",
   "CompetitorBootstrapHostingDeploymentCustomResource0FC3A573",
+  "CompetitorBootstrapHostingDeploymentLogs86C5BC2C",
   "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756C256MiB5F7BD223",
   "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756C256MiBServiceRoleDefaultPolicyE5468F0E",
   "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756C256MiBServiceRoleF991ED9F",
@@ -332,6 +335,7 @@ exports[`buildTenkaCloudApp synth regression (issue #2192) > should keep every s
   "GenericScoringScheduleAllowEventRuletenkacloudproblemdeployGenericScoringFunctionF179B3866F4E3204",
   "ProblemArtifactsAwsCliLayerB6913F4C",
   "ProblemArtifactsCustomResource256MiB0BA85DBF",
+  "ProblemArtifactsLogs9CD05026",
   "ProblemEndpointsTableEB12A2E1",
   "SystemAuditWriterCodeBuildFailureRule0847123D",
   "SystemAuditWriterCodeBuildFailureRuleAllowEventRuletenkacloudproblemdeploySystemAuditWriterFunctionBF75E2BBAAFB7DB1",
@@ -507,6 +511,7 @@ exports[`buildTenkaCloudApp synth regression (issue #2192) > should keep every s
   "ApiGatewayTenantAPIpooledproblemsproblemIddeploymentsGET5A28B382",
   "ApiGatewayTenantAPIpooledproblemsproblemIddeploymentsOPTIONSFE2BA7B1",
   "ApiGatewayTenantCognitoAuthorizer8FA8379A",
+  "ApplicationAdminConsoleHostingBucketDeploymentLogsDB143A21",
   "ApplicationAdminConsoleHostingDistribution6FB216F4",
   "ApplicationAdminConsoleHostingOAI496A55AE",
   "ApplicationAdminConsoleHostingRuntimeConfigDeploymentAwsCliLayer2DBF31A5",
@@ -519,6 +524,7 @@ exports[`buildTenkaCloudApp synth regression (issue #2192) > should keep every s
   "ApplicationAdminConsoleHostingSiteDeploymentCustomResource9B3CE067",
   "CreateTenantMappingA61F466B",
   "CreateTenantMappingCustomResourcePolicy8D1C8E08",
+  "CreateTenantMappingLogsBD83A5DA",
   "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756C81C01536",
   "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756CServiceRole89A01265",
   "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756CServiceRoleDefaultPolicy88902FDF",
