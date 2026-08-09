@@ -1,0 +1,61 @@
+{
+  "$schema": "./tenkacloud-release.schema.json",
+  "schemaVersion": 1,
+  "release": {
+    "version": "1.1.0-candidate.20260809",
+    "status": "candidate"
+  },
+  "sources": {
+    "platform": {
+      "repository": "https://github.com/susumutomita/TenkaCloud.git",
+      "commit": "da88355a0fe2ff9a8a0fe141bedba2558209d6c9"
+    },
+    "catalog": {
+      "repository": "https://github.com/susumutomita/TenkaCloudChallenge.git",
+      "commit": "6f1a8d325bcd44e6146ecdb907b1446810799cba"
+    }
+  },
+  "artifacts": {
+    "simulatorImage": "ghcr.io/susumutomita/tenkacloud-simulator@sha256:049c6c165f9947b386b2c5864983aebefba26e996ec62859dae0e9814c52d505"
+  },
+  "toolchain": {
+    "bun": "1.3.11",
+    "node": {
+      "development": "24",
+      "launcher": "22"
+    },
+    "awsCdk": {
+      "cli": "2.1133.0",
+      "library": "2.262.1"
+    }
+  },
+  "compatibility": {
+    "qualificationTargets": [
+      {
+        "mode": "lite",
+        "regions": ["ap-northeast-1"]
+      }
+    ],
+    "supportedModes": [],
+    "contracts": [
+      {
+        "id": "problem-pack-manifest",
+        "version": "1"
+      },
+      {
+        "id": "always-on-control-plane-d1-migration",
+        "version": "0004_competitor_accounts"
+      }
+    ]
+  },
+  "verification": {
+    "goldenPathRuns": []
+  },
+  "knownLimitations": [
+    "No fresh-environment Golden Path run is attached, so this release is not certified for third-party production use.",
+    "No deployment mode or AWS region is certified by this manifest.",
+    "This candidate manifest and report are a packaging layer created after the pinned platform commit; they are not the published v1.1.0 GitHub Release or a source tag.",
+    "The pinned platform commit predates this manifest and residual-scanner packaging, so every future qualification run must record a separate immutable verification-runner repository and commit.",
+    "The Lite launcher uses Node.js 22 because its managed CodeBuild image does not provide Node.js 24; repository development requires Node.js 24."
+  ]
+}

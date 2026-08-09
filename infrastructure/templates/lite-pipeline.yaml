@@ -7,9 +7,9 @@ Description: >-
 
 
   Cost note: build minutes for a handful of Lite deploys cost under a dollar.
-  Separately, once deployed, the default DynamoDB profile is a standing cost of
-  about $7.06 per month until you run `make destroy-all` or launch this build with
-  the destroy-all action (see docs/running-costs.md).
+  Separately, while deployed, the default DynamoDB profile is a standing cost of
+  about $7.06 per month. `destroy` removes those tables by default; `destroy-all`
+  also removes explicitly retained tables and logs (see docs/running-costs.md).
 
 
   IAM note: creating this stack also creates a CodeBuild role with broad,
@@ -43,7 +43,7 @@ Metadata:
         Parameters:
           - TenantAdminEmail
       - Label:
-          default: "Advanced: repository sources (safe to leave alone)"
+          default: "Advanced: repository sources and release classification"
         Parameters:
           - RepoUrl
           - RepoRef
@@ -114,8 +114,11 @@ Parameters:
 
   RepoRef:
     Type: String
-    Default: main
-    Description: Branch or tag of the platform repo to deploy.
+    Default: da88355a0fe2ff9a8a0fe141bedba2558209d6c9
+    Description: >-
+      Full 40-hex commit SHA, branch, or tag of the platform repo to deploy. The exact
+      default platform/catalog pair is candidate/unverified; selecting main in either
+      ref is development/unreleased; every other combination is custom/unverified.
 
   ProblemsRepoUrl:
     Type: String
@@ -126,8 +129,11 @@ Parameters:
 
   ProblemsRepoRef:
     Type: String
-    Default: main
-    Description: Branch or tag of the problem-catalog repo to ship.
+    Default: 6f1a8d325bcd44e6146ecdb907b1446810799cba
+    Description: >-
+      Full 40-hex commit SHA, branch, or tag of the problem-catalog repo to ship. The
+      exact default platform/catalog pair is candidate/unverified; selecting main in
+      either ref is development/unreleased; every other combination is custom/unverified.
 
   DeployExternalId:
     Type: String
@@ -223,6 +229,15 @@ Parameters:
 
 Conditions:
   HasExternalId: !Not [!Equals [!Ref DeployExternalId, ""]]
+  # CloudFormation cannot import the repository manifest at runtime. These deployable-artifact
+  # literals are consumers, not a second source of truth: the launcher regression test reads
+  # release/tenkacloud-release.json and gates defaults, conditions, build log, and Outputs together.
+  UsesAnyMainRef: !Or
+    - !Equals [!Ref RepoRef, main]
+    - !Equals [!Ref ProblemsRepoRef, main]
+  UsesCandidateReleasePair: !And
+    - !Equals [!Ref RepoRef, da88355a0fe2ff9a8a0fe141bedba2558209d6c9]
+    - !Equals [!Ref ProblemsRepoRef, 6f1a8d325bcd44e6146ecdb907b1446810799cba]
 
 Resources:
   LauncherLogGroup:
@@ -317,14 +332,66 @@ Resources:
               runtime-versions:
                 nodejs: 22
               commands:
-                # Public OSS repo -> plain git clone, no auth / no GitHub connection.
-                - echo "Cloning ${REPO_URL} @ ${REPO_REF}"
-                - git clone --depth 1 --branch "${REPO_REF}" "${REPO_URL}" repo
-                # Problem catalog: clone the chosen catalog into problems/ (replaces the
-                # git submodule, so any catalog repo can be shipped by parameter).
-                - echo "Cloning catalog ${PROBLEMS_REPO_URL} @ ${PROBLEMS_REPO_REF} into problems/"
-                - rm -rf repo/problems
-                - git clone --depth 1 --branch "${PROBLEMS_REPO_REF}" "${PROBLEMS_REPO_URL}" repo/problems
+                - |
+                  echo "Release manifest version: 1.1.0-candidate.20260809 (baseline for the exact candidate ref pair)"
+                  if [ "${REPO_REF}" = "main" ] || [ "${PROBLEMS_REPO_REF}" = "main" ]; then
+                    release_classification="development/unreleased"
+                  elif [ "${REPO_REF}" = "da88355a0fe2ff9a8a0fe141bedba2558209d6c9" ] && [ "${PROBLEMS_REPO_REF}" = "6f1a8d325bcd44e6146ecdb907b1446810799cba" ]; then
+                    release_classification="candidate/unverified"
+                  else
+                    release_classification="custom/unverified"
+                  fi
+                  echo "Release classification: ${release_classification}"
+
+                  checkout_repo_ref() {
+                    checkout_repo_url="$1"
+                    checkout_requested_ref="$2"
+                    checkout_destination="$3"
+                    checkout_label="$4"
+
+                    if printf '%s' "${checkout_requested_ref}" | grep -Eq '^[0-9a-fA-F]{40}$'; then
+                      echo "Fetching ${checkout_label} ${checkout_repo_url} @ immutable commit ${checkout_requested_ref}"
+                      if ! git init --quiet "${checkout_destination}"; then
+                        echo "Failed to initialize ${checkout_label} checkout."
+                        return 1
+                      fi
+                      if ! git -C "${checkout_destination}" remote add origin "${checkout_repo_url}"; then
+                        echo "Failed to configure ${checkout_label} origin."
+                        return 1
+                      fi
+                      if ! git -C "${checkout_destination}" fetch --depth 1 origin "${checkout_requested_ref}"; then
+                        echo "Failed to fetch ${checkout_label} commit ${checkout_requested_ref}; refusing to fall back to another ref."
+                        return 1
+                      fi
+                      if ! checkout_resolved_ref="$(git -C "${checkout_destination}" rev-parse --verify 'FETCH_HEAD^{commit}')"; then
+                        echo "Fetched ${checkout_label} ref did not resolve to a commit."
+                        return 1
+                      fi
+                      checkout_normalized_ref="$(printf '%s' "${checkout_requested_ref}" | tr '[:upper:]' '[:lower:]')"
+                      if [ "${checkout_resolved_ref}" != "${checkout_normalized_ref}" ]; then
+                        echo "Resolved ${checkout_label} commit ${checkout_resolved_ref} does not match requested ${checkout_normalized_ref}."
+                        return 1
+                      fi
+                      if ! git -C "${checkout_destination}" checkout --quiet --detach "${checkout_resolved_ref}"; then
+                        echo "Failed to check out ${checkout_label} commit ${checkout_resolved_ref}."
+                        return 1
+                      fi
+                    else
+                      echo "Cloning ${checkout_label} ${checkout_repo_url} @ ${checkout_requested_ref}"
+                      if ! git clone --depth 1 --branch "${checkout_requested_ref}" "${checkout_repo_url}" "${checkout_destination}"; then
+                        echo "Failed to clone ${checkout_label} ref ${checkout_requested_ref}; no fallback ref will be used."
+                        return 1
+                      fi
+                    fi
+                  }
+
+                  # Public OSS repositories: no auth / GitHub connection. A full commit SHA
+                  # uses fetch + detached checkout because `git clone --branch <sha>` fails.
+                  checkout_repo_ref "${REPO_URL}" "${REPO_REF}" repo platform || exit 1
+                  # Replace the platform's catalog submodule with the independently selected
+                  # problem catalog so third parties can ship their own repository.
+                  rm -rf repo/problems
+                  checkout_repo_ref "${PROBLEMS_REPO_URL}" "${PROBLEMS_REPO_REF}" repo/problems catalog || exit 1
                 - cd repo
                 - echo "Installing bun ${BUN_VERSION}"
                 - npm install -g "bun@${BUN_VERSION}"
@@ -492,6 +559,22 @@ Resources:
                 Resource: "*"
 
 Outputs:
+  ReleaseManifestVersion:
+    Description: >-
+      Baseline manifest version for the exact default ref pair. main or custom overrides are
+      classified separately and are not represented by this manifest version.
+    Value: 1.1.0-candidate.20260809
+
+  ReleaseClassification:
+    Description: >-
+      Classification of the ref parameters saved on this launcher stack. candidate/unverified is
+      the default pair; development/unreleased means at least one saved ref is main; custom/unverified
+      means another pair is saved. A one-build CodeBuild override is classified in that build's log.
+    Value: !If
+      - UsesAnyMainRef
+      - development/unreleased
+      - !If [UsesCandidateReleasePair, candidate/unverified, custom/unverified]
+
   CodeBuildProjectName:
     Description: CodeBuild project name. Press "Start build" to deploy.
     Value: !Ref CodeBuildProject

@@ -76,7 +76,7 @@ This is the source of truth for the first live verification. It is deliberately 
 
 ### 0. Use a fresh environment
 
-Use a fresh Lite stack with no control data to migrate. Do not point this runbook at an existing `dynamodb` deployment: those tables have `RemovalPolicy.RETAIN`, so a direct switch would orphan still-billing tables. Existing deployments must use [Migrating an existing stack](#migrating-an-existing-stack).
+Use a fresh Lite stack with no control data to migrate. Do not point this runbook at an existing `dynamodb` deployment: a direct switch removes the DynamoDB resources, deleting the tables under the default policy or orphaning them only if the deployment explicitly enabled retention. Existing deployments must use [Migrating an existing stack](#migrating-an-existing-stack).
 
 Choose the environment once and pass it to every command. The examples use `development`:
 
@@ -238,17 +238,18 @@ Cost Explorer data can lag behind the deployment. Record the functional run imme
 
 ### 9. Tear down deliberately
 
-After saving evidence, delete the problem stack in the competitor account, remove the competitor bootstrap stack, and then run `make destroy-all ENV=development` if the entire Lite environment is disposable. Use `make destroy` only when retaining the DynamoDB history is intentional. Destruction is intentionally not part of any `turso-live-*` helper: each deletion must be reviewed by the operator who owns the accounts.
+After saving evidence, delete the problem stack in the competitor account, remove the competitor bootstrap stack, and then run `make destroy-all ENV=development` if the entire Lite environment is disposable. A normal `make destroy` also deletes DynamoDB tables under the default policy; tables survive only when the deployment previously set `CDK_PARAM_RETAIN_DATA_TABLES=true`. Destruction is intentionally not part of any `turso-live-*` helper: each deletion must be reviewed by the operator who owns the accounts.
 
 ## Migrating an existing stack
 
-Moving an *existing* `dynamodb`-backed stack to `turso` is a separate, riskier path than a fresh deploy: the Events/Teams/Deployments/ProblemEndpoints/CompetitorAccounts/Disruptions/AdminAuditLog/SamlIdps DynamoDB tables all use `RemovalPolicy.RETAIN`, so cutting over directly orphans them (still billing) instead of deleting them.
+Moving an *existing* `dynamodb`-backed stack to `turso` is a separate, riskier path than a fresh deploy. The cutover removes the Events/Teams/Deployments/ProblemEndpoints/CompetitorAccounts/Disruptions/AdminAuditLog/SamlIdps resources from CloudFormation. With the default `CDK_PARAM_RETAIN_DATA_TABLES=false`, CloudFormation deletes those tables and their data. If the DynamoDB deployment was last updated with `CDK_PARAM_RETAIN_DATA_TABLES=true`, the cutover instead orphans the tables and they continue billing.
 
 Recommended sequence, also documented in the `CDK_PARAM_CONTROL_DATA_BACKEND` comment block in [`infrastructure/environments/development/.env.example`](../infrastructure/environments/development/.env.example):
 
 1. Export the data you need from the DynamoDB tables (scores, event definitions) before switching — the two backends never sync (#2677 removed the former `turso-mirror` dual-write bridge; the backend is a hard two-way choice now).
-2. Redeploy with `CDK_PARAM_CONTROL_DATA_BACKEND=turso` — this is the point where CDK stops synthesizing the eight DynamoDB tables. The stack starts from an empty SQL database; re-create events/teams there.
-3. Manually delete the now-orphaned tables (and their GSIs) with `aws dynamodb delete-table` after confirming you no longer need the DynamoDB copy.
+2. If you need the DynamoDB copy to survive the cutover, first redeploy the still-`dynamodb` stack with `CDK_PARAM_RETAIN_DATA_TABLES=true` and verify that update completed. Skip this step only when the export is sufficient and table deletion is intentional.
+3. Redeploy with `CDK_PARAM_CONTROL_DATA_BACKEND=turso` — this is the point where CDK stops synthesizing the eight DynamoDB tables. The stack starts from an empty SQL database; re-create events/teams there.
+4. If step 2 retained the tables, manually delete those orphaned tables (and their GSIs) with `aws dynamodb delete-table` after confirming you no longer need the DynamoDB copy.
 
 Rolling back `turso` → `dynamodb` loses any write that only ever reached the SQL backend (pure SQL never writes to DynamoDB) — do this only with fresh/empty tables, not as a way to "undo" a cutover with live data. In practice: pick the backend per environment BEFORE the first real event; treat a mid-life cutover as a data migration project, not a flag flip.
 
@@ -260,7 +261,7 @@ Rolling back `turso` → `dynamodb` loses any write that only ever reached the S
 | CodeBuild (problem deploy) | part of ~$2.55 | **Resolved** — the Lambda deploy path is the default (#2353); no CodeBuild project in Lite mode |
 | CodeBuild (SaaS tenant provisioning) | part of ~$2.55 | SaaS-mode only; not present in Lite mode |
 | KMS customer-managed key | $0 | **Resolved** — AWS-managed key via a CDK Aspect |
-| Retained tables after `destroy` | cumulative | `make destroy` intentionally preserves and reports them; `make destroy-all` removes only the exact tables owned by the two Lite stacks (#2765) |
+| Explicitly retained tables after `destroy` | cumulative | Default `make destroy` deletes tables. A deployment with `CDK_PARAM_RETAIN_DATA_TABLES=true` preserves and reports them; `make destroy-all` removes only the exact tables owned by the two Lite stacks (#2765) |
 
 > **Free Tier note.** New-style AWS Free Tier accounts (2025-07 onward) are credit-based: there is **no** always-free 25 RCU/WCU DynamoDB allowance. Credits can make the visible bill read $0, but Usage still accrues from the first hour and becomes a real charge once the credits run out.
 
