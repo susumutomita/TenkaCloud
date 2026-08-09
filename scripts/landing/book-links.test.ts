@@ -75,25 +75,25 @@ describe("書籍導線 (#2971)", () => {
     expect(footerBookLink("landing/index.en.html")).not.toContain(JA_BOOK);
   });
 
-  it.each([["landing/index.html"], ["landing/index.en.html"]])(
-    "%s の書籍セクションは、両方の版を並べて出す",
-    (surface) => {
-      // Issue #2974 の実質。フッターの 1 行だけだった頃は、日本語ページからは
-      // Zenn 版しか、英語ページからは Leanpub 版しか見えず、読者から見て
-      // 「自分の言語の版しか存在しない」ように読めていた。並べるのが目的なので、
-      // 両方あることと、どちらがどの言語かが書かれていることを固定する。
-      const text = read(surface);
-      const section = text.slice(text.indexOf('<section id="book">'));
-      expect(section, `${surface} に #book セクションがない`).toContain("</section>");
-      const body = section.slice(0, section.indexOf("</section>"));
-      expect(body, `${surface} の書籍セクションに日本語版がない`).toContain(JA_BOOK);
-      expect(body, `${surface} の書籍セクションに英語版がない`).toContain(EN_BOOK);
-      // 言語表示は data-i18n で差し替わるので、キーの存在で固定する。URL だけ
-      // 並べても、どちらが自分の読める版かは分からない。
-      expect(body).toContain('data-i18n="book.jaLang"');
-      expect(body).toContain('data-i18n="book.enLang"');
-    },
-  );
+  it.each([
+    ["landing/index.html"],
+    ["landing/index.en.html"],
+  ])("%s の書籍セクションは、両方の版を並べて出す", (surface) => {
+    // Issue #2974 の実質。フッターの 1 行だけだった頃は、日本語ページからは
+    // Zenn 版しか、英語ページからは Leanpub 版しか見えず、読者から見て
+    // 「自分の言語の版しか存在しない」ように読めていた。並べるのが目的なので、
+    // 両方あることと、どちらがどの言語かが書かれていることを固定する。
+    const text = read(surface);
+    const section = text.slice(text.indexOf('<section id="book">'));
+    expect(section, `${surface} に #book セクションがない`).toContain("</section>");
+    const body = section.slice(0, section.indexOf("</section>"));
+    expect(body, `${surface} の書籍セクションに日本語版がない`).toContain(JA_BOOK);
+    expect(body, `${surface} の書籍セクションに英語版がない`).toContain(EN_BOOK);
+    // 言語表示は data-i18n で差し替わるので、キーの存在で固定する。URL だけ
+    // 並べても、どちらが自分の読める版かは分からない。
+    expect(body).toContain('data-i18n="book.jaLang"');
+    expect(body).toContain('data-i18n="book.enLang"');
+  });
 
   it("app.js は href も翻訳対象として両方の URL を持つ", () => {
     // 文言だけ翻訳して href を共通にすると、生成される英語ページが日本語の販売先を指す。
