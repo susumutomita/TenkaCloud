@@ -4,7 +4,7 @@ import { Construct } from "constructs";
 /**
  * Issue #952 epic / cost guardrails: AWS Budgets で 月次コストの天井を設定し、 alarm
  * threshold (80% / 100%) で SNS topic → email 通知する。 production / development の
- * default を分けて、 user は config.json で override 可能。
+ * limit と通知先は opt-in で、 user が config.json / env から明示的に有効化する。
  *
  * 目的:
  *   - dev 環境で 検証用 deploy が放置されコスト爆発するのを早期検知する (= 80% で 1 回、
@@ -23,7 +23,7 @@ export interface CostBudgetProps {
    */
   readonly budgetNamePrefix: string;
   /**
-   * monthly limit (USD)。 production: 200、 development: 50 を default 想定。 config.json で override。
+   * monthly limit (USD)。 guardrail を有効化する環境で明示的に指定する。
    */
   readonly monthlyLimitUsd: number;
   /**
