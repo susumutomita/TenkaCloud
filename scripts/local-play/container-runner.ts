@@ -58,7 +58,15 @@ export interface ContainerRunnerDeps {
     projectDirectory?: string,
   ) => void;
   readonly waitForReachable: (url: string, label: string) => Promise<void>;
-  readonly generateSecretEnv: (names: readonly string[]) => Record<string, string>;
+  /**
+   * The container secrets for one problem. Takes the problem id because the secrets are
+   * derived from it (Issue #2975): a restarted container must present the same evidence
+   * a participant already reasoned about, and a per-call random draw could not.
+   */
+  readonly generateSecretEnv: (
+    problemId: string,
+    names: readonly string[],
+  ) => Record<string, string>;
   readonly readCompose: (path: string) => string;
   readonly writeTempCompose: (path: string, content: string) => void;
   readonly removeTempCompose: (path: string) => void;
@@ -103,7 +111,7 @@ export class ContainerRunner {
     };
     const composeEnv: NodeJS.ProcessEnv = {
       ...process.env,
-      ...this.deps.generateSecretEnv(problem.secretEnv),
+      ...this.deps.generateSecretEnv(problem.problemId, problem.secretEnv),
     };
     this.deps.log(`Starting problem container for ${problem.name}...`);
     try {

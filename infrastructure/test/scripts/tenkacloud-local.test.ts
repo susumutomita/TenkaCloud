@@ -430,19 +430,50 @@ describe("problemSearchRoots", () => {
 });
 
 describe("generateSecretEnv", () => {
-  it("should mint one fresh secret per declared env name", () => {
-    let n = 0;
-    const env = generateSecretEnv(["FLAG_SEED", "ADMIN_TOKEN"], () => `secret-${n++}`);
-    expect(env).toEqual({ FLAG_SEED: "secret-0", ADMIN_TOKEN: "secret-1" });
+  /**
+   * The previous contract here was "one **fresh** secret per declared env name", asserted
+   * with an injected counter. That is the behaviour Issue #2975 is about: local play
+   * evicts the least-recently-used container at its concurrency cap, the evicted problem
+   * restarts on the next request, and a fresh draw meant every value the participant had
+   * derived stopped being the answer. Four wrong submissions on `stackstack-secrets`, two
+   * on `stackstack-observability`, a scored penalty on `hollow-invite`, and
+   * `stackstack-defend`'s sixty-second checkpoint failing five times in a row.
+   *
+   * So these assert the opposite property. Freshness moved from "per start" to "per
+   * deployment", which is where it was doing the work nobody wanted to lose.
+   */
+  function scratch(): string {
+    return mkdtempSync(join(tmpdir(), "secret-env-"));
+  }
+
+  it("should give a restarted problem the same secrets it had before", () => {
+    const localDir = scratch();
+    const first = generateSecretEnv(localDir, "stackstack-secrets", ["FLAG_SEED"]);
+    const second = generateSecretEnv(localDir, "stackstack-secrets", ["FLAG_SEED"]);
+    expect(second).toEqual(first);
+  });
+
+  it("should give different problems different secrets", () => {
+    const localDir = scratch();
+    const one = generateSecretEnv(localDir, "stackstack-secrets", ["FLAG_SEED"]);
+    const other = generateSecretEnv(localDir, "stackstack-observability", ["FLAG_SEED"]);
+    expect(other.FLAG_SEED).not.toBe(one.FLAG_SEED);
+  });
+
+  it("should give different deployments different secrets", () => {
+    // The property the old per-start draw was protecting: an answer worked out in
+    // somebody else's deployment must not carry into this one.
+    const one = generateSecretEnv(scratch(), "p", ["FLAG_SEED"]);
+    const other = generateSecretEnv(scratch(), "p", ["FLAG_SEED"]);
+    expect(other.FLAG_SEED).not.toBe(one.FLAG_SEED);
   });
 
   it("should return an empty object when no secrets are declared", () => {
-    expect(generateSecretEnv([])).toEqual({});
+    expect(generateSecretEnv(scratch(), "p", [])).toEqual({});
   });
 
-  it("should default to a 256-bit hex secret", () => {
-    const env = generateSecretEnv(["FLAG_SEED"]);
-    expect(env.FLAG_SEED).toMatch(/^[0-9a-f]{64}$/);
+  it("should produce a 256-bit hex secret", () => {
+    expect(generateSecretEnv(scratch(), "p", ["FLAG_SEED"]).FLAG_SEED).toMatch(/^[0-9a-f]{64}$/);
   });
 });
 
