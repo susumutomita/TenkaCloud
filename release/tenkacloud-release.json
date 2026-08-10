@@ -2,13 +2,13 @@
   "$schema": "./tenkacloud-release.schema.json",
   "schemaVersion": 1,
   "release": {
-    "version": "1.1.0-candidate.20260810",
+    "version": "1.2.0-candidate.20260810",
     "status": "candidate"
   },
   "sources": {
     "platform": {
       "repository": "https://github.com/susumutomita/TenkaCloud.git",
-      "commit": "56a318e72f8ff9a37ce981860f68a0834bd3c229"
+      "commit": "15aaa9abd9f3ffaa10e72ab914b4b6958dd5cd36"
     },
     "catalog": {
       "repository": "https://github.com/susumutomita/TenkaCloudChallenge.git",
@@ -54,7 +54,7 @@
   "knownLimitations": [
     "No fresh-environment Golden Path run is attached, so this release is not certified for third-party production use.",
     "No deployment mode or AWS region is certified by this manifest.",
-    "This candidate manifest and report are a packaging layer created after the pinned platform commit; they are not the published v1.1.0 GitHub Release or a source tag.",
+    "This candidate manifest and report are a packaging layer created after the pinned platform commit; they are not the published v1.2.0 GitHub Release or a source tag.",
     "The pinned platform commit predates this manifest and residual-scanner packaging, so every future qualification run must record a separate immutable verification-runner repository and commit.",
     "The Lite launcher uses Node.js 22 because its managed CodeBuild image does not provide Node.js 24; repository development requires Node.js 24."
   ]
