@@ -110,6 +110,24 @@ const OPERATION_SUMMARIES: Readonly<Record<string, { summary: string; descriptio
   },
 };
 
+/**
+ * [Issue #3002] `POST /problems/{problemId}/deploy` の retry 安全キー。
+ *
+ * deploy はレスポンスまで時間がかかるので、 タイムアウト後の再送で job が 2 本でき、
+ * 競技アカウントに CloudFormation stack が 2 つ作られる。 同じキーの再送には 1 回目の
+ * 結果 (成功・失敗とも) を返す。
+ */
+const IDEMPOTENCY_KEY_PARAMETER = {
+  name: "Idempotency-Key",
+  in: "header" as const,
+  required: false as const,
+  schema: {
+    type: "string",
+    description:
+      "Optional retry-safety key. Send a sufficiently random string (a v4 UUID, max 255 chars). A resend with the same key returns the first request's status and body instead of starting a second deployment. Reusing a key with a different body is rejected; keys expire after 24 hours.",
+  },
+};
+
 function operationIdFor(route: MachineRouteScope): string {
   const segments = route.apigwPath
     .split("/")
@@ -149,9 +167,14 @@ function buildOperation(route: MachineRouteScope): OpenApiOperation {
     // route を足して copy を足し忘れたら生成を止める。ラベルの無い operation を公開しない。
     throw new Error(`OpenAPI summary が未定義の route です: ${key}`);
   }
-  const parameters = pathParametersFor(route);
+  const pathParameters = pathParametersFor(route);
   const isDeploy = route.capability === "deploy";
   const isRetry = route.apigwPath === "/deployments/retry";
+  // [Issue #3002] deploy だけが `Idempotency-Key` を受ける。 retry は既に冪等
+  // (COMPLETE / IN_PROGRESS は no-op、jobId も dedupe) なので付けない。
+  const parameters = isDeploy
+    ? [...(pathParameters ?? []), IDEMPOTENCY_KEY_PARAMETER]
+    : pathParameters;
   return {
     operationId: operationIdFor(route),
     summary: copy.summary,
@@ -187,6 +210,18 @@ function buildOperation(route: MachineRouteScope): OpenApiOperation {
               content: {
                 "application/json": { schema: zodToJsonSchema(DeployResponseSchema) },
               },
+            },
+          }
+        : {}),
+      ...(isDeploy
+        ? {
+            "409": {
+              description:
+                "A request with the same `Idempotency-Key` is still running (`idempotency_request_in_progress`). Retry shortly.",
+            },
+            "422": {
+              description:
+                "The `Idempotency-Key` was reused with a different request body (`idempotency_key_reused`).",
             },
           }
         : {}),

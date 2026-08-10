@@ -39,8 +39,10 @@ import {
 } from "./deploy.js";
 import { recordDeployAudit, recordRetryAudit } from "./deploy-audit.js";
 import { DeployQuotaExceededError, type QuotaTier, resolveQuotaTier } from "./deploy-quota.js";
+import { beginIdempotent, finishIdempotent, hashRequest } from "./idempotency.js";
 import { getDeployment, listDeployments } from "./list.js";
 import { InvalidRetryRequestError, retryDeployments, validateRetryRequest } from "./retry.js";
+import { resolveIdempotencyRepository } from "./shared.js";
 import {
   defaultCfnClient,
   defaultCfnClientForCompetitor,
@@ -253,6 +255,41 @@ app.post("/problems/:problemId/deploy", async (c) => {
   }
 
   const tenantId = resolveTenantId(c);
+
+  // [Issue #3002] Idempotency-Key。 ヘッダが無ければ従来どおり素通りする (後方互換)。
+  // deploy はレスポンスまで時間がかかるので、 タイムアウト後の再送でスタックが 2 つ
+  // できるのを止めるのがここの目的。
+  //
+  // ヘッダが無いときは storage を一切触らない。 resolver を呼ぶだけでも backend への
+  // 往復が増えるので、 既存クライアント (= 大多数) の経路は従来と同じままにする。
+  const idempotencyKey = c.req.header("Idempotency-Key");
+  // 結果の記録は 1 つの closure に閉じ込める。 分岐先 (composite / 単一 / 失敗) ごとに
+  // `if (idempotency)` を書くと、 同じ条件が 3 箇所へ散り、 1 つ書き忘れるとその経路だけ
+  // 再送で二重に走る。
+  let recordIdempotentResult: (status: number, resultBody: unknown) => Promise<void> = async () =>
+    undefined;
+  if (idempotencyKey !== undefined) {
+    const repository = await resolveIdempotencyRepository(shared);
+    const decision = await beginIdempotent({
+      repository,
+      tenantId,
+      key: idempotencyKey,
+      requestHash: hashRequest(problemId, body),
+      nowSeconds: Math.floor(Date.now() / 1000),
+    });
+    if (decision.kind === "respond") {
+      return c.json(decision.body as Record<string, unknown>, decision.status as 200);
+    }
+    recordIdempotentResult = (status, resultBody) =>
+      finishIdempotent({
+        repository,
+        tenantId,
+        key: decision.key,
+        status,
+        body: resultBody,
+      });
+  }
+
   const ctx = buildContext(shared, tenantId);
   // #1766: quota tier は JWT claim から route で解決し、enforcement 自体は
   // startDeployment / startCompositeDeployment 内で行う (PR-1803 review)。
@@ -272,6 +309,8 @@ app.post("/problems/:problemId/deploy", async (c) => {
       problemId,
       response.status === StatusCodes.ACCEPTED ? "success" : "error",
     );
+    // composite も同じ route なので、 記録しないとここだけ再送で二重に走る。
+    await recordIdempotentResult(response.status, await response.clone().json());
     return response;
   }
 
@@ -296,10 +335,15 @@ app.post("/problems/:problemId/deploy", async (c) => {
       quotaTier,
     });
     await recordDeployAudit(c, tenantId, problemId, "success");
+    await recordIdempotentResult(StatusCodes.ACCEPTED, response);
     return c.json(response, StatusCodes.ACCEPTED);
   } catch (err) {
     await recordDeployAudit(c, tenantId, problemId, "error");
-    return mapDeployError(c, problemId, err);
+    const failure = mapDeployError(c, problemId, err);
+    // 失敗も記録する。 Stripe と同じで、 同じキーの再送には成功・失敗を問わず 1 回目の
+    // 結果を返す。 失敗を記録しないと、 再送のたびに実処理が走ってしまう。
+    await recordIdempotentResult(failure.status, await failure.clone().json());
+    return failure;
   }
 });
 

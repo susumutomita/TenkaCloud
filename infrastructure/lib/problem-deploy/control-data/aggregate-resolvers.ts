@@ -6,6 +6,12 @@ import { createDeploymentsRepository } from "./deployments-repository.js";
 import { createDisruptionsRepository } from "./disruptions-repository.js";
 import { createEventsRepository } from "./events-repository.js";
 import { createFeatureFlagsRepository } from "./feature-flags-repository.js";
+import {
+  DynamoDbIdempotencyRepository,
+  IDEMPOTENCY_TABLE_SQL,
+  type IdempotencyPort,
+  SqlIdempotencyRepository,
+} from "./idempotency-repository.js";
 import { createNotificationsRepository } from "./notifications-repository.js";
 import { createProblemEndpointsRepository } from "./problem-endpoints-repository.js";
 import { createSamlConfigRepository } from "./saml-config-repository.js";
@@ -84,6 +90,16 @@ export interface AggregateResolvers {
     readonly ddb?: DynamoDBDocumentClient;
     readonly deploymentsTableName?: string;
   }) => Promise<DeploymentsRepository>;
+  /**
+   * [Issue #3002] Cold-start resolver for the Idempotency seam (same two-branch
+   * policy as Deployments). `/deploy` runs on both backends, so a DynamoDB-only
+   * store would leave Turso environments silently unprotected against the
+   * duplicate-stack retry this exists to stop.
+   */
+  readonly resolveIdempotencyRepository: (input: {
+    readonly ddb?: DynamoDBDocumentClient;
+    readonly deploymentsTableName?: string;
+  }) => Promise<IdempotencyPort>;
   /**
    * [Issue #2442 / Phase C1] Cold-start resolver for the ProblemEndpoints seam
    * (same two-branch policy as Deployments).
@@ -240,6 +256,28 @@ export function createAggregateResolvers(
     });
   }
 
+  /** [Issue #3002] Resolver for the Idempotency seam (mirrors resolveDeploymentsRepository). */
+  async function resolveIdempotencyRepository(input: {
+    readonly ddb?: DynamoDBDocumentClient;
+    readonly deploymentsTableName?: string;
+  }): Promise<IdempotencyPort> {
+    if (selectBackend(env).kind === "pure") {
+      const sql = await acquireSqlExecutor();
+      // 冪等レコードは deployments と同じ database に置く。 SQLite に TTL は無いので
+      // table は CREATE TABLE IF NOT EXISTS で確保する (deployments 系と同じやり方)。
+      await sql.run(IDEMPOTENCY_TABLE_SQL);
+      return new SqlIdempotencyRepository(sql);
+    }
+    const requiredInput = requireDdbAndTableName(
+      input.ddb,
+      input.deploymentsTableName,
+      "deploymentsTableName",
+    );
+    // 新しい table は作らない。 deployments table が既に TTL 属性 (expiresAt) を持つので、
+    // IDEM# prefix で相乗りする (CloudFormation の変更なし)。
+    return new DynamoDbIdempotencyRepository(requiredInput.ddb, requiredInput.tableName);
+  }
+
   /** [Issue #2442 / Phase C1] Resolver for the ProblemEndpoints seam (mirrors resolveDeploymentsRepository). */
   async function resolveProblemEndpointsRepository(input: {
     readonly ddb?: DynamoDBDocumentClient;
@@ -366,6 +404,7 @@ export function createAggregateResolvers(
     resolveNotificationsRepository,
     resolveFeatureFlagsRepository,
     resolveDeploymentsRepository,
+    resolveIdempotencyRepository,
     resolveProblemEndpointsRepository,
     resolveCompetitorAccountsRepository,
     resolveSamlConfigRepository,
