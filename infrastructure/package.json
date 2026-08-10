@@ -54,7 +54,7 @@
     "@aws-sdk/client-cloudwatch-logs": "^3.1079.0",
     "@aws-sdk/client-codebuild": "^3.1079.0",
     "@aws-sdk/client-codepipeline": "^3.1079.0",
-    "@aws-sdk/client-scheduler": "^3.1079.0",
+    "@aws-sdk/client-scheduler": "^3.1105.0",
     "@aws-sdk/client-sfn": "^3.1090.0",
     "@aws-sdk/credential-provider-node": "^3.972.42",
     "@cdklabs/sbt-aws": "0.9.5",
