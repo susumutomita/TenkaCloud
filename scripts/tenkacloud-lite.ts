@@ -225,6 +225,33 @@ export function ensureSystemAdminEmailForSynth(): void {
   }
 }
 
+/**
+ * `cdk destroy` synths the app the same way `cdk deploy` does, so resolveAppConfig's
+ * unconditional reads of CDK_PARAM_S3_BUCKET_NAME / CDK_SOURCE_NAME / CDK_PARAM_COMMIT_ID
+ * (see requireSystemAdminEmail's siblings in lib/app-config/resolve.ts) apply to `down` too
+ * -- even though teardown never reads the source bundle. `up` resolves all three via
+ * scripts/prepare-source-bundle.sh before synth; `down` previously only derived
+ * CDK_PARAM_SYSTEM_ADMIN_EMAIL (ensureSystemAdminEmailForSynth above), so a shell that never
+ * ran `up` in the same session -- only TENANT_ADMIN_EMAIL set, the Lite launcher .env case --
+ * failed synth one variable at a time: "CDK_PARAM_S3_BUCKET_NAME is empty", then
+ * "CDK_SOURCE_NAME is empty", then "CDK_PARAM_COMMIT_ID is empty".
+ *
+ * The bucket name is resolved the exact same way `up` resolves it (account+region scoped,
+ * via resolveSourceBucketName's prepare-source-bundle.sh RESOLVE_ONLY seam) so destroy never
+ * invents a second source of truth for it. CDK_SOURCE_NAME / CDK_PARAM_COMMIT_ID are cosmetic
+ * for destroy -- `cdk destroy <stack> --force` deletes by stack name via CloudFormation, so
+ * neither value affects which physical resources go away -- so a fixed placeholder is safe.
+ * Never override an explicit value (SaaS-shared env, or a caller pinning a specific bucket).
+ */
+async function ensureSourceParamsForSynth(io: CliIO): Promise<void> {
+  if (!process.env.CDK_PARAM_S3_BUCKET_NAME) {
+    const bucket = await resolveSourceBucketName(io);
+    if (bucket) process.env.CDK_PARAM_S3_BUCKET_NAME = bucket;
+  }
+  process.env.CDK_SOURCE_NAME ??= "source.zip";
+  process.env.CDK_PARAM_COMMIT_ID ??= "teardown";
+}
+
 async function cmdUp(_args: readonly string[], io: CliIO): Promise<number> {
   // Issue #955 follow-up: Lite mode は SBT ControlPlane と provision-tenant.sh を持たないため、
   // tenant admin user を別経路で作る必要がある。 deploy 後に Cognito UserPool ID を
@@ -542,6 +569,9 @@ async function cmdDown(args: readonly string[], io: CliIO): Promise<number> {
   // `make destroy` works with only TENANT_ADMIN_EMAIL set (the Lite .env the CodeBuild
   // launcher writes); without this, destroy throws "Please provide system admin email".
   ensureSystemAdminEmailForSynth();
+  // Same synth requirement for the other three unconditional resolveAppConfig reads
+  // (see ensureSourceParamsForSynth's doc comment for why destroy needs them too).
+  await ensureSourceParamsForSynth(io);
   // cdk destroy synths the app; the SPA dist dirs are staged as assets even though teardown
   // never builds them. Create empty placeholders so synth does not throw CannotFindAsset
   // (content is irrelevant -- destroy deletes, it never uploads).
