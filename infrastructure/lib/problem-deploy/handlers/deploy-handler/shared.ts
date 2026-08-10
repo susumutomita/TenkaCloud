@@ -1,5 +1,6 @@
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import type { DeploymentsRepository } from "../../control-data/deployments-repository.js";
+import type { IdempotencyPort } from "../../control-data/idempotency-repository.js";
 import type { ControlDataRuntime } from "../../control-data/runtime-repositories.js";
 
 export interface DeploymentsTableSharedResources {
@@ -24,6 +25,22 @@ export function resolveDeploymentsRepository(
   shared: DeploymentsTableSharedResources,
 ): Promise<DeploymentsRepository> {
   return shared.runtime.resolveDeploymentsRepository({
+    ddb: shared.ddb as DynamoDBDocumentClient,
+    deploymentsTableName: shared.tableName,
+  });
+}
+
+/**
+ * [Issue #3002] Idempotency seam。 `resolveDeploymentsRepository` と同じ二分岐で、
+ * DynamoDB backend でも Turso backend でも同じ port が返る。
+ *
+ * `/deploy` は両 backend で動くため、 ここが片方だけだと Turso の環境が黙って無防備になる
+ * (= 二重デプロイが防げているように見えて防げていない)。
+ */
+export function resolveIdempotencyRepository(
+  shared: DeploymentsTableSharedResources,
+): Promise<IdempotencyPort> {
+  return shared.runtime.resolveIdempotencyRepository({
     ddb: shared.ddb as DynamoDBDocumentClient,
     deploymentsTableName: shared.tableName,
   });
