@@ -49,6 +49,7 @@ const spies = vi.hoisted(() => ({
   dispatch: vi.fn(),
   enforceQuota: vi.fn(),
   startDeployment: vi.fn(),
+  resolveIdempotencyRepository: vi.fn(),
 }));
 
 // Mock the production composite wiring so `buildCompositeDeployDeps` returns the
@@ -93,6 +94,14 @@ vi.mock("../../lib/problem-deploy/handlers/deploy-handler/deploy", async (orig) 
     buildContext: (shared: unknown, tenantId: string) => ({ ...(shared as object), tenantId }),
     startDeployment: spies.startDeployment,
   };
+});
+
+// [Issue #3002] composite も同じ route を通るので、 記録しないとここだけ再送で二重に走る。
+vi.mock("../../lib/problem-deploy/handlers/deploy-handler/shared", async () => {
+  const actual = await vi.importActual<
+    typeof import("../../lib/problem-deploy/handlers/deploy-handler/shared")
+  >("../../lib/problem-deploy/handlers/deploy-handler/shared");
+  return { ...actual, resolveIdempotencyRepository: spies.resolveIdempotencyRepository };
 });
 
 const { app } = await import("../../lib/problem-deploy/handlers/deploy-handler/index");
@@ -333,5 +342,67 @@ describe("POST /problems/:problemId/deploy — legacy path unchanged (#2075)", (
     const body = await res.json();
     expect(body.error).toBe("validation_failed");
     expect(spies.startDeployment).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * [Issue #3002] composite deploy の `Idempotency-Key`。
+ *
+ * composite は route の別分岐を通るので、 単一 provider 側だけ記録していると **composite
+ * だけ再送で二重に走る**。 分岐ごとに固定する。
+ */
+describe("composite deploy with Idempotency-Key (Issue 3002)", () => {
+  const KEY = "99999999-8888-4777-8666-555555555555";
+
+  async function inMemoryIdempotency() {
+    const { DatabaseSync } = await import("node:sqlite");
+    const { IDEMPOTENCY_TABLE_SQL, SqlIdempotencyRepository } = await import(
+      "../../lib/problem-deploy/control-data/idempotency-repository"
+    );
+    const db = new DatabaseSync(":memory:");
+    db.exec(IDEMPOTENCY_TABLE_SQL);
+    const executor = {
+      run: (sql: string, params: readonly unknown[] = []) => ({
+        changes: db.prepare(sql).run(...(params as never[])).changes,
+      }),
+      get: (sql: string, params: readonly unknown[] = []) =>
+        db.prepare(sql).get(...(params as never[])),
+      all: (sql: string, params: readonly unknown[] = []) =>
+        db.prepare(sql).all(...(params as never[])),
+      batch: () => [],
+    };
+    // biome-ignore lint/suspicious/noExplicitAny: test executor は必要な 3 メソッドだけ持つ
+    return new SqlIdempotencyRepository(executor as any);
+  }
+
+  const postWithKey = (path: string, body: unknown) =>
+    app.request(path, {
+      method: "POST",
+      headers: { "content-type": "application/json", "Idempotency-Key": KEY },
+      body: JSON.stringify(body),
+    });
+
+  it("は composite の再送で materialize / dispatch を再実行しない", async () => {
+    const repository = await inMemoryIdempotency();
+    spies.resolveIdempotencyRepository.mockResolvedValue(repository);
+
+    const first = await postWithKey("/problems/cross-cloud/deploy", {
+      teamName: "Alpha",
+      awsAccountId: "123456789012",
+      region: "ap-northeast-1",
+    });
+    const firstBody = await first.json();
+    spies.materialize.mockClear();
+    spies.dispatch.mockClear();
+
+    const replay = await postWithKey("/problems/cross-cloud/deploy", {
+      teamName: "Alpha",
+      awsAccountId: "123456789012",
+      region: "ap-northeast-1",
+    });
+    expect(replay.status).toBe(first.status);
+    expect(await replay.json()).toEqual(firstBody);
+    expect(spies.materialize).not.toHaveBeenCalled();
+    expect(spies.dispatch).not.toHaveBeenCalled();
   });
 });

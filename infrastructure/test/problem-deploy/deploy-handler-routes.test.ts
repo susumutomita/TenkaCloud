@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   getDeployment: vi.fn(),
   requestTeardown: vi.fn(),
   getStackProgress: vi.fn(),
+  resolveIdempotencyRepository: vi.fn(),
 }));
 
 // `UnknownProblemError` / `UnverifiedCompetitorAccountError` は handler の instanceof 判定
@@ -38,6 +39,16 @@ vi.mock("../../lib/problem-deploy/handlers/deploy-handler/deploy", async () => {
     UnknownProblemError: actual.UnknownProblemError,
     UnverifiedCompetitorAccountError: actual.UnverifiedCompetitorAccountError,
   };
+});
+
+// [Issue #3002] Idempotency seam。 production の `shared.js` は runtime 経由で backend を
+// 選ぶが、 この suite の fake shared には runtime が無い。 seam だけ差し替えて、 route の
+// 分岐 (replay / 進行中 / キー再利用 / 記録) を実際に通す。
+vi.mock("../../lib/problem-deploy/handlers/deploy-handler/shared", async () => {
+  const actual = await vi.importActual<
+    typeof import("../../lib/problem-deploy/handlers/deploy-handler/shared")
+  >("../../lib/problem-deploy/handlers/deploy-handler/shared");
+  return { ...actual, resolveIdempotencyRepository: mocks.resolveIdempotencyRepository };
 });
 
 vi.mock("../../lib/problem-deploy/handlers/deploy-handler/list", () => ({
@@ -300,5 +311,124 @@ describe("GET /deployments/:jobId/stack-progress", () => {
     expect(res.status).toBe(500);
     const body = await res.json();
     expect(body.error).toBe("internal_error");
+  });
+});
+
+/**
+ * [Issue #3002] `Idempotency-Key` を付けたときの route の挙動。
+ *
+ * storage の parity と判断ロジックは専用 suite が見ている。 ここが見るのは **route が
+ * 実際に startDeployment を呼ばないこと**で、 これが崩れると再送のたびに deploy が走り、
+ * 競技アカウントに CloudFormation stack が増える。
+ */
+describe("POST /problems/:problemId/deploy with Idempotency-Key (Issue 3002)", () => {
+  const KEY = "11111111-2222-4333-8444-555555555555";
+
+  /** 実際の SQLite を使う (fake を書くと排他の検証にならない)。 */
+  async function inMemoryIdempotency() {
+    const { DatabaseSync } = await import("node:sqlite");
+    const { IDEMPOTENCY_TABLE_SQL, SqlIdempotencyRepository } = await import(
+      "../../lib/problem-deploy/control-data/idempotency-repository"
+    );
+    const db = new DatabaseSync(":memory:");
+    db.exec(IDEMPOTENCY_TABLE_SQL);
+    const executor = {
+      run: (sql: string, params: readonly unknown[] = []) => ({
+        changes: db.prepare(sql).run(...(params as never[])).changes,
+      }),
+      get: (sql: string, params: readonly unknown[] = []) =>
+        db.prepare(sql).get(...(params as never[])),
+      all: (sql: string, params: readonly unknown[] = []) =>
+        db.prepare(sql).all(...(params as never[])),
+      batch: () => [],
+    };
+    // biome-ignore lint/suspicious/noExplicitAny: test executor は必要な 3 メソッドだけ持つ
+    return new SqlIdempotencyRepository(executor as any);
+  }
+
+  function deployRequest(key?: string) {
+    return new Request("http://local/problems/p1/deploy", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        ...(key === undefined ? {} : { "Idempotency-Key": key }),
+      },
+      body: JSON.stringify(VALID_DEPLOY_BODY),
+    });
+  }
+
+  beforeEach(async () => {
+    mocks.resolveIdempotencyRepository.mockResolvedValue(await inMemoryIdempotency());
+  });
+
+  it("は 1 回目を通し、成功を記録する", async () => {
+    mocks.startDeployment.mockResolvedValue({ jobId: ULID });
+    const res = await app.request(deployRequest(KEY));
+    expect(res.status).toBe(202);
+    expect(mocks.startDeployment).toHaveBeenCalledTimes(1);
+  });
+
+  it("は再送で startDeployment を呼ばず、1 回目の結果を返す", async () => {
+    // この suite の存在理由。 呼ばれてしまうと stack が 2 つできる。
+    mocks.startDeployment.mockResolvedValue({ jobId: ULID });
+    const repository = await inMemoryIdempotency();
+    mocks.resolveIdempotencyRepository.mockResolvedValue(repository);
+
+    const first = await app.request(deployRequest(KEY));
+    expect(first.status).toBe(202);
+    mocks.startDeployment.mockClear();
+
+    const replay = await app.request(deployRequest(KEY));
+    expect(replay.status).toBe(202);
+    expect(await replay.json()).toEqual({ jobId: ULID });
+    expect(mocks.startDeployment).not.toHaveBeenCalled();
+  });
+
+  it("は失敗した deploy も記録し、再送で再実行しない", async () => {
+    mocks.startDeployment.mockRejectedValue(new UnverifiedCompetitorAccountError("123456789012"));
+    const repository = await inMemoryIdempotency();
+    mocks.resolveIdempotencyRepository.mockResolvedValue(repository);
+
+    const first = await app.request(deployRequest(KEY));
+    const firstStatus = first.status;
+    mocks.startDeployment.mockClear();
+
+    const replay = await app.request(deployRequest(KEY));
+    expect(replay.status).toBe(firstStatus);
+    expect(mocks.startDeployment).not.toHaveBeenCalled();
+  });
+
+  it("は同じキーに違う本文が来たら 422 で断る", async () => {
+    mocks.startDeployment.mockResolvedValue({ jobId: ULID });
+    const repository = await inMemoryIdempotency();
+    mocks.resolveIdempotencyRepository.mockResolvedValue(repository);
+    await app.request(deployRequest(KEY));
+    mocks.startDeployment.mockClear();
+
+    const other = await app.request(
+      new Request("http://local/problems/p1/deploy", {
+        method: "POST",
+        headers: { "content-type": "application/json", "Idempotency-Key": KEY },
+        body: JSON.stringify({ ...VALID_DEPLOY_BODY, awsAccountId: "999988887777" }),
+      }),
+    );
+    expect(other.status).toBe(422);
+    expect(await other.json()).toEqual({ error: "idempotency_key_reused" });
+    expect(mocks.startDeployment).not.toHaveBeenCalled();
+  });
+
+  it("は長すぎるキーを 400 で断る", async () => {
+    const res = await app.request(deployRequest("x".repeat(256)));
+    expect(res.status).toBe(400);
+    expect(mocks.startDeployment).not.toHaveBeenCalled();
+  });
+
+  it("はヘッダが無ければ storage を触らない", async () => {
+    // 既存クライアントの経路。 resolver すら呼ばれないこと。
+    mocks.startDeployment.mockResolvedValue({ jobId: ULID });
+    mocks.resolveIdempotencyRepository.mockClear();
+    const res = await app.request(deployRequest());
+    expect(res.status).toBe(202);
+    expect(mocks.resolveIdempotencyRepository).not.toHaveBeenCalled();
   });
 });
