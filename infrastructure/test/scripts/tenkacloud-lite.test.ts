@@ -826,6 +826,83 @@ describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
     }
   });
 
+  // Regression: resolveAppConfig also unconditionally requires CDK_PARAM_S3_BUCKET_NAME /
+  // CDK_SOURCE_NAME / CDK_PARAM_COMMIT_ID to synth -- not just CDK_PARAM_SYSTEM_ADMIN_EMAIL
+  // above. `up` resolves all three via prepare-source-bundle.sh before synth; `down` derived
+  // none of them, so a shell that never ran `up` in the same session failed destroy's synth
+  // one variable at a time ("CDK_PARAM_S3_BUCKET_NAME is empty", then "CDK_SOURCE_NAME is
+  // empty", then "CDK_PARAM_COMMIT_ID is empty").
+  it("down should derive CDK_PARAM_S3_BUCKET_NAME / CDK_SOURCE_NAME / CDK_PARAM_COMMIT_ID so destroy can synth", async () => {
+    const prev = {
+      bucket: process.env.CDK_PARAM_S3_BUCKET_NAME,
+      source: process.env.CDK_SOURCE_NAME,
+      commit: process.env.CDK_PARAM_COMMIT_ID,
+      tenant: process.env.TENANT_ADMIN_EMAIL,
+    };
+    delete process.env.CDK_PARAM_S3_BUCKET_NAME;
+    delete process.env.CDK_SOURCE_NAME;
+    delete process.env.CDK_PARAM_COMMIT_ID;
+    process.env.TENANT_ADMIN_EMAIL = "organizer@example.com";
+    try {
+      const { io } = buildIO({
+        inheritExitCode: 0,
+        capture: (_cmd, args) => {
+          if (args.some((a) => a.includes("prepare-source-bundle.sh"))) {
+            return {
+              code: 0,
+              stdout:
+                "REGION=ap-northeast-1\nACCOUNT_ID=111122223333\n" +
+                "CDK_PARAM_S3_BUCKET_NAME=tenkacloud-source-111122223333-ap-northeast-1\n" +
+                "CDK_SOURCE_NAME=source.zip\n",
+              stderr: "",
+            };
+          }
+          return { code: 0, stdout: "", stderr: "" };
+        },
+      });
+      await main(["down"], io);
+      expect(process.env.CDK_PARAM_S3_BUCKET_NAME).toBe(
+        "tenkacloud-source-111122223333-ap-northeast-1",
+      );
+      expect(process.env.CDK_SOURCE_NAME).toBe("source.zip");
+      expect(process.env.CDK_PARAM_COMMIT_ID).toBe("teardown");
+    } finally {
+      if (prev.bucket === undefined) delete process.env.CDK_PARAM_S3_BUCKET_NAME;
+      else process.env.CDK_PARAM_S3_BUCKET_NAME = prev.bucket;
+      if (prev.source === undefined) delete process.env.CDK_SOURCE_NAME;
+      else process.env.CDK_SOURCE_NAME = prev.source;
+      if (prev.commit === undefined) delete process.env.CDK_PARAM_COMMIT_ID;
+      else process.env.CDK_PARAM_COMMIT_ID = prev.commit;
+      if (prev.tenant === undefined) delete process.env.TENANT_ADMIN_EMAIL;
+      else process.env.TENANT_ADMIN_EMAIL = prev.tenant;
+    }
+  });
+
+  it("down should not override explicit CDK_PARAM_S3_BUCKET_NAME / CDK_SOURCE_NAME / CDK_PARAM_COMMIT_ID", async () => {
+    const prev = {
+      bucket: process.env.CDK_PARAM_S3_BUCKET_NAME,
+      source: process.env.CDK_SOURCE_NAME,
+      commit: process.env.CDK_PARAM_COMMIT_ID,
+    };
+    process.env.CDK_PARAM_S3_BUCKET_NAME = "custom-bucket";
+    process.env.CDK_SOURCE_NAME = "custom.zip";
+    process.env.CDK_PARAM_COMMIT_ID = "abc123";
+    try {
+      const { io } = buildIO({ inheritExitCode: 0 });
+      await main(["down"], io);
+      expect(process.env.CDK_PARAM_S3_BUCKET_NAME).toBe("custom-bucket");
+      expect(process.env.CDK_SOURCE_NAME).toBe("custom.zip");
+      expect(process.env.CDK_PARAM_COMMIT_ID).toBe("abc123");
+    } finally {
+      if (prev.bucket === undefined) delete process.env.CDK_PARAM_S3_BUCKET_NAME;
+      else process.env.CDK_PARAM_S3_BUCKET_NAME = prev.bucket;
+      if (prev.source === undefined) delete process.env.CDK_SOURCE_NAME;
+      else process.env.CDK_SOURCE_NAME = prev.source;
+      if (prev.commit === undefined) delete process.env.CDK_PARAM_COMMIT_ID;
+      else process.env.CDK_PARAM_COMMIT_ID = prev.commit;
+    }
+  });
+
   // Regression: cdk destroy synths the app, which stages apps/participant-portal/dist and
   // apps/application-admin-console/dist as BucketDeployment assets. Teardown never builds
   // the SPAs, so `down` must create the placeholder dirs or synth throws CannotFindAsset.
