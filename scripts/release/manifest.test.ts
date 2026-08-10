@@ -122,7 +122,44 @@ function gitOutput(
   return execFileSync(GIT_BINARY, args, { cwd, encoding: "utf8", env }).trim();
 }
 
+/**
+ * Make sure the pinned commit's objects are actually in this clone.
+ *
+ * These assertions read blobs *at the pinned platform commit*, which is the whole point:
+ * the manifest must match what that commit really contains, not what HEAD happens to have.
+ * But CI checks out with a limited fetch depth, so the pinned commit is usually absent and
+ * every read dies with a bare `fatal: not a tree object` — a failure that says nothing
+ * about the manifest and cannot be fixed by editing it.
+ *
+ * Fetch just that one commit when it is missing. If the fetch also fails, throw with the
+ * reason attached instead of letting the next `git show` report a missing tree, so the
+ * distinction between "the manifest is wrong" and "the object was never fetched" survives
+ * into the failure message.
+ */
+const ensuredCommits = new Set<string>();
+function ensureCommitPresent(commit: string): void {
+  if (ensuredCommits.has(commit)) return;
+  try {
+    gitOutput(REPO_ROOT, ["cat-file", "-e", `${commit}^{commit}`]);
+    ensuredCommits.add(commit);
+    return;
+  } catch {
+    // Not in this clone yet — fall through to the targeted fetch.
+  }
+  try {
+    gitOutput(REPO_ROOT, ["fetch", "--no-tags", "--depth=1", "origin", commit]);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `pinned platform commit ${commit} is not in this clone and could not be fetched. ` +
+        `This is a checkout problem, not a manifest mismatch. Original error: ${reason}`,
+    );
+  }
+  ensuredCommits.add(commit);
+}
+
 function platformBlob(commit: string, path: string): string {
+  ensureCommitPresent(commit);
   return gitOutput(REPO_ROOT, ["show", `${commit}:${path}`]);
 }
 
@@ -399,6 +436,7 @@ describe("release source parity and generated report", () => {
   );
 
   it("verifies both declared repositories, display tags, and exact source objects", () => {
+    ensureCommitPresent(manifest.sources.platform.commit);
     const gitlink = gitOutput(REPO_ROOT, [
       "ls-tree",
       manifest.sources.platform.commit,
@@ -509,6 +547,7 @@ describe("release source parity and generated report", () => {
 
   it("matches launcher refs and named subsystem contract versions", () => {
     const commit = manifest.sources.platform.commit;
+    ensureCommitPresent(commit);
     const migrations = gitOutput(REPO_ROOT, [
       "ls-tree",
       "-r",
