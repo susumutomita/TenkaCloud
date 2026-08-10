@@ -254,11 +254,9 @@
             "name": "Idempotency-Key",
             "in": "header",
             "required": false,
-            "description": "Optional retry-safety key (Issue 3002). Send a sufficiently random string (a v4 UUID, max 255 chars) and a resend with the same key returns the first request's status and body instead of starting a second deployment. Reusing a key with a different body is rejected with 422; a resend while the first request is still running returns 409. Keys expire after 24 hours.",
             "schema": {
               "type": "string",
-              "maxLength": 255,
-              "minLength": 1
+              "description": "Optional retry-safety key. Send a sufficiently random string (a v4 UUID, max 255 chars). A resend with the same key returns the first request's status and body instead of starting a second deployment. Reusing a key with a different body is rejected; keys expire after 24 hours."
             }
           }
         ],
@@ -350,10 +348,10 @@
             "description": "Not found within the calling tenant."
           },
           "409": {
-            "description": "The first request with this Idempotency-Key is still in progress."
+            "description": "A request with the same `Idempotency-Key` is still running (`idempotency_request_in_progress`). Retry shortly."
           },
           "422": {
-            "description": "The Idempotency-Key was reused with a different request body."
+            "description": "The `Idempotency-Key` was reused with a different request body (`idempotency_key_reused`)."
           }
         },
         "security": [

@@ -299,6 +299,16 @@ export const MACHINE_API_SPEC: MachineApiSpec = {
               description: "Problem id from the catalog.",
             },
           },
+          {
+            name: "Idempotency-Key",
+            in: "header",
+            required: false,
+            schema: {
+              type: "string",
+              description:
+                "Optional retry-safety key. Send a sufficiently random string (a v4 UUID, max 255 chars). A resend with the same key returns the first request's status and body instead of starting a second deployment. Reusing a key with a different body is rejected; keys expire after 24 hours.",
+            },
+          },
         ],
         requestBody: {
           required: true,
@@ -387,6 +397,14 @@ export const MACHINE_API_SPEC: MachineApiSpec = {
           },
           "404": {
             description: "Not found within the calling tenant.",
+          },
+          "409": {
+            description:
+              "A request with the same `Idempotency-Key` is still running (`idempotency_request_in_progress`). Retry shortly.",
+          },
+          "422": {
+            description:
+              "The `Idempotency-Key` was reused with a different request body (`idempotency_key_reused`).",
           },
         },
         security: [
