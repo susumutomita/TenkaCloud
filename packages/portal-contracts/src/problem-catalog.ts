@@ -148,7 +148,23 @@ export interface ProblemCatalogEntry {
     readonly en?: ProblemI18nOverride;
   };
   /** ADR-026 / ADR-027: 問題が deploy される cloud (provider) と engine。 未宣言は aws/cloudformation。 */
-  readonly runtime: { readonly provider: string; readonly engine: string };
+  readonly runtime: {
+    readonly provider: string;
+    readonly engine: string;
+    /**
+     * [#3008] Host requirements without which this problem's *result* is meaningless
+     * (e.g. an amd64 instruction-latency benchmark, TenkaCloudChallenge#434). Projected
+     * to the participant so the portal can say "not startable here, and why" on the
+     * catalog card instead of only at the moment the start is refused.
+     *
+     * Not a spoiler: it describes the machine, never the answer. Absent on every problem
+     * that runs anywhere, which is all of them today.
+     */
+    readonly compatibility?: {
+      readonly nativeArchitectures?: readonly string[];
+      readonly cpuFlags?: readonly string[];
+    };
+  };
   /** Issue #2786: curriculum 内の位置。 未宣言の問題は track に属さない。 */
   readonly track?: ProblemTrackPosition;
   /** Issue #2786: 外部講座との対応 (participant-safe な部分のみ)。 embargoed は不在になる。 */
@@ -201,7 +217,13 @@ export interface ProblemMetadata extends ProblemCourseMetadataInput {
   cfnTemplate?: string;
   cfnParameters?: Record<string, string>;
   /** ADR-026 / ADR-027: 問題の実行環境 (provider/engine)。 未宣言は aws/cloudformation 既定。 */
-  runtime?: { provider?: string; engine?: string; entry?: string };
+  runtime?: {
+    provider?: string;
+    engine?: string;
+    entry?: string;
+    /** [#3008] See `ProblemCatalogEntry["runtime"]["compatibility"]`. */
+    compatibility?: { nativeArchitectures?: string[]; cpuFlags?: string[] };
+  };
   endpoints?: {
     slot: string;
     default: { from: "cfn-output"; key: string; appendPath?: string };
@@ -251,6 +273,18 @@ function omitUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
     if (v !== undefined) (out as Record<string, unknown>)[k] = v;
   }
   return out;
+}
+
+/**
+ * [#3008] 宣言が実際に host を絞っているか。 `{}` や空配列だけの宣言を「宣言あり」として
+ * 通すと、 portal が「この機材では起動できません」を出す条件が空になり、 何も制約していない
+ * 問題に unsupported の見た目だけが付く。
+ */
+function hasCompatibility(
+  value: { nativeArchitectures?: readonly string[]; cpuFlags?: readonly string[] } | undefined,
+): value is NonNullable<typeof value> {
+  if (!value) return false;
+  return (value.nativeArchitectures?.length ?? 0) > 0 || (value.cpuFlags?.length ?? 0) > 0;
 }
 
 /**
@@ -347,6 +381,11 @@ export function metadataToEntry(metadata: ProblemMetadata): ProblemCatalogEntry 
     runtime: {
       provider: metadata.runtime?.provider ?? "aws",
       engine: metadata.runtime?.engine ?? "cloudformation",
+      // [#3008] Carried through only when declared, so the entry shape of every existing
+      // problem is byte-identical to what it was.
+      ...(hasCompatibility(metadata.runtime?.compatibility)
+        ? { compatibility: metadata.runtime.compatibility }
+        : {}),
     },
     // Issue #2786: curriculum 位置と講座対応。 どちらも宣言が無ければ field ごと省略する
     // (= track 未設定の既存問題の entry shape を変えない)。

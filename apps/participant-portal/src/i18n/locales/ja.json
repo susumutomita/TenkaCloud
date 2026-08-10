@@ -444,7 +444,12 @@
     "terminal_exited_no_code": "シェルが終了しました",
     "terminal_not_running_error": "コンテナが起動していません。起動してから接続してください。",
     "terminal_connect_failed_error": "接続に失敗しました。もう一度お試しください。",
-    "terminal_error_header": "ターミナル接続エラー"
+    "terminal_error_header": "ターミナル接続エラー",
+    "incompatible_host_unsupported_architecture": "この問題は native な {{required}} CPU でのみ結果に意味があります。 このマシンは {{host}} のため起動しません。 Docker は emulation で動かせますが、 採点する測定値が実 CPU ではなく emulator の性質になります。",
+    "incompatible_host_unknown_architecture": "この問題は native な {{required}} CPU を必要としますが、 Docker host の architecture を判定できませんでした。 emulation 上の測定値は正しく見えて正しくないため、 互換とみなさず起動しません。",
+    "incompatible_host_missing_cpu_flags": "この問題は CPU 機能 {{flags}} を必要としますが、 この host は報告していません。 採点する測定値がこれらに依存するため起動しません。",
+    "incompatible_host_unknown_cpu_flags": "この問題は CPU 機能 {{flags}} を必要としますが、 この host の CPU 機能を読み取れませんでした。 互換とみなさず起動しません。",
+    "incompatible_host_generic": "この問題はこのマシンでは結果に意味がないため起動しません。"
   },
   "multi_flag": {
     "progress_header": "解答した flag: {solved} / {total}",

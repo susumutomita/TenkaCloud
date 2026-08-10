@@ -168,6 +168,80 @@ describe("loadContainerProblem", () => {
     expect(problem.terminal).toEqual({ service: "verifier" });
   });
 
+  it("should have no compatibility requirement unless runtime.compatibility opts in (#3008)", () => {
+    // Backward compatibility: every problem in the catalog today is this case, and it
+    // must keep starting on every host exactly as before.
+    expect(loadContainerProblem(DIR, fixture())).not.toHaveProperty("compatibility");
+  });
+
+  it("should parse a declared runtime.compatibility (#3008)", () => {
+    const problem = loadContainerProblem(
+      DIR,
+      fixture({
+        runtime: {
+          ...VALID_METADATA.runtime,
+          compatibility: {
+            nativeArchitectures: ["amd64"],
+            cpuFlags: ["rdtscp", "constant_tsc"],
+          },
+        },
+      }),
+    );
+    expect(problem.compatibility).toEqual({
+      nativeArchitectures: ["amd64"],
+      cpuFlags: ["rdtscp", "constant_tsc"],
+    });
+  });
+
+  it("should accept a compatibility declaring only cpuFlags (#3008)", () => {
+    const problem = loadContainerProblem(
+      DIR,
+      fixture({
+        runtime: { ...VALID_METADATA.runtime, compatibility: { cpuFlags: ["rdtscp"] } },
+      }),
+    );
+    expect(problem.compatibility).toEqual({ cpuFlags: ["rdtscp"] });
+  });
+
+  it.each([
+    ["a non-object", "amd64"],
+    ["an array", ["amd64"]],
+  ])("should reject runtime.compatibility that is %s (#3008)", (_label, compatibility) => {
+    expect(() =>
+      loadContainerProblem(DIR, fixture({ runtime: { ...VALID_METADATA.runtime, compatibility } })),
+    ).toThrow(/runtime.compatibility must be an object/);
+  });
+
+  it("should reject an empty runtime.compatibility rather than ignore it (#3008)", () => {
+    // An author who wrote the key meant to constrain something; treating `{}` as absent
+    // is exactly how an emulated benchmark ships looking fine.
+    expect(() =>
+      loadContainerProblem(
+        DIR,
+        fixture({ runtime: { ...VALID_METADATA.runtime, compatibility: {} } }),
+      ),
+    ).toThrow(/must declare nativeArchitectures or cpuFlags/);
+  });
+
+  it.each([
+    ["an empty array", { nativeArchitectures: [] }, /must not be empty/],
+    ["a non-array", { nativeArchitectures: "amd64" }, /must be an array/],
+    ["a non-string entry", { nativeArchitectures: [64] }, /nativeArchitectures\[0\] must match/],
+    [
+      "an upper-case token",
+      { nativeArchitectures: ["AMD64"] },
+      /nativeArchitectures\[0\] must match/,
+    ],
+    ["a padded token", { cpuFlags: ["rdtscp "] }, /cpuFlags\[0\] must match/],
+    ["a duplicate", { cpuFlags: ["rdtscp", "rdtscp"] }, /must not repeat a value/],
+  ])("should reject compatibility with %s (#3008)", (_label, compatibility, expected) => {
+    // A typo becomes an architecture no host can match, which would make the problem
+    // permanently unstartable while blaming the participant's machine.
+    expect(() =>
+      loadContainerProblem(DIR, fixture({ runtime: { ...VALID_METADATA.runtime, compatibility } })),
+    ).toThrow(expected);
+  });
+
   it.each([
     ["a non-object", "verifier"],
     ["an array", ["verifier"]],

@@ -444,7 +444,12 @@
     "terminal_exited_no_code": "The shell exited",
     "terminal_not_running_error": "The container is not running. Start it, then connect.",
     "terminal_connect_failed_error": "Failed to connect. Try again.",
-    "terminal_error_header": "Terminal connection error"
+    "terminal_error_header": "Terminal connection error",
+    "incompatible_host_unsupported_architecture": "This problem is only meaningful on a native {{required}} CPU, and this machine is {{host}}, so it was not started. Docker could run it under emulation, but the measurement this problem scores would be an artifact of the emulator rather than of a real CPU.",
+    "incompatible_host_unknown_architecture": "This problem needs a native {{required}} CPU and the Docker host's architecture could not be determined, so it was not started rather than assumed compatible.",
+    "incompatible_host_missing_cpu_flags": "This problem needs the CPU features {{flags}}, which this host does not report. It was not started, because the measurement it scores depends on them.",
+    "incompatible_host_unknown_cpu_flags": "This problem needs the CPU features {{flags}}, and this host's CPU features could not be read. It was not started rather than assumed compatible.",
+    "incompatible_host_generic": "This problem was not started: its result would not be meaningful on this machine."
   },
   "multi_flag": {
     "progress_header": "Flags solved: {solved} / {total}",

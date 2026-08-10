@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { compareCodePoints } from "./lib/code-point-order";
 import { scoreSimulatedProblem } from "./local-play/api-scoring";
 import type { LocalPlayDeployment } from "./local-play/api-state";
+import { formatLocalProblemListing } from "./local-play/catalog-listing";
 import {
   autoInitProblemsSubmodule,
   loadLocalPlayCatalog,
@@ -668,12 +669,8 @@ function listProblems(): void {
     return;
   }
   console.log("Local-play problems (`tenkacloud local --problem <id>`):\n");
-  const idWidth = Math.max(...summaries.map((s) => s.problemId.length), "id".length);
-  const categoryWidth = Math.max(...summaries.map((s) => s.category.length), "category".length);
-  console.log(`  ${"id".padEnd(idWidth)}  ${"category".padEnd(categoryWidth)}  name`);
-  for (const s of summaries) {
-    console.log(`  ${s.problemId.padEnd(idWidth)}  ${s.category.padEnd(categoryWidth)}  ${s.name}`);
-  }
+  // [#3008] Rows carry a mark and an explanation for any problem this machine cannot run.
+  console.log(formatLocalProblemListing(summaries).join("\n"));
   if (simulated.length > 0) {
     console.log("\nSimulated-cloud problems (use the pinned Simulator image by default):\n");
     const simIdWidth = Math.max(...simulated.map((s) => s.problemId.length), "id".length);

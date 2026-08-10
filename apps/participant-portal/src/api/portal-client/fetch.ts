@@ -137,6 +137,14 @@ async function throwPortalErrorResponse(res: Response, options: PortalFetchOptio
   if (res.status === StatusCodes.CONFLICT && options.throwOn409) {
     await throwConflictError(res);
   }
+  // [#3008] 422 は「この機材ではこの問題の結果に意味が無いので起動しない」。 generic な
+  // PortalNetworkError(422, 生 text) にすると、 参加者には JSON 断片が出るだけで、
+  // 何が足りないのか (architecture か CPU flag か) が読めない。 details を保って UI が
+  // locale 付きの本文を出せるようにする。
+  if (res.status === StatusCodes.UNPROCESSABLE_ENTITY) {
+    const body = await readPortalErrorBody(res);
+    throw new PortalValidationError(body.error ?? "unprocessable", { ...body });
+  }
   if (res.status === StatusCodes.INTERNAL_SERVER_ERROR && options.throwOnAssumeRoleFailed) {
     await throwAssumeRoleFailedError(res);
   }
