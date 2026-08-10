@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   DynamoDbIdempotencyRepository,
   IDEMPOTENCY_TABLE_SQL,
@@ -7,6 +7,7 @@ import {
   type IdempotencyRecord,
   SqlIdempotencyRepository,
 } from "../../../lib/problem-deploy/control-data/idempotency-repository";
+import { createControlDataRuntime } from "../../../lib/problem-deploy/control-data/runtime-repositories";
 import type { SqlExecutor } from "../../../lib/problem-deploy/control-data/sql-port";
 import { makeFakeDdb } from "./control-data-write.test-helpers";
 
@@ -142,5 +143,47 @@ describe("Idempotency 期限切れ — SQL (Issue 3002)", () => {
     await repo.reserve(record());
     const soon = new SqlIdempotencyRepository(executor, () => NOW + 60);
     expect((await soon.reserve(record())).kind).toBe("conflict");
+  });
+});
+
+/**
+ * Issue #3002 — backend 選択そのもの。
+ *
+ * parity suite は「両方の実装が同じように振る舞う」ことを見るが、 **runtime がどちらを返すか**
+ * は別の話。 ここが turso で DynamoDB 実装を返すようだと、 parity が緑でも実環境では
+ * 動かない (あるいは逆に、 Turso で何も保護されない)。
+ */
+describe("resolveIdempotencyRepository (runtime) — Issue 3002", () => {
+  it("は既定 (CONTROL_DATA_BACKEND 未設定) で DynamoDB を返す", async () => {
+    const runtime = createControlDataRuntime({
+      env: {},
+      ssm: { send: vi.fn() },
+      createClient: vi.fn(),
+    });
+    const repo = await runtime.resolveIdempotencyRepository({
+      ddb: makeFakeDdb(),
+      deploymentsTableName: "TestDeployments",
+    });
+    expect(repo).toBeInstanceOf(DynamoDbIdempotencyRepository);
+  });
+
+  it("は turso で SQL を返し、table を用意する", async () => {
+    // CREATE TABLE IF NOT EXISTS を打つこと。 打たないと Turso 環境で最初の reserve が落ち、
+    // 「保護しているつもりで deploy が通らない」状態になる。
+    const run = vi.fn().mockResolvedValue({ changes: 0 });
+    const runtime = createControlDataRuntime({
+      env: {
+        CONTROL_DATA_BACKEND: "turso",
+        TURSO_DATABASE_URL: "file:local.db",
+        TURSO_AUTH_TOKEN_PARAMETER_NAME: "/tenkacloud/dev/sql-token",
+      },
+      ssm: { send: vi.fn().mockResolvedValue({ Parameter: { Value: "secret-token" } }) },
+      createClient: vi.fn().mockReturnValue({
+        execute: vi.fn().mockResolvedValue({ rows: [] }),
+        batch: vi.fn().mockResolvedValue([]),
+      }),
+    });
+    const repo = await runtime.resolveIdempotencyRepository({});
+    expect(repo).toBeInstanceOf(SqlIdempotencyRepository);
   });
 });

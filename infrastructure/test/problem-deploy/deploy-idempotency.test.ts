@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   IDEMPOTENCY_TABLE_SQL,
   type IdempotencyPort,
@@ -185,5 +185,77 @@ describe("deploy Idempotency-Key (Issue 3002)", () => {
     expect(validateKey("")).toBe("idempotency_key_empty");
     expect(validateKey("x".repeat(256))).toBe("idempotency_key_too_long");
     expect(validateKey(KEY)).toBeUndefined();
+  });
+});
+
+/**
+ * Issue #3002 — handler 側の seam と、storage の異常系。
+ *
+ * seam (`shared.ts`) は 1 行の委譲だが、ここが runtime を通らないと backend 選択が効かず、
+ * Turso 環境で DynamoDB 実装を掴む。委譲先と引数を固定する。
+ */
+describe("resolveIdempotencyRepository seam (Issue 3002)", () => {
+  it("は runtime へ ddb と deployments table を渡す", async () => {
+    const { resolveIdempotencyRepository } = await import(
+      "../../lib/problem-deploy/handlers/deploy-handler/shared"
+    );
+    const port = { reserve: async () => ({ kind: "reserved" as const }), complete: async () => {} };
+    const resolve = vi.fn().mockResolvedValue(port);
+    const ddb = { send: vi.fn() };
+    const result = await resolveIdempotencyRepository({
+      // biome-ignore lint/suspicious/noExplicitAny: runtime は該当 1 メソッドだけ使う
+      runtime: { resolveIdempotencyRepository: resolve } as any,
+      ddb,
+      tableName: "TestDeployments",
+    });
+    expect(result).toBe(port);
+    expect(resolve).toHaveBeenCalledWith({ ddb, deploymentsTableName: "TestDeployments" });
+  });
+});
+
+describe("DynamoDB idempotency の異常系 (Issue 3002)", () => {
+  it("は ConditionalCheckFailed 以外の失敗を握り潰さない", async () => {
+    // storage 障害を conflict に変換すると、「既に処理済み」と誤って replay され、
+    // 本来走るべき deploy が二度と走らなくなる。
+    const { DynamoDbIdempotencyRepository } = await import(
+      "../../lib/problem-deploy/control-data/idempotency-repository"
+    );
+    const client = { send: vi.fn().mockRejectedValue(new Error("throughput exceeded")) };
+    // biome-ignore lint/suspicious/noExplicitAny: send だけを持つ最小の fake
+    const repo = new DynamoDbIdempotencyRepository(client as any, "T");
+    await expect(
+      repo.reserve({ tenantId: "t1", key: KEY, requestHash: "h", expiresAt: NOW + 60 }),
+    ).rejects.toThrow("throughput exceeded");
+  });
+
+  it("は条件で負けた直後に行が消えていても conflict として扱う", async () => {
+    // TTL で消えた直後の競合。「無かったこと」にして実処理を走らせると二重実行になる。
+    const { DynamoDbIdempotencyRepository } = await import(
+      "../../lib/problem-deploy/control-data/idempotency-repository"
+    );
+    const conditional = Object.assign(new Error("exists"), {
+      name: "ConditionalCheckFailedException",
+    });
+    const send = vi.fn().mockRejectedValueOnce(conditional).mockResolvedValueOnce({});
+    // biome-ignore lint/suspicious/noExplicitAny: send だけを持つ最小の fake
+    const repo = new DynamoDbIdempotencyRepository({ send } as any, "T");
+    const outcome = await repo.reserve({
+      tenantId: "t1",
+      key: KEY,
+      requestHash: "h",
+      expiresAt: NOW + 60,
+    });
+    expect(outcome.kind).toBe("conflict");
+  });
+
+  it("は記録先が消えていれば complete を no-op にする", async () => {
+    const { DynamoDbIdempotencyRepository } = await import(
+      "../../lib/problem-deploy/control-data/idempotency-repository"
+    );
+    const send = vi.fn().mockResolvedValue({});
+    // biome-ignore lint/suspicious/noExplicitAny: send だけを持つ最小の fake
+    const repo = new DynamoDbIdempotencyRepository({ send } as any, "T");
+    await repo.complete("t1", KEY, 202, "{}");
+    expect(send).toHaveBeenCalledTimes(1); // Get のみ。 Put しない
   });
 });
