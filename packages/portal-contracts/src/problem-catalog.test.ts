@@ -65,6 +65,50 @@ describe("metadataToEntry (fairness projection)", () => {
     expect(metadataToEntry(withRuntime).runtime).toEqual({ provider: "azure", engine: "bicep" });
   });
 
+  it("should project a declared native-CPU compatibility requirement (#3008)", () => {
+    // The shape TenkaCloudChallenge#434 declares. Projected to the participant because it
+    // describes the machine, never the answer — the portal needs it to say "not startable
+    // here, and why" on the card rather than only when a start is refused.
+    const withCompatibility = {
+      ...FAIRNESS_FIXTURE,
+      runtime: {
+        provider: "docker",
+        engine: "compose",
+        entry: "local/docker-compose.yml",
+        compatibility: {
+          nativeArchitectures: ["amd64"],
+          cpuFlags: ["rdtscp", "constant_tsc", "nonstop_tsc"],
+        },
+      },
+    } as Parameters<typeof metadataToEntry>[0];
+    expect(metadataToEntry(withCompatibility).runtime).toEqual({
+      provider: "docker",
+      engine: "compose",
+      compatibility: {
+        nativeArchitectures: ["amd64"],
+        cpuFlags: ["rdtscp", "constant_tsc", "nonstop_tsc"],
+      },
+    });
+  });
+
+  it("should omit compatibility when it constrains nothing (#3008)", () => {
+    // An empty declaration must not make the portal render an "unsupported host" state for
+    // a problem that in fact runs anywhere.
+    const empty = {
+      ...FAIRNESS_FIXTURE,
+      runtime: {
+        provider: "docker",
+        engine: "compose",
+        compatibility: { nativeArchitectures: [], cpuFlags: [] },
+      },
+    } as Parameters<typeof metadataToEntry>[0];
+    expect(metadataToEntry(empty).runtime).toEqual({ provider: "docker", engine: "compose" });
+  });
+
+  it("should leave the runtime shape of a problem declaring no compatibility unchanged (#3008)", () => {
+    expect(metadataToEntry(FAIRNESS_FIXTURE).runtime).not.toHaveProperty("compatibility");
+  });
+
   it("should project i18n.en (dropping its description) and omit i18n when the override is empty", () => {
     const withI18n = {
       ...FAIRNESS_FIXTURE,

@@ -6,6 +6,7 @@ import {
   type StartedContainer,
 } from "./container-runner";
 import type { ContainerProblem } from "./manifest";
+import { createNativeCompatibilityGate } from "./native-compatibility";
 import { remapContainerProblem } from "./port-remap";
 import { type LifecycleDeps, ProblemLifecycle } from "./problem-lifecycle";
 import { ProblemTerminals, type TerminalDeps, type TerminalProcess } from "./problem-terminal";
@@ -205,6 +206,12 @@ export interface CreateStateOptions {
    */
   readonly portConflicts?: LifecycleDeps["portConflicts"];
   /**
+   * [#3008] Refuses to start a problem whose declared `runtime.compatibility` this host
+   * cannot satisfy. Omitted here means "not wired" (tests, simulator-only sessions);
+   * `serve` builds it from the catalog, and a catalog declaring nothing never probes.
+   */
+  readonly nativeCompatibility?: LifecycleDeps["nativeCompatibility"];
+  /**
    * [#2925 / #2926] Participant-facing catalog served at `/portal/problem-catalog`,
    * already projected by `metadataToEntry`. `serve` loads it from the bind-mounted
    * `problems/`; tests and simulator-only sessions may omit it (route answers empty).
@@ -376,6 +383,7 @@ function buildLifecycleDeps(
   context: LifecycleContext,
   now: () => number,
   portConflicts: LifecycleDeps["portConflicts"],
+  nativeCompatibility?: LifecycleDeps["nativeCompatibility"],
 ): LifecycleDeps {
   return {
     // 起動: catalog 原本を offset へ remap して runtime に差し替える /
@@ -386,6 +394,7 @@ function buildLifecycleDeps(
     stopContainer: (problemId) => stopLifecycleProblem(context, problemId),
     now,
     ...(portConflicts ? { portConflicts } : {}),
+    ...(nativeCompatibility ? { nativeCompatibility } : {}),
   };
 }
 
@@ -434,7 +443,13 @@ export function createLocalPlayState(
   };
   const lifecycle = new ProblemLifecycle(
     [...catalog.keys(), ...simulatedRuntimes.keys()],
-    buildLifecycleDeps(lifecycleContext, now, options.portConflicts),
+    buildLifecycleDeps(
+      lifecycleContext,
+      now,
+      options.portConflicts,
+      options.nativeCompatibility ??
+        createNativeCompatibilityGate((problemId) => catalog.get(problemId)?.compatibility),
+    ),
     { maxRunning: options.maxRunning ?? DEFAULT_MAX_RUNNING },
   );
   return {

@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { parseLoopbackUrl } from "./loopback";
+import type { NativeCompatibilityRequirement } from "./native-compatibility";
 
 /**
  * A local-play problem is a self-contained Docker container that owns both the
@@ -130,6 +131,11 @@ export interface ContainerProblem {
   readonly secretEnv: readonly string[];
   /** [#2850] Portal terminal opt-in; absent = this problem has no terminal. */
   readonly terminal?: ContainerTerminal;
+  /**
+   * [#3008] Host requirements without which this problem's *result* is meaningless.
+   * Absent = the problem runs anywhere, which is every problem in the catalog today.
+   */
+  readonly compatibility?: NativeCompatibilityRequirement;
   readonly scoring: ContainerScoring;
 }
 
@@ -168,6 +174,7 @@ interface RawMetadata {
     readonly verifyUrl?: unknown;
     readonly secretEnv?: unknown;
     readonly terminal?: unknown;
+    readonly compatibility?: unknown;
   } | null;
   readonly scoring?: {
     readonly kind?: unknown;
@@ -260,6 +267,60 @@ function normalizeTerminal(value: unknown): ContainerTerminal | undefined {
     );
   }
   return { service };
+}
+
+/**
+ * Architecture and CPU-flag tokens as the OCI platform names and `/proc/cpuinfo` spell
+ * them. Constrained here rather than accepted free-form because a typo like `x86-64 ` or
+ * `AMD64!` would otherwise become an architecture no host can ever match, turning the
+ * problem permanently unstartable with a message blaming the participant's machine.
+ */
+const COMPATIBILITY_TOKEN_RE = /^[a-z0-9][a-z0-9._-]*$/;
+
+/**
+ * [#3008] `runtime.compatibility` opt-in: absent = runs anywhere. Declared but empty is
+ * rejected rather than treated as absent — an author who wrote the key meant to constrain
+ * something, and silently ignoring it is how an emulated benchmark ships.
+ */
+function normalizeCompatibility(value: unknown): NativeCompatibilityRequirement | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new Error("runtime.compatibility must be an object");
+  }
+  const raw = value as { nativeArchitectures?: unknown; cpuFlags?: unknown };
+  const nativeArchitectures = normalizeCompatibilityTokens(
+    raw.nativeArchitectures,
+    "runtime.compatibility.nativeArchitectures",
+  );
+  const cpuFlags = normalizeCompatibilityTokens(raw.cpuFlags, "runtime.compatibility.cpuFlags");
+  if (nativeArchitectures === undefined && cpuFlags === undefined) {
+    throw new Error(
+      "runtime.compatibility must declare nativeArchitectures or cpuFlags (an empty declaration would silently allow every host)",
+    );
+  }
+  return {
+    ...(nativeArchitectures ? { nativeArchitectures } : {}),
+    ...(cpuFlags ? { cpuFlags } : {}),
+  };
+}
+
+function normalizeCompatibilityTokens(
+  value: unknown,
+  field: string,
+): readonly string[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) throw new Error(`${field} must be an array`);
+  if (value.length === 0) throw new Error(`${field} must not be empty`);
+  const tokens = value.map((entry, index) => {
+    if (typeof entry !== "string" || !COMPATIBILITY_TOKEN_RE.test(entry)) {
+      throw new Error(`${field}[${index}] must match ${COMPATIBILITY_TOKEN_RE}`);
+    }
+    return entry;
+  });
+  if (new Set(tokens).size !== tokens.length) {
+    throw new Error(`${field} must not repeat a value`);
+  }
+  return tokens;
 }
 
 function normalizeHints(
@@ -406,6 +467,13 @@ export interface LocalPlayProblemSummary {
   readonly name: string;
   /** The search root's directory name (e.g. `challenges` / `battles`). */
   readonly category: string;
+  /**
+   * [#3008] The problem's host requirements, when it declares any. Carried here so
+   * `tenkacloud local list` can mark a problem this machine cannot run *before* the
+   * participant picks it — the full problem is already loaded to build this summary, so
+   * it costs nothing to keep.
+   */
+  readonly compatibility?: NativeCompatibilityRequirement;
 }
 
 /**
@@ -443,6 +511,7 @@ export function listLocalPlayProblems(
           problemId: problem.problemId,
           name: problem.name,
           category: basename(root),
+          ...(problem.compatibility ? { compatibility: problem.compatibility } : {}),
         });
       } catch {
         // Not a local-play container problem (e.g. AWS-only or malformed) — skip.
@@ -492,6 +561,7 @@ export function loadContainerProblem(
   }
 
   const terminal = normalizeTerminal(runtime.terminal);
+  const compatibility = normalizeCompatibility(runtime.compatibility);
   const overlay = parseEnglishOverlay(metadata.i18n);
   const containerScoring =
     kind === "verify"
@@ -515,6 +585,7 @@ export function loadContainerProblem(
     verifyUrl: loopbackUrl(runtime.verifyUrl, "runtime.verifyUrl"),
     secretEnv: normalizeSecretEnv(runtime.secretEnv),
     ...(terminal ? { terminal } : {}),
+    ...(compatibility ? { compatibility } : {}),
     scoring: containerScoring,
   };
 }

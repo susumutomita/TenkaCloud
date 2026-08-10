@@ -14,6 +14,10 @@
  * cap evicts the least-recently-played problem to make room for another start.
  */
 
+import type {
+  NativeCompatibilityRefusal,
+  NativeCompatibilityVerdict,
+} from "./native-compatibility";
 import { PORT_STRIDE } from "./port-remap";
 
 export type ProblemStatus = "stopped" | "starting" | "running" | "stopping" | "error";
@@ -43,6 +47,16 @@ export interface LifecycleDeps {
    * "port is already allocated" to go on.
    */
   readonly portConflicts?: (problemId: string, offset: number) => readonly PortConflict[];
+  /**
+   * [#3008] Whether this host can produce a *meaningful* result for the problem, for the
+   * problems that declare `runtime.compatibility`. An absent dep means "no problem in this
+   * catalog declares one", which is the common case and keeps current behavior exactly.
+   *
+   * Unlike {@link portConflicts}, this gate is consulted before a port slot is even
+   * considered: a refusal here must leave no container, network, volume or occupied offset
+   * behind, so it has to come before anything that could create one.
+   */
+  readonly nativeCompatibility?: (problemId: string) => NativeCompatibilityVerdict;
 }
 
 /**
@@ -80,6 +94,21 @@ export class PortsUnavailableError extends Error {
       lines.push("Or reclaim everything this project owns with:  make local-down");
     }
     return lines.join("\n");
+  }
+}
+
+/**
+ * [#3008] The host cannot produce a meaningful result for this problem, so it was never
+ * started. Carries the structured refusal so the CLI and the portal render the same facts
+ * instead of each re-deriving them from a string.
+ */
+export class NativeCompatibilityError extends Error {
+  constructor(
+    readonly problemId: string,
+    readonly refusal: NativeCompatibilityRefusal,
+  ) {
+    super(`Cannot start "${problemId}": ${refusal.message}`);
+    this.name = "NativeCompatibilityError";
   }
 }
 
@@ -165,9 +194,28 @@ export class ProblemLifecycle {
    * callers share the in-flight start. When at capacity, the least-recently-used
    * running problem is evicted first. Returns the assigned host-port offset.
    */
+  /**
+   * [#3008] Whether this host can produce a meaningful result for `problemId`, without
+   * starting anything. The API asks this *before* dispatching the detached start, so a
+   * refusal is an immediate precise response rather than a 202 followed by an error the
+   * participant has to poll for. {@link ensureRunning} re-checks regardless: this is the
+   * fast path, not the enforcement point.
+   */
+  compatibilityOf(problemId: string): NativeCompatibilityVerdict {
+    return this.deps.nativeCompatibility?.(problemId) ?? { supported: true };
+  }
+
   async ensureRunning(problemId: string): Promise<number> {
     const entry = this.entries.get(problemId);
     if (!entry) throw new Error(`unknown problem: ${problemId}`);
+    // [#3008] Before anything that could allocate: an incompatible host must leave no
+    // container, network, volume or port slot behind, and "already running" must not be a
+    // way past the gate either — a problem that reached `running` before its requirement
+    // was declared is exactly the stale state this refuses.
+    const verdict = this.deps.nativeCompatibility?.(problemId);
+    if (verdict !== undefined && !verdict.supported) {
+      throw new NativeCompatibilityError(problemId, verdict);
+    }
     if (entry.stopping) {
       await entry.stopping;
       return this.ensureRunning(problemId);

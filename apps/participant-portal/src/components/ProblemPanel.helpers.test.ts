@@ -80,6 +80,59 @@ describe("formatProblemPanelActionError — non-gate errors", () => {
     ).toBe("problem_panel.prerequisite_locked_error");
   });
 
+  it("should describe an emulated-host refusal with both architectures (#3008)", () => {
+    // The case #3008 exists for: an amd64 benchmark asked to run on Apple Silicon. The
+    // portal renders from the structured fields, not the server's prose, so the message
+    // follows the participant's locale switch.
+    expect(
+      fmt(
+        new PortalValidationError("incompatible_host", {
+          code: "unsupported_architecture",
+          requiredArchitectures: ["amd64"],
+          hostArchitecture: "arm64",
+        }),
+      ),
+    ).toBe(
+      `problem_panel.incompatible_host_unsupported_architecture|${JSON.stringify({
+        required: "amd64",
+        host: "arm64",
+      })}`,
+    );
+  });
+
+  it("should name only the missing CPU flags (#3008)", () => {
+    expect(
+      fmt(
+        new PortalValidationError("incompatible_host", {
+          code: "missing_cpu_flags",
+          missingCpuFlags: ["constant_tsc", "nonstop_tsc"],
+        }),
+      ),
+    ).toBe(
+      `problem_panel.incompatible_host_missing_cpu_flags|${JSON.stringify({
+        flags: "constant_tsc, nonstop_tsc",
+      })}`,
+    );
+  });
+
+  it.each([
+    ["unknown_host_architecture", "problem_panel.incompatible_host_unknown_architecture"],
+    ["unknown_cpu_flags", "problem_panel.incompatible_host_unknown_cpu_flags"],
+  ])("should describe the fail-closed %s refusal (#3008)", (code, expected) => {
+    expect(fmt(new PortalValidationError("incompatible_host", { code }))).toContain(expected);
+  });
+
+  it("should still explain a refusal whose code it does not recognize (#3008)", () => {
+    // A refusal must never degrade into a generic "invalid input" — the participant would
+    // have no idea their machine is the reason.
+    expect(fmt(new PortalValidationError("incompatible_host", { code: "future_reason" }))).toBe(
+      "problem_panel.incompatible_host_generic",
+    );
+    expect(fmt(new PortalValidationError("incompatible_host"))).toBe(
+      "problem_panel.incompatible_host_generic",
+    );
+  });
+
   it("should fall back to the Error message, then String() for unknowns", () => {
     expect(fmt(new Error("boom"))).toBe("boom");
     expect(fmt("weird")).toBe("weird");

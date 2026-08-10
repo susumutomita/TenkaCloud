@@ -981,6 +981,60 @@ describe("local-play API: on-demand container lifecycle (#2392 Phase 2)", () => 
     });
   });
 
+  it("should refuse to start a problem this host cannot run natively (#3008)", async () => {
+    // The whole point of #3008: a benchmark whose result is only meaningful on amd64 must
+    // not quietly run under emulation on an arm64 machine and report a plausible number.
+    const state = createLocalPlayState(
+      { problems: [{ ...PROBLEM, compatibility: { nativeArchitectures: ["amd64"] } }] },
+      {
+        verify: neverVerify,
+        nativeCompatibility: () => ({
+          supported: false,
+          code: "unsupported_architecture",
+          requiredArchitectures: ["amd64"],
+          hostArchitecture: "arm64",
+          message: "This problem needs a native amd64 CPU; this machine is arm64.",
+          messageJa: "この問題は native な amd64 CPU を必要としますが、 このマシンは arm64 です。",
+        }),
+      },
+    );
+    const response = await handleLocalPlayRequest(
+      post("/portal/me/problems/sqli-demo/start", {}),
+      state,
+      NOW,
+    );
+    // 422, not the usual 202: this start can never succeed on this machine, so the reason
+    // is due immediately rather than through a poll of lifecycle status.
+    expect(response.status).toBe(StatusCodes.UNPROCESSABLE_ENTITY);
+    expect(response.body).toMatchObject({
+      error: "incompatible_host",
+      code: "unsupported_architecture",
+      requiredArchitectures: ["amd64"],
+      hostArchitecture: "arm64",
+    });
+    // Bilingual, and the CLI reads the same structured fields (acceptance criterion).
+    expect(response.body).toHaveProperty("messageJa");
+    await settleLifecycle();
+    // Nothing was started, so nothing needs cleaning up: no container, no network, no
+    // volume, and no `cleanupRequired` mark that would owe a teardown.
+    expect(state.lifecycle.snapshot()).toEqual([{ problemId: "sqli-demo", status: "stopped" }]);
+  });
+
+  it("should still start a problem normally when the host is compatible (#3008)", async () => {
+    const state = createLocalPlayState(
+      { problems: [PROBLEM] },
+      { verify: neverVerify, nativeCompatibility: () => ({ supported: true }) },
+    );
+    const response = await handleLocalPlayRequest(
+      post("/portal/me/problems/sqli-demo/start", {}),
+      state,
+      NOW,
+    );
+    expect(response.status).toBe(StatusCodes.ACCEPTED);
+    await settleLifecycle();
+    expect(state.lifecycle.statusOf("sqli-demo")).toBe("running");
+  });
+
   it("should 404 start/stop for an unknown or malformed problem id", async () => {
     const state = createLocalPlayState({ problems: [PROBLEM] }, { verify: neverVerify });
     const start = await handleLocalPlayRequest(

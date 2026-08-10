@@ -38,7 +38,8 @@ import {
   waitForProblemRunning,
   waitForServeProcessExit,
 } from "./local-play/local-runtime-support";
-import { listLocalPlayProblems } from "./local-play/manifest";
+import { type LocalPlayProblemSummary, listLocalPlayProblems } from "./local-play/manifest";
+import { createNativeCompatibilityGate } from "./local-play/native-compatibility";
 import { observeProcessIdentity } from "./local-play/process-identity";
 import { assertPortFree, freeLoopbackPort, waitForLocalApi } from "./local-play/readiness";
 import { startLocalPlayServer } from "./local-play/server";
@@ -650,6 +651,41 @@ function describeTarget(target: { readonly provider: string; readonly engine: st
  * (id / display name / category) so players can choose one instead of already
  * needing to know the id.
  */
+/**
+ * [#3008] Print the local-play rows, marking any problem whose declared
+ * `runtime.compatibility` this machine cannot satisfy, and then explaining each one.
+ *
+ * An unsupported problem is still listed: hiding it would look identical to a problem that
+ * was never authored, and the participant would have no way to learn that the reason is
+ * their machine. Extracted from {@link listProblems} to keep that function's branching flat.
+ */
+function printLocalProblemRows(
+  summaries: readonly LocalPlayProblemSummary[],
+  idWidth: number,
+  categoryWidth: number,
+): void {
+  // Evaluated once for the whole listing; the gate probes the host lazily, so a catalog
+  // where nothing declares a requirement never runs `docker info` at all.
+  const compatibilityOf = createNativeCompatibilityGate(
+    (problemId) => summaries.find((s) => s.problemId === problemId)?.compatibility,
+  );
+  const refusals: string[] = [];
+  for (const s of summaries) {
+    const verdict = compatibilityOf(s.problemId);
+    const mark = verdict.supported ? "" : "  [not startable on this machine]";
+    if (!verdict.supported) {
+      refusals.push(
+        `  ${s.problemId}: ${verdict.message}`,
+        `  ${s.problemId}: ${verdict.messageJa}`,
+      );
+    }
+    console.log(
+      `  ${s.problemId.padEnd(idWidth)}  ${s.category.padEnd(categoryWidth)}  ${s.name}${mark}`,
+    );
+  }
+  if (refusals.length > 0) console.log(`\n${refusals.join("\n")}`);
+}
+
 function listProblems(): void {
   const roots = problemSearchRoots(REPO_ROOT);
   // [#2696 PR5] Same pin the portal catalog applies (loadLocalPlayCatalog) — the
@@ -671,9 +707,7 @@ function listProblems(): void {
   const idWidth = Math.max(...summaries.map((s) => s.problemId.length), "id".length);
   const categoryWidth = Math.max(...summaries.map((s) => s.category.length), "category".length);
   console.log(`  ${"id".padEnd(idWidth)}  ${"category".padEnd(categoryWidth)}  name`);
-  for (const s of summaries) {
-    console.log(`  ${s.problemId.padEnd(idWidth)}  ${s.category.padEnd(categoryWidth)}  ${s.name}`);
-  }
+  printLocalProblemRows(summaries, idWidth, categoryWidth);
   if (simulated.length > 0) {
     console.log("\nSimulated-cloud problems (use the pinned Simulator image by default):\n");
     const simIdWidth = Math.max(...simulated.map((s) => s.problemId.length), "id".length);

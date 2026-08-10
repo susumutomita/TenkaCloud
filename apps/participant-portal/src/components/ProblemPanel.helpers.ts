@@ -150,6 +150,41 @@ function describeScoringGate(
   return t("problem_panel.scoring_gate_paused");
 }
 
+/**
+ * [#3008] 「この機材ではこの問題の結果に意味が無いので起動しない」を、 参加者の locale で
+ * 具体的に説明する。
+ *
+ * server も同じ事実から en / ja の文面を作るが、 それは CLI 用。 portal は i18n を持って
+ * いるので、 文面ではなく `code` と構造化 field (required architecture / 実 architecture /
+ * 欠けている CPU flag) を受け取り、 自分の resource で組み立てる。 server 文面をそのまま
+ * 出すと portal の言語切替が効かない 1 か所になる。
+ *
+ * `code` が未知のときは generic に落ちる。 拒否理由が読めないことはあっても、 拒否そのものが
+ * 「不明なエラー」に化けてはいけない。
+ */
+function describeIncompatibleHost(
+  t: ProblemPanelT,
+  details: Readonly<Record<string, unknown>> | undefined,
+): string {
+  const list = (value: unknown): string =>
+    Array.isArray(value) ? value.filter((v) => typeof v === "string").join(", ") : "";
+  const required = list(details?.requiredArchitectures);
+  const host = typeof details?.hostArchitecture === "string" ? details.hostArchitecture : "";
+  const flags = list(details?.missingCpuFlags);
+  switch (details?.code) {
+    case "unsupported_architecture":
+      return t("problem_panel.incompatible_host_unsupported_architecture", { required, host });
+    case "unknown_host_architecture":
+      return t("problem_panel.incompatible_host_unknown_architecture", { required });
+    case "missing_cpu_flags":
+      return t("problem_panel.incompatible_host_missing_cpu_flags", { flags });
+    case "unknown_cpu_flags":
+      return t("problem_panel.incompatible_host_unknown_cpu_flags", { flags });
+    default:
+      return t("problem_panel.incompatible_host_generic");
+  }
+}
+
 export function formatProblemPanelActionError(
   t: ProblemPanelT,
   err: unknown,
@@ -163,6 +198,7 @@ export function formatProblemPanelActionError(
     if (err.errorCode === "challenge_prerequisite_not_met") {
       return t("problem_panel.prerequisite_locked_error");
     }
+    if (err.errorCode === "incompatible_host") return describeIncompatibleHost(t, err.details);
     return t(validationMessageKey, { errorCode: err.errorCode });
   }
   if (err instanceof Error) return err.message;

@@ -34,6 +34,31 @@ async function startProblem(
   if (!state.runtimes.has(problemId) && !state.simulatedRuntimes.has(problemId)) {
     return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_problem" } };
   }
+  // [#3008] Answer the host-compatibility refusal here, synchronously. The container path
+  // below returns 202 and reports failures through polled lifecycle status, which is right
+  // for a start that might still succeed — but this one never can on this machine, and a
+  // participant deserves the reason immediately rather than after a poll cycle.
+  const compatibility = state.lifecycle.compatibilityOf(problemId);
+  if (!compatibility.supported) {
+    return {
+      status: StatusCodes.UNPROCESSABLE_ENTITY,
+      body: {
+        error: "incompatible_host",
+        code: compatibility.code,
+        message: compatibility.message,
+        messageJa: compatibility.messageJa,
+        ...(compatibility.requiredArchitectures
+          ? { requiredArchitectures: compatibility.requiredArchitectures }
+          : {}),
+        ...(compatibility.hostArchitecture
+          ? { hostArchitecture: compatibility.hostArchitecture }
+          : {}),
+        ...(compatibility.missingCpuFlags
+          ? { missingCpuFlags: compatibility.missingCpuFlags }
+          : {}),
+      },
+    };
+  }
   const simulated = state.simulatedRuntimes.get(problemId);
   if (simulated) {
     try {
