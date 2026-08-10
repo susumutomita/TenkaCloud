@@ -114,7 +114,7 @@ Parameters:
 
   RepoRef:
     Type: String
-    Default: 15aaa9abd9f3ffaa10e72ab914b4b6958dd5cd36
+    Default: 6924122b4894ec7616aa241d2d729ddc27c891e7
     Description: >-
       Full 40-hex commit SHA, branch, or tag of the platform repo to deploy. The exact
       default platform/catalog pair is candidate/unverified; selecting main in either
@@ -129,7 +129,7 @@ Parameters:
 
   ProblemsRepoRef:
     Type: String
-    Default: 7a6ff45d928d4ac14b97b732c0e9069317c3130a
+    Default: 9d308e3a14c75aa804216742dd2a9a31b7e824d1
     Description: >-
       Full 40-hex commit SHA, branch, or tag of the problem-catalog repo to ship. The
       exact default platform/catalog pair is candidate/unverified; selecting main in
@@ -236,8 +236,8 @@ Conditions:
     - !Equals [!Ref RepoRef, main]
     - !Equals [!Ref ProblemsRepoRef, main]
   UsesCandidateReleasePair: !And
-    - !Equals [!Ref RepoRef, 15aaa9abd9f3ffaa10e72ab914b4b6958dd5cd36]
-    - !Equals [!Ref ProblemsRepoRef, 7a6ff45d928d4ac14b97b732c0e9069317c3130a]
+    - !Equals [!Ref RepoRef, 6924122b4894ec7616aa241d2d729ddc27c891e7]
+    - !Equals [!Ref ProblemsRepoRef, 9d308e3a14c75aa804216742dd2a9a31b7e824d1]
 
 Resources:
   LauncherLogGroup:
@@ -336,7 +336,7 @@ Resources:
                   echo "Release manifest version: 1.2.0-candidate.20260810 (baseline for the exact candidate ref pair)"
                   if [ "${REPO_REF}" = "main" ] || [ "${PROBLEMS_REPO_REF}" = "main" ]; then
                     release_classification="development/unreleased"
-                  elif [ "${REPO_REF}" = "15aaa9abd9f3ffaa10e72ab914b4b6958dd5cd36" ] && [ "${PROBLEMS_REPO_REF}" = "7a6ff45d928d4ac14b97b732c0e9069317c3130a" ]; then
+                  elif [ "${REPO_REF}" = "6924122b4894ec7616aa241d2d729ddc27c891e7" ] && [ "${PROBLEMS_REPO_REF}" = "9d308e3a14c75aa804216742dd2a9a31b7e824d1" ]; then
                     release_classification="candidate/unverified"
                   else
                     release_classification="custom/unverified"

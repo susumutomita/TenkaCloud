@@ -12,8 +12,8 @@ The machine-readable source of truth is [`tenkacloud-release.json`](./tenkacloud
 
 | Component | Authoritative reference | Display tag |
 | --- | --- | --- |
-| Platform | [`15aaa9abd9f3ffaa10e72ab914b4b6958dd5cd36`](https://github.com/susumutomita/TenkaCloud/commit/15aaa9abd9f3ffaa10e72ab914b4b6958dd5cd36) | — |
-| Problem catalog | [`7a6ff45d928d4ac14b97b732c0e9069317c3130a`](https://github.com/susumutomita/TenkaCloudChallenge/commit/7a6ff45d928d4ac14b97b732c0e9069317c3130a) | — |
+| Platform | [`6924122b4894ec7616aa241d2d729ddc27c891e7`](https://github.com/susumutomita/TenkaCloud/commit/6924122b4894ec7616aa241d2d729ddc27c891e7) | — |
+| Problem catalog | [`9d308e3a14c75aa804216742dd2a9a31b7e824d1`](https://github.com/susumutomita/TenkaCloudChallenge/commit/9d308e3a14c75aa804216742dd2a9a31b7e824d1) | — |
 | Simulator | `ghcr.io/susumutomita/tenkacloud-simulator@sha256:049c6c165f9947b386b2c5864983aebefba26e996ec62859dae0e9814c52d505` | — |
 
 ## Toolchain
