@@ -117,6 +117,32 @@ export function composeArgsForCli(
   return cli.command === "docker-compose" ? args.slice(1) : args;
 }
 
+/** `compose ps` argv used to verify a recorded unit before adopting it at startup. */
+export function composeRunningPsArgs(
+  composePath: string,
+  projectName: string,
+  projectDirectory?: string,
+): string[] {
+  const base = ["compose", "-f", composePath, "-p", projectName];
+  if (projectDirectory) base.push("--project-directory", projectDirectory);
+  return [...base, "ps", "--status", "running", "--quiet"];
+}
+
+export function composeRunningPsArgsForCli(
+  cli: ComposeCli,
+  composePath: string,
+  projectName: string,
+  projectDirectory?: string,
+): string[] {
+  const args = composeRunningPsArgs(composePath, projectName, projectDirectory);
+  if (cli.command !== "docker-compose") return args;
+
+  // Compose v1.29 has no `ps --status`. Its `--filter status=running` is only
+  // applied on the `--services` path (not with `--quiet`), so use service names
+  // as the non-empty running sentinel on the supported standalone fallback.
+  return [...args.slice(1, -4), "ps", "--services", "--filter", "status=running"];
+}
+
 /**
  * [#2846] `compose exec` argv for attaching a shell to a running service.
  *
@@ -239,6 +265,58 @@ function composeInterpolationEnv(secretEnv: readonly string[] = []): NodeJS.Proc
 
 const COMPOSE_INTERPOLATION_PLACEHOLDER = "tenkacloud-local-exec";
 
+interface ComposeCapturedResult {
+  readonly status: number | null;
+  readonly stdout?: string;
+  readonly stderr?: string;
+  readonly error?: { readonly message: string };
+}
+
+function assertComposeCommandSucceeded(
+  cli: ComposeCli,
+  args: readonly string[],
+  result: ComposeCapturedResult,
+): void {
+  if (result.status === 0) return;
+  const stderr = [result.stderr ?? "", result.error?.message ?? ""].filter(Boolean).join("\n");
+  throw new Error(composeFailureMessage(`${cli.command} ${args.join(" ")}`, stderr));
+}
+
+export interface ComposePsDeps {
+  readonly cli?: ComposeCli;
+  readonly run?: (
+    command: string,
+    args: readonly string[],
+    env: NodeJS.ProcessEnv,
+  ) => ComposeCapturedResult;
+}
+
+/**
+ * [#3016] Verify that a compose unit from this session's durable ledger still has at least
+ * one running container. A CLI failure is not interpreted as "stopped": doing that would
+ * recreate the exact false-stopped state this probe exists to prevent.
+ */
+export function isComposeUnitRunning(unit: LocalComposeUnit, deps: ComposePsDeps = {}): boolean {
+  const cli = deps.cli ?? resolveComposeCli();
+  const args = composeRunningPsArgsForCli(
+    cli,
+    unit.composePath,
+    unit.composeProjectName,
+    unit.projectDirectory,
+  );
+  const env = composeInterpolationEnv(unit.secretEnv);
+  const result = deps.run
+    ? deps.run(cli.command, args, env)
+    : spawnSync(cli.command, args, {
+        cwd: REPO_ROOT,
+        env,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+  assertComposeCommandSucceeded(cli, args, result);
+  return (result.stdout ?? "").trim().length > 0;
+}
+
 /**
  * [#2846] Real shell adapter behind {@link ProblemTerminals}: `compose exec` into a
  * running service and expose it as the registry's process contract.
@@ -325,10 +403,7 @@ export const inspectComposeConfig: ComposeConfigInspector = (target) => {
     env: composeInterpolationEnv(target.secretEnv),
     encoding: "utf8",
   });
-  if (result.status !== 0) {
-    const stderr = [result.stderr ?? "", result.error?.message ?? ""].filter(Boolean).join("\n");
-    throw new Error(composeFailureMessage(`${cli.command} ${args.join(" ")}`, stderr));
-  }
+  assertComposeCommandSucceeded(cli, args, result);
   let config: unknown;
   try {
     config = JSON.parse(result.stdout ?? "");

@@ -112,9 +112,21 @@ export class NativeCompatibilityError extends Error {
   }
 }
 
+/** A container discovered running before this in-memory lifecycle was created. */
+export interface InitialRunningProblem {
+  readonly problemId: string;
+  readonly offset: number;
+}
+
 export interface LifecycleOptions {
   /** Max simultaneously-running containers (>= 1). Also the port-pool size. */
   readonly maxRunning: number;
+  /**
+   * [#3016] Containers adopted from the previous control-plane process. Their slots are
+   * reserved from the same pool as containers started on demand, so they remain subject to
+   * explicit stop, the concurrency cap and LRU eviction.
+   */
+  readonly initialRunning?: readonly InitialRunningProblem[];
 }
 
 export interface ProblemLifecycleView {
@@ -135,6 +147,51 @@ interface Entry {
   stopping?: Promise<void>;
 }
 
+function isValidInitialOffset(offset: number, maxOffset: number): boolean {
+  return (
+    Number.isInteger(offset) && offset >= 0 && offset <= maxOffset && offset % PORT_STRIDE === 0
+  );
+}
+
+function validateInitialRunning(
+  entries: ReadonlyMap<string, Entry>,
+  initialRunning: readonly InitialRunningProblem[],
+  maxRunning: number,
+  maxOffset: number,
+  nativeCompatibility: LifecycleDeps["nativeCompatibility"],
+): Set<number> {
+  if (initialRunning.length > maxRunning) {
+    throw new Error(
+      `initialRunning cannot exceed maxRunning (got ${initialRunning.length}, max ${maxRunning})`,
+    );
+  }
+  const adoptedProblemIds = new Set<string>();
+  const adoptedOffsets = new Set<number>();
+  for (const adopted of initialRunning) {
+    if (!entries.has(adopted.problemId)) {
+      throw new Error(`initialRunning contains unknown problem: ${adopted.problemId}`);
+    }
+    if (adoptedProblemIds.has(adopted.problemId)) {
+      throw new Error(`initialRunning contains duplicate problem: ${adopted.problemId}`);
+    }
+    const verdict = nativeCompatibility?.(adopted.problemId);
+    if (verdict !== undefined && !verdict.supported) {
+      throw new NativeCompatibilityError(adopted.problemId, verdict);
+    }
+    if (!isValidInitialOffset(adopted.offset, maxOffset)) {
+      throw new Error(
+        `initialRunning offset for "${adopted.problemId}" must be a PORT_STRIDE-aligned slot between 0 and ${maxOffset} (got ${adopted.offset})`,
+      );
+    }
+    if (adoptedOffsets.has(adopted.offset)) {
+      throw new Error(`initialRunning offset ${adopted.offset} is assigned more than once`);
+    }
+    adoptedProblemIds.add(adopted.problemId);
+    adoptedOffsets.add(adopted.offset);
+  }
+  return adoptedOffsets;
+}
+
 export class ProblemLifecycle {
   private readonly entries = new Map<string, Entry>();
   private readonly freeOffsets: number[];
@@ -151,7 +208,30 @@ export class ProblemLifecycle {
       this.entries.set(id, { status: "stopped", lastAccessedAt: 0 });
     }
     // One host-port offset per cap slot; taking an offset is how the cap is enforced.
-    this.freeOffsets = Array.from({ length: options.maxRunning }, (_, i) => i * PORT_STRIDE);
+    const allOffsets = Array.from({ length: options.maxRunning }, (_, i) => i * PORT_STRIDE);
+    const initialRunning = options.initialRunning ?? [];
+    const maxOffset = allOffsets[allOffsets.length - 1] as number;
+
+    // Validate the whole seed before mutating any entry. A partially adopted seed could
+    // otherwise mark an offset owned while still leaving it in the free pool.
+    const adoptedOffsets = validateInitialRunning(
+      this.entries,
+      initialRunning,
+      options.maxRunning,
+      maxOffset,
+      this.deps.nativeCompatibility,
+    );
+
+    if (initialRunning.length > 0) {
+      const adoptedAt = this.deps.now();
+      for (const adopted of initialRunning) {
+        const entry = this.entries.get(adopted.problemId) as Entry;
+        entry.status = "running";
+        entry.offset = adopted.offset;
+        entry.lastAccessedAt = adoptedAt;
+      }
+    }
+    this.freeOffsets = allOffsets.filter((offset) => !adoptedOffsets.has(offset));
   }
 
   snapshot(): ProblemLifecycleView[] {

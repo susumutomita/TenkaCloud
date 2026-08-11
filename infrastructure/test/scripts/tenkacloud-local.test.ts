@@ -26,7 +26,9 @@ import {
   composeExecArgs,
   composeExecArgsForCli,
   composeFailureMessage,
+  composeRunningPsArgsForCli,
   generateSecretEnv,
+  isComposeUnitRunning,
   openPrivateAppendLog,
   resolveComposeCli,
 } from "../../../scripts/local-play/docker-adapter";
@@ -34,6 +36,7 @@ import {
   ensurePrivateLocalDirectory,
   persistStartedContainerUnit,
   printRunningEndpoints,
+  reconcileRecordedContainerUnits,
   recordedApiIsHealthy,
   requiredLocalApiPort,
   shutdownLocalServe,
@@ -41,6 +44,7 @@ import {
   waitForProblemRunning,
   waitForServeProcessExit,
 } from "../../../scripts/local-play/local-runtime-support";
+import type { ContainerProblem } from "../../../scripts/local-play/manifest";
 import { observeProcessIdentity } from "../../../scripts/local-play/process-identity";
 import {
   reclaimStaleSession,
@@ -317,6 +321,248 @@ describe("persisted container ownership", () => {
     expect(units.has(unit.problemId)).toBe(false);
     expect(runner.stopPhysical).toHaveBeenCalledTimes(2);
     expect(runner.finalizeStop).toHaveBeenCalledWith(unit);
+  });
+});
+
+describe("recorded container startup reconciliation (#3016)", () => {
+  const problem: ContainerProblem = {
+    problemId: "sqli-demo",
+    name: "SQLi demo",
+    description: "",
+    instructions: "Open http://127.0.0.1:18080/",
+    problemDir: "/problems/sqli-demo",
+    composePath: "/problems/sqli-demo/local/docker-compose.yml",
+    composeProjectName: "tc-local-sqli-demo",
+    challengeEndpoints: { Web: "http://127.0.0.1:18080/" },
+    verifyUrl: "http://127.0.0.1:18081/verify",
+    secretEnv: [],
+    scoring: { kind: "verify", points: 100, wrongAnswerPenalty: 0, hints: [] },
+  };
+
+  const recordedUnit = () => ({
+    problemId: problem.problemId,
+    offset: 1000,
+    composePath: "/data/tc-local-sqli-demo.compose.yml",
+    composeProjectName: problem.composeProjectName,
+    secretEnv: [] as string[],
+    projectDirectory: "/problems/sqli-demo/local",
+    remappedComposePath: "/data/tc-local-sqli-demo.compose.yml",
+  });
+
+  it("should adopt only a ledger-owned unit that Compose confirms is Up", async () => {
+    const unit = recordedUnit();
+    const normalized = { ...unit, offset: 1000 };
+    const units = new Map([[unit.problemId, unit]]);
+    const runner = {
+      recover: vi.fn(async () => ({
+        offset: 1000,
+        started: { unit: normalized, problem },
+      })),
+      stopPhysical: vi.fn(),
+      finalizeStop: vi.fn(),
+    };
+    const isRunning = vi.fn(() => true);
+    const persistUnits = vi.fn();
+
+    const recovered = await reconcileRecordedContainerUnits({
+      problems: [problem],
+      units,
+      runner,
+      isRunning,
+      persistUnits,
+      maxRunning: 3,
+    });
+
+    expect(recovered).toEqual([{ offset: 1000, started: { unit: normalized, problem } }]);
+    expect(isRunning).toHaveBeenCalledWith(unit);
+    expect(runner.stopPhysical).not.toHaveBeenCalled();
+    expect(units.get(problem.problemId)).toEqual(normalized);
+    expect(persistUnits).toHaveBeenCalledTimes(1);
+  });
+
+  it("should compose-down a recorded unit that is no longer running", async () => {
+    const unit = recordedUnit();
+    const units = new Map([[unit.problemId, unit]]);
+    const runner = {
+      recover: vi.fn(),
+      stopPhysical: vi.fn(),
+      finalizeStop: vi.fn(),
+    };
+    const persistUnits = vi.fn();
+
+    await expect(
+      reconcileRecordedContainerUnits({
+        problems: [problem],
+        units,
+        runner,
+        isRunning: () => false,
+        persistUnits,
+        maxRunning: 3,
+      }),
+    ).resolves.toEqual([]);
+    expect(runner.stopPhysical).toHaveBeenCalledWith(unit);
+    expect(runner.finalizeStop).toHaveBeenCalledWith(unit);
+    expect(units.size).toBe(0);
+    expect(persistUnits).toHaveBeenCalledTimes(1);
+  });
+
+  it("should leave ownership untouched when Docker state cannot be inspected", async () => {
+    const unit = recordedUnit();
+    const units = new Map([[unit.problemId, unit]]);
+    const runner = {
+      recover: vi.fn(),
+      stopPhysical: vi.fn(),
+      finalizeStop: vi.fn(),
+    };
+    const persistUnits = vi.fn();
+
+    await expect(
+      reconcileRecordedContainerUnits({
+        problems: [problem],
+        units,
+        runner,
+        isRunning: () => {
+          throw new Error("Docker daemon unavailable");
+        },
+        persistUnits,
+        maxRunning: 3,
+      }),
+    ).rejects.toThrow("Docker daemon unavailable");
+    expect(units.get(unit.problemId)).toBe(unit);
+    expect(runner.stopPhysical).not.toHaveBeenCalled();
+    expect(persistUnits).not.toHaveBeenCalled();
+  });
+
+  it("should reject a ledger entry whose compose project does not match the catalog", async () => {
+    const unit = { ...recordedUnit(), composeProjectName: "tc-local-other" };
+    const runner = {
+      recover: vi.fn(),
+      stopPhysical: vi.fn(),
+      finalizeStop: vi.fn(),
+    };
+    const isRunning = vi.fn(() => true);
+
+    await expect(
+      reconcileRecordedContainerUnits({
+        problems: [problem],
+        units: new Map([[unit.problemId, unit]]),
+        runner,
+        isRunning,
+        persistUnits: vi.fn(),
+        maxRunning: 3,
+      }),
+    ).rejects.toThrow(/does not match/);
+    expect(isRunning).not.toHaveBeenCalled();
+    expect(runner.stopPhysical).not.toHaveBeenCalled();
+  });
+
+  it("should reclaim a removed catalog problem only under its deterministic project name", async () => {
+    const unit = recordedUnit();
+    const units = new Map([[unit.problemId, unit]]);
+    const runner = {
+      recover: vi.fn(),
+      stopPhysical: vi.fn(),
+      finalizeStop: vi.fn(),
+    };
+    const isRunning = vi.fn();
+
+    await expect(
+      reconcileRecordedContainerUnits({
+        problems: [],
+        units,
+        runner,
+        isRunning,
+        persistUnits: vi.fn(),
+        maxRunning: 3,
+      }),
+    ).resolves.toEqual([]);
+    expect(isRunning).not.toHaveBeenCalled();
+    expect(runner.stopPhysical).toHaveBeenCalledWith(unit);
+    expect(runner.finalizeStop).toHaveBeenCalledWith(unit);
+    expect(units.size).toBe(0);
+  });
+
+  it("should not clean an absent catalog problem that names a foreign project", async () => {
+    const unit = { ...recordedUnit(), composeProjectName: "tc-local-other" };
+    const runner = {
+      recover: vi.fn(),
+      stopPhysical: vi.fn(),
+      finalizeStop: vi.fn(),
+    };
+
+    await expect(
+      reconcileRecordedContainerUnits({
+        problems: [],
+        units: new Map([[unit.problemId, unit]]),
+        runner,
+        isRunning: vi.fn(),
+        persistUnits: vi.fn(),
+        maxRunning: 3,
+      }),
+    ).rejects.toThrow(/does not match/);
+    expect(runner.stopPhysical).not.toHaveBeenCalled();
+  });
+
+  it("should reclaim a live owned unit that cannot be reconstructed", async () => {
+    const unit = recordedUnit();
+    const units = new Map([[unit.problemId, unit]]);
+    const runner = {
+      recover: vi.fn(async () => {
+        throw new Error("recorded compose no longer matches offset");
+      }),
+      stopPhysical: vi.fn(),
+      finalizeStop: vi.fn(),
+    };
+    const persistUnits = vi.fn();
+
+    await expect(
+      reconcileRecordedContainerUnits({
+        problems: [problem],
+        units,
+        runner,
+        isRunning: () => true,
+        persistUnits,
+        maxRunning: 3,
+      }),
+    ).resolves.toEqual([]);
+    expect(runner.stopPhysical).toHaveBeenCalledWith(unit);
+    expect(runner.finalizeStop).toHaveBeenCalledWith(unit);
+    expect(units.size).toBe(0);
+    expect(persistUnits).toHaveBeenCalledTimes(1);
+  });
+
+  it("should reclaim an owned live unit that the cached native gate refuses", async () => {
+    const unit = recordedUnit();
+    const units = new Map([[unit.problemId, unit]]);
+    const runner = {
+      recover: vi.fn(),
+      stopPhysical: vi.fn(),
+      finalizeStop: vi.fn(),
+    };
+    const nativeCompatibility = vi.fn(() => ({
+      supported: false as const,
+      code: "unsupported_architecture" as const,
+      message: "requires amd64",
+      messageJa: "amd64 が必要です",
+    }));
+    const persistUnits = vi.fn();
+
+    await expect(
+      reconcileRecordedContainerUnits({
+        problems: [problem],
+        units,
+        runner,
+        isRunning: () => true,
+        nativeCompatibility,
+        persistUnits,
+        maxRunning: 3,
+      }),
+    ).resolves.toEqual([]);
+    expect(nativeCompatibility).toHaveBeenCalledWith(unit.problemId);
+    expect(runner.recover).not.toHaveBeenCalled();
+    expect(runner.stopPhysical).toHaveBeenCalledWith(unit);
+    expect(runner.finalizeStop).toHaveBeenCalledWith(unit);
+    expect(units.size).toBe(0);
   });
 });
 
@@ -633,6 +879,86 @@ describe("composeArgsForCli", () => {
       "--volumes",
       "--remove-orphans",
     ]);
+  });
+});
+
+describe("compose running reconciliation (#3016)", () => {
+  const cli = { command: "docker" as const, prefix: ["compose"] as const, label: "docker compose" };
+  const unit = {
+    problemId: "sqli-demo",
+    offset: 1000,
+    composePath: "/data/tc-local-sqli-demo.compose.yml",
+    composeProjectName: "tc-local-sqli-demo",
+    secretEnv: ["FLAG_SEED"],
+    projectDirectory: "/problems/sqli-demo/local",
+    remappedComposePath: "/data/tc-local-sqli-demo.compose.yml",
+  };
+
+  it("should query the exact recorded project for running containers", () => {
+    expect(
+      composeRunningPsArgsForCli(
+        cli,
+        unit.composePath,
+        unit.composeProjectName,
+        unit.projectDirectory,
+      ),
+    ).toEqual([
+      "compose",
+      "-f",
+      unit.composePath,
+      "-p",
+      unit.composeProjectName,
+      "--project-directory",
+      unit.projectDirectory,
+      "ps",
+      "--status",
+      "running",
+      "--quiet",
+    ]);
+  });
+
+  it("should use the standalone Compose v1 running-service filter", () => {
+    expect(
+      composeRunningPsArgsForCli(
+        { command: "docker-compose", prefix: [], label: "docker-compose" },
+        unit.composePath,
+        unit.composeProjectName,
+        unit.projectDirectory,
+      ),
+    ).toEqual([
+      "-f",
+      unit.composePath,
+      "-p",
+      unit.composeProjectName,
+      "--project-directory",
+      unit.projectDirectory,
+      "ps",
+      "--services",
+      "--filter",
+      "status=running",
+    ]);
+  });
+
+  it("should distinguish an Up unit from an empty project and supply interpolation placeholders", () => {
+    const seenEnv: NodeJS.ProcessEnv[] = [];
+    const run = vi.fn((_command: string, _args: readonly string[], env: NodeJS.ProcessEnv) => {
+      seenEnv.push(env);
+      return { status: 0, stdout: "abc123\n", stderr: "" };
+    });
+    expect(isComposeUnitRunning(unit, { cli, run })).toBe(true);
+    expect(seenEnv[0]?.FLAG_SEED).toBe("tenkacloud-local-exec");
+
+    run.mockReturnValueOnce({ status: 0, stdout: "", stderr: "" });
+    expect(isComposeUnitRunning(unit, { cli, run })).toBe(false);
+  });
+
+  it("should fail closed when Compose cannot be queried", () => {
+    expect(() =>
+      isComposeUnitRunning(unit, {
+        cli,
+        run: () => ({ status: 1, stdout: "", stderr: "daemon unavailable" }),
+      }),
+    ).toThrow(/daemon unavailable/);
   });
 });
 

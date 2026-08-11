@@ -4,7 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { compareCodePoints } from "./lib/code-point-order";
 import { scoreSimulatedProblem } from "./local-play/api-scoring";
-import type { LocalPlayDeployment } from "./local-play/api-state";
+import { DEFAULT_MAX_RUNNING, type LocalPlayDeployment } from "./local-play/api-state";
 import { formatLocalProblemListing } from "./local-play/catalog-listing";
 import {
   autoInitProblemsSubmodule,
@@ -14,10 +14,8 @@ import {
   problemSearchRoots,
 } from "./local-play/catalog-loader";
 import { browserDisplayText, buildLocalRuntimeConfig } from "./local-play/codespaces-links";
-import { ContainerStartOwnershipError, type LocalComposeUnit } from "./local-play/container-runner";
 import { parseProblemIds } from "./local-play/deployment-plan";
 import {
-  createContainerRunner,
   createPortConflictProbe,
   createProblemShellSpawner,
   startDetachedServe,
@@ -25,8 +23,8 @@ import {
 } from "./local-play/docker-adapter";
 import {
   assertDockerAvailable,
-  persistStartedContainerUnit,
   positivePort,
+  prepareContainerServeRuntime,
   printRunningEndpoints,
   privateLocalPaths,
   recordedApiIsHealthy,
@@ -34,7 +32,6 @@ import {
   SERVE_SHUTDOWN_TIMEOUT_MS,
   shutdownLocalServe,
   startProblemViaApi,
-  stopPersistedContainerUnit,
   tearDownRecordedUnits,
   waitForProblemRunning,
   waitForServeProcessExit,
@@ -45,7 +42,6 @@ import { assertPortFree, freeLoopbackPort, waitForLocalApi } from "./local-play/
 import { startLocalPlayServer } from "./local-play/server";
 import {
   type LocalProcessState,
-  type RecordedUnits,
   readLocalProcessState,
   readPrivateJson,
   reclaimStaleSession,
@@ -139,6 +135,7 @@ function assertRequestedProblemsExist(
 async function prepareLocalStartup(
   problemArg: string,
   paths: LocalPaths,
+  options: { readonly preserveRecordedUnits?: boolean } = {},
 ): Promise<LocalStartupPlan> {
   const problemIds = parseProblemIds(problemArg);
   const apiPort = process.env.LOCAL_API_PORT
@@ -146,9 +143,10 @@ async function prepareLocalStartup(
     : await freeLoopbackPort();
   const apiBaseUrl = `http://127.0.0.1:${apiPort}`;
   if (process.env.LOCAL_API_PORT) await assertPortFree(apiPort, "Participant API");
-  // Leftover containers from a crashed session would collide with this one on
-  // the same port blocks — reclaim them first (idempotent).
-  tearDownRecordedUnits(paths);
+  // A host `up` begins a new process-owned session, so it reclaims old units. The
+  // Docker control plane keeps its /data volume across container recreation and lets
+  // `serve` reconcile those same-session units against Compose instead (#3016).
+  if (!options.preserveRecordedUnits) tearDownRecordedUnits(paths);
 
   // [#2392 Phase 2] Warm session: the API serves the WHOLE local-play catalog
   // and containers start on demand. PROBLEM= only selects what to pre-start —
@@ -323,7 +321,7 @@ async function up(problemArg: string): Promise<void> {
 async function containerServe(): Promise<void> {
   const paths = privateLocalPaths();
   await reclaimPreviousLocalSession(paths);
-  const plan = await prepareLocalStartup("", paths);
+  const plan = await prepareLocalStartup("", paths, { preserveRecordedUnits: true });
   const deployment: LocalPlayDeployment = {
     problems: plan.catalog,
     simulatedProblems: plan.simulatedCatalog,
@@ -385,7 +383,11 @@ async function serve(deploymentPath: string): Promise<void> {
   // [#2392 Phase 2] On-demand docker: the API's lifecycle drives the real
   // ContainerRunner, and every start/stop is mirrored to units.json so `down`
   // (a separate process) can reclaim the containers even after a crash.
-  const runner = createContainerRunner(p.localDir);
+  const containerRuntime = await prepareContainerServeRuntime(
+    p,
+    deployment.problems,
+    DEFAULT_MAX_RUNNING,
+  );
   const simulator = new SimulatorLocalRuntime({
     sessionPath: p.simulatorSessionPath,
     stateDir: p.simulatorStateDir,
@@ -394,33 +396,13 @@ async function serve(deploymentPath: string): Promise<void> {
     participantEnvPath: p.simulatorEnvPath,
     nativeProxyBaseUrl: `http://127.0.0.1:${port}`,
   });
-  const units = new Map<string, LocalComposeUnit>();
-  const persistUnits = (): void => {
-    writePrivateJson(p.unitsPath, { units: [...units.values()] } satisfies RecordedUnits);
-  };
   const stateStore = await openLocalPlayStateStore(p);
   const server = await startLocalPlayServer(port, deployment, {
     browserText: browserDisplayText,
-    startContainer: async (problem, offset) => {
-      try {
-        const started = await runner.start(problem, offset);
-        persistStartedContainerUnit(units, persistUnits, started.unit);
-        return started;
-      } catch (error) {
-        if (error instanceof ContainerStartOwnershipError) {
-          units.set(error.unit.problemId, error.unit);
-          try {
-            persistUnits();
-          } catch (persistError) {
-            throw new ContainerStartOwnershipError(error.unit, [error, persistError]);
-          }
-        }
-        throw error;
-      }
-    },
-    stopContainer: (unit) => {
-      stopPersistedContainerUnit(runner, units, persistUnits, unit);
-    },
+    startContainer: containerRuntime.startContainer,
+    stopContainer: containerRuntime.stopContainer,
+    recoveredContainers: containerRuntime.recoveredContainers,
+    nativeCompatibility: containerRuntime.nativeCompatibility,
     // [#2846] The container shell behind the portal terminal. It reads the same `units`
     // ledger the lifecycle writes, so a problem that is not actually running has no unit
     // to exec into and the attach is refused instead of hanging. [#2850] The shell may
@@ -428,7 +410,7 @@ async function serve(deploymentPath: string): Promise<void> {
     // the spawner additionally verifies the live compose config builds that service with
     // `target: participant` before any exec.
     spawnShell: createProblemShellSpawner(
-      units,
+      containerRuntime.units,
       new Map(
         deployment.problems.flatMap((problem) =>
           problem.terminal ? [[problem.problemId, problem.terminal.service] as const] : [],

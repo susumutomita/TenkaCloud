@@ -44,6 +44,87 @@ describe("ProblemLifecycle: construction (#2392 Phase 2)", () => {
       { problemId: "b", status: "stopped" },
     ]);
   });
+
+  it("should adopt reconciled containers as running (#3016)", () => {
+    const { deps } = makeDeps();
+    const lc = new ProblemLifecycle(["a", "b"], deps, {
+      maxRunning: 2,
+      initialRunning: [{ problemId: "b", offset: PORT_STRIDE }],
+    });
+
+    expect(lc.snapshot()).toEqual([
+      { problemId: "a", status: "stopped" },
+      { problemId: "b", status: "running", offset: PORT_STRIDE },
+    ]);
+  });
+
+  it("should reject an initial running seed for an unknown problem", () => {
+    const { deps } = makeDeps();
+    expect(
+      () =>
+        new ProblemLifecycle(["a"], deps, {
+          maxRunning: 1,
+          initialRunning: [{ problemId: "missing", offset: 0 }],
+        }),
+    ).toThrow(/unknown problem: missing/);
+  });
+
+  it.each([
+    ["negative", -PORT_STRIDE],
+    ["not PORT_STRIDE-aligned", 1],
+    ["outside the configured pool", PORT_STRIDE * 2],
+  ])("should reject a %s initial running offset", (_description, offset) => {
+    const { deps } = makeDeps();
+    expect(
+      () =>
+        new ProblemLifecycle(["a"], deps, {
+          maxRunning: 2,
+          initialRunning: [{ problemId: "a", offset }],
+        }),
+    ).toThrow(/PORT_STRIDE-aligned slot/);
+  });
+
+  it("should reject colliding initial running offsets", () => {
+    const { deps } = makeDeps();
+    expect(
+      () =>
+        new ProblemLifecycle(["a", "b"], deps, {
+          maxRunning: 2,
+          initialRunning: [
+            { problemId: "a", offset: 0 },
+            { problemId: "b", offset: 0 },
+          ],
+        }),
+    ).toThrow(/offset 0 is assigned more than once/);
+  });
+
+  it("should reject duplicate initial running problem IDs", () => {
+    const { deps } = makeDeps();
+    expect(
+      () =>
+        new ProblemLifecycle(["a"], deps, {
+          maxRunning: 2,
+          initialRunning: [
+            { problemId: "a", offset: 0 },
+            { problemId: "a", offset: PORT_STRIDE },
+          ],
+        }),
+    ).toThrow(/duplicate problem: a/);
+  });
+
+  it("should reject more initial running entries than the concurrency cap", () => {
+    const { deps } = makeDeps();
+    expect(
+      () =>
+        new ProblemLifecycle(["a", "b"], deps, {
+          maxRunning: 1,
+          initialRunning: [
+            { problemId: "a", offset: 0 },
+            { problemId: "b", offset: PORT_STRIDE },
+          ],
+        }),
+    ).toThrow(/cannot exceed maxRunning/);
+  });
 });
 
 describe("ProblemLifecycle: on-demand start (#2392 Phase 2)", () => {
@@ -226,6 +307,28 @@ describe("ProblemLifecycle: concurrency cap + LRU eviction (#2392 Phase 2)", () 
     await expect(lc.ensureRunning("b")).rejects.toThrow(/docker compose down failed/);
     expect(lc.statusOf("b")).toBe("error");
   });
+
+  it("should reserve adopted slots and include adopted entries in LRU eviction (#3016)", async () => {
+    const { deps, started, stopped, tick } = makeDeps();
+    const lc = new ProblemLifecycle(["a", "b", "c"], deps, {
+      maxRunning: 2,
+      initialRunning: [{ problemId: "a", offset: 0 }],
+    });
+
+    // The adopted slot is not handed out again; the next start uses the other pool slot.
+    tick(10);
+    await lc.ensureRunning("b");
+    expect(started).toEqual([["b", PORT_STRIDE]]);
+
+    // Once b is newer, the adopted a is the LRU victim and its reserved slot is reused.
+    tick(10);
+    await lc.ensureRunning("c");
+    expect(stopped).toEqual([["a", 0]]);
+    expect(started).toEqual([
+      ["b", PORT_STRIDE],
+      ["c", 0],
+    ]);
+  });
 });
 
 describe("ProblemLifecycle: explicit stop / stop-all (#2392 Phase 2, #2512)", () => {
@@ -246,6 +349,19 @@ describe("ProblemLifecycle: explicit stop / stop-all (#2392 Phase 2, #2512)", ()
     await lc.stop("a");
     await lc.stop("nope");
     expect(stopped).toEqual([]);
+  });
+
+  it("should explicitly stop an adopted entry and release its slot (#3016)", async () => {
+    const { deps, started, stopped } = makeDeps();
+    const lc = new ProblemLifecycle(["a", "b"], deps, {
+      maxRunning: 1,
+      initialRunning: [{ problemId: "a", offset: 0 }],
+    });
+
+    await lc.stop("a");
+    expect(stopped).toEqual([["a", 0]]);
+    expect(await lc.ensureRunning("b")).toBe(0);
+    expect(started).toEqual([["b", 0]]);
   });
 
   it("should finish an in-flight start before honoring a concurrent stop", async () => {
