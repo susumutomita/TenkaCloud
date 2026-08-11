@@ -129,7 +129,6 @@ describe("EndpointOverrideForm", () => {
       mockPut.mockRejectedValueOnce(thrown);
       fireEvent.change(input, { target: { value: "https://x.example" } });
       save();
-      // eslint-disable-next-line no-await-in-loop
       await waitFor(() => expect(screen.getByText(expected, { exact: false })).toBeInTheDocument());
     }
   });

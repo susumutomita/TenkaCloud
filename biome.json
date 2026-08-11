@@ -21,7 +21,8 @@
       "!**/coverage",
       "!**/build",
       "!references",
-      "!problems"
+      "!problems",
+      "!eslint-suppressions.json"
     ]
   },
   "formatter": {

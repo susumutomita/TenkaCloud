@@ -165,7 +165,11 @@ ci-local: ## Run the full GitHub Actions gate locally | GitHub Actions相当の�
 # Issue #2862: `lint:ts` は #2861 で package.json に入ったが Makefile からも CI からも呼ばれず、
 # 一度も走っていなかった (= 走らせたら parser error で 97 file が無検査だった)。`lint` に足して
 # `before-commit` (GATE_CHECKS) 経路に載せ、CI 側は下の "ESLint (type-aware)" step で個別に呼ぶ。
-lint: lint-md lint-text lint-format lint-ts ## Check Markdown, prose, code formatting, and typed TS lint | Markdown・文章・code format・型付きTS lintを検査
+#
+# ESLint の対象は #3014 で `scripts/` からリポジトリ全体へ広げた。 既存 1,694 件は
+# `eslint-suppressions.json` に ceiling として焼いてあり (ESLint 純正の bulk suppressions)、
+# 新しい違反だけが落ちる。 詳細は `lint-ts` / `lint-ts-prune` の項を参照。
+lint: lint-md lint-text lint-format lint-eslint-scope lint-ts ## Check Markdown, prose, code formatting, and typed TS lint | Markdown・文章・code format・型付きTS lintを検査
 fix: fix-md fix-text fix-format ## Fix all automatically repairable lint issues | lint可能な問題を一括修正
 format: fix ## Apply the same automatic fixes as make fix | fixと同じ一括整形を実行
 
@@ -175,8 +179,27 @@ lint-text: ## Check Japanese and technical-writing conventions | 日本語・技
 	bun run lint:text
 lint-format: ## Check code formatting with Biome | Biomeでcode formatを検査
 	bun run lint:format
-lint-ts: ## Check scripts/ with type-aware ESLint | scripts/を型情報付きESLintで検査
+# #3014: 対象は repo 全体 (`eslint .`)。 型情報を要する rule は引き続き `scripts/**` だけに
+# 効く (eslint.config.js の typedSourceFiles) が、 strict / stylistic / sonarjs は全 workspace に
+# 効く。 既存違反は `eslint-suppressions.json` に file × rule の件数として焼いてあり、 その件数
+# **以下**なら緑、 1 件でも超えたら赤。
+#
+# 違反を直して件数が ceiling を下回ると ESLint は
+# "There are suppressions left that do not occur anymore" で exit 2 になる。 これは失敗ではなく
+# 「ceiling を下げろ」という催促で、 `make lint-ts-prune` を実行して差分を commit するのが正しい
+# 応答 (= ratchet が下がる唯一の経路)。 ceiling を手で編集しないこと。
+#
+# 並行 agent 運用では複数の branch が同時に prune して `eslint-suppressions.json` が衝突する。
+# 解決はどちらかを選ぶのではなく、 **merge 後の tree で `make lint-ts-prune` を流し直す**こと。
+# 片側を採用すると、 もう片側で直したはずの違反が ceiling に残り regression を素通しする。
+lint-ts: ## Check the whole repo with ESLint against the frozen ceiling | repo全体をESLintで検査(既存違反はceilingで凍結)
 	bun run lint:ts
+# ESLint の ignores が .gitignore から drift していないか検査する。 drift すると生成物や nested
+# worktree まで lint 対象になり、 ceiling が machine 依存になる (#3014 で実際に踏んだ)。
+lint-eslint-scope: ## Fail when ESLint would lint git-ignored paths | ESLintがgit-ignored pathを対象にしていたら落とす
+	bun run lint:eslint-scope
+lint-ts-prune: ## Lower the ESLint ceiling to today's violation count | ESLintのceilingを現在の違反件数まで下げる
+	bun run lint:ts:prune
 fix-md: ## Automatically fix Markdown violations | Markdown規約違反を自動修正
 	bun run fix:md
 fix-text: ## Automatically fix prose violations | 文章規約違反を自動修正
@@ -218,9 +241,13 @@ openapi-check: ## Fail when the committed OpenAPI spec drifts from the source of
 #     なし (`prepack` のみ = publish 時) で supply-chain 面の素性は良いが、それは「消えない」
 #     保証ではない。devDependency である以上 `bun install` は解決を要するので、その分の露出は
 #     残る (= 放置されたらこの target と依存ごと削除する、が撤退手順)。
-#   - report-only なので exit code に意味を持たせていない。ゲート化するなら freeze / check が
-#     必要で、それは ESLint の実行範囲を scripts/ からリポジトリ全体へ広げる別作業
-#     (実測: `eslint .` = 1,612 errors / 551 files) の判断とセットになる。
+#   - report-only なので exit code に意味を持たせていない。
+#
+# ratchet 自体は #3014 で導入済みだが、ever-better ではなく **素の ESLint** で実装した。
+# bulk suppressions (`--suppress-all` / `--prune-suppressions` / `--pass-on-unpruned-suppressions`)
+# は ESLint 9.39 に元から入っており、ever-better の README 自身が「ratchet の再実装はしていない」
+# と明記している。同じ機構を新規 gate 依存ゼロで使えるので、上記の存続性リスクを gate に持ち込む
+# 理由が無い。運用は `lint-ts` / `lint-ts-prune` を参照。
 #
 # `ever-better bootstrap` は実行しないこと: Prettier を入れる (このレポの formatter は Biome)、
 # ESLint 10 を要求する (このレポは ^9 + typescript-eslint ^8)、生成する workflow が

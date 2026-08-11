@@ -1,0 +1,3582 @@
+{
+  ".claude/harness/src/rules/adr-self-contained.ts": {
+    "sonarjs/cognitive-complexity": {
+      "count": 1
+    }
+  },
+  ".claude/harness/src/rules/agent-registry-consistency.ts": {
+    "sonarjs/cognitive-complexity": {
+      "count": 1
+    }
+  },
+  ".claude/harness/src/rules/domain-no-infra-import.ts": {
+    "sonarjs/regex-complexity": {
+      "count": 1
+    },
+    "sonarjs/slow-regex": {
+      "count": 1
+    }
+  },
+  ".claude/harness/src/rules/handler-no-transitive-cdk-import.ts": {
+    "sonarjs/single-character-alternation": {
+      "count": 1
+    }
+  },
+  ".claude/harness/src/rules/no-aws-trademark-fictions.ts": {
+    "sonarjs/slow-regex": {
+      "count": 1
+    }
+  },
+  ".claude/harness/src/rules/secrets-manager-forbidden.ts": {
+    "sonarjs/slow-regex": {
+      "count": 1
+    }
+  },
+  ".claude/harness/src/tech-debt/circular-dependency.ts": {
+    "sonarjs/regex-complexity": {
+      "count": 1
+    },
+    "sonarjs/slow-regex": {
+      "count": 2
+    }
+  },
+  ".claude/harness/src/tech-debt/high-coupling.ts": {
+    "sonarjs/slow-regex": {
+      "count": 1
+    }
+  },
+  ".claude/harness/src/tech-debt/index.test.ts": {
+    "sonarjs/publicly-writable-directories": {
+      "count": 1
+    }
+  },
+  ".claude/harness/src/tech-debt/magic-number.ts": {
+    "sonarjs/concise-regex": {
+      "count": 3
+    },
+    "sonarjs/slow-regex": {
+      "count": 1
+    }
+  },
+  ".claude/harness/src/tech-debt/oversized-file.ts": {
+    "@typescript-eslint/prefer-for-of": {
+      "count": 1
+    }
+  },
+  ".claude/harness/src/utils/staged-files.ts": {
+    "sonarjs/no-os-command-from-path": {
+      "count": 2
+    }
+  },
+  ".claude/skills/quality-gates/scripts/check-coverage-gate.ts": {
+    "sonarjs/no-nested-template-literals": {
+      "count": 1
+    }
+  },
+  ".claude/skills/quality-gates/scripts/check-http-magic-numbers.ts": {
+    "sonarjs/concise-regex": {
+      "count": 2
+    }
+  },
+  ".claude/skills/quality-gates/scripts/check-no-conflicts.ts": {
+    "sonarjs/os-command": {
+      "count": 1
+    }
+  },
+  ".claude/skills/quality-gates/scripts/check-submodule-not-behind.ts": {
+    "sonarjs/no-os-command-from-path": {
+      "count": 3
+    }
+  },
+  ".claude/skills/quality-gates/scripts/check-synth-iam-ascii.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    }
+  },
+  ".claude/skills/quality-gates/scripts/run.ts": {
+    "@typescript-eslint/consistent-type-definitions": {
+      "count": 1
+    },
+    "sonarjs/no-nested-template-literals": {
+      "count": 1
+    },
+    "sonarjs/no-os-command-from-path": {
+      "count": 1
+    }
+  },
+  "apps/admin-console/src/api/admin-drill-down.ts": {
+    "sonarjs/no-nested-template-literals": {
+      "count": 2
+    }
+  },
+  "apps/admin-console/src/api/tenants.ts": {
+    "sonarjs/no-nested-conditional": {
+      "count": 1
+    }
+  },
+  "apps/admin-console/src/lib/cognito.ts": {
+    "sonarjs/slow-regex": {
+      "count": 1
+    }
+  },
+  "apps/admin-console/src/lib/tenant-progress.ts": {
+    "sonarjs/no-nested-conditional": {
+      "count": 1
+    }
+  },
+  "apps/admin-console/src/lib/tenant-table.tsx": {
+    "sonarjs/no-nested-conditional": {
+      "count": 2
+    }
+  },
+  "apps/admin-console/test/App.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "apps/admin-console/test/AuthProvider.test.tsx": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 1
+    }
+  },
+  "apps/admin-console/test/BudgetConsumptionPanel.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    },
+    "@typescript-eslint/no-empty-function": {
+      "count": 4
+    }
+  },
+  "apps/admin-console/test/Callback.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 2
+    }
+  },
+  "apps/admin-console/test/IdentityProviders.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 3
+    }
+  },
+  "apps/admin-console/test/Jobs.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 2
+    }
+  },
+  "apps/admin-console/test/Operations.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 3
+    },
+    "@typescript-eslint/no-empty-function": {
+      "count": 2
+    }
+  },
+  "apps/admin-console/test/TenantCreate.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 5
+    }
+  },
+  "apps/admin-console/test/TenantDetail.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 10
+    },
+    "@typescript-eslint/no-empty-function": {
+      "count": 1
+    }
+  },
+  "apps/admin-console/test/TenantList.test.tsx": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    },
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "apps/admin-console/test/Usage.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "apps/admin-console/test/audit-log.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    },
+    "sonarjs/no-hardcoded-ip": {
+      "count": 1
+    }
+  },
+  "apps/admin-console/test/components/AppLayout.test.tsx": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 3
+    }
+  },
+  "apps/admin-console/test/tenant-table.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "apps/always-on-control-plane/src/auth.ts": {
+    "sonarjs/slow-regex": {
+      "count": 4
+    }
+  },
+  "apps/always-on-control-plane/src/crypto.ts": {
+    "sonarjs/slow-regex": {
+      "count": 1
+    }
+  },
+  "apps/always-on-control-plane/src/types.ts": {
+    "@typescript-eslint/consistent-type-definitions": {
+      "count": 1
+    }
+  },
+  "apps/always-on-control-plane/test/app.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    },
+    "@typescript-eslint/no-empty-function": {
+      "count": 1
+    }
+  },
+  "apps/always-on-control-plane/test/auth-jwt.test.ts": {
+    "sonarjs/slow-regex": {
+      "count": 2
+    }
+  },
+  "apps/always-on-control-plane/test/aws-command.test.ts": {
+    "sonarjs/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "apps/always-on-control-plane/test/deploy-command-routes.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "apps/always-on-control-plane/test/mcp.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 5
+    },
+    "sonarjs/no-clear-text-protocols": {
+      "count": 1
+    }
+  },
+  "apps/always-on-control-plane/test/setup.ts": {
+    "@typescript-eslint/no-namespace": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/src/api/client.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/src/api/demo-client.ts": {
+    "sonarjs/no-nested-conditional": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/src/api/disruptions-client.ts": {
+    "sonarjs/no-nested-template-literals": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/src/api/events-client.ts": {
+    "sonarjs/no-nested-template-literals": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/src/auth/demo-session.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 2
+    }
+  },
+  "apps/application-admin-console/src/auth/demo-session.tsx": {
+    "sonarjs/slow-regex": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/src/components/TeamRankingPanel.tsx": {
+    "sonarjs/no-nested-conditional": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/src/components/event-detail/DeployProgressPanel.tsx": {
+    "sonarjs/no-nested-conditional": {
+      "count": 3
+    }
+  },
+  "apps/application-admin-console/src/components/event-detail/EventSchedulePanel.tsx": {
+    "sonarjs/no-nested-conditional": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/src/components/event-detail/EventWizardPanel.tsx": {
+    "sonarjs/no-nested-conditional": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/src/components/event-detail/shared.tsx": {
+    "sonarjs/use-type-alias": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/src/hooks/useEffectiveFeatures.test.ts": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 5
+    }
+  },
+  "apps/application-admin-console/src/hooks/useEventOperations.ts": {
+    "sonarjs/no-nested-conditional": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/src/lib/cognito.ts": {
+    "sonarjs/slow-regex": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/src/lib/event-report-print-css.test.ts": {
+    "sonarjs/slow-regex": {
+      "count": 2
+    }
+  },
+  "apps/application-admin-console/src/lib/friendly-error.ts": {
+    "sonarjs/slow-regex": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/src/lib/invite-link.ts": {
+    "sonarjs/slow-regex": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/src/lib/resource-naming.ts": {
+    "sonarjs/slow-regex": {
+      "count": 2
+    }
+  },
+  "apps/application-admin-console/src/pages/AuditLog.tsx": {
+    "@typescript-eslint/consistent-type-definitions": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/src/pages/EventCreate.tsx": {
+    "sonarjs/no-nested-functions": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/src/pages/Problems.tsx": {
+    "sonarjs/no-nested-functions": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/src/pages/TenantUsers.tsx": {
+    "sonarjs/no-nested-conditional": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/src/pages/deployment-detail/types.ts": {
+    "@typescript-eslint/consistent-type-definitions": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/src/pages/deployment-detail/useDeploymentDetail.ts": {
+    "@typescript-eslint/consistent-type-definitions": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/src/pages/event-create/EventCreateProblemsetSection.tsx": {
+    "sonarjs/no-nested-template-literals": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/src/pages/event-create/EventCreateTeamsSection.tsx": {
+    "sonarjs/no-nested-conditional": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/src/pages/event-detail/CapacityScaleModal.tsx": {
+    "sonarjs/no-nested-template-literals": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/src/pages/event-detail/FireModal.tsx": {
+    "@typescript-eslint/consistent-type-definitions": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/src/pages/event-report/exporters/html.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/src/pages/event-report/exporters/markdown.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 3
+    }
+  },
+  "apps/application-admin-console/test/AuthProvider.test.tsx": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/test/api/client.test.ts": {
+    "sonarjs/slow-regex": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/test/auth/jwt.test.ts": {
+    "sonarjs/slow-regex": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/test/claims.test.ts": {
+    "sonarjs/slow-regex": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/test/components/AppLayout.test.tsx": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 3
+    }
+  },
+  "apps/application-admin-console/test/components/TeamRankingPanel.test.tsx": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/test/components/TeamScoreEventsPanel.test.tsx": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 3
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/test/components/event-detail/CapacityScaleModal.test.tsx": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 2
+    }
+  },
+  "apps/application-admin-console/test/components/event-detail/EventDangerZone.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 3
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/test/components/event-detail/EventHeaderActions.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/test/components/event-detail/EventParticipantsPanel.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 2
+    }
+  },
+  "apps/application-admin-console/test/components/event-detail/EventProgressionGatePanel.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    },
+    "@typescript-eslint/no-empty-function": {
+      "count": 2
+    }
+  },
+  "apps/application-admin-console/test/components/event-detail/EventSchedulePanel.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    },
+    "sonarjs/assertions-in-tests": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/test/components/event-detail/EventTeamsPanel.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 5
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/test/components/event-detail/event-danger-zone-models.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 5
+    }
+  },
+  "apps/application-admin-console/test/components/event-detail/shared.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 2
+    }
+  },
+  "apps/application-admin-console/test/config.test.ts": {
+    "sonarjs/code-eval": {
+      "count": 1
+    },
+    "sonarjs/no-clear-text-protocols": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/test/hooks/useCapacityOverview.test.ts": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 11
+    },
+    "sonarjs/assertions-in-tests": {
+      "count": 2
+    }
+  },
+  "apps/application-admin-console/test/hooks/useEventDetail.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    },
+    "@typescript-eslint/no-empty-function": {
+      "count": 2
+    }
+  },
+  "apps/application-admin-console/test/hooks/useEventOperations.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    },
+    "@typescript-eslint/no-empty-function": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/test/pages/AuditLog.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 3
+    },
+    "sonarjs/no-hardcoded-ip": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/test/pages/Callback.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/test/pages/CompetitorAccounts.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 4
+    }
+  },
+  "apps/application-admin-console/test/pages/CreateIdpModal.test.tsx": {
+    "sonarjs/no-extra-arguments": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/test/pages/Deployments.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 2
+    }
+  },
+  "apps/application-admin-console/test/pages/EventCreate.flow.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 4
+    }
+  },
+  "apps/application-admin-console/test/pages/EventCreate.nonaws-flow.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 2
+    }
+  },
+  "apps/application-admin-console/test/pages/EventDetail.wiring.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 4
+    }
+  },
+  "apps/application-admin-console/test/pages/EventList.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 2
+    },
+    "@typescript-eslint/no-empty-function": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/test/pages/EventReport.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/test/pages/Home.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    },
+    "@typescript-eslint/no-empty-function": {
+      "count": 2
+    }
+  },
+  "apps/application-admin-console/test/pages/IdentityProviders.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 2
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "sonarjs/slow-regex": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/test/pages/ProblemDetail.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 3
+    }
+  },
+  "apps/application-admin-console/test/pages/Problems.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    },
+    "@typescript-eslint/no-empty-function": {
+      "count": 3
+    }
+  },
+  "apps/application-admin-console/test/pages/Settings.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    },
+    "sonarjs/assertions-in-tests": {
+      "count": 2
+    }
+  },
+  "apps/application-admin-console/test/pages/TenantUsers.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 4
+    }
+  },
+  "apps/application-admin-console/test/pages/competitor-accounts/AddAccountModal.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/test/pages/competitor-accounts/CompetitorAccountDeleteModal.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/test/pages/competitor-accounts/CompetitorAccountsTable.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/test/pages/competitor-accounts/SecretRevealModal.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/test/pages/competitor-accounts/TeamCloudCredentialsPanel.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/test/pages/competitor-accounts/useCompetitorAccounts.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/test/pages/deployment-detail/BasicInfoSection.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 2
+    }
+  },
+  "apps/application-admin-console/test/pages/deployment-detail/PhaseRow.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/test/pages/deployment-detail/StackProgressBody.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 8
+    }
+  },
+  "apps/application-admin-console/test/pages/deployment-detail/useDeploymentDetail.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    },
+    "@typescript-eslint/no-empty-function": {
+      "count": 2
+    }
+  },
+  "apps/application-admin-console/test/pages/event-create/EventCreateTeamsSection.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/test/pages/event-create/useCompetitorAccountsLoader.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "apps/application-admin-console/test/pages/event-detail/DisruptionsPanel.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 3
+    }
+  },
+  "apps/application-admin-console/test/pages/event-detail/OperationsTab.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 4
+    }
+  },
+  "apps/application-admin-console/test/pages/event-detail/tabs.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 4
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    }
+  },
+  "apps/developer-portal/scripts/generate-catalog.ts": {
+    "sonarjs/no-os-command-from-path": {
+      "count": 1
+    }
+  },
+  "apps/developer-portal/scripts/generate-machine-api.test.ts": {
+    "@typescript-eslint/consistent-indexed-object-style": {
+      "count": 1
+    }
+  },
+  "apps/developer-portal/scripts/generate-machine-api.ts": {
+    "sonarjs/no-os-command-from-path": {
+      "count": 1
+    }
+  },
+  "apps/developer-portal/scripts/generate-reference.ts": {
+    "sonarjs/no-os-command-from-path": {
+      "count": 1
+    }
+  },
+  "apps/developer-portal/src/content/machine-api-copy.ts": {
+    "sonarjs/no-hardcoded-secrets": {
+      "count": 1
+    }
+  },
+  "apps/developer-portal/src/content/machine-api.generated.ts": {
+    "@typescript-eslint/consistent-indexed-object-style": {
+      "count": 2
+    }
+  },
+  "apps/developer-portal/src/content/openapi.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    }
+  },
+  "apps/developer-portal/src/lib/redirects.ts": {
+    "sonarjs/slow-regex": {
+      "count": 1
+    }
+  },
+  "apps/participant-portal/src/App.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "apps/participant-portal/src/auth/team-view-diff.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "apps/participant-portal/src/components/ContainerWorkbenchPanel.test.tsx": {
+    "sonarjs/assertions-in-tests": {
+      "count": 1
+    }
+  },
+  "apps/participant-portal/src/components/EndpointOverrideForm.tsx": {
+    "sonarjs/no-nested-conditional": {
+      "count": 1
+    }
+  },
+  "apps/participant-portal/src/components/MultiFlagSubmissionPanel.test.tsx": {
+    "sonarjs/no-nested-conditional": {
+      "count": 1
+    }
+  },
+  "apps/participant-portal/src/components/MultiFlagSubmissionPanel.tsx": {
+    "sonarjs/no-nested-conditional": {
+      "count": 1
+    },
+    "sonarjs/no-small-switch": {
+      "count": 1
+    }
+  },
+  "apps/participant-portal/src/components/ProblemPanel.helpers.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 3
+    }
+  },
+  "apps/participant-portal/src/components/ProblemPanel.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    },
+    "sonarjs/no-clear-text-protocols": {
+      "count": 1
+    },
+    "sonarjs/no-identical-functions": {
+      "count": 1
+    }
+  },
+  "apps/participant-portal/src/components/ProblemPanelLifecycle.tsx": {
+    "sonarjs/no-nested-conditional": {
+      "count": 2
+    }
+  },
+  "apps/participant-portal/src/components/ProblemTerminalPanel.test.tsx": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 2
+    },
+    "sonarjs/public-static-readonly": {
+      "count": 1
+    }
+  },
+  "apps/participant-portal/src/components/ScoreTimelineChart.test.tsx": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 3
+    },
+    "sonarjs/no-extra-arguments": {
+      "count": 2
+    }
+  },
+  "apps/participant-portal/src/data/catalog-source.test.ts": {
+    "sonarjs/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "apps/participant-portal/src/data/course-track.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 4
+    }
+  },
+  "apps/participant-portal/src/data/course-track.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 2
+    }
+  },
+  "apps/participant-portal/src/data/problems.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 3
+    }
+  },
+  "apps/participant-portal/src/lib/score-events-chart.ts": {
+    "sonarjs/no-nested-conditional": {
+      "count": 1
+    }
+  },
+  "apps/participant-portal/src/onboarding-analytics.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 2
+    }
+  },
+  "apps/participant-portal/src/pages/CourseTracks.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 2
+    }
+  },
+  "apps/participant-portal/src/pages/Quests.tsx": {
+    "sonarjs/no-nested-functions": {
+      "count": 1
+    }
+  },
+  "apps/participant-portal/src/pages/RootEntry.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "apps/participant-portal/src/pages/Scoreboard.test.tsx": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    },
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "apps/participant-portal/src/pages/Start.test.tsx": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    }
+  },
+  "apps/participant-portal/src/pages/TeamSetup.tsx": {
+    "sonarjs/no-nested-conditional": {
+      "count": 1
+    }
+  },
+  "apps/participant-portal/src/plugins/PortalPluginSlots.test.tsx": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 1
+    },
+    "@typescript-eslint/no-non-null-assertion": {
+      "count": 2
+    }
+  },
+  "apps/participant-portal/src/plugins/props-builder.test.ts": {
+    "sonarjs/no-clear-text-protocols": {
+      "count": 3
+    }
+  },
+  "apps/participant-portal/test/auth/TeamViewProvider.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 4
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 4
+    },
+    "sonarjs/no-extra-arguments": {
+      "count": 2
+    }
+  },
+  "apps/participant-portal/test/auth/team-view-diff.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 3
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "apps/participant-portal/test/components/AppLayout.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 11
+    },
+    "@typescript-eslint/no-empty-function": {
+      "count": 3
+    }
+  },
+  "apps/participant-portal/test/components/NextActionHero.render.test.tsx": {
+    "sonarjs/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "apps/participant-portal/test/components/NextActionHero.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 6
+    }
+  },
+  "apps/participant-portal/test/components/locale-switcher.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 2
+    }
+  },
+  "apps/participant-portal/test/config-context.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "apps/participant-portal/test/config.test.ts": {
+    "sonarjs/no-clear-text-protocols": {
+      "count": 3
+    }
+  },
+  "apps/participant-portal/test/local-play-proxy.test.ts": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 1
+    }
+  },
+  "apps/participant-portal/test/pages/Home.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    }
+  },
+  "apps/participant-portal/test/pages/Login.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "apps/participant-portal/test/pages/ProblemDetail.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "apps/participant-portal/test/pages/ProblemDetail.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 2
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 8
+    }
+  },
+  "apps/participant-portal/test/pages/Quests.test.tsx": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 3
+    }
+  },
+  "apps/participant-portal/test/pages/ScoreEvents.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    },
+    "@typescript-eslint/no-empty-function": {
+      "count": 3
+    },
+    "sonarjs/no-extra-arguments": {
+      "count": 1
+    }
+  },
+  "apps/participant-portal/test/pages/Scoreboard.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "apps/participant-portal/test/pages/SsoCredentials.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    },
+    "sonarjs/no-extra-arguments": {
+      "count": 1
+    }
+  },
+  "apps/participant-portal/test/pages/TeamScorePanel.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "apps/participant-portal/test/pages/TeamSetup.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 2
+    },
+    "@typescript-eslint/no-empty-function": {
+      "count": 3
+    }
+  },
+  "apps/participant-portal/test/plugins/PortalPluginSlots.test.tsx": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 1
+    }
+  },
+  "infrastructure/bin/tenkacloud-always-on-command.ts": {
+    "sonarjs/constructor-for-side-effects": {
+      "count": 1
+    }
+  },
+  "infrastructure/bin/tenkacloud-always-on-oidc.ts": {
+    "sonarjs/constructor-for-side-effects": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/admin-insight/admin-console-insight-stack.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    },
+    "sonarjs/constructor-for-side-effects": {
+      "count": 2
+    }
+  },
+  "infrastructure/lib/admin-insight/handlers/admin-insight-handler/auth.ts": {
+    "@typescript-eslint/consistent-indexed-object-style": {
+      "count": 1
+    },
+    "@typescript-eslint/consistent-type-definitions": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/always-on-runtime/event-runtime-stack.ts": {
+    "sonarjs/constructor-for-side-effects": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/always-on-runtime/sweeper/cfn-stacks-client.ts": {
+    "sonarjs/no-nested-template-literals": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/always-on-runtime/worker-oidc-command-role-stack.ts": {
+    "sonarjs/slow-regex": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/app-config/types.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 2
+    }
+  },
+  "infrastructure/lib/app-wiring/wire/guardrails.ts": {
+    "sonarjs/constructor-for-side-effects": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/bootstrap-template/bootstrap-template-stack.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    },
+    "sonarjs/constructor-for-side-effects": {
+      "count": 6
+    }
+  },
+  "infrastructure/lib/control-plane-stack.ts": {
+    "sonarjs/constructor-for-side-effects": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/control-plane/handlers/idp-handler/auth.ts": {
+    "@typescript-eslint/consistent-indexed-object-style": {
+      "count": 1
+    },
+    "@typescript-eslint/consistent-type-definitions": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/control-plane/handlers/idp-handler/core.ts": {
+    "sonarjs/todo-tag": {
+      "count": 2
+    }
+  },
+  "infrastructure/lib/control-plane/saml-admin-allowlist.ts": {
+    "sonarjs/slow-regex": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/customer-execution/customer-execution-plane-stack.ts": {
+    "sonarjs/aws-sqs-unencrypted-queue": {
+      "count": 2
+    }
+  },
+  "infrastructure/lib/customer-execution/handler/message.ts": {
+    "sonarjs/slow-regex": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/hosting/spa-hosting.ts": {
+    "sonarjs/aws-s3-bucket-versioning": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/interfaces/api-key-ssm-parameter-names.ts": {
+    "@typescript-eslint/consistent-indexed-object-style": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/interfaces/identity-details.ts": {
+    "@typescript-eslint/consistent-indexed-object-style": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/observability/cloudwatch-dashboard-stack.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 2
+    }
+  },
+  "infrastructure/lib/observability/cost-budget.ts": {
+    "sonarjs/aws-sns-unencrypted-topics": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/build-api-lambdas.ts": {
+    "sonarjs/aws-s3-bucket-versioning": {
+      "count": 1
+    },
+    "sonarjs/constructor-for-side-effects": {
+      "count": 2
+    }
+  },
+  "infrastructure/lib/problem-deploy/build-deploy-pipeline.ts": {
+    "sonarjs/constructor-for-side-effects": {
+      "count": 3
+    }
+  },
+  "infrastructure/lib/problem-deploy/build-scoring-subsystem.ts": {
+    "sonarjs/constructor-for-side-effects": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/cfn-deploy-lambda.ts": {
+    "sonarjs/todo-tag": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/competitor-bootstrap-hosting.ts": {
+    "sonarjs/aws-s3-bucket-granted-access": {
+      "count": 1
+    },
+    "sonarjs/aws-s3-bucket-versioning": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/control-data/domain/competitor-accounts.ts": {
+    "@typescript-eslint/consistent-type-definitions": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/control-data/domain/deployments.ts": {
+    "@typescript-eslint/consistent-type-definitions": {
+      "count": 3
+    }
+  },
+  "infrastructure/lib/problem-deploy/control-data/domain/events.ts": {
+    "@typescript-eslint/consistent-type-definitions": {
+      "count": 4
+    }
+  },
+  "infrastructure/lib/problem-deploy/control-data/domain/feature-flags.ts": {
+    "@typescript-eslint/consistent-type-definitions": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/control-data/domain/notifications.ts": {
+    "@typescript-eslint/consistent-type-definitions": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/control-data/domain/teams.ts": {
+    "@typescript-eslint/consistent-type-definitions": {
+      "count": 2
+    }
+  },
+  "infrastructure/lib/problem-deploy/control-data/dynamodb-deployments-core.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/control-data/dynamodb-events-repository.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/control-data/dynamodb-saml-idps-repository.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    },
+    "sonarjs/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "infrastructure/lib/problem-deploy/control-data/dynamodb-teams-repository.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/control-data/sql-deployments-core.ts": {
+    "sonarjs/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "infrastructure/lib/problem-deploy/control-data/sql-events-repository.ts": {
+    "sonarjs/no-nested-template-literals": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/control-data/sql-teams-repository.ts": {
+    "sonarjs/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/coordination-plugin-bundle.ts": {
+    "sonarjs/aws-s3-bucket-versioning": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/deploy-allowed-cidrs.ts": {
+    "sonarjs/concise-regex": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/handlers/acceptance/composite-acceptance-harness.ts": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/handlers/cfn-deploy-handler/create-stack.ts": {
+    "sonarjs/todo-tag": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/handlers/competitor-accounts-handler/cognito-saml.ts": {
+    "sonarjs/use-type-alias": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/handlers/competitor-accounts-handler/saml-routes.ts": {
+    "sonarjs/no-nested-conditional": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/handlers/competitor-accounts-handler/team-credentials-routes.ts": {
+    "sonarjs/no-nested-conditional": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/handlers/deploy-handler/delete.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/handlers/deploy-handler/deploy.ts": {
+    "sonarjs/no-nested-conditional": {
+      "count": 2
+    }
+  },
+  "infrastructure/lib/problem-deploy/handlers/deploy-handler/index.ts": {
+    "sonarjs/no-extra-arguments": {
+      "count": 3
+    }
+  },
+  "infrastructure/lib/problem-deploy/handlers/disruption-executor-handler/dispatch-command.ts": {
+    "sonarjs/concise-regex": {
+      "count": 1
+    },
+    "sonarjs/no-nested-conditional": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/handlers/disruption-executor-handler/route.ts": {
+    "@typescript-eslint/consistent-indexed-object-style": {
+      "count": 2
+    },
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/handlers/disruption-executor-handler/schedule-revert.ts": {
+    "sonarjs/no-unused-vars": {
+      "count": 3
+    }
+  },
+  "infrastructure/lib/problem-deploy/handlers/event-handler/bulk-delete.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/handlers/event-handler/create.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/handlers/event-handler/disruption-fire.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 3
+    }
+  },
+  "infrastructure/lib/problem-deploy/handlers/event-handler/team-score-events.ts": {
+    "sonarjs/no-nested-conditional": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/handlers/generic-scoring-handler/composite-status-reconciler.ts": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/handlers/generic-scoring-handler/index.ts": {
+    "sonarjs/no-nested-conditional": {
+      "count": 1
+    },
+    "sonarjs/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/handlers/generic-scoring-handler/kinds/uptime-multi.ts": {
+    "@typescript-eslint/consistent-type-definitions": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/handlers/generic-scoring-handler/scoring-kernel.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/handlers/participant-handler/auth.ts": {
+    "sonarjs/slow-regex": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/handlers/participant-handler/battle-attacks.ts": {
+    "sonarjs/no-nested-conditional": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/handlers/participant-handler/coordination-plugin-loader.ts": {
+    "@typescript-eslint/consistent-type-definitions": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/handlers/participant-handler/leaderboard-score-events.ts": {
+    "sonarjs/no-nested-conditional": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/handlers/participant-handler/leaderboard.ts": {
+    "@typescript-eslint/consistent-type-definitions": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/handlers/participant-handler/lookup.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    },
+    "@typescript-eslint/no-dynamic-delete": {
+      "count": 2
+    }
+  },
+  "infrastructure/lib/problem-deploy/handlers/participant-handler/score-events.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    },
+    "sonarjs/no-nested-conditional": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/handlers/participant-handler/sso.ts": {
+    "@typescript-eslint/consistent-type-definitions": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/handlers/participant-handler/submit-flag.ts": {
+    "sonarjs/no-identical-functions": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/handlers/shared/audit-log.ts": {
+    "sonarjs/no-nested-conditional": {
+      "count": 2
+    }
+  },
+  "infrastructure/lib/problem-deploy/handlers/shared/audit/audit-wrapper.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/handlers/shared/jwt-claims.ts": {
+    "@typescript-eslint/consistent-indexed-object-style": {
+      "count": 1
+    },
+    "@typescript-eslint/consistent-type-definitions": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/handlers/shared/score-event.ts": {
+    "sonarjs/no-nested-conditional": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/ops-monitoring.ts": {
+    "sonarjs/aws-sns-unencrypted-topics": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/runtime-clients/gcp-aws-subject-token.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/runtime-clients/sakura-apprun-rest-client.ts": {
+    "@typescript-eslint/no-invalid-void-type": {
+      "count": 1
+    },
+    "sonarjs/slow-regex": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-deploy/runtime-clients/ssrf-guard.ts": {
+    "sonarjs/no-hardcoded-ip": {
+      "count": 6
+    }
+  },
+  "infrastructure/lib/problem-pack/catalog-source.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 10
+    }
+  },
+  "infrastructure/lib/problem-pack/git-fetcher.ts": {
+    "sonarjs/no-os-command-from-path": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-pack/pack-activation.ts": {
+    "sonarjs/slow-regex": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/problem-pack/pack-cli.ts": {
+    "sonarjs/no-nested-template-literals": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/source-bundle/lifecycle-policy.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/tenant-pipeline/serverless-saas-pipeline.ts": {
+    "sonarjs/aws-iam-all-privileges": {
+      "count": 1
+    },
+    "sonarjs/aws-iam-privilege-escalation": {
+      "count": 1
+    },
+    "sonarjs/aws-s3-bucket-insecure-http": {
+      "count": 1
+    },
+    "sonarjs/aws-s3-bucket-public-access": {
+      "count": 1
+    },
+    "sonarjs/aws-s3-bucket-versioning": {
+      "count": 1
+    },
+    "sonarjs/aws-sqs-unencrypted-queue": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/tenant-template/identity-provider.ts": {
+    "sonarjs/no-hardcoded-passwords": {
+      "count": 1
+    }
+  },
+  "infrastructure/lib/utils/define-nodejs-function.ts": {
+    "sonarjs/no-nested-template-literals": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/admin-console-hosting.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/admin-console-runtime-config-stack.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 1
+    },
+    "sonarjs/aws-s3-bucket-insecure-http": {
+      "count": 1
+    },
+    "sonarjs/aws-s3-bucket-public-access": {
+      "count": 1
+    },
+    "sonarjs/aws-s3-bucket-versioning": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/admin-console-runtime-config.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 3
+    },
+    "sonarjs/aws-s3-bucket-insecure-http": {
+      "count": 1
+    },
+    "sonarjs/aws-s3-bucket-public-access": {
+      "count": 1
+    },
+    "sonarjs/aws-s3-bucket-versioning": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/admin-insight/admin-console-insight-stack.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 2
+    },
+    "sonarjs/assertions-in-tests": {
+      "count": 14
+    },
+    "sonarjs/no-nested-conditional": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/admin-insight/admin-insight-handler-shared.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/admin-insight/admin-insight-routes.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/admin-insight/audit-export.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 3
+    }
+  },
+  "infrastructure/test/admin-insight/audit-routes.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/admin-insight/summary-edge.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 4
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/always-on-runtime/event-runtime-entrypoint.test.ts": {
+    "@typescript-eslint/no-dynamic-delete": {
+      "count": 1
+    },
+    "sonarjs/assertions-in-tests": {
+      "count": 1
+    },
+    "sonarjs/no-unused-vars": {
+      "count": 3
+    }
+  },
+  "infrastructure/test/always-on-runtime/event-runtime-stack.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/always-on-runtime/github-oidc-deploy-role-stack.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 12
+    },
+    "sonarjs/no-nested-conditional": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/always-on-runtime/runtime-tags.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 2
+    },
+    "sonarjs/aws-sns-unencrypted-topics": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/always-on-runtime/sweeper/index.composition.test.ts": {
+    "@typescript-eslint/no-dynamic-delete": {
+      "count": 1
+    },
+    "@typescript-eslint/no-empty-function": {
+      "count": 6
+    }
+  },
+  "infrastructure/test/always-on-runtime/sweeper/sweep.test.ts": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 7
+    }
+  },
+  "infrastructure/test/always-on-runtime/worker-oidc-command-role-stack.test.ts": {
+    "@typescript-eslint/no-dynamic-delete": {
+      "count": 2
+    },
+    "sonarjs/assertions-in-tests": {
+      "count": 11
+    }
+  },
+  "infrastructure/test/app-plane-core/build-app-plane-core.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 3
+    }
+  },
+  "infrastructure/test/app-plane-core/handlers/pre-token-generation.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 9
+    }
+  },
+  "infrastructure/test/app-wiring/cost-guardrails-default-off.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 3
+    }
+  },
+  "infrastructure/test/app-wiring/problem-deploy-backend-props.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/application-admin-console-hosting.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 7
+    },
+    "sonarjs/constructor-for-side-effects": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/bootstrap-template/job-runner-permissions.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 2
+    },
+    "sonarjs/no-nested-conditional": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/bootstrap-template/sbt-0.9.5-migration.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/bootstrap-template/source-bucket-injection.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/bootstrap-template/tenant-api-key.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 2
+    },
+    "sonarjs/constructor-for-side-effects": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/bundling-skip-context.test.ts": {
+    "sonarjs/constructor-for-side-effects": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/cdk-aspect/codebuild-use-aws-managed-kms.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 2
+    },
+    "sonarjs/constructor-for-side-effects": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/cdk-aspect/dynamodb-low-capacity.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 4
+    }
+  },
+  "infrastructure/test/cdk-aspect/kms-key-short-pending-window.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 4
+    }
+  },
+  "infrastructure/test/cdk-aspect/log-group-retention.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    },
+    "sonarjs/assertions-in-tests": {
+      "count": 2
+    },
+    "sonarjs/constructor-for-side-effects": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/cdk-outdir-concurrency.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    },
+    "sonarjs/no-os-command-from-path": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/challenge-payload-stack.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 7
+    }
+  },
+  "infrastructure/test/config-loader.test.ts": {
+    "sonarjs/no-nested-template-literals": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/control-plane/control-plane-idp-api.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 4
+    }
+  },
+  "infrastructure/test/control-plane/managed-login.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 3
+    }
+  },
+  "infrastructure/test/control-plane/saml-admin-allowlist.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 2
+    },
+    "sonarjs/code-eval": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/control-plane/saml-identity-providers.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 1
+    },
+    "sonarjs/no-clear-text-protocols": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/control-plane/sbt-tenant-registration-table.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    },
+    "sonarjs/assertions-in-tests": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/customer-execution/customer-execution-plane-stack.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 5
+    }
+  },
+  "infrastructure/test/detect-suspicious-comment.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/discover-problems-catalog.test.ts": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 4
+    }
+  },
+  "infrastructure/test/fixtures/simulator-conformance-process.mjs": {
+    "sonarjs/cognitive-complexity": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/fixtures/simulator-ignore-sigterm.mjs": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/identity-provider.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 17
+    },
+    "sonarjs/constructor-for-side-effects": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/idp/core-error-paths.test.ts": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/idp/core.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    },
+    "@typescript-eslint/no-empty-function": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/idp/ddb-store.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/idp/idp-handler-shared.test.ts": {
+    "@typescript-eslint/no-dynamic-delete": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/idp/routes-wiring.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/idp/routes.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 2
+    },
+    "@typescript-eslint/no-empty-function": {
+      "count": 3
+    }
+  },
+  "infrastructure/test/idp/tenant-tier-guard.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/nodejs-function-bundling-smoke.test.ts": {
+    "sonarjs/constructor-for-side-effects": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/observability/cloudwatch-dashboard-stack.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/observability/cost-budget.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 2
+    },
+    "sonarjs/assertions-in-tests": {
+      "count": 2
+    },
+    "sonarjs/constructor-for-side-effects": {
+      "count": 7
+    }
+  },
+  "infrastructure/test/observability/free-tier-alarms.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 8
+    },
+    "sonarjs/aws-sns-unencrypted-topics": {
+      "count": 1
+    },
+    "sonarjs/constructor-for-side-effects": {
+      "count": 10
+    }
+  },
+  "infrastructure/test/participant-portal-hosting.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 1
+    },
+    "sonarjs/constructor-for-side-effects": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/problem-deploy-backend-stack-artifacts.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy-backend-stack-capacity-runbook.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/problem-deploy-backend-stack-codebuild.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 3
+    }
+  },
+  "infrastructure/test/problem-deploy-backend-stack-events.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 6
+    }
+  },
+  "infrastructure/test/problem-deploy-backend-stack-lambdas.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 3
+    },
+    "sonarjs/assertions-in-tests": {
+      "count": 6
+    },
+    "sonarjs/no-identical-functions": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy-backend-stack-lite-mode.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/problem-deploy-backend-stack-ops-monitoring.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 5
+    }
+  },
+  "infrastructure/test/problem-deploy-backend-stack-outputs.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/problem-deploy-backend-stack-pack-artifacts.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy-backend-stack-participant-portal-subsystem.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 10
+    }
+  },
+  "infrastructure/test/problem-deploy-backend-stack-portal.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 7
+    },
+    "sonarjs/assertions-in-tests": {
+      "count": 5
+    }
+  },
+  "infrastructure/test/problem-deploy-backend-stack-statemachines.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/problem-deploy-backend-stack-synth-lockdown.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    },
+    "sonarjs/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/problem-deploy-backend-stack-tables.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/problem-deploy-backend-stack.test-helpers.ts": {
+    "sonarjs/constructor-for-side-effects": {
+      "count": 3
+    }
+  },
+  "infrastructure/test/problem-deploy/audit-log-read.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    },
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 5
+    }
+  },
+  "infrastructure/test/problem-deploy/audit-log-routes.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/audit-wrapper.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/auth-wiring.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/azure-bicep-adapter.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/azure-credential-store.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    },
+    "sonarjs/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/azure-template-materializer.test.ts": {
+    "sonarjs/no-hardcoded-ip": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/bulk-adapter-dispatch.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/problem-deploy/bulk-deploy-create-state-machine.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    },
+    "sonarjs/assertions-in-tests": {
+      "count": 2
+    },
+    "sonarjs/aws-s3-bucket-insecure-http": {
+      "count": 1
+    },
+    "sonarjs/aws-s3-bucket-public-access": {
+      "count": 1
+    },
+    "sonarjs/aws-s3-bucket-versioning": {
+      "count": 1
+    },
+    "sonarjs/constructor-for-side-effects": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/bulk-deploy-persistence.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/problem-deploy/bulk-deploy-routes.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/capacity-routes.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/catalog.test.ts": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/cfn-deploy-delete-handler.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/cfn-deploy-handler.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    },
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    },
+    "@typescript-eslint/no-dynamic-delete": {
+      "count": 1
+    },
+    "@typescript-eslint/no-empty-function": {
+      "count": 1
+    },
+    "sonarjs/no-unused-vars": {
+      "count": 3
+    }
+  },
+  "infrastructure/test/problem-deploy/cfn-deploy-lambda.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 11
+    },
+    "sonarjs/constructor-for-side-effects": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/cfn-status.test.ts": {
+    "sonarjs/no-clear-text-protocols": {
+      "count": 4
+    }
+  },
+  "infrastructure/test/problem-deploy/cloud-action-enforcement.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/problem-deploy/competitor-accounts-routes.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/competitor-accounts-shared.test.ts": {
+    "@typescript-eslint/no-dynamic-delete": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/composite-aws-access-bridge.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/composite-compat-single-provider.test.ts": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 6
+    }
+  },
+  "infrastructure/test/problem-deploy/composite-deploy.test.ts": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/composite-deployment-repository.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/composite-four-provider-contract.test.ts": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/composite-ready-dispatch.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 4
+    }
+  },
+  "infrastructure/test/problem-deploy/composite-status-reconciler.test.ts": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/composite-target-access.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/control-data-backend-feature-flag.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/control-data/admin-audit-log-repository.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 4
+    }
+  },
+  "infrastructure/test/problem-deploy/control-data/competitor-accounts-repository.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 4
+    }
+  },
+  "infrastructure/test/problem-deploy/control-data/control-data-write.test-helpers.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 2
+    },
+    "@typescript-eslint/no-dynamic-delete": {
+      "count": 1
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    },
+    "sonarjs/concise-regex": {
+      "count": 5
+    },
+    "sonarjs/no-incomplete-assertions": {
+      "count": 10
+    }
+  },
+  "infrastructure/test/problem-deploy/control-data/deployments-repository-error-paths.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    },
+    "@typescript-eslint/no-empty-function": {
+      "count": 3
+    }
+  },
+  "infrastructure/test/problem-deploy/control-data/deployments-repository-parity.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    },
+    "sonarjs/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/control-data/deployments-repository-scan.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 5
+    }
+  },
+  "infrastructure/test/problem-deploy/control-data/deployments-repository-writes.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 7
+    }
+  },
+  "infrastructure/test/problem-deploy/control-data/deployments-repository.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 6
+    }
+  },
+  "infrastructure/test/problem-deploy/control-data/disruptions-repository.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 4
+    }
+  },
+  "infrastructure/test/problem-deploy/control-data/events-repository-listing-parity.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/control-data/events-repository-mutations-parity.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/control-data/events-repository-parity.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/control-data/feature-flags-repository-parity.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/control-data/idempotency-repository-parity.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    },
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    },
+    "sonarjs/no-dead-store": {
+      "count": 1
+    },
+    "sonarjs/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/control-data/notifications-repository-parity.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/control-data/problem-endpoints-repository-parity.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/control-data/problem-endpoints-repository.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 4
+    }
+  },
+  "infrastructure/test/problem-deploy/control-data/saml-config-repository.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/control-data/saml-idps-repository-parity.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/control-data/saml-idps-repository.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    }
+  },
+  "infrastructure/test/problem-deploy/control-data/teams-repository-parity.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    },
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 5
+    },
+    "sonarjs/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/problem-deploy/coordination-dispatch.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/problem-deploy/coordination-dispatcher-index.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 2
+    },
+    "sonarjs/no-hardcoded-ip": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/coordination-dispatcher-lambda.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    },
+    "sonarjs/assertions-in-tests": {
+      "count": 2
+    },
+    "sonarjs/no-nested-conditional": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/coordination-handler.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/problem-deploy/coordination-plugin-bundle.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    },
+    "sonarjs/aws-s3-bucket-insecure-http": {
+      "count": 1
+    },
+    "sonarjs/aws-s3-bucket-public-access": {
+      "count": 1
+    },
+    "sonarjs/aws-s3-bucket-versioning": {
+      "count": 1
+    },
+    "sonarjs/constructor-for-side-effects": {
+      "count": 2
+    },
+    "sonarjs/no-nested-conditional": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/coordination-plugin-loader.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 2
+    },
+    "@typescript-eslint/no-empty-function": {
+      "count": 12
+    }
+  },
+  "infrastructure/test/problem-deploy/coordination-tick-host.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 3
+    }
+  },
+  "infrastructure/test/problem-deploy/coordination-tick.test.ts": {
+    "sonarjs/no-identical-functions": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/data-table-removal-policy.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/ddb-paginate.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 8
+    }
+  },
+  "infrastructure/test/problem-deploy/deploy-codebuild-project.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 9
+    },
+    "sonarjs/constructor-for-side-effects": {
+      "count": 1
+    },
+    "sonarjs/no-nested-conditional": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/deploy-cost-model.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    },
+    "sonarjs/constructor-for-side-effects": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/problem-deploy/deploy-create-state-machine.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 5
+    },
+    "sonarjs/assertions-in-tests": {
+      "count": 2
+    },
+    "sonarjs/constructor-for-side-effects": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/deploy-delete-state-machine.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    },
+    "sonarjs/assertions-in-tests": {
+      "count": 1
+    },
+    "sonarjs/constructor-for-side-effects": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/deploy-handler-composite-routes.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/deploy-handler-index.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/deploy-handler-non-aws-gate.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/deploy-handler-routes.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "sonarjs/no-clear-text-protocols": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/problem-deploy/deploy-handler.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/problem-deploy/deploy-idempotency.test.ts": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 1
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 9
+    },
+    "@typescript-eslint/no-require-imports": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/deploy-retry.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/problem-deploy/deploy-runtime-dispatch.test.ts": {
+    "sonarjs/no-identical-functions": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/deployment-progress-log.test.ts": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/problem-deploy/deployments-table-gsi3.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    },
+    "sonarjs/assertions-in-tests": {
+      "count": 3
+    },
+    "sonarjs/constructor-for-side-effects": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/describe-stack-handler-gaps.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "@typescript-eslint/no-extraneous-class": {
+      "count": 3
+    }
+  },
+  "infrastructure/test/problem-deploy/describe-stack-handler.test.ts": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 5
+    }
+  },
+  "infrastructure/test/problem-deploy/disruption-effects.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/disruption-executor-lambda.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 5
+    },
+    "sonarjs/constructor-for-side-effects": {
+      "count": 3
+    },
+    "sonarjs/no-nested-conditional": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/disruption-fire-executor-contract.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    },
+    "sonarjs/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/disruption-fire-mutation.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    }
+  },
+  "infrastructure/test/problem-deploy/disruption-fire-queries.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/disruption-routes.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/end-event-internals.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/endpoints-store-and-audit-repository.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    }
+  },
+  "infrastructure/test/problem-deploy/event-audit.test.ts": {
+    "sonarjs/no-hardcoded-ip": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/problem-deploy/event-bulk-deploy-happy.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/event-bulk-deploy-non-aws.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/event-bulk-deploy-provenance-audit.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/event-crud-routes.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/event-gate.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/event-handler-shared.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/problem-deploy/event-list-detail.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/event-lock-scoring.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/event-progression-gate-routes.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/event-route-helpers.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/external-id-audit-handler-repository.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 3
+    }
+  },
+  "infrastructure/test/problem-deploy/feature-flags-routes.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/feature-flags.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/gcp-credential-store.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/gcp-infra-manager-adapter.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/generic-scoring-dispatcher.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/generic-scoring-disruption-fire.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 3
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/generic-scoring-index.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 3
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 6
+    }
+  },
+  "infrastructure/test/problem-deploy/generic-scoring-phased-polling.test.ts": {
+    "sonarjs/no-clear-text-protocols": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/generic-scoring-reconciler-scheduled-deploy.test.ts": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/problem-deploy/generic-scoring-reconciler-scheduled-turso.test.ts": {
+    "@typescript-eslint/no-dynamic-delete": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/problem-deploy/generic-scoring-shared.test.ts": {
+    "@typescript-eslint/no-dynamic-delete": {
+      "count": 1
+    },
+    "sonarjs/no-clear-text-protocols": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/problem-deploy/generic-scoring-uptime-multi.test.ts": {
+    "sonarjs/no-hardcoded-passwords": {
+      "count": 3
+    }
+  },
+  "infrastructure/test/problem-deploy/job-progress-log.test.ts": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/lifecycle-routes.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/machine-principal.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    },
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    },
+    "@typescript-eslint/no-dynamic-delete": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/machine-route-guard.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/machine-scopes-source.test.ts": {
+    "sonarjs/slow-regex": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/notification-routes.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/participant-handler-index.test.ts": {
+    "sonarjs/no-clear-text-protocols": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/participant-login-diagnostics.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    },
+    "@typescript-eslint/no-empty-function": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/problem-deploy/participant-lookup.test.ts": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 4
+    }
+  },
+  "infrastructure/test/problem-deploy/participant-prerequisite-enforcement.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/problem-deploy/presigned-url.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/problem-endpoints-handler.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    },
+    "sonarjs/no-clear-text-protocols": {
+      "count": 13
+    }
+  },
+  "infrastructure/test/problem-deploy/problem-template-participant-viewer-role.test.ts": {
+    "sonarjs/slow-regex": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/problem-deploy/runtime-status-reconciler.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 3
+    }
+  },
+  "infrastructure/test/problem-deploy/sakura-apprun-adapter.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/sakura-credential-store.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/saml-routes-orchestrators.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    },
+    "sonarjs/no-clear-text-protocols": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/problem-deploy/scheduled-deploy-resources.test.ts": {
+    "@typescript-eslint/no-dynamic-delete": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/problem-deploy/scheduled-resources-turso.test.ts": {
+    "@typescript-eslint/no-dynamic-delete": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/problem-deploy/scoring-routes.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/secure-json-store.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/shared-builders.test.ts": {
+    "@typescript-eslint/no-dynamic-delete": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/problem-deploy/ssrf-guard.test.ts": {
+    "sonarjs/no-clear-text-protocols": {
+      "count": 14
+    },
+    "sonarjs/no-hardcoded-ip": {
+      "count": 10
+    }
+  },
+  "infrastructure/test/problem-deploy/stack-progress.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    },
+    "@typescript-eslint/consistent-type-definitions": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/system-audit-writer-handler.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    },
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/team-credentials-routes.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-deploy/tenant-saml-tier-guard.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/problem-deploy/tenant-saml.test.ts": {
+    "sonarjs/no-clear-text-protocols": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/problem-deploy/visibility.test.ts": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-pack-ci-workflow.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-pack/external-git-pack-e2e.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/problem-pack/git-source.test.ts": {
+    "sonarjs/no-clear-text-protocols": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/problem-pack/pack-cli-init.test.ts": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/problem-pack/pack-lite-full-chain-e2e.test.ts": {
+    "@typescript-eslint/no-dynamic-delete": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/run-vitest.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 2
+    },
+    "sonarjs/no-os-command-from-path": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/scripts/audit-dependencies.test.ts": {
+    "sonarjs/no-all-duplicated-branches": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/scripts/battles-common-assume-role.test.ts": {
+    "sonarjs/no-os-command-from-path": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/scripts/cdk-cli-path.test.ts": {
+    "sonarjs/no-os-command-from-path": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/scripts/cleanup.test.ts": {
+    "@typescript-eslint/no-dynamic-delete": {
+      "count": 1
+    },
+    "sonarjs/no-os-command-from-path": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/scripts/codespaces-onboarding.test.ts": {
+    "sonarjs/slow-regex": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/scripts/delete-battles-account-check.test.ts": {
+    "sonarjs/no-os-command-from-path": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/scripts/deploy-stack-recovery.test.ts": {
+    "sonarjs/no-os-command-from-path": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/scripts/docker-launcher-project-name.test.ts": {
+    "sonarjs/no-os-command-from-path": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/scripts/docker-launcher-socket.test.ts": {
+    "sonarjs/no-os-command-from-path": {
+      "count": 1
+    },
+    "sonarjs/publicly-writable-directories": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/scripts/enforce-log-retention.test.ts": {
+    "sonarjs/no-os-command-from-path": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/scripts/env-check-lite-turso.test.ts": {
+    "@typescript-eslint/no-dynamic-delete": {
+      "count": 1
+    },
+    "sonarjs/no-os-command-from-path": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/scripts/env-init.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    },
+    "sonarjs/no-unused-collection": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/scripts/image-build-excludes-problems.test.ts": {
+    "sonarjs/no-os-command-from-path": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/scripts/lite-pipeline-capacity.test.ts": {
+    "sonarjs/slow-regex": {
+      "count": 6
+    }
+  },
+  "infrastructure/test/scripts/lite-pipeline-drill.test.ts": {
+    "sonarjs/slow-regex": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/scripts/lite-pipeline-interface.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    },
+    "sonarjs/slow-regex": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/scripts/lite-pipeline-retain-data-tables.test.ts": {
+    "sonarjs/slow-regex": {
+      "count": 5
+    }
+  },
+  "infrastructure/test/scripts/lite-pipeline-turso.test.ts": {
+    "sonarjs/slow-regex": {
+      "count": 6
+    }
+  },
+  "infrastructure/test/scripts/local-play-api.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 29
+    },
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 2
+    },
+    "sonarjs/publicly-writable-directories": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/scripts/local-play-container-runner.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 2
+    },
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/scripts/local-play-lifecycle.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 2
+    },
+    "@typescript-eslint/no-empty-function": {
+      "count": 5
+    },
+    "@typescript-eslint/no-invalid-void-type": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/scripts/local-play-loopback.test.ts": {
+    "sonarjs/no-clear-text-protocols": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/scripts/local-play-native-compatibility.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/scripts/local-play-server-cors.test.ts": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 2
+    },
+    "sonarjs/no-clear-text-protocols": {
+      "count": 3
+    }
+  },
+  "infrastructure/test/scripts/local-play-server-static.test.ts": {
+    "sonarjs/no-nested-functions": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/scripts/local-play-session-state.test.ts": {
+    "sonarjs/publicly-writable-directories": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/scripts/local-play-simulator-data-plane-proxy.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    },
+    "@typescript-eslint/no-empty-function": {
+      "count": 7
+    }
+  },
+  "infrastructure/test/scripts/local-play-simulator-native-proxy.test.ts": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 8
+    }
+  },
+  "infrastructure/test/scripts/local-play-simulator-runtime.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 14
+    },
+    "@typescript-eslint/no-empty-function": {
+      "count": 10
+    },
+    "sonarjs/assertions-in-tests": {
+      "count": 1
+    },
+    "sonarjs/no-clear-text-protocols": {
+      "count": 2
+    },
+    "sonarjs/no-unused-vars": {
+      "count": 6
+    }
+  },
+  "infrastructure/test/scripts/local-play-simulator.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/scripts/local-play-smoke.test.ts": {
+    "@typescript-eslint/consistent-type-definitions": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/scripts/local-play-state-store.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 2
+    },
+    "@typescript-eslint/no-empty-function": {
+      "count": 12
+    },
+    "sonarjs/no-os-command-from-path": {
+      "count": 2
+    },
+    "sonarjs/publicly-writable-directories": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/scripts/local-play-terminal-handoff.test.ts": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 7
+    }
+  },
+  "infrastructure/test/scripts/local-play-terminal-ws.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    },
+    "@typescript-eslint/no-empty-function": {
+      "count": 4
+    },
+    "sonarjs/publicly-writable-directories": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/scripts/local-play-terminal.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    },
+    "@typescript-eslint/no-empty-function": {
+      "count": 8
+    }
+  },
+  "infrastructure/test/scripts/local-play-verifier-only.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 2
+    },
+    "sonarjs/publicly-writable-directories": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/scripts/machine-credential-reaping.test.ts": {
+    "sonarjs/no-os-command-from-path": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/scripts/makefile-local-bootstrap.test.ts": {
+    "sonarjs/no-nested-template-literals": {
+      "count": 4
+    },
+    "sonarjs/no-os-command-from-path": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/scripts/package-source-bundle.test.ts": {
+    "sonarjs/no-os-command-from-path": {
+      "count": 3
+    }
+  },
+  "infrastructure/test/scripts/participant-portal-runtime-config.test.ts": {
+    "sonarjs/no-os-command-from-path": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/scripts/prepare-source-bundle.test.ts": {
+    "sonarjs/no-os-command-from-path": {
+      "count": 1
+    },
+    "sonarjs/slow-regex": {
+      "count": 3
+    }
+  },
+  "infrastructure/test/scripts/print-source-bundle-lifecycle.test.ts": {
+    "sonarjs/no-os-command-from-path": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/scripts/source-bucket-name.test.ts": {
+    "sonarjs/no-os-command-from-path": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/scripts/tenkacloud-cli.test.ts": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/scripts/tenkacloud-lite.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 3
+    },
+    "@typescript-eslint/no-dynamic-delete": {
+      "count": 2
+    },
+    "sonarjs/no-unused-collection": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/scripts/tenkacloud-local-cli.test.ts": {
+    "sonarjs/no-os-command-from-path": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/scripts/tenkacloud-local.test.ts": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 2
+    },
+    "sonarjs/assertions-in-tests": {
+      "count": 1
+    },
+    "sonarjs/no-os-command-from-path": {
+      "count": 1
+    },
+    "sonarjs/publicly-writable-directories": {
+      "count": 8
+    }
+  },
+  "infrastructure/test/scripts/tenkacloud-turso-wizard.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/scripts/turso-live-guide.test.ts": {
+    "sonarjs/no-os-command-from-path": {
+      "count": 3
+    },
+    "sonarjs/slow-regex": {
+      "count": 13
+    }
+  },
+  "infrastructure/test/security/cloudfront-headers.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    },
+    "sonarjs/assertions-in-tests": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/tenant-pipeline/serverless-saas-pipeline.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 3
+    }
+  },
+  "infrastructure/test/tenant-pipeline/tenant-lifecycle-scripts.test.ts": {
+    "sonarjs/slow-regex": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/tenant-status-reconciler/tenant-status-reconciler.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 5
+    },
+    "sonarjs/constructor-for-side-effects": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/tenant-template/api-gateway.test.ts": {
+    "sonarjs/constructor-for-side-effects": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/tenant-template/human-authorizer-audience.test.ts": {
+    "@typescript-eslint/consistent-type-definitions": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/tenant-template/machine-api.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    },
+    "@typescript-eslint/consistent-type-definitions": {
+      "count": 1
+    },
+    "sonarjs/assertions-in-tests": {
+      "count": 3
+    }
+  },
+  "infrastructure/test/tenant-template/saml-admin-allowlist.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/tenant-template/saml-identity-providers.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 1
+    },
+    "sonarjs/no-clear-text-protocols": {
+      "count": 1
+    }
+  },
+  "infrastructure/test/tenant-template/tenant-template-stack-saml.test.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    },
+    "sonarjs/assertions-in-tests": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/tenkacloud-lite-bin.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 2
+    }
+  },
+  "infrastructure/test/tenkacloud-lite/tenkacloud-lite-stack.test.ts": {
+    "sonarjs/assertions-in-tests": {
+      "count": 9
+    }
+  },
+  "infrastructure/test/utils/read-catalog-blob.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    },
+    "@typescript-eslint/no-dynamic-delete": {
+      "count": 1
+    }
+  },
+  "packages/ai-eval/src/dataset.ts": {
+    "sonarjs/slow-regex": {
+      "count": 1
+    }
+  },
+  "packages/auth-client/src/pkce.ts": {
+    "sonarjs/slow-regex": {
+      "count": 1
+    }
+  },
+  "packages/auth-client/test/jwks-resolver.test.ts": {
+    "sonarjs/no-unused-vars": {
+      "count": 1
+    },
+    "sonarjs/slow-regex": {
+      "count": 1
+    }
+  },
+  "packages/auth-client/test/oidc-jwks-verify.test.ts": {
+    "sonarjs/no-unused-vars": {
+      "count": 6
+    },
+    "sonarjs/slow-regex": {
+      "count": 1
+    }
+  },
+  "packages/auth-client/test/runtime-config.test.ts": {
+    "sonarjs/no-clear-text-protocols": {
+      "count": 1
+    }
+  },
+  "packages/coordination-plugin-sdk/test/coordination.test.ts": {
+    "sonarjs/no-clear-text-protocols": {
+      "count": 1
+    },
+    "sonarjs/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/portal-contracts/src/problem-catalog.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 27
+    }
+  },
+  "packages/problem-cost/src/index.ts": {
+    "sonarjs/concise-regex": {
+      "count": 1
+    }
+  },
+  "packages/problem-runtime/src/index.ts": {
+    "@typescript-eslint/consistent-type-definitions": {
+      "count": 1
+    },
+    "sonarjs/concise-regex": {
+      "count": 1
+    }
+  },
+  "packages/problem-sdk/src/manifest.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    }
+  },
+  "packages/problem-sdk/src/metadata-parser.ts": {
+    "@typescript-eslint/consistent-type-definitions": {
+      "count": 1
+    }
+  },
+  "packages/problem-sdk/src/problem-metadata.ts": {
+    "sonarjs/no-nested-conditional": {
+      "count": 1
+    }
+  },
+  "packages/problem-sdk/src/semver-range.ts": {
+    "sonarjs/no-nested-conditional": {
+      "count": 1
+    },
+    "sonarjs/regex-complexity": {
+      "count": 3
+    }
+  },
+  "packages/problem-sdk/test/no-forbidden-deps.test.ts": {
+    "sonarjs/slow-regex": {
+      "count": 1
+    }
+  },
+  "packages/problem-sdk/test/report.test.ts": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 4
+    }
+  },
+  "packages/problem-test-harness/test/run-harness.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 2
+    }
+  },
+  "packages/problem-test-harness/test/scorer.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 2
+    }
+  },
+  "packages/saml-utils/test/metadata.test.ts": {
+    "sonarjs/no-clear-text-protocols": {
+      "count": 1
+    }
+  },
+  "packages/saml-utils/test/schema.test.ts": {
+    "sonarjs/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "packages/standalone-cli/src/problems.mjs": {
+    "sonarjs/cognitive-complexity": {
+      "count": 1
+    }
+  },
+  "packages/standalone-cli/src/runtime.mjs": {
+    "sonarjs/no-os-command-from-path": {
+      "count": 2
+    },
+    "sonarjs/pseudo-random": {
+      "count": 1
+    }
+  },
+  "packages/standalone-cli/test/standalone-cli.test.mjs": {
+    "sonarjs/no-os-command-from-path": {
+      "count": 1
+    }
+  },
+  "packages/tcloud/src/api-client.ts": {
+    "sonarjs/no-dead-store": {
+      "count": 1
+    },
+    "sonarjs/no-nested-template-literals": {
+      "count": 1
+    }
+  },
+  "packages/tcloud/src/auth.ts": {
+    "sonarjs/no-nested-template-literals": {
+      "count": 2
+    }
+  },
+  "packages/tcloud/src/cli.ts": {
+    "sonarjs/no-os-command-from-path": {
+      "count": 1
+    }
+  },
+  "packages/tcloud/src/config.ts": {
+    "sonarjs/anchor-precedence": {
+      "count": 1
+    }
+  },
+  "packages/trust-bridge/poc/customer-execution-plane-demo.ts": {
+    "@typescript-eslint/array-type": {
+      "count": 1
+    },
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    },
+    "sonarjs/no-nested-template-literals": {
+      "count": 1
+    },
+    "sonarjs/pseudo-random": {
+      "count": 2
+    }
+  },
+  "packages/trust-bridge/src/provider.ts": {
+    "@typescript-eslint/consistent-indexed-object-style": {
+      "count": 1
+    }
+  },
+  "packages/trust-bridge/test/aws-assume-role.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 2
+    }
+  },
+  "packages/trust-bridge/test/azure-federated-credential.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 3
+    }
+  },
+  "packages/trust-bridge/test/customer-execution-agent.test.ts": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 1
+    },
+    "sonarjs/pseudo-random": {
+      "count": 1
+    }
+  },
+  "packages/trust-bridge/test/customer-execution-plane.test.ts": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 2
+    },
+    "sonarjs/pseudo-random": {
+      "count": 1
+    }
+  },
+  "packages/trust-bridge/test/ddb-nonce-store.test.ts": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 1
+    }
+  },
+  "packages/trust-bridge/test/gcp-workload-identity.test.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 2
+    }
+  },
+  "packages/trust-bridge/test/verify.test.ts": {
+    "sonarjs/pseudo-random": {
+      "count": 1
+    },
+    "sonarjs/slow-regex": {
+      "count": 1
+    }
+  },
+  "packages/web-kit/src/feature-flags.ts": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "packages/web-kit/test/ShellLayout.test.tsx": {
+    "@typescript-eslint/consistent-type-assertions": {
+      "count": 1
+    }
+  },
+  "packages/web-kit/test/auth.test.tsx": {
+    "@typescript-eslint/no-empty-function": {
+      "count": 1
+    }
+  },
+  "packages/web-kit/test/usePolling.test.tsx": {
+    "@typescript-eslint/no-non-null-assertion": {
+      "count": 2
+    }
+  },
+  "tmp/passport-video/audit_qr.mjs": {
+    "sonarjs/no-internal-api-use": {
+      "count": 2
+    }
+  },
+  "tmp/passport-video/generate_demo_qr.mjs": {
+    "sonarjs/no-internal-api-use": {
+      "count": 1
+    }
+  },
+  "tmp/passport-video/retake/audit_final_qr.mjs": {
+    "sonarjs/no-internal-api-use": {
+      "count": 1
+    }
+  },
+  "tmp/passport-video/retake/decode-qr.mjs": {
+    "sonarjs/no-internal-api-use": {
+      "count": 2
+    }
+  }
+}
