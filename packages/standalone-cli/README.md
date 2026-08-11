@@ -2,7 +2,8 @@
 
 Install and operate TenkaCloud without cloning the monorepo.
 
-Requires Node.js 24+ and [Bun](https://bun.sh) on `PATH`. The bundled runtime is
+Requires Node.js 24+ and Bun available on `PATH` (install from
+[bun.sh](https://bun.sh)). The bundled runtime is
 TypeScript, so Bun executes it. This package does not vendor Bun: the `bun` npm
 package downloads its binary from a `postinstall`, which is the kind of
 install-time script the platform's dependency audit rejects, and which never
