@@ -23,7 +23,7 @@ export interface CreateAdminAuditLogRepositoryDeps {
 
 /**
  * [Issue #2442 / Phase C4] Cold-start factory that selects the AdminAuditLog backend from the
- * `CONTROL_DATA_BACKEND` flag value (ADR-035 mechanism; mirror of
+ * `CONTROL_DATA_BACKEND` flag value (mirrors
  * `createDisruptionsRepository` / `createCompetitorAccountsRepository`). **Default = dynamodb**
  * (behavior-preserving): an unset / empty / `"dynamodb"` flag returns the DDB repository, so the
  * existing path is byte-identical.

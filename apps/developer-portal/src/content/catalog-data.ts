@@ -1,7 +1,7 @@
 // GENERATED FILE — do not edit by hand.
-// Produced by apps/developer-portal/scripts/generate-catalog.ts from the public
-// problem metadata.json files in the problems/ submodule (TenkaCloudChallenge,
-// ADR-012). Run 'bun run generate:catalog' after the catalog changes and commit
+// Produced by apps/developer-portal/scripts/generate-catalog.ts from public problem
+// metadata.json files in the problems/ submodule (TenkaCloudChallenge catalog).
+// Run 'bun run generate:catalog' after the catalog changes and commit
 // this file. 'bun run check:catalog' fails when it is stale vs the submodule
 // (a maintainer check; it needs the submodule checked out).
 

@@ -1,5 +1,5 @@
 /**
- * Issue #607: Endpoint override registration form (ADR-012 Phase 3.A / Phase 5 UI 補完)。
+ * Issue #607: Endpoint override registration form。
  *
  * 1 Battle 問題の `endpoints[]` のうち `overridable: true` な slot に対して、 競技者が
  * 自前の URL (Lambda / ECS / App Runner 等の再ホスト先) を登録 / 解除する form。 PROblem

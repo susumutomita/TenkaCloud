@@ -1,5 +1,5 @@
 /**
- * Issue #2291 (ADR-008 Phase 3 / #642): private-problem payload fetch for the Lambda deploy path.
+ * Issues #2291 and #642: private-problem payload fetch for the Lambda deploy path.
  *
  * The Lambda deploy path ({@link ./handlers/cfn-deploy-handler/create-stack.ts | create-stack.ts})
  * normally reads `template.yaml` + `metadata.json` straight from the materialized `problems/` tree
@@ -53,7 +53,7 @@
 
 import { unzipSync } from "fflate";
 
-/** Filename of the CloudFormation deploy body inside a problem payload (ADR-012 3-asset model). */
+/** Filename of the CloudFormation deploy body inside a problem payload (3-asset model). */
 const TEMPLATE_ENTRY = "template.yaml" as const;
 /** Filename of the problem metadata (source of the `cfnParameters`). */
 const METADATA_ENTRY = "metadata.json" as const;

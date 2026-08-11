@@ -5,7 +5,7 @@ import type { AppFeatures } from "../features";
 import { FEATURE_REGISTRY } from "../features";
 
 /**
- * Issue #2231 (ADR-035): merges the tenant's runtime feature-flag overrides
+ * Issue #2231: merges the tenant's runtime feature-flag overrides
  * (`GET /feature-flags`, #2265/#2267 — readable by any tenant role) on top of the
  * deploy-time baseline (`config.features` = registry default + `runtime-config.json`
  * override, resolved once in `loadConfig()`).

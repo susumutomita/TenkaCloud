@@ -1,23 +1,10 @@
 /**
- * [ADR-023 / Issue #1268] Problem runtime adapter abstraction.
+ * [Issue #1268] Problem runtime adapter abstraction.
  *
- * Today the deploy worker is hard-wired to AWS / CloudFormation: it publishes a
- * `DeployCreateRequested` event, the Step Functions state machine fans out to
- * CodeBuild, and CodeBuild runs `aws cloudformation deploy` in the competitor
- * account. That path is correct for AWS-only problems.
- *
- * Per ADR-023 we will eventually support provider-specific problems (Azure /
- * GCP / Kubernetes) bound to the same deploy backend. To avoid bolting
- * provider switches into the deploy handler, the deploy path resolves a
- * `ProblemRuntimeAdapter` from the problem's normalized runtime descriptor.
- *
- * Phase 1 (this issue): the only registered adapter is
- * `AwsCloudFormationRuntimeAdapter`. It wraps the existing
- * `publishProblemEvent` flow byte-for-byte. Any other normalized runtime is
- * rejected via `RuntimeNotSupportedError` BEFORE any cloud mutation, so a
- * mis-shipped Azure problem cannot create a stack-shaped artifact in AWS.
- *
- * Phase 2+ will introduce new adapters without changing this interface.
+ * The deploy path resolves a `ProblemRuntimeAdapter` from the problem's normalized runtime
+ * descriptor and the provider contexts wired for that deployment. A missing exact adapter or
+ * provider context raises `RuntimeNotSupportedError` before any cloud mutation; it never falls
+ * back to another provider.
  */
 
 import type { RuntimeDescriptor } from "@tenkacloud/problem-runtime";
@@ -71,7 +58,7 @@ export interface RuntimeDeployInput {
   readonly competitorRoleArn?: string;
   /** SSM SecureString path. AWS adapter only. */
   readonly externalIdParameterName?: string;
-  /** ADR-008: optional presigned URL for private problem payloads. */
+  /** optional presigned URL for private problem payloads. */
   readonly challengePayloadUrl?: string;
   /**
    * [Composite Runtime / Issue #2747] The ONE typed, provider-neutral parameter contract: bound
@@ -130,8 +117,7 @@ export interface RuntimeCollectOutputsInput {
 
 /**
  * Provider-independent map of deploy outputs (e.g. endpoint URLs / flag
- * values). AWS adapter maps CloudFormation Outputs into this map; future
- * adapters do the analogous projection.
+ * values). Each adapter projects provider-specific outputs into this map.
  */
 export type RuntimeOutputs = Readonly<Record<string, string>>;
 
@@ -156,13 +142,12 @@ export interface RuntimeDestroyResult {
 }
 
 /**
- * Problem runtime adapter. Implementations represent one
- * `<provider>/<engine>` pair. Only AWS / CloudFormation is registered today.
+ * Problem runtime adapter. Implementations represent one `<provider>/<engine>` pair.
  *
  * The interface is intentionally small (deploy / collectOutputs / getStatus /
  * destroy) so contributors do not infer that the platform is provider-aware
- * beyond what ADR-023 promises. Anything richer should be added in a separate
- * PR with the matching ADR amendment.
+ * beyond what it promises. Any richer capability needs an implementation and
+ * adapter tests in the same PR.
  */
 export interface ProblemRuntimeAdapter {
   readonly provider: string;
@@ -175,9 +160,7 @@ export interface ProblemRuntimeAdapter {
 }
 
 /**
- * Thrown when a problem's normalized runtime has no registered adapter — i.e.
- * the metadata declares e.g. `azure/bicep` but the platform only knows
- * `aws/cloudformation` today.
+ * Thrown when a problem's normalized runtime has no adapter configured for this deployment.
  *
  * This is a LOUD failure on purpose. Per AGENTS.md "no silent fallbacks": we
  * never substitute a different adapter, we never quietly degrade. The
@@ -189,9 +172,8 @@ export class RuntimeNotSupportedError extends Error {
    * The runtime classification distinguishes the rejection reason (the failure is
    * always loud — no adapter, no cloud mutation — only the operator-facing message
    * differs):
-   *   - `reserved`: a **planned** provider/engine (ADR-026/ADR-027, tracker #1408 —
-   *     known roadmap, no adapter registered yet).
-   *   - `container`: a **local-only** container problem (ADR-023 `docker/compose`) —
+   * - `reserved`: a recognized provider/engine whose account-gated context is not configured.
+   * - `container`: a **local-only** container problem (`docker/compose`) —
    *     deliberately not cloud-deployable; run it with `make local`.
    *   - otherwise: an **unknown** runtime (likely a typo in `metadata.runtime`).
    * Classification is supplied by the caller (`registry.selectAdapter`) so this
@@ -211,11 +193,11 @@ export class RuntimeNotSupportedError extends Error {
   ): string {
     const pair = `${runtime.provider}/${runtime.engine}`;
     if (opts.reserved) {
-      return `Runtime ${pair} is a planned provider/engine (ADR-026/ADR-027, tracker #1408) but is not yet executable in this platform version — no adapter is registered.`;
+      return `Runtime ${pair} is recognized but is not configured for this deployment — its provider credentials or client are unavailable, so no adapter can run.`;
     }
     if (opts.container) {
-      return `Runtime ${pair} is a local-only container problem (ADR-023) — run it with \`make local\`; it is not cloud-deployable.`;
+      return `Runtime ${pair} is a local-only container problem — run it with \`make local\`; it is not cloud-deployable.`;
     }
-    return `Runtime ${pair} is not a recognized executable runtime (check metadata.runtime for typos). Only aws/cloudformation is supported today (ADR-023 D4).`;
+    return `Runtime ${pair} is not a recognized executable runtime (check metadata.runtime for typos). No adapter is registered for this runtime.`;
   }
 }

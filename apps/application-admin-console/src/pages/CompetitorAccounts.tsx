@@ -117,7 +117,7 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
         onAdd={() => setAddModalVisible(true)}
       />
 
-      {/* [ADR-026/027/032 / #1413] non-AWS (sakura/azure/gcp) per-team credential onboarding.
+      {/* Issue #1413: non-AWS (sakura/azure/gcp) per-team credential onboarding.
           Feature-flagged off until the non-AWS runtimes are verified end-to-end. */}
       {config.features?.nonAwsRuntime ? <TeamCloudCredentialsPanel config={config} /> : null}
 

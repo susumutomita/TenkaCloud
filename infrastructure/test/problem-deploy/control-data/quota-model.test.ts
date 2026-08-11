@@ -6,7 +6,7 @@ import {
 } from "../../../lib/problem-deploy/control-data/quota-model.js";
 
 describe("estimateControlDataQuota", () => {
-  it("should keep the ADR-049 event-day profile below one percent of both monthly quotas", () => {
+  it("should keep the event-day profile below one percent of both monthly quotas", () => {
     const estimate = estimateControlDataQuota({
       participantCount: 300,
       leaderboardPollIntervalSeconds: 30,

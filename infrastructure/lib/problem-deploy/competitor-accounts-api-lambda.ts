@@ -24,7 +24,7 @@ export interface CompetitorAccountsApiLambdaProps {
   /** SSM SecureString path 構築用 (`/<env>/tenants/<tenantId>/external-id`)。 */
   readonly environmentName: string;
   /**
-   * Issue #950 (ADR-020 Phase D): admin 操作 audit log 用 DDB Table。 deploy-api-lambda と同じ。
+   * Issue #950: admin 操作 audit log 用 DDB Table。 deploy-api-lambda と同じ。
    */
   readonly adminAuditLogTable?: Table;
   /**
@@ -32,7 +32,7 @@ export interface CompetitorAccountsApiLambdaProps {
    */
   readonly auditLogEnabled?: boolean;
   /**
-   * Issue #2290 (ADR-049 §5.1): control-plane data backend (dynamodb|turso)。監査 Lambda 群と
+   * Issue #2290: control-plane data backend (dynamodb|turso)。監査 Lambda 群と
    * lockstep で env を配線する。default (未指定 / `dynamodb`) は env を足さず byte 互換。
    */
   readonly controlDataBackend?: string;
@@ -47,7 +47,7 @@ export interface CompetitorAccountsApiLambdaProps {
 }
 
 /**
- * Competitor Accounts API Lambda (Issue #459 / ADR-002 Phase 2.1)。
+ * Competitor Accounts API Lambda (Issue #459)。
  *
  * tenant API (TenantTemplateStack の REST API + Cognito JWT authorizer) から
  * `LambdaIntegration` で invoke される。Hono routes:
@@ -110,7 +110,7 @@ export class CompetitorAccountsApiLambda extends Construct {
     // 1. DDB CompetitorAccounts: PutItem / Query / GetItem / UpdateItem / DeleteItem
     // Issue #2442: 純 SQL backend では table 自体が無いので grant も付与しない。
     props.competitorAccountsTable?.grantReadWriteData(this.fn);
-    // Issue #950 (ADR-020 Phase D): admin audit log は write-only。
+    // Issue #950: admin audit log は write-only。
     props.adminAuditLogTable?.grantWriteData(this.fn);
 
     // 2. SSM Parameter Store SecureString — tenant の path prefix で絞り込み。
@@ -120,7 +120,7 @@ export class CompetitorAccountsApiLambda extends Construct {
       stack.account,
       props.environmentName,
     );
-    // [ADR-026/027/032 / #1413] per-team cloud credential onboarding。 同 Lambda が TenantAdmin の
+    // [#1413] per-team cloud credential onboarding。 同 Lambda が TenantAdmin の
     // register/rotate/revoke で sakura/azure/gcp の SecureString を Put/Delete/Get する。 ExternalId と
     // 同じ prefix-scope (tenantId / teamSlug は wildcard) で最小権限を保つ。
     const credentialSsmArns = [

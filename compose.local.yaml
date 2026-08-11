@@ -1,4 +1,4 @@
-# [#2906 / ADR-055] Docker-only participant local-play control plane.
+# [#2906] Docker-only participant local-play control plane.
 #
 # Invoked by scripts/local/docker-launcher.sh (which `make local` / `make
 # local-down` / `make local-status` call) — not meant to be run with a bare
@@ -27,7 +27,7 @@ services:
     # HOST's own network namespace, so its 127.0.0.1 genuinely IS the host's
     # — the same relationship the pre-#2906 host Bun process had, restored.
     # This container already holds the Docker socket (below), which is
-    # already root-equivalent host access (ADR-055 §2.3) — host networking
+    # already root-equivalent host access — host networking
     # adds no privilege beyond what that mount already grants; a process with
     # docker.sock could start a `--network host` sibling itself regardless.
     # Requires Docker Desktop >=4.34 on macOS/Windows (host networking was
@@ -39,8 +39,9 @@ services:
     # process does today (scripts/local-play/docker-adapter.ts, unchanged) —
     # moved into a container, not a newly granted capability. Never forward
     # this socket into the portal's own responses or into any per-problem
-    # container. See ADR-055 for the full trust-boundary writeup, including
-    # why a docker-socket-proxy sidecar was considered and rejected here.
+    # container. A docker-socket-proxy sidecar would not remove the need to
+    # create and control arbitrary problem containers, so it would not reduce
+    # this trust boundary.
     # The HOST side is whichever socket the active Docker context uses, resolved
     # by docker-launcher.sh — rootless Docker puts it under $XDG_RUNTIME_DIR, not
     # /var/run, and hardcoding the rootful path there produced a container that

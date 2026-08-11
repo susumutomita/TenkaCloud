@@ -35,7 +35,7 @@ export interface SamlIdpLambdaProps {
    */
   readonly idpTierGuard: "silo";
   /**
-   * Issue #2290 (ADR-049 §5.1): control-plane data backend (dynamodb|turso)。他の C-series
+   * Issue #2290: control-plane data backend (dynamodb|turso)。他の C-series
    * Lambda 群と lockstep で env を配線する。default (未指定 / `dynamodb`) は env を足さず byte 互換。
    */
   readonly controlDataBackend?: string;

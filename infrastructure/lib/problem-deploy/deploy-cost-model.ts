@@ -1,5 +1,5 @@
 /**
- * Issue #2291 (ADR-049 §9): the Step Functions cost model for the Lambda deploy path, and the poll
+ * Issue #2291: the Step Functions cost model for the Lambda deploy path, and the poll
  * interval it is tuned against.
  *
  * The migration off CodeBuild replaced a 5-15 min `.sync` build (billed as CodeBuild compute — the
@@ -15,7 +15,7 @@
  * so `transitions(deploy) = FIXED + CYCLE * ceil(deploySeconds / pollIntervalSeconds)`.
  *
  * At {@link DEPLOY_STATUS_POLL_INTERVAL_SECONDS} = 30s a typical 5-min deploy is ≈33 transitions, so a
- * 750-deploy wave is ≈24.75k transitions ≈ $0.62 — validating the ADR-049 §9 ≈$0.7/wave estimate. A
+ * 750-deploy wave is ≈24.75k transitions ≈ $0.62 — validating the ≈$0.7/wave estimate. A
  * 15s interval doubled the poll count (≈$1.18/wave for the same wave) and bought no meaningful UX on a
  * multi-minute operation, so it overshot the target. The interval is a single shared constant so the
  * create and delete poll loops stay in sync and the cost model stays valid.

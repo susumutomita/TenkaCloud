@@ -1,5 +1,5 @@
 /**
- * Issue #2290 (ADR-049 §5.1): control-plane data backend の選択フラグを Lambda env へ落とす
+ * Issue #2290: control-plane data backend の選択フラグを Lambda env へ落とす
  * CDK helper (`audit-log-env.ts` の mirror)。
  *
  * Events / Teams repository を組み立てる handler (event-handler の `getEventDetail`) は

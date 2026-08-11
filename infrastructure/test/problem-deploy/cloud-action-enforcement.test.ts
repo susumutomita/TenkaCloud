@@ -1,5 +1,5 @@
 /**
- * Issue #2019 / ADR-017: unit tests for the deploy-side enforcement glue
+ * Issue #2019: unit tests for the deploy-side enforcement glue
  * (`cloud-action-enforcement.ts`). The pure verdict logic is covered 100% in
  * `packages/trust-bridge`; here we cover the env parsing, policy assembly, and
  * the paginated replacement lookup.

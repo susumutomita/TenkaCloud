@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppConfig } from "../../../src/config";
 
 /**
- * [ADR-032 / #1413] TeamCloudCredentialsPanel の 100% pin。 provider Select / teamSlug / credential JSON /
+ * TeamCloudCredentialsPanel の provider Select / teamSlug / credential JSON /
  * register (valid→success / invalid JSON→error / API error) / revoke / status (registered/unregistered) /
  * slug invalid disable / apiClient null disable / notice dismiss を網羅する。
  */

@@ -35,13 +35,13 @@ export interface UptimeMultiScoringMetadata {
   readonly probedSlots: readonly UptimeMultiProbedSlot[];
   readonly pointsAllOk: number;
   readonly failurePenalty?: number;
-  /** [ADR-034 / #1666] optional attack-blocked bonus (counter-delta * pointsPerBlock). */
+  /** Issue #1666: optional attack-blocked bonus (counter-delta * pointsPerBlock). */
   readonly attackBlocked?: {
     readonly slot: string;
     readonly path: string;
     readonly pointsPerBlock: number;
   };
-  /** [ADR-034 / #1666] optional attack-probes (scorer-side defense test). */
+  /** Issue #1666: optional attack-probes (scorer-side defense test). */
   readonly attackProbes?: readonly {
     readonly slot: string;
     readonly path: string;
@@ -161,7 +161,7 @@ function parseProbeDisplayString(value: unknown, maxLen: number): string | undef
   return trimmed.length > maxLen ? trimmed.slice(0, maxLen) : trimmed;
 }
 
-/** [ADR-034 / #1666] parse one attack-probe fail-safe. slot/path/vulnerableStatus/penalty required. */
+/** Issue #1666: parse one attack-probe fail-safe. slot/path/vulnerableStatus/penalty required. */
 function parseAttackProbe(
   value: unknown,
 ): NonNullable<UptimeMultiScoringMetadata["attackProbes"]>[number] | undefined {
@@ -198,7 +198,7 @@ function parseAttackProbe(
   };
 }
 
-/** [ADR-034 / #1666] attack-blocked bonus enabled only when slot/path/pointsPerBlock all present. */
+/** Issue #1666: attack-blocked bonus enabled only when slot/path/pointsPerBlock all present. */
 function parseAttackBlocked(
   value: unknown,
 ): UptimeMultiScoringMetadata["attackBlocked"] | undefined {

@@ -88,8 +88,7 @@ export const fileTooLarge: Rule = {
         recommendation:
           "責務単位で sub-module / sub-component に分割を検討してください。 例: " +
           "Lambda handler index.ts は routes (Hono routing) / service (business rule) / repository (SDK adapter) の 3 層に分割。 " +
-          "React page は modal / table / form 等を sub-component に切り出し、 page 自体は orchestrator にする。 " +
-          "Issue #986 (= SOLID 監査 epic) Phase B / C を参照。",
+          "React page は modal / table / form 等を sub-component に切り出し、 page 自体は orchestrator にする。",
       });
     }
     return findings;

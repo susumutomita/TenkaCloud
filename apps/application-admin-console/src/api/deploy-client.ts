@@ -54,8 +54,8 @@ function stackOutputMapToRecord(entries: Record<string, unknown>): Record<string
 
 export type DeploymentStatus =
   | "PENDING"
-  // Issue #2019 / ADR-017: held by TrustBridge enforcement pending operator
-  // approval. In-flight (no stack yet), not terminal.
+  // Issue #2019: TrustBridge が operator approval を待つ間の状態。stack 未作成の
+  // in-flight 状態であり、terminal ではない。
   | "APPROVAL_PENDING"
   | "IN_PROGRESS"
   | "COMPLETE"

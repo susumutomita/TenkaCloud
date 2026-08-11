@@ -103,8 +103,8 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
     convertSbtTenantRegistrationTable: config.isDynamoProvisioned,
   });
 
-  // ADR-003 Phase 2 / catalog split: TenkaCloudChallenge repo の publish.yml が S3 に
-  // payload を push するための bucket + OIDC IAM Role を立てる。 config.challengePayload が
+  // TenkaCloudChallenge の publish workflow が payload を S3 に push するための bucket と
+  // OIDC IAM Role を立てる。config.challengePayload が
   // 設定されていれば stack を立てる (= 旧 env override `CDK_PARAM_CHALLENGE_PAYLOAD_BUCKET`
   // は互換目的で残す = override 優先)。
   const challengePayloadStack = createChallengePayloadStack(app, config);
@@ -194,10 +194,10 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
       competitorBootstrapTemplateUrl: problemDeployBackendStack.competitorBootstrapTemplateUrl,
       // Issue #1340 Phase 2: opt-in per-tenant SAML SSO (= 未設定なら空配列で no-op)。
       // pooled tier では本 props を受けても TenantTemplateStack が `isPooledDeploy` で
-      // ignore するため、 pooled / silo どちらでも同 env を渡してよい (ADR-018 と整合)。
+      // ignore するため、 pooled / silo どちらでも同 env を渡してよい (既存の分離契約と整合)。
       samlIdps: config.tenantSamlIdps,
       samlAdminAllowlist: config.tenantSamlAdminAllowlist,
-      // Issue #2230 (ADR-035): deploy 時 feature flag override を runtime-config に焼く。
+      // Issue #2230: deploy 時 feature flag override を runtime-config に焼く。
       features: config.features,
     },
   );
@@ -230,7 +230,7 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
       // admin-insight Lambda が ListExecutions で履歴を引けるようにする。
       deprovisioningStateMachineArn: bootstrapTemplateStack.deprovisioningStateMachineArn,
       provisioningStateMachineArn: bootstrapTemplateStack.provisioningStateMachineArn,
-      // Issue #950 (ADR-020 Phase D): admin audit log table を cross-stack read で渡す
+      // Issue #950: admin audit log table を cross-stack read で渡す
       adminAuditLogTable: problemDeployBackendStack.adminAuditLogTable,
       // Issue #2311: 監査ログ feature flag を admin-insight / sign-in-audit Lambda 群へ伝播。
       auditLogEnabled: config.auditLogEnabled,
@@ -383,7 +383,7 @@ export function buildTenkaCloudApp(app: cdk.App, config: AppConfig): TenkaCloudA
       // Issue #1335 Phase 1: SAML HRD directory (domain → providerName[])。 admin-console Login が
       // email から候補 IdP を解決して `identity_provider=` を組み立てる (= 公開 metadata、 非秘匿)。
       samlIdpDirectory: controlPlaneStack.samlIdpDirectory,
-      // Issue #2230 (ADR-035): deploy 時 feature flag override (admin-console 側 registry 用)。
+      // Issue #2230: deploy 時 feature flag override (admin-console 側 registry 用)。
       features: config.features,
     },
   );

@@ -12,7 +12,7 @@ import {
 } from "./shared.js";
 
 /**
- * #1422 (ADR-013 Phase 2): scoring tick の condition-triggered disruption 発火 I/O。
+ * #1422: scoring tick の condition-triggered disruption 発火 I/O。
  *
  * 純粋な trigger 評価は {@link evaluateDisruptionTriggers} (disruption-triggers.ts) に閉じ、
  * 本 module は「評価 → publish → idempotency 永続化」 の副作用 (EventBridge / DDB) だけを担う。
@@ -69,7 +69,7 @@ export async function maybeFireConditionDisruptions(
   // を base に firedDisruptions だけ merge する (= bonusAwarded / attackCount を温存)。
   const { activeEffects: priorEffects, ...baseState } = result.newState ?? prevState;
   const mergedFired = [...alreadyFired, ...fired.map((f) => f.disruptionId)];
-  // [ADR-033 / #1665] fire した disruption が effect を宣言していれば減点 window を記録する。
+  // [#1665] fire した disruption が effect を宣言していれば減点 window を記録する。
   // 期限切れの prior 効果は prune し、 新規発火分を足す (= 次 tick 以降 applyDisruptionEffects が適用)。
   const survivingPrior = (priorEffects ?? []).filter((e) => e.expiresAtMs > nowMs);
   const newEffects = fired.flatMap((f) => {
@@ -115,7 +115,7 @@ async function publishConditionDisruptions(
         requestId: `${item.jobId}#${f.disruptionId}`,
         firedAt,
         triggeredBy: f.triggerKind,
-        // [ADR-037 Slice 3] 宣言されていれば executor が rate() schedule で定期化する (= score-gated 定期妨害)。
+        // 宣言されていれば executor が rate schedule で定期化する (score-gated 定期妨害)。
         ...(f.recurrence ? { recurrence: f.recurrence } : {}),
       }),
     },

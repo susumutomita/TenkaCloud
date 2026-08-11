@@ -125,7 +125,7 @@ describe("書籍導線 (#2971)", () => {
     // 表現は面ごとに違ってよいが、リポジトリ側が正本だという趣旨は落とさない。
     const claims: [string, RegExp][] = [
       ["README.md", /source of truth for how it currently works/i],
-      ["README.ja.md", /現行仕様の正本はこのリポジトリ/],
+      ["README.ja.md", /現行挙動の正本はこのリポジトリ/],
       ["landing/llms.txt", /not\*\* a specification/i],
       ["landing/llms-full.txt", /not\*\* a specification/i],
       [

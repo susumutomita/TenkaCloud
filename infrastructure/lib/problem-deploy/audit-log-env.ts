@@ -1,5 +1,5 @@
 /**
- * Issue #2311 (ADR-049 cost-zero): 監査ログ feature flag を Lambda env へ落とす CDK helper。
+ * Issue #2311: 監査ログ feature flag を Lambda env へ落とす CDK helper。
  *
  * 監査を書く Lambda (deploy-api / event-api / competitor-accounts-api / system-audit-writer /
  * sign-in-audit / admin-insight) は全て `handlers/shared/audit-log.ts` の `writeAuditEvent` を

@@ -1,9 +1,9 @@
 /**
- * [ADR-027 / ADR-032 / Issue #1411] Concrete GCP STS + IAM Credentials REST client.
+ * [Issue #1411] Concrete GCP STS + IAM Credentials REST client.
  *
  * trust-bridge の `GcpStsClient` (= `GcpWorkloadIdentityFederationExchange` の注入境界) を実 GCP REST API に
  * 実装する。 2 段の token 交換を担う:
- *   1. STS token exchange: subject token (= AWS-signed GetCallerIdentity、 ADR-032) を WIF pool の
+ * 1. STS token exchange: subject token (AWS-signed GetCallerIdentity) を WIF pool の
  *      federated access token に交換 (`https://sts.googleapis.com/v1/token`)。
  *   2. service account impersonation: federated token を per-team SA の短命 access token に交換
  *      (`https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/{email}:generateAccessToken`)。

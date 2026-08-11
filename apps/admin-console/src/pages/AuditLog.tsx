@@ -104,7 +104,7 @@ function triggerCsvDownload(blob: Blob, filename: string): void {
 }
 
 /**
- * Issue #950 (ADR-020 Phase D): SystemAdmin Console 側の admin 操作監査ログ view。
+ * Issue #950: SystemAdmin Console 側の admin 操作監査ログ view。
  *
  * 表示: scope (= tenant or system) + tenantId を入力 → 1 ページ 50 件、 cursor で次ページ。
  * outcome は success / forbidden / not_found / conflict / error で badge 色分け。

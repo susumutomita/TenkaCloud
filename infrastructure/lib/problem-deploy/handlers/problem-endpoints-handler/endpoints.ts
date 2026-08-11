@@ -6,7 +6,7 @@ import { type ResolvedEndpoint, resolveEndpoints } from "./resolve.js";
 import { deleteOverride, putOverride, queryOverrides } from "./store.js";
 
 /**
- * Endpoint registry (ADR-012 Phase 3.A) の business logic。
+ * Endpoint registry の business logic。
  *
  * 流れ:
  *   1. teamLoginKey で team の deployments を引く (= GSI2 Query)

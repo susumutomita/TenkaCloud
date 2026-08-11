@@ -1,12 +1,12 @@
 name: destroy-always-on-runtime
 
-# ADR-049 Phase 4 (Issue #2363) — Always-On per-event runtime lifecycle (destroy).
+# Issue #2363 — Always-On per-event runtime lifecycle (destroy).
 #
 # Tears down ONLY the per-event runtime stack (tenkacloud-event-runtime-<eventId>) via
 # `make destroy-always-on-runtime` — the single stack for this event, never `--all`, so it
-# cannot take down other events' runtimes or the shared ingress. Mirrors
+# cannot take down other events' runtimes or the event-independent command seam. Mirrors
 # deploy-always-on-runtime.yml: GitHub OIDC only (sts:AssumeRoleWithWebIdentity), no
-# long-lived AWS access keys, same environment / permission hardening (ADR-049 §12).
+# long-lived AWS access keys, with the same environment / permission hardening as deploy.
 
 on:
   workflow_dispatch:
@@ -42,7 +42,7 @@ concurrency:
 jobs:
   destroy:
     runs-on: ubuntu-latest
-    # ADR-049 §12: run inside a protected GitHub Environment so its reviewers / branch
+    # Run inside a protected GitHub Environment so its reviewers / branch
     # rules gate the teardown, and the OIDC sub claim (repo:...:environment:*) matches.
     environment: always-on-runtime
     steps:

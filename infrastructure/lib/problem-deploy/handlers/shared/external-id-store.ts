@@ -10,7 +10,7 @@ import { isParameterNotFound, isParameterVersionNotFound } from "./ssm-parameter
 
 /**
  * SSM Parameter Store SecureString ベースの per-tenant ExternalId ストア
- * (Issue #459 / ADR-002 Decision 2.2)。
+ * (Issue #459)。
  *
  * path 規約: `/{env}/tenants/{tenantId}/external-id`
  *   - 1 tenant 1 値 (Decision 1 = A2 と整合: 同 tenant 配下の複数 competitor account は同じ ExternalId を共有)
@@ -126,7 +126,7 @@ export async function getExternalIdByVersion(
 /**
  * tenant の ExternalId が無ければ生成 + Put して返す。既存なら既存値を返す (= 冪等)。
  *
- * 「Add account」を 2 回目以降に押しても ExternalId は **回さない** (ADR-002 Decision 3.1)。
+ * 「Add account」を 2 回目以降に押しても ExternalId は **回さない**。
  */
 export async function ensureExternalId(
   deps: ExternalIdStoreDeps,

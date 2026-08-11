@@ -7,7 +7,7 @@ import { SamlIdpsTable } from "../problem-deploy/saml-idps-table.js";
 import type { SamlIdpConfig } from "../tenant-template/saml-identity-providers.js";
 
 /**
- * Issue #778 ADR-016 Phase 3: TenkaCloud Lite mode の専用 stack。
+ * Issue #778: TenkaCloud Lite mode の専用 stack。
  *
  * AppPlaneCore (tenantId=local) を 1 つ立てて Application Admin Console + tenant API
  * + Cognito Hosted UI を自己完結で deploy する。 ControlPlaneStack / BootstrapTemplateStack
@@ -54,10 +54,10 @@ export interface TenkaCloudLiteStackProps extends StackProps {
    * 空配列 = federated sign-in 全拒否 (fail-safe)。
    */
   readonly samlAdminAllowlist?: readonly string[];
-  /** Issue #2230 (ADR-035): runtime-config.json に焼く SPA feature flag override (未設定 = key なし)。 */
+  /** Issue #2230: runtime-config.json に焼く SPA feature flag override (未設定 = key なし)。 */
   readonly features?: Readonly<Record<string, boolean>>;
   /**
-   * [Issue #2442 / Phase C5 / ADR-049 §5.1] control-plane data backend
+   * [Issue #2442] control-plane data backend
    * (dynamodb|turso)。 純 SQL (`turso`) のときは
    * `SamlIdpsTable` を synth しない (= DynamoDB standing cost をゼロにする A5/B6/C1-C4 と同じ
    * 条件)。 default 未指定 / `dynamodb` は既存 CFn と byte 互換。

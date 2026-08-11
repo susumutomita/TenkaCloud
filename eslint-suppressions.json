@@ -1,9 +1,4 @@
 {
-  ".claude/harness/src/rules/adr-self-contained.ts": {
-    "sonarjs/cognitive-complexity": {
-      "count": 1
-    }
-  },
   ".claude/harness/src/rules/agent-registry-consistency.ts": {
     "sonarjs/cognitive-complexity": {
       "count": 1
@@ -3229,14 +3224,6 @@
   "infrastructure/test/scripts/tenkacloud-turso-wizard.test.ts": {
     "@typescript-eslint/array-type": {
       "count": 1
-    }
-  },
-  "infrastructure/test/scripts/turso-live-guide.test.ts": {
-    "sonarjs/no-os-command-from-path": {
-      "count": 3
-    },
-    "sonarjs/slow-regex": {
-      "count": 13
     }
   },
   "infrastructure/test/security/cloudfront-headers.test.ts": {

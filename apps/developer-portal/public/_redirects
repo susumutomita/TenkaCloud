@@ -1,4 +1,4 @@
-# Cloudflare Pages redirects for the tenkacloud.com flip (#2408, ADR-0003 §10 stage 5).
+# Cloudflare Pages redirects for the tenkacloud.com flip (#2408, legacy-route migration).
 #
 # After the flip the developer portal serves tenkacloud.com. These rules keep the
 # old static-landing URLs alive so external links and search results do not 404.

@@ -148,7 +148,7 @@ export function buildConsoleUtility(
   t: Translate,
 ): TopNavigationProps.Utility {
   // [#2234] 非 AWS 行も deploy request 由来の awsAccountId を持つため、 provider でゲートする
-  // (= Sakura/Azure/GCP 問題に "Open AWS Console" を誤表示しない、 ADR-0001 の matrix)。
+  // (= Sakura/Azure/GCP 問題に "Open AWS Console" を誤表示しない)。
   const consolable = problems.filter((p) => problemProvider(p) === "aws" && p.awsAccountId);
   if (consolable.length === 0) {
     return {

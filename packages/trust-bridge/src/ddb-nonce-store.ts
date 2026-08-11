@@ -1,7 +1,7 @@
 import type { NonceStore } from "./verify.js";
 
 /**
- * Issue #1727 / ADR-039 §7 (Later): replay 防止を本番化する DDB-backed NonceStore。
+ * Issue #1727: replay 防止を本番化する DDB-backed NonceStore。
  *
  * PoC は in-memory Set で nonce を覚えていたが、 Lambda は warm/cold・水平スケールで
  * memory を共有しないため replay 防止にならない。 本 store は **conditional PutItem**

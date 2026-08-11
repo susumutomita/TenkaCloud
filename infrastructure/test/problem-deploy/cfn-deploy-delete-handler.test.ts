@@ -9,7 +9,7 @@ import {
 } from "../../lib/problem-deploy/handlers/cfn-deploy-handler/delete-stack.js";
 
 /**
- * Issue #2291 (ADR-049 §9): Lambda DeleteStack deploy handler unit tests (the DELETE mirror of
+ * Issue #2291: Lambda DeleteStack deploy handler unit tests (the DELETE mirror of
  * `cfn-deploy-handler.test.ts`). All AWS SDK clients are mocked via injected `send` fakes (no
  * network). The tests lock the behavior ported from `scripts/delete-battles.sh`: ExternalId
  * resolution + cross-account AssumeRole, the #1797 account-mismatch guard, DeleteStack idempotency

@@ -50,7 +50,7 @@ import {
 } from "./verify.js";
 
 /**
- * Competitor Accounts API Lambda の Hono app (Issue #459 / ADR-002 Phase 2.1)。
+ * Competitor Accounts API Lambda の Hono app (Issue #459)。
  *
  * routes (すべて tenant API + Cognito JWT authorizer 経由):
  *   POST   /admin/competitor-accounts                                    — register (= SSM Put + DDB Put)
@@ -101,7 +101,7 @@ app.onError(async (err, c) => {
       StatusCodes.UNAUTHORIZED,
     );
   }
-  // Issue #854 / ADR-020 Phase B.1 (#948): role 不一致は 403、 actualRole / requiredRoles は
+  // Issues #854 and #948: role 不一致は 403、 actualRole / requiredRoles は
   // body に出さず log にだけ残す (= attacker に attack surface を教えない)。
   if (err instanceof ForbiddenRoleError) {
     console.warn("[competitor-accounts] forbidden role", {
@@ -110,7 +110,7 @@ app.onError(async (err, c) => {
       actualRole: err.actualRole,
       requiredRoles: err.requiredRoles,
     });
-    // Issue #950 (ADR-020 Phase D): forbidden_role を audit に残す (= 「誰が何を試みたか」 が
+    // Issue #950: forbidden_role を audit に残す (「誰が何を試みたか」 が
     // 1 query で引ける)。 tenantId 不明 (= claim 不在 / 越境) の場合は "unknown" を入れる。
     const auditCtx = extractAuditContext(c);
     let tenantId = "unknown";
@@ -149,7 +149,7 @@ app.onError(async (err, c) => {
   return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
 });
 
-// ADR-020 Phase B.1 (#948): /admin/* は 「tenant 内の認証済 user」 (= Admin / Operator / Viewer
+// Issue #948: /admin/* は 「tenant 内の認証済 user」 (Admin / Operator / Viewer
 // のいずれか) を要求する。 destructive 操作 (= POST / DELETE / PATCH) は各 route の 1 行目で
 // `requireRole(c, [TENANT_ADMIN_ROLE])` を呼んで Admin 限定にする。 GET 系のうち
 // `/admin/competitor-accounts` は 3 role 全部 pass (= EventCreate 画面 dropdown populate に
@@ -172,7 +172,7 @@ app.get("/admin/competitor-accounts/healthz", (c) => c.json({ ok: true }));
 
 // Issue #839 follow-up Phase B: Tenant 管理者が画面 / API から SAML IdP を CRUD する経路。
 // 同 Lambda に同居させる (= 同 IAM / auth、 別 handler 化は Phase 3 で再評価)。
-// ADR-020 Phase B.1 (#948): SAML 設定は sensitive config なので GET も含めて Admin only。
+// Issue #948: SAML 設定は sensitive config なので GET も含めて Admin only。
 app.get("/admin/tenant-saml-config", async (c) => {
   requireRole(c, [TENANT_ADMIN_ROLE]);
   const result = await routeGet({ shared }, c);
@@ -355,7 +355,7 @@ app.delete("/admin/competitor-accounts/:awsAccountId", async (c) => {
   }
 });
 
-// [ADR-026/027/032 / Issue #1413] per-team cloud credential onboarding (sakura/azure/gcp)。
+// [Issue #1413] per-team cloud credential onboarding (sakura/azure/gcp)。
 // TenantAdmin が非 AWS 問題の deploy 前に per-team 認証情報を SSM SecureString store に登録 / 失効する。
 // path: /admin/team-cloud-credentials/{provider}/{teamSlug}。 tenantId は JWT claim (body 非信頼)。
 const TEAM_SLUG_RE = /^[a-z0-9-]+$/;

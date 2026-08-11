@@ -34,7 +34,7 @@ import { type JsonSchema, zodToJsonSchema } from "./zod-json-schema.ts";
 const OPENAPI_VERSION = "3.1.0";
 const SECURITY_SCHEME_NAME = "TenkaCloudMachineOAuth";
 
-/** operation ごとの capability を機械可読にする拡張 (ADR-0004 の capability ラベルに倣う)。 */
+/** operation ごとの required capability を機械可読にする拡張。 */
 export const CAPABILITY_EXTENSION = "x-tenkacloud-capability";
 
 export interface OpenApiOperation {
@@ -252,7 +252,7 @@ export function buildMachineApiSpec(): OpenApiDocument {
       title: "TenkaCloud Machine API",
       version: "1.1.0",
       description:
-        "Machine-to-machine surface of the TenkaCloud Tenant API (ADR-0005 Phase 1). " +
+        "Machine-to-machine surface of the TenkaCloud Tenant API. " +
         "A machine principal holds the role `TenantMachine`, which no destructive route accepts, " +
         "so the operations below are the complete surface reachable with a machine credential. " +
         "This reference is generated from the platform's own route table and validation schemas.",

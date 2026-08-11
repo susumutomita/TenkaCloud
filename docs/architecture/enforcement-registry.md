@@ -21,8 +21,6 @@
 
 | Rule ID | Principle | Scope | Severity |
 | --- | --- | --- | --- |
-| `adr-must-be-html` | `PRINCIPLE_EXPLICIT_GAPS` | architecture decision records | error |
-| `adr-self-contained` | `PRINCIPLE_EXPLICIT_GAPS` | architecture decision records | error |
 | `agent-registry-consistency` | `PRINCIPLE_EVIDENCE_OVER_CONFIDENCE` | principle / enforcement / rule metadata | error |
 | `domain-no-infra-import` | `PRINCIPLE_ONE_PASS_PRODUCT_SLICE` | control-data domain | error |
 | `file-too-large` | `PRINCIPLE_ONE_PASS_PRODUCT_SLICE` | application / infrastructure source | warning / error |
@@ -62,6 +60,7 @@
 | coverage gate | `PRINCIPLE_COMPLETION_REQUIRES_AUDIT` | CI | agent-owned workspace coverage |
 | CDK `Template.fromStack` | `PRINCIPLE_PHYSICAL_EFFECTS_ARE_BEHAVIOR` | test / CI | generated CFn shape |
 | `make check-synth` | `PRINCIPLE_PHYSICAL_EFFECTS_ARE_BEHAVIOR` | local / CI | synth and IAM description constraints |
+| PR residual-risk review | `PRINCIPLE_EXPLICIT_GAPS` | PR review | remaining risks and unverified conditions must stay explicit |
 | dependency lifecycle audit | `PRINCIPLE_EXPLICIT_TRUST_BOUNDARY` | CI | install-script attack surface drift |
 | duplication baseline ratchet | `PRINCIPLE_ONE_PASS_PRODUCT_SLICE` | CI | unexamined copy-paste growth |
 | problem catalog validation | `PRINCIPLE_ONE_PASS_PRODUCT_SLICE` | CI | schema and bilingual README contract |
@@ -100,7 +99,7 @@ commit の最終 gate は `.husky/pre-commit` と CI を正本とします。上
 - `ONE_PASS_LOCAL`。
 - `ONE_PASS_AWS`。
 
-これらは Principle Registry、ADR、PR body、review、実行証拠で監査します。機械化できる部分が見つかった場合は、小さな enforcement rule と test を追加します。
+これらは Principle Registry、PR body、review、実行証拠で監査します。機械化できる部分が見つかった場合は、小さな enforcement rule と test を追加します。
 
 ## 例外手続き
 
@@ -110,5 +109,5 @@ commit の最終 gate は `.husky/pre-commit` と CI を正本とします。上
 
 1. rule の誤検知ではなく設計例外である証拠を示す。
 2. trust boundary、影響範囲、代替防御を記録する。
-3. self-contained な ADR で supersede または scope を限定する。
+3. 例外の scope と代替防御を、該当 code と test の近くに記録する。
 4. implementation、test、manifest、本レジストリ、関連 Skill を同じ PR で更新する。

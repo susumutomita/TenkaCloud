@@ -22,12 +22,11 @@ import { formatProblemPanelActionError, type ProblemPanelT } from "./ProblemPane
  * xterm.js のような pty emulator は不要 — 素の `<pre>` scrollback + 1 行 `<Input>` で足りる
  * (行編集もプロンプトも無い、 1 行送って出力を待つだけの console)。
  *
- * WebSocket 自体は ADR-014 (frontend polling-only) の例外。 同 ADR の Frontend row は AWS 向け
- * request-scoped Lambda を前提にしており、 local-play backend は単一長期プロセスなので
- * 「connection registry も fan-out cost も要らない」 という ADR の反対理由がそもそも
- * 成立しない (`scripts/local-play/problem-terminal.ts` 参照)。 AWS mode はこの endpoint 自体を
+ * Frontend の polling-only 原則は AWS 向け request-scoped Lambda を前提にしている。一方、local-play
+ * backend は単一の長期プロセスで、connection registry や fan-out を追加せず WebSocket を終端できる
+ * (`scripts/local-play/problem-terminal.ts` 参照)。AWS mode はこの endpoint 自体を
  * 持たない (`runtimeKind` が "docker" になるのは local-play だけ) ので、 この component が
- * ADR-014 の対象範囲外であることは呼び出し条件そのものが保証する。
+ * 持たないため、この local-only WebSocket 境界は呼び出し条件そのものが保証する。
  */
 
 const MAX_SCROLLBACK_LINES = 500;

@@ -92,9 +92,19 @@ describe("repository-local CDK CLI contract", () => {
     expect(tenantPipeline).not.toContain("npm install -g aws-cdk");
   });
 
+  it("should not export a bare CDK variable that the CLI parses as an empty option", () => {
+    const makefile = readFileSync(join(REPO_ROOT, "Makefile"), "utf8");
+
+    expect(makefile).toContain("REPO_CDK :=");
+    expect(makefile).not.toMatch(/^CDK\s*[:+?]?=/mu);
+  });
+
   it.each([
     "synth",
     "check-synth",
+    "deploy-always-on-runtime-role",
+    "synth-always-on-runtime-role",
+    "destroy-always-on-runtime-role",
     "deploy-always-on-command",
     "synth-always-on-command",
     "destroy-always-on-command",
@@ -108,9 +118,18 @@ describe("repository-local CDK CLI contract", () => {
   it.each([
     "synth",
     "check-synth",
+    "synth-always-on-runtime-role",
     "synth-always-on-command",
     "synth-always-on-runtime",
   ])("should not pass the removed --all option to make %s", (target) => {
     expect(makeDryRun(target)).not.toMatch(/\bcdk synth\b[^\n]*\s--all(?:\s|$)/);
+  });
+
+  it.each([
+    ["synth-always-on-runtime-role", "bin/tenkacloud-always-on-oidc.ts"],
+    ["synth-always-on-command", "bin/tenkacloud-always-on-command.ts"],
+    ["synth-always-on-runtime", "bin/tenkacloud-always-on-runtime.ts"],
+  ])("should run make %s through its dedicated CDK entrypoint", (target, entrypoint) => {
+    expect(makeDryRun(target)).toContain(`--app "bunx tsx ${entrypoint}"`);
   });
 });

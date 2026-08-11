@@ -9,7 +9,7 @@ import {
  * Issue #1035: SystemAdmin の MFA / password policy が緩む方向に書き換えられないよう値を pin する。
  * ここの定数値は control-plane-stack.ts が SBT 内蔵 UserPool に escape hatch で flush している。
  *
- * tenant-template/identity-provider.ts (TenantAdmin 側、 ADR-020 Phase E) と同方針 — TOTP only /
+ * tenant-template/identity-provider.ts の TenantAdmin 側と同方針 — TOTP only /
  * SMS なし / 12 文字以上 / 4 種混在 を baseline とする。
  */
 describe("SystemAdmin の Cognito UserPool MFA / password policy (Issue #1035)", () => {

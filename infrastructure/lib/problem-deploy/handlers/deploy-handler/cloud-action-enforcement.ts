@@ -18,7 +18,7 @@ import { resolveDeploymentsRepository } from "./shared.js";
 import type { DeploymentStatus, DeployResponse } from "./types.js";
 
 /**
- * Issue #2019 / ADR-017: staged enforcement gate for the single-deploy path.
+ * Issue #2019: staged enforcement gate for the single-deploy path.
  *
  * This is the *infrastructure-side* glue around the pure
  * `evaluateCloudActionRisk` policy in `@TenkaCloud/trust-bridge`. It:

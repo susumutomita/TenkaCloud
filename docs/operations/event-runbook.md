@@ -10,7 +10,7 @@ Issue #2407。TenkaCloud で 1 回のイベント (Battle / Challenge) を運営
 | --- | --- | --- | --- |
 | Lite (単一テナント、デフォルト) | `make deploy` / Console から `lite-pipeline.yaml` | 2 スタック (`ProblemDeployBackendStack` + `TenkaCloudLiteStack`)。Tenant Admin Console + Participant Portal。`tenantId="local"` 固定 | 主催者 1 人 / 1 イベント |
 | SaaS (マルチテナント) | `make deploy-saas` (`scripts/install.sh`) | SBT ControlPlane + Bootstrap + pooled Tenant + 各 SPA hosting。System Admin 招待あり | 複数テナント / 常設運用 |
-| Always-On (ADR-049) | Cloudflare Worker + `make deploy-always-on-command` + `make deploy-always-on-runtime` | 常時稼働ゼロ。イベント期間だけ per-event runtime スタック | イベント間の AWS 常時コストを 0 にしたいとき |
+| Always-On | Cloudflare Worker + `make deploy-always-on-command` + `make deploy-always-on-runtime` | 常時稼働ゼロ。イベント期間だけ per-event runtime スタック | イベント間の AWS 常時コストを 0 にしたいとき |
 
 - Lite / SaaS は AWS の 1 分 tick (EventBridge `rate(1 minute)`) で採点する。
 - Always-On は per-event runtime スタック内の同じ 1 分 tick で Battle を採点し、Flag は Worker 側で採点する。イベント終了後に runtime を destroy すれば AWS 側の常時課金は消える。
@@ -66,7 +66,7 @@ launcher stack 削除
   - Participant Portal の URL (`tenkacloud-problem-deploy` / Lite は `tenkacloud-lite-problem-deploy`)。
   - Admin Console / Application Admin Console の URL。
   - `EventCapacityRunbookName` (キャパシティ変更に使う SSM Automation document 名)。
-- `.env` に `TENANT_ADMIN_EMAIL` (Lite) または `SYSTEM_ADMIN_EMAIL` (SaaS)、`AWS_REGION`、`CDK_PARAM_DEPLOY_EXTERNAL_ID` が入っていること。Always-On はさらに ingress / runtime 用の `CDK_PARAM_*` が必要 (DEPLOYMENT_GUIDE.md / docs/always-on/README.md)。
+- `.env` に `TENANT_ADMIN_EMAIL` (Lite) または `SYSTEM_ADMIN_EMAIL` (SaaS)、`AWS_REGION`、`CDK_PARAM_DEPLOY_EXTERNAL_ID` が入っていること。Always-On の必須入力は、実行する workflow と `Makefile` の preflight を正本とする。
 
 ### 2. 競技アカウント (competitor account) の bootstrap 確認
 
@@ -165,7 +165,7 @@ Participant Portal のログインはチームログイン鍵そのものを bea
 
 - [dynamodb-event-capacity.md](./dynamodb-event-capacity.md) — イベント中のキャパシティ運用の詳細手順
 - [DEPLOYMENT_GUIDE.md](../../DEPLOYMENT_GUIDE.md) — Lite / SaaS の具体的なデプロイ手順
-- [docs/always-on/README.md](../always-on/README.md) — Always-On モードの運用
+- [DEPLOYMENT_GUIDE.md](../../DEPLOYMENT_GUIDE.md#always-on-operator-runbook) — Always-On モードの運用手順
 - [docs/local-play.md](../local-play.md) — AWS なしのローカル動作確認 (`make local`)
 - `infrastructure/templates/README.md` — 競技アカウント側の bootstrap 手順
 - 各問題の `OPERATOR.md` (catalog repo `battles/<id>/OPERATOR.md`) — 問題ごとの当日運用・赤チーム・撤収

@@ -4,7 +4,7 @@ import { describe, it } from "vitest";
 import { CfnDeployLambda } from "../../lib/problem-deploy/cfn-deploy-lambda";
 
 /**
- * Issue #2291 (ADR-049 §9): the Lambda deploy role must be least-privilege — the same privilege
+ * Issue #2291: the Lambda deploy role must be least-privilege — the same privilege
  * split as `DeployCodeBuildProject`'s build role (#1381): CFn stack ops scoped to `tc-*`,
  * `iam:PassRole` to the CFn exec role with `PassedToService=cloudformation`, `sts:AssumeRole`
  * only to `TenkaCloud-*` roles, `ssm:GetParameter` on the ExternalId param, `kms:Decrypt`

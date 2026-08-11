@@ -3,7 +3,7 @@ import type { KindHandlerInput, KindResult } from "../scoring-kernel.js";
 import { noopKindResult } from "../scoring-kernel.js";
 
 /**
- * `flag` kind (ADR-012 Phase 3.B)。
+ * `flag` kind。
  *
  * **採点は polling 経由では行わない**。Challenge の flag 提出は POST `/portal/me/.../submit-flag`
  * で event-triggered に走り、`participant-handler/submit-flag.ts` が一致比較 + 加点 + score

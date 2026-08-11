@@ -1,6 +1,6 @@
 # Reference coordination Battle pack
 
-The canonical worked example of the **ADR-028 inter-team coordination** contract:
+The canonical worked example of the **inter-team coordination** contract:
 a Battle problem that ships a pure coordination plugin the platform hosts. Copy it
 when authoring a Battle whose teams interact through shared state (routers,
 alliances, contested resources) rather than only through their own deployed stack.
@@ -32,7 +32,7 @@ At synth the platform bundles the plugin into a self-contained ES module; at
 runtime the minimal-IAM **coordination dispatcher** Lambda drives it for each op:
 read the one shared per-event row → `dispatchOp` (validate → apply) → optimistic
 write → `projectForTeam`. The dispatcher holds no cross-account credentials, so a
-plugin can never reach competitor accounts (ADR-028 / ADR-030). The plugin is a
+plugin can never reach competitor accounts. The plugin is a
 pure, deterministic reducer — no clock, network, or cloud SDK.
 
 ## The example: Cross-Account Capture
@@ -57,4 +57,4 @@ The live dispatcher is fed from the core `problems/` catalog today. This in-repo
 pack validates and is unit-tested against the coordination SDK as the reference
 consumer; carrying pack-declared coordination all the way through to a running
 dispatcher (pack activation) and wiring the scoring engine's per-tick `runTick`
-call are tracked as follow-up work in ADR-028.
+call are tracked as follow-up work in the relevant GitHub issues.

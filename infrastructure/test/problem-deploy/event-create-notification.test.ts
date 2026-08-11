@@ -33,7 +33,7 @@ const eventRow = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-describe("createNotification (ADR-006)", () => {
+describe("createNotification", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("event 不在は not_found", async () => {

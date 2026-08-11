@@ -1,5 +1,5 @@
 /**
- * [ADR-023 / Issue #1268] Integration tests for runtime-aware deploy
+ * [Issue #1268] Integration tests for runtime-aware deploy
  * dispatch in `startDeployment`.
  *
  * What we assert:
@@ -84,7 +84,7 @@ const sampleRequest = (overrides: Partial<DeployInvocation> = {}): DeployInvocat
   ...overrides,
 });
 
-describe("startDeployment with runtime-aware dispatch (ADR-023 / Issue #1268)", () => {
+describe("startDeployment with runtime-aware dispatch (Issue #1268)", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("should deploy legacy problems exactly as before when no resolver is injected", async () => {
@@ -163,14 +163,14 @@ describe("startDeployment with runtime-aware dispatch (ADR-023 / Issue #1268)", 
 });
 
 /**
- * [ADR-026 / Issue #1412] sakura/apprun dispatch wiring。 SSM (per-team key store) が配線されたときだけ
+ * [Issue #1412] sakura/apprun dispatch wiring。 SSM (per-team key store) が配線されたときだけ
  * executable になり、 AppRun REST へ deploy する (EventBridge は使わない)。 鍵未登録は loud に throw、
  * SSM 未配線では reserved のまま。 [Issue #2561] verified-AWS-account gate は provider-aware になった
  * (`resolveDeployAuthorization`) ため、 sakura/apprun は AWS competitor account 不要 — test の
  * `buildContext` が満たす verified account fixture は非 AWS runtime の deploy には使われない
  * (AWS runtime の他テストのためだけに残る共有 fixture)。
  */
-describe("startDeployment sakura/apprun dispatch (ADR-026 / Issue #1412)", () => {
+describe("startDeployment sakura/apprun dispatch (Issue #1412)", () => {
   const sakuraRuntime: ProblemRuntime = { provider: "sakura", engine: "apprun", entry: "img:1" };
 
   beforeEach(() => vi.clearAllMocks());
@@ -248,7 +248,7 @@ describe("startDeployment sakura/apprun dispatch (ADR-026 / Issue #1412)", () =>
 });
 
 /**
- * [ADR-032 / Issue #1410 / #2743] azure/bicep dispatch wiring。 SSM (per-team Azure credential) +
+ * [Issue #1410 / #2743] azure/bicep dispatch wiring。 SSM (per-team Azure credential) +
  * Entra token client が配線されたときだけ executable になり、 `runtime.entry` を必ず materialize してから
  * ARM Deployment Stacks REST へ deploy する (EventBridge は使わない)。 config 未登録は loud throw、 SSM
  * 未配線では reserved のまま。 [Issue #2561] verified-AWS-account gate は provider-aware になったため、
@@ -261,7 +261,7 @@ describe("startDeployment sakura/apprun dispatch (ADR-026 / Issue #1412)", () =>
  * S3 stub) so the deploy actually materializes `main.json` out of a real (fflate-built) payload zip
  * before it ever PUTs the Deployment Stack.
  */
-describe("startDeployment azure/bicep dispatch (ADR-032 / Issue #1410)", () => {
+describe("startDeployment azure/bicep dispatch (Issue #1410)", () => {
   const azureRuntime: ProblemRuntime = { provider: "azure", engine: "bicep", entry: "main.json" };
   const AZURE_CONFIG = {
     azureTenantId: "dir-1",
@@ -422,12 +422,12 @@ describe("startDeployment azure/bicep dispatch (ADR-032 / Issue #1410)", () => {
 });
 
 /**
- * [ADR-032 / Issue #1411 / #2745] gcp/infra-manager dispatch wiring。 SSM (per-team WIF config) +
+ * [Issue #1411 / #2745] gcp/infra-manager dispatch wiring。 SSM (per-team WIF config) +
  * STS client + subject-token signer が配線されたときだけ executable になり、 鍵レスで AWS subject →
  * GCP STS → SA impersonation → **Terraform blueprint materialize (#2745)** → Infra Manager REST へ
  * deploy する (EventBridge 不使用)。 config 未登録は loud throw、 SSM 未配線では reserved のまま。
  */
-describe("startDeployment gcp/infra-manager dispatch (ADR-032 / Issue #1411 / #2745)", () => {
+describe("startDeployment gcp/infra-manager dispatch (Issue #1411 / #2745)", () => {
   const gcpRuntime: ProblemRuntime = {
     provider: "gcp",
     engine: "infra-manager",
@@ -487,7 +487,7 @@ describe("startDeployment gcp/infra-manager dispatch (ADR-032 / Issue #1411 / #2
       gcpSubjectTokenSigner: signer as unknown as DeployContext["gcpSubjectTokenSigner"],
       awsRegion: "ap-northeast-1",
       resolveProblemRuntime: () => gcpRuntime,
-      // ADR-008 Phase 3: private-problem path — the presigned URL itself is mocked at module
+      // private-problem path — the presigned URL itself is mocked at module
       // scope (`generateChallengePayloadUrl`); ctx.s3 just needs to be truthy so
       // resolveChallengePayloadUrl's "S3 client wired?" check passes.
       problemsVisibility: { "hello-world": "private" },

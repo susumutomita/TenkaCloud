@@ -38,7 +38,7 @@ interface RuntimeConfigProps {
   readonly tenantName: string;
   /**
    * application-admin-console が叩くテナント API の base URL。
-   * Issue #458 / ADR-001 後: Deploy 系 endpoint も同じ tenant API に統合されているので、
+   * Issue #458 後: Deploy 系 endpoint も同じ tenant API に統合されているので、
    * frontend は本 URL 1 本で全 API 呼び出しを賄う。
    * ApiGateway.restApi.url (末尾スラッシュ有) から渡す。
    */
@@ -77,7 +77,7 @@ interface RuntimeConfigProps {
    */
   readonly samlIdpDirectory: Readonly<Record<string, readonly string[]>>;
   /**
-   * Issue #2230 (ADR-035): SPA feature flag の deploy 時 override。 SPA 側
+   * Issue #2230: SPA feature flag の deploy 時 override。 SPA 側
    * `resolveFeatureFlags(FEATURE_REGISTRY, runtimeConfig.features)` が registry default に
    * merge する (未知 key / 非 boolean は SPA 側で無視)。 未設定なら `features` key 自体を
    * 書かない (= 旧 runtime-config と byte 互換、 registry default のまま)。
@@ -186,7 +186,7 @@ export class ApplicationAdminConsoleHosting extends Construct {
       ...(props.competitorBootstrapTemplateUrl
         ? { competitorBootstrapTemplateUrl: props.competitorBootstrapTemplateUrl }
         : {}),
-      // Issue #2230 (ADR-035): 旧来 S3 手編集しか経路が無かった feature flag override の正規経路。
+      // Issue #2230: S3 手編集に代わる feature flag override の正規経路。
       ...(props.features ? { features: props.features } : {}),
     };
     // Issue #867: runtime-config.json は CloudFront cache 無効化。 pooled tenants 共有 CDN

@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import { DeployCreateRequestedDetailSchema } from "../../lib/problem-deploy/handlers/shared/events.js";
 
 /**
- * Drift pin for the sign-side deploy-command patterns (ADR-049 Phase 4 / #2293).
+ * Drift pin for the sign-side deploy-command patterns (#2293).
  *
  * The Workers control plane pre-validates organizer commands with the
  * trust-bridge `DEPLOY_*_PATTERN` mirrors before signing an intent. This suite

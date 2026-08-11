@@ -7,7 +7,7 @@ import { buildOidcRoleApp } from "../../bin/tenkacloud-always-on-oidc.js";
 import { GithubOidcDeployRoleStack } from "../../lib/always-on-runtime/github-oidc-deploy-role-stack.js";
 
 /**
- * ADR-049 Phase 4 (Issue #2293) SLICE 3 — GitHub Actions OIDC deploy-role stack.
+ * Issue #2293: GitHub Actions OIDC deploy-role stack.
  * Pins the security-critical invariants of the runtime-lifecycle trust:
  *   - trust policy hard-pins aud (StringEquals) + sub (StringLike, environment-scoped)
  *   - deploy is limited to cdk-* bootstrap roles; sweeper mutations are limited to
@@ -39,7 +39,7 @@ function synth(props?: {
   return Template.fromStack(stack);
 }
 
-describe("GithubOidcDeployRoleStack (#2293 ADR-049 Phase 4 SLICE 3)", () => {
+describe("GithubOidcDeployRoleStack (#2293)", () => {
   it("should hard-pin the OIDC trust policy aud (StringEquals) and sub (StringLike, environment-scoped)", () => {
     const t = synth();
     t.hasResourceProperties("AWS::IAM::Role", {

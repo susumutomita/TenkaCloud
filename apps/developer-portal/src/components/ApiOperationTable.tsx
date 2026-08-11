@@ -10,7 +10,7 @@ const CAPABILITY_LABEL: Record<Capability, string> = {
 // renderer so the API operation names are present in the pre-rendered HTML (which
 // is what the static-generation and search tests assert) and so the reference is
 // readable even before client hydration. Every row shows the capability label from
-// the OpenAPI artifact (ADR-0004), but no credentials.
+// the OpenAPI artifact, but no credentials.
 export function ApiOperationTable() {
   const operations = listApiOperations();
   return (

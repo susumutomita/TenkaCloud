@@ -64,10 +64,10 @@ export function buildControlDataTables(
   // [Issue #2959] 8 table 共通の削除方針。既定 DESTROY、opt-in で RETAIN。
   const tableProps = { removalPolicy: dataTableRemovalPolicy(args.retainDataTables) };
 
-  // ADR-004 Phase 1: Event / Team の 2 Table を Deployments と並列に持つ。
+  // Event / Team の 2 Table を Deployments と並列に持つ。
   // Phase 2 で Bulk Deploy / Bulk Teardown を State Machine 経由で動かす。
   //
-  // [Issue #2440 / ADR-049 §5.1 Phase A5] `controlDataBackend` が純 SQL (`turso`) の
+  // [Issue #2440] `controlDataBackend` が純 SQL (`turso`) の
   // ときは Events/Teams を **synth しない** — DynamoDB standing cost (Events+Teams+GSI 3本 =
   // 5 ユニット常時) をゼロにする。
   //
@@ -78,7 +78,7 @@ export function buildControlDataTables(
   const deployments = pureSql ? undefined : new DeploymentsTable(scope, "Deployments", tableProps);
   const events = pureSql ? undefined : new EventsTable(scope, "Events", tableProps);
   const teams = pureSql ? undefined : new TeamsTable(scope, "Teams", tableProps);
-  // ADR-012 Phase 3.A: Endpoint registry。per (tenant, team, problem, slot) で override
+  // Endpoint registry。per (tenant, team, problem, slot) で override
   // URL を保管する。default URL は read-through で deployment.stackOutputs から算出。
   //
   // [Issue #2442 / Phase C1] `controlDataBackend` が純 SQL (`turso`) のときは Events/Teams/
@@ -88,7 +88,7 @@ export function buildControlDataTables(
   const endpoints = pureSql
     ? undefined
     : new ProblemEndpointsTable(scope, "ProblemEndpoints", tableProps);
-  // Issue #459 / ADR-002 Phase 2.1: tenant ↔ 競技者 AWS account の許可表。
+  // Issue #459: tenant ↔ 競技者 AWS account の許可表。
   // 1 行 = 1 (tenantId, awsAccountId)。verified=false は deploy 不可。
   //
   // [Issue #2442 / Phase C2] 純 SQL backend では Events/Teams/Deployments/ProblemEndpoints と
@@ -103,7 +103,7 @@ export function buildControlDataTables(
   // (disruption-fire.ts / disruption-recurring.ts / executor-store.ts / generic-scoring index.ts)
   // が repository seam (`resolveDisruptionsRepository`) 経由で読み書きする。
   const disruptions = pureSql ? undefined : new DisruptionsTable(scope, "Disruptions", tableProps);
-  // Issue #950 (ADR-020 Phase D): admin 操作の append-only 監査ログ。 6 handler Lambda +
+  // Issue #950: admin 操作の append-only 監査ログ。 6 handler Lambda +
   // admin-insight Lambda が read/write する。 TTL 90 日で自動 GC (= env `AUDIT_RETENTION_DAYS`
   // で 365 / SOC2 enterprise 用に上げる)。
   //
@@ -162,27 +162,26 @@ export function buildControlDataTables(
   if (events) {
     new CfnOutput(scope, "EventsTableName", {
       value: events.table.tableName,
-      description: "ADR-004 Events table 名 (1 競技イベント = 1 行)。",
+      description: "Events table 名 (1 競技イベント = 1 行)。",
     });
   }
   if (teams) {
     new CfnOutput(scope, "TeamsTableName", {
       value: teams.table.tableName,
-      description: "ADR-004 Teams table 名 (1 チーム = 1 行、teamLoginKey は team scope)。",
+      description: "Teams table 名 (1 チーム = 1 行、teamLoginKey は team scope)。",
     });
   }
   if (competitorAccounts) {
     new CfnOutput(scope, "CompetitorAccountsTableName", {
       value: competitorAccounts.table.tableName,
-      description:
-        "Issue #459 / ADR-002 Competitor Accounts table 名 (tenant ↔ 競技者 AWS account 紐付け)。",
+      description: "Issue #459 Competitor Accounts table 名 (tenant ↔ 競技者 AWS account 紐付け)。",
     });
   }
   if (endpoints) {
     new CfnOutput(scope, "ProblemEndpointsTableName", {
       value: endpoints.table.tableName,
       description:
-        "ADR-012 Phase 3.A Endpoint registry table 名 (per (tenant, team, problem, slot) の override 行)。",
+        "Endpoint registry table 名 (per (tenant, team, problem, slot) の override 行)。",
     });
   }
 

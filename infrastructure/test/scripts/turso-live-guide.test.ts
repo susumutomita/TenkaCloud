@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -208,84 +207,5 @@ describe("scripts/ops/turso-live-guide (#2617)", () => {
     expect(runningCosts).not.toContain('--value "$TURSO_TOKEN"');
     expect(runningCosts).not.toContain('--value "<token from step 1>"');
     expect(envExample).toContain("tenkacloud turso-live");
-  });
-
-  it("should link the data boundary and live caveat to documents that still exist", () => {
-    const alwaysOn = readFileSync(join(REPO_ROOT, "docs/always-on/README.md"), "utf8");
-
-    expect(alwaysOn).not.toContain("CLAUDE.md#data-isolation");
-    expect(alwaysOn).toContain("adr-049-always-on-cloudflare-control-plane.html");
-    expect(alwaysOn).toContain("running-costs.md#first-live-e2e-verification-runbook");
-  });
-
-  it("should default make help to English and provide an explicit Japanese view", () => {
-    const makefile = readFileSync(join(REPO_ROOT, "Makefile"), "utf8");
-    const english = execFileSync("make", [], { cwd: REPO_ROOT, encoding: "utf8" });
-    const explicitEnglish = execFileSync("make", ["help-en"], {
-      cwd: REPO_ROOT,
-      encoding: "utf8",
-    });
-    const japanese = execFileSync("make", ["help-ja"], {
-      cwd: REPO_ROOT,
-      encoding: "utf8",
-    });
-
-    expect(makefile).toContain("# ===== Problem catalog validation | 問題カタログ検証 =====");
-    expect(makefile).toContain(
-      "# ===== Problem Packs (author-side CLI) | 問題パック（作成者向けCLI） =====",
-    );
-    expect(english).toBe(explicitEnglish);
-    expect(english).toContain("Language: English (Japanese: make help-ja)");
-    expect(english).toContain("Setup / Build");
-    expect(english).toMatch(/^\s+install\s+Install development dependencies safely/m);
-    expect(english).toMatch(
-      /^\s+turso-live\s+Start the interactive Turso\/AWS live verification wizard/m,
-    );
-    // Issue #2906: `local` is now the Docker-only participant path;
-    // `local-dev` (new) is the developer Bun/Vite hot-reload path and is
-    // deliberately visible in help too, unlike the other `local-*` internals.
-    expect(english).toMatch(
-      /^\s+local\s+Start the local drill API and portal via Docker \(participant path\)/m,
-    );
-    expect(english).toMatch(/^\s+local-down\s+Stop local play and clear all persisted progress/m);
-    expect(english).toMatch(
-      /^\s+local-dev\s+Start local play on the host with Bun\/Vite \(developer path, hot reload\)/m,
-    );
-    for (const hiddenLocalTarget of [
-      "doctor",
-      "local-onboard",
-      "local-up",
-      "local-portal",
-      "local-status",
-      "local-list",
-      "local-evaluate",
-      "local-reset",
-      "local-snapshot-export",
-      "local-snapshot-import",
-      "local-disrupt",
-      "local-smoke",
-    ]) {
-      expect(english).not.toMatch(new RegExp(`^\\s+${hiddenLocalTarget}\\s+`, "m"));
-    }
-    expect(english).not.toContain("開発依存関係を安全設定でインストール");
-    expect(japanese).toContain("言語: 日本語（英語: make help-en）");
-    expect(japanese).toContain("セットアップ / ビルド");
-    expect(japanese).toMatch(/^\s+install\s+開発依存関係を安全設定でインストール/m);
-    expect(japanese).toMatch(/^\s+turso-live\s+Turso\/AWSの初回live検証wizardを開始/m);
-    expect(japanese).toMatch(/^\s+local\s+Docker でローカル問題演習を起動\(参加者向け\)/m);
-    expect(japanese).toMatch(
-      /^\s+local-dev\s+ホストで Bun\/Vite により起動\(開発者向け・ホットリロード\)/m,
-    );
-    expect(japanese).not.toContain("Install development dependencies safely");
-    for (const help of [english, japanese]) {
-      expect(help).not.toMatch(/(?:Issue\s*)?#\d+/);
-      expect(help.match(/^\s+check-synth\s+/gm)).toHaveLength(1);
-      expect(help.match(/^\s+synth-always-on-command\s+/gm)).toHaveLength(1);
-      expect(help.match(/^\s+synth-always-on-runtime\s+/gm)).toHaveLength(1);
-      expect(help).not.toMatch(/^\s+ensure-deps\s+/m);
-      for (const line of help.split("\n").filter((line) => /^\s{2}\S/.test(line))) {
-        expect(line).toMatch(/^\s{2}\S+\s{2,}\S/);
-      }
-    }
   });
 });

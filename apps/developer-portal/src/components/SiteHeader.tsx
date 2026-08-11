@@ -6,7 +6,7 @@ import { BrandMark } from "./BrandMark";
 import { CommandSearch } from "./CommandSearch";
 import { HeaderLangSwitch } from "./HeaderLangSwitch";
 
-// The one global header (ADR-0003 §6). Rendered by the app shell so it wraps every
+// The app shell renders one global header around every
 // route — landing, docs, and the Scalar API reference alike — from the single
 // PRIMARY_NAV model. The mobile toggle reveals the same links on small screens.
 export function SiteHeader() {

@@ -1,11 +1,11 @@
 /**
- * ADR-049 Phase 5 (#2294): control-plane reconciliation on Workers Cron.
+ * Issue #2294: control-plane reconciliation on Workers Cron.
  *
  * In Always-On mode the control plane runs on Workers, so event-status transitions
  * (and expired-data pruning) are driven by a Workers Cron trigger — NOT by a constant
  * AWS per-minute tick (that monolith belongs to SaaS/Lite mode). This keeps the platform
- * at zero always-on AWS compute between events, while preserving ADR-014's freshness
- * contract (a status change is visible within one Cron interval).
+ * at zero always-on AWS compute between events. A status change becomes visible within one
+ * Cron interval.
  */
 
 /** How long after `ends_at` an ENDED event's row is pruned. */

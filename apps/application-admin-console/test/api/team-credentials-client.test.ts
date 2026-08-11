@@ -7,7 +7,7 @@ import {
 } from "../../src/api/team-credentials-client";
 
 /**
- * [ADR-032 / #1413] team cloud credential API client の path / body / verb を pin。
+ * team cloud credential API client の path / body / verb を pin。
  */
 
 function fakeClient(getResponse: unknown = {}) {
@@ -20,7 +20,7 @@ function fakeClient(getResponse: unknown = {}) {
   return { client, put, del, get };
 }
 
-describe("team-credentials-client (ADR-032 #1413)", () => {
+describe("team-credentials-client", () => {
   it("should PUT the credential to the per-team provider path (register/rotate)", async () => {
     const { client, put } = fakeClient();
     const res = await registerTeamCredential(client, "sakura", "team-a", { accessToken: "x" });

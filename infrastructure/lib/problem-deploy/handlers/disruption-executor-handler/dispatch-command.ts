@@ -1,5 +1,5 @@
 /**
- * [ADR-031 / Issue #1419] cross-account disruption executor の **純粋な dispatch core**。
+ * [Issue #1419] cross-account disruption executor の **純粋な dispatch core**。
  *
  * fired event (= `*DisruptionFired`) が持つ `action` 宣言 + 既に fold 済の `parameters` +
  * team の `stackOutputs` を受け取り、 競技者アカウントで実行すべき 1 アクションを **SDK 非依存の
@@ -8,7 +8,7 @@
  *
  * 設計判断:
  *   - `targetRef` / `functionRef` は **stackOutputs の key** からのみ解決する (= 任意 resource id を
- *     直接実行させない、 ADR-031 の injection 縮小)。 解決できなければ loud に throw (silent fallback 禁止)。
+ * 直接実行させない、 injection 縮小)。 解決できなければ loud に throw (silent fallback 禁止)。
  *   - `paramTemplate` の `{{key}}` は fired `parameters` の値でのみ置換する。 値が無い placeholder は
  *     literal `{{key}}` を競技者アカウントへ送らないよう throw する (= validate-problems の宣言時 allow-list と
  *     runtime の二重防御)。

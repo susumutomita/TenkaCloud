@@ -2,7 +2,7 @@
   "id": "cross-account-capture",
   "title": "Cross-Account Capture",
   "category": "battles",
-  "description": "Reference Battle that opts into inter-team coordination (ADR-028). Teams race to hold a shared roster of contested cross-account regions; the shipped coordination plugin arbitrates every claim and hides rival holdings.",
+  "description": "Reference Battle that opts into inter-team coordination. Teams race to hold a shared roster of contested cross-account regions; the shipped coordination plugin arbitrates every claim and hides rival holdings.",
   "difficulty": "intermediate",
   "tags": ["battle", "coordination", "cross-account", "reference"],
   "runtime": {

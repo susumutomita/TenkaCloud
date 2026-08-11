@@ -3,7 +3,7 @@ import Link from "next/link";
 
 export const metadata: Metadata = { title: "Examples" };
 
-// Examples (ADR-0003 §5: /developers/examples/*). Copyable SDK / CLI / HTTP
+// /developers/examples/* provides copyable SDK / CLI / HTTP
 // snippets. Concise but real for the foundation; CI-tested snippet sources are a
 // follow-up.
 export default function ExamplesPage() {

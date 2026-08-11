@@ -16,7 +16,7 @@ import {
 } from "../../lib/problem-deploy/handlers/shared/sakura-credential-store.js";
 
 /**
- * [ADR-026 / #1412] per-team Sakura API-key store の振る舞い pin。 SSM を mock し、 path 規約 /
+ * [#1412] per-team Sakura API-key store の振る舞い pin。 SSM を mock し、 path 規約 /
  * SecureString 保管 / fail-safe parse / not-found→undefined / idempotent delete を観測する。
  */
 
@@ -26,7 +26,7 @@ function makeDeps(send: ReturnType<typeof vi.fn>): SakuraCredentialStoreDeps {
 
 const CRED = { accessToken: "tok-abc", accessTokenSecret: "sec-xyz" };
 
-describe("sakura-credential-store (ADR-026 #1412)", () => {
+describe("sakura-credential-store (#1412)", () => {
   it("should build a per-team SecureString path nested under tenant + team", () => {
     expect(buildSakuraCredentialParameterName("development", "tenant-1", "team-a")).toBe(
       "/development/tenants/tenant-1/teams/team-a/sakura-api-key",

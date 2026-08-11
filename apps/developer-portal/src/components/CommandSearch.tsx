@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type SearchEntry, searchIndex } from "@/lib/search";
 
-// The command-search palette (ADR-0003 §6). One component, mounted in the shared
+// One command-search component is mounted in the shared
 // header, so search works identically on landing, docs, and the API reference.
 // Cmd/Ctrl+K opens it and focus moves to the input (the keyboard-focus contract
 // the tests assert).

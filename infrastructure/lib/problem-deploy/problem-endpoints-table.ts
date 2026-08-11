@@ -3,7 +3,7 @@ import { Construct } from "constructs";
 import { type DataTableProps, dataTableRemovalPolicy } from "./data-table-removal-policy.js";
 
 /**
- * ADR-012 Phase 3.A: Endpoint registry の per (tenant, team, problem, slot) 行を 1 行に
+ * Endpoint registry の per (tenant, team, problem, slot) 行を 1 行に
  * 記録する DynamoDB テーブル。
  *
  * Schema:

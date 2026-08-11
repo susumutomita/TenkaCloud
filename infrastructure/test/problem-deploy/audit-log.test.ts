@@ -9,7 +9,7 @@ import {
 } from "../../lib/problem-deploy/handlers/shared/audit-log";
 
 /**
- * Issue #950 (ADR-020 Phase D): writeAuditEvent helper の挙動を pin する。
+ * Issue #950: writeAuditEvent helper の挙動を pin する。
  *
  * - env ADMIN_AUDIT_LOG_TABLE_NAME が空文字 → no-op で false を返すべき (= 旧 stack 互換)
  * - env 設定済 + 正常書き込み → PutCommand を送信して true を返すべき

@@ -18,8 +18,8 @@ export type ProblemPanelT = (
 ) => string;
 
 /**
- * Issue #1917: uptime kind の集約 health (ADR-005 D1) を StatusIndicator と人間可読ラベルに
- * 変換する pure helper。 競技者は「なぜ減点されたか」を、 落ちている個別 endpoint URL を
+ * Issue #1917: uptime kind の participant-safe な集約 health を StatusIndicator と人間可読ラベルに
+ * 変換する pure helper。競技者は「なぜ減点されたか」を、落ちている個別 endpoint URL を
  * 知らずとも「サービスが degraded/down」という形で把握できる (per-endpoint は露出しない)。
  */
 const APP_STATUS_INDICATOR: Record<ApplicationStatusOverall, StatusIndicatorProps.Type> = {

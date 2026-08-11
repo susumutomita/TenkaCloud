@@ -13,7 +13,7 @@ import { handleRouteError, parseJsonBody, withEventId } from "../route-helpers.j
 import type { EventSharedResources } from "../shared.js";
 
 /**
- * Operator → competitor notification route (ADR-006).
+ * Operator → competitor notification route.
  *
  *   POST /events/:eventId/notifications
  */

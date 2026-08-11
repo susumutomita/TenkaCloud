@@ -27,17 +27,17 @@ export interface ParticipantPortalLambdaProps {
    */
   readonly deploymentsTable?: ITable;
   /**
-   * Events table (ADR-006 Notifications で参照)。
+   * Events table (Notifications で参照)。
    * `GET /portal/me/notifications` が `PK=EVENT#<eventId>` で `dynamodb:Query`。
    *
-   * [Issue #2440 / ADR-049 §5.1 Phase A5] `controlDataBackend` が純 SQL (`turso`) のとき
+   * [Issue #2440] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env
    * `EVENTS_TABLE_NAME` も EventsRead IAM も付与しない — notifications / feature-flags は
    * repository seam (entrypoint 注入の control-data runtime) が SQL executor 直結で処理する。
    */
   readonly eventsTable?: ITable;
   /**
-   * ADR-012 Phase 3.A: Endpoint registry テーブル。
+   * Endpoint registry テーブル。
    * `/portal/me/problems/:problemId/endpoints` 系 route が読み書きする。
    *
    * [Issue #2442 / Phase C1] `controlDataBackend` が純 SQL (`turso`) のとき
@@ -59,7 +59,7 @@ export interface ParticipantPortalLambdaProps {
    */
   readonly problemsWriteups?: Readonly<Record<string, unknown>>;
   /**
-   * ADR-012 Phase 3.A: `{ [problemId]: ProblemEndpointSlot[] }` 形の endpoint 宣言。
+   * `{ [problemId]: ProblemEndpointSlot[] }` 形の endpoint 宣言。
    * `discoverProblemsEndpoints` で metadata.json から自動収集して synth 時に注入する。
    * GET /endpoints が default URL を CFn output から read-through 算出するため参照。
    */
@@ -83,7 +83,7 @@ export interface ParticipantPortalLambdaProps {
    */
   readonly deployJobLogGroup?: ILogGroup;
   /**
-   * [Issue #2440 / ADR-049 §5.1 Phase A5] control-plane data backend (dynamodb|turso)。
+   * [Issue #2440] control-plane data backend (dynamodb|turso)。
    * notifications / feature-flags の repository seam
    * (entrypoint 注入の control-data runtime) がこの env を読む。default (未指定 / `dynamodb`) は env を足さず
    * byte 互換。`EventApiLambda` と同型の注入パターン。
@@ -153,7 +153,7 @@ export class ParticipantPortalLambda extends Construct {
               }),
             }
           : {}),
-        // ADR-006 Notifications: Events table の partition Query 権限 + 単一行 GetItem。
+        // Notifications: Events table の partition Query 権限 + 単一行 GetItem。
         // GetItem は Issue #1005 で導入された event-gate.ts (= submit-flag / hint reveal
         // が共有する scoring gate) が PK=EVENT#<id> / SK=META 1 行を `dynamodb:GetItem` で
         // 引くために必要。 grant が漏れていると AccessDenied で getEventGate が undefined を
@@ -173,7 +173,7 @@ export class ParticipantPortalLambda extends Construct {
               }),
             }
           : {}),
-        // ADR-012 Phase 3.A: Endpoint registry の override 行 R/W。
+        // Endpoint registry の override 行 R/W。
         // PutItem / DeleteItem / Query で 1 (tenant, team, problem, slot) を扱う。
         // Issue #2442: 純 SQL backend では table 自体が無いので policy を足さない (repository
         // seam が SQL executor 直結で処理する。`eventsTable`/`EventsRead` と同じ pattern)。
@@ -348,7 +348,7 @@ export class ParticipantPortalLambda extends Construct {
       authType: FunctionUrlAuthType.NONE,
       cors: {
         allowedOrigins: ["*"],
-        // ADR-012 Phase 3.A: DELETE は endpoint override 解除 (= default に戻す) で必要。
+        // DELETE は endpoint override 解除 (default に戻す) で必要。
         allowedMethods: [HttpMethod.GET, HttpMethod.PATCH, HttpMethod.POST, HttpMethod.DELETE],
         allowedHeaders: ["content-type", "authorization"],
         maxAge: Duration.minutes(10),

@@ -1,5 +1,5 @@
 /**
- * [ADR-037 Slice 2] recurring disruption の一覧 / 早期解除 (operator 用)。
+ * recurring disruption の一覧 / 早期解除 (operator 用)。
  *
  * Slice 1 で recurring fire は `rate(N minutes)` schedule + EndDate により maxFires 回ぶんで自動停止する
  * (= 必ず終わる)。 本 module はそれを **早期に止める** / **今動いている定期障害を見る** ための薄い層:
@@ -45,7 +45,7 @@ export interface ListRecurringResponse {
 export type CancelRecurringOutcome = "cancelled" | "not_found";
 
 /**
- * [ADR-037 Slice 2] recurring fire のとき registry 行 (`EVENT#{eventId}` / `RECUR#{requestId}`) を書く。
+ * recurring fire のとき registry 行 (`EVENT#{eventId}` / `RECUR#{requestId}`) を書く。
  * 一覧 / 早期解除の索引であり、 affectedTeamIds から cancel 時の per-team schedule 名を復元できる。 EndDate
  * と同じ endsAt を持たせ、 自動停止後は一覧から自然に落ちる。 idempotency claim (REQUEST#) が dup を先に
  * 弾くので 1 度だけ書かれる (= attribute_not_exists(SK) は防御)。 非 recurring は no-op。

@@ -32,7 +32,6 @@ const JUSTIFY_KEYWORDS = [
   /API 制約/, // 日本語
   /Issue #\d+/, // issue ref
   /PR #\d+/,
-  /ADR-\d+/,
   /SBT vendored/, // serverless-saas-pipeline は SBT upstream
 ];
 

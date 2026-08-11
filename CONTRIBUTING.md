@@ -24,8 +24,7 @@ For first-time contributors:
 
 ## Development flow
 
-1. Pick an issue (`good first issue` / `help wanted`) or a starter task from
-   [ROADMAP.md](./ROADMAP.md#good-first-issue-candidates)
+1. Pick an issue labeled [`good first issue`](https://github.com/susumutomita/TenkaCloud/issues?q=is%3Aissue%20state%3Aopen%20label%3A%22good%20first%20issue%22) or [`help wanted`](https://github.com/susumutomita/TenkaCloud/issues?q=is%3Aissue%20state%3Aopen%20label%3A%22help%20wanted%22).
 2. Create a branch: `git checkout -b feat/your-feature`
 3. Write tests first (TDD). Test titles use the English `should ...` pattern — match this style for consistency with the existing suite.
 4. Run `make before-commit` (lint / test) — a fast local sanity check, not a full
@@ -41,9 +40,8 @@ files through Issue / PR comments. TenkaCloud reviews code changes through norma
 pull requests so maintainers can inspect the diff and CI result before running or
 downloading anything.
 
-## Roadmap and starter tasks
+## Starter tasks
 
-- [ROADMAP.md](./ROADMAP.md) shows the current product direction.
 - [`problems/CATALOG.md`](./problems/CATALOG.md) lists the available problems and bundles.
 - Starter tasks should stay small enough for one focused PR.
 

@@ -1,5 +1,5 @@
 /**
- * [Problem SDK / Issue #2106 ← ADR-012 Phase 3.A] Pure `metadata.json:endpoints[]`
+ * Issue #2106: pure `metadata.json:endpoints[]`
  * section parser — single source of truth shared by the platform Endpoint
  * registry (CDK synth + Lambda runtime) and external Pack authoring. The infra
  * copy re-exports from here. The env-decoding helper (`parseEndpointsEnv`) stays

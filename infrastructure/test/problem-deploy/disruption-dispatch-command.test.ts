@@ -6,7 +6,7 @@ import {
 import type { DisruptionAction } from "../../lib/utils/discover-problems-catalog";
 
 /**
- * [ADR-031 / #1419] executor の純粋 dispatch core を pin する。
+ * [#1419] executor の純粋 dispatch core を pin する。
  * - targetRef / functionRef を stackOutputs から解決 (未解決は throw)
  * - paramTemplate の {{key}} を fired parameters で置換 (値無しは throw)
  * - revert は同 kind/target + revert.paramTemplate/documentName で上書き
@@ -27,7 +27,7 @@ const ssmAction: DisruptionAction = {
 const stackOutputs = { WorkerInstanceIds: "i-aaa,i-bbb", FaultFn: "tc-fault-fn" };
 const parameters = { device: "eth0", delayMs: 200 };
 
-describe("buildDisruptionDispatch (ADR-031 #1419)", () => {
+describe("buildDisruptionDispatch (#1419)", () => {
   it("should resolve targetRef from stackOutputs and substitute placeholders from fired parameters", () => {
     expect(buildDisruptionDispatch(ssmAction, parameters, stackOutputs)).toEqual({
       kind: "ssm-run-command",
@@ -112,7 +112,7 @@ describe("buildDisruptionDispatch (ADR-031 #1419)", () => {
   });
 });
 
-describe("buildRevertDispatch (ADR-031 #1419, ADR-029 INV-2)", () => {
+describe("buildRevertDispatch (#1419 automatic revert dispatch)", () => {
   it("should reuse the inject target/kind and apply the revert paramTemplate + documentName", () => {
     expect(buildRevertDispatch(ssmAction, parameters, stackOutputs)).toEqual({
       kind: "ssm-run-command",

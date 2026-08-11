@@ -1,6 +1,6 @@
 # developer-portal
 
-The unified TenkaCloud developer platform (ADR-0003). One Next.js application
+The unified TenkaCloud developer platform. One Next.js application
 serves the landing page, product page, developer hub, MDX docs, the OpenAPI API
 reference, examples, and the changelog under a single shared shell.
 
@@ -38,7 +38,7 @@ bun run --filter @TenkaCloud/developer-portal check:catalog     # fail if catalo
 The build is a static export of the public surface. Broken internal links fail
 the build through `scripts/check-internal-links.ts`. The checked-in OpenAPI
 artifact defaults to the sandbox base URL and embeds no credentials; the
-interactive sandbox Try-It is deferred to a later PR per ADR-0004.
+interactive sandbox Try-It is not part of the current implementation.
 
 The public catalog data (`src/content/catalog-data.ts`) is a **generated,
 committed artifact** built from the public `metadata.json` files in the

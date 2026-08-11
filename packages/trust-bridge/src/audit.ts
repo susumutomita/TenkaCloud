@@ -2,10 +2,9 @@ import type { CloudActionIntent } from "./schema.js";
 import type { IntentVerifyOutcome } from "./verify.js";
 
 /**
- * Issue #795 / ADR-017 Phase 1: audit record helper。
+ * Issue #795: audit record helper。
  *
- * 「すべての decision に audit を残す」 原則 (= ADR-017 D5) を Phase 1 から
- * pin する。 出力 schema は CloudActionAuditRecord (= ADR-017 で書いた shape)。
+ * allow / deny / needs_approval のすべてを CloudActionAuditRecord として記録する。
  * 失敗系も audit に記録する (= attacker が token を投げ込んで何が起きた
  * かを後から再現可能にする)。
  */
@@ -40,8 +39,8 @@ export interface AuditInput {
 
 /**
  * 失敗系の intent (= JWS / schema invalid) でも、 token 内の見えた情報から audit を作る。
- * Phase 1 では JWS payload を再 decode しない (= verify 経路で得た intent or
- * fail だけを使う)。 fail 系は requestId/tenantId 等が不明なので "unknown" を埋める。
+ * JWS payload は再 decode せず、verify 経路で得た intent または失敗理由だけを使う。
+ * fail 系は requestId/tenantId 等が不明なので "unknown" を埋める。
  */
 export function buildAuditRecord(input: AuditInput): CloudActionAuditRecord {
   const createdAt = (input.now ?? (() => new Date()))().toISOString();

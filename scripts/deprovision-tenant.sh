@@ -101,7 +101,7 @@ delete_items_if_exists() {
 # Issue #2952: machine (M2M) credential の回収。
 #
 # `tc-tenant-<tenantId>` bind resource server と `tc-m2m-<tenantId>*` app client は **CFn 管理外**
-# である (ADR-0005 §5: CFn 管理にすると次の `cdk deploy` が scope list を空へ reconcile して
+# である。CFn 管理にすると次の `cdk deploy` が scope list を空へ reconcile して
 # 発行済み token を全滅させるため)。したがって `cdk destroy` でも回収されない。pooled tier では
 # UserPool が他 tenant と共有で残り続けるので、ここで消さないと **削除済み tenant の
 # credential が有効なまま残る**。silo でも UserPool が retain された場合に同じことが起きる。

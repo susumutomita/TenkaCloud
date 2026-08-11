@@ -1,5 +1,5 @@
 /**
- * [ADR-027 / Issues #1410, #2743] Concrete Azure Deployment Stacks REST client.
+ * [Issues #1410, #2743] Concrete Azure Deployment Stacks REST client.
  *
  * `AzureDeploymentStackClient` interface (= `handlers/shared/runtime/azure-bicep-adapter.ts` の注入境界)
  * を実 ARM Deployment Stacks REST API に実装する。 adapter は orchestration (= parameters / status 射影)

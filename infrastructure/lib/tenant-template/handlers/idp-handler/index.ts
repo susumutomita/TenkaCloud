@@ -8,8 +8,7 @@
  *     handler enforces this by ignoring any tenantId on the body and using
  *     the JWT-derived value.
  *
- * Pooled vs silo UserPool (= per #1294 acceptance "Design ADR for per-tenant
- * IdP model"):
+ * Pooled vs silo UserPool (= #1294 per-tenant IdP model acceptance):
  *   - BASIC / STANDARD / PREMIUM (pooled): one UserPool serves N tenants.
  *     Cognito federated IdPs are global to the UserPool, so the `idpId` MUST
  *     be namespaced by tenantId (`${tenantId}__${idpId}`) when calling

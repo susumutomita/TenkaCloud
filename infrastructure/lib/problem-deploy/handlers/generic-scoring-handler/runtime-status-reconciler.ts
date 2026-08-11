@@ -22,7 +22,7 @@ import {
 import { resolveDeploymentsRepository } from "./shared.js";
 
 /**
- * [ADR-026/027/032 / #1410-1412] 非 AWS runtime (sakura/azure/gcp) deployment の status reconciler。
+ * [#1410-1412] 非 AWS runtime (sakura/azure/gcp) deployment の status reconciler。
  *
  * AWS は Step Functions State Machine が deploy 進捗を CFn から読み status / stackOutputs を書き戻すが、
  * 非 AWS は同期 adapter.deploy で enqueue するだけなので status を進める主体が無い。 本 reconciler は

@@ -48,17 +48,17 @@ interface TenantTemplateStackProps extends StackProps {
   /**
    * `ProblemDeployBackendStack.deployApiLambda` をクロススタック参照で受ける。
    * tenant API の Cognito-gated routes (`POST /problems/:id/deploy` 等) が本 Lambda を
-   * `LambdaIntegration` で invoke する (ADR-001 / Issue #458)。
+   * `LambdaIntegration` で invoke する (Issue #458)。
    */
   deployApiLambda: IFunction;
   /**
-   * `ProblemDeployBackendStack.eventApiLambda` をクロススタック参照で受ける (ADR-004 Phase 1)。
+   * `ProblemDeployBackendStack.eventApiLambda` をクロススタック参照で受ける。
    * tenant API の `/events*` routes が本 Lambda を invoke する。
    */
   eventApiLambda: IFunction;
   /**
    * `ProblemDeployBackendStack.competitorAccountsApiLambda` をクロススタック参照で受ける
-   * (Issue #459 / ADR-002 Phase 2.1)。tenant API の `/admin/competitor-accounts*` routes が
+   * (Issue #459)。tenant API の `/admin/competitor-accounts*` routes が
    * 本 Lambda を invoke する。
    */
   competitorAccountsApiLambda: IFunction;
@@ -84,7 +84,7 @@ interface TenantTemplateStackProps extends StackProps {
    * を bin/infrastructure → app-config で parse 済の正規化 list)。 未指定 / 空配列なら従来
    * Cognito local auth + MFA 強制のみ。 設定時のみ allowlist が動く。
    *
-   * **ADR-018**: pooled tier (BASIC / STANDARD / PREMIUM) は UserPool を全 pooled tenant が
+   * **Pooled tier:** BASIC / STANDARD / PREMIUM は UserPool を全 pooled tenant が
    * 共有するため、 SAML attach は他 tenant に副作用を及ぼす。 本 stack は `isPooledDeploy=true`
    * のとき samlIdps を ignore し、 silo (PLATINUM) instance / Lite mode のみ attach する。
    */
@@ -94,7 +94,7 @@ interface TenantTemplateStackProps extends StackProps {
    * `samlIdps` 設定時のみ意味を持つ。 空配列 = federated sign-in 全拒否 (fail-safe)。
    */
   samlAdminAllowlist?: readonly string[];
-  /** Issue #2230 (ADR-035): runtime-config.json に焼く SPA feature flag override (未設定 = key なし)。 */
+  /** Issue #2230: runtime-config.json に焼く SPA feature flag override (未設定 = key なし)。 */
   features?: Readonly<Record<string, boolean>>;
 }
 
@@ -130,7 +130,7 @@ export class TenantTemplateStack extends Stack {
     super(scope, id, props);
     const waveNumber = props.waveNumber || "1";
 
-    // Issue #778 ADR-016 Phase 1: App Plane コア構成 (= hosting + identity + apiGateway +
+    // Issue #778: App Plane コア構成 (hosting + identity + apiGateway +
     // runtime-config 配置) は `buildAppPlaneCore` builder に切り出して Lite mode と共有する。
     // CFn 物理差分 0 件 invariant のため、 sub-construct は同 stack scope に同 logical ID で
     // 生成される (= Stack/ApplicationAdminConsoleHosting / Stack/IdentityProvider / Stack/ApiGateway)。
@@ -145,8 +145,8 @@ export class TenantTemplateStack extends Stack {
     //   - pooled: install.sh phase 1 で 1 度だけ立つ共有 console
     //   - silo:   provision-tenant.sh が PLATINUM tier で per-tenant に立てる
     // Issue #1340 Phase 2: pooled tier (= UserPool 共有) では SAML attach を一切しない
-    // (= ADR-018 と整合)。 silo / per-tenant deploy のときだけ env-driven SAML 設定を渡す。
-    // pooled 経路の CFn 物理差分は本 PR で 0 件 (= props.samlIdps を渡しても force-empty)。
+    // (既存の分離契約と整合)。 silo / per-tenant deploy のときだけ env-driven SAML 設定を渡す。
+    // pooled 経路では props.samlIdps を渡しても force-empty にして CFn 物理差分を出さない。
     const effectiveSamlIdps = props.isPooledDeploy ? [] : (props.samlIdps ?? []);
     const effectiveSamlAdminAllowlist = props.isPooledDeploy
       ? []
@@ -181,7 +181,7 @@ export class TenantTemplateStack extends Stack {
     this.tenantUserPoolId = identityProvider.tenantUserPool.userPoolId;
     this.samlIdpDirectory = appPlaneCore.samlIdpDirectory;
 
-    // Issue #2948 / ADR-0005 Phase 1: machine (M2M) token 経路。default OFF。
+    // Issue #2948: machine (M2M) token 経路。default OFF。
     // ON のときだけ capability resource server と machine 専用 RestApi を CREATE する。
     // 既存 UserPool / human UserPoolClient / human TenantAPI には一切触らない (= NO-OP)。
     if (isMachineTokenPathEnabled(props.features)) {

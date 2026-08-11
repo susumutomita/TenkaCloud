@@ -335,7 +335,7 @@ describe("requestTeardown (AWS/CFn row stays on the DeleteStack EventBridge path
 });
 
 /**
- * [ADR-026/027/032 / #1410-1412] 非 AWS runtime (sakura/apprun) の teardown は CFn DeleteStack event を
+ * [#1410-1412] 非 AWS runtime (sakura/apprun) の teardown は CFn DeleteStack event を
  * publish せず adapter.destroy (cloud REST) で削除する。 status は DELETING に倒し、 EventBridge は使わない。
  */
 describe("requestTeardown (non-AWS runtime via adapter)", () => {

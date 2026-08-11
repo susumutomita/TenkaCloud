@@ -23,7 +23,7 @@ export interface CreateDisruptionsRepositoryDeps {
 
 /**
  * [Issue #2442 / Phase C3] Cold-start factory that selects the Disruptions backend from the
- * `CONTROL_DATA_BACKEND` flag value (ADR-035 mechanism; mirror of
+ * `CONTROL_DATA_BACKEND` flag value (mirrors
  * `createCompetitorAccountsRepository` / `createProblemEndpointsRepository`). **Default =
  * dynamodb** (behavior-preserving): an unset / empty / `"dynamodb"` flag returns the DDB
  * repository, so the existing path is byte-identical.

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * Issue #2291 (ADR-049 §9): the cfn-deploy Lambda `index.ts` dispatches one Lambda to create /
+ * Issue #2291: the cfn-deploy Lambda `index.ts` dispatches one Lambda to create /
  * delete / describe-delete by the `action` field. The create SM sends no `action` (backward
  * compatible → create); the delete SM sends `action: "delete"` then `action: "describe-delete"`.
  * The underlying handlers are mocked (their real-SDK entries build clients + call AWS).

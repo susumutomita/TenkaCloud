@@ -15,7 +15,7 @@
  * directory (domain → provider[]) の供給元 (= per-tenant runtime-config.json) は本モジュールの
  * 関心外 — 注入された directory に対する決定だけを行う。 tenant A の Login 画面は自分の
  * CloudFront に置かれた runtime-config.json しか読まないため、 tenant B の directory を覗くことは
- * できない (= 物理的 isolation、 ADR-018 と整合)。
+ * できない。これは tenant ごとに IdP directory を物理的に分離する境界と整合する。
  *
  * Phase 1 (admin-console) の同名 module と挙動は完全に同一。 両 SPA で実装を共有しない理由は
  * cross-SPA 依存 (= packages/auth-client) を増やさず、 monorepo の app boundary を明確に

@@ -12,7 +12,7 @@ import type { CoordinationStoreDeps } from "../../lib/problem-deploy/handlers/pa
 import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers.js";
 
 /**
- * ADR-028 D6 (#1420): 問題同梱 coordination plugin の動的 import loader を pin する。
+ * Issue #1420: 問題同梱 coordination plugin の動的 import loader を pin する。
  * import 失敗 / 契約不一致 → safe fallback、 load 成功 → 既存 dispatcher へ委譲、 を観測する。
  */
 

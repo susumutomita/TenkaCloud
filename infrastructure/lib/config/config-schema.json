@@ -190,7 +190,7 @@
     },
     "challengePayloadConfig": {
       "type": "object",
-      "description": "ADR-003 Phase 2 / problem catalog split。 TenkaCloudChallenge repo の publish.yml が S3 にアップロードするための bucket + OIDC IAM Role 設定。 未指定なら ChallengePayloadStack は立てない。",
+      "description": "TenkaCloudChallenge の publish workflow が S3 にアップロードするための bucket と GitHub OIDC IAM Role の設定。未指定なら ChallengePayloadStack は立てない。",
       "required": ["bucketPrefix", "githubRepository"],
       "properties": {
         "bucketPrefix": {

@@ -18,7 +18,7 @@ const SEVERITY_COLOR: Record<NotificationView["severity"], "blue" | "red"> = {
 };
 
 /**
- * 運営 → 競技者 通知一覧 (sidebar 「Notifications」、ADR-006)。
+ * 運営 → 競技者 通知一覧 (sidebar 「Notifications」、notification API)。
  *
  * データ source は `TeamViewProvider.notifications` を共有 (= 同じ polling tick に
  * 乗っているので別 polling は立てない)。**page を開いた瞬間に最新 occurredAt を

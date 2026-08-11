@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "core": "^1.0.0",
   "title": "Reference coordination Battle pack",
-  "description": "Reference TenkaCloud Battle pack demonstrating the ADR-028 inter-team coordination contract: a problem ships a pure coordination plugin that the platform hosts.",
+  "description": "Reference TenkaCloud Battle pack demonstrating the inter-team coordination contract: a problem ships a pure coordination plugin that the platform hosts.",
   "license": "Apache-2.0",
   "problemsRoot": "problems",
   "requiredRuntimes": [

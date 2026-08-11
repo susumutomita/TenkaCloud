@@ -8,7 +8,7 @@ import { TenantTemplateStack } from "../../lib/tenant-template/tenant-template-s
 /**
  * Issue #1340 Phase 2: `TenantTemplateStack` の SAML attach 契約。
  *
- * 主目的 (= ADR-018 整合):
+ * 主目的:
  *   - pooled tier (= 全 pooled tenant が UserPool 共有) では `samlIdps` を props で受けても
  *     attach しない (= 物理的に他テナントへの副作用を作らない)。
  *   - silo tier (= per-tenant UserPool) では `samlIdps` を attach し、 directory が表に出る。
@@ -82,7 +82,7 @@ describe("TenantTemplateStack SAML props (#1340)", () => {
     template.resourceCountIs("AWS::Cognito::UserPoolIdentityProvider", 0);
   });
 
-  it("should IGNORE samlIdps on pooled tier even when env provides them (= ADR-018 pooled isolation)", () => {
+  it("should IGNORE samlIdps on pooled tier even when env provides them (= pooled isolation)", () => {
     const template = makeTenantTemplate({
       isPooledDeploy: true,
       samlIdps: [

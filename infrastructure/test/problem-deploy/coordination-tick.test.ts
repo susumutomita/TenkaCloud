@@ -9,7 +9,7 @@ import {
 import type { CoordinationTickInvoker } from "../../lib/problem-deploy/handlers/generic-scoring-handler/coordination-tick-dispatch.js";
 
 /**
- * ADR-028 scoring-driven tick (#2324) の **採点 pass 側**。 資格情報分離 (ADR-028/030) のため、 採点
+ * scoring-driven tick (#2324) の **採点 pass 側**。資格情報分離のため、採点
  * Lambda は plugin を実行せず、 tick 対象を集めて CoordinationDispatcher Lambda を 1 回 async Invoke する。
  * collect の集約 / start gate、 event 相対 eventNowMs、 「coordination event が無ければ invoke しない」 no-op
  * を pin する。

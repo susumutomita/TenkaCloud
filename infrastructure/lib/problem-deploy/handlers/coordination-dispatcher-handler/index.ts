@@ -24,20 +24,20 @@ import { secureApiHeaders } from "../shared/secure-headers.js";
 import { defaultS3PluginImporter } from "./s3-plugin-importer.js";
 
 /**
- * ADR-030 Phase 2 (#1420): inter-team coordination dispatch を participant-portal Lambda から
+ * Issue #1420: inter-team coordination dispatch を participant-portal Lambda から
  * 分離した **専用 Lambda** の Hono app。
  *
  * participant-portal Lambda は AWS Console SSO / CLI 資格情報発行のため `sts:AssumeRole`(競技者
- * federation) + `ssm:GetParameter` + `kms:Decrypt`(ExternalId 復号) を持つ。 そこで未信頼の
- * 問題同梱 coordination plugin を動的実行すると、 1 つの悪性 plugin が競技者アカウントの資格情報・
- * 全テナントデータに到達しうる (ADR-030 S2 の脅威)。 本 Lambda は Deployments テーブルの
- * coordination / team-lookup 行しか触れない最小 IAM で動かし、 blast radius を IAM で構造的に縛る。
+ * federation) + `ssm:GetParameter` + `kms:Decrypt`(ExternalId 復号) を持つ。本 Lambda へ分離することで
+ * plugin からそれらの資格情報を外す。ただし DynamoDB backend の role は Deployments table 全体への
+ * Query / GetItem / PutItem を許可し、tenant ごとの IAM isolation はない。動的実行するのはレビュー済み
+ * catalog bundle の trusted plugin に限り、catalog review と publish control を trust boundary とする。
  *
- * ADR-030 Phase 3b: importer は `COORDINATION_PLUGIN_BUCKET` が配線されていれば S3 から
- * synth-bundle 済み .mjs を materialize → `import()` する (= 最小 IAM 下での動的 load)。 未配線
+ * importer は `COORDINATION_PLUGIN_BUCKET` が配線されていれば S3 から
+ * synth-bundle 済み .mjs を materialize → `import()` する。未配線
  * (= bucket env 空) なら reject し、 load 不可 → `unavailable` / fallback で participant API を壊さない。
  */
-// [#2527 Slice 4] Composition root: one control-data runtime per Lambda instance.
+// One control-data runtime is shared for the Lambda instance lifetime (#2527).
 const shared = buildParticipantSharedResources(createDefaultControlDataRuntime());
 
 const pluginBucket = process.env.COORDINATION_PLUGIN_BUCKET ?? "";
@@ -54,9 +54,9 @@ const coordinationDeps: CoordinationHandlerDeps = {
 };
 
 /**
- * ADR-028 scoring-driven tick (#2324): 採点 Lambda が直接 Invoke する tick batch を、 op 経路と同じ最小
- * IAM の本 Lambda 内で処理するための deps。 importer (S3 materialize) / store (coordination row) は上の
- * op 経路と同一 (= 追加 IAM ゼロ)、 config は宣言 gate に使う。
+ * Issue #2324: 採点 Lambda が直接 Invoke する tick batch を op 経路と同じ dispatcher role で
+ * 処理するための deps。importer (S3 materialize) / store (coordination row) は上の op 経路と同一
+ * (= 追加 IAM ゼロ)、config は宣言 gate に使う。
  */
 const tickDeps: CoordinationTickDeps = {
   importer: coordinationImporter,
@@ -91,7 +91,7 @@ app.use("*", secureApiHeaders());
 
 app.get("/portal/healthz", (c) => c.json({ ok: true }));
 
-// ADR-028 D4/D5 (#1420): 参加者間 coordination の op 提出 + projection polling。
+// Issue #1420: 参加者間 coordination の op 提出 + projection polling。
 app.post("/portal/me/coordination/op", (c) =>
   withBearerAuth(
     c,
@@ -124,8 +124,8 @@ app.get("/portal/me/coordination/projection", (c) =>
 const honoHandler = handle(app);
 
 /**
- * ADR-028 scoring-driven tick (#2324): Lambda の entry。 採点 Lambda からの直接 Invoke (= tick batch
- * payload) なら plugin の `runTick` を **本 Lambda 内** (= 最小 IAM、 op 経路と同じ場所) で処理する。
+ * Issue #2324: Lambda の entry。採点 Lambda からの直接 Invoke (tick batch payload) なら plugin の
+ * `runTick` を **本 Lambda 内** (= op 経路と同じ role) で処理する。
  * それ以外 (= Function URL 経由の HTTP event) は従来どおり Hono app へ委譲する (= op / projection 経路は
  * 完全に不変)。 判別は payload 形状 (`parseCoordinationTickBatch`) のみで、 tick 経路は HTTP を通らない
  * (= bearer 認証の対象外、 到達は `lambda:InvokeFunction` を持つ採点 Lambda role に IAM で限定される)。

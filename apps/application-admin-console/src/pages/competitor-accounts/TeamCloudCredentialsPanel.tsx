@@ -15,7 +15,7 @@ import { useT } from "../../i18n";
 import { PROVIDER_OPTIONS, useTeamCloudCredentials } from "./useTeamCloudCredentials";
 
 /**
- * [ADR-026/027/032 / Issue #1413] per-team cloud credential onboarding パネル。
+ * Issue #1413: per-team cloud credential onboarding パネル。
  *
  * TenantAdmin が非 AWS 問題 (sakura/azure/gcp) を deploy する前に、 team の認証情報 (provider 別 JSON) を
  * `PUT /admin/team-cloud-credentials/:provider/:teamSlug` で SSM SecureString store に登録 / 失効する。

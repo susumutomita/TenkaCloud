@@ -12,7 +12,7 @@ import { handleRouteError, withEventId } from "../route-helpers.js";
 import type { EventSharedResources } from "../shared.js";
 
 /**
- * Scoring lock + archive routes (#558, ADR-020 admin operations).
+ * Scoring lock + archive routes (#558, admin operations).
  *
  *   POST   /events/:eventId/lock-scoring
  *   DELETE /events/:eventId/lock-scoring

@@ -15,9 +15,9 @@ TenkaCloud は AWS 上の multi-tenant cloud competition platform です。Contr
 
 ## Working contract
 
-- 依頼、Issue、関連 stack、handler、UI、test、ADR から受け入れ条件を把握する。既存コードと履歴から解決できる曖昧さはリポジトリ内で確認する。
+- 依頼、Issue、関連 stack、handler、UI、test から受け入れ条件を把握する。既存コードと履歴から解決できる曖昧さはリポジトリ内で確認する。
 - 新しい helper、table、event、IAM permission、runtime config を足す前に既存実装と shared utility を検索する。
-- 方法はタスクに合わせて選ぶ。`Plan.md`、専用 Skill、固定 role、固定人数の subagent、TDD の順序は必須ではない。
+- 方法はタスクに合わせて選ぶ。専用 plan file、Skill、固定 role、固定人数の subagent、TDD の順序は必須ではない。
 - apps、packages、scripts、infrastructure を必要な範囲で end-to-end に変更し、利用者から観測できる working increment を作る。
 - 単純な修正を ceremony や multi-agent 化で膨らませない。trust boundary、migration、cross-plane、cost、physical impact が複雑な場合だけ独立探索や反証を使う。
 

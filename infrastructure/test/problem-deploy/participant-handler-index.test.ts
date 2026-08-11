@@ -489,9 +489,9 @@ describe("DELETE /portal/me/problems/:problemId/endpoints/:slot", () => {
   });
 });
 
-// ADR-030 Phase 2 (#1420): coordination の op/projection route は専用 CoordinationDispatcherLambda
+// Issue #1420: coordination の op/projection route は専用 CoordinationDispatcherLambda
 // (coordination-dispatcher-handler) へ分離した。 route glue の test は coordination-dispatcher-index.test.ts。
-describe("coordination routes are no longer served by the participant-portal Lambda (ADR-030 Phase 2)", () => {
+describe("coordination routes are no longer served by the participant-portal Lambda", () => {
   it("should 404 POST /portal/me/coordination/op (moved to the dedicated dispatcher)", async () => {
     expect((await send("POST", "/portal/me/coordination/op", { op: {} })).status).toBe(
       StatusCodes.NOT_FOUND,

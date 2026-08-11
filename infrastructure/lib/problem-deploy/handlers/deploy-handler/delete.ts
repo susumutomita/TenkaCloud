@@ -33,8 +33,6 @@ export type TeardownOutcome =
 /**
  * 手動 teardown を要求する。status を DELETING に倒して `DeployDeleteRequested` を
  * EventBridge に publish するだけ (実 CFn DeleteStack は State Machine 経由で非同期実行)。
- * 詳細フローは ADR-004 を参照。
- *
  * publish 失敗時は status を FAILED に巻き戻す: DELETING のまま放置すると次の呼び出しが
  * `already_deleted` で no-op を返して CFn stack が orphan 化するため。
  *
@@ -58,7 +56,7 @@ export async function requestTeardown(
   const status = (item.status ?? "PENDING") as DeploymentStatus;
   if (status === "DELETING" || status === "DELETED") return { kind: "already_deleted" };
 
-  // [ADR-026/027/032 / #1410-1412] 非 AWS runtime (sakura/azure/gcp) は CFn DeleteStack ではなく
+  // [#1410-1412] 非 AWS runtime (sakura/azure/gcp) は CFn DeleteStack ではなく
   // adapter.destroy (cloud REST) で teardown する。 runtimeProvider が無い行は従来どおり AWS/CFn 経路。
   const runtime = resolveItemRuntime(item);
   if (runtime.provider !== EXECUTABLE_PROVIDER || runtime.engine !== EXECUTABLE_ENGINE) {
@@ -114,7 +112,7 @@ export async function requestTeardown(
 }
 
 /**
- * [ADR-026/027/032 / #1410-1412] 非 AWS runtime の teardown。 status を DELETING に倒し、 adapter.destroy で
+ * [#1410-1412] 非 AWS runtime の teardown。 status を DELETING に倒し、 adapter.destroy で
  * cloud REST 削除を enqueue する (EventBridge / CFn は使わない)。 DELETED への最終遷移は status polling
  * (adapter.getStatus → destroyed) が確定する想定 (= AWS の State Machine 確定と同じ非同期セマンティクス)。
  * adapter.destroy 失敗時は DELETING → FAILED に巻き戻す (= AWS publish 失敗時と同じ補償)。

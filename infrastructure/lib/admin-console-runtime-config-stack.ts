@@ -36,7 +36,7 @@ export interface AdminConsoleRuntimeConfigStackProps extends cdk.StackProps {
   readonly awsRegion: string;
   /** AWS account ID。 */
   readonly awsAccountId: string;
-  /** Admin Insight API のエンドポイント (= ADR-011 / #590 Phase 1.A)。 */
+  /** Admin Insight API のエンドポイント (Issue #590)。 */
   readonly adminInsightApiUrl: string;
   /** Issue #1053: 競技者向け bootstrap template の public S3 URL。 */
   readonly competitorBootstrapTemplateUrl: string;
@@ -52,7 +52,7 @@ export interface AdminConsoleRuntimeConfigStackProps extends cdk.StackProps {
    */
   readonly samlIdpDirectory: Readonly<Record<string, readonly string[]>>;
   /**
-   * Issue #2230 (ADR-035): admin-console の SPA feature flag override (例: `samlSso`)。
+   * Issue #2230: admin-console の SPA feature flag override (例: `samlSso`)。
    * 未設定なら `features` key 自体を書かない (= 旧 runtime-config と byte 互換)。
    */
   readonly features?: Readonly<Record<string, boolean>>;
@@ -76,7 +76,7 @@ export class AdminConsoleRuntimeConfigStack extends cdk.Stack {
       // Issue #1335 Phase 1: SAML HRD directory (= 未認証で読まれる、 admin-console Login で
       // email から候補 IdP を解決する)。 設定なし時は `{}` で焼かれる (= Login は local fallback)。
       samlIdpDirectory: props.samlIdpDirectory,
-      // Issue #2230 (ADR-035): deploy 時 feature flag override の正規経路 (S3 手編集を置換)。
+      // Issue #2230: deploy 時 feature flag override の正規経路 (手編集を置換)。
       ...(props.features ? { features: props.features } : {}),
     };
 

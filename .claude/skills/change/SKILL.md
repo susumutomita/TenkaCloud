@@ -33,7 +33,7 @@ argument-hint: "[変更または問題の概要]"
 
 ## 1. Framing
 
-リポジトリを調査し、`Plan.md` に次を記録する。
+リポジトリを調査し、作業中の plan に次を記録する。永続 file は作らない。
 
 - user outcome。
 - 観測可能な acceptance criteria。
@@ -47,13 +47,13 @@ argument-hint: "[変更または問題の概要]"
 - rollback、cleanup、migration の制約。
 - 必要な証拠。
 
-既存 code、ADR、test、git history、related issue で解決できる曖昧さは先に調査する。
+既存 code、test、git history、related issue で解決できる曖昧さは先に調査する。
 
 ユーザーへ確認するのは、production deploy、destroy、secret、不可逆な data migration、公開 API、費用、外部副作用の選択が必要な場合に限る。
 
 ## 2. Approach Registry
 
-`Plan.md` に `Approach Registry` 節を作る。各 approach は最低限次を持つ。
+作業中の plan に `Approach Registry` を作る。各 approach は最低限次を持つ。
 
 ```text
 id:
@@ -146,7 +146,7 @@ error finding が未解決の案は選択または完了しない。
 1. acceptance criteria と失敗条件を表す test を先に追加する。
 2. selected approach を working increment として実装する。
 3. CDK change は `Template.fromStack` assertion と `make check-synth` で CFn shape を確認する。
-4. code、test、docs、ADR、runtime config、migration を必要な範囲で同じ PR に含める。
+4. code、test、安定した利用者向け docs、runtime config、migration を必要な範囲で同じ PR に含める。
 5. scope 外の発見は別 issue / follow-up に切る。
 6. duplication、naming、責務を `/simplify` で確認する。
 

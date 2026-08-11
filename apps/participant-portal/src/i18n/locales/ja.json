@@ -337,7 +337,6 @@
     "kind_unknown": "(未設定)",
     "statement_heading": "問題内容",
     "writeup_heading": "解説と対策",
-    "writeup_drill_hint": "さらに深掘りしたいときは、手元の Claude Code で {command} を実行してください。",
     "writeup_handoff": "{solved}/{total} 解答済み。解説で原因と対策を振り返る",
     "failure_reason_header": "失敗理由",
     "stale_header": "スコアが伸びていません",

@@ -86,7 +86,7 @@ function plane(
   });
 }
 
-describe("CustomerExecutionPlane.authorize (#1727 / ADR-039)", () => {
+describe("CustomerExecutionPlane.authorize", () => {
   it("should authorize a valid, locally-approved, digest-matching deploy intent", async () => {
     const outcome = await plane().authorize({
       token: token(),

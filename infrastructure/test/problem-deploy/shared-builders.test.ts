@@ -133,7 +133,7 @@ describe("buildEventSharedResources", () => {
     expect(() => buildEventSharedResources(makeTestControlDataRuntime())).toThrow();
   });
 
-  // Issue #2440 (ADR-049 §5.1 Phase A5): pure SQL backend (turso|sql) 選択時は Events/Teams
+  // Issue #2440: pure SQL backend (turso|sql) 選択時は Events/Teams
   // table 自体が synth されず env も配線されない。cold start (module load) を fail-fast にすると
   // Lambda が Initialization Error で落ちるため、空文字 default に緩和した (= silent fallback
   // ではない。dynamodb/mirror backend の誤設定は runtime resolver 側の required チェックが
@@ -220,7 +220,7 @@ describe("buildParticipantSharedResources", () => {
     expect(() => buildParticipantSharedResources(makeTestControlDataRuntime())).toThrow();
   });
 
-  // Issue #2440 (ADR-049 §5.1 Phase A5): pure SQL backend (turso|sql) では Events table 自体が
+  // Issue #2440: pure SQL backend (turso|sql) では Events table 自体が
   // synth されず env も配線されない。cold start を fail-fast にすると Participant Portal Lambda
   // が落ちるため空文字 default に緩和した。
   it("should default eventsTableName to '' when unset (pure SQL backend cold start)", () => {

@@ -1,7 +1,7 @@
 import type { FeatureFlagsRepository } from "../../control-data/feature-flags-repository.js";
 
 /**
- * Issue #2231 / #2283 (ADR-035): per-tenant runtime feature-flag 行の共有 reader。
+ * Issue #2231 #2283: per-tenant runtime feature-flag 行の共有 reader。
  *
  * 行 shape (`PK: TENANT#<tenantId> / SK: FLAGS`) の書き込み側は
  * event-handler/feature-flags.ts (`PUT /admin/feature-flags`)。 読み側は event-handler に
@@ -9,7 +9,7 @@ import type { FeatureFlagsRepository } from "../../control-data/feature-flags-re
  * generic-scoring-handler (Gate 完了 bonus) も同じ判定を必要とするため、 row shape と
  * 読み経路をここへ一本化する (= 「同じ Flag 判定を backend の access guard にも適用する」)。
  *
- * [#2439 / ADR-049 §5.1] 物理 read は {@link FeatureFlagsRepository} seam に委譲する。 この
+ * [#2439] 物理 read は {@link FeatureFlagsRepository} seam に委譲する。 この
  * helper は「行 → flag map / 判定」への畳み込みと fail-OFF ポリシーだけを担い、 DynamoDB /
  * Turso いずれの backend でも同じ判定を返す (default backend では従来と byte 互換の GetCommand)。
  */

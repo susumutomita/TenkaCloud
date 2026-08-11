@@ -1,14 +1,13 @@
 import type { VerifiedCloudActionIntent } from "./schema.js";
 
 /**
- * Issue #1727 / ADR-039 D4 (LOCAL execution authority): 検証済み intent と
+ * Issue #1727: 検証済み intent と
  * digest 一致した artifact (= CFn テンプレ本文) を、 **customer-local な
  * CloudFormation 権限** で実際に deploy / destroy する executor。
  *
- * 重要 (ADR-039 の肝): ここで使う権限は customer 側のもの (= 注入された CFn client +
- * 任意の CFn service role ARN)。 hosted control plane が trust する role を AssumeRole
- * し直すことは **しない**。 つまり control plane を侵害しても、 この executor が握る
- * 配置権限には到達できない。
+ * ここで使う権限は customer 側から注入された CFn client と、任意の CFn service role
+ * ARN に限る。hosted control plane が trust する role を AssumeRole し直さないため、
+ * control plane から customer account の配置権限へ到達できない。
  *
  * `@aws-sdk/client-cloudformation` は hard dep にしない (= trust-bridge の方針)。
  * consumer が `CreateStackCommand` / `UpdateStackCommand` / `DeleteStackCommand` を
@@ -31,7 +30,7 @@ export interface CfnDeployClient {
 
 export interface CloudFormationExecutorOptions {
   readonly client: CfnDeployClient;
-  /** stack 名 prefix。 default "tc"。 `tc-*` scoping (ADR-039) と整合。 */
+  /** stack 名 prefix。default "tc"。customer 側 evaluator が操作できる stack を `tc-*` に限定する。 */
   readonly stackNamePrefix?: string;
   /** CFn capabilities。 default `["CAPABILITY_NAMED_IAM"]` (challenge は named IAM を作りうる)。 */
   readonly capabilities?: readonly string[];

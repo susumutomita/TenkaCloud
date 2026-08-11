@@ -24,7 +24,7 @@ export interface CreateCompetitorAccountsRepositoryDeps {
 /**
  * [Issue #2442 / Phase C2] Cold-start factory that selects the
  * CompetitorAccounts backend from the `CONTROL_DATA_BACKEND` flag value
- * (ADR-035 mechanism; mirror of `createProblemEndpointsRepository` /
+ * (mirrors `createProblemEndpointsRepository` /
  * `createTeamsRepository`). **Default = dynamodb** (behavior-preserving): an
  * unset / empty / `"dynamodb"` flag returns the DDB repository, so the
  * existing path is byte-identical.

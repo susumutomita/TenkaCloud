@@ -134,7 +134,7 @@ describe("GET /admin/insight/tenants/summary", () => {
     expect(JSON.stringify(body)).not.toContain("ddb down");
   });
 
-  it("ADR-011 D5 audit log: should console.log admin.insight.read on each read", async () => {
+  it("should console.log admin.insight.read on each read", async () => {
     const spy = vi.spyOn(console, "log").mockImplementation(() => undefined);
     mocks.summarizeTenants.mockResolvedValueOnce({ items: [] });
     await app.request(

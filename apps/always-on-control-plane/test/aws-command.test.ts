@@ -33,7 +33,7 @@ function decodeJwtHeader(token: string): Record<string, unknown> {
   return JSON.parse(new TextDecoder().decode(bytes)) as Record<string, unknown>;
 }
 
-describe("mintCommandToken (ADR-050 OIDC command token)", () => {
+describe("mintCommandToken", () => {
   it("should mint an ES256 JWT whose kid matches the served JWKS key", async () => {
     const token = await mintCommandToken({
       environment: environmentWithKey(),

@@ -12,7 +12,7 @@ function tableLogicalIds(tpl: Template): string[] {
 }
 
 /**
- * Issue #2290 / #2440 (ADR-049 §5.1): control-plane data backend フラグが
+ * Issue #2290 / #2440: control-plane data backend フラグが
  * ProblemDeployBackendStack の監査 Lambda 群 (DeployApi / EventApi / CompetitorAccountsApi /
  * SystemAuditWriter / ExternalIdAudit) + repository seam を実際に使う GenericScoring の env に
  * 正しく反映されることを検証する (`audit-log-feature-flag.test.ts` の mirror)。

@@ -1,7 +1,7 @@
 /**
- * ADR-049 Phase 3 (#2292) SLICE 2: generic caching JWKS resolver.
+ * Issue #2292: generic caching JWKS resolver.
  *
- * Pairs with the SLICE-1 verifier (`oidc-jwks-verify.ts`). The Always-On Workers
+ * Pairs with the verifier in `oidc-jwks-verify.ts`. The Always-On Workers
  * control plane authenticates organizers against Auth0 (RS256 / JWKS). Fetching the
  * issuer's JWKS document on every request would add a network round-trip to each
  * verification, so this resolver fetches once, indexes the keys by `kid`, and serves

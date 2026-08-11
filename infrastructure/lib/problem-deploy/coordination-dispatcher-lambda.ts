@@ -27,7 +27,7 @@ export interface CoordinationDispatcherLambdaProps {
   readonly deploymentsTable?: ITable;
   /**
    * `buildParticipantSharedResources` が読む `EVENTS_TABLE_NAME` env の source。 coordination
-   * route は events を読まない (= IAM は付与しない)。 [Issue #2440 / ADR-049 §5.1 Phase A5]
+   * route は events を読まない (IAM は付与しない)。 [Issue #2440]
    * `controlDataBackend` が純 SQL (`turso`) のとき `ProblemDeployBackendStack` は本
    * table を synth しない (= `undefined`)。 その場合 env も注入しない (= shared builder は
    * env 不在でも空文字にフォールバックするだけで dispatcher の挙動に影響しない)。
@@ -36,13 +36,13 @@ export interface CoordinationDispatcherLambdaProps {
   /** `buildParticipantSharedResources` が要求する `DEPLOY_ENVIRONMENT`。 coordination では未使用。 */
   readonly environmentName: string;
   /**
-   * [ADR-030 Phase 3 / #1420] `{ [problemId]: { plugin } }`。 問題が宣言する coordination plugin の
+   * [#1420] `{ [problemId]: { plugin } }`。 問題が宣言する coordination plugin の
    * module path。 scope resolver が team→moduleRef を解決するのに使う (= `PROBLEM_COORDINATION` env)。
    * 未宣言の問題はキー無し。 省略時は空 (= 全 route `not_configured`)。
    */
   readonly problemsCoordination?: Readonly<Record<string, unknown>>;
   /**
-   * [ADR-030 Phase 3b / #1420] synth-bundle 済み coordination plugin (.mjs) を置く S3 bucket。
+   * [#1420] synth-bundle 済み coordination plugin (.mjs) を置く bucket。
    * dispatcher は `coordination/<problemId>.mjs` を runtime download → `import()` する。 read-only。
    * 省略時は importer 未配線 → 全 route `unavailable`。
    */
@@ -50,17 +50,19 @@ export interface CoordinationDispatcherLambdaProps {
 }
 
 /**
- * ADR-030 Phase 2 (#1420): inter-team coordination dispatch 専用 Lambda。
+ * Issue #1420: inter-team coordination dispatch 専用 Lambda。
  *
  * coordination route (`POST/GET /portal/me/coordination/*`) を participant-portal Lambda から
  * **本 Lambda へ分離**する。 participant-portal Lambda は AWS Console SSO / CLI 資格情報発行のため
  * `sts:AssumeRole`(競技者 federation) + `ssm:GetParameter` + `kms:Decrypt`(ExternalId 復号) を持つ。
- * 将来 Phase 3 で未信頼の問題同梱 plugin を in-process 動的実行しても、 本 Lambda は Deployments
- * テーブルの coordination / team-lookup 行しか触れない最小 IAM のため、 競技者資格情報・他テナント
- * データ・ExternalId に **構造的に到達できない** (ADR-030 S2 = blast radius を IAM で封じる)。
+ * 問題同梱 plugin はレビュー済み catalog bundle だけを trusted code として本 Lambda の process 内で
+ * 動的実行する。plugin は Lambda の environment と execution role を共有し、DynamoDB backend では
+ * Deployments table 全体への Query / GetItem / PutItem と GSI2 全体への Query 権限を持つ。tenant ごとの
+ * IAM isolation はないため、catalog review と publish control が plugin の trust boundary になる。
  *
  * Function URL は AuthType=NONE で公開し、 `Authorization: Bearer <teamLoginKey>` を handler 内で検証する。
- * plugin の実 import (S3 materialize) は Phase 3 の seam。 現状は load 不可 → `not_configured` / `unavailable`。
+ * plugin bucket が指定されれば S3 から materialize して import し、未指定時は fail closed で
+ * `not_configured` / `unavailable` を返す。
  */
 export class CoordinationDispatcherLambda extends Construct {
   public readonly fn: NodejsFunction;
@@ -74,9 +76,10 @@ export class CoordinationDispatcherLambda extends Construct {
     const role = new Role(this, "Role", {
       assumedBy: new ServicePrincipal("lambda.amazonaws.com"),
       inlinePolicies: {
-        // team-login-key 認証 (= GSI2 Query) + coordination state 行 (PK=COORD#...) の Get/Put。
-        // ADR-030 S2: sts:AssumeRole / ssm:GetParameter / kms:Decrypt は **意図的に付与しない**
-        // (= 未信頼 plugin が競技者資格情報・ExternalId に到達する経路を IAM 上に存在させない)。
+        // DynamoDB backend では Deployments table / GSI2 全体への Query と、table 全体への
+        // GetItem / PutItem を許可する。handler は team-login-key 認証と coordination state に使うが、
+        // IAM は key や tenant を絞らないため、同一 process の plugin も同じ権限を共有する。
+        // sts:AssumeRole / ssm:GetParameter / kms:Decrypt は意図的に付与しない。
         // Issue #2441: 純 SQL backend では table 自体が無いので policy を足さない。
         ...(deploymentsTable
           ? {
@@ -115,13 +118,13 @@ export class CoordinationDispatcherLambda extends Construct {
         // Issue #2440: 純 SQL backend では table が無いので env も足さない。
         ...(props.eventsTable ? { EVENTS_TABLE_NAME: props.eventsTable.tableName } : {}),
         DEPLOY_ENVIRONMENT: props.environmentName,
-        // ADR-030 Phase 3b: plugin .mjs を materialize する S3 bucket。 未指定なら importer 未配線。
+        // plugin.mjs を materialize する bucket。 未指定なら importer 未配線。
         ...(props.pluginBucket
           ? { COORDINATION_PLUGIN_BUCKET: props.pluginBucket.bucketName }
           : {}),
         NODE_OPTIONS: "--enable-source-maps",
       },
-      // ADR-030 Phase 3 config layer: coordination catalog を build 時 literal 置換 (env 4KB 回避、
+      // config layer: coordination catalog を build 時 literal 置換 (env 4KB 回避、
       // scoring/disruptions と同方式)。 未宣言なら `{}` → scope resolver は全 team で not_configured。
       bundlingDefine: {
         "process.env.PROBLEM_COORDINATION": JSON.stringify(
@@ -130,8 +133,8 @@ export class CoordinationDispatcherLambda extends Construct {
       },
     });
 
-    // ADR-030 Phase 3b: plugin bundle bucket の read-only。 sts/ssm/kms は依然付与しないため、
-    // 動的 load した未信頼 plugin の到達範囲は coordination state 行 + 自身の bundle に限定される。
+    // レビュー済み plugin bundle を読むための bucket access。同一 process で実行する plugin は
+    // Lambda role を共有し、DynamoDB backend では table-wide Query / GetItem / PutItem も実行できる。
     props.pluginBucket?.grantRead(this.fn);
 
     this.url = this.fn.addFunctionUrl({

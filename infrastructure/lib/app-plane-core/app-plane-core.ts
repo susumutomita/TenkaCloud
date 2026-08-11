@@ -17,7 +17,7 @@ import {
 import { LiteAdminClaimsLambda } from "./lite-admin-claims-lambda.js";
 
 /**
- * Issue #778 ADR-016 Phase 1: TenantTemplateStack から共通 App Plane コア構成を抽出する。
+ * Issue #778: TenantTemplateStack から共通 App Plane コア構成を抽出する。
  *
  * 抽出対象 (= Full mode と Lite mode で共有する):
  *   - ApplicationAdminConsoleHosting (= SPA + runtime-config 配信)
@@ -110,7 +110,7 @@ export interface AppPlaneCoreProps {
    *
    * pooled UserPool を共有する pooled tier (BASIC / STANDARD / PREMIUM) では SAML attach を
    * **配線しない**。 caller 側 (= `TenantTemplateStack`) で pooled tier を判定して props を
-   * 渡さない (= ADR-018 `pooled-userpool-saml-isolation` と整合)。 Lite mode (= 単一 tenant、
+   * 渡さない (`pooled-userpool-saml-isolation` と整合)。 Lite mode (単一 tenant、
    * 1 UserPool) と silo (PLATINUM) tier では tenant 内で完結するため安全に attach できる。
    */
   readonly samlIdps?: readonly SamlIdpConfig[];
@@ -120,7 +120,7 @@ export interface AppPlaneCoreProps {
    */
   readonly samlAdminAllowlist?: readonly string[];
   /**
-   * Issue #2230 (ADR-035): SPA feature flag の deploy 時 override。 runtime-config.json の
+   * Issue #2230: SPA feature flag の deploy 時 override。 runtime-config.json の
    * `features` に焼かれ、application-admin-console の `resolveFeatureFlags` が merge する。
    */
   readonly features?: Readonly<Record<string, boolean>>;
@@ -223,9 +223,9 @@ export function buildAppPlaneCore(scope: Stack, props: AppPlaneCoreProps): AppPl
   // 2. federated admin allowlist: SAML が attach された tenant でのみ Pre sign-up Lambda を
   //    attach する。 空配列でも attach する (= fail-safe、 「テナント外 federated user が
   //    全員 TenantAdmin」 構成事故を防ぐ)。
-  // 3. pooled tier の判定は caller (= `TenantTemplateStack`) が担う。 builder 自身は同 UserPool
-  //    instance に対して attach するだけで、 pooled / silo の境界を持たない (= ADR-018 相当の
-  //    pooled UserPool 共有 SAML を防ぐ責務は外側にある)。
+  // 3. pooled tier の判定は caller (= `TenantTemplateStack`) が担う。builder 自身は同 UserPool
+  //    instance に attach するだけで pooled / silo の境界を持たないため、pooled UserPool への
+  //    SAML 共有を防ぐ責務は caller 側にある。
   const samlIdps = props.samlIdps ?? [];
   const samlIdpDirectory = attachTenantSamlIdentityProviders(
     scope,

@@ -1,5 +1,5 @@
 /**
- * [ADR-023 / #2054] Decode the `BATTLE_PROBLEMS_RUNTIMES` env into a per-problemId
+ * [#2054] Decode the `BATTLE_PROBLEMS_RUNTIMES` env into a per-problemId
  * runtime resolver for the deploy handler.
  *
  * The env is baked at synth from each non-aws problem's normalized

@@ -8,7 +8,7 @@ import {
 } from "../../lib/problem-deploy/handlers/competitor-accounts-handler/team-credentials-routes.js";
 
 /**
- * [ADR-032 / #1413] per-team cloud credential onboarding routes の振る舞い pin。 provider 別 Zod 検証 /
+ * [#1413] per-team cloud credential onboarding routes の振る舞い pin。 provider 別 Zod 検証 /
  * store への SecureString Put / status は secret を echo しない / 不正 body は 400 / delete idempotent。
  */
 
@@ -31,7 +31,7 @@ const GCP = {
   location: "asia-northeast1",
 };
 
-describe("team-credentials-routes (ADR-032 #1413)", () => {
+describe("team-credentials-routes (#1413)", () => {
   it("should recognize only sakura/azure/gcp as valid providers", () => {
     expect(isTeamCredentialProvider("sakura")).toBe(true);
     expect(isTeamCredentialProvider("azure")).toBe(true);

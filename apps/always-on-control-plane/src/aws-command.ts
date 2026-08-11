@@ -3,30 +3,30 @@ import { base64UrlEncode } from "./crypto.js";
 import { type OidcEnvironment, signingKeyFromEnvironment } from "./oidc.js";
 
 /**
- * ADR-050 (Issue #2555 slice C) — the OIDC command transport.
+ * Issue #2555: OIDC command transport.
  *
  * Replaces the bespoke signed-intent POST: the Worker mints a short-TTL ES256
- * JWT against its own OIDC IdP surface (slice A), exchanges it for scoped,
- * minutes-lived credentials via `sts:AssumeRoleWithWebIdentity` (the role from
- * slice B), and publishes the frozen `tenkacloud.deploy` EventBridge event
+ * JWT against its own OIDC IdP surface, exchanges it for scoped, minutes-lived
+ * credentials via `sts:AssumeRoleWithWebIdentity`, and publishes the frozen
+ * `tenkacloud.deploy` EventBridge event
  * itself. AWS verifies the token against the Worker's JWKS; there is no
  * project-side verifier. `AssumeRoleWithWebIdentity` is an unsigned STS call;
  * only `PutEvents` needs SigV4 (aws4fetch).
  */
 
-/** Validity window for a minted command token (replay bound, ADR-050 §7). */
+/** A command token is valid for five minutes to bound replay. */
 export const COMMAND_TOKEN_TTL_SECONDS = 300;
 
-/** Subject-claim contract enforced by the command role's trust policy (slice B). */
+/** Subject prefix enforced by the command role's trust policy. */
 export const COMMAND_SUBJECT_PREFIX = "tenkacloud:always-on:command:";
 
 /** The one audience STS accepts for web-identity federation. */
 export const STS_AUDIENCE = "sts.amazonaws.com";
 
-/** Web-identity session length: the STS minimum, per ADR-050 "minutes-lived". */
+/** Web-identity session length: the 15-minute STS minimum. */
 const SESSION_DURATION_SECONDS = 900;
 
-/** Frozen EventBridge source of the deploy contract (ADR-001). */
+/** Frozen EventBridge source consumed by the deploy handler. */
 export const DEPLOY_EVENT_SOURCE = "tenkacloud.deploy";
 
 export interface AwsCredentials {

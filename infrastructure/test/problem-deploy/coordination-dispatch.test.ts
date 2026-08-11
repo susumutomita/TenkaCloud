@@ -14,7 +14,7 @@ import {
 import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers.js";
 
 /**
- * ADR-028 D3/D6 (#1420): coordination state store + dispatcher orchestration の pin。
+ * Issue #1420: coordination state store + dispatcher orchestration の pin。
  * 既存 Deployments テーブル前提 (GetCommand / 条件付き PutCommand) を fake ddb で観測する。
  */
 

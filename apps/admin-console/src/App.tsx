@@ -47,8 +47,7 @@ export function App({ config }: { config: AppConfig }) {
             </RequireAuth>
           }
         />
-        {/* Tenant detail (= Control Plane metadata のみ。 App Plane data drill-down は plane
-            分離方針で除去、 [[feedback-no-cross-plane-data-leak]])。 */}
+        {/* Tenant detail (= Control Plane metadata のみ。App Plane data は表示しない)。 */}
         <Route
           path="/tenants/:tenantId"
           element={
@@ -83,8 +82,8 @@ export function App({ config }: { config: AppConfig }) {
         {/* SystemAdmin user 管理 page は廃止 (2026-05-18)。 token を扱う UI 経路は security
             hole になりやすく、 plane 境界も曖昧になるため、 SystemAdmin 招待は Cognito 直
             (= aws cognito-idp admin-create-user / Hosted UI) に倒した。 audit は別 page で
-            残す ([[feedback-no-cross-plane-data-leak]])。 */}
-        {/* Issue #950 (ADR-020 Phase D): admin audit log */}
+            残す。 */}
+        {/* Issue #950: admin audit log */}
         <Route
           path="/audit-log"
           element={

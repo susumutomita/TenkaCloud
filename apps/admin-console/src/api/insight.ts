@@ -2,7 +2,7 @@ import { StatusCodes } from "http-status-codes";
 import type { AppConfig } from "../config";
 
 /**
- * 1 tenant 分の deploy / event 集計 (ADR-011 #590 Phase 1.A)。
+ * 1 tenant 分の deploy / event 集計 (Issue #590)。
  * backend (`AdminInsightApiLambda`) が返す正本 shape と一致させる。
  */
 export interface TenantInsightSummary {

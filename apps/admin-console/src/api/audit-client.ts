@@ -2,7 +2,7 @@ import { StatusCodes } from "http-status-codes";
 import type { AppConfig } from "../config";
 
 /**
- * Issue #950 (ADR-020 Phase D): admin-insight Lambda の `/admin/insight/audit` route を叩く
+ * Issue #950: admin-insight Lambda の `/admin/insight/audit` route を叩く
  * read-only client。 既存 `fetchTenantsInsightSummary` と同じ base URL (= adminInsightApiUrl) を使う。
  *
  * `config.adminInsightApiUrl` 未配線なら null を返す (= 「未配線」 alert で誘導)。

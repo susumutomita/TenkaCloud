@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createGcpInfraManagerRestClient } from "../../lib/problem-deploy/runtime-clients/gcp-infra-manager-rest-client.js";
 
 /**
- * [ADR-027 / #1411 / #2745] Infrastructure Manager REST client の wire 整形を pin。 fetch を mock し、
+ * [#1411 / #2745] Infrastructure Manager REST client の wire 整形を pin。 fetch を mock し、
  * endpoint / Bearer auth / required serviceAccount / materialized GCS source / create-vs-update mask /
  * latest Revision の outputs 射影 / 404→undefined / idempotent delete / 非2xx throw を観測する。
  */
@@ -30,7 +30,7 @@ function client(fetchImpl: ReturnType<typeof vi.fn>) {
   return createGcpInfraManagerRestClient(CRED, { ...OPTS, fetchImpl: fetchImpl as never });
 }
 
-describe("gcp-infra-manager-rest-client (ADR-027 #1411 #2745)", () => {
+describe("gcp-infra-manager-rest-client (#1411 #2745)", () => {
   it("should POST a new deployment with a GCS blueprint and required service account", async () => {
     const fetchImpl = vi
       .fn()

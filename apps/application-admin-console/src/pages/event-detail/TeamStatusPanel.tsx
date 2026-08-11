@@ -19,8 +19,8 @@ type Translate = (key: string, params?: Readonly<Record<string, string | number>
 /**
  * Issue #1916: disruption console の隣に「各チームの現在地」を出して、 operator が
  * 障害を撃つ timing を判断できるようにする read-only な status table。 score/rank・deploy・
- * 直近採点・撃ち込んだ disruption 履歴を、 既存 read (`EventDetail` + disruption audit) だけ
- * から組み立てる (problem-specific な posture には踏み込まない = ADR-012 の host 側汎用層)。
+ * 直近採点・撃ち込んだ disruption 履歴を、既存 read (`EventDetail` + disruption audit) だけ
+ * から組み立て、問題固有の状態判定には踏み込まない。
  */
 
 /** ISO8601 → "HH:mm"。 null は "—"。 */

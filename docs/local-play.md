@@ -9,8 +9,7 @@ cloud account and no billed cloud resources. It has two explicit runtimes:
 
 The participant API, portal, leaderboard, hints, and lifecycle stay common. A
 cloud runtime is never silently converted to Docker or sent to a real cloud.
-The boundary is recorded in
-[ADR-051](./architecture/adr-051-local-multicloud-simulator.html).
+The runtime classifier and its tests enforce this boundary.
 
 > **Simulator (cloud / Composite) problems are experimental and hidden by
 > default (Issue #2632).** Their endpoint URLs, access instructions, and problem
@@ -22,7 +21,7 @@ The boundary is recorded in
 > and `tenkacloud local`. `compose.local.yaml` deliberately does not forward
 > `TENKACLOUD_LOCAL_SIMULATOR` into the container, so setting it in front of
 > `make local` has no effect. Containerizing a second Docker-socket consumer
-> inside an already-DooD control plane needs its own design pass, per ADR-055.
+> inside an already-DooD control plane is a separate change and is not enabled.
 
 ## How it works
 
@@ -71,9 +70,7 @@ make local
 ```
 
 `make local` needs only Git, Make, Docker Engine, and Docker Compose v2 on the
-host — no Bun, Node, or `node_modules` (see
-[ADR-055](./architecture/adr-055-docker-only-participant-local-mode.html) for
-the container/host boundary). It checks Docker is installed and running,
+host — no Bun, Node, or `node_modules`. It checks Docker is installed and running,
 fetches the `problems/` catalog submodule if it's missing, then builds/starts
 the local-play container and prints the Portal URL once it answers.
 `make local-down` stops it and clears progress; `make local-status` reports
@@ -83,7 +80,7 @@ there); run the **▷ ローカルプレイ開始** task only as a fallback when
 automatic startup reports a failure.
 
 On Docker Desktop (macOS/Windows) the container runs with host networking
-(`network_mode: host` in `compose.local.yaml`, ADR-055 §2.2), which Desktop
+(`network_mode: host` in `compose.local.yaml`), which Desktop
 requires enabling once under **Settings → Resources → Network → Enable host
 networking** (Desktop >=4.34). `make local`/`make local-status` detect a
 container that came up healthy but is unreachable from the host and fail
@@ -93,8 +90,8 @@ native Linux Docker Engine and Codespaces need no such setting.
 Reach the Portal at `localhost`, `127.0.0.1`, or `[::1]` on the port it is
 serving, set by `LOCAL_API_PORT` and defaulting to 5175, or through
 Codespaces' own port forwarding. Those are the only origins that
-`/runtime-config.json` will hand the participant login key to, as described in
-ADR-055. Anything else receives a `403 untrusted_host` instead: a tunnel that
+`/runtime-config.json` will hand the participant login key to. Anything else receives a
+`403 untrusted_host` instead: a tunnel that
 changes the port, such as `ssh -L 8080:127.0.0.1:5175`, a custom reverse
 proxy, or setting `LOCAL_API_PORT` to 80 or 443, where browsers omit the port
 from the `Host` header. Match the port end to end and this does not come up.
@@ -417,8 +414,8 @@ submission box per checkpoint, per-checkpoint hints).
 
 One directory = one problem. Problems live **only** in the
 [TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge)
-catalog (the `problems/` submodule) — never in this platform repo (ADR-008 /
-ADR-012). The platform is problem-agnostic: `tenkacloud local --problem <id>` resolves
+catalog (the `problems/` submodule) — never in this platform repo. The platform is
+problem-agnostic: `tenkacloud local --problem <id>` resolves
 `<id>` under `problems/challenges` or `problems/battles` when you choose to
 pre-start a container from the CLI. Otherwise the portal deploys selected
 problems on demand. The reference container problem is `sqli-demo` in the
@@ -433,7 +430,7 @@ catalog.
     └── app/…                # challenge surface + /verify; answer lives only here
 ```
 
-The manifest's `runtime` (container delivery, ADR-023) + `scoring` sections wire
+The manifest's `runtime` and `scoring` sections wire
 the harness (no answer, no scoring conditions):
 
 ```jsonc

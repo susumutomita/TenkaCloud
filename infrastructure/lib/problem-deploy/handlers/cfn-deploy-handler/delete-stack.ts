@@ -1,5 +1,5 @@
 /**
- * Issue #2291 (ADR-049 §9): Lambda-based problem deploy — the DELETE path.
+ * Issue #2291: Lambda-based problem deploy — the DELETE path.
  *
  * TypeScript port of `scripts/delete-battles.sh` so the teardown can run inside the **same**
  * `CfnDeployLambda` the create path (`create-stack.ts`) uses (Step Functions invokes it, then

@@ -1,5 +1,5 @@
 /**
- * Issue #2291 (ADR-049 §9): Lambda CFn deploy handler entry point.
+ * Issue #2291: Lambda CFn deploy handler entry point.
  *
  * Routing-only dispatch: the SDK clients + orchestration live in `create-stack.ts` / `delete-stack.ts`
  * so this `index.ts` stays free of direct `@aws-sdk/client-*` imports (handler-no-direct-sdk-import

@@ -5,13 +5,13 @@ import type {
 import type { ActiveDisruptionEffect, KindResult } from "./shared.js";
 
 /**
- * [ADR-033 / Issue #1665] disruption の **採点上の効果** を採点 tick に畳み込む純関数。
+ * [Issue #1665] disruption の **採点上の効果** を採点 tick に畳み込む純関数。
  *
  * kind handler が出した {@link KindResult} と、 deployment の scoringState に記録された active な効果群を
  * 受け取り、 期限切れ (`expiresAtMs <= nowMs`) を除いた効果を適用した新しい結果と、 生き残った効果リストを返す。
  * 現状 `penalty` のみ: active な各効果の `points` を当該 tick の `scoreDelta` から引く (= window 内の各 tick で
- * 累積減点。 ADR-033 の「5 cycle ぶん減点」セマンティクス)。 実 cloud への fault 注入は伴わない (= ADR-031 の
- * `action` とは別レイヤ)。 副作用なし・全分岐 unit-test 可能。
+ * 累積減点。「5 cycle ぶん減点」のセマンティクス)。実 cloud への fault 注入は伴わず、
+ * `action` とは別レイヤ。副作用なし・全分岐 unit-test 可能。
  */
 export function applyDisruptionEffects(
   result: KindResult,
@@ -31,8 +31,8 @@ export function applyDisruptionEffects(
 }
 
 /**
- * [ADR-033] fire した disruption の {@link DisruptionEffect} 宣言から active 効果レコードを作る。
- * `expiresAtMs = nowMs + durationSeconds * 1000` で window を確定する (= 永続しない、 ADR-029)。
+ * fire した disruption の {@link DisruptionEffect} 宣言から active 効果レコードを作る。
+ * `expiresAtMs = nowMs + durationSeconds * 1000` で window を確定する (永続しない)。
  */
 export function buildActiveDisruptionEffect(
   disruptionId: string,
@@ -47,7 +47,7 @@ export function buildActiveDisruptionEffect(
 }
 
 /**
- * [ADR-033] 同一 disruptionId の重複効果を 1 件に畳む (= condition-triggered と operator-fired が同じ
+ * 同一 disruptionId の重複効果を 1 件に畳む (condition-triggered と operator-fired が同じ
  * disruption を両方 active にしても二重減点しない)。 expiresAtMs が最大のものを残す。
  */
 export function dedupeEffectsByDisruptionId(
@@ -102,7 +102,7 @@ function activeEffectForAuditRow(
 }
 
 /**
- * [ADR-033 / #1665] operator-fired disruption の audit 行群から、 まだ window 内の採点効果を team×problem 別に
+ * [#1665] operator-fired disruption の audit 行群から、 まだ window 内の採点効果を team×problem 別に
  * 解決する。 効果 (points / durationSeconds) は catalog 宣言から引き、 audit 行は「いつ・どの team に」を持つ。
  * 純関数 — caller (handler) が disruptions table を query して行を渡す。 戻り値の key は `${teamId}#${problemId}`。
  */

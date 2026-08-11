@@ -4,7 +4,7 @@ import { lazy } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 /**
- * ADR-012 Phase 5 PortalPluginSlots wrapper。 loadPluginSlot を mock して slot 無し → null、
+ * portal plugin PortalPluginSlots wrapper。 loadPluginSlot を mock して slot 無し → null、
  * pending lazy → Suspense fallback、 throw (Error / 非 Error) → PluginErrorBoundary の Alert
  * (#1251 fail-loud console.error) を pin する。 props-builder は空に stub して catalog 非依存に。
  */

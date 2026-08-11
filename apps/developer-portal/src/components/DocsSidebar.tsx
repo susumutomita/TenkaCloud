@@ -1,8 +1,8 @@
 import { DOC_SECTIONS } from "@/content/docs-registry";
 import { MaturityBadge } from "./MaturityBadge";
 
-// The docs navigation tree (ADR-0003 §6: docs and reference share one navigation
-// model). Driven by the same DOC_SECTIONS registry that feeds search and the link
+// The docs and API reference share one navigation tree. It is driven by the same
+// DOC_SECTIONS registry that feeds search and the link
 // checker, plus a static entry for the API reference.
 export function DocsSidebar() {
   return (

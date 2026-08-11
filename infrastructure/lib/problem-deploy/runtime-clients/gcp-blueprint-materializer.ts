@@ -1,5 +1,5 @@
 /**
- * [ADR-027 / Issue #2745] Materialize a GCP problem's Terraform source into an immutable `gs://`
+ * [Issue #2745] Materialize a GCP problem's Terraform source into an immutable `gs://`
  * object Infrastructure Manager can read.
  *
  * `gcp-infra-manager-adapter.ts` used to pass `runtime.entry` (a repository-relative path, e.g.
@@ -80,7 +80,7 @@ export interface GcpBlueprintSource {
   readonly problemDir: string;
   /** `runtime.entry` (or a composite target's `entry`) — relative to `problemDir`. */
   readonly entry: string;
-  /** ADR-008: presigned payload.zip URL for a private problem. Takes priority when set. */
+  /** presigned payload.zip URL for a private problem. Takes priority when set. */
   readonly challengePayloadUrl?: string;
 }
 

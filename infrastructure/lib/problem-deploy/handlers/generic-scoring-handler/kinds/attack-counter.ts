@@ -1,9 +1,9 @@
 /**
- * [ADR-034 / Issue #1666] CFn-output attack counter からの差分加点の共通ロジック。
+ * [Issue #1666] CFn-output attack counter からの差分加点の共通ロジック。
  *
  * 競技者 stack が「攻撃をブロック/検知した回数」を CFn Output に counter として露出し、 採点 tick が
  * 前回値からの差分に応じて加点する (= 防御の成否を採点に反映する)。 元は attack-detection kind 内にあった
- * ロジックを、 uptime-multi の attack-blocked ボーナス (ADR-034 pattern B のスコア統合) と共有するため切り出した。
+ * ロジックを、 uptime-multi の attack-blocked ボーナス (pattern B のスコア統合) と共有するため切り出した。
  *
  * 競技者は自 account の CFn Output に任意値を仕込めるため、 1 tick の差分加点には上限を設ける
  * (= leaderboard の即時 inflation 防止)。 baseline は実値に追従し、 巨大ジャンプは 1 tick 分で止まる。

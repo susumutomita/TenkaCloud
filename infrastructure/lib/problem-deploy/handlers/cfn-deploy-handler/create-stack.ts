@@ -1,5 +1,5 @@
 /**
- * Issue #2291 (ADR-049 §9): Lambda-based problem deploy — the create path.
+ * Issue #2291: Lambda-based problem deploy — the create path.
  *
  * TypeScript port of the core of `scripts/deploy-battles.sh` + `scripts/lib/battles-common.sh`
  * so the deploy can run inside a Lambda (Step Functions invokes it, then polls DescribeStacks)

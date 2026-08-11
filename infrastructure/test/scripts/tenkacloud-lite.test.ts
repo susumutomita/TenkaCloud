@@ -10,7 +10,7 @@ import {
 } from "../../../scripts/tenkacloud-lite";
 
 /**
- * Issue #778 ADR-016 Phase 4: TenkaCloud Lite CLI runner の挙動 pin。
+ * Issue #778: TenkaCloud Lite CLI runner の挙動 pin。
  *
  * spawn 系を injectable にしてあるので、 AWS / CDK を実行せずに subcommand dispatch /
  * help / unknown subcommand / output 読み取りを観測する。
@@ -104,7 +104,7 @@ function describeStackCapture(args: readonly string[]): SpawnCaptureResult {
   return { code: 0, stdout: "https://example.cloudfront.net\n", stderr: "" };
 }
 
-describe("tenkacloud-lite CLI (#778 ADR-016 Phase 4)", () => {
+describe("tenkacloud-lite CLI (#778)", () => {
   it("should print help and exit 0 on no-arg / help / -h / --help", async () => {
     for (const argv of [[], ["help"], ["-h"], ["--help"]]) {
       const { io, stdout } = buildIO({});

@@ -1,7 +1,7 @@
 import type { CloudActionIntent } from "./schema.js";
 
 /**
- * Issue #2019 / ADR-017: staged enforcement of high-risk `CloudActionIntent`.
+ * Issue #2019: staged enforcement of high-risk `CloudActionIntent`.
  *
  * TrustBridge guards the dangerous boundary where the platform AWS account
  * `AssumeRole`s into a participant account and runs CloudFormation. Until now

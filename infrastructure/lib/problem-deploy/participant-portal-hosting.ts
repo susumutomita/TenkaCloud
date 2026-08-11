@@ -22,7 +22,7 @@ export interface ParticipantPortalRuntimeConfig {
    */
   readonly mode: ParticipantPortalMode;
   /**
-   * ADR-028/030 (#1420): 参加者間 coordination dispatcher の Function URL。 portal slot が
+   * Issue #1420: 参加者間 coordination dispatcher の Function URL。 portal slot が
    * coordination-client で叩く。 未配線なら省略 (= coordination 無効)。
    */
   readonly coordinationApiUrl?: string;

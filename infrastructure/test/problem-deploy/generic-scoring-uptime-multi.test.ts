@@ -116,7 +116,7 @@ describe("uptime-multi kind", () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe("https://override.example.com/");
   });
 
-  it("should emit attack-detected on ok→fail transition (ADR-005 D2-A compat)", async () => {
+  it("should emit attack-detected on ok→fail transition (compat)", async () => {
     fetchMock.mockResolvedValue({ status: 500, text: async () => "" });
     const input = buildInput({
       scoring: {
@@ -160,7 +160,7 @@ describe("uptime-multi kind", () => {
     expect(fetchMock.mock.calls[0]?.[0]).toBe("https://api.example.com/users/score");
   });
 
-  // [ADR-034 / #1666] optional attack-blocked bonus: アプリの counter endpoint を live probe して防御加点。
+  // [#1666] optional attack-blocked bonus: アプリの counter endpoint を live probe して防御加点。
   function withAttackBonus(
     prevAttackCount: number | undefined,
   ): KindHandlerInput<UptimeMultiScoringMetadata> {
@@ -223,7 +223,7 @@ describe("uptime-multi kind", () => {
     expect(result.newState).toBeUndefined();
   });
 
-  // [ADR-034 / #1666] attack-probes: scorer が攻撃 payload を送り、 防御が破れていれば減点 (= SQLi 防御テスト)。
+  // [#1666] attack-probes: scorer が攻撃 payload を送り、 防御が破れていれば減点 (= SQLi 防御テスト)。
   function withAttackProbe(): KindHandlerInput<UptimeMultiScoringMetadata> {
     const base = buildInput();
     return {

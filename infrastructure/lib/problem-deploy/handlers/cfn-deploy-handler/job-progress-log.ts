@@ -1,5 +1,5 @@
 /**
- * Issue #2291 (ADR-049 §9): deterministic per-job progress logging for the Lambda deploy path.
+ * Issue #2291: deterministic per-job progress logging for the Lambda deploy path.
  *
  * The CodeBuild deploy path writes its build output to a CloudWatch log stream, which
  * `handlers/participant-handler/deploy-logs.ts` streams to the participant portal. The Lambda

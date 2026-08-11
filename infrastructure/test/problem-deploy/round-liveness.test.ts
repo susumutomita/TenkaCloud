@@ -6,7 +6,7 @@ import {
 } from "../../lib/problem-deploy/handlers/generic-scoring-handler/round-liveness";
 
 /**
- * #1421 (ADR-029): attack-resilience liveness invariants の純関数を pin する。
+ * #1421: attack-resilience liveness invariants の純関数を pin する。
  * - "every round reaches a terminal state": resolveRoundTerminalAt は常に有限終端を返す
  * - "no disruption is permanent": isRoundTerminated が round 開始〜終端を区切る
  */

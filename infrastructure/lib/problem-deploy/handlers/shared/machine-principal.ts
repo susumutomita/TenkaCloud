@@ -12,7 +12,7 @@ import {
 } from "./machine-scopes.js";
 
 /**
- * Issue #2948 / ADR-0005 Phase 1: machine (M2M) principal の解決と route guard。
+ * Issue #2948: machine (M2M) principal の解決と route guard。
  *
  * ## 発火条件が「machine marker の存在」ではない
  *

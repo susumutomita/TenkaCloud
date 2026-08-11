@@ -3,7 +3,7 @@ import type { DisruptionTrigger } from "../api/disruptions-client";
 type Translate = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
 /**
- * [#1775 / ADR-013 Phase 2] disruption の自動発火条件を operator 向けの 1 行ラベルにする。
+ * Issue #1775: disruption の自動発火条件を operator 向けの 1 行ラベルにする。
  *
  * 条件は problem metadata.json の `disruptions[].triggers[]` が source of truth
  * (= 採点 tick が評価し OR 結合で発火)。 ここは読み取り表示のみで、 編集は問題

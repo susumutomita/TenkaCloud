@@ -29,7 +29,7 @@ export interface MachineApiGatewayProps {
 }
 
 /**
- * Issue #2948 / ADR-0005 Phase 1: machine (M2M) 専用の REST API。
+ * Issue #2948: machine (M2M) 専用の REST API。
  *
  * human の `TenantAPI` とは **別の RestApi** である。理由は 3 つある。
  *

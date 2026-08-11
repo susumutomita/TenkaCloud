@@ -1,17 +1,17 @@
 /**
- * @tenkacloud/coordination-plugin-sdk — ADR-028 inter-team coordination の plugin contract。
+ * @tenkacloud/coordination-plugin-sdk — inter-team coordination plugin の public API。
  *
  * Battle の「参加者間 interaction」 (router / 同盟 / 共有資源 queue 等) は問題ごとに意味が違うため、
- * platform に hardcode せず **問題が state machine を同梱して差し替える** plugin 方式にする
- * (ADR-022 → renumber ADR-028 / memory: 問題は plugin、 platform は host)。 問題は
+ * platform に hardcode せず、**問題が state machine を同梱して差し替える** plugin 方式にする。
+ * 問題を plugin、platform を host とし、問題は
  * `problems/<id>/coordination/<name>.ts` で `CoordinationPlugin` を default export し、 platform の
  * dispatcher Lambda (= 本 SDK の純 reducer を実行) が tenant/event 単位の 1 row state を駆動する。
  *
  * 本パッケージは **型 + 純 util だけ** を提供する (React / AWS SDK 非依存。 portal-plugin-sdk と
- * 同形)。 実際の DDB 永続化 / cross-account 配送は platform 側 (infrastructure、 ADR-028 D3/D4)。
+ * 同形)。実際の DDB 永続化と cross-account 配送は platform 側の infrastructure が所有する。
  *
- * Status: ADR-028 Accepted (docs/architecture/adr-028-inter-team-coordination.html)。 参照 Battle は
- * `packs/reference-coordination-battle`。 contract が変われば本 SDK も追従する (version 互換は別途)。
+ * The reference Battle is
+ * `packs/reference-coordination-battle`。public API の変更時は本 SDK の version も更新する。
  */
 
 /** event 開始時に `initialState` へ渡る文脈。 機密は含めない (= 問題 plugin に見せてよい範囲)。 */
@@ -80,7 +80,7 @@ export function runTick<State, Op>(
  * 問題が default export する plugin を **型推論付き** で書くための identity helper。
  * `export default defineCoordinationPlugin({ ... })` とすると、 各 hook の State / Op / Projection が
  * 相互推論される (= 問題 author が型注釈を手書きせずに contract へ従える。 defineConfig 同形)。
- * 実体は引数をそのまま返すだけ。 ADR-028 の参照 Battle 問題はこれ経由で書く。
+ * 実体は引数をそのまま返すだけ。参照 Battle 問題はこれ経由で書く。
  */
 export function defineCoordinationPlugin<State, Op, Projection = unknown>(
   plugin: CoordinationPlugin<State, Op, Projection>,
@@ -91,7 +91,7 @@ export function defineCoordinationPlugin<State, Op, Projection = unknown>(
 /**
  * {@link CoordinationPlugin.projectForTeam} を **fail-safe** に包む。 plugin (= 問題が同梱) が
  * throw しても portal を壊さず `fallback` を返す。 これにより buggy / 未対応な問題でも参加者画面が
- * 落ちない (ADR-028 acceptance「safe fallback for problems that don't opt in」)。 機密の非漏洩は
+ * 落ちない (opt-in しない問題は安全に no-op となる)。機密の非漏洩は
  * 呼び出し側が「空 / 当たり障りのない」 fallback を渡すことで担保する (= 他 team state を出さない)。
  */
 export function safeProjectForTeam<State, Op, Projection>(

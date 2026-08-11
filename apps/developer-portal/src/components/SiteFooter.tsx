@@ -16,7 +16,7 @@ function footerLinkProps(href: string) {
     : { target: "_blank" as const, rel: "noopener noreferrer" as const };
 }
 
-// The one global footer (ADR-0003 §6), rendered by the app shell on every route
+// The app shell renders one global footer on every route
 // from the shared navigation model. The brand block, tagline, columns, social
 // marks, AWS disclaimer, legal links, and copyright reproduce the legacy landing
 // footer so the chrome reads as one product (#2429).

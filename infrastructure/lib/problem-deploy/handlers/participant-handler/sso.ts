@@ -72,8 +72,8 @@ const IAM_ROLE_ARN_RE = /^arn:aws:iam::\d{12}:role\/[A-Za-z0-9+=,.@_/-]+$/;
 
 /**
  * AWS Console の federation destination は home 画面に固定する。 SSM / CFn の deep link は
- * サービス固有の list view を経由して `Describe*` を要求するため、 JAM/GameDay baseline IAM
- * (PR-933 / ADR-021) と相性が悪い。 home から競技者自身が必要なサービスへ遷移する方が
+ * サービス固有の list view を経由して `Describe*` を要求するため、least-privilege な
+ * JAM/GameDay baseline IAM と相性が悪い。home から競技者自身が必要なサービスへ遷移する方が
  * fail-safe (= 問題側の IAM スコープに依らない)。
  *
  * caller は `region` を事前 validate 済 (= URL injection 防御済) で渡す責務を負う。

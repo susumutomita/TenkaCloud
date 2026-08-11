@@ -2,7 +2,7 @@ import { GetObjectCommand, type S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 /**
- * ADR-008 Phase 3: private 問題の短命 S3 presigned URL を発行する。
+ * private 問題の短命 presigned URL を発行する。
  * default object key は `<problemId>/latest.zip`、 default TTL は 15 分。
  */
 export interface PresignedUrlOptions {

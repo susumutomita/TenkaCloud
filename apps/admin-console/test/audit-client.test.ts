@@ -4,7 +4,7 @@ import { AuditApiError, createAuditClient, describeAuditError } from "../src/api
 import type { AppConfig } from "../src/config";
 
 /**
- * Issue #950 (ADR-020 Phase D) admin-insight audit client。 fetch を stub して
+ * Issue #950 admin-insight audit client。 fetch を stub して
  * URL 構築 (= scope / tenantId / limit / cursor / #1292 filter params) / Bearer header /
  * !ok の AuditApiError 変換 / CSV export / 未配線時の null / error 文言を pin する。
  */

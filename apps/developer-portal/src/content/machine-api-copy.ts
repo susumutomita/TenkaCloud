@@ -36,7 +36,7 @@ export const MACHINE_API_COPY: { readonly ja: MachineApiCopy; readonly en: Machi
     lead: "CLI、CI、エージェントが machine credential で呼び出せる operation の一覧です。このページはプラットフォームの route table と検証スキーマから生成しています。",
     tryItHeading: "Try-It は無効です",
     tryItBody:
-      "この API は sandbox ではなく実データを操作します。ADR-0004 の sandbox 契約を満たさないため、ブラウザから直接呼び出す Try-It は提供しません。既定の server も解決できないホストにしてあり、このページから本番へ誤って送信することはできません。",
+      "この API は sandbox ではなく実データを操作するため、ブラウザから直接呼び出す Try-It は提供しません。既定の server も解決できないホストにしてあり、このページから本番へ誤って送信することはできません。",
     reachHeading: "machine principal が到達できる範囲",
     reachBody:
       "machine credential の role は TenantMachine で、破壊的な操作の allowlist にはどれにも含まれません。したがって下の一覧がそのまま「machine credential で到達できる全て」です。障害注入、削除、チームログインキーの取得、管理系の操作は role の時点で到達できません。",
@@ -61,7 +61,7 @@ export const MACHINE_API_COPY: { readonly ja: MachineApiCopy; readonly en: Machi
     lead: "The operations a CLI, CI job, or agent can call with a machine credential. This page is generated from the platform's own route table and validation schemas.",
     tryItHeading: "Try-It is disabled",
     tryItBody:
-      "This API operates on real data, not a sandbox. It does not meet the sandbox contract in ADR-0004, so there is no in-browser Try-It. The default server also resolves nowhere, so this page cannot send a request to production by accident.",
+      "This API operates on real data, not a sandbox, so there is no in-browser Try-It. The default server also resolves nowhere, preventing this page from sending a request to production by accident.",
     reachHeading: "What a machine principal can reach",
     reachBody:
       "A machine credential carries the role TenantMachine, which appears in no destructive route's allowlist. The list below is therefore the complete surface reachable with a machine credential. Disruption injection, deletion, team login keys, and every admin operation are unreachable at the role level.",

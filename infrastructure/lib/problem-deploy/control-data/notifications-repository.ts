@@ -22,7 +22,7 @@ export interface CreateNotificationsRepositoryDeps {
 }
 
 /**
- * [ADR-049 §5.1] Cold-start factory that selects the Notifications backend from
+ * Cold-start factory that selects the Notifications backend from
  * the `CONTROL_DATA_BACKEND` flag value. **Default = dynamodb**
  * (behavior-preserving): an unset / empty / `"dynamodb"` flag returns the DDB
  * repository. `"turso"` returns the SQLite repository. Any other value
@@ -38,7 +38,7 @@ export function createNotificationsRepository(
     if (!deps.sql) {
       throw new Error(
         `CONTROL_DATA_BACKEND="${backend}" requires a SqlExecutor (deps.sql). ` +
-          "The @libsql/Turso adapter is a follow-up (ADR-049 §5.2) and is not wired yet.",
+          "The @libsql/Turso adapter is not wired without that dependency; refusing to fall back to DynamoDB.",
       );
     }
     return new SqlNotificationsRepository(deps.sql);

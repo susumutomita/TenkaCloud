@@ -1,5 +1,5 @@
 /**
- * ADR-049 Phase 4 (Issue #2293) — sign-side mirrors of the FROZEN deploy-detail
+ * Issue #2293: sign-side mirrors of the frozen deploy-detail
  * identifier shapes.
  *
  * The authoritative definitions live in the platform's frozen EventBridge detail

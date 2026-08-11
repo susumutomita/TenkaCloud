@@ -57,7 +57,7 @@ export type PackCatalogProvenance = Extract<
  * が必要になったため拡張する。problemsCatalog は bulk deploy 時に problemId → problemDir
  * を解決するため env (BATTLE_PROBLEMS_CATALOG) から JSON parse する。
  *
- * Issue #459 / ADR-002 Phase 2.2: bulk-deploy が verified=true 行のみを許可する
+ * Issue #459: bulk-deploy が verified=true 行のみを許可する
  * gate を持つため、`CompetitorAccounts` table 名と SSM SecureString path 構築用の
  * `env` を share する。
  */
@@ -76,7 +76,7 @@ export interface EventSharedResources {
   /** Issue #888: disruption audit + idempotency 用 DDB table。 deploy 時に env で wire。 */
   readonly disruptionsTableName: string;
   /**
-   * Issue #950 (ADR-020 Phase D) / #2442 Phase C4: admin audit log 用 DDB table 名。 pure SQL
+   * Issue #950 / #2442: admin audit log 用 DDB table 名。 pure SQL
    * backend (turso) では table 自体が synth されず env も配線されないため、他の
    * `*TableName` field と同じ空文字 default 緩和を適用する (`resolveAdminAuditLogRepository` が
    * fail loud に受ける)。 tenant-scoped read route (`routes/audit-log.ts`) が使う。
@@ -87,7 +87,7 @@ export interface EventSharedResources {
   readonly ddb: DynamoDBDocumentClient;
   readonly events: EventBridgeClient;
   readonly s3: S3Client;
-  /** [ADR-037 Slice 2] recurring disruption の早期解除 (DeleteSchedule) 用 aws-scheduler client。 */
+  /** recurring disruption の早期解除 (DeleteSchedule) 用 aws-scheduler client。 */
   readonly scheduler: SchedulerClient;
   readonly problemsCatalog: Readonly<Record<string, string>>;
   /** Issue #888: problem metadata.json の `disruptions[]` 宣言 (problemId 毎)。 */
@@ -138,7 +138,7 @@ export interface EventSharedResources {
 export function buildEventSharedResources(runtime: ControlDataRuntime): EventSharedResources {
   return {
     runtime,
-    // [Issue #2440 / ADR-049 §5.1 Phase A5] pure SQL backend (turso) 選択時は Events/Teams
+    // [Issue #2440] pure SQL backend (turso) 選択時は Events/Teams
     // table 自体が synth されない (= env も未配線) ため、module-load を`getEnv`の fail-fast に
     // 委ねると cold start が Initialization Error で落ちる。空文字 default に緩和し、dynamodb
     // backend での誤設定 (= 本来 table がある構成で env を配線し忘れた場合) は runtime
@@ -191,7 +191,7 @@ export function buildEventSharedResources(runtime: ControlDataRuntime): EventSha
 }
 
 /**
- * [ADR-047] 毎分 reconciler (generic-scoring Lambda) から `bulkTeardownEvent` を呼ぶための
+ * 毎分 reconciler (generic-scoring Lambda) から `bulkTeardownEvent` を呼ぶための
  * 最小 `EventSharedResources`。 teardown は Events / Deployments / CompetitorAccounts table と
  * deploy event bus だけを使う (= Teams / problem catalog / S3 は不要)。 未使用 field は安全な
  * placeholder で埋める。
@@ -249,7 +249,7 @@ export function buildScheduledTeardownResources(
 }
 
 /**
- * [ADR-047 follow-up] 毎分 reconciler (generic-scoring Lambda) から `bulkDeployEvent` を呼ぶための
+ * 毎分 reconciler (generic-scoring Lambda) から `bulkDeployEvent` を呼ぶための
  * `EventSharedResources` (teardown の鏡像)。 bulk deploy は Events / Deployments / Teams /
  * CompetitorAccounts table と deploy event bus + problem catalog を使う (= teardown より広い)。
  *
@@ -313,7 +313,7 @@ export function buildScheduledDeployResources(
 }
 
 /**
- * [ADR-049 §5.1] Events **かつ** Teams aggregate を読む handler 向けの repository seam。
+ * Events **かつ** Teams aggregate を読む handler 向けの repository seam。
  *
  * `event-handler/list.ts` の `getEventDetail` と同型 (= 同じ `shared.ddb` / table 名を渡す)。
  * default backend (`CONTROL_DATA_BACKEND` 未設定 = `dynamodb`) では従来と byte 互換の
@@ -339,7 +339,7 @@ export function resolveEventRepositories(
 }
 
 /**
- * [ADR-049 §5.1] Events aggregate **のみ** を触る、 Teams table を持たない実行 context 向けの
+ * Events aggregate **のみ** を触る、 Teams table を持たない実行 context 向けの
  * events-only seam。
  *
  * Teams repo を構築しない (= `teamsTableName` を要求しない) ため、 scheduled teardown 経路
@@ -363,7 +363,7 @@ export function resolveEventsRepository(
 }
 
 /**
- * [ADR-049 §5.1] Teams aggregate **のみ** を読む handler 向けの teams-only seam (events-only の鏡像)。
+ * Teams aggregate **のみ** を読む handler 向けの teams-only seam (events-only の鏡像)。
  *
  * Events repo を構築しない (= `eventsTableName` を要求しない) ため、 Events table を参照しない
  * teams reader (= disruption fire の scope 解決) が余分な env 依存なしで使える。 default backend

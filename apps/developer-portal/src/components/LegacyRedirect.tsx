@@ -6,7 +6,7 @@ import { useEffect } from "react";
 // redirects(), so each legacy route renders a stub that points at its canonical
 // destination via <meta http-equiv="refresh"> (works without JS) plus a client
 // navigation (instant when JS runs). The destination comes from the REDIRECTS
-// source of truth (ADR-0003 §10 stage 5: old URLs redirect, no dead links).
+// source of truth (legacy-route migration: old URLs redirect, no dead links).
 export function LegacyRedirect({ to }: { to: string }) {
   useEffect(() => {
     window.location.replace(to);

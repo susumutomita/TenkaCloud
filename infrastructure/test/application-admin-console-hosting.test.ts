@@ -186,7 +186,7 @@ describe("ApplicationAdminConsoleHosting", () => {
   });
 });
 
-describe("Issue #2230 (ADR-035): features を渡して deployRuntimeConfig を呼んだとき", () => {
+describe("Issue #2230: features を渡して deployRuntimeConfig を呼んだとき", () => {
   it("should bake the features map into runtime-config.json", () => {
     // 共有 CDK_OUTDIR を他 fixture の asset と共有すると誤読するため、専用 outdir で synth する。
     const outdirBase =

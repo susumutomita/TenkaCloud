@@ -7,7 +7,7 @@
  */
 
 // ---------------------------------------------------------------------------
-// [Issue #2442 / Phase C1] ProblemEndpoints aggregate (ADR-012 Phase 3.A).
+// [Issue #2442] ProblemEndpoints aggregate.
 //
 // Physical shape (unchanged, `dynamodb-problem-endpoint-keys.ts`):
 //   PK = `TENANT#<tenantId>#TEAM#<teamId>#PROBLEM#<problemId>`

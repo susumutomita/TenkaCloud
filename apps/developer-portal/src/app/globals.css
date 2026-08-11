@@ -1,5 +1,4 @@
-/* Shared design tokens (ADR-0003 §6: theme tokens owned by the app shell, consumed
-   by marketing, docs, and the API reference alike). One token set, applied
+/* Shared design tokens are consumed by marketing, docs, and the API reference. One token set, applied
    everywhere, so no route forks the theme. */
 :root {
   --ink: #1b2430;

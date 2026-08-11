@@ -15,7 +15,7 @@ import { resolveDeploymentsRepository } from "./shared.js";
  * #557 / #539: Event status の auto-transition reconciler (= 1-min tick で deployment 集約
  * status を見て Event 行を `READY` / `ARCHIVED` に遷移させる)。
  *
- * ADR-012 Phase 3.B で health-check-handler から本 module に relocate。動作不変、import path 変更のみ。
+ * health-check-handler から本 module に relocate。動作不変、import path 変更のみ。
  *
  * 関数 2 つ:
  *   1. `resolveEventStatusTransition` (pure function、入出力のみ)
@@ -74,13 +74,13 @@ export interface ReconcileEventStatusesContext {
   readonly eventsTableName: string;
   readonly deploymentsTableName: string;
   /**
-   * [ADR-047] scheduled auto-teardown を発火するための resources (`bulkTeardownEvent` 用)。
+   * scheduled auto-teardown を発火するための resources (`bulkTeardownEvent` 用)。
    * `buildScheduledTeardownResources()` が返す。 未配線 (= CompetitorAccounts env 無し) なら
    * `undefined` で、 reconciler は scheduled teardown を skip する (= 後方互換・tick を壊さない)。
    */
   readonly teardownDeps?: EventSharedResources;
   /**
-   * [ADR-047 follow-up] scheduled auto-deploy を発火するための resources (`bulkDeployEvent` 用)。
+   * scheduled auto-deploy を発火するための resources (`bulkDeployEvent` 用)。
    * `buildScheduledDeployResources()` が返す。 未配線 (= Teams / catalog env 無し) なら `undefined`
    * で、 reconciler は scheduled deploy を skip する (= 後方互換・tick を壊さない、 teardownDeps の鏡像)。
    */
@@ -88,7 +88,7 @@ export interface ReconcileEventStatusesContext {
 }
 
 /**
- * [ADR-047] pure: event が「自動撤去すべき」状態か判定する。
+ * pure: event が「自動撤去すべき」状態か判定する。
  *
  * 条件: `teardownAt` 設定済 かつ `now >= teardownAt` かつ status が撤去可能 (= `READY` / `ENDED`、
  * すなわち deploy 済で採点が走る/終わった状態) かつ未発火 (`teardownFiredAt` 無し)。
@@ -114,7 +114,7 @@ export function resolveScheduledTeardownDue(
 }
 
 /**
- * [ADR-047 follow-up] pure: event が「自動デプロイすべき」状態か判定する (teardown の鏡像)。
+ * pure: event が「自動デプロイすべき」状態か判定する (teardown の鏡像)。
  *
  * 条件: `deployAt` 設定済 かつ `now >= deployAt` かつ status が `DRAFT` (= 未 deploy) かつ
  * 未発火 (`deployFiredAt` 無し)。
@@ -414,7 +414,7 @@ async function reconcileSingleEvent(
   if (!event.tenantId || !event.eventId || !event.status) return;
   const eventStatus: string = event.status;
 
-  // [ADR-047 follow-up] scheduled auto-deploy: deployAt 経過の DRAFT を自動 deploy。
+  // scheduled auto-deploy: deployAt 経過の DRAFT を自動 deploy。
   // deployDeps 未配線 (= Teams / catalog env 無し) なら skip (= dormant、 後方互換)。
   // bulkDeployEvent が status を DRAFT → DEPLOYING に倒すので、 通常遷移より先に発火し early return。
   if (resolveScheduledDeployDue(event, nowMs) && ctx.deployDeps) {
@@ -432,7 +432,7 @@ async function reconcileSingleEvent(
   // (= 未 deploy なので query しても 0 件、 RCU / Lambda 時間の無駄を避ける)。
   if (eventStatus === "DRAFT") return;
 
-  // [ADR-047] scheduled auto-teardown: teardownAt 経過の READY/ENDED を自動撤去 (課金リーク防止)。
+  // scheduled auto-teardown: teardownAt 経過の READY/ENDED を自動撤去 (課金リーク防止)。
   // teardownDeps 未配線 (= CompetitorAccounts env 無し) なら skip (= dormant、 後方互換)。
   // bulkTeardownEvent が status を TEARDOWN に倒すので、 通常遷移より先に発火し early return する。
   if (resolveScheduledTeardownDue(event, nowMs) && ctx.teardownDeps) {
@@ -538,7 +538,7 @@ async function applyEventStatusTransition(
 }
 
 /**
- * [ADR-047 / ADR-047 follow-up] scheduled teardown / deploy を発火する (旧 fireScheduledTeardown /
+ * scheduled teardown / deploy を発火する (旧 fireScheduledTeardown /
  * fireScheduledDeploy の鏡像を統合、 issue #2223)。 `bulkTeardownEvent` / `bulkDeployEvent` を
  * `publishFn` として受け取り再利用する (= 手動「Event を削除」/「Deploy」と同一経路)。 直後に
  * teardownFiredAt / deployFiredAt を記録 (= 二重発火防止の補助 + 監査)。 失敗は warn で握り潰す
@@ -561,10 +561,9 @@ async function fireScheduledAction(
     nowMs: number,
   ) => Promise<{ readonly kind: string; readonly result?: { readonly enqueued: number } }>,
 ): Promise<void> {
-  const label = kind === "teardown" ? "ADR-047" : "ADR-047 follow-up";
   try {
     const outcome = await publishFn(deps, args.tenantId, args.eventId, args.nowMs);
-    console.log(`[generic-scoring] scheduled auto-${kind} fired (${label})`, {
+    console.log(`[generic-scoring] scheduled auto-${kind} fired`, {
       eventId: args.eventId,
       outcome: outcome.kind,
       enqueued: outcome.kind === "ok" ? outcome.result?.enqueued : undefined,

@@ -3,7 +3,7 @@ import type { ParticipantSharedResources } from "./shared.js";
 import { queryTeamItems, resolveNotificationsRepository } from "./shared.js";
 
 /**
- * `GET /portal/me/notifications` の response shape (ADR-006)。
+ * `GET /portal/me/notifications` の response shape。
  */
 export interface NotificationsResponse {
   readonly eventId: string;
@@ -16,7 +16,7 @@ export type ListNotificationsOutcome =
   | { kind: "no_event" }
   | { kind: "invalid_limit" };
 
-/** limit 既定値 / 上限 (ADR-006 API 設計)。*/
+/** limit 既定値 / 上限 (API 設計)。*/
 export const NOTIFICATIONS_DEFAULT_LIMIT = 100;
 export const NOTIFICATIONS_MAX_LIMIT = 200;
 
@@ -24,7 +24,7 @@ export const NOTIFICATIONS_MAX_LIMIT = 200;
  * 自 team が紐づく event の通知一覧を時系列降順で返す。
  *
  * 認可: teamLoginKey で GSI2 を Query → team の deployments を取得。`eventId` は
- * 同 team の deployment 全行で一定 (= ADR-004 で event 1 件に紐づく構造) のため、
+ * 同 team の deployment 全行で一定 (event 1 件に紐づく構造) のため、
  * 任意の 1 行から拾えば十分。旧 jobId-based deployment (eventId 無し) は `no_event`。
  *
  * event 配下の通知を Notifications aggregate seam ({@link resolveNotificationsRepository})

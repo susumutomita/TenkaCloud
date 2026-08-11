@@ -11,7 +11,7 @@ import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers"
 /**
  * Issue #1418: disruption-fire.ts の read 系 (isEventOwnedByTenant / listDisruptionAudit /
  * listDisruptionCatalog) を pin する。 cursor decode の全 reject 枝、 audit row の field default、
- * pagination、 catalog merge の guard を網羅する。 fireDisruption (mutation) は別 PR。
+ * pagination、 catalog merge の guard を網羅する。fireDisruption mutation は専用 test で扱う。
  */
 const cfg = {
   eventItem: undefined as Record<string, unknown> | undefined,

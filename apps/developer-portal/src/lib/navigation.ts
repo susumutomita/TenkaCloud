@@ -1,8 +1,7 @@
 import type { Maturity } from "./maturity";
 
-// The single source of truth for navigation across every surface (ADR-0003 §6:
-// "Header / footer / global nav owned by the app shell layout, consumed by every
-// route"). Landing, docs, and the API reference all render their global nav from
+// The single source of truth for navigation across every surface. Landing, docs,
+// and the API reference all render their global nav from
 // this one model, which is what makes the surface feel like one product and what
 // the cross-surface navigation tests assert.
 

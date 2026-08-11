@@ -71,7 +71,7 @@ describe("validateEndsAtInput", () => {
   });
 });
 
-describe("validateTeardownAtInput (ADR-047)", () => {
+describe("validateTeardownAtInput", () => {
   const NOW = new Date("2026-05-05T10:00:00.000Z").getTime();
   it("should reject empty / invalid / past / before-ends and accept a valid future teardown", () => {
     expect(validateTeardownAtInput("", "", undefined, NOW)).toEqual({ canSubmit: false });
@@ -92,7 +92,7 @@ describe("validateTeardownAtInput (ADR-047)", () => {
   });
 });
 
-describe("validateDeployAtInput (ADR-047 follow-up)", () => {
+describe("validateDeployAtInput", () => {
   const NOW = new Date("2026-05-05T10:00:00.000Z").getTime();
   it("should reject empty / invalid / past / after-ends and accept a valid future deploy", () => {
     expect(validateDeployAtInput("", "", undefined, NOW)).toEqual({ canSubmit: false });
@@ -253,7 +253,7 @@ describe("useEventOperations — scheduling", () => {
     expect(setError).toHaveBeenCalledWith("end-now");
   });
 
-  it("should validate the teardown input (required + errorKey) before scheduling (ADR-047)", async () => {
+  it("should validate the teardown input (required + errorKey) before scheduling", async () => {
     const { result, setError } = setup();
     // 空入力 → required key。
     await act(async () => {
@@ -272,7 +272,7 @@ describe("useEventOperations — scheduling", () => {
     expect(ops.setEventSchedule).not.toHaveBeenCalled();
   });
 
-  it("should schedule a valid teardown and clear its modal on success (ADR-047)", async () => {
+  it("should schedule a valid teardown and clear its modal on success", async () => {
     ops.setEventSchedule.mockResolvedValue(undefined);
     const { result } = setup();
     act(() => {
@@ -289,7 +289,7 @@ describe("useEventOperations — scheduling", () => {
     expect(result.current.teardownModalOpen).toBe(false);
   });
 
-  it("should surface teardown schedule errors (Error + non-Error) (ADR-047)", async () => {
+  it("should surface teardown schedule errors (Error + non-Error)", async () => {
     const { result, setError } = setup();
     act(() => {
       result.current.setTeardownDate("2999-01-01");
@@ -311,7 +311,7 @@ describe("useEventOperations — scheduling", () => {
     expect(setError).toHaveBeenCalledWith("teardown-sched-str");
   });
 
-  it("should validate the deploy input (required + errorKey) before scheduling (ADR-047 follow-up)", async () => {
+  it("should validate the deploy input (required + errorKey) before scheduling", async () => {
     const { result, setError } = setup();
     // 空入力 → required key。
     await act(async () => {
@@ -330,7 +330,7 @@ describe("useEventOperations — scheduling", () => {
     expect(ops.setEventSchedule).not.toHaveBeenCalled();
   });
 
-  it("should schedule a valid deploy and clear its modal on success (ADR-047 follow-up)", async () => {
+  it("should schedule a valid deploy and clear its modal on success", async () => {
     ops.setEventSchedule.mockResolvedValue(undefined);
     const { result } = setup();
     act(() => {
@@ -347,7 +347,7 @@ describe("useEventOperations — scheduling", () => {
     expect(result.current.deployScheduleModalOpen).toBe(false);
   });
 
-  it("should surface deploy schedule errors (Error + non-Error) (ADR-047 follow-up)", async () => {
+  it("should surface deploy schedule errors (Error + non-Error)", async () => {
     const { result, setError } = setup();
     act(() => {
       result.current.setDeployDate("2999-01-01");

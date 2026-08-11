@@ -10,7 +10,7 @@ interface ChangelogEntry {
   readonly reportUrl?: string;
 }
 
-// Changelog (ADR-0003 §5: /developers/changelog). Release history tied to the
+// /developers/changelog records release history tied to the
 // pack / SDK version axes. Generated from release entries in a follow-up; seeded
 // here so the route is real.
 const ENTRIES: readonly ChangelogEntry[] = [

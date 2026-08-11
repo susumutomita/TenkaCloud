@@ -54,16 +54,16 @@ export interface ProblemSummary {
    */
   defaultRegion?: string;
   /**
-   * Issue #1201 Phase 2: 動作確認済の region 集合。 宣言された場合、 EventCreate
+   * Issue #1201: 動作確認済の region 集合。宣言された場合、EventCreate
    * wizard の region picker はこの集合だけを選択肢として出す (= 動かない region への
    * misconfig 予防)。 `defaultRegion` はこの集合に含まれていることを validator が保証。
    * 未宣言なら全 AWS region から選べる (= 後方互換)。
    */
   supportedRegions?: readonly string[];
-  /** ADR-026 / ADR-027: 問題が deploy される cloud (provider) と engine。 未宣言は aws/cloudformation。 */
+  /** 問題の deploy 先 provider と engine。未宣言は aws/cloudformation。 */
   runtime: ProblemRuntimeSummary;
   /**
-   * Issue #1776: `metadata.json` の `scoring.kind` (ADR-012 の 5 builtin kind:
+   * Issue #1776: `metadata.json` の `scoring.kind` (5 種類の builtin kind:
    * flag / uptime-flat / uptime-multi / phased-polling / attack-detection)。
    * scoring 未宣言 (= deploy のみで競技要素なし) は undefined。 カタログ絞り込みの facet に使う。
    */
@@ -114,7 +114,7 @@ export interface ProblemMetadata {
   learningGoals: string[];
   cfnTemplate: string;
   cfnParameters?: Record<string, string>;
-  /** ADR-026 / ADR-027: 問題の実行環境 (provider/engine)。 未宣言は aws/cloudformation 既定。 */
+  /** 問題の実行環境。未宣言は aws/cloudformation。 */
   runtime?:
     | { provider?: string; engine?: string; entry?: string }
     | {
@@ -127,7 +127,7 @@ export interface ProblemMetadata {
         }[];
       };
   /**
-   * ADR-012: scoring 宣言。 UI が使うのは `kind` のみ (kind は schema 上 scoring 内で必須)。
+   * `metadata.json` の scoring 宣言。UI が使うのは `kind` のみ (kind は schema 上 scoring 内で必須)。
    * 配点詳細 (points / flagOutputKey 等) は backend の責務なので型として持たない。
    */
   scoring?: { kind: string };

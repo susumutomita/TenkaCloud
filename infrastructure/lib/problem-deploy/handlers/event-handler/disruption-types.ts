@@ -31,12 +31,12 @@ export interface DisruptionFireInput {
   /** 現在時刻 (ms)。 test で差し替え可能にする。 */
   readonly nowMs: number;
   /**
-   * [ADR-037] scheduled fire の遅延分。 未指定 / 0 は即時注入 (= 従来)。 1 以上で
+   * scheduled fire の遅延分。 未指定 / 0 は即時注入 (従来)。 1 以上で
    * executor が `afterMinutes` 分後に注入を予約する (= published Detail に乗せて executor へ渡す)。
    */
   readonly afterMinutes?: number;
   /**
-   * [ADR-037] recurring fire。 宣言されると executor が `rate(intervalMinutes)` schedule を作り、
+   * recurring fire。 宣言されると executor が `rate(intervalMinutes)` schedule を作り、
    * maxFires 回ぶん経過後に aws-scheduler が自動停止する。 `afterMinutes` とは排他 (= schema で検証)。
    */
   readonly recurrence?: { readonly intervalMinutes: number; readonly maxFires: number };

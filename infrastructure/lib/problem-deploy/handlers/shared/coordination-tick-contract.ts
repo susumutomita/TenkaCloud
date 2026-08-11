@@ -1,8 +1,8 @@
 /**
- * ADR-028 scoring-driven tick (#2324): generic scoring Lambda → CoordinationDispatcher Lambda の
+ * scoring-driven tick Issue #2324: generic scoring Lambda → CoordinationDispatcher Lambda の
  * **直接 Invoke wire contract**。
  *
- * ADR-028/030 の資格情報分離を守るため、 pack-author 由来の coordination plugin は最小 IAM の
+ * 資格情報分離を守るため、 pack-author 由来の coordination plugin は最小 IAM の
  * CoordinationDispatcher Lambda 内でのみ実行する (= op 経路 `applyOp` と同じ場所)。 採点 Lambda
  * (= ssm:GetParameter / kms:Decrypt を持つ) は plugin を **load / 実行しない**。 代わりに per-minute
  * pass で「どの event が coordination を宣言しているか」だけを判定し、 tick 対象を batch にまとめて

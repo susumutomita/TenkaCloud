@@ -4,7 +4,7 @@ import type { IFunction } from "aws-cdk-lib/aws-lambda";
 import type { Construct } from "constructs";
 
 /**
- * ADR-008 Phase 3 (Issue #642): bucket 名が与えられた場合のみ S3 GetObject を
+ * Issue #642: bucket 名が与えられた場合のみ GetObject を
  * Lambda role に grant する。 undefined / 空なら no-op (= dormant、 最小権限維持)。
  */
 export function grantChallengePayloadRead(

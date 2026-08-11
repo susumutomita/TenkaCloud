@@ -9,7 +9,7 @@ import { TAG_EVENT_ID, TAG_EXPIRES_AT, TAG_MANAGED_BY, TAG_TENANT_ID } from "../
 import type { CfnStacksClient, ManagedStack } from "./sweep.js";
 
 /**
- * ADR-049 Phase 4 (Issue #2293) SLICE 4 — the real CloudFormation edge for the cleanup sweeper.
+ * Issue #2293 — the real CloudFormation edge for the cleanup sweeper.
  *
  * Kept deliberately thin: it lists stacks (paginated `DescribeStacks`, which is the only list call
  * that returns tags), projects each one down to its `TenkaCloud:*` tags, and forwards `DeleteStack`.

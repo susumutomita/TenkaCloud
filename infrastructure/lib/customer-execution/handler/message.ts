@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * Issue #1727 / ADR-039 §7: customer execution plane の SQS メッセージ契約。
+ * Issue #1727: customer execution plane の SQS メッセージ契約。
  *
  * hosted control plane (または relay) が、 署名済み JWS token と、 その intent が
  * digest で縛る **承認済みテンプレ本文 (base64)** を 1 メッセージに入れて送る。

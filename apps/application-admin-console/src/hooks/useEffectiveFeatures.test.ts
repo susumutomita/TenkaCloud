@@ -8,7 +8,7 @@ vi.mock("../api/client", () => ({ useApiClient: mocks.useApiClient }));
 import { useEffectiveFeatures } from "./useEffectiveFeatures";
 
 /**
- * Issue #2231 (ADR-035): `useEffectiveFeatures` layers `GET /feature-flags` (any tenant
+ * Issue #2231: `useEffectiveFeatures` layers `GET /feature-flags` (any tenant
  * role, #2265/#2267) onto the deploy-time `config.features` baseline. `useApiClient` is
  * mocked so these tests exercise only the merge/fail-open logic, not auth or fetch.
  */

@@ -17,7 +17,7 @@ const COMPOSITE = {
   ],
 };
 
-describe("parseProblemRuntimes (#2054 / ADR-023)", () => {
+describe("parseProblemRuntimes (#2054)", () => {
   it("should decode a baked runtime catalog", () => {
     expect(parseProblemRuntimes(JSON.stringify({ "sqli-demo": CONTAINER }))).toEqual({
       "sqli-demo": CONTAINER,

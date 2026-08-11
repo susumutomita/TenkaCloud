@@ -1,7 +1,7 @@
 /**
- * ADR-049 Phase 3 (#2292) SLICE 1: generic, config-injected OIDC/JWKS JWT verifier.
+ * Issue #2292: generic, config-injected OIDC/JWKS JWT verifier.
  *
- * Always-On mode (ADR-049 §6) authenticates organizers with Auth0 (RS256 / JWKS),
+ * Always-On mode authenticates organizers with Auth0 (RS256 / JWKS),
  * NOT Cognito. The Workers control API is application-level (Cloudflare Workers, not
  * AWS API Gateway), so it cannot lean on the API Gateway JWT authorizer and needs an
  * in-process JWKS verifier that runs in BOTH Node 20+ and Cloudflare Workers.

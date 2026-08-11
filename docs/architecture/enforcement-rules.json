@@ -1,25 +1,5 @@
 [
   {
-    "id": "adr-must-be-html",
-    "principle": "PRINCIPLE_EXPLICIT_GAPS",
-    "implementation": ".claude/harness/src/rules/adr-must-be-html.ts",
-    "test": ".claude/harness/src/rules/adr-must-be-html.test.ts",
-    "timing": "pre-commit / CI",
-    "severity": "error",
-    "scope": "architecture decision records",
-    "exception": "supersede through a self-contained HTML ADR"
-  },
-  {
-    "id": "adr-self-contained",
-    "principle": "PRINCIPLE_EXPLICIT_GAPS",
-    "implementation": ".claude/harness/src/rules/adr-self-contained.ts",
-    "test": ".claude/harness/src/rules/adr-self-contained.test.ts",
-    "timing": "pre-commit / CI",
-    "severity": "error",
-    "scope": "architecture decision records",
-    "exception": "supersede through a self-contained HTML ADR"
-  },
-  {
     "id": "agent-registry-consistency",
     "principle": "PRINCIPLE_EVIDENCE_OVER_CONFIDENCE",
     "implementation": ".claude/harness/src/rules/agent-registry-consistency.ts",
@@ -107,7 +87,7 @@
     "timing": "pre-commit / CI",
     "severity": "error",
     "scope": "IAM policies",
-    "exception": "record the trust boundary and compensating controls in code and ADR"
+    "exception": "record the trust boundary and compensating controls beside the policy and in its test"
   },
   {
     "id": "lambda-env-size",
@@ -157,6 +137,6 @@
     "timing": "pre-commit / CI",
     "severity": "error",
     "scope": "AWS SDK imports",
-    "exception": "use SSM SecureString or document a superseding cost/security ADR"
+    "exception": "use SSM SecureString or provide code and test evidence for a narrower exception"
   }
 ]

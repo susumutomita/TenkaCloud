@@ -139,9 +139,8 @@ export function LoginPage({ config, returnPath }: { config: AppConfig; returnPat
 
 /**
  * SAML 有効時に表示する email→IdP 解決つき login UI。 既存 `ProductLoginShell` は SSO ボタン
- * 1 個前提なので、 内部で同じ wordmark / footer / branding を流用しつつ form を組む。
- * shell の重複は将来 refactor で 1 つに統合する (本 PR では追加なし優先)。 Phase 1
- * (admin-console/src/pages/Login.tsx) の同名 component と branding は揃えてある。
+ * 1 個前提なので、内部で同じ wordmark / footer / branding を流用しつつ form を組む。
+ * admin-console/src/pages/Login.tsx の同名 component と branding を揃える。
  */
 function ProductLoginShellSaml(props: {
   readonly title: string;

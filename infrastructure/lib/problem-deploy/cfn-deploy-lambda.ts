@@ -9,7 +9,7 @@ import { buildExternalIdParameterArnPattern } from "./handlers/shared/external-i
 
 export interface CfnDeployLambdaProps {
   /**
-   * SSM SecureString path 構築用の environment 名 (Issue #459 / ADR-002)。
+   * SSM SecureString path 構築用の environment 名 (Issue #459)。
    * `/{environmentName}/tenants/{tenantId}/external-id` の prefix。 ExternalId param の
    * `ssm:GetParameter` scope を作る。
    */
@@ -28,7 +28,7 @@ export interface CfnDeployLambdaProps {
 }
 
 /**
- * Issue #2291 (ADR-049 §9): 問題 CFn テンプレを deploy する **Lambda**。CodeBuild path
+ * Issue #2291: 問題 CFn テンプレを deploy する **Lambda**。CodeBuild path
  * (`DeployCodeBuildProject` + `deploy-battles.sh`) の Lambda 版で、`deployViaLambda` feature
  * flag が true のときだけ `buildDeployPipeline` が生成する (default OFF = 既存 CodeBuild path、
  * CFn テンプレ byte 互換)。

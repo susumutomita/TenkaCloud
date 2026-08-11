@@ -19,7 +19,7 @@ import { StepFunctionsStartExecution } from "aws-cdk-lib/aws-stepfunctions-tasks
 import { Construct } from "constructs";
 
 /**
- * Issue #910 (#895 Phase 2.C): bulk batch (= 1 event で N×M deployments) を **Distributed Map**
+ * Issue #910: bulk batch (= 1 event で N×M deployments) を **Distributed Map**
  * で並列処理する State Machine。
  *
  * 入力 shape (= \`BulkDeployCreateRequestedDetail\`):
@@ -37,17 +37,10 @@ import { Construct } from "constructs";
  *   3. 各 child execution は \`childStateMachine\` (= 既存 \`DeployCreateStateMachine\`) を
  *      \`StartExecution\` で起動 (= 既存 single-shot logic をそのまま再利用)
  *   4. \`ToleratedFailure* 未設定\` で全 item を最後まで試す (= 失敗してもエラー扱いにせず
- *      Map 全体を success で終わらせる、 ADR-001 §4 の継続+summary 方針)
+ * Map 全体を success で終わらせる、 継続+summary 方針)
  *
- * Phase 2.C.1 (= 本 PR、 foundation only):
- *   - State Machine construct + S3 ItemReader + EventBridge Rule を CDK で確立
- *   - API 側の bulk-deploy handler refactor (= S3 PutObject + BulkDeployCreateRequested
- *     publish) は **本 PR 範囲外**。 既存 fan-out も削除しない (= 旧 経路は残し、
- *     新 経路を coexist させる)
- *
- * Phase 2.C.2 (= 別 PR):
- *   - \`bulk-deploy.ts\` の fan-out を撤廃して S3 write + 1 event publish に書き換え
- *   - result aggregation (= failedItems[] を親が返す)
+ * API が S3 に書いた batch を `BulkDeployCreateRequested` event から受け取り、既存の
+ * single-deploy state machine を再利用する。
  */
 export interface BulkDeployCreateStateMachineProps {
   /**
@@ -63,8 +56,8 @@ export interface BulkDeployCreateStateMachineProps {
 }
 
 /**
- * ADR-001 §3 で固定された並列度。 operator が UI で上げ下げしない (= cross-account API
- * rate limit / CFn quota との均衡)。 SLO 評価で見直すなら本 ADR を update する。
+ * 固定された並列度。 operator が UI で上げ下げしない (cross-account API
+ * rate limit / CFn quota との均衡)。見直す場合は SLO と quota の実測を PR に添える。
  */
 const MAX_CONCURRENCY = 50;
 
@@ -88,11 +81,11 @@ export class BulkDeployCreateStateMachine extends Construct {
       }),
       // wait なし (= async fan-out)、 各 child の終了は child 自身が DDB に書き戻すので
       // 親は item を Start するだけで次へ進む。 child execution の失敗は本 Map で catch
-      // しない (= ADR-001 §4 "continue + summary" = 親は失敗を accumulate するだけ)。
+      // しない ("continue + summary" = 親は失敗を accumulate するだけ)。
       integrationPattern: IntegrationPattern.REQUEST_RESPONSE,
     });
 
-    // ADR-001 §4: 失敗を error 扱いにせず最後まで試す。 ToleratedFailure* は未設定で
+    // 失敗を error 扱いにせず最後まで試す。 ToleratedFailure* は未設定で
     // "any failure tolerated" になり、 親 execution は success で終わる。
     //
     // CDK 2.252 の DistributedMap には API duplication がある:

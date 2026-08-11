@@ -3785,7 +3785,7 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — codebuild 
 exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — codebuild rollback path > should keep the complete CfnOutputs surface 1`] = `
 {
   "CompetitorAccountsTableName": {
-    "Description": "Issue #459 / ADR-002 Competitor Accounts table 名 (tenant ↔ 競技者 AWS account 紐付け)。",
+    "Description": "Issue #459 Competitor Accounts table 名 (tenant ↔ 競技者 AWS account 紐付け)。",
     "Value": {
       "Ref": "CompetitorAccountsTable2661C473",
     },
@@ -3828,19 +3828,19 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — codebuild 
     },
   },
   "EventsTableName": {
-    "Description": "ADR-004 Events table 名 (1 競技イベント = 1 行)。",
+    "Description": "Events table 名 (1 競技イベント = 1 行)。",
     "Value": {
       "Ref": "EventsTable4B7491D3",
     },
   },
   "ProblemEndpointsTableName": {
-    "Description": "ADR-012 Phase 3.A Endpoint registry table 名 (per (tenant, team, problem, slot) の override 行)。",
+    "Description": "Endpoint registry table 名 (per (tenant, team, problem, slot) の override 行)。",
     "Value": {
       "Ref": "ProblemEndpointsTableEB12A2E1",
     },
   },
   "TeamsTableName": {
-    "Description": "ADR-004 Teams table 名 (1 チーム = 1 行、teamLoginKey は team scope)。",
+    "Description": "Teams table 名 (1 チーム = 1 行、teamLoginKey は team scope)。",
     "Value": {
       "Ref": "TeamsTable29FBC014",
     },
@@ -7810,7 +7810,7 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — lambda-dep
 exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — lambda-deploy default > should keep the complete CfnOutputs surface 1`] = `
 {
   "CompetitorAccountsTableName": {
-    "Description": "Issue #459 / ADR-002 Competitor Accounts table 名 (tenant ↔ 競技者 AWS account 紐付け)。",
+    "Description": "Issue #459 Competitor Accounts table 名 (tenant ↔ 競技者 AWS account 紐付け)。",
     "Value": {
       "Ref": "CompetitorAccountsTable2661C473",
     },
@@ -7853,19 +7853,19 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — lambda-dep
     },
   },
   "EventsTableName": {
-    "Description": "ADR-004 Events table 名 (1 競技イベント = 1 行)。",
+    "Description": "Events table 名 (1 競技イベント = 1 行)。",
     "Value": {
       "Ref": "EventsTable4B7491D3",
     },
   },
   "ProblemEndpointsTableName": {
-    "Description": "ADR-012 Phase 3.A Endpoint registry table 名 (per (tenant, team, problem, slot) の override 行)。",
+    "Description": "Endpoint registry table 名 (per (tenant, team, problem, slot) の override 行)。",
     "Value": {
       "Ref": "ProblemEndpointsTableEB12A2E1",
     },
   },
   "TeamsTableName": {
-    "Description": "ADR-004 Teams table 名 (1 チーム = 1 行、teamLoginKey は team scope)。",
+    "Description": "Teams table 名 (1 チーム = 1 行、teamLoginKey は team scope)。",
     "Value": {
       "Ref": "TeamsTable29FBC014",
     },
@@ -11786,7 +11786,7 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — lite mode 
 exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — lite mode (no eventBusArn) > should keep the complete CfnOutputs surface 1`] = `
 {
   "CompetitorAccountsTableName": {
-    "Description": "Issue #459 / ADR-002 Competitor Accounts table 名 (tenant ↔ 競技者 AWS account 紐付け)。",
+    "Description": "Issue #459 Competitor Accounts table 名 (tenant ↔ 競技者 AWS account 紐付け)。",
     "Value": {
       "Ref": "CompetitorAccountsTable2661C473",
     },
@@ -11829,19 +11829,19 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — lite mode 
     },
   },
   "EventsTableName": {
-    "Description": "ADR-004 Events table 名 (1 競技イベント = 1 行)。",
+    "Description": "Events table 名 (1 競技イベント = 1 行)。",
     "Value": {
       "Ref": "EventsTable4B7491D3",
     },
   },
   "ProblemEndpointsTableName": {
-    "Description": "ADR-012 Phase 3.A Endpoint registry table 名 (per (tenant, team, problem, slot) の override 行)。",
+    "Description": "Endpoint registry table 名 (per (tenant, team, problem, slot) の override 行)。",
     "Value": {
       "Ref": "ProblemEndpointsTableEB12A2E1",
     },
   },
   "TeamsTableName": {
-    "Description": "ADR-004 Teams table 名 (1 チーム = 1 行、teamLoginKey は team scope)。",
+    "Description": "Teams table 名 (1 チーム = 1 行、teamLoginKey は team scope)。",
     "Value": {
       "Ref": "TeamsTable29FBC014",
     },

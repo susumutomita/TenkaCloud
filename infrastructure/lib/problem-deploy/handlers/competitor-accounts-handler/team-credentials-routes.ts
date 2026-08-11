@@ -21,7 +21,7 @@ import {
 import type { SecureJsonStoreDeps } from "../shared/secure-json-store.js";
 
 /**
- * [ADR-026/027/032 / Issue #1413] per-team cloud credential onboarding routes。
+ * [Issue #1413] per-team cloud credential onboarding routes。
  *
  * 非 AWS の問題 (sakura/azure/gcp) を deploy する前に、 TenantAdmin が per-team の認証情報を SSM SecureString
  * store ([[sakura-credential-store.ts]] / [[azure-credential-store.ts]] / [[gcp-credential-store.ts]]) に登録する

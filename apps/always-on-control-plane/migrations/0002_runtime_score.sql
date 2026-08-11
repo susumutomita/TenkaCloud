@@ -1,4 +1,4 @@
--- ADR-049 Phase 5 (#2294): uptime-kind score contributions fed from the AWS event
+-- Issue #2294: uptime-kind score contributions fed from the AWS event
 -- runtime into the control store. Flag scoring is materialized into score_summary by the
 -- submissions trigger; uptime scores land here and the leaderboard sums the two, so Battle
 -- (uptime) and evergreen Challenge (flag) scoring coexist without either overwriting the other.

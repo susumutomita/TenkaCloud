@@ -167,7 +167,7 @@ export function createApp(options: AppOptions = {}): Hono<AppEnvironment> {
     }),
   );
 
-  // OIDC IdP surface (ADR-050): public documents AWS IAM fetches to validate the
+  // Public OIDC documents let AWS IAM validate the
   // command-path tokens exchanged via sts:AssumeRoleWithWebIdentity.
   app.get(OPENID_CONFIGURATION_PATH, (context) =>
     context.json(buildOpenIdConfiguration(new URL(context.req.url).origin)),
@@ -259,7 +259,7 @@ export function createApp(options: AppOptions = {}): Hono<AppEnvironment> {
   });
 
   // Register (or update) a tenant-owned deployment account for the OIDC command
-  // path (ADR-050). Deploy/destroy commands fail closed against this projection.
+  // path. Deploy/destroy commands fail closed against this projection.
   app.put("/v1/system/competitor-accounts/:tenantId/:awsAccountId", async (context) => {
     const tenantId = context.req.param("tenantId").trim();
     if (tenantId.length === 0) {

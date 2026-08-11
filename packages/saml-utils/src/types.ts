@@ -78,9 +78,7 @@ export interface SamlAttributeMapping {
 
 /**
  * Canonical user identity claim, derived from a verified SAML response and
- * Cognito federated session. This is the shape we persist on the Users table
- * (see `infrastructure/lib/.../users-table.ts` — created in this PR as a
- * `[USER-REVIEW]` CDK addition).
+ * Cognito federated session. This is the shape persisted on the Users table.
  *
  * - Control Plane PK: `${idpId}#${subjectId}`
  * - Application Plane PK: `${tenantId}#${idpId}#${subjectId}`

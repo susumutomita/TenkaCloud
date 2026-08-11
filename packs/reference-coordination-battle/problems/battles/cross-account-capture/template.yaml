@@ -2,7 +2,7 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: >-
   Reference deploy body for the cross-account-capture Battle. Each team deploys
   this stack into its own competitor account; the shared player-vs-player contest
-  is governed by the problem's inter-team coordination plugin (ADR-028), not by
+  is governed by the problem's inter-team coordination plugin, not by
   resources here. Replace the empty resource set with the per-team footholds your
   Battle needs.
 Resources: {}

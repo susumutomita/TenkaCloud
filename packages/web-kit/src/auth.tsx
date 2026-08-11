@@ -3,7 +3,7 @@
  * Cognito AuthProvider を共有化する。 両 SPA はコメント (Issue 参照) 以外コード byte 一致だった。
  *
  * 設計の要点:
- *   - **ADR-025: tokens は memory (React state) のみで保持**し sessionStorage には残さない
+ *   - **token は memory (React state) のみで保持**し sessionStorage には残さない
  *     (XSS によるトークン持ち出し面を断つ)。 reload で memory が消えると RequireAuth → Login が
  *     Cognito Hosted UI へ auto-redirect し、 既存 session cookie 経由で silent re-auth に倒れる。
  *   - **Issue #859: idle session 自動ログアウト**。 15 分間 mouse / keyboard / touch / focus /
@@ -65,7 +65,7 @@ export function AuthProvider({
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    // ADR-025: 旧バージョンが永続化した token を purge してから ready にする。
+    // 旧バージョンが永続化した token を purge してから ready にする。
     purgeLegacyTokenStorage();
     setReady(true);
   }, []);
@@ -73,7 +73,7 @@ export function AuthProvider({
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const logout = useCallback(() => {
-    // ADR-025: token は memory 保持なので、 revoke 対象の現在値を beginLogout に渡す。
+    // token は memory 保持なので、revoke 対象の現在値を beginLogout に渡す。
     setTokensState(null);
     void beginLogout(config, tokens);
   }, [config, tokens]);

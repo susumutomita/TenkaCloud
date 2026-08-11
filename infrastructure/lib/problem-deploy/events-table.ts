@@ -3,7 +3,7 @@ import { Construct } from "constructs";
 import { type DataTableProps, dataTableRemovalPolicy } from "./data-table-removal-policy.js";
 
 /**
- * 1 競技イベント (= 1 Event) を 1 行で記録する DynamoDB テーブル (ADR-004 Phase 1)。
+ * 1 競技イベント (1 Event) を 1 行で記録する DynamoDB テーブル。
  *
  * Schema:
  *   PK: EVENT#<eventId>     (eventId = ULID)

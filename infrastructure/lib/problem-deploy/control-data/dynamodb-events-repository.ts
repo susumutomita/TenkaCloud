@@ -33,7 +33,7 @@ import type {
 } from "./types.js";
 
 /**
- * [ADR-049 §5.1] DynamoDB implementation of {@link EventsRepository}. This is a
+ * DynamoDB implementation of {@link EventsRepository}. This is a
  * behavior-preserving extraction of the DDB access the event-handler already
  * performs (`handlers/event-handler/{list,create}.ts`): the SAME table, keys,
  * GSI, and marshalling. It is the default backend — flipping to SQLite is a
@@ -274,7 +274,7 @@ export class DynamoDbEventsRepository implements EventsRepository {
   }
 
   async pruneExpired(nowEpochSeconds: number): Promise<number> {
-    // Sweep rationale (native TTL vs seam uniformity, ADR-049 §5.2) + loop live
+    // Sweep rationale (native TTL vs seam uniformity) + loop live
     // in `sweepExpiredRows` (shared, #2866).
     return sweepExpiredRows({
       ddb: this.ddb,

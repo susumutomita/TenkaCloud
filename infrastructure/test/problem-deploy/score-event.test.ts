@@ -22,7 +22,7 @@ const parent = {
   expiresAt: 1_700_000_000,
 };
 
-describe("buildScoreEventRecord (ADR-005 Phase 3.1: source extension)", () => {
+describe("buildScoreEventRecord source extension", () => {
   it("source=uptime のとき result=ok / points=指定値で組み立てる", () => {
     const record = buildScoreEventRecord(parent, "uptime", 5, "2026-05-10T10:00:00.000Z");
     expect(record).toMatchObject({

@@ -13,7 +13,7 @@ import { handleRouteError, withJsonBody } from "../route-helpers.js";
 import type { EventSharedResources } from "../shared.js";
 
 /**
- * Issue #2231 (ADR-035): per-tenant runtime feature-flag toggle.
+ * Issue #2231: per-tenant runtime feature-flag toggle.
  *
  *   GET /feature-flags         — current stored overrides (registry defaults for absent keys)
  *   PUT /admin/feature-flags   — full-replace the override set

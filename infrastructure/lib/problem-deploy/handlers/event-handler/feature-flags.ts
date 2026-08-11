@@ -3,10 +3,10 @@ import { readTenantFeatureFlags } from "../shared/tenant-feature-flags.js";
 import { type EventSharedResources, resolveEventRepositories } from "./shared.js";
 
 /**
- * Issue #2231 (ADR-035): per-tenant runtime feature-flag overrides.
+ * Issue #2231: per-tenant runtime feature-flag overrides.
  *
- * ADR-020 Phase B admin surface pattern (mirrors `lock-scoring.ts`): reuse the existing
- * per-tenant Events table (no new table — `DynamoDbLowCapacity` keeps the whole platform
+ * The admin handler mirrors `lock-scoring.ts` and reuses the existing per-tenant Events table
+ * (no new table — `DynamoDbLowCapacity` keeps the whole platform
  * inside the Free Tier budget, so every new table is a cost decision, not a free one).
  *
  * Schema (single item per tenant):

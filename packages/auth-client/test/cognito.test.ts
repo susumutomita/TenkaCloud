@@ -14,7 +14,7 @@ import {
  * admin-console + application-admin-console. Asserts behavior is preserved verbatim,
  * including Issue #861 (fail-closed state validation) and Issue #833 (revoke + OIDC logout).
  *
- * ADR-025: tokens are memory-only. The exchange must NOT write a bearer token to
+ * Tokens are memory-only. The exchange must NOT write a bearer token to
  * sessionStorage, `purgeLegacyTokenStorage` evicts a token left by a pre-upgrade tab, and
  * `beginLogout` revokes the TokenSet handed to it by the caller rather than reading storage.
  */
@@ -30,7 +30,7 @@ const CONFIG: CognitoOAuthConfig = {
   scope: "openid email profile",
 };
 
-/** Seed a bearer token under the legacy key, as a pre-ADR-025 app version would have. */
+/** Seed a bearer token under the legacy key, as an older app version would have. */
 function seedLegacyToken(refreshToken: string | undefined): void {
   sessionStorage.setItem(
     TOKENS_KEY,
@@ -127,7 +127,7 @@ describe("completeLogin", () => {
     );
   });
 
-  it("should exchange the auth code for tokens, return them WITHOUT persisting, and clear PKCE artifacts (ADR-025)", async () => {
+  it("should exchange the auth code without persisting tokens and clear PKCE artifacts", async () => {
     sessionStorage.setItem(VERIFIER_KEY, "verifier-xyz");
     sessionStorage.setItem(STATE_KEY, "state-xyz");
     fetchSpy.mockResolvedValueOnce(
@@ -161,7 +161,7 @@ describe("completeLogin", () => {
 
     expect(sessionStorage.getItem(VERIFIER_KEY)).toBeNull();
     expect(sessionStorage.getItem(STATE_KEY)).toBeNull();
-    // ADR-025: the bearer token must never land in web storage (memory-only in the caller).
+    // The bearer token must never land in web storage; the caller owns it in memory.
     expect(sessionStorage.getItem(TOKENS_KEY)).toBeNull();
   });
 
@@ -176,7 +176,7 @@ describe("completeLogin", () => {
   });
 });
 
-describe("purgeLegacyTokenStorage / clearStoredAuthState (ADR-025)", () => {
+describe("purgeLegacyTokenStorage / clearStoredAuthState", () => {
   it("should evict a token a previous app version persisted, leaving PKCE artifacts intact", () => {
     seedLegacyToken("refresh.jwt");
     sessionStorage.setItem(VERIFIER_KEY, "verifier-still-needed");
@@ -206,7 +206,7 @@ describe("purgeLegacyTokenStorage / clearStoredAuthState (ADR-025)", () => {
   });
 });
 
-describe("beginLogout (Issue #833 / ADR-025)", () => {
+describe("beginLogout", () => {
   it("should POST the caller-supplied refresh token to /oauth2/revoke and clear sessionStorage", async () => {
     seedLegacyToken("legacy-leftover"); // a stale persisted token from before the upgrade
     await beginLogout(CONFIG, tokenSet("refresh.jwt"));

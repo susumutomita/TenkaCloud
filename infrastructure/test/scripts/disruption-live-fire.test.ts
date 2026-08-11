@@ -90,7 +90,7 @@ describe("evaluateFaultTimeline + assessLiveFire (#1419/#1666 acceptance)", () =
     expect(assessLiveFire(timeline, { maxRecoveryMs: 1000 }).verdict).toBe("no-fault");
   });
 
-  it("should report no-recovery when the fault never reverts (ADR-029 INV-2 violation)", () => {
+  it("should report no-recovery when automatic revert never restores the target", () => {
     const timeline = evaluateFaultTimeline(
       [sample(900, true), sample(1200, false), sample(1600, false)],
       FIRED,

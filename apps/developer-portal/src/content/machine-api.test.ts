@@ -67,7 +67,7 @@ describe("machine API artifact", () => {
 
 describe("machine API reference renderer", () => {
   it("should keep the Scalar Try-It button hidden", () => {
-    // 実データを操作する API なので ADR-0004 の sandbox 契約を満たさない。ここが true に
+    // 実データを操作する API なので browser Try-It は許可しない。ここが true に
     // 戻ったら、ブラウザから本番テナントを叩ける導線ができたということになる。
     const source = readFileSync(
       resolve(here, "..", "components", "MachineApiReference.tsx"),
@@ -106,9 +106,9 @@ describe("machine API page copy", () => {
 
   it("should state in both languages that Try-It is disabled", () => {
     expect(MACHINE_API_COPY.en.tryItHeading.toLowerCase()).toContain("try-it");
-    expect(MACHINE_API_COPY.en.tryItBody.toLowerCase()).toContain("adr-0004");
+    expect(MACHINE_API_COPY.en.tryItBody.toLowerCase()).toContain("real data");
     expect(MACHINE_API_COPY.ja.tryItHeading).toContain("Try-It");
-    expect(MACHINE_API_COPY.ja.tryItBody).toContain("ADR-0004");
+    expect(MACHINE_API_COPY.ja.tryItBody).toContain("実データ");
   });
 
   it("should have non-empty copy for every field in both locales", () => {

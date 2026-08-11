@@ -8,7 +8,7 @@ import {
 } from "../src/index";
 
 /**
- * ADR-028 (#1420): coordination plugin contract の純 util を pin する。 ADR の router 例を
+ * Issue #1420: coordination plugin の純 util を pin する。参照 router の例を
  * 参照 plugin として実装し、 dispatchOp (validate→apply / 拒否時 state 不変) と runTick
  * (tick あり/なし) を検証する。 tick を持つ alliance 風 plugin も用意して optional hook 経路を覆う。
  */

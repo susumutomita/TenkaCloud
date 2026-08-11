@@ -640,7 +640,7 @@ describe("Composite compat: catalog metadata validity", () => {
       engine: "apprun",
       entry: "registry/img:1",
     });
-    // [ADR-023] the local container runtime is recognized (classified "container",
+    // the local container runtime is recognized (classified "container",
     // not "unknown") even though it is intentionally not cloud-executable.
     expect(runtimes["container-only"]).toEqual({
       provider: "docker",
@@ -665,8 +665,8 @@ describe("Composite compat: catalog metadata validity", () => {
     // provider catalog must never blow up the runtime discovery used at synth.
     //
     // We do NOT assert every discovered runtime is cloud-recognized: the catalog
-    // legitimately carries non-cloud runtimes (e.g. the local-play container
-    // problem, ADR #2055), which classify as "unknown" to the cloud classifier.
+    // legitimately carries local-only runtimes, including the container problem from
+    // Issue #2055. Those classify as "unknown" to the cloud classifier.
     // The forward-compat guarantee is only that discovery does not throw and
     // returns a plain map.
     const realRoot = path.resolve(__dirname, "../../../problems");

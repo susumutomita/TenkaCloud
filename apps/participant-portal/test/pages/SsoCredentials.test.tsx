@@ -98,7 +98,7 @@ describe("SsoCredentialsPage render branches", () => {
     expect(screen.getByText("sso_credentials.empty_problems")).toBeInTheDocument();
   });
 
-  it("should treat a problem without provider as AWS (legacy view contract)", () => {
+  it("should treat a legacy problem without provider as AWS", () => {
     // 旧 backend 応答 (provider 欠落) は行契約どおり aws 扱い — 表示・導線は従来どおり。
     mockTeamView.mockReturnValue({ view: { problems: [problem()] }, error: undefined });
     renderPage();

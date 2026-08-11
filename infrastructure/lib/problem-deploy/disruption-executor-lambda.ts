@@ -49,10 +49,10 @@ export interface DisruptionExecutorLambdaProps {
 }
 
 /**
- * [ADR-031 / Issue #1419] cross-account disruption executor Lambda (Phase B)。
+ * [Issue #1419] cross-account disruption executor Lambda。
  *
  * EventBridge `tenantcloud.disruptions` source の `*DisruptionFired` を拾い、 該当 team deployment へ
- * AssumeRole して実障害を注入し、 ADR-029 INV-2 のため revert を aws-scheduler に予約する。 注入の破壊力は
+ * AssumeRole して実障害を注入し、注入後は必ず自動復旧を aws-scheduler に予約する。注入の破壊力は
  * **競技者側 CompetitorDeployRole (AdministratorAccess)** に由来し、 本 Lambda 自身の IAM は最小:
  *   - sts:AssumeRole は `TenkaCloud-*` ロールのみ (= deploy worker / describe-stack と同 scope)
  *   - ssm:GetParameter + kms:Decrypt は tenant ExternalId の SecureString のみ (describe-stack と同パターン)

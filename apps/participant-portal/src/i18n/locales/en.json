@@ -337,7 +337,6 @@
     "kind_unknown": "(unknown)",
     "statement_heading": "Problem",
     "writeup_heading": "Explanation and remediation",
-    "writeup_drill_hint": "Want to go deeper? Run {command} in your local Claude Code.",
     "writeup_handoff": "{solved}/{total} solved. Review the cause and remediation in the explanation",
     "failure_reason_header": "Failure reason",
     "stale_header": "Score is not increasing",

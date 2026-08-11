@@ -92,7 +92,6 @@ describe("lite-pipeline.yaml destroy wording (Issue #2959)", () => {
       "infrastructure/templates/README.md",
       "docs/operations/event-runbook.md",
       "docs/running-costs.md",
-      "docs/architecture/adr-016-lite-mode-single-tenant.html",
       "scripts/tenkacloud-lite.ts",
       "apps/developer-portal/src/app/developers/docs/getting-started/page.mdx",
       "apps/developer-portal/src/app/developers/docs/getting-started/page.ja.mdx",

@@ -18,7 +18,7 @@ import {
 } from "../lib/utils/discover-problems-catalog.js";
 
 /**
- * ADR-049 Phase 4 per-event runtime composition root.
+ * Per-event runtime composition root.
  *
  * This app is independent of the shared OIDC command seam and creates exactly one stack keyed
  * by event id. App-scope tags/aspects and the stack-scope DynamoDB aspect mirror

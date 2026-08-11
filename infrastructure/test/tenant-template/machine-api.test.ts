@@ -12,7 +12,7 @@ import {
 import { TenantTemplateStack } from "../../lib/tenant-template/tenant-template-stack";
 
 /**
- * Issue #2948 / ADR-0005 Phase 1: machine (M2M) 経路の CloudFormation 契約。
+ * Issue #2948: machine (M2M) 経路の CloudFormation 契約。
  *
  * この test が守るのは 2 つの invariant である。
  *
@@ -132,7 +132,7 @@ describe("#2948 T-12 / T-13: features.machineTokenPath OFF is a physical no-op",
     template.resourceCountIs("Custom::DescribeCognitoUserPoolClient", 0);
   });
 
-  it("should not attach a Pre-Token Generation Lambda (ADR-018 regression guard)", () => {
+  it("should not attach a Pre-Token Generation Lambda (regression guard)", () => {
     const userPool = Object.values(template.findResources("AWS::Cognito::UserPool"))[0];
     const lambdaConfig = (userPool as CfnResource | undefined)?.Properties?.LambdaConfig as
       | Record<string, unknown>

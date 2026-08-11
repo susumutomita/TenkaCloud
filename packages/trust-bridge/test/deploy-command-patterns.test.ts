@@ -12,7 +12,7 @@ const PATTERNS = {
   region: DEPLOY_AWS_REGION_PATTERN,
 } as const;
 
-describe("deploy command patterns (ADR-049 Phase 4 / #2293)", () => {
+describe("deploy command patterns", () => {
   for (const field of Object.keys(PATTERNS) as (keyof typeof PATTERNS)[]) {
     it(`should accept and reject the shared ${field} vectors`, () => {
       const { accept, reject } = DEPLOY_COMMAND_PATTERN_VECTORS[field];

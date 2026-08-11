@@ -52,7 +52,7 @@ describe("toFriendlyError", () => {
     expect(fe.title).toBe("plain string");
   });
 
-  // Issue #948 (ADR-020 Phase B.1): granular role gate で返る forbidden_role
+  // Issue #948: granular role gate で返る forbidden_role
   it("should expand forbidden_role into a friendly title (= #948)", () => {
     const err = new ApiError(
       403,
@@ -78,7 +78,7 @@ describe("toFriendlyError", () => {
     expect(fe.title).toMatch(/自分自身は削除/);
   });
 
-  // Issue #950 (ADR-020 Phase D): audit table 未配線
+  // Issue #950: audit table 未配線
   it("should expand audit_log_unconfigured into a friendly title (= #950)", () => {
     const err = new ApiError(503, '{"error":"audit_log_unconfigured"}');
     const fe = toFriendlyError(err);
@@ -86,7 +86,7 @@ describe("toFriendlyError", () => {
     expect(fe.possibleCauses?.length).toBeGreaterThan(0);
   });
 
-  // Issue #949 (ADR-020 Phase C): ControlPlane UserPool 未配線
+  // Issue #949: ControlPlane UserPool 未配線
   it("should expand control_plane_user_pool_unconfigured into a friendly title (= #949)", () => {
     const err = new ApiError(503, '{"error":"control_plane_user_pool_unconfigured"}');
     const fe = toFriendlyError(err);

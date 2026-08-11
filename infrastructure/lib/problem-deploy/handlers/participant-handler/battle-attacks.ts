@@ -9,7 +9,7 @@ import {
 } from "./shared.js";
 
 /**
- * `GET /portal/me/battle-attacks?jobId=&sinceMin=` の response shape (ADR-005 D2)。
+ * `GET /portal/me/battle-attacks?jobId=&sinceMin=` の response shape。
  *
  * Battle Portal の Attack Statistics / Attack History タブが poll する。`recoveredAt` は
  * その attack-detected event の **後で** 観測された最初の `uptime` event (= 復旧 marker)
@@ -36,7 +36,7 @@ export type BattleAttacksOutcome =
   | { kind: "invalid_jobid" }
   | { kind: "invalid_sincemin" };
 
-/** sinceMin の上限。ADR-005 D2 で RCU 暴発防止のため設定。 */
+/** sinceMin の上限。 RCU 暴発防止のため設定。 */
 export const BATTLE_ATTACKS_SINCE_MIN_MAX = 60;
 /** sinceMin 既定値。明示的にクエリパラメータが無い場合に使う。 */
 export const BATTLE_ATTACKS_SINCE_MIN_DEFAULT = 30;
@@ -49,7 +49,7 @@ export const BATTLE_ATTACKS_SINCE_MIN_DEFAULT = 30;
  * 認可: teamLoginKey で team の deployment 一覧を取得し、jobId が含まれることを check
  * (= 自 team の deployment かを保証)。
  *
- * 設計: per-endpoint 情報は **絶対に出さない** (ADR-005 D1)。response の view shape
+ * 設計: per-endpoint 情報は **絶対に出さない**。response の view shape
  * から構造的に漏れない (= occurredAt / source / result / recoveredAt のみ)。
  */
 export async function listBattleAttacks(

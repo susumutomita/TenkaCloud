@@ -1,9 +1,9 @@
 import { createSecureJsonStore, type SecureJsonStoreDeps } from "./secure-json-store.js";
 
 /**
- * [ADR-027 / ADR-032 / Issue #1411] per-team GCP WIF deploy config store (SSM SecureString)。
+ * [Issue #1411] per-team GCP WIF deploy config store (SSM SecureString)。
  *
- * ADR-032: GCP は WIF AWS provider で **署名鍵レス** federate する (deploy Lambda の AWS identity が subject)。
+ * GCP は WIF AWS provider で **署名鍵レス** federate する (deploy Lambda の AWS identity が subject)。
  * よって保管するのは「秘密鍵」ではなく per-team の **federate 先 config** = WIF pool audience / 委譲先
  * service account email / project / location。 秘密ではないが、 per-team config を 1 箇所で扱うため Sakura /
  * Azure と同じ SecureString store ([[secure-json-store.ts]]) に相乗りする (= DRY、 path 規約も統一)。

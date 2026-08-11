@@ -1,7 +1,7 @@
 {
   "name": "@TenkaCloud/trust-bridge",
   "version": "0.1.0",
-  "description": "Cross-cloud authority transfer library (= signed CloudActionIntent → short-lived provider-native credentials). Phase 1: schema + canonical serialization + JWS sign/verify + TTL + nonce hook + audit (#795 / ADR-017).",
+  "description": "Cross-cloud authority transfer library for converting signed CloudActionIntent values into short-lived provider-native credentials, with canonical serialization, JWS verification, TTL, replay protection, and audit records (#795).",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",

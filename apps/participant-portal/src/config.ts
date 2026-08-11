@@ -43,8 +43,9 @@ export interface AppConfig {
   /** Random local-session login key, present only in generated local runtime config. */
   readonly localTeamLoginKey?: string;
   /**
-   * ADR-028/030 (#1420): 参加者間 coordination dispatcher (専用 Lambda) の Function URL。
-   * 未配線 (= coordination 無効 / 旧 deploy) なら undefined。 portal slot が coordination-client で叩く。
+   * Issue #1420: team credential を使って参加者間 coordination dispatcher を呼び出す
+   * 専用 Lambda の Function URL。coordination が無効な場合や旧 deploy で未配線の場合は undefined。
+   * portal slot は coordination-client 経由で呼び出す。
    */
   readonly coordinationApiUrl?: string;
 }

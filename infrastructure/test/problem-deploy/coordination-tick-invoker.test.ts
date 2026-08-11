@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 /**
- * ADR-028 scoring-driven tick (#2324): 採点 pass → dispatcher の直接 Invoke client を pin する。
+ * scoring-driven tick (#2324): 採点 pass → dispatcher の直接 Invoke client を pin する。
  * `InvocationType=Event` (= async fire-and-forget) で wire batch を JSON payload として送ることを観測する。
  */
 const mocks = vi.hoisted(() => ({ send: vi.fn() }));

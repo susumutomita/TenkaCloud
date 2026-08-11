@@ -7,7 +7,7 @@
  */
 
 // ---------------------------------------------------------------------------
-// [Issue #2442 / Phase C2] CompetitorAccounts aggregate (Issue #459 / ADR-002).
+// [Issue #2442] CompetitorAccounts aggregate (Issue #459).
 //
 // Physical shape (unchanged, `competitor-accounts-table.ts`):
 //   PK = `TENANT#<tenantId>` / SK = `ACCOUNT#<awsAccountId>`
@@ -42,7 +42,7 @@ export type CompetitorAccountRecord = {
   createdAt: string;
   updatedAt: string;
   /**
-   * 最後に ExternalId を rotate した時刻 (Issue #596 / ADR-002 Phase 3.1)。
+   * 最後に ExternalId を rotate した時刻 (Issue #596)。
    * 過去 row には存在しない (= undefined のときは「未 rotate = createdAt から経過」とみなす)。
    */
   rotatedAt?: string;
@@ -94,7 +94,7 @@ export interface CompetitorAccountsRepository {
    * already registered for this tenant (duplicate-prevention gate); nothing
    * is written. The caller supplies the full record (including
    * `verified: false` and audit fields) — SSM ExternalId provisioning stays
-   * outside the seam (a distinct SSM SecureString concern, ADR-002 §2.2).
+   * outside the seam (a distinct SSM SecureString concern).
    */
   createAccount(record: CompetitorAccountRecord): Promise<CreateCompetitorAccountOutcome>;
   /** Every competitor account row for a tenant (verified and unverified alike). */

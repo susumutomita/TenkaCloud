@@ -9,7 +9,7 @@ import type { AppConfig } from "../config";
  * user feedback、 「Control Plane が tenant の中身を覗くと plane 境界が壊れる」)。
  *
  * 旧来は `/admin/insight/tenants/:tenantId/events`、 `/deployments/:jobId` 等の App Plane data
- * 経路も同居していたが、 Plane 分離 ([[feedback-no-cross-plane-data-leak]]) で除去した。
+ * 経路も同居していたが、plane 分離のため除去した。
  * 必要なら tenant admin が application-admin-console (= App Plane UI) で見る。
  *
  * 全 endpoint で:

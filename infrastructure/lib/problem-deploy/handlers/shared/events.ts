@@ -6,13 +6,13 @@ import { logDeployTrace } from "./trace-log.js";
 /**
  * Deploy backend で流れる EventBridge イベントの定義。
  *
- * MVP-1 (ADR-001 PR-2): tenant API Lambda が `DeployCreateRequested` を publish し、
+ * MVP-1: tenant API Lambda が `DeployCreateRequested` を publish し、
  * EventBridge Rule が Step Functions State Machine を起動する流れ。Producer (tenant API)
  * と Consumer (State Machine input transformer) で同じシンボルを参照させ、文字列 drift
  * を防ぐ。
  *
- * `EVENT_SOURCE` は `tenkacloud.deploy` (ADR-001 命名規約)。Phase 2 で Update / Delete
- * 系イベントが増えるときも同 source を使い、detail-type で分岐する。
+ * `EVENT_SOURCE` は `tenkacloud.deploy` に固定する。Update / Delete 系イベントが増えるときも
+ * 同じ source を使い、detail-type で分岐する。
  */
 
 export const EVENT_SOURCE = "tenkacloud.deploy" as const;
@@ -126,7 +126,7 @@ export const DeployCreateRequestedDetailSchema = z.object({
    */
   externalIdParameterName: z.string().optional(),
   /**
-   * ADR-008 Phase 3 (Issue #642): private 問題用の短命 (15 分 TTL) S3 presigned URL。
+   * Issue #642: private 問題用の短命 (15 分 TTL) presigned URL。
    * deploy-handler が `metadata.visibility === "private"` で `CHALLENGE_PAYLOAD_BUCKET`
    * env 変数が bind されているときのみ発行する。 CodeBuild の `deploy-battles.sh`
    * がこの URL を fetch して zip 展開する (= PR-638 で実装済)。 public 問題 / 未配線
@@ -175,8 +175,8 @@ export type DeployDeleteRequestedDetail = z.infer<typeof DeployDeleteRequestedDe
  *
  * - `s3Bucket` / `s3Key`: deployment 配列 (\`DeployCreateRequestedDetail[]\`) を JSON で保存
  *   した S3 object。 Step Functions の Distributed Map が ItemReader で iteration する
- * - `batchId`: 1 bulk 実行を識別する ULID。 各 deployment の CFn stack に Tag として
- *   打たれ、 operator が後で同 batch を逆引きできる (= ADR-001 §6 + Phase 2.A)
+ * - `batchId`: 1 bulk 実行を識別する ULID。各 deployment の CFn stack に Tag として
+ *   記録し、operator が後で同じ batch を逆引きできる
  * - `tenantId`: caller tenant の scope。 Distributed Map child execution に渡され、
  *   個別 deploy の TenantId に伝搬する
  */

@@ -7,7 +7,7 @@ import {
 import type { VerifiedCloudActionIntent } from "./schema.js";
 
 /**
- * Issue #795 / ADR-017 Phase 4: GcpWorkloadIdentityFederationExchange adapter (prototype)。
+ * Issue #795: GcpWorkloadIdentityFederationExchange adapter (prototype)。
  *
  * Google Cloud の Workload Identity Federation (WIF) は OIDC / SAML token を
  * GCP service account の short-lived access token に交換する仕組み。 TenkaCloud
@@ -20,11 +20,10 @@ import type { VerifiedCloudActionIntent } from "./schema.js";
  *      `generateAccessToken` API で service account の OAuth2 access token に
  *      exchange
  *
- * Phase 4 では (2) と (3) を呼ぶ HTTP client を inject 可能にする (= @google-cloud
- * 系 SDK を hard dep にしない、 prototype scope を最小化する)。 実 GCP account
- * smoke は Phase 4 末で別 PR で行う。
+ * (2) と (3) を呼ぶ HTTP client は inject し、@google-cloud 系 SDK を hard dependency にしない。
+ * 実 GCP account の検証は one-time verification として別に行う。
  *
- * 既知の Open Question (ADR-017 OQ#1):
+ * provider-subject binding に関する既知の Open Question:
  *   - CloudActionIntent を JWT として直接 GCP STS に渡すべきか、 JWS で包んだ
  *     canonical JSON を audience に乗せるか。 GCP STS は JWT を期待するため、
  *     Phase 4 末で intent → JWT claim 変換 layer を追加するか、 JWS のまま

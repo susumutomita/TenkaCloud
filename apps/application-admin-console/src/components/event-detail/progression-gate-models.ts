@@ -11,7 +11,7 @@ import type {
 type Translate = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
 /**
- * Issue #2283: per-tenant runtime flag key (ADR-035)。 backend
+ * Issue #2283: per-tenant runtime flag key。backend
  * (infrastructure/lib/problem-deploy/handlers/shared/progression-gate.ts の
  * `CHALLENGE_PREREQUISITE_GATE_FLAG`) と同じ文字列。 apps は infrastructure を import
  * できないためここに鏡像を持つ。

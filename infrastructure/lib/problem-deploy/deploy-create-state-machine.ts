@@ -52,7 +52,7 @@ export interface DeployCreateStateMachineProps {
    */
   readonly deploymentsTable?: ITable;
   /**
-   * Issue #2291 (ADR-049 §9): true のとき CodeBuild を使わず、CreateStack を行う **deploy Lambda**
+   * Issue #2291: true のとき CodeBuild を使わず、CreateStack を行う **deploy Lambda**
    * を invoke し、`describeStackFunction` で DescribeStacks を polling して terminal まで待つ。
    * default (false / 未指定) は在来の CodeBuild `.sync` path で、CFn テンプレは byte 互換。
    */
@@ -97,7 +97,7 @@ type DeployStatusWriteTask = DynamoUpdateItem | LambdaInvoke;
  * single-shot deploy のみ。Distributed Map による bulk 化と、
  * `cloudformation:describeStacks` による stackOutputs / stackId の取り込みは Phase 2。
  *
- * Issue #909 (#895 Phase 2.B): ADR-001 §2 は \"Create / Update / Delete の 3 state machine\"
+ * Issue #909 (#895): \"Create / Update / Delete の 3 state machine\"
  * を提示したが、 実装では **Create と Update を 1 state machine に collapse** している。
  * 理由: \`deploy-battles.sh\` が \`aws cloudformation deploy\` を使っており、 これが
  * CREATE / UPDATE を **idempotent** に扱う (= stack が無ければ Create、 あれば Update、
@@ -127,7 +127,7 @@ export class DeployCreateStateMachine extends Construct {
     // しても PENDING のまま固定で「動いていない」ように見える (実際は deploy 進行中)。
     const markInProgress = this.buildMarkInProgress(props);
 
-    // Issue #2291 (ADR-049 §9): 在来 CodeBuild 経路と Lambda CreateStack 経路の 2 branch。
+    // Issue #2291: 在来 CodeBuild 経路と Lambda CreateStack 経路の 2 branch。
     // default (deployViaLambda=false/未指定) は CodeBuild 定義を **そのまま** 生成するので、
     // 既存 CFn テンプレと byte 互換 (追加リソースなし)。true のときだけ Lambda + poll 定義。
     const definitionHead = props.deployViaLambda
@@ -197,7 +197,7 @@ export class DeployCreateStateMachine extends Construct {
     // CodeBuild env に渡す。Step Functions の optional path 直接参照は field 欠落時に
     // States.Runtime で即死するため、Choice で cross-account / same-account を明示分岐する。
     //
-    // Issue #895 Phase 2.A: ADR-001 §6 の stack tagging に必要な tenantId / jobId /
+    // Issue #895: stack tagging に必要な tenantId / jobId /
     // batchId を CodeBuild env に渡す。 deploy-battles.sh が `cloudformation deploy --tags`
     // に展開し、 operator が `cloudformation:ListStacks` + tag filter で batch を逆引き
     // できるようにする。 batchId は bulk 発火 (= 同一 event で N×M 個の deploy を撒く
@@ -349,7 +349,7 @@ export class DeployCreateStateMachine extends Construct {
   }
 
   /**
-   * Issue #2291 (ADR-049 §9): Lambda CreateStack + DescribeStacks poll 定義。
+   * Issue #2291: Lambda CreateStack + DescribeStacks poll 定義。
    * `deployViaLambda === true` のときだけ生成する (additive; default synth には現れない)。
    *
    * flow: MarkInProgress → InvokeCfnDeploy (CreateStack を投げて即 return) → Wait →

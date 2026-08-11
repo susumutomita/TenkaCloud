@@ -7,7 +7,7 @@ import {
 } from "../../lib/problem-deploy/handlers/shared/machine-scopes";
 
 /**
- * Issue #2948 / ADR-0005 Phase 1: 実行時には観測できない 3 つの invariant を source level で pin する。
+ * Issue #2948: 実行時には観測できない 3 つの invariant を source level で pin する。
  *
  * - **T-20** `machine-scopes.ts` は CDK を import しない。この module は Lambda bundle (esbuild) と
  *   CDK synth の両方から読まれるため、CDK 依存が入ると handler bundle が壊れる。

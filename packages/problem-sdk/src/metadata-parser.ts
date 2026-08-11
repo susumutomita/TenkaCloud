@@ -1,12 +1,12 @@
 /**
- * [Problem SDK / Issue #2106 ← ADR-012 Phase 3.B] Pure `metadata.json` section
+ * Issue #2106: pure `metadata.json` section
  * parsers for `phases[]` and `disruptions[]` — single source of truth shared by
  * the platform (CDK synth discovery + Lambda runtime) and external Pack authoring.
  * The infra copy re-exports from here. Every function is pure (no I/O, no env,
  * no clock).
  */
 
-/** [ADR-012 Phase 3.B] one time-based rule-switch declaration of a `phased-polling` problem. */
+/** One time-based rule-switch declaration of a `phased-polling` problem. */
 export interface ProblemPhaseEntry {
   readonly name: string;
   readonly afterMinutes: number;
@@ -17,13 +17,13 @@ export interface ProblemPhaseEntry {
   readonly description?: string;
 }
 
-/** [ADR-013 Phase 2 / #1422] condition-triggered disruption firing condition (OR-combined). */
+/** Issue #1422: condition-triggered disruption firing condition (OR-combined). */
 export type DisruptionTrigger =
   | { readonly kind: "after-deploy"; readonly afterMinutes: number }
   | { readonly kind: "team-score-above"; readonly threshold: number }
   | { readonly kind: "phase-entered"; readonly phaseName: string };
 
-/** [ADR-031 / #1419] cross-account disruption action kind dispatched by the executor. */
+/** Issue #1419: cross-account disruption action kind dispatched by the executor. */
 export type DisruptionActionKind = "ssm-run-command" | "lambda-invoke" | "cfn-stack-update";
 
 export const DISRUPTION_ACTION_KINDS: readonly DisruptionActionKind[] = [
@@ -32,14 +32,14 @@ export const DISRUPTION_ACTION_KINDS: readonly DisruptionActionKind[] = [
   "cfn-stack-update",
 ];
 
-/** [ADR-029 INV-2 / ADR-031] mandatory revert declaration — no disruption persists. */
+/** Mandatory revert declaration: no disruption persists. */
 export interface DisruptionActionRevert {
   readonly afterSeconds: number;
   readonly documentName?: string;
   readonly paramTemplate?: Readonly<Record<string, unknown>>;
 }
 
-/** [ADR-031 / #1419] declaration of the fault a disruption injects in a competitor account. */
+/** Issue #1419: declaration of the fault a disruption injects in a competitor account. */
 export interface DisruptionAction {
   readonly kind: DisruptionActionKind;
   readonly targetRef: string;
@@ -49,14 +49,14 @@ export interface DisruptionAction {
   readonly revert: DisruptionActionRevert;
 }
 
-/** [ADR-033 / #1665] scoring-level effect of a disruption (separate from real fault injection). */
+/** Issue #1665: scoring-level effect of a disruption (separate from real fault injection). */
 export type DisruptionEffect = {
   readonly kind: "penalty";
   readonly points: number;
   readonly durationSeconds: number;
 };
 
-/** [ADR-033] effect duration cap (aligned with ADR-029 1h; no persistent fault). */
+/** Effect duration cap: at most one hour, so no scoring fault can persist indefinitely. */
 export const DISRUPTION_EFFECT_MAX_DURATION_SECONDS = 3600;
 
 export interface ProblemDisruptionEntry {
@@ -68,13 +68,13 @@ export interface ProblemDisruptionEntry {
   readonly operatorEditable?: readonly string[];
   readonly parameters?: Readonly<Record<string, unknown>>;
   readonly publicHint?: boolean;
-  /** [ADR-013 Phase 2 / #1422] condition-triggered firing (unset = Phase 1 self-fire only). */
+  /** Issue #1422: condition-triggered firing (unset = self-fire only). */
   readonly triggers?: readonly DisruptionTrigger[];
-  /** [ADR-031 / #1419] cross-account execution action (unset = Phase A audit only). */
+  /** Issue #1419: cross-account execution action (unset = audit only). */
   readonly action?: DisruptionAction;
-  /** [ADR-033 / #1665] scoring-level effect (unset = no effect). */
+  /** Issue #1665: scoring-level effect (unset = no effect). */
   readonly effect?: DisruptionEffect;
-  /** [ADR-037 Slice 3] recurrence on trigger (unset = fire once). */
+  /** Recurrence on trigger (unset = fire once). */
   readonly recurrence?: { readonly intervalMinutes: number; readonly maxFires: number };
 }
 

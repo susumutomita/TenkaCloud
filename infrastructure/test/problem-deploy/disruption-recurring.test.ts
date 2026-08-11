@@ -9,7 +9,7 @@ import type { EventSharedResources } from "../../lib/problem-deploy/handlers/eve
 import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 /**
- * [ADR-037 Slice 2] recurring の一覧 / 早期解除を pin する。 list は未 cancel + 未到達 だけを返し、
+ * recurring の一覧 / 早期解除を pin する。 list は未 cancel + 未到達 だけを返し、
  * cancel は affectedTeamIds 分の `tc-recur-*` を DeleteSchedule (ResourceNotFound は冪等に無視) し、
  * registry へ cancelledAt を刻むことを観察する。
  */
@@ -25,7 +25,7 @@ function makeShared(ddbSend: ReturnType<typeof vi.fn>, schedulerSend: ReturnType
   } as unknown as EventSharedResources;
 }
 
-describe("listActiveRecurring (ADR-037 Slice 2)", () => {
+describe("listActiveRecurring", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("should return only schedules that are neither cancelled nor past their endsAt", async () => {
@@ -80,7 +80,7 @@ describe("listActiveRecurring (ADR-037 Slice 2)", () => {
   });
 });
 
-describe("cancelRecurring (ADR-037 Slice 2)", () => {
+describe("cancelRecurring", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("should delete each per-team schedule and stamp cancelledAt on the registry row", async () => {

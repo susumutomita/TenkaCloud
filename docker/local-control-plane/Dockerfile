@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 #
-# [#2906 / ADR-055] Docker-only participant local-play control plane.
+# [#2906] Docker-only participant local-play control plane.
 #
 # Runs the SAME `scripts/tenkacloud-local.ts` engine the host Bun dev path
 # (`make local-dev`) uses, plus the prebuilt Participant Portal, from one

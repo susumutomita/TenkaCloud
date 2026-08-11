@@ -16,7 +16,8 @@ import {
 } from "../../lib/problem-deploy/handlers/disruption-executor-handler/schedule-revert";
 
 /**
- * [ADR-031 / ADR-029 INV-2 / #1419] scheduleRevert: one-shot aws-scheduler 登録を mocked client で pin。
+ * Issue #1419: scheduleRevert の one-shot aws-scheduler 登録を mocked client で pin し、
+ * every injection が自動復旧されることを保証する。
  * 冪等 name / at(...) 式 / DELETE-after-completion / revert payload を観察する。
  */
 
@@ -76,7 +77,7 @@ describe("revertAtExpression", () => {
   });
 });
 
-describe("scheduleRevert (ADR-031 #1419)", () => {
+describe("scheduleRevert (#1419)", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("should create a one-shot DELETE-after schedule invoking the target with the revert payload", async () => {
@@ -113,7 +114,7 @@ describe("injectScheduleName", () => {
   });
 });
 
-describe("scheduleInject (ADR-037 scheduled fire)", () => {
+describe("scheduleInject (scheduled fire)", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("should create a one-shot at firedAt + afterMinutes invoking the target with mode:inject", async () => {
@@ -140,7 +141,7 @@ describe("scheduleInject (ADR-037 scheduled fire)", () => {
   });
 });
 
-describe("scheduleRecurring (ADR-037)", () => {
+describe("scheduleRecurring", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("should register a rate() schedule with EndDate, auto-delete, and a scheduled-time tick payload", async () => {

@@ -1,11 +1,11 @@
 ---
 name: blindspot-pass
-description: 実装計画・ADR・Issue・PR diff・特定ディレクトリを対象に、計画に書かれていない前提／未接続の境界／将来の運用条件など「計画を無効化しうる未知 (unknown unknowns)」をコード・設定・テスト・ドキュメントの証拠で洗い出し、意思決定可能な形で報告する review-only スキル。実装開始前・PR 前・ADR/設計レビュー時に使う。設計は変更しない。
+description: 実装計画・Issue・PR diff・特定ディレクトリを対象に、計画に書かれていない前提／未接続の境界／将来の運用条件など「計画を無効化しうる未知 (unknown unknowns)」をコード・設定・テストの証拠で洗い出し、意思決定可能な形で報告する review-only スキル。実装開始前・PR 前・設計レビュー時に使う。設計は変更しない。
 ---
 
 # Blindspot pass — 未知の未知を探す
 
-実装計画・ADR・Issue は既知の要件を整理するには強いが、**計画に書かれていない前提・未接続の境界・将来の運用条件**までは保証しない。個々のスライスがテスト green でも、producer/consumer が互いに接続されていない、同じ操作でも経路ごとに account 解決の前提が違う、データ面が分断されている、といった「計画を破綻させうる未知」は後から見つかる。
+実装計画や Issue は既知の要件を整理するには強いが、**計画に書かれていない前提・未接続の境界・将来の運用条件**までは保証しない。個々のスライスがテスト green でも、producer/consumer が互いに接続されていない、同じ操作でも経路ごとに account 解決の前提が違う、データ面が分断されている、といった「計画を破綻させうる未知」は後から見つかる。
 
 このスキルは、そうした未検証の前提を**証拠付きで探し、report として出す**ためのもの。参考: [A Field Guide to Fable: Finding Your Unknowns](https://www.anthropic.com/engineering)。
 
@@ -19,7 +19,7 @@ description: 実装計画・ADR・Issue・PR diff・特定ディレクトリを�
 対象は次のいずれか（複数可）を受け取れる。
 
 - **Issue**: `#<番号>` — `gh issue view <n>` で本文・完了条件を読む
-- **ADR / 設計メモ**: `docs/architecture/adr-*.html` などのパス
+- **設計メモ**: 対象となる文書や実装のパス
 - **PR diff**: `#<PR番号>` または `git diff <base>...<head>`（未完成ブランチも可）
 - **ディレクトリ / パス**: `infrastructure/lib/intent-ingress/` のような範囲
 
@@ -125,28 +125,6 @@ description: 実装計画・ADR・Issue・PR diff・特定ディレクトリを�
 - 証拠を得られない発見は `仮説` と明示し、Critical と断定しない。
 - 発見数を競わない。計画を無効化しうるものを優先する。
 - 実装中の未完成ブランチでは「`main` にないこと」と「設計上不要なこと」を区別する。
-
-## 実行例（ADR-049 Always-On 化を題材にした匿名化例）
-
-複数の並行スライス（署名付き intent seam / 常設 Control Plane / データシーム）を横断した blindspot pass の抜粋。各発見はコードで裏取り済み。
-
-> ### [Critical] ingress 起源の deploy が誤アカウントに入る
-> - **何が起きるか**: ある操作の *デフォルト経路* が切り替わった後、別 producer（署名 intent の ingress）は AssumeRole 用メタデータ（role ARN / ExternalId）を event に載せない前提のままだった。新デフォルト経路のハンドラは event の該当フィールドが無いと同一アカウント経路へ fallback するため、競技者アカウントのはずの deploy がプラットフォームアカウントに入る。
-> - **なぜ見落としやすいか**: producer 側・consumer 側とも単体テストは green。旧経路には「下流が verified account を解決する」前提が成り立っていたが、デフォルト切替でその前提が別 consumer では崩れた（**経路差分 + test illusion**）。
-> - **証拠**: `detail-builder.ts`（両フィールドを未設定にする doc コメント）と `create-stack.ts`（event 値をそのまま使い、欠落時 undefined creds = 同一アカウント）。
-> - **最小の是正方向**: ingress で verified account を解決し、未検証は fail-closed。
-> - **blocker 判定**: yes
-
-> ### [High] per-event lifecycle が実体を持たない（consumer with no producer）
-> - **何が起きるか**: 掃除の sweeper は特定タグのスタックだけを削除するが、そのタグを付与する構成コードが**テスト内にしか存在しない**。lifecycle workflow は event id を受けるが entrypoint がそれを読まず singleton を再デプロイし、destroy は `--all`。
-> - **証拠**: タグ適用関数の唯一の呼び出し元がユニットテスト（`grep` で本番コードに producer 無し）。
-> - **blocker 判定**: yes
-
-> ### [Medium] データ面の分断（data seam）
-> - **何が起きるか**: 常設面は D1、既存シームは DDB/Turso。同じ event/team が二つのストアに分かれ、片方で作ったデータがもう片方から見えない。橋渡しコードが無い。
-> - **是正方向**: 収斂方針（どちらを canonical にし、どう橋渡すか）を決める。
-
-（結論としては「Critical/High を先に解くべき blocker」と判定し、各々を独立 Issue 化した。）
 
 ## 完了後
 

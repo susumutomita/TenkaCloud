@@ -10,7 +10,7 @@ import {
 import type { ProblemDisruptionEntry } from "../../lib/utils/discover-problems-catalog";
 
 /**
- * [ADR-031 / #1419] executor orchestration を pin する。 副作用は deps 経由のみなので、
+ * [#1419] executor orchestration を pin する。 副作用は deps 経由のみなので、
  * 各 dep を mock して分岐 (no_action / duplicate / no_deployment / ok + 順序) を観察する。
  */
 
@@ -63,7 +63,7 @@ function makeDeps(over: Partial<ExecutorDeps> = {}): ExecutorDeps {
   };
 }
 
-describe("executeDisruptionAction (ADR-031 #1419)", () => {
+describe("executeDisruptionAction (#1419)", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("should inject the built dispatch then schedule the revert on the happy path", async () => {
@@ -137,7 +137,7 @@ describe("executeDisruptionAction (ADR-031 #1419)", () => {
     expect(deps.scheduleRevert).not.toHaveBeenCalled();
   });
 
-  // [ADR-037] scheduled fire
+  // scheduled fire
   it("should defer the inject (schedule it) when afterMinutes > 0, after claiming", async () => {
     const deps = makeDeps();
     const scheduled: DisruptionFiredDetail = { ...detail, afterMinutes: 30 };
@@ -170,7 +170,7 @@ describe("executeDisruptionAction (ADR-031 #1419)", () => {
   });
 });
 
-describe("executeScheduledInject (ADR-037 deferred inject)", () => {
+describe("executeScheduledInject (deferred inject)", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("should claim the inject phase, then inject + schedule revert", async () => {
@@ -212,7 +212,7 @@ describe("executeScheduledInject (ADR-037 deferred inject)", () => {
   });
 });
 
-describe("recurring fire (ADR-037)", () => {
+describe("recurring fire", () => {
   beforeEach(() => vi.clearAllMocks());
   const recurringDetail: DisruptionFiredDetail = {
     ...detail,

@@ -1,5 +1,5 @@
 /**
- * 問題の `metadata.json:scoring` section parser (ADR-012 Phase 3.B / Issue #2106)。
+ * 問題の `metadata.json:scoring` (Issue #2106)。
  *
  * 純 narrowing parser (`parseScoringMetadata`) と 6+1 種の kind 型は公開 SDK
  * `@tenkacloud/problem-sdk` に単一 source of truth として集約済みで、 同名・同 signature

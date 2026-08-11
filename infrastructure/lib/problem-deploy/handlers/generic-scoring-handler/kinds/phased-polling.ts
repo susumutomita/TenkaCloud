@@ -15,7 +15,7 @@ import {
 } from "../scoring-kernel.js";
 
 /**
- * `phased-polling` kind (ADR-012 Phase 3.B、microservice-migration-battle 想定)。
+ * `phased-polling` kind (microservice-migration-battle 想定)。
  *
  * 動作:
  *   1. `nowMs - createdAt` から phaseElapsedMin を算出し、metadata.phases[] から active phase
@@ -407,7 +407,7 @@ function resolvePlatformSnapshot(slotResults: readonly SlotResult[]): {
 }
 
 /**
- * `responseTimeMs > N` のみサポート (Phase 3.B 範囲)。 拡張は別 ADR で。
+ * `responseTimeMs > N` のみサポートする。演算子を増やす場合は metadata parser と test も更新する。
  */
 function evalResponseCondition(expr: string, responseTimeMs: number): boolean {
   const m = expr.match(/^responseTimeMs\s*>\s*(\d+)$/);

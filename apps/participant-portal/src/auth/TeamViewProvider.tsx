@@ -50,7 +50,7 @@ interface TeamViewState {
   readonly leaderboardError: string | null;
   readonly leaderboardNoEvent: boolean;
   /**
-   * 自 event の運営通知 (ADR-006)。Phase 1 以前 (eventId 無し) では
+   * 自 event の運営通知。eventId を持たない旧 deployment では
    * `notificationsNoEvent: true` を返して null。
    */
   readonly notifications: NotificationsResponse | null;
@@ -67,8 +67,7 @@ interface TeamViewState {
   readonly setAutoRefreshEnabled: Dispatch<SetStateAction<boolean>>;
   /**
    * `/notifications` page を開いたときに呼ぶ。`occurredAt` を localStorage と Context
-   * 両方に書き込み、TopNav 未読 badge を **次の polling tick を待たず即時 0 化** する
-   * (codex review)。
+   * 両方に書き込み、TopNav 未読 badge を **次の polling tick を待たず即時 0 化** する。
    */
   readonly markNotificationsSeen: (occurredAt: string) => void;
 }
@@ -130,7 +129,7 @@ export {
 export function TeamViewProvider({ config, children }: { config: AppConfig; children: ReactNode }) {
   const auth = useAuth();
   const sessionToken = auth.session?.sessionToken ?? null;
-  // codex review: `lastSeenAt` を eventId scope にして「同 browser で別 event ログイン
+  // `lastSeenAt` を eventId scope にして「同 browser で別 event ログイン
   // 後、前 event の lastSeen を引きずって新 event の通知を silent 既読化」を防ぐ。
   const eventIdForKey = auth.session?.eventId ?? "";
   const isMock = useIsMock();
@@ -275,7 +274,7 @@ export function TeamViewProvider({ config, children }: { config: AppConfig; chil
     enabled: !isMock && Boolean(sessionToken),
   });
 
-  // codex review P3: page を開いた瞬間の既読化を **localStorage と Context state 両方** に
+  // page を開いた瞬間の既読化を **localStorage と Context state 両方** に
   // 反映して、TopNav 未読 badge が次の 60s tick を待たず即 0 化する。
   const markNotificationsSeen = useCallback(
     (occurredAt: string) => {

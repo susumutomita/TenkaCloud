@@ -9,7 +9,7 @@ import { CodeBuildUseAwsManagedKms } from "../lib/cdk-aspect/codebuild-use-aws-m
 import { KmsKeyShortPendingWindow } from "../lib/cdk-aspect/kms-key-short-pending-window.js";
 
 /**
- * ADR-050 (Issue #2555 slice B) — CDK app entrypoint for the Worker OIDC
+ * Issue #2555 — CDK app entrypoint for the Worker OIDC
  * command seam (IAM OIDC provider + `tenkacloud-alwayson-command` role).
  *
  * Deliberately does NOT route through `resolveAppConfig`: like

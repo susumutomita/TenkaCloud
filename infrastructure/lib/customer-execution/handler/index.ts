@@ -17,11 +17,11 @@ import { buildCfnDeployClient, buildDdbConditionalPutClient } from "./aws-client
 import { parseIntentMessage } from "./message.js";
 
 /**
- * Issue #1727 / ADR-039 §7: customer execution plane の Lambda entry (= SQS 駆動)。
+ * Issue #1727: customer execution plane の Lambda entry (SQS 駆動)。
  *
  * customer 側アカウントで動き、 hosted control plane が署名した CloudActionIntent を
  * SQS から受け、 **ローカル CFn 権限** で deploy/destroy する。 control plane が trust
- * する role は一切 AssumeRole しない (ADR-039 の肝)。 trust-bridge の検証・実行・監査
+ * する role は一切 AssumeRole しない (肝)。 trust-bridge の検証・実行・監査
  * ロジックに、 ここで実 SDK client を注入する。
  */
 
@@ -107,7 +107,7 @@ async function buildAgent(): Promise<CustomerExecutionAgent> {
   return new CustomerExecutionAgent({ plane, executor, audit: emitAudit });
 }
 
-/** 監査レコードを構造化ログで出す (= ADR-017 D5 第 1 版: CloudWatch Logs)。 */
+/** 監査レコードを構造化ログで出す (第 1 版: CloudWatch Logs)。 */
 function emitAudit(record: CloudActionAuditRecord): void {
   console.log(JSON.stringify({ kind: "CloudActionAuditRecord", ...record }));
 }

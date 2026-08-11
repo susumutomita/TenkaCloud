@@ -15,7 +15,7 @@ import type { CoordinationTickBatch } from "../../lib/problem-deploy/handlers/sh
 import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers.js";
 
 /**
- * ADR-028 scoring-driven tick (#2324) の **dispatcher 側 tick host**。 plugin の runTick を最小 IAM の
+ * scoring-driven tick (#2324) の **dispatcher 側 tick host**。 plugin の runTick を最小 IAM の
  * CoordinationDispatcher Lambda 内 (= op 経路と同じ場所) で走らせる。 参照 Battle の capture-window
  * クローズ (= 時間経過で state 遷移) が実発火し、 no-op tick では書き込みが出ないこと (= WCU 予算) を観測する。
  */

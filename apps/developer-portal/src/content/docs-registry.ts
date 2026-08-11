@@ -1,7 +1,7 @@
 import type { Maturity } from "@/lib/maturity";
 
-// The docs page tree (ADR-0003 §6: "Sidebar / nav tree owned by the Fumadocs page
-// tree"). Until the Fumadocs swap (tracked as a follow-up), this typed registry is
+// This typed registry feeds the docs sidebar, search, and route validation. Until
+// the Fumadocs swap (tracked as a follow-up), it is
 // the single source of truth that drives the docs sidebar, the search index, and
 // the build-time link checker. Each entry maps a route slug to a real MDX file
 // under src/app/developers/docs and carries searchable text.

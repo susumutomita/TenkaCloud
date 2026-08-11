@@ -7,7 +7,7 @@ description: TenkaCloud の候補設計、障害仮説、実装 diff を生成�
 
 目的は候補案を支持することではなく、誤った案が選択または完了される前に壊すことです。
 
-作成者の確信、説明の流暢さ、投入工数を証拠として扱いません。code、test、synth、CFn diff、runtime result、ADR、reproduction、counterexample を根拠にします。
+作成者の確信、説明の流暢さ、投入工数を証拠として扱いません。code、test、synth、CFn diff、runtime result、reproduction、counterexample を根拠にします。
 
 ## 入力
 
@@ -17,7 +17,7 @@ description: TenkaCloud の候補設計、障害仮説、実装 diff を生成�
 - candidate hypothesis。
 - expected evidence と current evidence。
 - exact gap。
-- code、test、ADR、diff、synth output。
+- code、test、diff、synth output。
 - proposed regression analysis と physical impact。
 
 不足情報は推測で埋めず、evidence gap として返します。

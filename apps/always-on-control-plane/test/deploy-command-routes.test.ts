@@ -9,7 +9,7 @@ import type { AppEnvironment } from "../src/types.js";
 import { decodeJwtPayload, fakeAwsFetch } from "./helpers/aws-capture.js";
 
 /**
- * ADR-050 (Issue #2555 slice C) — the organizer deploy/destroy route over the
+ * Issue #2555: the organizer deploy/destroy route over the
  * OIDC command seam: mint → AssumeRoleWithWebIdentity → PutEvents, with the
  * frozen `tenkacloud.deploy` event shape pinned end to end.
  */

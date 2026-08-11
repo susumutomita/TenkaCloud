@@ -5,8 +5,8 @@ import type { AppConfig } from "../config";
  * Issue #2696: Lite deploy オンボーディングドリルのチェックポイントコードを、 この
  * console が Lite mode で動いているときだけ返す。
  *
- * Lite mode (ADR-016) は tenantId="local" 固定で、 これは frontend が Lite を判定する
- * ための公式 signal (= `infrastructure/lib/tenkacloud-lite/tenkacloud-lite-stack.ts`)。
+ * Lite mode の tenantId は "local" 固定で、frontend はこの値を公式 signal として
+ * Lite を判定する。設定元は `infrastructure/lib/tenkacloud-lite/tenkacloud-lite-stack.ts`。
  * SaaS の pooled / silo tenant や demo mode (`tenantId: "demo-tenant"`) ではコードを
  * 出さない — ドリルは 「自分の AWS に Lite を立てた学習者」 への報酬表示であって、
  * 通常運用のイベント運営画面に出すノイズではないため。

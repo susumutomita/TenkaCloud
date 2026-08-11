@@ -1,5 +1,5 @@
 /**
- * [ADR-027 / Issue #1411 / #2745] Unit tests for the gcp/infra-manager runtime adapter + registry
+ * [Issue #1411 / #2745] Unit tests for the gcp/infra-manager runtime adapter + registry
  * wiring. orchestration を注入された GcpInfraManagerClient / getCredential / materializeBlueprint に
  * 対して pin する (= 実 Infra Manager REST + WIF exchange + 実 materializer は account-gated / 別レイヤ)。
  */
@@ -47,7 +47,7 @@ function makeCtx(client: GcpInfraManagerClient): {
   };
 }
 
-describe("mapGcpDeploymentState (ADR-027 #1411)", () => {
+describe("mapGcpDeploymentState (#1411)", () => {
   it("should map Infra Manager state to the 6-state runtime status", () => {
     expect(mapGcpDeploymentState("ACTIVE")).toBe("ready");
     expect(mapGcpDeploymentState("FAILED")).toBe("failed");
@@ -57,7 +57,7 @@ describe("mapGcpDeploymentState (ADR-027 #1411)", () => {
   });
 });
 
-describe("GcpInfraManagerRuntimeAdapter (ADR-027 #1411)", () => {
+describe("GcpInfraManagerRuntimeAdapter (#1411)", () => {
   let client: {
     upsertDeployment: ReturnType<typeof vi.fn>;
     getDeployment: ReturnType<typeof vi.fn>;
@@ -159,7 +159,7 @@ describe("GcpInfraManagerRuntimeAdapter (ADR-027 #1411)", () => {
   });
 });
 
-describe("selectAdapter gcp wiring (ADR-027 #1411)", () => {
+describe("selectAdapter gcp wiring (#1411)", () => {
   const aws = {} as AwsCloudFormationAdapterContext;
   it("should return the GCP adapter only when its WIF context is wired, else reserved", () => {
     const ctx: GcpInfraManagerAdapterContext = {

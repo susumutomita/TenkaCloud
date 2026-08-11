@@ -142,7 +142,7 @@ describe("DeployCreateStateMachine DescribeStack task (#809 regression)", () => 
     );
   });
 
-  // Issue #895 Phase 2.A: ADR-001 §6 の stack tagging に必要な tenantId / jobId を
+  // Issue #895: stack tagging に必要な tenantId / jobId を
   // CodeBuild env に渡す経路の regression test。 これらが欠けると deploy-battles.sh が
   // tag 値を \"unknown\" にして CFn → tenant 逆引きが効かなくなる。
   it("Issue #895: should pass TENKACLOUD_TENANT_ID / TENKACLOUD_JOB_ID into CodeBuild env", () => {
@@ -169,7 +169,7 @@ describe("DeployCreateStateMachine DescribeStack task (#809 regression)", () => 
 });
 
 /**
- * Issue #2291 (ADR-049 §9): deployViaLambda feature flag. Flag OFF keeps the CodeBuild `.sync`
+ * Issue #2291: deployViaLambda feature flag. Flag OFF keeps the CodeBuild `.sync`
  * definition unchanged; flag ON swaps to the Lambda CreateStack + DescribeStacks poll definition.
  */
 describe("DeployCreateStateMachine deployViaLambda flag (#2291)", () => {

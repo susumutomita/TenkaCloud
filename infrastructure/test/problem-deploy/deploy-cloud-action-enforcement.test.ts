@@ -1,5 +1,5 @@
 /**
- * Issue #2019 / ADR-017: completion-criteria proof for staged TrustBridge
+ * Issue #2019: completion-criteria proof for staged TrustBridge
  * enforcement of high-risk `CloudActionIntent`.
  *
  * The security-critical assertions (issue COMPLETION CRITERIA #2 + #3):

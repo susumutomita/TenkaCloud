@@ -1,5 +1,5 @@
 /**
- * [ADR-026 / Issues #1412, #2746] Concrete Sakura AppRun REST client.
+ * [Issues #1412, #2746] Concrete Sakura AppRun REST client.
  *
  * The adapter owns orchestration while this service owns the current AppRun wire contract:
  * user bootstrap, Basic authentication, paginated name-to-id lookup, POST/PATCH, detail/status

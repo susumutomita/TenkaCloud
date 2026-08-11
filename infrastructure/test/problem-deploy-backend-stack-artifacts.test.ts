@@ -6,7 +6,7 @@ import {
 } from "./problem-deploy-backend-stack.test-helpers";
 
 /**
- * Issue #2291 (ADR-049 §9): the Lambda deploy path's `buildS3ArtifactsResolver` reads
+ * Issue #2291: the Lambda deploy path's `buildS3ArtifactsResolver` reads
  * `${problemDir}/template.yaml` + `${problemDir}/metadata.json` from the source bucket, where
  * `problemDir` is `problems/<category>/<id>` (events.ts schema). This slice materializes the repo
  * `problems/` tree into the source bucket under the `problems/` key prefix via a `BucketDeployment`

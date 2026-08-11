@@ -27,7 +27,7 @@ function positiveInteger(value: number, name: string): number {
 }
 
 /**
- * Models the ADR-049 event-day data flow at SQL row granularity.
+ * Models the event-day data flow at SQL row granularity.
  *
  * The participant route reads one materialized leaderboard snapshot per poll.
  * Runtime scoring writes one summary row per changed team, while snapshot

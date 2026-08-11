@@ -10,7 +10,7 @@ import {
 } from "../../lib/problem-deploy/handlers/shared/gcp-credential-store.js";
 
 /**
- * [ADR-032 / #1411] per-team GCP WIF config store の振る舞い pin。 鍵レス (= federate 先 config のみ) だが
+ * [#1411] per-team GCP WIF config store の振る舞い pin。 鍵レス (= federate 先 config のみ) だが
  * Sakura/Azure と同じ SecureString store に相乗りする。 path / 必須 field parse / round-trip / not-found を観測。
  */
 
@@ -26,7 +26,7 @@ const CRED = {
   location: "asia-northeast1",
 };
 
-describe("gcp-credential-store (ADR-032 #1411)", () => {
+describe("gcp-credential-store (#1411)", () => {
   it("should build the per-team path + IAM ARN pattern", () => {
     expect(buildGcpCredentialParameterName("development", "t1", "team-a")).toBe(
       "/development/tenants/t1/teams/team-a/gcp-credential",

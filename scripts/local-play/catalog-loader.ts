@@ -18,9 +18,9 @@ import { listLocalPlayProblems, loadContainerProblem, resolveProblemDir } from "
 /**
  * The catalog groups, searched in order. Problems live only in the
  * TenkaCloudChallenge catalog (the `problems/` submodule) — never in the
- * platform repo (ADR-008 / ADR-012).
+ * platform repo. This keeps problem content owned by one pinned catalog.
  *
- * [#2906 / ADR-055] `TENKACLOUD_PROBLEMS_HOST_PATH`, set only by the
+ * [#2906] `TENKACLOUD_PROBLEMS_HOST_PATH`, set only by the
  * containerized entrypoint, overrides `<repoRoot>/problems` with the REAL
  * host-absolute path `problems/` is bind-mounted at. Every per-problem
  * compose file's relative bind mounts get resolved by `docker compose`

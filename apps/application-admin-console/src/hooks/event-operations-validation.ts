@@ -74,7 +74,7 @@ export function validateEndsAtInput(
 }
 
 /**
- * [ADR-047] 自動撤去予定時刻の入力検証。 過去不可 (now-60s 以前) かつ endsAt 以降 (= 採点 gate を
+ * 自動撤去予定時刻の入力検証。 過去不可 (now-60s 以前) かつ endsAt 以降 (= 採点 gate を
  * 閉じてから撤去する always-ends 不変条件)。 endsAt 未設定なら下限制約なし。
  */
 export function validateTeardownAtInput(
@@ -91,7 +91,7 @@ export function validateTeardownAtInput(
 }
 
 /**
- * [ADR-047 follow-up] 自動デプロイ予定時刻の入力検証 (validateTeardownAtInput の鏡像)。 過去不可
+ * 自動デプロイ予定時刻の入力検証 (validateTeardownAtInput の鏡像)。 過去不可
  * (now-60s 以前) かつ endsAt 以前 (= deploy → 採点 → 終了 の時系列を保つ)。 endsAt 未設定なら
  * 上限制約なし。
  */

@@ -1,5 +1,5 @@
 /**
- * ADR-012 Phase 5: problem 側 plugin (= metadata.dashboard.slots) を render する wrapper。
+ * metadata.dashboard.slots で宣言した problem plugin を render する wrapper。
  *
  * 設計判断:
  *   - chunk 分割は loader.ts 内 Vite glob で自動。 portal SPA 起動時に plugin chunk は

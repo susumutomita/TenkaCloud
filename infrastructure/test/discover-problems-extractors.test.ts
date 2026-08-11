@@ -154,7 +154,7 @@ describe("discoverProblemsDisruptions", () => {
   });
 });
 
-describe("discoverProblemsRuntime (#2054 / ADR-023)", () => {
+describe("discoverProblemsRuntime (#2054)", () => {
   it("should collect only non-aws runtimes so container problems are caught by the deploy guard", () => {
     writeProblem("challenges", "container-prob", {
       id: "container-prob",

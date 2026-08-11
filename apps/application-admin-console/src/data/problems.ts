@@ -3,8 +3,7 @@
  * で build 時に取り込む。問題を追加するときは `problems/<category>/<id>/{template.yaml,
  * metadata.json}` を置くだけで、本ファイルへの手作業は不要。
  *
- * Phase 2 (ADR-003) で問題カタログを DDB-backed の API に置き換える予定。それまでは
- * 静的 build-time discovery で 1 元化を保つ。
+ * 現在は静的 build-time discovery を正本として両 console の catalog を一元化する。
  */
 
 import type { CoreCatalogInput, PackCatalogProblemInput } from "./effective-catalog";
@@ -196,7 +195,7 @@ export function listProblemSummaries(): readonly ProblemSummary[] {
 }
 
 /**
- * ADR-026 / ADR-027: 問題の deploy 先 cloud の表示名 (brand 名なので locale 非依存)。
+ * 問題の deploy 先 cloud の表示名。brand 名なので locale 非依存。
  * 未知 provider は raw 値をそのまま出す (= 新 provider 追加時の安全側 fallback)。
  */
 export const PROVIDER_LABEL: Record<string, string> = {

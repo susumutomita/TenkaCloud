@@ -9,7 +9,7 @@ import {
 import { makeFakeDdb, makeSqliteExecutor } from "./control-data-write.test-helpers";
 
 /**
- * [ADR-049 §5] Parity suite for the Events repository seam. The SAME assertions
+ * Parity suite for the Events repository seam. The SAME assertions
  * run against every backend so DynamoDB (behavior-preserving extraction) and
  * SQLite (Turso / D1 dialect) are provably interchangeable:
  *   - DynamoDb impl against a faithful in-memory fake DocumentClient (real

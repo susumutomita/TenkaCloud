@@ -105,11 +105,11 @@ describe("fireDisruption (#888)", () => {
     // PR #889 review: publish detail も mergedParameters を載せる
     const detail = JSON.parse(evCmd.input.Entries?.[0]?.Detail ?? "{}");
     expect(detail.parameters).toMatchObject({ throttleRps: 5, durationSec: 60 });
-    // [ADR-037] immediate fire: published detail に afterMinutes を載せない (regression)
+    // immediate fire: published detail に afterMinutes を載せない (regression)
     expect(detail).not.toHaveProperty("afterMinutes");
   });
 
-  it("[ADR-037] scheduled fire: published detail に afterMinutes、 audit に scheduledFor を載せる", async () => {
+  it("scheduled fire: published detail に afterMinutes、 audit に scheduledFor を載せる", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [{ teamId: "T1" }] }); // team list
     ddbSend.mockResolvedValueOnce({}); // idempotency claim
@@ -132,7 +132,7 @@ describe("fireDisruption (#888)", () => {
     expect(auditItem.scheduledFor).toBe(new Date(NOW_MS + 30 * 60_000).toISOString());
   });
 
-  it("[ADR-037 Slice 2] recurring fire: published detail に recurrence、 RECUR# registry を書く", async () => {
+  it("recurring fire: published detail に recurrence、 RECUR# registry を書く", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [{ teamId: "T1" }] }); // team list
     ddbSend.mockResolvedValueOnce({}); // idempotency claim

@@ -7,21 +7,21 @@ import type { ApiClient } from "./client";
  *   POST /events/:eventId/disruptions/fire   — fire one disruption at a scope (all / team / random-n)
  *   GET  /events/:eventId/disruptions/audit  — fire history (cursor-paginated)
  *
- * The mechanism is generic: a problem declares each disruption in metadata.json; the catalog
- * surfaces them, and firing publishes a `*DisruptionFired` event the cross-account executor Lambda
- * picks up (ADR-031/033/034). This client is the operator's read/fire surface.
+ * The mechanism is generic: a problem declares each disruption in metadata.json, and the catalog
+ * surfaces it. Firing publishes a `*DisruptionFired` event consumed by the cross-account executor
+ * Lambda. This client is the operator's read/fire surface.
  */
 
 export type DisruptionScope = "all" | "team" | "random-n";
 
 /**
- * [ADR-037] When the injection runs: immediately, scheduled `afterMinutes` from now, or
+ * When the injection runs: immediately, scheduled `afterMinutes` from now, or
  * `recurring` every `intervalMinutes` for `maxFires` times (auto-stops; always ends).
  */
 export type DisruptionTiming = "immediate" | "scheduled" | "recurring";
 
 /**
- * [ADR-013 Phase 2] A condition that auto-fires the disruption from the scoring tick.
+ * A condition that auto-fires the disruption from the scoring tick.
  * Declared in the problem's metadata.json (`disruptions[].triggers[]`, OR-combined);
  * the catalog surfaces them read-only — the metadata stays the source of truth.
  */
@@ -42,9 +42,9 @@ export interface DisruptionCatalogItem {
   readonly parameters?: Readonly<Record<string, unknown>>;
   /** Whether competitors can see this disruption exists (operator view shows all). */
   readonly publicHint?: boolean;
-  /** [ADR-037] Declared default delay (minutes) used to pre-fill the schedule input. */
+  /** Declared default delay (minutes) used to pre-fill the schedule input. */
   readonly defaultAfterMinutes?: number;
-  /** [ADR-013 Phase 2] Auto-fire conditions (absent = manual fire only). */
+  /** Auto-fire conditions (absent = manual fire only). */
   readonly triggers?: readonly DisruptionTrigger[];
 }
 
@@ -66,13 +66,13 @@ export interface FireDisruptionRequest {
   readonly parameters?: Readonly<Record<string, unknown>>;
   /** Idempotency key (>= 8 chars); re-firing with the same id is a no-op on the platform. */
   readonly requestId: string;
-  /** [ADR-037] `immediate` (default) injects now; `scheduled` defers; `recurring` repeats. */
+  /** `immediate` (default) injects now; `scheduled` defers; `recurring` repeats. */
   readonly timing?: DisruptionTiming;
-  /** [ADR-037] Required when `timing === "scheduled"`; 1–1440 minutes. */
+  /** Required when `timing === "scheduled"`; 1–1440 minutes. */
   readonly afterMinutes?: number;
-  /** [ADR-037] Required when `timing === "recurring"`; minutes between fires (1–1440). */
+  /** Required when `timing === "recurring"`; minutes between fires (1–1440). */
   readonly intervalMinutes?: number;
-  /** [ADR-037] Required when `timing === "recurring"`; total fires before auto-stop (1–60). */
+  /** Required when `timing === "recurring"`; total fires before auto-stop (1–60). */
   readonly maxFires?: number;
 }
 
@@ -92,7 +92,7 @@ export interface DisruptionAuditRow {
   readonly targetTeamIds: readonly string[];
   readonly parameters: Readonly<Record<string, unknown>>;
   readonly requestId: string;
-  /** [ADR-037] For a scheduled fire, the time the injection is/was due (ISO8601). */
+  /** For a scheduled fire, the time the injection is/was due (ISO8601). */
   readonly scheduledFor?: string;
 }
 
@@ -135,7 +135,7 @@ export function newFireRequestId(): string {
   return `fire-${crypto.randomUUID()}`;
 }
 
-/** [ADR-037 Slice 2] One active recurring disruption (an aws-scheduler rate schedule still running). */
+/** One active recurring disruption (an aws-scheduler rate schedule still running). */
 export interface ActiveRecurringRow {
   readonly requestId: string;
   readonly problemId: string;
@@ -154,7 +154,7 @@ export interface ListRecurringResponse {
   readonly items: readonly ActiveRecurringRow[];
 }
 
-/** [ADR-037 Slice 2] List the event's still-running recurring disruptions (not cancelled, not past endsAt). */
+/** List the event's still-running recurring disruptions (not cancelled, not past endsAt). */
 export function fetchActiveRecurring(
   api: ApiClient,
   eventId: string,
@@ -162,7 +162,7 @@ export function fetchActiveRecurring(
   return api.get<ListRecurringResponse>(`events/${eventId}/disruptions/recurring`);
 }
 
-/** [ADR-037 Slice 2] Cancel one recurring disruption early (deletes its schedules; idempotent). */
+/** Cancel one recurring disruption early (deletes its schedules; idempotent). */
 export function cancelRecurringDisruption(
   api: ApiClient,
   eventId: string,

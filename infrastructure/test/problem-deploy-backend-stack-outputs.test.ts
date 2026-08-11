@@ -12,7 +12,7 @@ describe("ProblemDeployBackendStack (MVP-1) — Outputs", () => {
     );
   });
 
-  it("ADR-012 Phase 3.A: should expose ProblemEndpointsTableName as an Output", () => {
+  it("should expose ProblemEndpointsTableName as an Output", () => {
     const outputs = tpl.findOutputs("*");
     expect(Object.keys(outputs)).toEqual(expect.arrayContaining(["ProblemEndpointsTableName"]));
   });

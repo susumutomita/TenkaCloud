@@ -225,7 +225,7 @@ describe("EventDangerZone", () => {
     expect(screen.getByTestId("modal-teardown-confirm")).toBeDisabled();
   });
 
-  it("should drive the teardown-schedule modal inputs and confirm/cancel (ADR-047)", () => {
+  it("should drive the teardown-schedule modal inputs and confirm/cancel", () => {
     const c = controller({
       teardownSchedule: { open: true },
       detail: {
@@ -279,7 +279,7 @@ describe("EventDangerZone", () => {
     expect(screen.getByRole("button", confirmName)).toBeDisabled();
   });
 
-  it("should drive the deploy-schedule modal inputs and confirm/cancel (ADR-047 follow-up)", () => {
+  it("should drive the deploy-schedule modal inputs and confirm/cancel", () => {
     const c = controller({
       deploySchedule: { open: true },
       detail: {

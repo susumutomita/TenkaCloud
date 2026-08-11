@@ -13,7 +13,7 @@ import type { ProblemDisruptionEntry } from "../../lib/utils/discover-problems-c
 import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 /**
- * [ADR-031 / Issue #1419] Disruption Phase B の **fire → executor 接合 (contract) test**。
+ * Issue #1419 の **fire → executor 接合 (contract) test**。
  *
  * 各側の unit test (disruption-fire-mutation / disruption-execute / disruption-route) は片側しか触らない。
  * 一方 `disruption-fire.publishEntries` が `JSON.stringify` する `Detail` の形と、 executor 側
@@ -121,7 +121,7 @@ beforeEach(() => {
   eventsSend.mockResolvedValue({ FailedEntryCount: 0 });
 });
 
-describe("disruption fire → executor contract (#1419 Phase B seam)", () => {
+describe("disruption fire → executor contract (#1419)", () => {
   it("should carry a fired disruption end-to-end into the competitor-side inject + revert", async () => {
     const out = await fireDisruption(shared, fireInput);
     expect(out.kind).toBe("ok");
@@ -144,7 +144,7 @@ describe("disruption fire → executor contract (#1419 Phase B seam)", () => {
       documentName: "AWS-RunShellScript",
       params: { commands: ["inject 250"] },
     });
-    // ADR-029 INV-2: every injection scheduled a revert at the declared afterSeconds (= game always ends).
+    // Every injection schedules a revert at the declared afterSeconds so the disruption always ends.
     expect(reverts).toHaveLength(2);
     expect(reverts[0]?.afterSeconds).toBe(120);
   });

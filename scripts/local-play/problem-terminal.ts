@@ -7,11 +7,11 @@
  * the starter, run the tests — happens in a shell. Without one, the portal starts a
  * grader and leaves the participant on a screen with nothing to act on.
  *
- * local play only. ADR-014 bars SSE/WebSocket on AWS-backed surfaces because those
- * backends are request-scoped Lambdas sized for the Free Tier (connection registry
- * against the DynamoDB 1/1 rule, per-connection cost). Local play is one long-lived
- * `node:http` process with SQLite on the participant's own machine, so not one of
- * those reasons reaches here; the ADR's Frontend row now says so explicitly.
+ * This is local-play only. AWS-backed surfaces remain request-scoped Lambdas and do
+ * not open SSE/WebSocket sessions: a connection registry would consume the bounded
+ * DynamoDB capacity and add per-connection cost. Local play is one long-lived
+ * `node:http` process with SQLite on the participant's own machine, so those cloud
+ * constraints do not apply here.
  *
  * This module is the pure session bookkeeping — who may attach, how many sessions a
  * problem may hold, and how a session ends. Docker is injected, so it unit tests with

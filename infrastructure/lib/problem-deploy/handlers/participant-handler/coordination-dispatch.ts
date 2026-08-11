@@ -11,12 +11,12 @@ import {
 } from "./coordination-store.js";
 
 /**
- * ADR-028 D6 (#1420): platform-side coordination dispatcher の純粋なオーケストレーション。
+ * Issue #1420: platform-side coordination dispatcher の純粋なオーケストレーション。
  *
  * 副作用 (DDB read/write) は {@link CoordinationStoreDeps} 越しに注入し、 意味論 (validate / apply /
  * project) は問題が同梱する {@link CoordinationPlugin} に委譲する。 platform は SDK の純 util
  * (`dispatchOp` / `safeProjectForTeam`) を「DDB から read → dispatch → 楽観ロック write」 の外側で
- * 呼ぶだけで、 問題依存の意味論を一切持たない (= ADR-012 の problem=plugin / platform=host)。
+ * 呼ぶだけで、 問題依存の意味論を一切持たない (problem=plugin / platform=host)。
  */
 
 /** dispatch 1 回の文脈。 route が team-login-key 認証 + event scope を解決して渡す。 */

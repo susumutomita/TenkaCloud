@@ -14,7 +14,7 @@ import {
 } from "../../lib/problem-deploy/handlers/shared/azure-credential-store.js";
 
 /**
- * [ADR-032 / #1410] per-team Azure deploy credential store の振る舞い pin。 path 規約 / 必須 field の
+ * [#1410] per-team Azure deploy credential store の振る舞い pin。 path 規約 / 必須 field の
  * fail-safe parse / round-trip / not-found→undefined / idempotent delete を観測する (SSM mock)。
  */
 
@@ -31,7 +31,7 @@ const CRED = {
   location: "japaneast",
 };
 
-describe("azure-credential-store (ADR-032 #1410)", () => {
+describe("azure-credential-store (#1410)", () => {
   it("should build a per-team SecureString path + IAM ARN pattern", () => {
     expect(buildAzureCredentialParameterName("development", "t1", "team-a")).toBe(
       "/development/tenants/t1/teams/team-a/azure-credential",

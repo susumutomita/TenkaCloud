@@ -17,12 +17,12 @@ import type { Construct } from "constructs";
 import { LAMBDA_LOG_RETENTION, LAMBDA_NODEJS_RUNTIME } from "../utils/lambda-runtime.js";
 
 /**
- * Issue #1727 / ADR-039 §7: customer-execution mode の CDK 配線。
+ * Issue #1727: customer-execution mode の CDK 配線。
  *
  * **customer 側のアカウントに** deploy する独立 stack。 hosted control plane が署名した
  * CloudActionIntent を SQS で受け、 ローカル CFn 権限で deploy/destroy する。
  *
- * ADR-039 の核心: ここに作る IAM の中に **control plane を trust する経路は無い**。
+ * 核心: ここに作る IAM の中に **control plane を trust する経路は無い**。
  * deploy 権限は customer 所有の CFn service role に閉じ、 hosted control plane からは
  * 構造的に到達できない (= control plane を侵害しても、 この権限は奪えない)。
  */
@@ -73,7 +73,7 @@ export class CustomerExecutionPlaneStack extends Stack {
     });
 
     // CloudFormation がチャレンジ stack を配置するときに assume する service role。
-    // broad な権限は **この dedicated challenge account に閉じる** (ADR-039 §3.2)。
+    // broad な権限は **この dedicated challenge account に閉じる**。
     this.cfnServiceRole = new Role(this, "CfnServiceRole", {
       assumedBy: new ServicePrincipal("cloudformation.amazonaws.com"),
       managedPolicies: [ManagedPolicy.fromAwsManagedPolicyName("AdministratorAccess")],

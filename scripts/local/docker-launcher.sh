@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# [Issue #2906 / ADR-055] Docker-only participant entry point for `make local`
+# [Issue #2906] Docker-only participant entry point for `make local`
 # / `make local-down` / `make local-status`. Needs only Docker Engine + Docker
 # Compose v2 on the host — no Bun, Node, or node_modules. The Bun/Vite
 # developer path (unchanged) lives under `make local-dev`.

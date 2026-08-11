@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * Issue #795 / ADR-017 Phase 1: CloudActionIntent schema。
+ * Issue #795: CloudActionIntent schema。
  *
  * 「クレデンシャルを越境させず、 署名された意図 (intent) を越境させ、
  * 検証側で短命 provider-native authority に交換する」 protocol の
@@ -53,7 +53,7 @@ const TargetSchema = z
   .strict();
 
 /**
- * Issue #1727 / ADR-039: immutable artifact identity.
+ * Issue #1727: immutable artifact identity.
  *
  * Binds the exact bytes a Customer Execution Plane is allowed to deploy to the
  * signed intent. The digest is signature-covered, so a hosted control-plane
@@ -94,7 +94,7 @@ export const CloudActionIntentSchema = z
     version: z.literal(INTENT_VERSION),
     requestId: z.string().min(1),
     nonce: z.string().min(1),
-    // Issue #1727 / ADR-039: the recipient this intent is bound to (= the
+    // Issue #1727: the recipient this intent is bound to (= the
     // Customer Execution Plane identity, JWT `aud` style). Signature-covered, so
     // a leaked token cannot be redirected to a different execution plane. Stays
     // optional to keep the central CodeBuild path (no audience) on the same v1.
@@ -109,7 +109,7 @@ export const CloudActionIntentSchema = z
 export type CloudActionIntent = z.infer<typeof CloudActionIntentSchema>;
 
 /**
- * Issue #795 / ADR-017: 検証済み intent を nominal type で表現。 unvalidated
+ * Issue #795: 検証済み intent を nominal type で表現。 unvalidated
  * 入力が intent として通る事故 (= confused deputy の入口) を型で防ぐ。
  */
 export type VerifiedCloudActionIntent = CloudActionIntent & { readonly __verified: true };
@@ -119,7 +119,7 @@ export function brandVerified(intent: CloudActionIntent): VerifiedCloudActionInt
 }
 
 /**
- * Issue #795 / ADR-017 Phase 1: canonical JSON serialization。
+ * Issue #795: canonical JSON serialization。
  *
  * 確定的 byte 表現を作るため key を lexicographic sort し、 array は順序を
  * 保ったまま recurse する。 number / string / boolean / null は

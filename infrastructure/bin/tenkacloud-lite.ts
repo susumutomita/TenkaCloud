@@ -9,7 +9,7 @@ import { TenkaCloudLiteStack } from "../lib/tenkacloud-lite/index.js";
 import { resolveLiteStackNames } from "../lib/tenkacloud-lite/stack-names.js";
 
 /**
- * Issue #778 ADR-016 Phase 5: TenkaCloud Lite mode の CDK app entry point。
+ * Issue #778: TenkaCloud Lite mode の CDK app entry point。
  *
  * SBT / Pipeline / 動的 tenant 作成のフル機能を持ち込まず、 tenantId="local" 固定で
  * ApplicationAdminConsole + ProblemDeploy backend だけを deploy する経路。
@@ -17,7 +17,7 @@ import { resolveLiteStackNames } from "../lib/tenkacloud-lite/stack-names.js";
  *
  * 配線:
  *   1. ProblemDeployBackendStack を eventBusArn=undefined で作る (= local
- *      EventBus に倒す、 ADR-016 Phase 2)
+ *      EventBus に倒す)
  *   2. TenkaCloudLiteStack を作って ProblemDeploy stack の Lambda refs を渡す
  *
  * config 解決は Full mode と同じ `resolveAppConfig` を使う (= env / .env /
@@ -49,7 +49,7 @@ const liteStackNames = resolveLiteStackNames(config.environment);
 // Lite 側だけの手コピーは、 wire 側への Aspect 追加が Lite に伝播しない drift の温床だった。
 applyGlobalAspects(app, config);
 
-// Issue #778 ADR-016 Phase 2 / PR-#791: eventBusArn 省略で local bus 自動作成。
+// Issue #778 / PR #791: eventBusArn 省略で local bus 自動作成。
 const problemDeployBackend = new ProblemDeployBackendStack(app, liteStackNames.problemDeploy, {
   ...config.stackEnv,
   // source bundle + problems.* の共通 props は SaaS (wire.ts) と共有の factory (#2209)。
@@ -79,10 +79,10 @@ const liteStack = new TenkaCloudLiteStack(app, liteStackNames.app, {
   // Issue #1340 Phase 2: opt-in per-tenant SAML (= 未設定なら空配列で no-op)。
   samlIdps: config.tenantSamlIdps,
   samlAdminAllowlist: config.tenantSamlAdminAllowlist,
-  // Issue #2230 (ADR-035): Lite mode でも deploy 時 feature flag override を焼く
+  // Issue #2230: Lite mode でも deploy 時 feature flag override を焼く
   // (= nonAwsRuntime の検証は Lite が主戦場)。
   features: config.features,
-  // Issue #2442 / Phase C5 (ADR-049 §5.1): control-plane data backend の選択。base props
+  // Issue #2442: control-plane data backend の選択。base props
   // (`buildProblemDeployBackendBaseProps`) と同じ `config` source を共有し、両モードへ同一に
   // 届ける (= Lite mode での flag 切替配線、 SamlIdpsTable の条件付き synth に使う)。
   controlDataBackend: config.controlDataBackend,

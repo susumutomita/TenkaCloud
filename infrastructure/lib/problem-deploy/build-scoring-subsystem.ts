@@ -18,7 +18,7 @@ export interface BuildScoringSubsystemArgs {
   readonly problemsDisruptions?: Readonly<Record<string, unknown>>;
   readonly problemsCoordination?: Readonly<Record<string, unknown>>;
   /**
-   * [ADR-023 / #2054 / Issue #2571] Bulk Deploy adapter dispatch 用 runtime catalog。EventApi の
+   * [#2054 / Issue #2571] Bulk Deploy adapter dispatch 用 runtime catalog。EventApi の
    * 同名 prop と同一 source (= `discoverProblemsRuntime` の戻り値)。
    */
   readonly problemRuntimes?: Readonly<Record<string, unknown>>;
@@ -52,7 +52,7 @@ export function buildScoringSubsystem(
 ): ScoringSubsystemOutputs {
   const { tables } = args;
 
-  // ADR-012 Phase 3.B: 1 分間隔の Generic Scoring Lambda (= 旧 HealthCheckLambda の後継)。
+  // 1 分間隔の Generic Scoring Lambda (旧 HealthCheckLambda の後継)。
   // 2 つの責務を持つ:
   // - 採点 dispatch (= 5 種 builtin kind の handler に dispatch、`flag` は polling では no-op)
   // - Event status auto-transition (#557 #539): DEPLOYING→READY / TEARDOWN→ARCHIVED
@@ -68,20 +68,20 @@ export function buildScoringSubsystem(
     problemsScoring: args.problemsScoring,
     problemsEndpoints: args.problemsEndpoints,
     problemsPhases: args.problemsPhases ?? {},
-    // #1422 (ADR-013 Phase 2): condition-triggered disruption の eval + in-account 発火。
+    // #1422: condition-triggered disruption の eval + in-account 発火。
     problemsDisruptions: args.problemsDisruptions ?? {},
-    // [ADR-028 / #2324] scoring-driven coordination tick 用の宣言 config (= どの problemId が
+    // [#2324] scoring-driven coordination tick 用の宣言 config (どの problemId が
     // coordination を宣言しているか、 plugin code ではない metadata)。 per-minute pass が tick 対象を
     // 判定し、 実 runTick は最小 IAM の CoordinationDispatcher Lambda へ Invoke で委ねる
     // (= 配線は呼び出し側 constructor の participant-portal subsystem 側)。
     problemsCoordination: args.problemsCoordination ?? {},
-    // [ADR-033 / #1665] operator-fired disruption の active 採点効果を tick で解決する (read-only)。
+    // [#1665] operator-fired disruption の active 採点効果を tick で解決する (read-only)。
     // Issue #2442: 純 SQL backend では table 自体が無いので undefined を渡す (env/grant を
     // GenericScoringLambda 側で条件化。 disruption 読み取りは repository seam 経由)。
     disruptionsTable: tables.disruptions?.table,
-    // [ADR-047] scheduled auto-teardown が bulkTeardownEvent で cross-account role を解決する (read-only)。
+    // scheduled auto-teardown が bulkTeardownEvent で cross-account role を解決する (read-only)。
     competitorAccountsTable: tables.competitorAccounts?.table,
-    // [ADR-047 follow-up] scheduled auto-deploy が bulkDeployEvent で teams を Query (read-only) +
+    // scheduled auto-deploy が bulkDeployEvent で teams を Query (read-only) +
     // catalog で problemId→problemDir を解決する。
     teamsTable: tables.teams?.table,
     problemsCatalog: args.problemsCatalog,
@@ -89,7 +89,7 @@ export function buildScoringSubsystem(
     // GenericScoringLambda 側の `?? {}` で空 map に正規化される。
     problemRuntimes: args.problemRuntimes,
     eventBus: args.eventBus,
-    // [ADR-026/027/032 / #1410-1412] 非 AWS runtime status reconciler の credential path 構築用。
+    // [#1410-1412] 非 AWS runtime status reconciler の credential path 構築用。
     environmentName: args.environmentName,
     // Issue #2440: control-plane data backend。event status reconcile + manual prune tick が
     // repository seam 経由でこの env を読む (= turso 選択時のみ注入)。

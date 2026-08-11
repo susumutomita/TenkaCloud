@@ -2,7 +2,7 @@ import { StatusCodes } from "http-status-codes";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * ADR-030 Phase 2 (#1420): 専用 CoordinationDispatcherLambda (coordination-dispatcher-handler) の
+ * Issue #1420: 専用 CoordinationDispatcherLambda (coordination-dispatcher-handler) の
  * route glue を pin する。 coordination-handler / shared を mock し、 op/projection の outcome→HTTP
  * 写像 + bearer auth を検証する (= participant-handler から移設した route の挙動保存)。
  */
@@ -109,7 +109,7 @@ describe("GET /portal/me/coordination/projection", () => {
   });
 });
 
-// [ADR-028 / #2324] direct Invoke の tick batch は Hono を通さず本 Lambda 内で処理する。 それ以外の
+// [#2324] direct Invoke の tick batch は Hono を通さず本 Lambda 内で処理する。 それ以外の
 // (= Function URL) HTTP event は従来どおり Hono app に委譲する (= op / projection 経路は不変)。
 describe("handler (scoring-driven tick batch vs HTTP delegation)", () => {
   it("should process a coordination-tick batch invoke without going through Hono", async () => {

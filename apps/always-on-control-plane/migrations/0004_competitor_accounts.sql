@@ -1,4 +1,4 @@
--- ADR-050 (Issue #2555 slice C): tenant-owned deployment-account projection.
+-- Issue #2555: tenant-owned deployment-account projection.
 -- The OIDC command path fails closed unless the (tenant, account) pair is
 -- registered here — the control-store edition of the verified-account check
 -- the signed-intent ingress performed against the CompetitorAccounts

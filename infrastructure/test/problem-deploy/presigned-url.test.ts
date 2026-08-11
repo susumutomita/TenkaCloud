@@ -2,7 +2,7 @@ import type { S3Client } from "@aws-sdk/client-s3";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 /**
- * Issue #1424: ADR-008 private 問題 presigned URL 発行 (deploy-handler/presigned-url.ts) は
+ * Issue #1424: private 問題 presigned URL 発行 (deploy-handler/presigned-url.ts) は
  * 0% branch だった。 default key / TTL と明示指定の両 branch を pin する。 S3 presigner は
  * mock して network を踏ませない。
  */

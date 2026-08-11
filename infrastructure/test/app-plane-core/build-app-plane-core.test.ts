@@ -24,7 +24,7 @@ beforeAll(() => {
 });
 
 /**
- * Issue #778 ADR-016 Phase 1: AppPlaneCore builder の契約 pin。
+ * Issue #778: AppPlaneCore builder の契約 pin。
  *
  * 主目的は "CFn 物理差分 0 件" invariant — sub-construct (= hosting / identity / apiGateway)
  * が **stack scope に直接** logical ID `ApplicationAdminConsoleHosting` / `IdentityProvider` /

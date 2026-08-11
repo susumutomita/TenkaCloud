@@ -1,6 +1,6 @@
 # packs/
 
-In-repo sample / golden / reference problem packs (ADR-012 3-asset model:
+In-repo sample / golden / reference problem packs (3-asset model:
 `metadata.json` + `template.yaml` + optional `portal/`). Each subdirectory is a
 self-contained Problem Pack (`tenkacloud-pack.json` manifest + `problems/`
 tree) with its own README — worked examples and fixtures, not the community
@@ -21,7 +21,7 @@ To install / activate any pack for a tenant, see the top-level README's
 ## Reference packs
 
 - [`reference-aws-hello`](./reference-aws-hello/) — minimal pack exercising the manifest + offline validators
-- [`reference-coordination-battle`](./reference-coordination-battle/) — worked example of the ADR-028 inter-team coordination contract
+- [`reference-coordination-battle`](./reference-coordination-battle/) — worked example of the inter-team coordination contract
 
 ## Sample packs
 

@@ -69,7 +69,7 @@ export type ProgressionGateConfig = {
 };
 
 /**
- * [ADR-049 §5.1] Control-plane data behind a repository seam.
+ * Control-plane data behind a repository seam.
  *
  * `EventRecord` is the domain shape of one competition Event. Physical DDB keys
  * (PK / SK / GSI1PK / GSI1SK) are an implementation detail of the DynamoDB
@@ -116,19 +116,19 @@ export type EventRecord = {
    */
   endsAt?: string;
   /**
-   * [ADR-047] 自動撤去予定時刻 (ISO8601, UTC)。毎分 reconciler が `now >= teardownAt` を
+   * 自動撤去予定時刻 (ISO8601, UTC)。毎分 reconciler が `now >= teardownAt` を
    * 検知すると bulk teardown を自動発火し、撤去し忘れによる課金リークを防ぐ (#1910 の主動機)。
    * 不変条件: 設定する場合 `teardownAt >= endsAt` (採点 gate を閉じてから撤去する)。
    * 未設定なら自動撤去なし (= operator が手動で「Event を終了」/ teardown する従来挙動)。
    */
   teardownAt?: string;
   /**
-   * [ADR-047] reconciler が teardownAt に基づき自動 teardown を発火した時刻 (ISO8601, UTC)。
+   * reconciler が teardownAt に基づき自動 teardown を発火した時刻 (ISO8601, UTC)。
    * status 遷移 (→ TEARDOWN) が一次の冪等ガードだが、監査 + 二重発火防止の補助として記録する。
    */
   teardownFiredAt?: string;
   /**
-   * [ADR-047 follow-up] 自動デプロイ予定時刻 (ISO8601, UTC)。毎分 reconciler が `now >= deployAt`
+   * 自動デプロイ予定時刻 (ISO8601, UTC)。毎分 reconciler が `now >= deployAt`
    * を検知すると、 status=DRAFT の event について bulk deploy を自動発火し、 deploy のし忘れ /
    * 開始時刻直前の手動操作を不要にする (teardownAt の鏡像)。 不変条件: 設定する場合
    * `deployAt <= endsAt` (deploy → 採点 → 終了 の時系列を保つ)。 未設定なら自動デプロイなし
@@ -136,7 +136,7 @@ export type EventRecord = {
    */
   deployAt?: string;
   /**
-   * [ADR-047 follow-up] reconciler が deployAt に基づき自動 deploy を発火した時刻 (ISO8601, UTC)。
+   * reconciler が deployAt に基づき自動 deploy を発火した時刻 (ISO8601, UTC)。
    * status 遷移 (DRAFT → DEPLOYING) が一次の冪等ガードだが、監査 + 二重発火防止の補助として記録する
    * (teardownFiredAt の鏡像)。
    */
@@ -236,7 +236,7 @@ export interface EventSchedulePatch {
 /**
  * [Issue #2437] Which scheduled-action audit stamp
  * {@link EventsRepository.markScheduleFired} writes: `teardown` →
- * `teardownFiredAt`, `deploy` → `deployFiredAt` (ADR-047 / follow-up).
+ * `teardownFiredAt`, `deploy` → `deployFiredAt`.
  */
 export type ScheduleFiredKind = "teardown" | "deploy";
 
@@ -264,7 +264,7 @@ export interface EventScoringMeta {
 }
 
 /**
- * [ADR-049 §5.1] Aggregate-scoped repository for the Events aggregate — domain
+ * Aggregate-scoped repository for the Events aggregate — domain
  * methods, not a generic key-value shim. Two interchangeable backends implement
  * it: {@link DynamoDbEventsRepository} (status quo, the default) and
  * {@link SqlEventsRepository} (one SQL layer, SQLite dialect for Turso / D1).
@@ -300,7 +300,7 @@ export interface EventsRepository {
   /**
    * TTL-equivalent sweep: delete events whose `expiresAt` (epoch seconds, `> 0`)
    * is at or before `nowEpochSeconds`, and return the number deleted. DynamoDB
-   * has native TTL; the SQLite backends have none (ADR-049 §5.2) and rely on this
+   * has native TTL; the SQLite backends have none and rely on this
    * being run on a schedule.
    */
   pruneExpired(nowEpochSeconds: number): Promise<number>;
@@ -334,7 +334,7 @@ export interface EventsRepository {
    */
   archiveEvent(tenantId: string, eventId: string, at: string): Promise<EventMutationOutcome>;
   /**
-   * [#536 / #537 / ADR-047] Partial schedule update — writes only the fields
+   * [#536 / #537] Partial schedule update — writes only the fields
    * present in `patch` plus `updatedAt`. The condition is tenant-scope only, so
    * the union never yields `conflict` (a failed condition means the row is
    * absent or foreign → `not_found`).
@@ -391,7 +391,7 @@ export interface EventsRepository {
     at: string,
   ): Promise<EventMutationOutcome>;
   /**
-   * [ADR-047] Idempotently stamps `teardownFiredAt` / `deployFiredAt` = `at`
+   * Idempotently stamps `teardownFiredAt` / `deployFiredAt` = `at`
    * (audit + double-fire guard). `conflict` = already stamped; no probe.
    * Deliberately does NOT touch `updatedAt` (byte-parity with the pre-seam
    * reconciler write).

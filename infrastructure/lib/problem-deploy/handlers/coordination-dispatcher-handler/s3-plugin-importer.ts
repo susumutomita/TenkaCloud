@@ -7,13 +7,15 @@ import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import type { PluginImporter } from "../participant-handler/coordination-plugin-loader.js";
 
 /**
- * ADR-030 Phase 3b (#1420): coordination plugin の実 importer。
+ * Issue #1420: coordination plugin の実 importer。
  *
- * 同 ADR が「動的 load の対象 = レビュー済みカタログ bundle (= S3)」(S1) と定めた通り、 問題が同梱した
- * coordination plugin を **synth 時に esbuild で self-contained .mjs に bundle → S3 へ upload** したものを、
- * dispatcher Lambda が runtime に download → `import()` する。 plugin が AWS SDK / fetch / 環境変数に
- * 触れても本 Lambda は最小 IAM (ADR-030 S2、 PR #1633) で competitor 資格情報・他テナントデータに
- * 構造的に到達できないため、 in-process 実行の blast radius は coordination state 行に限定される。
+ * 動的 load の対象は、レビュー済みカタログから synth 時に esbuild で self-contained .mjs へ
+ * bundle し、S3 へ upload した coordination plugin に限定する。dispatcher Lambda はその bundle を
+ * runtime に download して dynamic import する。この import は sandbox ではなく、plugin は Lambda の
+ * environment と execution role を共有する。DynamoDB backend では Deployments table 全体への
+ * Query / GetItem / PutItem と GSI2 全体への Query 権限も共有し、plugin 単位・tenant 単位の IAM
+ * isolation はない。
+ * そのため catalog review と publish control が plugin の trust boundary になる。
  *
  * `moduleRef` は problem id (= scope resolver が解決した一意キー)。 S3 key は `coordination/<id>.mjs`。
  * 同 Lambda 実行内では module-level cache で再 download / 再 import を避ける (= plugin は event 中 immutable)。
@@ -22,7 +24,7 @@ export interface S3PluginImporterDeps {
   readonly s3: Pick<S3Client, "send">;
   readonly bucket: string;
   /**
-   * 整合性 seam (ADR-039 の artifact-digest 方針を plugin load に流用)。 `import()` する前に
+   * 整合性 seam (artifact-digest 方針を plugin load に流用)。 `import` する前に
    * download した bundle bytes の digest を期待値と照合する。
    *   - `sha256:<hex>` を返す → 検証する。 不一致なら throw (= loader が plugin_unavailable に
    *     fail-closed)。 plugin bucket / publish 経路が改ざんされても任意コード実行を遮断する。
@@ -39,7 +41,7 @@ export function coordinationPluginS3Key(moduleRef: string): string {
   return `coordination/${moduleRef}.mjs`;
 }
 
-/** bundle bytes の `sha256:<hex>` digest。 ADR-039 の artifact digest と同形式。 */
+/** bundle bytes の `sha256:<hex>` digest。 artifact digest と同形式。 */
 export function pluginBundleDigest(body: string): string {
   return `sha256:${createHash("sha256").update(body, "utf8").digest("hex")}`;
 }

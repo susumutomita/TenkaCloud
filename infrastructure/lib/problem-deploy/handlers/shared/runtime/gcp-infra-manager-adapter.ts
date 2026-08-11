@@ -1,13 +1,12 @@
 /**
- * [ADR-027 / Issue #1411] gcp/infra-manager runtime adapter (Infrastructure Manager).
+ * [Issue #1411] gcp/infra-manager runtime adapter (Infrastructure Manager).
  *
  * GCP problem は Infrastructure Manager (= GCP が state/lock を所有する managed Terraform) で
- * deployment を作る。 GCP が state を持つので ADR-023 D3/D5 を満たす (platform は backend を持たない)。
+ * deployment を作る。GCP が state / lock を所有し、platform は backend を持たない。
  * `runtime.entry` が Terraform config 参照 (repository-relative path)、 problem パラメータは TF input
- * vars、 deployment outputs を deploy output に読む。 Deployment Manager は 2026-03 EOL なので不採用
- * (ADR-027)。
+ * vars、 deployment outputs を deploy output に読む。Deployment Manager は 2026-03 EOL なので不採用。
  *
- * 認証は **Workload Identity Federation** (ADR-027): trust-bridge の `gcp-workload-identity` adapter が
+ * 認証は **Workload Identity Federation** trust-bridge の `gcp-workload-identity` adapter が
  * 短命 access token を発行する (service-account key 不要)。 本 adapter はその token を受け取る resolver を
  * 注入される (= account-gated な WIF exchange は handler 側)。
  *
@@ -59,7 +58,7 @@ export interface MaterializeGcpBlueprintInput {
   readonly problemDir: string;
   /** `runtime.entry` — problemDir からの相対 path (file または directory module)。 */
   readonly entry: string;
-  /** ADR-008: private 問題の presigned payload.zip URL。 */
+  /** private 問題の presigned payload.zip URL。 */
   readonly challengePayloadUrl?: string;
 }
 

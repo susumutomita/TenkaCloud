@@ -50,23 +50,23 @@ export interface DeployApiLambdaProps {
    * `problemId → problemDir` の hard-coded 問題カタログ (MVP-1)。
    * tenant API Lambda が POST /problems/:id/deploy を受けたとき、引数の problemId から
    * `problems/<category>/<id>` 形式の path を解決し、Step Functions State Machine の
-   * 入力 (`detail.problemDir`) に詰める。Phase 2 (ADR-003) で DDB ベースの catalog に置換。
+   * 入力 (`detail.problemDir`) に詰める。
    */
   readonly problemsCatalog: Readonly<Record<string, string>>;
   /**
-   * ADR-008 Phase 3 (Issue #642): private 問題 id のセット (= `{problemId: "private"}`)。
+   * Issue #642: private 問題 id のセット (`{problemId: "private"}`)。
    * `discoverProblemsVisibility` の戻り値そのまま。 空 map なら全 public 扱いで dormant。
    */
   readonly problemsVisibility: Readonly<Record<string, "private">>;
   /**
-   * [ADR-023 / #2054] 非 aws/cloudformation の runtime を宣言した問題のみ
+   * [#2054] 非 aws/cloudformation の runtime を宣言した問題のみ
    * (= `{problemId: {provider,engine,entry}}`)。`discoverProblemsRuntime` の戻り値。
    * deploy handler が `resolveProblemRuntime` に配線し、 非 AWS 問題を cloud mutation
    * 前に 4xx で拒否する (= ローカル専用問題のクラウド誤デプロイ防止)。空 map なら全 AWS 扱い。
    */
   readonly problemRuntimes?: Readonly<Record<string, unknown>>;
   /**
-   * ADR-008 Phase 3 (Issue #642): private 問題 payload を格納する S3 bucket 名。
+   * Issue #642: private 問題 payload を格納する bucket 名。
    * 未指定 / 空文字列なら presigned URL を発行しない (= local-path 経路で動作)。
    * ChallengePayloadStack (Phase 2 infra) が deploy 後にここを指定して活性化する。
    */
@@ -76,7 +76,7 @@ export interface DeployApiLambdaProps {
    */
   readonly environmentName: string;
   /**
-   * Issue #950 (ADR-020 Phase D): admin 操作 audit log を append-only 書き込む DDB Table。
+   * Issue #950: admin 操作 audit log を append-only 書き込む DDB Table。
    * 指定時は Lambda env `ADMIN_AUDIT_LOG_TABLE_NAME` を注入 + IAM `dynamodb:PutItem` を付与する。
    * 未指定なら writeAuditEvent は env 不在で no-op を選ぶ (= 旧 stack 互換、 audit 行 0 件)。
    */
@@ -88,7 +88,7 @@ export interface DeployApiLambdaProps {
    */
   readonly auditLogEnabled?: boolean;
   /**
-   * Issue #2290 (ADR-049 §5.1): control-plane data backend (dynamodb|turso)。監査 Lambda 群と
+   * Issue #2290: control-plane data backend (dynamodb|turso)。監査 Lambda 群と
    * lockstep で env を配線する (= 実際に repository seam を使うのは EventApi だが、AUDIT_LOG_ENABLED と
    * 同じ注入面に揃える)。default (未指定 / `dynamodb`) は env を足さず byte 互換。
    */
@@ -107,7 +107,7 @@ export interface DeployApiLambdaProps {
     readonly platinum: number;
   };
   /**
-   * Issue #2019 / ADR-017: TrustBridge high-risk enforcement mode, injected as the
+   * Issue #2019: TrustBridge high-risk enforcement mode, injected as the
    * `CLOUD_ACTION_ENFORCEMENT_MODE` env. `"shadow"` (default / unset) keeps every
    * deploy on the legacy path (no behavior change). `"enforce"` opts in: a
    * high-risk deploy (replacing a live stack) is held as `APPROVAL_PENDING`
@@ -140,7 +140,7 @@ export function deployApiBundlingDefine(
 /**
  * 問題 deploy 起動用 Lambda。
  *
- * MVP-1 (ADR-001 PR-2): tenant API (TenantTemplateStack の REST API + Cognito authorizer)
+ * MVP-1: tenant API (TenantTemplateStack の REST API + Cognito authorizer)
  * から `LambdaIntegration` で invoke され、validation 後に EventBridge へ
  * `DeployCreateRequested` event を publish する。実 deploy は EventBridge Rule から
  * Step Functions State Machine + CodeBuild が肩代わりする。
@@ -174,7 +174,7 @@ export class DeployApiLambda extends Construct {
         DEPLOY_EVENT_BUS_NAME: props.eventBus.eventBusName,
         // #686: legacy "unknown-tenant" fallback は削除 (= JWT claim 欠落時は handler が 401)
         ...(props.defaultTenantId ? { DEFAULT_TENANT_ID: props.defaultTenantId } : {}),
-        // ADR-008 Phase 3 (Issue #642): visibility + bucket env、 default は dormant
+        // Issue #642: visibility + bucket env、 default は dormant
         BATTLE_PROBLEMS_VISIBILITY: JSON.stringify(props.problemsVisibility),
         CHALLENGE_PAYLOAD_BUCKET: props.challengePayloadBucketName ?? "",
         // Issue #950: audit log table 名 (未配線なら空文字、 handler の writeAuditEvent が no-op)
@@ -193,7 +193,7 @@ export class DeployApiLambda extends Construct {
         DEPLOY_QUOTA_BY_TIER: props.deployQuotaByTier
           ? JSON.stringify(props.deployQuotaByTier)
           : "",
-        // Issue #2019 / ADR-017: TrustBridge high-risk enforcement mode。 default
+        // Issue #2019: TrustBridge high-risk enforcement mode。 default
         // "shadow" (= 既存挙動、 全 deploy が従来経路)。 "enforce" で opt-in。
         CLOUD_ACTION_ENFORCEMENT_MODE: props.cloudActionEnforcementMode ?? "shadow",
         // [Issue #2745] materialized problems/ tree bucket — read by gcp-blueprint-materializer.ts
@@ -217,7 +217,7 @@ export class DeployApiLambda extends Construct {
     // Issue #2442: 純 SQL backend では table 自体が無いので grant も付与しない。
     props.competitorAccountsTable?.grantReadData(this.fn);
     props.eventBus.grantPutEventsTo(this.fn);
-    // Issue #950 (ADR-020 Phase D): admin 操作 audit log を append-only 書き込む。
+    // Issue #950: admin 操作 audit log を append-only 書き込む。
     // Read は付与しない (= write-only から query を起こす経路を作らない)。
     props.adminAuditLogTable?.grantWriteData(this.fn);
 
@@ -244,7 +244,7 @@ export class DeployApiLambda extends Construct {
       stack.account,
       props.environmentName,
     );
-    // [ADR-026/027/032 / #1412 #1410 #1411] per-team の Sakura API key / Azure deploy credential /
+    // [#1412 #1410 #1411] per-team の Sakura API key / Azure deploy credential /
     // GCP WIF config (SSM SecureString) も同 Lambda が deploy 時に decrypt 取得する。 ExternalId と同じ
     // prefix-scope + AWS managed key 復号で最小権限を保つ。
     const sakuraSsmArn = buildSakuraCredentialParameterArnPattern(
@@ -288,7 +288,7 @@ export class DeployApiLambda extends Construct {
       }),
     );
 
-    // ADR-008 Phase 3 (Issue #642): private 問題 payload の S3 GetObject 権限。
+    // Issue #642: private 問題 payload の GetObject 権限。
     // bucket 未指定なら no-op (= dormant、 最小権限維持)。
     grantChallengePayloadRead(this, this.fn, props.challengePayloadBucketName);
 

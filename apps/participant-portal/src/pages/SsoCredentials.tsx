@@ -16,7 +16,7 @@ import { externalPortalUrl, problemProvider, providerLabel } from "../data/provi
 import { useT } from "../i18n";
 
 /**
- * [#2235 / ADR-048 §5.1] external-portal 導線の宛先。backend の capability 配信と
+ * Issue #2235: external-portal 導線の宛先。backend の capability 配信と
  * プラットフォーム定数マップの両方が揃うときだけ返す (= 判定は backend、宛先は
  * platform 定数。participant 入力・problem metadata からは供給しない)。
  */

@@ -94,7 +94,7 @@ const allowEvaluator: PolicyEvaluator = {
   },
 };
 
-describe("CustomerExecutionAgent (#1727 / ADR-039 §7)", () => {
+describe("CustomerExecutionAgent", () => {
   it("should authorize, deploy via local CFn, and audit the allow", async () => {
     const { agent, audits } = makeAgent({ policyEvaluator: allowEvaluator });
     const out = await agent.run({

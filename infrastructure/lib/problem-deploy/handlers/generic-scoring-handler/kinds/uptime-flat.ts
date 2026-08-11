@@ -22,14 +22,14 @@ import {
 } from "../scoring-kernel.js";
 
 /**
- * `uptime-flat` kind (ADR-012 Phase 3.B、 legacy `uptime` alias)。
+ * `uptime-flat` kind (legacy `uptime` alias)。
  *
  * 各 endpoint を **独立** に probe する。全 endpoint が ok の時のみ pointsPerSuccess を 1
  * 単位として加点する (= 既存 health-check-handler の挙動を完全保存)。
  *
  * 「全 endpoint ok」 で加点する semantic は legacy uptime と同じ:
  *   - 1 つでも fail があると pointsPerSuccess を 1 単位として **加算しない** (= 既存挙動)
- *   - `lastResult: ok → fail` 遷移時のみ `attack-detected` event を別途 emit (= ADR-005 D2-A)
+ *   - `lastResult: ok → fail` 遷移時のみ `attack-detected` event を別途 emit
  *
  * endpoint の解決経路は 2 通り (= Phase 3.B で endpoint registry と統合):
  *   - `slot` 指定がある場合 → metadata.endpoints[] の同 slot の default URL (+ override) を probe
@@ -80,7 +80,7 @@ export async function runUptimeFlatKind(
     newHealth[key] = { ok, checkedAt: nowIso, ...(since ? { since } : {}) };
   }
 
-  // ADR-005 D2-A: 直前 tick が ok → 今 tick fail で attack-detected marker (= row 爆発防止)。
+  // 直前 tick が ok → 今 tick fail で attack-detected marker (row 爆発防止)。
   const attackDetected = !allOk && deployment.lastResult === "ok";
 
   // 失敗時の減点 (opt-in)。 failurePenalty は負値で減点 (uptime-multi と同契約)、 省略時 0 (= 従来挙動)。

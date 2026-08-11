@@ -32,8 +32,8 @@ type TFn = (key: string, params?: Readonly<Record<string, string | number>>) => 
  *
  * 表示するのは **tenant のメタデータだけ** (= tenant ID / 名前 / tier / status / Cognito IDs /
  * Application Console URL)。 tenant の中身 (= competition events / deployments / teams /
- * scoring 等) は **App Plane data なので Control Plane では一切覗かない**
- * ([[feedback-no-cross-plane-data-leak]])。 内部運用は tenant admin が application-admin-console
+ * scoring 等) は **App Plane data なので Control Plane では一切覗かない**。内部運用は
+ * tenant admin が application-admin-console
  * (= App Plane UI) で行う。
  *
  * data fetch は listTenants() を 1 回呼んで該当 tenant を抽出する (= TenantList と同じ source)。

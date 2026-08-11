@@ -1,5 +1,5 @@
 // Legacy landing URLs and README anchors redirect to the new canonical routes
-// (ADR-0003 §10 stage 5: "Add redirects from the old landing URLs and README
+// (legacy-route migration: "Add redirects from the old landing URLs and README
 // anchors to the new routes ... no dead links"). This is the single source of
 // truth; the static route stubs and the redirect tests both read it.
 

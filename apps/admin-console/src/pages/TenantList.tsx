@@ -31,7 +31,7 @@ import { interpolate, useT } from "../i18n";
 import { inactiveCell, isDeprovisioned, tenantStatusCell } from "../lib/tenant-table";
 
 /**
- * ADR-011 #590 Phase 1.A: 60s polling 周期。SSE / WebSocket は禁止 (Lambda 運用と整合せず)。
+ * Issue #590: 60s polling 周期。SSE / WebSocket は禁止 (Lambda 運用と整合せず)。
  * 5 tenants × ~50 deployments を 60s ごとに refresh して RCU 消費は 1 tenant あたり ~1 query。
  * Phase 3 dashboard で tenant 数が伸びるなら pre-aggregation table に置き換え。
  */
@@ -50,7 +50,7 @@ export function TenantListPage({ config }: { config: AppConfig }) {
   const [showDeprovisioned, setShowDeprovisioned] = useState(false);
   // #657: "In progress" の経過時間表示用 wall clock。 60 秒ごとに更新し severity 再評価。
   const [nowMs, setNowMs] = useState(() => Date.now());
-  // ADR-011 #590 Phase 1.A: tenantId → 集計 の lookup。
+  // Issue #590: tenantId → 集計 の lookup。
   // - null = まだ fetch していない / AdminInsight API が未配線 (= column hide)
   // - {} = fetch 済みで対象 tenant が無い (= 集計 0 表示)
   const [insightByTenantId, setInsightByTenantId] = useState<Record<
@@ -187,9 +187,8 @@ export function TenantListPage({ config }: { config: AppConfig }) {
                 return <Box color="text-status-inactive">{row.tenantName}</Box>;
               }
               // 行クリックは Tenant detail (= Control Plane metadata) に遷移する。
-              // tenant 内部の events / deployments への drill-down は plane 分離方針で除去
-              // ([[feedback-no-cross-plane-data-leak]])、 tenant admin が application-admin-console
-              // で見る。
+              // tenant 内部の events / deployments は plane を跨いで表示せず、tenant admin が
+              // application-admin-console で見る。
               const href = `/tenants/${encodeURIComponent(row.tenantId)}`;
               return (
                 <Link

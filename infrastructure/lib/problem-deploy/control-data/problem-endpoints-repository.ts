@@ -23,7 +23,7 @@ export interface CreateProblemEndpointsRepositoryDeps {
 
 /**
  * [Issue #2442 / Phase C1] Cold-start factory that selects the ProblemEndpoints
- * backend from the `CONTROL_DATA_BACKEND` flag value (ADR-035 mechanism; mirror
+ * backend from the `CONTROL_DATA_BACKEND` flag value (mirrors
  * of `createTeamsRepository` / `createDeploymentsRepository`). **Default =
  * dynamodb** (behavior-preserving): an unset / empty / `"dynamodb"` flag
  * returns the DDB repository, so the existing path is byte-identical.

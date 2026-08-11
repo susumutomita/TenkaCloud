@@ -11,7 +11,7 @@
  * build context に `problems/` が無いイメージでは 1 の glob が空になり、カタログ由来の表示
  * — 説明・手順・学習目標・endpoint 上書き欄・図・講座トラック・plugin slot — が丸ごと消える。
  *
- * 投影そのもの (`metadataToEntry` の fairness contract) は `@tenkacloud/portal-contracts` が
+ * 競技者向け投影 (`metadataToEntry`) は `@tenkacloud/portal-contracts` が
  * 所有する。control plane と同じ関数を通すため、片側だけ `description` を落とし忘れる形の
  * ドリフトが起きない。ここが持つのは「どの供給源を今使うか」だけ。
  */
@@ -61,7 +61,7 @@ let activeCatalogById: ReadonlyMap<string, ProblemCatalogEntry> = new Map(
  * (`main.tsx` の `loadConfig()` 解決後) ので、 画面側は従来どおり同期 API のままでよい。
  *
  * 受け取る entry は control plane 側で `metadataToEntry` を通済み — つまり投影後の shape。
- * ここで再投影しないのは、 生 metadata が wire に載らないことが fairness contract だから。
+ * ここで再投影せず、生 metadata が wire に載らないようにする。
  */
 export function hydrateProblemCatalog(entries: readonly ProblemCatalogEntry[]): void {
   activeCatalog = [...entries].sort((a, b) => a.id.localeCompare(b.id));

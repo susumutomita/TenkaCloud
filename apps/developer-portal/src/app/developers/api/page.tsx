@@ -5,8 +5,8 @@ import { SANDBOX_BASE_URL } from "@/content/openapi";
 
 export const metadata: Metadata = { title: "API reference" };
 
-// API reference (ADR-0003 §5: /developers/api/*). Browse + copy only for now; the
-// interactive sandbox Try-It is deferred to the post-ADR-0004 PR. The default
+// The API reference at /developers/api/* is browse + copy only; the
+// interactive sandbox Try-It is deferred to the sandbox follow-up PR. The default
 // target is the sandbox base URL — production is never the default and no
 // credentials are embedded.
 export default function ApiReferencePage() {

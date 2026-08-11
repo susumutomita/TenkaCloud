@@ -50,7 +50,7 @@ TenkaCloud is a self-hostable, Apache-2.0 platform for running hands-on AWS comp
 
 ## Vision
 
-TenkaCloud is not only a competition platform. The product direction is a path from safe, individual practice to team competition: **local drills → practical courses / enterprise training → team competitions / GameDay → global community**. Local drills are live today (`tenkacloud local`); courses, enterprise training as a packaged product, and a global community are directions we are building toward, not shipped features. See [`docs/vision.md`](./docs/vision.md) for the full picture.
+TenkaCloud is not only a competition platform. The product direction is a path from safe, individual practice to team competition: **local drills → practical courses / enterprise training → team competitions / GameDay → global community**. Local drills are live today (`tenkacloud local`); courses, enterprise training as a packaged product, and a global community are directions we are building toward, not shipped features.
 
 ## What TenkaCloud gives you
 
@@ -125,7 +125,7 @@ Even lower-level: `make install && git submodule update --init problems && bun l
 
 </details>
 
-See [docs/local-play.md](./docs/local-play.md) for every subcommand and [ADR-055](./docs/architecture/adr-055-docker-only-participant-local-mode.html) for the container/host boundary this is built on.
+See [docs/local-play.md](./docs/local-play.md) for every subcommand and the container/host boundary.
 
 ### Deploy on AWS
 
@@ -236,11 +236,10 @@ record of the reasoning, not an API reference.
 
 ## Documentation
 
-- [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) — local terminal deploys, SaaS mode, and [Always-On mode](./DEPLOYMENT_GUIDE.md#always-on-mode-adr-049) (zero always-on compute between events; operator runbook: [docs/always-on/README.md](./docs/always-on/README.md))
+- [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) — local terminal deploys, SaaS mode, and [Always-On mode](./DEPLOYMENT_GUIDE.md#always-on-mode)
 - [docs/local-play.md](./docs/local-play.md) — local drill internals, authoring a container problem, the `/verify` contract
 - [docs/running-costs.md](./docs/running-costs.md) — the cost profiles, the zero-cost opt-in walkthrough, measured costs
-- [docs/vision.md](./docs/vision.md) — product direction and what is live vs. planned
-- [docs/architecture/README.md](./docs/architecture/README.md) — ADRs and system design
+- [docs/architecture/README.md](./docs/architecture/README.md) — architecture principles and machine-enforced boundaries
 
 ## Contributing
 

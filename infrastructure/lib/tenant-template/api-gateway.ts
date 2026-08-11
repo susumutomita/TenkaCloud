@@ -28,13 +28,13 @@ interface ApiGatewayProps {
    */
   deployApiLambda: IFunction;
   /**
-   * `ProblemDeployBackendStack.eventApiLambda` のクロススタック参照 (ADR-004 Phase 1)。
+   * `ProblemDeployBackendStack.eventApiLambda` のクロススタック参照。
    * Event / Team CRUD routes が本 Lambda を invoke する。
    */
   eventApiLambda: IFunction;
   /**
    * `ProblemDeployBackendStack.competitorAccountsApiLambda` のクロススタック参照
-   * (Issue #459 / ADR-002 Phase 2.1)。`/admin/competitor-accounts*` routes を proxy する。
+   * (Issue #459)。`/admin/competitor-accounts*` routes を proxy する。
    */
   competitorAccountsApiLambda: IFunction;
   /**
@@ -84,7 +84,7 @@ interface ApiGatewayProps {
 
 /**
  * テナントの REST API。tenant の Cognito UserPool で JWT 認可された「ログイン済み」ユーザー
- * が Deploy 操作を publish する経路を提供する (ADR-001 / SBT Control-Plane → Application-Plane
+ * が Deploy 操作を publish する経路を提供する (SBT Control-Plane → Application-Plane
  * 同型)。
  *
  * MVP-1 で Deploy 系 routes (POST /problems/:id/deploy 等) を本 RestApi に直接生やし、
@@ -204,13 +204,13 @@ export class ApiGateway extends Construct {
       .addResource("stack-progress")
       .addMethod("GET", deployIntegration, deployMethodOptions);
 
-    // ADR-004 Phase 1+2a/2b: /events — 1 競技イベント = 1 行で teams + problems を持つ
+    // /events — 1 競技イベント = 1 行で teams + problems を持つ
     // /events                          POST  = create   / GET = list
     // /events/{eventId}                GET   = detail   / DELETE = bulk teardown
     // /events/{eventId}/deploy         POST  = bulk deploy (teams × problems を fan-out)
     // /events/{eventId}/schedule       PATCH = 競技開始時刻 (startsAt) を設定 (Phase 2b 追加)
     // /events/{eventId}/end            POST  = Event を ENDED 状態にし採点を停止 (Issue #494)
-    // /events/{eventId}/notifications  POST  = 運営 → 競技者 通知 1 件作成 (ADR-006、#553)
+    // events/{eventId}/notifications POST = 運営 → 競技者 通知 1 件作成 (#553)
     // /events/{eventId}/lock-scoring   POST  = 採点を lock (表彰フェーズ)、DELETE = unlock (#558)
     // EventApi は ~40 route を持つので、 最初にこの pattern が必要になったのはここだった
     // (per-method permission では /feature-flags を足した時点で 20KB を超えた)。 現在は他の
@@ -238,8 +238,8 @@ export class ApiGateway extends Construct {
     //   /events/{eventId}/disruptions                                  GET  = catalog
     //   /events/{eventId}/disruptions/audit                            GET  = 発火履歴 (pagination)
     //   /events/{eventId}/disruptions/fire                             POST = disruption を fire
-    //   [ADR-037 Slice 2] /events/{eventId}/disruptions/recurring      GET  = 実行中の定期障害 一覧
-    //   [ADR-037 Slice 2] /events/{eventId}/disruptions/recurring/{requestId}/cancel POST = 早期解除
+    // events/{eventId}/disruptions/recurring GET = 実行中の定期障害 一覧
+    // events/{eventId}/disruptions/recurring/{requestId}/cancel POST = 早期解除
     const disruptions = event.addResource("disruptions");
     disruptions.addMethod("GET", eventIntegration, deployMethodOptions);
     disruptions.addResource("audit").addMethod("GET", eventIntegration, deployMethodOptions);
@@ -251,7 +251,7 @@ export class ApiGateway extends Construct {
       .addResource("cancel")
       .addMethod("POST", eventIntegration, deployMethodOptions);
 
-    // Issue #459 / ADR-002 Phase 2.1: Competitor Accounts CRUD + verify
+    // Issue #459: Competitor Accounts CRUD + verify
     //   /admin/competitor-accounts                                     POST=register, GET=list
     //   /admin/competitor-accounts/{awsAccountId}                      DELETE=remove (last row なら SSM 鍵も掃除)
     //   /admin/competitor-accounts/{awsAccountId}/verify               POST=STS AssumeRole sanity check
@@ -311,7 +311,7 @@ export class ApiGateway extends Construct {
     capacity.addMethod("GET", eventIntegration, deployMethodOptions);
     capacity.addMethod("POST", eventIntegration, deployMethodOptions);
 
-    // Issue #2231 (ADR-035): per-tenant runtime feature-flag overrides, served by the same
+    // Issue #2231: per-tenant runtime feature-flag overrides, served by the same
     // EventApi handler as /admin/audit-log and /admin/capacity.
     //   GET  /feature-flags        readable by any tenant role (gates UI tabs for all roles)
     //   PUT  /admin/feature-flags  TenantAdmin-only full-replace of the override set

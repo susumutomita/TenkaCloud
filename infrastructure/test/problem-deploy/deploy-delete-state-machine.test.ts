@@ -119,7 +119,7 @@ describe("DeployDeleteStateMachine expected-account wiring (#1797)", () => {
 });
 
 /**
- * Issue #2291 (ADR-049 §9): deployViaLambda feature flag. Flag OFF keeps the CodeBuild `.sync`
+ * Issue #2291: deployViaLambda feature flag. Flag OFF keeps the CodeBuild `.sync`
  * definition unchanged (byte-compat: zero new resources); flag ON swaps to the Lambda DeleteStack +
  * DescribeStacks poll definition (reusing the create path's shared CfnDeployLambda).
  */

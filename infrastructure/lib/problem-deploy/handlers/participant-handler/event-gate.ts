@@ -44,7 +44,7 @@ export interface EventGate {
  * を repository seam の point read で取得。 不在 / DDB error は fail-closed (= undefined 返却、
  * evaluateGate 側で scoring_not_started に変換) で安全側に倒す。
  *
- * [ADR-049 §5.1] `tenantId` は競技者の deployment 行 (= その team の tenant) から導出して渡す。
+ * `tenantId` は競技者の deployment 行 (その team の tenant) から導出して渡す。
  * 競技者が参照する eventId は常に自 tenant の event なので `getEvent(tenantId, eventId)` は
  * 従来の tenant-agnostic Get と同じ event を返す。 tenant 不一致 (= 別 tenant の eventId、
  * 実運用では発生しない) は undefined に畳まれ、 本モジュールの fail-closed 契約に沿って

@@ -12,7 +12,7 @@ import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
 
 export interface SignInAuditLambdaProps {
   /**
-   * ADR-020 Phase D の admin audit log table (= `PK=SYSTEM#<env>` 又は `PK=TENANT#<id>` の
+   * admin audit log table (`PK=SYSTEM#<env>` 又は `PK=TENANT#<id>` の
    * sign-in 行を書く)。
    *
    * [Issue #2442 / Phase C4] `controlDataBackend` が純 SQL (`turso`) のとき

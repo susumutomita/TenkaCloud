@@ -22,7 +22,7 @@ const LOCKABLE_STATUSES = new Set(["READY", "ENDED"]);
  * 設計判断:
  * - `READY` / `ENDED` の event のみ lock 可能 (= 採点が走りうる状態)。DRAFT / DEPLOYING /
  *   TEARDOWN / ARCHIVED は加点経路自体が無いので lock 無意味
- * - status とは独立な軸として `scoringLocked` flag を立てる (D1: 案 A、boolean orthogonal)
+ * - status とは独立した boolean の `scoringLocked` flag を立てる
  * - audit: 誰がいつ lock したかを attribute に残す
  * - reversible: unlockScoring で false に戻せる
  *

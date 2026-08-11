@@ -1,5 +1,5 @@
 /**
- * [ADR-027 / Issue #2743] Unit tests for the Azure Bicep -> inline ARM template materializer.
+ * [Issue #2743] Unit tests for the Azure Bicep -> inline ARM template materializer.
  * Pins the `.json` / `.bicep` dispatch, the fail-closed compiler-absent + traversal + missing-
  * artifact paths, provenance sha256 pinning, and the default CLI compiler's own compile/ENOENT
  * handling (via an injected `runBuild` fake — no real `bicep` binary required).

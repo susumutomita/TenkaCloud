@@ -12,7 +12,7 @@ import type {
 import type { ProblemDisruptionEntry } from "../../lib/utils/discover-problems-catalog";
 
 /**
- * [ADR-033 / Issue #1665] scoring-side disruption effect の純ロジックを pin。
+ * [Issue #1665] scoring-side disruption effect の純ロジックを pin。
  * active な penalty を tick の scoreDelta から引き、 期限切れは prune (= 適用しない)。
  */
 

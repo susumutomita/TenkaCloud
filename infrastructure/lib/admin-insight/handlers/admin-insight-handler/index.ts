@@ -25,7 +25,7 @@ import { summarizeTenants } from "./summary.js";
  *   GET /admin/insight/audit                                  — admin 操作 audit log
  *   GET /admin/insight/usage                                  — tenant usage facts (aggregate only)
  *
- * 廃止済 (= 2026-05-18 plane 分離方針、 [[feedback-no-cross-plane-data-leak]]):
+ * plane 分離のため廃止済:
  *   - `/admin/insight/tenants/:tenantId/events*`                  — App Plane data 覗き込み
  *   - `/admin/insight/tenants/:tenantId/deployments/:jobId*`      — App Plane data 覗き込み
  *   - `/admin/insight/system-users*`                              — SystemAdmin user CRUD、
@@ -34,8 +34,8 @@ import { summarizeTenants } from "./summary.js";
  *
  * Auth:
  *   - API Gateway HTTP API + JWT Authorizer (ControlPlane UserPool) で 1 段目を通す
- *   - handler 内で `cognito:groups` claim ⊇ {SystemAdmin} を再検査 (2 段目)。Tenant Admin
- *     の token が誤って届いた場合は 403 で弾く (= ADR-011 D2 採用案)
+ *   - handler 内で `custom:userRole=SystemAdmin` claim を再検査 (2 段目)。Tenant Admin
+ *     の token が誤って届いた場合は 403 で弾く
  *
  * Audit:
  *   - 各 read API で `console.log({ event: "admin.insight.read", admin: sub, path })` を出力
@@ -140,12 +140,12 @@ function parseTenantIds(
 }
 
 app.get("/admin/insight/tenants/summary", async (c) => {
-  // ADR-011 D2: 2 段目の SystemAdmin claim check。1 段目は API GW JWT Authorizer。
+  // 2 段目の SystemAdmin claim check。1 段目は API GW JWT Authorizer。
   if (!isSystemAdmin(c)) {
     return c.json({ error: "forbidden" }, StatusCodes.FORBIDDEN);
   }
 
-  // ADR-011 D5: structured audit log。tenant 一覧の中身を log には残さず、admin sub と
+  // structured audit log。tenant 一覧の中身を log には残さず、admin sub と
   // path だけを残す (= 監査要件は「誰がいつ覗いたか」が分かれば十分、内容は別 storage)。
   const sub = resolveCognitoSub(c);
   console.log({
@@ -226,8 +226,7 @@ app.get("/admin/insight/usage", async (c) => {
   }
 });
 
-// Phase 1.B drill-down (旧 #598) は plane 分離方針で廃止
-// ([[feedback-no-cross-plane-data-leak]])。 tenant 内の events / deployments は
+// drill-down (旧 #598) は plane 分離方針で廃止。tenant 内の events / deployments は
 // application-admin-console (= App Plane UI) で見る。
 
 // ====== Issue #658: Provisioning Jobs (CodePipeline executions) ======
@@ -315,10 +314,10 @@ registerStateMachineExecutionsRoute(
 //
 // UI 経路で SystemAdmin token を扱うと exfil 経路が増える (= security hole)。 SystemAdmin の
 // 招待 / 削除 / role 変更は Cognito 直 (aws cognito-idp admin-create-user / admin-delete-user
-// / Hosted UI) に倒す ([[feedback-no-cross-plane-data-leak]] 2026-05-18)。 audit log は
+// / Hosted UI) に倒す。audit log は
 // 引き続き `/admin/insight/audit` で参照可能。
 
-// ====== Issue #950 (ADR-020 Phase D): admin audit log read route ======
+// ====== Issue #950: admin audit log read route ======
 // Issue #1292: filter + CSV export 追加 (= date range / principal / action)。
 
 app.get("/admin/insight/audit", handleAuditEntries);

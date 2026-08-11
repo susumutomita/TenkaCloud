@@ -9,13 +9,13 @@ import type { AdminAuditRow } from "../../control-data/types.js";
 import { MACHINE_ACTOR_PREFIX } from "./machine-scopes.js";
 
 /**
- * Issue #950 (ADR-020 Phase D): admin 操作の append-only 監査ログを書き込む shared helper。
+ * Issue #950: admin 操作の append-only 監査ログを書き込む shared helper。
  *
  * 旧状態: admin 操作 (= user 招待 / role 変更 / 削除、 SAML CRUD、 ExternalId rotate、 Event 削除 等) は
  * CloudWatch Logs に \`console.log\` で 1 行残るだけ。 「誰が・いつ・何を」 を後追いする集約 storage が
  * 無く、 audit は CloudWatch Logs Insights grep に依存。 本 helper は 3 handler (= deploy /
  * event / competitor-accounts) と admin-insight Lambda から共通で呼ばれ、 1 DDB Table に行を
- * 集約する (= ADR-006 Notifications の writeScoreEvent と同パターン)。
+ * 集約する (Notifications の writeScoreEvent と同パターン)。
  *
  * Schema (= `admin-audit-log-table.ts` 参照):
  *   PK: TENANT#<tenantId>   (tenant 操作)
@@ -59,11 +59,11 @@ export function resolveAuditRetentionDays(): number {
   return parsed;
 }
 
-/** SOC2 enterprise default. Re-exported for CDK tests and ADR alignment. */
+/** SOC2 enterprise default. Re-exported for CDK assertions. */
 export const SOC2_AUDIT_RETENTION_DAYS = ENTERPRISE_AUDIT_TTL_DAYS;
 
 /**
- * Issue #2311 (ADR-049 cost-zero): 監査ログ出力の on/off を deploy 時に切り替える feature flag。
+ * Issue #2311: 監査ログ出力の on/off を deploy 時に切り替える feature flag。
  *
  * 監査行 1 write = `DynamoDbLowCapacity` で 1 WCU に固定された table への 1 write であり、
  * organizer にとっては書き込みコスト (WCU 予算 / burst credit) とのトレードオフになる。監査が
@@ -227,7 +227,7 @@ export function extractAuditContext(c: {
     | { jwt?: { claims?: Record<string, unknown> }; claims?: Record<string, unknown> }
     | undefined;
   const claims = authorizer?.jwt?.claims ?? authorizer?.claims;
-  // #2948 / ADR-0005: machine (M2M) access token には `cognito:username` が無く、`sub` がある
+  // Issue #2948: machine (M2M) access token には `cognito:username` が無く、`sub` がある
   // 保証も無い。`token_use === "access"` を machine の目印にし、actor を `m2m:<client_id>` に
   // 固定する。`client_id` すら無ければ `m2m:unknown` (= 裸の "unknown" と衝突させないことで、
   // audit 検索で human 不明行と machine 不明行を取り違えない)。

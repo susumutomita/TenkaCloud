@@ -6,7 +6,7 @@ import type { CustomDomainsConfig } from "../security/cloudfront-custom-domain.j
 export type { ApiKeySSMParameterNames };
 
 /**
- * Issue #2290 (ADR-049 §5.1): control-plane data backend selector。app-config は construct 層
+ * Issue #2290: control-plane data backend selector。app-config は construct 層
  * (`../problem-deploy/…`) に依存しない upstream レイヤなので、`control-data/types.ts` の
  * `ControlDataBackend` を import せずここに local 定義する (= 同一の literal union)。runtime factory
  * (`createEventsRepository` / `createTeamsRepository`) が cold-start で再検証するため二重管理でも安全。
@@ -119,12 +119,12 @@ export interface AppConfig {
    */
   readonly packAssets?: readonly PackAsset[];
 
-  /** ADR-008 Phase 2 (#642): private 問題 payload を格納する S3 bucket 名 (未設定なら undefined)。 */
+  /** Issue #642: private 問題 payload を格納する bucket 名 (未設定なら undefined)。 */
   readonly challengePayloadBucketName: string | undefined;
 
   /**
-   * ADR-003 Phase 2 / problem catalog split: TenkaCloudChallenge repo 用の
-   * S3 bucket + GitHub OIDC IAM Role を立てる構成。 未設定なら ChallengePayloadStack
+   * TenkaCloudChallenge の publish workflow 用に S3 bucket と GitHub OIDC IAM Role を
+   * 立てる構成。未設定なら ChallengePayloadStack
    * は立てない (= 旧 `CDK_PARAM_CHALLENGE_PAYLOAD_BUCKET` env override 経路のみ動く)。
    */
   readonly challengePayload:
@@ -162,7 +162,7 @@ export interface AppConfig {
   readonly useBulkDistributedMap: boolean;
 
   /**
-   * Issue #2291 (ADR-049 §9): DeployCreate を CodeBuild ではなく Lambda CreateStack +
+   * Issue #2291: DeployCreate を CodeBuild ではなく Lambda CreateStack +
    * DescribeStacks poll 経路にするか (`CDK_PARAM_DEPLOY_VIA_LAMBDA`)。**default true**
    * (未設定は Lambda + poll 経路)。在来の CodeBuild 経路へ戻す場合だけ明示的に `"false"` を
    * 指定する。
@@ -180,7 +180,7 @@ export interface AppConfig {
   readonly retainDataTables: boolean;
 
   /**
-   * Issue #2311 (ADR-049 cost-zero): 監査ログ出力を deploy 時に on/off する
+   * Issue #2311: 監査ログ出力を deploy 時に on/off する
    * (`CDK_PARAM_AUDIT_LOG_ENABLED`)。監査行 1 write = 1 WCU 固定 table への 1 write のため、
    * 書き込みコストとのトレードオフで organizer が停止できる。**default true** (未設定 /
    * `"true"` は従来どおり出力)。明示的に `"false"` のときだけ監査 Lambda 群へ
@@ -190,7 +190,7 @@ export interface AppConfig {
   readonly auditLogEnabled: boolean;
 
   /**
-   * Issue #2290 (ADR-049 §5.1): Events / Teams repository seam の backend を deploy 時に選ぶ
+   * Issue #2290: Events / Teams repository seam の backend を deploy 時に選ぶ
    * (`CDK_PARAM_CONTROL_DATA_BACKEND`、`dynamodb` | `turso` の二択、#2677)。**default `"dynamodb"`**
    * (未設定は在来の DDB 経路で、Lambda env を足さず CFn テンプレ byte 互換)。turso のときだけ
    * EventApi 系 Lambda に `CONTROL_DATA_BACKEND` を注入し、runtime resolver が pure SQL を選ぶ。
@@ -210,7 +210,7 @@ export interface AppConfig {
     | undefined;
 
   /**
-   * Issue #2230 (ADR-035): SPA feature flag の deploy 時 override
+   * Issue #2230: SPA feature flag の deploy 時 override
    * (`CDK_PARAM_FEATURES`、JSON `{"nonAwsRuntime":true}` 形式)。runtime-config.json の
    * `features` に焼かれ、各 SPA の `resolveFeatureFlags` が registry default に merge する。
    * 未設定なら `features` key 自体を書かない (= 旧 runtime-config と byte 互換)。
@@ -245,7 +245,7 @@ export interface AppConfig {
   /**
    * Issue #1340 Phase 2: per-tenant Application Plane SAML IdP 群。 env
    * `TENANT_SAML_IDPS` (JSON 配列) を parse 済み。 空配列なら SAML 無効。 pooled tier には
-   * attach されない (= ADR-018 で `TenantTemplateStack` が `isPooledDeploy` を見て ignore する)。
+   * attach されない (`TenantTemplateStack` が `isPooledDeploy` を見て ignore する)。
    * silo (PLATINUM) instance / Lite mode (= 1 UserPool) のみ attach 可能。
    */
   readonly tenantSamlIdps: ReadonlyArray<{
@@ -290,13 +290,13 @@ export interface ProblemsCatalogBundle {
   readonly endpoints: unknown;
   readonly phases: unknown;
   readonly visibility: unknown;
-  /** [ADR-023 / #2054] 非 aws/cloudformation runtime を宣言した問題のみ (= `{problemId: {provider,engine,entry}}`)。 */
+  /** [#2054] 非 aws/cloudformation runtime を宣言した問題のみ (`{problemId: {provider,engine,entry}}`)。 */
   readonly runtimes: unknown;
   /** Issue #888: per-problem `disruptions[]` 宣言。 未宣言の問題はキー無し。 */
   readonly disruptions: unknown;
-  /** ADR-028/030 #1420: per-problem `interTeamCoordination.plugin` (= `{ [problemId]: { plugin } }`)。 未宣言はキー無し。 */
+  /** #1420: per-problem `interTeamCoordination.plugin` (`{ [problemId]: { plugin } }`)。 未宣言はキー無し。 */
   readonly coordination: unknown;
-  /** ADR-030 Phase 3b #1420: `{ [problemId]: bundledMjs }` (= synth-bundle 済み coordination plugin)。 */
+  /** #1420: `{ [problemId]: bundledMjs }` (synth-bundle 済み coordination plugin)。 */
   readonly coordinationBundles: unknown;
   /**
    * [Problem Packs / Issue #2464] `problemId → EffectiveCatalogProvenance` for pack-sourced

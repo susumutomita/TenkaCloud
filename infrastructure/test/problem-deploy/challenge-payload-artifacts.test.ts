@@ -8,7 +8,7 @@ import {
 } from "../../lib/problem-deploy/challenge-payload-artifacts.js";
 
 /**
- * Issue #2291 (ADR-008 Phase 3 / #642): private-problem payload fetch on the Lambda deploy path.
+ * Issue #2291 (#642): private-problem payload fetch on the Lambda deploy path.
  *
  * The module HTTP-GETs a presigned S3 URL and unzips `payload.zip` in memory, returning the
  * problem's `template.yaml` + `metadata.json`. Tests inject a fake `httpGet` (no real network) and,

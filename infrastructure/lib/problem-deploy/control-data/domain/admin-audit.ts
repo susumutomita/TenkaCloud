@@ -7,7 +7,7 @@
  */
 
 // ---------------------------------------------------------------------------
-// [Issue #2442 / Phase C4] AdminAuditLog aggregate (Issue #950 / ADR-020 Phase D).
+// [Issue #2442] AdminAuditLog aggregate (Issue #950).
 //
 // Physical shape (unchanged, `admin-audit-log-table.ts`):
 //   PK = `TENANT#<tenantId>` (tenant-scoped operation) | `SYSTEM#<env>` (SystemAdmin operation)
@@ -96,7 +96,7 @@ export interface AdminAuditLogRepository {
   ): Promise<readonly AdminAuditRow[]>;
   /**
    * TTL-equivalent sweep for SQL backends (mirrors {@link DisruptionsRepository.pruneExpired}).
-   * DynamoDB has native TTL on `ttl`; the SQLite backends have none (ADR-049 §5.2) and rely on
+   * DynamoDB has native TTL on `ttl`; the SQLite backends have none and rely on
    * this being run on the manual-prune tick.
    */
   pruneExpired(nowEpochSeconds: number): Promise<number>;

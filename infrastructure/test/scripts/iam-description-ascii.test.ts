@@ -19,7 +19,9 @@ const ARROW = "→"; // → — the char that failed the deploy
 
 describe("firstDisallowedChar", () => {
   it("should allow tab/LF/CR + printable ASCII + Latin-1 supplement", () => {
-    expect(firstDisallowedChar("Publish role for repo -> bucket (ADR-003).")).toBeUndefined();
+    expect(
+      firstDisallowedChar("Publish role for repo -> bucket. S3 publication only."),
+    ).toBeUndefined();
     expect(firstDisallowedChar("café résumé naïve ÿ")).toBeUndefined(); // Latin-1 supplement ok
     expect(firstDisallowedChar("\t\n\r")).toBeUndefined();
   });
@@ -65,7 +67,7 @@ describe("scanTemplateForIamDescriptions (#664)", () => {
     const template = role({
       "Fn::Join": [
         "",
-        [`Publish role for repo ${ARROW} `, { Ref: "Bucket83908E77" }, " (ADR-003)."],
+        [`Publish role for repo ${ARROW} `, { Ref: "Bucket83908E77" }, ". S3 publication only."],
       ],
     });
     const findings = scanTemplateForIamDescriptions(template);
@@ -92,7 +94,7 @@ describe("scanTemplateForIamDescriptions (#664)", () => {
 
   it("should pass a clean ASCII / Latin-1 IAM description", () => {
     expect(
-      scanTemplateForIamDescriptions(role("Publish role for repo -> bucket (ADR-003).")),
+      scanTemplateForIamDescriptions(role("Publish role for repo -> bucket. S3 publication only.")),
     ).toEqual([]);
     expect(scanTemplateForIamDescriptions(role(undefined))).toEqual([]);
     expect(scanTemplateForIamDescriptions(role(null))).toEqual([]);

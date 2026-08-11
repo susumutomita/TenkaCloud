@@ -1,6 +1,6 @@
 # tcloud
 
-TenkaCloud の machine API を叩く operator CLI です。Issue 2951、ADR-0005。
+TenkaCloud の machine API を叩く operator CLI です。Issue 2951。
 
 人間が GUI にログインしなくても、CI や手元から問題をデプロイして完了まで見届けられるようにします。
 

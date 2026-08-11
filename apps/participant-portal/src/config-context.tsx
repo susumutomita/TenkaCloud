@@ -11,8 +11,7 @@ import type { AppConfig } from "./config";
  *   新: 中間 component は config を知らない。 葉 component が必要なら useAppConfig で
  *       直接読む。 derived `isMock` も `useIsMock()` helper として提供。
  *
- * Mock / backend の API 呼び分け (= フル adapter) は別 PR で順次。 まずは prop drill
- * 撲滅と簡易な mock 判定統合まで。
+ * Mock / backend の簡易判定は `useIsMock()` に集約する。
  */
 
 const AppConfigContext = createContext<AppConfig | null>(null);

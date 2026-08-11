@@ -30,7 +30,7 @@ import {
 } from "../../lib/problem-deploy/handlers/cfn-deploy-handler/create-stack.js";
 
 /**
- * Issue #2291 (ADR-049 §9): Lambda CreateStack deploy handler unit tests.
+ * Issue #2291: Lambda CreateStack deploy handler unit tests.
  *
  * All AWS SDK clients are mocked via injected `send` fakes (no network). The tests lock the
  * behavior ported from `scripts/deploy-battles.sh`: parameter overrides (incl.

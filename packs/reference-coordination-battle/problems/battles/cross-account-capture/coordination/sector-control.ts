@@ -1,5 +1,5 @@
 /**
- * Reference inter-team coordination plugin (ADR-028) — "Cross-Account Capture".
+ * Reference inter-team coordination plugin — "Cross-Account Capture".
  *
  * This is the canonical worked example a Battle problem ships to opt into the
  * platform's coordination host. It is a pure state machine, default-exported

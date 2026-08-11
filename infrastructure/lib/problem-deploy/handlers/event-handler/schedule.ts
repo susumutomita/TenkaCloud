@@ -19,10 +19,10 @@ export interface SetEventScheduleParams {
   readonly startsAt?: string;
   /** 競技終了予約時刻 (ISO8601 Z、#536)。未指定なら既存値を保持 */
   readonly endsAt?: string;
-  /** [ADR-047] 自動撤去予定時刻 (ISO8601 Z)。未指定なら既存値を保持。teardownAt >= 実効 endsAt 必須 */
+  /** 自動撤去予定時刻 (ISO8601 Z)。未指定なら既存値を保持。teardownAt >= 実効 endsAt 必須 */
   readonly teardownAt?: string;
   /**
-   * [ADR-047 follow-up] 自動デプロイ予定時刻 (ISO8601 Z)。未指定なら既存値を保持。
+   * 自動デプロイ予定時刻 (ISO8601 Z)。未指定なら既存値を保持。
    * deployAt <= 実効 endsAt 必須 (deploy → 採点 → 終了 の時系列を保つ)。
    */
   readonly deployAt?: string;
@@ -41,10 +41,10 @@ export interface SetEventScheduleParams {
  * - `past_starts_at`: 指定 startsAt が `now - SLACK_MS` 以前 → 400 相当 (#537)
  * - `past_ends_at`: 指定 endsAt が `now - SLACK_MS` 以前 → 400 相当 (#536)
  * - `ends_before_starts`: 指定 endsAt <= startsAt → 400 相当 (#536)
- * - `past_teardown_at`: 指定 teardownAt が `now - SLACK_MS` 以前 → 400 相当 (ADR-047)
- * - `teardown_before_ends`: 実効 teardownAt < 実効 endsAt → 400 相当 (ADR-047 always-ends)
- * - `past_deploy_at`: 指定 deployAt が `now - SLACK_MS` 以前 → 400 相当 (ADR-047 follow-up)
- * - `deploy_after_ends`: 実効 deployAt > 実効 endsAt → 400 相当 (ADR-047 follow-up: deploy は終了より前)
+ * - `past_teardown_at`: 指定 teardownAt が `now - SLACK_MS` 以前 → 400 相当
+ * - `teardown_before_ends`: 実効 teardownAt < 実効 endsAt → 400 相当 (always-ends)
+ * - `past_deploy_at`: 指定 deployAt が `now - SLACK_MS` 以前 → 400 相当
+ * - `deploy_after_ends`: 実効 deployAt > 実効 endsAt → 400 相当 (deploy は終了より前)
  * - `no_op`: 何も指定なし (= zod 通過後ありえない、defense-in-depth)
  * - `ok`: 更新後の startsAt / endsAt / teardownAt / deployAt + 影響を受けた deployment 数
  */
@@ -113,11 +113,11 @@ export async function setEventSchedule(
   const effectiveEndsAt = endsAt ?? currentEvent.endsAt;
   const effectiveOrder = validateScheduleOrder(effectiveStartsAt, effectiveEndsAt);
   if (effectiveOrder) return effectiveOrder;
-  // [ADR-047] teardownAt >= 実効 endsAt (採点 gate を閉じてから撤去する always-ends 不変条件)。
+  // teardownAt >= 実効 endsAt (採点 gate を閉じてから撤去する always-ends 不変条件)。
   const effectiveTeardownAt = teardownAt ?? currentEvent.teardownAt;
   const teardownOrder = validateTeardownOrder(effectiveTeardownAt, effectiveEndsAt);
   if (teardownOrder) return teardownOrder;
-  // [ADR-047 follow-up] deployAt <= 実効 endsAt (deploy → 採点 → 終了 の時系列を保つ)。
+  // deployAt <= 実効 endsAt (deploy → 採点 → 終了 の時系列を保つ)。
   const effectiveDeployAt = deployAt ?? currentEvent.deployAt;
   const deployOrder = validateDeployOrder(effectiveDeployAt, effectiveEndsAt);
   if (deployOrder) return deployOrder;
@@ -179,7 +179,7 @@ function validateScheduleParams(
 }
 
 /**
- * [ADR-047] 実効 teardownAt が 実効 endsAt より前なら `teardown_before_ends`。
+ * 実効 teardownAt が 実効 endsAt より前なら `teardown_before_ends`。
  * どちらかが未設定なら制約なし (= undefined)。 endsAt 未設定の event は無期限なので
  * teardownAt 単独設定も許容する (= 「いつか撤去」 を予約できる)。
  */
@@ -197,7 +197,7 @@ function validateTeardownOrder(
 }
 
 /**
- * [ADR-047 follow-up] 実効 deployAt が 実効 endsAt より後なら `deploy_after_ends`。
+ * 実効 deployAt が 実効 endsAt より後なら `deploy_after_ends`。
  * どちらかが未設定なら制約なし (= undefined)。 endsAt 未設定の event は無期限なので
  * deployAt 単独設定も許容する (= 「いつか deploy」 を予約できる)。 teardownOrder の鏡像で、
  * deploy は採点終了より後ろに置けないという時系列制約を表す。
@@ -236,7 +236,7 @@ function validateScheduleOrder(
 
 /**
  * Event 行へ書く field だけを patch に写す (Event 側の式構築は repository seam)。
- * [ADR-047] teardownAt / [ADR-047 follow-up] deployAt は event 行のみ
+ * teardownAt / deployAt は event 行のみ
  * (reconciler が event から読む) — deployment 非伝播。 両 backend とも
  * `!== undefined` の field だけを書くので、 undefined のままの pick で挙動は同一。
  */

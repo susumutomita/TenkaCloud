@@ -55,7 +55,7 @@ function allActions(tpl: Template): string[] {
   });
 }
 
-describe("CoordinationPluginBundle (ADR-030 Phase 3b)", () => {
+describe("CoordinationPluginBundle", () => {
   it(
     "should provision a private S3 bucket and a BucketDeployment",
     () => {
@@ -75,7 +75,7 @@ describe("CoordinationPluginBundle (ADR-030 Phase 3b)", () => {
   );
 });
 
-describe("CoordinationDispatcherLambda with pluginBucket (ADR-030 Phase 3b)", () => {
+describe("CoordinationDispatcherLambda with pluginBucket", () => {
   it(
     "should set COORDINATION_PLUGIN_BUCKET env + grant S3 read, still WITHOUT sts/ssm/kms",
     () => {

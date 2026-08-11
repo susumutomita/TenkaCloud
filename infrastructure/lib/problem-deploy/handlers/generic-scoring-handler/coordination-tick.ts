@@ -6,10 +6,10 @@ import {
 import type { CoordinationTickInvoker } from "./coordination-tick-dispatch.js";
 
 /**
- * ADR-028 scoring-driven tick (#2324) の **採点 pass 側**。 coordination を宣言した event を per-minute
+ * scoring-driven tick (#2324) の **採点 pass 側**。 coordination を宣言した event を per-minute
  * pass で見つけ、 tick 対象を batch にまとめて CoordinationDispatcher Lambda を 1 回 async Invoke する。
  *
- * 資格情報分離 (ADR-028/030): 採点 Lambda は ssm:GetParameter / kms:Decrypt を持つため、 pack-author
+ * 資格情報分離: 採点 Lambda は ssm:GetParameter / kms:Decrypt を持つため、 pack-author
  * 由来の plugin を **ここでは load / 実行しない**。 「どの event が coordination を宣言しているか」だけを
  * `PROBLEM_COORDINATION` config (= problemId 集合、 plugin code ではない純 metadata) で判定し、 実 tick
  * (plugin の runTick) は最小 IAM の dispatcher に委ねる (= op 経路と同じ場所)。 event 数によらず invoke は

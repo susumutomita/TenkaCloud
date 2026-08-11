@@ -7,7 +7,7 @@ import {
 } from "../src/oidc-jwks-verify";
 
 /**
- * ADR-049 Phase 3 (#2292) SLICE 1 — offline matrix for the generic OIDC/JWKS verifier.
+ * Issue #2292: offline matrix for the generic OIDC/JWKS verifier.
  *
  * Keypairs are generated in-test via WebCrypto (RSASSA-PKCS1-v1_5); a tiny in-test
  * signer produces compact JWTs so every branch — valid, each failure reason, and the
@@ -111,7 +111,7 @@ beforeAll(async () => {
   resolver = resolverFor(rs256.publicJwk);
 });
 
-describe("verifyOidcJwt (ADR-049 Phase 3 #2292 SLICE 1)", () => {
+describe("verifyOidcJwt", () => {
   it("should accept a valid token and return its claims and header", async () => {
     const token = await signJwt(rs256.privateKey, header(), claims());
     const outcome = await verifyOidcJwt(token, options());

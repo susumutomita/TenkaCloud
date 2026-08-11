@@ -3,7 +3,7 @@ import { MarketingHome } from "@/components/MarketingHome";
 import { HOME_COPY } from "@/content/site-copy";
 
 // Marketing home, English mirror, served at "/en/". The Japanese original at "/" is
-// the primary; both render from the one bilingual content model (ADR-0003 §5).
+// the primary; both render from the same bilingual content model.
 export const metadata: Metadata = {
   title: HOME_COPY.en.meta.title,
   description: HOME_COPY.en.meta.description,

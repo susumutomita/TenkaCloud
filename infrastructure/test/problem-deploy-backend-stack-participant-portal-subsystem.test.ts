@@ -137,7 +137,7 @@ describe("ProblemDeployBackendStack participantPortal subsystem (#2220)", () => 
                 version: "1.0.0",
                 core: "^1.0.0",
                 title: "Coordination pack",
-                description: "Declares an inter-team coordination plugin (ADR-028).",
+                description: "Declares an inter-team coordination plugin.",
                 license: "Apache-2.0",
                 problemsRoot: "problems",
                 requiredRuntimes: [{ provider: "aws", engine: "cloudformation" }],
@@ -209,7 +209,7 @@ describe("ProblemDeployBackendStack participantPortal subsystem (#2220)", () => 
 
       // (b) 採点 role が coordination のために得る IAM は `lambda:InvokeFunction` のみ (= dispatcher へ
       // 委譲するためだけ)。 plugin bundle を読むための `s3:*` は付与しない (= plugin は dispatcher 内でのみ
-      // load、 ADR-028/030 の資格情報分離)。
+      // load するため、採点 role と dispatcher の資格情報を分離する)。
       const policies = tpl.findResources("AWS::IAM::Policy");
       const scoringPolicies = Object.entries(policies).filter(([name]) =>
         name.includes("GenericScoring"),
@@ -312,7 +312,7 @@ describe("ProblemDeployBackendStack participantPortal subsystem (#2220)", () => 
         )
         .filter((a): a is string => typeof a === "string");
       // op 経路と同じ最小 IAM を維持: coordination row の DDB Query/Get/Put のみ。 tick を本 Lambda 内で
-      // 走らせても、 競技者資格情報に到達しうる sts/ssm/kms は付与されない (= ADR-028/030 の分離)。
+      // 走らせても、競技者資格情報に到達しうる sts/ssm/kms は付与されない。
       expect(dispatcherActions).toContain("dynamodb:PutItem");
       expect(dispatcherActions.some((a) => a.startsWith("sts:"))).toBe(false);
       expect(dispatcherActions.some((a) => a.startsWith("ssm:"))).toBe(false);
@@ -340,7 +340,7 @@ describe("ProblemDeployBackendStack participantPortal subsystem (#2220)", () => 
         ":parameter/tenkacloud/development/turso-token",
       );
 
-      // ADR-030 S2: the dispatcher must not gain sts/ssm/kms just because the portal did.
+      // the dispatcher must not gain sts/ssm/kms just because the portal did.
       const roles = tpl.findResources("AWS::IAM::Role");
       const dispatcherRole = Object.entries(roles).find(([name]) =>
         name.includes("CoordinationDispatcher"),

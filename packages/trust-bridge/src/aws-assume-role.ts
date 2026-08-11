@@ -7,19 +7,19 @@ import {
 import type { VerifiedCloudActionIntent } from "./schema.js";
 
 /**
- * Issue #795 / ADR-017 Phase 2: AwsAssumeRoleExchange adapter。
+ * Issue #795: AwsAssumeRoleExchange adapter。
  *
  * Phase 1 で sign / verify した CloudActionIntent を、 AWS STS の AssumeRole
  * 呼び出しに変換する layer。 既存 TenkaCloud の competitor account flow
- * (= ADR-002 cross-account federation、 ExternalId 必須) を本抽象に乗せる。
+ * (= cross-account federation では ExternalId 必須) を本抽象に乗せる。
  *
  * 設計判断:
  *   - STS client は inject 可能にする (= test では fake、 production では
  *     @aws-sdk/client-sts の AssumeRoleCommand を渡す)。 本 package に
  *     `@aws-sdk/client-sts` を hard dep しない (= consumer 側で持ち込む、
  *     これにより trust-bridge は provider client universe から独立を保つ)。
- *   - ExternalId は context.externalId で渡す。 ADR-002 の「必ず ExternalId
- *     を要求」 原則を強制 (= 渡されていなければ context-missing で fail)。
+ *   - ExternalId は context.externalId で渡す。cross-account federation では必ず ExternalId
+ *     を要求し、渡されていなければ context-missing で fail する。
  *   - RoleArn は context.roleArn で渡す (= providerAccountRef は ID 検証用、
  *     RoleArn は具体的な ARN)。
  *   - session policy は intent.action.requestedScopes から組み立てる
@@ -109,7 +109,7 @@ export class AwsAssumeRoleExchange implements ProviderTokenExchange<AwsCredentia
     if (!awsContext.externalId || awsContext.externalId.length === 0) {
       throw new ExchangeError(
         "context-missing",
-        "AwsExchangeContext.externalId is required (= ADR-002 で必須化)",
+        "AwsExchangeContext.externalId is required for every cross-account AssumeRole request",
       );
     }
 
@@ -118,7 +118,7 @@ export class AwsAssumeRoleExchange implements ProviderTokenExchange<AwsCredentia
       // STS AssumeRole の最小 DurationSeconds は 900 (= 15 min)。 spec 上限は
       // 3600 で揃えているが、 下限は STS 側で 900。 intent が短すぎる場合は
       // 900 に切り上げる代わりに ttl-exceeded-provider-limit で fail (= 静かに
-      // 値を曲げない、 ADR-017 D1 の "explicit failure" 原則)。
+      // 値を曲げず、構造化した explicit failure を返す)。
       throw new ExchangeError(
         "ttl-exceeded-provider-limit",
         `STS AssumeRole requires DurationSeconds >= 900, got ${duration}`,

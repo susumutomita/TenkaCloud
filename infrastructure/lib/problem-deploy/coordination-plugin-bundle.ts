@@ -16,11 +16,11 @@ export interface CoordinationPluginBundleProps {
 }
 
 /**
- * ADR-030 Phase 3b (#1420): synth-bundle 済み coordination plugin を **専用 S3 bucket** に配置する。
+ * Issue #1420: synth-bundle 済み coordination plugin を **専用 bucket** に配置する。
  *
- * CoordinationDispatcher Lambda が runtime に `coordination/<problemId>.mjs` を download → `import()`
- * する (= ADR-030 S1 の「レビュー済みカタログ bundle の動的 load」)。 bucket は private (BlockPublicAccess)
- * + SSL 必須 + S3 managed 暗号化。 dispatcher 以外には読ませない (= S2 と合わせ未信頼コードの到達範囲を絞る)。
+ * CoordinationDispatcher Lambda が runtime に `coordination/<problemId>.mjs` を download して
+ * dynamic import する。bucket は private (BlockPublicAccess)、SSL 必須、S3 managed 暗号化とし、
+ * dispatcher だけに read 権限を与えて未信頼コードの到達範囲を絞る。
  */
 export class CoordinationPluginBundle extends Construct {
   public readonly bucket: IBucket;

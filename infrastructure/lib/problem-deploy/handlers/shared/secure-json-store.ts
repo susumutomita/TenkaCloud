@@ -8,7 +8,7 @@ import {
 import { isParameterNotFound } from "./ssm-parameter.js";
 
 /**
- * [ADR-026/027 / #1412 #1410] per-team の機密設定を SSM SecureString に保管する汎用ストア。
+ * [#1412 #1410] per-team の機密設定を SSM SecureString に保管する汎用ストア。
  *
  * Sakura API key / Azure client secret など、 provider 別の「per-team な JSON 機密を SecureString で
  * 保管し、 未登録 / 復号不能なら fail-safe に undefined を返し、 delete は idempotent」という共通形を

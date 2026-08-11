@@ -6,7 +6,7 @@ import {
 import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 /**
- * [ADR-047 follow-up] `buildScheduledDeployResources` の段階的有効化ガード (= teardown 配線の鏡像)。
+ * `buildScheduledDeployResources` の段階的有効化ガード (= teardown 配線の鏡像)。
  *
  * deploy に必須な env が 1 つでも欠けると `undefined` (= dormant) を返し、 reconciler が scheduled
  * deploy を skip して毎分 tick / 採点を壊さないことを pin する。 全 env が揃って初めて有効な
@@ -39,7 +39,7 @@ afterEach(() => {
   }
 });
 
-describe("buildScheduledDeployResources (ADR-047 follow-up)", () => {
+describe("buildScheduledDeployResources", () => {
   it("should return undefined when no env is wired (dormant)", () => {
     expect(buildScheduledDeployResources(makeTestControlDataRuntime())).toBeUndefined();
   });
@@ -116,10 +116,10 @@ describe("buildScheduledDeployResources (ADR-047 follow-up)", () => {
 });
 
 /**
- * [ADR-047] `buildScheduledTeardownResources` の段階的有効化ガード (deploy 側の鏡像)。
+ * `buildScheduledTeardownResources` の段階的有効化ガード (deploy 側の鏡像)。
  * teardown は Teams / catalog を使わないため必須 env が deploy より狭い。
  */
-describe("buildScheduledTeardownResources (ADR-047)", () => {
+describe("buildScheduledTeardownResources", () => {
   const TEARDOWN_REQUIRED_ENV = {
     COMPETITOR_ACCOUNTS_TABLE_NAME: "Accounts",
     EVENTS_TABLE_NAME: "Events",

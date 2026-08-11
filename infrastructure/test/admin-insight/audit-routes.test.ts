@@ -3,7 +3,7 @@ import { listAuditEntries } from "../../lib/admin-insight/handlers/admin-insight
 import { DynamoDbAdminAuditLogRepository } from "../../lib/problem-deploy/control-data/admin-audit-log-repository";
 
 /**
- * Issue #950 (ADR-020 Phase D): listAuditEntries の挙動を pin する。
+ * Issue #950: listAuditEntries の挙動を pin する。
  *
  * - scope=tenant + tenantId → PK=TENANT#<id> で Query
  * - scope=system → PK=SYSTEM#<env> で Query

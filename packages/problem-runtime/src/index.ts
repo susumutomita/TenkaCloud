@@ -1,6 +1,6 @@
 /**
  * @tenkacloud/problem-runtime — single source of truth for problem runtime
- * classification and Composite Runtime dataflow (ADR-023 / ADR-026 / ADR-027).
+ * classification and Composite Runtime dataflow.
  *
  * The functions are pure and dependency-free so Lambda bundles, the SDK, authoring
  * tools, and local play consume the same contract.

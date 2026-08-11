@@ -1,7 +1,7 @@
 /**
- * [ADR-027 / ADR-032 / Issue #1410] Microsoft Entra ID `client_credentials` token client.
+ * [Issue #1410] Microsoft Entra ID `client_credentials` token client.
  *
- * ADR-032 の決定どおり、 Azure deploy は per-team app registration の client secret で
+ * 決定どおり、 Azure deploy は per-team app registration の client secret で
  * `client_credentials` grant を行い ARM access token を得る (= WIF/OIDC issuer は将来アップグレード)。
  * Sakura / ARM REST client と同方針で `handlers/` の外 (service 層) に置き `fetch` を閉じ込める。
  *
