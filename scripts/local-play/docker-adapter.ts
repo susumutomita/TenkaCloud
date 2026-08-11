@@ -265,11 +265,21 @@ function composeInterpolationEnv(secretEnv: readonly string[] = []): NodeJS.Proc
 
 const COMPOSE_INTERPOLATION_PLACEHOLDER = "tenkacloud-local-exec";
 
-interface ComposePsResult {
+interface ComposeCapturedResult {
   readonly status: number | null;
   readonly stdout?: string;
   readonly stderr?: string;
   readonly error?: { readonly message: string };
+}
+
+function assertComposeCommandSucceeded(
+  cli: ComposeCli,
+  args: readonly string[],
+  result: ComposeCapturedResult,
+): void {
+  if (result.status === 0) return;
+  const stderr = [result.stderr ?? "", result.error?.message ?? ""].filter(Boolean).join("\n");
+  throw new Error(composeFailureMessage(`${cli.command} ${args.join(" ")}`, stderr));
 }
 
 export interface ComposePsDeps {
@@ -278,7 +288,7 @@ export interface ComposePsDeps {
     command: string,
     args: readonly string[],
     env: NodeJS.ProcessEnv,
-  ) => ComposePsResult;
+  ) => ComposeCapturedResult;
 }
 
 /**
@@ -303,10 +313,7 @@ export function isComposeUnitRunning(unit: LocalComposeUnit, deps: ComposePsDeps
         encoding: "utf8",
         stdio: ["ignore", "pipe", "pipe"],
       });
-  if (result.status !== 0) {
-    const stderr = [result.stderr ?? "", result.error?.message ?? ""].filter(Boolean).join("\n");
-    throw new Error(composeFailureMessage(`${cli.command} ${args.join(" ")}`, stderr));
-  }
+  assertComposeCommandSucceeded(cli, args, result);
   return (result.stdout ?? "").trim().length > 0;
 }
 
@@ -396,10 +403,7 @@ export const inspectComposeConfig: ComposeConfigInspector = (target) => {
     env: composeInterpolationEnv(target.secretEnv),
     encoding: "utf8",
   });
-  if (result.status !== 0) {
-    const stderr = [result.stderr ?? "", result.error?.message ?? ""].filter(Boolean).join("\n");
-    throw new Error(composeFailureMessage(`${cli.command} ${args.join(" ")}`, stderr));
-  }
+  assertComposeCommandSucceeded(cli, args, result);
   let config: unknown;
   try {
     config = JSON.parse(result.stdout ?? "");
