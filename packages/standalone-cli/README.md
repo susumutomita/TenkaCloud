@@ -52,6 +52,6 @@ The complete problem tree is inspected before copying. Symbolic links at any dep
 
 ## Runtime packaging
 
-The npm tarball contains a prepared TenkaCloud runtime. On first use, the CLI expands that runtime into the user's cache directory, installs its locked dependencies with the Bun binary shipped as an npm dependency, and copies the configured problem directory into the isolated runtime workspace. Users do not need Git, a repository checkout, submodules, or a separate Bun installation.
+The npm tarball contains a prepared TenkaCloud runtime. On first use, the CLI expands that runtime into the user's cache directory, installs its locked dependencies with the Bun executable already required on `PATH`, and copies the configured problem directory into the isolated runtime workspace. Users do not need Git, a repository checkout, or submodules, but they do need the separate Bun prerequisite described above.
 
 The `prepack` script assembles the runtime from the monorepo immediately before publishing. Generated `node_modules`, `dist`, and CDK output directories are excluded from the tarball.
