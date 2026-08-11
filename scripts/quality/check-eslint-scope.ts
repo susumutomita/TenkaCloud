@@ -33,18 +33,28 @@ import { compareCodePoints } from "../lib/code-point-order";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
+/** `eslint .` が拾い得る拡張子。 これ以外の ignored file は lint 対象になり得ない。 */
+const LINTABLE_EXTENSIONS = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
+
 /**
- * `git ls-files --others --ignored --exclude-standard --directory` の出力から directory entry
- * だけを取り出す。 `--directory` は「丸ごと無視される directory」を 1 行に畳むので、 残る個別
- * file 行 (`.DS_Store` / `.env` 等) は lint 対象になり得ず捨ててよい。
+ * `git ls-files --others --ignored --exclude-standard --directory` の出力から、 lint 対象に
+ * なり得る path を取り出す。 `--directory` は「丸ごと無視される directory」を 1 行に畳むが、
+ * **個別 file の行も混ざる** — 初版は directory 行だけを見ており、 `next-env.d.ts`
+ * (`next build` の生成物、 CI の lint 時には存在しない) を素通ししていた。 file 行は拡張子で
+ * 絞る: `.DS_Store` / `.env` は ESLint に渡しても意味が無い。
  */
-export function parseIgnoredDirectories(gitOutput: string): string[] {
-  return gitOutput
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line.endsWith("/"))
-    .map((line) => line.slice(0, -1))
-    .filter((line) => line.length > 0);
+export function parseIgnoredPaths(gitOutput: string): string[] {
+  const paths: string[] = [];
+  for (const raw of gitOutput.split("\n")) {
+    const line = raw.trim();
+    if (line.length === 0) continue;
+    if (line.endsWith("/")) {
+      paths.push(line.slice(0, -1));
+    } else if (LINTABLE_EXTENSIONS.some((extension) => line.endsWith(extension))) {
+      paths.push(line);
+    }
+  }
+  return paths;
 }
 
 export function formatFindings(lintedPaths: readonly string[]): string {
@@ -58,7 +68,7 @@ export function formatFindings(lintedPaths: readonly string[]): string {
   ].join("\n");
 }
 
-const GIT_IGNORED_DIRS_ARGS = [
+const GIT_IGNORED_PATHS_ARGS = [
   "ls-files",
   "--others",
   "--ignored",
@@ -66,9 +76,9 @@ const GIT_IGNORED_DIRS_ARGS = [
   "--directory",
 ];
 
-function listIgnoredDirectories(): string[] {
+function listIgnoredPaths(): string[] {
   // eslint-disable-next-line sonarjs/no-os-command-from-path -- git is this gate's input source
-  const result = spawnSync("git", GIT_IGNORED_DIRS_ARGS, {
+  const result = spawnSync("git", GIT_IGNORED_PATHS_ARGS, {
     cwd: REPO_ROOT,
     encoding: "utf8",
     shell: false,
@@ -76,7 +86,7 @@ function listIgnoredDirectories(): string[] {
   if (result.status !== 0) {
     throw new Error(`git ls-files failed (status ${String(result.status)}): ${result.stderr}`);
   }
-  return parseIgnoredDirectories(result.stdout);
+  return parseIgnoredPaths(result.stdout);
 }
 
 /** 検査に必要な ESLint の能力だけを表す。 test から fake を渡せるよう構造型で受ける。 */
@@ -86,14 +96,15 @@ export interface FileLinter {
 
 /**
  * ESLint が実際に lint する file を repo 相対 path で返す。 `warnIgnored: false` により、
- * 既に ignores が覆っている directory は結果に現れない — 残ったものだけが drift。
+ * 既に ignores が覆っている path は結果に現れない — 残ったものだけが drift。
  */
 export async function lintedPathsUnder(
   linter: FileLinter,
-  directories: readonly string[],
+  candidates: readonly string[],
 ): Promise<string[]> {
-  if (directories.length === 0) return [];
-  const results = await linter.lintFiles([...directories]);
+  // `lintFiles([])` は cwd 全体を lint するので、 候補ゼロを repo 全体の誤検出に変えてしまう。
+  if (candidates.length === 0) return [];
+  const results = await linter.lintFiles([...candidates]);
   return results.map((result) => relative(REPO_ROOT, result.filePath)).sort(compareCodePoints);
 }
 
@@ -103,7 +114,7 @@ export async function main(): Promise<number> {
     errorOnUnmatchedPattern: false,
     warnIgnored: false,
   });
-  const findings = await lintedPathsUnder(eslint, listIgnoredDirectories());
+  const findings = await lintedPathsUnder(eslint, listIgnoredPaths());
   if (findings.length === 0) {
     console.log("OK ESLint の lint 対象は .gitignore と整合しています。");
     return 0;
