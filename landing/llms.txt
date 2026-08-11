@@ -28,6 +28,7 @@ This file follows the [llms.txt](https://llmstxt.org/) convention. Links point t
 
 - [Problem catalog repo (TenkaCloudChallenge)](https://github.com/susumutomita/TenkaCloudChallenge#readme): where competition problems live and are contributed
 - [Problem schema + conventions](https://github.com/susumutomita/TenkaCloud/blob/main/problems/README.md): `metadata.json` schema and `template.yaml` conventions
+- [Add your own problems (README)](https://github.com/susumutomita/TenkaCloud#add-your-own-problems): two paths — contribute to the public catalog, or install a private Problem Pack (`make pack-init` / `pack-validate` / `pack-install` / `pack-activate`) that never leaves your own tenant
 
 ## For AI coding agents
 

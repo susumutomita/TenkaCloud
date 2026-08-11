@@ -295,9 +295,10 @@
       "extend.eyebrow": "問題は、増やせる",
       "extend.h2": "足りない問題は、自分で作ればいい。",
       "extend.lead":
-        '問題カタログは <a href="https://github.com/susumutomita/TenkaCloudChallenge" target="_blank" rel="noopener noreferrer">TenkaCloudChallenge</a> リポジトリで完全に開かれていて、 metadata.json + template.yaml の 2 ファイルを書けば 1 問追加できます。 Claude Code 等のコーディングエージェント向けに 問題作成 skill (<code>new-problem</code>) も同梱されているので、 「こういう問題を作りたい」 とアイデアを話すだけで、 初めてでも 1 問が形になります。',
+        '問題カタログは <a href="https://github.com/susumutomita/TenkaCloudChallenge" target="_blank" rel="noopener noreferrer">TenkaCloudChallenge</a> リポジトリで完全に開かれていて、 metadata.json + template.yaml の 2 ファイルを書けば 1 問追加できます。 Claude Code 等のコーディングエージェント向けに 問題作成 skill (<code>new-problem</code>) も同梱されているので、 「こういう問題を作りたい」 とアイデアを話すだけで、 初めてでも 1 問が形になります。 社内限定やイベント専用で公開したくない問題は、 <a href="https://github.com/susumutomita/TenkaCloud#自分の問題を追加する" target="_blank" rel="noopener noreferrer">Problem Pack</a> を使えばカタログに公開せず、自分のテナントだけに追加できます。',
       "extend.cta1": "問題カタログを見る",
       "extend.cta2": "new-problem skill",
+      "extend.cta3": "非公開のまま追加する (Problem Pack)",
       "extend.agent_title": "AI エージェントで始める",
       "extend.agent_lead":
         'Claude Code や Codex に下のプロンプトを貼り付けると、エージェントが TenkaCloud の説明から「遊ぶ / 立てる」の案内までやってくれます。中身は LLM 向けブリーフィング <a href="/llms-full.txt" target="_blank" rel="noopener noreferrer">llms-full.txt</a> です。',
@@ -588,9 +589,11 @@
       "extend.eyebrow": "Catalog grows with you",
       "extend.h2": "Missing a problem? Author your own.",
       "extend.lead":
-        'The problem catalog lives in the open <a href="https://github.com/susumutomita/TenkaCloudChallenge" target="_blank" rel="noopener noreferrer">TenkaCloudChallenge</a> repo — write two files (metadata.json + template.yaml) and you have a new problem. A <code>new-problem</code> skill is shipped for Claude Code and other coding agents, so even first-timers can ship a problem just by describing the idea.',
+        'The problem catalog lives in the open <a href="https://github.com/susumutomita/TenkaCloudChallenge" target="_blank" rel="noopener noreferrer">TenkaCloudChallenge</a> repo — write two files (metadata.json + template.yaml) and you have a new problem. A <code>new-problem</code> skill is shipped for Claude Code and other coding agents, so even first-timers can ship a problem just by describing the idea. For internal-only or one-off event problems you never want published, a <a href="https://github.com/susumutomita/TenkaCloud#add-your-own-problems" target="_blank" rel="noopener noreferrer">Problem Pack</a> installs and activates for your own tenant without ever going through the catalog.',
       "extend.cta1": "Browse the catalog",
       "extend.cta2": "new-problem skill",
+      "extend.cta3": "Add it privately (Problem Pack)",
+      "extend.cta3Href": "https://github.com/susumutomita/TenkaCloud#add-your-own-problems",
       "extend.agent_title": "Start with an AI agent",
       "extend.agent_lead":
         'Paste the prompt below into Claude Code or Codex and the agent will explain TenkaCloud and guide you through playing or hosting. It reads the LLM briefing <a href="/llms-full.txt" target="_blank" rel="noopener noreferrer">llms-full.txt</a>.',

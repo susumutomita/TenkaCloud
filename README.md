@@ -217,7 +217,7 @@ make pack-activate ARGS="com.example.starter@0.1.0 --tenant local"   # activate 
 
 More detail: [concepts](./apps/developer-portal/src/app/developers/docs/concepts/problem-packs/page.mdx) · [tutorial](./apps/developer-portal/src/app/developers/docs/tutorials/first-pack/page.mdx) · [manifest reference](./apps/developer-portal/src/app/developers/docs/reference/pack-manifest/page.mdx) · [installing from a pinned Git commit](./infrastructure/lib/problem-pack/README-external-git-pack.md). The developer portal is not deployed yet, so these links point at the in-repo MDX source; every `make pack-*` command above is a live, working CLI today.
 
-Live, end-to-end verification of the pack flow has not been run yet (#2459 closed with this recorded as remaining work).
+Live, end-to-end verification of the pack flow (`pack-init` through a local-path `pack-install`, `pack-activate --tenant local`, a real Lite mode deploy to AWS, the pack's problem showing up in the Application Admin Console, and a participant submitting a flag that scores) has been run.
 
 [catalog]: https://github.com/susumutomita/TenkaCloudChallenge
 
