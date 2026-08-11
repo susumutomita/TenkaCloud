@@ -40,11 +40,15 @@ jobs:
     steps:
       - name: Resolve the target tag
         id: tag
+        env:
+          # Keep event-derived values out of the shell program text. A tag/ref may contain
+          # shell metacharacters, while workflow_dispatch accepts arbitrary input.
+          TARGET_TAG: ${{ github.event.inputs.tag || github.ref_name }}
         run: |
           set -euo pipefail
-          TAG="${{ github.event.inputs.tag || github.ref_name }}"
-          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-            echo "Tag '$TAG' does not look like a version tag (expected v<major>.<minor>.<patch>...)." >&2
+          TAG="$TARGET_TAG"
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Tag '$TAG' does not look like a stable version tag (expected v<major>.<minor>.<patch>)." >&2
             exit 1
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
