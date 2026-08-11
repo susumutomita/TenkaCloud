@@ -180,8 +180,8 @@ describe("repo parity (the reviewable seam)", () => {
 
   const allWorkspaces = ["infrastructure", ...appsAlphabetical, ...packagesAlphabetical];
 
-  it("should discover exactly 21 workspaces from the root package.json", () => {
-    expect(workspaces).toHaveLength(21);
+  it("should discover exactly 20 workspaces from the root package.json", () => {
+    expect(workspaces).toHaveLength(20);
     expect(workspaces.map((w) => w.dir).sort()).toEqual([...allWorkspaces].sort());
   });
 
