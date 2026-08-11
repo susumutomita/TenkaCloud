@@ -185,3 +185,11 @@ sampleimages/
 .git-commit-msg.txt
 .pr-body.md
 .jscpd-report/
+
+# packages/standalone-cli's prepack assembles a monorepo copy here before `npm pack`
+# (scripts/assemble-runtime.mjs). Generated per run, shipped only inside the tarball.
+packages/standalone-cli/runtime/
+# Same script's own staging directory, created at the repository root (never inside
+# `packages/`, which fs.cp() cannot copy into itself) and renamed away on success —
+# only lingers after an interrupted run.
+/.tenkacloud-runtime-staging-*/
