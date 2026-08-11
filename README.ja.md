@@ -215,7 +215,7 @@ make pack-activate ARGS="com.example.starter@0.1.0 --tenant local"   # activate 
 
 詳細: [コンセプト](./apps/developer-portal/src/app/developers/docs/concepts/problem-packs/page.mdx) · [チュートリアル](./apps/developer-portal/src/app/developers/docs/tutorials/first-pack/page.mdx) · [マニフェストリファレンス](./apps/developer-portal/src/app/developers/docs/reference/pack-manifest/page.mdx) · [固定コミットからの install](./infrastructure/lib/problem-pack/README-external-git-pack.md)(いずれも英語)。developer portal 自体はまだデプロイされていないため、上記リンクはリポジトリ内の MDX ソースを直接指しています。一方で上記の `make pack-*` コマンドはすべて今日から使える、実際に動く CLI です。
 
-Problem Pack の一連の流れ(init から「コンソールに表示される」まで)の end-to-end での live 検証は、まだ行われていません(#2459 はこれを未完了の残作業として記録した上でクローズされています)。
+Problem Pack の一連の流れ(`pack-init` から `pack-install`(ローカルパス)、`pack-activate --tenant local`、実 AWS への Lite mode デプロイ、Application Admin Console のカタログ表示、参加者による flag 提出・採点まで)は、end-to-end で live 検証済みです。
 
 [catalog]: https://github.com/susumutomita/TenkaCloudChallenge
 
