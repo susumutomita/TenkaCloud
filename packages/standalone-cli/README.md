@@ -2,7 +2,8 @@
 
 Install and operate TenkaCloud without cloning the monorepo.
 
-Requires Node.js 24+ and [Bun](https://bun.sh) on `PATH`. The bundled runtime is
+Requires Node.js 24+ and Bun available on `PATH` (install from
+[bun.sh](https://bun.sh)). The bundled runtime is
 TypeScript, so Bun executes it. This package does not vendor Bun: the `bun` npm
 package downloads its binary from a `postinstall`, which is the kind of
 install-time script the platform's dependency audit rejects, and which never
@@ -11,12 +12,18 @@ missing prerequisite and stops, rather than failing part-way through a deploy.
 
 ```bash
 npm install -g bun          # skip if you already have it
-npm install -g @tenkacloud/cli
+npm install -g https://github.com/susumutomita/TenkaCloud/releases/latest/download/tenkacloud-cli.tgz
 tenkacloud init
 aws login
 tenkacloud doctor
 tenkacloud deploy
 ```
+
+This package is not yet published to the npm registry (`npm install -g @tenkacloud/cli`
+does not work), so install directly from the tarball that
+[`.github/workflows/release-cli.yml`](../../.github/workflows/release-cli.yml) attaches to
+every `v*` tag's GitHub Release. That URL only starts resolving from the first tag pushed
+after this workflow was added — releases published before it carry no assets.
 
 `tenkacloud init` stores only non-secret configuration under the platform config directory:
 
@@ -46,6 +53,6 @@ The complete problem tree is inspected before copying. Symbolic links at any dep
 
 ## Runtime packaging
 
-The npm tarball contains a prepared TenkaCloud runtime. On first use, the CLI expands that runtime into the user's cache directory, installs its locked dependencies with the Bun binary shipped as an npm dependency, and copies the configured problem directory into the isolated runtime workspace. Users do not need Git, a repository checkout, submodules, or a separate Bun installation.
+The npm tarball contains a prepared TenkaCloud runtime. On first use, the CLI expands that runtime into the user's cache directory, installs its locked dependencies with the Bun executable already required on `PATH`, and copies the configured problem directory into the isolated runtime workspace. Users do not need Git, a repository checkout, or submodules, but they do need the separate Bun prerequisite described above.
 
 The `prepack` script assembles the runtime from the monorepo immediately before publishing. Generated `node_modules`, `dist`, and CDK output directories are excluded from the tarball.
