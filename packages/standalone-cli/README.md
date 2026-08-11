@@ -11,12 +11,18 @@ missing prerequisite and stops, rather than failing part-way through a deploy.
 
 ```bash
 npm install -g bun          # skip if you already have it
-npm install -g @tenkacloud/cli
+npm install -g https://github.com/susumutomita/TenkaCloud/releases/latest/download/tenkacloud-cli.tgz
 tenkacloud init
 aws login
 tenkacloud doctor
 tenkacloud deploy
 ```
+
+This package is not yet published to the npm registry (`npm install -g @tenkacloud/cli`
+does not work), so install directly from the tarball that
+[`.github/workflows/release-cli.yml`](../../.github/workflows/release-cli.yml) attaches to
+every `v*` tag's GitHub Release. That URL only starts resolving from the first tag pushed
+after this workflow was added — releases published before it carry no assets.
 
 `tenkacloud init` stores only non-secret configuration under the platform config directory:
 
