@@ -64,7 +64,10 @@ describe("ContainerRunner: start (#2392 Phase 2)", () => {
     expect(reached).toEqual(["http://127.0.0.1:18081/verify", "http://127.0.0.1:18080/"]);
     expect(started.problem.challengeEndpoints).toEqual({ Web: "http://127.0.0.1:18080/" });
     expect(started.problem.verifyUrl).toBe("http://127.0.0.1:18081/verify");
-    expect(started.unit).toMatchObject({ composePath: "/p/sqli-demo/local/docker-compose.yml" });
+    expect(started.unit).toMatchObject({
+      offset: 0,
+      composePath: "/p/sqli-demo/local/docker-compose.yml",
+    });
     expect(started.unit.remappedComposePath).toBeUndefined();
   });
 
@@ -87,10 +90,50 @@ describe("ContainerRunner: start (#2392 Phase 2)", () => {
     // The instructions prose moves onto the same block as the surface it quotes.
     expect(started.problem.instructions).toBe("Attack http://127.0.0.1:18180/login.");
     expect(started.unit).toMatchObject({
+      offset: 100,
       composePath: "/local/tc-local-sqli-demo.compose.yml",
       projectDirectory: "/p/sqli-demo/local",
       remappedComposePath: "/local/tc-local-sqli-demo.compose.yml",
     });
+  });
+
+  it("should commit ownership before compose up can create the project", async () => {
+    const events: string[] = [];
+    const { deps } = makeDeps({
+      runCompose: vi.fn((_path, _project, action) => {
+        events.push(action);
+        if (action === "up") expect(events[0]).toBe("acquire");
+      }),
+    });
+    const runner = new ContainerRunner("/local", deps);
+    const cleanupFailedStart = vi.fn();
+
+    await runner.start(problem(), 100, {
+      acquire: () => events.push("acquire"),
+      cleanupFailedStart,
+    });
+
+    expect(events).toEqual(["acquire", "up"]);
+    expect(cleanupFailedStart).not.toHaveBeenCalled();
+  });
+
+  it("should release the durable handle when a compose start fails", async () => {
+    const events: string[] = [];
+    const { deps } = makeDeps({
+      runCompose: vi.fn((_path, _project, action) => {
+        events.push(action);
+        if (action === "up") throw new Error("docker up failed");
+      }),
+    });
+    const runner = new ContainerRunner("/local", deps);
+
+    await expect(
+      runner.start(problem(), 100, {
+        acquire: () => events.push("acquire"),
+        cleanupFailedStart: () => events.push("release"),
+      }),
+    ).rejects.toThrow("docker up failed");
+    expect(events).toEqual(["acquire", "up", "release"]);
   });
 
   it("should propagate a compose-up failure (lifecycle marks it error)", async () => {
@@ -114,6 +157,95 @@ describe("ContainerRunner: start (#2392 Phase 2)", () => {
     await expect(runner.start(problem(), 100)).rejects.toThrow("readiness failed");
     expect(compose.map(([action]) => action)).toEqual(["up", "down"]);
     expect(removed).toEqual(["/local/tc-local-sqli-demo.compose.yml"]);
+  });
+});
+
+describe("ContainerRunner: recover (#3016)", () => {
+  it("should rebuild remapped URLs from a recorded offset without starting compose", async () => {
+    const remapped = COMPOSE.replaceAll(":18080:", ":19080:").replaceAll(":18081:", ":19081:");
+    const { deps, compose, reached } = makeDeps({
+      readCompose: vi.fn((path: string) =>
+        path === "/local/tc-local-sqli-demo.compose.yml" ? remapped : COMPOSE,
+      ),
+    });
+    const runner = new ContainerRunner("/local", deps);
+    const recovered = await runner.recover(problem(), {
+      problemId: "sqli-demo",
+      offset: 1000,
+      composePath: "/local/tc-local-sqli-demo.compose.yml",
+      composeProjectName: "tc-local-sqli-demo",
+      secretEnv: ["FLAG_SEED"],
+      projectDirectory: "/p/sqli-demo/local",
+      remappedComposePath: "/local/tc-local-sqli-demo.compose.yml",
+    });
+
+    expect(recovered.offset).toBe(1000);
+    expect(recovered.started.unit.offset).toBe(1000);
+    expect(recovered.started.problem.challengeEndpoints.Web).toBe("http://127.0.0.1:19080/");
+    expect(recovered.started.problem.verifyUrl).toBe("http://127.0.0.1:19081/verify");
+    expect(recovered.started.problem.instructions).toContain("127.0.0.1:19080");
+    expect(compose).toEqual([]);
+    expect(reached).toEqual(["http://127.0.0.1:19081/verify", "http://127.0.0.1:19080/"]);
+  });
+
+  it("should infer a legacy remapped unit's offset and normalize its ledger entry", async () => {
+    const remapped = COMPOSE.replaceAll(":18080:", ":19080:").replaceAll(":18081:", ":19081:");
+    const { deps } = makeDeps({
+      readCompose: vi.fn((path: string) =>
+        path === "/local/tc-local-sqli-demo.compose.yml" ? remapped : COMPOSE,
+      ),
+    });
+    const runner = new ContainerRunner("/local", deps);
+    const recovered = await runner.recover(problem(), {
+      problemId: "sqli-demo",
+      composePath: "/local/tc-local-sqli-demo.compose.yml",
+      composeProjectName: "tc-local-sqli-demo",
+      secretEnv: ["FLAG_SEED"],
+      projectDirectory: "/p/sqli-demo/local",
+      remappedComposePath: "/local/tc-local-sqli-demo.compose.yml",
+    });
+
+    expect(recovered.offset).toBe(1000);
+    expect(recovered.started.unit.offset).toBe(1000);
+    expect(recovered.started.problem.verifyUrl).toContain(":19081/");
+  });
+
+  it("should reject an ambiguous legacy remapped unit", async () => {
+    const { deps } = makeDeps({
+      readCompose: vi.fn((path: string) =>
+        path === "/local/tc-local-sqli-demo.compose.yml"
+          ? COMPOSE.replace("127.0.0.1:18081:8081", "127.0.0.1:19999:8081")
+          : COMPOSE,
+      ),
+    });
+    const runner = new ContainerRunner("/local", deps);
+
+    await expect(
+      runner.recover(problem(), {
+        problemId: "sqli-demo",
+        composePath: "/local/tc-local-sqli-demo.compose.yml",
+        composeProjectName: "tc-local-sqli-demo",
+        secretEnv: [],
+        remappedComposePath: "/local/tc-local-sqli-demo.compose.yml",
+      }),
+    ).rejects.toThrow(/Cannot recover port offset/);
+  });
+
+  it("should reject a recorded offset that does not match its persisted compose", async () => {
+    const { deps } = makeDeps();
+    const runner = new ContainerRunner("/local", deps);
+
+    await expect(
+      runner.recover(problem(), {
+        problemId: "sqli-demo",
+        offset: 1000,
+        composePath: "/local/tc-local-sqli-demo.compose.yml",
+        composeProjectName: "tc-local-sqli-demo",
+        secretEnv: ["FLAG_SEED"],
+        projectDirectory: "/p/sqli-demo/local",
+        remappedComposePath: "/local/tc-local-sqli-demo.compose.yml",
+      }),
+    ).rejects.toThrow(/does not match offset 1000/);
   });
 });
 

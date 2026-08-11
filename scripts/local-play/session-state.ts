@@ -216,6 +216,8 @@ function assertRecordedUnitShape(unit: Record<string, unknown>): void {
   if (
     typeof unit.problemId !== "string" ||
     !/^[a-z0-9][a-z0-9-]{0,127}$/.test(unit.problemId) ||
+    (unit.offset !== undefined &&
+      (!Number.isSafeInteger(unit.offset) || Number(unit.offset) < 0)) ||
     typeof unit.composePath !== "string" ||
     !isAbsolute(unit.composePath) ||
     typeof unit.composeProjectName !== "string" ||

@@ -279,6 +279,17 @@ describe("ProblemLifecycle: native compatibility gate (#3008)", () => {
     expect(started).toEqual([["sqli", 0]]);
   });
 
+  it("should refuse to adopt an incompatible container after restart (#3016)", () => {
+    const { deps } = makeDeps({ nativeCompatibility: () => refusal });
+    expect(
+      () =>
+        new ProblemLifecycle(["asm"], deps, {
+          maxRunning: 1,
+          initialRunning: [{ problemId: "asm", offset: 0 }],
+        }),
+    ).toThrow(NativeCompatibilityError);
+  });
+
   it("should carry the structured refusal so the CLI and portal render the same facts", async () => {
     const { deps } = makeDeps({ nativeCompatibility: () => refusal });
     const lc = new ProblemLifecycle(["asm"], deps, { maxRunning: 2 });

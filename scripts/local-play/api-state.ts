@@ -3,6 +3,7 @@ import type { ProblemCatalogEntry } from "@tenkacloud/portal-contracts";
 import {
   ContainerStartOwnershipError,
   type LocalComposeUnit,
+  type RecoveredContainer,
   type StartedContainer,
 } from "./container-runner";
 import type { ContainerProblem } from "./manifest";
@@ -194,6 +195,11 @@ export interface CreateStateOptions {
   readonly startContainer?: StartProblemContainer;
   /** Docker stop seam; `serve` injects the real `ContainerRunner`. */
   readonly stopContainer?: StopProblemContainer;
+  /**
+   * [#3016] Live compose units adopted from this session's durable startup ledger.
+   * Their offsets, teardown handles and remapped participant URLs must enter state together.
+   */
+  readonly recoveredContainers?: readonly RecoveredContainer[];
   /** [#2846] Container-shell seam; `serve` injects the real `compose exec` spawner. */
   readonly spawnShell?: TerminalDeps["spawnShell"];
   /** Real provider-neutral Simulator lifecycle port. Required only when a cloud problem is started. */
@@ -289,6 +295,51 @@ function createRuntimeCollections(deployment: LocalPlayDeployment): RuntimeColle
     });
   }
   return { runtimes, simulatedRuntimes, catalog };
+}
+
+function restoreRecoveredContainers(
+  collections: RuntimeCollections,
+  units: Map<string, LocalComposeUnit>,
+  recoveredContainers: readonly RecoveredContainer[],
+): { readonly problemId: string; readonly offset: number }[] {
+  const recoveredIds = new Set<string>();
+  const initialRunning: { problemId: string; offset: number }[] = [];
+  for (const recovered of recoveredContainers) {
+    const { unit, problem } = recovered.started;
+    const problemId = unit.problemId;
+    const catalogProblem = collections.catalog.get(problemId);
+    const runtime = collections.runtimes.get(problemId);
+    if (
+      !catalogProblem ||
+      !runtime ||
+      problem.problemId !== problemId ||
+      unit.offset !== recovered.offset ||
+      unit.composeProjectName !== catalogProblem.composeProjectName ||
+      recoveredIds.has(problemId)
+    ) {
+      throw new Error(`Invalid recovered container for problem "${problemId}"`);
+    }
+    recoveredIds.add(problemId);
+    units.set(problemId, unit);
+    runtime.problem = problem;
+    initialRunning.push({ problemId, offset: recovered.offset });
+  }
+  return initialRunning;
+}
+
+function restoredLifecycleOptions(
+  collections: RuntimeCollections,
+  units: Map<string, LocalComposeUnit>,
+  options: CreateStateOptions,
+) {
+  return {
+    maxRunning: options.maxRunning ?? DEFAULT_MAX_RUNNING,
+    initialRunning: restoreRecoveredContainers(
+      collections,
+      units,
+      options.recoveredContainers ?? [],
+    ),
+  };
 }
 
 interface LifecycleContext extends RuntimeCollections {
@@ -417,6 +468,11 @@ export function createLocalPlayState(
   const now = options.now ?? Date.now;
   /** Teardown handle per running problem (the lifecycle only knows ids + offsets). */
   const units = new Map<string, LocalComposeUnit>();
+  const lifecycleOptions = restoredLifecycleOptions(
+    { runtimes, simulatedRuntimes, catalog },
+    units,
+    options,
+  );
   // [#2846] terminals ↔ lifecycle is mutually recursive (a shell may only attach to a
   // `running` container; a stopping container must kill its shells), so the back edge
   // is a closure over `lifecycle` rather than a constructor argument. [#2850] Only
@@ -450,7 +506,7 @@ export function createLocalPlayState(
       options.nativeCompatibility ??
         createNativeCompatibilityGate((problemId) => catalog.get(problemId)?.compatibility),
     ),
-    { maxRunning: options.maxRunning ?? DEFAULT_MAX_RUNNING },
+    lifecycleOptions,
   );
   return {
     runtimes,
