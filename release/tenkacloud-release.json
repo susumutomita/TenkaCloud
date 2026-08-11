@@ -8,11 +8,12 @@
   "sources": {
     "platform": {
       "repository": "https://github.com/susumutomita/TenkaCloud.git",
-      "commit": "6924122b4894ec7616aa241d2d729ddc27c891e7"
+      "commit": "421cd1bd9ede67ccf765878f1cbf27d7c5660762"
     },
     "catalog": {
       "repository": "https://github.com/susumutomita/TenkaCloudChallenge.git",
-      "commit": "9d308e3a14c75aa804216742dd2a9a31b7e824d1"
+      "commit": "2e98928e985be637b60453fda5d1005bcc1a0f5c",
+      "tag": "v1.1.0"
     }
   },
   "artifacts": {
