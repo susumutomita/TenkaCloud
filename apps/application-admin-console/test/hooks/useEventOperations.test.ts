@@ -590,7 +590,6 @@ describe("useEventOperations — remaining validation + both error-type sides", 
       () => result.current.handleEndEvent(),
     ];
     for (const call of calls) {
-      // eslint-disable-next-line no-await-in-loop
       await act(async () => {
         await call();
       });

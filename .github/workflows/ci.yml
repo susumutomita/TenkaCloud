@@ -125,11 +125,16 @@ jobs:
         run: |
           make lint-format
 
-      # #2862: type-aware ESLint (scripts/). Biome は format と構文寄りの rule を見るが、型情報が
-      # 要る検査 (no-floating-promises / await-thenable / sonarjs の型ベース rule) はここでしか
-      # 走らない。 #2861 で gate 自体は入っていたが Makefile からも CI からも呼ばれておらず、
-      # 一度も実行されていなかった。 local は `make lint` (= before-commit) 経由。
-      - name: ESLint (type-aware, scripts/)
+      # #2862: ESLint。 Biome は format と構文寄りの rule を見るが、型情報が要る検査
+      # (no-floating-promises / await-thenable / sonarjs の型ベース rule) はここでしか走らない。
+      # #2861 で gate 自体は入っていたが Makefile からも CI からも呼ばれておらず、一度も実行され
+      # ていなかった。 local は `make lint` (= before-commit) 経由。
+      #
+      # #3014 で対象を scripts/ から repo 全体へ広げた。 既存 1,694 件は eslint-suppressions.json
+      # に ceiling として凍結してあるので、ここが赤くなるのは (a) ceiling を超える新しい違反か、
+      # (b) 違反を直したのに `make lint-ts-prune` を流していない (exit 2 "suppressions left that do
+      # not occur anymore") のどちらか。 (b) は prune した差分を commit すれば緑になる。
+      - name: ESLint (repo-wide, ratcheted)
         run: |
           make lint-ts
 
