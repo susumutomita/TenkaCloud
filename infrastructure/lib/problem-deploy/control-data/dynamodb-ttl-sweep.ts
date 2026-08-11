@@ -5,7 +5,7 @@ import { DeleteCommand, type DynamoDBDocumentClient, ScanCommand } from "@aws-sd
  *
  * DynamoDB removes expired rows natively via each table's TTL attribute; this
  * manual Scan + Delete sweep exists so the seam is uniform with the SQLite
- * backends (no native TTL, ADR-049 §5.2). It is idempotent and only ever
+ * backends (no native TTL). It is idempotent and only ever
  * deletes rows DynamoDB's own TTL would also drop, so it is safe on the DDB
  * backend too. Five repositories (admin-audit-log / events / notifications /
  * teams / disruptions) carried this loop verbatim — it now lives here once.

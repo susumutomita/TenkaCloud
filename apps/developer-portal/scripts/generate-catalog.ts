@@ -4,7 +4,7 @@
  *
  * The public catalog page (/catalog, /en/catalog) is GENERATED from the single
  * source of truth: the per-problem `metadata.json` files in the `problems/`
- * submodule (the TenkaCloudChallenge catalog, ADR-012 3-asset model). This script
+ * submodule (the TenkaCloudChallenge catalog). This script
  * reads every `problems/<category>/<id>/metadata.json`, keeps the publicly
  * visible ones, and emits one typed, committed data module
  * (`src/content/catalog-data.ts`) that the catalog page renders.
@@ -41,7 +41,7 @@ const REPO_ROOT = resolve(here, "..", "..", "..");
 const PROBLEMS_DIR = resolve(REPO_ROOT, "problems");
 const OUTPUT_PATH = resolve(here, "..", "src", "content", "catalog-data.ts");
 
-// The two catalog category directories in the submodule (ADR-012 layout).
+// The two catalog category directories in the submodule (problem metadata layout).
 const CATEGORY_DIRS = ["battles", "challenges"] as const;
 
 const VALID_CATEGORIES: readonly CatalogCategory[] = ["Battle", "Challenge"];
@@ -164,9 +164,9 @@ export function buildCatalogData(): CatalogData {
 }
 
 const GENERATED_HEADER = `// GENERATED FILE — do not edit by hand.
-// Produced by apps/developer-portal/scripts/generate-catalog.ts from the public
-// problem metadata.json files in the problems/ submodule (TenkaCloudChallenge,
-// ADR-012). Run 'bun run generate:catalog' after the catalog changes and commit
+// Produced by apps/developer-portal/scripts/generate-catalog.ts from public problem
+// metadata.json files in the problems/ submodule (TenkaCloudChallenge catalog).
+// Run 'bun run generate:catalog' after the catalog changes and commit
 // this file. 'bun run check:catalog' fails when it is stale vs the submodule
 // (a maintainer check; it needs the submodule checked out).
 `;

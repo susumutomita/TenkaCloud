@@ -26,8 +26,8 @@ const { mockAuth, mockFetchPipeline, mockFetchSfn, mockFetchProvisioning } = vi.
 }));
 
 vi.mock("../src/auth/AuthProvider", () => ({ useAuth: mockAuth }));
-// admin-drill-down は全 mock (importOriginal を使わない) → 実 module を読み込まず、 本 test の
-// coverage scope を Jobs.tsx に限定する (API client 自体の coverage は別 PR の責務)。
+// admin-drill-down は全 mock (importOriginal を使わない) → 実 module を読み込まず、本 test の
+// coverage scope を Jobs.tsx に限定する。API client は専用 test で検証する。
 // fake error class は Jobs.tsx の `err instanceof AdminInsightApiError` を満たす。
 vi.mock("../src/api/admin-drill-down", () => {
   class AdminInsightApiError extends Error {

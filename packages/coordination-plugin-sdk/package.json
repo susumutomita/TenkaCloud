@@ -1,7 +1,7 @@
 {
   "name": "@tenkacloud/coordination-plugin-sdk",
   "version": "0.1.0",
-  "description": "ADR-028 inter-team coordination plugin contract (state machine + 5 hooks) shared by problems and the platform dispatcher (Issue #1420)",
+  "description": "Inter-team coordination plugin (state machine + 5 hooks) shared by problems and the platform dispatcher (Issue #1420)",
   "private": true,
   "type": "module",
   "main": "src/index.ts",

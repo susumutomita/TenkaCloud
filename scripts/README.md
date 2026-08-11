@@ -28,7 +28,7 @@ lives:
 | `package-source-bundle.sh` | CodeBuild (problem deploy) | Build the problem source bundle artifact |
 | `prepare-source-bundle.sh` | `tenkacloud-lite.ts`, docs | Stage the source bundle S3 object |
 | `tenkacloud.ts` | `tenkacloud` / `bun run tenkacloud` | Unified local, doctor, and Turso live-verification CLI |
-| `tenkacloud-lite.ts` | `make deploy` / `make destroy` | Lite mode (ADR-016) up/down CLI |
+| `tenkacloud-lite.ts` | `make deploy` / `make destroy` | Lite mode up/down CLI |
 | `tenkacloud-local.ts` | `tenkacloud local` / `make local-*` | Internal Docker local-play commands (no AWS) |
 | `tenkacloud-onboard.ts` | `make doctor` / `make onboard` | Toolchain doctor + first-run onboarding CLI |
 

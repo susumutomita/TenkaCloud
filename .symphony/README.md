@@ -7,7 +7,8 @@ monitor Symphony for TenkaCloudSimulator, TenkaCloudChallenge, or TenkaCloudPass
 
 - `.symphony/WORKFLOW.md`: GitHub Issues tracker scope, workspace bootstrap, agent policy, review loop,
   and merge policy for `susumutomita/TenkaCloud` only.
-- `GNUmakefile`: repository-local `symphony-validate`, `symphony-print`, and `symphony-run` commands.
+- `Makefile` (Symphony section): repository-local `symphony-validate`, `symphony-print`, and
+  `symphony-run` commands.
 
 ## Setup
 

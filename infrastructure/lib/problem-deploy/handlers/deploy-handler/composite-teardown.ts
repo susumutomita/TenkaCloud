@@ -66,7 +66,7 @@ const DELETED_LIKE_STATUSES = new Set(["DELETING", "DELETED", "EXPIRED", "AUTO_D
 export interface CompositeTeardownDeps {
   /** Repository deps (injected ddb client + table name) for loads + the DELETING write. */
   readonly repo: CompositeDeploymentRepositoryDeps;
-  /** Existing per-target teardown (#2059/ADR-004 `requestTeardown`). Injected. */
+  /** Existing per-target `requestTeardown` operation (#2059). */
   readonly teardownTarget: (targetDeploymentId: string) => Promise<TeardownOutcome>;
   /** Clock for the parent `updatedAt` (epoch ms). */
   readonly now: () => number;

@@ -12,7 +12,7 @@ import type {
  * 「1 サイクル分の per-probe 結果」。 raw の score event 履歴 (attack-detected 行) とは別に、
  * 「今このサイクルで何が刺さっているか」 を defender に見せるための最新値スナップショット。
  *
- * 非スポイラー不変条件 (ADR-005 D1 / AGENTS.md §10): snapshot には probe の slot / path
+ * 非スポイラー不変条件 (AGENTS.md): snapshot には probe の slot / path
  * (= 正確な endpoint)・脆弱性クラスを **絶対に含めない**。 出せるのは問題側 metadata が
  * 明示した `label` / `symptom` と `outcome` / `penalty` のみ。 wire 型 (`AttackProbeStatus`)
  * を DDB 側と共有し、 shape ドリフトを typecheck で検出する。

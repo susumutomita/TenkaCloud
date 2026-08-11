@@ -2,8 +2,7 @@ import { DOC_PAGES } from "@/content/docs-registry";
 
 // The complete set of internal route paths the app serves. The build-time link
 // checker (scripts/check-internal-links.ts) treats any internal href that is not
-// in this set as a broken link and fails the build (ADR-0003 / issue #2101:
-// "Broken internal links FAIL the build").
+// in this set as a broken link and fails the build (Issue #2101).
 
 export const STATIC_ROUTES: readonly string[] = [
   "/",
@@ -16,7 +15,7 @@ export const STATIC_ROUTES: readonly string[] = [
   "/developers/api/machine/",
   "/developers/examples/",
   "/developers/changelog/",
-  // Legal pages migrated from the static landing (ADR-0003).
+  // Legal pages migrated from the static landing.
   "/privacy/",
   "/terms/",
   "/legal/",

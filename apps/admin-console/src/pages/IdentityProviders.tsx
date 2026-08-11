@@ -24,7 +24,7 @@ import { CreateIdpModal } from "./CreateIdpModal";
  * Issue #1293: System Admin → list / add / edit / delete SAML IdPs attached to
  * the Control Plane Cognito UserPool.
  *
- * Feature-flagged (`samlSso`, ADR-035, default OFF) — hidden until the SAML sign-in path is
+ * Hidden behind the default-off `samlSso` feature until the SAML sign-in path is
  * verified live, so it isn't mistaken for ready. The Hosted UI picker shows all IdPs at once
  * (no domain auto-routing); the "Test sign-in" button jumps to the authorize endpoint with
  * `identity_provider=<idpId>`.

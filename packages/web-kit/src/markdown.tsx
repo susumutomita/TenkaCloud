@@ -122,7 +122,7 @@ DOMPurify.addHook("afterSanitizeAttributes", (node) => {
  * `dangerouslySetInnerHTML` 経由で render する想定。
  *
  * 設計判断:
- *   - marked は default で raw HTML を許容する (= XSS リスク)。 ADR-008 で community
+ *   - marked は default で raw HTML を許容する (= XSS リスク)。community
  *     contribution を受け入れる前提のため必ず DOMPurify を後段に挟む
  *   - rendering は同期 (= marked.parse の async option 非使用) で React 描画と整合
  *   - 許容 tag / attribute を allowlist 化、 javascript: scheme を ALLOWED_URI_REGEXP で reject

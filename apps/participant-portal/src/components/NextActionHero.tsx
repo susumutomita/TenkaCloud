@@ -108,7 +108,7 @@ export function pickNextProblem(
   const unsolved = problems.filter(isProblemUnsolved);
   if (unsolved.length === 0) return undefined;
   // [#2928] まだ 1 問も解いていない人には、 platform が「ここから始めろ」 と pin した
-  // 入門ドリル (`recommended: true`、 ADR-012 の reference implementation) を出す。
+  // 入門ドリル (`recommended: true` で固定された `challenges/hello-world`) を出す。
   //
   // 講座トラックの推薦 (`preferredProblemId`) より前に置くのは意図的である。 進捗ゼロの
   // 人に対するトラック推薦は「その人向けに選ばれた 1 問」 ではなく単に週 1 の先頭であり、

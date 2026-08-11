@@ -4,13 +4,13 @@ import * as s3 from "aws-cdk-lib/aws-s3";
 import type { Construct } from "constructs";
 
 /**
- * ADR-003 Phase 2 / problem catalog split.
+ * Publishes problem catalog payloads without coupling the catalog repository to deployment.
  *
  * S3 bucket + GitHub OIDC IAM Role を立てる stack。 TenkaCloudChallenge repo の
  * `.github/workflows/publish.yml` がこの Role を AssumeRole して、 変更があった
  * problem dir を `s3://<bucket>/<problemId>/<sha>.zip` (+ `latest.zip`) にアップロード。
- * deploy-handler は既存 ADR-008 経路 (= ProblemDeployBackendStack の
- * `challengePayloadBucketName`) でこの bucket から 15min TTL presigned URL を発行する。
+ * deploy-handler は ProblemDeployBackendStack の `challengePayloadBucketName` 経由で
+ * この bucket から 15min TTL presigned URL を発行する。
  *
  * stack を deploy したら Output:
  *   - `BucketName` を TenkaCloudChallenge repo の `vars` に bind (= 表示用、 secret 不要)
@@ -87,7 +87,7 @@ export class ChallengePayloadStack extends cdk.Stack {
 
     const role = new iam.Role(this, "PublishRole", {
       assumedBy: principal,
-      description: `Publish role for ${props.githubRepository} -> ${bucket.bucketName} (ADR-003 Phase 2).`,
+      description: `Publish role for ${props.githubRepository} -> ${bucket.bucketName}. S3 payload publication only.`,
       maxSessionDuration: cdk.Duration.hours(1),
     });
 

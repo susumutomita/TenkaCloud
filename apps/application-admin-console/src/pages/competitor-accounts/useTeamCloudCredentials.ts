@@ -11,7 +11,7 @@ import { useT } from "../../i18n";
 import { type FriendlyError, toFriendlyError } from "../../lib/friendly-error";
 
 /**
- * [ADR-026/027/032 / Issue #1413] TeamCloudCredentialsPanel の view-model hook。
+ * Issue #1413: TeamCloudCredentialsPanel の view-model hook。
  *
  * data/effect 層 (apiClient 解決・per-team 認証情報の register/revoke/status・
  * JSON parse 検証・FriendlyError 変換・notice メッセージ) をここに集約し、 panel を純粋な

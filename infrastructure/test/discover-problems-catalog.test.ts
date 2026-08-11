@@ -233,7 +233,7 @@ describe("discoverProblemsScoring", () => {
   });
 });
 
-// ADR-008 Phase 3 (Issue #642): visibility 抜き出し
+// Issue #642: visibility 抜き出し
 describe("discoverProblemsVisibility (Issue #642)", () => {
   it("should map only visibility=private problems (omit public)", () => {
     writeProblem("challenges", "public-one", { id: "public-one", visibility: "public" });
@@ -280,7 +280,7 @@ describe("discoverProblemsDisruptions triggers[] (#1422)", () => {
     expect(discoverProblemsDisruptions(workspace)["plain-battle"]?.[0]?.triggers).toBeUndefined();
   });
 
-  it("should surface a valid scoring effect and drop a malformed one (ADR-033 #1665)", () => {
+  it("should surface a valid scoring effect and drop a malformed one (#1665)", () => {
     writeProblem("battles", "effect-battle", {
       id: "effect-battle",
       disruptions: [
@@ -303,7 +303,7 @@ describe("discoverProblemsDisruptions triggers[] (#1422)", () => {
     expect(entries?.[1]?.effect).toBeUndefined(); // fail-safe drop, entry still kept
   });
 
-  it("[ADR-037 Slice 3] should surface a valid recurrence and drop a malformed one", () => {
+  it("should surface a valid recurrence and drop a malformed one", () => {
     writeProblem("battles", "recur-battle", {
       id: "recur-battle",
       disruptions: [
@@ -328,7 +328,7 @@ describe("discoverProblemsDisruptions triggers[] (#1422)", () => {
   });
 });
 
-describe("discoverProblemsCoordination (ADR-028/030 Phase 3 #1420)", () => {
+describe("discoverProblemsCoordination (#1420)", () => {
   it("should collect interTeamCoordination.plugin per problem", () => {
     writeProblem("battles", "router-battle", {
       id: "router-battle",

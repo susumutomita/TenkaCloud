@@ -94,7 +94,7 @@ describe("deriveStackName", () => {
   });
 });
 
-describe("CloudFormationExecutor (#1727 / ADR-039 D4)", () => {
+describe("CloudFormationExecutor", () => {
   it("should create a new stack with default capabilities + service role", async () => {
     const c = client();
     const exec = new CloudFormationExecutor({

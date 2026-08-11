@@ -6,12 +6,12 @@ import {
 } from "../../lib/problem-deploy/runtime-clients/gcp-aws-subject-token.js";
 
 /**
- * [ADR-032 / #1411] AWS subject-token builder の pin。 formatGcpSubjectToken は純関数なので exact 検証。
+ * [#1411] AWS subject-token builder の pin。 formatGcpSubjectToken は純関数なので exact 検証。
  * SigV4 signer は static credentials で構造 (url / method / x-goog-cloud-target-resource + 署名ヘッダ) を
- * 観測する (= 署名値そのものの正当性は実 AWS STS / GCP WIF に対する integration 相、 ADR-032 / waterfall)。
+ * 観測する。署名値そのものの正当性は実 AWS STS / GCP WIF に対する integration test で検証する。
  */
 
-describe("gcp-aws-subject-token (ADR-032 #1411)", () => {
+describe("gcp-aws-subject-token (#1411)", () => {
   it("should URL-encode the signed request JSON for GCP STS", () => {
     const signed: AwsSignedRequest = {
       url: "https://sts.ap-northeast-1.amazonaws.com/?Action=GetCallerIdentity&Version=2011-06-15",

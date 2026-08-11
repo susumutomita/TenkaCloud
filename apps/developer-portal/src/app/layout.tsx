@@ -4,7 +4,7 @@ import { AppShell } from "@/components/AppShell";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  // The unified developer platform is served from the site root (ADR-0003). Absolute
+  // The developer portal is served from the site root. Absolute
   // URLs (OpenGraph, canonical) resolve against this base.
   metadataBase: new URL("https://tenkacloud.com"),
   title: {

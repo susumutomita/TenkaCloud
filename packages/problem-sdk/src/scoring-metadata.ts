@@ -1,5 +1,5 @@
 /**
- * [Problem SDK / Issue #2106 ← ADR-012 Phase 3.B] Pure `metadata.json:scoring`
+ * Issue #2106: pure `metadata.json:scoring`
  * section parsers — the single source of truth shared by the platform (CDK synth
  * `discoverProblemsScoring`, Lambda runtime scoring) and external Pack authoring.
  *
@@ -8,8 +8,8 @@
  * stay in infra because they depend on `node:zlib`; everything here is pure and
  * deterministic (no I/O, no env, no clock).
  *
- * 6 builtin kinds (ADR-012 Phase 3.B 5 + #1796 multi-flag) + #2070 composite-probe
- * + #2252 multi-verify (local container problems):
+ * 8 builtin kinds (the original five generic kinds + #1796 multi-flag + #2070 composite-probe
+ * + #2252 multi-verify for local container problems):
  *   - `flag`              — single submission (Challenge, submission scoring)
  *   - `multi-flag`        — N independent flags in one problem, partial points
  *   - `multi-verify`      — N container-judged checkpoints (docker local-play), partial points

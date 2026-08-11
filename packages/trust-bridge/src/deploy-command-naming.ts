@@ -1,5 +1,5 @@
 /**
- * ADR-050 (Issue #2555 slice C) — sign-side mirrors of the FROZEN deploy-detail
+ * Issue #2555: sign-side mirrors of the frozen deploy-detail
  * naming derivations.
  *
  * The authoritative implementations live in the platform's deploy handler

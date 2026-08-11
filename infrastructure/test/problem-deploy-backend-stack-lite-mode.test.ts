@@ -6,7 +6,7 @@ import {
   synthLite,
 } from "./problem-deploy-backend-stack.test-helpers";
 
-describe("ProblemDeployBackendStack (#778 ADR-016 Phase 2: eventBusArn optional 化)", () => {
+describe("ProblemDeployBackendStack (#778: eventBusArn optional 化)", () => {
   // synth は 5 個の NodejsFunction (= esbuild bundling) を含むため CI 上で ~7s かかる。
   // vitest の default 5s timeout を 30s に拡張する (= 既存 #538 test と同じ pattern)。
 

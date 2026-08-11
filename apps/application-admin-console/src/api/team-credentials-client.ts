@@ -1,7 +1,7 @@
 import type { ApiClient } from "./client";
 
 /**
- * [ADR-026/027/032 / Issue #1413] per-team cloud credential onboarding API client。
+ * Issue #1413: per-team cloud credential onboarding API client。
  *
  * tenant API の `/admin/team-cloud-credentials/{provider}/{teamSlug}` を叩く。 tenantId は JWT claim から
  * backend が解決するので path / body には乗せない。 secret は register 時に送るだけで status では返らない

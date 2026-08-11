@@ -44,10 +44,10 @@ export interface EventRuntimeStackProps extends cdk.StackProps {
 }
 
 /**
- * ADR-049 Phase 4 per-event runtime lifecycle stack.
+ * per-event runtime lifecycle stack.
  *
- * The manifest is the first concrete resource in the runtime seam. Later phases can add uptime
- * scoring resources to this stack without changing its per-event identity or cleanup tag contract.
+ * The manifest anchors the runtime's per-event identity and cleanup tags. Optional scoring and
+ * archive resources share that identity without changing the lifecycle contract.
  */
 export class EventRuntimeStack extends cdk.Stack {
   public readonly manifestParameterName: string;

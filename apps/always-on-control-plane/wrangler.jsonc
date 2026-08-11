@@ -1,7 +1,7 @@
 {
   "$schema": "../../node_modules/wrangler/config-schema.json",
   // Private signing material is never a var. Configure it with:
-  // bunx wrangler secret put OIDC_SIGNING_PRIVATE_JWK --env <environment>   (ADR-050 OIDC IdP + command key)
+  // bunx wrangler secret put OIDC_SIGNING_PRIVATE_JWK --env <environment>
   "name": "tenkacloud-always-on-control-plane",
   "main": "src/index.ts",
   "compatibility_date": "2026-07-03",
@@ -9,7 +9,7 @@
   "workers_dev": true,
   "upload_source_maps": true,
   // Control-plane reconciliation (event status transitions + prune) every 5 minutes,
-  // so Always-On mode needs no constant AWS tick (ADR-049 Phase 5 / #2294).
+  // so Always-On mode needs no constant AWS tick (Issue #2294).
   "triggers": {
     "crons": ["*/5 * * * *"]
   },
@@ -34,7 +34,7 @@
     // `wrangler dev` serves the loopback origin below; every deployed
     // environment must replace its placeholder or the MCP routes fail closed.
     "MCP_CANONICAL_ORIGIN": "http://localhost:8787",
-    // ADR-050 OIDC command seam: role/bus from `make deploy-always-on-command` outputs;
+    // OIDC command role/bus from `make deploy-always-on-command` outputs;
     // PROBLEMS_CATALOG is the JSON problemId -> problemDir map offered in Always-On events.
     "COMMAND_ROLE_ARN": "arn:aws:iam::000000000000:role/tenkacloud-alwayson-command",
     "COMMAND_AWS_REGION": "ap-northeast-1",

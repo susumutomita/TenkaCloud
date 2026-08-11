@@ -127,7 +127,7 @@ describe("tenant ApiGateway", () => {
   });
 
   it("should expose the /events/{eventId}/notifications resource with a POST method (#553)", () => {
-    // backend handler `POST /events/:eventId/notifications` (= ADR-006 通知 push) と
+    // backend handler `POST /events/:eventId/notifications` (= 通知 push) と
     // API Gateway route の配線がセットでないと frontend は "Failed to fetch" になる。
     // #535 と同種の「backend だけ merge、CDK 後追い」 regression を再発させないための pin。
     const notificationsResourceId = Object.entries(
@@ -142,7 +142,7 @@ describe("tenant ApiGateway", () => {
     });
   });
 
-  it("[ADR-037 Slice 2] should wire /events/{eventId}/disruptions/recurring (GET) + .../{requestId}/cancel (POST)", () => {
+  it("should wire /events/{eventId}/disruptions/recurring (GET) + .../{requestId}/cancel (POST)", () => {
     // backend に Hono route + frontend RecurringPanel を merge しても、 この APIGW route を
     // 追加し忘れると gateway が CORS 無しで 404/403 を返し frontend は「Failed to fetch」になる
     // (= #553 通知 route と同じ「backend だけ merge、 CDK 後追い」 regression class)。
@@ -165,7 +165,7 @@ describe("tenant ApiGateway", () => {
   });
 
   it("should have /admin/competitor-accounts and /admin/competitor-accounts/{awsAccountId}/verify (Issue #459)", () => {
-    // Issue #459 / ADR-002 Phase 2.1: Competitor Accounts CRUD + verify
+    // Issue #459: Competitor Accounts CRUD + verify
     expect(findResource("admin")).toBeDefined();
     expect(findResource("competitor-accounts")).toBeDefined();
     expect(findResource("{awsAccountId}")).toBeDefined();
@@ -188,7 +188,7 @@ describe("tenant ApiGateway", () => {
   });
 
   it("should have POST /admin/competitor-accounts/{awsAccountId}/rotate-external-id (Issue #596)", () => {
-    // Issue #596 / ADR-002 Phase 3.1: ExternalId rotation route
+    // Issue #596: ExternalId rotation route
     expect(findResource("rotate-external-id")).toBeDefined();
     const rotateResourceId = Object.entries(
       tpl.findResources("AWS::ApiGateway::Resource", {

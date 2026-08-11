@@ -1,5 +1,5 @@
 /**
- * 問題の `metadata.json:endpoints[]` section parser (ADR-012 Phase 3.A / Issue #2106)。
+ * 問題の `metadata.json:endpoints` (Issue #2106)。
  *
  * 純 parser (`parseEndpointSlot` / `resolveDefaultUrl`) と型は公開 SDK
  * `@tenkacloud/problem-sdk` に単一 source of truth として集約済みで、 同名・同 signature

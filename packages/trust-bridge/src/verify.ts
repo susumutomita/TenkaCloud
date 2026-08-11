@@ -13,7 +13,7 @@ import { brandVerified, parseCloudActionIntent } from "./schema.js";
 type JsonWebKey = webcrypto.JsonWebKey;
 
 /**
- * Issue #795 / ADR-017 Phase 1: 上位 verify entrypoint。
+ * Issue #795: 上位 verify entrypoint。
  *
  * JWS 検証 → schema 検証 → TTL 検証 → nonce hook 評価 を順に実施し、
  * 失敗した最初の reason を 1 つ返す。 audit record は本 entry の戻り値から

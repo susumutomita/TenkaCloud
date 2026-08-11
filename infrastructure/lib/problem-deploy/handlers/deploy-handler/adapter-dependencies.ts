@@ -41,7 +41,7 @@ import {
 import { getSakuraCredential } from "../shared/sakura-credential-store.js";
 
 /**
- * [ADR-026/027/032] 非 AWS runtime (sakura/azure/gcp) の credential 解決 + adapter context 組立を 1 module に
+ * 非 AWS runtime (sakura/azure/gcp) の credential 解決 + adapter context 組立を 1 module に
  * 集約する (= deploy.ts の deploy orchestration から「provider 別の認証情報解決」という別責務を切り出す、 SRP)。
  * 各 builder は注入された REST client / token client / signer に対する純 orchestration で、 SSM 読取の per-team
  * credential store を引く。 未登録は loud throw (= silent fallback 禁止)。 実 cloud API の wire は各 client 側。
@@ -64,7 +64,7 @@ export interface AdapterDependencyConfig {
    * directory, `gcp-blueprint-materializer.ts`) AND `azure/bicep` (a single `.bicep`/`.json` file,
    * `adapter-dependencies.ts`'s own `resolveAzureArtifact`): the materialized `problems/` tree S3
    * client + its bucket name. Reuses the SAME `s3` field `DeployContext` already carries for the
-   * ADR-008 private-payload presigned URL, so wiring this costs no new Lambda dependency — only a
+   * private-payload presigned URL, so wiring this costs no new Lambda dependency — only a
    * wider IAM read grant (see `deploy-api-lambda.ts`). Absent (as in Lite mode / no
    * `SOURCE_BUCKET_NAME`) + no `challengePayloadUrl` on the deploy → the materializer fails loud
    * with an actionable diagnostic (never a silent empty result).
@@ -75,11 +75,11 @@ export interface AdapterDependencyConfig {
 
 /** GCP の OAuth2 scope (= cloud-platform full)。 */
 const GCP_CLOUD_PLATFORM_SCOPE = "https://www.googleapis.com/auth/cloud-platform";
-/** SA impersonation token の lifetime (= ADR-002 と揃え 1h)。 */
+/** SA impersonation token の lifetime は 1 時間。 */
 const GCP_SA_TOKEN_LIFETIME_SECONDS = 3600;
 
 /**
- * [ADR-026 / #1412] sakura/apprun の adapter context を組む。 getApiKey は per-team SSM SecureString
+ * [#1412] sakura/apprun の adapter context を組む。 getApiKey は per-team SSM SecureString
  * store を引き、 未登録なら loud に throw (= silent fallback 禁止)。 client は実 AppRun REST 実装を
  * credential で束ねる factory。
  */
@@ -136,7 +136,7 @@ async function resolveAzureArtifact(
 }
 
 /**
- * [ADR-027 / ADR-032 / #1410 / #2743] azure/bicep の adapter context を組む。 getCredential は per-team の
+ * [#1410 / #2743] azure/bicep の adapter context を組む。 getCredential は per-team の
  * Azure deploy 設定 (app registration secret + subscription/RG) を SSM から引き、 未登録なら loud に throw、
  * client_credentials grant で ARM token を得る。 client は同 config の subscription/RG で Deployment Stacks
  * REST client を束ねる。 adapter は必ず getCredential → client の順で呼ぶので config を closure に保持する。
@@ -193,7 +193,7 @@ function buildAzureAdapterContext(
 }
 
 /**
- * [ADR-027 / ADR-032 / #1411 / #2745] gcp/infra-manager の adapter context を組む。 getCredential は per-team の
+ * [#1411 / #2745] gcp/infra-manager の adapter context を組む。 getCredential は per-team の
  * WIF config を SSM から引き未登録なら loud throw、 **署名鍵レス**で AWS subject token (= 署名済
  * GetCallerIdentity) を作り → GCP STS で federated token → SA impersonation で短命 access token を得る。
  * client は同 config の project/location/service account で Infra Manager REST client を束ねる。
@@ -235,7 +235,7 @@ function buildGcpAdapterContext(
         serviceAccountEmail: config.serviceAccountEmail,
         ...(config.artifactBucket ? { artifactBucket: config.artifactBucket } : {}),
       };
-      // ADR-032: AWS identity を subject にした署名済 GetCallerIdentity (鍵レス)。
+      // AWS identity を subject にした署名済 GetCallerIdentity (鍵レス)。
       const signed = await signer.sign({ region: awsRegion, wifAudience: config.wifAudience });
       const subjectToken = formatGcpSubjectToken(signed);
       const federated = await stsClient.exchangeToken({

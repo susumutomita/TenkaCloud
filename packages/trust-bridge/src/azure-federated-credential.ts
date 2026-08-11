@@ -7,7 +7,7 @@ import {
 import type { VerifiedCloudActionIntent } from "./schema.js";
 
 /**
- * Issue #795 / ADR-017 Phase 4: AzureFederatedCredentialExchange adapter (prototype)。
+ * Issue #795: AzureFederatedCredentialExchange adapter (prototype)。
  *
  * Azure の Federated Identity Credential (FIC) は OIDC JWT を Azure AD token
  * exchange に使い、 user-assigned managed identity の access token を取得する
@@ -19,11 +19,10 @@ import type { VerifiedCloudActionIntent } from "./schema.js";
  *      (`grant_type=client_credentials`, `client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer`)
  *   3. 戻ってきた access token を Azure ARM API call に使う
  *
- * Phase 4 では `oauth2TokenEndpoint` を呼ぶ HTTP client を inject 可能にする
- * (= `@azure/identity` を hard dep にしない)。 実 Azure subscription smoke は
- * Phase 4 末で別 PR で行う。
+ * `oauth2TokenEndpoint` を呼ぶ HTTP client は inject し、`@azure/identity` を hard dependency
+ * にしない。実 Azure subscription の検証は one-time verification として別に行う。
  *
- * 既知の Open Question (ADR-017 OQ#1):
+ * provider-subject binding に関する既知の Open Question:
  *   - Azure AD の client_assertion は RFC 7523 JWT を期待する。 本 prototype の
  *     `toClientAssertion` hook は caller に JWT 変換責任を委ねる (= AWS / GCP と
  *     対称な設計)。 trust-bridge 側で JWT claim 変換 utility を提供するかは

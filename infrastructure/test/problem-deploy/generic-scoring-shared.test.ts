@@ -18,7 +18,7 @@ import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers"
  * 動作不変 (= health-check-handler.test.ts と同一 assertion)。
  */
 
-describe("buildSharedResources cold start (#2440 ADR-049 §5.1 Phase A5 / #2442 Phase C1)", () => {
+describe("buildSharedResources cold start (#2440 / #2442)", () => {
   const REQUIRED_ENV = {
     DEPLOYMENTS_TABLE_NAME: "Deployments",
   };
@@ -81,7 +81,7 @@ describe("isScoringActive (relocated from health-check-handler)", () => {
     ).toBe(true);
   });
 
-  it("should terminate a no-endsAt round once past the MAX_ROUND_DURATION cap (#1421 ADR-029 liveness)", () => {
+  it("should terminate a no-endsAt round once past the MAX_ROUND_DURATION cap (#1421 liveness)", () => {
     // 開始から 16 ヶ月後 (>> 30 日 cap) は endsAt 未設定でも terminal 扱い → 無限採点を排除。
     expect(isScoringActive({ eventStartsAt: "2025-01-01T00:00:00.000Z" }, NOW)).toBe(false);
   });
@@ -198,7 +198,7 @@ describe("computeSince", () => {
   });
 });
 
-describe("parseScoringState (ADR-012 Phase 3.B、 dispatcher state persistence)", () => {
+describe("parseScoringState dispatcher state persistence", () => {
   it("should return empty state for undefined / empty string / broken JSON", () => {
     expect(parseScoringState(undefined)).toEqual({});
     expect(parseScoringState("")).toEqual({});
@@ -228,7 +228,7 @@ describe("parseScoringState (ADR-012 Phase 3.B、 dispatcher state persistence)"
     expect(parseScoringState(JSON.stringify(123))).toEqual({});
   });
 
-  it("should decode activeEffects and drop malformed entries (ADR-033 #1665)", () => {
+  it("should decode activeEffects and drop malformed entries (#1665)", () => {
     const state = parseScoringState(
       JSON.stringify({
         activeEffects: [

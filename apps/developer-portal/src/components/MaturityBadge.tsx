@@ -1,6 +1,6 @@
 import { MATURITY_DESCRIPTIONS, MATURITY_LABELS, type Maturity } from "@/lib/maturity";
 
-// A small shared component (ADR-0003 §6: capability badges) rendered next to docs
+// A shared maturity badge rendered next to docs
 // pages, landing cards, and — later — API operations, so maturity reads the same
 // everywhere.
 export function MaturityBadge({ level }: { level: Maturity }) {

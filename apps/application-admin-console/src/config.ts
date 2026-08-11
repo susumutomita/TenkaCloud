@@ -14,7 +14,7 @@ export interface AppConfig {
   /**
    * テナント API の base URL (末尾スラッシュなし)。
    * application-admin-console は全 API 呼び出し (テナント管理 + Deploy 系) を
-   * JWT 認証付きでここに送る。Issue #458 / ADR-001 以降、Deploy 用の独立 base URL は廃止。
+   * JWT 認証付きでここに送る。Issue #458 以降、Deploy 用の独立 base URL は廃止。
    * dev fallback ではダミー URL になるので実 API 呼び出しは成立しない。
    */
   readonly apiBaseUrl: string;
@@ -46,7 +46,7 @@ export interface AppConfig {
    */
   readonly samlIdpDirectory: Readonly<Record<string, readonly string[]>>;
   /**
-   * Resolved feature flags (ADR-035). The registry (src/features.ts) holds defaults; an environment
+   * Resolved feature flags. The registry (src/features.ts) holds defaults; an environment
    * opts a flag on via runtime-config.json `features: { <key>: true }`. Access as
    * `config.features?.<key>` — unknown keys are a compile error. loadConfig always populates it;
    * optional only so test fixtures can omit it (absent → every flag reads OFF, fail-safe).
@@ -121,7 +121,7 @@ async function fetchRuntimeConfig(): Promise<RuntimeConfig | null> {
         data.samlIdpDirectory && typeof data.samlIdpDirectory === "object"
           ? data.samlIdpDirectory
           : {},
-      // Raw feature overrides; resolved against the registry in loadConfig (ADR-035).
+      // Raw feature overrides; resolved against the registry in loadConfig.
       features:
         data.features && typeof data.features === "object" && !Array.isArray(data.features)
           ? data.features

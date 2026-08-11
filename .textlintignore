@@ -8,7 +8,6 @@ coverage
 .cache/
 .cache/**
 plans.md
-Plan.md
 reference/
 reference/**
 .claude/

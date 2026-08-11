@@ -184,8 +184,8 @@ type BulkRuntimeDispatch =
  * descriptor (a provider match but not a registered engine) took the adapter
  * path and threw a per-row `RuntimeNotSupportedError` deep inside
  * `dispatchBulkAdapterEntries` instead of being refused up front, while a
- * `{provider:"docker", engine:"compose"}` descriptor (not a non-AWS cloud
- * runtime at all — ADR-023 local-play) fell through to the AWS/CFn path and
+ * `{provider:"docker", engine:"compose"}` local-play descriptor fell through to the AWS/CFn
+ * path even though it is not a non-AWS cloud runtime, and
  * violated its frozen-schema precondition (single-deploy rejects the same
  * runtime pre-mutation).
  *

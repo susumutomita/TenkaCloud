@@ -17,8 +17,7 @@ function buildStack(): { stack: cdk.Stack; template: Template } {
     env: { account: "123456789012", region: "ap-northeast-1" },
   });
   const payloadBucket = new Bucket(stack, "PayloadBucket");
-  // child State Machine は本 PR scope 外 (= 別 PR で DeployCreateStateMachine を渡す)。
-  // テスト的には任意の Standard SM があれば良いので minimal Pass で組む。
+  // child の具体動作は別 suite が検証するため、ここでは minimal Pass の Standard SM を使う。
   const childSm = new StateMachine(stack, "ChildSm", {
     definition: new Pass(stack, "ChildPass"),
   });
@@ -53,7 +52,7 @@ describe("BulkDeployCreateStateMachine", () => {
     expect(def).toContain('"ExecutionType":"STANDARD"');
   });
 
-  it("MaxConcurrency should be fixed at 50 per ADR-001 §3", () => {
+  it("should fix MaxConcurrency at 50", () => {
     const { template } = buildStack();
     const sm = Object.values(template.findResources("AWS::StepFunctions::StateMachine")).find(
       (r) => {

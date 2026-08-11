@@ -18,7 +18,7 @@ import {
 } from "../../lib/utils/discover-problems-catalog";
 
 /**
- * #1422 (ADR-013 Phase 2): condition-triggered disruption の純粋ロジックを pin する。
+ * #1422: condition-triggered disruption の純粋ロジックを pin する。
  * - catalog の triggers[] / env パース
  * - trigger 単体判定 + OR 評価 + idempotency 抑制 + phase 解決
  * - scoringState の firedDisruptions persist / parse + resolveActivePhase 共有
@@ -57,7 +57,7 @@ describe("parseDisruptionTriggers", () => {
   });
 });
 
-describe("parseDisruptionAction (ADR-031 #1419)", () => {
+describe("parseDisruptionAction (#1419)", () => {
   it("should parse a well-formed action carrying optional fields and a required revert", () => {
     const action = parseDisruptionAction({
       kind: "ssm-run-command",
@@ -153,7 +153,7 @@ describe("parseDisruptionAction (ADR-031 #1419)", () => {
   });
 });
 
-describe("parseDisruptionEffect (ADR-033 #1665)", () => {
+describe("parseDisruptionEffect (#1665)", () => {
   it("should parse a valid penalty effect", () => {
     expect(parseDisruptionEffect({ kind: "penalty", points: 40, durationSeconds: 300 })).toEqual({
       kind: "penalty",
@@ -278,7 +278,7 @@ describe("evaluateDisruptionTriggers", () => {
     ]);
   });
 
-  it("[ADR-037 Slice 3] should carry recurrence into the fired result for a score-gated repeat", () => {
+  it("should carry recurrence into the fired result for a score-gated repeat", () => {
     const d = baseDisruption({
       triggers: [{ kind: "team-score-above", threshold: 50 }],
       recurrence: { intervalMinutes: 5, maxFires: 6 },
@@ -291,7 +291,7 @@ describe("evaluateDisruptionTriggers", () => {
     expect(fired[0]?.recurrence).toEqual({ intervalMinutes: 5, maxFires: 6 });
   });
 
-  it("[ADR-037 Slice 3] should omit recurrence for a one-shot triggered disruption", () => {
+  it("should omit recurrence for a one-shot triggered disruption", () => {
     const d = baseDisruption({ triggers: [{ kind: "team-score-above", threshold: 50 }] });
     const fired = evaluateDisruptionTriggers(
       [d],

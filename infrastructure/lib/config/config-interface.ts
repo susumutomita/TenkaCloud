@@ -43,8 +43,8 @@ export interface Config {
   readonly opsMonitoringConfig?: OpsMonitoringConfig;
 
   /**
-   * ADR-003 Phase 2 / problem catalog split: TenkaCloudChallenge repo の publish.yml が
-   * S3 にアップロードするための bucket + GitHub OIDC IAM Role 設定。 未指定なら
+   * TenkaCloudChallenge の publish workflow が S3 にアップロードするための bucket と
+   * GitHub OIDC IAM Role の設定。未指定なら
    * `ChallengePayloadStack` は立てない (= 旧 `CDK_PARAM_CHALLENGE_PAYLOAD_BUCKET` env override
    * 経路だけ動く互換 mode)。
    */

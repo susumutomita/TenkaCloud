@@ -104,12 +104,12 @@ app.use(
 // は CloudWatch Logs の `[deploy] uncaught handler error` 行で詳細を引く。
 app.onError(buildAuthErrorHandler({ logPrefix: "[deploy]" }));
 
-// #2948 / ADR-0005: machine guard は blanket role check **より前** に mount する。allowlist 外の
+// Issue #2948: machine guard は blanket role check **より前** に mount する。allowlist 外の
 // route と capability 不足を role 解決の前に落とし、拒否を監査に残すため。human 経路 (=
 // `custom:tenantId` claim を持つ ID token) はこの middleware を素通りする。
 app.use("*", createMachineGuardMiddleware());
 
-// ADR-020 Phase B.1 (#948): blanket middleware は **「tenant 内のいずれかの role を持つ
+// Issue #948: blanket middleware は **「tenant 内のいずれかの role を持つ
 // 認証済 user」** であることだけ要求する (= Admin / Operator / Viewer のいずれか)。 各 route の
 // 1 行目で `requireRole(c, [...])` を呼び、 destructive 操作には Admin 限定 / mutate には
 // Admin + Operator のように **route 単位で** 絞り込む (= Viewer も dropdown populate のため
@@ -182,7 +182,7 @@ function mapDeployError(c: Context, problemId: string, err: unknown): Response {
       StatusCodes.UNPROCESSABLE_ENTITY,
     );
   }
-  // [ADR-023 / Issue #1268] Problem metadata declared a runtime we cannot
+  // [Issue #1268] Problem metadata declared a runtime we cannot
   // execute today (e.g. azure/bicep). 422: request is well-formed, but the
   // business invariant "platform has an adapter for this provider/engine" is
   // not satisfied. No cloud mutation happens on this path.

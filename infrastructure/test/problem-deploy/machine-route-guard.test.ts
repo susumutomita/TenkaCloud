@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * Issue #2948 / ADR-0005 Phase 1: machine (M2M) principal に対する **構造的封じ込め** の証明。
+ * Issue #2948: machine (M2M) principal に対する **構造的封じ込め** の証明。
  *
  * この test の中核は 2 つある。
  *

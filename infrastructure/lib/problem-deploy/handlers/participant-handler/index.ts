@@ -61,7 +61,7 @@ import { setDisplayTeamName } from "./update.js";
  *   GET   /portal/healthz
  *   GET   /portal/leaderboard           — event scope の team ランキング
  *   GET   /portal/me/score-events       — 自チームの加点履歴 (時系列降順)
- *   GET   /portal/me/notifications      — 自 event 宛の運営通知 (ADR-006、時系列降順)
+ * GET /portal/me/notifications — 自 event 宛の運営通知 (時系列降順)
  *   GET   /portal/me                    — Authorization: Bearer <teamLoginKey>
  *                                         → { team, problems[] }
  *   GET   /portal/me/console-signin-url — AWS Console federation login URL 発行
@@ -91,10 +91,10 @@ const compositeAwsAccessDeps: CompositeAwsAccessBridgeDeps = {
   repo: { runtime: shared.runtime, ddb: shared.ddb, tableName: shared.tableName },
 };
 
-// ADR-030 Phase 2 (#1420): inter-team coordination の op/projection route は専用の最小 IAM
+// Issue #1420: inter-team coordination の op/projection route は専用の最小 IAM
 // CoordinationDispatcherLambda (coordination-dispatcher-handler) へ分離した。 participant-portal
 // Lambda は sts:AssumeRole / ssm / kms を持つため、 未信頼 plugin を実行する coordination は
-// ここに置かない (ADR-030 S2 = blast radius を IAM で封じる)。
+// ここに置かない (blast radius を IAM で封じる)。
 const app = new Hono();
 
 // #1694: 全レスポンスに API セキュリティヘッダ (nosniff / no-store / X-Frame-Options /
@@ -507,7 +507,7 @@ function respondHintRevealOutcome(
   return c.json(outcome, StatusCodes.OK);
 }
 
-// ADR-012 Phase 3.A: Endpoint registry (override) routes — 競技者が自 team の slot URL を
+// Endpoint registry (override) routes — 競技者が自 team の slot URL を
 // 再ホスト先 (Lambda / ECS / App Runner 等) に切り替えるための CRUD。auth は teamLoginKey
 // bearer (= submit-flag と同じ scope)。
 //

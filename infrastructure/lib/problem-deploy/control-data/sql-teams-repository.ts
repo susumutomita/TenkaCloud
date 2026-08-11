@@ -20,7 +20,7 @@ export const TEAM_LOGIN_KEY_SCRUB_SQL =
   )`;
 
 /**
- * [ADR-049 §5.1 / §5.2] SQLite implementation of {@link TeamsRepository}. One SQL
+ * SQLite implementation of {@link TeamsRepository}. One SQL
  * layer in the SQLite dialect targets the Turso (libSQL) hosted backend
  * (#2677: Turso-only — the Always-On Cloudflare Worker holds its own D1 binding
  * and never routes through this seam). It talks to an injected

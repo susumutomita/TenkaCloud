@@ -1,11 +1,11 @@
 /**
- * Notifications の既読管理 (ADR-006 D2)。
+ * Notifications の既読管理 (notification API)。
  *
  * 既読は **localStorage で competitor のブラウザに閉じ込める**: server side に read
  * endpoint を持たない (= API surface を最小化、tenant 跨ぎ問題を作らない)。
  * value は最後に画面で見た notification の `occurredAt` (ISO 8601)。
  *
- * **eventId スコープ** (codex review): 同 browser で別 event にログインし直したとき
+ * **eventId スコープ**: 同 browser で別 event にログインし直したとき
  * 前 event の lastSeen を引きずって新 event の通知を silent に「既読」扱いしないよう、
  * key 自体に eventId を含める。
  *

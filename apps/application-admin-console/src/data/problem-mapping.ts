@@ -51,7 +51,7 @@ export function metadataToDetail(metadata: ProblemMetadata, templateYaml?: strin
     description: metadata.description,
     exposedPorts: metadata.exposedPorts,
     learningGoals: metadata.learningGoals,
-    // ADR-026 / ADR-027: 実行環境。 未宣言の legacy 問題は aws/cloudformation 既定。
+    // 未宣言の legacy 問題は aws/cloudformation で実行する。
     runtime: metadataRuntimeToSummary(metadata),
     ...(metadata.defaultRegion ? { defaultRegion: metadata.defaultRegion } : {}),
     ...(metadata.supportedRegions && metadata.supportedRegions.length > 0
@@ -93,7 +93,7 @@ type ConsoleRuntime =
     };
 
 /**
- * ADR-023 D4: only an AWS CloudFormation runtime is deployed/cost-analyzed by the
+ * Only an AWS CloudFormation runtime is deployed and cost-analyzed by the
  * console; every other provider/engine is display-only here. Delegates to the
  * `@tenkacloud/problem-runtime` constants so the console's notion of "executable"
  * cannot drift from the deploy worker's.
@@ -107,8 +107,8 @@ export function isExecutableProblemRuntime(runtime: ConsoleRuntime): boolean {
 }
 
 /**
- * [#2168] True for a problem delivered as a **local container** (`docker/compose`,
- * the ADR-023 local-play path) rather than a cloud account. Membership is read from
+ * [#2168] True for a problem delivered as a **local container** (`docker/compose`)
+ * through Docker local-play rather than a cloud account. Membership is read from
  * `CONTAINER_RUNTIMES` — the same source of truth the deploy worker uses to reject a
  * cloud deploy of these (`classifyRuntimeSupport` → `"container"`) — so a local-only
  * problem can never be silently treated as cloud-deployable here. Distinct from a

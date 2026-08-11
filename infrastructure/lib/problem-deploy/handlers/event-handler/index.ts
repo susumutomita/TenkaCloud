@@ -20,7 +20,7 @@ import { registerScoringRoutes } from "./routes/scoring.js";
 import { buildEventSharedResources } from "./shared.js";
 
 /**
- * Event API Lambda の Hono app (ADR-004 Phase 1+2a, ADR-006 Notifications)。routes:
+ * Event API Lambda の Hono app (2a, Notifications)。routes:
  *   POST   /events
  *   GET    /events
  *   GET    /events/:eventId
@@ -30,7 +30,7 @@ import { buildEventSharedResources } from "./shared.js";
  *   DELETE /events/:eventId/lock-scoring
  *   PUT    /events/:eventId/progression-gate — Progression Gate 設定 (#2283, flag ON のみ)
  *   DELETE /events/:eventId/progression-gate — Gate 設定除去 (idempotent)
- *   POST   /events/:eventId/notifications  — 運営 → 競技者 通知 1 件作成 (ADR-006)
+ *   POST   /events/:eventId/notifications — 運営 → 競技者 通知 1 件作成
  *   POST   /events/:eventId/archive
  *   POST   /events/:eventId/deploy         — Bulk deploy (teams × problems を fan-out)
  *   GET    /events/:eventId/disruptions          — Red Team disruption catalog (#888 Phase A)
@@ -74,11 +74,11 @@ app.use(
 // は CloudWatch Logs の `[events] uncaught handler error` 行で詳細を引く。
 app.onError(buildAuthErrorHandler({ logPrefix: "[events]" }));
 
-// #2948 / ADR-0005: machine guard は全 route の先頭で発火させる (= blanket が /events/* /
+// Issue #2948: machine guard は全 route の先頭で発火させる (blanket が /events/*/
 // /feature-flags / /admin/* に分かれているため、"*" に 1 本置くのが唯一の網羅的な位置)。
 app.use("*", createMachineGuardMiddleware());
 
-// ADR-020 Phase B.1 (#948): /events/* は 「tenant 内の認証済 user」 (= Admin / Operator /
+// Issue #948: /events/* は 「tenant 内の認証済 user」 (Admin / Operator /
 // Viewer のいずれか) を要求し、 destructive / mutate 操作は各 route の 1 行目で `requireRole(c,
 // [...])` を呼んで absolute に絞る。 GET 系 (= list / detail / disruption catalog / audit) は
 // 3 role 全部 OK (= Viewer も event 観覧可)。
@@ -122,7 +122,7 @@ registerBulkDeployRoutes(app, shared);
 registerDisruptionRoutes(app, shared);
 // Issue #1292: Tenant Admin 向け audit log read routes (= /admin/audit-log + /export)。
 registerAuditLogRoutes(app, shared);
-// Issue #2231 (ADR-035): per-tenant runtime feature-flag toggle (= /admin/feature-flags)。
+// Issue #2231: per-tenant runtime feature-flag toggle (/admin/feature-flags)。
 registerFeatureFlagsRoutes(app, shared);
 // Issue #2410 Slice 2: event-hot DynamoDB キャパ監視 (= /admin/capacity、read-only)。
 registerCapacityRoutes(app, shared);

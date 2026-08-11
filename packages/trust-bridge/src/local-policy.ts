@@ -5,7 +5,7 @@ import type {
 } from "./customer-execution-plane.js";
 
 /**
- * Issue #1727 / ADR-039 D4: customer-local な PolicyEvaluator / ArtifactInspector の
+ * Issue #1727: customer-local な PolicyEvaluator / ArtifactInspector の
  * 再利用可能な実装。 PoC では inline だったものを、 注入できる部品にする。
  *
  * CustomerExecutionPlane は既に audience / account / region / problem allowlist /

@@ -7,10 +7,10 @@ import {
 } from "./discover-problems-catalog.js";
 
 /**
- * ADR-030 Phase 3b (#1420): synth 時に各問題の coordination plugin を **self-contained ESM .mjs** に
+ * Issue #1420: synth 時に各問題の coordination plugin を **self-contained ESM (.mjs)** に
  * bundle する。 plugin が import する `@tenkacloud/coordination-plugin-sdk` を inline し、 dispatcher
  * Lambda が S3 から download → `import()` するだけで実行できる形にする (= 動的 load、 platform 再
- * デプロイ不要、 ADR-030 S1)。
+ * デプロイ不要)。
  *
  * 返り値は `{ [problemId]: bundledJs }`。 CoordinationPluginBundle 構築子が staging dir に書き出し
  * BucketDeployment で S3 へ上げる。 bundle 失敗 (= plugin の構文/依存エラー) は throw して synth を
@@ -33,7 +33,7 @@ export function bundleCoordinationPlugins(problemsRoot: string): Record<string, 
       bundle: true,
       format: "esm",
       platform: "node",
-      // 純 reducer 規約 (ADR-030 S3、 validate-problems で enforce 済) のため外部依存は SDK のみ。
+      // 純 reducer 規約 (validate-problems で enforce 済) のため外部依存は SDK のみ。
       // SDK を inline して self-contained にする (= Lambda の module graph に依存しない)。
       write: false,
       logLevel: "silent",

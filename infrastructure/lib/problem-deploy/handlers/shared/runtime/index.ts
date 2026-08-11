@@ -1,5 +1,5 @@
 /**
- * [ADR-023 / Issue #1268] Runtime adapter package barrel.
+ * [Issue #1268] Runtime adapter package barrel.
  *
  * Public entrypoints used by the deploy handler and tests. Keep this re-export
  * surface minimal so future adapters slot in via `selectAdapter` only and do

@@ -162,7 +162,7 @@ export function deriveFinalStatus(status: DeploymentStatus): PhaseStatus {
  * 4 phase 派生のコア関数。`stackProgress` は未取得 (= null) を許容する:
  * その場合 `Building` / `CloudFormation Deploy` は status だけから推定する。
  *
- * 旧 5 phase に居た Health Check は ADR-012 Phase 3.B で GenericScoringLambda に
+ * 旧 5 phase に居た Health Check は generic scoring metadata で GenericScoringLambda に
  * 置き換わり (= deploy-time の health check 連携枠としては復活しない設計) のため、
  * 永続 Skipped な dead UI を消した。
  */

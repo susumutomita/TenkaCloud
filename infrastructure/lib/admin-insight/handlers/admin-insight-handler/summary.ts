@@ -6,7 +6,7 @@ import {
 } from "./shared.js";
 
 /**
- * 1 tenant 分の deploy / event 集計。ADR-011 Phase 1 API の正本 shape:
+ * 1 tenant 分の deploy / event 集計。Admin Insight API の正本 shape:
  *   {
  *     tenantId,
  *     activeDeploys,        // status ∈ {PENDING, IN_PROGRESS} の Deployments 件数
@@ -91,7 +91,7 @@ async function countTenantDeployments(
 }
 
 /**
- * 1 tenant の Events 総件数。 [ADR-049 §5.1 / #2438] repository seam
+ * 1 tenant の Events 総件数。 [#2438] repository seam
  * (`countEventsByTenant`) 経由。 default backend (dynamodb) では従来と byte 互換の
  * GSI1 (TENANT#<id>) Select=COUNT query を全 page drain する。
  */

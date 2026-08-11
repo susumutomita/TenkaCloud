@@ -62,7 +62,6 @@ describe("iamWildcardNeedsJustify", () => {
     ["API 制約", "// AWS API 制約により ARN 指定不可"],
     ["Issue reference", "// Issue #857: see design doc"],
     ["PR reference", "// PR #857: reviewed"],
-    ["ADR reference", "// ADR-021: baseline IAM"],
     ["SBT vendored", "// SBT vendored: serverless-saas-pipeline upstream code"],
   ])("should recognize the %s justification keyword", (_label, comment) => {
     const findings = iamWildcardNeedsJustify.check(

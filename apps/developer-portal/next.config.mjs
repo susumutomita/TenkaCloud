@@ -6,7 +6,7 @@ const withMDX = createMDX({
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // The developer portal is a fully static export per ADR-0003: public routes
+  // The developer portal is a fully static export: public routes
   // (landing, product, docs, API reference, examples, changelog) are pre-rendered
   // and CDN-cached. The future authenticated /developers/sandbox/* segment will
   // flip this to the server runtime; that change is deferred to the sandbox PR.

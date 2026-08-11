@@ -1,5 +1,5 @@
 /**
- * Issue #1727 / ADR-039 — Customer Execution Plane proof of concept.
+ * Issue #1727 — Customer Execution Plane proof of concept.
  *
  * Run: `bun packages/trust-bridge/poc/customer-execution-plane-demo.ts`
  *      (or `bun run poc:cep` inside packages/trust-bridge)
@@ -170,7 +170,7 @@ function check(label: string, pass: boolean, detail: string): void {
 }
 
 async function run(): Promise<void> {
-  console.log("\n=== TenkaCloud Customer Execution Plane PoC (Issue #1727 / ADR-039) ===\n");
+  console.log("\n=== TenkaCloud Customer Execution Plane PoC (Issue #1727) ===\n");
 
   // Happy path: approved deploy is authorized, then executed with LOCAL authority.
   console.log("1) Approved deploy through the customer-controlled plane:");

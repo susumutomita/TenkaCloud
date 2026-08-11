@@ -5,7 +5,7 @@ import { scanTemplateForIamDescriptions } from "../../scripts/lib/iam-descriptio
 import { ChallengePayloadStack } from "../lib/challenge-payload/challenge-payload-stack.js";
 
 /**
- * ADR-003 Phase 2: ChallengePayloadStack の CFn snapshot test。
+ * ChallengePayloadStack の CFn snapshot test。
  * deploy 順序の主要 invariant を pin:
  *   - S3 bucket は versioned + SSL only + public access block
  *   - IAM Role は GitHub OIDC sub claim を branch ref で限定 (= 他 repo / 他 branch から

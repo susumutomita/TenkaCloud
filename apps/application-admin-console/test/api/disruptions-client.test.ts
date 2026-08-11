@@ -61,13 +61,13 @@ describe("disruptions-client", () => {
     expect(newFireRequestId()).not.toBe(newFireRequestId());
   });
 
-  it("[ADR-037 Slice 2] should GET the active recurring list at the event path", async () => {
+  it("should GET the active recurring list at the event path", async () => {
     const api = fakeApi();
     await fetchActiveRecurring(api, "EVT1");
     expect(api.get).toHaveBeenCalledWith("events/EVT1/disruptions/recurring");
   });
 
-  it("[ADR-037 Slice 2] should POST the recurring cancel at the request path", async () => {
+  it("should POST the recurring cancel at the request path", async () => {
     const api = fakeApi();
     await cancelRecurringDisruption(api, "EVT1", "r1");
     expect(api.post).toHaveBeenCalledWith("events/EVT1/disruptions/recurring/r1/cancel", {});

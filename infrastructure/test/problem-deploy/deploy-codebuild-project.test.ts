@@ -33,7 +33,7 @@ function synth(props?: { concurrentBuildLimit?: number }): Template {
 describe("DeployCodeBuildProject — concurrent build limit (#538)", () => {
   it("should omit the ConcurrentBuildLimit property when `concurrentBuildLimit` is unset", () => {
     // 未指定 = AWS account 全体の concurrent build limit (default 60) をフルに使う。
-    // この既定挙動を変えないことが本 PR の前提 (= 既存運用への regression を出さない)。
+    // この既定挙動を維持して既存運用への regression を防ぐ。
     const tpl = synth();
     const projects = tpl.findResources("AWS::CodeBuild::Project");
     const projectKeys = Object.keys(projects);

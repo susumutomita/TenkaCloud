@@ -46,7 +46,7 @@ export interface DeployDeleteStateMachineProps {
    */
   readonly deploymentsTable?: ITable;
   /**
-   * Issue #2291 (ADR-049 §9): true のとき CodeBuild を使わず、DeleteStack を行う **deploy Lambda**
+   * Issue #2291: true のとき CodeBuild を使わず、DeleteStack を行う **deploy Lambda**
    * を invoke し、DescribeStacks を polling して DELETE_COMPLETE / 消滅まで待つ。default
    * (false / 未指定) は在来の CodeBuild `.sync` path で、CFn テンプレは byte 互換。
    */
@@ -85,7 +85,7 @@ type DeployDeleteStatusWriteTask = DynamoUpdateItem | LambdaInvoke;
  * verified deployment は `competitorRoleArn` / `externalIdParameterName` を使い、ExternalId 付き
  * AssumeRole 後に target account の stack を消す。旧 event detail は same-account fallback に倒す。
  *
- * Issue #2291 (ADR-049 §9): 在来 CodeBuild 経路と Lambda DeleteStack 経路の 2 branch。
+ * Issue #2291: 在来 CodeBuild 経路と Lambda DeleteStack 経路の 2 branch。
  * default (deployViaLambda=false/未指定) は CodeBuild 定義を **そのまま** 生成するので、既存
  * CFn テンプレと byte 互換 (追加リソースなし)。true のときだけ Lambda + poll 定義。
  */
@@ -216,7 +216,7 @@ export class DeployDeleteStateMachine extends Construct {
   }
 
   /**
-   * Issue #2291 (ADR-049 §9): Lambda DeleteStack + DescribeStacks poll 定義。
+   * Issue #2291: Lambda DeleteStack + DescribeStacks poll 定義。
    * `deployViaLambda === true` のときだけ生成する (additive; default synth には現れない)。
    *
    * flow: InvokeCfnDelete (DeleteStack を投げて即 return) → Wait → DescribeDeleteStatus (poll) →

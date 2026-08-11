@@ -21,7 +21,7 @@ export interface BuildParticipantPortalSubsystemArgs {
    */
   readonly deploymentsTable?: Table;
   /**
-   * [Issue #2440 / ADR-049 §5.1 Phase A5] `controlDataBackend` が純 SQL (`turso`) のとき
+   * [Issue #2440] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。
    */
   readonly eventsTable?: Table;
@@ -51,9 +51,8 @@ export interface BuildParticipantPortalSubsystemArgs {
    */
   readonly deployJobLogGroup?: ILogGroup;
   /**
-   * [Issue #2440 / ADR-049 §5.1 Phase A5] control-plane data backend。 `ParticipantPortalLambda`
-   * にのみ渡す (`CoordinationDispatcherLambda` は ADR-030 S2 の最小 IAM を維持するため turso
-   * env/IAM を持たせない)。
+   * control-plane data backend は `ParticipantPortalLambda` にのみ渡す。
+   * `CoordinationDispatcherLambda` は最小 IAM を維持するため Turso env/IAM を持たせない。
    */
   readonly controlDataBackend?: string;
   /** Public remote libSQL URL. Never contains authentication material. */
@@ -66,9 +65,9 @@ export interface ParticipantPortalSubsystemOutputs {
   readonly participantPortalLambda: IFunction;
   readonly participantPortalUrl: string;
   /**
-   * [ADR-028 / #2324] scoring-driven coordination tick の実行先。 採点 Lambda が per-minute pass で
+   * [#2324] scoring-driven coordination tick の実行先。 採点 Lambda が per-minute pass で
    * tick 対象を集めて本 Lambda を async Invoke し、 plugin の runTick を最小 IAM の dispatcher 内で走らせる
-   * (= 資格情報分離、 ADR-028/030)。 caller が `grantInvoke` + function name env を配線するため公開する。
+   * (資格情報分離)。 caller が `grantInvoke` + function name env を配線するため公開する。
    */
   readonly coordinationDispatcherLambda: IFunction;
 }
@@ -81,12 +80,12 @@ export interface ParticipantPortalSubsystemOutputs {
  * (data-loss-class REPLACE on the portal Lambda / CloudFront distribution). Caller decides
  * whether to call this at all (mirrors the original `if (props.participantPortal)` guard).
  *
- * ADR-030 Phase 2 (#1420): inter-team coordination dispatch を participant-portal Lambda
+ * Issue #1420: inter-team coordination dispatch を participant-portal Lambda
  * (sts:AssumeRole / ssm / kms 保持) から分離し、 coordination state 行しか触れない最小 IAM の
  * 専用 Lambda で動かす。 未信頼の問題同梱 plugin を in-process 実行しても competitor 資格情報・
- * 他テナントデータに到達できない (ADR-030 S2)。
- * Phase 3b: coordination plugin を宣言した問題があれば、 synth-bundle 済み .mjs を専用 S3 bucket に
- * 配置し、 dispatcher が runtime に download → import() する (= S1 動的 load)。 0 件なら bucket 不要。
+ * 他テナントデータに到達できない。
+ * coordination plugin を宣言した問題があれば、synth-bundle 済み .mjs を専用 S3 bucket に
+ * 配置し、dispatcher が runtime に download して dynamic import する。0 件なら bucket は作らない。
  */
 export function buildParticipantPortalSubsystem(
   scope: Construct,
@@ -120,15 +119,15 @@ export function buildParticipantPortalSubsystem(
     deploymentsTable: args.deploymentsTable,
     eventsTable: args.eventsTable,
     environmentName: args.environmentName,
-    // ADR-030 Phase 3 config layer: 問題の coordination plugin path を scope resolver へ渡す。
+    // config layer: 問題の coordination plugin path を scope resolver へ渡す。
     problemsCoordination: args.problemsCoordination,
-    // ADR-030 Phase 3b: plugin .mjs を materialize する S3 bucket (宣言問題がある時のみ)。
+    // plugin.mjs を materialize する bucket (宣言問題がある時のみ)。
     ...(coordinationBucket ? { pluginBucket: coordinationBucket } : {}),
   });
   new CfnOutput(scope, "CoordinationDispatcherApiUrl", {
     value: coordinationDispatcher.url.url,
     description:
-      "Coordination Dispatcher Lambda Function URL (ADR-030 最小 IAM、 teamLoginKey bearer 認証)。",
+      "Coordination Dispatcher Lambda Function URL (scoped IAM、 teamLoginKey bearer 認証)。",
   });
 
   const portal = new ParticipantPortalHosting(scope, "ParticipantPortal");
@@ -151,13 +150,13 @@ export function buildParticipantPortalSubsystem(
   return {
     participantPortalLambda: portalLambda.fn,
     participantPortalUrl: portal.distributionUrl,
-    // [ADR-028 / #2324] 採点 Lambda が tick batch を async Invoke する先 (= caller が grantInvoke + env)。
+    // [#2324] 採点 Lambda が tick batch を async Invoke する先 (caller が grantInvoke + env)。
     coordinationDispatcherLambda: coordinationDispatcher.fn,
   };
 }
 
 /**
- * #1420 ADR-030 Phase 3b: coordination plugin を宣言した問題がある時だけ bundle bucket を作る
+ * #1420: coordination plugin を宣言した問題がある時だけ bundle bucket を作る
  * (= 0 件なら undefined を返し、 dispatcher は importer 未配線で全 route not_configured)。
  */
 function coordinationPluginBucket(

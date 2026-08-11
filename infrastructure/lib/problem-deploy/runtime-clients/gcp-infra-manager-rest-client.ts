@@ -1,5 +1,5 @@
 /**
- * [ADR-027 / Issues #1411, #2745] Concrete GCP Infrastructure Manager REST client.
+ * [Issues #1411, #2745] Concrete GCP Infrastructure Manager REST client.
  *
  * `GcpInfraManagerClient` interface (= `handlers/shared/runtime/gcp-infra-manager-adapter.ts` の注入境界)
  * を実 Infrastructure Manager REST API に実装する。 adapter は orchestration (= inputs / state 射影) を

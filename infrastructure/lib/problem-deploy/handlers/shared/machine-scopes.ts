@@ -1,5 +1,5 @@
 /**
- * Issue #2948 / ADR-0005 Phase 1: machine (M2M) token 経路の **単一の正** となる純データ。
+ * Issue #2948: machine (M2M) token 経路の **単一の正** となる純データ。
  *
  * この module は handler bundle (esbuild) と CDK synth の **両方** から import される。
  * よって `aws-cdk-lib` を含む一切の CDK 依存を持ってはならない (= handler bundle が

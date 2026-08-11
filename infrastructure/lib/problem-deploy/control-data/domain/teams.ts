@@ -7,7 +7,7 @@
  */
 
 /**
- * [ADR-049 §5.1] Team aggregate の domain shape。 物理 DDB キー (PK / SK / GSI1PK /
+ * Team aggregate の domain shape。 物理 DDB キー (PK / SK / GSI1PK /
  * GSI1SK) は DynamoDB backend の実装詳細であり、 SQLite backend
  * (Turso / D1) は独自のキー / カラムを導出する。
  *
@@ -72,7 +72,7 @@ export interface TeamLoginKeyRotationInput {
 export type TeamLoginKeyRotationOutcome = { readonly outcome: "updated" | "conflict" };
 
 /**
- * [ADR-049 §5.1] Aggregate-scoped repository for the Teams aggregate — domain
+ * Aggregate-scoped repository for the Teams aggregate — domain
  * methods, not a generic key-value shim (mirror of {@link EventsRepository}). Two
  * interchangeable backends implement it: {@link DynamoDbTeamsRepository} (status
  * quo, the default) and {@link SqlTeamsRepository} (one SQL layer, SQLite dialect
@@ -113,7 +113,7 @@ export interface TeamsRepository {
   /**
    * TTL-equivalent sweep: delete teams whose `expiresAt` (epoch seconds, `> 0`)
    * is at or before `nowEpochSeconds`, and return the number deleted. DynamoDB has
-   * native TTL; the SQLite backends have none (ADR-049 §5.2) and rely on this being
+   * native TTL; the SQLite backends have none and rely on this being
    * run on a schedule (mirror of {@link EventsRepository.pruneExpired}).
    */
   pruneExpired(nowEpochSeconds: number): Promise<number>;

@@ -16,7 +16,7 @@ import type { ParticipantSharedResources } from "../../lib/problem-deploy/handle
 import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers.js";
 
 /**
- * ADR-028 D4/D5 (#1420): coordination route handler を pin する。
+ * Issue #1420: coordination route handler を pin する。
  * scope 解決 → 動的 load → dispatch/project の委譲、 認証不可 / plugin 未配線時の safe 応答を観測する。
  */
 
@@ -162,7 +162,7 @@ describe("makeCoordinationScopeResolver", () => {
       eventId: "e1",
       teamId: "t1",
       ctx: { eventId: "e1", teamIds: ["t1"] },
-      // ADR-030 Phase 3b: moduleRef は problemId (= importer の S3 key `coordination/<id>.mjs`)。
+      // moduleRef は problemId (= importer の S3 key `coordination/<id>.mjs`)。
       moduleRef: "p1",
       fallbackProjection: {},
     });

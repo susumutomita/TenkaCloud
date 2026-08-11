@@ -36,7 +36,7 @@ export type {
  * lock 状態は一切永続せず read 時に毎回導出する。
  */
 
-/** ADR-035 の per-tenant runtime flag key。 既定 OFF (= tenant FLAGS 行に true が無い限り無効)。 */
+/** per-tenant runtime flag key。 既定 OFF (tenant FLAGS 行に true が無い限り無効)。 */
 export const CHALLENGE_PREREQUISITE_GATE_FLAG = "challengePrerequisiteGate";
 
 /**

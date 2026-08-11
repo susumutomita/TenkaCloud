@@ -4,9 +4,9 @@ import type { ControlDataRuntime } from "../../control-data/runtime-repositories
 import { resolveDeploymentsRepository } from "./shared.js";
 
 /**
- * ADR-028 D3 (#1420): inter-team coordination の per-event 共有 state を保存する store。
+ * Issue #1420: inter-team coordination の per-event 共有 state を保存する store。
  *
- * cast-event ([[feedback_inter_team_coordination_plugin]]) と同じく **既存 Deployments テーブルに
+ * cast-event と同じく **既存 Deployments テーブルに
  * 新 SK pattern を足すだけ** で新規 table / IAM / CDK は不要 (= participant-handler は既に
  * Deployments への Put 権限を持つ)。 1 event 1 row、 N teams 共有:
  *   PK = `COORD#<tenantId>#<eventId>`   SK = `STATE`

@@ -63,16 +63,14 @@ export interface DeploymentProvenance {
 }
 
 // ---------------------------------------------------------------------------
-// [Issue #2441 / Phase B1] Deployments aggregate — READ seam.
+// Deployments aggregate — READ seam.
 //
 // The Deployments table carries three GSIs and is (per the #2441 inventory) the
 // single largest standing DynamoDB cost. This seam extracts the READ access the
-// six handler groups already perform, verbatim, so a future SQL backend can
-// stand in behind the same domain methods. B1 is read-only: conditional /
-// atomic writes (B2/B3), the base-table Scans (B3), and the SQL implementation
-// itself (B4) are separate PRs. The DynamoDB backend keeps every
+// six handler groups perform so another backend can stand in behind the same domain methods.
+// The DynamoDB backend keeps every
 // KeyCondition / Filter / Projection / placeholder / Limit / ScanIndexForward
-// byte-identical to the pre-seam handler code — B1 is a pure NO-OP relocation.
+// byte-identical to the pre-seam handler code.
 // ---------------------------------------------------------------------------
 
 /**
@@ -127,7 +125,7 @@ export type DeploymentRecord = {
   status: DeploymentStatus;
 
   /**
-   * [ADR-026/027/032 / #1410-1412] 非 AWS runtime の問題 (sakura/azure/gcp) を deploy したときの
+   * [#1410-1412] 非 AWS runtime の問題 (sakura/azure/gcp) を deploy したときの
    * provider / engine / entry。 teardown / status が CFn 経由か adapter 経由かの判別に使う。
    * **absent = aws/cloudformation** (legacy 行 / 既定。 = 従来どおり CFn 経路)。
    */
@@ -168,7 +166,7 @@ export type DeploymentRecord = {
   problemSetId?: string;
 
   /**
-   * ADR-004 Phase 2: bulk deploy 経由で作られた deployment 行は、紐づく Event / Team を
+   * bulk deploy 経由で作られた deployment 行は、紐づく Event / Team を
    * 参照する。旧 `POST /problems/:id/deploy` 経路で作られた行は両方 undefined (後方互換)。
    */
   eventId?: string;
@@ -253,7 +251,7 @@ export type DeploymentRecord = {
    */
   attackProbes?: string;
   /**
-   * ADR-012 Phase 3.B: 5 種 builtin kind の中で polling 越しに per-deployment で保持する
+   * 5 種 builtin kind の中で polling 越しに per-deployment で保持する
    * scoring state の JSON 文字列。
    * - `attack-detection` の前回 counter (= 差分加算の baseline)
    * - `phased-polling` の bonus once 制御 flag map
@@ -382,8 +380,8 @@ export type ScoreEventRecord = {
    * - `uptime`: HealthCheck の probe で全 endpoint OK
    * - `flag`: 競技者の flag 提出が正解
    * - `flag-wrong`: 競技者の flag 提出が不正解で wrongAnswerPenalty が減点された (Issue #817)
-   * - `attack-detected`: HealthCheck で `lastResult: ok → fail` 遷移を検知 (ADR-005 D2-A、
-   *   Battle Portal の Attack Statistics / History で使う)
+   * - `attack-detected`: HealthCheck で `lastResult: ok → fail` 遷移を検知し、
+   *   Battle Portal の Attack Statistics / History で使う
    * - `hint`: 競技者がヒントを開封し penalty が deduct された (Issue #1038 P1 #8、 2026-05-18)。
    *   旧来 hint reveal は score を直 ADD するだけで score event 履歴に出ず、 「-30 pt なのに
    *   履歴 0 件」 表示の不整合になっていた。
@@ -413,7 +411,7 @@ export type ScoreEventRecord = {
 
 /**
  * [Issue #2441 / Phase B1] The domain shape of one `INBOX#<isoTs>#<ulid>`
- * inter-team cast/inbox row (ADR-028 D3 / #1420) — a second sparse sub-aggregate
+ * inter-team cast/inbox row (#1420) — a second sparse sub-aggregate
  * in the `DEPLOYMENT#<jobId>` partition, distinct from score events. Written and
  * read by `participant-handler/cast-event.ts`. The base PK/SK are stripped as in
  * every other record here.
@@ -430,7 +428,7 @@ export interface InboxEventRecord {
 
 /**
  * [Issue #2441 / Phase B1] The domain shape of the per-event inter-team
- * coordination state (`COORD#<tenantId>#<eventId>` / SK `STATE`, ADR-028 D3).
+ * coordination state (`COORD#<tenantId>#<eventId>` / SK `STATE`).
  * Mirrors the pre-seam `CoordinationStateRow` (`coordination-store.ts`): the
  * opaque plugin `state` plus its optimistic-lock `version` (0 when the row is
  * absent). The version predicate write is B2/B3 (conditional-write seam).

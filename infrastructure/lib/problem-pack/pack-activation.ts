@@ -121,7 +121,7 @@ const DEFAULT_PLATFORM: ActivationPlatform = {
 };
 
 /**
- * [ADR-028/030 activation (#2323)] How a snapshot is projected into a compose input.
+ * Controls how a snapshot is projected into a compose input.
  *
  * `withCoordinationProjection` は既定 false。false のとき snapshot は catalog 行のみを出す
  * (`projections: {}`)。true のとき (= {@link tenantCatalogSource} の deploy / synth 経路) だけ、
@@ -142,7 +142,7 @@ interface SnapshotInputOptions {
  * input. Reuses the #2088 validator so it stays in lockstep with what validates;
  * returns undefined when the revision's snapshot is missing or invalid.
  *
- * [ADR-028/030 activation (#2323) + #2463] When `options.withCoordinationProjection` is set, each
+ * When `options.withCoordinationProjection` is set, each
  * problem carries the same deploy-time projections the core `problems/` tree would expose:
  * scoring / endpoints / phases / runtimes / disruptions / writeups plus coordination declaration
  * and synth-bundled `.mjs` when present. A broken plugin fails loud at synth (esbuild throws) —
@@ -216,12 +216,12 @@ function toPosixPath(value: string): string {
 }
 
 /**
- * [ADR-028/030 activation (#2323) + #2463] problems root 配下の各問題について core と同じ
+ * problems root 配下の各問題について core と同じ
  * `discoverProblems*` extractor を走らせ、problemId 別の `projections` fragment を返す。各 value
  * の shape は {@link LocalCatalogSource} が core `problems/` に載せるものと同一で、pack 側で独自
  * parse はしない。未宣言の projection はキーごと不在 (呼び出し側で `{}` へ fallback = NO-OP)。
  *
- * `visibility: private` はここで fail-loud にする。packs は ADR-008 の presigned payload 経路に
+ * `visibility: private` はここで fail-loud にする。packs は private payload 用の presigned delivery 経路に
  * 対応しておらず、黙って public 扱い / 除外をすると payload の露出ポリシーを誤るため。
  */
 function loadSnapshotProjections(
@@ -231,7 +231,7 @@ function loadSnapshotProjections(
   const visibility = discoverProblemsVisibility(problemsRootAbs);
   for (const problemId of Object.keys(visibility)) {
     throw new Error(
-      `[ProblemPackProjection] packId='${manifest.id}' problemId='${problemId}' declares visibility: private, but packs do not support the ADR-008 presigned payload path; refusing to synth (a private problem must not silently become public).`,
+      `[ProblemPackProjection] packId='${manifest.id}' problemId='${problemId}' declares visibility: private, but packs do not support presigned private-payload delivery; refusing to synth (a private problem must not silently become public).`,
     );
   }
 
@@ -416,7 +416,7 @@ export class ActivationStore {
   /**
    * Map the tenant's active records onto already-validated compose snapshot inputs.
    *
-   * [ADR-028/030 activation (#2323)] `options.withCoordinationProjection` を渡した経路
+   * `options.withCoordinationProjection` を渡した経路
    * (= {@link tenantCatalogSource}) だけが pack の coordination plugin を discover + bundle して
    * projections に載せる。既定 (event-pin など) は `projections: {}` で byte-identical。
    */
@@ -546,7 +546,7 @@ export function composeTenantEffectiveCatalog(input: {
  * source is byte-identical to {@link LocalCatalogSource}, so a core-only tenant
  * is unchanged. Reads ONLY the local store — no clock, no remote fetch.
  *
- * [ADR-028/030 activation (#2323)] This is the deploy / synth catalog path, so it opts into
+ * This is the deploy / synth catalog path, so it opts into
  * coordination projection: an installed + active pack that declares `interTeamCoordination.plugin`
  * has its coordination declaration + synth-bundled `.mjs` carried onto the effective bundle (and on
  * to the coordination dispatcher) instead of going inert once installed as a snapshot. A pack

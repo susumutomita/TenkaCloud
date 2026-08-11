@@ -173,7 +173,7 @@ export class IdentityProvider extends Construct {
       featurePlan: aws_cognito.FeaturePlan.ESSENTIALS,
       autoVerify: { email: true },
       accountRecovery: aws_cognito.AccountRecovery.EMAIL_ONLY,
-      // ADR-020 Phase E / audit MFA: tenant admin consoles は destructive 操作を扱う
+      // audit MFA: tenant admin consoles は destructive 操作を扱う
       // (= user 管理 / SAML / 削除 / IAM mutate)。 OPTIONAL では参加率に依存して未設定の admin が
       // 攻撃面に残るため、 REQUIRED で全 admin に TOTP 設定を強制する。
       //

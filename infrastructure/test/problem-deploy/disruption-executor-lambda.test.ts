@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { DisruptionExecutorLambda } from "../../lib/problem-deploy/disruption-executor-lambda";
 
 /**
- * [ADR-031 / #1419] cross-account disruption executor の CDK 境界を pin する。 核心は
+ * [#1419] cross-account disruption executor の CDK 境界を pin する。 核心は
  * 「自前 role は最小 (sts:AssumeRole は TenkaCloud-* のみ、 Invoke/UpdateStack は **持たない**)」
  * = 破壊力は assumed の CompetitorDeployRole に閉じ、 executor 自身の blast radius は IAM で封じる。
  * #1710 例外: Lite (= same-account) 注入のため ssm:SendCommand のみ自前 role に付与し、 同一アカウントの
@@ -48,7 +48,7 @@ function inlineActions(tpl: Template): string[] {
   );
 }
 
-describe("DisruptionExecutorLambda (ADR-031 #1419)", () => {
+describe("DisruptionExecutorLambda (#1419)", () => {
   it(
     "should provision a Node.js / arm64 executor Lambda with the wiring env",
     () => {

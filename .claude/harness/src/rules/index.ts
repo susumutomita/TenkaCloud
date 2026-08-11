@@ -1,5 +1,3 @@
-import { adrMustBeHtml } from "./adr-must-be-html.ts";
-import { adrSelfContained } from "./adr-self-contained.ts";
 import { agentRegistryConsistency } from "./agent-registry-consistency.ts";
 import { domainNoInfraImport } from "./domain-no-infra-import.ts";
 import { fileTooLarge } from "./file-too-large.ts";
@@ -16,8 +14,6 @@ import { runtimeCompositionRootOnly } from "./runtime-composition-root-only.ts";
 import { secretsManagerForbidden } from "./secrets-manager-forbidden.ts";
 
 export const architectureRules = [
-  adrMustBeHtml,
-  adrSelfContained,
   // Issue #2731: principle / manifest / implementation / test / docs drift must fail in CI.
   agentRegistryConsistency,
   iamWildcardNeedsJustify,

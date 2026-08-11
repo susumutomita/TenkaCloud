@@ -29,14 +29,14 @@ export interface DisruptionAuditRow {
   readonly requestId: string;
   readonly expiresAt: number;
   /**
-   * [ADR-037] scheduled fire で注入が実行される予定時刻 (ISO8601, UTC)。 immediate fire では
+   * scheduled fire で注入が実行される予定時刻 (ISO8601, UTC)。 immediate fire では
    * 未設定 (= firedAt と同時)。 audit 表示で 「N 分後に予約」 を可視化するために持つ。
    */
   readonly scheduledFor?: string;
 }
 
 // ---------------------------------------------------------------------------
-// [Issue #2442 / Phase C3] Disruptions aggregate (Issue #888 / ADR-031 / ADR-037).
+// [Issue #2442] Disruptions aggregate (Issue #888).
 //
 // Physical shape (unchanged, `disruptions-table.ts`):
 //   PK = `EVENT#<eventId>`     SK = `AUDIT#<firedAt>#<auditId>`  (append-only audit log)
@@ -77,7 +77,7 @@ export interface DisruptionAuditPage {
 }
 
 /**
- * [Issue #2442 / Phase C3] `EXEC#` at-least-once claim phase (ADR-037). `"event"` guards the
+ * [Issue #2442] `EXEC#` at-least-once claim phase. `"event"` guards the
  * EventBridge-delivered fired event; `"inject"` guards the aws-scheduler delayed injection of a
  * scheduled fire; `"recurring"` guards one tick of a recurring schedule (keyed additionally by
  * `firedAt` so ticks don't collide with each other, only with their own redelivery).
@@ -104,7 +104,7 @@ export interface DisruptionExecutionClaimInput {
 
 /**
  * [Issue #2442 / Phase C3] Domain shape of one `RECUR#<requestId>` recurring-fire registry row
- * (ADR-037 Slice 2), derived 1:1 from the pre-seam `disruption-recurring.ts` Put/Get/Query
+ * and derived 1:1 from the pre-seam `disruption-recurring.ts` Put/Get/Query
  * payload. Unlike the public {@link ActiveRecurringRow} view the operator UI reads (which omits
  * `tenantId`/`cancelledAt`), this is the full internal row: `tenantId` backs the ownership check
  * in `cancelRecurringRegistry`'s condition, `cancelledAt` backs the "still active" filter in
@@ -190,7 +190,7 @@ export interface DisruptionsRepository {
    */
   listAuditSince(eventId: string, sinceIso: string): Promise<readonly DisruptionAuditRow[]>;
 
-  // --- Recurring-fire registry (`EVENT#<eventId>` / `RECUR#<requestId>`, ADR-037 Slice 2) ---
+  // --- Recurring-fire registry (`EVENT#<eventId>` / `RECUR#<requestId>`) ---
   /**
    * Appends one recurring-fire registry row. Conditioned on the physical SK being unused; a
    * collision propagates as an uncaught error (matches the pre-seam handler's unhandled Put).
@@ -222,7 +222,7 @@ export interface DisruptionsRepository {
     cancelledAt: string,
   ): Promise<DisruptionRecurringMutationOutcome>;
 
-  // --- Executor at-least-once claim (`EXEC#<requestId>#<teamId>[...]` / `METADATA`, ADR-031) ---
+  // --- Executor at-least-once claim (`EXEC#<requestId>#<teamId>[...]` / `METADATA`) ---
   /**
    * Conditional Put claim on one executor execution slot (per-team, per-phase). `already` =
    * this delivery was already processed (at-least-once redelivery); nothing is written.
@@ -232,7 +232,7 @@ export interface DisruptionsRepository {
   /**
    * TTL-equivalent sweep for SQL backends (mirrors {@link EventsRepository.pruneExpired} /
    * {@link TeamsRepository.pruneExpired} / {@link NotificationsRepository.pruneExpired}).
-   * DynamoDB has native TTL on `expiresAt`; the SQLite backends have none (ADR-049 §5.2) and
+   * DynamoDB has native TTL on `expiresAt`; the SQLite backends have none and
    * rely on this being run on a schedule. Sweeps every row shape (audit / fire-claim /
    * recurring / exec-claim).
    */

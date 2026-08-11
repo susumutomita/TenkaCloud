@@ -32,14 +32,13 @@ export interface AdminConsoleInsightStackProps extends cdk.StackProps {
    * 競技 Event の総数を集計するため `ProblemDeployBackendStack` の Events table を
    * cross-stack 参照する。Read-only。
    *
-   * [Issue #2440 / ADR-049 §5.1 Phase A5] `controlDataBackend` が純 SQL (`turso`) のとき
+   * [Issue #2440] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。
    */
   readonly eventsTable?: Table;
   /**
-   * Phase 1.B 以降の drill-down で読む Teams table。Phase 1.A では env として渡すのみ
-   * (Lambda 側で read 権限は付与しない、ADR-011 D6 最小権限)。{@link eventsTable} と同じ条件で
-   * 純 SQL backend 選択時は `undefined`。
+   * drill-down で読む Teams table。存在するときだけ Lambda に read-only 権限を付与する。
+   * {@link eventsTable} と同じ条件で純 SQL backend 選択時は `undefined`。
    */
   readonly teamsTable?: Table;
   /**
@@ -60,7 +59,7 @@ export interface AdminConsoleInsightStackProps extends cdk.StackProps {
    */
   readonly provisioningStateMachineArn?: string;
   /**
-   * Issue #950 (ADR-020 Phase D): admin 操作の audit log table。 ProblemDeployBackendStack で
+   * Issue #950: admin 操作の audit log table。 ProblemDeployBackendStack で
    * 作成された Table を cross-stack read で渡す。 未指定なら admin-insight の audit route は 503
    * (= 旧 stack 互換)。
    */
@@ -100,7 +99,7 @@ export interface AdminConsoleInsightStackProps extends cdk.StackProps {
    * ref として AdminConsoleInsightStack に流れている。 tenant 側 stack から adminAuditLogTable を
    * 直接読みに行くと逆向きの cross-stack ref が増え cyclic 化する。 AdminConsoleInsightStack は
    * Control Plane (Phase 1 audit Lambda) + Application Plane (Phase 2 audit Lambda) の両方を
-   * 同じ table に書き込ませる **観測ハブ** として位置付ける (= ADR-011 D6 の admin insight 集約)。
+   * 同じ table に書き込ませる **観測ハブ** として位置付ける (admin insight 集約)。
    */
   readonly tenantSignInAudit?: ReadonlyArray<{
     readonly tenantId: string;
@@ -118,15 +117,15 @@ export interface AdminConsoleInsightStackProps extends cdk.StackProps {
 }
 
 /**
- * Admin Console Insight Stack (ADR-011 / issue #590 Phase 1.A)。
+ * Admin Console Insight Stack (issue #590)。
  *
  * System Admin が tenant 横断で deploy 進捗を観察するための専用 HTTP API + Lambda を提供する。
  *
- * 設計判断 (ADR-011 から):
- * - **D1 採用**: 新 Lambda + 新 API を立てる (= 既存 tenant API に admin 例外を漏らさない)
- * - **D2 採用**: SBT 標準 SystemAdmin group の Cognito claim で authorize。JWT Authorizer
+ * セキュリティ境界:
+ * - 専用 Lambda + API に分離し、既存 tenant API に admin 例外を漏らさない
+ * - SBT 標準の `custom:userRole=SystemAdmin` claim を要求する。JWT Authorizer
  *   (1 段目) + handler 内の claim 再検査 (2 段目) で 403 を返す
- * - **D6 Phase 1**: read-only に限定 (write は別 ADR が必要)
+ * - read-only に限定する。write 経路には別の実装、review、test が必要
  *
  * 物理影響:
  * - HTTP API (API GW v2) 1 個 + Lambda 1 個 + JWT Authorizer 1 個。新 table は無し
@@ -205,7 +204,7 @@ export class AdminConsoleInsightStack extends cdk.Stack {
     const httpApi = new HttpApi(this, "AdminInsightHttpApi", {
       apiName: `admin-insight-${this.stackName}`,
       description:
-        "TenkaCloud Admin Insight API (ADR-011 Phase 1.A). System Admin が tenant 横断で deploy 進捗を read する経路。",
+        "TenkaCloud Admin Insight API. System Admin が tenant 横断で deploy 進捗を read-only 参照する経路。",
       defaultAuthorizer: authorizer,
       corsPreflight: {
         allowOrigins,
@@ -256,8 +255,7 @@ export class AdminConsoleInsightStack extends cdk.Stack {
     });
 
     // Issue #658: Provisioning Jobs page が叩く CodePipeline 実行履歴 route。
-    // PR-683 で Lambda handler / IAM は追加したが API GW route 登録漏れで "Failed to fetch"
-    // (= CORS preflight が 404 に当たって TypeError) が出ていた。本 PR で追加。
+    // Lambda handler / IAM と同じ route を登録し、CORS preflight が 404 になるのを防ぐ。
     httpApi.addRoutes({
       path: "/admin/insight/pipeline-executions",
       methods: [HttpMethod.GET],
@@ -287,7 +285,7 @@ export class AdminConsoleInsightStack extends cdk.Stack {
     // して残り、 least-privilege に反する + 再 handler 追加時に無審査で再武装するため、 route 登録と
     // Lambda 側の ControlPlane UserPool 権限/env を撤去した。
 
-    // Issue #950 (ADR-020 Phase D): admin audit log read route (= cross-tenant 監査)
+    // Issue #950: admin audit log read route (cross-tenant 監査)
     httpApi.addRoutes({
       path: "/admin/insight/audit",
       methods: [HttpMethod.GET],

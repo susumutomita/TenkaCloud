@@ -84,8 +84,8 @@ function templateForCost(
 
 /**
  * [#2168] The organizer console is the CLOUD console: its catalog is the set of
- * problems an operator can build a cloud event from. A local-only (`docker/compose`,
- * ADR-023 local-play) problem is categorically not that — the deploy worker rejects a
+ * problems an operator can build a cloud event from. A local-only `docker/compose` problem,
+ * delivered through Docker local-play, is categorically not that — the deploy worker rejects a
  * cloud deploy of it before any mutation — so listing it here only invites the operator
  * to pick a problem they cannot deploy. We drop those entries from the effective catalog
  * (browse + event picker alike); they remain reachable through the local-play path

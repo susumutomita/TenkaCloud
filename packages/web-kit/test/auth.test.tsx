@@ -1,6 +1,6 @@
 /**
  * Issue #1418 web-kit Stage 3: 共有 AuthProvider の regression test。
- * idle-logout (#859) / token memory 保持 (ADR-025) / login・logout 委譲 / useAuth guard を pin。
+ * idle-logout (#859) / token memory 保持 / login・logout 委譲 / useAuth guard を pin。
  */
 
 import type { CognitoOAuthConfig, TokenSet } from "@tenkacloud/auth-client";

@@ -3,7 +3,7 @@ import { Component, type ErrorInfo, type ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 /**
- * ADR-012 Phase 5: PortalPluginSlots の振る舞い pin。
+ * PortalPluginSlots の振る舞いを pin する。
  *
  * loader を mock することで「plugin が throw する case」 「resolve できない case」 「複数 slot
  * が並ぶ case」 を deterministic に観測する。 production catalog (= problems/ 配下の static
@@ -63,7 +63,7 @@ afterEach(() => {
   mockGetProjection.mockClear();
 });
 
-describe("PortalPluginSlots (ADR-012 Phase 5)", () => {
+describe("PortalPluginSlots", () => {
   it("should return null and render nothing when no slot has a loader", () => {
     mockLoadPluginSlot.mockReturnValue(undefined);
     const { container } = render(<PortalPluginSlots {...baseProps} />);

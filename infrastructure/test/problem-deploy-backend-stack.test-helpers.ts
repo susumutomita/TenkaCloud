@@ -145,7 +145,7 @@ export const synthWithOpsMonitoring = memoizeTemplate((): Template => {
 
 // Issue #2290 / #2440: controlDataBackend: "turso" を反映させ、監査 Lambda 群の env に
 // CONTROL_DATA_BACKEND="turso" が注入されることを検証するための別 synth (= synthWithAuditLogDisabled
-// と同じ pattern)。[Issue #2440 / ADR-049 §5.1 Phase A5] "turso" は純 SQL backend (Events/Teams
+// と同じ pattern)。[Issue #2440] "turso" は純 SQL backend (Events/Teams
 // テーブルを synth しない) を意味する。
 export const synthWithControlDataBackendTurso = memoizeTemplate((): Template => {
   const app = new cdk.App();
@@ -210,7 +210,7 @@ export const synthWithDeployConcurrentBuildLimit = memoizeTemplate((): Template 
   return Template.fromStack(stack);
 });
 
-// #778 ADR-016 Phase 2: eventBusArn を省略した Lite mode の synth。 別 stackId / bucket name を渡す。
+// #778: eventBusArn を省略した Lite mode の synth。 別 stackId / bucket name を渡す。
 // stackId / sourceBucketName の組み合わせごとにキャッシュされる (= 同じ引数の再呼び出しのみ再利用)。
 export const synthLite = memoizeTemplate((stackId: string, sourceBucketName: string): Template => {
   const app = new cdk.App();
@@ -298,7 +298,7 @@ export const synthParticipantPortalLambdaOnlyWithJobLogGroup = memoizeTemplate((
 });
 
 /**
- * ADR-030 Phase 2 (#1420): CoordinationDispatcherLambda 単体 synth。 stack 全体 synth は
+ * Issue #1420: CoordinationDispatcherLambda 単体 synth。stack 全体 synth は
  * ParticipantPortalHosting の dist asset を要求するため、 IAM (最小権限) / Function URL の検証は
  * construct 単体で行う (= synthParticipantPortalLambdaOnly と同方針)。
  */

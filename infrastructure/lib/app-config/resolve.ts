@@ -398,7 +398,7 @@ function resolveDeployConcurrentBuildLimit(env: NodeJS.ProcessEnv): number | und
 }
 
 /**
- * Issue #2290 (ADR-049 §5.1): control-plane data backend の選択フラグ
+ * Issue #2290: control-plane data backend の選択フラグ
  * (`CDK_PARAM_CONTROL_DATA_BACKEND`) を synth 時に検証する。control-data repository seam を
  * `dynamodb` / `turso` の二択から選ぶ (#2677 で `sql` alias と `*-mirror` bridge を削除)。
  * **default `"dynamodb"`** (未設定 / 空文字は在来 DDB 経路で、
@@ -426,14 +426,14 @@ function resolveDeployQuotaByTier(env: NodeJS.ProcessEnv) {
 }
 
 /**
- * Issue #2230 (ADR-035): `CDK_PARAM_FEATURES` (JSON) を synth 時に検証して SPA feature flag
+ * Issue #2230: `CDK_PARAM_FEATURES` (JSON) を synth 時に検証して SPA feature flag
  * の deploy 時 override にする。壊れた値を runtime-config.json まで持ち越さないため、
  * JSON でない / object でない / boolean 以外の値はここで fail loudly する
  * (= SPA 側 `resolveFeatureFlags` は tolerant だが、deploy 入力の誤りは synth で止める)。
  * 未設定は undefined (= runtime-config に `features` key を書かない)。
  */
 /**
- * Issue #2948 / ADR-0005: machine (M2M) token 経路の deploy 時 opt-in flag key。
+ * Issue #2948: machine (M2M) token 経路の deploy 時 opt-in flag key。
  *
  * 既存の `CDK_PARAM_FEATURES` 機構に相乗りする (= 新しい env / 新しい仕組みを足さない)。
  * ON にするのは `CDK_PARAM_FEATURES='{"machineTokenPath":true}'`。

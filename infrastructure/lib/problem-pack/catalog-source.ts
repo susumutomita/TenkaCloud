@@ -30,7 +30,7 @@
  * Known scope limits of the #2462 Lite wiring (documented so half-states are not
  * mistaken for done):
  *   - Pack `visibility: private` fails loud at synth because packs do not support
- *     the ADR-008 presigned payload path yet; pack payloads must not be silently public.
+ * the presigned payload path yet; pack payloads must not be silently public.
  *   - SaaS pooled activation is unwired by design (#2459): only Lite `bin/tenkacloud-lite.ts`
  *     reads the activation store. `bin/infrastructure.ts` passes no catalog source on the
  *     SaaS synth path, and `saas-pack-guard.ts` now makes that FAIL LOUD at synth when any
@@ -100,7 +100,7 @@ export class LocalCatalogSource implements CatalogSource {
       runtimes: discoverProblemsRuntime(problemsRoot),
       disruptions: discoverProblemsDisruptions(problemsRoot),
       coordination: discoverProblemsCoordination(problemsRoot),
-      // ADR-030 Phase 3b: synth 時に coordination plugin を self-contained .mjs へ bundle (esbuild)。
+      // synth 時に coordination plugin を self-contained.mjs へ bundle (esbuild)。
       coordinationBundles: bundleCoordinationPlugins(problemsRoot),
     };
   }
@@ -187,7 +187,7 @@ export class SnapshotCatalogSource implements CatalogSource {
       copyProjectionValue(pack.phases, entry.problemId, projections.phases);
       if (projections.visibility === "private") {
         throw new Error(
-          `[SnapshotCatalogSource] packId='${entry.provenance.packId}' problemId='${entry.problemId}' declares visibility: private, but packs do not support the ADR-008 presigned payload path; refusing to synth (a private problem must not silently become public).`,
+          `[SnapshotCatalogSource] packId='${entry.provenance.packId}' problemId='${entry.problemId}' declares visibility: private, but packs do not support presigned private-payload delivery; refusing to synth (a private problem must not silently become public).`,
         );
       }
       copyProjectionValue(pack.visibility, entry.problemId, projections.visibility);

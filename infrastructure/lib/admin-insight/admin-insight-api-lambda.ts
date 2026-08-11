@@ -11,7 +11,7 @@ import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
 export interface AdminInsightApiLambdaProps {
   /**
    * 問題 deploy 状況 (active / failed 集計) の出元。`ProblemDeployBackendStack` の
-   * `Deployments` table を cross-stack 参照する。Read-only (= ADR-011 D6 Phase 1 は read-only)。
+   * `Deployments` table を cross-stack の read-only 参照として使う。
    *
    * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env も
@@ -23,7 +23,7 @@ export interface AdminInsightApiLambdaProps {
    * 競技 Event 総数の出元。`ProblemDeployBackendStack` の `Events` table を cross-stack 参照する。
    * Read-only。
    *
-   * [Issue #2440 / ADR-049 §5.1 Phase A5] `controlDataBackend` が純 SQL (`turso`) のとき
+   * [Issue #2440] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env
    * `EVENTS_TABLE_NAME` も grant も付与しない — Events 集計は repository seam
    * (`resolveEventsRepository` / injected runtime) が SQL executor 直結で処理する。
@@ -52,7 +52,7 @@ export interface AdminInsightApiLambdaProps {
    */
   readonly provisioningStateMachineArn?: string;
   /**
-   * Issue #950 (ADR-020 Phase D): admin audit log table。 指定時は SystemAdmin が
+   * Issue #950: admin audit log table。 指定時は SystemAdmin が
    * /admin/insight/audit route で cross-tenant に audit を読めるようになる (= read-only)。
    * 未指定なら route は 503 を返す (= 旧 stack 互換)。
    */
@@ -97,10 +97,10 @@ export interface AdminInsightApiLambdaProps {
 }
 
 /**
- * Admin Insight API Lambda (ADR-011 / issue #590 Phase 1.A)。
+ * Admin Insight API Lambda (issue #590)。
  *
  * System Admin が admin-console から cross-tenant に deploy 進捗を見る経路。
- * tenant 専用 Lambda (= DeployApi / EventApi) と分離して認可境界を明確にする (ADR-011 D1 採用案)。
+ * tenant 専用 Lambda (DeployApi / EventApi) と分離して認可境界を明確にする。
  *
  * routes (Phase 1.A):
  *   GET /admin/insight/tenants/summary?tenantIds=t1,t2,t3
@@ -133,7 +133,7 @@ export class AdminInsightApiLambda extends Construct {
         // handler は env の有無で route を 503 にするか実 SFN.ListExecutions を呼ぶか分岐する。
         DEPROVISIONING_STATE_MACHINE_ARN: props.deprovisioningStateMachineArn ?? "",
         PROVISIONING_STATE_MACHINE_ARN: props.provisioningStateMachineArn ?? "",
-        // Issue #950 (ADR-020 Phase D): admin audit log table 名 (= read-only 経由で表示)
+        // Issue #950: admin audit log table 名 (read-only 経由で表示)
         ADMIN_AUDIT_LOG_TABLE_NAME: props.adminAuditLogTable?.tableName ?? "",
         // Issue #2311: 監査ログ feature flag (無効時のみ AUDIT_LOG_ENABLED="false" を注入)。
         ...auditLogEnabledEnv(props.auditLogEnabled),
@@ -154,15 +154,15 @@ export class AdminInsightApiLambda extends Construct {
       },
     });
 
-    // ADR-011 Phase 1 D6: read-only に限定。Phase 1.A は Deployments / Events のみだったが、
-    // Phase 1.B drill-down (#598) で Teams も読む必要が出たため read を追加する。
+    // read-only に限定する。当初の Deployments / Events に加え、drill-down (#598) で
+    // Teams も読むため read 権限を付与する。
     // GSI も含めて read できる必要があるので grantReadData (= GetItem / Query / Scan + index)
     // を使う (= 個別 PolicyStatement で限定するより SBT 同型の grantRead で十分)。
     // Issue #2441: 純 SQL backend では table 自体が無いので grant も付与しない。
     props.deploymentsTable?.grantReadData(this.fn);
     // Issue #2440: 純 SQL backend では table 自体が無いので grant も付与しない。
     props.eventsTable?.grantReadData(this.fn);
-    // Issue #950 (ADR-020 Phase D): admin audit log の read-only access (GSI も含む)
+    // Issue #950: admin audit log の read-only access (GSI も含む)
     props.adminAuditLogTable?.grantReadData(this.fn);
     props.teamsTable?.grantReadData(this.fn);
 
@@ -170,7 +170,7 @@ export class AdminInsightApiLambda extends Construct {
     // DescribeStackEvents / DescribeStackResources を直接叩く。Resource:* なのは、CFn の
     // これら API は ARN ベースの IAM 絞り込みをサポートしていない (= account 内全 stack に
     // 同列で適用される) ため。同一 account 内のみで、cross-account は ExternalId 経由の
-    // AssumeRole が別途必要 (= Phase 2 ADR-011 D4 で実装)。
+    // AssumeRole 経路を別途実装する必要がある。
     this.fn.addToRolePolicy(
       new PolicyStatement({
         effect: Effect.ALLOW,

@@ -1,5 +1,5 @@
 /**
- * [ADR-031 / Issue #1419] executor の DDB 副作用 dep 実装 (= `executeDisruptionAction` の
+ * [Issue #1419] executor の DDB 副作用 dep 実装 (`executeDisruptionAction` の
  * `claimExecution` / `resolveDeployment` の具体実装)。 既存 pattern を踏襲し新 SDK 依存を増やさない:
  *   - claim: disruption-fire の REQUEST# 冪等 claim と同型 (conditional Put + CCF=duplicate)
  *   - resolve: leaderboard-score-events の GSI1(TENANT#)+eventId filter query と同型
@@ -33,7 +33,7 @@ const DEFAULT_EXEC_TTL_SECONDS = 7 * 24 * 60 * 60;
  * `EXEC#{requestId}#{teamId}` を conditional Put で奪う。 at-least-once 配送に対する per-team 冪等性。
  * ConditionalCheckFailed = 既に処理済 (duplicate)、 それ以外の error は伝播。
  *
- * [ADR-037] phase で claim key を分ける:
+ * phase で claim key を分ける:
  *   - `"event"` (既定): fired event (EventBridge at-least-once) の重複を弾く。
  *   - `"inject"`: scheduled fire の遅延注入 (aws-scheduler at-least-once) の重複を弾く。 遅延注入は
  *     fired event とは別の配送経路なので、 別 key で claim しないと scheduler 再配送で二重注入になる。

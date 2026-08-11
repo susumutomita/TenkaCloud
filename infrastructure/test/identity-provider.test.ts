@@ -111,7 +111,7 @@ describe("IdentityProvider", () => {
       template.resourceCountIs("AWS::Cognito::UserPoolUICustomizationAttachment", 0);
     });
 
-    it("ADR-020 Phase E: should configure tenant UserPool with MFA REQUIRED + TOTP-only", () => {
+    it("should configure tenant UserPool with MFA REQUIRED + TOTP-only", () => {
       const { template } = synth("tenant-1", "https://d123abc.cloudfront.net");
       // MFA を REQUIRED にし、 SMS を無効化、 TOTP (SOFTWARE_TOKEN_MFA) のみ許可。
       // destructive 操作を扱う tenant admin console の baseline (OPTIONAL は不可)。

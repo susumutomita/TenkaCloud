@@ -2,12 +2,12 @@ import * as cdk from "aws-cdk-lib";
 import type { Construct } from "constructs";
 
 /**
- * ADR-049 Phase 4 (Issue #2293) SLICE 4 — the Always-On runtime **tagging contract** (ADR-049 §8,
- * Table 5). Every event-runtime CDK stack/resource carries this `TenkaCloud:*` tag set so the
+ * Issue #2293 — the Always-On runtime **tagging contract**. Every event-runtime CDK stack/resource
+ * carries this `TenkaCloud:*` tag set so the
  * cleanup sweeper ({@link ./sweeper/sweep.ts}) can find and force-destroy runtimes whose event has
  * ended — and, crucially, can tell its own stacks apart from Lite/SaaS stacks it must never touch.
  *
- * The four tags mirror ADR-049 §8 Table 5 exactly:
+ * The contract requires four tags:
  *   - `TenkaCloud:EventId`    — ULID of the event (cleanup sweeper + per-event cost attribution)
  *   - `TenkaCloud:TenantId`   — tenant identifier (cross-tenant hygiene audits)
  *   - `TenkaCloud:ExpiresAt`  — ISO-8601 hard deadline (event end + grace); anything past this is swept
@@ -50,7 +50,7 @@ export function normalizeExpiresAt(expiresAt: Date | string): string {
 }
 
 /**
- * Apply the four ADR-049 §8 tags to `scope` (a Stack or any Construct — CDK propagates tags to
+ * Apply the four tags to `scope` (a Stack or any Construct — CDK propagates tags to
  * every taggable resource beneath it). `expiresAt` is normalized to ISO-8601 first, so a bad value
  * fails at synth time, not silently at sweep time.
  */

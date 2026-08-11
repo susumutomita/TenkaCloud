@@ -2,7 +2,7 @@ import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
 import type { CoordinationTickBatch } from "../shared/coordination-tick-contract.js";
 
 /**
- * ADR-028 scoring-driven tick (#2324): 採点 pass → CoordinationDispatcher Lambda の直接 Invoke client。
+ * scoring-driven tick Issue #2324: 採点 pass → CoordinationDispatcher Lambda の直接 Invoke client。
  *
  * `handler-no-direct-sdk-import` は `handlers/**\/index.ts` だけを検査する。 SDK client (= LambdaClient)
  * は本 service module に閉じ込め、 handler index.ts へは注入可能な {@link CoordinationTickInvoker}

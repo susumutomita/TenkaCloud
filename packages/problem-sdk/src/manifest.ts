@@ -26,7 +26,7 @@ const PACK_ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*(?:\.[a-z0-9]+(?:-[a-z0-9]+)*)
 /** The current pack manifest schema version. Authors pin `schemaVersion` to this. */
 export const PACK_SCHEMA_VERSION = 1 as const;
 
-/** The providers a pack may declare a required runtime for (ADR-026 / ADR-027). */
+/** The providers a pack may declare a required runtime for. */
 export const PACK_PROVIDERS = ["aws", "gcp", "azure", "sakura"] as const;
 
 /**

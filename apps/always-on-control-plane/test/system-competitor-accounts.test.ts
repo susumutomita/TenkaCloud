@@ -45,7 +45,7 @@ beforeEach(async () => {
   await env.CONTROL_DB.exec("DELETE FROM competitor_account_projection;");
 });
 
-describe("PUT /v1/system/competitor-accounts/:tenantId/:awsAccountId (ADR-050)", () => {
+describe("PUT /v1/system/competitor-accounts/:tenantId/:awsAccountId", () => {
   it("should register the tenant-owned account with a valid system-admin bearer", async () => {
     const res = await put("tenant-acme", "111111111111", VALID_BODY, SYSTEM_TOKEN);
     expect(res.status).toBe(StatusCodes.NO_CONTENT);

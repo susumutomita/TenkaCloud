@@ -1,7 +1,7 @@
 import type { DeploymentItem } from "../deploy-handler/types.js";
 
 /**
- * #1421 (ADR-029): Attack-resilience liveness invariants。
+ * #1421: Attack-resilience liveness invariants。
  *
  * 競技 (Battle round) は攻撃 / disruption が当たっても **必ず終端に達する**ことを platform が保証する。
  * 本 module はその 2 つの invariant を純関数として encode する:

@@ -49,7 +49,7 @@ export function DisruptionsPanel({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [fireTarget, setFireTarget] = useState<FireTarget | null>(null);
   const [lastFired, setLastFired] = useState<string | null>(null);
-  // [ADR-037 Slice 2] bump 後に RecurringPanel が一覧を取り直す (= 定期 fire 直後に反映する) signal。
+  // bump 後に RecurringPanel が一覧を取り直す (= 定期 fire 直後に反映する) signal。
   const [recurringRefresh, setRecurringRefresh] = useState(0);
 
   const reloadAudit = useCallback(async () => {
@@ -132,7 +132,7 @@ export function DisruptionsPanel({
               maxWidth: 560,
             },
             {
-              // [#1775 / ADR-013 Phase 2] metadata 宣言の自動発火条件 (OR 結合) を読み取り表示。
+              // Issue #1775: metadata 宣言の自動発火条件 (OR 結合) を読み取り表示。
               // 条件の source of truth は problem の metadata.json なのでここでは編集しない。
               id: "autoFire",
               header: t("disruptions.col_auto_fire"),
@@ -211,7 +211,7 @@ export function DisruptionsPanel({
               cell: (r: DisruptionAuditRow) => String(r.targetTeamIds.length),
             },
             {
-              // [ADR-037] scheduled fire の注入予定時刻 (即時 fire は "-")。
+              // scheduled fire の注入予定時刻 (即時 fire は "-")。
               id: "scheduledFor",
               header: t("disruptions.col_scheduled_for"),
               cell: (r: DisruptionAuditRow) => r.scheduledFor ?? "-",

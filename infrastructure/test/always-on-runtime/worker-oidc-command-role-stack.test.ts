@@ -10,7 +10,7 @@ import {
 } from "../../lib/always-on-runtime/worker-oidc-command-role-stack.js";
 
 /**
- * ADR-050 (Issue #2555 slice B) — Worker OIDC command-seam trust.
+ * Issue #2555: Worker OIDC command-seam trust.
  * Pins the security-critical invariants of the federated command role:
  *   - trust policy hard-pins aud (StringEquals) + sub (StringLike, command-scoped)
  *   - the permission surface is exactly one statement: events:PutEvents to the
@@ -44,7 +44,7 @@ function synth(props?: {
   return Template.fromStack(stack);
 }
 
-describe("normalizeIssuer (ADR-050 issuer contract)", () => {
+describe("normalizeIssuer (issuer contract)", () => {
   it("should strip a trailing slash so the issuer matches the Worker origin-derived iss claim", () => {
     expect(normalizeIssuer(`${ISSUER}/`)).toEqual({
       providerUrl: ISSUER,
@@ -66,7 +66,7 @@ describe("normalizeIssuer (ADR-050 issuer contract)", () => {
   });
 });
 
-describe("WorkerOidcCommandRoleStack (#2555 ADR-050 slice B)", () => {
+describe("WorkerOidcCommandRoleStack (#2555)", () => {
   it("should hard-pin the OIDC trust policy aud (StringEquals) and sub (StringLike, command-scoped)", () => {
     const t = synth();
     t.hasResourceProperties("AWS::IAM::Role", {
@@ -88,7 +88,7 @@ describe("WorkerOidcCommandRoleStack (#2555 ADR-050 slice B)", () => {
     });
   });
 
-  it("should name the role tenkacloud-alwayson-command by default (ADR-050 section 2)", () => {
+  it("should name the role tenkacloud-alwayson-command by default", () => {
     synth().hasResourceProperties("AWS::IAM::Role", {
       RoleName: "tenkacloud-alwayson-command",
     });

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { metadataToEntry } from "./problem-catalog.js";
 
 /**
- * [#2925 / #2926] 投影 (`metadataToEntry`) の fairness contract は participant-portal から
+ * Issue #2925, #2926: 競技者向け投影 (`metadataToEntry`) は participant-portal から
  * ここへ移した。 消費者が 2 つになったため — build 時に bundle へ焼く portal と、 実行時に
  * `/portal/problem-catalog` で配る local-play control plane。 投影が壊れたときに落ちるべき
  * test は、 投影と同じ場所に居るべきである。
@@ -34,11 +34,11 @@ const FAIRNESS_FIXTURE = {
   ],
 } as Parameters<typeof metadataToEntry>[0];
 
-describe("metadataToEntry (fairness projection)", () => {
+describe("metadataToEntry competitor-safe projection", () => {
   it("should keep only publicHint:true phases/disruptions and drop the description", () => {
     const entry = metadataToEntry(FAIRNESS_FIXTURE);
 
-    // Fairness contract: competitor-facing bundle must not carry the authoring `description`.
+    // Competitor-facing bundles must not carry the authoring `description`.
     expect((entry as unknown as { description?: string }).description).toBeUndefined();
 
     // Only the publicHint:true phase/disruption survive (secret ones are filtered out).
@@ -50,7 +50,7 @@ describe("metadataToEntry (fairness projection)", () => {
     expect(entry.endpoints[0]?.slot).toBe("main");
   });
 
-  it("should default the runtime to aws/cloudformation when none is declared (ADR-026/027)", () => {
+  it("should default the runtime to aws/cloudformation when none is declared", () => {
     expect(metadataToEntry(FAIRNESS_FIXTURE).runtime).toEqual({
       provider: "aws",
       engine: "cloudformation",
@@ -154,7 +154,7 @@ describe("metadataToEntry (fairness projection)", () => {
 /**
  * Issue #2786: curriculum 位置と講座対応の投影。
  *
- * ここは fairness contract の一部である。`assessment_criteria` は「何が採点されるか」を
+ * `assessment_criteria` は「何が採点されるか」を
  * 問題を開く前に列挙し、`misconceptions` は「よくある誤り」の形で答えの方向を示すため、
  * どちらも participant bundle に載せない。`spoilerPolicy` は authoring 情報なので出さない。
  */

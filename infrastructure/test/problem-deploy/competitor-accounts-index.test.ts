@@ -2,7 +2,7 @@ import { StatusCodes } from "http-status-codes";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * Issue #1424: competitor-accounts-handler の Hono app (index.ts, ADR-002 Phase 2.1) を
+ * Issue #1424: competitor-accounts-handler の Hono app (index.ts) を
  * route-wiring 層として pin する。 既存の competitor-accounts-routes.test.ts は CRUD happy +
  * 一部 error を見ているが、 SAML config 4 route / onError (MissingTenantClaim / Forbidden+audit /
  * generic) / 各 internal_error 枝 / ExternalIdMissing が未カバーで 55% branch だった。

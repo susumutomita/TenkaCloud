@@ -7,14 +7,14 @@ import {
 } from "./verify.js";
 
 /**
- * Issue #1727 / ADR-039: Customer Execution Plane validation core.
+ * Issue #1727: Customer Execution Plane validation core.
  *
  * In enterprise customer-execution mode the hosted TenkaCloud control plane
  * sends a signed `CloudActionIntent`, but provider-native authority never leaves
  * the customer trust boundary. This module is the gate a customer-controlled
  * execution component runs *before* it acquires any local authority.
  *
- * It enforces the five properties ADR-039 requires, in order, and fails closed:
+ * It enforces five customer-local properties in order and fails closed:
  *   1. intent authenticity  — did TenkaCloud sign this exact request? (`verifyIntent`)
  *   2. intent authorization — does THIS customer allow this action here? (local policy)
  *   3. artifact integrity   — are these the approved bytes? (signature-covered digest)
@@ -28,8 +28,7 @@ import {
  */
 
 /**
- * ADR-017 D4 PolicyEvaluator. Defined in the ADR but not previously realized in
- * code; the Customer Execution Plane is its first consumer. Policy authorship is
+ * Fail-closed `PolicyEvaluator`. The Customer Execution Plane is its first consumer. Policy authorship is
  * the library's responsibility to *call*, not to *implement* — callers plug in
  * an inline allowlist, OPA, Cedar, a tenant policy document, etc.
  */
@@ -130,7 +129,7 @@ export interface CustomerExecutionRejected {
   readonly reason: CustomerExecutionRejectionReason | IntentVerifyFailureReason;
   readonly details?: readonly string[];
   /**
-   * Issue #1727 / ADR-039: 認証 (signature/schema/TTL/replay) を通過した後の
+   * Issue #1727: 認証 (signature/schema/TTL/replay) を通過した後の
    * 拒否 (authorization / artifact) には検証済み intent を添える。 監査ログに
    * tenant / problem / deployment の文脈を残すため。 authenticity 失敗時は intent が
    * 無いので undefined。
@@ -144,7 +143,7 @@ export interface CustomerExecutionPlaneOptions {
   readonly policy: CustomerExecutionPolicy;
   /** JWS verification inputs: `resolveSecret`, optional `nonceStore` (replay), `now`. */
   readonly verify: IntentVerifyOptions;
-  /** Fail-closed local authorization (ADR-017 D4). */
+  /** 評価不能時に拒否する customer-local policy evaluator。 */
   readonly policyEvaluator: PolicyEvaluator;
   /** Optional fail-closed artifact safety check over the digest-verified bytes. */
   readonly artifactInspector?: ArtifactInspector;

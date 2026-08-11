@@ -209,9 +209,9 @@ describe("extractClaims (REST API vs HTTP API authorizer 形式)", () => {
   });
 });
 
-/* ---- ADR-020 / Issue #926 Phase B: role enum + requireRole ---- */
+/* ---- Issue #926: role enum + requireRole ---- */
 
-describe("TENANT_ROLES enum (ADR-020)", () => {
+describe("TENANT_ROLES enum", () => {
   it("should have 3 roles (Admin / Operator / Viewer)", () => {
     expect(TENANT_ROLES).toEqual(["TenantAdmin", "TenantOperator", "TenantViewer"]);
   });
@@ -223,7 +223,7 @@ describe("TENANT_ROLES enum (ADR-020)", () => {
   });
 });
 
-describe("requireRole (ADR-020 / #926 Phase B)", () => {
+describe("requireRole (#926)", () => {
   const original = process.env.DEFAULT_USER_ROLE;
   afterEach(() => {
     if (original === undefined) delete process.env.DEFAULT_USER_ROLE;

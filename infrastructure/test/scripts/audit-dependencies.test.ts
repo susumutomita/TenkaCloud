@@ -5,13 +5,13 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runAudit } from "../../../scripts/security/audit-dependencies";
 
 /**
- * ADR (mini Shai-Hulud 2nd 対策) のための audit-dependencies.ts の挙動 pin。
+ * mini Shai-Hulud 2nd 型の supply-chain attack 対策として audit-dependencies.ts の挙動を pin。
  * fake node_modules を tmpdir に組み立てて、 baseline 不在 / 一致 / 追加 / hook 変更を
  * それぞれ検出することを確認する。 本テストは production の node_modules / baseline を
  * 触らない (= isolated)。
  */
 
-describe("audit-dependencies (ADR mini Shai-Hulud 2nd 対策)", () => {
+describe("audit-dependencies supply-chain attack checks", () => {
   let tmpRoot: string;
 
   beforeEach(() => {

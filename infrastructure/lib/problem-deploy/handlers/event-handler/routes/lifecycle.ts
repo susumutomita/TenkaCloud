@@ -59,7 +59,7 @@ function scheduleOutcomeResponse(c: Context, outcome: SetEventScheduleOutcome): 
         StatusCodes.BAD_REQUEST,
       );
     case "past_teardown_at":
-      // ADR-047: 過去 teardownAt を弾く (即時撤去は別の Delete Event 経路を使う)。
+      // 過去 teardownAt を弾く (即時撤去は別の Delete Event 経路を使う)。
       return c.json(
         {
           error: "past_teardown_at",
@@ -71,7 +71,7 @@ function scheduleOutcomeResponse(c: Context, outcome: SetEventScheduleOutcome): 
         StatusCodes.BAD_REQUEST,
       );
     case "teardown_before_ends":
-      // ADR-047 always-ends: 採点 gate (endsAt) を閉じる前に撤去しない。
+      // always-ends: 採点 gate (endsAt) を閉じる前に撤去しない。
       return c.json(
         {
           error: "teardown_before_ends",
@@ -82,7 +82,7 @@ function scheduleOutcomeResponse(c: Context, outcome: SetEventScheduleOutcome): 
         StatusCodes.BAD_REQUEST,
       );
     case "past_deploy_at":
-      // ADR-047 follow-up: 過去 deployAt を弾く (即時 deploy は別の「Deploy」button を使う)。
+      // 過去 deployAt を弾く (即時 deploy は別の「Deploy」button を使う)。
       return c.json(
         {
           error: "past_deploy_at",
@@ -94,7 +94,7 @@ function scheduleOutcomeResponse(c: Context, outcome: SetEventScheduleOutcome): 
         StatusCodes.BAD_REQUEST,
       );
     case "deploy_after_ends":
-      // ADR-047 follow-up: deploy → 採点 → 終了 の時系列を保つ (= deploy は終了より後ろに置けない)。
+      // deploy → 採点 → 終了 の時系列を保つ (deploy は終了より後ろに置けない)。
       return c.json(
         {
           error: "deploy_after_ends",

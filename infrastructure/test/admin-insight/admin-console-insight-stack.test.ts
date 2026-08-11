@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { AdminConsoleInsightStack } from "../../lib/admin-insight/admin-console-insight-stack";
 
 /**
- * ADR-011 #590 Phase 1.A — AdminConsoleInsightStack の CFn 構造を assertion で固定する。
+ * Issue #590: AdminConsoleInsightStack の CFn 構造を assertion で固定する。
  * cross-stack 参照を simulate するため UserPool / Tables は同 app 内 helper stack に作る。
  */
 function synthInsightStack(adminConsoleOrigin?: string, costBudgetName?: string): Template {
@@ -46,7 +46,7 @@ function synthInsightStack(adminConsoleOrigin?: string, costBudgetName?: string)
   return Template.fromStack(stack);
 }
 
-describe("AdminConsoleInsightStack (ADR-011 Phase 1.A)", () => {
+describe("AdminConsoleInsightStack", () => {
   describe("Lambda", () => {
     it("should provision 1 AdminInsight Lambda on Node.js 22 / arm64", () => {
       const tpl = synthInsightStack();
@@ -158,7 +158,7 @@ describe("AdminConsoleInsightStack (ADR-011 Phase 1.A)", () => {
     });
   });
 
-  describe("IAM 権限 (ADR-011 D6 read-only)", () => {
+  describe("IAM 権限 (read-only)", () => {
     function collectActions(tpl: Template): string[] {
       const policies = tpl.findResources("AWS::IAM::Policy");
       return Object.values(policies).flatMap(policyActions);
@@ -424,7 +424,7 @@ describe("AdminConsoleInsightStack (ADR-011 Phase 1.A)", () => {
     });
   });
 
-  describe("Issue #2440 (ADR-049 §5.1 Phase A5): eventsTable/teamsTable are optional (pure SQL backend)", () => {
+  describe("Issue #2440: eventsTable/teamsTable are optional (pure SQL backend)", () => {
     /**
      * `ProblemDeployBackendStack` does not synth Events/Teams tables when
      * `controlDataBackend` is a pure SQL value (turso|sql), so it hands `undefined` cross-stack

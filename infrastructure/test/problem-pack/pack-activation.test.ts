@@ -153,7 +153,7 @@ const PROJECTION_DISRUPTION = {
   eventDetailType: "ProjectionLatency",
 };
 
-/** Build a valid pack whose single problem opts into ADR-028 inter-team coordination. */
+/** Build a valid pack whose single problem opts into inter-team coordination. */
 function writeCoordinationPack(
   dir: string,
   options: { problemId?: string; pluginSrc?: string } = {},
@@ -763,9 +763,9 @@ describe("ActivationStore snapshot directory keys (#2462)", () => {
 });
 
 /**
- * [ADR-028/030 activation (#2323)] Installed-snapshot coordination activation.
+ * Issue #2323: Installed-snapshot coordination activation.
  *
- * Slice 1 (PR #2328) taught `SnapshotCatalogSource.loadBundle` to read a pack's
+ * PR #2328 taught `SnapshotCatalogSource.loadBundle` to read a pack's
  * `coordination` / `coordinationBundle` back off `projections`, but the production
  * installed-snapshot path (`ActivationStore.loadSnapshotInput`) still handed it `projections: {}`,
  * so an installed + active coordination pack stayed inert. These tests pin that
@@ -916,7 +916,7 @@ describe("ActivationStore pack projection activation (#2463)", () => {
     ).toBe(true);
 
     expect(() => tenantCatalogSource(store, TENANT_A, PROJECTION_PLATFORM)).toThrow(
-      /packId='com\.example\.projection-pack'.*problemId='projection-problem'.*ADR-008 presigned/,
+      /packId='com\.example\.projection-pack'.*problemId='projection-problem'.*presigned private-payload/,
     );
   });
 });

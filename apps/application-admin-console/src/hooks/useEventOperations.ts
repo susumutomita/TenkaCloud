@@ -56,12 +56,12 @@ export function useEventOperations(args: {
   const [endsAtDate, setEndsAtDate] = useState("");
   const [endsAtTime, setEndsAtTime] = useState("");
   const [endsAtInFlight, setEndsAtInFlight] = useState(false);
-  // [ADR-047] 自動撤去予定 modal の state (= endsAt modal と独立)
+  // 自動撤去予定 modal の state (= endsAt modal と独立)
   const [teardownModalOpen, setTeardownModalOpen] = useState(false);
   const [teardownDate, setTeardownDate] = useState("");
   const [teardownTime, setTeardownTime] = useState("");
   const [teardownInFlight, setTeardownInFlight] = useState(false);
-  // [ADR-047 follow-up] 自動デプロイ予定 modal の state (= teardown modal の鏡像、独立)
+  // 自動デプロイ予定 modal の state (= teardown modal の鏡像、独立)
   const [deployScheduleModalOpen, setDeployScheduleModalOpen] = useState(false);
   const [deployDate, setDeployDate] = useState("");
   const [deployTime, setDeployTime] = useState("");

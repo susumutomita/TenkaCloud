@@ -23,16 +23,16 @@ Import these with `workspace:*` from any app or from `infrastructure`.
 | Package | What it provides |
 | ------- | ---------------- |
 | `@tenkacloud/auth-client` | Cognito Hosted UI OAuth 2.0 Code + PKCE client shared by the admin SPAs |
-| `@tenkacloud/coordination-plugin-sdk` | ADR-028 inter-team coordination plugin contract (state machine + 5 hooks) |
+| `@tenkacloud/coordination-plugin-sdk` | Inter-team coordination plugin contract (state machine + 5 hooks) |
 | `@tenkacloud/format` | Pure formatters for SPAs — `formatRelativeTime` (ja/en) |
 | `@tenkacloud/portal-contracts` | Participant portal API wire contract — one definition for backend handler + SPA |
-| `@tenkacloud/portal-plugin-sdk` | Type definitions for participant-portal problem plugins (ADR-012 Phase 5) |
+| `@tenkacloud/portal-plugin-sdk` | Type definitions for participant-portal problem plugins |
 | `@tenkacloud/problem-cost` | Offline heuristic AWS cost estimation for a problem's CFn template |
-| `@tenkacloud/problem-runtime` | Problem runtime classification (normalize / executable / reserved, ADR-023/026/027) |
+| `@tenkacloud/problem-runtime` | Problem runtime classification (normalize / executable / reserved) |
 | `@tenkacloud/problem-sdk` | Public problem-pack authoring contract: stable types, validators, diagnostic codes |
 | `@tenkacloud/problem-test` (`packages/problem-test-harness`) | Offline problem test harness — contract validation + scoring/probe runs with injected fakes |
 | `@tenkacloud/saml-utils` | SAML metadata validation + attribute mapper for Control/Application Plane SSO |
-| `@TenkaCloud/trust-bridge` | Cross-cloud authority transfer (signed CloudActionIntent → short-lived credentials, ADR-017) |
+| `@TenkaCloud/trust-bridge` | Cross-cloud authority transfer (signed CloudActionIntent → short-lived credentials) |
 | `@tenkacloud/web-kit` | Shared SPA UI primitives — `createCoreApiClient`, `AuthProvider`/`useAuth`, `EmptyState`, boot error rendering |
 
 ## Script-side shared helpers (`scripts/` and `scripts/lib/`)

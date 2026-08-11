@@ -120,7 +120,7 @@ function cloneLabel(clone: Clone): string {
 
 function runJscpd(): JscpdReport {
   // 検査用の実行は console 出力を抑え、 JSON レポートだけ生成する (CLI 引数が
-  // .jscpd.json の reporters を上書きする)。 人間向けの詳細表示は `make dup-report`。
+  // .jscpd.json の reporters を上書きする)。 人間向けの詳細表示は ./node_modules/.bin/jscpd を直接叩く。
   const result = spawnSync(
     join(REPO_ROOT, "node_modules", ".bin", "jscpd"),
     ["--reporters", "json", "--silent"],

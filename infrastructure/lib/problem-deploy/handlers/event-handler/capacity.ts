@@ -28,7 +28,7 @@ import type { EventSharedResources } from "./shared.js";
  * DescribeTable の欠損 (Table / ProvisionedThroughput / IndexName) はエラーにして route の 5xx に
  * 変換する (silent zero は返さない)。
  *
- * ADR-014 / AGENTS.md の方針どおり frontend は polling でこの route を叩く (SSE/WS なし)。
+ * AGENTS.md の方針どおり frontend は polling でこの route を叩く (SSE/WS なし)。
  * write 側 (`POST /admin/capacity` の runbook 起動、Issue #2680) は `capacity-scale.ts`。
  */
 
@@ -109,7 +109,7 @@ interface EventHotTable {
  * (= cold start で getEnv fail-fast 済み) から、problemEndpoints だけ本 slice で追加した env
  * から読む。
  *
- * events/teams/problemEndpoints は [Issue #2440 / ADR-049 §5.1 Phase A5、Issue #2442 / Phase C1]
+ * events/teams/problemEndpoints は [Issue #2440、Issue #2442]
  * 純 SQL backend (turso) 選択時は table 自体が synth されず env も空文字になる
  * (`event-handler/shared.ts` / `generic-scoring-handler/shared.ts` 側で fail-fast を緩和済み)。
  * その場合はこの role を **監視対象から外す** (= DescribeTable(TableName="") で fail するのを

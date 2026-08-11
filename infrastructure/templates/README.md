@@ -280,7 +280,7 @@ provider の問題は「近日対応」のまま選べません（Issue 2167）�
 ### 1. 機能フラグを ON にする
 
 `.env`（`infrastructure/environments/<env>/.env`）に `CDK_PARAM_FEATURES='{"nonAwsRuntime":true}'`
-を設定して deploy します（ADR-035、デフォルト OFF。Issue 2230 で S3 上の `runtime-config.json`
+を設定して deploy します（デフォルト OFF。Issue 2230 で S3 上の `runtime-config.json`
 手編集は不要になりました）。Application Admin Console の Competitor Accounts ページに
 Team Cloud Credentials パネルが現れます。
 

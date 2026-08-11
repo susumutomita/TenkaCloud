@@ -84,7 +84,7 @@ export type TeamTableItem = TeamRow & { idx: number };
 export type ProblemOption = MultiselectProps.Option & { value: string };
 
 /**
- * ADR-026 / ADR-027 (#1414, #2167): event の problem picker option を組み立てる。 選択可否は
+ * Issue #1414, #2167: event の problem picker option を組み立てる。選択可否は
  * {@link isProviderSelectable} に委ねる:
  *   - aws/cloudformation は常に選択可。
  *   - 予約 provider (sakura/azure/gcp) は `enabledProviders` に含まれるとき選択可

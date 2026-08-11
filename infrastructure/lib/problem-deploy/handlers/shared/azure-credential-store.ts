@@ -1,12 +1,12 @@
 import { createSecureJsonStore, type SecureJsonStoreDeps } from "./secure-json-store.js";
 
 /**
- * [ADR-027 / ADR-032 / Issue #1410] per-team Azure deploy credential store (SSM SecureString)。
+ * [Issue #1410] per-team Azure deploy credential store (SSM SecureString)。
  *
- * ADR-032: Microsoft Entra ID は AWS-native の federation 経路を持たない (federated credential は OIDC
+ * Microsoft Entra ID は AWS-native の federation 経路を持たない (federated credential は OIDC
  * issuer のみ受付) ため、 AWS Lambda の deploy worker から鍵レスにするには platform-as-OIDC-issuer という
  * 重いサブシステムが要る。 deployable v1 ではこれを避け、 **per-team app registration の client secret を
- * SSM SecureString に保管** (= ADR-026 Sakura stored-key と同型) し `client_credentials` grant で ARM token を
+ * SSM SecureString に保管** (Sakura stored-key と同型) し `client_credentials` grant で ARM token を
  * 得る。 long-lived secret なので Sakura 同等の補償 (per-team app + 最小 ARM ロール + SecureString のみ + rotation) を課す。
  *
  * path 規約: `/{env}/tenants/{tenantId}/teams/{teamSlug}/azure-credential`。 値は app registration の認証情報 +

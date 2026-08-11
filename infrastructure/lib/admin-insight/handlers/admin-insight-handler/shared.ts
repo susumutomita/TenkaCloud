@@ -9,7 +9,7 @@ import type { ControlDataRuntime } from "../../../problem-deploy/control-data/ru
  * AdminInsight Lambda が module load で 1 度だけ作るリソース束。
  *
  * Lambda warm invoke で SDK client / connection pool を使い回すため、handler 外で
- * `buildSharedResources()` を呼ぶ。[Issue #2440 / ADR-049 §5.1 Phase A5] `EVENTS_TABLE_NAME` /
+ * `buildSharedResources` を呼ぶ。[Issue #2440] `EVENTS_TABLE_NAME` /
  * `TEAMS_TABLE_NAME` は純 SQL backend (turso) で table 自体が synth されないため対象外
  * (空文字 default、下記参照)。[Issue #2441 / Phase B PR-6] `DEPLOYMENTS_TABLE_NAME` も同じ
  * 条件で synth されないため、同じ空文字 default に統一した (以前は module 評価時に throw して
@@ -25,7 +25,7 @@ export interface AdminInsightSharedResources {
   readonly teamsTableName: string;
   readonly ddb: DynamoDBDocumentClient;
   /**
-   * Issue #950 (ADR-020 Phase D): admin audit log table 名。 未配線時は空文字、
+   * Issue #950: admin audit log table 名。 未配線時は空文字、
    * handler の audit route が 503 を返す。
    */
   readonly auditTableName: string;
@@ -45,7 +45,7 @@ export function buildSharedResources(runtime: ControlDataRuntime): AdminInsightS
     // [Issue #2441 / Phase B PR-6] pure SQL backend (turso) では Deployments table 自体が
     // synth されず env も配線されない。EVENTS_TABLE_NAME/TEAMS_TABLE_NAME と同じ空文字 default。
     deploymentsTableName: process.env.DEPLOYMENTS_TABLE_NAME ?? "",
-    // [Issue #2440 / ADR-049 §5.1 Phase A5] pure SQL backend (turso) では Events/Teams
+    // [Issue #2440] pure SQL backend (turso) では Events/Teams
     // table 自体が synth されず env も配線されないため、module-load を fail-fast にすると cold
     // start が Initialization Error で落ちる。空文字 default に緩和し、dynamodb backend
     // の誤設定は runtime resolver (`runtime-repositories.ts`) が fail loud に受ける (= silent
@@ -61,7 +61,7 @@ export function buildSharedResources(runtime: ControlDataRuntime): AdminInsightS
 }
 
 /**
- * [ADR-049 §5.1 / #2438] Events aggregate 専用 read seam (event-handler/shared.ts の
+ * [#2438] Events aggregate 専用 read seam (event-handler/shared.ts の
  * `resolveEventsRepository` と同型)。 default backend (`CONTROL_DATA_BACKEND` 未設定 =
  * dynamodb) では従来と byte 互換の Query を `shared.ddb` 経由で発火する。 admin-insight は
  * Events の read-only 集計のみ行う (mutating method は使わない) ため、 events-only seam で十分。

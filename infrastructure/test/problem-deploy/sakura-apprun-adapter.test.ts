@@ -1,5 +1,5 @@
 /**
- * [ADR-026 / Issues #1412, #2746] Unit tests for the sakura/apprun runtime adapter + its registry wiring.
+ * [Issues #1412, #2746] Unit tests for the sakura/apprun runtime adapter + its registry wiring.
  *
  * orchestration は注入された SakuraAppRunClient / getApiKey に対して全分岐を pin する
  * (= 実 AppRun REST / SSM key 取得は account-gated な別レイヤ。 #1419 executor と同方針)。
@@ -46,7 +46,7 @@ function makeCtx(client: SakuraAppRunClient): {
   return { ctx: { getApiKey, client: clientFactory }, getApiKey, clientFactory };
 }
 
-describe("mapSakuraStatus (ADR-026 #1412 #2746)", () => {
+describe("mapSakuraStatus (#1412 #2746)", () => {
   it("should map current AppRun and compatible states to the 6-state runtime status", () => {
     expect(mapSakuraStatus("Healthy")).toBe("ready");
     expect(mapSakuraStatus("Running")).toBe("ready");
@@ -62,7 +62,7 @@ describe("mapSakuraStatus (ADR-026 #1412 #2746)", () => {
   });
 });
 
-describe("SakuraAppRunRuntimeAdapter (ADR-026 #1412)", () => {
+describe("SakuraAppRunRuntimeAdapter (#1412)", () => {
   let client: {
     upsertApplication: ReturnType<typeof vi.fn>;
     getApplication: ReturnType<typeof vi.fn>;
@@ -174,7 +174,7 @@ describe("SakuraAppRunRuntimeAdapter (ADR-026 #1412)", () => {
   });
 });
 
-describe("selectAdapter sakura wiring (ADR-026 #1412)", () => {
+describe("selectAdapter sakura wiring (#1412)", () => {
   const aws = {} as AwsCloudFormationAdapterContext;
 
   it("should return the Sakura adapter when the account-gated context is wired", () => {

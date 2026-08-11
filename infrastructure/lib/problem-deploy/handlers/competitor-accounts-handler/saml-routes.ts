@@ -255,7 +255,7 @@ export function defaultMakeCognitoDeps(
   };
 }
 
-// #1385: pooled tier は UserPool + UserPoolClient を全 pooled tenant で共有する (ADR-018)。
+// #1385: pooled tier は UserPool + UserPoolClient を全 pooled tenant で共有する。
 // そこで SAML config を mutate (= UserPoolClient の SupportedIdentityProviders /
 // ExplicitAuthFlows 書き換え) すると他 pooled tenant のログインを巻き込む (cross-tenant DoS /
 // 認証ハイジャック)。 専有 UserPool を持つ silo (PLATINUM) / Lite mode のみ mutation を許可する。

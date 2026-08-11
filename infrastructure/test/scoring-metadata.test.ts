@@ -371,7 +371,7 @@ describe("parseScoringMetadata", () => {
     });
   });
 
-  describe("uptime-flat 形式 (ADR-012 Phase 3.B 新名)", () => {
+  describe("uptime-flat format", () => {
     it("should narrow slot-based endpoints", () => {
       const cfg = {
         kind: "uptime-flat",

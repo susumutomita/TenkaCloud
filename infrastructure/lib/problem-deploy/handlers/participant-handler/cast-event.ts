@@ -14,13 +14,13 @@ import {
 /**
  * 「Battle 中のイベント注入 + チーム間 interactive 交流」 の platform-side dispatch primitive。
  *
- * 既存設計メモ ([[feedback_inter_team_coordination_plugin]]):
+ * dispatch boundary:
  *   - inter-team interaction の semantics (= alliance / attack / shared queue / etc.) は
  *     問題ごとに異なるので、 platform に hardcode せず dispatch だけ提供する
  *   - 問題側 plugin が portal で polling して inbox を読み、 問題固有の UI / scoring に
  *     繋ぎ込む
  *
- * 通信モデル ([[feedback_polling_over_sse]]): SSE / WebSocket を使わず polling。 Lambda
+ * 通信モデル: SSE / WebSocket を使わず polling。Lambda
  * 運用 / 既存 portal の polling 周期 (30s) に乗せる。
  *
  * 物理: Deployments テーブル (= 既存) に `INBOX#<isoTs>#<ulid>` SK pattern を増やすだけ

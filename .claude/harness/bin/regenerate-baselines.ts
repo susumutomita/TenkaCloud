@@ -7,16 +7,12 @@
  * block future debt"). Re-running it for an existing rule is also valid when
  * deliberately re-baselining after a refactor batch.
  *
- * Excludes ADR self-contained baseline by default (= already hand-curated).
- *
  * Usage:
  *   bun run .claude/harness/bin/regenerate-baselines.ts <ruleId> [<ruleId>...]
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { adrMustBeHtml } from "../src/rules/adr-must-be-html.ts";
-import { adrSelfContained } from "../src/rules/adr-self-contained.ts";
 import { fileTooLarge } from "../src/rules/file-too-large.ts";
 import { handlerMustNotCallFetch } from "../src/rules/handler-must-not-call-fetch.ts";
 import { handlerNoDirectSdkImport } from "../src/rules/handler-no-direct-sdk-import.ts";
@@ -29,8 +25,6 @@ const RULES = {
   "file-too-large": fileTooLarge,
   "handler-must-not-call-fetch": handlerMustNotCallFetch,
   "handler-no-direct-sdk-import": handlerNoDirectSdkImport,
-  "adr-must-be-html": adrMustBeHtml,
-  "adr-self-contained": adrSelfContained,
   "iam-wildcard-needs-justify": iamWildcardNeedsJustify,
   "lambda-env-size": lambdaEnvSize,
   "secrets-manager-forbidden": secretsManagerForbidden,

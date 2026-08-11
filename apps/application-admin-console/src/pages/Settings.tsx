@@ -15,8 +15,7 @@ type FlagKey = keyof typeof FEATURE_REGISTRY;
 const FLAG_KEYS = Object.keys(FEATURE_REGISTRY) as readonly FlagKey[];
 
 /**
- * Issue #2231 (ADR-035, 3/3 — backend API #2265/#2267, config merge #2269, this page):
- * per-tenant runtime feature-flag toggle UI.
+ * Issue #2231: per-tenant runtime feature-flag toggle UI。
  *
  * Read (`GET /feature-flags`) is available to any tenant role — this page still renders
  * for everyone so a TenantOperator / TenantViewer can see what's enabled, but every Toggle

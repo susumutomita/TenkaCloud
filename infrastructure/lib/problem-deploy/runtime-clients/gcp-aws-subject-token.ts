@@ -1,7 +1,7 @@
 /**
- * [ADR-032 / Issue #1411] GCP Workload Identity Federation の **AWS provider** subject token builder.
+ * [Issue #1411] GCP Workload Identity Federation の **AWS provider** subject token builder.
  *
- * ADR-032 の決定: GCP WIF は AWS を first-class の credential source として受け付ける。 subject token は
+ * 決定: GCP WIF は AWS を first-class の credential source として受け付ける。 subject token は
  * **署名済 `sts:GetCallerIdentity` リクエスト**で、 deploy Lambda の AWS 実行ロール identity をそのまま
  * federate 元にする (= 署名鍵を platform 側に持たない)。 GCP STS は subject token として
  * `{url, method, headers}` を URL-encoded JSON にした形を期待し、 検証時に署名された
@@ -10,7 +10,7 @@
  * 設計: 実 SigV4 署名は注入境界 (`GcpAwsSubjectTokenSigner`) に閉じ込め、 orchestration / 整形は純関数で
  * 単体テストする。 default 実装は `@smithy/signature-v4` を使い、 credentials は Lambda 実行ロール
  * (`@aws-sdk/credential-provider-node`) から解決する。 SigV4 署名の実 AWS STS / GCP WIF に対する正当性は
- * 実 account で照合する seam (= integration 相、 ADR-032 / waterfall)。
+ * 実 account との integration / live-account verification で照合する。
  */
 
 import { Sha256 } from "@aws-crypto/sha256-js";

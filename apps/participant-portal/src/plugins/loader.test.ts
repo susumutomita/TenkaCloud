@@ -6,10 +6,10 @@ afterEach(() => {
 });
 
 /**
- * ADR-012 Phase 5: plugin loader が Vite glob で問題 dir 配下の portal tsx を
+ * plugin loader が Vite glob で問題 dir 配下の portal tsx を
  * discover できることと、 metadata.dashboard.slots → component の lookup が正しいことを pin。
  */
-describe("plugin loader (ADR-012 Phase 5)", () => {
+describe("plugin loader", () => {
   it("should discover the 2 files under microservice-migration-battle/portal/ via Vite glob", () => {
     const keys = _listDiscoveredPluginKeys();
     expect(
@@ -61,7 +61,7 @@ describe("plugin loader (ADR-012 Phase 5)", () => {
  * Issue #1251: metadata で slot が宣言されているのに glob で対応 file が見つからない場合は
  * silent fallback (= console.warn) を撤去し、 console.error で operator に降ろした上で
  * Lazy の Promise を reject する。 erroring lazy が ErrorBoundary に catch されることで
- * UI 側でも user-visible Alert が出る (= fail loudly contract)。
+ * UI 側でも user-visible Alert を出し、失敗を隠さない。
  */
 describe("plugin loader unresolved-slot reporting (Issue #1251)", () => {
   it("should call console.error (not warn) and reject the lazy loader when metadata declares a slot but the glob has no matching file", async () => {

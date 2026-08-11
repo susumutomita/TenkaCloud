@@ -7,7 +7,7 @@ import { createGitHubIssueFiler } from "./github-issue-filer.js";
 import { type SweepSummary, sweepExpiredRuntimes } from "./sweep.js";
 
 /**
- * ADR-049 Phase 4 (Issue #2293) SLICE 4 — the composition root that wires the real CloudFormation +
+ * Issue #2293 — the composition root that wires the real CloudFormation +
  * GitHub edges to the pure sweeper core ({@link ./sweep.ts}) and runs one sweep. Run manually
  * (`bun run infrastructure/lib/always-on-runtime/sweeper/index.ts` with AWS credentials +
  * `GITHUB_REPOSITORY` / `GITHUB_TOKEN`); the nightly GitHub Actions schedule was removed because

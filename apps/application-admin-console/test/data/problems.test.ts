@@ -64,7 +64,7 @@ describe("metadataToDetail", () => {
     expect(detail.supportedRegions).toBeUndefined();
   });
 
-  it("should default the runtime to aws/cloudformation when none is declared (ADR-026/027)", () => {
+  it("should default the runtime to aws/cloudformation when none is declared", () => {
     expect(metadataToDetail(BASE_METADATA).runtime).toEqual({
       provider: "aws",
       engine: "cloudformation",
@@ -121,7 +121,7 @@ describe("metadataToDetail", () => {
   });
 });
 
-describe("isExecutableProblemRuntime (ADR-023 D4)", () => {
+describe("isExecutableProblemRuntime", () => {
   it("should be true only for aws/cloudformation", () => {
     expect(isExecutableProblemRuntime({ provider: "aws", engine: "cloudformation" })).toBe(true);
   });

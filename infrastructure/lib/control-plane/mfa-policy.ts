@@ -4,7 +4,7 @@
  * `control-plane-stack.ts` が escape hatch (`addPropertyOverride`) でこれらを上書きする。
  *
  * SMS は使わず TOTP 単独 (= SOFTWARE_TOKEN_MFA)。 国際 SMS の到達率不安定 + SNS コストを避ける。
- * tenant-template/identity-provider.ts (= TenantAdmin 側、 ADR-020 Phase E で既設) と同方針。
+ * tenant-template/identity-provider.ts (TenantAdmin 側、 既設) と同方針。
  *
  * password policy も同時に強化する。 SBT default (= 8 文字 / lower+upper+number+symbol) を
  * 12 文字に引き上げ、 SystemAdmin が SaaS 全体の権限を持つ前提に合わせる。

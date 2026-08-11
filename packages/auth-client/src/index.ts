@@ -7,13 +7,13 @@
  * Public surface:
  *   - PKCE helpers: `generateVerifier`, `deriveChallenge` (browser `crypto.subtle`)
  *   - OAuth flow: `beginLogin`, `completeLogin`, `clearStoredAuthState`, `beginLogout`
- *   - Storage hygiene: `purgeLegacyTokenStorage` (ADR-025: evict pre-upgrade persisted tokens)
- *   - Token shape: `TokenSet` (held in memory by the caller; never persisted — ADR-025)
+ *   - Storage hygiene: `purgeLegacyTokenStorage` evicts pre-upgrade persisted tokens
+ *   - Token shape: `TokenSet` is held in memory by the caller and never persisted
  *   - Config contract: `CognitoOAuthConfig` (subset of each SPA's `AppConfig`)
  *   - runtime-config.json URL validators: `isHttpsUrl`, `isCognitoDomain` (Issue #871 reuse)
  *
  * Browser-only (relies on `sessionStorage` for PKCE transients, `window.location`,
- * `crypto.subtle`). Bearer tokens are returned to the caller, not stored here (ADR-025).
+ * `crypto.subtle`). Bearer tokens are returned to the caller, not stored here.
  */
 
 export {

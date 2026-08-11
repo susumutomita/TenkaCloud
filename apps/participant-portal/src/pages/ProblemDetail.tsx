@@ -117,8 +117,8 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
     [problem, locale],
   );
   // #550: problem.problemId から build-time catalog で metadata を引いて narrative を表示。
-  // backend を経由せず Portal が直接 metadata.json を bundle に持つ (admin-console と同 source、
-  // ADR-003 で DDB API 化したらここを差し替える)。catalog 不在 (= 旧 problem 等) は undefined。
+  // backend を経由せず Portal が metadata.json を bundle に持つ (admin-console と同じ source)。
+  // catalog 不在 (= 旧 problem 等) は undefined。
   const metadata = problem ? findProblemMetadata(problem.problemId) : undefined;
   // ja / metadata.i18n 不在 / 該当 field 不在は元の ja narrative にフォールバック (helper 側で処理)。
   const narrative = useMemo(
@@ -211,7 +211,7 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
       )}
       {/* 2026-05-18 user feedback: 「攻撃時刻を相手に予告する Red Team は存在しない」
        *   「種明かしをした おばけやしき はつまらない」
-       *   ADR-012 Phase 4 / Issue #607 の `TimelinePredictSection` (= 残時間 countdown +
+       *   Issue #607 の `TimelinePredictSection` (= 残時間 countdown +
        *   phase / disruption の事前予告) は **競技公平性と体験の観点から competitor side で
        *   表示しない**。 component 自体は operator 視点 (= application-admin-console の
        *   Event 管理画面) で再利用する可能性があるため file は維持、 participant portal の
@@ -227,7 +227,7 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
         />
       )}
 
-      {/* Issue #607 ADR-012 Phase 3.A UI: endpoints[] が宣言された Battle 問題で override 登録
+      {/* Issue #607: endpoints[] が宣言された Battle 問題で override 登録
        *   form を表示。 endpoints 空 / 不在の問題 (= flag-only Challenge 等) は内部で skip。
        *   Issue #1038 P0 #2: scoring_not_started のときは render しない (= lock)。 */}
       {canRenderEndpoints && problem && (
@@ -242,7 +242,7 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
         />
       )}
 
-      {/* ADR-012 Phase 5: problem 側 portal plugin (= metadata.dashboard.slots で宣言) を
+      {/* metadata.dashboard.slots で宣言した problem plugin を
        *   render する。 該当 slot が無い問題は section 全体が render されない。 */}
       {problem && metadata?.dashboardSlots && view?.team && (
         <PortalPluginSlots
@@ -416,7 +416,7 @@ function ProblemInfoSection({
               <Badge color={metadata.category === "Battle" ? "red" : "blue"}>
                 {metadata.category}
               </Badge>
-              {/* ADR-008 Phase 1: private 問題には「答え非公開」 badge。 public は省略 (= ノイズ削減)。 */}
+              {/* private 問題には「答え非公開」badge を出し、public では省略する。 */}
               {metadata.visibility === "private" && (
                 <Badge color="severity-high">{t("problem_detail.info_private_badge")}</Badge>
               )}
@@ -425,7 +425,7 @@ function ProblemInfoSection({
           <InfoCell label={t("problem_detail.info_difficulty")}>
             {t(DIFFICULTY_KEY[metadata.difficulty])}
           </InfoCell>
-          {/* ADR-026 / ADR-027: 問題が deploy される cloud を明示。 aws 以外 (multi-cloud) は
+          {/* 問題が deploy される cloud を明示。AWS 以外は
               緑で強調し、 競技者が自分の対象 cloud account を取り違えないようにする。 */}
           <InfoCell label={t("problem_detail.info_runtime")}>
             <Badge color={metadata.runtime.provider === "aws" ? "grey" : "green"}>
@@ -436,13 +436,13 @@ function ProblemInfoSection({
 
         <div>
           <Box variant="awsui-key-label">{t("problem_detail.info_description_label")}</Box>
-          {/* fairness contract (#1124 follow-up): metadata.description は採点ルール /
+          {/* metadata.description は採点ルール /
            *   hardened state / 段階詳細 などのネタバレを含むので portal には embed しない。
            *   競技者向けの 1 行サマリ (= shortDescription) のみ表示する。 admin / authoring
            *   view 用の長文は apps/application-admin-console を参照。 */}
           <Box variant="p">{narrative.shortDescription}</Box>
         </div>
-        {/* Phase 1c (#1929): per-problem architecture diagram (bundled diagram.svg). */}
+        {/* Issue #1929: per-problem architecture diagram (bundled diagram.svg). */}
         {diagramUrl && (
           <div>
             <Box variant="awsui-key-label">{t("problem_detail.info_diagram_label")}</Box>

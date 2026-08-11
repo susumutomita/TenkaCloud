@@ -74,22 +74,21 @@ export interface DeployContext extends AdapterDependencyConfig {
   readonly ttlMs?: number;
   /**
    * problemId → problemDir のマップ (例: `{"hello-world": "problems/challenges/hello-world"}`)。
-   * MVP-1 で env (`BATTLE_PROBLEMS_CATALOG` JSON) from inject される hard-coded catalog。
-   * Phase 2 (ADR-003) で DDB ベースの問題カタログに置換する。
+   * env (`BATTLE_PROBLEMS_CATALOG` JSON) から注入される hard-coded catalog。
    */
   readonly problemsCatalog: Readonly<Record<string, string>>;
   /**
-   * ADR-008 Phase 3: visibility / bucket / s3 client。 いずれか欠けるなら presigned URL を
+   * visibility / bucket / client。 いずれか欠けるなら presigned URL を
    * 発行せず local-path 経路で動作する (= dormant default)。
    */
   readonly problemsVisibility?: Readonly<Record<string, PrivateVisibility>>;
   readonly challengePayloadBucket?: string;
   readonly s3?: S3Client;
   /**
-   * [ADR-023 / Issue #1268] Optional per-problemId runtime resolver. If
+   * [Issue #1268] Optional per-problemId runtime resolver. If
    * undefined OR if it returns undefined for a given problemId, the deploy
-   * worker assumes `aws/cloudformation` — which preserves pre-#1268 behavior
-   * exactly (every problem in the catalog today is CFn-backed).
+   * worker assumes `aws/cloudformation`, preserving the legacy path for metadata that omits
+   * an explicit runtime.
    *
    * Tests pin this to assert that an `azure/bicep` problem is rejected with
    * `RuntimeNotSupportedError` BEFORE any DDB Put / EventBridge publish runs.
@@ -108,7 +107,7 @@ export interface DeployContext extends AdapterDependencyConfig {
   /** #1766: tier 別同時デプロイ上限。未設定 = クォータ無効 (在来 stack / Lite)。 */
   readonly deployQuota?: DeployQuotaConfig;
   /**
-   * Issue #2019 / ADR-017: TrustBridge high-risk enforcement mode. `"shadow"`
+   * Issue #2019: TrustBridge high-risk enforcement mode. `"shadow"`
    * (default / unset) = no behavior change, every deploy proceeds. `"enforce"`
    * = opt-in; a high-risk deploy (replacing a live stack) is held as
    * `APPROVAL_PENDING` instead of dispatching the adapter.
@@ -136,7 +135,7 @@ const DEFAULT_TTL_MS = 8 * 60 * 60 * 1000;
 const toEpochSeconds = (ms: number): number => Math.floor(ms / 1000);
 
 /**
- * ADR-008 Phase 3: private 問題なら 15min TTL の presigned URL を返す。 public 問題 /
+ * private 問題なら 15min TTL の presigned URL を返す。 public 問題 /
  * bucket 未配線なら undefined (= local-path 経路)。 private なのに S3 client が無ければ
  * 設定不整合として loud throw する (= silent fallback 禁止)。
  */
@@ -297,12 +296,11 @@ export async function startDeployment(
   const problemDir = ctx.problemsCatalog[request.problemId];
   if (!problemDir) throw new UnknownProblemError(request.problemId);
 
-  // [ADR-023 / Issue #1268] Resolve runtime BEFORE any cloud mutation. Default
-  // is aws/cloudformation (= the only registered adapter today), which keeps
-  // legacy problems and explicit `runtime: aws/cloudformation` declarations on
-  // the exact same path. A mismatched runtime (e.g. azure/bicep) raises
-  // `RuntimeNotSupportedError` here — pre-DDB-Put / pre-EventBridge — so the
-  // platform never half-creates an AWS-shaped artifact for a non-AWS problem.
+  // [Issue #1268] Resolve runtime BEFORE any cloud mutation. Default
+  // is aws/cloudformation, which keeps legacy problems and explicit AWS declarations on the
+  // same path. Configured provider contexts select their exact adapters; an unknown runtime or
+  // missing provider context raises `RuntimeNotSupportedError` before any DDB Put, event publish,
+  // or cloud call.
   const runtime: ProblemRuntime = ctx.resolveProblemRuntime?.(request.problemId) ?? {
     provider: EXECUTABLE_PROVIDER,
     engine: EXECUTABLE_ENGINE,
@@ -358,7 +356,7 @@ export async function startDeployment(
     expiresAt,
     accountGroupId: request.accountGroupId,
     problemSetId: request.problemSetId,
-    // [ADR-026/027/032 / #1410-1412] 非 AWS runtime のときだけ provider/engine/entry を永続化する
+    // [#1410-1412] 非 AWS runtime のときだけ provider/engine/entry を永続化する
     // (= teardown / status が adapter 経由で動く判別。 AWS 行は従来どおり field なしで byte-identical)。
     ...runtimeItemFields(runtime),
   };
@@ -366,11 +364,11 @@ export async function startDeployment(
   const deploymentsRepository: DeploymentsLifecyclePort = await resolveDeploymentsRepository(ctx);
   await deploymentsRepository.putDeployment(item);
 
-  // ADR-008 Phase 3: private 問題 + bucket bind 済なら S3 から 15min TTL presigned URL を
+  // private 問題 + bucket bind 済なら S3 から 15min TTL presigned URL を
   // 発行。 CodeBuild の deploy-battles.sh が CHALLENGE_PAYLOAD_URL を fetch して zip 展開する。
   const challengePayloadUrl = await resolveChallengePayloadUrl(ctx, request.problemId);
 
-  // Issue #2019 / ADR-017: staged enforcement gate. In the default `shadow` mode
+  // Issue #2019: staged enforcement gate. In the default `shadow` mode
   // this is a single env compare that returns `null` (proceed) with zero extra
   // I/O — the legacy path below is byte-for-byte unchanged. Only when the operator
   // opts in (`CLOUD_ACTION_ENFORCEMENT_MODE=enforce`) and this deploy matches the
@@ -396,10 +394,9 @@ export async function startDeployment(
   }
 
   try {
-    // [ADR-023 / Issue #1268 / #2064] dispatch via the prepared-dispatch seam.
-    // For AWS / CFn (= the only registered adapter today) this is byte-for-byte
-    // the same `publishProblemEvent` the legacy inline code did — see
-    // `AwsCloudFormationRuntimeAdapter.deploy`. No new IAM, no new SDK calls.
+    // [Issue #1268 #2064] dispatch via the prepared-dispatch seam.
+    // AWS / CFn keeps the same `publishProblemEvent` used by the legacy inline path; configured
+    // provider adapters use this same prepared-dispatch seam without silent fallback.
     // The adapter was already selected above (the pre-mutation runtime gate);
     // dispatchPreparedDeployment owns only the deploy invocation + rethrow.
     await dispatchPreparedDeployment({
@@ -477,7 +474,7 @@ export interface DeploySharedResources {
   readonly problemsCatalog: Readonly<Record<string, string>>;
   readonly problemsVisibility: Readonly<Record<string, PrivateVisibility>>;
   /**
-   * [ADR-023 / #2054] Per-problemId runtime resolver, baked from non-aws
+   * [#2054] Per-problemId runtime resolver, baked from non-aws
    * `metadata.runtime` at synth. Returns undefined for CFn problems (→ aws
    * default); returns e.g. `docker/compose` for a container problem so the
    * deploy is rejected pre-mutation instead of half-creating an AWS artifact.
@@ -499,14 +496,14 @@ export interface DeploySharedResources {
    * Terraform source 読取だけが利用不可 (= private 問題の challengePayloadUrl 経路は影響なし)。
    */
   readonly sourceBucketName: string | undefined;
-  /** [ADR-026 / #1412] per-team Sakura API key store の読取 client。 */
+  /** [#1412] per-team Sakura API key store の読取 client。 */
   readonly ssm: SSMClient;
-  /** [ADR-026 / #1412] AppRun REST base URL の override (env)。 未設定なら本番 AppRun 共用型。 */
+  /** [#1412] AppRun REST base URL の override (env)。 未設定なら本番 AppRun 共用型。 */
   readonly sakuraAppRunBaseUrl: string | undefined;
   /** #1766: tier 別同時デプロイ上限 (env JSON)。 未設定 = クォータ無効 (在来 stack / Lite)。 */
   readonly deployQuota: DeployQuotaConfig | undefined;
   /**
-   * Issue #2019 / ADR-017: TrustBridge high-risk enforcement mode (env). Default
+   * Issue #2019: TrustBridge high-risk enforcement mode (env). Default
    * `"shadow"` (= unset / anything but `"enforce"`) keeps the legacy path.
    */
   readonly cloudActionEnforcementMode: CloudActionEnforcementMode;

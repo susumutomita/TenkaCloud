@@ -107,23 +107,23 @@ export function buildApiLambdas(scope: Construct, args: BuildApiLambdasArgs): Ap
     eventBus,
     defaultTenantId: args.defaultTenantId,
     problemsCatalog: args.problemsCatalog,
-    // ADR-008 Phase 3 (Issue #642): visibility + bucket、 unset で dormant default。
+    // Issue #642: visibility + bucket、 unset で dormant default。
     problemsVisibility: args.problemsVisibility ?? {},
-    // [ADR-023 / #2054] 非 AWS 問題を cloud mutation 前に拒否する runtime catalog
+    // [#2054] 非 AWS 問題を cloud mutation 前に拒否する runtime catalog
     // (= DeployApiLambda の optional prop。 undefined は env 側 `?? {}` で空 map に正規化)。
     problemRuntimes: args.problemRuntimes,
     ...(args.challengePayloadBucketName
       ? { challengePayloadBucketName: args.challengePayloadBucketName }
       : {}),
     environmentName: args.environmentName,
-    // Issue #950 (ADR-020 Phase D): admin audit log を write
+    // Issue #950: admin audit log を write
     adminAuditLogTable: tables.adminAuditLog?.table,
     // Issue #2311: 監査ログ feature flag。
     auditLogEnabled: args.auditLogEnabled,
     ...controlDataBackendProps, // #2560: startDeployment / resolveVerifiedCompetitorAccount が SQL executor を acquire
     // #1766: tier 別の同時デプロイ上限 (env JSON)。
     deployQuotaByTier: args.deployQuotaByTier,
-    // Issue #2019 / ADR-017: TrustBridge enforcement mode (undefined → lambda
+    // Issue #2019: TrustBridge enforcement mode (undefined → lambda
     // defaults to shadow = no-op)。
     cloudActionEnforcementMode: args.cloudActionEnforcementMode,
     // [Issue #2745] materialized problems/ tree bucket — public gcp/infra-manager Terraform read.
@@ -149,8 +149,8 @@ export function buildApiLambdas(scope: Construct, args: BuildApiLambdasArgs): Ap
     ],
   });
 
-  // ADR-004 Phase 1+2a: Event / Team CRUD + Bulk Deploy/Teardown Lambda。
-  // Phase 2a で deployment 行の作成 / status 更新 + EventBridge fan-out publish を担う。
+  // Event / Team CRUD + Bulk Deploy/Teardown Lambda。
+  // deployment 行の作成 / status 更新 + EventBridge fan-out publish を担う。
   // Phase 2.2 (Issue #459): CompetitorAccounts table + env を渡して verified-only gate を有効化。
   const eventApi = new EventApiLambda(scope, "EventApi", {
     eventsTable: tables.events?.table,
@@ -177,7 +177,7 @@ export function buildApiLambdas(scope: Construct, args: BuildApiLambdasArgs): Ap
       Record<string, readonly unknown[]>
     >,
     problemsProvenance: args.problemsProvenance ?? {},
-    // [ADR-023 / #2054 / Issue #2571] Bulk Deploy adapter dispatch 用 runtime catalog。DeployApi
+    // [#2054 / Issue #2571] Bulk Deploy adapter dispatch 用 runtime catalog。DeployApi
     // と同一 source (args.problemRuntimes) をそのまま流す — undefined は EventApiLambda 側の
     // `?? {}` で空 map に正規化される。
     problemRuntimes: args.problemRuntimes,
@@ -193,7 +193,7 @@ export function buildApiLambdas(scope: Construct, args: BuildApiLambdasArgs): Ap
     ...controlDataBackendProps,
   });
 
-  // [ADR-031 / Issue #1419] Disruption Phase B: operator fire が publish した `*DisruptionFired` を
+  // [Issue #1419] Disruption: operator fire が publish した `*DisruptionFired` を
   // 拾い、 team deployment へ AssumeRole して実障害を注入し、 revert を予約する cross-account executor。
   // action 未宣言の disruption は no-op (= Phase A 監査のみ、 後方互換)。
   new DisruptionExecutorLambda(scope, "DisruptionExecutor", {
@@ -207,7 +207,7 @@ export function buildApiLambdas(scope: Construct, args: BuildApiLambdasArgs): Ap
     ...controlDataBackendProps, // #2442: EXEC# 冪等 claim の repository seam を開く
   });
 
-  // Issue #459 / ADR-002 Phase 2.1: Competitor Accounts CRUD + STS verify Lambda。
+  // Issue #459: Competitor Accounts CRUD + STS verify Lambda。
   // 独立 Lambda にする理由: SSM SecureString R/W + STS AssumeRole の IAM scope を最小化するため。
   const competitorAccountsApi = new CompetitorAccountsApiLambda(scope, "CompetitorAccountsApi", {
     competitorAccountsTable: tables.competitorAccounts?.table,

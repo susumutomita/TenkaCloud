@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Issue #2948 / ADR-0005 Phase 1: tenant の machine (M2M) credential を発行 / 一覧 / 失効する。
+# Issue #2948: tenant の machine (M2M) credential を発行 / 一覧 / 失効する。
 #
 #   issue-machine-client.sh create --user-pool-id <id> --tenant <tenantId> --preset read|deploy|write
 #   issue-machine-client.sh list   --user-pool-id <id> --tenant <tenantId>

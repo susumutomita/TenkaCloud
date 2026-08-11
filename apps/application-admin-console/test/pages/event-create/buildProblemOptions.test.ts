@@ -3,7 +3,7 @@ import { enabledNonAwsProviders } from "../../../src/data/problems";
 import { buildProblemOptions } from "../../../src/pages/event-create/helpers";
 
 /**
- * #1414 / #2167 (ADR-026 / ADR-027 / ADR-035), tightened by #2757: event の problem
+ * #1414 / #2167 (runtime provider/engine and feature-flag rules), tightened by #2757: event の problem
  * picker option 組立。 aws/cloudformation 問題は常に選択可。 予約 provider の中でも
  * **executable** な provider (今日時点は sakura のみ) は multi-cloud
  * (`features.nonAwsRuntime`) ON のとき選択可、 OFF なら disabled + 「近日対応」 tag。

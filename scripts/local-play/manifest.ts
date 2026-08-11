@@ -6,7 +6,7 @@ import type { NativeCompatibilityRequirement } from "./native-compatibility";
 /**
  * A local-play problem is a self-contained Docker container that owns both the
  * challenge surface and its own scoring (`/verify`). This module reads the
- * `runtime` (container delivery, ADR-023) + `scoring` sections of a catalog
+ * `runtime` (container delivery) + `scoring` sections of a catalog
  * problem's `metadata.json` and validates the *wiring* only — the platform
  * deliberately never learns the answer, the hidden tests, or any scoring
  * condition (those live inside the container). See Issue #2054: "evaluation is
@@ -162,7 +162,7 @@ interface RawMetadata {
   readonly description?: unknown;
   readonly instructions?: unknown;
   readonly writeup?: unknown;
-  // [ADR-023] container delivery is declared via the catalog's `runtime` field.
+  // Container delivery is declared via the catalog's `runtime` field.
   // `| null` is not decoration: this shape describes raw `JSON.parse` output, where any field
   // can legitimately be `null`, and `typeof null === "object"` means the guard on it below is
   // the only thing standing between a null `runtime` and a property read on null.

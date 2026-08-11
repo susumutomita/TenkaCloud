@@ -94,7 +94,7 @@ export function discoverProblemsWriteups(problemsRoot: string): Record<string, P
 }
 
 /**
- * `discoverProblemsCatalog` の sibling (ADR-012 Phase 3.A)。`endpoints[]` section を抜き、
+ * `discoverProblemsCatalog` の sibling。`endpoints` section を抜き、
  * `{ [problemId]: ProblemEndpointSlot[] }` の map を返す。`endpoints` を持たない問題は
  * キーごと出さない (= endpoint 無効、Challenge 系 flag-only 問題が該当)。
  *
@@ -118,7 +118,7 @@ export function discoverProblemsEndpoints(
 }
 
 /**
- * `discoverProblemsCatalog` の sibling (ADR-012 Phase 3.B)。`phases[]` section を抜き、
+ * `discoverProblemsCatalog` の sibling。`phases` section を抜き、
  * `{ [problemId]: PhaseEntry[] }` の map を返す。`phases` を持たない問題はキーごと出さない。
  *
  * `phased-polling` kind の dispatcher が time-based rule 切替に参照する。CDK synth 時に
@@ -142,7 +142,7 @@ export function discoverProblemsPhases(
 }
 
 /**
- * `discoverProblemsCatalog` の sibling (ADR-008 Phase 3 / Issue #642)。
+ * `discoverProblemsCatalog` の sibling (Issue #642)。
  * `metadata.visibility === "private"` の問題 id のみを抜いて map で返す。
  * public 問題は省略 (= env var を最小化、 default 動作を維持)。
  *
@@ -161,7 +161,7 @@ export function discoverProblemsVisibility(problemsRoot: string): Record<string,
 }
 
 /**
- * [ADR-023 / #2054] `metadata.runtime` を normalize し、**非 aws/cloudformation の
+ * [#2054] `metadata.runtime` を normalize し、**非 aws/cloudformation の
  * runtime を宣言した問題 id のみ** を map で返す (= container 配信の docker/compose 等)。
  * aws 問題は省略する (= env を最小化、 deploy worker の default fallback がそのまま処理)。
  *
@@ -188,7 +188,7 @@ export function discoverProblemsRuntime(
 }
 
 /**
- * [ADR-028 / ADR-030 Phase 3 / #1420] `{ [problemId]: { plugin } }` を返す。 problem が
+ * [#1420] `{ [problemId]: { plugin } }` を返す。 problem が
  * `interTeamCoordination.plugin` (= coordination plugin の module path) を宣言していれば収集する。
  * CoordinationDispatcher Lambda の `PROBLEM_COORDINATION` env へ JSON 化して渡し、 scope resolver が
  * team→moduleRef を解決するのに使う。 宣言の無い問題はキーごと不在 (= coordination 無効)。

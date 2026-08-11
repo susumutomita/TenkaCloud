@@ -50,7 +50,7 @@ function buildInput(
   };
 }
 
-describe("uptime-flat kind (ADR-012 Phase 3.B、 legacy uptime probe 動作不変)", () => {
+describe("uptime-flat kind legacy uptime probe compatibility", () => {
   const fetchMock = vi.fn();
   beforeEach(() => {
     vi.stubGlobal("fetch", fetchMock);
@@ -118,7 +118,7 @@ describe("uptime-flat kind (ADR-012 Phase 3.B、 legacy uptime probe 動作不�
     expect(result.scoreEvents).toEqual([{ source: "uptime", points: 100, occurredAt: NOW_ISO }]);
   });
 
-  it("should emit an attack-detected event when previous tick was ok and current tick fails (ADR-005 D2-A)", async () => {
+  it("should emit an attack-detected event when previous tick was ok and current tick fails", async () => {
     fetchMock.mockResolvedValue({ status: 500, text: async () => "" });
     const input = buildInput({
       deployment: {
@@ -151,7 +151,7 @@ describe("uptime-flat kind (ADR-012 Phase 3.B、 legacy uptime probe 動作不�
     expect(health.ApiUrl).toMatchObject({ ok: true, checkedAt: NOW_ISO });
   });
 
-  it("should resolve metadata.endpoints default URLs via slot (new in ADR-012 Phase 3.B)", async () => {
+  it("should resolve metadata.endpoints default URLs via slot", async () => {
     fetchMock.mockResolvedValue({ status: 200, text: async () => "" });
     const input = buildInput({
       scoring: {

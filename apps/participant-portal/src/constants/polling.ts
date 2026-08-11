@@ -12,7 +12,7 @@
 export const POLL_INTERVAL_MS = 30_000;
 
 /**
- * Notifications だけは 60 秒間隔で polling する (ADR-006 D3 + codex review)。
+ * Notifications だけは 60 秒間隔で polling する。
  * Events table は 1 RCU PROVISIONED なので、N 競技者 × 5 秒 polling で簡単に throttle
  * を引き起こす。Score / Leaderboard と同じ tick (30 秒) には乗せない。
  */

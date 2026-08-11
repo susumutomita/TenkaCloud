@@ -1,5 +1,5 @@
 /**
- * [ADR-027 / Issue #2743] Azure Bicep -> inline ARM template materialization.
+ * [Issue #2743] Azure Bicep -> inline ARM template materialization.
  *
  * Azure Deployment Stacks PUT accepts `properties.template` (inline ARM JSON) as an alternative to
  * `properties.templateLink` (a reachable URI). The platform adopts the inline contract for

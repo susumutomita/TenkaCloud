@@ -1,4 +1,4 @@
-# [#2906 / ADR-055] Build context for docker/local-control-plane/Dockerfile.
+# [#2906] Build context for docker/local-control-plane/Dockerfile.
 #
 # `problems/` and `.gitmodules` are deliberately excluded, not merely large:
 # `problems/` is bind-mounted read-only at runtime (see docker-launcher.sh) so

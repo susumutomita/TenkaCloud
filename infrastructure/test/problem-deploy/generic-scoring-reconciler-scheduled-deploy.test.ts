@@ -2,7 +2,7 @@ import { UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * [ADR-047 follow-up] scheduled auto-deploy の fire 経路 (= reconciler が deployAt 経過の DRAFT event を
+ * scheduled auto-deploy の fire 経路 (= reconciler が deployAt 経過の DRAFT event を
  * 検知して `bulkDeployEvent` を呼び `deployFiredAt` を stamp する) の DDB I/O 越し統合テスト。
  *
  * `bulkDeployEvent` は teams/catalog/CompetitorAccounts の orchestration を内包するため module mock し、
@@ -47,7 +47,7 @@ afterEach(() => {
   deploy.bulkDeployEvent.mockReset();
 });
 
-describe("reconcileEventStatuses scheduled auto-deploy (ADR-047 follow-up)", () => {
+describe("reconcileEventStatuses scheduled auto-deploy", () => {
   let ctx: ReconcileEventStatusesContext;
   let ddbSend: ReturnType<typeof vi.fn>;
   beforeEach(() => {

@@ -21,7 +21,7 @@ import type {
 import { makeFakeDdb, makeSqliteExecutor } from "./control-data-write.test-helpers";
 
 /**
- * [ADR-049 §5] Parity suite for the Teams repository seam. The SAME assertions run
+ * Parity suite for the Teams repository seam. The SAME assertions run
  * against both backends so DynamoDB (behavior-preserving extraction) and SQLite
  * (Turso / D1 dialect) are provably interchangeable:
  *   - DynamoDb impl against the shared in-memory fake DocumentClient

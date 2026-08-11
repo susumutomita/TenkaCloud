@@ -19,7 +19,7 @@ export interface TeamContext {
 export interface SecretBindings {
   /**
    * ES256 key pair backing the OIDC IdP surface and the command-token mint
-   * (ADR-050); only the public half is served from the JWKS route.
+   * for AWS commands; only the public half is served from the JWKS route.
    */
   readonly OIDC_SIGNING_PRIVATE_JWK?: string;
   /**

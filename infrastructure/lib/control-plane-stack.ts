@@ -55,7 +55,7 @@ interface ControlPlaneStackProps extends cdk.StackProps {
    */
   samlAdminAllowlist?: readonly string[];
   /**
-   * ADR-049 §5.1 / Issue #2290: control-plane data backend (`dynamodb` | `turso`)。
+   * Issue #2290: control-plane data backend (`dynamodb` | `turso`)。
    * `/admin/idp` CRUD Lambda が repository seam をどちらに解決するかを決める。 未指定 (=
    * `dynamodb`) なら Lambda env を足さず、 system scope の `SamlIdpsTable` を synth する。
    * `turso` では table を **synth せず** SQL executor に直結する (= Lite と同条件)。
@@ -100,7 +100,7 @@ export class ControlPlaneStack extends cdk.Stack {
   public readonly eventBusArn: string;
   /**
    * SBT 内蔵 Cognito UserPool (= System Admin が登録される pool)。
-   * Issue #590 / ADR-011 (Phase 1.A) で AdminInsight HTTP API の JWT Authorizer に渡す。
+   * Issue #590 で AdminInsight HTTP API の JWT Authorizer に渡す。
    * 同 pool の SystemAdmin group claim を required scope として扱う。
    */
   public readonly cognitoUserPool: IUserPool;
@@ -207,7 +207,7 @@ export class ControlPlaneStack extends cdk.Stack {
 
     // Issue #1035: SystemAdmin は SaaS 全 tenant 横断の権限を持つので MFA 必須化 + 強 password。
     // SBT 0.3.9 が UserPool を内部生成するため escape hatch で CFn property を上書きする。
-    // TenantAdmin 側 (= tenant-template/identity-provider.ts) は ADR-020 Phase E で同 baseline 適用済み。
+    // TenantAdmin 側 (tenant-template/identity-provider.ts) も同じ baseline を適用する。
     // TOTP only (= SMS は SNS コスト + 国際到達率不安定で避ける)。
     cfnUserPool.addPropertyOverride("MfaConfiguration", SYSTEM_ADMIN_MFA_CONFIGURATION);
     cfnUserPool.addPropertyOverride("EnabledMfas", [...SYSTEM_ADMIN_ENABLED_MFAS]);

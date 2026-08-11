@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { bundleCoordinationPlugins } from "../../lib/utils/bundle-coordination-plugins";
 
 /**
- * ADR-030 Phase 3b (#1420): synth 時の coordination plugin bundler。 SDK 解決を要しない
+ * Issue #1420: synth 時の coordination plugin bundler。 SDK 解決を要しない
  * self-contained plugin で iteration + esbuild 出力を pin する (= 実 SDK inline は s3-plugin-importer
  * 側 + reference 問題で検証)。
  */

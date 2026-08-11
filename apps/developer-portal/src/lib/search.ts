@@ -1,7 +1,7 @@
 import { DOC_PAGES } from "@/content/docs-registry";
 import { listApiOperations } from "@/content/openapi";
 
-// The command-search index (ADR-0003 §6). One index spans MDX docs (titles,
+// One command-search index spans MDX docs (titles,
 // headings, body) and the OpenAPI operation list, so a developer searches docs and
 // endpoints from one box. This is the single source feeding the command palette on
 // every route, which is what makes search behave identically across surfaces.

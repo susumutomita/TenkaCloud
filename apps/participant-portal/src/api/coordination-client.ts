@@ -1,9 +1,9 @@
 import { StatusCodes } from "http-status-codes";
 
 /**
- * ADR-028/030 (#1420): 参加者間 coordination の op 提出 / projection polling client。
+ * Issue #1420: 参加者間 coordination の op 提出 / projection polling client。
  *
- * coordination は専用 dispatcher Lambda (= `coordinationApiUrl`、 最小 IAM、 ADR-030 S2) が host する。
+ * 専用 dispatcher Lambda が `coordinationApiUrl` を最小 IAM で host する。
  * portal slot (= 問題が同梱する UI) がこの client で op を送り、 自チーム向け projection を polling する。
  * backend の {@link CoordinationHandlerOutcome} に対応する discriminated union を返し、 caller (slot)
  * が `kind` で分岐する。 polling 方針は AGENTS.md (SSE 不使用) に従い、 呼び出し側 setInterval で行う。

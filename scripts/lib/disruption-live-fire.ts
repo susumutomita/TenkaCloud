@@ -112,8 +112,8 @@ export interface LiveFireAssessment {
 /**
  * The acceptance judgement for #1419/#1666: the fire must produce an *observable fault* that
  * *auto-reverts within the declared window*. A flat (never-faulted) timeline fails — that is the
- * "no real fault" symptom the issue is about; a faulted-but-never-recovered timeline fails ADR-029
- * INV-2 ("no disruption is permanent").
+ * "no real fault" symptom the issue is about; a faulted-but-never-recovered timeline also fails
+ * because every injected disruption must auto-revert within its declared window.
  */
 export function assessLiveFire(
   timeline: FaultTimeline,
@@ -134,7 +134,8 @@ export function assessLiveFire(
   if (!timeline.recovered) {
     return {
       verdict: "no-recovery",
-      reason: "target faulted but never recovered — auto-revert did not restore it (ADR-029 INV-2)",
+      reason:
+        "target faulted but never recovered — auto-revert must restore every injected disruption",
     };
   }
   if ((timeline.faultDurationMs ?? Number.POSITIVE_INFINITY) > opts.maxRecoveryMs) {

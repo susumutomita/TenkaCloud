@@ -82,7 +82,7 @@ describe("AwsAssumeRoleExchange (#795 Phase 2)", () => {
     ).rejects.toMatchObject({ reason: "context-missing" });
   });
 
-  it("should throw context-missing when context.externalId is absent (= mandated by ADR-002)", async () => {
+  it("should throw context-missing when context.externalId is absent", async () => {
     const ex = new AwsAssumeRoleExchange({ sts: makeStub() });
     await expect(
       ex.exchange(makeIntent(), { roleArn: "arn:aws:iam::1:role/x" } as Record<string, unknown>),

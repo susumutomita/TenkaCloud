@@ -1,5 +1,5 @@
 /**
- * ADR-049 §5.3 materialized scoring projection.
+ * SQL schema for the materialized scoring projection.
  *
  * One row per team keeps the leaderboard query bounded to the event's team
  * count. The JSON snapshot is regenerated at most once per polling interval, so

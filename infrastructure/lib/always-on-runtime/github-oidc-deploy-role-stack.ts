@@ -4,7 +4,7 @@ import type { Construct } from "constructs";
 import { EVENT_RUNTIME_STACK_ID_PREFIX } from "./event-runtime-stack.js";
 
 /**
- * ADR-049 Phase 4 (Issue #2293) SLICE 3 — GitHub Actions OIDC runtime-lifecycle role.
+ * Issue #2293 — GitHub Actions OIDC runtime-lifecycle role.
  *
  * Stands up the least-privilege IAM role that the Always-On event runtime's
  * `workflow_dispatch` deploy/destroy workflows assume via OIDC
@@ -13,14 +13,14 @@ import { EVENT_RUNTIME_STACK_ID_PREFIX } from "./event-runtime-stack.js";
  * (`make deploy-always-on-runtime` / `destroy-always-on-runtime`) under this
  * role.
  *
- * Trust hardening (ADR-049 §12):
+ * Trust hardening:
  *   - `aud` (audience) is pinned with `StringEquals` to `sts.amazonaws.com`.
  *   - `sub` (subject) is pinned with `StringLike` to
  *     `repo:susumutomita/TenkaCloud:environment:*` — environment-scoped, so a fork
  *     or any other repo cannot assume this role, and only jobs that opt into a
  *     GitHub Environment (with its protection rules) can.
  *
- * Least privilege (ADR-049 §8):
+ * Least privilege:
  *   - CDK deploy/destroy may assume only this account's bootstrap roles.
  *   - The cleanup sweeper (manual script) may inspect CloudFormation stacks, but may delete only
  *     `tenkacloud-event-runtime-*` stacks and invoke only Lambdas whose physical name
@@ -97,7 +97,7 @@ export class GithubOidcDeployRoleStack extends cdk.Stack {
           clientIds: [OIDC_AUDIENCE],
         });
 
-    // Trust hardening (ADR-049 §12): aud == sts.amazonaws.com AND sub LIKE the
+    // Trust hardening: aud == sts.amazonaws.com AND sub LIKE the
     // environment-scoped repo pattern. Forks / other repos fail the `sub` match.
     const principal = new iam.OpenIdConnectPrincipal(oidcProvider, {
       StringEquals: {
@@ -113,7 +113,7 @@ export class GithubOidcDeployRoleStack extends cdk.Stack {
       ...(props.deployRoleName ? { roleName: props.deployRoleName } : {}),
       // ASCII-only (IAM Description Latin-1 gate): no arrows / em-dashes / CJK.
       description:
-        "GitHub Actions OIDC role for the TenkaCloud Always-On runtime lifecycle (ADR-049 Phase 4).",
+        "GitHub Actions OIDC role for the TenkaCloud Always-On runtime lifecycle. Repository-scoped trust.",
       maxSessionDuration: cdk.Duration.hours(1),
     });
 

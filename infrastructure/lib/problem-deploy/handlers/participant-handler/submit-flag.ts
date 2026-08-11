@@ -111,7 +111,7 @@ export async function submitFlag(
  *
  * lib-dynamodb は JS `Set<string>` ↔ DynamoDB String Set (SS) を marshal するので通常は Set で
  * 戻るが、 旧 SDK / 手書き row 由来の string[] や、 未設定 (undefined) も握れるようにする
- * (= DB row drift / 移行期の防御層、 ADR-008 と整合)。 lookup.ts も同 helper を再利用する。
+ * (DB row drift / 移行期の防御層、 既存の分離契約と整合)。 lookup.ts も同 helper を再利用する。
  */
 export function getSolvedFlagIds(item: Partial<DeploymentItem>): ReadonlySet<string> {
   const raw = (item as { solvedFlagIds?: unknown }).solvedFlagIds;

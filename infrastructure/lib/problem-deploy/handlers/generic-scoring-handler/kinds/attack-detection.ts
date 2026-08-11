@@ -4,7 +4,7 @@ import { type KindHandlerInput, type KindResult, noopKindResult } from "../scori
 import { scoreCounterDelta } from "./attack-counter.js";
 
 /**
- * `attack-detection` kind (ADR-012 Phase 3.B、 security-battle-royale の攻撃検知部 想定)。
+ * `attack-detection` kind (security-battle-royale の攻撃検知部 想定)。
  *
  * 問題 stack に同梱した attack counter (= CFn Output に counter 値を露出するか、 SSM Parameter
  * name 等の参照を露出する) を読み、 前回 tick との差分に応じて加点する。
@@ -26,8 +26,8 @@ export function runAttackDetectionKind(
   if (!deployment.problemId) return noopKindResult();
 
   const outputs = parseStackOutputs(deployment.stackOutputs);
-  // 差分加点 + cap + baseline 追従の共通ロジックは attack-counter.ts に集約 (uptime-multi の
-  // attack-blocked bonus と共有、 ADR-034)。 不正値 / 未露出は noop。
+  // 差分加点 + cap + baseline 追従の共通ロジックは attack-counter.ts に集約し、uptime-multi の
+  // attack-blocked bonus と共有する。不正値 / 未露出は noop。
   const scored = scoreCounterDelta(
     outputs[scoring.statsOutputKey],
     prevState.attackCount,

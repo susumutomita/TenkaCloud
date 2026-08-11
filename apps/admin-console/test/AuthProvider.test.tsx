@@ -3,7 +3,7 @@
  *
  * 15 分間 mouse / keyboard 操作が無ければ logout を発火することを timer mock で pin。
  *
- * ADR-025: tokens は memory (React state) のみで保持し sessionStorage には残さないため、
+ * tokens は memory (React state) のみで保持し sessionStorage には残さないため、
  * テストは Callback 相当の `setTokens` でログイン状態を作る (= 旧 test の sessionStorage
  * シードは廃止)。logout は revoke 対象として現在の TokenSet を beginLogout に渡す。
  */
@@ -119,7 +119,7 @@ describe("AuthProvider idle timeout (#859)", () => {
     });
     expect(beginLogoutMock).not.toHaveBeenCalled();
 
-    // 残り 1 sec で発火。 ADR-025: revoke 対象の TokenSet が渡る。
+    // 残り 1 sec で発火し、revoke 対象の TokenSet が渡る。
     await act(async () => {
       vi.advanceTimersByTime(2 * 1000);
       await Promise.resolve();

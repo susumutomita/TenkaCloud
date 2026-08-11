@@ -5,7 +5,7 @@ import {
   deployStackPrefix,
 } from "../src/deploy-command-naming.js";
 
-describe("deploy-command-naming (ADR-050 sign-side mirrors)", () => {
+describe("deploy-command-naming", () => {
   it("should lowercase, dash-join, trim, and cap slugs at 40 chars", () => {
     expect(deploySlugify("Team Alpha")).toBe("team-alpha");
     expect(deploySlugify("  spaced   out  ")).toBe("spaced-out");

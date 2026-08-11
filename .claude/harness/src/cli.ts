@@ -63,8 +63,6 @@ Options:
   -h, --help           Show this message.
 
 Rules:
-  adr-must-be-html              docs/architecture/adr-*.md must not exist (use handwritten .html).
-  adr-self-contained            ADR HTML files must not contain chat / phased-rollout traces.
   iam-wildcard-needs-justify    Wildcard IAM policies need an inline justification comment.
   file-too-large                Single .ts/.tsx files must not exceed 500 (warn) / 800 (error) lines.
   handler-no-direct-sdk-import  handlers/<x>/index.ts must not import @aws-sdk/client-* directly.
@@ -98,8 +96,7 @@ export function run(opts: RunOptions): RunResult {
  * Loads all *.json baseline files from `dir` and merges entries.
  *
  * Each rule is encouraged to keep its own baseline file (e.g.
- * `adr-self-contained.json`, `file-too-large.json`,
- * `handler-no-direct-sdk-import.json`) so PRs that ratchet one rule don't
+ * `file-too-large.json`, `handler-no-direct-sdk-import.json`) so PRs that ratchet one rule don't
  * collide with PRs that ratchet another.
  */
 export function loadAllBaselines(dir: string): BaselineFile {

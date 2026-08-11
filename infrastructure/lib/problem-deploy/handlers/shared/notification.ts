@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { NotificationRecord } from "../../control-data/domain/notifications.js";
 
 /**
- * 運営 → 競技者 Notification の DynamoDB 行 shape (ADR-006)。
+ * 運営 → 競技者 Notification の DynamoDB 行 shape。
  *
  *   PK = `EVENT#<eventId>` (= 既存 Events partition と同居)
  *   SK = 時系列降順のソートキー (`<prefix>#<occurredAt>#<ulid>` — 衝突防止に ulid を付す)。
@@ -11,7 +11,7 @@ import type { NotificationRecord } from "../../control-data/domain/notifications
  *
  * 既存 META 行を巻き込まないので Event detail / list の Query には影響しない
  * (sparse な追加行)。TTL は親 event の `expiresAt` を継承し、event archive 後も
- * TTL までは残す (= 競技者の振り返り猶予、ADR-006 D5)。
+ * TTL までは残す (競技者の振り返り猶予)。
  *
  * [Issue #2527 Slice 1 step 2] The domain fields live on
  * {@link NotificationRecord} (`control-data/domain/notifications.ts`, the source
@@ -23,7 +23,7 @@ export interface NotificationItem extends NotificationRecord {
 }
 
 /**
- * `POST /events/:eventId/notifications` 受信 body (ADR-006 API 設計)。
+ * `POST /events/:eventId/notifications` 受信 body (API 設計)。
  *
  * - `title` 1〜120 chars
  * - `body`  1〜2000 chars

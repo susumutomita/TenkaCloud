@@ -36,7 +36,7 @@ const teamRow = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-describe("listNotifications (ADR-006)", () => {
+describe("listNotifications", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("limit が 0 / 負 / 上限超 / 非整数 は invalid_limit", async () => {

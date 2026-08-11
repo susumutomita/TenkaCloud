@@ -16,7 +16,7 @@ function synth(): Template {
   return Template.fromStack(stack);
 }
 
-describe("CustomerExecutionPlaneStack (#1727 / ADR-039 §7)", () => {
+describe("CustomerExecutionPlaneStack (#1727)", () => {
   it("should provision a 1/1 PROVISIONED nonce table with a TTL attribute", () => {
     const t = synth();
     // PROVISIONED is the CFn default so CDK omits BillingMode; the presence of
@@ -83,7 +83,7 @@ describe("CustomerExecutionPlaneStack (#1727 / ADR-039 §7)", () => {
     });
   });
 
-  it("should NOT grant the execution Lambda any sts:AssumeRole into a control-plane role (ADR-039 core property)", () => {
+  it("should NOT grant the execution Lambda any sts:AssumeRole into a control-plane role", () => {
     // Service roles (CFn / Lambda) legitimately have sts:AssumeRole in their TRUST policy,
     // but the Lambda's own permission policies must never let it assume an external role.
     const policies = synth().findResources("AWS::IAM::Policy");

@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 /**
  * #708: Event teardown が ROLLBACK_COMPLETE な stack で stuck したときの operator rescue。
  * 旧 UX は TEARDOWN になると「削除中... 全削除が完了すると自動で ARCHIVED に遷移します」
- * の Alert だけで、 進まない時の脱出経路が無かった。 本 PR は TEARDOWN 時に
+ * の Alert だけで、進まない時の脱出経路が無かった。TEARDOWN 時に
  * 「Force ARCHIVED に倒す」 button を出し、 confirm modal 経由で archiveEvent を呼ぶ。
  */
 

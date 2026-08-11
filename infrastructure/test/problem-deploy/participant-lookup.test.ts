@@ -563,7 +563,7 @@ describe("lookupTeamByLoginKey (Phase 2c team scope)", () => {
     expect(view?.problems[0]?.score).toBe(0);
   });
 
-  /* ADR-005 Phase 3.1: applicationStatus aggregate ----------------------- */
+  /* applicationStatus aggregate ----------------------- */
 
   it("should return uptime-kind problem applicationStatus as aggregate (healthy)", async () => {
     const scoring = {
@@ -816,7 +816,7 @@ describe("access capabilities (#2235)", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("should expose console and cli-credentials capabilities for an AWS problem", async () => {
-    // ADR-0001 / ADR-048 matrix: aws = managed (console + cli-credentials)。
+    // Access capability matrix: aws = managed (console + cli-credentials)。
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
 

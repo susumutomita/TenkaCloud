@@ -44,9 +44,8 @@ export class ControlStore {
   }
 
   /**
-   * Register (or update) a tenant-owned deployment account for the OIDC
-   * command path (ADR-050). The pair is the fail-closed precondition of every
-   * deploy/destroy command (#2362 posture, control-store edition).
+   * Register (or update) a tenant-owned deployment account. The tenant/account pair is the
+   * fail-closed precondition of every OIDC deploy/destroy command (#2362).
    */
   async upsertCompetitorAccountProjection(input: {
     readonly tenantId: string;
@@ -222,7 +221,7 @@ export class ControlStore {
   }
 
   /**
-   * Upsert an event runtime's uptime-score contribution for a team (ADR-049 Phase 5 / #2294).
+   * Issue #2294: upsert an event runtime's uptime-score contribution for a team.
    * The AWS event runtime pushes the authoritative uptime points; the leaderboard sums them
    * with the flag-materialized `score_summary`.
    */
@@ -318,8 +317,8 @@ export class ControlStore {
   }
 
   /**
-   * Export a control-store scoring snapshot for a tenant-owned event before reconciliation prunes
-   * it (ADR-049 Phase 5 / #2294). Per-tick runtime score events stay in the AWS event runtime and
+   * Issue #2294: export a control-store scoring snapshot for a tenant-owned event before reconciliation
+   * prunes it. Per-tick runtime score events stay in the AWS event runtime and
    * are not represented here. Returns `null` when the event is not owned by the tenant.
    */
   async exportEventScores(

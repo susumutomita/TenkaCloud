@@ -5,13 +5,13 @@ import type {
 import { type PhaseEntry, resolveActivePhase } from "./shared.js";
 
 /**
- * [ADR-013 Phase 2 / Issue #1422] condition-triggered disruption の純粋な評価ロジック。
+ * [Issue #1422] condition-triggered disruption の純粋な評価ロジック。
  *
  * scoring Lambda の 1 tick で、 1 deployment (= 1 team の 1 problem) について観測値
  * (= 採点後 score / deploy 経過分 / active phase) を見て、 どの disruption を「今」発火させるかを返す。
  *
- * - 複数 trigger は OR 結合 (= 最初に true になった条件で発火、 ADR-013 OQ#5)
- * - 一度発火した disruption は `alreadyFired` で抑制 (= idempotency、 OQ#5 の fire-suppress)
+ * - 複数 trigger は OR 結合 (最初に true になった条件で発火)
+ * - 一度発火した disruption は `alreadyFired` で抑制し、再発火させない
  * - `triggers` 未宣言の disruption は Phase 1 self-fire のみ (= ここでは無視)
  *
  * I/O を持たない純関数なので、 caller (index.ts) が publish と state 永続化を担う。
@@ -32,7 +32,7 @@ export interface FiredDisruption {
   readonly parameters: Readonly<Record<string, unknown>>;
   readonly triggerKind: DisruptionTrigger["kind"];
   /**
-   * [ADR-037 Slice 3] 宣言されていれば、 この条件発火を executor が `rate()` schedule で定期化する
+   * 宣言されていれば、 この条件発火を executor が `rate` schedule で定期化する
    * (= 「スコア一定以上で定期妨害」)。 省略 = 1 回だけ。 publish 時に Detail へ載せる。
    */
   readonly recurrence?: { readonly intervalMinutes: number; readonly maxFires: number };

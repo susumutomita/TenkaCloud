@@ -1,5 +1,5 @@
 /**
- * @tenkacloud/web-kit feature flags (ADR-035): one shared, typed mechanism so experimental
+ * @tenkacloud/web-kit feature flags: one shared, typed mechanism so experimental
  * features can ship behind a switch without scattering `config.featureX` booleans (spaghetti).
  *
  * The contract, per app:

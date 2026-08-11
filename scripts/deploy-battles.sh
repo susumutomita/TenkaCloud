@@ -22,10 +22,9 @@
 # value に置くと deploy ごとにランダム生成 (DbPassword 等の secret 用途)。
 #
 # 設計意図:
-#   ADR-001 の MVP-0 (PR-1.5) として、SaaS 配線 (Step Functions / EventBridge / tenant API /
-#   Cognito) を一切持ち込まずに「CFn template と AWS 権限の正しさ」だけを smoke test する。
-#   このスクリプトが安定すれば、MVP-1 では SBT ScriptJob パターン (Step Functions →
-#   CodeBuild StartBuild .sync → 同 script 実行) で wrap するだけで済む。
+#   SaaS 配線 (Step Functions / EventBridge / tenant API / Cognito) を一切持ち込まず、
+#   選択した問題の CFn template と AWS 権限の正しさだけを smoke test する。
+#   この script 自身は tenant onboarding や event 単位の orchestration を行わない。
 
 set -euo pipefail
 
@@ -115,7 +114,7 @@ build_parameter_overrides() {
 }
 
 #
-# ADR-008 Phase 3 / Issue #634: private 問題の payload を S3 から取得する。
+# Issue #634: private 問題の payload を S3 から取得する。
 #
 # 環境変数 `CHALLENGE_PAYLOAD_URL` が set されているとき、 problem_dir を local path として
 # 信頼せず、 presigned URL から zip を取得し /tmp に展開してそちらを problem_dir に差し替える。
@@ -157,7 +156,7 @@ resolve_problem_dir() {
 
 deploy_one() {
   local problem_dir="$1"
-  # ADR-008 Phase 3: private 問題の場合 zip を展開して dir を差し替える。 public は no-op。
+  # private 問題は zip を展開して dir を差し替え、public 問題は local dir をそのまま使う。
   problem_dir="$(resolve_problem_dir "${problem_dir}")"
   local template="${problem_dir}/template.yaml"
   if [[ ! -f "${template}" ]]; then
@@ -198,7 +197,7 @@ deploy_one() {
   #   - stack があれば Update (差分が無ければ "No changes" で 0 終了)
   #   - --no-fail-on-empty-changeset で「差分無し」を成功扱いにする (rerun 時の運用上の都合)
   #
-  # Issue #895 Phase 2.A (ADR-001 §6): stack カタログ用 tag を打つ。 operator が
+  # Issue #895: stack カタログ用 tag を打つ。 operator が
   # `cloudformation:ListStacks` / Resource Groups Tagging API で次の用途で逆引きできる:
   #   - TenantId    : tenant 別の deploy 一覧
   #   - JobId       : 1 deploy = 1 job、 retry / drill-down の identity

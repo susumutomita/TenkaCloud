@@ -8,7 +8,7 @@ import {
 import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 /**
- * [ADR-026/027/032 / #1410-1412] 非 AWS runtime status reconciler の振る舞い pin。 RuntimeStatus→
+ * [#1410-1412] 非 AWS runtime status reconciler の振る舞い pin。 RuntimeStatus→
  * DeploymentStatus 射影 / sakura 行の getStatus→ready→COMPLETE + collectOutputs→stackOutputs /
  * 無変化 skip / AWS・runtime 欠落 skip / race(ConditionalCheckFailed) を観測する。
  */

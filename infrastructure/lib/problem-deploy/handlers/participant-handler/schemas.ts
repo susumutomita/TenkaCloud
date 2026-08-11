@@ -17,7 +17,7 @@ import { ULID_RE as JOB_ID_RE, PROBLEM_ID_RE } from "../shared/constants.js";
  *     ULID_RE)。 schema は `.regex()` で同じ pattern を表現し、 1 source of truth を維持。
  *   - downstream service が `unknown` を再 validate しているケース (= submitFlag / castEvent
  *     / setDisplayTeamName) も schema 適用後は typed value を渡せるが、 service 側の
- *     defensive validation は残す (= DB row 改竄 / schema drift 防御層、 ADR-008 と整合)。
+ * defensive validation は残す (DB row 改竄 / schema drift 防御層、 既存の分離契約と整合)。
  *
  * route → schema 対応:
  *   - GET    /portal/me                                       — token only (schema 不要)
@@ -39,7 +39,7 @@ import { ULID_RE as JOB_ID_RE, PROBLEM_ID_RE } from "../shared/constants.js";
  *   - DELETE /portal/me/problems/:problemId/endpoints/:slot        ProblemSlotParamSchema
  */
 
-/** ADR-012 Phase 3.A: slot 名は kebab-case (= metadata.endpoints[].slot pattern と同じ)。 */
+/** slot 名は kebab-case (`metadata.endpoints[].slot` pattern と同じ)。 */
 export const SLOT_NAME_RE = /^[a-z0-9][a-z0-9-]*$/;
 
 /** hint id は metadata.json 側で `[a-z0-9][a-z0-9-]{0,63}` 想定。 既存 handler の 1〜64 文字 cap を維持。 */
@@ -86,8 +86,7 @@ export const SubmitFlagBodySchema = z.object({
 });
 
 /**
- * POST /portal/me/cast-event — inter-team dispatch primitive
- * (= ADR-013 候補、 [[feedback_inter_team_coordination_plugin]])。
+ * POST /portal/me/cast-event — inter-team dispatch primitive。
  *
  * - `targetJobId` は ULID
  * - `kind` は `[a-z][a-z0-9-]{0,63}` (= cast-event.ts の KIND_RE)

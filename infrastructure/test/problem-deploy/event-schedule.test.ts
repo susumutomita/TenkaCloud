@@ -290,7 +290,7 @@ describe("setEventSchedule endsAt (#536 scheduled endsAt)", () => {
   });
 });
 
-describe("setEventSchedule teardownAt (ADR-047 自動撤去)", () => {
+describe("setEventSchedule teardownAt (自動撤去)", () => {
   beforeEach(() => vi.clearAllMocks());
   const TEARDOWN_AT = "2026-05-08T14:00:00.000Z"; // ENDS_AT (12:00) 以降
 
@@ -381,7 +381,7 @@ describe("setEventSchedule teardownAt (ADR-047 自動撤去)", () => {
   });
 });
 
-describe("setEventSchedule deployAt (ADR-047 follow-up 自動デプロイ)", () => {
+describe("setEventSchedule deployAt (自動デプロイ)", () => {
   beforeEach(() => vi.clearAllMocks());
   const DEPLOY_AT = "2026-05-08T09:00:00.000Z"; // ENDS_AT (12:00) 以前
 
@@ -494,22 +494,22 @@ describe("ScheduleEventRequestSchema", () => {
     expect(out.endsAt).toBe("2026-05-08T12:00:00.000Z");
   });
 
-  it("teardownAt should also transform its offset to Z (ADR-047)", () => {
+  it("teardownAt should also transform its offset to Z", () => {
     const out = ScheduleEventRequestSchema.parse({ teardownAt: "2026-05-08T23:00:00+09:00" });
     expect(out.teardownAt).toBe("2026-05-08T14:00:00.000Z");
   });
 
-  it("deployAt should also transform its offset to Z (ADR-047 follow-up)", () => {
+  it("deployAt should also transform its offset to Z", () => {
     const out = ScheduleEventRequestSchema.parse({ deployAt: "2026-05-08T18:00:00+09:00" });
     expect(out.deployAt).toBe("2026-05-08T09:00:00.000Z");
   });
 
-  it("`{ deployAt }` のみで refine を通る (ADR-047 follow-up)", () => {
+  it("`{ deployAt }` のみで refine を通る", () => {
     const out = ScheduleEventRequestSchema.parse({ deployAt: "2026-05-08T09:00:00.000Z" });
     expect(out.deployAt).toBe("2026-05-08T09:00:00.000Z");
   });
 
-  it("`{ teardownAt }` のみで refine を通る (ADR-047)", () => {
+  it("`{ teardownAt }` のみで refine を通る", () => {
     const out = ScheduleEventRequestSchema.parse({ teardownAt: "2026-05-08T14:00:00.000Z" });
     expect(out.teardownAt).toBe("2026-05-08T14:00:00.000Z");
   });

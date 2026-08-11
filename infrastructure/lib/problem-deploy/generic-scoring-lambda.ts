@@ -24,14 +24,14 @@ export interface GenericScoringLambdaProps {
    * Events table。Event status の auto-transition (#557 / #539) を 1-min tick で reconcile する。
    * 採点 dispatcher とは独立の責務だが、 cron schedule (= rate(1 minute)) を共有する。
    *
-   * [Issue #2440 / ADR-049 §5.1 Phase A5] `controlDataBackend` が純 SQL (`turso`) のとき
+   * [Issue #2440] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env
    * `EVENTS_TABLE_NAME` は注入せず grant も付与しない — Events 読み書きは repository seam
    * (`resolveEventsRepository` / entrypoint 注入の control-data runtime) が SQL executor 直結で処理する。
    */
   readonly eventsTable?: ITable;
   /**
-   * [ADR-047 follow-up] Teams table (read-only)。 scheduled auto-deploy が `bulkDeployEvent` 経由で
+   * Teams table (read-only)。 scheduled auto-deploy が `bulkDeployEvent` 経由で
    * event の teams を Query して teams × problems の deployment 行を一括生成するため。 これを配線すると
    * `buildScheduledDeployResources()` が有効化され、 reconciler が deployAt 経過の DRAFT event を
    * 自動 deploy する (未配線なら dormant、 teardownAt の鏡像)。 {@link eventsTable} と同じ条件で
@@ -39,13 +39,13 @@ export interface GenericScoringLambdaProps {
    */
   readonly teamsTable?: ITable;
   /**
-   * [ADR-047 follow-up] `{ [problemId]: problemDir }` の catalog。 scheduled auto-deploy が
+   * `{ [problemId]: problemDir }` の catalog。 scheduled auto-deploy が
    * problemId → problemDir を解決して DeployCreateRequested を組み立てるため。 EventApiLambda の
    * `BATTLE_PROBLEMS_CATALOG` と同じ source (= props.problemsCatalog)。
    */
   readonly problemsCatalog: Readonly<Record<string, string>>;
   /**
-   * ADR-012 Phase 3.A: Endpoint registry table (= ProblemEndpoints)。 dispatcher は
+   * Endpoint registry table (ProblemEndpoints)。 dispatcher は
    * per (tenant, team, problem) で override 行を Query で引き、 effective URL (= override ?? default)
    * を probe する。
    *
@@ -56,12 +56,12 @@ export interface GenericScoringLambdaProps {
    */
   readonly endpointsTable?: ITable;
   /**
-   * `{ [problemId]: scoring }` 形の 5 種 builtin scoring 設定 (ADR-012 Phase 3.B)。
+   * `{ [problemId]: scoring }` 形の 5 種 builtin scoring 設定。
    * `scoring` field を持たない問題は不在キー (= 採点無効)。
    */
   readonly problemsScoring: Readonly<Record<string, unknown>>;
   /**
-   * ADR-012 Phase 3.A: `{ [problemId]: ProblemEndpointSlot[] }`。dispatcher が
+   * `{ [problemId]: ProblemEndpointSlot[] }`。dispatcher が
    * default URL (= CFn output から read-through) を解決するため参照。`endpoints[]`
    * 宣言の無い問題は不在キー。
    */
@@ -72,20 +72,20 @@ export interface GenericScoringLambdaProps {
    */
   readonly problemsPhases: Readonly<Record<string, unknown>>;
   /**
-   * [#1422 / ADR-013 Phase 2] `{ [problemId]: ProblemDisruptionEntry[] }`。 `triggers[]` を持つ
-   * disruption を tick で eval し condition-triggered 発火する。 disruptions[] 無しの問題は不在キー。
+   * [#1422] `{ [problemId]: ProblemDisruptionEntry[] }`。 `triggers[]` を持つ
+   * disruption を tick で eval し condition-triggered 発火する。`disruptions[]` 無しの問題は不在キー。
    */
   readonly problemsDisruptions: Readonly<Record<string, unknown>>;
   /**
-   * [ADR-028 / #2324] `{ [problemId]: { plugin } }`。 coordination を宣言した問題の宣言 metadata
+   * [#2324] `{ [problemId]: { plugin } }`。 coordination を宣言した問題の宣言 metadata
    * (= `discoverProblemsCoordination` の出力、 dispatcher の `PROBLEM_COORDINATION` と同一 source)。
    * per-minute pass の tick が「どの event が coordination を宣言しているか」判定するのに使う。 これは
    * 宣言 metadata であって plugin code ではないので、 採点 Lambda に持たせても資格情報分離を壊さない
-   * (= 実 runTick は最小 IAM の CoordinationDispatcher Lambda で走る、 ADR-028/030)。 宣言 0 件なら空。
+   * (実 runTick は最小 IAM の CoordinationDispatcher Lambda で走る)。 宣言 0 件なら空。
    */
   readonly problemsCoordination?: Readonly<Record<string, unknown>>;
   /**
-   * [ADR-033 / #1665] disruptions audit table。 operator-fired disruption の active 採点効果を tick で
+   * [#1665] disruptions audit table。 operator-fired disruption の active 採点効果を tick で
    * 解決するため read-only で query する (= scoring-side effect)。
    *
    * [Issue #2442 / Phase C3] `controlDataBackend` が純 SQL (`turso`) のとき
@@ -95,7 +95,7 @@ export interface GenericScoringLambdaProps {
    */
   readonly disruptionsTable?: ITable;
   /**
-   * [ADR-047] scheduled auto-teardown が `bulkTeardownEvent` 経由で cross-account teardown の
+   * scheduled auto-teardown が `bulkTeardownEvent` 経由で cross-account teardown の
    * competitorRoleArn / externalId を解決するための CompetitorAccounts table (read-only)。
    * これを配線すると `buildScheduledTeardownResources()` が有効化され、 reconciler が
    * teardownAt 経過の event を自動撤去する (未配線なら dormant)。
@@ -114,12 +114,12 @@ export interface GenericScoringLambdaProps {
    */
   readonly eventBus: IEventBus;
   /**
-   * [ADR-026/027/032 / #1410-1412] SSM SecureString path 構築 + 非 AWS runtime status reconciler の
+   * [#1410-1412] SSM SecureString path 構築 + 非 AWS runtime status reconciler の
    * credential 解決用の environment 名 (`/<env>/tenants/.../{sakura-api-key|azure-credential|gcp-credential}`)。
    */
   readonly environmentName: string;
   /**
-   * [Issue #2440 / ADR-049 §5.1 Phase A5] control-plane data backend (dynamodb|turso)。
+   * [Issue #2440] control-plane data backend (dynamodb|turso)。
    * event status reconcile (`resolveEventsRepository`) と manual prune
    * tick (注入 runtime の `needsManualPrune`) の両方がこの env を読む。default (未指定 /
    * `dynamodb`) は env を足さず byte 互換。`EventApiLambda` と同型の注入パターン。
@@ -130,7 +130,7 @@ export interface GenericScoringLambdaProps {
   /** SSM SecureString parameter name containing the libSQL auth token. */
   readonly tursoAuthTokenParameterName?: string;
   /**
-   * [ADR-023 / #2054 / Issue #2571] 非 aws/cloudformation の runtime を宣言した問題のみ
+   * [#2054 / Issue #2571] 非 aws/cloudformation の runtime を宣言した問題のみ
    * (= `{problemId: {provider,engine,entry}}`)。`discoverProblemsRuntime` の戻り値、
    * EventApiLambda / DeployApiLambda の同名 prop と同一 source。scheduled auto-deploy
    * (`buildScheduledDeployResources`) が `makeProblemRuntimeDescriptorResolver` 経由でここから
@@ -142,7 +142,7 @@ export interface GenericScoringLambdaProps {
 }
 
 /**
- * ADR-012 Phase 3.B: Generic scoring Lambda (旧 HealthCheckLambda の後継)。
+ * Generic scoring Lambda (旧 HealthCheckLambda の後継)。
  *
  * 1 分間隔で 2 つの reconcile 処理を回す:
  *
@@ -194,20 +194,20 @@ export class GenericScoringLambda extends Construct {
           : {}),
         // #1422: condition-triggered disruption の publish 先 (手動 fire と同じ deploy bus)。
         DEPLOY_EVENT_BUS_NAME: props.eventBus.eventBusName,
-        // [ADR-026/027/032 / #1410-1412] 非 AWS runtime status reconciler の credential path 構築用。
+        // [#1410-1412] 非 AWS runtime status reconciler の credential path 構築用。
         DEPLOY_ENVIRONMENT: props.environmentName,
-        // [ADR-033 / #1665] operator-fired disruption の active 採点効果を解決するための audit table。
+        // [#1665] operator-fired disruption の active 採点効果を解決するための audit table。
         // Issue #2442: 純 SQL backend では table 自体が無いので env も足さない。
         ...(props.disruptionsTable
           ? { DISRUPTIONS_TABLE_NAME: props.disruptionsTable.tableName }
           : {}),
-        // [ADR-047] scheduled auto-teardown 用。 buildScheduledTeardownResources がこの env を見て
+        // scheduled auto-teardown 用。 buildScheduledTeardownResources がこの env を見て
         // 有効化する (未設定なら scheduled teardown は dormant)。 Issue #2442: 純 SQL backend
         // では table 自体が無いので env も足さない (= dormant のまま安全に倒れる)。
         ...(props.competitorAccountsTable
           ? { COMPETITOR_ACCOUNTS_TABLE_NAME: props.competitorAccountsTable.tableName }
           : {}),
-        // [ADR-047 follow-up] scheduled auto-deploy 用。 buildScheduledDeployResources がこの env +
+        // scheduled auto-deploy 用。 buildScheduledDeployResources がこの env +
         // BATTLE_PROBLEMS_CATALOG (下の define) を見て有効化する (未設定なら scheduled deploy は dormant)。
         ...(props.teamsTable ? { TEAMS_TABLE_NAME: props.teamsTable.tableName } : {}),
         // [Issue #2440]: control-plane data backend (default dynamodb は env を足さず byte 互換)。
@@ -234,12 +234,12 @@ export class GenericScoringLambda extends Construct {
         "process.env.BATTLE_PROBLEMS_DISRUPTIONS": JSON.stringify(
           JSON.stringify(props.problemsDisruptions),
         ),
-        // [ADR-047 follow-up] scheduled auto-deploy が problemId→problemDir を解決するための catalog。
+        // scheduled auto-deploy が problemId→problemDir を解決するための catalog。
         // EventApiLambda と同じく build 時 literal 置換し env 4KB 上限を回避 (#1308 と同パターン)。
         "process.env.BATTLE_PROBLEMS_CATALOG": JSON.stringify(
           JSON.stringify(props.problemsCatalog),
         ),
-        // [ADR-028 / #2324] coordination 宣言 config を build 時 literal 置換 (env 4KB 回避、
+        // [#2324] coordination 宣言 config を build 時 literal 置換 (env 4KB 回避、
         // scoring/phases/disruptions catalog と同方式)。 tick が「どの problemId が coordination を
         // 宣言しているか」判定するため (= plugin code ではなく宣言 metadata、 dispatcher と同一 source)。
         // 宣言 0 件なら `{}` (= tick 対象なし)。 env var は増やさない。
@@ -265,15 +265,15 @@ export class GenericScoringLambda extends Construct {
     // Endpoint registry: per (tenant, team, problem) の override 行を Query する (= read-only)。
     // Issue #2442: 純 SQL backend では table 自体が無いので grant も付与しない。
     props.endpointsTable?.grantReadData(this.fn);
-    // [ADR-033 / #1665] disruptions audit table: operator-fired disruption の active 採点効果を
+    // [#1665] disruptions audit table: operator-fired disruption の active 採点効果を
     // event ごとに Query する (= read-only、 scoring-side effect の解決)。
     // Issue #2442: 純 SQL backend では table 自体が無いので grant も付与しない。
     props.disruptionsTable?.grantReadData(this.fn);
-    // [ADR-047] scheduled auto-teardown: bulkTeardownEvent が CompetitorAccounts から cross-account
+    // scheduled auto-teardown: bulkTeardownEvent が CompetitorAccounts から cross-account
     // role / externalId を解決する (= read-only)。 これで scheduled teardown が有効化される。
     // Issue #2442: 純 SQL backend では table 自体が無いので grant も付与しない。
     props.competitorAccountsTable?.grantReadData(this.fn);
-    // [ADR-047 follow-up] scheduled auto-deploy: bulkDeployEvent が event の teams を Query する
+    // scheduled auto-deploy: bulkDeployEvent が event の teams を Query する
     // (= read-only)。 Deployments への TransactWrite / event bus publish は既存 grant を再利用する
     // (deployments.grantReadWriteData + eventBus.grantPutEventsTo)。 これで scheduled deploy が有効化される。
     props.teamsTable?.grantReadData(this.fn);
@@ -295,7 +295,7 @@ export class GenericScoringLambda extends Construct {
       );
     }
 
-    // [ADR-026/027/032 / #1410-1412] 非 AWS runtime status reconciler が per-team credential
+    // [#1410-1412] 非 AWS runtime status reconciler が per-team credential
     // (sakura/azure/gcp SecureString) を decrypt 取得する。 deploy-api-lambda と同じ prefix-scope。
     const stack = Stack.of(this);
     const credentialSsmArns = [
@@ -325,7 +325,7 @@ export class GenericScoringLambda extends Construct {
     new Rule(this, "Schedule", {
       schedule: Schedule.rate(Duration.minutes(1)),
       description:
-        "TenkaCloud 1-min tick: ADR-012 generic scoring dispatcher + Event status reconcile (#557 #539).",
+        "TenkaCloud 1-min tick: generic scoring dispatcher + Event status reconcile (#557 #539).",
       targets: [new LambdaFunction(this.fn)],
     });
   }

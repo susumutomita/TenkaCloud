@@ -170,20 +170,20 @@ describe("ProblemDeployBackendStack (MVP-1) — Deploy API Lambda (invoked from 
     );
   });
 
-  // [ADR-026 / #1412] sakura/apprun deploy 用に per-team Sakura API-key SecureString を decrypt 取得する
+  // [#1412] sakura/apprun deploy 用に per-team Sakura API-key SecureString を decrypt 取得する
   // grant が必要。 ExternalId path と同様 prefix-scope された ARN が deploy Lambda の policy に乗っていること。
   it("should grant ssm:GetParameter on the per-team Sakura API-key SecureString path (#1412)", () => {
     const serialized = JSON.stringify(tpl.findResources("AWS::IAM::Policy"));
     expect(serialized).toContain("tenants/*/teams/*/sakura-api-key");
   });
 
-  // [ADR-032 / #1410] azure/bicep deploy も per-team Azure credential を decrypt 取得する。
+  // [#1410] azure/bicep deploy も per-team Azure credential を decrypt 取得する。
   it("should grant ssm:GetParameter on the per-team Azure credential SecureString path (#1410)", () => {
     const serialized = JSON.stringify(tpl.findResources("AWS::IAM::Policy"));
     expect(serialized).toContain("tenants/*/teams/*/azure-credential");
   });
 
-  // [ADR-032 / #1411] gcp/infra-manager deploy も per-team GCP WIF config を decrypt 取得する。
+  // [#1411] gcp/infra-manager deploy も per-team GCP WIF config を decrypt 取得する。
   it("should grant ssm:GetParameter on the per-team GCP credential SecureString path (#1411)", () => {
     const serialized = JSON.stringify(tpl.findResources("AWS::IAM::Policy"));
     expect(serialized).toContain("tenants/*/teams/*/gcp-credential");
@@ -301,23 +301,23 @@ describe("ProblemDeployBackendStack (MVP-1) — GenericScoring Lambda", () => {
     expect(vars.DEPLOYMENTS_TABLE_NAME).toBeDefined();
     expect(vars.EVENTS_TABLE_NAME).toBeDefined();
     expect(vars.PROBLEM_ENDPOINTS_TABLE_NAME).toBeDefined();
-    // [ADR-033 / #1665] operator-fired disruption の active 採点効果を解決する audit table。
+    // [#1665] operator-fired disruption の active 採点効果を解決する audit table。
     expect(vars.DISRUPTIONS_TABLE_NAME).toBeDefined();
-    // [ADR-047] scheduled auto-teardown を有効化する CompetitorAccounts table 名 env。
+    // scheduled auto-teardown を有効化する CompetitorAccounts table 名 env。
     expect(vars.COMPETITOR_ACCOUNTS_TABLE_NAME).toBeDefined();
-    // [ADR-047 follow-up] scheduled auto-deploy を有効化する Teams table 名 env。
+    // scheduled auto-deploy を有効化する Teams table 名 env。
     expect(vars.TEAMS_TABLE_NAME).toBeDefined();
     expect(vars.BATTLE_PROBLEMS_SCORING).toBeUndefined();
     expect(vars.PROBLEM_ENDPOINTS).toBeUndefined();
     expect(vars.BATTLE_PROBLEMS_PHASES).toBeUndefined();
-    // [ADR-047 follow-up] catalog は esbuild define で build 時 literal 化するので env からは除く。
+    // catalog は esbuild define で build 時 literal 化するので env からは除く。
     expect(vars.BATTLE_PROBLEMS_CATALOG).toBeUndefined();
     // [Issue #2571] scheduled auto-deploy adapter dispatch 用 runtime catalog も同じ esbuild
     // define channel に載る (= EventApi と同型、4KB env 上限回避)。
     expect(vars.BATTLE_PROBLEMS_RUNTIMES).toBeUndefined();
   });
 
-  it("GenericScoring Lambda role should be granted read on the Teams table (#ADR-047 follow-up scheduled deploy)", () => {
+  it("GenericScoring Lambda role should be granted read on the Teams table for scheduled deploy", () => {
     // scheduled auto-deploy が bulkDeployEvent で event の teams を Query する (= read-only)。
     // CodeRabbit #2010: 「どこかの policy に dynamodb:Query があれば pass」では Teams grant の
     // 回帰を捕まえられないので、 (a) GenericScoring role の policy に限定し、 (b) Resource が
@@ -381,7 +381,7 @@ describe("ProblemDeployBackendStack (MVP-1) — GenericScoring Lambda", () => {
     expect(hasPutEvents).toBe(true);
   });
 
-  // [ADR-026/027/032 / #1410-1412] runtime status reconciler が非 AWS credential を decrypt 取得する。
+  // [#1410-1412] runtime status reconciler が非 AWS credential を decrypt 取得する。
   it("should grant ssm:GetParameter on the per-team credential paths + DEPLOY_ENVIRONMENT env (#1410-1412)", () => {
     const functions = tpl.findResources("AWS::Lambda::Function");
     const genericScoring = Object.entries(functions).find(
@@ -461,7 +461,7 @@ describe("ProblemDeployBackendStack — EventApi Lambda audit log read grant (#1
     expect(allActions.has("dynamodb:UpdateItem")).toBe(true);
   });
 
-  it("[ADR-037 Slice 2] EventApi Role should grant scheduler:DeleteSchedule scoped to tc-recur-*", () => {
+  it("EventApi Role should grant scheduler:DeleteSchedule scoped to tc-recur-*", () => {
     // recurring disruption の早期解除 (operator 一覧→Cancel) が executor の作った rate schedule を
     // 消すための最小権限。 resource は tc-recur-* に scope する (= 任意 schedule は消せない)。
     const policies = tpl.findResources("AWS::IAM::Policy");
@@ -471,7 +471,7 @@ describe("ProblemDeployBackendStack — EventApi Lambda audit log read grant (#1
   });
 });
 
-describe("ProblemDeployBackendStack (MVP-1) — Competitor Accounts API Lambda (Issue #459 / ADR-002 Phase 2.1)", () => {
+describe("ProblemDeployBackendStack (MVP-1) — Competitor Accounts API Lambda (Issue #459)", () => {
   const tpl = synthDefault();
 
   it("Lambda should have COMPETITOR_ACCOUNTS_TABLE_NAME / DEPLOY_ENVIRONMENT / TENKACLOUD_ACCOUNT_ID env", () => {
@@ -522,7 +522,7 @@ describe("ProblemDeployBackendStack (MVP-1) — Competitor Accounts API Lambda (
     );
   });
 
-  // [ADR-026/027/032 / #1413] per-team cloud credential onboarding は同 Lambda が sakura/azure/gcp の
+  // [#1413] per-team cloud credential onboarding は同 Lambda が sakura/azure/gcp の
   // SecureString を Put/Delete/Get する。 3 provider 分の path prefix ARN が policy に乗っていること。
   it("should grant SSM access on the per-team sakura/azure/gcp credential SecureString paths (#1413)", () => {
     const serialized = JSON.stringify(tpl.findResources("AWS::IAM::Policy"));

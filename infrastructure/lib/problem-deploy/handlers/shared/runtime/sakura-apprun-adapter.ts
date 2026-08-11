@@ -1,18 +1,18 @@
 /**
- * [ADR-026 / Issues #1412, #2746] sakura/apprun runtime adapter.
+ * [Issues #1412, #2746] sakura/apprun runtime adapter.
  *
  * Sakura には CloudFormation 相当の state-owning IaC が無いので、 problem の container image を
  * **AppRun application** として deploy し、 AppRun (Knative on managed k8s) が runtime / scaling /
- * teardown を所有する (= ADR-023 D3 を満たす。 platform は state file / lock を持たない)。 image は
+ * teardown を所有し、platform は state file / lock を持たない。image は
  * `runtime.entry`、 problem パラメータ + platform メタは env var で渡し、 public URL を deploy output に読む。
  *
- * 認証は **static API key (Access Token + Secret)** を SSM SecureString から都度取得する (ADR-026 D3、
- * AWS の ExternalId と同型の保管。 long-lived なので scope 最小化 + per-team account 前提)。 Sakura は
+ * 認証は **static API key (Access Token + Secret)** を SSM SecureString から都度取得する。
+ * AWS の ExternalId と同型の保管で、long-lived なので scope 最小化 + per-team account 前提。Sakura は
  * federation primitive を持たないため Trust Bridge には乗らない。
  *
  * orchestration は注入された `SakuraAppRunClient` / `getApiKey` に対して書き、 unit test で全分岐を pin する。
  * 具体 HTTP 実装 (実 AppRun REST 呼び出し) と SSM key 取得は **実 account で検証する別レイヤ** (= deploy
- * handler が束縛する)。 = #1419 executor と同じ「logic を注入境界で組み、 実 I/O は後で配線」方針。
+ * handler が束縛する)。#1419 executor と同じく、logic を注入境界で組み実 I/O を別層で配線する。
  */
 
 import {
@@ -29,7 +29,7 @@ import {
   type RuntimeStatusInput,
 } from "./adapter.js";
 
-/** Sakura API の静的キー (Access Token + Secret)。 SSM SecureString から取得 (ADR-026 D3)。 */
+/** Sakura API の静的キー (Access Token + Secret)。 SSM SecureString から取得。 */
 export interface SakuraCredential {
   readonly accessToken: string;
   readonly accessTokenSecret: string;
@@ -114,7 +114,7 @@ export class SakuraAppRunRuntimeAdapter implements ProblemRuntimeAdapter {
     };
     await client.upsertApplication({
       name: input.namePrefix,
-      image: this.runtime.entry, // ADR-026: runtime.entry = container image reference
+      image: this.runtime.entry, // runtime.entry is the immutable container image reference.
       env: mergeCompositeParameters(platformEnv, input.parameters),
     });
     return { status: "deploying" };

@@ -1,6 +1,6 @@
 name: deploy-always-on-runtime
 
-# ADR-049 Phase 4 (Issue #2363) — Always-On per-event runtime lifecycle (deploy).
+# Issue #2363 — Always-On per-event runtime lifecycle (deploy).
 #
 # Deploys the PER-EVENT runtime stack (tenkacloud-event-runtime-<eventId>) via
 # `make deploy-always-on-runtime`, keyed by the eventId input. This is distinct from the
@@ -45,7 +45,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    # ADR-049 §12: run inside a protected GitHub Environment so its reviewers / branch
+    # Run inside a protected GitHub Environment so its reviewers / branch
     # rules gate the deploy, and the OIDC sub claim (repo:...:environment:*) matches.
     environment: always-on-runtime
     steps:

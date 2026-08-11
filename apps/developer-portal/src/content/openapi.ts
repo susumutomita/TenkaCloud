@@ -1,11 +1,8 @@
-// The OpenAPI artifact rendered by the API reference (ADR-0003 §7: "HTTP API
-// reference — source of truth is the OpenAPI document generated/validated from the
-// platform API in CI"). This minimal, browse-only artifact is checked in for the
-// foundation; the CI generation step that derives it from the platform API is a
-// follow-up tracked against ADR-0004.
+// The API reference renders this checked-in, browse-only OpenAPI artifact. A future
+// CI step will generate and validate it from the platform API.
 //
-// Security (ADR-0003 §8, ADR-0004): the default server is the SANDBOX base URL,
-// never production. No API key or bearer token is embedded. Every operation
+// The default server is the sandbox, never production. No API key or bearer token
+// is embedded. Every operation
 // carries exactly one `x-tenkacloud-capability` label so the renderer can gate
 // what a reader's zone may exercise once interactive Try-It lands.
 
@@ -27,8 +24,7 @@ export interface OpenApiOperation {
   readonly responses: Record<string, { readonly description: string }>;
 }
 
-// Sandbox base URL is the only default target. Production is intentionally absent
-// from the default server list (ADR-0004: production is never the Try-It default).
+// Sandbox is the only default target; production is intentionally absent.
 export const SANDBOX_BASE_URL = "https://sandbox.api.tenkacloud.example/v1";
 
 export const OPENAPI_ARTIFACT: OpenApiArtifact = {
@@ -83,8 +79,7 @@ export interface ApiOperationSummary {
   readonly capability: Capability;
 }
 
-// The flat operation list fed into the command-search index (ADR-0003 §6: "the
-// command palette indexes MDX headings and the OpenAPI operation list").
+// The command palette indexes this operation list alongside MDX headings.
 export function listApiOperations(
   artifact: OpenApiArtifact = OPENAPI_ARTIFACT,
 ): readonly ApiOperationSummary[] {

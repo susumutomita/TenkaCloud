@@ -57,7 +57,7 @@ rule ID・principle・scope・severity の一覧は [`docs/architecture/enforcem
 1. `ruleId`、`filePath`、`line`、`recommendation` を確認する。
 2. `.claude/harness/src/rules/<ruleId>.ts` と test を読み、判定契約を確認する。
 3. 設定や baseline で隠さず、まず code を修正する。
-4. rule の例外が本当に必要なら、影響と代替防御を ADR に記録し、scope と test を明示的に更新する。
+4. rule の例外が本当に必要なら、影響と代替防御を該当 code と test の近くに記録し、scope と test を明示的に更新する。
 
 ## 関連
 

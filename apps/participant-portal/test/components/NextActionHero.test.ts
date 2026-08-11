@@ -312,8 +312,8 @@ describe("next action follows the course track", () => {
 /**
  * [#2928] The very first screen a `make local` participant sees sent them to a
  * graduate-level cryptography problem, identified by its raw problem id. The intro drill
- * was already pinned by the platform (`recommended: true`, ADR-012's reference
- * implementation) and already delivered by the API — the hero simply never looked at it.
+ * was already pinned by the platform (`recommended: true`) and delivered by the API — the hero
+ * simply never looked at it.
  *
  * These pin the three separable parts, because each fails independently and silently:
  * choosing the drill, standing down once the participant has progress, and showing a name.

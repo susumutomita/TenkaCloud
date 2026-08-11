@@ -1,5 +1,5 @@
 /**
- * @TenkaCloud/trust-bridge — Issue #795 / ADR-017 Phase 1 public surface。
+ * @TenkaCloud/trust-bridge — Issue #795 public surface。
  *
  * 「クレデンシャルを越境させず、 署名された CloudActionIntent を越境させ、
  *  検証側で短命 provider-native authority に交換する」 protocol の基盤層。

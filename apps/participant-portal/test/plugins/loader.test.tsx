@@ -4,7 +4,7 @@ import { Component, type ComponentType, type ReactNode, Suspense } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * ADR-012 Phase 5 plugin loader。 findProblemMetadata を mock して dashboard slot の
+ * portal plugin loader。 findProblemMetadata を mock して dashboard slot の
  * 宣言有無 / glob 解決可否を制御し、 (1) slot 未宣言 → undefined、 (2) glob 解決済 →
  * memoize された React.lazy、 (3) 宣言済だが file 不在 → erroring lazy (= #1251 fail-loud)
  * を pin する。 erroring lazy は ErrorBoundary 経由で render し console.error を確認する。

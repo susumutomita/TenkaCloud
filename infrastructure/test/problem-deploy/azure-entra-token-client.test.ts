@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createAzureEntraTokenClient } from "../../lib/problem-deploy/runtime-clients/azure-entra-token-client.js";
 
 /**
- * [ADR-032 / #1410] Entra ID client_credentials token client の wire を pin。 fetch を mock し、
+ * [#1410] Entra ID client_credentials token client の wire を pin。 fetch を mock し、
  * token endpoint / form body (grant_type / client_id / client_secret / scope) / access_token 抽出 /
  * 非2xx throw / access_token 欠落 throw を観測する。
  */
@@ -16,7 +16,7 @@ function client(fetchImpl: ReturnType<typeof vi.fn>) {
 
 const INPUT = { azureTenantId: "dir-1", clientId: "app-1", clientSecret: "shh" };
 
-describe("azure-entra-token-client (ADR-032 #1410)", () => {
+describe("azure-entra-token-client (#1410)", () => {
   it("should POST client_credentials to the tenant token endpoint and return the access_token", async () => {
     const fetchImpl = vi.fn().mockResolvedValueOnce(
       new Response(

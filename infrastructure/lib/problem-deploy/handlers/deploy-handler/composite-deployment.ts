@@ -10,7 +10,7 @@
  * Targets reuse the existing deployment row fields so the current AWS
  * EventBridge / Step Functions path and the non-AWS reconciler can keep
  * operating on a target solely by `DEPLOYMENT#{targetDeploymentId}` / `META`
- * (ADR-023 / epic #2058). Parent + target rows deliberately DO NOT populate
+ * (epic #2058). Parent + target rows deliberately DO NOT populate
  * GSI1 (tenant list) or GSI2 (participant teamLoginKey) so they stay out of the
  * existing list / portal queries until a later issue adds an intentional view.
  * Target rows alone populate GSI3 for parent→target lookup.

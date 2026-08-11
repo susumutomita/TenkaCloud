@@ -1,6 +1,6 @@
 # machine (M2M) credential 運用 Runbook
 
-Issue 2948 / 2952 / 2954、ADR-0005。CLI・CI・agent operator が Tenant API を叩くための machine credential を、発行・棚卸し・失効するための手順。
+Issue 2948 / 2952 / 2954。CLI・CI・agent operator が Tenant API を叩くための machine credential を、発行・棚卸し・失効するための手順。
 
 ## 前提 (プラットフォームの設計)
 
@@ -60,7 +60,7 @@ scripts/issue-machine-client.sh revoke-tenant --user-pool-id <id> --tenant <tena
 
 その tenant の `tc-m2m-<tenantId>*` app client を全部消し、`tc-tenant-<tenantId>` bind resource server も消す。bind resource server が無くなると Cognito は `tc-tenant-<tenantId>/bind` scope を発行できなくなり、新しい token は machine principal として解決されなくなる。
 
-**deploy は不要**。bind resource server が CloudFormation 管理外なのは、この kill switch を成立させるためである (ADR-0005 §5)。
+**deploy は不要**。bind resource server は CloudFormation 管理外なので、この kill switch を即時に使える。
 
 ここでも **既に発行済みの access token は最大 15 分間まだ通る**。それより速く止める必要がある場合は、`features.machineTokenPath` を落として tenant stack を deploy し、machine API 自体を消す。
 

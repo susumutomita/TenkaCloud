@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * #1422 (ADR-013 Phase 2): scoring dispatcher が採点後に condition-triggered disruption を
+ * #1422: scoring dispatcher が採点後に condition-triggered disruption を
  * 評価し、 in-account event bus に PutEvents する経路を end-to-end で pin する。
  * EventBridge + DynamoDB を mock し、 発火 / idempotency 抑制 / bus 未配線 / publish 失敗を網羅。
  */
@@ -155,7 +155,7 @@ describe("condition-triggered disruption fire", () => {
     expect(state.firedDisruptions).toEqual(["latency"]);
   });
 
-  it("[ADR-037 Slice 3] should carry recurrence into the published Detail for a score-gated repeat", async () => {
+  it("should carry recurrence into the published Detail for a score-gated repeat", async () => {
     process.env.BATTLE_PROBLEMS_SCORING = JSON.stringify({
       "hello-world-battle": {
         kind: "uptime",
@@ -223,7 +223,7 @@ describe("condition-triggered disruption fire", () => {
 });
 
 /**
- * [ADR-033 / #1665] scoring-side disruption effect の end-to-end。 fire 時に effect window を
+ * [#1665] scoring-side disruption effect の end-to-end。 fire 時に effect window を
  * activeEffects に記録し、 次 tick で penalty を score から引くことを実 handler で pin する。
  */
 const NOW_MS = new Date(NOW_ISO).getTime();
@@ -313,7 +313,7 @@ describe("scoring-side disruption effect (#1665)", () => {
 });
 
 /**
- * [ADR-033 / #1665] operator-fired disruption effect: 主催者が手動 fire した disruption (= disruptions
+ * [#1665] operator-fired disruption effect: 主催者が手動 fire した disruption (= disruptions
  * audit table の AUDIT 行) を採点 tick が読み、 window 内なら減点する。 condition trigger 無しで動く本命経路。
  */
 function configureOperatorEffect(): void {

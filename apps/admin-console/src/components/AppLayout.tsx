@@ -25,8 +25,8 @@ export function ShellLayout({
   // 手動更新 (= ヘッダの「最新の状態に更新」)。 各 page は自前の refresh / usePolling を持つが
   // 呼び出し口を page ごとの Header に足すと導線が page 単位でばらつくため、 shell 共通の
   // TopNavigation utility に 1 つだけ置き、 route content を remount して再 fetch させる。
-  // ADR-011 の polling opt-in 方針 (SSE / WebSocket は使わない、 自動更新は既定 OFF、 手動更新を
-  // 用意する) に沿った導線で、 application-admin-console の shell と同一実装。
+  // Admin Insight は SSE / WebSocket を使わず、自動更新を既定 OFF にして手動更新を
+  // 用意するため、application-admin-console の shell と同じ導線にする。
   const [contentRevision, refreshContent] = useReducer((revision: number) => revision + 1, 0);
 
   return (
@@ -40,7 +40,7 @@ export function ShellLayout({
         { type: "link", href: "/usage", text: t("nav.usage") },
         { type: "link", href: "/jobs", text: t("nav.jobs") },
         { type: "link", href: "/audit-log", text: t("nav.audit_log") },
-        // SAML SSO is feature-flagged off until verified (ADR-035) — hide the nav item.
+        // SAML SSO is feature-flagged off until verified — hide the nav item.
         ...(samlSsoEnabled
           ? [
               {

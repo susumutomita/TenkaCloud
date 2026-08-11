@@ -15,10 +15,10 @@ import {
 type Translate = (key: string, params?: Readonly<Record<string, string | number>>) => string;
 
 /**
- * [ADR-037 Slice 2] 「実行中の定期障害」 セクション。 動作中の recurring を一覧し、 ワンタップで早期解除
+ * 「実行中の定期障害」 セクション。 動作中の recurring を一覧し、 ワンタップで早期解除
  * する (= 「解除を毎回手でやるのめんどくさい」 の解消)。 一覧は mount 時に取得し、 定期 fire 直後は親が
- * `key` を変えて remount することで取り直す。 polling はしない (ADR: polling-only だが通知系は opt-in。
- * ここは操作起点で十分)。 何も走っていなければ section ごと隠す。 DisruptionsPanel から分離して SRP/
+ * `key` を変えて remount することで取り直す。定期 polling は行わず、操作起点の再取得だけで十分とする。
+ * 何も走っていなければ section ごと隠す。DisruptionsPanel から分離して SRP/
  * file-size を保つ (Issue #986)。
  */
 export function RecurringPanel({

@@ -1,5 +1,5 @@
 /**
- * [ADR-031 / Issue #1419] cross-account disruption executor Lambda の entry。
+ * [Issue #1419] cross-account disruption executor Lambda の entry。
  *
  * 実 client / AssumeRole を組み立てて `routeDisruptionInvocation` (= 純粋 router) に注入するだけの
  * 薄い glue (= describe-stack-handler/index.ts と同じ「testable service + real-deps entry」分離)。

@@ -393,7 +393,7 @@ describe("SnapshotCatalogSource (#2092)", () => {
             version: "1.0.0",
             core: "^1.0.0",
             title: "Private pack",
-            description: "Should fail because ADR-008 presigned payloads are unavailable.",
+            description: "Should fail because presigned private-payload delivery is unavailable.",
             license: "Apache-2.0",
             problemsRoot: "problems",
             requiredRuntimes: [{ provider: "aws", engine: "cloudformation" }],
@@ -411,7 +411,7 @@ describe("SnapshotCatalogSource (#2092)", () => {
     });
 
     expect(() => source.loadBundle(root)).toThrow(
-      /packId='com\.example\.private-pack'.*problemId='pack-private'.*ADR-008 presigned/,
+      /packId='com\.example\.private-pack'.*problemId='pack-private'.*presigned private-payload/,
     );
   });
 
@@ -459,7 +459,7 @@ describe("SnapshotCatalogSource (#2092)", () => {
 /**
  * [#2323] Coordination ACTIVATION through the snapshot adapter.
  *
- * ADR-028 packs may declare `interTeamCoordination.plugin`. Before #2323 the snapshot
+ * packs may declare `interTeamCoordination.plugin`. Before #2323 the snapshot
  * adapter propagated only the pack's catalog directory map, so an installed coordination
  * pack was inert — its `coordination` / `coordinationBundles` projections never reached the
  * effective bundle (and therefore never reached the dispatcher). These tests pin that a pack
@@ -478,7 +478,7 @@ function coordinationPackSnapshot(options?: { readonly withBundle?: boolean }) {
       version: "1.0.0",
       core: "^1.0.0",
       title: "Coordination pack",
-      description: "Declares an inter-team coordination plugin (ADR-028).",
+      description: "Declares an inter-team coordination plugin.",
       license: "Apache-2.0",
       problemsRoot: "problems",
       requiredRuntimes: [{ provider: "aws" as const, engine: "cloudformation" as const }],

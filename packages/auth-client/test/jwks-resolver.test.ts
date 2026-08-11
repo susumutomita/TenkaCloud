@@ -3,7 +3,7 @@ import { createCachingJwksResolver, DEFAULT_CACHE_TTL_SEC } from "../src/jwks-re
 import { type Jwk, verifyOidcJwt } from "../src/oidc-jwks-verify";
 
 /**
- * ADR-049 Phase 3 (#2292) SLICE 2 — offline matrix for the caching JWKS resolver.
+ * Issue #2292: offline matrix for the caching JWKS resolver.
  *
  * Keypairs are generated in-test via WebCrypto (RSASSA-PKCS1-v1_5) and their public
  * JWKs are served through a fake `fetchImpl`, so caching / TTL / rotation / dedup and
@@ -110,7 +110,7 @@ beforeAll(async () => {
   jwkNoKid = withoutKid as Jwk;
 });
 
-describe("createCachingJwksResolver (ADR-049 Phase 3 #2292 SLICE 2)", () => {
+describe("createCachingJwksResolver", () => {
   it("should resolve the JWK for a present kid", async () => {
     const fetchImpl = jwksFetch({ keys: [jwkA] });
     const resolve = createCachingJwksResolver({

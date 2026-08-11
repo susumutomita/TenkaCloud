@@ -37,7 +37,7 @@ export function formatNotificationSubmitError(err: unknown): string {
 }
 
 /**
- * Operator → competitor notification modal (ADR-006 D6).
+ * Operator → competitor notification modal (notification API).
  */
 export function SendNotificationModal({
   canMutateTenant,

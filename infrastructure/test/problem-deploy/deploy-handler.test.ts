@@ -10,7 +10,7 @@ import {
 } from "../../lib/problem-deploy/handlers/deploy-handler/deploy";
 import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
-// ADR-008 Phase 3 (Issue #642): presigned URL 発行は AWS SDK の signing が必要なので
+// Issue #642: presigned URL 発行は AWS SDK の signing が必要なので
 // 実 SDK を呼ばずに deterministic な URL を返すよう module を mock する。
 // generateChallengePayloadUrl の input 検証はこの mock で十分。
 vi.mock("../../lib/problem-deploy/handlers/deploy-handler/presigned-url", () => ({
@@ -227,7 +227,7 @@ describe("startDeployment", () => {
     expect(detail.externalIdParameterName).toBe("/development/tenants/tenant-acme/external-id");
   });
 
-  // ADR-008 Phase 3 (Issue #642): visibility / bucket env が dormant なら presigned URL を発行しない (= default)
+  // Issue #642: visibility / bucket env が dormant なら presigned URL を発行しない (= default)
   describe("Issue #642: private 問題の presigned URL 発行", () => {
     it("visibility 空のとき detail.challengePayloadUrl は undefined (= default 互換)", async () => {
       const { ctx, eventsSend } = buildContext();

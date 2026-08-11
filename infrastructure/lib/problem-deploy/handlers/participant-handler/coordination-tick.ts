@@ -14,12 +14,12 @@ import {
 } from "./coordination-store.js";
 
 /**
- * ADR-028 scoring-driven tick (#2324): time-driven coordination 遷移 (= capture-window クローズ /
+ * scoring-driven tick Issue #2324: time-driven coordination 遷移 (capture-window クローズ /
  * alliance 失効 等) を **CoordinationDispatcher Lambda 内** で駆動する tick host。
  *
- * ADR-028/030 の資格情報分離を守るため、 pack-author 由来の plugin の `runTick` 実行は op 経路
+ * 資格情報分離を守るため、 pack-author 由来の plugin の `runTick` 実行は op 経路
  * (`applyOp`) と同じ最小 IAM の dispatcher 内に閉じる (= 採点 Lambda の ssm/kms と同居させない)。
- * dispatcher は既に (a) plugin bundle の importer (S3 materialize、 ADR-030 Phase 3b) と (b) coordination
+ * dispatcher は既に (a) plugin bundle の importer (materialize) と (b) coordination
  * shared row への Get/Put grant を持つので、 tick はそれらを **そのまま再利用** する (= 追加 IAM ゼロ)。
  *
  * 副作用 (DDB read/write) は {@link CoordinationTickDeps} 越しに注入し、 意味論 (initialState / tick) は

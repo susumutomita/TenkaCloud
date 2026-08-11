@@ -1,10 +1,10 @@
 /**
- * [ADR-031 / Issue #1419] cross-account disruption executor の orchestration。
+ * [Issue #1419] cross-account disruption executor の orchestration。
  *
  * `*DisruptionFired` event (= disruption-fire が operator account の bus に publish したもの) を 1 件受け、
- * 該当 team の deployment へ実障害を注入し、 ADR-029 INV-2 のため復旧を予約する。 流れ:
+ * 該当 team の deployment へ実障害を注入し、注入後は必ず自動復旧を予約する。流れ:
  *
- *   1. catalog で `(problemId, disruptionId)` の `action` を解決。 action 未宣言 = Phase A (監査のみ) で no-op。
+ *   1. catalog で `(problemId, disruptionId)` の `action` を解決。action 未宣言は監査のみで no-op。
  *   2. `EXEC#{requestId}#{teamId}` の conditional claim で per-team 冪等性を取る (= EventBridge at-least-once 対策)。
  *   3. team の deployment row (jobId / region / competitorRoleArn / externalId / stackOutputs) を解決。
  *      未 deploy / 未完了 = 注入対象が無いので no-op (loud にせず skip、 監査は claim 済)。
@@ -38,12 +38,12 @@ export interface DisruptionFiredDetail {
   readonly requestId: string;
   readonly firedAt: string;
   /**
-   * [ADR-037] scheduled fire の遅延分。 未指定 / 0 は即時注入。 1 以上なら executor が
+   * scheduled fire の遅延分。 未指定 / 0 は即時注入。 1 以上なら executor が
    * `afterMinutes` 分後に注入を遅延予約する (= mode:"inject" で自分を呼び戻す)。
    */
   readonly afterMinutes?: number;
   /**
-   * [ADR-037] recurring fire。 宣言されると executor は `rate(intervalMinutes)` schedule を 1 件作り、
+   * recurring fire。 宣言されると executor は `rate(intervalMinutes)` schedule を 1 件作り、
    * `maxFires` 回ぶん (= EndDate) 経過後に aws-scheduler が自動停止する。 tick payload には乗せない
    * (= 各 tick は単発 inject)。
    */
@@ -70,7 +70,7 @@ export interface ExecutorDeps {
   readonly problemsDisruptions: Readonly<Record<string, readonly ProblemDisruptionEntry[]>>;
   /**
    * `EXEC#{requestId}#{teamId}` の conditional claim。 claimed=winner / duplicate=既処理。
-   * [ADR-037] phase="inject" は遅延注入用の別 claim key (= scheduler 再配送の二重注入を弾く)。
+   * phase="inject" は遅延注入用の別 claim key (scheduler 再配送の二重注入を弾く)。
    */
   readonly claimExecution: (
     detail: DisruptionFiredDetail,
@@ -83,7 +83,7 @@ export interface ExecutorDeps {
   /** dispatch を競技者アカウントで実行 (= AssumeRole + SDK send は具体実装側)。 */
   readonly sendDispatch: (dispatch: DisruptionDispatch, target: DeploymentTarget) => Promise<void>;
   /**
-   * revert を afterSeconds 後に予約 (ADR-029 INV-2)。 scheduler 機構は具体実装側。
+   * revert を afterSeconds 後に予約。 scheduler 機構は具体実装側。
    * `detail` は冪等な schedule 名 (= EXEC# と対の requestId/teamId) と revert invocation payload の
    * 組み立てに必要なため渡す (= 具体実装 scheduleRevert がそれらを使う)。
    */
@@ -94,12 +94,12 @@ export interface ExecutorDeps {
     afterSeconds: number,
   ) => Promise<void>;
   /**
-   * [ADR-037] scheduled fire の遅延注入を `afterMinutes` 分後に予約する。 scheduler 機構は
+   * scheduled fire の遅延注入を `afterMinutes` 分後に予約する。 scheduler 機構は
    * 具体実装側 (= scheduleRevert と同じ aws-scheduler one-shot を転用、 payload は mode:"inject")。
    */
   readonly scheduleInject: (detail: DisruptionFiredDetail, afterMinutes: number) => Promise<void>;
   /**
-   * [ADR-037] recurring fire: `rate(intervalMinutes)` schedule を 1 件作り、 maxFires 回ぶん (= EndDate)
+   * recurring fire: `rate(intervalMinutes)` schedule を 1 件作り、 maxFires 回ぶん (EndDate)
    * 経過後に aws-scheduler が自動停止 + 自動削除する。 各 tick は mode:"inject-recurring" で自身を呼び戻す。
    */
   readonly scheduleRecurring: (
@@ -144,7 +144,7 @@ async function injectAndScheduleRevert(
   const inject = buildDisruptionDispatch(action, detail.parameters, target.stackOutputs);
   await deps.sendDispatch(inject, target);
 
-  // ADR-029 INV-2: 注入したら必ず復旧を予約する (revert は schema 必須)。
+  // 注入したら必ず復旧を予約する (revert は schema 必須)。
   const revert = buildRevertDispatch(action, detail.parameters, target.stackOutputs);
   await deps.scheduleRevert(detail, revert, target, action.revert.afterSeconds);
 
@@ -155,7 +155,7 @@ async function injectAndScheduleRevert(
  * 1 件の fired disruption を実行する。 副作用は deps 経由のみ。 戻り値で結果を表す
  * (= caller の handler が log / metric に使う)。
  *
- * [ADR-037] `afterMinutes > 0` の scheduled fire は、 claim を取った上で注入を T+N に遅延予約し
+ * `afterMinutes > 0` の scheduled fire は、 claim を取った上で注入を T+N に遅延予約し
  * `scheduled` を返す (= 注入本体は T+N の {@link executeScheduledInject} で走る)。 claim は fired
  * event 受信時に取るので、 EventBridge at-least-once の再配送は遅延予約より前に弾かれる。
  */
@@ -165,13 +165,13 @@ export async function executeDisruptionAction(
 ): Promise<DisruptionExecuteOutcome> {
   const action = resolveAction(deps.problemsDisruptions, detail.problemId, detail.disruptionId);
   if (action === "unknown") return { kind: "unknown_disruption" };
-  // action 未宣言 = Phase A 監査のみ。 注入は起こさない (= 後方互換)。
+  // action 未宣言は監査のみ。注入は起こさない (= 後方互換)。
   if (!action) return { kind: "no_action" };
 
   // EventBridge at-least-once の再配送を per-team 冪等で弾く。 claim は注入 / 遅延予約の前に取る。
   if ((await deps.claimExecution(detail)) === "duplicate") return { kind: "duplicate" };
 
-  // [ADR-037] recurring fire: rate schedule を 1 件作って return (= 各 tick は executeRecurringInject)。
+  // recurring fire: rate schedule を 1 件作って return (各 tick は executeRecurringInject)。
   // afterMinutes より先に判定する (= 両者は schema で排他なので順序は安全側の防御)。
   if (detail.recurrence) {
     await deps.scheduleRecurring(
@@ -192,7 +192,7 @@ export async function executeDisruptionAction(
 }
 
 /**
- * [ADR-037] scheduled fire の T+N 遅延注入。 scheduler が積んだ `mode:"inject"` payload で起動される。
+ * scheduled fire の T+N 遅延注入。 scheduler が積んだ `mode:"inject"` payload で起動される。
  * aws-scheduler も at-least-once なので、 注入直前に **inject-phase の claim** を取り、 scheduler の
  * 再配送による二重注入を弾く (= 即時 path が同一 invocation の event-phase claim で得るのと同じ冪等保証を、
  * fired event と別経路で届く遅延注入にも与える)。 fired event 時の event-phase claim とは別 key。
@@ -209,7 +209,7 @@ export async function executeScheduledInject(
 }
 
 /**
- * [ADR-037] recurring fire の各 tick の注入。 rate schedule が積んだ `{mode:"inject-recurring", detail}`
+ * recurring fire の各 tick の注入。 rate schedule が積んだ `{mode:"inject-recurring", detail}`
  * で起動される。 `detail.firedAt` は aws-scheduler が tick ごとに実時刻へ置換するので、 per-tick claim
  * (phase="recurring", key に firedAt を含む) が tick ごとに一意になり、 同一 tick の再配送のみ弾く
  * (= tick 間は別注入として通す)。 各 tick は単発 fire と同じく inject + revert 予約を行う。

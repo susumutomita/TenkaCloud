@@ -317,7 +317,7 @@ export function ProblemsPage() {
               content: (item) => (
                 <SpaceBetween direction="horizontal" size="xs">
                   <Badge color={item.category === "Battle" ? "red" : "blue"}>{item.category}</Badge>
-                  {/* ADR-026 / ADR-027: deploy 先 cloud。 aws 以外 (multi-cloud) は緑で強調。 */}
+                  {/* deploy 先 cloud。AWS 以外は緑で強調する。 */}
                   <Badge color={providerBadge(item.runtime).awsOnly ? "grey" : "green"}>
                     {providerBadge(item.runtime).label}
                   </Badge>

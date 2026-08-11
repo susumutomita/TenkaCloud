@@ -6,7 +6,7 @@ import {
 import { makeTestControlDataRuntime } from "../problem-deploy/control-data/runtime.test-helpers";
 
 /**
- * Issue #2440 (ADR-049 §5.1 Phase A5) / #2441 (Phase B PR-6): pure SQL backend (turso|sql)
+ * Issues #2440 and #2441: pure SQL backend (turso|sql)
  * 選択時は Events/Teams/Deployments table 自体が synth されず env も配線されない。module load
  * (cold start) を fail-fast にすると AdminInsight Lambda が Initialization Error で落ちるため、
  * `EVENTS_TABLE_NAME` / `TEAMS_TABLE_NAME` / `DEPLOYMENTS_TABLE_NAME` は全て空文字 default に

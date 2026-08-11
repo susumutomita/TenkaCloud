@@ -14,7 +14,7 @@
  *   - firstEventCreated  → Application Admin Console の Event 作成成功 modal (Lite のみ)
  *   - cleanupComplete    → launcher CodeBuild の `make destroy` 成功直後のログ
  *
- * fairness contract 上の位置づけ: これは競技問題の flag ではなく **意図的に公開** の
+ * これは競技問題の flag ではなく **意図的に公開** する
  * オンボーディング用チェックポイント (repo を grep すれば見える)。 デプロイの暗号学的
  * 証明ではなく 「手順を踏まないと画面に出ない値の確認」 であり、 競技スコアには使わない。
  * cleanupComplete が観測するのは Lite 本体の destroy 成功までで、 その後の launcher 削除は

@@ -160,7 +160,7 @@ export async function fireDisruption(
   const auditId = ulid();
   const firedAt = new Date(input.nowMs).toISOString();
   const expiresAt = Math.floor(input.nowMs / 1000) + AUDIT_TTL_SECONDS;
-  // [ADR-037] scheduled fire: 実際の注入予定時刻を audit に残す (= 「N 分後に予約」 を可視化)。
+  // scheduled fire: 実際の注入予定時刻を audit に残す (「N 分後に予約」 を可視化)。
   // afterMinutes は route で 1..1440 に validate 済 (= 未指定 / 0 は即時 fire)。
   const scheduledFor = input.afterMinutes
     ? new Date(input.nowMs + input.afterMinutes * 60_000).toISOString()
@@ -209,7 +209,7 @@ export async function fireDisruption(
   const repository = await resolveDisruptionsRepository(shared);
   await repository.appendAudit(draft);
 
-  // 6b. [ADR-037 Slice 2] recurring fire は RECUR# registry row も書く (= operator が一覧 / 早期解除する
+  // 6b. recurring fire は RECUR# registry row も書く (operator が一覧 / 早期解除する
   // ための索引)。 詳細は disruption-recurring.writeRecurringRegistry (非 recurring は no-op)。
   await writeRecurringRegistry(shared, input, affected, firedAt, expiresAt);
 
@@ -254,9 +254,9 @@ async function publishEntries(
           parameters: mergedParameters,
           requestId: input.requestId,
           firedAt,
-          // [ADR-037] scheduled fire: executor がこの分数だけ注入を遅延予約する。 即時は省略。
+          // scheduled fire: executor がこの分数だけ注入を遅延予約する。 即時は省略。
           ...(input.afterMinutes ? { afterMinutes: input.afterMinutes } : {}),
-          // [ADR-037] recurring fire: executor が rate(intervalMinutes) schedule を作る。 即時/予約では省略。
+          // recurring fire: executor が rate(intervalMinutes) schedule を作る。 即時/予約では省略。
           ...(input.recurrence ? { recurrence: input.recurrence } : {}),
         }),
       },

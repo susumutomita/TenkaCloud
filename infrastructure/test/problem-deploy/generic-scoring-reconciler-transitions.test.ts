@@ -122,7 +122,7 @@ describe("reconcileEventStatuses transitions (#557 #539 #1038)", () => {
     expect(ddbSend).toHaveBeenCalledTimes(5);
   });
 
-  it("Event filter should target DEPLOYING / READY / TEARDOWN + ENDED + DRAFT (ADR-047 + follow-up)", async () => {
+  it("Event filter should target DEPLOYING / READY / TEARDOWN + ENDED + DRAFT", async () => {
     // [#2438 / Phase A3] The raw Scan moved into the `listEventsByStatus` repository
     // seam (`dynamodb-events-repository.ts`), which generates its own `:s0, :s1, …`
     // placeholder names and always projects the full row (EventRecord shape) — so

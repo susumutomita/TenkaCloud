@@ -15,7 +15,7 @@ import {
 import { LanguageSwitch } from "./LanguageSwitch";
 import { BattlePreview, ChallengePreview, HeroDashboard, SsoPreview } from "./MarketingPreviews";
 
-// The marketing home (ADR-0003 §5: "/" marketing, static). Japanese renders at "/",
+// The static marketing home renders Japanese at "/",
 // English at "/en/". Both render from HOME_COPY[locale] so the two language versions
 // are structurally identical. The visual design reproduces the legacy landing
 // (landing/index.html) — ink palette, Inter/Noto type, the 墨流し ink-bg hero, and the

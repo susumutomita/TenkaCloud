@@ -1,7 +1,7 @@
 import type { ApiClient } from "./client";
 
 /**
- * Competitor Accounts API client (Issue #459 / ADR-002 Phase 2.1)。
+ * Issue #459: mandatory ExternalId を使う cross-account Competitor Accounts API client。
  *
  * tenant API の `/admin/competitor-accounts*` routes を叩く。`tenantId` は JWT claim
  * から backend が解決するので、frontend では path に乗せない。

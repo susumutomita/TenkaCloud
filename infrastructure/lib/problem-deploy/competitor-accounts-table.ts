@@ -4,7 +4,7 @@ import { type DataTableProps, dataTableRemovalPolicy } from "./data-table-remova
 
 /**
  * tenant 単位で「deploy 許可されている競技者 AWS account」を 1 行で記録する DDB テーブル
- * (Issue #459 / ADR-002 Decision 2.1)。
+ * (Issue #459)。
  *
  * 本テーブルは **メタデータ専用**。ExternalId は同 stack の SSM SecureString に置く
  * (= `secrets-manager-forbidden` enforcement と整合、coppy-paste 経路で漏洩しないため)。

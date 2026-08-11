@@ -17,7 +17,7 @@ export type { DeploymentProvenance } from "../shared/deployment-provenance.js";
 export const DeploymentStatusSchema = z.enum([
   "PENDING",
   /**
-   * Issue #2019 / ADR-017: a high-risk deploy that TrustBridge enforcement held
+   * Issue #2019: a high-risk deploy that TrustBridge enforcement held
    * pending operator approval. The deployment row exists, but **no AssumeRole /
    * CloudFormation has run** — the worker was never invoked. Lives between
    * `PENDING` (created) and `IN_PROGRESS` (worker running), and is treated like
@@ -104,7 +104,7 @@ export interface DeploymentItem extends DeploymentRecord {
 }
 
 /**
- * [ADR-026/027/032 / #1410-1412, moved from `deploy.ts` in #2571 review-fix] 非 AWS
+ * [#1410-1412, moved from `deploy.ts` in #2571 review-fix] 非 AWS
  * runtime のときだけ provider/engine/entry を {@link DeploymentItem} に載せる (= teardown /
  * status の adapter 経路判別)。 AWS/CFn は field を載せず従来行と byte-identical。
  *

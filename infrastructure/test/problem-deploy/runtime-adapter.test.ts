@@ -1,5 +1,5 @@
 /**
- * [ADR-023 / Issue #1268] Unit tests for the runtime adapter abstraction.
+ * [Issue #1268] Unit tests for the runtime adapter abstraction.
  *
  * Coverage:
  *   - `normalizeRuntime`: legacy `cfnTemplate` → aws/cloudformation, explicit
@@ -10,8 +10,8 @@
  *   - `AwsCloudFormationRuntimeAdapter.deploy`: publishes the same
  *     `DeployCreateRequested` shape the legacy inline call did (behavior
  *     preservation).
- *   - Stub methods (`collectOutputs` / `getStatus` / `destroy`) throw
- *     `AdapterMethodNotWiredError` until the migration PR.
+ *   - Unimplemented methods (`collectOutputs` / `getStatus` / `destroy`) throw
+ *     `AdapterMethodNotWiredError` instead of a placeholder result.
  */
 
 import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
@@ -86,7 +86,7 @@ describe("normalizeRuntime", () => {
   });
 });
 
-describe("classifyRuntimeSupport (ADR-026 / ADR-027 reserved runtimes)", () => {
+describe("classifyRuntimeSupport (reserved runtimes)", () => {
   it("should classify aws/cloudformation as executable", () => {
     expect(
       classifyRuntimeSupport({ provider: "aws", engine: "cloudformation", entry: "template.yaml" }),
@@ -101,7 +101,7 @@ describe("classifyRuntimeSupport (ADR-026 / ADR-027 reserved runtimes)", () => {
     expect(isReservedRuntime(runtime)).toBe(true);
   });
 
-  it("should reserve the three roadmap providers from ADR-026/027", () => {
+  it("should reserve the three planned cloud runtime providers", () => {
     expect(RESERVED_RUNTIMES).toEqual([
       { provider: "sakura", engine: "apprun" },
       { provider: "azure", engine: "bicep" },
@@ -153,9 +153,7 @@ describe("selectAdapter", () => {
     expect(() => selectAdapter(runtime, deps)).toThrow(RuntimeNotSupportedError);
   });
 
-  it("should point a planned (reserved) runtime at the roadmap tracker, not call it a typo", () => {
-    // azure/bicep is on the ADR-027 roadmap, so the rejection must say "planned"
-    // and cite the tracker — never the typo-oriented message.
+  it("should report a recognized runtime whose provider context is not configured", () => {
     const runtime: ProblemRuntime = { provider: "azure", engine: "bicep", entry: "main.bicep" };
     try {
       selectAdapter(runtime, deps);
@@ -164,15 +162,15 @@ describe("selectAdapter", () => {
       expect(err).toBeInstanceOf(RuntimeNotSupportedError);
       if (err instanceof RuntimeNotSupportedError) {
         expect(err.message).toContain("azure/bicep");
-        expect(err.message).toContain("planned");
-        expect(err.message).toContain("#1408");
+        expect(err.message).toContain("not configured");
+        expect(err.message).toContain("credentials or client");
         expect(err.message).not.toContain("typo");
       }
     }
   });
 
   it("should reject a local container runtime with a make-local message, not a typo", () => {
-    // docker/compose is a deliberate local-only runtime (ADR-023), so the cloud
+    // docker/compose is a deliberate local-only runtime, so the cloud
     // deploy rejection must point at `make local` rather than calling it a typo.
     const runtime: ProblemRuntime = {
       provider: "docker",
@@ -206,7 +204,7 @@ describe("selectAdapter", () => {
       if (err instanceof RuntimeNotSupportedError) {
         expect(err.runtime).toEqual(runtime);
         expect(err.message).toContain("kubernetes/helm");
-        expect(err.message).toContain("aws/cloudformation");
+        expect(err.message).toContain("No adapter is registered");
         expect(err.message).toContain("typo");
       }
     }
@@ -360,7 +358,7 @@ describe("AwsCloudFormationRuntimeAdapter", () => {
     expect(result.status).toBe("pending");
   });
 
-  it("should throw AdapterMethodNotWiredError for collectOutputs (Phase 1 stub)", async () => {
+  it("should throw AdapterMethodNotWiredError for collectOutputs", async () => {
     const { adapter } = build();
     await expect(
       adapter.collectOutputs({
@@ -372,7 +370,7 @@ describe("AwsCloudFormationRuntimeAdapter", () => {
     ).rejects.toBeInstanceOf(AdapterMethodNotWiredError);
   });
 
-  it("should throw AdapterMethodNotWiredError for getStatus (Phase 1 stub)", async () => {
+  it("should throw AdapterMethodNotWiredError for getStatus", async () => {
     const { adapter } = build();
     await expect(
       adapter.getStatus({
@@ -384,7 +382,7 @@ describe("AwsCloudFormationRuntimeAdapter", () => {
     ).rejects.toBeInstanceOf(AdapterMethodNotWiredError);
   });
 
-  it("should throw AdapterMethodNotWiredError for destroy (Phase 1 stub)", async () => {
+  it("should throw AdapterMethodNotWiredError for destroy", async () => {
     const { adapter } = build();
     await expect(
       adapter.destroy({

@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { type CloudActionIntent, canonicalize } from "./schema.js";
 
 /**
- * Issue #795 / ADR-017 Phase 1: minimal JWS compact serialization for
+ * Issue #795: minimal JWS compact serialization for
  * CloudActionIntent。
  *
  * Phase 1 では HS256 (HMAC-SHA256) のみ実装する。 これは:
@@ -15,9 +15,9 @@ import { type CloudActionIntent, canonicalize } from "./schema.js";
  * production 移行時の方針:
  *  - KMS / Cloud HSM 経由の非対称鍵 (ES256 / RS256) に差し替える
  *  - 共有 secret HS256 は internal tooling と test 限定で残す
- *  - 本 module は node:crypto のみ依存 (= 追加 supply chain 負担なし、 ADR-017
- *    Phase 1 の "no custom crypto" 原則は createHmac を OpenSSL bindings として
- *    使うことで満たす、 JWS framing は spec 準拠の単純な base64url 連結のみ)
+ *  - 本 module は node:crypto のみに依存し、追加の暗号ライブラリを持ち込まない
+ *  - HMAC は OpenSSL bindings を使う createHmac に委ね、独自実装するのは
+ *    RFC 7515 に従う単純な base64url framing のみ
  */
 
 const ALG_HS256 = "HS256" as const;
@@ -79,7 +79,7 @@ function hmacSha256(secret: Uint8Array, signingInput: string): Uint8Array {
 }
 
 /**
- * Issue #795 / ADR-017 Phase 1: CloudActionIntent → JWS compact serialization。
+ * Issue #795: CloudActionIntent → JWS compact serialization。
  *
  * payload は canonicalize() の出力 (= sorted-key JSON) を使う。 検証側で
  * 同じ payload を再現するためには parse → re-canonicalize が必要だが、
@@ -102,7 +102,7 @@ export function signIntent(intent: CloudActionIntent, options: SignOptions): str
 }
 
 /**
- * Issue #795 / ADR-017 Phase 1: verify JWS compact token → CloudActionIntent。
+ * Issue #795: verify JWS compact token → CloudActionIntent。
  *
  * TTL 検証 / nonce 検証 / policy 評価 は本 module の責務ではない (= layer 分離)。
  * 上位の `verifyIntent` (`./verify.ts`) が TTL / nonce / audit を組み合わせる。

@@ -205,7 +205,7 @@ describe("getEventDetail", () => {
   });
 
   it("should merge displayTeamName set by participants in the portal from Deployments", async () => {
-    // ADR-004 Phase 2c 統合ギャップの再発防止。participant の PATCH /portal/me は
+    // 統合ギャップの再発防止。participant の PATCH /portal/me は
     // DeploymentsTable のみ書き込む (TeamsTable には書けない) ため、operator 側 read で
     // merge する必要がある。
     const { shared, ddbSend } = buildShared();

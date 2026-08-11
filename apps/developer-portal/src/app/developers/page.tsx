@@ -3,8 +3,8 @@ import Link from "next/link";
 
 export const metadata: Metadata = { title: "Developer hub" };
 
-// Developer hub (ADR-0003 §5: /developers). The entry point a visitor reaches "API
-// Reference" from via the developer nav without leaving the app shell.
+// From the developer hub at /developers, a visitor can reach "API Reference"
+// via the developer nav without leaving the app shell.
 export default function DevelopersHubPage() {
   return (
     <div className="page">

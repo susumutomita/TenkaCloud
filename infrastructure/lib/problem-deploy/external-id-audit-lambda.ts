@@ -27,7 +27,7 @@ export interface ExternalIdAuditLambdaProps {
    */
   readonly environmentName: string;
   /**
-   * Issue #2290 (ADR-049 §5.1): control-plane data backend (dynamodb|turso)。
+   * Issue #2290: control-plane data backend (dynamodb|turso)。
    * default (未指定 / `dynamodb`) は env を足さず byte 互換。
    */
   readonly controlDataBackend?: string;

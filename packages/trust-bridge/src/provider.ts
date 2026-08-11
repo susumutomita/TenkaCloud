@@ -1,7 +1,7 @@
 import type { VerifiedCloudActionIntent } from "./schema.js";
 
 /**
- * Issue #795 / ADR-017 Phase 2: ProviderTokenExchange interface。
+ * Issue #795: ProviderTokenExchange interface。
  *
  * 「verified intent → short-lived provider-native credential」 への変換を
  * 抽象化する。 implementation は provider 別の adapter (Phase 2 で AWS、

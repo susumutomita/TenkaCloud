@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { controlDataBackendEnv } from "../../lib/problem-deploy/control-data-backend-env";
 
 /**
- * Issue #2290 (ADR-049 §5.1): control-plane data backend フラグを Lambda env へ落とす CDK helper の
+ * Issue #2290: control-plane data backend フラグを Lambda env へ落とす CDK helper の
  * 分岐を pin する (`audit-log-env.test.ts` の mirror)。
  *
  * - `dynamodb` (default) → env を足さない ({}) = 既存テンプレートと byte 互換 (factory も unset で

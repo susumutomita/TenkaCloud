@@ -5,10 +5,6 @@ LP (`landing/`) のお問い合わせフォームは、 Google フォームを�
 エンドポイントへ直接 POST します。 サーバーもデータベースも持たずに、 回答の保存と
 スプレッドシートへの蓄積、 メール通知、 集計が手に入ります。
 
-設計判断の背景は
-[ADR-052](../docs/architecture/adr-052-google-form-as-landing-form-backend.html)
-にあります。
-
 ## なぜ同期が要るのか
 
 送信先の質問には `entry.123456` という ID が振られていて、 この ID は Google が

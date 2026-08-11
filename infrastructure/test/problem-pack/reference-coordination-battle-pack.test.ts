@@ -3,7 +3,7 @@
  *
  * Companion to `reference-pack.test.ts`: the coordination reference pack lives at
  * the repo top-level `packs/` directory — OUTSIDE the core `problems/` catalog —
- * and opts into inter-team coordination (ADR-028) via `interTeamCoordination`.
+ * and opts into inter-team coordination via `interTeamCoordination`.
  * This runs the REAL #2088 validator over the checked-in directory and asserts
  * zero diagnostics, guarding the worked example against silent drift as the
  * manifest / metadata contracts evolve.

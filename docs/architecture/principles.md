@@ -9,7 +9,7 @@
 - 原則には安定した `PRINCIPLE_*` ID を付ける。
 - 原則は状況に応じた比較と証拠評価へ使う。
 - 同じ入力に対して真偽を決定論的に判定できる要求は machine rule にする。
-- 原則や例外の変更は self-contained な ADR で理由、影響、移行を記録する。
+- 原則や例外の変更は、関連する実装、test、PR の回帰分析に理由と影響を記録する。
 - 一般原則の例外は trust boundary と代替防御を明示し、他の領域へ一般化しない。
 
 ## Principles
@@ -98,4 +98,4 @@ SaaS、Lite、Always-On、local play の 1 つだけで成功した結果を、�
 2. 誤検知と見逃しを許容範囲に抑えられる。
 3. staged check、edit hook、test、CI のいずれかで自動的に止める価値がある。
 
-責務境界の妥当性、脅威モデル、移行戦略、UX、コストとの trade-off など、文脈に応じた証拠比較が必要なものは principle、ADR、review で扱います。
+責務境界の妥当性、脅威モデル、移行戦略、UX、コストとの trade-off など、文脈に応じた証拠比較が必要なものは principle、実装に近い test、review で扱います。

@@ -1,7 +1,7 @@
 import { base64UrlEncode } from "./crypto.js";
 
 /**
- * ADR-050 — the Worker as an OIDC identity provider.
+ * Issue #2555: the Worker acts as an OIDC identity provider for AWS commands.
  *
  * AWS IAM registers this Worker's origin as an OIDC identity provider and
  * fetches these two public documents to validate the short-lived ES256 JWTs

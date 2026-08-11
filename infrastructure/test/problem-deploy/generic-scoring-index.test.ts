@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 /**
- * Issue #1424: generic scoring dispatcher Lambda (index.ts, ADR-012 Phase 3.B) の
+ * Issue #1424: generic scoring dispatcher Lambda (index.ts) の
  * orchestration 層 (handler / processDeployment / applyKindResult /
  * appendKindScoreEvents / fetchScoringLockedMap / queryOverridesForDeployment / parsePhasesEnv)
  * を pin する。 既存の kind / reconciler 単体テスト群は sibling module を直接叩いており
@@ -85,7 +85,7 @@ vi.mock("../../lib/problem-deploy/handlers/generic-scoring-handler/kinds/phased-
 vi.mock("../../lib/problem-deploy/handlers/generic-scoring-handler/kinds/attack-detection", () => ({
   runAttackDetectionKind: mocks.runAttackDetectionKind,
 }));
-// [ADR-028 / #2324] coordination tick glue は本 index test では mock し、 handler が per-page で
+// [#2324] coordination tick glue は本 index test では mock し、 handler が per-page で
 // collect し scan 後に run すること だけを pin する (= tick 本体は coordination-tick.test.ts で網羅)。
 vi.mock("../../lib/problem-deploy/handlers/generic-scoring-handler/coordination-tick", () => ({
   createCoordinationTickPass: mocks.createCoordinationTickPass,

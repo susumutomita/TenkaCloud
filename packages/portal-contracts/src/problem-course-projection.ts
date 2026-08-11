@@ -3,7 +3,7 @@
  * 出してよい形へ narrow する層。
  *
  * `problems.ts` から分けているのは責務が違うから。あちらは「catalog をどう組み立て、どう
- * 引くか」で、こちらは「何を見せてよいか」という fairness contract である。後者は
+ * 引くか」で、こちらは「何を見せてよいか」を決める。後者は
  * 判断の理由をコメントで残す価値が高く、混ぜると読む理由の違う規則が 1 ファイルに溜まる。
  *
  * ここに UI も fetch も無い。純関数だけなので、投影の境界をテストで固定できる。
@@ -145,7 +145,7 @@ export function toCourseAlignment(
  *
  * 通すのは learning objective と concept だけ。 assessment criterion は「何が採点されるか」を
  * 開始前に列挙し、 misconception は「よくある誤り」の形で答えの方向を示すため落とす
- * (問題ごとの opt-in も設けない — 既定非表示という判断そのものが fairness contract)。
+ * (問題ごとの opt-in も設けず常に非表示)。
  * `problem.<id>` node は宣言されないので、 relation から参照できるよう自前で 1 つ足す。
  */
 export function toParticipantGraphNodes(

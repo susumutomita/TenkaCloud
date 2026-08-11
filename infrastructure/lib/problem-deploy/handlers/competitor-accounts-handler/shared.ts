@@ -9,7 +9,7 @@ import type { ControlDataRuntime } from "../../control-data/runtime-repositories
 /**
  * Competitor Accounts handler の module-scope shared resources。
  *
- * - `tableName` = `CompetitorAccounts` DDB (Issue #459 / ADR-002)
+ * - `tableName` = `CompetitorAccounts` DDB (Issue #459)
  * - `env` / `tenkaCloudAccountId` = SSM path 構築 + 「Add account」レスポンスで返す値
  * - `cognito` = Issue #839 Phase B で SAML IdP CRUD に使う Cognito-IDP client
  *

@@ -711,11 +711,7 @@ describe("Simulator launch authorization", () => {
 
   it("should keep the local-play docs pinned to the reviewed immutable image", () => {
     const root = resolve(import.meta.dirname, "..", "..", "..");
-    for (const path of [
-      "docs/local-play.md",
-      "docs/architecture/adr-051-local-multicloud-simulator.html",
-      "docs/vision.md",
-    ]) {
+    for (const path of ["docs/local-play.md"]) {
       expect(readFileSync(join(root, path), "utf8")).toContain(DEFAULT_SIMULATOR_IMAGE);
     }
   });

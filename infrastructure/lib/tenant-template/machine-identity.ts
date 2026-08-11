@@ -13,7 +13,7 @@ import {
 } from "../problem-deploy/handlers/shared/machine-scopes.js";
 
 /**
- * Issue #2948 / ADR-0005 Phase 1: machine (M2M) capability の Cognito resource server。
+ * Issue #2948: machine (M2M) capability の Cognito resource server。
  *
  * ## default OFF の安全性は暗号論的である
  *

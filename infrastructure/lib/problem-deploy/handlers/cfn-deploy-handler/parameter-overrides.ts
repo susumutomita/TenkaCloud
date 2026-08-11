@@ -1,5 +1,5 @@
 /**
- * Issue #2291 (ADR-049 §9) / Issue #986 (SOLID split): CloudFormation `Parameters` array building
+ * Issue #2291 / Issue #986 (SOLID split): CloudFormation `Parameters` array building
  * for the Lambda-based deploy create path (`create-stack.ts`).
  *
  * TypeScript port of the parameter-override portion of `scripts/lib/battles-common.sh`

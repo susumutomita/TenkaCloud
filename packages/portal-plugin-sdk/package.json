@@ -1,7 +1,7 @@
 {
   "name": "@tenkacloud/portal-plugin-sdk",
   "version": "0.1.0",
-  "description": "Type definitions for TenkaCloud participant-portal plugins (ADR-012 Phase 5)",
+  "description": "Type definitions for TenkaCloud participant-portal plugins",
   "private": true,
   "type": "module",
   "main": "src/index.ts",

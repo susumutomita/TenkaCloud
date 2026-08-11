@@ -9,7 +9,7 @@ BEGIN {
     print "HELP_LANG must be en or ja" > "/dev/stderr"
     exit 2
   }
-  print (lang == "ja" ? "言語: 日本語（英語: make help-en）" : "Language: English (Japanese: make help-ja)")
+  print (lang == "ja" ? "言語: 日本語（英語: make help HELP_LANG=en）" : "Language: English (Japanese: make help HELP_LANG=ja)")
 }
 
 /^# =====/ {

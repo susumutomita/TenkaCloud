@@ -2,7 +2,7 @@ import { portalFetch } from "./fetch";
 import type { NotificationsResponse } from "./types";
 
 /**
- * ADR-006 Notifications: 運営 → 競技者 への通知の polling endpoint。
+ * Notifications API: 運営 → 競技者 への通知の polling endpoint。
  *
  * `GET /portal/me/notifications?limit=` を `Authorization: Bearer <teamLoginKey>` で呼ぶ。
  * occurredAt 降順で最大 200 件。`limit` 未指定なら backend 側 default (100)。

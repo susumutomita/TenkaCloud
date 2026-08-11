@@ -108,7 +108,7 @@ export type AdapterPlanEntry = Extract<PlanEntry, { kind: "adapter" }>;
 
 export interface LoadedBulkDeployTargets {
   readonly event: Partial<EventItem>;
-  // [ADR-049 §5.1] Teams aggregate は repository seam 経由で読むため、 物理 DDB キーを
+  // Teams aggregate は repository seam 経由で読むため、 物理 DDB キーを
   // 剥がした deployment view。下流は team metadata と、backend が明示した plaintext/hash
   // credential の discriminated union だけを読む。
   readonly allTeams: readonly TeamDeploymentRecord[];

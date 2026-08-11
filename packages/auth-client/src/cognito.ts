@@ -6,7 +6,7 @@
  * two SPAs (begin login -> Cognito callback -> exchange code for tokens -> return them to the
  * caller -> begin logout revokes refresh token and clears Hosted UI cookie).
  *
- * ADR-025: tokens (id/access/refresh) are NEVER persisted to web storage. completeLogin
+ * Tokens (id/access/refresh) are NEVER persisted to web storage. completeLogin
  * returns the TokenSet and the caller (AuthProvider) keeps it in memory (React state) only,
  * so an XSS payload has no sessionStorage / localStorage bearer token to read out. The only
  * sessionStorage left is the short-lived PKCE verifier + OAuth state, which must survive the
@@ -26,7 +26,7 @@ import { deriveChallenge, generateVerifier } from "./pkce";
 
 const VERIFIER_KEY = "TenkaCloud.pkce_verifier";
 const STATE_KEY = "TenkaCloud.oauth_state";
-// ADR-025: a previous app version persisted the bearer TokenSet under this key. Tokens are
+// A previous app version persisted the bearer TokenSet under this key. Tokens are
 // now memory-only; the key is retained solely so `purgeLegacyTokenStorage` can evict a stale
 // token left behind in a tab that was already open before the upgrade.
 const LEGACY_TOKENS_KEY = "TenkaCloud.tokens";
@@ -139,12 +139,12 @@ export async function completeLogin(
     refreshToken: json.refresh_token,
     expiresAt: Date.now() + json.expires_in * 1000,
   };
-  // ADR-025: do NOT persist tokens. Return to the caller for in-memory (React state) storage.
+  // Do NOT persist tokens. Return them to the caller for in-memory (React state) storage.
   return tokens;
 }
 
 /**
- * ADR-025: evict any bearer TokenSet a previous app version persisted to sessionStorage.
+ * Evict any bearer TokenSet a previous app version persisted to sessionStorage.
  * Tokens are now memory-only, so a leftover token in an already-open tab would needlessly
  * stay readable by JavaScript. Call once on app init. The PKCE verifier + OAuth state are
  * deliberately left intact so a /callback load mid-flow can still complete the exchange.
@@ -178,7 +178,7 @@ export function clearStoredAuthState(): void {
  * しまっていた。
  *
  * 修正:
- *   1. refresh token があれば `/oauth2/revoke` で server-side revoke (ADR-025: token は
+ *   1. refresh token があれば `/oauth2/revoke` で server-side revoke (token は
  *      memory 保持なので呼び出し元が現在の TokenSet を渡す)
  *   2. sessionStorage の PKCE state を `clearStoredAuthState`
  *   3. `/logout?client_id=...&logout_uri=...&redirect_uri=...&response_type=code`

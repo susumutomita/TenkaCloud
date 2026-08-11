@@ -49,7 +49,7 @@ function disruptionFireOutcomeResponse(c: Context, outcome: DisruptionFireOutcom
 }
 
 /**
- * [ADR-037 Slice 2] recurring 一覧。 ownership 検証 → 動作中 (未 cancel + endsAt 未到達) を返す。
+ * recurring 一覧。 ownership 検証 → 動作中 (未 cancel + endsAt 未到達) を返す。
  * inline handler から切り出し、 registerDisruptionRoutes の cognitive complexity を抑える。
  */
 async function handleRecurringList(
@@ -65,7 +65,7 @@ async function handleRecurringList(
 }
 
 /**
- * [ADR-037 Slice 2] recurring の早期解除。 ownership 検証 → schedule 削除 → registry に cancelledAt。
+ * recurring の早期解除。 ownership 検証 → schedule 削除 → registry に cancelledAt。
  * route の inline handler から切り出し、 registerDisruptionRoutes の cognitive complexity を抑える。
  */
 async function handleRecurringCancel(
@@ -84,7 +84,7 @@ async function handleRecurringCancel(
   return c.json({ ok: true }, StatusCodes.OK);
 }
 
-/** [ADR-037] timing=recurring のときだけ recurrence を載せる (= schema が cross-field を保証済)。 */
+/** timing=recurring のときだけ recurrence を載せる (schema が cross-field を保証済)。 */
 function recurrenceInput(req: DisruptionFireRequest): {
   recurrence?: { intervalMinutes: number; maxFires: number };
 } {
@@ -135,7 +135,7 @@ async function handleDisruptionFire(
 }
 
 /**
- * [ADR-037 Slice 2] recurring disruption の一覧 / 早期解除 route。 別関数に切り出すことで
+ * recurring disruption の一覧 / 早期解除 route。 別関数に切り出すことで
  * registerDisruptionRoutes の cognitive complexity 予算を超えないようにする (= 単なる構造分割)。
  */
 function registerRecurringRoutes(app: Hono, shared: EventSharedResources): void {

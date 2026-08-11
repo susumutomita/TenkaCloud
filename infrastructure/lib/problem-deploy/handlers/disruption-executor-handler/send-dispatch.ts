@@ -1,5 +1,5 @@
 /**
- * [ADR-031 / Issue #1419] executor の `sendDispatch` dep 具体実装 = 正規化記述子 (DisruptionDispatch) を
+ * [Issue #1419] executor の `sendDispatch` dep 具体実装 = 正規化記述子 (DisruptionDispatch) を
  * 競技者アカウントの実 SDK command に map して送る。 client は describe-stack-handler と同じ factory dep
  * (`{ region, credentials }` を受けて assumed-credential client を返す) で注入し、 unit test では mock する。
  *

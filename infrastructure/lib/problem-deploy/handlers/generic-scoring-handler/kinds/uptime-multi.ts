@@ -55,7 +55,7 @@ function buildNewHealth(
 }
 
 /**
- * [ADR-034 / #1666] optional attack-blocked bonus: live-probe the app's counter endpoint, read the
+ * [#1666] optional attack-blocked bonus: live-probe the app's counter endpoint, read the
  * block count from the body, and award the delta since last cycle. Probe failure / bad body = 0.
  */
 async function computeAttackBlockedBonus(
@@ -75,7 +75,7 @@ async function computeAttackBlockedBonus(
 }
 
 /**
- * [ADR-034 / #1666, Issue #2422] optional attack-probes: send each attack payload and classify the
+ * [#1666, Issue #2422] optional attack-probes: send each attack payload and classify the
  * per-probe outcome for this cycle. A probe whose response status lands in `vulnerableStatus` is
  * `landed` (= defense breached → `penalty` applied); a resolvable probe that returns any other
  * status is `blocked` (= defense held, no penalty); an unresolved / unreachable probe is `skipped`
@@ -161,7 +161,7 @@ function buildScoreEvents(
 }
 
 /**
- * `uptime-multi` kind (ADR-012 Phase 3.B、 security-battle-royale 想定)。
+ * `uptime-multi` kind (security-battle-royale 想定)。
  *
  * N slot を **AND probe** する。 全 slot が ok の時のみ pointsAllOk を加点、 1 つでも fail
  * があれば failurePenalty (= 通常 0 or 負値) を加点する。

@@ -15,7 +15,7 @@ export interface SystemAuditWriterLambdaProps {
   /** SBT ControlPlane が払い出す共通 EventBus。 */
   readonly eventBus: IEventBus;
   /**
-   * ADR-020 Phase D の admin audit log table (= `PK=SYSTEM#<env>` で行を書く)。
+   * admin audit log table (`PK=SYSTEM#<env>` で行を書く)。
    *
    * [Issue #2442 / Phase C4] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env
@@ -31,7 +31,7 @@ export interface SystemAuditWriterLambdaProps {
    */
   readonly auditLogEnabled?: boolean;
   /**
-   * Issue #2290 (ADR-049 §5.1): control-plane data backend (dynamodb|turso)。監査 Lambda 群と
+   * Issue #2290: control-plane data backend (dynamodb|turso)。監査 Lambda 群と
    * lockstep で env を配線する。default (未指定 / `dynamodb`) は env を足さず byte 互換。
    */
   readonly controlDataBackend?: string;
@@ -44,7 +44,7 @@ export interface SystemAuditWriterLambdaProps {
   /** SSM SecureString parameter name containing the libSQL auth token. */
   readonly tursoAuthTokenParameterName?: string;
   /**
-   * Issue #2291 (ADR-049 §9): Lambda deploy 経路 (`deployViaLambda=true`) が有効なとき true。
+   * Issue #2291: Lambda deploy 経路 (`deployViaLambda=true`) が有効なとき true。
    * true のときだけ `deployFailureRule` (= 共通 bus 上の `TenkaCloud Deploy Failed` を拾う Rule)
    * を追加する。CodeBuild path と違い Lambda deploy 失敗は AWS service event を出さないため、
    * `DeployCreate` state machine が emit する custom event を audit に橋渡しする。default
@@ -76,7 +76,7 @@ export class SystemAuditWriterLambda extends Construct {
    */
   public readonly codeBuildFailureRule: Rule;
   /**
-   * Issue #2291 (ADR-049 §9): Lambda deploy 経路の失敗 event (= `DeployCreate` state machine が
+   * Issue #2291: Lambda deploy 経路の失敗 event (`DeployCreate` state machine が
    * SBT bus に PutEvents する `TenkaCloud Deploy Failed`) を listen する Rule。 `deployViaLambda`
    * が true のときだけ生成する (= CodeBuild path しか無い環境では byte 互換で undefined)。
    */

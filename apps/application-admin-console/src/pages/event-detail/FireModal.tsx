@@ -34,7 +34,7 @@ export interface FireTarget {
 const SCOPE_OPTIONS: readonly DisruptionScope[] = ["all", "team", "random-n"];
 const DEFAULT_AFTER_MINUTES = 30;
 const MAX_AFTER_MINUTES = 1440;
-// [ADR-037] recurring fire の既定/上限。 maxFires は always-ends の回数上限 (= schema と一致)。
+// recurring fire の既定/上限。 maxFires は always-ends の回数上限 (= schema と一致)。
 const DEFAULT_INTERVAL_MINUTES = 5;
 const DEFAULT_MAX_FIRES = 5;
 const MAX_MAX_FIRES = 60;
@@ -105,7 +105,7 @@ function firedFlash(
 /**
  * Fire modal — owns its own form state (scope / timing / minutes), fires once, and reports the
  * success flash back to the panel. Extracted so the panel stays a thin orchestrator + the form is a
- * cohesive unit ([ADR-037] adds the immediate/scheduled/recurring timing toggle here).
+ * cohesive unit (adds the immediate/scheduled/recurring timing toggle here).
  */
 export function FireModal({
   apiClient,

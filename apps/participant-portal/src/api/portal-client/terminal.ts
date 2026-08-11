@@ -4,9 +4,8 @@ import { portalFetch } from "./fetch";
 /**
  * [#2846] local-play container terminal。 `ProblemRuntimeKind === "docker"` の問題だけが
  * 対象で、 TTY 無しの `/bin/sh` に 1 行単位で input/output を中継する。 AWS mode には存在しない
- * endpoint (= backend が local-play 限定で実装、 ADR-014 の frontend polling-only 原則は
- * AWS 向け request-scoped Lambda が前提であり、 単一長期プロセスのローカル backend には
- * 適用されない — `scripts/local-play/problem-terminal.ts` 参照)。
+ * endpoint。backend は local-play の単一長期プロセス内でのみ WebSocket を実装する
+ * (`scripts/local-play/problem-terminal.ts` 参照)。
  *
  * `issueProblemConsoleHandoff` (simulated-cloud の認証 console handoff) と同じ 2 段構え:
  *   1. `POST .../terminal-handoff` (Bearer team key) で一度きりの ticket を発行する。

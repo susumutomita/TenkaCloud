@@ -85,7 +85,7 @@ describe("listEvents", () => {
       problemCount: 2,
       scoringLocked: true,
       scoreboardFreezeMinutes: 10,
-      // ADR-047: 自動デプロイ/撤去の予定時刻を summary が落とすと UI が常に「未設定」になる回帰ガード。
+      // 自動デプロイ/撤去の予定時刻を summary が落とすと UI が常に「未設定」になる回帰ガード。
       deployAt: "2026-05-31T00:00:00Z",
       teardownAt: "2026-06-03T00:00:00Z",
     });

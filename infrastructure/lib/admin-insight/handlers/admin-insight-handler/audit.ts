@@ -5,7 +5,7 @@ import type {
 import { csvEscapeField } from "../../../utils/csv.js";
 
 /**
- * Issue #950 (ADR-020 Phase D): admin audit log を tenant 別 / system 別に read する。
+ * Issue #950: admin audit log を tenant 別 / system 別に read する。
  *
  * SystemAdmin 用 (= cross-tenant) の 「すべての audit を見る」 経路は admin-insight handler の
  * `/admin/insight/audit?scope=tenant&tenantId=...` または `?scope=system` で実現する。

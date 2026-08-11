@@ -15,7 +15,7 @@ import {
 } from "../../lib/problem-deploy/handlers/shared/machine-scopes";
 
 /**
- * Issue #2948 / ADR-0005 Phase 1: machine principal の解析規則。
+ * Issue #2948: machine principal の解析規則。
  *
  * ここで pin するのは「どんな claim が machine principal になるか」だけであり、route guard の
  * 振る舞いは `machine-route-guard.test.ts` が持つ。fail-closed の matrix (bind scope 0 件 /

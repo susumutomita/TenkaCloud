@@ -8,7 +8,7 @@ import { ProblemDeployBackendStack } from "../lib/problem-deploy/problem-deploy-
 import { TenkaCloudLiteStack } from "../lib/tenkacloud-lite";
 
 /**
- * Issue #778 ADR-016 Phase 5: bin/tenkacloud-lite.ts は `make lite-up` から
+ * Issue #778: bin/tenkacloud-lite.ts は `make lite-up` から
  * `cdk deploy` で呼ばれる app entry。 ここでは entry の配線を **直接 reproducer
  * する** (= bin file を import すると `new cdk.App()` の副作用が起きるため、
  * 同等の wiring を test 内で再構築して assertion を pin する)。
@@ -96,7 +96,7 @@ function synthLiteFixture() {
   };
 }
 
-describe("bin/tenkacloud-lite.ts (#778 ADR-016 Phase 5)", () => {
+describe("bin/tenkacloud-lite.ts (#778)", () => {
   // ProblemDeployBackend の NodejsFunction bundling が重いので wiring 一式を 1 度だけ synth する。
   const fixture = synthLiteFixture();
 

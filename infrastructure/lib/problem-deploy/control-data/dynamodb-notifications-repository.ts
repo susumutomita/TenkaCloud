@@ -65,7 +65,7 @@ export class DynamoDbNotificationsRepository implements NotificationsRepository 
   }
 
   async pruneExpired(nowEpochSeconds: number): Promise<number> {
-    // Sweep rationale (native TTL vs seam uniformity, ADR-049 §5.2) + loop live
+    // Sweep rationale (native TTL vs seam uniformity) + loop live
     // in `sweepExpiredRows` (shared, #2866).
     return sweepExpiredRows({
       ddb: this.ddb,

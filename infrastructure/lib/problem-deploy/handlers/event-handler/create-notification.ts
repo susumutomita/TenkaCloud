@@ -13,7 +13,7 @@ export type CreateNotificationOutcome =
   | { kind: "ok"; notificationId: string; occurredAt: string };
 
 /**
- * Event に紐づく 1 通知を Notifications aggregate へ追記する (ADR-006)。
+ * Event に紐づく 1 通知を Notifications aggregate へ追記する。
  *
  * `severity` 既定値は `info`。`expiresAt` は親 event 行と同値 (epoch seconds、TTL 同期)。
  * `createdBy` は operator の Cognito sub (tenant API GW + JWT authorizer から渡る `sub` claim)。
@@ -22,7 +22,7 @@ export type CreateNotificationOutcome =
  *   - tenant 不一致 / event 不在 → `not_found`
  *   - 書き込み失敗 → throw (caller が 500 にする)
  *
- * [#2439 / ADR-049 §5.1] 物理行 (DynamoDB backend では `PK=EVENT#<eventId>` /
+ * [#2439] 物理行 (DynamoDB backend では `PK=EVENT#<eventId>` /
  * SK に時系列降順ソートキー) の導出は {@link NotificationsRepository} seam の実装詳細。 caller は
  * PK/SK を持たない {@link NotificationRecord} を渡すだけ。 default backend では従来と byte 互換の
  * PutItem が飛ぶ。 同 ms の race も notificationId (ulid) suffix で衝突回避できる。

@@ -217,7 +217,7 @@ describe("getDeployLogs", () => {
   });
 });
 
-describe("listProblemEndpoints (ADR-012 Phase 3.A / Issue #607)", () => {
+describe("listProblemEndpoints", () => {
   afterEach(() => vi.restoreAllMocks());
 
   it("should GET /portal/me/problems/<id>/endpoints with Bearer", async () => {

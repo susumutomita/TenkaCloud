@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { type FeatureRegistry, resolveFeatureFlags } from "../src/feature-flags";
 
 /**
- * ADR-035 feature-flag resolver. Pins: registry default when unset, boolean override wins,
+ * Shared feature-flag resolver. Pins: registry default when unset, boolean override wins,
  * non-boolean / unknown override ignored, and the result surface is exactly the registry keys.
  */
 const REGISTRY = {

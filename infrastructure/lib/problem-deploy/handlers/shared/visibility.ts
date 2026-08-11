@@ -1,5 +1,5 @@
 /**
- * ADR-008 Phase 3 (Issue #642): private 問題 visibility env のパーサと判定。
+ * Issue #642: private 問題 visibility env のパーサと判定。
  *
  * BATTLE_PROBLEMS_VISIBILITY env (= `{problemId: "private"}` JSON) を decode し、
  * CHALLENGE_PAYLOAD_BUCKET env と組み合わせて S3 presigned URL を発行すべきか判定する。

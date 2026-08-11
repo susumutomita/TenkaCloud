@@ -37,7 +37,7 @@ function makeIdToken(claims: Record<string, string>): string {
 }
 
 /**
- * ADR-025: tokens are memory-only, so a test can no longer fake a session by writing to
+ * Tokens are memory-only, so a test can no longer fake a session by writing to
  * sessionStorage. Instead drive the real Cognito callback: seed the PKCE artifacts, stub the
  * token exchange to return an id_token carrying the given claims, and render at /callback so
  * the app exchanges → keeps the token in memory → navigates to the authenticated home.
@@ -122,7 +122,7 @@ describe("App", () => {
     });
   });
 
-  describe("when completing the Cognito callback with a valid token (ADR-025: memory-only)", () => {
+  describe("when completing the Cognito callback with a valid in-memory token", () => {
     it("should display JWT custom:tenantName in the greeting", async () => {
       stubLoginExchange({
         email: "admin@example.com",

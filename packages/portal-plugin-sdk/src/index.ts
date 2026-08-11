@@ -1,16 +1,17 @@
 /**
  * @tenkacloud/portal-plugin-sdk
  *
- * ADR-012 Phase 5: TenkaCloud participant-portal の plugin contract。
+ * TenkaCloud participant-portal plugin の public type surface。
  * 問題 (= problems/<id>/portal/) が export する React component の props を型で
  * 固める。portal はこれらの型に従って plugin slot を render する。
  *
- * peer-dep policy: react のみ。Cloudscape は portal 側が runtime に provide する想定
- * (= Phase 7 で importmap 配線、 現状は build-time integration で同一 bundle に乗る)。
+ * peer dependency は React だけ。Cloudscape は portal 側が提供し、現在は build-time
+ * integration により同じ bundle へ組み込む。
  *
  * MVP は **build-time integration** で動作する (= participant-portal が Vite の
  * `import.meta.glob` で problems/<id>/portal/ の .tsx を chunk 分割込みで取り込む)。
- * 真の runtime URL-based loading (= 別 S3 / 別 deploy) は Phase 7 separate ADR で扱う。
+ * 別 S3 / 別 deploy からの URL-based loading は、bundle の二重化と import-map 対応が
+ * 未解決のため提供しない。
  */
 
 import type { ComponentType } from "react";
@@ -48,15 +49,16 @@ export interface PortalSlotProps {
   readonly phases: readonly PortalPhaseEntry[];
   readonly disruptions: readonly PortalDisruptionEntry[];
   /**
-   * ADR-028 / Issue #1420: 参加者間 coordination の公開情報 (= `publicHint: true` の問題のみ)。
+   * Issue #1420: 参加者間 coordination の公開情報 (= `publicHint: true` の問題のみ)。
    * 未宣言 / non-public な問題では undefined (= plugin 側で `props.coordination?.` で安全に扱う)。
    */
   readonly coordination?: PortalCoordinationEntry;
   /**
-   * ADR-028/030 / Issue #1420: coordination dispatcher を team の credential で叩く **live** client。
-   * portal が `coordinationApiUrl` (= dispatcher URL) + session を持つときだけ束縛される (= 未配線 /
-   * coordination 無効の問題では undefined)。 plugin は `props.coordinationClient?.submitOp(op)` で op を
-   * 投げ、 `getProjection()` で自チーム視点の projection を読む (= live route directory 等)。
+   * Issue #1420: team credential を使って coordination dispatcher を実際に呼び出す client。
+   * portal が dispatcher URL (`coordinationApiUrl`) と session を持つときだけ束縛される。
+   * 未配線または coordination 無効の問題では undefined。plugin は
+   * `props.coordinationClient?.submitOp(op)` で op を送り、`getProjection()` で自チーム視点の
+   * projection (live route directory など) を読む。
    */
   readonly coordinationClient?: PortalCoordinationClient;
   readonly nowIso: string;
@@ -100,7 +102,7 @@ export interface PortalEndpoint {
 }
 
 /**
- * Issue #689 (ADR-013 OQ#7): `publicHint=true` の entry のみ portal に流す前提で plugin
+ * Issue #689: `publicHint=true` の entry のみ portal に流す前提で plugin
  * は受け取る。 false / undefined は portal layer (= props-builder) で fail-closed に
  * filter される。 plugin 側で publicHint flag を見る必要は無い (= 既に絞り込み済が来る)。
  */
@@ -120,7 +122,7 @@ export interface PortalDisruptionEntry {
 }
 
 /**
- * ADR-028 / Issue #1420: 参加者間 coordination の公開情報。 `publicHint=true` の問題のみ portal
+ * Issue #1420: 参加者間 coordination の公開情報。`publicHint=true` の問題のみ portal
  * (= props-builder) で narrow され plugin に届く。 plugin 側で publicHint を見る必要は無い。
  * plugin path 等の platform 内部 field は portal には流さない (= 表示用の name / description のみ)。
  */

@@ -25,7 +25,7 @@ export interface AppConfig {
   /** AWS account ID。CodeBuild console URL の {accountId} に埋める。 */
   readonly awsAccountId: string;
   /**
-   * Admin Insight API のエンドポイント (ADR-011 / #590 Phase 1.A)。tenant 一覧の
+   * Admin Insight API のエンドポイント (Issue #590)。tenant 一覧の
    * deploy 集計 column (activeDeploys / failedDeploys) を取得するのに使う。
    * 空文字なら admin-console は集計 fetch をスキップする (= phase 2 初回 deploy の race 対策)。
    */
@@ -42,7 +42,7 @@ export interface AppConfig {
    */
   readonly samlIdpDirectory: Readonly<Record<string, readonly string[]>>;
   /**
-   * Resolved feature flags (ADR-035). Registry in src/features.ts; an environment opts a flag on
+   * Resolved feature flags. Registry in src/features.ts; an environment opts a flag on
    * via runtime-config.json `features: { <key>: true }`. Access as `config.features?.<key>`.
    * loadConfig always populates it; optional only so test fixtures can omit it (absent → all OFF).
    */
@@ -178,7 +178,7 @@ export async function loadConfig(
     provisioningCodeBuildProject: "unknown",
     awsRegion: "",
     awsAccountId: "",
-    // ADR-011 #590: dev では admin-insight API も未配線 (= 集計 column を skip)
+    // Issue #590: dev では admin-insight API も未配線 (= 集計 column を skip)
     adminInsightApiUrl: env.VITE_ADMIN_INSIGHT_API_URL ?? "",
     // #1080: dev fallback では CloudWatch Dashboard リンクを出さない
     cloudWatchDashboardName: "",

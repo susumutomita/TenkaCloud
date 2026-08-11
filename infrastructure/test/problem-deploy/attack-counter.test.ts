@@ -5,7 +5,7 @@ import {
 } from "../../lib/problem-deploy/handlers/generic-scoring-handler/kinds/attack-counter";
 
 /**
- * [ADR-034 / #1666] CFn-output attack counter の差分加点ロジック (attack-detection と uptime-multi が共有)。
+ * [#1666] CFn-output attack counter の差分加点ロジック (attack-detection と uptime-multi が共有)。
  */
 
 describe("scoreCounterDelta (#1666)", () => {

@@ -39,7 +39,7 @@ export interface ControlPlaneIdpApiProps {
    * 純 SQL 経路で table 名が空でも runtime は正しく SQL 側に落ちる。
    */
   readonly samlIdpsTable?: Table;
-  /** ADR-049 §5.1: control-plane data backend (dynamodb|turso)。 default は env を足さず byte 互換。 */
+  /** control-plane data backend (dynamodb|turso)。 default は env を足さず byte 互換。 */
   readonly controlDataBackend?: string;
   /** Public remote libSQL URL (turso backend のみ)。 */
   readonly tursoDatabaseUrl?: string;
@@ -61,8 +61,7 @@ export interface ControlPlaneIdpApiProps {
  * 再利用せず別 construct にしている:
  *   - env 名が違う (`CONTROL_PLANE_USER_POOL_ID` vs `TENANT_USER_POOL_ID`)
  *   - Control Plane は system scope 固定で `IDP_TIER_GUARD` を持たない
- *   - 何より Lite の synth 出力は既存 test が pin 済みで、 共有 construct を触ると
- *     「Lite が動いていない」ことの証明まで本 PR の検証範囲に入る
+ *   - Lite の synth 出力を変えないため、共有 construct にはしない
  * IAM statement の重複だけは {@link samlIdpCognitoCrudStatement} / {@link tursoSsmReadStatement}
  * に集約して drift を防ぐ (= `controlDataBackendEnv` と同じ集約方針)。
  *

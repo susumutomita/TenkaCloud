@@ -7,7 +7,7 @@ import {
 } from "../../lib/problem-deploy/handlers/deploy-handler/naming.js";
 
 /**
- * ADR-050 (Issue #2555 slice C) — parity pin between the trust-bridge naming
+ * Issue #2555: parity pin between the trust-bridge naming
  * mirrors (used by the Always-On Worker to build the frozen deploy detail) and
  * the platform's authoritative `slugify` / `buildStackPrefix`. A drift here
  * would orphan a deployed stack from its destroy command, so any change must

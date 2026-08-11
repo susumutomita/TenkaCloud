@@ -35,8 +35,8 @@ export interface CreateEventsRepositoryDeps {
 }
 
 /**
- * [ADR-049 §5.1] Cold-start factory that selects the Events backend from the
- * `CONTROL_DATA_BACKEND` flag value (ADR-035 mechanism). **Default = dynamodb**
+ * Cold-start factory that selects the Events backend from the
+ * `CONTROL_DATA_BACKEND` flag value. **Default = dynamodb**
  * (behavior-preserving): an unset / empty / `"dynamodb"` flag returns the DDB
  * repository, so the existing path is byte-identical. `"turso"` return
  * the SQLite repository. Any other value is a hard error (fail loud).
@@ -54,7 +54,7 @@ export function createEventsRepository(
     if (!deps.sql) {
       throw new Error(
         `CONTROL_DATA_BACKEND="${backend}" requires a SqlExecutor (deps.sql). ` +
-          "The @libsql/Turso adapter is a follow-up (ADR-049 §5.2) and is not wired yet.",
+          "The @libsql/Turso adapter is not wired without that dependency; refusing to fall back to DynamoDB.",
       );
     }
     return new SqlEventsRepository(deps.sql);

@@ -52,7 +52,7 @@ TenkaCloud は、ハンズオン形式の AWS 競技会を運営するための�
 
 ## ビジョン
 
-TenkaCloud は競技プラットフォームだけを目指しているわけではありません。プロダクトの方向性は、個人が安全に練習できる段階から、チームで競い合う段階へと進む一本道です。**ローカルドリル → 実践的なコース / エンタープライズ研修 → チーム対抗の競技 / GameDay → グローバルコミュニティ**。ローカルドリル(`tenkacloud local`)は今日すでに動いています。コース、パッケージ化されたエンタープライズ研修、グローバルコミュニティは今後目指している方向であり、まだ実装済みの機能ではありません。実装済みと構想中の区別を含めた全体像は [`docs/vision.md`](./docs/vision.md)(英語)を参照してください。
+TenkaCloud は競技プラットフォームだけを目指しているわけではありません。プロダクトの方向性は、個人が安全に練習できる段階から、チームで競い合う段階へと進む一本道です。**ローカルドリル → 実践的なコース / エンタープライズ研修 → チーム対抗の競技 / GameDay → グローバルコミュニティ**。ローカルドリル(`tenkacloud local`)は今日すでに動いています。コース、パッケージ化されたエンタープライズ研修、グローバルコミュニティは今後目指している方向であり、まだ実装済みの機能ではありません。
 
 ## TenkaCloud が提供するもの
 
@@ -127,7 +127,7 @@ make local-dev
 
 </details>
 
-全サブコマンドは [docs/local-play.md](./docs/local-play.md)(英語)、コンテナ/ホスト境界の設計は [ADR-055](./docs/architecture/adr-055-docker-only-participant-local-mode.html) を参照してください。
+全サブコマンドとコンテナ/ホスト境界は [docs/local-play.md](./docs/local-play.md)(英語)を参照してください。
 
 ### AWS にデプロイする
 
@@ -228,16 +228,15 @@ TenkaCloud をエンタープライズや社内研修の用途 — ハンズオ�
 **[『自分で作るクラウド競技』](https://zenn.dev/bull/books/cloud-competition)** — TenkaCloud の設計思想と、クラウド競技基盤をゼロから
 作る過程を解説しています。English: **[Build Your Own Cloud Competition](https://leanpub.com/build-your-own-cloud-competition)**。
 
-書籍はプラットフォームが今の形になった理由を扱い、現行仕様の正本はこのリポジトリのドキュメントです。
+書籍はプラットフォームが今の形になった理由を扱い、現行挙動の正本はこのリポジトリの実装とテストです。
 両者が食い違う場合はリポジトリが正しく、書籍は判断の記録であって API リファレンスではありません。
 
 ## ドキュメント
 
-- [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md)(英語)— ローカル端末からのデプロイ、SaaS mode、そしてイベント間で常時稼働の AWS リソースをゼロにする [Always-On mode](./DEPLOYMENT_GUIDE.md#always-on-mode-adr-049)(運用者向けランブック: [docs/always-on/README.md](./docs/always-on/README.md))
+- [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md)(英語)— ローカル端末からのデプロイ、SaaS mode、そしてイベント間で常時稼働の AWS リソースをゼロにする [Always-On mode](./DEPLOYMENT_GUIDE.md#always-on-mode)
 - [docs/local-play.md](./docs/local-play.md)(英語)— ローカルドリルの内部実装、コンテナ問題の作り方、`/verify` の契約
 - [docs/running-costs.md](./docs/running-costs.md)(英語)— 2 つのコストプロファイル、ゼロコストへのオプトイン手順、実測コスト
-- [docs/vision.md](./docs/vision.md)(英語)— プロダクトの方向性と、何がすでに動いていて何が構想段階かの区別
-- [docs/architecture/README.md](./docs/architecture/README.md)(英語)— ADR とシステム設計
+- [docs/architecture/README.md](./docs/architecture/README.md)(英語)— architecture 原則と機械強制される境界
 
 ## コントリビューション
 

@@ -16,7 +16,7 @@ const TEARDOWN_NOW_MS = Date.parse("2026-05-08T12:00:00.000Z");
 const TEARDOWN_PAST = "2026-05-08T11:00:00.000Z"; // now より前
 const TEARDOWN_FUTURE = "2026-05-08T13:00:00.000Z"; // now より後
 
-describe("resolveScheduledTeardownDue (ADR-047 pure logic)", () => {
+describe("resolveScheduledTeardownDue (pure logic)", () => {
   it("should be due when READY + teardownAt has passed", () => {
     expect(
       resolveScheduledTeardownDue({ status: "READY", teardownAt: TEARDOWN_PAST }, TEARDOWN_NOW_MS),
@@ -75,7 +75,7 @@ describe("resolveScheduledTeardownDue (ADR-047 pure logic)", () => {
   });
 });
 
-describe("resolveScheduledDeployDue (ADR-047 follow-up pure logic)", () => {
+describe("resolveScheduledDeployDue (pure logic)", () => {
   // teardown と同じ now/past/future fixtures を再利用 (= deployAt 経過 / 未到来 / 不在 を表す)。
   it("should be due when DRAFT + deployAt has passed", () => {
     expect(

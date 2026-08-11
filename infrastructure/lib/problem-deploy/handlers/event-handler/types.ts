@@ -13,7 +13,7 @@ import { PUBLIC_SCORE_EVENT_RESULTS, PUBLIC_SCORE_EVENT_SOURCES } from "../share
 export type { EventProblemTarget } from "../../control-data/domain/events.js";
 
 /**
- * 1 競技イベント (= ADR-004 の Event aggregate) の DDB 行 shape。
+ * 1 競技イベント (Event aggregate) の DDB 行 shape。
  *
  *   PK     = `EVENT#<eventId>` / SK = `META`
  *   GSI1PK = `TENANT#<tenantId>` / GSI1SK = `<createdAt>` (ISO8601)
@@ -175,9 +175,9 @@ export const EventSummarySchema = z.object({
   /** 競技終了時刻 (#536)。HealthCheck が `now >= endsAt` で gate 閉。
    *  「Event を終了」 button = now を書く / 「日時を指定して終了」 = 未来時刻を書く。 */
   endsAt: z.string().optional(),
-  /** [ADR-047] 自動撤去予定時刻。reconciler が `now >= teardownAt` で bulk teardown を自動発火。 */
+  /** 自動撤去予定時刻。reconciler が `now >= teardownAt` で bulk teardown を自動発火。 */
   teardownAt: z.string().optional(),
-  /** [ADR-047 follow-up] 自動デプロイ予定時刻。reconciler が `now >= deployAt` で DRAFT event を bulk deploy。 */
+  /** 自動デプロイ予定時刻。reconciler が `now >= deployAt` で DRAFT event を bulk deploy。 */
   deployAt: z.string().optional(),
   /** 採点 lock flag (#558)。true なら加点経路全停止、read のみ可。 */
   scoringLocked: z.boolean().optional(),
@@ -223,7 +223,7 @@ export const ScheduleEventRequestSchema = z
       .transform((s) => new Date(s).toISOString())
       .optional(),
     /**
-     * [ADR-047] 自動撤去予定時刻。non-Z offset 入力も canonical UTC Z に transform して persist
+     * 自動撤去予定時刻。non-Z offset 入力も canonical UTC Z に transform して persist
      * (startsAt / endsAt と同じ理由 = 辞書順比較の安定化、Issue #497)。teardownAt >= 実効 endsAt の
      * cross-field 不変条件は handler 側 (setEventSchedule) で検証する (= 既存 / 新規 endsAt を要するため)。
      */
@@ -233,7 +233,7 @@ export const ScheduleEventRequestSchema = z
       .transform((s) => new Date(s).toISOString())
       .optional(),
     /**
-     * [ADR-047 follow-up] 自動デプロイ予定時刻。non-Z offset 入力も canonical UTC Z に transform して
+     * 自動デプロイ予定時刻。non-Z offset 入力も canonical UTC Z に transform して
      * persist (startsAt / endsAt / teardownAt と同じ理由 = 辞書順比較の安定化、Issue #497)。
      * deployAt <= 実効 endsAt の cross-field 不変条件は handler 側 (setEventSchedule) で検証する。
      */
@@ -400,15 +400,15 @@ export const DisruptionFireRequestSchema = z
     randomCount: z.number().int().finite().min(1).max(200).optional(),
     requestId: z.string().min(8).max(128),
     /**
-     * [ADR-037] 発火の timing。 `immediate` (既定) は従来どおり即注入、 `scheduled` は
+     * 発火の timing。 `immediate` (既定) は従来どおり即注入、 `scheduled` は
      * operator が `afterMinutes` 分後に注入を予約する (= executor が自分の aws-scheduler で遅延)。
      */
     timing: z.enum(["immediate", "scheduled", "recurring"]).default("immediate"),
     /** scheduled のみ必須。 1〜1440 分 (= 最長 24h)。 finite + integer で NaN / 小数を reject。 */
     afterMinutes: z.number().int().finite().min(1).max(1440).optional(),
-    /** [ADR-037] recurring のみ必須。 再注入の間隔 (分)。 1〜1440。 */
+    /** recurring のみ必須。 再注入の間隔 (分)。 1〜1440。 */
     intervalMinutes: z.number().int().finite().min(1).max(1440).optional(),
-    /** [ADR-037] recurring のみ必須。 最大注入回数 (= always-ends の上限)。 1〜60。 */
+    /** recurring のみ必須。 最大注入回数 (always-ends の上限)。 1〜60。 */
     maxFires: z.number().int().finite().min(1).max(60).optional(),
   })
   .strict()

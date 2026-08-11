@@ -39,7 +39,7 @@ export interface BuildDeployPipelineArgs {
   /** Score-engine / operator-attacker egress CIDRs for problem templates declaring AllowedCidr. */
   readonly deployAllowedCidrs?: readonly string[];
   /**
-   * Issue #2291 (ADR-049 §9): true のとき DeployCreate を Lambda CreateStack + DescribeStacks
+   * Issue #2291: true のとき DeployCreate を Lambda CreateStack + DescribeStacks
    * poll 経路にし、専用 {@link CfnDeployLambda} を生成する。default (false / 未指定) は在来の
    * CodeBuild 経路で、追加リソースなし = CFn テンプレ byte 互換。
    */
@@ -147,7 +147,7 @@ export function buildDeployPipeline(
     );
     cfnDeploy.deploymentLogGroup.grantWrite(describeStack.fn);
 
-    // Issue #2291 (ADR-049 §9): materialize the repo `problems/` tree (un-zipped) into the
+    // Issue #2291: materialize the repo `problems/` tree (un-zipped) into the
     // source bucket so `buildS3ArtifactsResolver` (create-stack.ts) can GetObject
     // `${detail.problemDir}/template.yaml` + `${detail.problemDir}/metadata.json`. `problemDir`
     // is validated as `problems/<category>/<id>` (events.ts `DeployCreateRequestedDetailSchema`),

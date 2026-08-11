@@ -4,7 +4,7 @@ import { AssumeRoleCommand, GetCallerIdentityCommand } from "@aws-sdk/client-sts
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * Issue #2291 (ADR-049 §9): coverage for the DELETE handler's **real-SDK entry** wiring
+ * Issue #2291: coverage for the DELETE handler's **real-SDK entry** wiring
  * (`deleteHandler` / `describeDeleteHandler` → `buildRealDeps` → `sdkCredentials`), which the
  * dep-injected tests in `cfn-deploy-delete-handler.test.ts` never exercise. Only the SDK **client**
  * constructors are mocked (via `importOriginal`, so the `*Command` classes stay real and the

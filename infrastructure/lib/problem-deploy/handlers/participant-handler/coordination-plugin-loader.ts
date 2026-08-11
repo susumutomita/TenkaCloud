@@ -8,15 +8,15 @@ import {
 import type { CoordinationStoreDeps } from "./coordination-store.js";
 
 /**
- * ADR-028 D6 (#1420): 問題が同梱する coordination plugin の **動的 import loader**。
+ * Issue #1420: 問題が同梱する coordination plugin の **動的 import loader**。
  *
  * 静的レジストリにすると platform が各問題に結合し、 community が coordination 付き問題を
  * 追加するたびに platform の再デプロイが要る。 それは「問題は plugin、 platform は host」を壊し
- * 問題カタログの community moat を殺す。 そこで plugin は問題 payload (ADR-008 の S3 配信経路) から
+ * 問題カタログの community moat を殺す。 そこで plugin は問題 payload (配信経路) から
  * 取得し runtime に `import()` で動的 load する — platform リリース不要で community が拡張できる。
  *
  * 実 import 関数は {@link PluginImporter} として注入する (= 本番は S3 から materialize した module を
- * import、 test は fake)。 別 isolate sandbox は立てない (cost/複雑度、 ADR-028 D6): plugin の hook は
+ * import、 test は fake)。 別 isolate sandbox は立てない (cost/複雑度): plugin の hook は
  * SDK 契約上すべて純関数 (AWS SDK / fetch 非依存) で、 bug は当該 event の 1 row に閉じ
  * (optimistic lock + DDB write fail で停止)、 platform 全体には波及しない。
  */
@@ -64,7 +64,7 @@ export async function loadCoordinationPlugin(
 export type PluginUnavailable = { readonly kind: "plugin_unavailable" };
 
 /**
- * 動的 load → dispatch を 1 経路にした orchestration (ADR-028 D6: 「plugin を load して dispatchOp」)。
+ * plugin の動的 load と `dispatchOp` を 1 経路にまとめた orchestration。
  * plugin が load できなければ `plugin_unavailable` を返し、 副作用 (DDB) には触れない。
  */
 export async function loadAndDispatchCoordinationOp(

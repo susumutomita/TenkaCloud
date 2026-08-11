@@ -3,7 +3,7 @@ import { StatusCodes } from "http-status-codes";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * Issue #1424: operator→competitor notification route (routes/notifications.ts, ADR-006)。
+ * Issue #1424: operator→competitor notification route (routes/notifications.ts)。
  * POST /events/:eventId/notifications の body-validation / not_found / created / error 分岐。
  */
 const mocks = vi.hoisted(() => ({ createNotification: vi.fn() }));

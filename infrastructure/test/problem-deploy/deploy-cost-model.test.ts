@@ -16,7 +16,7 @@ import { DeployCreateStateMachine } from "../../lib/problem-deploy/deploy-create
 import { DeployDeleteStateMachine } from "../../lib/problem-deploy/deploy-delete-state-machine";
 
 /**
- * Issue #2291 (ADR-049 §9): machine-check the Step Functions cost model for the Lambda deploy path,
+ * Issue #2291: machine-check the Step Functions cost model for the Lambda deploy path,
  * so the ≈$0.7/wave estimate is anchored and a future change to the poll interval / state count that
  * would blow the budget fails a test instead of a live bill.
  */
@@ -65,7 +65,7 @@ function deployStateMachineAsl(kind: "create" | "delete"): string {
   return parts.map((p) => (typeof p === "string" ? p : "ARN")).join("");
 }
 
-describe("deploy cost model (#2291 ADR-049 §9)", () => {
+describe("deploy cost model (#2291)", () => {
   it("should count fixed + per-cycle transitions for one deploy", () => {
     // 300s deploy / 30s poll = 10 cycles → 3 fixed + 3*10 = 33 transitions.
     expect(deployTransitionCount(TYPICAL_DEPLOY_SECONDS, 30)).toBe(
@@ -90,12 +90,12 @@ describe("deploy cost model (#2291 ADR-049 §9)", () => {
     expect(() => deployTransitionCount(300, Number.POSITIVE_INFINITY)).toThrow(/finite/);
   });
 
-  it("should keep a 750-deploy wave at ~$0.6 with the tuned 30s interval (validates ADR ~$0.7)", () => {
+  it("should keep a 750-deploy wave below the ~$0.7 design budget", () => {
     const cost = estimateDeployWaveCostUsd({
       deploys: DESIGN_WAVE_DEPLOYS,
       deploySeconds: TYPICAL_DEPLOY_SECONDS,
     });
-    // 750 * 33 * 0.025/1000 = $0.61875 — within the ADR-049 §9 ~$0.7/wave estimate.
+    // 750 * 33 * 0.025/1000 = $0.61875 — within the ~$0.7/wave estimate.
     expect(cost).toBeCloseTo(0.619, 2);
     expect(cost).toBeLessThanOrEqual(0.7);
     // ...and a full order of magnitude under the ≈$37.50 CodeBuild baseline the migration replaces.

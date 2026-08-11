@@ -3,7 +3,7 @@ import type { ParticipantScoringInfo, ScoringKind } from "../api/portal-client";
 export type ProblemCategory = "battle" | "challenge";
 
 /**
- * scoring.kind から Battle / Challenge 表示用カテゴリを推定する。 ADR-012 で定義された
+ * scoring.kind から Battle / Challenge 表示用カテゴリを推定する。 problem metadata で定義された
  * 5 種の builtin kind を 2 軸に collapse する:
  *
  *   - `flag`             -> challenge (= CTF / 1-shot 提出)

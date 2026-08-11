@@ -1,4 +1,4 @@
-// Maturity labels (ADR-0003 §6: capability badges) describe how settled a
+// Maturity labels describe how settled a
 // surface, doc, or API operation is. They are a small, shared vocabulary so the
 // label means the same thing on a landing card, a docs page, and an API
 // operation.

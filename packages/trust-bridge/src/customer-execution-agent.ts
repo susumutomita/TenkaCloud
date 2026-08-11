@@ -10,12 +10,12 @@ import type { VerifiedCloudActionIntent } from "./schema.js";
 import type { IntentVerifyFailureReason } from "./verify.js";
 
 /**
- * Issue #1727 / ADR-039 §7 (Next): customer execution plane の end-to-end orchestrator。
+ * Issue #1727: customer execution plane の end-to-end orchestrator。
  *
  * 1 本の `run()` で「署名 intent を検証 → ローカル authority で CFn 実行 → 監査記録」を回す。
  *   - authorize (= CustomerExecutionPlane): authenticity / authorization / artifact 検証
  *   - 成功時のみ CloudFormationExecutor で deploy/destroy (= LOCAL authority)
- *   - 成否どちらでも CloudActionAuditRecord を audit sink に書く (ADR-017 D5: 全 decision を監査)
+ *   - 成否どちらでも CloudActionAuditRecord を audit sink に書く
  *
  * 全部品は注入される (= plane / executor / audit)。 trust-bridge は AWS SDK に依存しない。
  */

@@ -9,7 +9,7 @@ import {
 } from "../../lib/problem-deploy/runtime-clients/gcp-blueprint-materializer.js";
 
 /**
- * [ADR-027 / Issue #2745] Unit tests for the GCP Terraform blueprint materializer: the missing
+ * [Issue #2745] Unit tests for the GCP Terraform blueprint materializer: the missing
  * INPUT-side step that turns `runtime.entry` (a repository-relative path) into the `gs://` object
  * `gcp-infra-manager-rest-client.ts`'s fail-closed `assertGcsBlueprintRef` requires.
  *

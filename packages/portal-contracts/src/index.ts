@@ -13,7 +13,7 @@
  *   - backend 側で「必ず埋める」ことを型で強制したい field は、 backend 側が本契約型との
  *     intersection で optionality を tighten する (定義の重複にはならない)
  *
- * 不変条件 (ADR-005 D1 / 回答秘匿): flagOutputKey の値・ per-endpoint URL / 名前は
+ * 回答秘匿のため、flagOutputKey の値・per-endpoint URL / 名前は
  * 本契約のどの型にも現れない。 field を足すときは「競技者に見せてよいか」 を必ず確認する。
  */
 
@@ -29,7 +29,7 @@ export * from "./problem-course-projection.js";
 
 export type DeploymentStatus =
   | "PENDING"
-  // Issue #2019 / ADR-017: held by TrustBridge enforcement pending operator
+  // Issue #2019: held by TrustBridge enforcement pending operator
   // approval (no stack created yet). In-flight, not terminal — treated like
   // PENDING in the portal.
   | "APPROVAL_PENDING"
@@ -50,10 +50,10 @@ export const TERMINAL_STATUSES: ReadonlySet<DeploymentStatus> = new Set([
 ]);
 
 /**
- * ADR-012 で定義された builtin scoring kind。
+ * problem metadata で定義された builtin scoring kind。
  * Phase 1 (旧 view) は flag / uptime のみだったが、 Phase 3 で phased-polling /
  * uptime-flat / uptime-multi / attack-detection が追加された。
- * UI 表示 (= categoryOf) は ADR-005 で Battle / Challenge の 2 軸に collapse する。
+ * UI 表示 (= categoryOf) は Battle / Challenge の 2 軸に collapse する。
  */
 export type ScoringKind =
   | "flag"
@@ -140,7 +140,7 @@ export interface ParticipantScoringInfo {
 }
 
 /**
- * Battle (uptime kind) の集約 health (ADR-005 D1)。 per-endpoint URL / 名前は **絶対に
+ * Battle (uptime kind) の集約 health。per-endpoint URL / 名前は **絶対に
  * 露出しない** (= 「なぜ壊れているか」 を防御側自身が調査するゲーム性のため)。
  * Challenge (flag kind) では undefined。
  */
@@ -160,7 +160,7 @@ export interface ApplicationStatus {
  *   - `"blocked"` — probe は撃たれたが防御が持ちこたえ、 減点なし (= 防御成功)
  *   - `"skipped"` — slot 未解決 / 到達不能で判定不能 (= 減点なし。 可用性は別途 applicationStatus)
  *
- * 非スポイラー不変条件 (ADR-005 D1 / AGENTS.md §10): probe の `slot` / `path` (= 正確な
+ * 非スポイラー不変条件: probe の `slot` / `path` (= 正確な
  * endpoint) や脆弱性クラスは **絶対に含めない**。 出せるのは問題側 metadata が明示的に開示した
  * `label` / `symptom` (author が書いた非スポイラー文言) と、 減点量 (`penalty`) のみ。
  */
@@ -224,7 +224,7 @@ export interface ProblemTextI18n {
 }
 
 /**
- * [#2235 / ADR-0001·ADR-048] 問題への参加者アクセス capability。 matrix の正本は backend の
+ * Issue #2235: 問題への参加者アクセス capability。割り当ての正本は backend の
  * composite-target-access.ts (aws → console + cli-credentials、 gcp / azure / sakura →
  * external-portal、 未知 provider → unsupported)。 credential / URL は含まない。
  */
@@ -301,7 +301,7 @@ export interface ParticipantProblemView {
   };
   /**
    * [#2696 PR5] Local-play only: true when this is the platform's one fixed
-   * intro drill (`challenges/hello-world`, the ADR-012 reference implementation).
+   * intro drill (`challenges/hello-world`, selected by `recommended: true`).
    * `scripts/local-play/catalog-loader.ts` pins this problem first in the
    * catalog; the portal renders a "start here" badge on it. AWS mode never
    * sends this field.
@@ -339,7 +339,7 @@ export interface ParticipantProblemView {
    *  metadata.phases / disruptions の afterMinutes との差で残時間を計算する。 deploy 中の
    *  PENDING / IN_PROGRESS でも present。 */
   readonly createdAt?: string;
-  /** ADR-005 Phase 3.1: Battle (uptime) のみ aggregate health を露出。 */
+  /** Battle (uptime) のみ aggregate health を露出。 */
   readonly applicationStatus?: ApplicationStatus;
   /**
    * Issue #2422: uptime-multi Battle の直近サイクルの attack-probe 結果 (= 「green なのに

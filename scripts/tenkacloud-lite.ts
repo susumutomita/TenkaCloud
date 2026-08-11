@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Issue #778 ADR-016 Phase 4: TenkaCloud Lite mode の CLI runner。
+ * Issue #778: TenkaCloud Lite mode の CLI runner。
  *
  * SBT / Pipeline / 動的 tenant 作成のフル機能を持ち込まずに、 「TenkaCloud を試したい」
  * 開発者が 1 コマンドで AWS account に最小 stack を deploy できる体験を提供する。

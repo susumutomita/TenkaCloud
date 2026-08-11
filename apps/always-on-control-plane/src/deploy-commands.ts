@@ -10,7 +10,7 @@ import { assumeCommandRole, mintCommandToken, putDeployEvent } from "./aws-comma
 import type { OidcEnvironment } from "./oidc.js";
 
 /**
- * ADR-050 (Issue #2555 slice C) — organizer deploy/destroy commands over the
+ * Issue #2555: organizer deploy/destroy commands over the
  * OIDC command seam.
  *
  * Turns an organizer's command into the FROZEN `tenkacloud.deploy` EventBridge

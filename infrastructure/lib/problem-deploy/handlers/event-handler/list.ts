@@ -60,7 +60,7 @@ function toSummary(item: Partial<EventItem>): EventSummary {
     startsAt: typeof item.startsAt === "string" ? item.startsAt : undefined,
     endsAt: typeof item.endsAt === "string" ? item.endsAt : undefined,
     teardownAt: typeof item.teardownAt === "string" ? item.teardownAt : undefined,
-    // [ADR-047 follow-up] deployAt も summary に載せる。 backend は schedule で永続化するが、
+    // deployAt も summary に載せる。 backend は schedule で永続化するが、
     // ここに無いと GET /events(/:id) が返さず UI が常に「未設定」になる (teardownAt の取りこぼし対)。
     deployAt: typeof item.deployAt === "string" ? item.deployAt : undefined,
     scoringLocked: item.scoringLocked === true ? true : undefined,
@@ -73,7 +73,7 @@ function toSummary(item: Partial<EventItem>): EventSummary {
 /**
  * 指定 tenant の Event 一覧を新しい順に返す (GSI1: TENANT#<tenantId> / createdAt)。
  *
- * [ADR-049 §5.1 / #2438] repository seam 経由 (`repositories.events.listEventsPage`)。
+ * [#2438] repository seam 経由 (`repositories.events.listEventsPage`)。
  * default backend (dynamodb) では同じ Query + cursor codec (allowlist PK/SK/GSI1PK/GSI1SK)
  * を発火するので、 流通中の cursor 互換 / CFn 差分は無い (byte 互換)。
  */
@@ -111,7 +111,7 @@ export async function getEventDetail(
     readonly withTeamLoginKeys?: boolean;
   } = {},
 ): Promise<EventDetail | undefined> {
-  // [ADR-049 §5.1] Event 行の point read も Teams 一覧も repository seam 経由 (getEvent が
+  // Event 行の point read も Teams 一覧も repository seam 経由 (getEvent が
   // tenant scope + 404 判定を、 listTeamsByEvent が base-table query を担う)。 default backend
   // = dynamodb なので発火する GetCommand / QueryCommand は従来と byte 互換 (= 同 table / 同 Key
   // / 同 KeyConditionExpression / 同 client)、 CFn 差分 0。 CONTROL_DATA_BACKEND を turso に
@@ -121,7 +121,7 @@ export async function getEventDetail(
   // Event Get と Teams / Deployments Query は依存関係なし → 並列発火でラウンドトリップを節約。
   // Deployments は競技者が PATCH /portal/me で設定した displayTeamName を引くため必要
   // (TeamsTable には participant が直接書けないので displayName が常に空のままになる、
-  // という ADR-004 Phase 2c 統合ギャップへの補正)。GSI1 = TENANT#<tenantId> 全件取得 →
+  // という統合ギャップへの補正)。GSI1 = TENANT#<tenantId> 全件取得 →
   // eventId で in-memory filter。
   const repositories = await resolveEventRepositories(shared);
   const deploymentsRepository: DeploymentsQueryPort = await resolveDeploymentsRepository(shared);

@@ -28,8 +28,8 @@
  *   - `teardown`      — bulk teardown confirmation (DELETE-gated; blast-radius shown by the UI).
  *   - `schedule`      — scheduled *start* reservation (date + time input).
  *   - `endsAt`        — scheduled *end* reservation (date + time input + validation error text).
- *   - `teardownSchedule` — scheduled automatic teardown (ADR-047; date + time input).
- *   - `deploySchedule`   — scheduled automatic deploy (ADR-047 follow-up; date + time input).
+ *   - `teardownSchedule` — scheduled automatic teardown (date + time input).
+ *   - `deploySchedule`   — scheduled automatic deploy (date + time input).
  *   - `notification`  — send-notification modal + the post-send success alert.
  *
  * Keeping each model tiny and single-purpose is what lets the next operational feature add a new

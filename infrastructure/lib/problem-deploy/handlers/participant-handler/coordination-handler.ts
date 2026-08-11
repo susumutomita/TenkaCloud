@@ -8,14 +8,14 @@ import type { CoordinationStoreDeps } from "./coordination-store.js";
 import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
 
 /**
- * ADR-028 D4/D5 (#1420): 参加者 portal 向け coordination route の handler。
+ * Issue #1420: 参加者 portal 向け coordination route の handler。
  *
  * route は team-login-key で認証し、 {@link CoordinationHandlerDeps.resolveScope} が tenant/event/team
  * scope + 問題が宣言した plugin の module path (interTeamCoordination.plugin) を解決する。 そこから先は
  * #1606 の dispatcher core + #1617 の動的 loader に委譲するだけで、 platform は問題依存の意味論を持たない。
  *
- * **importer は seam** (ADR-028 D6): 問題同梱 plugin を S3 (ADR-008 payload 経路) から materialize して
- * import する実装は別 increment。 本 handler は importer を注入で受け、 load 不可 (= 未配線 / 壊れた問題) は
+ * importer は問題同梱 plugin の bundle を materialize して import する seam。本 handler は
+ * importer を注入で受け、load 不可 (= 未配線 / 壊れた問題) は
  * `unavailable` / fallback projection で participant API を壊さない。
  */
 
@@ -137,7 +137,7 @@ export function makeCoordinationScopeResolver(
           eventId: item.eventId,
           teamId: item.teamId,
           ctx: { eventId: item.eventId, teamIds: [item.teamId] },
-          // ADR-030 Phase 3b: moduleRef は problemId (= importer の S3 key `coordination/<id>.mjs`)。
+          // moduleRef は problemId (importer の key `coordination/<id>.mjs`)。
           // plugin path は宣言の有無判定にのみ使い、 実 load は problemId-keyed bundle を引く。
           moduleRef: problemId,
           fallbackProjection: {},

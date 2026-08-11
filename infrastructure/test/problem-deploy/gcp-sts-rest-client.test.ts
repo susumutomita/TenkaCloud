@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createGcpStsRestClient } from "../../lib/problem-deploy/runtime-clients/gcp-sts-rest-client.js";
 
 /**
- * [ADR-032 / #1411] GCP STS + IAM Credentials REST client の wire を pin。 fetch を mock し、
+ * [#1411] GCP STS + IAM Credentials REST client の wire を pin。 fetch を mock し、
  * token-exchange の body (grantType / requestedTokenType / subjectToken) / SA impersonation の
  * Authorization + lifetime / access_token・accessToken 抽出 / 非2xx throw を観測する。
  */
@@ -22,7 +22,7 @@ function client(fetchImpl: ReturnType<typeof vi.fn>) {
   });
 }
 
-describe("gcp-sts-rest-client (ADR-032 #1411)", () => {
+describe("gcp-sts-rest-client (#1411)", () => {
   it("should POST a token-exchange with the grant/requested types and subject token", async () => {
     const fetchImpl = vi
       .fn()

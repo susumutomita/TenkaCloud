@@ -39,7 +39,7 @@ export interface CreateDeploymentsRepositoryDeps {
 
 /**
  * [Issue #2441 / Phase B1] Cold-start factory that selects the Deployments READ
- * backend from the `CONTROL_DATA_BACKEND` flag value (ADR-035 mechanism; mirror
+ * backend from the `CONTROL_DATA_BACKEND` flag value (mirrors
  * of `createEventsRepository` / `createTeamsRepository`). **Default = dynamodb**
  * (behavior-preserving): an unset / empty / `"dynamodb"` flag returns the DDB
  * repository, so the existing path is byte-identical.

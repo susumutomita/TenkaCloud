@@ -7,7 +7,7 @@ import {
 import type { ProblemDisruptionEntry } from "../../lib/utils/discover-problems-catalog";
 
 /**
- * [ADR-031 / #1419] executor router: EventBridge inject envelope と scheduler revert payload を
+ * [#1419] executor router: EventBridge inject envelope と scheduler revert payload を
  * 判別し、 それぞれ executeDisruptionAction / sendDispatch dep に振り分けることを pin する。
  */
 
@@ -57,7 +57,7 @@ function makeDeps(over: Partial<ExecutorDeps> = {}): ExecutorDeps {
   };
 }
 
-describe("recurring routing (ADR-037)", () => {
+describe("recurring routing", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("should parse the recurrence block from the initial fired event", () => {
@@ -120,7 +120,7 @@ describe("parseDisruptionFiredDetail", () => {
     expect(parseDisruptionFiredDetail({ detail: { ...firedDetail, teamId: "" } })).toBeUndefined();
   });
 
-  // [ADR-037] scheduled fire: afterMinutes は正の有限数のみ採用
+  // scheduled fire: afterMinutes は正の有限数のみ採用
   it("should carry a positive finite afterMinutes and drop invalid ones", () => {
     expect(parseDisruptionFiredDetail({ detail: { ...firedDetail, afterMinutes: 30 } })).toEqual({
       ...firedDetail,
@@ -134,7 +134,7 @@ describe("parseDisruptionFiredDetail", () => {
   });
 });
 
-describe("routeDisruptionInvocation (ADR-031 #1419)", () => {
+describe("routeDisruptionInvocation (#1419)", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("should route an EventBridge fired envelope to executeDisruptionAction (inject)", async () => {
@@ -165,7 +165,7 @@ describe("routeDisruptionInvocation (ADR-031 #1419)", () => {
     expect(deps.scheduleRevert).not.toHaveBeenCalled();
   });
 
-  it("should defer the inject when the fired envelope carries afterMinutes > 0 (ADR-037)", async () => {
+  it("should defer the inject when the fired envelope carries afterMinutes > 0", async () => {
     const deps = makeDeps();
     const outcome = await routeDisruptionInvocation(
       { detail: { ...firedDetail, afterMinutes: 30 } },

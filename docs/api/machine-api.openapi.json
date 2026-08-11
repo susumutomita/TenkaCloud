@@ -3,7 +3,7 @@
   "info": {
     "title": "TenkaCloud Machine API",
     "version": "1.1.0",
-    "description": "Machine-to-machine surface of the TenkaCloud Tenant API (ADR-0005 Phase 1). A machine principal holds the role `TenantMachine`, which no destructive route accepts, so the operations below are the complete surface reachable with a machine credential. This reference is generated from the platform's own route table and validation schemas.",
+    "description": "Machine-to-machine surface of the TenkaCloud Tenant API. A machine principal holds the role `TenantMachine`, which no destructive route accepts, so the operations below are the complete surface reachable with a machine credential. This reference is generated from the platform's own route table and validation schemas.",
     "license": {
       "name": "Apache-2.0",
       "identifier": "Apache-2.0"

@@ -2,7 +2,7 @@ import { portalFetch } from "./fetch";
 import type { ParticipantEndpointsResponse } from "./types";
 
 /**
- * ADR-012 Phase 3.A: Endpoint registry CRUD (= 1 problem の slot 単位で default URL を
+ * Endpoint registry CRUD (= 1 problem の slot 単位で default URL を
  * 競技者が override / 解除する)。 list は GET、 override 登録は POST、 削除は DELETE。
  * 400 (invalid_url 等) と 409 (slot_not_overridable) は `PortalValidationError` で
  * inline form エラーとして表示する。

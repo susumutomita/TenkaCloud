@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createAzureDeploymentStacksRestClient } from "../../lib/problem-deploy/runtime-clients/azure-deployment-stacks-rest-client.js";
 
 /**
- * [ADR-027 / #1410 / #2743] ARM Deployment Stacks REST client の wire 整形を pin。 fetch を mock し、
+ * [#1410 / #2743] ARM Deployment Stacks REST client の wire 整形を pin。 fetch を mock し、
  * endpoint / Bearer auth / ARM body (inline template / templateLink + parameters{value} +
  * actionOnUnmanage) / provisioningState+direct outputs 射影 / 404→undefined / idempotent delete /
  * 非2xx throw / remote-URI fail-closed guard / no credential leakage を観測する。
@@ -29,7 +29,7 @@ function client(fetchImpl: ReturnType<typeof vi.fn>) {
 const EXPECTED_PATH =
   "https://arm.test/subscriptions/sub-1/resourceGroups/rg-1/providers/Microsoft.Resources/deploymentStacks/p-team?api-version=2024-03-01";
 
-describe("azure-deployment-stacks-rest-client (ADR-027 #1410 #2743)", () => {
+describe("azure-deployment-stacks-rest-client (#1410 #2743)", () => {
   it("should PUT a deployment stack with Bearer auth, an INLINE template, and ARM-shaped parameters", async () => {
     const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse({}, 200));
     const document = { $schema: "s", resources: [] };

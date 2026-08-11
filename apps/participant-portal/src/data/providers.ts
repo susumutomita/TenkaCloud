@@ -1,7 +1,7 @@
 /**
  * [#2233] 問題が動く cloud provider の共有ヘルパ。
  *
- * ADR-026 / ADR-027: 実行先 cloud を競技者に明示する表示名。brand 名なので locale 非依存。
+ * 実行先 cloud を競技者に明示する表示名。brand 名なので locale 非依存。
  * 未知 provider は raw 値をそのまま出す (= 新 provider 追加時の安全側 fallback)。
  */
 export const PROVIDER_LABEL: Record<string, string> = {
@@ -17,7 +17,7 @@ export function providerLabel(provider: string): string {
 }
 
 /**
- * ParticipantProblemView の provider を解決する。行契約 (backend resolveViewProvider と同じ):
+ * ParticipantProblemView の provider を backend の resolveViewProvider と同じ規則で解決する:
  * provider 欠落 / 空 = aws (旧 backend 応答 / legacy 行との互換)。
  */
 export function problemProvider(problem: { readonly provider?: string }): string {
@@ -25,7 +25,7 @@ export function problemProvider(problem: { readonly provider?: string }): string
 }
 
 /**
- * [#2235 / ADR-048 §5.1] external-portal capability の宛先。プラットフォーム所有の
+ * Issue #2235: external-portal capability の宛先。プラットフォーム所有の
  * 定数マップ — problem metadata / 参加者入力からは供給しない (= redirect vector を
  * 作らない)。公開コンソールのサインインページなので問題情報の漏えいも無い。
  * aws はここに載せない (managed console 経路 = SSO federation を使う)。

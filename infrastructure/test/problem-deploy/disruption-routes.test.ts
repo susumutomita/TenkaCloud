@@ -160,44 +160,44 @@ describe("POST /events/:eventId/disruptions/fire", () => {
     expect(call.targetTeamIds).toEqual(["team-1"]);
   });
 
-  it("[ADR-037] should 400 when timing=scheduled but afterMinutes is missing", async () => {
+  it("should 400 when timing=scheduled but afterMinutes is missing", async () => {
     const res = await fire({ ...validFireBody, timing: "scheduled" });
     expect(res.status).toBe(StatusCodes.BAD_REQUEST);
     expect(mocks.fireDisruption).not.toHaveBeenCalled();
   });
 
-  it("[ADR-037] should 400 when afterMinutes is set without timing=scheduled", async () => {
+  it("should 400 when afterMinutes is set without timing=scheduled", async () => {
     const res = await fire({ ...validFireBody, afterMinutes: 30 });
     expect(res.status).toBe(StatusCodes.BAD_REQUEST);
     expect(mocks.fireDisruption).not.toHaveBeenCalled();
   });
 
-  it("[ADR-037] should pass afterMinutes to the service when timing=scheduled", async () => {
+  it("should pass afterMinutes to the service when timing=scheduled", async () => {
     mocks.fireDisruption.mockResolvedValueOnce({ kind: "ok", result: { fired: 1 } });
     const res = await fire({ ...validFireBody, timing: "scheduled", afterMinutes: 30 });
     expect(res.status).toBe(StatusCodes.CREATED);
     expect(mocks.fireDisruption.mock.calls[0][1].afterMinutes).toBe(30);
   });
 
-  it("[ADR-037] should not pass afterMinutes for an immediate fire (default timing)", async () => {
+  it("should not pass afterMinutes for an immediate fire (default timing)", async () => {
     mocks.fireDisruption.mockResolvedValueOnce({ kind: "ok", result: { fired: 1 } });
     await fire(validFireBody);
     expect(mocks.fireDisruption.mock.calls[0][1].afterMinutes).toBeUndefined();
   });
 
-  it("[ADR-037] should 400 when timing=recurring but intervalMinutes/maxFires are missing", async () => {
+  it("should 400 when timing=recurring but intervalMinutes/maxFires are missing", async () => {
     const res = await fire({ ...validFireBody, timing: "recurring" });
     expect(res.status).toBe(StatusCodes.BAD_REQUEST);
     expect(mocks.fireDisruption).not.toHaveBeenCalled();
   });
 
-  it("[ADR-037] should 400 when intervalMinutes/maxFires are set without timing=recurring", async () => {
+  it("should 400 when intervalMinutes/maxFires are set without timing=recurring", async () => {
     const res = await fire({ ...validFireBody, intervalMinutes: 5, maxFires: 6 });
     expect(res.status).toBe(StatusCodes.BAD_REQUEST);
     expect(mocks.fireDisruption).not.toHaveBeenCalled();
   });
 
-  it("[ADR-037] should pass the recurrence to the service when timing=recurring", async () => {
+  it("should pass the recurrence to the service when timing=recurring", async () => {
     mocks.fireDisruption.mockResolvedValueOnce({ kind: "ok", result: { fired: 1 } });
     const res = await fire({
       ...validFireBody,
@@ -259,7 +259,7 @@ const cancelRecurringReq = (requestId: string) =>
     method: "POST",
   });
 
-describe("[ADR-037 Slice 2] GET /events/:eventId/disruptions/recurring", () => {
+describe("GET /events/:eventId/disruptions/recurring", () => {
   it("should 404 when the event is not owned by the tenant", async () => {
     mocks.isEventOwnedByTenant.mockResolvedValueOnce(false);
     expect((await getRecurring()).status).toBe(StatusCodes.NOT_FOUND);
@@ -279,7 +279,7 @@ describe("[ADR-037 Slice 2] GET /events/:eventId/disruptions/recurring", () => {
   });
 });
 
-describe("[ADR-037 Slice 2] POST /events/:eventId/disruptions/recurring/:requestId/cancel", () => {
+describe("POST /events/:eventId/disruptions/recurring/:requestId/cancel", () => {
   it("should 404 when the event is not owned by the tenant", async () => {
     mocks.isEventOwnedByTenant.mockResolvedValueOnce(false);
     expect((await cancelRecurringReq("r1")).status).toBe(StatusCodes.NOT_FOUND);

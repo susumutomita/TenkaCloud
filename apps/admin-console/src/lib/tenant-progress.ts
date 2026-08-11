@@ -6,7 +6,7 @@
  *   - `createdAt` からの 経過時間を表示 (= "5 分経過" / "1 時間経過")
  *   - 30 分超 / 60 分超で warning / danger 色に切り替え (= 失敗ハングの可能性を示唆)
  *
- * AdminInsight API に provisioning phase が出来たら別 PR で sub-status を足す。
+ * AdminInsight API は細粒度の provisioning phase を返さないため、sub-status は推測しない。
  */
 
 export type ProgressSeverity = "ok" | "warning" | "danger";

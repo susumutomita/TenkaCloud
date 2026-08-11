@@ -26,14 +26,14 @@ export interface ParticipantSharedResources {
   readonly runtime: ControlDataRuntime;
   readonly tableName: string;
   /**
-   * Events table 名 (ADR-006 Notifications で参照)。`GET /portal/me/notifications` は
+   * Events table 名 (Notifications で参照)。`GET /portal/me/notifications` は
    * Notifications aggregate seam ({@link resolveNotificationsRepository}) 経由で 1 event 分の
    * 通知を読む。default backend では `PK=EVENT#<eventId>` partition の通知行を Query する
    * (物理キー導出は seam の実装詳細)。CDK 側で IAM `dynamodb:Query` を Events table にも付与する。
    */
   readonly eventsTableName: string;
   /**
-   * ADR-012 Phase 3.A: Endpoint registry table 名 (= ProblemEndpoints)。
+   * Endpoint registry table 名 (ProblemEndpoints)。
    * `/portal/me/problems/:problemId/endpoints` 系 route が読み書きする。
    * 未配線時 (= 古い deploy / Phase 3.A 適用前) は空文字、route 側で 503 ガード。
    */
@@ -48,7 +48,7 @@ export interface ParticipantSharedResources {
   /** Issue #2191: backend-only post-solve explanations. */
   readonly problemsWriteups?: Record<string, ProblemWriteup>;
   /**
-   * ADR-012 Phase 3.A: `{ [problemId]: ProblemEndpointSlot[] }`。endpoint registry
+   * `{ [problemId]: ProblemEndpointSlot[] }`。endpoint registry
    * route が default URL 算出に使う。`endpoints[]` 宣言の無い problem は key ごと不在。
    */
   readonly problemsEndpoints: Record<string, readonly ProblemEndpointSlot[]>;
@@ -65,7 +65,7 @@ export function buildParticipantSharedResources(
     // (`runtime-repositories.ts`) が fail loud に受ける (= silent fallback にはならない、
     // EVENTS_TABLE_NAME と同じ緩和)。
     tableName: process.env.DEPLOYMENTS_TABLE_NAME ?? "",
-    // [Issue #2440 / ADR-049 §5.1 Phase A5] pure SQL backend (turso) では Events table
+    // [Issue #2440] pure SQL backend (turso) では Events table
     // 自体が synth されず env も配線されないため、module-load を fail-fast にすると cold start
     // が落ちる。空文字 default に緩和し、dynamodb backend の誤設定は runtime resolver
     // (`runtime-repositories.ts`) が fail loud に受ける (= silent fallback にはならない)。
@@ -141,7 +141,7 @@ export async function queryTeamItems(
 }
 
 /**
- * [ADR-049 §5.1 / #2439] Notifications aggregate 専用 read seam
+ * [#2439] Notifications aggregate 専用 read seam
  * (admin-insight/event-handler の `resolveEventsRepository` と同型)。 default backend
  * (`CONTROL_DATA_BACKEND` 未設定 = dynamodb) では従来と byte 互換の Query を `shared.ddb`
  * 経由で発火する。 participant portal は通知の read しか行わない。
@@ -161,7 +161,7 @@ export function resolveNotificationsRepository(
 }
 
 /**
- * [ADR-049 §5.1 / #2439] TenantFeatureFlags aggregate 専用 read seam
+ * [#2439] TenantFeatureFlags aggregate 専用 read seam
  * ({@link resolveNotificationsRepository} の鏡像)。 challenge access guard の Gate flag 判定が
  * seam 経由で per-tenant flag 行を読む。 default backend では従来と byte 互換の GetCommand を
  * `shared.ddb` 経由で発火する。 [#2450] notifications seam と同じく async resolver 経由なので

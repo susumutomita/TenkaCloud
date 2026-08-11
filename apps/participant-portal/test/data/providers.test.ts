@@ -19,7 +19,7 @@ describe("providers (#2233)", () => {
     expect(providerLabel("constructor")).toBe("constructor");
   });
 
-  it("should default a view without provider to aws (legacy contract)", () => {
+  it("should default a legacy view without provider to aws", () => {
     expect(problemProvider({})).toBe("aws");
   });
 
@@ -32,7 +32,7 @@ describe("providers (#2233)", () => {
   });
 
   it("should map external-portal providers to their public console URLs", () => {
-    // [#2235 / ADR-048 §5.1] プラットフォーム所有の定数マップ (metadata / 参加者入力からは供給しない)。
+    // Issue #2235: プラットフォーム所有の定数マップ (metadata / 参加者入力からは供給しない)。
     expect(externalPortalUrl("gcp")).toBe("https://console.cloud.google.com/");
     expect(externalPortalUrl("azure")).toBe("https://portal.azure.com/");
     expect(externalPortalUrl("sakura")).toBe("https://secure.sakura.ad.jp/cloud/");

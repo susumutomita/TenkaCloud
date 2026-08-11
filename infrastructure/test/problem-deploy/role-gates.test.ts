@@ -1,7 +1,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
- * ADR-020 Phase B.1 (#948): 3 handler (deploy / event / competitor-accounts) の
+ * Issue #948: 3 handler (deploy / event / competitor-accounts) の
  * route 単位 granular role gate を pin する test。
  *
  * 旧 broken-glass 規律 (= 全 route で TenantAdmin only) を、 次の matrix に置換した:
@@ -288,7 +288,7 @@ async function expectNotForbidden(res: Response): Promise<void> {
   expect(res.status).not.toBe(403);
 }
 
-describe("ADR-020 Phase B.1 (#948): deploy-handler route role gates", () => {
+describe("deploy-handler route role gates (#948)", () => {
   describe("TenantViewer (= read-only)", () => {
     beforeEach(() => {
       process.env.DEFAULT_USER_ROLE = "TenantViewer";
@@ -379,7 +379,7 @@ describe("ADR-020 Phase B.1 (#948): deploy-handler route role gates", () => {
   });
 });
 
-describe("ADR-020 Phase B.1 (#948): event-handler route role gates", () => {
+describe("event-handler route role gates (#948)", () => {
   describe("TenantViewer", () => {
     beforeEach(() => {
       process.env.DEFAULT_USER_ROLE = "TenantViewer";
@@ -562,7 +562,7 @@ describe("ADR-020 Phase B.1 (#948): event-handler route role gates", () => {
   });
 });
 
-describe("ADR-020 Phase B.1 (#948): competitor-accounts-handler route role gates", () => {
+describe("competitor-accounts-handler route role gates (#948)", () => {
   describe("TenantViewer (= dropdown populate のため list には pass)", () => {
     beforeEach(() => {
       process.env.DEFAULT_USER_ROLE = "TenantViewer";

@@ -15,7 +15,7 @@ import { buildSakuraCredentialParameterArnPattern } from "./handlers/shared/saku
 
 export interface EventApiLambdaProps {
   /**
-   * [Issue #2440 / ADR-049 §5.1 Phase A5] `controlDataBackend` が純 SQL (`turso`) のとき、
+   * [Issue #2440] `controlDataBackend` が純 SQL (`turso`) のとき、
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env
    * `EVENTS_TABLE_NAME` は注入せず、grant も付与しない — Events CRUD は repository seam
    * (`resolveEventRepositories`) が SQL executor 直結で処理する。`dynamodb` では
@@ -53,7 +53,6 @@ export interface EventApiLambdaProps {
   readonly eventBus: IEventBus;
   /**
    * Bulk deploy 時に problemId → problemDir を解決するための hard-coded カタログ。
-   * Phase 2 (ADR-003) で DDB catalog に置換される予定。
    */
   readonly problemsCatalog: Readonly<Record<string, string>>;
   /**
@@ -124,7 +123,7 @@ export interface EventApiLambdaProps {
    */
   readonly useBulkDistributedMap?: boolean;
   /**
-   * Issue #950 (ADR-020 Phase D): admin 操作 audit log 用 DDB Table。 deploy-api-lambda と同じ。
+   * Issue #950: admin 操作 audit log 用 DDB Table。 deploy-api-lambda と同じ。
    */
   readonly adminAuditLogTable?: Table;
   /**
@@ -132,7 +131,7 @@ export interface EventApiLambdaProps {
    */
   readonly auditLogEnabled?: boolean;
   /**
-   * Issue #2290 (ADR-049 §5.1): control-plane data backend (dynamodb|turso)。event-handler の
+   * Issue #2290: control-plane data backend (dynamodb|turso)。event-handler の
    * `getEventDetail` が Events / Teams repository を組み立てる seam を切替える。default (未指定 /
    * `dynamodb`) は env を足さず byte 互換、`turso` で `CONTROL_DATA_BACKEND` を注入する。
    */
@@ -142,7 +141,7 @@ export interface EventApiLambdaProps {
   /** SSM SecureString parameter name containing the libSQL auth token. */
   readonly tursoAuthTokenParameterName?: string;
   /**
-   * [ADR-023 / #2054 / Issue #2571] 非 aws/cloudformation の runtime を宣言した問題のみ
+   * [#2054 / Issue #2571] 非 aws/cloudformation の runtime を宣言した問題のみ
    * (= `{problemId: {provider,engine,entry}}`)。`discoverProblemsRuntime` の戻り値、
    * DeployApiLambda の同名 prop と同一 source。Bulk Deploy (event-handler の
    * `buildEventSharedResources`) が `makeProblemRuntimeDescriptorResolver` 経由でここから
@@ -244,7 +243,7 @@ export function eventApiBundlingDefine(props: {
 }
 
 /**
- * Event / Team CRUD + Bulk Deploy 用の Lambda (ADR-004 Phase 1+2a)。
+ * Event / Team CRUD + Bulk Deploy 用の Lambda (2a)。
  *
  * tenant API (TenantTemplateStack の REST API + Cognito authorizer) から
  * `LambdaIntegration` で invoke される。Phase 2a で `POST /events/{id}/deploy` /
@@ -340,7 +339,7 @@ export class EventApiLambda extends Construct {
     // (= disruption fire でも同 bus に publish するため)。
     // Issue #2442: 純 SQL backend では table 自体が無いので grant も付与しない。
     props.disruptionsTable?.grantReadWriteData(this.fn);
-    // Issue #950 (ADR-020 Phase D): admin 操作 audit log は write が中心 (mutate 系 handler の append)。
+    // Issue #950: admin 操作 audit log は write が中心 (mutate 系 handler の append)。
     // Issue #1313: 追加で Tenant Admin Console 向け read endpoint
     //   GET /admin/audit-log (`registerAuditLogRoutes`) が同 Lambda 内に register 済 (Issue #1292)
     // のため、 read 権限も必須。 旧 `grantWriteData` だけだと AccessDenied で 5xx になり、
@@ -382,7 +381,7 @@ export class EventApiLambda extends Construct {
       props.capacityRunbookDocumentName,
       props.capacityRunbookAutomationRoleArn,
     );
-    // [ADR-037 Slice 2] recurring disruption の早期解除 (operator の一覧→Cancel) は、 executor が作った
+    // recurring disruption の早期解除 (operator の一覧→Cancel) は、 executor が作った
     // `tc-recur-*` rate schedule を同一アカウントから消す。 DeleteSchedule を tc-recur-* に scope して付与
     // (= 最小権限。 作成は executor、 削除は本 Lambda)。 EndDate 到達分は aws-scheduler が自動削除する。
     this.fn.addToRolePolicy(
@@ -393,7 +392,7 @@ export class EventApiLambda extends Construct {
         ],
       }),
     );
-    // [ADR-026/027/032 / Issue #2571] Bulk Deploy が非 AWS single-provider 問題を adapter 経路で
+    // [Issue #2571] Bulk Deploy が非 AWS single-provider 問題を adapter 経路で
     // dispatch する際、 team ごとの sakura/azure/gcp credential (SSM SecureString) の登録有無確認 +
     // 取得が必要。 DeployApiLambda / GenericScoringLambda と同じ prefix-scope + AWS managed key 復号で
     // 最小権限を保つ。 ExternalId pattern はここに含めない — bulk 非 AWS dispatch は ExternalId を

@@ -11,7 +11,7 @@ import {
 } from "../../lib/problem-deploy/handlers/cfn-deploy-handler/job-progress-log.js";
 
 /**
- * Issue #2291 (ADR-049 §9): the Lambda deploy path writes deterministic progress lines to a
+ * Issue #2291: the Lambda deploy path writes deterministic progress lines to a
  * jobId-keyed CloudWatch stream so participants can watch a deploy that has no CodeBuild build.
  * The `logs` client is mocked (no network).
  */

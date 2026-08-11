@@ -2,11 +2,11 @@ import { z } from "zod";
 import type { CompetitorAccountRecord } from "../../control-data/domain/competitor-accounts.js";
 
 /**
- * `CompetitorAccounts` DDB 1 行の shape (Issue #459 / ADR-002 Decision 2.1)。
+ * `CompetitorAccounts` DDB 1 行の shape (Issue #459)。
  *
  *   PK = `TENANT#<tenantId>`  /  SK = `ACCOUNT#<awsAccountId>`
  *
- * ExternalId は本テーブルに **保存しない** — 同じ tenant の SSM SecureString 経由 (= ADR-002 §2.2)。
+ * ExternalId は本テーブルに **保存しない**。同じ tenant の SSM SecureString から都度取得する。
  *
  * [Issue #2527 Slice 1 step 2] The domain fields live on
  * {@link CompetitorAccountRecord} (`control-data/domain/competitor-accounts.ts`,
@@ -53,7 +53,7 @@ export interface CompetitorAccountSummary {
   verifiedAt?: string;
   createdAt: string;
   updatedAt: string;
-  /** 最後に ExternalId を rotate した時刻 (Issue #596 / ADR-002 Phase 3.1)。未 rotate なら undefined。 */
+  /** 最後に ExternalId を rotate した時刻 (Issue #596)。未 rotate なら undefined。 */
   rotatedAt?: string;
 }
 

@@ -68,7 +68,7 @@ const CODEBUILD_DETAIL_TYPE = "CodeBuild Build State Change";
 const CODEBUILD_ACTOR = "codebuild";
 
 /**
- * Issue #2291 (ADR-049 §9): Lambda deploy path (`deployViaLambda=true`) は CodeBuild を
+ * Issue #2291: Lambda deploy path (`deployViaLambda=true`) は CodeBuild を
  * 使わないので、その失敗は `CodeBuild Build State Change` event を発しない。 CodeBuild path と
  * parity を取るため、`DeployCreate` state machine が Lambda 失敗経路で emit する
  * `TenkaCloud Deploy Failed` event を SYSTEM scope の `deploy_failed` 行として audit に集約する。
@@ -254,8 +254,8 @@ export async function handler(
       ...(Object.keys(row.extra).length > 0 ? { extra: row.extra } : {}),
     });
   } catch (err) {
-    // EventBridge retry storm を避けるため throw しない (= [[feedback-question-premise-before-patching]]
-    // の fail-safe pattern と同方針、 writeAuditEvent 自体も内部で fail-safe だが念のため二重防御)。
+    // EventBridge retry storm を避けるため throw しない。writeAuditEvent 自体も内部で
+    // fail-safe だが念のため二重防御する。
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[system-audit-writer] write failed (swallowed)", {
       detailType: event["detail-type"],

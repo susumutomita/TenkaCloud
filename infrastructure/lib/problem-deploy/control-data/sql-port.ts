@@ -22,7 +22,7 @@ export interface SqlStatement {
 }
 
 /**
- * [ADR-049 §5.1] Minimal injected SQL driver so {@link SqlEventsRepository} stays
+ * Minimal injected SQL driver so {@link SqlEventsRepository} stays
  * decoupled from any concrete client. Node's built-in `node:sqlite`
  * (`DatabaseSync`) backs it for tests and offline validation; the production
  * adapter is the HTTP-only `@libsql/client` (Turso) wired in

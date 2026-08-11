@@ -1,5 +1,5 @@
 /**
- * [ADR-023 / Issue #1268] AWS CloudFormation runtime adapter.
+ * [Issue #1268] AWS CloudFormation runtime adapter.
  *
  * Wraps the existing AWS-only deploy behavior so callers can resolve a
  * `ProblemRuntimeAdapter` and call `.deploy(...)` without knowing this is the
@@ -7,20 +7,9 @@
  * same `publishProblemEvent` with the same shape that pre-#1268 code did, so
  * the downstream Step Functions / CodeBuild pipeline is untouched.
  *
- * Phase 1 scope (this issue):
- *   - `deploy`: publish `DeployCreateRequested` to EventBridge. Identical to
- *     the legacy inline call in `deploy.ts`.
- *   - `collectOutputs` / `getStatus` / `destroy`: not wired in this PR.
- *     Existing call sites (`describe-stack-handler`, `delete.ts`) keep using
- *     their direct CFn SDK calls. The methods exist on the interface so
- *     future adapters can be drop-in; here they throw a clearly named
- *     `AdapterMethodNotWiredError` if someone tries to use them via the
- *     adapter before the matching follow-up PR lands.
- *
- * Why partial wiring is OK now: the interface is the seam, not the migration
- * lever. Migrating existing call sites onto the adapter is its own PR with
- * its own regression analysis; bundling it into the abstraction PR would
- * violate INVARIANT_PR_SHIPS_WORKING_INCREMENT.
+ * `deploy` publishes `DeployCreateRequested` to EventBridge with the legacy event shape.
+ * `collectOutputs`, `getStatus`, and `destroy` are not implemented here; existing handlers use
+ * direct CloudFormation SDK calls, and these adapter methods fail loudly if invoked.
  */
 
 import type { EventBridgeClient } from "@aws-sdk/client-eventbridge";
@@ -54,16 +43,15 @@ export interface AwsCloudFormationAdapterContext {
 
 /**
  * Thrown when an adapter method that exists on the interface but is not
- * wired into this adapter is called. Today: `collectOutputs` / `getStatus` /
+ * implemented by this adapter is called: `collectOutputs`, `getStatus`, or
  * `destroy`. We throw loudly rather than silently no-oping (= AGENTS.md "no
  * silent fallbacks via mocks / stubs / empty-array returns").
  */
 export class AdapterMethodNotWiredError extends Error {
   constructor(method: string) {
     super(
-      `AwsCloudFormationRuntimeAdapter.${method} is not wired in Phase 1 (Issue #1268). ` +
-        `Existing handlers must keep using their direct CloudFormation SDK calls until the ` +
-        `migration PR lands. See ADR-023 D6.`,
+      `AwsCloudFormationRuntimeAdapter.${method} is not implemented. ` +
+        `Existing handlers use direct CloudFormation SDK calls; refusing to return a placeholder result.`,
     );
     this.name = "AdapterMethodNotWiredError";
   }

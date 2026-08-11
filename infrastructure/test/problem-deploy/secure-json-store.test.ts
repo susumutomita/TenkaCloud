@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createSecureJsonStore } from "../../lib/problem-deploy/handlers/shared/secure-json-store.js";
 
 /**
- * [ADR-026/027 / #1412 #1410] 汎用 SecureJsonStore の契約 pin (Sakura / Azure store が共有する DRY 基盤)。
+ * [#1412 #1410] 汎用 SecureJsonStore の契約 pin (Sakura / Azure store が共有する DRY 基盤)。
  * buildName / parse / serialize の注入が正しく get/put/delete に反映され、 not-found→undefined +
  * idempotent delete + parse 委譲が成り立つことを観測する。
  */

@@ -9,7 +9,7 @@ import {
 } from "../../src/plugins/props-builder";
 
 /**
- * ADR-012 Phase 5: props-builder は build-time catalog (`findProblemMetadata`) を消費して
+ * props-builder は build-time catalog (`findProblemMetadata`) を消費して
  * SDK の PortalSlotProps shape に marshal する純関数群。 catalog 実データに依存させず
  * `findProblemMetadata` を mock して各分岐 (= endpoint URL 結合 / fail-closed publicHint
  * filter / 不正 URL の context-rethrow / optional field の narrow) を決定論的に pin する。
@@ -189,7 +189,7 @@ describe("buildPortalEndpointsFromRegistry", () => {
   });
 });
 
-describe("buildPortalPhases (fairness contract: publicHint fail-closed)", () => {
+describe("buildPortalPhases hides entries unless publicHint is true", () => {
   it("should return [] when the problem has no metadata", () => {
     findProblemMetadata.mockReturnValue(undefined);
     expect(buildPortalPhases("missing")).toEqual([]);
@@ -209,7 +209,7 @@ describe("buildPortalPhases (fairness contract: publicHint fail-closed)", () => 
   });
 });
 
-describe("buildPortalDisruptions (fairness contract: publicHint fail-closed)", () => {
+describe("buildPortalDisruptions hides entries unless publicHint is true", () => {
   it("should return [] when the problem has no metadata", () => {
     findProblemMetadata.mockReturnValue(undefined);
     expect(buildPortalDisruptions("missing")).toEqual([]);

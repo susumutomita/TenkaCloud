@@ -53,7 +53,7 @@ import {
 } from "./shared.js";
 
 /**
- * Generic scoring dispatcher Lambda (ADR-012 Phase 3.B、 旧 health-check-handler の責務を引き継ぐ)。
+ * Generic scoring dispatcher Lambda (旧 health-check-handler の責務を引き継ぐ)。
  *
  * EventBridge Scheduler `rate(1 minute)` で起動。 2 つの責務を並列で動かす:
  *
@@ -93,9 +93,9 @@ export async function handler(event: GenericScoringTickEvent = {}): Promise<void
   const runtimeEventId = resolveRuntimeEventId(event);
 
   // Event status reconcile (#557 #539) を採点と並列実行。1 tick の失敗は次 tick で再評価。
-  // [ADR-047] teardownDeps を渡すと teardownAt 経過の event を自動撤去する。 CompetitorAccounts env が
+  // teardownDeps を渡すと teardownAt 経過の event を自動撤去する。 CompetitorAccounts env が
   // 未配線なら buildScheduledTeardownResources が undefined を返し、 scheduled teardown は dormant。
-  // [ADR-047 follow-up] deployDeps を渡すと deployAt 経過の DRAFT event を自動 deploy する。 Teams /
+  // deployDeps を渡すと deployAt 経過の DRAFT event を自動 deploy する。 Teams /
   // catalog env が未配線なら buildScheduledDeployResources が undefined を返し、 scheduled deploy は dormant。
   const reconcilePromise = runtimeEventId
     ? Promise.resolve()
@@ -115,7 +115,7 @@ export async function handler(event: GenericScoringTickEvent = {}): Promise<void
         });
       });
 
-  // [ADR-026/027/032 / #1410-1412] 非 AWS runtime (sakura/azure/gcp) deployment の status / outputs を
+  // [#1410-1412] 非 AWS runtime (sakura/azure/gcp) deployment の status / outputs を
   // adapter.getStatus / collectOutputs で reconcile (= State Machine が無いので tick が進める)。 採点と並列。
   // [#2747] その直後に Composite DAG の後続 wave を dispatch する (= 直前で refresh した target
   // status を見て、 依存が揃った target を起動する)。 [#2068] その後に Composite parent の status
@@ -148,7 +148,7 @@ export async function handler(event: GenericScoringTickEvent = {}): Promise<void
   // discoverProblemsPhases から JSON 化)。env が無い場合は空 (= phases 無し)。
   const phasesByProblemId = parsePhasesEnv(process.env.BATTLE_PROBLEMS_PHASES);
 
-  // [ADR-033 / #1665] operator-fired disruption の active 採点効果を event ごとに 1 度だけ query して
+  // [#1665] operator-fired disruption の active 採点効果を event ごとに 1 度だけ query して
   // (`${eventId}#${teamId}#${problemId}` 別に) 解決する。 disruptions table 未配線なら空 (= 無効・後方互換)。
   const operatorEffects = new Map<string, ActiveDisruptionEffect[]>();
   const queriedEvents = new Set<string>();
@@ -158,7 +158,7 @@ export async function handler(event: GenericScoringTickEvent = {}): Promise<void
   const tenantFlagCache: TenantFlagCache = new Map();
   const gateCompletionCache: GateCompletionCache = new Map();
 
-  // [ADR-028 / #2324] scoring-driven coordination tick。 資格情報分離 (ADR-028/030) のため採点 Lambda は
+  // [#2324] scoring-driven coordination tick。資格情報分離のため採点 Lambda は
   // plugin を実行せず、 tick 対象を集めて最小 IAM の CoordinationDispatcher を 1 回 async Invoke するだけ。
   const coordinationTick = createCoordinationTickPass(
     createLambdaTickInvoker(),
@@ -205,7 +205,7 @@ export async function handler(event: GenericScoringTickEvent = {}): Promise<void
     );
   });
 
-  // [ADR-028 / #2324] coordination tick は scan で集めた target に依存するため scan 後に起動する。
+  // [#2324] coordination tick は scan で集めた target に依存するため scan 後に起動する。
   const coordinationPromise = coordinationTick.run(nowMs, nowIso);
 
   await Promise.all([reconcilePromise, runtimeReconcilePromise, coordinationPromise]);
@@ -250,11 +250,11 @@ function requiredRuntimeBinding(name: string): string {
   return value;
 }
 
-/** [ADR-033 / ADR-029] 採点効果の最大 window (= 1h)。 これより古い audit 行は active になりえない。 */
+/** 採点効果の最大 window (1h)。 これより古い audit 行は active になりえない。 */
 const OPERATOR_EFFECT_WINDOW_MS = 60 * 60 * 1000;
 
 /**
- * [ADR-033 / #1665] この page の deployment が属する各 event について (未 query のものだけ) disruptions
+ * [#1665] この page の deployment が属する各 event について (未 query のものだけ) disruptions
  * audit table を query し、 operator-fired disruption の active 採点効果を解決して `out` に蓄積する。
  * key は `${eventId}#${teamId}#${problemId}`。
  *
@@ -354,13 +354,13 @@ async function processDeployment(
   if (!kindResult) return;
   let result = kindResult;
 
-  // [ADR-033 / #1665] active な disruption 採点効果 (condition-fired + operator-fired) を畳み込む。
+  // [#1665] active な disruption 採点効果 (condition-fired + operator-fired) を畳み込む。
   // active 効果が無い問題は完全に挙動不変 (= 余分な scoringState write を出さない)。
   result = foldActiveDisruptionEffects(result, prevState, operatorEffects, nowMs);
 
   await applyKindResult(shared, item, result, nowIso);
 
-  // #1422 (ADR-013 Phase 2): 採点後の score / phase / 経過分で condition-triggered disruption を
+  // #1422: 採点後の score / phase / 経過分で condition-triggered disruption を
   // 評価し、 成立した disruption を in-account event bus に発火する (= cross-account forward は #1419)。
   // score 書き込み (applyKindResult) の後に走らせ、 publish 失敗は outer processDeployment の .catch
   // に委ねる (= score は確定済、 disruption は次 tick で再評価)。
@@ -436,7 +436,7 @@ async function applyProgressionGateTick(
 }
 
 /**
- * [ADR-033 / #1665] active な disruption 採点効果を KindResult に畳み込む。 2 ソースを統合する:
+ * [#1665] active な disruption 採点効果を KindResult に畳み込む。 2 ソースを統合する:
  *   - condition-triggered: deployment の `scoringState.activeEffects` (= maybeFireConditionDisruptions が記録)
  *   - operator-fired: disruptions audit table から毎 tick 解決した効果 (= 永続せず derive)
  * 同一 disruptionId は dedupe して二重減点を防ぐ。 condition 効果だけを永続 (operator は次 tick で再 derive)、

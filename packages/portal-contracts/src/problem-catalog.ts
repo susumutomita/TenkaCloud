@@ -10,7 +10,7 @@
  *   - local-play control plane は bind-mount された `problems/` を実行時に読み、同じ投影を
  *     かけて `/portal/problem-catalog` で返す (Docker local mode の正本 — #2925 / #2926)。
  *
- * 投影を両側に手写しすると fairness contract が 2 か所に増え、片方だけ `description` を
+ * 投影を両側に手写しすると実装が 2 か所に増え、片方だけ `description` を
  * 落とし忘れる形の無音ドリフトが起きる。それは本 package が #2203 で潰した失敗そのものなので、
  * 定義はここ 1 か所に置く。
  */
@@ -31,20 +31,20 @@ import {
 
 export type ProblemCategory = "Battle" | "Challenge";
 export type ProblemStatus = "ready" | "draft" | "deprecated";
-/** ADR-008 / Issue #574: 問題実装の公開境界。 public = 本体 repo に payload を持つ教材問題、
+/** Issue #574: 問題実装の公開範囲。public = 本体 repo に payload を持つ教材問題、
  *  private = TenkaCloudChallenges 別 repo に payload を持ち S3 presigned URL で配信される
  *  本格競技問題。 metadata に省略時は public 扱い (= 既存 metadata との互換)。 */
 export type ProblemVisibility = "public" | "private";
 
 /**
- * ADR-012 Phase 4 portal predict: 問題 metadata で宣言された phase / disruption の予告 entry。
+ * 問題 metadata で宣言された phase / disruption の participant 向け予告 entry。
  * 競技者向けに「いつ何が起きるか」を見せるためだけの shape (= effect の中身 / score 値は隠す)。
  */
 export interface ProblemPhaseEntry {
   readonly name: string;
   readonly afterMinutes: number;
   readonly description?: string;
-  /** Issue #689 / ADR-013 OQ#7: true のみ portal に流す (= ネタバレ防止)。 */
+  /** Issue #689: `publicHint: true` の entry だけ portal に流す (= ネタバレ防止)。 */
   readonly publicHint?: boolean;
 }
 
@@ -53,12 +53,12 @@ export interface ProblemDisruptionEntry {
   readonly name: string;
   readonly defaultAfterMinutes?: number;
   readonly description?: string;
-  /** Issue #689 / ADR-013 OQ#7: true のみ portal に流す (= ネタバレ防止)。 */
+  /** Issue #689: `publicHint: true` の entry だけ portal に流す (= ネタバレ防止)。 */
   readonly publicHint?: boolean;
 }
 
 /**
- * ADR-028 / Issue #1420: portal が表示してよい参加者間 coordination の公開情報。
+ * Issue #1420: portal が表示してよい参加者間 coordination の公開情報。
  * `publicHint === true` の問題だけ catalog に narrow される (= disruptions と同じ fairness 方針)。
  * plugin path は platform 内部 (dispatcher が S3 から load) なので portal には出さない。
  */
@@ -68,14 +68,14 @@ export interface ProblemCoordinationEntry {
 }
 
 /**
- * ADR-012 Phase 5: 1 problem に紐づく portal plugin slot map。 `dashboard.slots[slotName]`
+ * 1 problem に紐づく portal plugin slot map。`dashboard.slots[slotName]`
  * の各 entry は metadata.json で `portal/<SlotName>.tsx` 形式の相対 path を持つ。 portal
  * の plugin loader (= src/plugins/loader.ts) がこれを glob で照合して該当 chunk を lazy load する。
  */
 export type ProblemDashboardSlots = Readonly<Record<string, string>>;
 
 /**
- * ADR-012 Phase 2: endpoint slot 宣言 (= portal が plugin に渡す default URL の組立に使う)。
+ * Endpoint slot 宣言 (= portal が plugin に渡す default URL の組立に使う)。
  * `default.from` は現状 `cfn-output` のみ。 `appendPath` で 1 CFn output を複数 slot で path
  * 違いに使い回せる (= microservice-migration の BaseUrl + /users /orders /catalog 等)。
  */
@@ -95,7 +95,7 @@ export interface ProblemEndpointEntry {
  * Issue #583 Phase 5: 1 locale 分の override。 各 field 省略時は ja (= top-level の値) に fallback。
  * portal の locale switcher (= "ja" / "en") と対応。
  *
- * fairness contract: `description` (= ネタバレ長文) は portal に embed しないため、
+ * `description` はネタバレを含むため portal に embed せず、
  * locale override も `name` / `shortDescription` / `learningGoals` のみ受け付ける。
  */
 export interface ProblemI18nOverride {
@@ -109,7 +109,7 @@ export interface ProblemI18nOverride {
  * Portal で表示する問題メタ情報。`cfnTemplate` / `cfnParameters` 等の deploy 内部情報は
  * 含めない (= 答えのヒントを意図せず露出させないため)。
  *
- * **fairness contract**:
+ * 競技者へ公開する情報は次に限定する:
  * - `description` (= 採点ルール / hardened state / 段階詳細などのネタバレを含む長文) は
  *   admin / authoring view 専用で portal には決して embed しない。 portal では
  *   `shortDescription` のみ。
@@ -125,7 +125,7 @@ export interface ProblemCatalogEntry {
   readonly name: string;
   readonly category: ProblemCategory;
   readonly status: ProblemStatus;
-  /** ADR-008 Phase 1 / Issue #574: 公開境界。 metadata 省略時は "public" を default に。 */
+  /** Issue #574: 公開範囲。metadata 省略時は "public"。 */
   readonly visibility: ProblemVisibility;
   readonly difficulty: 1 | 2 | 3 | 4 | 5;
   readonly estimatedDuration: string;
@@ -133,21 +133,21 @@ export interface ProblemCatalogEntry {
   readonly instructions?: string;
   readonly learningGoals: readonly string[];
   readonly tags: readonly string[];
-  /** ADR-012 Phase 2: endpoint slot 宣言 (= portal plugin の default URL 組立に使う)。 */
+  /** Endpoint slot 宣言 (= portal plugin の default URL 組立に使う)。 */
   readonly endpoints: readonly ProblemEndpointEntry[];
-  /** ADR-012 Phase 4: 段階制の予告 (= afterMinutes で portal が countdown / status pill 表示)。 `publicHint: true` のみ。 */
+  /** `publicHint: true` の段階だけ予告する (= afterMinutes で countdown / status pill 表示)。 */
   readonly phases: readonly ProblemPhaseEntry[];
-  /** ADR-012 Phase 4: 「妨害」予告 (= template.yaml-bundled self-triggered Scheduler)。 `publicHint: true` のみ。 */
+  /** `publicHint: true` の妨害だけ予告する (= template.yaml-bundled self-triggered Scheduler)。 */
   readonly disruptions: readonly ProblemDisruptionEntry[];
-  /** ADR-012 Phase 5: dashboard.slots[slotName] = portal/<file>.tsx 相対 path の map。 */
+  /** dashboard.slots[slotName] = portal/<file>.tsx 相対 path の map。 */
   readonly dashboardSlots?: ProblemDashboardSlots;
-  /** ADR-028 / Issue #1420: 参加者間 coordination の公開情報 (`publicHint: true` の問題のみ)。 */
+  /** Issue #1420: 参加者間 coordination の公開情報 (`publicHint: true` の問題のみ)。 */
   readonly interTeamCoordination?: ProblemCoordinationEntry;
   /** Issue #583 Phase 5: 競技者向け field の locale override (en のみ、 #1108 で es / zh は廃止)。 ja は top-level。 */
   readonly i18n?: {
     readonly en?: ProblemI18nOverride;
   };
-  /** ADR-026 / ADR-027: 問題が deploy される cloud (provider) と engine。 未宣言は aws/cloudformation。 */
+  /** 問題が deploy される cloud (provider) と engine。未宣言は aws/cloudformation。 */
   readonly runtime: {
     readonly provider: string;
     readonly engine: string;
@@ -216,7 +216,7 @@ export interface ProblemMetadata extends ProblemCourseMetadataInput {
   exposedPorts?: { port: number; name: string }[];
   cfnTemplate?: string;
   cfnParameters?: Record<string, string>;
-  /** ADR-026 / ADR-027: 問題の実行環境 (provider/engine)。 未宣言は aws/cloudformation 既定。 */
+  /** 問題の実行環境 (provider/engine)。未宣言は aws/cloudformation 既定。 */
   runtime?: {
     provider?: string;
     engine?: string;
@@ -257,7 +257,7 @@ export interface ProblemMetadata extends ProblemCourseMetadataInput {
     description?: string;
     publicHint?: boolean;
   };
-  /** ADR Issue #583 Phase 5 / #1108: 競技者向け field の locale override。 ja 自体は top-level が正本。 サポート対象は en のみ。 */
+  /** Issue #583, #1108: 競技者向け field の locale override。ja は top-level が正本で、追加 locale は en のみ。 */
   i18n?: {
     en?: ProblemI18nOverride;
   };
@@ -306,7 +306,7 @@ function sanitizeI18n(raw: ProblemMetadata["i18n"]): ProblemCatalogEntry["i18n"]
 }
 
 /**
- * `metadata.json` 1 件を競技者向け catalog entry へ narrow する。 上の fairness contract
+ * `metadata.json` 1 件を競技者向け catalog entry へ narrow する。上の公開条件
  * (`description` drop / `publicHint` filter) の実装本体。
  *
  * build-time (portal の glob) と runtime (local-play control plane) の両経路が同じ関数を通る。
@@ -320,7 +320,7 @@ export function metadataToEntry(metadata: ProblemMetadata): ProblemCatalogEntry 
     name: metadata.name,
     category: metadata.category,
     status: metadata.status,
-    // metadata 省略時は public 扱い (= 既存問題互換 + ADR-008 D4 の "省略時 public" 規約)。
+    // metadata 省略時は既存問題との互換性のため public 扱い。
     visibility: metadata.visibility ?? "public",
     difficulty: metadata.difficulty,
     estimatedDuration: metadata.estimatedDuration,
@@ -367,7 +367,7 @@ export function metadataToEntry(metadata: ProblemMetadata): ProblemCatalogEntry 
     ...(dashboardSlots && Object.keys(dashboardSlots).length > 0
       ? { dashboardSlots: dashboardSlots as ProblemDashboardSlots }
       : {}),
-    // ADR-028 / #1420: publicHint===true の coordination だけ portal に narrow (= disruptions と同方針)。
+    // Issue #1420: publicHint===true の coordination だけ portal に narrow (= disruptions と同方針)。
     ...(metadata.interTeamCoordination?.publicHint === true
       ? {
           interTeamCoordination: omitUndefined({
@@ -377,7 +377,7 @@ export function metadataToEntry(metadata: ProblemMetadata): ProblemCatalogEntry 
         }
       : {}),
     ...(publicI18n ? { i18n: publicI18n } : {}),
-    // ADR-026 / ADR-027: 実行環境を露出。 未宣言の legacy 問題は aws/cloudformation 既定。
+    // 実行環境を露出。未宣言の legacy 問題は aws/cloudformation 既定。
     runtime: {
       provider: metadata.runtime?.provider ?? "aws",
       engine: metadata.runtime?.engine ?? "cloudformation",

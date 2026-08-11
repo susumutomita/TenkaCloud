@@ -22,7 +22,6 @@ This file follows the [llms.txt](https://llmstxt.org/) convention. Links point t
 ## Contributing & extending
 
 - [CONTRIBUTING](https://github.com/susumutomita/TenkaCloud/blob/main/CONTRIBUTING.md): setup, development flow, gates, and community roles
-- [Roadmap](https://github.com/susumutomita/TenkaCloud/blob/main/ROADMAP.md): product direction and starter tasks
 - [Competitor-side setup](https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/README.md): the least-privilege IAM role to roll out in a competitor account
 
 ## Authoring problems

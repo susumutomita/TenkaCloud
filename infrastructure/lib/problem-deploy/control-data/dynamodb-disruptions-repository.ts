@@ -297,7 +297,7 @@ export class DynamoDbDisruptionsRepository implements DisruptionsRepository {
   }
 
   async pruneExpired(nowEpochSeconds: number): Promise<number> {
-    // Sweep rationale (native TTL vs seam uniformity, ADR-049 §5.2) + loop live
+    // Sweep rationale (native TTL vs seam uniformity) + loop live
     // in `sweepExpiredRows` (shared, #2866). One Scan covers every row shape
     // (audit / fire-claim / recurring / exec-claim) since they all share this
     // physical table.

@@ -7,13 +7,13 @@ on:
   pull_request:
     paths:
       - ".symphony/**"
-      - "GNUmakefile"
+      - "Makefile"
       - ".github/workflows/symphony.yml"
   push:
     branches: [main]
     paths:
       - ".symphony/**"
-      - "GNUmakefile"
+      - "Makefile"
       - ".github/workflows/symphony.yml"
   workflow_dispatch:
 

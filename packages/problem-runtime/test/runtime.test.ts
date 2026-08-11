@@ -37,7 +37,7 @@ describe("constants", () => {
     expect(DEFAULT_ENTRY).toBe("template.yaml");
   });
 
-  it("should reserve exactly the three ADR-026/027 roadmap pairs in order", () => {
+  it("should reserve exactly the three provider/engine roadmap pairs in order", () => {
     expect(RESERVED_RUNTIMES).toEqual([
       { provider: "sakura", engine: "apprun" },
       { provider: "azure", engine: "bicep" },
@@ -45,7 +45,7 @@ describe("constants", () => {
     ]);
   });
 
-  it("should recognize the local container runtime (ADR-023 docker/compose)", () => {
+  it("should recognize the local container runtime (docker/compose)", () => {
     expect(CONTAINER_RUNTIMES).toEqual([{ provider: "docker", engine: "compose" }]);
   });
 });

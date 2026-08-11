@@ -1,7 +1,7 @@
 import type { CleanupFailure, IssueFiler } from "./sweep.js";
 
 /**
- * ADR-049 Phase 4 (Issue #2293) SLICE 4 — the loud-failure edge for the cleanup sweeper.
+ * Issue #2293 — the loud-failure edge for the cleanup sweeper.
  *
  * When an expired always-on runtime stack refuses to delete after every retry, the sweeper OPENS A
  * GITHUB ISSUE naming the stuck stack (repo policy: no silent fallback — a leaked runtime must be
@@ -37,7 +37,7 @@ function toAscii(value: string): string {
 /** Build the Markdown issue body naming the stuck stack, its retry count, and the last error. */
 function buildIssueBody(failure: CleanupFailure): string {
   return [
-    "The Always-On runtime cleanup sweeper (ADR-049 §8) could not delete an expired stack.",
+    "The Always-On runtime cleanup sweeper could not delete an expired stack.",
     "",
     `- **Stack:** \`${failure.stackName}\``,
     `- **Delete attempts:** ${failure.attempts}`,

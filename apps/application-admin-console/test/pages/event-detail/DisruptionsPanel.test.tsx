@@ -248,7 +248,7 @@ describe("DisruptionsPanel", () => {
     await waitFor(() => expect(createWrapper(document.body).findModal()).toBeNull());
   });
 
-  it("[ADR-037] should fire immediately (no timing/afterMinutes) by default", async () => {
+  it("should fire immediately (no timing/afterMinutes) by default", async () => {
     renderPanel();
     fireEvent.click(await screen.findByText("disruptions.fire_button"));
     fireEvent.click(screen.getByText("disruptions.confirm_fire"));
@@ -259,7 +259,7 @@ describe("DisruptionsPanel", () => {
     });
   });
 
-  it("[ADR-037] should fire with timing=scheduled + afterMinutes when scheduled", async () => {
+  it("should fire with timing=scheduled + afterMinutes when scheduled", async () => {
     renderPanel();
     fireEvent.click(await screen.findByText("disruptions.fire_button"));
     // switch the timing segmented control to "scheduled" (2nd segment)
@@ -277,7 +277,7 @@ describe("DisruptionsPanel", () => {
     expect(await screen.findByText(/disruptions.scheduled_flash/)).toBeInTheDocument();
   });
 
-  it("[ADR-037] should pre-fill the scheduled minutes from the declared defaultAfterMinutes", async () => {
+  it("should pre-fill the scheduled minutes from the declared defaultAfterMinutes", async () => {
     mockCatalog.mockResolvedValue({
       entries: [
         {
@@ -305,7 +305,7 @@ describe("DisruptionsPanel", () => {
     );
   });
 
-  it("[ADR-037] should disable confirm when the scheduled minutes are out of range", async () => {
+  it("should disable confirm when the scheduled minutes are out of range", async () => {
     renderPanel();
     fireEvent.click(await screen.findByText("disruptions.fire_button"));
     modal()?.findContent().findSegmentedControl()?.findSegments()[1]?.click();
@@ -313,7 +313,7 @@ describe("DisruptionsPanel", () => {
     expect(screen.getByText("disruptions.confirm_fire").closest("button")).toBeDisabled();
   });
 
-  it("[ADR-037] should fire with timing=recurring + intervalMinutes + maxFires", async () => {
+  it("should fire with timing=recurring + intervalMinutes + maxFires", async () => {
     renderPanel();
     fireEvent.click(await screen.findByText("disruptions.fire_button"));
     // switch the timing segmented control to "recurring" (3rd segment)
@@ -332,7 +332,7 @@ describe("DisruptionsPanel", () => {
     expect(await screen.findByText(/disruptions.recurring_flash/)).toBeInTheDocument();
   });
 
-  it("[ADR-037] should disable confirm for out-of-range recurring interval / maxFires", async () => {
+  it("should disable confirm for out-of-range recurring interval / maxFires", async () => {
     renderPanel();
     fireEvent.click(await screen.findByText("disruptions.fire_button"));
     modal()?.findContent().findSegmentedControl()?.findSegments()[2]?.click();
@@ -407,18 +407,18 @@ describe("DisruptionsPanel", () => {
           targetTeamIds: ["t1"],
           parameters: {},
           requestId: "r2",
-          scheduledFor: "2026-06-03T00:35:00Z", // [ADR-037] scheduled fire
+          scheduledFor: "2026-06-03T00:35:00Z", // scheduled fire
         },
       ],
     });
     renderPanel();
     expect(await screen.findByText("2026-06-03T00:00:00Z")).toBeInTheDocument();
-    // [ADR-037] scheduled row shows its injection time; immediate row shows "-"
+    // scheduled row shows its injection time; immediate row shows "-"
     expect(await screen.findByText("2026-06-03T00:35:00Z")).toBeInTheDocument();
     expect(screen.getByText("disruptions.col_scheduled_for")).toBeInTheDocument();
   });
 
-  it("[ADR-037 Slice 2] should list active recurring disruptions and cancel one", async () => {
+  it("should list active recurring disruptions and cancel one", async () => {
     mockRecurring.mockResolvedValue({ items: [recurRow] });
     renderPanel();
     expect(
@@ -429,20 +429,20 @@ describe("DisruptionsPanel", () => {
     await waitFor(() => expect(mockCancelRecurring).toHaveBeenCalledWith(fakeApi, "EVT1", "r1"));
   });
 
-  it("[ADR-037 Slice 2] should hide the recurring section when none are active", async () => {
+  it("should hide the recurring section when none are active", async () => {
     // default mockRecurring → { items: [] }
     renderPanel();
     await screen.findByText("Availability flood"); // catalog loaded
     expect(screen.queryByText(/disruptions.recurring_active_header/)).not.toBeInTheDocument();
   });
 
-  it("[ADR-037 Slice 2] should surface an error when listing recurring fails", async () => {
+  it("should surface an error when listing recurring fails", async () => {
     mockRecurring.mockRejectedValue(new Error("recur list boom"));
     renderPanel();
     expect(await screen.findByText("recur list boom")).toBeInTheDocument();
   });
 
-  it("[ADR-037 Slice 2] should surface an error when cancelling fails", async () => {
+  it("should surface an error when cancelling fails", async () => {
     mockRecurring.mockResolvedValue({ items: [recurRow] });
     mockCancelRecurring.mockRejectedValue(new Error("cancel boom"));
     renderPanel();
@@ -450,7 +450,7 @@ describe("DisruptionsPanel", () => {
     expect(await screen.findByText("cancel boom")).toBeInTheDocument();
   });
 
-  it("[ADR-037 Slice 2] should show the cancel button as loading while a cancel is in flight", async () => {
+  it("should show the cancel button as loading while a cancel is in flight", async () => {
     mockRecurring.mockResolvedValue({ items: [recurRow] });
     mockCancelRecurring.mockReturnValue(new Promise(() => undefined)); // never resolves
     renderPanel();
@@ -460,7 +460,7 @@ describe("DisruptionsPanel", () => {
     await waitFor(() => expect(cancelBtn.closest("button")).toBeDisabled());
   });
 
-  it("[ADR-037 Slice 2] should disable cancel for a read-only (canMutateTenant=false) operator", async () => {
+  it("should disable cancel for a read-only (canMutateTenant=false) operator", async () => {
     mockRecurring.mockResolvedValue({ items: [recurRow] });
     renderPanel(fakeApi, false);
     const cancelBtn = await screen.findByText("disruptions.recurring_cancel");

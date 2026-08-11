@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { MarketingHome } from "@/components/MarketingHome";
 import { HOME_COPY } from "@/content/site-copy";
 
-// Marketing home, Japanese (primary), served at "/" (ADR-0003 §5 marketing, static).
+// The static marketing home serves the primary Japanese version at "/".
 // The English mirror lives at /en. Both render from the one bilingual content model
 // so the two never drift.
 export const metadata: Metadata = {

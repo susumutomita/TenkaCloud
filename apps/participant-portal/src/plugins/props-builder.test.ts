@@ -7,7 +7,7 @@ import {
 } from "./props-builder";
 
 /**
- * ADR-012 Phase 5: portal が plugin に渡す PortalSlotProps を組み立てる純関数の pin test。
+ * portal が plugin に渡す PortalSlotProps を組み立てる純関数の pin test。
  * metadata 由来の operator 内部 field (effect / parameters / eventDetailType) が plugin に
  * 漏れないことを assertion で確認 (= "portal は plugin の信頼境界" 原則)。
  */

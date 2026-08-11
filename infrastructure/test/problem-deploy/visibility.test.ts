@@ -5,7 +5,7 @@ import {
 } from "../../lib/problem-deploy/handlers/shared/visibility";
 
 /**
- * ADR-008 Phase 3 (Issue #642): BATTLE_PROBLEMS_VISIBILITY env のパーサと
+ * Issue #642: BATTLE_PROBLEMS_VISIBILITY env のパーサと
  * presigned URL 発行可否判定の pin。 dormant-default と fail-safe parse の挙動を検証する。
  */
 describe("parseProblemsVisibility (Issue #642)", () => {

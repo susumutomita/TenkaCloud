@@ -511,7 +511,7 @@ export interface DeploymentsScoringPort {
 }
 
 /**
- * [Issue #2527 Slice 2] Composite-deployment capability (ADR-023 / #2061) —
+ * [Issue #2527] Composite-deployment capability (#2061) —
  * parent/target persistence, parent status CAS, target failure folding, and the
  * two composite reconciler Scans (per-page callback contract as on
  * {@link DeploymentsQueryPort}).
@@ -569,7 +569,7 @@ export interface DeploymentsCompositePort {
 }
 
 /**
- * [Issue #2527 Slice 2] Inter-team coordination state (ADR-028 D3) — the
+ * [Issue #2527] Inter-team coordination state — the
  * per-event opaque plugin state with optimistic-lock versioning.
  */
 export interface DeploymentsCoordinationPort {
@@ -602,7 +602,7 @@ export interface DeploymentsCoordinationPort {
 }
 
 /**
- * [ADR-049 §5.1 / Issue #2441] Aggregate-scoped repository for the Deployments
+ * [Issue #2441] Aggregate-scoped repository for the Deployments
  * aggregate — domain methods, not a generic key-value shim (mirror of
  * {@link EventsRepository} / {@link TeamsRepository}). Two interchangeable
  * backends implement it: `DynamoDbDeploymentsRepository` (status quo, default)

@@ -1,5 +1,5 @@
 /**
- * ADR-012 Phase 5 plugin loader.
+ * Build-time portal plugin loader.
  *
  * MVP は **build-time integration via Vite import.meta.glob** で動作する:
  *
@@ -10,9 +10,8 @@
  * 3. plugin 不在 / load 失敗 / 該当 slot 未宣言なら `null` を返し、 portal 側で
  *    fallback (= 標準 panel) を render する。
  *
- * 真の runtime URL-based loading (= 別 S3 / 別 deploy / `@vite-ignore` 付き `import(URL)`)
- * は Phase 7 separate ADR で扱う (= bundle 二重化問題 + importmap browser support 等)。
- * 本 MVP は **chunk 分割で十分** との判断 (= 50KB target も十分達成可能、 portal SPA
+ * 別 S3 / 別 deploy からの `import(URL)` は、bundle の二重化と browser の import-map
+ * 対応が未解決のため提供しない。本実装は **chunk 分割で十分** との判断 (= 50KB target も十分達成可能、 portal SPA
  * 起動時 cost にはほぼ影響しない)。
  */
 

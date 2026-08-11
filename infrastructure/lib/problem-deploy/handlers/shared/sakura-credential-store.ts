@@ -2,13 +2,13 @@ import type { SakuraCredential } from "./runtime/sakura-apprun-adapter.js";
 import { createSecureJsonStore, type SecureJsonStoreDeps } from "./secure-json-store.js";
 
 /**
- * [ADR-026 / Issue #1412] per-team Sakura API-key store (SSM SecureString)。
+ * [Issue #1412] per-team Sakura API-key store (SSM SecureString)。
  *
- * ADR-026 D3: Sakura は OIDC / STS federation を持たないため Trust Bridge (ADR-017) に乗らず、
+ * Sakura は OIDC / STS federation を持たないため Trust Bridge に乗らず、
  * **静的 API key (Access Token + Secret)** を SSM SecureString に保管する。 これは AWS ExternalId 保管
  * ([[external-id-store.ts]]) と同型の **stored-scoped-credential** 経路で、 long-lived ゆえ AWS の 15 分
  * AssumeRole より isolation が弱い → 鍵は AppRun 最小操作に scope + per-team Sakura account 前提 + rotation
- * 対応で補償する (ADR-026 D3 security note)。
+ * 対応で補償する (security note)。
  *
  * path 規約: `/{env}/tenants/{tenantId}/teams/{teamSlug}/sakura-api-key`
  *   - **1 team 1 鍵** (ExternalId は 1 tenant 1 値だが、 Sakura は per-team account で鍵を分けるため team 粒度)。
@@ -78,7 +78,7 @@ export function getSakuraCredential(
 }
 
 /**
- * team の Sakura API key を登録 / 上書き (= register + rotation 兼用、 ADR-026 D3 rotation 対応)。
+ * team の Sakura API key を登録 / 上書き (register + rotation 兼用、 rotation 対応)。
  * `Overwrite: true` なので 2 回目以降は鍵を差し替える (= rotation = 再 register)。
  */
 export function putSakuraCredential(

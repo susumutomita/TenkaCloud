@@ -52,7 +52,7 @@ export interface DeployCodeBuildProjectProps {
 }
 
 /**
- * 問題 CFn テンプレートを deploy する CodeBuild Project。MVP-1 (ADR-001 PR-2) で導入。
+ * 問題 CFn テンプレートを deploy する CodeBuild Project。MVP-1 で導入。
  *
  * SBT の `BashJobRunner` (= ScriptJob) 同型: Step Functions の `CodeBuildStartBuild`
  * task が本 Project を `RUN_JOB` integration pattern で起動し、`scripts/deploy-battles.sh`

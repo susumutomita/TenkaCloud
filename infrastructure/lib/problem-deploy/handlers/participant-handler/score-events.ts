@@ -64,7 +64,7 @@ export async function listScoreEvents(
   if (liveJobs.length === 0) return { kind: "unauthorized" };
 
   // 各 deployment の event 行を並列に query。N query を Promise.all で発火。
-  // attack-detected 行 (ADR-005 D2-A) は同 EVENT# partition に共存し、`toView` で
+  // attack-detected 行 は同 EVENT# partition に共存し、`toView` で
   // undefined になる。Limit は scan 量に効くので、そのまま 100 にすると markers が
   // 詰まったときに valid scoring 行が押し出される。LastEvaluatedKey で paginate して
   // valid 行が limit 件集まる (or 親なし) まで読む。MAX_PAGES で暴走防止。

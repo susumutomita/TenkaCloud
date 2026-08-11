@@ -1,5 +1,5 @@
 /**
- * [ADR-027 / Issue #1410 / #2743] Unit tests for the azure/bicep runtime adapter + registry wiring.
+ * [Issue #1410 / #2743] Unit tests for the azure/bicep runtime adapter + registry wiring.
  * orchestration を注入された AzureDeploymentStackClient / getCredential / materialize に対して pin する
  * (実 ARM REST + WIF exchange + Bicep compile は account-gated / #2743 別レイヤ)。
  */
@@ -54,7 +54,7 @@ function makeCtx(client: AzureDeploymentStackClient): {
   };
 }
 
-describe("mapAzureProvisioningState (ADR-027 #1410)", () => {
+describe("mapAzureProvisioningState (#1410)", () => {
   it("should map ARM provisioningState to the 6-state runtime status", () => {
     expect(mapAzureProvisioningState("Succeeded")).toBe("ready");
     expect(mapAzureProvisioningState("Failed")).toBe("failed");
@@ -66,7 +66,7 @@ describe("mapAzureProvisioningState (ADR-027 #1410)", () => {
   });
 });
 
-describe("AzureBicepRuntimeAdapter (ADR-027 #1410 / #2743)", () => {
+describe("AzureBicepRuntimeAdapter (#1410 / #2743)", () => {
   let client: {
     upsertStack: ReturnType<typeof vi.fn>;
     getStack: ReturnType<typeof vi.fn>;
@@ -182,7 +182,7 @@ describe("AzureBicepRuntimeAdapter (ADR-027 #1410 / #2743)", () => {
   });
 });
 
-describe("selectAdapter azure wiring (ADR-027 #1410)", () => {
+describe("selectAdapter azure wiring (#1410)", () => {
   const aws = {} as AwsCloudFormationAdapterContext;
   it("should return the Azure adapter only when its WIF context is wired, else reserved", () => {
     const ctx: AzureBicepAdapterContext = {

@@ -3,7 +3,7 @@ import { Construct } from "constructs";
 import { type DataTableProps, dataTableRemovalPolicy } from "./data-table-removal-policy.js";
 
 /**
- * Issue #950 (ADR-020 Phase D): admin 操作の append-only 監査ログ DDB Table。
+ * Issue #950: admin 操作の append-only 監査ログ DDB Table。
  *
  * 旧状態: admin 操作 (= user 招待 / role 変更 / 削除、 SAML CRUD、 ExternalId rotate、 Event 削除 等) は
  * CloudWatch Logs に `console.log` で 1 行残るだけ。 「誰が・いつ・何を」 を後追いする集約 storage が

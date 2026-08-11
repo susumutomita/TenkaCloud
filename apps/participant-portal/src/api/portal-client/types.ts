@@ -124,8 +124,8 @@ export interface CliCredentialsView {
 }
 
 /**
- * ADR-005 Phase 3.1: 自 team の指定 deployment における attack-detected event の
- * 時系列。Battle Portal の Attack Statistics / Attack History タブが poll する。
+ * 自 team の指定 deployment における attack-detected event の participant-safe な時系列。
+ * Battle Portal の Attack Statistics / Attack History タブが poll する。
  */
 export interface BattleAttackEventView {
   readonly occurredAt: string;
@@ -142,7 +142,7 @@ export interface BattleAttacksResponse {
 }
 
 /**
- * ADR-006 Notifications: 運営 → 競技者 通知 1 件。tenantId / createdBy 等の運営内部
+ * Notifications API: 運営 → 競技者 通知 1 件。tenantId / createdBy 等の運営内部
  * 情報は backend の NotificationView shape で構造的に削られているのでここでは出ない。
  */
 export interface NotificationView {
@@ -171,7 +171,7 @@ export interface RevealHintResponse {
 }
 
 /**
- * ADR-012 Phase 3.A: Endpoint registry API client。 1 problem の slot 一覧 (= default URL +
+ * Endpoint registry API client。 1 problem の slot 一覧 (= default URL +
  * override URL + effective URL の集約 view) を返す。 競技者 portal で「自チームの endpoint」 panel
  * を render するために使う。
  */

@@ -529,27 +529,16 @@ describe("ProblemPanel render branches", () => {
     const { unmount } = renderPanel({ writeup: "原因と根本対策" }, "local");
     expect(screen.getByText("原因と根本対策")).toBeInTheDocument();
     expect(screen.getByText(/Explanation and remediation|解説と対策/)).toBeInTheDocument();
-    // Local mode shows the pointer to the tenka-drill skill (no AI runs in the portal).
-    expect(screen.getByText(/\/tenka-drill hello-world/)).toBeInTheDocument();
     unmount();
 
     renderPanel({ writeup: undefined }, "local");
     expect(screen.queryByText(/Explanation and remediation|解説と対策/)).not.toBeInTheDocument();
-    // The pointer only lives inside the writeup panel, so it is gone too.
-    expect(screen.queryByText(/tenka-drill/)).not.toBeInTheDocument();
   });
 
   it("renders the writeup's markdown heading as a real heading, not literal `## ` text (#2473)", () => {
     renderPanel({ writeup: "## 何が起きていたか\n\n原因の説明。" }, "local");
     expect(screen.getByRole("heading", { name: "何が起きていたか" })).toBeInTheDocument();
     expect(screen.queryByText(/^##\s/)).not.toBeInTheDocument();
-  });
-
-  it("hides the tenka-drill pointer on the cloud side (writeup shows, pointer does not)", () => {
-    // Cloud releases writeups post-event; an AWS competitor has no local repo/skill.
-    renderPanel({ writeup: "原因と根本対策" }, "real");
-    expect(screen.getByText("原因と根本対策")).toBeInTheDocument();
-    expect(screen.queryByText(/tenka-drill/)).not.toBeInTheDocument();
   });
 
   it.each([

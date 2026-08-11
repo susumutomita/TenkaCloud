@@ -1,6 +1,6 @@
 /**
  * [#2195] The reference coordination plugin must be a real, exercised consumer of
- * the ADR-028 coordination SDK.
+ * the coordination SDK.
  *
  * This drives the pack's default-exported `CoordinationPlugin` through the SDK
  * host utilities (`dispatchOp` / `runTick` / `safeProjectForTeam`) exactly as the

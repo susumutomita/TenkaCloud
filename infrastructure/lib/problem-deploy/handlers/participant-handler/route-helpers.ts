@@ -49,7 +49,7 @@ const ERROR_STATUS = {
   federation_endpoint_failed: StatusCodes.INTERNAL_SERVER_ERROR,
   federation_token_malformed: StatusCodes.INTERNAL_SERVER_ERROR,
   internal_error: StatusCodes.INTERNAL_SERVER_ERROR,
-  // ADR-012 Phase 3.A: endpoint registry
+  // endpoint registry
   no_endpoints: StatusCodes.NOT_FOUND,
   unknown_slot: StatusCodes.BAD_REQUEST,
   slot_not_overridable: StatusCodes.CONFLICT,

@@ -1,5 +1,5 @@
 /**
- * ADR-012 Phase 5: PortalSlotProps を組み立てる純関数群。
+ * PortalSlotProps を組み立てる純関数群。
  *
  * `data/problems.ts` の build-time catalog (= operator 内部 field を narrow 済) を消費し、
  * deployment.stackOutputs / team view と合流して SDK の shape に marshal する。
@@ -8,7 +8,7 @@
  *   - 副作用なし (= test 容易)
  *   - metadata 不在 / endpoint slot 宣言なしは空配列 (= plugin 側で `.map` で安全に処理可)
  *   - URL 結合失敗は context (problemId / slot / key) 付きで throw (= silent skip しない)
- *   - effectiveUrl は portal 側 endpoint registry (Phase 3.A) が override を返すまでは
+ *   - effectiveUrl は portal 側 endpoint registry が override を返すまでは
  *     defaultUrl と同一値。 plugin から見ると "default が常に effective" になる初期 state。
  */
 
@@ -82,7 +82,7 @@ export function buildPortalEndpointsFromRegistry(
 }
 
 /**
- * Issue #689 (= ADR-013 OQ#7): 競技者にとって発見すべき phase / disruption 詳細を
+ * Issue #689: 競技者にとって発見すべき phase / disruption 詳細を
  * 事前にネタバレ表示しないため、 各 entry が `publicHint=true` を持つ場合のみ portal に
  * 流す。 default は **hide** (= fail-closed)、 operator side (= admin-console) は別経路で
  * 全 phase 表示できる前提。 metadata 作者が「これは事前に見せて OK」 と明示した entry だけが
@@ -99,7 +99,7 @@ export function buildPortalDisruptions(problemId: string): readonly PortalDisrup
 }
 
 /**
- * ADR-028 / Issue #1420: 参加者間 coordination の公開情報を plugin props 用に取り出す。
+ * Issue #1420: 参加者間 coordination の公開情報を plugin props 用に取り出す。
  * catalog 側 `metadataToEntry` が既に `publicHint === true` で narrow 済 (= non-public は
  * entry 自体が無い)ので、 ここは catalog の値をそのまま返す。 未宣言 problem は undefined。
  */

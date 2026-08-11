@@ -1,8 +1,8 @@
 /**
- * [ADR-031 / ADR-029 INV-2 / Issue #1419] executor の `scheduleRevert` dep 具体実装。
+ * [Issue #1419] executor の `scheduleRevert` dep 具体実装。
  *
  * 注入と同時に「afterSeconds 後に 1 度だけ復旧する」 one-shot schedule を aws-scheduler に登録する
- * (= ADR-031 で選定した機構)。 schedule は executor Lambda 自身を `mode:"revert"` payload で呼び戻す:
+ * (選定した機構)。 schedule は executor Lambda 自身を `mode:"revert"` payload で呼び戻す:
  * revert 時刻には注入時の credentials は失効しているため、 payload は DeploymentTarget (= roleArn /
  * externalIdParameterName / region / stackOutputs) と **構築済の revert dispatch** を運び、 handler は
  * 再 AssumeRole して送るだけにする (= re-lookup 不要、 注入時の決定を凍結)。
@@ -11,7 +11,7 @@
  * - FlexibleTimeWindow=OFF / ActionAfterCompletion=DELETE (= 発火後に自動削除、 schedule が溜まらない)。
  * - schedule が target を起動するための RoleArn は construct が作り env 経由で注入 (= deps.schedulerRoleArn)。
  *
- * SDK error は握り潰さず伝播 (= 復旧予約に失敗したら loud にする。 INV-2 を黙って破らない)。
+ * SDK error は握り潰さず伝播し、必須の自動復旧予約に失敗したことを明示する。
  */
 
 import {
@@ -50,13 +50,13 @@ export function revertScheduleName(detail: DisruptionFiredDetail): string {
   return sanitizeScheduleName(`tc-revert-${detail.requestId}-${detail.teamId}`);
 }
 
-/** [ADR-037] scheduled fire の遅延注入 schedule 名。 revert と対の冪等キー (requestId/teamId)。 */
+/** scheduled fire の遅延注入 schedule 名。 revert と対の冪等キー (requestId/teamId)。 */
 export function injectScheduleName(detail: DisruptionFiredDetail): string {
   return sanitizeScheduleName(`tc-inject-${detail.requestId}-${detail.teamId}`);
 }
 
 /**
- * [ADR-037] recurring fire の rate schedule 名を `(requestId, teamId)` から直接組む。 executor 側の
+ * recurring fire の rate schedule 名を `(requestId, teamId)` から直接組む。 executor 側の
  * 作成と、 event-handler 側の cancel (DeleteSchedule) が **同一の名前** を導けるよう primitive を共有する
  * (= cancel が確実に同じ schedule を消せる)。
  */
@@ -64,7 +64,7 @@ export function recurringScheduleNameOf(requestId: string, teamId: string): stri
   return sanitizeScheduleName(`tc-recur-${requestId}-${teamId}`);
 }
 
-/** [ADR-037] recurring fire の rate schedule 名。 requestId/teamId と対の冪等キー (cancel/teardown 用)。 */
+/** recurring fire の rate schedule 名。 requestId/teamId と対の冪等キー (cancel/teardown 用)。 */
 export function recurringScheduleName(detail: DisruptionFiredDetail): string {
   return recurringScheduleNameOf(detail.requestId, detail.teamId);
 }
@@ -91,7 +91,7 @@ export function revertAtExpression(firedAtIso: string, afterSeconds: number): st
 /**
  * executor 自身を呼び戻す one-shot schedule を 1 件登録する (= revert / inject 共通)。
  * FlexibleTimeWindow=OFF / ActionAfterCompletion=DELETE (= 発火後に自動削除、 schedule が溜まらない)。
- * SDK error は握り潰さず伝播 (= 予約失敗を loud にする。 INV-2 を黙って破らない)。
+ * SDK error は握り潰さず伝播し、必須の自動復旧予約に失敗したことを明示する。
  */
 function sendOneShot(
   deps: ScheduleRevertDeps,
@@ -137,7 +137,7 @@ export async function scheduleRevert(
 }
 
 /**
- * [ADR-037] scheduled fire: 注入を `afterMinutes` 分後に予約する。 schedule は executor を
+ * scheduled fire: 注入を `afterMinutes` 分後に予約する。 schedule は executor を
  * `{mode:"inject", detail}` payload で呼び戻す。 payload の `detail.firedAt` は注入予定時刻に
  * 進め、 `afterMinutes` は落とす (= T+N の revert が注入時刻基準になる / 再遅延しない)。
  */
@@ -156,7 +156,7 @@ export async function scheduleInject(
 }
 
 /**
- * [ADR-037] recurring fire: `rate(intervalMinutes minutes)` schedule を 1 件登録し、 各 tick で
+ * recurring fire: `rate(intervalMinutes minutes)` schedule を 1 件登録し、 各 tick で
  * executor を `{mode:"inject-recurring", detail}` で呼び戻す。 `EndDate = firedAt + interval*maxFires`
  * + `ActionAfterCompletion: DELETE` で maxFires 回ぶん経過後に aws-scheduler が停止 + 自動削除する
  * (= always-ends、 IAM 追加不要・DDB カウンタ不要)。 tick payload の `firedAt` は scheduled-time

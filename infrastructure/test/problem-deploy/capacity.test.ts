@@ -128,7 +128,7 @@ describe("resolveEventHotTables", () => {
     ]);
   });
 
-  // Issue #2440 (ADR-049 §5.1 Phase A5): pure SQL backend (turso|sql) では Events/Teams table
+  // Issue #2440: pure SQL backend (turso|sql) では Events/Teams table
   // 自体が synth されず、shared builder はそれらの table 名 env を空文字にフォールバックする
   // (event-handler/shared.ts 参照)。DescribeTable(TableName="") で fail するのを防ぐため、
   // 空 tableName の role は監視対象から除外する (= 残り 3 role で capacity overview は動作する)。

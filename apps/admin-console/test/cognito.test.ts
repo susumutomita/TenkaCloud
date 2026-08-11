@@ -24,7 +24,7 @@ const config: AppConfig = {
   samlIdpDirectory: {},
 };
 
-describe("purgeLegacyTokenStorage (ADR-025)", () => {
+describe("purgeLegacyTokenStorage", () => {
   beforeEach(() => sessionStorage.clear());
   afterEach(() => sessionStorage.clear()); // don't leak a seeded verifier into completeLogin tests
 
@@ -102,7 +102,7 @@ describe("completeLogin", () => {
       expect(tokens.expiresAt).toBeGreaterThan(Date.now());
     });
 
-    it("should NOT persist tokens to sessionStorage (ADR-025: memory-only)", () => {
+    it("should NOT persist tokens to sessionStorage", () => {
       expect(sessionStorage.getItem("TenkaCloud.tokens")).toBeNull();
     });
   });

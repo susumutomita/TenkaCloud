@@ -40,7 +40,7 @@ export type AuthErrorHandler = (err: Error, c: Context) => Response | Promise<Re
  * call sites.
  */
 /**
- * #2948 / ADR-0005: machine principal の拒否を 403 `forbidden_machine_route` にして監査に残す。
+ * Issue #2948: machine principal の拒否を 403 `forbidden_machine_route` にして監査に残す。
  *
  * human 経路の挙動は一切変わらない (= `MachineRouteDeniedError` は machine token でしか
  * 発生しない)。拒否は #2911 が要求する監査の一部なので、principal が判っているときだけ
@@ -129,7 +129,7 @@ export function buildAuthErrorHandler({ logPrefix }: { logPrefix: string }): Aut
         StatusCodes.UNAUTHORIZED,
       );
     }
-    // Issue #854 / ADR-020 Phase B.1 (#948): a role mismatch is 403; detail stays in
+    // Issues #854 and #948: a role mismatch is 403; detail stays in
     // logs only (= do not teach an attacker the attack surface). The frontend maps the
     // "forbidden_role" error code via FriendlyErrorAlert.
     if (err instanceof ForbiddenRoleError) {

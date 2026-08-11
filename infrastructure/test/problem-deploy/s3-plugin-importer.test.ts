@@ -7,7 +7,7 @@ import {
 import { loadCoordinationPlugin } from "../../lib/problem-deploy/handlers/participant-handler/coordination-plugin-loader";
 
 /**
- * ADR-030 Phase 3b (#1420): S3 plugin importer。 mock S3 が返す self-contained .mjs を /tmp に
+ * Issue #1420: S3 plugin importer。mock S3 が返す self-contained .mjs を /tmp に
  * 書き出して dynamic import し、 純 reducer の contract を満たすことを e2e で pin する。
  */
 const PLUGIN_JS =
@@ -64,7 +64,7 @@ describe("createS3PluginImporter", () => {
   });
 });
 
-describe("createS3PluginImporter digest integrity (ADR-039 流用)", () => {
+describe("createS3PluginImporter digest integrity", () => {
   it("should compute a sha256:<hex> digest of the bundle bytes", () => {
     expect(pluginBundleDigest(PLUGIN_JS)).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(pluginBundleDigest(PLUGIN_JS)).toBe(pluginBundleDigest(PLUGIN_JS));

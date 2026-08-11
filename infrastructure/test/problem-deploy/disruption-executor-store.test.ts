@@ -9,7 +9,7 @@ import {
 import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 /**
- * [ADR-031 / #1419] executor の DDB dep 実装。 claimExecution (冪等 Put) と resolveDeployment
+ * [#1419] executor の DDB dep 実装。 claimExecution (冪等 Put) と resolveDeployment
  * (GSI1 query + COMPLETE filter + stackOutputs parse) を mocked ddb で pin する。
  */
 
@@ -33,7 +33,7 @@ function makeResources(send: ReturnType<typeof vi.fn>): ExecutorResources {
   };
 }
 
-describe("claimExecution (ADR-031 #1419)", () => {
+describe("claimExecution (#1419)", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("should Put the EXEC# row with attribute_not_exists and return claimed", async () => {
@@ -46,19 +46,19 @@ describe("claimExecution (ADR-031 #1419)", () => {
     expect(put.input.Item.expiresAt).toBe(Math.floor(1_000_000 / 1000) + 7 * 24 * 60 * 60);
   });
 
-  it("[ADR-037] should Put a distinct EXEC#...#INJECT row for phase='inject'", async () => {
+  it("should Put a distinct EXEC#...#INJECT row for phase='inject'", async () => {
     const send = vi.fn().mockResolvedValue({});
     expect(await claimExecution(makeResources(send), detail, 1_000_000, "inject")).toBe("claimed");
     expect(send.mock.calls[0][0].input.Item.PK).toBe("EXEC#req-1#team-1#INJECT");
   });
 
-  it("[ADR-037] phase='event' uses the same key as the default", async () => {
+  it("phase='event' uses the same key as the default", async () => {
     const send = vi.fn().mockResolvedValue({});
     await claimExecution(makeResources(send), detail, 1_000_000, "event");
     expect(send.mock.calls[0][0].input.Item.PK).toBe("EXEC#req-1#team-1");
   });
 
-  it("[ADR-037] phase='recurring' keys per-tick on firedAt so each tick claims once", async () => {
+  it("phase='recurring' keys per-tick on firedAt so each tick claims once", async () => {
     const send = vi.fn().mockResolvedValue({});
     // tick 1 (one firedAt)
     await claimExecution(makeResources(send), detail, 1_000_000, "recurring");
@@ -97,7 +97,7 @@ describe("claimExecution (ADR-031 #1419)", () => {
   });
 });
 
-describe("resolveDeployment (ADR-031 #1419)", () => {
+describe("resolveDeployment (#1419)", () => {
   beforeEach(() => vi.clearAllMocks());
 
   const completeRow = {

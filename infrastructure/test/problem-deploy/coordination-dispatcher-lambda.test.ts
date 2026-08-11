@@ -6,10 +6,10 @@ import {
 } from "../problem-deploy-backend-stack.test-helpers";
 
 /**
- * ADR-030 Phase 2 (#1420): 専用 CoordinationDispatcherLambda の最小 IAM 境界を pin する。
+ * Issue #1420: 専用 CoordinationDispatcherLambda の最小 IAM 境界を pin する。
  * 核心は「participant-portal Lambda が持つ sts:AssumeRole / ssm / kms を **継承しない**」こと
  * (= 未信頼の問題同梱 plugin を将来 in-process 実行しても competitor 資格情報・ExternalId に
- * 構造的に到達不能、 ADR-030 S2)。
+ * 構造的に到達不能にすること)。
  */
 
 // Role の **inline 権限ポリシー** (= Properties.Policies) の action を集める。 trust policy
@@ -31,7 +31,7 @@ function allActions(tpl: Template): string[] {
   });
 }
 
-describe("CoordinationDispatcherLambda (ADR-030 Phase 2)", () => {
+describe("CoordinationDispatcherLambda", () => {
   it(
     "should provision a Node.js 22 / arm64 Lambda with a Function URL (AuthType=NONE)",
     () => {
@@ -66,7 +66,7 @@ describe("CoordinationDispatcherLambda (ADR-030 Phase 2)", () => {
   );
 
   it(
-    "should grant scoped DynamoDB access but NOT sts:AssumeRole / ssm / kms (ADR-030 S2)",
+    "should grant scoped DynamoDB access but NOT sts:AssumeRole / ssm / kms",
     () => {
       const tpl = synthCoordinationDispatcherLambdaOnly();
       const actions = allActions(tpl);

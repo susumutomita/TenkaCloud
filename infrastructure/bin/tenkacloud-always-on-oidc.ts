@@ -9,7 +9,7 @@ import { CodeBuildUseAwsManagedKms } from "../lib/cdk-aspect/codebuild-use-aws-m
 import { KmsKeyShortPendingWindow } from "../lib/cdk-aspect/kms-key-short-pending-window.js";
 
 /**
- * ADR-049 Phase 4 (Issue #2293) SLICE 3 — CDK app entrypoint for the GitHub Actions
+ * Issue #2293 — CDK app entrypoint for the GitHub Actions
  * OIDC deploy role (the Always-On runtime-lifecycle bootstrap).
  *
  * Deliberately does NOT route through `resolveAppConfig`: this is a one-time bootstrap

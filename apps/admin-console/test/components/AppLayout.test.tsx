@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * 状態、 locale 切替、 SideNavigation の link navigate、 samlSso flag による nav 出し分け、
  * そして「最新の状態に更新」が route content を remount することを pin する。
  * useAuth / useI18n / react-router を mock、 SUPPORTED_LOCALES は実物。 Cloudscape は
- * test-utils で駆動する ([[feedback_cloudscape_multiselect_testutils]])。
+ * test-utils で駆動する。
  */
 const { mockAuth, mockNav, mockSetLocale } = vi.hoisted(() => ({
   mockAuth: vi.fn(),

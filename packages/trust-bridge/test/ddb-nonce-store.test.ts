@@ -34,7 +34,7 @@ function recordingClient(behavior: () => Promise<void> = async () => {}) {
   };
 }
 
-describe("DdbNonceStore (#1727 / ADR-039 §7)", () => {
+describe("DdbNonceStore", () => {
   it("should accept a first-seen nonce via a conditional put", async () => {
     const client = recordingClient();
     const store = new DdbNonceStore({ client, tableName: "Nonces" });

@@ -3,23 +3,23 @@ import * as iam from "aws-cdk-lib/aws-iam";
 import type { Construct } from "constructs";
 
 /**
- * ADR-050 (Issue #2555 slice B) — Worker OIDC command-seam trust.
+ * Issue #2555 — Worker OIDC command-seam trust.
  *
- * Registers the Always-On control-plane Worker (the OIDC IdP stood up in
- * slice A: discovery + JWKS on the Worker origin) as an IAM OIDC identity
- * provider, and stands up the least-privilege `tenkacloud-alwayson-command`
+ * Registers the Always-On control-plane Worker, which serves OIDC discovery and JWKS at its
+ * origin, as an IAM OIDC identity provider and creates the least-privilege
+ * `tenkacloud-alwayson-command`
  * role the Worker assumes via `sts:AssumeRoleWithWebIdentity` to publish the
- * frozen `tenkacloud.deploy` EventBridge event itself (ADR-050 variant A).
+ * frozen `tenkacloud.deploy` EventBridge event itself.
  * This replaced the bespoke signed-intent ingress (Function URL + verifier +
- * nonce table), which ADR-050 retired.
+ * nonce table), which the current design retired.
  *
- * Trust hardening (ADR-050 §7):
+ * Trust hardening:
  *   - `aud` is pinned with `StringEquals` to `sts.amazonaws.com`.
  *   - `sub` is pinned with `StringLike` to the command subject contract
  *     (`tenkacloud:always-on:command:<tenantId>:<eventId>`), so only tokens
  *     the Worker mints for a tenant/event-scoped command can assume the role.
  *
- * Least privilege (ADR-050 §2.1): the role's only permission is
+ * Least privilege: the role's only permission is
  * `events:PutEvents` to the one deploy bus, conditioned on the frozen
  * `events:source`. Scope is enforced by IAM, not application code.
  *
@@ -54,7 +54,7 @@ export interface WorkerOidcCommandRoleStackProps extends cdk.StackProps {
    * Override to pin a single tenant or event.
    */
   readonly subjectClaimPattern?: string;
-  /** Physical role name. Default `tenkacloud-alwayson-command` (ADR-050 §2). */
+  /** Physical role name. Default `tenkacloud-alwayson-command`. */
   readonly commandRoleName?: string;
 }
 
@@ -62,7 +62,7 @@ export interface WorkerOidcCommandRoleStackProps extends cdk.StackProps {
 const OIDC_AUDIENCE = "sts.amazonaws.com";
 
 /**
- * Frozen EventBridge source of the deploy contract (ADR-001; same literal as
+ * Frozen EventBridge source of the deploy contract (same literal as
  * `EVENT_SOURCE` in `lib/problem-deploy/handlers/shared/events.ts` — declared
  * here so a CDK stack does not import handler modules).
  */
@@ -70,12 +70,12 @@ export const DEPLOY_EVENT_SOURCE = "tenkacloud.deploy";
 
 /**
  * Subject-claim contract of the command seam. The Worker mints tokens with
- * `sub = tenkacloud:always-on:command:<tenantId>:<eventId>` (slice C); the
+ * `sub = tenkacloud:always-on:command:<tenantId>:<eventId>`; the
  * default trust pattern accepts exactly this shape.
  */
 export const COMMAND_SUBJECT_PREFIX = "tenkacloud:always-on:command:";
 
-/** Default physical name of the federated command role (ADR-050 §2). */
+/** Default physical name of the federated command role. */
 export const DEFAULT_COMMAND_ROLE_NAME = "tenkacloud-alwayson-command";
 
 /**
@@ -106,7 +106,7 @@ export function normalizeIssuer(workerIssuerUrl: string): {
 }
 
 export class WorkerOidcCommandRoleStack extends cdk.Stack {
-  /** ARN of the federated command role (the Worker's `AWS_COMMAND_ROLE_ARN`). */
+  /** ARN of the federated command role (the Worker's `COMMAND_ROLE_ARN`). */
   public readonly commandRoleArn: string;
   /** The `sub` claim pattern the trust policy enforces (exposed for assertions). */
   public readonly subjectClaimPattern: string;
@@ -145,13 +145,13 @@ export class WorkerOidcCommandRoleStack extends cdk.Stack {
       roleName: props.commandRoleName ?? DEFAULT_COMMAND_ROLE_NAME,
       // ASCII-only (IAM Description Latin-1 gate): no arrows / em-dashes / CJK.
       description:
-        "Worker OIDC federated role for the TenkaCloud Always-On command seam (ADR-050). PutEvents only.",
+        "Worker OIDC federated role for TenkaCloud Always-On commands. EventBridge PutEvents only.",
       maxSessionDuration: cdk.Duration.hours(1),
     });
 
     // The seam's entire permission surface: publish the frozen deploy event to
     // the one bus. Everything else (verification, replay bounds, scoping) is
-    // carried by the trust policy and the short token TTL (ADR-050 §7).
+    // carried by the trust policy and the short token TTL.
     role.addToPolicy(
       new iam.PolicyStatement({
         sid: "PutFrozenDeployEvents",
@@ -168,8 +168,7 @@ export class WorkerOidcCommandRoleStack extends cdk.Stack {
 
     new cdk.CfnOutput(this, "CommandRoleArnOutput", {
       value: role.roleArn,
-      description:
-        "Federated command role ARN. Bind to the Worker var AWS_COMMAND_ROLE_ARN (slice C).",
+      description: "Federated command role ARN. Bind to the Worker var COMMAND_ROLE_ARN.",
     });
     new cdk.CfnOutput(this, "SubjectClaimPatternOutput", {
       value: subjectClaimPattern,

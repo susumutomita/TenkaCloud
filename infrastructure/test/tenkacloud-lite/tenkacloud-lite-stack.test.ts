@@ -12,7 +12,7 @@ import { TenkaCloudLiteStack, type TenkaCloudLiteStackProps } from "../../lib/te
 const SYNTH_TIMEOUT_MS = 120_000;
 
 /**
- * Issue #778 ADR-016 Phase 3: TenkaCloudLiteStack の最小契約 pin。
+ * Issue #778: TenkaCloudLiteStack の最小契約 pin。
  *
  * - AppPlaneCore 経由で hosting + identity + apiGateway が立つ
  * - tenantId="local" 固定
@@ -81,7 +81,7 @@ function synth(
 
 // synth() は Lambda asset bundling を含む重い実処理。全 suite 並列時は default 5s を
 // 超え flake するため、明示 timeout を持つ。
-describe("TenkaCloudLiteStack (#778 ADR-016 Phase 3)", { timeout: 60_000 }, () => {
+describe("TenkaCloudLiteStack (#778)", { timeout: 60_000 }, () => {
   beforeAll(() => {
     ensurePlaceholderDist();
   });

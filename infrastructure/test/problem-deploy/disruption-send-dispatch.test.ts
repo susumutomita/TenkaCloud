@@ -7,7 +7,7 @@ import {
 } from "../../lib/problem-deploy/handlers/disruption-executor-handler/send-dispatch";
 
 /**
- * [ADR-031 / #1419] sendDispatch: DisruptionDispatch → 実 SDK command の mapping を mocked client で pin。
+ * [#1419] sendDispatch: DisruptionDispatch → 実 SDK command の mapping を mocked client で pin。
  * client factory は assumed-credential 付きで呼ばれること + 各 kind の command input を観察する。
  */
 
@@ -38,7 +38,7 @@ function makeDeps(): {
   };
 }
 
-describe("sendDispatch (ADR-031 #1419)", () => {
+describe("sendDispatch (#1419)", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("should send SSM SendCommand with split InstanceIds and coerced string[] Parameters", async () => {

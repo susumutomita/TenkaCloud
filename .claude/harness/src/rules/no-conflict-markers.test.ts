@@ -13,7 +13,7 @@ describe("noConflictMarkers", () => {
     const findings = noConflictMarkers.check(
       ctx({
         "apps/foo/src/bar.ts": "const x = 1;\nconst y = 2;\n",
-        "docs/architecture/adr-001-foo.html": "<html><body>ok</body></html>",
+        "docs/architecture/example.html": "<html><body>ok</body></html>",
       }),
     );
     expect(findings).toEqual([]);

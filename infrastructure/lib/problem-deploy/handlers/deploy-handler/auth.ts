@@ -100,14 +100,14 @@ export class ForbiddenRoleError extends Error {
 }
 
 /**
- * ADR-020 / Issue #926 Phase B: tenant 内 role enum。 \`custom:userRole\` claim に入る値の正本。
+ * Issue #926: tenant 内 role enum。 \`custom:userRole\` claim に入る値の正本。
  *
  *   TenantAdmin    — destructive 全部 (user 管理 / SAML / 削除 / IAM mutate)
  *   TenantOperator — mutate 可 (deploy / event 進行 / disruption fire) だが user 管理は不可
  *   TenantViewer   — read-only (= 監査担当 / dashboard 観覧)
  *
- * SystemAdmin は SBT ControlPlane が \`cognito:groups\` で払い出す別軸 (= admin-insight 専用、
- * ADR-011 D2)。 tenant 側 helper では扱わない。
+ * SystemAdmin は SBT ControlPlane が `custom:userRole` で払い出す別軸で、admin-insight 専用。
+ * tenant 側 helper では扱わない。
  */
 export const TENANT_ADMIN_ROLE = "TenantAdmin";
 export const TENANT_OPERATOR_ROLE = "TenantOperator";
@@ -116,7 +116,7 @@ export const TENANT_ROLES = [TENANT_ADMIN_ROLE, TENANT_OPERATOR_ROLE, TENANT_VIE
 export type TenantRole = (typeof TENANT_ROLES)[number];
 
 /**
- * #2948 / ADR-0005: machine (M2M) principal の role。
+ * Issue #2948: machine (M2M) principal の role。
  *
  * **`TenantOperator` を投影しない** ことが本設計の中核である。`requireRole` は
  * `allowedRoles.includes(role)` の strict 判定なので、既存のどの allowlist にも含まれない
@@ -192,7 +192,7 @@ export function requireTenantNotSuspended(c: Context): void {
 }
 
 /**
- * ADR-020 / Issue #926 Phase B: 任意の \`allowedRoles\` array で role gate する helper。
+ * Issue #926: 任意の \`allowedRoles\` array で role gate する helper。
  * 一致なら return、 不一致 / 不在 / allowedRoles 空配列なら \`ForbiddenRoleError\` を throw。
  * caller (handler) は route の middleware で \`requireRole(c, [TENANT_ADMIN_ROLE])\` のように呼ぶ。
  */

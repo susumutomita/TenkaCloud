@@ -53,7 +53,7 @@ export type ParticipantProblemView = PortalParticipantProblemView & {
    */
   readonly provider: string;
   /**
-   * [#2235 / ADR-0001·ADR-048] provider の純関数。 matrix の正本は composite-target-access.ts。
+   * [#2235] provider の純関数。 matrix の正本は composite-target-access.ts。
    */
   readonly accessCapabilities: readonly TargetAccessCapability[];
 };
@@ -114,7 +114,7 @@ export function toProblemView(
     region: String(item.region ?? ""),
     awsAccountId: String(item.awsAccountId ?? ""),
     provider,
-    // [#2235] ADR-0001/048 の matrix を composite-target-access の resolver で解決する
+    // [#2235] matrix を composite-target-access の resolver で解決する
     // (= view 側に別 matrix を持たせず drift を防ぐ)。
     accessCapabilities: resolveTargetAccessCapability(provider, status),
     status,
@@ -132,7 +132,7 @@ export function toProblemView(
     // metadata.phases[].afterMinutes との差で「+N 分まであと M 分」を計算する。
     createdAt: typeof item.createdAt === "string" ? item.createdAt : undefined,
     // 全 uptime 系 (= legacy uptime + uptime-flat + uptime-multi + phased-polling) で
-    // endpointsHealth aggregate を出す (ADR-005 D1: per-endpoint URL は隠す)。
+    // endpointsHealth aggregate だけを返し、per-endpoint URL は隠す。
     // attack-detection / flag では undefined (= probe しない kind)。
     applicationStatus: isUptimeKind(scoring?.kind) ? toApplicationStatus(item) : undefined,
     // [#2422] uptime-multi の attack-probe 結果 (= 「green なのに満点でない理由」)。 attackProbes
@@ -318,7 +318,7 @@ function toScoringInfo(
 
 /**
  * `endpointsHealth` JSON を aggregate (overall / healthyCount / totalCount / checkedAt)
- * に変換する。**per-endpoint URL / 名前は絶対に出さない** (ADR-005 D1)。
+ * に変換する。**per-endpoint URL / 名前は絶対に出さない**。
  *
  * 判定ルール:
  *   - probe 未実行 (= endpointsHealth が無い / 空) → `unknown`

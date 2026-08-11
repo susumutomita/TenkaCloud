@@ -1,12 +1,12 @@
 /**
- * [ADR-027 / Issue #1410 / #2743] azure/bicep runtime adapter (Deployment Stacks).
+ * [Issue #1410 #2743] azure/bicep runtime adapter (Deployment Stacks).
  *
  * Azure problem は Bicep テンプレートを **Deployment Stack** として展開する。 Deployment Stack は
- * CFn 相当で、 配下リソースの lifecycle / teardown を Azure 側が所有する (= ADR-023 D3 を満たす。
- * platform は state file / lock を持たない)。 `runtime.entry` が Bicep/precompiled-ARM-JSON 参照、
+ * CFn 相当で、配下リソースの lifecycle / teardown を Azure 側が所有する。platform は state file /
+ * lock を持たない。`runtime.entry` が Bicep/precompiled-ARM-JSON 参照、
  * problem パラメータは stack parameters、 stack outputs を deploy output に読む。
  *
- * 認証は **Workload Identity Federation** (ADR-027): trust-bridge の `azure-federated-credential`
+ * 認証は **Workload Identity Federation** trust-bridge の `azure-federated-credential`
  * adapter が短命 OAuth token を発行する (stored key 不要、 AWS AssumeRole 並みの isolation)。 本 adapter は
  * その token を受け取る credential resolver を注入される (= account-gated な exchange は handler 側)。
  *

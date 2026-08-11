@@ -257,8 +257,8 @@ const DEFAULT_PROBE: HostProbe = {
  * `docker info` reports the daemon's own host. That distinction is the requirement, not a
  * detail: `uname` inside a container started with `platform: linux/amd64` on an arm64 Mac
  * answers `x86_64`, because the emulator says so. Reading it there would confirm exactly
- * the situation we are trying to refuse. The control plane may itself be containerized
- * (ADR-055), which makes any in-process reading doubly wrong.
+ * the situation we are trying to refuse. The control plane may itself be containerized,
+ * which makes any in-process reading doubly wrong.
  */
 export function readHostCapabilities(probe: HostProbe = DEFAULT_PROBE): HostCapabilities {
   return {

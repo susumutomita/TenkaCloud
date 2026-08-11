@@ -1,7 +1,7 @@
 import { MANAGED_BY_ALWAYS_ON_RUNTIME } from "../runtime-tags.js";
 
 /**
- * ADR-049 Phase 4 (Issue #2293) SLICE 4 — the **pure** cleanup-sweeper core (ADR-049 §8).
+ * Issue #2293 — the **pure** cleanup-sweeper core.
  *
  * This is the loud-failure safety net against cost leaks from event-runtime stacks that were never
  * torn down. It scans CloudFormation stacks tagged `TenkaCloud:ManagedBy=always-on-runtime` whose

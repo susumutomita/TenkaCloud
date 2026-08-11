@@ -307,7 +307,7 @@ function EndsAtModal({
 }
 
 /**
- * Scheduled automatic teardown (ADR-047) / deploy (ADR-047 follow-up) modal. The two operations are
+ * Scheduled automatic teardown / deploy modal. The two operations are
  * structurally identical (date + time, an endsAt ordering hint), so they share one component
  * parameterised by the i18n keys; only the model and the labels differ.
  */
