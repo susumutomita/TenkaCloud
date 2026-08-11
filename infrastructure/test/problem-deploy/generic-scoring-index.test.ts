@@ -275,6 +275,18 @@ describe("handler scan loop", () => {
     warn.mockRestore();
   });
 
+  it("should swallow a reconcileDeployStatusMaintenance failure without throwing (#2068)", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    mocks.reconcileDeployStatusMaintenance.mockRejectedValueOnce(new Error("parent scan boom"));
+    cfg.scanPages = [{ Items: [], LastEvaluatedKey: undefined }];
+    await expect(handler()).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledWith(
+      "[generic-scoring] reconcileCompositeParents failed",
+      expect.objectContaining({ message: "parent scan boom" }),
+    );
+    warn.mockRestore();
+  });
+
   it("should swallow a reconcileRuntimeStatuses failure without throwing (#1410-1412)", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     mocks.reconcileRuntimeStatuses.mockRejectedValueOnce(new Error("runtime reconcile boom"));
