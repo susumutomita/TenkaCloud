@@ -55,18 +55,6 @@ make local-down
 | ヒント | 任意の助け。得点を消費する場合は、開く前に画面へ表示される |
 | リセット | 現在の練習状態を破棄し、同じ問題環境を作り直す操作 |
 
-## 参加者MCPは得点確認だけ
-
-通常の参加者はMCPを設定する必要がありません。問題の開始、ヒントを開く、flag提出は
-Participant Portalで行います。開催者からAlways-On MCPの利用を案内された場合だけ、
-`{ALWAYS_ON_CONTROL_PLANE_ORIGIN}/mcp/participant`へ自分のteam keyをBearer tokenとして
-接続できます。
-
-現在の`get_my_score`は、自分のteam名、event ID、合計得点、解答済みcheckpoint数だけを
-返します。正解flag、ヒントの答え、team key、提出内容、他teamの名前や得点は返しません。
-team keyをMCP設定へ保存するときはclientのsecret保存機能を使い、promptやログへ
-貼り付けないでください。
-
 ## うまく動かないとき
 
 | 症状 | 確認すること |

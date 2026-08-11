@@ -10,10 +10,8 @@ Issue #2407。TenkaCloud で 1 回のイベント (Battle / Challenge) を運営
 | --- | --- | --- | --- |
 | Lite (単一テナント、デフォルト) | `make deploy` / Console から `lite-pipeline.yaml` | 2 スタック (`ProblemDeployBackendStack` + `TenkaCloudLiteStack`)。Tenant Admin Console + Participant Portal。`tenantId="local"` 固定 | 主催者 1 人 / 1 イベント |
 | SaaS (マルチテナント) | `make deploy-saas` (`scripts/install.sh`) | SBT ControlPlane + Bootstrap + pooled Tenant + 各 SPA hosting。System Admin 招待あり | 複数テナント / 常設運用 |
-| Always-On | Cloudflare Worker + `make deploy-always-on-command` + `make deploy-always-on-runtime` | 常時稼働ゼロ。イベント期間だけ per-event runtime スタック | イベント間の AWS 常時コストを 0 にしたいとき |
 
 - Lite / SaaS は AWS の 1 分 tick (EventBridge `rate(1 minute)`) で採点する。
-- Always-On は per-event runtime スタック内の同じ 1 分 tick で Battle を採点し、Flag は Worker 側で採点する。イベント終了後に runtime を destroy すれば AWS 側の常時課金は消える。
 - 環境切替は `make deploy ENV=production` のように `ENV` で行う (`infrastructure/environments/<env>/.env` を読む)。
 
 ## Lite launcher のライフサイクルと再ビルド方針 (Issue #2760)
@@ -66,7 +64,7 @@ launcher stack 削除
   - Participant Portal の URL (`tenkacloud-problem-deploy` / Lite は `tenkacloud-lite-problem-deploy`)。
   - Admin Console / Application Admin Console の URL。
   - `EventCapacityRunbookName` (キャパシティ変更に使う SSM Automation document 名)。
-- `.env` に `TENANT_ADMIN_EMAIL` (Lite) または `SYSTEM_ADMIN_EMAIL` (SaaS)、`AWS_REGION`、`CDK_PARAM_DEPLOY_EXTERNAL_ID` が入っていること。Always-On の必須入力は、実行する workflow と `Makefile` の preflight を正本とする。
+- `.env` に `TENANT_ADMIN_EMAIL` (Lite) または `SYSTEM_ADMIN_EMAIL` (SaaS)、`AWS_REGION`、`CDK_PARAM_DEPLOY_EXTERNAL_ID` が入っていること。
 
 ### 2. 競技アカウント (competitor account) の bootstrap 確認
 
@@ -142,7 +140,7 @@ Participant Portal のログインはチームログイン鍵そのものを bea
 - **鍵の形式が不正** (43 文字の base64url でない): DynamoDB を引く前に **401**。コピー&ペーストで前後に空白 / 改行が混ざっている、鍵が途中で切れている、を疑う。
 - **形式は正しいがチームが見つからない**: 鍵がローテーション / TTL 失効した、または撤収でスタックが消えて Deployments テーブルの sparse GSI2 行が消えた、などで **401** (`PortalAuthError`)。→ 有効な鍵を再発行 / 再配布する。デプロイをテスト中に消していないか確認する。サーバ側には `portal.login.unauthorized` の構造化ログ (reason = `no_rows` / `all_deleted` / `no_live_sample`) が出るので、CloudWatch で原因を切り分けられる (Issue 2675)。
 - **バックエンド到達不能**: フロントが `BACKEND_UNREACHABLE`。Participant Portal のバックエンド (`tenkacloud-problem-deploy`) が生きているか、URL / runtime-config が正しいかを確認する。
-- 鍵の保存方式はバックエンドで異なる (デフォルト DynamoDB は **Deployments テーブル**の sparse GSI2 `TEAMKEY#<鍵>` に平文で索引、Always-On / SQL 経路は SHA-256 ハッシュのみ。Teams テーブル側の平文 index は Issue 2674 で削除済みで、鍵は再配布用の属性としてのみ残る)。どちらでも「鍵 = そのチームの認証情報」なので、鍵の配布経路は限定する。
+- 鍵の保存方式はバックエンドで異なる (デフォルト DynamoDB は **Deployments テーブル**の sparse GSI2 `TEAMKEY#<鍵>` に平文で索引、SQL 経路は SHA-256 ハッシュのみ。Teams テーブル側の平文 index は Issue 2674 で削除済みで、鍵は再配布用の属性としてのみ残る)。どちらでも「鍵 = そのチームの認証情報」なので、鍵の配布経路は限定する。
 
 ## 撤収チェックリスト
 
@@ -152,7 +150,6 @@ Participant Portal のログインはチームログイン鍵そのものを bea
 - [ ] **キャパシティを 1/1 に戻す** (event-hot 5 テーブル)。[capacity runbook](./dynamodb-event-capacity.md) の scale-down。scale-down はテーブルあたり 1 日の回数制限があるので、細かく下げず一発で 1/1 に戻す。上げっぱなしの放置が唯一の課金爆死経路。
 - [ ] **各チームの問題スタックを削除**: `aws cloudformation delete-stack --stack-name <チームスタック名>`。問題によっては参加者が作った managed リソース (Lambda / ECS / App Runner / ALB / ECR / SG など) がスタック外に残る (例: microservice-migration-battle)。各問題の `OPERATOR.md` の「After the event」に従い、`${NamePrefix}` prefix / `TenkaCloud:NamePrefix` タグで掃く。
 - [ ] Battle 問題のログイン鍵は TTL で自動失効するが、早期に無効化したい場合はデプロイを削除する。
-- [ ] Always-On の場合: `make archive-always-on-runtime` でスコアを退避してから `make destroy-always-on-runtime`。per-event runtime を消せば AWS 常時課金が 0 に戻る (消し忘れは翌朝の自動掃除で拾われない — nightly sweeper は撤去済みなので必ずここで消す)。D1 は互換期間中は消さない。
 - [ ] **Lite はデフォルトでイベントごとに撤去する**(Issue #2760): 完全削除は `make destroy-all` (Console 経由なら CodeBuild を **Start build with overrides** で `ACTION=destroy-all` を指定して再実行)。通常の `make destroy` / `ACTION=destroy` でも、デフォルトの `RetainDataTables=false` なら DynamoDB テーブルは stack とともに削除される。履歴を残す場合はデプロイ時（または destroy 前の再デプロイ時）に `RetainDataTables=true` を指定し、残る provisioned capacity 課金を理解した上で `destroy` を使う。常設運用(イベントをまたいで同じ環境を稼働させ続ける)は default ではなく明示的な選択であり、その場合はこのチェックリストの本項目をスキップしてよい。SaaS は `make destroy-saas` (`scripts/cleanup.sh`、部分削除からでも冪等)。
 - [ ] **destroy 後の残存確認**: CloudFormation で `tenkacloud-lite` / `tenkacloud-lite-problem-deploy` の 2 スタックが `DELETE_COMPLETE` になっていること。`RetainDataTables=true` でデプロイしてから `ACTION=destroy` を使った場合だけ、`RemovalPolicy.RETAIN` の DynamoDB テーブルが意図的に残る — 次にこの launcher から再デプロイする前に `ACTION=destroy-all` で完全削除するか、残ったテーブルを手動で消しておく(消し忘れは孤立テーブルとして課金され続ける、`scripts/lib/retained-tables.ts` の警告対象)。
 - [ ] **launcher stack の削除**: 本体 2 スタックの撤去を確認したら `tenkacloud-lite-launcher` を削除し、CodeBuild プロジェクト・IAM Role・launcher 専用ロググループも消す。次のイベントは新しい launcher stack を作るのがデフォルト運用(同じ launcher の使い回しも可能だが、上の再デプロイ注意点を踏まえる)。
@@ -165,7 +162,6 @@ Participant Portal のログインはチームログイン鍵そのものを bea
 
 - [dynamodb-event-capacity.md](./dynamodb-event-capacity.md) — イベント中のキャパシティ運用の詳細手順
 - [DEPLOYMENT_GUIDE.md](../../DEPLOYMENT_GUIDE.md) — Lite / SaaS の具体的なデプロイ手順
-- [DEPLOYMENT_GUIDE.md](../../DEPLOYMENT_GUIDE.md#always-on-operator-runbook) — Always-On モードの運用手順
 - [docs/local-play.md](../local-play.md) — AWS なしのローカル動作確認 (`make local`)
 - `infrastructure/templates/README.md` — 競技アカウント側の bootstrap 手順
 - 各問題の `OPERATOR.md` (catalog repo `battles/<id>/OPERATOR.md`) — 問題ごとの当日運用・赤チーム・撤収

@@ -82,7 +82,7 @@ TenkaCloud の個人利用と community event の継続可能性を守るため�
 
 未検証の仮定、live verification、migration gap、未対応 mode、blocked reason、retry condition を具体的に記録します。
 
-SaaS、Lite、Always-On、local play の 1 つだけで成功した結果を、他 mode でも検証済みであるかのように扱いません。
+SaaS、Lite、local play の 1 つだけで成功した結果を、他 mode でも検証済みであるかのように扱いません。
 
 ### `PRINCIPLE_COMPLETION_REQUIRES_AUDIT`
 

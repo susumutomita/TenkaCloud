@@ -1,4 +1,4 @@
-import { QueryCommand, type ScanCommandInput } from "@aws-sdk/lib-dynamodb";
+import { QueryCommand } from "@aws-sdk/lib-dynamodb";
 import {
   type DynamoDbDeploymentsCore,
   deploymentPk,
@@ -253,25 +253,19 @@ export class DynamoDbDeploymentsQuery implements DeploymentsQueryPort {
   // -- Full-table Scans (per-page callback) --------------------------------
 
   async forEachCompleteDeploymentPage(
-    eventId: string | undefined,
     onPage: (items: readonly DeploymentRecord[]) => Promise<void>,
   ): Promise<void> {
-    const input: Omit<ScanCommandInput, "TableName" | "ExclusiveStartKey"> = eventId
-      ? {
-          FilterExpression: "#status = :complete AND eventId = :eventId",
-          ExpressionAttributeNames: { "#status": "status" },
-          ExpressionAttributeValues: { ":complete": "COMPLETE", ":eventId": eventId },
-          Limit: 200,
-        }
-      : {
-          FilterExpression: "#status = :complete",
-          ExpressionAttributeNames: { "#status": "status" },
-          ExpressionAttributeValues: { ":complete": "COMPLETE" },
-          Limit: 200,
-        };
-    await this.core.scanAllPages(input, async (items) => {
-      await onPage(items.map(itemToRecord));
-    });
+    await this.core.scanAllPages(
+      {
+        FilterExpression: "#status = :complete",
+        ExpressionAttributeNames: { "#status": "status" },
+        ExpressionAttributeValues: { ":complete": "COMPLETE" },
+        Limit: 200,
+      },
+      async (items) => {
+        await onPage(items.map(itemToRecord));
+      },
+    );
   }
 
   async forEachRuntimeReconcilablePage(
@@ -291,35 +285,6 @@ export class DynamoDbDeploymentsQuery implements DeploymentsQueryPort {
       },
       async (items) => {
         await onPage(items.map(itemToRecord));
-      },
-    );
-  }
-
-  async forEachRuntimeScoreFeedPage(
-    eventId: string,
-    onPage: (
-      items: readonly Pick<DeploymentRecord, "eventId" | "teamId" | "problemId" | "score">[],
-    ) => Promise<void>,
-  ): Promise<void> {
-    await this.core.scanAllPages(
-      {
-        FilterExpression:
-          "#status = :complete AND eventId = :eventId AND attribute_exists(teamId) AND attribute_exists(score)",
-        ExpressionAttributeNames: { "#status": "status" },
-        ExpressionAttributeValues: { ":complete": "COMPLETE", ":eventId": eventId },
-        ProjectionExpression: "eventId, teamId, problemId, score",
-        ConsistentRead: true,
-        Limit: 200,
-      },
-      async (items) => {
-        await onPage(
-          items.map((item) => ({
-            eventId: item.eventId as string | undefined,
-            teamId: item.teamId as string | undefined,
-            problemId: item.problemId as string,
-            score: item.score as number | undefined,
-          })),
-        );
       },
     );
   }

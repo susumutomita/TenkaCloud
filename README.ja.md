@@ -233,7 +233,7 @@ TenkaCloud をエンタープライズや社内研修の用途 — ハンズオ�
 
 ## ドキュメント
 
-- [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md)(英語)— ローカル端末からのデプロイ、SaaS mode、そしてイベント間で常時稼働の AWS リソースをゼロにする [Always-On mode](./DEPLOYMENT_GUIDE.md#always-on-mode)
+- [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md)(英語)— ローカル端末からのデプロイと SaaS mode
 - [docs/local-play.md](./docs/local-play.md)(英語)— ローカルドリルの内部実装、コンテナ問題の作り方、`/verify` の契約
 - [docs/running-costs.md](./docs/running-costs.md)(英語)— 2 つのコストプロファイル、ゼロコストへのオプトイン手順、実測コスト
 - [docs/architecture/README.md](./docs/architecture/README.md)(英語)— architecture 原則と機械強制される境界

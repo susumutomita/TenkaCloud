@@ -31,7 +31,7 @@ RUN bun run --filter @TenkaCloud/participant-portal build
 # 実行時の依存だけを別に解決する。 build stage の node_modules を持ち込むと、 この control
 # plane が一度も読まないものが image に載る — 実測で 1.8GB のうち 1GB 以上が別アプリと
 # ビルド道具だった (next 410MB = developer-portal、 aws-cdk-lib 144MB = infrastructure、
-# @cloudflare 128MB = always-on-control-plane、 @biomejs 109MB = linter)。 portal の
+# @biomejs 109MB = linter)。 portal の
 # frontend 依存 (cloudscape / ace-builds 等) も dist に bundle 済みで、 実行時には要らない。
 #
 # workspace を `packages/*` だけに絞って install し直す。 root の dependencies は 3 つしか

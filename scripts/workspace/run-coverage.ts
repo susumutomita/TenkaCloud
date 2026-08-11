@@ -68,15 +68,9 @@ export const COVERAGE_WORKSPACES: readonly CoverageWorkspace[] = [
     shard: "packages",
   },
   { dir: "packages/problem-test-harness", filter: "@tenkacloud/problem-test", shard: "packages" },
-  {
-    dir: "apps/always-on-control-plane",
-    filter: "@tenkacloud/always-on-control-plane",
-    shard: "packages",
-  },
   // Issue #2756: developer-portal already has a working vitest.config.ts and 18 test files,
   // but its tests never ran in CI (the ci job runs no tests; only this coverage matrix does).
-  // Placed on the packages shard, which already hosts the odd-one-out
-  // apps/always-on-control-plane and is the fastest shard to absorb the addition.
+  // Placed on the packages shard, the fastest shard to absorb the addition.
   { dir: "apps/developer-portal", filter: "@TenkaCloud/developer-portal", shard: "packages" },
   // Issue #2951: the tcloud operator CLI. Its tests are pure (fetch / clock / config I/O are
   // injected), so it lands on the packages shard alongside the other dependency-light packages.

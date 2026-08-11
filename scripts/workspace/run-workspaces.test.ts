@@ -155,7 +155,6 @@ describe("repo parity (the reviewable seam)", () => {
 
   const appsAlphabetical = [
     "apps/admin-console",
-    "apps/always-on-control-plane",
     "apps/application-admin-console",
     "apps/developer-portal",
     "apps/participant-portal",

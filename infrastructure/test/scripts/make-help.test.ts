@@ -126,12 +126,7 @@ describe("root Makefile help", () => {
       [japanese, japaneseEntries],
     ] as const) {
       expect(containsHashNumber(help)).toBe(false);
-      for (const target of [
-        "check-synth",
-        "synth-always-on-runtime-role",
-        "synth-always-on-command",
-        "synth-always-on-runtime",
-      ]) {
+      for (const target of ["check-synth"]) {
         expect(entries.filter((entry) => entry.target === target)).toHaveLength(1);
       }
       expect(entries.some((entry) => entry.target === "ensure-deps")).toBe(false);

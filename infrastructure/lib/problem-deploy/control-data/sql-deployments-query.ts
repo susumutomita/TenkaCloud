@@ -178,18 +178,12 @@ export class SqlDeploymentsQuery implements DeploymentsQueryPort {
   }
 
   async forEachCompleteDeploymentPage(
-    eventId: string | undefined,
     onPage: (items: readonly DeploymentRecord[]) => Promise<void>,
   ): Promise<void> {
-    const rows = eventId
-      ? await this.core.selectRows(
-          "SELECT payload FROM deployments WHERE status = ? AND event_id = ? ORDER BY job_id ASC",
-          ["COMPLETE", eventId],
-        )
-      : await this.core.selectRows(
-          "SELECT payload FROM deployments WHERE status = ? ORDER BY job_id ASC",
-          ["COMPLETE"],
-        );
+    const rows = await this.core.selectRows(
+      "SELECT payload FROM deployments WHERE status = ? ORDER BY job_id ASC",
+      ["COMPLETE"],
+    );
     await onPage(this.core.records(rows));
   }
 
@@ -202,26 +196,5 @@ export class SqlDeploymentsQuery implements DeploymentsQueryPort {
       ["PENDING", "IN_PROGRESS", "COMPLETE", "DELETING"],
     );
     await onPage(this.core.records(rows));
-  }
-
-  async forEachRuntimeScoreFeedPage(
-    eventId: string,
-    onPage: (
-      items: readonly Pick<DeploymentRecord, "eventId" | "teamId" | "problemId" | "score">[],
-    ) => Promise<void>,
-  ): Promise<void> {
-    const rows = await this.core.selectRows(
-      "SELECT event_id, team_id, problem_id, score FROM deployments WHERE status = ? " +
-        "AND event_id = ? AND team_id IS NOT NULL AND score IS NOT NULL ORDER BY job_id ASC",
-      ["COMPLETE", eventId],
-    );
-    await onPage(
-      rows.map((row) => ({
-        eventId: row.event_id as string | undefined,
-        teamId: row.team_id as string | undefined,
-        problemId: String(row.problem_id),
-        score: Number(row.score),
-      })),
-    );
   }
 }

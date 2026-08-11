@@ -66,9 +66,6 @@ export abstract class DeploymentsRepositoryFacade implements DeploymentsReposito
   ) => this.parts.query.forEachCompleteDeploymentPage(...args);
   readonly forEachRuntimeReconcilablePage: DeploymentsQueryPort["forEachRuntimeReconcilablePage"] =
     (...args) => this.parts.query.forEachRuntimeReconcilablePage(...args);
-  readonly forEachRuntimeScoreFeedPage: DeploymentsQueryPort["forEachRuntimeScoreFeedPage"] = (
-    ...args
-  ) => this.parts.query.forEachRuntimeScoreFeedPage(...args);
 
   // ── DeploymentsLifecyclePort ────────────────────────────────────
   readonly putDeployment: DeploymentsLifecyclePort["putDeployment"] = (...args) =>

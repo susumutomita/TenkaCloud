@@ -137,66 +137,6 @@ manuals in the same pull request.</li>
 <li>A database backend change must preserve the explicit data-migration and
 rollback boundary. Do not introduce silent dual writes.</li>
 </ul>
-<h2>MCP 2026-07-28</h2>
-<p>The TenkaCloud Always-On control plane exposes sessionless MCP 2026-07-28
-endpoints. MCP is a common format through which an AI client calls an explicitly
-allowed TenkaCloud capability. The developer endpoint exposes only
-plain-language concept help and the recognized runtime list.</p>
-<p>Connect to <code>{ALWAYS_ON_CONTROL_PLANE_ORIGIN}/mcp/developer</code>. The client must
-call <code>server/discover</code> first and send all of the following on each request:</p>
-<ul>
-<li><code>MCP-Protocol-Version: 2026-07-28</code></li>
-<li><code>Mcp-Method</code> equal to the JSON body method</li>
-<li><code>Mcp-Name</code> equal to the target of <code>tools/call</code> or <code>resources/read</code></li>
-<li>protocol version, client info, and client capabilities in <code>_meta</code></li>
-</ul>
-<p>The endpoint does not use <code>initialize</code>, <code>Mcp-Session-Id</code>, or sticky routing. A
-legacy-only client cannot connect. Public list results carry a five-minute
-public cache hint; authenticated results carry a zero-duration private hint.
-A request body larger than 32 KiB is rejected before a tool runs.</p>
-<table>
-<thead>
-<tr>
-<th>Endpoint</th>
-<th>Boundary</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>/mcp/developer</code></td>
-<td>Public and read-only: <code>explain_concept</code>, <code>list_runtime_capabilities</code></td>
-</tr>
-<tr>
-<td><code>/mcp/problem-author</code></td>
-<td>Public and read-only: pure validation of supplied JSON</td>
-</tr>
-<tr>
-<td><code>/mcp/organizer</code></td>
-<td>Existing middleware verifies the Auth0 issuer, audience, organization, tenant, and role</td>
-</tr>
-<tr>
-<td><code>/mcp/participant</code></td>
-<td>Team-key authentication fixes the request to one team ID and event ID</td>
-</tr>
-</tbody></table>
-<p>When the organizer endpoint returns <code>401 Unauthorized</code>, follow the
-<code>resource_metadata</code> link in <code>WWW-Authenticate</code> to discover the protected
-resource. The current Auth0 setup uses an OAuth client registered in advance by
-an administrator. TenkaCloud does not expose Dynamic Client Registration (DCR);
-use a Client ID Metadata Document (CIMD) only when the configured authorization
-server explicitly advertises <code>client_id_metadata_document_supported</code>.</p>
-<p>Deploy, teardown, and setting changes are not synchronous MCP tools. A future
-mutation must use the Tasks extension for a durable handle, cancellation, and
-idempotency, and use a multi-round-trip request for explicit confirmation.
-Until then, use the existing UI and operating procedures.</p>
-<p>The MCP host must show the tool name and arguments and obtain your approval
-before every tool call. All current tools advertise read-only, non-destructive,
-and idempotent annotations, but the HTTP server cannot prove that a remote
-client displayed its local approval screen. Do not connect a client that calls
-tools without this confirmation step.</p>
-<p><code>apps/always-on-control-plane</code> owns the serving implementation and
-<code>packages/problem-sdk</code> owns the problem-validation contract. Negative tests
-cover protocol headers, cross-role authentication mix-ups, and leakage of
-another tenant, team, flag, or credential.</p>
 <h2>Before requesting review</h2>
 <ul>
 <li>The new behavior has a focused test.</li>

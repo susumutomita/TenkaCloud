@@ -66,8 +66,7 @@ export const DOC_PAGES: readonly DocPage[] = [
     slug: "manual/developer",
     href: "/developers/docs/manual/developer/",
     title: "Developer manual",
-    description:
-      "Repository setup, code ownership, checks, configuration boundaries, and MCP status.",
+    description: "Repository setup, code ownership, checks, and configuration boundaries.",
     maturity: "stable",
     section: "Role manuals",
     headings: [
@@ -75,9 +74,8 @@ export const DOC_PAGES: readonly DocPage[] = [
       { id: "find-the-owner-before-editing", text: "Find the owner before editing" },
       { id: "change-workflow", text: "Change workflow" },
       { id: "code-change-or-environment-setting", text: "Code change or environment setting" },
-      { id: "mcp-status", text: "MCP status" },
     ],
-    body: "Developer manual for changing TenkaCloud platform code in apps, infrastructure, packages, and scripts. Repository setup, make doctor, make harness, make before-commit, architecture ownership, environment parameter boundaries, honest verification, and current MCP 2026-07-28 support status tracked in Issue 2819. 開発者マニュアル。コード変更、担当module、検査、環境設定との境界、MCP対応状況。",
+    body: "Developer manual for changing TenkaCloud platform code in apps, infrastructure, packages, and scripts. Repository setup, make doctor, make harness, make before-commit, architecture ownership, environment parameter boundaries, and honest verification. 開発者マニュアル。コード変更、担当module、検査、環境設定との境界。",
   },
   {
     slug: "manual/organizer",

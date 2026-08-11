@@ -40,8 +40,6 @@
         "lib/**/handlers/**/index.ts",
         "lib/**/handler/index.ts",
         "lib/**/handlers/handler.ts",
-        "lib/always-on-runtime/handlers/*.ts",
-        "lib/always-on-runtime/sweeper/index.ts",
         "lib/problem-pack/pack-cli.ts",
         "test/**/*.ts"
       ],
@@ -59,10 +57,6 @@
     "apps/developer-portal": {
       "entry": ["scripts/**/*.ts"],
       "project": ["src/**", "scripts/**"]
-    },
-    "apps/always-on-control-plane": {
-      "entry": ["src/index.ts", "test/**/*.ts"],
-      "project": ["src/**", "test/**"]
     },
     "packages/*": {
       "entry": ["test/**/*.ts"],

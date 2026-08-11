@@ -40,7 +40,7 @@ HTTP magic number、template、coverage、IAM ASCII、merge、submodule など�
 
 以下は設計と PR discipline の契約であり、単独の regex rule ではない。
 
-- `INVARIANT_CONTROL_PLANE_USES_SBT` — SaaS mode の Control Plane は `@cdklabs/sbt-aws` の ControlPlane construct に乗せる。Lite mode と Always-On mode は対象外。
+- `INVARIANT_CONTROL_PLANE_USES_SBT` — SaaS mode の Control Plane は `@cdklabs/sbt-aws` の ControlPlane construct に乗せる。Lite mode は対象外。
 - `INVARIANT_CONTROL_PLANE_DOES_NOT_HOST_TENANT_RUNTIME` — Control Plane は tenant manager とし、tenant runtime を持ち込まない。
 - `INVARIANT_TENANT_ISOLATION_AT_INFRA_LAYER` — tenant 分離は partition key、stack、repository boundary などの infrastructure / data boundary で強制する。
 - `INVARIANT_PR_SHIPS_WORKING_INCREMENT` — PR 単体で観測可能な機能が動く。

@@ -45,9 +45,6 @@ export const GATED_WORKSPACES = [
 /** gate しないが現在値を表示する workspace (owner lane、 100% への道筋表示用)。 */
 export const REPORTED_WORKSPACES = [
   "infrastructure",
-  // Issue #2292 Phase 3 foundation. Move to GATED_WORKSPACES once its first
-  // auth/storage branch suite reaches 100%.
-  "apps/always-on-control-plane",
   // Issue #2756: developer-portal's tests now run in CI (packages shard) for the first
   // time, but its authoring-tool scripts (generate-catalog.ts / generate-reference.ts /
   // check-internal-links.ts) sit at ~53% lines / ~24% branches — a real gap, not a few

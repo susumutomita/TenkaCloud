@@ -35,7 +35,6 @@ import { runPhasedPollingKind } from "./kinds/phased-polling.js";
 import { runUptimeFlatKind } from "./kinds/uptime-flat.js";
 import { runUptimeMultiKind } from "./kinds/uptime-multi.js";
 import { parsePhasesEnv } from "./phases-env.js";
-import { publishRuntimeScoreFeed } from "./runtime-score-feed.js";
 import { reconcileRuntimeStatuses } from "./runtime-status-reconciler.js";
 import { isScoringActive } from "./scoring-active.js";
 import {
@@ -74,74 +73,61 @@ import {
  * GSI3 (PK=STATUS) で query 化を検討。
  */
 
-export interface GenericScoringTickEvent {
-  /**
-   * When present, run the tick for exactly one Always-On event runtime. A blank value is rejected
-   * instead of falling back to the global SaaS/Lite scan.
-   */
-  readonly eventId?: string;
-}
-
 // [#2527 Slice 4] Composition root: one control-data runtime per Lambda instance
 // (cold-start SQL executor cache preserved), injected into every shared-resources build.
 const controlDataRuntime = createDefaultControlDataRuntime();
 
-export async function handler(event: GenericScoringTickEvent = {}): Promise<void> {
+export async function handler(): Promise<void> {
   const shared = buildSharedResources(controlDataRuntime);
   const nowMs = Date.now();
   const nowIso = new Date(nowMs).toISOString();
-  const runtimeEventId = resolveRuntimeEventId(event);
 
   // Event status reconcile (#557 #539) を採点と並列実行。1 tick の失敗は次 tick で再評価。
   // teardownDeps を渡すと teardownAt 経過の event を自動撤去する。 CompetitorAccounts env が
   // 未配線なら buildScheduledTeardownResources が undefined を返し、 scheduled teardown は dormant。
   // deployDeps を渡すと deployAt 経過の DRAFT event を自動 deploy する。 Teams /
   // catalog env が未配線なら buildScheduledDeployResources が undefined を返し、 scheduled deploy は dormant。
-  const reconcilePromise = runtimeEventId
-    ? Promise.resolve()
-    : reconcileEventStatuses(
-        {
-          runtime: shared.runtime,
-          ddb: shared.ddb,
-          eventsTableName: shared.eventsTableName,
-          deploymentsTableName: shared.deploymentsTableName,
-          teardownDeps: buildScheduledTeardownResources(shared.runtime),
-          deployDeps: buildScheduledDeployResources(shared.runtime),
-        },
-        nowIso,
-      ).catch((err) => {
-        console.warn("[generic-scoring] reconcileEventStatuses failed", {
-          message: err instanceof Error ? err.message : String(err),
-        });
-      });
+  const reconcilePromise = reconcileEventStatuses(
+    {
+      runtime: shared.runtime,
+      ddb: shared.ddb,
+      eventsTableName: shared.eventsTableName,
+      deploymentsTableName: shared.deploymentsTableName,
+      teardownDeps: buildScheduledTeardownResources(shared.runtime),
+      deployDeps: buildScheduledDeployResources(shared.runtime),
+    },
+    nowIso,
+  ).catch((err) => {
+    console.warn("[generic-scoring] reconcileEventStatuses failed", {
+      message: err instanceof Error ? err.message : String(err),
+    });
+  });
 
   // [#1410-1412] 非 AWS runtime (sakura/azure/gcp) deployment の status / outputs を
   // adapter.getStatus / collectOutputs で reconcile (= State Machine が無いので tick が進める)。 採点と並列。
   // [#2747] その直後に Composite DAG の後続 wave を dispatch する (= 直前で refresh した target
   // status を見て、 依存が揃った target を起動する)。 [#2068] その後に Composite parent の status
   // を target 群から集約 reconcile する (= per-target の後)。
-  const runtimeReconcilePromise = runtimeEventId
-    ? Promise.resolve()
-    : reconcileDeployStatusMaintenance(
-        shared,
-        nowIso,
-        () =>
-          reconcileRuntimeStatuses(shared, nowIso).catch((err) => {
-            console.warn("[generic-scoring] reconcileRuntimeStatuses failed", {
-              message: err instanceof Error ? err.message : String(err),
-            });
-          }),
-        () =>
-          dispatchCompositeReadyTargets(shared, nowMs).catch((err) => {
-            console.warn("[generic-scoring] dispatchCompositeReadyTargets failed", {
-              message: err instanceof Error ? err.message : String(err),
-            });
-          }),
-      ).catch((err) => {
-        console.warn("[generic-scoring] reconcileCompositeParents failed", {
+  const runtimeReconcilePromise = reconcileDeployStatusMaintenance(
+    shared,
+    nowIso,
+    () =>
+      reconcileRuntimeStatuses(shared, nowIso).catch((err) => {
+        console.warn("[generic-scoring] reconcileRuntimeStatuses failed", {
           message: err instanceof Error ? err.message : String(err),
         });
-      });
+      }),
+    () =>
+      dispatchCompositeReadyTargets(shared, nowMs).catch((err) => {
+        console.warn("[generic-scoring] dispatchCompositeReadyTargets failed", {
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }),
+  ).catch((err) => {
+    console.warn("[generic-scoring] reconcileCompositeParents failed", {
+      message: err instanceof Error ? err.message : String(err),
+    });
+  });
 
   // metadata.json の `phases[]` は scoring とは別 field なので、 dispatcher で per-problemId
   // に展開する。Phase 3.B では `BATTLE_PROBLEMS_PHASES` env で渡す (= Lambda 配線で
@@ -170,12 +156,8 @@ export async function handler(event: GenericScoringTickEvent = {}): Promise<void
   // 200-per-page Scan + `LastEvaluatedKey` drain into the Deployments seam;
   // per-page BatchGet / parallel processing below stays unchanged.
   const deploymentsRepository: DeploymentsQueryPort = await resolveDeploymentsRepository(shared);
-  await deploymentsRepository.forEachCompleteDeploymentPage(runtimeEventId, async (page) => {
-    // The backend applies FilterExpression server-side. Keep the in-process check as a
-    // confused-deputy guard for mocks, future query adapters, and malformed rows.
-    const items = (page as Partial<DeploymentItem>[]).filter(
-      (item) => runtimeEventId === undefined || item.eventId === runtimeEventId,
-    );
+  await deploymentsRepository.forEachCompleteDeploymentPage(async (page) => {
+    const items = page as Partial<DeploymentItem>[];
 
     coordinationTick.collect(items, nowIso); // [#2324] tick 対象を per-page で集約 (= 1 event 1 tick)。
 
@@ -209,45 +191,6 @@ export async function handler(event: GenericScoringTickEvent = {}): Promise<void
   const coordinationPromise = coordinationTick.run(nowMs, nowIso);
 
   await Promise.all([reconcilePromise, runtimeReconcilePromise, coordinationPromise]);
-  if (runtimeEventId) {
-    try {
-      await publishRuntimeScoreFeed(
-        {
-          eventId: runtimeEventId,
-          deploymentsTableName: shared.deploymentsTableName,
-          runtimeProblemIds: Object.entries(shared.problemsScoring)
-            .filter(([, scoring]) => isRuntimeScoringKind(scoring.kind))
-            .map(([problemId]) => problemId),
-          controlPlaneUrl: requiredRuntimeBinding("ALWAYS_ON_CONTROL_PLANE_URL"),
-          tokenParameterName: requiredRuntimeBinding("RUNTIME_FEED_TOKEN_PARAMETER_NAME"),
-        },
-        { runtime: shared.runtime, ddb: shared.ddb, ssm: shared.ssm },
-      );
-    } catch (error) {
-      // Scoring updates have already committed. Throwing here would make EventBridge retry the
-      // whole tick and double-apply score deltas. The next scheduled tick publishes a fresh
-      // authoritative total, so log this failure and let that tick repair the control store.
-      console.error("[generic-scoring] runtime score feed failed", {
-        eventId: runtimeEventId,
-        message: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-}
-
-function resolveRuntimeEventId(event: GenericScoringTickEvent): string | undefined {
-  if (event.eventId === undefined) return undefined;
-  const eventId = event.eventId.trim();
-  if (eventId.length === 0) {
-    throw new Error("eventId must be non-empty when invoking an event-runtime scoring tick");
-  }
-  return eventId;
-}
-
-function requiredRuntimeBinding(name: string): string {
-  const value = process.env[name]?.trim();
-  if (!value) throw new Error(`${name} is required for an event-runtime scoring tick`);
-  return value;
 }
 
 /** 採点効果の最大 window (1h)。 これより古い audit 行は active になりえない。 */

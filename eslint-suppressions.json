@@ -209,57 +209,6 @@
       "count": 1
     }
   },
-  "apps/always-on-control-plane/src/auth.ts": {
-    "sonarjs/slow-regex": {
-      "count": 4
-    }
-  },
-  "apps/always-on-control-plane/src/crypto.ts": {
-    "sonarjs/slow-regex": {
-      "count": 1
-    }
-  },
-  "apps/always-on-control-plane/src/types.ts": {
-    "@typescript-eslint/consistent-type-definitions": {
-      "count": 1
-    }
-  },
-  "apps/always-on-control-plane/test/app.test.ts": {
-    "@typescript-eslint/array-type": {
-      "count": 1
-    },
-    "@typescript-eslint/no-empty-function": {
-      "count": 1
-    }
-  },
-  "apps/always-on-control-plane/test/auth-jwt.test.ts": {
-    "sonarjs/slow-regex": {
-      "count": 2
-    }
-  },
-  "apps/always-on-control-plane/test/aws-command.test.ts": {
-    "sonarjs/no-unused-vars": {
-      "count": 1
-    }
-  },
-  "apps/always-on-control-plane/test/deploy-command-routes.test.ts": {
-    "@typescript-eslint/consistent-type-assertions": {
-      "count": 1
-    }
-  },
-  "apps/always-on-control-plane/test/mcp.test.ts": {
-    "@typescript-eslint/array-type": {
-      "count": 5
-    },
-    "sonarjs/no-clear-text-protocols": {
-      "count": 1
-    }
-  },
-  "apps/always-on-control-plane/test/setup.ts": {
-    "@typescript-eslint/no-namespace": {
-      "count": 1
-    }
-  },
   "apps/application-admin-console/src/api/client.test.ts": {
     "@typescript-eslint/consistent-type-assertions": {
       "count": 1
@@ -1044,16 +993,6 @@
       "count": 1
     }
   },
-  "infrastructure/bin/tenkacloud-always-on-command.ts": {
-    "sonarjs/constructor-for-side-effects": {
-      "count": 1
-    }
-  },
-  "infrastructure/bin/tenkacloud-always-on-oidc.ts": {
-    "sonarjs/constructor-for-side-effects": {
-      "count": 1
-    }
-  },
   "infrastructure/lib/admin-insight/admin-console-insight-stack.ts": {
     "@typescript-eslint/array-type": {
       "count": 1
@@ -1067,21 +1006,6 @@
       "count": 1
     },
     "@typescript-eslint/consistent-type-definitions": {
-      "count": 1
-    }
-  },
-  "infrastructure/lib/always-on-runtime/event-runtime-stack.ts": {
-    "sonarjs/constructor-for-side-effects": {
-      "count": 1
-    }
-  },
-  "infrastructure/lib/always-on-runtime/sweeper/cfn-stacks-client.ts": {
-    "sonarjs/no-nested-template-literals": {
-      "count": 1
-    }
-  },
-  "infrastructure/lib/always-on-runtime/worker-oidc-command-role-stack.ts": {
-    "sonarjs/slow-regex": {
       "count": 1
     }
   },
@@ -1596,59 +1520,6 @@
     },
     "@typescript-eslint/no-explicit-any": {
       "count": 1
-    }
-  },
-  "infrastructure/test/always-on-runtime/event-runtime-entrypoint.test.ts": {
-    "@typescript-eslint/no-dynamic-delete": {
-      "count": 1
-    },
-    "sonarjs/assertions-in-tests": {
-      "count": 1
-    },
-    "sonarjs/no-unused-vars": {
-      "count": 3
-    }
-  },
-  "infrastructure/test/always-on-runtime/event-runtime-stack.test.ts": {
-    "sonarjs/assertions-in-tests": {
-      "count": 1
-    }
-  },
-  "infrastructure/test/always-on-runtime/github-oidc-deploy-role-stack.test.ts": {
-    "sonarjs/assertions-in-tests": {
-      "count": 12
-    },
-    "sonarjs/no-nested-conditional": {
-      "count": 1
-    }
-  },
-  "infrastructure/test/always-on-runtime/runtime-tags.test.ts": {
-    "sonarjs/assertions-in-tests": {
-      "count": 2
-    },
-    "sonarjs/aws-sns-unencrypted-topics": {
-      "count": 1
-    }
-  },
-  "infrastructure/test/always-on-runtime/sweeper/index.composition.test.ts": {
-    "@typescript-eslint/no-dynamic-delete": {
-      "count": 1
-    },
-    "@typescript-eslint/no-empty-function": {
-      "count": 6
-    }
-  },
-  "infrastructure/test/always-on-runtime/sweeper/sweep.test.ts": {
-    "@typescript-eslint/no-empty-function": {
-      "count": 7
-    }
-  },
-  "infrastructure/test/always-on-runtime/worker-oidc-command-role-stack.test.ts": {
-    "@typescript-eslint/no-dynamic-delete": {
-      "count": 2
-    },
-    "sonarjs/assertions-in-tests": {
-      "count": 11
     }
   },
   "infrastructure/test/app-plane-core/build-app-plane-core.test.ts": {
@@ -3322,22 +3193,6 @@
       "count": 1
     }
   },
-  "packages/auth-client/test/jwks-resolver.test.ts": {
-    "sonarjs/no-unused-vars": {
-      "count": 1
-    },
-    "sonarjs/slow-regex": {
-      "count": 1
-    }
-  },
-  "packages/auth-client/test/oidc-jwks-verify.test.ts": {
-    "sonarjs/no-unused-vars": {
-      "count": 6
-    },
-    "sonarjs/slow-regex": {
-      "count": 1
-    }
-  },
   "packages/auth-client/test/runtime-config.test.ts": {
     "sonarjs/no-clear-text-protocols": {
       "count": 1
@@ -3543,26 +3398,6 @@
   },
   "packages/web-kit/test/usePolling.test.tsx": {
     "@typescript-eslint/no-non-null-assertion": {
-      "count": 2
-    }
-  },
-  "tmp/passport-video/audit_qr.mjs": {
-    "sonarjs/no-internal-api-use": {
-      "count": 2
-    }
-  },
-  "tmp/passport-video/generate_demo_qr.mjs": {
-    "sonarjs/no-internal-api-use": {
-      "count": 1
-    }
-  },
-  "tmp/passport-video/retake/audit_final_qr.mjs": {
-    "sonarjs/no-internal-api-use": {
-      "count": 1
-    }
-  },
-  "tmp/passport-video/retake/decode-qr.mjs": {
-    "sonarjs/no-internal-api-use": {
       "count": 2
     }
   }
