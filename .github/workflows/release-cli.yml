@@ -70,6 +70,18 @@ jobs:
         with:
           node-version: 24
 
+      - name: Setup Bun
+        # oven-sh/setup-bun v2.0.2 (pinned, matches ci.yml). Only needed to run safe-chain
+        # below — the packed CLI itself is smoke-tested on its bun-free path.
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: "1.3.11"
+
+      # Supply Chain Security: Safe Chain for malicious package detection
+      - name: Setup safe-chain
+        continue-on-error: true
+        run: bunx @aikidosec/safe-chain setup-ci
+
       - name: Stamp the package version from the tag
         working-directory: packages/standalone-cli
         run: |
