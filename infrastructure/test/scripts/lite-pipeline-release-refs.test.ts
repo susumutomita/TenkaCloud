@@ -5,14 +5,16 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 // Schema v2 manifests no longer pin a platform commit (the release identity is derived
-// from the v* tag at publish time, #3024), so the launcher's hand-maintained literals are
-// anchored to the last published baseline instead of the in-progress manifest. #3024 PR 2
-// replaces both the literals and this anchor with bindings generated from the identity.
-import { LAUNCHER_RELEASE_BASELINE } from "../../../scripts/release/launcher-baseline";
+// from the v* tag at publish time, #3024), so the launcher literals are stamped from
+// release/launcher-defaults.json — the last published pair — by
+// scripts/release/generate-launcher-defaults.ts, with release:check as the drift gate.
+// This suite asserts the stamped values sit in the right template positions.
+import { readLauncherDefaults } from "../../../scripts/release/generate-launcher-defaults";
 
-const PLATFORM_CANDIDATE_SHA = LAUNCHER_RELEASE_BASELINE.platformCommit;
-const CATALOG_CANDIDATE_SHA = LAUNCHER_RELEASE_BASELINE.catalogCommit;
-const BASELINE_MANIFEST_VERSION = LAUNCHER_RELEASE_BASELINE.manifestVersion;
+const launcherDefaults = readLauncherDefaults();
+const PLATFORM_CANDIDATE_SHA = launcherDefaults.platformCommit;
+const CATALOG_CANDIDATE_SHA = launcherDefaults.catalogCommit;
+const BASELINE_MANIFEST_VERSION = launcherDefaults.manifestVersion;
 const FIXTURE_TAG = "v-fixture";
 const GIT_BINARY = "/usr/bin/git";
 const BASH_BINARY = "/bin/bash";

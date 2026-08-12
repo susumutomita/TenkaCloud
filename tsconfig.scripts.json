@@ -29,6 +29,6 @@
     "scripts/release/generate-release-report.ts",
     "scripts/release/identity.ts",
     "scripts/release/verify-release-identity.ts",
-    "scripts/release/launcher-baseline.ts"
+    "scripts/release/generate-launcher-defaults.ts"
   ]
 }
