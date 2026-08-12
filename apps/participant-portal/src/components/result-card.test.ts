@@ -4,13 +4,13 @@ import {
   buildResultCardFilename,
   buildResultCardModel,
   escapeXml,
+  type ResultCardBrowserAdapters,
+  ResultCardError,
+  type ResultCardModel,
   renderResultCardPng,
   renderResultCardSvg,
   resultCardSvgDataUrl,
-  ResultCardError,
   truncateCodePoints,
-  type ResultCardBrowserAdapters,
-  type ResultCardModel,
 } from "./result-card";
 
 function leaderboard(overrides: Partial<LeaderboardResponse> = {}): LeaderboardResponse {
@@ -144,28 +144,25 @@ describe("Result Card rendering", () => {
     expect(malformed.value.eventTitle).toContain("�");
   });
 
-  it(
-    "normalizes untrusted display text without splitting emoji or preserving bidi controls",
-    () => {
-      const result = build({
-        eventTitle: `  大会\u202e名 ${"界".repeat(60)}  `,
-        leaderboard: leaderboard({
-          entries: [
-            {
-              ...leaderboard().entries[0],
-              teamName: `${"🚀".repeat(48)}\uffff`,
-            },
-          ],
-        }),
-      });
-      if (!result.ok) throw result.error;
+  it("normalizes untrusted display text without splitting emoji or preserving bidi controls", () => {
+    const result = build({
+      eventTitle: `  大会\u202e名 ${"界".repeat(60)}  `,
+      leaderboard: leaderboard({
+        entries: [
+          {
+            ...leaderboard().entries[0],
+            teamName: `${"🚀".repeat(48)}\uffff`,
+          },
+        ],
+      }),
+    });
+    if (!result.ok) throw result.error;
 
-      expect(result.value.eventTitle).not.toContain("\u202e");
-      expect(result.value.teamName).not.toContain("\uffff");
-      expect(Array.from(result.value.teamName)).toHaveLength(48);
-      expect(() => renderResultCardSvg(result.value)).not.toThrow();
-    },
-  );
+    expect(result.value.eventTitle).not.toContain("\u202e");
+    expect(result.value.teamName).not.toContain("\uffff");
+    expect(Array.from(result.value.teamName)).toHaveLength(48);
+    expect(() => renderResultCardSvg(result.value)).not.toThrow();
+  });
 
   it("builds a path-safe stable filename", () => {
     const result = build({
@@ -174,9 +171,7 @@ describe("Result Card rendering", () => {
       }),
     });
     if (!result.ok) throw result.error;
-    expect(buildResultCardFilename(result.value)).toBe(
-      "tenkacloud-team-live-20260812T130000Z.png",
-    );
+    expect(buildResultCardFilename(result.value)).toBe("tenkacloud-team-live-20260812T130000Z.png");
   });
 
   it("rasterizes the deterministic SVG into a PNG blob", async () => {
@@ -222,8 +217,7 @@ describe("Result Card rendering", () => {
 
     const noContext = await renderResultCardPng(model(), {
       createImage: () => image,
-      createCanvas: () =>
-        ({ getContext: () => null } as unknown as HTMLCanvasElement),
+      createCanvas: () => ({ getContext: () => null }) as unknown as HTMLCanvasElement,
     });
     expect(noContext.ok).toBe(false);
     if (!noContext.ok) expect(noContext.error.code).toBe("canvas-context-unavailable");

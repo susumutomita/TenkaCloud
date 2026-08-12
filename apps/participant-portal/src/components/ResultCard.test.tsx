@@ -49,11 +49,7 @@ describe("ResultCard", () => {
 
   it("renders a responsive preview and both explicit user actions", () => {
     render(
-      <ResultCard
-        leaderboard={leaderboard()}
-        eventTitle="TenkaCloud Battle"
-        runtime={runtime()}
-      />,
+      <ResultCard leaderboard={leaderboard()} eventTitle="TenkaCloud Battle" runtime={runtime()} />,
     );
 
     expect(screen.getByText("result_card.title")).toBeDefined();

@@ -72,8 +72,6 @@ export interface ResultCardBrowserAdapters {
 
 const SVG_FONT_FAMILY =
   "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', 'Yu Gothic', 'Noto Sans JP', 'Noto Sans CJK JP', 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif";
-const INVALID_XML_CONTROL_CHARACTERS =
-  /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\ufffe\uffff]/gu;
 const BIDI_CONTROL_CHARACTERS = /[\u202a-\u202e\u2066-\u2069]/gu;
 
 const CARD_LABELS = {
@@ -127,9 +125,26 @@ function replaceLoneSurrogates(value: string): string {
   return output;
 }
 
+function isInvalidXmlCodePoint(codePoint: number): boolean {
+  return (
+    (codePoint >= 0 && codePoint <= 8) ||
+    codePoint === 11 ||
+    codePoint === 12 ||
+    (codePoint >= 14 && codePoint <= 31) ||
+    codePoint === 127 ||
+    codePoint === 0xfffe ||
+    codePoint === 0xffff
+  );
+}
+
+function stripInvalidXmlCharacters(value: string): string {
+  return Array.from(value)
+    .filter((character) => !isInvalidXmlCodePoint(character.codePointAt(0) ?? 0))
+    .join("");
+}
+
 function normalizeDisplayText(value: string, maximumCodePoints: number): string {
-  const normalized = replaceLoneSurrogates(value)
-    .replace(INVALID_XML_CONTROL_CHARACTERS, "")
+  const normalized = stripInvalidXmlCharacters(replaceLoneSurrogates(value))
     .replace(BIDI_CONTROL_CHARACTERS, "")
     .replace(/\s+/gu, " ")
     .trim();

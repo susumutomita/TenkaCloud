@@ -4,17 +4,17 @@ import Button from "@cloudscape-design/components/button";
 import Container from "@cloudscape-design/components/container";
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { LeaderboardResponse } from "../api/portal-client";
 import { useLang, useT } from "../i18n";
 import "./ResultCard.css";
 import {
   buildResultCardFilename,
   buildResultCardModel,
-  renderResultCardPng,
-  resultCardSvgDataUrl,
   type ResultCardModel,
   type ResultCardResult,
+  renderResultCardPng,
+  resultCardSvgDataUrl,
 } from "./result-card";
 
 export interface ResultCardRuntime {
@@ -98,57 +98,18 @@ function isShareCancellation(error: unknown): boolean {
   );
 }
 
-/**
- * Issue #3035: Scoreboard と同じ LeaderboardResponse を読む Result Card UI。
- * 独自 polling や score 再計算は持たず、明示的な user action でだけ PNG を生成する。
- */
-export function ResultCard({
-  leaderboard,
-  eventTitle,
-  runtime = defaultResultCardRuntime,
+function ResultCardContent({
+  model,
+  runtime,
 }: {
-  readonly leaderboard: LeaderboardResponse;
-  readonly eventTitle: string;
-  readonly runtime?: ResultCardRuntime;
+  readonly model: ResultCardModel;
+  readonly runtime: ResultCardRuntime;
 }) {
   const t = useT();
-  const lang = useLang();
   const inFlight = useRef(false);
   const [busy, setBusy] = useState<"share" | "download" | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorVisible, setErrorVisible] = useState(false);
-
-  const modelResult = useMemo(
-    () =>
-      buildResultCardModel({
-        leaderboard,
-        eventTitle,
-        generatedAt: runtime.now(),
-        locale: lang,
-      }),
-    [eventTitle, lang, leaderboard, runtime],
-  );
-
-  const model = modelResult.ok ? modelResult.value : undefined;
-  const modelIdentity = model
-    ? [
-        model.generatedAt,
-        model.eventTitle,
-        model.teamName,
-        model.rank,
-        model.score,
-        model.completedProblems,
-        model.totalProblems,
-        model.status,
-      ].join(":")
-    : undefined;
-  useEffect(() => {
-    setSuccessMessage(null);
-    setErrorVisible(false);
-  }, [modelIdentity]);
-
-  if (!model) return null;
-
   const filename = buildResultCardFilename(model);
   const shareSupported = runtime.supportsFileShare();
   const previewAlt = t("result_card.preview_alt", {
@@ -247,9 +208,7 @@ export function ResultCard({
         </div>
 
         <Box variant="small" color="text-status-inactive">
-          {model.status === "final"
-            ? t("result_card.final_note")
-            : t("result_card.live_note")}
+          {model.status === "final" ? t("result_card.final_note") : t("result_card.live_note")}
         </Box>
 
         <SpaceBetween direction="horizontal" size="s">
@@ -263,11 +222,7 @@ export function ResultCard({
               {t("result_card.share_button")}
             </Button>
           )}
-          <Button
-            loading={busy === "download"}
-            disabled={busy !== null}
-            onClick={handleDownload}
-          >
+          <Button loading={busy === "download"} disabled={busy !== null} onClick={handleDownload}>
             {t("result_card.download_button")}
           </Button>
         </SpaceBetween>
@@ -280,4 +235,47 @@ export function ResultCard({
       </SpaceBetween>
     </Container>
   );
+}
+
+/**
+ * Issue #3035: Scoreboard と同じ LeaderboardResponse を読む Result Card UI。
+ * 独自 polling や score 再計算は持たず、明示的な user action でだけ PNG を生成する。
+ */
+export function ResultCard({
+  leaderboard,
+  eventTitle,
+  runtime = defaultResultCardRuntime,
+}: {
+  readonly leaderboard: LeaderboardResponse;
+  readonly eventTitle: string;
+  readonly runtime?: ResultCardRuntime;
+}) {
+  const lang = useLang();
+  const modelResult = useMemo(
+    () =>
+      buildResultCardModel({
+        leaderboard,
+        eventTitle,
+        generatedAt: runtime.now(),
+        locale: lang,
+      }),
+    [eventTitle, lang, leaderboard, runtime],
+  );
+
+  if (!modelResult.ok) return null;
+
+  const model = modelResult.value;
+  const modelKey = [
+    model.generatedAt,
+    model.eventTitle,
+    model.teamName,
+    model.rank,
+    model.score,
+    model.completedProblems,
+    model.totalProblems,
+    model.status,
+    model.locale,
+  ].join(":");
+
+  return <ResultCardContent key={modelKey} model={model} runtime={runtime} />;
 }

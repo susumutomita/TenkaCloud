@@ -11,10 +11,12 @@ export const resultCardLocaleMessages = {
     share_success: "Result Cardを共有しました。",
     download_success: "Result CardをPNGで保存しました。",
     error_header: "Result Cardを生成できませんでした",
-    error_body: "ブラウザの画像生成機能を利用できませんでした。画面を更新して、もう一度お試しください。",
+    error_body:
+      "ブラウザの画像生成機能を利用できませんでした。画面を更新して、もう一度お試しください。",
     live_note: "LIVEは現在取得できているスコアのスナップショットです。最終順位ではありません。",
     final_note: "競技終了時刻を過ぎた公式スコアのスナップショットです。",
-    share_unavailable: "このブラウザは画像ファイルの共有に対応していません。PNG保存は利用できます。",
+    share_unavailable:
+      "このブラウザは画像ファイルの共有に対応していません。PNG保存は利用できます。",
   },
   en: {
     title: "Result Card",
@@ -27,11 +29,9 @@ export const resultCardLocaleMessages = {
     share_success: "The Result Card was shared.",
     download_success: "The Result Card was downloaded as a PNG.",
     error_header: "The Result Card could not be generated",
-    error_body:
-      "The browser image renderer was unavailable. Refresh the page and try again.",
+    error_body: "The browser image renderer was unavailable. Refresh the page and try again.",
     live_note: "LIVE is a snapshot of the score currently available. It is not a final result.",
     final_note: "This is an official score snapshot taken after the event end time.",
-    share_unavailable:
-      "This browser cannot share image files. PNG download remains available.",
+    share_unavailable: "This browser cannot share image files. PNG download remains available.",
   },
 } as const;
