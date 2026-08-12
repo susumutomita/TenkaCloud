@@ -1,13 +1,40 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { isExactSemver } from "../../packages/problem-sdk/src/semver-range";
+import {
+  arrayAt,
+  enumAt,
+  exactObject,
+  exactSemverAt,
+  fail,
+  httpsUrlAt,
+  literalAt,
+  strictDateTimeAt,
+  stringAt,
+  stringMatching,
+  uniqueStrings,
+} from "./manifest-fields";
 
-export const RELEASE_MANIFEST_SCHEMA_VERSION = 1 as const;
+export const RELEASE_MANIFEST_SCHEMA_VERSION = 2 as const;
 export const RELEASE_MANIFEST_SCHEMA_REF = "./tenkacloud-release.schema.json" as const;
 export const RELEASE_MANIFEST_PATH = resolve(
   import.meta.dirname,
   "../../release/tenkacloud-release.json",
 );
+
+/**
+ * Certified evidence freshness window (#3024). Golden Path runs older than this at
+ * validation time are stale: they may describe a world that has since drifted (expired
+ * credentials, changed AWS service behavior, rotated images), so they cannot carry a
+ * current certification claim. Candidates are unaffected — they never claim support.
+ */
+export const GOLDEN_PATH_EVIDENCE_MAX_AGE_DAYS = 90 as const;
+
+/**
+ * Evidence completed after "now" is rejected — future-dated evidence would defeat the
+ * staleness window permanently. One hour absorbs honest clock skew between the runner
+ * that produced the evidence and the machine validating the manifest.
+ */
+export const GOLDEN_PATH_EVIDENCE_FUTURE_SKEW_MS = 60 * 60 * 1000;
 
 export const DEPLOYMENT_MODES = ["lite", "saas-pooled", "saas-silo"] as const;
 
@@ -15,6 +42,16 @@ export type DeploymentMode = (typeof DEPLOYMENT_MODES)[number];
 export type ReleaseStatus = "candidate" | "certified";
 export type VerificationResult = "passed" | "failed";
 export type ResidualScanDecision = "passed" | "failed" | "undecidable";
+
+/**
+ * The platform source carries no commit on purpose (#3024). This manifest lives inside
+ * the platform tree, so it cannot contain the SHA of the commit that contains it — the
+ * platform identity of a release is definitionally the commit its `v<version>` tag
+ * points at, derived and validated at publish time by `identity.ts`.
+ */
+export interface PlatformSourceRef {
+  readonly repository: string;
+}
 
 export interface ReleaseSourceRef {
   readonly repository: string;
@@ -95,7 +132,7 @@ export interface ReleaseManifest {
     readonly status: ReleaseStatus;
   };
   readonly sources: {
-    readonly platform: ReleaseSourceRef;
+    readonly platform: PlatformSourceRef;
     readonly catalog: ReleaseSourceRef;
   };
   readonly artifacts: {
@@ -114,135 +151,17 @@ export interface ReleaseManifest {
 }
 
 const FULL_COMMIT = /^[a-f0-9]{40}$/;
+const STABLE_RELEASE_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const DIGEST_PINNED_IMAGE = /^[a-z0-9][a-z0-9._/-]*(?::[A-Za-z0-9._-]+)?@sha256:[a-f0-9]{64}$/;
 const EXACT_MAJOR = /^(0|[1-9]\d*)$/;
 const DISPLAY_TAG = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/;
 const CONTRACT_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const AWS_REGION = /^[a-z]{2}(?:-gov)?-[a-z]+-\d+$/;
 const SHA256 = /^[a-f0-9]{64}$/;
-const RFC_3339_DATE_TIME =
-  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|[+-](\d{2}):(\d{2}))$/;
 
-type UnknownRecord = Record<string, unknown>;
-
-function fail(path: string, message: string): never {
-  throw new Error(`Invalid release manifest at ${path}: ${message}`);
-}
-
-function recordAt(value: unknown, path: string): UnknownRecord {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    fail(path, "expected an object");
-  }
-  return value as UnknownRecord;
-}
-
-function exactObject(
-  value: unknown,
-  path: string,
-  required: readonly string[],
-  optional: readonly string[] = [],
-): UnknownRecord {
-  const record = recordAt(value, path);
-  const allowed = new Set([...required, ...optional]);
-  for (const key of Object.keys(record)) {
-    if (!allowed.has(key)) fail(`${path}.${key}`, "unknown property");
-  }
-  for (const key of required) {
-    if (!Object.hasOwn(record, key)) fail(`${path}.${key}`, "required property is missing");
-  }
-  return record;
-}
-
-function arrayAt(value: unknown, path: string): readonly unknown[] {
-  if (!Array.isArray(value)) fail(path, "expected an array");
-  return value;
-}
-
-function stringAt(value: unknown, path: string): string {
-  if (typeof value !== "string" || value.length === 0) {
-    fail(path, "expected a non-empty string");
-  }
-  return value;
-}
-
-function stringMatching(
-  value: unknown,
-  path: string,
-  pattern: RegExp,
-  description: string,
-): string {
-  const parsed = stringAt(value, path);
-  if (!pattern.test(parsed)) fail(path, description);
-  return parsed;
-}
-
-function exactSemverAt(value: unknown, path: string): string {
-  const parsed = stringAt(value, path);
-  if (!isExactSemver(parsed)) fail(path, "expected an exact semantic version");
-  return parsed;
-}
-
-function literalAt<const T extends string | number>(value: unknown, path: string, literal: T): T {
-  if (value !== literal) fail(path, `expected ${JSON.stringify(literal)}`);
-  return literal;
-}
-
-function enumAt<const T extends string>(value: unknown, path: string, allowed: readonly T[]): T {
-  if (typeof value !== "string" || !(allowed as readonly string[]).includes(value)) {
-    fail(path, `expected one of ${allowed.join(", ")}`);
-  }
-  return value as T;
-}
-
-function httpsUrlAt(value: unknown, path: string): string {
-  const parsed = stringAt(value, path);
-  let url: URL;
-  try {
-    url = new URL(parsed);
-  } catch {
-    fail(path, "expected an absolute HTTPS URL");
-  }
-  if (url.protocol !== "https:") fail(path, "expected an absolute HTTPS URL");
-  return parsed;
-}
-
-function strictDateTimeAt(value: unknown, path: string): string {
-  const parsed = stringAt(value, path);
-  const match = RFC_3339_DATE_TIME.exec(parsed);
-  if (!match) fail(path, "expected an RFC 3339 date-time including a timezone");
-
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const hour = Number(match[4]);
-  const minute = Number(match[5]);
-  const second = Number(match[6]);
-  const offsetHour = match[9] === undefined ? 0 : Number(match[9]);
-  const offsetMinute = match[10] === undefined ? 0 : Number(match[10]);
-  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
-  const daysInMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-  const validCalendarDate =
-    month >= 1 &&
-    month <= 12 &&
-    day >= 1 &&
-    day <= (daysInMonth[month - 1] ?? 0) &&
-    hour <= 23 &&
-    minute <= 59 &&
-    second <= 59 &&
-    offsetHour <= 23 &&
-    offsetMinute <= 59;
-  if (!validCalendarDate || Number.isNaN(Date.parse(parsed))) {
-    fail(path, "date-time is not a real calendar instant");
-  }
-  return parsed;
-}
-
-function uniqueStrings(values: readonly string[], path: string): void {
-  const seen = new Set<string>();
-  for (const value of values) {
-    if (seen.has(value)) fail(path, `duplicate value ${JSON.stringify(value)}`);
-    seen.add(value);
-  }
+function parsePlatformSource(value: unknown, path: string): PlatformSourceRef {
+  const source = exactObject(value, path, ["repository"]);
+  return { repository: httpsUrlAt(source.repository, `${path}.repository`) };
 }
 
 function parseSourceRef(value: unknown, path: string): ReleaseSourceRef {
@@ -533,13 +452,10 @@ function assertEvidenceBindings(
   manifest: ReleaseManifest,
   qualificationPairs: ReadonlySet<string>,
 ): void {
-  const expectedBom: EvidenceBom = {
-    releaseVersion: manifest.release.version,
-    platformCommit: manifest.sources.platform.commit,
-    catalogCommit: manifest.sources.catalog.commit,
-    simulatorImage: manifest.artifacts.simulatorImage,
-    toolchain: manifest.toolchain,
-  };
+  // The manifest cannot pin its own platform commit (see PlatformSourceRef), so runs are
+  // required to agree on ONE platform commit here; `resolveReleaseIdentity` binds that
+  // commit to the actual tag commit when the release is published.
+  const expectedPlatformCommit = manifest.verification.goldenPathRuns[0]?.bom.platformCommit;
   for (const run of manifest.verification.goldenPathRuns) {
     if (!qualificationPairs.has(`${run.mode}:${run.region}`)) {
       fail(
@@ -547,10 +463,17 @@ function assertEvidenceBindings(
         `run ${JSON.stringify(run.runId)} does not reference a declared qualification target`,
       );
     }
+    const expectedBom: EvidenceBom = {
+      releaseVersion: manifest.release.version,
+      platformCommit: expectedPlatformCommit as string,
+      catalogCommit: manifest.sources.catalog.commit,
+      simulatorImage: manifest.artifacts.simulatorImage,
+      toolchain: manifest.toolchain,
+    };
     if (JSON.stringify(run.bom) !== JSON.stringify(expectedBom)) {
       fail(
         "$.verification.goldenPathRuns",
-        `run ${JSON.stringify(run.runId)} BOM does not exactly match the top-level release BOM`,
+        `run ${JSON.stringify(run.runId)} BOM does not exactly match the top-level release BOM and the platform commit shared by every run`,
       );
     }
     if (run.residualScan.runId !== run.runId) {
@@ -563,16 +486,6 @@ function assertEvidenceBindings(
 }
 
 function assertCandidateRelease(manifest: ReleaseManifest): void {
-  if (
-    !/^\d+\.\d+\.\d+-candidate(?:\.[0-9A-Za-z-]+)*(?:\+[0-9A-Za-z.-]+)?$/.test(
-      manifest.release.version,
-    )
-  ) {
-    fail(
-      "$.release.version",
-      "a candidate release version must carry an explicit -candidate prerelease label",
-    );
-  }
   if (manifest.compatibility.supportedModes.length > 0) {
     fail("$.compatibility.supportedModes", "a candidate release cannot claim certified support");
   }
@@ -584,11 +497,8 @@ function assertCandidateRelease(manifest: ReleaseManifest): void {
 function assertCertifiedRunHistory(
   manifest: ReleaseManifest,
   supportedPairs: ReadonlySet<string>,
+  now: Date,
 ): void {
-  if (/-candidate(?:\.|\+|$)/.test(manifest.release.version)) {
-    fail("$.release.version", "a certified release cannot carry a candidate version label");
-  }
-
   if (manifest.compatibility.supportedModes.length === 0) {
     fail("$.compatibility.supportedModes", "a certified release must support at least one mode");
   }
@@ -624,10 +534,26 @@ function assertCertifiedRunHistory(
         `the latest three Golden Path runs for ${mode}/${region} must all pass with distinct fresh-environment evidence decision passed and residual scanner report v1 decision passed`,
       );
     }
+    const staleBefore = now.getTime() - GOLDEN_PATH_EVIDENCE_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
+    for (const run of latestRuns) {
+      const completedAt = Date.parse(run.completedAt);
+      if (completedAt < staleBefore) {
+        fail(
+          "$.verification.goldenPathRuns",
+          `run ${JSON.stringify(run.runId)} evidence is stale: certification requires Golden Path evidence completed within ${GOLDEN_PATH_EVIDENCE_MAX_AGE_DAYS} days`,
+        );
+      }
+      if (completedAt > now.getTime() + GOLDEN_PATH_EVIDENCE_FUTURE_SKEW_MS) {
+        fail(
+          "$.verification.goldenPathRuns",
+          `run ${JSON.stringify(run.runId)} evidence is future-dated beyond the allowed clock skew`,
+        );
+      }
+    }
   }
 }
 
-function assertCompatibilityAndEvidence(manifest: ReleaseManifest): void {
+function assertCompatibilityAndEvidence(manifest: ReleaseManifest, now: Date): void {
   const qualificationTargets = manifest.compatibility.qualificationTargets;
   if (qualificationTargets.length === 0) {
     fail("$.compatibility.qualificationTargets", "expected at least one qualification target");
@@ -641,15 +567,24 @@ function assertCompatibilityAndEvidence(manifest: ReleaseManifest): void {
     assertCandidateRelease(manifest);
     return;
   }
-  assertCertifiedRunHistory(manifest, supportedPairs);
+  assertCertifiedRunHistory(manifest, supportedPairs, now);
+}
+
+export interface ParseReleaseManifestOptions {
+  /** Validation instant for the certified-evidence freshness window. Injectable for tests. */
+  readonly now?: Date;
 }
 
 /**
  * Parses the public release contract without coercion or silent unknown-field stripping.
  * Cross-field certification rules live here because JSON Schema cannot express the
- * per-mode/per-region evidence join without duplicating every future compatibility row.
+ * per-mode/per-region evidence join without duplicating every future compatibility row,
+ * and the evidence freshness window is relative to the validation instant.
  */
-export function parseReleaseManifest(value: unknown): ReleaseManifest {
+export function parseReleaseManifest(
+  value: unknown,
+  options: ParseReleaseManifestOptions = {},
+): ReleaseManifest {
   const root = exactObject(value, "$", [
     "$schema",
     "schemaVersion",
@@ -700,11 +635,16 @@ export function parseReleaseManifest(value: unknown): ReleaseManifest {
       RELEASE_MANIFEST_SCHEMA_VERSION,
     ),
     release: {
-      version: exactSemverAt(release.version, "$.release.version"),
+      version: stringMatching(
+        release.version,
+        "$.release.version",
+        STABLE_RELEASE_VERSION,
+        "expected a stable X.Y.Z release version; candidate status is carried by $.release.status, not a version suffix",
+      ),
       status: enumAt(release.status, "$.release.status", ["candidate", "certified"] as const),
     },
     sources: {
-      platform: parseSourceRef(sources.platform, "$.sources.platform"),
+      platform: parsePlatformSource(sources.platform, "$.sources.platform"),
       catalog: parseSourceRef(sources.catalog, "$.sources.catalog"),
     },
     artifacts: {
@@ -720,11 +660,14 @@ export function parseReleaseManifest(value: unknown): ReleaseManifest {
     verification: { goldenPathRuns },
     knownLimitations,
   };
-  assertCompatibilityAndEvidence(manifest);
+  assertCompatibilityAndEvidence(manifest, options.now ?? new Date());
   return manifest;
 }
 
-export function readReleaseManifest(path = RELEASE_MANIFEST_PATH): ReleaseManifest {
+export function readReleaseManifest(
+  path = RELEASE_MANIFEST_PATH,
+  options: ParseReleaseManifestOptions = {},
+): ReleaseManifest {
   let value: unknown;
   try {
     value = JSON.parse(readFileSync(path, "utf8"));
@@ -732,7 +675,7 @@ export function readReleaseManifest(path = RELEASE_MANIFEST_PATH): ReleaseManife
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Could not read release manifest ${path}: ${message}`);
   }
-  return parseReleaseManifest(value);
+  return parseReleaseManifest(value, options);
 }
 
 /**

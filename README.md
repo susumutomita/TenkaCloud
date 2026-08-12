@@ -131,9 +131,11 @@ See [docs/local-play.md](./docs/local-play.md) for every subcommand and the cont
 
 Deploy from the AWS Console — a CloudFormation stack creates a CodeBuild project that git-clones this repo and runs the deploy for you, **no local install, no GitHub connection**.
 
-The launcher's repository defaults are the immutable platform/catalog pair recorded in the
-[`release manifest`](./release/tenkacloud-release.json). The
-[`generated release report`](./release/tenkacloud-release.md) currently classifies that pair as
+The launcher's repository defaults are the immutable platform/catalog pair of the last published
+release baseline; the in-progress [`release manifest`](./release/tenkacloud-release.json) describes
+the next release, whose platform commit is derived from its `v*` tag at publish time. The
+[`generated release report`](./release/tenkacloud-release.md) currently classifies the launcher's
+default pair as
 **candidate / unverified**: pinning it prevents a moving `main` from changing the deployment, but
 does not turn missing Golden Path evidence into certification. If either launcher stack ref
 parameter is `main`, the launcher output and build log label it **development / unreleased**. A

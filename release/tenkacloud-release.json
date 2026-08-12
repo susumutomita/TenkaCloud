@@ -1,19 +1,17 @@
 {
   "$schema": "./tenkacloud-release.schema.json",
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "release": {
-    "version": "1.2.0-candidate.20260810",
+    "version": "1.4.0",
     "status": "candidate"
   },
   "sources": {
     "platform": {
-      "repository": "https://github.com/susumutomita/TenkaCloud.git",
-      "commit": "421cd1bd9ede67ccf765878f1cbf27d7c5660762"
+      "repository": "https://github.com/susumutomita/TenkaCloud.git"
     },
     "catalog": {
       "repository": "https://github.com/susumutomita/TenkaCloudChallenge.git",
-      "commit": "2e98928e985be637b60453fda5d1005bcc1a0f5c",
-      "tag": "v1.1.0"
+      "commit": "5c0cda83fea51a93f006bb78f4fec07c0266ed76"
     }
   },
   "artifacts": {
@@ -42,10 +40,6 @@
       {
         "id": "problem-pack-manifest",
         "version": "1"
-      },
-      {
-        "id": "always-on-control-plane-d1-migration",
-        "version": "0004_competitor_accounts"
       }
     ]
   },
@@ -55,8 +49,8 @@
   "knownLimitations": [
     "No fresh-environment Golden Path run is attached, so this release is not certified for third-party production use.",
     "No deployment mode or AWS region is certified by this manifest.",
-    "This candidate manifest and report are a packaging layer created after the pinned platform commit; they are not the published v1.2.0 GitHub Release or a source tag.",
-    "The pinned platform commit predates this manifest and residual-scanner packaging, so every future qualification run must record a separate immutable verification-runner repository and commit.",
+    "The platform commit of this release is derived from its v1.4.0 tag at publish time (#3024); the manifest lives inside that tree and cannot record it.",
+    "The Lite launcher default RepoRef/ProblemsRepoRef pair is still hand-maintained in lite-pipeline.yaml and points at the previously released pair; generated launcher bindings arrive with #3024 PR 2.",
     "The Lite launcher uses Node.js 22 because its managed CodeBuild image does not provide Node.js 24; repository development requires Node.js 24."
   ]
 }

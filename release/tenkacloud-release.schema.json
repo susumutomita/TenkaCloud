@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/susumutomita/TenkaCloud/blob/main/release/tenkacloud-release.schema.json",
   "title": "TenkaCloud release manifest",
-  "description": "Immutable source bill of materials, compatibility claims, and Golden Path evidence for one TenkaCloud release.",
+  "description": "Immutable source bill of materials, compatibility claims, and Golden Path evidence for one TenkaCloud release. The platform commit is deliberately absent: this manifest lives inside the platform tree, so the platform identity of a release is the commit its v<version> tag points at, joined and validated at publish time (scripts/release/identity.ts, #3024). Evidence freshness is a semantic rule relative to the validation instant and is enforced by scripts/release/manifest.ts, not this schema.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -21,7 +21,7 @@
       "const": "./tenkacloud-release.schema.json"
     },
     "schemaVersion": {
-      "const": 1
+      "const": 2
     },
     "release": {
       "$ref": "#/$defs/release"
@@ -32,7 +32,7 @@
       "required": ["platform", "catalog"],
       "properties": {
         "platform": {
-          "$ref": "#/$defs/sourceRef"
+          "$ref": "#/$defs/platformSourceRef"
         },
         "catalog": {
           "$ref": "#/$defs/sourceRef"
@@ -111,10 +111,24 @@
       "properties": {
         "version": {
           "type": "string",
-          "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?(?:\\+[0-9A-Za-z][0-9A-Za-z.-]*)?$"
+          "description": "The stable X.Y.Z the release tag v<version> points at. Candidate status is carried by status, not a version suffix, because the tag and manifest version must be identical for both states.",
+          "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$"
         },
         "status": {
           "enum": ["candidate", "certified"]
+        }
+      }
+    },
+    "platformSourceRef": {
+      "type": "object",
+      "description": "The platform repository only. Its commit is the release tag's commit, derived at publish time; recording it here would require this manifest to contain the SHA of the commit that contains it.",
+      "additionalProperties": false,
+      "required": ["repository"],
+      "properties": {
+        "repository": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://"
         }
       }
     },
@@ -405,15 +419,6 @@
       "then": {
         "type": "object",
         "properties": {
-          "release": {
-            "type": "object",
-            "properties": {
-              "version": {
-                "type": "string",
-                "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)-candidate(?:\\.[0-9A-Za-z-]+)*(?:\\+[0-9A-Za-z][0-9A-Za-z.-]*)?$"
-              }
-            }
-          },
           "compatibility": {
             "type": "object",
             "properties": {

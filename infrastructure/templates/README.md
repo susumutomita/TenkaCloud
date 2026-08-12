@@ -144,9 +144,11 @@ Issue #2760 は CloudFormation Quick Create URL / Deploy to AWS badge の追加�
 Open Question 7（配布先を S3 / CloudFront / GitHub Release のどれにするか）への回答でもあり、
 GitHub Release アセットとしての配布も現時点では行っていない。
 
-launcher の platform / catalog 初期値は、repo 直下の
-[`release/tenkacloud-release.json`](../../release/tenkacloud-release.json) にある完全な commit SHA
-と一致させる。人間向けの現在地は、同じ manifest から生成した
+launcher の platform / catalog 初期値は、最後に公開した release baseline の完全な commit SHA
+と一致させる（正本は `scripts/release/launcher-baseline.ts`。#3024 PR 2 で release identity からの
+生成に置き換える）。次の release の machine-readable な記述は repo 直下の
+[`release/tenkacloud-release.json`](../../release/tenkacloud-release.json) にあり、その platform
+commit は `v*` タグから publish 時に導出する。人間向けの現在地は、同じ manifest から生成した
 [`release/tenkacloud-release.md`](../../release/tenkacloud-release.md) を参照する。現在の pair は
 **candidate / unverified** であり、immutable であることと認定済みであることは別です。stack
 parameter のどちらかの ref に `main` を指定すると **development / unreleased**、manifest 以外の

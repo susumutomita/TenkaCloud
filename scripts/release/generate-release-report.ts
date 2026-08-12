@@ -30,7 +30,7 @@ function statusSummary(manifest: ReleaseManifest): string {
   if (manifest.release.status === "certified") {
     return "Structurally certification-eligible, not publishable as certified: every declared mode and region has three consecutive BOM-bound Golden Path runs with distinct fresh-environment evidence and a passed residual-scanner-v1 report, but the #2982 artifact resolver gate is still required.";
   }
-  return "Candidate / unverified: the launcher's default platform/catalog pair is immutable, but it is not certified for any mode or region.";
+  return "Candidate / unverified: this manifest pins the catalog, Simulator, and toolchain of the next release, but it is not certified for any mode or region.";
 }
 
 function qualificationSection(manifest: ReleaseManifest): string {
@@ -69,12 +69,10 @@ export function renderReleaseReport(manifest: ReleaseManifest): string {
     manifest.release.status === "candidate"
       ? `TenkaCloud release candidate ${manifest.release.version}`
       : `TenkaCloud release ${manifest.release.version}`;
-  const platformTag = manifest.sources.platform.tag
-    ? `\`${markdownCell(manifest.sources.platform.tag)}\``
-    : "—";
   const catalogTag = manifest.sources.catalog.tag
     ? `\`${markdownCell(manifest.sources.catalog.tag)}\``
     : "—";
+  const platformRepository = repositoryBrowserUrl(manifest.sources.platform.repository);
   const contractRows = manifest.compatibility.contracts
     .map(({ id, version }) => `| ${markdownCell(id)} | \`${markdownCell(version)}\` |`)
     .join("\n");
@@ -88,7 +86,7 @@ export function renderReleaseReport(manifest: ReleaseManifest): string {
 
 > ${statusSummary(manifest)}
 
-The machine-readable source of truth is [\`tenkacloud-release.json\`](./tenkacloud-release.json), validated against [\`tenkacloud-release.schema.json\`](./tenkacloud-release.schema.json). Tags are display labels; the full commits and image digest below are authoritative.
+The machine-readable source of truth is [\`tenkacloud-release.json\`](./tenkacloud-release.json), validated against [\`tenkacloud-release.schema.json\`](./tenkacloud-release.schema.json). Tags are display labels; the full commit and image digest below are authoritative.
 
 > Publication gate: schema and semantic validation alone do not authenticate downloaded evidence bytes. \`release:check\` rejects \`certified\` until #2982 verifies every referenced artifact's schema and SHA-256 digest.
 
@@ -96,9 +94,11 @@ The machine-readable source of truth is [\`tenkacloud-release.json\`](./tenkaclo
 
 | Component | Authoritative reference | Display tag |
 | --- | --- | --- |
-| Platform | ${sourceLink(manifest.sources.platform)} | ${platformTag} |
+| Platform | [${platformRepository}](${platformRepository}) — the commit tagged \`v${manifest.release.version}\` | — |
 | Problem catalog | ${sourceLink(manifest.sources.catalog)} | ${catalogTag} |
 | Simulator | \`${manifest.artifacts.simulatorImage}\` | — |
+
+The platform commit is derived from the release tag at publish time (\`scripts/release/verify-release-identity.ts\`, #3024): this manifest is part of the tagged tree, so it cannot record the SHA of the commit that contains it. Until the tag exists, the platform identity of this manifest is the in-progress branch it ships on.
 
 ## Toolchain
 
