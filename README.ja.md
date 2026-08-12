@@ -133,9 +133,10 @@ make local-dev
 
 AWS コンソールからデプロイします。CloudFormation スタックが CodeBuild プロジェクトを作成し、このリポジトリを Git clone してデプロイまで代行してくれます。**ローカルへのインストールも GitHub 連携も不要です**。
 
-launcher の repository 初期値は [`release manifest`](./release/tenkacloud-release.json) に記録した
-platform / catalog の immutable な組み合わせです。
-[`自動生成 release report`](./release/tenkacloud-release.md) が示す現在の区分は
+launcher の repository 初期値は、最後に公開した release baseline の platform / catalog の
+immutable な組み合わせです。作業中の [`release manifest`](./release/tenkacloud-release.json) は
+次の release を記述し、その platform commit は `v*` タグから publish 時に導出します。
+[`自動生成 release report`](./release/tenkacloud-release.md) が示す launcher 初期値の現在の区分は
 **candidate / unverified** です。`main` の移動による内容変更は防ぎますが、Golden Path の証拠が
 無い状態を認定済みとは扱いません。launcher stack のどちらかの ref parameter を `main` にした
 場合は、Output と build log に **development / unreleased** と表示します。CodeBuild でその 1 回

@@ -4,14 +4,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const releaseManifest = JSON.parse(
-  readFileSync(join(__dirname, "..", "..", "..", "release", "tenkacloud-release.json"), "utf8"),
-) as {
-  release: { version: string };
-  sources: { platform: { commit: string }; catalog: { commit: string } };
-};
-const PLATFORM_CANDIDATE_SHA = releaseManifest.sources.platform.commit;
-const CATALOG_CANDIDATE_SHA = releaseManifest.sources.catalog.commit;
+// Schema v2 manifests no longer pin a platform commit (the release identity is derived
+// from the v* tag at publish time, #3024), so the launcher's hand-maintained literals are
+// anchored to the last published baseline instead of the in-progress manifest. #3024 PR 2
+// replaces both the literals and this anchor with bindings generated from the identity.
+import { LAUNCHER_RELEASE_BASELINE } from "../../../scripts/release/launcher-baseline";
+
+const PLATFORM_CANDIDATE_SHA = LAUNCHER_RELEASE_BASELINE.platformCommit;
+const CATALOG_CANDIDATE_SHA = LAUNCHER_RELEASE_BASELINE.catalogCommit;
+const BASELINE_MANIFEST_VERSION = LAUNCHER_RELEASE_BASELINE.manifestVersion;
 const FIXTURE_TAG = "v-fixture";
 const GIT_BINARY = "/usr/bin/git";
 const BASH_BINARY = "/bin/bash";
@@ -160,10 +161,10 @@ describe("Lite launcher immutable release refs", () => {
   it("exposes the manifest version as the baseline before classifying selected refs", () => {
     const script = checkoutScript();
     expect(template).toMatch(
-      new RegExp(`ReleaseManifestVersion:[\\s\\S]*?Value: ${releaseManifest.release.version}`),
+      new RegExp(`ReleaseManifestVersion:[\\s\\S]*?Value: ${BASELINE_MANIFEST_VERSION}`),
     );
     expect(script).toContain(
-      `Release manifest version: ${releaseManifest.release.version} (baseline for the exact candidate ref pair)`,
+      `Release manifest version: ${BASELINE_MANIFEST_VERSION} (baseline for the exact candidate ref pair)`,
     );
     expect(script.indexOf("Release manifest version:")).toBeLessThan(
       script.indexOf('release_classification="development/unreleased"'),

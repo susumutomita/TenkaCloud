@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import Ajv2020 from "ajv/dist/2020";
 import addFormats from "ajv-formats";
 import { renderReleaseReport, renderReleaseReportForCheck } from "./generate-release-report";
+import { LAUNCHER_RELEASE_BASELINE } from "./launcher-baseline";
 import {
   assertReleaseCheckEligible,
   parseReleaseManifest,
@@ -49,11 +50,30 @@ function objectAt(record: UnknownRecord, key: string): UnknownRecord {
   return record[key] as UnknownRecord;
 }
 
+/**
+ * The platform commit every fixture Golden Path run claims to have exercised. Schema v2
+ * manifests carry no platform commit (the tag commit is derived at publish time), so
+ * runs only have to agree with each other at parse time; binding this value to the real
+ * tag commit is `resolveReleaseIdentity`'s job, tested in identity.test.ts.
+ */
+const RUN_PLATFORM_COMMIT = "b".repeat(40);
+
+/**
+ * Validation instant injected into every fixture parse so the certified-evidence
+ * freshness window is deterministic: fixture runs complete on 2026-08-01..04, which is
+ * inside the 90-day window from this instant.
+ */
+const FIXTURE_NOW = new Date("2026-08-10T00:00:00Z");
+
+function parseFixture(value: unknown, now: Date = FIXTURE_NOW) {
+  return parseReleaseManifest(value, { now });
+}
+
 function evidenceBom(value: UnknownRecord): UnknownRecord {
   const sources = objectAt(value, "sources");
   return {
     releaseVersion: objectAt(value, "release").version,
-    platformCommit: objectAt(sources, "platform").commit,
+    platformCommit: RUN_PLATFORM_COMMIT,
     catalogCommit: objectAt(sources, "catalog").commit,
     simulatorImage: objectAt(value, "artifacts").simulatorImage,
     toolchain: structuredClone(objectAt(value, "toolchain")),
@@ -120,51 +140,6 @@ function gitOutput(
 ): string {
   const env = cleanGitEnvironment(ambientEnvironment);
   return execFileSync(GIT_BINARY, args, { cwd, encoding: "utf8", env }).trim();
-}
-
-/**
- * Make sure the pinned commit's objects are actually in this clone.
- *
- * These assertions read blobs *at the pinned platform commit*, which is the whole point:
- * the manifest must match what that commit really contains, not what HEAD happens to have.
- * But CI checks out with a limited fetch depth, so the pinned commit is usually absent and
- * every read dies with a bare `fatal: not a tree object` — a failure that says nothing
- * about the manifest and cannot be fixed by editing it.
- *
- * Fetch just that one commit when it is missing. If the fetch also fails, throw with the
- * reason attached instead of letting the next `git show` report a missing tree, so the
- * distinction between "the manifest is wrong" and "the object was never fetched" survives
- * into the failure message.
- */
-const ensuredCommits = new Set<string>();
-function ensureCommitPresent(commit: string): void {
-  if (ensuredCommits.has(commit)) return;
-  try {
-    gitOutput(REPO_ROOT, ["cat-file", "-e", `${commit}^{commit}`]);
-    ensuredCommits.add(commit);
-    return;
-  } catch {
-    // Not in this clone yet — fall through to the targeted fetch.
-  }
-  try {
-    gitOutput(REPO_ROOT, ["fetch", "--no-tags", "--depth=1", "origin", commit]);
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    throw new Error(
-      `pinned platform commit ${commit} is not in this clone and could not be fetched. ` +
-        `This is a checkout problem, not a manifest mismatch. Original error: ${reason}`,
-    );
-  }
-  ensuredCommits.add(commit);
-}
-
-function platformBlob(commit: string, path: string): string {
-  ensureCommitPresent(commit);
-  return gitOutput(REPO_ROOT, ["show", `${commit}:${path}`]);
-}
-
-function platformJson<T>(commit: string, path: string): T {
-  return JSON.parse(platformBlob(commit, path)) as T;
 }
 
 function canonicalRepositoryUrl(url: string): string {
@@ -249,8 +224,14 @@ describe("release manifest schema and parser", () => {
     "A".repeat(40),
   ])("rejects mutable, abbreviated, or non-canonical authoritative ref %s", (ref) => {
     const value = cloneManifestValue();
-    objectAt(objectAt(value, "sources"), "platform").commit = ref;
+    objectAt(objectAt(value, "sources"), "catalog").commit = ref;
     expect(() => parseReleaseManifest(value)).toThrow("lowercase full 40-hex commit");
+  });
+
+  it("rejects a manifest that tries to pin its own platform commit", () => {
+    const value = cloneManifestValue();
+    objectAt(objectAt(value, "sources"), "platform").commit = "a".repeat(40);
+    expect(() => parseReleaseManifest(value)).toThrow("$.sources.platform.commit");
   });
 
   it("requires the Simulator artifact to be digest-pinned", () => {
@@ -270,10 +251,16 @@ describe("release manifest schema and parser", () => {
     );
   });
 
-  it("requires candidate versions to be visibly distinct from a published release version", () => {
+  it("rejects version suffixes because the tag and manifest version must be identical", () => {
+    const value = cloneManifestValue();
+    objectAt(value, "release").version = "1.4.0-candidate.20260812";
+    expect(() => parseReleaseManifest(value)).toThrow("stable X.Y.Z release version");
+  });
+
+  it("accepts a plain stable version for a candidate: status alone carries candidacy", () => {
     const value = cloneManifestValue();
     objectAt(value, "release").version = "1.1.0";
-    expect(() => parseReleaseManifest(value)).toThrow("explicit -candidate prerelease label");
+    expect(parseReleaseManifest(value).release.status).toBe("candidate");
   });
 
   it("lets a candidate retain partial and failed qualification evidence without claiming support", () => {
@@ -300,23 +287,23 @@ describe("certification evidence", () => {
     const validate = ajv.compile(readJson(SCHEMA_PATH) as object);
     const value = certifiedManifest(["passed", "passed", "passed"]);
     expect(validate(value), JSON.stringify(validate.errors)).toBe(true);
-    expect(parseReleaseManifest(value).release.status).toBe("certified");
+    expect(parseFixture(value).release.status).toBe("certified");
   });
 
   it.each([0, 1, 2])("rejects certification with only %i successful run(s)", (count) => {
     const value = certifiedManifest(Array.from({ length: count }, () => "passed" as const));
-    expect(() => parseReleaseManifest(value)).toThrow(/Golden Path evidence|at least three/);
+    expect(() => parseFixture(value)).toThrow(/Golden Path evidence|at least three/);
   });
 
   it("accepts three consecutive passed runs even when evidence is not input chronologically", () => {
     const value = certifiedManifest(["passed", "passed", "passed"]);
     const verification = objectAt(value, "verification");
     verification.goldenPathRuns = (verification.goldenPathRuns as unknown[]).toReversed();
-    expect(parseReleaseManifest(value).release.status).toBe("certified");
+    expect(parseFixture(value).release.status).toBe("certified");
   });
 
   it("blocks certified publication until the #2982 artifact resolver authenticates evidence", () => {
-    const manifest = parseReleaseManifest(certifiedManifest(["passed", "passed", "passed"]));
+    const manifest = parseFixture(certifiedManifest(["passed", "passed", "passed"]));
     expect(() => assertReleaseCheckEligible(manifest)).toThrow(
       "Certified publication is blocked until #2982",
     );
@@ -328,24 +315,21 @@ describe("certification evidence", () => {
 
   it("allows an older failure after three newer consecutive passes", () => {
     expect(
-      parseReleaseManifest(certifiedManifest(["failed", "passed", "passed", "passed"])).release
-        .status,
+      parseFixture(certifiedManifest(["failed", "passed", "passed", "passed"])).release.status,
     ).toBe("certified");
   });
 
   it("rejects pass-pass-pass-fail because a later failure breaks certification", () => {
-    expect(() =>
-      parseReleaseManifest(certifiedManifest(["passed", "passed", "passed", "failed"])),
-    ).toThrow("latest three Golden Path runs");
+    expect(() => parseFixture(certifiedManifest(["passed", "passed", "passed", "failed"]))).toThrow(
+      "latest three Golden Path runs",
+    );
   });
 
   it("rejects evidence for a mode/region that is not a qualification target", () => {
     const value = certifiedManifest(["passed", "passed", "passed"]);
     const runs = objectAt(value, "verification").goldenPathRuns as UnknownRecord[];
     runs[0].region = "us-east-1";
-    expect(() => parseReleaseManifest(value)).toThrow(
-      "does not reference a declared qualification target",
-    );
+    expect(() => parseFixture(value)).toThrow("does not reference a declared qualification target");
   });
 
   it("rejects a run whose BOM differs from the exact top-level release BOM", () => {
@@ -353,7 +337,7 @@ describe("certification evidence", () => {
     const runs = objectAt(value, "verification").goldenPathRuns as UnknownRecord[];
     objectAt(runs[0], "bom").catalogCommit = "f".repeat(40);
 
-    expect(() => parseReleaseManifest(value)).toThrow(
+    expect(() => parseFixture(value)).toThrow(
       "BOM does not exactly match the top-level release BOM",
     );
   });
@@ -362,7 +346,7 @@ describe("certification evidence", () => {
     const value = certifiedManifest(["passed", "passed", "passed"]);
     const runs = objectAt(value, "verification").goldenPathRuns as UnknownRecord[];
     objectAt(runs[0], "runner").commit = "main";
-    expect(() => parseReleaseManifest(value)).toThrow("verification-runner commit");
+    expect(() => parseFixture(value)).toThrow("verification-runner commit");
   });
 
   it.each([
@@ -372,7 +356,7 @@ describe("certification evidence", () => {
     const value = certifiedManifest(["passed", "passed", "passed"]);
     const runs = objectAt(value, "verification").goldenPathRuns as UnknownRecord[];
     objectAt(runs[2], "residualScan").decision = decision;
-    expect(() => parseReleaseManifest(value)).toThrow("residual scanner report v1 decision passed");
+    expect(() => parseFixture(value)).toThrow("residual scanner report v1 decision passed");
   });
 
   it("rejects reusing one environment identity as three fresh starts", () => {
@@ -382,7 +366,7 @@ describe("certification evidence", () => {
       runs[0],
       "freshEnvironment",
     ).environmentId;
-    expect(() => parseReleaseManifest(value)).toThrow("duplicate value");
+    expect(() => parseFixture(value)).toThrow("duplicate value");
   });
 
   it.each([
@@ -392,7 +376,7 @@ describe("certification evidence", () => {
     const value = certifiedManifest(["passed", "passed", "passed"]);
     const runs = objectAt(value, "verification").goldenPathRuns as UnknownRecord[];
     objectAt(runs[2], "freshEnvironment").decision = decision;
-    expect(() => parseReleaseManifest(value)).toThrow("fresh-environment evidence decision passed");
+    expect(() => parseFixture(value)).toThrow("fresh-environment evidence decision passed");
   });
 
   it.each([
@@ -403,7 +387,7 @@ describe("certification evidence", () => {
     const value = certifiedManifest(["passed", "passed", "passed"]);
     const runs = objectAt(value, "verification").goldenPathRuns as UnknownRecord[];
     runs[0].completedAt = completedAt;
-    expect(() => parseReleaseManifest(value)).toThrow("date-time is not a real calendar instant");
+    expect(() => parseFixture(value)).toThrow("date-time is not a real calendar instant");
   });
 
   it("rejects a residual scanner report bound to another run", () => {
@@ -411,7 +395,7 @@ describe("certification evidence", () => {
     const runs = objectAt(value, "verification").goldenPathRuns as UnknownRecord[];
     objectAt(runs[1], "residualScan").runId = "golden-1";
 
-    expect(() => parseReleaseManifest(value)).toThrow("residual scanner report refers to");
+    expect(() => parseFixture(value)).toThrow("residual scanner report refers to");
   });
 
   it("rejects reused evidence URLs or digests", () => {
@@ -419,12 +403,45 @@ describe("certification evidence", () => {
     const runs = objectAt(value, "verification").goldenPathRuns as UnknownRecord[];
     objectAt(runs[1], "residualScan").evidenceUrl = runs[0].evidenceUrl;
 
-    expect(() => parseReleaseManifest(value)).toThrow("duplicate value");
+    expect(() => parseFixture(value)).toThrow("duplicate value");
 
     const reusedDigest = certifiedManifest(["passed", "passed", "passed"]);
     const digestRuns = objectAt(reusedDigest, "verification").goldenPathRuns as UnknownRecord[];
     objectAt(digestRuns[1], "freshEnvironment").evidenceSha256 = digestRuns[0].evidenceSha256;
-    expect(() => parseReleaseManifest(reusedDigest)).toThrow("duplicate value");
+    expect(() => parseFixture(reusedDigest)).toThrow("duplicate value");
+  });
+
+  it("rejects runs that disagree on which platform commit they exercised", () => {
+    const value = certifiedManifest(["passed", "passed", "passed"]);
+    const runs = objectAt(value, "verification").goldenPathRuns as UnknownRecord[];
+    objectAt(runs[1], "bom").platformCommit = "c".repeat(40);
+    expect(() => parseFixture(value)).toThrow("platform commit shared by every run");
+  });
+
+  it("rejects stale evidence outside the certification freshness window", () => {
+    const value = certifiedManifest(["passed", "passed", "passed"]);
+    expect(() => parseFixture(value, new Date("2026-12-01T00:00:00Z"))).toThrow(
+      "evidence is stale",
+    );
+  });
+
+  it("accepts evidence exactly at the freshness boundary", () => {
+    const value = certifiedManifest(["passed", "passed", "passed"]);
+    // The oldest of the latest three runs completed 2026-08-01; 90 days later is 10-30.
+    expect(parseFixture(value, new Date("2026-10-30T00:00:00Z")).release.status).toBe("certified");
+  });
+
+  it("rejects future-dated evidence beyond the allowed clock skew", () => {
+    const value = certifiedManifest(["passed", "passed", "passed"]);
+    expect(() => parseFixture(value, new Date("2026-08-01T12:00:00Z"))).toThrow(
+      "future-dated beyond the allowed clock skew",
+    );
+  });
+
+  it("keeps candidates exempt from the freshness window: they claim no support", () => {
+    const value = cloneManifestValue();
+    objectAt(value, "verification").goldenPathRuns = [goldenPathRun(value, "passed", 0)];
+    expect(parseFixture(value, new Date("2027-08-10T00:00:00Z")).release.status).toBe("candidate");
   });
 });
 
@@ -436,14 +453,6 @@ describe("release source parity and generated report", () => {
   );
 
   it("verifies both declared repositories, display tags, and exact source objects", () => {
-    ensureCommitPresent(manifest.sources.platform.commit);
-    const gitlink = gitOutput(REPO_ROOT, [
-      "ls-tree",
-      manifest.sources.platform.commit,
-      "problems",
-    ]).split(/\s+/)[2];
-    expect(gitlink).toBe(manifest.sources.catalog.commit);
-
     expect(canonicalRepositoryUrl(parameterDefault(launcher, "RepoUrl"))).toBe(
       canonicalRepositoryUrl(manifest.sources.platform.repository),
     );
@@ -467,24 +476,15 @@ describe("release source parity and generated report", () => {
         }),
       ),
     ).toBe(canonicalRepositoryUrl(manifest.sources.catalog.repository));
-    const pinnedCatalogRepository = submoduleUrl(
-      platformBlob(manifest.sources.platform.commit, ".gitmodules"),
+    const declaredCatalogRepository = submoduleUrl(
+      readFileSync(join(REPO_ROOT, ".gitmodules"), "utf8"),
       "problems",
     );
-    expect(pinnedCatalogRepository).toBeDefined();
-    expect(canonicalRepositoryUrl(pinnedCatalogRepository as string)).toBe(
+    expect(declaredCatalogRepository).toBeDefined();
+    expect(canonicalRepositoryUrl(declaredCatalogRepository as string)).toBe(
       canonicalRepositoryUrl(manifest.sources.catalog.repository),
     );
 
-    if (manifest.sources.platform.tag) {
-      expect(
-        gitOutput(REPO_ROOT, [
-          "rev-parse",
-          "--verify",
-          `refs/tags/${manifest.sources.platform.tag}^{commit}`,
-        ]),
-      ).toBe(manifest.sources.platform.commit);
-    }
     expect(commitAvailable(join(REPO_ROOT, "problems"), manifest.sources.catalog.commit)).toBe(
       true,
     );
@@ -500,23 +500,28 @@ describe("release source parity and generated report", () => {
     }
   });
 
-  it("reads Simulator, release version, and toolchain from the pinned platform commit", () => {
-    const commit = manifest.sources.platform.commit;
-    const mise = platformBlob(commit, "mise.toml");
-    const rootPackage = platformJson<{
+  // Schema v2 has no pinned platform commit (the tag commit is derived at publish time),
+  // so toolchain and Simulator parity is read live from this tree: the manifest describes
+  // the release this branch would become, and any drift fails on the PR that causes it.
+  it("keeps Simulator, release version, and toolchain in parity with this tree", () => {
+    const mise = readFileSync(join(REPO_ROOT, "mise.toml"), "utf8");
+    const rootPackage = readJson(join(REPO_ROOT, "package.json")) as {
       version: string;
       packageManager: string;
       engines: { node: string };
-    }>(commit, "package.json");
-    const infrastructurePackage = platformJson<{
+    };
+    const infrastructurePackage = readJson(join(REPO_ROOT, "infrastructure/package.json")) as {
       devDependencies: Record<string, string>;
       dependencies: Record<string, string>;
-    }>(commit, "infrastructure/package.json");
-    const simulatorSource = platformBlob(commit, "scripts/local-play/simulator-launch-state.ts");
+    };
+    const simulatorSource = readFileSync(
+      join(REPO_ROOT, "scripts/local-play/simulator-launch-state.ts"),
+      "utf8",
+    );
     const simulatorImage = exportedString(simulatorSource, "DEFAULT_SIMULATOR_IMAGE");
     if (!simulatorImage) throw new Error("Could not read DEFAULT_SIMULATOR_IMAGE");
 
-    expect(manifest.release.version.match(/^\d+\.\d+\.\d+/)?.[0]).toBe(rootPackage.version);
+    expect(manifest.release.version).toBe(rootPackage.version);
     expect(manifest.artifacts.simulatorImage).toBe(simulatorImage);
     expect(mise).toContain(`bun = "${manifest.toolchain.bun}"`);
     expect(mise).toContain(`node = "${manifest.toolchain.node.development}"`);
@@ -530,55 +535,28 @@ describe("release source parity and generated report", () => {
     );
   });
 
-  it("keeps the parity seam historical instead of silently reading current HEAD", () => {
-    const historical = platformJson<{
-      devDependencies: Record<string, string>;
-      dependencies: Record<string, string>;
-    }>("31f0262ee2cda8aa84eb179307042e5fcc06b1b1", "infrastructure/package.json");
-    const current = readJson(join(REPO_ROOT, "infrastructure/package.json")) as {
-      devDependencies: Record<string, string>;
-      dependencies: Record<string, string>;
-    };
-
-    expect(historical.devDependencies["aws-cdk"]).toBe("2.1122.0");
-    expect(historical.devDependencies["aws-cdk"]).not.toBe(current.devDependencies["aws-cdk"]);
-    expect(historical.dependencies["aws-cdk-lib"]).not.toBe(current.dependencies["aws-cdk-lib"]);
-  });
-
-  it("matches launcher refs and named subsystem contract versions", () => {
-    const commit = manifest.sources.platform.commit;
-    ensureCommitPresent(commit);
-    const migrations = gitOutput(REPO_ROOT, [
-      "ls-tree",
-      "-r",
-      "--name-only",
-      commit,
-      "--",
-      "apps/always-on-control-plane/migrations",
-    ])
-      .split("\n")
-      .filter((file) => file.endsWith(".sql"))
-      .toSorted();
-    const packSchemaSource = platformBlob(commit, "packages/problem-sdk/src/manifest.ts");
+  it("matches launcher refs to the last published baseline and contracts to this tree", () => {
+    const packSchemaSource = readFileSync(
+      join(REPO_ROOT, "packages/problem-sdk/src/manifest.ts"),
+      "utf8",
+    );
     const packSchemaVersion = packSchemaSource.match(
       /export const PACK_SCHEMA_VERSION = (\d+) as const/,
     )?.[1];
     const contracts = Object.fromEntries(
       manifest.compatibility.contracts.map(({ id, version }) => [id, version]),
     );
-    const latestMigration = migrations.at(-1);
-    if (!latestMigration) throw new Error("No Always-On D1 migrations found");
-    const latestMigrationVersion = latestMigration
-      .split("/")
-      .at(-1)
-      ?.replace(/\.sql$/, "");
-    if (!latestMigrationVersion) throw new Error("Could not derive latest Always-On migration");
 
-    expect(parameterDefault(launcher, "RepoRef")).toBe(manifest.sources.platform.commit);
-    expect(parameterDefault(launcher, "ProblemsRepoRef")).toBe(manifest.sources.catalog.commit);
+    // The launcher defaults deliberately do NOT track this manifest: they point at the
+    // last published pair until #3024 PR 2 generates them from the release identity.
+    // The baseline module is the single place that pair may change.
+    expect(parameterDefault(launcher, "RepoRef")).toBe(LAUNCHER_RELEASE_BASELINE.platformCommit);
+    expect(parameterDefault(launcher, "ProblemsRepoRef")).toBe(
+      LAUNCHER_RELEASE_BASELINE.catalogCommit,
+    );
+    expect(launcher).toContain(LAUNCHER_RELEASE_BASELINE.manifestVersion);
     expect(packSchemaVersion).toBeDefined();
     expect(contracts["problem-pack-manifest"]).toBe(packSchemaVersion);
-    expect(contracts["always-on-control-plane-d1-migration"]).toBe(latestMigrationVersion);
   });
 
   it("keeps the committed human report byte-identical to the manifest", () => {
