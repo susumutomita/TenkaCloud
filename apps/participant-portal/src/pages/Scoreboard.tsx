@@ -61,7 +61,7 @@ export function ScoreboardPage({ config }: { config: AppConfig }) {
             {leaderboard.endsAt && (
               <>
                 <br />
-                {t("scoreboard.frozen_ends_at_label")}: {" "}
+                {t("scoreboard.frozen_ends_at_label")}:{" "}
                 <code>{new Date(leaderboard.endsAt).toLocaleString()}</code>
               </>
             )}
