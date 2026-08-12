@@ -93,10 +93,6 @@ export function resolveLocalPaths(): LocalPaths {
   };
 }
 
-export function readJson<T>(path: string): T {
-  return JSON.parse(readFileSync(path, "utf8")) as T;
-}
-
 export function readPrivateJson<T>(path: string, maxBytes = 16 * 1024 * 1024): T {
   const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {

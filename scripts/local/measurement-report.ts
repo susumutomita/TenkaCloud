@@ -88,7 +88,6 @@ export const MeasurementRecordSchema = z.object({
 });
 
 export type MeasurementRecord = z.infer<typeof MeasurementRecordSchema>;
-export type Observation = z.infer<typeof ObservationSchema>;
 
 /** Parse a record, throwing a message that names the offending field. */
 export function parseMeasurementRecord(value: unknown): MeasurementRecord {
@@ -98,12 +97,4 @@ export function parseMeasurementRecord(value: unknown): MeasurementRecord {
     .map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`)
     .join("; ");
   throw new Error(`Invalid measurement record: ${issues}`);
-}
-
-/** The observation backing a published profile, if this record has one. */
-export function observationFor(
-  record: MeasurementRecord,
-  profileId: string,
-): Observation | undefined {
-  return record.observations.find((observation) => observation.profileId === profileId);
 }
