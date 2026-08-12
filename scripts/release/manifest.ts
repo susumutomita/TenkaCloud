@@ -150,9 +150,10 @@ export interface ReleaseManifest {
   readonly knownLimitations: readonly string[];
 }
 
-const FULL_COMMIT = /^[a-f0-9]{40}$/;
+export const FULL_COMMIT = /^[a-f0-9]{40}$/;
 const STABLE_RELEASE_VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
-const DIGEST_PINNED_IMAGE = /^[a-z0-9][a-z0-9._/-]*(?::[A-Za-z0-9._-]+)?@sha256:[a-f0-9]{64}$/;
+export const DIGEST_PINNED_IMAGE =
+  /^[a-z0-9][a-z0-9._/-]*(?::[A-Za-z0-9._-]+)?@sha256:[a-f0-9]{64}$/;
 const EXACT_MAJOR = /^(0|[1-9]\d*)$/;
 const DISPLAY_TAG = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/;
 const CONTRACT_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -224,7 +225,7 @@ function parseContract(value: unknown, index: number): ContractVersion {
   };
 }
 
-function parseToolchain(value: unknown, path: string): ReleaseToolchain {
+export function parseToolchain(value: unknown, path: string): ReleaseToolchain {
   const toolchain = exactObject(value, path, ["bun", "node", "awsCdk"]);
   const node = exactObject(toolchain.node, `${path}.node`, ["development", "launcher"]);
   const awsCdk = exactObject(toolchain.awsCdk, `${path}.awsCdk`, ["cli", "library"]);

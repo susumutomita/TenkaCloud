@@ -1,17 +1,23 @@
 name: release-cli
 
-# Issue #3021 — CLI distribution. Publishes `@tenkacloud/cli` (packages/standalone-cli) as a
-# tarball attached to the GitHub Release for the pushed tag, so `npm install -g` works without
-# a monorepo checkout.
+# Issue #3021 + #3024 — the unified release contract. One `v*` tag push produces one GitHub
+# Release whose identity is validated fail-closed BEFORE anything is built or published:
 #
-# Operational note: pushing a `v*` tag is enough. It produces the same --generate-notes
-# ("What's Changed") release body as before, now with two tarballs attached
-# (`tenkacloud-cli-<version>.tgz` and the fixed-name `tenkacloud-cli.tgz` used by the stable
-# `releases/latest/download/` URL). Do NOT create the Release by hand before pushing the tag —
-# this repository's Releases are immutable (assets cannot be added or changed after the Release
-# is published), so a hand-created Release can never receive these assets. `workflow_dispatch`
-# exists only to retry/backfill a `v*` tag whose Release was never created (e.g. this workflow
-# failed before reaching the create step) — it cannot repair an already-published Release.
+#   resolve tag → checkout exact tag → resolve/validate the release identity
+#   (tag == manifest version, tagged tree's problems gitlink == manifest catalog pin;
+#   scripts/release/verify-release-identity.ts) → drift + publication gates
+#   (`release:check`: report drift, launcher-literal drift, and the #2982 certified stop)
+#   → build the CLI tarball → smoke test → assemble the closed asset set → SHA256SUMS
+#   → release-attestation.json (binds tag, platform commit, manifest digest, asset digests,
+#   and this workflow run) → a single `gh release create` with every asset attached.
+#
+# Operational notes: pushing a `v*` tag is enough; the Release keeps the --generate-notes
+# ("What's Changed") body. Do NOT create the Release by hand before pushing the tag — this
+# repository's Releases are immutable (assets cannot be added or changed after publication),
+# so a hand-created Release can never receive these assets. `workflow_dispatch` exists only to
+# retry/backfill a `v*` tag whose Release was never created; it cannot repair a published
+# Release, and it fails closed for tags whose tree predates manifest schema v2 (v1.3.0 and
+# earlier) because their identity cannot be validated under this contract.
 #
 # Supply Chain Security: actions pinned to full SHA (matches ci.yml). No external secret is
 # used; `GITHUB_TOKEN` is sufficient for both `gh release` and the `contents: write` permission.
@@ -82,6 +88,22 @@ jobs:
         continue-on-error: true
         run: bunx @aikidosec/safe-chain setup-ci
 
+      - name: Resolve and validate the release identity
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        # Fail-closed identity join (#3024): the tag must equal v<manifest version> and the
+        # tagged tree's problems gitlink must equal the manifest catalog pin. The resolved
+        # identity JSON is the attestation's input; nothing is built if this disagrees.
+        run: |
+          set -euo pipefail
+          bun run scripts/release/verify-release-identity.ts --tag "$TAG" \
+            | tee "$RUNNER_TEMP/release-identity.json"
+
+      - name: Run the release drift and publication gates
+        # Rejects report drift, launcher-literal drift, and (via the #2982 stop) any attempt
+        # to publish a manifest that claims `certified`.
+        run: bun run release:check
+
       - name: Stamp the package version from the tag
         working-directory: packages/standalone-cli
         run: |
@@ -131,26 +153,63 @@ jobs:
           # it from outside the checkout to prove the tarball needs no monorepo on disk.
           (cd /tmp && "$PREFIX/bin/tenkacloud" --help)
 
-      - name: Create the fixed-name copy for the stable download URL
-        working-directory: packages/standalone-cli
-        run: cp tenkacloud-cli-*.tgz tenkacloud-cli.tgz
+      - name: Assemble the release asset set and SHA256SUMS
+        id: assets
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        # The asset set is closed (#3024): exactly these files plus the attestation ship.
+        # SHA256SUMS is written before the attestation, which embeds and re-verifies it.
+        run: |
+          set -euo pipefail
+          ASSETS="$RUNNER_TEMP/release-assets"
+          mkdir -p "$ASSETS"
+          cp "packages/standalone-cli/tenkacloud-cli-$VERSION.tgz" "$ASSETS/"
+          cp "packages/standalone-cli/tenkacloud-cli-$VERSION.tgz" "$ASSETS/tenkacloud-cli.tgz"
+          cp release/tenkacloud-release.json "$ASSETS/release-manifest.json"
+          cp release/tenkacloud-release.md "$ASSETS/release-report.md"
+          (cd "$ASSETS" && sha256sum "tenkacloud-cli-$VERSION.tgz" tenkacloud-cli.tgz \
+            release-manifest.json release-report.md > SHA256SUMS)
+          cat "$ASSETS/SHA256SUMS"
+          echo "dir=$ASSETS" >> "$GITHUB_OUTPUT"
 
-      - name: Create or update the release
-        working-directory: packages/standalone-cli
+      - name: Generate the release attestation
+        # Binds tag, platform commit, manifest digest, every asset digest, and this workflow
+        # run into release-attestation.json — and fails closed if the asset set is not exactly
+        # the required one, so an incomplete set never reaches `gh release create`.
+        run: |
+          set -euo pipefail
+          bun run scripts/release/generate-release-attestation.ts \
+            --identity "$RUNNER_TEMP/release-identity.json" \
+            --assets-dir "${{ steps.assets.outputs.dir }}"
+          cat "${{ steps.assets.outputs.dir }}/release-attestation.json"
+
+      - name: Create the release once, with every asset attached
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.tag.outputs.tag }}
+          VERSION: ${{ steps.tag.outputs.version }}
         run: |
           set -euo pipefail
-          ASSETS=(tenkacloud-cli-*.tgz tenkacloud-cli.tgz)
+          DIR="${{ steps.assets.outputs.dir }}"
+          ASSETS=(
+            "$DIR/tenkacloud-cli-$VERSION.tgz"
+            "$DIR/tenkacloud-cli.tgz"
+            "$DIR/release-manifest.json"
+            "$DIR/release-report.md"
+            "$DIR/SHA256SUMS"
+            "$DIR/release-attestation.json"
+          )
+          for asset in "${ASSETS[@]}"; do
+            test -s "$asset" || { echo "Missing release asset: $asset" >&2; exit 1; }
+          done
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG already exists — attempting to attach assets to it." >&2
             if ! gh release upload "$TAG" "${ASSETS[@]}" --clobber; then
               echo "Uploading assets to an existing release failed. This repository's Releases are" >&2
               echo "immutable: assets cannot be added or changed once a release is published. Do" >&2
               echo "not create the GitHub Release by hand before pushing the tag -- pushing a" >&2
-              echo "v* tag alone creates a --generate-notes release with both tarballs attached" >&2
-              echo "from the start. If a release for this tag already exists without the CLI" >&2
+              echo "v* tag alone creates a --generate-notes release with every asset attached" >&2
+              echo "from the start. If a release for this tag already exists without these" >&2
               echo "assets (created before this workflow existed, or by hand), delete that" >&2
               echo "release and re-push the tag (or re-run this workflow via workflow_dispatch)" >&2
               echo "so the release is created here, with the assets attached from the start." >&2

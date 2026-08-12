@@ -24,7 +24,7 @@
     "typecheck": "bun run typecheck:scripts && bun run scripts/workspace/run-workspaces.ts typecheck",
     "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json",
     "synth": "bun run --filter @TenkaCloud/infrastructure synth",
-    "test:root": "bun run release:check && bun run scripts/landing/generate-landing-locales.ts --check && bun run scripts/landing/generate-landing-docs.ts --check && bun test ./scripts/landing/landing-seo.test.ts ./scripts/landing/contact-form.test.ts ./scripts/form/setup-core.test.ts ./scripts/form/setup-run.test.ts ./scripts/workspace/run-coverage.test.ts ./scripts/workspace/run-workspaces.test.ts ./scripts/landing/book-links.test.ts ./scripts/release/manifest.test.ts ./scripts/release/identity.test.ts ./scripts/release/generate-launcher-defaults.test.ts",
+    "test:root": "bun run release:check && bun run scripts/landing/generate-landing-locales.ts --check && bun run scripts/landing/generate-landing-docs.ts --check && bun test ./scripts/landing/landing-seo.test.ts ./scripts/landing/contact-form.test.ts ./scripts/form/setup-core.test.ts ./scripts/form/setup-run.test.ts ./scripts/workspace/run-coverage.test.ts ./scripts/workspace/run-workspaces.test.ts ./scripts/landing/book-links.test.ts ./scripts/release/manifest.test.ts ./scripts/release/identity.test.ts ./scripts/release/generate-launcher-defaults.test.ts ./scripts/release/generate-release-attestation.test.ts",
     "test": "bun run test:root && bun run scripts/workspace/run-workspaces.ts test",
     "test:coverage": "bun run scripts/workspace/run-coverage.ts",
     "audit:dependencies": "bun run scripts/security/audit-dependencies.ts",

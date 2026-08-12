@@ -1,4 +1,12 @@
-import type { ReleaseManifest, ReleaseStatus, ReleaseToolchain } from "./manifest";
+import {
+  DIGEST_PINNED_IMAGE,
+  FULL_COMMIT,
+  parseToolchain,
+  type ReleaseManifest,
+  type ReleaseStatus,
+  type ReleaseToolchain,
+} from "./manifest";
+import { enumAt, exactObject, stringMatching } from "./manifest-fields";
 
 /**
  * The resolved identity of one publishable release (#3024): the checked-in manifest's
@@ -28,10 +36,68 @@ export interface ReleaseTagContext {
 }
 
 const STABLE_RELEASE_TAG = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
-const FULL_COMMIT = /^[a-f0-9]{40}$/;
 
 function fail(message: string): never {
   throw new Error(`Release identity mismatch: ${message}`);
+}
+
+/**
+ * Re-validates a resolved identity that crossed a process boundary (the release
+ * workflow pipes `verify-release-identity` output into the attestation generator).
+ * The same fail-closed vocabulary as the manifest parser: unknown fields, mutable
+ * refs, and tag/version disagreement are all rejected.
+ */
+export function parseReleaseIdentity(value: unknown): ReleaseIdentity {
+  const record = exactObject(value, "$", [
+    "tag",
+    "version",
+    "status",
+    "platformCommit",
+    "catalogCommit",
+    "simulatorImage",
+    "toolchain",
+  ]);
+  const identity: ReleaseIdentity = {
+    tag: stringMatching(
+      record.tag,
+      "$.tag",
+      STABLE_RELEASE_TAG,
+      "expected a stable v<major>.<minor>.<patch> release tag",
+    ),
+    version: stringMatching(
+      record.version,
+      "$.version",
+      /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/,
+      "expected a stable X.Y.Z release version",
+    ),
+    status: enumAt(record.status, "$.status", ["candidate", "certified"] as const),
+    platformCommit: stringMatching(
+      record.platformCommit,
+      "$.platformCommit",
+      FULL_COMMIT,
+      "expected a lowercase full 40-hex platform commit",
+    ),
+    catalogCommit: stringMatching(
+      record.catalogCommit,
+      "$.catalogCommit",
+      FULL_COMMIT,
+      "expected a lowercase full 40-hex catalog commit",
+    ),
+    simulatorImage: stringMatching(
+      record.simulatorImage,
+      "$.simulatorImage",
+      DIGEST_PINNED_IMAGE,
+      "expected an OCI image pinned by a lowercase sha256 digest",
+    ),
+    toolchain: parseToolchain(record.toolchain, "$.toolchain"),
+  };
+  if (identity.tag !== `v${identity.version}`) {
+    fail(
+      `identity tag ${JSON.stringify(identity.tag)} does not match its version ` +
+        JSON.stringify(identity.version),
+    );
+  }
+  return identity;
 }
 
 /**
