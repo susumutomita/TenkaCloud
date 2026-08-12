@@ -30,6 +30,7 @@
     "scripts/release/identity.ts",
     "scripts/release/verify-release-identity.ts",
     "scripts/release/generate-launcher-defaults.ts",
-    "scripts/release/generate-release-attestation.ts"
+    "scripts/release/generate-release-attestation.ts",
+    "scripts/quality/check-pr-title.ts"
   ]
 }

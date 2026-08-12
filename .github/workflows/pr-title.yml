@@ -1,0 +1,43 @@
+name: pr-title
+
+# Issue #3024 PR 4 — generic PR title gate. Merged PR titles become the generated Release
+# notes ("What's Changed"), so a title like "update" or "修正" ships meaningless release
+# history. This workflow rejects titles that are a generic word exactly, or effectively
+# exactly once symbols are stripped; specific Conventional Commit titles always pass.
+# It runs on `edited` too, so fixing the title re-runs the gate without a new push.
+#
+# Supply Chain Security: actions pinned to full SHA (matches ci.yml). The title is
+# attacker-influenced text, so it reaches the checker only via an environment variable —
+# never interpolated into shell program text.
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+concurrency:
+  group: pr-title-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  check-title:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the code
+        # actions/checkout v4.3.1 (pinned, matches ci.yml)
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          submodules: false
+
+      - name: Setup Bun
+        # oven-sh/setup-bun v2.0.2 (pinned, matches ci.yml)
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: "1.3.11"
+
+      - name: Reject generic PR titles
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: bun run scripts/quality/check-pr-title.ts

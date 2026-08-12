@@ -1,4 +1,8 @@
 <!--
+PR title: merged titles become the generated Release notes, so say what changed and where
+(e.g. `fix(local-play): handle EPIPE from the simulator proxy`). Generic one-word titles
+(update / fix / misc / 修正 / 更新 / 変更 ...) are rejected by the pr-title workflow.
+
 This template is intended to satisfy the PR Discipline invariants enforced by .claude/harness by enforcing a consistent structure.
 If a section cannot be completed, reconsider the PR scope or keep the PR in DRAFT.
 
