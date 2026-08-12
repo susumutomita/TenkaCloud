@@ -7,6 +7,7 @@ import Spinner from "@cloudscape-design/components/spinner";
 import Table from "@cloudscape-design/components/table";
 import type { LeaderboardEntry } from "../api/portal-client";
 import { useTeamView } from "../auth/TeamViewProvider";
+import { ResultCard } from "../components/ResultCard";
 import type { AppConfig } from "../config";
 import { useIsMock } from "../config-context";
 import { useT } from "../i18n";
@@ -60,7 +61,7 @@ export function ScoreboardPage({ config }: { config: AppConfig }) {
             {leaderboard.endsAt && (
               <>
                 <br />
-                {t("scoreboard.frozen_ends_at_label")}:{" "}
+                {t("scoreboard.frozen_ends_at_label")}: {" "}
                 <code>{new Date(leaderboard.endsAt).toLocaleString()}</code>
               </>
             )}
@@ -83,7 +84,7 @@ export function ScoreboardPage({ config }: { config: AppConfig }) {
               {
                 id: "rank",
                 header: t("scoreboard.col_rank"),
-                cell: (e) => (
+                cell: (e: LeaderboardEntry) => (
                   <Box variant="strong" color={e.isMyTeam ? "text-status-success" : "inherit"}>
                     #{e.rank}
                   </Box>
@@ -93,7 +94,7 @@ export function ScoreboardPage({ config }: { config: AppConfig }) {
               {
                 id: "team",
                 header: t("scoreboard.col_team"),
-                cell: (e) => (
+                cell: (e: LeaderboardEntry) => (
                   <Box variant={e.isMyTeam ? "strong" : "p"}>
                     {e.teamName}
                     {e.isMyTeam && (
@@ -108,7 +109,7 @@ export function ScoreboardPage({ config }: { config: AppConfig }) {
               {
                 id: "score",
                 header: t("scoreboard.col_score"),
-                cell: (e) => (
+                cell: (e: LeaderboardEntry) => (
                   <Box variant="strong" color="text-status-success">
                     {e.score} pt
                   </Box>
@@ -117,13 +118,17 @@ export function ScoreboardPage({ config }: { config: AppConfig }) {
               {
                 id: "progress",
                 header: t("scoreboard.col_progress"),
-                cell: (e) => `${e.completedProblems} / ${e.totalProblems}`,
+                cell: (e: LeaderboardEntry) => `${e.completedProblems} / ${e.totalProblems}`,
                 width: 120,
               },
             ]}
             empty={<Box>{t("scoreboard.empty")}</Box>}
           />
         </Container>
+      )}
+
+      {leaderboard && !leaderboard.scoreboardFrozen && (
+        <ResultCard leaderboard={leaderboard} eventTitle={config.eventTitle} />
       )}
     </SpaceBetween>
   );

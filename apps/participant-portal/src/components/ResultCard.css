@@ -1,0 +1,25 @@
+.tenkacloud-result-card-preview {
+  width: 100%;
+  max-width: 960px;
+  overflow: hidden;
+  border: 1px solid rgb(139 190 218 / 32%);
+  border-radius: 18px;
+  background: #07111f;
+  box-shadow: 0 16px 38px rgb(2 12 27 / 22%);
+}
+
+.tenkacloud-result-card-preview img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 40 / 21;
+  object-fit: contain;
+  user-select: none;
+}
+
+@media print {
+  .tenkacloud-result-card-preview {
+    max-width: none;
+    box-shadow: none;
+  }
+}
