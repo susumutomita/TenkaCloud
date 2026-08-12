@@ -220,11 +220,13 @@ pack-list: ## List installed problem packs | install済み問題packを一覧表
 	$(PACK) list $(ARGS)
 
 # ===== Release | リリース =====
-.PHONY: release-report release-check form-setup
+.PHONY: release-report release-launcher-defaults release-check form-setup
 
 release-report: ## Generate the human release report | 人間向けrelease reportを生成
 	bun run release:report
-release-check: ## Validate the release manifest and generated report | release manifestと生成reportを検証
+release-launcher-defaults: ## Stamp launcher template literals from release/launcher-defaults.json | launcher literalをlauncher-defaults.jsonから生成
+	bun run release:launcher-defaults
+release-check: ## Validate the release manifest, generated report, and launcher literals | release manifest・生成report・launcher literalを検証
 	bun run release:check
 # Options go through FORM_SETUP_ARGS; make would otherwise parse --repo itself.
 # e.g. make form-setup FORM_SETUP_ARGS="--repo owner/name --skip-workflow"

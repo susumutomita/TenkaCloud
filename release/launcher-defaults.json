@@ -1,0 +1,6 @@
+{
+  "$comment": "The launcher default pair last published for infrastructure/templates/lite-pipeline.yaml. Single authoring point (#3024 PR 2): scripts/release/generate-launcher-defaults.ts stamps every template literal from these values, release:check rejects drift, and the release flow (#3024 PR 3/5) updates this file from the resolved release identity of each published tag. Never edit the template literals by hand.",
+  "manifestVersion": "1.2.0-candidate.20260810",
+  "platformCommit": "421cd1bd9ede67ccf765878f1cbf27d7c5660762",
+  "catalogCommit": "2e98928e985be637b60453fda5d1005bcc1a0f5c"
+}

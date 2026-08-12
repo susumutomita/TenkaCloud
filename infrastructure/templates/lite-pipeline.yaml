@@ -229,9 +229,10 @@ Parameters:
 
 Conditions:
   HasExternalId: !Not [!Equals [!Ref DeployExternalId, ""]]
-  # CloudFormation cannot import the repository manifest at runtime. These deployable-artifact
-  # literals are consumers, not a second source of truth: the launcher regression test reads
-  # release/tenkacloud-release.json and gates defaults, conditions, build log, and Outputs together.
+  # CloudFormation cannot import repository files at runtime. These deployable-artifact
+  # literals are generated, not hand-maintained: release/launcher-defaults.json is the single
+  # authoring point, scripts/release/generate-launcher-defaults.ts stamps every literal site,
+  # and `bun run release:check` rejects drift between that file and this template.
   UsesAnyMainRef: !Or
     - !Equals [!Ref RepoRef, main]
     - !Equals [!Ref ProblemsRepoRef, main]

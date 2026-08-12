@@ -145,8 +145,9 @@ Open Question 7（配布先を S3 / CloudFront / GitHub Release のどれにす�
 GitHub Release アセットとしての配布も現時点では行っていない。
 
 launcher の platform / catalog 初期値は、最後に公開した release baseline の完全な commit SHA
-と一致させる（正本は `scripts/release/launcher-baseline.ts`。#3024 PR 2 で release identity からの
-生成に置き換える）。次の release の machine-readable な記述は repo 直下の
+と一致させる。正本は [`release/launcher-defaults.json`](../../release/launcher-defaults.json) で、
+`make release-launcher-defaults` が template の literal を生成し、`make release-check` が drift を
+拒否する（#3024 PR 2）。template の literal を手編集しない。次の release の machine-readable な記述は repo 直下の
 [`release/tenkacloud-release.json`](../../release/tenkacloud-release.json) にあり、その platform
 commit は `v*` タグから publish 時に導出する。人間向けの現在地は、同じ manifest から生成した
 [`release/tenkacloud-release.md`](../../release/tenkacloud-release.md) を参照する。現在の pair は

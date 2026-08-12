@@ -4,8 +4,8 @@ import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import Ajv2020 from "ajv/dist/2020";
 import addFormats from "ajv-formats";
+import { readLauncherDefaults } from "./generate-launcher-defaults";
 import { renderReleaseReport, renderReleaseReportForCheck } from "./generate-release-report";
-import { LAUNCHER_RELEASE_BASELINE } from "./launcher-baseline";
 import {
   assertReleaseCheckEligible,
   parseReleaseManifest,
@@ -547,14 +547,13 @@ describe("release source parity and generated report", () => {
       manifest.compatibility.contracts.map(({ id, version }) => [id, version]),
     );
 
-    // The launcher defaults deliberately do NOT track this manifest: they point at the
-    // last published pair until #3024 PR 2 generates them from the release identity.
-    // The baseline module is the single place that pair may change.
-    expect(parameterDefault(launcher, "RepoRef")).toBe(LAUNCHER_RELEASE_BASELINE.platformCommit);
-    expect(parameterDefault(launcher, "ProblemsRepoRef")).toBe(
-      LAUNCHER_RELEASE_BASELINE.catalogCommit,
-    );
-    expect(launcher).toContain(LAUNCHER_RELEASE_BASELINE.manifestVersion);
+    // The launcher defaults deliberately do NOT track this manifest: they are stamped
+    // from release/launcher-defaults.json (the last published pair) by
+    // generate-launcher-defaults.ts, and updated only by the release flow (#3024).
+    const launcherDefaults = readLauncherDefaults();
+    expect(parameterDefault(launcher, "RepoRef")).toBe(launcherDefaults.platformCommit);
+    expect(parameterDefault(launcher, "ProblemsRepoRef")).toBe(launcherDefaults.catalogCommit);
+    expect(launcher).toContain(launcherDefaults.manifestVersion);
     expect(packSchemaVersion).toBeDefined();
     expect(contracts["problem-pack-manifest"]).toBe(packSchemaVersion);
   });
