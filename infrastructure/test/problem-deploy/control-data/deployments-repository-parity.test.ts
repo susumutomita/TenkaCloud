@@ -244,21 +244,10 @@ describe.each(backends)("DeploymentsRepository parity: %s", (_label, makeBackend
     );
 
     expect(
-      (
-        await drain<DeploymentRecord>((onPage) =>
-          repo.forEachCompleteDeploymentPage(undefined, onPage),
-        )
-      )
+      (await drain<DeploymentRecord>((onPage) => repo.forEachCompleteDeploymentPage(onPage)))
         .map((r) => r.jobId)
         .sort(),
     ).toEqual(["complete-a", "complete-b"]);
-    expect(
-      (
-        await drain<DeploymentRecord>((onPage) =>
-          repo.forEachCompleteDeploymentPage("ev-1", onPage),
-        )
-      ).map((r) => r.jobId),
-    ).toEqual(["complete-a"]);
     expect(
       (
         await drain<DeploymentRecord>((onPage) =>
@@ -276,21 +265,6 @@ describe.each(backends)("DeploymentsRepository parity: %s", (_label, makeBackend
         (r) => r.jobId,
       ),
     ).toEqual(["runtime-a"]);
-    expect(await drain((onPage) => repo.forEachRuntimeScoreFeedPage("ev-1", onPage))).toEqual([]);
-
-    await repo.putDeployment(
-      deployment({
-        jobId: "feed",
-        status: "COMPLETE",
-        eventId: "ev-feed",
-        teamId: "team-feed",
-        problemId: "p-feed",
-        score: 99,
-      }),
-    );
-    expect(await drain((onPage) => repo.forEachRuntimeScoreFeedPage("ev-feed", onPage))).toEqual([
-      { eventId: "ev-feed", teamId: "team-feed", problemId: "p-feed", score: 99 },
-    ]);
   });
 
   it("should preserve conditional write outcomes for status and tenant mutations", async () => {

@@ -89,15 +89,6 @@ make pack-validate ARGS=&quot;./my-first-pack&quot;
 <p><a href="/docs/tutorials/first-pack/">最初のpackチュートリアル</a>では、最小構成の
 packを雛形作成、検証、不変Git commitへの固定、install、tenantへの有効化、削除まで
 通して扱います。</p>
-<h3>JSONだけをMCPで事前検証する</h3>
-<p>MCP 2026-07-28対応clientから
-<code>{ALWAYS_ON_CONTROL_PLANE_ORIGIN}/mcp/problem-author</code>へ接続すると、
-<code>validate_pack_manifest</code>と<code>validate_problem_metadata</code>を認証なしで呼べます。</p>
-<p>この2つは、渡されたJSONを同じProblem SDK contractで純粋かつ決定的に検証します。
-filesystem、network、cloud、環境変数、credentialへアクセスせず、同じ入力には同じ
-diagnosticを返します。ただし、参照fileの存在、templateの起動、local mode、
-flag提出は確認しません。公開前の最終確認では必ず<code>make pack-validate</code>と実際の
-リハーサルを行います。</p>
 <h2>参加者の体験を書く</h2>
 <p>技術詳細より前に、各問題が次の質問へ答えるようにします。</p>
 <ol>

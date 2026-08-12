@@ -135,62 +135,6 @@ greenでも、実AWSデプロイやブラウザ操作まで証明したことに
 <li>データベース保存先の変更では、データ移行とロールバックの境界を明示します。
 暗黙のdual writeを追加しません。</li>
 </ul>
-<h2>MCP 2026-07-28</h2>
-<p>TenkaCloudのAlways-On control planeは、sessionを持たないMCP 2026-07-28 endpointを
-提供します。MCPは、AI clientがTenkaCloudの許可された機能を呼ぶための共通形式です。
-開発者向け接続では、専門用語の説明と対応runtime一覧だけを読み取れます。</p>
-<p>接続先は<code>{ALWAYS_ON_CONTROL_PLANE_ORIGIN}/mcp/developer</code>です。clientは最初に
-<code>server/discover</code>を呼び、各requestへ次を付ける必要があります。</p>
-<ul>
-<li><code>MCP-Protocol-Version: 2026-07-28</code></li>
-<li>JSON bodyのmethodと同じ<code>Mcp-Method</code></li>
-<li><code>tools/call</code>と<code>resources/read</code>では、対象名と同じ<code>Mcp-Name</code></li>
-<li><code>_meta</code>内のprotocol version、client info、client capabilities</li>
-</ul>
-<p>このendpointは<code>initialize</code>、<code>Mcp-Session-Id</code>、sticky routingを使いません。旧仕様だけを
-話すclientは接続できません。公開情報の一覧結果には5分のpublic cache、認証後の結果には
-保存しないprivate cache指定が返ります。request bodyが32 KiBを超えると、toolを
-実行する前に拒否します。</p>
-<table>
-<thead>
-<tr>
-<th>endpoint</th>
-<th>境界</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>/mcp/developer</code></td>
-<td>公開・read-only。<code>explain_concept</code>、<code>list_runtime_capabilities</code></td>
-</tr>
-<tr>
-<td><code>/mcp/problem-author</code></td>
-<td>公開・read-only。渡されたJSONだけを純粋に検証</td>
-</tr>
-<tr>
-<td><code>/mcp/organizer</code></td>
-<td>Auth0 issuer、audience、organization、tenant、roleを既存middlewareで検証</td>
-</tr>
-<tr>
-<td><code>/mcp/participant</code></td>
-<td>team keyを検証し、そのteam IDとevent IDだけへ固定</td>
-</tr>
-</tbody></table>
-<p>開催者endpointが<code>401 Unauthorized</code>を返す場合、<code>WWW-Authenticate</code>内の
-<code>resource_metadata</code>から保護対象リソース情報を取得できます。現行のAuth0構成では、
-管理者が事前登録したOAuth clientを使用します。Dynamic Client Registration（DCR）を
-公開せず、Client ID Metadata Document（CIMD）は接続先の認証サーバーが
-<code>client_id_metadata_document_supported</code>対応を明示した場合にだけ使用します。</p>
-<p>deploy、teardown、設定変更を同期toolとして公開していません。将来追加する場合は
-Tasks extensionでdurable handle、cancel、idempotencyを実装し、危険な操作は
-multi-round-trip requestによる明示確認を要求します。それまでは既存の画面と運用手順を
-使用します。</p>
-<p>MCP hostはtoolを呼ぶたびにtool名と引数を表示し、利用者の承認を得る必要があります。
-現在の全toolはread-only、non-destructive、idempotentと宣言しています。ただしHTTP
-serverから、remote clientが手元の承認画面を本当に表示したかは確認できません。確認
-なしでtoolを呼ぶclientは接続しないでください。</p>
-<p>MCPの実装は<code>apps/always-on-control-plane</code>、problem検証contractは
-<code>packages/problem-sdk</code>が担当します。protocol header、role間の認証混同、他tenant・
-他team・flag・credentialの漏えいをnegative testで確認します。</p>
 <h2>レビュー依頼前の確認</h2>
 <ul>
 <li>新しい挙動を確認する範囲の絞られたテストがある。</li>

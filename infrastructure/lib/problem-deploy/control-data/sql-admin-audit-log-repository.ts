@@ -7,8 +7,7 @@ import type {
 
 /**
  * [Issue #2442 / Phase C4] SQLite schema for the AdminAuditLog aggregate. One SQL layer in the
- * SQLite dialect targets the Turso (libSQL) hosted backend (#2677: Turso-only;
- * the Always-On Cloudflare Worker holds its own D1 binding and never uses this seam).
+ * SQLite dialect targets the Turso (libSQL) hosted backend (#2677: Turso-only).
  *
  * One table for the aggregate's single row shape (append-only audit rows). GSI1 (`ACTOR#<sub>`
  * reverse lookup) is never queried by any handler today (grep-confirmed, same status on the

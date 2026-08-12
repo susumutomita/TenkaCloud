@@ -27,7 +27,7 @@ argument-hint: "[変更または問題の概要]"
 - EventBridge、CodePipeline、CloudFormation の非同期状態を含む。
 - CFn replacement、retention、standing cost が変わり得る。
 - 原因仮説または妥当な設計案が複数ある。
-- local、Lite、SaaS、Always-On の parity を判断する必要がある。
+- local、Lite、SaaS の parity を判断する必要がある。
 
 単純な変更を無理に multi-agent 化しない。複雑な変更を一つの確信だけで進めない。
 
@@ -85,7 +85,7 @@ adversarialFindings:
 - DynamoDB / Turso repository boundary と data migration。
 - EventBridge duplicate、ordering、retry、reconciliation。
 - CloudFormation CREATE / UPDATE / REPLACE / DELETE / retention。
-- Lite / SaaS / Always-On / local play parity。
+- Lite / SaaS / local play parity。
 - participant UX / operator UX / accessibility。
 - running cost / cleanup / retained resource。
 - backward compatibility / external problem pack contract。

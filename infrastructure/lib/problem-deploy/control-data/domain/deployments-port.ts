@@ -193,7 +193,6 @@ export interface DeploymentsQueryPort {
    * guard for mocks / malformed rows) stays in the caller.
    */
   forEachCompleteDeploymentPage(
-    eventId: string | undefined,
     onPage: (items: readonly DeploymentRecord[]) => Promise<void>,
   ): Promise<void>;
 
@@ -206,21 +205,6 @@ export interface DeploymentsQueryPort {
    */
   forEachRuntimeReconcilablePage(
     onPage: (items: readonly DeploymentRecord[]) => Promise<void>,
-  ): Promise<void>;
-
-  /**
-   * COMPLETE deployments for one `eventId` with a team score
-   * (`FilterExpression` `#status = :complete AND eventId = :eventId AND
-   * attribute_exists(teamId) AND attribute_exists(score)`,
-   * `ProjectionExpression "eventId, teamId, problemId, score"`,
-   * `ConsistentRead=true`, `Limit=200`). Site:
-   * `generic-scoring-handler/runtime-score-feed.ts` `publishRuntimeScoreFeed`.
-   */
-  forEachRuntimeScoreFeedPage(
-    eventId: string,
-    onPage: (
-      items: readonly Pick<DeploymentRecord, "eventId" | "teamId" | "problemId" | "score">[],
-    ) => Promise<void>,
   ): Promise<void>;
 }
 

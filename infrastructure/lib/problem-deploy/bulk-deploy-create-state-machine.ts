@@ -22,7 +22,9 @@ import { Construct } from "constructs";
  * Issue #910: bulk batch (= 1 event で N×M deployments) を **Distributed Map**
  * で並列処理する State Machine。
  *
- * 入力 shape (= \`BulkDeployCreateRequestedDetail\`):
+ * 入力 shape (= \`BulkDeployCreateRequested\` event の \`detail\`。 batchId は 1 bulk 実行を
+ * 識別する ULID で各 deployment の CFn stack に Tag として記録され、 tenantId は child
+ * execution へ伝搬する):
  *   {
  *     batchId: "01HX...",
  *     tenantId: "tenant-acme",

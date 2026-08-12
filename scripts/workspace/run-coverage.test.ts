@@ -40,7 +40,6 @@ const EXPECTED_DIRS = [
   "packages/web-kit",
   "packages/portal-plugin-sdk",
   "packages/problem-test-harness",
-  "apps/always-on-control-plane",
   "apps/developer-portal",
   "packages/tcloud",
   "packages/ai-eval",
@@ -52,8 +51,8 @@ describe("COVERAGE_WORKSPACES", () => {
   });
 
   // Issue #2756: developer-portal has a working vitest.config.ts and 18 test files but its
-  // tests never ran in CI. It now runs in the packages shard alongside its fellow app
-  // apps/always-on-control-plane, which already broke the "packages shard = packages/*" pattern.
+  // tests never ran in CI. It now runs in the packages shard, the app exception to the
+  // "packages shard = packages/*" pattern.
   it("should include developer-portal in the packages shard now that its tests run in CI", () => {
     const ws = COVERAGE_WORKSPACES.find((w) => w.dir === "apps/developer-portal");
     expect(ws?.shard).toBe("packages");
@@ -93,7 +92,7 @@ describe("SHARDS", () => {
     ]);
   });
 
-  it("should assign every remaining package + always-on-control-plane + developer-portal to the packages shard", () => {
+  it("should assign every remaining package + developer-portal to the packages shard", () => {
     expect(SHARDS.packages).toEqual([
       "packages/trust-bridge",
       "packages/auth-client",
@@ -107,7 +106,6 @@ describe("SHARDS", () => {
       "packages/web-kit",
       "packages/portal-plugin-sdk",
       "packages/problem-test-harness",
-      "apps/always-on-control-plane",
       "apps/developer-portal",
       "packages/tcloud",
       "packages/ai-eval",
@@ -194,7 +192,6 @@ describe("resolveLcovPaths", () => {
       "./packages/web-kit/coverage/lcov.info",
       "./packages/portal-plugin-sdk/coverage/lcov.info",
       "./packages/problem-test-harness/coverage/lcov.info",
-      "./apps/always-on-control-plane/coverage/lcov.info",
       "./apps/developer-portal/coverage/lcov.info",
       "./packages/tcloud/coverage/lcov.info",
       "./packages/ai-eval/coverage/lcov.info",

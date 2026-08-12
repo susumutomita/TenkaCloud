@@ -98,11 +98,9 @@ done, not "stop".
    walks a human through exactly this flow with penalty-free hints; prefer
    sending them there over paraphrasing.
 
-Other hosting modes, for context only: **SaaS mode** (`make deploy-saas`,
+The other hosting mode, for context only: **SaaS mode** (`make deploy-saas`,
 full multi-tenant on the AWS SaaS Builder Toolkit with pooled and silo
-tiers) and **Always-On mode** (a Cloudflare Worker control plane with
-per-event AWS runtime stacks, targeting zero always-on AWS compute between
-events). Recommend Lite first.
+tiers). Recommend Lite first.
 
 ## Architecture in one paragraph
 

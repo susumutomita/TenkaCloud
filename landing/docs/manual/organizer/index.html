@@ -225,24 +225,6 @@ DynamoDBのテーブルは保持されて料金が続く場合があります。
 </ol>
 <p>問題の開始・停止処理や、片付け処理の一般的な失敗をすべて通知する機能ではありません。
 メールアドレスを設定しない場合、この3種類の通知は届きません。</p>
-<h2>開催者MCPを使う場合</h2>
-<p>開催者MCPはAlways-On control planeの機能です。<strong>このページで案内するLite導入
-パイプラインへ自動的に追加されるものではありません。</strong> Lite競技の基本操作は引き続き
-Application Admin Consoleを使います。</p>
-<p>Always-On環境を検証している運営者は
-<code>{ALWAYS_ON_CONTROL_PLANE_ORIGIN}/mcp/organizer</code>へ接続できます。開催者として発行された
-Auth0 access tokenを<code>Authorization: Bearer ...</code>で渡します。tokenはclientのsecret
-保存機能へ入れ、設定file、prompt、Issue、ログへ貼り付けません。</p>
-<p>認証前のclientは、<code>401 Unauthorized</code>の<code>WWW-Authenticate</code>にある
-<code>resource_metadata</code>から認証先を確認します。現在はAuth0へ事前登録したOAuth clientが
-必要です。TenkaCloudはDCR endpointを提供しません。CIMDを使うのは、使用中の
-認証サーバーが対応を明示している場合だけです。</p>
-<p>現在公開するtoolは<code>list_events</code>だけです。認証されたtenantに属するeventだけを返し、
-作成、変更、deploy、停止、削除は行いません。他tenantのevent、team key、flag、
-採点の秘密値も返しません。MCP clientは2026-07-28に対応し、
-<code>server/discover</code>とrequestごとのprotocol header / <code>_meta</code>を送る必要があります。
-MCP hostは呼び出しのたびにtool名と引数を表示し、開催者の承認を得なければなりません。
-この確認を省略するclientは使わないでください。</p>
 <h2>参加者を入れる前の確認</h2>
 <ul>
 <li>参加者と同じ権限・リージョンのテストチームを使った。</li>

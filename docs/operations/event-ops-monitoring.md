@@ -43,16 +43,9 @@ CloudWatch alarms は 2 件だけ。SNS email と AWS Budgets の先頭 2 件無
 3. 手動で Lambda test invoke し、Invocations metric が戻るか確認する。
 4. イベント中に復旧できない場合は、採点結果を freeze し、参加者へ運営通知を出す。
 
-### Always-On runtime の残留確認 (イベント後)
-
-nightly の sweeper workflow は撤去済み (AWS OIDC environment 未整備のまま失敗通知だけを量産したため。Always-On GA #2294 で環境を用意してから再導入する)。イベント後は手動で残留を確認する。
-
-1. `TenkaCloud:ManagedBy=always-on-runtime` かつ `TenkaCloud:ExpiresAt` が過去の stack が残っていないか確認する。
-2. 残っている場合は runtime archive の有無を確認してから `make destroy-always-on-runtime` (または sweeper script `bun run infrastructure/lib/always-on-runtime/sweeper/index.ts` を AWS credentials + `GITHUB_REPOSITORY` / `GITHUB_TOKEN` 付きで手動実行) で削除する。
-
 ### Budget breach
 
 1. AWS Billing / Cost Explorer で当月の増分 service を確認する。
-2. Always-On runtime stack、DynamoDB capacity の戻し忘れ、CloudWatch Logs retention、S3 artifact の残りを優先して確認する。
+2. DynamoDB capacity の戻し忘れ、CloudWatch Logs retention、S3 artifact の残りを優先して確認する。
 3. イベント後なら `docs/operations/dynamodb-event-capacity.md` の scale-down 手順で event-hot tables を 1/1 に戻す。
 4. 監視が正常に届くことは CI では確認できないため、初回有効化時は一度 deploy して SNS confirmation と alarm delivery を live 確認する。

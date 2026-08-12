@@ -168,28 +168,6 @@ export const DeployDeleteRequestedDetailSchema = z.object({
 });
 export type DeployDeleteRequestedDetail = z.infer<typeof DeployDeleteRequestedDetailSchema>;
 
-/**
- * Issue #910 (#895 Phase 2.C): `BulkDeployCreateRequested` event の `detail` schema。
- * tenant API Lambda が bulk deploy 時 (= 1 event で N×M deployments) に publish し、
- * `BulkDeployCreate` State Machine が `S3JsonItemReader` で deployment 配列を読み込む。
- *
- * - `s3Bucket` / `s3Key`: deployment 配列 (\`DeployCreateRequestedDetail[]\`) を JSON で保存
- *   した S3 object。 Step Functions の Distributed Map が ItemReader で iteration する
- * - `batchId`: 1 bulk 実行を識別する ULID。各 deployment の CFn stack に Tag として
- *   記録し、operator が後で同じ batch を逆引きできる
- * - `tenantId`: caller tenant の scope。 Distributed Map child execution に渡され、
- *   個別 deploy の TenantId に伝搬する
- */
-export const BulkDeployCreateRequestedDetailSchema = z.object({
-  batchId: z.string().min(1),
-  tenantId: z.string().min(1),
-  s3Bucket: z.string().min(1),
-  s3Key: z.string().min(1),
-  /** batch 内 item 数 (= operator の参考表示用、 state machine の挙動には影響しない)。 */
-  itemCount: z.number().int().nonnegative().optional(),
-});
-export type BulkDeployCreateRequestedDetail = z.infer<typeof BulkDeployCreateRequestedDetailSchema>;
-
 export class ProblemEventPublishError extends Error {
   constructor(
     public readonly detailType: string,

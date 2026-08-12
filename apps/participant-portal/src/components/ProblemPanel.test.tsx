@@ -479,7 +479,7 @@ describe("ProblemPanel render branches", () => {
     renderPanel({
       problemId: "what-is-tenkacloud",
       status: "COMPLETE",
-      description: "Battle Lite SaaS Always-On Docker Codespaces DynamoDB Turso",
+      description: "Battle Lite SaaS Docker Codespaces DynamoDB Turso",
       scoring: {
         kind: "multi-flag",
         points: 100,

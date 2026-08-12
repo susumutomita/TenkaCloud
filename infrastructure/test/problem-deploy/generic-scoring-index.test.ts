@@ -39,7 +39,6 @@ const mocks = vi.hoisted(() => ({
   coordinationCollect: vi.fn(),
   coordinationRun: vi.fn(),
   createCoordinationTickPass: vi.fn(),
-  publishRuntimeScoreFeed: vi.fn(),
 }));
 vi.mock("../../lib/problem-deploy/handlers/generic-scoring-handler/shared", async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
@@ -55,9 +54,6 @@ vi.mock(
     reconcileRuntimeStatuses: mocks.reconcileRuntimeStatuses,
   }),
 );
-vi.mock("../../lib/problem-deploy/handlers/generic-scoring-handler/runtime-score-feed", () => ({
-  publishRuntimeScoreFeed: mocks.publishRuntimeScoreFeed,
-}));
 vi.mock(
   "../../lib/problem-deploy/handlers/generic-scoring-handler/composite-status-reconciler",
   () => ({
@@ -222,7 +218,6 @@ beforeEach(() => {
     collect: mocks.coordinationCollect,
     run: mocks.coordinationRun,
   });
-  mocks.publishRuntimeScoreFeed.mockResolvedValue(undefined);
   shared = {
     runtime: makeTestControlDataRuntime(),
     ddb,
@@ -234,8 +229,6 @@ beforeEach(() => {
   };
   mocks.buildSharedResources.mockImplementation(() => shared);
   process.env.BATTLE_PROBLEMS_PHASES = undefined;
-  process.env.ALWAYS_ON_CONTROL_PLANE_URL = "https://control.example";
-  process.env.RUNTIME_FEED_TOKEN_PARAMETER_NAME = "/tenkacloud/runtime/feed-token";
 });
 afterEach(() => {
   vi.clearAllMocks();
@@ -278,6 +271,30 @@ describe("handler scan loop", () => {
     expect(warn).toHaveBeenCalledWith(
       "[generic-scoring] dispatchCompositeReadyTargets failed",
       expect.objectContaining({ message: "dispatch string rejection" }),
+    );
+    warn.mockRestore();
+  });
+
+  it("should swallow a reconcileDeployStatusMaintenance failure without throwing (#2068)", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    mocks.reconcileDeployStatusMaintenance.mockRejectedValueOnce(new Error("parent scan boom"));
+    cfg.scanPages = [{ Items: [], LastEvaluatedKey: undefined }];
+    await expect(handler()).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledWith(
+      "[generic-scoring] reconcileCompositeParents failed",
+      expect.objectContaining({ message: "parent scan boom" }),
+    );
+    warn.mockRestore();
+  });
+
+  it("should record a generic reason when reconcileDeployStatusMaintenance rejects with a non-Error value (#2068)", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    mocks.reconcileDeployStatusMaintenance.mockRejectedValueOnce("parent scan string rejection");
+    cfg.scanPages = [{ Items: [], LastEvaluatedKey: undefined }];
+    await expect(handler()).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledWith(
+      "[generic-scoring] reconcileCompositeParents failed",
+      expect.objectContaining({ message: "parent scan string rejection" }),
     );
     warn.mockRestore();
   });
@@ -333,59 +350,6 @@ describe("handler scan loop", () => {
     cfg.scanPages = [{ LastEvaluatedKey: undefined }]; // out.Items undefined → ?? [] path
     await expect(handler()).resolves.toBeUndefined();
     expect(mocks.runUptimeFlatKind).not.toHaveBeenCalled();
-  });
-
-  it("should scope an event-runtime tick and leave reconciliation to Workers Cron", async () => {
-    shared.problemsScoring = { p1: { kind: "uptime-flat" } };
-    cfg.scanPages = [
-      {
-        Items: [baseItem(), { ...baseItem(), PK: "DEP#other", eventId: "other-event" }],
-      },
-    ];
-
-    await handler({ eventId: "01HZX0K3M3K9ZQHB3MRQHBA1ZZ" });
-
-    const scan = ddb.send.mock.calls.find((call) => call[0] instanceof ScanCommand)?.[0];
-    expect(scan.input).toMatchObject({
-      FilterExpression: "#status = :complete AND eventId = :eventId",
-      ExpressionAttributeValues: {
-        ":complete": "COMPLETE",
-        ":eventId": "01HZX0K3M3K9ZQHB3MRQHBA1ZZ",
-      },
-    });
-    expect(mocks.runUptimeFlatKind).toHaveBeenCalledTimes(1);
-    expect(mocks.reconcileEventStatuses).not.toHaveBeenCalled();
-    expect(mocks.reconcileRuntimeStatuses).not.toHaveBeenCalled();
-    expect(mocks.reconcileDeployStatusMaintenance).not.toHaveBeenCalled();
-    expect(mocks.dispatchCompositeReadyTargets).not.toHaveBeenCalled();
-    expect(mocks.publishRuntimeScoreFeed).toHaveBeenCalledWith(
-      expect.objectContaining({ eventId: "01HZX0K3M3K9ZQHB3MRQHBA1ZZ" }),
-      expect.objectContaining({ ddb }),
-    );
-  });
-
-  it("should reject a blank event-runtime scope instead of running the global tick", async () => {
-    await expect(handler({ eventId: "  " })).rejects.toThrow(/eventId must be non-empty/);
-    expect(ddb.send).not.toHaveBeenCalled();
-    expect(mocks.reconcileEventStatuses).not.toHaveBeenCalled();
-    expect(mocks.publishRuntimeScoreFeed).not.toHaveBeenCalled();
-  });
-
-  it("should not retry committed scoring when the runtime score feed fails", async () => {
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    mocks.publishRuntimeScoreFeed.mockRejectedValueOnce(new Error("feed unavailable"));
-    cfg.scanPages = [{ Items: [] }];
-
-    await expect(handler({ eventId: "01HZX0K3M3K9ZQHB3MRQHBA1ZZ" })).resolves.toBeUndefined();
-
-    expect(consoleError).toHaveBeenCalledWith(
-      "[generic-scoring] runtime score feed failed",
-      expect.objectContaining({
-        eventId: "01HZX0K3M3K9ZQHB3MRQHBA1ZZ",
-        message: "feed unavailable",
-      }),
-    );
-    consoleError.mockRestore();
   });
 });
 

@@ -26,20 +26,5 @@ export {
   purgeLegacyTokenStorage,
   type TokenSet,
 } from "./cognito";
-export {
-  type CachingJwksResolverOptions,
-  createCachingJwksResolver,
-  DEFAULT_CACHE_TTL_SEC,
-} from "./jwks-resolver";
-export {
-  DEFAULT_CLOCK_TOLERANCE_SEC,
-  type Jwk,
-  type JwksResolver,
-  type JwtHeader,
-  type OidcVerifyFailureReason,
-  type OidcVerifyOptions,
-  type OidcVerifyOutcome,
-  verifyOidcJwt,
-} from "./oidc-jwks-verify";
 export { deriveChallenge, generateVerifier } from "./pkce";
 export { isCognitoDomain, isHttpsUrl } from "./runtime-config";

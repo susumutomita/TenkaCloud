@@ -26,7 +26,7 @@ TenkaCloud は AWS 上の multi-tenant cloud competition platform です。Contr
 - tenant isolation、Cognito / JWT auth、mandatory `ExternalId`、IAM least privilege を維持する。
 - `infrastructure/templates/competitor-bootstrap.yaml` の `AdministratorAccess` は competitor account bootstrap だけの明示的例外であり、他の role へ一般化しない。
 - EventBridge bus、tenant onboarding、`DeployCreateRequested`、`runtime-config.json` の cross-plane contract を変更する場合は、producer と consumer を同じ PR で確認する。
-- DynamoDB の capacity、Turso backend、Always-On、Lite、SaaS の mode 差分と running cost を意識する。
+- DynamoDB の capacity、Turso backend、Lite、SaaS の mode 差分と running cost を意識する。
 - 破壊的操作、release、shared environment への変更、secret access は明示的な承認なしに行わない。
 - test、type、lint、harness、coverage、config を通すためだけに弱めない。rule または config が根本原因なら、証拠、test、regression analysis を伴って修正してよい。
 - failure を空値、mock、silent fallback、偽の成功へ変換して隠さない。

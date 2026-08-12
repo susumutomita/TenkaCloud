@@ -3,7 +3,7 @@ import type { ProblemEndpointRecord, ProblemEndpointsRepository, SqlExecutor } f
 /**
  * [Issue #2442 / Phase C1] SQLite schema for the ProblemEndpoints aggregate. One
  * SQL layer in the SQLite dialect targets the Turso (libSQL) hosted backend
- * (#2677: Turso-only; the Always-On Worker holds its own D1 binding, not this seam).
+ * (#2677: Turso-only).
  *
  * The composite primary key mirrors the DynamoDB physical PK/SK exactly
  * (`tenant_id`/`team_id`/`problem_id`/`slot` decompose

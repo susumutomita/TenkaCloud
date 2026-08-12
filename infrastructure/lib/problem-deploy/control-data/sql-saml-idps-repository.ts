@@ -4,7 +4,7 @@ import type { SamlIdpRecord, SamlIdpsRepository, SqlExecutor } from "./types.js"
 /**
  * [Issue #2442 / Phase C5] SQLite schema for the SamlIdps aggregate. One SQL
  * layer in the SQLite dialect targets the Turso (libSQL) hosted backend
- * (#2677: Turso-only; the Always-On Worker holds its own D1 binding, not this seam).
+ * (#2677: Turso-only).
  *
  * `scope_key` mirrors the DynamoDB physical `pk` (`SYSTEM` | tenantId); `idp_id`
  * mirrors `sk`. The full record is additionally stored as a JSON `payload` so

@@ -26,8 +26,7 @@ export interface SqlStatement {
  * decoupled from any concrete client. Node's built-in `node:sqlite`
  * (`DatabaseSync`) backs it for tests and offline validation; the production
  * adapter is the HTTP-only `@libsql/client` (Turso) wired in
- * `runtime-repositories.ts`. (#2677: Turso-only — the Always-On Cloudflare
- * Worker accesses D1 through its own binding, never through this seam.)
+ * `runtime-repositories.ts`. (#2677: Turso-only.)
  *
  * [Issue #2437] Contract notes:
  * - `all()` accepts `UPDATE … RETURNING` statements — a conditional update and

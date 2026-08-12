@@ -59,7 +59,7 @@ description: TenkaCloud の候補設計、障害仮説、実装 diff を生成�
 
 ### Mode and compatibility
 
-- local play、Lite、SaaS、Always-On のどれで検証したか。
+- local play、Lite、SaaS のどれで検証したか。
 - 一つの mode の成功を他 mode へ一般化していないか。
 - old data / new code、old client / new API、old problem pack / new platform を処理できるか。
 - external problem pack CI と catalog schema を壊していないか。

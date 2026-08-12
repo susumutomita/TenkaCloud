@@ -14,7 +14,6 @@ import { makeFakeDdb } from "./control-data-write.test-helpers";
  * - generic-scoring-handler/composite-status-reconciler.ts:126-143 -> forEachCompositeDeployReconcilablePage
  * - generic-scoring-handler/composite-teardown-reconciler.ts:130-147 -> forEachCompositeTeardownPendingPage
  * - generic-scoring-handler/runtime-status-reconciler.ts:167-186 -> forEachRuntimeReconcilablePage
- * - generic-scoring-handler/runtime-score-feed.ts:29-81 -> forEachRuntimeScoreFeedPage
  * - handlers/shared/score-event.ts (`writeScoreEvent`, retired in B3) -> appendScoreEvent
  * - participant-handler/cast-event.ts:170-183 (pre-B3) -> appendInboxEvent
  * - participant-handler/coordination-store.ts:63-77 (pre-B3) -> writeCoordinationState
@@ -96,7 +95,7 @@ describe("DynamoDbDeploymentsRepository — Scan (per-page callback)", () => {
       reset();
 
       const { all } = await drain<DeploymentRecord>((onPage) =>
-        repo.forEachCompleteDeploymentPage(undefined, onPage),
+        repo.forEachCompleteDeploymentPage(onPage),
       );
       expect(all.map((r) => r.jobId).sort()).toEqual(["a", "c"]);
 
@@ -109,29 +108,6 @@ describe("DynamoDbDeploymentsRepository — Scan (per-page callback)", () => {
       expect(scan.ProjectionExpression).toBeUndefined();
     });
 
-    it("should scope to one eventId when provided", async () => {
-      const { repo, seed, commands, reset } = makeRepo();
-      await seed([
-        metaItem({ jobId: "a", status: "COMPLETE", eventId: "ev-1" }),
-        metaItem({ jobId: "b", status: "COMPLETE", eventId: "ev-2" }),
-        metaItem({ jobId: "c", status: "PENDING", eventId: "ev-1" }),
-      ]);
-      reset();
-
-      const { all } = await drain<DeploymentRecord>((onPage) =>
-        repo.forEachCompleteDeploymentPage("ev-1", onPage),
-      );
-      expect(all.map((r) => r.jobId)).toEqual(["a"]);
-
-      const scan = commands[0].input;
-      expect(scan.FilterExpression).toBe("#status = :complete AND eventId = :eventId");
-      expect(scan.ExpressionAttributeValues).toEqual({
-        ":complete": "COMPLETE",
-        ":eventId": "ev-1",
-      });
-      expect(scan.Limit).toBe(200);
-    });
-
     it("should invoke onPage once per physical Scan page (multi-page drain, not a single collected batch)", async () => {
       const { repo, seed } = makeRepo(2); // force 2 rows per page, capped below Limit=200
       await seed(
@@ -139,7 +115,7 @@ describe("DynamoDbDeploymentsRepository — Scan (per-page callback)", () => {
       );
 
       const { pages, all } = await drain<DeploymentRecord>((onPage) =>
-        repo.forEachCompleteDeploymentPage(undefined, onPage),
+        repo.forEachCompleteDeploymentPage(onPage),
       );
       expect(pages.length).toBeGreaterThan(1);
       expect(pages.every((p) => p.length <= 2)).toBe(true);
@@ -228,48 +204,6 @@ describe("DynamoDbDeploymentsRepository — Scan (per-page callback)", () => {
         ":c": "COMPLETE",
         ":d": "DELETING",
       });
-      expect(scan.Limit).toBe(200);
-    });
-  });
-
-  describe("forEachRuntimeScoreFeedPage", () => {
-    it("should return the score-feed projection for COMPLETE rows with a team + score", async () => {
-      const { repo, seed, commands, reset } = makeRepo();
-      await seed([
-        metaItem({
-          jobId: "a",
-          status: "COMPLETE",
-          eventId: "ev-1",
-          teamId: "t1",
-          problemId: "p1",
-          score: 40,
-        }),
-        metaItem({ jobId: "b", status: "COMPLETE", eventId: "ev-1", problemId: "p1" }), // no teamId/score
-        metaItem({
-          jobId: "c",
-          status: "COMPLETE",
-          eventId: "ev-2",
-          teamId: "t2",
-          problemId: "p1",
-          score: 10,
-        }),
-      ]);
-      reset();
-
-      const { all } = await drain((onPage) => repo.forEachRuntimeScoreFeedPage("ev-1", onPage));
-      expect(all).toEqual([{ eventId: "ev-1", teamId: "t1", problemId: "p1", score: 40 }]);
-
-      const scan = commands[0].input;
-      expect(scan.FilterExpression).toBe(
-        "#status = :complete AND eventId = :eventId AND attribute_exists(teamId) AND attribute_exists(score)",
-      );
-      expect(scan.ExpressionAttributeNames).toEqual({ "#status": "status" });
-      expect(scan.ExpressionAttributeValues).toEqual({
-        ":complete": "COMPLETE",
-        ":eventId": "ev-1",
-      });
-      expect(scan.ProjectionExpression).toBe("eventId, teamId, problemId, score");
-      expect(scan.ConsistentRead).toBe(true);
       expect(scan.Limit).toBe(200);
     });
   });

@@ -5,7 +5,7 @@ names, adds the TenantRegistration table, and changes the System Admin API from
 direct tenant mutation to tenant-registration orchestration. Do not run it
 during an event or while System Admins can create or delete tenants.
 
-Lite and Always-On deployments do not use this SBT Control Plane migration.
+Lite deployments do not use this SBT Control Plane migration.
 
 ## Stop conditions
 

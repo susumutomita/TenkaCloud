@@ -53,8 +53,7 @@ function decodeKeysetCursor(cursor: string): EventsKeysetCursor | undefined {
 /**
  * SQLite implementation of {@link EventsRepository}. One
  * SQL layer in the SQLite dialect targets the Turso (libSQL) hosted backend
- * (#2677: Turso-only — the Always-On Cloudflare Worker holds its own D1 binding
- * and never routes through this seam). It talks to an injected
+ * (#2677: Turso-only). It talks to an injected
  * {@link SqlExecutor} so it carries no client dependency of its own — `node:sqlite`
  * backs it in tests, a future `@libsql/client` adapter backs it in production.
  *
