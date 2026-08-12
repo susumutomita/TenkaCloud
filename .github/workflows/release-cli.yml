@@ -110,11 +110,16 @@ jobs:
           TARBALL="$(ls packages/standalone-cli/tenkacloud-cli-*.tgz)"
           # Fail loudly if prepack was skipped (e.g. ignore-scripts crept back in): a
           # src-only tarball still installs and prints --help, so without this check a
-          # runtime-less, unusable CLI would ship silently.
-          if ! tar -tzf "$TARBALL" | grep -q '^package/runtime/'; then
+          # runtime-less, unusable CLI would ship silently. `grep -c` (never `-q`) is
+          # load-bearing under `set -o pipefail`: -q exits at the first match, tar dies
+          # on the closed pipe (EPIPE), and the pipeline "fails" precisely when the
+          # tarball is healthy — run 31554895670 rejected a good tarball that way.
+          RUNTIME_FILES="$(tar -tzf "$TARBALL" | grep -c '^package/runtime/')" || RUNTIME_FILES=0
+          if [ "$RUNTIME_FILES" -eq 0 ]; then
             echo "Tarball $TARBALL contains no runtime/ files — prepack did not run." >&2
             exit 1
           fi
+          echo "Tarball contains $RUNTIME_FILES runtime/ files."
           PREFIX="$(mktemp -d)"
           # --min-release-age=7: same override as the pack step — the checked-out tag may
           # still carry the broken `168h` value in its .npmrc.
