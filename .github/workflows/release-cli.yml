@@ -90,14 +90,35 @@ jobs:
 
       - name: Build the CLI tarball (prepack assembles the bundled runtime)
         working-directory: packages/standalone-cli
-        run: npm pack
+        # The repo-root .npmrc is this workspace's npm project config, and two of its
+        # supply-chain defenses would break this step if left in effect here:
+        #   - `ignore-scripts=true` silently skips prepack, producing a src-only tarball
+        #     with no runtime/ (the smoke test's `--help` cannot catch that — see the
+        #     assertion below). `--no-ignore-scripts` is safe in this job: @tenkacloud/cli
+        #     has zero dependencies, so the only lifecycle script npm can run is this
+        #     repo's own scripts/assemble-runtime.mjs.
+        #   - `min-release-age` must be a Number of days; the `168h` the repo shipped
+        #     until v1.3.0 makes npm 11.16 abort every command with "Invalid time value".
+        #     Passing a valid value on the CLI (highest config precedence) keeps the
+        #     7-day defense while letting workflow_dispatch backfill tags whose tree
+        #     still carries the broken value.
+        run: npm pack --no-ignore-scripts --min-release-age=7
 
       - name: Smoke test the packed tarball
         run: |
           set -euo pipefail
           TARBALL="$(ls packages/standalone-cli/tenkacloud-cli-*.tgz)"
+          # Fail loudly if prepack was skipped (e.g. ignore-scripts crept back in): a
+          # src-only tarball still installs and prints --help, so without this check a
+          # runtime-less, unusable CLI would ship silently.
+          if ! tar -tzf "$TARBALL" | grep -q '^package/runtime/'; then
+            echo "Tarball $TARBALL contains no runtime/ files — prepack did not run." >&2
+            exit 1
+          fi
           PREFIX="$(mktemp -d)"
-          npm install -g --prefix "$PREFIX" "$TARBALL"
+          # --min-release-age=7: same override as the pack step — the checked-out tag may
+          # still carry the broken `168h` value in its .npmrc.
+          npm install -g --prefix "$PREFIX" "$TARBALL" --min-release-age=7
           # Only the config-free, bun-free, AWS-free path is exercised here: printing usage
           # (src/cli.mjs's `!command || command === "help" || "--help" || "-h"` branch) returns
           # before touching TENKACLOUD_CONFIG_DIR or spawning `bun`/`aws`, so it is the one
