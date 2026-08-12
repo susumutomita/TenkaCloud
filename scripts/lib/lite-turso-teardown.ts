@@ -51,11 +51,3 @@ export function planTursoTeardown(
       " 一部として自動で実行されます。\n",
   };
 }
-
-/**
- * purge を stack 削除の**前**に走らせる理由。
- *
- * auth token は stack が作る SSM SecureString から読む。 stack を先に消すと parameter ごと
- * 消えて認証できなくなり、 「消せませんでした」とすら言えなくなる。
- */
-export const TURSO_PURGE_RUNS_BEFORE_STACK_DELETION = true;

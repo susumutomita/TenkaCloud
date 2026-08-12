@@ -37,6 +37,7 @@ import {
   releaseProcessLaunchFiles,
   SAFE_PROCESS_ENVIRONMENT_KEYS,
   type SimulatorLauncherRecord,
+  type SimulatorLaunchPreparation,
   type SimulatorOwnedLaunchIntent,
   type SimulatorProcessRegistration,
   simulatorLaunchIntentPath,
@@ -48,10 +49,8 @@ import {
 export {
   clearSimulatorLaunchIntent,
   DEFAULT_SIMULATOR_IMAGE,
-  readSimulatorLaunchIntent,
   type SimulatorLauncherKind,
   type SimulatorLauncherRecord,
-  type SimulatorLaunchPreparation,
   type SimulatorNativeCredentials,
   type SimulatorOwnedLaunchIntent,
   simulatorLaunchIntentPath,

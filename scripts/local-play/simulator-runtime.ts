@@ -30,12 +30,11 @@ import {
   simulatorScoringContract,
 } from "./simulator-scoring";
 
-export {
-  type LocalSimulatorDeployment,
-  type LocalSimulatorRuntimePort,
-  type SimulatorDataPlaneRoute,
-  type SimulatorRuntimeOptions,
-  SimulatorStartOwnershipError,
+export type {
+  LocalSimulatorDeployment,
+  LocalSimulatorRuntimePort,
+  SimulatorDataPlaneRoute,
+  SimulatorRuntimeOptions,
 } from "./simulator-runtime-contract";
 export { cleanupRecordedSimulatorSession } from "./simulator-session-cleanup";
 export type { SimulatorSessionRecord } from "./simulator-session-record";

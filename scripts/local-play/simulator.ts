@@ -18,14 +18,9 @@ export {
   SIMULATOR_PROTOCOL_VERSION,
   type SimulatorCapabilities,
   type SimulatorClockAdvanceResponse,
-  type SimulatorDeploymentRequest,
   type SimulatorDeploymentResponse,
-  type SimulatorEngineCapabilities,
   SimulatorHttpError,
-  type SimulatorOperation,
-  type SimulatorProviderOperationRequest,
   type SimulatorSnapshot,
-  type SimulatorWorldRequest,
   type SimulatorWorldResponse,
 } from "./simulator-client";
 

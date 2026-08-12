@@ -31,7 +31,27 @@
   },
   "workspaces": {
     ".": {
-      "entry": ["scripts/**/*.ts"],
+      "entry": [
+        "scripts/*.ts",
+        "scripts/form/setup.ts",
+        "scripts/landing/generate-landing-docs.ts",
+        "scripts/landing/generate-landing-locales.ts",
+        "scripts/landing/stamp-asset-versions.ts",
+        "scripts/landing/onboarding-videos/render-*.ts",
+        "scripts/local-play/server.ts",
+        "scripts/local-play/api.ts",
+        "scripts/local-play/local-smoke.ts",
+        "scripts/local/measure-profile.ts",
+        "scripts/onboarding/verify-custom-challenge.ts",
+        "scripts/openapi/generate.ts",
+        "scripts/ops/*.ts",
+        "scripts/quality/*.ts",
+        "scripts/release/generate-release-report.ts",
+        "scripts/security/*.ts",
+        "scripts/workspace/*.ts",
+        "scripts/**/*.test.ts",
+        "scripts/**/*.test-helpers.ts"
+      ],
       "project": ["scripts/**/*.ts"]
     },
     "infrastructure": {
