@@ -25,6 +25,7 @@
     "scripts/lib/lite-residual-scan-aws.ts",
     "scripts/ops/scan-lite-residual-resources.ts",
     "scripts/release/manifest.ts",
+    "scripts/release/manifest-fields.ts",
     "scripts/release/generate-release-report.ts",
     "scripts/release/identity.ts",
     "scripts/release/verify-release-identity.ts",
