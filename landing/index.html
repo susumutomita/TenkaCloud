@@ -123,7 +123,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" />
-<link rel="stylesheet" href="./styles/main.css?v=4dc0575463" />
+<link rel="stylesheet" href="./styles/main.css?v=cf08a52993" />
 </head>
 <body>
 
@@ -166,6 +166,11 @@
         <span data-i18n="hero.h1a">クラウドエンジニアの、</span><em data-i18n="hero.h1b">天下一武道会。</em>
       </h1>
       <p class="sub" data-i18n="hero.sub">本物の AWS で競う、OSS の競技プラットフォーム。 「ローカルでは動く」アプリを本番品質へ ── 認証・公開範囲・監査・可用性の仕上がりを毎分自動採点し、 順位がリアルタイムに動く。 主催者はイベント・採点・再利用できる問題カタログを 1 画面で運営。</p>
+      <!-- TenkaCloudChallenge#468 (funnel): 上のキラーラインはクラウドエンジニアに刺さる完成形。
+           この第二メッセージはクラウドエンジニアを自認しないバイブコーダーを拾う ── 売るのは
+           「作ったものを安全に出せるようになること」。 無料・AWS アカウント不要は local play が
+           既に持つ性質で、 本物の AWS は StackStack 最終問だけ。 -->
+      <p class="hero-vibe" data-i18n="hero.vibe"><strong>AI と作ったアプリ、公開する前に。</strong> 無料・AWS アカウント不要・ブラウザで始める。 本物の AWS は最後の 1 問だけ。</p>
       <!-- #2711 follow-up: /portal-demo/start の deep link は静的ホスティングの rewrite が
            効かない環境で 404 fallback に崩れるため、 実在する index.html に着地して
            SPA 側 (`goto=start`) で /start へ遷移する。 -->
@@ -730,7 +735,7 @@
 
 <script src="./ink-bg.js" defer></script>
 <script src="./contact-form.js?v=7301ba7ae8" defer></script>
-<script src="./app.js?v=427f261f4f" defer></script>
+<script src="./app.js?v=72dc9b5703" defer></script>
 
 </body>
 </html>
