@@ -488,7 +488,8 @@
     "test_failed": "公開テストに未合格です",
     "action_failed": "問題エディタの操作に失敗しました",
     "inspect_error": "証拠の取得に失敗しました",
-    "test_error": "公開テストの実行に失敗しました"
+    "test_error": "公開テストの実行に失敗しました",
+    "editor_keys": "Tab でインデント、Shift+Tab で戻す。Cmd/Ctrl+/ でコメント切り替え。Enter は前の行のインデントを引き継ぐ。Esc を押してから Tab でフォーカス移動。"
   },
   "onboarding_tutorial": {
     "panel_title": "動画から実操作へ・6つのステップ",

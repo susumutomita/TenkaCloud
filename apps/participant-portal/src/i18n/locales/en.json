@@ -488,7 +488,8 @@
     "test_failed": "Public tests have not passed yet",
     "action_failed": "Problem editor action failed",
     "inspect_error": "Failed to inspect the evidence",
-    "test_error": "Failed to run the public tests"
+    "test_error": "Failed to run the public tests",
+    "editor_keys": "Tab indents, Shift+Tab outdents, Cmd/Ctrl+/ toggles comments, Enter keeps the current indentation. Press Escape then Tab to move focus."
   },
   "onboarding_tutorial": {
     "panel_title": "Six steps from video to real action",
