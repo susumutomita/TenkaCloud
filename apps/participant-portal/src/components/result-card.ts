@@ -335,15 +335,21 @@ export function resultCardSvgDataUrl(model: ResultCardModel): string {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(renderResultCardSvg(model))}`;
 }
 
+function trimHyphens(value: string): string {
+  let start = 0;
+  let end = value.length;
+  while (start < end && value[start] === "-") start += 1;
+  while (end > start && value[end - 1] === "-") end -= 1;
+  return value.slice(start, end);
+}
+
 export function buildResultCardFilename(model: ResultCardModel): string {
-  const slug = model.teamName
+  const normalizedTeamName = model.teamName
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/gu, "")
     .toLowerCase()
-    .replace(/[^a-z0-9]+/gu, "-")
-    .replace(/^-+/u, "")
-    .replace(/-+$/u, "")
-    .slice(0, 48);
+    .replace(/[^a-z0-9]+/gu, "-");
+  const slug = trimHyphens(normalizedTeamName).slice(0, 48);
   const timestamp = model.generatedAt.replace(/[-:]/gu, "").replace(/\.\d{3}/u, "");
   return `tenkacloud-${slug || "team"}-${model.status}-${timestamp}.png`;
 }
