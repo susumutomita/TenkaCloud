@@ -22,86 +22,12 @@ COMPOSE="docker compose -p ${COMPOSE_PROJECT} -f compose.local.yaml"
 CONTROL_PLANE_CONTAINER="tenkacloud-local"
 PORTAL_PORT="${LOCAL_API_PORT:-5175}"
 
-require_docker() {
-  if ! command -v docker >/dev/null 2>&1; then
-    echo "Docker is required for 'make local' but was not found." >&2
-    echo "  Install Docker: https://docs.docker.com/get-docker/" >&2
-    echo "  Prefer the host Bun path instead? Run: make local-onboard && make local-dev" >&2
-    exit 1
-  fi
-  if ! docker compose version >/dev/null 2>&1; then
-    echo "Docker Compose v2 is required (the 'docker compose' plugin) but was not found." >&2
-    echo "  See: https://docs.docker.com/compose/install/" >&2
-    exit 1
-  fi
-  if ! docker info >/dev/null 2>&1; then
-    echo "Docker is installed but its daemon is not reachable." >&2
-    echo "  Start Docker Desktop (or the docker service), then retry." >&2
-    exit 1
-  fi
-  resolve_docker_socket
-}
+# Keep the participant launcher's Docker contract identical to `make doctor`.
+# shellcheck source=scripts/local/docker-prerequisites.sh
+. "$repo_root/scripts/local/docker-prerequisites.sh"
 
-# [#2906 review] The control-plane container talks to the daemon over a bind-
-# mounted socket, so the path mounted must be the socket the ACTIVE context
-# actually uses — not a hardcoded /var/run/docker.sock. Docker's official
-# rootless setup puts it at $XDG_RUNTIME_DIR/docker.sock (e.g.
-# /run/user/1000/docker.sock); there, every check above still passes, because the
-# CLI follows the context, but the container would receive a path that does not
-# exist and could not start a single problem container. The container side always
-# sees /var/run/docker.sock, so only the host side of the mount varies.
-#
-# A non-Unix endpoint (tcp://, ssh://) cannot work here at all: there is no
-# socket to mount, and the daemon would also resolve this repo's bind-mount paths
-# against a different machine's filesystem (the same daemon-side path problem
-# TENKACLOUD_PROBLEMS_HOST_PATH exists for). That is rejected with an actionable
-# message rather than accepted and failed later.
-resolve_docker_socket() {
-  # 明示指定が最優先。 ここで想定できていない Docker 構成の逃げ道を必ず残す (= 検出を
-  # 賢くするより、 人が上書きできるほうが確実に速い)。
-  if [ -n "${TENKACLOUD_DOCKER_SOCKET:-}" ]; then
-    export TENKACLOUD_DOCKER_SOCKET
-    return
-  fi
-  endpoint=$(docker context inspect -f '{{.Endpoints.docker.Host}}' 2>/dev/null || true)
-  [ -n "$endpoint" ] || endpoint="${DOCKER_HOST:-unix:///var/run/docker.sock}"
-  case "$endpoint" in
-    unix://*)
-      TENKACLOUD_DOCKER_SOCKET="${endpoint#unix://}"
-      ;;
-    *)
-      echo "'make local' needs a local Docker daemon reachable over a Unix socket," >&2
-      echo "  but the active Docker context uses: $endpoint" >&2
-      echo "  The control plane bind-mounts the daemon socket to start problem" >&2
-      echo "  containers, and a remote daemon would also resolve this repository's" >&2
-      echo "  paths on the wrong machine." >&2
-      echo "  Switch to a local context (e.g. docker context use default), or use" >&2
-      echo "  the host developer path instead: make local-onboard && make local-dev" >&2
-      exit 1
-      ;;
-  esac
-  # macOS では daemon は必ず VM の中にいる (Docker Desktop / Colima / Rancher Desktop の
-  # どれでも同じ)。 bind-mount の source は **daemon 側** = VM 内で解決されるため、 context が
-  # 指すホスト側の proxy socket を渡すと、 daemon は VM 内に存在しないパスを掘ろうとして
-  #   error while creating mount source path '/Users/<me>/.colima/default/docker.sock':
-  #   mkdir ...: operation not supported
-  # で起動に失敗する ($HOME は virtiofs で VM に見えているので「無い」 のではなく、 socket を
-  # bind-mount できないため)。 VM 内の正規パスへ倒す。
-  #
-  # 上のホスト側 socket 存在チェックも macOS では成立しない。 /var/run/docker.sock は VM の中
-  # にしか無く、 ホストからは見えないので `-S` は必ず false になる。 だから判定より前に返す。
-  if [ "$(uname -s)" = "Darwin" ]; then
-    TENKACLOUD_DOCKER_SOCKET=/var/run/docker.sock
-    export TENKACLOUD_DOCKER_SOCKET
-    return
-  fi
-  if [ ! -S "$TENKACLOUD_DOCKER_SOCKET" ]; then
-    echo "The active Docker context points at $TENKACLOUD_DOCKER_SOCKET," >&2
-    echo "  but no socket exists there. Start the daemon for this context, or" >&2
-    echo "  switch contexts (docker context ls) and retry." >&2
-    exit 1
-  fi
-  export TENKACLOUD_DOCKER_SOCKET
+require_docker() {
+  tenkacloud_require_docker "make local"
 }
 
 # [Finding 2, #2906 audit] `problems/` self-heal must run HOST-side: the
@@ -200,7 +126,8 @@ host_reachable() {
     # proxy fix above removes. Probe for it instead of assuming either flavour.
     wget_tries=""
     if wget --help 2>&1 | grep -q -- '--tries'; then wget_tries="--tries=1"; fi
-    # shellcheck disable=SC2086 -- $wget_tries is a single flag or empty, by construction
+    # $wget_tries is a single flag or empty, by construction.
+    # shellcheck disable=SC1007,SC2086
     http_proxy= HTTP_PROXY= https_proxy= HTTPS_PROXY= all_proxy= ALL_PROXY= \
       wget -q -T 5 $wget_tries -O - "$url" 2>/dev/null | grep -q '"mode":"local"' && return 0
     return 1
@@ -270,7 +197,15 @@ cmd_up() {
     docker_desktop_host_networking_hint
     exit 1
   fi
-  echo "TenkaCloud local play is up: http://127.0.0.1:${PORTAL_PORT}"
+  if [ "$reachable_result" -eq 2 ]; then
+    echo "The control-plane container is healthy, but host reachability was not verified" >&2
+    echo "  because neither curl nor wget is installed." >&2
+    echo "  Open http://127.0.0.1:${PORTAL_PORT} in a browser. If it does not load," >&2
+    docker_desktop_host_networking_hint
+    echo "TenkaCloud local play container is up (host reachability unverified): http://127.0.0.1:${PORTAL_PORT}"
+    return 0
+  fi
+  echo "TenkaCloud local play is up and host-reachable: http://127.0.0.1:${PORTAL_PORT}"
 }
 
 # [Finding 1, #2906 audit] Two independent reclaim paths, not one:
@@ -425,7 +360,13 @@ cmd_status() {
         docker_desktop_host_networking_hint
         exit 1
       fi
-      echo "Local play is running: http://127.0.0.1:${PORTAL_PORT}"
+      if [ "$status_reachable_result" -eq 2 ]; then
+        echo "Local play's container is healthy, but host reachability is unverified" >&2
+        echo "  because neither curl nor wget is installed." >&2
+        echo "Local play container is running (host reachability unverified): http://127.0.0.1:${PORTAL_PORT}"
+        return 0
+      fi
+      echo "Local play is running and host-reachable: http://127.0.0.1:${PORTAL_PORT}"
       return 0
       ;;
     starting)

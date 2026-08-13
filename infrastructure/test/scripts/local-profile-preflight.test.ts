@@ -10,8 +10,9 @@ import { findProfile, type LocalProfile } from "../../../scripts/local/profiles"
 /**
  * [Issue #2909] The preflight's value is in what it refuses to claim: a value it
  * could not read must stay `unknown` rather than becoming a pass, and a machine
- * below every measured configuration must be reported as untested rather than as
- * a failure. Both distinctions are asserted here.
+ * below every measured CPU/memory configuration must be reported as untested,
+ * while a measured hard disk floor remains a real failure. Both distinctions
+ * are asserted here.
  */
 
 function profile(id: string): LocalProfile {
@@ -70,12 +71,13 @@ describe("evaluateProfile — minimum (has a measured configuration)", () => {
     expect(result.items.find((item) => item.id === "docker-cpus")?.status).toBe("warn");
   });
 
-  it("should warn below the disk floor, because the image cannot materialise", () => {
+  it("should fail below the disk floor, because the image cannot materialise", () => {
     const result = evaluateProfile(MINIMUM, { ...ROOMY, freeDiskBytes: 1024 });
     const disk = result.items.find((item) => item.id === "free-disk");
 
-    expect(disk?.status).toBe("warn");
+    expect(disk?.status).toBe("fail");
     expect(disk?.nextAction).toContain("docker builder prune");
+    expect(result.status).toBe("fail");
   });
 
   it("should report unknown — never pass — when Docker's resources cannot be read", () => {
@@ -104,7 +106,8 @@ describe("evaluateProfile — profiles without their own measurement", () => {
 
     expect(memory?.status).toBe("unknown");
     expect(memory?.detail).toContain("no measurement recorded");
-    expect(memory?.nextAction).toContain("make local-measure");
+    expect(memory?.nextAction).toContain("#not-measured-yet");
+    expect(memory?.nextAction).not.toContain("make local-measure");
   });
 
   it("should still check the recommended profile's disk floor, which is measured", () => {
@@ -122,10 +125,11 @@ describe("evaluateProfile — profiles without their own measurement", () => {
 });
 
 describe("worstStatus", () => {
-  it("should rank warn above unknown above pass", () => {
-    const item = (status: "pass" | "warn" | "unknown") =>
+  it("should rank fail above warn above unknown above pass", () => {
+    const item = (status: "pass" | "warn" | "unknown" | "fail") =>
       ({ id: "docker-cpus", title: "t", status, detail: "d" }) as const;
 
+    expect(worstStatus([item("fail"), item("warn"), item("unknown")])).toBe("fail");
     expect(worstStatus([item("pass"), item("unknown"), item("warn")])).toBe("warn");
     expect(worstStatus([item("pass"), item("unknown")])).toBe("unknown");
     expect(worstStatus([item("pass")])).toBe("pass");
@@ -148,6 +152,13 @@ describe("formatPreflight", () => {
 
     expect(text).toContain("Next: ");
     expect(text).toContain("Result: WARN");
+  });
+
+  it("should render a measured hard-floor violation as FAIL", () => {
+    const text = formatPreflight(evaluateProfile(MINIMUM, { ...ROOMY, freeDiskBytes: 1 }));
+
+    expect(text).toContain("✗ Docker VM free disk");
+    expect(text).toContain("Result: FAIL");
   });
 
   it("should list what the profile has not measured yet", () => {

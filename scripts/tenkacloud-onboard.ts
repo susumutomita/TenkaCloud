@@ -1,7 +1,7 @@
 /**
- * [Issue #2119] Optional onboarding entry for local play.
+ * [Issue #2119] Optional onboarding entry for the host Bun/Vite developer path.
  *
- *   bun run scripts/tenkacloud-onboard.ts doctor      # report prerequisites only
+ *   make doctor-dev                                   # report developer prerequisites only
  *   bun run scripts/tenkacloud-onboard.ts preflight   # diagnose → consent → fix
  *
  * Flags: `--yes` pre-approves software installs (also used by automation). In a
@@ -10,10 +10,11 @@
  *
  * [Issue #2909] `--profile <minimum|recommended|full>` additionally compares the
  * resources Docker actually has against what that profile has been measured in.
- * The comparison is advisory: it never changes the exit code, because being below
- * an unmeasured size is untested, not broken. `--probe-disk` opts in to the one
- * check that is not read-only (it pulls busybox to read the Docker VM's free
- * space); without it the disk item reports `unknown` and prints the command.
+ * CPU and memory comparisons are advisory because being below an observed
+ * configuration is untested, not broken. `--probe-disk` opts in to the one check
+ * that is not read-only (it pulls busybox to read the Docker VM's free space).
+ * A measured disk shortage is a hard failure because the required image cannot
+ * materialise; an unread disk remains `unknown`.
  *
  * This file is deliberately a thin orchestrator: the detection interpretation,
  * the remediation plan, the consent policy, and the formatting are pure,
@@ -141,36 +142,37 @@ export function collectPreflightFacts(run: CommandRunner, probeDisk: boolean): P
 }
 
 /**
- * Advisory only — deliberately does not affect the exit code. A machine below
- * every measured configuration is untested, not known-broken, and failing the
- * doctor on it would block a setup that may work fine.
+ * CPU/memory warnings and unknown measurements are advisory. A disk value below
+ * the measured image floor is known-broken and therefore blocks readiness.
  */
-function reportProfile(profileId: ProfileId, probeDisk: boolean): void {
+function reportProfile(profileId: ProfileId, probeDisk: boolean): boolean {
   const profile = findProfile(profileId);
-  if (!profile) return;
+  if (!profile) return true;
+  const result = evaluateProfile(profile, collectPreflightFacts(nodeRunner, probeDisk));
   console.log("");
-  console.log(
-    formatPreflight(evaluateProfile(profile, collectPreflightFacts(nodeRunner, probeDisk))),
-  );
+  console.log(formatPreflight(result));
   if (!probeDisk) {
     console.log("  (Pass --probe-disk to also measure Docker VM free space; it pulls busybox.)");
   }
   console.log("  Profile definitions: docs/local-play-requirements.md");
+  return result.status !== "fail";
 }
 
 function doctor(profileId: ProfileId | undefined, probeDisk: boolean): number {
   const result = diagnose(diagnoseInput());
   console.log(formatDiagnosis(result));
-  if (profileId) reportProfile(profileId, probeDisk);
-  if (isReady(result)) {
-    // `make local` (not `bun run tenkacloud local`): only the make target
-    // self-installs workspace dependencies, which this diagnosis does not cover.
-    console.log("\nAll prerequisites are satisfied — run `make local`.");
+  const profileReady = profileId ? reportProfile(profileId, probeDisk) : true;
+  if (isReady(result) && profileReady) {
+    console.log("\nAll developer prerequisites are satisfied — run `make local-dev`.");
     return 0;
+  }
+  if (isReady(result)) {
+    console.log("\nA measured hard requirement needs action before `make local-dev`.");
+    return 1;
   }
   console.log(
     "\nSome prerequisites need action. Run `tenkacloud onboard` (it will offer to set them up), " +
-      "or fix them manually with the commands from `tenkacloud doctor`.",
+      "or fix them manually with the commands from `make doctor-dev`.",
   );
   return 1;
 }
@@ -233,7 +235,7 @@ async function preflight(autoYes: boolean): Promise<number> {
 
   const after = diagnose(diagnoseInput());
   if (isReady(after)) {
-    console.log("\n✓ All prerequisites satisfied. Next: run `make local`.");
+    console.log("\n✓ All developer prerequisites satisfied. Next: run `make local-dev`.");
     return 0;
   }
   const remaining = planRemediation(after, { platform });

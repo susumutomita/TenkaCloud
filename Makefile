@@ -381,26 +381,28 @@ dev: ## Start all three SPA dev servers without AWS | 3つのSPA dev serverをAW
 	bun run --filter '@TenkaCloud/admin-console' --filter '@TenkaCloud/application-admin-console' --filter '@TenkaCloud/participant-portal' --parallel dev
 
 # ===== Local play (Docker, no AWS) | ローカル演習（Docker、AWS不要） =====
-.PHONY: doctor ensure-deps local-onboard local local-down local-status local-dev local-up \
+.PHONY: doctor doctor-dev ensure-deps local-onboard local local-down local-status local-dev local-up \
         local-portal local-list local-evaluate local-reset local-snapshot-export \
         local-snapshot-import local-disrupt local-smoke local-measure
 
 # Issue #2054: AWS 非依存の CTF コンテナ。 問題コンテナが `/verify` と採点条件を持ち、TenkaCloud は
 # 採点 (participant API / portal / leaderboard / hint) だけを担う。
-#   TENKACLOUD_COMPOSE_CLI='docker-compose'  standalone compose を明示
-
-# Issue #2119: report-only prerequisite diagnosis (mise trust / submodule / bun / Docker Compose /
-# daemon). Installs nothing. Issue #2909: `PROFILE=recommended` additionally compares the resources
-# Docker actually has against that profile's measured configuration. `PROBE_DISK=1` opts in to the
-# one non-read-only check (it pulls busybox to read the Docker VM's free space, which the host's own
-# `df` cannot see on macOS).
+# Participant diagnosis intentionally has the same Docker-only host contract as `make local`.
+# Issue #2909: `PROFILE=recommended` additionally compares Docker resources with the published
+# measurements. `PROBE_DISK=1` opts in to the one non-read-only check (it pulls busybox to read the
+# Docker VM's free space, which the host's own `df` cannot see on macOS).
 DOCTOR_FLAGS := $(if $(PROFILE),--profile $(PROFILE),)$(if $(PROBE_DISK), --probe-disk,)
-doctor:
+doctor: ## Diagnose Docker-only participant prerequisites | Dockerのみの参加者向け前提条件を診断
+	@sh scripts/local/doctor.sh $(DOCTOR_FLAGS)
+
+# Issue #2119: the original mise/submodule/Bun/Docker report belongs to the host Bun/Vite developer
+# path. Keep it available without making Bun a participant prerequisite.
+doctor-dev: ## Diagnose Bun/Vite developer prerequisites | Bun/Vite開発者向け前提条件を診断
 	@command -v bun >/dev/null 2>&1 || { \
-	  echo "Bun is required for diagnostics."; \
+	  echo "Bun is required for developer diagnostics."; \
 	  echo "  Install (macOS / Linux): bash scripts/onboard/install-bun.sh"; \
 	  exit 1; }
-	@bun run tenkacloud doctor $(DOCTOR_FLAGS)
+	@bun run scripts/tenkacloud-onboard.ts doctor $(DOCTOR_FLAGS)
 
 # Issue #2119: optional guided setup for the DEVELOPER Bun/Vite path (`make local-dev`). The
 # participant path (`make local`) is Docker-only and needs none of this.

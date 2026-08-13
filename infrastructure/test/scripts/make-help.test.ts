@@ -8,7 +8,6 @@ const REPO_ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const MAKE_BINARY = "/usr/bin/make";
 const REMOVED_TARGETS = ["help-en", "help-ja", "format", "dup-report", "ever-better-diagnose"];
 const HIDDEN_LOCAL_TARGETS = [
-  "doctor",
   "local-onboard",
   "local-up",
   "local-portal",
@@ -102,6 +101,10 @@ describe("root Makefile help", () => {
     expect(englishDescriptions.get("local")).toBe(
       "Start the local drill API and portal via Docker (participant path)",
     );
+    expect(englishDescriptions.get("doctor")).toBe(
+      "Diagnose Docker-only participant prerequisites",
+    );
+    expect(englishDescriptions.get("doctor-dev")).toBe("Diagnose Bun/Vite developer prerequisites");
     expect(englishDescriptions.get("local-down")).toBe(
       "Stop local play and clear all persisted progress",
     );
@@ -117,6 +120,8 @@ describe("root Makefile help", () => {
     expect(japaneseDescriptions.get("install")).toBe("開発依存関係を安全設定でインストール");
     expect(japaneseDescriptions.get("turso-live")).toBe("Turso/AWSの初回live検証wizardを開始");
     expect(japaneseDescriptions.get("local")).toBe("Docker でローカル問題演習を起動(参加者向け)");
+    expect(japaneseDescriptions.get("doctor")).toBe("Dockerのみの参加者向け前提条件を診断");
+    expect(japaneseDescriptions.get("doctor-dev")).toBe("Bun/Vite開発者向け前提条件を診断");
     expect(japaneseDescriptions.get("local-dev")).toBe(
       "ホストで Bun/Vite により起動(開発者向け・ホットリロード)",
     );

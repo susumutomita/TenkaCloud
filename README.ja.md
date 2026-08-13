@@ -52,7 +52,7 @@ TenkaCloud は、ハンズオン形式の AWS 競技会を運営するための�
 
 ## ビジョン
 
-TenkaCloud は競技プラットフォームだけを目指しているわけではありません。プロダクトの方向性は、個人が安全に練習できる段階から、チームで競い合う段階へと進む一本道です。**ローカルドリル → 実践的なコース / エンタープライズ研修 → チーム対抗の競技 / GameDay → グローバルコミュニティ**。ローカルドリル(`tenkacloud local`)は今日すでに動いています。コース、パッケージ化されたエンタープライズ研修、グローバルコミュニティは今後目指している方向であり、まだ実装済みの機能ではありません。
+TenkaCloud は競技プラットフォームだけを目指しているわけではありません。プロダクトの方向性は、個人が安全に練習できる段階から、チームで競い合う段階へと進む一本道です。**ローカルドリル → 実践的なコース / エンタープライズ研修 → チーム対抗の競技 / GameDay → グローバルコミュニティ**。ローカルドリル(`make local`)は今日すでに動いています。コース、パッケージ化されたエンタープライズ研修、グローバルコミュニティは今後目指している方向であり、まだ実装済みの機能ではありません。
 
 ## TenkaCloud が提供するもの
 
@@ -97,7 +97,7 @@ Codespaces でプレイできるのは **クラウド非依存のドリルのみ
 
 `make local` が参加者向けの主入口です。ローカル採点 API と Participant Portal を Docker コンテナ内で起動し、開いた画面からドリルを選べます。進捗は Docker が管理する volume に保存され、DynamoDB と AWS SDK には依存しません。
 
-**前提条件は Git・Make・Docker Engine・Docker Compose v2 のみです。Bun・Node・`node_modules` はホストに不要です。** CPU・メモリ・Docker への割り当て・空きディスクの目安は[動作要件プロファイル](./docs/local-play-requirements.md)を参照してください。
+**前提条件は Git・Make・Docker Engine・Docker Compose v2 のみです。Bun・Node・`node_modules` はホストに不要です。** `make doctor` は、この参加者向け Docker-only 経路の起動前要件を Bun なしで診断し、何もインストールしません。実コンテナ起動後、`curl` または `wget` があれば `make local` が Portal のホスト到達性を検証します。どちらもなければ起動自体は成功しますが、到達性を未検証と明示し、表示した URL を開いて確認するよう案内します。`PROFILE=recommended` を付けると、Docker の CPU・メモリ・任意のディスク割り当てを公開済みの[動作要件プロファイル](./docs/local-play-requirements.md)と比較できます。
 
 ```bash
 git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
@@ -105,9 +105,9 @@ cd TenkaCloud
 make local
 ```
 
-`make local` は Docker のインストールと起動状態を確認し、`problems/` submodule が未取得なら取得し、local-play コンテナを build・起動して、準備ができたら Portal の URL を表示します。`make local-down` で停止して進捗を消去、`make local-status` で起動状況を確認できます。
+`make local` は Docker のインストールと起動状態を確認し、`problems/` submodule が未取得なら取得を提案し、local-play コンテナを build・起動して、準備ができたら Portal の URL を表示します。`make local-down` で停止して進捗を消去、`make local-status` で起動状況を確認できます。
 
-> **Docker Desktop (macOS/Windows) を使う場合:** local-play コンテナは host networking で動作します。Docker Desktop では初回だけ **設定 → Resources → Network → Enable host networking**(Desktop 4.34 以降)を有効化してください。有効化されないままコンテナが起動した場合、`make local` はこの手順そのものを表示して失敗します。ネイティブの Linux Docker Engine と Codespaces ではこの設定は不要です。
+> **Docker Desktop (macOS/Windows) を使う場合:** local-play コンテナは host networking で動作します。Docker Desktop では初回だけ **設定 → Resources → Network → Enable host networking**(Desktop 4.34 以降)を有効化してください。`curl` または `wget` があれば、コンテナが正常でもホストから到達できない場合に `make local` はこの手順そのものを表示して失敗します。どちらの検証コマンドもなければ到達性を未検証と報告して成功するため、表示した URL を開いて手動確認してください。ネイティブの Linux Docker Engine と Codespaces ではこの設定は不要です。
 
 <details>
 <summary>開発者向け: Bun / Vite のホットリロード経路</summary>
@@ -121,7 +121,7 @@ make local-onboard
 make local-dev
 ```
 
-`make local-onboard` は、必要なものをインストールする前に必ず同意を求めます — Bun 本体(未インストールの場合)、`problems/` submodule、Docker の診断 — その上で準備状況を報告します。同意なしに何かをインストールすることはありません。無人実行では `make local-onboard YES=1` ですべてのインストールを事前承認できます。
+`make doctor-dev` は、この開発者向け経路の report-only 診断です。Bun を必要とし、mise の trust、`problems/` submodule、Bun、Docker Compose、Docker daemon を確認します。`make local-onboard` は、開発者向け前提条件の修復を提案し、インストール前に必ず同意を求めます。無人実行では `make local-onboard YES=1` ですべてのインストールを事前承認できます。
 
 さらに低レベルには `make install && git submodule update --init problems && bun link && tenkacloud local`(`bun link` を行わない場合は `bun run tenkacloud local`)でも実行できます。ドリル一覧は `tenkacloud local list`、1 つを事前起動する場合は `tenkacloud local --problem <id>` です。リモート保存を使う場合だけ `--database turso` と `TENKACLOUD_LOCAL_TURSO_URL` / `TENKACLOUD_LOCAL_TURSO_AUTH_TOKEN` を明示します。デフォルトは常に SQLite です。
 
@@ -165,11 +165,11 @@ Output は stack に保存された parameter の区分を示し続けます。
 
 ## 対応環境
 
-- **macOS・Linux・WSL2** — ローカルプレイ(`make local` / `tenkacloud local`)と AWS デプロイ(`make deploy` の Lite mode、`make deploy-saas` の SaaS mode)の両方に対応する。
+- **macOS・Linux・WSL2** — 参加者向け Docker-only ローカルプレイ(`make local`)、開発者向け Bun / Vite ローカルプレイ(`make local-dev` / `tenkacloud local`)、AWS デプロイ(`make deploy` の Lite mode、`make deploy-saas` の SaaS mode)に対応する。
 - **WSL2 を使わないネイティブ Windows** — ローカルプレイは非対応。上記の GitHub Codespaces を使うか、先に WSL2 を導入する。
 - **ブラウザのみでローカルインストール不要な場合** — 上記の GitHub Codespaces を使う。
 
-**必要なマシンスペック**は同時に起動する問題数で変わるため、`minimum` / `recommended` / `full` の 3 プロファイルとして実測値付きで公開しています。[docs/local-play-requirements.md](./docs/local-play-requirements.md) を参照してください。手元のマシンがどのプロファイルを満たすかは `make doctor PROFILE=recommended` で確認できます。
+**必要なマシンスペック**は同時に起動する問題数で変わるため、`minimum` / `recommended` / `full` の 3 プロファイルとして実測値付きで公開しています。[docs/local-play-requirements.md](./docs/local-play-requirements.md) を参照してください。手元のマシンとの比較には、Bun 不要の参加者向け診断 `make doctor PROFILE=recommended` を使います。
 
 ## 運用コスト
 

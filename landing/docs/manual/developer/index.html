@@ -77,11 +77,12 @@
 <h2>リポジトリを準備する</h2>
 <pre><code class="language-bash">bun install
 git submodule update --init problems
-make doctor
+make doctor-dev
 </code></pre>
-<p><code>make doctor</code>は不足しているローカル要件を表示しますが、自動インストールや設定変更
-は行いません。<a href="/docs/getting-started/">Getting started</a>から必要な実行経路
-だけを選びます。</p>
+<p><code>make doctor-dev</code>は不足している Bun / mise の開発者向け要件を表示しますが、
+自動インストールや設定変更は行いません。別の<code>make doctor</code>は Bun 不要の参加者向け
+Docker 経路を診断します。<a href="/docs/getting-started/">Getting started</a>から
+必要な実行経路だけを選びます。</p>
 <h2>変更前に担当場所を見つける</h2>
 <table>
 <thead>

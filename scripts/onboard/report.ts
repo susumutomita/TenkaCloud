@@ -19,9 +19,11 @@ export function formatCheckLine(check: CheckResult): string {
   return `  ${STATUS_ICON[check.status]} ${check.title} — ${check.detail}`;
 }
 
-/** The full doctor report (status of every prerequisite). */
+/** The full developer doctor report (status of every host Bun/Vite prerequisite). */
 export function formatDiagnosis(diagnosis: Diagnosis): string {
-  return ["TenkaCloud local prerequisites:", ...diagnosis.checks.map(formatCheckLine)].join("\n");
+  return ["TenkaCloud developer prerequisites:", ...diagnosis.checks.map(formatCheckLine)].join(
+    "\n",
+  );
 }
 
 /** A single remediation step rendered for the user (why + commands + notes). */

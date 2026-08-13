@@ -2,7 +2,8 @@
  * [Issue #2909] Profile-aware resource preflight: compare what Docker actually
  * has against what a profile has been measured in, and say what to do next.
  *
- * Three verdicts, and the difference between the last two is the whole point:
+ * Four verdicts, and the distinction between measured configuration and a
+ * measured hard floor is the whole point:
  *
  *  - `pass`    — the value was read and is at or above a configuration this
  *                profile was observed running in.
@@ -12,14 +13,18 @@
  *  - `unknown` — the value could not be read, or the profile has no measurement
  *                to compare against. Never silently upgraded to `pass`: a host
  *                whose Docker allocation cannot be queried has not been checked.
+ *  - `fail`    — a measured hard requirement is known not to be met. Today this
+ *                is only Docker VM disk space below the required image size.
  *
- * Every non-`pass` item carries exactly one concrete next command.
+ * Every non-`pass` item carries one honest next step. When no threshold exists,
+ * the next step points at that published limitation instead of inventing a
+ * benchmark command that cannot run for the planned profile.
  */
 
 import { formatBytes } from "./docker-metrics";
 import type { LocalProfile } from "./profiles";
 
-export type PreflightStatus = "pass" | "warn" | "unknown";
+export type PreflightStatus = "pass" | "warn" | "unknown" | "fail";
 
 export type PreflightItemId = "docker-cpus" | "docker-memory" | "free-disk";
 
@@ -41,18 +46,18 @@ export interface PreflightFacts {
 export interface PreflightResult {
   readonly profile: LocalProfile;
   readonly items: readonly PreflightItem[];
-  /** The worst item status: `warn` > `unknown` > `pass`. */
+  /** The worst item status: `fail` > `warn` > `unknown` > `pass`. */
   readonly status: PreflightStatus;
 }
 
 const NO_MEASUREMENT_ACTION =
-  "Measure it on this machine and contribute the record: `make local-measure PROFILE=<id>`";
+  "Read `docs/local-play-requirements.md#not-measured-yet`; no pass/fail threshold is published for this profile";
 
 const DOCKER_ALLOCATION_ACTION =
   "Raise the Docker allocation (Docker Desktop: Settings → Resources; colima: `colima stop && colima start --cpu <n> --memory <GiB>`)";
 
 const DOCKER_UNREADABLE_ACTION =
-  "Start the Docker daemon, then re-run `tenkacloud doctor` (`make doctor`)";
+  "Start the Docker daemon, then re-run `tenkacloud doctor` (`make doctor-dev`)";
 
 const DISK_ACTION =
   "Free space on the Docker VM disk: `docker builder prune -af && docker image prune -af`";
@@ -147,14 +152,15 @@ function diskItem(profile: LocalProfile, facts: PreflightFacts): PreflightItem {
   if (facts.freeDiskBytes >= floor.bytes) return { ...base, status: "pass", detail };
   return {
     ...base,
-    status: "warn",
+    status: "fail",
     detail: `${detail} — below the floor, so the image cannot finish materialising`,
     nextAction: DISK_ACTION,
   };
 }
 
-/** `warn` beats `unknown` beats `pass`. */
+/** `fail` beats `warn` beats `unknown` beats `pass`. */
 export function worstStatus(items: readonly PreflightItem[]): PreflightStatus {
+  if (items.some((item) => item.status === "fail")) return "fail";
   if (items.some((item) => item.status === "warn")) return "warn";
   if (items.some((item) => item.status === "unknown")) return "unknown";
   return "pass";
@@ -165,12 +171,18 @@ export function evaluateProfile(profile: LocalProfile, facts: PreflightFacts): P
   return { profile, items, status: worstStatus(items) };
 }
 
-const STATUS_ICON: Record<PreflightStatus, string> = { pass: "✓", warn: "!", unknown: "?" };
+const STATUS_ICON: Record<PreflightStatus, string> = {
+  pass: "✓",
+  warn: "!",
+  unknown: "?",
+  fail: "✗",
+};
 
 const STATUS_SUMMARY: Record<PreflightStatus, string> = {
   pass: "PASS — this machine is at or above every configuration this profile was measured in.",
   warn: "WARN — this machine is below every measured configuration. Untested, not known to fail.",
   unknown: "UNKNOWN — at least one value could not be read or has never been measured.",
+  fail: "FAIL — Docker VM free disk is below a measured hard floor.",
 };
 
 /** The profile preflight block appended to the doctor report. */

@@ -71,7 +71,7 @@ make local
 
 `make local` needs only Git, Make, Docker Engine, and Docker Compose v2 on the
 host — no Bun, Node, or `node_modules`. It checks Docker is installed and running,
-fetches the `problems/` catalog submodule if it's missing, then builds/starts
+offers to fetch the `problems/` catalog submodule if it's missing, then builds/starts
 the local-play container and prints the Portal URL once it answers.
 `make local-down` stops it and clears progress; `make local-status` reports
 whether it's running. GitHub Codespaces performs the equivalent setup and
@@ -79,13 +79,27 @@ starts the Portal automatically (Docker-in-Docker is already provisioned
 there); run the **▷ ローカルプレイ開始** task only as a fallback when
 automatic startup reports a failure.
 
+`make doctor` is the report-only diagnosis for that same participant path. It
+runs without Bun, checks the pre-start prerequisites that `make local` relies on,
+and installs nothing. It does not start a probe container, so it reports Portal
+host reachability as deferred. After startup, `make local` probes the real
+control plane with `curl` or `wget` when either is available. If neither is
+installed, startup succeeds but explicitly reports host reachability as
+unverified and asks the participant to open the printed URL. Use
+`make doctor PROFILE=recommended` to append the Docker resource comparison
+described in
+[local-play-requirements.md](./local-play-requirements.md).
+
 On Docker Desktop (macOS/Windows) the container runs with host networking
 (`network_mode: host` in `compose.local.yaml`), which Desktop
 requires enabling once under **Settings → Resources → Network → Enable host
-networking** (Desktop >=4.34). `make local`/`make local-status` detect a
-container that came up healthy but is unreachable from the host and fail
-loud with this exact instruction, rather than reporting a false success —
-native Linux Docker Engine and Codespaces need no such setting.
+networking** (Desktop >=4.34). When `curl` or `wget` is available,
+`make local`/`make local-status` detect a container that came up healthy but is
+unreachable from the host and fail loud with this exact instruction. If neither
+probe tool is installed, they explicitly report reachability as unverified and
+return success instead of claiming the Portal was reached; open the printed URL
+to confirm it manually. Native Linux Docker Engine and Codespaces need no such
+setting.
 
 Reach the Portal at `localhost`, `127.0.0.1`, or `[::1]` on the port it is
 serving, set by `LOCAL_API_PORT` and defaulting to 5175, or through
@@ -103,6 +117,10 @@ stack directly on the host instead:
 make local-onboard   # diagnoses/installs Bun, the submodule, and Docker, with consent
 make local-dev       # host Bun + Vite, same local-play engine as the container
 ```
+
+`make doctor-dev` is the non-installing diagnosis for this developer path. It
+requires Bun and reports mise trust, the catalog submodule, Bun, Docker Compose,
+and daemon readiness; `make local-onboard` is the consent-based repair flow.
 
 The developer CLI exposes advanced launch options once `make local-onboard`
 has run:
@@ -180,22 +198,18 @@ socket or policy cannot be established, workload capability discovery fails
 closed before deployment resources are created. This socket-enabled boundary is
 for single-user local play only, not a hosted or shared deployment mode.
 
-On a bare clone, `tenkacloud local` is a single, self-healing entry point: it
-installs missing workspace dependencies (`ensure-deps`, only when `vite` is
-absent — a no-op on a warm tree) and initializes an empty `problems/`
-submodule (`git submodule update --init problems`) automatically before it
-starts, so a fresh checkout can run `tenkacloud local` straight away with no
-separate `make install` or `git submodule update --init` step (#2525, #2533).
-`tenkacloud local portal` self-heals the same way. The `make local-*` targets
-remain thin compatibility wrappers around these CLI commands.
+On a bare clone, `make local` is the participant entry point. Its POSIX-shell
+launcher needs no host JavaScript runtime: it checks Docker, offers to initialize
+an empty `problems/` submodule, and runs the API and Portal inside the
+local-control-plane container. `make local-down` and `make local-status` use the
+same Docker launcher.
 
-Prefer a guided walkthrough instead? `tenkacloud doctor` reports on prerequisites
-(mise trust / the `problems/` submodule / Bun / Docker Compose / the Docker
-daemon) without installing anything; `tenkacloud onboard` runs the same
-checks interactively and offers to fix what it finds (trusting mise,
-installing Bun, initializing the submodule, Docker Compose help) — add
-`YES=1` to pre-approve every install for unattended use. Both wrap
-`scripts/tenkacloud-onboard.ts`.
+`tenkacloud local` is instead the lower-level Bun developer CLI behind
+`make local-dev` and advanced helpers such as `make local-list`; it requires the
+workspace dependencies installed by the developer setup. Use `make doctor` for
+the Docker-only participant prerequisites. Use `make doctor-dev` for the
+report-only Bun/mise developer diagnosis, or `make local-onboard` for its
+consent-based repair flow.
 
 How much machine local play needs is published as three run profiles
 (`minimum` / `recommended` / `full`) with the measurements behind them, in
