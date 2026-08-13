@@ -341,7 +341,8 @@ export function buildResultCardFilename(model: ResultCardModel): string {
     .replace(/[\u0300-\u036f]/gu, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/gu, "-")
-    .replace(/^-+|-+$/gu, "")
+    .replace(/^-+/u, "")
+    .replace(/-+$/u, "")
     .slice(0, 48);
   const timestamp = model.generatedAt.replace(/[-:]/gu, "").replace(/\.\d{3}/u, "");
   return `tenkacloud-${slug || "team"}-${model.status}-${timestamp}.png`;
