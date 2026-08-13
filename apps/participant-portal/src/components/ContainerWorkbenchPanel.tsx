@@ -6,7 +6,6 @@ import FormField from "@cloudscape-design/components/form-field";
 import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Spinner from "@cloudscape-design/components/spinner";
-import Textarea from "@cloudscape-design/components/textarea";
 import { useEffect, useMemo, useState } from "react";
 import type { MultiFlagEntryView } from "../api/portal-client";
 import {
@@ -19,6 +18,7 @@ import {
   type WorkbenchFiles,
 } from "../api/portal-client";
 import { useT } from "../i18n";
+import { CodeTextarea } from "./CodeTextarea";
 import { MultiFlagSubmissionPanel } from "./MultiFlagSubmissionPanel";
 import { formatProblemPanelActionError } from "./ProblemPanel.helpers";
 
@@ -241,12 +241,14 @@ export function ContainerWorkbenchPanel({
       >
         <SpaceBetween size="m">
           {load.value.config.submittedFiles.map((file) => (
-            <FormField key={file} label={<code>{file}</code>}>
-              <Textarea
+            <FormField
+              key={file}
+              label={<code>{file}</code>}
+              description={t("workbench.editor_keys")}
+            >
+              <CodeTextarea
                 value={files[file] as string}
-                onChange={(event) =>
-                  setFiles((current) => ({ ...current, [file]: event.detail.value }))
-                }
+                onChange={(value) => setFiles((current) => ({ ...current, [file]: value }))}
                 rows={16}
                 disabled={testing}
               />
