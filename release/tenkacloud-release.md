@@ -57,5 +57,5 @@ No Golden Path run is attached. Three consecutive runs bound to this exact BOM m
 - No fresh-environment Golden Path run is attached, so this release is not certified for third-party production use.
 - No deployment mode or AWS region is certified by this manifest.
 - The platform commit of this release is derived from its v1.4.0 tag at publish time (#3024); the manifest lives inside that tree and cannot record it.
-- The Lite launcher default RepoRef/ProblemsRepoRef pair is still hand-maintained in lite-pipeline.yaml and points at the previously released pair; generated launcher bindings arrive with #3024 PR 2.
+- The Lite launcher default RepoRef/ProblemsRepoRef pair is generated from release/launcher-defaults.json but still points at the previously released identity; it advances to this release's pair only after the published Release is verified (#3024 PR 5).
 - The Lite launcher uses Node.js 22 because its managed CodeBuild image does not provide Node.js 24; repository development requires Node.js 24.
