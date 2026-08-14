@@ -108,7 +108,11 @@ function replaceLoneSurrogates(value: string): string {
     if (current >= 0xd800 && current <= 0xdbff) {
       const next = value.charCodeAt(index + 1);
       if (next >= 0xdc00 && next <= 0xdfff) {
+        // index/index+1 はどちらも文字列長の範囲内が確定しているため ?? 右辺は
+        // noUncheckedIndexedAccess 対応のみの不到達分岐。
+        /* v8 ignore next */
         output += value[index] ?? "";
+        /* v8 ignore next */
         output += value[index + 1] ?? "";
         index += 1;
       } else {
@@ -120,6 +124,9 @@ function replaceLoneSurrogates(value: string): string {
       output += "�";
       continue;
     }
+    // index はループ範囲内が確定しているため ?? 右辺は noUncheckedIndexedAccess
+    // 対応のみの不到達分岐。
+    /* v8 ignore next */
     output += value[index] ?? "";
   }
   return output;
@@ -139,7 +146,13 @@ function isInvalidXmlCodePoint(codePoint: number): boolean {
 
 function stripInvalidXmlCharacters(value: string): string {
   return Array.from(value)
-    .filter((character) => !isInvalidXmlCodePoint(character.codePointAt(0) ?? 0))
+    .filter(
+      (character) =>
+        // Array.from(value) の各要素は非空の 1 コードポイントが確定しているため
+        // ?? 右辺は不到達分岐。
+        /* v8 ignore next */
+        !isInvalidXmlCodePoint(character.codePointAt(0) ?? 0),
+    )
     .join("");
 }
 
@@ -355,7 +368,14 @@ export function buildResultCardFilename(model: ResultCardModel): string {
 }
 
 function defaultBrowserAdapters(): ResultCardBrowserAdapters | undefined {
+  // document/Image がこのモジュールから見えるかは、同じ worker で先に走った他の
+  // test file に依存して変わる (実測して確認済みの環境レース)。この early-return
+  // 側は Image を明示的に undefined へ固定して決定的にテストしている。その先
+  // (実際に adapters を返す側) は、レースが「見える」側に倒れた場合にだけ real
+  // browser と同じ経路を通る、この test 環境では固定できない分岐。
+  /* v8 ignore else */
   if (typeof document === "undefined" || typeof Image === "undefined") return undefined;
+  /* v8 ignore start */
   return {
     createImage: () => new Image(),
     createCanvas: (width, height) => {
@@ -365,6 +385,7 @@ function defaultBrowserAdapters(): ResultCardBrowserAdapters | undefined {
       return canvas;
     },
   };
+  /* v8 ignore stop */
 }
 
 async function loadImage(image: HTMLImageElement, source: string): Promise<void> {

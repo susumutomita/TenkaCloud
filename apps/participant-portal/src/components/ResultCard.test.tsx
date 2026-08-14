@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { LeaderboardResponse } from "../api/portal-client";
 import { ResultCard, type ResultCardRuntime } from "./ResultCard";
@@ -56,6 +56,18 @@ describe("ResultCard", () => {
     expect(screen.getByRole("img")).toHaveAttribute("width", "1200");
     expect(screen.getByRole("button", { name: "result_card.share_button" })).toBeDefined();
     expect(screen.getByRole("button", { name: "result_card.download_button" })).toBeDefined();
+  });
+
+  it("shows the live note before the event has ended", () => {
+    render(
+      <ResultCard
+        leaderboard={leaderboard()}
+        eventTitle="TenkaCloud Battle"
+        runtime={runtime({ now: () => "2026-08-12T11:00:00.000Z" })}
+      />,
+    );
+    expect(screen.getByText("result_card.live_note")).toBeDefined();
+    expect(screen.queryByText("result_card.final_note")).toBeNull();
   });
 
   it("fails closed when scores are frozen or the current team is missing", () => {
@@ -202,5 +214,104 @@ describe("ResultCard", () => {
       value: new Blob(["png"], { type: "image/png" }),
     });
     await waitFor(() => expect(testRuntime.download).toHaveBeenCalledTimes(1));
+  });
+
+  it("guards re-entrancy at the handler level, before the disabled button can take effect", async () => {
+    // The two `fireEvent.click`s above are prevented by React committing `disabled`
+    // between them — the DOM never dispatches a second click. Batching both dispatches
+    // inside one `act()` defers that commit, so both synchronously reach the handler
+    // and the in-flight ref guard itself (not just the UI) is what stops the second one.
+    let resolveRender:
+      | ((value: Awaited<ReturnType<ResultCardRuntime["renderPng"]>>) => void)
+      | undefined;
+    const renderPng = vi.fn(
+      () =>
+        new Promise<Awaited<ReturnType<ResultCardRuntime["renderPng"]>>>((resolve) => {
+          resolveRender = resolve;
+        }),
+    );
+    const testRuntime = runtime({ renderPng });
+    render(
+      <ResultCard
+        leaderboard={leaderboard()}
+        eventTitle="TenkaCloud Battle"
+        runtime={testRuntime}
+      />,
+    );
+
+    const button = screen.getByRole("button", { name: "result_card.download_button" });
+    act(() => {
+      fireEvent.click(button);
+      fireEvent.click(button);
+    });
+    expect(renderPng).toHaveBeenCalledTimes(1);
+
+    resolveRender?.({
+      ok: true,
+      value: new Blob(["png"], { type: "image/png" }),
+    });
+    await waitFor(() => expect(testRuntime.download).toHaveBeenCalledTimes(1));
+  });
+
+  it("treats a plain cancellation-shaped object the same as a real AbortError", async () => {
+    const testRuntime = runtime({
+      share: vi.fn(async () => {
+        // Some environments reject with a plain object rather than a real DOMException;
+        // the quiet-cancellation check must recognize both shapes.
+        throw { name: "AbortError" };
+      }),
+    });
+    render(
+      <ResultCard leaderboard={leaderboard()} eventTitle="TenkaCloud Battle" runtime={testRuntime} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "result_card.share_button" }));
+    await waitFor(() => expect(testRuntime.share).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText("result_card.error_header")).toBeNull();
+    expect(screen.queryByText("result_card.share_success")).toBeNull();
+  });
+
+  it("shows an error and never calls share when rasterization fails before sharing", async () => {
+    const renderPng = vi.fn(async () => ({
+      ok: false as const,
+      error: new ResultCardError("canvas-context-unavailable", "failed"),
+    }));
+    const testRuntime = runtime({ renderPng });
+    render(
+      <ResultCard leaderboard={leaderboard()} eventTitle="TenkaCloud Battle" runtime={testRuntime} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "result_card.share_button" }));
+    await waitFor(() => expect(screen.getByText("result_card.error_header")).toBeDefined());
+    expect(testRuntime.share).not.toHaveBeenCalled();
+  });
+
+  it("shows an error when the download action itself throws", async () => {
+    const testRuntime = runtime({
+      download: vi.fn(() => {
+        throw new Error("disk full");
+      }),
+    });
+    render(
+      <ResultCard leaderboard={leaderboard()} eventTitle="TenkaCloud Battle" runtime={testRuntime} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "result_card.download_button" }));
+    await waitFor(() => expect(screen.getByText("result_card.error_header")).toBeDefined());
+  });
+
+  it("shows an error for a genuine (non-cancellation) share failure", async () => {
+    const testRuntime = runtime({
+      share: vi.fn(async () => {
+        throw new Error("network unreachable");
+      }),
+    });
+    render(
+      <ResultCard leaderboard={leaderboard()} eventTitle="TenkaCloud Battle" runtime={testRuntime} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "result_card.share_button" }));
+    await waitFor(() => expect(screen.getByText("result_card.error_header")).toBeDefined());
+    expect(screen.queryByText("result_card.share_success")).toBeNull();
   });
 });
