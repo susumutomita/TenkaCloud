@@ -18,12 +18,14 @@ passes the relevant repository checks.
 ```bash
 bun install
 git submodule update --init problems
-make doctor
+make doctor-dev
 ```
 
-`make doctor` reports missing local prerequisites without installing or
-changing them. Use [Getting started](/developers/docs/getting-started/) only for
-the runtime path you need.
+`make doctor-dev` reports missing Bun/mise developer prerequisites without
+installing or changing them. The separate `make doctor` target checks the
+Bun-free Docker participant path. Use
+[Getting started](/developers/docs/getting-started/) only for the runtime path
+you need.
 
 ## Find the owner before editing
 

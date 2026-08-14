@@ -86,7 +86,7 @@
 <tbody><tr>
 <td>1</td>
 <td>ローカルドリル</td>
-<td>Docker + Bun、<strong>AWS アカウント不要</strong></td>
+<td>Git + Make + Docker、<strong>Bun・AWS アカウント不要</strong></td>
 <td>コンテナ型のドリル問題をローカルで即時採点</td>
 <td>約 5 分</td>
 </tr>
@@ -125,26 +125,29 @@
 <h2>1. ローカルドリル — Docker、AWS 不要</h2>
 <p>クラウドに依存しないドリル問題は、ローカル採点 API を備えた自己完結型の
 Docker コンテナとして動作します。AWS には一切触れず、費用もかかりません。</p>
-<p><strong>前提条件:</strong> <a href="https://bun.sh">Bun</a> 1.3.11 と、起動中の Docker デーモン
-（Docker Desktop、macOS では colima も可）。<code>make doctor</code> は何もインストール
-せずにセットアップ状況を診断します。ガイド付きインストーラーを使いたい場合は
-<code>make local-onboard</code> を実行してください。CPU・メモリ・Docker への割り当て・
-空きディスクは 3 つの実行プロファイルとして実測値付きで
+<p><strong>前提条件:</strong> Git・Make・Docker Engine・Docker Compose v2 のみです。ホストに
+Bun・Node・<code>node_modules</code> は不要です。<code>make doctor</code> は何もインストールせず、
+この参加者向け Docker-only 経路の起動前要件を診断します。実コンテナ起動後、<code>curl</code>
+または <code>wget</code> があれば <code>make local</code> が Portal のホスト到達性を検証します。どちらも
+なければ起動自体は成功しますが、到達性を未検証と明示し、表示した URL を開いて確認する
+よう案内します。CPU・メモリ・Docker への割り当て・空きディスクは 3 つの実行
+プロファイルとして実測値付きで
 <a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/local-play-requirements.md"><code>docs/local-play-requirements.md</code></a>
 に公開しています。<code>make doctor PROFILE=recommended</code> で手元のマシンと比較できます。</p>
-<pre><code class="language-bash">git clone https://github.com/susumutomita/TenkaCloud.git
+<pre><code class="language-bash">git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
 cd TenkaCloud
-make install
-git submodule update --init problems   # the drill catalog
+make doctor PROFILE=recommended
 make local
 </code></pre>
-<p><code>make local</code> はローカル採点 API を起動し、Participant Portal（ポート 5175）を
-開きます。ドリルの選択と開始はポータル画面から行います。便利なバリエーション:</p>
-<pre><code class="language-bash">make local-list                # list every drill id
-make local PROBLEM=&lt;drill-id&gt;  # pre-start one drill
-make local-status              # what is running
-make local-down                # stop everything
+<p><code>make local</code> はローカル採点 API を起動し、Participant Portal の URL（ポート 5175）を
+表示します。ドリルの選択と開始はポータル画面から行います。参加者向けの補助コマンド:</p>
+<pre><code class="language-bash">make local-status # 起動状況を確認
+make local-down   # すべて停止し、ローカルの進捗を消去
 </code></pre>
+<p>この Docker 経路では、問題の選択と起動を Portal から行います。下位の
+<code>tenkacloud local</code> CLI、<code>make local-dev</code>、<code>make local-list</code> などの高度な補助コマンドは
+Bun / Vite を使う開発者向け経路です。<code>make doctor-dev</code> で診断するか、同意に基づく
+セットアップには <code>make local-onboard</code> を使います。</p>
 <p>ローカルプレイの完全なマニュアル — <code>/verify</code> 採点コントラクトや、独自の
 コンテナドリルの作成方法 — は
 <a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/local-play.md"><code>docs/local-play.md</code></a>

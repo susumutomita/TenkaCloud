@@ -13,7 +13,7 @@ TenkaCloud にはいくつかの実行モードがあります。今日やりた
 
 | # | モード | 必要なもの | 得られるもの | 所要時間の目安 |
 | --- | --- | --- | --- | --- |
-| 1 | ローカルドリル | Docker + Bun、**AWS アカウント不要** | コンテナ型のドリル問題をローカルで即時採点 | 約 5 分 |
+| 1 | ローカルドリル | Git + Make + Docker、**Bun・AWS アカウント不要** | コンテナ型のドリル問題をローカルで即時採点 | 約 5 分 |
 | 2 | GitHub Codespaces | GitHub アカウントのみ、**インストール不要** | 同じローカルドリルを、すべてブラウザ内で実行 | 約 3 分 |
 | 3 | AWS 上の Lite モード — コンソールランチャー | AWS アカウント、**インストール不要** | 単一主催者向けプラットフォーム（Admin Console + Participant Portal） | 約 20〜30 分 |
 | 4 | AWS 上の Lite モード — CLI | AWS アカウント + ローカルツールチェーン | 3 と同じ構成を、シェルからデプロイ・反復 | 約 20 分 |
@@ -28,31 +28,35 @@ TenkaCloud にはいくつかの実行モードがあります。今日やりた
 クラウドに依存しないドリル問題は、ローカル採点 API を備えた自己完結型の
 Docker コンテナとして動作します。AWS には一切触れず、費用もかかりません。
 
-**前提条件:** [Bun](https://bun.sh) 1.3.11 と、起動中の Docker デーモン
-（Docker Desktop、macOS では colima も可）。`make doctor` は何もインストール
-せずにセットアップ状況を診断します。ガイド付きインストーラーを使いたい場合は
-`make local-onboard` を実行してください。CPU・メモリ・Docker への割り当て・
-空きディスクは 3 つの実行プロファイルとして実測値付きで
+**前提条件:** Git・Make・Docker Engine・Docker Compose v2 のみです。ホストに
+Bun・Node・`node_modules` は不要です。`make doctor` は何もインストールせず、
+この参加者向け Docker-only 経路の起動前要件を診断します。実コンテナ起動後、`curl`
+または `wget` があれば `make local` が Portal のホスト到達性を検証します。どちらも
+なければ起動自体は成功しますが、到達性を未検証と明示し、表示した URL を開いて確認する
+よう案内します。CPU・メモリ・Docker への割り当て・空きディスクは 3 つの実行
+プロファイルとして実測値付きで
 [`docs/local-play-requirements.md`](https://github.com/susumutomita/TenkaCloud/blob/main/docs/local-play-requirements.md)
 に公開しています。`make doctor PROFILE=recommended` で手元のマシンと比較できます。
 
 ```bash
-git clone https://github.com/susumutomita/TenkaCloud.git
+git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
 cd TenkaCloud
-make install
-git submodule update --init problems   # the drill catalog
+make doctor PROFILE=recommended
 make local
 ```
 
-`make local` はローカル採点 API を起動し、Participant Portal（ポート 5175）を
-開きます。ドリルの選択と開始はポータル画面から行います。便利なバリエーション:
+`make local` はローカル採点 API を起動し、Participant Portal の URL（ポート 5175）を
+表示します。ドリルの選択と開始はポータル画面から行います。参加者向けの補助コマンド:
 
 ```bash
-make local-list                # list every drill id
-make local PROBLEM=<drill-id>  # pre-start one drill
-make local-status              # what is running
-make local-down                # stop everything
+make local-status # 起動状況を確認
+make local-down   # すべて停止し、ローカルの進捗を消去
 ```
+
+この Docker 経路では、問題の選択と起動を Portal から行います。下位の
+`tenkacloud local` CLI、`make local-dev`、`make local-list` などの高度な補助コマンドは
+Bun / Vite を使う開発者向け経路です。`make doctor-dev` で診断するか、同意に基づく
+セットアップには `make local-onboard` を使います。
 
 ローカルプレイの完全なマニュアル — `/verify` 採点コントラクトや、独自の
 コンテナドリルの作成方法 — は
