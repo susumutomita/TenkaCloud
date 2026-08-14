@@ -12,6 +12,7 @@ const { mockTeamView, mockIsMock } = vi.hoisted(() => ({
   mockIsMock: vi.fn(),
 }));
 vi.mock("../../src/i18n", () => ({
+  useLang: () => "en",
   useT: () => (key: string, params?: Readonly<Record<string, string | number>>) =>
     params ? `${key}|${JSON.stringify(params)}` : key,
 }));

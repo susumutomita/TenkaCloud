@@ -15,6 +15,7 @@ import { ScoreboardPage } from "./Scoreboard";
 
 vi.mock("../i18n", () => ({
   useT: () => (key: string) => key,
+  useLang: () => "ja",
 }));
 vi.mock("../config-context", () => ({
   useIsMock: () => false,
@@ -49,7 +50,7 @@ describe("ScoreboardPage no_event state (#1793)", () => {
     expect(screen.queryByText("app.loading")).toBeNull();
   });
 
-  it("should render the ranking table when the leaderboard is event-scoped", () => {
+  it("should render the ranking table and Result Card when the leaderboard is event-scoped", () => {
     teamView.leaderboard = {
       eventId: "EV1",
       entries: [
@@ -77,7 +78,20 @@ describe("ScoreboardPage no_event state (#1793)", () => {
 
     expect(screen.getByText("rival")).toBeDefined();
     expect(screen.getByText("we")).toBeDefined();
+    expect(screen.getByText("result_card.title")).toBeDefined();
     expect(screen.queryByText("scoreboard.no_event_header")).toBeNull();
+  });
+
+  it("should not expose a Result Card while the scoreboard is frozen", () => {
+    teamView.leaderboard = {
+      eventId: "EV1",
+      scoreboardFrozen: true,
+      entries: [],
+    };
+    render(<ScoreboardPage config={config} />);
+
+    expect(screen.getByText("scoreboard.frozen_header")).toBeDefined();
+    expect(screen.queryByText("result_card.title")).toBeNull();
   });
 
   it("should keep the no_event copy participant-actionable and jargon-free in both locales (ja/en parity)", () => {
