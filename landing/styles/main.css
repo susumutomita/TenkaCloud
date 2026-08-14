@@ -142,6 +142,23 @@ p { margin: 0; }
   letter-spacing: 0;
   text-wrap: balance;
 }
+/* TenkaCloudChallenge#468 (funnel): the killer line above speaks to cloud
+   engineers; this second band catches vibe coders — people who built an app
+   with AI and want to ship it safely. Free / no AWS account / in-browser is
+   what local play already offers; real AWS is only the StackStack finale. */
+.hero .hero-vibe {
+  max-width: 410px;
+  margin: 18px 0 0;
+  padding: 10px 14px;
+  border-left: 3px solid #0969da;
+  border-radius: 0 8px 8px 0;
+  background: rgba(9, 105, 218, 0.06);
+  font-size: 13.5px;
+  line-height: 1.75;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.hero .hero-vibe strong { color: #07111f; font-weight: 800; }
 /* Issue #2711 (design 6a): the hero funnels every visitor into one quest card —
    the tutorial problem what-is-tenkacloud. No stacked primary buttons; the
    organizer path is demoted to the text-link row below the card. */
@@ -940,7 +957,7 @@ footer .footer-legal-links { display: inline-flex; flex-wrap: wrap; gap: 0 6px; 
   .hero-grid, .twoup, .onboard-layout, .trust, .stats, .pricing-grid { grid-template-columns: 1fr; }
   .hero { padding-top: 44px; }
   .hero-grid { gap: 40px; }
-  .hero h1, .hero .sub { max-width: none; }
+  .hero h1, .hero .sub, .hero .hero-vibe { max-width: none; }
   .app-body { grid-template-columns: 1fr; }
   .app-sidebar { display: none; }
   .aud { grid-template-columns: 1fr; }

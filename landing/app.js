@@ -143,6 +143,8 @@
       "hero.h1b": "天下一武道会。",
       "hero.sub":
         "本物の AWS で競う、OSS の競技プラットフォーム。 「ローカルでは動く」アプリを本番品質へ ── <strong>認証・公開範囲・監査・可用性</strong>の仕上がりを毎分自動採点し、 順位がリアルタイムに動く。 主催者はイベント・採点・再利用できる問題カタログを 1 画面で運営。",
+      "hero.vibe":
+        "<strong>AI と作ったアプリ、公開する前に。</strong> 無料・AWS アカウント不要・ブラウザで始める。 本物の AWS は最後の 1 問だけ。",
       "hero.quest_meta": "最初の 1 問 · 登録不要 · 約 3 分",
       "hero.quest_badge": "チュートリアル",
       "hero.quest_diff": "難易度: 入門",
@@ -438,6 +440,8 @@
       "hero.h1b": "Tenka-Ichi.",
       "hero.sub":
         'An OSS competition platform on real AWS. Take an app that "only works locally" and make it production-grade — <strong>auth, exposure, audit, and availability</strong> are auto-scored every minute, and the leaderboard moves in real time. Organizers run events, scoring, and a reusable problem catalog from one console.',
+      "hero.vibe":
+        "<strong>Built your app with AI? Before you ship it —</strong> free, no AWS account, starts in your browser. Real AWS is only the finale.",
       "hero.quest_meta": "First quest · No signup · ~3 min",
       "hero.quest_badge": "Tutorial",
       "hero.quest_diff": "Difficulty: Intro",
