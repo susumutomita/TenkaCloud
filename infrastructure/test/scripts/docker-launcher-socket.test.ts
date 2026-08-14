@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 /**
  * `make local` の control plane は daemon の socket を bind-mount して問題コンテナを起こす。
- * mount の source を解決するのが `resolve_docker_socket` で、ここが外れると image が build
+ * mount の source を解決するのが `tenkacloud_resolve_docker_socket` で、ここが外れると image が build
  * できてもコンテナが起動しない。
  *
  * 元の実装は context の endpoint (= **ホスト側**のパス) をそのまま source にしていた。これは
@@ -25,20 +25,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
  */
 
 const REPO_ROOT = join(import.meta.dirname, "..", "..", "..");
-const LAUNCHER = join(REPO_ROOT, "scripts", "local", "docker-launcher.sh");
-
-/**
- * launcher から `resolve_docker_socket` だけを取り出す。 script 末尾には `up|down|status` の
- * dispatch があり、 まるごと source すると usage で exit してしまう。
- */
-function resolveDockerSocketSource(): string {
-  const text = readFileSync(LAUNCHER, "utf8");
-  const start = text.indexOf("resolve_docker_socket() {");
-  expect(start, "resolve_docker_socket() が launcher に見つからない").toBeGreaterThan(-1);
-  const end = text.indexOf("\n}\n", start);
-  expect(end, "resolve_docker_socket() の終端が見つからない").toBeGreaterThan(start);
-  return text.slice(start, end + 3);
-}
+const PREREQUISITES = join(REPO_ROOT, "scripts", "local", "docker-prerequisites.sh");
 
 let sandbox: string;
 
@@ -69,8 +56,11 @@ function resolveWith(options: {
     [
       "#!/bin/sh",
       "set -eu",
-      resolveDockerSocketSource(),
-      "resolve_docker_socket",
+      `. '${PREREQUISITES}'`,
+      "if ! tenkacloud_resolve_docker_socket; then",
+      '  tenkacloud_print_docker_socket_guidance "make local"',
+      "  exit 1",
+      "fi",
       'printf "%s" "$TENKACLOUD_DOCKER_SOCKET"',
       "",
     ].join("\n"),
@@ -103,7 +93,7 @@ async function createUnixSocket(path: string): Promise<() => void> {
   return () => server.close();
 }
 
-describe("resolve_docker_socket", () => {
+describe("tenkacloud_resolve_docker_socket", () => {
   it("should mount the in-VM socket on macOS, not the host-side path the context reports", () => {
     // Colima が報告するホスト側 proxy socket。 これを daemon に渡すと mount source を VM 内で
     // 掘ろうとして operation not supported になる。

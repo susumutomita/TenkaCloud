@@ -89,7 +89,7 @@ machine; the rest name the mechanism without claiming a measurement.
 | `docker build` fails with `rpc error: code = Unknown desc = EOF` while writing the image | BuildKit ran out of space in the Docker VM. The build cache accumulates across builds and is not reclaimed by removing images | Yes — the cache reached 58 GB and the host still showed tens of GB free, so `df` on the host did not reveal it | `docker builder prune -af` |
 | A problem container exits immediately after start, or the runtime reports the process was killed | Docker VM memory exhausted (OOM kill). The control plane alone accounts for most of local play's footprint, so this is usually several problems at once rather than one heavy problem | No | Stop other problems (`make local-down`), or raise the Docker VM memory allocation |
 | A problem never becomes ready and start times out | Image pull or first build is still running on a slow link, or the VM is thrashing | No | Re-run after the pull completes; check `docker stats` for a container pinned at high CPU |
-| `make doctor` reports UNKNOWN for Docker memory or disk | The value could not be read, or no measurement exists for that profile yet | Yes | `make local-measure PROFILE=<id>` and contribute the record |
+| `make doctor` reports UNKNOWN for Docker memory or disk | The value could not be read, or no measurement exists for that profile yet | Yes | Read [Not measured yet](#not-measured-yet); no pass/fail threshold is published for that value |
 
 The build-cache row is the one worth reading twice. It presents as an unexplained
 build failure rather than as a disk error, the host's own `df` does not show it on
@@ -97,29 +97,51 @@ macOS or Windows, and it is the only entry here that has actually bitten someone
 
 ## Checking your own machine
 
+`make doctor` is the Bun-free, report-only diagnosis for the Docker participant
+path. It checks every pre-start prerequisite shared with `make local`, then
+appends a resource comparison when `PROFILE` is set. Because it deliberately
+starts no container, Portal host reachability (including Docker Desktop's
+opt-in host networking) remains visibly deferred. After startup, `make local`
+probes it with `curl` or `wget` when either is available. If neither is installed,
+startup succeeds but explicitly reports host reachability as unverified and asks
+the participant to open the printed URL. The separate `make doctor-dev` target
+checks the Bun/mise developer toolchain and is outside these participant run
+profiles.
+
 ```bash
-make doctor PROFILE=recommended              # prerequisites + resource comparison
+make doctor PROFILE=recommended              # Docker-only participant prerequisites + resources
 make doctor PROFILE=recommended PROBE_DISK=1 # also measure Docker VM free space
 ```
 
-The resource comparison is advisory and never changes the exit code. It reports
-one of three verdicts per item, and the difference between the last two is the
-point:
+CPU and memory comparisons are advisory, as is any value reported as UNKNOWN.
+The measured Docker VM disk floor is different: with `PROBE_DISK=1`, free space
+below a hard floor recorded for the selected profile is a FAIL and makes
+`make doctor` exit nonzero. Without the opt-in probe, disk remains UNKNOWN. A
+profile with no recorded disk floor also remains UNKNOWN even when disk is
+measured. Each item has one of four verdicts:
 
-- **PASS** — the value was read and is at or above a configuration this profile
-  was measured in.
-- **WARN** — the value was read and is below every measured configuration. That
-  means untested, not too small; nothing has been shown to fail at that size.
+- **PASS** — the value was read and meets its comparison: CPU or memory is at or
+  above a measured working configuration, or disk is at or above its recorded
+  hard floor.
+- **WARN** — CPU or memory was read and is below every measured working
+  configuration. That means untested, not too small; nothing has been shown to
+  fail at that size. WARN does not change the exit code.
 - **UNKNOWN** — the value could not be read, or the profile has no measurement to
   compare against. Never upgraded to PASS: a machine whose Docker allocation
-  cannot be queried has not been checked.
+  cannot be queried has not been checked. UNKNOWN does not change the exit code.
+- **FAIL** — a measured hard requirement is not met. Today this only means that
+  `PROBE_DISK=1` measured Docker VM free space below the selected profile's
+  recorded image-size floor. FAIL makes `make doctor` exit nonzero.
 
-Each non-PASS item prints one concrete next command. Example:
+Each non-PASS item prints one honest next step. When a profile has no published
+threshold, it points at that limitation instead of suggesting a benchmark
+command that would require Bun, explicit problem ids, or an implemented profile.
+Example:
 
 ```text
 Selected profile: recommended — Recommended — several problems at once (partially-measured)
   ? Docker memory — 3.81 GiB available; no measurement recorded for the "recommended" profile yet
-      Next: Measure it on this machine and contribute the record: `make local-measure PROFILE=<id>`
+      Next: Read `docs/local-play-requirements.md#not-measured-yet`; no pass/fail threshold is published for this profile
   ✓ Docker VM free disk — 40.54 GiB free; 755 MB is the tenkacloud-local:dev control-plane image only …
   Result: UNKNOWN — at least one value could not be read or has never been measured.
 ```
@@ -128,7 +150,9 @@ Selected profile: recommended — Recommended — several problems at once (part
 pulls `busybox` to read free space from inside the Docker VM. The host's own `df`
 is the wrong filesystem on macOS and Windows, where images and build cache live in
 a VM disk — the recorded disk-full failure happened while the host had tens of GB
-free.
+free. The `minimum` and `recommended` profiles currently record the control-plane
+image size as a hard floor; a measured value below it produces FAIL. The `full`
+profile has no disk floor yet, so its disk verdict remains UNKNOWN.
 
 If the disk is short, reclaim only TenkaCloud-owned space:
 
@@ -142,7 +166,8 @@ make local-down            # stop local play and clear its progress volume
 
 `make local-measure` starts a profile's problems through the already-running
 local-play API, samples only TenkaCloud-owned containers, stops them, asserts they
-were reclaimed, and writes a JSON record.
+were reclaimed, and writes a JSON record. This benchmark is developer tooling:
+run `make local-onboard` first if the Bun workspace dependencies are not ready.
 
 ```bash
 make local                                                    # start local play first

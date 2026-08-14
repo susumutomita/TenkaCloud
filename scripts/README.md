@@ -27,10 +27,12 @@ lives:
 | `destroy-battles.sh` | `make destroy-battles` | Operator-side Battle teardown wrapper |
 | `package-source-bundle.sh` | CodeBuild (problem deploy) | Build the problem source bundle artifact |
 | `prepare-source-bundle.sh` | `tenkacloud-lite.ts`, docs | Stage the source bundle S3 object |
-| `tenkacloud.ts` | `tenkacloud` / `bun run tenkacloud` | Unified local, doctor, and Turso live-verification CLI |
+| `tenkacloud.ts` | `tenkacloud` / `bun run tenkacloud` | Unified Bun developer CLI for host local play, developer diagnosis, and Turso live verification |
 | `tenkacloud-lite.ts` | `make deploy` / `make destroy` | Lite mode up/down CLI |
-| `tenkacloud-local.ts` | `tenkacloud local` / `make local-*` | Internal Docker local-play commands (no AWS) |
-| `tenkacloud-onboard.ts` | `make doctor` / `make onboard` | Toolchain doctor + first-run onboarding CLI |
+| `tenkacloud-local.ts` | `tenkacloud local` / `make local-dev` / advanced `make local-*` helpers | Host Bun/Vite local-play commands for developers (no AWS; not the Docker-only `make local`) |
+| `tenkacloud-onboard.ts` | `make doctor-dev` / `make local-onboard` | Bun/mise developer doctor + consent-based onboarding CLI |
+| `local/doctor.sh` | `make doctor` | Bun-free participant prerequisite and resource-profile diagnosis |
+| `local/docker-prerequisites.sh` | `make doctor` / `make local` | Shared Docker CLI, Compose v2, daemon, and local-context checks |
 
 ## Subdirectories — domain tooling
 

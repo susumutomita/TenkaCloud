@@ -18,7 +18,7 @@ export function tenkaCloudUsage(): string {
     "  tenkacloud local [subcommand] [--database sqlite|turso] [--problem ID]",
     "        Start local play; SQLite is the default and requires no cloud account",
     "  tenkacloud doctor [--profile minimum|recommended|full] [--probe-disk]",
-    "        Diagnose local prerequisites without changing the machine;",
+    "        Diagnose host Bun/Vite developer prerequisites without changing the machine;",
     "        --profile also compares Docker's resources against that profile's",
     "        measured configuration (--probe-disk adds free space, pulls busybox)",
     "  tenkacloud onboard [--yes]",

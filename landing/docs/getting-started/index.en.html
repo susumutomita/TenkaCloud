@@ -87,7 +87,7 @@ event, participating, or authoring problems, start from the
 <tbody><tr>
 <td>1</td>
 <td>Local drills</td>
-<td>Docker + Bun, <strong>no AWS account</strong></td>
+<td>Git + Make + Docker, <strong>no Bun or AWS account</strong></td>
 <td>Container drill problems with instant local scoring</td>
 <td>~5 min</td>
 </tr>
@@ -125,26 +125,30 @@ lives in <a href="/docs/operate/deploy-paths/index.en.html">deploy modes and lau
 <h2>1. Local drills — Docker, no AWS</h2>
 <p>Cloud-independent drill problems run as self-contained Docker containers with a
 local scoring API. Nothing touches AWS and nothing costs money.</p>
-<p><strong>Prerequisites:</strong> <a href="https://bun.sh">Bun</a> 1.3.11 and a running Docker daemon
-(Docker Desktop, or colima on macOS). <code>make doctor</code> diagnoses your setup without
-installing anything; <code>make local-onboard</code> is the guided installer if you prefer.
-CPU, memory, Docker allocation and free disk are published as three run profiles
-with the measurements behind them in
+<p><strong>Prerequisites:</strong> Git, Make, Docker Engine, and Docker Compose v2 — no Bun,
+Node, or <code>node_modules</code> on the host. <code>make doctor</code> checks this Docker-only
+participant path&#39;s pre-start requirements without installing anything. After the
+real container starts, <code>make local</code> probes Portal host reachability when <code>curl</code> or
+<code>wget</code> is available. If neither is installed, startup succeeds but explicitly
+reports reachability as unverified and asks you to open the printed URL. CPU,
+memory, Docker allocation and free disk are published as three run profiles with the measurements behind them in
 <a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/local-play-requirements.md"><code>docs/local-play-requirements.md</code></a>;
 <code>make doctor PROFILE=recommended</code> compares this machine against one of them.</p>
-<pre><code class="language-bash">git clone https://github.com/susumutomita/TenkaCloud.git
+<pre><code class="language-bash">git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
 cd TenkaCloud
-make install
-git submodule update --init problems   # the drill catalog
+make doctor PROFILE=recommended
 make local
 </code></pre>
-<p><code>make local</code> starts the local scoring API and opens the Participant Portal
-(port 5175); you pick and start a drill from the portal screen. Useful variants:</p>
-<pre><code class="language-bash">make local-list                # list every drill id
-make local PROBLEM=&lt;drill-id&gt;  # pre-start one drill
-make local-status              # what is running
-make local-down                # stop everything
+<p><code>make local</code> starts the local scoring API and prints the Participant Portal URL
+(port 5175); you pick and start a drill from the portal screen. Useful participant
+commands:</p>
+<pre><code class="language-bash">make local-status # what is running
+make local-down   # stop everything and clear local progress
 </code></pre>
+<p>Problem selection and startup happen in the Portal on this Docker path. The
+lower-level <code>tenkacloud local</code> CLI, <code>make local-dev</code>, and advanced helpers such
+as <code>make local-list</code> are the Bun/Vite developer path. Diagnose that path with
+<code>make doctor-dev</code>, or use <code>make local-onboard</code> for consent-based setup.</p>
 <p>The full local-play manual — the <code>/verify</code> scoring contract, authoring your own
 container drills — is in
 <a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/local-play.md"><code>docs/local-play.md</code></a>.</p>

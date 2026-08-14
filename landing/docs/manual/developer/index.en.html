@@ -77,11 +77,13 @@ passes the relevant repository checks.</p>
 <h2>Prepare the repository</h2>
 <pre><code class="language-bash">bun install
 git submodule update --init problems
-make doctor
+make doctor-dev
 </code></pre>
-<p><code>make doctor</code> reports missing local prerequisites without installing or
-changing them. Use <a href="/docs/getting-started/index.en.html">Getting started</a> only for
-the runtime path you need.</p>
+<p><code>make doctor-dev</code> reports missing Bun/mise developer prerequisites without
+installing or changing them. The separate <code>make doctor</code> target checks the
+Bun-free Docker participant path. Use
+<a href="/docs/getting-started/index.en.html">Getting started</a> only for the runtime path
+you need.</p>
 <h2>Find the owner before editing</h2>
 <table>
 <thead>

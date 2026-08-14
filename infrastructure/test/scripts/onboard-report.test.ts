@@ -39,7 +39,7 @@ describe("formatDiagnosis", () => {
       ],
     };
     const out = formatDiagnosis(diagnosis);
-    expect(out).toContain("TenkaCloud local prerequisites:");
+    expect(out).toContain("TenkaCloud developer prerequisites:");
     expect(out).toContain("Bun");
     expect(out).toContain("Docker CLI");
   });

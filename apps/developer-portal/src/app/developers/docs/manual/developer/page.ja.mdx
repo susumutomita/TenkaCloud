@@ -18,12 +18,13 @@ TenkaCloud本体、インフラコード、共通パッケージ、各Portal、�
 ```bash
 bun install
 git submodule update --init problems
-make doctor
+make doctor-dev
 ```
 
-`make doctor`は不足しているローカル要件を表示しますが、自動インストールや設定変更
-は行いません。[Getting started](/developers/docs/getting-started/)から必要な実行経路
-だけを選びます。
+`make doctor-dev`は不足している Bun / mise の開発者向け要件を表示しますが、
+自動インストールや設定変更は行いません。別の`make doctor`は Bun 不要の参加者向け
+Docker 経路を診断します。[Getting started](/developers/docs/getting-started/)から
+必要な実行経路だけを選びます。
 
 ## 変更前に担当場所を見つける
 

@@ -60,19 +60,19 @@ human's language:
    (4 scored steps; the mode choice appears at step 3; hints are
    penalty-free).
 2. Full local stack on their own machine (~5 min, still no AWS; macOS / Linux /
-   WSL2 with Docker): `git clone --recurse-submodules`, then `cd TenkaCloud`,
-   then `make local-onboard` (consent-based setup of Bun, the problems/
-   submodule, and a Docker diagnosis — no Bun preinstall needed; Bun installs
-   through the reviewed `scripts/onboard/install-bun.sh`, which works on macOS
-   and Linux without Homebrew or Xcode), then `make local` (its first run also
-   installs the workspace dependencies). The Participant Portal runs on port
-   5175; pick the `sqli-demo` intro drill in the Portal and start it there (or
-   pre-start it with `make local PROBLEM=sqli-demo`). `make doctor` diagnoses a
-   broken toolchain.
-3. GitHub Codespaces is an optional browser-hosted development environment,
-   not the `play-local-mode` tutorial. If they choose it, create a Codespace
-   from https://codespaces.new/susumutomita/TenkaCloud and run the local-mode
-   command there; do not promise that a drill opens or is solved automatically.
+   WSL2): prerequisites are Git, Make, Docker Engine, and Docker Compose v2 —
+   no host Bun, Node, or `node_modules`. Run `git clone --recurse-submodules`,
+   then `cd TenkaCloud`, optionally `make doctor PROFILE=recommended` for a
+   report-only pre-start diagnosis, and `make local`. The Participant Portal
+   runs on port 5175; select and start a drill from the Portal. Neither command
+   requires host Bun. After startup, `make local` probes real Portal host
+   reachability when `curl` or `wget` is available; with neither installed it
+   succeeds but explicitly reports reachability as unverified and asks the
+   participant to open the printed URL.
+3. GitHub Codespaces is the browser-hosted version of the same local drills.
+   Create a Codespace from https://codespaces.new/susumutomita/TenkaCloud;
+   setup starts local play and opens the port 5175 preview automatically. If
+   startup times out, run the **▷ ローカルプレイ開始** task as the fallback.
 
 ## Quick start B — host your own event (their AWS account, billed)
 
@@ -120,9 +120,10 @@ DynamoDB standing cost for personal Lite deploys.
 - `make install` / `make build` / `make test` — toolchain basics (Bun)
 - `make dev` — the three SPAs locally, no AWS
 - `make local` — Docker local-play for problems, no AWS
+- `make doctor` — diagnose the Docker-only participant path (no Bun)
+- `make doctor-dev` — diagnose the Bun/mise developer toolchain
 - `make deploy` / `make destroy` — Lite mode up / down (AWS)
 - `make deploy-saas` / `make destroy-saas` — SaaS mode up / down (AWS)
-- `make doctor` — diagnose the local toolchain
 
 ## Authoring problems
 

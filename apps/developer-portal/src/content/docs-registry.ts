@@ -75,7 +75,7 @@ export const DOC_PAGES: readonly DocPage[] = [
       { id: "change-workflow", text: "Change workflow" },
       { id: "code-change-or-environment-setting", text: "Code change or environment setting" },
     ],
-    body: "Developer manual for changing TenkaCloud platform code in apps, infrastructure, packages, and scripts. Repository setup, make doctor, make harness, make before-commit, architecture ownership, environment parameter boundaries, and honest verification. 開発者マニュアル。コード変更、担当module、検査、環境設定との境界。",
+    body: "Developer manual for changing TenkaCloud platform code in apps, infrastructure, packages, and scripts. Repository setup, make doctor-dev, make harness, make before-commit, architecture ownership, environment parameter boundaries, and honest verification. 開発者マニュアル。コード変更、担当module、検査、環境設定との境界。",
   },
   {
     slug: "manual/organizer",

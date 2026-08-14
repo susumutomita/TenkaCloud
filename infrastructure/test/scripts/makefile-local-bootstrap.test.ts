@@ -65,6 +65,20 @@ describe("make local is Docker-only and never reaches the Bun CLI (Issue #2906)"
       expect(recipe).not.toContain("bun run");
     });
   }
+
+  it("should run the participant doctor through POSIX shell without Bun", () => {
+    const recipe = recipeOf("doctor");
+    expect(recipe).toContain("scripts/local/doctor.sh");
+    expect(recipe).not.toContain("command -v bun");
+    expect(recipe).not.toContain("bun run");
+    expect(recipe).not.toContain("ensure-deps");
+  });
+
+  it("should keep the Bun/mise diagnosis behind the developer-only target", () => {
+    const recipe = recipeOf("doctor-dev");
+    expect(recipe).toContain("command -v bun");
+    expect(recipe).toContain("scripts/tenkacloud-onboard.ts doctor");
+  });
 });
 
 /**
@@ -103,6 +117,20 @@ describe("docker-launcher host reachability probe (Issue #2906)", () => {
 
   it("should treat a host with neither curl nor wget as unknown, not as failure", () => {
     expect(probe).toMatch(/return 2/);
+  });
+
+  it("should surface that unknown result instead of claiming host reachability", () => {
+    const up = launcher.slice(launcher.indexOf("cmd_up() {"), launcher.indexOf("cmd_status() {"));
+
+    expect(up).toContain('reachable_result" -eq 2');
+    expect(up).toContain("host reachability unverified");
+    expect(up).toContain("neither curl nor wget is installed");
+    expect(up).toContain("is up and host-reachable");
+
+    const status = launcher.slice(launcher.indexOf("cmd_status() {"));
+    expect(status).toContain('status_reachable_result" -eq 2');
+    expect(status).toContain("host reachability is unverified");
+    expect(status).toContain("is running and host-reachable");
   });
 });
 
@@ -216,9 +244,14 @@ describe("docker-launcher crash-recovery teardown (Issue #2906)", () => {
     const compose = readFileSync(join(REPO_ROOT, "compose.local.yaml"), "utf8");
     // Built by concatenation so this file contains no literal shell placeholder.
     const socketMount = ["$", "{TENKACLOUD_DOCKER_SOCKET:-/var/run/docker.sock}"].join("");
+    const prerequisites = readFileSync(
+      join(REPO_ROOT, "scripts", "local", "docker-prerequisites.sh"),
+      "utf8",
+    );
     expect(compose).toContain(`${socketMount}:/var/run/docker.sock`);
-    expect(launcher).toContain("docker context inspect");
-    expect(launcher).toContain("TENKACLOUD_DOCKER_SOCKET");
+    expect(launcher).toContain("docker-prerequisites.sh");
+    expect(prerequisites).toContain("docker context inspect");
+    expect(prerequisites).toContain("TENKACLOUD_DOCKER_SOCKET");
   });
 
   it("should gate the sweep on that liveness check rather than on the state file", () => {

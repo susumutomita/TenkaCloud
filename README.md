@@ -50,7 +50,7 @@ TenkaCloud is a self-hostable, Apache-2.0 platform for running hands-on AWS comp
 
 ## Vision
 
-TenkaCloud is not only a competition platform. The product direction is a path from safe, individual practice to team competition: **local drills → practical courses / enterprise training → team competitions / GameDay → global community**. Local drills are live today (`tenkacloud local`); courses, enterprise training as a packaged product, and a global community are directions we are building toward, not shipped features.
+TenkaCloud is not only a competition platform. The product direction is a path from safe, individual practice to team competition: **local drills → practical courses / enterprise training → team competitions / GameDay → global community**. Local drills are live today (`make local`); courses, enterprise training as a packaged product, and a global community are directions we are building toward, not shipped features.
 
 ## What TenkaCloud gives you
 
@@ -95,7 +95,7 @@ Codespaces plays **cloud-independent drills only** — self-contained Docker con
 
 `make local` is the participant entry point: it starts the local scoring API and the Participant Portal in a Docker container, then you pick and start a drill from the portal screen. Progress is stored in a Docker-managed volume; local play has no DynamoDB or AWS SDK dependency.
 
-**Prerequisites: Git, Make, Docker Engine, Docker Compose v2 — no Bun, Node, or `node_modules` on your machine.** For CPU, memory, Docker allocation and free disk, see [the run profiles](./docs/local-play-requirements.md).
+**Prerequisites: Git, Make, Docker Engine, Docker Compose v2 — no Bun, Node, or `node_modules` on your machine.** `make doctor` checks this Docker-only participant path's pre-start requirements without Bun and installs nothing. After the real container starts, `make local` probes Portal host reachability when either `curl` or `wget` is available. If neither is installed, startup still succeeds but the output marks reachability unverified and asks you to open the printed URL. Add `PROFILE=recommended` to compare Docker's CPU, memory, and optional disk allocation with a published [run profile](./docs/local-play-requirements.md).
 
 ```bash
 git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
@@ -103,9 +103,9 @@ cd TenkaCloud
 make local
 ```
 
-`make local` checks Docker is installed and running, fetches the `problems/` submodule if it's missing, builds/starts the local-play container, and prints the Portal URL once it's ready. `make local-down` stops it and clears progress; `make local-status` checks whether it's running.
+`make local` checks Docker is installed and running, offers to fetch the `problems/` submodule if it's missing, builds/starts the local-play container, and prints the Portal URL once it's ready. `make local-down` stops it and clears progress; `make local-status` checks whether it's running.
 
-> **Docker Desktop (macOS/Windows) users:** the local-play container runs with host networking, which Docker Desktop requires you to enable once — **Settings → Resources → Network → Enable host networking** (Desktop 4.34+). `make local` fails loud with this exact instruction if it detects the container came up without it; native Linux Docker Engine and Codespaces need no such setting.
+> **Docker Desktop (macOS/Windows) users:** the local-play container runs with host networking, which Docker Desktop requires you to enable once — **Settings → Resources → Network → Enable host networking** (Desktop 4.34+). When `curl` or `wget` is available, `make local` fails loud with this exact instruction if the container is healthy but unreachable from the host. If neither probe tool is installed, it reports reachability as unverified and succeeds; open the printed URL to confirm it manually. Native Linux Docker Engine and Codespaces need no such setting.
 
 <details>
 <summary>For developers: the Bun/Vite hot-reload path</summary>
@@ -119,7 +119,7 @@ make local-onboard
 make local-dev
 ```
 
-`make local-onboard` asks for consent before installing anything it needs — Bun itself if missing, the `problems/` submodule, and a Docker diagnosis — then reports readiness; it installs nothing without asking. Pass `YES=1` (`make local-onboard YES=1`) to pre-approve every install for unattended runs.
+`make doctor-dev` is the report-only diagnosis for this developer path. It requires Bun and checks mise trust, the `problems/` submodule, Bun, Docker Compose, and the Docker daemon. `make local-onboard` offers to repair those developer prerequisites, asking before every install; pass `YES=1` (`make local-onboard YES=1`) to pre-approve them for unattended runs.
 
 Even lower-level: `make install && git submodule update --init problems && bun link && tenkacloud local` (or `bun run tenkacloud local` without `bun link`). Run `tenkacloud local list` to list every drill id, or pre-start one with `tenkacloud local --problem <id>`. The optional remote state backend is selected explicitly with `--database turso` and `TENKACLOUD_LOCAL_TURSO_URL` / `TENKACLOUD_LOCAL_TURSO_AUTH_TOKEN`; SQLite remains the default.
 
@@ -164,7 +164,7 @@ Re-running the same launcher for a later event works (the buildspec re-clones bo
 
 ## Supported environments
 
-- **macOS, Linux, or WSL2** — supported for local play (`make local` / `tenkacloud local`) and for AWS deploys (`make deploy` Lite mode, `make deploy-saas` SaaS mode).
+- **macOS, Linux, or WSL2** — supported for Docker-only participant play (`make local`), Bun/Vite developer play (`make local-dev` / `tenkacloud local`), and AWS deploys (`make deploy` Lite mode, `make deploy-saas` SaaS mode).
 - **Native Windows without WSL2** — not supported for local play; use GitHub Codespaces (above) or install WSL2 first.
 - **Browser only, no local install** — use GitHub Codespaces (above).
 
@@ -172,7 +172,8 @@ Re-running the same launcher for a later event works (the buildspec re-clones bo
 is published as three profiles (`minimum` / `recommended` / `full`) with the
 measurements behind them — see
 [docs/local-play-requirements.md](./docs/local-play-requirements.md). Check your
-own machine against a profile with `make doctor PROFILE=recommended`.
+own machine against a profile with the Bun-free participant diagnostic
+`make doctor PROFILE=recommended`.
 
 ## Running costs
 
