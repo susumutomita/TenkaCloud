@@ -209,9 +209,7 @@ describe("Result Card rendering", () => {
       }),
     });
     if (!result.ok) throw result.error;
-    expect(buildResultCardFilename(result.value)).toBe(
-      "tenkacloud-team-live-20260812T130000Z.png",
-    );
+    expect(buildResultCardFilename(result.value)).toBe("tenkacloud-team-live-20260812T130000Z.png");
   });
 
   it("trims a trailing hyphen left by normalizing trailing punctuation", () => {
@@ -264,7 +262,9 @@ describe("Result Card rendering", () => {
       expect(svg).toContain(
         `font-size="${testCase.scoreFontSize}" font-weight="800">${testCase.score}`,
       );
-      expect(svg).toContain(`font-size="${testCase.rankFontSize}" font-weight="800">#${testCase.rank}`);
+      expect(svg).toContain(
+        `font-size="${testCase.rankFontSize}" font-weight="800">#${testCase.rank}`,
+      );
       expect(svg).toContain(`font-size="24" font-weight="600">${midEventTitle}`);
       expect(svg).toContain(`font-size="44" font-weight="800">${midTeamName}`);
     }

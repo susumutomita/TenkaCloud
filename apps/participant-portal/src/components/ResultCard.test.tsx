@@ -262,7 +262,11 @@ describe("ResultCard", () => {
       }),
     });
     render(
-      <ResultCard leaderboard={leaderboard()} eventTitle="TenkaCloud Battle" runtime={testRuntime} />,
+      <ResultCard
+        leaderboard={leaderboard()}
+        eventTitle="TenkaCloud Battle"
+        runtime={testRuntime}
+      />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: "result_card.share_button" }));
@@ -278,7 +282,11 @@ describe("ResultCard", () => {
     }));
     const testRuntime = runtime({ renderPng });
     render(
-      <ResultCard leaderboard={leaderboard()} eventTitle="TenkaCloud Battle" runtime={testRuntime} />,
+      <ResultCard
+        leaderboard={leaderboard()}
+        eventTitle="TenkaCloud Battle"
+        runtime={testRuntime}
+      />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: "result_card.share_button" }));
@@ -293,7 +301,11 @@ describe("ResultCard", () => {
       }),
     });
     render(
-      <ResultCard leaderboard={leaderboard()} eventTitle="TenkaCloud Battle" runtime={testRuntime} />,
+      <ResultCard
+        leaderboard={leaderboard()}
+        eventTitle="TenkaCloud Battle"
+        runtime={testRuntime}
+      />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: "result_card.download_button" }));
@@ -307,7 +319,11 @@ describe("ResultCard", () => {
       }),
     });
     render(
-      <ResultCard leaderboard={leaderboard()} eventTitle="TenkaCloud Battle" runtime={testRuntime} />,
+      <ResultCard
+        leaderboard={leaderboard()}
+        eventTitle="TenkaCloud Battle"
+        runtime={testRuntime}
+      />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: "result_card.share_button" }));

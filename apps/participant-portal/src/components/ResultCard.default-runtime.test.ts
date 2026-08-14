@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildResultCardModel } from "./result-card";
 import { browserSupportsFileShare, defaultResultCardRuntime } from "./ResultCard";
+import { buildResultCardModel } from "./result-card";
 
 // A plain .ts module (no React/testing-library import), matching result-card.test.ts's
 // stable pattern: exercising defaultResultCardRuntime alongside ResultCard.test.tsx's
