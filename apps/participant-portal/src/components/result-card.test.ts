@@ -127,7 +127,6 @@ describe("buildResultCardModel", () => {
     ["invalid-rank", { rank: 0 }],
     ["invalid-rank", { rank: 1.5 }],
     ["invalid-score", { score: Number.NaN }],
-    ["invalid-score", { score: -1 }],
     ["invalid-progress", { completedProblems: 7, totalProblems: 6 }],
     ["invalid-progress", { completedProblems: 1.5 }],
   ] as const)("rejects malformed official values with %s", (expectedCode, entryPatch) => {
@@ -138,6 +137,27 @@ describe("buildResultCardModel", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error.code).toBe(expectedCode);
+  });
+
+  it("accepts negative safe-integer scores and NFC-normalizes display text", () => {
+    const result = build({
+      eventTitle: "Cafe\u0301",
+      leaderboard: leaderboard({
+        entries: [
+          {
+            ...leaderboard().entries[0],
+            teamName: "Te\u0301am",
+            score: -75,
+          },
+        ],
+      }),
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.score).toBe(-75);
+    expect(result.value.eventTitle).toBe("Café");
+    expect(result.value.teamName).toBe("Téam");
   });
 });
 
