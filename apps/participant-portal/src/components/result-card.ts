@@ -157,7 +157,7 @@ function stripInvalidXmlCharacters(value: string): string {
 }
 
 function normalizeDisplayText(value: string, maximumCodePoints: number): string {
-  const normalized = stripInvalidXmlCharacters(replaceLoneSurrogates(value))
+  const normalized = stripInvalidXmlCharacters(replaceLoneSurrogates(value).normalize("NFC"))
     .replace(BIDI_CONTROL_CHARACTERS, "")
     .replace(/\s+/gu, " ")
     .trim();
@@ -214,8 +214,8 @@ export function buildResultCardModel(
   if (!ownEntry || !Number.isSafeInteger(ownEntry.rank) || ownEntry.rank < 1) {
     return fail("invalid-rank", "The team rank must be a positive safe integer.");
   }
-  if (!isNonNegativeSafeInteger(ownEntry.score)) {
-    return fail("invalid-score", "The team score must be a non-negative safe integer.");
+  if (!Number.isSafeInteger(ownEntry.score)) {
+    return fail("invalid-score", "The team score must be a safe integer.");
   }
   if (
     !isNonNegativeSafeInteger(ownEntry.completedProblems) ||
