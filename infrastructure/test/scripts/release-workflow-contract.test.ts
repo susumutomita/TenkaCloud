@@ -66,13 +66,56 @@ describe("release workflow contract", () => {
     expect(workflow).toContain("--generate-notes");
   });
 
-  it("keeps the least-privilege token: contents write only, no extra permissions", () => {
-    expect(workflow).toMatch(/permissions:\n {2}contents: write\n/);
-    expect(workflow.match(/permissions:/g)).toHaveLength(1);
+  it("keeps the least-privilege token: only the publishing job may write", () => {
+    expect(workflow).toMatch(/ {4}permissions:\n {6}contents: write\n/);
+    expect(workflow).toMatch(/ {4}permissions:\n {6}contents: read\n/);
+    // Per job, never workflow-wide: a workflow-level block would hand the verifier write access.
+    expect(workflow.match(/permissions:/g)).toHaveLength(2);
+    expect(workflow).not.toMatch(/\npermissions:/);
   });
 
   it("keeps the npm supply-chain overrides scoped to the pack and install steps", () => {
     expect(workflow).toContain("npm pack --no-ignore-scripts --min-release-age=7");
     expect(workflow).toContain('npm install -g --prefix "$PREFIX" "$TARBALL" --min-release-age=7');
+  });
+});
+
+// #3024 PR 5. The release is only as trustworthy as what GitHub actually serves, so a second
+// job re-verifies the published release from the outside. These assertions pin the properties
+// that make that verification meaningful: it cannot run before publication, it reads the tagged
+// tree, it requires the latest-download URL to serve this release, it installs the downloaded
+// bytes rather than the built ones, and it records evidence even when it fails.
+describe("published release verification contract", () => {
+  it("runs only after the release is created, and never with write access", () => {
+    expect(workflow).toMatch(/ {2}verify-published:\n {4}needs: release\n/);
+    expect(workflow.indexOf("  verify-published:")).toBeGreaterThan(
+      stepIndex("Create the release once, with every asset attached"),
+    );
+  });
+
+  it("checks out the exact tag the release job resolved", () => {
+    expect(workflow).toContain("ref: ${{ needs.release.outputs.tag }}");
+    expect(workflow).toMatch(/ {4}outputs:\n {6}tag: \$\{\{ steps\.tag\.outputs\.tag \}\}\n/);
+  });
+
+  it("verifies the published artifacts, requiring the latest-download URL to serve this release", () => {
+    expect(workflow).toContain("scripts/release/verify-published-release.ts");
+    expect(workflow).toContain("--require-latest");
+    expect(workflow).toContain('--evidence-out "$RUNNER_TEMP/published-release-evidence.json"');
+  });
+
+  it("installs the downloaded tarball, not the one the release job built", () => {
+    expect(stepIndex("Verify the published release")).toBeLessThan(
+      stepIndex("Install the published tarball outside the checkout and run it"),
+    );
+    expect(workflow).toContain('"$RUNNER_TEMP/published-assets/tenkacloud-cli-$VERSION.tgz"');
+    expect(workflow).toContain('(cd /tmp && "$PREFIX/bin/tenkacloud" --help)');
+  });
+
+  it("records the evidence in the run summary even when a check fails", () => {
+    expect(workflow).toMatch(
+      / {6}- name: Publish the verification evidence to the run summary\n {8}#[^\n]*\n(?: {8}#[^\n]*\n)* {8}if: \$\{\{ !cancelled\(\) \}\}\n/,
+    );
+    expect(workflow).toContain('>> "$GITHUB_STEP_SUMMARY"');
   });
 });

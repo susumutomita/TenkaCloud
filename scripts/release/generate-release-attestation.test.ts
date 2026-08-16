@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import {
   buildReleaseAttestation,
+  parseReleaseAttestation,
   parseSha256Sums,
   requiredReleaseAssets,
   type WorkflowIdentity,
@@ -117,6 +118,39 @@ describe("release attestation", () => {
     );
     expect(() => parseReleaseIdentity({ ...IDENTITY, extra: true })).toThrow("unknown property");
     expect(parseReleaseIdentity(structuredClone(IDENTITY))).toEqual(IDENTITY);
+  });
+
+  it("round-trips through the parser a downloaded attestation must pass", () => {
+    const attestation = buildReleaseAttestation({
+      identity: IDENTITY,
+      sums: parseSha256Sums(completeSums()),
+      workflow: WORKFLOW,
+      generatedAt: "2026-08-12T07:00:00.000Z",
+    });
+    expect(parseReleaseAttestation(JSON.parse(JSON.stringify(attestation)))).toEqual(attestation);
+  });
+
+  it.each([
+    [{ schemaVersion: 2 }, "$.schemaVersion"],
+    [{ tag: "v1.4" }, "stable v<major>.<minor>.<patch> release tag"],
+    [{ tag: "v9.9.9" }, "does not match the attested version"],
+    [{ platformCommit: "d".repeat(39) }, "lowercase full 40-hex platform commit"],
+    [{ simulatorImage: "ghcr.io/susumutomita/tenkacloud-simulator:v1.4.0" }, "sha256 digest"],
+    [{ manifestSha256: "not-a-digest" }, "lowercase SHA-256 digest"],
+    [{ status: "released" }, "expected one of candidate, certified"],
+    [{ generatedAt: "2026-08-12" }, "RFC 3339 date-time"],
+    [{ workflow: { repository: "susumutomita/TenkaCloud" } }, "required property is missing"],
+    [{ extra: true }, "unknown property"],
+  ])("rejects a downloaded attestation with %j", (overrides, message) => {
+    const attestation = buildReleaseAttestation({
+      identity: IDENTITY,
+      sums: parseSha256Sums(completeSums()),
+      workflow: WORKFLOW,
+      generatedAt: "2026-08-12T07:00:00.000Z",
+    });
+    expect(() => parseReleaseAttestation({ ...attestation, ...overrides })).toThrow(
+      message as string,
+    );
   });
 
   it("requires the full workflow identity from the environment", () => {
