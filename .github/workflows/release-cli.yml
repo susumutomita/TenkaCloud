@@ -11,6 +11,13 @@ name: release-cli
 #   → release-attestation.json (binds tag, platform commit, manifest digest, asset digests,
 #   and this workflow run) → a single `gh release create` with every asset attached.
 #
+# After the Release exists, `make release-verify-published TAG=v<x.y.z>` re-checks the whole
+# chain from the outside — downloading only what a third party can, and asserting the tag, the
+# attestation, SHA256SUMS, the published manifest and report, the latest-download URL, and the
+# Lite launcher default pair all describe one BOM. That step is deliberately NOT run here: the
+# launcher pair advances to a release only once its Release is published and verified, so the
+# verification belongs after publication, not inside it.
+#
 # Operational notes: pushing a `v*` tag is enough; the Release keeps the --generate-notes
 # ("What's Changed") body. Do NOT create the Release by hand before pushing the tag — this
 # repository's Releases are immutable (assets cannot be added or changed after publication),

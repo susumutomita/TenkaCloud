@@ -1,7 +1,17 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseReleaseIdentity, type ReleaseIdentity } from "./identity";
-import { fail } from "./manifest-fields";
+import { DIGEST_PINNED_IMAGE, FULL_COMMIT } from "./manifest";
+import {
+  arrayAt,
+  enumAt,
+  exactObject,
+  fail,
+  literalAt,
+  strictDateTimeAt,
+  stringAt,
+  stringMatching,
+} from "./manifest-fields";
 
 export const RELEASE_ATTESTATION_SCHEMA_VERSION = 1 as const;
 export const RELEASE_ATTESTATION_FILENAME = "release-attestation.json";
@@ -57,6 +67,100 @@ export function parseSha256Sums(content: string): readonly AttestedAsset[] {
     assets.push({ name: match[2] as string, sha256: match[1] as string });
   }
   return assets;
+}
+
+/** A lowercase hex SHA-256, the only digest form this release contract writes or accepts. */
+export const SHA256_HEX = /^[a-f0-9]{64}$/;
+
+/**
+ * Re-parses a published `release-attestation.json` with the same fail-closed vocabulary the
+ * builder writes it under. The attestation crosses the widest trust boundary in this contract
+ * — it is downloaded back from a GitHub Release by whoever is auditing it (#3024 PR 5) — so a
+ * verifier must never read it as loosely-typed JSON.
+ */
+export function parseReleaseAttestation(value: unknown): ReleaseAttestation {
+  const record = exactObject(value, "$", [
+    "schemaVersion",
+    "tag",
+    "version",
+    "status",
+    "platformCommit",
+    "catalogCommit",
+    "simulatorImage",
+    "manifestSha256",
+    "assets",
+    "workflow",
+    "generatedAt",
+  ]);
+  const workflow = exactObject(record.workflow, "$.workflow", [
+    "repository",
+    "runId",
+    "runAttempt",
+    "workflowRef",
+  ]);
+  return {
+    schemaVersion: literalAt(
+      record.schemaVersion,
+      "$.schemaVersion",
+      RELEASE_ATTESTATION_SCHEMA_VERSION,
+    ),
+    tag: stringMatching(
+      record.tag,
+      "$.tag",
+      /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/,
+      "expected a stable v<major>.<minor>.<patch> release tag",
+    ),
+    version: stringMatching(
+      record.version,
+      "$.version",
+      /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/,
+      "expected a stable X.Y.Z release version",
+    ),
+    status: enumAt(record.status, "$.status", ["candidate", "certified"] as const),
+    platformCommit: stringMatching(
+      record.platformCommit,
+      "$.platformCommit",
+      FULL_COMMIT,
+      "expected a lowercase full 40-hex platform commit",
+    ),
+    catalogCommit: stringMatching(
+      record.catalogCommit,
+      "$.catalogCommit",
+      FULL_COMMIT,
+      "expected a lowercase full 40-hex catalog commit",
+    ),
+    simulatorImage: stringMatching(
+      record.simulatorImage,
+      "$.simulatorImage",
+      DIGEST_PINNED_IMAGE,
+      "expected an OCI image pinned by a lowercase sha256 digest",
+    ),
+    manifestSha256: stringMatching(
+      record.manifestSha256,
+      "$.manifestSha256",
+      SHA256_HEX,
+      "expected a lowercase 64-hex sha256 digest",
+    ),
+    assets: arrayAt(record.assets, "$.assets").map((asset, index) => {
+      const entry = exactObject(asset, `$.assets[${index}]`, ["name", "sha256"]);
+      return {
+        name: stringAt(entry.name, `$.assets[${index}].name`),
+        sha256: stringMatching(
+          entry.sha256,
+          `$.assets[${index}].sha256`,
+          SHA256_HEX,
+          "expected a lowercase 64-hex sha256 digest",
+        ),
+      };
+    }),
+    workflow: {
+      repository: stringAt(workflow.repository, "$.workflow.repository"),
+      runId: stringAt(workflow.runId, "$.workflow.runId"),
+      runAttempt: stringAt(workflow.runAttempt, "$.workflow.runAttempt"),
+      workflowRef: stringAt(workflow.workflowRef, "$.workflow.workflowRef"),
+    },
+    generatedAt: strictDateTimeAt(record.generatedAt, "$.generatedAt"),
+  };
 }
 
 export interface BuildAttestationInput {

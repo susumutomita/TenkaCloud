@@ -709,10 +709,18 @@ describe("Simulator launch authorization", () => {
     expect(existsSync(simulatorLaunchIntentPath(options.sessionPath))).toBe(false);
   });
 
-  it("should keep the local-play docs pinned to the reviewed immutable image", () => {
+  // #3024: this used to assert the docs CONTAINED the digest, which made the operator manual a
+  // second authoring point for it — exactly the hand-transcribed current value the release
+  // contract forbids, and one that goes stale silently on the next image bump. The staleness
+  // protection did not disappear, it moved: scripts/release/check-bom-consumers.ts gates
+  // DEFAULT_SIMULATOR_IMAGE against the release manifest, so the manifest is the only place the
+  // digest is authored. What the docs owe now is a pointer to that source and no copy of it.
+  it("should keep the local-play docs free of a transcribed image digest", () => {
     const root = resolve(import.meta.dirname, "..", "..", "..");
     for (const path of ["docs/local-play.md"]) {
-      expect(readFileSync(join(root, path), "utf8")).toContain(DEFAULT_SIMULATOR_IMAGE);
+      const doc = readFileSync(join(root, path), "utf8");
+      expect(doc).not.toMatch(/@sha256:[a-f0-9]{64}/);
+      expect(doc).toContain("release/tenkacloud-release.json");
     }
   });
 

@@ -180,11 +180,13 @@ Image tags are rejected: the value must contain `@sha256:`. The launched
 Simulator binds a random loopback port and receives a fresh 256-bit launch
 secret. TenkaCloud signs a short-lived `tc_sim_v1` namespace token; browser
 console access receives it only as a URL fragment and it is never printed. The
-private native-CLI environment uses the token as a bearer credential. The default image
-is pinned to
-`ghcr.io/susumutomita/tenkacloud-simulator@sha256:049c6c165f9947b386b2c5864983aebefba26e996ec62859dae0e9814c52d505`;
-an explicit command, image, or externally managed URL replaces that default,
-and configuring more than one explicit source fails before resource creation.
+private native-CLI environment uses the token as a bearer credential. The default
+image is the digest-pinned Simulator of this release's BOM, declared in the
+[release manifest](../release/tenkacloud-release.json) and shown in the
+[generated release report](../release/tenkacloud-release.md); `make release-check`
+rejects any product code that would ship a different digest. An explicit command,
+image, or externally managed URL replaces that default, and configuring more than
+one explicit source fails before resource creation.
 
 When the validated catalog contains a digest-pinned workload, the local launcher
 also enables Simulator's bounded workload runner. A Simulator process uses the

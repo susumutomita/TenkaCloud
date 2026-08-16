@@ -220,14 +220,20 @@ pack-list: ## List installed problem packs | install済み問題packを一覧表
 	$(PACK) list $(ARGS)
 
 # ===== Release | リリース =====
-.PHONY: release-report release-launcher-defaults release-check form-setup
+.PHONY: release-report release-launcher-defaults release-check release-verify-published form-setup
 
 release-report: ## Generate the human release report | 人間向けrelease reportを生成
 	bun run release:report
 release-launcher-defaults: ## Stamp launcher template literals from release/launcher-defaults.json | launcher literalをlauncher-defaults.jsonから生成
 	bun run release:launcher-defaults
-release-check: ## Validate the release manifest, generated report, and launcher literals | release manifest・生成report・launcher literalを検証
+release-check: ## Validate the release manifest, generated report, launcher literals, and in-product BOM values | release manifest・生成report・launcher literal・製品コード内BOM値を検証
 	bun run release:check
+# Post-publication verification of a real GitHub Release (#3024). Reads only what a third
+# party can download, so it needs no checkout of the tag. e.g. make release-verify-published TAG=v1.4.0
+TAG ?=
+release-verify-published: ## Verify a published GitHub Release end to end | 公開済みGitHub Releaseをend-to-endで検証
+	@test -n "$(TAG)" || { echo "Usage: make release-verify-published TAG=v<major>.<minor>.<patch>" >&2; exit 1; }
+	bun run release:verify-published -- --tag $(TAG)
 # Options go through FORM_SETUP_ARGS; make would otherwise parse --repo itself.
 # e.g. make form-setup FORM_SETUP_ARGS="--repo owner/name --skip-workflow"
 FORM_SETUP_ARGS ?=
