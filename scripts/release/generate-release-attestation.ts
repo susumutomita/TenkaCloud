@@ -1,7 +1,15 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { parseReleaseIdentity, type ReleaseIdentity } from "./identity";
-import { fail } from "./manifest-fields";
+import { parseReleaseBomFields, parseReleaseIdentity, type ReleaseIdentity } from "./identity";
+import {
+  arrayAt,
+  exactObject,
+  fail,
+  literalAt,
+  strictDateTimeAt,
+  stringAt,
+  stringMatching,
+} from "./manifest-fields";
 
 export const RELEASE_ATTESTATION_SCHEMA_VERSION = 1 as const;
 export const RELEASE_ATTESTATION_FILENAME = "release-attestation.json";
@@ -106,6 +114,86 @@ export function buildReleaseAttestation(input: BuildAttestationInput): ReleaseAt
     workflow: input.workflow,
     generatedAt: input.generatedAt,
   };
+}
+
+const SHA256 = /^[a-f0-9]{64}$/;
+const RUN_NUMBER = /^[1-9]\d*$/;
+
+function parseAttestedAsset(value: unknown, index: number): AttestedAsset {
+  const record = exactObject(value, `$.assets[${index}]`, ["name", "sha256"]);
+  return {
+    name: stringAt(record.name, `$.assets[${index}].name`),
+    sha256: stringMatching(
+      record.sha256,
+      `$.assets[${index}].sha256`,
+      SHA256,
+      "expected a lowercase SHA-256 digest",
+    ),
+  };
+}
+
+function parseWorkflowIdentity(value: unknown): WorkflowIdentity {
+  const record = exactObject(value, "$.workflow", [
+    "repository",
+    "runId",
+    "runAttempt",
+    "workflowRef",
+  ]);
+  return {
+    repository: stringAt(record.repository, "$.workflow.repository"),
+    runId: stringMatching(record.runId, "$.workflow.runId", RUN_NUMBER, "expected a GitHub run id"),
+    runAttempt: stringMatching(
+      record.runAttempt,
+      "$.workflow.runAttempt",
+      RUN_NUMBER,
+      "expected a GitHub run attempt number",
+    ),
+    workflowRef: stringAt(record.workflowRef, "$.workflow.workflowRef"),
+  };
+}
+
+/**
+ * Parses a `release-attestation.json` that crossed a trust boundary — a downloaded
+ * release asset (#3024 PR 5), not the file this script just wrote. Same fail-closed
+ * vocabulary as the manifest and identity parsers: unknown fields, short SHAs, mutable
+ * image tags, and a tag that disagrees with its own version are all rejected before any
+ * field is compared with the release being verified.
+ */
+export function parseReleaseAttestation(value: unknown): ReleaseAttestation {
+  const record = exactObject(value, "$", [
+    "schemaVersion",
+    "tag",
+    "version",
+    "status",
+    "platformCommit",
+    "catalogCommit",
+    "simulatorImage",
+    "manifestSha256",
+    "assets",
+    "workflow",
+    "generatedAt",
+  ]);
+  const attestation: ReleaseAttestation = {
+    schemaVersion: literalAt(
+      record.schemaVersion,
+      "$.schemaVersion",
+      RELEASE_ATTESTATION_SCHEMA_VERSION,
+    ),
+    ...parseReleaseBomFields(record),
+    manifestSha256: stringMatching(
+      record.manifestSha256,
+      "$.manifestSha256",
+      SHA256,
+      "expected a lowercase SHA-256 digest",
+    ),
+    assets: arrayAt(record.assets, "$.assets").map(parseAttestedAsset),
+    workflow: parseWorkflowIdentity(record.workflow),
+    generatedAt: strictDateTimeAt(record.generatedAt, "$.generatedAt"),
+  };
+  if (attestation.tag !== `v${attestation.version}`) {
+    fail("$.tag", `does not match the attested version ${JSON.stringify(attestation.version)}`);
+  }
+  return attestation;
 }
 
 export function workflowIdentityFromEnv(env: NodeJS.ProcessEnv): WorkflowIdentity {

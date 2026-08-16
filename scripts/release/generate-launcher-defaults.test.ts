@@ -4,10 +4,13 @@ import {
   LAUNCHER_DEFAULTS_PATH,
   LAUNCHER_TEMPLATE_PATH,
   type LauncherDefaults,
+  launcherDefaultsFromIdentity,
   parseLauncherDefaults,
   readLauncherDefaults,
+  renderLauncherDefaults,
   stampLauncherDefaults,
 } from "./generate-launcher-defaults";
+import type { ReleaseIdentity } from "./identity";
 
 const template = readFileSync(LAUNCHER_TEMPLATE_PATH, "utf8");
 const committed = readLauncherDefaults();
@@ -66,6 +69,44 @@ describe("launcher defaults stamping", () => {
     const value = committedRaw();
     delete value.platformCommit;
     expect(() => parseLauncherDefaults(value)).toThrow("required property is missing");
+  });
+});
+
+describe("advancing the launcher pair to a published tag", () => {
+  const identity: ReleaseIdentity = {
+    tag: "v9.9.9",
+    version: "9.9.9",
+    status: "candidate",
+    platformCommit: "1".repeat(40),
+    catalogCommit: "2".repeat(40),
+    simulatorImage: `ghcr.io/susumutomita/tenkacloud-simulator@sha256:${"0".repeat(64)}`,
+    toolchain: {
+      bun: "1.3.11",
+      node: { development: "24", launcher: "22" },
+      awsCdk: { cli: "2.1133.0", library: "2.262.1" },
+    },
+  };
+
+  it("derives all three values from the tag's resolved identity", () => {
+    expect(launcherDefaultsFromIdentity(identity)).toEqual(OTHER);
+  });
+
+  it("renders a file the parser accepts, keeping the authoring comment", () => {
+    const rendered = renderLauncherDefaults(
+      launcherDefaultsFromIdentity(identity),
+      "why this file",
+    );
+    const value = JSON.parse(rendered) as Record<string, unknown>;
+    expect(value.$comment).toBe("why this file");
+    expect(parseLauncherDefaults(value)).toEqual(OTHER);
+    expect(rendered.endsWith("\n")).toBe(true);
+  });
+
+  it("renders the committed file byte-for-byte from its own values", () => {
+    const raw = committedRaw();
+    expect(renderLauncherDefaults(committed, raw.$comment as string)).toBe(
+      readFileSync(LAUNCHER_DEFAULTS_PATH, "utf8"),
+    );
   });
 });
 

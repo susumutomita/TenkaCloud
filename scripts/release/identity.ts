@@ -6,7 +6,7 @@ import {
   type ReleaseStatus,
   type ReleaseToolchain,
 } from "./manifest";
-import { enumAt, exactObject, stringMatching } from "./manifest-fields";
+import { enumAt, exactObject, stringMatching, type UnknownRecord } from "./manifest-fields";
 
 /**
  * The resolved identity of one publishable release (#3024): the checked-in manifest's
@@ -42,22 +42,15 @@ function fail(message: string): never {
 }
 
 /**
- * Re-validates a resolved identity that crossed a process boundary (the release
- * workflow pipes `verify-release-identity` output into the attestation generator).
- * The same fail-closed vocabulary as the manifest parser: unknown fields, mutable
- * refs, and tag/version disagreement are all rejected.
+ * The fields that say which release this is and what BOM it names. Shared vocabulary for
+ * every document that carries a release identity — the resolved identity itself and the
+ * attestation published beside it (#3024) — so the two can never disagree about what a
+ * valid commit, digest, or status looks like. Callers own the object shape around it.
  */
-export function parseReleaseIdentity(value: unknown): ReleaseIdentity {
-  const record = exactObject(value, "$", [
-    "tag",
-    "version",
-    "status",
-    "platformCommit",
-    "catalogCommit",
-    "simulatorImage",
-    "toolchain",
-  ]);
-  const identity: ReleaseIdentity = {
+export type ReleaseBomFields = Omit<ReleaseIdentity, "toolchain">;
+
+export function parseReleaseBomFields(record: UnknownRecord): ReleaseBomFields {
+  return {
     tag: stringMatching(
       record.tag,
       "$.tag",
@@ -89,6 +82,27 @@ export function parseReleaseIdentity(value: unknown): ReleaseIdentity {
       DIGEST_PINNED_IMAGE,
       "expected an OCI image pinned by a lowercase sha256 digest",
     ),
+  };
+}
+
+/**
+ * Re-validates a resolved identity that crossed a process boundary (the release
+ * workflow pipes `verify-release-identity` output into the attestation generator).
+ * The same fail-closed vocabulary as the manifest parser: unknown fields, mutable
+ * refs, and tag/version disagreement are all rejected.
+ */
+export function parseReleaseIdentity(value: unknown): ReleaseIdentity {
+  const record = exactObject(value, "$", [
+    "tag",
+    "version",
+    "status",
+    "platformCommit",
+    "catalogCommit",
+    "simulatorImage",
+    "toolchain",
+  ]);
+  const identity: ReleaseIdentity = {
+    ...parseReleaseBomFields(record),
     toolchain: parseToolchain(record.toolchain, "$.toolchain"),
   };
   if (identity.tag !== `v${identity.version}`) {

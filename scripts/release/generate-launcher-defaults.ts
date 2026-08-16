@@ -1,6 +1,8 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { exactObject, stringMatching } from "./manifest-fields";
+import type { ReleaseIdentity } from "./identity";
+import { exactObject, stringAt, stringMatching } from "./manifest-fields";
+import { resolveIdentityFromLocalTag } from "./verify-release-identity";
 
 export const LAUNCHER_DEFAULTS_PATH = resolve(
   import.meta.dirname,
@@ -13,8 +15,8 @@ export const LAUNCHER_TEMPLATE_PATH = resolve(
 
 /**
  * The launcher default pair last published: the values every hand-written literal in
- * lite-pipeline.yaml must equal. Authored in release/launcher-defaults.json — by the
- * release flow (#3024 PR 3/5) from the resolved release identity, never by editing
+ * lite-pipeline.yaml must equal. Authored in release/launcher-defaults.json — by
+ * `--from-tag` from a published tag's resolved identity (#3024 PR 5), never by editing
  * the template — and stamped into the template by this generator.
  */
 export interface LauncherDefaults {
@@ -140,8 +142,49 @@ export function stampLauncherDefaults(template: string, defaults: LauncherDefaul
   return next;
 }
 
+/**
+ * The launcher pair a published tag advertises. Derived from the tag's resolved identity
+ * (#3024 PR 5) rather than transcribed: the platform commit only exists once the tag does,
+ * and a mistyped SHA here would send every launcher build at a ref nobody released.
+ */
+export function launcherDefaultsFromIdentity(identity: ReleaseIdentity): LauncherDefaults {
+  return {
+    manifestVersion: identity.version,
+    platformCommit: identity.platformCommit,
+    catalogCommit: identity.catalogCommit,
+  };
+}
+
+export function renderLauncherDefaults(defaults: LauncherDefaults, comment: string): string {
+  return `${JSON.stringify({ $comment: comment, ...defaults }, null, 2)}\n`;
+}
+
+function advanceToTag(tag: string): void {
+  const { identity } = resolveIdentityFromLocalTag(tag);
+  const current = JSON.parse(readFileSync(LAUNCHER_DEFAULTS_PATH, "utf8")) as {
+    $comment?: unknown;
+  };
+  const comment = stringAt(current.$comment, "$.$comment");
+  writeFileSync(
+    LAUNCHER_DEFAULTS_PATH,
+    renderLauncherDefaults(launcherDefaultsFromIdentity(identity), comment),
+  );
+  console.log(`Advanced ${LAUNCHER_DEFAULTS_PATH} to the published identity of ${tag}`);
+}
+
 function main(): void {
   const check = process.argv.includes("--check");
+  const fromTagIndex = process.argv.indexOf("--from-tag");
+  if (fromTagIndex !== -1) {
+    const tag = process.argv[fromTagIndex + 1];
+    if (check || !tag || tag.startsWith("--")) {
+      throw new Error(
+        "Usage: bun run scripts/release/generate-launcher-defaults.ts " +
+          "[--check | --from-tag v<major>.<minor>.<patch>]",
+      );
+    }
+    advanceToTag(tag);
+  }
   const defaults = readLauncherDefaults();
   const current = readFileSync(LAUNCHER_TEMPLATE_PATH, "utf8");
   const next = stampLauncherDefaults(current, defaults);
