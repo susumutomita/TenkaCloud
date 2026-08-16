@@ -6,7 +6,7 @@ import {
   type ReleaseStatus,
   type ReleaseToolchain,
 } from "./manifest";
-import { enumAt, exactObject, stringMatching } from "./manifest-fields";
+import { enumAt, exactObject, stringMatching, type UnknownRecord } from "./manifest-fields";
 
 /**
  * The resolved identity of one publishable release (#3024): the checked-in manifest's
@@ -41,23 +41,33 @@ function fail(message: string): never {
   throw new Error(`Release identity mismatch: ${message}`);
 }
 
+/** The fields naming which release a document is about, shared by every such document. */
+export type ReleaseIdentityCore = Omit<ReleaseIdentity, "toolchain">;
+
 /**
- * Re-validates a resolved identity that crossed a process boundary (the release
- * workflow pipes `verify-release-identity` output into the attestation generator).
- * The same fail-closed vocabulary as the manifest parser: unknown fields, mutable
- * refs, and tag/version disagreement are all rejected.
+ * The field names of `ReleaseIdentityCore`, for callers building their own `exactObject`
+ * allow-list around it.
  */
-export function parseReleaseIdentity(value: unknown): ReleaseIdentity {
-  const record = exactObject(value, "$", [
-    "tag",
-    "version",
-    "status",
-    "platformCommit",
-    "catalogCommit",
-    "simulatorImage",
-    "toolchain",
-  ]);
-  const identity: ReleaseIdentity = {
+export const RELEASE_IDENTITY_CORE_FIELDS = [
+  "tag",
+  "version",
+  "status",
+  "platformCommit",
+  "catalogCommit",
+  "simulatorImage",
+] as const;
+
+/**
+ * Parses the identity fields every release document carries — the resolved identity itself
+ * and the attestation built from it (#3024) — including the invariant that a document's tag
+ * and version cannot disagree. Extracted so those two parsers cannot drift apart: a document
+ * that names a release must name it under exactly one set of rules.
+ *
+ * Takes an already-`exactObject`-checked record because each caller's document has its own
+ * additional fields and therefore its own allow-list.
+ */
+export function parseReleaseIdentityCore(record: UnknownRecord): ReleaseIdentityCore {
+  const core: ReleaseIdentityCore = {
     tag: stringMatching(
       record.tag,
       "$.tag",
@@ -89,15 +99,28 @@ export function parseReleaseIdentity(value: unknown): ReleaseIdentity {
       DIGEST_PINNED_IMAGE,
       "expected an OCI image pinned by a lowercase sha256 digest",
     ),
-    toolchain: parseToolchain(record.toolchain, "$.toolchain"),
   };
-  if (identity.tag !== `v${identity.version}`) {
+  if (core.tag !== `v${core.version}`) {
     fail(
-      `identity tag ${JSON.stringify(identity.tag)} does not match its version ` +
-        JSON.stringify(identity.version),
+      `identity tag ${JSON.stringify(core.tag)} does not match its version ` +
+        JSON.stringify(core.version),
     );
   }
-  return identity;
+  return core;
+}
+
+/**
+ * Re-validates a resolved identity that crossed a process boundary (the release
+ * workflow pipes `verify-release-identity` output into the attestation generator).
+ * The same fail-closed vocabulary as the manifest parser: unknown fields, mutable
+ * refs, and tag/version disagreement are all rejected.
+ */
+export function parseReleaseIdentity(value: unknown): ReleaseIdentity {
+  const record = exactObject(value, "$", [...RELEASE_IDENTITY_CORE_FIELDS, "toolchain"]);
+  return {
+    ...parseReleaseIdentityCore(record),
+    toolchain: parseToolchain(record.toolchain, "$.toolchain"),
+  };
 }
 
 /**

@@ -200,22 +200,20 @@ function assertSumsMatchServedBytes(published: PublishedAssets): void {
   }
 }
 
-/** Asserts the attestation was issued for this exact tag, version, and tag commit. */
+/**
+ * Asserts the attestation was issued for this exact tag and the commit that tag resolves to.
+ *
+ * Its version needs no separate check: `parseReleaseAttestation` already rejects an
+ * attestation whose tag and version disagree, so tag equality here implies version equality.
+ */
 function assertAttestationIdentity(
   attestation: ReleaseAttestation,
   input: PublishedReleaseInput,
-  version: string,
 ): void {
   if (attestation.tag !== input.tag) {
     fail(
       `the attestation was issued for tag ${JSON.stringify(attestation.tag)}, not ` +
         JSON.stringify(input.tag),
-    );
-  }
-  if (attestation.version !== version) {
-    fail(
-      `the attestation declares version ${JSON.stringify(attestation.version)}, which is not ` +
-        `the version of tag ${JSON.stringify(input.tag)}`,
     );
   }
   if (attestation.platformCommit !== input.tagCommit) {
@@ -379,7 +377,7 @@ export function verifyPublishedRelease(input: PublishedReleaseInput): PublishedR
   const attestation = parseReleaseAttestation(
     parseJsonAsset(RELEASE_ATTESTATION_FILENAME, published.textOf(RELEASE_ATTESTATION_FILENAME)),
   );
-  assertAttestationIdentity(attestation, input, version);
+  assertAttestationIdentity(attestation, input);
   checks.push("the attestation binds this tag to the commit the tag actually resolves to");
 
   assertAttestationDigests(attestation, published);

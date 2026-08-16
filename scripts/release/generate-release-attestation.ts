@@ -1,10 +1,13 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { parseReleaseIdentity, type ReleaseIdentity } from "./identity";
-import { DIGEST_PINNED_IMAGE, FULL_COMMIT } from "./manifest";
+import {
+  parseReleaseIdentity,
+  parseReleaseIdentityCore,
+  RELEASE_IDENTITY_CORE_FIELDS,
+  type ReleaseIdentity,
+} from "./identity";
 import {
   arrayAt,
-  enumAt,
   exactObject,
   fail,
   literalAt,
@@ -80,13 +83,8 @@ export const SHA256_HEX = /^[a-f0-9]{64}$/;
  */
 export function parseReleaseAttestation(value: unknown): ReleaseAttestation {
   const record = exactObject(value, "$", [
+    ...RELEASE_IDENTITY_CORE_FIELDS,
     "schemaVersion",
-    "tag",
-    "version",
-    "status",
-    "platformCommit",
-    "catalogCommit",
-    "simulatorImage",
     "manifestSha256",
     "assets",
     "workflow",
@@ -99,41 +97,13 @@ export function parseReleaseAttestation(value: unknown): ReleaseAttestation {
     "workflowRef",
   ]);
   return {
+    // The identity fields parse under the same rules as the resolved identity this
+    // attestation was built from — including tag/version agreement (scripts/release/identity.ts).
+    ...parseReleaseIdentityCore(record),
     schemaVersion: literalAt(
       record.schemaVersion,
       "$.schemaVersion",
       RELEASE_ATTESTATION_SCHEMA_VERSION,
-    ),
-    tag: stringMatching(
-      record.tag,
-      "$.tag",
-      /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/,
-      "expected a stable v<major>.<minor>.<patch> release tag",
-    ),
-    version: stringMatching(
-      record.version,
-      "$.version",
-      /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/,
-      "expected a stable X.Y.Z release version",
-    ),
-    status: enumAt(record.status, "$.status", ["candidate", "certified"] as const),
-    platformCommit: stringMatching(
-      record.platformCommit,
-      "$.platformCommit",
-      FULL_COMMIT,
-      "expected a lowercase full 40-hex platform commit",
-    ),
-    catalogCommit: stringMatching(
-      record.catalogCommit,
-      "$.catalogCommit",
-      FULL_COMMIT,
-      "expected a lowercase full 40-hex catalog commit",
-    ),
-    simulatorImage: stringMatching(
-      record.simulatorImage,
-      "$.simulatorImage",
-      DIGEST_PINNED_IMAGE,
-      "expected an OCI image pinned by a lowercase sha256 digest",
     ),
     manifestSha256: stringMatching(
       record.manifestSha256,

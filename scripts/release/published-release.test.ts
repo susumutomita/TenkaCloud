@@ -110,7 +110,8 @@ describe("published release verification", () => {
   it("rejects an attestation issued for another tag, version, or commit", () => {
     for (const [patch, message] of [
       [{ tag: "v9.9.9", version: "9.9.9" }, "was issued for tag"],
-      [{ version: "1.5.0" }, "declares version"],
+      // An internally inconsistent attestation dies in the parser, before the tag comparison.
+      [{ version: "1.5.0" }, "does not match its version"],
       [{ platformCommit: "e".repeat(40) }, "binds platform commit"],
     ] as const) {
       const assets = publishedAssets({ [RELEASE_ATTESTATION_FILENAME]: attestationWith(patch) });
