@@ -147,7 +147,10 @@ GitHub Release アセットとしての配布も現時点では行っていな�
 launcher の platform / catalog 初期値は、最後に公開した release baseline の完全な commit SHA
 と一致させる。正本は [`release/launcher-defaults.json`](../../release/launcher-defaults.json) で、
 `make release-launcher-defaults` が template の literal を生成し、`make release-check` が drift を
-拒否する（#3024 PR 2）。template の literal を手編集しない。次の release の machine-readable な記述は repo 直下の
+拒否する（#3024 PR 2）。この pair 自体も公開済み tag の identity から
+`bun run release:launcher-defaults --from-tag <tag>` で導出し、SHA を手で書き写さない（#3024 PR 5）。
+更新するのは、その tag の Release が `make release-verify-published TAG=<tag>` を通過した後だけです。
+template の literal を手編集しない。次の release の machine-readable な記述は repo 直下の
 [`release/tenkacloud-release.json`](../../release/tenkacloud-release.json) にあり、その platform
 commit は `v*` タグから publish 時に導出する。人間向けの現在地は、同じ manifest から生成した
 [`release/tenkacloud-release.md`](../../release/tenkacloud-release.md) を参照する。現在の pair は

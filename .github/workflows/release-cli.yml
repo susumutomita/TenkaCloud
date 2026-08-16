@@ -11,12 +11,13 @@ name: release-cli
 #   → release-attestation.json (binds tag, platform commit, manifest digest, asset digests,
 #   and this workflow run) → a single `gh release create` with every asset attached.
 #
-# After the Release exists, `make release-verify-published TAG=v<x.y.z>` re-checks the whole
-# chain from the outside — downloading only what a third party can, and asserting the tag, the
-# attestation, SHA256SUMS, the published manifest and report, the latest-download URL, and the
-# Lite launcher default pair all describe one BOM. That step is deliberately NOT run here: the
-# launcher pair advances to a release only once its Release is published and verified, so the
-# verification belongs after publication, not inside it.
+# A second job then verifies the release from the outside (#3024 PR 5): it re-downloads what
+# GitHub actually serves — including `releases/latest/download/tenkacloud-cli.tgz` — re-hashes
+# every asset, re-checks the attestation against the identity resolved from the tag, and
+# installs the downloaded tarball outside the checkout. Every release proves itself in the run
+# that created it, instead of trusting the job that built it or a one-time manual inspection.
+# A red `verify-published` job means the release must be recreated: published Releases here are
+# immutable, so there is nothing to patch.
 #
 # Operational notes: pushing a `v*` tag is enough; the Release keeps the --generate-notes
 # ("What's Changed") body. Do NOT create the Release by hand before pushing the tag — this
@@ -28,9 +29,7 @@ name: release-cli
 #
 # Supply Chain Security: actions pinned to full SHA (matches ci.yml). No external secret is
 # used; `GITHUB_TOKEN` is sufficient for both `gh release` and the `contents: write` permission.
-
-permissions:
-  contents: write
+# Permissions are declared per job, so only the job that publishes can write.
 
 on:
   push:
@@ -50,6 +49,11 @@ concurrency:
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      version: ${{ steps.tag.outputs.version }}
     steps:
       - name: Resolve the target tag
         id: tag
@@ -227,3 +231,81 @@ jobs:
               --generate-notes \
               "${ASSETS[@]}"
           fi
+
+  verify-published:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the code
+        # actions/checkout v4.3.1 (pinned, matches ci.yml)
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          # The tagged tree is half of the verification: the published manifest and report
+          # are compared against the files this tag actually recorded.
+          ref: ${{ needs.release.outputs.tag }}
+          submodules: false
+
+      - name: Setup Bun
+        # oven-sh/setup-bun v2.0.2 (pinned, matches ci.yml)
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: "1.3.11"
+
+      - name: Verify the published release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release.outputs.tag }}
+        # Fails the run when the published asset set, its checksums, the attestation, or the
+        # latest-download URL disagree with the identity resolved from the tag. --require-latest
+        # is correct here and only here: the tag just published is the repository's latest
+        # release, so `releases/latest/download/` must already serve it.
+        run: |
+          set -euo pipefail
+          bun run scripts/release/verify-published-release.ts \
+            --tag "$TAG" \
+            --require-latest \
+            --assets-out "$RUNNER_TEMP/published-assets" \
+            --evidence-out "$RUNNER_TEMP/published-release-evidence.json" > /dev/null
+
+      - name: Setup Node.js
+        # actions/setup-node v4 (pinned, matches form-sync.yml)
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+
+      - name: Install the published tarball outside the checkout and run it
+        env:
+          VERSION: ${{ needs.release.outputs.version }}
+        # The release job smoke-tested the tarball it built; this installs the bytes GitHub
+        # serves, which is what a participant actually gets. --min-release-age=7: same override
+        # as the release job, because the checked-out tag may still carry the broken `168h`
+        # value in its .npmrc.
+        run: |
+          set -euo pipefail
+          PREFIX="$(mktemp -d)"
+          npm install -g --prefix "$PREFIX" \
+            "$RUNNER_TEMP/published-assets/tenkacloud-cli-$VERSION.tgz" --min-release-age=7
+          (cd /tmp && "$PREFIX/bin/tenkacloud" --help)
+
+      - name: Publish the verification evidence to the run summary
+        # Runs on failure too — the evidence record matters most when a check fails, and it
+        # names the tag, the resolved BOM, every published digest, the producing workflow run,
+        # and the verdict of each check.
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          EVIDENCE="$RUNNER_TEMP/published-release-evidence.json"
+          if [ ! -s "$EVIDENCE" ]; then
+            echo "No evidence file was written: verification did not run to completion." \
+              >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            echo "## Published release verification"
+            echo
+            echo '```json'
+            cat "$EVIDENCE"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-import type { LauncherDefaults } from "./generate-launcher-defaults";
 import {
   type AttestedAsset,
   parseReleaseAttestation,
@@ -7,417 +5,417 @@ import {
   RELEASE_ATTESTATION_FILENAME,
   type ReleaseAttestation,
   requiredReleaseAssets,
-  SHA256_HEX,
+  type WorkflowIdentity,
 } from "./generate-release-attestation";
-import { renderReleaseReport } from "./generate-release-report";
-import { FULL_COMMIT, parseReleaseManifest, type ReleaseManifest } from "./manifest";
+import type { ReleaseIdentity } from "./identity";
 
 /**
- * The release-contract rules a published GitHub Release must satisfy (#3024 PR 5).
+ * Verifies a GitHub Release that is already published (#3024 PR 5).
  *
- * This module is pure: it decides, and never fetches. `verify-published-release.ts` owns
- * downloading a real Release and feeding it here, which is what lets the same rules run
- * over live bytes in CI and over fixtures in tests.
+ * Everything up to `gh release create` is verified by the workflow that builds it, from
+ * inputs it produced itself. This module verifies the opposite direction: it starts from
+ * the bytes GitHub actually serves and proves they are the release the tag claims —
+ * complete asset set, checksums over the published bytes, an attestation that agrees with
+ * the identity resolved from the tag, and a `releases/latest/download` URL that serves
+ * this release rather than an older one. That is the check a third party can repeat, so
+ * it is a pure function over fetched inputs with no I/O of its own.
  *
- * Every other release gate in this repository runs BEFORE publication and reads the
- * working tree. This one runs after, reads only what the Release actually serves to a
- * third party, and answers the question the issue exists to make answerable: does one
- * tag resolve to exactly one BOM everywhere a user can observe it?
- *
- * The chain it closes, entirely from downloaded bytes plus the forge's own tag→commit
- * answer:
- *
- *   tag → commit → attestation → SHA256SUMS → asset bytes → manifest → report
- *                                                              ↓
- *                                                    launcher default pair
- *
- * Nothing here trusts the tag name, and nothing trusts the checked-in tree except the
- * launcher binding it is asserting about. A release that passes has no path left by
- * which its GitHub Release, its CLI tarball, its generated report, and the Lite
- * launcher's default refs could be describing different software.
+ * Published releases are immutable here, so the output is evidence, not a repair plan: a
+ * failed check means the release must be recreated, never patched.
  */
 
 export const SHA256SUMS_FILENAME = "SHA256SUMS";
+export const LATEST_DOWNLOAD_ASSET = "tenkacloud-cli.tgz";
+export const RELEASE_WORKFLOW_PATH = ".github/workflows/release-cli.yml";
 export const PUBLISHED_RELEASE_EVIDENCE_SCHEMA_VERSION = 1 as const;
-export const UNVERSIONED_CLI_ASSET = "tenkacloud-cli.tgz";
-export const RELEASE_MANIFEST_ASSET = "release-manifest.json";
-export const RELEASE_REPORT_ASSET = "release-report.md";
 
-const STABLE_RELEASE_TAG = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
-
-/**
- * The complete published asset set: the hashed artifacts, the sums over them, and the
- * attestation that binds both. `requiredReleaseAssets` deliberately excludes the last two
- * (SHA256SUMS cannot hash itself, and the attestation embeds the sums), so a verifier
- * needs this wider list to assert the set is closed.
- */
-export function publishedReleaseAssetNames(version: string): readonly string[] {
-  return [...requiredReleaseAssets(version), SHA256SUMS_FILENAME, RELEASE_ATTESTATION_FILENAME];
+/** One asset attached to the published release, hashed from the bytes GitHub served. */
+export interface PublishedAsset {
+  readonly name: string;
+  readonly sha256: string;
 }
 
-export interface DownloadedAsset {
-  readonly name: string;
-  readonly bytes: Uint8Array;
+export interface LatestDownloadInput {
+  /**
+   * Whether `releases/latest/download/` must serve this release. True for a freshly
+   * published stable tag; false when re-verifying an older tag, where a newer release
+   * legitimately owns that URL.
+   */
+  readonly required: boolean;
+  /** `tag_name` of the repository's latest release, or null when it has none. */
+  readonly latestReleaseTag: string | null;
+  /** SHA-256 of the bytes served by the latest-download URL, or null when not fetched. */
+  readonly sha256: string | null;
+}
+
+/** Digests of the files as they exist in the tagged tree, read from git, not from GitHub. */
+export interface TaggedTreeDigests {
+  readonly manifestSha256: string;
+  readonly reportSha256: string;
 }
 
 export interface PublishedReleaseInput {
-  /** The published tag under verification, e.g. `v1.4.0`. */
-  readonly tag: string;
-  /** The commit that tag resolves to, read back from the forge — never from the manifest. */
-  readonly tagCommit: string;
-  /** Every asset the published Release carries, downloaded back from it. */
-  readonly assets: readonly DownloadedAsset[];
-  /** SHA-256 of the bytes served by `releases/latest/download/tenkacloud-cli.tgz`. */
-  readonly latestDownloadSha256: string;
-  /** The checked-in launcher binding, which must point at this published BOM. */
-  readonly launcherDefaults: LauncherDefaults;
+  readonly identity: ReleaseIdentity;
+  /** `owner/name` the release must belong to, derived from the tagged manifest. */
+  readonly repository: string;
+  readonly releaseUrl: string;
+  readonly assets: readonly PublishedAsset[];
+  /** Text of the published SHA256SUMS asset, or null when it is not attached. */
+  readonly sha256sums: string | null;
+  /** Text of the published attestation asset, or null when it is not attached. */
+  readonly attestationJson: string | null;
+  readonly taggedTree: TaggedTreeDigests;
+  readonly latestDownload: LatestDownloadInput;
   readonly verifiedAt: string;
+}
+
+export interface VerificationCheck {
+  readonly id: string;
+  readonly passed: boolean;
+  readonly detail: string;
 }
 
 export interface PublishedReleaseEvidence {
   readonly schemaVersion: typeof PUBLISHED_RELEASE_EVIDENCE_SCHEMA_VERSION;
-  readonly tag: string;
-  readonly version: string;
-  readonly status: ReleaseAttestation["status"];
-  readonly platformCommit: string;
-  readonly catalogCommit: string;
-  readonly simulatorImage: string;
-  readonly manifestSha256: string;
-  readonly assets: readonly AttestedAsset[];
-  readonly workflow: ReleaseAttestation["workflow"];
-  /** The verified invariants, in the order they were established. */
-  readonly checks: readonly string[];
   readonly verifiedAt: string;
+  readonly repository: string;
+  readonly tag: string;
+  readonly releaseUrl: string;
+  readonly identity: ReleaseIdentity;
+  readonly assets: readonly PublishedAsset[];
+  /** The run that produced the release, once the attestation parses; null otherwise. */
+  readonly workflow: WorkflowIdentity | null;
+  readonly checks: readonly VerificationCheck[];
+  readonly verified: boolean;
 }
 
-/** The one failure vocabulary for this contract, shared with the collection layer. */
-export function fail(message: string): never {
-  throw new Error(`Published release verification failed: ${message}`);
+function passed(id: string, detail: string): VerificationCheck {
+  return { id, passed: true, detail };
 }
 
-export function sha256(bytes: Uint8Array): string {
-  return createHash("sha256").update(bytes).digest("hex");
+function failed(id: string, detail: string): VerificationCheck {
+  return { id, passed: false, detail };
 }
 
-function decodeUtf8(name: string, bytes: Uint8Array): string {
-  try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-  } catch {
-    return fail(`published asset ${JSON.stringify(name)} is not valid UTF-8`);
+/** Code-unit order, not locale order: evidence must not depend on the verifying machine's ICU data. */
+function compareNames(left: string, right: string): number {
+  if (left === right) return 0;
+  return left < right ? -1 : 1;
+}
+
+function sortedNames(names: Iterable<string>): string[] {
+  return [...names].sort(compareNames);
+}
+
+function describeList(names: readonly string[]): string {
+  return names.map((name) => JSON.stringify(name)).join(", ");
+}
+
+/** The complete asset set a published release must carry: hashed artifacts, their sums, and the attestation. */
+export function publishedReleaseAssetNames(version: string): readonly string[] {
+  return [...requiredReleaseAssets(version), SHA256SUMS_FILENAME, RELEASE_ATTESTATION_FILENAME];
+}
+
+function checkAssetSet(input: PublishedReleaseInput): VerificationCheck {
+  const id = "release-assets-complete";
+  const expected = sortedNames(publishedReleaseAssetNames(input.identity.version));
+  const published = sortedNames(input.assets.map((asset) => asset.name));
+  const missing = expected.filter((name) => !published.includes(name));
+  const unexpected = published.filter((name) => !expected.includes(name));
+  if (missing.length > 0 || unexpected.length > 0) {
+    const parts = [
+      missing.length > 0 ? `missing ${describeList(missing)}` : "",
+      unexpected.length > 0 ? `unexpected ${describeList(unexpected)}` : "",
+    ].filter((part) => part !== "");
+    return failed(id, `The published asset set is wrong: ${parts.join("; ")}.`);
   }
-}
-
-function parseJsonAsset(name: string, text: string): unknown {
-  try {
-    return JSON.parse(text);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return fail(`published asset ${JSON.stringify(name)} is not valid JSON: ${message}`);
-  }
-}
-
-/**
- * The published bytes, indexed and hashed once. Each verification step below reads only
- * this and the inputs it is asserting about, so the steps stay independently readable.
- */
-interface PublishedAssets {
-  readonly version: string;
-  /** The assets SHA256SUMS and the attestation cover — everything except those two. */
-  readonly hashed: readonly string[];
-  readonly textOf: (name: string) => string;
-  readonly digestOf: (name: string) => string;
-}
-
-/**
- * Indexes the published assets and asserts the set is closed: exactly the required files,
- * each exactly once. Every later step may then look assets up without re-proving presence.
- */
-function indexPublishedAssets(
-  assets: readonly DownloadedAsset[],
-  version: string,
-): PublishedAssets {
-  const bytesByName = new Map<string, Uint8Array>();
-  for (const asset of assets) {
-    if (bytesByName.has(asset.name)) {
-      fail(`the published release carries ${JSON.stringify(asset.name)} more than once`);
-    }
-    bytesByName.set(asset.name, asset.bytes);
-  }
-  const expected = publishedReleaseAssetNames(version);
-  for (const name of expected) {
-    if (!bytesByName.has(name)) {
-      fail(`required asset ${JSON.stringify(name)} is missing from the published release`);
-    }
-  }
-  for (const name of bytesByName.keys()) {
-    if (!expected.includes(name)) {
-      fail(`unexpected published asset ${JSON.stringify(name)}; the release asset set is closed`);
-    }
-  }
-  const digestByName = new Map(
-    [...bytesByName].map(([name, bytes]) => [name, sha256(bytes)] as const),
+  return passed(
+    id,
+    `All ${expected.length} required assets are attached: ${describeList(expected)}.`,
   );
-  return {
-    version,
-    hashed: requiredReleaseAssets(version),
-    textOf: (name) => {
-      const bytes = bytesByName.get(name);
-      if (!bytes) fail(`required asset ${JSON.stringify(name)} is missing from the release`);
-      return decodeUtf8(name, bytes);
-    },
-    digestOf: (name) => {
-      const digest = digestByName.get(name);
-      if (!digest) fail(`required asset ${JSON.stringify(name)} was never hashed`);
-      return digest;
-    },
-  };
 }
 
-/**
- * Asserts SHA256SUMS covers exactly the hashed asset set and that every digest in it matches
- * the bytes the release actually serves. This is the step that catches an asset replaced
- * after it was hashed.
- */
-function assertSumsMatchServedBytes(published: PublishedAssets): void {
-  const sums = parseSha256Sums(published.textOf(SHA256SUMS_FILENAME));
-  const declaredByName = new Map(sums.map((asset) => [asset.name, asset.sha256]));
-  if (declaredByName.size !== sums.length) fail("SHA256SUMS lists the same asset more than once");
-  for (const name of declaredByName.keys()) {
-    if (!published.hashed.includes(name)) {
-      fail(`SHA256SUMS covers unexpected asset ${JSON.stringify(name)}`);
-    }
-  }
-  for (const name of published.hashed) {
-    const declared = declaredByName.get(name);
-    if (!declared) fail(`SHA256SUMS does not cover required asset ${JSON.stringify(name)}`);
-    const actual = published.digestOf(name);
-    if (declared !== actual) {
-      fail(
-        `published asset ${JSON.stringify(name)} hashes to ${actual}, but SHA256SUMS ` +
-          `declares ${declared}`,
-      );
-    }
-  }
-}
-
-/**
- * Asserts the attestation was issued for this exact tag and the commit that tag resolves to.
- *
- * Its version needs no separate check: `parseReleaseAttestation` already rejects an
- * attestation whose tag and version disagree, so tag equality here implies version equality.
- */
-function assertAttestationIdentity(
-  attestation: ReleaseAttestation,
+function checkSumsCoverage(
   input: PublishedReleaseInput,
-): void {
-  if (attestation.tag !== input.tag) {
-    fail(
-      `the attestation was issued for tag ${JSON.stringify(attestation.tag)}, not ` +
-        JSON.stringify(input.tag),
+  sums: readonly AttestedAsset[] | null,
+  sumsError: string | null,
+): VerificationCheck {
+  const id = "sha256sums-cover-hashed-assets";
+  if (sums === null) {
+    return failed(id, `SHA256SUMS is unusable: ${sumsError ?? "the asset is not attached"}.`);
+  }
+  const expected = sortedNames(requiredReleaseAssets(input.identity.version));
+  const listed = sortedNames(sums.map((asset) => asset.name));
+  if (describeList(expected) !== describeList(listed)) {
+    return failed(
+      id,
+      `SHA256SUMS lists ${describeList(listed)}; the hashed asset set is exactly ${describeList(expected)}.`,
     );
   }
-  if (attestation.platformCommit !== input.tagCommit) {
-    fail(
-      `the attestation binds platform commit ${JSON.stringify(attestation.platformCommit)}, but ` +
-        `tag ${JSON.stringify(input.tag)} resolves to ${JSON.stringify(input.tagCommit)}`,
-    );
-  }
+  return passed(id, `SHA256SUMS hashes exactly ${describeList(expected)}.`);
 }
 
-/** Asserts the attestation's digests cover, and agree with, the published bytes. */
-function assertAttestationDigests(
-  attestation: ReleaseAttestation,
-  published: PublishedAssets,
-): void {
-  const attestedByName = new Map(attestation.assets.map((asset) => [asset.name, asset.sha256]));
-  if (attestedByName.size !== attestation.assets.length) {
-    fail("the attestation lists the same asset more than once");
+function checkPublishedBytes(
+  input: PublishedReleaseInput,
+  sums: readonly AttestedAsset[] | null,
+): VerificationCheck {
+  const id = "published-bytes-match-sha256sums";
+  if (sums === null)
+    return failed(id, "SHA256SUMS is unusable, so the published bytes are unverified.");
+  const published = new Map(input.assets.map((asset) => [asset.name, asset.sha256]));
+  const mismatches = sums
+    .filter((asset) => published.get(asset.name) !== asset.sha256)
+    .map(
+      (asset) =>
+        `${asset.name} (SHA256SUMS ${asset.sha256}, downloaded ${published.get(asset.name) ?? "absent"})`,
+    );
+  if (mismatches.length > 0) {
+    return failed(id, `Downloaded bytes disagree with SHA256SUMS: ${mismatches.join("; ")}.`);
   }
-  for (const name of published.hashed) {
-    const attested = attestedByName.get(name);
-    if (!attested) fail(`the attestation does not cover required asset ${JSON.stringify(name)}`);
-    const served = published.digestOf(name);
-    if (attested !== served) {
-      fail(
-        `the attestation declares ${JSON.stringify(name)} as ${attested}, but the release ` +
-          `serves ${served}`,
-      );
+  return passed(id, `Every hashed asset's downloaded bytes match its SHA256SUMS digest.`);
+}
+
+function checkAttestedIdentity(
+  input: PublishedReleaseInput,
+  attestation: ReleaseAttestation | null,
+  attestationError: string | null,
+): VerificationCheck {
+  const id = "attestation-matches-tag-identity";
+  if (attestation === null) {
+    return failed(
+      id,
+      `${RELEASE_ATTESTATION_FILENAME} is unusable: ${attestationError ?? "the asset is not attached"}.`,
+    );
+  }
+  const { identity } = input;
+  const disagreements = (
+    [
+      ["tag", attestation.tag, identity.tag],
+      ["version", attestation.version, identity.version],
+      ["status", attestation.status, identity.status],
+      ["platformCommit", attestation.platformCommit, identity.platformCommit],
+      ["catalogCommit", attestation.catalogCommit, identity.catalogCommit],
+      ["simulatorImage", attestation.simulatorImage, identity.simulatorImage],
+    ] as const
+  )
+    .filter(([, attested, resolved]) => attested !== resolved)
+    .map(([field, attested, resolved]) => `${field} (attested ${attested}, tag ${resolved})`);
+  if (disagreements.length > 0) {
+    return failed(
+      id,
+      `The attestation describes a different release than the tag: ${disagreements.join("; ")}.`,
+    );
+  }
+  return passed(
+    id,
+    `The attestation binds ${identity.tag} to platform ${identity.platformCommit}, catalog ` +
+      `${identity.catalogCommit}, and ${identity.simulatorImage}.`,
+  );
+}
+
+function checkAttestedAssets(
+  attestation: ReleaseAttestation | null,
+  sums: readonly AttestedAsset[] | null,
+  published: readonly PublishedAsset[],
+): VerificationCheck {
+  const id = "attestation-matches-published-assets";
+  if (attestation === null || sums === null) {
+    return failed(
+      id,
+      "The attestation or SHA256SUMS is unusable, so the asset digests are unverified.",
+    );
+  }
+  const attested = new Map(attestation.assets.map((asset) => [asset.name, asset.sha256]));
+  const disagreements = sums
+    .filter((asset) => attested.get(asset.name) !== asset.sha256)
+    .map(
+      (asset) =>
+        `${asset.name} (attested ${attested.get(asset.name) ?? "absent"}, SHA256SUMS ${asset.sha256})`,
+    );
+  for (const asset of attestation.assets) {
+    if (!sums.some((hashed) => hashed.name === asset.name)) {
+      disagreements.push(`${asset.name} (attested but not in SHA256SUMS)`);
     }
   }
-  for (const name of attestedByName.keys()) {
-    if (!published.hashed.includes(name)) {
-      fail(`the attestation covers unexpected asset ${JSON.stringify(name)}`);
-    }
-  }
-  const manifestDigest = published.digestOf(RELEASE_MANIFEST_ASSET);
+  const manifestDigest = published.find((asset) => asset.name === "release-manifest.json")?.sha256;
   if (attestation.manifestSha256 !== manifestDigest) {
-    fail(
-      `the attestation's manifest digest ${attestation.manifestSha256} does not match the ` +
-        `published manifest digest ${manifestDigest}`,
+    disagreements.push(
+      `manifestSha256 (attested ${attestation.manifestSha256}, downloaded ${manifestDigest ?? "absent"})`,
     );
   }
+  if (disagreements.length > 0) {
+    return failed(
+      id,
+      `The attestation disagrees with the published assets: ${disagreements.join("; ")}.`,
+    );
+  }
+  return passed(
+    id,
+    `The attestation covers every hashed asset and the published manifest digest ${attestation.manifestSha256}.`,
+  );
 }
 
-/** Asserts the published manifest describes the same BOM the attestation binds. */
-function assertManifestMatchesAttestation(
-  manifest: ReleaseManifest,
-  attestation: ReleaseAttestation,
-  version: string,
-): void {
-  if (manifest.release.version !== version) {
-    fail(
-      `the published manifest declares version ${JSON.stringify(manifest.release.version)}, not ` +
-        JSON.stringify(version),
+function checkAttestedProvenance(
+  input: PublishedReleaseInput,
+  attestation: ReleaseAttestation | null,
+): VerificationCheck {
+  const id = "attestation-names-the-release-workflow-run";
+  if (attestation === null) {
+    return failed(
+      id,
+      `${RELEASE_ATTESTATION_FILENAME} is unusable, so the release has no provenance.`,
     );
   }
-  if (manifest.release.status !== attestation.status) {
-    fail(
-      `the published manifest is ${JSON.stringify(manifest.release.status)}, but the attestation ` +
-        `records ${JSON.stringify(attestation.status)}`,
+  const { workflow } = attestation;
+  const expectedRefPrefix = `${input.repository}/${RELEASE_WORKFLOW_PATH}@`;
+  if (workflow.repository !== input.repository) {
+    return failed(
+      id,
+      `The attestation was produced in ${workflow.repository}, not ${input.repository}.`,
     );
   }
-  if (manifest.sources.catalog.commit !== attestation.catalogCommit) {
-    fail(
-      `the published manifest pins catalog ${JSON.stringify(manifest.sources.catalog.commit)}, ` +
-        `but the attestation binds ${JSON.stringify(attestation.catalogCommit)}`,
+  if (!workflow.workflowRef.startsWith(expectedRefPrefix)) {
+    return failed(
+      id,
+      `The attestation names workflow ${workflow.workflowRef}, not ${expectedRefPrefix}<ref>.`,
     );
   }
-  if (manifest.artifacts.simulatorImage !== attestation.simulatorImage) {
-    fail(
-      `the published manifest pins Simulator ${JSON.stringify(manifest.artifacts.simulatorImage)}, ` +
-        `but the attestation binds ${JSON.stringify(attestation.simulatorImage)}`,
+  return passed(
+    id,
+    `Produced by ${workflow.workflowRef} run ${workflow.runId} attempt ${workflow.runAttempt}.`,
+  );
+}
+
+function checkTaggedTreeBytes(input: PublishedReleaseInput): VerificationCheck {
+  const id = "published-documents-match-the-tagged-tree";
+  const published = new Map(input.assets.map((asset) => [asset.name, asset.sha256]));
+  const disagreements = (
+    [
+      ["release-manifest.json", input.taggedTree.manifestSha256],
+      ["release-report.md", input.taggedTree.reportSha256],
+    ] as const
+  )
+    .filter(([name, tagged]) => published.get(name) !== tagged)
+    .map(
+      ([name, tagged]) =>
+        `${name} (published ${published.get(name) ?? "absent"}, tagged ${tagged})`,
+    );
+  if (disagreements.length > 0) {
+    return failed(
+      id,
+      `Published documents differ from the files in the tagged tree: ${disagreements.join("; ")}.`,
     );
   }
+  return passed(
+    id,
+    "The published manifest and report are byte-identical to the files in the tagged tree.",
+  );
+}
+
+function checkLatestDownload(input: PublishedReleaseInput): VerificationCheck {
+  const id = "latest-download-serves-this-release";
+  const { latestDownload, identity } = input;
+  const publishedDigest = input.assets.find(
+    (asset) => asset.name === LATEST_DOWNLOAD_ASSET,
+  )?.sha256;
+  if (latestDownload.latestReleaseTag !== identity.tag) {
+    const detail =
+      `The repository's latest release is ${latestDownload.latestReleaseTag ?? "none"}, not ${identity.tag}, ` +
+      `so releases/latest/download/${LATEST_DOWNLOAD_ASSET} does not serve this release.`;
+    return latestDownload.required ? failed(id, detail) : passed(id, `Not applicable: ${detail}`);
+  }
+  if (latestDownload.sha256 === null) {
+    return failed(id, `releases/latest/download/${LATEST_DOWNLOAD_ASSET} was not retrievable.`);
+  }
+  if (latestDownload.sha256 !== publishedDigest) {
+    return failed(
+      id,
+      `releases/latest/download/${LATEST_DOWNLOAD_ASSET} served ${latestDownload.sha256}, but this ` +
+        `release publishes ${publishedDigest ?? "no such asset"}.`,
+    );
+  }
+  return passed(
+    id,
+    `releases/latest/download/${LATEST_DOWNLOAD_ASSET} serves this release's ${latestDownload.sha256}.`,
+  );
+}
+
+function checkTarballCopies(input: PublishedReleaseInput): VerificationCheck {
+  const id = "unversioned-tarball-copies-the-versioned-one";
+  const published = new Map(input.assets.map((asset) => [asset.name, asset.sha256]));
+  const versioned = published.get(`tenkacloud-cli-${input.identity.version}.tgz`);
+  const unversioned = published.get(LATEST_DOWNLOAD_ASSET);
+  if (versioned === undefined || unversioned === undefined || versioned !== unversioned) {
+    return failed(
+      id,
+      `tenkacloud-cli-${input.identity.version}.tgz (${versioned ?? "absent"}) and ` +
+        `${LATEST_DOWNLOAD_ASSET} (${unversioned ?? "absent"}) are not the same bytes.`,
+    );
+  }
+  return passed(id, `Both CLI tarballs are the same bytes (${versioned}).`);
 }
 
 /**
- * Asserts the unversioned tarball is an alias of this release's tarball, and that the
- * `releases/latest/download/` URL — the one install instructions point at — serves it.
- */
-function assertCliArtifacts(published: PublishedAssets, latestDownloadSha256: string): void {
-  const versioned = published.digestOf(`tenkacloud-cli-${published.version}.tgz`);
-  if (published.digestOf(UNVERSIONED_CLI_ASSET) !== versioned) {
-    fail(
-      `${UNVERSIONED_CLI_ASSET} and tenkacloud-cli-${published.version}.tgz are different bytes; ` +
-        "the unversioned asset must be an alias of this release's tarball",
-    );
-  }
-  if (latestDownloadSha256 !== versioned) {
-    fail(
-      `releases/latest/download/${UNVERSIONED_CLI_ASSET} serves ${latestDownloadSha256}, ` +
-        `not this release's tarball ${versioned}`,
-    );
-  }
-}
-
-/**
- * Asserts the Lite launcher's checked-in default pair points at this release's BOM. This is
- * the one step that reads the repository rather than the download: it is the claim that the
- * launcher a user runs deploys the software this tag published.
- */
-function assertLauncherBinding(
-  launcherDefaults: LauncherDefaults,
-  attestation: ReleaseAttestation,
-  version: string,
-): void {
-  if (launcherDefaults.platformCommit !== attestation.platformCommit) {
-    fail(
-      `the Lite launcher default RepoRef ${JSON.stringify(launcherDefaults.platformCommit)} ` +
-        `is not this release's platform commit ${JSON.stringify(attestation.platformCommit)}`,
-    );
-  }
-  if (launcherDefaults.catalogCommit !== attestation.catalogCommit) {
-    fail(
-      "the Lite launcher default ProblemsRepoRef " +
-        `${JSON.stringify(launcherDefaults.catalogCommit)} is not this release's catalog ` +
-        `commit ${JSON.stringify(attestation.catalogCommit)}`,
-    );
-  }
-  if (launcherDefaults.manifestVersion !== version) {
-    fail(
-      "the Lite launcher reports manifest version " +
-        `${JSON.stringify(launcherDefaults.manifestVersion)}, not ${JSON.stringify(version)}`,
-    );
-  }
-}
-
-/** Asserts the tag and the two loose digests in `input` are well-formed before anything else. */
-function assertInputShape(input: PublishedReleaseInput): string {
-  if (!STABLE_RELEASE_TAG.test(input.tag)) {
-    fail(`tag ${JSON.stringify(input.tag)} is not a stable v<major>.<minor>.<patch> release tag`);
-  }
-  if (!FULL_COMMIT.test(input.tagCommit)) {
-    fail(`tag commit ${JSON.stringify(input.tagCommit)} is not a lowercase full 40-hex commit`);
-  }
-  if (!SHA256_HEX.test(input.latestDownloadSha256)) {
-    fail(
-      `the latest-download digest ${JSON.stringify(input.latestDownloadSha256)} ` +
-        "is not a lowercase 64-hex sha256",
-    );
-  }
-  return input.tag.slice(1);
-}
-
-/**
- * Verifies one published Release against the release contract, failing closed on the first
- * disagreement. Pure: every fact it checks arrives through `input`, so the same function runs
- * over live downloads in CI and over fixtures in tests. The returned evidence lists the
- * invariants that held, in the order they were established.
+ * Runs every published-release check and returns the evidence record. Checks never throw:
+ * an unusable asset fails its own check and the ones that depend on it, so one broken
+ * release still produces a complete report instead of stopping at the first problem.
  */
 export function verifyPublishedRelease(input: PublishedReleaseInput): PublishedReleaseEvidence {
-  const version = assertInputShape(input);
-  const published = indexPublishedAssets(input.assets, version);
-  const checks = [
-    `the published asset set is exactly the required ${publishedReleaseAssetNames(version).length} files`,
-  ];
-
-  assertSumsMatchServedBytes(published);
-  checks.push("every SHA256SUMS digest matches the bytes the release actually serves");
-
-  const attestation = parseReleaseAttestation(
-    parseJsonAsset(RELEASE_ATTESTATION_FILENAME, published.textOf(RELEASE_ATTESTATION_FILENAME)),
-  );
-  assertAttestationIdentity(attestation, input);
-  checks.push("the attestation binds this tag to the commit the tag actually resolves to");
-
-  assertAttestationDigests(attestation, published);
-  checks.push("the attestation's manifest and artifact digests match the published bytes");
-
-  const manifest = parseReleaseManifest(
-    parseJsonAsset(RELEASE_MANIFEST_ASSET, published.textOf(RELEASE_MANIFEST_ASSET)),
-    { now: new Date(input.verifiedAt) },
-  );
-  assertManifestMatchesAttestation(manifest, attestation, version);
-  checks.push("the published manifest declares the same BOM the attestation binds");
-
-  if (published.textOf(RELEASE_REPORT_ASSET) !== renderReleaseReport(manifest)) {
-    fail(
-      `the published ${RELEASE_REPORT_ASSET} is not what the published manifest generates; a ` +
-        "release report must be generated from the manifest, never hand-edited",
-    );
+  let sums: readonly AttestedAsset[] | null = null;
+  let sumsError: string | null = null;
+  if (input.sha256sums === null) {
+    sumsError = "the asset is not attached";
+  } else {
+    try {
+      sums = parseSha256Sums(input.sha256sums);
+    } catch (error) {
+      sumsError = error instanceof Error ? error.message : String(error);
+    }
   }
-  checks.push("the published report regenerates byte-for-byte from the published manifest");
 
-  assertCliArtifacts(published, input.latestDownloadSha256);
-  checks.push(
-    `releases/latest/download/${UNVERSIONED_CLI_ASSET} serves this release's tarball byte-for-byte`,
-  );
+  let attestation: ReleaseAttestation | null = null;
+  let attestationError: string | null = null;
+  if (input.attestationJson === null) {
+    attestationError = "the asset is not attached";
+  } else {
+    try {
+      attestation = parseReleaseAttestation(JSON.parse(input.attestationJson));
+    } catch (error) {
+      attestationError = error instanceof Error ? error.message : String(error);
+    }
+  }
 
-  assertLauncherBinding(input.launcherDefaults, attestation, version);
-  checks.push("the Lite launcher default pair points at this release's BOM");
+  const checks: readonly VerificationCheck[] = [
+    checkAssetSet(input),
+    checkSumsCoverage(input, sums, sumsError),
+    checkPublishedBytes(input, sums),
+    checkTarballCopies(input),
+    checkTaggedTreeBytes(input),
+    checkAttestedIdentity(input, attestation, attestationError),
+    checkAttestedAssets(attestation, sums, input.assets),
+    checkAttestedProvenance(input, attestation),
+    checkLatestDownload(input),
+  ];
 
   return {
     schemaVersion: PUBLISHED_RELEASE_EVIDENCE_SCHEMA_VERSION,
-    tag: input.tag,
-    version,
-    status: attestation.status,
-    platformCommit: attestation.platformCommit,
-    catalogCommit: attestation.catalogCommit,
-    simulatorImage: attestation.simulatorImage,
-    manifestSha256: attestation.manifestSha256,
-    assets: published.hashed.map((name) => ({ name, sha256: published.digestOf(name) })),
-    workflow: attestation.workflow,
-    checks,
     verifiedAt: input.verifiedAt,
+    repository: input.repository,
+    tag: input.identity.tag,
+    releaseUrl: input.releaseUrl,
+    identity: input.identity,
+    assets: [...input.assets].sort((left, right) => compareNames(left.name, right.name)),
+    workflow: attestation?.workflow ?? null,
+    checks,
+    verified: checks.every((check) => check.passed),
   };
+}
+
+/** `https://github.com/owner/name.git` → `owner/name`, the form GitHub's API and `GITHUB_REPOSITORY` use. */
+export function repositorySlug(repositoryUrl: string): string {
+  const path = new URL(repositoryUrl).pathname.replace(/^\//, "").replace(/\.git$/, "");
+  if (!/^[^/]+\/[^/]+$/.test(path)) {
+    throw new Error(`Cannot derive an owner/name slug from ${JSON.stringify(repositoryUrl)}.`);
+  }
+  return path;
 }

@@ -1,11 +1,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-  parseReleaseIdentity,
-  parseReleaseIdentityCore,
-  RELEASE_IDENTITY_CORE_FIELDS,
-  type ReleaseIdentity,
-} from "./identity";
+import { parseReleaseBomFields, parseReleaseIdentity, type ReleaseIdentity } from "./identity";
 import {
   arrayAt,
   exactObject,
@@ -72,67 +67,6 @@ export function parseSha256Sums(content: string): readonly AttestedAsset[] {
   return assets;
 }
 
-/** A lowercase hex SHA-256, the only digest form this release contract writes or accepts. */
-export const SHA256_HEX = /^[a-f0-9]{64}$/;
-
-/**
- * Re-parses a published `release-attestation.json` with the same fail-closed vocabulary the
- * builder writes it under. The attestation crosses the widest trust boundary in this contract
- * — it is downloaded back from a GitHub Release by whoever is auditing it (#3024 PR 5) — so a
- * verifier must never read it as loosely-typed JSON.
- */
-export function parseReleaseAttestation(value: unknown): ReleaseAttestation {
-  const record = exactObject(value, "$", [
-    ...RELEASE_IDENTITY_CORE_FIELDS,
-    "schemaVersion",
-    "manifestSha256",
-    "assets",
-    "workflow",
-    "generatedAt",
-  ]);
-  const workflow = exactObject(record.workflow, "$.workflow", [
-    "repository",
-    "runId",
-    "runAttempt",
-    "workflowRef",
-  ]);
-  return {
-    // The identity fields parse under the same rules as the resolved identity this
-    // attestation was built from — including tag/version agreement (scripts/release/identity.ts).
-    ...parseReleaseIdentityCore(record),
-    schemaVersion: literalAt(
-      record.schemaVersion,
-      "$.schemaVersion",
-      RELEASE_ATTESTATION_SCHEMA_VERSION,
-    ),
-    manifestSha256: stringMatching(
-      record.manifestSha256,
-      "$.manifestSha256",
-      SHA256_HEX,
-      "expected a lowercase 64-hex sha256 digest",
-    ),
-    assets: arrayAt(record.assets, "$.assets").map((asset, index) => {
-      const entry = exactObject(asset, `$.assets[${index}]`, ["name", "sha256"]);
-      return {
-        name: stringAt(entry.name, `$.assets[${index}].name`),
-        sha256: stringMatching(
-          entry.sha256,
-          `$.assets[${index}].sha256`,
-          SHA256_HEX,
-          "expected a lowercase 64-hex sha256 digest",
-        ),
-      };
-    }),
-    workflow: {
-      repository: stringAt(workflow.repository, "$.workflow.repository"),
-      runId: stringAt(workflow.runId, "$.workflow.runId"),
-      runAttempt: stringAt(workflow.runAttempt, "$.workflow.runAttempt"),
-      workflowRef: stringAt(workflow.workflowRef, "$.workflow.workflowRef"),
-    },
-    generatedAt: strictDateTimeAt(record.generatedAt, "$.generatedAt"),
-  };
-}
-
 export interface BuildAttestationInput {
   readonly identity: ReleaseIdentity;
   readonly sums: readonly AttestedAsset[];
@@ -180,6 +114,86 @@ export function buildReleaseAttestation(input: BuildAttestationInput): ReleaseAt
     workflow: input.workflow,
     generatedAt: input.generatedAt,
   };
+}
+
+const SHA256 = /^[a-f0-9]{64}$/;
+const RUN_NUMBER = /^[1-9]\d*$/;
+
+function parseAttestedAsset(value: unknown, index: number): AttestedAsset {
+  const record = exactObject(value, `$.assets[${index}]`, ["name", "sha256"]);
+  return {
+    name: stringAt(record.name, `$.assets[${index}].name`),
+    sha256: stringMatching(
+      record.sha256,
+      `$.assets[${index}].sha256`,
+      SHA256,
+      "expected a lowercase SHA-256 digest",
+    ),
+  };
+}
+
+function parseWorkflowIdentity(value: unknown): WorkflowIdentity {
+  const record = exactObject(value, "$.workflow", [
+    "repository",
+    "runId",
+    "runAttempt",
+    "workflowRef",
+  ]);
+  return {
+    repository: stringAt(record.repository, "$.workflow.repository"),
+    runId: stringMatching(record.runId, "$.workflow.runId", RUN_NUMBER, "expected a GitHub run id"),
+    runAttempt: stringMatching(
+      record.runAttempt,
+      "$.workflow.runAttempt",
+      RUN_NUMBER,
+      "expected a GitHub run attempt number",
+    ),
+    workflowRef: stringAt(record.workflowRef, "$.workflow.workflowRef"),
+  };
+}
+
+/**
+ * Parses a `release-attestation.json` that crossed a trust boundary — a downloaded
+ * release asset (#3024 PR 5), not the file this script just wrote. Same fail-closed
+ * vocabulary as the manifest and identity parsers: unknown fields, short SHAs, mutable
+ * image tags, and a tag that disagrees with its own version are all rejected before any
+ * field is compared with the release being verified.
+ */
+export function parseReleaseAttestation(value: unknown): ReleaseAttestation {
+  const record = exactObject(value, "$", [
+    "schemaVersion",
+    "tag",
+    "version",
+    "status",
+    "platformCommit",
+    "catalogCommit",
+    "simulatorImage",
+    "manifestSha256",
+    "assets",
+    "workflow",
+    "generatedAt",
+  ]);
+  const attestation: ReleaseAttestation = {
+    schemaVersion: literalAt(
+      record.schemaVersion,
+      "$.schemaVersion",
+      RELEASE_ATTESTATION_SCHEMA_VERSION,
+    ),
+    ...parseReleaseBomFields(record),
+    manifestSha256: stringMatching(
+      record.manifestSha256,
+      "$.manifestSha256",
+      SHA256,
+      "expected a lowercase SHA-256 digest",
+    ),
+    assets: arrayAt(record.assets, "$.assets").map(parseAttestedAsset),
+    workflow: parseWorkflowIdentity(record.workflow),
+    generatedAt: strictDateTimeAt(record.generatedAt, "$.generatedAt"),
+  };
+  if (attestation.tag !== `v${attestation.version}`) {
+    fail("$.tag", `does not match the attested version ${JSON.stringify(attestation.version)}`);
+  }
+  return attestation;
 }
 
 export function workflowIdentityFromEnv(env: NodeJS.ProcessEnv): WorkflowIdentity {
