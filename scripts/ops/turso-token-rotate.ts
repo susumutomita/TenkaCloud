@@ -1,5 +1,4 @@
-import type { ProcessRunner } from "../cli/process";
-import { resolveTursoResetTarget, type TursoResetTarget } from "./turso-reset";
+import { resolveTursoTargetOrLog, type TursoOpsDeps, type TursoResetTarget } from "./turso-reset";
 
 /**
  * `make turso-token-rotate` (= `tenkacloud turso-live rotate-token`) の本体。
@@ -71,18 +70,9 @@ export function formatTursoTokenExpiryDate(at: Date): string {
   return at.toISOString().slice(0, ISO_DATE_LENGTH);
 }
 
-export interface TursoTokenRotateDeps {
-  readonly env: NodeJS.ProcessEnv;
-  readonly environment: string;
-  readonly processRunner: ProcessRunner;
+export interface TursoTokenRotateDeps extends TursoOpsDeps {
   /** 解決済みの turso CLI 実行パス (`turso` または `~/.turso/turso`)。 */
   readonly tursoExecutable: string;
-  /** `POST <databaseUrl>/v2/pipeline` を投げる seam (テストで fake 注入)。 */
-  readonly httpPost: (url: string, authToken: string, body: unknown) => Promise<unknown>;
-  readonly confirm: (question: string) => Promise<boolean>;
-  readonly log: (message: string) => void;
-  readonly interactive: boolean;
-  readonly assumeYes: boolean;
   /** 発行前に既存 token を全部失効させる (漏えい時用)。 */
   readonly invalidate: boolean;
   readonly expiration: string;
@@ -317,12 +307,8 @@ function logPlan(deps: TursoTokenRotateDeps, target: TursoResetTarget, databaseN
 }
 
 export async function runTursoTokenRotate(deps: TursoTokenRotateDeps): Promise<number> {
-  const resolved = resolveTursoResetTarget(deps.env);
-  if (!resolved.ok) {
-    for (const error of resolved.errors) deps.log(`✗ ${error}`);
-    return 1;
-  }
-  const { target } = resolved;
+  const target = resolveTursoTargetOrLog(deps.env, deps.log);
+  if (!target) return 1;
 
   const databaseName = resolveDatabaseName(deps, target);
   if (!databaseName) return 1;
