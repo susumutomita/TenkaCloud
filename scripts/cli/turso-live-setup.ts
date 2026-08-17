@@ -1,4 +1,10 @@
 import { resolve } from "node:path";
+import {
+  DEFAULT_TURSO_TOKEN_EXPIRATION,
+  describeTursoTokenExpiry,
+  formatTursoTokenExpiryDate,
+  TURSO_TOKEN_EXPIRY_WARNING_MS,
+} from "../ops/turso-token-rotate";
 import type { ProcessResult, ProcessRunner } from "./process";
 import {
   loadTursoLiveEnvironment,
@@ -153,16 +159,75 @@ function ssmParameterType(parameterName: string, region: string, deps: TursoLive
   return result.stdout.trim();
 }
 
-async function ensureSecureString(
-  databaseName: string,
-  parameterName: string,
-  region: string,
+interface SecureStringContext {
+  readonly databaseName: string;
+  readonly parameterName: string;
+  readonly region: string;
+  readonly environment: string;
+  readonly env: NodeJS.ProcessEnv;
+}
+
+/**
+ * 既存 SecureString の再利用判断。 値そのものは決して表示せず、JWT の `exp` だけを見る。
+ * 期限切れ / 期限間近の token を再利用すると、deploy 直後に Lambda が 401 で全滅する
+ * (2026-08-17 の Lite 障害) ので、そこは confirm を出さずに拒否して rotate へ誘導する。
+ */
+async function reuseExistingSecureString(
+  context: SecureStringContext,
   deps: TursoLiveSetupDeps,
 ): Promise<boolean> {
+  const reuseQuestion = "既存の token をこの Turso database 用として再利用しますか?";
+  deps.log(`SSM SecureString は既に存在します: ${context.parameterName}`);
+  const current = deps.processRunner.run("aws", [
+    "ssm",
+    "get-parameter",
+    "--name",
+    context.parameterName,
+    "--with-decryption",
+    "--region",
+    context.region,
+    "--query",
+    "Parameter.Value",
+    "--output",
+    "text",
+  ]);
+  if (current.status !== 0) {
+    deps.log("⚠ 既存 token の有効期限を確認できませんでした (読み取り権限を確認してください)。");
+    return deps.confirm(reuseQuestion);
+  }
+  const expiry = describeTursoTokenExpiry(current.stdout.trim());
+  if (expiry.kind === "unknown") {
+    deps.log("⚠ 既存 token が JWT 形式ではないため、有効期限を判定できません。");
+    return deps.confirm(reuseQuestion);
+  }
+  if (
+    expiry.kind === "expires" &&
+    expiry.at.getTime() - Date.now() <= TURSO_TOKEN_EXPIRY_WARNING_MS
+  ) {
+    const date = formatTursoTokenExpiryDate(expiry.at);
+    const expired = expiry.at.getTime() <= Date.now();
+    deps.log(
+      `✗ 既存 token は ${date} に期限切れ${expired ? "しています" : "になります (7日以内)"}。再利用しません。`,
+    );
+    deps.log(`→ make turso-token-rotate ENV=${context.environment} で表示せずに再発行できます。`);
+    return false;
+  }
+  if (expiry.kind === "expires") {
+    deps.log(`✓ 既存 token は ${formatTursoTokenExpiryDate(expiry.at)} まで有効です。`);
+  } else {
+    deps.log("✓ 既存 token は無期限です。");
+  }
+  return deps.confirm(reuseQuestion);
+}
+
+async function ensureSecureString(
+  context: SecureStringContext,
+  deps: TursoLiveSetupDeps,
+): Promise<boolean> {
+  const { databaseName, parameterName, region } = context;
   const parameterType = ssmParameterType(parameterName, region, deps);
   if (parameterType === "SecureString") {
-    deps.log(`SSM SecureString は既に存在します: ${parameterName}`);
-    return deps.confirm("既存の token をこの Turso database 用として再利用しますか?");
+    return reuseExistingSecureString(context, deps);
   }
   if (parameterType && parameterType !== "None") {
     throw new Error(`SSM parameter ${parameterName} is ${parameterType}; SecureString is required`);
@@ -170,6 +235,8 @@ async function ensureSecureString(
   if (!(await deps.confirm(`書き込み token を作成して ${parameterName} に保存しますか?`))) {
     return false;
   }
+  // 既定は Turso CLI と同じ無期限。 定期ローテーション運用にしたい場合だけ日数を渡す。
+  const expiration = context.env.TURSO_TOKEN_EXPIRATION?.trim() || DEFAULT_TURSO_TOKEN_EXPIRATION;
   const tokenResult = requiredSecretResult(
     "turso db tokens create",
     deps.processRunner.run(deps.tursoExecutable, [
@@ -178,7 +245,7 @@ async function ensureSecureString(
       "create",
       databaseName,
       "--expiration",
-      "30d",
+      expiration,
     ]),
   );
   const token = tokenResult.stdout.trim();
@@ -231,9 +298,11 @@ export async function runTursoLiveSetup(
   const parameterName =
     loaded.CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME?.trim() ||
     `/TenkaCloud/${environment}/turso/auth-token`;
-  if (!(await ensureSecureString(database.name, parameterName, region, deps))) {
-    return { ok: false, env: loaded };
-  }
+  const secureStringReady = await ensureSecureString(
+    { databaseName: database.name, parameterName, region, environment, env: loaded },
+    deps,
+  );
+  if (!secureStringReady) return { ok: false, env: loaded };
   const overrides = {
     AWS_ACCOUNT_ID: account,
     AWS_REGION: region,

@@ -39,7 +39,8 @@ interface PipelineResponse {
   readonly results?: readonly PipelineExecuteResult[];
 }
 
-export interface TursoResetDeps {
+/** turso-live 系 destructive コマンド (reset / rotate-token) が共有する注入点。 */
+export interface TursoOpsDeps {
   readonly env: NodeJS.ProcessEnv;
   readonly environment: string;
   readonly processRunner: ProcessRunner;
@@ -50,6 +51,8 @@ export interface TursoResetDeps {
   readonly interactive: boolean;
   readonly assumeYes: boolean;
 }
+
+export type TursoResetDeps = TursoOpsDeps;
 
 export interface TursoResetTarget {
   readonly databaseUrl: string;
@@ -180,13 +183,20 @@ async function confirmReset(deps: TursoResetDeps): Promise<boolean> {
   return confirmed;
 }
 
+/** ガード結果を log に流し、通ったときだけ target を返す (reset / rotate-token 共通)。 */
+export function resolveTursoTargetOrLog(
+  env: NodeJS.ProcessEnv,
+  log: (message: string) => void,
+): TursoResetTarget | undefined {
+  const resolved = resolveTursoResetTarget(env);
+  if (resolved.ok) return resolved.target;
+  for (const error of resolved.errors) log(`✗ ${error}`);
+  return undefined;
+}
+
 export async function runTursoReset(deps: TursoResetDeps): Promise<number> {
-  const resolved = resolveTursoResetTarget(deps.env);
-  if (!resolved.ok) {
-    for (const error of resolved.errors) deps.log(`✗ ${error}`);
-    return 1;
-  }
-  const { target } = resolved;
+  const target = resolveTursoTargetOrLog(deps.env, deps.log);
+  if (!target) return 1;
 
   const authToken = fetchAuthToken(deps, target.parameterName);
   if (!authToken) return 1;

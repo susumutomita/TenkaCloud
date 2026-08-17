@@ -7,6 +7,7 @@ import {
   validateTursoLiveEnvironment,
 } from "../ops/turso-live-guide";
 import { runTursoReset, tursoPipelinePost } from "../ops/turso-reset";
+import { DEFAULT_TURSO_TOKEN_EXPIRATION, runTursoTokenRotate } from "../ops/turso-token-rotate";
 import type { ProcessRunner } from "./process";
 import { loadTursoLiveEnvironment } from "./turso-live-environment";
 import { runTursoLiveSetup } from "./turso-live-setup";
@@ -80,6 +81,10 @@ async function ensureTursoAuthentication(
   deps: TursoLiveCommandDeps,
 ): Promise<boolean> {
   if (deps.processRunner.run(tursoExecutable, ["auth", "whoami"]).status === 0) return true;
+  if (!deps.interactive) {
+    deps.log("Turso にログインしていません。`turso auth login` を実行してから再実行してください。");
+    return false;
+  }
   if (!(await deps.confirm("Turso にログインしますか?"))) return false;
   const login = deps.processRunner.run(tursoExecutable, ["auth", "login"], { inherit: true });
   if (login.status !== 0) throw new Error("turso auth login failed");
@@ -101,21 +106,7 @@ export async function runTursoLiveCommand(
     return 0;
   }
   const loaded = loadTursoLiveEnvironment(deps.repoRoot, environment, env).env;
-  if (command === "deploy") return deployTursoLive(environment, loaded, deps);
-  if (command === "reset") {
-    // destructive: 全 control-data 行の削除 (スキーマ / マイグレーション状態は維持)。
-    return runTursoReset({
-      env: loaded,
-      environment,
-      processRunner: deps.processRunner,
-      httpPost: tursoPipelinePost,
-      confirm: deps.confirm,
-      log: deps.log,
-      interactive: deps.interactive,
-      assumeYes: args.includes("--yes"),
-    });
-  }
-  const directResult = runReadOnlyTursoCommand(command, environment, loaded, deps);
+  const directResult = await runDirectTursoCommand(args, environment, loaded, deps);
   if (directResult !== undefined) return directResult;
   if (command) throw new Error(`Unknown turso-live command: ${command}`);
 
@@ -157,6 +148,42 @@ export async function runTursoLiveCommand(
   return 0;
 }
 
+/**
+ * サブコマンド dispatch。 引数なし (= 対話 wizard) のときだけ undefined を返し、
+ * 呼び出し側の wizard 経路へ落とす。
+ */
+async function runDirectTursoCommand(
+  args: readonly string[],
+  environment: string,
+  env: NodeJS.ProcessEnv,
+  deps: TursoLiveCommandDeps,
+): Promise<number | undefined> {
+  const command = args[0];
+  if (command === "deploy") return deployTursoLive(environment, env, deps);
+  if (command === "reset") return resetTursoControlData(args, environment, env, deps);
+  if (command === "rotate-token") return rotateTursoToken(args, environment, env, deps);
+  return runReadOnlyTursoCommand(command, environment, env, deps);
+}
+
+/** destructive: 全 control-data 行の削除 (スキーマ / マイグレーション状態は維持)。 */
+function resetTursoControlData(
+  args: readonly string[],
+  environment: string,
+  env: NodeJS.ProcessEnv,
+  deps: TursoLiveCommandDeps,
+): Promise<number> {
+  return runTursoReset({
+    env,
+    environment,
+    processRunner: deps.processRunner,
+    httpPost: tursoPipelinePost,
+    confirm: deps.confirm,
+    log: deps.log,
+    interactive: deps.interactive,
+    assumeYes: args.includes("--yes"),
+  });
+}
+
 async function deployTursoLive(
   environment: string,
   env: NodeJS.ProcessEnv,
@@ -178,6 +205,60 @@ async function deployTursoLive(
     return 1;
   }
   return deps.processRunner.run("make", ["deploy", `ENV=${environment}`], { inherit: true }).status;
+}
+
+/**
+ * `--flag value` を読む。 値が無い / 次が別の flag なら `null` を返し、`--yes` のような
+ * 後続 flag を expiration として飲み込ませない。
+ */
+function flagValue(args: readonly string[], flag: string): string | undefined | null {
+  const index = args.indexOf(flag);
+  if (index < 0) return undefined;
+  const value = args[index + 1];
+  return value === undefined || value.startsWith("--") ? null : value;
+}
+
+/**
+ * `rotate-token`: Turso DB token を表示せずに再発行して SSM SecureString を上書きする。
+ * 発行には turso CLI とログイン済みセッションが要るので、reset と違いここで解決する。
+ */
+async function rotateTursoToken(
+  args: readonly string[],
+  environment: string,
+  env: NodeJS.ProcessEnv,
+  deps: TursoLiveCommandDeps,
+): Promise<number> {
+  const expiration = flagValue(args, "--expiration");
+  if (expiration === null) {
+    deps.log("✗ --expiration には値が必要です (例: --expiration never / --expiration 30d)。");
+    return 1;
+  }
+  const database = flagValue(args, "--database");
+  if (database === null) {
+    deps.log("✗ --database には database 名が必要です (例: --database tenkacloud-lite)。");
+    return 1;
+  }
+  const tursoExecutable = resolveTursoCli(deps);
+  if (!tursoExecutable) {
+    deps.log("turso CLI が見つかりません。`make turso-live` で導入してください。");
+    return 1;
+  }
+  if (!(await ensureTursoAuthentication(tursoExecutable, deps))) return 1;
+  return runTursoTokenRotate({
+    env,
+    environment,
+    processRunner: deps.processRunner,
+    tursoExecutable,
+    httpPost: tursoPipelinePost,
+    confirm: deps.confirm,
+    log: deps.log,
+    interactive: deps.interactive,
+    assumeYes: args.includes("--yes"),
+    invalidate: args.includes("--invalidate"),
+    expiration:
+      expiration ?? (env.TURSO_TOKEN_EXPIRATION?.trim() || DEFAULT_TURSO_TOKEN_EXPIRATION),
+    database: database ?? undefined,
+  });
 }
 
 function runReadOnlyTursoCommand(
