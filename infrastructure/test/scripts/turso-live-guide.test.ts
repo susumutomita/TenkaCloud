@@ -11,6 +11,36 @@ import {
 
 const REPO_ROOT = new URL("../../../", import.meta.url).pathname;
 
+const MS_PER_SECOND = 1000;
+const MS_PER_DAY = 86_400_000;
+
+function jwt(payload: Record<string, unknown>): string {
+  const encode = (value: unknown): string =>
+    Buffer.from(JSON.stringify(value)).toString("base64url");
+  return [encode({ alg: "EdDSA", typ: "JWT" }), encode(payload), "c2ln"].join(".");
+}
+
+function jwtExpiringAt(when: Date | string): string {
+  const at = typeof when === "string" ? Date.parse(when) : when.getTime();
+  return jwt({ id: "tenkacloud-lite", exp: Math.floor(at / MS_PER_SECOND) });
+}
+
+/**
+ * preflight の runner: SSM の 2 呼び出し (metadata / decrypt) を区別して返す。
+ * decrypt の stdout は token そのものなので、出力へ漏れないことを各テストで検査する。
+ */
+function preflightRunner(storedToken: string): CommandRunner {
+  return (command, args) => {
+    if (args[0] === "--version") return { status: 0, stdout: `${command} 1`, stderr: "" };
+    if (args[0] === "sts") return { status: 0, stdout: "123456789012\n", stderr: "" };
+    if (args[1] === "describe-parameters") {
+      return { status: 0, stdout: "SecureString\n", stderr: "" };
+    }
+    if (args[1] === "get-parameter") return { status: 0, stdout: `${storedToken}\n`, stderr: "" };
+    throw new Error(`Unexpected command: ${command} ${args.join(" ")}`);
+  };
+}
+
 function validEnvironment(): NodeJS.ProcessEnv {
   return {
     AWS_ACCOUNT_ID: "123456789012",
@@ -40,6 +70,9 @@ describe("scripts/ops/turso-live-guide (#2617)", () => {
     expect(guide).toContain("Disruptions");
     expect(guide).toContain("監査ログ");
     expect(guide).toContain("docs/running-costs.md");
+    expect(guide).toContain("turso db tokens create tenkacloud-lite --expiration never");
+    expect(guide).toContain("make turso-token-rotate ENV=development");
+    expect(guide).not.toContain("--expiration 30d");
     expect(guide).toContain("--value file:///dev/stdin");
     expect(guide).toContain("printf '%s' \"$TURSO_TOKEN\" | aws ssm put-parameter");
     expect(guide).not.toContain('--value "$TURSO_TOKEN"');
@@ -55,6 +88,7 @@ describe("scripts/ops/turso-live-guide (#2617)", () => {
     expect(guide).toContain("tenkacloud-lite-staging");
     expect(guide).toContain("tenkacloud-lite-problem-deploy-staging");
     expect(guide).toContain("infrastructure/environments/staging/.env");
+    expect(guide).toContain("make turso-token-rotate ENV=staging");
   });
 
   it("should reject a non-turso backend and missing SAML verification flag", () => {
@@ -87,32 +121,96 @@ describe("scripts/ops/turso-live-guide (#2617)", () => {
     );
   });
 
-  it("should preflight AWS identity and SecureString metadata without requesting or printing a token", () => {
-    const env = validEnvironment();
-    const runner = vi.fn<CommandRunner>((command, args) => {
-      if (command === "aws" && args[0] === "--version") {
-        return { status: 0, stdout: "aws-cli/2", stderr: "" };
-      }
-      if (command === "turso" && args[0] === "--version") {
-        return { status: 0, stdout: "turso 1", stderr: "" };
-      }
-      if (args[0] === "sts") {
-        return { status: 0, stdout: "123456789012\n", stderr: "" };
-      }
-      return { status: 0, stdout: "SecureString\n", stderr: "" };
-    });
+  it("should preflight AWS identity and SecureString metadata without printing the token", () => {
+    const storedToken = jwtExpiringAt("2099-01-01T00:00:00Z");
+    const runner = vi.fn<CommandRunner>(preflightRunner(storedToken));
 
-    const result = runTursoLivePreflight(env, runner);
+    const result = runTursoLivePreflight(validEnvironment(), runner);
 
     expect(result.ok).toBe(true);
     expect(result.output).toContain("AWS account: 123456789012");
-    expect(result.output).toContain("SSM parameter: SecureString");
-    const ssmCall = runner.mock.calls.find(([, args]) => args[0] === "ssm");
-    expect(ssmCall?.[1]).toContain("describe-parameters");
-    expect(ssmCall?.[1]).toContain("Parameters[0].Type");
-    expect(ssmCall?.[1]).not.toContain("get-parameter");
-    expect(ssmCall?.[1]).not.toContain("--with-decryption");
+    expect(result.output).toContain("SSM parameter: SecureString (値は表示しません)");
+    expect(result.output).toContain("Turso token: 2099-01-01 まで有効");
+
+    // metadata の問い合わせは今も値を要求しない。
+    const describeCall = runner.mock.calls.find(([, args]) => args[1] === "describe-parameters");
+    expect(describeCall?.[1]).toContain("Parameters[0].Type");
+    expect(describeCall?.[1]).not.toContain("--with-decryption");
+    // 期限判定のためだけに 1 回 decrypt するが、値は出力に出さない。
+    const decryptCall = runner.mock.calls.find(([, args]) => args[1] === "get-parameter");
+    expect(decryptCall?.[1]).toEqual(
+      expect.arrayContaining([
+        "--with-decryption",
+        "Parameter.Value",
+        "--region",
+        "ap-northeast-1",
+      ]),
+    );
+    expect(result.output).not.toContain(storedToken);
     expect(result.output).not.toMatch(/eyJ[A-Za-z0-9_-]+/);
+  });
+
+  it("should fail preflight when the stored Turso token has already expired", () => {
+    const storedToken = jwtExpiringAt("2026-08-14T00:00:00Z");
+
+    const result = runTursoLivePreflight(validEnvironment(), preflightRunner(storedToken));
+
+    expect(result.ok).toBe(false);
+    expect(result.output).toContain("✗ Turso token は 2026-08-14 に期限切れ");
+    expect(result.output).toContain("make turso-token-rotate ENV=development");
+    expect(result.output).not.toContain("preflight passed");
+    expect(result.output).not.toContain(storedToken);
+  });
+
+  it("should warn but pass when the stored token expires within seven days", () => {
+    const soon = new Date(Date.now() + 3 * MS_PER_DAY);
+    const storedToken = jwtExpiringAt(soon);
+
+    const result = runTursoLivePreflight(validEnvironment(), preflightRunner(storedToken));
+
+    expect(result.ok).toBe(true);
+    expect(result.output).toContain("⚠ Turso token");
+    expect(result.output).toContain("7日以内");
+    expect(result.output).toContain("preflight passed");
+    expect(result.output).not.toContain(storedToken);
+  });
+
+  it("should pass with an explicit note when the stored token never expires", () => {
+    const storedToken = jwt({ id: "tenkacloud-lite", a: "rw" });
+
+    const result = runTursoLivePreflight(validEnvironment(), preflightRunner(storedToken));
+
+    expect(result.ok).toBe(true);
+    expect(result.output).toContain("✓ Turso token: 無期限");
+  });
+
+  it("should pass with a warning when the stored value is not a JWT", () => {
+    const result = runTursoLivePreflight(
+      validEnvironment(),
+      preflightRunner("legacy-opaque-token"),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(result.output).toContain("⚠ Turso token: 形式を判定できません");
+    expect(result.output).toContain("preflight passed");
+    expect(result.output).not.toContain("legacy-opaque-token");
+  });
+
+  it("should not echo the parameter value when the decrypt call itself fails", () => {
+    const runner: CommandRunner = (command, args) => {
+      if (args[0] === "--version") return { status: 0, stdout: `${command} 1`, stderr: "" };
+      if (args[0] === "sts") return { status: 0, stdout: "123456789012\n", stderr: "" };
+      if (args[1] === "describe-parameters") {
+        return { status: 0, stdout: "SecureString\n", stderr: "" };
+      }
+      return { status: 1, stdout: "half-written-secret", stderr: "AccessDeniedException" };
+    };
+
+    const result = runTursoLivePreflight(validEnvironment(), runner);
+
+    expect(result.ok).toBe(false);
+    expect(result.output).toContain("AccessDeniedException");
+    expect(result.output).not.toContain("half-written-secret");
   });
 
   it("should fail preflight when the active AWS account differs from the deployment account", () => {
@@ -194,6 +292,8 @@ describe("scripts/ops/turso-live-guide (#2617)", () => {
     expect(makefile).toContain("ENV=$(ENV) bun run tenkacloud turso-live");
     expect(makefile).toContain("turso-live-preflight:");
     expect(makefile).toContain("turso-live-verify-cfn:");
+    expect(makefile).toContain("turso-token-rotate:");
+    expect(makefile).toContain("bun run tenkacloud turso-live rotate-token");
     expect(makefile).toContain("bun run tenkacloud turso-live guide");
     expect(readme).toContain("tenkacloud turso-live");
     expect(readmeJa).toContain("tenkacloud turso-live");
@@ -202,6 +302,7 @@ describe("scripts/ops/turso-live-guide (#2617)", () => {
     expect(readmeJa).toContain("make turso-live ENV=development");
     expect(runningCosts).toContain("make turso-live ENV=development");
     expect(runningCosts).toContain("including Codespaces");
+    expect(runningCosts.match(/make turso-token-rotate ENV=development/g)).toHaveLength(2);
     expect(runningCosts).toContain("avoids Homebrew and external tap dependencies");
     expect(runningCosts.match(/--value file:\/\/\/dev\/stdin/g)).toHaveLength(2);
     expect(runningCosts).not.toContain('--value "$TURSO_TOKEN"');

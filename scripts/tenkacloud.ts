@@ -23,8 +23,9 @@ export function tenkaCloudUsage(): string {
     "        measured configuration (--probe-disk adds free space, pulls busybox)",
     "  tenkacloud onboard [--yes]",
     "        Interactively repair missing local prerequisites",
-    "  tenkacloud turso-live [guide|preflight|deploy|verify-cloudformation|reset]",
-    "        Guided Turso/AWS live verification",
+    "  tenkacloud turso-live [guide|preflight|deploy|verify-cloudformation|reset|rotate-token]",
+    "        Guided Turso/AWS live verification; rotate-token reissues the Turso database",
+    "        token into SSM SecureString without ever printing it",
   ].join("\n");
 }
 

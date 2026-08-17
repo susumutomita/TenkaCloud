@@ -2,14 +2,22 @@
 /**
  * Issue #2617: first live Turso E2E verification guide and read-only checks.
  *
- * This command deliberately does not deploy, destroy, create a Turso token, or read an SSM
- * SecureString value. It gives the operator one discoverable route, checks the selected account /
- * region / public config before deployment, and verifies the two deployed CloudFormation stacks
- * without mutating them.
+ * This command deliberately does not deploy, destroy, or create a Turso token. It gives the
+ * operator one discoverable route, checks the selected account / region / public config before
+ * deployment, and verifies the two deployed CloudFormation stacks without mutating them.
+ *
+ * Since #3051 the preflight decrypts the stored token once so it can decode the JWT `exp` claim —
+ * an expired token makes every Turso Lambda answer 401 and the console answer 500, and that was
+ * invisible to a metadata-only check. The value itself is never logged or returned.
  */
 
 import { spawnSync } from "node:child_process";
 import { resolveLiteStackNames } from "../../infrastructure/lib/tenkacloud-lite/stack-names";
+import {
+  describeTursoTokenExpiry,
+  formatTursoTokenExpiryDate,
+  TURSO_TOKEN_EXPIRY_WARNING_MS,
+} from "./turso-token-rotate";
 
 export interface CommandResult {
   readonly status: number;
@@ -154,9 +162,67 @@ export function runTursoLivePreflight(
     lines.push(`✗ SSM parameter type is ${parameterType || "unknown"}; SecureString が必要です`);
     return { ok: false, output: lines.join("\n") };
   }
-  lines.push("✓ SSM parameter: SecureString (metadata のみ、値は要求していません)");
+  lines.push("✓ SSM parameter: SecureString (値は表示しません)");
+
+  const expiry = checkStoredTokenExpiry(parameterName, env, run);
+  lines.push(...expiry.lines);
+  if (!expiry.ok) return { ok: false, output: lines.join("\n") };
+
   lines.push("✓ preflight passed — 次は `make deploy` です");
   return { ok: true, output: lines.join("\n") };
+}
+
+function environmentLabel(env: NodeJS.ProcessEnv): string {
+  return env.ENV?.trim() || env.CDK_PARAM_ENVIRONMENT?.trim() || "development";
+}
+
+/**
+ * 保存済み token の JWT `exp` だけを見る。 stdout は token そのものなので、失敗時でも
+ * stdout を出力に混ぜない (stderr と exit code だけを報告する)。
+ */
+function checkStoredTokenExpiry(
+  parameterName: string,
+  env: NodeJS.ProcessEnv,
+  run: CommandRunner,
+): { readonly ok: boolean; readonly lines: readonly string[] } {
+  const result = run("aws", [
+    "ssm",
+    "get-parameter",
+    "--name",
+    parameterName,
+    "--with-decryption",
+    "--region",
+    env.AWS_REGION ?? "",
+    "--query",
+    "Parameter.Value",
+    "--output",
+    "text",
+  ]);
+  if (result.status !== 0) {
+    const detail = result.stderr.trim() || `exit ${result.status}`;
+    return {
+      ok: false,
+      lines: [`✗ SSM parameter ${parameterName} の有効期限を確認できません: ${detail}`],
+    };
+  }
+  const rotate = `make turso-token-rotate ENV=${environmentLabel(env)}`;
+  const expiry = describeTursoTokenExpiry(result.stdout.trim());
+  if (expiry.kind === "never") return { ok: true, lines: ["✓ Turso token: 無期限"] };
+  if (expiry.kind === "unknown") {
+    return {
+      ok: true,
+      lines: ["⚠ Turso token: 形式を判定できません (JWT ではないため期限は未確認)"],
+    };
+  }
+  const date = formatTursoTokenExpiryDate(expiry.at);
+  const remaining = expiry.at.getTime() - Date.now();
+  if (remaining <= 0) {
+    return { ok: false, lines: [`✗ Turso token は ${date} に期限切れ (${rotate})`] };
+  }
+  if (remaining <= TURSO_TOKEN_EXPIRY_WARNING_MS) {
+    return { ok: true, lines: [`⚠ Turso token は ${date} に期限切れ — 7日以内 (${rotate})`] };
+  }
+  return { ok: true, lines: [`✓ Turso token: ${date} まで有効`] };
 }
 
 function stackStatusIsComplete(status: string): boolean {
@@ -280,7 +346,9 @@ export function renderTursoLiveGuide(environment: string): string {
     "2. Turso DB と書き込み可能 token を作る",
     "   turso db create tenkacloud-lite",
     "   turso db show tenkacloud-lite --http-url",
-    "   turso db tokens create tenkacloud-lite --expiration 30d",
+    "   turso db tokens create tenkacloud-lite --expiration never",
+    "   期限付き (Nd) で発行した場合は N 日ごとに `make turso-token-rotate ENV=" +
+      `${environment}\` が必要です。`,
     "   token は再表示せず、.env / issue / terminal log に貼らないでください。",
     "",
     "3. token を同じ region の SSM SecureString に保存",

@@ -317,7 +317,8 @@ env-init: ## Create the Lite .env file interactively | Lite用.envを対話wizar
 	@ENV=$(ENV) bun run scripts/ops/env-init.ts
 
 # ===== Turso live verification | Turso live 検証 =====
-.PHONY: turso-live turso-live-guide turso-live-preflight turso-live-verify-cfn turso-reset
+.PHONY: turso-live turso-live-guide turso-live-preflight turso-live-verify-cfn turso-reset \
+	turso-token-rotate
 
 # Issue #2617: Turso pure-SQL profile の初回 live E2E を 1 本の discoverable な導線へまとめる。
 # guide は副作用なし、preflight / verify-cfn は AWS read-only。deploy は CLI 側で exact
@@ -332,6 +333,8 @@ turso-live-verify-cfn: ## Verify deployed stacks contain no DynamoDB tables | de
 	@ENV=$(ENV) bun run tenkacloud turso-live verify-cloudformation
 turso-reset: ## Delete all Turso control-data rows, keep schema | Tursoのcontrol-data全行を削除(スキーマ維持)
 	@ENV=$(ENV) bun run tenkacloud turso-live reset
+turso-token-rotate: ## Reissue the Turso DB token into SSM without printing it | Turso DB tokenを表示せず再発行してSSMへ保存
+	@ENV=$(ENV) bun run tenkacloud turso-live rotate-token $(ROTATE_ARGS)
 
 # ===== Deploy / Destroy | デプロイ / 削除 =====
 .PHONY: deploy deploy-saas destroy destroy-all destroy-saas enforce-log-retention

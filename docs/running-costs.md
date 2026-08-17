@@ -46,6 +46,8 @@ The steps below are for a **fresh** stack. See [Migrating an existing stack](#mi
    turso db tokens create tenkacloud-lite
    ```
 
+   `db tokens create` issues a token that never expires by default. If you pass `--expiration Nd`, the token stops working after N days and every Turso Lambda starts answering `401`; reissue it with `make turso-token-rotate ENV=development`, which reissues into SSM without printing the token.
+
    `db show --http-url` prints something like `https://tenkacloud-lite-<organization>.turso.io`. The Lambda uses the HTTP-only libSQL client, so the live runbook standardizes on the provider's HTTP URL and removes URL protocol conversion from the experiment. Keep the token from `db tokens create` for the next step without pasting it into a command line.
 
 2. **Store the token in SSM as a `SecureString`** — never write it into `.env`:
@@ -111,6 +113,8 @@ turso db create tenkacloud-lite
 turso db show tenkacloud-lite --http-url
 turso db tokens create tenkacloud-lite
 ```
+
+`db tokens create` defaults to a token with no expiry. A token created with `--expiration Nd` has to be reissued every N days — use `make turso-token-rotate ENV=development` for that, so the token never reaches the terminal.
 
 Put the token in SSM `SecureString` in the same AWS region as the Lite deployment. Reading it into a shell variable keeps the token itself out of shell history; clear the variable immediately afterward.
 
