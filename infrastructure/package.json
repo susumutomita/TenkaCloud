@@ -50,7 +50,7 @@
     "@TenkaCloud/trust-bridge": "workspace:*",
     "@aws-cdk/aws-lambda-python-alpha": "^2.140.0-alpha.0",
     "@aws-crypto/sha256-js": "^5.2.0",
-    "@aws-sdk/client-budgets": "^3.1095.0",
+    "@aws-sdk/client-budgets": "^3.1115.0",
     "@aws-sdk/client-cloudwatch-logs": "^3.1079.0",
     "@aws-sdk/client-codebuild": "^3.1079.0",
     "@aws-sdk/client-codepipeline": "^3.1079.0",
