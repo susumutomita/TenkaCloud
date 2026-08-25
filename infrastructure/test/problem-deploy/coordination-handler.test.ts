@@ -13,7 +13,10 @@ import {
 import type { PluginImporter } from "../../lib/problem-deploy/handlers/participant-handler/coordination-plugin-loader.js";
 import type { CoordinationStoreDeps } from "../../lib/problem-deploy/handlers/participant-handler/coordination-store.js";
 import type { ParticipantSharedResources } from "../../lib/problem-deploy/handlers/participant-handler/shared.js";
-import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers.js";
+import {
+  fakeParticipantShared,
+  fakeParticipantSharedWithItems,
+} from "./coordination.test-helpers.js";
 
 /**
  * Issue #1420: coordination route handler を pin する。
@@ -47,11 +50,7 @@ function fakeStore(getItem?: Record<string, unknown>): CoordinationStoreDeps {
     if (cmd instanceof PutCommand) return {};
     throw new Error("unexpected command");
   });
-  return {
-    runtime: makeTestControlDataRuntime(),
-    ddb: { send } as never,
-    tableName: "Deployments",
-  };
+  return fakeParticipantShared(send);
 }
 
 const importerOf =
@@ -139,16 +138,7 @@ describe("parseCoordinationConfig", () => {
 
 describe("makeCoordinationScopeResolver", () => {
   function fakeShared(items: Partial<DeploymentItem>[]): ParticipantSharedResources {
-    const send = vi.fn(async () => ({ Items: items }));
-    return {
-      runtime: makeTestControlDataRuntime(),
-      tableName: "Deployments",
-      eventsTableName: "Events",
-      endpointsTableName: "",
-      ddb: { send } as never,
-      problemsScoring: {},
-      problemsEndpoints: {},
-    };
+    return fakeParticipantSharedWithItems(items);
   }
   const config = { p1: { plugin: "coordination/alliance.ts" } };
 
@@ -190,5 +180,49 @@ describe("makeCoordinationScopeResolver", () => {
       config,
     );
     expect(await resolve("key")).toBeNull();
+  });
+
+  // Issue #3053: requester 1 チームだけの ctx では、 相手チームを対象にする op が
+  // 必ず `unknown team` で reject され、 チーム間 interaction する plugin
+  // (ac26-crypto-battle の hunt など) が原理的に成立しなかった。
+  it("should hand the plugin the full event roster, sorted", async () => {
+    const resolve = makeCoordinationScopeResolver(
+      fakeShared([
+        { tenantId: "tn1", eventId: "e1", teamId: "t2", problemId: "p1" },
+        { tenantId: "tn1", eventId: "e1", teamId: "t1", problemId: "p1" },
+        { tenantId: "tn1", eventId: "e1", teamId: "t3", problemId: "p1" },
+      ]),
+      config,
+    );
+    const scope = await resolve("key");
+    // 昇順であることが競合対策の本体: どのチームの request が先に state を materialize
+    // しても initialState(ctx) の入力が同一になる。
+    expect(scope?.ctx.teamIds).toEqual(["t1", "t2", "t3"]);
+  });
+
+  it("should leave out teams that deployed a different problem", async () => {
+    const resolve = makeCoordinationScopeResolver(
+      fakeShared([
+        { tenantId: "tn1", eventId: "e1", teamId: "t1", problemId: "p1" },
+        { tenantId: "tn1", eventId: "e1", teamId: "t9", problemId: "other" },
+      ]),
+      config,
+    );
+    const scope = await resolve("key");
+    expect(scope?.ctx.teamIds).toEqual(["t1"]);
+  });
+
+  it("should still scope the requester when the roster query fails", async () => {
+    let call = 0;
+    const send = vi.fn(async () => {
+      call += 1;
+      if (call === 1)
+        return { Items: [{ tenantId: "tn1", eventId: "e1", teamId: "t1", problemId: "p1" }] };
+      throw new Error("roster query failed");
+    });
+    const shared = fakeParticipantShared(send);
+    const scope = await makeCoordinationScopeResolver(shared, config)("key");
+    // route ごと落とすより、 requester だけの ctx で従来どおり動く方が安全。
+    expect(scope?.ctx.teamIds).toEqual(["t1"]);
   });
 });

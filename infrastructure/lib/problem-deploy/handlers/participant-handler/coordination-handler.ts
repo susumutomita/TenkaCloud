@@ -5,7 +5,11 @@ import {
   type PluginImporter,
 } from "./coordination-plugin-loader.js";
 import type { CoordinationStoreDeps } from "./coordination-store.js";
-import { type ParticipantSharedResources, queryTeamItems } from "./shared.js";
+import {
+  type ParticipantSharedResources,
+  queryTeamItems,
+  resolveDeploymentsRepository,
+} from "./shared.js";
 
 /**
  * Issue #1420: 参加者 portal 向け coordination route の handler。
@@ -118,10 +122,53 @@ export function parseCoordinationConfig(raw: string | undefined): CoordinationCo
  * 引き、 その問題が coordination を宣言していれば moduleRef を確定する。 認証不可 / 未宣言は null
  * (= route は `not_configured`)。
  *
- * 注: `ctx.teamIds` は現状 requester 自身のみ。 full event roster の解決は importer 配線
- * (= 実 plugin が load される時) と同 increment で拡張する (plugin が load されない seam 状態では
- * ctx は使われないため安全)。
+ * `ctx.teamIds` は **event の full roster** (= 同じ event で同じ問題を deploy している全チーム、
+ * teamId 昇順) を渡す。 requester 1 チームだけを渡していた頃 (Issue #3053) は、 plugin の
+ * `initialState(ctx)` が requester しか state に登録できず、 相手チームを対象にする op
+ * (`ac26-crypto-battle` の `hunt` など) が必ず `unknown team` で reject されていた。 さらに
+ * 各チームが別々の 1 チーム ctx で同じ state 行を初期化しに行くため、 先に書いた側の state に
+ * もう一方が存在しない、 という競合も起きていた。
+ *
+ * roster は teamId でソートして渡す。 これが競合対策の本体で、 どのチームの request が先に
+ * state を materialize しても `initialState(ctx)` の入力が同一になる (= 同じ initial state)。
+ *
+ * roster の定義は「同じ (tenant, event) で **同じ problemId** の deployment 行を持つチーム」。
+ * status は絞らない — deploy 途中のチームを外すと、 完了の前後で roster が変わり、 まさに
+ * 上の競合が再発するため。
+ *
+ * 既知の限界: state は最初の op で 1 度だけ materialize される。 それより後に deploy した
+ * チームは `state.teams` に現れない (SDK に roster 再解決の hook が無い)。 運用は全チームの
+ * deploy 完了後に試合を開始する。
  */
+/**
+ * 同じ (tenant, event) で同じ問題を deploy している全チーム ID を teamId 昇順で返す
+ * (Issue #3053)。 requester は必ず含む — roster query が (transient error などで) 落ちても
+ * requester だけの ctx で従来どおり動く方が、 route ごと落とすより安全なため。
+ */
+async function resolveEventRoster(
+  shared: ParticipantSharedResources,
+  target: {
+    readonly tenantId: string;
+    readonly eventId: string;
+    readonly problemId: string;
+    readonly requesterTeamId: string;
+  },
+): Promise<readonly string[]> {
+  const roster = new Set<string>([target.requesterTeamId]);
+  try {
+    const repository = await resolveDeploymentsRepository(shared);
+    const rows = await repository.listByTenantAndEvent(target.tenantId, target.eventId);
+    for (const row of rows) {
+      if (row.problemId === target.problemId && typeof row.teamId === "string" && row.teamId) {
+        roster.add(row.teamId);
+      }
+    }
+  } catch {
+    // roster 解決の失敗は coordination route を落とさない (requester のみで継続)。
+  }
+  return [...roster].sort();
+}
+
 export function makeCoordinationScopeResolver(
   shared: ParticipantSharedResources,
   config: CoordinationConfig,
@@ -132,11 +179,17 @@ export function makeCoordinationScopeResolver(
       const problemId = item.problemId;
       const plugin = problemId ? config[problemId]?.plugin : undefined;
       if (problemId && item.tenantId && item.eventId && item.teamId && plugin) {
+        const teamIds = await resolveEventRoster(shared, {
+          tenantId: item.tenantId,
+          eventId: item.eventId,
+          problemId,
+          requesterTeamId: item.teamId,
+        });
         return {
           tenantId: item.tenantId,
           eventId: item.eventId,
           teamId: item.teamId,
-          ctx: { eventId: item.eventId, teamIds: [item.teamId] },
+          ctx: { eventId: item.eventId, teamIds },
           // moduleRef は problemId (importer の key `coordination/<id>.mjs`)。
           // plugin path は宣言の有無判定にのみ使い、 実 load は problemId-keyed bundle を引く。
           moduleRef: problemId,
