@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { planRecon } from "../src/recon.js";
 import type { ReconThreatModel } from "../src/recon.js";
+import { planRecon } from "../src/recon.js";
 
 const THREAT_MODEL: ReconThreatModel = {
   threatModelDigest: "sha256:abc",

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { runFinders } from "../src/finder-orchestration.js";
 import type { FinderTaskCheckpoint } from "../src/finder-orchestration.js";
+import { runFinders } from "../src/finder-orchestration.js";
 import type {
   ModelProvider,
   ModelProviderRequest,
@@ -25,9 +25,10 @@ function buildPrompt(): { systemPrompt: string; userPrompt: string; maxOutputTok
 
 const NO_WAIT = (): Promise<void> => Promise.resolve();
 
-function scriptedProvider(
-  script: Readonly<Record<string, ModelProviderResult[]>>,
-): { provider: ModelProvider; requests: ModelProviderRequest[] } {
+function scriptedProvider(script: Readonly<Record<string, ModelProviderResult[]>>): {
+  provider: ModelProvider;
+  requests: ModelProviderRequest[];
+} {
   const requests: ModelProviderRequest[] = [];
   const cursors = new Map<string, number>();
   const provider: ModelProvider = {
@@ -361,7 +362,11 @@ describe("runFinders: cancellation stops new work", () => {
         calls += 1;
         return {
           ok: true,
-          response: { outputText: "{}", stopReason: "end_turn", usage: { inputTokens: 0, outputTokens: 0 } },
+          response: {
+            outputText: "{}",
+            stopReason: "end_turn",
+            usage: { inputTokens: 0, outputTokens: 0 },
+          },
         };
       },
     };

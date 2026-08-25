@@ -24,11 +24,7 @@
  * produces the same sequence of outcomes — no `Math.random()`, no clock read, no real network I/O.
  */
 
-import type {
-  ModelProvider,
-  ModelProviderRequest,
-  ModelProviderResult,
-} from "./model-provider.js";
+import type { ModelProvider, ModelProviderRequest, ModelProviderResult } from "./model-provider.js";
 
 export interface FixtureModelProviderOptions {
   /**

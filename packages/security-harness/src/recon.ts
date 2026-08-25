@@ -93,8 +93,7 @@ export function planRecon(threatModel: ReconThreatModel, maxFinders: number): Re
     return {
       ...base,
       assignments: [],
-      uncoveredFocusAreaIds:
-        maxFinders <= 0 ? threatModel.focusAreas.map((f) => f.id) : [],
+      uncoveredFocusAreaIds: maxFinders <= 0 ? threatModel.focusAreas.map((f) => f.id) : [],
     };
   }
 

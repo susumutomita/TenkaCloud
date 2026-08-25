@@ -14,9 +14,13 @@
 import { describe, expect, it } from "vitest";
 import { dedupeFindings } from "../src/dedupe.js";
 import { runFinders } from "../src/finder-orchestration.js";
-import { FixtureModelProvider, fixtureFailure, fixtureSuccess } from "../src/fixture-model-provider.js";
-import { planRecon } from "../src/recon.js";
+import {
+  FixtureModelProvider,
+  fixtureFailure,
+  fixtureSuccess,
+} from "../src/fixture-model-provider.js";
 import type { ReconThreatModel } from "../src/recon.js";
+import { planRecon } from "../src/recon.js";
 
 function claimText(focusArea: string, witnessId: string, path: string): string {
   return JSON.stringify({
@@ -57,7 +61,9 @@ describe("Phase 2 Recon -> Find -> Dedupe (model-free)", () => {
           fixtureSuccess(claimText("documents-idor", "finder-0-witness", "/documents/doc-b1")),
           fixtureSuccess(claimText("documents-idor", "finder-2-witness", "/documents/doc-b1")),
         ],
-        "auth-bypass": [fixtureFailure("invalid_response", "model returned unusable output", false)],
+        "auth-bypass": [
+          fixtureFailure("invalid_response", "model returned unusable output", false),
+        ],
       },
     });
 

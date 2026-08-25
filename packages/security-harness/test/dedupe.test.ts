@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { canonicalJsonStringify, computeDeterministicSignature, dedupeFindings } from "../src/dedupe.js";
+import {
+  canonicalJsonStringify,
+  computeDeterministicSignature,
+  dedupeFindings,
+} from "../src/dedupe.js";
 import type { FinderHandoff } from "../src/finder-output.js";
 import type { HttpSequenceWitness } from "../src/types.js";
 
@@ -33,8 +37,14 @@ describe("canonicalJsonStringify", () => {
   });
 
   it("should recurse into nested objects and arrays", () => {
-    const a = canonicalJsonStringify({ outer: { z: 1, a: { y: 2, x: 3 } }, list: [{ b: 1, a: 2 }] });
-    const b = canonicalJsonStringify({ list: [{ a: 2, b: 1 }], outer: { a: { x: 3, y: 2 }, z: 1 } });
+    const a = canonicalJsonStringify({
+      outer: { z: 1, a: { y: 2, x: 3 } },
+      list: [{ b: 1, a: 2 }],
+    });
+    const b = canonicalJsonStringify({
+      list: [{ a: 2, b: 1 }],
+      outer: { a: { x: 3, y: 2 }, z: 1 },
+    });
     expect(a).toBe(b);
   });
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { isRetryableModelProviderError } from "../src/model-provider.js";
 import type { ModelProviderError } from "../src/model-provider.js";
+import { isRetryableModelProviderError } from "../src/model-provider.js";
 
 function error(overrides: Partial<ModelProviderError>): ModelProviderError {
   return { kind: "transport_error", message: "boom", retryable: false, ...overrides };

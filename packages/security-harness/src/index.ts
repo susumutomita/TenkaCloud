@@ -33,13 +33,12 @@
  * container/Simulator execution plane, or any product/portal wiring.
  */
 
-export { canonicalJsonStringify, computeDeterministicSignature, dedupeFindings } from "./dedupe.js";
 export type { DedupeGroup, DedupeManifest } from "./dedupe.js";
+export { canonicalJsonStringify, computeDeterministicSignature, dedupeFindings } from "./dedupe.js";
 export { digestOfOwnSource, sha256Hex, toDigestRef } from "./digest.js";
 export type { EvaluateFindingInput } from "./evaluate-finding.js";
 export { evaluateFindingVerdict } from "./evaluate-finding.js";
 export { evaluatePatch, evaluatePatchVerdict } from "./evaluate-patch.js";
-export { runFinders } from "./finder-orchestration.js";
 export type {
   FinderPrompt,
   FinderRetryPolicy,
@@ -49,18 +48,16 @@ export type {
   RunFindersOptions,
   RunFindersResult,
 } from "./finder-orchestration.js";
-export { extractFinderHandoff } from "./finder-output.js";
+export { runFinders } from "./finder-orchestration.js";
 export type {
   ExtractFinderHandoffInput,
   FinderHandoff,
   FinderHandoffResult,
   FinderTargetMetadata,
 } from "./finder-output.js";
-export { fixtureFailure, FixtureModelProvider, fixtureSuccess } from "./fixture-model-provider.js";
+export { extractFinderHandoff } from "./finder-output.js";
 export type { FixtureModelProviderOptions } from "./fixture-model-provider.js";
-export {
-  isRetryableModelProviderError,
-} from "./model-provider.js";
+export { FixtureModelProvider, fixtureFailure, fixtureSuccess } from "./fixture-model-provider.js";
 export type {
   ModelProvider,
   ModelProviderError,
@@ -70,6 +67,7 @@ export type {
   ModelProviderResult,
   ModelProviderUsage,
 } from "./model-provider.js";
+export { isRetryableModelProviderError } from "./model-provider.js";
 export type {
   GoldenTestResult,
   Phase1SliceOptions,
@@ -77,13 +75,13 @@ export type {
   TargetVariant,
 } from "./phase1-slice.js";
 export { runPhase1Slice } from "./phase1-slice.js";
-export { planRecon } from "./recon.js";
 export type {
   ReconFinderAssignment,
   ReconPlan,
   ReconThreatModel,
   ThreatModelFocusArea,
 } from "./recon.js";
+export { planRecon } from "./recon.js";
 export {
   canTransition,
   IllegalSecurityRunTransitionError,

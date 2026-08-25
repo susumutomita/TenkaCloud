@@ -23,12 +23,12 @@
  * out, errored, or given invalid output — is retried fresh.
  */
 
+import { extractFinderHandoff, type FinderHandoff } from "./finder-output.js";
 import {
   isRetryableModelProviderError,
   type ModelProvider,
   type ModelProviderRequest,
 } from "./model-provider.js";
-import { extractFinderHandoff, type FinderHandoff } from "./finder-output.js";
 import type { ReconFinderAssignment } from "./recon.js";
 
 export type FinderTaskStatus =
@@ -99,7 +99,9 @@ function sessionIdFor(runId: string, finderIndex: number): string {
   return `${runId}-finder-${finderIndex}`;
 }
 
-function statusForErrorKind(kind: "rate_limited" | "timeout" | "transport_error" | "invalid_response"): FinderTaskStatus {
+function statusForErrorKind(
+  kind: "rate_limited" | "timeout" | "transport_error" | "invalid_response",
+): FinderTaskStatus {
   if (kind === "rate_limited") return "rate_limited";
   if (kind === "timeout") return "timed_out";
   return "model_error";

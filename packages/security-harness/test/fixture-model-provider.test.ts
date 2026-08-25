@@ -21,10 +21,7 @@ describe("FixtureModelProvider: no live model call, ever", () => {
   it("should return scripted results in declaration order for a given focus area", async () => {
     const provider = new FixtureModelProvider({
       scripts: {
-        "documents-idor": [
-          fixtureSuccess("first"),
-          fixtureSuccess("second"),
-        ],
+        "documents-idor": [fixtureSuccess("first"), fixtureSuccess("second")],
       },
     });
     const first = await provider.complete(request());
