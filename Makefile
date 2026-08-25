@@ -180,6 +180,17 @@ fix-text: ## Automatically fix prose violations | 文章規約違反を自動修
 fix-format: ## Automatically format code with Biome | Biomeでcode formatを自動修正
 	bun run fix:format
 
+# ===== Security harness | セキュリティ演習基盤 =====
+.PHONY: security-harness-demo
+
+# Issue #3036 Phase 1's documented single command: runs the deterministic vertical slice against
+# every fixture patch variant (correct fix / id-denylist-only / endpoint-removed) plus the
+# baseline-not-reproducible case, and prints one JSON evidence report per run. No AWS, no Docker,
+# no model — see packages/security-harness/src/phase1-slice.ts for why this is real (a genuine
+# in-process HTTP target) yet fully deterministic.
+security-harness-demo: ## Run the security harness Phase 1 slice end to end | security harnessのPhase 1縦切りを実行
+	bun run --filter '@tenkacloud/security-harness' demo
+
 # ===== Problem catalog validation | 問題カタログ検証 =====
 .PHONY: validate-problems
 
