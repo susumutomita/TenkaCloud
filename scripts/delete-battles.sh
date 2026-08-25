@@ -9,10 +9,29 @@ set -euo pipefail
 # shellcheck source=lib/battles-common.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/battles-common.sh"
 
+# #3063: 元は無条件で en_US.UTF-8 を強制していた。その locale が generate されていない
+# image では `setlocale: LC_ALL: cannot change locale` 警告が以後の bash 子プロセス全部の
+# stderr に出続け、下の STS account 比較を汚染する一因になった (詳細は #3063 参照)。
+# 必要なのは「ASCII-only な C/POSIX/未設定を UTF-8 な locale に倒す」ことだけで en_US で
+# ある必然性はないので、`locale -a` に実在する候補だけを使う。en_US.UTF-8 (これまでの
+# 既定・大半の image で generate 済) → C.UTF-8 → C.utf8 (どちらも glibc 組込みで
+# generate 不要。ディストリごとの綴り違いを両方試す) の順。どれも無ければ強制しない
+# (= 警告は出ないが元の locale のまま; UTF-8 mojibake 対策より「壊れた delete」の方が害が大きい)。
 case "${LC_ALL:-${LANG:-}}" in
   C|POSIX|"")
-    export LANG="en_US.UTF-8"
-    export LC_ALL="en_US.UTF-8"
+    available_locales="$(locale -a 2>/dev/null || true)"
+    utf8_locale=""
+    for candidate in en_US.UTF-8 C.UTF-8 C.utf8; do
+      if grep -qxF "${candidate}" <<<"${available_locales}"; then
+        utf8_locale="${candidate}"
+        break
+      fi
+    done
+    if [[ -n "${utf8_locale}" ]]; then
+      export LANG="${utf8_locale}"
+      export LC_ALL="${utf8_locale}"
+    fi
+    unset available_locales utf8_locale candidate
     ;;
 esac
 
@@ -38,12 +57,21 @@ trace_log "deploy.codebuild.start" operation "delete" region "${REGION}" stackNa
 # State Machine 経由は常に DELETE_EXPECTED_AWS_ACCOUNT_ID が入る (欠損 event は SFN 側の
 # isPresent ガードで markFailed)。未設定で skip するのは手動実行 (運営 recovery) のみ。
 if [[ -n "${DELETE_EXPECTED_AWS_ACCOUNT_ID:-}" ]]; then
-  # set -e 下で command substitution が黙って死なないよう、STS 失敗は明示的に trace する。
-  if ! ACTUAL_AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text 2>&1)"; then
+  # #3063: 値 (stdout) と診断 (stderr) を別々に受ける。以前は `2>&1` で 1 変数に
+  # まとめており、成功時でも stderr に出た無関係な 1 行 (locale 警告、aws CLI の
+  # deprecation notice 等) が account ID へ混入し、一致している account を mismatch
+  # と誤判定して正しい delete を拒否していた。set -e 下で command substitution が
+  # 黙って死なないよう、STS 失敗時の診断は sts_stderr_file 経由で trace に載せる
+  # (2>&1 で得ていた「失敗理由を trace へ載せる」という意図はここに残す)。
+  sts_stderr_file="$(mktemp)"
+  if ! ACTUAL_AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text 2>"${sts_stderr_file}")"; then
+    sts_stderr="$(cat "${sts_stderr_file}")"
+    rm -f "${sts_stderr_file}"
     trace_log "deploy.cfn.delete.failed" stackName "${STACK_NAME}" region "${REGION}"
-    echo "error: sts get-caller-identity failed (credential / STS availability): ${ACTUAL_AWS_ACCOUNT_ID}" >&2
+    echo "error: sts get-caller-identity failed (credential / STS availability): ${sts_stderr}" >&2
     exit 1
   fi
+  rm -f "${sts_stderr_file}"
   if [[ "${ACTUAL_AWS_ACCOUNT_ID}" != "${DELETE_EXPECTED_AWS_ACCOUNT_ID}" ]]; then
     trace_log "deploy.cfn.delete.account_mismatch" stackName "${STACK_NAME}" region "${REGION}" \
       expectedAccount "${DELETE_EXPECTED_AWS_ACCOUNT_ID}" actualAccount "${ACTUAL_AWS_ACCOUNT_ID}"

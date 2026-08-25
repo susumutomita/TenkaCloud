@@ -39,10 +39,16 @@ function runDelete(env: Record<string, string>): {
   // Fake aws は CONSTANT script: 可変値は child env 経由でのみ流す (shell injection 回避)。
   // sts get-caller-identity は FAKE_CALLER_ACCOUNT を返し、それ以外 (delete-stack / wait)
   // は記録して成功する。
+  // FAKE_STS_STDERR_NOISE: #3063 regression 用。setlocale 警告等、STS 呼び出しの
+  // *成功時* にも stderr へ紛れ得る無関係な 1 行を注入できるようにする。fake aws が
+  // bash script である以上、この注入がなければ「たまたま locale 警告が出ない環境」
+  // でテストが常に通ってしまう (= 検出器として機能しない) ので、host の locale 状態に
+  // 依存せず決定論的に再現する。
   const fakeAws = `#!/usr/bin/env bash
 echo "$@" >> "$AWS_CALL_LOG"
 if [ "$1" = "sts" ] && [ "$2" = "get-caller-identity" ]; then
   if [ -z "$FAKE_CALLER_ACCOUNT" ]; then echo "fake sts failure" >&2; exit 254; fi
+  if [ -n "\${FAKE_STS_STDERR_NOISE:-}" ]; then echo "$FAKE_STS_STDERR_NOISE" >&2; fi
   echo "$FAKE_CALLER_ACCOUNT"
   exit 0
 fi
@@ -98,6 +104,23 @@ describe("delete-battles.sh expected-account verification (#1797)", { timeout: 3
       FAKE_CALLER_ACCOUNT: "999999999999",
     });
     expect(status, stderr).toBe(0);
+    expect(awsCalls).toContain("cloudformation delete-stack");
+    expect(awsCalls).toContain("cloudformation wait stack-delete-complete");
+  });
+
+  // #3063: `2>&1` で account ID の値と診断を同じ変数へ詰めていたせいで、STS 呼び出しが
+  // *成功* していても stderr に紛れた無関係な 1 行 (setlocale 警告など) が account ID
+  // へ混入し、一致している account を mismatch と誤判定して正しい delete を拒否していた。
+  // FAKE_STS_STDERR_NOISE でその無関係な 1 行を注入し、host の locale 生成状況に関係なく
+  // 決定論的に再現する。
+  it("should proceed with delete-stack + wait when the accounts match even if stderr carries an unrelated warning line (#3063)", () => {
+    const { status, stderr, awsCalls } = runDelete({
+      DELETE_EXPECTED_AWS_ACCOUNT_ID: "999999999999",
+      FAKE_CALLER_ACCOUNT: "999999999999",
+      FAKE_STS_STDERR_NOISE: "bash: warning: setlocale: LC_ALL: cannot change locale (en_US.UTF-8)",
+    });
+    expect(status, stderr).toBe(0);
+    expect(stderr).not.toContain("aborting before delete-stack");
     expect(awsCalls).toContain("cloudformation delete-stack");
     expect(awsCalls).toContain("cloudformation wait stack-delete-complete");
   });
