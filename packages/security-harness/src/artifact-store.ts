@@ -248,7 +248,19 @@ export class InMemoryArtifactStore {
       if (record.retention?.expiresAt !== undefined && record.retention.expiresAt <= nowIso) {
         this.records.delete(key);
         removed.push(record.id);
-        const refCount = (this.digestRefCounts.get(record.id) ?? 1) - 1;
+        // put() is the only insert site and increments exactly once per new
+        // (scope, digest) record; this is the only delete site and decrements exactly
+        // once. So any record still in `this.records` must have a count of at least 1.
+        // A missing count means that invariant is already broken — do not paper over it
+        // with a default, because the plausible-looking default (1) would free content
+        // bytes that another scope may still reference.
+        const currentRefCount = this.digestRefCounts.get(record.id);
+        if (currentRefCount === undefined) {
+          throw new Error(
+            `artifact store invariant violated: no reference count for retained digest "${record.id}"`,
+          );
+        }
+        const refCount = currentRefCount - 1;
         if (refCount <= 0) {
           this.digestRefCounts.delete(record.id);
           this.contents.delete(record.id);
