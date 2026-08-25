@@ -2212,11 +2212,6 @@
       "count": 1
     }
   },
-  "infrastructure/test/problem-deploy/coordination-handler.test.ts": {
-    "@typescript-eslint/consistent-type-assertions": {
-      "count": 2
-    }
-  },
   "infrastructure/test/problem-deploy/coordination-plugin-bundle.test.ts": {
     "@typescript-eslint/array-type": {
       "count": 1
