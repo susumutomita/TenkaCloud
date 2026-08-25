@@ -339,6 +339,15 @@
         "vitest": "^4.1.9",
       },
     },
+    "packages/security-harness": {
+      "name": "@tenkacloud/security-harness",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@types/node": "^26.1.0",
+        "typescript": "^6.0.3",
+        "vitest": "^4.1.9",
+      },
+    },
     "packages/standalone-cli": {
       "name": "@tenkacloud/cli",
       "version": "0.1.0",
@@ -1230,6 +1239,8 @@
     "@tenkacloud/problem-test": ["@tenkacloud/problem-test@workspace:packages/problem-test-harness"],
 
     "@tenkacloud/saml-utils": ["@tenkacloud/saml-utils@workspace:packages/saml-utils"],
+
+    "@tenkacloud/security-harness": ["@tenkacloud/security-harness@workspace:packages/security-harness"],
 
     "@tenkacloud/tcloud": ["@tenkacloud/tcloud@workspace:packages/tcloud"],
 

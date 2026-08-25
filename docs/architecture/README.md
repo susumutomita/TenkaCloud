@@ -18,3 +18,12 @@ Use the closest executable evidence instead:
 When behavior changes, update the implementation and its nearest deterministic
 test in the same pull request. Keep documentation at the level of stable user
 entry points and avoid duplicating internal control flow.
+
+## Decision records (narrow exception)
+
+[`decisions/`](./decisions/) holds numbered ADRs for the rare case where a design
+decision spans multiple repositories and needs a durable, reviewable record
+before any implementation lands — not a substitute for the executable-evidence
+rule above. See
+[`decisions/0001-security-harness-trust-boundary.md`](./decisions/0001-security-harness-trust-boundary.md)
+for the first one and its own justification for existing.

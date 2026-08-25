@@ -1,0 +1,23 @@
+{
+  "name": "@tenkacloud/security-harness",
+  "version": "0.1.0",
+  "description": "Issue #3036 Phase 0/1: versioned contracts, deterministic run state machine, and the false-pass-resistant baseline/patch verdict engine for the TenkaCloud security drill harness. Dependency-light and deterministic — no CDK / AWS SDK / model provider code here.",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage --coverage.reporter=lcov --coverage.reporter=text --coverage.reportsDirectory=./coverage --coverage.exclude='dist/**' --coverage.exclude='**/*.test.ts'",
+    "demo": "bun run bin/run-phase1-demo.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
+}

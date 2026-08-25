@@ -78,6 +78,10 @@ export const COVERAGE_WORKSPACES: readonly CoverageWorkspace[] = [
   // Issue #2936 Phase 1: the AI evaluation contracts. Pure and AWS-independent, so it sits on
   // the packages shard with the other dependency-light packages.
   { dir: "packages/ai-eval", filter: "@tenkacloud/ai-eval", shard: "packages" },
+  // Issue #3036 Phase 0/1: the security drill harness contracts (run state machine, witness
+  // schema, finding/patch verdict engine). Pure and AWS-independent, so it sits on the packages
+  // shard with the other dependency-light packages.
+  { dir: "packages/security-harness", filter: "@tenkacloud/security-harness", shard: "packages" },
 ];
 
 function shardDirs(shard: ShardName): readonly string[] {
