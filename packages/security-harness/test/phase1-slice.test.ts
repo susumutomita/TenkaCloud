@@ -111,6 +111,152 @@ describe("runPhase1Slice: cancellation stops new work", () => {
   });
 });
 
+describe("runPhase1Slice: patch evaluation state machine completion (Phase 3)", () => {
+  it("should evaluate a patch target that fails to build/start as build:'failed' -> inconclusive, never an uncaught exception", async () => {
+    const result = await runPhase1Slice({
+      runId: "e2e-patch-build-failure",
+      baselineVariant: "vulnerable",
+      patchVariant: "patched-build-failure",
+      now: FIXED_CLOCK,
+    });
+    expect(result.finalState).toBe("COMPLETED");
+    expect(result.patchEvaluation?.build).toBe("failed");
+    expect(result.patchEvaluation?.verdict).toBe("inconclusive");
+    expect(result.patchEvaluation?.reasons.some((r) => r.includes("build failed"))).toBe(true);
+    // A build failure never even attempts golden tests — there is no live target to run them
+    // against — so `goldenTests` stays absent rather than being reported as a false pass/fail.
+    expect(result.goldenTests).toBeUndefined();
+  });
+
+  it("should record every stage — including the build-failure short-circuit — on the timeline", async () => {
+    const result = await runPhase1Slice({
+      runId: "e2e-patch-build-failure-timeline",
+      baselineVariant: "vulnerable",
+      patchVariant: "patched-build-failure",
+      now: FIXED_CLOCK,
+    });
+    const types = result.timeline.map((e) => e.type);
+    expect(types).toContain("finding-recorded");
+    expect(types).toContain("patch-evaluation-recorded");
+    expect(result.timeline.every((e) => e.runId === "e2e-patch-build-failure-timeline")).toBe(true);
+    // Sequence numbers are strictly increasing insertion order.
+    expect(result.timeline.map((e) => e.sequence)).toEqual(result.timeline.map((_, i) => i));
+  });
+
+  it("should evaluate a target/verifier crash during golden-tests-and-replay as inconclusive, never a silent pass", async () => {
+    const result = await runPhase1Slice({
+      runId: "e2e-golden-replay-crash",
+      baselineVariant: "vulnerable",
+      patchVariant: "patched-correct",
+      now: FIXED_CLOCK,
+      makeHttpClient: () => ({
+        request: () => Promise.reject(new Error("simulated target crash")),
+      }),
+    });
+    expect(result.finalState).toBe("COMPLETED");
+    expect(result.patchEvaluation?.goldenBehavior).toBe("inconclusive");
+    expect(result.patchEvaluation?.originalWitnessReplay).toBe("inconclusive");
+    expect(result.patchEvaluation?.verdict).toBe("inconclusive");
+    expect(result.patchEvaluation?.verdict).not.toBe("verified-fixed");
+  });
+
+  it("should evaluate a crash isolated to JUST the fresh-reattack stage as inconclusive, not verified-fixed", async () => {
+    let callCount = 0;
+    const result = await runPhase1Slice({
+      runId: "e2e-reattack-crash-only",
+      baselineVariant: "vulnerable",
+      patchVariant: "patched-correct",
+      now: FIXED_CLOCK,
+      makeHttpClient: (baseUrl) => ({
+        request: async (step) => {
+          callCount += 1;
+          // Golden tests + original-witness-replay all run first and must keep succeeding
+          // normally; only the fresh re-attack witness (a distinct witnessId/path) is made to
+          // crash, isolating this test to "the reattack executor itself failed" rather than
+          // "everything failed".
+          if (step.path === "/documents/doc-b2") {
+            throw new Error("simulated verifier crash during fresh re-attack");
+          }
+          const response = await fetch(`${baseUrl}${step.path}`, {
+            method: step.method,
+            headers: step.headers,
+            body: step.body,
+          });
+          return { status: response.status, body: await response.text() };
+        },
+      }),
+    });
+    expect(callCount).toBeGreaterThan(0);
+    expect(result.patchEvaluation?.goldenBehavior).toBe("passed");
+    expect(result.patchEvaluation?.originalWitnessReplay).toBe("blocked");
+    expect(result.patchEvaluation?.freshReattack).toBe("inconclusive");
+    expect(result.patchEvaluation?.verdict).toBe("inconclusive");
+    expect(result.patchEvaluation?.verdict).not.toBe("verified-fixed");
+  });
+
+  it("should still cancel cleanly (no patch evaluation) even with a crash-simulating client installed but never invoked", async () => {
+    let calls = 0;
+    const result = await runPhase1Slice({
+      runId: "e2e-cancel-with-crash-client",
+      baselineVariant: "vulnerable",
+      patchVariant: "patched-correct",
+      now: FIXED_CLOCK,
+      makeHttpClient: () => ({
+        request: () => Promise.reject(new Error("should never be called")),
+      }),
+      shouldCancel: () => {
+        calls += 1;
+        return calls >= 3;
+      },
+    });
+    expect(result.finalState).toBe("CANCELLED");
+    expect(result.patchEvaluation).toBeUndefined();
+  });
+});
+
+describe("runPhase1Slice: run timeline (Phase 3)", () => {
+  it("should timestamp every timeline event from the injected clock, never Date.now()", async () => {
+    const result = await runPhase1Slice({
+      runId: "e2e-timeline-clock",
+      baselineVariant: "vulnerable",
+      patchVariant: "patched-correct",
+      now: FIXED_CLOCK,
+    });
+    expect(result.timeline.length).toBeGreaterThan(0);
+    expect(result.timeline.every((e) => e.occurredAt === FIXED_CLOCK())).toBe(true);
+  });
+
+  it("should record a state-transition event for every entry in `states`, in the same order", async () => {
+    const result = await runPhase1Slice({
+      runId: "e2e-timeline-states",
+      baselineVariant: "vulnerable",
+      patchVariant: "patched-correct",
+      now: FIXED_CLOCK,
+    });
+    const recordedStates = result.timeline
+      .filter((e) => e.type === "state-transition")
+      .map((e) => (e.type === "state-transition" ? e.state : undefined));
+    expect(recordedStates).toEqual(result.states);
+  });
+
+  it("should stop appending to the timeline once cancelled — nothing recorded after the CANCELLED event", async () => {
+    let calls = 0;
+    const result = await runPhase1Slice({
+      runId: "e2e-timeline-cancel",
+      baselineVariant: "vulnerable",
+      patchVariant: "patched-correct",
+      now: FIXED_CLOCK,
+      shouldCancel: () => {
+        calls += 1;
+        return calls >= 3;
+      },
+    });
+    const lastEvent = result.timeline.at(-1);
+    expect(lastEvent?.type).toBe("state-transition");
+    expect(lastEvent?.type === "state-transition" ? lastEvent.state : undefined).toBe("CANCELLED");
+  });
+});
+
 describe("runPhase1Slice: fresh environment per run", () => {
   it("should not carry document state between separate runs against the same variant", async () => {
     const first = await runPhase1Slice({

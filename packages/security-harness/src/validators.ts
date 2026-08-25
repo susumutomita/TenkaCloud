@@ -6,7 +6,7 @@
  * defaults.
  */
 
-import type { SecurityHarnessDefinition } from "./types.js";
+import type { RevealField, SecurityHarnessDefinition } from "./types.js";
 import type { ValidationResult } from "./witness.js";
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -180,6 +180,49 @@ function validateBudget(value: unknown, errors: string[]): void {
   }
 }
 
+/** Kept in sync with `RevealField` in ./types.ts. */
+const KNOWN_REVEAL_FIELDS: ReadonlySet<RevealField> = new Set<RevealField>([
+  "status",
+  "bounded-claim-notice",
+  "golden-test-results",
+  "generated-at",
+  "verdict-reasons",
+  "witness-digests",
+  "target-patch-digests",
+  "forbidden-side-effects",
+  "budget-usage",
+  "verification-metadata",
+  "redacted-transcript-ref",
+]);
+
+function validateRevealFieldList(value: unknown, prefix: string, errors: string[]): void {
+  if (
+    !Array.isArray(value) ||
+    value.some((v) => typeof v !== "string" || !KNOWN_REVEAL_FIELDS.has(v as RevealField))
+  ) {
+    errors.push(`${prefix}: must be an array of known reveal fields`);
+  }
+}
+
+/**
+ * Optional field (Issue #3036 Phase 3): a `SecurityHarnessDefinition` that omits `revealPolicy`
+ * entirely is still valid (Phase 1 definitions predate this field), but a `revealPolicy` that IS
+ * present must be well-formed — an unknown field name here is very likely a typo a problem author
+ * would want caught, not a value worth silently passing through to `./reveal-policy.ts`'s
+ * enforcement layer.
+ */
+function validateRevealPolicy(value: unknown, errors: string[]): void {
+  if (value === undefined) return;
+  const prefix = "definition.revealPolicy";
+  if (!isPlainObject(value)) {
+    errors.push(`${prefix}: expected an object`);
+    return;
+  }
+  pushUnknownKeys(value, new Set(["participantCanSee", "organizerCanSee"]), prefix, errors);
+  validateRevealFieldList(value.participantCanSee, `${prefix}.participantCanSee`, errors);
+  validateRevealFieldList(value.organizerCanSee, `${prefix}.organizerCanSee`, errors);
+}
+
 export function validateSecurityHarnessDefinition(
   value: unknown,
 ): ValidationResult<SecurityHarnessDefinition> {
@@ -189,7 +232,7 @@ export function validateSecurityHarnessDefinition(
   const errors: string[] = [];
   pushUnknownKeys(
     value,
-    new Set(["version", "target", "engagement", "witness", "budget"]),
+    new Set(["version", "target", "engagement", "witness", "budget", "revealPolicy"]),
     "definition",
     errors,
   );
@@ -200,6 +243,7 @@ export function validateSecurityHarnessDefinition(
   validateEngagement(value.engagement, errors);
   validateWitnessDeclaration(value.witness, errors);
   validateBudget(value.budget, errors);
+  validateRevealPolicy(value.revealPolicy, errors);
 
   if (errors.length > 0) return { ok: false, errors };
   return { ok: true, value: value as unknown as SecurityHarnessDefinition, errors: [] };

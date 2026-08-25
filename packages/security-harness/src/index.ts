@@ -14,9 +14,7 @@
  *     in-process HTTP fixture, proving the contract end to end without a model, Docker, or the
  *     network.
  *
- * Also in this package (Issue #3036 Phase 2 — Recon / Finder / adapter / dedupe only; independent
- * Verifier confirmation, patch evaluation, the artifact store, the audit timeline, and
- * participant/organizer reveal policy are separate follow-up work):
+ * Also in this package (Issue #3036 Phase 2 — Recon / Finder / adapter / dedupe):
  *   - `ModelProvider`, the provider-neutral model adapter contract (`./model-provider.ts`), and
  *     `FixtureModelProvider`, the model-free deterministic implementation of it
  *     (`./fixture-model-provider.ts`) — no live provider is implemented in this package;
@@ -28,11 +26,30 @@
  *     (`./finder-output.ts`);
  *   - `dedupeFindings`, deterministic-signature deduplication of candidate findings (`./dedupe.ts`).
  *
+ * And (Issue #3036 Phase 3): the participant/organizer spoiler boundary (`./reveal-policy.ts`),
+ * the run timeline + JSON/JSONL export (`./run-timeline.ts`), and the artifact metadata / access
+ * control / retention / secret-redaction reference store (`./artifact-store.ts`,
+ * `./secret-redaction.ts`). None of these read `scoring.attackProbes` or change its wire shape —
+ * see `./run-timeline.ts`'s header comment for how the two coexist.
+ *
  * Explicitly NOT in this package: a live model provider (Claude or otherwise), an independent
- * Verifier that re-confirms a witness in a fresh sandbox, patch evaluation wiring, a real
- * container/Simulator execution plane, or any product/portal wiring.
+ * Verifier that re-confirms a witness in a fresh sandbox, a real container/Simulator execution
+ * plane, or real S3/DynamoDB-backed artifact storage / a wired operator API or Participant Portal
+ * route — Simulator-owned and Phase 4 / infra-wiring follow-up per the issue.
  */
 
+export {
+  ArtifactAccessDeniedError,
+  type ArtifactKind,
+  type ArtifactMetadata,
+  type ArtifactRecord,
+  type ArtifactScope,
+  ArtifactValidationError,
+  type IngestArtifactFileInput,
+  InMemoryArtifactStore,
+  ingestArtifactFile,
+  type PutArtifactInput,
+} from "./artifact-store.js";
 export type { DedupeGroup, DedupeManifest } from "./dedupe.js";
 export { canonicalJsonStringify, computeDeterministicSignature, dedupeFindings } from "./dedupe.js";
 export { digestOfOwnSource, sha256Hex, toDigestRef } from "./digest.js";
@@ -83,12 +100,42 @@ export type {
 } from "./recon.js";
 export { planRecon } from "./recon.js";
 export {
+  BOUNDED_CLAIM_NOTICE,
+  DEFAULT_REVEAL_POLICY,
+  ORGANIZER_ALLOWED_REVEAL_FIELDS,
+  type OrganizerPatchEvaluationView,
+  PARTICIPANT_ALLOWED_REVEAL_FIELDS,
+  type ParticipantPatchEvaluationView,
+  type ParticipantPatchStatus,
+  type PatchEvaluationProjectionInput,
+  type PublicGoldenTestResult,
+  projectPatchEvaluationForOrganizer,
+  projectPatchEvaluationForParticipant,
+  sanitizeRevealPolicy,
+} from "./reveal-policy.js";
+export {
   canTransition,
   IllegalSecurityRunTransitionError,
   isTerminalState,
   TERMINAL_STATES,
   transitionSecurityRun,
 } from "./run-state-machine.js";
+export type {
+  OrganizerTimelineEvent,
+  ParticipantRunPhase,
+  ParticipantTimelineEvent,
+  SecurityRunTimelineEvent,
+  SecurityRunTimelineEventType,
+} from "./run-timeline.js";
+export {
+  projectTimelineForOrganizer,
+  projectTimelineForParticipant,
+  TimelineRecorder,
+  toTimelineJson,
+  toTimelineJsonl,
+} from "./run-timeline.js";
+export type { RedactionResult } from "./secret-redaction.js";
+export { redactSecrets } from "./secret-redaction.js";
 export type {
   CommandContract,
   FindingEvidence,
@@ -99,6 +146,8 @@ export type {
   PatchEvaluationInput,
   PatchVerdict,
   ProbeContract,
+  RevealField,
+  RevealPolicy,
   SecurityHarnessDefinition,
   SecurityRunState,
   TestContract,
