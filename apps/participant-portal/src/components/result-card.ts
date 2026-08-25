@@ -249,6 +249,35 @@ export function buildResultCardModel(
   };
 }
 
+// #3066: SCORE (x=60) と RANK (x=570) の値テキストは、それぞれの font-size を桁数だけから
+// 独立に選んでいた。rank が 4 桁かつ score が 10 桁のように両方が同時に長くなる組み合わせ
+// では、選んだ font-size のままでも自然な描画幅が次の列の開始位置を越えて SCORE と RANK
+// (あるいは RANK と PROGRESS) が重なる。font-size をさらに細かく場合分けするのではなく、
+// 各列に「これを超えない」という幅の上限を持たせ、越えるときだけ SVG の
+// textLength/lengthAdjust="spacingAndGlyphs" で実描画幅をその上限に強制収縮する
+// (収まっている通常値ではこの属性を付けず、既存の見た目を変えない)。
+const SCORE_COLUMN_X = 60;
+const SCORE_COLUMN_MAX_WIDTH = 460; // 次列 RANK (x=570) との間隔 510px から余白 50px を引いた値。
+const RANK_COLUMN_X = 570;
+const RANK_COLUMN_MAX_WIDTH = 260; // 次列 PROGRESS (x=880) との間隔 310px から余白 50px を引いた値。
+
+// SCORE/RANK は数字と '#' / '-' のみで構成される。実際のグリフ幅は描画環境のフォントに
+// 依存し、この pure function からは測定できないため、「越えそうなら安全側 (収縮する) に
+// 倒す」ように意図的に太らせた係数を使う (result-card.test.ts の Playwright geometry 回帰
+// テストで、実際に Chromium が描画した bounding box が重ならないことを検証している)。
+const NUMERIC_GLYPH_WIDTH_EM = 0.75;
+
+function estimateNumericTextWidth(text: string, fontSizePx: number): number {
+  return text.length * fontSizePx * NUMERIC_GLYPH_WIDTH_EM;
+}
+
+// text が maxWidth に収まりそうにないときだけ、その幅へ強制収縮する SVG 属性を返す。
+// 収まりそうなときは空文字 (= 属性を付けない、通常の自然な描画幅のまま)。
+function widthClampAttributes(text: string, fontSizePx: number, maxWidth: number): string {
+  if (estimateNumericTextWidth(text, fontSizePx) <= maxWidth) return "";
+  return ` textLength="${maxWidth}" lengthAdjust="spacingAndGlyphs"`;
+}
+
 function scoreFontSize(score: number): number {
   const digits = String(score).length;
   if (digits <= 5) return 124;
@@ -308,6 +337,16 @@ export function renderResultCardSvg(model: ResultCardModel): string {
   const generatedAt = escapeXml(formatGeneratedAt(model.generatedAt));
   const accessibleTitle = escapeXml(buildResultCardAltText(model));
 
+  // #3066: SCORE/RANK は値そのもの (escapeXml 不要な数字と '#' / '-' のみ) を幅の制約対象
+  // にする。桁数から選んだ font-size のままで列の最大幅を越えそうなときだけ、実描画幅を
+  // その列の最大幅に強制収縮する属性を付ける。
+  const scoreText = String(model.score);
+  const scoreFontSizePx = scoreFontSize(model.score);
+  const scoreWidthAttrs = widthClampAttributes(scoreText, scoreFontSizePx, SCORE_COLUMN_MAX_WIDTH);
+  const rankText = `#${model.rank}`;
+  const rankFontSizePx = rankFontSize(model.rank);
+  const rankWidthAttrs = widthClampAttributes(rankText, rankFontSizePx, RANK_COLUMN_MAX_WIDTH);
+
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${RESULT_CARD_WIDTH}" height="${RESULT_CARD_HEIGHT}" viewBox="0 0 ${RESULT_CARD_WIDTH} ${RESULT_CARD_HEIGHT}" role="img" aria-labelledby="title">
   <title id="title">${accessibleTitle}</title>
   <defs>
@@ -332,9 +371,9 @@ export function renderResultCardSvg(model: ResultCardModel): string {
   <text x="60" y="226" fill="#ffffff" font-family="${SVG_FONT_FAMILY}" font-size="${teamNameFontSize(teamNameText)}" font-weight="800">${teamName}</text>
   <line x1="60" y1="268" x2="1140" y2="268" stroke="#d6f1ff" stroke-opacity="0.18"/>
   <text x="60" y="330" fill="#89b9d4" font-family="${SVG_FONT_FAMILY}" font-size="22" font-weight="700" letter-spacing="1">${labels.score}</text>
-  <text x="60" y="445" fill="#ffffff" font-family="${SVG_FONT_FAMILY}" font-size="${scoreFontSize(model.score)}" font-weight="800">${model.score}</text>
+  <text x="${SCORE_COLUMN_X}" y="445" fill="#ffffff" font-family="${SVG_FONT_FAMILY}" font-size="${scoreFontSizePx}" font-weight="800"${scoreWidthAttrs}>${scoreText}</text>
   <text x="570" y="330" fill="#89b9d4" font-family="${SVG_FONT_FAMILY}" font-size="22" font-weight="700" letter-spacing="1">${labels.rank}</text>
-  <text x="570" y="435" fill="#d9f99d" font-family="${SVG_FONT_FAMILY}" font-size="${rankFontSize(model.rank)}" font-weight="800">#${model.rank}</text>
+  <text x="${RANK_COLUMN_X}" y="435" fill="#d9f99d" font-family="${SVG_FONT_FAMILY}" font-size="${rankFontSizePx}" font-weight="800"${rankWidthAttrs}>${rankText}</text>
   <text x="880" y="330" fill="#89b9d4" font-family="${SVG_FONT_FAMILY}" font-size="22" font-weight="700" letter-spacing="1">${labels.progress}</text>
   <text x="880" y="421" fill="#ffffff" font-family="${SVG_FONT_FAMILY}" font-size="72" font-weight="800">${model.completedProblems}<tspan fill="#7fb4cf" font-size="38"> / ${model.totalProblems}</tspan></text>
   <rect x="60" y="500" width="1060" height="18" rx="9" fill="#ffffff" opacity="0.13"/>

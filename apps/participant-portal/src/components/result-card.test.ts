@@ -279,11 +279,22 @@ describe("Result Card rendering", () => {
       });
       if (!result.ok) throw result.error;
       const svg = renderResultCardSvg(result.value);
-      expect(svg).toContain(
-        `font-size="${testCase.scoreFontSize}" font-weight="800">${testCase.score}`,
+      // #3066: SCORE/RANK は、選んだ font-size のままだと列の最大幅を越えるときだけ
+      // `textLength`/`lengthAdjust="spacingAndGlyphs"` で実描画幅をその列の最大幅へ
+      // 強制収縮する (result-card.ts の widthClampAttributes)。この test は font-size の
+      // 選択そのものを検証するのが目的なので、その属性が付くかどうかは固定せず許容する。
+      // 付いたときの幅の値までは検証しない (= 幾何が実際に重ならないことは、下の
+      // Playwright ベースの geometry 回帰テストが担う)。
+      const widthClampSuffix = ' textLength="\\d+" lengthAdjust="spacingAndGlyphs"';
+      expect(svg).toMatch(
+        new RegExp(
+          `font-size="${testCase.scoreFontSize}" font-weight="800"(?:${widthClampSuffix})?>${testCase.score}<`,
+        ),
       );
-      expect(svg).toContain(
-        `font-size="${testCase.rankFontSize}" font-weight="800">#${testCase.rank}`,
+      expect(svg).toMatch(
+        new RegExp(
+          `font-size="${testCase.rankFontSize}" font-weight="800"(?:${widthClampSuffix})?>#${testCase.rank}<`,
+        ),
       );
       expect(svg).toContain(`font-size="24" font-weight="600">${midEventTitle}`);
       expect(svg).toContain(`font-size="44" font-weight="800">${midTeamName}`);
