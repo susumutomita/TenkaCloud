@@ -14,15 +14,60 @@
  *     in-process HTTP fixture, proving the contract end to end without a model, Docker, or the
  *     network.
  *
- * Explicitly NOT in this package: an LLM/model provider adapter, an autonomous Finder/Recon loop,
- * a real container/Simulator execution plane, or any product/portal wiring — all Phase 2/3
- * per the issue.
+ * Also in this package (Issue #3036 Phase 2 — Recon / Finder / adapter / dedupe only; independent
+ * Verifier confirmation, patch evaluation, the artifact store, the audit timeline, and
+ * participant/organizer reveal policy are separate follow-up work):
+ *   - `ModelProvider`, the provider-neutral model adapter contract (`./model-provider.ts`), and
+ *     `FixtureModelProvider`, the model-free deterministic implementation of it
+ *     (`./fixture-model-provider.ts`) — no live provider is implemented in this package;
+ *   - `planRecon`, threat-model-driven focus-area partitioning (`./recon.ts`);
+ *   - `runFinders`, N-Finder parallel fan-out through a `ModelProvider` with a per-task isolation
+ *     contract and rate-limit/timeout/model-error checkpoint-and-resume (`./finder-orchestration.ts`);
+ *   - `extractFinderHandoff`, the PoC-only handoff schema restriction that keeps Finder reasoning,
+ *     self-assessment, severity, and conclusions out of anything forwarded toward verification
+ *     (`./finder-output.ts`);
+ *   - `dedupeFindings`, deterministic-signature deduplication of candidate findings (`./dedupe.ts`).
+ *
+ * Explicitly NOT in this package: a live model provider (Claude or otherwise), an independent
+ * Verifier that re-confirms a witness in a fresh sandbox, patch evaluation wiring, a real
+ * container/Simulator execution plane, or any product/portal wiring.
  */
 
+export type { DedupeGroup, DedupeManifest } from "./dedupe.js";
+export { canonicalJsonStringify, computeDeterministicSignature, dedupeFindings } from "./dedupe.js";
 export { digestOfOwnSource, sha256Hex, toDigestRef } from "./digest.js";
 export type { EvaluateFindingInput } from "./evaluate-finding.js";
 export { evaluateFindingVerdict } from "./evaluate-finding.js";
 export { evaluatePatch, evaluatePatchVerdict } from "./evaluate-patch.js";
+export type {
+  FinderPrompt,
+  FinderRetryPolicy,
+  FinderSessionDescriptor,
+  FinderTaskCheckpoint,
+  FinderTaskStatus,
+  RunFindersOptions,
+  RunFindersResult,
+} from "./finder-orchestration.js";
+export { runFinders } from "./finder-orchestration.js";
+export type {
+  ExtractFinderHandoffInput,
+  FinderHandoff,
+  FinderHandoffResult,
+  FinderTargetMetadata,
+} from "./finder-output.js";
+export { extractFinderHandoff } from "./finder-output.js";
+export type { FixtureModelProviderOptions } from "./fixture-model-provider.js";
+export { FixtureModelProvider, fixtureFailure, fixtureSuccess } from "./fixture-model-provider.js";
+export type {
+  ModelProvider,
+  ModelProviderError,
+  ModelProviderErrorKind,
+  ModelProviderRequest,
+  ModelProviderResponse,
+  ModelProviderResult,
+  ModelProviderUsage,
+} from "./model-provider.js";
+export { isRetryableModelProviderError } from "./model-provider.js";
 export type {
   GoldenTestResult,
   Phase1SliceOptions,
@@ -30,6 +75,13 @@ export type {
   TargetVariant,
 } from "./phase1-slice.js";
 export { runPhase1Slice } from "./phase1-slice.js";
+export type {
+  ReconFinderAssignment,
+  ReconPlan,
+  ReconThreatModel,
+  ThreatModelFocusArea,
+} from "./recon.js";
+export { planRecon } from "./recon.js";
 export {
   canTransition,
   IllegalSecurityRunTransitionError,
