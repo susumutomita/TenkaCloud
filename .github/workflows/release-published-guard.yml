@@ -1,0 +1,60 @@
+name: release-published-guard
+
+# Post-publish completeness guard (#3024 structural gap). `release-cli.yml` validates the
+# release identity and asset set at creation time, but only when a `v*` tag is pushed
+# through that workflow — it assumes the workflow is the only path by which a GitHub
+# Release reaches this repository. That assumption is false: anyone with `contents: write`
+# can call `gh release create` (or use the web UI) against an existing tag directly,
+# publishing a Release the workflow never built and never checked. `v1.2.1` and `v1.3.1`
+# are both live proof — non-draft, non-prerelease Releases with an empty asset list,
+# published by a human account rather than `github-actions[bot]`.
+#
+# This workflow closes that gap from the outside: it fires on the `release: published`
+# webhook event, which GitHub sends no matter how the Release was created, and asserts the
+# closed asset set `release-cli.yml` assembles is actually attached. The check itself is a
+# pure function (scripts/release/release-published-completeness.ts) over the webhook
+# payload alone — no checkout of the tagged tree, no manifest resolution — because a
+# hand-created Release's tag may not even point at a tree that satisfies the manifest
+# schema (v1.3.1 does not), and a guard that could only run on a healthy tree would not
+# have caught the bug it exists for.
+#
+# This is a detector only: it never creates, edits, or deletes a Release or tag, and it
+# cannot repair `v1.3.1` — this repository's Releases are immutable, so a broken one can
+# only be recreated by a human with the authority to delete and republish it.
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-published-guard-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the code
+        # actions/checkout v4.3.1 (pinned, matches release-cli.yml). Checks out the default
+        # branch, not the release tag: the guard is generic over any tag shape, including
+        # one whose tree cannot satisfy the manifest schema at all.
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          submodules: false
+
+      - name: Setup Bun
+        # oven-sh/setup-bun v2.0.2 (pinned, matches release-cli.yml)
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: "1.3.11"
+
+      - name: Check the published release's asset completeness
+        # Reads the release object straight out of GITHUB_EVENT_PATH — never interpolated
+        # into this shell script — so a tag name or release body containing shell
+        # metacharacters can never reach a command line. Fails the job (and this workflow)
+        # when the release is in scope and missing any required asset; writes exactly which
+        # assets are missing to the step summary either way.
+        run: bun run scripts/release/check-release-published-completeness.ts
