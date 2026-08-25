@@ -35,7 +35,10 @@ export interface ReleaseTagContext {
   readonly catalogGitlink: string;
 }
 
-const STABLE_RELEASE_TAG = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+// Exported: the post-publish completeness guard (release-published-completeness.ts) reuses
+// this exact shape to derive a version from a tag it only ever receives from the GitHub
+// release webhook payload, never from a local checkout — see that module's header comment.
+export const STABLE_RELEASE_TAG = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
 function fail(message: string): never {
   throw new Error(`Release identity mismatch: ${message}`);
