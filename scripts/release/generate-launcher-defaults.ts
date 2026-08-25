@@ -25,6 +25,21 @@ export interface LauncherDefaults {
   readonly catalogCommit: string;
 }
 
+/**
+ * The `knownLimitations` sentence a release manifest must carry while the launcher default
+ * pair trails it: `launcher-defaults.json` still names the previous release, because this
+ * manifest's version has no verified published Release to advance to yet. The lag is a real
+ * user-visible property -- the launcher's default deploys the previous release, not the one
+ * the manifest describes -- so the manifest has to say so. Once `--from-tag` advances the
+ * pair, the sentence is false and has to go. `manifest.test.ts` asserts both directions, so
+ * neither adding it at manifest-bump time nor removing it at advance time can be forgotten.
+ */
+export const LAUNCHER_LAG_LIMITATION =
+  "The Lite launcher default RepoRef/ProblemsRepoRef pair is generated from " +
+  "release/launcher-defaults.json but still points at the previously released identity; " +
+  "it advances to this release's pair only after the published Release is verified " +
+  "(#3024 PR 5).";
+
 const FULL_COMMIT = /^[a-f0-9]{40}$/;
 // The version lands inside YAML scalars and a double-quoted shell echo, so keep it to
 // characters that are inert in both.
