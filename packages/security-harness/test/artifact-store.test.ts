@@ -114,6 +114,47 @@ describe("InMemoryArtifactStore.put: content addressing", () => {
     });
     expect(record.contentType).toBe("application/jsonl");
   });
+
+  it("should report the correct 0-indexed line number for a single malformed line among several JSONL lines", () => {
+    const store = new InMemoryArtifactStore();
+    // Line 0 and line 2 are valid JSON; only line 1 ("not-json") is malformed.
+    const content = `${JSON.stringify({ a: 1 })}\nnot-json\n${JSON.stringify({ b: 2 })}\n`;
+    try {
+      store.put({
+        kind: "AUDIT_EVENT_STREAM",
+        scope: TEAM_A_SCOPE,
+        content,
+        contentType: "application/jsonl",
+      });
+      expect.fail("expected put() to throw ArtifactValidationError for a malformed JSONL line");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ArtifactValidationError);
+      expect((error as ArtifactValidationError).reasons).toEqual(["line 1: not valid JSON"]);
+    }
+  });
+
+  it("should accept non-JSON content for text/plain (no whole-content JSON validation applies)", () => {
+    const store = new InMemoryArtifactStore();
+    const record = store.put({
+      kind: "EVIDENCE_REPORT",
+      scope: TEAM_A_SCOPE,
+      content: "plain text notes, deliberately not JSON at all",
+      contentType: "text/plain",
+    });
+    expect(record.contentType).toBe("text/plain");
+    expect(record.content).toBe("plain text notes, deliberately not JSON at all");
+  });
+
+  it("should attach an optional producer to the stored record when supplied", () => {
+    const store = new InMemoryArtifactStore();
+    const record = store.put({
+      kind: "EVIDENCE_REPORT",
+      scope: TEAM_A_SCOPE,
+      content: "{}",
+      producer: { id: "harness-cli", version: "1.2.3" },
+    });
+    expect(record.producer).toEqual({ id: "harness-cli", version: "1.2.3" });
+  });
 });
 
 describe("InMemoryArtifactStore.get: cross-team access is denied", () => {
@@ -217,6 +258,61 @@ describe("InMemoryArtifactStore.pruneExpired: retention", () => {
     expect(store.get(noRetention.id, TEAM_A_SCOPE)).toBeDefined();
     expect(store.get(futureRetention.id, TEAM_A_SCOPE)).toBeDefined();
   });
+
+  it("should default to the system clock when no clock is injected, so a far-past expiry is still pruned", () => {
+    const store = new InMemoryArtifactStore();
+    const record = store.put({
+      kind: "EVIDENCE_REPORT",
+      scope: TEAM_A_SCOPE,
+      content: "{}",
+      retention: { expiresAt: "1970-01-01T00:00:00.000Z" },
+    });
+    const removed = store.pruneExpired();
+    expect(removed).toContain(record.id);
+    expect(() => store.get(record.id, TEAM_A_SCOPE)).toThrow(ArtifactAccessDeniedError);
+  });
+
+  it("should keep content bytes alive for a surviving scope after an identical-content record in ANOTHER scope expires, and only free them once every referencing scope has expired", () => {
+    const store = new InMemoryArtifactStore();
+    const content = JSON.stringify({ shared: "identical bytes, two independent scopes" });
+
+    const teamARecord = store.put(
+      {
+        kind: "EVIDENCE_REPORT",
+        scope: TEAM_A_SCOPE,
+        content,
+        retention: { expiresAt: "2026-01-01T00:00:00.000Z" },
+      },
+      FIXED_CLOCK,
+    );
+    const teamBRecord = store.put(
+      {
+        kind: "EVIDENCE_REPORT",
+        scope: TEAM_B_SCOPE,
+        content,
+        retention: { expiresAt: "2027-01-01T00:00:00.000Z" },
+      },
+      FIXED_CLOCK,
+    );
+    // Byte-identical (post-redaction) content under two different scopes content-addresses to the
+    // same digest — this is the whole point of the scenario: one shared content blob, two scopes.
+    expect(teamBRecord.id).toBe(teamARecord.id);
+
+    // Expire only team A's record. Team B's record on the SAME digest is still live, so the
+    // content bytes must NOT be freed yet.
+    const firstRemoved = store.pruneExpired(() => "2026-06-01T00:00:00.000Z");
+    expect(firstRemoved).toEqual([teamARecord.id]);
+    expect(() => store.get(teamARecord.id, TEAM_A_SCOPE)).toThrow(ArtifactAccessDeniedError);
+
+    const stillReadable = store.get(teamBRecord.id, TEAM_B_SCOPE);
+    expect(stillReadable.content).toBe(teamARecord.content);
+
+    // Now expire team B's record too — the last reference to that digest — and the bytes are
+    // finally released (also reflected in it becoming inaccessible).
+    const secondRemoved = store.pruneExpired(() => "2027-06-01T00:00:00.000Z");
+    expect(secondRemoved).toEqual([teamBRecord.id]);
+    expect(() => store.get(teamBRecord.id, TEAM_B_SCOPE)).toThrow(ArtifactAccessDeniedError);
+  });
 });
 
 describe("ingestArtifactFile: filesystem ingestion safety", () => {
@@ -247,6 +343,47 @@ describe("ingestArtifactFile: filesystem ingestion safety", () => {
       now: FIXED_CLOCK,
     });
     expect(record.content).toContain("fine");
+  });
+
+  it("should throw ArtifactValidationError naming the participant-supplied relativePath when the target cannot be stat'd at all (e.g. it does not exist)", () => {
+    const root = makeRoot();
+    const store = new InMemoryArtifactStore();
+    // In-bounds path (so the traversal check passes and we actually reach lstatSync), but nothing
+    // exists there — lstatSync itself must throw, distinct from the symlink-rejection branch below.
+    try {
+      ingestArtifactFile({
+        store,
+        rootDir: root,
+        relativePath: "does-not-exist.json",
+        kind: "EVIDENCE_REPORT",
+        scope: TEAM_A_SCOPE,
+      });
+      expect.fail("expected ingestArtifactFile() to throw for a path that cannot be stat'd");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ArtifactValidationError);
+      expect((error as ArtifactValidationError).reasons[0]).toContain("does-not-exist.json");
+    }
+  });
+
+  it("should forward an explicit contentType, producer, and retention through to the stored record", () => {
+    const root = makeRoot();
+    writeFileSync(join(root, "notes.txt"), "plain text, deliberately not JSON at all");
+    const store = new InMemoryArtifactStore();
+    const record = ingestArtifactFile({
+      store,
+      rootDir: root,
+      relativePath: "notes.txt",
+      kind: "EVIDENCE_REPORT",
+      scope: TEAM_A_SCOPE,
+      contentType: "text/plain",
+      producer: { id: "harness-cli", version: "1.2.3" },
+      retention: { expiresAt: "2099-01-01T00:00:00.000Z" },
+      now: FIXED_CLOCK,
+    });
+    expect(record.contentType).toBe("text/plain");
+    expect(record.content).toBe("plain text, deliberately not JSON at all");
+    expect(record.producer).toEqual({ id: "harness-cli", version: "1.2.3" });
+    expect(record.retention).toEqual({ expiresAt: "2099-01-01T00:00:00.000Z" });
   });
 
   it("should reject a path that traverses outside the artifact root, even before checking whether the target exists", () => {

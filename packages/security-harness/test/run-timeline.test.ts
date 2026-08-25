@@ -109,6 +109,14 @@ describe("projectTimelineForParticipant: drops finding-recorded entirely", () =>
       "needs-more-information",
     ]);
   });
+
+  it("should surface a golden-tests-recorded event as a participant golden-tests event", () => {
+    const recorder = new TimelineRecorder("run-1", () => "t0");
+    const goldenTests = [{ id: "g1", description: "normal login still works", passed: true }];
+    recorder.recordGoldenTests(goldenTests);
+    const events = projectTimelineForParticipant(recorder.toArray());
+    expect(events).toEqual([{ sequence: 0, occurredAt: "t0", type: "golden-tests", goldenTests }]);
+  });
 });
 
 describe("projectTimelineForOrganizer: full detail retained", () => {
@@ -137,6 +145,31 @@ describe("projectTimelineForOrganizer: full detail retained", () => {
     expect(
       patchEvent && patchEvent.type === "patch-result" ? patchEvent.evaluation.verdict : undefined,
     ).toBe("verified-fixed");
+  });
+
+  it("should keep the raw internal SecurityRunState on an organizer state-transition event, while the participant projection only ever sees the coarse phase", () => {
+    const recorder = new TimelineRecorder("run-1", () => "t0");
+    recorder.recordStateTransition("BUILDING");
+
+    const organizerEvents = projectTimelineForOrganizer(recorder.toArray());
+    expect(organizerEvents).toEqual([
+      { sequence: 0, occurredAt: "t0", type: "state-transition", state: "BUILDING" },
+    ]);
+
+    const participantEvents = projectTimelineForParticipant(recorder.toArray());
+    expect(participantEvents).toEqual([
+      { sequence: 0, occurredAt: "t0", type: "phase-update", phase: "in-progress" },
+    ]);
+    // The organizer view names the raw internal state; the participant view must never leak it.
+    expect(JSON.stringify(participantEvents)).not.toContain("BUILDING");
+  });
+
+  it("should surface a golden-tests-recorded event as an organizer golden-tests event", () => {
+    const recorder = new TimelineRecorder("run-1", () => "t0");
+    const goldenTests = [{ id: "g1", description: "normal login still works", passed: false }];
+    recorder.recordGoldenTests(goldenTests);
+    const events = projectTimelineForOrganizer(recorder.toArray());
+    expect(events).toEqual([{ sequence: 0, occurredAt: "t0", type: "golden-tests", goldenTests }]);
   });
 });
 
