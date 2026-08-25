@@ -104,3 +104,58 @@ describe("validateSecurityHarnessDefinition", () => {
     ).toBe(false);
   });
 });
+
+describe("validateSecurityHarnessDefinition: revealPolicy (Phase 3 addition)", () => {
+  it("should accept a definition with no revealPolicy at all — Phase 1 definitions predate this field", () => {
+    const result = validateSecurityHarnessDefinition(VALID);
+    expect(result.ok).toBe(true);
+    expect(result.value?.revealPolicy).toBeUndefined();
+  });
+
+  it("should accept a well-formed revealPolicy", () => {
+    const result = validateSecurityHarnessDefinition({
+      ...VALID,
+      revealPolicy: {
+        participantCanSee: ["status", "bounded-claim-notice"],
+        organizerCanSee: ["status", "verdict-reasons", "witness-digests"],
+      },
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("should reject a revealPolicy containing an unknown reveal field", () => {
+    const result = validateSecurityHarnessDefinition({
+      ...VALID,
+      revealPolicy: {
+        participantCanSee: ["status", "raw-exploit-payload"],
+        organizerCanSee: [],
+      },
+    });
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.includes("participantCanSee"))).toBe(true);
+  });
+
+  it("should reject a revealPolicy that is not an object", () => {
+    expect(validateSecurityHarnessDefinition({ ...VALID, revealPolicy: "wide-open" }).ok).toBe(
+      false,
+    );
+  });
+
+  it("should reject an unknown field inside revealPolicy", () => {
+    const result = validateSecurityHarnessDefinition({
+      ...VALID,
+      revealPolicy: { participantCanSee: [], organizerCanSee: [], hiddenBackdoorField: true },
+    });
+    expect(result.ok).toBe(false);
+    expect(result.errors.some((e) => e.includes("hiddenBackdoorField"))).toBe(true);
+  });
+
+  it("should reject a revealPolicy field that is not an array", () => {
+    expect(
+      validateSecurityHarnessDefinition({
+        ...VALID,
+        revealPolicy: { participantCanSee: "status", organizerCanSee: [] },
+      }).ok,
+    ).toBe(false);
+  });
+});

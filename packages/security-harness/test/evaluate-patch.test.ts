@@ -123,4 +123,18 @@ describe("evaluatePatch", () => {
     expect(evaluation.verdict).toBe("verified-fixed");
     expect(evaluation.reasons.length).toBeGreaterThan(0);
   });
+
+  it("should stamp generatedAt from the injected clock, never a bare Date.now() the caller cannot control", () => {
+    const evaluation = evaluatePatch(baseInput(), () => "2026-03-01T00:00:00.000Z");
+    expect(evaluation.generatedAt).toBe("2026-03-01T00:00:00.000Z");
+  });
+
+  it("should default generatedAt to a real ISO timestamp when no clock is injected", () => {
+    const before = Date.now();
+    const evaluation = evaluatePatch(baseInput());
+    const after = Date.now();
+    const stamped = new Date(evaluation.generatedAt).getTime();
+    expect(stamped).toBeGreaterThanOrEqual(before);
+    expect(stamped).toBeLessThanOrEqual(after);
+  });
 });

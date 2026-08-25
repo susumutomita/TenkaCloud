@@ -121,8 +121,16 @@ export function evaluatePatchVerdict(input: PatchEvaluationInput): {
   );
 }
 
-/** Convenience wrapper that returns the full `PatchEvaluation` record (input + computed verdict/reasons) for reporting. */
-export function evaluatePatch(input: PatchEvaluationInput): PatchEvaluation {
+/**
+ * Convenience wrapper that returns the full `PatchEvaluation` record (input + computed
+ * verdict/reasons/generatedAt) for reporting. `now` defaults to the real clock but is injectable
+ * — same seam `phase1-slice.ts` and `evaluate-finding.ts`'s callers already use — so a caller that
+ * needs deterministic timeline output (`./run-timeline.ts`) can fix it.
+ */
+export function evaluatePatch(
+  input: PatchEvaluationInput,
+  now: () => string = () => new Date().toISOString(),
+): PatchEvaluation {
   const { verdict: v, reasons } = evaluatePatchVerdict(input);
-  return { ...input, verdict: v, reasons };
+  return { ...input, verdict: v, reasons, generatedAt: now() };
 }

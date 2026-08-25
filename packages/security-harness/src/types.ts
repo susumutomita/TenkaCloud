@@ -107,6 +107,13 @@ export interface PatchEvaluation extends PatchEvaluationInput {
   readonly verdict: PatchVerdict;
   /** Evidence-derived justification strings only — never LLM prose or a self-assessment. */
   readonly reasons: readonly string[];
+  /**
+   * Phase 3 addition: when the verdict was computed, from the same injectable clock the rest of
+   * this package uses (never `Date.now()` read directly by a caller). Populated by
+   * `evaluatePatch` — a hand-built `PatchEvaluation` literal must supply it explicitly, the same
+   * way it must already supply `verdict`/`reasons`.
+   */
+  readonly generatedAt: string;
 }
 
 export interface CommandContract {
@@ -127,9 +134,15 @@ export interface TestContract {
 
 /**
  * Trimmed to the fields Phase 1 actually reads and validates
- * (`validateSecurityHarnessDefinition` in ./validators.ts). `sandboxPolicy` / `revealPolicy` /
- * `search` from the issue's full proposal are Phase 2/3 concerns and are intentionally not
- * declared yet — adding them later is additive.
+ * (`validateSecurityHarnessDefinition` in ./validators.ts). `sandboxPolicy` / `search` from the
+ * issue's full proposal are Phase 2 concerns and are intentionally not declared yet — adding them
+ * later is additive.
+ *
+ * `revealPolicy` is a Phase 3 addition and is declared `readonly revealPolicy?:` (optional) so
+ * that Phase 1 definitions which predate it — including the fixture in
+ * `test/validators.test.ts` — remain valid without a reshape. A definition that omits it gets the
+ * fail-closed default from `./reveal-policy.ts` (`DEFAULT_REVEAL_POLICY`), never an
+ * implicitly-wide-open one.
  */
 export interface SecurityHarnessDefinition {
   readonly version: "tenkacloud.security-harness.v1";
@@ -156,4 +169,47 @@ export interface SecurityHarnessDefinition {
     readonly wallClockSeconds: number;
     readonly maxToolCalls: number;
   };
+  readonly revealPolicy?: RevealPolicy;
+}
+
+/**
+ * Phase 3 addition (Issue #3036 spoiler boundary): the closed set of things a patch-evaluation /
+ * run-timeline projection could ever choose to reveal. This union is deliberately closed (not
+ * `string`) so that `./reveal-policy.ts`'s `PARTICIPANT_ALLOWED_REVEAL_FIELDS` ceiling and
+ * `validateSecurityHarnessDefinition`'s field check both fail a typo or a not-yet-reviewed field
+ * name at compile time / validation time instead of silently allowing it through.
+ *
+ * Declaring a field here does NOT mean a participant may ever see it — see
+ * `PARTICIPANT_ALLOWED_REVEAL_FIELDS` in `./reveal-policy.ts` for the actual (much smaller)
+ * participant ceiling. Fields such as `witness-digests`, `verdict-reasons`,
+ * `forbidden-side-effects`, `budget-usage`, `verification-metadata`, `failure-reasons`, and
+ * `redacted-transcript-ref` exist here only so an organizer-facing revealPolicy can name them —
+ * they are never in the participant ceiling. `verdict-reasons` covers the issue's "failure
+ * reason" wording too (a `PatchEvaluation.reasons` entry IS the failure/success reason in every
+ * branch of `evaluatePatchVerdict`) — there is no separate token for it.
+ */
+export type RevealField =
+  | "status"
+  | "bounded-claim-notice"
+  | "golden-test-results"
+  | "generated-at"
+  | "verdict-reasons"
+  | "witness-digests"
+  | "target-patch-digests"
+  | "forbidden-side-effects"
+  | "budget-usage"
+  | "verification-metadata"
+  | "redacted-transcript-ref";
+
+/**
+ * Wire shape for `SecurityHarnessDefinition.revealPolicy` (Issue #3036 contract:
+ * `revealPolicy.participantCanSee` / `organizerCanSee`). This type only fixes the SHAPE a problem
+ * author may configure — it is not itself an enforcement mechanism. Enforcement (clamping
+ * `participantCanSee` to a fixed ceiling regardless of what is configured here) lives in
+ * `./reveal-policy.ts`, which every participant-facing projection in this package must go
+ * through.
+ */
+export interface RevealPolicy {
+  readonly participantCanSee: readonly RevealField[];
+  readonly organizerCanSee: readonly RevealField[];
 }

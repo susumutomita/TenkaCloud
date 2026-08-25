@@ -15,6 +15,19 @@
  * Repository boundary: the fixtures under ./fixtures are a throwaway conformance target for this
  * package's own contracts, not the Challenge catalog's "first intentionally vulnerable Web
  * target" (that is out-of-scope follow-up work in `TenkaCloudChallenge` — see ./fixtures/shared.ts).
+ *
+ * Phase 3 addition (Issue #3036 "patch evaluation state machine を完成させる"): the patch-stage
+ * calls below (`launchTarget` for the patch variant, golden-tests-and-replay, fresh re-attack) are
+ * now wrapped so a real failure — the patch target failing to start, or the verifier/target
+ * process crashing mid-check — resolves to an evaluable `PatchEvaluation` (`build: "failed"` or
+ * the relevant stage `"inconclusive"`) instead of an uncaught exception escaping this function.
+ * `evaluatePatchVerdict` (./evaluate-patch.ts) already turns each of those into `"inconclusive"`,
+ * never a pass — this file's job is only to make sure that code path is actually reachable rather
+ * than living solely in evaluate-patch.test.ts's unit tests. The four externally-injectable seams
+ * are now the clock (`now`), a cooperative cancellation check (`shouldCancel`), an HTTP client
+ * factory (`makeHttpClient`, Phase 3 addition — lets a test simulate a target/verifier crash
+ * without a new real-network failure fixture), and defaulted for the demo CLI
+ * (`bin/run-phase1-demo.ts`).
  */
 
 import type { Server } from "node:http";
@@ -22,6 +35,10 @@ import type { AddressInfo } from "node:net";
 import { sha256Hex, toDigestRef } from "./digest.js";
 import { evaluateFindingVerdict } from "./evaluate-finding.js";
 import { evaluatePatch } from "./evaluate-patch.js";
+import {
+  createServer as createPatchedBuildFailureServer,
+  DIGEST as PATCHED_BUILD_FAILURE_DIGEST,
+} from "./fixtures/patched-build-failure.js";
 import {
   createServer as createPatchedCorrectServer,
   DIGEST as PATCHED_CORRECT_DIGEST,
@@ -39,6 +56,7 @@ import {
   DIGEST as VULNERABLE_DIGEST,
 } from "./fixtures/vulnerable.js";
 import { transitionSecurityRun } from "./run-state-machine.js";
+import { type SecurityRunTimelineEvent, TimelineRecorder } from "./run-timeline.js";
 import type {
   FindingEvidence,
   HttpSequenceWitness,
@@ -51,7 +69,8 @@ export type TargetVariant =
   | "vulnerable"
   | "patched-correct"
   | "patched-denylist-only"
-  | "patched-endpoint-removed";
+  | "patched-endpoint-removed"
+  | "patched-build-failure";
 
 interface FixtureModule {
   readonly createServer: () => Server;
@@ -72,6 +91,10 @@ const MODULES: Readonly<Record<TargetVariant, FixtureModule>> = {
   "patched-endpoint-removed": {
     createServer: createPatchedEndpointRemovedServer,
     DIGEST: PATCHED_ENDPOINT_REMOVED_DIGEST,
+  },
+  "patched-build-failure": {
+    createServer: createPatchedBuildFailureServer,
+    DIGEST: PATCHED_BUILD_FAILURE_DIGEST,
   },
 };
 
@@ -224,6 +247,14 @@ export interface Phase1SliceOptions {
   readonly now?: () => string;
   /** Checked before each stage. Returning true stops the run at CANCELLED before that stage's work runs. */
   readonly shouldCancel?: () => boolean;
+  /**
+   * Phase 3 addition — overrides the default real-`fetch` client used against the PATCHED target
+   * only (the baseline always uses the real client; a baseline that cannot be reached must fail
+   * the baseline confirmation itself, not be papered over here). Defaults to `makeHttpClient`.
+   * Exists so a test can simulate a target/verifier crash mid-patch-evaluation (a thrown
+   * `request()`) deterministically, without needing a new real-network failure fixture.
+   */
+  readonly makeHttpClient?: (baseUrl: string) => HttpClient;
 }
 
 export interface GoldenTestResult {
@@ -239,6 +270,8 @@ export interface Phase1SliceResult {
   readonly finding?: FindingEvidence;
   readonly goldenTests?: readonly GoldenTestResult[];
   readonly patchEvaluation?: PatchEvaluation;
+  /** Phase 3 addition — every state transition and stage result, timestamped by the same injected `now`. See ./run-timeline.ts. */
+  readonly timeline: readonly SecurityRunTimelineEvent[];
 }
 
 interface VerifyBaselineParams {
@@ -318,18 +351,81 @@ async function runFreshReattack(
   return reattack.success ? "witness-confirmed" : "no-witness-found";
 }
 
+/**
+ * `runGoldenTestsAndOriginalReplay`, but a crash (target/verifier process failure, not a normal
+ * pass/fail response) resolves to `"inconclusive"` instead of propagating — Issue #3036 "No false
+ * pass": a stage that could not run to completion is never silently treated as passed or blocked.
+ * Kept as its own function (rather than an inline try/catch in `runPhase1Slice`) purely to keep
+ * that function's own branching readable.
+ */
+async function runGoldenTestsAndOriginalReplaySafely(
+  client: HttpClient,
+): Promise<GoldenAndReplayResult | undefined> {
+  try {
+    return await runGoldenTestsAndOriginalReplay(client);
+  } catch {
+    return undefined;
+  }
+}
+
+/** `runFreshReattack`, but a crash resolves to `"inconclusive"` — see `runGoldenTestsAndOriginalReplaySafely`'s doc comment for why. */
+async function runFreshReattackSafely(
+  client: HttpClient,
+): Promise<"no-witness-found" | "witness-confirmed" | "inconclusive"> {
+  try {
+    return await runFreshReattack(client);
+  } catch {
+    return "inconclusive";
+  }
+}
+
+interface BuildFailureEvaluationParams {
+  readonly runId: string;
+  readonly patchVariant: TargetVariant;
+  readonly baselineTargetDigest: string;
+  readonly finding: FindingEvidence;
+  readonly now: () => string;
+}
+
+/**
+ * Builds the `PatchEvaluation` for a patch target that failed to build/start at all (Issue #3036
+ * condition 2). Pulled out of `runPhase1Slice` so that function's own branching stays readable —
+ * this one is a straight-line record construction with no control flow of its own.
+ */
+function evaluateBuildFailure(params: BuildFailureEvaluationParams): PatchEvaluation {
+  return evaluatePatch(
+    {
+      runId: params.runId,
+      baselineTargetDigest: params.baselineTargetDigest,
+      patchDigest: MODULES[params.patchVariant].DIGEST,
+      baselineFinding: params.finding,
+      build: "failed",
+      goldenBehavior: "inconclusive",
+      originalWitnessReplay: "inconclusive",
+      freshReattack: "inconclusive",
+      forbiddenSideEffects: [],
+      digestsMatch: params.baselineTargetDigest === params.finding.targetDigest,
+    },
+    params.now,
+  );
+}
+
 export async function runPhase1Slice(options: Phase1SliceOptions): Promise<Phase1SliceResult> {
   const now = options.now ?? (() => new Date().toISOString());
   const shouldCancel = options.shouldCancel ?? ((): boolean => false);
+  const makeClient = options.makeHttpClient ?? makeHttpClient;
   const minimumReproductions = options.minimumReproductions ?? 2;
   const reproductionAttempts = options.reproductionAttempts ?? minimumReproductions;
   const threatModelDigest = toDigestRef(sha256Hex("idor-documents-focus-area-v1"));
+  const timeline = new TimelineRecorder(options.runId, now);
 
   const states: SecurityRunState[] = ["QUEUED"];
   let state: SecurityRunState = "QUEUED";
+  timeline.recordStateTransition(state);
   const moveTo = (next: SecurityRunState): void => {
     state = transitionSecurityRun(state, next);
     states.push(state);
+    timeline.recordStateTransition(state);
   };
   const cancelled = (): boolean => {
     if (!shouldCancel()) return false;
@@ -344,6 +440,7 @@ export async function runPhase1Slice(options: Phase1SliceOptions): Promise<Phase
     runId: options.runId,
     states: [...states],
     finalState: state,
+    timeline: timeline.toArray(),
     ...(finding !== undefined ? { finding } : {}),
     ...(goldenTests !== undefined ? { goldenTests } : {}),
     ...(patchEvaluation !== undefined ? { patchEvaluation } : {}),
@@ -368,6 +465,7 @@ export async function runPhase1Slice(options: Phase1SliceOptions): Promise<Phase
       now,
       client: makeHttpClient(baseline.baseUrl),
     });
+    timeline.recordFinding(finding);
 
     // Exactly one finding in Phase 1, so dedupe is a pass-through — the state still exists so
     // Phase 2's multi-Finder dedupe logic slots into the same machine without a reshape.
@@ -385,28 +483,55 @@ export async function runPhase1Slice(options: Phase1SliceOptions): Promise<Phase
     if (cancelled()) return finish(finding);
 
     moveTo("VALIDATING_PATCH");
-    const patch = await launchTarget(options.patchVariant);
+
+    // Patch target failing to build/start at all is a real, evaluable outcome (Issue #3036
+    // condition 2), not an uncaught crash — `.catch(() => undefined)` turns a thrown launch into
+    // a value this function can act on instead of letting it escape `runPhase1Slice`.
+    const patch = await launchTarget(options.patchVariant).catch(() => undefined);
+    if (patch === undefined) {
+      const patchEvaluation = evaluateBuildFailure({
+        runId: options.runId,
+        patchVariant: options.patchVariant,
+        baselineTargetDigest: baseline.digest,
+        finding,
+        now,
+      });
+      timeline.recordPatchEvaluation(patchEvaluation);
+      moveTo("REATTACKING");
+      moveTo("COMPLETED");
+      return finish(finding, undefined, patchEvaluation);
+    }
+
     try {
-      const patchClient = makeHttpClient(patch.baseUrl);
-      const { goldenTests, goldenBehavior, originalWitnessReplay } =
-        await runGoldenTestsAndOriginalReplay(patchClient);
+      const patchClient = makeClient(patch.baseUrl);
+
+      const golden = await runGoldenTestsAndOriginalReplaySafely(patchClient);
+      const goldenTests = golden?.goldenTests;
+      const goldenBehavior = golden?.goldenBehavior ?? "inconclusive";
+      const originalWitnessReplay = golden?.originalWitnessReplay ?? "inconclusive";
+      if (goldenTests !== undefined) timeline.recordGoldenTests(goldenTests);
 
       if (cancelled()) return finish(finding, goldenTests);
       moveTo("REATTACKING");
-      const freshReattack = await runFreshReattack(patchClient);
 
-      const patchEvaluation = evaluatePatch({
-        runId: options.runId,
-        baselineTargetDigest: baseline.digest,
-        patchDigest: patch.digest,
-        baselineFinding: finding,
-        build: "passed",
-        goldenBehavior,
-        originalWitnessReplay,
-        freshReattack,
-        forbiddenSideEffects: [],
-        digestsMatch: baseline.digest === finding.targetDigest,
-      });
+      const freshReattack = await runFreshReattackSafely(patchClient);
+
+      const patchEvaluation = evaluatePatch(
+        {
+          runId: options.runId,
+          baselineTargetDigest: baseline.digest,
+          patchDigest: patch.digest,
+          baselineFinding: finding,
+          build: "passed",
+          goldenBehavior,
+          originalWitnessReplay,
+          freshReattack,
+          forbiddenSideEffects: [],
+          digestsMatch: baseline.digest === finding.targetDigest,
+        },
+        now,
+      );
+      timeline.recordPatchEvaluation(patchEvaluation);
 
       moveTo("COMPLETED");
       return finish(finding, goldenTests, patchEvaluation);
