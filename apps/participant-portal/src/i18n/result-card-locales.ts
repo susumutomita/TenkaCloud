@@ -6,8 +6,10 @@ export const resultCardLocaleMessages = {
       "現在のスコアボードに表示されている公式値から、共有用画像をブラウザ内だけで生成します。チームIDや認証情報は含みません。",
     preview_alt:
       "{eventTitle} の結果カード。{teamName}、順位 {rank} 位、{score} 点、{completed}/{total} 問完了。",
+    prepare_button: "PNGを準備",
     share_button: "画像を共有",
     download_button: "PNGを保存",
+    prepared_hint: "PNGの準備ができました。もう一度ボタンを押すと共有できます。",
     share_success: "Result Cardを共有しました。",
     download_success: "Result CardをPNGで保存しました。",
     error_header: "Result Cardを生成できませんでした",
@@ -24,8 +26,10 @@ export const resultCardLocaleMessages = {
       "Generate a shareable image in your browser from the official values currently shown on the scoreboard. Team IDs and credentials are never included.",
     preview_alt:
       "Result card for {eventTitle}. {teamName}, rank {rank}, {score} points, {completed} of {total} problems completed.",
+    prepare_button: "Prepare PNG",
     share_button: "Share image",
     download_button: "Download PNG",
+    prepared_hint: "The PNG is ready. Press the button again to share it.",
     share_success: "The Result Card was shared.",
     download_success: "The Result Card was downloaded as a PNG.",
     error_header: "The Result Card could not be generated",
