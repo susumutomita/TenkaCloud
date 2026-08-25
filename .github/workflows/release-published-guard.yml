@@ -10,13 +10,28 @@ name: release-published-guard
 # published by a human account rather than `github-actions[bot]`.
 #
 # This workflow closes that gap from the outside: it fires on the `release: published`
-# webhook event, which GitHub sends no matter how the Release was created, and asserts the
-# closed asset set `release-cli.yml` assembles is actually attached. The check itself is a
-# pure function (scripts/release/release-published-completeness.ts) over the webhook
-# payload alone — no checkout of the tagged tree, no manifest resolution — because a
-# hand-created Release's tag may not even point at a tree that satisfies the manifest
-# schema (v1.3.1 does not), and a guard that could only run on a healthy tree would not
-# have caught the bug it exists for.
+# webhook event and asserts the closed asset set `release-cli.yml` assembles is actually
+# attached.
+#
+# Scope, stated precisely because the obvious reading is wrong: GitHub does not start a
+# workflow run from an event raised by `GITHUB_TOKEN`, and `release-cli.yml` publishes with
+# `secrets.GITHUB_TOKEN`. A Release the pipeline creates therefore never fires this guard.
+# Verified against v1.4.0 (published 2026-08-25T12:50:03Z by `github-actions[bot]` with all
+# six assets): the repository has no `release`-event workflow run for it. That path is not
+# left unchecked — `release-cli.yml`'s `verify-published` job re-verifies the same Release
+# from the outside in the same run, and does strictly more than this guard: it re-downloads
+# what GitHub serves, re-hashes every asset, re-checks the attestation against the identity
+# resolved from the tag, requires `releases/latest/download/` to serve it, and installs the
+# downloaded tarball. So this guard's real scope is the paths `verify-published` cannot see:
+# a Release created by a human account or any other non-`GITHUB_TOKEN` credential, which is
+# exactly how `v1.2.1` and `v1.3.1` were made. Do not delete `verify-published` on the
+# assumption that this guard backstops it; for the pipeline path, it does not run at all.
+#
+# The check itself is a pure function (scripts/release/release-published-completeness.ts)
+# over the webhook payload alone — no checkout of the tagged tree, no manifest resolution —
+# because a hand-created Release's tag may not even point at a tree that satisfies the
+# manifest schema (v1.3.1 does not), and a guard that could only run on a healthy tree
+# would not have caught the bug it exists for.
 #
 # This is a detector only: it never creates, edits, or deletes a Release or tag, and it
 # cannot repair `v1.3.1` — this repository's Releases are immutable, so a broken one can

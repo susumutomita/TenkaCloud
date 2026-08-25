@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import Ajv2020 from "ajv/dist/2020";
 import addFormats from "ajv-formats";
-import { readLauncherDefaults } from "./generate-launcher-defaults";
+import { LAUNCHER_LAG_LIMITATION, readLauncherDefaults } from "./generate-launcher-defaults";
 import { renderReleaseReport, renderReleaseReportForCheck } from "./generate-release-report";
 import {
   assertReleaseCheckEligible,
@@ -556,6 +556,16 @@ describe("release source parity and generated report", () => {
     expect(launcher).toContain(launcherDefaults.manifestVersion);
     expect(packSchemaVersion).toBeDefined();
     expect(contracts["problem-pack-manifest"]).toBe(packSchemaVersion);
+  });
+
+  it("declares the launcher lag exactly while the launcher pair trails this manifest", () => {
+    // The pair advances only from a tag whose published Release passed verification, so it
+    // trails every manifest version that has not shipped yet. Whichever side is currently
+    // true, the prose has to agree with it: a stale "still points at the previously released
+    // identity" is the same drift this manifest exists to eliminate, and a missing one hides
+    // that the launcher default deploys something other than the release being described.
+    const lags = readLauncherDefaults().manifestVersion !== manifest.release.version;
+    expect(manifest.knownLimitations.includes(LAUNCHER_LAG_LIMITATION)).toBe(lags);
   });
 
   it("keeps the committed human report byte-identical to the manifest", () => {
