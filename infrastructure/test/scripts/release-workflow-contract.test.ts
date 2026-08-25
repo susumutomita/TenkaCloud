@@ -78,6 +78,66 @@ describe("release workflow contract", () => {
     expect(workflow).toContain("npm pack --no-ignore-scripts --min-release-age=7");
     expect(workflow).toContain('npm install -g --prefix "$PREFIX" "$TARBALL" --min-release-age=7');
   });
+
+  // #3024 test design: "asset build failure never reaches gh release create". Step order
+  // (asserted above) only proves this as long as an earlier failure actually stops the job —
+  // GitHub Actions' default, but one `continue-on-error: true` or swallowed exit code on the
+  // critical path would silently defeat it. These two assertions pin that nothing does.
+  it("never swallows a failure on the critical path to gh release create", () => {
+    // GitHub Actions already runs every `run:` step as `bash --noprofile --norc -eo pipefail
+    // {0}` unless a step overrides `shell:`, so a build/publish step fails the job on any
+    // non-zero exit without needing its own `set -e`. The two things that WOULD silently
+    // defeat that default are pinned here: an opted-out step (`continue-on-error: true`) and
+    // a weaker shell. Exactly one step may opt out, and it must be the non-critical
+    // safe-chain setup — never a step between identity resolution and `gh release create`.
+    expect(workflow).not.toMatch(/\n {6,8}shell:/);
+    expect(workflow.match(/continue-on-error: true/g)).toHaveLength(1);
+    const continueOnErrorIndex = workflow.indexOf("continue-on-error: true");
+    const owningStepName = workflow
+      .slice(0, continueOnErrorIndex)
+      .match(/- name: ([^\n]+)\n(?:(?!\n {6}- name: ).)*$/s)?.[1];
+    expect(owningStepName).toBe("Setup safe-chain");
+
+    const buildSteps = [
+      "Resolve and validate the release identity",
+      "Run the release drift and publication gates",
+      "Build the CLI tarball (prepack assembles the bundled runtime)",
+      "Smoke test the packed tarball",
+      "Assemble the release asset set and SHA256SUMS",
+      "Generate the release attestation",
+      "Create the release once, with every asset attached",
+    ];
+    for (const name of buildSteps) {
+      const start = stepIndex(name);
+      const nextNameIndex = workflow.indexOf("\n      - name:", start + 1);
+      const body = workflow.slice(start, nextNameIndex === -1 ? undefined : nextNameIndex);
+      expect(body, `step "${name}" must not opt out of failing the job`).not.toContain(
+        "continue-on-error",
+      );
+    }
+  });
+
+  it("re-verifies every required asset is non-empty immediately before publishing it", () => {
+    const createStep = workflow.slice(
+      stepIndex("Create the release once, with every asset attached"),
+    );
+    const preflightLoop = createStep.slice(0, createStep.indexOf("gh release view"));
+    expect(preflightLoop).toMatch(
+      /for asset in "\$\{ASSETS\[@\]\}"; do\n\s+test -s "\$asset" \|\| \{ echo "Missing release asset: \$asset" >&2; exit 1; \}\n\s+done/,
+    );
+    for (const asset of [
+      '"$DIR/tenkacloud-cli-$VERSION.tgz"',
+      '"$DIR/tenkacloud-cli.tgz"',
+      '"$DIR/release-manifest.json"',
+      '"$DIR/release-report.md"',
+      '"$DIR/SHA256SUMS"',
+      '"$DIR/release-attestation.json"',
+    ]) {
+      expect(preflightLoop).toContain(asset);
+    }
+    // The preflight loop runs before either publish path (fresh create or --clobber retry).
+    expect(preflightLoop.indexOf("done")).toBeLessThan(createStep.indexOf("gh release view"));
+  });
 });
 
 // #3024 PR 5. The release is only as trustworthy as what GitHub actually serves, so a second
