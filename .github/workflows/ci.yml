@@ -20,6 +20,15 @@ on:
   pull_request:
   workflow_dispatch:
 
+# force-push や立て続けの follow-up commit が、置き換えられた前の matrix を完走まで
+# 走らせ続けていた分の runner 時間を止める。 push (main) は cancel しない -- 各 merge
+# commit の run がその commit の記録であり、Codecov の BASE report もその commit に
+# 紐づくため、 近接した複数の merge がどちらも完走する必要がある (ci.yml 自身の
+# push スコープと同じ理由、Issue #993 の延長)。
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   ci:
     runs-on: ubuntu-latest
