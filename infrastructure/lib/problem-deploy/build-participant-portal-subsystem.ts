@@ -51,8 +51,15 @@ export interface BuildParticipantPortalSubsystemArgs {
    */
   readonly deployJobLogGroup?: ILogGroup;
   /**
-   * control-plane data backend は `ParticipantPortalLambda` にのみ渡す。
-   * `CoordinationDispatcherLambda` は最小 IAM を維持するため Turso env/IAM を持たせない。
+   * control-plane data backend。 `ParticipantPortalLambda` と `CoordinationDispatcherLambda` の
+   * 両方へ渡す。
+   *
+   * 以前ここには「dispatcher は最小 IAM を維持するため Turso env/IAM を持たせない」と書いてあった。
+   * それは DynamoDB しか無かった頃は成立していたが、純 SQL profile では table 自体を synth しない
+   * ので、dispatcher は table 名も Turso 設定も持たない Lambda になり、`resolveDeploymentsRepository`
+   * が dynamodb 分岐へ落ちて毎 request throw していた。coordination plugin を使う battle が
+   * まるごと遊べなくなるので、この「最小 IAM」は成立しない (Issue 486)。SSM read は
+   * `tursoAuthTokenParameterName` があるときだけ付くため、DynamoDB profile の IAM は不変。
    */
   readonly controlDataBackend?: string;
   /** Public remote libSQL URL. Never contains authentication material. */
@@ -123,6 +130,13 @@ export function buildParticipantPortalSubsystem(
     problemsCoordination: args.problemsCoordination,
     // plugin.mjs を materialize する bucket (宣言問題がある時のみ)。
     ...(coordinationBucket ? { pluginBucket: coordinationBucket } : {}),
+    // data layer: 純 SQL profile では table が無いので、seam が SQL executor を組み立てるための
+    // backend 三点を渡す。 dynamodb default では env も IAM も増えない。
+    ...(args.controlDataBackend ? { controlDataBackend: args.controlDataBackend } : {}),
+    ...(args.tursoDatabaseUrl ? { tursoDatabaseUrl: args.tursoDatabaseUrl } : {}),
+    ...(args.tursoAuthTokenParameterName
+      ? { tursoAuthTokenParameterName: args.tursoAuthTokenParameterName }
+      : {}),
   });
   new CfnOutput(scope, "CoordinationDispatcherApiUrl", {
     value: coordinationDispatcher.url.url,
