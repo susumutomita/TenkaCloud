@@ -1,5 +1,5 @@
 import * as path from "node:path";
-import { Duration, Stack } from "aws-cdk-lib";
+import { Duration } from "aws-cdk-lib";
 import type { ITable } from "aws-cdk-lib/aws-dynamodb";
 import {
   ManagedPolicy,
@@ -13,7 +13,7 @@ import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import type { IBucket } from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
 import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
-import { controlDataBackendEnv } from "./control-data-backend-env.js";
+import { controlDataRuntimeEnv, grantTursoAuthTokenRead } from "./control-data-backend-env.js";
 
 export interface CoordinationDispatcherLambdaProps {
   /**
@@ -86,7 +86,6 @@ export class CoordinationDispatcherLambda extends Construct {
   constructor(scope: Construct, id: string, props: CoordinationDispatcherLambdaProps) {
     super(scope, id);
 
-    const stack = Stack.of(this);
     const deploymentsTable = props.deploymentsTable;
 
     const role = new Role(this, "Role", {
@@ -139,12 +138,8 @@ export class CoordinationDispatcherLambda extends Construct {
           ? { COORDINATION_PLUGIN_BUCKET: props.pluginBucket.bucketName }
           : {}),
         // 純 SQL backend で repository seam が SQL executor を組み立てるために要る三点。
-        // default (`dynamodb`) では `controlDataBackendEnv` が空を返すので byte 互換。
-        ...controlDataBackendEnv(props.controlDataBackend ?? "dynamodb"),
-        ...(props.tursoDatabaseUrl ? { TURSO_DATABASE_URL: props.tursoDatabaseUrl } : {}),
-        ...(props.tursoAuthTokenParameterName
-          ? { TURSO_AUTH_TOKEN_PARAMETER_NAME: props.tursoAuthTokenParameterName }
-          : {}),
+        // default (`dynamodb`) では helper が空を返すので byte 互換。
+        ...controlDataRuntimeEnv(props),
         NODE_OPTIONS: "--enable-source-maps",
       },
       // config layer: coordination catalog を build 時 literal 置換 (env 4KB 回避、
@@ -160,21 +155,9 @@ export class CoordinationDispatcherLambda extends Construct {
     // Lambda role を共有し、DynamoDB backend では table-wide Query / GetItem / PutItem も実行できる。
     props.pluginBucket?.grantRead(this.fn);
 
-    // Turso auth token を読むための SSM SecureString read 権限 (`ParticipantPortalLambda` /
-    // `EventApiLambda` と同型)。 未配線 (= dynamodb default) なら付与しないので、最小 IAM は
-    // DynamoDB profile では従来どおり。
-    if (props.tursoAuthTokenParameterName) {
-      this.fn.addToRolePolicy(
-        new PolicyStatement({
-          actions: ["ssm:GetParameter"],
-          resources: [
-            `arn:${stack.partition}:ssm:${stack.region}:${
-              stack.account
-            }:parameter/${props.tursoAuthTokenParameterName.replace(/^\/+/, "")}`,
-          ],
-        }),
-      );
-    }
+    // Turso auth token を読むための SSM SecureString read。 未配線 (= dynamodb default) では
+    // 何も付与しないので、最小 IAM は DynamoDB profile では従来どおり。
+    grantTursoAuthTokenRead(this.fn, props.tursoAuthTokenParameterName);
 
     this.url = this.fn.addFunctionUrl({
       authType: FunctionUrlAuthType.NONE,

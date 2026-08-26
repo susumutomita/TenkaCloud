@@ -1,3 +1,7 @@
+import { Stack } from "aws-cdk-lib";
+import { PolicyStatement } from "aws-cdk-lib/aws-iam";
+import type { IFunction } from "aws-cdk-lib/aws-lambda";
+
 /**
  * Issue #2290: control-plane data backend の選択フラグを Lambda env へ落とす
  * CDK helper (`audit-log-env.ts` の mirror)。
@@ -54,4 +58,30 @@ export function controlDataRuntimeEnv(props: ControlDataRuntimeEnvProps): Record
       ? { TURSO_AUTH_TOKEN_PARAMETER_NAME: props.tursoAuthTokenParameterName }
       : {}),
   };
+}
+
+/**
+ * Turso auth token を読むための SSM SecureString read を 1 関数へ。
+ *
+ * `controlDataRuntimeEnv` が env 3 点を集約しているのと同じ理由で、その直後に必ず同伴する
+ * IAM 側もここへ置く。 env だけ helper 化して grant を inline のままにすると、
+ * 「env はあるのに読めない」という組み合わせが construct ごとに再発生する。
+ *
+ * `parameterName` 未指定 (= dynamodb profile) では**何も付与しない**ので、既存テンプレートと
+ * byte 互換のまま呼び出せる。 Resource は parameter 1 本に限定する (`parameter/*` にしない)。
+ *
+ * 既存 construct 群はまだ inline のまま。 `controlDataRuntimeEnv` の doc と同じ方針で、
+ * 各 construct を触る PR で 1 つずつ寄せる。
+ */
+export function grantTursoAuthTokenRead(fn: IFunction, parameterName?: string): void {
+  if (!parameterName) return;
+  const stack = Stack.of(fn);
+  fn.addToRolePolicy(
+    new PolicyStatement({
+      actions: ["ssm:GetParameter"],
+      resources: [
+        `arn:${stack.partition}:ssm:${stack.region}:${stack.account}:parameter/${parameterName.replace(/^\/+/, "")}`,
+      ],
+    }),
+  );
 }
