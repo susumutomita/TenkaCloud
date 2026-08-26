@@ -320,3 +320,25 @@ export const synthCoordinationDispatcherLambdaOnly = memoizeTemplate((): Templat
   });
   return Template.fromStack(stack);
 });
+
+/**
+ * The pure-SQL (`turso`) profile: `ProblemDeployBackendStack` synthesizes no control-data
+ * tables at all, so the dispatcher gets none. What it must get instead is the backend
+ * triple the repository seam needs to build its SQL executor — without it the seam falls
+ * through to the DynamoDB branch and throws on every request, which is what made every
+ * coordination-plugin battle report `not_configured` (Issue 486).
+ */
+export const synthCoordinationDispatcherLambdaPureTurso = memoizeTemplate((): Template => {
+  const app = new cdk.App();
+  const stack = new cdk.Stack(app, "TestStack");
+  const dispatcher = new CoordinationDispatcherLambda(stack, "CoordinationDispatcher", {
+    environmentName: "development",
+    controlDataBackend: "turso",
+    tursoDatabaseUrl: "https://example-db.turso.io",
+    tursoAuthTokenParameterName: "/TenkaCloud/development/turso/auth-token",
+  });
+  // Bound and checked rather than instantiated for its side effect: if the construct ever
+  // stops exposing the function, the assertions below would silently test an empty stack.
+  if (!dispatcher.fn) throw new Error("CoordinationDispatcherLambda exposed no function");
+  return Template.fromStack(stack);
+});

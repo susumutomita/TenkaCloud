@@ -1,5 +1,5 @@
 import * as path from "node:path";
-import { Duration } from "aws-cdk-lib";
+import { Duration, Stack } from "aws-cdk-lib";
 import type { ITable } from "aws-cdk-lib/aws-dynamodb";
 import {
   ManagedPolicy,
@@ -13,6 +13,7 @@ import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import type { IBucket } from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
 import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
+import { controlDataBackendEnv } from "./control-data-backend-env.js";
 
 export interface CoordinationDispatcherLambdaProps {
   /**
@@ -47,6 +48,20 @@ export interface CoordinationDispatcherLambdaProps {
    * 省略時は importer 未配線 → 全 route `unavailable`。
    */
   readonly pluginBucket?: IBucket;
+  /**
+   * [Issue 486] control-plane data backend. `deploymentsTable` の docstring が言うとおり、純 SQL
+   * (`turso`) では table を synth せず repository seam が SQL executor 直結で処理する設計だが、その
+   * executor は `CONTROL_DATA_BACKEND` / `TURSO_*` env が無いと組み立てられない。これらを渡さないまま
+   * table だけ落としていたため、純 Turso の deploy では dispatcher が table 名も Turso 設定も持たず、
+   * `resolveDeploymentsRepository` が dynamodb 分岐に落ちて毎 request throw していた
+   * (`dynamodb backend requires ddb/deploymentsTableName.`) — coordination plugin を使う battle が
+   * まるごと `not_configured` になり、Contract が 1 件も供給されなかった。
+   */
+  readonly controlDataBackend?: string;
+  /** Public remote libSQL URL. Never contains authentication material. */
+  readonly tursoDatabaseUrl?: string;
+  /** SSM SecureString parameter name containing the libSQL auth token. */
+  readonly tursoAuthTokenParameterName?: string;
 }
 
 /**
@@ -71,6 +86,7 @@ export class CoordinationDispatcherLambda extends Construct {
   constructor(scope: Construct, id: string, props: CoordinationDispatcherLambdaProps) {
     super(scope, id);
 
+    const stack = Stack.of(this);
     const deploymentsTable = props.deploymentsTable;
 
     const role = new Role(this, "Role", {
@@ -122,6 +138,13 @@ export class CoordinationDispatcherLambda extends Construct {
         ...(props.pluginBucket
           ? { COORDINATION_PLUGIN_BUCKET: props.pluginBucket.bucketName }
           : {}),
+        // 純 SQL backend で repository seam が SQL executor を組み立てるために要る三点。
+        // default (`dynamodb`) では `controlDataBackendEnv` が空を返すので byte 互換。
+        ...controlDataBackendEnv(props.controlDataBackend ?? "dynamodb"),
+        ...(props.tursoDatabaseUrl ? { TURSO_DATABASE_URL: props.tursoDatabaseUrl } : {}),
+        ...(props.tursoAuthTokenParameterName
+          ? { TURSO_AUTH_TOKEN_PARAMETER_NAME: props.tursoAuthTokenParameterName }
+          : {}),
         NODE_OPTIONS: "--enable-source-maps",
       },
       // config layer: coordination catalog を build 時 literal 置換 (env 4KB 回避、
@@ -136,6 +159,22 @@ export class CoordinationDispatcherLambda extends Construct {
     // レビュー済み plugin bundle を読むための bucket access。同一 process で実行する plugin は
     // Lambda role を共有し、DynamoDB backend では table-wide Query / GetItem / PutItem も実行できる。
     props.pluginBucket?.grantRead(this.fn);
+
+    // Turso auth token を読むための SSM SecureString read 権限 (`ParticipantPortalLambda` /
+    // `EventApiLambda` と同型)。 未配線 (= dynamodb default) なら付与しないので、最小 IAM は
+    // DynamoDB profile では従来どおり。
+    if (props.tursoAuthTokenParameterName) {
+      this.fn.addToRolePolicy(
+        new PolicyStatement({
+          actions: ["ssm:GetParameter"],
+          resources: [
+            `arn:${stack.partition}:ssm:${stack.region}:${
+              stack.account
+            }:parameter/${props.tursoAuthTokenParameterName.replace(/^\/+/, "")}`,
+          ],
+        }),
+      );
+    }
 
     this.url = this.fn.addFunctionUrl({
       authType: FunctionUrlAuthType.NONE,
