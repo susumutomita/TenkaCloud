@@ -5,9 +5,9 @@ TenkaCloud's published SDK CLI directly — no checkout, build, or deployment of
 any TenkaCloud platform code is needed (Issue 2108).
 
 > **History:** this integration used to be a reusable `workflow_call` GitHub
-> Actions workflow (`.github/workflows/problem-pack-ci.yml`, adopted with a
-> `uses: susumutomita/TenkaCloud/.github/workflows/problem-pack-ci.yml@<tag>`
-> stanza). That workflow has been removed from this repository, so a pin to
+> Actions workflow at `.github/workflows/problem-pack-ci.yml`. A pack adopted it
+> with a `uses: susumutomita/TenkaCloud/.github/workflows/problem-pack-ci.yml@<tag>`
+> stanza. That workflow has been removed from this repository, so a pin to
 > any new tag will not find it — only old tags published before the removal
 > still carry the file. The CLI it invoked is unaffected and is now the
 > supported integration path.

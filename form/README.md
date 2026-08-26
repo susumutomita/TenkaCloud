@@ -6,7 +6,7 @@
 > Apps Script のデプロイと `landing/contact-form-config.json` の再生成が必要な場合は、
 > `form/sync.gs` のコメントにある手動手順 (`clasp push` -> `curl` で Web アプリを叩く) で
 > 代替してください。 自動化を復活させる場合は、 本ドキュメントと `scripts/form/setup-run.ts`
-> を合わせて更新する必要があります。
+> も合わせて更新します。
 
 LP (`landing/`) のお問い合わせフォームは、 Google フォームをバックエンドにしています。
 画面は LP 自身の HTML と CSS で描き、 送信だけを Google フォームの `formResponse`
