@@ -2,7 +2,7 @@
 /**
  * Submodule pin 後退ガード (gitlink ping-pong 対策)。
  *
- * なぜ必要か: `problems/` は週次 auto-sync (submodule-sync.yml) で前進するが、 古い pin から
+ * なぜ必要か: `problems/` は手動 PR (`make submodule-latest`) で前進するが、 古い pin から
  * 切られた並行 PR が gitlink を過去 commit に **後退** させると、 一度上げた pin が巻き戻る
  * ping-pong が起きる (実例: #1927 で 56cbd2f へ上げた pin が a848323 に戻された)。
  *

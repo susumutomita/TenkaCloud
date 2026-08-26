@@ -14,9 +14,9 @@
  *     build must not depend on the `problems/` submodule being checked out. By
  *     committing the generated module, the page builds with zero submodule
  *     dependency (matching how the docs reference is generated + committed).
- *   - The submodule pin is bumped by an automated, bot-authored PR that does NOT
- *     trigger the parent CI (`submodule-sync.yml`). A hard byte-equality CI gate
- *     coupled to the pin would therefore surprise unrelated PRs after a bump, so
+ *   - The submodule pin is bumped by a manually-opened PR (`make submodule-latest`;
+ *     there is no automated bump workflow). A hard byte-equality CI gate coupled
+ *     to the pin would therefore surprise unrelated PRs after a bump, so
  *     the drift check here is a MAINTAINER tool (`--check`), not a CI gate. Run
  *     `bun run generate:catalog` after the catalog changes and commit the result.
  *

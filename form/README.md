@@ -1,5 +1,13 @@
 # お問い合わせフォームの同期
 
+> **削除済み:** このドキュメントが説明する自動化 (`.github/workflows/form-sync.yml`) は
+> 削除されました。 push トリガーの dry run、 `make form-setup` 最後の dry run 起動、
+> および下記「実同期の手順」の `gh workflow run form-sync ...` は現状すべて動きません。
+> Apps Script のデプロイと `landing/contact-form-config.json` の再生成が必要な場合は、
+> `form/sync.gs` のコメントにある手動手順 (`clasp push` -> `curl` で Web アプリを叩く) で
+> 代替してください。 自動化を復活させる場合は、 本ドキュメントと `scripts/form/setup-run.ts`
+> を合わせて更新する必要があります。
+
 LP (`landing/`) のお問い合わせフォームは、 Google フォームをバックエンドにしています。
 画面は LP 自身の HTML と CSS で描き、 送信だけを Google フォームの `formResponse`
 エンドポイントへ直接 POST します。 サーバーもデータベースも持たずに、 回答の保存と
@@ -21,7 +29,7 @@ LP (`landing/`) のお問い合わせフォームは、 Google フォームを�
 | `sync.gs` | フォーム定義の正本。 同期処理と Web アプリのエンドポイント |
 | `appsscript.json` | Apps Script のマニフェスト。 実行権限と OAuth スコープ |
 | `.clasp.json.example` | `clasp` のローカル設定の雛形。 実物は Git 管理外 |
-| `../.github/workflows/form-sync.yml` | push とデプロイ、 同期、 設定の PR 作成 |
+| `../.github/workflows/form-sync.yml` | (削除済み) push とデプロイ、 同期、 設定の PR 作成を自動化していた workflow |
 | `../landing/contact-form.js` | LP 側の設定検証と送信ペイロード組み立て |
 
 ## 質問の同一性はタイトルではなくアイテム ID
