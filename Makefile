@@ -30,8 +30,9 @@ install: ## Install development dependencies safely | 開発依存関係を安�
 	bun x husky
 install_ci: ## Install locked CI dependencies without lifecycle scripts | lockfile固定・script無効でCI依存関係をインストール
 	bun install --frozen-lockfile --ignore-scripts
-# Bumps the problems/ pin to its tracked branch tip and leaves it STAGED for review. The scheduled
-# submodule-sync workflow does the same as its own PR; pre-commit only syncs the worktree to the pin.
+# Bumps the problems/ pin to its tracked branch tip and leaves it STAGED for review. Run this to
+# open the bump as its own PR (there is no scheduled workflow that does this automatically);
+# pre-commit only syncs the worktree to the pin.
 submodule-latest: ## Update and stage the problem catalog submodule | 問題カタログsubmoduleを最新版へ更新してstage
 	git submodule update --remote --recursive problems
 	@git diff --quiet -- problems \

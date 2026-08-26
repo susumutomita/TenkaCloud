@@ -29,16 +29,18 @@ asserts the same so the example never drifts from the contract.
 
 ## Validate in CI
 
-An external pack repository validates in CI by calling the reusable workflow,
-without copying any platform internals (see
+An external pack repository validates in CI by running the published SDK CLI
+directly, without copying any platform internals (see
 [`docs/external-pack-ci.md`](../../docs/external-pack-ci.md)):
 
 ```yaml
 jobs:
   validate-pack:
-    uses: susumutomita/TenkaCloud/.github/workflows/problem-pack-ci.yml@v1
-    with:
-      pack-directory: .
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bunx --bun @tenkacloud/problem-sdk tenkacloud-pack-report .
 ```
 
 ## Test

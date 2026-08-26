@@ -28,9 +28,10 @@
  *   - フォーム側でタイトルが重複していると人が読む計画が信用できないので止める。
  *
  * 実行経路:
- *   .github/workflows/form-sync.yml が clasp push した後、 Web アプリ (doPost)
- *   を SYNC_TOKEN 付きで叩く。 clasp run は GCP プロジェクト関連付けと
- *   API 実行可能デプロイが必要になるため使わない。
+ *   clasp push した後、 Web アプリ (doPost) を SYNC_TOKEN 付きで叩くと同期が走る。
+ *   これを自動化していた .github/workflows/form-sync.yml は削除済みのため、 現状は
+ *   手動 (clasp push -> curl) でのみ実行できる (form/README.md 参照)。 clasp run は
+ *   GCP プロジェクト関連付けと API 実行可能デプロイが必要になるため使わない。
  *
  * スクリプトプロパティ (Apps Script エディタの「プロジェクトの設定」で設定):
  *   FORM_ID                  対象フォームの ID (必須)

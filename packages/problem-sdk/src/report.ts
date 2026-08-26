@@ -1,30 +1,30 @@
 /**
  * [Problem SDK / Issue #2108] Deterministic pack-validation report.
  *
- * `buildPackReport(dir, options)` is the single function the reusable external
- * Pack CI workflow (`.github/workflows/problem-pack-ci.yml`) runs to produce a
- * machine-readable, byte-deterministic report of a pack's offline validation. It
- * is the report layer over the SDK's existing offline validator: it NEVER runs a
- * script from the pack, never touches the network, and never reads cloud
- * credentials. The only I/O is the read-only filesystem walk already performed by
+ * `buildPackReport(dir, options)` is the single function behind the published
+ * `tenkacloud-pack-report` CLI (see `docs/external-pack-ci.md`), which external
+ * problem-pack repositories run in their own CI to produce a machine-readable,
+ * byte-deterministic report of a pack's offline validation. It is the report
+ * layer over the SDK's existing offline validator: it NEVER runs a script from
+ * the pack, never touches the network, and never reads cloud credentials. The
+ * only I/O is the read-only filesystem walk already performed by
  * {@link validatePackDirectory} plus the content-digest hash.
  *
- * The report is the public contract the workflow's outputs derive from:
- *   - `result` — `"passed"` | `"failed"` (the workflow's `result` output);
+ * The report is the public contract the CLI's exit status and JSON output derive from:
+ *   - `result` — `"passed"` | `"failed"`;
  *   - `packId` / `packVersion` — from the validated manifest (empty when the
  *     manifest did not parse);
  *   - `contentDigest` — a deterministic hex SHA-256 over the pack's file bytes,
- *     so equal content always yields an equal digest (the `content-digest`
- *     output);
+ *     so equal content always yields an equal digest;
  *   - `diagnostics` — the PUBLIC, namespaced `PACK_*` / `PROBLEM_*` / `RUNTIME_*`
  *     diagnostic codes shared with #2106 / #2107 (never the internal codes);
  *   - `ranLocalTests` — whether the offline harness phase ran (driven by the
- *     workflow's `run-local-tests` input). The harness here IS the deterministic
- *     SDK validation: there is deliberately no pack-supplied executable step.
+ *     `--no-local-tests` flag). The harness here IS the deterministic SDK
+ *     validation: there is deliberately no pack-supplied executable step.
  *
  * Determinism: given identical pack bytes the serialized report (see
  * {@link serializePackReport}) is byte-identical, independent of walk order, the
- * wall clock, or the host. That is what lets the workflow assert a stable report.
+ * wall clock, or the host. That is what lets a caller assert a stable report.
  */
 
 import { createHash } from "node:crypto";
@@ -62,7 +62,7 @@ export interface BuildPackReportOptions {
    * Run the local offline harness (the SDK's deterministic validation) when true
    * (default). The harness NEVER executes pack-supplied scripts — it is the same
    * read-only validation either way; this flag only records intent in the report.
-   * Mirrors the reusable workflow's `run-local-tests` input.
+   * Mirrors the `tenkacloud-pack-report` CLI's `--no-local-tests` flag.
    */
   readonly runLocalTests?: boolean;
 }
@@ -97,7 +97,7 @@ export function buildPackReport(dir: string, options: BuildPackReportOptions = {
 
 /**
  * Serialize a report to a byte-deterministic JSON string (2-space indent, trailing
- * newline). Equal reports always serialize identically, so the workflow can write
+ * newline). Equal reports always serialize identically, so a caller can write
  * the file and assert on it without ordering flakiness.
  */
 export function serializePackReport(report: PackReport): string {

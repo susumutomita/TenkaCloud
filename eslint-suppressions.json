@@ -2729,11 +2729,6 @@
       "count": 1
     }
   },
-  "infrastructure/test/problem-pack-ci-workflow.test.ts": {
-    "@typescript-eslint/array-type": {
-      "count": 1
-    }
-  },
   "infrastructure/test/problem-pack/external-git-pack-e2e.test.ts": {
     "@typescript-eslint/array-type": {
       "count": 2
