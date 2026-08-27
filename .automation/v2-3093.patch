@@ -1,0 +1,225 @@
+From 0e3b6073ba1946aa74df41fc2ea3bc5607b9ad86 Mon Sep 17 00:00:00 2001
+From: OpenAI <openai@example.com>
+Date: Thu, 27 Aug 2026 22:17:25 +0000
+Subject: [PATCH] fix(local-play): fail fast on Docker VM disk exhaustion
+
+---
+ .../scripts/docker-disk-preflight.test.ts     | 93 +++++++++++++++++++
+ scripts/local/docker-launcher.sh              | 30 ++++++
+ scripts/local/docker-prerequisites.sh         | 36 +++++++
+ scripts/local/doctor.sh                       |  5 +-
+ 4 files changed, 162 insertions(+), 2 deletions(-)
+ create mode 100644 infrastructure/test/scripts/docker-disk-preflight.test.ts
+
+diff --git a/infrastructure/test/scripts/docker-disk-preflight.test.ts b/infrastructure/test/scripts/docker-disk-preflight.test.ts
+new file mode 100644
+index 0000000..1187074
+--- /dev/null
++++ b/infrastructure/test/scripts/docker-disk-preflight.test.ts
+@@ -0,0 +1,93 @@
++import { execFileSync } from "node:child_process";
++import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
++import { tmpdir } from "node:os";
++import { join } from "node:path";
++import { afterEach, beforeEach, describe, expect, it } from "vitest";
++
++const REPO_ROOT = join(import.meta.dirname, "..", "..", "..");
++const PREREQUISITES = join(REPO_ROOT, "scripts", "local", "docker-prerequisites.sh");
++const LAUNCHER = join(REPO_ROOT, "scripts", "local", "docker-launcher.sh");
++
++let sandbox: string;
++
++beforeEach(() => {
++  sandbox = mkdtempSync(join(tmpdir(), "tenkacloud-disk-preflight-"));
++});
++
++afterEach(() => {
++  rmSync(sandbox, { recursive: true, force: true });
++});
++
++function runDiskCheck(options: {
++  readonly availableKiB?: number;
++  readonly probeFails?: boolean;
++}): { readonly status: number; readonly stdout: string } {
++  const bin = join(sandbox, "bin");
++  mkdirSync(bin);
++  writeFileSync(
++    join(bin, "docker"),
++    [
++      "#!/bin/sh",
++      options.probeFails ? "exit 1" : "",
++      "echo 'Filesystem 1024-blocks Used Available Capacity Mounted on'",
++      `echo 'overlay 50000000 1 ${options.availableKiB ?? 1000000} 1% /'`,
++      "",
++    ].join("\n"),
++    { mode: 0o755 },
++  );
++  const script = join(sandbox, "run.sh");
++  writeFileSync(
++    script,
++    [
++      "#!/bin/sh",
++      `. '${PREREQUISITES}'`,
++      "tenkacloud_docker_disk_meets_floor",
++      "status=$?",
++      'printf "%s:%s" "$status" "${TENKACLOUD_DOCKER_DISK_AVAILABLE_BYTES:-unknown}"',
++      "exit 0",
++      "",
++    ].join("\n"),
++    { mode: 0o755 },
++  );
++  const stdout = execFileSync("/bin/sh", [script], {
++    env: { PATH: `${bin}:/usr/bin:/bin` },
++    encoding: "utf8",
++  });
++  const [status] = stdout.split(":");
++  return { status: Number(status), stdout };
++}
++
++describe("Docker VM disk preflight", () => {
++  it("passes when the measured free space is above the image floor", () => {
++    const result = runDiskCheck({ availableKiB: 1_000_000 });
++
++    expect(result.status).toBe(0);
++    expect(result.stdout).toBe("0:1024000000");
++  });
++
++  it("fails when free space is below the measured image floor", () => {
++    const result = runDiskCheck({ availableKiB: 1 });
++
++    expect(result.status).toBe(1);
++    expect(result.stdout).toBe("1:1024");
++  });
++
++  it("returns unknown rather than a false failure when the probe is unavailable", () => {
++    const result = runDiskCheck({ probeFails: true });
++
++    expect(result.status).toBe(2);
++    expect(result.stdout).toBe("2:unknown");
++  });
++
++  it("runs the disk preflight before catalog work and the full control-plane build", () => {
++    const launcher = readFileSync(LAUNCHER, "utf8");
++    const up = launcher.slice(launcher.indexOf("cmd_up()"), launcher.indexOf("cmd_down()"));
++
++    expect(up.indexOf("preflight_docker_disk")).toBeGreaterThan(-1);
++    expect(up.indexOf("preflight_docker_disk")).toBeLessThan(
++      up.indexOf("ensure_problems_submodule"),
++    );
++    expect(up.indexOf("preflight_docker_disk")).toBeLessThan(up.indexOf("$COMPOSE build"));
++    expect(up).toContain("TenkaCloud did not run either cleanup command");
++  });
++});
++diff --git a/scripts/local/docker-launcher.sh b/scripts/local/docker-launcher.sh
++index 16b7d71..1c178f4 100755
++--- a/scripts/local/docker-launcher.sh
+++++ b/scripts/local/docker-launcher.sh
++@@ -30,6 +30,35 @@ require_docker() {
++   tenkacloud_require_docker "make local"
++ }
++ 
+++format_disk_megabytes() {
+++  printf '%s MB' "$(($1 / 1000000))"
+++}
+++
+++preflight_docker_disk() {
+++  disk_result=0
+++  tenkacloud_docker_disk_meets_floor || disk_result=$?
+++  if [ "$disk_result" -eq 2 ]; then
+++    echo "Warning: Docker VM free space could not be measured; continuing." >&2
+++    echo "  If startup later reports 'No space left on device', inspect it with:" >&2
+++    echo "    docker run --rm busybox df -P /" >&2
+++    return 0
+++  fi
+++
+++  disk_free=$(format_disk_megabytes "$TENKACLOUD_DOCKER_DISK_AVAILABLE_BYTES")
+++  disk_floor=$(format_disk_megabytes "$TENKACLOUD_CONTROL_PLANE_DISK_FLOOR_BYTES")
+++  if [ "$disk_result" -eq 1 ]; then
+++    echo "Docker VM free space is below TenkaCloud's measured image floor." >&2
+++    echo "  Free: $disk_free; required for the control-plane image: at least $disk_floor." >&2
+++    echo "  Problem images and BuildKit cache need additional space." >&2
+++    echo "  Next: reclaim Docker VM space manually, for example:" >&2
+++    echo "    docker builder prune -af" >&2
+++    echo "    docker image prune -af" >&2
+++    echo "  TenkaCloud did not run either cleanup command." >&2
+++    return 1
+++  fi
+++  echo "Docker VM free space: $disk_free (control-plane image floor: $disk_floor)."
+++}
+++
++ # [Finding 2, #2906 audit] `problems/` self-heal must run HOST-side: the
++ # container has no `.git` history for it (only the `problems/` working tree
++ # is bind-mounted, read-only, per the Dockerfile/catalog-loader.ts
++@@ -178,6 +207,7 @@ cmd_up() {
++     echo "  Every problem starts on demand from the Portal instead." >&2
++   fi
++   require_docker
+++  preflight_docker_disk
++   ensure_problems_submodule
++   reclaim_foreign_control_plane_container
++   $COMPOSE build
++diff --git a/scripts/local/docker-prerequisites.sh b/scripts/local/docker-prerequisites.sh
++index 4154dc1..ec99007 100644
++--- a/scripts/local/docker-prerequisites.sh
+++++ b/scripts/local/docker-prerequisites.sh
++@@ -146,6 +146,42 @@ tenkacloud_print_docker_socket_guidance() {
++   esac
++ }
++ 
+++# Measured minimum needed to materialize the Docker-only control-plane image.
+++# Problem images and BuildKit cache require additional space.
+++TENKACLOUD_CONTROL_PLANE_DISK_FLOOR_BYTES=755000000
+++TENKACLOUD_DOCKER_DISK_AVAILABLE_BYTES=""
+++TENKACLOUD_DOCKER_DISK_ERROR_KIND=""
+++
+++tenkacloud_probe_docker_disk() {
+++  TENKACLOUD_DOCKER_DISK_AVAILABLE_BYTES=""
+++  TENKACLOUD_DOCKER_DISK_ERROR_KIND=""
+++  tenkacloud_disk_output=$(docker run --rm busybox df -P / 2>/dev/null) || {
+++    TENKACLOUD_DOCKER_DISK_ERROR_KIND="probe-failed"
+++    return 1
+++  }
+++  tenkacloud_disk_available_kib=$(
+++    printf '%s\n' "$tenkacloud_disk_output" |
+++      awk '$NF == "/" && $4 ~ /^[0-9]+$/ { print $4; exit }'
+++  )
+++  case "$tenkacloud_disk_available_kib" in
+++    '' | *[!0-9]*)
+++      TENKACLOUD_DOCKER_DISK_ERROR_KIND="unparseable"
+++      return 1
+++      ;;
+++  esac
+++  TENKACLOUD_DOCKER_DISK_AVAILABLE_BYTES=$((tenkacloud_disk_available_kib * 1024))
+++  export TENKACLOUD_DOCKER_DISK_AVAILABLE_BYTES
+++}
+++
+++# Returns 0=sufficient, 1=below floor, 2=probe unavailable.
+++tenkacloud_docker_disk_meets_floor() {
+++  tenkacloud_disk_floor=${1:-$TENKACLOUD_CONTROL_PLANE_DISK_FLOOR_BYTES}
+++  if ! tenkacloud_probe_docker_disk; then
+++    return 2
+++  fi
+++  [ "$TENKACLOUD_DOCKER_DISK_AVAILABLE_BYTES" -ge "$tenkacloud_disk_floor" ]
+++}
+++
++ tenkacloud_require_docker() {
++   entrypoint=${1:-make local}
++   if ! tenkacloud_docker_cli_version >/dev/null; then
++diff --git a/scripts/local/doctor.sh b/scripts/local/doctor.sh
++index a160049..57f3cb2 100644
++--- a/scripts/local/doctor.sh
+++++ b/scripts/local/doctor.sh
++@@ -293,8 +293,9 @@ doctor_report_profile() {
++   doctor_memory=$(printf '%s\n' "$doctor_info" | awk -F '\t' 'NR == 1 && $2 ~ /^[0-9]+$/ && $2 > 0 { print $2 }')
++   doctor_free_disk=""
++   if [ "$doctor_probe_disk" -eq 1 ] && [ "$doctor_daemon_ready" -eq 1 ]; then
++-    doctor_disk_output=$(docker run --rm busybox df -P / 2>/dev/null || true)
++-    doctor_free_disk=$(printf '%s\n' "$doctor_disk_output" | awk '$NF == "/" && $4 ~ /^[0-9]+$/ { print $4 * 1024; exit }')
+++    if tenkacloud_probe_docker_disk; then
+++      doctor_free_disk=$TENKACLOUD_DOCKER_DISK_AVAILABLE_BYTES
+++    fi
++   fi
++ 
++   echo ""
++-- 
++2.47.3
