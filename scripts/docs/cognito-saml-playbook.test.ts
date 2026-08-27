@@ -48,4 +48,22 @@ describe("Cognito / SAML IdP operations playbook", () => {
     expect(playbook).toContain("Participant Portal はチームログイン鍵");
     expect(playbook).toContain("samlIdpDirectory");
   });
+
+  it("publishes the administrator SSO procedure in the public event manual", () => {
+    const publicManualJa = readRepoFile(
+      "apps/developer-portal/src/app/developers/docs/operate/run-an-event/page.ja.mdx",
+    );
+    const publicManualEn = readRepoFile(
+      "apps/developer-portal/src/app/developers/docs/operate/run-an-event/page.mdx",
+    );
+    const publicHtmlJa = readRepoFile("landing/docs/operate/run-an-event/index.html");
+    const publicHtmlEn = readRepoFile("landing/docs/operate/run-an-event/index.en.html");
+
+    for (const source of [publicManualJa, publicManualEn, publicHtmlJa, publicHtmlEn]) {
+      expect(source).toContain("AWS IAM Identity Center");
+      expect(source).toContain("docs/operations/cognito-saml-idp-playbook.md");
+    }
+    expect(publicManualJa).toContain("管理者SSOを企業IdPに接続する");
+    expect(publicManualEn).toContain("Connect administrator SSO to a corporate IdP");
+  });
 });
