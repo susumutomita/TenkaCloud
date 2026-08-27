@@ -24,6 +24,10 @@ node_modules
 # `infrastructure` と `apps/*` は workspace なので同じ扱いにはできない — `bun install
 # --frozen-lockfile` がそれぞれの package.json を要求する。 中身の重い cdk.out は上で除外済み。
 tmp/
+# 54% of the files BuildKit walks in the primary clone live here: .claude/worktrees/ holds a full
+# checkout per worktree, and the root-anchored ignores above (problems/, docs/, landing/, tmp/) do
+# NOT match their copies inside a worktree. The build needs none of it.
+.claude/
 sampleimages/
 docs/
 landing/
