@@ -10,11 +10,10 @@ services:
   # #3096 migration helper. Old versions ran the control plane as root, so an
   # existing named volume may contain root-owned state. Migrate only that
   # volume before the non-root service starts. This service has no network and
-  # no Docker socket; CAP_CHOWN is its single extra capability.
+  # no Docker socket; CAP_CHOWN is its single extra capability. The image is
+  # built by the `local` service in the launcher's explicit `compose build`
+  # step, so this helper does not define a second build target.
   local-data-init:
-    build:
-      context: .
-      dockerfile: docker/local-control-plane/Dockerfile
     image: tenkacloud-local:dev
     user: "0:0"
     network_mode: none
