@@ -7,6 +7,30 @@
 # scripts/local-play/catalog-loader.ts's `problemSearchRoots` for why a
 # mismatched path silently breaks problems with a relative bind mount.
 services:
+  # #3096 migration helper. Old versions ran the control plane as root, so an
+  # existing named volume may contain root-owned state. Migrate only that
+  # volume before the non-root service starts. This service has no network and
+  # no Docker socket; CAP_CHOWN is its single extra capability.
+  local-data-init:
+    build:
+      context: .
+      dockerfile: docker/local-control-plane/Dockerfile
+    image: tenkacloud-local:dev
+    user: "0:0"
+    network_mode: none
+    restart: "no"
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    entrypoint: ["sh", "-c"]
+    command: ["chown -R 10001:10001 /data"]
+    volumes:
+      - tenkacloud-local-data:/data
+
   local:
     build:
       context: .
@@ -15,6 +39,26 @@ services:
     container_name: tenkacloud-local
     init: true
     restart: "no"
+    depends_on:
+      local-data-init:
+        condition: service_completed_successfully
+    # #3096: runtime image also declares USER tenkacloud. Keep the compose
+    # user explicit so a future Dockerfile refactor cannot silently promote the
+    # participant-facing control plane back to root.
+    user: "10001:10001"
+    # The Docker socket is temporarily still required until #3097 replaces raw
+    # daemon access with a bounded runtime broker. The launcher probes the
+    # daemon-side socket GID before `compose up`; only that supplementary group
+    # is granted. No chmod 666, no privileged container, no root fallback.
+    group_add:
+      - "${TENKACLOUD_DOCKER_SOCKET_GID:-0}"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=64m,mode=1777
     # [#2906 audit finding, round 2] host.docker.internal (built into Docker
     # Desktop; extra_hosts:host-gateway on Linux) was the first fix attempted
     # here and does NOT work: a per-problem sibling container publishes its
@@ -26,22 +70,15 @@ services:
     # 0.0.0.0 is FOR. `network_mode: host` instead puts this container in the
     # HOST's own network namespace, so its 127.0.0.1 genuinely IS the host's
     # — the same relationship the pre-#2906 host Bun process had, restored.
-    # This container already holds the Docker socket (below), which is
-    # already root-equivalent host access — host networking
-    # adds no privilege beyond what that mount already grants; a process with
-    # docker.sock could start a `--network host` sibling itself regardless.
-    # Requires Docker Desktop >=4.34 on macOS/Windows (host networking was
-    # Linux Engine-only before that); native on Linux Engine and WSL2's
-    # Docker Engine, including GitHub Codespaces' docker-in-docker.
+    # #3097 tracks removing this transitional dependency by moving readiness /
+    # scoring to a managed bridge network.
     network_mode: host
     # Docker-outside-of-Docker: this container starts/stops PER-PROBLEM
     # sibling containers through the host daemon, exactly like the host Bun
     # process does today (scripts/local-play/docker-adapter.ts, unchanged) —
     # moved into a container, not a newly granted capability. Never forward
     # this socket into the portal's own responses or into any per-problem
-    # container. A docker-socket-proxy sidecar would not remove the need to
-    # create and control arbitrary problem containers, so it would not reduce
-    # this trust boundary.
+    # container. #3097 replaces this raw socket boundary with a bounded broker.
     # The HOST side is whichever socket the active Docker context uses, resolved
     # by docker-launcher.sh — rootless Docker puts it under $XDG_RUNTIME_DIR, not
     # /var/run, and hardcoding the rootful path there produced a container that
@@ -55,13 +92,10 @@ services:
       - ${TENKACLOUD_REPO_ROOT:?set by scripts/local/docker-launcher.sh}/problems:${TENKACLOUD_REPO_ROOT:?}/problems:ro
     environment:
       TENKACLOUD_PROBLEMS_HOST_PATH: ${TENKACLOUD_REPO_ROOT:?}/problems
-      # No `ports:` publish rule under `network_mode: host` — the app binds
-      # directly to this port on the host's own loopback (server.ts's default
-      # bind is already 127.0.0.1, same as the host/dev path — nothing
-      # container-specific to configure), so this is now the ONLY place an
-      # override takes effect (docker-launcher.sh passes LOCAL_API_PORT
-      # through from the same environment variable a participant would set).
       LOCAL_API_PORT: ${LOCAL_API_PORT:-5175}
+      # Docker CLI / Compose may materialize per-user config/cache state. The
+      # image rootfs stays read-only; all ephemeral writes go to tmpfs instead.
+      HOME: /tmp/tenkacloud-home
       # Passed through only when set (GitHub Codespaces sets both on the host
       # shell docker-launcher.sh runs in) — CORS's Codespaces-forwarded-origin
       # check (scripts/local-play/cors.ts) needs them to recognize the
