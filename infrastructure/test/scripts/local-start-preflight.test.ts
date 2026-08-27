@@ -15,6 +15,7 @@ interface Scenario {
   readonly operatingSystem?: string;
   readonly context?: string;
   readonly desktopSetting?: boolean | "missing";
+  readonly socketGid?: number | "unavailable";
 }
 
 function runPreflight(scenario: Scenario): RunResult {
@@ -34,6 +35,17 @@ function runPreflight(scenario: Scenario): RunResult {
       );
     }
 
+    const socketProbe =
+      scenario.socketGid === "unavailable"
+        ? "    exit 1"
+        : `    printf '%s\\n' '${scenario.socketGid ?? 987}'`;
+    const diskProbe =
+      scenario.disk === "unavailable"
+        ? "    exit 1"
+        : scenario.disk === "full"
+          ? "    printf '95 512000\\n'"
+          : "    printf '42 10485760\\n'";
+
     const docker = [
       "#!/bin/sh",
       'case "$1 $2" in',
@@ -44,11 +56,14 @@ function runPreflight(scenario: Scenario): RunResult {
       `    printf '%s\\n' '${scenario.context ?? "desktop-linux"}'`,
       "    ;;",
       '  "run --rm")',
-      scenario.disk === "unavailable"
-        ? "    exit 1"
-        : scenario.disk === "full"
-          ? "    printf '95 512000\\n'"
-          : "    printf '42 10485760\\n'",
+      '    case "$*" in',
+      "      *tenkacloud-docker.sock*)",
+      socketProbe,
+      "        ;;",
+      "      *)",
+      diskProbe,
+      "        ;;",
+      "    esac",
       "    ;;",
       "esac",
       "exit 0",
@@ -60,7 +75,7 @@ function runPreflight(scenario: Scenario): RunResult {
     writeFileSync(join(bin, "uname"), "#!/bin/sh\necho Darwin\n");
     chmodSync(join(bin, "uname"), 0o755);
 
-    const script = `. "${PREFLIGHT}"; tenkacloud_local_start_preflight`;
+    const script = `. "${PREFLIGHT}"; TENKACLOUD_DOCKER_SOCKET=/daemon/docker.sock; export TENKACLOUD_DOCKER_SOCKET; tenkacloud_local_start_preflight; printf 'gid=%s\\n' "$TENKACLOUD_DOCKER_SOCKET_GID"`;
     const result = spawnSync("sh", ["-eu", "-c", script], {
       encoding: "utf8",
       env: { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}` },
@@ -71,7 +86,7 @@ function runPreflight(scenario: Scenario): RunResult {
   }
 }
 
-describe("Docker participant start preflight (#3093/#3095)", () => {
+describe("Docker participant start preflight (#3093/#3095/#3096)", () => {
   it("fails before startup when the Docker VM disk is above the threshold", () => {
     const result = runPreflight({ disk: "full" });
     expect(result.status).toBe(1);
@@ -107,6 +122,20 @@ describe("Docker participant start preflight (#3093/#3095)", () => {
     const result = runPreflight({ desktopSetting: true });
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("host networking: enabled");
+  });
+
+  it("exports the daemon-side Docker socket GID for compose group_add", () => {
+    const result = runPreflight({ socketGid: 1234 });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("Docker socket supplementary GID: 1234");
+    expect(result.stdout).toContain("gid=1234");
+  });
+
+  it("fails closed when the Docker socket GID cannot be determined", () => {
+    const result = runPreflight({ socketGid: "unavailable" });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Could not determine the Docker daemon socket group safely");
+    expect(result.stderr).toContain("will not fall back to root");
   });
 
   it("does not call the start-only preflight from cleanup/status", () => {
