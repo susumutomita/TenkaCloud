@@ -5,6 +5,11 @@
 
 TENKACLOUD_DOCKER_DESKTOP_SETTINGS=""
 
+# #3096 extends the same start-only preflight with a daemon-socket GID check so
+# the control plane can stay non-root without making the socket world-writable.
+# shellcheck source=scripts/local/docker-socket-gid-preflight.sh
+. "$TENKACLOUD_REPO_ROOT/scripts/local/docker-socket-gid-preflight.sh"
+
 # Detect the ACTIVE daemon, not merely whether Docker Desktop happens to be
 # installed. This avoids false failures on Macs using Colima with a dormant
 # Docker Desktop settings file still present.
@@ -50,7 +55,7 @@ tenkacloud_docker_desktop_settings_path() {
 
 # Returns 0 when enabled / not Desktop / unknown, and 1 only when Docker
 # Desktop is positively identified and its setting is explicitly false.
-tenkacloud_preflight_docker_desktop_host_networking() {
+tenkacloud_check_docker_desktop_host_networking() {
   tenkacloud_active_daemon_is_docker_desktop || return 0
 
   settings_status=0
@@ -82,4 +87,12 @@ tenkacloud_preflight_docker_desktop_host_networking() {
   echo "Warning: Docker Desktop detected, but its host-networking setting was not recognizable." >&2
   echo "  Continuing; the existing post-start host reachability probe remains the fallback." >&2
   return 0
+}
+
+# The launcher already calls this only on `up`. Keep the public function name
+# introduced by #3095, and layer #3096's non-root socket permission check after
+# the networking check so downstream stacked branches need no launcher rewrite.
+tenkacloud_preflight_docker_desktop_host_networking() {
+  tenkacloud_check_docker_desktop_host_networking || return 1
+  tenkacloud_preflight_docker_socket_gid || return 1
 }
