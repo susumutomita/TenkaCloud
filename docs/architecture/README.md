@@ -26,4 +26,6 @@ decision spans multiple repositories and needs a durable, reviewable record
 before any implementation lands — not a substitute for the executable-evidence
 rule above. See
 [`decisions/0001-security-harness-trust-boundary.md`](./decisions/0001-security-harness-trust-boundary.md)
-for the first one and its own justification for existing.
+for the security harness boundary and
+[`decisions/0002-ctfd-runtime-integration.md`](./decisions/0002-ctfd-runtime-integration.md)
+for the CTFd / TenkaCloud cross-system responsibility and credential boundary.
