@@ -22,12 +22,17 @@ function runPreflight(options: {
   readonly operatingSystem?: string;
   readonly context?: string;
   readonly setting?: boolean | "missing" | "unknown";
+  readonly socketGid?: number | "unavailable";
 }): { readonly status: number; readonly output: string } {
   const bin = join(sandbox, "bin");
   const home = join(sandbox, "home");
   mkdirSync(bin, { recursive: true });
   mkdirSync(home, { recursive: true });
 
+  const socketProbe =
+    options.socketGid === "unavailable"
+      ? "  exit 1"
+      : `  echo '${options.socketGid ?? 987}'`;
   writeFileSync(
     join(bin, "docker"),
     [
@@ -36,6 +41,8 @@ function runPreflight(options: {
       `  echo '${options.operatingSystem ?? "Docker Desktop"}'`,
       'elif [ "$1 $2" = "context show" ]; then',
       `  echo '${options.context ?? "desktop-linux"}'`,
+      'elif [ "$1 $2" = "run --rm" ]; then',
+      socketProbe,
       "fi",
       "",
     ].join("\n"),
@@ -58,8 +65,12 @@ function runPreflight(options: {
     script,
     [
       "#!/bin/sh",
+      "TENKACLOUD_REPO_ROOT='" + REPO_ROOT + "'",
+      "TENKACLOUD_DOCKER_SOCKET=/daemon/docker.sock",
+      "export TENKACLOUD_REPO_ROOT TENKACLOUD_DOCKER_SOCKET",
       `. '${PREFLIGHT}'`,
       "tenkacloud_preflight_docker_desktop_host_networking",
+      'printf "gid=%s\\n" "$TENKACLOUD_DOCKER_SOCKET_GID"',
       "",
     ].join("\n"),
     { mode: 0o755 },
@@ -81,7 +92,7 @@ function runPreflight(options: {
   }
 }
 
-describe("Docker Desktop host-networking preflight (#3095)", () => {
+describe("Docker Desktop/non-root start preflight (#3095/#3096)", () => {
   it("fails before build when active Docker Desktop explicitly disables host networking", () => {
     const result = runPreflight({ setting: false });
     expect(result.status).toBe(1);
@@ -94,6 +105,7 @@ describe("Docker Desktop host-networking preflight (#3095)", () => {
     const result = runPreflight({ setting: true });
     expect(result.status).toBe(0);
     expect(result.output).toContain("host networking: enabled");
+    expect(result.output).toContain("Docker socket supplementary GID: 987");
   });
 
   it("does not mistake Colima for an installed but inactive Docker Desktop", () => {
@@ -104,6 +116,7 @@ describe("Docker Desktop host-networking preflight (#3095)", () => {
     });
     expect(result.status).toBe(0);
     expect(result.output).not.toContain("host networking is disabled");
+    expect(result.output).toContain("Docker socket supplementary GID: 987");
   });
 
   it("warns and continues when Docker Desktop settings are not readable", () => {
@@ -116,6 +129,20 @@ describe("Docker Desktop host-networking preflight (#3095)", () => {
     const result = runPreflight({ setting: "unknown" });
     expect(result.status).toBe(0);
     expect(result.output).toContain("setting was not recognizable");
+  });
+
+  it("exports the daemon-side Docker socket GID for compose group_add", () => {
+    const result = runPreflight({ setting: true, socketGid: 1234 });
+    expect(result.status).toBe(0);
+    expect(result.output).toContain("Docker socket supplementary GID: 1234");
+    expect(result.output).toContain("gid=1234");
+  });
+
+  it("fails closed when the socket GID cannot be determined", () => {
+    const result = runPreflight({ setting: true, socketGid: "unavailable" });
+    expect(result.status).toBe(1);
+    expect(result.output).toContain("Could not determine the Docker daemon socket group safely");
+    expect(result.output).toContain("will not fall back to root");
   });
 
   it("runs only on the up path before catalog work and the full build", () => {
