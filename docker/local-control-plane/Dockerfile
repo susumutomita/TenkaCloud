@@ -125,18 +125,32 @@ COPY scripts /app/scripts
 COPY infrastructure/lib /app/infrastructure/lib
 COPY --from=build /app/apps/participant-portal/dist /app/apps/participant-portal/dist
 
+# #3096: the upstream image creates users for its own purposes but does not
+# make TenkaCloud's runtime identity an explicit contract. Give the local
+# control plane a dedicated fixed UID/GID so compose, persisted-volume
+# migration, and future image updates agree on the same non-root principal.
+ARG TENKACLOUD_UID=10001
+ARG TENKACLOUD_GID=10001
+RUN addgroup -S -g "${TENKACLOUD_GID}" tenkacloud \
+  && adduser -S -D -H -u "${TENKACLOUD_UID}" -G tenkacloud tenkacloud \
+  && mkdir -p /data \
+  && chown -R "${TENKACLOUD_UID}:${TENKACLOUD_GID}" /data
+
 # [#2906 audit finding, round 2] No bind-host override needed: server.ts's
 # default listener bind is already loopback-only (127.0.0.1), identical to
 # the host/dev path — and correct here specifically because this container
-# runs with `network_mode: host` (compose.local.yaml), so its 127.0.0.1
-# genuinely IS the host's loopback, not a separate namespace. Binding 0.0.0.0
-# would leak straight onto the LAN once this container IS the host's own
-# network stack — this is why that override was deliberately removed rather
-# than left configurable.
+# currently runs with `network_mode: host` (compose.local.yaml). #3097 tracks
+# moving readiness/scoring onto an internal bridge and removing host mode.
 ENV TENKACLOUD_LOCAL_DIR=/data
 ENV TENKACLOUD_LOCAL_PORTAL_DIST=/app/apps/participant-portal/dist
 ENV LOCAL_API_PORT=5175
 VOLUME ["/data"]
+
+# Defense-in-depth while #3097 removes the raw Docker socket entirely. Compose
+# adds only the daemon socket's measured supplementary GID; the primary process
+# identity stays this fixed non-root user. Do not remove this USER merely to
+# work around a socket-permission mismatch — fix the launcher GID probe instead.
+USER tenkacloud:tenkacloud
 
 # Runs in the FOREGROUND as this container's PID 1 (not `up`'s host-oriented
 # detach-and-track-by-PID model — see containerServe() in
