@@ -1,0 +1,51 @@
+name: publish-pr-branches
+
+permissions:
+  contents: write
+
+on:
+  push:
+    branches:
+      - automation/source-snapshot-v2
+    paths:
+      - .automation/READY
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out automation payload
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          fetch-depth: 0
+
+      - name: Publish review branches
+        env:
+          GIT_AUTHOR_NAME: bull
+          GIT_AUTHOR_EMAIL: oyster880@gmail.com
+          GIT_COMMITTER_NAME: bull
+          GIT_COMMITTER_EMAIL: oyster880@gmail.com
+        run: |
+          set -euo pipefail
+          cp .automation/*.patch /tmp/
+          git config user.name "$GIT_AUTHOR_NAME"
+          git config user.email "$GIT_AUTHOR_EMAIL"
+          git fetch origin main
+
+          publish() {
+            branch="$1"
+            base="$2"
+            patch="$3"
+            git reset --hard
+            git clean -fdx
+            git switch -C "$branch" "$base"
+            git am "/tmp/$patch"
+            git push --force origin "$branch"
+          }
+
+          publish fix/3092-readiness-diagnostics origin/main v2-3092.patch
+          publish fix/3093-local-disk-preflight origin/main v2-3093.patch
+          publish fix/3095-docker-desktop-hostnet-preflight fix/3093-local-disk-preflight v2-3095.patch
+          publish security/3096-non-root-local-control-plane fix/3095-docker-desktop-hostnet-preflight v2-3096.patch
+          publish docs/3094-ctfd-runtime-seam origin/main v2-3094.patch
+          publish docs/3097-local-runtime-trust-boundary docs/3094-ctfd-runtime-seam v2-3097.patch
