@@ -1,6 +1,6 @@
 # イベント運用 Runbook
 
-Issue #2407。TenkaCloud で 1 回のイベント (Battle / Challenge) を運営する運営者向けの手順書。作問者でなくても、この文書だけで前日準備から撤収まで通せることを目標にする。キャパシティ運用の詳細は [dynamodb-event-capacity.md](./dynamodb-event-capacity.md)、デプロイ手順の詳細は [DEPLOYMENT_GUIDE.md](../../DEPLOYMENT_GUIDE.md)、問題ごとの当日運用は各問題の `OPERATOR.md` (catalog repo) に委ねる。
+Issue #2407。TenkaCloud で 1 回のイベント (Battle / Challenge) を運営する運営者向けの手順書。作問者でなくても、この文書だけで前日準備から撤収まで通せることを目標にする。キャパシティ運用の詳細は [dynamodb-event-capacity.md](./dynamodb-event-capacity.md)、管理者 SSO は [cognito-saml-idp-playbook.md](./cognito-saml-idp-playbook.md)、デプロイ手順の詳細は [DEPLOYMENT_GUIDE.md](../../DEPLOYMENT_GUIDE.md)、問題ごとの当日運用は各問題の `OPERATOR.md` (catalog repo) に委ねる。
 
 ## 前提: どのモードで動かすか
 
@@ -96,6 +96,16 @@ launcher stack 削除
 - 鍵そのものが bearer トークンになる (毎 polling で `Authorization` に載る)。アイドル 6 時間で自動ログアウトする。
 - 前日に、テストチームの鍵で実際にログインし、そのチームのデプロイと採点が portal に見えることを確認する。招待リンク `/login#invite=<鍵>` は鍵を prefill するが自動送信はしない (鍵が履歴に残らないよう hash は消える)。
 
+### 6. 管理者 SSO の確認
+
+SaaS Control Plane または silo tenant で外部 SAML IdP を使う場合は、[Cognito / SAML IdP 接続プレイブック](./cognito-saml-idp-playbook.md) に従って前日までに確認する。
+
+- private window から TenkaCloud 起点の SP-initiated login を行い、IdP 認証後に正しい Admin Console へ戻ること。
+- SystemAdmin / TenantAdmin / Operator / Viewer の期待ロールで、許可された操作だけが実行できること。
+- signing certificate がイベント終了後まで有効であること。
+- SSO 障害時にも使える Cognito local administrator でログインできること。
+- Participant Portal は SAML ではなくチームログイン鍵であることを運営メンバーが理解していること。
+
 ## 当日タイムライン
 
 | 時刻 | やること |
@@ -160,6 +170,7 @@ Participant Portal のログインはチームログイン鍵そのものを bea
 
 ## 参照
 
+- [cognito-saml-idp-playbook.md](./cognito-saml-idp-playbook.md) — Cognito / SAML 管理者 SSO の接続・リハーサル・障害切り分け
 - [dynamodb-event-capacity.md](./dynamodb-event-capacity.md) — イベント中のキャパシティ運用の詳細手順
 - [DEPLOYMENT_GUIDE.md](../../DEPLOYMENT_GUIDE.md) — Lite / SaaS の具体的なデプロイ手順
 - [docs/local-play.md](../local-play.md) — AWS なしのローカル動作確認 (`make local`)
