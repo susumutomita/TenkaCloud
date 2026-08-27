@@ -132,6 +132,28 @@ else
 fi
 
 if [ "$doctor_daemon_ready" -eq 1 ]; then
+  tenkacloud_docker_daemon_stale
+  case "$?" in
+    0)
+      doctor_fail "Docker containerd version" "daemon is running containerd $TENKACLOUD_RUNNING_CONTAINERD_VERSION, but $TENKACLOUD_ONDISK_CONTAINERD_VERSION is installed on disk"
+      echo "      The daemon is running a containerd from before a package upgrade."
+      echo "      Its containerd and the freshly upgraded on-disk shim mismatch, so"
+      echo "      every container fails at start (\"failed to create shim\")."
+      echo "      Next (rootless): systemctl --user restart docker"
+      echo "      Next (rootful):  sudo systemctl restart docker"
+      ;;
+    1)
+      doctor_ok "Docker containerd version" "running matches on-disk ($TENKACLOUD_RUNNING_CONTAINERD_VERSION)"
+      ;;
+    *)
+      doctor_skip "Docker containerd version" "running or on-disk containerd version unreadable (e.g. Docker Desktop); skipped"
+      ;;
+  esac
+else
+  doctor_skip "Docker containerd version" "not checked because the Docker daemon is unavailable"
+fi
+
+if [ "$doctor_daemon_ready" -eq 1 ]; then
   if tenkacloud_resolve_docker_socket; then
     doctor_ok "Docker context" "local Unix socket: $TENKACLOUD_DOCKER_SOCKET"
   else
