@@ -22,8 +22,11 @@ entry points and avoid duplicating internal control flow.
 ## Decision records (narrow exception)
 
 [`decisions/`](./decisions/) holds numbered ADRs for the rare case where a design
-decision spans multiple repositories and needs a durable, reviewable record
-before any implementation lands — not a substitute for the executable-evidence
-rule above. See
-[`decisions/0001-security-harness-trust-boundary.md`](./decisions/0001-security-harness-trust-boundary.md)
-for the first one and its own justification for existing.
+decision spans multiple repositories or an external system boundary and needs a
+durable, reviewable record before any implementation lands — not a substitute for
+the executable-evidence rule above.
+
+Current records:
+
+- [`ADR-0001: Security drill harness trust boundary`](./decisions/0001-security-harness-trust-boundary.md)
+- [`ADR-0002: CTFd / TenkaCloud runtime integration boundary`](./decisions/0002-ctfd-runtime-integration.md)
