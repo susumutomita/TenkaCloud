@@ -13,142 +13,37 @@
  * tested with no Docker.
  */
 import { spawnSync } from "node:child_process";
-import { z } from "zod";
+import {
+  LONG_RUNNING_INSPECT_FORMAT,
+  type ComposeService,
+  classifyService,
+  describeFailure,
+  evaluateHealth,
+  looksDiskFull,
+  parseComposePs,
+  parseLongRunning,
+} from "./compose-health";
 import { resolveComposeCli } from "./docker-adapter";
 
-export interface ComposeService {
-  readonly name: string;
-  readonly service: string;
-  readonly state: string;
-  readonly health: string;
-  readonly exitCode: number;
-}
-
-const ComposePsRowsSchema = z.array(
-  z
-    .object({
-      Name: z.string().optional(),
-      Service: z.string().optional(),
-      State: z.string().optional(),
-      Health: z.string().optional(),
-      ExitCode: z.number().optional(),
-    })
-    .transform(
-      (row): ComposeService => ({
-        name: row.Name ?? "",
-        service: row.Service ?? "",
-        state: row.State ?? "",
-        health: row.Health ?? "",
-        exitCode: row.ExitCode ?? 0,
-      }),
-    ),
-);
-
-/** Parse `docker compose ps --format json` (newline-delimited objects, or a JSON array). */
-export function parseComposePs(stdout: string): ComposeService[] {
-  const text = stdout.trim();
-  if (!text) return [];
-  let parsed: unknown;
-  try {
-    parsed = text.startsWith("[")
-      ? JSON.parse(text)
-      : text
-          .split("\n")
-          .filter((line) => line.trim().length > 0)
-          .map((line) => JSON.parse(line));
-  } catch {
-    return [];
-  }
-  const result = ComposePsRowsSchema.safeParse(parsed);
-  return result.success ? result.data : [];
-}
-
-export type ServiceVerdict = "ok" | "completed" | "failing" | "pending";
-
-/** `docker inspect` format marking a service meant to stay up (declares a healthcheck or ports). */
-export const LONG_RUNNING_INSPECT_FORMAT =
-  "{{if .Config.Healthcheck}}H{{end}}{{if .HostConfig.PortBindings}}P{{end}}";
-
-/** A container is "long-running" (must stay up) if it declares a healthcheck or published ports. */
-export function parseLongRunning(inspectStdout: string): boolean {
-  return /[HP]/.test(inspectStdout);
-}
-
-/**
- * Classify one service:
- * - `dead` is always `failing` — a dead container is an error state, never a
- *   clean one-shot completion.
- * - `exited`: a `longRunning` service (one that declares a healthcheck or ports)
- *   must not exit at all, even with code 0 — that is `failing`, which is what
- *   stops a multi-service stack from passing when one server dies "cleanly" while
- *   a sidecar stays up. A non-long-running service that exited 0 is `completed`
- *   (a genuine one-shot such as a WP-CLI installer); any non-zero exit is `failing`.
- * - `unhealthy` is `failing`; `running` + healthy/no-healthcheck is `ok`;
- *   anything still coming up (`starting`, `created`, `restarting`) is `pending`.
- */
-export function classifyService(service: ComposeService, longRunning: boolean): ServiceVerdict {
-  if (service.state === "dead") return "failing";
-  if (service.state === "exited") {
-    if (longRunning) return "failing";
-    return service.exitCode === 0 ? "completed" : "failing";
-  }
-  if (service.health === "unhealthy") return "failing";
-  if (service.state === "running") {
-    return service.health === "" || service.health === "healthy" ? "ok" : "pending";
-  }
-  return "pending";
-}
-
-export interface HealthReport {
-  /** No service is still pending (or at least one has failed) — safe to stop polling. */
-  readonly done: boolean;
-  /** Nothing failing/pending AND at least one service is genuinely running. */
-  readonly ok: boolean;
-  readonly failing: readonly ComposeService[];
-  readonly pending: readonly ComposeService[];
-  readonly running: readonly ComposeService[];
-}
-
-export function evaluateHealth(
-  services: readonly ComposeService[],
-  isLongRunning: (service: ComposeService) => boolean,
-): HealthReport {
-  const withVerdict = (verdict: ServiceVerdict): ComposeService[] =>
-    services.filter((service) => classifyService(service, isLongRunning(service)) === verdict);
-  const failing = withVerdict("failing");
-  const pending = withVerdict("pending");
-  const running = withVerdict("ok");
-  return {
-    done: failing.length > 0 || pending.length === 0,
-    ok: failing.length === 0 && pending.length === 0 && running.length > 0,
-    failing,
-    pending,
-    running,
-  };
-}
+export {
+  type ComposeService,
+  classifyService,
+  describeFailure,
+  evaluateHealth,
+  looksDiskFull,
+  parseComposePs,
+  parseLongRunning,
+};
 
 /** Extract the root filesystem use-percentage from `df -P /` output. */
 export function parseDiskUsePercent(dfStdout: string): number | null {
   const lines = dfStdout.trim().split("\n");
   for (const line of lines) {
-    if (!/\s\/\s*$/.test(line)) continue; // the row whose mount point is "/"
+    if (!/\s\/\s*$/.test(line)) continue;
     const match = /(?<!\d)(\d+)%/.exec(line);
     if (match) return Number(match[1]);
   }
   return null;
-}
-
-/** The signature of a full-disk failure inside a container (e.g. MariaDB init aborting). */
-export function looksDiskFull(logs: string): boolean {
-  return /No space left on device|Errcode:\s*28/i.test(logs);
-}
-
-/** Human summary of a failing service, e.g. `db(exited exit 1)` / `wordpress(running unhealthy)`. */
-export function describeFailure(service: ComposeService): string {
-  const parts = [service.state];
-  if (service.exitCode !== 0) parts.push(`exit ${service.exitCode}`);
-  if (service.health) parts.push(service.health);
-  return `${service.service}(${parts.join(" ")})`;
 }
 
 export interface SmokeDeps {
