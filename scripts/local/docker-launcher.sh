@@ -25,6 +25,10 @@ PORTAL_PORT="${LOCAL_API_PORT:-5175}"
 # Keep the participant launcher's Docker contract identical to `make doctor`.
 # shellcheck source=scripts/local/docker-prerequisites.sh
 . "$repo_root/scripts/local/docker-prerequisites.sh"
+# #3095: Docker Desktop host networking is a start-only transitional
+# prerequisite while the control plane still uses network_mode: host (#3097).
+# shellcheck source=scripts/local/docker-host-network-preflight.sh
+. "$repo_root/scripts/local/docker-host-network-preflight.sh"
 
 require_docker() {
   tenkacloud_require_docker "make local"
@@ -208,6 +212,7 @@ cmd_up() {
   fi
   require_docker
   preflight_docker_disk
+  tenkacloud_preflight_docker_desktop_host_networking
   ensure_problems_submodule
   reclaim_foreign_control_plane_container
   $COMPOSE build
