@@ -146,6 +146,18 @@ tenkacloud_print_docker_socket_guidance() {
   esac
 }
 
+tenkacloud_docker_operating_system() {
+  docker info --format '{{.OperatingSystem}}' 2>/dev/null
+}
+
+tenkacloud_is_docker_desktop() {
+  tenkacloud_operating_system=$(tenkacloud_docker_operating_system) || return 1
+  case "$tenkacloud_operating_system" in
+    *Docker\ Desktop* | *docker\ desktop*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 # Measured minimum needed to materialize the Docker-only control-plane image.
 # Problem images and BuildKit cache require additional space.
 TENKACLOUD_CONTROL_PLANE_DISK_FLOOR_BYTES=755000000
