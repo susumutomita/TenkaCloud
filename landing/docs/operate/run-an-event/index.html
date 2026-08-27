@@ -81,6 +81,19 @@ SaaSのテナント作成とマルチクラウドは末尾に分離し、コー�
 <li>停止し、競技者AWSの問題スタックが削除されたことを確認する。</li>
 <li>Participant PortalのURL、team key、開始時刻を参加者へ渡す。</li>
 </ol>
+<h2>管理者SSOを企業IdPに接続する</h2>
+<p>管理者SSOはParticipant Portalのチームログイン鍵とは別の認証経路です。TenkaCloudではCognito User PoolをSAML Service Providerとして使い、Microsoft Entra ID、Google Workspace、AWS IAM Identity CenterなどのSAML 2.0 IdPと接続できます。</p>
+<p>Application Admin ConsoleのSAML SSOは実験的機能で、デフォルトでは無効です。tenant単位のIdP設定はLiteまたはsilo tierの専用User Poolで使い、pooled tenantでは使用しません。本番イベントの前に非本番環境で一連のログインを確認してください。</p>
+<ol>
+<li>Application Admin Consoleの「ID プロバイダ」画面を開き、表示されたACS URL、SPエンティティID、email attribute mappingを取得する。ドキュメント中の例ではなく、画面に表示された値を正本にする。</li>
+<li>IdP側でSAML 2.0アプリケーションを作成し、ACS URLとSPエンティティIDを設定する。<code>NameID</code>は同一ユーザーで安定した値にし、通常はemailを使う。</li>
+<li>IdP側でテストユーザーまたはテストグループをアプリケーションへ割り当て、IdP metadata XMLを取得する。AWS IAM Identity Centerは汎用SAMLとして設定する。</li>
+<li>TenkaCloudへmetadata XMLを登録し、email attribute mappingを確認する。最初はgroup-to-role mappingを空にし、基本ログインが成功してから認可設定を追加する。</li>
+<li>private browsing windowからTenkaCloudのログインを開始し、IdP認証、Cognito callback、Application Admin Consoleへの復帰までを確認する。IdPのポータルから直接開くだけではなく、TenkaCloudから開始するSP-initiated loginを確認する。</li>
+<li>通常ログインでも同じIdPへルーティングされること、ログイン後のemail、tenant、roleが期待どおりであることを確認する。IdP登録と通常ログインのルーティングは別の設定経路なので、登録だけで完了と判断しない。</li>
+<li>SSO障害時に備え、既存のCognito local administratorを少なくとも1名維持する。SAML assertion、ID token、metadata XMLは組織情報を含むため、Issueやチャットへ無加工で貼らない。</li>
+</ol>
+<p>証明書更新、障害切り分け、IdPの撤去を含む詳細手順は<a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/operations/cognito-saml-idp-playbook.md">管理者向けCognito / SAML IdP接続プレイブック</a>を参照してください。</p>
 <h2>SaaSでテナントを作成する（構成参考）</h2>
 <p>SaaS モードでは、System Admin が <code>admin-console</code>からテナントを作成するコードがあります。
 しかし、最近の新規AWS環境でテナント作成から採点・削除までを通した記録はありません。
