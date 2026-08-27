@@ -19,13 +19,35 @@
 
 FROM oven/bun:1.3.11-alpine AS build
 WORKDIR /app
-COPY . .
+# Manifests BEFORE sources, so the install layer is keyed on the dependency tree
+# rather than on the whole repository. `COPY . .` used to sit here, which meant
+# editing any one file — a comment in a test, anything — invalidated the install
+# below and cost a full re-resolve (measured: 145s) on every `make local`. Every
+# workspace root in package.json ("infrastructure", "apps/*", "packages/*") needs
+# its manifest present for the resolve; `--frozen-lockfile` is what makes a
+# missing one fail loudly instead of silently resolving a different tree, so a
+# newly added app cannot slip past this list unnoticed. apps/always-on-control-plane
+# is absent on purpose: it carries no package.json, so it is not a workspace member.
+COPY package.json bun.lock ./
+COPY packages ./packages
+COPY infrastructure/package.json ./infrastructure/
+COPY apps/admin-console/package.json ./apps/admin-console/
+COPY apps/application-admin-console/package.json ./apps/application-admin-console/
+COPY apps/developer-portal/package.json ./apps/developer-portal/
+COPY apps/participant-portal/package.json ./apps/participant-portal/
 # --ignore-scripts: bun does not honour npm_config_ignore_scripts or .npmrc's
 # ignore-scripts, so this flag is required on every invocation (defuses the
 # mini-shai-hulud-class supply-chain risk the same way `make install` does —
 # see Makefile:40-46). --frozen-lockfile: a build must never silently
 # resolve a different dependency tree than bun.lock records.
-RUN bun install --frozen-lockfile --ignore-scripts
+#
+# The cache mount keeps bun's package cache across builds, so the runs that DO
+# miss the layer cache (a lockfile change) re-link from disk instead of
+# re-downloading the registry. It is a cache, not a source of versions —
+# bun.lock still decides what gets installed.
+RUN --mount=type=cache,target=/root/.bun/install/cache \
+      bun install --frozen-lockfile --ignore-scripts
+COPY . .
 RUN bun run --filter @TenkaCloud/participant-portal build
 
 # 実行時の依存だけを別に解決する。 build stage の node_modules を持ち込むと、 この control
@@ -57,8 +79,8 @@ RUN bun --eval ' \
       delete pkg.devDependencies; \
       await Bun.write("package.json", JSON.stringify(pkg, null, 2)); \
     ' \
-  && rm package.json.full \
-  && bun install --ignore-scripts
+  && rm package.json.full
+RUN --mount=type=cache,target=/root/.bun/install/cache bun install --ignore-scripts
 
 FROM oven/bun:1.3.11-alpine AS runtime
 WORKDIR /app
