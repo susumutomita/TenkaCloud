@@ -12,8 +12,8 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  LONG_RUNNING_INSPECT_FORMAT,
   classifyService,
+  LONG_RUNNING_INSPECT_FORMAT,
   looksDiskFull,
   parseComposePs,
   parseLongRunning,
@@ -328,7 +328,7 @@ const DIAGNOSTIC_LOG_LINES = 20;
 const DIAGNOSTIC_LOG_CHARS = 6_000;
 const SENSITIVE_LOG_LINE_RE =
   /["']?(?:flag|secret|password|passwd|token|credential|authorization|cookie|api[_ -]?key|access[_ -]?key|private[_ -]?key)["']?\s*[:=]/i;
-const ANSI_ESCAPE_RE = /\u001b\[[0-?]*[ -/]*[@-~]/g;
+const ANSI_ESCAPE_RE = new RegExp("\\x1B\\[[0-?]*[ -/]*[@-~]", "g");
 
 export interface ComposeDiagnosticsDeps {
   readonly cli?: ComposeCli;
