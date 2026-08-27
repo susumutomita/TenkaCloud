@@ -15,7 +15,7 @@ Issue #3098。TenkaCloud の管理者画面を企業の SAML 2.0 IdP と接続�
 
 Application Admin Console の tenant 単位 SAML IdP CRUD は、Lite または **silo tier** の専用 User Pool だけで使う。pooled tier は User Pool を複数 tenant で共有するため、UI と API の両方が fail-closed で拒否する。Cognito コンソールから手動設定してこの境界を迂回しない。
 
-Application Admin Console の `samlSso` は実験的機能で、既定値は無効。ID プロバイダ画面が表示されない場合は、対象環境の feature flag と isolation mode を先に確認する。本番導入前に非本番環境で end-to-end の疎通を完了させる。
+Application Admin Console の `samlSso` は実験的機能で、デフォルトは無効。ID プロバイダ画面が表示されない場合は、対象環境の feature flag と isolation mode を先に確認する。本番導入前に非本番環境で end-to-end の疎通を完了させる。
 
 ```text
 Browser
@@ -40,7 +40,7 @@ TenkaCloud の SAML ログインには、次の 3 つがそろう必要がある
 2. Cognito app client の supported identity provider に対象 IdP が含まれている。
 3. 通常のログイン画面でメールドメインから IdP を選ぶ場合、`runtime-config.json` の `samlIdpDirectory` に `domain -> provider[]` が入っている。
 
-ID プロバイダ画面の CRUD と、deploy 時に生成される `samlIdpDirectory` は別の投影である。UI で IdP を登録しただけで通常ログインのドメインルーティングまで更新されたと仮定しない。
+ID プロバイダ画面の CRUD と、deploy 時に生成される `samlIdpDirectory` は別の投影です。UI で IdP を登録しただけで通常ログインのドメインルーティングまで更新されたと仮定しない。
 
 登録後は次を個別に確認する。
 
@@ -243,7 +243,7 @@ TenkaCloud は metadata XML を Cognito の `MetadataFile` として保存する
 ## break-glass と rollback
 
 - SSO の end-to-end 疎通が完了するまで Cognito local administrator を削除しない。
-- local auth を無効化する変更は、別の administrator session と復旧手順を確保してから行う。
+- local auth を無効化する変更は、別の administrator セッションと復旧手順を確保してから行う。
 - SAML 設定不備で全員が lock-out した場合は、Cognito User Pool app client に local `COGNITO` provider を復元するか、検証済み構成で `make deploy` を再実行する。
 - 復旧後は Test sign-in、通常ログイン、role の順に再確認する。
 
