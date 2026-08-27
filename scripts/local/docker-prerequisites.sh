@@ -24,6 +24,61 @@ tenkacloud_docker_daemon_ready() {
   docker info >/dev/null 2>&1
 }
 
+TENKACLOUD_RUNNING_CONTAINERD_VERSION=""
+TENKACLOUD_ONDISK_CONTAINERD_VERSION=""
+
+# Detect a Docker daemon still running a containerd from before a package
+# upgrade.
+#
+# The failing case (#3088): apt upgrades the `containerd.io` package — which
+# ships both `containerd` and the `containerd-shim-runc-v2` binary — but the
+# daemon service is never restarted. This is common with the rootless,
+# user-managed `docker.service`, which package upgrades do not restart (unlike
+# the system service). The stale in-memory containerd then execs the freshly
+# upgraded on-disk shim on every `docker run`; the two speak mismatched ttrpc
+# and every container fails at start with "failed to create shim". `make doctor`
+# otherwise reports all green because the CLI, Compose, socket, and
+# `docker info` all still answer.
+#
+# The comparison is on CONTAINERD, not dockerd. `containerd.io` versions and
+# upgrades independently of `docker-ce` (which carries dockerd), and a
+# containerd-only upgrade is a common trigger — one that leaves dockerd
+# untouched, so a dockerd-vs-dockerd check would miss it. This reads the
+# containerd the daemon is RUNNING (from `docker version`) against the ON-DISK
+# `containerd` binary.
+#
+# Skipped (returns 2) when either version cannot be read — e.g. Docker Desktop,
+# where the daemon and its containerd live in a VM the host cannot inspect and
+# Docker Desktop manages its own restarts, so this case does not apply.
+#
+# Returns: 0 = versions read and DIFFER (stale; restart needed),
+#          1 = versions read and match (healthy),
+#          2 = cannot decide (a version was unreadable).
+tenkacloud_docker_daemon_stale() {
+  TENKACLOUD_RUNNING_CONTAINERD_VERSION=""
+  TENKACLOUD_ONDISK_CONTAINERD_VERSION=""
+  command -v docker >/dev/null 2>&1 || return 2
+  command -v containerd >/dev/null 2>&1 || return 2
+
+  TENKACLOUD_RUNNING_CONTAINERD_VERSION=$(docker version --format '{{range .Server.Components}}{{if eq .Name "containerd"}}{{.Version}}{{end}}{{end}}' 2>/dev/null || true)
+  # `containerd --version` prints e.g. "containerd containerd v2.3.3 <commit>".
+  # Take the third word with POSIX built-ins only, so this needs no awk/tr.
+  tenkacloud_containerd_version_line=$(containerd --version 2>/dev/null || true)
+  # Disable pathname expansion so a version string is never glob-expanded, then
+  # word-split. `set --` here touches only this function's positional params.
+  set -f
+  # shellcheck disable=SC2086 # deliberate word-splitting to pick the 3rd field.
+  set -- $tenkacloud_containerd_version_line
+  set +f
+  # `${3:-}` keeps this safe under `set -u` when the line had fewer than 3 words.
+  TENKACLOUD_ONDISK_CONTAINERD_VERSION=${3:-}
+
+  [ -n "$TENKACLOUD_RUNNING_CONTAINERD_VERSION" ] || return 2
+  [ -n "$TENKACLOUD_ONDISK_CONTAINERD_VERSION" ] || return 2
+
+  [ "$TENKACLOUD_RUNNING_CONTAINERD_VERSION" != "$TENKACLOUD_ONDISK_CONTAINERD_VERSION" ]
+}
+
 # Resolve the Unix socket the ACTIVE Docker context uses.
 #
 # The control-plane container bind-mounts this socket to start problem
