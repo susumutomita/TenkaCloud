@@ -10,6 +10,7 @@
 TENKACLOUD_DOCKER_DISK_USED_PERCENT=""
 TENKACLOUD_DOCKER_DISK_FREE_KB=""
 TENKACLOUD_DOCKER_DESKTOP_SETTINGS=""
+TENKACLOUD_DOCKER_SOCKET_GID=""
 
 # Docker Desktop/Colima/native Linux differ in where the daemon filesystem
 # lives. A throwaway busybox container measures the daemon-side root filesystem
@@ -152,8 +153,44 @@ tenkacloud_check_docker_desktop_host_networking() {
   return 0
 }
 
+# The main control plane runs as a fixed non-root UID/GID. It still needs to
+# talk to the active Docker daemon during the #3097 migration away from the raw
+# socket. Grant exactly the daemon socket's numeric group as a supplementary
+# group rather than running the entire control plane as root or chmod'ing the
+# socket world-writable.
+#
+# The socket path must be inspected from the daemon's namespace. On Docker
+# Desktop the host proxy path and daemon-side path are not the same filesystem;
+# mounting the already-resolved source into a throwaway container gives the GID
+# that the control-plane bind mount will actually expose.
+tenkacloud_probe_docker_socket_gid() {
+  TENKACLOUD_DOCKER_SOCKET_GID=""
+  socket=${TENKACLOUD_DOCKER_SOCKET:-/var/run/docker.sock}
+  gid=$(docker run --rm -v "${socket}:/tenkacloud-docker.sock:ro" busybox \
+    stat -c '%g' /tenkacloud-docker.sock 2>/dev/null) || return 1
+  case "$gid" in
+    '' | *[!0-9]*) return 1 ;;
+  esac
+  TENKACLOUD_DOCKER_SOCKET_GID=$gid
+  export TENKACLOUD_DOCKER_SOCKET_GID
+  return 0
+}
+
+tenkacloud_check_docker_socket_gid() {
+  if ! tenkacloud_probe_docker_socket_gid; then
+    echo "Could not determine the Docker daemon socket group safely." >&2
+    echo "  TenkaCloud will not fall back to root or make the socket world-writable." >&2
+    echo "  Active socket: ${TENKACLOUD_DOCKER_SOCKET:-/var/run/docker.sock}" >&2
+    echo "  Verify the active Docker context/socket, then retry 'make local'." >&2
+    return 1
+  fi
+  echo "Docker socket supplementary GID: ${TENKACLOUD_DOCKER_SOCKET_GID}."
+  return 0
+}
+
 tenkacloud_local_start_preflight() {
   tenkacloud_check_docker_vm_disk || return 1
   tenkacloud_check_docker_desktop_host_networking || return 1
+  tenkacloud_check_docker_socket_gid || return 1
   return 0
 }
