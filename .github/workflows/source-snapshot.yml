@@ -1,0 +1,29 @@
+name: source-snapshot
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - automation/source-snapshot
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          submodules: false
+
+      - name: Archive source
+        run: tar --exclude=.git -czf /tmp/tenkacloud-source.tar.gz .
+
+      - name: Upload source snapshot
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: tenkacloud-source
+          path: /tmp/tenkacloud-source.tar.gz
+          if-no-files-found: error
+          retention-days: 1
