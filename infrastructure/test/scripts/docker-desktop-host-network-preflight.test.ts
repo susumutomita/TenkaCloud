@@ -95,6 +95,7 @@ function runLauncher(options: LauncherOptions = {}): {
     env: {
       PATH: `${bin}:/usr/bin:/bin`,
       TENKACLOUD_DOCKER_SOCKET: "/tmp/fake-docker.sock",
+      TENKACLOUD_DOCKER_SOCKET_GID: "0",
       HOSTNET_TEST_DOCKER_LOG: dockerLog,
       HOSTNET_TEST_OPERATING_SYSTEM: options.operatingSystem ?? "Docker Desktop",
       HOSTNET_TEST_PROBE_STARTS: options.probeStarts === false ? "0" : "1",

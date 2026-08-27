@@ -126,6 +126,32 @@ tenkacloud_resolve_docker_socket() {
   export TENKACLOUD_DOCKER_SOCKET
 }
 
+tenkacloud_resolve_docker_socket_gid() {
+  if [ -n "${TENKACLOUD_DOCKER_SOCKET_GID:-}" ]; then
+    case "$TENKACLOUD_DOCKER_SOCKET_GID" in
+      *[!0-9]*) return 1 ;;
+    esac
+    export TENKACLOUD_DOCKER_SOCKET_GID
+    return 0
+  fi
+  TENKACLOUD_DOCKER_SOCKET_GID=""
+  if [ "$(uname -s)" = "Darwin" ]; then
+    # The source path is resolved inside the Desktop/Colima VM, not on macOS.
+    # Their socket proxy is exposed to containers through supplementary group 0.
+    TENKACLOUD_DOCKER_SOCKET_GID=0
+  elif stat -c '%g' "$TENKACLOUD_DOCKER_SOCKET" >/dev/null 2>&1; then
+    TENKACLOUD_DOCKER_SOCKET_GID=$(stat -c '%g' "$TENKACLOUD_DOCKER_SOCKET")
+  elif stat -f '%g' "$TENKACLOUD_DOCKER_SOCKET" >/dev/null 2>&1; then
+    TENKACLOUD_DOCKER_SOCKET_GID=$(stat -f '%g' "$TENKACLOUD_DOCKER_SOCKET")
+  else
+    return 1
+  fi
+  case "$TENKACLOUD_DOCKER_SOCKET_GID" in
+    '' | *[!0-9]*) return 1 ;;
+  esac
+  export TENKACLOUD_DOCKER_SOCKET_GID
+}
+
 tenkacloud_print_docker_socket_guidance() {
   entrypoint=${1:-make local}
   case "$TENKACLOUD_DOCKER_SOCKET_ERROR_KIND" in
@@ -214,6 +240,11 @@ tenkacloud_require_docker() {
   fi
   if ! tenkacloud_resolve_docker_socket; then
     tenkacloud_print_docker_socket_guidance "$entrypoint"
+    return 1
+  fi
+  if ! tenkacloud_resolve_docker_socket_gid; then
+    echo "Could not determine the Docker socket group for $TENKACLOUD_DOCKER_SOCKET." >&2
+    echo "  The non-root control plane needs that supplementary GID to reach Docker." >&2
     return 1
   fi
 }

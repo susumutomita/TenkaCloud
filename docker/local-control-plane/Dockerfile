@@ -136,7 +136,19 @@ COPY --from=build /app/apps/participant-portal/dist /app/apps/participant-portal
 ENV TENKACLOUD_LOCAL_DIR=/data
 ENV TENKACLOUD_LOCAL_PORTAL_DIST=/app/apps/participant-portal/dist
 ENV LOCAL_API_PORT=5175
+# `compose.local.yaml` mounts /tmp as tmpfs under a read-only root filesystem.
+# Keep Bun's writable home/cache there rather than under the immutable image.
+ENV HOME=/tmp/tenkacloud-home
+RUN test "$(id -u bun)" = "1000" \
+    && test "$(id -g bun)" = "1000" \
+    && mkdir -p /data \
+    && chown bun:bun /data
 VOLUME ["/data"]
+
+# The runtime image already provides the unprivileged `bun` user (uid/gid 1000).
+# Docker access is granted only through the socket's supplementary numeric GID in
+# compose.local.yaml; the long-running control plane itself never runs as uid 0.
+USER bun
 
 # Runs in the FOREGROUND as this container's PID 1 (not `up`'s host-oriented
 # detach-and-track-by-PID model — see containerServe() in
