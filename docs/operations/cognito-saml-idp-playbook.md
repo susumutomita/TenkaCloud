@@ -37,11 +37,11 @@ IdP 側へ入力する値は、Application Admin Console または Admin Console
 | 項目 | 用途 |
 | --- | --- |
 | ACS URL | IdP が SAML Response を POST する Cognito の endpoint。通常は `https://<cognito-domain>/saml2/idpresponse` |
-| SP Entity ID | SAML audience / identifier。通常は `urn:amazon:cognito:sp:<user-pool-id>` |
+| SP エンティティ ID | SAML audience / identifier。通常は `urn:amazon:cognito:sp:<user-pool-id>` |
 | email attribute mapping | SAML assertion の email claim を Cognito の `email` 属性へ写す |
-| IdP metadata XML | Entity ID、SSO endpoint、signing certificate 等を Cognito に登録する |
+| IdP metadata XML | エンティティ ID、SSO endpoint、signing certificate 等を Cognito に登録する |
 
-画面の既定 email claim URI は次の値だが、実際の入力欄を正本とする。
+画面のデフォルト email claim URI は次の値だが、実際の入力欄を正本とする。
 
 ```text
 http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress
@@ -54,7 +54,7 @@ Cognito は少なくとも一貫した `NameID` と、User Pool で必須にな�
 - [ ] 接続対象が Control Plane User Pool か、特定 silo tenant の User Pool かを決めた。
 - [ ] TenkaCloud 側で IdP を登録できる TenantAdmin または SystemAdmin がいる。
 - [ ] IdP 側で enterprise application / custom SAML application を作成できる管理者がいる。
-- [ ] ID プロバイダ追加画面から ACS URL と SP Entity ID を控えた。
+- [ ] ID プロバイダ追加画面から ACS URL と SP エンティティ ID を控えた。
 - [ ] 本番ユーザーとは別のテストユーザーを用意した。
 - [ ] テストユーザーの email、NameID、所属グループが想定どおり assertion に入ることを確認できる。
 - [ ] IdP 側で対象ユーザーまたはグループをアプリケーションへ割り当てる担当者が決まっている。
@@ -69,7 +69,7 @@ Cognito は少なくとも一貫した `NameID` と、User Pool で必須にな�
 1. 対象の Admin Console に local administrator でサインインする。
 2. **ID プロバイダ**を開き、追加を選ぶ。
 3. 対象プロバイダのガイドを選ぶ。AWS IAM Identity Center は **汎用 SAML** として扱う。
-4. ACS URL、SP Entity ID、email attribute mapping をコピーする。
+4. ACS URL、SP エンティティ ID、email attribute mapping をコピーする。
 5. この画面は閉じず、IdP 側の設定を進める。
 
 ### 2. IdP 側に TenkaCloud を登録する
@@ -78,7 +78,7 @@ IdP 側で次を設定する。
 
 - SAML protocol: SAML 2.0
 - Reply URL / ACS URL: TenkaCloud 画面の ACS URL
-- Identifier / Audience / Entity ID: TenkaCloud 画面の SP Entity ID
+- Identifier / Audience / エンティティ ID: TenkaCloud 画面の SP エンティティ ID
 - NameID: 同じユーザーに対して継続的に同じ値を返す属性。原則として email を使う
 - email claim: TenkaCloud 画面の email attribute mapping と同じ claim 名
 - signing: SAML assertion または response を署名する
@@ -103,7 +103,7 @@ IdP 側で次を設定する。
 1. Microsoft Entra admin center で **Enterprise applications** を開く。
 2. 新しい enterprise application を作り、SAML single sign-on を選ぶ。
 3. Basic SAML Configuration で次を設定する。
-   - Identifier (Entity ID): TenkaCloud の SP Entity ID
+   - Identifier (エンティティ ID): TenkaCloud の SP エンティティ ID
    - Reply URL (ACS URL): TenkaCloud の ACS URL
 4. Attributes & Claims で、NameID と email claim がテストユーザーの email を返すようにする。
 5. Users and groups でテストユーザーまたはテストグループを割り当てる。
@@ -119,9 +119,9 @@ Entra ID の metadata はファイルで取得する運用になるため、sign
 3. Google 側の IdP metadata をダウンロードする。
 4. Service provider details に次を設定する。
    - ACS URL: TenkaCloud の ACS URL
-   - Entity ID: TenkaCloud の SP Entity ID
+   - エンティティ ID: TenkaCloud の SP エンティティ ID
    - Name ID: primary email
-5. email claim が TenkaCloud の email attribute mapping と一致するよう属性を設定する。
+5. email claim が TenkaCloud の email attribute mapping と一致するように属性を設定する。
 6. テストユーザーまたは組織部門にアプリを有効化する。
 7. metadata XML を TenkaCloud に登録する。
 
@@ -134,7 +134,7 @@ Google 側の設定反映には時間差が生じる場合があるため、変�
 3. IAM Identity Center metadata file をダウンロードする。
 4. Application metadata は手動入力を選び、次を設定する。
    - Application ACS URL: TenkaCloud の ACS URL
-   - Application SAML audience: TenkaCloud の SP Entity ID
+   - Application SAML audience: TenkaCloud の SP エンティティ ID
 5. Subject / NameID を安定した email にし、TenkaCloud が要求する email claim を attribute mapping に追加する。
 6. テストユーザーまたは、推奨される場合はテストグループをアプリへ割り当てる。
 7. IAM Identity Center metadata XML を TenkaCloud に登録する。
@@ -146,7 +146,7 @@ IAM Identity Center の AWS アカウント／Permission Set 割り当てと、c
 汎用 SAML ガイドを選び、次を満たす。
 
 - HTTP-POST binding で Cognito ACS URL へ response を送る
-- audience が SP Entity ID と完全一致する
+- audience が SP エンティティ ID と完全一致する
 - `NameID` が存在し、同一ユーザーで安定している
 - required attribute、通常は email、が assertion に含まれる
 - metadata XML に現在有効な signing certificate が含まれる
@@ -173,13 +173,13 @@ IAM Identity Center の AWS アカウント／Permission Set 割り当てと、c
 | --- | --- | --- |
 | IdP へ遷移しない | IdP 未登録、対象環境違い、provider routing 未反映 | 接続対象 User Pool、runtime config、ID プロバイダ一覧を確認する |
 | IdP で「Reply URL 不一致」 | ACS URL の誤り | TenkaCloud 画面から ACS URL を再コピーする。末尾 path を省略しない |
-| IdP で「Audience / Identifier 不一致」 | SP Entity ID の誤り | TenkaCloud 画面の SP Entity ID と完全一致させる |
+| IdP で「Audience / Identifier 不一致」 | SP エンティティ ID の誤り | TenkaCloud 画面の SP エンティティ ID と完全一致させる |
 | Cognito が SAML response を拒否 | metadata 不正、署名証明書不一致、NameID 不足、時刻ずれ | IdP sign-in log、metadata XML、certificate、NameID、端末／IdP 時刻を確認する |
 | ログイン後に別ユーザーが作成される | NameID の表記または大小文字が変わった | NameID source を固定し、既存ユーザーと同じ値を返す |
 | ログインは成功するが email が空 | email claim 名と attribute mapping が不一致 | assertion の claim 名と TenkaCloud の email mapping を一致させる |
 | ログインは成功するが 403 | group-to-role mapping、tenant、role claim の不一致 | まず認証済み email / tenant を確認し、その後 role mapping を確認する |
 | 一部ユーザーだけ失敗 | IdP application への割り当て漏れ、属性欠落 | IdP の user/group assignment と対象ユーザーの属性を確認する |
-| 全ユーザーが突然失敗 | signing certificate 更新、metadata 期限切れ、IdP 停止 | 新 metadata を取得し、break-glass admin で TenkaCloud 側を更新する |
+| 全ユーザーが突然失敗 | signing certificate 更新、metadata 内の signing certificate 期限切れ、IdP 停止 | 新 metadata を取得し、break-glass admin で TenkaCloud 側を更新する |
 | IdP 選択が想定外 | 同一 email domain に複数 provider、directory 不整合 | 接続済み provider と domain routing を確認する。候補が複数なら選択画面が正常 |
 
 切り分け時は次の順で証跡を集める。
@@ -222,7 +222,7 @@ TenkaCloud 側を残したまま IdP application を先に削除すると、利�
 - [ ] System Admin または TenantAdmin の SSO が private window で成功する。
 - [ ] Operator / Viewer の権限制御を確認した。
 - [ ] IdP 側で本番利用グループが TenkaCloud application に割り当てられている。
-- [ ] ACS URL、SP Entity ID、metadata XML の対象環境を再確認した。
+- [ ] ACS URL、SP エンティティ ID、metadata XML の対象環境を再確認した。
 - [ ] certificate の有効期限がイベント終了後まで十分に残っている。
 - [ ] break-glass administrator でログインできる。
 - [ ] Participant Portal の参加者ログイン鍵は別経路で配布することを運営メンバーが理解している。
