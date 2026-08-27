@@ -27,9 +27,9 @@ jobs:
           GIT_COMMITTER_EMAIL: oyster880@gmail.com
         run: |
           set -euo pipefail
-          for encoded in .automation/*.patch.b64; do
-            patch=$(basename "$encoded" .b64)
-            base64 --decode "$encoded" > "/tmp/$patch"
+          for encoded in .automation/*.patch.gz.b64; do
+            patch=$(basename "$encoded" .gz.b64)
+            base64 --decode "$encoded" | gzip --decompress > "/tmp/$patch"
           done
           git config user.name "$GIT_AUTHOR_NAME"
           git config user.email "$GIT_AUTHOR_EMAIL"
