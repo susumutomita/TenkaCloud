@@ -14,11 +14,11 @@
  */
 import { spawnSync } from "node:child_process";
 import {
-  LONG_RUNNING_INSPECT_FORMAT,
   type ComposeService,
   classifyService,
   describeFailure,
   evaluateHealth,
+  LONG_RUNNING_INSPECT_FORMAT,
   looksDiskFull,
   parseComposePs,
   parseLongRunning,
