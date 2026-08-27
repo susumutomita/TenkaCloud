@@ -25,6 +25,10 @@ PORTAL_PORT="${LOCAL_API_PORT:-5175}"
 # Keep the participant launcher's Docker contract identical to `make doctor`.
 # shellcheck source=scripts/local/docker-prerequisites.sh
 . "$repo_root/scripts/local/docker-prerequisites.sh"
+# #3093/#3095: start-only probes. Cleanup/status must remain available even
+# when disk pressure or Desktop networking prevents a new startup.
+# shellcheck source=scripts/local/docker-runtime-preflight.sh
+. "$repo_root/scripts/local/docker-runtime-preflight.sh"
 
 require_docker() {
   tenkacloud_require_docker "make local"
@@ -178,6 +182,9 @@ cmd_up() {
     echo "  Every problem starts on demand from the Portal instead." >&2
   fi
   require_docker
+  # #3093/#3095: fail/warn before the expensive control-plane build. This is
+  # start-only so disk pressure can never prevent cleanup/status commands.
+  tenkacloud_local_start_preflight
   ensure_problems_submodule
   reclaim_foreign_control_plane_container
   $COMPOSE build
