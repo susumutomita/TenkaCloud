@@ -18,6 +18,18 @@ Lite mode deploys the application plane with `tenantId="local"`:
   when you explicitly set `CDK_PARAM_DEPLOY_VIA_LAMBDA=false`; see
   `infrastructure/lib/problem-deploy/build-deploy-pipeline.ts`.
 
+## Administrator SSO
+
+SaaS Control Plane administrators and silo-tenant administrators can connect their
+Cognito User Pool to an external SAML 2.0 IdP. Use the values rendered by the
+Admin Console as the source of truth for the ACS URL, SP Entity ID, and email
+attribute mapping. The end-to-end setup, rehearsal, troubleshooting, certificate
+rotation, and removal procedure is in the
+[Cognito / SAML IdP operations playbook](./docs/operations/cognito-saml-idp-playbook.md).
+
+Participant Portal authentication is separate: participants use per-team login keys,
+not Cognito or SAML accounts.
+
 ## Lite mode — local terminal
 
 Use this when you can install the repo toolchain (Bun / CDK) locally.
