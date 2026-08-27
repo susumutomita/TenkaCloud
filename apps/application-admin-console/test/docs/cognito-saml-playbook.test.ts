@@ -15,7 +15,9 @@ describe("Cognito / SAML IdP operations playbook", () => {
     const eventRunbook = readRepoFile("docs/operations/event-runbook.md");
     const deploymentGuide = readRepoFile("DEPLOYMENT_GUIDE.md");
 
-    expect(eventRunbook).toContain("[cognito-saml-idp-playbook.md](./cognito-saml-idp-playbook.md)");
+    expect(eventRunbook).toContain(
+      "[cognito-saml-idp-playbook.md](./cognito-saml-idp-playbook.md)",
+    );
     expect(deploymentGuide).toContain(
       "[Cognito / SAML IdP operations playbook](./docs/operations/cognito-saml-idp-playbook.md)",
     );
@@ -26,11 +28,10 @@ describe("Cognito / SAML IdP operations playbook", () => {
       "apps/application-admin-console/src/pages/CreateIdpModal.tsx",
     );
     const cognitoHelpers = readRepoFile("apps/application-admin-console/src/lib/cognito.ts");
-    const emailClaim =
-      "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress";
+    const emailClaim = "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress";
 
     expect(createIdpModal).toMatch(/new URL\(\s*"\/saml2\/idpresponse"/);
-    expect(cognitoHelpers).toContain("urn:amazon:cognito:sp:${userPoolId}");
+    expect(cognitoHelpers).toMatch(/urn:amazon:cognito:sp:\$\{userPoolId\}/);
     expect(createIdpModal).toContain(emailClaim);
 
     expect(playbook).toContain("ID プロバイダ追加画面に表示される値をコピーする");
