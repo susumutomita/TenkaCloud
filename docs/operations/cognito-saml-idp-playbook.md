@@ -110,7 +110,7 @@ IdP 側で次を設定する。
 6. SAML Certificates から Federation Metadata XML をダウンロードする。
 7. XML を TenkaCloud に登録する。
 
-Entra ID の metadata はファイルで取得する運用になるため、signing certificate 更新時は新しい XML を再取得して TenkaCloud 側を更新する。
+Entra ID では metadata をファイルとして取得するため、signing certificate 更新時は新しい XML を再取得して TenkaCloud 側を更新する。
 
 ### Google Workspace
 
