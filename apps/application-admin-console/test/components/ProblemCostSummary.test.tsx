@@ -1,6 +1,9 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { ProblemCostSummary } from "../../src/components/ProblemCostSummary";
+import {
+  ProblemAlwaysOnSummary,
+  ProblemCostSummary,
+} from "../../src/components/ProblemCostSummary";
 import type { ProblemCostEstimateSummary } from "../../src/data/problems";
 
 const t = (key: string, params?: Readonly<Record<string, string | number>>) =>
@@ -31,6 +34,12 @@ describe("ProblemCostSummary", () => {
 
   it("should render a quiet state when no estimate is available", () => {
     render(<ProblemCostSummary estimate={undefined} t={t} />);
+
+    expect(screen.getByText("problem_cost.unavailable")).toBeInTheDocument();
+  });
+
+  it("should render a quiet always-on state when no estimate is available", () => {
+    render(<ProblemAlwaysOnSummary estimate={undefined} t={t} />);
 
     expect(screen.getByText("problem_cost.unavailable")).toBeInTheDocument();
   });
