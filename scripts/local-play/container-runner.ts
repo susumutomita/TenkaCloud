@@ -12,6 +12,7 @@
  */
 
 import { dirname, join, resolve } from "node:path";
+import { assertComposePolicy } from "./compose-policy";
 import type { ContainerProblem } from "./manifest";
 import { remapComposeHostPorts, remapContainerProblem } from "./port-remap";
 
@@ -115,10 +116,16 @@ export class ContainerRunner {
     offset: number,
     ownership?: ContainerStartOwnershipHooks,
   ): Promise<StartedContainer> {
-    const { text, portMap } = remapComposeHostPorts(
-      this.deps.readCompose(problem.composePath),
-      offset,
-    );
+    const originalCompose = this.deps.readCompose(problem.composePath);
+    // [Issue #3097] Deny-by-default structural policy, fail-closed before anything is written or
+    // started. Port remapping below only rewrites published-port text (port-remap.ts preserves
+    // everything else byte-for-byte), so validating the pre-remap text is equivalent to
+    // validating what actually starts.
+    assertComposePolicy(originalCompose, {
+      problemDir: problem.problemDir,
+      composePath: problem.composePath,
+    });
+    const { text, portMap } = remapComposeHostPorts(originalCompose, offset);
     let composePath = problem.composePath;
     let projectDirectory: string | undefined;
     let remappedComposePath: string | undefined;
@@ -188,6 +195,13 @@ export class ContainerRunner {
    */
   async recover(problem: ContainerProblem, unit: LocalComposeUnit): Promise<RecoveredContainer> {
     const originalCompose = this.deps.readCompose(problem.composePath);
+    // [Issue #3097] Same fail-closed policy as `start`: a compose file that was compliant when a
+    // container was first started must still be compliant when the control plane reconciles it
+    // after a restart (a catalog checkout could have changed underneath a long-lived session).
+    assertComposePolicy(originalCompose, {
+      problemDir: problem.problemDir,
+      composePath: problem.composePath,
+    });
     const offset = this.recoverOffset(problem, unit, originalCompose);
     const remapped = remapComposeHostPorts(originalCompose, offset);
     this.assertUnitMatchesProblem(problem, unit, offset, remapped.text);
