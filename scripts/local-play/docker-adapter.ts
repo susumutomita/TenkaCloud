@@ -326,8 +326,19 @@ export function isComposeUnitRunning(unit: LocalComposeUnit, deps: ComposePsDeps
 
 const DIAGNOSTIC_LOG_LINES = 20;
 const DIAGNOSTIC_LOG_CHARS = 6_000;
-const SENSITIVE_LOG_LINE_RE =
-  /["']?(?:flag|secret|password|passwd|token|credential|authorization|cookie|api[_ -]?key|access[_ -]?key|private[_ -]?key)["']?\s*[:=]/i;
+const SENSITIVE_LOG_KEYS = new Set([
+  "flag",
+  "secret",
+  "password",
+  "passwd",
+  "token",
+  "credential",
+  "authorization",
+  "cookie",
+  "apikey",
+  "accesskey",
+  "privatekey",
+]);
 const ANSI_ESCAPE_RE = new RegExp("\\x1B\\[[0-?]*[ -/]*[@-~]", "g");
 
 export interface ComposeDiagnosticsDeps {
@@ -369,7 +380,7 @@ function redactDiagnosticLog(raw: string, sensitiveValues: readonly string[]): s
   value = value
     .replace(/:\/\/[^\s/@:]+:[^\s/@]+@/g, "://[redacted]@")
     .split("\n")
-    .map((line) => (SENSITIVE_LOG_LINE_RE.test(line) ? "[redacted sensitive log line]" : line))
+    .map((line) => (isSensitiveLogLine(line) ? "[redacted sensitive log line]" : line))
     .slice(-DIAGNOSTIC_LOG_LINES)
     .join("\n")
     .trim();
@@ -379,10 +390,41 @@ function redactDiagnosticLog(raw: string, sensitiveValues: readonly string[]): s
   return value;
 }
 
+function isSensitiveLogLine(line: string): boolean {
+  const separator = line.search(/[:=]/);
+  if (separator < 0) return false;
+  const key = line
+    .slice(0, separator)
+    .toLowerCase()
+    .replaceAll(/[^a-z]/g, "");
+  return SENSITIVE_LOG_KEYS.has(key);
+}
+
 function serviceStateLine(service: ReturnType<typeof parseComposePs>[number]): string {
   const state = service.state || "unknown";
   const health = service.health || "none";
   return `- ${service.service || service.name || "unknown"}: state=${state}, health=${health}, exit=${service.exitCode}`;
+}
+
+function findLongRunningServices(
+  services: ReturnType<typeof parseComposePs>,
+  env: NodeJS.ProcessEnv,
+  deps: ComposeDiagnosticsDeps,
+): Set<string> {
+  const longRunning = new Set<string>();
+  for (const service of services) {
+    if (service.state !== "exited" || service.name === "") continue;
+    const inspected = runCapturedCompose(
+      { command: "docker", prefix: [], label: "docker" },
+      ["inspect", service.name, "--format", LONG_RUNNING_INSPECT_FORMAT],
+      env,
+      deps,
+    );
+    if (inspected.status !== 0 || parseLongRunning(inspected.stdout ?? "")) {
+      longRunning.add(service.name);
+    }
+  }
+  return longRunning;
 }
 
 /**
@@ -410,19 +452,7 @@ export function diagnoseComposeUnit(
     return `Container diagnostics for ${unit.composeProjectName}: no compose services were reported.`;
   }
 
-  const longRunning = new Set<string>();
-  for (const service of services) {
-    if (service.state !== "exited" || service.name === "") continue;
-    const inspected = runCapturedCompose(
-      { command: "docker", prefix: [], label: "docker" },
-      ["inspect", service.name, "--format", LONG_RUNNING_INSPECT_FORMAT],
-      env,
-      deps,
-    );
-    if (inspected.status !== 0 || parseLongRunning(inspected.stdout ?? "")) {
-      longRunning.add(service.name);
-    }
-  }
+  const longRunning = findLongRunningServices(services, env, deps);
 
   const failing = services.filter((service) => {
     const verdict = classifyService(service, longRunning.has(service.name));

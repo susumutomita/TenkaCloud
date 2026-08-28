@@ -25,7 +25,7 @@ function psRows(rows: readonly Record<string, unknown>[]): string {
 
 describe("diagnoseComposeUnit", () => {
   it("reports exited and unhealthy service state and only queries the authenticated project", () => {
-    const calls: Array<[string, readonly string[]]> = [];
+    const calls: [string, readonly string[]][] = [];
     const run = vi.fn((command: string, args: readonly string[]): Result => {
       calls.push([command, args]);
       if (args.includes("ps")) {
