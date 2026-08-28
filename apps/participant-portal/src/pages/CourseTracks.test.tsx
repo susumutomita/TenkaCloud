@@ -46,8 +46,6 @@ function entry(overrides: Partial<ProblemCatalogEntry>): ProblemCatalogEntry {
     phases: [],
     disruptions: [],
     runtime: { provider: "docker", engine: "compose" },
-    graphNodes: [],
-    graphRelations: [],
     ...overrides,
   } as ProblemCatalogEntry;
 }
@@ -159,32 +157,6 @@ describe("CourseTracksPage (#2786)", () => {
     const multi = screen.getByTestId("course-problem-multi");
     expect(multi).toHaveTextContent('checkpoints:{"solved":1,"total":2}');
     expect(screen.getByTestId("course-problem-single")).not.toHaveTextContent("checkpoints:");
-  });
-
-  it("should mark a solved problem and name what is still blocking another", () => {
-    catalog.entries = [
-      tracked("a", 10, "Week 1"),
-      tracked("b", 20, "Week 1", {
-        graphRelations: [{ type: "requires", source: "problem.b", target: "problem.a" }],
-      }),
-    ];
-    render(<CourseTracksPage />);
-    expect(screen.getByTestId("course-problem-b")).toHaveTextContent("prerequisite_unmet");
-  });
-
-  it("should not claim a prerequisite is unmet once it is solved", () => {
-    catalog.entries = [
-      tracked("a", 10, "Week 1"),
-      tracked("b", 20, "Week 1", {
-        graphRelations: [{ type: "requires", source: "problem.b", target: "problem.a" }],
-      }),
-    ];
-    teamView.view = {
-      problems: [{ problemId: "a", jobId: "j", scoring: { flagSubmitted: true } }],
-    };
-    render(<CourseTracksPage />);
-    expect(screen.getByTestId("course-problem-a")).toHaveTextContent("course_track.solved");
-    expect(screen.getByTestId("course-problem-b")).not.toHaveTextContent("prerequisite_unmet");
   });
 
   it("should translate a known alignment role", () => {

@@ -37,8 +37,6 @@ const ENTRY: ProblemCatalogEntry = {
   phases: [],
   disruptions: [],
   runtime: { provider: "docker", engine: "compose" },
-  graphNodes: [],
-  graphRelations: [],
 };
 
 const LOCAL_CONFIG: AppConfig = {
