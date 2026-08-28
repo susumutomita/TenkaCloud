@@ -186,16 +186,13 @@
     "empty_filtered": "条件に一致する問題はありません。"
   },
   "problem_cost": {
-    "header": "コスト目安",
-    "per_hour": "{cost}/時",
-    "per_session": "典型セッション {cost}",
-    "per_day_left_running": "放置時の 1 日目安 {cost}",
+    "header": "課金リスク",
     "always_on_count": "常時課金 {count} 件",
-    "no_always_on": "常時課金なし",
+    "no_always_on": "常時課金リソースなし",
     "always_on_resources": "常時課金: {resources}",
     "resources": "AWS リソース: {resources}",
     "manual_review": "要確認: {resources}",
-    "unavailable": "見積もりなし"
+    "unavailable": "リスク分類なし"
   },
   "event_create": {
     "title": "新規 Event 作成",
@@ -231,8 +228,7 @@
     "problemset_placeholder": "問題を選んでください",
     "col_problem": "問題",
     "col_region": "Region",
-    "col_estimated_cost": "コスト目安",
-    "col_always_on_cost": "常時課金リスク",
+    "col_estimated_cost": "課金リスク",
     "cancel": "キャンセル",
     "submit": "Event を作成",
     "deploy_modal_header": "Event を作成しました",
@@ -376,8 +372,7 @@
     "problemset_col_id": "Problem ID",
     "problemset_col_account": "Default AWS Account",
     "problemset_col_region": "Default Region",
-    "problemset_col_estimated_cost": "コスト目安",
-    "problemset_col_always_on_cost": "常時課金リスク",
+    "problemset_col_estimated_cost": "課金リスク",
     "problemset_col_status": "Deploy Status",
     "problemset_col_jobs": "Job Links",
     "problemset_empty": "未設定 — Event 編集 (Phase 2c+) で追加できる予定",

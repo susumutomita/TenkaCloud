@@ -3,14 +3,12 @@
  *
  * 問題一覧 (`/problems`) は「自チームに deploy された問題のカタログ」で、順序を持たない。
  * 7 週間の講座を並べても、参加者には単発問題の集合にしか見えない。この画面は同じ問題を
- * **週・章の順序と前提関係つき**で見せる。
+ * **週・章の順序つき**で見せる。
  *
  * 表示は metadata から組み立てる (= 固定ページに hard-code しない)。track を宣言しない
  * 既存問題は 1 件も現れず、`/problems` 側の挙動は変わらない。
  *
- * 未達成の前提があっても **lock はしない**。推奨順から外し、何が足りないかを書くだけである。
- * 前提判定は catalog の bug (cycle / 欠損) で `unknown` に倒れることがあり、それで進行不能に
- * なるのは participant の落ち度ではない。
+ * 並び順の正本は `track.order` と `courseAlignment.week` であり、別の知識グラフは持たない。
  */
 
 import Alert from "@cloudscape-design/components/alert";
@@ -95,14 +93,6 @@ function ProblemRow({
             variant="key-value"
             label={t("course_track.checkpoint_label")}
           />
-        ) : null}
-
-        {problem.prerequisiteState === "unmet" ? (
-          <Box variant="small" color="text-status-warning">
-            {t("course_track.prerequisite_unmet", {
-              problems: problem.unmetPrerequisites.join(", "),
-            })}
-          </Box>
         ) : null}
 
         {problem.sources.length > 0 ? (

@@ -3198,7 +3198,7 @@
   },
   "packages/portal-contracts/src/problem-catalog.test.ts": {
     "@typescript-eslint/consistent-type-assertions": {
-      "count": 27
+      "count": 22
     }
   },
   "packages/problem-cost/src/index.ts": {

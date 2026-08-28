@@ -53,18 +53,14 @@ const problem = (over: Partial<ProblemDetail> = {}): ProblemDetail =>
     exposedPorts: [{ name: "web", port: 8080 }],
     learningGoals: ["goal-a", "goal-b"],
     costEstimate: {
-      totalHourlyUsd: 0.025,
-      perSessionUsd: 0.01875,
-      perDayIfLeftRunningUsd: 0.6,
       alwaysOnResources: [
         {
           logicalId: "AppLoadBalancer",
           resourceType: "AWS::ElasticLoadBalancingV2::LoadBalancer",
-          roughHourlyUsd: 0.0225,
           riskLevel: "medium",
         },
       ],
-      unpricedResourceTypes: [],
+      unclassifiedResourceTypes: [],
       resourceTypes: ["AWS::ElasticLoadBalancingV2::LoadBalancer"],
     },
     ...over,
@@ -120,7 +116,7 @@ describe("ProblemDetailPage", () => {
     expect(screen.getByText("goal-a")).toBeInTheDocument();
     expect(screen.getByText("goal-b")).toBeInTheDocument();
     expect(screen.getByText("problem_detail.section_cost")).toBeInTheDocument();
-    expect(screen.getByText(/problem_cost.per_day_left_running/)).toBeInTheDocument();
+    expect(screen.getByText(/problem_cost.always_on_count/)).toBeInTheDocument();
     expect(screen.getAllByText(/AWS::ElasticLoadBalancingV2::LoadBalancer/).length).toBeGreaterThan(
       0,
     );
