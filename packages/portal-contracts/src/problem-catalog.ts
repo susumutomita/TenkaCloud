@@ -16,18 +16,11 @@
  */
 
 import type {
-  ParticipantGraphNode,
-  ParticipantGraphRelation,
   ProblemCourseAlignment,
   ProblemCourseMetadataInput,
   ProblemTrackPosition,
 } from "./problem-course-projection.js";
-import {
-  toCourseAlignment,
-  toParticipantGraphNodes,
-  toParticipantGraphRelations,
-  toTrackPosition,
-} from "./problem-course-projection.js";
+import { toCourseAlignment, toTrackPosition } from "./problem-course-projection.js";
 
 export type ProblemCategory = "Battle" | "Challenge";
 export type ProblemStatus = "ready" | "draft" | "deprecated";
@@ -169,10 +162,6 @@ export interface ProblemCatalogEntry {
   readonly track?: ProblemTrackPosition;
   /** Issue #2786: 外部講座との対応 (participant-safe な部分のみ)。 embargoed は不在になる。 */
   readonly courseAlignment?: ProblemCourseAlignment;
-  /** Issue #2786: participant-safe な graph node (learning objective / concept のみ)。 */
-  readonly graphNodes: readonly ParticipantGraphNode[];
-  /** Issue #2786: participant-safe な relation (teaches / covers / requires のみ)。 */
-  readonly graphRelations: readonly ParticipantGraphRelation[];
   /**
    * [TenkaCloudChallenge #402] local play で起動できる問題か。
    *
@@ -314,7 +303,6 @@ function sanitizeI18n(raw: ProblemMetadata["i18n"]): ProblemCatalogEntry["i18n"]
 export function metadataToEntry(metadata: ProblemMetadata): ProblemCatalogEntry {
   const dashboardSlots = metadata.dashboard?.slots;
   const publicI18n = sanitizeI18n(metadata.i18n);
-  const graphNodes = toParticipantGraphNodes(metadata);
   return {
     id: metadata.id,
     name: metadata.name,
@@ -393,10 +381,5 @@ export function metadataToEntry(metadata: ProblemMetadata): ProblemCatalogEntry 
       track: toTrackPosition(metadata.track),
       courseAlignment: toCourseAlignment(metadata.courseAlignment),
     }),
-    graphNodes,
-    graphRelations: toParticipantGraphRelations(
-      metadata.relations,
-      new Set(graphNodes.map((n) => n.id)),
-    ),
   };
 }

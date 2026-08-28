@@ -37,18 +37,14 @@ const problem = (over: Partial<ProblemSummary> & { id: string }): ProblemSummary
   ...over,
 });
 const costEstimate: ProblemSummary["costEstimate"] = {
-  totalHourlyUsd: 0.065,
-  perSessionUsd: 0.0325,
-  perDayIfLeftRunningUsd: 1.56,
   alwaysOnResources: [
     {
       logicalId: "Nat",
       resourceType: "AWS::EC2::NatGateway",
-      roughHourlyUsd: 0.045,
       riskLevel: "high",
     },
   ],
-  unpricedResourceTypes: [],
+  unclassifiedResourceTypes: [],
   resourceTypes: ["AWS::EC2::NatGateway"],
 };
 
@@ -231,8 +227,7 @@ describe("EventCreateProblemsetSection", () => {
     const { container } = render(<EventCreateProblemsetSection {...p} />);
     expect(screen.getByText("Problem 1")).toBeInTheDocument();
     expect(screen.getByText("event_create.col_estimated_cost")).toBeInTheDocument();
-    expect(screen.getByText("event_create.col_always_on_cost")).toBeInTheDocument();
-    expect(screen.getByText(/problem_cost.per_session/)).toBeInTheDocument();
+    expect(screen.getByText(/problem_cost.always_on_count/)).toBeInTheDocument();
     expect(screen.getAllByText("problem_cost.always_on_resources").length).toBeGreaterThan(0);
     // region Select は table 内 (= category filter Select の後)。 testid 無しなので位置で特定。
     const select = createWrapper(container).findAllSelects()[1];

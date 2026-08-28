@@ -18,6 +18,22 @@ tenant creation and multi-cloud are separated as architecture reference.
 7. Stop it and confirm the problem stack is gone from the competitor account.
 8. Give participants the Participant Portal URL, team key, and start time.
 
+## Connect administrator SSO to a corporate IdP
+
+Administrator SSO is separate from the Participant Portal team-login-key flow. TenkaCloud uses a Cognito User Pool as the SAML Service Provider and can connect to SAML 2.0 IdPs such as Microsoft Entra ID, Google Workspace, and AWS IAM Identity Center.
+
+SAML SSO in the Application Admin Console is an experimental feature and is disabled by default. Tenant-level IdP configuration is for Lite or silo-tier deployments with a dedicated User Pool; do not use it for pooled tenants. Complete an end-to-end login rehearsal in a non-production environment before the event.
+
+1. Open **Identity providers** in the Application Admin Console and copy the displayed ACS URL, SP Entity ID, and email attribute mapping. Treat the values rendered by the console as the source of truth rather than copying examples from documentation.
+2. Create a SAML 2.0 application in the IdP and configure the ACS URL and SP Entity ID. Keep `NameID` stable for the same user; email is the usual choice.
+3. Assign a test user or group to the IdP application and obtain the IdP metadata XML. Configure AWS IAM Identity Center through the generic SAML path.
+4. Register the metadata XML in TenkaCloud and verify the email attribute mapping. Leave group-to-role mapping empty for the first test, then add authorization mapping after basic authentication succeeds.
+5. Start sign-in from the TenkaCloud URL in a private-browsing window and verify the complete SP-initiated flow: IdP authentication, Cognito callback, and return to the Application Admin Console. Opening the application only from the IdP portal does not validate TenkaCloud's routing and callback path.
+6. Verify that the normal login path routes to the same IdP and that the resulting email, tenant, and role are correct. IdP registration and normal-login routing are separate configuration paths, so successful registration alone is not sufficient.
+7. Keep at least one existing Cognito local administrator as a break-glass path. SAML assertions, ID tokens, and metadata XML can contain organization and user information; do not paste them unredacted into issues or chat.
+
+For certificate rotation, troubleshooting, and IdP removal, see the [Cognito / SAML IdP connection playbook](https://github.com/susumutomita/TenkaCloud/blob/main/docs/operations/cognito-saml-idp-playbook.md).
+
 ## Create a SaaS tenant (architecture reference)
 
 The repository contains code for a System Admin to create a tenant from

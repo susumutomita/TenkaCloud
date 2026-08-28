@@ -6,16 +6,12 @@ export type ProblemStatus = "ready" | "draft" | "deprecated";
 export interface ProblemCostResourceSummary {
   readonly logicalId: string;
   readonly resourceType: string;
-  readonly roughHourlyUsd: number;
   readonly riskLevel: CostRiskLevel;
 }
 
 export interface ProblemCostEstimateSummary {
-  readonly totalHourlyUsd: number;
-  readonly perSessionUsd: number | undefined;
-  readonly perDayIfLeftRunningUsd: number;
   readonly alwaysOnResources: readonly ProblemCostResourceSummary[];
-  readonly unpricedResourceTypes: readonly string[];
+  readonly unclassifiedResourceTypes: readonly string[];
   readonly resourceTypes: readonly string[];
 }
 
@@ -68,7 +64,7 @@ export interface ProblemSummary {
    * scoring 未宣言 (= deploy のみで競技要素なし) は undefined。 カタログ絞り込みの facet に使う。
    */
   scoringKind?: string;
-  /** Issue #1910: template.yaml から導出した offline cost-risk estimate。 */
+  /** template.yaml から導出した、価格非依存の課金リスク分類。 */
   costEstimate?: ProblemCostEstimateSummary;
   /**
    * Issue #2093: EFFECTIVE catalog provenance — display-only metadata, populated

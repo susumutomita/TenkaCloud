@@ -137,8 +137,6 @@ function alignedCatalogEntry(
       role: "diagnostic",
       sources: [],
     },
-    graphNodes: [],
-    graphRelations: [],
   };
 }
 

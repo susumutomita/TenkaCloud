@@ -4,13 +4,11 @@ import {
   buildCourseTracks,
   type CourseProblemView,
   type CourseTrackView,
-  evaluatePrerequisites,
   isRecommendableTrack,
   type ProblemProgress,
   recommendedNextAcrossTracks,
   recommendNext,
   recommendNextInCourseOrder,
-  resolvePrerequisiteProblemIds,
   TRACKS_EXCLUDED_FROM_DEFAULT_RECOMMENDATION,
   toProblemProgress,
 } from "./course-track";
@@ -20,8 +18,7 @@ import type { ProblemCatalogEntry } from "./problems";
  * Issue #2786: track view の組み立て契約。
  *
  * ここで守りたいのは 2 つ。第一に、track を宣言しない既存問題が 1 件も混ざらないこと。
- * 第二に、壊れた catalog (cycle / 欠損 node / 部分的な track) で participant の画面が
- * 落ちたり、理由なく問題が塞がれたりしないこと。
+ * 第二に、`track.order` に従って deterministic に推薦されること。
  */
 
 function entry(overrides: Partial<ProblemCatalogEntry> = {}): ProblemCatalogEntry {
@@ -40,8 +37,6 @@ function entry(overrides: Partial<ProblemCatalogEntry> = {}): ProblemCatalogEntr
     phases: [],
     disruptions: [],
     runtime: { provider: "docker", engine: "compose" },
-    graphNodes: [],
-    graphRelations: [],
     ...overrides,
   } as ProblemCatalogEntry;
 }
@@ -81,132 +76,6 @@ function alignment(role: string, week = 1) {
   } as Partial<ProblemCatalogEntry>;
 }
 
-describe("resolvePrerequisiteProblemIds", () => {
-  it("should resolve a requires edge that names a problem directly", () => {
-    const a = tracked("a", 10, "W1");
-    const b = tracked("b", 20, "W1", {
-      graphRelations: [{ type: "requires", source: "problem.b", target: "problem.a" }],
-    });
-    expect(resolvePrerequisiteProblemIds(b, [a, b]).resolved).toEqual(["a"]);
-  });
-
-  it("should resolve a concept prerequisite through the problem that teaches it", () => {
-    const teacher = tracked("teacher", 10, "W1", {
-      graphRelations: [{ type: "covers", source: "problem.teacher", target: "concept.x" }],
-    });
-    const learner = tracked("learner", 20, "W1", {
-      graphRelations: [{ type: "requires", source: "problem.learner", target: "concept.x" }],
-    });
-    expect(resolvePrerequisiteProblemIds(learner, [teacher, learner]).resolved).toEqual([
-      "teacher",
-    ]);
-  });
-
-  it("should report a concept that no problem provides as unresolved", () => {
-    const orphan = tracked("orphan", 10, "W1", {
-      graphRelations: [{ type: "requires", source: "problem.orphan", target: "concept.nobody" }],
-    });
-    const result = resolvePrerequisiteProblemIds(orphan, [orphan]);
-    expect(result.resolved).toEqual([]);
-    expect(result.unresolvedTargets).toEqual(["concept.nobody"]);
-  });
-
-  it("should not treat a problem as its own prerequisite", () => {
-    // 自分が teaches する concept を自分で requires する metadata は実在する
-    // (= 「この問題で扱う概念」を両方向で書いてしまうケース)。
-    const selfish = tracked("selfish", 10, "W1", {
-      graphRelations: [
-        { type: "covers", source: "problem.selfish", target: "concept.x" },
-        { type: "requires", source: "problem.selfish", target: "concept.x" },
-      ],
-    });
-    const result = resolvePrerequisiteProblemIds(selfish, [selfish]);
-    expect(result.resolved).toEqual([]);
-    expect(result.unresolvedTargets).toEqual(["concept.x"]);
-  });
-
-  it("should ignore relation types that are not requires", () => {
-    const e = tracked("e", 10, "W1", {
-      graphRelations: [
-        { type: "teaches", source: "problem.e", target: "lo.e.x" },
-        { type: "covers", source: "problem.e", target: "concept.y" },
-      ],
-    });
-    expect(resolvePrerequisiteProblemIds(e, [e]).resolved).toEqual([]);
-  });
-});
-
-describe("evaluatePrerequisites", () => {
-  it("should report met when a problem declares no prerequisite", () => {
-    const a = tracked("a", 10, "W1");
-    expect(evaluatePrerequisites(a, [a], new Map())).toEqual({ state: "met", unmet: [] });
-  });
-
-  it("should report met once every prerequisite is solved", () => {
-    const a = tracked("a", 10, "W1");
-    const b = tracked("b", 20, "W1", {
-      graphRelations: [{ type: "requires", source: "problem.b", target: "problem.a" }],
-    });
-    const map = new Map([["a", progress("a", true)]]);
-    expect(evaluatePrerequisites(b, [a, b], map)).toEqual({ state: "met", unmet: [] });
-  });
-
-  it("should name the unsolved prerequisites rather than only reporting unmet", () => {
-    const a = tracked("a", 10, "W1");
-    const b = tracked("b", 20, "W1", {
-      graphRelations: [{ type: "requires", source: "problem.b", target: "problem.a" }],
-    });
-    expect(evaluatePrerequisites(b, [a, b], new Map())).toEqual({ state: "unmet", unmet: ["a"] });
-  });
-
-  it("should fail soft to unknown when a prerequisite is missing from the catalog", () => {
-    const b = tracked("b", 20, "W1", {
-      graphRelations: [{ type: "requires", source: "problem.b", target: "problem.gone" }],
-    });
-    expect(evaluatePrerequisites(b, [b], new Map()).state).toBe("unknown");
-  });
-
-  it("should fail soft to unknown on a requires cycle instead of throwing", () => {
-    // 著者側のバグだが、participant の画面が落ちる理由にはならない。
-    const a = tracked("a", 10, "W1", {
-      graphRelations: [{ type: "requires", source: "problem.a", target: "problem.b" }],
-    });
-    const b = tracked("b", 20, "W1", {
-      graphRelations: [{ type: "requires", source: "problem.b", target: "problem.a" }],
-    });
-    expect(evaluatePrerequisites(a, [a, b], new Map()).state).toBe("unknown");
-    expect(evaluatePrerequisites(b, [a, b], new Map()).state).toBe("unknown");
-  });
-
-  it("should fail soft to unknown on a longer cycle", () => {
-    const chain = ["a", "b", "c"].map((id, index, all) =>
-      tracked(id, (index + 1) * 10, "W1", {
-        graphRelations: [
-          { type: "requires", source: `problem.${id}`, target: `problem.${all[(index + 1) % 3]}` },
-        ],
-      }),
-    );
-    expect(evaluatePrerequisites(chain[0] as ProblemCatalogEntry, chain, new Map()).state).toBe(
-      "unknown",
-    );
-  });
-
-  it("should stay met for a long acyclic chain", () => {
-    const a = tracked("a", 10, "W1");
-    const b = tracked("b", 20, "W1", {
-      graphRelations: [{ type: "requires", source: "problem.b", target: "problem.a" }],
-    });
-    const c = tracked("c", 30, "W1", {
-      graphRelations: [{ type: "requires", source: "problem.c", target: "problem.b" }],
-    });
-    const map = new Map([
-      ["a", progress("a", true)],
-      ["b", progress("b", true)],
-    ]);
-    expect(evaluatePrerequisites(c, [a, b, c], map)).toEqual({ state: "met", unmet: [] });
-  });
-});
-
 describe("recommendNext", () => {
   function view(overrides: Partial<CourseProblemView>): CourseProblemView {
     return {
@@ -218,8 +87,6 @@ describe("recommendNext", () => {
       estimatedDuration: "10 分",
       learningGoals: [],
       progress: progress("x", false),
-      prerequisiteState: "met",
-      unmetPrerequisites: [],
       sources: [],
       ...overrides,
     } as CourseProblemView;
@@ -241,18 +108,6 @@ describe("recommendNext", () => {
     expect(recommendNext([later, earlier])?.problemId).toBe("earlier");
   });
 
-  it("should skip a problem whose prerequisites are unmet", () => {
-    const blocked = view({ problemId: "blocked", order: 10, prerequisiteState: "unmet" });
-    const open = view({ problemId: "open", order: 20 });
-    expect(recommendNext([blocked, open])?.problemId).toBe("open");
-  });
-
-  it("should still recommend a problem whose prerequisites could not be judged", () => {
-    // unknown で塞ぐと、著者側の graph バグが participant の進行不能に化ける。
-    const unknown = view({ problemId: "u", order: 10, prerequisiteState: "unknown" });
-    expect(recommendNext([unknown])?.problemId).toBe("u");
-  });
-
   it("should hold synthesis back until nothing else is startable", () => {
     const synthesis = view({ problemId: "s", order: 10, role: "synthesis" });
     const transfer = view({ problemId: "t", order: 20, role: "transfer" });
@@ -262,11 +117,6 @@ describe("recommendNext", () => {
   it("should recommend synthesis once it is the only thing left", () => {
     const synthesis = view({ problemId: "s", order: 10, role: "synthesis" });
     expect(recommendNext([synthesis])?.problemId).toBe("s");
-  });
-
-  it("should return nothing when every unsolved problem is blocked", () => {
-    const blocked = view({ problemId: "b", prerequisiteState: "unmet" });
-    expect(recommendNext([blocked])).toBeUndefined();
   });
 });
 
@@ -281,8 +131,6 @@ describe("recommendNextInCourseOrder (#2882)", () => {
       estimatedDuration: "10 分",
       learningGoals: [],
       progress: progress("x", false),
-      prerequisiteState: "met",
-      unmetPrerequisites: [],
       sources: [],
       ...overrides,
     } as CourseProblemView;
@@ -292,12 +140,6 @@ describe("recommendNextInCourseOrder (#2882)", () => {
     const synthesis = view({ problemId: "week-2-synthesis", order: 250, role: "synthesis" });
     const later = view({ problemId: "week-3-mechanism", order: 310, role: "mechanism" });
     expect(recommendNextInCourseOrder([later, synthesis])?.problemId).toBe("week-2-synthesis");
-  });
-
-  it("should skip an unmet prerequisite without locking the rest of the course", () => {
-    const blocked = view({ problemId: "blocked", order: 10, prerequisiteState: "unmet" });
-    const open = view({ problemId: "open", order: 20 });
-    expect(recommendNextInCourseOrder([blocked, open])?.problemId).toBe("open");
   });
 
   it("should break an equal syllabus order by problem id", () => {
@@ -421,12 +263,9 @@ describe("buildCourseTracks", () => {
     expect(buildCourseTracks([a, b], [])[0]?.recommendedNext?.problemId).toBe("a");
   });
 
-  it("should move the recommendation on once a prerequisite is solved", () => {
+  it("should move the recommendation on once the earlier problem is solved", () => {
     const a = tracked("a", 10, "W1", alignment("diagnostic"));
-    const b = tracked("b", 20, "W1", {
-      ...alignment("mechanism"),
-      graphRelations: [{ type: "requires", source: "problem.b", target: "problem.a" }],
-    });
+    const b = tracked("b", 20, "W1", alignment("mechanism"));
     const before = buildCourseTracks([a, b], []);
     expect(before[0]?.recommendedNext?.problemId).toBe("a");
     const after = buildCourseTracks([a, b], [progress("a", true)]);
@@ -436,17 +275,6 @@ describe("buildCourseTracks", () => {
   it("should stop recommending once the whole track is solved", () => {
     const a = tracked("a", 10, "W1");
     expect(buildCourseTracks([a], [progress("a", true)])[0]?.recommendedNext).toBeUndefined();
-  });
-
-  it("should expose the unmet prerequisite on the blocked problem itself", () => {
-    const a = tracked("a", 10, "W1");
-    const b = tracked("b", 20, "W1", {
-      graphRelations: [{ type: "requires", source: "problem.b", target: "problem.a" }],
-    });
-    const blocked = buildCourseTracks([a, b], [])[0]?.chapters[0]?.problems.find(
-      (p) => p.problemId === "b",
-    );
-    expect(blocked).toMatchObject({ prerequisiteState: "unmet", unmetPrerequisites: ["a"] });
   });
 
   it("should surface the pinned source so a link can point at a fixed commit", () => {
