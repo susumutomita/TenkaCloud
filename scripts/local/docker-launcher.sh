@@ -143,31 +143,81 @@ wait_for_portal() {
 #     (scripts/local-play/api.ts) confirms it is this engine answering, the same
 #     standard scripts/onboard/codespaces-start-local.sh already applies via its
 #     <title> grep.
-host_reachable() {
-  url="http://127.0.0.1:${PORTAL_PORT}/healthz"
+host_http_contains() {
+  url=$1
+  expected=$2
   if command -v curl >/dev/null 2>&1; then
-    curl -sf --noproxy '*' --max-time 5 "$url" 2>/dev/null | grep -q '"mode":"local"' && return 0
+    curl -sf --noproxy '*' --max-time 5 "$url" 2>/dev/null | grep -Fq "$expected" && return 0
     return 1
   fi
   if command -v wget >/dev/null 2>&1; then
-    # `--tries` is GNU wget only — busybox wget rejects it as an unknown option and
-    # would exit non-zero, turning this fallback into the very false failure the
-    # proxy fix above removes. Probe for it instead of assuming either flavour.
     wget_tries=""
     if wget --help 2>&1 | grep -q -- '--tries'; then wget_tries="--tries=1"; fi
-    # $wget_tries is a single flag or empty, by construction.
     # shellcheck disable=SC1007,SC2086
     http_proxy= HTTP_PROXY= https_proxy= HTTPS_PROXY= all_proxy= ALL_PROXY= \
-      wget -q -T 5 $wget_tries -O - "$url" 2>/dev/null | grep -q '"mode":"local"' && return 0
+      wget -q -T 5 $wget_tries -O - "$url" 2>/dev/null | grep -Fq "$expected" && return 0
     return 1
   fi
-  return 2 # neither tool available — genuinely unknown, not a failure signal
+  return 2
+}
+
+host_reachable() {
+  host_http_contains "http://127.0.0.1:${PORTAL_PORT}/healthz" '"mode":"local"'
 }
 
 docker_desktop_host_networking_hint() {
   echo "  This usually means Docker Desktop's host networking is not enabled." >&2
   echo "  Docker Desktop >=4.34 required; enable it under Settings > Resources > Network," >&2
   echo "  then retry 'make local'. See: https://docs.docker.com/engine/network/drivers/host/" >&2
+}
+
+docker_desktop_host_networking_preflight() {
+  if ! tenkacloud_is_docker_desktop; then
+    return 0
+  fi
+
+  if ! command -v curl >/dev/null 2>&1 && ! command -v wget >/dev/null 2>&1; then
+    echo "Warning: Docker Desktop host networking could not be preflighted because" >&2
+    echo "  neither curl nor wget is installed. The post-start check will remain unverified." >&2
+    docker_desktop_host_networking_hint
+    return 0
+  fi
+
+  probe_name="tenkacloud-host-network-preflight-$$"
+  probe_port=$((40000 + ($$ % 20000)))
+  probe_marker="tenkacloud-host-network-preflight-ok"
+  probe_id=$(
+    docker run -d --rm --name "$probe_name" --network host busybox \
+      sh -c 'mkdir -p /tmp/www; printf "%s" "$1" > /tmp/www/index.html; httpd -f -p "$2" -h /tmp/www & server=$!; trap "kill $server 2>/dev/null || true" EXIT; sleep 15' \
+      sh "$probe_marker" "$probe_port" 2>/dev/null
+  ) || probe_id=""
+  if [ -z "$probe_id" ]; then
+    echo "Warning: Docker Desktop host networking preflight container could not start;" >&2
+    echo "  continuing to the normal startup check instead of reporting a false failure." >&2
+    docker rm -f "$probe_name" >/dev/null 2>&1 || true
+    return 0
+  fi
+
+  probe_result=1
+  probe_attempt=0
+  while [ "$probe_attempt" -lt 5 ]; do
+    if host_http_contains "http://127.0.0.1:${probe_port}/" "$probe_marker"; then
+      probe_result=0
+      break
+    fi
+    probe_attempt=$((probe_attempt + 1))
+    sleep 1
+  done
+  docker rm -f "$probe_name" >/dev/null 2>&1 || true
+
+  if [ "$probe_result" -ne 0 ]; then
+    echo "Docker Desktop is running, but a temporary --network host container was not" >&2
+    echo "  reachable from this host. TenkaCloud would finish a full image build and then" >&2
+    echo "  expose an unreachable Participant Portal, so startup stopped before the build." >&2
+    docker_desktop_host_networking_hint
+    return 1
+  fi
+  echo "Docker Desktop host networking preflight: reachable."
 }
 
 # [Issue #2963] 固定名 container が **別の compose project** の持ち物として既に存在する場合に
@@ -208,6 +258,7 @@ cmd_up() {
   fi
   require_docker
   preflight_docker_disk
+  docker_desktop_host_networking_preflight
   ensure_problems_submodule
   reclaim_foreign_control_plane_container
   $COMPOSE build
