@@ -18,10 +18,10 @@ afterEach(() => {
   rmSync(sandbox, { recursive: true, force: true });
 });
 
-function runDiskCheck(options: {
-  readonly availableKiB?: number;
-  readonly probeFails?: boolean;
-}): { readonly status: number; readonly stdout: string } {
+function runDiskCheck(options: { readonly availableKiB?: number; readonly probeFails?: boolean }): {
+  readonly status: number;
+  readonly stdout: string;
+} {
   const bin = join(sandbox, "bin");
   mkdirSync(bin);
   writeFileSync(
@@ -88,6 +88,6 @@ describe("Docker VM disk preflight", () => {
       up.indexOf("ensure_problems_submodule"),
     );
     expect(up.indexOf("preflight_docker_disk")).toBeLessThan(up.indexOf("$COMPOSE build"));
-    expect(up).toContain("TenkaCloud did not run either cleanup command");
+    expect(launcher).toContain("TenkaCloud did not run either cleanup command");
   });
 });
