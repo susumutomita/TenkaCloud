@@ -126,6 +126,28 @@ tenkacloud_resolve_docker_socket() {
   export TENKACLOUD_DOCKER_SOCKET
 }
 
+tenkacloud_resolve_docker_socket_gid() {
+  if [ -n "${TENKACLOUD_DOCKER_SOCKET_GID:-}" ]; then
+    case "$TENKACLOUD_DOCKER_SOCKET_GID" in
+      *[!0-9]*) return 1 ;;
+    esac
+    export TENKACLOUD_DOCKER_SOCKET_GID
+    return 0
+  fi
+  TENKACLOUD_DOCKER_SOCKET_GID=""
+  # Resolve the group from the daemon-side mount, not from the host path.
+  # Docker Desktop and Colima can expose a host proxy path whose group differs
+  # from the socket that the control-plane container ultimately sees.
+  TENKACLOUD_DOCKER_SOCKET_GID=$(
+    docker run --rm -v "${TENKACLOUD_DOCKER_SOCKET}:/tenkacloud-docker.sock:ro" busybox \
+      stat -c '%g' /tenkacloud-docker.sock 2>/dev/null
+  ) || return 1
+  case "$TENKACLOUD_DOCKER_SOCKET_GID" in
+    '' | *[!0-9]*) return 1 ;;
+  esac
+  export TENKACLOUD_DOCKER_SOCKET_GID
+}
+
 tenkacloud_print_docker_socket_guidance() {
   entrypoint=${1:-make local}
   case "$TENKACLOUD_DOCKER_SOCKET_ERROR_KIND" in
@@ -214,6 +236,11 @@ tenkacloud_require_docker() {
   fi
   if ! tenkacloud_resolve_docker_socket; then
     tenkacloud_print_docker_socket_guidance "$entrypoint"
+    return 1
+  fi
+  if ! tenkacloud_resolve_docker_socket_gid; then
+    echo "Could not determine the Docker socket group for $TENKACLOUD_DOCKER_SOCKET." >&2
+    echo "  The non-root control plane needs that supplementary GID to reach Docker." >&2
     return 1
   fi
 }

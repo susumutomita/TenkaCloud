@@ -47,6 +47,11 @@ make -C "$repo_root" install
 # not brick Codespace creation — codespaces-start-local.sh still runs the real build (and
 # fails loud) if this pre-warm did not stick.
 (
-  cd "$repo_root" \
-    && TENKACLOUD_REPO_ROOT="$repo_root" docker compose -f compose.local.yaml build
+  cd "$repo_root"
+  # Resolve both the active socket and its numeric supplementary GID; compose now
+  # runs the long-lived control plane as uid 1000 instead of uid 0.
+  # shellcheck source=scripts/local/docker-prerequisites.sh
+  . "$repo_root/scripts/local/docker-prerequisites.sh"
+  tenkacloud_require_docker "Codespaces local-play pre-build"
+  TENKACLOUD_REPO_ROOT="$repo_root" docker compose -f compose.local.yaml build
 ) || echo "[codespaces-setup] WARN: pre-building the local-play image failed — 'make local' will build it (slower) on first start."
