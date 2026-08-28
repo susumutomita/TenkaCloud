@@ -98,7 +98,7 @@ describe("make local is Docker-only and never reaches the Bun CLI (Issue #2906)"
 describe("docker-launcher host reachability probe (Issue #2906)", () => {
   const launcher = readFileSync(join(REPO_ROOT, "scripts", "local", "docker-launcher.sh"), "utf8");
   const probe = launcher.slice(
-    launcher.indexOf("host_reachable() {"),
+    launcher.indexOf("host_http_contains() {"),
     launcher.indexOf("docker_desktop_host_networking_hint()"),
   );
 
