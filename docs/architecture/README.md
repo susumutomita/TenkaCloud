@@ -28,4 +28,6 @@ rule above. See
 [`decisions/0001-security-harness-trust-boundary.md`](./decisions/0001-security-harness-trust-boundary.md)
 for the security harness boundary and
 [`decisions/0002-ctfd-runtime-integration.md`](./decisions/0002-ctfd-runtime-integration.md)
-for the CTFd / TenkaCloud cross-system responsibility and credential boundary.
+for the CTFd / TenkaCloud cross-system responsibility and credential boundary, and
+[`decisions/0003-local-runtime-trust-boundary.md`](./decisions/0003-local-runtime-trust-boundary.md)
+for the local-play Docker / Compose trust boundary and broker target architecture.
