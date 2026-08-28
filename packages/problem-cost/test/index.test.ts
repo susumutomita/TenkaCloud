@@ -1,11 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analyzeProblemCost, formatUsd, parseEstimatedDurationHours } from "../src/index";
-
-/**
- * Issue #2215: this module had zero dedicated tests before the packages/ move (it was only
- * exercised indirectly through apps/application-admin-console's ProblemCostSummary component
- * test). Pins the public API's behavior directly.
- */
+import { analyzeProblemCost } from "../src/index";
 
 const cfnTemplate = (resources: string) => `
 Resources:
@@ -13,7 +7,7 @@ ${resources}
 `;
 
 describe("analyzeProblemCost", () => {
-  it("should cost a known always-on resource and sum totals", () => {
+  it("classifies a known standing resource without embedding a dollar price", () => {
     const estimate = analyzeProblemCost(
       cfnTemplate(`
   Table:
@@ -21,20 +15,18 @@ describe("analyzeProblemCost", () => {
     Properties: {}
 `),
     );
-    expect(estimate.resources).toHaveLength(1);
     expect(estimate.resources[0]).toMatchObject({
       logicalId: "Table",
       resourceType: "AWS::DynamoDB::Table",
-      roughHourlyUsd: 0.00078,
       alwaysOn: true,
       riskLevel: "low",
     });
-    expect(estimate.totalHourlyUsd).toBeCloseTo(0.00078);
-    expect(estimate.alwaysOnHourlyUsd).toBeCloseTo(0.00078);
-    expect(estimate.perDayIfLeftRunningUsd).toBeCloseTo(0.00078 * 24);
+    expect(estimate.alwaysOnWarnings.map((resource) => resource.logicalId)).toEqual(["Table"]);
+    expect(estimate.resources[0]).not.toHaveProperty("roughHourlyUsd");
+    expect(estimate).not.toHaveProperty("totalHourlyUsd");
   });
 
-  it("should not count a zero-hourly always-on resource as an alwaysOnWarning", () => {
+  it("does not warn for a resource that has no independent standing charge", () => {
     const estimate = analyzeProblemCost(
       cfnTemplate(`
   Vpc:
@@ -42,11 +34,10 @@ describe("analyzeProblemCost", () => {
     Properties: {}
 `),
     );
-    expect(estimate.alwaysOnWarnings).toHaveLength(0);
-    expect(estimate.totalHourlyUsd).toBe(0);
+    expect(estimate.alwaysOnWarnings).toEqual([]);
   });
 
-  it("should override the EC2 hourly cost by InstanceType and flag large instances as high risk", () => {
+  it("raises large EC2 instance families to high risk without assigning a rate", () => {
     const estimate = analyzeProblemCost(
       cfnTemplate(`
   Server:
@@ -55,14 +46,11 @@ describe("analyzeProblemCost", () => {
       InstanceType: m5.xlarge
 `),
     );
-    expect(estimate.resources[0]).toMatchObject({
-      roughHourlyUsd: 0.192,
-      riskLevel: "high",
-      notes: expect.arrayContaining(["InstanceType=m5.xlarge"]),
-    });
+    expect(estimate.resources[0]).toMatchObject({ riskLevel: "high" });
+    expect(estimate.resources[0]?.notes).toContain("InstanceType=m5.xlarge");
   });
 
-  it("should fall back to the default EC2 estimate when InstanceType is a dynamic CFn intrinsic", () => {
+  it("requires current-price verification for a dynamic EC2 instance type", () => {
     const estimate = analyzeProblemCost(
       cfnTemplate(`
   Server:
@@ -71,13 +59,12 @@ describe("analyzeProblemCost", () => {
       InstanceType: !Ref InstanceTypeParam
 `),
     );
-    expect(estimate.resources[0]?.roughHourlyUsd).toBe(0.0104);
-    expect(estimate.resources[0]?.notes.some((n) => n.includes("InstanceType is dynamic"))).toBe(
-      true,
-    );
+    expect(
+      estimate.resources[0]?.notes.some((note) => note.includes("current regional price")),
+    ).toBe(true);
   });
 
-  it("should mark a resource type with no heuristic as unpriced/unknown", () => {
+  it("marks an unknown resource type for manual review", () => {
     const estimate = analyzeProblemCost(
       cfnTemplate(`
   Mystery:
@@ -86,10 +73,10 @@ describe("analyzeProblemCost", () => {
 `),
     );
     expect(estimate.resources[0]?.riskLevel).toBe("unknown");
-    expect(estimate.unpricedResourceTypes).toEqual(["AWS::Made::UpType"]);
+    expect(estimate.unclassifiedResourceTypes).toEqual(["AWS::Made::UpType"]);
   });
 
-  it("should treat Custom:: resources as invocation-time (no standing cost)", () => {
+  it("treats Custom resources as invocation-time rather than standing resources", () => {
     const estimate = analyzeProblemCost(
       cfnTemplate(`
   Setup:
@@ -97,11 +84,11 @@ describe("analyzeProblemCost", () => {
     Properties: {}
 `),
     );
-    expect(estimate.resources[0]).toMatchObject({ roughHourlyUsd: 0, riskLevel: "low" });
-    expect(estimate.unpricedResourceTypes).toEqual([]);
+    expect(estimate.resources[0]).toMatchObject({ alwaysOn: false, riskLevel: "low" });
+    expect(estimate.unclassifiedResourceTypes).toEqual([]);
   });
 
-  it("should sort resources by logicalId and compute perSessionUsd from estimatedDuration", () => {
+  it("sorts resources by logical id", () => {
     const estimate = analyzeProblemCost(
       cfnTemplate(`
   Zebra:
@@ -111,70 +98,11 @@ describe("analyzeProblemCost", () => {
     Type: AWS::DynamoDB::Table
     Properties: {}
 `),
-      "2 hours",
     );
-    expect(estimate.resources.map((r) => r.logicalId)).toEqual(["Alpha", "Zebra"]);
-    expect(estimate.sessionHours).toBe(2);
-    expect(estimate.perSessionUsd).toBeCloseTo(estimate.totalHourlyUsd * 2);
+    expect(estimate.resources.map((resource) => resource.logicalId)).toEqual(["Alpha", "Zebra"]);
   });
 
-  it("should leave sessionHours/perSessionUsd undefined without estimatedDuration", () => {
-    const estimate = analyzeProblemCost(cfnTemplate(`  Table:\n    Type: AWS::DynamoDB::Table\n`));
-    expect(estimate.sessionHours).toBeUndefined();
-    expect(estimate.perSessionUsd).toBeUndefined();
-  });
-
-  it("should ignore a non-object Resources section and non-object resource entries", () => {
-    const estimate = analyzeProblemCost("Resources: not-an-object");
-    expect(estimate.resources).toEqual([]);
-  });
-});
-
-describe("parseEstimatedDurationHours", () => {
-  it("should parse combined hour+minute forms", () => {
-    expect(parseEstimatedDurationHours("1h30m")).toBeCloseTo(1.5);
-    expect(parseEstimatedDurationHours("2時間30分")).toBeCloseTo(2.5);
-  });
-
-  it("should average multiple numbers and apply the hour unit", () => {
-    expect(parseEstimatedDurationHours("2-3 hours")).toBeCloseTo(2.5);
-  });
-
-  it("should convert a minutes-only value to hours", () => {
-    expect(parseEstimatedDurationHours("90 minutes")).toBeCloseTo(1.5);
-  });
-
-  it("should return undefined for blank input", () => {
-    expect(parseEstimatedDurationHours("  ")).toBeUndefined();
-  });
-
-  it("should return undefined when no unit can be inferred", () => {
-    expect(parseEstimatedDurationHours("42")).toBeUndefined();
-  });
-
-  it("should return undefined when there are no numbers at all", () => {
-    expect(parseEstimatedDurationHours("unknown")).toBeUndefined();
-  });
-
-  it("should not backtrack catastrophically on a long non-matching digit run", () => {
-    // Regression guard for js/polynomial-redos: before bounding the numeric
-    // groups this input (a huge digit run with a non-matching tail) drove the
-    // hour+minute regex into O(n^2) backtracking. The test completing quickly
-    // is the proof; the value is still `undefined` (no h/m unit present).
-    expect(parseEstimatedDurationHours(`${"9".repeat(50_000)} x`)).toBeUndefined();
-  });
-});
-
-describe("formatUsd", () => {
-  it("should format sub-dollar amounts with 4 decimal places", () => {
-    expect(formatUsd(0.00078)).toBe("$0.0008");
-  });
-
-  it("should format dollar-or-more amounts with 2 decimal places", () => {
-    expect(formatUsd(1.5)).toBe("$1.50");
-  });
-
-  it("should return 'unknown' for undefined", () => {
-    expect(formatUsd(undefined)).toBe("unknown");
+  it("ignores malformed resource sections", () => {
+    expect(analyzeProblemCost("Resources: not-an-object").resources).toEqual([]);
   });
 });

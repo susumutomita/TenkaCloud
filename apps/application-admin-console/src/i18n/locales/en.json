@@ -186,16 +186,13 @@
     "empty_filtered": "No problems match the filters."
   },
   "problem_cost": {
-    "header": "Cost estimate",
-    "per_hour": "{cost}/hour",
-    "per_session": "{cost}/typical session",
-    "per_day_left_running": "{cost}/day if left running",
+    "header": "Cost risk",
     "always_on_count": "{count} always-on",
-    "no_always_on": "No always-on cost",
+    "no_always_on": "No identified always-on resource",
     "always_on_resources": "Always-on: {resources}",
     "resources": "AWS resources: {resources}",
     "manual_review": "Manual review: {resources}",
-    "unavailable": "Estimate unavailable"
+    "unavailable": "Risk classification unavailable"
   },
   "event_create": {
     "title": "Create new Event",
@@ -231,8 +228,7 @@
     "problemset_placeholder": "Choose problems",
     "col_problem": "Problem",
     "col_region": "Region",
-    "col_estimated_cost": "Estimated cost",
-    "col_always_on_cost": "Always-on risk",
+    "col_estimated_cost": "Cost risk",
     "cancel": "Cancel",
     "submit": "Create Event",
     "deploy_modal_header": "Event created",
@@ -376,8 +372,7 @@
     "problemset_col_id": "Problem ID",
     "problemset_col_account": "Default AWS Account",
     "problemset_col_region": "Default Region",
-    "problemset_col_estimated_cost": "Estimated Cost",
-    "problemset_col_always_on_cost": "Always-on Risk",
+    "problemset_col_estimated_cost": "Cost Risk",
     "problemset_col_status": "Deploy Status",
     "problemset_col_jobs": "Job Links",
     "problemset_empty": "Not configured — will be addable in Event edit (Phase 2c+)",

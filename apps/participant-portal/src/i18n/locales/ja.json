@@ -642,7 +642,6 @@
     "solved": "完了",
     "recommended": "次におすすめ",
     "problem_meta": "難易度 {difficulty} ・ 目安 {duration}",
-    "prerequisite_unmet": "先に解いておくと理解しやすい問題: {problems}",
     "source_label": "対応する講座教材:",
     "role_diagnostic": "前提確認",
     "role_mechanism": "仕組みの観察",

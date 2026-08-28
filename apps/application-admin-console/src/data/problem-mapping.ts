@@ -37,7 +37,7 @@ export function metadataRuntimeToSummary(metadata: ProblemMetadata): ProblemDeta
 
 export function metadataToDetail(metadata: ProblemMetadata, templateYaml?: string): ProblemDetail {
   const costEstimate = templateYaml
-    ? summarizeProblemCost(analyzeProblemCost(templateYaml, metadata.estimatedDuration))
+    ? summarizeProblemCost(analyzeProblemCost(templateYaml))
     : undefined;
   return {
     id: metadata.id,
@@ -65,16 +65,12 @@ export function metadataToDetail(metadata: ProblemMetadata, templateYaml?: strin
 
 function summarizeProblemCost(estimate: ProblemCostEstimate): ProblemCostEstimateSummary {
   return {
-    totalHourlyUsd: estimate.totalHourlyUsd,
-    perSessionUsd: estimate.perSessionUsd,
-    perDayIfLeftRunningUsd: estimate.perDayIfLeftRunningUsd,
     alwaysOnResources: estimate.alwaysOnWarnings.map((resource) => ({
       logicalId: resource.logicalId,
       resourceType: resource.resourceType,
-      roughHourlyUsd: resource.roughHourlyUsd,
       riskLevel: resource.riskLevel,
     })),
-    unpricedResourceTypes: estimate.unpricedResourceTypes,
+    unclassifiedResourceTypes: estimate.unclassifiedResourceTypes,
     resourceTypes: [...new Set(estimate.resources.map((resource) => resource.resourceType))].sort(),
   };
 }

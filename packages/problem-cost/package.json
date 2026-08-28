@@ -1,7 +1,7 @@
 {
   "name": "@tenkacloud/problem-cost",
   "version": "0.1.0",
-  "description": "Offline, heuristic AWS cost estimation for a problem's CloudFormation template (Issue #2215)",
+  "description": "Price-independent AWS billing-risk classification for a problem's CloudFormation template",
   "private": true,
   "type": "module",
   "main": "src/index.ts",
