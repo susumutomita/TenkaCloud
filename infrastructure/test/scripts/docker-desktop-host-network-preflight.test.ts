@@ -78,7 +78,7 @@ function runLauncher(options: LauncherOptions = {}): {
     [
       "#!/bin/sh",
       'case "$*" in',
-      "  *5175/healthz*) echo '{\"mode\":\"local\"}'; exit 0 ;;",
+      '  *5175/healthz*) echo \'{"mode":"local"}\'; exit 0 ;;',
       "esac",
       options.hostNetworkReachable === false
         ? "exit 1"
@@ -94,7 +94,7 @@ function runLauncher(options: LauncherOptions = {}): {
     encoding: "utf8",
     env: {
       PATH: `${bin}:/usr/bin:/bin`,
-      TENKACLOUD_DOCKER_SOCKET: "/tmp/fake-docker.sock",
+      TENKACLOUD_DOCKER_SOCKET: join(sandbox, "fake-docker.sock"),
       TENKACLOUD_DOCKER_SOCKET_GID: "0",
       HOSTNET_TEST_DOCKER_LOG: dockerLog,
       HOSTNET_TEST_OPERATING_SYSTEM: options.operatingSystem ?? "Docker Desktop",
