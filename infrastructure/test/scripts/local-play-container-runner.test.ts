@@ -146,6 +146,35 @@ describe("ContainerRunner: start (#2392 Phase 2)", () => {
     await expect(runner.start(problem(), 0)).rejects.toThrow(/docker up failed/);
   });
 
+  it("should append owned-container diagnostics to an endpoint readiness failure", async () => {
+    const diagnoseComposeUnit = vi.fn(() =>
+      [
+        "Container diagnostics for tc-local-sqli-demo:",
+        "- app: state=exited, health=none, exit=1",
+        "Logs (tail) for app:",
+        "database failed",
+      ].join("\n"),
+    );
+    const { deps } = makeDeps({
+      waitForReachable: vi.fn(async () => {
+        throw new Error("Timed out waiting for challenge endpoint Web");
+      }),
+      diagnoseComposeUnit,
+    });
+    const runner = new ContainerRunner("/local", deps);
+
+    await expect(runner.start(problem(), 0)).rejects.toThrow(
+      /Timed out waiting for challenge endpoint Web[\s\S]*app: state=exited/,
+    );
+    expect(diagnoseComposeUnit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        problemId: "sqli-demo",
+        composeProjectName: "tc-local-sqli-demo",
+      }),
+      ["secret"],
+    );
+  });
+
   it("should compose down and remove a remapped file when readiness fails", async () => {
     const { deps, compose, removed } = makeDeps({
       waitForReachable: vi.fn(async () => {
@@ -157,6 +186,20 @@ describe("ContainerRunner: start (#2392 Phase 2)", () => {
     await expect(runner.start(problem(), 100)).rejects.toThrow("readiness failed");
     expect(compose.map(([action]) => action)).toEqual(["up", "down"]);
     expect(removed).toEqual(["/local/tc-local-sqli-demo.compose.yml"]);
+  });
+
+  it("should preserve the readiness error when diagnostic collection itself fails", async () => {
+    const { deps } = makeDeps({
+      waitForReachable: vi.fn(async () => {
+        throw new Error("readiness failed");
+      }),
+      diagnoseComposeUnit: vi.fn(() => {
+        throw new Error("docker inspect failed");
+      }),
+    });
+    const runner = new ContainerRunner("/local", deps);
+
+    await expect(runner.start(problem(), 0)).rejects.toThrow("readiness failed");
   });
 });
 

@@ -11,7 +11,15 @@ import {
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  classifyService,
+  LONG_RUNNING_INSPECT_FORMAT,
+  looksDiskFull,
+  parseComposePs,
+  parseLongRunning,
+} from "./compose-health";
 import { ContainerRunner, type LocalComposeUnit } from "./container-runner";
+import { redactDiagnosticLog } from "./diagnostic-redaction";
 import { remapComposeHostPorts } from "./port-remap";
 import type { PortConflict } from "./problem-lifecycle";
 import { deriveSecretEnv, loadOrCreateMasterSecret } from "./problem-secrets";
@@ -317,6 +325,126 @@ export function isComposeUnitRunning(unit: LocalComposeUnit, deps: ComposePsDeps
   return (result.stdout ?? "").trim().length > 0;
 }
 
+export interface ComposeDiagnosticsDeps {
+  readonly cli?: ComposeCli;
+  readonly run?: (
+    command: string,
+    args: readonly string[],
+    env: NodeJS.ProcessEnv,
+  ) => ComposeCapturedResult;
+}
+
+function runCapturedCompose(
+  cli: ComposeCli,
+  args: readonly string[],
+  env: NodeJS.ProcessEnv,
+  deps: ComposeDiagnosticsDeps,
+): ComposeCapturedResult {
+  return deps.run
+    ? deps.run(cli.command, args, env)
+    : spawnSync(cli.command, [...args], {
+        cwd: REPO_ROOT,
+        env,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+}
+
+function composeProjectPrefix(cli: ComposeCli, unit: LocalComposeUnit): string[] {
+  const args = [...cli.prefix, "-f", unit.composePath, "-p", unit.composeProjectName];
+  if (unit.projectDirectory) args.push("--project-directory", unit.projectDirectory);
+  return args;
+}
+
+function serviceStateLine(service: ReturnType<typeof parseComposePs>[number]): string {
+  const state = service.state || "unknown";
+  const health = service.health || "none";
+  return `- ${service.service || service.name || "unknown"}: state=${state}, health=${health}, exit=${service.exitCode}`;
+}
+
+function findLongRunningServices(
+  services: ReturnType<typeof parseComposePs>,
+  env: NodeJS.ProcessEnv,
+  deps: ComposeDiagnosticsDeps,
+): Set<string> {
+  const longRunning = new Set<string>();
+  for (const service of services) {
+    if (service.state !== "exited" || service.name === "") continue;
+    const inspected = runCapturedCompose(
+      { command: "docker", prefix: [], label: "docker" },
+      ["inspect", service.name, "--format", LONG_RUNNING_INSPECT_FORMAT],
+      env,
+      deps,
+    );
+    if (inspected.status !== 0 || parseLongRunning(inspected.stdout ?? "")) {
+      longRunning.add(service.name);
+    }
+  }
+  return longRunning;
+}
+
+/**
+ * Collect bounded, redacted diagnostics for one authenticated compose unit.
+ *
+ * The caller supplies the exact durable unit; this function never scans by project-name
+ * prefix, so a readiness failure cannot cause TenkaCloud to inspect a foreign container.
+ */
+export function diagnoseComposeUnit(
+  unit: LocalComposeUnit,
+  sensitiveValues: readonly string[],
+  deps: ComposeDiagnosticsDeps = {},
+): string | undefined {
+  const cli = deps.cli ?? resolveComposeCli();
+  const env = composeInterpolationEnv(unit.secretEnv);
+  const prefix = composeProjectPrefix(cli, unit);
+  const psArgs = [...prefix, "ps", "-a", "--format", "json"];
+  const ps = runCapturedCompose(cli, psArgs, env, deps);
+  if (ps.status !== 0) {
+    return `Container diagnostics unavailable for ${unit.composeProjectName}: compose ps failed.`;
+  }
+
+  const services = parseComposePs(ps.stdout ?? "");
+  if (services.length === 0) {
+    return `Container diagnostics for ${unit.composeProjectName}: no compose services were reported.`;
+  }
+
+  const longRunning = findLongRunningServices(services, env, deps);
+
+  const failing = services.filter((service) => {
+    const verdict = classifyService(service, longRunning.has(service.name));
+    return verdict === "failing" || service.state === "restarting";
+  });
+  const logTargets = (failing.length > 0 ? failing : services).slice(0, 3);
+  const lines = [
+    `Container diagnostics for ${unit.composeProjectName}:`,
+    ...services.map(serviceStateLine),
+  ];
+  let diskFull = false;
+  for (const service of logTargets) {
+    if (!service.service) continue;
+    const logs = runCapturedCompose(
+      cli,
+      [...prefix, "logs", "--no-color", "--tail", "40", service.service],
+      env,
+      deps,
+    );
+    const combined = `${logs.stdout ?? ""}\n${logs.stderr ?? ""}`;
+    if (looksDiskFull(combined)) diskFull = true;
+    const redacted = redactDiagnosticLog(combined, sensitiveValues);
+    if (redacted !== "") {
+      lines.push(`Logs (tail) for ${service.service}:`, redacted);
+    }
+  }
+  if (diskFull) {
+    lines.push(
+      'Detected "No space left on device" in container logs.',
+      "Next: reclaim Docker VM space manually, for example with `docker builder prune -af` " +
+        "and `docker image prune -af`, then retry. TenkaCloud did not run either command.",
+    );
+  }
+  return lines.join("\n");
+}
+
 /**
  * [#2846] Real shell adapter behind {@link ProblemTerminals}: `compose exec` into a
  * running service and expose it as the registry's process contract.
@@ -602,6 +730,7 @@ export function createContainerRunner(localDir: string): ContainerRunner {
   return new ContainerRunner(localDir, {
     runCompose,
     waitForReachable: (url, label) => waitForReachable(url, label),
+    diagnoseComposeUnit: (unit, sensitiveValues) => diagnoseComposeUnit(unit, sensitiveValues),
     generateSecretEnv: (problemId, names) => generateSecretEnv(localDir, problemId, names),
     readCompose: (path) => readFileSync(path, "utf8"),
     writeTempCompose: (path, content) => writeFileSync(path, content, "utf8"),
