@@ -20,9 +20,9 @@ TenkaCloud は問題環境の deploy、状態追跡、stack output、失敗理�
 既存 Machine API は `TenantMachine` role と tenant binding scope を持つ client-credentials token
 だけを受け付け、到達可能な route は
 `infrastructure/lib/problem-deploy/handlers/shared/machine-scopes.ts` の
-`MACHINE_ROUTE_SCOPES` が正本である。現在の surface は event/deployment の read、problem deploy、
+`MACHINE_ROUTE_SCOPES` が正本です。現在の surface は event/deployment の read、problem deploy、
 failed deployment retry に限定される。team login key、管理者 route、event progression route は
-machine principal から到達不能である。
+machine principal から到達不能です。
 
 ## Decision
 
@@ -57,7 +57,7 @@ Browser
                   -> deploy pipeline
 ```
 
-Bridge の責務は次の 5 点だけである。
+Bridge の責務は次の 5 点だけです。
 
 1. CTFd からの署名済み request を認証する。
 2. CTFd id を TenkaCloud id / AWS account に変換する。
@@ -66,7 +66,7 @@ Bridge の責務は次の 5 点だけである。
 5. correlation id と監査情報を保存する。
 
 Bridge は challenge content、flag、team login key、AWS credential、CloudFormation template を
-保持しない。CTFd browser session を TenkaCloud token に変換する token exchange も行わない。
+保持しない。CTFd browser セッションを TenkaCloud token に変換する token exchange も行わない。
 
 ### 3. Identity mapping
 
@@ -91,7 +91,7 @@ deploy request 用の内部 slug とし、Bridge が安定した値を生成す�
 ### 4. Authentication and authorization
 
 - CTFd -> Bridge は HMAC 署名または private network 上の workload identity を使う。request は
-  timestamp、nonce、body digest を含み、replay window を超えた request を拒否する。
+  タイムスタンプ、nonce、body digest を含み、replay window を超えた request を拒否する。
 - Bridge -> TenkaCloud は Cognito client credentials を使う。token は 15 分以内の短命 token とし、
   tenant binding scope を 1 つだけ持つ。
 - Phase 1 の Bridge credential は `tenkacloud/ops.read` と
@@ -127,7 +127,7 @@ sequenceDiagram
     C-->>U: Render runtime status / launch data
 ```
 
-利用する既存 route は次のとおりである。
+利用する既存 route は次のとおりです。
 
 - `POST /problems/{problemId}/deploy`
 - `GET /deployments/{jobId}`
@@ -153,7 +153,7 @@ TenkaCloud の uptime / attack / phased scoring を CTFd へ反映する Phase 2
 - score の出所、計算 version、observed-at を含む evidence。
 
 CTFd へ直接 score を push する webhook より、Bridge が read-only projection を pull する方式を
-優先する。CTFd outage 中の retry と重複排除を Bridge 側で制御できるためである。
+優先します。CTFd outage 中の retry と重複排除を Bridge 側で制御できるためです。
 
 ### 7. Teardown ownership
 
@@ -192,13 +192,13 @@ PoC は次を完了条件にする。
 - Bridge restart 後に既存 `jobId` から reconciliation できる。
 
 PoC の scope 外は、TenkaCloud score の CTFd 反映、automatic teardown、multi-tenant Bridge、
-participant credential federation、CTFd plugin marketplace 公開である。
+participant credential federation、CTFd plugin marketplace 公開です。
 
 ## Consequences
 
 - **Good**: CTFd の競技 UX を維持したまま、runtime provisioning と cloud audit を TenkaCloud に
   委譲できる。既存 Machine API の最小 capability だけで PoC を開始できる。
-- **Good**: CTFd browser/session と TenkaCloud machine credential が分離される。
+- **Good**: CTFd browser/セッションと TenkaCloud machine credential が分離される。
 - **Bad**: Bridge という追加 component の運用が必要になる。mapping と reconciliation database を
   高可用にする責任が増える。
 - **Tradeoff**: Phase 1 では score の正本を CTFd に限定するため、TenkaCloud Battle scoring の

@@ -9,7 +9,7 @@
 
 Docker-only local play は、control-plane container に active Docker context の raw daemon socket と
 `network_mode: host` を与え、catalog の Compose を `up`、`down`、`exec` する。現在の
-`compose.local.yaml` が記載するとおり、raw Docker socket は root-equivalent host access である。
+`compose.local.yaml` が記載するとおり、raw Docker socket は root-equivalent host access です。
 control plane を non-root にしても、socket 経由で privileged container や host bind mount を作成できる
 限り、host isolation の最終境界にはならない。
 
@@ -32,7 +32,7 @@ Compose が catalog に入った場合、local play 自身が fail closed にす
 > catalog directory 外の host path、host namespace、device、dangerous capability へ直接到達できない。
 
 container image 自身の kernel exploit、Docker daemon / runtime の脆弱性、participant が host 上で
-直接実行した任意 command までは保証しない。専用 rootless daemon は blast radius を縮小するが、
+直接実行した任意 command までは保証しない。専用 rootless daemon は blast RADIUS を縮小するが、
 container escape 不在の証明ではない。
 
 ### 2. Trust classification
@@ -75,8 +75,8 @@ Participant Portal / local control plane
 broker API に任意 image、volume、Docker endpoint、Compose path、raw command array を渡す field は設けない。
 `problemId` から pinned catalog entry を broker 自身が再解決し、control plane が送った path を信用しない。
 
-control plane と broker の protocol は local Unix socket を第一候補とし、Windows portability が必要な
-環境では loopback-only TCP と per-session random bearer を使う。socket/token は 1 session ごとに生成し、
+control plane と broker の protocol は local UNIX socket を第一候補とし、Windows portability が必要な
+環境では loopback-only TCP と per-セッション random bearer を使う。socket/token は 1 セッションごとに生成し、
 repository、log、browser response に出さない。
 
 ### 4. Docker daemon boundary
@@ -126,7 +126,7 @@ interpolation failure は fail closed とする。
 - `security_opt` による seccomp/AppArmor/SELinux 無効化、`no-new-privileges:false`。
 - arbitrary `userns_mode`、cgroup namespace、sysctl、ulimit の緩和。
 - host port の `0.0.0.0` / `::` publish、assigned block 外 publish、UDP publish。
-- external network / external volume、fixed `container_name`、host-path `env_file` / `secrets` / `configs`。
+- external network / external volume、fixed `container_name`、host-パス `env_file` / `secrets` / `configs`。
 - catalog directory 外の build context、Dockerfile、volume source、`extends`、include。
 - lifecycle hook、entrypoint、command から host-side executable を参照する構成。
 
@@ -151,7 +151,7 @@ policy validator は lexical prefix ではなく real path で containment を�
 
 ### 7. Network architecture
 
-control plane の `network_mode: host` は最終構成で削除する。broker は session ごとに managed bridge
+control plane の `network_mode: host` は最終構成で削除する。broker はセッションごとに managed bridge
 network を作成し、problem service をその network に接続する。
 
 - scoring / readiness は container DNS 名と internal port を使う。
@@ -172,12 +172,12 @@ terminal は arbitrary `docker exec` proxy にしない。metadata が宣言し�
 - service は runtime ownership ledger に属する running container である。
 - shell profile は approved executable と working directory を持つ。
 - host path、Docker socket、broker socket を mount した service では terminal を許可しない。
-- session duration、output bytes、process count を bound する。
+- セッション duration、output bytes、process count を bound する。
 - control-plane request から `--privileged`、`--user root`、namespace option を注入できない。
 
 ### 9. Ownership and cleanup
 
-全 resource に broker session id、runtime id、problem digest の label を付ける。reconciliation は label と
+全 resource に broker セッション id、runtime id、problem digest の label を付ける。reconciliation は label と
 ledger の積集合だけを対象にし、name prefix だけで foreign container を削除しない。broker crash 後は
 新 broker が ledger + labels を照合し、ambiguous resource を自動削除せず operator に報告する。
 
@@ -188,7 +188,7 @@ ledger の積集合だけを対象にし、name prefix だけで foreign contain
 | A | 現行 adapter の前に canonical Compose policy と path containment を実装 | malicious Compose の既知 dangerous feature は fail closed。ただし control plane compromise は raw socket に到達可能 |
 | B | Local Runtime Broker を導入し、control plane から socket mount を削除 | problem/control-plane から raw Docker API を削除。broker compromise の daemon risk は残る |
 | C | managed bridge network と internal readiness を導入し、`network_mode: host` を削除 | control plane の host network exposure と Docker Desktop toggle 依存を削除 |
-| D | dedicated rootless context を default にする | broker compromise の host/rootful daemon blast radius を縮小 |
+| D | dedicated rootless context を default にする | broker compromise の host/rootful daemon blast RADIUS を縮小 |
 
 #3096 の non-root control plane は Phase A と並行する defense-in-depth であり、Phase B の代替ではない。
 
@@ -200,7 +200,7 @@ ledger の積集合だけを対象にし、name prefix だけで foreign contain
   場合は既存 VM を破壊しない。
 - **native Linux**: rootless context を推奨し、cgroup v2、subuid/subgid、systemd user service 不在時の
   guidance を用意する。
-- **rootless Docker**: active context の Unix socket と user namespace を broker が使用し、rootful
+- **rootless Docker**: active context の UNIX socket と user namespace を broker が使用し、rootful
   `/var/run/docker.sock` へ暗黙 fallback しない。
 - **Codespaces / docker-in-docker**: dedicated daemon が既に隔離 boundary 内にある場合も Compose policy を
   省略しない。
@@ -220,9 +220,9 @@ Phase A の merge gate として、少なくとも次の dangerous fixtures が 
 | `unconfined-security-profile` | security profile relaxation denied |
 | `wildcard-publish` | non-loopback publish denied |
 | `external-network-volume` | externally owned resource denied |
-| `build-context-escape` | real-path containment denied |
+| `build-context-escape` | real-パス containment denied |
 | `runtime-entry-dotdot` | lexical traversal denied |
-| `runtime-entry-symlink-escape` | symlink real-path escape denied |
+| `runtime-entry-symlink-escape` | symlink real-パス escape denied |
 | `unknown-compose-feature` | unknown field denied |
 
 positive fixtures は single-service、multi-service + one-shot initializer、named volume、healthcheck、
@@ -237,8 +237,8 @@ socket API が container create/mount/exec を許すため、uid 1000 でも hos
 
 ### Generic docker-socket-proxy
 
-HTTP method/path allowlist だけでは、合法な container-create request の body に privileged、host mount、
-capability を埋め込める。TenkaCloud domain operation と canonical policy を理解する broker が必要である。
+HTTP method/パス allowlist だけでは、合法な container-create request の body に privileged、host mount、
+capability を埋め込める。TenkaCloud domain operation と canonical policy を理解する broker が必要です。
 
 ### Catalog signature だけ
 
@@ -248,7 +248,7 @@ trusted publisher の credential compromise にも対応できない。policy va
 ### Host networking を先に削除
 
 raw Docker socket が残る間は control plane が自分で host-network container を作成できるため、境界改善が
-限定的である。policy、broker、network の順に移行する。
+限定的です。policy、broker、network の順に移行します。
 
 ## Consequences
 
