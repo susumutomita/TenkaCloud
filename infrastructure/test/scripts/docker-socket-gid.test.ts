@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -56,7 +56,7 @@ describe("Docker socket supplementary GID", () => {
     const socket = join(sandbox, "docker.sock");
     const close = await unixSocket(socket);
     try {
-      const expected = execFileSync("stat", ["-c", "%g", socket], { encoding: "utf8" }).trim();
+      const expected = statSync(socket).gid.toString();
       expect(resolveGid("Linux", socket)).toBe(expected);
     } finally {
       await close();

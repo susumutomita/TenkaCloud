@@ -39,7 +39,10 @@ describe("Docker-only local control-plane hardening", () => {
   });
 
   it("drops privileges and makes the main container filesystem read-only", () => {
-    const local = compose.slice(compose.indexOf("  local:"), compose.indexOf("volumes:\n  tenkacloud"));
+    const local = compose.slice(
+      compose.indexOf("  local:"),
+      compose.indexOf("volumes:\n  tenkacloud"),
+    );
 
     expect(local).toContain('user: "1000:1000"');
     expect(local).toContain("group_add:");
@@ -49,7 +52,7 @@ describe("Docker-only local control-plane hardening", () => {
     expect(local).toContain("cap_drop:\n      - ALL");
     expect(local).toContain("no-new-privileges:true");
     expect(local).toContain("pids_limit: 512");
-    expect(local).toContain('test \"$$(id -u)\" -ne 0');
+    expect(local).toContain(String.raw`test \"$$(id -u)\" -ne 0`);
     expect(local).toContain(":/var/run/docker.sock:ro");
   });
 
