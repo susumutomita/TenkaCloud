@@ -58,9 +58,9 @@ describe("Docker-only local control-plane hardening", () => {
 
   it("derives the supplementary group from the active local Docker socket", () => {
     expect(prerequisites).toContain("tenkacloud_resolve_docker_socket_gid");
+    expect(prerequisites).toContain("docker run --rm");
     expect(prerequisites).toContain("stat -c '%g'");
-    expect(prerequisites).toContain("stat -f '%g'");
-    expect(prerequisites).toContain("TENKACLOUD_DOCKER_SOCKET_GID=0");
+    expect(prerequisites).toContain("/tenkacloud-docker.sock");
     expect(prerequisites).toContain("non-root control plane needs that supplementary GID");
   });
 });

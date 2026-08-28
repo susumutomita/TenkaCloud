@@ -135,17 +135,13 @@ tenkacloud_resolve_docker_socket_gid() {
     return 0
   fi
   TENKACLOUD_DOCKER_SOCKET_GID=""
-  if [ "$(uname -s)" = "Darwin" ]; then
-    # The source path is resolved inside the Desktop/Colima VM, not on macOS.
-    # Their socket proxy is exposed to containers through supplementary group 0.
-    TENKACLOUD_DOCKER_SOCKET_GID=0
-  elif stat -c '%g' "$TENKACLOUD_DOCKER_SOCKET" >/dev/null 2>&1; then
-    TENKACLOUD_DOCKER_SOCKET_GID=$(stat -c '%g' "$TENKACLOUD_DOCKER_SOCKET")
-  elif stat -f '%g' "$TENKACLOUD_DOCKER_SOCKET" >/dev/null 2>&1; then
-    TENKACLOUD_DOCKER_SOCKET_GID=$(stat -f '%g' "$TENKACLOUD_DOCKER_SOCKET")
-  else
-    return 1
-  fi
+  # Resolve the group from the daemon-side mount, not from the host path.
+  # Docker Desktop and Colima can expose a host proxy path whose group differs
+  # from the socket that the control-plane container ultimately sees.
+  TENKACLOUD_DOCKER_SOCKET_GID=$(
+    docker run --rm -v "${TENKACLOUD_DOCKER_SOCKET}:/tenkacloud-docker.sock:ro" busybox \
+      stat -c '%g' /tenkacloud-docker.sock 2>/dev/null
+  ) || return 1
   case "$TENKACLOUD_DOCKER_SOCKET_GID" in
     '' | *[!0-9]*) return 1 ;;
   esac
