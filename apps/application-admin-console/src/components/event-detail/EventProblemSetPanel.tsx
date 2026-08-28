@@ -4,7 +4,7 @@ import Header from "@cloudscape-design/components/header";
 import Table from "@cloudscape-design/components/table";
 import { useNavigate } from "react-router";
 import type { EventDetail } from "../../api/events-client";
-import { ProblemAlwaysOnSummary, ProblemCostSummary } from "../../components/ProblemCostSummary";
+import { ProblemCostSummary } from "../../components/ProblemCostSummary";
 import { findProblem } from "../../data/problems";
 import { renderProblemDeployStatus, renderProblemJobLinks } from "./shared";
 
@@ -54,13 +54,6 @@ export function EventProblemSetPanel({
                 showResourceTypes={false}
                 t={t}
               />
-            ),
-          },
-          {
-            id: "alwaysOnCost",
-            header: t("event_detail.problemset_col_always_on_cost"),
-            cell: (p) => (
-              <ProblemAlwaysOnSummary estimate={findProblem(p.problemId)?.costEstimate} t={t} />
             ),
           },
           {

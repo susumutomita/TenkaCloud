@@ -173,20 +173,6 @@ describe("metadataToEntry (course track projection #2786)", () => {
         { repository: "org/course", ref: "a".repeat(40), path: "week3/README.md", kind: "lecture" },
       ],
     },
-    nodes: {
-      learning_objectives: [{ id: "lo.ac26-demo.invert", description: "逆元を求められる" }],
-      concepts: [{ id: "concept.finite-field", description: "有限体" }],
-      assessment_criteria: [{ id: "assessment.ac26-demo.x", description: "SPOILER: 採点条件" }],
-      misconceptions: [{ id: "misconception.y", description: "SPOILER: よくある誤り" }],
-      audiences: [{ id: "audience.z", description: "対象者" }],
-    },
-    relations: [
-      { type: "teaches", source: "problem.ac26-demo", target: "lo.ac26-demo.invert" },
-      { type: "covers", source: "problem.ac26-demo", target: "concept.finite-field" },
-      { type: "requires", source: "problem.ac26-demo", target: "concept.modular-arithmetic" },
-      { type: "assesses", source: "problem.ac26-demo", target: "assessment.ac26-demo.x" },
-      { type: "related_to", source: "misconception.y", target: "concept.finite-field" },
-    ],
   } as Parameters<typeof metadataToEntry>[0];
 
   it("should carry the track position through", () => {
@@ -272,85 +258,14 @@ describe("metadataToEntry (course track projection #2786)", () => {
     expect(out.courseAlignment?.sources).toEqual([]);
   });
 
-  it("should project only learning objectives and concepts as graph nodes", () => {
-    const nodes = metadataToEntry(COURSE_FIXTURE).graphNodes;
-    expect(nodes.map((n) => n.id)).toEqual([
-      "problem.ac26-demo",
-      "lo.ac26-demo.invert",
-      "concept.finite-field",
-    ]);
-  });
-
-  it("should never carry assessment criteria or misconceptions into the bundle", () => {
-    const serialized = JSON.stringify(metadataToEntry(COURSE_FIXTURE));
-    expect(serialized).not.toContain("assessment.");
-    expect(serialized).not.toContain("misconception.");
-    expect(serialized).not.toContain("audience.");
-    expect(serialized).not.toContain("SPOILER");
-  });
-
-  it("should label a node by its id when it has no description", () => {
+  it("should not project removed knowledge-graph fields from legacy metadata", () => {
     const out = metadataToEntry({
       ...COURSE_FIXTURE,
-      nodes: { concepts: [{ id: "concept.bare" }] },
-    } as never);
-    expect(out.graphNodes.find((n) => n.id === "concept.bare")?.label).toBe("concept.bare");
-  });
-
-  it("should skip a node with no id", () => {
-    const out = metadataToEntry({
-      ...COURSE_FIXTURE,
-      nodes: { concepts: [{ description: "nameless" }] },
-    } as never);
-    expect(out.graphNodes.map((n) => n.id)).toEqual(["problem.ac26-demo"]);
-  });
-
-  it("should project only teaches, covers and requires relations", () => {
-    const relations = metadataToEntry(COURSE_FIXTURE).graphRelations;
-    expect(relations.map((r) => r.type).sort()).toEqual(["covers", "requires", "teaches"]);
-  });
-
-  it("should drop a relation pointing at a node kind that was withheld", () => {
-    // 参照先が無い edge を残すと UI が「未解決の前提」として表示してしまう。
-    const out = metadataToEntry({
-      ...COURSE_FIXTURE,
-      relations: [{ type: "requires", source: "problem.ac26-demo", target: "misconception.y" }],
-    } as never);
-    expect(out.graphRelations).toEqual([]);
-  });
-
-  it("should keep a requires edge that points at another problem", () => {
-    const out = metadataToEntry({
-      ...COURSE_FIXTURE,
+      nodes: { concepts: [{ id: "concept.legacy", description: "legacy" }] },
       relations: [{ type: "requires", source: "problem.ac26-demo", target: "problem.other" }],
     } as never);
-    expect(out.graphRelations).toEqual([
-      { type: "requires", source: "problem.ac26-demo", target: "problem.other" },
-    ]);
-  });
-
-  it("should drop a relation whose source is not a node of this problem", () => {
-    const out = metadataToEntry({
-      ...COURSE_FIXTURE,
-      relations: [
-        { type: "requires", source: "lo.someone-else.x", target: "concept.finite-field" },
-      ],
-    } as never);
-    expect(out.graphRelations).toEqual([]);
-  });
-
-  it("should drop a malformed relation instead of throwing", () => {
-    const out = metadataToEntry({
-      ...COURSE_FIXTURE,
-      relations: [{ type: "requires" }, { source: "problem.ac26-demo", target: "concept.x" }],
-    } as never);
-    expect(out.graphRelations).toEqual([]);
-  });
-
-  it("should give an untracked problem an empty graph rather than undefined", () => {
-    const out = metadataToEntry(FAIRNESS_FIXTURE);
-    expect(out.graphRelations).toEqual([]);
-    expect(out.graphNodes).toEqual([{ id: "problem.demo", type: "problem", label: "Demo" }]);
+    expect(out).not.toHaveProperty("graphNodes");
+    expect(out).not.toHaveProperty("graphRelations");
   });
 });
 

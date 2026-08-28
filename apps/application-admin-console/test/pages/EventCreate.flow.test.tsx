@@ -71,18 +71,14 @@ const account: CompetitorAccountSummary = {
 // #1910: 選択した問題に costEstimate があれば EventCreate が row へ引き継ぐ分岐 (truthy) を
 // 踏むための fixture。 これを持つ p1 と、 持たない p2 の両方を選択して両分岐を pin する。
 const costEstimate: ProblemSummary["costEstimate"] = {
-  totalHourlyUsd: 0.065,
-  perSessionUsd: 0.0325,
-  perDayIfLeftRunningUsd: 1.56,
   alwaysOnResources: [
     {
       logicalId: "Nat",
       resourceType: "AWS::EC2::NatGateway",
-      roughHourlyUsd: 0.045,
       riskLevel: "high",
     },
   ],
-  unpricedResourceTypes: [],
+  unclassifiedResourceTypes: [],
   resourceTypes: ["AWS::EC2::NatGateway"],
 };
 

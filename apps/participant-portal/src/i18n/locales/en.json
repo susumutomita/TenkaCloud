@@ -642,7 +642,6 @@
     "solved": "Complete",
     "recommended": "Suggested next",
     "problem_meta": "Difficulty {difficulty} · about {duration}",
-    "prerequisite_unmet": "Easier after solving: {problems}",
     "source_label": "Course material:",
     "role_diagnostic": "Prerequisite check",
     "role_mechanism": "Mechanism",

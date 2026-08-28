@@ -40,18 +40,14 @@ const summary = (over: Partial<ProblemSummary> = {}): ProblemSummary =>
     ...over,
   }) as ProblemSummary;
 const costEstimate: ProblemSummary["costEstimate"] = {
-  totalHourlyUsd: 0.03,
-  perSessionUsd: 0.015,
-  perDayIfLeftRunningUsd: 0.72,
   alwaysOnResources: [
     {
       logicalId: "Database",
       resourceType: "AWS::RDS::DBInstance",
-      roughHourlyUsd: 0.02,
       riskLevel: "high",
     },
   ],
-  unpricedResourceTypes: [],
+  unclassifiedResourceTypes: [],
   resourceTypes: ["AWS::RDS::DBInstance"],
 };
 const CATALOG: ProblemSummary[] = [
@@ -99,7 +95,7 @@ describe("ProblemsPage", () => {
     renderPage();
     expect(screen.getByText("Alpha")).toBeInTheDocument();
     expect(screen.getByText("Bravo")).toBeInTheDocument();
-    expect(screen.getByText(/problem_cost.per_session/)).toBeInTheDocument();
+    expect(screen.getByText(/problem_cost.always_on_count/)).toBeInTheDocument();
     expect(screen.getByText(/problem_cost.resources/)).toBeInTheDocument();
     expect(screen.getByText("(2)")).toBeInTheDocument(); // counter no filter
     // category badge 両色: Alpha=Battle(red), Bravo=Challenge(blue)。

@@ -27,13 +27,16 @@ Import these with `workspace:*` from any app or from `infrastructure`.
 | `@tenkacloud/format` | Pure formatters for SPAs — `formatRelativeTime` (ja/en) |
 | `@tenkacloud/portal-contracts` | Participant portal API wire contract — one definition for backend handler + SPA |
 | `@tenkacloud/portal-plugin-sdk` | Type definitions for participant-portal problem plugins |
-| `@tenkacloud/problem-cost` | Offline heuristic AWS cost estimation for a problem's CFn template |
+| `@tenkacloud/problem-cost` | Price-independent AWS billing-risk classification for a problem's CFn template |
 | `@tenkacloud/problem-runtime` | Problem runtime classification (normalize / executable / reserved) |
 | `@tenkacloud/problem-sdk` | Public problem-pack authoring contract: stable types, validators, diagnostic codes |
 | `@tenkacloud/problem-test` (`packages/problem-test-harness`) | Offline problem test harness — contract validation + scoring/probe runs with injected fakes |
 | `@tenkacloud/saml-utils` | SAML metadata validation + attribute mapper for Control/Application Plane SSO |
 | `@TenkaCloud/trust-bridge` | Cross-cloud authority transfer (signed CloudActionIntent → short-lived credentials) |
 | `@tenkacloud/web-kit` | Shared SPA UI primitives — `createCoreApiClient`, `AuthProvider`/`useAuth`, `EmptyState`, boot error rendering |
+
+The cost-risk classifier's contract and maintenance policy are documented in
+[problem-cost-risk.md](./problem-cost-risk.md).
 
 ## Script-side shared helpers (`scripts/` and `scripts/lib/`)
 
