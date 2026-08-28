@@ -1,5 +1,6 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { basename, join } from "node:path";
+import { resolveComposeEntryPath } from "./compose-policy";
 import { parseLoopbackUrl } from "./loopback";
 import type { NativeCompatibilityRequirement } from "./native-compatibility";
 
@@ -144,6 +145,16 @@ export interface ManifestFs {
   readonly readFileSync: (path: string) => string;
   /** Directory entry names under `path` (used only by {@link listLocalPlayProblems}). */
   readonly readDirNames?: (path: string) => readonly string[];
+  /**
+   * Resolves symlinks (used only by the `runtime.entry` containment check in
+   * {@link loadContainerProblem}, via `compose-policy.ts#resolveComposeEntryPath`). Optional and
+   * deliberately NOT defaulted to the real `node:fs` implementation when a caller supplies its
+   * own fake `ManifestFs` without it — an in-memory test fixture has nothing on real disk to
+   * resolve, and falling back to the real filesystem there would look up a path that does not
+   * exist and fail every such test. Omitting it only narrows the check to lexical containment
+   * (still rejects `..` traversal and absolute paths), never widens what production accepts.
+   */
+  readonly realpathSync?: (path: string) => string;
 }
 
 const NODE_FS: ManifestFs = {
@@ -155,6 +166,7 @@ const NODE_FS: ManifestFs = {
       .filter((entry) => entry.isDirectory())
       .map((entry) => entry.name);
   },
+  realpathSync,
 };
 
 interface RawMetadata {
@@ -555,10 +567,9 @@ export function loadContainerProblem(
   }
 
   const composeName = requiredString(runtime.entry, "runtime.entry");
-  const composePath = join(problemDir, composeName);
-  if (!fs.existsSync(composePath)) {
-    throw new Error(`compose file was not found: ${composePath}`);
-  }
+  // [Issue #3097] `runtime.entry` must resolve inside `problemDir` — no lexical `..` escape and
+  // no symlink escape after resolution. See compose-policy.ts#resolveComposeEntryPath.
+  const composePath = resolveComposeEntryPath(problemDir, composeName, fs);
 
   const terminal = normalizeTerminal(runtime.terminal);
   const compatibility = normalizeCompatibility(runtime.compatibility);

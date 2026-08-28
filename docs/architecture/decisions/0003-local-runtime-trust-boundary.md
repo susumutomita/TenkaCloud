@@ -103,7 +103,7 @@ interpolation failure は fail closed とする。
 | Feature | Constraint |
 | --- | --- |
 | `image` | digest pin または approved registry / tag policy を満たす |
-| `build.context` | problem directory 配下の real path |
+| `build.context` | problem directory 配下の real path。ただし `runtimes/<family>/` (`<problemsRoot>/runtimes/`) は、TenkaCloudChallenge AGENTS.md §13 が定義する複数 problem 共有 runtime の唯一の例外として許可する (Phase A 実装: `scripts/local-play/compose-policy.ts#catalogRuntimesRoot`)。volume source には同じ例外を認めない — build context だけの例外である |
 | `build.dockerfile` | build context 配下の regular file |
 | environment | metadata の declared variable と generated problem secret だけ |
 | `ports` | host IP は `127.0.0.1`、assigned port block 内、TCP のみ |
@@ -185,12 +185,12 @@ ledger の積集合だけを対象にし、name prefix だけで foreign contain
 
 | Phase | Change | Security claim / residual risk |
 | --- | --- | --- |
-| A | 現行 adapter の前に canonical Compose policy と path containment を実装 | malicious Compose の既知 dangerous feature は fail closed。ただし control plane compromise は raw socket に到達可能 |
+| A (implemented) | `scripts/local-play/compose-policy.ts` を `container-runner.ts`（`start`/`recover`）と `manifest.ts`（`runtime.entry` containment）の前に実装。raw YAML の構造 parse + deny-by-default allowlist（現行 catalog 97 problem 全件を fixture として固定、`compose-policy.test.ts`） | malicious Compose の既知 dangerous feature（本文書 §5 の denied 表）は fail closed。§5 が記述する `docker compose config --format json` ベースの canonical model 検証は broker 導入後の Phase B に持ち越し — Phase A は Docker daemon 無しで動く raw-YAML validator であり、`tenkacloud local list` を Docker 依存にしない設計判断による。control plane compromise は raw socket に到達可能なまま |
 | B | Local Runtime Broker を導入し、control plane から socket mount を削除 | problem/control-plane から raw Docker API を削除。broker compromise の daemon risk は残る |
 | C | managed bridge network と internal readiness を導入し、`network_mode: host` を削除 | control plane の host network exposure と Docker Desktop toggle 依存を削除 |
 | D | dedicated rootless context を default にする | broker compromise の host/rootful daemon blast RADIUS を縮小 |
 
-#3096 の non-root control plane は Phase A と並行する defense-in-depth であり、Phase B の代替ではない。
+Issue #3096 の non-root control plane は Phase A と並行する defense-in-depth であり、Phase B の代替ではない。
 
 ### 11. Portability requirements
 
@@ -269,3 +269,6 @@ raw Docker socket が残る間は control plane が自分で host-network contai
 - `scripts/local-play/manifest.ts`
 - `scripts/local-play/port-remap.ts`
 - `scripts/local-play/catalog-loader.ts`
+- `scripts/local-play/compose-policy.ts` (Phase A validator)
+- `scripts/local-play/compose-policy.test.ts` (Phase A security regression suite)
+- `scripts/local-play/container-runner.ts` (Phase A wiring: `start` / `recover`)
