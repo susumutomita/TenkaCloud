@@ -601,6 +601,11 @@ const SubFlagRow = memo(function SubFlagRow({
                 penalty: -outcome.scoreDelta,
               })
             : t("problem_panel.wrong_body")}
+          {outcome.message !== undefined && outcome.message !== "" && (
+            <Box variant="p">
+              {t("problem_panel.wrong_verifier_message", { message: outcome.message })}
+            </Box>
+          )}
         </Alert>
       )}
       {outcome?.kind === "already_scored" && (

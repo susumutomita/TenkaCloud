@@ -257,6 +257,27 @@ describe("MultiFlagSubmissionPanel", () => {
     expect(screen.getByText("Check the value and try again.")).toBeInTheDocument();
   });
 
+  it("should show the verifier's failure message when the wrong verdict carries one", async () => {
+    const user = userEvent.setup();
+    apiMocks.submitFlag.mockResolvedValue({
+      kind: "wrong",
+      scoreDelta: -10,
+      totalScore: 40,
+      wrongCount: 1,
+      message: "did not report a non-integer time claim as malformed",
+    });
+    renderPanel();
+    const inputs = screen.getAllByRole("textbox");
+    await user.type(inputs[0], "bad");
+    const buttons = screen.getAllByRole("button", { name: /^Submit/ });
+    await user.click(buttons[0]);
+    expect(
+      await screen.findByText(
+        "Reason from the verifier: did not report a non-integer time claim as malformed",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("should show the already-scored info when a flag was scored elsewhere", async () => {
     const user = userEvent.setup();
     apiMocks.submitFlag.mockResolvedValue({ kind: "already_scored", totalScore: 300 });

@@ -427,8 +427,16 @@ export type SubmitFlagOutcome =
   /**
    * Issue #817: 不正解。 問題 metadata に `wrongAnswerPenalty` が設定されていれば
    * `scoreDelta` は負数 (= 減点)。 設定されていなければ 0。 wrongCount は累計試行回数。
+   * `message` は問題 container の /verify が返した property-level の失敗理由
+   * (VerifyResponseSchema が 2000 文字で cap)。 理由を返さない judge では欠ける。
    */
-  | { kind: "wrong"; scoreDelta: number; totalScore: number; wrongCount: number };
+  | {
+      kind: "wrong";
+      scoreDelta: number;
+      totalScore: number;
+      wrongCount: number;
+      message?: string;
+    };
 
 /**
  * Phase 3: Event scope の team ランキング (= Scoreboard) の 1 行 (1 team の集計)。
