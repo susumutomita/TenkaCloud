@@ -293,8 +293,9 @@ doctor_report_profile() {
   doctor_memory=$(printf '%s\n' "$doctor_info" | awk -F '\t' 'NR == 1 && $2 ~ /^[0-9]+$/ && $2 > 0 { print $2 }')
   doctor_free_disk=""
   if [ "$doctor_probe_disk" -eq 1 ] && [ "$doctor_daemon_ready" -eq 1 ]; then
-    doctor_disk_output=$(docker run --rm busybox df -P / 2>/dev/null || true)
-    doctor_free_disk=$(printf '%s\n' "$doctor_disk_output" | awk '$NF == "/" && $4 ~ /^[0-9]+$/ { print $4 * 1024; exit }')
+    if tenkacloud_probe_docker_disk; then
+      doctor_free_disk=$TENKACLOUD_DOCKER_DISK_AVAILABLE_BYTES
+    fi
   fi
 
   echo ""

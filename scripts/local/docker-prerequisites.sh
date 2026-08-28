@@ -146,6 +146,42 @@ tenkacloud_print_docker_socket_guidance() {
   esac
 }
 
+# Measured minimum needed to materialize the Docker-only control-plane image.
+# Problem images and BuildKit cache require additional space.
+TENKACLOUD_CONTROL_PLANE_DISK_FLOOR_BYTES=755000000
+TENKACLOUD_DOCKER_DISK_AVAILABLE_BYTES=""
+TENKACLOUD_DOCKER_DISK_ERROR_KIND=""
+
+tenkacloud_probe_docker_disk() {
+  TENKACLOUD_DOCKER_DISK_AVAILABLE_BYTES=""
+  TENKACLOUD_DOCKER_DISK_ERROR_KIND=""
+  tenkacloud_disk_output=$(docker run --rm busybox df -P / 2>/dev/null) || {
+    TENKACLOUD_DOCKER_DISK_ERROR_KIND="probe-failed"
+    return 1
+  }
+  tenkacloud_disk_available_kib=$(
+    printf '%s\n' "$tenkacloud_disk_output" |
+      awk '$NF == "/" && $4 ~ /^[0-9]+$/ { print $4; exit }'
+  )
+  case "$tenkacloud_disk_available_kib" in
+    '' | *[!0-9]*)
+      TENKACLOUD_DOCKER_DISK_ERROR_KIND="unparseable"
+      return 1
+      ;;
+  esac
+  TENKACLOUD_DOCKER_DISK_AVAILABLE_BYTES=$((tenkacloud_disk_available_kib * 1024))
+  export TENKACLOUD_DOCKER_DISK_AVAILABLE_BYTES
+}
+
+# Returns 0=sufficient, 1=below floor, 2=probe unavailable.
+tenkacloud_docker_disk_meets_floor() {
+  tenkacloud_disk_floor=${1:-$TENKACLOUD_CONTROL_PLANE_DISK_FLOOR_BYTES}
+  if ! tenkacloud_probe_docker_disk; then
+    return 2
+  fi
+  [ "$TENKACLOUD_DOCKER_DISK_AVAILABLE_BYTES" -ge "$tenkacloud_disk_floor" ]
+}
+
 tenkacloud_require_docker() {
   entrypoint=${1:-make local}
   if ! tenkacloud_docker_cli_version >/dev/null; then

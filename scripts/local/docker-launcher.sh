@@ -30,6 +30,35 @@ require_docker() {
   tenkacloud_require_docker "make local"
 }
 
+format_disk_megabytes() {
+  printf '%s MB' "$(($1 / 1000000))"
+}
+
+preflight_docker_disk() {
+  disk_result=0
+  tenkacloud_docker_disk_meets_floor || disk_result=$?
+  if [ "$disk_result" -eq 2 ]; then
+    echo "Warning: Docker VM free space could not be measured; continuing." >&2
+    echo "  If startup later reports 'No space left on device', inspect it with:" >&2
+    echo "    docker run --rm busybox df -P /" >&2
+    return 0
+  fi
+
+  disk_free=$(format_disk_megabytes "$TENKACLOUD_DOCKER_DISK_AVAILABLE_BYTES")
+  disk_floor=$(format_disk_megabytes "$TENKACLOUD_CONTROL_PLANE_DISK_FLOOR_BYTES")
+  if [ "$disk_result" -eq 1 ]; then
+    echo "Docker VM free space is below TenkaCloud's measured image floor." >&2
+    echo "  Free: $disk_free; required for the control-plane image: at least $disk_floor." >&2
+    echo "  Problem images and BuildKit cache need additional space." >&2
+    echo "  Next: reclaim Docker VM space manually, for example:" >&2
+    echo "    docker builder prune -af" >&2
+    echo "    docker image prune -af" >&2
+    echo "  TenkaCloud did not run either cleanup command." >&2
+    return 1
+  fi
+  echo "Docker VM free space: $disk_free (control-plane image floor: $disk_floor)."
+}
+
 # [Finding 2, #2906 audit] `problems/` self-heal must run HOST-side: the
 # container has no `.git` history for it (only the `problems/` working tree
 # is bind-mounted, read-only, per the Dockerfile/catalog-loader.ts
@@ -178,6 +207,7 @@ cmd_up() {
     echo "  Every problem starts on demand from the Portal instead." >&2
   fi
   require_docker
+  preflight_docker_disk
   ensure_problems_submodule
   reclaim_foreign_control_plane_container
   $COMPOSE build
