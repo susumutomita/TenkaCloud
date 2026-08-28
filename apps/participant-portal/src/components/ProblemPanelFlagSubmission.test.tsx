@@ -142,6 +142,25 @@ describe("FlagSubmissionPanel submit flow", () => {
     expect(await screen.findByText("Check the value and try again.")).toBeInTheDocument();
   });
 
+  it("should show the verifier's failure message when the wrong verdict carries one", async () => {
+    const user = userEvent.setup();
+    apiMocks.submitFlag.mockResolvedValue({
+      kind: "wrong",
+      scoreDelta: 0,
+      totalScore: 0,
+      wrongCount: 1,
+      message: "the reason does not describe why this request was decided that way",
+    });
+    renderPanel();
+    await user.type(screen.getByRole("textbox"), "bad");
+    await user.click(screen.getByRole("button", { name: SUBMIT }));
+    expect(
+      await screen.findByText(
+        "Reason from the verifier: the reason does not describe why this request was decided that way",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("should show the already-scored info", async () => {
     const user = userEvent.setup();
     apiMocks.submitFlag.mockResolvedValue({ kind: "already_scored", totalScore: 100 });

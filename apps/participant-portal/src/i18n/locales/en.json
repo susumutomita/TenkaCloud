@@ -379,6 +379,7 @@
     "wrong_header": "Wrong",
     "wrong_with_penalty_body": "You've made {count} wrong attempts. Check the value and try again. Penalty per wrong attempt is {penalty} pt; total never drops below 0 pt.",
     "wrong_body": "Check the value and try again.",
+    "wrong_verifier_message": "Reason from the verifier: {message}",
     "already_scored_header": "Already submitted",
     "already_scored_body": "Already solved (total {total} pt).",
     "submit_failed_header": "Submission failed",

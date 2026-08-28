@@ -379,6 +379,7 @@
     "wrong_header": "不正解",
     "wrong_with_penalty_body": "これまで {count} 回 不正解です。 値を確認して再度提出してください。 ペナルティは不正解 1 回あたり {penalty} pt で、 累計スコアは 0 pt 未満になりません。",
     "wrong_body": "値を確認して再度提出してください。",
+    "wrong_verifier_message": "検証からの理由: {message}",
     "already_scored_header": "提出済み",
     "already_scored_body": "既に正解済みです (合計 {total} pt)。",
     "submit_failed_header": "提出に失敗しました",

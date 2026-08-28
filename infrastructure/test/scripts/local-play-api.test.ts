@@ -647,6 +647,38 @@ describe("local-play API: multi-verify (issue #2252)", () => {
     });
   });
 
+  it("should surface the container's failure message on a wrong verdict and omit it otherwise", async () => {
+    const verify = vi.fn(
+      async (_u: string, _s: string, _c: unknown, o?: { checkpointId?: string }) => ({
+        correct: false,
+        checkpointId: o?.checkpointId,
+        message: "did not report a non-integer time claim as malformed",
+      }),
+    );
+    const state = await multiState(verify as VerifyFn);
+
+    const wrong = await handleLocalPlayRequest(submit("public-backup"), state, NOW);
+    expect(wrong.body).toEqual({
+      kind: "wrong",
+      scoreDelta: -5,
+      totalScore: -5,
+      wrongCount: 1,
+      message: "did not report a non-integer time claim as malformed",
+      flagId: "public-backup",
+    });
+
+    // message を返さない judge (従来 container) では field ごと欠ける
+    const silentVerify = vi.fn(
+      async (_u: string, _s: string, _c: unknown, o?: { checkpointId?: string }) => ({
+        correct: false,
+        checkpointId: o?.checkpointId,
+      }),
+    );
+    const silentState = await multiState(silentVerify as VerifyFn);
+    const silentWrong = await handleLocalPlayRequest(submit("public-backup"), silentState, NOW);
+    expect(silentWrong.body).not.toHaveProperty("message");
+  });
+
   it("should fail closed on unknown / missing flagId without calling the container", async () => {
     const verify = vi.fn();
     const state = await multiState(verify);

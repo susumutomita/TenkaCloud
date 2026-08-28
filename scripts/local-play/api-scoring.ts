@@ -154,7 +154,7 @@ async function submitContainerFlag(
 
   return verdict.correct
     ? recordCorrect(state, runtime, target, verdict, iso, flagIdEcho)
-    : recordWrong(state, runtime, target, iso, flagIdEcho);
+    : recordWrong(state, runtime, target, verdict, iso, flagIdEcho);
 }
 
 function submitSimulatorFlag(
@@ -435,6 +435,7 @@ function recordWrong(
   state: LocalPlayState,
   runtime: ProblemRuntime,
   target: SubmissionTarget,
+  verdict: VerifyResult,
   iso: string,
   flagIdField: { flagId?: string },
 ): LocalPlayResponse {
@@ -450,6 +451,10 @@ function recordWrong(
     result: "wrong",
     occurredAt: iso,
   });
+  // The container's leak-free failure reason (VerifyResponseSchema caps it at
+  // 2000 chars); absent for containers that judge silently.
+  const messageField =
+    verdict.message !== undefined && verdict.message !== "" ? { message: verdict.message } : {};
   return {
     status: StatusCodes.OK,
     body: {
@@ -457,6 +462,7 @@ function recordWrong(
       scoreDelta,
       totalScore: sessionScore(state),
       wrongCount,
+      ...messageField,
       ...flagIdField,
     },
   };
