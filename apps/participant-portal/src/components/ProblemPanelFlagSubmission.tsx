@@ -177,7 +177,7 @@ export function FlagSubmissionPanel({
                 penalty: -outcome.scoreDelta,
               })
             : t("problem_panel.wrong_body")}
-          {outcome.message !== undefined && outcome.message !== "" && (
+          {outcome.message !== undefined && (
             <Box variant="p">
               {t("problem_panel.wrong_verifier_message", { message: outcome.message })}
             </Box>
