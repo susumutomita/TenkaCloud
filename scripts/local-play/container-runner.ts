@@ -77,6 +77,11 @@ export interface ContainerRunnerDeps {
     projectDirectory?: string,
   ) => void;
   readonly waitForReachable: (url: string, label: string) => Promise<void>;
+  /** Bounded diagnostics for this exact owned compose unit after readiness fails. */
+  readonly diagnoseComposeUnit?: (
+    unit: LocalComposeUnit,
+    sensitiveValues: readonly string[],
+  ) => string | undefined;
   /**
    * The container secrets for one problem. Takes the problem id because the secrets are
    * derived from it (Issue #2975): a restarted container must present the same evidence
@@ -133,9 +138,10 @@ export class ContainerRunner {
       ...(projectDirectory ? { projectDirectory } : {}),
       ...(remappedComposePath ? { remappedComposePath } : {}),
     };
+    const generatedSecrets = this.deps.generateSecretEnv(problem.problemId, problem.secretEnv);
     const composeEnv: NodeJS.ProcessEnv = {
       ...process.env,
-      ...this.deps.generateSecretEnv(problem.problemId, problem.secretEnv),
+      ...generatedSecrets,
     };
     // The remapped compose must exist before its handle is committed, but ownership must
     // be durable before `compose up`: a SIGKILL immediately after Docker creates the
@@ -156,7 +162,7 @@ export class ContainerRunner {
       // report "running" before POST /verify was actually ready (or wait on
       // nothing at all). Always gate startup on verifyUrl, then on any additional
       // participant-facing endpoints the problem declares.
-      await this.waitUntilReady(remappedProblem);
+      await this.waitUntilReady(remappedProblem, unit, Object.values(generatedSecrets));
     } catch (startError) {
       try {
         if (ownership) ownership.cleanupFailedStart(unit);
@@ -192,7 +198,12 @@ export class ContainerRunner {
         problem: remapContainerProblem(problem, remapped.portMap),
       },
     };
-    await this.waitUntilReady(recovered.started.problem);
+    const generatedSecrets = this.deps.generateSecretEnv(problem.problemId, problem.secretEnv);
+    await this.waitUntilReady(
+      recovered.started.problem,
+      recovered.started.unit,
+      Object.values(generatedSecrets),
+    );
     return recovered;
   }
 
@@ -264,13 +275,29 @@ export class ContainerRunner {
     }
   }
 
-  private async waitUntilReady(problem: ContainerProblem): Promise<void> {
-    await Promise.all([
-      this.deps.waitForReachable(problem.verifyUrl, "verify endpoint"),
-      ...Object.entries(problem.challengeEndpoints).map(([label, url]) =>
-        this.deps.waitForReachable(url, `challenge endpoint ${label}`),
-      ),
-    ]);
+  private async waitUntilReady(
+    problem: ContainerProblem,
+    unit: LocalComposeUnit,
+    sensitiveValues: readonly string[],
+  ): Promise<void> {
+    try {
+      await Promise.all([
+        this.deps.waitForReachable(problem.verifyUrl, "verify endpoint"),
+        ...Object.entries(problem.challengeEndpoints).map(([label, url]) =>
+          this.deps.waitForReachable(url, `challenge endpoint ${label}`),
+        ),
+      ]);
+    } catch (error) {
+      let diagnostics: string | undefined;
+      try {
+        diagnostics = this.deps.diagnoseComposeUnit?.(unit, sensitiveValues);
+      } catch {
+        // Diagnostics are best effort and must never replace the endpoint failure.
+      }
+      if (!diagnostics) throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`${message}\n\n${diagnostics}`, { cause: error });
+    }
   }
 
   /** Tear one unit down (idempotent) and drop its remapped temp compose. */
