@@ -40,7 +40,7 @@
     "lint:eslint-scope": "bun run scripts/quality/check-eslint-scope.ts",
     "lint:md": "markdownlint-cli2 '**/*.md' '#**/node_modules' '#references' '#client' '#src' '#**/cdk.out/**' '#**/cdk.out.test/**' '#**/dist' '#problems/**' '#.cache/**'",
     "lint:text": "textlint '**/*.md' '!problems/**'",
-    "lint:format": "biome check",
+    "lint:format": "biome check --error-on-warnings",
     "fix:md": "markdownlint-cli2 --fix '**/*.md' '#**/node_modules' '#references' '#client' '#src' '#**/cdk.out/**' '#**/cdk.out.test/**' '#**/dist' '#problems/**' '#.cache/**'",
     "fix:text": "textlint --fix '**/*.md'",
     "fix:format": "biome check --write",
