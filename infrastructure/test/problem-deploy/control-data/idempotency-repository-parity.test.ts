@@ -170,7 +170,7 @@ describe("resolveIdempotencyRepository (runtime) — Issue 3002", () => {
   it("は turso で SQL を返し、table を用意する", async () => {
     // CREATE TABLE IF NOT EXISTS を打つこと。 打たないと Turso 環境で最初の reserve が落ち、
     // 「保護しているつもりで deploy が通らない」状態になる。
-    const run = vi.fn().mockResolvedValue({ changes: 0 });
+    const execute = vi.fn().mockResolvedValue({ rows: [] });
     const runtime = createControlDataRuntime({
       env: {
         CONTROL_DATA_BACKEND: "turso",
@@ -179,11 +179,16 @@ describe("resolveIdempotencyRepository (runtime) — Issue 3002", () => {
       },
       ssm: { send: vi.fn().mockResolvedValue({ Parameter: { Value: "secret-token" } }) },
       createClient: vi.fn().mockReturnValue({
-        execute: vi.fn().mockResolvedValue({ rows: [] }),
+        execute,
         batch: vi.fn().mockResolvedValue([]),
       }),
     });
     const repo = await runtime.resolveIdempotencyRepository({});
     expect(repo).toBeInstanceOf(SqlIdempotencyRepository);
+    expect(execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sql: expect.stringContaining("CREATE TABLE IF NOT EXISTS idempotency_records"),
+      }),
+    );
   });
 });

@@ -2133,15 +2133,6 @@
     },
     "@typescript-eslint/consistent-type-assertions": {
       "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    },
-    "sonarjs/no-dead-store": {
-      "count": 1
-    },
-    "sonarjs/no-unused-vars": {
-      "count": 1
     }
   },
   "infrastructure/test/problem-deploy/control-data/notifications-repository-parity.test.ts": {

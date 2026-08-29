@@ -13,7 +13,8 @@ const SENSITIVE_LOG_KEYS = new Set([
   "accesskey",
   "privatekey",
 ]);
-const ANSI_ESCAPE_RE = new RegExp("\\x1B\\[[0-?]*[ -/]*[@-~]", "g");
+// biome-ignore lint/suspicious/noControlCharactersInRegex: ESC (ANSI escape) そのものを剥がす regex
+const ANSI_ESCAPE_RE = /\x1B\[[0-?]*[ -/]*[@-~]/g;
 
 function isSensitiveLogLine(line: string): boolean {
   const separator = line.search(/[:=]/);
