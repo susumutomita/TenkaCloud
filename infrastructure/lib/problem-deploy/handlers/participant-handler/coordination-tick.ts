@@ -107,7 +107,13 @@ async function tickCoordinationEvent(
     );
     return false;
   }
-  const existing = await readCoordinationState(deps.store, target.tenantId, target.eventId);
+  const existing = await readCoordinationState(
+    deps.store,
+    target.tenantId,
+    target.eventId,
+    target.moduleRef,
+    target.moduleRef,
+  );
   const ctx: CoordinationContext = { eventId: target.eventId, teamIds: [...target.teamIds] };
   const currentState = existing?.state ?? plugin.initialState(ctx);
   const version = existing?.version ?? 0;
@@ -122,6 +128,8 @@ async function tickCoordinationEvent(
     nextState,
     version,
     nowIso,
+    target.moduleRef,
+    target.moduleRef,
   );
   if (written.kind === "conflict") {
     // 並行 op が version race に勝った (= applyOp が先に書いた)。 lost-update を作らず次 tick で

@@ -23,6 +23,8 @@ import {
 export interface CoordinationDispatchInput<Op> {
   readonly tenantId: string;
   readonly eventId: string;
+  readonly problemId: string;
+  readonly runId: string;
   readonly teamId: string;
   readonly op: Op;
   /** plugin が初期化に使う event 文脈 (= 参加チーム一覧)。 */
@@ -62,7 +64,13 @@ export async function dispatchCoordinationOp<State, Op, Projection>(
   // 別 event 用に組んだ state を保存 / 配信してしまう。 read/write 前に fail-closed で弾く。
   if (!isContextConsistent(input)) return { kind: "rejected", error: "context_mismatch" };
 
-  const existing = await readCoordinationState(store, input.tenantId, input.eventId);
+  const existing = await readCoordinationState(
+    store,
+    input.tenantId,
+    input.eventId,
+    input.problemId,
+    input.runId,
+  );
   const state = (existing?.state as State) ?? plugin.initialState(input.ctx);
   const version = existing?.version ?? 0;
 
@@ -76,6 +84,8 @@ export async function dispatchCoordinationOp<State, Op, Projection>(
     verdict.state,
     version,
     input.nowIso,
+    input.problemId,
+    input.runId,
   );
   if (written.kind === "conflict") return { kind: "conflict" };
 
@@ -98,6 +108,8 @@ export async function projectCoordinationForTeam<State, Op, Projection>(
   input: {
     readonly tenantId: string;
     readonly eventId: string;
+    readonly problemId: string;
+    readonly runId: string;
     readonly teamId: string;
     readonly ctx: CoordinationContext;
     readonly fallbackProjection: unknown;
@@ -105,7 +117,13 @@ export async function projectCoordinationForTeam<State, Op, Projection>(
 ): Promise<unknown> {
   // ctx 不整合 (= 別 event 用 ctx / team が event 外) は fail-closed で fallback を返す (= 機密非漏洩)。
   if (!isContextConsistent(input)) return input.fallbackProjection;
-  const existing = await readCoordinationState(store, input.tenantId, input.eventId);
+  const existing = await readCoordinationState(
+    store,
+    input.tenantId,
+    input.eventId,
+    input.problemId,
+    input.runId,
+  );
   const state = (existing?.state as State) ?? plugin.initialState(input.ctx);
   return safeProjectForTeam(plugin, state, input.teamId, input.fallbackProjection as Projection);
 }

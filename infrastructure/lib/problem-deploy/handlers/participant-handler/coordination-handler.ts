@@ -28,6 +28,9 @@ export interface CoordinationScope {
   readonly tenantId: string;
   readonly eventId: string;
   readonly teamId: string;
+  readonly problemId: string;
+  /** Stable platform run namespace. Current event deployments have one run per problem. */
+  readonly runId: string;
   /** plugin の initialState に渡す event 文脈 (= 参加チーム一覧)。 */
   readonly ctx: CoordinationContext;
   /** 問題が宣言する plugin module path (= interTeamCoordination.plugin)。 */
@@ -68,6 +71,8 @@ export async function handleCoordinationOp(
   const outcome = await loadAndDispatchCoordinationOp(deps.importer, scope.moduleRef, deps.store, {
     tenantId: scope.tenantId,
     eventId: scope.eventId,
+    problemId: scope.problemId,
+    runId: scope.runId,
     teamId: scope.teamId,
     op,
     ctx: scope.ctx,
@@ -91,6 +96,8 @@ export async function handleCoordinationProjection(
     {
       tenantId: scope.tenantId,
       eventId: scope.eventId,
+      problemId: scope.problemId,
+      runId: scope.runId,
       teamId: scope.teamId,
       ctx: scope.ctx,
       fallbackProjection: scope.fallbackProjection,
@@ -189,6 +196,8 @@ export function makeCoordinationScopeResolver(
           tenantId: item.tenantId,
           eventId: item.eventId,
           teamId: item.teamId,
+          problemId,
+          runId: problemId,
           ctx: { eventId: item.eventId, teamIds },
           // moduleRef は problemId (importer の key `coordination/<id>.mjs`)。
           // plugin path は宣言の有無判定にのみ使い、 実 load は problemId-keyed bundle を引く。

@@ -92,13 +92,15 @@ export const DEPLOYMENTS_SCHEMA_STATEMENTS = [
 )`,
   `CREATE INDEX IF NOT EXISTS idx_deployment_score_events_job_type_sk
   ON deployment_score_events (job_id, record_type, sk DESC)`,
-  `CREATE TABLE IF NOT EXISTS coordination_state (
+  `CREATE TABLE IF NOT EXISTS coordination_state_v2 (
   tenant_id  TEXT    NOT NULL,
   event_id   TEXT    NOT NULL,
+  problem_id TEXT    NOT NULL,
+  run_id     TEXT    NOT NULL,
   state      TEXT    NOT NULL,
   version    INTEGER NOT NULL,
   updated_at TEXT    NOT NULL,
-  PRIMARY KEY (tenant_id, event_id)
+  PRIMARY KEY (tenant_id, event_id, problem_id, run_id)
 )`,
 ] as const;
 

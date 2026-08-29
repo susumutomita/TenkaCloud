@@ -34,6 +34,8 @@ const ctx = { eventId: "e1", teamIds: ["t1", "t2"] };
 const base = {
   tenantId: "tn1",
   eventId: "e1",
+  problemId: "problem-1",
+  runId: "run-1",
   teamId: "t1",
   ctx,
   fallbackProjection: { count: -1 },
@@ -92,8 +94,28 @@ describe("coordination-store", () => {
       "2026-06-01T00:00:00Z",
     );
     expect(r).toEqual({ kind: "ok" });
-    expect(captured?.input.Item).toMatchObject({ PK: "COORD#tn1#e1", SK: "STATE", version: 5 });
+    expect(captured?.input.Item).toMatchObject({
+      PK: "COORD#tn1#e1#legacy#legacy",
+      SK: "STATE",
+      version: 5,
+    });
     expect(captured?.input.ExpressionAttributeValues).toEqual({ ":expected": 4 });
+  });
+
+  it("should isolate the same event by problem and run", async () => {
+    let captured: PutCommand | undefined;
+    const { store } = fakeStore({ onPut: (cmd) => (captured = cmd) });
+    await writeCoordinationState(
+      store,
+      "tn1",
+      "e1",
+      { count: 1 },
+      0,
+      "2026-06-01T00:00:00Z",
+      "problem-a",
+      "run-2",
+    );
+    expect(captured?.input.Item?.PK).toBe("COORD#tn1#e1#problem-a#run-2");
   });
 
   it("should return conflict on a ConditionalCheckFailed", async () => {

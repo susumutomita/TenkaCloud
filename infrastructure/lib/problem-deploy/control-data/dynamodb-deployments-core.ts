@@ -58,8 +58,13 @@ export function deploymentPk(jobId: string): string {
 }
 
 /** COORD# partition key (`coordination-store.ts` `pk`). */
-export function coordinationPk(tenantId: string, eventId: string): string {
-  return `COORD#${tenantId}#${eventId}`;
+export function coordinationPk(
+  tenantId: string,
+  eventId: string,
+  problemId = "legacy",
+  runId = "legacy",
+): string {
+  return `COORD#${tenantId}#${eventId}#${problemId}#${runId}`;
 }
 
 /** The physical DDB keys stripped from every returned domain record. */

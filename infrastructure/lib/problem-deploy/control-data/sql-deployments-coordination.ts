@@ -17,10 +17,12 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
   async readCoordinationState(
     tenantId: string,
     eventId: string,
+    problemId = "legacy",
+    runId = "legacy",
   ): Promise<CoordinationStateRecord | undefined> {
     const row = await this.core.sql.get(
-      "SELECT state, version FROM coordination_state WHERE tenant_id = ? AND event_id = ?",
-      [tenantId, eventId],
+      "SELECT state, version FROM coordination_state_v2 WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ?",
+      [tenantId, eventId, problemId, runId],
     );
     if (!row) return undefined;
     return { state: JSON.parse(String(row.state)), version: Number(row.version ?? 0) };
@@ -32,18 +34,22 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
     state: unknown,
     expectedVersion: number,
     at: string,
+    problemId = "legacy",
+    runId = "legacy",
   ): Promise<DeploymentMutationOutcome> {
     const result = await this.core.sql.run(
-      `INSERT INTO coordination_state (tenant_id, event_id, state, version, updated_at)
-       VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(tenant_id, event_id) DO UPDATE SET
+      `INSERT INTO coordination_state_v2 (tenant_id, event_id, problem_id, run_id, state, version, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(tenant_id, event_id, problem_id, run_id) DO UPDATE SET
          state = excluded.state,
          version = excluded.version,
          updated_at = excluded.updated_at
-       WHERE coordination_state.version = ?`,
+       WHERE coordination_state_v2.version = ?`,
       [
         tenantId,
         eventId,
+        problemId,
+        runId,
         JSON.stringify(normalizeJsonValue(state)),
         expectedVersion + 1,
         at,
@@ -51,5 +57,17 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
       ],
     );
     return Number(result.changes) > 0 ? { outcome: "updated" } : { outcome: "conflict" };
+  }
+
+  async deleteCoordinationState(
+    tenantId: string,
+    eventId: string,
+    problemId: string,
+    runId: string,
+  ): Promise<void> {
+    await this.core.sql.run(
+      "DELETE FROM coordination_state_v2 WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ?",
+      [tenantId, eventId, problemId, runId],
+    );
   }
 }

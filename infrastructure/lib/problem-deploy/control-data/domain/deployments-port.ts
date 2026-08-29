@@ -566,6 +566,8 @@ export interface DeploymentsCoordinationPort {
   readCoordinationState(
     tenantId: string,
     eventId: string,
+    problemId?: string,
+    runId?: string,
   ): Promise<CoordinationStateRecord | undefined>;
 
   /**
@@ -582,7 +584,16 @@ export interface DeploymentsCoordinationPort {
     state: unknown,
     expectedVersion: number,
     at: string,
+    problemId?: string,
+    runId?: string,
   ): Promise<DeploymentMutationOutcome>;
+
+  deleteCoordinationState(
+    tenantId: string,
+    eventId: string,
+    problemId: string,
+    runId: string,
+  ): Promise<void>;
 }
 
 /**

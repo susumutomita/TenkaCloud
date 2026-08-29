@@ -1,4 +1,4 @@
-import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { DeleteCommand, GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 import {
   COORD_STATE_SK,
   coordinationPk,
@@ -25,11 +25,13 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
   async readCoordinationState(
     tenantId: string,
     eventId: string,
+    problemId = "legacy",
+    runId = "legacy",
   ): Promise<CoordinationStateRecord | undefined> {
     const out = await this.core.ddb.send(
       new GetCommand({
         TableName: this.core.tableName,
-        Key: { PK: coordinationPk(tenantId, eventId), SK: COORD_STATE_SK },
+        Key: { PK: coordinationPk(tenantId, eventId, problemId, runId), SK: COORD_STATE_SK },
       }),
     );
     const item = out.Item as Record<string, unknown> | undefined;
@@ -50,13 +52,15 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
     state: unknown,
     expectedVersion: number,
     at: string,
+    problemId = "legacy",
+    runId = "legacy",
   ): Promise<DeploymentMutationOutcome> {
     try {
       await this.core.ddb.send(
         new PutCommand({
           TableName: this.core.tableName,
           Item: {
-            PK: coordinationPk(tenantId, eventId),
+            PK: coordinationPk(tenantId, eventId, problemId, runId),
             SK: COORD_STATE_SK,
             state,
             version: expectedVersion + 1,
@@ -71,5 +75,19 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
       if (isConditionalCheckFailed(err)) return { outcome: "conflict" };
       throw err;
     }
+  }
+
+  async deleteCoordinationState(
+    tenantId: string,
+    eventId: string,
+    problemId: string,
+    runId: string,
+  ): Promise<void> {
+    await this.core.ddb.send(
+      new DeleteCommand({
+        TableName: this.core.tableName,
+        Key: { PK: coordinationPk(tenantId, eventId, problemId, runId), SK: COORD_STATE_SK },
+      }),
+    );
   }
 }

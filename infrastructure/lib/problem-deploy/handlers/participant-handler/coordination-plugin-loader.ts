@@ -89,6 +89,8 @@ export async function loadAndProjectCoordinationForTeam(
   input: {
     readonly tenantId: string;
     readonly eventId: string;
+    readonly problemId: string;
+    readonly runId: string;
     readonly teamId: string;
     readonly ctx: CoordinationContext;
     readonly fallbackProjection: unknown;

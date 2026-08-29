@@ -28,6 +28,14 @@ export interface CoordinationStateRow {
   readonly version: number;
 }
 
+/** Platform-owned namespace. Plugins never see or construct persistence keys. */
+export interface CoordinationStateScope {
+  readonly tenantId: string;
+  readonly eventId: string;
+  readonly problemId: string;
+  readonly runId: string;
+}
+
 /** store が必要とする DDB client の最小 shape (= test で容易に mock)。 */
 export interface CoordinationStoreDeps {
   /** [#2527 Slice 4] Injected control-data runtime (from the Lambda entrypoint's instance). */
@@ -41,9 +49,11 @@ export async function readCoordinationState(
   deps: CoordinationStoreDeps,
   tenantId: string,
   eventId: string,
+  problemId = "legacy",
+  runId = "legacy",
 ): Promise<CoordinationStateRow | undefined> {
   const repository: DeploymentsCoordinationPort = await resolveDeploymentsRepository(deps);
-  return repository.readCoordinationState(tenantId, eventId);
+  return repository.readCoordinationState(tenantId, eventId, problemId, runId);
 }
 
 export type WriteCoordinationOutcome = { kind: "ok" } | { kind: "conflict" };
@@ -60,6 +70,8 @@ export async function writeCoordinationState(
   state: unknown,
   expectedVersion: number,
   nowIso: string,
+  problemId = "legacy",
+  runId = "legacy",
 ): Promise<WriteCoordinationOutcome> {
   const repository: DeploymentsCoordinationPort = await resolveDeploymentsRepository(deps);
   const outcome = await repository.writeCoordinationState(
@@ -68,6 +80,22 @@ export async function writeCoordinationState(
     state,
     expectedVersion,
     nowIso,
+    problemId,
+    runId,
   );
   return outcome.outcome === "updated" ? { kind: "ok" } : { kind: "conflict" };
+}
+
+/** Idempotently removes exactly one problem/run namespace. */
+export async function deleteCoordinationState(
+  deps: CoordinationStoreDeps,
+  scope: CoordinationStateScope,
+): Promise<void> {
+  const repository: DeploymentsCoordinationPort = await resolveDeploymentsRepository(deps);
+  await repository.deleteCoordinationState(
+    scope.tenantId,
+    scope.eventId,
+    scope.problemId,
+    scope.runId,
+  );
 }
