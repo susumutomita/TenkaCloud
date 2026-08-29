@@ -32,6 +32,7 @@ import {
 } from "../data/course-track";
 import { listProblemCatalog } from "../data/problems";
 import { useT } from "../i18n";
+import { visibleCourseCatalog } from "../lib/draft-visibility";
 
 /** role → i18n key。未知の role は素の文字列を出す (= 新しい role で画面が壊れない)。 */
 const ROLE_KEYS: Readonly<Record<string, string>> = {
@@ -199,10 +200,12 @@ export function CourseTracksPage() {
   const navigate = useNavigate();
   const t = useT();
 
-  const tracks = useMemo(
-    () => buildCourseTracks(listProblemCatalog(), toProblemProgress(view?.problems ?? [])),
-    [view],
-  );
+  const tracks = useMemo(() => {
+    const problems = view?.problems ?? [];
+    // Quests の draft toggle と同じ好みを尊重する (詳細は lib/draft-visibility.ts)。
+    const catalog = visibleCourseCatalog(listProblemCatalog(), problems);
+    return buildCourseTracks(catalog, toProblemProgress(problems));
+  }, [view]);
 
   // deploy された問題の jobId は問題 id と別なので、 catalog の problemId から引き直す。
   // 未 deploy の問題は開けないため、 一覧 (`/problems`) へ送る。

@@ -15,6 +15,7 @@ import StatusIndicator, {
   type StatusIndicatorProps,
 } from "@cloudscape-design/components/status-indicator";
 import TextFilter from "@cloudscape-design/components/text-filter";
+import Toggle from "@cloudscape-design/components/toggle";
 import type * as React from "react";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
@@ -31,6 +32,12 @@ import {
 import { findProblemMetadata, listProblemCatalog } from "../data/problems";
 import { useI18n, useT } from "../i18n";
 import { categoryOf } from "../lib/category";
+import {
+  readShowDraftProblems,
+  visibleCatalogEntries,
+  visibleQuestProblems,
+  writeShowDraftProblems,
+} from "../lib/draft-visibility";
 import {
   gateProblemDisplayName,
   hasGateCompletionBonus,
@@ -261,6 +268,8 @@ export function QuestsPage() {
   const [query, setQuery] = useState("");
   const [difficulty, setDifficulty] = useState<QuestDifficultyFilter>("all");
   const [answerStatus, setAnswerStatus] = useState<QuestAnswerStatusFilter>("all");
+  // draft 表示は開発者向けの opt-in。既定は隠す (通常プレーで未完成問題を起動させない)。
+  const [showDrafts, setShowDrafts] = useState(() => readShowDraftProblems());
 
   const allProblems = useMemo(() => view?.problems ?? [], [view]);
   const showCourseGuidance = showsCourseTracks(config.cloudMode);
@@ -269,10 +278,28 @@ export function QuestsPage() {
     () => new Map(catalog.map((metadata) => [metadata.id, metadata])),
     [catalog],
   );
+  // draft を隠した後の母集合。進行中 / 起動済み / pin された入門ドリルの draft は残る
+  // (lib/draft-visibility.ts の不変条件)。以降の一覧・件数・講座 track はこちらから作る。
+  const visibleProblems = useMemo(
+    () =>
+      visibleQuestProblems(
+        allProblems,
+        (problemId) => metadataByProblemId.get(problemId)?.status,
+        showDrafts,
+      ),
+    [allProblems, metadataByProblemId, showDrafts],
+  );
+  const hiddenDraftCount = allProblems.length - visibleProblems.length;
+  const visibleCatalog = useMemo(
+    () => visibleCatalogEntries(catalog, allProblems, showDrafts),
+    [allProblems, catalog, showDrafts],
+  );
   const courseTracks = useMemo(
     () =>
-      showCourseGuidance ? buildCourseAlignmentTracks(catalog, toProblemProgress(allProblems)) : [],
-    [allProblems, catalog, showCourseGuidance],
+      showCourseGuidance
+        ? buildCourseAlignmentTracks(visibleCatalog, toProblemProgress(visibleProblems))
+        : [],
+    [visibleProblems, visibleCatalog, showCourseGuidance],
   );
   // [Issue #2965] Home と同じ選択規則を使う。先頭を取ると track id の辞書順で「どの講座を
   // 勧めるか」が決まり、2 つの画面が別々の基準で別々の答えを出す状態になる。
@@ -306,9 +333,9 @@ export function QuestsPage() {
   const catalogProblems = useMemo(
     () =>
       showCourseGuidance
-        ? allProblems.filter((problem) => !courseProblemIds.has(problem.problemId))
-        : allProblems,
-    [allProblems, courseProblemIds, showCourseGuidance],
+        ? visibleProblems.filter((problem) => !courseProblemIds.has(problem.problemId))
+        : visibleProblems,
+    [visibleProblems, courseProblemIds, showCourseGuidance],
   );
 
   // Issue #2283: Progression Gate。 progression 不在 (= Gate 設定なし / feature flag OFF)
@@ -409,6 +436,10 @@ export function QuestsPage() {
               {categoryBadge(problem.scoring, t("quests.category_uncategorized"))}
               {difficultyBadge(problem.problemId, t)}
               {awsOnlyBadge(problem.problemId, t)}
+              {/* 開発者が toggle で表示した draft を見分ける印。exempt (進行中等) の draft にも付く。 */}
+              {metadataByProblemId.get(problem.problemId)?.status === "draft" && (
+                <Badge color="grey">{t("quests.draft_badge")}</Badge>
+              )}
               {gatePending && <Badge color="green">{t("quests.gate_start_here")}</Badge>}
               {bonusPending && progression && (
                 <Badge color="blue">
@@ -428,7 +459,7 @@ export function QuestsPage() {
       },
       sections: [],
     }),
-    [navigate, t, progression, gateName],
+    [navigate, t, progression, gateName, metadataByProblemId],
   );
 
   const emptyUnsolved = (
@@ -513,6 +544,22 @@ export function QuestsPage() {
             }
           />
         </ColumnLayout>
+        <SpaceBetween size="xs" direction="horizontal" alignItems="center">
+          <Toggle
+            checked={showDrafts}
+            onChange={({ detail }) => {
+              setShowDrafts(detail.checked);
+              writeShowDraftProblems(detail.checked);
+            }}
+          >
+            {t("quests.show_drafts_label")}
+          </Toggle>
+          {!showDrafts && hiddenDraftCount > 0 && (
+            <Box variant="small" color="text-status-inactive">
+              {t("quests.drafts_hidden_hint", { count: hiddenDraftCount })}
+            </Box>
+          )}
+        </SpaceBetween>
       </SpaceBetween>
 
       {view && hasActiveFilters && filteredProblems.length === 0 ? (

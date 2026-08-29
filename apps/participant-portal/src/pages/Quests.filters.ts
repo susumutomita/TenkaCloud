@@ -18,6 +18,8 @@ export interface QuestSearchMetadata {
   readonly shortDescription?: string;
   readonly tags?: readonly string[];
   readonly difficulty?: 1 | 2 | 3 | 4 | 5;
+  /** カタログの公開段階。draft の表示切り替え (lib/draft-visibility.ts) と draft badge が読む。 */
+  readonly status?: "ready" | "draft" | "deprecated";
   readonly i18n?: {
     readonly en?: {
       readonly name?: string;

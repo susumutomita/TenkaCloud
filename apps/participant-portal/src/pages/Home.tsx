@@ -20,6 +20,7 @@ import {
 } from "../data/course-track";
 import { listProblemCatalog } from "../data/problems";
 import { useT } from "../i18n";
+import { visibleCourseCatalog } from "../lib/draft-visibility";
 import { TeamScorePanel } from "./TeamScorePanel";
 
 /**
@@ -53,7 +54,11 @@ export function HomePage({ config }: { config: AppConfig }) {
    */
   const courseNext = useMemo(() => {
     if (!showsCourseTracks(config.cloudMode)) return undefined;
-    const tracks = buildCourseTracks(listProblemCatalog(), toProblemProgress(view?.problems ?? []));
+    const problems = view?.problems ?? [];
+    // Quests の draft toggle と同じ好みを尊重する。隠している間は「次にやること」にも
+    // draft を出さない (推薦して隠すのは矛盾)。進行中の draft は lib 側の exempt で残る。
+    const catalog = visibleCourseCatalog(listProblemCatalog(), problems);
+    const tracks = buildCourseTracks(catalog, toProblemProgress(problems));
     // [Issue #2965] 先頭を取ると track id の辞書順で「どの講座を勧めるか」が決まってしまい、
     // 1 問解いた直後の初学者に大学院レベルの暗号の問題が出ていた。選択は明示的な優先順で行う。
     return recommendedNextAcrossTracks(tracks);
