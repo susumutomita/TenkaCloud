@@ -43,6 +43,7 @@ function runDiskCheck(options: { readonly availableKiB?: number; readonly probeF
       `. '${PREREQUISITES}'`,
       "tenkacloud_docker_disk_meets_floor",
       "status=$?",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: JS の template ではなく shell の変数展開をそのまま検証する
       'printf "%s:%s" "$status" "${TENKACLOUD_DOCKER_DISK_AVAILABLE_BYTES:-unknown}"',
       "exit 0",
       "",

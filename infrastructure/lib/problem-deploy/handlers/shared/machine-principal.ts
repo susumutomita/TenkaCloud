@@ -182,6 +182,38 @@ export function machineActor(principal: MachinePrincipal): string {
  *  6. `?withTeamLoginKeys=true` → 無条件 deny (role により既に構造的に不可だが明示する)
  *  7. ここで初めて principal を context へ publish する
  */
+type MachineGuardDecision =
+  | { readonly kind: "pass" }
+  | { readonly kind: "publish"; readonly principal: MachinePrincipal };
+
+/** docstring の 3〜6 の判定本体。deny は throw、素通しと publish を値で返す。順序は security-critical。 */
+function decideMachineAccess(
+  claims: JwtClaims,
+  method: string,
+  path: string,
+  withTeamLoginKeys: boolean,
+): MachineGuardDecision {
+  const principal = parseMachinePrincipal(claims);
+  const route = findMachineRoute(method, path);
+
+  if (!principal) {
+    // human でも machine でもない token。allowlist 外は監査付きで即 deny、allowlist 内は
+    // 下流の blanket `requireRole` が role 不在で 403 に倒す (どちらでも 403、より早く落とす)。
+    if (!route) throw new MachineRouteDeniedError("not_a_machine_principal", method, path);
+    return { kind: "pass" };
+  }
+  if (!route) {
+    throw new MachineRouteDeniedError("route_not_allowlisted", method, path, principal);
+  }
+  if (!principal.capabilities.has(route.capability)) {
+    throw new MachineRouteDeniedError("capability_missing", method, path, principal);
+  }
+  if (withTeamLoginKeys) {
+    throw new MachineRouteDeniedError("team_login_keys_forbidden", method, path, principal);
+  }
+  return { kind: "publish", principal };
+}
+
 export function createMachineGuardMiddleware(): MiddlewareHandler {
   return async (c, next) => {
     if (c.req.path.endsWith("/healthz")) return next();
@@ -189,28 +221,13 @@ export function createMachineGuardMiddleware(): MiddlewareHandler {
     if (!claims) return next();
     if (isHumanClaims(claims)) return next();
 
-    const method = c.req.method;
-    const path = c.req.path;
-    const principal = parseMachinePrincipal(claims);
-    const route = findMachineRoute(method, path);
-
-    if (!principal) {
-      // human でも machine でもない token。allowlist 外は監査付きで即 deny、allowlist 内は
-      // 下流の blanket `requireRole` が role 不在で 403 に倒す (どちらでも 403、より早く落とす)。
-      if (!route) throw new MachineRouteDeniedError("not_a_machine_principal", method, path);
-      return next();
-    }
-    if (!route) {
-      throw new MachineRouteDeniedError("route_not_allowlisted", method, path, principal);
-    }
-    if (!principal.capabilities.has(route.capability)) {
-      throw new MachineRouteDeniedError("capability_missing", method, path, principal);
-    }
-    if (c.req.query("withTeamLoginKeys") === "true") {
-      throw new MachineRouteDeniedError("team_login_keys_forbidden", method, path, principal);
-    }
-
-    c.set("machinePrincipal", principal);
+    const decision = decideMachineAccess(
+      claims,
+      c.req.method,
+      c.req.path,
+      c.req.query("withTeamLoginKeys") === "true",
+    );
+    if (decision.kind === "publish") c.set("machinePrincipal", decision.principal);
     return next();
   };
 }

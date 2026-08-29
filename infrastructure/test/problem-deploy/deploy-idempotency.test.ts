@@ -394,7 +394,7 @@ describe("壊れた保存行と例外の扱い (Issue 3002)", () => {
     const broken: IdempotencyPort = {
       reserve: async () => ({ kind: "reserved" }),
       complete: async () => {
-        // biome-ignore lint: Error 以外が投げられる経路を実際に再現する
+        // Error 以外が投げられる経路を実際に再現する。
         throw "not an error";
       },
     };

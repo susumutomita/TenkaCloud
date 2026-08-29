@@ -24,6 +24,7 @@ describe("release workflow contract", () => {
   });
 
   it("checks out the exact tag, not a branch", () => {
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: GitHub Actions の式構文を平文のまま検証する
     expect(workflow).toContain("ref: ${{ steps.tag.outputs.tag }}");
   });
 
@@ -154,6 +155,7 @@ describe("published release verification contract", () => {
   });
 
   it("checks out the exact tag the release job resolved", () => {
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: GitHub Actions の式構文を平文のまま検証する
     expect(workflow).toContain("ref: ${{ needs.release.outputs.tag }}");
     expect(workflow).toMatch(/ {4}outputs:\n {6}tag: \$\{\{ steps\.tag\.outputs\.tag \}\}\n/);
   });

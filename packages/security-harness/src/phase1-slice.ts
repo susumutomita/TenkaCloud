@@ -410,12 +410,21 @@ function evaluateBuildFailure(params: BuildFailureEvaluationParams): PatchEvalua
   );
 }
 
-export async function runPhase1Slice(options: Phase1SliceOptions): Promise<Phase1SliceResult> {
-  const now = options.now ?? (() => new Date().toISOString());
-  const shouldCancel = options.shouldCancel ?? ((): boolean => false);
-  const makeClient = options.makeHttpClient ?? makeHttpClient;
+/** 実行時 option の既定値解決。runPhase1Slice 本体を状態機械の進行だけにする。 */
+function resolvePhase1SliceOptions(options: Phase1SliceOptions) {
   const minimumReproductions = options.minimumReproductions ?? 2;
-  const reproductionAttempts = options.reproductionAttempts ?? minimumReproductions;
+  return {
+    now: options.now ?? ((): string => new Date().toISOString()),
+    shouldCancel: options.shouldCancel ?? ((): boolean => false),
+    makeClient: options.makeHttpClient ?? makeHttpClient,
+    minimumReproductions,
+    reproductionAttempts: options.reproductionAttempts ?? minimumReproductions,
+  };
+}
+
+export async function runPhase1Slice(options: Phase1SliceOptions): Promise<Phase1SliceResult> {
+  const { now, shouldCancel, makeClient, minimumReproductions, reproductionAttempts } =
+    resolvePhase1SliceOptions(options);
   const threatModelDigest = toDigestRef(sha256Hex("idor-documents-focus-area-v1"));
   const timeline = new TimelineRecorder(options.runId, now);
 

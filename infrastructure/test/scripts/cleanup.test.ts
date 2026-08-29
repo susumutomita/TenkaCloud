@@ -78,6 +78,16 @@ interface Scenario {
   readonly preExportedCdkParams?: Readonly<Record<string, string>>;
 }
 
+/** shell fake へ渡す boolean env の表現。 */
+function flag(value: boolean | undefined): "1" | "0" {
+  return value ? "1" : "0";
+}
+
+/** fake が書いたログを読む。未生成 (その経路に到達しなかった) は空文字列。 */
+function readLogIfWritten(logPath: string): string {
+  return existsSync(logPath) ? readFileSync(logPath, "utf8") : "";
+}
+
 function run(scenario: Scenario): RunResult {
   const dir = mkdtempSync(join(tmpdir(), "tenkacloud-cleanup-"));
   tempDirs.push(dir);
@@ -317,15 +327,13 @@ exit 0
       FAKE_REGION: "ap-northeast-1",
       FAKE_ACCOUNT_ID: "123456789012",
       FAKE_SOURCE_BUCKET: sourceBucket,
-      FAKE_SOURCE_BUCKET_EXISTS: scenario.sourceBucketExists ? "1" : "0",
-      FAKE_ADMIN_CONSOLE_HOSTING_EXISTS: scenario.adminConsoleHostingStackExists ? "1" : "0",
-      FAKE_ADMIN_CONSOLE_HOSTING_DELETE_CANCELED: scenario.adminConsoleHostingDeleteCanceled
-        ? "1"
-        : "0",
+      FAKE_SOURCE_BUCKET_EXISTS: flag(scenario.sourceBucketExists),
+      FAKE_ADMIN_CONSOLE_HOSTING_EXISTS: flag(scenario.adminConsoleHostingStackExists),
+      FAKE_ADMIN_CONSOLE_HOSTING_DELETE_CANCELED: flag(scenario.adminConsoleHostingDeleteCanceled),
       FAKE_DELETE_CANCEL_REASON:
         "Cannot delete export tenkacloud-admin-console-hosting:ExportsOutputFnGetAttDistributionDomainName as it is in use by tenkacloud-admin-console-insight and tenkacloud-control-plane.",
-      FAKE_CDK_DESTROY_ALL_FAILS: scenario.cdkDestroyAllFails ? "1" : "0",
-      FAKE_STS_EXPIRED: scenario.stsExpired ? "1" : "0",
+      FAKE_CDK_DESTROY_ALL_FAILS: flag(scenario.cdkDestroyAllFails),
+      FAKE_STS_EXPIRED: flag(scenario.stsExpired),
       FAKE_S3_BUCKETS: s3Buckets.join(" "),
       FAKE_TENANT_STACKS: tenantStacks.join(" "),
       FAKE_ORPHAN_SSM_PARAMS: orphanSsmParams.join(" "),
@@ -342,12 +350,12 @@ exit 0
     status: result.status,
     stderr: result.stderr,
     stdout: result.stdout,
-    awsCalls: existsSync(callLog) ? readFileSync(callLog, "utf8") : "",
-    bunCalls: existsSync(bunCallLog) ? readFileSync(bunCallLog, "utf8") : "",
-    orderedCalls: existsSync(orderedCallLog) ? readFileSync(orderedCallLog, "utf8") : "",
-    cdkParamEnv: existsSync(cdkParamEnvLog) ? readFileSync(cdkParamEnvLog, "utf8") : "",
-    ddbDeletes: existsSync(ddbDeleteLog) ? readFileSync(ddbDeleteLog, "utf8") : "",
-    lgDeletes: existsSync(lgDeleteLog) ? readFileSync(lgDeleteLog, "utf8") : "",
+    awsCalls: readLogIfWritten(callLog),
+    bunCalls: readLogIfWritten(bunCallLog),
+    orderedCalls: readLogIfWritten(orderedCallLog),
+    cdkParamEnv: readLogIfWritten(cdkParamEnvLog),
+    ddbDeletes: readLogIfWritten(ddbDeleteLog),
+    lgDeletes: readLogIfWritten(lgDeleteLog),
   };
 }
 

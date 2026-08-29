@@ -109,6 +109,39 @@ export interface AdminInsightApiLambdaProps {
  * Auth: 呼び出し側の AdminConsoleInsightStack で HTTP API + JWT Authorizer (ControlPlane
  * UserPool) を結線する。Handler は更に `cognito:groups` ⊇ {SystemAdmin} の claim 検査を行う。
  */
+/** handler へ渡す env。任意 backend / 任意 table は「無いなら env ごと足さない」を束ねる。 */
+function adminInsightEnvironment(props: AdminInsightApiLambdaProps): Record<string, string> {
+  return {
+    // Issue #2441: 純 SQL backend では table 自体が無いので env も足さない。
+    ...(props.deploymentsTable ? { DEPLOYMENTS_TABLE_NAME: props.deploymentsTable.tableName } : {}),
+    // Issue #2440: 純 SQL backend では table が無いので env も足さない。
+    ...(props.eventsTable ? { EVENTS_TABLE_NAME: props.eventsTable.tableName } : {}),
+    ...(props.teamsTable ? { TEAMS_TABLE_NAME: props.teamsTable.tableName } : {}),
+    // Issue #814 Phase 2: deprovisioning Step Functions ARN を env に渡す (= 未指定なら空)。
+    // handler は env の有無で route を 503 にするか実 SFN.ListExecutions を呼ぶか分岐する。
+    DEPROVISIONING_STATE_MACHINE_ARN: props.deprovisioningStateMachineArn ?? "",
+    PROVISIONING_STATE_MACHINE_ARN: props.provisioningStateMachineArn ?? "",
+    // Issue #950: admin audit log table 名 (read-only 経由で表示)
+    ADMIN_AUDIT_LOG_TABLE_NAME: props.adminAuditLogTable?.tableName ?? "",
+    // Issue #2311: 監査ログ feature flag (無効時のみ AUDIT_LOG_ENABLED="false" を注入)。
+    ...auditLogEnabledEnv(props.auditLogEnabled),
+    ...(props.auditRetentionDays !== undefined
+      ? { AUDIT_RETENTION_DAYS: String(props.auditRetentionDays) }
+      : {}),
+    // Issue #1431: AWS Budgets DescribeBudget で月次コスト消化率を返す (= 無料 API)。
+    // 未指定なら空 → handler は available:false (= 外部リンク表示) に倒す。
+    COST_BUDGET_NAME: props.costBudgetName ?? "",
+    COST_BUDGET_ACCOUNT_ID: props.costBudgetAccountId ?? "",
+    // [Issue #2438]: control-plane data backend (default dynamodb は env を足さず byte 互換)。
+    ...controlDataBackendEnv(props.controlDataBackend ?? "dynamodb"),
+    ...(props.tursoDatabaseUrl ? { TURSO_DATABASE_URL: props.tursoDatabaseUrl } : {}),
+    ...(props.tursoAuthTokenParameterName
+      ? { TURSO_AUTH_TOKEN_PARAMETER_NAME: props.tursoAuthTokenParameterName }
+      : {}),
+    NODE_OPTIONS: "--enable-source-maps",
+  };
+}
+
 export class AdminInsightApiLambda extends Construct {
   public readonly fn: NodejsFunction;
 
@@ -121,37 +154,7 @@ export class AdminInsightApiLambda extends Construct {
       // ≒ 5s が最大。安全側で 15s。
       timeout: Duration.seconds(15),
       memorySize: 256,
-      environment: {
-        // Issue #2441: 純 SQL backend では table 自体が無いので env も足さない。
-        ...(props.deploymentsTable
-          ? { DEPLOYMENTS_TABLE_NAME: props.deploymentsTable.tableName }
-          : {}),
-        // Issue #2440: 純 SQL backend では table が無いので env も足さない。
-        ...(props.eventsTable ? { EVENTS_TABLE_NAME: props.eventsTable.tableName } : {}),
-        ...(props.teamsTable ? { TEAMS_TABLE_NAME: props.teamsTable.tableName } : {}),
-        // Issue #814 Phase 2: deprovisioning Step Functions ARN を env に渡す (= 未指定なら空)。
-        // handler は env の有無で route を 503 にするか実 SFN.ListExecutions を呼ぶか分岐する。
-        DEPROVISIONING_STATE_MACHINE_ARN: props.deprovisioningStateMachineArn ?? "",
-        PROVISIONING_STATE_MACHINE_ARN: props.provisioningStateMachineArn ?? "",
-        // Issue #950: admin audit log table 名 (read-only 経由で表示)
-        ADMIN_AUDIT_LOG_TABLE_NAME: props.adminAuditLogTable?.tableName ?? "",
-        // Issue #2311: 監査ログ feature flag (無効時のみ AUDIT_LOG_ENABLED="false" を注入)。
-        ...auditLogEnabledEnv(props.auditLogEnabled),
-        ...(props.auditRetentionDays !== undefined
-          ? { AUDIT_RETENTION_DAYS: String(props.auditRetentionDays) }
-          : {}),
-        // Issue #1431: AWS Budgets DescribeBudget で月次コスト消化率を返す (= 無料 API)。
-        // 未指定なら空 → handler は available:false (= 外部リンク表示) に倒す。
-        COST_BUDGET_NAME: props.costBudgetName ?? "",
-        COST_BUDGET_ACCOUNT_ID: props.costBudgetAccountId ?? "",
-        // [Issue #2438]: control-plane data backend (default dynamodb は env を足さず byte 互換)。
-        ...controlDataBackendEnv(props.controlDataBackend ?? "dynamodb"),
-        ...(props.tursoDatabaseUrl ? { TURSO_DATABASE_URL: props.tursoDatabaseUrl } : {}),
-        ...(props.tursoAuthTokenParameterName
-          ? { TURSO_AUTH_TOKEN_PARAMETER_NAME: props.tursoAuthTokenParameterName }
-          : {}),
-        NODE_OPTIONS: "--enable-source-maps",
-      },
+      environment: adminInsightEnvironment(props),
     });
 
     // read-only に限定する。当初の Deployments / Events に加え、drill-down (#598) で

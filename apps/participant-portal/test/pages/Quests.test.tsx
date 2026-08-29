@@ -856,3 +856,95 @@ describe("QuestsPage Progression Gate (Issue #2283)", () => {
     expect(screen.queryByText("quests.locked_badge")).not.toBeInTheDocument();
   });
 });
+
+describe("QuestsPage draft visibility toggle", () => {
+  function catalogEntry(id: string, status: "ready" | "draft"): ProblemCatalogEntry {
+    return {
+      id,
+      name: id,
+      category: "Challenge",
+      status,
+      visibility: "public",
+      difficulty: 1,
+      estimatedDuration: "20 min",
+      shortDescription: "s",
+      learningGoals: [],
+      tags: [],
+      endpoints: [],
+      phases: [],
+      disruptions: [],
+      runtime: { provider: "docker", engine: "compose" },
+    };
+  }
+
+  function deployed(problemId: string): ParticipantProblemView {
+    return problem({
+      problemId,
+      jobId: `job-${problemId}`,
+      scoring: { kind: "flag", flagSubmitted: false },
+    });
+  }
+
+  beforeEach(() => {
+    localStorage.clear();
+    mockListCatalog.mockReturnValue([
+      catalogEntry("draft-quest", "draft"),
+      catalogEntry("ready-quest", "ready"),
+    ]);
+    mockTeamView.mockReturnValue({
+      view: { problems: [deployed("draft-quest"), deployed("ready-quest")] },
+      error: null,
+    });
+  });
+
+  afterEach(() => {
+    localStorage.clear();
+  });
+
+  it("should hide an untouched draft by default and count it in the hint", () => {
+    render(<QuestsPage />);
+
+    expect(screen.queryByText("draft-quest")).not.toBeInTheDocument();
+    expect(screen.getByText("ready-quest")).toBeInTheDocument();
+    expect(screen.getByText('quests.drafts_hidden_hint|{"count":1}')).toBeInTheDocument();
+  });
+
+  it("should reveal drafts with a badge when toggled, and persist the choice", () => {
+    render(<QuestsPage />);
+
+    fireEvent.click(screen.getByRole("checkbox"));
+
+    expect(screen.getByText("draft-quest")).toBeInTheDocument();
+    expect(screen.getByText("quests.draft_badge")).toBeInTheDocument();
+    expect(screen.queryByText('quests.drafts_hidden_hint|{"count":1}')).not.toBeInTheDocument();
+    expect(localStorage.getItem("tenkacloud.showDraftProblems")).toBe("true");
+
+    // もう一度 off にすると隠れて、好みも戻る。
+    fireEvent.click(screen.getByRole("checkbox"));
+    expect(screen.queryByText("draft-quest")).not.toBeInTheDocument();
+    expect(localStorage.getItem("tenkacloud.showDraftProblems")).toBe("false");
+  });
+
+  it("should keep a draft the participant is amid, marked with the badge, even while hidden", () => {
+    mockTeamView.mockReturnValue({
+      view: {
+        problems: [
+          problem({
+            problemId: "draft-quest",
+            jobId: "job-draft-quest",
+            scoring: { kind: "flag", flagSubmitted: false },
+            lifecycle: { status: "running", runtimeKind: "docker" },
+          }),
+          deployed("ready-quest"),
+        ],
+      },
+      error: null,
+    });
+
+    render(<QuestsPage />);
+
+    expect(screen.getByText("draft-quest")).toBeInTheDocument();
+    expect(screen.getByText("quests.draft_badge")).toBeInTheDocument();
+    expect(screen.queryByText(/drafts_hidden_hint/)).not.toBeInTheDocument();
+  });
+});
