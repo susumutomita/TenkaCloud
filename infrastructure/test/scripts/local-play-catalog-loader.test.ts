@@ -276,11 +276,82 @@ describe("loadProblemCatalogEntries (#2925 / #2926)", () => {
  * the wire. Run against the real catalog rather than a fixture: a fixture only proves the
  * projection drops the fields the fixture happened to declare.
  */
-/** True when `value` from a raw metadata.json can be found in the projected payload. */
+/** True when `value` from a raw metadata.json can be found in `payload`. */
 function isLeaked(value: unknown, payload: string, asProse: boolean): boolean {
   if (asProse) return typeof value === "string" && value.length > 30 && payload.includes(value);
   return value !== undefined && payload.includes(JSON.stringify(value));
 }
+
+/** Fields whose raw value must never appear in a problem's own projected entry, and how to look for each. */
+const FORBIDDEN_FIELDS = [
+  // Long prose: substring match, guarded by a length floor so a short shared phrase
+  // (e.g. a one-word description) cannot produce a false positive.
+  { fields: ["description", "writeup", "writeupI18n", "cfnTemplate"], asProse: true },
+  // Structured authoring data: exact serialized match.
+  { fields: ["scoring", "cfnParameters"], asProse: false },
+] as const;
+
+/**
+ * `${entry.id}.${field}` for every forbidden field of `raw` (that entry's own
+ * raw metadata.json) found inside `entry`'s OWN serialized projection --
+ * never against any other problem's entry, or the combined multi-problem
+ * catalog payload. Scoping matters: a forbidden value only actually "leaks"
+ * if it appears in the entry it was supposed to be redacted FROM. Checking a
+ * combined payload instead is both over-broad (a short/generic forbidden
+ * value -- `cfnParameters: {}` serializes to the 2-character string `"{}"` --
+ * trivially collides with unrelated prose anywhere else in a 100+-problem
+ * catalog, e.g. another problem's own instructions quoting an empty dict
+ * literal) and detects nothing extra: a real leak of problem A's redacted
+ * field always shows up inside problem A's own entry too.
+ */
+function leaksForEntry(
+  entry: Record<string, unknown> & { id: string },
+  raw: Record<string, unknown>,
+): string[] {
+  const ownPayload = JSON.stringify(entry);
+  return FORBIDDEN_FIELDS.flatMap(({ fields, asProse }) =>
+    fields
+      .filter((field) => isLeaked(raw[field], ownPayload, asProse))
+      .map((f) => `${entry.id}.${f}`),
+  );
+}
+
+describe("leaksForEntry -- scoped-to-own-entry leak detection [platform fix landed alongside TenkaCloudChallenge#638]", () => {
+  // Focused, catalog-independent unit coverage for the scoping fix itself --
+  // the integration test below (against the real catalog) can only prove
+  // "no leak currently exists", never "a real leak would still be caught" or
+  // "this exact false-positive class can't recur", since neither scenario
+  // is something the real catalog is guaranteed to contain.
+  it("still catches a genuine self-leak: the forbidden field appears inside its OWN entry", () => {
+    const raw = { scoring: { rubric: "internal grading logic", points: 999 } };
+    // Simulates a projection bug that forgot to redact `scoring` onto the
+    // wire entry itself.
+    const leakyEntry = { id: "fake-problem", scoring: raw.scoring };
+    expect(leaksForEntry(leakyEntry, raw)).toEqual(["fake-problem.scoring"]);
+  });
+
+  it("does NOT flag a coincidental match against an UNRELATED problem's entry (the exact false positive this scoping fixes)", () => {
+    // `cfnParameters: {}` serializes to the trivially-collidable string
+    // `"{}"`. `otherProblemsPayload` simulates the REST of a large combined
+    // catalog containing an unrelated problem whose prose happens to quote
+    // an empty dict literal -- exactly what tripped this check against the
+    // real catalog before this fix (`hello-world-battle` /
+    // `microservice-migration-battle`, both legitimately `cfnParameters: {}`,
+    // colliding with an unrelated Advanced Cryptography challenge's
+    // "見つからなければ空の辞書 `{}`" prose).
+    const raw = { cfnParameters: {} };
+    const ownEntry = { id: "hello-world-battle", cfnParameters: undefined }; // correctly redacted off the wire
+    const otherProblemsPayload =
+      '[{"id":"unrelated","description":"returns an empty dict `{}` if not found"}]';
+
+    expect(leaksForEntry(ownEntry, raw)).toEqual([]);
+    // Confirms this is a real collision (i.e. the test above isn't passing
+    // vacuously) -- `isLeaked` alone, against the WRONG scope, still finds
+    // it. Only the CALLER's scoping (using `ownEntry`, not a combined
+    // multi-problem payload) is what fixes this.
+    expect(isLeaked(raw.cfnParameters, otherProblemsPayload, false)).toBe(true);
+  });
+});
 
 describe("runtime catalog wire payload carries nothing participant-hostile (#2925 / #2926)", () => {
   const REPO_ROOTS = problemSearchRoots(join(__dirname, "..", "..", ".."));
@@ -330,25 +401,10 @@ describe("runtime catalog wire payload carries nothing participant-hostile (#292
     return JSON.parse(readFileSync(join(dir, "metadata.json"), "utf8")) as Record<string, unknown>;
   }
 
-  /** Fields whose raw value must never appear in the payload, and how to look for each. */
-  const FORBIDDEN = [
-    // Long prose: substring match, guarded by a length floor so a short shared phrase
-    // (e.g. a one-word description) cannot produce a false positive.
-    { fields: ["description", "writeup", "writeupI18n", "cfnTemplate"], asProse: true },
-    // Structured authoring data: exact serialized match.
-    { fields: ["scoring", "cfnParameters"], asProse: false },
-  ] as const;
-
   it("should never carry a problem's writeup, template, or scoring rules", () => {
-    const payload = JSON.stringify(entries);
-    const leaks = entries.flatMap((entry) => {
-      const raw = rawMetadataOf(entry.id);
-      return FORBIDDEN.flatMap(({ fields, asProse }) =>
-        fields
-          .filter((field) => isLeaked(raw[field], payload, asProse))
-          .map((f) => `${entry.id}.${f}`),
-      );
-    });
+    // See `leaksForEntry`'s doc comment above for why this is scoped to each
+    // problem's own entry rather than the combined multi-problem payload.
+    const leaks = entries.flatMap((entry) => leaksForEntry(entry, rawMetadataOf(entry.id)));
     expect(leaks).toEqual([]);
   });
 });
