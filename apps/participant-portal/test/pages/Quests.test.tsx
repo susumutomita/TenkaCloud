@@ -887,6 +887,8 @@ describe("QuestsPage draft visibility toggle", () => {
 
   beforeEach(() => {
     localStorage.clear();
+    // draft を隠す規則は local play (一覧 = catalog 全件) だけで成立する。
+    mockAppConfig.mockReturnValue({ cloudMode: "local" });
     mockListCatalog.mockReturnValue([
       catalogEntry("draft-quest", "draft"),
       catalogEntry("ready-quest", "ready"),
@@ -945,6 +947,22 @@ describe("QuestsPage draft visibility toggle", () => {
 
     expect(screen.getByText("draft-quest")).toBeInTheDocument();
     expect(screen.getByText("quests.draft_badge")).toBeInTheDocument();
+    expect(screen.queryByText(/drafts_hidden_hint/)).not.toBeInTheDocument();
+  });
+
+  it.each([
+    "real",
+    "mock",
+  ] as const)("should keep an operator-deployed draft and drop the dev toggle in %s mode", (cloudMode) => {
+    // cloud mode の一覧は運営が deploy した分だけ。catalog が draft でも隠さないし、
+    // 何も隠れない以上 toggle も出さない。
+    mockAppConfig.mockReturnValue({ cloudMode });
+
+    render(<QuestsPage />);
+
+    expect(screen.getByText("draft-quest")).toBeInTheDocument();
+    expect(screen.getByText("ready-quest")).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
     expect(screen.queryByText(/drafts_hidden_hint/)).not.toBeInTheDocument();
   });
 });

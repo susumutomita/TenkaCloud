@@ -33,6 +33,7 @@ import { findProblemMetadata, listProblemCatalog } from "../data/problems";
 import { useI18n, useT } from "../i18n";
 import { categoryOf } from "../lib/category";
 import {
+  hidesDraftProblems,
   readShowDraftProblems,
   visibleCatalogEntries,
   visibleQuestProblems,
@@ -270,6 +271,9 @@ export function QuestsPage() {
   const [answerStatus, setAnswerStatus] = useState<QuestAnswerStatusFilter>("all");
   // draft 表示は開発者向けの opt-in。既定は隠す (通常プレーで未完成問題を起動させない)。
   const [showDrafts, setShowDrafts] = useState(() => readShowDraftProblems());
+  // 隠す規則が成立するのは一覧 = catalog 全件の local だけ。cloud mode では toggle 自体を出さない
+  // (何も隠れないので効き目のない開発者向けスイッチになる)。
+  const canHideDrafts = hidesDraftProblems(config.cloudMode);
 
   const allProblems = useMemo(() => view?.problems ?? [], [view]);
   const showCourseGuidance = showsCourseTracks(config.cloudMode);
@@ -286,8 +290,9 @@ export function QuestsPage() {
         allProblems,
         (problemId) => metadataByProblemId.get(problemId)?.status,
         showDrafts,
+        config.cloudMode,
       ),
-    [allProblems, metadataByProblemId, showDrafts],
+    [allProblems, config.cloudMode, metadataByProblemId, showDrafts],
   );
   const hiddenDraftCount = allProblems.length - visibleProblems.length;
   const visibleCatalog = useMemo(
@@ -544,22 +549,24 @@ export function QuestsPage() {
             }
           />
         </ColumnLayout>
-        <SpaceBetween size="xs" direction="horizontal" alignItems="center">
-          <Toggle
-            checked={showDrafts}
-            onChange={({ detail }) => {
-              setShowDrafts(detail.checked);
-              writeShowDraftProblems(detail.checked);
-            }}
-          >
-            {t("quests.show_drafts_label")}
-          </Toggle>
-          {!showDrafts && hiddenDraftCount > 0 && (
-            <Box variant="small" color="text-status-inactive">
-              {t("quests.drafts_hidden_hint", { count: hiddenDraftCount })}
-            </Box>
-          )}
-        </SpaceBetween>
+        {canHideDrafts && (
+          <SpaceBetween size="xs" direction="horizontal" alignItems="center">
+            <Toggle
+              checked={showDrafts}
+              onChange={({ detail }) => {
+                setShowDrafts(detail.checked);
+                writeShowDraftProblems(detail.checked);
+              }}
+            >
+              {t("quests.show_drafts_label")}
+            </Toggle>
+            {!showDrafts && hiddenDraftCount > 0 && (
+              <Box variant="small" color="text-status-inactive">
+                {t("quests.drafts_hidden_hint", { count: hiddenDraftCount })}
+              </Box>
+            )}
+          </SpaceBetween>
+        )}
       </SpaceBetween>
 
       {view && hasActiveFilters && filteredProblems.length === 0 ? (
