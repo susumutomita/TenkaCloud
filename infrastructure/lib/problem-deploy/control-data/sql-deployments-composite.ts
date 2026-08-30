@@ -76,6 +76,10 @@ export class SqlDeploymentsComposite implements DeploymentsCompositePort {
       mutate: (record) => {
         record.status = "DELETING";
         record.updatedAt = at;
+        // [Issue #3128] Same permanent teardown marker as the other DELETING
+        // transitions — see `domain/deployments.ts` for why status cannot
+        // carry this on its own.
+        record.teardownRequestedAt ??= at;
       },
       onMiss: "conflict",
     });

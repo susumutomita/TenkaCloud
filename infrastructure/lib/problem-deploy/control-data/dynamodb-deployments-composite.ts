@@ -96,7 +96,11 @@ export class DynamoDbDeploymentsComposite implements DeploymentsCompositePort {
     return this.core.conditionalUpdate(
       jobId,
       {
-        UpdateExpression: "SET #s = :deleting, updatedAt = :now",
+        // [Issue #3128] Same permanent teardown marker the two other DELETING
+        // transitions stamp. Leaving the composite parent out would reopen the
+        // hole for exactly the rows a composite problem's teams own.
+        UpdateExpression:
+          "SET #s = :deleting, updatedAt = :now, teardownRequestedAt = if_not_exists(teardownRequestedAt, :now)",
         ConditionExpression: "runtimeKind = :composite AND #s <> :deleting",
         ExpressionAttributeNames: { "#s": "status" },
         ExpressionAttributeValues: {

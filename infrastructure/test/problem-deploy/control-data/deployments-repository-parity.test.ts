@@ -29,6 +29,7 @@ function coordScope(tenantId: string, eventId: string, problemId = "problem-a", 
 }
 
 const EXPIRES = 4_102_444_800;
+const LATER = "2026-07-08T13:00:00.000Z";
 
 interface Backend {
   readonly name: string;
@@ -581,6 +582,31 @@ describe.each(backends)("DeploymentsRepository parity: %s", (_label, makeBackend
       state: { turn: 2 },
       version: 2,
     });
+  });
+
+  /**
+   * [Issue #3128] The teardown marker both backends must stamp.
+   *
+   * A row that went DELETING can end up FAILED (the delete state machine's
+   * `DELETE_FAILED` route calls `markFailed`), and FAILED is indistinguishable
+   * from a failed deploy — so the coordination guard cannot read "was this torn
+   * down" off `status`. The marker is what makes that question answerable, and
+   * it must survive the later transition to be worth anything.
+   */
+  it("should stamp a permanent teardown marker when a row transitions to DELETING", async () => {
+    const { repo } = makeBackend();
+    await repo.putDeployment(deployment({ jobId: "torn-down", status: "COMPLETE" }));
+
+    expect((await repo.getDeployment("torn-down"))?.teardownRequestedAt).toBeUndefined();
+
+    await expectOutcome(repo.markDeletingForBulk("torn-down", "tenant-a", AT), "updated");
+    expect((await repo.getDeployment("torn-down"))?.teardownRequestedAt).toBe(AT);
+
+    // The whole point: the marker outlives the status it was written alongside.
+    await repo.compensateDeleteToFailed("torn-down", "tenant-a", "delete failed", LATER, EXPIRES);
+    const failed = await repo.getDeployment("torn-down");
+    expect(failed?.status).toBe("FAILED");
+    expect(failed?.teardownRequestedAt).toBe(AT);
   });
 
   /**

@@ -205,7 +205,15 @@ export class DynamoDbDeploymentsLifecycle implements DeploymentsLifecyclePort {
     return this.core.conditionalUpdate(
       jobId,
       {
-        UpdateExpression: "SET #s = :deleting, updatedAt = :updatedAt, expiresAt = :expiresAt",
+        // [Issue #3128] `teardownRequestedAt` is a permanent marker, written once
+        // (`if_not_exists`) the way `completedAt` is: a row that went DELETING
+        // can still land on FAILED afterwards (the delete state machine's
+        // `DELETE_FAILED` route calls `markFailed`), and FAILED is
+        // indistinguishable from a failed DEPLOY. Status alone therefore cannot
+        // answer "was this torn down", which is what the coordination guard
+        // needs to know.
+        UpdateExpression:
+          "SET #s = :deleting, updatedAt = :updatedAt, expiresAt = :expiresAt, teardownRequestedAt = if_not_exists(teardownRequestedAt, :updatedAt)",
         ConditionExpression: "tenantId = :tenantId AND #s IN (:p, :ap, :i, :c, :f)",
         ExpressionAttributeNames: { "#s": "status" },
         ExpressionAttributeValues: {
@@ -381,7 +389,9 @@ export class DynamoDbDeploymentsLifecycle implements DeploymentsLifecyclePort {
     return this.core.conditionalUpdate(
       jobId,
       {
-        UpdateExpression: "SET #s = :deleting, updatedAt = :updatedAt",
+        // [Issue #3128] Same permanent teardown marker as `markDeleting`.
+        UpdateExpression:
+          "SET #s = :deleting, updatedAt = :updatedAt, teardownRequestedAt = if_not_exists(teardownRequestedAt, :updatedAt)",
         ConditionExpression: "tenantId = :tenantId AND #s IN (:p, :ap, :i, :c, :f)",
         ExpressionAttributeNames: { "#s": "status" },
         ExpressionAttributeValues: {
