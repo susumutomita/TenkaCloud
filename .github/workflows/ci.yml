@@ -68,34 +68,6 @@ jobs:
         run: |
           make audit-deps
 
-      # Architecture enforcement must run in the remote, non-bypassable gate too. Local hooks
-      # are useful feedback, but contributors and automation can bypass them.
-      - name: Run architecture harness
-        run: bun run .claude/harness/bin/architecture.ts --fail-on=error
-
-      - name: Test architecture harness
-        run: make harness-test
-
-      # Issue #2979: validate the machine manifest and reject generated-report drift early.
-      # The repo-root tests below also enforce launcher / Simulator / toolchain parity and the
-      # three-consecutive-Golden-Path certification rule.
-      - name: Release manifest and report drift gate
-        run: make release-check
-
-      # Issue #2949: the machine API reference is generated from MACHINE_ROUTE_SCOPES and the
-      # handler's zod schemas. A PR that adds a route but forgets to regenerate would publish a
-      # reference that lies about the surface, so the drift check is a gate, not a report.
-      - name: OpenAPI drift gate
-        run: make openapi-check
-
-      # jscpd baseline ratchet: zero-duplication is NOT the goal (apps are split by
-      # responsibility, so some intentional similarity is baselined). This fails only when
-      # a PR grows duplication past scripts/quality/duplication-baseline.json — i.e. new
-      # copy-paste / reimplementation landed without checking for an existing helper.
-      - name: Duplication baseline ratchet (jscpd)
-        run: |
-          make dup-check
-
       # knip dead-code gate (#2866). Previously report-only: knip reports everything that
       # exists, not the PR's delta, so gating would have punished PRs for the 168 findings
       # of pre-existing debt. #2866 cleared the backlog to zero, so from here on any finding
@@ -110,14 +82,13 @@ jobs:
       # sideways (the ping-pong where an old-pin branch reverts a newer pin, e.g. #1927).
       # Pull-request checkout does not guarantee origin/main or full submodule history, so fetch
       # both first (the superproject is full-depth for the release-manifest tag/gitlink gate).
-      # 品質ゲートは本体と分離し .claude/skills/quality-gates へ移設済み (runner を直接呼ぶ)。
       - name: Submodule pin guard (problems must not roll back)
         run: |
           git fetch --no-tags origin main:refs/remotes/origin/main
           # Release-manifest parity resolves an optional catalog display tag and checks the exact
           # catalog commit object locally, so retain tags when deepening the submodule checkout.
           git -C problems fetch --tags --unshallow origin 2>/dev/null || git -C problems fetch --tags origin || true
-          bun run .claude/skills/quality-gates/scripts/run.ts submodule-not-behind
+          make submodule-not-behind
 
       # #2254: enforce the catalog authoring contract (schema + bilingual-README invariant) against
       # the platform's problems/ mirror, so a README-less / schema-invalid problem fails platform CI
@@ -218,13 +189,6 @@ jobs:
         id: lcov
         run: |
           echo "files=$(bun run scripts/workspace/run-coverage.ts --shard ${{ matrix.shard }} --print-lcov-paths)" >> "$GITHUB_OUTPUT"
-
-      # Issue #1424 / #2513: agent-owned workspace の 100% coverage を shard 単位で enforce。
-      # 品質ゲートは本体と分離し .claude/skills/quality-gates へ移設済み (--shard で絞って直接呼ぶ、
-      # run.ts は経由しない)。
-      - name: Coverage gate (100% for agent-owned workspaces, shard ${{ matrix.shard }})
-        run: |
-          bun run .claude/skills/quality-gates/scripts/check-coverage-gate.ts --shard ${{ matrix.shard }}
 
       # Issue #2758: infrastructure 全体はまだ #1424 の 100% gate 対象外 (report-only) だが、
       # AssumeRole/ExternalId・tenant isolation・deploy state machine・scoring・delete

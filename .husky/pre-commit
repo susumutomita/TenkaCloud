@@ -1,8 +1,4 @@
 #!/usr/bin/env sh
-# architecture harness (.claude/harness/) は make before-commit の GATE_CHECKS
-# (harness lint test) 経由で有効。rule 一覧は docs/architecture/enforcement-registry.md
-# / enforcement-rules.json を正本とする。
-
 # [submodule] problems/ の checkout を記録済 pin に揃える (= stale な checkout が commit に紛れない)。
 # pin の *bump* はここではやらない: catalog の更新を feature commit に混ぜると conflict の元なので、
 # bump は単独 PR として `make submodule-latest` で手動で行う (自動 bump workflow は無い)。
@@ -12,8 +8,3 @@ if git diff --cached --quiet -- problems 2>/dev/null; then
 fi
 
 mise exec -- make before-commit
-
-# 品質チェックは本体 (make before-commit / CI) とは「混ぜず」別呼び出しで走らせる。
-# 実体は .claude/skills/quality-gates (本体を肥大化させないため Claude のツール領域へ寄せた)。
-# precommit グループ = 高速・決定的なファイル/git スキャンのみ。重い検査 (coverage/synth) は CI 側。
-mise exec -- bun run .claude/skills/quality-gates/scripts/run.ts

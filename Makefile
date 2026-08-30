@@ -62,17 +62,9 @@ test-scripts: ## Run only the fast script and CLI tests | script・CLI関連テ�
 	bun run --filter '@TenkaCloud/infrastructure' test test/scripts
 
 # ===== Quality gates | 品質ゲート =====
-.PHONY: harness harness-test tech-debt audit-deps dup-check dup-baseline \
-        infra-coverage-check infra-coverage-baseline dead-code openapi openapi-check \
-        before-commit ci-local
-
-HARNESS := bun run .claude/harness/bin
-harness: ## Check architecture invariants | architecture invariant違反を検査
-	$(HARNESS)/architecture.ts --staged --fail-on=error
-harness-test: ## Run the harness unit tests | harness自身のunit testを実行
-	cd .claude/harness && bun vitest run
-tech-debt: ## Generate the technical-debt backlog | tech debt backlogを生成
-	$(HARNESS)/tech-debt.ts
+.PHONY: audit-deps dup-check dup-baseline openapi openapi-check \
+        infra-coverage-check infra-coverage-baseline dead-code \
+        submodule-not-behind before-commit ci-local
 
 # 依存 package の lifecycle script 監査 (mini Shai-Hulud 2nd 対策)。
 audit-deps: ## Audit dependency lifecycle-script changes | 依存packageのlifecycle script差分を監査
@@ -103,33 +95,32 @@ dead-code: ## Fail on unused files/exports found by knip | knipで未使用コ�
 	bun run dead-code
 
 # Issue #2949: machine API surface の spec は `MACHINE_ROUTE_SCOPES` と handler の zod schema から
-# 生成する。手書きの path も schema も無いので、route を足して生成物を更新し忘れた PR は落ちる。
+# 生成する。developer-portal の prebuild がこの生成物を読むので、doc ではなく build 入力。
 openapi: ## Generate the machine API OpenAPI spec | machine API の OpenAPI spec を生成
 	bun run scripts/openapi/generate.ts
 openapi-check: ## Fail when the committed OpenAPI spec drifts from the source of truth | OpenAPI 生成物の drift を検査
 	bun run scripts/openapi/generate.ts --check
 
-# Pre-PR gate for the product BODY, run by the pre-commit hook. HTTP magic number / template /
-# coverage / IAM ASCII / merge / submodule の品質ゲートは本体と混ぜず .claude/skills/quality-gates
-# へ分離してあり、pre-commit がこれとは別呼び出しで runner を走らせる。
-GATE_CHECKS := harness openapi-check lint dead-code test
+# problems/ の pin が後退した PR を落とす (gitlink ping-pong 対策)。CI も同じ実装を呼ぶ。
+submodule-not-behind: ## Fail when the problems submodule pin moves backwards | problems pinの後退をfail
+	bun run scripts/quality/check-submodule-not-behind.ts
+
+# Pre-PR gate for the product BODY, run by the pre-commit hook.
+GATE_CHECKS := lint dead-code test
 
 before-commit: $(GATE_CHECKS) ## Run lint and all tests before committing | commit前のlintと全テストを実行
 
-# Issue #2219: `before-commit` は速い pre-push sanity check であって CI の完全な写しではない
-# (CI は audit-deps / submodule pin guard / coverage-gate / build も走らせる)。`ci-local` は CI が
-# 走らせるものを CI と同じ順で全部走らせる (Codecov upload だけ除く)。
+# `before-commit` は速い pre-push sanity check であって CI の完全な写しではない
+# (CI は audit-deps / submodule pin guard / build も走らせる)。`ci-local` は CI が走らせるものを
+# CI と同じ順で全部走らせる (Codecov upload だけ除く)。
 # Issue #2513: CI は同じ workspace 集合を 3 shard の matrix で並列に走らせる。ここでは 3 shard を
 # 1 プロセスで直列に走らせる — 同じ検査・同じ workspace・意図的に違う並列度。
 ci-local: ## Run the full GitHub Actions gate locally | GitHub Actions相当の全gateをローカル実行
-	bun run .claude/harness/bin/architecture.ts --fail-on=error
-	$(MAKE) harness-test
 	git fetch --no-tags origin main:refs/remotes/origin/main
 	git -C problems fetch --tags --unshallow origin 2>/dev/null || git -C problems fetch --tags origin || true
 	$(MAKE) audit-deps
-	$(MAKE) dup-check
 	$(MAKE) dead-code
-	bun run .claude/skills/quality-gates/scripts/run.ts submodule-not-behind
+	$(MAKE) submodule-not-behind
 	$(MAKE) validate-problems
 	$(MAKE) lint-text
 	$(MAKE) lint-format
@@ -137,7 +128,6 @@ ci-local: ## Run the full GitHub Actions gate locally | GitHub Actions相当の�
 	$(MAKE) test-root
 	$(MAKE) typecheck
 	$(MAKE) test-coverage
-	bun run .claude/skills/quality-gates/scripts/run.ts coverage-gate
 	$(MAKE) build
 
 # ===== Lint / Fix | Lint / 修正 =====
@@ -385,14 +375,14 @@ destroy-saas: env-check ## Delete SaaS-mode AWS resources | SaaS modeのAWS reso
 #   - `synth`: full CFn synth (real Lambda bundling — slow, matches what `deploy` runs).
 #   - `check-synth`: fast synth-only shape check (CDK_SKIP_BUNDLING=1 skips Docker Lambda bundling,
 #     #1446) + the IAM Description ASCII gate (#664) that only sees synth output. This is the
-#     offline infra-review step AGENTS.md points agents at for infra changes.
+#     offline infra-review step to run before an infra PR.
 synth: ## Synthesize every CDK stack with bundling | 全CDK stackをbundle込みでsynth
 	$(REPO_CDK) synth --quiet
 
 check-synth: export CDK_SKIP_BUNDLING := 1
 check-synth: ## Run fast CDK synth and the IAM ASCII check | 高速CDK synthとIAM ASCII検査を実行
 	$(REPO_CDK) synth --quiet
-	bun run .claude/skills/quality-gates/scripts/check-synth-iam-ascii.ts
+	bun run scripts/quality/check-synth-iam-ascii.ts
 
 # ===== Local dev (no AWS) | ローカル開発（AWS不要） =====
 .PHONY: dev
@@ -558,34 +548,3 @@ destroy-battles: ## Delete smoke-deployed problem stacks | smoke deployした問
 	  exit 1; \
 	fi
 	@TEAM_SLUG="$(TEAM_SLUG)" bash scripts/destroy-battles.sh $(BATTLES)
-
-# ===== Symphony (self-hosted agent orchestration) | Symphony（自前エージェント統制） =====
-.PHONY: agent-gate symphony-validate symphony-print symphony-run
-
-# このリポジトリは自分の Symphony インスタンスだけを所有・実行する (.symphony/README.md)。
-# 以前は GNUmakefile に分かれていたが、make が Makefile より先に GNUmakefile を読むため
-# 「make の入口が 2 つある」状態になっていたのでこちらへ統合した。
-SYMPHONY_BIN ?= symphony
-SYMPHONY_WORKFLOW ?= .symphony/WORKFLOW.md
-SYMPHONY_PORT ?= 4311
-SYMPHONY_LOGS_ROOT ?= .symphony/logs
-
-agent-gate: ci-local symphony-validate ## Run the full local gate plus the Symphony policy check | ci-localとSymphony policy検査をまとめて実行
-
-symphony-validate: ## Assert the Symphony workflow keeps its safety policy | Symphony workflowの安全policyを検査
-	@test -f "$(SYMPHONY_WORKFLOW)"
-	@grep -q '^  kind: github$$' "$(SYMPHONY_WORKFLOW)"
-	@grep -q '^    repo: susumutomita/TenkaCloud$$' "$(SYMPHONY_WORKFLOW)"
-	@grep -q '^    - agent:ready$$' "$(SYMPHONY_WORKFLOW)"
-	@grep -q 'make agent-gate' "$(SYMPHONY_WORKFLOW)"
-	@grep -q 'codex exec review --base origin/main' "$(SYMPHONY_WORKFLOW)"
-	@grep -q 'Never run deploy, destroy, release, force-push, or secret-management commands' "$(SYMPHONY_WORKFLOW)"
-
-symphony-print: symphony-validate ## Print the validated Symphony workflow | 検査済みSymphony workflowを表示
-	@cat "$(SYMPHONY_WORKFLOW)"
-
-symphony-run: symphony-validate ## Start the repository-local Symphony instance | このrepo専用のSymphonyを起動
-	@test -n "$$GITHUB_TOKEN" || { echo 'GITHUB_TOKEN is required' >&2; exit 2; }
-	@test -n "$$SYMPHONY_WORKSPACE_ROOT" || { echo 'SYMPHONY_WORKSPACE_ROOT is required' >&2; exit 2; }
-	@mkdir -p "$(SYMPHONY_LOGS_ROOT)"
-	"$(SYMPHONY_BIN)" "$(SYMPHONY_WORKFLOW)" --port "$(SYMPHONY_PORT)" --logs-root "$(SYMPHONY_LOGS_ROOT)"

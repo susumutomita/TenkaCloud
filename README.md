@@ -242,7 +242,7 @@ record of the reasoning, not an API reference.
 - [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) — local terminal deploys and SaaS mode
 - [docs/local-play.md](./docs/local-play.md) — local drill internals, authoring a container problem, the `/verify` contract
 - [docs/running-costs.md](./docs/running-costs.md) — the cost profiles, the zero-cost opt-in walkthrough, measured costs
-- [docs/architecture/README.md](./docs/architecture/README.md) — architecture principles and machine-enforced boundaries
+- [docs/architecture/diagrams/system-architecture.drawio](./docs/architecture/diagrams/system-architecture.drawio) — the system architecture diagram (open with draw.io / diagrams.net)
 
 ## Contributing
 

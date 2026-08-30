@@ -4,7 +4,7 @@
  * `@types/js-yaml` is not a repository dependency. This narrows the ambient surface to exactly
  * what `compose-policy.ts` uses — the *safe* loader only, which never instantiates arbitrary JS
  * types from the document (important: the input here is catalog Compose YAML, `untrusted input`
- * per docs/architecture/decisions/0003-local-runtime-trust-boundary.md's trust table).
+ * per the compose trust table).
  */
 declare module "js-yaml" {
   export function safeLoad(input: string): unknown;

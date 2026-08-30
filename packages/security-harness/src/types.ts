@@ -1,7 +1,7 @@
 /**
  * Versioned wire contracts for the security drill harness (Issue #3036 Phase 0).
  *
- * These types fix the shape the ADR (`docs/architecture/decisions/0001-security-harness-trust-boundary.md`)
+ * These types fix the shape the ADR
  * decided on. Phase 1 only exercises the `http-sequence` witness type and a trimmed
  * `SecurityHarnessDefinition`; the remaining witness kinds and definition fields are declared
  * here so Phase 2/3 additions are additive, not a breaking reshape. Nothing in this file reads

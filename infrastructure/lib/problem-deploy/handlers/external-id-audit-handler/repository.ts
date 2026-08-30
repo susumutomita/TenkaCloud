@@ -12,9 +12,8 @@ import type { CompetitorAccountItem } from "../competitor-accounts-handler/types
  * Issue #1237 / SOLID enforcement: SDK adapter for the
  * `external-id-audit-handler` Lambda.
  *
- * The handler `index.ts` must not import `@aws-sdk/*` directly (see
- * `.claude/harness/src/rules/handler-no-direct-sdk-import.ts`). This module
- * owns:
+ * The handler `index.ts` must not import `@aws-sdk/*` directly — routing stays
+ * separate from infrastructure concerns. This module owns:
  *
  *   - Construction of the CloudWatch `PutMetricData` command + dimension
  *     marshalling.

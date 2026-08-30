@@ -127,7 +127,7 @@ boundary.
 ## SBT 0.9.5 tenant-registration backfill
 
 Follow the complete
-[SBT 0.9.5 migration runbook](../docs/operations/sbt-0.9.5-tenant-registration-migration.md).
+the SBT 0.9.5 migration runbook.
 After the staged Control Plane deployment, pass the exact deployed table,
 account, region, and environment identifiers. The first invocation is always a
 read-only inventory and plan:

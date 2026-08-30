@@ -4,7 +4,7 @@
  * で検証できるようにする").
  *
  * This is NOT a mock fallback for a missing live provider — see the distinction the task brief
- * and `docs/architecture/decisions/0001-security-harness-trust-boundary.md` both draw:
+ * both draw:
  *
  *   - a "mock fallback" would sit in a PRODUCTION code path and quietly stand in for a real
  *     dependency that failed or was never configured, hiding that failure from the caller
