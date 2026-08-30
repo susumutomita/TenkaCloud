@@ -109,6 +109,14 @@ export function resolveDeploymentsRepository(
   });
 }
 
+/** Event status lookup used only by coordination writes to reject torn-down events. */
+export function resolveParticipantEventsRepository(shared: ParticipantSharedResources) {
+  return shared.runtime.resolveEventsRepository({
+    ddb: shared.ddb,
+    eventsTableName: shared.eventsTableName,
+  });
+}
+
 function rehydrateDeploymentKeys(
   item: Awaited<ReturnType<DeploymentsRepository["listByTeamLoginKey"]>>[number],
   teamLoginKey: string,

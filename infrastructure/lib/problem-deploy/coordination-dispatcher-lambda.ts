@@ -28,7 +28,7 @@ export interface CoordinationDispatcherLambdaProps {
   readonly deploymentsTable?: ITable;
   /**
    * `buildParticipantSharedResources` が読む `EVENTS_TABLE_NAME` env の source。 coordination
-   * route は events を読まない (IAM は付与しない)。 [Issue #2440]
+   * write は event status を point-read し、TEARDOWN/ARCHIVED で fail closed にする。
    * `controlDataBackend` が純 SQL (`turso`) のとき `ProblemDeployBackendStack` は本
    * table を synth しない (= `undefined`)。 その場合 env も注入しない (= shared builder は
    * env 不在でも空文字にフォールバックするだけで dispatcher の挙動に影響しない)。
@@ -92,8 +92,14 @@ export class CoordinationDispatcherLambda extends Construct {
       assumedBy: new ServicePrincipal("lambda.amazonaws.com"),
       inlinePolicies: {
         // DynamoDB backend では Deployments table / GSI2 全体への Query と、table 全体への
-        // GetItem / PutItem を許可する。handler は team-login-key 認証と coordination state に使うが、
-        // IAM は key や tenant を絞らないため、同一 process の plugin も同じ権限を共有する。
+        // GetItem / PutItem / UpdateItem を許可する。handler は team-login-key 認証と
+        // coordination state に使うが、IAM は key や tenant を絞らないため、同一 process の
+        // plugin も同じ権限を共有する。
+        // [Issue #3123] UpdateItem は tick の TTL 延長 (`touchCoordinationState`) に要る。
+        // PutItem を既に持つ role にとって権限の拡大ではない (同じ行を丸ごと上書きできる)
+        // が、state / version を読まずに `expiresAt` だけ動かせるので、 tick が in-flight な
+        // optimistic lock を壊さずに retention を延ばせる。 DeleteItem は付けない —
+        // namespace の削除は event を所有する経路 (event-api / generic-scoring) の責務。
         // sts:AssumeRole / ssm:GetParameter / kms:Decrypt は意図的に付与しない。
         // Issue #2441: 純 SQL backend では table 自体が無いので policy を足さない。
         ...(deploymentsTable
@@ -108,8 +114,20 @@ export class CoordinationDispatcherLambda extends Construct {
                     ],
                   }),
                   new PolicyStatement({
-                    actions: ["dynamodb:GetItem", "dynamodb:PutItem"],
+                    actions: ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem"],
                     resources: [deploymentsTable.tableArn],
+                  }),
+                ],
+              }),
+            }
+          : {}),
+        ...(props.eventsTable
+          ? {
+              EventStatusRead: new PolicyDocument({
+                statements: [
+                  new PolicyStatement({
+                    actions: ["dynamodb:GetItem"],
+                    resources: [props.eventsTable.tableArn],
                   }),
                 ],
               }),

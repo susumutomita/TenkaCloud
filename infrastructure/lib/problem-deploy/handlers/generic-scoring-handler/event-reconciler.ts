@@ -388,14 +388,16 @@ async function pruneExpiredControlData(runtime: ControlDataRuntime, nowIso: stri
     // DynamoDB's native TTL attribute name — no `ddb`/`adminAuditLogTableName` needed here since
     // `needsManualPrune()` above already gates this branch to the pure-SQL backend).
     runtime.resolveAdminAuditLogRepository({}),
+    runtime.resolveDeploymentsRepository({}),
   ])
-    .then(([events, teams, notifications, disruptions, adminAuditLog]) =>
+    .then(([events, teams, notifications, disruptions, adminAuditLog, deployments]) =>
       Promise.all([
         events.pruneExpired(nowEpochSeconds),
         teams.pruneExpired(nowEpochSeconds),
         notifications.pruneExpired(nowEpochSeconds),
         disruptions.pruneExpired(nowEpochSeconds),
         adminAuditLog.pruneExpired(nowEpochSeconds),
+        deployments.sweepExpiredCoordinationState(nowEpochSeconds),
       ]),
     )
     .catch((err: unknown) => {

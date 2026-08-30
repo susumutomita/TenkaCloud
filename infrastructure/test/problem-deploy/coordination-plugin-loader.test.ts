@@ -29,9 +29,10 @@ const counter: CoordinationPlugin<CounterState, CounterOp, { count: number }> = 
 };
 
 const ctx = { eventId: "e1", teamIds: ["t1", "t2"] };
+/** [Issue #3123] The platform-owned persistence namespace for one dispatch. */
+const scope = { tenantId: "tn1", eventId: "e1", problemId: "p1", runId: "default" } as const;
 const dispatchInput = {
-  tenantId: "tn1",
-  eventId: "e1",
+  scope,
   teamId: "t1",
   op: { kind: "inc" } as CounterOp,
   ctx,
@@ -140,8 +141,7 @@ describe("loadAndDispatchCoordinationOp", () => {
 
 describe("loadAndProjectCoordinationForTeam", () => {
   const projectInput = {
-    tenantId: "tn1",
-    eventId: "e1",
+    scope,
     teamId: "t1",
     ctx,
     fallbackProjection: { count: -1 },

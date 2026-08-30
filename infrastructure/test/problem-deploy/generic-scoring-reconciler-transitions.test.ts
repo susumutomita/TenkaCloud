@@ -17,6 +17,9 @@ type DisruptionsRepository = Awaited<
 type AdminAuditLogRepository = Awaited<
   ReturnType<ControlDataRuntime["resolveAdminAuditLogRepository"]>
 >;
+type DeploymentsRepository = Awaited<
+  ReturnType<ControlDataRuntime["resolveDeploymentsRepository"]>
+>;
 
 /**
  * #557 / #539 / #1038: end-to-end transition scenarios for the reconciler.
@@ -161,6 +164,9 @@ describe("reconcileEventStatuses transitions (#557 #539 #1038)", () => {
     const pruneAdminAuditLog = {
       pruneExpired: vi.fn(async () => 5),
     } as unknown as AdminAuditLogRepository;
+    const pruneDeployments = {
+      sweepExpiredCoordinationState: vi.fn(async () => 6),
+    } as unknown as DeploymentsRepository;
     vi.spyOn(ctx.runtime, "needsManualPrune").mockReturnValue(true);
     vi.spyOn(ctx.runtime, "resolveEventsRepository").mockImplementation(async (input) =>
       input.eventsTableName ? listEvents : pruneEvents,
@@ -170,6 +176,7 @@ describe("reconcileEventStatuses transitions (#557 #539 #1038)", () => {
     vi.spyOn(ctx.runtime, "resolveDisruptionsRepository").mockResolvedValue(pruneDisruptions);
     // [Issue #2442 / Phase C4] AdminAuditLog joins the manual-prune tick alongside Disruptions.
     vi.spyOn(ctx.runtime, "resolveAdminAuditLogRepository").mockResolvedValue(pruneAdminAuditLog);
+    vi.spyOn(ctx.runtime, "resolveDeploymentsRepository").mockResolvedValue(pruneDeployments);
 
     await reconcileEventStatuses(ctx, NOW_ISO);
 
@@ -178,6 +185,7 @@ describe("reconcileEventStatuses transitions (#557 #539 #1038)", () => {
     expect(pruneNotifications.pruneExpired).toHaveBeenCalledWith(nowEpochSeconds);
     expect(pruneDisruptions.pruneExpired).toHaveBeenCalledWith(nowEpochSeconds);
     expect(pruneAdminAuditLog.pruneExpired).toHaveBeenCalledWith(nowEpochSeconds);
+    expect(pruneDeployments.sweepExpiredCoordinationState).toHaveBeenCalledWith(nowEpochSeconds);
     expect(listEvents.listEventsByStatus).toHaveBeenCalledWith([
       "DEPLOYING",
       "READY",
@@ -229,6 +237,9 @@ describe("reconcileEventStatuses transitions (#557 #539 #1038)", () => {
     vi.spyOn(ctx.runtime, "resolveAdminAuditLogRepository").mockResolvedValue({
       pruneExpired: vi.fn(async () => 0),
     } as unknown as AdminAuditLogRepository);
+    vi.spyOn(ctx.runtime, "resolveDeploymentsRepository").mockResolvedValue({
+      sweepExpiredCoordinationState: vi.fn(async () => 0),
+    } as unknown as DeploymentsRepository);
 
     await reconcileEventStatuses(ctx, NOW_ISO);
 

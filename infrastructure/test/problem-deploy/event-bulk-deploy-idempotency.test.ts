@@ -1,4 +1,4 @@
-import { TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
+import { DeleteCommand, TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { bulkDeployEvent } from "../../lib/problem-deploy/handlers/event-handler/bulk-deploy";
 import { buildShared, NOW_MS, sampleEvent, sampleTeams } from "./event-bulk-deploy.test-helpers";
@@ -157,6 +157,15 @@ describe("bulkDeployEvent — idempotency, retry & range filters", () => {
     expect(deletes[0]?.Delete?.Key?.PK).toBe("DEPLOYMENT#OLD-COMPLETE");
     expect(deletes[0]?.Delete?.ConditionExpression).toContain("tenantId");
     expect(deletes[0]?.Delete?.ExpressionAttributeValues?.[":tenantId"]).toBe("tenant-acme");
+    const coordinationDeletes = ddbSend.mock.calls
+      .map((call) => call[0])
+      .filter((command): command is DeleteCommand => command instanceof DeleteCommand);
+    expect(coordinationDeletes).toHaveLength(2);
+    expect(
+      coordinationDeletes.some((command) =>
+        String(command.input.Key?.PK).includes("#hello-world#default"),
+      ),
+    ).toBe(true);
   });
 
   // #555: teamIds で range を絞る (= 後追い team / 該当 team の env だけ deploy)

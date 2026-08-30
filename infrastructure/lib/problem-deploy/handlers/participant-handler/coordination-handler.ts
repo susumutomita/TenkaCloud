@@ -1,5 +1,13 @@
 import type { CoordinationContext } from "@tenkacloud/coordination-plugin-sdk";
 import {
+  type CoordinationStateScope,
+  DEFAULT_COORDINATION_RUN_ID,
+} from "../../control-data/domain/coordination-scope.js";
+import type { DeploymentStatus } from "../deploy-handler/types.js";
+import type { RoundWindow } from "../generic-scoring-handler/round-liveness.js";
+import { isScoringActive } from "../generic-scoring-handler/scoring-active.js";
+import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
+import {
   loadAndDispatchCoordinationOp,
   loadAndProjectCoordinationForTeam,
   type PluginImporter,
@@ -8,6 +16,7 @@ import type { CoordinationStoreDeps } from "./coordination-store.js";
 import {
   type ParticipantSharedResources,
   queryTeamItems,
+  resolveParticipantEventsRepository,
   resolveDeploymentsRepository,
 } from "./shared.js";
 
@@ -25,8 +34,10 @@ import {
 
 /** route が解決した 1 回分の実行 scope。 resolveScope が null を返したら scope 不成立。 */
 export interface CoordinationScope {
-  readonly tenantId: string;
-  readonly eventId: string;
+  /**
+   * [Issue #3123] 永続化 namespace (tenant x event x problem x run)。 platform 所有。
+   */
+  readonly state: CoordinationStateScope;
   readonly teamId: string;
   /** plugin の initialState に渡す event 文脈 (= 参加チーム一覧)。 */
   readonly ctx: CoordinationContext;
@@ -34,6 +45,12 @@ export interface CoordinationScope {
   readonly moduleRef: string;
   /** projection 失敗 / 未初期化時に返す安全な既定 (= 他 team の機密を出さない)。 */
   readonly fallbackProjection: unknown;
+  /**
+   * [Issue #3123] deployment 行に denormalize された event の開始 / 終了。 op 経路が
+   * `isScoringActive` で終端を判定するために持つ (= 追加 read 無し。 resolver は clock を
+   * 持たないので、 判定は nowIso を持つ handler 側で行う)。
+   */
+  readonly window: RoundWindow;
 }
 
 export interface CoordinationHandlerDeps {
@@ -44,7 +61,10 @@ export interface CoordinationHandlerDeps {
    * team-login-key → 実行 scope。 認証不可 / 当該 event に coordination 宣言が無い場合は null
    * (= route は `not_configured` で安全に応答する)。
    */
-  readonly resolveScope: (teamLoginKey: string) => Promise<CoordinationScope | null>;
+  readonly resolveScope: (
+    teamLoginKey: string,
+    access?: "read" | "write",
+  ) => Promise<CoordinationScope | null>;
 }
 
 export type CoordinationHandlerOutcome =
@@ -63,11 +83,17 @@ export async function handleCoordinationOp(
   op: unknown,
   nowIso: string,
 ): Promise<CoordinationHandlerOutcome> {
-  const scope = await deps.resolveScope(teamLoginKey);
+  const scope = await deps.resolveScope(teamLoginKey, "write");
   if (!scope) return { kind: "not_configured" };
+  // [Issue #3123] 終了した event の試合は書き換えられない。 status だけを見ていると、
+  // `endEvent` が `eventEndsAt` を刻んだ後も deployment 行は `COMPLETE` のまま残るため、
+  // 参加者が終わった試合を変更でき、 さらに write のたびに `expiresAt` が更新されて
+  // retention が始まらない (= tick 側を `isScoringActive` で止めた意味が消える)。
+  // 判定は tick collector と同一の predicate。 projection (read) は素通しする —
+  // 読むだけなら TTL も state も動かないし、 event 後の振り返りを壊す理由がない。
+  if (!isScoringActive(scope.window, nowIso)) return { kind: "rejected", error: "event_ended" };
   const outcome = await loadAndDispatchCoordinationOp(deps.importer, scope.moduleRef, deps.store, {
-    tenantId: scope.tenantId,
-    eventId: scope.eventId,
+    scope: scope.state,
     teamId: scope.teamId,
     op,
     ctx: scope.ctx,
@@ -89,8 +115,7 @@ export async function handleCoordinationProjection(
     scope.moduleRef,
     deps.store,
     {
-      tenantId: scope.tenantId,
-      eventId: scope.eventId,
+      scope: scope.state,
       teamId: scope.teamId,
       ctx: scope.ctx,
       fallbackProjection: scope.fallbackProjection,
@@ -169,16 +194,54 @@ async function resolveEventRoster(
   return [...roster].sort();
 }
 
+/**
+ * [Issue #3123] Whether this deployment row may still submit coordination ops.
+ *
+ * A torn-down deployment stays queryable through the participant login index
+ * (GSI2 is keyed by `teamLoginKey`, not by status) while it sits in `DELETING`,
+ * and terminal rows are retained for seven days for audit. Without this guard a
+ * participant could keep submitting after their deployment — or their whole
+ * event — was torn down, and because event cleanup now DELETES the coordination
+ * namespace, the next op would re-materialize it from `plugin.initialState`,
+ * recreating exactly the row teardown had just removed.
+ *
+ * Every other participant write path already applies this same filter with this
+ * same constant (`battle-attacks.ts`, `cast-event.ts`, `sso.ts`, `lookup.ts`,
+ * `update.ts`, `score-events.ts`, `leaderboard*.ts`, `challenge-access.ts`).
+ * Coordination was the one that did not.
+ *
+ * Note this guards the REQUESTER's own row only. `resolveEventRoster`
+ * deliberately does not filter by status, for an unrelated and still-valid
+ * reason: dropping mid-deploy teams from the roster would make
+ * `initialState(ctx)` depend on deploy timing (#3053).
+ */
+function canSubmitCoordination(item: { readonly status?: string }): boolean {
+  const status = (item.status ?? "PENDING") as DeploymentStatus;
+  return !DELETED_LIKE_STATUSES.has(status);
+}
+
 export function makeCoordinationScopeResolver(
   shared: ParticipantSharedResources,
   config: CoordinationConfig,
-): (teamLoginKey: string) => Promise<CoordinationScope | null> {
-  return async (teamLoginKey) => {
+): (teamLoginKey: string, access?: "read" | "write") => Promise<CoordinationScope | null> {
+  return async (teamLoginKey, access = "read") => {
     const items = await queryTeamItems(shared, teamLoginKey);
     for (const item of items) {
       const problemId = item.problemId;
       const plugin = problemId ? config[problemId]?.plugin : undefined;
-      if (problemId && item.tenantId && item.eventId && item.teamId && plugin) {
+      if (
+        problemId &&
+        item.tenantId &&
+        item.eventId &&
+        item.teamId &&
+        plugin &&
+        canSubmitCoordination(item)
+      ) {
+        if (access === "write") {
+          const events = await resolveParticipantEventsRepository(shared);
+          const event = await events.getEvent(item.tenantId, item.eventId);
+          if (!event || event.status !== "READY") continue;
+        }
         const teamIds = await resolveEventRoster(shared, {
           tenantId: item.tenantId,
           eventId: item.eventId,
@@ -186,10 +249,19 @@ export function makeCoordinationScopeResolver(
           requesterTeamId: item.teamId,
         });
         return {
-          tenantId: item.tenantId,
-          eventId: item.eventId,
+          // [Issue #3123] runId は problemId のエイリアスにしない。 同じ値を入れると 2 つの
+          // 次元が区別できなくなり、 将来 run id が problem id と一致した瞬間に別 run の
+          // state が衝突する。 platform は現状 (event, problem) あたり 1 run しか作らないので
+          // 明示的な既定値を発行し、 run reset は「この namespace を消す」で表現する。
+          state: {
+            tenantId: item.tenantId,
+            eventId: item.eventId,
+            problemId,
+            runId: DEFAULT_COORDINATION_RUN_ID,
+          },
           teamId: item.teamId,
           ctx: { eventId: item.eventId, teamIds },
+          window: { eventStartsAt: item.eventStartsAt, eventEndsAt: item.eventEndsAt },
           // moduleRef は problemId (importer の key `coordination/<id>.mjs`)。
           // plugin path は宣言の有無判定にのみ使い、 実 load は problemId-keyed bundle を引く。
           moduleRef: problemId,

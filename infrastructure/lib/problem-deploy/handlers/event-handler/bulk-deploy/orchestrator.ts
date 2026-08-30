@@ -1,4 +1,9 @@
-import { type EventSharedResources, queryDeploymentsByEvent } from "../shared.js";
+import {
+  type EventSharedResources,
+  queryDeploymentsByEvent,
+  resolveDeploymentsRepository,
+} from "../shared.js";
+import { DEFAULT_COORDINATION_RUN_ID } from "../../../control-data/domain/coordination-scope.js";
 import type { BulkDeployRequest } from "../types.js";
 import { dispatchBulkAdapterEntries } from "./adapter-dispatch.js";
 import { indexExistingDeployments } from "./existing-index.js";
@@ -114,6 +119,28 @@ export async function bulkDeployEvent(
   // when the audit table is unwired or no pack rows exist), so it never blocks
   // the deploy and core-only events behave exactly as before.
   await writePackProvenanceAudit({ tenantId, eventId, nowMs }, plan.entries);
+
+  if (forceRedeploy && selected.teams.length === loaded.allTeams.length) {
+    const plannedByProblem = new Map<string, number>();
+    for (const entry of plan.entries) {
+      const problemId = entry.item.problemId;
+      if (problemId) plannedByProblem.set(problemId, (plannedByProblem.get(problemId) ?? 0) + 1);
+    }
+    const repository = await resolveDeploymentsRepository(shared);
+    await Promise.all(
+      selected.problems
+        .map((problem) => problem.problemId)
+        .filter((problemId) => plannedByProblem.get(problemId) === selected.teams.length)
+        .map((problemId) =>
+          repository.deleteCoordinationState({
+            tenantId,
+            eventId,
+            problemId,
+            runId: DEFAULT_COORDINATION_RUN_ID,
+          }),
+        ),
+    );
+  }
 
   return {
     kind: "ok",

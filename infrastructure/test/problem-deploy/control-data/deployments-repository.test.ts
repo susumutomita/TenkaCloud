@@ -116,10 +116,25 @@ function inboxItem(jobId: string, sk: string, over: Item = {}): Item {
   };
 }
 
+/**
+ * [Issue #3123] A coordination scope. Every port call names all four
+ * dimensions; there is no default that would silently rejoin a shared
+ * namespace.
+ */
+function coordScope(tenantId: string, eventId: string, problemId = "problem-a", runId = "default") {
+  return { tenantId, eventId, problemId, runId };
+}
+
 /** A `COORD#` coordination-state row. */
-function coordItem(tenantId: string, eventId: string, over: Item = {}): Item {
+function coordItem(
+  tenantId: string,
+  eventId: string,
+  over: Item = {},
+  problemId = "problem-a",
+  runId = "default",
+): Item {
   return {
-    PK: `COORD#${tenantId}#${eventId}`,
+    PK: `COORD#${tenantId}#${eventId}#${problemId}#${runId}`,
     SK: "STATE",
     state: { flags: 3 },
     version: 2,
@@ -599,21 +614,86 @@ describe("DynamoDbDeploymentsRepository — sparse sub-aggregates", () => {
     await seed([coordItem("tenant-a", "ev-1", { state: { turns: 4 }, version: 7 })]);
     reset();
 
-    const state = await repo.readCoordinationState("tenant-a", "ev-1");
+    const state = await repo.readCoordinationState(coordScope("tenant-a", "ev-1"));
     expect(state).toEqual({ state: { turns: 4 }, version: 7 });
 
     expect(commands[0]).toBeInstanceOf(GetCommand);
-    expect(commands[0].input.Key).toEqual({ PK: "COORD#tenant-a#ev-1", SK: "STATE" });
+    expect(commands[0].input.Key).toEqual({
+      PK: "COORD#tenant-a#ev-1#problem-a#default",
+      SK: "STATE",
+    });
 
-    expect(await repo.readCoordinationState("tenant-a", "missing")).toBeUndefined();
+    expect(await repo.readCoordinationState(coordScope("tenant-a", "missing"))).toBeUndefined();
   });
 
   it("should default coordination version to 0 for a row missing the version attribute", async () => {
     const { repo, seed } = makeRepo();
-    await seed([{ PK: "COORD#tenant-a#ev-2", SK: "STATE", state: { x: 1 } }]);
-    expect(await repo.readCoordinationState("tenant-a", "ev-2")).toEqual({
+    await seed([{ PK: "COORD#tenant-a#ev-2#problem-a#default", SK: "STATE", state: { x: 1 } }]);
+    expect(await repo.readCoordinationState(coordScope("tenant-a", "ev-2"))).toEqual({
       state: { x: 1 },
       version: 0,
+    });
+  });
+
+  /**
+   * [Issue #3123] The regression this issue exists for: one event, two
+   * coordination problems. Before the key carried problem and run they shared a
+   * single row, so the second problem's first write clobbered the first
+   * problem's match and left its next honest write looking like a conflict.
+   */
+  it("should keep two problems in one event on separate rows", async () => {
+    const { repo, seed } = makeRepo();
+    await seed([
+      coordItem("tenant-a", "ev-1", { state: { turns: 4 }, version: 7 }, "problem-a"),
+      coordItem("tenant-a", "ev-1", { state: { turns: 9 }, version: 2 }, "problem-b"),
+    ]);
+    expect(await repo.readCoordinationState(coordScope("tenant-a", "ev-1", "problem-a"))).toEqual({
+      state: { turns: 4 },
+      version: 7,
+    });
+    expect(await repo.readCoordinationState(coordScope("tenant-a", "ev-1", "problem-b"))).toEqual({
+      state: { turns: 9 },
+      version: 2,
+    });
+  });
+
+  /** [Issue #3123] Two runs of the SAME problem are separate too. */
+  it("should keep two runs of one problem on separate rows", async () => {
+    const { repo, seed } = makeRepo();
+    await seed([
+      coordItem("tenant-a", "ev-1", { state: { turns: 1 } }, "problem-a", "run-1"),
+      coordItem("tenant-a", "ev-1", { state: { turns: 2 } }, "problem-a", "run-2"),
+    ]);
+    expect(
+      await repo.readCoordinationState(coordScope("tenant-a", "ev-1", "problem-a", "run-1")),
+    ).toMatchObject({ state: { turns: 1 } });
+    expect(
+      await repo.readCoordinationState(coordScope("tenant-a", "ev-1", "problem-a", "run-2")),
+    ).toMatchObject({ state: { turns: 2 } });
+  });
+
+  /**
+   * [Issue #3123] Cleanup removes exactly the named namespace, plus the
+   * pre-scope row for that event (nothing else reaps those — they predate
+   * `expiresAt`). Every other namespace is untouched, and a repeat is a no-op.
+   */
+  it("should delete one namespace idempotently and leave the others alone", async () => {
+    const { repo, seed } = makeRepo();
+    await seed([
+      coordItem("tenant-a", "ev-1", { state: { turns: 4 } }, "problem-a"),
+      coordItem("tenant-a", "ev-1", { state: { turns: 9 } }, "problem-b"),
+      { PK: "COORD#tenant-a#ev-1", SK: "STATE", state: { legacy: true }, version: 1 },
+    ]);
+
+    await repo.deleteCoordinationState(coordScope("tenant-a", "ev-1", "problem-a"));
+    await repo.deleteCoordinationState(coordScope("tenant-a", "ev-1", "problem-a"));
+
+    expect(
+      await repo.readCoordinationState(coordScope("tenant-a", "ev-1", "problem-a")),
+    ).toBeUndefined();
+    expect(await repo.readCoordinationState(coordScope("tenant-a", "ev-1", "problem-b"))).toEqual({
+      state: { turns: 9 },
+      version: 2,
     });
   });
 });

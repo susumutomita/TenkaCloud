@@ -9,6 +9,7 @@
  * lands.
  */
 
+import type { CoordinationStateScope } from "./coordination-scope.js";
 import type {
   BulkDeploymentCreateEntry,
   CompositeParentDeploymentRecord,
@@ -558,31 +559,98 @@ export interface DeploymentsCompositePort {
  */
 export interface DeploymentsCoordinationPort {
   /**
-   * The per-event inter-team coordination state (`GetItem`
-   * `PK = COORD#<tenantId>#<eventId>`, `SK = STATE`). Returns `undefined` when
-   * the row is absent (= uninitialized). Site:
-   * `participant-handler/coordination-store.ts` `readCoordinationState`.
+   * The inter-team coordination state for one {@link CoordinationStateScope}
+   * (`GetItem` `PK = COORD#<tenantId>#<eventId>#<problemId>#<runId>`,
+   * `SK = STATE`). Returns `undefined` when the row is absent (=
+   * uninitialized). Site: `participant-handler/coordination-store.ts`
+   * `readCoordinationState`.
+   *
+   * [Issue #3123] Rows written before the scope existed live under the old
+   * two-part key and are deliberately NOT returned here — inheriting them
+   * would hand one problem's game state to whichever OTHER problem in the
+   * same event happened to read first. See {@link
+   * PRE_SCOPE_COORDINATION_NAMESPACE}.
    */
   readCoordinationState(
-    tenantId: string,
-    eventId: string,
+    scope: CoordinationStateScope,
   ): Promise<CoordinationStateRecord | undefined>;
 
   /**
-   * Optimistic-lock write of the per-event coordination state (`PutItem`,
+   * Optimistic-lock write of one scope's coordination state (`PutItem`,
    * `ConditionExpression "attribute_not_exists(version) OR version =
    * :expected"`, `version` set to `expectedVersion + 1`). Mirrors the A2/B2
    * union contract: `conflict` folds the DynamoDB `ConditionalCheckFailed`
    * instead of throwing (never `not_found` — a first write creates the row).
    * Site: `participant-handler/coordination-store.ts` `writeCoordinationState`.
+   *
+   * `expiresAt` is the row's TTL (epoch seconds, {@link
+   * coordinationStateExpiresAt}) — a retention backstop for a cleanup that
+   * never ran, refreshed by every write so it only starts counting once a
+   * match stops being played.
    */
   writeCoordinationState(
-    tenantId: string,
-    eventId: string,
+    scope: CoordinationStateScope,
     state: unknown,
     expectedVersion: number,
     at: string,
+    expiresAt: number,
   ): Promise<DeploymentMutationOutcome>;
+
+  /**
+   * [Issue #3123] Pushes a live row's TTL out without touching `state` or
+   * `version`.
+   *
+   * The TTL alone cannot tell "this match is over" from "nobody has moved
+   * lately": `writeCoordinationState` refreshes it, but a plugin with no `tick`
+   * hook (`microservice-migration-battle`'s `router.ts` is one) only writes when
+   * a participant acts. In an open-ended event its registration state would
+   * simply age out and the next request would silently rebuild from
+   * `plugin.initialState`.
+   *
+   * The tick is the liveness signal that fixes it: it runs once a minute for
+   * every coordination problem in a started event, whether or not the plugin
+   * has a `tick` hook, and stops when the event does. Refreshing from there
+   * means the retention clock starts when the EVENT goes quiet rather than when
+   * the participants do.
+   *
+   * Deliberately version-free. Bumping `version` every minute would invalidate
+   * in-flight optimistic locks and manufacture conflicts against a row nothing
+   * semantically changed.
+   *
+   * A no-op when the row is absent — there is nothing to keep alive.
+   */
+  touchCoordinationState(scope: CoordinationStateScope, expiresAt: number): Promise<void>;
+
+  /**
+   * [Issue #3123] Removes exactly one scope's coordination state, and nothing
+   * else. Idempotent: deleting an absent row is a success, so a retried or
+   * partially-completed teardown converges instead of erroring.
+   *
+   * This is also the run-reset primitive — the next op re-materializes the
+   * namespace from `plugin.initialState(ctx)` at version 0.
+   */
+  deleteCoordinationState(scope: CoordinationStateScope): Promise<void>;
+
+  /**
+   * [Issue #3123] Deletes every coordination row whose TTL has passed
+   * (`expiresAt > 0 AND expiresAt <= nowEpochSeconds`), returning how many
+   * were removed.
+   *
+   * On DynamoDB this duplicates the table's native TTL sweep. It exists so the
+   * SQLite/Turso backend — which has no native TTL — has the same primitive,
+   * the same way `dynamodb-ttl-sweep.ts` already unifies the other five
+   * repositories.
+   *
+   * NOT YET SCHEDULED, and the two backends are therefore not yet equivalent:
+   * on DynamoDB `expiresAt` is reaped by the table's own TTL with no caller at
+   * all, while on Turso an expired row stays readable until something invokes
+   * this. No aggregate's SQL sweep has a production caller today — events,
+   * teams, notifications, disruptions and admin-audit-log are all in the same
+   * position — so wiring a maintenance schedule is a platform-wide follow-up,
+   * not a coordination-specific one. Until it exists, event teardown is the
+   * only path that actually removes a Turso coordination row.
+   */
+  sweepExpiredCoordinationState(nowEpochSeconds: number): Promise<number>;
 }
 
 /**
