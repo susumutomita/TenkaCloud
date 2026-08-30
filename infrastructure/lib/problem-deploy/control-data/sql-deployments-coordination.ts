@@ -86,10 +86,14 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
   }
 
   /**
-   * [Issue #3123] The retention backstop for rows no teardown ever deleted.
+   * [Issue #3123] The retention primitive for rows no teardown ever deleted.
    * `expires_at > 0` skips rows written without a TTL (the migrated
    * `__pre_scope__` rows), the same guard the disruptions repository's sweep
    * uses.
+   *
+   * Has no scheduled caller yet — see `DeploymentsCoordinationPort`'s docstring
+   * for why that is a platform-wide gap rather than a coordination one, and for
+   * what it means for Turso/DynamoDB parity in the meantime.
    */
   async sweepExpiredCoordinationState(nowEpochSeconds: number): Promise<number> {
     const result = await this.core.sql.run(

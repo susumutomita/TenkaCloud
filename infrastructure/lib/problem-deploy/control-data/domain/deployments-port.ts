@@ -611,10 +611,19 @@ export interface DeploymentsCoordinationPort {
    * (`expiresAt > 0 AND expiresAt <= nowEpochSeconds`), returning how many
    * were removed.
    *
-   * On DynamoDB this duplicates the table's native TTL sweep and exists so the
-   * SQLite/Turso backend — which has no native TTL — reaches the same end
-   * state, the same way `dynamodb-ttl-sweep.ts` already unifies the other five
+   * On DynamoDB this duplicates the table's native TTL sweep. It exists so the
+   * SQLite/Turso backend — which has no native TTL — has the same primitive,
+   * the same way `dynamodb-ttl-sweep.ts` already unifies the other five
    * repositories.
+   *
+   * NOT YET SCHEDULED, and the two backends are therefore not yet equivalent:
+   * on DynamoDB `expiresAt` is reaped by the table's own TTL with no caller at
+   * all, while on Turso an expired row stays readable until something invokes
+   * this. No aggregate's SQL sweep has a production caller today — events,
+   * teams, notifications, disruptions and admin-audit-log are all in the same
+   * position — so wiring a maintenance schedule is a platform-wide follow-up,
+   * not a coordination-specific one. Until it exists, event teardown is the
+   * only path that actually removes a Turso coordination row.
    */
   sweepExpiredCoordinationState(nowEpochSeconds: number): Promise<number>;
 }

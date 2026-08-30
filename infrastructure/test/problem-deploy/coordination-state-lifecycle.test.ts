@@ -63,9 +63,34 @@ describe("coordination_state SQL migration (#3123)", () => {
         expires_at: 0,
       },
     ]);
+    // The legacy table is deliberately KEPT: Turso is one shared remote
+    // database, so during a rolling deployment the first new cold start runs
+    // this bootstrap while old execution environments are still reading and
+    // writing `coordination_state`. Dropping it would fail all of them with
+    // `no such table` until the rollout drained.
     expect(
       db.prepare("SELECT name FROM sqlite_master WHERE name = 'coordination_state'").get(),
-    ).toBeUndefined();
+    ).toEqual({ name: "coordination_state" });
+  });
+
+  /**
+   * An old execution environment still writing to the legacy table during a
+   * rolling deployment keeps working, and its row is picked up by a later
+   * bootstrap rather than lost.
+   */
+  it("should keep serving a write that lands on the legacy table mid-rollout", () => {
+    const db = seedPreScopeDatabase();
+    db.exec(DEPLOYMENTS_SCHEMA_SQL);
+
+    db.prepare(
+      "INSERT INTO coordination_state (tenant_id, event_id, state, version, updated_at) VALUES (?, ?, ?, ?, ?)",
+    ).run("tenant-b", "ev-9", JSON.stringify({ turn: 1 }), 1, "2026-06-02T00:00:00.000Z");
+    db.exec(DEPLOYMENTS_SCHEMA_SQL);
+
+    expect(rows(db).map((row) => [row.tenant_id, row.event_id])).toEqual([
+      ["tenant-a", "ev-1"],
+      ["tenant-b", "ev-9"],
+    ]);
   });
 
   it("should be idempotent across repeated cold starts", () => {
@@ -85,17 +110,25 @@ describe("coordination_state SQL migration (#3123)", () => {
   });
 
   /**
-   * The migration must not resurrect a namespace a later run already deleted:
-   * the copy is `INSERT OR IGNORE` from an empty legacy table, so a second
-   * bootstrap adds nothing back.
+   * The bootstrap must never resurrect a LIVE namespace that cleanup removed --
+   * the case that would matter, since a re-created row is a match the platform
+   * thought it had torn down. The copy only ever touches the reserved
+   * `__pre_scope__` namespace, so a deleted live row stays deleted however many
+   * times the schema is re-applied.
    */
-  it("should not resurrect a namespace deleted after the first migration", () => {
+  it("should not resurrect a live namespace deleted after the migration", () => {
     const db = seedPreScopeDatabase();
     db.exec(DEPLOYMENTS_SCHEMA_SQL);
-    db.exec("DELETE FROM coordination_state_scoped");
+    db.prepare(
+      `INSERT INTO coordination_state_scoped
+       (tenant_id, event_id, problem_id, run_id, state, version, updated_at, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run("tenant-a", "ev-1", "problem-a", "default", "{}", 3, "2026-06-01T00:00:00.000Z", 0);
+
+    db.exec("DELETE FROM coordination_state_scoped WHERE problem_id = 'problem-a'");
     db.exec(DEPLOYMENTS_SCHEMA_SQL);
 
-    expect(rows(db)).toEqual([]);
+    expect(rows(db).map((row) => row.problem_id)).toEqual([PRE_SCOPE_COORDINATION_NAMESPACE]);
   });
 });
 

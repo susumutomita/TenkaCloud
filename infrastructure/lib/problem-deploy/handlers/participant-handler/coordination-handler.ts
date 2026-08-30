@@ -3,6 +3,8 @@ import {
   type CoordinationStateScope,
   DEFAULT_COORDINATION_RUN_ID,
 } from "../../control-data/domain/coordination-scope.js";
+import type { DeploymentStatus } from "../deploy-handler/types.js";
+import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
 import {
   loadAndDispatchCoordinationOp,
   loadAndProjectCoordinationForTeam,
@@ -173,6 +175,32 @@ async function resolveEventRoster(
   return [...roster].sort();
 }
 
+/**
+ * [Issue #3123] Whether this deployment row may still submit coordination ops.
+ *
+ * A torn-down deployment stays queryable through the participant login index
+ * (GSI2 is keyed by `teamLoginKey`, not by status) while it sits in `DELETING`,
+ * and terminal rows are retained for seven days for audit. Without this guard a
+ * participant could keep submitting after their deployment — or their whole
+ * event — was torn down, and because event cleanup now DELETES the coordination
+ * namespace, the next op would re-materialize it from `plugin.initialState`,
+ * recreating exactly the row teardown had just removed.
+ *
+ * Every other participant write path already applies this same filter with this
+ * same constant (`battle-attacks.ts`, `cast-event.ts`, `sso.ts`, `lookup.ts`,
+ * `update.ts`, `score-events.ts`, `leaderboard*.ts`, `challenge-access.ts`).
+ * Coordination was the one that did not.
+ *
+ * Note this guards the REQUESTER's own row only. `resolveEventRoster`
+ * deliberately does not filter by status, for an unrelated and still-valid
+ * reason: dropping mid-deploy teams from the roster would make
+ * `initialState(ctx)` depend on deploy timing (#3053).
+ */
+function canSubmitCoordination(item: { readonly status?: string }): boolean {
+  const status = (item.status ?? "PENDING") as DeploymentStatus;
+  return !DELETED_LIKE_STATUSES.has(status);
+}
+
 export function makeCoordinationScopeResolver(
   shared: ParticipantSharedResources,
   config: CoordinationConfig,
@@ -182,7 +210,14 @@ export function makeCoordinationScopeResolver(
     for (const item of items) {
       const problemId = item.problemId;
       const plugin = problemId ? config[problemId]?.plugin : undefined;
-      if (problemId && item.tenantId && item.eventId && item.teamId && plugin) {
+      if (
+        problemId &&
+        item.tenantId &&
+        item.eventId &&
+        item.teamId &&
+        plugin &&
+        canSubmitCoordination(item)
+      ) {
         const teamIds = await resolveEventRoster(shared, {
           tenantId: item.tenantId,
           eventId: item.eventId,

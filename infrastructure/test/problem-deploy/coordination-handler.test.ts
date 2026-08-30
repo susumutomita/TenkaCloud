@@ -195,6 +195,41 @@ describe("makeCoordinationScopeResolver", () => {
     });
   });
 
+  /**
+   * [Issue #3123] A torn-down deployment stays queryable through the
+   * participant login index while it is DELETING and for the seven days its
+   * terminal row is retained. Since event cleanup now DELETES the coordination
+   * namespace, letting such a row resolve a scope would let the next op
+   * re-materialize from `plugin.initialState` -- recreating exactly the row
+   * teardown had just removed. Every sibling participant write path already
+   * applies this filter.
+   */
+  it.each([
+    "DELETING",
+    "DELETED",
+    "EXPIRED",
+    "AUTO_DELETED",
+  ])("should refuse a scope for a %s deployment", async (status) => {
+    const resolve = makeCoordinationScopeResolver(
+      fakeShared([{ tenantId: "tn1", eventId: "e1", teamId: "t1", problemId: "p1", status }]),
+      config,
+    );
+    expect(await resolve("key")).toBeNull();
+  });
+
+  it.each([
+    "PENDING",
+    "IN_PROGRESS",
+    "COMPLETE",
+    "FAILED",
+  ])("should still resolve a scope for a %s deployment", async (status) => {
+    const resolve = makeCoordinationScopeResolver(
+      fakeShared([{ tenantId: "tn1", eventId: "e1", teamId: "t1", problemId: "p1", status }]),
+      config,
+    );
+    expect(await resolve("key")).not.toBeNull();
+  });
+
   it("should return null when no owned problem declares coordination", async () => {
     const resolve = makeCoordinationScopeResolver(
       fakeShared([{ tenantId: "tn1", eventId: "e1", teamId: "t1", problemId: "other" }]),

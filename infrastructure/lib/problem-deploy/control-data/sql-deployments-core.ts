@@ -101,11 +101,10 @@ export const DEPLOYMENTS_SCHEMA_STATEMENTS = [
   // four statements below migrate into it. They are ordered to be idempotent on
   // every cold start, not just the first:
   //
-  //   1. re-create the legacy table if absent (an empty source for step 3 on a
-  //      database that already migrated, and on a brand-new one)
+  //   1. create the legacy table if absent (an empty source for step 3 on a
+  //      brand-new database)
   //   2. create the scoped table
   //   3. copy any legacy row into the reserved `__pre_scope__` namespace
-  //   4. drop the legacy table
   //
   // Step 3 preserves the rows rather than dropping them, but parks them where
   // no live scope can resolve: a real `problemId` matches `PROBLEM_ID_RE`
@@ -113,9 +112,16 @@ export const DEPLOYMENTS_SCHEMA_STATEMENTS = [
   // Reading a legacy row back as live state would hand ONE problem's game state
   // to whichever OTHER problem in the same event happened to ask first — the
   // exact cross-problem bleed this issue fixes. The compatibility policy is
-  // therefore: pre-#3123 coordination state does not carry over, a match in
-  // flight across the deploy re-initializes from `plugin.initialState`, and the
-  // old bytes stay queryable for forensics until an operator drops them.
+  // therefore: pre-#3123 coordination state does not carry over, and a match in
+  // flight across the deploy re-initializes from `plugin.initialState`.
+  //
+  // The legacy table is deliberately NOT dropped. Turso is one shared remote
+  // database, so during a rolling deployment the first NEW cold start runs this
+  // bootstrap while OLD execution environments are still serving traffic
+  // against `coordination_state` — dropping it would fail every one of their
+  // reads and writes with `no such table` until the rollout drained. Leaving it
+  // costs a stale table that nothing reads; an operator can drop it once no old
+  // environment remains.
   `CREATE TABLE IF NOT EXISTS coordination_state (
   tenant_id  TEXT    NOT NULL,
   event_id   TEXT    NOT NULL,
@@ -139,7 +145,6 @@ export const DEPLOYMENTS_SCHEMA_STATEMENTS = [
   (tenant_id, event_id, problem_id, run_id, state, version, updated_at, expires_at)
   SELECT tenant_id, event_id, '${PRE_SCOPE_COORDINATION_NAMESPACE}', '${PRE_SCOPE_COORDINATION_NAMESPACE}', state, version, updated_at, 0
   FROM coordination_state`,
-  `DROP TABLE IF EXISTS coordination_state`,
 ] as const;
 
 /** SQL script form retained for local SQLite parity tests and manual bootstrap. */
