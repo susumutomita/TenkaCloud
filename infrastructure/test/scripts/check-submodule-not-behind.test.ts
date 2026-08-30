@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   checkSubmoduleNotBehind,
   type GitIO,
-} from "../../../.claude/skills/quality-gates/scripts/check-submodule-not-behind";
+} from "../../../scripts/quality/check-submodule-not-behind";
 
 describe("checkSubmoduleNotBehind", () => {
   it("should give the fetcher every pin needed to restore shallow submodule ancestry", () => {

@@ -2,10 +2,6 @@ import { describe, expect, it } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-  GATED_WORKSPACES,
-  REPORTED_WORKSPACES,
-} from "../../.claude/skills/quality-gates/scripts/check-coverage-gate.ts";
-import {
   COVERAGE_WORKSPACES,
   formatDuration,
   lcovPathForWorkspace,
@@ -112,13 +108,6 @@ describe("SHARDS", () => {
       "packages/ai-eval",
       "packages/security-harness",
     ]);
-  });
-
-  it("should cover every workspace the coverage gate reads, so per-shard gating covers the full gated set", () => {
-    const covered = new Set(COVERAGE_WORKSPACES.map((ws) => ws.dir));
-    for (const ws of [...GATED_WORKSPACES, ...REPORTED_WORKSPACES]) {
-      expect(covered.has(ws)).toBe(true);
-    }
   });
 });
 

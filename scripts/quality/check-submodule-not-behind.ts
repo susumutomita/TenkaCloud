@@ -14,7 +14,7 @@
  *   - main の pin が PR の pin の祖先 (= 前進)      → OK (ahead)
  *   - それ以外 (後退 / 分岐)                       → FAIL
  *
- * Usage: `bun run scripts/check-submodule-not-behind.ts [baseRef]` (default baseRef=origin/main)。
+ * Usage: `bun run scripts/quality/check-submodule-not-behind.ts [baseRef]` (default baseRef=origin/main)。
  * git I/O は injectable なので unit test から純粋に判定ロジックを観測できる。
  */
 
@@ -109,6 +109,7 @@ export function checkSubmoduleNotBehind(baseRef: string, io: GitIO): boolean {
 function realGitIO(): GitIO {
   const tryGit = (args: readonly string[]): string | undefined => {
     try {
+      // eslint-disable-next-line sonarjs/no-os-command-from-path -- git is this gate's input source
       const out = execFileSync("git", [...args], { encoding: "utf8" }).trim();
       return out.length > 0 ? out : undefined;
     } catch {
@@ -125,6 +126,7 @@ function realGitIO(): GitIO {
         tryGit(["-C", SUBMODULE_PATH, "rev-parse", "--is-shallow-repository"]) === "true";
       try {
         execFileSync(
+          // eslint-disable-next-line sonarjs/no-os-command-from-path -- git is this gate's input source
           "git",
           [
             "-C",
@@ -145,6 +147,7 @@ function realGitIO(): GitIO {
     isAncestor: (maybeAncestor, descendant) => {
       try {
         execFileSync(
+          // eslint-disable-next-line sonarjs/no-os-command-from-path -- git is this gate's input source
           "git",
           ["-C", SUBMODULE_PATH, "merge-base", "--is-ancestor", maybeAncestor, descendant],
           { stdio: "ignore" },

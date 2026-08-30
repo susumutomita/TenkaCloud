@@ -4,23 +4,23 @@
  * descriptions that contain a character outside the IAM Latin-1 range — the class of bug that
  * `CREATE_FAILED` a real deploy (`ChallengePayloadStack` PublishRole had a U+2192 `->` arrow).
  *
- * `scripts/check-template-ascii.ts` covers hand-written YAML; this covers descriptions set in CDK,
+ * This covers IAM descriptions set in CDK,
  * which only exist in the synth output (often wrapped in `Fn::Join`). Run AFTER `cdk synth` — the
  * `check-synth` make target invokes it on the freshly-written `cdk.out`.
  *
- *   bun run scripts/check-synth-iam-ascii.ts                 # scans infrastructure/cdk.out
- *   bun run scripts/check-synth-iam-ascii.ts <synth-outdir>  # explicit dir
+ *   bun run scripts/quality/check-synth-iam-ascii.ts                 # scans infrastructure/cdk.out
+ *   bun run scripts/quality/check-synth-iam-ascii.ts <synth-outdir>  # explicit dir
  */
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-// Gate logic は scripts/lib/ の共有実装 (docs/shared-utils.md) が単一の正。
+// Gate logic は scripts/lib/ の共有実装が単一の正。
 // infrastructure/test の synth assertion も同じ scanner を使う (= 判定ドリフト防止)。
 import {
   formatCodePoint,
   type IamDescriptionFinding,
   scanTemplateForIamDescriptions,
-} from "../../../../scripts/lib/iam-description-ascii";
+} from "../lib/iam-description-ascii";
 
 const DEFAULT_OUTDIR = "infrastructure/cdk.out";
 
@@ -45,7 +45,7 @@ if (files.length === 0) {
   process.exit(1);
 }
 
-const findings: Array<IamDescriptionFinding & { file: string }> = [];
+const findings: (IamDescriptionFinding & { file: string })[] = [];
 for (const file of files) {
   let template: unknown;
   try {

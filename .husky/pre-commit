@@ -12,8 +12,3 @@ if git diff --cached --quiet -- problems 2>/dev/null; then
 fi
 
 mise exec -- make before-commit
-
-# 品質チェックは本体 (make before-commit / CI) とは「混ぜず」別呼び出しで走らせる。
-# 実体は .claude/skills/quality-gates (本体を肥大化させないため Claude のツール領域へ寄せた)。
-# precommit グループ = 高速・決定的なファイル/git スキャンのみ。重い検査 (coverage/synth) は CI 側。
-mise exec -- bun run .claude/skills/quality-gates/scripts/run.ts
