@@ -293,10 +293,12 @@ describe("DynamoDbDeploymentsRepository — sub-aggregate writes (Phase B3)", ()
       expect(outcome).toEqual({ outcome: "updated" });
 
       const put = commands.find((c) => c instanceof PutCommand);
-      expect(put.input.ConditionExpression).toBe(
-        "attribute_not_exists(version) OR version = :expected",
-      );
-      expect(put.input.ExpressionAttributeValues).toEqual({ ":expected": 0 });
+      // [Issue #3126] A first write may only CREATE. The permissive
+      // `attribute_not_exists(version) OR version = :expected` this replaced let
+      // a stale op (holding a version read before a run reset) resurrect the
+      // deleted namespace, because the delete made `attribute_not_exists` true.
+      expect(put.input.ConditionExpression).toBe("attribute_not_exists(version)");
+      expect(put.input.ExpressionAttributeValues).toBeUndefined();
       expect(await repo.readCoordinationState(coordScope("tn1", "ev-1"))).toEqual({
         state: { turns: 1 },
         version: 1,

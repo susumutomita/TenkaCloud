@@ -119,8 +119,24 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
             updatedAt: at,
             expiresAt,
           },
-          ConditionExpression: "attribute_not_exists(version) OR version = :expected",
-          ExpressionAttributeValues: { ":expected": expectedVersion },
+          // [Issue #3126] The condition is split on `expectedVersion`, not the
+          // permissive `attribute_not_exists(version) OR version = :expected`
+          // it used to be. Only a first write (expectedVersion 0) may create the
+          // row; a write carrying a version read earlier must match a row that
+          // still exists.
+          //
+          // Without the split, a run reset races: an op reads state at version
+          // 3, the operator resets (deleting the row), and the op's write then
+          // satisfies `attribute_not_exists(version)` and resurrects the match
+          // the reset just ended — with the reset still reporting success. Now
+          // that write conflicts, the participant retries, and the retry
+          // re-initializes cleanly from `plugin.initialState`.
+          ...(expectedVersion === 0
+            ? { ConditionExpression: "attribute_not_exists(version)" }
+            : {
+                ConditionExpression: "version = :expected",
+                ExpressionAttributeValues: { ":expected": expectedVersion },
+              }),
         }),
       );
       return { outcome: "updated" };

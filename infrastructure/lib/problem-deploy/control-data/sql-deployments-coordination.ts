@@ -64,27 +64,45 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
     at: string,
     expiresAt: number,
   ): Promise<DeploymentMutationOutcome> {
-    const result = await this.core.sql.run(
-      `INSERT INTO coordination_state_scoped (tenant_id, event_id, problem_id, run_id, state, version, updated_at, expires_at)
+    const params = [
+      scope.tenantId,
+      scope.eventId,
+      scope.problemId,
+      scope.runId,
+      JSON.stringify(normalizeJsonValue(state)),
+      expectedVersion + 1,
+      at,
+      expiresAt,
+    ];
+    // [Issue #3126] Only a first write (expectedVersion 0) may insert. A write
+    // carrying a version read earlier must find that row still present — see
+    // the DynamoDB adapter for the run-reset race this closes. The plain upsert
+    // this replaced inserted whenever the row was absent, whatever version the
+    // caller expected, so a pre-reset op could resurrect the deleted match.
+    const result =
+      expectedVersion === 0
+        ? await this.core.sql.run(
+            `INSERT INTO coordination_state_scoped (tenant_id, event_id, problem_id, run_id, state, version, updated_at, expires_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(tenant_id, event_id, problem_id, run_id) DO UPDATE SET
-         state = excluded.state,
-         version = excluded.version,
-         updated_at = excluded.updated_at,
-         expires_at = excluded.expires_at
-       WHERE coordination_state_scoped.version = ?`,
-      [
-        scope.tenantId,
-        scope.eventId,
-        scope.problemId,
-        scope.runId,
-        JSON.stringify(normalizeJsonValue(state)),
-        expectedVersion + 1,
-        at,
-        expiresAt,
-        expectedVersion,
-      ],
-    );
+       ON CONFLICT(tenant_id, event_id, problem_id, run_id) DO NOTHING`,
+            params,
+          )
+        : await this.core.sql.run(
+            `UPDATE coordination_state_scoped
+         SET state = ?, version = ?, updated_at = ?, expires_at = ?
+       WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ? AND version = ?`,
+            [
+              JSON.stringify(normalizeJsonValue(state)),
+              expectedVersion + 1,
+              at,
+              expiresAt,
+              scope.tenantId,
+              scope.eventId,
+              scope.problemId,
+              scope.runId,
+              expectedVersion,
+            ],
+          );
     return Number(result.changes) > 0 ? { outcome: "updated" } : { outcome: "conflict" };
   }
 

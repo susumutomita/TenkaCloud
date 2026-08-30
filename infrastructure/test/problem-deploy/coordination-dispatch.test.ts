@@ -258,12 +258,15 @@ describe("dispatchCoordinationOp", () => {
       nowIso: "2026-06-01T00:00:00Z",
     });
     expect(out).toEqual({ kind: "ok", projection: { count: 1 } });
-    // version 0 condition (= 新規 row)。 [Issue #3133] 同じ partition に秘密の Put も走るので
-    // state の item だけを見る。
+    // [Issue #3133] 同じ partition に秘密の Put も走るので state の item だけを見る。
+    // [Issue #3126] 新規 row (expectedVersion 0) の条件は `attribute_not_exists(version)` 単独。
+    // 以前の `... OR version = :expected` は、reset で消された直後の遅い op が row を
+    // 復活させられてしまうため分割した。
     const put = send.mock.calls
       .map((c) => c[0])
       .find((c) => c instanceof PutCommand && c.input.Item?.SK === "STATE") as PutCommand;
-    expect(put.input.ExpressionAttributeValues).toEqual({ ":expected": 0 });
+    expect(put.input.ConditionExpression).toBe("attribute_not_exists(version)");
+    expect(put.input.ExpressionAttributeValues).toBeUndefined();
   });
 
   it("should apply on top of existing state", async () => {

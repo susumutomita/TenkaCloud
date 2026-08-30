@@ -52,6 +52,7 @@ const nullImporter: PluginImporter = async () => {
 interface FakeDdb {
   readonly store: CoordinationStoreDeps;
   readonly puts: { PK: string; state: unknown; version: number }[];
+  readonly secretPuts: PutCommand[];
   readonly updates: UpdateCommand[];
   readonly send: ReturnType<typeof vi.fn>;
 }
@@ -60,28 +61,51 @@ function fakeDdb(opts: {
   conflict?: boolean;
   getThrows?: boolean;
   updateThrows?: unknown;
+  matchSecret?: string;
 }): FakeDdb {
   const puts: { PK: string; state: unknown; version: number }[] = [];
+  const secretPuts: PutCommand[] = [];
   const updates: UpdateCommand[] = [];
+
+  // [Issue #3133] The coordination partition now holds two rows — `SK=STATE`
+  // and `SK=MATCHSECRET` — so each command handler branches on the sort key
+  // first. Split out of `send` so the dispatch stays one flat switch.
+  const isSecret = (sk: string | undefined) => sk === "MATCHSECRET";
+
+  const handleGet = (cmd: GetCommand) => {
+    if (opts.getThrows) throw new Error("get boom");
+    if (isSecret((cmd.input as { Key?: { SK?: string } }).Key?.SK)) {
+      return { Item: opts.matchSecret ? { matchSecret: opts.matchSecret } : undefined };
+    }
+    return { Item: opts.getItem };
+  };
+
+  const handlePut = (cmd: PutCommand) => {
+    // A `conflict` fixture models a STATE version race and must not also
+    // reject the mint, which is a different row.
+    if (isSecret((cmd.input as { Item?: { SK?: string } }).Item?.SK)) {
+      secretPuts.push(cmd);
+      return {};
+    }
+    if (opts.conflict) throw new ConditionalCheckFailedException({ $metadata: {}, message: "x" });
+    const input = cmd.input as { Item: { PK: string; state: unknown; version: number } };
+    puts.push({ PK: input.Item.PK, state: input.Item.state, version: input.Item.version });
+    return {};
+  };
+
+  // [Issue #3123] The TTL refresh. Recorded rather than folded into `puts`:
+  // the distinction the tests care about is exactly that it is not a write of
+  // `state`/`version`.
+  const handleUpdate = (cmd: UpdateCommand) => {
+    if (opts.updateThrows !== undefined) throw opts.updateThrows;
+    updates.push(cmd);
+    return {};
+  };
+
   const send = vi.fn(async (cmd: unknown) => {
-    if (cmd instanceof GetCommand) {
-      if (opts.getThrows) throw new Error("get boom");
-      return { Item: opts.getItem };
-    }
-    if (cmd instanceof PutCommand) {
-      if (opts.conflict) throw new ConditionalCheckFailedException({ $metadata: {}, message: "x" });
-      const input = cmd.input as { Item: { PK: string; state: unknown; version: number } };
-      puts.push({ PK: input.Item.PK, state: input.Item.state, version: input.Item.version });
-      return {};
-    }
-    // [Issue #3123] The TTL refresh. Recorded rather than folded into `puts`:
-    // the distinction the tests care about is exactly that it is not a write of
-    // `state`/`version`.
-    if (cmd instanceof UpdateCommand) {
-      if (opts.updateThrows !== undefined) throw opts.updateThrows;
-      updates.push(cmd);
-      return {};
-    }
+    if (cmd instanceof GetCommand) return handleGet(cmd);
+    if (cmd instanceof PutCommand) return handlePut(cmd);
+    if (cmd instanceof UpdateCommand) return handleUpdate(cmd);
     throw new Error("unexpected command");
   });
   return {
@@ -91,6 +115,7 @@ function fakeDdb(opts: {
       tableName: "Deployments",
     },
     puts,
+    secretPuts,
     updates,
     send,
   };
@@ -387,5 +412,73 @@ describe("coordinationStateChanged", () => {
     expect(coordinationStateChanged(s, s)).toBe(false);
     expect(coordinationStateChanged({ phase: "open" }, { phase: "open" })).toBe(false);
     expect(coordinationStateChanged({ phase: "open" }, { phase: "locked" })).toBe(true);
+  });
+});
+
+/**
+ * [Issue #3133] The hole a read-only tick would have left open.
+ *
+ * The tick persists whatever `runTick` returns, including state it just built
+ * from `initialState`. If the tick initialized without a secret, every later op
+ * would find that state already present, skip initialization, and never mint —
+ * so the whole match would run on the plugin's fallback seed, which is exactly
+ * what this issue exists to prevent. The tick therefore resolves the secret by
+ * the same rule the op path uses: only when initializing, and minting if absent.
+ */
+describe("coordination tick match secret", () => {
+  const seedPlugin: CoordinationPlugin<{ seed: string }, unknown, { seed: string }> = {
+    initialState: (ctx) => ({ seed: ctx.matchSecret ?? `fallback:${ctx.eventId}` }),
+    validateOp: () => ({ ok: true }),
+    applyOp: (s) => s,
+    // Always advances, so the tick-initialized state is actually written.
+    tick: (s) => ({ seed: `${s.seed}!` }),
+    projectForTeam: (s) => s,
+  };
+
+  it("should mint a secret before persisting state it initialized itself", async () => {
+    const ddb = fakeDdb({ getItem: undefined });
+    const result = await handleCoordinationTickBatch(
+      depsWith(importerOf({ default: seedPlugin }), ddb.store),
+      batch([
+        { tenantId: "t1", eventId: "e1", moduleRef: "cap", eventNowMs: CAPTURE_MS, teamIds: ["a"] },
+      ]),
+    );
+
+    expect(result.written).toBe(1);
+    expect(ddb.secretPuts).toHaveLength(1);
+    const persisted = ddb.puts[0]?.state as { seed: string };
+    expect(persisted.seed).not.toContain("fallback:");
+    expect(persisted.seed).toMatch(/^[0-9a-f]{64}!$/);
+  });
+
+  it("should reuse an already issued secret rather than minting a second one", async () => {
+    const ddb = fakeDdb({ getItem: undefined, matchSecret: "issued-by-first-op" });
+    await handleCoordinationTickBatch(
+      depsWith(importerOf({ default: seedPlugin }), ddb.store),
+      batch([
+        { tenantId: "t1", eventId: "e1", moduleRef: "cap", eventNowMs: CAPTURE_MS, teamIds: ["a"] },
+      ]),
+    );
+
+    expect(ddb.secretPuts).toHaveLength(0);
+    expect((ddb.puts[0]?.state as { seed: string } | undefined)?.seed).toBe("issued-by-first-op!");
+  });
+
+  it("should not touch the secret when the match already has state", async () => {
+    const ddb = fakeDdb({ getItem: { state: { seed: "existing" }, version: 2 } });
+    await handleCoordinationTickBatch(
+      depsWith(importerOf({ default: seedPlugin }), ddb.store),
+      batch([
+        { tenantId: "t1", eventId: "e1", moduleRef: "cap", eventNowMs: CAPTURE_MS, teamIds: ["a"] },
+      ]),
+    );
+
+    // `initialState` is the only hook that takes ctx, so an established match
+    // needs no secret and must not pay a read or a write for one.
+    const secretReads = ddb.send.mock.calls
+      .map((c) => c[0] as { input?: { Key?: { SK?: string } } })
+      .filter((c) => c.input?.Key?.SK === "MATCHSECRET");
+    expect(secretReads).toEqual([]);
+    expect(ddb.secretPuts).toEqual([]);
   });
 });

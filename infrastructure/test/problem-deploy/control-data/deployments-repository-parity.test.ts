@@ -643,6 +643,55 @@ describe.each(backends)("DeploymentsRepository parity: %s", (_label, makeBackend
   });
 
   /**
+   * [Issue #3133] The mint race, and the one case where minting must fail loudly.
+   *
+   * Two concurrent first ops both see "absent" — the read is not a lock. The
+   * conditional put / `INSERT OR IGNORE` makes exactly one of them the writer
+   * and the loser adopts the winner's value, because two teams deriving from
+   * two different seeds would be playing two different games.
+   */
+  it("should converge concurrent first mints on a single secret", async () => {
+    const { repo } = makeBackend();
+    const scope = coordScope("tenant-a", "ev-race");
+
+    const [first, second] = await Promise.all([
+      repo.ensureCoordinationMatchSecret(scope, "candidate-one", EXPIRES),
+      repo.ensureCoordinationMatchSecret(scope, "candidate-two", EXPIRES),
+    ]);
+
+    expect(first).toBe(second);
+    expect(await repo.readCoordinationMatchSecret(scope)).toBe(first);
+  });
+
+  /**
+   * [Issue #3126] The run-reset race the write fence closes.
+   *
+   * An op reads state, the operator resets (deleting the row), and the op's
+   * write lands afterwards. Before the fence both backends accepted it — the
+   * DynamoDB condition allowed `attribute_not_exists(version)` and the SQL
+   * upsert inserted whenever the row was absent — so the match the reset just
+   * ended came back, with the reset still reporting success.
+   */
+  it("should refuse a stale write that would resurrect a reset match", async () => {
+    const { repo } = makeBackend();
+    const scope = coordScope("tenant-a", "ev-reset");
+
+    await expectOutcome(repo.writeCoordinationState(scope, { turn: 1 }, 0, AT, EXPIRES), "updated");
+    // The operator resets the run while an op is mid-flight holding version 1.
+    await repo.deleteCoordinationState(scope);
+
+    await expectOutcome(
+      repo.writeCoordinationState(scope, { turn: 2 }, 1, AT, EXPIRES),
+      "conflict",
+    );
+    expect(await repo.readCoordinationState(scope)).toBeUndefined();
+
+    // The participant's retry re-initializes cleanly at version 0.
+    await expectOutcome(repo.writeCoordinationState(scope, { turn: 1 }, 0, AT, EXPIRES), "updated");
+    expect((await repo.readCoordinationState(scope))?.version).toBe(1);
+  });
+
+  /**
    * [Issue #3133] The structural half of "never projected": the secret lives in
    * its own row, so the record `readCoordinationState` returns — the value
    * every projection, log line and participant response is built from — cannot
