@@ -157,9 +157,10 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
    * `__pre_scope__` rows), the same guard the disruptions repository's sweep
    * uses.
    *
-   * Has no scheduled caller yet — see `DeploymentsCoordinationPort`'s docstring
-   * for why that is a platform-wide gap rather than a coordination one, and for
-   * what it means for Turso/DynamoDB parity in the meantime.
+   * [Issue #3127] Driven by the generic-scoring reconciler's per-minute prune
+   * tick, which is gated on the pure-SQL backend — DynamoDB reaps `expiresAt`
+   * natively and must not pay for a Scan that deletes what the table already
+   * deletes.
    */
   async sweepExpiredCoordinationState(nowEpochSeconds: number): Promise<number> {
     const result = await this.core.sql.run(

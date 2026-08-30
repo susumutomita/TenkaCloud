@@ -681,14 +681,13 @@ export interface DeploymentsCoordinationPort {
    * the same way `dynamodb-ttl-sweep.ts` already unifies the other five
    * repositories.
    *
-   * NOT YET SCHEDULED, and the two backends are therefore not yet equivalent:
-   * on DynamoDB `expiresAt` is reaped by the table's own TTL with no caller at
-   * all, while on Turso an expired row stays readable until something invokes
-   * this. No aggregate's SQL sweep has a production caller today — events,
-   * teams, notifications, disruptions and admin-audit-log are all in the same
-   * position — so wiring a maintenance schedule is a platform-wide follow-up,
-   * not a coordination-specific one. Until it exists, event teardown is the
-   * only path that actually removes a Turso coordination row.
+   * [Issue #3127] Scheduled since: the generic-scoring reconciler's per-minute
+   * `pruneExpiredControlData` tick calls this alongside the other five
+   * aggregates' `pruneExpired`, gated on `needsManualPrune()` so it only runs
+   * on the pure-SQL backend. It was the one aggregate that tick missed, because
+   * the other five spell the same operation `pruneExpired` and this one does
+   * not; until it was wired, `CONTROL_DATA_BACKEND=turso` kept expired
+   * coordination rows readable indefinitely while DynamoDB reaped its own.
    */
   sweepExpiredCoordinationState(nowEpochSeconds: number): Promise<number>;
 }
