@@ -4,6 +4,7 @@ import type { ParticipantProblemView } from "../api/portal-client";
 import {
   hideDraftCatalogEntries,
   hideDraftQuestProblems,
+  hidesDraftProblems,
   isDraftHideExempt,
   readShowDraftProblems,
   visibleCatalogEntries,
@@ -193,6 +194,14 @@ describe("hideDraftCatalogEntries", () => {
   });
 });
 
+describe("hidesDraftProblems", () => {
+  it("should hide drafts only in local play, where the list is the whole catalog", () => {
+    expect(hidesDraftProblems("local")).toBe(true);
+    expect(hidesDraftProblems("real")).toBe(false);
+    expect(hidesDraftProblems("mock")).toBe(false);
+  });
+});
+
 describe("visibleQuestProblems / visibleCatalogEntries (toggle 状態つき)", () => {
   const draftProblem = problem({ problemId: "draft-1" });
   const draftEntry = entry({ id: "draft-1", status: "draft" });
@@ -200,13 +209,23 @@ describe("visibleQuestProblems / visibleCatalogEntries (toggle 状態つき)", (
     problemId === "draft-1" ? ("draft" as const) : undefined;
 
   it("should pass everything through while drafts are shown", () => {
-    expect(visibleQuestProblems([draftProblem], statusOf, true)).toEqual([draftProblem]);
+    expect(visibleQuestProblems([draftProblem], statusOf, true, "local")).toEqual([draftProblem]);
     expect(visibleCatalogEntries([draftEntry], [], true)).toEqual([draftEntry]);
   });
 
   it("should hide drafts while they are not shown", () => {
-    expect(visibleQuestProblems([draftProblem], statusOf, false)).toEqual([]);
+    expect(visibleQuestProblems([draftProblem], statusOf, false, "local")).toEqual([]);
     expect(visibleCatalogEntries([draftEntry], [], false)).toEqual([]);
+  });
+
+  it("should keep an operator-deployed draft in cloud modes even with the toggle off", () => {
+    // real / mock の一覧は運営が deploy した分だけ。catalog が draft でも、目の前で動いている
+    // 問題を既定で消してはいけない (toggle は local 専用の開発者向け導線)。
+    for (const cloudMode of ["real", "mock"] as const) {
+      expect(visibleQuestProblems([draftProblem], statusOf, false, cloudMode)).toEqual([
+        draftProblem,
+      ]);
+    }
   });
 });
 
