@@ -12,6 +12,8 @@ import {
   type CoordinationStoreDeps,
   DEFAULT_COORDINATION_RUN_ID,
   readCoordinationState,
+  shouldRefreshCoordinationTtl,
+  touchCoordinationState,
   writeCoordinationState,
 } from "./coordination-store.js";
 
@@ -125,7 +127,10 @@ async function tickCoordinationEvent(
   // eventNowMs は採点 pass が算出した event 相対経過 (= plugin の tick 契約、 参照 Battle は
   // CAPTURE_WINDOW_MS と比較)。 dispatcher は clock を持たず、 渡された値だけで純関数を回す。
   const nextState = runTick(plugin, currentState, target.eventNowMs);
-  if (!coordinationStateChanged(currentState, nextState)) return false;
+  if (!coordinationStateChanged(currentState, nextState)) {
+    await refreshCoordinationTtl(deps, target, scope, existing, nowIso);
+    return false;
+  }
   const written = await writeCoordinationState(deps.store, scope, nextState, version, nowIso);
   if (written.kind === "conflict") {
     // 並行 op が version race に勝った (= applyOp が先に書いた)。 lost-update を作らず次 tick で
@@ -134,6 +139,42 @@ async function tickCoordinationEvent(
     return false;
   }
   return true;
+}
+
+/**
+ * [Issue #3123] Push a namespace's TTL out on a tick that changed nothing.
+ *
+ * The tick is the platform's liveness signal for a namespace: it runs for every
+ * coordination problem in a started event, whether or not the plugin implements
+ * `tick`, and stops when the event does. Refreshing here is what anchors
+ * retention to the EVENT going quiet instead of the participants going quiet --
+ * without it, a plugin with no `tick` hook (`microservice-migration-battle`'s
+ * `router.ts` is one) would let its state age out mid-match and the next
+ * request would silently rebuild from `initialState`.
+ *
+ * Only past the halfway mark, so this costs one write per namespace per
+ * half-window rather than one per minute. A namespace with no row has nothing
+ * to keep alive, and a failure is warned rather than thrown: a missed refresh
+ * still leaves half the window of margin, and failing here would turn a
+ * cosmetic write failure into a scoring outage for the rest of the batch.
+ */
+async function refreshCoordinationTtl(
+  deps: CoordinationTickDeps,
+  target: CoordinationTickTarget,
+  scope: CoordinationStateScope,
+  existing: { readonly expiresAt?: number } | undefined,
+  nowIso: string,
+): Promise<void> {
+  if (!existing) return;
+  if (!shouldRefreshCoordinationTtl(existing.expiresAt, Date.parse(nowIso))) return;
+  try {
+    await touchCoordinationState(deps.store, scope, nowIso);
+  } catch (err) {
+    console.warn(
+      `[coordination-dispatcher] ttl refresh failed event=${target.eventId} problem=${target.moduleRef}`,
+      { message: err instanceof Error ? err.message : String(err) },
+    );
+  }
 }
 
 /**

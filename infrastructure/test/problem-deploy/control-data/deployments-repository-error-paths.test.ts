@@ -597,6 +597,42 @@ describe("SqlDeploymentsCoordination", () => {
     expect(await repo.readCoordinationState(live)).toMatchObject({ state: { phase: 2 } });
     expect(await repo.readCoordinationState(untimed)).toMatchObject({ state: { phase: 3 } });
   });
+
+  /**
+   * [Issue #3123] The tick's liveness signal. A namespace whose plugin has no
+   * `tick` hook is never rewritten by the dispatcher, so the TTL has to be
+   * extendable without a state or version change — otherwise a live match ages
+   * out and the next request silently rebuilds it from `initialState`.
+   */
+  it("should extend a TTL without changing state or version, and spare the row from the sweep", async () => {
+    const repo = makeSqlRepo();
+    const live = { ...COORD_SCOPE, problemId: "problem-live" };
+    await repo.writeCoordinationState(live, { phase: 1 }, 0, AT, 1000);
+
+    await repo.touchCoordinationState(live, 9000);
+
+    expect(await repo.readCoordinationState(live)).toEqual({
+      state: { phase: 1 },
+      version: 1,
+      expiresAt: 9000,
+    });
+    expect(await repo.sweepExpiredCoordinationState(2000)).toBe(0);
+    expect(await repo.readCoordinationState(live)).toMatchObject({ state: { phase: 1 } });
+  });
+
+  /**
+   * [Issue #3123] A namespace that does not exist has nothing to keep alive.
+   * The touch must not conjure a row carrying only a TTL — no read could
+   * interpret it, and the optimistic lock would have no version to compare.
+   */
+  it("should not create a row when the namespace is absent", async () => {
+    const repo = makeSqlRepo();
+    const absent = { ...COORD_SCOPE, problemId: "problem-absent" };
+
+    await repo.touchCoordinationState(absent, 9000);
+
+    expect(await repo.readCoordinationState(absent)).toBeUndefined();
+  });
 });
 
 describe("SqlDeploymentsCore engine branches", () => {

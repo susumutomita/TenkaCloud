@@ -65,22 +65,54 @@ export const DEFAULT_COORDINATION_RUN_ID = "default";
 export const PRE_SCOPE_COORDINATION_NAMESPACE = "__pre_scope__";
 
 /**
- * How long a coordination row survives its last write.
+ * How long a coordination row survives once its event stops being ticked.
  *
  * This is the backstop for a cleanup that never ran (a teardown that failed
  * mid-way, an event row deleted out from under its deployments), not the
  * primary delete path — {@link CoordinationStateScope} deletion on event
- * teardown is. Every successful write pushes the deadline out, so the clock
- * only starts once a match stops being played.
+ * teardown is.
  *
- * Seven days matches the deployments table's own post-terminal audit retention
- * (`handlers/shared/deployment-retention.ts`), so a debrief or replay that can
- * still read the deployment rows can still read the coordination state they
- * refer to.
+ * The clock is deliberately anchored to the EVENT going quiet, not to the
+ * participants going quiet. Both a successful write and a per-minute tick
+ * refresh the deadline (see the port's `touchCoordinationState`), and the tick
+ * runs for every coordination problem in a started event regardless of whether
+ * its plugin implements `tick`. Anchoring it to writes alone would have been
+ * wrong in a way that loses data: a plugin with no `tick` hook —
+ * `microservice-migration-battle`'s `router.ts` is one — writes only when a
+ * participant acts, so in an open-ended event its registration state would age
+ * out mid-match and the next request would silently rebuild from
+ * `plugin.initialState`.
+ *
+ * Seven days then matches the deployments table's own post-terminal audit
+ * retention (`handlers/shared/deployment-retention.ts`) with the same meaning
+ * it has there — time since a real terminal signal — so a debrief or replay
+ * that can still read the deployment rows can still read the coordination
+ * state they refer to.
  */
 const COORDINATION_STATE_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
-/** The TTL value (epoch seconds) to stamp on a row written at `nowMs`. */
+/** The TTL value (epoch seconds) to stamp on a row written or touched at `nowMs`. */
 export function coordinationStateExpiresAt(nowMs: number): number {
   return Math.floor((nowMs + COORDINATION_STATE_RETENTION_MS) / 1000);
+}
+
+/**
+ * Whether a row carrying `expiresAt` should have its TTL pushed out now.
+ *
+ * Refreshing on every tick would be one write per namespace per minute for a
+ * row nothing changed. Refreshing once the row is past the halfway mark costs
+ * roughly one write per namespace per half-window while still leaving that same
+ * half-window of margin before anything could expire — so a few missed ticks,
+ * or a dispatcher outage, cannot cost a live match.
+ *
+ * A row with no `expiresAt` predates the TTL and is refreshed on sight, which
+ * is also how those rows acquire one.
+ */
+export function shouldRefreshCoordinationTtl(
+  expiresAt: number | undefined,
+  nowMs: number,
+): boolean {
+  if (expiresAt === undefined) return true;
+  const halfWindowMs = COORDINATION_STATE_RETENTION_MS / 2;
+  return expiresAt * 1000 - nowMs <= halfWindowMs;
 }

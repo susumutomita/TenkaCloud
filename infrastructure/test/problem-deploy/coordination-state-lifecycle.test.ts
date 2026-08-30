@@ -1,7 +1,11 @@
 import { DatabaseSync } from "node:sqlite";
-import { DeleteCommand, ScanCommand } from "@aws-sdk/lib-dynamodb";
+import { DeleteCommand, ScanCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { PRE_SCOPE_COORDINATION_NAMESPACE } from "../../lib/problem-deploy/control-data/domain/coordination-scope";
+import {
+  coordinationStateExpiresAt,
+  PRE_SCOPE_COORDINATION_NAMESPACE,
+  shouldRefreshCoordinationTtl,
+} from "../../lib/problem-deploy/control-data/domain/coordination-scope";
 import { DynamoDbDeploymentsCoordination } from "../../lib/problem-deploy/control-data/dynamodb-deployments-coordination";
 import type { DynamoDbDeploymentsCore } from "../../lib/problem-deploy/control-data/dynamodb-deployments-core";
 import { DEPLOYMENTS_SCHEMA_SQL } from "../../lib/problem-deploy/control-data/sql-deployments-core";
@@ -171,6 +175,91 @@ describe("DynamoDbDeploymentsCoordination.sweepExpiredCoordinationState (#3123)"
   });
 });
 
+describe("coordination TTL refresh (#3123)", () => {
+  const SCOPE = {
+    tenantId: "tn1",
+    eventId: "ev-1",
+    problemId: "problem-a",
+    runId: "default",
+  };
+
+  function makeCoordination(send: (cmd: unknown) => Promise<unknown>) {
+    return new DynamoDbDeploymentsCoordination({
+      ddb: { send },
+      tableName: "Deployments",
+    } as unknown as DynamoDbDeploymentsCore);
+  }
+
+  it("should extend only the TTL attribute and require the row to already exist", async () => {
+    const send = vi.fn(async () => ({}));
+    await makeCoordination(send).touchCoordinationState(SCOPE, 9_000);
+
+    const update = send.mock.calls.map((c) => c[0]).find((c) => c instanceof UpdateCommand);
+    expect(update.input.Key).toEqual({ PK: "COORD#tn1#ev-1#problem-a#default", SK: "STATE" });
+    // The whole point of the touch is that it cannot disturb the optimistic
+    // lock: no `state`, no `version`, so a concurrent `applyOp` write racing
+    // this refresh still sees the version it expects.
+    expect(update.input.UpdateExpression).toBe("SET expiresAt = :expiresAt");
+    expect(update.input.ConditionExpression).toBe("attribute_exists(version)");
+    expect(update.input.ExpressionAttributeValues).toEqual({ ":expiresAt": 9_000 });
+  });
+
+  /**
+   * Losing the race against a teardown or a sweep is the expected outcome, not
+   * an error — and the condition is what stops the touch conjuring a row that
+   * carries a TTL and nothing a read could interpret.
+   */
+  it("should swallow the conditional-check failure when the namespace is absent", async () => {
+    const ccf = new Error("The conditional request failed");
+    ccf.name = "ConditionalCheckFailedException";
+    const send = vi.fn(async () => {
+      throw ccf;
+    });
+
+    await expect(
+      makeCoordination(send).touchCoordinationState(SCOPE, 9_000),
+    ).resolves.toBeUndefined();
+  });
+
+  it("should rethrow a failure that is not a conditional-check failure", async () => {
+    const send = vi.fn(async () => {
+      throw new Error("ProvisionedThroughputExceededException");
+    });
+
+    await expect(makeCoordination(send).touchCoordinationState(SCOPE, 9_000)).rejects.toThrow(
+      "ProvisionedThroughputExceededException",
+    );
+  });
+
+  describe("shouldRefreshCoordinationTtl", () => {
+    const NOW_MS = 1_700_000_000_000;
+
+    it("should refresh a row that predates the TTL", () => {
+      expect(shouldRefreshCoordinationTtl(undefined, NOW_MS)).toBe(true);
+    });
+
+    it("should leave a row alone while it is still in the first half of its window", () => {
+      // Freshly stamped: a full window of margin, so nothing to do yet.
+      expect(shouldRefreshCoordinationTtl(coordinationStateExpiresAt(NOW_MS), NOW_MS)).toBe(false);
+    });
+
+    it("should refresh once the row is past the halfway mark", () => {
+      const stampedAt = NOW_MS - 4 * 24 * 60 * 60 * 1000;
+      expect(shouldRefreshCoordinationTtl(coordinationStateExpiresAt(stampedAt), NOW_MS)).toBe(
+        true,
+      );
+    });
+
+    /**
+     * The half-window threshold is what buys the margin: a dispatcher outage
+     * shorter than half the retention cannot cost a live match.
+     */
+    it("should refresh a row that has already expired but has not been reaped", () => {
+      expect(shouldRefreshCoordinationTtl(Math.floor(NOW_MS / 1000) - 1, NOW_MS)).toBe(true);
+    });
+  });
+});
+
 describe("event teardown cleans up coordination state (#3123)", () => {
   const NOW_MS = 1_700_000_000_000;
 
@@ -284,6 +373,65 @@ describe("event teardown cleans up coordination state (#3123)", () => {
     await bulkTeardownEvent(shared, "tenant-acme", "EV1", NOW_MS);
 
     expect(ddbSend.mock.calls.map((c) => c[0]).some((c) => c instanceof DeleteCommand)).toBe(false);
+  });
+
+  /**
+   * A failed publish is compensated `DELETING` -> `FAILED` so the operator can
+   * retry, and a `FAILED` deployment still resolves a coordination scope. So
+   * the namespaces must survive a partial teardown: deleting them here would
+   * drop the match state while the problem is still reachable, and the next op
+   * would rebuild it from `initialState` before the retry ran. The retry calls
+   * this same path and deletes them then.
+   */
+  it("should defer the cleanup when a teardown target failed to publish", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Item: { eventId: "EV1", tenantId: "tenant-acme" } });
+    ddbSend.mockResolvedValueOnce({ Items: [dep({ jobId: "01A" })] });
+    ddbSend.mockResolvedValue({});
+    (shared.events.send as ReturnType<typeof vi.fn>).mockResolvedValue({
+      FailedEntryCount: 1,
+      Entries: [{ ErrorCode: "ThrottlingException", ErrorMessage: "slow down" }],
+    });
+
+    const out = await bulkTeardownEvent(shared, "tenant-acme", "EV1", NOW_MS);
+
+    expect(out).toEqual({
+      kind: "ok",
+      result: { eventId: "EV1", enqueued: 0, skipped: 0, failed: 1 },
+    });
+    expect(ddbSend.mock.calls.map((c) => c[0]).some((c) => c instanceof DeleteCommand)).toBe(false);
+  });
+
+  /**
+   * `Promise.allSettled`, not `Promise.all`. A Lambda freezes its execution
+   * environment the moment the handler returns, so a delete still in flight
+   * when a sibling rejected would simply never finish -- a namespace whose own
+   * delete had no error at all would leak.
+   */
+  it("should wait for every namespace delete even when one of them rejects", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Item: { eventId: "EV1", tenantId: "tenant-acme" } });
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        dep({ jobId: "01A", problemId: "problem-a" }),
+        dep({ jobId: "01B", problemId: "problem-b", namePrefix: "tc-b-t1" }),
+      ],
+    });
+    let slowDeleteSettled = false;
+    ddbSend.mockImplementation(async (cmd: unknown) => {
+      if (!(cmd instanceof DeleteCommand)) return {};
+      // The pre-scope key is deleted alongside the scoped ones; only the two
+      // problem namespaces take part in this race.
+      if (String(cmd.input.Key?.PK).endsWith("#problem-a#default")) throw new Error("ddb down");
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      slowDeleteSettled = true;
+      return {};
+    });
+
+    const out = await bulkTeardownEvent(shared, "tenant-acme", "EV1", NOW_MS);
+
+    expect(out.kind).toBe("ok");
+    expect(slowDeleteSettled).toBe(true);
   });
 
   it("should not touch coordination state when the event has no deployments", async () => {

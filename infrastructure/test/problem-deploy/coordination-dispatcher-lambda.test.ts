@@ -99,10 +99,16 @@ describe("CoordinationDispatcherLambda", () => {
     () => {
       const tpl = synthCoordinationDispatcherLambdaOnly();
       const actions = allActions(tpl);
-      // team-login-key 認証 (Query) + coordination state 行 (Get/Put) は持つ。
+      // team-login-key 認証 (Query) + coordination state 行 (Get/Put/Update) は持つ。
       expect(actions).toContain("dynamodb:Query");
       expect(actions).toContain("dynamodb:GetItem");
       expect(actions).toContain("dynamodb:PutItem");
+      // [Issue #3123] tick の TTL 延長 (`touchCoordinationState`) が UpdateItem を使う。
+      // 無いと refresh が AccessDenied で落ち、 warn に飲まれて retention が黙って壊れる。
+      expect(actions).toContain("dynamodb:UpdateItem");
+      // namespace の削除は event を所有する経路の責務であって、 plugin を実行するこの
+      // Lambda のものではない。
+      expect(actions).not.toContain("dynamodb:DeleteItem");
       // competitor 資格情報・ExternalId への経路は **存在しない**。
       expect(actions).not.toContain("sts:AssumeRole");
       expect(actions).not.toContain("ssm:GetParameter");

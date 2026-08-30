@@ -597,6 +597,31 @@ export interface DeploymentsCoordinationPort {
   ): Promise<DeploymentMutationOutcome>;
 
   /**
+   * [Issue #3123] Pushes a live row's TTL out without touching `state` or
+   * `version`.
+   *
+   * The TTL alone cannot tell "this match is over" from "nobody has moved
+   * lately": `writeCoordinationState` refreshes it, but a plugin with no `tick`
+   * hook (`microservice-migration-battle`'s `router.ts` is one) only writes when
+   * a participant acts. In an open-ended event its registration state would
+   * simply age out and the next request would silently rebuild from
+   * `plugin.initialState`.
+   *
+   * The tick is the liveness signal that fixes it: it runs once a minute for
+   * every coordination problem in a started event, whether or not the plugin
+   * has a `tick` hook, and stops when the event does. Refreshing from there
+   * means the retention clock starts when the EVENT goes quiet rather than when
+   * the participants do.
+   *
+   * Deliberately version-free. Bumping `version` every minute would invalidate
+   * in-flight optimistic locks and manufacture conflicts against a row nothing
+   * semantically changed.
+   *
+   * A no-op when the row is absent — there is nothing to keep alive.
+   */
+  touchCoordinationState(scope: CoordinationStateScope, expiresAt: number): Promise<void>;
+
+  /**
    * [Issue #3123] Removes exactly one scope's coordination state, and nothing
    * else. Idempotent: deleting an absent row is a success, so a retried or
    * partially-completed teardown converges instead of erroring.

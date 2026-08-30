@@ -34,6 +34,7 @@ import { resolveDeploymentsRepository } from "./shared.js";
 export {
   type CoordinationStateScope,
   DEFAULT_COORDINATION_RUN_ID,
+  shouldRefreshCoordinationTtl,
 } from "../../control-data/domain/coordination-scope.js";
 
 export interface CoordinationStateRow {
@@ -41,6 +42,8 @@ export interface CoordinationStateRow {
   readonly state: unknown;
   /** 楽観ロック用 version。 row が無いときは 0 を初期値として扱う。 */
   readonly version: number;
+  /** [Issue #3123] 行の TTL (epoch 秒)。 TTL 以前に書かれた行では undefined。 */
+  readonly expiresAt?: number;
 }
 
 /** store が必要とする DDB client の最小 shape (= test で容易に mock)。 */
@@ -68,8 +71,12 @@ export type WriteCoordinationOutcome = { kind: "ok" } | { kind: "conflict" };
  *   - 更新: 直前の read が返した version を渡す → 一致時のみ上書き
  * 競合 (他の op が先に書いた) は例外にせず `{ kind: "conflict" }` を返す。
  *
- * [Issue #3123] `nowMs` は行の TTL (`expiresAt`) 算出にも使う。 write のたびに更新されるので、
- * 試合中の row は期限切れにならず、 teardown を取りこぼした row だけが自然に消える。
+ * [Issue #3123] `nowIso` は行の TTL (`expiresAt`) 算出にも使う。 teardown を取りこぼした row を
+ * 自然に消すための backstop であって、 主たる削除経路ではない。
+ *
+ * write だけが期限を延ばすわけではない (そうであってはならない)。 `tick` hook を持たない plugin は
+ * 参加者が動いたときにしか書かないので、 write 基準だと終了時刻の無い event で試合中の row が
+ * 期限切れになる。 tick 側が {@link touchCoordinationState} で延長する。
  */
 export async function writeCoordinationState(
   deps: CoordinationStoreDeps,
@@ -101,6 +108,27 @@ function parseNowMs(nowIso: string): number {
     throw new RangeError(`coordination write timestamp is not an ISO8601 instant: ${nowIso}`);
   }
   return parsed;
+}
+
+/**
+ * [Issue #3123] state / version に触れず TTL だけ延ばす。
+ *
+ * TTL は「試合が終わった」と「誰も動いていない」を区別できない。 `tick` hook を持たない plugin
+ * (`microservice-migration-battle` の `router.ts`) は参加者が動いたときにしか書かないため、
+ * 終了時刻の無い event ではその登録 state が試合中に期限切れになり、 次の request が黙って
+ * `plugin.initialState` から作り直してしまう。
+ *
+ * tick は開始済み event の全 coordination problem に対して毎分走り (plugin が `tick` を
+ * 実装しているかに依らない)、 event が終われば止まる。 そこから TTL を延ばすことで、
+ * retention の起点が「参加者が静かになった時刻」ではなく「**event** が静かになった時刻」になる。
+ */
+export async function touchCoordinationState(
+  deps: CoordinationStoreDeps,
+  scope: CoordinationStateScope,
+  nowIso: string,
+): Promise<void> {
+  const repository: DeploymentsCoordinationPort = await resolveDeploymentsRepository(deps);
+  await repository.touchCoordinationState(scope, coordinationStateExpiresAt(parseNowMs(nowIso)));
 }
 
 /**

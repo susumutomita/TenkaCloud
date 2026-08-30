@@ -23,11 +23,31 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
     scope: CoordinationStateScope,
   ): Promise<CoordinationStateRecord | undefined> {
     const row = await this.core.sql.get(
-      "SELECT state, version FROM coordination_state_scoped WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ?",
+      "SELECT state, version, expires_at FROM coordination_state_scoped WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ?",
       [scope.tenantId, scope.eventId, scope.problemId, scope.runId],
     );
     if (!row) return undefined;
-    return { state: JSON.parse(String(row.state)), version: Number(row.version ?? 0) };
+    // `expires_at` defaults to 0 in the schema, and 0 means "never expires"
+    // (the sweep skips it) -- surfaced as undefined so the tick refreshes it on
+    // sight, matching how a TTL-less DynamoDB row is treated.
+    const expiresAt = Number(row.expires_at ?? 0);
+    return {
+      state: JSON.parse(String(row.state)),
+      version: Number(row.version ?? 0),
+      expiresAt: expiresAt > 0 ? expiresAt : undefined,
+    };
+  }
+
+  /**
+   * [Issue #3123] See `DeploymentsCoordinationPort.touchCoordinationState`.
+   * An `UPDATE` matching no row is a no-op, which is the wanted behaviour for
+   * an absent namespace.
+   */
+  async touchCoordinationState(scope: CoordinationStateScope, expiresAt: number): Promise<void> {
+    await this.core.sql.run(
+      "UPDATE coordination_state_scoped SET expires_at = ? WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ?",
+      [expiresAt, scope.tenantId, scope.eventId, scope.problemId, scope.runId],
+    );
   }
 
   /**

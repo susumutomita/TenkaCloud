@@ -436,6 +436,13 @@ export interface InboxEventRecord {
 export interface CoordinationStateRecord {
   readonly state: unknown;
   readonly version: number;
+  /**
+   * [Issue #3123] The row's TTL (epoch seconds), or `undefined` for a row
+   * written before the TTL existed. Returned so the tick host can tell a row
+   * that is drifting toward expiry from one just written, and refresh it
+   * without a version-bumping write — see `touchCoordinationState`.
+   */
+  readonly expiresAt?: number;
 }
 
 /**

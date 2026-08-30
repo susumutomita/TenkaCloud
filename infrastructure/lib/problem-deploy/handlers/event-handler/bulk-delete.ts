@@ -152,7 +152,23 @@ export async function bulkTeardownEvent(
   // every team on a problem, so deleting it when ONE team's deployment goes
   // away would wipe a match the others are still playing. The event is the
   // first boundary at which no team is left.
-  await deleteEventCoordinationState(shared, tenantId, eventId, targets);
+  //
+  // Only once every target committed, though. A failed publish or adapter
+  // teardown is compensated back to `FAILED` for the operator to retry, and a
+  // `FAILED` deployment still resolves a coordination scope — so deleting here
+  // would drop the match state while the problem is still reachable, letting
+  // the next op recreate the namespace from `initialState` before the retry
+  // even runs. The retry calls this same path, so the namespaces are deleted
+  // then; if no retry ever comes, the row's `expiresAt` reaps it.
+  if (failedJobIds.length === 0 && adapterFailed === 0) {
+    await deleteEventCoordinationState(shared, tenantId, eventId, targets);
+  } else {
+    logDeployTrace("bulk-teardown.coordination.cleanup-deferred", {
+      tenantId,
+      eventId,
+      failed: String(failedJobIds.length + adapterFailed),
+    });
+  }
 
   return {
     kind: "ok",
@@ -194,10 +210,16 @@ async function deleteEventCoordinationState(
       .filter((problemId): problemId is string => typeof problemId === "string" && !!problemId),
   );
   if (problemIds.size === 0) return;
+  const ordered = [...problemIds];
   try {
     const repository: DeploymentsCoordinationPort = await resolveDeploymentsRepository(shared);
-    await Promise.all(
-      [...problemIds].map((problemId) =>
+    // `allSettled`, not `all`: one rejection must not strand the others. A
+    // Lambda freezes its execution environment the moment the handler returns,
+    // so a promise still in flight when `Promise.all` short-circuited would
+    // simply never finish — a namespace whose delete had no error at all would
+    // leak. Each failure is reported on its own line.
+    const settled = await Promise.allSettled(
+      ordered.map((problemId) =>
         repository.deleteCoordinationState({
           tenantId,
           eventId,
@@ -206,11 +228,23 @@ async function deleteEventCoordinationState(
         }),
       ),
     );
+    for (const [index, outcome] of settled.entries()) {
+      if (outcome.status === "fulfilled") continue;
+      const reason = outcome.reason;
+      logDeployTrace("bulk-teardown.coordination.cleanup-failed", {
+        tenantId,
+        eventId,
+        problemIds: ordered[index],
+        reason: reason instanceof Error ? reason.message : String(reason),
+      });
+    }
   } catch (err) {
+    // Reaching here means the repository itself could not be resolved, so no
+    // delete was attempted for any namespace.
     logDeployTrace("bulk-teardown.coordination.cleanup-failed", {
       tenantId,
       eventId,
-      problemIds: [...problemIds].join(","),
+      problemIds: ordered.join(","),
       reason: err instanceof Error ? err.message : String(err),
     });
   }

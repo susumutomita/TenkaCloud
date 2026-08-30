@@ -1,4 +1,4 @@
-import { DeleteCommand, GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { DeleteCommand, GetCommand, PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { CoordinationStateScope } from "./domain/coordination-scope.js";
 import {
   COORD_STATE_SK,
@@ -40,7 +40,44 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
     );
     const item = out.Item as Record<string, unknown> | undefined;
     if (!item) return undefined;
-    return { state: item.state, version: Number(item.version ?? 0) };
+    return {
+      state: item.state,
+      version: Number(item.version ?? 0),
+      // Absent on a row written before the TTL existed; the tick treats that as
+      // "refresh on sight", which is also how such a row acquires one. A
+      // non-positive value is normalised to absent for the same reason the SQL
+      // adapter does it: 0 is the schema default there, and on DynamoDB a TTL
+      // of 0 is an epoch-1970 timestamp the table would treat as long expired.
+      expiresAt:
+        typeof item.expiresAt === "number" && item.expiresAt > 0 ? item.expiresAt : undefined,
+    };
+  }
+
+  /**
+   * [Issue #3123] See `DeploymentsCoordinationPort.touchCoordinationState`.
+   *
+   * `attribute_exists(version)` keeps this from creating a row: a namespace
+   * that does not exist has nothing to keep alive, and conjuring an empty item
+   * with only a TTL would leave a row no read can interpret. The
+   * `ConditionalCheckFailed` that raises is folded to a no-op rather than
+   * thrown — losing a race against a delete is the expected outcome here, not
+   * an error.
+   */
+  async touchCoordinationState(scope: CoordinationStateScope, expiresAt: number): Promise<void> {
+    try {
+      await this.core.ddb.send(
+        new UpdateCommand({
+          TableName: this.core.tableName,
+          Key: { PK: coordinationPk(scope), SK: COORD_STATE_SK },
+          UpdateExpression: "SET expiresAt = :expiresAt",
+          ConditionExpression: "attribute_exists(version)",
+          ExpressionAttributeValues: { ":expiresAt": expiresAt },
+        }),
+      );
+    } catch (err) {
+      if (isConditionalCheckFailed(err)) return;
+      throw err;
+    }
   }
 
   /**
@@ -52,9 +89,15 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
    *
    * [Issue #3123] `expiresAt` rides the same Put so the row picks up the
    * deployments table's native TTL (`deployments-table.ts`
-   * `timeToLiveAttribute: "expiresAt"`). It is refreshed on every write, so a
-   * live match never expires under itself and an abandoned namespace drops on
+   * `timeToLiveAttribute: "expiresAt"`), letting an abandoned namespace drop on
    * its own even if no teardown ever deletes it.
+   *
+   * A write is not the only thing that pushes the deadline out, and must not
+   * be: a plugin with no `tick` hook writes only when a participant acts, so in
+   * an open-ended event a live match would age out under itself. The tick
+   * refreshes the TTL through {@link touchCoordinationState}; see
+   * `coordination-scope.ts` for why the clock is anchored to the event rather
+   * than to the participants.
    */
   async writeCoordinationState(
     scope: CoordinationStateScope,

@@ -1,7 +1,8 @@
 import { ConditionalCheckFailedException } from "@aws-sdk/client-dynamodb";
-import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { GetCommand, PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { CoordinationPlugin } from "@tenkacloud/coordination-plugin-sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { coordinationStateExpiresAt } from "../../lib/problem-deploy/control-data/domain/coordination-scope.js";
 import type { CoordinationConfig } from "../../lib/problem-deploy/handlers/participant-handler/coordination-handler.js";
 import type { PluginImporter } from "../../lib/problem-deploy/handlers/participant-handler/coordination-plugin-loader.js";
 import type { CoordinationStoreDeps } from "../../lib/problem-deploy/handlers/participant-handler/coordination-store.js";
@@ -51,14 +52,17 @@ const nullImporter: PluginImporter = async () => {
 interface FakeDdb {
   readonly store: CoordinationStoreDeps;
   readonly puts: { PK: string; state: unknown; version: number }[];
+  readonly updates: UpdateCommand[];
   readonly send: ReturnType<typeof vi.fn>;
 }
 function fakeDdb(opts: {
   getItem?: Record<string, unknown>;
   conflict?: boolean;
   getThrows?: boolean;
+  updateThrows?: boolean;
 }): FakeDdb {
   const puts: { PK: string; state: unknown; version: number }[] = [];
+  const updates: UpdateCommand[] = [];
   const send = vi.fn(async (cmd: unknown) => {
     if (cmd instanceof GetCommand) {
       if (opts.getThrows) throw new Error("get boom");
@@ -70,6 +74,14 @@ function fakeDdb(opts: {
       puts.push({ PK: input.Item.PK, state: input.Item.state, version: input.Item.version });
       return {};
     }
+    // [Issue #3123] The TTL refresh. Recorded rather than folded into `puts`:
+    // the distinction the tests care about is exactly that it is not a write of
+    // `state`/`version`.
+    if (cmd instanceof UpdateCommand) {
+      if (opts.updateThrows) throw new Error("update boom");
+      updates.push(cmd);
+      return {};
+    }
     throw new Error("unexpected command");
   });
   return {
@@ -79,6 +91,7 @@ function fakeDdb(opts: {
       tableName: "Deployments",
     },
     puts,
+    updates,
     send,
   };
 }
@@ -91,9 +104,10 @@ const depsWith = (
   store,
   config: CONFIG,
 });
+const NOW_ISO = "2026-06-01T01:00:00.000Z";
 const batch = (
   targets: CoordinationTickBatch["targets"],
-  nowIso = "2026-06-01T01:00:00.000Z",
+  nowIso = NOW_ISO,
 ): CoordinationTickBatch => ({ action: "coordination-tick", nowIso, targets });
 const capTarget = (over: Partial<CoordinationTickBatch["targets"][number]> = {}) => ({
   tenantId: "t1",
@@ -123,7 +137,7 @@ describe("handleCoordinationTickBatch", () => {
     ]);
   });
 
-  it("should NOT write when the tick is a no-op (before the window)", async () => {
+  it("should NOT write state when the tick is a no-op (before the window)", async () => {
     const ddb = fakeDdb({ getItem: { state: { phase: "open" }, version: 1 } });
     const res = await handleCoordinationTickBatch(
       depsWith(importerOf(windowPlugin), ddb.store),
@@ -131,7 +145,93 @@ describe("handleCoordinationTickBatch", () => {
     );
     expect(res).toEqual({ ticked: 1, written: 0 });
     expect(ddb.puts).toHaveLength(0);
-    expect(ddb.send).toHaveBeenCalledTimes(1); // read only, no write
+  });
+
+  /**
+   * [Issue #3123] A no-op tick still refreshes the row's TTL. The tick is the
+   * platform's liveness signal -- it runs for every coordination problem in a
+   * started event whether or not the plugin implements `tick` -- so anchoring
+   * retention to it is what stops a plugin like
+   * `microservice-migration-battle`'s `router.ts` (no `tick` hook at all) from
+   * ageing out mid-match and silently rebuilding from `initialState`.
+   *
+   * The refresh must not touch `state` or `version`: bumping the version every
+   * minute would invalidate in-flight optimistic locks and manufacture
+   * conflicts against a row nothing changed.
+   */
+  it("should refresh the TTL on a no-op tick without touching state or version", async () => {
+    const ddb = fakeDdb({ getItem: { state: { phase: "open" }, version: 1 } });
+    await handleCoordinationTickBatch(
+      depsWith(importerOf(windowPlugin), ddb.store),
+      batch([capTarget({ eventNowMs: CAPTURE_MS - 1 })]),
+    );
+
+    expect(ddb.updates).toHaveLength(1);
+    expect(ddb.updates[0]?.input.Key).toEqual({ PK: "COORD#t1#e1#cap#default", SK: "STATE" });
+    expect(ddb.updates[0]?.input.UpdateExpression).toBe("SET expiresAt = :expiresAt");
+    // Guards against creating a row for a namespace that does not exist.
+    expect(ddb.updates[0]?.input.ConditionExpression).toBe("attribute_exists(version)");
+    expect(ddb.updates[0]?.input.ExpressionAttributeValues).toEqual({
+      ":expiresAt": coordinationStateExpiresAt(Date.parse(NOW_ISO)),
+    });
+    expect(ddb.puts).toHaveLength(0);
+  });
+
+  /** A row still well inside its window is left alone -- one write per
+   *  half-window per namespace, not one per minute. */
+  it("should not refresh a TTL that is still fresh", async () => {
+    const ddb = fakeDdb({
+      getItem: {
+        state: { phase: "open" },
+        version: 1,
+        expiresAt: coordinationStateExpiresAt(Date.parse(NOW_ISO)),
+      },
+    });
+    await handleCoordinationTickBatch(
+      depsWith(importerOf(windowPlugin), ddb.store),
+      batch([capTarget({ eventNowMs: CAPTURE_MS - 1 })]),
+    );
+
+    expect(ddb.updates).toHaveLength(0);
+  });
+
+  /**
+   * There is nothing to keep alive before the first write: the state the tick
+   * just built is `plugin.initialState`, and a row holding only a TTL is one no
+   * read could interpret.
+   */
+  it("should not refresh a TTL when the namespace has no row yet", async () => {
+    const ddb = fakeDdb({ getItem: undefined });
+    await handleCoordinationTickBatch(
+      depsWith(importerOf(noTickPlugin), ddb.store),
+      batch([capTarget()]),
+    );
+
+    expect(ddb.updates).toHaveLength(0);
+    expect(ddb.puts).toHaveLength(0);
+  });
+
+  /**
+   * A missed refresh still leaves half the retention window of margin, so the
+   * batch must not lose the other targets over it. Failing the tick here would
+   * turn a cosmetic write failure into a scoring outage.
+   */
+  it("should keep ticking when the TTL refresh fails", async () => {
+    const ddb = fakeDdb({
+      getItem: { state: { phase: "open" }, version: 1 },
+      updateThrows: true,
+    });
+
+    const res = await handleCoordinationTickBatch(
+      depsWith(importerOf(windowPlugin), ddb.store),
+      batch([capTarget({ eventNowMs: CAPTURE_MS - 1 })]),
+    );
+
+    expect(res).toEqual({ ticked: 1, written: 0 });
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("ttl refresh failed"),
+      expect.objectContaining({ message: "update boom" }),
+    );
   });
 
   it("should NOT write when the plugin has no tick hook", async () => {
