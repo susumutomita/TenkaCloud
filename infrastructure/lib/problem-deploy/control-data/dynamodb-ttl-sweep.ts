@@ -22,6 +22,15 @@ export async function sweepExpiredRows(opts: {
   /** e.g. `"expiresAt > :zero AND expiresAt <= :now"` — kept verbatim per table. */
   readonly filterExpression: string;
   readonly expressionAttributeNames?: Readonly<Record<string, string>>;
+  /**
+   * [Issue #3123] Extra placeholders the caller's `filterExpression` needs on
+   * top of `:zero` / `:now`. The coordination sweep shares the deployments
+   * table with several other PK prefixes, so it adds
+   * `begins_with(PK, :coordPrefix)` to avoid reaping rows another repository
+   * owns. Callers cannot override `:zero` / `:now` — those are the sweep's own
+   * contract, and are merged last.
+   */
+  readonly expressionAttributeValues?: Readonly<Record<string, unknown>>;
 }): Promise<number> {
   let deleted = 0;
   let exclusiveStartKey: Record<string, unknown> | undefined;
@@ -33,7 +42,11 @@ export async function sweepExpiredRows(opts: {
         ...(opts.expressionAttributeNames
           ? { ExpressionAttributeNames: { ...opts.expressionAttributeNames } }
           : {}),
-        ExpressionAttributeValues: { ":zero": 0, ":now": opts.nowEpochSeconds },
+        ExpressionAttributeValues: {
+          ...opts.expressionAttributeValues,
+          ":zero": 0,
+          ":now": opts.nowEpochSeconds,
+        },
         ...(exclusiveStartKey ? { ExclusiveStartKey: exclusiveStartKey } : {}),
       }),
     );

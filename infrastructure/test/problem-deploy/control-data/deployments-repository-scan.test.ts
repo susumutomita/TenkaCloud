@@ -272,15 +272,23 @@ describe("DynamoDbDeploymentsRepository — sub-aggregate writes (Phase B3)", ()
   });
 
   describe("writeCoordinationState (optimistic lock)", () => {
+    /** [Issue #3123] see deployments-repository.test.ts's coordScope. */
+    const coordScope = (tenantId: string, eventId: string, problemId = "problem-a") => ({
+      tenantId,
+      eventId,
+      problemId,
+      runId: "default",
+    });
+
     it("should create the row on the first write (version 0 -> 1)", async () => {
       const { repo, commands, reset } = makeRepo();
       reset();
       const outcome = await repo.writeCoordinationState(
-        "tn1",
-        "ev-1",
+        coordScope("tn1", "ev-1"),
         { turns: 1 },
         0,
         "2026-06-01T00:00:00.000Z",
+        0,
       );
       expect(outcome).toEqual({ outcome: "updated" });
 
@@ -289,7 +297,7 @@ describe("DynamoDbDeploymentsRepository — sub-aggregate writes (Phase B3)", ()
         "attribute_not_exists(version) OR version = :expected",
       );
       expect(put.input.ExpressionAttributeValues).toEqual({ ":expected": 0 });
-      expect(await repo.readCoordinationState("tn1", "ev-1")).toEqual({
+      expect(await repo.readCoordinationState(coordScope("tn1", "ev-1"))).toEqual({
         state: { turns: 1 },
         version: 1,
       });
@@ -297,16 +305,22 @@ describe("DynamoDbDeploymentsRepository — sub-aggregate writes (Phase B3)", ()
 
     it("should update on a matching version and bump it (the `updated` branch)", async () => {
       const { repo } = makeRepo();
-      await repo.writeCoordinationState("tn1", "ev-1", { turns: 1 }, 0, "2026-06-01T00:00:00.000Z");
+      await repo.writeCoordinationState(
+        coordScope("tn1", "ev-1"),
+        { turns: 1 },
+        0,
+        "2026-06-01T00:00:00.000Z",
+        0,
+      );
       const outcome = await repo.writeCoordinationState(
-        "tn1",
-        "ev-1",
+        coordScope("tn1", "ev-1"),
         { turns: 2 },
         1,
         "2026-06-01T00:01:00.000Z",
+        0,
       );
       expect(outcome).toEqual({ outcome: "updated" });
-      expect(await repo.readCoordinationState("tn1", "ev-1")).toEqual({
+      expect(await repo.readCoordinationState(coordScope("tn1", "ev-1"))).toEqual({
         state: { turns: 2 },
         version: 2,
       });
@@ -314,16 +328,22 @@ describe("DynamoDbDeploymentsRepository — sub-aggregate writes (Phase B3)", ()
 
     it("should return conflict on a version mismatch without mutating the row (the `conflict` branch)", async () => {
       const { repo } = makeRepo();
-      await repo.writeCoordinationState("tn1", "ev-1", { turns: 1 }, 0, "2026-06-01T00:00:00.000Z");
+      await repo.writeCoordinationState(
+        coordScope("tn1", "ev-1"),
+        { turns: 1 },
+        0,
+        "2026-06-01T00:00:00.000Z",
+        0,
+      );
       const outcome = await repo.writeCoordinationState(
-        "tn1",
-        "ev-1",
+        coordScope("tn1", "ev-1"),
         { turns: 99 },
         0, // stale expected version — the row is already at version 1
         "2026-06-01T00:02:00.000Z",
+        0,
       );
       expect(outcome).toEqual({ outcome: "conflict" });
-      expect(await repo.readCoordinationState("tn1", "ev-1")).toEqual({
+      expect(await repo.readCoordinationState(coordScope("tn1", "ev-1"))).toEqual({
         state: { turns: 1 },
         version: 1,
       });

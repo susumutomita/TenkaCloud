@@ -85,6 +85,48 @@ describe("collectCoordinationTickTargets", () => {
     expect(out.size).toBe(0);
   });
 
+  /**
+   * [Issue #3123] The tick is what keeps a namespace's TTL alive, so it has to
+   * stop when the event does. A finished event's deployment rows stay
+   * `COMPLETE` until teardown, so gating on `eventStartsAt` alone kept ticking
+   * a match that was already over -- extending its retention forever, and
+   * advancing the state of any plugin that implements `tick` after scoring had
+   * stopped. The gate is `isScoringActive`, the same predicate the scoring pass
+   * uses.
+   */
+  it("should skip an event that has reached its explicit end", () => {
+    const out = new Map<string, CollectedTickTarget>();
+    collectCoordinationTickTargets(
+      IDS,
+      [{ ...baseItem(), eventEndsAt: "2026-06-01T00:30:00.000Z" }],
+      out,
+      NOW,
+    );
+    expect(out.size).toBe(0);
+  });
+
+  /**
+   * `#1421`'s liveness invariant: a round with no `eventEndsAt` still
+   * terminates at `eventStartsAt + 30 days`, so an event whose end nobody set
+   * cannot refresh its TTL forever either.
+   */
+  it("should skip an event past the liveness cap even with no eventEndsAt", () => {
+    const out = new Map<string, CollectedTickTarget>();
+    collectCoordinationTickTargets(IDS, [baseItem()], out, "2026-07-15T00:00:00.000Z");
+    expect(out.size).toBe(0);
+  });
+
+  it("should still collect an event that is inside its window", () => {
+    const out = new Map<string, CollectedTickTarget>();
+    collectCoordinationTickTargets(
+      IDS,
+      [{ ...baseItem(), eventEndsAt: "2026-06-01T09:00:00.000Z" }],
+      out,
+      NOW,
+    );
+    expect(out.size).toBe(1);
+  });
+
   it("should skip an unparseable eventStartsAt (NaN epoch)", () => {
     const out = new Map<string, CollectedTickTarget>();
     collectCoordinationTickTargets(
@@ -96,7 +138,11 @@ describe("collectCoordinationTickTargets", () => {
     expect(out.size).toBe(0);
   });
 
-  it("should collect one target per event and accumulate distinct team ids", () => {
+  /** [Issue #3123] The dedupe key is a JSON array of (tenant, event, problem). */
+  const targetKey = (tenantId: string, eventId: string, problemId: string) =>
+    JSON.stringify([tenantId, eventId, problemId]);
+
+  it("should collect one target per event problem and accumulate distinct team ids", () => {
     const out = new Map<string, CollectedTickTarget>();
     collectCoordinationTickTargets(
       IDS,
@@ -105,7 +151,7 @@ describe("collectCoordinationTickTargets", () => {
       NOW,
     );
     expect(out.size).toBe(1);
-    const t = out.get("t1#e1");
+    const t = out.get(targetKey("t1", "e1", "cap"));
     expect(t?.moduleRef).toBe("cap");
     expect(t?.eventStartMs).toBe(Date.parse(STARTED));
     expect(t?.teamIds).toEqual(["team-a", "team-b"]);
@@ -114,7 +160,37 @@ describe("collectCoordinationTickTargets", () => {
   it("should collect separate targets for distinct events", () => {
     const out = new Map<string, CollectedTickTarget>();
     collectCoordinationTickTargets(IDS, [baseItem(), { ...baseItem(), eventId: "e2" }], out, NOW);
-    expect([...out.keys()].sort()).toEqual(["t1#e1", "t1#e2"]);
+    expect([...out.keys()].sort()).toEqual(
+      [targetKey("t1", "e1", "cap"), targetKey("t1", "e2", "cap")].sort(),
+    );
+  });
+
+  /**
+   * [Issue #3123] The tick half of the namespace split. Keying by event alone
+   * meant the second coordination problem in an event was silently dropped
+   * from the batch — its clock never advanced, so no contract was ever issued
+   * and the match never ended — while its teams were merged into the FIRST
+   * problem's roster, putting teams into a state machine they were not playing.
+   * Independent state without an independent clock is not independence.
+   */
+  it("should collect a separate target per coordination problem in one event", () => {
+    const out = new Map<string, CollectedTickTarget>();
+    collectCoordinationTickTargets(
+      new Set(["cap", "sector"]),
+      [
+        baseItem(),
+        { ...baseItem(), problemId: "sector", teamId: "team-z" },
+        { ...baseItem(), problemId: "sector", teamId: "team-y" },
+      ],
+      out,
+      NOW,
+    );
+
+    expect(out.size).toBe(2);
+    expect(out.get(targetKey("t1", "e1", "cap"))?.teamIds).toEqual(["team-a"]);
+    const sector = out.get(targetKey("t1", "e1", "sector"));
+    expect(sector?.moduleRef).toBe("sector");
+    expect(sector?.teamIds).toEqual(["team-z", "team-y"]);
   });
 });
 

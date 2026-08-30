@@ -1,3 +1,4 @@
+import { PRE_SCOPE_COORDINATION_NAMESPACE } from "./domain/coordination-scope.js";
 import { hashLoginKey } from "./sql-teams-repository.js";
 import type {
   CompositeParentDeploymentRecord,
@@ -92,6 +93,35 @@ export const DEPLOYMENTS_SCHEMA_STATEMENTS = [
 )`,
   `CREATE INDEX IF NOT EXISTS idx_deployment_score_events_job_type_sk
   ON deployment_score_events (job_id, record_type, sk DESC)`,
+  // [Issue #3123] Coordination state is keyed by tenant x event x problem x run.
+  //
+  // The pre-#3123 table was `PRIMARY KEY (tenant_id, event_id)`, so two
+  // coordination problems in one event overwrote each other. SQLite cannot
+  // widen a primary key in place, so the new shape needs a new table and the
+  // four statements below migrate into it. They are ordered to be idempotent on
+  // every cold start, not just the first:
+  //
+  //   1. create the legacy table if absent (an empty source for step 3 on a
+  //      brand-new database)
+  //   2. create the scoped table
+  //   3. copy any legacy row into the reserved `__pre_scope__` namespace
+  //
+  // Step 3 preserves the rows rather than dropping them, but parks them where
+  // no live scope can resolve: a real `problemId` matches `PROBLEM_ID_RE`
+  // (`handlers/shared/constants.ts`), which forbids `_`. That is deliberate.
+  // Reading a legacy row back as live state would hand ONE problem's game state
+  // to whichever OTHER problem in the same event happened to ask first — the
+  // exact cross-problem bleed this issue fixes. The compatibility policy is
+  // therefore: pre-#3123 coordination state does not carry over, and a match in
+  // flight across the deploy re-initializes from `plugin.initialState`.
+  //
+  // The legacy table is deliberately NOT dropped. Turso is one shared remote
+  // database, so during a rolling deployment the first NEW cold start runs this
+  // bootstrap while OLD execution environments are still serving traffic
+  // against `coordination_state` — dropping it would fail every one of their
+  // reads and writes with `no such table` until the rollout drained. Leaving it
+  // costs a stale table that nothing reads; an operator can drop it once no old
+  // environment remains.
   `CREATE TABLE IF NOT EXISTS coordination_state (
   tenant_id  TEXT    NOT NULL,
   event_id   TEXT    NOT NULL,
@@ -100,6 +130,21 @@ export const DEPLOYMENTS_SCHEMA_STATEMENTS = [
   updated_at TEXT    NOT NULL,
   PRIMARY KEY (tenant_id, event_id)
 )`,
+  `CREATE TABLE IF NOT EXISTS coordination_state_scoped (
+  tenant_id  TEXT    NOT NULL,
+  event_id   TEXT    NOT NULL,
+  problem_id TEXT    NOT NULL,
+  run_id     TEXT    NOT NULL,
+  state      TEXT    NOT NULL,
+  version    INTEGER NOT NULL,
+  updated_at TEXT    NOT NULL,
+  expires_at INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (tenant_id, event_id, problem_id, run_id)
+)`,
+  `INSERT OR IGNORE INTO coordination_state_scoped
+  (tenant_id, event_id, problem_id, run_id, state, version, updated_at, expires_at)
+  SELECT tenant_id, event_id, '${PRE_SCOPE_COORDINATION_NAMESPACE}', '${PRE_SCOPE_COORDINATION_NAMESPACE}', state, version, updated_at, 0
+  FROM coordination_state`,
 ] as const;
 
 /** SQL script form retained for local SQLite parity tests and manual bootstrap. */

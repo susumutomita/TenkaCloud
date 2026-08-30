@@ -18,6 +18,16 @@ import { makeFakeDdb, makeSqliteExecutor } from "./control-data-write.test-helpe
 
 const TABLE = "Deployments";
 const AT = "2026-07-08T12:00:00.000Z";
+
+/**
+ * [Issue #3123] A coordination scope. Every port call names all four
+ * dimensions; there is no default that would silently rejoin a shared
+ * namespace.
+ */
+function coordScope(tenantId: string, eventId: string, problemId = "problem-a", runId = "default") {
+  return { tenantId, eventId, problemId, runId };
+}
+
 const EXPIRES = 4_102_444_800;
 
 interface Backend {
@@ -173,7 +183,7 @@ describe.each(backends)("DeploymentsRepository parity: %s", (_label, makeBackend
     await repo.appendScoreEvent(scoreEvent({ jobId: "a", occurredAt: "2026-07-05T00:00:00.000Z" }));
     await repo.appendInboxEvent("a", "01INBOXIDXXXXXXXXXXXXXXXXX", inboxEvent());
     await expectOutcome(
-      repo.writeCoordinationState("tenant-a", "ev-1", { turn: 1 }, 0, AT),
+      repo.writeCoordinationState(coordScope("tenant-a", "ev-1"), { turn: 1 }, 0, AT, 0),
       "updated",
     );
 
@@ -220,7 +230,7 @@ describe.each(backends)("DeploymentsRepository parity: %s", (_label, makeBackend
     expect(await repo.listInboxEventsInRange("a", "INBOX#2026-07-01", "INBOX#~")).toEqual([
       inboxEvent(),
     ]);
-    expect(await repo.readCoordinationState("tenant-a", "ev-1")).toEqual({
+    expect(await repo.readCoordinationState(coordScope("tenant-a", "ev-1"))).toEqual({
       state: { turn: 1 },
       version: 1,
     });
@@ -552,22 +562,22 @@ describe.each(backends)("DeploymentsRepository parity: %s", (_label, makeBackend
     ).toEqual([inbox]);
 
     await expectOutcome(
-      repo.writeCoordinationState("tenant-a", "ev-lock", { turn: 1 }, 0, AT),
+      repo.writeCoordinationState(coordScope("tenant-a", "ev-lock"), { turn: 1 }, 0, AT, 0),
       "updated",
     );
     await expectOutcome(
-      repo.writeCoordinationState("tenant-a", "ev-lock", { turn: 2 }, 0, AT),
+      repo.writeCoordinationState(coordScope("tenant-a", "ev-lock"), { turn: 2 }, 0, AT, 0),
       "conflict",
     );
-    expect(await repo.readCoordinationState("tenant-a", "ev-lock")).toEqual({
+    expect(await repo.readCoordinationState(coordScope("tenant-a", "ev-lock"))).toEqual({
       state: { turn: 1 },
       version: 1,
     });
     await expectOutcome(
-      repo.writeCoordinationState("tenant-a", "ev-lock", { turn: 2 }, 1, AT),
+      repo.writeCoordinationState(coordScope("tenant-a", "ev-lock"), { turn: 2 }, 1, AT, 0),
       "updated",
     );
-    expect(await repo.readCoordinationState("tenant-a", "ev-lock")).toEqual({
+    expect(await repo.readCoordinationState(coordScope("tenant-a", "ev-lock"))).toEqual({
       state: { turn: 2 },
       version: 2,
     });

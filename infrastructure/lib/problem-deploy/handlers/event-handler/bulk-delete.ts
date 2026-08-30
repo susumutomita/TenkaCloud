@@ -1,5 +1,9 @@
 import type { PutEventsRequestEntry } from "@aws-sdk/client-eventbridge";
-import type { DeploymentsLifecyclePort } from "../../control-data/deployments-repository.js";
+import type {
+  DeploymentsCoordinationPort,
+  DeploymentsLifecyclePort,
+} from "../../control-data/deployments-repository.js";
+import { DEFAULT_COORDINATION_RUN_ID } from "../../control-data/domain/coordination-scope.js";
 import { buildAdapterDependencies } from "../deploy-handler/adapter-dependencies.js";
 import { slugify } from "../deploy-handler/naming.js";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
@@ -53,7 +57,15 @@ export type BulkTeardownOutcome =
  */
 type UpdateOutcome =
   | { entry: PutEventsRequestEntry; jobId: string }
-  | { skip: true }
+  /**
+   * [Issue #3123] `deletedLike` separates the two very different reasons a row
+   * is skipped. A row already `DELETING` / `DELETED` is finished — a retried
+   * teardown sees every row that way, and that retry is exactly when the
+   * coordination cleanup must run. Every other skip leaves a row that is still
+   * `PENDING` / `COMPLETE` / `FAILED`, i.e. one a participant can still submit
+   * through, so the shared namespace must not be deleted under it.
+   */
+  | { skip: true; deletedLike?: true }
   | { adapterEnqueued: string }
   | { adapterFailed: string };
 
@@ -109,9 +121,14 @@ export async function bulkTeardownEvent(
   // rather than riding the EventBridge publish batch below.
   let adapterEnqueued = 0;
   let adapterFailed = 0;
+  // [Issue #3123] Skips that left a row still live, as opposed to a row that
+  // was already gone. Only the first kind blocks the coordination cleanup.
+  let activeSkipped = 0;
   for (const o of outcomes) {
-    if ("skip" in o) skipped++;
-    else if ("adapterEnqueued" in o) adapterEnqueued++;
+    if ("skip" in o) {
+      skipped++;
+      if (!o.deletedLike) activeSkipped++;
+    } else if ("adapterEnqueued" in o) adapterEnqueued++;
     else if ("adapterFailed" in o) adapterFailed++;
     else pending.push(o);
   }
@@ -143,6 +160,40 @@ export async function bulkTeardownEvent(
     failedJobIds.map((jobId) => compensateBulkTeardownPublish(shared, tenantId, jobId, updatedAt)),
   );
 
+  // [Issue #3123] Event cleanup owns the coordination namespaces this event
+  // created. Deployment teardown alone cannot: coordination state is shared by
+  // every team on a problem, so deleting it when ONE team's deployment goes
+  // away would wipe a match the others are still playing. The event is the
+  // first boundary at which no team is left.
+  //
+  // Only once every target is actually gone, though. Three things leave a
+  // deployment live after this call, and all three still resolve a coordination
+  // scope (`canSubmitCoordination` filters only deleted-like statuses):
+  //
+  //   - a failed publish, compensated `DELETING` -> `FAILED` for the operator
+  //     to retry,
+  //   - a failed adapter teardown, compensated the same way,
+  //   - a skip that was not "already deleted" — a row with no usable teardown
+  //     target, a lost `DELETING` transition, or an adapter row whose SSM
+  //     wiring is absent.
+  //
+  // Deleting the shared namespace in any of those cases drops the match state
+  // while the problem is still reachable, and the next op rebuilds it from
+  // `initialState` before the retry even runs. The retry calls this same path —
+  // and by then those rows read as deleted-like, so it does clean up. If no
+  // retry ever comes, the row's `expiresAt` reaps it.
+  const uncommitted = failedJobIds.length + adapterFailed + activeSkipped;
+  if (uncommitted === 0) {
+    await deleteEventCoordinationState(shared, tenantId, eventId, targets);
+  } else {
+    logDeployTrace("bulk-teardown.coordination.cleanup-deferred", {
+      tenantId,
+      eventId,
+      failed: String(failedJobIds.length + adapterFailed),
+      activeSkipped: String(activeSkipped),
+    });
+  }
+
   return {
     kind: "ok",
     result: {
@@ -152,6 +203,71 @@ export async function bulkTeardownEvent(
       failed: failedJobIds.length + adapterFailed,
     },
   };
+}
+
+/**
+ * [Issue #3123] Drops the coordination state of every problem this event
+ * deployed.
+ *
+ * Deletes are issued for each distinct `problemId` among the event's
+ * deployments, not only for problems that declare a coordination plugin: this
+ * module has no `PROBLEM_COORDINATION` config (that env belongs to the
+ * participant handler), and a delete against an absent row is a no-op on both
+ * backends. Asking the config would couple event teardown to the participant
+ * Lambda's wiring to save nothing.
+ *
+ * Best-effort by design — teardown already reported which stacks it enqueued,
+ * and failing the whole call here would leave the operator unable to tell a
+ * leaked CloudFormation stack (money, real resources) from a leaked state row
+ * (bytes, and covered by the row's TTL). The failure is logged rather than
+ * swallowed, and the row's `expiresAt` backstop still reaps it.
+ */
+async function deleteEventCoordinationState(
+  shared: EventSharedResources,
+  tenantId: string,
+  eventId: string,
+  targets: readonly Partial<DeploymentItem>[],
+): Promise<void> {
+  const problemIds = new Set(
+    targets
+      .map((item) => item.problemId)
+      .filter((problemId): problemId is string => typeof problemId === "string" && !!problemId),
+  );
+  if (problemIds.size === 0) return;
+  const ordered = [...problemIds];
+  // `allSettled`, not `all`: one rejection must not strand the others. A Lambda
+  // freezes its execution environment the moment the handler returns, so a
+  // promise still in flight when `Promise.all` short-circuited would simply
+  // never finish — a namespace whose delete had no error at all would leak.
+  //
+  // The repository is resolved inside each task rather than once outside, so
+  // this has exactly one failure path. Resolving outside needed a second
+  // try/catch for it, which no test could reach honestly: the resolver already
+  // ran for `queryDeploymentsByEvent` above, the SQL executor is cached per
+  // cold start, and the DynamoDB branch reads the same two fields of the same
+  // `shared` object. A branch that cannot fail is not a safety net, it is
+  // unreachable code that hides which namespace actually failed.
+  const settled = await Promise.allSettled(
+    ordered.map(async (problemId) => {
+      const repository: DeploymentsCoordinationPort = await resolveDeploymentsRepository(shared);
+      await repository.deleteCoordinationState({
+        tenantId,
+        eventId,
+        problemId,
+        runId: DEFAULT_COORDINATION_RUN_ID,
+      });
+    }),
+  );
+  for (const [index, outcome] of settled.entries()) {
+    if (outcome.status === "fulfilled") continue;
+    const reason = outcome.reason;
+    logDeployTrace("bulk-teardown.coordination.cleanup-failed", {
+      tenantId,
+      eventId,
+      problemIds: ordered[index],
+      reason: reason instanceof Error ? reason.message : String(reason),
+    });
+  }
 }
 
 /**
@@ -185,7 +301,7 @@ async function prepareBulkTeardownEntry(
   item: Partial<DeploymentItem>,
 ): Promise<UpdateOutcome> {
   const status = (item.status ?? "PENDING") as DeploymentStatus;
-  if (status === "DELETING" || status === "DELETED") return { skip: true };
+  if (status === "DELETING" || status === "DELETED") return { skip: true, deletedLike: true };
 
   // [#2571] Non-AWS runtime (sakura/azure/gcp) rows never carry a region /
   // awsAccountId CFn can act on (both persisted as "", #2571 plan-builder) —

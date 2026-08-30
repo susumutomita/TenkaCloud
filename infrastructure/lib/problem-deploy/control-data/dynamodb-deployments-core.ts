@@ -16,6 +16,7 @@ import {
   compositeTargetGsi3Sk,
 } from "../handlers/deploy-handler/composite-deployment.js";
 import { createCursorCodec } from "../handlers/shared/cursor-codec.js";
+import type { CoordinationStateScope } from "./domain/coordination-scope.js";
 import type {
   CompositeParentDeploymentRecord,
   CompositeTargetDeploymentRecord,
@@ -57,9 +58,58 @@ export function deploymentPk(jobId: string): string {
   return `${DEPLOYMENT_PK_PREFIX}${jobId}`;
 }
 
-/** COORD# partition key (`coordination-store.ts` `pk`). */
-export function coordinationPk(tenantId: string, eventId: string): string {
-  return `COORD#${tenantId}#${eventId}`;
+/**
+ * [Issue #3123] Rejects a key component that is empty or carries the `#`
+ * delimiter.
+ *
+ * With two components a smuggled `#` was merely ambiguous; with four it aliases
+ * namespaces across the tenant boundary — `{tenant: "a#b", event: "c"}` and
+ * `{tenant: "a", event: "b#c"}` build the same partition key, so one tenant's
+ * coordination state would be served to another. Every id that reaches here is
+ * already constrained upstream (`PROBLEM_ID_RE` / `ULID_RE` /
+ * `TENANT_ID_RE` in `handlers/shared/constants.ts`) and cannot contain `#`, so
+ * this never fires in practice. It is here because "the callers all validate"
+ * is an invariant no type carries: this makes the key builder itself fail
+ * closed rather than compute a colliding key, the same way `isContextConsistent`
+ * guards the dispatcher.
+ */
+function assertKeyComponent(value: string, field: string): string {
+  if (!value) throw new RangeError(`coordination key component ${field} must not be empty`);
+  if (value.includes(KEY_DELIMITER)) {
+    throw new RangeError(`coordination key component ${field} must not contain "${KEY_DELIMITER}"`);
+  }
+  return value;
+}
+
+const KEY_DELIMITER = "#" as const;
+
+/** COORD# partition key prefix — shared by the scoped and pre-scope key builders. */
+export const COORD_PK_PREFIX = "COORD#" as const;
+
+/**
+ * COORD# partition key for one {@link CoordinationStateScope} (`coordination-store.ts` `pk`).
+ *
+ * [Issue #3123] Was `COORD#<tenant>#<event>`, which collided across problems
+ * and runs sharing one event.
+ */
+export function coordinationPk(scope: CoordinationStateScope): string {
+  return [
+    COORD_PK_PREFIX + assertKeyComponent(scope.tenantId, "tenantId"),
+    assertKeyComponent(scope.eventId, "eventId"),
+    assertKeyComponent(scope.problemId, "problemId"),
+    assertKeyComponent(scope.runId, "runId"),
+  ].join(KEY_DELIMITER);
+}
+
+/**
+ * The pre-#3123 two-part key for the same `(tenant, event)`.
+ *
+ * Only `deleteCoordinationState` uses it, so a torn-down event takes its
+ * orphaned pre-scope row with it. Nothing reads through to it — see
+ * `DeploymentsCoordinationPort.readCoordinationState`.
+ */
+export function preScopeCoordinationPk(tenantId: string, eventId: string): string {
+  return `${COORD_PK_PREFIX + assertKeyComponent(tenantId, "tenantId")}${KEY_DELIMITER}${assertKeyComponent(eventId, "eventId")}`;
 }
 
 /** The physical DDB keys stripped from every returned domain record. */

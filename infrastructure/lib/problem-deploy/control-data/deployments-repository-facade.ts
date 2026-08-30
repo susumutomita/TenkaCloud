@@ -175,4 +175,12 @@ export abstract class DeploymentsRepositoryFacade implements DeploymentsReposito
   readonly writeCoordinationState: DeploymentsCoordinationPort["writeCoordinationState"] = (
     ...args
   ) => this.parts.coordination.writeCoordinationState(...args);
+  readonly touchCoordinationState: DeploymentsCoordinationPort["touchCoordinationState"] = (
+    ...args
+  ) => this.parts.coordination.touchCoordinationState(...args);
+  readonly deleteCoordinationState: DeploymentsCoordinationPort["deleteCoordinationState"] = (
+    ...args
+  ) => this.parts.coordination.deleteCoordinationState(...args);
+  readonly sweepExpiredCoordinationState: DeploymentsCoordinationPort["sweepExpiredCoordinationState"] =
+    (...args) => this.parts.coordination.sweepExpiredCoordinationState(...args);
 }
