@@ -149,6 +149,26 @@ describe("coordination-store", () => {
   });
 
   /**
+   * [Issue #3123] An empty component collapses two adjacent delimiters, so
+   * `{problemId: "", runId: "a"}` and `{problemId: "a", runId: ""}`... would
+   * differ, but `{eventId: "", problemId: "a#b"}` would not. More simply: an
+   * empty dimension is never a real scope, and writing one would park state
+   * where no honest read can find it again.
+   */
+  it.each([
+    "tenantId",
+    "eventId",
+    "problemId",
+    "runId",
+  ] as const)("should refuse an empty %s", async (field) => {
+    const { store, send } = fakeStore({});
+    await expect(
+      writeCoordinationState(store, { ...scope, [field]: "" }, {}, 0, "2026-06-01T00:00:00Z"),
+    ).rejects.toThrow(new RegExp(`${field} must not be empty`));
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  /**
    * [Issue #3123] The row's TTL is the retention backstop for a cleanup that
    * never ran, and every write refreshes it — so a live match never expires
    * under itself.

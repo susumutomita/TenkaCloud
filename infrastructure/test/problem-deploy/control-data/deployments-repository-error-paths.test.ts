@@ -10,6 +10,7 @@ import {
   DynamoDbDeploymentsCore,
   isTransactConditionalCheckFailed,
 } from "../../../lib/problem-deploy/control-data/dynamodb-deployments-core";
+import { SqlDeploymentsCoordination } from "../../../lib/problem-deploy/control-data/sql-deployments-coordination";
 import {
   decodeCursor,
   encodeCursor,
@@ -500,6 +501,23 @@ describe("SqlDeploymentsCoordination", () => {
 
   it("should read undefined before any coordination state is written", async () => {
     expect(await makeSqlRepo().readCoordinationState(COORD_SCOPE)).toBeUndefined();
+  });
+
+  /**
+   * [Issue #3123] Mirrors the DynamoDB adapter's "should default coordination
+   * version to 0 for a row missing the version attribute". The live schema
+   * declares `version INTEGER NOT NULL`, so this goes through the executor seam
+   * -- which is the layer that could hand back such a row (a hand-run
+   * migration, a different SQL backend), and the reason the fallback exists.
+   */
+  it("should default a missing version to 0", async () => {
+    const coordination = new SqlDeploymentsCoordination(
+      new SqlDeploymentsCore(scriptedExecutor({ row: { state: JSON.stringify({ x: 1 }) } })),
+    );
+    expect(await coordination.readCoordinationState(COORD_SCOPE)).toEqual({
+      state: { x: 1 },
+      version: 0,
+    });
   });
 
   it("should roundtrip state and reject a stale version", async () => {

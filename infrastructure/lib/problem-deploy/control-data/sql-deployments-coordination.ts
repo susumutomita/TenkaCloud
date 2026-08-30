@@ -96,6 +96,6 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
       "DELETE FROM coordination_state_scoped WHERE expires_at > 0 AND expires_at <= ?",
       [nowEpochSeconds],
     );
-    return Number(result.changes ?? 0);
+    return Number(result.changes);
   }
 }

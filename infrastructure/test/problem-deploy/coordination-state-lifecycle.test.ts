@@ -234,6 +234,25 @@ describe("event teardown cleans up coordination state (#3123)", () => {
     });
   });
 
+  /**
+   * A deployment row with no `problemId` names no namespace, so there is
+   * nothing to delete. Issuing `COORD#tenant#event#undefined#default` instead
+   * would create a partition no honest read ever reaches.
+   */
+  it.each([
+    ["absent", undefined],
+    ["empty", ""],
+  ])("should not delete anything when every deployment's problemId is %s", async (_label, problemId) => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Item: { eventId: "EV1", tenantId: "tenant-acme" } });
+    ddbSend.mockResolvedValueOnce({ Items: [dep({ jobId: "01A", problemId })] });
+    ddbSend.mockResolvedValue({});
+
+    await bulkTeardownEvent(shared, "tenant-acme", "EV1", NOW_MS);
+
+    expect(ddbSend.mock.calls.map((c) => c[0]).some((c) => c instanceof DeleteCommand)).toBe(false);
+  });
+
   it("should not touch coordination state when the event has no deployments", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: { eventId: "EV1", tenantId: "tenant-acme" } });
