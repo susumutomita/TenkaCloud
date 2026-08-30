@@ -64,28 +64,86 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
     at: string,
     expiresAt: number,
   ): Promise<DeploymentMutationOutcome> {
-    const result = await this.core.sql.run(
-      `INSERT INTO coordination_state_scoped (tenant_id, event_id, problem_id, run_id, state, version, updated_at, expires_at)
+    const params = [
+      scope.tenantId,
+      scope.eventId,
+      scope.problemId,
+      scope.runId,
+      JSON.stringify(normalizeJsonValue(state)),
+      expectedVersion + 1,
+      at,
+      expiresAt,
+    ];
+    // [Issue #3126] Only a first write (expectedVersion 0) may insert. A write
+    // carrying a version read earlier must find that row still present — see
+    // the DynamoDB adapter for the run-reset race this closes. The plain upsert
+    // this replaced inserted whenever the row was absent, whatever version the
+    // caller expected, so a pre-reset op could resurrect the deleted match.
+    const result =
+      expectedVersion === 0
+        ? await this.core.sql.run(
+            `INSERT INTO coordination_state_scoped (tenant_id, event_id, problem_id, run_id, state, version, updated_at, expires_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(tenant_id, event_id, problem_id, run_id) DO UPDATE SET
-         state = excluded.state,
-         version = excluded.version,
-         updated_at = excluded.updated_at,
-         expires_at = excluded.expires_at
-       WHERE coordination_state_scoped.version = ?`,
-      [
-        scope.tenantId,
-        scope.eventId,
-        scope.problemId,
-        scope.runId,
-        JSON.stringify(normalizeJsonValue(state)),
-        expectedVersion + 1,
-        at,
-        expiresAt,
-        expectedVersion,
-      ],
-    );
+       ON CONFLICT(tenant_id, event_id, problem_id, run_id) DO NOTHING`,
+            params,
+          )
+        : await this.core.sql.run(
+            `UPDATE coordination_state_scoped
+         SET state = ?, version = ?, updated_at = ?, expires_at = ?
+       WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ? AND version = ?`,
+            [
+              JSON.stringify(normalizeJsonValue(state)),
+              expectedVersion + 1,
+              at,
+              expiresAt,
+              scope.tenantId,
+              scope.eventId,
+              scope.problemId,
+              scope.runId,
+              expectedVersion,
+            ],
+          );
     return Number(result.changes) > 0 ? { outcome: "updated" } : { outcome: "conflict" };
+  }
+
+  /**
+   * [Issue #3133] See `DeploymentsCoordinationPort.ensureCoordinationMatchSecret`.
+   *
+   * Read first, mint only when absent, so every op after the first is one
+   * SELECT and no write. `INSERT OR IGNORE` still guards the mint because the
+   * read is not a lock: on a concurrent first op the insert is a no-op and the
+   * read-back adopts the winner's secret, instead of replacing material the
+   * winner has already derived from.
+   */
+  async ensureCoordinationMatchSecret(
+    scope: CoordinationStateScope,
+    candidate: string,
+    expiresAt: number,
+  ): Promise<string> {
+    const existing = await this.readCoordinationMatchSecret(scope);
+    if (existing !== undefined) return existing;
+    await this.core.sql.run(
+      `INSERT OR IGNORE INTO coordination_match_secret
+         (tenant_id, event_id, problem_id, run_id, match_secret, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [scope.tenantId, scope.eventId, scope.problemId, scope.runId, candidate, expiresAt],
+    );
+    const stored = await this.readCoordinationMatchSecret(scope);
+    if (stored !== undefined) return stored;
+    // Deleted between the insert and the read (a teardown landing mid-op).
+    // Returning `candidate` would hand this op a secret nothing else holds.
+    throw new Error("coordination match secret vanished between write and read");
+  }
+
+  /** [Issue #3133] See `DeploymentsCoordinationPort.readCoordinationMatchSecret`. */
+  async readCoordinationMatchSecret(scope: CoordinationStateScope): Promise<string | undefined> {
+    const row = await this.core.sql.get(
+      "SELECT match_secret FROM coordination_match_secret WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ?",
+      [scope.tenantId, scope.eventId, scope.problemId, scope.runId],
+    );
+    if (!row) return undefined;
+    const secret = String(row.match_secret ?? "");
+    return secret.length > 0 ? secret : undefined;
   }
 
   /**
@@ -103,6 +161,12 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
       "DELETE FROM coordination_state_scoped WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ?",
       [scope.tenantId, scope.eventId, scope.problemId, scope.runId],
     );
+    // [Issue #3133] The secret goes with the match it belongs to, so a
+    // re-created scope cannot inherit the deleted match's hidden material.
+    await this.core.sql.run(
+      "DELETE FROM coordination_match_secret WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ?",
+      [scope.tenantId, scope.eventId, scope.problemId, scope.runId],
+    );
   }
 
   /**
@@ -111,13 +175,21 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
    * `__pre_scope__` rows), the same guard the disruptions repository's sweep
    * uses.
    *
-   * Has no scheduled caller yet — see `DeploymentsCoordinationPort`'s docstring
-   * for why that is a platform-wide gap rather than a coordination one, and for
-   * what it means for Turso/DynamoDB parity in the meantime.
+   * [Issue #3127] Driven by the generic-scoring reconciler's per-minute prune
+   * tick, which is gated on the pure-SQL backend — DynamoDB reaps `expiresAt`
+   * natively and must not pay for a Scan that deletes what the table already
+   * deletes.
    */
   async sweepExpiredCoordinationState(nowEpochSeconds: number): Promise<number> {
     const result = await this.core.sql.run(
       "DELETE FROM coordination_state_scoped WHERE expires_at > 0 AND expires_at <= ?",
+      [nowEpochSeconds],
+    );
+    // [Issue #3133] Secrets expire on the same clock as the state they belong
+    // to. Counted separately would double-count one match, so only the state
+    // rows are reported — the count is "matches reaped", not "rows deleted".
+    await this.core.sql.run(
+      "DELETE FROM coordination_match_secret WHERE expires_at > 0 AND expires_at <= ?",
       [nowEpochSeconds],
     );
     return Number(result.changes);

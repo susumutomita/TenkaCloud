@@ -116,3 +116,33 @@ export function shouldRefreshCoordinationTtl(
   const halfWindowMs = COORDINATION_STATE_RETENTION_MS / 2;
   return expiresAt * 1000 - nowMs <= halfWindowMs;
 }
+
+/**
+ * [Issue #3133] Bytes of entropy behind one match secret.
+ *
+ * 32 bytes (256 bits, 64 hex characters) is the same size the rest of the
+ * platform uses for material an attacker must not be able to search — it is far
+ * beyond any offline guessing budget, and the value never leaves the server, so
+ * there is no length constraint pulling the other way.
+ */
+const MATCH_SECRET_BYTES = 32;
+
+/**
+ * [Issue #3133] Mints one match's server-only secret.
+ *
+ * Coordination plugins that need unguessable material had nowhere to get it:
+ * `CoordinationContext` carried only `eventId` and `teamIds`, both of which are
+ * routing keys the portal hands to the participant's own browser. A plugin
+ * seeding from `eventId` therefore published its hidden material, because the
+ * problem repository is public and every derivation function in it is readable.
+ *
+ * The randomness source is the platform's, not the plugin's, so that a problem
+ * cannot weaken it — and the value is issued exactly once per scope (see the
+ * port's `ensureCoordinationMatchSecret`), because a secret that changed under
+ * a running match would invalidate everything already derived from it.
+ */
+export function createCoordinationMatchSecret(
+  randomBytes: (size: number) => { toString(encoding: "hex"): string },
+): string {
+  return randomBytes(MATCH_SECRET_BYTES).toString("hex");
+}

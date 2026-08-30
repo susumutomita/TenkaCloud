@@ -29,6 +29,7 @@ function coordScope(tenantId: string, eventId: string, problemId = "problem-a", 
 }
 
 const EXPIRES = 4_102_444_800;
+const LATER = "2026-07-08T13:00:00.000Z";
 
 interface Backend {
   readonly name: string;
@@ -581,6 +582,130 @@ describe.each(backends)("DeploymentsRepository parity: %s", (_label, makeBackend
       state: { turn: 2 },
       version: 2,
     });
+  });
+
+  /**
+   * [Issue #3128] The teardown marker both backends must stamp.
+   *
+   * A row that went DELETING can end up FAILED (the delete state machine's
+   * `DELETE_FAILED` route calls `markFailed`), and FAILED is indistinguishable
+   * from a failed deploy — so the coordination guard cannot read "was this torn
+   * down" off `status`. The marker is what makes that question answerable, and
+   * it must survive the later transition to be worth anything.
+   */
+  it("should stamp a permanent teardown marker when a row transitions to DELETING", async () => {
+    const { repo } = makeBackend();
+    await repo.putDeployment(deployment({ jobId: "torn-down", status: "COMPLETE" }));
+
+    expect((await repo.getDeployment("torn-down"))?.teardownRequestedAt).toBeUndefined();
+
+    await expectOutcome(repo.markDeletingForBulk("torn-down", "tenant-a", AT), "updated");
+    expect((await repo.getDeployment("torn-down"))?.teardownRequestedAt).toBe(AT);
+
+    // The whole point: the marker outlives the status it was written alongside.
+    await repo.compensateDeleteToFailed("torn-down", "tenant-a", "delete failed", LATER, EXPIRES);
+    const failed = await repo.getDeployment("torn-down");
+    expect(failed?.status).toBe("FAILED");
+    expect(failed?.teardownRequestedAt).toBe(AT);
+  });
+
+  /**
+   * [Issue #3133] The match secret is the one piece of coordination material a
+   * participant must never be able to derive. Both backends have to agree on
+   * all three of its properties, because a plugin seeds its hidden material
+   * from it: minted once, stable afterwards, and gone with the match.
+   */
+  it("should mint a match secret once per scope, keep it stable, and scope it", async () => {
+    const { repo } = makeBackend();
+    const a = coordScope("tenant-a", "ev-secret", "problem-a");
+    const b = coordScope("tenant-a", "ev-secret", "problem-b");
+
+    expect(await repo.readCoordinationMatchSecret(a)).toBeUndefined();
+
+    const minted = await repo.ensureCoordinationMatchSecret(a, "secret-a", EXPIRES);
+    expect(minted).toBe("secret-a");
+    // Stable: a second op offering a different candidate adopts the stored one.
+    // If this ever returned "secret-a2", two teams in one match would derive
+    // incompatible hidden material from two different seeds.
+    expect(await repo.ensureCoordinationMatchSecret(a, "secret-a2", EXPIRES)).toBe("secret-a");
+    expect(await repo.readCoordinationMatchSecret(a)).toBe("secret-a");
+
+    // Scoped like the state row: a second problem in the same event is a
+    // different match and must not share the first one's secret.
+    expect(await repo.readCoordinationMatchSecret(b)).toBeUndefined();
+    expect(await repo.ensureCoordinationMatchSecret(b, "secret-b", EXPIRES)).toBe("secret-b");
+
+    // Deleting the match takes its secret, so a re-created scope re-mints
+    // instead of inheriting the old match's material.
+    await repo.deleteCoordinationState(a);
+    expect(await repo.readCoordinationMatchSecret(a)).toBeUndefined();
+    expect(await repo.readCoordinationMatchSecret(b)).toBe("secret-b");
+  });
+
+  /**
+   * [Issue #3133] The mint race, and the one case where minting must fail loudly.
+   *
+   * Two concurrent first ops both see "absent" — the read is not a lock. The
+   * conditional put / `INSERT OR IGNORE` makes exactly one of them the writer
+   * and the loser adopts the winner's value, because two teams deriving from
+   * two different seeds would be playing two different games.
+   */
+  it("should converge concurrent first mints on a single secret", async () => {
+    const { repo } = makeBackend();
+    const scope = coordScope("tenant-a", "ev-race");
+
+    const [first, second] = await Promise.all([
+      repo.ensureCoordinationMatchSecret(scope, "candidate-one", EXPIRES),
+      repo.ensureCoordinationMatchSecret(scope, "candidate-two", EXPIRES),
+    ]);
+
+    expect(first).toBe(second);
+    expect(await repo.readCoordinationMatchSecret(scope)).toBe(first);
+  });
+
+  /**
+   * [Issue #3126] The run-reset race the write fence closes.
+   *
+   * An op reads state, the operator resets (deleting the row), and the op's
+   * write lands afterwards. Before the fence both backends accepted it — the
+   * DynamoDB condition allowed `attribute_not_exists(version)` and the SQL
+   * upsert inserted whenever the row was absent — so the match the reset just
+   * ended came back, with the reset still reporting success.
+   */
+  it("should refuse a stale write that would resurrect a reset match", async () => {
+    const { repo } = makeBackend();
+    const scope = coordScope("tenant-a", "ev-reset");
+
+    await expectOutcome(repo.writeCoordinationState(scope, { turn: 1 }, 0, AT, EXPIRES), "updated");
+    // The operator resets the run while an op is mid-flight holding version 1.
+    await repo.deleteCoordinationState(scope);
+
+    await expectOutcome(
+      repo.writeCoordinationState(scope, { turn: 2 }, 1, AT, EXPIRES),
+      "conflict",
+    );
+    expect(await repo.readCoordinationState(scope)).toBeUndefined();
+
+    // The participant's retry re-initializes cleanly at version 0.
+    await expectOutcome(repo.writeCoordinationState(scope, { turn: 1 }, 0, AT, EXPIRES), "updated");
+    expect((await repo.readCoordinationState(scope))?.version).toBe(1);
+  });
+
+  /**
+   * [Issue #3133] The structural half of "never projected": the secret lives in
+   * its own row, so the record `readCoordinationState` returns — the value
+   * every projection, log line and participant response is built from — cannot
+   * carry it even by accident.
+   */
+  it("should keep the match secret out of the coordination state record", async () => {
+    const { repo } = makeBackend();
+    const scope = coordScope("tenant-a", "ev-leak");
+    await repo.ensureCoordinationMatchSecret(scope, "TOP-SECRET-MATCH-SEED", EXPIRES);
+    await expectOutcome(repo.writeCoordinationState(scope, { turn: 1 }, 0, AT, EXPIRES), "updated");
+
+    const record = await repo.readCoordinationState(scope);
+    expect(record).toEqual({ state: { turn: 1 }, version: 1, expiresAt: EXPIRES });
+    expect(JSON.stringify(record)).not.toContain("TOP-SECRET-MATCH-SEED");
   });
 });
 

@@ -7,6 +7,8 @@ import {
 import type { CoordinationStateScope } from "../../control-data/domain/coordination-scope.js";
 import {
   type CoordinationStoreDeps,
+  ensureCoordinationMatchSecret,
+  readCoordinationMatchSecret,
   readCoordinationState,
   writeCoordinationState,
 } from "./coordination-store.js";
@@ -68,7 +70,12 @@ export async function dispatchCoordinationOp<State, Op, Projection>(
   if (!isContextConsistent(input)) return { kind: "rejected", error: "context_mismatch" };
 
   const existing = await readCoordinationState(store, input.scope);
-  const state = (existing?.state as State) ?? plugin.initialState(input.ctx);
+  // [Issue #3133] 秘密が要るのは `initialState` を呼ぶときだけ — ctx を受け取る hook は
+  // それ 1 つで、 validateOp / applyOp / projectForTeam は (state, teamId, op) しか見ない。
+  // だから既存 state があるときは秘密に一切触らない: 全 op に read/write を足さずに済む。
+  const state =
+    (existing?.state as State) ??
+    plugin.initialState(await withMatchSecret(store, input.scope, input.ctx, input.nowIso));
   const version = existing?.version ?? 0;
 
   const verdict = dispatchOp(plugin, state, input.teamId, input.op);
@@ -109,6 +116,39 @@ export async function projectCoordinationForTeam<State, Op, Projection>(
   // ctx 不整合 (= 別 event 用 ctx / team が event 外) は fail-closed で fallback を返す (= 機密非漏洩)。
   if (!isContextConsistent(input)) return input.fallbackProjection;
   const existing = await readCoordinationState(store, input.scope);
-  const state = (existing?.state as State) ?? plugin.initialState(input.ctx);
-  return safeProjectForTeam(plugin, state, input.teamId, input.fallbackProjection as Projection);
+  if (existing) {
+    return safeProjectForTeam(
+      plugin,
+      existing.state as State,
+      input.teamId,
+      input.fallbackProjection as Projection,
+    );
+  }
+  // [Issue #3133] 未初期化 state の投影。 read 経路なので秘密は **発行しない** — GET が
+  // 書き込みになるし、 始まらないかもしれない試合に秘密を配ることになる。 既に op が
+  // 走っていれば発行済みの値が読めるので、 その試合の projection は op 経路と一致する。
+  const matchSecret = await readCoordinationMatchSecret(store, input.scope);
+  const ctx: CoordinationContext = matchSecret ? { ...input.ctx, matchSecret } : input.ctx;
+  return safeProjectForTeam(
+    plugin,
+    plugin.initialState(ctx),
+    input.teamId,
+    input.fallbackProjection as Projection,
+  );
+}
+
+/**
+ * [Issue #3133] `initialState` に渡す ctx へ、 この試合の server-only 秘密を足す。
+ *
+ * write 経路専用 — 未発行なら発行する。 呼ばれるのは state を初期化する瞬間だけなので、
+ * 試合が始まったあとの op はこの経路を通らない。 op が validateOp で弾かれても発行済みの
+ * 秘密は残るが、 それは孤児ではなく「この試合の秘密」で、 次に成功する op がそのまま採用する。
+ */
+async function withMatchSecret(
+  store: CoordinationStoreDeps,
+  scope: CoordinationStateScope,
+  ctx: CoordinationContext,
+  nowIso: string,
+): Promise<CoordinationContext> {
+  return { ...ctx, matchSecret: await ensureCoordinationMatchSecret(store, scope, nowIso) };
 }

@@ -1,4 +1,4 @@
-import { type CoordinationContext, runTick } from "@tenkacloud/coordination-plugin-sdk";
+import { runTick } from "@tenkacloud/coordination-plugin-sdk";
 import { z } from "zod";
 import {
   COORDINATION_TICK_ACTION,
@@ -11,6 +11,7 @@ import {
   type CoordinationStateScope,
   type CoordinationStoreDeps,
   DEFAULT_COORDINATION_RUN_ID,
+  ensureCoordinationMatchSecret,
   readCoordinationState,
   shouldRefreshCoordinationTtl,
   touchCoordinationState,
@@ -121,8 +122,20 @@ async function tickCoordinationEvent(
     runId: DEFAULT_COORDINATION_RUN_ID,
   };
   const existing = await readCoordinationState(deps.store, scope);
-  const ctx: CoordinationContext = { eventId: target.eventId, teamIds: [...target.teamIds] };
-  const currentState = existing?.state ?? plugin.initialState(ctx);
+  // [Issue #3133] tick も `initialState` を呼びうる (= 未初期化 namespace に対する最初の tick)
+  // 以上、op 経路とまったく同じ規則で秘密を解決する: 初期化するときだけ、未発行なら発行する。
+  //
+  // read 専用にして「まだ秘密が無いなら fallback で初期化する」は成立しない。tick が進めた
+  // state はそのまま永続化されるので、以後の op は `existing` を見つけて初期化を通らず、
+  // 試合まるごとが fallback seed のまま進んでしまう (= この issue が閉じたい穴が tick 経由で
+  // 開いたままになる)。state が既にあるときは秘密に触れないのは op 経路と同じ。
+  const currentState =
+    existing?.state ??
+    plugin.initialState({
+      eventId: target.eventId,
+      teamIds: [...target.teamIds],
+      matchSecret: await ensureCoordinationMatchSecret(deps.store, scope, nowIso),
+    });
   const version = existing?.version ?? 0;
   // eventNowMs は採点 pass が算出した event 相対経過 (= plugin の tick 契約、 参照 Battle は
   // CAPTURE_WINDOW_MS と比較)。 dispatcher は clock を持たず、 渡された値だけで純関数を回す。

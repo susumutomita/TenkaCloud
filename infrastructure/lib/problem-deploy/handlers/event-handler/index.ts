@@ -10,6 +10,7 @@ import { secureApiHeaders } from "../shared/secure-headers.js";
 import { registerAuditLogRoutes } from "./routes/audit-log.js";
 import { registerBulkDeployRoutes } from "./routes/bulk-deploy.js";
 import { registerCapacityRoutes } from "./routes/capacity.js";
+import { registerCoordinationRoutes } from "./routes/coordination.js";
 import { registerDisruptionRoutes } from "./routes/disruptions.js";
 import { registerEventRoutes } from "./routes/events.js";
 import { registerFeatureFlagsRoutes } from "./routes/feature-flags.js";
@@ -119,6 +120,9 @@ registerScoringRoutes(app, shared);
 registerProgressionGateRoutes(app, shared);
 registerNotificationRoutes(app, shared);
 registerBulkDeployRoutes(app, shared);
+// [Issue #3126] Explicit coordination run reset — deliberately NOT folded into
+// the deploy route, which runs against live events.
+registerCoordinationRoutes(app, shared);
 registerDisruptionRoutes(app, shared);
 // Issue #1292: Tenant Admin 向け audit log read routes (= /admin/audit-log + /export)。
 registerAuditLogRoutes(app, shared);

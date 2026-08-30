@@ -158,6 +158,19 @@ export type DeploymentRecord = {
    * 混同してはならない。
    */
   completedAt?: string;
+  /**
+   * [Issue #3128] このデプロイの **撤去が要求された** ことの恒久 marker (`completedAt` と同型)。
+   *
+   * `status` からは復元できない。teardown は行を `DELETING` にするが、その後 delete state
+   * machine が `DELETE_FAILED` / task failure を観測すると `markFailed` で `FAILED` へ移り、
+   * `FAILED` は **deploy 失敗と見分けがつかない**。結果として「撤去済みだが FAILED の行」が
+   * `DELETED_LIKE_STATUSES` を通り抜け、event teardown が消した coordination namespace へ
+   * 参加者の op が届き、`plugin.initialState` から試合が作り直されていた。
+   *
+   * 最初に `DELETING` へ遷移したときだけ書き、以後は上書きしない。**既存行には存在しない**
+   * ので遡及はできない (= 不在は「撤去要求なし」ではなく「不明」)。
+   */
+  teardownRequestedAt?: string;
   /** TTL 属性 (epoch seconds)。auto-teardown のキー。 */
   expiresAt: number;
 

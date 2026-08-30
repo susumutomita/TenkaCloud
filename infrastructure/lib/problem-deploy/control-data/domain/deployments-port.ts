@@ -632,6 +632,46 @@ export interface DeploymentsCoordinationPort {
   deleteCoordinationState(scope: CoordinationStateScope): Promise<void>;
 
   /**
+   * [Issue #3133] Returns this match's server-only secret, minting `candidate`
+   * on the first call for the scope and returning the already-stored value on
+   * every call after that.
+   *
+   * Insert-if-absent rather than read-then-write: two concurrent first ops race
+   * here, and both must end up with the SAME secret. A plugin derives its
+   * hidden material from this value, so two teams holding different secrets for
+   * one match would not be a stale read — it would be two incompatible games.
+   * The backends implement it with a conditional put / `INSERT OR IGNORE` and
+   * return whatever is stored afterwards, so the loser of the race adopts the
+   * winner's value.
+   *
+   * The secret lives in its OWN row, not as a field on the state row, and this
+   * is the only method that reads it. That is the structural half of "never
+   * projected": {@link readCoordinationState} cannot carry it into a
+   * {@link CoordinationStateRecord}, so no projection, log line, or response
+   * built from that record can leak it by accident.
+   *
+   * `expiresAt` matches the state row's TTL so the pair ages out together —
+   * a surviving secret for a deleted match is dead weight, and a surviving
+   * match with a deleted secret would re-mint mid-game.
+   */
+  ensureCoordinationMatchSecret(
+    scope: CoordinationStateScope,
+    candidate: string,
+    expiresAt: number,
+  ): Promise<string>;
+
+  /**
+   * [Issue #3133] Reads this match's secret without minting one, for the
+   * read-only projection path. `undefined` means no op has created the match
+   * yet; the plugin then sees `ctx.matchSecret === undefined` and falls back.
+   *
+   * Polling must not mint: the portal polls before the first op, and a mint
+   * there would write on a GET and hand out a secret for a match that may never
+   * start.
+   */
+  readCoordinationMatchSecret(scope: CoordinationStateScope): Promise<string | undefined>;
+
+  /**
    * [Issue #3123] Deletes every coordination row whose TTL has passed
    * (`expiresAt > 0 AND expiresAt <= nowEpochSeconds`), returning how many
    * were removed.
@@ -641,14 +681,13 @@ export interface DeploymentsCoordinationPort {
    * the same way `dynamodb-ttl-sweep.ts` already unifies the other five
    * repositories.
    *
-   * NOT YET SCHEDULED, and the two backends are therefore not yet equivalent:
-   * on DynamoDB `expiresAt` is reaped by the table's own TTL with no caller at
-   * all, while on Turso an expired row stays readable until something invokes
-   * this. No aggregate's SQL sweep has a production caller today — events,
-   * teams, notifications, disruptions and admin-audit-log are all in the same
-   * position — so wiring a maintenance schedule is a platform-wide follow-up,
-   * not a coordination-specific one. Until it exists, event teardown is the
-   * only path that actually removes a Turso coordination row.
+   * [Issue #3127] Scheduled since: the generic-scoring reconciler's per-minute
+   * `pruneExpiredControlData` tick calls this alongside the other five
+   * aggregates' `pruneExpired`, gated on `needsManualPrune()` so it only runs
+   * on the pure-SQL backend. It was the one aggregate that tick missed, because
+   * the other five spell the same operation `pruneExpired` and this one does
+   * not; until it was wired, `CONTROL_DATA_BACKEND=turso` kept expired
+   * coordination rows readable indefinitely while DynamoDB reaped its own.
    */
   sweepExpiredCoordinationState(nowEpochSeconds: number): Promise<number>;
 }

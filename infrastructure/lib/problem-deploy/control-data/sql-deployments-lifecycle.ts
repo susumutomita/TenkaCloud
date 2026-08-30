@@ -173,6 +173,9 @@ export class SqlDeploymentsLifecycle implements DeploymentsLifecyclePort {
         record.status = "DELETING";
         record.updatedAt = at;
         record.expiresAt = expiresAt;
+        // [Issue #3128] Permanent teardown marker, written once — see the
+        // DynamoDB adapter for why status cannot carry this.
+        record.teardownRequestedAt ??= at;
       },
       onMiss: "conflict",
     });
@@ -312,6 +315,8 @@ export class SqlDeploymentsLifecycle implements DeploymentsLifecyclePort {
       mutate: (record) => {
         record.status = "DELETING";
         record.updatedAt = at;
+        // [Issue #3128] Same permanent teardown marker as `markDeleting`.
+        record.teardownRequestedAt ??= at;
       },
       onMiss: "conflict",
     });

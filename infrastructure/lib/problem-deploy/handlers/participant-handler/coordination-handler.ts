@@ -210,8 +210,29 @@ async function resolveEventRoster(
  * deliberately does not filter by status, for an unrelated and still-valid
  * reason: dropping mid-deploy teams from the roster would make
  * `initialState(ctx)` depend on deploy timing (#3053).
+ *
+ * [Issue #3128] Status alone is not enough, because a torn-down row does not
+ * stay in a deleted-like status. `bulkTeardownEvent` moves rows to `DELETING`
+ * and — once nothing is uncommitted — DELETES the coordination namespace. The
+ * delete state machine then runs asynchronously, and on `DELETE_FAILED` (or a
+ * task failure) `markFailed` moves the row to `FAILED`, which is
+ * indistinguishable from a failed DEPLOY and is therefore NOT deleted-like. The
+ * event window is usually still open at that point, so the row passed both
+ * gates and the next op re-materialized the namespace teardown had just
+ * removed — the participant kept playing a match the operator had ended.
+ *
+ * `teardownRequestedAt` closes that: it is stamped once when the row first
+ * transitions to `DELETING` and never cleared, so "was teardown requested" no
+ * longer depends on where the row happened to land afterwards. Rows written
+ * before this marker existed do not carry it and keep the previous
+ * status-only behaviour; the field's absence means "unknown", not "not torn
+ * down".
  */
-function canSubmitCoordination(item: { readonly status?: string }): boolean {
+function canSubmitCoordination(item: {
+  readonly status?: string;
+  readonly teardownRequestedAt?: string;
+}): boolean {
+  if (item.teardownRequestedAt) return false;
   const status = (item.status ?? "PENDING") as DeploymentStatus;
   return !DELETED_LIKE_STATUSES.has(status);
 }

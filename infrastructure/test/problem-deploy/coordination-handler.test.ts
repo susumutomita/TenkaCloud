@@ -295,6 +295,50 @@ describe("makeCoordinationScopeResolver", () => {
     expect(await resolve("key")).not.toBeNull();
   });
 
+  /**
+   * [Issue #3128] The gap status alone could not close.
+   *
+   * Event teardown moves rows to DELETING and deletes the coordination
+   * namespace; the delete state machine then observes DELETE_FAILED and
+   * `markFailed` moves the row to FAILED. FAILED is not deleted-like (it is
+   * indistinguishable from a failed deploy), so before the marker the row
+   * passed this guard, the event window was still open, and the next op rebuilt
+   * the match the operator had just ended.
+   */
+  it.each([
+    "FAILED",
+    "COMPLETE",
+    "PENDING",
+    "IN_PROGRESS",
+  ])("should refuse a scope for a torn-down deployment that landed on %s", async (status) => {
+    const resolve = makeCoordinationScopeResolver(
+      fakeShared([
+        {
+          tenantId: "tn1",
+          eventId: "e1",
+          teamId: "t1",
+          problemId: "p1",
+          status,
+          teardownRequestedAt: "2026-08-30T09:00:00.000Z",
+        },
+      ]),
+      config,
+    );
+    expect(await resolve("key")).toBeNull();
+  });
+
+  it("should keep resolving a row written before the teardown marker existed", async () => {
+    // Absence means "unknown", not "not torn down" — pre-marker rows keep the
+    // previous status-only behaviour rather than being locked out wholesale.
+    const resolve = makeCoordinationScopeResolver(
+      fakeShared([
+        { tenantId: "tn1", eventId: "e1", teamId: "t1", problemId: "p1", status: "COMPLETE" },
+      ]),
+      config,
+    );
+    expect(await resolve("key")).not.toBeNull();
+  });
+
   it("should return null when no owned problem declares coordination", async () => {
     const resolve = makeCoordinationScopeResolver(
       fakeShared([{ tenantId: "tn1", eventId: "e1", teamId: "t1", problemId: "other" }]),

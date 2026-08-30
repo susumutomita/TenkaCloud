@@ -351,7 +351,8 @@ describe("DynamoDbDeploymentsRepository writes — status transitions", () => {
         seed: deployment({ status: "COMPLETE" }),
         run: (repo: DynamoDbDeploymentsRepository) =>
           repo.markDeleting("j1", "tenant-a", AT, EXPIRES),
-        expression: "SET #s = :deleting, updatedAt = :updatedAt, expiresAt = :expiresAt",
+        expression:
+          "SET #s = :deleting, updatedAt = :updatedAt, expiresAt = :expiresAt, teardownRequestedAt = if_not_exists(teardownRequestedAt, :updatedAt)",
         condition: "tenantId = :tenantId AND #s IN (:p, :ap, :i, :c, :f)",
         expected: { status: "DELETING", expiresAt: EXPIRES },
       },
@@ -390,7 +391,8 @@ describe("DynamoDbDeploymentsRepository writes — status transitions", () => {
           runtimeKind: "composite",
         },
         run: (repo: DynamoDbDeploymentsRepository) => repo.markCompositeParentDeleting("j1", AT),
-        expression: "SET #s = :deleting, updatedAt = :now",
+        expression:
+          "SET #s = :deleting, updatedAt = :now, teardownRequestedAt = if_not_exists(teardownRequestedAt, :now)",
         condition: "runtimeKind = :composite AND #s <> :deleting",
         expected: { status: "DELETING" },
       },
@@ -411,7 +413,8 @@ describe("DynamoDbDeploymentsRepository writes — status transitions", () => {
         seed: deployment({ status: "FAILED" }),
         run: (repo: DynamoDbDeploymentsRepository) =>
           repo.markDeletingForBulk("j1", "tenant-a", AT),
-        expression: "SET #s = :deleting, updatedAt = :updatedAt",
+        expression:
+          "SET #s = :deleting, updatedAt = :updatedAt, teardownRequestedAt = if_not_exists(teardownRequestedAt, :updatedAt)",
         condition: "tenantId = :tenantId AND #s IN (:p, :ap, :i, :c, :f)",
         expected: { status: "DELETING" },
       },
