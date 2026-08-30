@@ -85,9 +85,10 @@ vi.mock("@cloudscape-design/components/select", () => ({
   ),
 }));
 
-const { renderSubmissionState, questCardTitle, QuestsPage } = await import(
-  "../../src/pages/Quests"
-);
+const { QuestsPage } = await import("../../src/pages/Quests");
+// 抽出後も mock (findProblemMetadata 等) 適用後に読む必要があるので dynamic import のまま。
+const { renderSubmissionState } = await import("../../src/pages/Quests.submission-state");
+const { questCardTitle } = await import("../../src/pages/Quests.badges");
 
 function problem(partial: Partial<ParticipantProblemView>): ParticipantProblemView {
   return {
