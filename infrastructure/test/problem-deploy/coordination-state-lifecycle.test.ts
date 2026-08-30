@@ -340,12 +340,17 @@ describe("event teardown cleans up coordination state (#3123)", () => {
    * leave the operator unable to tell a leaked stack (money, real resources)
    * from a leaked state row (bytes, and covered by the row's TTL).
    */
-  it("should still report the teardown result when the cleanup write fails", async () => {
+  it.each([
+    ["an Error", new Error("ddb down")],
+    // The reason does not have to be an Error; the trace line must still carry
+    // it rather than logging "[object Object]".
+    ["a non-Error rejection", "ddb down"],
+  ])("should still report the teardown result when the cleanup fails with %s", async (_label, thrown) => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: { eventId: "EV1", tenantId: "tenant-acme" } });
     ddbSend.mockResolvedValueOnce({ Items: [dep({ jobId: "01A" })] });
     ddbSend.mockImplementation(async (cmd: unknown) => {
-      if (cmd instanceof DeleteCommand) throw new Error("ddb down");
+      if (cmd instanceof DeleteCommand) throw thrown;
       return {};
     });
 

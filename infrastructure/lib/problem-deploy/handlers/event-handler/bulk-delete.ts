@@ -211,41 +211,37 @@ async function deleteEventCoordinationState(
   );
   if (problemIds.size === 0) return;
   const ordered = [...problemIds];
-  try {
-    const repository: DeploymentsCoordinationPort = await resolveDeploymentsRepository(shared);
-    // `allSettled`, not `all`: one rejection must not strand the others. A
-    // Lambda freezes its execution environment the moment the handler returns,
-    // so a promise still in flight when `Promise.all` short-circuited would
-    // simply never finish — a namespace whose delete had no error at all would
-    // leak. Each failure is reported on its own line.
-    const settled = await Promise.allSettled(
-      ordered.map((problemId) =>
-        repository.deleteCoordinationState({
-          tenantId,
-          eventId,
-          problemId,
-          runId: DEFAULT_COORDINATION_RUN_ID,
-        }),
-      ),
-    );
-    for (const [index, outcome] of settled.entries()) {
-      if (outcome.status === "fulfilled") continue;
-      const reason = outcome.reason;
-      logDeployTrace("bulk-teardown.coordination.cleanup-failed", {
+  // `allSettled`, not `all`: one rejection must not strand the others. A Lambda
+  // freezes its execution environment the moment the handler returns, so a
+  // promise still in flight when `Promise.all` short-circuited would simply
+  // never finish — a namespace whose delete had no error at all would leak.
+  //
+  // The repository is resolved inside each task rather than once outside, so
+  // this has exactly one failure path. Resolving outside needed a second
+  // try/catch for it, which no test could reach honestly: the resolver already
+  // ran for `queryDeploymentsByEvent` above, the SQL executor is cached per
+  // cold start, and the DynamoDB branch reads the same two fields of the same
+  // `shared` object. A branch that cannot fail is not a safety net, it is
+  // unreachable code that hides which namespace actually failed.
+  const settled = await Promise.allSettled(
+    ordered.map(async (problemId) => {
+      const repository: DeploymentsCoordinationPort = await resolveDeploymentsRepository(shared);
+      await repository.deleteCoordinationState({
         tenantId,
         eventId,
-        problemIds: ordered[index],
-        reason: reason instanceof Error ? reason.message : String(reason),
+        problemId,
+        runId: DEFAULT_COORDINATION_RUN_ID,
       });
-    }
-  } catch (err) {
-    // Reaching here means the repository itself could not be resolved, so no
-    // delete was attempted for any namespace.
+    }),
+  );
+  for (const [index, outcome] of settled.entries()) {
+    if (outcome.status === "fulfilled") continue;
+    const reason = outcome.reason;
     logDeployTrace("bulk-teardown.coordination.cleanup-failed", {
       tenantId,
       eventId,
-      problemIds: ordered.join(","),
-      reason: err instanceof Error ? err.message : String(err),
+      problemIds: ordered[index],
+      reason: reason instanceof Error ? reason.message : String(reason),
     });
   }
 }

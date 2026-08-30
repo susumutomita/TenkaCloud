@@ -59,7 +59,7 @@ function fakeDdb(opts: {
   getItem?: Record<string, unknown>;
   conflict?: boolean;
   getThrows?: boolean;
-  updateThrows?: boolean;
+  updateThrows?: unknown;
 }): FakeDdb {
   const puts: { PK: string; state: unknown; version: number }[] = [];
   const updates: UpdateCommand[] = [];
@@ -78,7 +78,7 @@ function fakeDdb(opts: {
     // the distinction the tests care about is exactly that it is not a write of
     // `state`/`version`.
     if (cmd instanceof UpdateCommand) {
-      if (opts.updateThrows) throw new Error("update boom");
+      if (opts.updateThrows !== undefined) throw opts.updateThrows;
       updates.push(cmd);
       return {};
     }
@@ -216,10 +216,16 @@ describe("handleCoordinationTickBatch", () => {
    * batch must not lose the other targets over it. Failing the tick here would
    * turn a cosmetic write failure into a scoring outage.
    */
-  it("should keep ticking when the TTL refresh fails", async () => {
+  it.each([
+    ["an Error", new Error("update boom"), "update boom"],
+    // An SDK or a plugin can reject with something that is not an Error; the
+    // warn must still say what happened rather than logging "[object Object]"
+    // or dropping the reason.
+    ["a non-Error rejection", "update boom", "update boom"],
+  ])("should keep ticking when the TTL refresh fails with %s", async (_label, thrown, message) => {
     const ddb = fakeDdb({
       getItem: { state: { phase: "open" }, version: 1 },
-      updateThrows: true,
+      updateThrows: thrown,
     });
 
     const res = await handleCoordinationTickBatch(
@@ -230,7 +236,7 @@ describe("handleCoordinationTickBatch", () => {
     expect(res).toEqual({ ticked: 1, written: 0 });
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining("ttl refresh failed"),
-      expect.objectContaining({ message: "update boom" }),
+      expect.objectContaining({ message }),
     );
   });
 
