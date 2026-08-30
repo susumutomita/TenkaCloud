@@ -57,7 +57,7 @@
   "dependencies": {
     "@libsql/client": "^0.17.4",
     "@tenkacloud/coordination-plugin-sdk": "workspace:*",
-    "js-yaml": "3.15.0",
+    "js-yaml": "3.15.1",
     "ws": "^8.21.1"
   },
   "devDependencies": {
@@ -99,7 +99,7 @@
     "fast-uri": "4.1.1",
     "hono": "4.13.3",
     "ip-address": "10.1.1",
-    "js-yaml": "3.15.0",
+    "js-yaml": "3.15.1",
     "linkify-it": "6.1.0",
     "markdown-it": "14.2.0",
     "postcss": "8.5.25",
