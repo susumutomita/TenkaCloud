@@ -14,11 +14,37 @@
  * `packs/reference-coordination-battle`。public API の変更時は本 SDK の version も更新する。
  */
 
-/** event 開始時に `initialState` へ渡る文脈。 機密は含めない (= 問題 plugin に見せてよい範囲)。 */
+/**
+ * event 開始時に `initialState` へ渡る文脈。
+ *
+ * `eventId` / `teamIds` は routing key であって秘密ではない — URL・log・portal の
+ * props に載る。 隠し材料をこれらから導出してはいけない ({@link CoordinationContext.matchSecret}
+ * を使う)。
+ */
 export interface CoordinationContext {
   readonly eventId: string;
   /** 参加チームの teamId 一覧 (= 初期 state を teams 数に応じて組むため)。 */
   readonly teamIds: readonly string[];
+  /**
+   * [Issue #3133] この試合だけの server-only 秘密 (高エントロピー hex)。
+   *
+   * 参加者に推測できない材料が要る plugin (秘密の生成、 share の分割、 FHE / MPC の
+   * 入力導出) はこれを seed にする。 platform が試合ごとに生成して plugin から見えない
+   * 場所に保存し、 participant-facing な応答には決して載せない。
+   *
+   * **`eventId` を seed にしてはいけない。** 問題 repository は public なので導出関数は
+   * 全て公開されており、 portal は同じ `eventId` を参加者のブラウザへ渡す。 つまり
+   * `eventId` を seed にした瞬間、 隠したはずの材料は誰でも再計算できる。
+   *
+   * optional な理由は 2 つあり、 どちらも「まだ platform が発行していない」状態を表す:
+   *   - state の row がまだ無い read 専用経路 (portal の polling が最初の op より先に来た
+   *     場合)。 次の op が row と一緒に秘密を発行する。
+   *   - platform を通さない local play / 単体テスト。
+   *
+   * したがって plugin は不在時の fallback を持つ必要がある。 ただし fallback に
+   * `ctx.eventId` を選ぶと上記の理由でそれは秘密ではない。
+   */
+  readonly matchSecret?: string;
 }
 
 /** operation の受理可否。 不可のとき error は機械可読な短い理由コード。 */

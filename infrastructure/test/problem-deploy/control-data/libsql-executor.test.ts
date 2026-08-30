@@ -80,7 +80,7 @@ describe("LibsqlExecutor", () => {
     expect(batch).toHaveBeenCalledTimes(1);
     const [statements, mode] = batch.mock.calls[0] ?? [];
     expect(mode).toBe("write");
-    expect(statements).toHaveLength(35);
+    expect(statements).toHaveLength(36);
     expect(statements.map((entry: { sql: string }) => entry.sql)).toEqual(
       expect.arrayContaining([
         expect.stringContaining("CREATE TABLE IF NOT EXISTS events"),
@@ -91,6 +91,10 @@ describe("LibsqlExecutor", () => {
         expect.stringContaining("idx_deployments_login_key_hash"),
         expect.stringContaining("idx_deployments_parent_deployment"),
         expect.stringContaining("CREATE TABLE IF NOT EXISTS deployment_score_events"),
+        // [Issue #3133] The match secret gets its own table so the state
+        // query cannot select it, and so the bootstrap stays a plain
+        // idempotent CREATE rather than an ALTER that fails on rerun.
+        expect.stringContaining("CREATE TABLE IF NOT EXISTS coordination_match_secret"),
         // [Issue #3123] The coordination table is now keyed by
         // tenant x event x problem x run. The legacy table is still created and
         // copied from in the same batch, so the migration is idempotent on

@@ -1,6 +1,7 @@
 import { DeleteCommand, GetCommand, PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { CoordinationStateScope } from "./domain/coordination-scope.js";
 import {
+  COORD_SECRET_SK,
   COORD_STATE_SK,
   coordinationPk,
   type DynamoDbDeploymentsCore,
@@ -130,6 +131,66 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
   }
 
   /**
+   * [Issue #3133] See `DeploymentsCoordinationPort.ensureCoordinationMatchSecret`.
+   *
+   * Read first, mint only when absent. Every op after the first is then one
+   * Get and no write — minting unconditionally and letting the condition reject
+   * it would put a doomed Put on the hot path of every single operation.
+   *
+   * `attribute_not_exists(matchSecret)` still guards the mint, because the read
+   * is not a lock: two concurrent first ops can both see "absent". The
+   * condition makes exactly one of them the writer, and the loser re-reads and
+   * adopts the winner's value — both derive their hidden material from the same
+   * secret, which is the property that matters. Without it the second write
+   * would silently replace a secret the first op has already derived from.
+   */
+  async ensureCoordinationMatchSecret(
+    scope: CoordinationStateScope,
+    candidate: string,
+    expiresAt: number,
+  ): Promise<string> {
+    const existing = await this.readCoordinationMatchSecret(scope);
+    if (existing !== undefined) return existing;
+    try {
+      await this.core.ddb.send(
+        new PutCommand({
+          TableName: this.core.tableName,
+          Item: {
+            PK: coordinationPk(scope),
+            SK: COORD_SECRET_SK,
+            matchSecret: candidate,
+            expiresAt,
+          },
+          ConditionExpression: "attribute_not_exists(matchSecret)",
+        }),
+      );
+      return candidate;
+    } catch (err) {
+      if (!isConditionalCheckFailed(err)) throw err;
+    }
+    // Lost the mint race. Whatever the winner stored wins — returning
+    // `candidate` here would hand this op a secret nothing else holds.
+    const stored = await this.readCoordinationMatchSecret(scope);
+    if (stored !== undefined) return stored;
+    // The condition failed but nothing is readable: a teardown deleted the row
+    // between the Put and the Get. Failing beats returning a secret that is not
+    // the match's; the caller retries against the re-created match.
+    throw new Error("coordination match secret vanished between write and read");
+  }
+
+  /** [Issue #3133] See `DeploymentsCoordinationPort.readCoordinationMatchSecret`. */
+  async readCoordinationMatchSecret(scope: CoordinationStateScope): Promise<string | undefined> {
+    const out = await this.core.ddb.send(
+      new GetCommand({
+        TableName: this.core.tableName,
+        Key: { PK: coordinationPk(scope), SK: COORD_SECRET_SK },
+      }),
+    );
+    const secret = (out.Item as Record<string, unknown> | undefined)?.matchSecret;
+    return typeof secret === "string" && secret.length > 0 ? secret : undefined;
+  }
+
+  /**
    * [Issue #3123] Deletes this scope's row, plus the pre-scope
    * `COORD#<tenant>#<event>` row for the same event.
    *
@@ -150,6 +211,14 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
       new DeleteCommand({
         TableName: this.core.tableName,
         Key: { PK: preScopeCoordinationPk(scope.tenantId, scope.eventId), SK: COORD_STATE_SK },
+      }),
+    );
+    // [Issue #3133] The secret goes with the match it belongs to. Leaving it
+    // would let a re-created scope inherit the deleted match's hidden material.
+    await this.core.ddb.send(
+      new DeleteCommand({
+        TableName: this.core.tableName,
+        Key: { PK: coordinationPk(scope), SK: COORD_SECRET_SK },
       }),
     );
   }

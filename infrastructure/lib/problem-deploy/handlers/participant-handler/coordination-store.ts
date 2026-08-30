@@ -1,8 +1,10 @@
+import { randomBytes } from "node:crypto";
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import type { DeploymentsCoordinationPort } from "../../control-data/deployments-repository.js";
 import {
   type CoordinationStateScope,
   coordinationStateExpiresAt,
+  createCoordinationMatchSecret,
 } from "../../control-data/domain/coordination-scope.js";
 import type { ControlDataRuntime } from "../../control-data/runtime-repositories.js";
 import { resolveDeploymentsRepository } from "./shared.js";
@@ -129,6 +131,44 @@ export async function touchCoordinationState(
 ): Promise<void> {
   const repository: DeploymentsCoordinationPort = await resolveDeploymentsRepository(deps);
   await repository.touchCoordinationState(scope, coordinationStateExpiresAt(parseNowMs(nowIso)));
+}
+
+/**
+ * [Issue #3133] この試合の server-only 秘密を返す。 未発行なら発行して保存する (= op 経路)。
+ *
+ * plugin が `initialState` を呼ぶ前に必要なので、 state の read と write の間ではなく
+ * **read の直後** に解決する。 発行は scope ごとに 1 度きり — 途中で変わると、 それまでに
+ * 導出済みの share / 暗号文が全部無効になる。 同時に来た 2 つの op は backend の
+ * insert-if-absent で同じ値に収束する。
+ *
+ * 戻り値は participant-facing な応答へは決して載せない。 構造としても、 秘密は state 行とは
+ * 別の row / 別 table にあり {@link readCoordinationState} の SELECT からは見えない。
+ */
+export async function ensureCoordinationMatchSecret(
+  deps: CoordinationStoreDeps,
+  scope: CoordinationStateScope,
+  nowIso: string,
+): Promise<string> {
+  const repository: DeploymentsCoordinationPort = await resolveDeploymentsRepository(deps);
+  return repository.ensureCoordinationMatchSecret(
+    scope,
+    createCoordinationMatchSecret(randomBytes),
+    coordinationStateExpiresAt(parseNowMs(nowIso)),
+  );
+}
+
+/**
+ * [Issue #3133] 発行済みの秘密を読むだけ (= 発行しない)。 read 専用経路 (portal の polling) 用。
+ *
+ * polling で発行してしまうと、 GET が書き込みになり、 始まらないかもしれない試合に秘密を
+ * 配ることになる。 未発行なら undefined を返し、 plugin 側の fallback に委ねる。
+ */
+export async function readCoordinationMatchSecret(
+  deps: CoordinationStoreDeps,
+  scope: CoordinationStateScope,
+): Promise<string | undefined> {
+  const repository: DeploymentsCoordinationPort = await resolveDeploymentsRepository(deps);
+  return repository.readCoordinationMatchSecret(scope);
 }
 
 /**

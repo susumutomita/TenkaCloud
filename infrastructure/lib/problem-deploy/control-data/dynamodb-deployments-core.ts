@@ -52,6 +52,15 @@ export const META_SK = "META" as const;
 export const EVENT_SK_PREFIX = "EVENT#" as const;
 export const INBOX_SK_PREFIX = "INBOX#" as const;
 export const COORD_STATE_SK = "STATE" as const;
+/**
+ * [Issue #3133] The match secret's own sort key, under the same coordination
+ * partition as `STATE`.
+ *
+ * A separate item, not an attribute on the state item, so the secret cannot
+ * ride along into a `CoordinationStateRecord`: `readCoordinationState` fetches
+ * `STATE` by key and never sees this one.
+ */
+export const COORD_SECRET_SK = "MATCHSECRET" as const;
 
 /** Base PK for a deployment partition. */
 export function deploymentPk(jobId: string): string {

@@ -11,6 +11,7 @@ import {
   type CoordinationStateScope,
   type CoordinationStoreDeps,
   DEFAULT_COORDINATION_RUN_ID,
+  readCoordinationMatchSecret,
   readCoordinationState,
   shouldRefreshCoordinationTtl,
   touchCoordinationState,
@@ -121,7 +122,15 @@ async function tickCoordinationEvent(
     runId: DEFAULT_COORDINATION_RUN_ID,
   };
   const existing = await readCoordinationState(deps.store, scope);
-  const ctx: CoordinationContext = { eventId: target.eventId, teamIds: [...target.teamIds] };
+  // [Issue #3133] tick は試合を **開始** しない (= 参加者が op を打つまで秘密は発行しない)。
+  // 既に発行済みならそれを渡す。 未発行なら initialState の隠し材料は fallback になるが、
+  // その state は書かれない限り誰にも配られず、 最初の op が本物の秘密で作り直す。
+  const matchSecret = existing ? await readCoordinationMatchSecret(deps.store, scope) : undefined;
+  const ctx: CoordinationContext = {
+    eventId: target.eventId,
+    teamIds: [...target.teamIds],
+    ...(matchSecret ? { matchSecret } : {}),
+  };
   const currentState = existing?.state ?? plugin.initialState(ctx);
   const version = existing?.version ?? 0;
   // eventNowMs は採点 pass が算出した event 相対経過 (= plugin の tick 契約、 参照 Battle は

@@ -141,6 +141,25 @@ export const DEPLOYMENTS_SCHEMA_STATEMENTS = [
   expires_at INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (tenant_id, event_id, problem_id, run_id)
 )`,
+  // [Issue #3133] The match secret lives in its OWN table, not as a column on
+  // `coordination_state_scoped`. Two reasons, and the second is why a column
+  // was rejected even though it would have been less code:
+  //   - `readCoordinationState`'s SELECT names its columns, so a secret column
+  //     could only leak through a future edit. A separate table means the
+  //     secret is not reachable from that query at all.
+  //   - `CREATE TABLE IF NOT EXISTS` is idempotent inside the atomic bootstrap
+  //     batch. Adding a column to a table that already exists on a live Turso
+  //     database needs `ALTER TABLE`, which errors on the second cold start and
+  //     would take the whole batch — every other aggregate's schema — with it.
+  `CREATE TABLE IF NOT EXISTS coordination_match_secret (
+  tenant_id    TEXT    NOT NULL,
+  event_id     TEXT    NOT NULL,
+  problem_id   TEXT    NOT NULL,
+  run_id       TEXT    NOT NULL,
+  match_secret TEXT    NOT NULL,
+  expires_at   INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (tenant_id, event_id, problem_id, run_id)
+)`,
   `INSERT OR IGNORE INTO coordination_state_scoped
   (tenant_id, event_id, problem_id, run_id, state, version, updated_at, expires_at)
   SELECT tenant_id, event_id, '${PRE_SCOPE_COORDINATION_NAMESPACE}', '${PRE_SCOPE_COORDINATION_NAMESPACE}', state, version, updated_at, 0

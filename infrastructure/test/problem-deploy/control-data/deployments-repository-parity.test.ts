@@ -582,6 +582,56 @@ describe.each(backends)("DeploymentsRepository parity: %s", (_label, makeBackend
       version: 2,
     });
   });
+
+  /**
+   * [Issue #3133] The match secret is the one piece of coordination material a
+   * participant must never be able to derive. Both backends have to agree on
+   * all three of its properties, because a plugin seeds its hidden material
+   * from it: minted once, stable afterwards, and gone with the match.
+   */
+  it("should mint a match secret once per scope, keep it stable, and scope it", async () => {
+    const { repo } = makeBackend();
+    const a = coordScope("tenant-a", "ev-secret", "problem-a");
+    const b = coordScope("tenant-a", "ev-secret", "problem-b");
+
+    expect(await repo.readCoordinationMatchSecret(a)).toBeUndefined();
+
+    const minted = await repo.ensureCoordinationMatchSecret(a, "secret-a", EXPIRES);
+    expect(minted).toBe("secret-a");
+    // Stable: a second op offering a different candidate adopts the stored one.
+    // If this ever returned "secret-a2", two teams in one match would derive
+    // incompatible hidden material from two different seeds.
+    expect(await repo.ensureCoordinationMatchSecret(a, "secret-a2", EXPIRES)).toBe("secret-a");
+    expect(await repo.readCoordinationMatchSecret(a)).toBe("secret-a");
+
+    // Scoped like the state row: a second problem in the same event is a
+    // different match and must not share the first one's secret.
+    expect(await repo.readCoordinationMatchSecret(b)).toBeUndefined();
+    expect(await repo.ensureCoordinationMatchSecret(b, "secret-b", EXPIRES)).toBe("secret-b");
+
+    // Deleting the match takes its secret, so a re-created scope re-mints
+    // instead of inheriting the old match's material.
+    await repo.deleteCoordinationState(a);
+    expect(await repo.readCoordinationMatchSecret(a)).toBeUndefined();
+    expect(await repo.readCoordinationMatchSecret(b)).toBe("secret-b");
+  });
+
+  /**
+   * [Issue #3133] The structural half of "never projected": the secret lives in
+   * its own row, so the record `readCoordinationState` returns — the value
+   * every projection, log line and participant response is built from — cannot
+   * carry it even by accident.
+   */
+  it("should keep the match secret out of the coordination state record", async () => {
+    const { repo } = makeBackend();
+    const scope = coordScope("tenant-a", "ev-leak");
+    await repo.ensureCoordinationMatchSecret(scope, "TOP-SECRET-MATCH-SEED", EXPIRES);
+    await expectOutcome(repo.writeCoordinationState(scope, { turn: 1 }, 0, AT, EXPIRES), "updated");
+
+    const record = await repo.readCoordinationState(scope);
+    expect(record).toEqual({ state: { turn: 1 }, version: 1, expiresAt: EXPIRES });
+    expect(JSON.stringify(record)).not.toContain("TOP-SECRET-MATCH-SEED");
+  });
 });
 
 describe("SqlDeploymentsRepository login-key storage", () => {

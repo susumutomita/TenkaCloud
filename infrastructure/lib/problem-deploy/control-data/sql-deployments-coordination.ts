@@ -89,6 +89,46 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
   }
 
   /**
+   * [Issue #3133] See `DeploymentsCoordinationPort.ensureCoordinationMatchSecret`.
+   *
+   * Read first, mint only when absent, so every op after the first is one
+   * SELECT and no write. `INSERT OR IGNORE` still guards the mint because the
+   * read is not a lock: on a concurrent first op the insert is a no-op and the
+   * read-back adopts the winner's secret, instead of replacing material the
+   * winner has already derived from.
+   */
+  async ensureCoordinationMatchSecret(
+    scope: CoordinationStateScope,
+    candidate: string,
+    expiresAt: number,
+  ): Promise<string> {
+    const existing = await this.readCoordinationMatchSecret(scope);
+    if (existing !== undefined) return existing;
+    await this.core.sql.run(
+      `INSERT OR IGNORE INTO coordination_match_secret
+         (tenant_id, event_id, problem_id, run_id, match_secret, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [scope.tenantId, scope.eventId, scope.problemId, scope.runId, candidate, expiresAt],
+    );
+    const stored = await this.readCoordinationMatchSecret(scope);
+    if (stored !== undefined) return stored;
+    // Deleted between the insert and the read (a teardown landing mid-op).
+    // Returning `candidate` would hand this op a secret nothing else holds.
+    throw new Error("coordination match secret vanished between write and read");
+  }
+
+  /** [Issue #3133] See `DeploymentsCoordinationPort.readCoordinationMatchSecret`. */
+  async readCoordinationMatchSecret(scope: CoordinationStateScope): Promise<string | undefined> {
+    const row = await this.core.sql.get(
+      "SELECT match_secret FROM coordination_match_secret WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ?",
+      [scope.tenantId, scope.eventId, scope.problemId, scope.runId],
+    );
+    if (!row) return undefined;
+    const secret = String(row.match_secret ?? "");
+    return secret.length > 0 ? secret : undefined;
+  }
+
+  /**
    * [Issue #3123] Deletes exactly this scope's row. Idempotent — a `DELETE`
    * matching nothing is a success, so a retried or half-finished teardown
    * converges rather than erroring.
@@ -101,6 +141,12 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
   async deleteCoordinationState(scope: CoordinationStateScope): Promise<void> {
     await this.core.sql.run(
       "DELETE FROM coordination_state_scoped WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ?",
+      [scope.tenantId, scope.eventId, scope.problemId, scope.runId],
+    );
+    // [Issue #3133] The secret goes with the match it belongs to, so a
+    // re-created scope cannot inherit the deleted match's hidden material.
+    await this.core.sql.run(
+      "DELETE FROM coordination_match_secret WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ?",
       [scope.tenantId, scope.eventId, scope.problemId, scope.runId],
     );
   }
@@ -118,6 +164,13 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
   async sweepExpiredCoordinationState(nowEpochSeconds: number): Promise<number> {
     const result = await this.core.sql.run(
       "DELETE FROM coordination_state_scoped WHERE expires_at > 0 AND expires_at <= ?",
+      [nowEpochSeconds],
+    );
+    // [Issue #3133] Secrets expire on the same clock as the state they belong
+    // to. Counted separately would double-count one match, so only the state
+    // rows are reported — the count is "matches reaped", not "rows deleted".
+    await this.core.sql.run(
+      "DELETE FROM coordination_match_secret WHERE expires_at > 0 AND expires_at <= ?",
       [nowEpochSeconds],
     );
     return Number(result.changes);
