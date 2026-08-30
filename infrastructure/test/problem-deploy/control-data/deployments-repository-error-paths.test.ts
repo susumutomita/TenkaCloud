@@ -490,18 +490,94 @@ describe("SqlDeploymentsScoring error paths", () => {
 });
 
 describe("SqlDeploymentsCoordination", () => {
+  /** [Issue #3123] Every port call names all four namespace dimensions. */
+  const COORD_SCOPE = {
+    tenantId: "tenant-a",
+    eventId: "e1",
+    problemId: "problem-a",
+    runId: "default",
+  } as const;
+
   it("should read undefined before any coordination state is written", async () => {
-    expect(await makeSqlRepo().readCoordinationState("tenant-a", "e1")).toBeUndefined();
+    expect(await makeSqlRepo().readCoordinationState(COORD_SCOPE)).toBeUndefined();
   });
 
   it("should roundtrip state and reject a stale version", async () => {
     const repo = makeSqlRepo();
-    const write = await repo.writeCoordinationState("tenant-a", "e1", { phase: 1 }, 0, AT);
+    const write = await repo.writeCoordinationState(COORD_SCOPE, { phase: 1 }, 0, AT, 0);
     expect(write).toEqual({ outcome: "updated" });
-    const read = await repo.readCoordinationState("tenant-a", "e1");
+    const read = await repo.readCoordinationState(COORD_SCOPE);
     expect(read).toEqual({ state: { phase: 1 }, version: 1 });
-    const stale = await repo.writeCoordinationState("tenant-a", "e1", { phase: 2 }, 0, AT);
+    const stale = await repo.writeCoordinationState(COORD_SCOPE, { phase: 2 }, 0, AT, 0);
     expect(stale).toEqual({ outcome: "conflict" });
+  });
+
+  /**
+   * [Issue #3123] The SQL mirror of the DynamoDB isolation test: one event,
+   * two problems, two runs — four independent rows, none of which sees the
+   * others' state or version.
+   */
+  it("should isolate state by problem and by run inside one event", async () => {
+    const repo = makeSqlRepo();
+    const targets = [
+      { ...COORD_SCOPE, problemId: "problem-a", runId: "run-1" },
+      { ...COORD_SCOPE, problemId: "problem-b", runId: "run-1" },
+      { ...COORD_SCOPE, problemId: "problem-a", runId: "run-2" },
+    ];
+    for (const [index, target] of targets.entries()) {
+      expect(await repo.writeCoordinationState(target, { phase: index }, 0, AT, 0)).toEqual({
+        outcome: "updated",
+      });
+    }
+    for (const [index, target] of targets.entries()) {
+      expect(await repo.readCoordinationState(target)).toEqual({
+        state: { phase: index },
+        version: 1,
+      });
+    }
+  });
+
+  /**
+   * [Issue #3123] Cleanup is idempotent and removes exactly one namespace —
+   * a retried teardown converges instead of erroring, and a sibling problem
+   * still mid-match keeps its state.
+   */
+  it("should delete one namespace idempotently without touching a sibling", async () => {
+    const repo = makeSqlRepo();
+    const doomed = { ...COORD_SCOPE, problemId: "problem-a" };
+    const survivor = { ...COORD_SCOPE, problemId: "problem-b" };
+    await repo.writeCoordinationState(doomed, { phase: 1 }, 0, AT, 0);
+    await repo.writeCoordinationState(survivor, { phase: 2 }, 0, AT, 0);
+
+    await repo.deleteCoordinationState(doomed);
+    await repo.deleteCoordinationState(doomed);
+
+    expect(await repo.readCoordinationState(doomed)).toBeUndefined();
+    expect(await repo.readCoordinationState(survivor)).toEqual({
+      state: { phase: 2 },
+      version: 1,
+    });
+  });
+
+  /**
+   * [Issue #3123] The retention backstop for a namespace no teardown ever
+   * deleted. SQLite has no native TTL, so the sweep is what reaps here; rows
+   * still inside their window, and rows written without a TTL, are left alone.
+   */
+  it("should sweep only rows whose TTL has passed", async () => {
+    const repo = makeSqlRepo();
+    const expired = { ...COORD_SCOPE, problemId: "problem-expired" };
+    const live = { ...COORD_SCOPE, problemId: "problem-live" };
+    const untimed = { ...COORD_SCOPE, problemId: "problem-untimed" };
+    await repo.writeCoordinationState(expired, { phase: 1 }, 0, AT, 1000);
+    await repo.writeCoordinationState(live, { phase: 2 }, 0, AT, 5000);
+    await repo.writeCoordinationState(untimed, { phase: 3 }, 0, AT, 0);
+
+    expect(await repo.sweepExpiredCoordinationState(2000)).toBe(1);
+
+    expect(await repo.readCoordinationState(expired)).toBeUndefined();
+    expect(await repo.readCoordinationState(live)).toMatchObject({ state: { phase: 2 } });
+    expect(await repo.readCoordinationState(untimed)).toMatchObject({ state: { phase: 3 } });
   });
 });
 

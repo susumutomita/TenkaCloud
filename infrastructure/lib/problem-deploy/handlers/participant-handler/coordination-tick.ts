@@ -8,7 +8,9 @@ import {
 import type { CoordinationConfig } from "./coordination-handler.js";
 import { loadCoordinationPlugin, type PluginImporter } from "./coordination-plugin-loader.js";
 import {
+  type CoordinationStateScope,
   type CoordinationStoreDeps,
+  DEFAULT_COORDINATION_RUN_ID,
   readCoordinationState,
   writeCoordinationState,
 } from "./coordination-store.js";
@@ -107,13 +109,16 @@ async function tickCoordinationEvent(
     );
     return false;
   }
-  const existing = await readCoordinationState(
-    deps.store,
-    target.tenantId,
-    target.eventId,
-    target.moduleRef,
-    target.moduleRef,
-  );
+  // [Issue #3123] tick も op 経路と同じ namespace を使う。 `moduleRef` は importer の key で
+  // あると同時に problemId そのもの (= `coordination/<problemId>.mjs` を引く値、
+  // `makeCoordinationScopeResolver` 参照)。 run は platform 既定の 1 run/(event, problem)。
+  const scope: CoordinationStateScope = {
+    tenantId: target.tenantId,
+    eventId: target.eventId,
+    problemId: target.moduleRef,
+    runId: DEFAULT_COORDINATION_RUN_ID,
+  };
+  const existing = await readCoordinationState(deps.store, scope);
   const ctx: CoordinationContext = { eventId: target.eventId, teamIds: [...target.teamIds] };
   const currentState = existing?.state ?? plugin.initialState(ctx);
   const version = existing?.version ?? 0;
@@ -121,16 +126,7 @@ async function tickCoordinationEvent(
   // CAPTURE_WINDOW_MS と比較)。 dispatcher は clock を持たず、 渡された値だけで純関数を回す。
   const nextState = runTick(plugin, currentState, target.eventNowMs);
   if (!coordinationStateChanged(currentState, nextState)) return false;
-  const written = await writeCoordinationState(
-    deps.store,
-    target.tenantId,
-    target.eventId,
-    nextState,
-    version,
-    nowIso,
-    target.moduleRef,
-    target.moduleRef,
-  );
+  const written = await writeCoordinationState(deps.store, scope, nextState, version, nowIso);
   if (written.kind === "conflict") {
     // 並行 op が version race に勝った (= applyOp が先に書いた)。 lost-update を作らず次 tick で
     // 最新 state を再読込して再評価する (= op 経路と同じ optimistic-lock 契約)。

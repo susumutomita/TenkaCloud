@@ -1,5 +1,9 @@
 import type { CoordinationContext } from "@tenkacloud/coordination-plugin-sdk";
 import {
+  type CoordinationStateScope,
+  DEFAULT_COORDINATION_RUN_ID,
+} from "../../control-data/domain/coordination-scope.js";
+import {
   loadAndDispatchCoordinationOp,
   loadAndProjectCoordinationForTeam,
   type PluginImporter,
@@ -25,12 +29,11 @@ import {
 
 /** route が解決した 1 回分の実行 scope。 resolveScope が null を返したら scope 不成立。 */
 export interface CoordinationScope {
-  readonly tenantId: string;
-  readonly eventId: string;
+  /**
+   * [Issue #3123] 永続化 namespace (tenant x event x problem x run)。 platform 所有。
+   */
+  readonly state: CoordinationStateScope;
   readonly teamId: string;
-  readonly problemId: string;
-  /** Stable platform run namespace. Current event deployments have one run per problem. */
-  readonly runId: string;
   /** plugin の initialState に渡す event 文脈 (= 参加チーム一覧)。 */
   readonly ctx: CoordinationContext;
   /** 問題が宣言する plugin module path (= interTeamCoordination.plugin)。 */
@@ -69,10 +72,7 @@ export async function handleCoordinationOp(
   const scope = await deps.resolveScope(teamLoginKey);
   if (!scope) return { kind: "not_configured" };
   const outcome = await loadAndDispatchCoordinationOp(deps.importer, scope.moduleRef, deps.store, {
-    tenantId: scope.tenantId,
-    eventId: scope.eventId,
-    problemId: scope.problemId,
-    runId: scope.runId,
+    scope: scope.state,
     teamId: scope.teamId,
     op,
     ctx: scope.ctx,
@@ -94,10 +94,7 @@ export async function handleCoordinationProjection(
     scope.moduleRef,
     deps.store,
     {
-      tenantId: scope.tenantId,
-      eventId: scope.eventId,
-      problemId: scope.problemId,
-      runId: scope.runId,
+      scope: scope.state,
       teamId: scope.teamId,
       ctx: scope.ctx,
       fallbackProjection: scope.fallbackProjection,
@@ -193,11 +190,17 @@ export function makeCoordinationScopeResolver(
           requesterTeamId: item.teamId,
         });
         return {
-          tenantId: item.tenantId,
-          eventId: item.eventId,
+          // [Issue #3123] runId は problemId のエイリアスにしない。 同じ値を入れると 2 つの
+          // 次元が区別できなくなり、 将来 run id が problem id と一致した瞬間に別 run の
+          // state が衝突する。 platform は現状 (event, problem) あたり 1 run しか作らないので
+          // 明示的な既定値を発行し、 run reset は「この namespace を消す」で表現する。
+          state: {
+            tenantId: item.tenantId,
+            eventId: item.eventId,
+            problemId,
+            runId: DEFAULT_COORDINATION_RUN_ID,
+          },
           teamId: item.teamId,
-          problemId,
-          runId: problemId,
           ctx: { eventId: item.eventId, teamIds },
           // moduleRef は problemId (importer の key `coordination/<id>.mjs`)。
           // plugin path は宣言の有無判定にのみ使い、 実 load は problemId-keyed bundle を引く。

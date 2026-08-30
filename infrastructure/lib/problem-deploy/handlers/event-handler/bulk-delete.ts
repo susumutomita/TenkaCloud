@@ -1,5 +1,9 @@
 import type { PutEventsRequestEntry } from "@aws-sdk/client-eventbridge";
-import type { DeploymentsLifecyclePort } from "../../control-data/deployments-repository.js";
+import type {
+  DeploymentsCoordinationPort,
+  DeploymentsLifecyclePort,
+} from "../../control-data/deployments-repository.js";
+import { DEFAULT_COORDINATION_RUN_ID } from "../../control-data/domain/coordination-scope.js";
 import { buildAdapterDependencies } from "../deploy-handler/adapter-dependencies.js";
 import { slugify } from "../deploy-handler/naming.js";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
@@ -143,6 +147,13 @@ export async function bulkTeardownEvent(
     failedJobIds.map((jobId) => compensateBulkTeardownPublish(shared, tenantId, jobId, updatedAt)),
   );
 
+  // [Issue #3123] Event cleanup owns the coordination namespaces this event
+  // created. Deployment teardown alone cannot: coordination state is shared by
+  // every team on a problem, so deleting it when ONE team's deployment goes
+  // away would wipe a match the others are still playing. The event is the
+  // first boundary at which no team is left.
+  await deleteEventCoordinationState(shared, tenantId, eventId, targets);
+
   return {
     kind: "ok",
     result: {
@@ -152,6 +163,57 @@ export async function bulkTeardownEvent(
       failed: failedJobIds.length + adapterFailed,
     },
   };
+}
+
+/**
+ * [Issue #3123] Drops the coordination state of every problem this event
+ * deployed.
+ *
+ * Deletes are issued for each distinct `problemId` among the event's
+ * deployments, not only for problems that declare a coordination plugin: this
+ * module has no `PROBLEM_COORDINATION` config (that env belongs to the
+ * participant handler), and a delete against an absent row is a no-op on both
+ * backends. Asking the config would couple event teardown to the participant
+ * Lambda's wiring to save nothing.
+ *
+ * Best-effort by design — teardown already reported which stacks it enqueued,
+ * and failing the whole call here would leave the operator unable to tell a
+ * leaked CloudFormation stack (money, real resources) from a leaked state row
+ * (bytes, and covered by the row's TTL). The failure is logged rather than
+ * swallowed, and the row's `expiresAt` backstop still reaps it.
+ */
+async function deleteEventCoordinationState(
+  shared: EventSharedResources,
+  tenantId: string,
+  eventId: string,
+  targets: readonly Partial<DeploymentItem>[],
+): Promise<void> {
+  const problemIds = new Set(
+    targets
+      .map((item) => item.problemId)
+      .filter((problemId): problemId is string => typeof problemId === "string" && !!problemId),
+  );
+  if (problemIds.size === 0) return;
+  try {
+    const repository: DeploymentsCoordinationPort = await resolveDeploymentsRepository(shared);
+    await Promise.all(
+      [...problemIds].map((problemId) =>
+        repository.deleteCoordinationState({
+          tenantId,
+          eventId,
+          problemId,
+          runId: DEFAULT_COORDINATION_RUN_ID,
+        }),
+      ),
+    );
+  } catch (err) {
+    logDeployTrace("bulk-teardown.coordination.cleanup-failed", {
+      tenantId,
+      eventId,
+      problemIds: [...problemIds].join(","),
+      reason: err instanceof Error ? err.message : String(err),
+    });
+  }
 }
 
 /**

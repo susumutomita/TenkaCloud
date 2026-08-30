@@ -118,7 +118,9 @@ describe("handleCoordinationTickBatch", () => {
       batch([capTarget()]),
     );
     expect(res).toEqual({ ticked: 1, written: 1 });
-    expect(ddb.puts).toEqual([{ PK: "COORD#t1#e1", state: { phase: "locked" }, version: 3 }]);
+    expect(ddb.puts).toEqual([
+      { PK: "COORD#t1#e1#cap#default", state: { phase: "locked" }, version: 3 },
+    ]);
   });
 
   it("should NOT write when the tick is a no-op (before the window)", async () => {
@@ -148,7 +150,9 @@ describe("handleCoordinationTickBatch", () => {
       depsWith(importerOf(windowPlugin), ddb.store),
       batch([capTarget()]),
     );
-    expect(ddb.puts).toEqual([{ PK: "COORD#t1#e1", state: { phase: "locked" }, version: 1 }]);
+    expect(ddb.puts).toEqual([
+      { PK: "COORD#t1#e1#cap#default", state: { phase: "locked" }, version: 1 },
+    ]);
   });
 
   it("should skip a target whose problemId does not declare coordination (config gate, no load/read)", async () => {
@@ -189,7 +193,7 @@ describe("handleCoordinationTickBatch", () => {
     const send = vi.fn(async (cmd: unknown) => {
       if (cmd instanceof GetCommand) {
         const key = (cmd.input as { Key: { PK: string } }).Key.PK;
-        if (key === "COORD#t1#e1") throw new Error("get boom");
+        if (key === "COORD#t1#e1#cap#default") throw new Error("get boom");
         return { Item: { state: { phase: "open" }, version: 0 } };
       }
       if (cmd instanceof PutCommand) {
@@ -209,7 +213,7 @@ describe("handleCoordinationTickBatch", () => {
     );
     expect(res.ticked).toBe(2);
     expect(res.written).toBe(1);
-    expect(puts).toEqual(["COORD#t1#e2"]);
+    expect(puts).toEqual(["COORD#t1#e2#cap#default"]);
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining("tick failed event=e1"),
       expect.anything(),

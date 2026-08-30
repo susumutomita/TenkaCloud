@@ -54,9 +54,20 @@ export function parseCoordinationProblemIds(raw: string | undefined): Set<string
 }
 
 /**
- * scan 1 ページの deployment 群から tick 対象を event 単位で収集する (= 集約)。 coordination を宣言した
- * 問題の COMPLETE deployment を `${tenantId}#${eventId}` で dedupe し、 未開始 event (= `eventStartsAt`
+ * scan 1 ページの deployment 群から tick 対象を (event, problem) 単位で収集する (= 集約)。
+ * coordination を宣言した問題の COMPLETE deployment を dedupe し、 未開始 event (= `eventStartsAt`
  * 不在 / 未来) は `isScoringActive` と同じ start gate で除外する。
+ *
+ * [Issue #3123] dedupe key は以前 `${tenantId}#${eventId}` だった。 1 event が coordination 問題を
+ * 2 つ deploy すると、
+ *
+ *   1. 先に見つかった問題の target だけが残り、 2 つ目は tick 対象から黙って落ちる
+ *      (= 契約が発行されず、 phase も進まず、 試合が終わらない)。
+ *   2. さらに 2 つ目の問題のチームが 1 つ目の `teamIds` に merge され、 その roster で
+ *      `initialState` が組まれる (= その問題を遊んでいないチームが state に現れる)。
+ *
+ * key に problem を含めることが、 state を namespace 分割した #3123 の tick 側の対。 片方だけでは
+ * 「state は分かれているが時計は 1 つ」 という状態になる。
  */
 export function collectCoordinationTickTargets(
   coordinationProblemIds: ReadonlySet<string>,
@@ -68,7 +79,9 @@ export function collectCoordinationTickTargets(
   for (const item of items) {
     const candidate = toTickCandidate(coordinationProblemIds, item, nowIso);
     if (!candidate) continue;
-    const key = `${candidate.tenantId}#${candidate.eventId}`;
+    // JSON 配列 key: `#` 連結だと、 `#` を含む id (= 現状の validation では起きないが、 key builder
+    // 側と同じ理由で不変条件に依存しない) が別 namespace と衝突しうる。
+    const key = JSON.stringify([candidate.tenantId, candidate.eventId, candidate.moduleRef]);
     const existing = out.get(key);
     if (existing) {
       if (!existing.teamIds.includes(candidate.teamId)) existing.teamIds.push(candidate.teamId);

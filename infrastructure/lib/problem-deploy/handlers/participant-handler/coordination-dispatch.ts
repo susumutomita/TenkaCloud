@@ -4,6 +4,7 @@ import {
   dispatchOp,
   safeProjectForTeam,
 } from "@tenkacloud/coordination-plugin-sdk";
+import type { CoordinationStateScope } from "../../control-data/domain/coordination-scope.js";
 import {
   type CoordinationStoreDeps,
   readCoordinationState,
@@ -21,10 +22,12 @@ import {
 
 /** dispatch 1 回の文脈。 route が team-login-key 認証 + event scope を解決して渡す。 */
 export interface CoordinationDispatchInput<Op> {
-  readonly tenantId: string;
-  readonly eventId: string;
-  readonly problemId: string;
-  readonly runId: string;
+  /**
+   * [Issue #3123] 永続化 namespace (tenant x event x problem x run)。 platform が所有し、
+   * plugin へは渡さない。 4 つの同型 string を個別引数で運ぶと取り違えが型検査を通ってしまうため、
+   * store まで 1 つの object のまま持ち回る。
+   */
+  readonly scope: CoordinationStateScope;
   readonly teamId: string;
   readonly op: Op;
   /** plugin が初期化に使う event 文脈 (= 参加チーム一覧)。 */
@@ -41,11 +44,11 @@ export type CoordinationDispatchOutcome =
 
 /** ctx.eventId が永続化 key (eventId) と一致し、 認証 team が ctx.teamIds に含まれるか。 */
 function isContextConsistent(input: {
-  readonly eventId: string;
+  readonly scope: CoordinationStateScope;
   readonly teamId: string;
   readonly ctx: CoordinationContext;
 }): boolean {
-  return input.ctx.eventId === input.eventId && input.ctx.teamIds.includes(input.teamId);
+  return input.ctx.eventId === input.scope.eventId && input.ctx.teamIds.includes(input.teamId);
 }
 
 /**
@@ -64,13 +67,7 @@ export async function dispatchCoordinationOp<State, Op, Projection>(
   // 別 event 用に組んだ state を保存 / 配信してしまう。 read/write 前に fail-closed で弾く。
   if (!isContextConsistent(input)) return { kind: "rejected", error: "context_mismatch" };
 
-  const existing = await readCoordinationState(
-    store,
-    input.tenantId,
-    input.eventId,
-    input.problemId,
-    input.runId,
-  );
+  const existing = await readCoordinationState(store, input.scope);
   const state = (existing?.state as State) ?? plugin.initialState(input.ctx);
   const version = existing?.version ?? 0;
 
@@ -79,13 +76,10 @@ export async function dispatchCoordinationOp<State, Op, Projection>(
 
   const written = await writeCoordinationState(
     store,
-    input.tenantId,
-    input.eventId,
+    input.scope,
     verdict.state,
     version,
     input.nowIso,
-    input.problemId,
-    input.runId,
   );
   if (written.kind === "conflict") return { kind: "conflict" };
 
@@ -106,10 +100,7 @@ export async function projectCoordinationForTeam<State, Op, Projection>(
   store: CoordinationStoreDeps,
   plugin: CoordinationPlugin<State, Op, Projection>,
   input: {
-    readonly tenantId: string;
-    readonly eventId: string;
-    readonly problemId: string;
-    readonly runId: string;
+    readonly scope: CoordinationStateScope;
     readonly teamId: string;
     readonly ctx: CoordinationContext;
     readonly fallbackProjection: unknown;
@@ -117,13 +108,7 @@ export async function projectCoordinationForTeam<State, Op, Projection>(
 ): Promise<unknown> {
   // ctx 不整合 (= 別 event 用 ctx / team が event 外) は fail-closed で fallback を返す (= 機密非漏洩)。
   if (!isContextConsistent(input)) return input.fallbackProjection;
-  const existing = await readCoordinationState(
-    store,
-    input.tenantId,
-    input.eventId,
-    input.problemId,
-    input.runId,
-  );
+  const existing = await readCoordinationState(store, input.scope);
   const state = (existing?.state as State) ?? plugin.initialState(input.ctx);
   return safeProjectForTeam(plugin, state, input.teamId, input.fallbackProjection as Projection);
 }

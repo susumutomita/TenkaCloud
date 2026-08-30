@@ -1,4 +1,5 @@
 import type { CoordinationContext, CoordinationPlugin } from "@tenkacloud/coordination-plugin-sdk";
+import type { CoordinationStateScope } from "../../control-data/domain/coordination-scope.js";
 import {
   type CoordinationDispatchInput,
   type CoordinationDispatchOutcome,
@@ -87,10 +88,7 @@ export async function loadAndProjectCoordinationForTeam(
   moduleRef: string,
   store: CoordinationStoreDeps,
   input: {
-    readonly tenantId: string;
-    readonly eventId: string;
-    readonly problemId: string;
-    readonly runId: string;
+    readonly scope: CoordinationStateScope;
     readonly teamId: string;
     readonly ctx: CoordinationContext;
     readonly fallbackProjection: unknown;

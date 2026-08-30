@@ -1,10 +1,13 @@
 import { DeleteCommand, GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import type { CoordinationStateScope } from "./domain/coordination-scope.js";
 import {
   COORD_STATE_SK,
   coordinationPk,
   type DynamoDbDeploymentsCore,
   isConditionalCheckFailed,
+  preScopeCoordinationPk,
 } from "./dynamodb-deployments-core.js";
+import { sweepExpiredRows } from "./dynamodb-ttl-sweep.js";
 import type {
   CoordinationStateRecord,
   DeploymentMutationOutcome,
@@ -16,6 +19,10 @@ import type {
  * moved verbatim from the pre-split `DynamoDbDeploymentsRepository`. Engine
  * primitives (keys, conditional writes, pagination) live on
  * {@link DynamoDbDeploymentsCore}.
+ *
+ * [Issue #3123] Every method now takes a whole {@link CoordinationStateScope};
+ * the partition key carries problem and run, so two problems (or two runs)
+ * inside one event no longer share a row.
  */
 export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationPort {
   constructor(private readonly core: DynamoDbDeploymentsCore) {}
@@ -23,15 +30,12 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
   // -- COORD#: coordination state -----------------------------------------
 
   async readCoordinationState(
-    tenantId: string,
-    eventId: string,
-    problemId = "legacy",
-    runId = "legacy",
+    scope: CoordinationStateScope,
   ): Promise<CoordinationStateRecord | undefined> {
     const out = await this.core.ddb.send(
       new GetCommand({
         TableName: this.core.tableName,
-        Key: { PK: coordinationPk(tenantId, eventId, problemId, runId), SK: COORD_STATE_SK },
+        Key: { PK: coordinationPk(scope), SK: COORD_STATE_SK },
       }),
     );
     const item = out.Item as Record<string, unknown> | undefined;
@@ -45,26 +49,31 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
    * `ConditionalCheckFailedException` catch folds into `{ outcome: "conflict" }`
    * instead of throwing (A2/B2 union contract). Never `not_found`: an absent
    * row is a valid target for the first write (`expectedVersion` 0).
+   *
+   * [Issue #3123] `expiresAt` rides the same Put so the row picks up the
+   * deployments table's native TTL (`deployments-table.ts`
+   * `timeToLiveAttribute: "expiresAt"`). It is refreshed on every write, so a
+   * live match never expires under itself and an abandoned namespace drops on
+   * its own even if no teardown ever deletes it.
    */
   async writeCoordinationState(
-    tenantId: string,
-    eventId: string,
+    scope: CoordinationStateScope,
     state: unknown,
     expectedVersion: number,
     at: string,
-    problemId = "legacy",
-    runId = "legacy",
+    expiresAt: number,
   ): Promise<DeploymentMutationOutcome> {
     try {
       await this.core.ddb.send(
         new PutCommand({
           TableName: this.core.tableName,
           Item: {
-            PK: coordinationPk(tenantId, eventId, problemId, runId),
+            PK: coordinationPk(scope),
             SK: COORD_STATE_SK,
             state,
             version: expectedVersion + 1,
             updatedAt: at,
+            expiresAt,
           },
           ConditionExpression: "attribute_not_exists(version) OR version = :expected",
           ExpressionAttributeValues: { ":expected": expectedVersion },
@@ -77,17 +86,45 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
     }
   }
 
-  async deleteCoordinationState(
-    tenantId: string,
-    eventId: string,
-    problemId: string,
-    runId: string,
-  ): Promise<void> {
+  /**
+   * [Issue #3123] Deletes this scope's row, plus the pre-scope
+   * `COORD#<tenant>#<event>` row for the same event.
+   *
+   * The second delete is how an orphaned pre-#3123 row leaves the table: those
+   * rows predate `expiresAt`, so DynamoDB's TTL will never reap them, and
+   * nothing reads them any more. Both deletes are unconditional — DynamoDB
+   * `DeleteItem` on an absent key succeeds — which is what makes a retried or
+   * half-finished teardown converge instead of erroring.
+   */
+  async deleteCoordinationState(scope: CoordinationStateScope): Promise<void> {
     await this.core.ddb.send(
       new DeleteCommand({
         TableName: this.core.tableName,
-        Key: { PK: coordinationPk(tenantId, eventId, problemId, runId), SK: COORD_STATE_SK },
+        Key: { PK: coordinationPk(scope), SK: COORD_STATE_SK },
       }),
     );
+    await this.core.ddb.send(
+      new DeleteCommand({
+        TableName: this.core.tableName,
+        Key: { PK: preScopeCoordinationPk(scope.tenantId, scope.eventId), SK: COORD_STATE_SK },
+      }),
+    );
+  }
+
+  /**
+   * [Issue #3123] Duplicates what the table's native TTL already does, so the
+   * SQLite backend (no native TTL) can reach the same end state through the
+   * same port method. Filters on `begins_with(PK, "COORD#")` so it only ever
+   * touches coordination rows — the deployments table holds several other PK
+   * prefixes whose retention is not this port's business.
+   */
+  async sweepExpiredCoordinationState(nowEpochSeconds: number): Promise<number> {
+    return sweepExpiredRows({
+      ddb: this.core.ddb,
+      tableName: this.core.tableName,
+      nowEpochSeconds,
+      filterExpression: "begins_with(PK, :coordPrefix) AND expiresAt > :zero AND expiresAt <= :now",
+      expressionAttributeValues: { ":coordPrefix": "COORD#" },
+    });
   }
 }

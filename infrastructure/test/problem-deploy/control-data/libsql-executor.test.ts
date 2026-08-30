@@ -80,7 +80,7 @@ describe("LibsqlExecutor", () => {
     expect(batch).toHaveBeenCalledTimes(1);
     const [statements, mode] = batch.mock.calls[0] ?? [];
     expect(mode).toBe("write");
-    expect(statements).toHaveLength(33);
+    expect(statements).toHaveLength(36);
     expect(statements.map((entry: { sql: string }) => entry.sql)).toEqual(
       expect.arrayContaining([
         expect.stringContaining("CREATE TABLE IF NOT EXISTS events"),
@@ -91,7 +91,14 @@ describe("LibsqlExecutor", () => {
         expect.stringContaining("idx_deployments_login_key_hash"),
         expect.stringContaining("idx_deployments_parent_deployment"),
         expect.stringContaining("CREATE TABLE IF NOT EXISTS deployment_score_events"),
-        expect.stringContaining("CREATE TABLE IF NOT EXISTS coordination_state"),
+        // [Issue #3123] The coordination table is now keyed by
+        // tenant x event x problem x run. The legacy table is still created,
+        // copied from, and dropped in the same batch so the migration is
+        // idempotent on every cold start — assert all four statements ship.
+        expect.stringContaining("CREATE TABLE IF NOT EXISTS coordination_state ("),
+        expect.stringContaining("CREATE TABLE IF NOT EXISTS coordination_state_scoped"),
+        expect.stringContaining("INSERT OR IGNORE INTO coordination_state_scoped"),
+        expect.stringContaining("DROP TABLE IF EXISTS coordination_state"),
         expect.stringContaining("idx_teams_login_key_hash"),
         expect.stringContaining("json_remove(payload, '$.teamLoginKey')"),
         expect.stringContaining("CREATE TABLE IF NOT EXISTS control_data_migrations"),

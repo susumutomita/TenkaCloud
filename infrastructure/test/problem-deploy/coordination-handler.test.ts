@@ -36,8 +36,10 @@ const counter: CoordinationPlugin<CounterState, CounterOp, { count: number }> = 
 };
 
 const scope: CoordinationScope = {
-  tenantId: "tn1",
-  eventId: "e1",
+  // [Issue #3123] The platform-owned persistence namespace, carried as one
+  // object so a transposed argument cannot land on a valid-looking wrong
+  // partition.
+  state: { tenantId: "tn1", eventId: "e1", problemId: "p1", runId: "default" },
   teamId: "t1",
   ctx: { eventId: "e1", teamIds: ["t1", "t2"] },
   moduleRef: "coordination/alliance.ts",
@@ -148,13 +150,48 @@ describe("makeCoordinationScopeResolver", () => {
       config,
     );
     expect(await resolve("key")).toEqual({
-      tenantId: "tn1",
-      eventId: "e1",
+      // [Issue #3123] `runId` is NOT an alias of `problemId`: aliasing them
+      // would make the two key dimensions indistinguishable, and would collide
+      // the moment a real run id ever equalled a problem id. The platform
+      // issues one run per (event, problem) today, so the resolver emits the
+      // documented default and resetting a run is expressed as deleting the
+      // namespace.
+      state: { tenantId: "tn1", eventId: "e1", problemId: "p1", runId: "default" },
       teamId: "t1",
       ctx: { eventId: "e1", teamIds: ["t1"] },
       // moduleRef は problemId (= importer の S3 key `coordination/<id>.mjs`)。
       moduleRef: "p1",
       fallbackProjection: {},
+    });
+  });
+
+  /**
+   * [Issue #3123] Two teams on DIFFERENT coordination problems in the same
+   * event must resolve to different persistence namespaces. Before the key
+   * carried `problemId` they shared one row, so whichever problem wrote last
+   * overwrote the other's match.
+   */
+  it("should resolve a distinct namespace per problem in one event", async () => {
+    const resolveP1 = makeCoordinationScopeResolver(
+      fakeShared([{ tenantId: "tn1", eventId: "e1", teamId: "t1", problemId: "p1" }]),
+      { p1: { plugin: "coordination/p1.ts" }, p2: { plugin: "coordination/p2.ts" } },
+    );
+    const resolveP2 = makeCoordinationScopeResolver(
+      fakeShared([{ tenantId: "tn1", eventId: "e1", teamId: "t9", problemId: "p2" }]),
+      { p1: { plugin: "coordination/p1.ts" }, p2: { plugin: "coordination/p2.ts" } },
+    );
+
+    expect((await resolveP1("key"))?.state).toEqual({
+      tenantId: "tn1",
+      eventId: "e1",
+      problemId: "p1",
+      runId: "default",
+    });
+    expect((await resolveP2("key"))?.state).toEqual({
+      tenantId: "tn1",
+      eventId: "e1",
+      problemId: "p2",
+      runId: "default",
     });
   });
 
