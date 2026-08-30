@@ -44,6 +44,9 @@ const scope: CoordinationScope = {
   ctx: { eventId: "e1", teamIds: ["t1", "t2"] },
   moduleRef: "coordination/alliance.ts",
   fallbackProjection: { count: -1 },
+  // [Issue #3123] The event window the op path checks. Open here: started an
+  // hour before the tests' `nowIso`, with no end.
+  window: { eventStartsAt: "2026-05-31T23:00:00Z" },
 };
 
 function fakeStore(getItem?: Record<string, unknown>): CoordinationStoreDeps {
@@ -86,6 +89,56 @@ describe("handleCoordinationOp", () => {
   it("should load the plugin and apply a valid op", async () => {
     const out = await handleCoordinationOp(deps(), "key", { kind: "inc" }, "2026-06-01T00:00:00Z");
     expect(out).toEqual({ kind: "ok", projection: { count: 1 } });
+  });
+
+  /**
+   * [Issue #3123] A finished event's deployment rows stay `COMPLETE` until
+   * teardown, so a status-only guard would let participants keep mutating an
+   * ended match -- and every write refreshes `expiresAt`, so retention would
+   * never start. The tick stops at the same predicate; the op path has to agree
+   * or the two disagree about when a match is over.
+   */
+  it.each([
+    [
+      "an explicit eventEndsAt in the past",
+      { eventStartsAt: "2026-05-31T23:00:00Z", eventEndsAt: "2026-05-31T23:30:00Z" },
+    ],
+    // #1421: a round with no end still terminates at start + 30 days.
+    ["the liveness cap with no eventEndsAt", { eventStartsAt: "2026-04-01T00:00:00Z" }],
+    ["an event that has not started", { eventStartsAt: "2026-06-01T09:00:00Z" }],
+  ])("should reject an op for %s", async (_label, window) => {
+    const store = fakeStore();
+    const out = await handleCoordinationOp(
+      { importer: importerOf(counter), store, resolveScope: async () => ({ ...scope, window }) },
+      "key",
+      { kind: "inc" },
+      "2026-06-01T00:00:00Z",
+    );
+
+    expect(out).toEqual({ kind: "rejected", error: "event_ended" });
+    // The op must not reach the store at all: no read, and above all no write
+    // that would push the TTL out.
+    expect(store.ddb.send).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Reads stay open after the event ends. A projection moves neither state nor
+   * TTL, and refusing it would break the post-event review for no gain.
+   */
+  it("should still serve a projection after the event has ended", async () => {
+    const out = await handleCoordinationProjection(
+      {
+        importer: importerOf(counter),
+        store: fakeStore({ state: { count: 3 }, version: 1 }),
+        resolveScope: async () => ({
+          ...scope,
+          window: { eventStartsAt: "2026-05-31T23:00:00Z", eventEndsAt: "2026-05-31T23:30:00Z" },
+        }),
+      },
+      "key",
+    );
+
+    expect(out).toEqual({ kind: "ok", projection: { count: 3 } });
   });
 
   it("should surface the plugin's rejection for an invalid op", async () => {
@@ -146,7 +199,16 @@ describe("makeCoordinationScopeResolver", () => {
 
   it("should resolve a scope when the team's problem declares coordination", async () => {
     const resolve = makeCoordinationScopeResolver(
-      fakeShared([{ tenantId: "tn1", eventId: "e1", teamId: "t1", problemId: "p1" }]),
+      fakeShared([
+        {
+          tenantId: "tn1",
+          eventId: "e1",
+          teamId: "t1",
+          problemId: "p1",
+          eventStartsAt: "2026-05-31T23:00:00Z",
+          eventEndsAt: "2026-06-01T09:00:00Z",
+        },
+      ]),
       config,
     );
     expect(await resolve("key")).toEqual({
@@ -162,6 +224,9 @@ describe("makeCoordinationScopeResolver", () => {
       // moduleRef は problemId (= importer の S3 key `coordination/<id>.mjs`)。
       moduleRef: "p1",
       fallbackProjection: {},
+      // [Issue #3123] The denormalized event window travels with the scope so
+      // the op path can refuse a finished match without a second read.
+      window: { eventStartsAt: "2026-05-31T23:00:00Z", eventEndsAt: "2026-06-01T09:00:00Z" },
     });
   });
 

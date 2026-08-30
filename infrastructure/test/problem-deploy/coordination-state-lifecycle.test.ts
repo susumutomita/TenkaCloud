@@ -408,6 +408,62 @@ describe("event teardown cleans up coordination state (#3123)", () => {
   });
 
   /**
+   * [Issue #3123] Not every skip means "already gone". `prepareBulkTeardownEntry`
+   * also skips a row with no usable teardown target, one whose `DELETING`
+   * transition was lost, and an adapter row with no SSM wiring -- all of which
+   * leave the deployment `PENDING` / `COMPLETE` / `FAILED`, which
+   * `canSubmitCoordination` still permits. Deleting the shared namespace under
+   * one of those drops a match the participant can still reach.
+   */
+  it("should defer the cleanup when a skip left a deployment still live", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Item: { eventId: "EV1", tenantId: "tenant-acme" } });
+    // No `namePrefix`, so `getBulkTeardownTarget` yields nothing and the row is
+    // skipped while still COMPLETE.
+    ddbSend.mockResolvedValueOnce({
+      Items: [dep({ jobId: "01A", namePrefix: undefined })],
+    });
+    ddbSend.mockResolvedValue({});
+
+    const out = await bulkTeardownEvent(shared, "tenant-acme", "EV1", NOW_MS);
+
+    expect(out).toEqual({
+      kind: "ok",
+      result: { eventId: "EV1", enqueued: 0, skipped: 1, failed: 0 },
+    });
+    expect(ddbSend.mock.calls.map((c) => c[0]).some((c) => c instanceof DeleteCommand)).toBe(false);
+  });
+
+  /**
+   * The retry path, which is the whole reason deferring is safe: on a second
+   * teardown every row reads `DELETING` / `DELETED`, so every skip is
+   * deleted-like and the namespaces are finally removed.
+   */
+  it("should clean up when every skip is a row that is already deleted", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Item: { eventId: "EV1", tenantId: "tenant-acme" } });
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        dep({ jobId: "01A", status: "DELETING" }),
+        dep({ jobId: "01B", status: "DELETED", namePrefix: "tc-a-t2" }),
+      ],
+    });
+    ddbSend.mockResolvedValue({});
+
+    const out = await bulkTeardownEvent(shared, "tenant-acme", "EV1", NOW_MS);
+
+    expect(out).toEqual({
+      kind: "ok",
+      result: { eventId: "EV1", enqueued: 0, skipped: 2, failed: 0 },
+    });
+    const deleted = ddbSend.mock.calls
+      .map((c) => c[0])
+      .filter((c): c is DeleteCommand => c instanceof DeleteCommand)
+      .map((c) => c.input.Key?.PK);
+    expect(deleted).toContain("COORD#tenant-acme#EV1#problem-a#default");
+  });
+
+  /**
    * `Promise.allSettled`, not `Promise.all`. A Lambda freezes its execution
    * environment the moment the handler returns, so a delete still in flight
    * when a sibling rejected would simply never finish -- a namespace whose own

@@ -4,6 +4,8 @@ import {
   DEFAULT_COORDINATION_RUN_ID,
 } from "../../control-data/domain/coordination-scope.js";
 import type { DeploymentStatus } from "../deploy-handler/types.js";
+import type { RoundWindow } from "../generic-scoring-handler/round-liveness.js";
+import { isScoringActive } from "../generic-scoring-handler/scoring-active.js";
 import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
 import {
   loadAndDispatchCoordinationOp,
@@ -42,6 +44,12 @@ export interface CoordinationScope {
   readonly moduleRef: string;
   /** projection 失敗 / 未初期化時に返す安全な既定 (= 他 team の機密を出さない)。 */
   readonly fallbackProjection: unknown;
+  /**
+   * [Issue #3123] deployment 行に denormalize された event の開始 / 終了。 op 経路が
+   * `isScoringActive` で終端を判定するために持つ (= 追加 read 無し。 resolver は clock を
+   * 持たないので、 判定は nowIso を持つ handler 側で行う)。
+   */
+  readonly window: RoundWindow;
 }
 
 export interface CoordinationHandlerDeps {
@@ -73,6 +81,13 @@ export async function handleCoordinationOp(
 ): Promise<CoordinationHandlerOutcome> {
   const scope = await deps.resolveScope(teamLoginKey);
   if (!scope) return { kind: "not_configured" };
+  // [Issue #3123] 終了した event の試合は書き換えられない。 status だけを見ていると、
+  // `endEvent` が `eventEndsAt` を刻んだ後も deployment 行は `COMPLETE` のまま残るため、
+  // 参加者が終わった試合を変更でき、 さらに write のたびに `expiresAt` が更新されて
+  // retention が始まらない (= tick 側を `isScoringActive` で止めた意味が消える)。
+  // 判定は tick collector と同一の predicate。 projection (read) は素通しする —
+  // 読むだけなら TTL も state も動かないし、 event 後の振り返りを壊す理由がない。
+  if (!isScoringActive(scope.window, nowIso)) return { kind: "rejected", error: "event_ended" };
   const outcome = await loadAndDispatchCoordinationOp(deps.importer, scope.moduleRef, deps.store, {
     scope: scope.state,
     teamId: scope.teamId,
@@ -237,6 +252,7 @@ export function makeCoordinationScopeResolver(
           },
           teamId: item.teamId,
           ctx: { eventId: item.eventId, teamIds },
+          window: { eventStartsAt: item.eventStartsAt, eventEndsAt: item.eventEndsAt },
           // moduleRef は problemId (importer の key `coordination/<id>.mjs`)。
           // plugin path は宣言の有無判定にのみ使い、 実 load は problemId-keyed bundle を引く。
           moduleRef: problemId,

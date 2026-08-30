@@ -57,7 +57,15 @@ export type BulkTeardownOutcome =
  */
 type UpdateOutcome =
   | { entry: PutEventsRequestEntry; jobId: string }
-  | { skip: true }
+  /**
+   * [Issue #3123] `deletedLike` separates the two very different reasons a row
+   * is skipped. A row already `DELETING` / `DELETED` is finished — a retried
+   * teardown sees every row that way, and that retry is exactly when the
+   * coordination cleanup must run. Every other skip leaves a row that is still
+   * `PENDING` / `COMPLETE` / `FAILED`, i.e. one a participant can still submit
+   * through, so the shared namespace must not be deleted under it.
+   */
+  | { skip: true; deletedLike?: true }
   | { adapterEnqueued: string }
   | { adapterFailed: string };
 
@@ -113,9 +121,14 @@ export async function bulkTeardownEvent(
   // rather than riding the EventBridge publish batch below.
   let adapterEnqueued = 0;
   let adapterFailed = 0;
+  // [Issue #3123] Skips that left a row still live, as opposed to a row that
+  // was already gone. Only the first kind blocks the coordination cleanup.
+  let activeSkipped = 0;
   for (const o of outcomes) {
-    if ("skip" in o) skipped++;
-    else if ("adapterEnqueued" in o) adapterEnqueued++;
+    if ("skip" in o) {
+      skipped++;
+      if (!o.deletedLike) activeSkipped++;
+    } else if ("adapterEnqueued" in o) adapterEnqueued++;
     else if ("adapterFailed" in o) adapterFailed++;
     else pending.push(o);
   }
@@ -153,20 +166,31 @@ export async function bulkTeardownEvent(
   // away would wipe a match the others are still playing. The event is the
   // first boundary at which no team is left.
   //
-  // Only once every target committed, though. A failed publish or adapter
-  // teardown is compensated back to `FAILED` for the operator to retry, and a
-  // `FAILED` deployment still resolves a coordination scope — so deleting here
-  // would drop the match state while the problem is still reachable, letting
-  // the next op recreate the namespace from `initialState` before the retry
-  // even runs. The retry calls this same path, so the namespaces are deleted
-  // then; if no retry ever comes, the row's `expiresAt` reaps it.
-  if (failedJobIds.length === 0 && adapterFailed === 0) {
+  // Only once every target is actually gone, though. Three things leave a
+  // deployment live after this call, and all three still resolve a coordination
+  // scope (`canSubmitCoordination` filters only deleted-like statuses):
+  //
+  //   - a failed publish, compensated `DELETING` -> `FAILED` for the operator
+  //     to retry,
+  //   - a failed adapter teardown, compensated the same way,
+  //   - a skip that was not "already deleted" — a row with no usable teardown
+  //     target, a lost `DELETING` transition, or an adapter row whose SSM
+  //     wiring is absent.
+  //
+  // Deleting the shared namespace in any of those cases drops the match state
+  // while the problem is still reachable, and the next op rebuilds it from
+  // `initialState` before the retry even runs. The retry calls this same path —
+  // and by then those rows read as deleted-like, so it does clean up. If no
+  // retry ever comes, the row's `expiresAt` reaps it.
+  const uncommitted = failedJobIds.length + adapterFailed + activeSkipped;
+  if (uncommitted === 0) {
     await deleteEventCoordinationState(shared, tenantId, eventId, targets);
   } else {
     logDeployTrace("bulk-teardown.coordination.cleanup-deferred", {
       tenantId,
       eventId,
       failed: String(failedJobIds.length + adapterFailed),
+      activeSkipped: String(activeSkipped),
     });
   }
 
@@ -277,7 +301,7 @@ async function prepareBulkTeardownEntry(
   item: Partial<DeploymentItem>,
 ): Promise<UpdateOutcome> {
   const status = (item.status ?? "PENDING") as DeploymentStatus;
-  if (status === "DELETING" || status === "DELETED") return { skip: true };
+  if (status === "DELETING" || status === "DELETED") return { skip: true, deletedLike: true };
 
   // [#2571] Non-AWS runtime (sakura/azure/gcp) rows never carry a region /
   // awsAccountId CFn can act on (both persisted as "", #2571 plan-builder) —
