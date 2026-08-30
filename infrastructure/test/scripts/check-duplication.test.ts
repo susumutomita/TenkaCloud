@@ -31,7 +31,7 @@ describe("areaOf", () => {
   it("should map everything else to its top-level directory", () => {
     expect(areaOf("infrastructure/lib/app-config/resolve.ts")).toBe("infrastructure");
     expect(areaOf("scripts/local-play/api.ts")).toBe("scripts");
-    expect(areaOf(".claude/harness/src/rules/index.ts")).toBe(".claude");
+    expect(areaOf(".github/workflows/ci.yml")).toBe(".github");
   });
 });
 

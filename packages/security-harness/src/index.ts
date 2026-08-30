@@ -3,7 +3,7 @@
  * deterministic run state machine / verdict engine for TenkaCloud's independent-verification
  * security drill harness.
  *
- * Scope of this package (see `docs/architecture/decisions/0001-security-harness-trust-boundary.md`):
+ * Scope of this package:
  *   - the `SecurityHarnessDefinition` / `FindingEvidence` / `PatchEvaluation` wire contracts;
  *   - the `SecurityRun` state machine (`transitionSecurityRun`), pure and idempotent;
  *   - the `http-sequence` witness schema, validator, and executor;

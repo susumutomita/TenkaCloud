@@ -5,7 +5,7 @@ PR title: merged titles become the generated Release notes, so say what changed 
 (The automated pr-title workflow that used to reject these at Issue #3024 AC11 was removed;
 this is self-enforced now.)
 
-This template is intended to satisfy the PR Discipline invariants enforced by .claude/harness by enforcing a consistent structure.
+This template keeps PR bodies to a consistent structure.
 If a section cannot be completed, reconsider the PR scope or keep the PR in DRAFT.
 
 Reference: https://zenn.dev/nttdata_tech/articles/8a010aff542625

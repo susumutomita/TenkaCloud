@@ -82,7 +82,6 @@ jobs:
       # sideways (the ping-pong where an old-pin branch reverts a newer pin, e.g. #1927).
       # Pull-request checkout does not guarantee origin/main or full submodule history, so fetch
       # both first (the superproject is full-depth for the release-manifest tag/gitlink gate).
-      # 品質ゲートは本体と分離し .claude/skills/quality-gates へ移設済み (runner を直接呼ぶ)。
       - name: Submodule pin guard (problems must not roll back)
         run: |
           git fetch --no-tags origin main:refs/remotes/origin/main

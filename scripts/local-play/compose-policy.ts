@@ -11,7 +11,7 @@ import { safeLoad } from "js-yaml";
  * (`port-remap.ts`, which preserves everything else byte-for-byte). A malicious or compromised
  * catalog Compose file could therefore declare `privileged: true`, mount the Docker socket,
  * join a host namespace, or bind-mount an arbitrary host path, and nothing in local play would
- * refuse to start it — see docs/architecture/decisions/0003-local-runtime-trust-boundary.md for
+ * refuse to start it — see the compose trust table for
  * the full threat model this closes.
  *
  * This is Phase A of that ADR: a raw-YAML structural validator wired in front of the *existing*
@@ -156,7 +156,7 @@ export function resolveStaticDefaults(text: string): StaticResolution {
 // ---------------------------------------------------------------------------
 
 export interface ComposePolicyViolation {
-  /** Stable machine-readable rule id (see docs/architecture/decisions/0003 §12 fixture names). */
+  /** Stable machine-readable rule id . */
   readonly rule: string;
   readonly message: string;
 }
