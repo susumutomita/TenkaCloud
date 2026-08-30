@@ -85,6 +85,48 @@ describe("collectCoordinationTickTargets", () => {
     expect(out.size).toBe(0);
   });
 
+  /**
+   * [Issue #3123] The tick is what keeps a namespace's TTL alive, so it has to
+   * stop when the event does. A finished event's deployment rows stay
+   * `COMPLETE` until teardown, so gating on `eventStartsAt` alone kept ticking
+   * a match that was already over -- extending its retention forever, and
+   * advancing the state of any plugin that implements `tick` after scoring had
+   * stopped. The gate is `isScoringActive`, the same predicate the scoring pass
+   * uses.
+   */
+  it("should skip an event that has reached its explicit end", () => {
+    const out = new Map<string, CollectedTickTarget>();
+    collectCoordinationTickTargets(
+      IDS,
+      [{ ...baseItem(), eventEndsAt: "2026-06-01T00:30:00.000Z" }],
+      out,
+      NOW,
+    );
+    expect(out.size).toBe(0);
+  });
+
+  /**
+   * `#1421`'s liveness invariant: a round with no `eventEndsAt` still
+   * terminates at `eventStartsAt + 30 days`, so an event whose end nobody set
+   * cannot refresh its TTL forever either.
+   */
+  it("should skip an event past the liveness cap even with no eventEndsAt", () => {
+    const out = new Map<string, CollectedTickTarget>();
+    collectCoordinationTickTargets(IDS, [baseItem()], out, "2026-07-15T00:00:00.000Z");
+    expect(out.size).toBe(0);
+  });
+
+  it("should still collect an event that is inside its window", () => {
+    const out = new Map<string, CollectedTickTarget>();
+    collectCoordinationTickTargets(
+      IDS,
+      [{ ...baseItem(), eventEndsAt: "2026-06-01T09:00:00.000Z" }],
+      out,
+      NOW,
+    );
+    expect(out.size).toBe(1);
+  });
+
   it("should skip an unparseable eventStartsAt (NaN epoch)", () => {
     const out = new Map<string, CollectedTickTarget>();
     collectCoordinationTickTargets(

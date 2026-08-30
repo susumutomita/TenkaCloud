@@ -4,6 +4,7 @@ import {
   type CoordinationTickBatch,
 } from "../shared/coordination-tick-contract.js";
 import type { CoordinationTickInvoker } from "./coordination-tick-dispatch.js";
+import { isScoringActive } from "./scoring-active.js";
 
 /**
  * scoring-driven tick (#2324) の **採点 pass 側**。 coordination を宣言した event を per-minute
@@ -55,8 +56,8 @@ export function parseCoordinationProblemIds(raw: string | undefined): Set<string
 
 /**
  * scan 1 ページの deployment 群から tick 対象を (event, problem) 単位で収集する (= 集約)。
- * coordination を宣言した問題の COMPLETE deployment を dedupe し、 未開始 event (= `eventStartsAt`
- * 不在 / 未来) は `isScoringActive` と同じ start gate で除外する。
+ * coordination を宣言した問題の COMPLETE deployment を dedupe し、 採点対象でない event は
+ * `isScoringActive` (start gate + 終端 gate) で除外する。
  *
  * [Issue #3123] dedupe key は以前 `${tenantId}#${eventId}` だった。 1 event が coordination 問題を
  * 2 つ deploy すると、
@@ -113,8 +114,19 @@ function toTickCandidate(
   const { tenantId, eventId, problemId, teamId, eventStartsAt } = item;
   if (!tenantId || !eventId || !problemId || !teamId) return null;
   if (!coordinationProblemIds.has(problemId)) return null;
-  // start gate: eventStartsAt 不在 / 未来なら tick しない (= 未開始 event の early-lock 防止)。
-  if (typeof eventStartsAt !== "string" || nowIso < eventStartsAt) return null;
+  // typeof は下の Date.parse 用の narrowing (gate 本体は isScoringActive が持つ)。
+  if (typeof eventStartsAt !== "string") return null;
+  // [Issue #3123] 採点 pass (`index.ts` の `isScoringActive`) と同じ gate を使う。 start だけを
+  // 見ていた頃は、 終了済み event の deployment 行が teardown まで `COMPLETE` のまま残るため、
+  // 終わった試合を tick し続けていた:
+  //
+  //   1. tick が TTL を延ばし続けるので、 retention の起点が「event が静かになった時刻」に
+  //      ならず、 teardown を取りこぼした namespace が無期限に残る。
+  //   2. `tick` を実装した plugin は、 採点が止まった後も state を進めてしまう。
+  //
+  // `isRoundTerminated` は `eventEndsAt` 明示が無くても `eventStartsAt + 30 日` で必ず終端を
+  // 返す (#1421 liveness invariant) ので、 endsAt を持たない event も有限で止まる。
+  if (!isScoringActive(item, nowIso)) return null;
   const eventStartMs = Date.parse(eventStartsAt);
   if (Number.isNaN(eventStartMs)) return null;
   return { tenantId, eventId, moduleRef: problemId, eventStartMs, teamId };
