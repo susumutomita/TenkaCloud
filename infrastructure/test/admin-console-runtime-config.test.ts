@@ -16,7 +16,7 @@ import { AdminConsoleRuntimeConfigStack } from "../lib/admin-console-runtime-con
 const ENV = { env: { account: "123456789012", region: "ap-northeast-1" } };
 
 function synthRuntimeConfigStack(): Template {
-  const app = new cdk.App();
+  const app = new cdk.App({ autoSynth: false });
   // cross-stack ref の供給元 (= 実構成では AdminConsoleHostingStack)。 dist/ asset を焼く本物の
   // hosting stack を使うと SPA build 成果物に依存するため、最小の Bucket + Distribution で代替する。
   const sourceStack = new cdk.Stack(app, "SourceStack", ENV);

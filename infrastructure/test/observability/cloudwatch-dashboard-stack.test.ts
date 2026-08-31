@@ -7,7 +7,7 @@ function synthDefault(
   cfnDeploy?: string,
   problemDeployProjectName: string | null = "tenkacloud-problem-deploy",
 ): Template {
-  const app = new cdk.App();
+  const app = new cdk.App({ autoSynth: false });
   const stack = new ObservabilityStack(app, "ObservabilityStack", {
     environment: "test",
     stateMachines: {

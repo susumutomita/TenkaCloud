@@ -20,7 +20,7 @@ function synth(props?: {
   tursoDatabaseUrl?: string;
   tursoAuthTokenParameterName?: string;
 }): Template {
-  const app = new cdk.App({ context: { "aws:cdk:bundling-stacks": [] } });
+  const app = new cdk.App({ autoSynth: false, context: { "aws:cdk:bundling-stacks": [] } });
   const stack = new ControlPlaneStack(app, "ControlPlane", {
     env: { account: "123456789012", region: "ap-northeast-1" },
     systemAdminEmail: "admin@example.com",

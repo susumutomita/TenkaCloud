@@ -60,7 +60,7 @@ function observabilityTemplate(envOverrides: Record<string, string> = {}): Templ
     dotenvConfig: () => undefined,
     discoverProblems: stubProblems,
   });
-  const app = new cdk.App({ context: { "aws:cdk:bundling-stacks": [] } });
+  const app = new cdk.App({ autoSynth: false, context: { "aws:cdk:bundling-stacks": [] } });
   buildTenkaCloudApp(app, config);
   // development 以外では stack ID に環境名 suffix が付く (#992) ので prefix で引く。
   const observability = app.node.children

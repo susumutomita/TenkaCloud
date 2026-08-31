@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 import { DeploymentsTable } from "../../lib/problem-deploy/deployments-table";
 
 function synthTable(): Template {
-  const app = new App();
+  const app = new App({ autoSynth: false });
   const stack = new Stack(app, "TestStack");
   new DeploymentsTable(stack, "Deployments");
   return Template.fromStack(stack);

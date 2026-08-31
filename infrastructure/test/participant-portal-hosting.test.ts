@@ -24,7 +24,7 @@ function ensurePlaceholderDist(): void {
 }
 
 function synth(): Template {
-  const app = new cdk.App();
+  const app = new cdk.App({ autoSynth: false });
   const stack = new cdk.Stack(app, "TestStack", {
     env: { account: "123456789012", region: "ap-northeast-1" },
   });
@@ -90,7 +90,7 @@ describe("ParticipantPortalHosting", () => {
     });
 
     it("should exclude a stray dist/runtime-config.json from the SPA asset", () => {
-      const app = new cdk.App();
+      const app = new cdk.App({ autoSynth: false });
       const stack = new cdk.Stack(app, "PortalLeakStack", {
         env: { account: "123456789012", region: "ap-northeast-1" },
       });
@@ -112,7 +112,7 @@ describe("ParticipantPortalHosting", () => {
   // no-cache + /runtime-config.json invalidation + 末尾スラッシュ正規化を維持する。
   describe("deployRuntimeConfig", () => {
     function synthWithRuntimeConfig(coordinationApiUrl?: string): Template {
-      const app = new cdk.App();
+      const app = new cdk.App({ autoSynth: false });
       const stack = new cdk.Stack(app, "RuntimeConfigStack", {
         env: { account: "123456789012", region: "ap-northeast-1" },
       });
@@ -140,7 +140,7 @@ describe("ParticipantPortalHosting", () => {
     // synth した assembly から runtime-config deployment の SourceObjectKeys が指す asset を
     // 読んで行う (= 共有 CDK_OUTDIR に残る他テストの asset に影響されない、 keyed lookup)。
     function readRuntimeConfigAsset(coordinationApiUrl?: string): Record<string, unknown> {
-      const app = new cdk.App();
+      const app = new cdk.App({ autoSynth: false });
       const stack = new cdk.Stack(app, "RuntimeConfigContentStack", {
         env: { account: "123456789012", region: "ap-northeast-1" },
       });

@@ -10,14 +10,14 @@ const SAMPLE_PLUGIN =
   "applyOp: (s) => s, projectForTeam: (s) => s };\n";
 
 function synthBundle(): Template {
-  const app = new cdk.App();
+  const app = new cdk.App({ autoSynth: false });
   const stack = new cdk.Stack(app, "TestStack");
   new CoordinationPluginBundle(stack, "Bundle", { bundles: { p1: SAMPLE_PLUGIN } });
   return cdk.assertions.Template.fromStack(stack);
 }
 
 function synthDispatcherWithBucket(): Template {
-  const app = new cdk.App();
+  const app = new cdk.App({ autoSynth: false });
   const stack = new cdk.Stack(app, "TestStack");
   const tableProps = {
     partitionKey: { name: "PK", type: cdk.aws_dynamodb.AttributeType.STRING },

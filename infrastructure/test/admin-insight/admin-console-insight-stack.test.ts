@@ -10,7 +10,7 @@ import { AdminConsoleInsightStack } from "../../lib/admin-insight/admin-console-
  * cross-stack 参照を simulate するため UserPool / Tables は同 app 内 helper stack に作る。
  */
 function synthInsightStack(adminConsoleOrigin?: string, costBudgetName?: string): Template {
-  const app = new cdk.App();
+  const app = new cdk.App({ autoSynth: false });
   const fixtures = new cdk.Stack(app, "Fixtures", {
     env: { account: "123456789012", region: "ap-northeast-1" },
   });
@@ -347,7 +347,7 @@ describe("AdminConsoleInsightStack", () => {
       readonly tursoDatabaseUrl?: string;
       readonly tursoAuthTokenParameterName?: string;
     }): Template {
-      const app = new cdk.App();
+      const app = new cdk.App({ autoSynth: false });
       const fixtures = new cdk.Stack(app, "Fixtures2438", {
         env: { account: "123456789012", region: "ap-northeast-1" },
       });
@@ -432,7 +432,7 @@ describe("AdminConsoleInsightStack", () => {
      * TEAMS_TABLE_NAME env and no read grant on a nonexistent table.
      */
     function synthWithoutEventsTeamsTables(): Template {
-      const app = new cdk.App();
+      const app = new cdk.App({ autoSynth: false });
       const fixtures = new cdk.Stack(app, "Fixtures2440", {
         env: { account: "123456789012", region: "ap-northeast-1" },
       });
@@ -503,7 +503,7 @@ describe("AdminConsoleInsightStack", () => {
      * the repository seam (`countActiveByTenant`) rather than a raw DDB reference.
      */
     function synthWithoutAnyTables(): Template {
-      const app = new cdk.App();
+      const app = new cdk.App({ autoSynth: false });
       const fixtures = new cdk.Stack(app, "Fixtures2441", {
         env: { account: "123456789012", region: "ap-northeast-1" },
       });

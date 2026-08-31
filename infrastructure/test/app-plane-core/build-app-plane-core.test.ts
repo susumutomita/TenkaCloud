@@ -41,7 +41,7 @@ function buildStubLambda(scope: cdk.Stack, id: string): LambdaFunction {
 }
 
 function synth(): Template {
-  const app = new cdk.App();
+  const app = new cdk.App({ autoSynth: false });
   const stack = new cdk.Stack(app, "TestStack", {
     env: { account: "123456789012", region: "ap-northeast-1" },
   });
@@ -119,7 +119,7 @@ describe("buildAppPlaneCore", () => {
   });
 
   it("should attach a Pre-Token Generation V2 Lambda when liteAdminClaimsInjection is true (#1327 / #1358)", () => {
-    const app = new cdk.App();
+    const app = new cdk.App({ autoSynth: false });
     const stack = new cdk.Stack(app, "TestStack", {
       env: { account: "123456789012", region: "ap-northeast-1" },
     });
@@ -167,7 +167,7 @@ describe("buildAppPlaneCore", () => {
   });
 
   it("the returned applicationAdminConsoleUrl should equal hosting.distributionUrl", () => {
-    const app = new cdk.App();
+    const app = new cdk.App({ autoSynth: false });
     const stack = new cdk.Stack(app, "TestStack", {
       env: { account: "123456789012", region: "ap-northeast-1" },
     });
@@ -202,7 +202,7 @@ describe("buildAppPlaneCore", () => {
   });
 
   it("should attach SAML provider + allowlist Pre sign-up Lambda when samlIdps is non-empty (#1340)", () => {
-    const app = new cdk.App();
+    const app = new cdk.App({ autoSynth: false });
     const stack = new cdk.Stack(app, "TestStack", {
       env: { account: "123456789012", region: "ap-northeast-1" },
     });
@@ -250,7 +250,7 @@ describe("buildAppPlaneCore", () => {
     // 「allowlist だけ設定して SAML は未設定」 のケース。 SAML 経路が無いので allowlist の意味は無く、
     // attach すると無駄な Pre sign-up trigger が UserPool に乗ってしまう。 builder は samlIdps が
     // 空のとき allowlist Lambda を立てない契約 (= app-plane-core.ts の if guard) を pin する。
-    const app = new cdk.App();
+    const app = new cdk.App({ autoSynth: false });
     const stack = new cdk.Stack(app, "TestStack", {
       env: { account: "123456789012", region: "ap-northeast-1" },
     });

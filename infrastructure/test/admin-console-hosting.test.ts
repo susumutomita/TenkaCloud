@@ -26,7 +26,7 @@ function ensurePlaceholderDist(): void {
 }
 
 function synth(): Template {
-  const app = new cdk.App();
+  const app = new cdk.App({ autoSynth: false });
   const stack = new AdminConsoleHostingStack(app, "TestStack", {
     env: { account: "123456789012", region: "ap-northeast-1" },
   });
@@ -34,7 +34,7 @@ function synth(): Template {
 }
 
 function synthWithCustomDomain(): Template {
-  const app = new cdk.App();
+  const app = new cdk.App({ autoSynth: false });
   const stack = new AdminConsoleHostingStack(app, "TestStack", {
     env: { account: "123456789012", region: "ap-northeast-1" },
     customDomain: {

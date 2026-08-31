@@ -47,7 +47,7 @@ const TABLES: ReadonlyArray<{
 
 function policiesFor(props: DataTableProps): string[][] {
   return TABLES.map(({ build }) => {
-    const stack = new Stack(new App(), "TestStack");
+    const stack = new Stack(new App({ autoSynth: false }), "TestStack");
     build(stack, props);
     const resources = Template.fromStack(stack).findResources("AWS::DynamoDB::Table");
     const row = Object.values(resources)[0] as

@@ -23,7 +23,7 @@ describe("CDK test outdir pinning (issue #1295)", () => {
   });
 
   it("should land synth output inside the pinned outdir (not $TMPDIR)", () => {
-    const app = new App();
+    const app = new App({ autoSynth: false });
     new Stack(app, "OutdirSmokeStack");
     const assembly = app.synth();
     const repoInternal = path.resolve(__dirname, "..", "cdk.out", "test-synth");

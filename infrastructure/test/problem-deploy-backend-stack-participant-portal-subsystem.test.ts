@@ -39,7 +39,7 @@ async function synthWithParticipantPortal(
   const { ProblemDeployBackendStack } = await import(
     "../lib/problem-deploy/problem-deploy-backend-stack.js"
   );
-  const app = new cdk.App();
+  const app = new cdk.App({ autoSynth: false });
   const stack = new ProblemDeployBackendStack(app, "TestStackParticipantPortal", {
     eventBusArn: "arn:aws:events:ap-northeast-1:123456789012:event-bus/test-bus",
     sourceBucketName: "test-source-bucket",

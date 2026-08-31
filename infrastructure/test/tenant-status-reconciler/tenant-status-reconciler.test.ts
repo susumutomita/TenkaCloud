@@ -5,7 +5,7 @@ import { describe, it } from "vitest";
 import { TenantStatusReconciler } from "../../lib/tenant-status-reconciler/tenant-status-reconciler";
 
 function synth() {
-  const app = new cdk.App();
+  const app = new cdk.App({ autoSynth: false });
   const stack = new cdk.Stack(app, "TestStack", {
     env: { account: "123456789012", region: "ap-northeast-1" },
   });
@@ -67,7 +67,7 @@ describe("TenantStatusReconciler", () => {
   });
 
   it("should allow overriding scheduleInterval", () => {
-    const app = new cdk.App();
+    const app = new cdk.App({ autoSynth: false });
     const stack = new cdk.Stack(app, "T", {
       env: { account: "123456789012", region: "ap-northeast-1" },
     });

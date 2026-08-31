@@ -26,11 +26,11 @@ process.env.CDK_OUTDIR = join(resolve(__dirname, ".."), "cdk.out", "test-synth",
 // Issue #2515: skip real esbuild asset bundling for every CDK stack synthed in the test suite.
 // aws-cdk-lib's `App` constructor unconditionally merges `CDK_CONTEXT_JSON` (cxapi.CONTEXT_ENV)
 // into its context — this happens regardless of whether the test also passed a `context` prop,
-// so setting this one env var here reaches every `new cdk.App()` call in every test file without
+// so setting this one env var here reaches every `new cdk.App({ autoSynth: false })` call in every test file without
 // per-file changes. Real esbuild bundling (~6.5-8s per Lambda, ~35MB js + ~90MB sourcemap) is
 // what dominates `test:coverage` wall time; the only intentional exception is
 // test/nodejs-function-bundling-smoke.test.ts, which temporarily clears this key around its own
-// `new App()` call to keep one real-bundling exercise in the suite. See
+// `new App({ autoSynth: false })` call to keep one real-bundling exercise in the suite. See
 // test/bundling-skip-context.test.ts for the pin.
 //
 // Merge rather than clobber: some other tool in the chain (e.g. a wrapped `cdk` CLI invocation)

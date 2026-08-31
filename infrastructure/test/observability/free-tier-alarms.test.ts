@@ -15,7 +15,7 @@ import { FreeTierAlarms } from "../../lib/observability/free-tier-alarms";
  */
 
 function buildStack() {
-  const app = new App();
+  const app = new App({ autoSynth: false });
   const stack = new Stack(app, "TestStack");
   const topic = new Topic(stack, "Topic");
   return { app, stack, topic };

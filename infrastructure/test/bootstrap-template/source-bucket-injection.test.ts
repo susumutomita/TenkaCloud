@@ -45,7 +45,7 @@ function bootstrapTemplate(): Template {
     dotenvConfig: () => undefined,
     discoverProblems: stubProblems,
   });
-  const app = new cdk.App({ context: { "aws:cdk:bundling-stacks": [] } });
+  const app = new cdk.App({ autoSynth: false, context: { "aws:cdk:bundling-stacks": [] } });
   buildTenkaCloudApp(app, config);
   const assembly = app.synth();
   return Template.fromJSON(assembly.getStackByName("tenkacloud-bootstrap").template);

@@ -15,7 +15,7 @@ import {
  */
 
 function buildHarness(pendingWindow: number): Template {
-  const app = new App();
+  const app = new App({ autoSynth: false });
   const stack = new Stack(app, "TestStack");
   new Key(stack, "MyKey");
   Aspects.of(stack).add(new KmsKeyShortPendingWindow(pendingWindow));
@@ -36,7 +36,7 @@ describe("KmsKeyShortPendingWindow", () => {
   });
 
   it("should apply the same value to every KMS Key even in stacks with multiple KMS Keys mixed", () => {
-    const app = new App();
+    const app = new App({ autoSynth: false });
     const stack = new Stack(app, "TestStack");
     new Key(stack, "KeyA");
     new Key(stack, "KeyB");
@@ -52,7 +52,7 @@ describe("KmsKeyShortPendingWindow", () => {
   });
 
   it("should leave stacks without KMS Keys untouched", () => {
-    const app = new App();
+    const app = new App({ autoSynth: false });
     const stack = new Stack(app, "TestStack");
     Aspects.of(stack).add(new KmsKeyShortPendingWindow(7));
 

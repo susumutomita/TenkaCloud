@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { CodeBuildUseAwsManagedKms } from "../../lib/cdk-aspect/codebuild-use-aws-managed-kms";
 
 function buildStackWithCodeBuild(): Template {
-  const app = new App();
+  const app = new App({ autoSynth: false });
   const stack = new Stack(app, "TestStack");
   // SBT BashJobRunner と同じ shape を再現: CodeBuild project に customer-managed KMS Key を attach
   const encryptionKey = new Key(stack, "EncryptionKey", { description: "build artifact key" });
@@ -67,7 +67,7 @@ describe("CodeBuildUseAwsManagedKms", () => {
   });
 
   it("should leave KMS Keys unrelated to EncryptionKey untouched (different use)", () => {
-    const app = new App();
+    const app = new App({ autoSynth: false });
     const stack = new Stack(app, "OtherStack");
     new Key(stack, "DataAtRestKey", { description: "別用途の KMS、削除されてはいけない" });
     Aspects.of(app).add(new CodeBuildUseAwsManagedKms());
@@ -81,7 +81,7 @@ describe("CodeBuildUseAwsManagedKms", () => {
       "aws-cdk-lib/aws-iam"
     );
     const { Key } = await import("aws-cdk-lib/aws-kms");
-    const app = new App();
+    const app = new App({ autoSynth: false });
     const stack = new Stack(app, "MixedStack");
     const key = new Key(stack, "EncryptionKey");
     const role = new Role(stack, "Role", {

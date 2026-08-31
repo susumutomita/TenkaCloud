@@ -51,7 +51,7 @@ function synthApp(envOverrides: Record<string, string | undefined> = {}) {
     dotenvConfig: () => undefined,
     discoverProblems: stubProblems,
   });
-  const app = new cdk.App({ context: { "aws:cdk:bundling-stacks": [] } });
+  const app = new cdk.App({ autoSynth: false, context: { "aws:cdk:bundling-stacks": [] } });
   buildTenkaCloudApp(app, config);
   return app.synth();
 }

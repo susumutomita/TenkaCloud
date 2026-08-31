@@ -15,7 +15,7 @@ import { DeployCodeBuildProject } from "../../lib/problem-deploy/deploy-codebuil
  * 利用する CFn default (= property 省略) になる」の 2 系統を検証する。
  */
 function synth(props?: { concurrentBuildLimit?: number }): Template {
-  const app = new App();
+  const app = new App({ autoSynth: false });
   // ssm:GetParameter ARN を build するため account / region を pin する。
   const stack = new Stack(app, "TestStack", {
     env: { account: "123456789012", region: "ap-northeast-1" },

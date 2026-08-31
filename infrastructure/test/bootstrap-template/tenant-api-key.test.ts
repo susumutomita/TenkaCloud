@@ -8,7 +8,7 @@ import { TenantApiKey } from "../../lib/bootstrap-template/tenant-api-key";
  * 値を auto-generate させ、 値 SSM パラメータには非機密 placeholder を入れる (= 値は vestigial)。
  */
 function synth(): Template {
-  const app = new App();
+  const app = new App({ autoSynth: false });
   const stack = new Stack(app, "Test", {
     env: { account: "123456789012", region: "ap-northeast-1" },
   });

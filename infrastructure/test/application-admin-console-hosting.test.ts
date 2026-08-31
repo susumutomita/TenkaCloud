@@ -24,7 +24,7 @@ function ensurePlaceholderDist() {
 }
 
 function synth(tenantId: string): Template {
-  const app = new cdk.App();
+  const app = new cdk.App({ autoSynth: false });
   const stack = new cdk.Stack(app, "TestStack");
   new ApplicationAdminConsoleHosting(stack, "Hosting", { tenantId });
   return Template.fromStack(stack);
@@ -105,7 +105,7 @@ describe("ApplicationAdminConsoleHosting", () => {
     });
 
     it("should expose distributionDomainName and distributionUrl as properties", () => {
-      const app = new cdk.App();
+      const app = new cdk.App({ autoSynth: false });
       const stack = new cdk.Stack(app, "TestStack");
       const hosting = new ApplicationAdminConsoleHosting(stack, "Hosting", {
         tenantId: "tenant-1",
@@ -125,7 +125,7 @@ describe("ApplicationAdminConsoleHosting", () => {
 
   describe("deployRuntimeConfig() を呼び出したとき", () => {
     function synthWithRuntimeConfig() {
-      const app = new cdk.App();
+      const app = new cdk.App({ autoSynth: false });
       const stack = new cdk.Stack(app, "TestStack");
       const hosting = new ApplicationAdminConsoleHosting(stack, "Hosting", {
         tenantId: "tenant-1",
@@ -193,7 +193,7 @@ describe("Issue #2230: features を渡して deployRuntimeConfig を呼んだと
       process.env.CDK_OUTDIR ?? path.join(__dirname, "..", "cdk.out", "test-synth");
     fs.mkdirSync(outdirBase, { recursive: true });
     const outdir = fs.mkdtempSync(path.join(outdirBase, "features-test-"));
-    const app = new cdk.App({ outdir });
+    const app = new cdk.App({ autoSynth: false, outdir });
     const stack = new cdk.Stack(app, "FeaturesTestStack");
     const hosting = new ApplicationAdminConsoleHosting(stack, "Hosting", {
       tenantId: "tenant-1",

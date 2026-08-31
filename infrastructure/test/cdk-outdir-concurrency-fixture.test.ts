@@ -20,7 +20,7 @@ async function waitForBothWorkers(barrierDir: string): Promise<void> {
 
 describe("CDK test outdir concurrency fixture", () => {
   it("should synthesize after both wrapper processes have created their Apps", async () => {
-    const app = new App();
+    const app = new App({ autoSynth: false });
     new Stack(app, "ConcurrencyFixtureStack");
     const barrierDir = process.env.TENKACLOUD_CDK_CONCURRENCY_BARRIER_DIR;
     const role = process.env.TENKACLOUD_CDK_CONCURRENCY_ROLE;

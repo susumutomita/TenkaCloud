@@ -7,7 +7,7 @@ import { ControlPlaneStack } from "../../lib/control-plane-stack";
 
 describe("SBT tenant-registration table capacity", () => {
   it("should preserve the SBT 0.3.9 tenant table logical id during the 0.9.5 upgrade", () => {
-    const app = new cdk.App({ context: { "aws:cdk:bundling-stacks": [] } });
+    const app = new cdk.App({ autoSynth: false, context: { "aws:cdk:bundling-stacks": [] } });
     const stack = new ControlPlaneStack(app, "ControlPlane", {
       env: { account: "123456789012", region: "ap-northeast-1" },
       systemAdminEmail: "admin@example.com",
@@ -24,7 +24,7 @@ describe("SBT tenant-registration table capacity", () => {
   });
 
   it("should synthesize the SBT 0.9.5 registration table as PROVISIONED 1/1", () => {
-    const app = new cdk.App({ context: { "aws:cdk:bundling-stacks": [] } });
+    const app = new cdk.App({ autoSynth: false, context: { "aws:cdk:bundling-stacks": [] } });
     const stack = new ControlPlaneStack(app, "ControlPlane", {
       env: { account: "123456789012", region: "ap-northeast-1" },
       systemAdminEmail: "admin@example.com",
@@ -50,7 +50,7 @@ describe("SBT tenant-registration table capacity", () => {
   });
 
   it("should PATCH lifecycle failure jobOutput to the registration identified by the event", () => {
-    const app = new cdk.App({ context: { "aws:cdk:bundling-stacks": [] } });
+    const app = new cdk.App({ autoSynth: false, context: { "aws:cdk:bundling-stacks": [] } });
     const stack = new ControlPlaneStack(app, "ControlPlane", {
       env: { account: "123456789012", region: "ap-northeast-1" },
       systemAdminEmail: "admin@example.com",

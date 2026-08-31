@@ -11,7 +11,7 @@ function synth(
   applicationAdminConsoleUrl: string,
   environment = "development",
 ): { template: Template; provider: IdentityProvider } {
-  const app = new cdk.App();
+  const app = new cdk.App({ autoSynth: false });
   const stack = new cdk.Stack(app, "TestStack", {
     env: { account: "123456789012", region: "ap-northeast-1" },
   });
@@ -391,7 +391,7 @@ describe("buildAllowedRedirectUrls (Issue #861)", () => {
 
 describe("OAuth flow hardening (Issue #861)", () => {
   function synthFor(environment: string): Template {
-    const app = new cdk.App();
+    const app = new cdk.App({ autoSynth: false });
     const stack = new cdk.Stack(app, "TestStack", {
       env: { account: "123456789012", region: "ap-northeast-1" },
     });
@@ -445,7 +445,7 @@ describe("IdentityProvider login custom domain (#1993/#1994)", () => {
     domainName: string;
     certificateArn: string;
   }): Template {
-    const app = new cdk.App();
+    const app = new cdk.App({ autoSynth: false });
     const stack = new cdk.Stack(app, "TestStack", {
       env: { account: "123456789012", region: "ap-northeast-1" },
     });

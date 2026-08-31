@@ -16,7 +16,7 @@ import { DisruptionExecutorLambda } from "../../lib/problem-deploy/disruption-ex
 const SYNTH_TIMEOUT_MS = 120_000;
 
 function synth(): Template {
-  const app = new App();
+  const app = new App({ autoSynth: false });
   const stack = new Stack(app, "TestStack");
   const deployments = new Table(stack, "Deployments", {
     partitionKey: { name: "PK", type: AttributeType.STRING },
@@ -163,7 +163,7 @@ describe("DisruptionExecutorLambda (#1419)", () => {
     () => {
       // catalog 未配線 (= problemsDisruptions undefined) でも bundlingDefine の `?? {}` fallback で
       // 空 catalog として synth できることを pin する (dormant 経路の regression 防止)。
-      const app = new App();
+      const app = new App({ autoSynth: false });
       const stack = new Stack(app, "TestStackNoCatalog");
       const deployments = new Table(stack, "Deployments", {
         partitionKey: { name: "PK", type: AttributeType.STRING },
@@ -190,7 +190,7 @@ describe("DisruptionExecutorLambda (#1419)", () => {
   it(
     "[Issue #2442 / Phase C3] should synth without DISRUPTIONS_TABLE_NAME env or PutItem IAM when disruptionsTable is omitted (pure SQL backend)",
     () => {
-      const app = new App();
+      const app = new App({ autoSynth: false });
       const stack = new Stack(app, "TestStackPureSql");
       const deployments = new Table(stack, "Deployments", {
         partitionKey: { name: "PK", type: AttributeType.STRING },

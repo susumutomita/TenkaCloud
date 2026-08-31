@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { BootstrapTemplateStack } from "../../lib/bootstrap-template/bootstrap-template-stack";
 
 function synthesizeBootstrap(): Record<string, unknown> {
-  const app = new cdk.App();
+  const app = new cdk.App({ autoSynth: false });
   const stack = new BootstrapTemplateStack(app, "Bootstrap", {
     env: { account: "123456789012", region: "ap-northeast-1" },
     apiKeySSMParameterNames: {

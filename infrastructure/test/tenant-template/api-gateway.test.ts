@@ -15,7 +15,7 @@ import { LAMBDA_NODEJS_RUNTIME } from "../../lib/utils/lambda-runtime";
  */
 
 function buildHarness() {
-  const app = new App();
+  const app = new App({ autoSynth: false });
   const stack = new Stack(app, "TestStack");
   const userPool = new UserPool(stack, "UP");
   const fn = new LambdaFunction(stack, "DeployApi", {

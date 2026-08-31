@@ -63,7 +63,7 @@ describe("defineNodejsFunction carrying catalog data", () => {
   );
 
   function build(props: Partial<Parameters<typeof defineNodejsFunction>[1]>) {
-    const stack = new Stack(new App(), "S");
+    const stack = new Stack(new App({ autoSynth: false }), "S");
     return defineNodejsFunction(stack, {
       entry,
       environment: {},
