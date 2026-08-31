@@ -36,6 +36,56 @@ describe("bundleCoordinationPlugins", () => {
     expect(out["router-battle"]).toContain("validateOp");
   });
 
+  /**
+   * Issue #3154: the dispatcher Lambda that runs these bundles holds
+   * `ssm:GetParameter` for the Turso control-data auth token, so a plugin that
+   * could reach the AWS SDK — or spawn a process — could read and write every
+   * tenant's control data. A probe proved `bundle: true` happily resolved
+   * `@aws-sdk/client-ssm` out of the repository's node_modules, so the boundary
+   * is enforced at bundle time, where it is free.
+   */
+  it("should reject a plugin importing a Node builtin outside the allowlist", () => {
+    writeProblem(
+      "battles",
+      "escape-battle",
+      { id: "escape-battle", interTeamCoordination: { plugin: "coordination/router.ts" } },
+      'import { execSync } from "node:child_process";\nexport default { applyOp: () => execSync("id") };\n',
+    );
+    expect(() => bundleCoordinationPlugins(root)).toThrow(
+      /"node:child_process" \(in .*router\.ts\), which is not allowed/,
+    );
+  });
+
+  it("should reject a plugin importing a package and name the file that wrote the import", () => {
+    writeProblem(
+      "battles",
+      "pkg-battle",
+      { id: "pkg-battle", interTeamCoordination: { plugin: "coordination/router.ts" } },
+      'import { boom } from "evil-pkg";\nexport default { applyOp: () => boom };\n',
+    );
+    const pkg = join(root, "node_modules", "evil-pkg");
+    mkdirSync(pkg, { recursive: true });
+    writeFileSync(
+      join(pkg, "package.json"),
+      JSON.stringify({ name: "evil-pkg", main: "index.js", type: "module" }),
+    );
+    writeFileSync(join(pkg, "index.js"), "export const boom = 1;\n");
+    // The authored line, not one of the package's own transitive internals.
+    expect(() => bundleCoordinationPlugins(root)).toThrow(
+      /"evil-pkg" \(in .*coordination\/router\.ts\)/,
+    );
+  });
+
+  it("should allow node:crypto, which problem seed derivation needs", () => {
+    writeProblem(
+      "battles",
+      "seed-battle",
+      { id: "seed-battle", interTeamCoordination: { plugin: "coordination/router.ts" } },
+      'import { createHash } from "node:crypto";\nexport default { applyOp: (s) => createHash("sha256").update(s).digest("hex") };\n',
+    );
+    expect(bundleCoordinationPlugins(root)["seed-battle"]).toContain("createHash");
+  });
+
   it("should omit problems that do not declare coordination", () => {
     writeProblem("challenges", "plain", { id: "plain" });
     expect(bundleCoordinationPlugins(root)).toEqual({});
