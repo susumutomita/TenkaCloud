@@ -70,7 +70,7 @@ function deps(over: Partial<CoordinationHandlerDeps> = {}): CoordinationHandlerD
   return {
     importer: importerOf(counter),
     store: fakeStore(undefined),
-    resolveScope: async () => scope,
+    resolveScope: async () => ({ kind: "scope" as const, scope }),
     ...over,
   };
 }
@@ -78,7 +78,7 @@ function deps(over: Partial<CoordinationHandlerDeps> = {}): CoordinationHandlerD
 describe("handleCoordinationOp", () => {
   it("should return not_configured when scope cannot be resolved", async () => {
     const out = await handleCoordinationOp(
-      deps({ resolveScope: async () => null }),
+      deps({ resolveScope: async () => ({ kind: "not_configured" as const }) }),
       "key",
       { kind: "inc" },
       "2026-06-01T00:00:00Z",
@@ -109,7 +109,11 @@ describe("handleCoordinationOp", () => {
   ])("should reject an op for %s", async (_label, window) => {
     const store = fakeStore();
     const out = await handleCoordinationOp(
-      { importer: importerOf(counter), store, resolveScope: async () => ({ ...scope, window }) },
+      {
+        importer: importerOf(counter),
+        store,
+        resolveScope: async () => ({ kind: "scope" as const, scope: { ...scope, window } }),
+      },
       "key",
       { kind: "inc" },
       "2026-06-01T00:00:00Z",
@@ -131,8 +135,11 @@ describe("handleCoordinationOp", () => {
         importer: importerOf(counter),
         store: fakeStore({ state: { count: 3 }, version: 1 }),
         resolveScope: async () => ({
-          ...scope,
-          window: { eventStartsAt: "2026-05-31T23:00:00Z", eventEndsAt: "2026-05-31T23:30:00Z" },
+          kind: "scope" as const,
+          scope: {
+            ...scope,
+            window: { eventStartsAt: "2026-05-31T23:00:00Z", eventEndsAt: "2026-05-31T23:30:00Z" },
+          },
         }),
       },
       "key",
@@ -159,7 +166,10 @@ describe("handleCoordinationOp", () => {
 
 describe("handleCoordinationProjection", () => {
   it("should return not_configured when scope cannot be resolved", async () => {
-    const out = await handleCoordinationProjection(deps({ resolveScope: async () => null }), "key");
+    const out = await handleCoordinationProjection(
+      deps({ resolveScope: async () => ({ kind: "not_configured" as const }) }),
+      "key",
+    );
     expect(out).toEqual({ kind: "not_configured" });
   });
 
@@ -197,6 +207,10 @@ describe("makeCoordinationScopeResolver", () => {
   }
   const config = { p1: { plugin: "coordination/alliance.ts" } };
 
+  /** Unwrap a successful resolution; `undefined` for anything else. */
+  const scopeOf = (r: Awaited<ReturnType<ReturnType<typeof makeCoordinationScopeResolver>>>) =>
+    r.kind === "scope" ? r.scope : undefined;
+
   it("should resolve a scope when the team's problem declares coordination", async () => {
     const resolve = makeCoordinationScopeResolver(
       fakeShared([
@@ -212,21 +226,24 @@ describe("makeCoordinationScopeResolver", () => {
       config,
     );
     expect(await resolve("key")).toEqual({
-      // [Issue #3123] `runId` is NOT an alias of `problemId`: aliasing them
-      // would make the two key dimensions indistinguishable, and would collide
-      // the moment a real run id ever equalled a problem id. The platform
-      // issues one run per (event, problem) today, so the resolver emits the
-      // documented default and resetting a run is expressed as deleting the
-      // namespace.
-      state: { tenantId: "tn1", eventId: "e1", problemId: "p1", runId: "default" },
-      teamId: "t1",
-      ctx: { eventId: "e1", teamIds: ["t1"] },
-      // moduleRef は problemId (= importer の S3 key `coordination/<id>.mjs`)。
-      moduleRef: "p1",
-      fallbackProjection: {},
-      // [Issue #3123] The denormalized event window travels with the scope so
-      // the op path can refuse a finished match without a second read.
-      window: { eventStartsAt: "2026-05-31T23:00:00Z", eventEndsAt: "2026-06-01T09:00:00Z" },
+      kind: "scope",
+      scope: {
+        // [Issue #3123] `runId` is NOT an alias of `problemId`: aliasing them
+        // would make the two key dimensions indistinguishable, and would collide
+        // the moment a real run id ever equalled a problem id. The platform
+        // issues one run per (event, problem) today, so the resolver emits the
+        // documented default and resetting a run is expressed as deleting the
+        // namespace.
+        state: { tenantId: "tn1", eventId: "e1", problemId: "p1", runId: "default" },
+        teamId: "t1",
+        ctx: { eventId: "e1", teamIds: ["t1"] },
+        // moduleRef は problemId (= importer の S3 key `coordination/<id>.mjs`)。
+        moduleRef: "p1",
+        fallbackProjection: {},
+        // [Issue #3123] The denormalized event window travels with the scope so
+        // the op path can refuse a finished match without a second read.
+        window: { eventStartsAt: "2026-05-31T23:00:00Z", eventEndsAt: "2026-06-01T09:00:00Z" },
+      },
     });
   });
 
@@ -246,13 +263,13 @@ describe("makeCoordinationScopeResolver", () => {
       { p1: { plugin: "coordination/p1.ts" }, p2: { plugin: "coordination/p2.ts" } },
     );
 
-    expect((await resolveP1("key"))?.state).toEqual({
+    expect(scopeOf(await resolveP1("key"))?.state).toEqual({
       tenantId: "tn1",
       eventId: "e1",
       problemId: "p1",
       runId: "default",
     });
-    expect((await resolveP2("key"))?.state).toEqual({
+    expect(scopeOf(await resolveP2("key"))?.state).toEqual({
       tenantId: "tn1",
       eventId: "e1",
       problemId: "p2",
@@ -279,7 +296,7 @@ describe("makeCoordinationScopeResolver", () => {
       fakeShared([{ tenantId: "tn1", eventId: "e1", teamId: "t1", problemId: "p1", status }]),
       config,
     );
-    expect(await resolve("key")).toBeNull();
+    expect(await resolve("key")).toEqual({ kind: "not_configured" });
   });
 
   it.each([
@@ -292,7 +309,7 @@ describe("makeCoordinationScopeResolver", () => {
       fakeShared([{ tenantId: "tn1", eventId: "e1", teamId: "t1", problemId: "p1", status }]),
       config,
     );
-    expect(await resolve("key")).not.toBeNull();
+    expect((await resolve("key")).kind).toBe("scope");
   });
 
   /**
@@ -324,7 +341,7 @@ describe("makeCoordinationScopeResolver", () => {
       ]),
       config,
     );
-    expect(await resolve("key")).toBeNull();
+    expect(await resolve("key")).toEqual({ kind: "not_configured" });
   });
 
   it("should keep resolving a row written before the teardown marker existed", async () => {
@@ -336,7 +353,7 @@ describe("makeCoordinationScopeResolver", () => {
       ]),
       config,
     );
-    expect(await resolve("key")).not.toBeNull();
+    expect((await resolve("key")).kind).toBe("scope");
   });
 
   it("should return null when no owned problem declares coordination", async () => {
@@ -344,7 +361,7 @@ describe("makeCoordinationScopeResolver", () => {
       fakeShared([{ tenantId: "tn1", eventId: "e1", teamId: "t1", problemId: "other" }]),
       config,
     );
-    expect(await resolve("key")).toBeNull();
+    expect(await resolve("key")).toEqual({ kind: "not_configured" });
   });
 
   it("should return null when the deployment row lacks event/team scope", async () => {
@@ -352,7 +369,7 @@ describe("makeCoordinationScopeResolver", () => {
       fakeShared([{ tenantId: "tn1", problemId: "p1" }]),
       config,
     );
-    expect(await resolve("key")).toBeNull();
+    expect(await resolve("key")).toEqual({ kind: "not_configured" });
   });
 
   it("should return null when the deployment row has no problemId", async () => {
@@ -360,7 +377,7 @@ describe("makeCoordinationScopeResolver", () => {
       fakeShared([{ tenantId: "tn1", eventId: "e1", teamId: "t1" }]),
       config,
     );
-    expect(await resolve("key")).toBeNull();
+    expect(await resolve("key")).toEqual({ kind: "not_configured" });
   });
 
   // Issue #3053: requester 1 チームだけの ctx では、 相手チームを対象にする op が
@@ -375,7 +392,7 @@ describe("makeCoordinationScopeResolver", () => {
       ]),
       config,
     );
-    const scope = await resolve("key");
+    const scope = scopeOf(await resolve("key"));
     // 昇順であることが競合対策の本体: どのチームの request が先に state を materialize
     // しても initialState(ctx) の入力が同一になる。
     expect(scope?.ctx.teamIds).toEqual(["t1", "t2", "t3"]);
@@ -389,7 +406,7 @@ describe("makeCoordinationScopeResolver", () => {
       ]),
       config,
     );
-    const scope = await resolve("key");
+    const scope = scopeOf(await resolve("key"));
     expect(scope?.ctx.teamIds).toEqual(["t1"]);
   });
 
@@ -402,8 +419,88 @@ describe("makeCoordinationScopeResolver", () => {
       throw new Error("roster query failed");
     });
     const shared = fakeParticipantShared(send);
-    const scope = await makeCoordinationScopeResolver(shared, config)("key");
+    const scope = scopeOf(await makeCoordinationScopeResolver(shared, config)("key"));
     // route ごと落とすより、 requester だけの ctx で従来どおり動く方が安全。
     expect(scope?.ctx.teamIds).toEqual(["t1"]);
+  });
+
+  /**
+   * [Issue #3125] Two coordination problems deployed to the SAME team.
+   *
+   * The resolver used to loop over the team's deployments and return the first
+   * one that qualified, so the second problem was unreachable through the
+   * participant API — and it did not surface as a failure: the first problem's
+   * projection came back fine, so nothing distinguished "the second problem is
+   * not there" from "the second problem does not exist".
+   */
+  describe("when one team has two coordination problems", () => {
+    const twoProblems = {
+      p1: { plugin: "coordination/p1.ts" },
+      p2: { plugin: "coordination/p2.ts" },
+    };
+    const bothDeployed = () =>
+      makeCoordinationScopeResolver(
+        fakeShared([
+          { tenantId: "tn1", eventId: "e1", teamId: "t1", problemId: "p1" },
+          { tenantId: "tn1", eventId: "e1", teamId: "t1", problemId: "p2" },
+        ]),
+        twoProblems,
+      );
+
+    it("should refuse to guess when no problemId is given", async () => {
+      // Picking either one silently is what made the other unreachable.
+      expect(await bothDeployed()("key")).toEqual({
+        kind: "ambiguous",
+        problemIds: ["p1", "p2"],
+      });
+    });
+
+    it("should reach EITHER problem when the caller names one", async () => {
+      expect(scopeOf(await bothDeployed()("key", "p1"))?.state.problemId).toBe("p1");
+      // The one that used to be unreachable.
+      expect(scopeOf(await bothDeployed()("key", "p2"))?.state.problemId).toBe("p2");
+    });
+
+    it("should give each problem its own namespace", async () => {
+      const p1 = scopeOf(await bothDeployed()("key", "p1"))?.state;
+      const p2 = scopeOf(await bothDeployed()("key", "p2"))?.state;
+      expect(p1).not.toEqual(p2);
+      expect(p1?.runId).toBe(p2?.runId);
+      expect(p1?.eventId).toBe(p2?.eventId);
+    });
+
+    it("should not fall back to another problem when the named one is absent", async () => {
+      // Resolving a DIFFERENT problem than the one asked for would let a
+      // participant operate a match they did not name.
+      expect(await bothDeployed()("key", "p3")).toEqual({ kind: "not_configured" });
+    });
+  });
+
+  /**
+   * The common case must not change: one coordination problem, no `problemId`
+   * given, resolves exactly as before. Every existing caller relies on this.
+   */
+  it("should still resolve without a problemId when the team has only one", async () => {
+    const resolve = makeCoordinationScopeResolver(
+      fakeShared([{ tenantId: "tn1", eventId: "e1", teamId: "t1", problemId: "p1" }]),
+      config,
+    );
+    expect(scopeOf(await resolve("key"))?.state.problemId).toBe("p1");
+    // And naming it explicitly resolves the same scope.
+    expect(scopeOf(await resolve("key", "p1"))?.state).toEqual(
+      scopeOf(await resolve("key"))?.state,
+    );
+  });
+
+  it("should not call a same-problem duplicate deployment ambiguous", async () => {
+    // Two rows for ONE problem (e.g. a retried deploy) is not a choice to make.
+    const resolve = makeCoordinationScopeResolver(
+      fakeShared([
+        { tenantId: "tn1", eventId: "e1", teamId: "t1", problemId: "p1" },
+        { tenantId: "tn1", eventId: "e1", teamId: "t1", problemId: "p1" },
+      ]),
+      config,
+    );
+    expect(scopeOf(await resolve("key"))?.state.problemId).toBe("p1");
   });
 });

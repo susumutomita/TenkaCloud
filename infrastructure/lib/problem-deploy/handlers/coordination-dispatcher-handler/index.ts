@@ -78,6 +78,14 @@ function respondCoordination(
       return c.json({ error: "conflict" }, StatusCodes.CONFLICT);
     case "unavailable":
       return c.json({ error: "unavailable" }, StatusCodes.SERVICE_UNAVAILABLE);
+    // [Issue #3125] 候補が複数で problemId 省略。 どれかを勝手に選ぶと 2 問目が永久に
+    // 到達不能になるので、 候補を返して選ばせる。 `default` に落とすと 404
+    // (`not_configured`) に化けて「問題が無い」と嘘をつくことになる。
+    case "ambiguous":
+      return c.json(
+        { error: "ambiguous_problem", problemIds: outcome.problemIds },
+        StatusCodes.CONFLICT,
+      );
     default:
       return c.json({ error: "not_configured" }, StatusCodes.NOT_FOUND);
   }
@@ -104,6 +112,7 @@ app.post("/portal/me/coordination/op", (c) =>
         token,
         parsed.data.op,
         new Date().toISOString(),
+        parsed.data.problemId,
       );
       return respondCoordination(c, outcome);
     },
@@ -116,7 +125,15 @@ app.get("/portal/me/coordination/projection", (c) =>
     c,
     "coordination-projection",
     async (token) =>
-      respondCoordination(c, await handleCoordinationProjection(coordinationDeps, token)),
+      respondCoordination(
+        c,
+        // [Issue #3125] GET なので query から。 省略時の挙動は従来どおり。
+        await handleCoordinationProjection(
+          coordinationDeps,
+          token,
+          c.req.query("problemId") || undefined,
+        ),
+      ),
     RATE_LIMITS.READ_HIGH,
   ),
 );

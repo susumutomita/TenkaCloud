@@ -87,6 +87,49 @@ describe("POST /portal/me/coordination/op", () => {
     mocks.handleCoordinationOp.mockResolvedValueOnce({ kind: "not_configured" });
     expect((await send("POST", OP, { op: {} })).status).toBe(StatusCodes.NOT_FOUND);
   });
+
+  /**
+   * [Issue #3125] A team with TWO coordination problems and no `problemId`.
+   *
+   * This arm exists because `respondCoordination`'s `default` maps to 404
+   * `not_configured` — without it, a team that has two problems would be told
+   * there is no such problem, which is the original "the second one is
+   * unreachable" bug wearing a different status code.
+   */
+  it("should 409 with the candidates when the problem is ambiguous", async () => {
+    mocks.handleCoordinationOp.mockResolvedValueOnce({
+      kind: "ambiguous",
+      problemIds: ["p1", "p2"],
+    });
+    const res = await send("POST", OP, { op: {} });
+    expect(res.status).toBe(StatusCodes.CONFLICT);
+    expect(await res.json()).toEqual({ error: "ambiguous_problem", problemIds: ["p1", "p2"] });
+  });
+
+  it("should forward the body's problemId to the handler", async () => {
+    mocks.handleCoordinationOp.mockResolvedValueOnce({ kind: "ok", projection: {} });
+    await send("POST", OP, { op: { kind: "inc" }, problemId: "p2" });
+    expect(mocks.handleCoordinationOp).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(String),
+      { kind: "inc" },
+      expect.any(String),
+      "p2",
+    );
+  });
+
+  it("should leave problemId undefined when the body omits it", async () => {
+    // The single-problem case, which must keep working untouched.
+    mocks.handleCoordinationOp.mockResolvedValueOnce({ kind: "ok", projection: {} });
+    await send("POST", OP, { op: { kind: "inc" } });
+    expect(mocks.handleCoordinationOp).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(String),
+      { kind: "inc" },
+      expect.any(String),
+      undefined,
+    );
+  });
 });
 
 describe("GET /portal/me/coordination/projection", () => {
@@ -106,6 +149,39 @@ describe("GET /portal/me/coordination/projection", () => {
   it("should 404 when coordination is not configured", async () => {
     mocks.handleCoordinationProjection.mockResolvedValueOnce({ kind: "not_configured" });
     expect((await get(PROJ)).status).toBe(StatusCodes.NOT_FOUND);
+  });
+
+  it("should 409 with the candidates when the problem is ambiguous", async () => {
+    mocks.handleCoordinationProjection.mockResolvedValueOnce({
+      kind: "ambiguous",
+      problemIds: ["p1", "p2"],
+    });
+    const res = await get(PROJ);
+    expect(res.status).toBe(StatusCodes.CONFLICT);
+    expect(await res.json()).toEqual({ error: "ambiguous_problem", problemIds: ["p1", "p2"] });
+  });
+
+  it("should forward the query's problemId to the handler", async () => {
+    // [Issue #3125] GET carries it in the query, POST in the body.
+    mocks.handleCoordinationProjection.mockResolvedValueOnce({ kind: "ok", projection: {} });
+    await get(`${PROJ}?problemId=p2`);
+    expect(mocks.handleCoordinationProjection).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(String),
+      "p2",
+    );
+  });
+
+  it("should treat an empty problemId as absent", async () => {
+    // `?problemId=` must not resolve "the problem named empty string", which
+    // would be `not_configured` for every team.
+    mocks.handleCoordinationProjection.mockResolvedValueOnce({ kind: "ok", projection: {} });
+    await get(`${PROJ}?problemId=`);
+    expect(mocks.handleCoordinationProjection).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(String),
+      undefined,
+    );
   });
 });
 

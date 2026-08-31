@@ -23,9 +23,10 @@ describe("ac26-crypto-battle over the dispatcher's ctx", () => {
       ]),
       { "ac26-crypto-battle": { plugin: "coordination/crypto-battle.ts" } },
     );
-    const scope = await resolve("key");
-    expect(scope).not.toBeNull();
-    if (!scope) return;
+    const resolution = await resolve("key");
+    expect(resolution.kind).toBe("scope");
+    if (resolution.kind !== "scope") return;
+    const scope = resolution.scope;
     expect(scope.ctx.teamIds).toEqual(["alpha", "bravo"]);
     const state: { teams: Record<string, unknown> } = battle.initialState(scope.ctx);
     expect(Object.keys(state.teams).sort()).toEqual(["alpha", "bravo"]);
