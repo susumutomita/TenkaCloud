@@ -27,3 +27,12 @@ TenkaCloud は AWS 上の multi-tenant cloud competition platform です。Contr
 ## Verification
 
 - commit 前に `make before-commit` を通す。
+- 実装後は `/verify` を使い、Issue / Acceptance Criteria と `git diff` を突き合わせて検証する。
+- 検証結果は `VERIFIED` / `UNVERIFIED` / `FAILED` を区別する。
+  - `VERIFIED`: 現在の環境で実行可能な test / lint / typecheck / build 等が成功し、根拠を確認できた。
+  - `UNVERIFIED`: 実機、利用不能な AWS/shared environment、credentials/secret、外部サービス/account 等が必要で、この session では確認できない。
+  - `FAILED`: 現在の環境で実行可能な検査が、実装または repository state に起因して失敗している。
+- `FAILED` は原因を調査して修正し、同じ検査を再実行する。コード起因の失敗を残したまま完了扱いにしない。
+- `UNVERIFIED` は実装、commit 準備、PR 準備を停止する理由にしない。未検証理由と、人間または disposable environment で残る最小の確認手順を明記して先へ進む。
+- `UNVERIFIED` を成功扱いしない。mock、silent fallback、空値、検査弱体化で環境不足を隠さない。
+- cross-plane、auth、IAM、tenant isolation、migration、cost、scoring、deployment 等の非自明・高リスク変更では、実装者とは独立した `verifier` subagent で反証する。単純修正では必須にしない。
