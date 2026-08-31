@@ -40,7 +40,21 @@ export interface CoordinationDispatchInput<Op> {
 }
 
 export type CoordinationDispatchOutcome =
-  | { readonly kind: "ok"; readonly projection: unknown }
+  | {
+      readonly kind: "ok";
+      readonly projection: unknown;
+      /**
+       * [Issue #659] Team scores the op CHANGED, absolute, keyed by teamId.
+       *
+       * Only present when the plugin declares `teamScores`, and only carrying
+       * the teams whose figure actually moved — usually the acting team, two
+       * for a hunt. The platform copies these onto the deployment rows so the
+       * scoreboard shows the match; before this, a coordination problem's score
+       * could not reach it at all (`scoring` is undeclared for such problems and
+       * no builtin kind reads plugin state).
+       */
+      readonly changedScores?: Readonly<Record<string, number>>;
+    }
   | { readonly kind: "rejected"; readonly error: string }
   | { readonly kind: "conflict" };
 
@@ -96,7 +110,35 @@ export async function dispatchCoordinationOp<State, Op, Projection>(
     input.teamId,
     input.fallbackProjection as Projection,
   );
-  return { kind: "ok", projection };
+  // [Issue #659] Compare before and after so only the rows that moved are
+  // written. A plugin that throws here must not lose the op: the state is
+  // already committed, and a missing scoreboard update is repaired by the next
+  // op, while a thrown error would report a rejection that did not happen.
+  return { kind: "ok", projection, changedScores: diffTeamScores(plugin, state, verdict.state) };
+}
+
+function diffTeamScores<State, Op, Projection>(
+  plugin: CoordinationPlugin<State, Op, Projection>,
+  before: State,
+  after: State,
+): Readonly<Record<string, number>> | undefined {
+  if (!plugin.teamScores) return undefined;
+  try {
+    const previous = plugin.teamScores(before);
+    const current = plugin.teamScores(after);
+    const changed: Record<string, number> = {};
+    for (const [teamId, score] of Object.entries(current)) {
+      if (typeof score === "number" && Number.isFinite(score) && previous[teamId] !== score) {
+        changed[teamId] = score;
+      }
+    }
+    return Object.keys(changed).length > 0 ? changed : undefined;
+  } catch (err) {
+    console.warn("[coordination] teamScores threw; scoreboard not updated for this op", {
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return undefined;
+  }
 }
 
 /**

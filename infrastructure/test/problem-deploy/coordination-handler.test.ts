@@ -504,3 +504,117 @@ describe("makeCoordinationScopeResolver", () => {
     expect(scopeOf(await resolve("key"))?.state.problemId).toBe("p1");
   });
 });
+
+/**
+ * [Issue #659] A coordination Battle's own scoring reaching the scoreboard.
+ *
+ * Before this the two were structurally disconnected: such a problem declares
+ * no `scoring` (no builtin kind can serve it), and the scoring Lambda does not
+ * run plugins, so the portal showed 0 for a team an hour into a match while the
+ * plugin's own state held the real figure.
+ */
+describe("handleCoordinationOp publishing the plugin's scores", () => {
+  const scopeFor = () => ({
+    kind: "scope" as const,
+    scope: {
+      state: { tenantId: "tn1", eventId: "e1", problemId: "p1", runId: "default" },
+      teamId: "t1",
+      ctx: { eventId: "e1", teamIds: ["t1", "t2"] },
+      window: { eventStartsAt: "2026-05-31T23:00:00Z", eventEndsAt: "2026-06-01T09:00:00Z" },
+      moduleRef: "p1",
+      fallbackProjection: {},
+    },
+  });
+
+  /** A plugin whose score for the acting team moves 0 -> 30 on any op. */
+  const scoringPlugin: CoordinationPlugin<{ n: number }, unknown, unknown> = {
+    initialState: () => ({ n: 0 }),
+    validateOp: () => ({ ok: true }),
+    applyOp: (state) => ({ n: state.n + 30 }),
+    projectForTeam: (state) => state,
+    teamScores: (state) => ({ t1: state.n, t2: 0 }),
+  };
+
+  it("publishes only the teams whose score actually moved", async () => {
+    const publishScores = vi.fn(async () => undefined);
+    await handleCoordinationOp(
+      {
+        importer: async () => ({ default: scoringPlugin }),
+        store: fakeStore({ state: { n: 0 }, version: 1 }),
+        resolveScope: async () => scopeFor(),
+        publishScores,
+      },
+      "key",
+      { kind: "go" },
+      "2026-06-01T00:00:00Z",
+    );
+
+    expect(publishScores).toHaveBeenCalledTimes(1);
+    const [scope, scores] = publishScores.mock.calls[0] ?? [];
+    expect(scope).toEqual({ tenantId: "tn1", eventId: "e1", problemId: "p1", runId: "default" });
+    // t2 did not move, so it is not written — an op normally touches one team.
+    expect(scores).toEqual({ t1: 30 });
+  });
+
+  it("does not publish when a plugin declares no scores", async () => {
+    // Every existing plugin is in this position; they must keep behaving as
+    // they did, which means writing nothing to the scoreboard.
+    const publishScores = vi.fn(async () => undefined);
+    const silent: CoordinationPlugin<{ n: number }, unknown, unknown> = {
+      initialState: scoringPlugin.initialState,
+      validateOp: scoringPlugin.validateOp,
+      applyOp: scoringPlugin.applyOp,
+      projectForTeam: scoringPlugin.projectForTeam,
+    };
+    await handleCoordinationOp(
+      {
+        importer: async () => ({ default: silent }),
+        store: fakeStore({ state: { n: 0 }, version: 1 }),
+        resolveScope: async () => scopeFor(),
+        publishScores,
+      },
+      "key",
+      { kind: "go" },
+      "2026-06-01T00:00:00Z",
+    );
+    expect(publishScores).not.toHaveBeenCalled();
+  });
+
+  it("does not publish when the op was rejected", async () => {
+    const publishScores = vi.fn(async () => undefined);
+    await handleCoordinationOp(
+      {
+        importer: async () => ({
+          default: { ...scoringPlugin, validateOp: () => ({ ok: false, error: "no" }) },
+        }),
+        store: fakeStore({ state: { n: 0 }, version: 1 }),
+        resolveScope: async () => scopeFor(),
+        publishScores,
+      },
+      "key",
+      { kind: "go" },
+      "2026-06-01T00:00:00Z",
+    );
+    expect(publishScores).not.toHaveBeenCalled();
+  });
+
+  it("still reports the op as accepted when publishing throws", async () => {
+    // The state is already committed by this point. Turning a scoreboard write
+    // into a rejection would tell the participant their move failed when it did
+    // not, and the next op repairs the figure anyway.
+    const out = await handleCoordinationOp(
+      {
+        importer: async () => ({ default: scoringPlugin }),
+        store: fakeStore({ state: { n: 0 }, version: 1 }),
+        resolveScope: async () => scopeFor(),
+        publishScores: async () => {
+          throw new Error("dynamodb unavailable");
+        },
+      },
+      "key",
+      { kind: "go" },
+      "2026-06-01T00:00:00Z",
+    ).catch((err: unknown) => ({ kind: "threw", err }) as const);
+    expect(out.kind).toBe("ok");
+  });
+});
