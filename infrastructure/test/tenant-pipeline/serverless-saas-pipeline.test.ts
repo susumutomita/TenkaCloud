@@ -5,7 +5,7 @@ import { describe, it } from "vitest";
 import { ServerlessSaaSPipeline } from "../../lib/tenant-pipeline/serverless-saas-pipeline";
 
 function synth(): Template {
-  const app = new App();
+  const app = new App({ autoSynth: false });
   const sharedStack = new Stack(app, "TestSharedResources", {
     env: { account: "123456789012", region: "ap-northeast-1" },
   });

@@ -89,7 +89,7 @@ describe("buildContentSecurityPolicy (pure helper)", () => {
 
 describe("buildSecurityHeadersPolicy (CDK ResponseHeadersPolicy synth)", () => {
   function synth(): Template {
-    const app = new App();
+    const app = new App({ autoSynth: false });
     const stack = new Stack(app, "TestStack");
     buildSecurityHeadersPolicy(stack, "TestPolicy", {
       connectSrcAllowedOrigins: ["https://api.example.com"],

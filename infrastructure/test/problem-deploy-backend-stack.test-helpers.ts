@@ -48,7 +48,7 @@ function memoizeTemplate<Args extends unknown[]>(
 // problem-deploy CodeBuild Project は 0 個)。在来 CodeBuild 経路を検証したい test は
 // {@link synthWithCodeBuild} (= CDK_PARAM_DEPLOY_VIA_LAMBDA=false rollback 相当) を使う。
 export const synthDefault = memoizeTemplate((): Template => {
-  const app = new cdk.App();
+  const app = new cdk.App({ autoSynth: false });
   const stack = new ProblemDeployBackendStack(app, "TestStack", {
     eventBusArn: "arn:aws:events:ap-northeast-1:123456789012:event-bus/test-bus",
     sourceBucketName: "test-source-bucket",
@@ -70,7 +70,7 @@ export const synthDefault = memoizeTemplate((): Template => {
 // 検証したい test はこの helper を使う (= 既定反転前の synthDefault と同一 shape)。複数 test file
 // から読まれるので synthDefault と同様メモ化する。
 export const synthWithCodeBuild = memoizeTemplate((): Template => {
-  const app = new cdk.App();
+  const app = new cdk.App({ autoSynth: false });
   const stack = new ProblemDeployBackendStack(app, "TestStackCodeBuild", {
     eventBusArn: "arn:aws:events:ap-northeast-1:123456789012:event-bus/test-bus",
     sourceBucketName: "test-source-bucket",
@@ -90,7 +90,7 @@ export const synthWithCodeBuild = memoizeTemplate((): Template => {
 // Issue #2232: useBulkDistributedMap: true を反映させた EventApi Lambda env を検証するための
 // 別 synth (= 既存 synthWithDeployConcurrentBuildLimit と同じ pattern)。
 export const synthWithBulkDistributedMap = memoizeTemplate((): Template => {
-  const app = new cdk.App();
+  const app = new cdk.App({ autoSynth: false });
   const stack = new ProblemDeployBackendStack(app, "TestStackWithDistributedMap", {
     eventBusArn: "arn:aws:events:ap-northeast-1:123456789012:event-bus/test-bus",
     sourceBucketName: "test-source-bucket",
@@ -107,7 +107,7 @@ export const synthWithBulkDistributedMap = memoizeTemplate((): Template => {
 // Issue #2311: auditLogEnabled: false を反映させ、 監査を書く Lambda 群の env に
 // AUDIT_LOG_ENABLED="false" が注入されることを検証するための別 synth。
 export const synthWithAuditLogDisabled = memoizeTemplate((): Template => {
-  const app = new cdk.App();
+  const app = new cdk.App({ autoSynth: false });
   const stack = new ProblemDeployBackendStack(app, "TestStackAuditDisabled", {
     eventBusArn: "arn:aws:events:ap-northeast-1:123456789012:event-bus/test-bus",
     sourceBucketName: "test-source-bucket",
@@ -124,7 +124,7 @@ export const synthWithAuditLogDisabled = memoizeTemplate((): Template => {
 // Issue #2406: ops monitoring is opt-in via CDK_PARAM_OPS_ALERT_EMAIL. This helper pins the
 // ProblemDeployBackendStack shape when the alerting email is present.
 export const synthWithOpsMonitoring = memoizeTemplate((): Template => {
-  const app = new cdk.App();
+  const app = new cdk.App({ autoSynth: false });
   const stack = new ProblemDeployBackendStack(app, "TestStackOpsMonitoring", {
     eventBusArn: "arn:aws:events:ap-northeast-1:123456789012:event-bus/test-bus",
     sourceBucketName: "test-source-bucket",
@@ -148,7 +148,7 @@ export const synthWithOpsMonitoring = memoizeTemplate((): Template => {
 // と同じ pattern)。[Issue #2440] "turso" は純 SQL backend (Events/Teams
 // テーブルを synth しない) を意味する。
 export const synthWithControlDataBackendTurso = memoizeTemplate((): Template => {
-  const app = new cdk.App();
+  const app = new cdk.App({ autoSynth: false });
   const stack = new ProblemDeployBackendStack(app, "TestStackControlDataTurso", {
     eventBusArn: "arn:aws:events:ap-northeast-1:123456789012:event-bus/test-bus",
     sourceBucketName: "test-source-bucket",
@@ -177,7 +177,7 @@ export function synthWithDeployViaLambda(): Template {
 // `problemsRootAbs` は実在ディレクトリを要する (Source.asset が synth 時に stage する) ため、
 // 呼び出し側が fixture dir を作って渡す。
 export const synthWithPackAssets = memoizeTemplate((packAssets: readonly PackAsset[]): Template => {
-  const app = new cdk.App();
+  const app = new cdk.App({ autoSynth: false });
   const stack = new ProblemDeployBackendStack(app, "TestStackPackAssets", {
     eventBusArn: "arn:aws:events:ap-northeast-1:123456789012:event-bus/test-bus",
     sourceBucketName: "test-source-bucket",
@@ -194,7 +194,7 @@ export const synthWithPackAssets = memoizeTemplate((packAssets: readonly PackAss
 
 // #538: deployConcurrentBuildLimit を反映させた CodeBuild Project を検証するための別 synth。
 export const synthWithDeployConcurrentBuildLimit = memoizeTemplate((): Template => {
-  const app = new cdk.App();
+  const app = new cdk.App({ autoSynth: false });
   const stack = new ProblemDeployBackendStack(app, "TestStackWithLimit", {
     eventBusArn: "arn:aws:events:ap-northeast-1:123456789012:event-bus/test-bus",
     sourceBucketName: "test-source-bucket",
@@ -213,7 +213,7 @@ export const synthWithDeployConcurrentBuildLimit = memoizeTemplate((): Template 
 // #778: eventBusArn を省略した Lite mode の synth。 別 stackId / bucket name を渡す。
 // stackId / sourceBucketName の組み合わせごとにキャッシュされる (= 同じ引数の再呼び出しのみ再利用)。
 export const synthLite = memoizeTemplate((stackId: string, sourceBucketName: string): Template => {
-  const app = new cdk.App();
+  const app = new cdk.App({ autoSynth: false });
   const stack = new ProblemDeployBackendStack(app, stackId, {
     sourceBucketName,
     sourceObjectKey: "source.zip",
@@ -235,7 +235,7 @@ export const synthLite = memoizeTemplate((stackId: string, sourceBucketName: str
  * 単体で synth する。
  */
 export const synthParticipantPortalLambdaOnly = memoizeTemplate((): Template => {
-  const app = new cdk.App();
+  const app = new cdk.App({ autoSynth: false });
   const stack = new cdk.Stack(app, "TestStack");
   const deployments = new cdk.aws_dynamodb.Table(stack, "Deployments", {
     partitionKey: { name: "PK", type: cdk.aws_dynamodb.AttributeType.STRING },
@@ -268,7 +268,7 @@ export const synthParticipantPortalLambdaOnly = memoizeTemplate((): Template => 
  * `DEPLOY_JOB_LOG_GROUP` env の付与を検証する。 flag OFF 版は `synthParticipantPortalLambdaOnly`。
  */
 export const synthParticipantPortalLambdaOnlyWithJobLogGroup = memoizeTemplate((): Template => {
-  const app = new cdk.App();
+  const app = new cdk.App({ autoSynth: false });
   const stack = new cdk.Stack(app, "TestStack");
   const deployments = new cdk.aws_dynamodb.Table(stack, "Deployments", {
     partitionKey: { name: "PK", type: cdk.aws_dynamodb.AttributeType.STRING },
@@ -303,7 +303,7 @@ export const synthParticipantPortalLambdaOnlyWithJobLogGroup = memoizeTemplate((
  * construct 単体で行う (= synthParticipantPortalLambdaOnly と同方針)。
  */
 export const synthCoordinationDispatcherLambdaOnly = memoizeTemplate((): Template => {
-  const app = new cdk.App();
+  const app = new cdk.App({ autoSynth: false });
   const stack = new cdk.Stack(app, "TestStack");
   const deployments = new cdk.aws_dynamodb.Table(stack, "Deployments", {
     partitionKey: { name: "PK", type: cdk.aws_dynamodb.AttributeType.STRING },
@@ -329,7 +329,7 @@ export const synthCoordinationDispatcherLambdaOnly = memoizeTemplate((): Templat
  * coordination-plugin battle report `not_configured` (Issue 486).
  */
 export const synthCoordinationDispatcherLambdaPureTurso = memoizeTemplate((): Template => {
-  const app = new cdk.App();
+  const app = new cdk.App({ autoSynth: false });
   const stack = new cdk.Stack(app, "TestStack");
   const dispatcher = new CoordinationDispatcherLambda(stack, "CoordinationDispatcher", {
     environmentName: "development",

@@ -14,7 +14,7 @@ import { CfnDeployLambda } from "../../lib/problem-deploy/cfn-deploy-lambda";
 function buildTemplate(
   options: { readonly deployAllowedCidrs?: readonly string[] } = {},
 ): Template {
-  const app = new cdk.App();
+  const app = new cdk.App({ autoSynth: false });
   const stack = new cdk.Stack(app, "Test", {
     env: { account: "123456789012", region: "ap-northeast-1" },
   });

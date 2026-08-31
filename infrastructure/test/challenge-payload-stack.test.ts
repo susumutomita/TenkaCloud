@@ -19,7 +19,7 @@ function synth(props?: {
   bucketName?: string;
   githubRepository?: string;
 }) {
-  const app = new App();
+  const app = new App({ autoSynth: false });
   const stack = new ChallengePayloadStack(app, "Test", {
     env: { account: "123456789012", region: "ap-northeast-1" },
     environmentName: "development",

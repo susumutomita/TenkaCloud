@@ -128,7 +128,7 @@ export const DOC_PAGES: readonly DocPage[] = [
       { id: "rehearse-the-real-interaction", text: "Rehearse the real interaction" },
       { id: "publish-safely", text: "Publish safely" },
     ],
-    body: "Problem author manual with a visual publication decision flow: validate from a fresh checkout, rehearse start through flag submission when the local runtime is supported, record Not run when it is unsupported, and use an independent participant-role test before publication. Also covers participant-friendly scenarios, metadata.json, runtime entry, verifier, scoring, hints, reset, stop, immutable commit pins, and safe publishing. WordPress belongs only as an independent local problem, never onboarding content. 問題作成者マニュアル。fresh checkoutでの検証、対応runtimeの実演、未対応時のNot run、第三者の参加者役確認をフロー図で示す。",
+    body: "Problem author manual with a visual publication decision flow: validate from a fresh checkout, rehearse start through flag submission when the local runtime is supported, record Not run without blocking merge when it is unsupported, and verify the participant-visible route with an author, reviewer, or deterministic browser assertion. Independent testers and real-cloud runs are optional event rehearsals. Also covers participant-friendly scenarios, metadata.json, runtime entry, verifier, scoring, hints, reset, stop, immutable commit pins, and safe publishing. 問題作成者マニュアル。fresh checkoutでの検証、対応runtimeの実演、未対応時の非blockingなNot run、作成者・reviewer・ブラウザassertionによる参加者役確認をフロー図で示す。",
   },
   {
     slug: "concepts/problem-packs",

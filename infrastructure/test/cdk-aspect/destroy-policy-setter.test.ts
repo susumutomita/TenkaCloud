@@ -22,7 +22,7 @@ function templateWithAspect(
   build: (stack: Stack) => void,
   skipResourceTypes: readonly string[] = [],
 ): Template {
-  const stack = new Stack(new App(), "TestStack");
+  const stack = new Stack(new App({ autoSynth: false }), "TestStack");
   build(stack);
   Aspects.of(stack).add(new DestroyPolicySetter({ skipResourceTypes }));
   return Template.fromStack(stack);

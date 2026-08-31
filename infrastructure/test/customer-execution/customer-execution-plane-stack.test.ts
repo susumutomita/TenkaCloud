@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { CustomerExecutionPlaneStack } from "../../lib/customer-execution/customer-execution-plane-stack";
 
 function synth(): Template {
-  const app = new App();
+  const app = new App({ autoSynth: false });
   const stack = new CustomerExecutionPlaneStack(app, "Test", {
     planeAudience: "plane://acme/challenge-ou",
     allowedAccountIds: ["111111111111"],

@@ -20,7 +20,7 @@ import {
  */
 describe("LogGroupRetention aspect", () => {
   it("should set RetentionInDays=1 (the param default) on an explicit Lambda LogGroup", () => {
-    const app = new App();
+    const app = new App({ autoSynth: false });
     const stack = new Stack(app, "RetentionStack");
     new LambdaFunction(stack, "Fn", {
       runtime: Runtime.NODEJS_22_X,
@@ -41,7 +41,7 @@ describe("LogGroupRetention aspect", () => {
   });
 
   it("should overwrite an already-set retention so the param always wins", () => {
-    const app = new App();
+    const app = new App({ autoSynth: false });
     const stack = new Stack(app, "OverwriteStack");
     // 既に retention=ONE_WEEK (= 7 日) が設定済の LogGroup (= state-machine / log-destination 相当)。
     new LogGroup(stack, "Preset", {
@@ -57,7 +57,7 @@ describe("LogGroupRetention aspect", () => {
   });
 
   it("should leave stacks without LogGroups untouched", () => {
-    const app = new App();
+    const app = new App({ autoSynth: false });
     const stack = new Stack(app, "EmptyStack");
     Aspects.of(app).add(new LogGroupRetention());
 
@@ -69,7 +69,7 @@ describe("LogGroupRetention aspect", () => {
     // 実 Lambda construct (CoordinationDispatcherLambda) は明示 LogGroup を持つようになった。
     // bin/wire の App scope と同様に Aspect を適用すると、 その LogGroup の retention が 1 日に
     // 倒れることを end-to-end で pin する (= "Never expire" log group の根絶)。
-    const app = new cdk.App();
+    const app = new cdk.App({ autoSynth: false });
     const stack = new cdk.Stack(app, "RepresentativeStack");
     const deployments = new cdk.aws_dynamodb.Table(stack, "Deployments", {
       partitionKey: { name: "PK", type: cdk.aws_dynamodb.AttributeType.STRING },

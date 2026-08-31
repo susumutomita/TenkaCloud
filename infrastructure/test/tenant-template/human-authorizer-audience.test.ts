@@ -24,7 +24,7 @@ import { buildAppPlaneCore } from "../../lib/app-plane-core/index";
  */
 
 function synth(features?: Readonly<Record<string, boolean>>): Template {
-  const app = new cdk.App();
+  const app = new cdk.App({ autoSynth: false });
   const stack = new cdk.Stack(app, "TestStack", {
     env: { account: "123456789012", region: "ap-northeast-1" },
   });

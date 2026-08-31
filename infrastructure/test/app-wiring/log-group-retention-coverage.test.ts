@@ -120,7 +120,7 @@ function allLogGroups(): LogGroupRow[] {
     dotenvConfig: () => undefined,
     discoverProblems: stubProblems,
   });
-  const app = new cdk.App({ context: { "aws:cdk:bundling-stacks": [] } });
+  const app = new cdk.App({ autoSynth: false, context: { "aws:cdk:bundling-stacks": [] } });
   buildTenkaCloudApp(app, config);
 
   const rows: LogGroupRow[] = [];
@@ -153,7 +153,7 @@ function allFunctions(): FunctionRow[] {
     dotenvConfig: () => undefined,
     discoverProblems: stubProblems,
   });
-  const app = new cdk.App({ context: { "aws:cdk:bundling-stacks": [] } });
+  const app = new cdk.App({ autoSynth: false, context: { "aws:cdk:bundling-stacks": [] } });
   buildTenkaCloudApp(app, config);
 
   const rows: FunctionRow[] = [];

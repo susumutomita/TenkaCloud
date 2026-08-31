@@ -141,7 +141,7 @@ describe("PRE_SIGNUP_HANDLER sandbox semantics (#1335)", () => {
 
 describe("attachFederatedAdminAllowlist (CDK) (#1335)", () => {
   it("should attach a Pre sign-up Lambda trigger on the UserPool with the allowlist env", () => {
-    const app = new App();
+    const app = new App({ autoSynth: false });
     const stack = new Stack(app, "TestStack");
     const userPool = new UserPool(stack, "Pool");
     attachFederatedAdminAllowlist(stack, userPool, ["corp-entra/admin@example.com"]);
@@ -163,7 +163,7 @@ describe("attachFederatedAdminAllowlist (CDK) (#1335)", () => {
   });
 
   it("should still attach the trigger when allowlist is empty (= fail-safe deny-all)", () => {
-    const app = new App();
+    const app = new App({ autoSynth: false });
     const stack = new Stack(app, "TestStack");
     const userPool = new UserPool(stack, "Pool");
     attachFederatedAdminAllowlist(stack, userPool, []);

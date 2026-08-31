@@ -10,7 +10,7 @@ import { grantChallengePayloadRead } from "../../lib/utils/iam-helpers";
  */
 describe("grantChallengePayloadRead", () => {
   it("should add an s3:GetObject statement when a bucket name is given", () => {
-    const stack = new Stack(new App(), "T");
+    const stack = new Stack(new App({ autoSynth: false }), "T");
     const addToRolePolicy = vi.fn();
     const fn = { addToRolePolicy } as unknown as IFunction;
     grantChallengePayloadRead(stack, fn, "challenge-payloads");
@@ -25,7 +25,7 @@ describe("grantChallengePayloadRead", () => {
   });
 
   it("should be a no-op when the bucket name is undefined or empty", () => {
-    const stack = new Stack(new App(), "T");
+    const stack = new Stack(new App({ autoSynth: false }), "T");
     const addToRolePolicy = vi.fn();
     const fn = { addToRolePolicy } as unknown as IFunction;
     grantChallengePayloadRead(stack, fn, undefined);

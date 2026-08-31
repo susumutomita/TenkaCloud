@@ -10,22 +10,22 @@ You do not need to operate a TenkaCloud tenant or change platform code.
 
 ## Your goal
 
-A pack is ready to publish only when another person can reproduce all three
-outcomes:
+A pack is ready to publish when these three outcomes are reproducible:
 
 1. `make pack-validate` succeeds from a fresh checkout.
 2. For a supported local runtime, the author rehearses the complete path from
    start through flag submission.
-3. Someone who did not build the problem can explain the goal and first action
-   from the participant-facing statement alone.
+3. A participant-role check can explain the goal and first action from the
+   participant-facing statement alone.
 
 ![Decision flow from authoring a problem pack to publication](/docs/assets/problem-author-flow.en.svg)
 
 When local execution is unsupported, record `Not run` instead of inferring a
-result. Verify in a supported test environment or tell the organizer that the
-runtime remains unverified. If the independent reader cannot understand the
-problem, rewrite its situation, goal, first action, and completion condition
-before changing the environment.
+result. This does not block merge. A real-cloud rehearsal is optional before a
+specific event. The participant-role check may be performed by the author or
+reviewer, or recorded as a deterministic browser assertion; it does not require
+an independent tester. If the statement is unclear, rewrite its situation,
+goal, first action, and completion condition before changing the environment.
 
 ## Create and validate a pack
 
@@ -80,11 +80,13 @@ the problem is understandable or solvable.
 4. Perform the intended investigation or repair.
 5. Submit the exact flag through the Participant Portal.
 6. Test one wrong flag, reset, stop, and a second start.
-7. Ask someone who did not author the problem to complete the same path.
+7. Repeat the participant-role path without using implementation, verifier, or
+   answer data.
 
-Do not show that final tester the implementation, verifier, or correct flag.
-Publish only when they can explain what happened, what must be fixed, where to
-start, and what proves completion—and then reach the real flag submission.
+The author, a reviewer, or a deterministic browser harness may record this
+evidence. Publish when the participant-visible route explains what happened,
+what must be fixed, where to start, and what proves completion. Independent
+third-party and real-cloud runs are optional event rehearsals, not merge gates.
 
 Local mode is for problems that declare a supported local runtime. It is not a
 WordPress tutorial or a substitute for the participant onboarding. A WordPress

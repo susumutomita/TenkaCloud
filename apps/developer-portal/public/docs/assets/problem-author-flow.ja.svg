@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="600" viewBox="0 0 1200 600" role="img" aria-labelledby="title desc">
   <title id="title">問題パックを作成して公開するまでの判定フロー</title>
-  <desc id="desc">新しいcheckoutで検証し、対応するlocal runtimeでリハーサルし、第三者が問題文だけでゴールを理解できた場合に公開する。未対応runtimeはNot runと記録し、理解できない場合は問題文を書き直す。</desc>
+  <desc id="desc">新しいcheckoutで検証し、対応するlocal runtimeでリハーサルし、参加者役で問題文だけからゴールを確認して公開する。未対応runtimeはNot runと記録してもmergeを止めず、理解できない場合は問題文を書き直す。</desc>
   <defs>
     <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
       <path d="M0 0 L10 5 L0 10 Z" fill="#466582"/>
@@ -10,7 +10,7 @@
     </style>
   </defs>
   <rect class="bg" width="1200" height="600" rx="24"/>
-  <text class="title" x="48" y="48">作成 → 検証 → 実演 → 第三者確認 → 公開</text>
+  <text class="title" x="48" y="48">作成 → 検証 → 実演 → 参加者役で確認 → 公開</text>
 
   <rect class="box" x="48" y="92" width="210" height="104" rx="16"/>
   <text class="label" x="72" y="124">1. 新しいcheckout</text>

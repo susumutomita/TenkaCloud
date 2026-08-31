@@ -24,7 +24,7 @@ function buildTestStack(opts: { deployViaLambda?: boolean; statusWriter?: boolea
   stack: cdk.Stack;
   template: Template;
 } {
-  const app = new cdk.App();
+  const app = new cdk.App({ autoSynth: false });
   const stack = new cdk.Stack(app, "Test", {
     env: { account: "123456789012", region: "ap-northeast-1" },
   });
@@ -211,7 +211,7 @@ describe("DeployCreateStateMachine deployViaLambda flag (#2291)", () => {
   });
 
   it("should require cfnDeployFunction when deployViaLambda is true", () => {
-    const app = new cdk.App();
+    const app = new cdk.App({ autoSynth: false });
     const stack = new cdk.Stack(app, "Bad", {
       env: { account: "123456789012", region: "ap-northeast-1" },
     });
@@ -242,7 +242,7 @@ describe("DeployCreateStateMachine deployViaLambda flag (#2291)", () => {
   });
 
   it("should require eventBus when deployViaLambda is true (fail loud, #2291)", () => {
-    const app = new cdk.App();
+    const app = new cdk.App({ autoSynth: false });
     const stack = new cdk.Stack(app, "NoBus", {
       env: { account: "123456789012", region: "ap-northeast-1" },
     });
@@ -317,7 +317,7 @@ describe("DeployCreateStateMachine deployViaLambda flag (#2291)", () => {
   });
 
   it("should require codeBuildProject on the default CodeBuild path", () => {
-    const app = new cdk.App();
+    const app = new cdk.App({ autoSynth: false });
     const stack = new cdk.Stack(app, "MissingCodeBuild", {
       env: { account: "123456789012", region: "ap-northeast-1" },
     });

@@ -7,7 +7,7 @@ import { buildCustomDomainDistributionProps } from "../../lib/security/cloudfron
  * 設定時のみ domainNames + certificate + TLS 1.2 を返すことを pin する。
  */
 function scope() {
-  return new Stack(new App(), "TestStack");
+  return new Stack(new App({ autoSynth: false }), "TestStack");
 }
 
 describe("buildCustomDomainDistributionProps (Issue #1695)", () => {

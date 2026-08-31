@@ -30,7 +30,7 @@ import { TenantTemplateStack } from "../../lib/tenant-template/tenant-template-s
 const TENANT_ID = "tenant-1";
 
 function makeTemplate(features?: Readonly<Record<string, boolean>>): Template {
-  const app = new cdk.App();
+  const app = new cdk.App({ autoSynth: false });
   const supportStack = new cdk.Stack(app, "Support", {
     env: { account: "123456789012", region: "ap-northeast-1" },
   });

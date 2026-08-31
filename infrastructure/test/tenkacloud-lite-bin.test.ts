@@ -10,7 +10,7 @@ import { TenkaCloudLiteStack } from "../lib/tenkacloud-lite";
 /**
  * Issue #778: bin/tenkacloud-lite.ts は `make lite-up` から
  * `cdk deploy` で呼ばれる app entry。 ここでは entry の配線を **直接 reproducer
- * する** (= bin file を import すると `new cdk.App()` の副作用が起きるため、
+ * する** (= bin file を import すると `new cdk.App({ autoSynth: false })` の副作用が起きるため、
  * 同等の wiring を test 内で再構築して assertion を pin する)。
  *
  * 重要な invariant:
@@ -23,7 +23,7 @@ import { TenkaCloudLiteStack } from "../lib/tenkacloud-lite";
  */
 
 function buildLiteApp(): cdk.App {
-  const app = new cdk.App();
+  const app = new cdk.App({ autoSynth: false });
   cdk.Aspects.of(app).add(new KmsKeyShortPendingWindow(7));
   cdk.Aspects.of(app).add(new CodeBuildUseAwsManagedKms());
 

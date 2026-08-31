@@ -24,7 +24,7 @@ function synthRuntimeConfigStack() {
   const outdirBase = process.env.CDK_OUTDIR ?? tmpdir();
   mkdirSync(outdirBase, { recursive: true });
   const outdir = mkdtempSync(join(outdirBase, "runtime-config-test-"));
-  const app = new App({ outdir });
+  const app = new App({ autoSynth: false, outdir });
   const hosting = new Stack(app, "HostingFixture");
   const siteBucket = new Bucket(hosting, "SiteBucket");
   const distribution = new Distribution(hosting, "Distribution", {

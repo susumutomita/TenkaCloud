@@ -9,7 +9,7 @@ import { CfnDeployLambda } from "../lib/problem-deploy/cfn-deploy-lambda";
 /**
  * Issue #2515: `test/setup.ts` sets `process.env.CDK_CONTEXT_JSON` (aws-cdk-lib's `App`
  * constructor reads this env var — `cxapi.CONTEXT_ENV` — on every construction, regardless of
- * whether `props.context` was passed) so every `new App()` created anywhere in the
+ * whether `props.context` was passed) so every `new App({ autoSynth: false })` created anywhere in the
  * infrastructure test suite defaults `aws:cdk:bundling-stacks` to `[]` and skips real esbuild
  * bundling. That esbuild step (~6.5-8s per Lambda, ~35MB js + ~90MB sourcemap) is what dominates
  * `test:coverage` wall time; skipping it in every test but one is the fix.
@@ -26,7 +26,7 @@ describe("CDK bundling-skip test context (Issue #2515)", () => {
   });
 
   it("should default a fresh App's aws:cdk:bundling-stacks context to []", () => {
-    const app = new cdk.App();
+    const app = new cdk.App({ autoSynth: false });
     expect(app.node.tryGetContext("aws:cdk:bundling-stacks")).toEqual([]);
   });
 
@@ -34,7 +34,7 @@ describe("CDK bundling-skip test context (Issue #2515)", () => {
     // Isolated outdir (not the shared per-worker CDK_OUTDIR) so this assertion can't be
     // confused by another test file's staged assets landing in the same directory.
     outdir = mkdtempSync(join(tmpdir(), "tenkacloud-bundling-skip-"));
-    const app = new cdk.App({ outdir });
+    const app = new cdk.App({ autoSynth: false, outdir });
     const stack = new cdk.Stack(app, "Test", {
       env: { account: "123456789012", region: "ap-northeast-1" },
     });

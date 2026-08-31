@@ -11,7 +11,7 @@ import { attachCognitoCustomLoginDomain } from "../lib/security/cognito-custom-d
  */
 describe("attachCognitoCustomLoginDomain (#1993/#1994)", () => {
   function makeStack() {
-    const app = new App();
+    const app = new App({ autoSynth: false });
     const stack = new Stack(app, "TestStack", {
       env: { account: "123456789012", region: "ap-northeast-1" },
     });

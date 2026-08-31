@@ -45,7 +45,7 @@ describe("parseTenantSamlIdpConfig (#1340)", () => {
 
 describe("attachTenantSamlIdentityProviders (CDK) (#1340)", () => {
   function makeStack() {
-    const app = new App();
+    const app = new App({ autoSynth: false });
     const stack = new Stack(app, "TestStack");
     const userPool = new UserPool(stack, "Pool");
     const client = new UserPoolClient(stack, "Client", { userPool });

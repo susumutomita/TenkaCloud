@@ -11,7 +11,7 @@ import { applyControlPlaneManagedLogin } from "../../lib/control-plane/managed-l
  */
 describe("applyControlPlaneManagedLogin (#1992)", () => {
   function makeStack() {
-    const app = new App();
+    const app = new App({ autoSynth: false });
     const stack = new Stack(app, "TestStack");
     const userPool = new UserPool(stack, "Pool");
     const userPoolDomain = userPool.addDomain("Domain", {

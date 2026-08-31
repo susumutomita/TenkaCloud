@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="600" viewBox="0 0 1200 600" role="img" aria-labelledby="title desc">
   <title id="title">Decision flow from authoring a problem pack to publication</title>
-  <desc id="desc">Validate from a fresh checkout, rehearse with a supported local runtime, and publish only when an independent tester understands the goal from the problem statement. Record unsupported local runtimes as Not run.</desc>
+  <desc id="desc">Validate from a fresh checkout, rehearse with a supported local runtime, and check the goal from the problem statement in the participant role. Record unsupported local runtimes as Not run without blocking merge.</desc>
   <defs>
     <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
       <path d="M0 0 L10 5 L0 10 Z" fill="#466582"/>
@@ -10,7 +10,7 @@
     </style>
   </defs>
   <rect class="bg" width="1200" height="600" rx="24"/>
-  <text class="title" x="48" y="48">Author → validate → rehearse → independent test → publish</text>
+  <text class="title" x="48" y="48">Author → validate → rehearse → participant-role check → publish</text>
 
   <rect class="box" x="48" y="92" width="210" height="104" rx="16"/>
   <text class="label" x="72" y="124">1. Fresh checkout</text>

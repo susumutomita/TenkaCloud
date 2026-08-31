@@ -32,7 +32,7 @@ describe("NodejsFunction real-bundling smoke test (Issue #2515)", () => {
       // test/setup.ts sets CDK_CONTEXT_JSON globally to skip bundling. Context is read inside
       // the `App` constructor, so temporarily clearing just the bundling-stacks key (preserving
       // any other keys already present) and restoring it right after is enough to make this one
-      // `new App()` call opt back into real bundling.
+      // `new App({ autoSynth: false })` call opt back into real bundling.
       const savedContextJson = process.env.CDK_CONTEXT_JSON;
       let app: cdk.App;
       try {
@@ -41,7 +41,7 @@ describe("NodejsFunction real-bundling smoke test (Issue #2515)", () => {
           : {};
         delete context["aws:cdk:bundling-stacks"];
         process.env.CDK_CONTEXT_JSON = JSON.stringify(context);
-        app = new cdk.App({ outdir });
+        app = new cdk.App({ autoSynth: false, outdir });
       } finally {
         if (savedContextJson === undefined) {
           delete process.env.CDK_CONTEXT_JSON;

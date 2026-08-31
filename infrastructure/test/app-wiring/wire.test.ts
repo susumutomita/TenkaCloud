@@ -58,7 +58,7 @@ function buildApp(envOverrides: Record<string, string> = {}): cdk.App {
   });
   // SBT の Python Lambda bundling (要 Docker) を construct 時に走らせないため、
   // bundling を全 stack で skip する (asset は placeholder になる。 synth はしない)。
-  const app = new cdk.App({ context: { "aws:cdk:bundling-stacks": [] } });
+  const app = new cdk.App({ autoSynth: false, context: { "aws:cdk:bundling-stacks": [] } });
   buildTenkaCloudApp(app, config);
   return app;
 }

@@ -11,7 +11,7 @@ import { DynamoDbLowCapacity } from "../../lib/cdk-aspect/dynamodb-low-capacity"
  */
 describe("DynamoDbLowCapacity aspect", () => {
   it("should force PROVISIONED tables to the (read, write) capacity supplied by the caller", () => {
-    const app = new App();
+    const app = new App({ autoSynth: false });
     const stack = new Stack(app, "ProvisionedStack");
     new Table(stack, "Provisioned", {
       partitionKey: { name: "pk", type: AttributeType.STRING },
@@ -27,7 +27,7 @@ describe("DynamoDbLowCapacity aspect", () => {
   });
 
   it("should leave PAY_PER_REQUEST tables untouched (no ProvisionedThroughput injected)", () => {
-    const app = new App();
+    const app = new App({ autoSynth: false });
     const stack = new Stack(app, "OnDemandStack");
     new Table(stack, "OnDemand", {
       partitionKey: { name: "pk", type: AttributeType.STRING },
@@ -44,7 +44,7 @@ describe("DynamoDbLowCapacity aspect", () => {
   });
 
   it("should convert selected third-party PAY_PER_REQUEST tables to PROVISIONED capacity", () => {
-    const app = new App();
+    const app = new App({ autoSynth: false });
     const stack = new Stack(app, "ThirdPartyOnDemandStack");
     new Table(stack, "ThirdPartyOnDemand", {
       partitionKey: { name: "pk", type: AttributeType.STRING },
@@ -65,7 +65,7 @@ describe("DynamoDbLowCapacity aspect", () => {
   it("should overwrite each GlobalSecondaryIndex throughput when CfnTable exposes a concrete array", () => {
     // L1 CfnTable で GSI を直接 array として渡すと aspect の Array.isArray 分岐に入る。
     // L2 Table.addGlobalSecondaryIndex は IResolvable を返すため aspect が触らない (設計どおり)。
-    const app = new App();
+    const app = new App({ autoSynth: false });
     const stack = new Stack(app, "GsiStack");
     new CfnTable(stack, "WithGsi", {
       keySchema: [{ attributeName: "pk", keyType: "HASH" }],
@@ -101,7 +101,7 @@ describe("DynamoDbLowCapacity aspect", () => {
     // #2679 exposes CDK_PARAM_DYNAMODB_READ/WRITE_CAPACITY through the lite pipeline.
     // The aspect is the single place that fans the value out, so pin the raised-value
     // direction too — not just the 1/1 floor — including the GSI overwrite.
-    const app = new App();
+    const app = new App({ autoSynth: false });
     const stack = new Stack(app, "RaisedStack");
     new CfnTable(stack, "WithGsi", {
       keySchema: [{ attributeName: "pk", keyType: "HASH" }],

@@ -33,7 +33,7 @@ describe("parseTenantAdminAllowlist (#1340)", () => {
 
 describe("attachTenantFederatedAdminAllowlist (CDK) (#1340)", () => {
   it("should attach a Pre sign-up Lambda trigger on the per-tenant UserPool with allowlist env", () => {
-    const app = new App();
+    const app = new App({ autoSynth: false });
     const stack = new Stack(app, "TestStack");
     const userPool = new UserPool(stack, "Pool");
     attachTenantFederatedAdminAllowlist(stack, userPool, ["corp-entra/admin@example.com"]);
@@ -51,7 +51,7 @@ describe("attachTenantFederatedAdminAllowlist (CDK) (#1340)", () => {
   });
 
   it("should still attach the trigger when allowlist is empty (= fail-safe deny-all)", () => {
-    const app = new App();
+    const app = new App({ autoSynth: false });
     const stack = new Stack(app, "TestStack");
     const userPool = new UserPool(stack, "Pool");
     attachTenantFederatedAdminAllowlist(stack, userPool, []);
