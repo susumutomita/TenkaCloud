@@ -27,4 +27,4 @@ TenkaCloud は AWS 上の multi-tenant cloud competition platform です。Contr
 ## Verification
 
 - commit 前に `make before-commit` を通す。
-- 実AWS、実機、第三者、外部account/serviceでしか行えない確認はmerge gateにしない。必要なら特定イベントの任意リハーサルとしてrunbookへ記録し、未実施だけを理由に開発Issueを残さない。
+- 実 AWS、実機、第三者、外部の account / service でしか行えない確認は merge gate にしない。必要なら特定イベントの任意リハーサルとして runbook へ記録し、未実施だけを理由に開発 Issue を残さない。
