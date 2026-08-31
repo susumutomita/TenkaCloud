@@ -106,6 +106,12 @@ export const CastEventBodySchema = z.object({
  */
 export const CoordinationOpBodySchema = z.object({
   op: z.unknown(),
+  /**
+   * [Issue #3125] どの coordination problem に対する op か。 team に coordination problem が
+   * 1 つしか無い event (= 大多数) では省略可能で、 その場合は従来どおりその 1 つに解決する。
+   * 2 つ以上あるときに省略すると `ambiguous` (409) が返り、 候補が示される。
+   */
+  problemId: z.string().min(1).max(200).optional(),
 });
 
 /**

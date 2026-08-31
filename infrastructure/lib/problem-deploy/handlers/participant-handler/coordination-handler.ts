@@ -60,8 +60,29 @@ export interface CoordinationHandlerDeps {
    * team-login-key → 実行 scope。 認証不可 / 当該 event に coordination 宣言が無い場合は null
    * (= route は `not_configured` で安全に応答する)。
    */
-  readonly resolveScope: (teamLoginKey: string) => Promise<CoordinationScope | null>;
+  readonly resolveScope: (
+    teamLoginKey: string,
+    problemId?: string,
+  ) => Promise<CoordinationScopeResolution>;
 }
+
+/**
+ * [Issue #3125] scope 解決の結果。
+ *
+ * 以前は `CoordinationScope | null` で、 team に coordination problem が 2 つ deploy されて
+ * いても「最初に条件を満たした 1 件」を返していた。 2 問目は participant API から到達できず、
+ * しかも**失敗として現れない** — 1 問目の projection が正常に返るので、 参加者にも運営にも
+ * 「2 問目が存在しない」ようにしか見えなかった。
+ *
+ * 曖昧なときに片方を黙って選ぶのをやめる。 coordination problem が 1 つだけの event
+ * (= 大多数) は `problemId` 省略のまま従来どおり動くので、 呼び出し側の変更は不要。
+ */
+export type CoordinationScopeResolution =
+  | { readonly kind: "scope"; readonly scope: CoordinationScope }
+  /** 認証不可 / 当該 event に coordination 宣言が無い / 指定 problemId が当該 team に無い。 */
+  | { readonly kind: "not_configured" }
+  /** `problemId` 省略で候補が複数。 候補を返して選択を要求する。 */
+  | { readonly kind: "ambiguous"; readonly problemIds: readonly string[] };
 
 export type CoordinationHandlerOutcome =
   | { readonly kind: "ok"; readonly projection: unknown }
@@ -70,7 +91,12 @@ export type CoordinationHandlerOutcome =
   /** plugin が load 不可 (= importer 未配線 / 壊れた問題 plugin)。 op は適用されない。 */
   | { readonly kind: "unavailable" }
   /** 認証不可 or 当該 event に coordination 宣言が無い (= scope null)。 */
-  | { readonly kind: "not_configured" };
+  | { readonly kind: "not_configured" }
+  /**
+   * [Issue #3125] `problemId` 省略で coordination problem が複数ある。 どれか 1 つを勝手に
+   * 選ぶと 2 問目が永久に到達不能になるので、 候補を返して選択を要求する。
+   */
+  | { readonly kind: "ambiguous"; readonly problemIds: readonly string[] };
 
 /** op を受理 → 適用 → 永続化し、 当該 team 向け projection を返す (= write 経路)。 */
 export async function handleCoordinationOp(
@@ -78,9 +104,11 @@ export async function handleCoordinationOp(
   teamLoginKey: string,
   op: unknown,
   nowIso: string,
+  problemId?: string,
 ): Promise<CoordinationHandlerOutcome> {
-  const scope = await deps.resolveScope(teamLoginKey);
-  if (!scope) return { kind: "not_configured" };
+  const resolution = await deps.resolveScope(teamLoginKey, problemId);
+  if (resolution.kind !== "scope") return resolution;
+  const scope = resolution.scope;
   // [Issue #3123] 終了した event の試合は書き換えられない。 status だけを見ていると、
   // `endEvent` が `eventEndsAt` を刻んだ後も deployment 行は `COMPLETE` のまま残るため、
   // 参加者が終わった試合を変更でき、 さらに write のたびに `expiresAt` が更新されて
@@ -103,9 +131,11 @@ export async function handleCoordinationOp(
 export async function handleCoordinationProjection(
   deps: CoordinationHandlerDeps,
   teamLoginKey: string,
+  problemId?: string,
 ): Promise<CoordinationHandlerOutcome> {
-  const scope = await deps.resolveScope(teamLoginKey);
-  if (!scope) return { kind: "not_configured" };
+  const resolution = await deps.resolveScope(teamLoginKey, problemId);
+  if (resolution.kind !== "scope") return resolution;
+  const scope = resolution.scope;
   const projection = await loadAndProjectCoordinationForTeam(
     deps.importer,
     scope.moduleRef,
@@ -240,47 +270,64 @@ function canSubmitCoordination(item: {
 export function makeCoordinationScopeResolver(
   shared: ParticipantSharedResources,
   config: CoordinationConfig,
-): (teamLoginKey: string) => Promise<CoordinationScope | null> {
-  return async (teamLoginKey) => {
+): (teamLoginKey: string, problemId?: string) => Promise<CoordinationScopeResolution> {
+  return async (teamLoginKey, problemId) => {
     const items = await queryTeamItems(shared, teamLoginKey);
-    for (const item of items) {
-      const problemId = item.problemId;
-      const plugin = problemId ? config[problemId]?.plugin : undefined;
-      if (
-        problemId &&
+    // [Issue #3125] 候補を**全部**集める。 以前はループ内で最初の 1 件を return していたため、
+    // 同じ team に 2 つ目の coordination problem が deploy されていても到達できなかった。
+    const candidates = items.filter(
+      (item) =>
+        item.problemId &&
         item.tenantId &&
         item.eventId &&
         item.teamId &&
-        plugin &&
-        canSubmitCoordination(item)
-      ) {
-        const teamIds = await resolveEventRoster(shared, {
+        config[item.problemId]?.plugin &&
+        canSubmitCoordination(item),
+    );
+    const wanted = problemId
+      ? candidates.filter((item) => item.problemId === problemId)
+      : candidates;
+    // problemId 指定で該当なし = その team にその問題は無い。 存在する別問題を代わりに
+    // 返すと、 参加者は指定した問題を操作したつもりで別の試合を動かすことになる。
+    if (wanted.length === 0) return { kind: "not_configured" };
+    if (wanted.length > 1) {
+      const problemIds = [...new Set(wanted.map((item) => String(item.problemId)))].sort();
+      // 1 問しか無いのに重複行がある場合 (= 同一 problem の複数 deployment 行) は曖昧では
+      // ないので、 そのまま解決する。
+      if (problemIds.length > 1) return { kind: "ambiguous", problemIds };
+    }
+    const item = wanted[0];
+    if (!item?.problemId || !item.tenantId || !item.eventId || !item.teamId) {
+      return { kind: "not_configured" };
+    }
+    const resolvedProblemId = item.problemId;
+    const teamIds = await resolveEventRoster(shared, {
+      tenantId: item.tenantId,
+      eventId: item.eventId,
+      problemId: resolvedProblemId,
+      requesterTeamId: item.teamId,
+    });
+    return {
+      kind: "scope",
+      scope: {
+        // [Issue #3123] runId は problemId のエイリアスにしない。 同じ値を入れると 2 つの
+        // 次元が区別できなくなり、 将来 run id が problem id と一致した瞬間に別 run の
+        // state が衝突する。 platform は現状 (event, problem) あたり 1 run しか作らないので
+        // 明示的な既定値を発行し、 run reset は「この namespace を消す」で表現する。
+        state: {
           tenantId: item.tenantId,
           eventId: item.eventId,
-          problemId,
-          requesterTeamId: item.teamId,
-        });
-        return {
-          // [Issue #3123] runId は problemId のエイリアスにしない。 同じ値を入れると 2 つの
-          // 次元が区別できなくなり、 将来 run id が problem id と一致した瞬間に別 run の
-          // state が衝突する。 platform は現状 (event, problem) あたり 1 run しか作らないので
-          // 明示的な既定値を発行し、 run reset は「この namespace を消す」で表現する。
-          state: {
-            tenantId: item.tenantId,
-            eventId: item.eventId,
-            problemId,
-            runId: DEFAULT_COORDINATION_RUN_ID,
-          },
-          teamId: item.teamId,
-          ctx: { eventId: item.eventId, teamIds },
-          window: { eventStartsAt: item.eventStartsAt, eventEndsAt: item.eventEndsAt },
-          // moduleRef は problemId (importer の key `coordination/<id>.mjs`)。
-          // plugin path は宣言の有無判定にのみ使い、 実 load は problemId-keyed bundle を引く。
-          moduleRef: problemId,
-          fallbackProjection: {},
-        };
-      }
-    }
-    return null;
+          problemId: resolvedProblemId,
+          runId: DEFAULT_COORDINATION_RUN_ID,
+        },
+        teamId: item.teamId,
+        ctx: { eventId: item.eventId, teamIds },
+        window: { eventStartsAt: item.eventStartsAt, eventEndsAt: item.eventEndsAt },
+        // moduleRef は problemId (importer の key `coordination/<id>.mjs`)。
+        // plugin path は宣言の有無判定にのみ使い、 実 load は problemId-keyed bundle を引く。
+        moduleRef: resolvedProblemId,
+        fallbackProjection: {},
+      },
+    };
   };
 }
