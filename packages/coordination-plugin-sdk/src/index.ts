@@ -70,6 +70,22 @@ export interface CoordinationPlugin<State, Op, Projection = unknown> {
   tick?(state: State, eventNowMs: number): State;
   /** その team の portal に渡す projection (= 他 team の機密を漏らさない投影)。 */
   projectForTeam(state: State, teamId: string): Projection;
+  /**
+   * [Issue #659] 各 team の現在得点 (= 絶対値)。 宣言すると platform の scoreboard に反映される。
+   *
+   * これが無い間、coordination problem の得点は**構造的に scoreboard へ届かなかった**。
+   * builtin の scoring kind (flag / uptime-* / phased-polling / attack-detection) はどれも
+   * plugin state を読まないし、採点 Lambda は plugin を実行しない (= 資格情報分離、
+   * `coordination-dispatcher-lambda.ts` 参照)。 結果、`scoring` 未宣言の Battle は
+   * 「試合中の得点はすべて plugin が判定する」と説明しながら、portal の点数は 0 のままだった。
+   *
+   * 差分ではなく**絶対値**を返す。 plugin 側が権威で、platform は「今いくつか」を写すだけ
+   * (= 差分だと再送 / conflict 再試行で二重加算しうる)。 op が通った直後に呼ばれ、
+   * 前後で変わった team の行だけが更新される。
+   *
+   * optional: 宣言しない plugin は従来どおり scoreboard に何も書かない。
+   */
+  teamScores?(state: State): Readonly<Record<string, number>>;
 }
 
 /** {@link dispatchOp} の結果。 受理時は次 state、 拒否時は validateOp の error。 */

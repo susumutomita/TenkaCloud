@@ -25,6 +25,9 @@ vi.mock("../../lib/problem-deploy/handlers/participant-handler/coordination-hand
   handleCoordinationOp: mocks.handleCoordinationOp,
   handleCoordinationProjection: mocks.handleCoordinationProjection,
   makeCoordinationScopeResolver: () => async () => null,
+  // [Issue #659] The dispatcher wires a score publisher so a coordination
+  // Battle's own scoring reaches the scoreboard.
+  makeCoordinationScorePublisher: () => async () => undefined,
   parseCoordinationConfig: () => ({}),
 }));
 

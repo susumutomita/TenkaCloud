@@ -64,6 +64,16 @@ export interface CoordinationHandlerDeps {
     teamLoginKey: string,
     problemId?: string,
   ) => Promise<CoordinationScopeResolution>;
+  /**
+   * [Issue #659] Copies the plugin's team scores onto the deployment rows the
+   * scoreboard reads. Optional so a host without it keeps the previous
+   * behaviour (= the match scores, and the scoreboard never hears about it).
+   */
+  readonly publishScores?: (
+    scope: CoordinationStateScope,
+    scores: Readonly<Record<string, number>>,
+    nowIso: string,
+  ) => Promise<void>;
 }
 
 /**
@@ -124,7 +134,21 @@ export async function handleCoordinationOp(
     fallbackProjection: scope.fallbackProjection,
     nowIso,
   });
-  return outcome.kind === "plugin_unavailable" ? { kind: "unavailable" } : outcome;
+  if (outcome.kind === "plugin_unavailable") return { kind: "unavailable" };
+  if (outcome.kind === "ok" && outcome.changedScores && deps.publishScores) {
+    // [Issue #659] The op is already committed. A scoreboard write that fails
+    // must not be reported to the participant as a rejected move — it would be
+    // a lie about their own state, and the next op recomputes the figure from
+    // the plugin's absolute score anyway. The guard belongs HERE and not only
+    // inside the default publisher, because `publishScores` is injected and a
+    // host can supply one that throws.
+    await deps.publishScores(scope.state, outcome.changedScores, nowIso).catch((err: unknown) => {
+      console.warn("[coordination] scoreboard update failed; the next op will repair it", {
+        message: err instanceof Error ? err.message : String(err),
+      });
+    });
+  }
+  return outcome;
 }
 
 /** 当該 team の現在 projection を読む (= 書き込みなし、 portal polling 用)。 */
@@ -196,6 +220,71 @@ export function parseCoordinationConfig(raw: string | undefined): CoordinationCo
  * (Issue #3053)。 requester は必ず含む — roster query が (transient error などで) 落ちても
  * requester だけの ctx で従来どおり動く方が、 route ごと落とすより安全なため。
  */
+/**
+ * [Issue #659] Copy the plugin's team scores onto the deployment rows the
+ * scoreboard reads.
+ *
+ * A coordination Battle decides its own scoring — `ac26-crypto-battle`'s
+ * metadata says so outright — but nothing carried the figure anywhere the
+ * platform looks. `scoring` is undeclared for such problems (there is no
+ * builtin kind that could serve them), and the scoring Lambda deliberately does
+ * not run plugins, so the portal showed 0 for a team that had been playing for
+ * an hour.
+ *
+ * The dispatcher already holds the answer and already has DynamoDB write
+ * permission on this table, so it writes: no new IAM, no new invocation path,
+ * and no coupling of the scoring loop to plugin execution.
+ *
+ * The plugin reports ABSOLUTE scores and the row stores a running total, so the
+ * delta is `target - current`. That is what makes this safe to repeat: a retry,
+ * or two ops racing, converge on the plugin's figure instead of double-counting
+ * the way a delta-based report would.
+ *
+ * Failure is logged, never thrown. The op is already committed at this point;
+ * turning a scoreboard write into a rejection would tell the participant their
+ * move failed when it did not, and the next op repairs the figure anyway.
+ */
+export function makeCoordinationScorePublisher(
+  shared: ParticipantSharedResources,
+): NonNullable<CoordinationHandlerDeps["publishScores"]> {
+  return (scope, scores, nowIso) =>
+    publishTeamScores(
+      shared,
+      { tenantId: scope.tenantId, eventId: scope.eventId, problemId: scope.problemId },
+      scores,
+      nowIso,
+    );
+}
+
+async function publishTeamScores(
+  shared: ParticipantSharedResources,
+  target: { readonly tenantId: string; readonly eventId: string; readonly problemId: string },
+  scores: Readonly<Record<string, number>>,
+  nowIso: string,
+): Promise<void> {
+  try {
+    const repository = await resolveDeploymentsRepository(shared);
+    const rows = await repository.listByTenantAndEvent(target.tenantId, target.eventId);
+    for (const row of rows) {
+      if (row.problemId !== target.problemId) continue;
+      const teamId = row.teamId;
+      const jobId = row.jobId;
+      if (typeof teamId !== "string" || typeof jobId !== "string") continue;
+      const wanted = scores[teamId];
+      if (wanted === undefined) continue;
+      const delta = wanted - (typeof row.score === "number" ? row.score : 0);
+      if (delta === 0) continue;
+      await repository.applyKindScoringResult(jobId, { scoreDelta: delta }, nowIso);
+    }
+  } catch (err) {
+    console.warn("[coordination] scoreboard update failed; the next op will repair it", {
+      eventId: target.eventId,
+      problemId: target.problemId,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
 async function resolveEventRoster(
   shared: ParticipantSharedResources,
   target: {
