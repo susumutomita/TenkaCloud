@@ -8,6 +8,7 @@ import {
   handleCoordinationOp,
   handleCoordinationProjection,
   makeCoordinationScopeResolver,
+  makeCoordinationScorePublisher,
   parseCoordinationConfig,
 } from "../../lib/problem-deploy/handlers/participant-handler/coordination-handler.js";
 import type { PluginImporter } from "../../lib/problem-deploy/handlers/participant-handler/coordination-plugin-loader.js";
@@ -616,5 +617,135 @@ describe("handleCoordinationOp publishing the plugin's scores", () => {
       "2026-06-01T00:00:00Z",
     ).catch((err: unknown) => ({ kind: "threw", err }) as const);
     expect(out.kind).toBe("ok");
+  });
+});
+
+/**
+ * [Issue #659] The default publisher: the only place a Battle's own scoring
+ * actually reaches a Deployments row.
+ *
+ * The repository is faked at the runtime seam rather than at the DynamoDB item
+ * level, because what is worth pinning here is the publisher's own arithmetic
+ * and filtering — which row it picks, what delta it computes, what it declines
+ * to write — not the physical shape of a Query response that
+ * `dynamodb-deployments-query` already owns tests for.
+ */
+describe("makeCoordinationScorePublisher", () => {
+  const target = { tenantId: "t1", eventId: "e1", problemId: "p1" } as const;
+
+  function sharedWithRows(
+    rows: readonly Record<string, unknown>[],
+    applied: { jobId: string; delta: number | undefined }[],
+    failWith?: Error,
+  ): ParticipantSharedResources {
+    const repository = {
+      listByTenantAndEvent: async () => {
+        if (failWith) throw failWith;
+        return rows;
+      },
+      applyKindScoringResult: async (jobId: string, result: { scoreDelta?: number }) => {
+        applied.push({ jobId, delta: result.scoreDelta });
+      },
+    };
+    const base = fakeParticipantShared(async () => ({}));
+    return {
+      ...base,
+      runtime: {
+        ...base.runtime,
+        resolveDeploymentsRepository: async () => repository,
+      },
+    } as unknown as ParticipantSharedResources;
+  }
+
+  function publish(
+    shared: ParticipantSharedResources,
+    scores: Record<string, number>,
+  ): Promise<void> {
+    return makeCoordinationScorePublisher(shared)(
+      { ...target, state: {} } as unknown as Parameters<
+        NonNullable<CoordinationHandlerDeps["publishScores"]>
+      >[0],
+      scores,
+      "2026-06-01T00:00:00Z",
+    );
+  }
+
+  it("writes the difference between the plugin's figure and the row's", async () => {
+    // Absolute in, delta out: the plugin says 145, the row holds 100, so 45 is
+    // what `ADD score :pts` needs to make the row agree with the match.
+    const applied: { jobId: string; delta: number | undefined }[] = [];
+    await publish(
+      sharedWithRows([{ teamId: "teamA", jobId: "jobA", problemId: "p1", score: 100 }], applied),
+      { teamA: 145 },
+    );
+    expect(applied).toEqual([{ jobId: "jobA", delta: 45 }]);
+  });
+
+  it("treats a row that has never scored as zero", async () => {
+    const applied: { jobId: string; delta: number | undefined }[] = [];
+    await publish(sharedWithRows([{ teamId: "teamA", jobId: "jobA", problemId: "p1" }], applied), {
+      teamA: 30,
+    });
+    expect(applied).toEqual([{ jobId: "jobA", delta: 30 }]);
+  });
+
+  it("writes nothing when the row already agrees with the plugin", async () => {
+    const applied: { jobId: string; delta: number | undefined }[] = [];
+    await publish(
+      sharedWithRows([{ teamId: "teamA", jobId: "jobA", problemId: "p1", score: 30 }], applied),
+      { teamA: 30 },
+    );
+    expect(applied).toEqual([]);
+  });
+
+  it("leaves another problem's row for that problem to score", async () => {
+    // One event runs several problems and a team has a row in each. Scoring the
+    // wrong row would move a score the plugin has no authority over.
+    const applied: { jobId: string; delta: number | undefined }[] = [];
+    await publish(
+      sharedWithRows(
+        [
+          { teamId: "teamA", jobId: "other", problemId: "p2", score: 0 },
+          { teamId: "teamA", jobId: "jobA", problemId: "p1", score: 0 },
+        ],
+        applied,
+      ),
+      { teamA: 30 },
+    );
+    expect(applied).toEqual([{ jobId: "jobA", delta: 30 }]);
+  });
+
+  it("skips a row with no teamId or no jobId", async () => {
+    const applied: { jobId: string; delta: number | undefined }[] = [];
+    await publish(
+      sharedWithRows(
+        [
+          { jobId: "noTeam", problemId: "p1", score: 0 },
+          { teamId: "teamA", problemId: "p1", score: 0 },
+        ],
+        applied,
+      ),
+      { teamA: 30 },
+    );
+    expect(applied).toEqual([]);
+  });
+
+  it("ignores a team the plugin did not report", async () => {
+    const applied: { jobId: string; delta: number | undefined }[] = [];
+    await publish(
+      sharedWithRows([{ teamId: "teamB", jobId: "jobB", problemId: "p1", score: 0 }], applied),
+      { teamA: 30 },
+    );
+    expect(applied).toEqual([]);
+  });
+
+  it("swallows a repository failure so the accepted op still stands", async () => {
+    const applied: { jobId: string; delta: number | undefined }[] = [];
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    await expect(
+      publish(sharedWithRows([], applied, new Error("dynamodb unavailable")), { teamA: 30 }),
+    ).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
   });
 });

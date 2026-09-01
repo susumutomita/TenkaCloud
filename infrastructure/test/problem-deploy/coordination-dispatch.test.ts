@@ -295,6 +295,40 @@ describe("dispatchCoordinationOp", () => {
     expect(statePuts).toEqual([]);
   });
 
+  /**
+   * [Issue #659] `teamScores` is a plugin's own code running on the accepted-op
+   * path. The op is already committed when it runs, so a plugin bug there must
+   * cost at most one scoreboard update — never the move the participant made.
+   */
+  it("should keep the op when the plugin's teamScores throws", async () => {
+    const { store } = fakeStore({ getItem: undefined });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const out = await dispatchCoordinationOp(
+      store,
+      {
+        ...counter,
+        teamScores: () => {
+          throw new Error("plugin bug");
+        },
+      },
+      { ...base, op: { kind: "inc" }, nowIso: "2026-06-01T00:00:00Z" },
+    );
+    expect(out).toEqual({ kind: "ok", projection: { count: 1 } });
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("should report only the teams whose score moved", async () => {
+    const { store } = fakeStore({ getItem: undefined });
+    const out = await dispatchCoordinationOp(
+      store,
+      { ...counter, teamScores: (s) => ({ teamA: s.count * 10, teamB: 0 }) },
+      { ...base, op: { kind: "inc" }, nowIso: "2026-06-01T00:00:00Z" },
+    );
+    // teamB sat still, so it is absent: an unchanged row is not rewritten.
+    expect(out).toEqual({ kind: "ok", projection: { count: 1 }, changedScores: { teamA: 10 } });
+  });
+
   it("should surface a write conflict", async () => {
     const { store } = fakeStore({ getItem: undefined, conflict: true });
     const out = await dispatchCoordinationOp(store, counter, {
