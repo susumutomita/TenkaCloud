@@ -64,6 +64,29 @@ describe("analyzeProblemCost", () => {
     ).toBe(true);
   });
 
+  it("keeps parsing when intrinsics use the sequence and mapping short forms", () => {
+    const estimate = analyzeProblemCost(
+      cfnTemplate(`
+  Server:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Select [0, [t3.micro, t3.small]]
+      SecurityGroupIds:
+        - !GetAtt [ServerSecurityGroup, GroupId]
+      UserData: !Base64
+        "Fn::Sub": "#!/bin/bash\\necho \${AWS::Region}"
+`),
+    );
+    expect(estimate.resources).toHaveLength(1);
+    expect(estimate.resources[0]).toMatchObject({
+      logicalId: "Server",
+      resourceType: "AWS::EC2::Instance",
+    });
+    expect(estimate.resources[0]?.notes.some((note) => note.startsWith("InstanceType"))).toBe(
+      false,
+    );
+  });
+
   it("marks an unknown resource type for manual review", () => {
     const estimate = analyzeProblemCost(
       cfnTemplate(`
