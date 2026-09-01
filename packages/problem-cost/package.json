@@ -15,7 +15,7 @@
     "test:coverage": "vitest run --coverage --coverage.reporter=lcov --coverage.reporter=text --coverage.reportsDirectory=./coverage --coverage.exclude='dist/**' --coverage.exclude='**/*.test.ts'"
   },
   "dependencies": {
-    "yaml": "^1.10.3"
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "typescript": "^6.0.3",

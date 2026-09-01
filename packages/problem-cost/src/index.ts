@@ -1,3 +1,4 @@
+import type { CollectionTag, ScalarTag } from "yaml";
 import { parse as parseYaml } from "yaml";
 
 export type CostRiskLevel = "none" | "low" | "medium" | "high" | "critical" | "unknown";
@@ -22,11 +23,7 @@ export interface ProblemCostEstimate {
   readonly unclassifiedResourceTypes: readonly string[];
 }
 
-interface YamlCstNode {
-  readonly strValue?: string;
-}
-
-const CFN_YAML_TAGS = [
+const CFN_INTRINSIC_TAG_NAMES = [
   "!And",
   "!Base64",
   "!Cidr",
@@ -43,10 +40,19 @@ const CFN_YAML_TAGS = [
   "!Select",
   "!Split",
   "!Sub",
-].map((tag) => ({
-  tag,
-  resolve: (_doc: unknown, cst: YamlCstNode) => cst.strValue ?? "",
-}));
+] as const;
+
+// CloudFormation short-form intrinsics appear on scalars (`!Ref Param`), sequences
+// (`!GetAtt [Server, PublicIp]`) and mappings (`!Base64 { "Fn::Sub": ... }`). Register
+// every form so the parser keeps the value in place instead of reporting an
+// unresolved tag; the heuristics below only ever read plain-string properties.
+const CFN_YAML_TAGS: readonly (ScalarTag | CollectionTag)[] = CFN_INTRINSIC_TAG_NAMES.flatMap(
+  (tag): (ScalarTag | CollectionTag)[] => [
+    { tag, resolve: (value: string) => value },
+    { tag, collection: "seq", resolve: (node) => node },
+    { tag, collection: "map", resolve: (node) => node },
+  ],
+);
 
 export const RESOURCE_COST_HEURISTICS: Readonly<Record<string, ResourceCostHeuristic>> = {
   "AWS::CloudWatch::Alarm": {
@@ -310,7 +316,7 @@ function customResourceHeuristic(resourceType: string): ResourceCostHeuristic | 
 }
 
 export function analyzeProblemCost(templateYaml: string): ProblemCostEstimate {
-  const parsed = parseYaml(templateYaml, { customTags: CFN_YAML_TAGS as never });
+  const parsed = parseYaml(templateYaml, { customTags: [...CFN_YAML_TAGS] });
   const template = isPlainObject(parsed) ? parsed : {};
   const resources = isPlainObject(template.Resources) ? template.Resources : {};
   const costedResources = Object.entries(resources)
