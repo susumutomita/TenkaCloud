@@ -43,7 +43,7 @@
     "typescript": "~6.0.3",
     "ulid": "^2.4.0",
     "vitest": "^4.1.9",
-    "yaml": "^1.10.3",
+    "yaml": "^2.9.0",
     "zod": "^3.25.76"
   },
   "dependencies": {
