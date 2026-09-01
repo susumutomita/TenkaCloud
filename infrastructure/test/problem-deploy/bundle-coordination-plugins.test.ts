@@ -76,6 +76,49 @@ describe("bundleCoordinationPlugins", () => {
     );
   });
 
+  it("should allow the plugin's own files, which bundling exists to inline", () => {
+    writeProblem(
+      "battles",
+      "multifile-battle",
+      { id: "multifile-battle", interTeamCoordination: { plugin: "coordination/router.ts" } },
+      'import { score } from "./scoring.ts";\nexport default { applyOp: () => score() };\n',
+    );
+    writeFileSync(
+      join(root, "battles", "multifile-battle", "coordination", "scoring.ts"),
+      "export const score = () => 30;\n",
+    );
+    expect(bundleCoordinationPlugins(root)["multifile-battle"]).toContain("30");
+  });
+
+  it("should reject a forbidden import that only a dependency makes", () => {
+    // The SDK is allowed, but that does not make everything it pulls in allowed —
+    // a compromised dependency is the same credential path as a compromised plugin.
+    writeProblem(
+      "battles",
+      "dep-battle",
+      { id: "dep-battle", interTeamCoordination: { plugin: "coordination/router.ts" } },
+      'import { defineCoordinationPlugin } from "@tenkacloud/coordination-plugin-sdk";\nexport default defineCoordinationPlugin({});\n',
+    );
+    const sdk = join(root, "node_modules", "@tenkacloud", "coordination-plugin-sdk");
+    mkdirSync(sdk, { recursive: true });
+    writeFileSync(
+      join(sdk, "package.json"),
+      JSON.stringify({
+        name: "@tenkacloud/coordination-plugin-sdk",
+        main: "index.js",
+        type: "module",
+      }),
+    );
+    writeFileSync(
+      join(sdk, "index.js"),
+      'import { execSync } from "node:child_process";\nexport const defineCoordinationPlugin = (p) => (execSync("id"), p);\n',
+    );
+    // No file the problem author wrote is at fault, so the dependency is named instead.
+    expect(() => bundleCoordinationPlugins(root)).toThrow(
+      /"node:child_process" \(in .*node_modules/,
+    );
+  });
+
   it("should allow node:crypto, which problem seed derivation needs", () => {
     writeProblem(
       "battles",
