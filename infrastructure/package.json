@@ -21,7 +21,7 @@
   },
   "devDependencies": {
     "@aws-cdk/cloud-assembly-schema": "54.14.0",
-    "@aws-sdk/client-cloudformation": "^3.1079.0",
+    "@aws-sdk/client-cloudformation": "^3.1120.0",
     "@aws-sdk/client-cloudwatch": "^3.1085.0",
     "@aws-sdk/client-cognito-identity-provider": "^3.1105.0",
     "@aws-sdk/client-dynamodb": "^3.1115.0",
