@@ -300,6 +300,27 @@ describe("makeCoordinationScopeResolver", () => {
     expect(await resolve("key")).toEqual({ kind: "not_configured" });
   });
 
+  /**
+   * A Deployments row is written in stages, so a row can match the login index
+   * before it carries everything a scope needs. Resolving one anyway would name
+   * a persistence namespace with an empty segment in it.
+   */
+  it.each([
+    "tenantId",
+    "eventId",
+    "problemId",
+    "teamId",
+  ])("should refuse a scope for a row still missing %s", async (missing) => {
+    const row = Object.fromEntries(
+      Object.entries({ tenantId: "tn1", eventId: "e1", teamId: "t1", problemId: "p1" }).filter(
+        ([field]) => field !== missing,
+      ),
+    );
+    expect(await makeCoordinationScopeResolver(fakeShared([row]), config)("key")).toEqual({
+      kind: "not_configured",
+    });
+  });
+
   it.each([
     "PENDING",
     "IN_PROGRESS",
@@ -599,7 +620,10 @@ describe("handleCoordinationOp publishing the plugin's scores", () => {
     expect(publishScores).not.toHaveBeenCalled();
   });
 
-  it("still reports the op as accepted when publishing throws", async () => {
+  it.each([
+    ["an Error", new Error("dynamodb unavailable")],
+    ["a bare string", "dynamodb unavailable"],
+  ])("still reports the op as accepted when publishing throws %s", async (_label, thrown) => {
     // The state is already committed by this point. Turning a scoreboard write
     // into a rejection would tell the participant their move failed when it did
     // not, and the next op repairs the figure anyway.
@@ -609,7 +633,7 @@ describe("handleCoordinationOp publishing the plugin's scores", () => {
         store: fakeStore({ state: { n: 0 }, version: 1 }),
         resolveScope: async () => scopeFor(),
         publishScores: async () => {
-          throw new Error("dynamodb unavailable");
+          throw thrown;
         },
       },
       "key",
@@ -636,7 +660,7 @@ describe("makeCoordinationScorePublisher", () => {
   function sharedWithRows(
     rows: readonly Record<string, unknown>[],
     applied: { jobId: string; delta: number | undefined }[],
-    failWith?: Error,
+    failWith?: unknown,
   ): ParticipantSharedResources {
     const repository = {
       listByTenantAndEvent: async () => {
@@ -739,13 +763,21 @@ describe("makeCoordinationScorePublisher", () => {
     expect(applied).toEqual([]);
   });
 
-  it("swallows a repository failure so the accepted op still stands", async () => {
+  // The repository is reached over the network, and a plugin's own code is not
+  // the only thing that can throw a non-Error here.
+  it.each([
+    ["an Error", new Error("dynamodb unavailable")],
+    ["a bare string", "dynamodb unavailable"],
+  ])("swallows a repository failure (%s) so the accepted op still stands", async (_l, thrown) => {
     const applied: { jobId: string; delta: number | undefined }[] = [];
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     await expect(
-      publish(sharedWithRows([], applied, new Error("dynamodb unavailable")), { teamA: 30 }),
+      publish(sharedWithRows([], applied, thrown), { teamA: 30 }),
     ).resolves.toBeUndefined();
-    expect(warn).toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ message: "dynamodb unavailable" }),
+    );
     warn.mockRestore();
   });
 });
