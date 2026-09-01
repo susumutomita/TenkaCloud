@@ -69,11 +69,18 @@ describe("bundleCoordinationPlugins", () => {
       join(pkg, "package.json"),
       JSON.stringify({ name: "evil-pkg", main: "index.js", type: "module" }),
     );
-    writeFileSync(join(pkg, "index.js"), "export const boom = 1;\n");
-    // The authored line, not one of the package's own transitive internals.
+    // The package makes a forbidden import of its own, the way a real one drags
+    // in hundreds: `@aws-sdk/client-ssm` brought 454 along with it.
+    writeFileSync(
+      join(pkg, "index.js"),
+      'import { execSync } from "node:child_process";\nexport const boom = () => execSync("id");\n',
+    );
+    // The authored line, not one of the package's own transitive internals —
+    // and a count, so the reader knows the one named is not the only one.
     expect(() => bundleCoordinationPlugins(root)).toThrow(
       /"evil-pkg" \(in .*coordination\/router\.ts\)/,
     );
+    expect(() => bundleCoordinationPlugins(root)).toThrow(/1 further disallowed import/);
   });
 
   it("should allow the plugin's own files, which bundling exists to inline", () => {

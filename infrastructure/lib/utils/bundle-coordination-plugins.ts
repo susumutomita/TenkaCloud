@@ -80,9 +80,9 @@ function assertPluginImportsAllowed(problemId: string, metafile: BundleMetafile)
   for (const [file, input] of Object.entries(metafile.inputs)) {
     for (const imported of input.imports) {
       const specifier = imported.original ?? imported.path;
-      // Relative and absolute specifiers are the plugin's own files, which
-      // `bundle: true` exists to inline.
-      if (specifier.startsWith(".") || specifier.startsWith("/")) continue;
+      // A path specifier is one of the plugin's own files, which `bundle: true`
+      // exists to inline. Only bare specifiers reach outside the problem.
+      if (/^[./]/.test(specifier)) continue;
       if (ALLOWED_PLUGIN_IMPORTS.includes(specifier)) continue;
       violations.push({ file, specifier });
     }
