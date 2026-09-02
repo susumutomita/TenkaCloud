@@ -1,3 +1,4 @@
+import { randomInt } from "node:crypto";
 import {
   type CoordinationContext,
   type CoordinationPlugin,
@@ -43,23 +44,6 @@ export interface CoordinationDispatchInput<Op> {
   readonly fallbackProjection: unknown;
   readonly nowIso: string;
 }
-
-/**
- * [Issue #3150] load 時に検証した版宣言。 plugin から読み直さずこれを使う。
- *
- * Codex review: `stateSchemaVersion` が可変 state に裏打ちされた accessor だと、 検証時に 1 を
- * 返して通り、 DDB の await を挟んだ再読で別の値を返しうる。 そうなると突き合わせや write が
- * `invalid_schema` ではなく throw になり、 tick は外側の catch に飛んで TTL 延長を飛ばす --
- * 進行中の行を retention で失う、 この gate が塞ごうとしている失敗そのもの。
- *
- * plugin を包む形 (`Object.create`) では直せない: hook の `this` が wrapper になり、
- * `#private` を持つ class instance の plugin が壊れる。 だから包まず、 **検証した値だけを
- * 別に持ち回る**。 `migrateState` は元の plugin に bind してあるので receiver も保たれる。
- */
-export type CoordinationSchemaDeclaration<State = unknown> = Pick<
-  CoordinationPlugin<State, unknown>,
-  "stateSchemaVersion" | "migrateState"
->;
 
 export type CoordinationDispatchOutcome =
   | {
@@ -108,24 +92,130 @@ function isContextConsistent(input: {
  *   1.5. [Issue #3150] 既存 state があれば `reconcileStateSchema` で突き合わせる。
  *        mismatch ならここで打ち切り (`schema_mismatch`) — 以降の 2〜4 には進まない
  *   2. SDK `dispatchOp` で validate→apply (拒否なら `rejected`)
- *   3. version 条件付き write (並行更新なら `conflict` → caller が 409 で退避。
- *      write は常に plugin の現在の版で封筒に刻む)
+ *   3. version 条件付き write (並行更新なら 1 から読み直して再試行。 上限回数まで負けたら
+ *      `conflict` を返し、 caller が 409 で退避。 write は常に plugin の現在の版で封筒に刻む)
  *   4. `safeProjectForTeam` で fail-safe に projection を返す
+ *
+ * [Issue #3164] 3 の再試行がここに居るのは、 この関数だけが read と validate の両方を持って
+ * いるから。 呼び出し側が 409 を受けて投げ直すと、 参加者から見れば「押したのに消えた手」に
+ * なる (portal は conflict を汎用のインフラ エラーとして出す)。 1 試合 1 行を全 op が書き換える
+ * 設計では、 チーム数が増えるほどこれは日常的に起きる。
  */
 export async function dispatchCoordinationOp<State, Op, Projection>(
   store: CoordinationStoreDeps,
   plugin: CoordinationPlugin<State, Op, Projection>,
   input: CoordinationDispatchInput<Op>,
-  /**
-   * [Issue #3150] load 時に検証した版宣言。 既定は plugin 自身 (= 直呼びする test と、
-   * この Issue 以前の意味論)。 本番経路は必ず loader が snapshot を渡す。
-   */
-  schema: CoordinationSchemaDeclaration<State> = plugin,
+  options: CoordinationDispatchOptions<State> = {},
 ): Promise<CoordinationDispatchOutcome> {
   // ctx (= 初期化に使う event 文脈) が永続化 key (eventId) / 認証 team とズレていたら、
   // 別 event 用に組んだ state を保存 / 配信してしまう。 read/write 前に fail-closed で弾く。
+  // Checked once rather than per attempt: it reads only the request, which no
+  // retry can change.
   if (!isContextConsistent(input)) return { kind: "rejected", error: "context_mismatch" };
 
+  const attempts = options.attempts ?? DEFAULT_WRITE_ATTEMPTS;
+  const backoff = options.backoff ?? jitteredBackoff;
+  for (let attempt = 0; ; attempt += 1) {
+    const outcome = await attemptDispatch(store, plugin, input, options.schema ?? plugin);
+    if (outcome.kind !== "conflict") return outcome;
+    if (attempt + 1 >= attempts) return outcome;
+    await backoff(attempt);
+  }
+}
+
+/**
+ * [Issue #3164] How many times one participant action may try to land.
+ *
+ * The whole match is one row, rewritten under a version condition on every op,
+ * and Orders arrive for every team at the same instant — so at twenty teams a
+ * batch is 120–400 writes inside a five-minute window against a single key.
+ * With a 334 KB row and no retry, a double-digit share of moves came back as
+ * `conflict`, which the portal shows as a generic infrastructure error with the
+ * move discarded. At two teams the same arithmetic gives a couple of percent,
+ * which is why it went unseen.
+ *
+ * Five attempts, not unlimited: the participant is waiting on this HTTP
+ * response, and a retry that never gives up turns contention into a queue that
+ * outlives the Lambda. Five with the backoff below is a few hundred
+ * milliseconds in the bad case.
+ */
+const DEFAULT_WRITE_ATTEMPTS = 5;
+
+/** Injectable so tests do not sleep, and so the delays can be observed. */
+/**
+ * [Issue #3150] load 時に検証した版宣言。 plugin から読み直さずこれを使う。
+ *
+ * Codex review: `stateSchemaVersion` が可変 state に裏打ちされた accessor だと、 検証時に 1 を
+ * 返して通り、 DDB の await を挟んだ再読で別の値を返しうる。 そうなると突き合わせや write が
+ * `invalid_schema` ではなく throw になり、 tick は外側の catch に飛んで TTL 延長を飛ばす --
+ * 進行中の行を retention で失う、 この gate が塞ごうとしている失敗そのもの。 retry が入った今は
+ * 試行ごとに読み直す機会が増えるので、 なおさら固定した値を配る。
+ *
+ * plugin を包む形 (`Object.create`) では直せない: hook の `this` が wrapper になり、
+ * `#private` を持つ class instance の plugin が壊れる。 だから包まず、 **検証した値だけを
+ * 別に持ち回る**。
+ */
+export type CoordinationSchemaDeclaration<State = unknown> = Pick<
+  CoordinationPlugin<State, unknown>,
+  "stateSchemaVersion" | "migrateState"
+>;
+
+export interface CoordinationDispatchOptions<State = unknown> {
+  readonly attempts?: number;
+  readonly backoff?: (attempt: number) => Promise<void>;
+  /**
+   * [Issue #3150] load 時に検証した版宣言。 省略時は plugin 自身 (= 直呼びする test と、
+   * この Issue 以前の意味論)。 本番経路は必ず loader が snapshot を渡す。
+   */
+  readonly schema?: CoordinationSchemaDeclaration<State>;
+}
+
+/**
+ * The widest wait a given retry may draw, doubling each time: 25, 50, 100, 200 ms.
+ *
+ * Exported because the doubling is the property worth pinning, and pinning it
+ * through the jitter would mean asserting on a random draw.
+ */
+export function backoffCeilingMs(attempt: number): number {
+  return 25 * 2 ** attempt;
+}
+
+/**
+ * Exponential backoff with FULL jitter, because the losers of one collision are
+ * otherwise released together.
+ *
+ * Twenty teams retrying on the same fixed delay collide again as a group, which
+ * turns one contended moment into a standing wave. Drawing a fresh value inside
+ * the window spreads them across it instead.
+ *
+ * `randomInt` rather than `Math.random` — not because jitter needs an
+ * unpredictable source, but because the linter cannot tell this call apart from
+ * one that does, and a CSPRNG drawn at most four times per contended op costs
+ * nothing worth measuring. The alternative was suppressing the rule here, which
+ * would also suppress it for whatever this function grows into.
+ */
+async function jitteredBackoff(attempt: number): Promise<void> {
+  const ceiling = backoffCeilingMs(attempt);
+  await new Promise((resolve) => setTimeout(resolve, randomInt(0, ceiling + 1)));
+}
+
+/**
+ * One read → validate → apply → conditional-write cycle.
+ *
+ * The read is INSIDE this function, so a retry re-reads and then re-runs
+ * `validateOp` against what it read. That is the point of retrying here rather
+ * than re-writing the state we already computed: between the two attempts
+ * another team may have hunted this team's secret, the Order may have expired,
+ * or the match may have ended, and each of those must come back as `rejected`
+ * on its own merits. Replaying the first attempt's result would apply a move
+ * the rules no longer allow.
+ */
+async function attemptDispatch<State, Op, Projection>(
+  store: CoordinationStoreDeps,
+  plugin: CoordinationPlugin<State, Op, Projection>,
+  input: CoordinationDispatchInput<Op>,
+  schema: CoordinationSchemaDeclaration<State>,
+): Promise<CoordinationDispatchOutcome> {
   const existing = await readCoordinationState(store, input.scope);
   // [Issue #3133] 秘密が要るのは `initialState` を呼ぶときだけ — ctx を受け取る hook は
   // それ 1 つで、 validateOp / applyOp / projectForTeam は (state, teamId, op) しか見ない。

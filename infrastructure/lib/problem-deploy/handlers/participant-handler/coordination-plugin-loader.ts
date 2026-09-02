@@ -142,9 +142,17 @@ function schemaDeclarationOf(
 ): CoordinationSchemaDeclaration {
   return {
     stateSchemaVersion: typeof snap.version === "number" ? snap.version : 1,
+    // `.bind` は読まない (Codex review 7 巡目): 装飾された関数や callable Proxy では own `bind`
+    // が欠けていたり throw したりしうる。 契約を満たす hook をそれで `invalid_schema` に落とすと、
+    // op / projection が 503 のまま試合が止まる。 intrinsic の `Reflect.apply` で元の receiver に
+    // 向けて呼ぶ。
     migrateState:
       typeof snap.migrate === "function"
-        ? (snap.migrate as (state: unknown, fromVersion: number) => unknown).bind(plugin)
+        ? (state: unknown, fromVersion: number) =>
+            Reflect.apply(snap.migrate as (...args: unknown[]) => unknown, plugin, [
+              state,
+              fromVersion,
+            ])
         : undefined,
   };
 }
@@ -235,7 +243,7 @@ export async function loadAndDispatchCoordinationOp(
   if (load.kind === "invalid_schema") {
     return { kind: "schema_mismatch", reason: "invalid_plugin_schema", detail: load.detail };
   }
-  return dispatchCoordinationOp(store, load.plugin, input, load.schema);
+  return dispatchCoordinationOp(store, load.plugin, input, { schema: load.schema });
 }
 
 /**
