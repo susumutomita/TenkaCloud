@@ -36,6 +36,16 @@ export function registerBulkDeployRoutes(app: Hono, shared: EventSharedResources
           );
           if (outcome.kind === "not_found")
             return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
+          // [Issue #3169] 422: the request is well-formed and the operator is
+          // authorised, but this event cannot hold a coordination problem it
+          // names on the selected backend. Nothing was deployed, so retrying
+          // the same request unchanged cannot succeed — `refusals` says what
+          // has to change (fewer teams, or a backend with room).
+          if (outcome.kind === "capacity_exceeded")
+            return c.json(
+              { error: "coordination_capacity_exceeded", refusals: outcome.refusals },
+              StatusCodes.UNPROCESSABLE_ENTITY,
+            );
           auditEventAction(c, "bulk_deploy", eventId);
           return c.json(outcome.result, StatusCodes.ACCEPTED);
         } catch (err) {

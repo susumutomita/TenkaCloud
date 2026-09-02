@@ -40,7 +40,19 @@ export interface BulkDeployResult {
   readonly missingCredentials?: readonly string[];
 }
 
-export type BulkDeployOutcome = { kind: "ok"; result: BulkDeployResult } | { kind: "not_found" };
+export type BulkDeployOutcome =
+  | { kind: "ok"; result: BulkDeployResult }
+  | { kind: "not_found" }
+  /**
+   * [Issue #3169] At least one coordination problem cannot hold this event's
+   * team count on the selected backend, so nothing was deployed.
+   *
+   * Distinct from a failed deploy because nothing was attempted: no rows were
+   * written and no work was published, so there is nothing to retry until the
+   * event or the backend changes. `refusals` carries one operator-readable
+   * sentence per problem, naming both numbers and the team count that fits.
+   */
+  | { kind: "capacity_exceeded"; refusals: readonly string[] };
 
 /**
  * DDB TransactWriteItems の上限は 1 transaction = 100 actions (2022 以前は 25)。 ここでは

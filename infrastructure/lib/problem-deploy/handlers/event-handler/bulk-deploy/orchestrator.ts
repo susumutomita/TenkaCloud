@@ -1,6 +1,11 @@
+import { logDeployTrace } from "../../shared/trace-log.js";
 import { type EventSharedResources, queryDeploymentsByEvent } from "../shared.js";
 import type { BulkDeployRequest } from "../types.js";
 import { dispatchBulkAdapterEntries } from "./adapter-dispatch.js";
+import {
+  checkBulkDeployCoordinationCapacity,
+  describeCapacityRefusal,
+} from "./capacity-preflight.js";
 import { indexExistingDeployments } from "./existing-index.js";
 import { markPublishFailuresFailed, writeBulkDeployPlan } from "./persistence.js";
 import { buildBulkDeployPlan } from "./plan-builder.js";
@@ -57,6 +62,47 @@ export async function bulkDeployEvent(
   }
   const selected = selectBulkDeployTargets(eventId, tenantId, loaded, request);
   if (!selected) return emptyBulkDeployResult(eventId);
+  // [Issue #3169] Sized against the event's WHOLE roster, not `selected.teams`:
+  // one coordination row holds the match for every team on that problem, so a
+  // partial deploy that fits its own subset still grows the row they share.
+  const capacity = checkBulkDeployCoordinationCapacity({
+    problems: selected.problems,
+    eventTeamCount: loaded.allTeams.length,
+    problemsCoordination: shared.problemsCoordination,
+    budget: shared.runtime.coordinationStateBudget(),
+  });
+  for (const entry of capacity.tight) {
+    logDeployTrace("bulk-deploy.coordination.capacity-tight", {
+      tenantId,
+      eventId,
+      problemIds: entry.problemId,
+      teams: entry.teamCount,
+      forecastBytes: entry.forecastBytes,
+      maxTeams: entry.maxTeams,
+      backend: entry.budget.backend,
+    });
+  }
+  if (capacity.refusals.length > 0) {
+    for (const entry of capacity.refusals) {
+      logDeployTrace("bulk-deploy.coordination.capacity-exceeded", {
+        tenantId,
+        eventId,
+        problemIds: entry.problemId,
+        teams: entry.teamCount,
+        forecastBytes: entry.forecastBytes,
+        maxTeams: entry.maxTeams,
+        backend: entry.budget.backend,
+      });
+    }
+    // Refused before anything is persisted or published: no PENDING rows, no
+    // EventBridge fan-out, nothing to unwind. Deploying anyway would put the
+    // match on course to stop mid-play, which #3151 can only report once it is
+    // already happening.
+    return {
+      kind: "capacity_exceeded",
+      refusals: capacity.refusals.map(describeCapacityRefusal),
+    };
+  }
   const existingDeployments = await queryDeploymentsByEvent(shared, tenantId, eventId);
   const existing = indexExistingDeployments(existingDeployments);
   const retryFailedOnly = request?.retryFailedOnly === true;

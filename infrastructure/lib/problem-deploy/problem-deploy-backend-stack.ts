@@ -400,6 +400,8 @@ export class ProblemDeployBackendStack extends cdk.Stack {
       deployQuotaByTier: props.deployQuotaByTier,
       cloudActionEnforcementMode: props.cloudActionEnforcementMode,
       problemsDisruptions: props.problemsDisruptions,
+      // [Issue #3169] Bulk deploy's coordination capacity preflight.
+      problemsCoordination: props.problemsCoordination,
       problemsProvenance: props.problemsProvenance,
       useBulkDistributedMap: props.useBulkDistributedMap,
       capacityRunbookDocumentName: tables.capacityRunbookDocumentName,

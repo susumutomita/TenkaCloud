@@ -42,6 +42,8 @@ export interface BuildApiLambdasArgs {
   };
   readonly cloudActionEnforcementMode?: "shadow" | "enforce";
   readonly problemsDisruptions?: Readonly<Record<string, unknown>>;
+  /** [Issue #3169] `interTeamCoordination` per problem; bulk deploy's capacity preflight reads it. */
+  readonly problemsCoordination?: Readonly<Record<string, unknown>>;
   readonly problemsProvenance?: Readonly<Record<string, unknown>>;
   readonly useBulkDistributedMap?: boolean;
   readonly capacityRunbookDocumentName?: string;
@@ -183,6 +185,9 @@ export function buildApiLambdas(scope: Construct, args: BuildApiLambdasArgs): Ap
     problemsDisruptions: (args.problemsDisruptions ?? {}) as Readonly<
       Record<string, readonly unknown[]>
     >,
+    // [Issue #3169] Bulk deploy refuses an event that cannot fit a coordination
+    // problem on the selected backend; this is the declaration it reads.
+    problemsCoordination: args.problemsCoordination ?? {},
     problemsProvenance: args.problemsProvenance ?? {},
     // [#2054 / Issue #2571] Bulk Deploy adapter dispatch 用 runtime catalog。DeployApi
     // と同一 source (args.problemRuntimes) をそのまま流す — undefined は EventApiLambda 側の
