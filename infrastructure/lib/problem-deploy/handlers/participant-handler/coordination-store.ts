@@ -155,6 +155,13 @@ export type WriteCoordinationOutcome = { kind: "ok" } | { kind: "conflict" };
  * 同一になり、 dispatcher の rollback は安全なまま。 封筒が現れるのは問題側の著者が
  * `stateSchemaVersion: 2` を宣言して初めてで、 それはこの dispatcher を要求する変更そのもの。
  * 読み側は封筒の有無を見るだけなので (`readCoordinationState`)、 両方の行が混在しても整合する。
+ *
+ * Codex review 2 巡目: ただし版 1 でも、 **plugin の生 state それ自体が封筒の形をしている**
+ * ときだけは封をする。 `State` は `unknown` で形の制約が無いので、 そのまま生で書くと次の read が
+ * 必ず封筒と誤認し、 plugin の内側の値を剥き出して返す -- 毎回確実に壊れる。 封をすれば read が
+ * 1 枚剥いで元の値に戻り、 版も 1 のままで一致する。 この 1 ケースだけ rollback 互換を失うが、
+ * 「rollback したときだけ壊れる」は「毎回壊れる」より厳密に良い。 形の検査を増やしても曖昧さは
+ * 消せない (それが指摘の主旨) ので、 曖昧になる値の側を封で退避させる。
  */
 export async function writeCoordinationState(
   deps: CoordinationStoreDeps,
@@ -166,7 +173,7 @@ export async function writeCoordinationState(
 ): Promise<WriteCoordinationOutcome> {
   const repository: DeploymentsCoordinationPort = await resolveDeploymentsRepository(deps);
   const payload: unknown =
-    stateSchemaVersion >= 2
+    stateSchemaVersion >= 2 || isCoordinationStateEnvelope(state)
       ? ({
           __tenkacloudCoordinationEnvelope: COORDINATION_ENVELOPE_MARKER,
           stateSchemaVersion,

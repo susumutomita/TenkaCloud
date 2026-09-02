@@ -59,6 +59,19 @@ export function isCoordinationPlugin(
  *   - `stateSchemaVersion` が 2 以上なのに `migrateState` が function でなければ拒否
  *   - `migrateState` を宣言するなら function でなければ拒否 (版に関係なく)
  */
+/**
+ * [Issue #3150] Codex review: `JSON.stringify` は BigInt で throw し、 循環参照でも throw する。
+ * ここが throw すると `invalid_schema` を返せず 500 になり、 tick は外側の catch に飛んで
+ * TTL 延長の枝に届かない -- 「壊れた plugin が進行中の行を巻き添えにしない」という、
+ * この関数の存在理由そのものが崩れる。 pack-author が書いた任意の値を受けるので、
+ * 整形は絶対に throw してはならない。
+ */
+function describeSchemaValue(value: unknown): string {
+  if (typeof value === "string") return `"${value}"`;
+  if (typeof value === "object" && value !== null) return Object.prototype.toString.call(value);
+  return String(value);
+}
+
 export function coordinationPluginSchemaDefect(
   plugin: CoordinationPlugin<unknown, unknown>,
 ): string | null {
@@ -69,7 +82,7 @@ export function coordinationPluginSchemaDefect(
       !Number.isInteger(p.stateSchemaVersion) ||
       p.stateSchemaVersion <= 0
     ) {
-      return `stateSchemaVersion must be a positive integer, got ${JSON.stringify(p.stateSchemaVersion)}`;
+      return `stateSchemaVersion must be a positive integer, got ${describeSchemaValue(p.stateSchemaVersion)}`;
     }
   }
   if (p.migrateState !== undefined && typeof p.migrateState !== "function") {

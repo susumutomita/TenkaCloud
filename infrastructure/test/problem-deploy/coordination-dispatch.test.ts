@@ -386,6 +386,24 @@ describe.each(backendStores)("coordination-store envelope round trip: %s", (_lab
     expect(read?.stateSchemaVersion).toBeUndefined();
   });
 
+  /**
+   * [Issue #3150] Codex review 2 巡目: 版 1 の plugin の生 state それ自体が封筒の形をしている
+   * ことはあり得る (`State` は `unknown` で形の制約が無い)。 そのまま生で書くと次の read が必ず
+   * 封筒と誤認して内側を剥き出す -- 毎回確実に壊れる。 封をすれば read が 1 枚剥いで元に戻る。
+   */
+  it("should seal a version-1 state that would otherwise be misread as an envelope", async () => {
+    const store = makeStore();
+    const looksLikeEnvelope = {
+      __tenkacloudCoordinationEnvelope: 1,
+      stateSchemaVersion: 2,
+      state: { mine: true },
+    };
+    await writeCoordinationState(store, rtScope, looksLikeEnvelope, 0, "2026-06-01T00:00:00.000Z");
+    const read = await readCoordinationState(store, rtScope);
+    expect(read?.state).toEqual(looksLikeEnvelope);
+    expect(read?.stateSchemaVersion).toBe(1);
+  });
+
   it("touchCoordinationState should not disturb the envelope", async () => {
     const store = makeStore();
     await writeCoordinationState(store, rtScope, { count: 5 }, 0, "2026-06-01T00:00:00.000Z", 3);

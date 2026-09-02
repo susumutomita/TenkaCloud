@@ -147,6 +147,19 @@ describe("coordinationPluginSchemaDefect", () => {
     );
   });
 
+  /**
+   * [Issue #3150] Codex review 2 巡目: 整形が throw すると `invalid_schema` を返せず 500 になり、
+   * tick は外側の catch に飛んで TTL 延長に届かない。 pack-author の任意の値で throw しないこと。
+   */
+  it("should reject exotic values without throwing while formatting them", () => {
+    const cyclic: Record<string, unknown> = {};
+    cyclic.self = cyclic;
+    for (const value of [1n, cyclic, Symbol("v"), () => 2]) {
+      const defect = coordinationPluginSchemaDefect(malformedPlugin({ stateSchemaVersion: value }));
+      expect(defect).toContain("stateSchemaVersion must be a positive integer");
+    }
+  });
+
   it("should reject a migrateState that is not a function, regardless of version", () => {
     const expected = "migrateState must be a function when declared";
     expect(coordinationPluginSchemaDefect(malformedPlugin({ migrateState: "nope" }))).toBe(
