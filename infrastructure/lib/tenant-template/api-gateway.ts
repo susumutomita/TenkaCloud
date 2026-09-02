@@ -212,6 +212,7 @@ export class ApiGateway extends Construct {
     // /events/{eventId}/end            POST  = Event を ENDED 状態にし採点を停止 (Issue #494)
     // events/{eventId}/notifications POST = 運営 → 競技者 通知 1 件作成 (#553)
     // /events/{eventId}/lock-scoring   POST  = 採点を lock (表彰フェーズ)、DELETE = unlock (#558)
+    // /events/{eventId}/progression-gate PUT = Gate 設定、DELETE = Gate 設定解除 (#2283)
     // EventApi は ~40 route を持つので、 最初にこの pattern が必要になったのはここだった
     // (per-method permission では /feature-flags を足した時点で 20KB を超えた)。 現在は他の
     // Lambda も同じ理由で同じ扱いにしてある — 詳細は `proxyIntegrationFor` を正本とする。
@@ -233,6 +234,9 @@ export class ApiGateway extends Construct {
     const lockScoring = event.addResource("lock-scoring");
     lockScoring.addMethod("POST", eventIntegration, deployMethodOptions);
     lockScoring.addMethod("DELETE", eventIntegration, deployMethodOptions);
+    const progressionGate = event.addResource("progression-gate");
+    progressionGate.addMethod("PUT", eventIntegration, deployMethodOptions);
+    progressionGate.addMethod("DELETE", eventIntegration, deployMethodOptions);
 
     // Issue #888 Phase A: Red Team Disruption Injection
     //   /events/{eventId}/disruptions                                  GET  = catalog
