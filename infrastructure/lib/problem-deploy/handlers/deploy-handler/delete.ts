@@ -4,6 +4,7 @@ import type {
   DeploymentsQueryPort,
 } from "../../control-data/deployments-repository.js";
 import { resolveVerifiedCompetitorAccount } from "../shared/competitor-account-lookup.js";
+import { resolveCoordinationArtifactStore } from "../shared/coordination-artifact-store.js";
 import { cleanupCoordinationStateIfLastDeployment } from "../shared/coordination-cleanup.js";
 import { deploymentTerminalExpiresAt } from "../shared/deployment-retention.js";
 import {
@@ -249,7 +250,7 @@ async function cleanupCoordinationStateAfterTeardown(
     const repository: DeploymentsQueryPort & DeploymentsCoordinationPort =
       await resolveDeploymentsRepository(shared);
     const outcome = await cleanupCoordinationStateIfLastDeployment(
-      { repository },
+      { repository, artifacts: resolveCoordinationArtifactStore() },
       {
         tenantId,
         eventId: item.eventId,

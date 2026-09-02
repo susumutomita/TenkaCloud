@@ -1,3 +1,4 @@
+import type { CoordinationArtifactStore } from "../../control-data/coordination-artifact-store.js";
 import type {
   DeploymentsCoordinationPort,
   DeploymentsQueryPort,
@@ -70,6 +71,14 @@ export type CoordinationCleanupOutcome =
 
 export interface CoordinationCleanupDeps {
   readonly repository: DeploymentsQueryPort & DeploymentsCoordinationPort;
+  /**
+   * [Issue #3152] The scope's immutable artifacts, removed alongside its state.
+   *
+   * Optional so a caller with no artifact storage configured keeps working
+   * unchanged. Where it IS configured, leaving the objects behind would be the
+   * same leak this module exists to close, moved from the row to the bucket.
+   */
+  readonly artifacts?: CoordinationArtifactStore;
 }
 
 /**
@@ -161,12 +170,29 @@ export async function cleanupCoordinationStateIfLastDeployment(
     });
     return { kind: "raced" };
   }
+  // [Issue #3152] The artifacts go only after the state delete was accepted.
+  // On a conflict the match is live and its projections still reference these
+  // bodies; removing them would leave a playable board pointing at nothing.
+  const removedArtifacts = await deps.artifacts?.deleteScope(scope).catch((err: unknown) => {
+    // Best-effort, and logged rather than swallowed: the state row — the thing
+    // that makes the match reachable — is already gone, so failing the whole
+    // cleanup here would report that nothing was cleaned when most of it was.
+    // The bucket's own expiry is the backstop.
+    logDeployTrace("coordination.cleanup.artifacts-failed", {
+      tenantId,
+      eventId,
+      problemIds: problemId,
+      reason: err instanceof Error ? err.message : String(err),
+    });
+    return undefined;
+  });
   logDeployTrace("coordination.cleanup.deleted", {
     tenantId,
     eventId,
     problemIds: problemId,
     runId: scope.runId,
     version: existing.version,
+    removedArtifacts,
   });
   return { kind: "deleted", scope };
 }

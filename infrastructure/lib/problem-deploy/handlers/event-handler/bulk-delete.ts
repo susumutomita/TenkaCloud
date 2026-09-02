@@ -8,6 +8,7 @@ import { buildAdapterDependencies } from "../deploy-handler/adapter-dependencies
 import { slugify } from "../deploy-handler/naming.js";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
 import { resolveVerifiedCompetitorAccount } from "../shared/competitor-account-lookup.js";
+import { resolveCoordinationArtifactStore } from "../shared/coordination-artifact-store.js";
 import {
   type DeployDeleteRequestedDetail,
   EVENT_DETAIL_TYPE_DEPLOY_DELETE_REQUESTED,
@@ -247,15 +248,22 @@ async function deleteEventCoordinationState(
   // cold start, and the DynamoDB branch reads the same two fields of the same
   // `shared` object. A branch that cannot fail is not a safety net, it is
   // unreachable code that hides which namespace actually failed.
+  const artifacts = resolveCoordinationArtifactStore();
   const settled = await Promise.allSettled(
     ordered.map(async (problemId) => {
       const repository: DeploymentsCoordinationPort = await resolveDeploymentsRepository(shared);
-      await repository.deleteCoordinationState({
+      const scope = {
         tenantId,
         eventId,
         problemId,
         runId: DEFAULT_COORDINATION_RUN_ID,
-      });
+      };
+      await repository.deleteCoordinationState(scope);
+      // [Issue #3152] The bodies go with the state they belonged to. Order
+      // matters: the state is what makes them reachable, so removing it first
+      // means a failure below leaves objects nothing can read rather than a
+      // playable board pointing at nothing.
+      await artifacts.deleteScope(scope);
     }),
   );
   for (const [index, outcome] of settled.entries()) {

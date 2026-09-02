@@ -3,6 +3,7 @@ import {
   type CoordinationStateScope,
   DEFAULT_COORDINATION_RUN_ID,
 } from "../../control-data/domain/coordination-scope.js";
+import { resolveCoordinationArtifactStore } from "../shared/coordination-artifact-store.js";
 import { logDeployTrace } from "../shared/trace-log.js";
 import {
   type EventSharedResources,
@@ -78,6 +79,15 @@ export async function resetCoordinationRun(
   };
   const repository: DeploymentsCoordinationPort = await resolveDeploymentsRepository(shared);
   await repository.deleteCoordinationState(scope);
-  logDeployTrace("coordination.run-reset", { tenantId, eventId, problemIds: problemId });
+  // [Issue #3152] A reset that left the previous match's proofs, ciphertexts and
+  // transcripts behind would not be a reset: the next match would start with the
+  // last one's evidence still readable to anyone who kept an artifact id.
+  const removedArtifacts = await resolveCoordinationArtifactStore().deleteScope(scope);
+  logDeployTrace("coordination.run-reset", {
+    tenantId,
+    eventId,
+    problemIds: problemId,
+    removedArtifacts,
+  });
   return { kind: "ok", result: { eventId, problemId, runId: scope.runId } };
 }

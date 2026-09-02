@@ -38,7 +38,7 @@ const SCOPE: CoordinationStateScope = {
 };
 
 function deployment(overrides: Partial<DeploymentRecord> = {}): DeploymentRecord {
-  return {
+  const base: DeploymentRecord = {
     jobId: "j1",
     tenantId: TENANT,
     listTenantId: TENANT,
@@ -54,8 +54,8 @@ function deployment(overrides: Partial<DeploymentRecord> = {}): DeploymentRecord
     createdAt: "2026-07-01T00:00:00.000Z",
     updatedAt: "2026-07-01T00:00:00.000Z",
     expiresAt: 4_102_444_800,
-    ...overrides,
-  } as DeploymentRecord;
+  };
+  return { ...base, ...overrides };
 }
 
 async function makeRepository(): Promise<SqlDeploymentsRepository> {

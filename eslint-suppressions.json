@@ -998,11 +998,6 @@
       "count": 3
     }
   },
-  "infrastructure/lib/problem-deploy/build-scoring-subsystem.ts": {
-    "sonarjs/constructor-for-side-effects": {
-      "count": 1
-    }
-  },
   "infrastructure/lib/problem-deploy/cfn-deploy-lambda.ts": {
     "sonarjs/todo-tag": {
       "count": 1

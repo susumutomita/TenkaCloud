@@ -1,4 +1,6 @@
 import type { CoordinationContext } from "@tenkacloud/coordination-plugin-sdk";
+import type { CoordinationArtifactStore } from "../../control-data/coordination-artifact-store.js";
+import type { CoordinationArtifactRef } from "../../control-data/domain/coordination-artifact.js";
 import type { CoordinationStateBudget } from "../../control-data/domain/coordination-budget.js";
 import {
   type CoordinationStateScope,
@@ -8,6 +10,14 @@ import type { DeploymentStatus } from "../deploy-handler/types.js";
 import type { RoundWindow } from "../generic-scoring-handler/round-liveness.js";
 import { isScoringActive } from "../generic-scoring-handler/scoring-active.js";
 import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
+import {
+  type ArtifactFetchOutcome,
+  discardArtifacts,
+  fetchAuthorizedArtifact,
+  parseArtifactSubmissions,
+  storeArtifactSubmissions,
+  withArtifactRefs,
+} from "./coordination-artifacts.js";
 import {
   loadAndDispatchCoordinationOp,
   loadAndProjectCoordinationForTeam,
@@ -76,6 +86,16 @@ export interface CoordinationHandlerDeps {
     scores: Readonly<Record<string, number>>,
     nowIso: string,
   ) => Promise<void>;
+  /**
+   * [Issue #3152] Where immutable submission bodies live.
+   *
+   * Required rather than optional: a host without one still has to answer
+   * "where did this proof go", and the only honest answers are "nowhere" or
+   * "refused". `UnconfiguredCoordinationArtifactStore` is the second, and it is
+   * what a deployment with no bucket gets — an operation carrying a body is
+   * refused loudly instead of being accepted with the body discarded.
+   */
+  readonly artifacts: CoordinationArtifactStore;
 }
 
 /**
@@ -141,6 +161,12 @@ export async function handleCoordinationOp(
   op: unknown,
   nowIso: string,
   problemId?: string,
+  /**
+   * [Issue #3152] Immutable bodies submitted with this operation, still encoded
+   * as they arrived. Absent for every operation that carries none, which is
+   * most of them.
+   */
+  rawArtifacts?: unknown,
 ): Promise<CoordinationHandlerOutcome> {
   const resolution = await deps.resolveScope(teamLoginKey, problemId);
   if (resolution.kind !== "scope") return resolution;
@@ -152,14 +178,33 @@ export async function handleCoordinationOp(
   // 判定は tick collector と同一の predicate。 projection (read) は素通しする —
   // 読むだけなら TTL も state も動かないし、 event 後の振り返りを壊す理由がない。
   if (!isScoringActive(scope.window, nowIso)) return { kind: "rejected", error: "event_ended" };
+
+  // [Issue #3152] Bodies are stored BEFORE dispatch so the plugin only ever
+  // sees references and stays a pure function. Everything written here is
+  // withdrawn again if the operation does not survive, because in that case
+  // nothing in the state refers to it and no teardown would ever find it.
+  const parsedArtifacts = parseArtifactSubmissions(rawArtifacts);
+  if (!parsedArtifacts.ok) return { kind: "rejected", error: parsedArtifacts.error };
+  const stored = await storeArtifactSubmissions(
+    deps.artifacts,
+    scope.state,
+    parsedArtifacts.submissions,
+  );
+  if (stored.kind === "scope_deleted") return { kind: "rejected", error: "event_ended" };
+  const storedRefs: readonly CoordinationArtifactRef[] = Object.values(stored.refs);
+
   const outcome = await loadAndDispatchCoordinationOp(deps.importer, scope.moduleRef, deps.store, {
     scope: scope.state,
     teamId: scope.teamId,
-    op,
+    op: withArtifactRefs(op, stored.refs),
     ctx: scope.ctx,
     fallbackProjection: scope.fallbackProjection,
     nowIso,
   });
+  // Anything other than a committed op leaves the bodies unreferenced.
+  if (outcome.kind !== "ok" && storedRefs.length > 0) {
+    await discardArtifacts(deps.artifacts, scope.state, storedRefs);
+  }
   if (outcome.kind === "plugin_unavailable") return { kind: "unavailable" };
   if (outcome.kind === "ok" && outcome.changedScores && deps.publishScores) {
     // [Issue #659] The op is already committed. A scoreboard write that fails
@@ -212,6 +257,57 @@ export async function handleCoordinationProjection(
     return outcome;
   }
   return { kind: "ok", projection: outcome.projection };
+}
+
+/**
+ * [Issue #3152] Reads one artifact body for a team, if that team's own
+ * projection refers to it.
+ *
+ * Routed through the projection rather than through a permission list of its
+ * own, because the plugin already answers "what may this team see" and a second
+ * answer could disagree with the first. It is also why this is a normal
+ * read path: computing the projection is what polling already does, so
+ * authorizing a fetch costs no more than a poll.
+ */
+export async function handleCoordinationArtifactFetch(
+  deps: CoordinationHandlerDeps,
+  teamLoginKey: string,
+  artifactId: string,
+  problemId?: string,
+): Promise<
+  | ArtifactFetchOutcome
+  | Extract<
+      CoordinationHandlerOutcome,
+      { kind: "not_configured" } | { kind: "ambiguous" } | { kind: "schema_mismatch" }
+    >
+> {
+  const resolution = await deps.resolveScope(teamLoginKey, problemId);
+  if (resolution.kind !== "scope") return resolution;
+  const scope = resolution.scope;
+  const projected = await loadAndProjectCoordinationForTeam(
+    deps.importer,
+    scope.moduleRef,
+    deps.store,
+    {
+      scope: scope.state,
+      teamId: scope.teamId,
+      ctx: scope.ctx,
+      fallbackProjection: scope.fallbackProjection,
+    },
+  );
+  // A plugin that will not load yields the empty fallback projection, which
+  // references no artifact and therefore authorizes none. Fail-closed is the
+  // right direction here: without the plugin there is nothing that can say who
+  // may read what.
+  if (projected.kind === "schema_mismatch") {
+    // The board this fetch would be authorized against cannot be built, so
+    // there is no honest answer about what this team may read. Refusing beats
+    // falling back to the empty projection, which would deny every artifact and
+    // look like the artifacts had gone.
+    warnSchemaMismatch("projection", scope.state, projected);
+    return projected;
+  }
+  return fetchAuthorizedArtifact(deps.artifacts, scope.state, projected.projection, artifactId);
 }
 
 /**

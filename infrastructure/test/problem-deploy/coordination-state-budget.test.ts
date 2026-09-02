@@ -63,12 +63,17 @@ function makeStore(env: Record<string, string | undefined> = {}): {
     },
   };
   const runtime = makeTestControlDataRuntime(env);
+  // The budget check runs before the repository is reached, so any `send` here
+  // means the guard let something through.
+  const ddb = {
+    send: () => Promise.reject(new Error("the budget path must not reach DynamoDB")),
+  } as unknown as CoordinationStoreDeps["ddb"];
   const deps: CoordinationStoreDeps = {
     runtime: {
       ...runtime,
       resolveDeploymentsRepository: () => Promise.resolve(repository as never),
     },
-    ddb: { send: () => Promise.reject(new Error("unused")) } as never,
+    ddb,
     tableName: "deployments",
   };
   return { deps, writes };
@@ -189,7 +194,7 @@ describe("classifyCoordinationStateSize (#3151)", () => {
 
 describe("writeCoordinationState budget enforcement (#3151)", () => {
   it("should write normally below the warning line, with no operator noise", () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const { deps, writes } = makeStore();
     return writeCoordinationState(deps, SCOPE, { turn: 1 }, 0, "2026-06-01T00:00:00.000Z").then(
       (outcome) => {
@@ -201,7 +206,7 @@ describe("writeCoordinationState budget enforcement (#3151)", () => {
   });
 
   it("should refuse the write as a platform error before it reaches the backend", async () => {
-    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const { deps, writes } = makeStore({
       CONTROL_DATA_BACKEND: "turso",
       [COORDINATION_STATE_MAX_BYTES_ENV]: "1024",
@@ -221,7 +226,7 @@ describe("writeCoordinationState budget enforcement (#3151)", () => {
   });
 
   it("should report the backend and ceiling on a refusal", async () => {
-    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const { deps } = makeStore({
       CONTROL_DATA_BACKEND: "turso",
       [COORDINATION_STATE_MAX_BYTES_ENV]: "1024",
@@ -256,7 +261,7 @@ describe("writeCoordinationState budget enforcement (#3151)", () => {
   });
 
   it("should emit the warning event before the ceiling, while still writing", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const { deps, writes } = makeStore({
       CONTROL_DATA_BACKEND: "turso",
       [COORDINATION_STATE_MAX_BYTES_ENV]: "8192",
@@ -287,7 +292,7 @@ describe("writeCoordinationState budget enforcement (#3151)", () => {
   });
 
   it("should name the match in the warning without carrying its contents", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const { deps } = makeStore({
       CONTROL_DATA_BACKEND: "turso",
       [COORDINATION_STATE_MAX_BYTES_ENV]: "8192",
@@ -307,7 +312,7 @@ describe("writeCoordinationState budget enforcement (#3151)", () => {
   });
 
   it("should emit a distinct event when a write is actually refused", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const { deps } = makeStore({
       CONTROL_DATA_BACKEND: "turso",
       [COORDINATION_STATE_MAX_BYTES_ENV]: "1024",
@@ -321,7 +326,7 @@ describe("writeCoordinationState budget enforcement (#3151)", () => {
   });
 
   it("should refuse state that cannot be serialized rather than passing it down", async () => {
-    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const { deps, writes } = makeStore();
     const cyclic: Record<string, unknown> = { turn: 1 };
     cyclic.self = cyclic;
@@ -340,7 +345,7 @@ describe("writeCoordinationState budget enforcement (#3151)", () => {
   });
 
   it("should measure the stored envelope, not the plugin payload alone", async () => {
-    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
     // A payload that fits with nothing around it, but not once the platform's
     // own schema envelope is added. Measuring the payload would under-report by
     // exactly the bytes the platform itself writes.

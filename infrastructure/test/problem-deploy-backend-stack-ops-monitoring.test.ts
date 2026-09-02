@@ -1,5 +1,5 @@
 import { Match } from "aws-cdk-lib/assertions";
-import { describe, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   COORDINATION_BUDGET_EXCEEDED_EVENT,
   COORDINATION_BUDGET_WARNING_EVENT,
@@ -129,7 +129,13 @@ describe("ProblemDeployBackendStack coordination state budget alerting (#3151)",
       // Matching on the JSON `event` field, not on a substring of the rendered
       // line: a message that merely quoted the event name must not fire the
       // operator's alarm.
+      const filters = Object.values(tpl.findResources("AWS::Logs::MetricFilter")).map(
+        (resource) => (resource as { Properties?: { FilterPattern?: string } }).Properties,
+      );
       for (const event of [COORDINATION_BUDGET_WARNING_EVENT, COORDINATION_BUDGET_EXCEEDED_EVENT]) {
+        expect(filters).toContainEqual(
+          expect.objectContaining({ FilterPattern: `{ $.event = "${event}" }` }),
+        );
         tpl.hasResourceProperties("AWS::Logs::MetricFilter", {
           FilterPattern: `{ $.event = "${event}" }`,
           LogGroupName: Match.anyValue(),
@@ -150,10 +156,14 @@ describe("ProblemDeployBackendStack coordination state budget alerting (#3151)",
       // Two separate alarms rather than one: "this match will stop unless
       // something changes" and "a match has already stopped" call for different
       // responses from whoever is woken up.
+      const alarmMetrics = Object.values(tpl.findResources("AWS::CloudWatch::Alarm")).map(
+        (resource) => (resource as { Properties?: { MetricName?: string } }).Properties?.MetricName,
+      );
       for (const metricName of [
         "CoordinationStateBudgetWarnings",
         "CoordinationStateBudgetRefusals",
       ]) {
+        expect(alarmMetrics).toContain(metricName);
         tpl.hasResourceProperties("AWS::CloudWatch::Alarm", {
           MetricName: metricName,
           Namespace: "TenkaCloud/tenkacloud-development",
@@ -176,8 +186,8 @@ describe("ProblemDeployBackendStack coordination state budget alerting (#3151)",
       // log group would create an alarm on a log group that never receives
       // anything — an alert that can only ever be silent.
       const tpl = synthWithOpsMonitoring();
-      tpl.resourceCountIs("AWS::Logs::MetricFilter", 0);
-      tpl.resourceCountIs("AWS::CloudWatch::Alarm", 2);
+      expect(Object.keys(tpl.findResources("AWS::Logs::MetricFilter"))).toHaveLength(0);
+      expect(Object.keys(tpl.findResources("AWS::CloudWatch::Alarm"))).toHaveLength(2);
     },
     SYNTH_TIMEOUT_MS,
   );
@@ -188,7 +198,7 @@ describe("ProblemDeployBackendStack coordination state budget alerting (#3151)",
       // Same dormancy contract as the rest of this construct: no email, no
       // topic, and therefore nothing to alarm into.
       const tpl = synthDefault();
-      tpl.resourceCountIs("AWS::Logs::MetricFilter", 0);
+      expect(Object.keys(tpl.findResources("AWS::Logs::MetricFilter"))).toHaveLength(0);
     },
     SYNTH_TIMEOUT_MS,
   );

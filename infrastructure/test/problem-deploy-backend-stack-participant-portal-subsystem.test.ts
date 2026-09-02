@@ -100,7 +100,7 @@ describe("ProblemDeployBackendStack participantPortal subsystem (#2220)", () => 
   );
 
   it(
-    "should also materialize a CoordinationPluginBundle bucket when coordination bundles are declared",
+    "should also materialize the coordination plugin and artifact buckets when bundles are declared",
     async () => {
       const withoutBundles = await synthWithParticipantPortal({});
       const withoutBundlesCount = Object.keys(
@@ -112,9 +112,14 @@ describe("ProblemDeployBackendStack participantPortal subsystem (#2220)", () => 
       });
       const withBundlesCount = Object.keys(withBundles.findResources("AWS::S3::Bucket")).length;
 
-      // #1420 Phase 3b: declaring a coordination bundle adds exactly one bucket
-      // (CoordinationPluginBundle) over the no-bundles baseline.
-      expect(withBundlesCount).toBe(withoutBundlesCount + 1);
+      // #1420 Phase 3b: declaring a coordination bundle adds the
+      // CoordinationPluginBundle bucket over the no-bundles baseline.
+      // [Issue #3152] It now adds a second: the artifact bucket holding
+      // immutable submissions. Deliberately NOT the same bucket — the dispatcher
+      // dynamically imports the plugin bundle as code, and write access to the
+      // bucket it imports code from would let a plugin bug reach every future
+      // match rather than only its own.
+      expect(withBundlesCount).toBe(withoutBundlesCount + 2);
     },
     SYNTH_TIMEOUT_MS,
   );
@@ -168,9 +173,10 @@ describe("ProblemDeployBackendStack participantPortal subsystem (#2220)", () => 
 
         const tpl = await synthWithParticipantPortal(coordinationBundles);
 
-        // The pack coordination bundle adds the CoordinationPluginBundle bucket ...
+        // The pack coordination bundle adds the plugin bundle bucket and, since
+        // [Issue #3152], the separate artifact bucket beside it ...
         expect(Object.keys(tpl.findResources("AWS::S3::Bucket")).length).toBe(
-          withoutBundlesCount + 1,
+          withoutBundlesCount + 2,
         );
         // ... and the dispatcher Lambda is wired to read it (COORDINATION_PLUGIN_BUCKET env).
         tpl.hasResourceProperties(
@@ -443,6 +449,101 @@ describe("ProblemDeployBackendStack participantPortal subsystem (#2220)", () => 
           ?.Properties?.Policies ?? []
       ).map((p) => p.PolicyName);
       expect(policyNames).toContain("EndpointsRW");
+    },
+    SYNTH_TIMEOUT_MS,
+  );
+});
+
+/**
+ * [Issue #3152] Immutable submission bodies live in their own bucket, and the
+ * dispatcher reaches only the prefix they live under.
+ */
+describe("ProblemDeployBackendStack coordination artifact storage (#3152)", () => {
+  it(
+    "should wire the dispatcher to the artifact bucket with a prefix-scoped grant",
+    async () => {
+      const tpl = await synthWithParticipantPortal({ "hello-world": "coordination/hello.mjs" });
+
+      const wired = Object.values(tpl.findResources("AWS::Lambda::Function")).filter((fn) =>
+        Object.hasOwn(
+          (fn as { Properties?: { Environment?: { Variables?: Record<string, unknown> } } })
+            .Properties?.Environment?.Variables ?? {},
+          "COORDINATION_ARTIFACT_BUCKET",
+        ),
+      );
+      expect(wired.length).toBeGreaterThan(0);
+      tpl.hasResourceProperties(
+        "AWS::Lambda::Function",
+        Match.objectLike({
+          Environment: Match.objectLike({
+            Variables: Match.objectLike({ COORDINATION_ARTIFACT_BUCKET: Match.anyValue() }),
+          }),
+        }),
+      );
+      // Scoped to `coordination/*`, not the whole bucket. This role also runs
+      // the problem plugin, so every resource it can name is a resource a
+      // plugin bug can reach.
+      tpl.hasResourceProperties(
+        "AWS::IAM::Policy",
+        Match.objectLike({
+          PolicyDocument: Match.objectLike({
+            Statement: Match.arrayWith([
+              Match.objectLike({
+                Action: Match.arrayWith(["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]),
+                Resource: Match.anyValue(),
+              }),
+            ]),
+          }),
+        }),
+      );
+    },
+    SYNTH_TIMEOUT_MS,
+  );
+
+  it(
+    "should expire artifacts on the same clock as the coordination state row",
+    async () => {
+      // Seven days, matching `coordination-scope.ts`. If the artifacts expired
+      // first a surviving state row would reference bodies that no longer
+      // exist; if the row went first the objects would be unreachable bytes.
+      const tpl = await synthWithParticipantPortal({ "hello-world": "coordination/hello.mjs" });
+      const expiring = Object.values(tpl.findResources("AWS::S3::Bucket")).filter((bucket) =>
+        (
+          (bucket as { Properties?: { LifecycleConfiguration?: { Rules?: { Id?: string }[] } } })
+            .Properties?.LifecycleConfiguration?.Rules ?? []
+        ).some((rule) => rule.Id === "expire-coordination-artifacts"),
+      );
+      expect(expiring).toHaveLength(1);
+      tpl.hasResourceProperties(
+        "AWS::S3::Bucket",
+        Match.objectLike({
+          LifecycleConfiguration: Match.objectLike({
+            Rules: Match.arrayWith([Match.objectLike({ ExpirationInDays: 7, Status: "Enabled" })]),
+          }),
+        }),
+      );
+    },
+    SYNTH_TIMEOUT_MS,
+  );
+
+  it(
+    "should create no artifact bucket for a stack with no coordination problem",
+    async () => {
+      // An event with no coordination problem has nothing to submit, and a
+      // bucket nothing writes to is standing cost for no behaviour.
+      //
+      // Asserted through the wiring rather than through a bucket count: this
+      // stack synthesizes several unrelated buckets, and a count would pass for
+      // the wrong reason the next time one is added or removed.
+      const tpl = await synthWithParticipantPortal({});
+      const wired = Object.values(tpl.findResources("AWS::Lambda::Function")).some((fn) =>
+        Object.hasOwn(
+          (fn as { Properties?: { Environment?: { Variables?: Record<string, unknown> } } })
+            .Properties?.Environment?.Variables ?? {},
+          "COORDINATION_ARTIFACT_BUCKET",
+        ),
+      );
+      expect(wired).toBe(false);
     },
     SYNTH_TIMEOUT_MS,
   );

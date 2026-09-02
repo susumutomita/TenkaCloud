@@ -6,6 +6,7 @@ import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import type { ILogGroup } from "aws-cdk-lib/aws-logs";
 import type { IBucket } from "aws-cdk-lib/aws-s3";
 import type { Construct } from "constructs";
+import { CoordinationArtifactBucket } from "./coordination-artifact-bucket.js";
 import { CoordinationDispatcherLambda } from "./coordination-dispatcher-lambda.js";
 import { CoordinationPluginBundle } from "./coordination-plugin-bundle.js";
 import {
@@ -70,6 +71,14 @@ export interface BuildParticipantPortalSubsystemArgs {
 }
 
 export interface ParticipantPortalSubsystemOutputs {
+  /**
+   * [Issue #3152] The artifact bucket, when one was created.
+   *
+   * Returned so the event and deploy API Lambdas — which own teardown and must
+   * remove a torn-down scope's objects — can be granted access to it. They are
+   * built before this subsystem, so the grant is wired by the caller.
+   */
+  readonly coordinationArtifactBucket?: IBucket;
   readonly participantPortalLambda: IFunction;
   readonly participantPortalUrl: string;
   /**
@@ -127,6 +136,12 @@ export function buildParticipantPortalSubsystem(
   });
 
   const coordinationBucket = coordinationPluginBucket(scope, args.problemsCoordinationBundles);
+  // [Issue #3152] Created alongside the plugin bucket and on the same condition:
+  // an event with no coordination problem has nothing to submit, and a bucket
+  // nothing writes to is standing cost for no behaviour.
+  const artifactBucket = coordinationBucket
+    ? new CoordinationArtifactBucket(scope, "CoordinationArtifacts").bucket
+    : undefined;
   const coordinationDispatcher = new CoordinationDispatcherLambda(scope, "CoordinationDispatcher", {
     deploymentsTable: args.deploymentsTable,
     eventsTable: args.eventsTable,
@@ -135,6 +150,7 @@ export function buildParticipantPortalSubsystem(
     problemsCoordination: args.problemsCoordination,
     // plugin.mjs を materialize する bucket (宣言問題がある時のみ)。
     ...(coordinationBucket ? { pluginBucket: coordinationBucket } : {}),
+    ...(artifactBucket ? { artifactBucket } : {}),
     // data layer: 純 SQL profile では table が無いので、seam が SQL executor を組み立てるための
     // backend 三点を渡す。 dynamodb default では env も IAM も増えない。
     ...(args.controlDataBackend ? { controlDataBackend: args.controlDataBackend } : {}),
@@ -171,6 +187,7 @@ export function buildParticipantPortalSubsystem(
     participantPortalUrl: portal.distributionUrl,
     // [#2324] 採点 Lambda が tick batch を async Invoke する先 (caller が grantInvoke + env)。
     coordinationDispatcherLambda: coordinationDispatcher.fn,
+    ...(artifactBucket ? { coordinationArtifactBucket: artifactBucket } : {}),
   };
 }
 

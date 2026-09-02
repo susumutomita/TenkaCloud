@@ -134,6 +134,8 @@ describe("POST /portal/me/coordination/op", () => {
       { kind: "inc" },
       expect.any(String),
       "p2",
+      // [Issue #3152] The artifacts slot, empty for an op that submits none.
+      undefined,
     );
   });
 
@@ -147,7 +149,43 @@ describe("POST /portal/me/coordination/op", () => {
       { kind: "inc" },
       expect.any(String),
       undefined,
+      undefined,
     );
+  });
+
+  it("should forward submitted artifact bodies to the handler (#3152)", async () => {
+    // The route passes them through unvalidated on purpose: the limits live
+    // next to the code that stores the bytes, so the two cannot disagree about
+    // what was accepted.
+    mocks.handleCoordinationOp.mockResolvedValueOnce({ kind: "ok", projection: {} });
+    const artifacts = { proof: { contentType: "application/octet-stream", contentBase64: "aGk=" } };
+    await send("POST", OP, { op: { kind: "PROVE" }, artifacts });
+    expect(mocks.handleCoordinationOp).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(String),
+      { kind: "PROVE" },
+      expect.any(String),
+      undefined,
+      artifacts,
+    );
+  });
+
+  it("should answer 507 when the state no longer fits the backend (#3151)", async () => {
+    // Distinct from the 409 a conflict gets: a conflict is worth retrying and
+    // this is not, because the state does not get smaller by being retried.
+    mocks.handleCoordinationOp.mockResolvedValueOnce({
+      kind: "too_large",
+      bytes: 999,
+      budget: { backend: "dynamodb", maxBytes: 500, warnBytes: 250 },
+    });
+    const res = await send("POST", OP, { op: {} });
+    expect(res.status).toBe(StatusCodes.INSUFFICIENT_STORAGE);
+    expect(await res.json()).toEqual({
+      error: "state_over_budget",
+      bytes: 999,
+      maxBytes: 500,
+      backend: "dynamodb",
+    });
   });
 });
 
