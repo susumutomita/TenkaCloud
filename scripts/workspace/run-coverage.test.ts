@@ -2,16 +2,21 @@ import { describe, expect, it } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  COVERAGE_PARTS,
   COVERAGE_WORKSPACES,
+  coverageMatrixLegs,
   formatDuration,
   lcovPathForWorkspace,
   parseArgs,
+  parseShardPart,
   resolveLcovPaths,
   resolveWorkspaces,
   SHARD_NAMES,
   SHARDS,
   UsageError,
+  validateShardParts,
   validateWorkspaces,
+  vitestPartArgs,
 } from "./run-coverage.ts";
 
 const root = join(import.meta.dir, "../..");
@@ -81,12 +86,13 @@ describe("SHARDS", () => {
     expect(SHARDS.infrastructure).toEqual(["infrastructure"]);
   });
 
-  it("should assign exactly the 3 SPAs to the spas shard", () => {
-    expect(SHARDS.spas).toEqual([
-      "apps/admin-console",
-      "apps/application-admin-console",
-      "apps/participant-portal",
-    ]);
+  // The three SPAs used to share one `spas` leg, which is paced by its slowest member:
+  // application-admin-console is ~4.7x admin-console, so the leg finished when the big one did
+  // and the small ones' runners sat idle. Each heavy SPA now owns a shard it can be split within.
+  it("should give each heavy SPA its own shard", () => {
+    expect(SHARDS["app-admin"]).toEqual(["apps/application-admin-console"]);
+    expect(SHARDS.portal).toEqual(["apps/participant-portal"]);
+    expect(SHARDS.admin).toEqual(["apps/admin-console"]);
   });
 
   it("should assign every remaining package + developer-portal to the packages shard", () => {
@@ -203,25 +209,101 @@ describe("resolveWorkspaces", () => {
 });
 
 describe("codecov.yml (Issue #2666)", () => {
-  // Codecov must wait for every coverage shard before it evaluates status, otherwise a
+  // Codecov must wait for every coverage upload before it evaluates status, otherwise a
   // partial upload (e.g. the infrastructure shard alone at ~92.11%) leaks out as a false
-  // `codecov/project` failure. `after_n_builds` encodes the shard count, so it must track
-  // SHARD_NAMES; this test fails loudly if the two drift (a 4th shard added without bumping
-  // codecov.yml, or vice versa).
+  // `codecov/project` failure. One upload happens per MATRIX LEG, and a shard split into parts
+  // is several legs — so `after_n_builds` tracks the leg count, not the shard count. Splitting a
+  // shard without bumping codecov.yml would resurrect the false-failure window this pins shut.
   const codecovPath = join(root, "codecov.yml");
 
   it("should exist at the repo root", () => {
     expect(existsSync(codecovPath)).toBe(true);
   });
 
-  it("should set every after_n_builds to the shard count so status waits for all shards", () => {
+  it("should set every after_n_builds to the matrix leg count so status waits for all uploads", () => {
     const values = [
       ...readFileSync(codecovPath, "utf8").matchAll(/^[ \t]*after_n_builds:[ \t]*(\d+)/gm),
     ].map((m) => Number(m[1]));
     expect(values.length).toBeGreaterThan(0);
     for (const n of values) {
-      expect(n).toBe(SHARD_NAMES.length);
+      expect(n).toBe(coverageMatrixLegs().length);
     }
+  });
+});
+
+describe("COVERAGE_PARTS / coverageMatrixLegs", () => {
+  it("should declare a part count for every shard", () => {
+    expect(Object.keys(COVERAGE_PARTS).sort()).toEqual([...SHARD_NAMES].sort());
+  });
+
+  it("should expand each shard into one leg per part", () => {
+    const legs = coverageMatrixLegs();
+    expect(legs.length).toBe(SHARD_NAMES.reduce((sum, s) => sum + COVERAGE_PARTS[s], 0));
+    for (const shard of SHARD_NAMES) {
+      const own = legs.filter((leg) => leg.shard === shard);
+      expect(own.map((leg) => leg.part)).toEqual(
+        Array.from({ length: COVERAGE_PARTS[shard] }, (_unused, i) => i + 1),
+      );
+      expect(own.every((leg) => leg.parts === COVERAGE_PARTS[shard])).toBe(true);
+    }
+  });
+
+  it("should only split shards that hold exactly one workspace", () => {
+    expect(() => validateShardParts(COVERAGE_WORKSPACES)).not.toThrow();
+    for (const shard of SHARD_NAMES) {
+      if (COVERAGE_PARTS[shard] > 1) {
+        expect(SHARDS[shard].length).toBe(1);
+      }
+    }
+  });
+
+  it("should reject a split shard that holds more than one workspace", () => {
+    const split = SHARD_NAMES.find((shard) => COVERAGE_PARTS[shard] > 1) ?? "infrastructure";
+    expect(COVERAGE_PARTS[split]).toBeGreaterThan(1);
+    const smuggled = [
+      ...COVERAGE_WORKSPACES,
+      { dir: "packages/format", filter: "@tenkacloud/format", shard: split },
+    ];
+    expect(() => validateShardParts(smuggled)).toThrow(/holds 2 workspaces/);
+  });
+});
+
+describe("ci.yml coverage matrix", () => {
+  // The workflow cannot compute its own matrix without an extra dependent job in front of the
+  // whole run (a "setup" leg every other leg waits on), so the legs are written out in ci.yml and
+  // pinned here instead. A shard split into more parts without editing the workflow would quietly
+  // run only some of the parts — the tests in the unlisted slices would simply never execute.
+  const workflow = readFileSync(join(root, ".github", "workflows", "ci.yml"), "utf8");
+
+  it("should list exactly the legs coverageMatrixLegs() declares", () => {
+    const legs = [
+      ...workflow.matchAll(/^[ \t]*- \{ shard: ([\w-]+), part: (\d+), parts: (\d+) \}[ \t]*$/gm),
+    ].map((match) => `${match[1]} ${match[2]}/${match[3]}`);
+    const expected = coverageMatrixLegs().map((leg) => `${leg.shard} ${leg.part}/${leg.parts}`);
+    expect(legs).toEqual(expected);
+  });
+});
+
+describe("parseShardPart / vitestPartArgs", () => {
+  it("should read <index>/<total>", () => {
+    expect(parseShardPart("2/6")).toEqual({ index: 2, total: 6 });
+    expect(parseShardPart("1/1")).toEqual({ index: 1, total: 1 });
+  });
+
+  it("should reject a malformed, zero, or out-of-range part", () => {
+    expect(() => parseShardPart(undefined)).toThrow(UsageError);
+    expect(() => parseShardPart("2")).toThrow(UsageError);
+    expect(() => parseShardPart("0/6")).toThrow(UsageError);
+    expect(() => parseShardPart("7/6")).toThrow(UsageError);
+    expect(() => parseShardPart("a/b")).toThrow(UsageError);
+  });
+
+  // Vitest validates --shard against the resolved file count, so `--shard=1/1` on a
+  // single-file workspace is an error rather than a no-op. An unsplit leg passes nothing.
+  it("should pass no Vitest flag for an unsplit run", () => {
+    expect(vitestPartArgs(undefined)).toEqual([]);
+    expect(vitestPartArgs({ index: 1, total: 1 })).toEqual([]);
+    expect(vitestPartArgs({ index: 3, total: 6 })).toEqual(["--shard=3/6"]);
   });
 });
 

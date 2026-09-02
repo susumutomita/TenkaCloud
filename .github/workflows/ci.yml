@@ -29,44 +29,43 @@ concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# The wall-clock shape of this workflow (measured on a 4-core runner, run #33602954027):
+# the old single `ci` job ran 7 gates + typecheck + build serially for 4m15s while the 3-shard
+# `coverage` matrix ran 6m27s, so a green run took ~6m30s. Nothing here was waiting on I/O — the
+# gates simply queued behind each other, and the `spas` shard was paced by its slowest app.
+# Every job below is now an independent leg that starts at t=0; the only thing that waits is the
+# final aggregation. A leg pays ~15-25s of checkout + Bun + install before its own work starts.
+#
+# The job COUNT is a budget, not a free parameter: this account runs at most 17 Actions jobs at
+# once, and the 18th waits for a runner. Run 33624913783 proved what that costs — `build` queued
+# 42s behind the 14-leg coverage matrix and finished last, so the extra split made the run slower
+# than the work required. 13 coverage legs + gates + lint-ts + typecheck + build = 17 keeps
+# everything on a runner from t=0. `COVERAGE_PARTS` in scripts/workspace/run-coverage.ts carries
+# the same reasoning next to the numbers.
 jobs:
-  ci:
+  # Cheap contract gates: dependency lifecycle audit, dead code, submodule pin, catalog schema,
+  # prose, formatting, and the repo-root script tests. Together ~25s, so they share one leg.
+  # This is the only leg that needs full history + tags: the release-manifest parity check in
+  # `test-root` resolves the platform display tag and its historical catalog gitlink, and the
+  # submodule pin guard diffs against origin/main.
+  gates:
     runs-on: ubuntu-latest
     steps:
       - name: Check out the code
         # actions/checkout v4.3.1
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          # Release-manifest parity verifies the platform display tag and its historical
-          # catalog gitlink, so the CI gate needs the tagged commit rather than only PR HEAD.
           fetch-depth: 0
           submodules: true
 
-      - name: Setup Bun
-        # oven-sh/setup-bun v2.0.2
-        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
-        with:
-          bun-version: "1.3.11"
-
-      # Supply Chain Security: Safe Chain for malicious package detection
-      - name: Setup safe-chain
-        continue-on-error: true
-        run: bunx @aikidosec/safe-chain setup-ci
-
-      # Supply Chain Security: Disable lifecycle scripts during install
-      - name: Install packages via packages.json
-        env:
-          npm_config_ignore_scripts: "true"
-          CI: "true"
-        run: make install_ci
+      - uses: ./.github/actions/bun-install
 
       # Supply Chain Security: dependency lifecycle script auditor。
       # scripts/security/audit-baseline.json と比較し、 新規 lifecycle script 付き package /
       # 既存 dep の新規 hook 追加を検出して fail させる (= mini Shai-Hulud 2nd 対策、
       # https://blog.flatt.tech/entry/mini_shai_hulud_2nd)。
       - name: Audit dependency lifecycle scripts
-        run: |
-          make audit-deps
+        run: make audit-deps
 
       # knip dead-code gate (#2866). Previously report-only: knip reports everything that
       # exists, not the PR's delta, so gating would have punished PRs for the 168 findings
@@ -75,8 +74,7 @@ jobs:
       # sequence as the #2862 ESLint gate). Typical false positive: a new entrypoint missing
       # from knip.json's workspace entry globs — fix the glob, don't relax the gate.
       - name: Dead-code gate (knip)
-        run: |
-          make dead-code
+        run: make dead-code
 
       # Submodule pin guard: reject PRs that roll the problems/ gitlink backward or
       # sideways (the ping-pong where an old-pin branch reverts a newer pin, e.g. #1927).
@@ -94,29 +92,13 @@ jobs:
       # the platform's problems/ mirror, so a README-less / schema-invalid problem fails platform CI
       # too — not only the catalog repo's own CI. Green today (all problems valid); catches drift.
       - name: Validate problem catalog (schema + bilingual README, #2254)
-        run: |
-          make validate-problems
+        run: make validate-problems
 
       - name: Run textlint
-        run: |
-          make lint-text
+        run: make lint-text
 
       - name: Format check
-        run: |
-          make lint-format
-
-      # #2862: ESLint。 Biome は format と構文寄りの rule を見るが、型情報が要る検査
-      # (no-floating-promises / await-thenable / sonarjs の型ベース rule) はここでしか走らない。
-      # #2861 で gate 自体は入っていたが Makefile からも CI からも呼ばれておらず、一度も実行され
-      # ていなかった。 local は `make lint` (= before-commit) 経由。
-      #
-      # #3014 で対象を scripts/ から repo 全体へ広げた。 既存 1,694 件は eslint-suppressions.json
-      # に ceiling として凍結してあるので、ここが赤くなるのは (a) ceiling を超える新しい違反か、
-      # (b) 違反を直したのに `make lint-ts-prune` を流していない (exit 2 "suppressions left that do
-      # not occur anymore") のどちらか。 (b) は prune した差分を commit すれば緑になる。
-      - name: ESLint (repo-wide, ratcheted)
-        run: |
-          make lint-ts
+        run: make lint-format
 
       # #2964 follow-up: CI's only test surface is the `coverage` job's shards, and every shard
       # enters a workspace. The tests that live at the repo root — the landing generators' --check
@@ -125,31 +107,52 @@ jobs:
       # whose entire job is to fail when a workspace is added, sat red on main and nothing said so.
       # `make before-commit` catches it locally; this makes CI say the same thing.
       - name: Repo-root script tests (#2964)
-        run: |
-          make test-root
+        run: make test-root
 
-      - name: Type check
-        run: |
-          make typecheck
-
-      - name: Build
-        run: |
-          make build
-
-  # Issue #2513: coverage は元々 `ci` job 内の直列 `make test-coverage` (17 workspace &&
-  # chain) が ~17m13s を占めていた。 workspace を 3 shard (infrastructure / spas / packages,
-  # scripts/workspace/run-coverage.ts の SHARDS 定義) に分け、 matrix で並列実行する。 `ci` job には
-  # 依存しない (= 両 job が同時に走り出す) ので、 coverage 自体の短縮に加えて job の直列待ちも
-  # 消える。 shard 内の workspace 実行は従来どおり直列 + fail-fast。
-  coverage:
+  # #2862: ESLint。 Biome は format と構文寄りの rule を見るが、型情報が要る検査
+  # (no-floating-promises / await-thenable / sonarjs の型ベース rule) はここでしか走らない。
+  # #2861 で gate 自体は入っていたが Makefile からも CI からも呼ばれておらず、一度も実行され
+  # ていなかった。 local は `make lint` (= before-commit) 経由。
+  #
+  # #3014 で対象を scripts/ から repo 全体へ広げた。 既存 1,694 件は eslint-suppressions.json
+  # に ceiling として凍結してあるので、ここが赤くなるのは (a) ceiling を超える新しい違反か、
+  # (b) 違反を直したのに `make lint-ts-prune` を流していない (exit 2 "suppressions left that do
+  # not occur anymore") のどちらか。 (b) は prune した差分を commit すれば緑になる。
+  #
+  # 単独 job なのは実測 (repo 全体 76s) が gates 全体より長く、直列に置くと他の gate まで
+  # 待たせるため。 `--concurrency=auto` (lint:ts script 側) で runner の全 core を使う。
+  lint-ts:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - shard: infrastructure
-          - shard: spas
-          - shard: packages
+    steps:
+      - name: Check out the code
+        # actions/checkout v4.3.1
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - uses: ./.github/actions/bun-install
+
+      - name: ESLint (repo-wide, ratcheted)
+        run: make lint-ts
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the code
+        # actions/checkout v4.3.1
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          # participant-portal type-checks test files that import a problem's metadata.json
+          # straight out of the catalog, so the submodule has to be on disk.
+          submodules: true
+
+      - uses: ./.github/actions/bun-install
+
+      # One `tsc --noEmit` saturates a single core, so the serial workspace chain used 1m33s of
+      # CPU across 51.9s of wall time on a 4-core runner. WORKSPACE_JOBS runs four at a time.
+      - name: Type check
+        run: make typecheck WORKSPACE_JOBS=4
+
+  build:
+    runs-on: ubuntu-latest
     steps:
       - name: Check out the code
         # actions/checkout v4.3.1
@@ -157,56 +160,88 @@ jobs:
         with:
           submodules: true
 
-      - name: Setup Bun
-        # oven-sh/setup-bun v2.0.2
-        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+      - uses: ./.github/actions/bun-install
+
+      - name: Build
+        run: make build WORKSPACE_JOBS=4
+
+  # Issue #2513 / this change: coverage started as a serial `make test-coverage` (17 workspaces,
+  # ~17m13s) inside the `ci` job, then became a 3-shard matrix (~6m27s). The remaining cost is not
+  # orchestration — it is that one workspace's suite is bigger than a shard: infrastructure alone
+  # is 538 test files and application-admin-console is ~4.7x admin-console, so the `spas` leg
+  # finished when its slowest app did. The matrix legs are therefore (shard, part) pairs, where a
+  # single-workspace shard is split further with Vitest's own `--shard` via `--part <i>/<N>`.
+  #
+  # The matrix below must match `coverageMatrixLegs()` in scripts/workspace/run-coverage.ts —
+  # scripts/workspace/run-coverage.test.ts fails when the two drift, and codecov.yml's
+  # `after_n_builds` counts these legs.
+  coverage:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { shard: infrastructure, part: 1, parts: 6 }
+          - { shard: infrastructure, part: 2, parts: 6 }
+          - { shard: infrastructure, part: 3, parts: 6 }
+          - { shard: infrastructure, part: 4, parts: 6 }
+          - { shard: infrastructure, part: 5, parts: 6 }
+          - { shard: infrastructure, part: 6, parts: 6 }
+          - { shard: portal, part: 1, parts: 2 }
+          - { shard: portal, part: 2, parts: 2 }
+          - { shard: app-admin, part: 1, parts: 3 }
+          - { shard: app-admin, part: 2, parts: 3 }
+          - { shard: app-admin, part: 3, parts: 3 }
+          - { shard: admin, part: 1, parts: 1 }
+          - { shard: packages, part: 1, parts: 1 }
+    env:
+      # A leg now runs one workspace's slice, so it can use the whole runner. The default of 2
+      # dates from when a single leg ran 17 workspaces back to back and had to leave headroom.
+      TENKACLOUD_VITEST_MAX_WORKERS: "4"
+    steps:
+      - name: Check out the code
+        # actions/checkout v4.3.1
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          bun-version: "1.3.11"
+          submodules: true
 
-      # Supply Chain Security: Safe Chain for malicious package detection
-      - name: Setup safe-chain
-        continue-on-error: true
-        run: bunx @aikidosec/safe-chain setup-ci
+      - uses: ./.github/actions/bun-install
 
-      # Supply Chain Security: Disable lifecycle scripts during install
-      - name: Install packages via packages.json
-        env:
-          npm_config_ignore_scripts: "true"
-          CI: "true"
-        run: make install_ci
-
-      # Issue #993 / #2513: この shard に属する workspace だけを直列実行し coverage/lcov.info を
-      # 生成する (root `test:coverage` script と同じ scripts/workspace/run-coverage.ts、 --shard で絞る)。
-      - name: Run tests with coverage (shard ${{ matrix.shard }})
+      # Issue #993 / #2513: run this leg's workspaces (and, when the shard is split, this leg's
+      # slice of its test files) and generate coverage/lcov.info.
+      - name: Run tests with coverage (${{ matrix.shard }} ${{ matrix.part }}/${{ matrix.parts }})
         run: |
-          bun run scripts/workspace/run-coverage.ts --shard ${{ matrix.shard }}
+          bun run scripts/workspace/run-coverage.ts \
+            --shard ${{ matrix.shard }} --part ${{ matrix.part }}/${{ matrix.parts }}
 
       # Issue #2676: derive the Codecov upload file list from the same COVERAGE_WORKSPACES
       # registry that runs coverage. A hand-written matrix list drifted to 5 lcov files while
       # run-coverage.ts generated 17 workspace reports, leaving several packages invisible in
       # Codecov even though the local coverage gate still checked them.
-      - name: Resolve Codecov lcov files (shard ${{ matrix.shard }})
+      - name: Resolve Codecov lcov files (${{ matrix.shard }})
         id: lcov
         run: |
           echo "files=$(bun run scripts/workspace/run-coverage.ts --shard ${{ matrix.shard }} --print-lcov-paths)" >> "$GITHUB_OUTPUT"
 
-      # Issue #2758: infrastructure 全体はまだ #1424 の 100% gate 対象外 (report-only) だが、
-      # AssumeRole/ExternalId・tenant isolation・deploy state machine・scoring・delete
-      # lifecycle・auth boundary (scripts/quality/infra-critical-paths.ts) は壊れると越境/
-      # 不正スコアリングに直結するため、jscpd と同じ baseline ratchet 方式 (make dup-check) で
-      # coverage の後退だけを検出する。 infrastructure shard の lcov.info しか対象にしないため
-      # infrastructure shard leg でのみ実行し、テストは再実行しない (既存 lcov.info を読むだけ)。
-      - name: Infra critical-path coverage ratchet (infrastructure shard only)
+      # Issue #2758's ratchet needs the infrastructure workspace's coverage as a WHOLE, and each
+      # part only executed its slice of the tests. The parts are handed to the final `ci` job,
+      # which merges them per line before judging (see scripts/workspace/merge-lcov.ts).
+      - name: Upload the infrastructure lcov part
         if: matrix.shard == 'infrastructure'
-        run: |
-          make infra-coverage-check
+        # actions/upload-artifact v4.6.2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: infra-lcov-part-${{ matrix.part }}
+          path: infrastructure/coverage/lcov.info
+          retention-days: 1
+          if-no-files-found: error
 
       # 3rd-party action は tag (mutable) ではなく commit SHA (immutable) で pin する
       # (= supply-chain attack 防御、 maintainer / attacker が tag を移動できなくする)。 v5.5.4 SHA。
       # Codecov は同一 commit に対する複数 upload を 1 つの commit report へマージするため、
-      # shard ごとに分けて upload しても (PR / main push いずれでも) 最終的な report は分割前と
-      # 同じ全体像 (= 元 5 file 分) になる。 base report が欠けることもない。
-      - name: Upload coverage reports to Codecov (shard ${{ matrix.shard }})
+      # leg ごとに分けて upload しても (PR / main push いずれでも) 最終的な report は分割前と
+      # 同じ全体像になる。 base report が欠けることもない。
+      - name: Upload coverage reports to Codecov (${{ matrix.shard }} ${{ matrix.part }}/${{ matrix.parts }})
         uses: codecov/codecov-action@aa56896cf108bd10b5eb883cd1d24196da57f695 # v5.5.4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -216,8 +251,8 @@ jobs:
           # The list is derived from COVERAGE_WORKSPACES to avoid upload drift (#2676).
           files: ${{ steps.lcov.outputs.files }}
 
-  # Issue #2513: branch protection 用の安定した単一 check 名。 matrix job (coverage) は shard 数
-  # だけ check が並び、 shard 構成が変わるたびに required status の設定も追随させる必要が出るため
+  # Issue #2513: branch protection 用の安定した単一 check 名。 matrix job (coverage) は leg 数
+  # だけ check が並び、 leg 構成が変わるたびに required status の設定も追随させる必要が出るため
   # 直接 required にはしにくい。 `if: always()` で matrix の成否に関わらず必ず走らせ、
   # needs.coverage.result を見て 1 つの check に集約する (third-party action は使わない)。
   coverage-complete:
@@ -232,3 +267,64 @@ jobs:
             exit 1
           fi
           echo "coverage matrix succeeded"
+
+  # The single required check, and the one gate that cannot run in parallel with the rest: the
+  # infra critical-path coverage ratchet needs every infrastructure part's lcov merged back into
+  # one report. It deliberately does NOT install dependencies — merging lcov and reading the
+  # baseline are plain Bun + node:fs — so it costs a checkout and a few seconds rather than a leg.
+  ci:
+    needs: [gates, lint-ts, typecheck, build, coverage]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check every gate's result
+        run: |
+          failed=""
+          for entry in \
+            "gates:${{ needs.gates.result }}" \
+            "lint-ts:${{ needs.lint-ts.result }}" \
+            "typecheck:${{ needs.typecheck.result }}" \
+            "build:${{ needs.build.result }}" \
+            "coverage:${{ needs.coverage.result }}"; do
+            if [ "${entry#*:}" != "success" ]; then
+              failed="$failed ${entry%%:*}(${entry#*:})"
+            fi
+          done
+          if [ -n "$failed" ]; then
+            echo "failed jobs:$failed" >&2
+            exit 1
+          fi
+          echo "every gate succeeded"
+
+      - name: Check out the code
+        # actions/checkout v4.3.1
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Setup Bun
+        # oven-sh/setup-bun v2.0.2
+        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+        with:
+          bun-version: "1.3.11"
+
+      - name: Download the infrastructure lcov parts
+        # actions/download-artifact v4.3.0
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: infra-lcov-part-*
+          path: .lcov-parts
+
+      # Concatenating the parts would double-count every `LF:` and halve the reported percentage,
+      # so they are merged per line / branch / function first.
+      - name: Merge the infrastructure lcov parts
+        run: |
+          bun run scripts/workspace/merge-lcov.ts \
+            --out infrastructure/coverage/lcov.info \
+            .lcov-parts/infra-lcov-part-*/lcov.info
+
+      # Issue #2758: infrastructure 全体はまだ #1424 の 100% gate 対象外 (report-only) だが、
+      # AssumeRole/ExternalId・tenant isolation・deploy state machine・scoring・delete
+      # lifecycle・auth boundary (scripts/quality/infra-critical-paths.ts) は壊れると越境/
+      # 不正スコアリングに直結するため、jscpd と同じ baseline ratchet 方式 (make dup-check) で
+      # coverage の後退だけを検出する。テストは再実行しない (merge した lcov.info を読むだけ)。
+      - name: Infra critical-path coverage ratchet
+        run: make infra-coverage-check

@@ -1,0 +1,33 @@
+name: Bun install
+description: >-
+  Sets up the pinned Bun toolchain and installs the locked dependencies with the repository's
+  supply-chain protections (Safe Chain scan, lifecycle scripts disabled).
+
+# ci.yml now runs several jobs in parallel instead of one long serial job, and every one of them
+# needs the same four steps. Duplicating them per job is how the Bun version, the Safe Chain scan,
+# or the `--ignore-scripts` install silently drifts in one job and not the others; a composite
+# action keeps a single definition. Checkout stays in the caller: a composite action's steps only
+# exist once the repository is on disk.
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Bun
+      # oven-sh/setup-bun v2.0.2
+      uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76
+      with:
+        bun-version: "1.3.11"
+
+    # Supply Chain Security: Safe Chain for malicious package detection
+    - name: Setup safe-chain
+      continue-on-error: true
+      shell: bash
+      run: bunx @aikidosec/safe-chain setup-ci
+
+    # Supply Chain Security: Disable lifecycle scripts during install
+    - name: Install packages via packages.json
+      shell: bash
+      env:
+        npm_config_ignore_scripts: "true"
+        CI: "true"
+      run: make install_ci
