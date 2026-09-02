@@ -15,6 +15,7 @@
 // that umbrella means a leftover run dir can never be type-checked by the build's
 // `tsc` (no `include`, so it globs everything else) — the failure mode that broke
 // `make deploy` when this dir was the sibling `cdk.out.test/`.
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { resolveCdkTestRunId, resolveVitestWorkerId } from "./cdk-test-outdir-contract";
 
@@ -43,3 +44,33 @@ process.env.CDK_CONTEXT_JSON = JSON.stringify({
   ...existingCdkContext,
   "aws:cdk:bundling-stacks": [],
 });
+
+// Every SPA-hosting construct stages its app's `dist/` through `BucketDeployment`'s
+// `Source.asset`, which validates that the path EXISTS at synth time. A test run does not build
+// the apps, so several test files each carried their own `ensurePlaceholderDist()` in a
+// `beforeAll` — and about ten other files that synth the same constructs (TenantTemplateStack,
+// AppPlaneCore, TenkaCloudLiteStack, the *-hosting constructs) carried none. Those files only
+// passed because some file with the helper happened to run first in the same invocation and left
+// the directory behind on disk.
+//
+// That order dependency became a failure the moment CI split the suite across runners
+// (`run-coverage.ts --part`): the shard holding tenant-template-stack-saml.test.ts had no
+// dist-creating file in it, and three tests died with `CannotFindAsset`. Creating the placeholder
+// here — setup runs before EVERY test file — makes the precondition belong to the suite instead
+// of to a lucky ordering. A real `vite build` overwrites it, so this has no effect on a built tree.
+const REPO_ROOT = resolve(__dirname, "..", "..");
+const PLACEHOLDER_DIST_APPS = [
+  "application-admin-console",
+  "admin-console",
+  "participant-portal",
+] as const;
+
+for (const app of PLACEHOLDER_DIST_APPS) {
+  const distDir = join(REPO_ROOT, "apps", app, "dist");
+  if (existsSync(distDir)) continue;
+  mkdirSync(distDir, { recursive: true });
+  writeFileSync(
+    join(distDir, "index.html"),
+    "<!doctype html><html><body>placeholder</body></html>",
+  );
+}

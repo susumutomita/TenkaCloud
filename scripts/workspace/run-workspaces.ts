@@ -28,10 +28,16 @@
  * (`COVERAGE_WORKSPACES`), the 3-way `--shard` CI matrix, per-workspace
  * timing, and the fix-coverage-paths post-step.
  *
- * Usage: bun run scripts/workspace/run-workspaces.ts <build|typecheck|test>
+ * Usage: bun run scripts/workspace/run-workspaces.ts <build|typecheck|test> [--jobs <n>]
+ *
+ * `--jobs <n>` runs up to n workspaces at once. The default stays 1 (serial, fail-fast) because
+ * that is what a developer reading interleaved terminal output wants. CI passes `--jobs 4`: the
+ * runner has 4 cores and one `tsc --noEmit` saturates a single one, so the serial chain left three
+ * cores idle for the whole step (measured: typecheck 51.9s wall for 1m33s of CPU). Parallel output
+ * is buffered per workspace and flushed on completion, so lines never interleave.
  */
 
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
@@ -206,14 +212,119 @@ export function planTask(task: string, workspaces: WorkspaceInfo[]): TaskPlan {
 }
 
 function printUsage(): void {
-  console.error(`Usage: bun run scripts/workspace/run-workspaces.ts <${TASKS.join("|")}>`);
+  console.error(
+    `Usage: bun run scripts/workspace/run-workspaces.ts <${TASKS.join("|")}> [--jobs <n>]`,
+  );
 }
 
-function main(): void {
+export class UsageError extends Error {}
+
+/** `--jobs <n>` / `--jobs=<n>`; absent = 1 (the serial, fail-fast default). */
+export function parseJobs(argv: readonly string[]): number {
+  let jobs = 1;
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    const inline = arg.startsWith("--jobs=") ? arg.slice("--jobs=".length) : undefined;
+    const raw = inline ?? (arg === "--jobs" ? argv[++i] : undefined);
+    if (raw === undefined) {
+      throw new UsageError(`unknown argument "${arg}"`);
+    }
+    if (!/^\d+$/.test(raw) || Number(raw) < 1) {
+      throw new UsageError(`--jobs expects a positive integer, got "${raw}"`);
+    }
+    jobs = Number(raw);
+  }
+  return jobs;
+}
+
+interface WorkspaceRun {
+  readonly dir: string;
+  readonly ok: boolean;
+  readonly durationMs: number;
+}
+
+/**
+ * One workspace, output captured rather than inherited: with several running at once, interleaved
+ * `tsc` / `vite` lines cannot be attributed to a workspace, and a failure becomes unreadable.
+ */
+function runWorkspaceBuffered(rootDir: string, dir: string, task: Task): Promise<WorkspaceRun> {
+  return new Promise((resolveRun) => {
+    const start = performance.now();
+    // Re-entering the same `bun` that is already running this file. mise pins the
+    // version, and the process is only ever started by a developer or the CI runner —
+    // both own their own PATH.
+    // eslint-disable-next-line sonarjs/no-os-command-from-path -- re-entrant bun call
+    const child = spawn("bun", ["run", task], {
+      cwd: join(rootDir, dir),
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    const chunks: string[] = [];
+    child.stdout.on("data", (chunk: Buffer) => chunks.push(chunk.toString()));
+    child.stderr.on("data", (chunk: Buffer) => chunks.push(chunk.toString()));
+    child.once("error", (error) => {
+      chunks.push(`${error.message}\n`);
+      const durationMs = performance.now() - start;
+      flush(dir, task, chunks, false, durationMs);
+      resolveRun({ dir, ok: false, durationMs });
+    });
+    child.once("close", (code) => {
+      const ok = code === 0;
+      const durationMs = performance.now() - start;
+      flush(dir, task, chunks, ok, durationMs);
+      resolveRun({ dir, ok, durationMs });
+    });
+  });
+}
+
+function flush(
+  dir: string,
+  task: Task,
+  chunks: readonly string[],
+  ok: boolean,
+  durationMs: number,
+): void {
+  const output = chunks.join("").trimEnd();
+  const seconds = (durationMs / 1000).toFixed(1);
+  console.log(`\n[run-workspaces] ${ok ? "✅" : "❌"} ${dir} — ${task} (${seconds}s)`);
+  if (output) console.log(output);
+}
+
+/**
+ * Runs the plan with at most `jobs` workspaces in flight. Unlike the serial path this does NOT
+ * stop at the first failure: with several already running there is nothing to gain by hiding the
+ * others' results, and a CI run that reports every broken workspace at once saves a round trip.
+ */
+export async function runPlanParallel(
+  rootDir: string,
+  plan: TaskPlan,
+  jobs: number,
+): Promise<readonly WorkspaceRun[]> {
+  const queue = [...plan.included];
+  const results: WorkspaceRun[] = [];
+  const workers = Array.from({ length: Math.min(jobs, queue.length) }, async () => {
+    for (let next = queue.shift(); next !== undefined; next = queue.shift()) {
+      results.push(await runWorkspaceBuffered(rootDir, next.dir, plan.task));
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+async function main(): Promise<void> {
   const rawTask = process.argv[2];
   if (!isTask(rawTask)) {
     printUsage();
     process.exit(1);
+  }
+
+  let jobs: number;
+  try {
+    jobs = parseJobs(process.argv.slice(3));
+  } catch (error) {
+    console.error(`[run-workspaces] ${(error as Error).message}`);
+    printUsage();
+    process.exit(1);
+    throw error; // unreachable: process.exit() already terminated the process
   }
 
   const rootDir = resolve(import.meta.dir, "../..");
@@ -233,6 +344,28 @@ function main(): void {
   }
 
   const total = plan.included.length;
+
+  if (jobs > 1) {
+    console.log(`[run-workspaces] ${total} workspace(s), up to ${jobs} at a time — ${plan.task}`);
+    const results = await runPlanParallel(rootDir, plan, jobs);
+    // The slowest workspace is the floor for the whole step, so print the ranking: it is the only
+    // way to tell "add another job slot" from "this one workspace is the critical path".
+    console.log(`\n[run-workspaces] ${plan.task} timing (slowest first):`);
+    for (const result of [...results].sort((a, b) => b.durationMs - a.durationMs)) {
+      console.log(
+        `  ${result.ok ? "✅" : "❌"} ${result.dir.padEnd(40)} ${(result.durationMs / 1000).toFixed(1)}s`,
+      );
+    }
+    const failed = results.filter((r) => !r.ok);
+    if (failed.length > 0) {
+      console.error(
+        `[run-workspaces] ${plan.task} failed in: ${failed.map((r) => r.dir).join(", ")}`,
+      );
+      process.exit(1);
+    }
+    return;
+  }
+
   plan.included.forEach((workspace, index) => {
     console.log(`[run-workspaces] (${index + 1}/${total}) ${workspace.dir} — ${plan.task}`);
     // Re-entering the same `bun` that is already running this file. mise pins the
@@ -251,5 +384,5 @@ function main(): void {
 }
 
 if (import.meta.main) {
-  main();
+  await main();
 }

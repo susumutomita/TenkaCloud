@@ -25,9 +25,15 @@ import { resolve } from "node:path";
 
 const REPO_ROOT = resolve(import.meta.dir, "../..");
 
-export type ShardName = "infrastructure" | "spas" | "packages";
+export type ShardName = "infrastructure" | "portal" | "app-admin" | "admin" | "packages";
 
-export const SHARD_NAMES: readonly ShardName[] = ["infrastructure", "spas", "packages"];
+export const SHARD_NAMES: readonly ShardName[] = [
+  "infrastructure",
+  "portal",
+  "app-admin",
+  "admin",
+  "packages",
+];
 
 export interface CoverageWorkspace {
   readonly dir: string;
@@ -38,16 +44,23 @@ export interface CoverageWorkspace {
 // Issue #2513 / #2756: the single source of truth for which workspaces `test:coverage` covers.
 // Order + membership must stay identical to the (now-retired) root package.json chain plus
 // developer-portal (#2756) and tcloud (#2951) — scripts/workspace/run-coverage.test.ts hardcodes
-// the expected 20-dir list to catch accidental drops.
+// the expected 21-dir list to catch accidental drops.
+//
+// The `shard` field is the CI matrix leg a workspace runs on. The original 3 shards
+// (infrastructure / spas / packages) were balanced when they were written, but the suites grew
+// unevenly: measured on a 4-core runner the three SPAs are ~37s (admin-console), ~95s
+// (participant-portal) and ~174s (application-admin-console), so a single `spas` leg is paced by
+// its slowest member and idles the rest. Each heavy SPA therefore gets its own shard, and a shard
+// holding exactly one workspace can be split further with `--part` (see `parseArgs`).
 export const COVERAGE_WORKSPACES: readonly CoverageWorkspace[] = [
   { dir: "infrastructure", filter: "@TenkaCloud/infrastructure", shard: "infrastructure" },
-  { dir: "apps/admin-console", filter: "@TenkaCloud/admin-console", shard: "spas" },
+  { dir: "apps/admin-console", filter: "@TenkaCloud/admin-console", shard: "admin" },
   {
     dir: "apps/application-admin-console",
     filter: "@TenkaCloud/application-admin-console",
-    shard: "spas",
+    shard: "app-admin",
   },
-  { dir: "apps/participant-portal", filter: "@TenkaCloud/participant-portal", shard: "spas" },
+  { dir: "apps/participant-portal", filter: "@TenkaCloud/participant-portal", shard: "portal" },
   { dir: "packages/trust-bridge", filter: "@TenkaCloud/trust-bridge", shard: "packages" },
   { dir: "packages/auth-client", filter: "@tenkacloud/auth-client", shard: "packages" },
   { dir: "packages/saml-utils", filter: "@tenkacloud/saml-utils", shard: "packages" },
@@ -94,9 +107,55 @@ function shardDirs(shard: ShardName): readonly string[] {
 // says the key is there. Spelled out, `Record<ShardName, …>` makes a new shard a type error here.
 export const SHARDS: Readonly<Record<ShardName, readonly string[]>> = {
   infrastructure: shardDirs("infrastructure"),
-  spas: shardDirs("spas"),
+  portal: shardDirs("portal"),
+  "app-admin": shardDirs("app-admin"),
+  admin: shardDirs("admin"),
   packages: shardDirs("packages"),
 };
+
+/**
+ * How many runners each shard's test files are split across in CI (`--part <i>/<N>`).
+ *
+ * This is the CI matrix, declared next to the shards it splits so the two cannot drift: the
+ * workflow's matrix legs and `codecov.yml`'s `after_n_builds` are both asserted against it in
+ * scripts/workspace/run-coverage.test.ts.
+ *
+ * The counts are capped by runner concurrency, not by how finely the suites could be split.
+ * Measured on run 33624913783 (the first green run of this matrix): 17 jobs started at once and
+ * the 18th — `build` — sat queued for 42s waiting for `gates` to free a runner, which put it on
+ * the critical path and cost more than the extra split saved. So the whole workflow is sized to
+ * 17 concurrent jobs: 13 coverage legs plus gates / lint-ts / typecheck / build.
+ *
+ * Within that budget the legs are balanced by measured test-step time on a GitHub runner:
+ * infrastructure 32-74s per part, application-admin-console 36-65s, participant-portal 49-63s,
+ * admin-console 39s, packages 45s. Raising a count here without dropping one elsewhere puts a job
+ * back in the queue; scripts/workspace/run-coverage.test.ts pins ci.yml and codecov.yml to it.
+ * A shard split across parts must hold exactly one workspace — see `parseArgs`.
+ */
+export const COVERAGE_PARTS: Readonly<Record<ShardName, number>> = {
+  infrastructure: 6,
+  "app-admin": 3,
+  portal: 2,
+  admin: 1,
+  packages: 1,
+};
+
+export interface CoverageMatrixLeg {
+  readonly shard: ShardName;
+  readonly part: number;
+  readonly parts: number;
+}
+
+/** Every (shard, part) pair CI runs — one GitHub Actions matrix leg, one Codecov upload. */
+export function coverageMatrixLegs(): readonly CoverageMatrixLeg[] {
+  return SHARD_NAMES.flatMap((shard) =>
+    Array.from({ length: COVERAGE_PARTS[shard] }, (_unused, index) => ({
+      shard,
+      part: index + 1,
+      parts: COVERAGE_PARTS[shard],
+    })),
+  );
+}
 
 function isShardName(value: string): value is ShardName {
   return (SHARD_NAMES as readonly string[]).includes(value);
@@ -120,12 +179,49 @@ export function validateWorkspaces(workspaces: readonly CoverageWorkspace[]): vo
       throw new Error(`run-coverage: workspace dir "${ws.dir}" does not exist`);
     }
   }
+  validateShardParts(workspaces);
+}
+
+/**
+ * A shard split across CI runners must hold exactly one workspace: `--part` maps onto Vitest's
+ * `--shard`, which splits ONE workspace's file list. Splitting a multi-workspace shard would make
+ * every part re-enter every workspace and pay its startup for a fraction of its files.
+ */
+export function validateShardParts(workspaces: readonly CoverageWorkspace[]): void {
+  for (const shard of SHARD_NAMES) {
+    const parts = COVERAGE_PARTS[shard];
+    if (!Number.isInteger(parts) || parts < 1) {
+      throw new Error(`run-coverage: shard "${shard}" has an invalid part count ${parts}`);
+    }
+    if (parts === 1) continue;
+    const dirs = workspaces.filter((ws) => ws.shard === shard).map((ws) => ws.dir);
+    if (dirs.length !== 1) {
+      throw new Error(
+        `run-coverage: shard "${shard}" is split into ${parts} parts but holds ${dirs.length} workspaces: ${dirs.join(", ")}`,
+      );
+    }
+  }
 }
 
 export class UsageError extends Error {}
 
+/**
+ * A `--part i/N` split of one shard's test files, forwarded to Vitest as `--shard=i/N`.
+ *
+ * Rebalancing the shards only helps until the slowest single workspace becomes the floor: the
+ * infrastructure suite alone is ~5m44s of wall time on a 4-core runner (538 files), so no
+ * arrangement of whole workspaces gets a leg under a minute. Vitest's own `--shard` splits that
+ * one workspace's file list across runners, which is the only lever left once a shard holds a
+ * single workspace.
+ */
+export interface ShardPart {
+  readonly index: number;
+  readonly total: number;
+}
+
 export interface ParsedArgs {
   readonly shard?: ShardName;
+  readonly part?: ShardPart;
   readonly printLcovPaths: boolean;
 }
 
@@ -137,36 +233,81 @@ export function resolveLcovPaths(shard: ShardName | undefined): readonly string[
   return resolveWorkspaces(shard).map(lcovPathForWorkspace);
 }
 
-/** No args = every workspace (current serial behavior). `--shard <name>` narrows to one shard. */
+export function parseShardPart(raw: string | undefined): ShardPart {
+  const match = /^(\d+)\/(\d+)$/.exec(raw ?? "");
+  if (!match) {
+    throw new UsageError(`--part expects "<index>/<total>" (e.g. "2/6"), got "${raw}"`);
+  }
+  const index = Number(match[1]);
+  const total = Number(match[2]);
+  if (total < 1) {
+    throw new UsageError(`--part total must be at least 1, got "${raw}"`);
+  }
+  if (index < 1 || index > total) {
+    throw new UsageError(`--part index must be within 1..${total}, got "${raw}"`);
+  }
+  return { index, total };
+}
+
+/**
+ * Rejects a `--part` that cannot be honoured. Kept out of `parseArgs` so that function stays
+ * under the repo's cognitive-complexity ceiling and each rule reads on its own.
+ */
+function validatePartRequest(shard: ShardName | undefined, part: ShardPart | undefined): void {
+  if (part === undefined || part.total <= 1) return;
+  if (shard === undefined) {
+    throw new UsageError(`--part requires --shard: it splits one shard's test files, not all`);
+  }
+  // A multi-workspace shard would pay Vitest's per-workspace startup on every part while each
+  // part runs a fraction of that workspace's files — more wall time, not less. Splitting is
+  // therefore only offered where it pays: a shard that holds exactly one workspace.
+  const dirs = SHARDS[shard];
+  if (dirs.length !== 1) {
+    throw new UsageError(
+      `--part needs a single-workspace shard; "${shard}" holds ${dirs.length}: ${dirs.join(", ")}`,
+    );
+  }
+}
+
+function parseShardFlag(value: string | undefined, alreadySet: boolean): ShardName {
+  if (value === undefined || !isShardName(value)) {
+    throw new UsageError(`Unknown shard "${value}". Known shards: ${SHARD_NAMES.join(", ")}`);
+  }
+  if (alreadySet) {
+    throw new UsageError(`--shard was provided more than once`);
+  }
+  return value;
+}
+
+/**
+ * No args = every workspace (current serial behavior). `--shard <name>` narrows to one shard,
+ * and `--part <i>/<N>` splits that shard's test files N ways (Vitest `--shard`).
+ */
 export function parseArgs(argv: readonly string[]): ParsedArgs {
   let shard: ShardName | undefined;
+  let part: ShardPart | undefined;
   let printLcovPaths = false;
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--print-lcov-paths") {
       printLcovPaths = true;
-      continue;
-    }
-    if (arg === "--shard") {
-      const candidate = argv[i + 1];
-      if (candidate === undefined || !isShardName(candidate)) {
-        throw new UsageError(
-          `Unknown shard "${candidate}". Known shards: ${SHARD_NAMES.join(", ")}`,
-        );
-      }
-      if (shard !== undefined) {
-        throw new UsageError(`--shard was provided more than once`);
-      }
-      shard = candidate;
+    } else if (arg === "--part") {
+      if (part !== undefined) throw new UsageError(`--part was provided more than once`);
+      part = parseShardPart(argv[i + 1]);
       i += 1;
-      continue;
+    } else if (arg === "--shard") {
+      shard = parseShardFlag(argv[i + 1], shard !== undefined);
+      i += 1;
+    } else {
+      throw new UsageError(
+        `Unknown arguments: ${argv.join(" ")}. Usage: bun run scripts/workspace/run-coverage.ts [--shard <${SHARD_NAMES.join("|")}>] [--part <i>/<N>] [--print-lcov-paths]`,
+      );
     }
-    throw new UsageError(
-      `Unknown arguments: ${argv.join(" ")}. Usage: bun run scripts/workspace/run-coverage.ts [--shard <${SHARD_NAMES.join("|")}>] [--print-lcov-paths]`,
-    );
   }
-  return { shard, printLcovPaths };
+
+  validatePartRequest(shard, part);
+  return { shard, part, printLcovPaths };
 }
 
 export function resolveWorkspaces(shard: ShardName | undefined): readonly CoverageWorkspace[] {
@@ -193,17 +334,23 @@ interface TimingResult {
   readonly success: boolean;
 }
 
-function runWorkspace(ws: CoverageWorkspace): TimingResult {
-  console.log(`\n▶ ${ws.dir}`);
+export function vitestPartArgs(part: ShardPart | undefined): string[] {
+  // `--shard=1/1` is a no-op split that Vitest still validates against the file count, so an
+  // unsplit run passes nothing at all rather than a degenerate flag.
+  if (!part || part.total <= 1) return [];
+  return [`--shard=${part.index}/${part.total}`];
+}
+
+function runWorkspace(ws: CoverageWorkspace, part?: ShardPart): TimingResult {
+  const partSuffix = part && part.total > 1 ? ` (part ${part.index}/${part.total})` : "";
+  console.log(`\n▶ ${ws.dir}${partSuffix}`);
   const start = performance.now();
   // Re-entering the same `bun` that is already running this file. mise pins the
   // version, and the process is only ever started by a developer or the CI runner —
   // both own their own PATH.
+  const args = ["run", "--filter", ws.filter, "test:coverage", ...vitestPartArgs(part)];
   // eslint-disable-next-line sonarjs/no-os-command-from-path -- re-entrant bun call
-  const result = spawnSync("bun", ["run", "--filter", ws.filter, "test:coverage"], {
-    cwd: REPO_ROOT,
-    stdio: "inherit",
-  });
+  const result = spawnSync("bun", args, { cwd: REPO_ROOT, stdio: "inherit" });
   const durationMs = performance.now() - start;
   const success = result.status === 0;
   if (success) {
@@ -215,13 +362,16 @@ function runWorkspace(ws: CoverageWorkspace): TimingResult {
 }
 
 /** Fail-fast: stop at the first failing workspace, same semantics as the old `&&` chain. */
-function runWorkspaces(workspaces: readonly CoverageWorkspace[]): {
+function runWorkspaces(
+  workspaces: readonly CoverageWorkspace[],
+  part?: ShardPart,
+): {
   readonly results: readonly TimingResult[];
   readonly failed: boolean;
 } {
   const results: TimingResult[] = [];
   for (const ws of workspaces) {
-    const result = runWorkspace(ws);
+    const result = runWorkspace(ws, part);
     results.push(result);
     if (!result.success) {
       return { results, failed: true };
@@ -299,7 +449,7 @@ function main(): void {
   }
 
   const workspaces = resolveWorkspaces(parsed.shard);
-  const { results, failed } = runWorkspaces(workspaces);
+  const { results, failed } = runWorkspaces(workspaces, parsed.part);
 
   printSummary(results);
 
