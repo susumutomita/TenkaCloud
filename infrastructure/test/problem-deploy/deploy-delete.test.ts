@@ -1,5 +1,5 @@
 import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
-import { GetCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { DeleteCommand, GetCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { requestTeardown } from "../../lib/problem-deploy/handlers/deploy-handler/delete";
 import type { DeploySharedResources } from "../../lib/problem-deploy/handlers/deploy-handler/deploy";
@@ -413,5 +413,120 @@ describe("requestTeardown (non-AWS runtime via adapter)", () => {
     // 補償 Update (DELETING → FAILED) が走った (= orphan 防止)
     const updates = ddbSend.mock.calls.filter((c) => c[0] instanceof UpdateCommand);
     expect(updates.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+/**
+ * [Issue #3149] Teardown of the last deployment on a problem is what removes
+ * that problem's coordination state while the event keeps running.
+ *
+ * The decision itself is pinned against a real database in
+ * `coordination-cleanup.test.ts`. What is asserted here is the wiring: that the
+ * teardown path reaches it at all, that it does so only for rows that have a
+ * coordination namespace, and that a failure there cannot fail a teardown that
+ * has already been accepted.
+ */
+describe("requestTeardown coordination cleanup (#3149)", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const eventRow = (over: Record<string, unknown> = {}) =>
+    sampleRow({ eventId: "ev-1", teamId: "team-a", problemId: "crypto-battle", ...over });
+
+  it("should look for this problem's coordination state after marking the row DELETING", async () => {
+    const { shared, ddbSend, eventsSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Item: eventRow() });
+    ddbSend.mockResolvedValueOnce({}); // markDeleting
+    ddbSend.mockResolvedValueOnce({ Item: undefined }); // coordination state: absent
+    eventsSend.mockResolvedValueOnce({});
+
+    const out = await requestTeardown(shared, "tenant-acme", "JOB1", NOW_MS);
+
+    expect(out).toEqual({ kind: "accepted", previousStatus: "COMPLETE" });
+    const reads = ddbSend.mock.calls
+      .map(([cmd]) => cmd)
+      .filter((cmd): cmd is GetCommand => cmd instanceof GetCommand);
+    expect(reads.some((cmd) => String(cmd.input.Key?.PK ?? "").startsWith("COORD#"))).toBe(true);
+  });
+
+  it("should delete the state conditionally once no deployment can act on the problem", async () => {
+    const { shared, ddbSend, eventsSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Item: eventRow() });
+    ddbSend.mockResolvedValueOnce({}); // markDeleting
+    ddbSend.mockResolvedValueOnce({ Item: { state: { turn: 3 }, version: 4 } });
+    // The event listing: the only row for this problem is the one just torn
+    // down, so nothing can act on the state any more.
+    ddbSend.mockResolvedValueOnce({
+      Items: [{ ...eventRow(), teardownRequestedAt: "2026-07-02T00:00:00.000Z" }],
+    });
+    ddbSend.mockResolvedValueOnce({}); // conditional delete
+    ddbSend.mockResolvedValueOnce({}); // match secret delete
+    eventsSend.mockResolvedValueOnce({});
+
+    await requestTeardown(shared, "tenant-acme", "JOB1", NOW_MS);
+
+    const deletes = ddbSend.mock.calls
+      .map(([cmd]) => cmd)
+      .filter((cmd): cmd is DeleteCommand => cmd instanceof DeleteCommand);
+    // Conditional on the version that was read, not a bare delete: between the
+    // listing and this call a new deployment could have started playing.
+    expect(deletes[0]?.input.ConditionExpression).toBe("version = :expected");
+    expect(deletes[0]?.input.ExpressionAttributeValues).toMatchObject({ ":expected": 4 });
+  });
+
+  it("should leave the state alone while another team is still deployed", async () => {
+    const { shared, ddbSend, eventsSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Item: eventRow() });
+    ddbSend.mockResolvedValueOnce({}); // markDeleting
+    ddbSend.mockResolvedValueOnce({ Item: { state: { turn: 3 }, version: 4 } });
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        { ...eventRow(), teardownRequestedAt: "2026-07-02T00:00:00.000Z" },
+        { ...eventRow(), jobId: "JOB2", teamId: "team-b" },
+      ],
+    });
+    eventsSend.mockResolvedValueOnce({});
+
+    await requestTeardown(shared, "tenant-acme", "JOB1", NOW_MS);
+
+    // Coordination state is shared by every team on the problem. Wiping it
+    // because one team left would end the match for the others.
+    const deletes = ddbSend.mock.calls
+      .map(([cmd]) => cmd)
+      .filter((cmd) => cmd instanceof DeleteCommand);
+    expect(deletes).toHaveLength(0);
+    expect(ddbSend.mock.calls.map(([cmd]) => cmd).some((cmd) => cmd instanceof QueryCommand)).toBe(
+      true,
+    );
+  });
+
+  it("should not look for coordination state on a deployment that has no event", async () => {
+    const { shared, ddbSend, eventsSend } = buildShared();
+    // The pre-event `POST /problems/:id/deploy` path. Such a row has no
+    // coordination namespace, so a lookup would address rows that cannot exist.
+    ddbSend.mockResolvedValueOnce({ Item: sampleRow() });
+    ddbSend.mockResolvedValueOnce({});
+    eventsSend.mockResolvedValueOnce({});
+
+    await requestTeardown(shared, "tenant-acme", "JOB1", NOW_MS);
+
+    const reads = ddbSend.mock.calls
+      .map(([cmd]) => cmd)
+      .filter((cmd): cmd is GetCommand => cmd instanceof GetCommand);
+    expect(reads.some((cmd) => String(cmd.input.Key?.PK ?? "").startsWith("COORD#"))).toBe(false);
+  });
+
+  it("should still accept the teardown when the cleanup itself fails", async () => {
+    const { shared, ddbSend, eventsSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({ Item: eventRow() });
+    ddbSend.mockResolvedValueOnce({}); // markDeleting
+    ddbSend.mockRejectedValueOnce(new Error("coordination read failed"));
+    eventsSend.mockResolvedValueOnce({});
+
+    // The stack deletion is already under way. Reporting failure here would
+    // tell the operator a teardown did not happen when it did, and would hide a
+    // leaked stack (money) behind a leaked row (bytes, with its own TTL).
+    const out = await requestTeardown(shared, "tenant-acme", "JOB1", NOW_MS);
+    expect(out).toEqual({ kind: "accepted", previousStatus: "COMPLETE" });
+    expect(eventsSend).toHaveBeenCalled();
   });
 });

@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   budgetUsedPercent,
-  checkCoordinationStateSize,
   COORDINATION_STATE_MAX_BYTES_ENV,
+  checkCoordinationStateSize,
   coordinationStateBudget,
   serializedStateBytes,
 } from "../../lib/problem-deploy/control-data/domain/coordination-budget";

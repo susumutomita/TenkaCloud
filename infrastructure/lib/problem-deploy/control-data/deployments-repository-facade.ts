@@ -181,6 +181,8 @@ export abstract class DeploymentsRepositoryFacade implements DeploymentsReposito
   readonly deleteCoordinationState: DeploymentsCoordinationPort["deleteCoordinationState"] = (
     ...args
   ) => this.parts.coordination.deleteCoordinationState(...args);
+  readonly deleteCoordinationStateIfUnchanged: DeploymentsCoordinationPort["deleteCoordinationStateIfUnchanged"] =
+    (...args) => this.parts.coordination.deleteCoordinationStateIfUnchanged(...args);
   readonly sweepExpiredCoordinationState: DeploymentsCoordinationPort["sweepExpiredCoordinationState"] =
     (...args) => this.parts.coordination.sweepExpiredCoordinationState(...args);
   readonly ensureCoordinationMatchSecret: DeploymentsCoordinationPort["ensureCoordinationMatchSecret"] =

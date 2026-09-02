@@ -1,4 +1,7 @@
-import type { CoordinationStateScope } from "./domain/coordination-scope.js";
+import {
+  assertConditionableVersion,
+  type CoordinationStateScope,
+} from "./domain/coordination-scope.js";
 import { normalizeJsonValue, type SqlDeploymentsCore } from "./sql-deployments-core.js";
 import type {
   CoordinationStateRecord,
@@ -167,6 +170,34 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
       "DELETE FROM coordination_match_secret WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ?",
       [scope.tenantId, scope.eventId, scope.problemId, scope.runId],
     );
+  }
+
+  /**
+   * [Issue #3149] See `DeploymentsCoordinationPort.deleteCoordinationStateIfUnchanged`.
+   *
+   * `version = ?` in the WHERE clause is the whole condition: SQLite reports
+   * how many rows the DELETE matched, and zero means the row is either gone or
+   * has moved on — both of which are `conflict` from the caller's side.
+   *
+   * The secret is removed only once the state delete actually matched, for the
+   * same reason as on DynamoDB: on a conflict the match is still being played
+   * and still deriving from that secret.
+   */
+  async deleteCoordinationStateIfUnchanged(
+    scope: CoordinationStateScope,
+    expectedVersion: number,
+  ): Promise<DeploymentMutationOutcome> {
+    assertConditionableVersion(expectedVersion);
+    const result = await this.core.sql.run(
+      "DELETE FROM coordination_state_scoped WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ? AND version = ?",
+      [scope.tenantId, scope.eventId, scope.problemId, scope.runId, expectedVersion],
+    );
+    if (Number(result.changes) === 0) return { outcome: "conflict" };
+    await this.core.sql.run(
+      "DELETE FROM coordination_match_secret WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ?",
+      [scope.tenantId, scope.eventId, scope.problemId, scope.runId],
+    );
+    return { outcome: "updated" };
   }
 
   /**

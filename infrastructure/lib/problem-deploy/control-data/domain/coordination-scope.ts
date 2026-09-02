@@ -118,6 +118,26 @@ export function shouldRefreshCoordinationTtl(
 }
 
 /**
+ * [Issue #3149] Guards the version a conditional coordination delete may be
+ * built from.
+ *
+ * 0 is the sentinel for "no row" everywhere else in this port
+ * (`writeCoordinationState` treats it as the create case), and there is no
+ * conditional delete that can express "delete the row that is not there".
+ * Accepting it would leave a backend with two options, both wrong: refuse
+ * every such call (making cleanup look permanently raced) or delete
+ * unconditionally (reintroducing the race the condition exists to close). A
+ * thrown error puts the mistake at the call site, where it can be fixed.
+ */
+export function assertConditionableVersion(expectedVersion: number): void {
+  if (!Number.isInteger(expectedVersion) || expectedVersion <= 0) {
+    throw new RangeError(
+      `A conditional coordination delete needs the positive version that was read; got ${expectedVersion}.`,
+    );
+  }
+}
+
+/**
  * [Issue #3133] Bytes of entropy behind one match secret.
  *
  * 32 bytes (256 bits, 64 hex characters) is the same size the rest of the

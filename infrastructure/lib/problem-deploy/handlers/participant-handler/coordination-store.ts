@@ -3,8 +3,8 @@ import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import type { DeploymentsCoordinationPort } from "../../control-data/deployments-repository.js";
 import {
   budgetUsedPercent,
-  checkCoordinationStateSize,
   type CoordinationStateBudget,
+  checkCoordinationStateSize,
 } from "../../control-data/domain/coordination-budget.js";
 import {
   type CoordinationStateScope,

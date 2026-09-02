@@ -8,7 +8,7 @@ import {
 } from "aws-cdk-lib/aws-cloudwatch";
 import { SnsAction } from "aws-cdk-lib/aws-cloudwatch-actions";
 import * as iam from "aws-cdk-lib/aws-iam";
-import type { Function as LambdaFunction, IFunction } from "aws-cdk-lib/aws-lambda";
+import type { IFunction, Function as LambdaFunction } from "aws-cdk-lib/aws-lambda";
 import { FilterPattern, MetricFilter } from "aws-cdk-lib/aws-logs";
 import { Topic } from "aws-cdk-lib/aws-sns";
 import { EmailSubscription } from "aws-cdk-lib/aws-sns-subscriptions";

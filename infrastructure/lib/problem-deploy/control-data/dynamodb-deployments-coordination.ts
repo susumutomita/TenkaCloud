@@ -1,5 +1,8 @@
 import { DeleteCommand, GetCommand, PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
-import type { CoordinationStateScope } from "./domain/coordination-scope.js";
+import {
+  assertConditionableVersion,
+  type CoordinationStateScope,
+} from "./domain/coordination-scope.js";
 import {
   COORD_SECRET_SK,
   COORD_STATE_SK,
@@ -237,6 +240,44 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
         Key: { PK: coordinationPk(scope), SK: COORD_SECRET_SK },
       }),
     );
+  }
+
+  /**
+   * [Issue #3149] See `DeploymentsCoordinationPort.deleteCoordinationStateIfUnchanged`.
+   *
+   * The condition is on the state row's `version`, so a match that was played
+   * between the caller's read and this call keeps its row. The secret is
+   * deleted only after the state delete has been accepted — on a conflict the
+   * match is still live and still deriving from that secret, and removing it
+   * would be worse than leaving the state behind, because the next
+   * `ensureCoordinationMatchSecret` would mint a different one under a match
+   * whose existing shares were derived from the old value.
+   */
+  async deleteCoordinationStateIfUnchanged(
+    scope: CoordinationStateScope,
+    expectedVersion: number,
+  ): Promise<DeploymentMutationOutcome> {
+    assertConditionableVersion(expectedVersion);
+    try {
+      await this.core.ddb.send(
+        new DeleteCommand({
+          TableName: this.core.tableName,
+          Key: { PK: coordinationPk(scope), SK: COORD_STATE_SK },
+          ConditionExpression: "version = :expected",
+          ExpressionAttributeValues: { ":expected": expectedVersion },
+        }),
+      );
+    } catch (err) {
+      if (isConditionalCheckFailed(err)) return { outcome: "conflict" };
+      throw err;
+    }
+    await this.core.ddb.send(
+      new DeleteCommand({
+        TableName: this.core.tableName,
+        Key: { PK: coordinationPk(scope), SK: COORD_SECRET_SK },
+      }),
+    );
+    return { outcome: "updated" };
   }
 
   /**

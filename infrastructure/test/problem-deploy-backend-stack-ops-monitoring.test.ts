@@ -1,15 +1,15 @@
 import { Match } from "aws-cdk-lib/assertions";
 import { describe, it } from "vitest";
 import {
+  COORDINATION_BUDGET_EXCEEDED_EVENT,
+  COORDINATION_BUDGET_WARNING_EVENT,
+} from "../lib/problem-deploy/handlers/participant-handler/coordination-store";
+import {
   SYNTH_TIMEOUT_MS,
   synthDefault,
   synthWithOpsMonitoring,
   synthWithOpsMonitoringAndPortal,
 } from "./problem-deploy-backend-stack.test-helpers";
-import {
-  COORDINATION_BUDGET_EXCEEDED_EVENT,
-  COORDINATION_BUDGET_WARNING_EVENT,
-} from "../lib/problem-deploy/handlers/participant-handler/coordination-store";
 
 describe("ProblemDeployBackendStack ops monitoring (#2406)", () => {
   it(

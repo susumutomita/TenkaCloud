@@ -632,6 +632,41 @@ export interface DeploymentsCoordinationPort {
   deleteCoordinationState(scope: CoordinationStateScope): Promise<void>;
 
   /**
+   * [Issue #3149] Deletes one scope's coordination state only if it is still at
+   * `expectedVersion`, folding a lost race into `{ outcome: "conflict" }`.
+   *
+   * ## Why cleanup needs a conditional delete at all
+   *
+   * The caller that wants this is deciding "is this problem's last deployment
+   * gone", and that decision is a read. Read-then-delete races: between the
+   * count and the delete, a new deployment can arrive and its first operation
+   * can write state — and the unconditional {@link deleteCoordinationState}
+   * would then remove a match that is being played, reporting success.
+   *
+   * Conditioning the delete on the version the caller read closes it, because
+   * the only way a live match reaches this window is by writing, and writing is
+   * exactly what moves the version. A new deployment that has NOT written
+   * anything yet is not a match in progress: it re-materializes from
+   * `plugin.initialState` on its first operation, which is what it would have
+   * done had it arrived a moment later.
+   *
+   * ## What `expectedVersion` 0 means here, and why it is refused
+   *
+   * A version of 0 is "no row", and this method requires a row to condition on.
+   * The backends therefore treat it as a programming error rather than
+   * silently deleting unconditionally — which would reintroduce the race in the
+   * one case the caller is least able to reason about.
+   *
+   * Never `not_found`: a row that vanished between the read and this call is
+   * reported as `conflict`, because from the caller's point of view both mean
+   * "the state you were about to remove is not the state that is there now".
+   */
+  deleteCoordinationStateIfUnchanged(
+    scope: CoordinationStateScope,
+    expectedVersion: number,
+  ): Promise<DeploymentMutationOutcome>;
+
+  /**
    * [Issue #3133] Returns this match's server-only secret, minting `candidate`
    * on the first call for the scope and returning the already-stored value on
    * every call after that.

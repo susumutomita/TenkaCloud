@@ -130,7 +130,7 @@ export function coordinationStateBudget(
   const maxBytes =
     backend.kind === "dynamodb"
       ? DYNAMODB_ITEM_LIMIT_BYTES - DYNAMODB_ROW_OVERHEAD_BYTES
-      : parseOverride(env[COORDINATION_STATE_MAX_BYTES_ENV]) ?? SQL_STATE_LIMIT_BYTES;
+      : (parseOverride(env[COORDINATION_STATE_MAX_BYTES_ENV]) ?? SQL_STATE_LIMIT_BYTES);
   return {
     backend: backend.kind,
     maxBytes,
