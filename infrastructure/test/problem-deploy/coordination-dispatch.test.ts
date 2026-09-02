@@ -288,8 +288,15 @@ const backendStores: readonly (readonly [string, () => CoordinationStoreDeps])[]
     "SqlDeploymentsRepository",
     () => {
       const sql = makeSqliteExecutor();
+      // [Issue #3151] Built by overriding one method on a REAL runtime rather
+      // than by casting an object literal. The store now also asks the runtime
+      // for the backend's state size budget, and a hand-rolled stub silently
+      // stops satisfying the interface the moment it grows a method -- the cast
+      // hides that from the compiler, so the miss only shows up as a runtime
+      // TypeError inside an unrelated assertion.
       return {
         runtime: {
+          ...makeTestControlDataRuntime({ CONTROL_DATA_BACKEND: "turso" }),
           resolveDeploymentsRepository: async () => new SqlDeploymentsRepository(sql),
         } as unknown as ControlDataRuntime,
         ddb: sqlBackendDdb as never,

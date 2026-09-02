@@ -1,4 +1,5 @@
 import type { CoordinationContext } from "@tenkacloud/coordination-plugin-sdk";
+import type { CoordinationStateBudget } from "../../control-data/domain/coordination-budget.js";
 import {
   type CoordinationStateScope,
   DEFAULT_COORDINATION_RUN_ID,
@@ -118,6 +119,19 @@ export type CoordinationHandlerOutcome =
       readonly reason: StateSchemaMismatchReason;
       /** `migration_failed` の throw メッセージ。 ログ専用で HTTP 応答には載せない。 */
       readonly detail?: string;
+    }
+  /**
+   * [Issue #3151] op は適用できたが、 その結果の state が選択中 backend の予算に収まらず、
+   * platform が write を拒んだ。 行は op 前のまま。
+   *
+   * `rejected` と分ける。 `rejected` は plugin が参加者の手を却下したという意味で、 参加者は
+   * 別の手を指せばよい。 これは platform 側に置き場所が無いという意味で、 どんな手を指しても
+   * 変わらない — 混ぜると参加者は永久に指し直し続けることになる。
+   */
+  | {
+      readonly kind: "too_large";
+      readonly bytes?: number;
+      readonly budget: CoordinationStateBudget;
     };
 
 /** op を受理 → 適用 → 永続化し、 当該 team 向け projection を返す (= write 経路)。 */

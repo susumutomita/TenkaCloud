@@ -2,6 +2,7 @@ import { CfnOutput } from "aws-cdk-lib";
 import type { IProject } from "aws-cdk-lib/aws-codebuild";
 import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import type { IFunction } from "aws-cdk-lib/aws-lambda";
+import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import type { ILogGroup } from "aws-cdk-lib/aws-logs";
 import type { IBucket } from "aws-cdk-lib/aws-s3";
 import type { Construct } from "constructs";
@@ -75,8 +76,12 @@ export interface ParticipantPortalSubsystemOutputs {
    * [#2324] scoring-driven coordination tick の実行先。 採点 Lambda が per-minute pass で
    * tick 対象を集めて本 Lambda を async Invoke し、 plugin の runTick を最小 IAM の dispatcher 内で走らせる
    * (資格情報分離)。 caller が `grantInvoke` + function name env を配線するため公開する。
+   *
+   * [Issue #3151] 具体型 (`NodejsFunction`) で返す。 caller は grantInvoke と function name に
+   * 加えて **log group** を要る -- coordination state のサイズ予算警告を metric filter で
+   * 拾うのがこの Lambda の log だけであり、 `IFunction` はそれを公開しない。
    */
-  readonly coordinationDispatcherLambda: IFunction;
+  readonly coordinationDispatcherLambda: NodejsFunction;
 }
 
 /**

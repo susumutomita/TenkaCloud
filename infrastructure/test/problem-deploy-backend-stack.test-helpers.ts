@@ -143,6 +143,36 @@ export const synthWithOpsMonitoring = memoizeTemplate((): Template => {
   return Template.fromStack(stack);
 });
 
+/**
+ * [Issue #3151] ops monitoring **and** a participant portal.
+ *
+ * The coordination state-budget alarms watch the CoordinationDispatcher
+ * Lambda's log group, and that Lambda only exists when the participant portal
+ * subsystem is built. {@link synthWithOpsMonitoring} has no portal, which is
+ * why the alarm count there is still exactly the two scoring alarms — a stack
+ * with no coordination dispatcher has no coordination log to watch.
+ */
+export const synthWithOpsMonitoringAndPortal = memoizeTemplate((): Template => {
+  const app = new cdk.App({ autoSynth: false });
+  const stack = new ProblemDeployBackendStack(app, "TestStackOpsMonitoringPortal", {
+    eventBusArn: "arn:aws:events:ap-northeast-1:123456789012:event-bus/test-bus",
+    sourceBucketName: "test-source-bucket",
+    sourceObjectKey: "source.zip",
+    problemsCatalog: { "hello-world": "problems/challenges/hello-world" },
+    problemsScoring: {},
+    problemsEndpoints: {},
+    deployViaLambda: true,
+    environmentName: "development",
+    participantPortal: { runtimeConfig: "default-dev-mock" },
+    opsMonitoring: {
+      alertEmail: "ops@example.com",
+      monthlyCostLimitUsd: 25,
+      budgetThresholdPercent: 90,
+    },
+  });
+  return Template.fromStack(stack);
+});
+
 // Issue #2290 / #2440: controlDataBackend: "turso" を反映させ、監査 Lambda 群の env に
 // CONTROL_DATA_BACKEND="turso" が注入されることを検証するための別 synth (= synthWithAuditLogDisabled
 // と同じ pattern)。[Issue #2440] "turso" は純 SQL backend (Events/Teams

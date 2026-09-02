@@ -178,6 +178,24 @@ async function tickCoordinationEvent(
     console.warn(`[coordination-dispatcher] tick write conflict event=${target.eventId}`);
     return false;
   }
+  if (written.kind === "too_large") {
+    // [Issue #3151] The tick is where an over-budget match was always going to
+    // be discovered first: it runs every minute whether or not participants are
+    // acting. There is nothing to retry -- the state does not shrink by being
+    // written again -- so the tick reports it and moves on to the other
+    // namespaces in this batch. The store has already emitted the operator
+    // warning; taking down the whole scoring pass for one full match would turn
+    // one stopped game into an outage for every other event.
+    console.warn(
+      `[coordination-dispatcher] tick write refused (state over budget) event=${target.eventId} ` +
+        `problem=${target.moduleRef} bytes=${written.bytes ?? "unmeasurable"} ` +
+        `max=${written.budget.maxBytes} backend=${written.budget.backend}`,
+    );
+    // TTL は延ばす。 書けないことと「試合が終わった」ことは別で、 ここで retention の時計を
+    // 進ませると、 運営が対処する前に行そのものが消える。
+    await refreshCoordinationTtl(deps, target, scope, existing, nowIso);
+    return false;
+  }
   return true;
 }
 

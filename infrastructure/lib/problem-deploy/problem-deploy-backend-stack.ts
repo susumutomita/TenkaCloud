@@ -11,6 +11,10 @@ import { buildDeployPipeline } from "./build-deploy-pipeline.js";
 import { buildParticipantPortalSubsystem } from "./build-participant-portal-subsystem.js";
 import { buildScoringSubsystem } from "./build-scoring-subsystem.js";
 import { CompetitorBootstrapHosting } from "./competitor-bootstrap-hosting.js";
+import {
+  COORDINATION_BUDGET_EXCEEDED_EVENT,
+  COORDINATION_BUDGET_WARNING_EVENT,
+} from "./handlers/participant-handler/coordination-store.js";
 import type { OpsMonitoringConfig } from "./ops-monitoring.js";
 import type { ParticipantPortalRuntimeConfig } from "./participant-portal-hosting.js";
 
@@ -499,6 +503,16 @@ export class ProblemDeployBackendStack extends cdk.Stack {
         "COORDINATION_DISPATCHER_FUNCTION_NAME",
         dispatcher.functionName,
       );
+
+      // [Issue #3151] coordination state のサイズ予算警告を運営へ届ける経路。 書き込みは
+      // この dispatcher Lambda だけが行うので、 その log group 1 つを見れば足りる。
+      // 配線がここにあるのは、 OpsMonitoring を作る scoring subsystem の時点では
+      // dispatcher がまだ存在しないため (= 上の grantInvoke と同じ理由・同じ場所)。
+      scoring.opsMonitoring?.watchCoordinationStateBudget({
+        coordinationDispatcher: dispatcher,
+        warningEvent: COORDINATION_BUDGET_WARNING_EVENT,
+        exceededEvent: COORDINATION_BUDGET_EXCEEDED_EVENT,
+      });
     }
 
     new CfnOutput(this, "DeployCreateStateMachineArn", {

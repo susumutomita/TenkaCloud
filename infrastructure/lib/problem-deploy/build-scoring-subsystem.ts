@@ -35,6 +35,15 @@ export interface ScoringSubsystemOutputs {
    * dispatcher via `addEnvironment` after the participant-portal subsystem exists.
    */
   readonly genericScoringFn: NodejsFunction;
+  /**
+   * [Issue #3151] The ops-alerting construct, when the operator configured one.
+   *
+   * Returned for the same reason `genericScoringFn` is: the coordination
+   * dispatcher does not exist yet at this point in the stack, and its log group
+   * is where the state-budget events land. The caller attaches that watch once
+   * the participant-portal subsystem has been built.
+   */
+  readonly opsMonitoring?: OpsMonitoring;
 }
 
 /**
@@ -96,13 +105,13 @@ export function buildScoringSubsystem(
     ...args.controlDataBackendProps,
   });
 
-  if (args.opsMonitoring) {
-    new OpsMonitoring(scope, "OpsMonitoring", {
-      ...args.opsMonitoring,
-      environmentName: args.environmentName,
-      genericScoringLambda: genericScoring.fn,
-    });
-  }
+  const opsMonitoring = args.opsMonitoring
+    ? new OpsMonitoring(scope, "OpsMonitoring", {
+        ...args.opsMonitoring,
+        environmentName: args.environmentName,
+        genericScoringLambda: genericScoring.fn,
+      })
+    : undefined;
 
-  return { genericScoringFn: genericScoring.fn };
+  return { genericScoringFn: genericScoring.fn, opsMonitoring };
 }

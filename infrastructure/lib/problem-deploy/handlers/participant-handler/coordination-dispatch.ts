@@ -4,6 +4,7 @@ import {
   dispatchOp,
   safeProjectForTeam,
 } from "@tenkacloud/coordination-plugin-sdk";
+import type { CoordinationStateBudget } from "../../control-data/domain/coordination-budget.js";
 import type { CoordinationStateScope } from "../../control-data/domain/coordination-scope.js";
 import {
   pluginStateSchemaVersion,
@@ -62,6 +63,21 @@ export type CoordinationDispatchOutcome =
     }
   | { readonly kind: "rejected"; readonly error: string }
   | { readonly kind: "conflict" }
+  /**
+   * [Issue #3151] The op was valid and applied, but the resulting state does
+   * not fit the selected backend's size budget, so the platform refused to
+   * persist it. Nothing was written; the match is where it was before this op.
+   *
+   * Deliberately not `rejected`: `rejected` is the plugin's verdict on the
+   * participant's move and its `error` is the plugin's own vocabulary. This is
+   * the platform saying the backend has no room, which is not the
+   * participant's mistake and not something a different move would fix.
+   */
+  | {
+      readonly kind: "too_large";
+      readonly bytes?: number;
+      readonly budget: CoordinationStateBudget;
+    }
   /**
    * [Issue #3150] The persisted row's `stateSchemaVersion` could not be
    * reconciled against the plugin currently loaded. Neither the row nor the
@@ -138,6 +154,9 @@ export async function dispatchCoordinationOp<State, Op, Projection>(
     pluginStateSchemaVersion(plugin),
   );
   if (written.kind === "conflict") return { kind: "conflict" };
+  if (written.kind === "too_large") {
+    return { kind: "too_large", bytes: written.bytes, budget: written.budget };
+  }
 
   const projection = safeProjectForTeam(
     plugin,

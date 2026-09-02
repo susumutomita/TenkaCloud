@@ -101,6 +101,23 @@ function respondCoordination(
         { error: "state_schema_mismatch", reason: outcome.reason },
         StatusCodes.SERVICE_UNAVAILABLE,
       );
+    // [Issue #3151] 507: 参加者の要求そのものは正しく、 受け入れられない理由は保存先に
+    // 空きが無いことにある。 413 (Payload Too Large) は「送ってきた request が大きい」の
+    // 意味なので当たらない -- 大きいのは request ではなく、 その op を適用した後の試合の
+    // state で、 これは参加者が小さくできるものではない。
+    //
+    // 数値は返す。 運営が「どこまで来ているか」を participant 側の報告からも掴めるように
+    // する必要があるし、 予算そのものは秘密ではない (試合の中身は載せない)。
+    case "too_large":
+      return c.json(
+        {
+          error: "state_over_budget",
+          bytes: outcome.bytes,
+          maxBytes: outcome.budget.maxBytes,
+          backend: outcome.budget.backend,
+        },
+        StatusCodes.INSUFFICIENT_STORAGE,
+      );
     default:
       return c.json({ error: "not_configured" }, StatusCodes.NOT_FOUND);
   }

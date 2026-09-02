@@ -2,11 +2,17 @@ import { randomBytes } from "node:crypto";
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import type { DeploymentsCoordinationPort } from "../../control-data/deployments-repository.js";
 import {
+  budgetUsedPercent,
+  checkCoordinationStateSize,
+  type CoordinationStateBudget,
+} from "../../control-data/domain/coordination-budget.js";
+import {
   type CoordinationStateScope,
   coordinationStateExpiresAt,
   createCoordinationMatchSecret,
 } from "../../control-data/domain/coordination-scope.js";
 import type { ControlDataRuntime } from "../../control-data/runtime-repositories.js";
+import { warnDeployTrace } from "../shared/trace-log.js";
 import { resolveDeploymentsRepository } from "./shared.js";
 
 /**
@@ -123,7 +129,40 @@ export async function readCoordinationState(
   return { state: record.state, version: record.version, expiresAt: record.expiresAt };
 }
 
-export type WriteCoordinationOutcome = { kind: "ok" } | { kind: "conflict" };
+export type WriteCoordinationOutcome =
+  | { kind: "ok" }
+  | { kind: "conflict" }
+  /**
+   * [Issue #3151] The serialized state does not fit this backend's budget, so
+   * the platform refused the write before it reached the backend.
+   *
+   * A distinct outcome rather than a thrown error, and distinct from
+   * `conflict`, because the three mean different things to the caller: retry
+   * (`conflict`), stop and tell the operator (`too_large`), proceed (`ok`).
+   * Folding this into `conflict` would put the participant into a retry loop
+   * against a state that cannot get smaller by being retried.
+   */
+  | {
+      kind: "too_large";
+      /** Serialized size, or undefined when the state could not be serialized at all. */
+      readonly bytes?: number;
+      readonly budget: CoordinationStateBudget;
+    };
+
+/**
+ * [Issue #3151] The log event a metric filter turns into the operator's early
+ * warning. `ops-monitoring.ts` matches this exact string; changing it here
+ * without changing it there silently disconnects the alarm, which is why it is
+ * a shared constant rather than a literal at the call site.
+ */
+export const COORDINATION_BUDGET_WARNING_EVENT = "coordination.state.budget-warning";
+
+/**
+ * [Issue #3151] The log event for a refused write. Distinct from the warning so
+ * an operator (and an alarm) can tell "heading for the ceiling" from "a match
+ * has stopped".
+ */
+export const COORDINATION_BUDGET_EXCEEDED_EVENT = "coordination.state.budget-exceeded";
 
 /**
  * version 条件付きで state を書く。
@@ -157,6 +196,11 @@ export async function writeCoordinationState(
     stateSchemaVersion,
     state,
   };
+  // [Issue #3151] Measured on the envelope, not on the plugin's `state`: the
+  // envelope is what is actually stored, so measuring the payload alone would
+  // under-report by exactly the bytes the platform itself adds.
+  const refusal = enforceCoordinationStateBudget(deps, scope, envelope);
+  if (refusal) return refusal;
   const outcome = await repository.writeCoordinationState(
     scope,
     envelope,
@@ -165,6 +209,84 @@ export async function writeCoordinationState(
     coordinationStateExpiresAt(parseNowMs(nowIso)),
   );
   return outcome.outcome === "updated" ? { kind: "ok" } : { kind: "conflict" };
+}
+
+/**
+ * [Issue #3151] Applies this backend's size budget to a state about to be
+ * written. Returns the refusal to hand back, or `undefined` to proceed.
+ *
+ * ## Why the check is here and not in the repository
+ *
+ * The ceiling is a property of the selected backend, and only the runtime knows
+ * which one is selected. Pushing the check down into each adapter would give
+ * two implementations of one rule that could drift apart, and the SQL adapter
+ * has no natural number to check against — its ceiling is platform policy, not
+ * a service limit. Pushing it up into the plugin would be worse still: the
+ * issue is explicit that the ceiling is the PLATFORM telling the problem how
+ * much room this backend has, not the problem being asked to shrink its game.
+ *
+ * ## Why the warning matters more than the stop
+ *
+ * Refusing a write ends the match just as surely as the backend refusing it
+ * would. By the time the ceiling is reached there is nothing anyone can do
+ * about it, so the ceiling is the last line, not the mechanism: the warning at
+ * half the budget is what actually gives an operator a chance to move an event
+ * to a backend with room, or cap the roster, while the match can still be
+ * played.
+ */
+function enforceCoordinationStateBudget(
+  deps: CoordinationStoreDeps,
+  scope: CoordinationStateScope,
+  stored: unknown,
+): Extract<WriteCoordinationOutcome, { kind: "too_large" }> | undefined {
+  const budget = deps.runtime.coordinationStateBudget();
+  const verdict = checkCoordinationStateSize(stored, budget);
+  if (verdict.kind === "ok") return undefined;
+  if (verdict.kind === "warn") {
+    warnDeployTrace(COORDINATION_BUDGET_WARNING_EVENT, {
+      ...budgetLogFields(scope, budget),
+      bytes: verdict.bytes,
+      usedPercent: budgetUsedPercent(verdict.bytes, budget),
+    });
+    return undefined;
+  }
+  if (verdict.kind === "exceeded") {
+    warnDeployTrace(COORDINATION_BUDGET_EXCEEDED_EVENT, {
+      ...budgetLogFields(scope, budget),
+      bytes: verdict.bytes,
+      usedPercent: budgetUsedPercent(verdict.bytes, budget),
+    });
+    return { kind: "too_large", bytes: verdict.bytes, budget };
+  }
+  // `unmeasurable`: the state could not be serialized at all (a cycle, a
+  // BigInt). The backend would reject it too, later and less legibly.
+  warnDeployTrace(COORDINATION_BUDGET_EXCEEDED_EVENT, {
+    ...budgetLogFields(scope, budget),
+    reason: "state_not_serializable",
+  });
+  return { kind: "too_large", budget };
+}
+
+/**
+ * Scope fields for a budget log line.
+ *
+ * `tenantId` / `eventId` / `problemId` only — never the state, and never the
+ * run's contents. An operator needs to know WHICH match is filling up; the
+ * bytes themselves are the participants' game.
+ */
+function budgetLogFields(
+  scope: CoordinationStateScope,
+  budget: CoordinationStateBudget,
+): Readonly<Record<string, unknown>> {
+  return {
+    tenantId: scope.tenantId,
+    eventId: scope.eventId,
+    problemIds: scope.problemId,
+    runId: scope.runId,
+    backend: budget.backend,
+    maxBytes: budget.maxBytes,
+    warnBytes: budget.warnBytes,
+  };
 }
 
 /**
