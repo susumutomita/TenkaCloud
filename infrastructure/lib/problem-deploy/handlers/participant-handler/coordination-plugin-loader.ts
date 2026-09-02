@@ -7,7 +7,6 @@ import {
   dispatchCoordinationOp,
   projectCoordinationForTeam,
 } from "./coordination-dispatch.js";
-import { pluginStateSchemaVersion } from "./coordination-state-schema.js";
 import type { CoordinationStoreDeps } from "./coordination-store.js";
 
 /**
@@ -89,24 +88,61 @@ function describeSchemaValue(value: unknown): string {
 export function coordinationPluginSchemaDefect(
   plugin: CoordinationPlugin<unknown, unknown>,
 ): string | null {
+  return schemaDefectOf(readSchemaSnapshot(plugin));
+}
+
+/**
+ * [Issue #3150] Codex review 5 巡目: 版宣言は **1 度だけ読んで固定する**。
+ *
+ * `stateSchemaVersion` が可変 state に裏打ちされた accessor だと、 検証時に 1 を返して通り、
+ * DDB の await を挟んだあとの再読で Symbol を返す、 といったことが起こりうる。 そうなると
+ * 突き合わせや write が `invalid_schema` ではなく throw になり、 tick は外側の catch に飛んで
+ * TTL 延長を飛ばす -- 進行中の行を retention で失う、 この gate が塞ごうとしている失敗そのもの。
+ * だから検証した値そのものを持ち回る。
+ */
+interface SchemaSnapshot {
+  readonly version: unknown;
+  readonly migrate: unknown;
+}
+
+function readSchemaSnapshot(plugin: CoordinationPlugin<unknown, unknown>): SchemaSnapshot {
   const p = plugin as unknown as Record<string, unknown>;
-  if (p.stateSchemaVersion !== undefined) {
-    if (
-      typeof p.stateSchemaVersion !== "number" ||
-      !Number.isInteger(p.stateSchemaVersion) ||
-      p.stateSchemaVersion <= 0
-    ) {
-      return `stateSchemaVersion must be a positive integer, got ${describeSchemaValue(p.stateSchemaVersion)}`;
+  return { version: p.stateSchemaVersion, migrate: p.migrateState };
+}
+
+function schemaDefectOf(snap: SchemaSnapshot): string | null {
+  if (snap.version !== undefined) {
+    if (typeof snap.version !== "number" || !Number.isInteger(snap.version) || snap.version <= 0) {
+      return `stateSchemaVersion must be a positive integer, got ${describeSchemaValue(snap.version)}`;
     }
   }
-  if (p.migrateState !== undefined && typeof p.migrateState !== "function") {
+  if (snap.migrate !== undefined && typeof snap.migrate !== "function") {
     return "migrateState must be a function when declared";
   }
-  const declared = pluginStateSchemaVersion(plugin);
-  if (declared >= 2 && typeof p.migrateState !== "function") {
+  const declared = typeof snap.version === "number" ? snap.version : 1;
+  if (declared >= 2 && typeof snap.migrate !== "function") {
     return `stateSchemaVersion ${declared} requires migrateState`;
   }
   return null;
+}
+
+/**
+ * 検証した版と migration hook を **own data property として焼き付けた** view を返す。 hook 群は
+ * prototype 経由で元の plugin に解決されるので、 plain object でも class instance でもそのまま
+ * 動く。 下流 (`pluginStateSchemaVersion` / `reconcileStateSchema` / `writeCoordinationState`) は
+ * 何も変えずに、 読むたび同じ値を得る。
+ */
+function pinSchema(
+  plugin: CoordinationPlugin<unknown, unknown>,
+  snap: SchemaSnapshot,
+): CoordinationPlugin<unknown, unknown> {
+  return Object.create(plugin, {
+    stateSchemaVersion: {
+      value: typeof snap.version === "number" ? snap.version : 1,
+      enumerable: true,
+    },
+    migrateState: { value: snap.migrate, enumerable: true },
+  }) as CoordinationPlugin<unknown, unknown>;
 }
 
 /**
@@ -156,13 +192,19 @@ export async function loadCoordinationPlugin(
     return { kind: "unavailable" };
   }
   const plugin = candidate as CoordinationPlugin<unknown, unknown>;
+  let snap: SchemaSnapshot;
   let defect: string | null;
+  let pinned: CoordinationPlugin<unknown, unknown>;
   try {
-    defect = coordinationPluginSchemaDefect(plugin);
+    snap = readSchemaSnapshot(plugin);
+    defect = schemaDefectOf(snap);
+    pinned = pinSchema(plugin, snap);
   } catch (err) {
     return { kind: "invalid_schema", detail: `schema inspection threw: ${describeThrown(err)}` };
   }
-  return defect === null ? { kind: "ok", plugin } : { kind: "invalid_schema", detail: defect };
+  return defect === null
+    ? { kind: "ok", plugin: pinned }
+    : { kind: "invalid_schema", detail: defect };
 }
 
 /** plugin が load できなかった (= 問題が coordination 未対応 / 壊れている) ときの outcome。 */

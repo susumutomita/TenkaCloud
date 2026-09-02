@@ -212,6 +212,30 @@ describe("coordinationPluginSchemaDefect", () => {
     expect(load.kind === "invalid_schema" ? load.detail : "").toContain("version getter exploded");
   });
 
+  /**
+   * [Issue #3150] Codex review 5 巡目: accessor は throw しなくてもよい -- 検証を通したあとに
+   * 値を変えるだけでいい。 下流は await を挟んで読み直すので、 そこで Symbol が返れば突き合わせや
+   * write が throw し、 tick は TTL 延長を飛ばして行を失う。 検証した値を焼き付けて防ぐ。
+   */
+  it("should pin the validated schema version against an accessor that changes after inspection", async () => {
+    let reads = 0;
+    const shifting = {
+      ...counter,
+      get stateSchemaVersion(): number {
+        reads += 1;
+        return reads === 1 ? 1 : (Symbol("gotcha") as unknown as number);
+      },
+    };
+    const load = await loadCoordinationPlugin(importerOf(shifting), "ref");
+    expect(load.kind).toBe("ok");
+    const plugin = load.kind === "ok" ? load.plugin : counter;
+    // 下流が何度読んでも、 検証を通した値のまま。
+    expect(plugin.stateSchemaVersion).toBe(1);
+    expect(plugin.stateSchemaVersion).toBe(1);
+    // hook は prototype 経由で元の plugin に解決される。
+    expect(plugin.projectForTeam({ count: 3 }, "t1", ctx)).toEqual({ count: 3 });
+  });
+
   it("should reject a migrateState that is not a function, regardless of version", () => {
     const expected = "migrateState must be a function when declared";
     expect(coordinationPluginSchemaDefect(malformedPlugin({ migrateState: "nope" }))).toBe(
@@ -226,18 +250,21 @@ describe("coordinationPluginSchemaDefect", () => {
 });
 
 describe("loadCoordinationPlugin", () => {
-  it("should return the plugin from a default export", async () => {
-    expect(await loadCoordinationPlugin(importerOf({ default: counter }), "ref")).toEqual({
-      kind: "ok",
-      plugin: counter,
-    });
+  /**
+   * 返るのは plugin そのものではなく、 検証した版宣言を焼き付けた view (`pinSchema` 参照)。
+   * hook は prototype 経由で元の plugin に解決されるので、 呼び出し側から見た挙動は同じ。
+   */
+  it("should return a view over the plugin from a default export", async () => {
+    const load = await loadCoordinationPlugin(importerOf({ default: counter }), "ref");
+    expect(load.kind).toBe("ok");
+    expect(load.kind === "ok" && Object.getPrototypeOf(load.plugin)).toBe(counter);
   });
 
-  it("should return the plugin when the module itself is the plugin", async () => {
-    expect(await loadCoordinationPlugin(importerOf(counter), "ref")).toEqual({
-      kind: "ok",
-      plugin: counter,
-    });
+  it("should return a view over the plugin when the module itself is the plugin", async () => {
+    const load = await loadCoordinationPlugin(importerOf(counter), "ref");
+    expect(load.kind).toBe("ok");
+    expect(load.kind === "ok" && Object.getPrototypeOf(load.plugin)).toBe(counter);
+    expect(load.kind === "ok" && load.plugin.initialState(ctx)).toEqual({ count: 0 });
   });
 
   it("should report unavailable when the importer throws", async () => {
