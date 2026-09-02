@@ -67,6 +67,15 @@ export function isCoordinationPlugin(
  * 巻き添えにしない」という、 この関数の存在理由そのものが崩れる。 pack-author が書いた任意の値を
  * 受けるので、 **どの分岐も throw させない**: 整形が失敗したら静的な文言に落とす。
  */
+function describeThrown(err: unknown): string {
+  try {
+    if (err instanceof Error && typeof err.message === "string") return err.message;
+  } catch {
+    // message の読み出し自体が throw する値もある。 下の整形に落とす。
+  }
+  return describeSchemaValue(err);
+}
+
 function describeSchemaValue(value: unknown): string {
   try {
     if (typeof value === "string") return `"${value}"`;
@@ -133,18 +142,27 @@ export async function loadCoordinationPlugin(
   // revoked Proxy なら `candidate.initialState` の property 読みが throw する。 この関数から
   // 例外が漏れると op / projection は分類できない 500 になり、 tick は外側の catch に飛んで
   // TTL を延ばせないまま進行中の行を失う。 **load は何が import されても throw しない**。
+  //
+  // catch を 2 つに分けているのは意図的 (Codex review 4 巡目)。 構造判定の throw は「使える
+  // plugin ではない」= `unavailable`、 **版宣言の検査の throw は `invalid_schema`**。 まとめて
+  // `unavailable` に倒すと、 必須 hook は読めるのに `stateSchemaVersion` の getter だけが
+  // throw する plugin が、 tick で TTL を延ばされない側 (= 行が retention で消える側) に
+  // 落ちる。 それはこの gate が塞ごうとしている失敗そのもの。
   let candidate: unknown;
-  let defect: string | null;
   try {
     candidate = (mod as { default?: unknown } | null)?.default ?? mod;
     if (!isCoordinationPlugin(candidate)) return { kind: "unavailable" };
-    defect = coordinationPluginSchemaDefect(candidate);
   } catch {
     return { kind: "unavailable" };
   }
-  return defect === null
-    ? { kind: "ok", plugin: candidate as CoordinationPlugin<unknown, unknown> }
-    : { kind: "invalid_schema", detail: defect };
+  const plugin = candidate as CoordinationPlugin<unknown, unknown>;
+  let defect: string | null;
+  try {
+    defect = coordinationPluginSchemaDefect(plugin);
+  } catch (err) {
+    return { kind: "invalid_schema", detail: `schema inspection threw: ${describeThrown(err)}` };
+  }
+  return defect === null ? { kind: "ok", plugin } : { kind: "invalid_schema", detail: defect };
 }
 
 /** plugin が load できなかった (= 問題が coordination 未対応 / 壊れている) ときの outcome。 */

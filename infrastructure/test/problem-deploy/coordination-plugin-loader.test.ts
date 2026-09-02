@@ -195,6 +195,23 @@ describe("coordinationPluginSchemaDefect", () => {
     });
   });
 
+  /**
+   * [Issue #3150] Codex review 4 巡目: 必須 hook は読めるのに版宣言の検査だけが throw する
+   * plugin を `unavailable` に倒すと、 tick が TTL を延ばさない側に落ちて行が retention で
+   * 消える。 構造の throw と版検査の throw は行き先が違う。
+   */
+  it("should route a throwing schema accessor to invalid_schema, not unavailable", async () => {
+    const throwingVersion = {
+      ...counter,
+      get stateSchemaVersion(): number {
+        throw new Error("version getter exploded");
+      },
+    };
+    const load = await loadCoordinationPlugin(importerOf(throwingVersion), "ref");
+    expect(load.kind).toBe("invalid_schema");
+    expect(load.kind === "invalid_schema" ? load.detail : "").toContain("version getter exploded");
+  });
+
   it("should reject a migrateState that is not a function, regardless of version", () => {
     const expected = "migrateState must be a function when declared";
     expect(coordinationPluginSchemaDefect(malformedPlugin({ migrateState: "nope" }))).toBe(
