@@ -7,10 +7,7 @@ import { coordinationScopeForRun } from "../../control-data/domain/coordination-
 import type { CoordinationStateScope } from "../../control-data/domain/coordination-scope.js";
 import type { DeploymentStatus } from "../deploy-handler/types.js";
 import { DELETED_LIKE_STATUSES } from "./constants.js";
-import {
-  deleteAllCoordinationRuns,
-  resolveCurrentCoordinationRunId,
-} from "./coordination-run.js";
+import { deleteAllCoordinationRuns, resolveCurrentCoordinationRunId } from "./coordination-run.js";
 import { logDeployTrace } from "./trace-log.js";
 
 /**

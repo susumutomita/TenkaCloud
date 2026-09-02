@@ -1,8 +1,5 @@
 import { DeleteCommand, GetCommand, PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
-import type {
-  CoordinationRunKey,
-  CoordinationRunPointer,
-} from "./domain/coordination-run.js";
+import type { CoordinationRunKey, CoordinationRunPointer } from "./domain/coordination-run.js";
 import {
   assertConditionableVersion,
   type CoordinationStateScope,

@@ -260,11 +260,14 @@ async function deleteEventCoordinationState(
       // is what makes them reachable, so removing it first means a failure
       // afterwards leaves objects nothing can read, rather than a playable
       // board pointing at nothing.
-      await deleteAllCoordinationRuns({ repository, artifacts }, {
-        tenantId,
-        eventId,
-        problemId,
-      });
+      await deleteAllCoordinationRuns(
+        { repository, artifacts },
+        {
+          tenantId,
+          eventId,
+          problemId,
+        },
+      );
     }),
   );
   for (const [index, outcome] of settled.entries()) {

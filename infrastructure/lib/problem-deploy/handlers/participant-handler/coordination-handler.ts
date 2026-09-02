@@ -562,14 +562,11 @@ export function makeCoordinationScopeResolver(
           tenantId: item.tenantId,
           eventId: item.eventId,
           problemId: resolvedProblemId,
-          runId: await resolveCurrentCoordinationRunId(
-            await resolveDeploymentsRepository(shared),
-            {
-              tenantId: item.tenantId,
-              eventId: item.eventId,
-              problemId: resolvedProblemId,
-            },
-          ),
+          runId: await resolveCurrentCoordinationRunId(await resolveDeploymentsRepository(shared), {
+            tenantId: item.tenantId,
+            eventId: item.eventId,
+            problemId: resolvedProblemId,
+          }),
         },
         teamId: item.teamId,
         ctx: { eventId: item.eventId, teamIds },

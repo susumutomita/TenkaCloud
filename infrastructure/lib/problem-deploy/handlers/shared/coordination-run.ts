@@ -177,8 +177,7 @@ async function retireCoordinationRuns(
       eventId: key.eventId,
       problemIds: key.problemId,
       runId: retired[index],
-      reason:
-        outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason),
+      reason: outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason),
     });
   }
 }

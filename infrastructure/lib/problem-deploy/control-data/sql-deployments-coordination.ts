@@ -1,7 +1,4 @@
-import type {
-  CoordinationRunKey,
-  CoordinationRunPointer,
-} from "./domain/coordination-run.js";
+import type { CoordinationRunKey, CoordinationRunPointer } from "./domain/coordination-run.js";
 import {
   assertConditionableVersion,
   type CoordinationStateScope,
