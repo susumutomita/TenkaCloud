@@ -2079,11 +2079,6 @@
       "count": 2
     }
   },
-  "infrastructure/test/problem-deploy/coordination-dispatch.test.ts": {
-    "@typescript-eslint/consistent-type-assertions": {
-      "count": 2
-    }
-  },
   "infrastructure/test/problem-deploy/coordination-dispatcher-index.test.ts": {
     "@typescript-eslint/consistent-type-assertions": {
       "count": 2
