@@ -51,7 +51,6 @@ import { resolveDeploymentsRepository } from "./shared.js";
 
 export {
   type CoordinationStateScope,
-  DEFAULT_COORDINATION_RUN_ID,
   shouldRefreshCoordinationTtl,
 } from "../../control-data/domain/coordination-scope.js";
 

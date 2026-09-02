@@ -494,10 +494,15 @@ describe("makeCoordinationScopeResolver", () => {
   });
 
   it("should still scope the requester when the roster query fails", async () => {
-    let call = 0;
-    const send = vi.fn(async () => {
-      call += 1;
-      if (call === 1)
+    // Only the ROSTER query fails. [Issue #3153] added a run-pointer read to
+    // this path, and failing that one too would be testing a different claim:
+    // a pointer this resolver cannot read means it does not know which match
+    // the operation belongs to, and that is deliberately fatal.
+    let queries = 0;
+    const send = vi.fn(async (cmd: unknown) => {
+      if (cmd instanceof GetCommand) return { Item: undefined };
+      queries += 1;
+      if (queries === 1)
         return { Items: [{ tenantId: "tn1", eventId: "e1", teamId: "t1", problemId: "p1" }] };
       throw new Error("roster query failed");
     });

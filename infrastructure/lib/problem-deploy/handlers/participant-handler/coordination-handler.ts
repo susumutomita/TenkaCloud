@@ -2,14 +2,12 @@ import type { CoordinationContext } from "@tenkacloud/coordination-plugin-sdk";
 import type { CoordinationArtifactStore } from "../../control-data/coordination-artifact-store.js";
 import type { CoordinationArtifactRef } from "../../control-data/domain/coordination-artifact.js";
 import type { CoordinationStateBudget } from "../../control-data/domain/coordination-budget.js";
-import {
-  type CoordinationStateScope,
-  DEFAULT_COORDINATION_RUN_ID,
-} from "../../control-data/domain/coordination-scope.js";
+import type { CoordinationStateScope } from "../../control-data/domain/coordination-scope.js";
 import type { DeploymentStatus } from "../deploy-handler/types.js";
 import type { RoundWindow } from "../generic-scoring-handler/round-liveness.js";
 import { isScoringActive } from "../generic-scoring-handler/scoring-active.js";
 import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
+import { resolveCurrentCoordinationRunId } from "../shared/coordination-run.js";
 import {
   type ArtifactFetchOutcome,
   discardArtifacts,
@@ -554,13 +552,24 @@ export function makeCoordinationScopeResolver(
       scope: {
         // [Issue #3123] runId は problemId のエイリアスにしない。 同じ値を入れると 2 つの
         // 次元が区別できなくなり、 将来 run id が problem id と一致した瞬間に別 run の
-        // state が衝突する。 platform は現状 (event, problem) あたり 1 run しか作らないので
-        // 明示的な既定値を発行し、 run reset は「この namespace を消す」で表現する。
+        // state が衝突する。
+        //
+        // [Issue #3153] 値は run pointer から引く。 ここを定数にしていた間、 reset は
+        // 「この namespace を消す」でしか表現できず、 直前の試合は残らなかった。 pointer が
+        // 無い (= 一度も reset されていない) 問題は初期 run に解決するので、 この変更の前から
+        // 進行中の試合はそのまま続く。
         state: {
           tenantId: item.tenantId,
           eventId: item.eventId,
           problemId: resolvedProblemId,
-          runId: DEFAULT_COORDINATION_RUN_ID,
+          runId: await resolveCurrentCoordinationRunId(
+            await resolveDeploymentsRepository(shared),
+            {
+              tenantId: item.tenantId,
+              eventId: item.eventId,
+              problemId: resolvedProblemId,
+            },
+          ),
         },
         teamId: item.teamId,
         ctx: { eventId: item.eventId, teamIds },

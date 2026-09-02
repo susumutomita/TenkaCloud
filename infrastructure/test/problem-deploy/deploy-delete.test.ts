@@ -436,6 +436,7 @@ describe("requestTeardown coordination cleanup (#3149)", () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: eventRow() });
     ddbSend.mockResolvedValueOnce({}); // markDeleting
+    ddbSend.mockResolvedValueOnce({ Item: undefined }); // run pointer: never reset
     ddbSend.mockResolvedValueOnce({ Item: undefined }); // coordination state: absent
     eventsSend.mockResolvedValueOnce({});
 
@@ -452,14 +453,16 @@ describe("requestTeardown coordination cleanup (#3149)", () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: eventRow() });
     ddbSend.mockResolvedValueOnce({}); // markDeleting
+    // [Issue #3153] The run pointer comes first: cleanup has to act on the run
+    // the problem is actually on. Absent means it was never reset.
+    ddbSend.mockResolvedValueOnce({ Item: undefined });
     ddbSend.mockResolvedValueOnce({ Item: { state: { turn: 3 }, version: 4 } });
     // The event listing: the only row for this problem is the one just torn
     // down, so nothing can act on the state any more.
     ddbSend.mockResolvedValueOnce({
       Items: [{ ...eventRow(), teardownRequestedAt: "2026-07-02T00:00:00.000Z" }],
     });
-    ddbSend.mockResolvedValueOnce({}); // conditional delete
-    ddbSend.mockResolvedValueOnce({}); // match secret delete
+    ddbSend.mockResolvedValue({});
     eventsSend.mockResolvedValueOnce({});
 
     await requestTeardown(shared, "tenant-acme", "JOB1", NOW_MS);
@@ -477,6 +480,7 @@ describe("requestTeardown coordination cleanup (#3149)", () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: eventRow() });
     ddbSend.mockResolvedValueOnce({}); // markDeleting
+    ddbSend.mockResolvedValueOnce({ Item: undefined }); // run pointer: never reset
     ddbSend.mockResolvedValueOnce({ Item: { state: { turn: 3 }, version: 4 } });
     ddbSend.mockResolvedValueOnce({
       Items: [
@@ -520,6 +524,7 @@ describe("requestTeardown coordination cleanup (#3149)", () => {
     ddbSend.mockResolvedValueOnce({ Item: eventRow() });
     ddbSend.mockResolvedValueOnce({}); // markDeleting
     ddbSend.mockRejectedValueOnce(new Error("coordination read failed"));
+    ddbSend.mockResolvedValue({});
     eventsSend.mockResolvedValueOnce({});
 
     // The stack deletion is already under way. Reporting failure here would

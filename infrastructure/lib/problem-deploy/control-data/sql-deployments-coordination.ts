@@ -1,6 +1,11 @@
+import type {
+  CoordinationRunKey,
+  CoordinationRunPointer,
+} from "./domain/coordination-run.js";
 import {
   assertConditionableVersion,
   type CoordinationStateScope,
+  DEFAULT_COORDINATION_RUN_ID,
 } from "./domain/coordination-scope.js";
 import { normalizeJsonValue, type SqlDeploymentsCore } from "./sql-deployments-core.js";
 import type {
@@ -200,6 +205,78 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
     return { outcome: "updated" };
   }
 
+  /** [Issue #3153] See `DeploymentsCoordinationPort.readCoordinationRun`. */
+  async readCoordinationRun(key: CoordinationRunKey): Promise<CoordinationRunPointer | undefined> {
+    const row = await this.core.sql.get(
+      "SELECT run_id, started_at, history FROM coordination_run WHERE tenant_id = ? AND event_id = ? AND problem_id = ?",
+      [key.tenantId, key.eventId, key.problemId],
+    );
+    if (!row) return undefined;
+    return {
+      runId: String(row.run_id ?? ""),
+      startedAt: String(row.started_at ?? ""),
+      history: parseRunHistory(row.history),
+    };
+  }
+
+  /**
+   * [Issue #3153] See `DeploymentsCoordinationPort.rotateCoordinationRun`.
+   *
+   * Two statements rather than one upsert, because the condition differs by
+   * case and SQLite cannot express both in a single `ON CONFLICT`. Rotating
+   * away from the initial run must succeed whether or not a row exists —
+   * "no pointer" and "a pointer naming the default" mean the same thing — so it
+   * tries the conditional UPDATE first and falls back to an insert that only
+   * lands when nothing is there.
+   */
+  async rotateCoordinationRun(
+    key: CoordinationRunKey,
+    expectedRunId: string,
+    pointer: CoordinationRunPointer,
+    expiresAt: number,
+  ): Promise<DeploymentMutationOutcome> {
+    const updated = await this.core.sql.run(
+      `UPDATE coordination_run
+         SET run_id = ?, started_at = ?, history = ?, expires_at = ?
+       WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ?`,
+      [
+        pointer.runId,
+        pointer.startedAt,
+        JSON.stringify(pointer.history),
+        expiresAt,
+        key.tenantId,
+        key.eventId,
+        key.problemId,
+        expectedRunId,
+      ],
+    );
+    if (Number(updated.changes) > 0) return { outcome: "updated" };
+    if (expectedRunId !== DEFAULT_COORDINATION_RUN_ID) return { outcome: "conflict" };
+    const inserted = await this.core.sql.run(
+      `INSERT INTO coordination_run (tenant_id, event_id, problem_id, run_id, started_at, history, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(tenant_id, event_id, problem_id) DO NOTHING`,
+      [
+        key.tenantId,
+        key.eventId,
+        key.problemId,
+        pointer.runId,
+        pointer.startedAt,
+        JSON.stringify(pointer.history),
+        expiresAt,
+      ],
+    );
+    return Number(inserted.changes) > 0 ? { outcome: "updated" } : { outcome: "conflict" };
+  }
+
+  /** [Issue #3153] See `DeploymentsCoordinationPort.deleteCoordinationRun`. */
+  async deleteCoordinationRun(key: CoordinationRunKey): Promise<void> {
+    await this.core.sql.run(
+      "DELETE FROM coordination_run WHERE tenant_id = ? AND event_id = ? AND problem_id = ?",
+      [key.tenantId, key.eventId, key.problemId],
+    );
+  }
+
   /**
    * [Issue #3123] The retention primitive for rows no teardown ever deleted.
    * `expires_at > 0` skips rows written without a TTL (the migrated
@@ -224,5 +301,25 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
       [nowEpochSeconds],
     );
     return Number(result.changes);
+  }
+}
+
+/**
+ * Reads the stored history column back.
+ *
+ * A row whose JSON will not parse is treated as having no history rather than
+ * failing the read: the pointer's job is to say which run is CURRENT, and
+ * refusing to answer that because a decorative list is corrupt would take a
+ * live match down over nothing.
+ */
+function parseRunHistory(raw: unknown): readonly string[] {
+  if (typeof raw !== "string" || raw.length === 0) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((entry): entry is string => typeof entry === "string")
+      : [];
+  } catch {
+    return [];
   }
 }

@@ -21,9 +21,13 @@ import type { EventSharedResources } from "../shared.js";
  * late team, retrying a failed stack), and coordination state is shared by
  * every team on the problem. See `coordination-reset.ts` for the full argument.
  *
- * Destructive and irreversible: the match's state is deleted, and the next
- * participant operation rebuilds it from `plugin.initialState`. Restricted to
- * the same operator roles as deploy and teardown.
+ * [Issue #3153] Starts a NEW run rather than deleting the namespace. The match
+ * in progress ends and the next participant operation rebuilds from
+ * `plugin.initialState`, but the run that just ended stays readable under its
+ * own id until the retention window pushes it out — so an operator who resets
+ * because something went wrong still has the evidence of what went wrong.
+ *
+ * Restricted to the same operator roles as deploy and teardown.
  */
 export function registerCoordinationRoutes(app: Hono, shared: EventSharedResources): void {
   app.post(
@@ -41,6 +45,11 @@ export function registerCoordinationRoutes(app: Hono, shared: EventSharedResourc
           );
           if (outcome.kind === "not_found")
             return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
+          // [Issue #3153] Another operator started a run first. 409 rather than
+          // a retry: the caller should see which run is current before deciding
+          // whether they still want one of their own.
+          if (outcome.kind === "conflict")
+            return c.json({ error: "run_rotation_conflict" }, StatusCodes.CONFLICT);
           auditEventAction(c, "coordination_run_reset", eventId);
           return c.json(outcome.result, StatusCodes.OK);
         } catch (err) {

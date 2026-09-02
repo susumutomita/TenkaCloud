@@ -1,12 +1,19 @@
 import { DeleteCommand, GetCommand, PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import type {
+  CoordinationRunKey,
+  CoordinationRunPointer,
+} from "./domain/coordination-run.js";
 import {
   assertConditionableVersion,
   type CoordinationStateScope,
+  DEFAULT_COORDINATION_RUN_ID,
 } from "./domain/coordination-scope.js";
 import {
+  COORD_RUN_SK,
   COORD_SECRET_SK,
   COORD_STATE_SK,
   coordinationPk,
+  coordinationRunPk,
   type DynamoDbDeploymentsCore,
   isConditionalCheckFailed,
   preScopeCoordinationPk,
@@ -278,6 +285,79 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
       }),
     );
     return { outcome: "updated" };
+  }
+
+  // -- COORDRUN#: which run of a problem is current ------------------------
+
+  /** [Issue #3153] See `DeploymentsCoordinationPort.readCoordinationRun`. */
+  async readCoordinationRun(key: CoordinationRunKey): Promise<CoordinationRunPointer | undefined> {
+    const out = await this.core.ddb.send(
+      new GetCommand({
+        TableName: this.core.tableName,
+        Key: { PK: coordinationRunPk(key), SK: COORD_RUN_SK },
+      }),
+    );
+    const item = out.Item as Record<string, unknown> | undefined;
+    if (!item || typeof item.runId !== "string") return undefined;
+    return {
+      runId: item.runId,
+      startedAt: String(item.startedAt ?? ""),
+      history: Array.isArray(item.history)
+        ? item.history.filter((entry): entry is string => typeof entry === "string")
+        : [],
+    };
+  }
+
+  /**
+   * [Issue #3153] See `DeploymentsCoordinationPort.rotateCoordinationRun`.
+   *
+   * The condition splits on whether the caller expects the pre-pointer state.
+   * Rotating away from {@link DEFAULT_COORDINATION_RUN_ID} has to accept both
+   * "no row" and "a row still naming the default", because a match that has
+   * never been reset can be in either: absent if nothing ever wrote a pointer,
+   * present if something wrote one and then rotated back to nothing. Any other
+   * expectation is an exact match on `runId`.
+   */
+  async rotateCoordinationRun(
+    key: CoordinationRunKey,
+    expectedRunId: string,
+    pointer: CoordinationRunPointer,
+    expiresAt: number,
+  ): Promise<DeploymentMutationOutcome> {
+    const fromInitial = expectedRunId === DEFAULT_COORDINATION_RUN_ID;
+    try {
+      await this.core.ddb.send(
+        new PutCommand({
+          TableName: this.core.tableName,
+          Item: {
+            PK: coordinationRunPk(key),
+            SK: COORD_RUN_SK,
+            runId: pointer.runId,
+            startedAt: pointer.startedAt,
+            history: [...pointer.history],
+            expiresAt,
+          },
+          ConditionExpression: fromInitial
+            ? "attribute_not_exists(runId) OR runId = :expected"
+            : "runId = :expected",
+          ExpressionAttributeValues: { ":expected": expectedRunId },
+        }),
+      );
+      return { outcome: "updated" };
+    } catch (err) {
+      if (isConditionalCheckFailed(err)) return { outcome: "conflict" };
+      throw err;
+    }
+  }
+
+  /** [Issue #3153] See `DeploymentsCoordinationPort.deleteCoordinationRun`. */
+  async deleteCoordinationRun(key: CoordinationRunKey): Promise<void> {
+    await this.core.ddb.send(
+      new DeleteCommand({
+        TableName: this.core.tableName,
+        Key: { PK: coordinationRunPk(key), SK: COORD_RUN_SK },
+      }),
+    );
   }
 
   /**

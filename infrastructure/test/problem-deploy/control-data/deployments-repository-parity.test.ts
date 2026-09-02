@@ -585,6 +585,67 @@ describe.each(backends)("DeploymentsRepository parity: %s", (_label, makeBackend
   });
 
   /**
+   * [Issue #3153] The run pointer, which both backends have to agree about.
+   *
+   * It is what names the match participants are playing. A backend that
+   * disagreed here would not be returning stale data — it would be pointing
+   * half the platform at a different match from the other half.
+   */
+  it("should mean the same thing by an absent, a rotated, and a raced run pointer", async () => {
+    const { repo } = makeBackend();
+    const key = { tenantId: "tenant-a", eventId: "ev-run", problemId: "battle" };
+
+    // Absent means "never reset", which the caller resolves to the initial run.
+    expect(await repo.readCoordinationRun(key)).toBeUndefined();
+
+    // The first rotation must work with no row present: "no pointer" and "a
+    // pointer naming the default" are the same starting point.
+    await expectOutcome(
+      repo.rotateCoordinationRun(key, "default", { runId: "r1", startedAt: AT, history: [] }, 0),
+      "updated",
+    );
+    expect(await repo.readCoordinationRun(key)).toEqual({
+      runId: "r1",
+      startedAt: AT,
+      history: [],
+    });
+
+    // A second rotation from the same stale expectation must lose, or two
+    // operators would both believe they own the current match.
+    await expectOutcome(
+      repo.rotateCoordinationRun(key, "default", { runId: "r2", startedAt: AT, history: [] }, 0),
+      "conflict",
+    );
+    await expectOutcome(
+      repo.rotateCoordinationRun(key, "r1", { runId: "r2", startedAt: AT, history: ["r1"] }, 0),
+      "updated",
+    );
+    expect(await repo.readCoordinationRun(key)).toEqual({
+      runId: "r2",
+      startedAt: AT,
+      history: ["r1"],
+    });
+
+    await repo.deleteCoordinationRun(key);
+    expect(await repo.readCoordinationRun(key)).toBeUndefined();
+  });
+
+  it("should keep run pointers of different problems and events apart", async () => {
+    const { repo } = makeBackend();
+    const key = { tenantId: "tenant-a", eventId: "ev-1", problemId: "battle-a" };
+    await expectOutcome(
+      repo.rotateCoordinationRun(key, "default", { runId: "r1", startedAt: AT, history: [] }, 0),
+      "updated",
+    );
+
+    // The pointer is keyed one level above the runs it names; a neighbouring
+    // problem or event must be untouched by it.
+    expect(await repo.readCoordinationRun({ ...key, problemId: "battle-b" })).toBeUndefined();
+    expect(await repo.readCoordinationRun({ ...key, eventId: "ev-2" })).toBeUndefined();
+    expect(await repo.readCoordinationRun({ ...key, tenantId: "tenant-b" })).toBeUndefined();
+  });
+
+  /**
    * [Issue #3149] The conditional delete both backends owe the cleanup path.
    *
    * Cleanup decides "this problem's last deployment is gone" from a read, and a

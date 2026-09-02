@@ -3,12 +3,14 @@ import type {
   DeploymentsCoordinationPort,
   DeploymentsQueryPort,
 } from "../../control-data/deployments-repository.js";
-import {
-  type CoordinationStateScope,
-  DEFAULT_COORDINATION_RUN_ID,
-} from "../../control-data/domain/coordination-scope.js";
+import { coordinationScopeForRun } from "../../control-data/domain/coordination-run.js";
+import type { CoordinationStateScope } from "../../control-data/domain/coordination-scope.js";
 import type { DeploymentStatus } from "../deploy-handler/types.js";
 import { DELETED_LIKE_STATUSES } from "./constants.js";
+import {
+  deleteAllCoordinationRuns,
+  resolveCurrentCoordinationRunId,
+} from "./coordination-run.js";
 import { logDeployTrace } from "./trace-log.js";
 
 /**
@@ -139,12 +141,14 @@ export async function cleanupCoordinationStateIfLastDeployment(
   // scope for it would address rows that do not exist.
   if (!tenantId || !eventId || !problemId) return { kind: "not_applicable" };
 
-  const scope: CoordinationStateScope = {
-    tenantId,
-    eventId,
-    problemId,
-    runId: DEFAULT_COORDINATION_RUN_ID,
-  };
+  // [Issue #3153] The run the problem is actually on, not the constant. A
+  // cleanup that always looked at the initial run would leave every reset
+  // match's state behind while reporting that it had cleaned up.
+  const runKey = { tenantId, eventId, problemId };
+  const scope: CoordinationStateScope = coordinationScopeForRun(
+    runKey,
+    await resolveCurrentCoordinationRunId(deps.repository, runKey),
+  );
 
   const existing = await deps.repository.readCoordinationState(scope);
   // Nothing to reclaim. The match never started, or event teardown / a reset
@@ -170,6 +174,23 @@ export async function cleanupCoordinationStateIfLastDeployment(
     });
     return { kind: "raced" };
   }
+  // [Issue #3153] The current run's state is gone, so the retained history and
+  // the pointer go too: nothing names them any more, and a pointer left behind
+  // would make a re-deployed problem resume a retired run id — and with it that
+  // run's tombstoned artifact prefix.
+  //
+  // After the conditional delete, never before it: a cleanup that lost its race
+  // must leave every run exactly as it found it.
+  await deleteAllCoordinationRuns(deps, runKey).catch((err: unknown) => {
+    logDeployTrace("coordination.cleanup.runs-failed", {
+      tenantId,
+      eventId,
+      problemIds: problemId,
+      reason: err instanceof Error ? err.message : String(err),
+    });
+    return [];
+  });
+
   // [Issue #3152] The artifacts go only after the state delete was accepted.
   // On a conflict the match is live and its projections still reference these
   // bodies; removing them would leave a playable board pointing at nothing.

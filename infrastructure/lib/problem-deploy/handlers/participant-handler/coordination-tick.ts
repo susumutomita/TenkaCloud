@@ -1,5 +1,6 @@
 import { runTick } from "@tenkacloud/coordination-plugin-sdk";
 import { z } from "zod";
+import { resolveCurrentCoordinationRunId } from "../shared/coordination-run.js";
 import {
   COORDINATION_TICK_ACTION,
   type CoordinationTickBatch,
@@ -11,13 +12,13 @@ import { pluginStateSchemaVersion, reconcileStateSchema } from "./coordination-s
 import {
   type CoordinationStateScope,
   type CoordinationStoreDeps,
-  DEFAULT_COORDINATION_RUN_ID,
   ensureCoordinationMatchSecret,
   readCoordinationState,
   shouldRefreshCoordinationTtl,
   touchCoordinationState,
   writeCoordinationState,
 } from "./coordination-store.js";
+import { resolveDeploymentsRepository } from "./shared.js";
 
 /**
  * scoring-driven tick Issue #2324: time-driven coordination 遷移 (capture-window クローズ /
@@ -115,12 +116,22 @@ async function tickCoordinationEvent(
   }
   // [Issue #3123] tick も op 経路と同じ namespace を使う。 `moduleRef` は importer の key で
   // あると同時に problemId そのもの (= `coordination/<problemId>.mjs` を引く値、
-  // `makeCoordinationScopeResolver` 参照)。 run は platform 既定の 1 run/(event, problem)。
-  const scope: CoordinationStateScope = {
+  // `makeCoordinationScopeResolver` 参照)。
+  //
+  // [Issue #3153] run も op 経路とまったく同じ解決を通す。 片方が定数のままだと、 reset 後に
+  // tick が引退した run を進め続け、 参加者が遊んでいる run は誰も tick しない --
+  // 「どの試合を動かしているか」で platform の 2 つの半分が食い違う。
+  const runKey = {
     tenantId: target.tenantId,
     eventId: target.eventId,
     problemId: target.moduleRef,
-    runId: DEFAULT_COORDINATION_RUN_ID,
+  };
+  const scope: CoordinationStateScope = {
+    ...runKey,
+    runId: await resolveCurrentCoordinationRunId(
+      await resolveDeploymentsRepository(deps.store),
+      runKey,
+    ),
   };
   const existing = await readCoordinationState(deps.store, scope);
   // [Issue #3133] tick も `initialState` を呼びうる (= 未初期化 namespace に対する最初の tick)

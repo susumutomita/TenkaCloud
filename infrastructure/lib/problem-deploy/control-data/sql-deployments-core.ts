@@ -141,6 +141,22 @@ export const DEPLOYMENTS_SCHEMA_STATEMENTS = [
   expires_at INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (tenant_id, event_id, problem_id, run_id)
 )`,
+  // [Issue #3153] Which run of a problem is current, and which runs came before.
+  // One level ABOVE `coordination_state_scoped`: this table is keyed by
+  // `(tenant, event, problem)` with no run column, because it is what NAMES the
+  // run. History is a JSON array rather than a second table — it is a short,
+  // ordered list read only alongside the pointer, so a join would buy nothing
+  // and a row per retired run would need its own lifecycle.
+  `CREATE TABLE IF NOT EXISTS coordination_run (
+  tenant_id  TEXT    NOT NULL,
+  event_id   TEXT    NOT NULL,
+  problem_id TEXT    NOT NULL,
+  run_id     TEXT    NOT NULL,
+  started_at TEXT    NOT NULL,
+  history    TEXT    NOT NULL DEFAULT '[]',
+  expires_at INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (tenant_id, event_id, problem_id)
+)`,
   // [Issue #3133] The match secret lives in its OWN table, not as a column on
   // `coordination_state_scoped`. Two reasons, and the second is why a column
   // was rejected even though it would have been less code:

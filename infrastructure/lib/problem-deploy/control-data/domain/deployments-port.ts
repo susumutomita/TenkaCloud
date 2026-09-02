@@ -9,6 +9,7 @@
  * lands.
  */
 
+import type { CoordinationRunKey, CoordinationRunPointer } from "./coordination-run.js";
 import type { CoordinationStateScope } from "./coordination-scope.js";
 import type {
   BulkDeploymentCreateEntry,
@@ -705,6 +706,52 @@ export interface DeploymentsCoordinationPort {
    * start.
    */
   readCoordinationMatchSecret(scope: CoordinationStateScope): Promise<string | undefined>;
+
+  /**
+   * [Issue #3153] The run pointer for one `(tenant, event, problem)`, or
+   * `undefined` when none has been written.
+   *
+   * `undefined` is not an error and not "no match": it means this problem has
+   * never been reset, so it is still on its first run. The caller resolves that
+   * to {@link DEFAULT_COORDINATION_RUN_ID} — see `domain/coordination-run.ts`
+   * for why the first run keeps the old constant instead of being minted.
+   */
+  readCoordinationRun(key: CoordinationRunKey): Promise<CoordinationRunPointer | undefined>;
+
+  /**
+   * [Issue #3153] Replaces the pointer, but only while it still names
+   * `expectedRunId`.
+   *
+   * Conditional for the same reason every other write in this port is: two
+   * operators resetting the same match at once must not both mint a run. The
+   * loser gets `conflict` and can re-read to see which run actually started,
+   * instead of both of them believing they own the current match while state
+   * accumulates under two ids.
+   *
+   * `expectedRunId` may be {@link DEFAULT_COORDINATION_RUN_ID} with no row
+   * present, which is how the first rotation of a pre-existing match works: the
+   * backends treat "no row" and "row naming the default" as the same starting
+   * point, because they mean the same thing.
+   *
+   * Never `not_found` — an absent row is a valid target for the first
+   * rotation.
+   */
+  rotateCoordinationRun(
+    key: CoordinationRunKey,
+    expectedRunId: string,
+    pointer: CoordinationRunPointer,
+    expiresAt: number,
+  ): Promise<DeploymentMutationOutcome>;
+
+  /**
+   * [Issue #3153] Removes the run pointer for a `(tenant, event, problem)`.
+   *
+   * Called when the problem itself goes — event teardown, or the last
+   * deployment being torn down. Leaving it would make a re-deployed problem
+   * resume the retired match's run id, and with it that run's tombstoned
+   * artifact prefix.
+   */
+  deleteCoordinationRun(key: CoordinationRunKey): Promise<void>;
 
   /**
    * [Issue #3123] Deletes every coordination row whose TTL has passed
