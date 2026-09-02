@@ -34,9 +34,9 @@ describe("createS3PluginImporter", () => {
   it("should download, write, and dynamically import a valid plugin", async () => {
     const s3 = mockS3(PLUGIN_JS);
     const importer = createS3PluginImporter({ s3, bucket: "B" });
-    const plugin = await loadCoordinationPlugin(importer, "ms-battle");
-    expect(plugin).not.toBeNull();
-    expect(typeof plugin?.initialState).toBe("function");
+    const load = await loadCoordinationPlugin(importer, "ms-battle");
+    expect(load.kind).toBe("ok");
+    expect(typeof (load.kind === "ok" ? load.plugin.initialState : undefined)).toBe("function");
     const cmd = s3.send.mock.calls[0][0] as { input: { Bucket: string; Key: string } };
     expect(cmd.input).toMatchObject({ Bucket: "B", Key: "coordination/ms-battle.mjs" });
   });
@@ -78,8 +78,7 @@ describe("createS3PluginImporter digest integrity", () => {
       bucket: "B",
       resolveExpectedDigest: () => pluginBundleDigest(PLUGIN_JS),
     });
-    const plugin = await loadCoordinationPlugin(importer, "ms-battle");
-    expect(plugin).not.toBeNull();
+    expect((await loadCoordinationPlugin(importer, "ms-battle")).kind).toBe("ok");
   });
 
   it("should fail closed (throw, no import) when the digest does not match the bytes", async () => {
@@ -99,7 +98,9 @@ describe("createS3PluginImporter digest integrity", () => {
       bucket: "B",
       resolveExpectedDigest: () => pluginBundleDigest(PLUGIN_JS),
     });
-    expect(await loadCoordinationPlugin(importerB, "ms-battle")).toBeNull();
+    // [Issue #3150] digest 不一致は import が throw する = 「plugin が無い」側。
+    // 版宣言の違反 (`invalid_schema`) とは別物であることをここでも固定する。
+    expect(await loadCoordinationPlugin(importerB, "ms-battle")).toEqual({ kind: "unavailable" });
   });
 
   it("should skip verification when the resolver returns undefined (module not pinned)", async () => {
@@ -109,7 +110,6 @@ describe("createS3PluginImporter digest integrity", () => {
       bucket: "B",
       resolveExpectedDigest: () => undefined,
     });
-    const plugin = await loadCoordinationPlugin(importer, "ms-battle");
-    expect(plugin).not.toBeNull();
+    expect((await loadCoordinationPlugin(importer, "ms-battle")).kind).toBe("ok");
   });
 });

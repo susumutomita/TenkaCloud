@@ -550,7 +550,7 @@ describe("tick schema reconciliation (Issue #3150)", () => {
   };
 
   it("[tick #1] should refuse a schema mismatch (no write) but still refresh the TTL, so the match does not disappear", async () => {
-    // `missing_migration` is gated out at load time by `isCoordinationPlugin`
+    // `missing_migration` is gated out at load time by `coordinationPluginSchemaDefect`
     // (a real plugin can never reach the tick host without a migration once
     // it declares v2+) -- so the mismatch reachable through the FULL loader
     // path is `newer_row`: a row stamped by a plugin newer than the one
@@ -574,6 +574,29 @@ describe("tick schema reconciliation (Issue #3150)", () => {
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("tick schema mismatch"));
     // The liveness refresh still runs -- a namespace stuck on a mismatch must
     // not also silently age out.
+    expect(ddb.updates).toHaveLength(1);
+    expect(ddb.updates[0]?.input.UpdateExpression).toBe("SET expiresAt = :expiresAt");
+  });
+
+  /**
+   * [Issue #3150] Codex review: 版宣言が壊れた plugin を bundle 不在と同じ早期 return にすると、
+   * scope も導出されず TTL も延びない。 retention (7 日) を過ぎれば **進行中の行が消え**、
+   * 直したあとの plugin は何事も無かったように `initialState` から始まる -- この Issue が
+   * 閉じたい「静かに壊れる」そのもの。 state は進めず、 行の生存だけ守る。
+   */
+  it("[tick #1b] should refuse a plugin whose schema declaration is broken, without a write, but still refresh the TTL", async () => {
+    const noMigrate: CoordinationPlugin<WindowStateV2, unknown, WindowStateV2> = {
+      ...migratableWindowPlugin,
+      migrateState: undefined,
+    };
+    const ddb = fakeDdb({ getItem: { state: { phase: "open" }, version: 1 } });
+    const res = await handleCoordinationTickBatch(
+      depsWith(importerOf(noMigrate), ddb.store),
+      batch([capTarget()]),
+    );
+    expect(res).toEqual({ ticked: 1, written: 0 });
+    expect(ddb.puts).toHaveLength(0);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("tick invalid plugin schema"));
     expect(ddb.updates).toHaveLength(1);
     expect(ddb.updates[0]?.input.UpdateExpression).toBe("SET expiresAt = :expiresAt");
   });

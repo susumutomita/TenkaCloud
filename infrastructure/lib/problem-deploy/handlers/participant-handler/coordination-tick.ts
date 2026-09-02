@@ -104,8 +104,8 @@ async function tickCoordinationEvent(
 ): Promise<boolean> {
   // 宣言 gate: coordination を宣言していない problemId は tick しない (= 未宣言 ref を load させない)。
   if (!deps.config[target.moduleRef]) return false;
-  const plugin = await loadCoordinationPlugin(deps.importer, target.moduleRef);
-  if (!plugin) {
+  const load = await loadCoordinationPlugin(deps.importer, target.moduleRef);
+  if (load.kind === "unavailable") {
     // 宣言済だが bundle 不在 / 壊れた plugin。 op 経路の `plugin_unavailable` と同じく副作用に触れず、
     // silent success にせず warn で可視化する (= fail loud、 次 tick で再試行)。
     console.warn(
@@ -123,6 +123,18 @@ async function tickCoordinationEvent(
     runId: DEFAULT_COORDINATION_RUN_ID,
   };
   const existing = await readCoordinationState(deps.store, scope);
+  if (load.kind === "invalid_schema") {
+    // [Issue #3150] Codex review: 版宣言が壊れた plugin を bundle 不在と同じ早期 return にすると、
+    // scope も導出されず TTL も延びないまま retention (7 日) が来て **進行中の行が消える**。
+    // 直したあとの plugin は何事も無かったように `initialState` から始まってしまい、 これは
+    // この Issue が閉じたい「静かに壊れる」そのもの。 state は 1 mm も進めず、 行の生存だけ守る。
+    console.warn(
+      `[coordination-dispatcher] tick invalid plugin schema event=${target.eventId} problem=${target.moduleRef} detail=${JSON.stringify(load.detail)}`,
+    );
+    await refreshCoordinationTtl(deps, target, scope, existing, nowIso);
+    return false;
+  }
+  const { plugin, schema } = load; // [Issue #3150] 版宣言は load 時に検証した値を使う (再読しない)
   // [Issue #3133] tick も `initialState` を呼びうる (= 未初期化 namespace に対する最初の tick)
   // 以上、op 経路とまったく同じ規則で秘密を解決する: 初期化するときだけ、未発行なら発行する。
   //
@@ -135,7 +147,7 @@ async function tickCoordinationEvent(
   if (existing) {
     // [Issue #3150] op 経路 (`dispatchCoordinationOp`) と同じ突き合わせ。 mismatch は state を
     // 一切進めず、 TTL だけ延ばして試合を消さない (= write が要らないので version 条件も張らない)。
-    const reconciled = reconcileStateSchema(plugin, existing);
+    const reconciled = reconcileStateSchema(schema, existing);
     if (reconciled.kind === "mismatch") {
       console.warn(
         `[coordination-dispatcher] tick schema mismatch event=${target.eventId} problem=${target.moduleRef} reason=${reconciled.reason}` +
@@ -170,7 +182,7 @@ async function tickCoordinationEvent(
     nextState,
     version,
     nowIso,
-    pluginStateSchemaVersion(plugin),
+    pluginStateSchemaVersion(schema),
   );
   if (written.kind === "conflict") {
     // 並行 op が version race に勝った (= applyOp が先に書いた)。 lost-update を作らず次 tick で

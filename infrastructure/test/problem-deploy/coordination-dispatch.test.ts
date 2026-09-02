@@ -379,6 +379,75 @@ describe.each(backendStores)("coordination-store envelope round trip: %s", (_lab
     expect(read?.stateSchemaVersion).toBeUndefined();
   });
 
+  /**
+   * [Issue #3150] Codex review (P1): 版 1 の行は封筒を **被せない**。 封筒は旧 dispatcher が
+   * 知らない形なので、 全行を封筒にすると「この版を deploy → 行に触る → 1 つ前の版に rollback」で
+   * 旧 reader が封筒をそのまま plugin の state として渡してしまう。 版を宣言しない / 1 と宣言する
+   * plugin -- 今日ある全 plugin -- の行が #3150 以前と同一であることが、 dispatcher rollback の
+   * 安全性そのもの。 ここが落ちたらその保証が消えている。
+   */
+  it.each([
+    ["the caller omits the version", undefined],
+    ["the caller passes version 1", 1],
+  ])("should write raw state with no envelope when %s", async (_label, declared) => {
+    const store = makeStore();
+    const args = [store, rtScope, { count: 7 }, 0, "2026-06-01T00:00:00.000Z"] as const;
+    await (declared === undefined
+      ? writeCoordinationState(...args)
+      : writeCoordinationState(...args, declared));
+    const repository = await store.runtime.resolveDeploymentsRepository({
+      ddb: store.ddb as never,
+      deploymentsTableName: store.tableName,
+    });
+    // 旧 dispatcher が見るのと同じ視点 -- 生の state であること。
+    expect((await repository.readCoordinationState(rtScope))?.state).toEqual({ count: 7 });
+    const read = await readCoordinationState(store, rtScope);
+    expect(read?.state).toEqual({ count: 7 });
+    expect(read?.stateSchemaVersion).toBeUndefined();
+  });
+
+  /**
+   * [Issue #3150] Codex review: plugin の State は `unknown` なので、 旧 state がたまたま
+   * marker key を持つことはあり得る。 marker 1 つで封筒と誤認すると `state.state` が undefined に
+   * なって plugin に渡り、 500 か次の write での破壊になる。 形が完全に揃ったときだけ封筒。
+   */
+  it.each([
+    ["only the marker", { __tenkacloudCoordinationEnvelope: 1 }],
+    [
+      "a non-integer version",
+      { __tenkacloudCoordinationEnvelope: 1, stateSchemaVersion: "2", state: { count: 1 } },
+    ],
+    ["no state key", { __tenkacloudCoordinationEnvelope: 1, stateSchemaVersion: 2, mine: true }],
+  ])("should treat legacy state with %s as raw state, not an envelope", async (_label, legacy) => {
+    const store = makeStore();
+    const repository = await store.runtime.resolveDeploymentsRepository({
+      ddb: store.ddb as never,
+      deploymentsTableName: store.tableName,
+    });
+    await repository.writeCoordinationState(rtScope, legacy, 0, "2026-06-01T00:00:00.000Z", 0);
+    const read = await readCoordinationState(store, rtScope);
+    expect(read?.state).toEqual(legacy);
+    expect(read?.stateSchemaVersion).toBeUndefined();
+  });
+
+  /**
+   * [Issue #3150] Codex review 2 巡目: 版 1 の plugin の生 state それ自体が封筒の形をしている
+   * ことはあり得る (`State` は `unknown` で形の制約が無い)。 そのまま生で書くと次の read が必ず
+   * 封筒と誤認して内側を剥き出す -- 毎回確実に壊れる。 封をすれば read が 1 枚剥いで元に戻る。
+   */
+  it("should seal a version-1 state that would otherwise be misread as an envelope", async () => {
+    const store = makeStore();
+    const looksLikeEnvelope = {
+      __tenkacloudCoordinationEnvelope: 1,
+      stateSchemaVersion: 2,
+      state: { mine: true },
+    };
+    await writeCoordinationState(store, rtScope, looksLikeEnvelope, 0, "2026-06-01T00:00:00.000Z");
+    const read = await readCoordinationState(store, rtScope);
+    expect(read?.state).toEqual(looksLikeEnvelope);
+    expect(read?.stateSchemaVersion).toBe(1);
+  });
+
   it("touchCoordinationState should not disturb the envelope", async () => {
     const store = makeStore();
     await writeCoordinationState(store, rtScope, { count: 5 }, 0, "2026-06-01T00:00:00.000Z", 3);

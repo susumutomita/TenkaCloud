@@ -86,8 +86,10 @@ export interface CoordinationPlugin<State, Op, Projection = unknown> {
    * {@link CoordinationPlugin.stateSchemaVersion} へ持ち上げる純関数。
    *
    * `stateSchemaVersion` が 2 以上を宣言する plugin は **必須** — 持たない plugin は
-   * load 時点で拒否される (`isCoordinationPlugin` 参照)。 その問題全体が最初の 1 リクエストで
-   * 「使えない」と分かり、行は 1 つも触られない。
+   * load 時点で拒否される (`coordinationPluginSchemaDefect` 参照)。 その問題全体が最初の
+   * 1 リクエストで「使えない」と分かり、 行は 1 つも触られない。 拒否は「plugin が無い」とは
+   * 別物として扱われ、 op / projection の両方が 503 になり、 tick は state を進めないまま
+   * 行の TTL だけ延ばす (= 直すまでの間に進行中の試合を retention で失わない)。
    *
    * throw したら platform はその行に **一切触れない** (initialState を呼ばない、write しない、
    * reset しない)。 移行できない行を黙って作り直すより、 該当試合だけを安全に止める。
