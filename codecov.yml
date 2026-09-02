@@ -1,22 +1,23 @@
 # Codecov config (Issue #2666).
 #
-# ci.yml's coverage job runs a 3-shard matrix (infrastructure / spas / packages) and each
-# shard uploads its own lcov to Codecov. Codecov's default is to (re)evaluate + notify on
-# every upload, so before all shards land it publishes a partial report (e.g. the
-# infrastructure shard alone reads ~92.11%) as a *false* `codecov/project` failure that
-# self-corrects to the real ~94.45% a minute later. `after_n_builds` makes Codecov wait for
-# all shards before evaluating status or posting a comment, so the first status is correct.
+# ci.yml's coverage matrix runs one leg per (shard, part) and each leg uploads its own lcov to
+# Codecov. Codecov's default is to (re)evaluate + notify on every upload, so before all legs
+# land it publishes a partial report (e.g. the infrastructure shard alone reads ~92.11%) as a
+# *false* `codecov/project` failure that self-corrects to the real ~94.45% a minute later.
+# `after_n_builds` makes Codecov wait for every upload before evaluating status or posting a
+# comment, so the first status is correct.
 #
-# The shard count is defined by SHARD_NAMES in scripts/workspace/run-coverage.ts; keep the
-# `after_n_builds` values below in sync with it. scripts/workspace/run-coverage.test.ts fails
-# loudly if they drift (e.g. a 4th shard is added but this file is not bumped).
+# The leg count is `coverageMatrixLegs()` in scripts/workspace/run-coverage.ts (SHARD_NAMES
+# expanded by COVERAGE_PARTS); keep the `after_n_builds` values below in sync with it.
+# scripts/workspace/run-coverage.test.ts fails loudly if they drift — including when a shard is
+# split into more parts, which adds uploads without adding shards.
 codecov:
   notify:
-    after_n_builds: 3
+    after_n_builds: 14
     wait_for_ci: true
 
 comment:
-  after_n_builds: 3
+  after_n_builds: 14
 
 coverage:
   status:

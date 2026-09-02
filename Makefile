@@ -38,10 +38,16 @@ submodule-latest: ## Update and stage the problem catalog submodule | 問題カ�
 	@git diff --quiet -- problems \
 		&& echo "problems already at the latest pin." \
 		|| { git add problems; echo "problems bumped + staged — review the submodule diff, then commit."; }
-build: ## Build all applications and infrastructure | 全アプリとinfrastructureをbuild
-	bun run build
-typecheck: ## Type-check every TypeScript workspace | 全workspaceのTypeScript型検査
-	bun run typecheck
+# How many workspaces `build` / `typecheck` run at once. 1 (serial, fail-fast, output in order)
+# is the default a developer wants in a terminal; CI passes WORKSPACE_JOBS=4 because one
+# `tsc --noEmit` uses a single core and the serial chain left three of the runner's four idle.
+WORKSPACE_JOBS ?= 1
+
+build: ## Build all applications and infrastructure (WORKSPACE_JOBS=n for parallel) | 全アプリとinfrastructureをbuild
+	bun run scripts/workspace/run-workspaces.ts build --jobs $(WORKSPACE_JOBS)
+typecheck: ## Type-check every TypeScript workspace (WORKSPACE_JOBS=n for parallel) | 全workspaceのTypeScript型検査
+	bun run typecheck:scripts
+	bun run scripts/workspace/run-workspaces.ts typecheck --jobs $(WORKSPACE_JOBS)
 
 # ===== Test | テスト =====
 .PHONY: test test-root test-coverage test-scripts

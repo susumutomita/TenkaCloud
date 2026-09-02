@@ -2,7 +2,14 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { discoverWorkspaces, planTask, TASKS, type WorkspaceInfo } from "./run-workspaces";
+import {
+  discoverWorkspaces,
+  parseJobs,
+  planTask,
+  TASKS,
+  UsageError,
+  type WorkspaceInfo,
+} from "./run-workspaces";
 
 /**
  * Issue #993 follow-up: the root `package.json` `build` / `typecheck` / `test`
@@ -199,5 +206,33 @@ describe("repo parity (the reviewable seam)", () => {
   it("should plan test across every workspace", () => {
     const plan = planTask("test", workspaces);
     expect(plan.included.map((w) => w.dir)).toEqual(allWorkspaces);
+  });
+});
+
+/**
+ * `--jobs` exists because the serial chain left a 4-core CI runner mostly idle: `typecheck` spent
+ * 51.9s of wall time for 1m33s of CPU, i.e. under two cores busy, since one `tsc --noEmit` cannot
+ * use more than one. The default stays 1 so a developer's terminal keeps its readable, fail-fast
+ * output; CI opts in.
+ */
+describe("parseJobs", () => {
+  it("should default to 1 (serial) when no --jobs is given", () => {
+    expect(parseJobs([])).toBe(1);
+  });
+
+  it("should accept both --jobs <n> and --jobs=<n>", () => {
+    expect(parseJobs(["--jobs", "4"])).toBe(4);
+    expect(parseJobs(["--jobs=4"])).toBe(4);
+  });
+
+  it("should reject a non-positive, non-numeric, or missing value", () => {
+    expect(() => parseJobs(["--jobs", "0"])).toThrow(UsageError);
+    expect(() => parseJobs(["--jobs", "-2"])).toThrow(UsageError);
+    expect(() => parseJobs(["--jobs", "many"])).toThrow(UsageError);
+    expect(() => parseJobs(["--jobs"])).toThrow(UsageError);
+  });
+
+  it("should reject an unknown argument instead of silently ignoring it", () => {
+    expect(() => parseJobs(["--parallel", "4"])).toThrow(UsageError);
   });
 });
