@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   checkCoordinationCapacity,
   coordinationStateBudget,
@@ -9,6 +9,7 @@ import {
 import { bulkDeployEvent } from "../../lib/problem-deploy/handlers/event-handler/bulk-deploy";
 import { checkBulkDeployCoordinationCapacity } from "../../lib/problem-deploy/handlers/event-handler/bulk-deploy/capacity-preflight";
 import { warnOnCoordinationCapacity } from "../../lib/problem-deploy/handlers/event-handler/coordination-capacity-warning";
+import { buildEventSharedResources } from "../../lib/problem-deploy/handlers/event-handler/shared";
 import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 import { buildShared, NOW_MS, sampleEvent, sampleTeams } from "./event-bulk-deploy.test-helpers";
 
@@ -168,6 +169,25 @@ describe("the event-creation warning", () => {
     expect(warnings[0]).toContain("dynamodb");
   });
 
+  it("should warn about a tight event without saying the deploy will be refused", () => {
+    // The two warnings have to read differently: one is "change this or the
+    // deploy stops", the other is "this will run, keep an eye on it". Same
+    // wording for both would train an operator to ignore the one that matters.
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const tightTeams = Math.ceil((turso.warnBytes - AC26_BASE) / AC26_PER_TEAM);
+    const warnings = warnOnCoordinationCapacity({
+      problems: [{ problemId: "ac26-crypto-battle" }],
+      teamCount: tightTeams,
+      problemsCoordination: { "ac26-crypto-battle": { stateBudget: forecast } },
+      budget: turso,
+      tenantId: "tenant-a",
+      eventId: "EV1",
+    });
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("close to the limit");
+    expect(warnings[0]).not.toContain("will be refused");
+  });
+
   it("should stay silent for an event that fits", () => {
     expect(
       warnOnCoordinationCapacity({
@@ -217,6 +237,30 @@ describe("bulkDeployEvent refusing an event that cannot fit", () => {
     expect(ddbSend.mock.calls.length).toBeLessThanOrEqual(3);
   });
 
+  it("should deploy a tight event, having warned the operator about it", async () => {
+    // Tight is a scheduling signal, not a refusal: the match fits, and an
+    // operator who is told before the event runs can decide to shrink it. A
+    // check that refused here would block events that work.
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const tightTeams = Math.ceil((turso.warnBytes - AC26_BASE) / AC26_PER_TEAM);
+    const { shared, eventsSend, ddbSend } = buildShared({
+      problemsCoordination: { "hello-world": { stateBudget: forecast } },
+      runtime: { ...makeTestControlDataRuntime(), coordinationStateBudget: () => turso },
+    });
+    ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
+    ddbSend.mockResolvedValueOnce({ Items: sampleTeams(tightTeams) });
+    ddbSend.mockResolvedValue({});
+    eventsSend.mockResolvedValue({});
+
+    const out = await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS);
+
+    expect(out.kind).toBe("ok");
+    expect(eventsSend).toHaveBeenCalled();
+    expect(log.mock.calls.map((c) => String(c[0])).join("\n")).toContain(
+      "coordination.capacity-tight",
+    );
+  });
+
   it("should deploy normally when the same event fits the backend", async () => {
     // The other side of the same switch: this must not become a check that
     // refuses everything once a problem declares a budget at all.
@@ -236,5 +280,67 @@ describe("bulkDeployEvent refusing an event that cannot fit", () => {
 
     expect(out.kind).toBe("ok");
     expect(eventsSend).toHaveBeenCalled();
+  });
+});
+
+describe("reading the declaration out of the Lambda environment", () => {
+  const original = process.env.BATTLE_PROBLEMS_COORDINATION;
+  // `buildEventSharedResources` is the real entry point, so it wants the two
+  // env vars the Lambda always has. Going through it rather than exporting the
+  // parser keeps the test on the path production actually takes.
+  beforeEach(() => {
+    process.env.DEPLOY_EVENT_BUS_NAME = "test-bus";
+    process.env.DEPLOY_ENVIRONMENT = "development";
+  });
+  afterEach(() => {
+    process.env.BATTLE_PROBLEMS_COORDINATION = original;
+  });
+
+  const readEnv = (value: string | undefined): Readonly<Record<string, unknown>> => {
+    // Assigning `undefined` rather than deleting: `process.env` coerces it to
+    // the string "undefined" on some runtimes, so the absent case is expressed
+    // as an empty string, which the parser treats identically.
+    process.env.BATTLE_PROBLEMS_COORDINATION = value ?? "";
+    return buildEventSharedResources(makeTestControlDataRuntime()).problemsCoordination;
+  };
+
+  it("should parse the declaration synth burned in", () => {
+    expect(readEnv(JSON.stringify({ "ac26-crypto-battle": { stateBudget: forecast } }))).toEqual({
+      "ac26-crypto-battle": { stateBudget: forecast },
+    });
+  });
+
+  it.each([
+    ["absent", undefined],
+    ["not JSON at all", "{oops"],
+    ["a JSON array", "[]"],
+    ["a JSON scalar", '"nope"'],
+    ["JSON null", "null"],
+  ])("should read a %s value as nothing declared rather than throwing", (_label, value) => {
+    // This env var reaches every bulk deploy, including the ones with no
+    // coordination problem in them. Throwing here would let a shape problem in
+    // an unrelated part of the catalog take all of them down; reading it as
+    // "nothing declared" only skips the size check, which is the same outcome
+    // as a catalog where nobody declared a budget.
+    expect(readEnv(value)).toEqual({});
+  });
+});
+
+describe("budget arithmetic at its edges", () => {
+  it("should treat a problem that grows by nothing as fitting any event", () => {
+    // Not reachable from a valid declaration (`bytesPerTeam` must be positive),
+    // but the function is exported and the answer has to be the safe one rather
+    // than a division by zero.
+    expect(maxTeamsForCoordinationBudget({ bytesPerTeam: 0, baseBytes: 0 }, dynamodb)).toBe(
+      Number.POSITIVE_INFINITY,
+    );
+  });
+
+  it("should fit zero teams when the base alone exceeds the ceiling", () => {
+    // A problem whose empty state is already over budget cannot host anybody,
+    // and saying "0 teams fit" is the honest answer rather than a negative one.
+    const huge = { bytesPerTeam: 1, baseBytes: dynamodb.maxBytes + 1 };
+    expect(maxTeamsForCoordinationBudget(huge, dynamodb)).toBe(0);
+    expect(checkCoordinationCapacity(huge, 0, dynamodb).kind).toBe("over");
   });
 });

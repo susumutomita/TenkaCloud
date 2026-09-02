@@ -71,4 +71,22 @@ describe("POST /events/:eventId/deploy", () => {
     mocks.bulkDeployEvent.mockRejectedValueOnce(new Error("boom"));
     expect((await deploy()).status).toBeGreaterThanOrEqual(500);
   });
+
+  it("should 422 when the event cannot fit a coordination problem (#3169)", async () => {
+    // Not a failed deploy: nothing was attempted, so retrying the same request
+    // unchanged cannot succeed. The refusal text is what tells the operator
+    // which of the two things has to change — the team count or the backend.
+    mocks.bulkDeployEvent.mockResolvedValueOnce({
+      kind: "capacity_exceeded",
+      refusals: ['problem "ac26-crypto-battle" is forecast to need 1684251 bytes'],
+    });
+
+    const res = await deploy();
+
+    expect(res.status).toBe(StatusCodes.UNPROCESSABLE_ENTITY);
+    expect(await res.json()).toEqual({
+      error: "coordination_capacity_exceeded",
+      refusals: ['problem "ac26-crypto-battle" is forecast to need 1684251 bytes'],
+    });
+  });
 });
