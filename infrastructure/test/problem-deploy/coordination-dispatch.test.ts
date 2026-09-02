@@ -3,6 +3,7 @@ import { DeleteCommand, GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 import type { CoordinationContext, CoordinationPlugin } from "@tenkacloud/coordination-plugin-sdk";
 import { describe, expect, it, vi } from "vitest";
 import { SqlDeploymentsRepository } from "../../lib/problem-deploy/control-data/deployments-repository.js";
+import { coordinationStateBudget } from "../../lib/problem-deploy/control-data/domain/coordination-budget.js";
 import type { ControlDataRuntime } from "../../lib/problem-deploy/control-data/runtime-repositories.js";
 import {
   backoffCeilingMs,
@@ -72,19 +73,28 @@ function isMatchSecretCommand(cmd: unknown): boolean {
 }
 
 /** Wraps a `send` double in the store shape `dispatchCoordinationOp` expects. */
-function storeOver(send: (cmd: unknown) => Promise<unknown>): CoordinationStoreDeps {
+function storeOver(
+  send: (cmd: unknown) => Promise<unknown>,
+  env: Record<string, string | undefined> = {},
+): CoordinationStoreDeps {
   // Bound before the assertion, not asserted in place: `consistent-type-assertions`
   // wants a declaration it can annotate, and the DocumentClient surface is far
   // wider than the one method these doubles answer.
   const partial = { send };
   const ddb = partial as never;
   const store: CoordinationStoreDeps = {
-    runtime: makeTestControlDataRuntime(),
+    runtime: makeTestControlDataRuntime(env),
     ddb,
     tableName: "Deployments",
   };
   return store;
 }
+
+/**
+ * [Issue #3151] The DynamoDB state ceiling, asked of the budget itself rather
+ * than restated here. A literal would keep passing if the real ceiling moved.
+ */
+const DYNAMODB_STATE_CEILING_BYTES = coordinationStateBudget({ kind: "dynamodb" }).maxBytes;
 
 const base = {
   scope,
@@ -729,6 +739,56 @@ describe("dispatchCoordinationOp write contention", () => {
     expect(out).toEqual({ kind: "conflict" });
     expect(writes()).toBe(3);
     expect(sleeps.delays).toEqual([0, 1]);
+  });
+
+  it("should surface an over-budget state instead of retrying it (#3151)", async () => {
+    // The retry loop returns on any outcome that is not `conflict`, and this is
+    // the case where that matters most. A `too_large` state cannot get smaller
+    // by being written again, so folding it into the retry would spend every
+    // attempt and the participant's whole request on a refusal that was already
+    // final -- and then report it as a conflict, which says "try again".
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const puts: unknown[] = [];
+    const send = async (cmd: unknown) => {
+      if (isMatchSecretCommand(cmd)) return { Item: undefined };
+      if (cmd instanceof GetCommand) return { Item: undefined };
+      if (cmd instanceof PutCommand) {
+        puts.push(cmd);
+        return {};
+      }
+      throw new Error("unexpected command");
+    };
+    // A real oversized state against the real DynamoDB ceiling, rather than a
+    // ceiling lowered to meet a small state: the DynamoDB budget is derived
+    // from the item limit and is deliberately not overridable, so lowering it
+    // would test a configuration that cannot exist.
+    const overflowing: CoordinationPlugin<{ padding: string }, CounterOp, { size: number }> = {
+      initialState: () => ({ padding: "" }),
+      validateOp: () => ({ ok: true }),
+      applyOp: () => ({ padding: "x".repeat(DYNAMODB_STATE_CEILING_BYTES + 1) }),
+      projectForTeam: (s) => ({ size: s.padding.length }),
+    };
+    const store = storeOver(send);
+    const sleeps = noSleep();
+
+    const out = await dispatchCoordinationOp(
+      store,
+      overflowing,
+      {
+        ...base,
+        op: { kind: "inc" },
+        nowIso: "2026-06-01T00:00:00Z",
+        fallbackProjection: { size: -1 },
+      },
+      sleeps,
+    );
+
+    expect(out.kind).toBe("too_large");
+    expect(out.kind === "too_large" && out.budget.backend).toBe("dynamodb");
+    // Refused by the platform, so the state row was never offered to the
+    // backend and the caller never waited between attempts.
+    expect(puts.filter((cmd) => !isMatchSecretCommand(cmd))).toHaveLength(0);
+    expect(sleeps.delays).toEqual([]);
   });
 });
 
