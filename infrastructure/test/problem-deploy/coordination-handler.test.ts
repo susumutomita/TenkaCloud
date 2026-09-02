@@ -163,6 +163,38 @@ describe("handleCoordinationOp", () => {
     );
     expect(out).toEqual({ kind: "unavailable" });
   });
+
+  /**
+   * [Issue #3150] Full-path wiring check: a plugin that DOES load (unlike
+   * `unavailable` above) but whose declared version cannot be reconciled
+   * against the persisted row must surface as `schema_mismatch`, not a
+   * generic failure and not a silently-applied op.
+   */
+  it("should map a schema mismatch to schema_mismatch instead of applying the op", async () => {
+    const counterV2: CoordinationPlugin<CounterState, CounterOp, { count: number }> = {
+      stateSchemaVersion: 2,
+      migrateState: (state) => state as CounterState,
+      ...counter,
+    };
+    const out = await handleCoordinationOp(
+      deps({
+        importer: importerOf(counterV2),
+        // A row stamped by a plugin newer (v3) than the one now loaded (v2).
+        store: fakeStore({
+          state: {
+            __tenkacloudCoordinationEnvelope: 1,
+            stateSchemaVersion: 3,
+            state: { count: 9 },
+          },
+          version: 1,
+        }),
+      }),
+      "key",
+      { kind: "inc" },
+      "2026-06-01T00:00:00Z",
+    );
+    expect(out).toEqual({ kind: "schema_mismatch", reason: "newer_row" });
+  });
 });
 
 describe("handleCoordinationProjection", () => {
@@ -185,6 +217,35 @@ describe("handleCoordinationProjection", () => {
   it("should fall back to the safe projection when the plugin is unavailable", async () => {
     const out = await handleCoordinationProjection(deps({ importer: throwingImporter }), "key");
     expect(out).toEqual({ kind: "ok", projection: { count: -1 } });
+  });
+
+  /**
+   * [Issue #3150] Full-path wiring check for the read side: a mismatch must
+   * surface as `schema_mismatch`, never as a 200-shaped `ok` outcome carrying
+   * the fallback -- that would be the polled-most route lying about the
+   * match's state.
+   */
+  it("should map a schema mismatch to schema_mismatch instead of the fallback projection", async () => {
+    const counterV2: CoordinationPlugin<CounterState, CounterOp, { count: number }> = {
+      stateSchemaVersion: 2,
+      migrateState: (state) => state as CounterState,
+      ...counter,
+    };
+    const out = await handleCoordinationProjection(
+      deps({
+        importer: importerOf(counterV2),
+        store: fakeStore({
+          state: {
+            __tenkacloudCoordinationEnvelope: 1,
+            stateSchemaVersion: 3,
+            state: { count: 9 },
+          },
+          version: 1,
+        }),
+      }),
+      "key",
+    );
+    expect(out).toEqual({ kind: "schema_mismatch", reason: "newer_row" });
   });
 });
 

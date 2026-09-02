@@ -447,6 +447,16 @@ export interface InboxEventRecord {
  * absent). The version predicate write is B2/B3 (conditional-write seam).
  */
 export interface CoordinationStateRecord {
+  /**
+   * [Issue #3150] Opaque to the repository, but NOT opaque to every reader:
+   * since this issue, `state` is wrapped in the platform's schema-version
+   * envelope by the store layer (`coordination-store.ts`'s
+   * `writeCoordinationState` / `readCoordinationState`). A consumer that
+   * reads this record directly from the repository -- bypassing that store
+   * layer -- gets the envelope, not the plugin's state, and must unwrap it
+   * itself. A row written before this issue carries no envelope and is the
+   * plugin's raw state, same as always.
+   */
   readonly state: unknown;
   readonly version: number;
   /**

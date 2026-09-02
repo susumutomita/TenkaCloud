@@ -86,6 +86,22 @@ describe("POST /portal/me/coordination/op", () => {
     mocks.handleCoordinationOp.mockResolvedValueOnce({ kind: "unavailable" });
     expect((await send("POST", OP, { op: {} })).status).toBe(StatusCodes.SERVICE_UNAVAILABLE);
   });
+  /**
+   * [Issue #3150] Distinct from `unavailable` -- `unavailable` means the
+   * plugin could not be loaded at all, `state_schema_mismatch` means it
+   * loaded fine but the persisted row's schema version could not be
+   * reconciled against it. Both are 503, but the error string lets an
+   * operator tell them apart instead of both looking like the same outage.
+   */
+  it("should 503 with state_schema_mismatch when the row's schema version cannot be reconciled", async () => {
+    mocks.handleCoordinationOp.mockResolvedValueOnce({
+      kind: "schema_mismatch",
+      reason: "newer_row",
+    });
+    const res = await send("POST", OP, { op: {} });
+    expect(res.status).toBe(StatusCodes.SERVICE_UNAVAILABLE);
+    expect(await res.json()).toEqual({ error: "state_schema_mismatch", reason: "newer_row" });
+  });
   it("should 404 when coordination is not configured for the team", async () => {
     mocks.handleCoordinationOp.mockResolvedValueOnce({ kind: "not_configured" });
     expect((await send("POST", OP, { op: {} })).status).toBe(StatusCodes.NOT_FOUND);
@@ -152,6 +168,25 @@ describe("GET /portal/me/coordination/projection", () => {
   it("should 404 when coordination is not configured", async () => {
     mocks.handleCoordinationProjection.mockResolvedValueOnce({ kind: "not_configured" });
     expect((await get(PROJ)).status).toBe(StatusCodes.NOT_FOUND);
+  });
+
+  /**
+   * [Issue #3150] The projection route is the most-polled path, so this is
+   * the case the design is most protective of: a mismatch must not fold into
+   * a 200 with an empty/fallback board. It gets the same 503 the op route
+   * does, never a quiet-looking success.
+   */
+  it("should 503 with state_schema_mismatch instead of folding into a 200 projection", async () => {
+    mocks.handleCoordinationProjection.mockResolvedValueOnce({
+      kind: "schema_mismatch",
+      reason: "missing_migration",
+    });
+    const res = await get(PROJ);
+    expect(res.status).toBe(StatusCodes.SERVICE_UNAVAILABLE);
+    expect(await res.json()).toEqual({
+      error: "state_schema_mismatch",
+      reason: "missing_migration",
+    });
   });
 
   it("should 409 with the candidates when the problem is ambiguous", async () => {

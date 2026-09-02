@@ -3,9 +3,11 @@ import type { CoordinationStateScope } from "../../control-data/domain/coordinat
 import {
   type CoordinationDispatchInput,
   type CoordinationDispatchOutcome,
+  type CoordinationProjectionOutcome,
   dispatchCoordinationOp,
   projectCoordinationForTeam,
 } from "./coordination-dispatch.js";
+import { pluginStateSchemaVersion } from "./coordination-state-schema.js";
 import type { CoordinationStoreDeps } from "./coordination-store.js";
 
 /**
@@ -28,18 +30,43 @@ export type PluginImporter = (moduleRef: string) => Promise<unknown>;
 /**
  * value が {@link CoordinationPlugin} 契約 (initialState + 3 必須 hook) を満たすか構造判定する。
  * tick は optional なので問わない。 動的 load した未知 module を dispatcher に渡す前の門番。
+ *
+ * [Issue #3150] ここが「deploy が落ちる」の実現点。 synth / activation は plugin を実行しない
+ * (#3154 の境界判断) ので、 pack-author コードを評価できる最初の安全な点がこの loader --
+ * `stateSchemaVersion` / `migrateState` の形が壊れていれば、 その問題全体が最初の 1 リクエストで
+ * `plugin_unavailable` (→ HTTP 503 `unavailable`) となり、 行は 1 つも触られない:
+ *   - `stateSchemaVersion` を宣言するなら正の整数でなければ拒否
+ *   - `stateSchemaVersion` が 2 以上なのに `migrateState` が function でなければ拒否
+ *   - `migrateState` を宣言するなら function でなければ拒否 (版に関係なく)
  */
 export function isCoordinationPlugin(
   value: unknown,
 ): value is CoordinationPlugin<unknown, unknown> {
   if (typeof value !== "object" || value === null) return false;
   const p = value as Record<string, unknown>;
-  return (
-    typeof p.initialState === "function" &&
-    typeof p.validateOp === "function" &&
-    typeof p.applyOp === "function" &&
-    typeof p.projectForTeam === "function"
+  if (
+    typeof p.initialState !== "function" ||
+    typeof p.validateOp !== "function" ||
+    typeof p.applyOp !== "function" ||
+    typeof p.projectForTeam !== "function"
+  ) {
+    return false;
+  }
+  if (p.stateSchemaVersion !== undefined) {
+    if (
+      typeof p.stateSchemaVersion !== "number" ||
+      !Number.isInteger(p.stateSchemaVersion) ||
+      p.stateSchemaVersion <= 0
+    ) {
+      return false;
+    }
+  }
+  if (p.migrateState !== undefined && typeof p.migrateState !== "function") return false;
+  const declared = pluginStateSchemaVersion(
+    p as Pick<CoordinationPlugin<unknown, unknown>, "stateSchemaVersion">,
   );
+  if (declared >= 2 && typeof p.migrateState !== "function") return false;
+  return true;
 }
 
 /**
@@ -81,7 +108,9 @@ export async function loadAndDispatchCoordinationOp(
 
 /**
  * 動的 load → projection の read 経路 (書き込みなし、 portal polling 用)。 plugin が load できなければ
- * `fallbackProjection` を返す (= 他 team の機密を出さない安全な既定)。
+ * `{ kind: "ok", projection: fallbackProjection }` を返す (= 他 team の機密を出さない安全な既定。
+ * 挙動は #3150 以前と不変)。 load できれば {@link projectCoordinationForTeam} の union
+ * (`ok` / `schema_mismatch`) をそのまま返す。
  */
 export async function loadAndProjectCoordinationForTeam(
   importer: PluginImporter,
@@ -93,8 +122,8 @@ export async function loadAndProjectCoordinationForTeam(
     readonly ctx: CoordinationContext;
     readonly fallbackProjection: unknown;
   },
-): Promise<unknown> {
+): Promise<CoordinationProjectionOutcome> {
   const plugin = await loadCoordinationPlugin(importer, moduleRef);
-  if (!plugin) return input.fallbackProjection;
+  if (!plugin) return { kind: "ok", projection: input.fallbackProjection };
   return projectCoordinationForTeam(store, plugin, input);
 }

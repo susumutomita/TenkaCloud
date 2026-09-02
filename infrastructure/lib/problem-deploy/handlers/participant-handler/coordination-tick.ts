@@ -7,6 +7,7 @@ import {
 } from "../shared/coordination-tick-contract.js";
 import type { CoordinationConfig } from "./coordination-handler.js";
 import { loadCoordinationPlugin, type PluginImporter } from "./coordination-plugin-loader.js";
+import { pluginStateSchemaVersion, reconcileStateSchema } from "./coordination-state-schema.js";
 import {
   type CoordinationStateScope,
   type CoordinationStoreDeps,
@@ -129,22 +130,48 @@ async function tickCoordinationEvent(
   // state はそのまま永続化されるので、以後の op は `existing` を見つけて初期化を通らず、
   // 試合まるごとが fallback seed のまま進んでしまう (= この issue が閉じたい穴が tick 経由で
   // 開いたままになる)。state が既にあるときは秘密に触れないのは op 経路と同じ。
-  const currentState =
-    existing?.state ??
-    plugin.initialState({
+  let currentState: unknown;
+  let version: number;
+  if (existing) {
+    // [Issue #3150] op 経路 (`dispatchCoordinationOp`) と同じ突き合わせ。 mismatch は state を
+    // 一切進めず、 TTL だけ延ばして試合を消さない (= write が要らないので version 条件も張らない)。
+    const reconciled = reconcileStateSchema(plugin, existing);
+    if (reconciled.kind === "mismatch") {
+      console.warn(
+        `[coordination-dispatcher] tick schema mismatch event=${target.eventId} problem=${target.moduleRef} reason=${reconciled.reason}` +
+          (reconciled.detail ? ` detail=${JSON.stringify(reconciled.detail)}` : ""),
+      );
+      await refreshCoordinationTtl(deps, target, scope, existing, nowIso);
+      return false;
+    }
+    currentState = reconciled.state;
+    version = existing.version;
+  } else {
+    currentState = plugin.initialState({
       eventId: target.eventId,
       teamIds: [...target.teamIds],
       matchSecret: await ensureCoordinationMatchSecret(deps.store, scope, nowIso),
     });
-  const version = existing?.version ?? 0;
+    version = 0;
+  }
   // eventNowMs は採点 pass が算出した event 相対経過 (= plugin の tick 契約、 参照 Battle は
   // CAPTURE_WINDOW_MS と比較)。 dispatcher は clock を持たず、 渡された値だけで純関数を回す。
   const nextState = runTick(plugin, currentState, target.eventNowMs);
   if (!coordinationStateChanged(currentState, nextState)) {
+    // [Issue #3150] migration だけが起きて tick 自体は no-op だった行はここに来る。 write が無い
+    // ので封筒は書き換わらず、 行は旧版のまま残る (= lazy upgrade。 migration は次に呼ばれるときも
+    // 冪等に走るので害はない)。 TTL の延長だけは行う -- 試合を消さないのはここでも同じ。
     await refreshCoordinationTtl(deps, target, scope, existing, nowIso);
     return false;
   }
-  const written = await writeCoordinationState(deps.store, scope, nextState, version, nowIso);
+  const written = await writeCoordinationState(
+    deps.store,
+    scope,
+    nextState,
+    version,
+    nowIso,
+    pluginStateSchemaVersion(plugin),
+  );
   if (written.kind === "conflict") {
     // 並行 op が version race に勝った (= applyOp が先に書いた)。 lost-update を作らず次 tick で
     // 最新 state を再読込して再評価する (= op 経路と同じ optimistic-lock 契約)。

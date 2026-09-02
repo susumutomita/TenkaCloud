@@ -2,6 +2,8 @@ import { ConditionalCheckFailedException } from "@aws-sdk/client-dynamodb";
 import { DeleteCommand, GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 import type { CoordinationContext, CoordinationPlugin } from "@tenkacloud/coordination-plugin-sdk";
 import { describe, expect, it, vi } from "vitest";
+import { SqlDeploymentsRepository } from "../../lib/problem-deploy/control-data/deployments-repository.js";
+import type { ControlDataRuntime } from "../../lib/problem-deploy/control-data/runtime-repositories.js";
 import {
   dispatchCoordinationOp,
   projectCoordinationForTeam,
@@ -10,8 +12,10 @@ import {
   type CoordinationStoreDeps,
   deleteCoordinationState,
   readCoordinationState,
+  touchCoordinationState,
   writeCoordinationState,
 } from "../../lib/problem-deploy/handlers/participant-handler/coordination-store.js";
+import { makeFakeDdb, makeSqliteExecutor } from "./control-data/control-data-write.test-helpers.js";
 import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers.js";
 
 /**
@@ -249,6 +253,99 @@ describe("coordination-store", () => {
   });
 });
 
+/**
+ * [Issue #3150] `coordination-store.ts` wraps / unwraps the schema-version
+ * envelope with no idea which repository backend is underneath -- it only
+ * ever touches `repository.state: unknown`. This pins that the wrap/unwrap
+ * behaves identically against BOTH concrete repositories, the same way
+ * `deployments-repository-parity.test.ts` pins parity for everything else in
+ * this port.
+ *
+ * The DynamoDB side goes through the real `makeTestControlDataRuntime()`
+ * resolver (default env = dynamodb) with `makeFakeDdb()`, so it exercises the
+ * actual backend-selection path. The SQL side cannot: `makeTestControlDataRuntime`'s
+ * `turso` branch needs a libSQL `Client` (SSM token fetch + HTTP `execute`/
+ * `batch`), and this repo has no existing fake libSQL client bridging
+ * `node:sqlite` faithfully -- building one from scratch for this test would be
+ * new, unproven infrastructure. Constructing `SqlDeploymentsRepository`
+ * directly on `makeSqliteExecutor()` (the same fake `deployments-repository-parity.test.ts`
+ * uses) exercises the exact same repository code against a real SQLite
+ * database instead; only the runtime-selection plumbing around it differs.
+ */
+const rtScope = { tenantId: "tn-rt", eventId: "ev-rt", problemId: "problem-rt", runId: "run-rt" };
+/** The SQL-backed store never touches DynamoDB; any `send` is a test bug, not a fallback. */
+const sqlBackendDdb = { send: () => Promise.reject(new Error("sql backend does not use ddb")) };
+const backendStores: readonly (readonly [string, () => CoordinationStoreDeps])[] = [
+  [
+    "DynamoDbDeploymentsRepository",
+    () => ({
+      runtime: makeTestControlDataRuntime(),
+      ddb: makeFakeDdb(),
+      tableName: "Deployments",
+    }),
+  ],
+  [
+    "SqlDeploymentsRepository",
+    () => {
+      const sql = makeSqliteExecutor();
+      return {
+        runtime: {
+          resolveDeploymentsRepository: async () => new SqlDeploymentsRepository(sql),
+        } as unknown as ControlDataRuntime,
+        ddb: sqlBackendDdb as never,
+        tableName: "Deployments",
+      };
+    },
+  ],
+];
+
+describe.each(backendStores)("coordination-store envelope round trip: %s", (_label, makeStore) => {
+  it("should round-trip an enveloped write through read, surfacing stateSchemaVersion and the unwrapped state", async () => {
+    const store = makeStore();
+    await writeCoordinationState(store, rtScope, { count: 1 }, 0, "2026-06-01T00:00:00.000Z", 2);
+    expect(await readCoordinationState(store, rtScope)).toEqual({
+      state: { count: 1 },
+      version: 1,
+      stateSchemaVersion: 2,
+      expiresAt: expect.any(Number),
+    });
+  });
+
+  /**
+   * A row written straight through the repository (as every row was before
+   * this issue) carries no envelope. It must read back as the plugin's raw
+   * state with `stateSchemaVersion: undefined` -- never as an error, and
+   * never silently reset.
+   */
+  it("should read a pre-envelope row as stateSchemaVersion undefined with the raw state intact", async () => {
+    const store = makeStore();
+    const repository = await store.runtime.resolveDeploymentsRepository({
+      ddb: store.ddb as never,
+      deploymentsTableName: store.tableName,
+    });
+    await repository.writeCoordinationState(
+      rtScope,
+      { legacy: true },
+      0,
+      "2026-06-01T00:00:00.000Z",
+      0,
+    );
+    const read = await readCoordinationState(store, rtScope);
+    expect(read?.state).toEqual({ legacy: true });
+    expect(read?.stateSchemaVersion).toBeUndefined();
+  });
+
+  it("touchCoordinationState should not disturb the envelope", async () => {
+    const store = makeStore();
+    await writeCoordinationState(store, rtScope, { count: 5 }, 0, "2026-06-01T00:00:00.000Z", 3);
+    await touchCoordinationState(store, rtScope, "2026-06-02T00:00:00.000Z");
+    const read = await readCoordinationState(store, rtScope);
+    expect(read?.state).toEqual({ count: 5 });
+    expect(read?.version).toBe(1);
+    expect(read?.stateSchemaVersion).toBe(3);
+  });
+});
+
 describe("dispatchCoordinationOp", () => {
   it("should initialize, apply, persist, and project on a fresh event", async () => {
     const { store, send } = fakeStore({ getItem: undefined });
@@ -442,7 +539,7 @@ describe("match secret in the plugin context", () => {
     // Polling must not write, and must not hand out a secret for a match that
     // may never start — the plugin sees no secret and falls back.
     expect(seen[0]?.matchSecret).toBeUndefined();
-    expect(projection).toEqual({ seed: `fallback:${ctx.eventId}` });
+    expect(projection).toEqual({ kind: "ok", projection: { seed: `fallback:${ctx.eventId}` } });
     expect(send.mock.calls.some((c) => c[0] instanceof PutCommand)).toBe(false);
   });
 
@@ -450,7 +547,8 @@ describe("match secret in the plugin context", () => {
     const { store } = fakeStore({ getItem: undefined, matchSecret: "issued-by-first-op" });
     const { plugin } = seedRecorder();
     expect(await projectCoordinationForTeam(store, plugin, base)).toEqual({
-      seed: "issued-by-first-op",
+      kind: "ok",
+      projection: { seed: "issued-by-first-op" },
     });
   });
 });
@@ -458,13 +556,19 @@ describe("match secret in the plugin context", () => {
 describe("projectCoordinationForTeam", () => {
   it("should project existing state without writing", async () => {
     const { store, send } = fakeStore({ getItem: { state: { count: 9 }, version: 1 } });
-    expect(await projectCoordinationForTeam(store, counter, base)).toEqual({ count: 9 });
+    expect(await projectCoordinationForTeam(store, counter, base)).toEqual({
+      kind: "ok",
+      projection: { count: 9 },
+    });
     expect(send.mock.calls.some((c) => c[0] instanceof PutCommand)).toBe(false);
   });
 
   it("should project the initial state when uninitialized", async () => {
     const { store } = fakeStore({ getItem: undefined });
-    expect(await projectCoordinationForTeam(store, counter, base)).toEqual({ count: 0 });
+    expect(await projectCoordinationForTeam(store, counter, base)).toEqual({
+      kind: "ok",
+      projection: { count: 0 },
+    });
   });
 });
 
@@ -496,7 +600,217 @@ describe("coordination context guard (#1420 review)", () => {
     const { store, send } = fakeStore({ getItem: { state: { count: 9 }, version: 1 } });
     expect(
       await projectCoordinationForTeam(store, counter, { ...base, teamId: "intruder" }),
-    ).toEqual({ count: -1 });
+    ).toEqual({ kind: "ok", projection: { count: -1 } });
     expect(send).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * [Issue #3150] The Issue's own incident, replayed at the dispatch layer: a
+ * plugin's state shape changed with no version to gate it, and new code read
+ * old rows unconditionally -- three of the four ways that broke were silent
+ * (`NaN`, a stalled distribution, another `NaN`), not a throw. These pin the
+ * one rule that closes it (`reconcileStateSchema`, via `dispatchCoordinationOp`
+ * / `projectCoordinationForTeam`): a version difference is either migrated
+ * with a real, non-`NaN` value, or the request is refused -- the row is never
+ * silently reset and never silently read as the wrong shape.
+ */
+describe("dispatch schema reconciliation (Issue #3150)", () => {
+  /** v1 shape: what every row looked like before this issue. */
+  interface CounterStateV1 {
+    readonly count: number;
+  }
+  /** v2 shape: a field (`bonus`) the v1 rows never had. */
+  interface CounterStateV2 {
+    readonly count: number;
+    readonly bonus: number;
+  }
+
+  function migratableCounter(
+    migrateState?: (state: unknown, fromVersion: number) => CounterStateV2,
+  ): CoordinationPlugin<CounterStateV2, CounterOp, { count: number; bonus: number }> {
+    return {
+      stateSchemaVersion: 2,
+      // Omitted (not `undefined`) when absent: the loader gate and `reconcileStateSchema`
+      // both key off `typeof migrateState === "function"`, and `[#3]` needs a plugin that
+      // truly lacks the hook, not one that carries it as `undefined`.
+      ...(migrateState ? { migrateState } : {}),
+      initialState: () => ({ count: 0, bonus: 0 }),
+      validateOp: (_s, _t, op) =>
+        op.kind === "bad" ? { ok: false, error: "bad_op" } : { ok: true },
+      applyOp: (s) => ({ count: s.count + 1, bonus: s.bonus + 1 }),
+      projectForTeam: (s) => ({ count: s.count, bonus: s.bonus }),
+    };
+  }
+
+  // The Issue's actual failure mode: a v1 row never had `bonus`, so reading
+  // it as v2 without a migration reads `bonus` as `undefined` -- exactly the
+  // "missing field -> NaN / silently stalled" pattern the four incidents
+  // shared. `migrateState` defaults it explicitly instead.
+  const defaultBonusMigration = vi.fn((state: unknown, _fromVersion: number): CounterStateV2 => {
+    const legacy = state as CounterStateV1;
+    return { count: legacy.count, bonus: 0 };
+  });
+
+  const envelopeItem = (stateSchemaVersion: number, state: unknown, version = 1) => ({
+    state: { __tenkacloudCoordinationEnvelope: 1, stateSchemaVersion, state },
+    version,
+  });
+
+  it("[#1] should migrate a pre-envelope (v1) row for a v2 plugin, apply the op on the migrated state, and persist a v2 envelope with real values (not NaN/undefined)", async () => {
+    defaultBonusMigration.mockClear();
+    let captured: PutCommand | undefined;
+    const plugin = migratableCounter(defaultBonusMigration);
+    const { store } = fakeStore({
+      // A pre-#3150 row: raw state, no envelope at all.
+      getItem: { state: { count: 5 }, version: 3 },
+      onPut: (cmd) => (captured = cmd),
+    });
+
+    const out = await dispatchCoordinationOp(store, plugin, {
+      ...base,
+      op: { kind: "inc" },
+      nowIso: "2026-06-01T00:00:00Z",
+    });
+
+    expect(defaultBonusMigration).toHaveBeenCalledWith({ count: 5 }, 1);
+    expect(out).toEqual({ kind: "ok", projection: { count: 6, bonus: 1 } });
+    expect(Number.isNaN((out as { projection: { bonus: number } }).projection.bonus)).toBe(false);
+    const put = captured?.input.Item as { state: unknown; version: number };
+    expect(put.state).toEqual({
+      __tenkacloudCoordinationEnvelope: 1,
+      stateSchemaVersion: 2,
+      state: { count: 6, bonus: 1 },
+    });
+    expect(put.version).toBe(4);
+  });
+
+  it("[#2] should refuse a v3 row for a v2 plugin (newer_row), leaving the row and initialState untouched", async () => {
+    const initialStateSpy = vi.fn(() => ({ count: 0, bonus: 0 }));
+    const plugin = { ...migratableCounter(defaultBonusMigration), initialState: initialStateSpy };
+    const { store, send } = fakeStore({
+      getItem: envelopeItem(3, { count: 9, bonus: 4 }),
+    });
+
+    const out = await dispatchCoordinationOp(store, plugin, {
+      ...base,
+      op: { kind: "inc" },
+      nowIso: "2026-06-01T00:00:00Z",
+    });
+
+    expect(out).toEqual({ kind: "schema_mismatch", reason: "newer_row" });
+    expect(initialStateSpy).not.toHaveBeenCalled();
+    const statePuts = send.mock.calls
+      .map((c) => c[0])
+      .filter((c) => c instanceof PutCommand && c.input.Item?.SK === "STATE");
+    expect(statePuts).toEqual([]);
+  });
+
+  it("[#3] should refuse a pre-envelope row for a v2 plugin with no migrateState (missing_migration), without a write", async () => {
+    const noMigratePlugin = migratableCounter();
+    const { store, send } = fakeStore({ getItem: { state: { count: 5 }, version: 1 } });
+
+    const out = await dispatchCoordinationOp(store, noMigratePlugin, {
+      ...base,
+      op: { kind: "inc" },
+      nowIso: "2026-06-01T00:00:00Z",
+    });
+
+    expect(out).toEqual({ kind: "schema_mismatch", reason: "missing_migration" });
+    const statePuts = send.mock.calls
+      .map((c) => c[0])
+      .filter((c) => c instanceof PutCommand && c.input.Item?.SK === "STATE");
+    expect(statePuts).toEqual([]);
+  });
+
+  it("[#4] should refuse a row whose migrateState throws (migration_failed), without a write", async () => {
+    const plugin = migratableCounter(() => {
+      throw new Error("cannot migrate this shape");
+    });
+    const { store, send } = fakeStore({ getItem: { state: { count: 5 }, version: 1 } });
+
+    const out = await dispatchCoordinationOp(store, plugin, {
+      ...base,
+      op: { kind: "inc" },
+      nowIso: "2026-06-01T00:00:00Z",
+    });
+
+    expect(out).toEqual({
+      kind: "schema_mismatch",
+      reason: "migration_failed",
+      detail: "cannot migrate this shape",
+    });
+    const statePuts = send.mock.calls
+      .map((c) => c[0])
+      .filter((c) => c instanceof PutCommand && c.input.Item?.SK === "STATE");
+    expect(statePuts).toEqual([]);
+  });
+
+  it("[#5a] projection should return schema_mismatch (not the fallback) for a newer row than the plugin declares", async () => {
+    const plugin = migratableCounter(defaultBonusMigration);
+    const { store, send } = fakeStore({ getItem: envelopeItem(3, { count: 9, bonus: 4 }) });
+
+    const out = await projectCoordinationForTeam(store, plugin, {
+      ...base,
+      fallbackProjection: { count: -1, bonus: -1 },
+    });
+
+    expect(out).toEqual({ kind: "schema_mismatch", reason: "newer_row" });
+    expect(send.mock.calls.some((c) => c[0] instanceof PutCommand)).toBe(false);
+  });
+
+  it("[#5b] projection should return a migrated projection for a pre-envelope row without writing (version unchanged)", async () => {
+    defaultBonusMigration.mockClear();
+    const plugin = migratableCounter(defaultBonusMigration);
+    const { store, send } = fakeStore({ getItem: { state: { count: 5 }, version: 3 } });
+
+    const out = await projectCoordinationForTeam(store, plugin, {
+      ...base,
+      fallbackProjection: { count: -1, bonus: -1 },
+    });
+
+    expect(out).toEqual({ kind: "ok", projection: { count: 5, bonus: 0 } });
+    expect(defaultBonusMigration).toHaveBeenCalledWith({ count: 5 }, 1);
+    // Read path: no write at all, so the persisted version cannot have moved.
+    expect(send.mock.calls.some((c) => c[0] instanceof PutCommand)).toBe(false);
+  });
+
+  it("[#6] should not lose the match: once a compatible (v3) plugin is loaded, the SAME row the v2 plugin was refused on continues from its own state", async () => {
+    const v3Plugin: CoordinationPlugin<
+      { count: number; bonus: number; tier: string },
+      CounterOp,
+      { count: number; bonus: number; tier: string }
+    > = {
+      stateSchemaVersion: 3,
+      initialState: () => ({ count: 0, bonus: 0, tier: "bronze" }),
+      validateOp: (_s, _t, op) =>
+        op.kind === "bad" ? { ok: false, error: "bad_op" } : { ok: true },
+      applyOp: (s) => ({ ...s, count: s.count + 1, bonus: s.bonus + 1 }),
+      projectForTeam: (s) => s,
+    };
+    // The exact row test [#2] was refused on.
+    const { store } = fakeStore({ getItem: envelopeItem(3, { count: 9, bonus: 4, tier: "gold" }) });
+
+    const out = await dispatchCoordinationOp(store, v3Plugin, {
+      ...base,
+      op: { kind: "inc" },
+      nowIso: "2026-06-01T00:00:00Z",
+    });
+
+    // Carried forward from count=9, NOT reset to initialState's count=0.
+    expect(out).toEqual({ kind: "ok", projection: { count: 10, bonus: 5, tier: "gold" } });
+  });
+
+  it("[#7] should not fold a schema mismatch into a 200 projection (the polled-most path must not lie)", async () => {
+    const plugin = migratableCounter(defaultBonusMigration);
+    const { store } = fakeStore({ getItem: envelopeItem(3, { count: 9, bonus: 4 }) });
+
+    const out = await projectCoordinationForTeam(store, plugin, {
+      ...base,
+      fallbackProjection: { count: -1, bonus: -1 },
+    });
+
+    expect(out.kind).toBe("schema_mismatch");
+    expect(out).not.toEqual({ kind: "ok", projection: { count: -1, bonus: -1 } });
   });
 });

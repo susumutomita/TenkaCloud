@@ -31,6 +31,16 @@ import { resolveDeploymentsRepository } from "./shared.js";
  * `DeploymentsRepository.writeCoordinationState`; this module maps its A2/B2-style
  * `{ outcome: "updated" | "conflict" }` union back onto the pre-seam
  * `WriteCoordinationOutcome` shape so callers are unchanged.
+ *
+ * [Issue #3150] This module is also the ONLY place that wraps / unwraps the
+ * platform's schema-version envelope around the plugin's opaque `state`. The
+ * repository (DynamoDB item / SQL row) never sees it -- it stores and returns
+ * `state: unknown` verbatim, so neither backend nor the DDL needed a change.
+ * `writeCoordinationState` wraps the plugin's state before handing it to the
+ * repository; `readCoordinationState` unwraps it back out. A row written
+ * before this issue (or through the repository directly) carries no
+ * envelope, and is treated as `stateSchemaVersion: undefined` -- reconciled
+ * by `coordination-state-schema.ts` as version 1, never as an error.
  */
 
 export {
@@ -40,12 +50,43 @@ export {
 } from "../../control-data/domain/coordination-scope.js";
 
 export interface CoordinationStateRow {
-  /** plugin 固有の共有 state。 plugin の applyOp が返した値。 */
+  /** plugin 固有の共有 state。 plugin の applyOp が返した値 (= envelope は剥がした後)。 */
   readonly state: unknown;
   /** 楽観ロック用 version。 row が無いときは 0 を初期値として扱う。 */
   readonly version: number;
   /** [Issue #3123] 行の TTL (epoch 秒)。 TTL 以前に書かれた行では undefined。 */
   readonly expiresAt?: number;
+  /**
+   * [Issue #3150] この行に刻まれた state の schema 版。 envelope の無い行 (= この Issue より前に
+   * 書かれた行) では undefined -- `coordination-state-schema.ts` はこれを版 1 として扱う。
+   */
+  readonly stateSchemaVersion?: number;
+}
+
+/**
+ * [Issue #3150] platform が `state` に被せる封筒。 repository はこれを opaque な
+ * `state: unknown` としてそのまま保存・返却するだけで、 DDB item / SQL row のどちらも
+ * 形を変えない (= DDL 変更ゼロ)。
+ *
+ * マーカーは `=== 1` の厳密一致で判定する。 plugin の State は `unknown` なので配列を含む
+ * どんな形もあり得るが、 その値がたまたまこの key を持ち値 1 を持つ確率は無視できる。
+ */
+interface CoordinationStateEnvelope {
+  readonly __tenkacloudCoordinationEnvelope: 1;
+  readonly stateSchemaVersion: number;
+  readonly state: unknown;
+}
+
+const COORDINATION_ENVELOPE_MARKER = 1;
+
+function isCoordinationStateEnvelope(raw: unknown): raw is CoordinationStateEnvelope {
+  return (
+    typeof raw === "object" &&
+    raw !== null &&
+    !Array.isArray(raw) &&
+    (raw as Record<string, unknown>).__tenkacloudCoordinationEnvelope ===
+      COORDINATION_ENVELOPE_MARKER
+  );
 }
 
 /** store が必要とする DDB client の最小 shape (= test で容易に mock)。 */
@@ -56,13 +97,30 @@ export interface CoordinationStoreDeps {
   readonly tableName: string;
 }
 
-/** 現在の coordination state を読む。 row が無ければ undefined (= 未初期化)。 */
+/**
+ * 現在の coordination state を読む。 row が無ければ undefined (= 未初期化)。
+ *
+ * [Issue #3150] repository が返す `state` が envelope なら剥がして
+ * `stateSchemaVersion` を取り出す。 envelope で無ければ (= この Issue より前の行) そのまま
+ * `state` として返し、 `stateSchemaVersion` は undefined のままにする -- 1 として扱うかどうかは
+ * `coordination-state-schema.ts` の仕事で、 ここでは決めない。
+ */
 export async function readCoordinationState(
   deps: CoordinationStoreDeps,
   scope: CoordinationStateScope,
 ): Promise<CoordinationStateRow | undefined> {
   const repository: DeploymentsCoordinationPort = await resolveDeploymentsRepository(deps);
-  return repository.readCoordinationState(scope);
+  const record = await repository.readCoordinationState(scope);
+  if (!record) return undefined;
+  if (isCoordinationStateEnvelope(record.state)) {
+    return {
+      state: record.state.state,
+      version: record.version,
+      expiresAt: record.expiresAt,
+      stateSchemaVersion: record.state.stateSchemaVersion,
+    };
+  }
+  return { state: record.state, version: record.version, expiresAt: record.expiresAt };
 }
 
 export type WriteCoordinationOutcome = { kind: "ok" } | { kind: "conflict" };
@@ -79,6 +137,11 @@ export type WriteCoordinationOutcome = { kind: "ok" } | { kind: "conflict" };
  * write だけが期限を延ばすわけではない (そうであってはならない)。 `tick` hook を持たない plugin は
  * 参加者が動いたときにしか書かないので、 write 基準だと終了時刻の無い event で試合中の row が
  * 期限切れになる。 tick 側が {@link touchCoordinationState} で延長する。
+ *
+ * [Issue #3150] `stateSchemaVersion` (省略時 1) をここで `state` に被せて封筒にする -- caller は
+ * 呼ぶ直前に確定している plugin の版 (`pluginStateSchemaVersion(plugin)`) を渡す。
+ * 省略時の既定を 1 にしているのは、 版を宣言しない plugin (= この Issue が始まる前の全 plugin) が
+ * 従来どおり動くのを壊さないため、 かつ store 単体テストが版を意識せず呼べるようにするため。
  */
 export async function writeCoordinationState(
   deps: CoordinationStoreDeps,
@@ -86,11 +149,17 @@ export async function writeCoordinationState(
   state: unknown,
   expectedVersion: number,
   nowIso: string,
+  stateSchemaVersion = 1,
 ): Promise<WriteCoordinationOutcome> {
   const repository: DeploymentsCoordinationPort = await resolveDeploymentsRepository(deps);
+  const envelope: CoordinationStateEnvelope = {
+    __tenkacloudCoordinationEnvelope: COORDINATION_ENVELOPE_MARKER,
+    stateSchemaVersion,
+    state,
+  };
   const outcome = await repository.writeCoordinationState(
     scope,
-    state,
+    envelope,
     expectedVersion,
     nowIso,
     coordinationStateExpiresAt(parseNowMs(nowIso)),
