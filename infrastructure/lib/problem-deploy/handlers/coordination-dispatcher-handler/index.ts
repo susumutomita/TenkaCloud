@@ -92,6 +92,15 @@ function respondCoordination(
         { error: "ambiguous_problem", problemIds: outcome.problemIds },
         StatusCodes.CONFLICT,
       );
+    // [Issue #3150] `unavailable` とは別の error 文字列にする -- 運営が「plugin が
+    // 全く load できない」と「plugin は load できたが行の版と噛み合わない」を区別できるように。
+    // `default` に落とすと 404 (`not_configured`) に化け、 Issue が最も嫌う「静かに壊れる」を
+    // HTTP 層で再生産することになる。
+    case "schema_mismatch":
+      return c.json(
+        { error: "state_schema_mismatch", reason: outcome.reason },
+        StatusCodes.SERVICE_UNAVAILABLE,
+      );
     default:
       return c.json({ error: "not_configured" }, StatusCodes.NOT_FOUND);
   }

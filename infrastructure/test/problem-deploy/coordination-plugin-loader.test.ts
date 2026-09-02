@@ -86,6 +86,46 @@ describe("isCoordinationPlugin", () => {
     );
     expect(isCoordinationPlugin({ initialState() {}, validateOp() {}, applyOp() {} })).toBe(false);
   });
+
+  /**
+   * [Issue #3150] This gate is "deploy が落ちる": synth/activation never runs a
+   * plugin (#3154), so this is the first safe point pack-author code is
+   * evaluated. A `stateSchemaVersion >= 2` with no `migrateState` fails HERE,
+   * before any row is ever touched.
+   */
+  it("should accept a plugin that declares no schema version at all", () => {
+    expect(isCoordinationPlugin(counter)).toBe(true);
+  });
+
+  it("should accept stateSchemaVersion 2 paired with a migrateState function", () => {
+    expect(
+      isCoordinationPlugin({ ...counter, stateSchemaVersion: 2, migrateState: (s: unknown) => s }),
+    ).toBe(true);
+  });
+
+  it("should reject stateSchemaVersion 2 with no migrateState", () => {
+    expect(isCoordinationPlugin({ ...counter, stateSchemaVersion: 2 })).toBe(false);
+  });
+
+  it.each([
+    ["zero", 0],
+    ["a fraction", 1.5],
+    ["a string", "2"],
+    ["negative", -1],
+  ])("should reject stateSchemaVersion that is %s", (_label, stateSchemaVersion) => {
+    expect(isCoordinationPlugin({ ...counter, stateSchemaVersion })).toBe(false);
+  });
+
+  it("should reject a migrateState that is not a function, regardless of version", () => {
+    expect(isCoordinationPlugin({ ...counter, migrateState: "not-a-function" })).toBe(false);
+    expect(
+      isCoordinationPlugin({
+        ...counter,
+        stateSchemaVersion: 1,
+        migrateState: "not-a-function",
+      }),
+    ).toBe(false);
+  });
 });
 
 describe("loadCoordinationPlugin", () => {
@@ -154,7 +194,7 @@ describe("loadAndProjectCoordinationForTeam", () => {
       fakeStore({ state: { count: 5 }, version: 1 }),
       projectInput,
     );
-    expect(out).toEqual({ count: 5 });
+    expect(out).toEqual({ kind: "ok", projection: { count: 5 } });
   });
 
   it("should return the fallback projection when the plugin is unavailable", async () => {
@@ -164,6 +204,26 @@ describe("loadAndProjectCoordinationForTeam", () => {
       fakeStore(undefined),
       projectInput,
     );
-    expect(out).toEqual({ count: -1 });
+    expect(out).toEqual({ kind: "ok", projection: { count: -1 } });
+  });
+
+  /**
+   * [Issue #3150] This loader is a thin delegation over
+   * `projectCoordinationForTeam` -- it must not swallow `schema_mismatch`
+   * into the fallback. A newer row than the loaded plugin's declared version
+   * is the "rolled back" case: `counter` declares no `stateSchemaVersion`
+   * (= 1), the row was stamped 3 by a later plugin.
+   */
+  it("should pass a schema_mismatch through instead of the fallback projection", async () => {
+    const out = await loadAndProjectCoordinationForTeam(
+      importerOf(counter),
+      "ref",
+      fakeStore({
+        state: { __tenkacloudCoordinationEnvelope: 1, stateSchemaVersion: 3, state: { count: 9 } },
+        version: 1,
+      }),
+      projectInput,
+    );
+    expect(out).toEqual({ kind: "schema_mismatch", reason: "newer_row" });
   });
 });

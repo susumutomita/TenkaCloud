@@ -6,6 +6,11 @@ import {
 } from "@tenkacloud/coordination-plugin-sdk";
 import type { CoordinationStateScope } from "../../control-data/domain/coordination-scope.js";
 import {
+  pluginStateSchemaVersion,
+  reconcileStateSchema,
+  type StateSchemaMismatchReason,
+} from "./coordination-state-schema.js";
+import {
   type CoordinationStoreDeps,
   ensureCoordinationMatchSecret,
   readCoordinationMatchSecret,
@@ -56,7 +61,20 @@ export type CoordinationDispatchOutcome =
       readonly changedScores?: Readonly<Record<string, number>>;
     }
   | { readonly kind: "rejected"; readonly error: string }
-  | { readonly kind: "conflict" };
+  | { readonly kind: "conflict" }
+  /**
+   * [Issue #3150] The persisted row's `stateSchemaVersion` could not be
+   * reconciled against the plugin currently loaded. Neither the row nor the
+   * write-side of this dispatch is touched -- see `coordination-state-schema.ts`
+   * for what each reason means and why this outcome never falls back to
+   * `initialState`.
+   */
+  | {
+      readonly kind: "schema_mismatch";
+      readonly reason: StateSchemaMismatchReason;
+      /** `migration_failed` の throw メッセージ。 ログ専用で HTTP 応答には載せない。 */
+      readonly detail?: string;
+    };
 
 /** ctx.eventId が永続化 key (eventId) と一致し、 認証 team が ctx.teamIds に含まれるか。 */
 function isContextConsistent(input: {
@@ -70,8 +88,11 @@ function isContextConsistent(input: {
 /**
  * op を受理 → 適用 → 永続化し、 当該 team 向け projection を返す。
  *   1. 現在 state を読む (無ければ plugin.initialState で初期化、 version 0)
+ *   1.5. [Issue #3150] 既存 state があれば `reconcileStateSchema` で突き合わせる。
+ *        mismatch ならここで打ち切り (`schema_mismatch`) — 以降の 2〜4 には進まない
  *   2. SDK `dispatchOp` で validate→apply (拒否なら `rejected`)
- *   3. version 条件付き write (並行更新なら `conflict` → caller が 409 で退避)
+ *   3. version 条件付き write (並行更新なら `conflict` → caller が 409 で退避。
+ *      write は常に plugin の現在の版で封筒に刻む)
  *   4. `safeProjectForTeam` で fail-safe に projection を返す
  */
 export async function dispatchCoordinationOp<State, Op, Projection>(
@@ -87,10 +108,21 @@ export async function dispatchCoordinationOp<State, Op, Projection>(
   // [Issue #3133] 秘密が要るのは `initialState` を呼ぶときだけ — ctx を受け取る hook は
   // それ 1 つで、 validateOp / applyOp / projectForTeam は (state, teamId, op) しか見ない。
   // だから既存 state があるときは秘密に一切触らない: 全 op に read/write を足さずに済む。
-  const state =
-    (existing?.state as State) ??
-    plugin.initialState(await withMatchSecret(store, input.scope, input.ctx, input.nowIso));
-  const version = existing?.version ?? 0;
+  let state: State;
+  let version: number;
+  if (existing) {
+    // [Issue #3150] 既存の行がある分岐の直後で突き合わせる。 mismatch はここで打ち切り —
+    // initialState を呼ばず、 write もしない (= 静かに壊れる代わりに、 その op だけを安全に止める)。
+    const reconciled = reconcileStateSchema<State>(plugin, existing);
+    if (reconciled.kind === "mismatch") {
+      return { kind: "schema_mismatch", reason: reconciled.reason, detail: reconciled.detail };
+    }
+    state = reconciled.state;
+    version = existing.version;
+  } else {
+    state = plugin.initialState(await withMatchSecret(store, input.scope, input.ctx, input.nowIso));
+    version = 0;
+  }
 
   const verdict = dispatchOp(plugin, state, input.teamId, input.op);
   if (!verdict.ok) return { kind: "rejected", error: verdict.error };
@@ -101,6 +133,9 @@ export async function dispatchCoordinationOp<State, Op, Projection>(
     verdict.state,
     version,
     input.nowIso,
+    // [Issue #3150] write は常に plugin の「現在の」版で封筒に刻む -- migrated 経路 (旧行を
+    // 持ち上げた) でも、 未初期化からの初回 write でも同じ。 旧版のまま書く理由が無い。
+    pluginStateSchemaVersion(plugin),
   );
   if (written.kind === "conflict") return { kind: "conflict" };
 
@@ -141,6 +176,21 @@ function diffTeamScores<State, Op, Projection>(
   }
 }
 
+/** {@link projectCoordinationForTeam} の結果。 */
+export type CoordinationProjectionOutcome =
+  | { readonly kind: "ok"; readonly projection: unknown }
+  /**
+   * [Issue #3150] projection は participant portal がいちばんポーリングする経路。
+   * mismatch を fallback で飲み込んで 200 を返すと、 空の板が正常応答のふりをして返る --
+   * この Issue が最も嫌う「静かに壊れる」そのもの。 だから read 経路でも op 経路と同じ
+   * outcome を返し、 caller (handler) が 503 に写す。
+   */
+  | {
+      readonly kind: "schema_mismatch";
+      readonly reason: StateSchemaMismatchReason;
+      readonly detail?: string;
+    };
+
 /**
  * 当該 team の現在 projection を読む (= 書き込みなし、 portal の polling 用)。 state 未初期化なら
  * plugin.initialState を投影する。 plugin が throw しても `fallbackProjection` を返す (fail-safe)。
@@ -154,29 +204,41 @@ export async function projectCoordinationForTeam<State, Op, Projection>(
     readonly ctx: CoordinationContext;
     readonly fallbackProjection: unknown;
   },
-): Promise<unknown> {
+): Promise<CoordinationProjectionOutcome> {
   // ctx 不整合 (= 別 event 用 ctx / team が event 外) は fail-closed で fallback を返す (= 機密非漏洩)。
-  if (!isContextConsistent(input)) return input.fallbackProjection;
+  if (!isContextConsistent(input)) return { kind: "ok", projection: input.fallbackProjection };
   const existing = await readCoordinationState(store, input.scope);
   if (existing) {
-    return safeProjectForTeam(
-      plugin,
-      existing.state as State,
-      input.teamId,
-      input.fallbackProjection as Projection,
-    );
+    // [Issue #3150] read 経路なので write はしない -- mismatch はそのまま返し、 ok (migrated
+    // でも) はその state を投影するだけで版を書き戻さない。
+    const reconciled = reconcileStateSchema<State>(plugin, existing);
+    if (reconciled.kind === "mismatch") {
+      return { kind: "schema_mismatch", reason: reconciled.reason, detail: reconciled.detail };
+    }
+    return {
+      kind: "ok",
+      projection: safeProjectForTeam(
+        plugin,
+        reconciled.state,
+        input.teamId,
+        input.fallbackProjection as Projection,
+      ),
+    };
   }
   // [Issue #3133] 未初期化 state の投影。 read 経路なので秘密は **発行しない** — GET が
   // 書き込みになるし、 始まらないかもしれない試合に秘密を配ることになる。 既に op が
   // 走っていれば発行済みの値が読めるので、 その試合の projection は op 経路と一致する。
   const matchSecret = await readCoordinationMatchSecret(store, input.scope);
   const ctx: CoordinationContext = matchSecret ? { ...input.ctx, matchSecret } : input.ctx;
-  return safeProjectForTeam(
-    plugin,
-    plugin.initialState(ctx),
-    input.teamId,
-    input.fallbackProjection as Projection,
-  );
+  return {
+    kind: "ok",
+    projection: safeProjectForTeam(
+      plugin,
+      plugin.initialState(ctx),
+      input.teamId,
+      input.fallbackProjection as Projection,
+    ),
+  };
 }
 
 /**

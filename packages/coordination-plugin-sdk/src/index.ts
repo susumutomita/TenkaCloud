@@ -71,6 +71,35 @@ export interface CoordinationPlugin<State, Op, Projection = unknown> {
   /** その team の portal に渡す projection (= 他 team の機密を漏らさない投影)。 */
   projectForTeam(state: State, teamId: string): Projection;
   /**
+   * [Issue #3150] この plugin が読み書きする state の schema 版。省略時は 1 とみなす。正の整数。
+   *
+   * 永続化された行にはこの値が platform によって刻まれ (`coordination-store.ts` の envelope)、
+   * 次に読むときに突き合わされる。 **State の形を変えたら必ずこの値を上げる** — platform は
+   * 「plugin コードの形」と「行に刻まれた版」が食い違っていることしか検出できず、
+   * 上げ忘れ (= 形は変わったのに版が同じ) は検出できない。 その場合 platform は旧行をそのまま
+   * 新コードに渡す。 この Issue が塞ぐのは「宣言された版差」だけで、
+   * 「宣言されなかった形の変更」はこの契約の外にある。
+   */
+  readonly stateSchemaVersion?: number;
+  /**
+   * [Issue #3150] `fromVersion` の版で書かれた state を、この plugin の
+   * {@link CoordinationPlugin.stateSchemaVersion} へ持ち上げる純関数。
+   *
+   * `stateSchemaVersion` が 2 以上を宣言する plugin は **必須** — 持たない plugin は
+   * load 時点で拒否される (`isCoordinationPlugin` 参照)。 その問題全体が最初の 1 リクエストで
+   * 「使えない」と分かり、行は 1 つも触られない。
+   *
+   * throw したら platform はその行に **一切触れない** (initialState を呼ばない、write しない、
+   * reset しない)。 移行できない行を黙って作り直すより、 該当試合だけを安全に止める。
+   *
+   * ctx (= `CoordinationContext`) は渡さない。 意図的な設計判断: この Issue が実際に踏んだ
+   * 4 件の破損は、 どれも「既定値の埋め込み」で足りる形の変更であり、
+   * 必要な材料 (team key 等) は state 自身が既に持っている。 ctx を足すと
+   * `matchSecret` のような秘密材料が移行の入力に紛れ込む余地ができ、
+   * 「移行は state だけを見る純関数」という単純な契約が崩れる。
+   */
+  migrateState?(state: unknown, fromVersion: number): State;
+  /**
    * [Issue #659] 各 team の現在得点 (= 絶対値)。 宣言すると platform の scoreboard に反映される。
    *
    * これが無い間、coordination problem の得点は**構造的に scoreboard へ届かなかった**。

@@ -12,6 +12,7 @@ import {
   loadAndProjectCoordinationForTeam,
   type PluginImporter,
 } from "./coordination-plugin-loader.js";
+import type { StateSchemaMismatchReason } from "./coordination-state-schema.js";
 import type { CoordinationStoreDeps } from "./coordination-store.js";
 import {
   type ParticipantSharedResources,
@@ -106,7 +107,18 @@ export type CoordinationHandlerOutcome =
    * [Issue #3125] `problemId` 省略で coordination problem が複数ある。 どれか 1 つを勝手に
    * 選ぶと 2 問目が永久に到達不能になるので、 候補を返して選択を要求する。
    */
-  | { readonly kind: "ambiguous"; readonly problemIds: readonly string[] };
+  | { readonly kind: "ambiguous"; readonly problemIds: readonly string[] }
+  /**
+   * [Issue #3150] 行の `stateSchemaVersion` を、 load できた plugin と突き合わせられなかった。
+   * op 経路 / projection 経路のどちらも、 このとき行には一切触れない
+   * (`coordination-state-schema.ts` 参照)。
+   */
+  | {
+      readonly kind: "schema_mismatch";
+      readonly reason: StateSchemaMismatchReason;
+      /** `migration_failed` の throw メッセージ。 ログ専用で HTTP 応答には載せない。 */
+      readonly detail?: string;
+    };
 
 /** op を受理 → 適用 → 永続化し、 当該 team 向け projection を返す (= write 経路)。 */
 export async function handleCoordinationOp(
@@ -148,6 +160,15 @@ export async function handleCoordinationOp(
       });
     });
   }
+  // [Issue #3150] `CoordinationDispatchOutcome`'s `schema_mismatch` variant
+  // (`{ kind, reason }`) is returned as-is here -- it already has the exact
+  // shape `CoordinationHandlerOutcome`'s `schema_mismatch` declares, so no
+  // separate mapping is needed the way `plugin_unavailable` -> `unavailable`
+  // above needed one. It IS logged: the participant sees a 503, but the
+  // operator is the one who has to act (redeploy a plugin that migrates), and
+  // a 503 that only the participant sees is the silent failure this issue
+  // exists to end.
+  if (outcome.kind === "schema_mismatch") warnSchemaMismatch("op", scope.state, outcome);
   return outcome;
 }
 
@@ -160,7 +181,7 @@ export async function handleCoordinationProjection(
   const resolution = await deps.resolveScope(teamLoginKey, problemId);
   if (resolution.kind !== "scope") return resolution;
   const scope = resolution.scope;
-  const projection = await loadAndProjectCoordinationForTeam(
+  const outcome = await loadAndProjectCoordinationForTeam(
     deps.importer,
     scope.moduleRef,
     deps.store,
@@ -171,7 +192,29 @@ export async function handleCoordinationProjection(
       fallbackProjection: scope.fallbackProjection,
     },
   );
-  return { kind: "ok", projection };
+  // [Issue #3150] mismatch を 200 に丸めない -- 呼び出し側 (dispatcher-handler) が 503 に写す。
+  if (outcome.kind === "schema_mismatch") {
+    warnSchemaMismatch("projection", scope.state, outcome);
+    return outcome;
+  }
+  return { kind: "ok", projection: outcome.projection };
+}
+
+/**
+ * [Issue #3150] One log line per refused request, on both paths, naming the
+ * scope and the reason (and the thrown message for `migration_failed`). The
+ * tick host logs the same way. Without this the only signal of a mismatched
+ * deploy is a participant's 503.
+ */
+function warnSchemaMismatch(
+  path: "op" | "projection",
+  scope: CoordinationStateScope,
+  outcome: { readonly reason: StateSchemaMismatchReason; readonly detail?: string },
+): void {
+  console.warn(
+    `[coordination] ${path} refused: state schema mismatch event=${scope.eventId} problem=${scope.problemId} run=${scope.runId} reason=${outcome.reason}` +
+      (outcome.detail ? ` detail=${JSON.stringify(outcome.detail)}` : ""),
+  );
 }
 
 /** `{ [problemId]: { plugin } }`。 問題が宣言する coordination plugin の module path を引く。 */

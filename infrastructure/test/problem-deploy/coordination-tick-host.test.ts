@@ -49,9 +49,23 @@ const nullImporter: PluginImporter = async () => {
   throw new Error("no module");
 };
 
+interface FakePut {
+  readonly PK: string;
+  /** [Issue #3150] Unwrapped -- the plugin's own state, envelope stripped. */
+  readonly state: unknown;
+  readonly version: number;
+}
+/** [Issue #3150] The envelope actually written to the `state` attribute. */
+interface FakeEnvelopePut {
+  readonly PK: string;
+  readonly stateSchemaVersion: number | undefined;
+  readonly state: unknown;
+}
 interface FakeDdb {
   readonly store: CoordinationStoreDeps;
-  readonly puts: { PK: string; state: unknown; version: number }[];
+  readonly puts: FakePut[];
+  /** [Issue #3150] Same writes as `puts`, but envelope-shaped and un-stripped. */
+  readonly envelopePuts: FakeEnvelopePut[];
   readonly secretPuts: PutCommand[];
   readonly updates: UpdateCommand[];
   readonly send: ReturnType<typeof vi.fn>;
@@ -63,7 +77,8 @@ function fakeDdb(opts: {
   updateThrows?: unknown;
   matchSecret?: string;
 }): FakeDdb {
-  const puts: { PK: string; state: unknown; version: number }[] = [];
+  const puts: FakePut[] = [];
+  const envelopePuts: FakeEnvelopePut[] = [];
   const secretPuts: PutCommand[] = [];
   const updates: UpdateCommand[] = [];
 
@@ -80,6 +95,26 @@ function fakeDdb(opts: {
     return { Item: opts.getItem };
   };
 
+  // [Issue #3150] `writeCoordinationState` wraps the plugin's state in the
+  // platform envelope before it ever reaches this fake. Unwrap it here so
+  // every pre-#3150 assertion below keeps pinning "the plugin's state",
+  // not the wire format -- the envelope itself is pinned separately by the
+  // tests in the "coordination-state-schema" describe block.
+  const unwrapEnvelope = (
+    raw: unknown,
+  ): { state: unknown; stateSchemaVersion: number | undefined } => {
+    if (
+      typeof raw === "object" &&
+      raw !== null &&
+      !Array.isArray(raw) &&
+      (raw as Record<string, unknown>).__tenkacloudCoordinationEnvelope === 1
+    ) {
+      const envelope = raw as { state: unknown; stateSchemaVersion: number };
+      return { state: envelope.state, stateSchemaVersion: envelope.stateSchemaVersion };
+    }
+    return { state: raw, stateSchemaVersion: undefined };
+  };
+
   const handlePut = (cmd: PutCommand) => {
     // A `conflict` fixture models a STATE version race and must not also
     // reject the mint, which is a different row.
@@ -89,7 +124,9 @@ function fakeDdb(opts: {
     }
     if (opts.conflict) throw new ConditionalCheckFailedException({ $metadata: {}, message: "x" });
     const input = cmd.input as { Item: { PK: string; state: unknown; version: number } };
-    puts.push({ PK: input.Item.PK, state: input.Item.state, version: input.Item.version });
+    const { state, stateSchemaVersion } = unwrapEnvelope(input.Item.state);
+    puts.push({ PK: input.Item.PK, state, version: input.Item.version });
+    envelopePuts.push({ PK: input.Item.PK, stateSchemaVersion, state });
     return {};
   };
 
@@ -115,6 +152,7 @@ function fakeDdb(opts: {
       tableName: "Deployments",
     },
     puts,
+    envelopePuts,
     secretPuts,
     updates,
     send,
@@ -480,5 +518,100 @@ describe("coordination tick match secret", () => {
       .filter((c) => c.input?.Key?.SK === "MATCHSECRET");
     expect(secretReads).toEqual([]);
     expect(ddb.secretPuts).toEqual([]);
+  });
+});
+
+/**
+ * [Issue #3150] The tick host reconciles a row's `stateSchemaVersion` the
+ * same way `dispatchCoordinationOp` does -- same rule, same module
+ * (`coordination-state-schema.ts`) -- but a mismatch here must not let a
+ * live match's TTL lapse: the tick is the platform's liveness signal, and
+ * refusing to advance a stuck row must not also let it silently expire.
+ */
+describe("tick schema reconciliation (Issue #3150)", () => {
+  interface WindowStateV1 {
+    readonly phase: "open" | "locked";
+  }
+  interface WindowStateV2 {
+    readonly phase: "open" | "locked";
+    readonly bonusRounds: number;
+  }
+
+  /** Same window-close behavior as `windowPlugin`, but declares v2 with a migration. */
+  const migratableWindowPlugin: CoordinationPlugin<WindowStateV2, unknown, WindowStateV2> = {
+    stateSchemaVersion: 2,
+    migrateState: (state) => ({ phase: (state as WindowStateV1).phase, bonusRounds: 0 }),
+    initialState: () => ({ phase: "open", bonusRounds: 0 }),
+    validateOp: () => ({ ok: true }),
+    applyOp: (s) => s,
+    tick: (s, eventNowMs) =>
+      s.phase === "open" && eventNowMs >= CAPTURE_MS ? { ...s, phase: "locked" } : s,
+    projectForTeam: (s) => s,
+  };
+
+  it("[tick #1] should refuse a schema mismatch (no write) but still refresh the TTL, so the match does not disappear", async () => {
+    // `missing_migration` is gated out at load time by `isCoordinationPlugin`
+    // (a real plugin can never reach the tick host without a migration once
+    // it declares v2+) -- so the mismatch reachable through the FULL loader
+    // path is `newer_row`: a row stamped by a plugin newer than the one
+    // currently loaded (a rollback, most often).
+    const ddb = fakeDdb({
+      getItem: {
+        state: {
+          __tenkacloudCoordinationEnvelope: 1,
+          stateSchemaVersion: 3,
+          state: { phase: "open", bonusRounds: 0 },
+        },
+        version: 1,
+      },
+    });
+    const res = await handleCoordinationTickBatch(
+      depsWith(importerOf(migratableWindowPlugin), ddb.store),
+      batch([capTarget()]),
+    );
+    expect(res).toEqual({ ticked: 1, written: 0 });
+    expect(ddb.puts).toHaveLength(0);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("tick schema mismatch"));
+    // The liveness refresh still runs -- a namespace stuck on a mismatch must
+    // not also silently age out.
+    expect(ddb.updates).toHaveLength(1);
+    expect(ddb.updates[0]?.input.UpdateExpression).toBe("SET expiresAt = :expiresAt");
+  });
+
+  it("[tick #2] should migrate a pre-envelope row and persist it under a v2 envelope when the tick actually advances the state", async () => {
+    const ddb = fakeDdb({ getItem: { state: { phase: "open" }, version: 2 } });
+    const res = await handleCoordinationTickBatch(
+      depsWith(importerOf(migratableWindowPlugin), ddb.store),
+      batch([capTarget()]),
+    );
+    expect(res).toEqual({ ticked: 1, written: 1 });
+    expect(ddb.puts).toEqual([
+      { PK: "COORD#t1#e1#cap#default", state: { phase: "locked", bonusRounds: 0 }, version: 3 },
+    ]);
+    expect(ddb.envelopePuts).toEqual([
+      {
+        PK: "COORD#t1#e1#cap#default",
+        stateSchemaVersion: 2,
+        state: { phase: "locked", bonusRounds: 0 },
+      },
+    ]);
+  });
+
+  /**
+   * The lazy-upgrade contract: migrating without a state change must not
+   * write. The row is left exactly as it was (still pre-envelope) -- only
+   * the TTL moves, and the next tick (or op) migrates again, idempotently.
+   */
+  it("[tick #3] should NOT write when migration is needed but the tick itself is a no-op -- the row stays on its old version, TTL still refreshes", async () => {
+    const ddb = fakeDdb({ getItem: { state: { phase: "open" }, version: 2 } });
+    const res = await handleCoordinationTickBatch(
+      depsWith(importerOf(migratableWindowPlugin), ddb.store),
+      batch([capTarget({ eventNowMs: CAPTURE_MS - 1 })]),
+    );
+    expect(res).toEqual({ ticked: 1, written: 0 });
+    expect(ddb.puts).toHaveLength(0);
+    expect(ddb.envelopePuts).toHaveLength(0);
+    expect(ddb.updates).toHaveLength(1);
+    expect(ddb.updates[0]?.input.UpdateExpression).toBe("SET expiresAt = :expiresAt");
   });
 });
