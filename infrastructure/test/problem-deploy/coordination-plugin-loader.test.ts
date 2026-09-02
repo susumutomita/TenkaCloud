@@ -154,10 +154,45 @@ describe("coordinationPluginSchemaDefect", () => {
   it("should reject exotic values without throwing while formatting them", () => {
     const cyclic: Record<string, unknown> = {};
     cyclic.self = cyclic;
-    for (const value of [1n, cyclic, Symbol("v"), () => 2]) {
+    const revoked = Proxy.revocable({}, {});
+    revoked.revoke();
+    const hostileTag = new Proxy(
+      {},
+      {
+        get: (_t, key) => {
+          if (key === Symbol.toStringTag) throw new Error("no tag for you");
+          return undefined;
+        },
+      },
+    );
+    for (const value of [1n, cyclic, Symbol("v"), () => 2, revoked.proxy, hostileTag]) {
       const defect = coordinationPluginSchemaDefect(malformedPlugin({ stateSchemaVersion: value }));
       expect(defect).toContain("stateSchemaVersion must be a positive integer");
     }
+  });
+
+  /**
+   * [Issue #3150] Codex review 3 巡目: 判定そのものも throw しうる -- revoked Proxy では
+   * property を読むだけで throw する。 load から例外が漏れると op / projection は分類できない
+   * 500 になり、 tick は TTL を延ばせないまま進行中の行を失う。
+   */
+  it("should report unavailable instead of throwing when the module itself is hostile", async () => {
+    const revoked = Proxy.revocable({}, {});
+    revoked.revoke();
+    expect(await loadCoordinationPlugin(importerOf(revoked.proxy), "ref")).toEqual({
+      kind: "unavailable",
+    });
+    const throwingGet = new Proxy(
+      {},
+      {
+        get: () => {
+          throw new Error("hostile getter");
+        },
+      },
+    );
+    expect(await loadCoordinationPlugin(importerOf({ default: throwingGet }), "ref")).toEqual({
+      kind: "unavailable",
+    });
   });
 
   it("should reject a migrateState that is not a function, regardless of version", () => {

@@ -61,15 +61,20 @@ export function isCoordinationPlugin(
  */
 /**
  * [Issue #3150] Codex review: `JSON.stringify` は BigInt で throw し、 循環参照でも throw する。
- * ここが throw すると `invalid_schema` を返せず 500 になり、 tick は外側の catch に飛んで
- * TTL 延長の枝に届かない -- 「壊れた plugin が進行中の行を巻き添えにしない」という、
- * この関数の存在理由そのものが崩れる。 pack-author が書いた任意の値を受けるので、
- * 整形は絶対に throw してはならない。
+ * `Object.prototype.toString.call` すら revoked Proxy や `Symbol.toStringTag` の getter が
+ * throw する Proxy では throw する。 ここが throw すると `invalid_schema` を返せず 500 になり、
+ * tick は外側の catch に飛んで TTL 延長の枝に届かない -- 「壊れた plugin が進行中の行を
+ * 巻き添えにしない」という、 この関数の存在理由そのものが崩れる。 pack-author が書いた任意の値を
+ * 受けるので、 **どの分岐も throw させない**: 整形が失敗したら静的な文言に落とす。
  */
 function describeSchemaValue(value: unknown): string {
-  if (typeof value === "string") return `"${value}"`;
-  if (typeof value === "object" && value !== null) return Object.prototype.toString.call(value);
-  return String(value);
+  try {
+    if (typeof value === "string") return `"${value}"`;
+    if (typeof value === "object" && value !== null) return Object.prototype.toString.call(value);
+    return String(value);
+  } catch {
+    return "<a value that cannot be described>";
+  }
 }
 
 export function coordinationPluginSchemaDefect(
@@ -124,11 +129,21 @@ export async function loadCoordinationPlugin(
   } catch {
     return { kind: "unavailable" };
   }
-  const candidate = (mod as { default?: unknown } | null)?.default ?? mod;
-  if (!isCoordinationPlugin(candidate)) return { kind: "unavailable" };
-  const defect = coordinationPluginSchemaDefect(candidate);
+  // [Issue #3150] Codex review: 判定そのものも throw しうる -- module や default export が
+  // revoked Proxy なら `candidate.initialState` の property 読みが throw する。 この関数から
+  // 例外が漏れると op / projection は分類できない 500 になり、 tick は外側の catch に飛んで
+  // TTL を延ばせないまま進行中の行を失う。 **load は何が import されても throw しない**。
+  let candidate: unknown;
+  let defect: string | null;
+  try {
+    candidate = (mod as { default?: unknown } | null)?.default ?? mod;
+    if (!isCoordinationPlugin(candidate)) return { kind: "unavailable" };
+    defect = coordinationPluginSchemaDefect(candidate);
+  } catch {
+    return { kind: "unavailable" };
+  }
   return defect === null
-    ? { kind: "ok", plugin: candidate }
+    ? { kind: "ok", plugin: candidate as CoordinationPlugin<unknown, unknown> }
     : { kind: "invalid_schema", detail: defect };
 }
 
