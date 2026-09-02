@@ -519,6 +519,32 @@ describe("requestTeardown coordination cleanup (#3149)", () => {
     expect(reads.some((cmd) => String(cmd.input.Key?.PK ?? "").startsWith("COORD#"))).toBe(false);
   });
 
+  it("should report a non-Error cleanup failure without losing the reason", async () => {
+    const { shared, ddbSend, eventsSend } = buildShared();
+    const trace = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    ddbSend.mockResolvedValueOnce({ Item: eventRow() });
+    ddbSend.mockResolvedValueOnce({}); // markDeleting
+    // An AWS SDK middleware or a plugin can reject with a plain value. Reading
+    // `.message` off it would log `undefined` and lose the only clue an
+    // operator has about why a namespace was left behind.
+    ddbSend.mockRejectedValueOnce("control data unavailable");
+    ddbSend.mockResolvedValue({});
+    eventsSend.mockResolvedValueOnce({});
+
+    const out = await requestTeardown(shared, "tenant-acme", "JOB1", NOW_MS);
+
+    expect(out).toEqual({ kind: "accepted", previousStatus: "COMPLETE" });
+    const logged = trace.mock.calls
+      .map(([line]) => String(line))
+      .filter((line) => line.includes("coordination.cleanup-failed"));
+    expect(logged).toHaveLength(1);
+    expect(JSON.parse(logged[0] ?? "{}")).toMatchObject({
+      event: "deploy.delete.coordination.cleanup-failed",
+      reason: "control data unavailable",
+    });
+    trace.mockRestore();
+  });
+
   it("should still accept the teardown when the cleanup itself fails", async () => {
     const { shared, ddbSend, eventsSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: eventRow() });
