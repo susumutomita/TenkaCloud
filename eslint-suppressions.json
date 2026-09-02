@@ -2124,9 +2124,6 @@
     }
   },
   "infrastructure/test/problem-deploy/coordination-plugin-loader.test.ts": {
-    "@typescript-eslint/consistent-type-assertions": {
-      "count": 2
-    },
     "@typescript-eslint/no-empty-function": {
       "count": 12
     }

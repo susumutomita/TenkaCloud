@@ -24,7 +24,18 @@ export function pluginStateSchemaVersion(
 }
 
 /** Why a row's schema version could not be reconciled against the plugin's. */
-export type StateSchemaMismatchReason = "newer_row" | "missing_migration" | "migration_failed";
+export type StateSchemaMismatchReason =
+  | "newer_row"
+  | "missing_migration"
+  | "migration_failed"
+  /**
+   * [Issue #3150] plugin 自身の版宣言が契約違反 (= 行と突き合わせる以前の問題)。
+   * **{@link reconcileStateSchema} はこれを返さない** -- 唯一の発生源は
+   * `coordination-plugin-loader.ts` の `coordinationPluginSchemaDefect` で、 下の突き合わせ表には
+   * 現れない。 ここに同居させているのは、 3 経路 (op / projection / tick) から見て「plugin の版が
+   * 理由でこの行を進められない」という同じ扱いになるため。
+   */
+  | "invalid_plugin_schema";
 
 export type StateSchemaReconcile<State> =
   | { readonly kind: "ok"; readonly state: State; readonly migrated: boolean }

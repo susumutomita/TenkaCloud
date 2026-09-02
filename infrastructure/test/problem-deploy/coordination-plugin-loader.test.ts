@@ -2,6 +2,7 @@ import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 import type { CoordinationPlugin } from "@tenkacloud/coordination-plugin-sdk";
 import { describe, expect, it, vi } from "vitest";
 import {
+  coordinationPluginSchemaDefect,
   isCoordinationPlugin,
   loadAndDispatchCoordinationOp,
   loadAndProjectCoordinationForTeam,
@@ -31,10 +32,11 @@ const counter: CoordinationPlugin<CounterState, CounterOp, { count: number }> = 
 const ctx = { eventId: "e1", teamIds: ["t1", "t2"] };
 /** [Issue #3123] The platform-owned persistence namespace for one dispatch. */
 const scope = { tenantId: "tn1", eventId: "e1", problemId: "p1", runId: "default" } as const;
+const incOp: CounterOp = { kind: "inc" };
 const dispatchInput = {
   scope,
   teamId: "t1",
-  op: { kind: "inc" } as CounterOp,
+  op: incOp,
   ctx,
   fallbackProjection: { count: -1 },
   nowIso: "2026-06-01T00:00:00Z",
@@ -47,11 +49,17 @@ function fakeStore(getItem?: Record<string, unknown>): CoordinationStoreDeps {
     if (cmd instanceof PutCommand) return {};
     throw new Error("unexpected command");
   });
-  return {
-    runtime: makeTestControlDataRuntime(),
-    ddb: { send } as never,
-    tableName: "Deployments",
-  };
+  const ddb: CoordinationStoreDeps["ddb"] = { send };
+  return { runtime: makeTestControlDataRuntime(), ddb, tableName: "Deployments" };
+}
+
+/**
+ * [Issue #3150] 契約に反する版宣言を持つ plugin を作る。 型としては通しつつ値だけ意図的に壊すので、
+ * assertion は identifier に対して 1 回だけ行い、 object literal には被せない。
+ */
+function malformedPlugin(extra: Record<string, unknown>): CoordinationPlugin<unknown, unknown> {
+  const plugin: Record<string, unknown> = { ...counter, ...extra };
+  return plugin as unknown as CoordinationPlugin<unknown, unknown>;
 }
 
 /** moduleRef を無視して固定 module を返す importer。 */
@@ -87,24 +95,45 @@ describe("isCoordinationPlugin", () => {
     expect(isCoordinationPlugin({ initialState() {}, validateOp() {}, applyOp() {} })).toBe(false);
   });
 
-  /**
-   * [Issue #3150] This gate is "deploy が落ちる": synth/activation never runs a
-   * plugin (#3154), so this is the first safe point pack-author code is
-   * evaluated. A `stateSchemaVersion >= 2` with no `migrateState` fails HERE,
-   * before any row is ever touched.
-   */
   it("should accept a plugin that declares no schema version at all", () => {
     expect(isCoordinationPlugin(counter)).toBe(true);
   });
 
-  it("should accept stateSchemaVersion 2 paired with a migrateState function", () => {
+  /**
+   * [Issue #3150] Codex review: schema 宣言の妥当性はこの述語の担当ではなくなった。
+   * 「plugin が無い」と「plugin は在るが版宣言が壊れている」を同じ false に潰すと、 caller が
+   * 両者を区別できず、 projection は 200 fallback、 tick は TTL 未延長になる。 版の判定は
+   * `coordinationPluginSchemaDefect` / `loadCoordinationPlugin` 側で観測する。
+   */
+  it("should not judge the schema declaration", () => {
+    expect(isCoordinationPlugin({ ...counter, stateSchemaVersion: 2 })).toBe(true);
+    expect(isCoordinationPlugin({ ...counter, stateSchemaVersion: -1 })).toBe(true);
+  });
+});
+
+/**
+ * [Issue #3150] This gate is "deploy が落ちる": synth/activation never runs a
+ * plugin (#3154), so this is the first safe point pack-author code is
+ * evaluated. A `stateSchemaVersion >= 2` with no `migrateState` fails HERE,
+ * before any row is ever touched.
+ */
+describe("coordinationPluginSchemaDefect", () => {
+  it("should pass a plugin that declares no schema version at all", () => {
+    expect(coordinationPluginSchemaDefect(counter)).toBeNull();
+  });
+
+  it("should pass stateSchemaVersion 2 paired with a migrateState function", () => {
     expect(
-      isCoordinationPlugin({ ...counter, stateSchemaVersion: 2, migrateState: (s: unknown) => s }),
-    ).toBe(true);
+      coordinationPluginSchemaDefect(
+        malformedPlugin({ stateSchemaVersion: 2, migrateState: (s: unknown) => s }),
+      ),
+    ).toBeNull();
   });
 
   it("should reject stateSchemaVersion 2 with no migrateState", () => {
-    expect(isCoordinationPlugin({ ...counter, stateSchemaVersion: 2 })).toBe(false);
+    expect(coordinationPluginSchemaDefect(malformedPlugin({ stateSchemaVersion: 2 }))).toBe(
+      "stateSchemaVersion 2 requires migrateState",
+    );
   });
 
   it.each([
@@ -113,37 +142,61 @@ describe("isCoordinationPlugin", () => {
     ["a string", "2"],
     ["negative", -1],
   ])("should reject stateSchemaVersion that is %s", (_label, stateSchemaVersion) => {
-    expect(isCoordinationPlugin({ ...counter, stateSchemaVersion })).toBe(false);
+    expect(coordinationPluginSchemaDefect(malformedPlugin({ stateSchemaVersion }))).toBe(
+      `stateSchemaVersion must be a positive integer, got ${JSON.stringify(stateSchemaVersion)}`,
+    );
   });
 
   it("should reject a migrateState that is not a function, regardless of version", () => {
-    expect(isCoordinationPlugin({ ...counter, migrateState: "not-a-function" })).toBe(false);
+    const expected = "migrateState must be a function when declared";
+    expect(coordinationPluginSchemaDefect(malformedPlugin({ migrateState: "nope" }))).toBe(
+      expected,
+    );
     expect(
-      isCoordinationPlugin({
-        ...counter,
-        stateSchemaVersion: 1,
-        migrateState: "not-a-function",
-      }),
-    ).toBe(false);
+      coordinationPluginSchemaDefect(
+        malformedPlugin({ stateSchemaVersion: 1, migrateState: "nope" }),
+      ),
+    ).toBe(expected);
   });
 });
 
 describe("loadCoordinationPlugin", () => {
   it("should return the plugin from a default export", async () => {
-    expect(await loadCoordinationPlugin(importerOf({ default: counter }), "ref")).toBe(counter);
+    expect(await loadCoordinationPlugin(importerOf({ default: counter }), "ref")).toEqual({
+      kind: "ok",
+      plugin: counter,
+    });
   });
 
   it("should return the plugin when the module itself is the plugin", async () => {
-    expect(await loadCoordinationPlugin(importerOf(counter), "ref")).toBe(counter);
+    expect(await loadCoordinationPlugin(importerOf(counter), "ref")).toEqual({
+      kind: "ok",
+      plugin: counter,
+    });
   });
 
-  it("should return null when the importer throws", async () => {
-    expect(await loadCoordinationPlugin(throwingImporter, "ref")).toBeNull();
+  it("should report unavailable when the importer throws", async () => {
+    expect(await loadCoordinationPlugin(throwingImporter, "ref")).toEqual({ kind: "unavailable" });
   });
 
-  it("should return null when the module is null or fails the contract", async () => {
-    expect(await loadCoordinationPlugin(importerOf(null), "ref")).toBeNull();
-    expect(await loadCoordinationPlugin(importerOf({ default: {} }), "ref")).toBeNull();
+  it("should report unavailable when the module is null or fails the contract", async () => {
+    expect(await loadCoordinationPlugin(importerOf(null), "ref")).toEqual({ kind: "unavailable" });
+    expect(await loadCoordinationPlugin(importerOf({ default: {} }), "ref")).toEqual({
+      kind: "unavailable",
+    });
+  });
+
+  /**
+   * [Issue #3150] Codex review: これが `unavailable` と別物であることが、 projection の 503 と
+   * tick の TTL 延長を成り立たせている。 潰すと壊れた deploy が「空だが正常な板」に化ける。
+   */
+  it("should separate a broken schema declaration from a missing plugin", async () => {
+    expect(
+      await loadCoordinationPlugin(
+        importerOf({ default: { ...counter, stateSchemaVersion: 2 } }),
+        "ref",
+      ),
+    ).toEqual({ kind: "invalid_schema", detail: "stateSchemaVersion 2 requires migrateState" });
   });
 });
 
@@ -225,5 +278,24 @@ describe("loadAndProjectCoordinationForTeam", () => {
       projectInput,
     );
     expect(out).toEqual({ kind: "schema_mismatch", reason: "newer_row" });
+  });
+
+  /**
+   * [Issue #3150] Codex review: 版宣言が壊れた plugin は `unavailable` の fallback に混ぜない。
+   * projection は portal がいちばん頻繁に叩く経路なので、 ここで 200 を返すと壊れた deploy が
+   * 「空だが正常な板」として無期限に見え続け、 503 は op を投げた参加者にしか届かない。
+   */
+  it("should surface a broken schema declaration instead of the fallback projection", async () => {
+    const out = await loadAndProjectCoordinationForTeam(
+      importerOf(malformedPlugin({ stateSchemaVersion: 2 })),
+      "ref",
+      fakeStore({ state: { count: 5 }, version: 1 }),
+      projectInput,
+    );
+    expect(out).toEqual({
+      kind: "schema_mismatch",
+      reason: "invalid_plugin_schema",
+      detail: "stateSchemaVersion 2 requires migrateState",
+    });
   });
 });

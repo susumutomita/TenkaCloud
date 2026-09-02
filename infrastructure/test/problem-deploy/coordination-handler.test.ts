@@ -195,6 +195,36 @@ describe("handleCoordinationOp", () => {
     );
     expect(out).toEqual({ kind: "schema_mismatch", reason: "newer_row" });
   });
+
+  /**
+   * [Issue #3150] Codex review: 版宣言そのものが壊れた plugin も同じ 503 に写る。 参加者に
+   * 見えるのは `unavailable` と同じ「今は使えない」だが、 運営の log には理由が残る --
+   * これが「壊れた deploy が空の板として無期限に見え続ける」を塞ぐ最後の 1 段。
+   */
+  it("should map a broken schema declaration to schema_mismatch with a logged reason", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      const out = await handleCoordinationOp(
+        deps({
+          importer: importerOf({ ...counter, stateSchemaVersion: 2 }),
+          store: fakeStore({ state: { count: 5 }, version: 1 }),
+        }),
+        "key",
+        { kind: "inc" },
+        "2026-06-01T00:00:00Z",
+      );
+      expect(out).toEqual({
+        kind: "schema_mismatch",
+        reason: "invalid_plugin_schema",
+        detail: "stateSchemaVersion 2 requires migrateState",
+      });
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('reason=invalid_plugin_schema detail="stateSchemaVersion 2'),
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
 });
 
 describe("handleCoordinationProjection", () => {
@@ -246,6 +276,33 @@ describe("handleCoordinationProjection", () => {
       "key",
     );
     expect(out).toEqual({ kind: "schema_mismatch", reason: "newer_row" });
+  });
+  /**
+   * [Issue #3150] Codex review: 版宣言そのものが壊れた plugin も同じ 503 に写る。 参加者に
+   * 見えるのは `unavailable` と同じ「今は使えない」だが、 運営の log には理由が残る --
+   * これが「壊れた deploy が空の板として無期限に見え続ける」を塞ぐ最後の 1 段。
+   */
+  it("should map a broken schema declaration to schema_mismatch with a logged reason", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      const out = await handleCoordinationProjection(
+        deps({
+          importer: importerOf({ ...counter, stateSchemaVersion: 2 }),
+          store: fakeStore({ state: { count: 5 }, version: 1 }),
+        }),
+        "key",
+      );
+      expect(out).toEqual({
+        kind: "schema_mismatch",
+        reason: "invalid_plugin_schema",
+        detail: "stateSchemaVersion 2 requires migrateState",
+      });
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('reason=invalid_plugin_schema detail="stateSchemaVersion 2'),
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 });
 
