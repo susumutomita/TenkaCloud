@@ -73,8 +73,10 @@ export interface CoordinationStateRow {
  * `state: unknown` としてそのまま保存・返却するだけで、 DDB item / SQL row のどちらも
  * 形を変えない (= DDL 変更ゼロ)。
  *
- * マーカーは `=== 1` の厳密一致で判定する。 plugin の State は `unknown` なので配列を含む
- * どんな形もあり得るが、 その値がたまたまこの key を持ち値 1 を持つ確率は無視できる。
+ * [Issue #3150] Codex review: マーカー 1 つでの判定は不十分。 plugin の State は `unknown` なので
+ * どんな形もあり得る -- たまたま同じ key を持つ旧 state を封筒と誤認すると、 `state.state` が
+ * undefined になって plugin に渡り、 500 か次の write での破壊になる。 **封筒の形が完全に
+ * 揃ったときだけ**封筒と見なす (マーカー + 正の整数 version + `state` key の存在)。
  */
 interface CoordinationStateEnvelope {
   readonly __tenkacloudCoordinationEnvelope: 1;
@@ -85,13 +87,17 @@ interface CoordinationStateEnvelope {
 const COORDINATION_ENVELOPE_MARKER = 1;
 
 function isCoordinationStateEnvelope(raw: unknown): raw is CoordinationStateEnvelope {
-  return (
-    typeof raw === "object" &&
-    raw !== null &&
-    !Array.isArray(raw) &&
-    (raw as Record<string, unknown>).__tenkacloudCoordinationEnvelope ===
-      COORDINATION_ENVELOPE_MARKER
-  );
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return false;
+  const r = raw as Record<string, unknown>;
+  if (r.__tenkacloudCoordinationEnvelope !== COORDINATION_ENVELOPE_MARKER) return false;
+  if (
+    typeof r.stateSchemaVersion !== "number" ||
+    !Number.isInteger(r.stateSchemaVersion) ||
+    r.stateSchemaVersion <= 0
+  ) {
+    return false;
+  }
+  return Object.hasOwn(r, "state");
 }
 
 /** store が必要とする DDB client の最小 shape (= test で容易に mock)。 */
@@ -176,10 +182,24 @@ export const COORDINATION_BUDGET_EXCEEDED_EVENT = "coordination.state.budget-exc
  * 参加者が動いたときにしか書かないので、 write 基準だと終了時刻の無い event で試合中の row が
  * 期限切れになる。 tick 側が {@link touchCoordinationState} で延長する。
  *
- * [Issue #3150] `stateSchemaVersion` (省略時 1) をここで `state` に被せて封筒にする -- caller は
- * 呼ぶ直前に確定している plugin の版 (`pluginStateSchemaVersion(plugin)`) を渡す。
- * 省略時の既定を 1 にしているのは、 版を宣言しない plugin (= この Issue が始まる前の全 plugin) が
- * 従来どおり動くのを壊さないため、 かつ store 単体テストが版を意識せず呼べるようにするため。
+ * [Issue #3150] `stateSchemaVersion` (省略時 1) を caller が渡す -- 呼ぶ直前に確定している
+ * plugin の版 (`pluginStateSchemaVersion(plugin)`)。
+ *
+ * Codex review (P1, rollback 互換): **版 2 以上のときだけ封筒を被せ、 版 1 は生の state を
+ * そのまま書く**。 封筒は旧 dispatcher が知らない形なので、 全行を封筒にすると「この版を deploy →
+ * 行に触る → 1 つ前の版に rollback」で旧 reader が封筒を state として plugin に渡してしまう
+ * (旧 dispatcher は state を opaque に通すだけなので、 生の state なら版に関係なく素通りする)。
+ * 版を宣言しない / 1 と宣言する plugin -- 今日ある全 plugin -- の行は #3150 以前と byte 単位で
+ * 同一になり、 dispatcher の rollback は安全なまま。 封筒が現れるのは問題側の著者が
+ * `stateSchemaVersion: 2` を宣言して初めてで、 それはこの dispatcher を要求する変更そのもの。
+ * 読み側は封筒の有無を見るだけなので (`readCoordinationState`)、 両方の行が混在しても整合する。
+ *
+ * Codex review 2 巡目: ただし版 1 でも、 **plugin の生 state それ自体が封筒の形をしている**
+ * ときだけは封をする。 `State` は `unknown` で形の制約が無いので、 そのまま生で書くと次の read が
+ * 必ず封筒と誤認し、 plugin の内側の値を剥き出して返す -- 毎回確実に壊れる。 封をすれば read が
+ * 1 枚剥いで元の値に戻り、 版も 1 のままで一致する。 この 1 ケースだけ rollback 互換を失うが、
+ * 「rollback したときだけ壊れる」は「毎回壊れる」より厳密に良い。 形の検査を増やしても曖昧さは
+ * 消せない (それが指摘の主旨) ので、 曖昧になる値の側を封で退避させる。
  */
 export async function writeCoordinationState(
   deps: CoordinationStoreDeps,
@@ -190,19 +210,26 @@ export async function writeCoordinationState(
   stateSchemaVersion = 1,
 ): Promise<WriteCoordinationOutcome> {
   const repository: DeploymentsCoordinationPort = await resolveDeploymentsRepository(deps);
-  const envelope: CoordinationStateEnvelope = {
-    __tenkacloudCoordinationEnvelope: COORDINATION_ENVELOPE_MARKER,
-    stateSchemaVersion,
-    state,
-  };
-  // [Issue #3151] Measured on the envelope, not on the plugin's `state`: the
-  // envelope is what is actually stored, so measuring the payload alone would
-  // under-report by exactly the bytes the platform itself adds.
-  const refusal = enforceCoordinationStateBudget(deps, scope, envelope);
+  const payload: unknown =
+    stateSchemaVersion >= 2 || isCoordinationStateEnvelope(state)
+      ? ({
+          __tenkacloudCoordinationEnvelope: COORDINATION_ENVELOPE_MARKER,
+          stateSchemaVersion,
+          state,
+        } satisfies CoordinationStateEnvelope)
+      : state;
+  // [Issue #3151] Measured on `payload` -- the bytes that actually reach the
+  // backend -- rather than on the plugin's `state`. Since #3150's rollback fix
+  // the two differ only sometimes: a version-1 row is written raw, a version-2
+  // row carries the envelope the platform adds. Measuring `state` would
+  // under-report the enveloped case by exactly those bytes, which is the case
+  // closest to the ceiling, and measuring a synthetic envelope would over-report
+  // every row that is stored raw.
+  const refusal = enforceCoordinationStateBudget(deps, scope, payload);
   if (refusal) return refusal;
   const outcome = await repository.writeCoordinationState(
     scope,
-    envelope,
+    payload,
     expectedVersion,
     nowIso,
     coordinationStateExpiresAt(parseNowMs(nowIso)),

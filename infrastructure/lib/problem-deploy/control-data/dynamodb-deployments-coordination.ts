@@ -44,6 +44,18 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
       new GetCommand({
         TableName: this.core.tableName,
         Key: { PK: coordinationPk(scope), SK: COORD_STATE_SK },
+        // [Issue #3164] Every read of this row exists to compute the next write
+        // against it, under a `version` condition. An eventually-consistent read
+        // can hand back a version that is already stale, so the write it feeds
+        // is refused for a reason nothing in the request was wrong about — and
+        // the retry that follows re-reads and can be handed the same stale row
+        // again. Retrying is only worth doing if the re-read sees the winner.
+        //
+        // The cost is real: a strongly consistent read is 1 RCU per 4 KB rather
+        // than 0.5. That matters for a row this size, and it is the price of the
+        // write condition meaning what it says. The SQL backend has no
+        // equivalent knob because its reads are already consistent.
+        ConsistentRead: true,
       }),
     );
     const item = out.Item as Record<string, unknown> | undefined;

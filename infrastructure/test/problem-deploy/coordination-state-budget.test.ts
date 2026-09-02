@@ -344,17 +344,51 @@ describe("writeCoordinationState budget enforcement (#3151)", () => {
     expect(writes).toHaveLength(0);
   });
 
-  it("should measure the stored envelope, not the plugin payload alone", async () => {
+  /**
+   * These two pin the same rule from both sides: the budget measures the bytes
+   * that actually reach the backend.
+   *
+   * Since #3150's rollback fix that is not always the same object. A plugin
+   * declaring schema version 2 gets the platform's envelope written around its
+   * state; a version-1 plugin -- every plugin that exists today -- is written
+   * raw, byte for byte. Measuring one shape for both is wrong in whichever
+   * direction it guesses: always-enveloped over-reports every row stored raw and
+   * refuses matches that fit, always-raw under-reports the enveloped ones by
+   * exactly the bytes the platform itself adds, which is the case sitting
+   * closest to the ceiling.
+   */
+  it("should charge a version-2 write for the envelope the platform stores around it", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    // A payload that fits with nothing around it, but not once the platform's
-    // own schema envelope is added. Measuring the payload would under-report by
-    // exactly the bytes the platform itself writes.
+    // Fits with nothing around it; does not fit once the envelope is added.
     const payload = stateOfBytes(1000);
     const payloadBytes = serializedStateBytes(payload) ?? 0;
     const { deps, writes } = makeStore({
       CONTROL_DATA_BACKEND: "turso",
       [COORDINATION_STATE_MAX_BYTES_ENV]: `${payloadBytes + 10}`,
     });
+
+    const outcome = await writeCoordinationState(
+      deps,
+      SCOPE,
+      payload,
+      0,
+      "2026-06-01T00:00:00.000Z",
+      2,
+    );
+
+    expect(outcome.kind).toBe("too_large");
+    expect(writes).toHaveLength(0);
+  });
+
+  it("should not charge a version-1 write for an envelope it is never given", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const payload = stateOfBytes(1000);
+    const payloadBytes = serializedStateBytes(payload) ?? 0;
+    const { deps, writes } = makeStore({
+      CONTROL_DATA_BACKEND: "turso",
+      [COORDINATION_STATE_MAX_BYTES_ENV]: `${payloadBytes + 10}`,
+    });
+
     const outcome = await writeCoordinationState(
       deps,
       SCOPE,
@@ -362,7 +396,9 @@ describe("writeCoordinationState budget enforcement (#3151)", () => {
       0,
       "2026-06-01T00:00:00.000Z",
     );
-    expect(outcome.kind).toBe("too_large");
-    expect(writes).toHaveLength(0);
+
+    // The row is stored raw, so those 10 bytes of headroom are real headroom.
+    expect(outcome).toEqual({ kind: "ok" });
+    expect(writes).toEqual([payload]);
   });
 });

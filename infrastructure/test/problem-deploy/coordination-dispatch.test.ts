@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { SqlDeploymentsRepository } from "../../lib/problem-deploy/control-data/deployments-repository.js";
 import type { ControlDataRuntime } from "../../lib/problem-deploy/control-data/runtime-repositories.js";
 import {
+  backoffCeilingMs,
   dispatchCoordinationOp,
   projectCoordinationForTeam,
 } from "../../lib/problem-deploy/handlers/participant-handler/coordination-dispatch.js";
@@ -43,6 +44,48 @@ const scope = {
   problemId: "problem-1",
   runId: "run-1",
 } as const;
+/**
+ * [Issue #3164] Records the backoff calls instead of sleeping, so a test that
+ * exercises the retry stays instant and can assert how many times it waited.
+ */
+function noSleep(attempts?: number) {
+  const delays: number[] = [];
+  return {
+    ...(attempts === undefined ? {} : { attempts }),
+    backoff: async (attempt: number) => {
+      delays.push(attempt);
+    },
+    delays,
+  };
+}
+
+/**
+ * [Issue #3164] The coordination partition holds two items — `SK=STATE` and
+ * `SK=MATCHSECRET` — and every fake in this file has to tell them apart before
+ * it can answer. Naming it once keeps the fakes small enough to read.
+ */
+function isMatchSecretCommand(cmd: unknown): boolean {
+  const keyed = cmd as {
+    input?: { Key?: Record<string, unknown>; Item?: Record<string, unknown> };
+  };
+  return (keyed.input?.Key?.SK ?? keyed.input?.Item?.SK) === "MATCHSECRET";
+}
+
+/** Wraps a `send` double in the store shape `dispatchCoordinationOp` expects. */
+function storeOver(send: (cmd: unknown) => Promise<unknown>): CoordinationStoreDeps {
+  // Bound before the assertion, not asserted in place: `consistent-type-assertions`
+  // wants a declaration it can annotate, and the DocumentClient surface is far
+  // wider than the one method these doubles answer.
+  const partial = { send };
+  const ddb = partial as never;
+  const store: CoordinationStoreDeps = {
+    runtime: makeTestControlDataRuntime(),
+    ddb,
+    tableName: "Deployments",
+  };
+  return store;
+}
+
 const base = {
   scope,
   teamId: "t1",
@@ -81,14 +124,7 @@ function fakeStore(opts: {
     }
     throw new Error("unexpected command");
   });
-  return {
-    store: {
-      runtime: makeTestControlDataRuntime(),
-      ddb: { send } as never,
-      tableName: "Deployments",
-    },
-    send,
-  };
+  return { store: storeOver(send), send };
 }
 
 describe("coordination-store", () => {
@@ -103,6 +139,18 @@ describe("coordination-store", () => {
       state: { count: 3 },
       version: 0,
     });
+  });
+
+  it("should read the state consistently, because the write it feeds is conditional", async () => {
+    // [Issue #3164] An eventually-consistent read can hand back a version that
+    // is already stale, so the conditional write it feeds is refused for a
+    // reason nothing in the request was wrong about — and the retry re-reads
+    // and can be handed the same stale row again. Retrying is only worth doing
+    // if the re-read can see the winner.
+    const { store, send } = fakeStore({ getItem: { state: { count: 3 }, version: 4 } });
+    await readCoordinationState(store, scope);
+    const get = send.mock.calls.map((c) => c[0]).find((c) => c instanceof GetCommand) as GetCommand;
+    expect(get.input.ConsistentRead).toBe(true);
   });
 
   it("should write with the version condition and bump the version", async () => {
@@ -242,11 +290,7 @@ describe("coordination-store", () => {
     const send = vi.fn(async () => {
       throw new Error("ddb down");
     });
-    const store = {
-      runtime: makeTestControlDataRuntime(),
-      ddb: { send } as never,
-      tableName: "Deployments",
-    };
+    const store = storeOver(send);
     await expect(
       writeCoordinationState(store, scope, {}, 0, "2026-06-01T00:00:00Z"),
     ).rejects.toThrow("ddb down");
@@ -340,6 +384,75 @@ describe.each(backendStores)("coordination-store envelope round trip: %s", (_lab
     const read = await readCoordinationState(store, rtScope);
     expect(read?.state).toEqual({ legacy: true });
     expect(read?.stateSchemaVersion).toBeUndefined();
+  });
+
+  /**
+   * [Issue #3150] Codex review (P1): 版 1 の行は封筒を **被せない**。 封筒は旧 dispatcher が
+   * 知らない形なので、 全行を封筒にすると「この版を deploy → 行に触る → 1 つ前の版に rollback」で
+   * 旧 reader が封筒をそのまま plugin の state として渡してしまう。 版を宣言しない / 1 と宣言する
+   * plugin -- 今日ある全 plugin -- の行が #3150 以前と同一であることが、 dispatcher rollback の
+   * 安全性そのもの。 ここが落ちたらその保証が消えている。
+   */
+  it.each([
+    ["the caller omits the version", undefined],
+    ["the caller passes version 1", 1],
+  ])("should write raw state with no envelope when %s", async (_label, declared) => {
+    const store = makeStore();
+    const args = [store, rtScope, { count: 7 }, 0, "2026-06-01T00:00:00.000Z"] as const;
+    await (declared === undefined
+      ? writeCoordinationState(...args)
+      : writeCoordinationState(...args, declared));
+    const repository = await store.runtime.resolveDeploymentsRepository({
+      ddb: store.ddb as never,
+      deploymentsTableName: store.tableName,
+    });
+    // 旧 dispatcher が見るのと同じ視点 -- 生の state であること。
+    expect((await repository.readCoordinationState(rtScope))?.state).toEqual({ count: 7 });
+    const read = await readCoordinationState(store, rtScope);
+    expect(read?.state).toEqual({ count: 7 });
+    expect(read?.stateSchemaVersion).toBeUndefined();
+  });
+
+  /**
+   * [Issue #3150] Codex review: plugin の State は `unknown` なので、 旧 state がたまたま
+   * marker key を持つことはあり得る。 marker 1 つで封筒と誤認すると `state.state` が undefined に
+   * なって plugin に渡り、 500 か次の write での破壊になる。 形が完全に揃ったときだけ封筒。
+   */
+  it.each([
+    ["only the marker", { __tenkacloudCoordinationEnvelope: 1 }],
+    [
+      "a non-integer version",
+      { __tenkacloudCoordinationEnvelope: 1, stateSchemaVersion: "2", state: { count: 1 } },
+    ],
+    ["no state key", { __tenkacloudCoordinationEnvelope: 1, stateSchemaVersion: 2, mine: true }],
+  ])("should treat legacy state with %s as raw state, not an envelope", async (_label, legacy) => {
+    const store = makeStore();
+    const repository = await store.runtime.resolveDeploymentsRepository({
+      ddb: store.ddb as never,
+      deploymentsTableName: store.tableName,
+    });
+    await repository.writeCoordinationState(rtScope, legacy, 0, "2026-06-01T00:00:00.000Z", 0);
+    const read = await readCoordinationState(store, rtScope);
+    expect(read?.state).toEqual(legacy);
+    expect(read?.stateSchemaVersion).toBeUndefined();
+  });
+
+  /**
+   * [Issue #3150] Codex review 2 巡目: 版 1 の plugin の生 state それ自体が封筒の形をしている
+   * ことはあり得る (`State` は `unknown` で形の制約が無い)。 そのまま生で書くと次の read が必ず
+   * 封筒と誤認して内側を剥き出す -- 毎回確実に壊れる。 封をすれば read が 1 枚剥いで元に戻る。
+   */
+  it("should seal a version-1 state that would otherwise be misread as an envelope", async () => {
+    const store = makeStore();
+    const looksLikeEnvelope = {
+      __tenkacloudCoordinationEnvelope: 1,
+      stateSchemaVersion: 2,
+      state: { mine: true },
+    };
+    await writeCoordinationState(store, rtScope, looksLikeEnvelope, 0, "2026-06-01T00:00:00.000Z");
+    const read = await readCoordinationState(store, rtScope);
+    expect(read?.state).toEqual(looksLikeEnvelope);
+    expect(read?.stateSchemaVersion).toBe(1);
   });
 
   it("touchCoordinationState should not disturb the envelope", async () => {
@@ -454,14 +567,168 @@ describe("dispatchCoordinationOp", () => {
     expect(out).toEqual({ kind: "ok", projection: { count: 1 }, changedScores: { teamA: 10 } });
   });
 
-  it("should surface a write conflict", async () => {
+  it("should surface a write conflict once it has run out of attempts", async () => {
     const { store } = fakeStore({ getItem: undefined, conflict: true });
-    const out = await dispatchCoordinationOp(store, counter, {
-      ...base,
-      op: { kind: "inc" },
-      nowIso: "2026-06-01T00:00:00Z",
-    });
+    const out = await dispatchCoordinationOp(
+      store,
+      counter,
+      { ...base, op: { kind: "inc" }, nowIso: "2026-06-01T00:00:00Z" },
+      noSleep(),
+    );
     expect(out).toEqual({ kind: "conflict" });
+  });
+});
+
+/**
+ * [Issue #3164] Losing a race on the shared row must not lose the move.
+ *
+ * A match is one row that every op rewrites under a version condition, and
+ * Orders land for every team at the same instant, so contention is the normal
+ * case rather than the exception once a match has more than a handful of teams.
+ * Before this, the loser got `conflict`, which the portal shows as a generic
+ * infrastructure error with the move discarded — the participant pressed a
+ * button and nothing happened.
+ */
+describe("dispatchCoordinationOp write contention", () => {
+  /**
+   * Conflicts on the first `times` writes, then accepts.
+   *
+   * `readState` is handed the number of writes already attempted, so a test can
+   * make the row it hands back depend on how far the retry has got — which is
+   * how "the match moved on between attempts" is expressed.
+   */
+  function flakyStore(times: number, readState?: (writes: number) => Record<string, unknown>) {
+    let writes = 0;
+    const reads: number[] = [];
+    const send = vi.fn(async (cmd: unknown) => {
+      if (isMatchSecretCommand(cmd)) return { Item: undefined };
+      if (cmd instanceof GetCommand) {
+        reads.push(writes);
+        return { Item: readState?.(writes) };
+      }
+      if (!(cmd instanceof PutCommand)) throw new Error("unexpected command");
+      writes += 1;
+      if (writes <= times) {
+        throw new ConditionalCheckFailedException({ message: "ccf", $metadata: {} });
+      }
+      return {};
+    });
+    return { store: storeOver(send), reads, writes: () => writes };
+  }
+
+  it("should land the move when a later attempt wins the row", async () => {
+    const { store, writes } = flakyStore(2);
+    const sleeps = noSleep();
+    const out = await dispatchCoordinationOp(
+      store,
+      counter,
+      { ...base, op: { kind: "inc" }, nowIso: "2026-06-01T00:00:00Z" },
+      sleeps,
+    );
+    expect(out).toEqual({ kind: "ok", projection: { count: 1 } });
+    expect(writes()).toBe(3);
+    // Backed off between attempts, and not after the one that succeeded.
+    expect(sleeps.delays).toEqual([0, 1]);
+  });
+
+  it("should re-read the row on every attempt, not replay the first read", async () => {
+    // The retry exists to re-decide against what is there NOW. A retry that
+    // re-wrote the state it computed the first time would silently overwrite
+    // whatever the winner of the race had just written.
+    const { store, reads } = flakyStore(2);
+    await dispatchCoordinationOp(
+      store,
+      counter,
+      { ...base, op: { kind: "inc" }, nowIso: "2026-06-01T00:00:00Z" },
+      noSleep(),
+    );
+    expect(reads).toEqual([0, 1, 2]);
+  });
+
+  it("should reject on a retry when the op is no longer legal", async () => {
+    // Between the two attempts the match moved on. `validateOp` runs again
+    // against the row that was actually read, so a move the rules no longer
+    // allow comes back as a rejection rather than being forced through.
+    // The first read sees an open match; every later read sees it closed.
+    const { store } = flakyStore(99, (writes) => ({
+      state: { count: 0, closed: writes > 0 },
+      version: writes,
+    }));
+    const closable: CoordinationPlugin<
+      { count: number; closed?: boolean },
+      { kind: "inc" },
+      unknown
+    > = {
+      initialState: () => ({ count: 0 }),
+      validateOp: (state) => (state.closed ? { ok: false, error: "match_closed" } : { ok: true }),
+      applyOp: (state) => ({ ...state, count: state.count + 1 }),
+      projectForTeam: (state) => ({ count: state.count }),
+    };
+    const out = await dispatchCoordinationOp(
+      store,
+      closable,
+      { ...base, op: { kind: "inc" }, nowIso: "2026-06-01T00:00:00Z" },
+      noSleep(),
+    );
+    expect(out).toEqual({ kind: "rejected", error: "match_closed" });
+  });
+
+  it("should not retry a rejection", async () => {
+    // Only a lost race is worth trying again. Re-running a move the rules
+    // refused would just refuse it four more times, at the participant's cost.
+    const { store, writes } = flakyStore(0);
+    const sleeps = noSleep();
+    const out = await dispatchCoordinationOp(
+      store,
+      counter,
+      { ...base, op: { kind: "bad" }, nowIso: "2026-06-01T00:00:00Z" },
+      sleeps,
+    );
+    expect(out).toEqual({ kind: "rejected", error: "bad_op" });
+    expect(writes()).toBe(0);
+    expect(sleeps.delays).toEqual([]);
+  });
+
+  it("should double the backoff window on each retry", () => {
+    expect([0, 1, 2, 3].map(backoffCeilingMs)).toEqual([25, 50, 100, 200]);
+  });
+
+  it("should wait inside that window by default, with nothing injected", async () => {
+    // The default path, which every other test here replaces. Full jitter is
+    // what keeps twenty teams from being released together after one collision
+    // and colliding again as a group; a fixed delay would just move the wave.
+    // Advancing by each attempt's ceiling is enough whatever the draw was, so
+    // this pins the wiring and the bound without asserting on the draw itself.
+    vi.useFakeTimers();
+    try {
+      const { store } = flakyStore(2);
+      const pending = dispatchCoordinationOp(store, counter, {
+        ...base,
+        op: { kind: "inc" },
+        nowIso: "2026-06-01T00:00:00Z",
+      });
+      await vi.advanceTimersByTimeAsync(backoffCeilingMs(0));
+      await vi.advanceTimersByTimeAsync(backoffCeilingMs(1));
+      expect(await pending).toEqual({ kind: "ok", projection: { count: 1 } });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("should stop after the configured number of attempts", async () => {
+    // Bounded because the participant is waiting on this response: a retry that
+    // never gives up turns a contended row into a queue that outlives the Lambda.
+    const { store, writes } = flakyStore(99);
+    const sleeps = noSleep(3);
+    const out = await dispatchCoordinationOp(
+      store,
+      counter,
+      { ...base, op: { kind: "inc" }, nowIso: "2026-06-01T00:00:00Z" },
+      sleeps,
+    );
+    expect(out).toEqual({ kind: "conflict" });
+    expect(writes()).toBe(3);
+    expect(sleeps.delays).toEqual([0, 1]);
   });
 });
 
