@@ -142,6 +142,23 @@ describe("tenant ApiGateway", () => {
     });
   });
 
+  it("should bind PUT, DELETE, and OPTIONS on /events/{eventId}/progression-gate (#2283)", () => {
+    // Lambda 内に route だけ追加すると API Gateway が CORS header 無しの 403 を返し、
+    // admin console では保存時に `Failed to fetch` としか見えないため CDK 配線まで pin する。
+    const progressionGateResourceId = Object.entries(
+      tpl.findResources("AWS::ApiGateway::Resource", {
+        Properties: { PathPart: "progression-gate" },
+      }),
+    )[0]?.[0];
+    expect(progressionGateResourceId).toBeDefined();
+    for (const method of ["PUT", "DELETE", "OPTIONS"]) {
+      tpl.hasResourceProperties("AWS::ApiGateway::Method", {
+        HttpMethod: method,
+        ResourceId: { Ref: progressionGateResourceId },
+      });
+    }
+  });
+
   it("should wire /events/{eventId}/disruptions/recurring (GET) + .../{requestId}/cancel (POST)", () => {
     // backend に Hono route + frontend RecurringPanel を merge しても、 この APIGW route を
     // 追加し忘れると gateway が CORS 無しで 404/403 を返し frontend は「Failed to fetch」になる

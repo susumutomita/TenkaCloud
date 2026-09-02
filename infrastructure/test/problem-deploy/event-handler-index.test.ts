@@ -50,6 +50,19 @@ afterEach(() => {
 });
 
 describe("event-handler app wiring", () => {
+  it("should allow PUT in CORS preflight for Progression Gate writes", async () => {
+    const res = await app.request(`/events/${EVENT_ID}/progression-gate`, {
+      method: "OPTIONS",
+      headers: {
+        origin: "https://admin.example.com",
+        "access-control-request-method": "PUT",
+        "access-control-request-headers": "authorization,content-type",
+      },
+    });
+    expect(res.status).toBe(StatusCodes.NO_CONTENT);
+    expect(res.headers.get("access-control-allow-methods")).toContain("PUT");
+  });
+
   it("should serve /events/healthz, skipping the role middleware", async () => {
     process.env.DEFAULT_USER_ROLE = "TenantUser"; // would 403 if the middleware did not skip
     const res = await app.request("/events/healthz");
