@@ -80,7 +80,7 @@ describe("LibsqlExecutor", () => {
     expect(batch).toHaveBeenCalledTimes(1);
     const [statements, mode] = batch.mock.calls[0] ?? [];
     expect(mode).toBe("write");
-    expect(statements).toHaveLength(36);
+    expect(statements).toHaveLength(37);
     expect(statements.map((entry: { sql: string }) => entry.sql)).toEqual(
       expect.arrayContaining([
         expect.stringContaining("CREATE TABLE IF NOT EXISTS events"),
@@ -95,6 +95,10 @@ describe("LibsqlExecutor", () => {
         // query cannot select it, and so the bootstrap stays a plain
         // idempotent CREATE rather than an ALTER that fails on rerun.
         expect.stringContaining("CREATE TABLE IF NOT EXISTS coordination_match_secret"),
+        // [Issue #3153] The run pointer sits one level above the runs it names:
+        // keyed by (tenant, event, problem) with no run column, because it is
+        // what says which run is current.
+        expect.stringContaining("CREATE TABLE IF NOT EXISTS coordination_run"),
         // [Issue #3123] The coordination table is now keyed by
         // tenant x event x problem x run. The legacy table is still created and
         // copied from in the same batch, so the migration is idempotent on

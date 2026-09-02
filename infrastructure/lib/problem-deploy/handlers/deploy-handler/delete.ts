@@ -1,8 +1,11 @@
 import type {
+  DeploymentsCoordinationPort,
   DeploymentsLifecyclePort,
   DeploymentsQueryPort,
 } from "../../control-data/deployments-repository.js";
 import { resolveVerifiedCompetitorAccount } from "../shared/competitor-account-lookup.js";
+import { resolveCoordinationArtifactStore } from "../shared/coordination-artifact-store.js";
+import { cleanupCoordinationStateIfLastDeployment } from "../shared/coordination-cleanup.js";
 import { deploymentTerminalExpiresAt } from "../shared/deployment-retention.js";
 import {
   type DeployDeleteRequestedDetail,
@@ -79,7 +82,14 @@ export async function requestTeardown(
   }
 
   const updatedAt = new Date(nowMs).toISOString();
-  const transition = await transitionTeardownToDeleting(shared, tenantId, jobId, updatedAt, nowMs);
+  const transition = await transitionTeardownToDeleting(
+    shared,
+    tenantId,
+    jobId,
+    updatedAt,
+    nowMs,
+    item,
+  );
   if (transition) return transition;
 
   // Phase 2.2 (Issue #459): delete も cross-account 化。verified=true 行が見つかった
@@ -127,7 +137,14 @@ async function teardownViaAdapter(
   nowMs: number,
 ): Promise<TeardownOutcome> {
   const updatedAt = new Date(nowMs).toISOString();
-  const transition = await transitionTeardownToDeleting(shared, tenantId, jobId, updatedAt, nowMs);
+  const transition = await transitionTeardownToDeleting(
+    shared,
+    tenantId,
+    jobId,
+    updatedAt,
+    nowMs,
+    item,
+  );
   if (transition) return transition;
 
   const teamSlug = slugify(String(item.teamName ?? ""));
@@ -179,6 +196,8 @@ async function transitionTeardownToDeleting(
   jobId: string,
   updatedAt: string,
   nowMs: number,
+  /** [Issue #3149] The row being torn down, for the coordination cleanup below. */
+  item: Partial<DeploymentItem>,
 ): Promise<Extract<TeardownOutcome, { kind: "race" }> | undefined> {
   // Issue #1200: DELETING に遷移したタイミングで expiresAt を 7 日 retention に refresh する
   // (= teardown が成功して DELETED に最終遷移するまでに competition session TTL (8h) が
@@ -197,7 +216,65 @@ async function transitionTeardownToDeleting(
   if (outcome.outcome === "conflict") {
     return { kind: "race", reason: "tenant_or_status_mismatch" };
   }
+  // [Issue #3149] The row now carries `teardownRequestedAt`, so it can no longer
+  // submit coordination operations. If it was the last one that could, this
+  // problem's coordination state is garbage from here on and nothing else would
+  // ever remove it while the event keeps running.
+  //
+  // Placed inside this helper rather than at its two call sites so both the CFn
+  // path and the non-AWS adapter path are covered by construction — a third
+  // teardown path added later gets it without anyone remembering to.
+  await cleanupCoordinationStateAfterTeardown(shared, tenantId, item);
   return undefined;
+}
+
+/**
+ * [Issue #3149] Best-effort coordination cleanup after a deployment enters
+ * teardown.
+ *
+ * Best-effort in the same sense as event teardown's own cleanup
+ * (`bulk-delete.ts`): the teardown itself has already been accepted and a
+ * CloudFormation stack is about to be deleted. Failing the caller here would
+ * report that the teardown did not happen when it did, and would leave the
+ * operator unable to tell a leaked stack — real resources, real money — from a
+ * leaked state row, which is bytes and which the row's own TTL still reaps.
+ *
+ * The failure is logged rather than swallowed.
+ */
+async function cleanupCoordinationStateAfterTeardown(
+  shared: DeploySharedResources,
+  tenantId: string,
+  item: Partial<DeploymentItem>,
+): Promise<void> {
+  try {
+    const repository: DeploymentsQueryPort & DeploymentsCoordinationPort =
+      await resolveDeploymentsRepository(shared);
+    const outcome = await cleanupCoordinationStateIfLastDeployment(
+      { repository, artifacts: resolveCoordinationArtifactStore() },
+      {
+        tenantId,
+        eventId: item.eventId,
+        problemId: item.problemId,
+        // The row this teardown just marked is read back from the event listing
+        // inside the cleanup, so its own status is not passed here — passing the
+        // pre-teardown snapshot would count a row that can no longer act.
+      },
+    );
+    if (outcome.kind === "deleted") {
+      logDeployTrace("deploy.delete.coordination.cleaned", {
+        tenantId,
+        eventId: item.eventId,
+        problemIds: item.problemId,
+      });
+    }
+  } catch (err) {
+    logDeployTrace("deploy.delete.coordination.cleanup-failed", {
+      tenantId,
+      eventId: item.eventId,
+      problemIds: item.problemId,
+      reason: err instanceof Error ? err.message : String(err),
+    });
+  }
 }
 
 async function publishTeardown(

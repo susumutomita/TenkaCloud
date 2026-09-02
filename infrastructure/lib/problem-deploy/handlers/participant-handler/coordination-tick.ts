@@ -1,5 +1,6 @@
 import { runTick } from "@tenkacloud/coordination-plugin-sdk";
 import { z } from "zod";
+import { resolveCurrentCoordinationRunId } from "../shared/coordination-run.js";
 import {
   COORDINATION_TICK_ACTION,
   type CoordinationTickBatch,
@@ -11,13 +12,13 @@ import { pluginStateSchemaVersion, reconcileStateSchema } from "./coordination-s
 import {
   type CoordinationStateScope,
   type CoordinationStoreDeps,
-  DEFAULT_COORDINATION_RUN_ID,
   ensureCoordinationMatchSecret,
   readCoordinationState,
   shouldRefreshCoordinationTtl,
   touchCoordinationState,
   writeCoordinationState,
 } from "./coordination-store.js";
+import { resolveDeploymentsRepository } from "./shared.js";
 
 /**
  * scoring-driven tick Issue #2324: time-driven coordination 遷移 (capture-window クローズ /
@@ -115,12 +116,22 @@ async function tickCoordinationEvent(
   }
   // [Issue #3123] tick も op 経路と同じ namespace を使う。 `moduleRef` は importer の key で
   // あると同時に problemId そのもの (= `coordination/<problemId>.mjs` を引く値、
-  // `makeCoordinationScopeResolver` 参照)。 run は platform 既定の 1 run/(event, problem)。
-  const scope: CoordinationStateScope = {
+  // `makeCoordinationScopeResolver` 参照)。
+  //
+  // [Issue #3153] run も op 経路とまったく同じ解決を通す。 片方が定数のままだと、 reset 後に
+  // tick が引退した run を進め続け、 参加者が遊んでいる run は誰も tick しない --
+  // 「どの試合を動かしているか」で platform の 2 つの半分が食い違う。
+  const runKey = {
     tenantId: target.tenantId,
     eventId: target.eventId,
     problemId: target.moduleRef,
-    runId: DEFAULT_COORDINATION_RUN_ID,
+  };
+  const scope: CoordinationStateScope = {
+    ...runKey,
+    runId: await resolveCurrentCoordinationRunId(
+      await resolveDeploymentsRepository(deps.store),
+      runKey,
+    ),
   };
   const existing = await readCoordinationState(deps.store, scope);
   if (load.kind === "invalid_schema") {
@@ -188,6 +199,24 @@ async function tickCoordinationEvent(
     // 並行 op が version race に勝った (= applyOp が先に書いた)。 lost-update を作らず次 tick で
     // 最新 state を再読込して再評価する (= op 経路と同じ optimistic-lock 契約)。
     console.warn(`[coordination-dispatcher] tick write conflict event=${target.eventId}`);
+    return false;
+  }
+  if (written.kind === "too_large") {
+    // [Issue #3151] The tick is where an over-budget match was always going to
+    // be discovered first: it runs every minute whether or not participants are
+    // acting. There is nothing to retry -- the state does not shrink by being
+    // written again -- so the tick reports it and moves on to the other
+    // namespaces in this batch. The store has already emitted the operator
+    // warning; taking down the whole scoring pass for one full match would turn
+    // one stopped game into an outage for every other event.
+    console.warn(
+      `[coordination-dispatcher] tick write refused (state over budget) event=${target.eventId} ` +
+        `problem=${target.moduleRef} bytes=${written.bytes ?? "unmeasurable"} ` +
+        `max=${written.budget.maxBytes} backend=${written.budget.backend}`,
+    );
+    // TTL は延ばす。 書けないことと「試合が終わった」ことは別で、 ここで retention の時計を
+    // 進ませると、 運営が対処する前に行そのものが消える。
+    await refreshCoordinationTtl(deps, target, scope, existing, nowIso);
     return false;
   }
   return true;

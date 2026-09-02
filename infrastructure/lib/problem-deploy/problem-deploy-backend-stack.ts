@@ -2,6 +2,7 @@ import * as cdk from "aws-cdk-lib";
 import { CfnOutput } from "aws-cdk-lib";
 import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import { EventBus } from "aws-cdk-lib/aws-events";
+import { PolicyStatement } from "aws-cdk-lib/aws-iam";
 import type { IFunction } from "aws-cdk-lib/aws-lambda";
 import type { Construct } from "constructs";
 import type { PackAsset } from "../app-config/types.js";
@@ -11,6 +12,10 @@ import { buildDeployPipeline } from "./build-deploy-pipeline.js";
 import { buildParticipantPortalSubsystem } from "./build-participant-portal-subsystem.js";
 import { buildScoringSubsystem } from "./build-scoring-subsystem.js";
 import { CompetitorBootstrapHosting } from "./competitor-bootstrap-hosting.js";
+import {
+  COORDINATION_BUDGET_EXCEEDED_EVENT,
+  COORDINATION_BUDGET_WARNING_EVENT,
+} from "./handlers/participant-handler/coordination-store.js";
 import type { OpsMonitoringConfig } from "./ops-monitoring.js";
 import type { ParticipantPortalRuntimeConfig } from "./participant-portal-hosting.js";
 
@@ -499,6 +504,42 @@ export class ProblemDeployBackendStack extends cdk.Stack {
         "COORDINATION_DISPATCHER_FUNCTION_NAME",
         dispatcher.functionName,
       );
+
+      // [Issue #3152] teardown / reset / last-deployment cleanup が torn-down scope の
+      // artifact prefix を空にするための grant。 Event API (event teardown と run reset) と
+      // Deploy API (単一 deployment teardown 後の cleanup) の 2 つが削除側で、 dispatcher は
+      // 自分が書いた 1 件を取り消すだけ (= 削除の責務は teardown を所有する経路に置く)。
+      const artifactBucket = portalSubsystem.coordinationArtifactBucket;
+      if (artifactBucket) {
+        for (const fn of [apiLambdas.eventApiFn, apiLambdas.deployApiFn]) {
+          fn.addToRolePolicy(
+            new PolicyStatement({
+              actions: ["s3:PutObject", "s3:DeleteObject"],
+              resources: [artifactBucket.arnForObjects("coordination/*")],
+            }),
+          );
+          // ListBucket は object ARN では表現できず bucket ARN + prefix 条件で絞る。
+          // prefix を落とすと bucket 全体の列挙になるので、 条件は必須。
+          fn.addToRolePolicy(
+            new PolicyStatement({
+              actions: ["s3:ListBucket"],
+              resources: [artifactBucket.bucketArn],
+              conditions: { StringLike: { "s3:prefix": ["coordination/*"] } },
+            }),
+          );
+          fn.addEnvironment("COORDINATION_ARTIFACT_BUCKET", artifactBucket.bucketName);
+        }
+      }
+
+      // [Issue #3151] coordination state のサイズ予算警告を運営へ届ける経路。 書き込みは
+      // この dispatcher Lambda だけが行うので、 その log group 1 つを見れば足りる。
+      // 配線がここにあるのは、 OpsMonitoring を作る scoring subsystem の時点では
+      // dispatcher がまだ存在しないため (= 上の grantInvoke と同じ理由・同じ場所)。
+      scoring.opsMonitoring?.watchCoordinationStateBudget({
+        coordinationDispatcher: dispatcher,
+        warningEvent: COORDINATION_BUDGET_WARNING_EVENT,
+        exceededEvent: COORDINATION_BUDGET_EXCEEDED_EVENT,
+      });
     }
 
     new CfnOutput(this, "DeployCreateStateMachineArn", {

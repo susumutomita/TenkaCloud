@@ -14,6 +14,12 @@ export interface RuntimeEnvironment {
   readonly CONTROL_DATA_BACKEND?: string;
   readonly TURSO_DATABASE_URL?: string;
   readonly TURSO_AUTH_TOKEN_PARAMETER_NAME?: string;
+  /**
+   * [Issue #3151] Overrides the coordination state ceiling on the SQL backends
+   * only — see `domain/coordination-budget.ts`. The DynamoDB ceiling is derived
+   * from that service's 400 KB item limit and is deliberately not overridable.
+   */
+  readonly COORDINATION_STATE_MAX_BYTES?: string;
 }
 
 export type SelectedBackend = { readonly kind: "dynamodb" } | { readonly kind: "pure" };

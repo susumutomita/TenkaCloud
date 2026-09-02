@@ -1,10 +1,17 @@
+import { S3Client } from "@aws-sdk/client-s3";
 import { type Context, Hono } from "hono";
 import type { LambdaContext, LambdaEvent } from "hono/aws-lambda";
 import { handle } from "hono/aws-lambda";
 import { StatusCodes } from "http-status-codes";
+import {
+  type CoordinationArtifactStore,
+  UnconfiguredCoordinationArtifactStore,
+} from "../../control-data/coordination-artifact-store.js";
 import { createDefaultControlDataRuntime } from "../../control-data/runtime-repositories.js";
+import { S3CoordinationArtifactStore } from "../../control-data/s3-coordination-artifact-store.js";
 import {
   type CoordinationHandlerDeps,
+  handleCoordinationArtifactFetch,
   handleCoordinationOp,
   handleCoordinationProjection,
   makeCoordinationScopeResolver,
@@ -48,6 +55,20 @@ const coordinationImporter: PluginImporter = pluginBucket
 
 const coordinationConfig = parseCoordinationConfig(process.env.PROBLEM_COORDINATION);
 
+/**
+ * [Issue #3152] Where immutable submission bodies live.
+ *
+ * A deployment with no bucket gets the unconfigured store, which REFUSES an
+ * operation carrying a body rather than accepting it and dropping the bytes.
+ * Silently discarding would leave the plugin's state referencing artifacts that
+ * were never stored, and the failure would surface much later as a participant
+ * fetching a proof that does not exist.
+ */
+const artifactBucket = process.env.COORDINATION_ARTIFACT_BUCKET ?? "";
+const coordinationArtifacts: CoordinationArtifactStore = artifactBucket
+  ? new S3CoordinationArtifactStore({ s3: new S3Client({}), bucket: artifactBucket })
+  : new UnconfiguredCoordinationArtifactStore();
+
 const coordinationDeps: CoordinationHandlerDeps = {
   importer: coordinationImporter,
   store: { runtime: shared.runtime, ddb: shared.ddb, tableName: shared.tableName },
@@ -57,6 +78,7 @@ const coordinationDeps: CoordinationHandlerDeps = {
   // hour into a match. The dispatcher already has write access to this table,
   // so it copies the plugin's scores across without new IAM or a new path.
   publishScores: makeCoordinationScorePublisher(shared),
+  artifacts: coordinationArtifacts,
 };
 
 /**
@@ -101,6 +123,23 @@ function respondCoordination(
         { error: "state_schema_mismatch", reason: outcome.reason },
         StatusCodes.SERVICE_UNAVAILABLE,
       );
+    // [Issue #3151] 507: 参加者の要求そのものは正しく、 受け入れられない理由は保存先に
+    // 空きが無いことにある。 413 (Payload Too Large) は「送ってきた request が大きい」の
+    // 意味なので当たらない -- 大きいのは request ではなく、 その op を適用した後の試合の
+    // state で、 これは参加者が小さくできるものではない。
+    //
+    // 数値は返す。 運営が「どこまで来ているか」を participant 側の報告からも掴めるように
+    // する必要があるし、 予算そのものは秘密ではない (試合の中身は載せない)。
+    case "too_large":
+      return c.json(
+        {
+          error: "state_over_budget",
+          bytes: outcome.bytes,
+          maxBytes: outcome.budget.maxBytes,
+          backend: outcome.budget.backend,
+        },
+        StatusCodes.INSUFFICIENT_STORAGE,
+      );
     default:
       return c.json({ error: "not_configured" }, StatusCodes.NOT_FOUND);
   }
@@ -128,6 +167,7 @@ app.post("/portal/me/coordination/op", (c) =>
         parsed.data.op,
         new Date().toISOString(),
         parsed.data.problemId,
+        parsed.data.artifacts,
       );
       return respondCoordination(c, outcome);
     },
@@ -149,6 +189,54 @@ app.get("/portal/me/coordination/projection", (c) =>
           c.req.query("problemId") || undefined,
         ),
       ),
+    RATE_LIMITS.READ_HIGH,
+  ),
+);
+
+/**
+ * [Issue #3152] Fetches one immutable artifact body.
+ *
+ * Separate from the projection on purpose. The projection is polled constantly
+ * and carries references only, which is what keeps a poll from turning into N
+ * object reads; the body is fetched at the moment a participant acts on it —
+ * `ac26-crypto-battle`'s HUNT reads the shares it is actually hunting.
+ *
+ * Authorized by that same projection: if the reference is on your board you may
+ * read what it points at, and if it is not, the artifact does not exist as far
+ * as you are concerned. That is why a missing artifact and an unauthorized one
+ * are the same 404 — distinguishing them would let a participant probe which
+ * ids exist in a match they cannot see.
+ */
+app.get("/portal/me/coordination/artifact/:artifactId", (c) =>
+  withBearerAuth(
+    c,
+    "coordination-artifact",
+    async (token) => {
+      const artifactId = c.req.param("artifactId");
+      if (!artifactId) return c.json({ error: "artifact_id_required" }, StatusCodes.BAD_REQUEST);
+      const outcome = await handleCoordinationArtifactFetch(
+        coordinationDeps,
+        token,
+        artifactId,
+        c.req.query("problemId") || undefined,
+      );
+      if (outcome.kind === "ok") {
+        // Returned as bytes rather than as JSON: these are proofs, ciphertexts
+        // and transcripts, and re-encoding them would inflate every fetch by a
+        // third for no one's benefit.
+        return c.body(outcome.artifact.content as unknown as ArrayBuffer, StatusCodes.OK, {
+          "content-type": outcome.artifact.ref.contentType,
+          "content-length": String(outcome.artifact.ref.bytes),
+          // Lets a participant verify they received the bytes the match
+          // recorded, without a second request.
+          "x-tenkacloud-artifact-digest": outcome.artifact.ref.digest,
+        });
+      }
+      if (outcome.kind === "not_found") {
+        return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
+      }
+      return respondCoordination(c, outcome);
+    },
     RATE_LIMITS.READ_HIGH,
   ),
 );

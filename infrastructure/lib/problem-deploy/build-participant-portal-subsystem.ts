@@ -2,9 +2,11 @@ import { CfnOutput } from "aws-cdk-lib";
 import type { IProject } from "aws-cdk-lib/aws-codebuild";
 import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import type { IFunction } from "aws-cdk-lib/aws-lambda";
+import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import type { ILogGroup } from "aws-cdk-lib/aws-logs";
 import type { IBucket } from "aws-cdk-lib/aws-s3";
 import type { Construct } from "constructs";
+import { CoordinationArtifactBucket } from "./coordination-artifact-bucket.js";
 import { CoordinationDispatcherLambda } from "./coordination-dispatcher-lambda.js";
 import { CoordinationPluginBundle } from "./coordination-plugin-bundle.js";
 import {
@@ -69,14 +71,26 @@ export interface BuildParticipantPortalSubsystemArgs {
 }
 
 export interface ParticipantPortalSubsystemOutputs {
+  /**
+   * [Issue #3152] The artifact bucket, when one was created.
+   *
+   * Returned so the event and deploy API Lambdas — which own teardown and must
+   * remove a torn-down scope's objects — can be granted access to it. They are
+   * built before this subsystem, so the grant is wired by the caller.
+   */
+  readonly coordinationArtifactBucket?: IBucket;
   readonly participantPortalLambda: IFunction;
   readonly participantPortalUrl: string;
   /**
    * [#2324] scoring-driven coordination tick の実行先。 採点 Lambda が per-minute pass で
    * tick 対象を集めて本 Lambda を async Invoke し、 plugin の runTick を最小 IAM の dispatcher 内で走らせる
    * (資格情報分離)。 caller が `grantInvoke` + function name env を配線するため公開する。
+   *
+   * [Issue #3151] 具体型 (`NodejsFunction`) で返す。 caller は grantInvoke と function name に
+   * 加えて **log group** を要る -- coordination state のサイズ予算警告を metric filter で
+   * 拾うのがこの Lambda の log だけであり、 `IFunction` はそれを公開しない。
    */
-  readonly coordinationDispatcherLambda: IFunction;
+  readonly coordinationDispatcherLambda: NodejsFunction;
 }
 
 /**
@@ -122,6 +136,12 @@ export function buildParticipantPortalSubsystem(
   });
 
   const coordinationBucket = coordinationPluginBucket(scope, args.problemsCoordinationBundles);
+  // [Issue #3152] Created alongside the plugin bucket and on the same condition:
+  // an event with no coordination problem has nothing to submit, and a bucket
+  // nothing writes to is standing cost for no behaviour.
+  const artifactBucket = coordinationBucket
+    ? new CoordinationArtifactBucket(scope, "CoordinationArtifacts").bucket
+    : undefined;
   const coordinationDispatcher = new CoordinationDispatcherLambda(scope, "CoordinationDispatcher", {
     deploymentsTable: args.deploymentsTable,
     eventsTable: args.eventsTable,
@@ -130,6 +150,7 @@ export function buildParticipantPortalSubsystem(
     problemsCoordination: args.problemsCoordination,
     // plugin.mjs を materialize する bucket (宣言問題がある時のみ)。
     ...(coordinationBucket ? { pluginBucket: coordinationBucket } : {}),
+    ...(artifactBucket ? { artifactBucket } : {}),
     // data layer: 純 SQL profile では table が無いので、seam が SQL executor を組み立てるための
     // backend 三点を渡す。 dynamodb default では env も IAM も増えない。
     ...(args.controlDataBackend ? { controlDataBackend: args.controlDataBackend } : {}),
@@ -166,6 +187,7 @@ export function buildParticipantPortalSubsystem(
     participantPortalUrl: portal.distributionUrl,
     // [#2324] 採点 Lambda が tick batch を async Invoke する先 (caller が grantInvoke + env)。
     coordinationDispatcherLambda: coordinationDispatcher.fn,
+    ...(artifactBucket ? { coordinationArtifactBucket: artifactBucket } : {}),
   };
 }
 

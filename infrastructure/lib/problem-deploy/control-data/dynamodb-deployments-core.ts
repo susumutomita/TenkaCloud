@@ -111,6 +111,32 @@ export function coordinationPk(scope: CoordinationStateScope): string {
 }
 
 /**
+ * [Issue #3153] Partition key for a `(tenant, event, problem)` run pointer.
+ *
+ * A DIFFERENT prefix from {@link coordinationPk}, not a fifth segment under it.
+ * The pointer is one level above the runs it names — deleting a run's state must
+ * never be able to address the pointer, and `deleteCoordinationState` works by
+ * partition key. Sharing a prefix would put the two one typo apart.
+ */
+export function coordinationRunPk(key: {
+  readonly tenantId: string;
+  readonly eventId: string;
+  readonly problemId: string;
+}): string {
+  return [
+    COORD_RUN_PK_PREFIX + assertKeyComponent(key.tenantId, "tenantId"),
+    assertKeyComponent(key.eventId, "eventId"),
+    assertKeyComponent(key.problemId, "problemId"),
+  ].join(KEY_DELIMITER);
+}
+
+/** COORDRUN# partition key prefix. See {@link coordinationRunPk}. */
+export const COORD_RUN_PK_PREFIX = "COORDRUN#" as const;
+
+/** Sort key of the run pointer row. */
+export const COORD_RUN_SK = "CURRENT" as const;
+
+/**
  * The pre-#3123 two-part key for the same `(tenant, event)`.
  *
  * Only `deleteCoordinationState` uses it, so a torn-down event takes its

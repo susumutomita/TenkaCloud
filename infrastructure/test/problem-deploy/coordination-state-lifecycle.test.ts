@@ -303,7 +303,7 @@ describe("event teardown cleans up coordination state (#3123)", () => {
    * away would wipe a match the others are still playing. Event teardown is the
    * first boundary at which no team is left, so it owns the cleanup.
    */
-  it("should delete one namespace per distinct problem in the event", async () => {
+  it("should delete every run of each distinct problem in the event", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Item: { eventId: "EV1", tenantId: "tenant-acme" } });
     ddbSend.mockResolvedValueOnce({
@@ -330,6 +330,11 @@ describe("event teardown cleans up coordination state (#3123)", () => {
         // The pre-scope row for this event goes too — it predates `expiresAt`,
         // so nothing else would ever reap it.
         "COORD#tenant-acme#EV1",
+        // [Issue #3153] The run pointer goes with the problem it names. Leaving
+        // it would make a re-deployed problem resume the retired run id, and
+        // with it that run's tombstoned artifact prefix.
+        "COORDRUN#tenant-acme#EV1#problem-a",
+        "COORDRUN#tenant-acme#EV1#problem-b",
       ]),
     );
   });

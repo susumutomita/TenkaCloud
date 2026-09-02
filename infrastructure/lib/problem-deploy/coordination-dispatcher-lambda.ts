@@ -49,6 +49,20 @@ export interface CoordinationDispatcherLambdaProps {
    */
   readonly pluginBucket?: IBucket;
   /**
+   * [Issue #3152] Bucket holding immutable submission artifacts (proofs,
+   * ciphertexts, transcripts). The dispatcher reads and writes ONLY under
+   * `coordination/`, and only its own withdrawals delete.
+   *
+   * A separate bucket from {@link pluginBucket} on purpose: this process
+   * dynamically imports the plugin bundle as code, and giving it write access to
+   * the bucket it imports code from would let a plugin bug reach every future
+   * match rather than just its own.
+   *
+   * Absent when the deployment has no artifact bucket — the handler then refuses
+   * an operation carrying a body rather than accepting and discarding it.
+   */
+  readonly artifactBucket?: IBucket;
+  /**
    * [Issue 486] control-plane data backend. `deploymentsTable` の docstring が言うとおり、純 SQL
    * (`turso`) では table を synth せず repository seam が SQL executor 直結で処理する設計だが、その
    * executor は `CONTROL_DATA_BACKEND` / `TURSO_*` env が無いと組み立てられない。これらを渡さないまま
@@ -143,6 +157,11 @@ export class CoordinationDispatcherLambda extends Construct {
         ...(props.pluginBucket
           ? { COORDINATION_PLUGIN_BUCKET: props.pluginBucket.bucketName }
           : {}),
+        // [Issue #3152] 未指定なら handler は artifact を伴う op を loud に拒否する
+        // (= 保存できない body を受理して黙って捨てない)。
+        ...(props.artifactBucket
+          ? { COORDINATION_ARTIFACT_BUCKET: props.artifactBucket.bucketName }
+          : {}),
         // 純 SQL backend で repository seam が SQL executor を組み立てるために要る三点。
         // default (`dynamodb`) では helper が空を返すので byte 互換。
         ...controlDataRuntimeEnv(props),
@@ -160,6 +179,21 @@ export class CoordinationDispatcherLambda extends Construct {
     // レビュー済み plugin bundle を読むための bucket access。同一 process で実行する plugin は
     // Lambda role を共有し、DynamoDB backend では table-wide Query / GetItem / PutItem も実行できる。
     props.pluginBucket?.grantRead(this.fn);
+
+    // [Issue #3152] Read/write, scoped to the coordination prefix rather than the
+    // whole bucket. Delete is included because this Lambda withdraws its OWN
+    // writes: a body whose operation was then rejected is referenced by nothing
+    // and would otherwise sit until the bucket's expiry. Removing a whole
+    // scope's worth is not this Lambda's job — that belongs to the event and
+    // deploy handlers, which own teardown.
+    if (props.artifactBucket) {
+      role.addToPolicy(
+        new PolicyStatement({
+          actions: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+          resources: [props.artifactBucket.arnForObjects("coordination/*")],
+        }),
+      );
+    }
 
     // Turso auth token を読むための SSM SecureString read。 未配線 (= dynamodb default) では
     // 何も付与しないので、最小 IAM は DynamoDB profile では従来どおり。

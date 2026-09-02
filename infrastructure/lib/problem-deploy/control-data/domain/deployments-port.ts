@@ -9,6 +9,7 @@
  * lands.
  */
 
+import type { CoordinationRunKey, CoordinationRunPointer } from "./coordination-run.js";
 import type { CoordinationStateScope } from "./coordination-scope.js";
 import type {
   BulkDeploymentCreateEntry,
@@ -632,6 +633,41 @@ export interface DeploymentsCoordinationPort {
   deleteCoordinationState(scope: CoordinationStateScope): Promise<void>;
 
   /**
+   * [Issue #3149] Deletes one scope's coordination state only if it is still at
+   * `expectedVersion`, folding a lost race into `{ outcome: "conflict" }`.
+   *
+   * ## Why cleanup needs a conditional delete at all
+   *
+   * The caller that wants this is deciding "is this problem's last deployment
+   * gone", and that decision is a read. Read-then-delete races: between the
+   * count and the delete, a new deployment can arrive and its first operation
+   * can write state — and the unconditional {@link deleteCoordinationState}
+   * would then remove a match that is being played, reporting success.
+   *
+   * Conditioning the delete on the version the caller read closes it, because
+   * the only way a live match reaches this window is by writing, and writing is
+   * exactly what moves the version. A new deployment that has NOT written
+   * anything yet is not a match in progress: it re-materializes from
+   * `plugin.initialState` on its first operation, which is what it would have
+   * done had it arrived a moment later.
+   *
+   * ## What `expectedVersion` 0 means here, and why it is refused
+   *
+   * A version of 0 is "no row", and this method requires a row to condition on.
+   * The backends therefore treat it as a programming error rather than
+   * silently deleting unconditionally — which would reintroduce the race in the
+   * one case the caller is least able to reason about.
+   *
+   * Never `not_found`: a row that vanished between the read and this call is
+   * reported as `conflict`, because from the caller's point of view both mean
+   * "the state you were about to remove is not the state that is there now".
+   */
+  deleteCoordinationStateIfUnchanged(
+    scope: CoordinationStateScope,
+    expectedVersion: number,
+  ): Promise<DeploymentMutationOutcome>;
+
+  /**
    * [Issue #3133] Returns this match's server-only secret, minting `candidate`
    * on the first call for the scope and returning the already-stored value on
    * every call after that.
@@ -670,6 +706,52 @@ export interface DeploymentsCoordinationPort {
    * start.
    */
   readCoordinationMatchSecret(scope: CoordinationStateScope): Promise<string | undefined>;
+
+  /**
+   * [Issue #3153] The run pointer for one `(tenant, event, problem)`, or
+   * `undefined` when none has been written.
+   *
+   * `undefined` is not an error and not "no match": it means this problem has
+   * never been reset, so it is still on its first run. The caller resolves that
+   * to {@link DEFAULT_COORDINATION_RUN_ID} — see `domain/coordination-run.ts`
+   * for why the first run keeps the old constant instead of being minted.
+   */
+  readCoordinationRun(key: CoordinationRunKey): Promise<CoordinationRunPointer | undefined>;
+
+  /**
+   * [Issue #3153] Replaces the pointer, but only while it still names
+   * `expectedRunId`.
+   *
+   * Conditional for the same reason every other write in this port is: two
+   * operators resetting the same match at once must not both mint a run. The
+   * loser gets `conflict` and can re-read to see which run actually started,
+   * instead of both of them believing they own the current match while state
+   * accumulates under two ids.
+   *
+   * `expectedRunId` may be {@link DEFAULT_COORDINATION_RUN_ID} with no row
+   * present, which is how the first rotation of a pre-existing match works: the
+   * backends treat "no row" and "row naming the default" as the same starting
+   * point, because they mean the same thing.
+   *
+   * Never `not_found` — an absent row is a valid target for the first
+   * rotation.
+   */
+  rotateCoordinationRun(
+    key: CoordinationRunKey,
+    expectedRunId: string,
+    pointer: CoordinationRunPointer,
+    expiresAt: number,
+  ): Promise<DeploymentMutationOutcome>;
+
+  /**
+   * [Issue #3153] Removes the run pointer for a `(tenant, event, problem)`.
+   *
+   * Called when the problem itself goes — event teardown, or the last
+   * deployment being torn down. Leaving it would make a re-deployed problem
+   * resume the retired match's run id, and with it that run's tombstoned
+   * artifact prefix.
+   */
+  deleteCoordinationRun(key: CoordinationRunKey): Promise<void>;
 
   /**
    * [Issue #3123] Deletes every coordination row whose TTL has passed

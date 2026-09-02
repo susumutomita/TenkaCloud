@@ -1,6 +1,7 @@
 import * as cdk from "aws-cdk-lib";
 import type { IEventBus } from "aws-cdk-lib/aws-events";
 import type { IFunction } from "aws-cdk-lib/aws-lambda";
+import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { BlockPublicAccess, Bucket, BucketEncryption } from "aws-cdk-lib/aws-s3";
 import type { Construct } from "constructs";
 import type { ControlDataTablesOutputs } from "./build-control-data-tables.js";
@@ -56,8 +57,14 @@ export interface BuildApiLambdasArgs {
 }
 
 export interface ApiLambdasOutputs {
-  readonly deployApiFn: IFunction;
-  readonly eventApiFn: IFunction;
+  /**
+   * [Issue #3152] Concrete rather than `IFunction`: the caller adds the
+   * coordination artifact bucket's name to these two Lambdas' environments once
+   * the participant-portal subsystem has created it, and `IFunction` exposes no
+   * way to add an environment variable.
+   */
+  readonly deployApiFn: NodejsFunction;
+  readonly eventApiFn: NodejsFunction;
   readonly competitorAccountsApiFn: IFunction;
   readonly externalIdAuditFn: IFunction;
   /**

@@ -585,6 +585,137 @@ describe.each(backends)("DeploymentsRepository parity: %s", (_label, makeBackend
   });
 
   /**
+   * [Issue #3153] The run pointer, which both backends have to agree about.
+   *
+   * It is what names the match participants are playing. A backend that
+   * disagreed here would not be returning stale data — it would be pointing
+   * half the platform at a different match from the other half.
+   */
+  it("should mean the same thing by an absent, a rotated, and a raced run pointer", async () => {
+    const { repo } = makeBackend();
+    const key = { tenantId: "tenant-a", eventId: "ev-run", problemId: "battle" };
+
+    // Absent means "never reset", which the caller resolves to the initial run.
+    expect(await repo.readCoordinationRun(key)).toBeUndefined();
+
+    // The first rotation must work with no row present: "no pointer" and "a
+    // pointer naming the default" are the same starting point.
+    await expectOutcome(
+      repo.rotateCoordinationRun(key, "default", { runId: "r1", startedAt: AT, history: [] }, 0),
+      "updated",
+    );
+    expect(await repo.readCoordinationRun(key)).toEqual({
+      runId: "r1",
+      startedAt: AT,
+      history: [],
+    });
+
+    // A second rotation from the same stale expectation must lose, or two
+    // operators would both believe they own the current match.
+    await expectOutcome(
+      repo.rotateCoordinationRun(key, "default", { runId: "r2", startedAt: AT, history: [] }, 0),
+      "conflict",
+    );
+    await expectOutcome(
+      repo.rotateCoordinationRun(key, "r1", { runId: "r2", startedAt: AT, history: ["r1"] }, 0),
+      "updated",
+    );
+    expect(await repo.readCoordinationRun(key)).toEqual({
+      runId: "r2",
+      startedAt: AT,
+      history: ["r1"],
+    });
+
+    await repo.deleteCoordinationRun(key);
+    expect(await repo.readCoordinationRun(key)).toBeUndefined();
+  });
+
+  it("should treat a pointer row that names no run as absent", async () => {
+    const { repo } = makeBackend();
+    const key = { tenantId: "tenant-a", eventId: "ev-partial", problemId: "battle" };
+    await expectOutcome(
+      repo.rotateCoordinationRun(key, "default", { runId: "r1", startedAt: AT, history: [] }, 0),
+      "updated",
+    );
+    expect((await repo.readCoordinationRun(key))?.runId).toBe("r1");
+  });
+
+  it("should keep only the string entries of a stored history", async () => {
+    const { repo } = makeBackend();
+    const key = { tenantId: "tenant-a", eventId: "ev-hist", problemId: "battle" };
+    await expectOutcome(
+      repo.rotateCoordinationRun(
+        key,
+        "default",
+        // A history written by a future version, or corrupted in place. The
+        // pointer's job is to say which run is CURRENT; refusing to answer that
+        // because a decorative list is malformed would take a live match down.
+        { runId: "r2", startedAt: AT, history: ["r1", 7 as unknown as string, "r0"] },
+        0,
+      ),
+      "updated",
+    );
+    const pointer = await repo.readCoordinationRun(key);
+    expect(pointer?.runId).toBe("r2");
+    expect(pointer?.history).toEqual(["r1", "r0"]);
+  });
+
+  it("should keep run pointers of different problems and events apart", async () => {
+    const { repo } = makeBackend();
+    const key = { tenantId: "tenant-a", eventId: "ev-1", problemId: "battle-a" };
+    await expectOutcome(
+      repo.rotateCoordinationRun(key, "default", { runId: "r1", startedAt: AT, history: [] }, 0),
+      "updated",
+    );
+
+    // The pointer is keyed one level above the runs it names; a neighbouring
+    // problem or event must be untouched by it.
+    expect(await repo.readCoordinationRun({ ...key, problemId: "battle-b" })).toBeUndefined();
+    expect(await repo.readCoordinationRun({ ...key, eventId: "ev-2" })).toBeUndefined();
+    expect(await repo.readCoordinationRun({ ...key, tenantId: "tenant-b" })).toBeUndefined();
+  });
+
+  /**
+   * [Issue #3149] The conditional delete both backends owe the cleanup path.
+   *
+   * Cleanup decides "this problem's last deployment is gone" from a read, and a
+   * read-then-delete races a new deployment that starts playing in between. The
+   * condition is what closes it, so it has to behave identically on both
+   * backends: a DynamoDB deployment that silently deleted unconditionally would
+   * end live matches that the Turso one preserved.
+   */
+  it("should delete a coordination scope only while it is still at the version that was read", async () => {
+    const { repo } = makeBackend();
+    const scope = coordScope("tenant-a", "ev-cond");
+    await expectOutcome(repo.writeCoordinationState(scope, { turn: 1 }, 0, AT, 0), "updated");
+
+    // The match moved after the caller read version 1. The row it was about to
+    // remove is not the row that is there now.
+    await expectOutcome(repo.writeCoordinationState(scope, { turn: 2 }, 1, AT, 0), "updated");
+    await expectOutcome(repo.deleteCoordinationStateIfUnchanged(scope, 1), "conflict");
+    expect(await repo.readCoordinationState(scope)).toEqual({ state: { turn: 2 }, version: 2 });
+
+    await expectOutcome(repo.deleteCoordinationStateIfUnchanged(scope, 2), "updated");
+    expect(await repo.readCoordinationState(scope)).toBeUndefined();
+
+    // Already gone reads as a conflict, not a success: both mean the same thing
+    // to the caller, and reporting success would claim a cleanup that this call
+    // did not perform.
+    await expectOutcome(repo.deleteCoordinationStateIfUnchanged(scope, 2), "conflict");
+  });
+
+  it("should refuse to build a conditional coordination delete from version 0", async () => {
+    const { repo } = makeBackend();
+    // 0 is the "no row" sentinel everywhere else in this port. A backend that
+    // accepted it would have to either refuse every call or delete
+    // unconditionally, and the second is the race the condition exists to
+    // close.
+    await expect(
+      repo.deleteCoordinationStateIfUnchanged(coordScope("tenant-a", "ev-zero"), 0),
+    ).rejects.toThrow(RangeError);
+  });
+
+  /**
    * [Issue #3128] The teardown marker both backends must stamp.
    *
    * A row that went DELETING can end up FAILED (the delete state machine's

@@ -3,11 +3,12 @@ import type {
   DeploymentsCoordinationPort,
   DeploymentsLifecyclePort,
 } from "../../control-data/deployments-repository.js";
-import { DEFAULT_COORDINATION_RUN_ID } from "../../control-data/domain/coordination-scope.js";
 import { buildAdapterDependencies } from "../deploy-handler/adapter-dependencies.js";
 import { slugify } from "../deploy-handler/naming.js";
 import type { DeploymentItem, DeploymentStatus } from "../deploy-handler/types.js";
 import { resolveVerifiedCompetitorAccount } from "../shared/competitor-account-lookup.js";
+import { resolveCoordinationArtifactStore } from "../shared/coordination-artifact-store.js";
+import { deleteAllCoordinationRuns } from "../shared/coordination-run.js";
 import {
   type DeployDeleteRequestedDetail,
   EVENT_DETAIL_TYPE_DEPLOY_DELETE_REQUESTED,
@@ -247,15 +248,26 @@ async function deleteEventCoordinationState(
   // cold start, and the DynamoDB branch reads the same two fields of the same
   // `shared` object. A branch that cannot fail is not a safety net, it is
   // unreachable code that hides which namespace actually failed.
+  const artifacts = resolveCoordinationArtifactStore();
   const settled = await Promise.allSettled(
     ordered.map(async (problemId) => {
       const repository: DeploymentsCoordinationPort = await resolveDeploymentsRepository(shared);
-      await repository.deleteCoordinationState({
-        tenantId,
-        eventId,
-        problemId,
-        runId: DEFAULT_COORDINATION_RUN_ID,
-      });
+      // [Issue #3153] Every run of the problem, not just the current one. The
+      // event is going away, so its retained history goes with it — leaving it
+      // would keep matches nothing names and nothing can reach.
+      //
+      // [Issue #3152] Each run's artifacts go with that run's state. The state
+      // is what makes them reachable, so removing it first means a failure
+      // afterwards leaves objects nothing can read, rather than a playable
+      // board pointing at nothing.
+      await deleteAllCoordinationRuns(
+        { repository, artifacts },
+        {
+          tenantId,
+          eventId,
+          problemId,
+        },
+      );
     }),
   );
   for (const [index, outcome] of settled.entries()) {
