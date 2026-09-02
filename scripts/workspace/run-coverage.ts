@@ -120,15 +120,21 @@ export const SHARDS: Readonly<Record<ShardName, readonly string[]>> = {
  * workflow's matrix legs and `codecov.yml`'s `after_n_builds` are both asserted against it in
  * scripts/workspace/run-coverage.test.ts.
  *
- * The numbers come from measured wall time per shard on a 4-core runner, targeting ~45s of test
- * work per leg (a leg also pays ~15s of checkout + Bun + install before it starts):
- *   infrastructure ~4m (538 files), application-admin-console ~3m15s, participant-portal ~1m45s,
- *   admin-console ~42s, packages ~44s.
+ * The counts are capped by runner concurrency, not by how finely the suites could be split.
+ * Measured on run 33624913783 (the first green run of this matrix): 17 jobs started at once and
+ * the 18th — `build` — sat queued for 42s waiting for `gates` to free a runner, which put it on
+ * the critical path and cost more than the extra split saved. So the whole workflow is sized to
+ * 17 concurrent jobs: 13 coverage legs plus gates / lint-ts / typecheck / build.
+ *
+ * Within that budget the legs are balanced by measured test-step time on a GitHub runner:
+ * infrastructure 32-74s per part, application-admin-console 36-65s, participant-portal 49-63s,
+ * admin-console 39s, packages 45s. Raising a count here without dropping one elsewhere puts a job
+ * back in the queue; scripts/workspace/run-coverage.test.ts pins ci.yml and codecov.yml to it.
  * A shard split across parts must hold exactly one workspace — see `parseArgs`.
  */
 export const COVERAGE_PARTS: Readonly<Record<ShardName, number>> = {
   infrastructure: 6,
-  "app-admin": 4,
+  "app-admin": 3,
   portal: 2,
   admin: 1,
   packages: 1,

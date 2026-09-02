@@ -13,11 +13,11 @@
 # split into more parts, which adds uploads without adding shards.
 codecov:
   notify:
-    after_n_builds: 14
+    after_n_builds: 13
     wait_for_ci: true
 
 comment:
-  after_n_builds: 14
+  after_n_builds: 13
 
 coverage:
   status:

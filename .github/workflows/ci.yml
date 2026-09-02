@@ -34,8 +34,14 @@ concurrency:
 # `coverage` matrix ran 6m27s, so a green run took ~6m30s. Nothing here was waiting on I/O — the
 # gates simply queued behind each other, and the `spas` shard was paced by its slowest app.
 # Every job below is now an independent leg that starts at t=0; the only thing that waits is the
-# final aggregation. Per-leg jobs pay ~15s of checkout + Bun + install, so a leg is sized at
-# roughly 45s of real work.
+# final aggregation. A leg pays ~15-25s of checkout + Bun + install before its own work starts.
+#
+# The job COUNT is a budget, not a free parameter: this account runs at most 17 Actions jobs at
+# once, and the 18th waits for a runner. Run 33624913783 proved what that costs — `build` queued
+# 42s behind the 14-leg coverage matrix and finished last, so the extra split made the run slower
+# than the work required. 13 coverage legs + gates + lint-ts + typecheck + build = 17 keeps
+# everything on a runner from t=0. `COVERAGE_PARTS` in scripts/workspace/run-coverage.ts carries
+# the same reasoning next to the numbers.
 jobs:
   # Cheap contract gates: dependency lifecycle audit, dead code, submodule pin, catalog schema,
   # prose, formatting, and the repo-root script tests. Together ~25s, so they share one leg.
@@ -183,10 +189,9 @@ jobs:
           - { shard: infrastructure, part: 6, parts: 6 }
           - { shard: portal, part: 1, parts: 2 }
           - { shard: portal, part: 2, parts: 2 }
-          - { shard: app-admin, part: 1, parts: 4 }
-          - { shard: app-admin, part: 2, parts: 4 }
-          - { shard: app-admin, part: 3, parts: 4 }
-          - { shard: app-admin, part: 4, parts: 4 }
+          - { shard: app-admin, part: 1, parts: 3 }
+          - { shard: app-admin, part: 2, parts: 3 }
+          - { shard: app-admin, part: 3, parts: 3 }
           - { shard: admin, part: 1, parts: 1 }
           - { shard: packages, part: 1, parts: 1 }
     env:
