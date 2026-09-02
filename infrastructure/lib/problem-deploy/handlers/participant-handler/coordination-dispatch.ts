@@ -44,6 +44,23 @@ export interface CoordinationDispatchInput<Op> {
   readonly nowIso: string;
 }
 
+/**
+ * [Issue #3150] load 時に検証した版宣言。 plugin から読み直さずこれを使う。
+ *
+ * Codex review: `stateSchemaVersion` が可変 state に裏打ちされた accessor だと、 検証時に 1 を
+ * 返して通り、 DDB の await を挟んだ再読で別の値を返しうる。 そうなると突き合わせや write が
+ * `invalid_schema` ではなく throw になり、 tick は外側の catch に飛んで TTL 延長を飛ばす --
+ * 進行中の行を retention で失う、 この gate が塞ごうとしている失敗そのもの。
+ *
+ * plugin を包む形 (`Object.create`) では直せない: hook の `this` が wrapper になり、
+ * `#private` を持つ class instance の plugin が壊れる。 だから包まず、 **検証した値だけを
+ * 別に持ち回る**。 `migrateState` は元の plugin に bind してあるので receiver も保たれる。
+ */
+export type CoordinationSchemaDeclaration<State = unknown> = Pick<
+  CoordinationPlugin<State, unknown>,
+  "stateSchemaVersion" | "migrateState"
+>;
+
 export type CoordinationDispatchOutcome =
   | {
       readonly kind: "ok";
@@ -99,6 +116,11 @@ export async function dispatchCoordinationOp<State, Op, Projection>(
   store: CoordinationStoreDeps,
   plugin: CoordinationPlugin<State, Op, Projection>,
   input: CoordinationDispatchInput<Op>,
+  /**
+   * [Issue #3150] load 時に検証した版宣言。 既定は plugin 自身 (= 直呼びする test と、
+   * この Issue 以前の意味論)。 本番経路は必ず loader が snapshot を渡す。
+   */
+  schema: CoordinationSchemaDeclaration<State> = plugin,
 ): Promise<CoordinationDispatchOutcome> {
   // ctx (= 初期化に使う event 文脈) が永続化 key (eventId) / 認証 team とズレていたら、
   // 別 event 用に組んだ state を保存 / 配信してしまう。 read/write 前に fail-closed で弾く。
@@ -113,7 +135,7 @@ export async function dispatchCoordinationOp<State, Op, Projection>(
   if (existing) {
     // [Issue #3150] 既存の行がある分岐の直後で突き合わせる。 mismatch はここで打ち切り —
     // initialState を呼ばず、 write もしない (= 静かに壊れる代わりに、 その op だけを安全に止める)。
-    const reconciled = reconcileStateSchema<State>(plugin, existing);
+    const reconciled = reconcileStateSchema<State>(schema, existing);
     if (reconciled.kind === "mismatch") {
       return { kind: "schema_mismatch", reason: reconciled.reason, detail: reconciled.detail };
     }
@@ -135,7 +157,7 @@ export async function dispatchCoordinationOp<State, Op, Projection>(
     input.nowIso,
     // [Issue #3150] write は常に plugin の「現在の」版で封筒に刻む -- migrated 経路 (旧行を
     // 持ち上げた) でも、 未初期化からの初回 write でも同じ。 旧版のまま書く理由が無い。
-    pluginStateSchemaVersion(plugin),
+    pluginStateSchemaVersion(schema),
   );
   if (written.kind === "conflict") return { kind: "conflict" };
 
@@ -204,6 +226,7 @@ export async function projectCoordinationForTeam<State, Op, Projection>(
     readonly ctx: CoordinationContext;
     readonly fallbackProjection: unknown;
   },
+  schema: CoordinationSchemaDeclaration<State> = plugin,
 ): Promise<CoordinationProjectionOutcome> {
   // ctx 不整合 (= 別 event 用 ctx / team が event 外) は fail-closed で fallback を返す (= 機密非漏洩)。
   if (!isContextConsistent(input)) return { kind: "ok", projection: input.fallbackProjection };
@@ -211,7 +234,7 @@ export async function projectCoordinationForTeam<State, Op, Projection>(
   if (existing) {
     // [Issue #3150] read 経路なので write はしない -- mismatch はそのまま返し、 ok (migrated
     // でも) はその state を投影するだけで版を書き戻さない。
-    const reconciled = reconcileStateSchema<State>(plugin, existing);
+    const reconciled = reconcileStateSchema<State>(schema, existing);
     if (reconciled.kind === "mismatch") {
       return { kind: "schema_mismatch", reason: reconciled.reason, detail: reconciled.detail };
     }

@@ -228,12 +228,50 @@ describe("coordinationPluginSchemaDefect", () => {
     };
     const load = await loadCoordinationPlugin(importerOf(shifting), "ref");
     expect(load.kind).toBe("ok");
-    const plugin = load.kind === "ok" ? load.plugin : counter;
-    // 下流が何度読んでも、 検証を通した値のまま。
-    expect(plugin.stateSchemaVersion).toBe(1);
-    expect(plugin.stateSchemaVersion).toBe(1);
-    // hook は prototype 経由で元の plugin に解決される。
-    expect(plugin.projectForTeam({ count: 3 }, "t1", ctx)).toEqual({ count: 3 });
+    // 下流は plugin ではなくこちらを読むので、 何度読んでも検証を通した値のまま。
+    expect(load.kind === "ok" && load.schema.stateSchemaVersion).toBe(1);
+    expect(load.kind === "ok" && load.schema.stateSchemaVersion).toBe(1);
+    // plugin 自身は包まずそのまま返す (下の receiver テストを参照)。
+    expect(load.kind === "ok" && load.plugin).toBe(shifting);
+  });
+
+  /**
+   * [Issue #3150] Codex review 6 巡目: 版宣言を plugin に被せた view で持つと、 inherited hook の
+   * `this` が view になり、 `#private` を持つ class instance を export する plugin --
+   * ごく普通の書き方 -- が private slot を失って throw する。 包まないことをここで固定する。
+   */
+  it("should keep the original receiver so a class plugin with private fields still works", async () => {
+    class PrivateCounter {
+      #step = 7;
+      stateSchemaVersion = 2;
+      migrateState(state: unknown): { count: number } {
+        return { count: (state as { count: number }).count + this.#step };
+      }
+      initialState(): { count: number } {
+        return { count: this.#step };
+      }
+      validateOp(): { ok: true } {
+        return { ok: true };
+      }
+      applyOp(s: { count: number }): { count: number } {
+        return { count: s.count + this.#step };
+      }
+      projectForTeam(s: { count: number }): { count: number } {
+        return s;
+      }
+    }
+    const instance = new PrivateCounter();
+    const load = await loadCoordinationPlugin(importerOf(instance), "ref");
+    expect(load.kind).toBe("ok");
+    if (load.kind !== "ok") return;
+    // hook を呼んでも private slot が生きている。
+    expect(load.plugin.initialState(ctx)).toEqual({ count: 7 });
+    const seed: unknown = { count: 1 };
+    const noOp: unknown = {};
+    expect(load.plugin.applyOp(seed, "t1", noOp, ctx)).toEqual({ count: 8 });
+    // bind 済みなので migrateState も元の receiver で走る。
+    expect(load.schema.stateSchemaVersion).toBe(2);
+    expect(load.schema.migrateState?.({ count: 1 }, 1)).toEqual({ count: 8 });
   });
 
   it("should reject a migrateState that is not a function, regardless of version", () => {
@@ -250,21 +288,17 @@ describe("coordinationPluginSchemaDefect", () => {
 });
 
 describe("loadCoordinationPlugin", () => {
-  /**
-   * 返るのは plugin そのものではなく、 検証した版宣言を焼き付けた view (`pinSchema` 参照)。
-   * hook は prototype 経由で元の plugin に解決されるので、 呼び出し側から見た挙動は同じ。
-   */
-  it("should return a view over the plugin from a default export", async () => {
-    const load = await loadCoordinationPlugin(importerOf({ default: counter }), "ref");
-    expect(load.kind).toBe("ok");
-    expect(load.kind === "ok" && Object.getPrototypeOf(load.plugin)).toBe(counter);
+  it("should return the plugin from a default export, with the validated schema alongside", async () => {
+    expect(await loadCoordinationPlugin(importerOf({ default: counter }), "ref")).toEqual({
+      kind: "ok",
+      plugin: counter,
+      schema: { stateSchemaVersion: 1, migrateState: undefined },
+    });
   });
 
-  it("should return a view over the plugin when the module itself is the plugin", async () => {
+  it("should return the plugin when the module itself is the plugin", async () => {
     const load = await loadCoordinationPlugin(importerOf(counter), "ref");
-    expect(load.kind).toBe("ok");
-    expect(load.kind === "ok" && Object.getPrototypeOf(load.plugin)).toBe(counter);
-    expect(load.kind === "ok" && load.plugin.initialState(ctx)).toEqual({ count: 0 });
+    expect(load.kind === "ok" && load.plugin).toBe(counter);
   });
 
   it("should report unavailable when the importer throws", async () => {

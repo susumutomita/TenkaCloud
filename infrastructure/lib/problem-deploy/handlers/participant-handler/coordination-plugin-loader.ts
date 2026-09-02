@@ -4,6 +4,7 @@ import {
   type CoordinationDispatchInput,
   type CoordinationDispatchOutcome,
   type CoordinationProjectionOutcome,
+  type CoordinationSchemaDeclaration,
   dispatchCoordinationOp,
   projectCoordinationForTeam,
 } from "./coordination-dispatch.js";
@@ -127,22 +128,25 @@ function schemaDefectOf(snap: SchemaSnapshot): string | null {
 }
 
 /**
- * 検証した版と migration hook を **own data property として焼き付けた** view を返す。 hook 群は
- * prototype 経由で元の plugin に解決されるので、 plain object でも class instance でもそのまま
- * 動く。 下流 (`pluginStateSchemaVersion` / `reconcileStateSchema` / `writeCoordinationState`) は
- * 何も変えずに、 読むたび同じ値を得る。
+ * 検証した宣言を、 plugin とは **別の値** として取り出す。
+ *
+ * [Issue #3150] Codex review 6 巡目: 当初は `Object.create` で plugin に被せた view を返して
+ * いたが、 それだと inherited hook の `this` が view になる。 `#private` を持つ class instance を
+ * export する plugin -- ごく普通の書き方 -- は private slot を失って throw し、 op と tick は
+ * 落ち、 projection は黙って fallback に差し替わる。 **包まない**。 plugin はそのまま返し、
+ * 検証した値だけを別に持ち回る。 `migrateState` は元の plugin に bind して receiver を保つ。
  */
-function pinSchema(
+function schemaDeclarationOf(
   plugin: CoordinationPlugin<unknown, unknown>,
   snap: SchemaSnapshot,
-): CoordinationPlugin<unknown, unknown> {
-  return Object.create(plugin, {
-    stateSchemaVersion: {
-      value: typeof snap.version === "number" ? snap.version : 1,
-      enumerable: true,
-    },
-    migrateState: { value: snap.migrate, enumerable: true },
-  }) as CoordinationPlugin<unknown, unknown>;
+): CoordinationSchemaDeclaration {
+  return {
+    stateSchemaVersion: typeof snap.version === "number" ? snap.version : 1,
+    migrateState:
+      typeof snap.migrate === "function"
+        ? (snap.migrate as (state: unknown, fromVersion: number) => unknown).bind(plugin)
+        : undefined,
+  };
 }
 
 /**
@@ -154,7 +158,12 @@ function pinSchema(
  *     3 経路すべてで可視化し、 かつ進行中の行を巻き添えにしない。
  */
 export type CoordinationPluginLoad =
-  | { readonly kind: "ok"; readonly plugin: CoordinationPlugin<unknown, unknown> }
+  | {
+      readonly kind: "ok";
+      readonly plugin: CoordinationPlugin<unknown, unknown>;
+      /** load 時に 1 度だけ読んで検証した版宣言。 下流は plugin から読み直さない。 */
+      readonly schema: CoordinationSchemaDeclaration;
+    }
   | { readonly kind: "unavailable" }
   | { readonly kind: "invalid_schema"; readonly detail: string };
 
@@ -194,16 +203,16 @@ export async function loadCoordinationPlugin(
   const plugin = candidate as CoordinationPlugin<unknown, unknown>;
   let snap: SchemaSnapshot;
   let defect: string | null;
-  let pinned: CoordinationPlugin<unknown, unknown>;
+  let schema: CoordinationSchemaDeclaration;
   try {
     snap = readSchemaSnapshot(plugin);
     defect = schemaDefectOf(snap);
-    pinned = pinSchema(plugin, snap);
+    schema = schemaDeclarationOf(plugin, snap);
   } catch (err) {
     return { kind: "invalid_schema", detail: `schema inspection threw: ${describeThrown(err)}` };
   }
   return defect === null
-    ? { kind: "ok", plugin: pinned }
+    ? { kind: "ok", plugin, schema }
     : { kind: "invalid_schema", detail: defect };
 }
 
@@ -226,7 +235,7 @@ export async function loadAndDispatchCoordinationOp(
   if (load.kind === "invalid_schema") {
     return { kind: "schema_mismatch", reason: "invalid_plugin_schema", detail: load.detail };
   }
-  return dispatchCoordinationOp(store, load.plugin, input);
+  return dispatchCoordinationOp(store, load.plugin, input, load.schema);
 }
 
 /**
@@ -254,5 +263,5 @@ export async function loadAndProjectCoordinationForTeam(
   if (load.kind === "invalid_schema") {
     return { kind: "schema_mismatch", reason: "invalid_plugin_schema", detail: load.detail };
   }
-  return projectCoordinationForTeam(store, load.plugin, input);
+  return projectCoordinationForTeam(store, load.plugin, input, load.schema);
 }

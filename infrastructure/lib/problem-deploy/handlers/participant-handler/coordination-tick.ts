@@ -134,7 +134,7 @@ async function tickCoordinationEvent(
     await refreshCoordinationTtl(deps, target, scope, existing, nowIso);
     return false;
   }
-  const plugin = load.plugin;
+  const { plugin, schema } = load; // [Issue #3150] 版宣言は load 時に検証した値を使う (再読しない)
   // [Issue #3133] tick も `initialState` を呼びうる (= 未初期化 namespace に対する最初の tick)
   // 以上、op 経路とまったく同じ規則で秘密を解決する: 初期化するときだけ、未発行なら発行する。
   //
@@ -147,7 +147,7 @@ async function tickCoordinationEvent(
   if (existing) {
     // [Issue #3150] op 経路 (`dispatchCoordinationOp`) と同じ突き合わせ。 mismatch は state を
     // 一切進めず、 TTL だけ延ばして試合を消さない (= write が要らないので version 条件も張らない)。
-    const reconciled = reconcileStateSchema(plugin, existing);
+    const reconciled = reconcileStateSchema(schema, existing);
     if (reconciled.kind === "mismatch") {
       console.warn(
         `[coordination-dispatcher] tick schema mismatch event=${target.eventId} problem=${target.moduleRef} reason=${reconciled.reason}` +
@@ -182,7 +182,7 @@ async function tickCoordinationEvent(
     nextState,
     version,
     nowIso,
-    pluginStateSchemaVersion(plugin),
+    pluginStateSchemaVersion(schema),
   );
   if (written.kind === "conflict") {
     // 並行 op が version race に勝った (= applyOp が先に書いた)。 lost-update を作らず次 tick で
