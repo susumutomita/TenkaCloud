@@ -9,6 +9,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   handleCoordinationOp: vi.fn(),
   handleCoordinationProjection: vi.fn(),
+  handleCoordinationArtifactFetch: vi.fn(),
 }));
 
 vi.mock("../../lib/problem-deploy/handlers/participant-handler/shared", () => ({
@@ -24,6 +25,9 @@ vi.mock("../../lib/problem-deploy/handlers/participant-handler/shared", () => ({
 vi.mock("../../lib/problem-deploy/handlers/participant-handler/coordination-handler", () => ({
   handleCoordinationOp: mocks.handleCoordinationOp,
   handleCoordinationProjection: mocks.handleCoordinationProjection,
+  // [Issue #3152] The on-demand body fetch that keeps the projection carrying
+  // references only.
+  handleCoordinationArtifactFetch: mocks.handleCoordinationArtifactFetch,
   makeCoordinationScopeResolver: () => async () => null,
   // [Issue #659] The dispatcher wires a score publisher so a coordination
   // Battle's own scoring reaches the scoreboard.
@@ -301,5 +305,74 @@ describe("handler (scoring-driven tick batch vs HTTP delegation)", () => {
     const res = (await handler(httpEvent, {} as never)) as { statusCode: number; body: string };
     expect(res.statusCode).toBe(StatusCodes.OK);
     expect(JSON.parse(res.body)).toEqual({ ok: true });
+  });
+});
+
+describe("GET /portal/me/coordination/artifact/:artifactId (#3152)", () => {
+  const ARTIFACT = "/portal/me/coordination/artifact/abc123";
+
+  it("should return the body as bytes with its media type and digest", async () => {
+    mocks.handleCoordinationArtifactFetch.mockResolvedValueOnce({
+      kind: "ok",
+      artifact: {
+        content: new TextEncoder().encode("share-value"),
+        ref: {
+          artifactId: "abc123",
+          contentType: "application/octet-stream",
+          bytes: 11,
+          digest: "f".repeat(64),
+          writtenAtMs: 1,
+        },
+      },
+    });
+
+    const res = await get(ARTIFACT);
+
+    // Bytes, not JSON: these are proofs and ciphertexts, and re-encoding would
+    // inflate every fetch by a third for nobody's benefit.
+    expect(res.status).toBe(StatusCodes.OK);
+    expect(res.headers.get("content-type")).toBe("application/octet-stream");
+    expect(res.headers.get("x-tenkacloud-artifact-digest")).toBe("f".repeat(64));
+    expect(new TextDecoder().decode(await res.arrayBuffer())).toBe("share-value");
+  });
+
+  it("should forward the requested id and the optional problemId", async () => {
+    mocks.handleCoordinationArtifactFetch.mockResolvedValueOnce({ kind: "not_found" });
+    await get(`${ARTIFACT}?problemId=p2`);
+    expect(mocks.handleCoordinationArtifactFetch).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.any(String),
+      "abc123",
+      "p2",
+    );
+  });
+
+  it("should answer 404 for an artifact this team may not read", async () => {
+    // Same status as one that does not exist, so a participant cannot probe
+    // which ids exist in a match they cannot see.
+    mocks.handleCoordinationArtifactFetch.mockResolvedValueOnce({ kind: "not_found" });
+    const res = await get(ARTIFACT);
+    expect(res.status).toBe(StatusCodes.NOT_FOUND);
+    expect(await res.json()).toEqual({ error: "not_found" });
+  });
+
+  it("should pass a scope resolution failure through the shared mapping", async () => {
+    mocks.handleCoordinationArtifactFetch.mockResolvedValueOnce({ kind: "not_configured" });
+    const res = await get(ARTIFACT);
+    expect(res.status).toBe(StatusCodes.NOT_FOUND);
+    expect(await res.json()).toEqual({ error: "not_configured" });
+  });
+
+  it("should answer 503 when the board the fetch is authorized against cannot be built", async () => {
+    mocks.handleCoordinationArtifactFetch.mockResolvedValueOnce({
+      kind: "schema_mismatch",
+      reason: "missing_migration",
+    });
+    const res = await get(ARTIFACT);
+    expect(res.status).toBe(StatusCodes.SERVICE_UNAVAILABLE);
+    expect(await res.json()).toEqual({
+      error: "state_schema_mismatch",
+      reason: "missing_migration",
+    });
   });
 });

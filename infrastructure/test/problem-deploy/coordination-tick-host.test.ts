@@ -76,6 +76,17 @@ function fakeDdb(opts: {
   getThrows?: boolean;
   updateThrows?: unknown;
   matchSecret?: string;
+  /** [Issue #3153] The run pointer row, when the problem has been reset. */
+  runPointer?: Record<string, unknown>;
+  /**
+   * [Issue #3151] Overrides the state size budget only.
+   *
+   * Not done through the runtime's environment: `CONTROL_DATA_BACKEND` picks
+   * the budget AND the repository, so setting it to `turso` here would send the
+   * store looking for a libSQL client that unit tests deliberately do not have.
+   * The budget's own derivation is pinned in `coordination-state-budget.test.ts`.
+   */
+  budget?: { backend: "dynamodb" | "pure"; maxBytes: number; warnBytes: number };
 }): FakeDdb {
   const puts: FakePut[] = [];
   const envelopePuts: FakeEnvelopePut[] = [];
@@ -89,9 +100,13 @@ function fakeDdb(opts: {
 
   const handleGet = (cmd: GetCommand) => {
     if (opts.getThrows) throw new Error("get boom");
-    if (isSecret((cmd.input as { Key?: { SK?: string } }).Key?.SK)) {
+    const key = (cmd.input as { Key?: { PK?: string; SK?: string } }).Key;
+    if (isSecret(key?.SK)) {
       return { Item: opts.matchSecret ? { matchSecret: opts.matchSecret } : undefined };
     }
+    // [Issue #3153] The run pointer lives under its own prefix, one level above
+    // the runs it names.
+    if (String(key?.PK ?? "").startsWith("COORDRUN#")) return { Item: opts.runPointer };
     return { Item: opts.getItem };
   };
 
@@ -147,7 +162,9 @@ function fakeDdb(opts: {
   });
   return {
     store: {
-      runtime: makeTestControlDataRuntime(),
+      runtime: opts.budget
+        ? { ...makeTestControlDataRuntime(), coordinationStateBudget: () => opts.budget as never }
+        : makeTestControlDataRuntime(),
       ddb: { send } as never,
       tableName: "Deployments",
     },
@@ -613,5 +630,65 @@ describe("tick schema reconciliation (Issue #3150)", () => {
     expect(ddb.envelopePuts).toHaveLength(0);
     expect(ddb.updates).toHaveLength(1);
     expect(ddb.updates[0]?.input.UpdateExpression).toBe("SET expiresAt = :expiresAt");
+  });
+});
+
+describe("the tick and the rest of the platform agree about which match (#3151 / #3153)", () => {
+  it("should tick the run the problem was reset onto, not the initial one", async () => {
+    const ddb = fakeDdb({
+      getItem: { state: { phase: "open" }, version: 2 },
+      runPointer: { runId: "rNEW", startedAt: NOW_ISO, history: ["default"] },
+    });
+
+    const res = await handleCoordinationTickBatch(
+      depsWith(importerOf(windowPlugin), ddb.store),
+      batch([capTarget()]),
+    );
+
+    // A tick left on the constant would advance a retired match while the one
+    // participants are playing went unticked — the two halves of the platform
+    // operating on different games.
+    expect(res).toEqual({ ticked: 1, written: 1 });
+    expect(ddb.puts).toEqual([
+      { PK: "COORD#t1#e1#cap#rNEW", state: { phase: "locked" }, version: 3 },
+    ]);
+  });
+
+  it("should report an over-budget tick without taking the batch down", async () => {
+    const ddb = fakeDdb({
+      getItem: { state: { phase: "open" }, version: 2 },
+      // A ceiling small enough that the advanced state cannot fit.
+      budget: { backend: "dynamodb", maxBytes: 8, warnBytes: 4 },
+    });
+
+    const res = await handleCoordinationTickBatch(
+      depsWith(importerOf(windowPlugin), ddb.store),
+      batch([capTarget()]),
+    );
+
+    // Nothing was written, and the pass carried on: taking down the whole
+    // scoring batch for one full match would turn one stopped game into an
+    // outage for every other event.
+    expect(res).toEqual({ ticked: 1, written: 0 });
+    expect(ddb.puts).toEqual([]);
+    expect(warnSpy.mock.calls.flat().join(" ")).toContain("state over budget");
+  });
+
+  it("should keep refreshing the TTL of a match it cannot write", async () => {
+    const ddb = fakeDdb({
+      // Past the halfway mark, so the tick is due to refresh.
+      getItem: { state: { phase: "open" }, version: 2, expiresAt: 1 },
+      budget: { backend: "dynamodb", maxBytes: 8, warnBytes: 4 },
+    });
+
+    await handleCoordinationTickBatch(
+      depsWith(importerOf(windowPlugin), ddb.store),
+      batch([capTarget()]),
+    );
+
+    // Being unable to write and the match being over are different things.
+    // Letting the retention clock run here would delete the row before an
+    // operator could act on the warning.
+    expect(ddb.updates).toHaveLength(1);
   });
 });

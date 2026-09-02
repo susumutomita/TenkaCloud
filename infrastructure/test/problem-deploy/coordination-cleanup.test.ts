@@ -6,7 +6,9 @@ import {
 import type { DeploymentRecord } from "../../lib/problem-deploy/control-data/domain/deployments.js";
 import { SqlDeploymentsRepository } from "../../lib/problem-deploy/control-data/sql-deployments-repository";
 import { cleanupCoordinationStateIfLastDeployment } from "../../lib/problem-deploy/handlers/shared/coordination-cleanup";
+import { startCoordinationRun } from "../../lib/problem-deploy/handlers/shared/coordination-run";
 import { makeSqliteExecutor } from "./control-data/control-data-write.test-helpers";
+import { fakeArtifactStore } from "./coordination.test-helpers";
 
 /**
  * [Issue #3149] Coordination state outlived the problem it belonged to.
@@ -346,5 +348,139 @@ describe("cleanup must not change an identifier it did not issue (#3149)", () =>
     // path here that can produce one.
     expect(await repository.readCoordinationState(SCOPE)).toBeUndefined();
     expect(version).toBeGreaterThan(0);
+  });
+});
+
+describe("cleanup takes the artifacts and the runs with the state (#3152 / #3153)", () => {
+  it("should delete the scope's artifacts once the state delete is accepted", async () => {
+    const repository = await makeRepository();
+    const artifacts = fakeArtifactStore();
+    await seedState(repository);
+    await repository.putDeployment(
+      deployment({ jobId: "a", teardownRequestedAt: "2026-07-02T00:00:00.000Z" }),
+    );
+
+    const outcome = await cleanupCoordinationStateIfLastDeployment(
+      { repository, artifacts },
+      { tenantId: TENANT, eventId: EVENT, problemId: PROBLEM },
+    );
+
+    // Leaving the bodies behind would be the same leak this module exists to
+    // close, moved from the row to the bucket.
+    expect(outcome).toMatchObject({ kind: "deleted" });
+    expect(
+      await repository.readCoordinationRun({
+        tenantId: TENANT,
+        eventId: EVENT,
+        problemId: PROBLEM,
+      }),
+    ).toBeUndefined();
+  });
+
+  it("should still report the state deleted when the artifact sweep fails", async () => {
+    const repository = await makeRepository();
+    const artifacts = {
+      ...fakeArtifactStore(),
+      deleteScope: () => Promise.reject(new Error("s3 unavailable")),
+    };
+    await seedState(repository);
+    await repository.putDeployment(
+      deployment({ jobId: "a", teardownRequestedAt: "2026-07-02T00:00:00.000Z" }),
+    );
+
+    const outcome = await cleanupCoordinationStateIfLastDeployment(
+      { repository, artifacts },
+      { tenantId: TENANT, eventId: EVENT, problemId: PROBLEM },
+    );
+
+    // The row — the thing that makes the match reachable — is already gone.
+    // Failing the whole cleanup here would report that nothing was cleaned when
+    // most of it was, and the bucket's expiry is still the backstop.
+    expect(outcome).toMatchObject({ kind: "deleted" });
+    expect(await repository.readCoordinationState(SCOPE)).toBeUndefined();
+  });
+
+  it("should clean the run the problem was actually reset onto", async () => {
+    const repository = await makeRepository();
+    const artifacts = fakeArtifactStore();
+    const key = { tenantId: TENANT, eventId: EVENT, problemId: PROBLEM };
+    // The problem has been reset, so its state lives under a minted run id —
+    // a cleanup that always looked at the initial run would leave it behind
+    // while reporting success.
+    const started = await startCoordinationRun(
+      { repository, artifacts },
+      key,
+      "2026-07-01T00:00:00.000Z",
+    );
+    const runId = started.kind === "started" ? started.runId : "";
+    await seedState(repository, { ...SCOPE, runId }, { turn: 12 });
+    await repository.putDeployment(
+      deployment({ jobId: "a", teardownRequestedAt: "2026-07-02T00:00:00.000Z" }),
+    );
+
+    const outcome = await cleanupCoordinationStateIfLastDeployment(
+      { repository, artifacts },
+      { tenantId: TENANT, eventId: EVENT, problemId: PROBLEM },
+    );
+
+    expect(outcome).toMatchObject({ kind: "deleted" });
+    expect(await repository.readCoordinationState({ ...SCOPE, runId })).toBeUndefined();
+    // The pointer goes too: leaving it would make a re-deployed problem resume
+    // a retired run id, and with it that run's tombstoned artifact prefix.
+    expect(await repository.readCoordinationRun(key)).toBeUndefined();
+  });
+});
+
+describe("cleanup failures that must not be silent (#3153)", () => {
+  it("should still report the state deleted when the run sweep fails", async () => {
+    const repository = await makeRepository();
+    await seedState(repository);
+    await repository.putDeployment(
+      deployment({ jobId: "a", teardownRequestedAt: "2026-07-02T00:00:00.000Z" }),
+    );
+    const failing = new Proxy(repository, {
+      get(target, prop, receiver) {
+        if (prop === "deleteCoordinationRun") {
+          return () => Promise.reject(new Error("control data unavailable"));
+        }
+        return Reflect.get(target, prop, receiver) as unknown;
+      },
+    });
+
+    const outcome = await cleanupCoordinationStateIfLastDeployment(
+      { repository: failing },
+      { tenantId: TENANT, eventId: EVENT, problemId: PROBLEM },
+    );
+
+    // The state row is already gone, so the match is unreachable either way.
+    // Reporting nothing was cleaned would be the less accurate answer.
+    expect(outcome).toMatchObject({ kind: "deleted" });
+    expect(await repository.readCoordinationState(SCOPE)).toBeUndefined();
+  });
+
+  it("should leave everything alone when the conditional delete is refused", async () => {
+    const repository = await makeRepository();
+    await seedState(repository);
+    await repository.putDeployment(
+      deployment({ jobId: "a", teardownRequestedAt: "2026-07-02T00:00:00.000Z" }),
+    );
+    const raced = new Proxy(repository, {
+      get(target, prop, receiver) {
+        if (prop === "deleteCoordinationStateIfUnchanged") {
+          return () => Promise.resolve({ outcome: "conflict" as const });
+        }
+        return Reflect.get(target, prop, receiver) as unknown;
+      },
+    });
+
+    const outcome = await cleanupCoordinationStateIfLastDeployment(
+      { repository: raced },
+      { tenantId: TENANT, eventId: EVENT, problemId: PROBLEM },
+    );
+
+    // Something is playing this match again. Removing its runs or its pointer
+    // after losing the race would end the very game the condition protected.
+    expect(outcome).toEqual({ kind: "raced" });
+    expect(await repository.readCoordinationState(SCOPE)).toBeDefined();
   });
 });

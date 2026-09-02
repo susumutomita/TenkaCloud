@@ -347,3 +347,41 @@ describe("the run pointer outlives the runs it names (#3153)", () => {
     expect(await repository.readCoordinationRun(KEY)).toBeDefined();
   });
 });
+
+describe("failures while retiring or removing runs (#3153)", () => {
+  it("should report a run that could not be retired without failing the rotation", async () => {
+    const repository = makeRepository();
+    const artifacts = {
+      ...makeArtifactSpy(),
+      deleteScope: () => Promise.reject(new Error("s3 unavailable")),
+    };
+    // Fill the window so the next rotation pushes one run out.
+    for (let index = 0; index < 3; index += 1) {
+      await startCoordinationRun({ repository }, KEY, AT);
+    }
+
+    const outcome = await startCoordinationRun({ repository, artifacts }, KEY, AT);
+
+    // The pointer is already written, so the run being removed is unreachable
+    // through any normal path. Failing the caller would report that a reset did
+    // not happen when it did; the bucket's expiry is still the backstop.
+    expect(outcome.kind).toBe("started");
+    expect(outcome.kind === "started" && outcome.retired).toHaveLength(1);
+  });
+
+  it("should propagate a failure that leaves runs still reachable", async () => {
+    const repository = makeRepository();
+    await seedState(repository, KEY, DEFAULT_COORDINATION_RUN_ID, { turn: 1 });
+    const broken = {
+      readCoordinationRun: () => Promise.resolve(undefined),
+      deleteCoordinationState: () => Promise.reject(new Error("control data unavailable")),
+    } as unknown as SqlDeploymentsRepository;
+
+    // Unlike retirement, this one still has a pointer path to the data. A
+    // silent success here would report a problem removed while its state stayed
+    // readable.
+    await expect(deleteAllCoordinationRuns({ repository: broken }, KEY)).rejects.toThrow(
+      "control data unavailable",
+    );
+  });
+});

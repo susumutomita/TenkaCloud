@@ -304,6 +304,36 @@ describe("artifact submission parsing (#3152)", () => {
     ).toMatchObject({ ok: false, error: "too_many_artifacts" });
   });
 
+  it("should reject a body field that is not a string", () => {
+    expect(parseArtifactSubmissions({ proof: { contentType: "text/plain" } })).toMatchObject({
+      ok: false,
+      error: "invalid_artifact_body",
+    });
+    expect(parseArtifactSubmissions({ proof: "just a string" })).toMatchObject({
+      ok: false,
+      error: "invalid_artifact_body",
+    });
+  });
+
+  it("should refuse an encoded body past the ceiling before decoding it", () => {
+    // Bounded on the ENCODED length: decoding first would let a request
+    // allocate the very memory the limit exists to cap.
+    expect(
+      parseArtifactSubmissions({
+        proof: { contentType: "text/plain", contentBase64: "A".repeat(3_000_000) },
+      }),
+    ).toMatchObject({ ok: false, error: "artifact_too_large" });
+  });
+
+  it("should accept an unpadded encoding of the same bytes", () => {
+    // Both a padded and an unpadded encoding are legitimate input, so the
+    // strictness check normalises padding away rather than rejecting one.
+    const parsed = parseArtifactSubmissions({
+      proof: { contentType: "text/plain", contentBase64: "aGk" },
+    });
+    expect(parsed.ok && new TextDecoder().decode(parsed.submissions[0]?.content)).toBe("hi");
+  });
+
   it("should reject invalid base64 instead of storing a shorter body", () => {
     // `Buffer.from(s, "base64")` skips what it does not recognise, so a corrupt
     // upload would decode to fewer bytes and be stored as though it were fine —
@@ -439,5 +469,153 @@ describe("a deployment with no artifact bucket (#3152)", () => {
     expect(await store.deleteScope()).toBe(0);
     expect(await store.get()).toBeUndefined();
     await expect(store.remove()).resolves.toBeUndefined();
+  });
+});
+
+describe("S3 failure and edge paths (#3152)", () => {
+  it("should page through a prefix larger than one listing", async () => {
+    const fake = makeFakeS3();
+    const store = makeStore(fake);
+    await store.put(SCOPE, { contentType: "text/plain", content: bytes("a") });
+    await store.put(SCOPE, { contentType: "text/plain", content: bytes("b") });
+    await store.put(SCOPE, { contentType: "text/plain", content: bytes("c") });
+    // Force the fake to hand back one key at a time so the continuation loop
+    // actually runs; a single-page sweep would silently leave a long prefix
+    // half-emptied in production.
+    const route = fake.send;
+    let page = 0;
+    const keys = [...fake.objects.keys()];
+    (fake as { send: (cmd: unknown) => Promise<unknown> }).send = async (cmd: unknown) => {
+      if (cmd instanceof ListObjectsV2Command) {
+        const key = keys[page];
+        page += 1;
+        return key
+          ? {
+              Contents: [{ Key: key }],
+              NextContinuationToken: page < keys.length ? "next" : undefined,
+            }
+          : { Contents: [] };
+      }
+      return route(cmd);
+    };
+
+    expect(await store.deleteScope(SCOPE)).toBe(3);
+  });
+
+  it("should rethrow a tombstone read error that is not a missing key", async () => {
+    const fake = makeFakeS3();
+    const store = makeStore(fake);
+    fake.onCommand = (cmd) => {
+      // The body write succeeds; the tombstone check is what fails.
+      if (cmd instanceof GetObjectCommand) throw new Error("AccessDenied");
+    };
+
+    // Treating a permissions failure as "no tombstone" would keep an object
+    // that a teardown may already have swept past — the orphan this protocol
+    // exists to prevent.
+    await expect(
+      store.put(SCOPE, { contentType: "text/plain", content: bytes("x") }),
+    ).rejects.toThrow("AccessDenied");
+  });
+
+  it("should rethrow an S3 error that is not a missing key", async () => {
+    const fake = makeFakeS3();
+    const store = makeStore(fake);
+    fake.onCommand = (cmd) => {
+      if (cmd instanceof GetObjectCommand) throw new Error("AccessDenied");
+    };
+
+    // Swallowing this as "no such artifact" would report a permissions problem
+    // as a missing proof, and the match would look corrupt rather than
+    // misconfigured.
+    await expect(store.get(SCOPE, "anything")).rejects.toThrow("AccessDenied");
+  });
+
+  it("should treat an unreadable tombstone as absent rather than refusing every write", async () => {
+    const fake = makeFakeS3();
+    const store = makeStore(fake);
+    fake.objects.set(coordinationTombstoneKey(SCOPE), {
+      body: bytes("{not json"),
+      contentType: "application/json",
+    });
+
+    // Refusing on an unparseable 20-byte marker would take a whole match down;
+    // the sweep is still the primary path and the bucket expiry the backstop.
+    const outcome = await store.put(SCOPE, {
+      contentType: "text/plain",
+      content: bytes("still playable"),
+    });
+    expect(outcome.kind).toBe("stored");
+  });
+
+  it("should treat a tombstone with no deletion time as absent", async () => {
+    const fake = makeFakeS3();
+    const store = makeStore(fake);
+    fake.objects.set(coordinationTombstoneKey(SCOPE), {
+      body: bytes(JSON.stringify({ unexpected: true })),
+      contentType: "application/json",
+    });
+
+    expect((await store.put(SCOPE, { contentType: "text/plain", content: bytes("x") })).kind).toBe(
+      "stored",
+    );
+  });
+
+  it("should return an empty body rather than throwing when S3 hands back none", async () => {
+    const fake = makeFakeS3();
+    const store = makeStore(fake);
+    const stored = await store.put(SCOPE, { contentType: "text/plain", content: bytes("x") });
+    const artifactId = stored.kind === "stored" ? stored.ref.artifactId : "";
+    fake.onCommand = undefined;
+    const route = fake.send;
+    (fake as { send: (cmd: unknown) => Promise<unknown> }).send = async (cmd: unknown) => {
+      if (cmd instanceof GetObjectCommand) return { ContentType: "text/plain", Metadata: {} };
+      return route(cmd);
+    };
+
+    const fetched = await store.get(SCOPE, artifactId);
+    expect(fetched?.ref.bytes).toBe(0);
+  });
+});
+
+describe("submission storage failures (#3152)", () => {
+  it("should withdraw earlier bodies when the scope is torn down mid-submission", async () => {
+    const fake = makeFakeS3();
+    const store = makeStore(fake, () => 1_000);
+    let puts = 0;
+    fake.onCommand = async (command) => {
+      if (command instanceof PutObjectCommand) {
+        puts += 1;
+        // The teardown lands between the first body and the second.
+        if (puts === 2) await makeStore(fake, () => 9_000).deleteScope(SCOPE);
+      }
+    };
+
+    const outcome = await storeArtifactSubmissions(store, SCOPE, [
+      { slot: "first", contentType: "text/plain", content: bytes("1") },
+      { slot: "second", contentType: "text/plain", content: bytes("2") },
+    ]);
+
+    expect(outcome.kind).toBe("scope_deleted");
+    fake.onCommand = undefined;
+    // Nothing but the marker survives: the first body is withdrawn even though
+    // its own write succeeded.
+    expect([...fake.objects.keys()]).toEqual([coordinationTombstoneKey(SCOPE)]);
+  });
+
+  it("should refuse to attach references to an op that cannot carry them", () => {
+    // Silently dropping them would hand the plugin an operation missing exactly
+    // the material the participant sent.
+    expect(() =>
+      withArtifactRefs("not-an-object", {
+        proof: {
+          artifactId: "a",
+          contentType: "text/plain",
+          bytes: 1,
+          digest: "d",
+          writtenAtMs: 1,
+        },
+      }),
+    ).toThrow(TypeError);
   });
 });

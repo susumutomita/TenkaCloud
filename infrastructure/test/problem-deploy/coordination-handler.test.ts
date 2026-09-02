@@ -5,6 +5,7 @@ import type { DeploymentItem } from "../../lib/problem-deploy/handlers/deploy-ha
 import {
   type CoordinationHandlerDeps,
   type CoordinationScope,
+  handleCoordinationArtifactFetch,
   handleCoordinationOp,
   handleCoordinationProjection,
   makeCoordinationScopeResolver,
@@ -15,6 +16,7 @@ import type { PluginImporter } from "../../lib/problem-deploy/handlers/participa
 import type { CoordinationStoreDeps } from "../../lib/problem-deploy/handlers/participant-handler/coordination-store.js";
 import type { ParticipantSharedResources } from "../../lib/problem-deploy/handlers/participant-handler/shared.js";
 import {
+  fakeArtifactStore,
   fakeParticipantShared,
   fakeParticipantSharedWithItems,
 } from "./coordination.test-helpers.js";
@@ -72,6 +74,9 @@ function deps(over: Partial<CoordinationHandlerDeps> = {}): CoordinationHandlerD
     importer: importerOf(counter),
     store: fakeStore(undefined),
     resolveScope: async () => ({ kind: "scope" as const, scope }),
+    // [Issue #3152] Required, not optional: a host without a store still has to
+    // answer "where did this proof go", and refusing is the only honest answer.
+    artifacts: fakeArtifactStore(),
     ...over,
   };
 }
@@ -113,6 +118,7 @@ describe("handleCoordinationOp", () => {
       {
         importer: importerOf(counter),
         store,
+        artifacts: fakeArtifactStore(),
         resolveScope: async () => ({ kind: "scope" as const, scope: { ...scope, window } }),
       },
       "key",
@@ -135,6 +141,7 @@ describe("handleCoordinationOp", () => {
       {
         importer: importerOf(counter),
         store: fakeStore({ state: { count: 3 }, version: 1 }),
+        artifacts: fakeArtifactStore(),
         resolveScope: async () => ({
           kind: "scope" as const,
           scope: {
@@ -845,5 +852,217 @@ describe("makeCoordinationScorePublisher", () => {
       expect.objectContaining({ message: "dynamodb unavailable" }),
     );
     warn.mockRestore();
+  });
+});
+
+/**
+ * [Issue #3152] The artifact half of the op path and the fetch that reads it
+ * back.
+ *
+ * The store itself is pinned in `coordination-artifacts.test.ts`; what is
+ * asserted here is the handler's part of the contract — bodies are stored
+ * before dispatch, references reach the plugin, and nothing survives an
+ * operation that did not commit.
+ */
+describe("coordination artifacts through the handler (#3152)", () => {
+  const artifactOf = (text: string) => ({
+    contentType: "application/octet-stream",
+    contentBase64: Buffer.from(text).toString("base64"),
+  });
+
+  /** A plugin that keeps whatever references the platform handed it. */
+  const recorder: CoordinationPlugin<
+    { readonly refs: unknown },
+    { readonly kind: string; readonly artifacts?: unknown },
+    { readonly refs: unknown }
+  > = {
+    initialState: () => ({ refs: null }),
+    validateOp: (_s, _t, op) => (op.kind === "bad" ? { ok: false, error: "bad_op" } : { ok: true }),
+    applyOp: (_s, _t, op) => ({ refs: op.artifacts ?? null }),
+    projectForTeam: (s) => ({ refs: s.refs }),
+  };
+
+  it("should store a body and hand the plugin a reference to it", async () => {
+    const artifacts = fakeArtifactStore();
+    const out = await handleCoordinationOp(
+      deps({ importer: importerOf(recorder), artifacts }),
+      "key",
+      { kind: "PROVE" },
+      "2026-06-01T00:00:00Z",
+      undefined,
+      { proof: artifactOf("proof-bytes") },
+    );
+
+    // The plugin sees a description of the body, never the body: `applyOp`
+    // stays a pure function of (state, teamId, op).
+    expect(out).toMatchObject({
+      kind: "ok",
+      projection: { refs: { proof: { artifactId: "artifact1", bytes: 11 } } },
+    });
+    expect(artifacts.stored.size).toBe(1);
+  });
+
+  it("should reject a malformed submission before storing anything", async () => {
+    const artifacts = fakeArtifactStore();
+    const out = await handleCoordinationOp(
+      deps({ importer: importerOf(recorder), artifacts }),
+      "key",
+      { kind: "PROVE" },
+      "2026-06-01T00:00:00Z",
+      undefined,
+      { proof: { contentType: "not-a-media-type", contentBase64: "aGk=" } },
+    );
+
+    expect(out).toEqual({ kind: "rejected", error: "invalid_artifact_content_type" });
+    expect(artifacts.stored.size).toBe(0);
+  });
+
+  it("should withdraw a stored body when the plugin rejects the op", async () => {
+    const artifacts = fakeArtifactStore();
+    const out = await handleCoordinationOp(
+      deps({ importer: importerOf(recorder), artifacts }),
+      "key",
+      { kind: "bad" },
+      "2026-06-01T00:00:00Z",
+      undefined,
+      { proof: artifactOf("never-referenced") },
+    );
+
+    // The op never reached the state, so nothing references this object and no
+    // teardown would ever find it.
+    expect(out).toEqual({ kind: "rejected", error: "bad_op" });
+    expect(artifacts.removed).toEqual(["artifact1"]);
+    expect(artifacts.stored.size).toBe(0);
+  });
+
+  it("should treat a scope torn down mid-submission as an ended event", async () => {
+    const artifacts = fakeArtifactStore();
+    artifacts.scopeDeleted = true;
+    const out = await handleCoordinationOp(
+      deps({ importer: importerOf(recorder), artifacts }),
+      "key",
+      { kind: "PROVE" },
+      "2026-06-01T00:00:00Z",
+      undefined,
+      { proof: artifactOf("in flight") },
+    );
+
+    expect(out).toEqual({ kind: "rejected", error: "event_ended" });
+  });
+
+  it("should leave an op with no artifacts entirely untouched", async () => {
+    const artifacts = fakeArtifactStore();
+    const out = await handleCoordinationOp(
+      deps({ importer: importerOf(recorder), artifacts }),
+      "key",
+      { kind: "PROVE" },
+      "2026-06-01T00:00:00Z",
+    );
+
+    // Most operations carry none, and they must not be made to say so.
+    expect(out).toMatchObject({ kind: "ok", projection: { refs: null } });
+    expect(artifacts.stored.size).toBe(0);
+  });
+});
+
+describe("handleCoordinationArtifactFetch (#3152)", () => {
+  /** A plugin whose projection carries whatever the state recorded. */
+  const ledger = (refs: unknown): CoordinationPlugin<unknown, unknown, unknown> => ({
+    initialState: () => ({}),
+    validateOp: () => ({ ok: true }),
+    applyOp: (s) => s,
+    projectForTeam: () => ({ publicLedger: refs }),
+  });
+
+  async function seed(artifacts: ReturnType<typeof fakeArtifactStore>): Promise<string> {
+    const stored = await artifacts.put(scope.state, {
+      contentType: "application/octet-stream",
+      content: new TextEncoder().encode("share-value"),
+    });
+    return stored.kind === "stored" ? stored.ref.artifactId : "";
+  }
+
+  it("should return the body when this team's projection references it", async () => {
+    const artifacts = fakeArtifactStore();
+    const artifactId = await seed(artifacts);
+
+    const out = await handleCoordinationArtifactFetch(
+      deps({ importer: importerOf(ledger([{ share: { artifactId } }])), artifacts }),
+      "key",
+      artifactId,
+    );
+
+    // This is what keeps HUNT working: the hunter fetches the bodies of the
+    // shares they are actually hunting, at the moment they hunt.
+    expect(out.kind).toBe("ok");
+    expect(out.kind === "ok" && new TextDecoder().decode(out.artifact.content)).toBe("share-value");
+  });
+
+  it("should refuse a body this team's projection does not reference", async () => {
+    const artifacts = fakeArtifactStore();
+    const artifactId = await seed(artifacts);
+
+    // The plugin already decides what each team may see; reusing that decision
+    // means the fetch cannot disagree with the board the participant sees.
+    expect(
+      await handleCoordinationArtifactFetch(
+        deps({ importer: importerOf(ledger([])), artifacts }),
+        "key",
+        artifactId,
+      ),
+    ).toEqual({ kind: "not_found" });
+  });
+
+  it("should answer not_found for an artifact that does not exist", async () => {
+    // Same answer as unauthorized, so a participant cannot probe which ids
+    // exist in a match they cannot see.
+    expect(
+      await handleCoordinationArtifactFetch(
+        deps({ importer: importerOf(ledger([{ share: { artifactId: "ghost" } }])) }),
+        "key",
+        "ghost",
+      ),
+    ).toEqual({ kind: "not_found" });
+  });
+
+  it("should pass the scope resolution through when there is no such match", async () => {
+    expect(
+      await handleCoordinationArtifactFetch(
+        deps({ resolveScope: async () => ({ kind: "not_configured" as const }) }),
+        "key",
+        "anything",
+      ),
+    ).toEqual({ kind: "not_configured" });
+  });
+
+  it("should refuse rather than deny everything when the board cannot be built", async () => {
+    const artifacts = fakeArtifactStore();
+    const artifactId = await seed(artifacts);
+    const v2: CoordinationPlugin<unknown, unknown, unknown> = {
+      ...ledger([{ share: { artifactId } }]),
+      stateSchemaVersion: 2,
+      // A plugin declaring version 2 or above must carry a migration or it is
+      // refused at load — which would produce the fallback projection and a
+      // plain `not_found`, testing the wrong thing.
+      migrateState: (state) => state,
+    };
+
+    const out = await handleCoordinationArtifactFetch(
+      deps({
+        importer: importerOf(v2),
+        artifacts,
+        // A row stamped by a plugin newer than the one now loaded.
+        store: fakeStore({
+          state: { __tenkacloudCoordinationEnvelope: 1, stateSchemaVersion: 3, state: {} },
+          version: 1,
+        }),
+      }),
+      "key",
+      artifactId,
+    );
+
+    // Falling back to the empty projection would deny every artifact and look
+    // exactly like the artifacts having gone.
+    expect(out).toMatchObject({ kind: "schema_mismatch" });
   });
 });
