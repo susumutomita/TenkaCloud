@@ -630,6 +630,36 @@ describe.each(backends)("DeploymentsRepository parity: %s", (_label, makeBackend
     expect(await repo.readCoordinationRun(key)).toBeUndefined();
   });
 
+  it("should treat a pointer row that names no run as absent", async () => {
+    const { repo } = makeBackend();
+    const key = { tenantId: "tenant-a", eventId: "ev-partial", problemId: "battle" };
+    await expectOutcome(
+      repo.rotateCoordinationRun(key, "default", { runId: "r1", startedAt: AT, history: [] }, 0),
+      "updated",
+    );
+    expect((await repo.readCoordinationRun(key))?.runId).toBe("r1");
+  });
+
+  it("should keep only the string entries of a stored history", async () => {
+    const { repo } = makeBackend();
+    const key = { tenantId: "tenant-a", eventId: "ev-hist", problemId: "battle" };
+    await expectOutcome(
+      repo.rotateCoordinationRun(
+        key,
+        "default",
+        // A history written by a future version, or corrupted in place. The
+        // pointer's job is to say which run is CURRENT; refusing to answer that
+        // because a decorative list is malformed would take a live match down.
+        { runId: "r2", startedAt: AT, history: ["r1", 7 as unknown as string, "r0"] },
+        0,
+      ),
+      "updated",
+    );
+    const pointer = await repo.readCoordinationRun(key);
+    expect(pointer?.runId).toBe("r2");
+    expect(pointer?.history).toEqual(["r1", "r0"]);
+  });
+
   it("should keep run pointers of different problems and events apart", async () => {
     const { repo } = makeBackend();
     const key = { tenantId: "tenant-a", eventId: "ev-1", problemId: "battle-a" };

@@ -1,3 +1,4 @@
+import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
 import { describe, expect, it } from "vitest";
 import {
   type CompositeParentDeploymentRecord,
@@ -6,6 +7,7 @@ import {
   DynamoDbDeploymentsRepository,
   SqlDeploymentsRepository,
 } from "../../../lib/problem-deploy/control-data/deployments-repository";
+import { DynamoDbDeploymentsCoordination } from "../../../lib/problem-deploy/control-data/dynamodb-deployments-coordination";
 import {
   DynamoDbDeploymentsCore,
   isTransactConditionalCheckFailed,
@@ -520,6 +522,55 @@ describe("SqlDeploymentsCoordination", () => {
     });
   });
 
+  /**
+   * [Issue #3153] A history column the executor hands back malformed.
+   *
+   * The pointer's job is to say which run is CURRENT. Refusing to answer that
+   * because a decorative list will not parse would take a live match down over
+   * a corrupt string, so the history degrades to empty and the run id survives.
+   */
+  it("should keep answering which run is current when the history will not parse", async () => {
+    const coordination = new SqlDeploymentsCoordination(
+      new SqlDeploymentsCore(
+        scriptedExecutor({ row: { run_id: "r7", started_at: AT, history: "{not json" } }),
+      ),
+    );
+    expect(await coordination.readCoordinationRun(COORD_SCOPE)).toEqual({
+      runId: "r7",
+      startedAt: AT,
+      history: [],
+    });
+  });
+
+  it("should read an absent history column as no history", async () => {
+    const coordination = new SqlDeploymentsCoordination(
+      new SqlDeploymentsCore(scriptedExecutor({ row: { run_id: "r7", started_at: AT } })),
+    );
+    expect((await coordination.readCoordinationRun(COORD_SCOPE))?.history).toEqual([]);
+  });
+
+  /**
+   * [Issue #3153] The insert half of `rotateCoordinationRun` losing its race.
+   *
+   * Rotating away from the initial run has to work with no row present, so it
+   * tries a conditional UPDATE and falls back to an insert. If another
+   * rotation inserted first, that insert matches nothing — and reporting
+   * `updated` there would let two operators both believe they own the match.
+   */
+  it("should report a conflict when the first rotation loses its insert", async () => {
+    const coordination = new SqlDeploymentsCoordination(
+      new SqlDeploymentsCore(scriptedExecutor({ row: undefined })),
+    );
+    expect(
+      await coordination.rotateCoordinationRun(
+        COORD_SCOPE,
+        "default",
+        { runId: "r1", startedAt: AT, history: [] },
+        0,
+      ),
+    ).toEqual({ outcome: "conflict" });
+  });
+
   it("should roundtrip state and reject a stale version", async () => {
     const repo = makeSqlRepo();
     const write = await repo.writeCoordinationState(COORD_SCOPE, { phase: 1 }, 0, AT, 0);
@@ -778,5 +829,93 @@ describe("pure helper branches", () => {
     withReasons.CancellationReasons = [{ Code: "None" }, { Code: "ConditionalCheckFailed" }];
     expect(isTransactConditionalCheckFailed(withReasons)).toBe(true);
     expect(isTransactConditionalCheckFailed(new Error("other"))).toBe(false);
+  });
+});
+
+/**
+ * [Issue #3149 / #3153] The DynamoDB adapter's rethrow branches.
+ *
+ * Both new conditional writes fold a `ConditionalCheckFailed` into a
+ * `conflict`, which is exactly right for a lost race. Every OTHER error has to
+ * propagate: throttling or a permissions failure reported as "someone else got
+ * there first" would have the caller quietly move on from a write that never
+ * happened — the cleanup believing a match was preserved, or a reset believing
+ * another operator owned the run.
+ */
+describe("DynamoDbDeploymentsCoordination error propagation", () => {
+  const SCOPE = {
+    tenantId: "tenant-a",
+    eventId: "e1",
+    problemId: "problem-a",
+    runId: "default",
+  } as const;
+  const KEY = { tenantId: "tenant-a", eventId: "e1", problemId: "problem-a" } as const;
+
+  /**
+   * A doc client whose only behaviour is the one `send` under test. The real
+   * client cannot be scripted to reject with a specific SDK error, and going
+   * through a named variable keeps the widening assertion in one place instead
+   * of on every literal.
+   */
+  const stubDdb = (send: () => Promise<unknown>): DynamoDBDocumentClient => {
+    const client = { send };
+    return client as unknown as DynamoDBDocumentClient;
+  };
+
+  const failing = (error: Error) =>
+    new DynamoDbDeploymentsCoordination(
+      new DynamoDbDeploymentsCore(
+        stubDdb(() => Promise.reject(error)),
+        TABLE,
+      ),
+    );
+
+  it("should propagate a non-conditional failure from the conditional delete", async () => {
+    await expect(
+      failing(new Error("ProvisionedThroughputExceeded")).deleteCoordinationStateIfUnchanged(
+        SCOPE,
+        3,
+      ),
+    ).rejects.toThrow("ProvisionedThroughputExceeded");
+  });
+
+  it("should propagate a non-conditional failure from a run rotation", async () => {
+    await expect(
+      failing(new Error("AccessDenied")).rotateCoordinationRun(
+        KEY,
+        "default",
+        { runId: "r1", startedAt: AT, history: [] },
+        0,
+      ),
+    ).rejects.toThrow("AccessDenied");
+  });
+
+  it("should read a pointer row that names no run as absent", async () => {
+    // A row shaped by a future version, or half-written. "No current run" is
+    // the safe reading: the caller resolves that to the initial run rather than
+    // to a run id it made up.
+    const coordination = new DynamoDbDeploymentsCoordination(
+      new DynamoDbDeploymentsCore(
+        stubDdb(() => Promise.resolve({ Item: { PK: "x", SK: "CURRENT" } })),
+        TABLE,
+      ),
+    );
+    expect(await coordination.readCoordinationRun(KEY)).toBeUndefined();
+  });
+
+  it("should read a pointer with a non-array history as having none", async () => {
+    const coordination = new DynamoDbDeploymentsCoordination(
+      new DynamoDbDeploymentsCore(
+        stubDdb(() =>
+          Promise.resolve({ Item: { runId: "r1", startedAt: AT, history: "not-an-array" } }),
+        ),
+        TABLE,
+      ),
+    );
+    expect(await coordination.readCoordinationRun(KEY)).toEqual({
+      runId: "r1",
+      startedAt: AT,
+      history: [],
+    });
   });
 });

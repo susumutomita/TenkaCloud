@@ -46,7 +46,14 @@ describe("POST /events/:eventId/problems/:problemId/coordination/reset", () => {
   it("should 200 with the cleared namespace", async () => {
     mocks.resetCoordinationRun.mockResolvedValueOnce({
       kind: "ok",
-      result: { eventId: EVENT_ID, problemId: PROBLEM_ID, runId: "default" },
+      result: {
+        eventId: EVENT_ID,
+        problemId: PROBLEM_ID,
+        runId: "rNEW",
+        // [Issue #3153] The run that just ended, still readable under its own
+        // scope until the retention window pushes it out.
+        previousRunId: "default",
+      },
     });
 
     const res = await reset();
@@ -55,7 +62,8 @@ describe("POST /events/:eventId/problems/:problemId/coordination/reset", () => {
     expect(await res.json()).toEqual({
       eventId: EVENT_ID,
       problemId: PROBLEM_ID,
-      runId: "default",
+      runId: "rNEW",
+      previousRunId: "default",
     });
     expect(mocks.resetCoordinationRun).toHaveBeenCalledWith(
       shared,
@@ -82,5 +90,17 @@ describe("POST /events/:eventId/problems/:problemId/coordination/reset", () => {
     const res = await reset();
 
     expect(res.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
+  });
+
+  it("should 409 when another operator started a run first (#3153)", async () => {
+    // Two operators resetting the same match at once must not end up with two
+    // runs started and one silently discarded. The caller is told, and can look
+    // at which run is current before deciding whether they still want another.
+    mocks.resetCoordinationRun.mockResolvedValueOnce({ kind: "conflict" });
+
+    const res = await reset();
+
+    expect(res.status).toBe(StatusCodes.CONFLICT);
+    expect(await res.json()).toEqual({ error: "run_rotation_conflict" });
   });
 });
