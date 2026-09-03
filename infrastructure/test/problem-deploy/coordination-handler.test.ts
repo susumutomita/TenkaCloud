@@ -445,6 +445,48 @@ describe("makeCoordinationScopeResolver", () => {
     });
   });
 
+  /**
+   * [Issue #3172] The roster carries names, not just ids.
+   *
+   * `teamId` is a ULID, so a plugin that shows an opponent shows
+   * `01M1J5VK3N6KX5G3MYW190S9Q8` — which is exactly what the exposure lane did
+   * on live. The display name is on the same rows the roster already reads.
+   */
+  it("should carry each team's display name into the plugin context", async () => {
+    const resolve = makeCoordinationScopeResolver(
+      fakeShared([
+        {
+          problemId: "p1",
+          tenantId: "tn1",
+          eventId: "e1",
+          teamId: "t1",
+          status: "COMPLETE",
+          displayTeamName: "かけら隊",
+          teamName: "team-1",
+        },
+        {
+          problemId: "p1",
+          tenantId: "tn1",
+          eventId: "e1",
+          teamId: "t2",
+          status: "COMPLETE",
+          // No display name yet: the operator slug is what an opponent sees
+          // until the team names itself, and it still beats a ULID.
+          teamName: "team-2",
+        },
+        // A row with neither is left out rather than mapped to an empty string,
+        // so the plugin's own fallback to the id is what runs.
+        { problemId: "p1", tenantId: "tn1", eventId: "e1", teamId: "t3", status: "COMPLETE" },
+      ]),
+      config,
+    );
+    expect(scopeOf(await resolve("key"))?.ctx).toEqual({
+      eventId: "e1",
+      teamIds: ["t1", "t2", "t3"],
+      teamNames: { t1: "かけら隊", t2: "team-2" },
+    });
+  });
+
   it("should resolve a scope when the team's problem declares coordination", async () => {
     const resolve = makeCoordinationScopeResolver(
       fakeShared([
@@ -470,7 +512,7 @@ describe("makeCoordinationScopeResolver", () => {
         // namespace.
         state: { tenantId: "tn1", eventId: "e1", problemId: "p1", runId: "default" },
         teamId: "t1",
-        ctx: { eventId: "e1", teamIds: ["t1"] },
+        ctx: { eventId: "e1", teamIds: ["t1"], teamNames: {} },
         // moduleRef は problemId (= importer の S3 key `coordination/<id>.mjs`)。
         moduleRef: "p1",
         fallbackProjection: {},

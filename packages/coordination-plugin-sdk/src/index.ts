@@ -26,6 +26,20 @@ export interface CoordinationContext {
   /** 参加チームの teamId 一覧 (= 初期 state を teams 数に応じて組むため)。 */
   readonly teamIds: readonly string[];
   /**
+   * [Issue #3172] teamId → 参加者に見せる表示名。
+   *
+   * teamId は ULID なので、 plugin が相手チームを画面に出すと
+   * `01M1J5VK3N6KX5G3MYW190S9Q8` がそのまま並ぶ。 表示名は roster (deployment 行の
+   * `displayTeamName ?? teamName`) が持っており、 plugin からは引けない。
+   *
+   * optional なのは、 platform を通さない local play / 単体テストのため。 名前が無い
+   * teamId は plugin 側で id へ fallback する。
+   *
+   * **既知の限界**: ctx を受け取る hook は `initialState` だけなので、 試合開始後の
+   * 改名は反映されない。 反映するには SDK が別 hook にも ctx を渡す必要がある。
+   */
+  readonly teamNames?: Readonly<Record<string, string>>;
+  /**
    * [Issue #3133] この試合だけの server-only 秘密 (高エントロピー hex)。
    *
    * 参加者に推測できない材料が要る plugin (秘密の生成、 share の分割、 FHE / MPC の

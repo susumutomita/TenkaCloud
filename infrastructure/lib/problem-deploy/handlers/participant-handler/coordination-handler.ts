@@ -455,20 +455,29 @@ async function resolveEventRoster(
     readonly problemId: string;
     readonly requesterTeamId: string;
   },
-): Promise<readonly string[]> {
+): Promise<{ readonly teamIds: readonly string[]; readonly teamNames: Record<string, string> }> {
   const roster = new Set<string>([target.requesterTeamId]);
+  // [Issue #3172] teamId is a ULID, so a plugin that shows an opponent shows
+  // `01M1J5VK3N6KX5G3MYW190S9Q8`. The display name lives on the same rows this
+  // already reads — `displayTeamName ?? teamName`, the order the leaderboard
+  // resolves — so it costs nothing to carry it along.
+  const teamNames: Record<string, string> = {};
   try {
     const repository = await resolveDeploymentsRepository(shared);
     const rows = await repository.listByTenantAndEvent(target.tenantId, target.eventId);
     for (const row of rows) {
       if (row.problemId === target.problemId && typeof row.teamId === "string" && row.teamId) {
         roster.add(row.teamId);
+        const display = typeof row.displayTeamName === "string" ? row.displayTeamName : undefined;
+        const slug = typeof row.teamName === "string" ? row.teamName : undefined;
+        const name = display?.trim() || slug?.trim();
+        if (name) teamNames[row.teamId] = name;
       }
     }
   } catch {
     // roster 解決の失敗は coordination route を落とさない (requester のみで継続)。
   }
-  return [...roster].sort();
+  return { teamIds: [...roster].sort(), teamNames };
 }
 
 /**
@@ -576,7 +585,7 @@ export function makeCoordinationScopeResolver(
     if (prerequisite) {
       return { kind: "locked", gateProblemId: prerequisite.gateProblemId };
     }
-    const teamIds = await resolveEventRoster(shared, {
+    const roster = await resolveEventRoster(shared, {
       tenantId: item.tenantId,
       eventId: item.eventId,
       problemId: resolvedProblemId,
@@ -604,7 +613,12 @@ export function makeCoordinationScopeResolver(
           }),
         },
         teamId: item.teamId,
-        ctx: { eventId: item.eventId, teamIds },
+        ctx: {
+          eventId: item.eventId,
+          teamIds: roster.teamIds,
+          // [Issue #3172] So a plugin can name an opponent instead of printing its ULID.
+          teamNames: roster.teamNames,
+        },
         window: { eventStartsAt: item.eventStartsAt, eventEndsAt: item.eventEndsAt },
         // moduleRef は problemId (importer の key `coordination/<id>.mjs`)。
         // plugin path は宣言の有無判定にのみ使い、 実 load は problemId-keyed bundle を引く。
