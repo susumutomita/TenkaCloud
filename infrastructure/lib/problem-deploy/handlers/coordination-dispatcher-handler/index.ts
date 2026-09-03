@@ -140,6 +140,16 @@ function respondCoordination(
         },
         StatusCodes.INSUFFICIENT_STORAGE,
       );
+    // [Issue #3170] Progression Gate 未完了。 403 -- 要求は正しく、 認証も通っており、
+    // 拒否の理由は「まだその問題を開けていない」ことにある。 404 (`not_configured`) へ
+    // 落とすと「その問題は無い」と嘘をつくことになり、 参加者は Gate を完了しても
+    // 何も変わらないと解釈する。 `gateProblemId` を返すのは、 portal が
+    // 「先に hello-world を完了してください」の導線を出せるようにするため。
+    case "locked":
+      return c.json(
+        { error: "challenge_prerequisite_not_met", gateProblemId: outcome.gateProblemId },
+        StatusCodes.FORBIDDEN,
+      );
     default:
       return c.json({ error: "not_configured" }, StatusCodes.NOT_FOUND);
   }

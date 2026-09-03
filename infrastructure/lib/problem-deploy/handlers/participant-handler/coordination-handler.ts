@@ -8,6 +8,7 @@ import type { RoundWindow } from "../generic-scoring-handler/round-liveness.js";
 import { isScoringActive } from "../generic-scoring-handler/scoring-active.js";
 import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
 import { resolveCurrentCoordinationRunId } from "../shared/coordination-run.js";
+import { getPrerequisiteBlockByEventId } from "./challenge-access.js";
 import {
   type ArtifactFetchOutcome,
   discardArtifacts,
@@ -112,7 +113,12 @@ export type CoordinationScopeResolution =
   /** 認証不可 / 当該 event に coordination 宣言が無い / 指定 problemId が当該 team に無い。 */
   | { readonly kind: "not_configured" }
   /** `problemId` 省略で候補が複数。 候補を返して選択を要求する。 */
-  | { readonly kind: "ambiguous"; readonly problemIds: readonly string[] };
+  | { readonly kind: "ambiguous"; readonly problemIds: readonly string[] }
+  /**
+   * [Issue #3170] Progression Gate が未完了。 op も projection も拒否する。
+   * `gateProblemId` は先に完了すべき問題 (= 参加者に見せる導線)。
+   */
+  | { readonly kind: "locked"; readonly gateProblemId: string };
 
 export type CoordinationHandlerOutcome =
   | { readonly kind: "ok"; readonly projection: unknown }
@@ -122,6 +128,8 @@ export type CoordinationHandlerOutcome =
   | { readonly kind: "unavailable" }
   /** 認証不可 or 当該 event に coordination 宣言が無い (= scope null)。 */
   | { readonly kind: "not_configured" }
+  /** [Issue #3170] Gate challenge 未完了。 op は適用されない。 */
+  | { readonly kind: "locked"; readonly gateProblemId: string }
   /**
    * [Issue #3125] `problemId` 省略で coordination problem が複数ある。 どれか 1 つを勝手に
    * 選ぶと 2 問目が永久に到達不能になるので、 候補を返して選択を要求する。
@@ -276,7 +284,10 @@ export async function handleCoordinationArtifactFetch(
   | ArtifactFetchOutcome
   | Extract<
       CoordinationHandlerOutcome,
-      { kind: "not_configured" } | { kind: "ambiguous" } | { kind: "schema_mismatch" }
+      | { kind: "not_configured" }
+      | { kind: "ambiguous" }
+      | { kind: "schema_mismatch" }
+      | { kind: "locked" }
     >
 > {
   const resolution = await deps.resolveScope(teamLoginKey, problemId);
@@ -541,6 +552,30 @@ export function makeCoordinationScopeResolver(
       return { kind: "not_configured" };
     }
     const resolvedProblemId = item.problemId;
+    // [Issue #3170] The Progression Gate has to reach this route too.
+    //
+    // `challenge-access.ts` guards flag submission, hint reveal, endpoint
+    // registration and the credential paths — every participant route that
+    // lives in the portal Lambda. Coordination was split into its own minimal-
+    // IAM Lambda by #1420 and the guard did not come with it, so a Battle whose
+    // Gate challenge was untouched stayed fully playable: on live, a team with
+    // `hello-world` incomplete started the match, LEAKed three shares and landed
+    // a HUNT for +25, all while the page above the board said the problem was
+    // locked. The Gate was a label, not a lock.
+    //
+    // Both the op and the projection are refused, because the banner the
+    // participant reads says the problem's detail is inaccessible — leaving the
+    // board readable would contradict it, and a readable board is also the
+    // opponent's public record.
+    const prerequisite = await getPrerequisiteBlockByEventId(
+      shared,
+      items,
+      resolvedProblemId,
+      item.eventId,
+    );
+    if (prerequisite) {
+      return { kind: "locked", gateProblemId: prerequisite.gateProblemId };
+    }
     const teamIds = await resolveEventRoster(shared, {
       tenantId: item.tenantId,
       eventId: item.eventId,
