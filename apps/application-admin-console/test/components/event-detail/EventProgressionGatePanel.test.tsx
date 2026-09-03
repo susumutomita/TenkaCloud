@@ -212,8 +212,9 @@ describe("EventProgressionGatePanel", () => {
     // t2 の override select は required、 bonus input は 500。
     const selects = cw.findAllSelects();
     expect(selects[2]?.findTrigger().getElement().textContent).toContain("gate.policy_required");
+    // [Issue #3174] index 0 is the event-wide bonus now, then one per team.
     const bonusInputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
-    expect(bonusInputs[1]?.value).toBe("500");
+    expect(bonusInputs[2]?.value).toBe("500");
     // 除去 button は保存済み設定があるときだけ出る。
     expect(screen.getByText("gate.remove_button")).toBeInTheDocument();
   });
@@ -242,8 +243,10 @@ describe("EventProgressionGatePanel", () => {
     const t2Select = cw.findAllSelects()[2];
     t2Select?.openDropdown();
     t2Select?.selectOptionByValue("required");
+    // [Issue #3174] index 0 is the event-wide bonus, then one per team.
     const bonusInputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
-    fireEvent.change(bonusInputs[1] as HTMLInputElement, { target: { value: "1000" } });
+    fireEvent.change(bonusInputs[0] as HTMLInputElement, { target: { value: "50" } });
+    fireEvent.change(bonusInputs[2] as HTMLInputElement, { target: { value: "1000" } });
     // 保存。
     fireEvent.click(screen.getByText("gate.save_button"));
     await waitFor(() =>
@@ -251,11 +254,40 @@ describe("EventProgressionGatePanel", () => {
         gateProblemId: "p-gate",
         unlockTargetIds: ["p-a"],
         defaultPolicy: "required",
+        completionBonus: 50,
         teamOverrides: { t2: { policy: "required", completionBonus: 1000 } },
       }),
     );
     expect(onRefresh).toHaveBeenCalled();
     expect(await screen.findByText("gate.saved_flash")).toBeInTheDocument();
+  });
+
+  /**
+   * [Issue #3174] The case the old model could not express: leave every team on
+   * the event's policy and still hand one of them a bonus. `inherit` rows were
+   * dropped on save and their bonus input was disabled, so the only way to give
+   * a handicap was to take the team off the event's policy.
+   */
+  it("should send a bonus-only override without touching the team's policy", async () => {
+    getFlags.mockResolvedValue({ challengePrerequisiteGate: true });
+    const { container } = renderPanel();
+    await screen.findByText("gate.save_button");
+    const cw = createWrapper(container);
+    cw.findSelect()?.openDropdown();
+    cw.findSelect()?.selectOptionByValue("p-gate");
+    cw.findMultiselect()?.openDropdown();
+    cw.findMultiselect()?.selectOptionByValue("p-a");
+    const bonusInputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
+    fireEvent.change(bonusInputs[1] as HTMLInputElement, { target: { value: "250" } });
+    fireEvent.click(screen.getByText("gate.save_button"));
+    await waitFor(() =>
+      expect(putGate).toHaveBeenCalledWith(fakeApi, "EVT1", {
+        gateProblemId: "p-gate",
+        unlockTargetIds: ["p-a"],
+        defaultPolicy: "required",
+        teamOverrides: { t1: { completionBonus: 250 } },
+      }),
+    );
   });
 
   it("should omit teamOverrides entirely when no team is overridden", async () => {

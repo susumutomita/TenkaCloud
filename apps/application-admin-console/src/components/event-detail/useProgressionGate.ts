@@ -16,6 +16,7 @@ import {
   GATE_FLAG,
   initialDrafts,
   isDemoFlagsUnsupported,
+  isValidBonusInput,
   mapGateSaveError,
   type OverrideDraft,
   validateDraft,
@@ -110,6 +111,9 @@ export interface GateEditorState {
   readonly gateProblemId: string | null;
   readonly unlockTargetIds: readonly string[];
   readonly defaultPolicy: ProgressionGatePolicy;
+  /** [Issue #3174] Event 既定の完了ボーナス。 空欄 = 省略 (= 0)。 */
+  readonly defaultBonus: string;
+  readonly setDefaultBonus: (next: string) => void;
   readonly saveInFlight: boolean;
   readonly saveError: string | null;
   readonly savedFlash: boolean;
@@ -151,6 +155,13 @@ export function useGateEditor(args: {
   const [defaultPolicy, setDefaultPolicy] = useState<ProgressionGatePolicy>(
     stored?.defaultPolicy ?? "required",
   );
+  // [Issue #3174] The event-wide bonus. Blank means "omit", which the backend
+  // reads as 0 — the same figure operators used to get with no field to see it in.
+  const [defaultBonus, setDefaultBonus] = useState<string>(
+    stored?.completionBonus !== undefined && stored.completionBonus > 0
+      ? String(stored.completionBonus)
+      : "",
+  );
   const [drafts, setDrafts] = useState<Record<string, OverrideDraft>>(() => initialDrafts(stored));
   const [saveInFlight, setSaveInFlight] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -158,12 +169,13 @@ export function useGateEditor(args: {
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [removeInFlight, setRemoveInFlight] = useState(false);
 
-  const validationErrorKey = validateDraft({
-    gateProblemId,
-    unlockTargetIds,
-    drafts,
-    teamIds: detail.teams.map((team) => team.teamId),
-  });
+  const validationErrorKey =
+    validateDraft({
+      gateProblemId,
+      unlockTargetIds,
+      drafts,
+      teamIds: detail.teams.map((team) => team.teamId),
+    }) ?? (isValidBonusInput(defaultBonus) ? null : "gate.error_bonus_range");
 
   const draftFor = (teamId: string): OverrideDraft =>
     drafts[teamId] ?? { policy: "inherit", bonus: "" };
@@ -184,10 +196,14 @@ export function useGateEditor(args: {
     /* v8 ignore next */
     if (!gateProblemId) return;
     const teamOverrides = buildTeamOverrides(detail.teams, draftFor);
+    const bonus = defaultBonus.trim() === "" ? 0 : Number(defaultBonus.trim());
     const config: ProgressionGateConfig = {
       gateProblemId,
       unlockTargetIds: unlockTargetIds.filter((id) => id !== gateProblemId),
       defaultPolicy,
+      // Omitted when zero, so the stored shape stays what it was for events that
+      // never wanted a bonus.
+      ...(bonus > 0 ? { completionBonus: bonus } : {}),
       ...(teamOverrides ? { teamOverrides } : {}),
     };
     setSaveInFlight(true);
@@ -223,6 +239,8 @@ export function useGateEditor(args: {
     gateProblemId,
     unlockTargetIds,
     defaultPolicy,
+    defaultBonus,
+    setDefaultBonus,
     saveInFlight,
     saveError,
     savedFlash,

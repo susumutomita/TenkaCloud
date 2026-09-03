@@ -972,7 +972,10 @@
     "error_reason_event_archived": "Gate settings cannot be changed on an archived event.",
     "error_gate_required": "Choose a gate challenge.",
     "error_no_targets": "Choose at least one unlock target.",
-    "error_bonus_range": "Completion bonus must be an integer between 0 and 100000."
+    "error_bonus_range": "Completion bonus must be an integer between 0 and 100000.",
+    "default_bonus_label": "Completion bonus (all teams)",
+    "default_bonus_description": "Awarded once when the Gate is completed. Blank means 0. A team's own value takes precedence.",
+    "default_bonus_placeholder": "0 (no bonus)"
   },
   "capacity": {
     "header": "DynamoDB capacity",

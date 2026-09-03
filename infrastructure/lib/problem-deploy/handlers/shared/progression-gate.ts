@@ -58,7 +58,9 @@ export const ProgressionGateTeamPolicySchema = z.enum(["required", "off"]);
  */
 export const ProgressionGateTeamOverrideSchema = z
   .object({
-    policy: ProgressionGateTeamPolicySchema,
+    // [Issue #3174] Optional: a team may carry a bonus and still follow the
+    // event's policy.
+    policy: ProgressionGateTeamPolicySchema.optional(),
     completionBonus: z.number().int().min(0).max(MAX_COMPLETION_BONUS).optional(),
   })
   .strict();
@@ -77,6 +79,8 @@ export const ProgressionGateConfigSchema = z
     gateProblemId: z.string().regex(GATE_PROBLEM_ID_RE),
     unlockTargetIds: z.array(z.string().regex(GATE_PROBLEM_ID_RE)).min(1).max(49),
     defaultPolicy: ProgressionGateTeamPolicySchema,
+    // [Issue #3174] The event-wide bonus. Same ceiling as the per-team one.
+    completionBonus: z.number().int().min(0).max(MAX_COMPLETION_BONUS).optional(),
     teamOverrides: z
       .record(z.string().min(1).max(64), ProgressionGateTeamOverrideSchema)
       .optional(),
@@ -131,7 +135,10 @@ export function resolveTeamGatePolicy(
   const override = teamId ? config.teamOverrides?.[teamId] : undefined;
   return {
     policy: override?.policy ?? config.defaultPolicy,
-    completionBonus: override?.completionBonus ?? 0,
+    // [Issue #3174] Event default, then 0. Before this the event had no bonus
+    // field at all, so a team without an override got nothing and the operator
+    // had nowhere to see that.
+    completionBonus: override?.completionBonus ?? config.completionBonus ?? 0,
   };
 }
 
