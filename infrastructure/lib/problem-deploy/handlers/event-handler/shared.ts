@@ -87,10 +87,11 @@ function parseProblemsCoordination(raw: string | undefined): Readonly<Record<str
   try {
     parsed = JSON.parse(raw);
   } catch (err) {
+    // `String(err)` rather than narrowing to `Error`: `JSON.parse` throws only
+    // `SyntaxError`, so an `instanceof` check here has an arm nothing can
+    // reach — and an unreachable arm is a branch no test can honestly cover.
     throw new Error(
-      `BATTLE_PROBLEMS_COORDINATION is not valid JSON; the coordination capacity check cannot run: ${
-        err instanceof Error ? err.message : String(err)
-      }`,
+      `BATTLE_PROBLEMS_COORDINATION is not valid JSON; the coordination capacity check cannot run: ${String(err)}`,
     );
   }
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {

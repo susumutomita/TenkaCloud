@@ -135,4 +135,36 @@ describe("EventCreateDeployPromptModal", () => {
     render(<EventCreateDeployPromptModal {...props()} />);
     expect(screen.queryByText("lite_drill.checkpoint_header")).not.toBeInTheDocument();
   });
+
+  /**
+   * [Issue #3169] The capacity warning has to be visible on this screen.
+   *
+   * It travelled from the API into the response and was dropped by the console,
+   * so an operator created an oversized event, pressed "Deploy now", and was
+   * refused with no earlier signal. This modal is the last screen before they
+   * leave the creation flow, which makes it the last cheap moment to change the
+   * team roster.
+   */
+  it("should show every capacity warning the API returned", () => {
+    render(
+      <EventCreateDeployPromptModal
+        {...props({
+          capacityWarnings: [
+            'problem "ac26-crypto-battle" will not fit 99 teams on the dynamodb backend',
+            'problem "other-battle" will not fit 99 teams on the dynamodb backend',
+          ],
+        })}
+      />,
+    );
+
+    expect(screen.getByText(/ac26-crypto-battle/)).toBeInTheDocument();
+    expect(screen.getByText(/other-battle/)).toBeInTheDocument();
+  });
+
+  it("should show nothing when the event fits", () => {
+    // The common case. An empty list must not leave an empty alert box behind.
+    render(<EventCreateDeployPromptModal {...props({ capacityWarnings: [] })} />);
+
+    expect(screen.queryByText("event_create.capacity_warning_header")).not.toBeInTheDocument();
+  });
 });
