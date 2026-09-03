@@ -310,19 +310,25 @@ describe("reading the declaration out of the Lambda environment", () => {
     });
   });
 
+  it("should read an unset value as an empty catalog", () => {
+    // Not every deployment has a coordination problem, and one that has none
+    // may not have the variable wired at all. That is not corruption.
+    expect(readEnv(undefined)).toEqual({});
+  });
+
   it.each([
-    ["absent", undefined],
     ["not JSON at all", "{oops"],
     ["a JSON array", "[]"],
     ["a JSON scalar", '"nope"'],
     ["JSON null", "null"],
-  ])("should read a %s value as nothing declared rather than throwing", (_label, value) => {
-    // This env var reaches every bulk deploy, including the ones with no
-    // coordination problem in them. Throwing here would let a shape problem in
-    // an unrelated part of the catalog take all of them down; reading it as
-    // "nothing declared" only skips the size check, which is the same outcome
-    // as a catalog where nobody declared a budget.
-    expect(readEnv(value)).toEqual({});
+  ])("should throw on a %s value rather than disabling the check (#3169)", (_label, value) => {
+    // An empty catalog is already expressible as a valid `{}`, so a malformed
+    // value can only mean the build or the deployment configuration is broken.
+    // Folding it to `{}` would silently switch the capacity check off and let
+    // an oversized event through — the failure this check exists to prevent,
+    // now with nothing to trace it back to. This value is substituted at build
+    // time, so failing at Lambda init surfaces it where it can be fixed.
+    expect(() => readEnv(value)).toThrow(/BATTLE_PROBLEMS_COORDINATION/);
   });
 });
 
@@ -342,5 +348,54 @@ describe("budget arithmetic at its edges", () => {
     const huge = { bytesPerTeam: 1, baseBytes: dynamodb.maxBytes + 1 };
     expect(maxTeamsForCoordinationBudget(huge, dynamodb)).toBe(0);
     expect(checkCoordinationCapacity(huge, 0, dynamodb).kind).toBe("over");
+  });
+});
+
+describe("the scheduled deploy path", () => {
+  // Every variable this describe sets is restored, not just the one under
+  // test: `buildScheduledDeployResources` needs a whole environment to return
+  // anything at all, and leaking those into later suites makes a failure show
+  // up somewhere unrelated to the test that caused it.
+  const ENV_KEYS = [
+    "PROBLEM_COORDINATION",
+    "DEPLOY_EVENT_BUS_NAME",
+    "DEPLOY_ENVIRONMENT",
+    "BATTLE_PROBLEMS_CATALOG",
+    "COMPETITOR_ACCOUNTS_TABLE_NAME",
+    "EVENTS_TABLE_NAME",
+    "DEPLOYMENTS_TABLE_NAME",
+    "TEAMS_TABLE_NAME",
+  ] as const;
+  const originals = new Map(ENV_KEYS.map((key) => [key, process.env[key]] as const));
+  afterEach(() => {
+    for (const [key, value] of originals) process.env[key] = value;
+  });
+
+  it("should carry the same declaration the manual route checks (#3169)", async () => {
+    // A DRAFT event whose `deployAt` comes round reaches the SAME
+    // `bulkDeployEvent`. Leaving its declaration empty meant the guard held
+    // only for the path an operator was watching, and a scheduled deploy
+    // enqueued the very event the button would have refused.
+    const { buildScheduledDeployResources } = await import(
+      "../../lib/problem-deploy/handlers/event-handler/shared"
+    );
+    process.env.PROBLEM_COORDINATION = JSON.stringify({
+      "ac26-crypto-battle": { stateBudget: forecast },
+    });
+    process.env.DEPLOY_EVENT_BUS_NAME = "test-bus";
+    process.env.DEPLOY_ENVIRONMENT = "development";
+    process.env.BATTLE_PROBLEMS_CATALOG = JSON.stringify({
+      "ac26-crypto-battle": "problems/battles/ac26-crypto-battle",
+    });
+    process.env.COMPETITOR_ACCOUNTS_TABLE_NAME = "C";
+    process.env.EVENTS_TABLE_NAME = "E";
+    process.env.DEPLOYMENTS_TABLE_NAME = "D";
+    process.env.TEAMS_TABLE_NAME = "T";
+
+    const resources = buildScheduledDeployResources(makeTestControlDataRuntime());
+
+    expect(resources?.problemsCoordination).toEqual({
+      "ac26-crypto-battle": { stateBudget: forecast },
+    });
   });
 });

@@ -314,4 +314,36 @@ describe("createEvent", () => {
       expect(item.Put?.ConditionExpression).toBe("attribute_not_exists(PK)");
     }
   });
+
+  /**
+   * [Issue #3169] The capacity warning is advisory, and advisory output must
+   * never be able to fail a write that already succeeded.
+   *
+   * `coordinationStateBudget()` throws on a malformed
+   * `COORDINATION_STATE_MAX_BYTES` — on purpose, since a typo there would
+   * otherwise silently restore the "no ceiling at all" state #3151 removed.
+   * Computing the warning AFTER the commit therefore meant an environment with
+   * that typo persisted the event and its teams and then returned 500, taking
+   * the one-time plaintext `teamLoginKey` values with it. There is no way to
+   * re-read them, so the operator loses an event they cannot use and cannot
+   * delete cleanly.
+   */
+  it("should not commit the event when the capacity warning cannot be computed", async () => {
+    const { shared, ddbSend } = buildShared({
+      runtime: {
+        ...makeTestControlDataRuntime(),
+        coordinationStateBudget: () => {
+          throw new RangeError("COORDINATION_STATE_MAX_BYTES must be a positive integer");
+        },
+      },
+    });
+    ddbSend.mockResolvedValue({});
+
+    await expect(
+      createEvent(shared, { tenantId: "tenant-acme", nowMs: NOW_MS }, sampleRequest()),
+    ).rejects.toThrow("COORDINATION_STATE_MAX_BYTES");
+
+    // Nothing was written, so there are no login keys to have lost.
+    expect(ddbSend).not.toHaveBeenCalled();
+  });
 });

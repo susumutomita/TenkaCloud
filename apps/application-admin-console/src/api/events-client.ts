@@ -157,6 +157,15 @@ export interface CreateEventResponse {
     teamLoginKey: string;
   }[];
   problems: readonly EventProblemTarget[];
+  /**
+   * [Issue #3169] Advisory notes from creation — today, a coordination problem
+   * whose state cannot fit this event's team count on the selected backend.
+   *
+   * Optional because the API omits the field when there is nothing to say. It
+   * has to reach the operator here: the deploy will refuse the event outright,
+   * and the creation screen is where the team roster can still be changed.
+   */
+  warnings?: readonly string[];
 }
 
 export interface BulkResult {

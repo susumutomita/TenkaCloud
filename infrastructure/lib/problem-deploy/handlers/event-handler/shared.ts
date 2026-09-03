@@ -62,23 +62,44 @@ export type PackCatalogProvenance = Extract<
  * `env` を share する。
  */
 /**
- * [Issue #3169] `BATTLE_PROBLEMS_COORDINATION` (= synth が metadata.json から集めた
- * `{ [problemId]: interTeamCoordination }`) を JSON parse する。
+ * [Issue #3169] synth が metadata.json から集めた
+ * `{ [problemId]: interTeamCoordination }` を JSON parse する。
  *
- * 壊れた JSON や object でない値は `{}` に倒す。 この宣言は capacity preflight の入力で
- * しかなく、 読めないことは「宣言が無い」と同義 — 検査が省かれるだけで deploy 自体は
- * 従来どおり通る。 ここで throw すると、 coordination と無関係な bulk deploy まで
- * env の破損で止まる。
+ * ## 壊れていたら握り潰さず throw する
+ *
+ * 初版は不正な JSON を `{}` に倒していた。 「coordination と無関係な bulk deploy まで
+ * env の破損で止めたくない」という理由だったが、 これは **failure を空値へ変換して隠す**
+ * (AGENTS.md) そのものだった。 影響範囲の話は正しくても、 結論が逆になっている:
+ *
+ *   - 空の catalog は `{}` という**正当な値で既に表現できる**。 つまり不正な値は
+ *     「宣言が無い」ではなく「build か deploy 設定が壊れている」しか意味しない。
+ *   - その状態で `{}` に倒すと、 capacity preflight は黙って無効になる。 収まらない
+ *     event が通り、 試合が止まるのは本番の最中で、 誰も原因に辿り着けない。
+ *   - この値は esbuild が build 時に literal 置換したもので、 runtime のデータではない。
+ *     壊れているなら deploy の時点で壊れており、 Lambda 初期化で落ちる方が発見が早い。
+ *
+ * 未設定と空文字だけは `{}` を返す。 coordination 問題を 1 つも持たない deployment では
+ * env そのものが配線されないことがあり、 それは破損ではないため。
  */
 function parseProblemsCoordination(raw: string | undefined): Readonly<Record<string, unknown>> {
-  if (!raw) return {};
+  if (raw === undefined || raw.trim() === "") return {};
+  let parsed: unknown;
   try {
-    const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return {};
-    return parsed as Readonly<Record<string, unknown>>;
-  } catch {
-    return {};
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    throw new Error(
+      `BATTLE_PROBLEMS_COORDINATION is not valid JSON; the coordination capacity check cannot run: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    );
   }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error(
+      "BATTLE_PROBLEMS_COORDINATION must be a JSON object of problemId to declaration; " +
+        "an empty catalog is {}",
+    );
+  }
+  return parsed as Readonly<Record<string, unknown>>;
 }
 
 export interface EventSharedResources {
@@ -326,7 +347,16 @@ export function buildScheduledDeployResources(
     disruptionsTableName: process.env.DISRUPTIONS_TABLE_NAME ?? "",
     adminAuditLogTableName: process.env.ADMIN_AUDIT_LOG_TABLE_NAME ?? "",
     problemsDisruptions: {},
-    problemsCoordination: {},
+    // [Issue #3169] Scheduled deploy reaches the SAME `bulkDeployEvent` as the
+    // manual route, so it has to reach the same capacity preflight. Leaving
+    // this `{}` meant a DRAFT event whose `deployAt` came round was deployed
+    // without the check that the operator's own button would have refused —
+    // the guard would hold only for the path someone was watching.
+    //
+    // The generic-scoring bundle carries this catalog under its own name
+    // (`PROBLEM_COORDINATION`, see `generic-scoring-lambda.ts`), so it is
+    // parsed rather than replaced.
+    problemsCoordination: parseProblemsCoordination(process.env.PROBLEM_COORDINATION),
     problemsProvenance: {},
     // Distributed Map 経路は EventApiLambda 専用 (= S3 bucket env)。 reconciler は旧 fan-out
     // 経路 (N×M DeployCreateRequested publish) を使うので bucket 不要 / flag は false 固定。

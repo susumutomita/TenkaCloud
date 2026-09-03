@@ -37,6 +37,16 @@ export interface EventCreateDeployPromptModalProps {
    * コード。 caller (= EventCreatePage) が Lite 判定込みで解決し、 非 Lite では undefined。
    */
   readonly liteDrillCheckpointCode?: string;
+  /**
+   * [Issue #3169] Advisory notes from creation, today: a coordination problem
+   * this event's team count cannot fit on the selected backend.
+   *
+   * Shown as an error rather than a warning because it is not a caution — the
+   * deploy this modal is offering will be refused. The operator's options are
+   * fewer teams or a different backend, and both are cheaper to act on here
+   * than after they leave this screen.
+   */
+  readonly capacityWarnings?: readonly string[];
   onDeployNow: () => void;
   onDeployLater: () => void;
 }
@@ -49,6 +59,7 @@ export function EventCreateDeployPromptModal({
   teams,
   participantPortalUrl,
   liteDrillCheckpointCode,
+  capacityWarnings = [],
   onDeployNow,
   onDeployLater,
 }: EventCreateDeployPromptModalProps) {
@@ -141,6 +152,15 @@ export function EventCreateDeployPromptModal({
             ? t("event_create.deploy_modal_alert_body")
             : t("event_create.deploy_modal_alert_body_non_aws")}
         </Alert>
+        {capacityWarnings.length > 0 && (
+          <Alert type="error" header={t("event_create.capacity_warning_header")}>
+            <ul>
+              {capacityWarnings.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+          </Alert>
+        )}
         {liteDrillCheckpointCode && <LiteDrillCheckpointAlert code={liteDrillCheckpointCode} />}
       </SpaceBetween>
     </Modal>

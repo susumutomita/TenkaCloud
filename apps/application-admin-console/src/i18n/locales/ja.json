@@ -235,6 +235,7 @@
     "deploy_modal_later": "あとで",
     "deploy_modal_now": "今すぐ Deploy",
     "deploy_modal_alert_header": "次は問題の Deploy です",
+    "capacity_warning_header": "この構成ではデプロイが拒否されます",
     "deploy_modal_alert_body": "チーム毎の問題 deploy を実行するまで、 participant は問題にアクセスできません。 「今すぐ Deploy」 で全 team × 全問題を一括 deploy します。 「あとで」 を選んだ場合は、 EventDetail 画面の Deploy button から後で実行できます。",
     "deploy_modal_alert_body_non_aws": "一括 Deploy は現在 AWS event のみ対応です。この event ではデプロイ履歴ページの新規デプロイから、ここで束縛した team 認証情報 slug を使って provider adapter 経由で team ごとに deploy してください。",
     "login_keys_header": "今すぐログインキーを保存してください",
