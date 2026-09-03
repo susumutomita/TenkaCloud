@@ -198,6 +198,46 @@ describe("EventProgressionGatePanel", () => {
     expect(screen.getByText("gate.error_gate_required")).toBeInTheDocument();
   });
 
+  /**
+   * [Issue #3174] What a stored config now looks like when it uses the two
+   * things that did not exist before: an event-wide bonus, and a team override
+   * that carries only a bonus while still following the event's policy.
+   */
+  it("should prefill the event bonus and a policy-less team override", async () => {
+    getFlags.mockResolvedValue({ challengePrerequisiteGate: true });
+    const { container } = renderPanel({
+      detail: detail({
+        progressionGate: {
+          gateProblemId: "p-gate",
+          unlockTargetIds: ["p-a"],
+          defaultPolicy: "required",
+          completionBonus: 300,
+          teamOverrides: { t1: { completionBonus: 750 } },
+        },
+      }),
+    });
+    await screen.findByText("gate.save_button");
+    const bonusInputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
+    expect(bonusInputs[0]?.value).toBe("300");
+    expect(bonusInputs[1]?.value).toBe("750");
+    // The row carries a bonus and no policy, so its select still reads inherit.
+    const selects = createWrapper(container).findAllSelects();
+    expect(selects[1]?.findTrigger().getElement().textContent).toContain("gate.policy_inherit");
+  });
+
+  it("should refuse to save an out-of-range event bonus", async () => {
+    // The event field is validated on the same rule as a team's, and the save
+    // button mirrors it — an operator cannot push a typo'd handicap through.
+    getFlags.mockResolvedValue({ challengePrerequisiteGate: true });
+    const { container } = renderPanel({ detail: detail({ progressionGate: storedGate }) });
+    await screen.findByText("gate.save_button");
+    const bonusInputs = screen.getAllByRole("spinbutton") as HTMLInputElement[];
+    fireEvent.change(bonusInputs[0] as HTMLInputElement, { target: { value: "999999999" } });
+    expect(screen.getByText("gate.error_bonus_range")).toBeInTheDocument();
+    expect(saveButton()?.closest("button")).toBeDisabled();
+    expect(createWrapper(container).findAllSelects().length).toBeGreaterThan(0);
+  });
+
   it("should render the editor prefilled from detail.progressionGate when the flag is ON", async () => {
     getFlags.mockResolvedValue({ challengePrerequisiteGate: true });
     const { container } = renderPanel({ detail: detail({ progressionGate: storedGate }) });
