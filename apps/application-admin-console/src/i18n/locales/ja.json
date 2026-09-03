@@ -976,7 +976,10 @@
     "error_reason_event_archived": "ARCHIVED なイベントの Gate 設定は変更できません。",
     "error_gate_required": "Gate challenge を選択してください。",
     "error_no_targets": "アンロック対象を 1 つ以上選択してください。",
-    "error_bonus_range": "完了ボーナスは 0〜100000 の整数で入力してください。"
+    "error_bonus_range": "完了ボーナスは 0〜100000 の整数で入力してください。",
+    "default_bonus_label": "完了ボーナス (全チーム共通)",
+    "default_bonus_description": "Gate 完了時に 1 度だけ加点します。空欄は 0。チーム別上書きがあればそちらが優先されます。",
+    "default_bonus_placeholder": "0 (ボーナスなし)"
   },
   "capacity": {
     "header": "DynamoDB キャパシティ",

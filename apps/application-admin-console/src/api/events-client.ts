@@ -98,7 +98,8 @@ export type ProgressionGatePolicy = "required" | "off";
 
 /** Issue #2283: team 単位の上書き。 `completionBonus` は Gate 完了時に 1 度だけ付与 (int 0..100000、省略時 0)。 */
 export interface ProgressionGateTeamOverride {
-  policy: ProgressionGatePolicy;
+  /** [Issue #3174] Optional — a team may carry a bonus and still follow the event's policy. */
+  policy?: ProgressionGatePolicy;
   completionBonus?: number;
 }
 
@@ -114,6 +115,11 @@ export interface ProgressionGateConfig {
   /** Gate 完了までロックする problemId (1..49、重複なし、gateProblemId を含まない)。 */
   unlockTargetIds: readonly string[];
   defaultPolicy: ProgressionGatePolicy;
+  /**
+   * [Issue #3174] Gate 完了時に全 team へ与えるボーナス (team override 優先、 省略時 0)。
+   * これが無かったため、 既定 policy のままボーナスだけ配ることができなかった。
+   */
+  completionBonus?: number;
   /** key = その Event の teamId。 未記載 team は defaultPolicy に従う。 */
   teamOverrides?: Readonly<Record<string, ProgressionGateTeamOverride>>;
 }

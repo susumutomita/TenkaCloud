@@ -137,6 +137,24 @@ function GateEditor({
           onChange={({ detail: d }) => editor.setDefaultPolicy(d.value as ProgressionGatePolicy)}
         />
       </Field>
+      {/*
+        [Issue #3174] The event's own bonus. Without it the effective figure was
+        0 with nowhere on screen to say so, and the only way to hand out a
+        handicap was to override every team's policy one row at a time.
+      */}
+      <Field label={t("gate.default_bonus_label")}>
+        <Box variant="small" color="text-body-secondary">
+          {t("gate.default_bonus_description")}
+        </Box>
+        <Input
+          type="number"
+          inputMode="numeric"
+          placeholder={t("gate.default_bonus_placeholder")}
+          value={editor.defaultBonus}
+          onChange={({ detail: d }) => editor.setDefaultBonus(d.value)}
+          disabled={!canMutateTenant}
+        />
+      </Field>
 
       <Header variant="h3" description={t("gate.overrides_description")}>
         {t("gate.overrides_header")}
@@ -149,7 +167,6 @@ function GateEditor({
         <SpaceBetween size="xs">
           {detail.teams.map((team) => {
             const draft = editor.draftFor(team.teamId);
-            const overridden = draft.policy !== "inherit";
             return (
               <SpaceBetween key={team.teamId} direction="horizontal" size="xs" alignItems="center">
                 <Box variant="strong">{team.displayName || team.internalSlug}</Box>
@@ -172,13 +189,17 @@ function GateEditor({
                 <Input
                   type="number"
                   inputMode="numeric"
-                  placeholder={t("gate.bonus_placeholder")}
+                  placeholder={editor.defaultBonus.trim() || t("gate.bonus_placeholder")}
                   value={draft.bonus}
                   onChange={({ detail: d }) =>
                     editor.setDraft(team.teamId, { ...draft, bonus: d.value })
                   }
-                  // bonus は override したときだけ意味を持つ (= inherit 行は入力不可)。
-                  disabled={!canMutateTenant || !overridden}
+                  // [Issue #3174] Editable whatever the policy says. Disabling it
+                  // on `inherit` rows is what welded the bonus to the policy
+                  // override: a team could not carry a handicap without also
+                  // being taken off the event's policy. Blank means "use the
+                  // event's bonus", which the placeholder states.
+                  disabled={!canMutateTenant}
                 />
               </SpaceBetween>
             );

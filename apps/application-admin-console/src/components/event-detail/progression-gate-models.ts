@@ -42,7 +42,7 @@ export function initialDrafts(
   const out: Record<string, OverrideDraft> = {};
   for (const [teamId, override] of Object.entries(stored?.teamOverrides ?? {})) {
     out[teamId] = {
-      policy: override.policy,
+      policy: override.policy ?? "inherit",
       // completionBonus 0 / 未設定は空欄表示 (= 保存時も省略する)。
       bonus:
         override.completionBonus !== undefined && override.completionBonus > 0
@@ -80,8 +80,12 @@ export function validateDraft(args: {
   // 実在 team の draft に限定する。 でないと除去済み team の残骸 draft が「見えないエラー」で
   // Save を永続 block する。
   for (const teamId of teamIds) {
+    // [Issue #3174] The bonus is checked whatever the policy is. It used to be
+    // skipped for `inherit` rows, which was consistent with dropping them on
+    // save — and both together are why "keep the default policy, give everyone
+    // a bonus" could not be expressed.
     const draft = drafts[teamId];
-    if (draft && draft.policy !== "inherit" && !isValidBonusInput(draft.bonus)) {
+    if (draft && !isValidBonusInput(draft.bonus)) {
       return "gate.error_bonus_range";
     }
   }
@@ -100,12 +104,18 @@ export function buildTeamOverrides(
   const out: Record<string, ProgressionGateTeamOverride> = {};
   for (const team of teams) {
     const draft = draftFor(team.teamId);
-    if (draft.policy === "inherit") continue;
     const trimmed = draft.bonus.trim();
     const bonus = trimmed === "" ? 0 : Number(trimmed);
-    // bonus 0 / 空欄は completionBonus を省略する (= backend 省略時 0 と同義)。
-    out[team.teamId] =
-      bonus > 0 ? { policy: draft.policy, completionBonus: bonus } : { policy: draft.policy };
+    // [Issue #3174] A row is sent when it says ANYTHING — a policy of its own, a
+    // bonus of its own, or both. Skipping every `inherit` row is what made the
+    // bonus a hostage of the policy override: the only way to give a team a
+    // handicap was to stop it following the event's policy.
+    const hasPolicy = draft.policy !== "inherit";
+    if (!hasPolicy && bonus <= 0) continue;
+    out[team.teamId] = {
+      ...(hasPolicy ? { policy: draft.policy } : {}),
+      ...(bonus > 0 ? { completionBonus: bonus } : {}),
+    };
   }
   return Object.keys(out).length > 0 ? out : undefined;
 }
