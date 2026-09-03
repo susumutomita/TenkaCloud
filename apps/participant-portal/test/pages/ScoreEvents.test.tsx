@@ -13,11 +13,16 @@ import type { AppConfig } from "../../src/config";
  * する。 ScoreEventsTable は stub せず実物で render し、 source badge / points 正負 / 空状態を
  * 同時に網羅する。 buildCumulativeSeries の sort・同値・無効 timestamp skip も同経路で踏む。
  */
-const { mockAuth, mockIsMock, mockGet } = vi.hoisted(() => ({
-  mockAuth: vi.fn(),
-  mockIsMock: vi.fn(),
-  mockGet: vi.fn(),
-}));
+const { mockAuth, mockIsMock, mockGet, mockTeamViewRefresh, mockUseTeamView } = vi.hoisted(() => {
+  const refresh = vi.fn();
+  return {
+    mockAuth: vi.fn(),
+    mockIsMock: vi.fn(),
+    mockGet: vi.fn(),
+    mockTeamViewRefresh: refresh,
+    mockUseTeamView: vi.fn(() => ({ refresh })),
+  };
+});
 
 vi.mock("../../src/i18n", () => ({
   useT: () => (key: string, params?: Readonly<Record<string, string | number>>) =>
@@ -25,6 +30,10 @@ vi.mock("../../src/i18n", () => ({
   useLang: () => "ja",
 }));
 vi.mock("../../src/config-context", () => ({ useIsMock: mockIsMock }));
+// Issue #3184: TopNav の Score / Rank は TeamViewProvider から来る。 このページの
+// refresh がそれを引き直しているかが検証対象なので、 provider ごと mock して
+// 「呼ばれたか」 を見る。
+vi.mock("../../src/auth/TeamViewProvider", () => ({ useTeamView: mockUseTeamView }));
 vi.mock("../../src/auth/AuthProvider", () => ({ useAuth: mockAuth }));
 vi.mock("../../src/api/portal-client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../src/api/portal-client")>();
@@ -219,6 +228,35 @@ describe("ScoreEventsPage", () => {
     await act(async () => void (await vi.advanceTimersByTimeAsync(30_000)));
 
     expect(mockGet).toHaveBeenCalledTimes(3);
+  });
+
+  /**
+   * Issue #3184: live 事象そのもの。 履歴に 「Gate ボーナス +100000 pt」 が並んでいるのに
+   * TopNav が加点前の 100 pt で固まり、 「最新の履歴に更新」 を何度押しても動かなかった。
+   * 履歴と header は別 source (getScoreEvents / TeamViewProvider) なので、 このボタンは
+   * 両方を引き直す必要がある。
+   */
+  it("should refresh the top-nav Score/Rank as well as the history", async () => {
+    mockGet.mockResolvedValue({ entries: [] });
+    renderPage();
+    expect(await screen.findByText("score_events.empty_header")).toBeInTheDocument();
+    expect(mockTeamViewRefresh).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "score_events.refresh_latest" }));
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(2));
+    expect(mockTeamViewRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("should keep the top-nav in step while this page auto-refreshes", async () => {
+    mockGet.mockResolvedValue({ entries: [] });
+    renderPage();
+    expect(await screen.findByText("score_events.empty_header")).toBeInTheDocument();
+
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByText(/score_events\.auto_refresh_label/));
+    await act(async () => void (await vi.advanceTimersByTimeAsync(30_000)));
+
+    expect(mockTeamViewRefresh).toHaveBeenCalledTimes(1);
   });
 
   it("should share an in-flight refresh instead of issuing duplicate reads", async () => {

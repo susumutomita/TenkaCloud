@@ -6,6 +6,8 @@ import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Spinner from "@cloudscape-design/components/spinner";
 import Toggle from "@cloudscape-design/components/toggle";
+import { usePolling } from "@tenkacloud/web-kit";
+import { useTeamView } from "../auth/TeamViewProvider";
 import { ScoreCumulativeChart } from "../components/ScoreCumulativeChart";
 import type { AppConfig } from "../config";
 import { useIsMock } from "../config-context";
@@ -33,6 +35,18 @@ export function ScoreEventsPage({ config }: { config: AppConfig }) {
     canRefresh,
     refresh,
   } = useScoreEventsData(config);
+  // Issue #3184: TopNav の Score / Rank は TeamViewProvider (= /portal/me +
+  // /portal/leaderboard) から来ており、 このページの refresh は score 履歴しか
+  // 引き直さない。 履歴に 「Gate ボーナス +100000 pt」 が並んでいるのに header が
+  // 加点前の値のまま固まる、 という live 事象がこれで、 自動更新 OFF だと押しても
+  // 永久に変わらない。 「最新の履歴に更新」 は 「いま画面に出ている数字を最新にする」
+  // と読まれるので、 両方を引き直す。
+  const teamView = useTeamView();
+  // 同じ理由で auto refresh 側も揃える。 手動ボタンだけ直すと、 このページの
+  // 「30 秒ごとに自動更新」 を ON にしている参加者には header が固まったままになる。
+  // 間隔・gate は useScoreEventsData の usePolling と同条件 (POLL_INTERVAL_MS /
+  // autoRefresh) なので、 2 本の timer が別々のリズムで走ることはない。
+  usePolling(teamView.refresh, POLL_INTERVAL_MS, { immediate: false, enabled: autoRefresh });
 
   return (
     <SpaceBetween size="l">
@@ -48,7 +62,16 @@ export function ScoreEventsPage({ config }: { config: AppConfig }) {
               >
                 {t("score_events.auto_refresh_label", { intervalSec: POLL_INTERVAL_MS / 1000 })}
               </Toggle>
-              <Button iconName="refresh" loading={isRefreshing} onClick={refresh}>
+              <Button
+                iconName="refresh"
+                loading={isRefreshing}
+                onClick={() => {
+                  // 並行に投げる: 片方が失敗しても他方は反映されるべきで、
+                  // それぞれ自前の error state を持っている。
+                  void refresh();
+                  void teamView.refresh();
+                }}
+              >
                 {t("score_events.refresh_latest")}
               </Button>
             </SpaceBetween>
