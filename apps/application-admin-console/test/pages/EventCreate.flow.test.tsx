@@ -235,7 +235,10 @@ describe("EventCreatePage flow", () => {
     expect(screen.getByText("Problem 1")).toBeInTheDocument();
     expect(screen.getByText("Problem 2")).toBeInTheDocument();
     // p1 の region Select だけ変更 → updateProblemRow の map で p1=match / p2=非match 両分岐。
-    const regionP1 = w(container).findAllSelects()[2];
+    // [Issue #3173] Teams 表が account と region の 2 Select を持つようになったので、
+    // 問題側の Select は「Teams 表のぶんを飛ばした先頭」= 全 team 分の後ろから数える。
+    const teamSelectCount = w(container).findAllSelects().length - 2; // p1 / p2 の 2 件
+    const regionP1 = w(container).findAllSelects()[teamSelectCount];
     regionP1?.openDropdown();
     regionP1?.selectOptionByValue("ap-northeast-1", { expandToViewport: true });
     expect(screen.getByText("Problem 1")).toBeInTheDocument();
@@ -341,8 +344,10 @@ describe("EventCreatePage flow", () => {
     ms?.openDropdown();
     ms?.selectOptionByValue("p1");
     // 両 team に valid account を割り当て (allAccountsValid true にして hasDuplicateSlug まで到達)。
+    // [Issue #3173] Each team row now renders account then region, so the
+    // account selects are the even indices rather than the first two.
     const selects = w(container).findAllSelects();
-    for (const s of selects.slice(0, 2)) {
+    for (const s of [selects[0], selects[2]]) {
       s?.openDropdown();
       s?.selectOptionByValue(ACCOUNT_ID, { expandToViewport: true });
     }

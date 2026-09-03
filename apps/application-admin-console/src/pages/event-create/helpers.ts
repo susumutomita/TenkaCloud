@@ -47,6 +47,12 @@ export interface TeamRow {
    * submit never need a fallback branch.
    */
   nonAwsCredentialTeamSlug: string;
+  /**
+   * [Issue #3173] Where this team deploys. Blank means "the problem's region",
+   * which is what every event did before this existed — one region for everyone,
+   * and one region's service limits for the whole event.
+   */
+  region: string;
 }
 
 export interface ProblemRow {
@@ -171,6 +177,8 @@ export function resizeTeamRows(prev: TeamRow[], next: number): TeamRow[] {
     internalSlug: `team-${prev.length + i + 1}`,
     awsAccountId: "",
     nonAwsCredentialTeamSlug: `team-${prev.length + i + 1}`,
+    // [Issue #3173] Blank = the problem's region.
+    region: "",
   }));
   return [...prev, ...additions];
 }

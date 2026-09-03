@@ -123,6 +123,14 @@ export const CreateEventRequestSchema = z.object({
             .max(40)
             .regex(/^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/, "teamSlug は a-z0-9- のみ")
             .optional(),
+          /**
+           * [Issue #3173] この team の deploy 先 region。 省略時は problem.defaultRegion。
+           * 同じ regex を使う (= 問題側と 1 文字も違わない形式検証)。
+           */
+          region: z
+            .string()
+            .regex(/^[a-z]{2}-[a-z]+-\d+$/, "AWS region 形式が不正です")
+            .optional(),
         })
         .refine(
           (team) => team.awsAccountId !== undefined || team.nonAwsCredentialTeamSlug !== undefined,

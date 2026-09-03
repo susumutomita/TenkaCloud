@@ -253,7 +253,9 @@
     "check_credential_failed": "Credential check failed. Try again.",
     "credential_registered": "Credential registered.",
     "credential_unregistered": "Credential is not registered.",
-    "mixed_provider_error": "AWS and non-AWS providers cannot be mixed in one event yet. For v1, create separate events per provider."
+    "mixed_provider_error": "AWS and non-AWS providers cannot be mixed in one event yet. For v1, create separate events per provider.",
+    "col_team_region": "Region (blank = the problem's)",
+    "team_region_inherit": "Use the problem's region"
   },
   "lite_drill": {
     "checkpoint_header": "Onboarding drill: checkpoint earned!",
