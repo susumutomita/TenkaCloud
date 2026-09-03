@@ -9,7 +9,12 @@ import { toErrorMessage } from "@tenkacloud/web-kit";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { canMutateTenant, useApiClient } from "../api/client";
-import { bulkDeployEvent, type CreateEventResponse, createEvent } from "../api/events-client";
+import {
+  bulkDeployEvent,
+  type CoordinationCapacityWarning,
+  type CreateEventResponse,
+  createEvent,
+} from "../api/events-client";
 import type { AppConfig } from "../config";
 import { DEFAULT_AWS_REGION } from "../data/aws-regions";
 import { listProblemSummaries, type ProblemSummary, runtimeProviders } from "../data/problems";
@@ -192,6 +197,11 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
   const [deployPromptTarget, setDeployPromptTarget] = useState<{
     eventId: string;
     teams: CreateEventResponse["teams"];
+    // [Issue #3169] Kept alongside the login keys because it has the same
+    // one-shot character: this modal is the last screen before the operator
+    // leaves the creation flow, and a warning dropped here is a deploy that
+    // gets refused later for a reason nobody was told about.
+    warnings: readonly CoordinationCapacityWarning[];
   } | null>(null);
   const [deployStarting, setDeployStarting] = useState(false);
 
@@ -245,7 +255,11 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
         })),
       });
       // Issue #1067: 即 navigate せず deploy 促し modal を出す。
-      setDeployPromptTarget({ eventId: res.eventId, teams: res.teams });
+      setDeployPromptTarget({
+        eventId: res.eventId,
+        teams: res.teams,
+        warnings: res.warnings ?? [],
+      });
     } catch (err) {
       setError(toErrorMessage(err));
     } finally {
@@ -358,6 +372,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
         bulkDeploySupported={providerMode.kind === "aws"}
         participantPortalUrl={config.participantPortalUrl}
         teams={deployPromptTarget?.teams ?? []}
+        capacityWarnings={deployPromptTarget?.warnings ?? []}
         liteDrillCheckpointCode={revealedFirstEventDrillCode}
         onDeployNow={() => void handleDeployNow()}
         onDeployLater={handleDeployLater}

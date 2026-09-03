@@ -165,8 +165,9 @@ describe("the event-creation warning", () => {
     });
     expect(warnings).toHaveLength(1);
     // The operator needs to know this is not merely advisory.
-    expect(warnings[0]).toContain("will be refused");
-    expect(warnings[0]).toContain("dynamodb");
+    expect(warnings[0]?.kind).toBe("over");
+    expect(warnings[0]?.message).toContain("will be refused");
+    expect(warnings[0]?.message).toContain("dynamodb");
   });
 
   it("should warn about a tight event without saying the deploy will be refused", () => {
@@ -184,8 +185,12 @@ describe("the event-creation warning", () => {
       eventId: "EV1",
     });
     expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toContain("close to the limit");
-    expect(warnings[0]).not.toContain("will be refused");
+    // `kind` is what the console branches on; the prose is what the operator
+    // reads. A tight entry rendered as a refusal would be false, so both are
+    // pinned here.
+    expect(warnings[0]?.kind).toBe("tight");
+    expect(warnings[0]?.message).toContain("close to the limit");
+    expect(warnings[0]?.message).not.toContain("will be refused");
   });
 
   it("should stay silent for an event that fits", () => {
@@ -284,23 +289,26 @@ describe("bulkDeployEvent refusing an event that cannot fit", () => {
 });
 
 describe("reading the declaration out of the Lambda environment", () => {
-  const original = process.env.BATTLE_PROBLEMS_COORDINATION;
+  // `vi.stubEnv` rather than assignment: it restores an originally-absent key by
+  // deleting it, where `process.env[k] = undefined` would leave the string
+  // "undefined" behind for whichever file this worker runs next — a truthy bus
+  // name and malformed JSON to the code that reads it.
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   // `buildEventSharedResources` is the real entry point, so it wants the two
   // env vars the Lambda always has. Going through it rather than exporting the
   // parser keeps the test on the path production actually takes.
   beforeEach(() => {
-    process.env.DEPLOY_EVENT_BUS_NAME = "test-bus";
-    process.env.DEPLOY_ENVIRONMENT = "development";
-  });
-  afterEach(() => {
-    process.env.BATTLE_PROBLEMS_COORDINATION = original;
+    vi.stubEnv("DEPLOY_EVENT_BUS_NAME", "test-bus");
+    vi.stubEnv("DEPLOY_ENVIRONMENT", "development");
   });
 
   const readEnv = (value: string | undefined): Readonly<Record<string, unknown>> => {
-    // Assigning `undefined` rather than deleting: `process.env` coerces it to
-    // the string "undefined" on some runtimes, so the absent case is expressed
-    // as an empty string, which the parser treats identically.
-    process.env.BATTLE_PROBLEMS_COORDINATION = value ?? "";
+    // The absent case is the variable actually being absent — an empty string
+    // is a different input, even though this parser treats the two the same.
+    vi.stubEnv("BATTLE_PROBLEMS_COORDINATION", value);
     return buildEventSharedResources(makeTestControlDataRuntime()).problemsCoordination;
   };
 
@@ -310,19 +318,25 @@ describe("reading the declaration out of the Lambda environment", () => {
     });
   });
 
+  it("should read an unset value as an empty catalog", () => {
+    // Not every deployment has a coordination problem, and one that has none
+    // may not have the variable wired at all. That is not corruption.
+    expect(readEnv(undefined)).toEqual({});
+  });
+
   it.each([
-    ["absent", undefined],
     ["not JSON at all", "{oops"],
     ["a JSON array", "[]"],
     ["a JSON scalar", '"nope"'],
     ["JSON null", "null"],
-  ])("should read a %s value as nothing declared rather than throwing", (_label, value) => {
-    // This env var reaches every bulk deploy, including the ones with no
-    // coordination problem in them. Throwing here would let a shape problem in
-    // an unrelated part of the catalog take all of them down; reading it as
-    // "nothing declared" only skips the size check, which is the same outcome
-    // as a catalog where nobody declared a budget.
-    expect(readEnv(value)).toEqual({});
+  ])("should throw on a %s value rather than disabling the check (#3169)", (_label, value) => {
+    // An empty catalog is already expressible as a valid `{}`, so a malformed
+    // value can only mean the build or the deployment configuration is broken.
+    // Folding it to `{}` would silently switch the capacity check off and let
+    // an oversized event through — the failure this check exists to prevent,
+    // now with nothing to trace it back to. This value is substituted at build
+    // time, so failing at Lambda init surfaces it where it can be fixed.
+    expect(() => readEnv(value)).toThrow(/BATTLE_PROBLEMS_COORDINATION/);
   });
 });
 
@@ -342,5 +356,48 @@ describe("budget arithmetic at its edges", () => {
     const huge = { bytesPerTeam: 1, baseBytes: dynamodb.maxBytes + 1 };
     expect(maxTeamsForCoordinationBudget(huge, dynamodb)).toBe(0);
     expect(checkCoordinationCapacity(huge, 0, dynamodb).kind).toBe("over");
+  });
+});
+
+describe("the scheduled deploy path", () => {
+  // Every variable this describe sets is restored, not just the one under
+  // test: `buildScheduledDeployResources` needs a whole environment to return
+  // anything at all, and leaking those into later suites makes a failure show
+  // up somewhere unrelated to the test that caused it.
+  // Every variable this describe stubs is undone by `vi.unstubAllEnvs`, which
+  // deletes the ones that were absent to begin with rather than leaving the
+  // string "undefined" in them for the next file in this worker.
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("should carry the same declaration the manual route checks (#3169)", async () => {
+    // A DRAFT event whose `deployAt` comes round reaches the SAME
+    // `bulkDeployEvent`. Leaving its declaration empty meant the guard held
+    // only for the path an operator was watching, and a scheduled deploy
+    // enqueued the very event the button would have refused.
+    const { buildScheduledDeployResources } = await import(
+      "../../lib/problem-deploy/handlers/event-handler/shared"
+    );
+    vi.stubEnv(
+      "PROBLEM_COORDINATION",
+      JSON.stringify({ "ac26-crypto-battle": { stateBudget: forecast } }),
+    );
+    vi.stubEnv("DEPLOY_EVENT_BUS_NAME", "test-bus");
+    vi.stubEnv("DEPLOY_ENVIRONMENT", "development");
+    vi.stubEnv(
+      "BATTLE_PROBLEMS_CATALOG",
+      JSON.stringify({ "ac26-crypto-battle": "problems/battles/ac26-crypto-battle" }),
+    );
+    vi.stubEnv("COMPETITOR_ACCOUNTS_TABLE_NAME", "C");
+    vi.stubEnv("EVENTS_TABLE_NAME", "E");
+    vi.stubEnv("DEPLOYMENTS_TABLE_NAME", "D");
+    vi.stubEnv("TEAMS_TABLE_NAME", "T");
+
+    const resources = buildScheduledDeployResources(makeTestControlDataRuntime());
+
+    expect(resources?.problemsCoordination).toEqual({
+      "ac26-crypto-battle": { stateBudget: forecast },
+    });
   });
 });

@@ -91,20 +91,16 @@ export async function createEvent(
     ...buildEventCatalogPin(shared, ctx.tenantId),
   };
 
-  const repositories = await resolveEventRepositories(shared);
-  const result = await repositories.events.createEventWithTeams(eventRecord, teams);
-  if (result.outcome === "conflict") {
-    // attribute_not_exists / 一意性制約の不成立。 ULID 生成なので実質起こらない —
-    // 旧実装が TransactionCanceledException をそのまま throw していたのと同じく
-    // 500 経路 (handleRouteError) に載せる。
-    throw new Error(`createEventWithTeams conflict: event/team row already exists (${eventId})`);
-  }
-
-  // [Issue #3169] The event is created either way; this only tells the operator
-  // what the deploy will refuse. Blocking here would make an existing event that
-  // no longer fits impossible to recreate, and the team roster is the thing they
-  // would have to change anyway — better said now, while it is still a draft,
-  // than discovered when they press deploy.
+  // [Issue #3169] Computed BEFORE the write, not after.
+  //
+  // `coordinationStateBudget()` throws on a malformed `COORDINATION_STATE_MAX_BYTES`
+  // — deliberately, since a typo there would otherwise silently restore the "no
+  // ceiling at all" state #3151 exists to remove. Running it after the commit
+  // therefore meant an environment with that typo could persist the event and
+  // its teams and THEN return 500, and the one-time plaintext `teamLoginKey`
+  // values in this response would be lost with no way to re-read them.
+  //
+  // Advisory output must not be able to fail a write that already succeeded.
   const capacityWarnings = warnOnCoordinationCapacity({
     problems: req.problems,
     teamCount: teams.length,
@@ -113,6 +109,15 @@ export async function createEvent(
     tenantId: ctx.tenantId,
     eventId,
   });
+
+  const repositories = await resolveEventRepositories(shared);
+  const result = await repositories.events.createEventWithTeams(eventRecord, teams);
+  if (result.outcome === "conflict") {
+    // attribute_not_exists / 一意性制約の不成立。 ULID 生成なので実質起こらない —
+    // 旧実装が TransactionCanceledException をそのまま throw していたのと同じく
+    // 500 経路 (handleRouteError) に載せる。
+    throw new Error(`createEventWithTeams conflict: event/team row already exists (${eventId})`);
+  }
 
   return {
     eventId,
