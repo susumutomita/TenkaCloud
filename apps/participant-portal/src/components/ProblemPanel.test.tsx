@@ -8,8 +8,17 @@ import {
 } from "../api/portal-client";
 import type { CloudMode } from "../config";
 import { AppConfigProvider } from "../config-context";
+import { findProblemMetadata } from "../data/problems";
 import { I18nProvider } from "../i18n";
 import { ProblemPanel } from "./ProblemPanel";
+
+/** [Issue #3171] The name a participant sees when the API delivered none. */
+function catalogTitleOf(problemId: string): string {
+  const name = findProblemMetadata(problemId)?.name;
+  if (!name) throw new Error(`fixture: ${problemId} is expected in the bundled catalog`);
+  return name;
+}
+
 import {
   buildAutoDeleteNotice,
   codespacesLoopbackUrl,
@@ -348,12 +357,22 @@ describe("ProblemPanel pure helpers", () => {
     ).toBeUndefined();
   });
 
-  it("should use name as the title when present and fall back to problemId otherwise", () => {
+  it("should use the deployed name, then the catalog's, and only then the id", () => {
     const p = (over: Partial<ParticipantProblemView>) => ({ ...baseProblem, ...over });
     expect(resolveProblemTitle(p({ name: "Hello World" }))).toBe("Hello World");
-    // problemId fallback: undefined name and blank/whitespace name.
-    expect(resolveProblemTitle(p({ name: undefined }))).toBe("hello-world");
-    expect(resolveProblemTitle(p({ name: "   " }))).toBe("hello-world");
+
+    // [Issue #3171] A blank name used to fall straight to the id, which is how
+    // a participant ended up looking at a card headed `ac26-crypto-battle`. The
+    // catalog knows this problem's name, so it is used before giving up.
+    const catalogName = findProblemMetadata("hello-world")?.name;
+    if (!catalogName) throw new Error("fixture: hello-world is expected in the bundled catalog");
+    expect(resolveProblemTitle(p({ name: undefined }))).toBe(catalogName);
+    expect(resolveProblemTitle(p({ name: "   " }))).toBe(catalogName);
+
+    // The id survives only for a problem the catalog has never seen.
+    expect(resolveProblemTitle(p({ name: undefined, problemId: "not-in-catalog" }))).toBe(
+      "not-in-catalog",
+    );
   });
 
   it("should detect a problem statement only when description is non-empty (#2473: instructions alone does not count)", () => {
@@ -758,8 +777,9 @@ describe("ProblemPanel render branches", () => {
     // AWS mode: name / description / instructions 未配信 → section も heading も出ない (= 既存挙動)。
     renderPanel({ status: "COMPLETE", scoring: { kind: "flag" } });
     expect(screen.queryByText(/^Problem$|^問題内容$/)).not.toBeInTheDocument();
-    // title は problemId に fall back。
-    expect(screen.getByText("hello-world")).toBeInTheDocument();
+    // [Issue #3171] AWS mode does not deliver a name, so the title comes from
+    // the bundled catalog rather than falling back to the internal id.
+    expect(screen.getByText(catalogTitleOf("hello-world"))).toBeInTheDocument();
   });
 });
 
@@ -788,7 +808,7 @@ describe("ProblemPanel countdown polling", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(30_000); // useNowMs tick
     });
-    expect(screen.getByText("hello-world")).toBeInTheDocument(); // still rendered, no crash
+    expect(screen.getByText(catalogTitleOf("hello-world"))).toBeInTheDocument(); // no crash
   });
 });
 
