@@ -9,7 +9,12 @@ import { toErrorMessage } from "@tenkacloud/web-kit";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { canMutateTenant, useApiClient } from "../api/client";
-import { bulkDeployEvent, type CreateEventResponse, createEvent } from "../api/events-client";
+import {
+  bulkDeployEvent,
+  type CoordinationCapacityWarning,
+  type CreateEventResponse,
+  createEvent,
+} from "../api/events-client";
 import type { AppConfig } from "../config";
 import { DEFAULT_AWS_REGION } from "../data/aws-regions";
 import { listProblemSummaries, type ProblemSummary, runtimeProviders } from "../data/problems";
@@ -195,7 +200,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
     // one-shot character: this modal is the last screen before the operator
     // leaves the creation flow, and a warning dropped here is a deploy that
     // gets refused later for a reason nobody was told about.
-    warnings: readonly string[];
+    warnings: readonly CoordinationCapacityWarning[];
   } | null>(null);
   const [deployStarting, setDeployStarting] = useState(false);
 

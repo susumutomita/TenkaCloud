@@ -5,7 +5,7 @@ import Modal from "@cloudscape-design/components/modal";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Table from "@cloudscape-design/components/table";
 import { useState } from "react";
-import type { CreateEventResponse } from "../../api/events-client";
+import type { CoordinationCapacityWarning, CreateEventResponse } from "../../api/events-client";
 import { LiteDrillCheckpointAlert } from "../../components/LiteDrillCheckpointAlert";
 import { OneTimeSecretCopyButton } from "../../components/OneTimeSecretCopyButton";
 import { useT } from "../../i18n";
@@ -39,14 +39,16 @@ export interface EventCreateDeployPromptModalProps {
   readonly liteDrillCheckpointCode?: string;
   /**
    * [Issue #3169] Advisory notes from creation, today: a coordination problem
-   * this event's team count cannot fit on the selected backend.
+   * measured against this event's team count on the selected backend.
    *
-   * Shown as an error rather than a warning because it is not a caution — the
-   * deploy this modal is offering will be refused. The operator's options are
-   * fewer teams or a different backend, and both are cheaper to act on here
-   * than after they leave this screen.
+   * The two verdicts are rendered apart. `"over"` is an error because it is not
+   * a caution — the deploy this modal is offering will be refused, and the
+   * operator's options are fewer teams or a different backend, both cheaper to
+   * act on here than after they leave this screen. `"tight"` is a warning: that
+   * event deploys today, and telling its operator it will be refused would be
+   * false.
    */
-  readonly capacityWarnings?: readonly string[];
+  readonly capacityWarnings?: readonly CoordinationCapacityWarning[];
   onDeployNow: () => void;
   onDeployLater: () => void;
 }
@@ -67,6 +69,8 @@ export function EventCreateDeployPromptModal({
   const [copyPending, setCopyPending] = useState(false);
   const busy = deployStarting || copyPending;
   const allLoginKeys = teams.map((team) => `${team.internalSlug}\t${team.teamLoginKey}`).join("\n");
+  const capacityRefusals = capacityWarnings.filter((warning) => warning.kind === "over");
+  const capacityTight = capacityWarnings.filter((warning) => warning.kind === "tight");
 
   return (
     <Modal
@@ -152,11 +156,20 @@ export function EventCreateDeployPromptModal({
             ? t("event_create.deploy_modal_alert_body")
             : t("event_create.deploy_modal_alert_body_non_aws")}
         </Alert>
-        {capacityWarnings.length > 0 && (
+        {capacityRefusals.length > 0 && (
           <Alert type="error" header={t("event_create.capacity_warning_header")}>
             <ul>
-              {capacityWarnings.map((warning) => (
-                <li key={warning}>{warning}</li>
+              {capacityRefusals.map((warning) => (
+                <li key={warning.message}>{warning.message}</li>
+              ))}
+            </ul>
+          </Alert>
+        )}
+        {capacityTight.length > 0 && (
+          <Alert type="warning" header={t("event_create.capacity_tight_header")}>
+            <ul>
+              {capacityTight.map((warning) => (
+                <li key={warning.message}>{warning.message}</li>
               ))}
             </ul>
           </Alert>

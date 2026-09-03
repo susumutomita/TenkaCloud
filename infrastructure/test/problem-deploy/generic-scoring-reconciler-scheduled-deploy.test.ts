@@ -170,6 +170,68 @@ describe("reconcileEventStatuses scheduled auto-deploy", () => {
     warn.mockRestore();
   });
 
+  it("should NOT stamp deployFiredAt when the deploy was refused for capacity (#3169)", async () => {
+    // `capacity_exceeded` means the preflight wrote and published nothing. If
+    // this were stamped as fired, `resolveScheduledDeployDue` would reject the
+    // row forever and the DRAFT would stay abandoned even after the operator
+    // shrinks the roster or moves the event to a backend that fits.
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        {
+          PK: "EVENT#EVD",
+          tenantId: "tenant-acme",
+          eventId: "EVD",
+          status: "DRAFT",
+          deployAt: PAST,
+        },
+      ],
+    });
+    deploy.bulkDeployEvent.mockResolvedValue({
+      kind: "capacity_exceeded",
+      refusals: ['problem "ac26-crypto-battle" needs 1700252 bytes'],
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    await expect(reconcileEventStatuses(ctx, NOW_ISO)).resolves.toBeUndefined();
+
+    expect(deploy.bulkDeployEvent).toHaveBeenCalledTimes(1);
+    // Scan only: no deployFiredAt Update was issued.
+    expect(ddbSend).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(
+      "[generic-scoring] scheduled auto-deploy refused",
+      expect.objectContaining({
+        eventId: "EVD",
+        outcome: "capacity_exceeded",
+        refusals: ['problem "ac26-crypto-battle" needs 1700252 bytes'],
+      }),
+    );
+    warn.mockRestore();
+  });
+
+  it("should still stamp deployFiredAt for a non-refusal outcome such as not_found", async () => {
+    // Only the refusal kinds are exempt. Anything else keeps the pre-#3169
+    // behaviour, because work may already have been enqueued.
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        {
+          PK: "EVENT#EVD",
+          tenantId: "tenant-acme",
+          eventId: "EVD",
+          status: "DRAFT",
+          deployAt: PAST,
+        },
+      ],
+    });
+    deploy.bulkDeployEvent.mockResolvedValue({ kind: "not_found" });
+    ddbSend.mockResolvedValueOnce({});
+
+    await reconcileEventStatuses(ctx, NOW_ISO);
+
+    const updateCmd = ddbSend.mock.calls[1]?.[0] as UpdateCommand;
+    expect(updateCmd).toBeInstanceOf(UpdateCommand);
+    expect(updateCmd.input.UpdateExpression).toBe("SET deployFiredAt = :now");
+  });
+
   it("should silently skip a deployFiredAt CCF (concurrent operator deploy race)", async () => {
     ddbSend.mockResolvedValueOnce({
       Items: [

@@ -554,6 +554,15 @@ async function applyEventStatusTransition(
  * teardownFiredAt / deployFiredAt を記録 (= 二重発火防止の補助 + 監査)。 失敗は warn で握り潰す
  * (= 次 tick で再評価。 status guard が一次冪等なので毎分 tick / 採点を巻き込まない)。
  */
+/**
+ * [Issue #3169] Outcome kinds that must NOT retire the schedule: the action was
+ * refused before anything was written or published, and the refusal is
+ * correctable (fewer teams, a different backend). Anything else — including a
+ * partial or failed publish — keeps the existing behaviour of recording the
+ * firing, because work may already have been enqueued.
+ */
+const SCHEDULE_REFUSED_OUTCOMES: ReadonlySet<string> = new Set(["capacity_exceeded"]);
+
 async function fireScheduledAction(
   ctx: ReconcileEventStatusesContext,
   deps: EventSharedResources,
@@ -569,10 +578,29 @@ async function fireScheduledAction(
     tenantId: string,
     eventId: string,
     nowMs: number,
-  ) => Promise<{ readonly kind: string; readonly result?: { readonly enqueued: number } }>,
+  ) => Promise<{
+    readonly kind: string;
+    readonly result?: { readonly enqueued: number };
+    readonly refusals?: readonly string[];
+  }>,
 ): Promise<void> {
   try {
     const outcome = await publishFn(deps, args.tenantId, args.eventId, args.nowMs);
+    // [Issue #3169] A refusal is not a firing. `capacity_exceeded` means the
+    // preflight wrote nothing and published nothing, so stamping deployFiredAt
+    // would retire the schedule for an event that never deployed —
+    // `resolveScheduledDeployDue` rejects every row carrying that field, so the
+    // DRAFT would stay abandoned even after its roster or backend is corrected.
+    // Leaving the row unstamped re-evaluates it next tick, the same way a thrown
+    // failure below does.
+    if (SCHEDULE_REFUSED_OUTCOMES.has(outcome.kind)) {
+      console.warn(`[generic-scoring] scheduled auto-${kind} refused`, {
+        eventId: args.eventId,
+        outcome: outcome.kind,
+        refusals: outcome.refusals,
+      });
+      return;
+    }
     console.log(`[generic-scoring] scheduled auto-${kind} fired`, {
       eventId: args.eventId,
       outcome: outcome.kind,

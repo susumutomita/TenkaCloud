@@ -145,13 +145,19 @@ describe("EventCreateDeployPromptModal", () => {
    * leave the creation flow, which makes it the last cheap moment to change the
    * team roster.
    */
-  it("should show every capacity warning the API returned", () => {
+  it("should show every capacity refusal the API returned", () => {
     render(
       <EventCreateDeployPromptModal
         {...props({
           capacityWarnings: [
-            'problem "ac26-crypto-battle" will not fit 99 teams on the dynamodb backend',
-            'problem "other-battle" will not fit 99 teams on the dynamodb backend',
+            {
+              kind: "over",
+              message: 'problem "ac26-crypto-battle" will not fit 99 teams on the dynamodb backend',
+            },
+            {
+              kind: "over",
+              message: 'problem "other-battle" will not fit 99 teams on the dynamodb backend',
+            },
           ],
         })}
       />,
@@ -159,6 +165,46 @@ describe("EventCreateDeployPromptModal", () => {
 
     expect(screen.getByText(/ac26-crypto-battle/)).toBeInTheDocument();
     expect(screen.getByText(/other-battle/)).toBeInTheDocument();
+    expect(screen.getByText("event_create.capacity_warning_header")).toBeInTheDocument();
+  });
+
+  it("should NOT tell the operator a tight event will be refused", () => {
+    // A forecast between warnBytes and maxBytes deploys. Rendering it under
+    // "Deployment will be refused" would be false, and the operator's response
+    // to it — shrink the roster, move backend — would be wasted work.
+    render(
+      <EventCreateDeployPromptModal
+        {...props({
+          capacityWarnings: [
+            {
+              kind: "tight",
+              message:
+                'problem "ac26-crypto-battle" is close to the limit for 90 teams on the turso backend',
+            },
+          ],
+        })}
+      />,
+    );
+
+    expect(screen.getByText(/close to the limit/)).toBeInTheDocument();
+    expect(screen.getByText("event_create.capacity_tight_header")).toBeInTheDocument();
+    expect(screen.queryByText("event_create.capacity_warning_header")).not.toBeInTheDocument();
+  });
+
+  it("should show both headers when one problem is over and another is tight", () => {
+    render(
+      <EventCreateDeployPromptModal
+        {...props({
+          capacityWarnings: [
+            { kind: "over", message: 'problem "over-battle" will not fit 99 teams' },
+            { kind: "tight", message: 'problem "tight-battle" is close to the limit for 99 teams' },
+          ],
+        })}
+      />,
+    );
+
+    expect(screen.getByText("event_create.capacity_warning_header")).toBeInTheDocument();
+    expect(screen.getByText("event_create.capacity_tight_header")).toBeInTheDocument();
   });
 
   it("should show nothing when the event fits", () => {
@@ -166,5 +212,6 @@ describe("EventCreateDeployPromptModal", () => {
     render(<EventCreateDeployPromptModal {...props({ capacityWarnings: [] })} />);
 
     expect(screen.queryByText("event_create.capacity_warning_header")).not.toBeInTheDocument();
+    expect(screen.queryByText("event_create.capacity_tight_header")).not.toBeInTheDocument();
   });
 });

@@ -159,13 +159,26 @@ export interface CreateEventResponse {
   problems: readonly EventProblemTarget[];
   /**
    * [Issue #3169] Advisory notes from creation — today, a coordination problem
-   * whose state cannot fit this event's team count on the selected backend.
+   * whose state is at or over what this event's team count fits on the selected
+   * backend.
    *
    * Optional because the API omits the field when there is nothing to say. It
-   * has to reach the operator here: the deploy will refuse the event outright,
-   * and the creation screen is where the team roster can still be changed.
+   * has to reach the operator here: the creation screen is where the team
+   * roster can still be changed. `kind` separates the two verdicts —
+   * `"over"` is a deploy the platform will refuse, `"tight"` is one that runs
+   * today near the ceiling — and the two must be presented differently.
    */
-  warnings?: readonly string[];
+  warnings?: readonly CoordinationCapacityWarning[];
+}
+
+/**
+ * [Issue #3169] One coordination capacity verdict from `POST /events`, mirroring
+ * the platform's `CoordinationCapacityWarning`. `"over"` will be refused at
+ * deploy; `"tight"` deploys and is close to the backend ceiling.
+ */
+export interface CoordinationCapacityWarning {
+  readonly kind: "over" | "tight";
+  readonly message: string;
 }
 
 export interface BulkResult {

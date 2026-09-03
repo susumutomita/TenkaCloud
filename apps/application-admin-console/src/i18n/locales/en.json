@@ -236,6 +236,7 @@
     "deploy_modal_now": "Deploy now",
     "deploy_modal_alert_header": "Next: Deploy the problems",
     "capacity_warning_header": "Deployment will be refused for this configuration",
+    "capacity_tight_header": "This configuration is close to the backend limit",
     "deploy_modal_alert_body": "Until per-team problem deploy runs, participants cannot access the problems. \"Deploy now\" runs bulk deploy across all teams × problems. \"Later\" lets you trigger it from the EventDetail Deploy button.",
     "deploy_modal_alert_body_non_aws": "Bulk deploy currently supports AWS events only. For this event, deploy each team's problem from the Deployments page (New deployment), which uses the provider adapter with the team credential slug bound here.",
     "login_keys_header": "Save these login keys now",
