@@ -106,6 +106,27 @@ describe("POST /portal/me/coordination/op", () => {
     expect(res.status).toBe(StatusCodes.SERVICE_UNAVAILABLE);
     expect(await res.json()).toEqual({ error: "state_schema_mismatch", reason: "newer_row" });
   });
+  /**
+   * [Issue #3170] The Progression Gate reaches this route now.
+   *
+   * 403 rather than 404: the request is well formed and authenticated, and the
+   * reason is that the problem is not open yet. `default` would map it to
+   * `not_configured`, telling the participant the problem does not exist — and
+   * they would then read a completed Gate as having changed nothing.
+   */
+  it("should 403 with the gate problem when the prerequisite is unmet", async () => {
+    mocks.handleCoordinationOp.mockResolvedValueOnce({
+      kind: "locked",
+      gateProblemId: "hello-world",
+    });
+    const res = await send("POST", OP, { op: {} });
+    expect(res.status).toBe(StatusCodes.FORBIDDEN);
+    expect(await res.json()).toEqual({
+      error: "challenge_prerequisite_not_met",
+      gateProblemId: "hello-world",
+    });
+  });
+
   it("should 404 when coordination is not configured for the team", async () => {
     mocks.handleCoordinationOp.mockResolvedValueOnce({ kind: "not_configured" });
     expect((await send("POST", OP, { op: {} })).status).toBe(StatusCodes.NOT_FOUND);

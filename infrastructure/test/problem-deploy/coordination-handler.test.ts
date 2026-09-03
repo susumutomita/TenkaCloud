@@ -1,7 +1,8 @@
 import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
 import type { CoordinationPlugin } from "@tenkacloud/coordination-plugin-sdk";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DeploymentItem } from "../../lib/problem-deploy/handlers/deploy-handler/types.js";
+import { clearTenantFlagCacheForTest } from "../../lib/problem-deploy/handlers/participant-handler/challenge-access.js";
 import {
   type CoordinationHandlerDeps,
   type CoordinationScope,
@@ -15,6 +16,7 @@ import {
 import type { PluginImporter } from "../../lib/problem-deploy/handlers/participant-handler/coordination-plugin-loader.js";
 import type { CoordinationStoreDeps } from "../../lib/problem-deploy/handlers/participant-handler/coordination-store.js";
 import type { ParticipantSharedResources } from "../../lib/problem-deploy/handlers/participant-handler/shared.js";
+import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers.js";
 import {
   fakeArtifactStore,
   fakeParticipantShared,
@@ -336,6 +338,112 @@ describe("makeCoordinationScopeResolver", () => {
   /** Unwrap a successful resolution; `undefined` for anything else. */
   const scopeOf = (r: Awaited<ReturnType<ReturnType<typeof makeCoordinationScopeResolver>>>) =>
     r.kind === "scope" ? r.scope : undefined;
+
+  /**
+   * [Issue #3170] The Gate has to reach this route.
+   *
+   * Live evidence: a team with the Gate challenge untouched started the match,
+   * leaked three shares and landed a HUNT for +25, while the page above the
+   * board told them the problem was locked. Coordination moved to its own
+   * Lambda in #1420 and the guard did not move with it.
+   */
+  describe("progression gate", () => {
+    // The tenant flag cache is module-level with a 30s TTL, so one test's
+    // answer would otherwise decide the next one's.
+    beforeEach(() => clearTenantFlagCacheForTest());
+    const GATED_EVENT = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+
+    /**
+     * Answers the two reads the gate needs: the tenant feature flag row and the
+     * event META row that carries the gate config. Everything else falls
+     * through to the team's deployment rows.
+     */
+    function gatedShared(
+      items: Partial<DeploymentItem>[],
+      opts: { flagOn?: boolean; teamOverrides?: Record<string, unknown> } = {},
+    ): ParticipantSharedResources {
+      const send = vi.fn(async (cmd: unknown) => {
+        const key = (cmd as { input?: { Key?: Record<string, unknown> } }).input?.Key;
+        if (cmd instanceof GetCommand && key?.SK === "FLAGS") {
+          return { Item: { flags: { challengePrerequisiteGate: opts.flagOn !== false } } };
+        }
+        if (cmd instanceof GetCommand && key?.SK === "META") {
+          return {
+            Item: {
+              tenantId: "tn1",
+              status: "READY",
+              startsAt: "2026-01-01T00:00:00.000Z",
+              progressionGate: {
+                gateProblemId: "hello-world",
+                unlockTargetIds: ["p1"],
+                defaultPolicy: "required",
+                ...(opts.teamOverrides ? { teamOverrides: opts.teamOverrides } : {}),
+              },
+            },
+          };
+        }
+        return { Items: items };
+      });
+      // Bound before the assertion: `consistent-type-assertions` wants a
+      // declaration it can annotate, and the DocumentClient surface is far
+      // wider than the one method this double answers.
+      const partial = {
+        runtime: makeTestControlDataRuntime(),
+        ddb: { send },
+        tableName: "Deployments",
+        eventsTableName: "Events",
+      };
+      return partial as unknown as ParticipantSharedResources;
+    }
+
+    /** The team's rows: the Gate challenge (unsolved unless scored) and the target. */
+    const rows = (gateScore: number): Partial<DeploymentItem>[] => [
+      {
+        problemId: "hello-world",
+        tenantId: "tn1",
+        eventId: GATED_EVENT,
+        teamId: "t1",
+        status: "COMPLETE",
+        score: gateScore,
+      },
+      {
+        problemId: "p1",
+        tenantId: "tn1",
+        eventId: GATED_EVENT,
+        teamId: "t1",
+        status: "COMPLETE",
+        score: 0,
+      },
+    ];
+
+    it("should refuse the scope while the Gate challenge is unsolved", async () => {
+      const resolve = makeCoordinationScopeResolver(gatedShared(rows(0)), config);
+      expect(await resolve("key")).toEqual({ kind: "locked", gateProblemId: "hello-world" });
+    });
+
+    it("should resolve once the Gate challenge has scored", async () => {
+      const resolve = makeCoordinationScopeResolver(gatedShared(rows(10)), config);
+      expect(scopeOf(await resolve("key"))?.state.problemId).toBe("p1");
+    });
+
+    it("should let a team whose policy is off straight through", async () => {
+      const resolve = makeCoordinationScopeResolver(
+        gatedShared(rows(0), { teamOverrides: { t1: { policy: "off" } } }),
+        config,
+      );
+      expect(scopeOf(await resolve("key"))?.state.problemId).toBe("p1");
+    });
+
+    it("should not lock anything while the tenant flag is off", async () => {
+      // The flag is the tenant's opt-in; enforcing without it would lock
+      // problems for tenants that never turned the feature on.
+      const resolve = makeCoordinationScopeResolver(
+        gatedShared(rows(0), { flagOn: false }),
+        config,
+      );
+      expect(scopeOf(await resolve("key"))?.state.problemId).toBe("p1");
+    });
+  });
 
   it("should resolve a scope when the team's problem declares coordination", async () => {
     const resolve = makeCoordinationScopeResolver(
