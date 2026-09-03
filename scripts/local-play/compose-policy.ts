@@ -206,6 +206,13 @@ const ALLOWED_SERVICE_KEYS = new Set([
   "environment",
   "healthcheck",
   "image",
+  // Runs docker-init (tini) as PID 1 so the container reaps its own zombies.
+  // Reviewed and granted because it is the opposite of an escalation: it adds
+  // no capability, no mount, no device and no host access — it replaces PID 1
+  // with a process whose entire job is to wait(2). A verifier that spawns child
+  // processes needs it, and without it those children accumulate as zombies
+  // until the container's pids_limit (already enforced above) stops the run.
+  "init",
   "mem_limit",
   "networks",
   "pids_limit",
