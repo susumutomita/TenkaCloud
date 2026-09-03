@@ -10,6 +10,7 @@ import {
   PortalValidationError,
   type SubmitFlagOutcome,
 } from "../api/portal-client";
+import { findProblemMetadata } from "../data/problems";
 import type { LocaleCode } from "../i18n";
 
 export type ProblemPanelT = (
@@ -439,8 +440,23 @@ export function shouldShowContainerTerminal(problem: ParticipantProblemView): bo
  * #1975: パネル title は人間可読な name を優先し、 不在時 (= AWS mode で問題文未配信) は
  * problemId に fall back する。
  */
+/**
+ * The name a participant should see for a problem.
+ *
+ * [Issue #3171] The last resort used to be `problemId`, and on live that is what
+ * a participant got: a card headed `ac26-crypto-battle` sitting under a page
+ * titled 「PROVE / LEAK / HUNT — 暗号リアルタイム判断 Battle」, two names for one
+ * problem on one screen, one of them an internal identifier.
+ *
+ * The catalog is consulted before giving up, the same way `ProblemDetail` has
+ * always done for the page title. The team view's `name` still wins when it has
+ * one — it is what the operator deployed — and the id survives only for a
+ * problem that is in neither, which is a problem the catalog has never seen.
+ */
 export function resolveProblemTitle(problem: ParticipantProblemView): string {
-  return problem.name?.trim() ? problem.name : problem.problemId;
+  if (problem.name?.trim()) return problem.name;
+  const catalogName = findProblemMetadata(problem.problemId)?.name;
+  return catalogName?.trim() ? catalogName : problem.problemId;
 }
 
 /**
