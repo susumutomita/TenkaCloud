@@ -16,6 +16,9 @@ const row = (
   internalSlug,
   awsAccountId,
   nonAwsCredentialTeamSlug,
+  // [Issue #3173] Blank = the problem's region, which is what every row is
+  // until an operator spreads the teams out.
+  region: "",
 });
 
 describe("resizeTeamRows", () => {
@@ -34,8 +37,8 @@ describe("resizeTeamRows", () => {
   it("should keep existing rows and append empty new rows when team count is increased", () => {
     expect(resizeTeamRows([row("team-1", "111111111111")], 3)).toEqual([
       row("team-1", "111111111111"),
-      { internalSlug: "team-2", awsAccountId: "", nonAwsCredentialTeamSlug: "team-2" },
-      { internalSlug: "team-3", awsAccountId: "", nonAwsCredentialTeamSlug: "team-3" },
+      { internalSlug: "team-2", awsAccountId: "", nonAwsCredentialTeamSlug: "team-2", region: "" },
+      { internalSlug: "team-3", awsAccountId: "", nonAwsCredentialTeamSlug: "team-3", region: "" },
     ]);
   });
 

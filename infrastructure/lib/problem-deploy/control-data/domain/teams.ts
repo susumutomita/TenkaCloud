@@ -36,6 +36,18 @@ export type TeamRecord = {
   awsAccountId?: string;
   /** #2563: Non-AWS deploy credential teamSlug selected in EventCreate. */
   nonAwsCredentialTeamSlug?: string;
+  /**
+   * [Issue #3173] Where this team's stacks go, overriding the problem's
+   * `defaultRegion`.
+   *
+   * Region used to be decided once per problem and applied to every team, so a
+   * whole event landed in one account and one region and met that region's
+   * service limits — VPCs, EIPs, Lambda concurrency — before it met anything
+   * else. Spreading teams across regions is the ordinary answer, and the
+   * deployment row already stores a region per deployment; only the plan had it
+   * fixed. Absent means "use the problem's", which is every existing event.
+   */
+  region?: string;
   createdAt: string;
   updatedAt: string;
   expiresAt: number;

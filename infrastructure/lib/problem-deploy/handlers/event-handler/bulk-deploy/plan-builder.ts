@@ -285,7 +285,7 @@ function createAwsPlanEntry(
   const namePrefix = buildStackPrefix(problem.problemId, team.internalSlug);
   const item = createDeploymentItem(args, team, problem, jobId, namePrefix, createdAt, {
     awsAccountId,
-    region: problem.defaultRegion,
+    region: team.region ?? problem.defaultRegion,
     competitorRoleArn: verified.competitorRoleArn,
   });
   const detail = createDeployDetail(
@@ -455,7 +455,7 @@ function createDeployDetail(
     problemDir,
     teamSlug: slugify(team.internalSlug),
     namePrefix,
-    region: problem.defaultRegion,
+    region: team.region ?? problem.defaultRegion,
     awsAccountId,
     competitorRoleArn: verified.competitorRoleArn,
     externalIdParameterName: verified.externalIdParameterName,

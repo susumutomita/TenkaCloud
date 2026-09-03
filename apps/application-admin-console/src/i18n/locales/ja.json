@@ -253,7 +253,9 @@
     "check_credential_failed": "認証情報の確認に失敗しました。再試行してください。",
     "credential_registered": "認証情報は登録済みです。",
     "credential_unregistered": "認証情報が未登録です。",
-    "mixed_provider_error": "v1 では AWS と非 AWS provider を同一 Event に混在できません。provider ごとに Event を分けてください。"
+    "mixed_provider_error": "v1 では AWS と非 AWS provider を同一 Event に混在できません。provider ごとに Event を分けてください。",
+    "col_team_region": "Region (未指定は問題の既定)",
+    "team_region_inherit": "問題の既定に従う"
   },
   "lite_drill": {
     "checkpoint_header": "オンボーディングドリル: チェックポイント獲得!",

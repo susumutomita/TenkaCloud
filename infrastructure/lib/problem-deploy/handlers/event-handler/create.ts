@@ -71,6 +71,8 @@ export async function createEvent(
     teamLoginKey: generateTeamLoginKey(),
     awsAccountId: t.awsAccountId,
     nonAwsCredentialTeamSlug: t.nonAwsCredentialTeamSlug,
+    // [Issue #3173] Where this team deploys, when it is not the problem default.
+    region: t.region,
     createdAt,
     updatedAt: createdAt,
     expiresAt,

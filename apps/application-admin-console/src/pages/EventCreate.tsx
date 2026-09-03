@@ -116,6 +116,7 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
       internalSlug: `team-${i + 1}`,
       awsAccountId: "",
       nonAwsCredentialTeamSlug: `team-${i + 1}`,
+      region: "",
     })),
   );
   const [selectedProblems, setSelectedProblems] = useState<readonly MultiselectProps.Option[]>([]);
@@ -233,6 +234,10 @@ export function EventCreatePage({ config }: { config: AppConfig }) {
           (providerMode.kind === "composite" && providerMode.providers.some((p) => p !== "aws"))
             ? { nonAwsCredentialTeamSlug: tr.nonAwsCredentialTeamSlug }
             : {}),
+          // [Issue #3173] Omitted when blank, so a team that follows the
+          // problem's region stores nothing and every existing event is
+          // unaffected.
+          ...(tr.region ? { region: tr.region } : {}),
         })),
         problems: problemRows.map((r) => ({
           problemId: r.problemId,

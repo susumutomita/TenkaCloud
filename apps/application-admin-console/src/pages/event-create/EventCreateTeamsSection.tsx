@@ -14,6 +14,7 @@ import {
   TEAM_CREDENTIAL_PROVIDERS,
   type TeamCredentialProvider,
 } from "../../api/team-credentials-client";
+import { AWS_REGIONS } from "../../data/aws-regions";
 import { useT } from "../../i18n";
 import {
   ACCOUNT_ID_RE,
@@ -97,6 +98,8 @@ export function EventCreateTeamsSection({
       setCheckingCredential(null);
     }
   };
+  /** The catalog's label when we have one; the raw code otherwise. */
+  const regionLabel = (code: string) => AWS_REGIONS.find((r) => r.code === code)?.label ?? code;
   const columns: TableProps.ColumnDefinition<TeamTableItem>[] = [
     {
       id: "slug",
@@ -155,6 +158,30 @@ export function EventCreateTeamsSection({
           </SpaceBetween>
         );
       },
+    });
+  }
+  if (showAwsAccount) {
+    // [Issue #3173] Where this team's stacks go. Blank follows the problem's
+    // region, which is what every event did before — one account and one region
+    // for everybody, meeting that region's service limits first.
+    columns.push({
+      id: "region",
+      header: t("event_create.col_team_region"),
+      cell: (tr) => (
+        <Select
+          selectedOption={tr.region ? { value: tr.region, label: regionLabel(tr.region) } : null}
+          options={[
+            { value: "", label: t("event_create.team_region_inherit") },
+            ...AWS_REGIONS.map((r) => ({ value: r.code, label: r.label })),
+          ]}
+          placeholder={t("event_create.team_region_inherit")}
+          onChange={({ detail }) =>
+            /* v8 ignore next */
+            onUpdateTeamRow(tr.idx, { region: detail.selectedOption?.value ?? "" })
+          }
+          expandToViewport
+        />
+      ),
     });
   }
   for (const provider of credentialProviders) {

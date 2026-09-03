@@ -9,6 +9,17 @@ import type { EventSharedResources } from "../../lib/problem-deploy/handlers/eve
 import { makeSqliteExecutor } from "./control-data/control-data-write.test-helpers";
 import { buildShared, NOW_MS, sampleEvent, sampleTeams } from "./event-bulk-deploy.test-helpers";
 
+/**
+ * The two fields `buildBulkDeployPlan` reads off the shared resources. Bound
+ * before the assertion rather than asserted in place: the real surface is far
+ * wider than a plan needs, and `consistent-type-assertions` wants a declaration
+ * it can annotate.
+ */
+function sharedFor(problemsCatalog: Record<string, string>): EventSharedResources {
+  const partial = { problemsCatalog, eventBusName: "test-bus" };
+  return partial as unknown as EventSharedResources;
+}
+
 describe("bulkDeployEvent — happy path & chunking", () => {
   beforeEach(() => vi.clearAllMocks());
 
@@ -102,6 +113,85 @@ describe("bulkDeployEvent — happy path & chunking", () => {
     expect(putCmds[2]?.input.Entries).toHaveLength(10);
   });
 
+  /**
+   * [Issue #3173] A team's own region wins over the problem's.
+   *
+   * Region used to be decided once per problem and applied to every team, so a
+   * whole event landed in one region and met that region's service limits
+   * before it met anything else. The deployment row has always stored a region
+   * per deployment; only the plan had it fixed.
+   */
+  it("should deploy a team into its own region, and fall back to the problem's", async () => {
+    const sql = makeSqliteExecutor();
+    const teams = new SqlTeamsRepository(sql);
+    const base = {
+      eventId: "EV1",
+      tenantId: "tenant-acme",
+      awsAccountId: "111111111111",
+      createdAt: "2026-07-15T00:00:00.000Z",
+      updatedAt: "2026-07-15T00:00:00.000Z",
+      expiresAt: 4_102_444_800,
+    };
+    await teams.putTeam({
+      ...base,
+      teamId: "T1",
+      internalSlug: "team-1",
+      teamLoginKey: "K1",
+      region: "us-east-1",
+    });
+    await teams.putTeam({ ...base, teamId: "T2", internalSlug: "team-2", teamLoginKey: "K2" });
+
+    const plan = buildBulkDeployPlan({
+      shared: sharedFor({ p1: "problems/challenges/p1" }),
+      tenantId: "tenant-acme",
+      eventId: "EV1",
+      nowMs: NOW_MS,
+      event: {},
+      selected: {
+        teams: await teams.listTeamsForDeployment("EV1"),
+        problems: [{ problemId: "p1", defaultRegion: "ap-northeast-1" }],
+      },
+      existing: {
+        failedByKey: new Map(),
+        forceRedeployByKey: new Map(),
+        existingKey: new Set(),
+      },
+      verified: new Map([
+        [
+          "111111111111",
+          {
+            awsAccountId: "111111111111",
+            competitorRoleName: "DeployRole",
+            region: "ap-northeast-1",
+            externalIdParameterName: "/test/external-id",
+            competitorRoleArn: "arn:aws:iam::111111111111:role/DeployRole",
+          },
+        ],
+      ]),
+      nonAwsCredentials: new Set(),
+      retryFailedOnly: false,
+      forceRedeploy: false,
+    });
+
+    const byTeam = new Map(plan.entries.map((e) => [e.item.teamId, e.item.region]));
+    expect(byTeam.get("T1")).toBe("us-east-1");
+    expect(byTeam.get("T2")).toBe("ap-northeast-1");
+    // The event the deploy state machine receives has to agree with the row
+    // that was written, or the stack lands somewhere the row does not name.
+    const detailRegion = new Map(
+      plan.entries.map((e) => [
+        e.item.teamId,
+        (
+          JSON.parse(String(e.kind === "eventbridge" ? e.entry.Detail : "{}")) as {
+            region?: string;
+          }
+        ).region,
+      ]),
+    );
+    expect(detailRegion.get("T1")).toBe("us-east-1");
+    expect(detailRegion.get("T2")).toBe("ap-northeast-1");
+  });
+
   it("should keep the create-response key usable through a pure-SQL bulk plan", async () => {
     const sql = makeSqliteExecutor();
     const teams = new SqlTeamsRepository(sql);
@@ -120,10 +210,7 @@ describe("bulkDeployEvent — happy path & chunking", () => {
     });
     const selectedTeams = await teams.listTeamsForDeployment("EV1");
     const plan = buildBulkDeployPlan({
-      shared: {
-        problemsCatalog: { p1: "problems/challenges/p1" },
-        eventBusName: "test-bus",
-      } as EventSharedResources,
+      shared: sharedFor({ p1: "problems/challenges/p1" }),
       tenantId: "tenant-acme",
       eventId: "EV1",
       nowMs: NOW_MS,
