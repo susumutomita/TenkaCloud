@@ -349,4 +349,46 @@ describe("discoverProblemsCoordination (#1420)", () => {
     writeProblem("battles", "array-coord", { id: "array-coord", interTeamCoordination: [] });
     expect(discoverProblemsCoordination(workspace)).toEqual({});
   });
+
+  /**
+   * [Issue #3169] The state budget rides along with the plugin path, because
+   * the platform refuses a deploy that cannot fit it. A declaration the
+   * discovery half-accepts is worse than one it drops: the platform would then
+   * treat the problem as declared and read the missing side as zero, which
+   * admits exactly the event this check exists to refuse.
+   */
+  it("should carry a complete stateBudget declaration", () => {
+    writeProblem("battles", "sized-battle", {
+      id: "sized-battle",
+      interTeamCoordination: {
+        plugin: "coordination/sized.ts",
+        stateBudget: { bytesPerTeam: 17001, baseBytes: 1152 },
+      },
+    });
+    expect(discoverProblemsCoordination(workspace)["sized-battle"]).toEqual({
+      plugin: "coordination/sized.ts",
+      stateBudget: { bytesPerTeam: 17001, baseBytes: 1152 },
+    });
+  });
+
+  it.each([
+    ["only bytesPerTeam", { bytesPerTeam: 17001 }],
+    ["only baseBytes", { baseBytes: 1152 }],
+    ["a zero per-team cost", { bytesPerTeam: 0, baseBytes: 1152 }],
+    ["a negative base", { bytesPerTeam: 17001, baseBytes: -1 }],
+    ["a fractional cost", { bytesPerTeam: 1.5, baseBytes: 0 }],
+    ["strings", { bytesPerTeam: "17001", baseBytes: "1152" }],
+    ["an array", []],
+    ["null", null],
+  ])("should keep the plugin but drop a stateBudget that is %s", (_label, stateBudget) => {
+    writeProblem("battles", "half-declared", {
+      id: "half-declared",
+      interTeamCoordination: { plugin: "coordination/half.ts", stateBudget },
+    });
+    // The plugin still loads — only the size check is skipped, which is the
+    // same outcome as a problem that never declared a budget at all.
+    expect(discoverProblemsCoordination(workspace)["half-declared"]).toEqual({
+      plugin: "coordination/half.ts",
+    });
+  });
 });

@@ -76,6 +76,11 @@ export function buildShared(
       "hello-world": "problems/challenges/hello-world",
       "hello-world-battle": "problems/battles/hello-world-battle",
     },
+    // [Issue #3169] Declared explicitly rather than left off: neither fixture
+    // problem declares a coordination state budget, so the capacity preflight
+    // has nothing to check and every suite here keeps its existing behaviour.
+    // A suite that wants the preflight to fire overrides this through `over`.
+    problemsCoordination: {},
     ...over,
   };
   return {

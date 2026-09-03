@@ -96,6 +96,12 @@ export interface EventApiLambdaProps {
    */
   readonly problemsDisruptions: Readonly<Record<string, readonly unknown[]>>;
   /**
+   * [Issue #3169] `interTeamCoordination` per problem, for bulk deploy's
+   * capacity preflight. Optional: a deployment with no coordination problems
+   * passes nothing and the preflight then has nothing to check.
+   */
+  readonly problemsCoordination?: Readonly<Record<string, unknown>>;
+  /**
    * Issue #2464: problemId → pack provenance map for pack-sourced catalog entries only.
    * Burned into the handler with esbuild define; core-only path is `{}`.
    */
@@ -224,11 +230,19 @@ export function eventApiBundlingDefine(props: {
   readonly problemsDisruptions: Readonly<Record<string, readonly unknown[]>>;
   readonly problemsProvenance?: Readonly<Record<string, unknown>>;
   readonly problemRuntimes?: Readonly<Record<string, unknown>>;
+  readonly problemsCoordination?: Readonly<Record<string, unknown>>;
 }): Record<string, string> {
   return {
     "process.env.BATTLE_PROBLEMS_CATALOG": JSON.stringify(JSON.stringify(props.problemsCatalog)),
     "process.env.BATTLE_PROBLEMS_DISRUPTIONS": JSON.stringify(
       JSON.stringify(props.problemsDisruptions),
+    ),
+    // [Issue #3169] The `interTeamCoordination` declaration, so bulk deploy can
+    // refuse an event whose team count cannot fit the selected backend before
+    // it deploys anything. Same literal-substitution treatment as the two above
+    // for the same reason (the 4 KB Lambda env limit).
+    "process.env.BATTLE_PROBLEMS_COORDINATION": JSON.stringify(
+      JSON.stringify(props.problemsCoordination ?? {}),
     ),
     "process.env.BATTLE_PROBLEMS_PROVENANCE": JSON.stringify(
       JSON.stringify(props.problemsProvenance ?? {}),

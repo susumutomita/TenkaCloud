@@ -6,6 +6,7 @@ import {
 import type { EventRecord } from "../../control-data/events-repository.js";
 import type { TeamRecord } from "../../control-data/teams-repository.js";
 import { generateTeamLoginKey } from "../deploy-handler/team-key.js";
+import { warnOnCoordinationCapacity } from "./coordination-capacity-warning.js";
 import { type EventSharedResources, resolveEventRepositories } from "./shared.js";
 import type { CreateEventRequest, CreateEventResponse } from "./types.js";
 
@@ -97,11 +98,26 @@ export async function createEvent(
     throw new Error(`createEventWithTeams conflict: event/team row already exists (${eventId})`);
   }
 
+  // [Issue #3169] The event is created either way; this only tells the operator
+  // what the deploy will refuse. Blocking here would make an existing event that
+  // no longer fits impossible to recreate, and the team roster is the thing they
+  // would have to change anyway — better said now, while it is still a draft,
+  // than discovered when they press deploy.
+  const capacityWarnings = warnOnCoordinationCapacity({
+    problems: req.problems,
+    teamCount: teams.length,
+    problemsCoordination: shared.problemsCoordination,
+    budget: shared.runtime.coordinationStateBudget(),
+    tenantId: ctx.tenantId,
+    eventId,
+  });
+
   return {
     eventId,
     status: eventRecord.status,
     createdAt,
     expiresAt,
+    ...(capacityWarnings.length > 0 ? { warnings: capacityWarnings } : {}),
     teams: teams.map((t) => ({
       teamId: t.teamId,
       internalSlug: t.internalSlug,

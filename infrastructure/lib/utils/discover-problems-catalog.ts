@@ -195,17 +195,53 @@ export function discoverProblemsRuntime(
  */
 export function discoverProblemsCoordination(
   problemsRoot: string,
-): Record<string, { readonly plugin: string }> {
-  const result: Record<string, { readonly plugin: string }> = {};
+): Record<string, CoordinationCatalogEntry> {
+  const result: Record<string, CoordinationCatalogEntry> = {};
   for (const meta of iterateProblemsMetadata(problemsRoot)) {
     const coord = meta.interTeamCoordination;
     if (!coord || typeof coord !== "object" || Array.isArray(coord)) continue;
     const plugin = (coord as { plugin?: unknown }).plugin;
     if (typeof plugin === "string" && plugin.length > 0) {
-      result[meta.id] = { plugin };
+      const stateBudget = parseStateBudget((coord as { stateBudget?: unknown }).stateBudget);
+      result[meta.id] = stateBudget ? { plugin, stateBudget } : { plugin };
     }
   }
   return result;
+}
+
+/**
+ * [Issue #3169] 問題が宣言した coordination state の伸び方。
+ *
+ * `bytesPerTeam x teams + baseBytes` の 2 数だけを運ぶ。 platform 側は
+ * `parseCoordinationStateForecast` でもう一度検証してから使うので、 ここは
+ * 「壊れた宣言を catalog に載せない」ための足切りに徹する。
+ */
+export interface CoordinationStateBudgetDeclaration {
+  readonly bytesPerTeam: number;
+  readonly baseBytes: number;
+}
+
+export interface CoordinationCatalogEntry {
+  readonly plugin: string;
+  readonly stateBudget?: CoordinationStateBudgetDeclaration;
+}
+
+/**
+ * 両方の数が有効なときだけ宣言として認め、 それ以外は `undefined`。
+ *
+ * 片方だけ書かれた宣言を半分だけ採用すると、 platform は「宣言がある」と見なして
+ * 欠けた側を 0 として扱い、 収まらない event を通してしまう。 未宣言 (= 検査しない)
+ * の方が、 半分の宣言で検査したつもりになるより安全。
+ */
+function parseStateBudget(raw: unknown): CoordinationStateBudgetDeclaration | undefined {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return undefined;
+  const { bytesPerTeam, baseBytes } = raw as Record<string, unknown>;
+  const validPerTeam =
+    typeof bytesPerTeam === "number" && Number.isSafeInteger(bytesPerTeam) && bytesPerTeam > 0;
+  const validBase =
+    typeof baseBytes === "number" && Number.isSafeInteger(baseBytes) && baseBytes >= 0;
+  if (!validPerTeam || !validBase) return undefined;
+  return { bytesPerTeam, baseBytes };
 }
 
 /**

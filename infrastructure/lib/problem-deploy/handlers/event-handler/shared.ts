@@ -61,6 +61,26 @@ export type PackCatalogProvenance = Extract<
  * gate を持つため、`CompetitorAccounts` table 名と SSM SecureString path 構築用の
  * `env` を share する。
  */
+/**
+ * [Issue #3169] `BATTLE_PROBLEMS_COORDINATION` (= synth が metadata.json から集めた
+ * `{ [problemId]: interTeamCoordination }`) を JSON parse する。
+ *
+ * 壊れた JSON や object でない値は `{}` に倒す。 この宣言は capacity preflight の入力で
+ * しかなく、 読めないことは「宣言が無い」と同義 — 検査が省かれるだけで deploy 自体は
+ * 従来どおり通る。 ここで throw すると、 coordination と無関係な bulk deploy まで
+ * env の破損で止まる。
+ */
+function parseProblemsCoordination(raw: string | undefined): Readonly<Record<string, unknown>> {
+  if (!raw) return {};
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return {};
+    return parsed as Readonly<Record<string, unknown>>;
+  } catch {
+    return {};
+  }
+}
+
 export interface EventSharedResources {
   /**
    * [#2527 Slice 4] Injected control-data runtime. The Lambda entrypoint
@@ -92,6 +112,15 @@ export interface EventSharedResources {
   readonly problemsCatalog: Readonly<Record<string, string>>;
   /** Issue #888: problem metadata.json の `disruptions[]` 宣言 (problemId 毎)。 */
   readonly problemsDisruptions: Readonly<Record<string, readonly ProblemDisruptionEntry[]>>;
+  /**
+   * [Issue #3169] problem metadata.json の `interTeamCoordination` 宣言 (problemId 毎)。
+   *
+   * bulk deploy の capacity preflight が `stateBudget` を読んで、選択中の backend に
+   * 収まらない team 数の event を配る前に落とす。 shape は問題側が持つので `unknown` の
+   * まま運び、 domain の `parseCoordinationStateForecast` が唯一の解釈点になる。
+   * 未宣言の問題は検査対象外 (= 従来どおり runtime guard だけが効く)。
+   */
+  readonly problemsCoordination: Readonly<Record<string, unknown>>;
   /**
    * Issue #2464: pack-only problem provenance burned in by esbuild define. Core problems are
    * absent, so `{}` means the runtime catalog has no active pack rows.
@@ -174,6 +203,7 @@ export function buildEventSharedResources(runtime: ControlDataRuntime): EventSha
     scheduler: new SchedulerClient({}),
     problemsCatalog: parseProblemsCatalog(process.env.BATTLE_PROBLEMS_CATALOG),
     problemsDisruptions: parseProblemsDisruptions(process.env.BATTLE_PROBLEMS_DISRUPTIONS),
+    problemsCoordination: parseProblemsCoordination(process.env.BATTLE_PROBLEMS_COORDINATION),
     resolveProblemRuntimeDescriptor: makeProblemRuntimeDescriptorResolver(
       process.env.BATTLE_PROBLEMS_RUNTIMES,
     ),
@@ -236,6 +266,7 @@ export function buildScheduledTeardownResources(
     scheduler: new SchedulerClient({}),
     problemsCatalog: {},
     problemsDisruptions: {},
+    problemsCoordination: {},
     problemsProvenance: {},
     bulkDeployPayloadBucket: "",
     useBulkDistributedMap: false,
@@ -295,6 +326,7 @@ export function buildScheduledDeployResources(
     disruptionsTableName: process.env.DISRUPTIONS_TABLE_NAME ?? "",
     adminAuditLogTableName: process.env.ADMIN_AUDIT_LOG_TABLE_NAME ?? "",
     problemsDisruptions: {},
+    problemsCoordination: {},
     problemsProvenance: {},
     // Distributed Map 経路は EventApiLambda 専用 (= S3 bucket env)。 reconciler は旧 fan-out
     // 経路 (N×M DeployCreateRequested publish) を使うので bucket 不要 / flag は false 固定。

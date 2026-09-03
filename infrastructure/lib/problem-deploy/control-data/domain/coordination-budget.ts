@@ -210,3 +210,134 @@ export function checkCoordinationStateSize(
 export function budgetUsedPercent(bytes: number, budget: CoordinationStateBudget): number {
   return Math.round((bytes / budget.maxBytes) * 1000) / 10;
 }
+
+/**
+ * [Issue #3169] What a problem declares about how its coordination state grows.
+ *
+ * ## Why the problem has to say, and the platform cannot work it out
+ *
+ * {@link checkCoordinationStateSize} is a runtime guard: it weighs the state a
+ * write is carrying, right now. That is the correct last line of defence and
+ * the wrong first one, because by the time it fires the event is running and
+ * the participants are mid-match. The question an operator needs answered is
+ * earlier and different — *will this event fit before I start it* — and nothing
+ * the platform can see answers it. The size a match reaches is a property of
+ * the game: how much each team accumulates, and how much of that is permanent.
+ *
+ * So the problem declares it, from a measurement rather than an estimate. In
+ * `ac26-crypto-battle` that measurement already exists and is enforced by the
+ * problem's own `state-size.test.ts`, which plays a full worst-case match; the
+ * declaration is that test's numbers, and the test is what keeps them true.
+ *
+ * ## Linear because the measurement says it is
+ *
+ * `bytesPerTeam x teams + baseBytes` is a model, and a model the platform is
+ * entitled to only because the problem is asked to prove it. The Battle's own
+ * suite asserts the per-team cost stays linear (a super-linear term — anything
+ * cross-team — would pass at four teams and blow up at ninety-nine), so the
+ * extrapolation the platform performs here is the one the problem has tested.
+ * A problem whose growth is not linear must not declare these fields; an
+ * undeclared problem is simply not checked, which is the honest outcome.
+ */
+export interface CoordinationStateForecast {
+  /** Serialized bytes the state gains per participating team, at worst case. */
+  readonly bytesPerTeam: number;
+  /** Serialized bytes the state occupies with no teams — config, seed, phase. */
+  readonly baseBytes: number;
+}
+
+/** The state size this problem is expected to reach with `teamCount` teams. */
+export function forecastCoordinationStateBytes(
+  forecast: CoordinationStateForecast,
+  teamCount: number,
+): number {
+  return forecast.baseBytes + forecast.bytesPerTeam * teamCount;
+}
+
+/**
+ * The largest team count whose forecast still fits under `budget.maxBytes`.
+ *
+ * Returned so an operator is told what WOULD fit rather than only that their
+ * number does not. "31 teams on this backend" is a decision they can act on;
+ * "too big" sends them to read the source.
+ */
+export function maxTeamsForCoordinationBudget(
+  forecast: CoordinationStateForecast,
+  budget: CoordinationStateBudget,
+): number {
+  if (forecast.bytesPerTeam <= 0) return Number.POSITIVE_INFINITY;
+  const room = budget.maxBytes - forecast.baseBytes;
+  if (room <= 0) return 0;
+  return Math.floor(room / forecast.bytesPerTeam);
+}
+
+export type CoordinationCapacityVerdict =
+  | { readonly kind: "fits"; readonly forecastBytes: number }
+  /**
+   * Fits, but is forecast past the warning line — the same line a running match
+   * crosses in {@link classifyCoordinationStateSize}. Reported before the event
+   * runs so it is a scheduling decision rather than an alarm mid-match.
+   */
+  | {
+      readonly kind: "tight";
+      readonly forecastBytes: number;
+      readonly maxTeams: number;
+      readonly budget: CoordinationStateBudget;
+    }
+  | {
+      readonly kind: "over";
+      readonly forecastBytes: number;
+      readonly maxTeams: number;
+      readonly budget: CoordinationStateBudget;
+    };
+
+/**
+ * Whether an event of `teamCount` teams can hold this problem on this backend.
+ *
+ * The whole point of #3151's per-backend budget stated ahead of play: DynamoDB
+ * caps one item at 400 KB and has no partial write, so a match that outgrows it
+ * stops dead with participants watching. Turso has no comparable per-row cap,
+ * so the same event is fine there. Which of those an operator is about to walk
+ * into is knowable before the event starts, and this is the function that knows
+ * it.
+ */
+export function checkCoordinationCapacity(
+  forecast: CoordinationStateForecast,
+  teamCount: number,
+  budget: CoordinationStateBudget,
+): CoordinationCapacityVerdict {
+  const forecastBytes = forecastCoordinationStateBytes(forecast, teamCount);
+  const maxTeams = maxTeamsForCoordinationBudget(forecast, budget);
+  if (forecastBytes > budget.maxBytes) return { kind: "over", forecastBytes, maxTeams, budget };
+  if (forecastBytes >= budget.warnBytes) return { kind: "tight", forecastBytes, maxTeams, budget };
+  return { kind: "fits", forecastBytes };
+}
+
+/**
+ * Reads a problem's declared forecast out of its catalog entry.
+ *
+ * `undefined` for anything not fully and validly declared, and the caller then
+ * performs no check at all. That is deliberate: every coordination problem that
+ * exists today predates the declaration, and a platform that guessed a number
+ * for them would either refuse events that are fine or admit ones that are not.
+ * Silence means unmeasured, and unmeasured means unchecked — not "assumed
+ * small".
+ */
+export function parseCoordinationStateForecast(
+  declaration: unknown,
+): CoordinationStateForecast | undefined {
+  if (typeof declaration !== "object" || declaration === null) return undefined;
+  const budget = (declaration as { stateBudget?: unknown }).stateBudget;
+  if (typeof budget !== "object" || budget === null) return undefined;
+  const { bytesPerTeam, baseBytes } = budget as Record<string, unknown>;
+  if (!isPositiveInteger(bytesPerTeam) || !isNonNegativeInteger(baseBytes)) return undefined;
+  return { bytesPerTeam, baseBytes };
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+}
+
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
