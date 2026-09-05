@@ -1,5 +1,5 @@
 import { ConditionalCheckFailedException } from "@aws-sdk/client-dynamodb";
-import { GetCommand, PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { GetCommand, PutCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { CoordinationPlugin } from "@tenkacloud/coordination-plugin-sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { coordinationStateExpiresAt } from "../../lib/problem-deploy/control-data/domain/coordination-scope.js";
@@ -68,6 +68,8 @@ interface FakeDdb {
   readonly envelopePuts: FakeEnvelopePut[];
   readonly secretPuts: PutCommand[];
   readonly updates: UpdateCommand[];
+  /** [Issue #3187] The roster reads (a GSI1 Query) the tick issues before it initialises. */
+  readonly queries: QueryCommand[];
   readonly send: ReturnType<typeof vi.fn>;
 }
 function fakeDdb(opts: {
@@ -78,6 +80,14 @@ function fakeDdb(opts: {
   matchSecret?: string;
   /** [Issue #3153] The run pointer row, when the problem has been reset. */
   runPointer?: Record<string, unknown>;
+  /**
+   * [Issue #3187] The tenant's deployment rows, as the roster query (GSI1,
+   * `TENANT#<tenantId>`, filtered to the event) returns them. Raw items: the
+   * real `itemToRecord` runs on them, the same way the op path's fake does.
+   */
+  rosterItems?: Record<string, unknown>[];
+  /** [Issue #3187] Fail the roster query only; the state and secret reads still answer. */
+  rosterThrows?: boolean;
   /**
    * [Issue #3151] Overrides the state size budget only.
    *
@@ -92,6 +102,7 @@ function fakeDdb(opts: {
   const envelopePuts: FakeEnvelopePut[] = [];
   const secretPuts: PutCommand[] = [];
   const updates: UpdateCommand[] = [];
+  const queries: QueryCommand[] = [];
 
   // [Issue #3133] The coordination partition now holds two rows — `SK=STATE`
   // and `SK=MATCHSECRET` — so each command handler branches on the sort key
@@ -154,10 +165,19 @@ function fakeDdb(opts: {
     return {};
   };
 
+  // [Issue #3187] The roster read. The only Query this host issues, and it is
+  // a single page: no `LastEvaluatedKey`, or `queryAllPages` would loop.
+  const handleQuery = (cmd: QueryCommand) => {
+    if (opts.rosterThrows) throw new Error("roster boom");
+    queries.push(cmd);
+    return { Items: opts.rosterItems ?? [] };
+  };
+
   const send = vi.fn(async (cmd: unknown) => {
     if (cmd instanceof GetCommand) return handleGet(cmd);
     if (cmd instanceof PutCommand) return handlePut(cmd);
     if (cmd instanceof UpdateCommand) return handleUpdate(cmd);
+    if (cmd instanceof QueryCommand) return handleQuery(cmd);
     throw new Error("unexpected command");
   });
   return {
@@ -172,6 +192,7 @@ function fakeDdb(opts: {
     envelopePuts,
     secretPuts,
     updates,
+    queries,
     send,
   };
 }
@@ -713,5 +734,127 @@ describe("the tick and the rest of the platform agree about which match (#3151 /
     // Letting the retention clock run here would delete the row before an
     // operator could act on the warning.
     expect(ddb.updates).toHaveLength(1);
+  });
+});
+
+/**
+ * [Issue #3187] The tick materialises the same roster the op path would.
+ *
+ * The scoring Lambda ticks every minute from the moment the event starts, so
+ * the tick -- not the first participant to open the portal -- is usually the
+ * host that materialises a namespace. `initialState` is the only hook that
+ * receives ctx, so whatever the tick passes is what the plugin knows about the
+ * teams for the whole match. On live it passed the scoring pass's ids alone:
+ * COMPLETE rows only, and no names, so every team stayed a ULID even after
+ * #3172 had wired display names into the op path.
+ */
+describe("the tick materialises the roster the op path would (#3187)", () => {
+  interface RosterState {
+    readonly teams: readonly { readonly id: string; readonly name?: string }[];
+    readonly ticks: number;
+  }
+  const rosterPlugin: CoordinationPlugin<RosterState, unknown, RosterState> = {
+    initialState: (ctx) => ({
+      teams: ctx.teamIds.map((id) => ({ id, name: ctx.teamNames?.[id] })),
+      ticks: 0,
+    }),
+    validateOp: () => ({ ok: true }),
+    applyOp: (s) => s,
+    // Always advances, so the tick-initialised state is actually written.
+    tick: (s) => ({ ...s, ticks: s.ticks + 1 }),
+    projectForTeam: (s) => s,
+  };
+  const deploymentRow = (over: Record<string, unknown>) => ({
+    tenantId: "t1",
+    eventId: "e1",
+    problemId: "cap",
+    ...over,
+  });
+  const persistedTeams = (ddb: FakeDdb) => (ddb.puts[0]?.state as RosterState | undefined)?.teams;
+
+  it("should hand initialState the full roster with display names, not the scoring pass's ids alone", async () => {
+    const ddb = fakeDdb({
+      getItem: undefined,
+      rosterItems: [
+        deploymentRow({
+          teamId: "team-b",
+          status: "COMPLETE",
+          displayTeamName: "かけら隊",
+          teamName: "team-2",
+        }),
+        // Mid-deploy, so the scoring pass (COMPLETE rows only) never observed
+        // it. Still on the roster and still named: status is not a filter,
+        // or the roster would depend on deploy timing (#3053).
+        deploymentRow({ teamId: "team-c", status: "PENDING", teamName: "team-3" }),
+        // Another problem in the same event is another match.
+        deploymentRow({
+          teamId: "team-z",
+          status: "COMPLETE",
+          problemId: "other",
+          displayTeamName: "elsewhere",
+        }),
+      ],
+    });
+
+    const res = await handleCoordinationTickBatch(
+      depsWith(importerOf(rosterPlugin), ddb.store),
+      // Unsorted on purpose: the scoring pass emits ids in scan order.
+      batch([capTarget({ teamIds: ["team-b", "team-a"] })]),
+    );
+
+    expect(res).toEqual({ ticked: 1, written: 1 });
+    // The union of what the scoring pass observed and what the rows say,
+    // sorted -- the same input `initialState` gets when a participant's op
+    // materialises the match instead, so who wins the race no longer matters.
+    expect(persistedTeams(ddb)).toEqual([
+      { id: "team-a", name: undefined },
+      { id: "team-b", name: "かけら隊" },
+      { id: "team-c", name: "team-3" },
+    ]);
+    // The same rows the op path reads: the tenant's GSI1 partition, filtered to the event.
+    expect(ddb.queries).toHaveLength(1);
+    expect(ddb.queries[0]?.input.IndexName).toBe("GSI1");
+    expect(ddb.queries[0]?.input.ExpressionAttributeValues).toEqual({
+      ":pk": "TENANT#t1",
+      ":ev": "e1",
+    });
+  });
+
+  it("should still initialise from the scoring pass's ids, unnamed, when the roster query fails", async () => {
+    const ddb = fakeDdb({ getItem: undefined, rosterThrows: true });
+
+    const res = await handleCoordinationTickBatch(
+      depsWith(importerOf(rosterPlugin), ddb.store),
+      batch([capTarget({ teamIds: ["team-b", "team-a"] })]),
+    );
+
+    // Same degradation as the op path: the match starts on what the host
+    // already knew rather than not starting. Not silently, though -- ids
+    // alone is exactly what the live symptom looked like.
+    expect(res).toEqual({ ticked: 1, written: 1 });
+    expect(persistedTeams(ddb)).toEqual([
+      { id: "team-a", name: undefined },
+      { id: "team-b", name: undefined },
+    ]);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("roster query failed"),
+      expect.objectContaining({ eventId: "e1", problemId: "cap", message: "roster boom" }),
+    );
+  });
+
+  it("should not read the roster when the match already has state", async () => {
+    const ddb = fakeDdb({
+      getItem: { state: { teams: [], ticks: 0 }, version: 1 },
+      rosterItems: [deploymentRow({ teamId: "team-a", displayTeamName: "late" })],
+    });
+
+    await handleCoordinationTickBatch(
+      depsWith(importerOf(rosterPlugin), ddb.store),
+      batch([capTarget()]),
+    );
+
+    // `initialState` is the only hook that takes ctx, so an established match
+    // must not pay a Query per minute for a roster nothing can consume.
+    expect(ddb.queries).toHaveLength(0);
   });
 });
