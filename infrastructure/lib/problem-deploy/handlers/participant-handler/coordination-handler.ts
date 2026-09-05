@@ -22,6 +22,7 @@ import {
   loadAndProjectCoordinationForTeam,
   type PluginImporter,
 } from "./coordination-plugin-loader.js";
+import { resolveEventRoster } from "./coordination-roster.js";
 import type { StateSchemaMismatchReason } from "./coordination-state-schema.js";
 import type { CoordinationStoreDeps } from "./coordination-store.js";
 import {
@@ -355,34 +356,6 @@ export function parseCoordinationConfig(raw: string | undefined): CoordinationCo
 }
 
 /**
- * team-login-key → {@link CoordinationScope}。 active な代表 deployment 行から tenant/event/team を
- * 引き、 その問題が coordination を宣言していれば moduleRef を確定する。 認証不可 / 未宣言は null
- * (= route は `not_configured`)。
- *
- * `ctx.teamIds` は **event の full roster** (= 同じ event で同じ問題を deploy している全チーム、
- * teamId 昇順) を渡す。 requester 1 チームだけを渡していた頃 (Issue #3053) は、 plugin の
- * `initialState(ctx)` が requester しか state に登録できず、 相手チームを対象にする op
- * (`ac26-crypto-battle` の `hunt` など) が必ず `unknown team` で reject されていた。 さらに
- * 各チームが別々の 1 チーム ctx で同じ state 行を初期化しに行くため、 先に書いた側の state に
- * もう一方が存在しない、 という競合も起きていた。
- *
- * roster は teamId でソートして渡す。 これが競合対策の本体で、 どのチームの request が先に
- * state を materialize しても `initialState(ctx)` の入力が同一になる (= 同じ initial state)。
- *
- * roster の定義は「同じ (tenant, event) で **同じ problemId** の deployment 行を持つチーム」。
- * status は絞らない — deploy 途中のチームを外すと、 完了の前後で roster が変わり、 まさに
- * 上の競合が再発するため。
- *
- * 既知の限界: state は最初の op で 1 度だけ materialize される。 それより後に deploy した
- * チームは `state.teams` に現れない (SDK に roster 再解決の hook が無い)。 運用は全チームの
- * deploy 完了後に試合を開始する。
- */
-/**
- * 同じ (tenant, event) で同じ問題を deploy している全チーム ID を teamId 昇順で返す
- * (Issue #3053)。 requester は必ず含む — roster query が (transient error などで) 落ちても
- * requester だけの ctx で従来どおり動く方が、 route ごと落とすより安全なため。
- */
-/**
  * [Issue #659] Copy the plugin's team scores onto the deployment rows the
  * scoreboard reads.
  *
@@ -447,39 +420,6 @@ async function publishTeamScores(
   }
 }
 
-async function resolveEventRoster(
-  shared: ParticipantSharedResources,
-  target: {
-    readonly tenantId: string;
-    readonly eventId: string;
-    readonly problemId: string;
-    readonly requesterTeamId: string;
-  },
-): Promise<{ readonly teamIds: readonly string[]; readonly teamNames: Record<string, string> }> {
-  const roster = new Set<string>([target.requesterTeamId]);
-  // [Issue #3172] teamId is a ULID, so a plugin that shows an opponent shows
-  // `01M1J5VK3N6KX5G3MYW190S9Q8`. The display name lives on the same rows this
-  // already reads — `displayTeamName ?? teamName`, the order the leaderboard
-  // resolves — so it costs nothing to carry it along.
-  const teamNames: Record<string, string> = {};
-  try {
-    const repository = await resolveDeploymentsRepository(shared);
-    const rows = await repository.listByTenantAndEvent(target.tenantId, target.eventId);
-    for (const row of rows) {
-      if (row.problemId === target.problemId && typeof row.teamId === "string" && row.teamId) {
-        roster.add(row.teamId);
-        const display = typeof row.displayTeamName === "string" ? row.displayTeamName : undefined;
-        const slug = typeof row.teamName === "string" ? row.teamName : undefined;
-        const name = display?.trim() || slug?.trim();
-        if (name) teamNames[row.teamId] = name;
-      }
-    }
-  } catch {
-    // roster 解決の失敗は coordination route を落とさない (requester のみで継続)。
-  }
-  return { teamIds: [...roster].sort(), teamNames };
-}
-
 /**
  * [Issue #3123] Whether this deployment row may still submit coordination ops.
  *
@@ -497,9 +437,9 @@ async function resolveEventRoster(
  * Coordination was the one that did not.
  *
  * Note this guards the REQUESTER's own row only. `resolveEventRoster`
- * deliberately does not filter by status, for an unrelated and still-valid
- * reason: dropping mid-deploy teams from the roster would make
- * `initialState(ctx)` depend on deploy timing (#3053).
+ * (`coordination-roster.ts`) deliberately does not filter by status, for an
+ * unrelated and still-valid reason: dropping mid-deploy teams from the roster
+ * would make `initialState(ctx)` depend on deploy timing (#3053).
  *
  * [Issue #3128] Status alone is not enough, because a torn-down row does not
  * stay in a deleted-like status. `bulkTeardownEvent` moves rows to `DELETING`
@@ -527,6 +467,18 @@ function canSubmitCoordination(item: {
   return !DELETED_LIKE_STATUSES.has(status);
 }
 
+/**
+ * team-login-key → {@link CoordinationScope}。 active な代表 deployment 行から tenant/event/team を
+ * 引き、 その問題が coordination を宣言していれば moduleRef を確定する。 認証不可 / 未宣言は
+ * `not_configured`。
+ *
+ * `ctx.teamIds` は **event の full roster** (= 同じ event で同じ問題を deploy している全チーム、
+ * teamId 昇順) を渡す。 requester 1 チームだけを渡していた頃 (Issue #3053) は、 plugin の
+ * `initialState(ctx)` が requester しか state に登録できず、 相手チームを対象にする op
+ * (`ac26-crypto-battle` の `hunt` など) が必ず `unknown team` で reject されていた。 roster の
+ * 定義・ソート・失敗時の縮退は tick 経路と共有する `resolveEventRoster`
+ * (`coordination-roster.ts`) が持つ。
+ */
 export function makeCoordinationScopeResolver(
   shared: ParticipantSharedResources,
   config: CoordinationConfig,
@@ -589,7 +541,7 @@ export function makeCoordinationScopeResolver(
       tenantId: item.tenantId,
       eventId: item.eventId,
       problemId: resolvedProblemId,
-      requesterTeamId: item.teamId,
+      knownTeamIds: [item.teamId],
     });
     return {
       kind: "scope",

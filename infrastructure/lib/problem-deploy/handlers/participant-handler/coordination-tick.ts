@@ -8,6 +8,7 @@ import {
 } from "../shared/coordination-tick-contract.js";
 import type { CoordinationConfig } from "./coordination-handler.js";
 import { loadCoordinationPlugin, type PluginImporter } from "./coordination-plugin-loader.js";
+import { resolveEventRoster } from "./coordination-roster.js";
 import { pluginStateSchemaVersion, reconcileStateSchema } from "./coordination-state-schema.js";
 import {
   type CoordinationStateScope,
@@ -170,9 +171,27 @@ async function tickCoordinationEvent(
     currentState = reconciled.state;
     version = existing.version;
   } else {
+    // [Issue #3187] The tick is usually the host that materialises a namespace:
+    // the scoring Lambda ticks every minute from the moment the event starts,
+    // so it wins the race against the first participant to open the portal.
+    // `initialState` is the only hook that receives ctx, so what this call
+    // passes is what the plugin knows about the teams for the whole match. It
+    // used to pass the scoring pass's ids alone -- COMPLETE rows only, and no
+    // names -- and on live every team was a ULID for the rest of the match,
+    // even after #3172 had wired names into the op path. The roster is resolved
+    // exactly as the op path resolves it (same rows, same rule, same sort),
+    // seeded with the ids the scoring pass observed so a failed query degrades
+    // to what the tick already knew rather than failing it.
+    const roster = await resolveEventRoster(deps.store, {
+      tenantId: target.tenantId,
+      eventId: target.eventId,
+      problemId: target.moduleRef,
+      knownTeamIds: target.teamIds,
+    });
     currentState = plugin.initialState({
       eventId: target.eventId,
-      teamIds: [...target.teamIds],
+      teamIds: roster.teamIds,
+      teamNames: roster.teamNames,
       matchSecret: await ensureCoordinationMatchSecret(deps.store, scope, nowIso),
     });
     version = 0;
