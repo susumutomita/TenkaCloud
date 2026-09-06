@@ -174,10 +174,13 @@ describe("visibility helpers", () => {
 });
 
 describe("ProblemDetailPage", () => {
-  it("puts an active interaction-only Battle first and preserves its answer while reference opens", async () => {
+  it.each([
+    undefined,
+    { status: "running", runtimeKind: "docker" },
+  ])("puts an active interaction-only Battle first and preserves its answer while reference opens (lifecycle: %j)", async (lifecycle) => {
     const user = userEvent.setup();
     mockTeamView.mockReturnValue(
-      teamView({ view: viewWith({ problems: [problem({ status: "COMPLETE" })] }) }),
+      teamView({ view: viewWith({ problems: [problem({ status: "COMPLETE", lifecycle })] }) }),
     );
     mockFindMeta.mockReturnValue(
       meta({
@@ -197,7 +200,9 @@ describe("ProblemDetailPage", () => {
     expect(screen.getByRole("textbox", { name: "live answer draft" })).toHaveValue("123");
     // A normal team poll does not remount the running plugin.
     mockTeamView.mockReturnValue(
-      teamView({ view: viewWith({ problems: [problem({ status: "COMPLETE", score: 30 })] }) }),
+      teamView({
+        view: viewWith({ problems: [problem({ status: "COMPLETE", lifecycle, score: 30 })] }),
+      }),
     );
     rerender(<ProblemDetailPage config={config} />);
     expect(screen.getByTestId("plugin-slots")).toBe(live);
@@ -226,6 +231,38 @@ describe("ProblemDetailPage", () => {
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(screen.getByTestId("endpoint-form")).toBeVisible();
+  });
+
+  it("keeps a stopped interaction-only Battle's environment information before the game", () => {
+    mockTeamView.mockReturnValue(
+      teamView({
+        view: viewWith({
+          problems: [
+            problem({
+              status: "COMPLETE",
+              lifecycle: { status: "stopped", runtimeKind: "docker" },
+            }),
+          ],
+        }),
+      }),
+    );
+    mockFindMeta.mockReturnValue(
+      meta({
+        endpoints: [],
+        dashboardSlots: { StatusPanel: "portal/StatusPanel.tsx" },
+        interTeamCoordination: {},
+      }),
+    );
+    renderPage();
+    expect(
+      screen.queryByRole("button", { name: "problem_detail.reference_header" }),
+    ).not.toBeInTheDocument();
+    const information = screen.getByText("problem_detail.info_header");
+    expect(information).toBeVisible();
+    expect(
+      information.compareDocumentPosition(screen.getByTestId("plugin-slots")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("does not mount game plugins while the event is locked", () => {
