@@ -28,7 +28,10 @@ import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers"
  * could not tell a rotation from a no-op: every reset would read "no pointer",
  * rotate from the initial run, and look like it worked.
  */
-function buildShared(deployments: readonly Record<string, unknown>[]): {
+function buildShared(
+  deployments: readonly Record<string, unknown>[],
+  event: Record<string, unknown> | null = { tenantId: "tenant-acme", status: "READY" },
+): {
   shared: EventSharedResources;
   ddbSend: ReturnType<typeof vi.fn>;
   getItem: (key: { PK: string; SK: string }) => Promise<Record<string, unknown> | undefined>;
@@ -36,6 +39,8 @@ function buildShared(deployments: readonly Record<string, unknown>[]): {
 } {
   const ddb = makeFakeDdb();
   const ddbSend = vi.fn(async (cmd: unknown) => {
+    if (cmd instanceof GetCommand && cmd.input.TableName === "TestEvents")
+      return { Item: event ?? undefined };
     if (cmd instanceof QueryCommand) return { Items: [...deployments] };
     return ddb.send(cmd as never);
   });
@@ -78,6 +83,61 @@ const deleteKeys = (ddbSend: ReturnType<typeof vi.fn>) =>
     .map((cmd) => `${cmd.input.Key?.PK}/${cmd.input.Key?.SK}`);
 
 describe("resetCoordinationRun (#3153)", () => {
+  it.each([
+    [-1, "ok"],
+    [0, "event_ended"],
+    [1, "event_ended"],
+  ] as const)("should apply the event end boundary at %+d ms", async (offset, kind) => {
+    const end = "2026-09-06T01:00:00.000Z";
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.parse(end) + offset);
+    try {
+      const { shared } = buildShared([deployment("battle-a", "team-1")], {
+        tenantId: "tenant-acme",
+        status: "READY",
+        endsAt: end,
+      });
+      expect((await resetCoordinationRun(shared, "tenant-acme", "EV1", "battle-a")).kind).toBe(
+        kind,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    { status: "ENDED" },
+    { status: "TEARDOWN" },
+    { status: "ARCHIVED" },
+    { status: "READY", endsAt: "2020-01-01T00:00:00.000Z" },
+    { status: "READY", startsAt: "2020-01-01T00:00:00.000Z" },
+  ])("should reject a finished event before rotating or clearing scores: %j", async (event) => {
+    // Deployment denormalization may lag behind the authoritative event row.
+    const { shared, ddbSend, getItem, putItem } = buildShared([deployment("battle-a", "team-1")], {
+      tenantId: "tenant-acme",
+      ...event,
+    });
+    const pointerKey = { PK: "COORDRUN#tenant-acme#EV1#battle-a", SK: "CURRENT" };
+    const pointer = { ...pointerKey, runId: "finished-run" };
+    await putItem(pointer);
+    expect(await resetCoordinationRun(shared, "tenant-acme", "EV1", "battle-a")).toEqual({
+      kind: "event_ended",
+    });
+    expect(await getItem(pointerKey)).toEqual(pointer);
+    expect(ddbSend.mock.calls.every(([cmd]) => cmd instanceof GetCommand)).toBe(true);
+  });
+
+  it.each([
+    null,
+    { tenantId: "another-tenant", status: "READY" },
+  ])("should not reset a missing or foreign event despite stale deployment rows: %j", async (event) => {
+    const { shared, ddbSend } = buildShared([deployment("battle-a", "team-1")], event);
+    expect(await resetCoordinationRun(shared, "tenant-acme", "EV1", "battle-a")).toEqual({
+      kind: "not_found",
+    });
+    expect(ddbSend.mock.calls.every(([cmd]) => cmd instanceof GetCommand)).toBe(true);
+  });
+
   it("should keep the current run and return conflict while score delivery is pending", async () => {
     const { shared, ddbSend, getItem, putItem } = buildShared([deployment("battle-a", "team-1")]);
     const stateKey = { PK: "COORD#tenant-acme#EV1#battle-a#default", SK: "STATE" };

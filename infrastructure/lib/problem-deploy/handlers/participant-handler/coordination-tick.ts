@@ -160,6 +160,9 @@ async function tickCoordinationEvent(
     ),
   };
   const existing = await readCoordinationState(deps.store, scope);
+  // A stalled delivery must not age out a live match. Refresh before delivery:
+  // both a partial result and a thrown backend error defer this tick.
+  await refreshCoordinationTtl(deps, target, scope, existing, nowIso);
   // Cold plugin loading and namespace resolution must not consume every retry's delivery slice.
   const scoreDeadlineMs = Date.now() + scoreBudgetMs;
   if (
@@ -174,7 +177,6 @@ async function tickCoordinationEvent(
     console.warn(
       `[coordination-dispatcher] tick invalid plugin schema event=${target.eventId} problem=${target.moduleRef} detail=${JSON.stringify(load.detail)}`,
     );
-    await refreshCoordinationTtl(deps, target, scope, existing, nowIso);
     return false;
   }
   const { plugin, schema } = load; // [Issue #3150] 版宣言は load 時に検証した値を使う (再読しない)
@@ -196,7 +198,6 @@ async function tickCoordinationEvent(
         `[coordination-dispatcher] tick schema mismatch event=${target.eventId} problem=${target.moduleRef} reason=${reconciled.reason}` +
           (reconciled.detail ? ` detail=${JSON.stringify(reconciled.detail)}` : ""),
       );
-      await refreshCoordinationTtl(deps, target, scope, existing, nowIso);
       return false;
     }
     currentState = reconciled.state;
@@ -240,7 +241,6 @@ async function tickCoordinationEvent(
     // [Issue #3150] migration だけが起きて tick 自体は no-op だった行はここに来る。 write が無い
     // ので封筒は書き換わらず、 行は旧版のまま残る (= lazy upgrade。 migration は次に呼ばれるときも
     // 冪等に走るので害はない)。 TTL の延長だけは行う -- 試合を消さないのはここでも同じ。
-    await refreshCoordinationTtl(deps, target, scope, existing, nowIso);
     return false;
   }
   const written = await writeCoordinationState(
@@ -273,7 +273,6 @@ async function tickCoordinationEvent(
     );
     // TTL は延ばす。 書けないことと「試合が終わった」ことは別で、 ここで retention の時計を
     // 進ませると、 運営が対処する前に行そのものが消える。
-    await refreshCoordinationTtl(deps, target, scope, existing, nowIso);
     return false;
   }
   await tryDeliverCoordinationScores(

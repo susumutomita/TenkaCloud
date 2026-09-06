@@ -19,7 +19,10 @@ import {
 } from "../../control-data/domain/coordination-state-envelope.js";
 import type { ControlDataRuntime } from "../../control-data/runtime-repositories.js";
 import { warnDeployTrace } from "../shared/trace-log.js";
-import { resolveDeploymentsRepository } from "./shared.js";
+import {
+  type ParticipantDeploymentsTableSharedResources,
+  resolveDeploymentsRepository,
+} from "./shared.js";
 
 /**
  * Issue #1420: inter-team coordination の per-event 共有 state を保存する store。
@@ -82,6 +85,8 @@ export interface CoordinationStoreDeps {
   readonly runtime: ControlDataRuntime;
   readonly ddb: Pick<DynamoDBDocumentClient, "send">;
   readonly tableName: string;
+  /** Separately bounded backend for saved, retryable score delivery only. */
+  readonly scoreDelivery?: ParticipantDeploymentsTableSharedResources;
   /** Catalog-derived ownership; missing legacy config must preserve unrelated points. */
   readonly coordinationScoreModes?: Readonly<Record<string, "exclusive" | "additive">>;
 }

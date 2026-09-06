@@ -44,11 +44,13 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
     version: number,
     update: CoordinationScoreUpdate,
   ): Promise<DeploymentMutationOutcome> {
-    const at = update.occurredAt;
+    const deliveredAt = new Date().toISOString();
     const statements: SqlStatement[] = [
       {
         sql: `UPDATE deployments SET score = ?, updated_at = ?,
-          payload = json_set(payload, '$.score', ?, '$.updatedAt', ?, '$.lastScoredAt', ?, '$.coordinationScoreRunId', ?, '$.coordinationScoreVersion', ?, '$.coordinationSubtotal', ?)
+          payload = json_set(payload, '$.score', ?, '$.updatedAt', ?,
+            '$.lastScoredAt', MAX(COALESCE(json_extract(payload, '$.lastScoredAt'), ''), ?),
+            '$.coordinationScoreRunId', ?, '$.coordinationScoreVersion', ?, '$.coordinationSubtotal', ?)
           WHERE job_id = ? AND tenant_id = ? AND event_id = ? AND problem_id = ? AND team_id = ? AND status = ?
           AND json_extract(payload, '$.teardownRequestedAt') IS NULL AND score IS ?
           AND (json_extract(payload, '$.coordinationScoreRunId') IS NOT ? OR json_extract(payload, '$.coordinationScoreVersion') < ?)
@@ -57,10 +59,10 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
             AND version = ? AND ${HAS_PENDING_COORDINATION_SCORES_SQL})`,
         params: [
           update.score,
-          at,
+          deliveredAt,
           update.score,
-          at,
-          at,
+          deliveredAt,
+          update.occurredAt,
           scope.runId,
           version,
           update.coordinationSubtotal,

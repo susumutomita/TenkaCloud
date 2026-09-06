@@ -7,6 +7,7 @@ import {
   type CoordinationArtifactStore,
   UnconfiguredCoordinationArtifactStore,
 } from "../../control-data/coordination-artifact-store.js";
+import { createDefaultControlDataRuntime } from "../../control-data/runtime-repositories.js";
 import { S3CoordinationArtifactStore } from "../../control-data/s3-coordination-artifact-store.js";
 import {
   type CoordinationHandlerDeps,
@@ -28,8 +29,8 @@ import { buildParticipantSharedResources } from "../participant-handler/shared.j
 import { RATE_LIMITS } from "../shared/rate-limiter.js";
 import { secureApiHeaders } from "../shared/secure-headers.js";
 import {
-  createCoordinationControlDataRuntime,
-  createCoordinationDdbClient,
+  createScoreDeliveryControlDataRuntime,
+  createScoreDeliveryDdbClient,
 } from "./coordination-backends.js";
 import { defaultS3PluginImporter } from "./s3-plugin-importer.js";
 
@@ -47,11 +48,8 @@ import { defaultS3PluginImporter } from "./s3-plugin-importer.js";
  * synth-bundle 済み .mjs を materialize → `import()` する。未配線
  * (= bucket env 空) なら reject し、 load 不可 → `unavailable` / fallback で participant API を壊さない。
  */
-// One control-data runtime is shared for the Lambda instance lifetime (#2527).
-const shared = buildParticipantSharedResources(
-  createCoordinationControlDataRuntime(),
-  createCoordinationDdbClient(),
-);
+// Scope lookup and participant state reads/writes retain their normal backend settings.
+const shared = buildParticipantSharedResources(createDefaultControlDataRuntime());
 
 const pluginBucket = process.env.COORDINATION_PLUGIN_BUCKET ?? "";
 const coordinationImporter: PluginImporter = pluginBucket
@@ -80,6 +78,12 @@ const coordinationDeps: CoordinationHandlerDeps = {
     runtime: shared.runtime,
     ddb: shared.ddb,
     tableName: shared.tableName,
+    // Only this saved, idempotent delivery can safely time out and retry next tick.
+    scoreDelivery: {
+      runtime: createScoreDeliveryControlDataRuntime(),
+      ddb: createScoreDeliveryDdbClient(),
+      tableName: shared.tableName,
+    },
     coordinationScoreModes: Object.fromEntries(
       Object.entries(coordinationConfig).map(([id, entry]) => [
         id,

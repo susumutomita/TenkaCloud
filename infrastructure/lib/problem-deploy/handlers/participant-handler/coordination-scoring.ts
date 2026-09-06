@@ -61,7 +61,8 @@ export async function deliverCoordinationScores(
   const now = options.now ?? Date.now;
   const deadline = options.deadlineMs ?? now() + COORDINATION_SCORE_DELIVERY_BUDGET_MS;
   if (now() >= deadline) return false;
-  const repository = await resolveDeploymentsRepository(store);
+  const { scoreDelivery = store } = store;
+  const repository = await resolveDeploymentsRepository(scoreDelivery);
   const delivery = row.pendingScores;
   const sorted = Object.entries(delivery.teams).sort(([a], [b]) => a.localeCompare(b));
   const savedResume = delivery.resumeAfterTeamId;

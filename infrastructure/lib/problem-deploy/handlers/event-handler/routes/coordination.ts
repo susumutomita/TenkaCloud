@@ -45,6 +45,8 @@ export function registerCoordinationRoutes(app: Hono, shared: EventSharedResourc
           );
           if (outcome.kind === "not_found")
             return c.json({ error: "not_found" }, StatusCodes.NOT_FOUND);
+          if (outcome.kind === "event_ended")
+            return c.json({ error: "event_ended" }, StatusCodes.CONFLICT);
           // [Issue #3153] Another operator started a run first. 409 rather than
           // a retry: the caller should see which run is current before deciding
           // whether they still want one of their own.

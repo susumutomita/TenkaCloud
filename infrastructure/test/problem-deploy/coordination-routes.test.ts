@@ -84,6 +84,13 @@ describe("POST /events/:eventId/problems/:problemId/coordination/reset", () => {
     expect(await res.json()).toEqual({ error: "not_found" });
   });
 
+  it("should 409 when the event ended and cannot initialize a new run", async () => {
+    mocks.resetCoordinationRun.mockResolvedValueOnce({ kind: "event_ended" });
+    const res = await reset();
+    expect(res.status).toBe(StatusCodes.CONFLICT);
+    expect(await res.json()).toEqual({ error: "event_ended" });
+  });
+
   it("should surface a backend failure instead of reporting a reset that never happened", async () => {
     mocks.resetCoordinationRun.mockRejectedValueOnce(new Error("dynamodb unavailable"));
 

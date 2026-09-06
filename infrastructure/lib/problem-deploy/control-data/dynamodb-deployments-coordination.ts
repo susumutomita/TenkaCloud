@@ -43,6 +43,14 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
     version: number,
     update: CoordinationScoreUpdate,
   ): Promise<DeploymentMutationOutcome> {
+    const deployment = await this.core.getDeployment(update.jobId);
+    if (!deployment) return { outcome: "conflict" };
+    const previousScoredAt = deployment.lastScoredAt;
+    const scoredAt =
+      previousScoredAt !== undefined && previousScoredAt > update.occurredAt
+        ? previousScoredAt
+        : update.occurredAt;
+    const deliveredAt = new Date().toISOString();
     return this.core.transactWrite({
       TransactItems: [
         {
@@ -72,12 +80,18 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
             TableName: this.core.tableName,
             Key: this.core.deploymentKey(update.jobId),
             UpdateExpression:
-              "SET score = :score, coordinationScoreRunId = :run, coordinationScoreVersion = :version, coordinationSubtotal = :subtotal, lastScoredAt = :at, updatedAt = :at",
+              "SET score = :score, coordinationScoreRunId = :run, coordinationScoreVersion = :version, coordinationSubtotal = :subtotal, lastScoredAt = :scoredAt, updatedAt = :deliveredAt",
             ConditionExpression:
               "tenantId = :tenant AND eventId = :event AND problemId = :problem AND teamId = :team AND #status = :status AND attribute_not_exists(teardownRequestedAt) AND " +
               (update.expectedScore === undefined
                 ? "attribute_not_exists(score)"
                 : "score = :expected") +
+              // A newer zero-point scorer may change only the timestamp. It
+              // must conflict too, or this retry could rewind lastScoredAt.
+              " AND " +
+              (previousScoredAt === undefined
+                ? "attribute_not_exists(lastScoredAt)"
+                : "lastScoredAt = :previousScoredAt") +
               " AND (attribute_not_exists(coordinationScoreRunId) OR coordinationScoreRunId <> :run OR coordinationScoreVersion < :version)",
             ExpressionAttributeNames: { "#status": "status" },
             ExpressionAttributeValues: {
@@ -90,7 +104,9 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
               ":subtotal": update.coordinationSubtotal,
               ":run": scope.runId,
               ":version": version,
-              ":at": update.occurredAt,
+              ":scoredAt": scoredAt,
+              ":deliveredAt": deliveredAt,
+              ...(previousScoredAt === undefined ? {} : { ":previousScoredAt": previousScoredAt }),
               ...(update.expectedScore === undefined ? {} : { ":expected": update.expectedScore }),
             },
           },

@@ -1,4 +1,5 @@
 import type { DeploymentsCoordinationPort } from "../../control-data/deployments-repository.js";
+import { isRoundTerminated } from "../generic-scoring-handler/round-liveness.js";
 import { resolveCoordinationArtifactStore } from "../shared/coordination-artifact-store.js";
 import { startCoordinationRun } from "../shared/coordination-run.js";
 import { logDeployTrace } from "../shared/trace-log.js";
@@ -6,6 +7,7 @@ import {
   type EventSharedResources,
   queryDeploymentsByEvent,
   resolveDeploymentsRepository,
+  resolveEventsRepository,
 } from "./shared.js";
 
 /**
@@ -41,11 +43,15 @@ import {
  * [Issue #3194] A saved score delivery must finish before the run can end.
  * Pending delivery returns the existing conflict outcome; the current run
  * stays reachable by normal op/tick recovery, then the operator can retry.
+ * An ended event cannot initialize the new run, so it rejects reset instead
+ * of reporting success while retaining the previous run's score subtotal.
  */
 export type CoordinationResetOutcome =
   | { readonly kind: "ok"; readonly result: CoordinationResetResult }
   /** The event has no deployment of this problem, so there is no match to reset. */
   | { readonly kind: "not_found" }
+  /** Ended events cannot materialize or score a fresh run. */
+  | { readonly kind: "event_ended" }
   /**
    * Another rotation started a run first, or saved score delivery is pending.
    * Reported rather than retried: the caller must re-read the current run and
@@ -84,6 +90,15 @@ export async function resetCoordinationRun(
   eventId: string,
   problemId: string,
 ): Promise<CoordinationResetOutcome> {
+  const events = await resolveEventsRepository(shared);
+  const event = await events.getEvent(tenantId, eventId);
+  if (!event) return { kind: "not_found" };
+  const nowIso = new Date().toISOString();
+  if (
+    ["ENDED", "TEARDOWN", "ARCHIVED"].includes(event.status) ||
+    isRoundTerminated({ eventStartsAt: event.startsAt, eventEndsAt: event.endsAt }, nowIso)
+  )
+    return { kind: "event_ended" };
   const deployments = await queryDeploymentsByEvent(shared, tenantId, eventId);
   const deployed = deployments.some((item) => item.problemId === problemId);
   if (!deployed) return { kind: "not_found" };
@@ -92,7 +107,7 @@ export async function resetCoordinationRun(
   const outcome = await startCoordinationRun(
     { repository, artifacts: resolveCoordinationArtifactStore() },
     { tenantId, eventId, problemId },
-    new Date().toISOString(),
+    nowIso,
   );
   if (outcome.kind === "conflict") return { kind: "conflict" };
   logDeployTrace("coordination.run-reset", {

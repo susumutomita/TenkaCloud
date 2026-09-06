@@ -346,6 +346,66 @@ describe.each(["DynamoDB", "SQL"])("durable coordination scoring: %s", (backend)
     expect((await readCoordinationState(store, scope))?.pendingScores).toBeUndefined();
   });
 
+  it("keeps an active match and its undelivered score alive across the retention window", async () => {
+    const { repository, store, input } = await setup(backend);
+    const listing = vi.spyOn(repository, "listByTenantAndEvent").mockResolvedValue([]);
+    await dispatchCoordinationOp(store, plugin, input);
+    const saved = await readCoordinationState(store, scope);
+    expect(saved?.pendingScores).toBeDefined();
+    const importer = vi.fn(async () => ({ default: plugin }));
+    const tickHook = vi.fn(plugin.tick);
+    for (const day of [5, 10]) {
+      const nowIso = new Date(Date.parse(at) + day * 86_400_000).toISOString();
+      await handleCoordinationTickBatch(
+        {
+          store,
+          importer: async () => ({ default: { ...plugin, tick: tickHook } }),
+          config: { battle: { plugin: "battle" } },
+        },
+        {
+          action: COORDINATION_TICK_ACTION,
+          nowIso,
+          targets: [
+            {
+              tenantId: scope.tenantId,
+              eventId: scope.eventId,
+              moduleRef: scope.problemId,
+              teamIds: ["red"],
+              eventNowMs: day * 86_400_000,
+            },
+          ],
+        },
+      );
+      const current = await readCoordinationState(store, scope);
+      expect(current?.expiresAt).toBeGreaterThan(Date.parse(nowIso) / 1000);
+      expect(current?.expiresAt).toBeGreaterThan(saved?.expiresAt ?? 0);
+      expect(current?.state).toEqual(saved?.state);
+      expect(current?.version).toBe(saved?.version);
+      expect(current?.pendingScores?.teams).toEqual(saved?.pendingScores?.teams);
+    }
+    expect(tickHook).not.toHaveBeenCalled();
+    listing.mockRestore();
+    await handleCoordinationTickBatch(
+      { store, importer, config: { battle: { plugin: "battle" } } },
+      {
+        action: COORDINATION_TICK_ACTION,
+        nowIso: new Date(Date.parse(at) + 10 * 86_400_000 + 1000).toISOString(),
+        targets: [
+          {
+            tenantId: scope.tenantId,
+            eventId: scope.eventId,
+            moduleRef: scope.problemId,
+            teamIds: ["red"],
+            eventNowMs: 0,
+          },
+        ],
+      },
+    );
+    expect((await repository.getDeployment("red"))?.score).toBe(30);
+    expect(await repository.listScoreEvents("red", { pageSize: 100 })).toHaveLength(1);
+    expect((await readCoordinationState(store, scope))?.pendingScores).toBeUndefined();
+  });
+
   it("retains pending scoring while the deployment index is missing and recovers after it catches up", async () => {
     const { repository, store, input, tick } = await setup(backend);
     const listing = vi.spyOn(repository, "listByTenantAndEvent").mockResolvedValueOnce([]);
