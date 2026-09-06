@@ -308,17 +308,16 @@ function ProblemDetailContent({
   readonly reference: ReactNode;
   readonly referenceLabel: string;
 }) {
-  return gameFirst ? (
+  return (
     <>
+      {!gameFirst && reference}
+      {/* Keep the game at the same sibling position while lifecycle changes reorder reference. */}
       {primary}
-      <ExpandableSection headerText={referenceLabel}>
-        <SpaceBetween size="l">{reference}</SpaceBetween>
-      </ExpandableSection>
-    </>
-  ) : (
-    <>
-      {reference}
-      {primary}
+      {gameFirst && (
+        <ExpandableSection headerText={referenceLabel}>
+          <SpaceBetween size="l">{reference}</SpaceBetween>
+        </ExpandableSection>
+      )}
     </>
   );
 }

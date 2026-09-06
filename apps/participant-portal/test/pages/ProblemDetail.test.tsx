@@ -211,6 +211,54 @@ describe("ProblemDetailPage", () => {
     expect(screen.getByRole("textbox", { name: "live answer draft" })).toHaveValue("123");
   });
 
+  it.each([
+    "stopped",
+    "starting",
+  ] as const)("preserves the Battle draft when %s becomes running and the page reorders", async (status) => {
+    const user = userEvent.setup();
+    const setLifecycle = (nextStatus: string) =>
+      mockTeamView.mockReturnValue(
+        teamView({
+          view: viewWith({
+            problems: [
+              problem({
+                status: "COMPLETE",
+                lifecycle: { status: nextStatus, runtimeKind: "docker" },
+              }),
+            ],
+          }),
+        }),
+      );
+    setLifecycle(status);
+    mockFindMeta.mockReturnValue(
+      meta({
+        endpoints: [],
+        dashboardSlots: { StatusPanel: "portal/StatusPanel.tsx" },
+        interTeamCoordination: {},
+      }),
+    );
+    const { rerender } = renderPage();
+    const game = screen.getByTestId("plugin-slots");
+    const draft = screen.getByRole("textbox", { name: "live answer draft" });
+    await user.type(draft, "123");
+
+    setLifecycle("running");
+    rerender(<ProblemDetailPage config={config} />);
+    expect(screen.getByTestId("plugin-slots")).toBe(game);
+    expect(screen.getByRole("textbox", { name: "live answer draft" })).toHaveValue("123");
+    const reference = screen.getByRole("button", { name: "problem_detail.reference_header" });
+    expect(game.compareDocumentPosition(reference) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    setLifecycle("stopped");
+    rerender(<ProblemDetailPage config={config} />);
+    expect(screen.getByTestId("plugin-slots")).toBe(game);
+    expect(screen.getByRole("textbox", { name: "live answer draft" })).toHaveValue("123");
+    expect(
+      screen.getByText("problem_detail.info_header").compareDocumentPosition(game) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("keeps an endpoint-registration Battle instruction-first", () => {
     mockTeamView.mockReturnValue(
       teamView({ view: viewWith({ problems: [problem({ status: "COMPLETE" })] }) }),
