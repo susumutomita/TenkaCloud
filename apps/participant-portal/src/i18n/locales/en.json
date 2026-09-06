@@ -237,6 +237,7 @@
     "reason_gate_bonus": "Gate completion bonus (one-time)"
   },
   "problem_detail": {
+    "reference_header": "Problem information and environment status",
     "back_button": "Back to problems",
     "video_header": "Watch the flow",
     "video_note": "No audio — captions are baked in. If the video does not load, the description and hints below are all you need.",

@@ -4,11 +4,12 @@ import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import ColumnLayout from "@cloudscape-design/components/column-layout";
 import Container from "@cloudscape-design/components/container";
+import ExpandableSection from "@cloudscape-design/components/expandable-section";
 import Header from "@cloudscape-design/components/header";
 import Link from "@cloudscape-design/components/link";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import { Markdown } from "@tenkacloud/web-kit";
-import { useMemo } from "react";
+import { type ReactNode, useMemo } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import type { ParticipantProblemView, ParticipantTeamView } from "../api/portal-client";
 import { useAuth } from "../auth/AuthProvider";
@@ -88,6 +89,23 @@ export function canRenderEndpointOverride(state: EndpointOverrideVisibilityState
   return canRenderProblemDetailBody(state) && state.hasMetadata && state.endpointCount > 0;
 }
 
+/** Only ready Battles with an in-page game and no endpoint setup become play-first. */
+function isInteractiveBattleReady(
+  problem: ParticipantProblemView | undefined,
+  metadata: ProblemCatalogEntry | undefined,
+  locked: boolean,
+): boolean {
+  return (
+    !locked &&
+    problem?.status === "COMPLETE" &&
+    metadata?.category === "Battle" &&
+    !!metadata.interTeamCoordination &&
+    !!metadata.dashboardSlots?.StatusPanel &&
+    metadata.endpoints.length === 0 &&
+    (!problem.lifecycle || problem.lifecycle.status === "running")
+  );
+}
+
 function getScoringNotStartedStartsAt(
   eventGate: ParticipantTeamView["eventGate"] | undefined,
 ): string | undefined {
@@ -162,43 +180,9 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
     return findProblemMetadata(problemId)?.localPlayable === false;
   }, [problem, config.cloudMode, jobId]);
 
-  if (!jobId) return <Navigate to="/problems" replace />;
-
-  return (
-    <SpaceBetween size="l">
-      <Header
-        variant="h1"
-        description={narrative?.shortDescription}
-        actions={
-          <Button onClick={() => navigate("/problems")}>{t("problem_detail.back_button")}</Button>
-        }
-      >
-        {narrative?.name ?? localizedProblem?.name ?? problem?.problemId ?? jobId}
-      </Header>
-
-      {/* Issue #1038 P0 #2: 競技開始前は問題詳細 / hints へのアクセスを **完全に lock**。
-       *   backend (= participant-handler) から eventGate が scoring_not_started で返ってきた
-       *   とき、 problem detail の代わりに lock screen を表示する。 backend 側で fail-closed
-       *   が担保されているため、 eventId 不在 / gate 取得失敗時も同じく lock 表示になる。
-       *   競技公平性 (= 開始前に hints / 問題文を読んで準備するのを防ぐ) のため必須。 */}
-      <ProblemDetailStatusAlerts
-        awsOnly={awsOnly}
-        error={error}
-        bonusPending={bonusPending}
-        gateName={gateName}
-        gatePending={gatePending}
-        gateProblem={gateProblem}
-        jobId={jobId}
-        locked={locked}
-        onNavigate={navigate}
-        prereqLocked={prereqLocked}
-        problem={problem}
-        progression={view?.progression}
-        scoringNotStartedAt={scoringNotStartedAt}
-        t={t}
-        view={view}
-      />
-
+  const gameFirst = isInteractiveBattleReady(problem, metadata, anyLocked);
+  const supportContent = (
+    <>
       {/* #2707 P0-1: 冒頭の短い operation 動画。 videoUrl を持つ問題のみ。
        *   lock 中 (scoring_not_started / prerequisite) は本文と同様に出さない。 */}
       <PlacedProblemVideo canRender={canRenderBody} videoUrl={localizedProblem?.videoUrl} />
@@ -241,11 +225,15 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
           onEndpointsChange={endpointRegistry.replaceEndpoints}
         />
       )}
-
+    </>
+  );
+  const pluginContent = (
+    <>
       {/* metadata.dashboard.slots で宣言した problem plugin を
        *   render する。 該当 slot が無い問題は section 全体が render されない。 */}
-      {problem && metadata?.dashboardSlots && view?.team && (
+      {canRenderBody && problem && metadata?.dashboardSlots && view?.team && (
         <PortalPluginSlots
+          key={problem.jobId}
           problemId={problem.problemId}
           jobId={problem.jobId}
           score={problem.score}
@@ -259,7 +247,78 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
           sessionToken={sessionToken ?? undefined}
         />
       )}
+    </>
+  );
+
+  if (!jobId) return <Navigate to="/problems" replace />;
+
+  return (
+    <SpaceBetween size="l">
+      <Header
+        variant="h1"
+        description={gameFirst ? undefined : narrative?.shortDescription}
+        actions={
+          <Button onClick={() => navigate("/problems")}>{t("problem_detail.back_button")}</Button>
+        }
+      >
+        {narrative?.name ?? localizedProblem?.name ?? problem?.problemId ?? jobId}
+      </Header>
+
+      {/* Issue #1038 P0 #2: 競技開始前は問題詳細 / hints へのアクセスを **完全に lock**。
+       *   backend (= participant-handler) から eventGate が scoring_not_started で返ってきた
+       *   とき、 problem detail の代わりに lock screen を表示する。 backend 側で fail-closed
+       *   が担保されているため、 eventId 不在 / gate 取得失敗時も同じく lock 表示になる。
+       *   競技公平性 (= 開始前に hints / 問題文を読んで準備するのを防ぐ) のため必須。 */}
+      <ProblemDetailStatusAlerts
+        awsOnly={awsOnly}
+        error={error}
+        bonusPending={bonusPending}
+        gateName={gateName}
+        gatePending={gatePending}
+        gateProblem={gateProblem}
+        jobId={jobId}
+        locked={locked}
+        onNavigate={navigate}
+        prereqLocked={prereqLocked}
+        problem={problem}
+        progression={view?.progression}
+        scoringNotStartedAt={scoringNotStartedAt}
+        t={t}
+        view={view}
+      />
+
+      <ProblemDetailContent
+        gameFirst={gameFirst}
+        primary={pluginContent}
+        reference={supportContent}
+        referenceLabel={t("problem_detail.reference_header")}
+      />
     </SpaceBetween>
+  );
+}
+
+function ProblemDetailContent({
+  gameFirst,
+  primary,
+  reference,
+  referenceLabel,
+}: {
+  readonly gameFirst: boolean;
+  readonly primary: ReactNode;
+  readonly reference: ReactNode;
+  readonly referenceLabel: string;
+}) {
+  return (
+    <>
+      {!gameFirst && reference}
+      {/* Keep the game at the same sibling position while lifecycle changes reorder reference. */}
+      {primary}
+      {gameFirst && (
+        <ExpandableSection headerText={referenceLabel}>
+          <SpaceBetween size="l">{reference}</SpaceBetween>
+        </ExpandableSection>
+      )}
+    </>
   );
 }
 
