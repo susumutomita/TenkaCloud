@@ -314,6 +314,7 @@ async function attemptDispatch<State, Op, Projection>(
 /** {@link projectCoordinationForTeam} の結果。 */
 export type CoordinationProjectionOutcome =
   | { readonly kind: "ok"; readonly projection: unknown }
+  | { readonly kind: "unavailable" }
   /**
    * [Issue #3150] projection は participant portal がいちばんポーリングする経路。
    * mismatch を fallback で飲み込んで 200 を返すと、 空の板が正常応答のふりをして返る --
@@ -337,6 +338,7 @@ export async function projectCoordinationForTeam<State, Op, Projection>(
     readonly scope: CoordinationStateScope;
     readonly teamId: string;
     readonly ctx: CoordinationContext;
+    readonly rosterIncomplete?: true;
     readonly fallbackProjection: unknown;
   },
   schema: CoordinationSchemaDeclaration<State> = plugin,
@@ -364,6 +366,7 @@ export async function projectCoordinationForTeam<State, Op, Projection>(
       ),
     };
   }
+  if (input.rosterIncomplete) return { kind: "unavailable" };
   // [Issue #3133] 未初期化 state の投影。 read 経路なので秘密は **発行しない** — GET が
   // 書き込みになるし、 始まらないかもしれない試合に秘密を配ることになる。 既に op が
   // 走っていれば発行済みの値が読めるので、 その試合の projection は op 経路と一致する。

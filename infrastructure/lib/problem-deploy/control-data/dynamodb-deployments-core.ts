@@ -390,11 +390,15 @@ export class DynamoDbDeploymentsCore {
 
   // -- Point reads ----------------------------------------------------------
 
-  async getDeployment(jobId: string): Promise<DeploymentRecord | undefined> {
+  async getDeployment(
+    jobId: string,
+    options?: { readonly consistentRead?: boolean },
+  ): Promise<DeploymentRecord | undefined> {
     const out = await this.ddb.send(
       new GetCommand({
         TableName: this.tableName,
         Key: { PK: deploymentPk(jobId), SK: META_SK },
+        ...(options?.consistentRead ? { ConsistentRead: true } : {}),
       }),
     );
     const item = out.Item as Record<string, unknown> | undefined;

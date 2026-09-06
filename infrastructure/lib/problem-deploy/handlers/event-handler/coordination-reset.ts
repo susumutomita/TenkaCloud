@@ -1,4 +1,3 @@
-import type { DeploymentsCoordinationPort } from "../../control-data/deployments-repository.js";
 import { isRoundTerminated } from "../generic-scoring-handler/round-liveness.js";
 import { resolveCoordinationArtifactStore } from "../shared/coordination-artifact-store.js";
 import { isCoordinationDeploymentPlayable } from "../shared/coordination-liveness.js";
@@ -91,6 +90,9 @@ export async function resetCoordinationRun(
   eventId: string,
   problemId: string,
 ): Promise<CoordinationResetOutcome> {
+  // Ordinary problems have no dispatcher that can complete an initialization.
+  // Do not create a durable reset obligation for an undeclared coordination scope.
+  if (!Object.hasOwn(shared.problemsCoordination ?? {}, problemId)) return { kind: "not_found" };
   const events = await resolveEventsRepository(shared);
   const event = await events.getEvent(tenantId, eventId);
   if (!event) return { kind: "not_found" };
@@ -101,12 +103,25 @@ export async function resetCoordinationRun(
   )
     return { kind: "event_ended" };
   const deployments = await queryDeploymentsByEvent(shared, tenantId, eventId);
-  const deployed = deployments.some(
-    (item) => item.problemId === problemId && isCoordinationDeploymentPlayable(item),
-  );
+  const repository = await resolveDeploymentsRepository(shared);
+  let deployed = false;
+  // GSI1 is discovery only: a just-retired deployment can still appear playable.
+  // Re-read the candidate's authoritative META row before admitting this reset.
+  for (const item of deployments) {
+    if (item.problemId !== problemId || !item.jobId) continue;
+    const current = await repository.getDeployment(item.jobId, { consistentRead: true });
+    if (
+      current?.tenantId === tenantId &&
+      current.eventId === eventId &&
+      current.problemId === problemId &&
+      isCoordinationDeploymentPlayable(current)
+    ) {
+      deployed = true;
+      break;
+    }
+  }
   if (!deployed) return { kind: "not_found" };
 
-  const repository: DeploymentsCoordinationPort = await resolveDeploymentsRepository(shared);
   const outcome = await startCoordinationRun(
     { repository, artifacts: resolveCoordinationArtifactStore() },
     { tenantId, eventId, problemId },

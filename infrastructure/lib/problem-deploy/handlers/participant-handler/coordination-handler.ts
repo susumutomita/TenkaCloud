@@ -234,6 +234,7 @@ export async function handleCoordinationProjection(
       scope: scope.state,
       teamId: scope.teamId,
       ctx: scope.ctx,
+      rosterIncomplete: scope.rosterIncomplete,
       fallbackProjection: scope.fallbackProjection,
     },
   );
@@ -242,7 +243,7 @@ export async function handleCoordinationProjection(
     warnSchemaMismatch("projection", scope.state, outcome);
     return outcome;
   }
-  return { kind: "ok", projection: outcome.projection };
+  return outcome;
 }
 
 /**
@@ -268,6 +269,7 @@ export async function handleCoordinationArtifactFetch(
       | { kind: "ambiguous" }
       | { kind: "schema_mismatch" }
       | { kind: "locked" }
+      | { kind: "unavailable" }
     >
 > {
   const resolution = await deps.resolveScope(teamLoginKey, problemId);
@@ -281,6 +283,7 @@ export async function handleCoordinationArtifactFetch(
       scope: scope.state,
       teamId: scope.teamId,
       ctx: scope.ctx,
+      rosterIncomplete: scope.rosterIncomplete,
       fallbackProjection: scope.fallbackProjection,
     },
   );
@@ -296,6 +299,7 @@ export async function handleCoordinationArtifactFetch(
     warnSchemaMismatch("projection", scope.state, projected);
     return projected;
   }
+  if (projected.kind === "unavailable") return projected;
   return fetchAuthorizedArtifact(deps.artifacts, scope.state, projected.projection, artifactId);
 }
 

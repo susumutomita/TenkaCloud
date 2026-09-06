@@ -91,6 +91,7 @@ async function setup(backend: string, scores = true) {
     ...store,
     deploymentsTableName: "Deployments",
     eventsTableName: "Events",
+    problemsCoordination: { battle: { plugin: "battle" } },
   } as unknown as EventSharedResources;
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(acceptedAt);

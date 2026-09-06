@@ -47,7 +47,10 @@ export interface DeploymentsQueryPort {
    * Sites: `deploy-handler/{retry,delete,list,stack-progress}` + composite
    * `getRawRow`. The tenant / status guards stay in the caller (raw read).
    */
-  getDeployment(jobId: string): Promise<DeploymentRecord | undefined>;
+  getDeployment(
+    jobId: string,
+    options?: { readonly consistentRead?: boolean },
+  ): Promise<DeploymentRecord | undefined>;
 
   /**
    * META read via `Query` (`PK = :pk AND SK = :sk`) — the ONE site

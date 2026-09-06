@@ -11,7 +11,9 @@ import {
 import type { DeploymentRecord } from "../../lib/problem-deploy/control-data/types.js";
 import {
   type CoordinationScopeResolution,
+  handleCoordinationArtifactFetch,
   handleCoordinationOp,
+  handleCoordinationProjection,
   makeCoordinationScopeResolver,
 } from "../../lib/problem-deploy/handlers/participant-handler/coordination-handler.js";
 import { readCoordinationState } from "../../lib/problem-deploy/handlers/participant-handler/coordination-store.js";
@@ -140,6 +142,9 @@ async function setup(backend: string) {
   const mint = vi.spyOn(repository, "ensureCoordinationMatchSecret");
   const roster = vi.spyOn(repository, "listByTenantAndEvent");
   const apply = () => handleCoordinationOp(deps, "login-alpha", op, at, key.problemId);
+  const project = () => handleCoordinationProjection(deps, "login-alpha", key.problemId);
+  const fetchArtifact = () =>
+    handleCoordinationArtifactFetch(deps, "login-alpha", "proof", key.problemId);
   const runTick = () =>
     handleCoordinationTickBatch(deps, {
       action: COORDINATION_TICK_ACTION,
@@ -164,6 +169,8 @@ async function setup(backend: string) {
     mint,
     roster,
     apply,
+    project,
+    fetchArtifact,
     runTick,
   };
 }
@@ -171,6 +178,41 @@ async function setup(backend: string) {
 afterEach(() => vi.restoreAllMocks());
 
 describe.each(["DynamoDB", "SQL"])("roster failure before materialization: %s", (backend) => {
+  it("refuses an absent-state projection during roster failure, then shows the complete board", async () => {
+    const ctx = await setup(backend);
+    ctx.roster.mockRejectedValueOnce(new Error("roster index unavailable"));
+    expect(await ctx.project()).toEqual({ kind: "unavailable" });
+    expect(ctx.initialState).not.toHaveBeenCalled();
+    expect(ctx.mint).not.toHaveBeenCalled();
+    expect(ctx.write).not.toHaveBeenCalled();
+    expect(await ctx.project()).toEqual({
+      kind: "ok",
+      projection: { teamIds: expectedTeams, teamNames: expectedNames, moves: 0, ticks: 0 },
+    });
+    expect(ctx.initialState).toHaveBeenCalledTimes(1);
+    expect(ctx.mint).not.toHaveBeenCalled();
+    expect(ctx.write).not.toHaveBeenCalled();
+  });
+
+  it("does not authorize artifacts against a made-up partial board", async () => {
+    const ctx = await setup(backend);
+    ctx.roster.mockRejectedValueOnce(new Error("roster index unavailable"));
+    expect(await ctx.fetchArtifact()).toEqual({ kind: "unavailable" });
+    expect(ctx.initialState).not.toHaveBeenCalled();
+  });
+
+  it("continues projecting stored full-roster state while the roster lookup is unavailable", async () => {
+    const ctx = await setup(backend);
+    await ctx.apply();
+    ctx.roster.mockRejectedValueOnce(new Error("roster index unavailable"));
+    expect(await ctx.project()).toEqual({
+      kind: "ok",
+      projection: { teamIds: expectedTeams, teamNames: expectedNames, moves: 1, ticks: 0 },
+    });
+    expect(ctx.initialState).toHaveBeenCalledTimes(1);
+    expect(ctx.write).toHaveBeenCalledTimes(1);
+  });
+
   it("refuses the first operation without creating a secret or state, then retries with both teams", async () => {
     const ctx = await setup(backend);
     ctx.roster.mockRejectedValueOnce(new Error("roster index unavailable"));

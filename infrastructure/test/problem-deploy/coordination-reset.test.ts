@@ -32,6 +32,7 @@ import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers"
 function buildShared(
   deployments: readonly Record<string, unknown>[],
   event: Record<string, unknown> | null = { tenantId: "tenant-acme", status: "READY" },
+  currentDeployments = deployments,
 ): {
   shared: EventSharedResources;
   ddbSend: ReturnType<typeof vi.fn>;
@@ -43,6 +44,10 @@ function buildShared(
     if (cmd instanceof GetCommand && cmd.input.TableName === "TestEvents")
       return { Item: event ?? undefined };
     if (cmd instanceof QueryCommand) return { Items: [...deployments] };
+    if (cmd instanceof GetCommand && String(cmd.input.Key?.PK).startsWith("DEPLOYMENT#"))
+      return {
+        Item: currentDeployments.find((row) => `DEPLOYMENT#${row.jobId}` === cmd.input.Key?.PK),
+      };
     return ddb.send(cmd as never);
   });
   const shared: EventSharedResources = {
@@ -56,6 +61,7 @@ function buildShared(
     ddb: { send: ddbSend } as unknown as EventSharedResources["ddb"],
     events: { send: vi.fn() } as unknown as EventSharedResources["events"],
     problemsCatalog: {},
+    problemsCoordination: { "battle-a": { plugin: "battle-a" } },
   };
   return {
     shared,
@@ -84,6 +90,47 @@ const deleteKeys = (ddbSend: ReturnType<typeof vi.fn>) =>
     .map((cmd) => `${cmd.input.Key?.PK}/${cmd.input.Key?.SK}`);
 
 describe("resetCoordinationRun (#3153)", () => {
+  it("refuses ordinary deployed problems before creating an unrecoverable reset pointer", async () => {
+    const { shared, ddbSend, getItem } = buildShared([deployment("ordinary", "team-1")]);
+    expect(await resetCoordinationRun(shared, "tenant-acme", "EV1", "ordinary")).toEqual({
+      kind: "not_found",
+    });
+    expect(ddbSend).not.toHaveBeenCalled();
+    expect(
+      await getItem({ PK: "COORDRUN#tenant-acme#EV1#ordinary", SK: "CURRENT" }),
+    ).toBeUndefined();
+  });
+
+  it.each(
+    [
+      [],
+      [{ ...deployment("battle-a", "team-1"), status: "DELETING" }],
+      [{ ...deployment("battle-a", "team-1"), teardownRequestedAt: "2026-09-06T01:00:00.000Z" }],
+      [{ ...deployment("battle-a", "team-1"), tenantId: "other-tenant" }],
+      [{ ...deployment("battle-a", "team-1"), eventId: "other-event" }],
+      [{ ...deployment("battle-a", "team-1"), problemId: "other-problem" }],
+    ].map((current) => ({ current })),
+  )("refuses stale GSI admission using the consistent META read: %j", async ({ current }) => {
+    const { shared, ddbSend, getItem } = buildShared(
+      [deployment("battle-a", "team-1")],
+      undefined,
+      current,
+    );
+    expect(await resetCoordinationRun(shared, "tenant-acme", "EV1", "battle-a")).toEqual({
+      kind: "not_found",
+    });
+    const pointRead = ddbSend.mock.calls
+      .map(([cmd]) => cmd)
+      .find((cmd) => cmd instanceof GetCommand && cmd.input.TableName === "TestDeployments");
+    expect(pointRead.input).toMatchObject({
+      ConsistentRead: true,
+      Key: { PK: "DEPLOYMENT#job-battle-a-team-1", SK: "META" },
+    });
+    expect(
+      await getItem({ PK: "COORDRUN#tenant-acme#EV1#battle-a", SK: "CURRENT" }),
+    ).toBeUndefined();
+  });
+
   it.each([
     [-1, "ok"],
     [0, "event_ended"],
