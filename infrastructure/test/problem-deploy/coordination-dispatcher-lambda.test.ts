@@ -106,6 +106,7 @@ describe("CoordinationDispatcherLambda", () => {
       // [Issue #3123] tick の TTL 延長 (`touchCoordinationState`) が UpdateItem を使う。
       // 無いと refresh が AccessDenied で落ち、 warn に飲まれて retention が黙って壊れる。
       expect(actions).toContain("dynamodb:UpdateItem");
+      expect(actions).toContain("dynamodb:ConditionCheckItem");
       // namespace の削除は event を所有する経路の責務であって、 plugin を実行するこの
       // Lambda のものではない。
       expect(actions).not.toContain("dynamodb:DeleteItem");
@@ -113,6 +114,51 @@ describe("CoordinationDispatcherLambda", () => {
       expect(actions).not.toContain("sts:AssumeRole");
       expect(actions).not.toContain("ssm:GetParameter");
       expect(actions).not.toContain("kms:Decrypt");
+    },
+    SYNTH_TIMEOUT_MS,
+  );
+
+  it(
+    "allows score delivery GSI1 queries and transaction checks only on deployments",
+    () => {
+      const tpl = synthCoordinationDispatcherLambdaOnly();
+      const tableId = Object.keys(tpl.findResources("AWS::DynamoDB::Table")).find((id) =>
+        id.startsWith("Deployments"),
+      );
+      expect(tableId).toBeDefined();
+      const tableArn = { "Fn::GetAtt": [tableId, "Arn"] };
+      tpl.hasResourceProperties("AWS::IAM::Role", {
+        Policies: Match.arrayWith([
+          {
+            PolicyName: "CoordinationRW",
+            PolicyDocument: {
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Allow",
+                  Action: "dynamodb:Query",
+                  Resource: [
+                    tableArn,
+                    { "Fn::Join": ["", [tableArn, "/index/GSI1"]] },
+                    { "Fn::Join": ["", [tableArn, "/index/GSI2"]] },
+                  ],
+                },
+                {
+                  Effect: "Allow",
+                  Action: [
+                    "dynamodb:GetItem",
+                    "dynamodb:PutItem",
+                    "dynamodb:UpdateItem",
+                    "dynamodb:ConditionCheckItem",
+                  ],
+                  Resource: tableArn,
+                },
+              ],
+            },
+          },
+        ]),
+      });
+      expect(allActions(tpl)).not.toContain("dynamodb:TransactWriteItems");
     },
     SYNTH_TIMEOUT_MS,
   );
@@ -151,6 +197,9 @@ describe("CoordinationDispatcherLambda on the pure-SQL (turso) profile", () => {
       const tpl = synthCoordinationDispatcherLambdaPureTurso();
       const reads = attachedActions(tpl).filter((action) => action === "ssm:GetParameter");
       expect(reads).toHaveLength(1);
+      expect(
+        [...allActions(tpl), ...attachedActions(tpl)].some((a) => a.startsWith("dynamodb:")),
+      ).toBe(false);
       const ssm = attachedPolicyStatements(tpl).filter((s) =>
         statementActions(s).includes("ssm:GetParameter"),
       );

@@ -46,7 +46,41 @@ describe("createLambdaTickInvoker", () => {
     mocks.send.mockRejectedValueOnce(new Error("throttled"));
     const invoke = createLambdaTickInvoker();
     await expect(
-      invoke("coord-dispatcher", { action: "coordination-tick", nowIso: "x", targets: [] }),
+      invoke("coord-dispatcher", {
+        action: "coordination-tick",
+        nowIso: "x",
+        targets: [{ tenantId: "t1", eventId: "e1", moduleRef: "cap", eventNowMs: 0, teamIds: [] }],
+      }),
     ).rejects.toThrow(/throttled/);
+  });
+  it("invokes each target separately with bounded concurrency and attempts peers after a failure", async () => {
+    mocks.send.mockReset();
+    let active = 0,
+      peak = 0;
+    const payloads: unknown[] = [];
+    mocks.send.mockImplementation(async (cmd) => {
+      active += 1;
+      peak = Math.max(peak, active);
+      const payload = JSON.parse(Buffer.from(cmd.input.Payload).toString("utf8"));
+      payloads.push(payload);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      active -= 1;
+      if (payload.targets[0].eventId === "e0") throw new Error("throttled");
+      return {};
+    });
+    const batch = {
+      action: "coordination-tick" as const,
+      nowIso: "2026-09-06T00:00:00.000Z",
+      targets: Array.from({ length: 9 }, (_, index) => ({
+        tenantId: `t${index}`,
+        eventId: `e${index}`,
+        moduleRef: "battle",
+        eventNowMs: index,
+        teamIds: [`team-${index}`],
+      })),
+    };
+    await expect(createLambdaTickInvoker()("dispatcher", batch)).rejects.toThrow("throttled");
+    expect(peak).toBe(4);
+    expect(payloads).toEqual(batch.targets.map((target) => ({ ...batch, targets: [target] })));
   });
 });

@@ -28,6 +28,8 @@ export function publicCoordinationScoreReason(value: unknown): CoordinationScore
 /** One transition's durable delivery, stored in the existing state envelope. */
 export interface CoordinationScoreDelivery {
   readonly occurredAt: string;
+  /** Rotate retries past attempted teams, including failures, so a bad prefix cannot starve peers. */
+  readonly resumeAfterTeamId?: string;
   readonly teams: Readonly<
     Record<
       string,

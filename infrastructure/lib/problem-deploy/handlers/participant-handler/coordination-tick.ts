@@ -10,6 +10,7 @@ import type { CoordinationConfig } from "./coordination-handler.js";
 import { loadCoordinationPlugin, type PluginImporter } from "./coordination-plugin-loader.js";
 import { resolveEventRoster } from "./coordination-roster.js";
 import {
+  COORDINATION_SCORE_DELIVERY_BUDGET_MS,
   coordinationScoreDelivery,
   deliverCoordinationScores,
   tryDeliverCoordinationScores,
@@ -33,7 +34,7 @@ import { resolveDeploymentsRepository } from "./shared.js";
  * 資格情報分離を守るため、 pack-author 由来の plugin の `runTick` 実行は op 経路
  * (`applyOp`) と同じ最小 IAM の dispatcher 内に閉じる (= 採点 Lambda の ssm/kms と同居させない)。
  * dispatcher は既に (a) plugin bundle の importer (materialize) と (b) coordination
- * shared row への Get/Put grant を持つので、 tick はそれらを **そのまま再利用** する (= 追加 IAM ゼロ)。
+ * shared row の権限を持つ。得点配信の GSI1 Query / transaction の権限は dispatcher construct で限定する。
  *
  * 副作用 (DDB read/write) は {@link CoordinationTickDeps} 越しに注入し、 意味論 (initialState / tick) は
  * 問題同梱 plugin に委譲する。 op 経路 {@link dispatchCoordinationOp} と同じ「read → 純関数 → 楽観 write」
@@ -88,13 +89,16 @@ export async function handleCoordinationTickBatch(
   batch: CoordinationTickBatch,
 ): Promise<CoordinationTickBatchResult> {
   let written = 0;
+  const scoreBudgetMs = COORDINATION_SCORE_DELIVERY_BUDGET_MS;
   for (const target of batch.targets) {
-    const didWrite = await tickCoordinationEvent(deps, target, batch.nowIso).catch((err) => {
-      console.warn(`[coordination-dispatcher] tick failed event=${target.eventId}`, {
-        message: err instanceof Error ? err.message : String(err),
-      });
-      return false;
-    });
+    const didWrite = await tickCoordinationEvent(deps, target, batch.nowIso, scoreBudgetMs).catch(
+      (err) => {
+        console.warn(`[coordination-dispatcher] tick failed event=${target.eventId}`, {
+          message: err instanceof Error ? err.message : String(err),
+        });
+        return false;
+      },
+    );
     if (didWrite) written += 1;
   }
   return { ticked: batch.targets.length, written };
@@ -108,6 +112,7 @@ async function tickCoordinationEvent(
   deps: CoordinationTickDeps,
   target: CoordinationTickTarget,
   nowIso: string,
+  scoreBudgetMs: number,
 ): Promise<boolean> {
   // 宣言 gate: coordination を宣言していない problemId は tick しない (= 未宣言 ref を load させない)。
   if (!deps.config[target.moduleRef]) return false;
@@ -140,7 +145,12 @@ async function tickCoordinationEvent(
     ),
   };
   const existing = await readCoordinationState(deps.store, scope);
-  await deliverCoordinationScores(deps.store, scope, existing);
+  // Cold plugin loading and namespace resolution must not consume every retry's delivery slice.
+  const scoreDeadlineMs = Date.now() + scoreBudgetMs;
+  if (
+    !(await deliverCoordinationScores(deps.store, scope, existing, { deadlineMs: scoreDeadlineMs }))
+  )
+    return false;
   if (load.kind === "invalid_schema") {
     // [Issue #3150] Codex review: 版宣言が壊れた plugin を bundle 不在と同じ早期 return にすると、
     // scope も導出されず TTL も延びないまま retention (7 日) が来て **進行中の行が消える**。
@@ -252,11 +262,16 @@ async function tickCoordinationEvent(
     await refreshCoordinationTtl(deps, target, scope, existing, nowIso);
     return false;
   }
-  await tryDeliverCoordinationScores(deps.store, scope, {
-    state: nextState,
-    version: version + 1,
-    pendingScores,
-  });
+  await tryDeliverCoordinationScores(
+    deps.store,
+    scope,
+    {
+      state: nextState,
+      version: version + 1,
+      pendingScores,
+    },
+    { deadlineMs: scoreDeadlineMs },
+  );
   return true;
 }
 

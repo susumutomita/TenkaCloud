@@ -8,6 +8,7 @@ import {
 import type { CoordinationStateBudget } from "../../control-data/domain/coordination-budget.js";
 import type { CoordinationStateScope } from "../../control-data/domain/coordination-scope.js";
 import {
+  COORDINATION_SCORE_DELIVERY_BUDGET_MS,
   coordinationScoreDelivery,
   deliverCoordinationScores,
   tryDeliverCoordinationScores,
@@ -58,6 +59,7 @@ export type CoordinationDispatchOutcome =
     }
   | { readonly kind: "rejected"; readonly error: string }
   | { readonly kind: "conflict" }
+  | { readonly kind: "unavailable" }
   /**
    * [Issue #3151] The op was valid and applied, but the resulting state does
    * not fit the selected backend's size budget, so the platform refused to
@@ -123,10 +125,17 @@ export async function dispatchCoordinationOp<State, Op, Projection>(
   // retry can change.
   if (!isContextConsistent(input)) return { kind: "rejected", error: "context_mismatch" };
 
+  const scoreDeadlineMs = Date.now() + COORDINATION_SCORE_DELIVERY_BUDGET_MS;
   const attempts = options.attempts ?? DEFAULT_WRITE_ATTEMPTS;
   const backoff = options.backoff ?? jitteredBackoff;
   for (let attempt = 0; ; attempt += 1) {
-    const outcome = await attemptDispatch(store, plugin, input, options.schema ?? plugin);
+    const outcome = await attemptDispatch(
+      store,
+      plugin,
+      input,
+      options.schema ?? plugin,
+      scoreDeadlineMs,
+    );
     if (outcome.kind !== "conflict") return outcome;
     if (attempt + 1 >= attempts) return outcome;
     await backoff(attempt);
@@ -225,9 +234,15 @@ async function attemptDispatch<State, Op, Projection>(
   plugin: CoordinationPlugin<State, Op, Projection>,
   input: CoordinationDispatchInput<Op>,
   schema: CoordinationSchemaDeclaration<State>,
+  scoreDeadlineMs: number,
 ): Promise<CoordinationDispatchOutcome> {
   const existing = await readCoordinationState(store, input.scope);
-  await deliverCoordinationScores(store, input.scope, existing);
+  if (
+    !(await deliverCoordinationScores(store, input.scope, existing, {
+      deadlineMs: scoreDeadlineMs,
+    }))
+  )
+    return { kind: "unavailable" };
   // [Issue #3133] 秘密が要るのは `initialState` を呼ぶときだけ — ctx を受け取る hook は
   // それ 1 つで、 validateOp / applyOp / projectForTeam は (state, teamId, op) しか見ない。
   // だから既存 state があるときは秘密に一切触らない: 全 op に read/write を足さずに済む。
@@ -279,11 +294,16 @@ async function attemptDispatch<State, Op, Projection>(
     input.teamId,
     input.fallbackProjection as Projection,
   );
-  await tryDeliverCoordinationScores(store, input.scope, {
-    state: verdict.state,
-    version: version + 1,
-    pendingScores,
-  });
+  await tryDeliverCoordinationScores(
+    store,
+    input.scope,
+    {
+      state: verdict.state,
+      version: version + 1,
+      pendingScores,
+    },
+    { deadlineMs: scoreDeadlineMs },
+  );
   return { kind: "ok", projection };
 }
 

@@ -580,7 +580,12 @@ export interface DeploymentsCoordinationPort {
     update: CoordinationScoreUpdate,
   ): Promise<DeploymentMutationOutcome>;
   /** Clear the durable delivery only after every team has committed; preserves the state version. */
-  acknowledgeCoordinationScores(scope: CoordinationStateScope, version: number): Promise<void>;
+  acknowledgeCoordinationScores(
+    scope: CoordinationStateScope,
+    version: number,
+    completedTeamIds?: readonly string[],
+    resumeAfterTeamId?: string,
+  ): Promise<void>;
 
   readCoordinationState(
     scope: CoordinationStateScope,

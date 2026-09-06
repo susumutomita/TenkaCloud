@@ -7,6 +7,7 @@ import {
   DEFAULT_COORDINATION_RUN_ID,
 } from "./domain/coordination-scope.js";
 import type { CoordinationScoreUpdate } from "./domain/coordination-score.js";
+import { isCoordinationStateEnvelope } from "./domain/coordination-state-envelope.js";
 import {
   COORD_RUN_SK,
   COORD_SECRET_SK,
@@ -59,9 +60,11 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
           ConditionCheck: {
             TableName: this.core.tableName,
             Key: { PK: coordinationPk(scope), SK: COORD_STATE_SK },
-            ConditionExpression: "version = :version AND attribute_exists(#state.pendingScores)",
-            ExpressionAttributeNames: { "#state": "state" },
-            ExpressionAttributeValues: { ":version": version },
+            ConditionExpression: "version = :version AND coordinationScoresPending = :pending",
+            ExpressionAttributeValues: {
+              ":version": version,
+              ":pending": true,
+            },
           },
         },
         {
@@ -69,7 +72,7 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
             TableName: this.core.tableName,
             Key: this.core.deploymentKey(update.jobId),
             UpdateExpression:
-              "SET score = :score, coordinationScoreRunId = :run, coordinationScoreVersion = :version, updatedAt = :at",
+              "SET score = :score, coordinationScoreRunId = :run, coordinationScoreVersion = :version, lastScoredAt = :at, updatedAt = :at",
             ConditionExpression:
               "tenantId = :tenant AND eventId = :event AND problemId = :problem AND teamId = :team AND #status = :status AND attribute_not_exists(teardownRequestedAt) AND " +
               (update.expectedScore === undefined
@@ -108,16 +111,35 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
   async acknowledgeCoordinationScores(
     scope: CoordinationStateScope,
     version: number,
+    completedTeamIds?: readonly string[],
+    resumeAfterTeamId?: string,
   ): Promise<void> {
+    if (completedTeamIds?.length === 0 && resumeAfterTeamId === undefined) return;
+    const paths = completedTeamIds?.map((_, index) => `#state.pendingScores.teams.#t${index}`);
+    const teamNames = Object.fromEntries(
+      completedTeamIds?.map((teamId, index) => [`#t${index}`, teamId]) ?? [],
+    );
+    const update = paths
+      ? [
+          ...(resumeAfterTeamId === undefined
+            ? []
+            : ["SET #state.pendingScores.resumeAfterTeamId = :resume"]),
+          ...(paths.length ? [`REMOVE ${paths.join(", ")}`] : []),
+        ].join(" ")
+      : "REMOVE #state.pendingScores, coordinationScoresPending";
     try {
       await this.core.ddb.send(
         new UpdateCommand({
           TableName: this.core.tableName,
           Key: { PK: coordinationPk(scope), SK: COORD_STATE_SK },
-          UpdateExpression: "REMOVE #state.pendingScores",
-          ConditionExpression: "version = :version",
-          ExpressionAttributeNames: { "#state": "state" },
-          ExpressionAttributeValues: { ":version": version },
+          UpdateExpression: update,
+          ConditionExpression: "version = :version AND coordinationScoresPending = :pending",
+          ExpressionAttributeNames: { "#state": "state", ...teamNames },
+          ExpressionAttributeValues: {
+            ":version": version,
+            ":pending": true,
+            ...(paths && resumeAfterTeamId !== undefined ? { ":resume": resumeAfterTeamId } : {}),
+          },
         }),
       );
     } catch (error) {
@@ -224,6 +246,11 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
             PK: coordinationPk(scope),
             SK: COORD_STATE_SK,
             state,
+            // Keep the write guard outside opaque plugin state; only the shared full
+            // envelope predicate may reserve a pending delivery.
+            ...(isCoordinationStateEnvelope(state) && state.pendingScores != null
+              ? { coordinationScoresPending: true }
+              : {}),
             version: expectedVersion + 1,
             updatedAt: at,
             expiresAt,
@@ -244,8 +271,7 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
             ? { ConditionExpression: "attribute_not_exists(version)" }
             : {
                 ConditionExpression:
-                  "version = :expected AND (attribute_not_exists(#state.__tenkacloudCoordinationEnvelope) OR attribute_not_exists(#state.pendingScores))",
-                ExpressionAttributeNames: { "#state": "state" },
+                  "version = :expected AND attribute_not_exists(coordinationScoresPending)",
                 ExpressionAttributeValues: { ":expected": expectedVersion },
               }),
         }),

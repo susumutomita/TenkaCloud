@@ -12,6 +12,11 @@ import {
   createCoordinationMatchSecret,
 } from "../../control-data/domain/coordination-scope.js";
 import type { CoordinationScoreDelivery } from "../../control-data/domain/coordination-score.js";
+import {
+  COORDINATION_ENVELOPE_MARKER,
+  type CoordinationStateEnvelope,
+  isCoordinationStateEnvelope,
+} from "../../control-data/domain/coordination-state-envelope.js";
 import type { ControlDataRuntime } from "../../control-data/runtime-repositories.js";
 import { warnDeployTrace } from "../shared/trace-log.js";
 import { resolveDeploymentsRepository } from "./shared.js";
@@ -69,39 +74,6 @@ export interface CoordinationStateRow {
    */
   readonly stateSchemaVersion?: number;
   readonly pendingScores?: CoordinationScoreDelivery;
-}
-
-/**
- * [Issue #3150] platform が `state` に被せる封筒。
- * [Issue #3194] repository は plugin state を解釈せず、platform の pendingScores だけを
- * 配信の条件・acknowledgement に使う。既存 DDB item / SQL row に保存し、DDL は変えない。
- *
- * [Issue #3150] Codex review: マーカー 1 つでの判定は不十分。 plugin の State は `unknown` なので
- * どんな形もあり得る -- たまたま同じ key を持つ旧 state を封筒と誤認すると、 `state.state` が
- * undefined になって plugin に渡り、 500 か次の write での破壊になる。 **封筒の形が完全に
- * 揃ったときだけ**封筒と見なす (マーカー + 正の整数 version + `state` key の存在)。
- */
-interface CoordinationStateEnvelope {
-  readonly __tenkacloudCoordinationEnvelope: 1;
-  readonly stateSchemaVersion: number;
-  readonly pendingScores?: CoordinationScoreDelivery;
-  readonly state: unknown;
-}
-
-const COORDINATION_ENVELOPE_MARKER = 1;
-
-function isCoordinationStateEnvelope(raw: unknown): raw is CoordinationStateEnvelope {
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return false;
-  const r = raw as Record<string, unknown>;
-  if (r.__tenkacloudCoordinationEnvelope !== COORDINATION_ENVELOPE_MARKER) return false;
-  if (
-    typeof r.stateSchemaVersion !== "number" ||
-    !Number.isInteger(r.stateSchemaVersion) ||
-    r.stateSchemaVersion <= 0
-  ) {
-    return false;
-  }
-  return Object.hasOwn(r, "state");
 }
 
 /** store が必要とする DDB client の最小 shape (= test で容易に mock)。 */
@@ -207,8 +179,8 @@ export const COORDINATION_BUDGET_EXCEEDED_EVENT = "coordination.state.budget-exc
  * 消せない (それが指摘の主旨) ので、 曖昧になる値の側を封で退避させる。
  *
  * [Issue #3194] 採点を伴う遷移は schema 1 でも封筒に pendingScores を保存する。
- * これは state と得点配信の分裂を防ぐためで、封筒対応前の dispatcher への rollback は
- * 対象外。現在の dispatcher は従来の生 state と採点付き封筒の両方を読める。
+ * これは state と得点配信の分裂を防ぐため。reader は従来の生 state と採点付き封筒の
+ * 両方を、同じ完全な envelope 判定で読み分ける。
  */
 export async function writeCoordinationState(
   deps: CoordinationStoreDeps,

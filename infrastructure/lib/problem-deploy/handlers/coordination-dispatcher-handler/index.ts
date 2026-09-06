@@ -7,7 +7,6 @@ import {
   type CoordinationArtifactStore,
   UnconfiguredCoordinationArtifactStore,
 } from "../../control-data/coordination-artifact-store.js";
-import { createDefaultControlDataRuntime } from "../../control-data/runtime-repositories.js";
 import { S3CoordinationArtifactStore } from "../../control-data/s3-coordination-artifact-store.js";
 import {
   type CoordinationHandlerDeps,
@@ -28,6 +27,10 @@ import { CoordinationOpBodySchema } from "../participant-handler/schemas.js";
 import { buildParticipantSharedResources } from "../participant-handler/shared.js";
 import { RATE_LIMITS } from "../shared/rate-limiter.js";
 import { secureApiHeaders } from "../shared/secure-headers.js";
+import {
+  createCoordinationControlDataRuntime,
+  createCoordinationDdbClient,
+} from "./coordination-backends.js";
 import { defaultS3PluginImporter } from "./s3-plugin-importer.js";
 
 /**
@@ -45,7 +48,10 @@ import { defaultS3PluginImporter } from "./s3-plugin-importer.js";
  * (= bucket env 空) なら reject し、 load 不可 → `unavailable` / fallback で participant API を壊さない。
  */
 // One control-data runtime is shared for the Lambda instance lifetime (#2527).
-const shared = buildParticipantSharedResources(createDefaultControlDataRuntime());
+const shared = buildParticipantSharedResources(
+  createCoordinationControlDataRuntime(),
+  createCoordinationDdbClient(),
+);
 
 const pluginBucket = process.env.COORDINATION_PLUGIN_BUCKET ?? "";
 const coordinationImporter: PluginImporter = pluginBucket
@@ -72,10 +78,6 @@ const coordinationDeps: CoordinationHandlerDeps = {
   importer: coordinationImporter,
   store: { runtime: shared.runtime, ddb: shared.ddb, tableName: shared.tableName },
   resolveScope: makeCoordinationScopeResolver(shared, coordinationConfig),
-  // [Issue #659] A coordination Battle judges its own scoring, and nothing used
-  // to carry that figure to the scoreboard — the portal showed 0 for a team an
-  // hour into a match. The dispatcher already has write access to this table,
-  // so it copies the plugin's scores across without new IAM or a new path.
   artifacts: coordinationArtifacts,
 };
 

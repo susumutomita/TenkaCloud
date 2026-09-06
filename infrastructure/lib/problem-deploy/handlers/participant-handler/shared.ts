@@ -56,6 +56,7 @@ export interface ParticipantSharedResources {
 
 export function buildParticipantSharedResources(
   runtime: ControlDataRuntime,
+  ddb?: DynamoDBDocumentClient,
 ): ParticipantSharedResources {
   return {
     runtime,
@@ -73,7 +74,7 @@ export function buildParticipantSharedResources(
     // 未配線時 (= legacy stack) でも import が落ちないよう env 必須にしない (= 空文字)。
     // route 側で空チェックして 503 を返す経路にする。
     endpointsTableName: process.env.PROBLEM_ENDPOINTS_TABLE_NAME ?? "",
-    ddb: DynamoDBDocumentClient.from(new DynamoDBClient({})),
+    ddb: ddb ?? DynamoDBDocumentClient.from(new DynamoDBClient({})),
     ssm: new SSMClient({}),
     env: getEnv("DEPLOY_ENVIRONMENT"),
     problemsScoring: parseScoringEnv(readCatalogBlob("BATTLE_PROBLEMS_SCORING")),

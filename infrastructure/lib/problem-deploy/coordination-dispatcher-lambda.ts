@@ -86,7 +86,8 @@ export interface CoordinationDispatcherLambdaProps {
  * `sts:AssumeRole`(競技者 federation) + `ssm:GetParameter` + `kms:Decrypt`(ExternalId 復号) を持つ。
  * 問題同梱 plugin はレビュー済み catalog bundle だけを trusted code として本 Lambda の process 内で
  * 動的実行する。plugin は Lambda の environment と execution role を共有し、DynamoDB backend では
- * Deployments table 全体への Query / GetItem / PutItem と GSI2 全体への Query 権限を持つ。tenant ごとの
+ * Deployments table 全体への Query / GetItem / PutItem / UpdateItem / ConditionCheckItem と
+ * GSI1 / GSI2 全体への Query 権限を持つ。tenant ごとの
  * IAM isolation はないため、catalog review と publish control が plugin の trust boundary になる。
  *
  * Function URL は AuthType=NONE で公開し、 `Authorization: Bearer <teamLoginKey>` を handler 内で検証する。
@@ -105,8 +106,8 @@ export class CoordinationDispatcherLambda extends Construct {
     const role = new Role(this, "Role", {
       assumedBy: new ServicePrincipal("lambda.amazonaws.com"),
       inlinePolicies: {
-        // DynamoDB backend では Deployments table / GSI2 全体への Query と、table 全体への
-        // GetItem / PutItem / UpdateItem を許可する。handler は team-login-key 認証と
+        // DynamoDB backend では Deployments table / GSI1 / GSI2 全体への Query と、table 全体への
+        // GetItem / PutItem / UpdateItem / ConditionCheckItem を許可する。handler は認証と
         // coordination state に使うが、IAM は key や tenant を絞らないため、同一 process の
         // plugin も同じ権限を共有する。
         // [Issue #3123] UpdateItem は tick の TTL 延長 (`touchCoordinationState`) に要る。
@@ -114,6 +115,9 @@ export class CoordinationDispatcherLambda extends Construct {
         // が、state / version を読まずに `expiresAt` だけ動かせるので、 tick が in-flight な
         // optimistic lock を壊さずに retention を延ばせる。 DeleteItem は付けない —
         // namespace の削除は event を所有する経路 (event-api / generic-scoring) の責務。
+        // #3194: GSI1 は採点対象の一覧、ConditionCheckItem は同じ run/state の採点配信の条件。
+        // TransactWriteItems の IAM は内包する Put/Update/ConditionCheck の action で判定される。
+        // https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/transaction-apis-iam.html
         // sts:AssumeRole / ssm:GetParameter / kms:Decrypt は意図的に付与しない。
         // Issue #2441: 純 SQL backend では table 自体が無いので policy を足さない。
         ...(deploymentsTable
@@ -124,11 +128,17 @@ export class CoordinationDispatcherLambda extends Construct {
                     actions: ["dynamodb:Query"],
                     resources: [
                       deploymentsTable.tableArn,
+                      `${deploymentsTable.tableArn}/index/GSI1`,
                       `${deploymentsTable.tableArn}/index/GSI2`,
                     ],
                   }),
                   new PolicyStatement({
-                    actions: ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem"],
+                    actions: [
+                      "dynamodb:GetItem",
+                      "dynamodb:PutItem",
+                      "dynamodb:UpdateItem",
+                      "dynamodb:ConditionCheckItem",
+                    ],
                     resources: [deploymentsTable.tableArn],
                   }),
                 ],

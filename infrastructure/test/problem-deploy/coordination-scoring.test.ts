@@ -23,9 +23,13 @@ import {
   writeCoordinationState,
 } from "../../lib/problem-deploy/handlers/participant-handler/coordination-store.js";
 import { handleCoordinationTickBatch } from "../../lib/problem-deploy/handlers/participant-handler/coordination-tick.js";
+import { getLeaderboardScoreEvents } from "../../lib/problem-deploy/handlers/participant-handler/leaderboard-score-events.js";
 import { listScoreEvents } from "../../lib/problem-deploy/handlers/participant-handler/score-events.js";
 import { COORDINATION_TICK_ACTION } from "../../lib/problem-deploy/handlers/shared/coordination-tick-contract.js";
-import { toPublicScoreEventView } from "../../lib/problem-deploy/handlers/shared/score-event.js";
+import {
+  buildScoreEventRecord,
+  toPublicScoreEventView,
+} from "../../lib/problem-deploy/handlers/shared/score-event.js";
 import { makeFakeDdb, makeSqliteExecutor } from "./control-data/control-data-write.test-helpers.js";
 import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers.js";
 import { fakeParticipantShared } from "./coordination.test-helpers.js";
@@ -140,6 +144,81 @@ async function setup(backend: string, teams = ["red"]) {
 }
 
 describe.each(["DynamoDB", "SQL"])("durable coordination scoring: %s", (backend) => {
+  it.each([
+    { __tenkacloudCoordinationEnvelope: 0, pendingScores: { raw: true } },
+    { __tenkacloudCoordinationEnvelope: 1, pendingScores: { raw: true } },
+    {
+      __tenkacloudCoordinationEnvelope: true,
+      stateSchemaVersion: 1,
+      state: null,
+      pendingScores: { raw: true },
+    },
+    {
+      __tenkacloudCoordinationEnvelope: 1,
+      stateSchemaVersion: "2",
+      state: null,
+      pendingScores: { raw: true },
+    },
+    {
+      __tenkacloudCoordinationEnvelope: 1,
+      stateSchemaVersion: 2.5,
+      state: null,
+      pendingScores: { raw: true },
+    },
+    {
+      __tenkacloudCoordinationEnvelope: 1,
+      stateSchemaVersion: 0,
+      state: null,
+      pendingScores: { raw: true },
+    },
+    {
+      __tenkacloudCoordinationEnvelope: 1,
+      stateSchemaVersion: -1,
+      state: null,
+      pendingScores: { raw: true },
+    },
+    { __tenkacloudCoordinationEnvelope: 1, stateSchemaVersion: 2, pendingScores: { raw: true } },
+  ])("does not mistake opaque plugin field names for a pending platform delivery: %j", async (raw) => {
+    const { repository, store } = await setup(backend);
+    // A raw pre-upgrade row; no new writer has wrapped or normalized it yet.
+    await repository.writeCoordinationState(scope, raw, 0, at, 9999);
+    expect((await readCoordinationState(store, scope))?.state).toEqual(raw);
+    expect(
+      await repository.publishCoordinationScore(scope, 1, {
+        jobId: "red",
+        teamId: "red",
+        expectedScore: 0,
+        expectedStatus: "COMPLETE",
+        score: 30,
+        events: [buildScoreEventRecord(deployment("red"), "coordination", 30, at)],
+      }),
+    ).toEqual({ outcome: "conflict" });
+    expect((await repository.getDeployment("red"))?.score).toBe(0);
+    expect(await repository.listScoreEvents("red", { pageSize: 100 })).toHaveLength(0);
+    await repository.acknowledgeCoordinationScores(scope, 1);
+    expect((await readCoordinationState(store, scope))?.state).toEqual(raw);
+    const next = { ...raw, changed: true };
+    expect(await writeCoordinationState(store, scope, next, 1, at)).toEqual({ kind: "ok" });
+    expect((await readCoordinationState(store, scope))?.state).toEqual(next);
+  });
+
+  it.each([
+    2, 1e30,
+  ])("guards genuine pending envelopes at schema version %s", async (schemaVersion) => {
+    const { store, repository } = await setup(backend);
+    const state = { scores: { red: 30 } };
+    const pending = {
+      occurredAt: at,
+      teams: { red: { before: 0, score: 30, reason: "cipher" as const } },
+    };
+    await writeCoordinationState(store, scope, state, 0, at, schemaVersion, pending);
+    expect((await readCoordinationState(store, scope))?.pendingScores).toEqual(pending);
+    expect(await writeCoordinationState(store, scope, state, 1, at)).toEqual({ kind: "conflict" });
+    await deliverCoordinationScores(store, scope, await readCoordinationState(store, scope));
+    expect((await repository.getDeployment("red"))?.score).toBe(30);
+    expect(await writeCoordinationState(store, scope, state, 1, at)).toEqual({ kind: "ok" });
+  });
+
   it("records a correct operation and a floored deadline penalty through the real participant history route", async () => {
     const { repository, store, input, tick } = await setup(backend);
     expect((await dispatchCoordinationOp(store, plugin, input)).kind).toBe("ok");
@@ -161,6 +240,22 @@ describe.each(["DynamoDB", "SQL"])("durable coordination scoring: %s", (backend)
       ]),
     );
     expect(history.reduce((sum, event) => sum + event.points, 0)).toBe(0);
+    expect((await repository.getDeployment("red"))?.lastScoredAt).toBe(at);
+    const timeline = await getLeaderboardScoreEvents(shared, "key-red");
+    expect(timeline).toMatchObject({
+      kind: "ok",
+      response: {
+        teams: [
+          {
+            teamId: "red",
+            events: expect.arrayContaining([
+              expect.objectContaining({ points: 30, reason: "cipher" }),
+              expect.objectContaining({ points: -30, reason: "deadline" }),
+            ]),
+          },
+        ],
+      },
+    });
     const adminHistory = await collectTeamScoreEvents(
       { ...store, deploymentsTableName: store.tableName },
       {
@@ -336,6 +431,241 @@ describe.each(["DynamoDB", "SQL"])("durable coordination scoring: %s", (backend)
       ]);
     }
     expect((await readCoordinationState(store, scope))?.pendingScores).toBeUndefined();
+  });
+
+  it("resumes a 99-team delivery with a tiny budget without rereading its completed prefix", async () => {
+    const teams = Array.from({ length: 99 }, (_, index) => `team-${index}`);
+    const { repository, store } = await setup(backend, teams);
+    for (const team of teams) await repository.putDeployment(deployment(team, { score: 30 }));
+    await writeCoordinationState(
+      store,
+      scope,
+      { scores: Object.fromEntries(teams.map((team) => [team, 0])) },
+      0,
+      at,
+      1,
+      {
+        occurredAt: at,
+        teams: Object.fromEntries(
+          teams.map((team) => [team, { before: 30, score: 0, reason: "deadline" }]),
+        ),
+      },
+    );
+    // Even a permanently stale GSI snapshot cannot send each slice back to team 0.
+    const stale = await repository.listByTenantAndEvent(scope.tenantId, scope.eventId);
+    const listing = vi.spyOn(repository, "listByTenantAndEvent").mockResolvedValue(stale);
+    const originalGet = repository.getDeployment.bind(repository);
+    let clock = 0,
+      active = 0,
+      peak = 0,
+      reads = 0;
+    const get = vi.spyOn(repository, "getDeployment").mockImplementation(async (jobId) => {
+      active += 1;
+      reads += 1;
+      peak = Math.max(peak, active);
+      await Promise.resolve();
+      const value = await originalGet(jobId);
+      clock += 1;
+      active -= 1;
+      return value;
+    });
+    let slices = 0;
+    while ((await readCoordinationState(store, scope))?.pendingScores && slices < 30) {
+      const row = await readCoordinationState(store, scope);
+      const remaining = Object.keys(row?.pendingScores?.teams ?? {}).length;
+      await deliverCoordinationScores(store, scope, row, {
+        deadlineMs: clock + 1,
+        now: () => clock,
+      });
+      const next = await readCoordinationState(store, scope);
+      expect(Object.keys(next?.pendingScores?.teams ?? {}).length).toBeLessThan(remaining);
+      slices += 1;
+    }
+    expect(slices).toBe(25);
+    expect(peak).toBe(4);
+    expect(reads).toBe(99);
+    get.mockRestore();
+    listing.mockRestore();
+    expect((await readCoordinationState(store, scope))?.pendingScores).toBeUndefined();
+    for (const team of teams) {
+      expect((await repository.getDeployment(team))?.score).toBe(0);
+      expect(await repository.listScoreEvents(team, { pageSize: 100 })).toMatchObject([
+        { points: -30 },
+      ]);
+    }
+  });
+
+  it("rotates past a permanently failing prefix while retaining each failed team's history obligation", async () => {
+    const teams = Array.from({ length: 8 }, (_, index) => `team-${index}`);
+    const { repository, store } = await setup(backend, teams);
+    await writeCoordinationState(store, scope, { scores: {} }, 0, at, 1, {
+      occurredAt: at,
+      teams: Object.fromEntries(
+        teams.map((team) => [team, { before: 0, score: 30, reason: "cipher" }]),
+      ),
+    });
+    let clock = 0;
+    const originalGet = repository.getDeployment.bind(repository);
+    const get = vi.spyOn(repository, "getDeployment").mockImplementation(async (jobId) => {
+      await Promise.resolve();
+      clock += 1;
+      if (teams.slice(0, 4).includes(jobId)) throw new Error("persistent failure");
+      return originalGet(jobId);
+    });
+    await expect(
+      deliverCoordinationScores(store, scope, await readCoordinationState(store, scope), {
+        deadlineMs: clock + 1,
+        now: () => clock,
+      }),
+    ).rejects.toThrow("persistent failure");
+    const checkpoint = await readCoordinationState(store, scope);
+    expect(Object.keys(checkpoint?.pendingScores?.teams ?? {})).toHaveLength(8);
+    expect(checkpoint?.pendingScores?.resumeAfterTeamId).toBe("team-3");
+    expect(
+      await deliverCoordinationScores(store, scope, checkpoint, {
+        deadlineMs: clock + 1,
+        now: () => clock,
+      }),
+    ).toBe(false);
+    const next = await readCoordinationState(store, scope);
+    expect(Object.keys(next?.pendingScores?.teams ?? {})).toEqual(teams.slice(0, 4));
+    expect(next?.pendingScores?.resumeAfterTeamId).toBe("team-7");
+    get.mockRestore();
+    for (const team of teams.slice(4)) {
+      expect((await repository.getDeployment(team))?.score).toBe(30);
+      expect(await repository.listScoreEvents(team, { pageSize: 100 })).toMatchObject([
+        { points: 30 },
+      ]);
+    }
+    // Recovery still delivers the retained failures exactly once.
+    expect(await deliverCoordinationScores(store, scope, next)).toBe(true);
+    for (const team of teams)
+      expect(await repository.listScoreEvents(team, { pageSize: 100 })).toHaveLength(1);
+  });
+
+  it("continues past missing deployments and leaves only their unresolved obligation pending", async () => {
+    const { repository, store } = await setup(backend, ["healthy"]);
+    await writeCoordinationState(store, scope, { scores: {} }, 0, at, 1, {
+      occurredAt: at,
+      teams: Object.fromEntries(
+        ["a", "b", "c", "d", "healthy"].map((team) => [
+          team,
+          { before: 0, score: 30, reason: "cipher" },
+        ]),
+      ),
+    });
+    await expect(
+      deliverCoordinationScores(store, scope, await readCoordinationState(store, scope)),
+    ).rejects.toThrow("no deployment");
+    expect((await repository.getDeployment("healthy"))?.score).toBe(30);
+    expect(
+      Object.keys((await readCoordinationState(store, scope))?.pendingScores?.teams ?? {}),
+    ).toEqual(["a", "b", "c", "d"]);
+  });
+
+  it("starts a fresh delivery slice after slow plugin loading and namespace reads", async () => {
+    const { repository, store } = await setup(backend);
+    await writeCoordinationState(
+      store,
+      scope,
+      { scores: { red: 30 }, solved: true, expired: false },
+      0,
+      at,
+      1,
+      {
+        occurredAt: at,
+        teams: { red: { before: 0, score: 30, reason: "cipher" } },
+      },
+    );
+    let clock = 0;
+    const time = vi.spyOn(Date, "now").mockImplementation(() => clock);
+    try {
+      await handleCoordinationTickBatch(
+        {
+          store,
+          importer: async () => {
+            clock += 5_000;
+            return { default: plugin };
+          },
+          config: { battle: { plugin: "battle" } },
+        },
+        {
+          action: COORDINATION_TICK_ACTION,
+          nowIso: at,
+          targets: [
+            {
+              tenantId: scope.tenantId,
+              eventId: scope.eventId,
+              moduleRef: scope.problemId,
+              teamIds: ["red"],
+              eventNowMs: 0,
+            },
+          ],
+        },
+      );
+      expect((await repository.getDeployment("red"))?.score).toBe(30);
+      expect((await readCoordinationState(store, scope))?.pendingScores).toBeUndefined();
+    } finally {
+      time.mockRestore();
+    }
+  });
+
+  it("returns unavailable without applying a new move while an earlier delivery exceeds the budget", async () => {
+    const { repository, store, input } = await setup(backend);
+    const pending = {
+      occurredAt: at,
+      teams: { red: { before: 0, score: 30, reason: "cipher" as const } },
+    };
+    await writeCoordinationState(
+      store,
+      scope,
+      { scores: { red: 30 }, solved: false, expired: false },
+      0,
+      at,
+      1,
+      pending,
+    );
+    let clock = 0;
+    const time = vi.spyOn(Date, "now").mockImplementation(() => clock);
+    const originalList = repository.listByTenantAndEvent.bind(repository);
+    const listing = vi
+      .spyOn(repository, "listByTenantAndEvent")
+      .mockImplementation(async (...args) => {
+        clock += 3_000;
+        return originalList(...args);
+      });
+    const apply = vi.fn(plugin.applyOp);
+    try {
+      expect(await dispatchCoordinationOp(store, { ...plugin, applyOp: apply }, input)).toEqual({
+        kind: "unavailable",
+      });
+      expect(apply).not.toHaveBeenCalled();
+      expect(listing).toHaveBeenCalledTimes(1);
+      expect((await readCoordinationState(store, scope))?.pendingScores).toEqual(pending);
+      expect((await readCoordinationState(store, scope))?.version).toBe(1);
+    } finally {
+      time.mockRestore();
+      listing.mockRestore();
+    }
+  });
+
+  it("does not start score I/O after its delivery budget is exhausted", async () => {
+    const { repository, store } = await setup(backend);
+    const pending = {
+      occurredAt: at,
+      teams: { red: { before: 0, score: 30, reason: "cipher" as const } },
+    };
+    await writeCoordinationState(store, scope, { scores: { red: 30 } }, 0, at, 1, pending);
+    const listing = vi.spyOn(repository, "listByTenantAndEvent");
+    expect(
+      await deliverCoordinationScores(store, scope, await readCoordinationState(store, scope), {
+        deadlineMs: 1,
+        now: () => 1,
+      }),
+    ).toBe(false);
+    expect(listing).not.toHaveBeenCalled();
+    expect((await readCoordinationState(store, scope))?.pendingScores).toEqual(pending);
+    listing.mockRestore();
   });
 
   it("does not partially write history when the score CAS fails", async () => {

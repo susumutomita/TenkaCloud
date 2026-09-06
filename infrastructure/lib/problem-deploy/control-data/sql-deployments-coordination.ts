@@ -14,6 +14,18 @@ import type {
   DeploymentsCoordinationPort,
 } from "./types.js";
 
+// SQL form of the shared isCoordinationStateEnvelope predicate, with a pending delivery.
+// Numeric type + round preserve Number.isInteger, including large numeric schema versions.
+const HAS_PENDING_COORDINATION_SCORES_SQL = `COALESCE(
+           json_type(state) = 'object'
+           AND json_type(state, '$.__tenkacloudCoordinationEnvelope') IN ('integer', 'real')
+           AND json_extract(state, '$.__tenkacloudCoordinationEnvelope') = 1
+           AND json_type(state, '$.stateSchemaVersion') IN ('integer', 'real')
+           AND json_extract(state, '$.stateSchemaVersion') > 0
+           AND json_extract(state, '$.stateSchemaVersion') = round(json_extract(state, '$.stateSchemaVersion'), 0)
+           AND json_type(state, '$.state') IS NOT NULL
+           AND json_extract(state, '$.pendingScores') IS NOT NULL, 0)`;
+
 /**
  * [#2527 Slice 3] SQLite (Turso/libSQL) {@link DeploymentsCoordinationPort} adapter — optimistic-lock coordination plugin state,
  * moved verbatim from the pre-split `SqlDeploymentsRepository`. Engine
@@ -36,17 +48,18 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
     const statements: SqlStatement[] = [
       {
         sql: `UPDATE deployments SET score = ?, updated_at = ?,
-          payload = json_set(payload, '$.score', ?, '$.updatedAt', ?, '$.coordinationScoreRunId', ?, '$.coordinationScoreVersion', ?)
+          payload = json_set(payload, '$.score', ?, '$.updatedAt', ?, '$.lastScoredAt', ?, '$.coordinationScoreRunId', ?, '$.coordinationScoreVersion', ?)
           WHERE job_id = ? AND tenant_id = ? AND event_id = ? AND problem_id = ? AND team_id = ? AND status = ?
           AND json_extract(payload, '$.teardownRequestedAt') IS NULL AND score IS ?
           AND (json_extract(payload, '$.coordinationScoreRunId') IS NOT ? OR json_extract(payload, '$.coordinationScoreVersion') < ?)
           AND COALESCE((SELECT run_id FROM coordination_run WHERE tenant_id = ? AND event_id = ? AND problem_id = ?), ?) = ?
           AND EXISTS (SELECT 1 FROM coordination_state_scoped WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ?
-            AND version = ? AND json_extract(state, '$.pendingScores') IS NOT NULL)`,
+            AND version = ? AND ${HAS_PENDING_COORDINATION_SCORES_SQL})`,
         params: [
           update.score,
           at,
           update.score,
+          at,
           at,
           scope.runId,
           version,
@@ -104,10 +117,24 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
   async acknowledgeCoordinationScores(
     scope: CoordinationStateScope,
     version: number,
+    completedTeamIds?: readonly string[],
+    resumeAfterTeamId?: string,
   ): Promise<void> {
+    if (completedTeamIds?.length === 0 && resumeAfterTeamId === undefined) return;
+    const paths = completedTeamIds?.map(
+      (teamId) => `$.pendingScores.teams.${JSON.stringify(teamId)}`,
+    ) ?? ["$.pendingScores"];
+    let updatedState = paths.length
+      ? `json_remove(state, ${paths.map(() => "?").join(", ")})`
+      : "state";
+    const values: string[] = [...paths];
+    if (completedTeamIds && resumeAfterTeamId !== undefined) {
+      updatedState = `json_set(${updatedState}, '$.pendingScores.resumeAfterTeamId', ?)`;
+      values.push(resumeAfterTeamId);
+    }
     await this.core.sql.run(
-      "UPDATE coordination_state_scoped SET state = json_remove(state, '$.pendingScores') WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ? AND version = ?",
-      [scope.tenantId, scope.eventId, scope.problemId, scope.runId, version],
+      `UPDATE coordination_state_scoped SET state = ${updatedState} WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ? AND version = ? AND ${HAS_PENDING_COORDINATION_SCORES_SQL}`,
+      [...values, scope.tenantId, scope.eventId, scope.problemId, scope.runId, version],
     );
   }
 
@@ -171,6 +198,8 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
     // the DynamoDB adapter for the run-reset race this closes. The plain upsert
     // this replaced inserted whenever the row was absent, whatever version the
     // caller expected, so a pre-reset op could resurrect the deleted match.
+    // The SQL predicate matches isCoordinationStateEnvelope (including numeric type
+    // and integer checks), so similarly named fields in a raw plugin state remain opaque.
     const result =
       expectedVersion === 0
         ? await this.core.sql.run(
@@ -182,7 +211,7 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
         : await this.core.sql.run(
             `UPDATE coordination_state_scoped
          SET state = ?, version = ?, updated_at = ?, expires_at = ?
-       WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ? AND version = ? AND (json_extract(state, '$.__tenkacloudCoordinationEnvelope') IS NOT 1 OR json_extract(state, '$.pendingScores') IS NULL)`,
+       WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ? AND version = ? AND NOT ${HAS_PENDING_COORDINATION_SCORES_SQL}`,
             [
               JSON.stringify(normalizeJsonValue(state)),
               expectedVersion + 1,

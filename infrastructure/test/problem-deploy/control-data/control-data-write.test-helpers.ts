@@ -263,7 +263,12 @@ function applySetClause(item: Item, body: string, names: Names, values: Values):
   for (const assignment of splitTopLevelCommas(body)) {
     const [rawAttr, rawValue] = splitTopLevelEquals(assignment);
     if (!rawAttr) throw new Error(`FakeDdb: unsupported SET assignment "${assignment}"`);
-    item[resolveName(rawAttr, names)] = evalUpdateValue(item, rawValue, names, values);
+    const segments = rawAttr.split(".");
+    const last = segments.pop();
+    const parent = segments.length ? readDocumentPath(item, segments.join("."), names) : item;
+    if (!last || !parent || typeof parent !== "object")
+      throw new Error(`FakeDdb: invalid SET document path "${rawAttr}"`);
+    (parent as Item)[resolveName(last, names)] = evalUpdateValue(item, rawValue, names, values);
   }
 }
 
