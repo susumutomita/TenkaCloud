@@ -79,4 +79,21 @@ export async function initializeControlDataSchema(client: LibsqlClient): Promise
     ...SCORE_SUMMARY_SCHEMA_STATEMENTS.map((sql) => statement(sql)),
   ];
   await client.batch(statements, "write");
+  // Existing installations predate this additive column. Inspect on every
+  // bootstrap, and tolerate another cold start winning ALTER only after a
+  // fresh schema read confirms the required column actually exists.
+  const hasInitializationColumn = async () =>
+    (await client.execute(statement("PRAGMA table_info(coordination_run)"))).rows.some(
+      (row) => row.name === "pending_initialization",
+    );
+  if (await hasInitializationColumn()) return;
+  try {
+    await client.execute(
+      statement(
+        "ALTER TABLE coordination_run ADD COLUMN pending_initialization INTEGER NOT NULL DEFAULT 0",
+      ),
+    );
+  } catch (error) {
+    if (!(await hasInitializationColumn())) throw error;
+  }
 }

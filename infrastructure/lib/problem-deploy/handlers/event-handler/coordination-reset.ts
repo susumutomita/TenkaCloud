@@ -32,8 +32,8 @@ import {
  *
  * It starts a new run rather than deleting the namespace. The previous match's
  * state, ledger, scores and artifacts stay readable under the run id they were
- * written against, and the next operation materializes the new run from
- * `plugin.initialState` exactly as the delete-based reset did.
+ * written against. The dispatcher materializes the new run from `plugin.initialState`;
+ * a durable pointer flag guarantees recovery even if the event ends before its next tick.
  *
  * That difference matters most in the case a reset is actually used for. An
  * operator resets because something went wrong; the old reset destroyed the
@@ -43,14 +43,14 @@ import {
  * [Issue #3194] A saved score delivery must finish before the run can end.
  * Pending delivery returns the existing conflict outcome; the current run
  * stays reachable by normal op/tick recovery, then the operator can retry.
- * An ended event cannot initialize the new run, so it rejects reset instead
- * of reporting success while retaining the previous run's score subtotal.
+ * New reset requests are refused after end. A reset accepted before that
+ * boundary still completes its saved initialization and initial-score delivery.
  */
 export type CoordinationResetOutcome =
   | { readonly kind: "ok"; readonly result: CoordinationResetResult }
   /** The event has no deployment of this problem, so there is no match to reset. */
   | { readonly kind: "not_found" }
-  /** Ended events cannot materialize or score a fresh run. */
+  /** Ended events cannot accept another reset. */
   | { readonly kind: "event_ended" }
   /**
    * Another rotation started a run first, or saved score delivery is pending.

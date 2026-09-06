@@ -188,15 +188,14 @@ export interface DeploymentsQueryPort {
   // relocation of the named pre-seam site.
 
   /**
-   * Every `status=COMPLETE` deployment, optionally scoped to one `eventId`
-   * (`FilterExpression` `#status = :complete [AND eventId = :eventId]`,
-   * `Limit=200`). Site: `generic-scoring-handler/index.ts` (the scoring-tick
-   * dispatch scan). `eventId === undefined` runs the unscoped (global tick)
-   * variant; the caller's own `eventId` equality re-check (confused-deputy
-   * guard for mocks / malformed rows) stays in the caller.
+   * Every `status=COMPLETE` deployment. Scoring may also request the scopes of
+   * unfinished coordination score deliveries / run initializations, even after
+   * cloud teardown. Recovery scopes are delivered separately: host state and
+   * secrets never enter the deployment scorer. DynamoDB uses the same scan.
    */
   forEachCompleteDeploymentPage(
     onPage: (items: readonly DeploymentRecord[]) => Promise<void>,
+    onCoordinationRecoveryPage?: (scopes: readonly CoordinationStateScope[]) => Promise<void>,
   ): Promise<void>;
 
   /**
@@ -603,6 +602,9 @@ export interface DeploymentsCoordinationPort {
    * coordinationStateExpiresAt}) — a retention backstop for a cleanup that
    * never ran, refreshed by every write so it only starts counting once a
    * match stops being played.
+   * The initial write consumes a reset's pending initialization atomically.
+   * `requirePendingInitialization` additionally requires that intent in the
+   * transaction, preventing ended recovery from recreating expired state.
    */
   writeCoordinationState(
     scope: CoordinationStateScope,
@@ -610,6 +612,7 @@ export interface DeploymentsCoordinationPort {
     expectedVersion: number,
     at: string,
     expiresAt: number,
+    requirePendingInitialization?: boolean,
   ): Promise<DeploymentMutationOutcome>;
 
   /**

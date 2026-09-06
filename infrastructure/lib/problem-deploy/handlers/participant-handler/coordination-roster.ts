@@ -40,6 +40,8 @@ export interface EventRosterTarget {
   readonly problemId: string;
   /** Team ids the caller already knows; on the roster whether or not the query succeeds. */
   readonly knownTeamIds: readonly string[];
+  /** A durable reset cannot commit an incomplete roster after a failed query. */
+  readonly requireComplete?: boolean;
 }
 
 export interface EventRoster {
@@ -68,12 +70,11 @@ export async function resolveEventRoster(
       }
       roster.add(row.teamId);
       // `displayTeamName ?? teamName`, the order the leaderboard resolves.
-      const display = typeof row.displayTeamName === "string" ? row.displayTeamName : undefined;
-      const slug = typeof row.teamName === "string" ? row.teamName : undefined;
-      const name = display?.trim() || slug?.trim();
+      const name = trimmedString(row.displayTeamName) || trimmedString(row.teamName);
       if (name) teamNames[row.teamId] = name;
     }
   } catch (err) {
+    if (target.requireComplete) throw err;
     // Neither host fails over this: the op path keeps serving the requester
     // and the tick keeps the batch moving. It is not silent either -- a match
     // that starts on the known ids alone is exactly what #3187 looked like on
@@ -86,4 +87,8 @@ export async function resolveEventRoster(
     });
   }
   return { teamIds: [...roster].sort(), teamNames };
+}
+
+function trimmedString(value: unknown): string | undefined {
+  return typeof value === "string" ? value.trim() : undefined;
 }

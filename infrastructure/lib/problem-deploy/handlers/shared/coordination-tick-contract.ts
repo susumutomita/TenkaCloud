@@ -25,6 +25,8 @@ export interface CoordinationTickTarget {
   readonly teamIds: readonly string[];
   /** Completed event: publish only already-saved scores, without loading or advancing the game. */
   readonly drainOnly?: boolean;
+  /** Fulfil an accepted reset after end; dispatcher must revalidate this exact pending run. */
+  readonly initializeRunId?: string;
 }
 
 /** 採点 pass が dispatcher に渡す 1 tick 分の batch (= 1 invoke/分、 event 数によらず 1 回)。 */

@@ -106,11 +106,9 @@ export type StartCoordinationRunOutcome =
  * winner is still keeping, and the loser would have done it while being told it
  * did not start a run at all.
  *
- * The new run's namespace is not created here. It does not need to be: an
- * absent state row IS an uninitialized match, and the first operation
- * materializes it from `plugin.initialState` exactly as the old delete-based
- * reset did. What has changed is that the previous match's state and artifacts
- * are still there afterwards, under a namespace nothing writes to any more.
+ * The pointer durably reserves initialization by the dispatcher, even when
+ * the event ends before the next tick. The first state write consumes that
+ * obligation atomically; an absent state after TTL is not another reset.
  */
 export async function startCoordinationRun(
   deps: CoordinationRunDeps,
@@ -120,6 +118,7 @@ export async function startCoordinationRun(
 ): Promise<StartCoordinationRunOutcome> {
   const current: CoordinationRunPointer =
     (await deps.repository.readCoordinationRun(key)) ?? initialCoordinationRunPointer(nowIso);
+  if (current.pendingInitialization) return { kind: "conflict" };
   const existing = await deps.repository.readCoordinationState(
     coordinationScopeForRun(key, current.runId),
   );
@@ -207,9 +206,23 @@ export async function deleteAllCoordinationRuns(
   key: CoordinationRunKey,
 ): Promise<readonly string[]> {
   const pointer = await deps.repository.readCoordinationRun(key);
+  if (pointer?.pendingInitialization) {
+    throw new Error("Coordination run initialization is pending");
+  }
   const runs = pointer
     ? [pointer.runId, ...pointer.history]
     : [initialCoordinationRunPointer("").runId];
+  // Teardown may release cloud resources immediately, but the saved score/history
+  // obligation must stay reachable until delivery succeeds. Inspect all retained
+  // runs before deleting any; the adapters repeat this guard at the delete itself.
+  for (const runId of runs) {
+    const existing = await deps.repository.readCoordinationState(
+      coordinationScopeForRun(key, runId),
+    );
+    if (isCoordinationStateEnvelope(existing?.state) && existing.state.pendingScores != null) {
+      throw new Error("Coordination score delivery is pending");
+    }
+  }
   for (const runId of runs) {
     const scope = coordinationScopeForRun(key, runId);
     await deps.repository.deleteCoordinationState(scope);

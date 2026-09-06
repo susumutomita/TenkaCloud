@@ -434,6 +434,8 @@ describe.each(["DynamoDB", "SQL"])("durable coordination scoring: %s", (backend)
     publish.mockRestore();
     await tick(0);
     expect((await readCoordinationState(store, scope))?.pendingScores).toBeUndefined();
+    expect((await repository.getDeployment("red"))?.score).toBe(30);
+    expect(await repository.listScoreEvents("red", { pageSize: 100 })).toHaveLength(1);
   });
 
   it("recovers an acknowledgement failure without scoring twice", async () => {
@@ -993,7 +995,7 @@ describe.each(["DynamoDB", "SQL"])("durable coordination scoring: %s", (backend)
     expect((await repository.getDeployment("red"))?.score).toBe(30);
   });
 
-  it("does not block the remaining teams when a scored team's deployment is retired", async () => {
+  it("delivers every team's committed score change even when a deployment is retired", async () => {
     const { repository, store, tick } = await setup(backend, ["red", "blue"]);
     await repository.putDeployment(deployment("red", { score: 30, status: "DELETED" }));
     await repository.putDeployment(deployment("blue", { score: 30 }));
@@ -1005,7 +1007,8 @@ describe.each(["DynamoDB", "SQL"])("durable coordination scoring: %s", (backend)
       at,
     );
     await tick();
-    expect((await repository.getDeployment("red"))?.score).toBe(30);
+    expect((await repository.getDeployment("red"))?.score).toBe(0);
+    expect(await repository.listScoreEvents("red", { pageSize: 100 })).toHaveLength(1);
     expect((await repository.getDeployment("blue"))?.score).toBe(0);
     expect((await readCoordinationState(store, scope))?.pendingScores).toBeUndefined();
   });
@@ -1516,13 +1519,17 @@ it("drops arbitrary plugin reason strings and all private metadata before public
 it("rolls back the SQL score and version when a history INSERT fails, then retries the saved delivery", async () => {
   const { repository, store, input, tick, sql } = await setup("SQL");
   const original = sql.batch.bind(sql);
-  const batch = vi.spyOn(sql, "batch").mockImplementationOnce((statements) =>
-    original([
-      ...statements,
-      {
-        sql: "INSERT INTO deployment_score_events (job_id, sk, record_type, payload) VALUES ('failure', '', NULL, '{}')",
-      },
-    ]),
+  const batch = vi.spyOn(sql, "batch").mockImplementation((statements) =>
+    original(
+      statements.some((entry) => entry.sql.includes("INSERT INTO deployment_score_events"))
+        ? [
+            ...statements,
+            {
+              sql: "INSERT INTO deployment_score_events (job_id, sk, record_type, payload) VALUES ('failure', '', NULL, '{}')",
+            },
+          ]
+        : statements,
+    ),
   );
   await dispatchCoordinationOp(store, plugin, input);
   expect((await repository.getDeployment("red"))?.score).toBe(0);

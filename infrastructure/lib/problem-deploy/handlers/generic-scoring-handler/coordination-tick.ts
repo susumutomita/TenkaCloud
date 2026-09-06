@@ -1,7 +1,10 @@
 import type { DeploymentsCoordinationPort } from "../../control-data/deployments-repository.js";
+import {
+  type CoordinationStateScope,
+  DEFAULT_COORDINATION_RUN_ID,
+} from "../../control-data/domain/coordination-scope.js";
 import { isCoordinationStateEnvelope } from "../../control-data/domain/coordination-state-envelope.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
-import { resolveCurrentCoordinationRunId } from "../shared/coordination-run.js";
 import {
   COORDINATION_TICK_ACTION,
   type CoordinationTickBatch,
@@ -29,12 +32,15 @@ export interface CollectedTickTarget {
   readonly eventStartMs: number;
   readonly teamIds: string[];
   readonly drainOnly?: boolean;
+  readonly initializeRunId?: string;
 }
 
 /** per-minute pass に差し込む driver (= scan 後に active と保存済み pending を配送する)。 */
 export interface CoordinationTickPass {
   /** scan 1 ページから tick 対象を集約する (= per-page で呼ぶ)。 */
   collect(items: readonly Partial<DeploymentItem>[], nowIso: string): void;
+  /** Saved obligations remain discoverable after all deployment rows leave COMPLETE. */
+  collectRecovery(scopes: readonly CoordinationStateScope[]): void;
   /** active を先に送り、終了済みは保存済み pending を見つけた場合だけ送る。 */
   run(nowMs: number, nowIso: string): Promise<void>;
 }
@@ -168,6 +174,7 @@ export function buildCoordinationTickBatch(
       eventNowMs: nowMs - t.eventStartMs,
       teamIds: t.teamIds,
       ...(t.drainOnly ? { drainOnly: true } : {}),
+      ...(t.initializeRunId ? { initializeRunId: t.initializeRunId } : {}),
     })),
   };
 }
@@ -188,11 +195,31 @@ export function createCoordinationTickPass(
   return {
     collect: (items, nowIso) =>
       collectCoordinationTickTargets(coordinationProblemIds, items, targets, nowIso, ended),
+    collectRecovery: (scopes) => {
+      for (const scope of scopes) {
+        if (!coordinationProblemIds.has(scope.problemId)) continue;
+        const key = JSON.stringify([scope.tenantId, scope.eventId, scope.problemId]);
+        if (!ended.has(key))
+          ended.set(key, {
+            tenantId: scope.tenantId,
+            eventId: scope.eventId,
+            moduleRef: scope.problemId,
+            eventStartMs: 0,
+            teamIds: [],
+            drainOnly: true,
+          });
+      }
+    },
     run: async (nowMs, nowIso) => {
       if (!dispatcherFunctionName) return;
       // Recovery reads for old events must never delay dispatch of live matches.
       await dispatchTargets([...targets.values()]);
-      await dispatchTargets(await pendingEndedTargets(repository, [...ended.values()]));
+      await dispatchTargets(
+        await pendingEndedTargets(
+          repository,
+          [...ended.entries()].filter(([key]) => !targets.has(key)).map(([, target]) => target),
+        ),
+      );
       async function dispatchTargets(selected: readonly CollectedTickTarget[]) {
         if (!selected.length) return;
         try {
@@ -236,7 +263,9 @@ async function pendingEndedTarget(
   target: CollectedTickTarget,
 ): Promise<CollectedTickTarget | undefined> {
   const key = { tenantId: target.tenantId, eventId: target.eventId, problemId: target.moduleRef };
-  const runId = await resolveCurrentCoordinationRunId(repository, key);
+  const pointer = await repository.readCoordinationRun(key);
+  if (pointer?.pendingInitialization) return { ...target, initializeRunId: pointer.runId };
+  const runId = pointer?.runId ?? DEFAULT_COORDINATION_RUN_ID;
   const row = await repository.readCoordinationState({ ...key, runId });
   return row && isCoordinationStateEnvelope(row.state) && row.state.pendingScores
     ? target

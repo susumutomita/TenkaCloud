@@ -82,7 +82,7 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
             UpdateExpression:
               "SET score = :score, coordinationScoreRunId = :run, coordinationScoreVersion = :version, coordinationSubtotal = :subtotal, lastScoredAt = :scoredAt, updatedAt = :deliveredAt",
             ConditionExpression:
-              "tenantId = :tenant AND eventId = :event AND problemId = :problem AND teamId = :team AND #status = :status AND attribute_not_exists(teardownRequestedAt) AND " +
+              "tenantId = :tenant AND eventId = :event AND problemId = :problem AND teamId = :team AND #status = :status AND " +
               (update.expectedScore === undefined
                 ? "attribute_not_exists(score)"
                 : "score = :expected") +
@@ -143,7 +143,7 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
             : ["SET #state.pendingScores.resumeAfterTeamId = :resume"]),
           ...(paths.length ? [`REMOVE ${paths.join(", ")}`] : []),
         ].join(" ")
-      : "REMOVE #state.pendingScores, coordinationScoresPending";
+      : "REMOVE #state.pendingScores, coordinationScoresPending, coordinationRecoveryScope";
     try {
       await this.core.ddb.send(
         new UpdateCommand({
@@ -254,20 +254,37 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
     expectedVersion: number,
     at: string,
     expiresAt: number,
+    requirePendingInitialization = false,
   ): Promise<DeploymentMutationOutcome> {
     return this.core.transactWrite({
       TransactItems: [
-        {
-          ConditionCheck: {
-            TableName: this.core.tableName,
-            Key: { PK: coordinationRunPk(scope), SK: COORD_RUN_SK },
-            ConditionExpression:
-              scope.runId === DEFAULT_COORDINATION_RUN_ID
-                ? "attribute_not_exists(runId) OR runId = :run"
-                : "runId = :run",
-            ExpressionAttributeValues: { ":run": scope.runId },
-          },
-        },
+        expectedVersion === 0 &&
+        (scope.runId !== DEFAULT_COORDINATION_RUN_ID || requirePendingInitialization)
+          ? {
+              Update: {
+                TableName: this.core.tableName,
+                Key: { PK: coordinationRunPk(scope), SK: COORD_RUN_SK },
+                UpdateExpression: "REMOVE pendingInitialization, coordinationRecoveryScope",
+                ConditionExpression: requirePendingInitialization
+                  ? "runId = :run AND pendingInitialization = :initializing"
+                  : "runId = :run",
+                ExpressionAttributeValues: {
+                  ":run": scope.runId,
+                  ...(requirePendingInitialization ? { ":initializing": true } : {}),
+                },
+              },
+            }
+          : {
+              ConditionCheck: {
+                TableName: this.core.tableName,
+                Key: { PK: coordinationRunPk(scope), SK: COORD_RUN_SK },
+                ConditionExpression:
+                  scope.runId === DEFAULT_COORDINATION_RUN_ID
+                    ? "attribute_not_exists(runId) OR runId = :run"
+                    : "runId = :run",
+                ExpressionAttributeValues: { ":run": scope.runId },
+              },
+            },
         {
           Put: {
             TableName: this.core.tableName,
@@ -276,7 +293,7 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
               SK: COORD_STATE_SK,
               state,
               ...(isCoordinationStateEnvelope(state) && state.pendingScores != null
-                ? { coordinationScoresPending: true }
+                ? { coordinationScoresPending: true, coordinationRecoveryScope: { ...scope } }
                 : {}),
               version: expectedVersion + 1,
               updatedAt: at,
@@ -361,15 +378,16 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
    *
    * The second delete is how an orphaned pre-#3123 row leaves the table: those
    * rows predate `expiresAt`, so DynamoDB's TTL will never reap them, and
-   * nothing reads them any more. Both deletes are unconditional — DynamoDB
-   * `DeleteItem` on an absent key succeeds — which is what makes a retried or
-   * half-finished teardown converge instead of erroring.
+   * nothing reads them any more. Absent rows still delete successfully. A pending score delivery refuses the
+   * state delete so teardown cannot discard its score/history obligation; the
+   * pointer, secret and artifacts remain reachable for recovery.
    */
   async deleteCoordinationState(scope: CoordinationStateScope): Promise<void> {
     await this.core.ddb.send(
       new DeleteCommand({
         TableName: this.core.tableName,
         Key: { PK: coordinationPk(scope), SK: COORD_STATE_SK },
+        ConditionExpression: "attribute_not_exists(coordinationScoresPending)",
       }),
     );
     await this.core.ddb.send(
@@ -409,7 +427,8 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
         new DeleteCommand({
           TableName: this.core.tableName,
           Key: { PK: coordinationPk(scope), SK: COORD_STATE_SK },
-          ConditionExpression: "version = :expected",
+          ConditionExpression:
+            "version = :expected AND attribute_not_exists(coordinationScoresPending)",
           ExpressionAttributeValues: { ":expected": expectedVersion },
         }),
       );
@@ -434,6 +453,7 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
       new GetCommand({
         TableName: this.core.tableName,
         Key: { PK: coordinationRunPk(key), SK: COORD_RUN_SK },
+        ConsistentRead: true,
       }),
     );
     const item = out.Item as Record<string, unknown> | undefined;
@@ -444,6 +464,7 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
       history: Array.isArray(item.history)
         ? item.history.filter((entry): entry is string => typeof entry === "string")
         : [],
+      ...(item.pendingInitialization === true ? { pendingInitialization: true } : {}),
     };
   }
 
@@ -482,11 +503,15 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
               runId: pointer.runId,
               startedAt: pointer.startedAt,
               history: [...pointer.history],
+              ...(pointer.pendingInitialization
+                ? {
+                    pendingInitialization: true,
+                    coordinationRecoveryScope: { ...key, runId: pointer.runId },
+                  }
+                : {}),
               expiresAt,
             },
-            ConditionExpression: fromInitial
-              ? "attribute_not_exists(runId) OR runId = :expected"
-              : "runId = :expected",
+            ConditionExpression: `${fromInitial ? "(attribute_not_exists(runId) OR runId = :expected)" : "runId = :expected"} AND attribute_not_exists(pendingInitialization)`,
             ExpressionAttributeValues: { ":expected": expectedRunId },
           },
         },

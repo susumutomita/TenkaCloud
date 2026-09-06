@@ -150,11 +150,12 @@ describe("starting a run keeps the previous one (#3153)", () => {
       },
     };
     await seedState(repository, KEY, runId, state);
+    const initializedPointer = await repository.readCoordinationRun(KEY);
 
     expect(await startCoordinationRun({ repository, artifacts }, KEY, AT)).toEqual({
       kind: "conflict",
     });
-    expect(await repository.readCoordinationRun(KEY)).toEqual(pointer);
+    expect(await repository.readCoordinationRun(KEY)).toEqual(initializedPointer);
     expect((await repository.readCoordinationState(scope))?.state).toEqual(state);
     expect(artifacts.deleted).toEqual([]);
 
@@ -279,6 +280,7 @@ describe("starting a run keeps the previous one (#3153)", () => {
     await startCoordinationRun({ repository }, KEY, AT);
     // A rotation built from a pointer that has since moved on.
     const stale = await repository.readCoordinationRun(KEY);
+    await seedState(repository, KEY, stale?.runId ?? "", {});
     await startCoordinationRun({ repository }, KEY, AT);
 
     const outcome = await repository.rotateCoordinationRun(
@@ -449,7 +451,8 @@ describe("failures while retiring or removing runs (#3153)", () => {
     };
     // Fill the window so the next rotation pushes one run out.
     for (let index = 0; index < 3; index += 1) {
-      await startCoordinationRun({ repository }, KEY, AT);
+      const started = await startCoordinationRun({ repository }, KEY, AT);
+      if (started.kind === "started") await seedState(repository, KEY, started.runId, {});
     }
 
     const outcome = await startCoordinationRun({ repository, artifacts }, KEY, AT);
@@ -466,6 +469,7 @@ describe("failures while retiring or removing runs (#3153)", () => {
     await seedState(repository, KEY, DEFAULT_COORDINATION_RUN_ID, { turn: 1 });
     const broken = {
       readCoordinationRun: () => Promise.resolve(undefined),
+      readCoordinationState: repository.readCoordinationState.bind(repository),
       deleteCoordinationState: () => Promise.reject(new Error("control data unavailable")),
     } as unknown as SqlDeploymentsRepository;
 

@@ -1,3 +1,4 @@
+import { DatabaseSync } from "node:sqlite";
 import type { Client, ResultSet } from "@libsql/client/http";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -73,7 +74,8 @@ describe("LibsqlExecutor", () => {
 
   it("should bootstrap all schema statements in one non-interactive write batch", async () => {
     const batch = vi.fn().mockResolvedValue([]);
-    const client = { batch } as unknown as Client;
+    const execute = vi.fn().mockResolvedValue(result([{ name: "pending_initialization" }]));
+    const client = { batch, execute } as unknown as Client;
 
     await initializeControlDataSchema(client);
 
@@ -130,5 +132,74 @@ describe("LibsqlExecutor", () => {
         expect.stringContaining("CREATE TABLE IF NOT EXISTS leaderboard_snapshots"),
       ]),
     );
+  });
+
+  it("adds the initialization flag to an existing SQLite pointer without changing history, and reruns safely", async () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec(`CREATE TABLE coordination_run (
+      tenant_id TEXT, event_id TEXT, problem_id TEXT, run_id TEXT,
+      started_at TEXT, history TEXT, expires_at INTEGER,
+      PRIMARY KEY (tenant_id, event_id, problem_id));
+      INSERT INTO coordination_run VALUES ('tenant','event','battle','r-old','at','["default"]',0);`);
+    const execute = vi.fn(async (input: { sql: string }) => {
+      const statement = db.prepare(input.sql);
+      return input.sql.startsWith("PRAGMA")
+        ? result(statement.all() as Record<string, unknown>[])
+        : result([], Number(statement.run().changes));
+    });
+    const client = {
+      execute,
+      batch: async (statements: { sql: string }[]) => {
+        db.exec("BEGIN");
+        try {
+          for (const statement of statements) db.exec(statement.sql);
+          db.exec("COMMIT");
+          return [];
+        } catch (error) {
+          db.exec("ROLLBACK");
+          throw error;
+        }
+      },
+    } as unknown as Client;
+    await initializeControlDataSchema(client);
+    await initializeControlDataSchema(client);
+    expect(
+      db.prepare("SELECT run_id, history, pending_initialization FROM coordination_run").get(),
+    ).toEqual({
+      run_id: "r-old",
+      history: '["default"]',
+      pending_initialization: 0,
+    });
+    expect(execute.mock.calls.filter(([input]) => input.sql.startsWith("ALTER"))).toHaveLength(1);
+    db.close();
+  });
+
+  it("accepts another cold start winning the additive migration only after verifying the column", async () => {
+    const execute = vi
+      .fn()
+      .mockResolvedValueOnce(result([{ name: "run_id" }]))
+      .mockRejectedValueOnce(new Error("duplicate column name: pending_initialization"))
+      .mockResolvedValueOnce(result([{ name: "pending_initialization" }]));
+    await expect(
+      initializeControlDataSchema({
+        batch: vi.fn().mockResolvedValue([]),
+        execute,
+      } as unknown as Client),
+    ).resolves.toBeUndefined();
+    expect(execute).toHaveBeenCalledTimes(3);
+  });
+
+  it("propagates migration errors when the column is still absent", async () => {
+    const execute = vi
+      .fn()
+      .mockResolvedValueOnce(result([{ name: "run_id" }]))
+      .mockRejectedValueOnce(new Error("disk unavailable"))
+      .mockResolvedValueOnce(result([{ name: "run_id" }]));
+    await expect(
+      initializeControlDataSchema({
+        batch: vi.fn().mockResolvedValue([]),
+        execute,
+      } as unknown as Client),
+    ).rejects.toThrow("disk unavailable");
   });
 });

@@ -197,6 +197,7 @@ export async function writeCoordinationState(
   nowIso: string,
   stateSchemaVersion = 1,
   pendingScores?: CoordinationScoreDelivery,
+  requirePendingInitialization = false,
 ): Promise<WriteCoordinationOutcome> {
   const repository: DeploymentsCoordinationPort = await resolveDeploymentsRepository(deps);
   const payload: unknown =
@@ -223,6 +224,7 @@ export async function writeCoordinationState(
     expectedVersion,
     nowIso,
     coordinationStateExpiresAt(parseNowMs(nowIso)),
+    requirePendingInitialization,
   );
   return outcome.outcome === "updated" ? { kind: "ok" } : { kind: "conflict" };
 }

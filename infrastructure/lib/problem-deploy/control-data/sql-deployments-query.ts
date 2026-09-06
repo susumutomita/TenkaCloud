@@ -179,12 +179,30 @@ export class SqlDeploymentsQuery implements DeploymentsQueryPort {
 
   async forEachCompleteDeploymentPage(
     onPage: (items: readonly DeploymentRecord[]) => Promise<void>,
+    onCoordinationRecoveryPage?: (scopes: readonly CoordinationStateScope[]) => Promise<void>,
   ): Promise<void> {
     const rows = await this.core.selectRows(
       "SELECT payload FROM deployments WHERE status = ? ORDER BY job_id ASC",
       ["COMPLETE"],
     );
     await onPage(this.core.records(rows));
+    if (onCoordinationRecoveryPage) {
+      const pending = await this.core.selectRows(
+        `SELECT tenant_id, event_id, problem_id, run_id FROM coordination_state_scoped
+         WHERE ${HAS_PENDING_COORDINATION_SCORES_SQL}
+         UNION SELECT tenant_id, event_id, problem_id, run_id FROM coordination_run
+         WHERE pending_initialization = 1`,
+        [],
+      );
+      await onCoordinationRecoveryPage(
+        pending.map((row) => ({
+          tenantId: String(row.tenant_id),
+          eventId: String(row.event_id),
+          problemId: String(row.problem_id),
+          runId: String(row.run_id),
+        })),
+      );
+    }
   }
 
   async forEachRuntimeReconcilablePage(
@@ -198,3 +216,6 @@ export class SqlDeploymentsQuery implements DeploymentsQueryPort {
     await onPage(this.core.records(rows));
   }
 }
+
+import type { CoordinationStateScope } from "./domain/coordination-scope.js";
+import { HAS_PENDING_COORDINATION_SCORES_SQL } from "./sql-deployments-coordination.js";

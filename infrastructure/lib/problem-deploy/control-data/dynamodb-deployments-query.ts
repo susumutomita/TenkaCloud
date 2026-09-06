@@ -1,5 +1,9 @@
 import { QueryCommand } from "@aws-sdk/lib-dynamodb";
+import type { CoordinationStateScope } from "./domain/coordination-scope.js";
 import {
+  COORD_RUN_SK,
+  coordinationPk,
+  coordinationRunPk,
   type DynamoDbDeploymentsCore,
   deploymentPk,
   itemToRecord,
@@ -254,16 +258,30 @@ export class DynamoDbDeploymentsQuery implements DeploymentsQueryPort {
 
   async forEachCompleteDeploymentPage(
     onPage: (items: readonly DeploymentRecord[]) => Promise<void>,
+    onCoordinationRecoveryPage?: (scopes: readonly CoordinationStateScope[]) => Promise<void>,
   ): Promise<void> {
     await this.core.scanAllPages(
       {
-        FilterExpression: "#status = :complete",
+        FilterExpression: onCoordinationRecoveryPage
+          ? "#status = :complete OR coordinationScoresPending = :pending OR pendingInitialization = :pending"
+          : "#status = :complete",
         ExpressionAttributeNames: { "#status": "status" },
-        ExpressionAttributeValues: { ":complete": "COMPLETE" },
+        ExpressionAttributeValues: {
+          ":complete": "COMPLETE",
+          ...(onCoordinationRecoveryPage ? { ":pending": true } : {}),
+        },
         Limit: 200,
       },
       async (items) => {
-        await onPage(items.map(itemToRecord));
+        await onPage(
+          (onCoordinationRecoveryPage
+            ? items.filter((item) => item.status === "COMPLETE")
+            : items
+          ).map(itemToRecord),
+        );
+        if (onCoordinationRecoveryPage) {
+          await onCoordinationRecoveryPage(recoveryScopes(items));
+        }
       },
     );
   }
@@ -288,4 +306,45 @@ export class DynamoDbDeploymentsQuery implements DeploymentsQueryPort {
       },
     );
   }
+}
+
+function recoveryScopes(items: readonly Record<string, unknown>[]): CoordinationStateScope[] {
+  const scopes: CoordinationStateScope[] = [];
+  for (const item of items) {
+    if (item.coordinationScoresPending !== true && item.pendingInitialization !== true) continue;
+    const scope = recoveryScope(item);
+    if (scope) scopes.push(scope);
+    else console.warn("[coordination] invalid recovery scope omitted from scan");
+  }
+  return scopes;
+}
+
+/** Check both the host marker and its physical namespace before scheduling recovery. */
+function recoveryScope(item: Record<string, unknown>): CoordinationStateScope | undefined {
+  const value = item.coordinationRecoveryScope;
+  if (!value || typeof value !== "object") return undefined;
+  const candidate = value as Record<string, unknown>;
+  const parts = [candidate.tenantId, candidate.eventId, candidate.problemId, candidate.runId];
+  if (!parts.every((part) => typeof part === "string" && part.length > 0 && !part.includes("#")))
+    return undefined;
+  const scope = {
+    tenantId: candidate.tenantId as string,
+    eventId: candidate.eventId as string,
+    problemId: candidate.problemId as string,
+    runId: candidate.runId as string,
+  };
+  if (
+    item.coordinationScoresPending === true &&
+    item.SK === "STATE" &&
+    item.PK === coordinationPk(scope)
+  )
+    return scope;
+  if (
+    item.pendingInitialization === true &&
+    item.SK === COORD_RUN_SK &&
+    item.PK === coordinationRunPk(scope) &&
+    item.runId === scope.runId
+  )
+    return scope;
+  return undefined;
 }

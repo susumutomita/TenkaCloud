@@ -5,7 +5,6 @@ import {
   publicCoordinationScoreReason,
 } from "../../control-data/domain/coordination-score.js";
 import type { DeploymentRecord, DeploymentsRepository } from "../../control-data/types.js";
-import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
 import { buildScoreEventRecord } from "../shared/score-event.js";
 import type { CoordinationStateRow, CoordinationStoreDeps } from "./coordination-store.js";
 import { resolveDeploymentsRepository } from "./shared.js";
@@ -158,7 +157,8 @@ async function publishJobScore(
   const deployment = await repository.getDeployment(jobId);
   if (!matchesTeam(deployment, scope, teamId))
     throw new Error("Coordination score deployment scope changed");
-  if (deployment.teardownRequestedAt || DELETED_LIKE_STATUSES.has(deployment.status)) return;
+  // Resource teardown cannot cancel an already committed score/history delivery.
+  // The transaction still checks this deployment's scope, status, score and run/version.
   if (
     deployment.coordinationScoreRunId === scope.runId &&
     Number(deployment.coordinationScoreVersion ?? 0) >= input.version

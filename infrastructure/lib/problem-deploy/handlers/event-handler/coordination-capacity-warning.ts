@@ -36,6 +36,7 @@ export interface CoordinationCapacityWarning {
 export function warnOnCoordinationCapacity(args: {
   readonly problems: readonly { readonly problemId: string }[];
   readonly teamCount: number;
+  readonly teamIds?: readonly string[];
   /** Absent is read as "nothing declared" — see the bulk-deploy preflight. */
   readonly problemsCoordination?: Readonly<Record<string, unknown>>;
   readonly budget: CoordinationStateBudget;
@@ -46,7 +47,7 @@ export function warnOnCoordinationCapacity(args: {
   for (const problem of args.problems) {
     const forecast = parseCoordinationStateForecast(args.problemsCoordination?.[problem.problemId]);
     if (!forecast) continue;
-    const verdict = checkCoordinationCapacity(forecast, args.teamCount, args.budget);
+    const verdict = checkCoordinationCapacity(forecast, args.teamCount, args.budget, args.teamIds);
     if (verdict.kind === "fits") continue;
     const over = verdict.kind === "over";
     warnings.push({

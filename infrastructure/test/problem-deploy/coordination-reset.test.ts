@@ -2,6 +2,7 @@ import { DeleteCommand, GetCommand, PutCommand, QueryCommand } from "@aws-sdk/li
 import { describe, expect, it, vi } from "vitest";
 import { resetCoordinationRun } from "../../lib/problem-deploy/handlers/event-handler/coordination-reset";
 import type { EventSharedResources } from "../../lib/problem-deploy/handlers/event-handler/shared";
+import { resolveDeploymentsRepository } from "../../lib/problem-deploy/handlers/event-handler/shared";
 import { makeFakeDdb } from "./control-data/control-data-write.test-helpers";
 import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
@@ -212,6 +213,19 @@ describe("resetCoordinationRun (#3153)", () => {
     const { shared } = buildShared([deployment("battle-a", "team-1")]);
 
     const first = await resetCoordinationRun(shared, "tenant-acme", "EV1", "battle-a");
+    if (first.kind === "ok")
+      await (await resolveDeploymentsRepository(shared)).writeCoordinationState(
+        {
+          tenantId: "tenant-acme",
+          eventId: "EV1",
+          problemId: "battle-a",
+          runId: first.result.runId,
+        },
+        {},
+        0,
+        new Date().toISOString(),
+        0,
+      );
     const second = await resetCoordinationRun(shared, "tenant-acme", "EV1", "battle-a");
 
     // A reused id would walk a new match into the previous run's tombstoned
@@ -232,7 +246,21 @@ describe("resetCoordinationRun (#3153)", () => {
     const runIds: string[] = [];
     for (let index = 0; index < 4; index += 1) {
       const outcome = await resetCoordinationRun(shared, "tenant-acme", "EV1", "battle-a");
-      if (outcome.kind === "ok") runIds.push(outcome.result.previousRunId);
+      if (outcome.kind === "ok") {
+        runIds.push(outcome.result.previousRunId);
+        await (await resolveDeploymentsRepository(shared)).writeCoordinationState(
+          {
+            tenantId: "tenant-acme",
+            eventId: "EV1",
+            problemId: "battle-a",
+            runId: outcome.result.runId,
+          },
+          {},
+          0,
+          new Date().toISOString(),
+          0,
+        );
+      }
     }
 
     // History is a debrief, not an archive: every retained run is a full state

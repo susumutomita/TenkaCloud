@@ -472,7 +472,9 @@ describe("requestTeardown coordination cleanup (#3149)", () => {
       .filter((cmd): cmd is DeleteCommand => cmd instanceof DeleteCommand);
     // Conditional on the version that was read, not a bare delete: between the
     // listing and this call a new deployment could have started playing.
-    expect(deletes[0]?.input.ConditionExpression).toBe("version = :expected");
+    expect(deletes[0]?.input.ConditionExpression).toBe(
+      "version = :expected AND attribute_not_exists(coordinationScoresPending)",
+    );
     expect(deletes[0]?.input.ExpressionAttributeValues).toMatchObject({ ":expected": 4 });
   });
 

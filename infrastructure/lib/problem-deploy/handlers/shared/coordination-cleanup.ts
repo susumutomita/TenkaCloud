@@ -5,6 +5,7 @@ import type {
 } from "../../control-data/deployments-repository.js";
 import { coordinationScopeForRun } from "../../control-data/domain/coordination-run.js";
 import type { CoordinationStateScope } from "../../control-data/domain/coordination-scope.js";
+import { isCoordinationStateEnvelope } from "../../control-data/domain/coordination-state-envelope.js";
 import type { DeploymentStatus } from "../deploy-handler/types.js";
 import { DELETED_LIKE_STATUSES } from "./constants.js";
 import { deleteAllCoordinationRuns, resolveCurrentCoordinationRunId } from "./coordination-run.js";
@@ -41,7 +42,7 @@ import { logDeployTrace } from "./trace-log.js";
  * (`coordination-handler.ts`'s `canSubmitCoordination`), and it is anchored on
  * `teardownRequestedAt` — a permanent marker written once when a row first
  * enters `DELETING` — precisely because status is recoverable and this is not.
- * When no row can act, nothing can read or write the state, and it is garbage.
+ * When no row can act, the state can be removed once its saved score delivery is complete.
  */
 
 /** The subset of a deployment row this decision reads. */
@@ -58,6 +59,8 @@ export type CoordinationCleanupOutcome =
   | { readonly kind: "deleted"; readonly scope: CoordinationStateScope }
   /** At least one deployment of this problem can still act. */
   | { readonly kind: "retained"; readonly liveDeployments: number }
+  /** Cloud cleanup can continue; this saved score/history obligation must still drain. */
+  | { readonly kind: "pending_scores" }
   /** There was no state row to remove (the match never started, or is already gone). */
   | { readonly kind: "absent" }
   /**
@@ -160,6 +163,9 @@ export async function cleanupCoordinationStateIfLastDeployment(
     (row) => row.problemId === problemId && canStillAct(row as CoordinationCleanupCandidate),
   );
   if (live.length > 0) return { kind: "retained", liveDeployments: live.length };
+  if (isCoordinationStateEnvelope(existing.state) && existing.state.pendingScores != null) {
+    return { kind: "pending_scores" };
+  }
 
   const outcome = await deps.repository.deleteCoordinationStateIfUnchanged(scope, existing.version);
   if (outcome.outcome !== "updated") {

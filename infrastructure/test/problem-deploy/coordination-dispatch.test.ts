@@ -90,10 +90,15 @@ function storeOver(
       // evaluation (including reset races) runs in coordination-scoring/reset suites.
       const entries = cmd.input.TransactItems;
       expect(entries).toHaveLength(2);
-      expect(entries?.[0].ConditionCheck).toMatchObject({
+      expect(entries?.[0].ConditionCheck ?? entries?.[0].Update).toMatchObject({
         Key: { SK: "CURRENT" },
         ExpressionAttributeValues: { ":run": expect.any(String) },
       });
+      if (entries?.[0].Update)
+        expect(entries[0].Update).toMatchObject({
+          UpdateExpression: "REMOVE pendingInitialization, coordinationRecoveryScope",
+          ConditionExpression: "runId = :run",
+        });
       expect(entries?.[1].Put?.Item?.SK).toBe("STATE");
       const put = entries?.[1].Put;
       if (!put) throw new Error("missing state put");

@@ -65,6 +65,7 @@ const TickTargetSchema = z.object({
   eventNowMs: z.number().finite(),
   teamIds: z.array(z.string()).default([]),
   drainOnly: z.boolean().optional(),
+  initializeRunId: z.string().min(1).optional(),
 });
 const TickBatchSchema = z.object({
   action: z.literal(COORDINATION_TICK_ACTION),
@@ -92,9 +93,14 @@ export async function handleCoordinationTickBatch(
   let written = 0;
   const scoreBudgetMs = COORDINATION_SCORE_DELIVERY_BUDGET_MS;
   for (const target of batch.targets) {
-    const work = target.drainOnly
-      ? drainSavedCoordinationScores(deps, target).then(() => false)
-      : tickCoordinationEvent(deps, target, batch.nowIso, scoreBudgetMs);
+    let work: Promise<boolean>;
+    if (target.initializeRunId) {
+      work = initializeAcceptedCoordinationReset(deps, target, batch.nowIso);
+    } else if (target.drainOnly) {
+      work = drainSavedCoordinationScores(deps, target).then(() => false);
+    } else {
+      work = tickCoordinationEvent(deps, target, batch.nowIso, scoreBudgetMs);
+    }
     const didWrite = await work.catch((err) => {
       console.warn(`[coordination-dispatcher] tick failed event=${target.eventId}`, {
         message: err instanceof Error ? err.message : String(err),
@@ -104,6 +110,64 @@ export async function handleCoordinationTickBatch(
     if (didWrite) written += 1;
   }
   return { ticked: batch.targets.length, written };
+}
+
+/** Only an explicit, still-pending reset may materialize a state after event end. */
+async function initializeAcceptedCoordinationReset(
+  deps: CoordinationTickDeps,
+  target: CoordinationTickTarget,
+  nowIso: string,
+): Promise<boolean> {
+  if (!deps.config[target.moduleRef]) return false;
+  const repository = await resolveDeploymentsRepository(deps.store);
+  const key = { tenantId: target.tenantId, eventId: target.eventId, problemId: target.moduleRef };
+  const pointer = await repository.readCoordinationRun(key);
+  if (!pointer?.pendingInitialization || pointer.runId !== target.initializeRunId) return false;
+  const scope = { ...key, runId: pointer.runId };
+  if (await readCoordinationState(deps.store, scope)) {
+    // A normal first writer may have won since the pointer read. Never replace its state.
+    return false;
+  }
+  const load = await loadCoordinationPlugin(deps.importer, target.moduleRef);
+  if (load.kind !== "ok") throw new Error(`Reset initialization plugin ${load.kind}`);
+  const roster = await resolveEventRoster(deps.store, {
+    ...key,
+    knownTeamIds: target.teamIds,
+    requireComplete: true,
+  });
+  if (!roster.teamIds.length) throw new Error("Reset initialization has no deployment roster");
+  const state = load.plugin.initialState({
+    eventId: target.eventId,
+    teamIds: roster.teamIds,
+    teamNames: roster.teamNames,
+    matchSecret: await ensureCoordinationMatchSecret(deps.store, scope, nowIso),
+  });
+  const pendingScores = coordinationScoreDelivery(
+    load.plugin,
+    state,
+    state,
+    { kind: "tick" },
+    pointer.startedAt,
+    true,
+  );
+  // Even plugins without teamScores need a durable state to consume the intent.
+  // The same transaction checks the intent, creates version 1, and clears it.
+  const written = await writeCoordinationState(
+    deps.store,
+    scope,
+    state,
+    0,
+    nowIso,
+    pluginStateSchemaVersion(load.schema),
+    pendingScores,
+    true,
+  );
+  if (written.kind !== "ok") {
+    console.warn(`[coordination-dispatcher] reset initialization ${written.kind}`, key);
+    return false;
+  }
+  await tryDeliverCoordinationScores(deps.store, scope, { state, version: 1, pendingScores });
+  return true;
 }
 
 /** A finished event may flush durable scoring, but must not load/advance the plugin or extend TTL. */
