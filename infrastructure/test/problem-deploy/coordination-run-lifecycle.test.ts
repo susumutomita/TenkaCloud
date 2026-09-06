@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { CoordinationArtifactStore } from "../../lib/problem-deploy/control-data/coordination-artifact-store";
 import {
   COORDINATION_RUN_HISTORY_LIMIT,
@@ -129,6 +129,98 @@ describe("resolveCurrentCoordinationRunId (#3153)", () => {
 });
 
 describe("starting a run keeps the previous one (#3153)", () => {
+  it.each([
+    false,
+    true,
+  ])("should refuse a pending delivery and allow reset after acknowledgement (rotated=%s)", async (rotated) => {
+    const repository = makeRepository();
+    const artifacts = makeArtifactSpy();
+    if (rotated) await startCoordinationRun({ repository }, KEY, AT);
+    const pointer = await repository.readCoordinationRun(KEY);
+    const runId = pointer?.runId ?? DEFAULT_COORDINATION_RUN_ID;
+    const scope = coordinationScopeForRun(KEY, runId);
+    const state = {
+      __tenkacloudCoordinationEnvelope: 1,
+      stateSchemaVersion: 1,
+      state: { scores: { "team-a": 30, "team-b": 10 }, ledger: ["accepted"] },
+      pendingScores: {
+        occurredAt: AT,
+        // Team A has already committed; only B remains in this delivery.
+        teams: { "team-b": { before: 0, score: 10, reason: "leak" } },
+      },
+    };
+    await seedState(repository, KEY, runId, state);
+    const initializedPointer = await repository.readCoordinationRun(KEY);
+
+    expect(await startCoordinationRun({ repository, artifacts }, KEY, AT)).toEqual({
+      kind: "conflict",
+    });
+    expect(await repository.readCoordinationRun(KEY)).toEqual(initializedPointer);
+    expect((await repository.readCoordinationState(scope))?.state).toEqual(state);
+    expect(artifacts.deleted).toEqual([]);
+
+    await repository.acknowledgeCoordinationScores(scope, 1);
+    const retried = await startCoordinationRun({ repository, artifacts }, KEY, AT);
+
+    expect(retried).toMatchObject({ kind: "started", previousRunId: runId });
+    expect((await repository.readCoordinationState(scope))?.state).toEqual({
+      __tenkacloudCoordinationEnvelope: 1,
+      stateSchemaVersion: 1,
+      state: state.state,
+    });
+  });
+
+  it("should reject a delivery saved after the pre-rotation read", async () => {
+    const repository = makeRepository();
+    const artifacts = makeArtifactSpy();
+    const scope = coordinationScopeForRun(KEY, DEFAULT_COORDINATION_RUN_ID);
+    await seedState(repository, KEY, scope.runId, { score: 0 });
+    const read = repository.readCoordinationState.bind(repository);
+    vi.spyOn(repository, "readCoordinationState").mockImplementationOnce(async (readScope) => {
+      const observed = await read(readScope);
+      await repository.writeCoordinationState(
+        scope,
+        {
+          __tenkacloudCoordinationEnvelope: 1,
+          stateSchemaVersion: 1,
+          state: { score: 30 },
+          pendingScores: {
+            occurredAt: AT,
+            teams: { "team-a": { before: 0, score: 30, reason: "cipher" } },
+          },
+        },
+        1,
+        AT,
+        0,
+      );
+      return observed;
+    });
+
+    expect(await startCoordinationRun({ repository, artifacts }, KEY, AT)).toEqual({
+      kind: "conflict",
+    });
+    expect(await resolveCurrentCoordinationRunId(repository, KEY)).toBe(scope.runId);
+    expect((await read(scope))?.version).toBe(2);
+    expect(artifacts.deleted).toEqual([]);
+  });
+
+  it.each([
+    { pendingScores: { teams: {} } },
+    { __tenkacloudCoordinationEnvelope: 1, pendingScores: { teams: {} } },
+    { __tenkacloudCoordinationEnvelope: 1, stateSchemaVersion: 1, state: {}, pendingScores: null },
+  ])("should not confuse opaque plugin fields with a pending delivery: %j", async (state) => {
+    const repository = makeRepository();
+    await seedState(repository, KEY, DEFAULT_COORDINATION_RUN_ID, state);
+    expect((await startCoordinationRun({ repository }, KEY, AT)).kind).toBe("started");
+  });
+
+  it("should leave the pointer unchanged when the current state cannot be read", async () => {
+    const repository = makeRepository();
+    vi.spyOn(repository, "readCoordinationState").mockRejectedValueOnce(new Error("read failed"));
+    await expect(startCoordinationRun({ repository }, KEY, AT)).rejects.toThrow("read failed");
+    expect(await repository.readCoordinationRun(KEY)).toBeUndefined();
+  });
+
   it("should leave the previous run's state readable under its own scope", async () => {
     const repository = makeRepository();
     await seedState(repository, KEY, DEFAULT_COORDINATION_RUN_ID, { turn: 7 });
@@ -188,6 +280,7 @@ describe("starting a run keeps the previous one (#3153)", () => {
     await startCoordinationRun({ repository }, KEY, AT);
     // A rotation built from a pointer that has since moved on.
     const stale = await repository.readCoordinationRun(KEY);
+    await seedState(repository, KEY, stale?.runId ?? "", {});
     await startCoordinationRun({ repository }, KEY, AT);
 
     const outcome = await repository.rotateCoordinationRun(
@@ -253,7 +346,7 @@ describe("2 problems x 2 runs stay completely isolated (#3153)", () => {
 });
 
 describe("removing a problem removes every run it had (#3153)", () => {
-  it("should delete the current run, the history, and the pointer", async () => {
+  it("should delete the current run and history while retaining a closed pointer", async () => {
     const repository = makeRepository();
     const artifacts = makeArtifactSpy();
     await seedState(repository, KEY, DEFAULT_COORDINATION_RUN_ID, { turn: 1 });
@@ -273,9 +366,8 @@ describe("removing a problem removes every run it had (#3153)", () => {
       ).toBeUndefined();
       expect(artifacts.deleted).toContain(`${KEY.problemId}/${runId}`);
     }
-    // The pointer goes last, so a failure part way through leaves a pointer
-    // naming runs that still exist rather than runs nothing names.
-    expect(await repository.readCoordinationRun(KEY)).toBeUndefined();
+    // The tombstone fences late first writes and preserves retry scopes.
+    expect(await repository.readCoordinationRun(KEY)).toMatchObject({ closed: true });
   });
 
   it("should still clear the initial run for a problem that was never reset", async () => {
@@ -314,6 +406,7 @@ describe("the run pointer outlives the runs it names (#3153)", () => {
     let storedExpiry: number | undefined;
     const spy = {
       readCoordinationRun: () => Promise.resolve(undefined),
+      readCoordinationState: () => Promise.resolve(undefined),
       rotateCoordinationRun: (
         _key: CoordinationRunKey,
         _expected: string,
@@ -357,7 +450,8 @@ describe("failures while retiring or removing runs (#3153)", () => {
     };
     // Fill the window so the next rotation pushes one run out.
     for (let index = 0; index < 3; index += 1) {
-      await startCoordinationRun({ repository }, KEY, AT);
+      const started = await startCoordinationRun({ repository }, KEY, AT);
+      if (started.kind === "started") await seedState(repository, KEY, started.runId, {});
     }
 
     const outcome = await startCoordinationRun({ repository, artifacts }, KEY, AT);
@@ -374,6 +468,8 @@ describe("failures while retiring or removing runs (#3153)", () => {
     await seedState(repository, KEY, DEFAULT_COORDINATION_RUN_ID, { turn: 1 });
     const broken = {
       readCoordinationRun: () => Promise.resolve(undefined),
+      readCoordinationState: repository.readCoordinationState.bind(repository),
+      closeCoordinationRun: repository.closeCoordinationRun.bind(repository),
       deleteCoordinationState: () => Promise.reject(new Error("control data unavailable")),
     } as unknown as SqlDeploymentsRepository;
 

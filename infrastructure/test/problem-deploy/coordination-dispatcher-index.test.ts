@@ -10,11 +10,27 @@ const mocks = vi.hoisted(() => ({
   handleCoordinationOp: vi.fn(),
   handleCoordinationProjection: vi.fn(),
   handleCoordinationArtifactFetch: vi.fn(),
+  normalRuntime: {},
+  deliveryRuntime: {},
+  normalDdb: { send: vi.fn() },
+  deliveryDdb: { send: vi.fn() },
+  resolveScope: vi.fn(),
 }));
 
+vi.mock("../../lib/problem-deploy/control-data/runtime-repositories", () => ({
+  createDefaultControlDataRuntime: () => mocks.normalRuntime,
+}));
+vi.mock(
+  "../../lib/problem-deploy/handlers/coordination-dispatcher-handler/coordination-backends",
+  () => ({
+    createScoreDeliveryControlDataRuntime: () => mocks.deliveryRuntime,
+    createScoreDeliveryDdbClient: () => mocks.deliveryDdb,
+  }),
+);
 vi.mock("../../lib/problem-deploy/handlers/participant-handler/shared", () => ({
-  buildParticipantSharedResources: () => ({
-    ddb: { send: vi.fn() },
+  buildParticipantSharedResources: (runtime: unknown, ddb = mocks.normalDdb) => ({
+    runtime,
+    ddb,
     tableName: "T",
     eventsTableName: "",
     endpointsTableName: "",
@@ -28,11 +44,15 @@ vi.mock("../../lib/problem-deploy/handlers/participant-handler/coordination-hand
   // [Issue #3152] The on-demand body fetch that keeps the projection carrying
   // references only.
   handleCoordinationArtifactFetch: mocks.handleCoordinationArtifactFetch,
-  makeCoordinationScopeResolver: () => async () => null,
+  makeCoordinationScopeResolver: (shared: unknown) => async () => mocks.resolveScope(shared),
   // [Issue #659] The dispatcher wires a score publisher so a coordination
   // Battle's own scoring reaches the scoreboard.
   makeCoordinationScorePublisher: () => async () => undefined,
-  parseCoordinationConfig: () => ({}),
+  parseCoordinationConfig: () => ({
+    pure: { plugin: "pure", scoreMode: "exclusive" },
+    mixed: { plugin: "mixed", scoreMode: "additive" },
+    legacy: { plugin: "legacy" },
+  }),
 }));
 
 const { app, handler } = await import(
@@ -75,6 +95,34 @@ describe("POST /portal/me/coordination/op", () => {
     const res = await send("POST", OP, { op: { kind: "inc" } });
     expect(res.status).toBe(StatusCodes.OK);
     expect(await res.json()).toEqual({ projection: { count: 1 } });
+  });
+  it("passes catalog score ownership into the operation and projection store", async () => {
+    mocks.handleCoordinationOp.mockResolvedValueOnce({ kind: "ok", projection: {} });
+    await send("POST", OP, { op: {} });
+    expect(mocks.handleCoordinationOp.mock.calls[0]?.[0].store.coordinationScoreModes).toEqual({
+      pure: "exclusive",
+      mixed: "additive",
+      legacy: "additive",
+    });
+  });
+  it("isolates score delivery limits from operation, projection, and scope lookup", async () => {
+    mocks.handleCoordinationOp.mockResolvedValueOnce({ kind: "ok", projection: {} });
+    mocks.handleCoordinationProjection.mockResolvedValueOnce({ kind: "ok", projection: {} });
+    await send("POST", OP, { op: {} });
+    await get("/portal/me/coordination/projection");
+    const deps = mocks.handleCoordinationOp.mock.calls[0]?.[0];
+    expect(mocks.handleCoordinationProjection.mock.calls[0]?.[0]).toBe(deps);
+    expect(deps.store.runtime).toBe(mocks.normalRuntime);
+    expect(deps.store.ddb).toBe(mocks.normalDdb);
+    expect(deps.store.scoreDelivery).toEqual({
+      runtime: mocks.deliveryRuntime,
+      ddb: mocks.deliveryDdb,
+      tableName: deps.store.tableName,
+    });
+    await deps.resolveScope("fixture-key");
+    expect(mocks.resolveScope).toHaveBeenCalledWith(
+      expect.objectContaining({ runtime: mocks.normalRuntime, ddb: mocks.normalDdb }),
+    );
   });
   it("should 422 with the error on a plugin rejection", async () => {
     mocks.handleCoordinationOp.mockResolvedValueOnce({ kind: "rejected", error: "bad_op" });

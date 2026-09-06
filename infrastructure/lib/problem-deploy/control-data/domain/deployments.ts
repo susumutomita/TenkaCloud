@@ -211,6 +211,11 @@ export type DeploymentRecord = {
 
   /** Scoring engine が加算したチームの累計ポイント。0 default。 */
   score?: number;
+  /** Last durable coordination transition delivered to this deployment. */
+  coordinationScoreRunId?: string;
+  coordinationScoreVersion?: number;
+  /** Coordination contribution to score; ordinary scoring owns the remainder. */
+  coordinationSubtotal?: number;
   /** 最後に scoring が走った時刻 (ISO 8601)。 */
   lastScoredAt?: string;
   /** Battle (uptime) で最後の health check が成功したか。 */
@@ -401,13 +406,22 @@ export type ScoreEventRecord = {
    * - `gate-bonus`: Progression Gate (Issue #2283) の完了 bonus。 team override の
    *   `completionBonus` を Gate challenge 完了時に 1 度だけ加算した marker。
    */
-  source: "uptime" | "flag" | "flag-wrong" | "attack-detected" | "hint" | "gate-bonus";
+  source:
+    | "uptime"
+    | "flag"
+    | "flag-wrong"
+    | "attack-detected"
+    | "hint"
+    | "gate-bonus"
+    | "coordination";
   /**
    * 加算ポイント。`uptime` = scoring.pointsPerSuccess、`flag` = scoring.points、
    * `flag-wrong` = -wrongAnswerPenalty (= 減点、 負数)、 `attack-detected` = 0 (= イベント marker のみ)、
    * `hint` = -hint.penalty (= 減点、 負数)、 `gate-bonus` = teamOverrides[].completionBonus (= 正数)。
    */
   points: number;
+  /** Allowlisted public explanation for a coordination score change. */
+  reason?: string;
   /**
    * 結果。
    * - `ok`: `uptime` で全 endpoint OK or `flag` で正解 or `hint` 開封成功

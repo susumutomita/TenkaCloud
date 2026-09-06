@@ -105,6 +105,7 @@ export async function createEvent(
     problems: req.problems,
     teamCount: teams.length,
     problemsCoordination: shared.problemsCoordination,
+    teamIds: teams.map((team) => team.teamId),
     budget: shared.runtime.coordinationStateBudget(),
     tenantId: ctx.tenantId,
     eventId,

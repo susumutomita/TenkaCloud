@@ -627,7 +627,7 @@ describe.each(backends)("DeploymentsRepository parity: %s", (_label, makeBackend
     });
 
     await repo.deleteCoordinationRun(key);
-    expect(await repo.readCoordinationRun(key)).toBeUndefined();
+    expect(await repo.readCoordinationRun(key)).toMatchObject({ runId: "r2", closed: true });
   });
 
   it("should treat a pointer row that names no run as absent", async () => {

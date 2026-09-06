@@ -1,10 +1,17 @@
 import { DeleteCommand, GetCommand, PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
-import type { CoordinationRunKey, CoordinationRunPointer } from "./domain/coordination-run.js";
+import { ulid } from "ulid";
+import {
+  type CoordinationRunKey,
+  type CoordinationRunPointer,
+  initialCoordinationRunPointer,
+} from "./domain/coordination-run.js";
 import {
   assertConditionableVersion,
   type CoordinationStateScope,
   DEFAULT_COORDINATION_RUN_ID,
 } from "./domain/coordination-scope.js";
+import type { CoordinationScoreUpdate } from "./domain/coordination-score.js";
+import { isCoordinationStateEnvelope } from "./domain/coordination-state-envelope.js";
 import {
   COORD_RUN_SK,
   COORD_SECRET_SK,
@@ -34,6 +41,132 @@ import type {
  */
 export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationPort {
   constructor(private readonly core: DynamoDbDeploymentsCore) {}
+
+  async publishCoordinationScore(
+    scope: CoordinationStateScope,
+    version: number,
+    update: CoordinationScoreUpdate,
+  ): Promise<DeploymentMutationOutcome> {
+    const deployment = await this.core.getDeployment(update.jobId);
+    if (!deployment) return { outcome: "conflict" };
+    const previousScoredAt = deployment.lastScoredAt;
+    const scoredAt =
+      previousScoredAt !== undefined && previousScoredAt > update.occurredAt
+        ? previousScoredAt
+        : update.occurredAt;
+    const deliveredAt = new Date().toISOString();
+    return this.core.transactWrite({
+      TransactItems: [
+        {
+          ConditionCheck: {
+            TableName: this.core.tableName,
+            Key: { PK: coordinationRunPk(scope), SK: COORD_RUN_SK },
+            ConditionExpression:
+              scope.runId === DEFAULT_COORDINATION_RUN_ID
+                ? "(attribute_not_exists(runId) OR runId = :run) AND attribute_not_exists(closed)"
+                : "runId = :run AND attribute_not_exists(closed)",
+            ExpressionAttributeValues: { ":run": scope.runId },
+          },
+        },
+        {
+          ConditionCheck: {
+            TableName: this.core.tableName,
+            Key: { PK: coordinationPk(scope), SK: COORD_STATE_SK },
+            ConditionExpression: "version = :version AND coordinationScoresPending = :pending",
+            ExpressionAttributeValues: {
+              ":version": version,
+              ":pending": true,
+            },
+          },
+        },
+        {
+          Update: {
+            TableName: this.core.tableName,
+            Key: this.core.deploymentKey(update.jobId),
+            UpdateExpression:
+              "SET score = :score, coordinationScoreRunId = :run, coordinationScoreVersion = :version, coordinationSubtotal = :subtotal, lastScoredAt = :scoredAt, updatedAt = :deliveredAt",
+            ConditionExpression:
+              "tenantId = :tenant AND eventId = :event AND problemId = :problem AND teamId = :team AND #status = :status AND " +
+              (update.expectedScore === undefined
+                ? "attribute_not_exists(score)"
+                : "score = :expected") +
+              // A newer zero-point scorer may change only the timestamp. It
+              // must conflict too, or this retry could rewind lastScoredAt.
+              " AND " +
+              (previousScoredAt === undefined
+                ? "attribute_not_exists(lastScoredAt)"
+                : "lastScoredAt = :previousScoredAt") +
+              " AND (attribute_not_exists(coordinationScoreRunId) OR coordinationScoreRunId <> :run OR coordinationScoreVersion < :version)",
+            ExpressionAttributeNames: { "#status": "status" },
+            ExpressionAttributeValues: {
+              ":tenant": scope.tenantId,
+              ":event": scope.eventId,
+              ":problem": scope.problemId,
+              ":team": update.teamId,
+              ":status": update.expectedStatus,
+              ":score": update.score,
+              ":subtotal": update.coordinationSubtotal,
+              ":run": scope.runId,
+              ":version": version,
+              ":scoredAt": scoredAt,
+              ":deliveredAt": deliveredAt,
+              ...(previousScoredAt === undefined ? {} : { ":previousScoredAt": previousScoredAt }),
+              ...(update.expectedScore === undefined ? {} : { ":expected": update.expectedScore }),
+            },
+          },
+        },
+        ...update.events.map((event) => ({
+          Put: {
+            TableName: this.core.tableName,
+            Item: {
+              ...event,
+              PK: `DEPLOYMENT#${update.jobId}`,
+              SK: `EVENT#${event.occurredAt}#${ulid()}`,
+            },
+          },
+        })),
+      ],
+    });
+  }
+
+  async acknowledgeCoordinationScores(
+    scope: CoordinationStateScope,
+    version: number,
+    completedTeamIds?: readonly string[],
+    resumeAfterTeamId?: string,
+  ): Promise<void> {
+    if (completedTeamIds?.length === 0 && resumeAfterTeamId === undefined) return;
+    const paths = completedTeamIds?.map((_, index) => `#state.pendingScores.teams.#t${index}`);
+    const teamNames = Object.fromEntries(
+      completedTeamIds?.map((teamId, index) => [`#t${index}`, teamId]) ?? [],
+    );
+    const update = paths
+      ? [
+          ...(resumeAfterTeamId === undefined
+            ? []
+            : ["SET #state.pendingScores.resumeAfterTeamId = :resume"]),
+          ...(paths.length ? [`REMOVE ${paths.join(", ")}`] : []),
+        ].join(" ")
+      : "REMOVE #state.pendingScores, coordinationScoresPending, coordinationRecoveryScope";
+    try {
+      await this.core.ddb.send(
+        new UpdateCommand({
+          TableName: this.core.tableName,
+          Key: { PK: coordinationPk(scope), SK: COORD_STATE_SK },
+          UpdateExpression: update,
+          ConditionExpression: "version = :version AND coordinationScoresPending = :pending",
+          ExpressionAttributeNames: { "#state": "state", ...teamNames },
+          ExpressionAttributeValues: {
+            ":version": version,
+            ":pending": true,
+            ...(paths && resumeAfterTeamId !== undefined ? { ":resume": resumeAfterTeamId } : {}),
+          },
+        }),
+      );
+    } catch (error) {
+      if (!isConditionalCheckFailed(error)) throw error;
+    }
+  }
 
   // -- COORD#: coordination state -----------------------------------------
 
@@ -125,44 +258,62 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
     expectedVersion: number,
     at: string,
     expiresAt: number,
+    requirePendingInitialization = false,
   ): Promise<DeploymentMutationOutcome> {
-    try {
-      await this.core.ddb.send(
-        new PutCommand({
-          TableName: this.core.tableName,
-          Item: {
-            PK: coordinationPk(scope),
-            SK: COORD_STATE_SK,
-            state,
-            version: expectedVersion + 1,
-            updatedAt: at,
-            expiresAt,
+    return this.core.transactWrite({
+      TransactItems: [
+        expectedVersion === 0 &&
+        (scope.runId !== DEFAULT_COORDINATION_RUN_ID || requirePendingInitialization)
+          ? {
+              Update: {
+                TableName: this.core.tableName,
+                Key: { PK: coordinationRunPk(scope), SK: COORD_RUN_SK },
+                UpdateExpression: "REMOVE pendingInitialization, coordinationRecoveryScope",
+                ConditionExpression: requirePendingInitialization
+                  ? "runId = :run AND pendingInitialization = :initializing AND attribute_not_exists(closed)"
+                  : "runId = :run AND attribute_not_exists(closed)",
+                ExpressionAttributeValues: {
+                  ":run": scope.runId,
+                  ...(requirePendingInitialization ? { ":initializing": true } : {}),
+                },
+              },
+            }
+          : {
+              ConditionCheck: {
+                TableName: this.core.tableName,
+                Key: { PK: coordinationRunPk(scope), SK: COORD_RUN_SK },
+                ConditionExpression:
+                  scope.runId === DEFAULT_COORDINATION_RUN_ID
+                    ? "(attribute_not_exists(runId) OR runId = :run) AND attribute_not_exists(closed)"
+                    : "runId = :run AND attribute_not_exists(closed)",
+                ExpressionAttributeValues: { ":run": scope.runId },
+              },
+            },
+        {
+          Put: {
+            TableName: this.core.tableName,
+            Item: {
+              PK: coordinationPk(scope),
+              SK: COORD_STATE_SK,
+              state,
+              ...(isCoordinationStateEnvelope(state) && state.pendingScores != null
+                ? { coordinationScoresPending: true, coordinationRecoveryScope: { ...scope } }
+                : {}),
+              version: expectedVersion + 1,
+              updatedAt: at,
+              expiresAt,
+            },
+            ...(expectedVersion === 0
+              ? { ConditionExpression: "attribute_not_exists(version)" }
+              : {
+                  ConditionExpression:
+                    "version = :expected AND attribute_not_exists(coordinationScoresPending)",
+                  ExpressionAttributeValues: { ":expected": expectedVersion },
+                }),
           },
-          // [Issue #3126] The condition is split on `expectedVersion`, not the
-          // permissive `attribute_not_exists(version) OR version = :expected`
-          // it used to be. Only a first write (expectedVersion 0) may create the
-          // row; a write carrying a version read earlier must match a row that
-          // still exists.
-          //
-          // Without the split, a run reset races: an op reads state at version
-          // 3, the operator resets (deleting the row), and the op's write then
-          // satisfies `attribute_not_exists(version)` and resurrects the match
-          // the reset just ended — with the reset still reporting success. Now
-          // that write conflicts, the participant retries, and the retry
-          // re-initializes cleanly from `plugin.initialState`.
-          ...(expectedVersion === 0
-            ? { ConditionExpression: "attribute_not_exists(version)" }
-            : {
-                ConditionExpression: "version = :expected",
-                ExpressionAttributeValues: { ":expected": expectedVersion },
-              }),
-        }),
-      );
-      return { outcome: "updated" };
-    } catch (err) {
-      if (isConditionalCheckFailed(err)) return { outcome: "conflict" };
-      throw err;
-    }
+        },
+      ],
+    });
   }
 
   /**
@@ -231,15 +382,16 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
    *
    * The second delete is how an orphaned pre-#3123 row leaves the table: those
    * rows predate `expiresAt`, so DynamoDB's TTL will never reap them, and
-   * nothing reads them any more. Both deletes are unconditional — DynamoDB
-   * `DeleteItem` on an absent key succeeds — which is what makes a retried or
-   * half-finished teardown converge instead of erroring.
+   * nothing reads them any more. Absent rows still delete successfully. A pending score delivery refuses the
+   * state delete so teardown cannot discard its score/history obligation; the
+   * pointer, secret and artifacts remain reachable for recovery.
    */
   async deleteCoordinationState(scope: CoordinationStateScope): Promise<void> {
     await this.core.ddb.send(
       new DeleteCommand({
         TableName: this.core.tableName,
         Key: { PK: coordinationPk(scope), SK: COORD_STATE_SK },
+        ConditionExpression: "attribute_not_exists(coordinationScoresPending)",
       }),
     );
     await this.core.ddb.send(
@@ -279,7 +431,8 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
         new DeleteCommand({
           TableName: this.core.tableName,
           Key: { PK: coordinationPk(scope), SK: COORD_STATE_SK },
-          ConditionExpression: "version = :expected",
+          ConditionExpression:
+            "version = :expected AND attribute_not_exists(coordinationScoresPending)",
           ExpressionAttributeValues: { ":expected": expectedVersion },
         }),
       );
@@ -304,6 +457,7 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
       new GetCommand({
         TableName: this.core.tableName,
         Key: { PK: coordinationRunPk(key), SK: COORD_RUN_SK },
+        ConsistentRead: true,
       }),
     );
     const item = out.Item as Record<string, unknown> | undefined;
@@ -314,6 +468,8 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
       history: Array.isArray(item.history)
         ? item.history.filter((entry): entry is string => typeof entry === "string")
         : [],
+      ...(item.pendingInitialization === true ? { pendingInitialization: true } : {}),
+      ...(item.closed === true ? { closed: true } : {}),
     };
   }
 
@@ -334,39 +490,89 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
     expiresAt: number,
   ): Promise<DeploymentMutationOutcome> {
     const fromInitial = expectedRunId === DEFAULT_COORDINATION_RUN_ID;
-    try {
-      await this.core.ddb.send(
-        new PutCommand({
-          TableName: this.core.tableName,
-          Item: {
-            PK: coordinationRunPk(key),
-            SK: COORD_RUN_SK,
-            runId: pointer.runId,
-            startedAt: pointer.startedAt,
-            history: [...pointer.history],
-            expiresAt,
+    return this.core.transactWrite({
+      TransactItems: [
+        {
+          ConditionCheck: {
+            TableName: this.core.tableName,
+            Key: { PK: coordinationPk({ ...key, runId: expectedRunId }), SK: COORD_STATE_SK },
+            ConditionExpression: "attribute_not_exists(coordinationScoresPending)",
           },
-          ConditionExpression: fromInitial
-            ? "attribute_not_exists(runId) OR runId = :expected"
-            : "runId = :expected",
-          ExpressionAttributeValues: { ":expected": expectedRunId },
-        }),
-      );
-      return { outcome: "updated" };
-    } catch (err) {
-      if (isConditionalCheckFailed(err)) return { outcome: "conflict" };
-      throw err;
-    }
+        },
+        {
+          Put: {
+            TableName: this.core.tableName,
+            Item: {
+              PK: coordinationRunPk(key),
+              SK: COORD_RUN_SK,
+              runId: pointer.runId,
+              startedAt: pointer.startedAt,
+              history: [...pointer.history],
+              ...(pointer.pendingInitialization
+                ? {
+                    pendingInitialization: true,
+                    coordinationRecoveryScope: { ...key, runId: pointer.runId },
+                  }
+                : {}),
+              expiresAt,
+            },
+            ConditionExpression: `${fromInitial ? "(attribute_not_exists(runId) OR runId = :expected)" : "runId = :expected"} AND attribute_not_exists(pendingInitialization)`,
+            ExpressionAttributeValues: { ":expected": expectedRunId },
+          },
+        },
+      ],
+    });
   }
 
-  /** [Issue #3153] See `DeploymentsCoordinationPort.deleteCoordinationRun`. */
+  async closeCoordinationRun(
+    key: CoordinationRunKey,
+    expected: CoordinationRunPointer,
+    expectedStateVersion?: number,
+  ): Promise<DeploymentMutationOutcome> {
+    if (expectedStateVersion !== undefined && expectedStateVersion !== 0)
+      assertConditionableVersion(expectedStateVersion);
+    const runs = [...new Set([expected.runId, ...expected.history])];
+    let versionCondition = "";
+    if (expectedStateVersion === 0) versionCondition = " AND attribute_not_exists(version)";
+    else if (expectedStateVersion !== undefined) versionCondition = " AND version = :version";
+    return this.core.transactWrite({
+      TransactItems: [
+        ...runs.map((runId) => ({
+          ConditionCheck: {
+            TableName: this.core.tableName,
+            Key: { PK: coordinationPk({ ...key, runId }), SK: COORD_STATE_SK },
+            ConditionExpression: `attribute_not_exists(coordinationScoresPending)${runId === expected.runId ? versionCondition : ""}`,
+            ...(runId === expected.runId &&
+            expectedStateVersion !== undefined &&
+            expectedStateVersion !== 0
+              ? { ExpressionAttributeValues: { ":version": expectedStateVersion } }
+              : {}),
+          },
+        })),
+        {
+          Put: {
+            TableName: this.core.tableName,
+            Item: {
+              PK: coordinationRunPk(key),
+              SK: COORD_RUN_SK,
+              runId: expected.runId,
+              startedAt: expected.startedAt,
+              history: [...expected.history],
+              closed: true,
+              expiresAt: 0,
+            },
+            ConditionExpression: `${expected.runId === DEFAULT_COORDINATION_RUN_ID ? "(attribute_not_exists(runId) OR runId = :expected)" : "runId = :expected"} AND attribute_not_exists(pendingInitialization)`,
+            ExpressionAttributeValues: { ":expected": expected.runId },
+          },
+        },
+      ],
+    });
+  }
+
   async deleteCoordinationRun(key: CoordinationRunKey): Promise<void> {
-    await this.core.ddb.send(
-      new DeleteCommand({
-        TableName: this.core.tableName,
-        Key: { PK: coordinationRunPk(key), SK: COORD_RUN_SK },
-      }),
-    );
+    const expected = (await this.readCoordinationRun(key)) ?? initialCoordinationRunPointer("");
+    const result = await this.closeCoordinationRun(key, expected);
+    if (result.outcome !== "updated") throw new Error("Coordination run closure conflicted");
   }
 
   /**

@@ -1,4 +1,9 @@
 import type { SelectedBackend } from "../backend-config.js";
+import { COORDINATION_SCORE_REASONS } from "./coordination-score.js";
+import {
+  COORDINATION_ENVELOPE_MARKER,
+  type CoordinationStateEnvelope,
+} from "./coordination-state-envelope.js";
 
 /**
  * [Issue #3151] How large one coordination state row is allowed to get, and
@@ -231,7 +236,8 @@ export function budgetUsedPercent(bytes: number, budget: CoordinationStateBudget
  *
  * ## Linear because the measurement says it is
  *
- * `bytesPerTeam x teams + baseBytes` is a model, and a model the platform is
+ * `bytesPerTeam x teams + baseBytes` models the plugin state; the host's schema
+ * and pending-score envelope is reserved separately below. The model is one the platform is
  * entitled to only because the problem is asked to prove it. The Battle's own
  * suite asserts the per-team cost stays linear (a super-linear term — anything
  * cross-team — would pass at four teams and blow up at ninety-nine), so the
@@ -246,12 +252,66 @@ export interface CoordinationStateForecast {
   readonly baseBytes: number;
 }
 
-/** The state size this problem is expected to reach with `teamCount` teams. */
+/**
+ * Reserve the host-owned fields in addition to the plugin's measured state.
+ * Both exclusive and additive scoring can save every team's before/score/reason.
+ * Catalog ownership does not reveal whether the optional teamScores hook exists,
+ * so all measured coordination declarations reserve it, including legacy entries.
+ *
+ * Team IDs normally come from create.ts's ULID, but stored/imported rosters have
+ * no length bound. Use their longest serialized ID, including UTF-8 and JSON
+ * escaping, for both the map keys and the retry cursor. Count-only callers use
+ * the platform-generated ULID length; admission callers pass the actual roster.
+ */
+function hostCoordinationStateForecast(teamIds: readonly string[]): CoordinationStateForecast {
+  const teamIdBytes = teamIds.reduce(
+    (max, id) => Math.max(max, Buffer.byteLength(JSON.stringify(id), "utf8")),
+    28, // 26 ASCII ULID characters plus JSON quotes.
+  );
+  // 32 covers a finite double's 17 significant digits, sign, decimal point,
+  // exponent or fixed-notation leading zeros, for each score and schema version.
+  const numberBytes = 32;
+  const longestReason = COORDINATION_SCORE_REASONS.reduce((longest, reason) =>
+    Buffer.byteLength(JSON.stringify(reason), "utf8") >
+    Buffer.byteLength(JSON.stringify(longest), "utf8")
+      ? reason
+      : longest,
+  );
+  const scoreBytes =
+    Buffer.byteLength(JSON.stringify({ before: 0, score: 0, reason: longestReason }), "utf8") +
+    2 * (numberBytes - 1);
+  const envelope: CoordinationStateEnvelope = {
+    __tenkacloudCoordinationEnvelope: COORDINATION_ENVELOPE_MARKER,
+    stateSchemaVersion: 1,
+    state: null,
+    pendingScores: {
+      // ISO dates beyond year 9999 are longer than today's 24-byte timestamp.
+      occurredAt: "+275760-09-13T00:00:00.000Z",
+      initializing: true,
+      resumeAfterTeamId: "",
+      teams: {},
+    },
+  };
+  return {
+    // Replace the null state and empty cursor with the separate plugin forecast
+    // and longest roster ID; replace the one-digit schema version with its bound.
+    baseBytes:
+      Buffer.byteLength(JSON.stringify(envelope), "utf8") - 4 - 2 + teamIdBytes + numberBytes - 1,
+    // Quoted ID, colon, score record and comma (also reserved for the final row).
+    bytesPerTeam: teamIdBytes + 1 + scoreBytes + 1,
+  };
+}
+
+/** Worst-case stored state: declared plugin bytes plus the host's score envelope. */
 export function forecastCoordinationStateBytes(
   forecast: CoordinationStateForecast,
   teamCount: number,
+  teamIds: readonly string[] = [],
 ): number {
-  return forecast.baseBytes + forecast.bytesPerTeam * teamCount;
+  const host = hostCoordinationStateForecast(teamIds);
+  return (
+    forecast.baseBytes + host.baseBytes + (forecast.bytesPerTeam + host.bytesPerTeam) * teamCount
+  );
 }
 
 /**
@@ -264,11 +324,14 @@ export function forecastCoordinationStateBytes(
 export function maxTeamsForCoordinationBudget(
   forecast: CoordinationStateForecast,
   budget: CoordinationStateBudget,
+  teamIds: readonly string[] = [],
 ): number {
-  if (forecast.bytesPerTeam <= 0) return Number.POSITIVE_INFINITY;
-  const room = budget.maxBytes - forecast.baseBytes;
+  const host = hostCoordinationStateForecast(teamIds);
+  const bytesPerTeam = forecast.bytesPerTeam + host.bytesPerTeam;
+  if (bytesPerTeam <= 0) return Number.POSITIVE_INFINITY;
+  const room = budget.maxBytes - forecast.baseBytes - host.baseBytes;
   if (room <= 0) return 0;
-  return Math.floor(room / forecast.bytesPerTeam);
+  return Math.floor(room / bytesPerTeam);
 }
 
 export type CoordinationCapacityVerdict =
@@ -305,9 +368,10 @@ export function checkCoordinationCapacity(
   forecast: CoordinationStateForecast,
   teamCount: number,
   budget: CoordinationStateBudget,
+  teamIds: readonly string[] = [],
 ): CoordinationCapacityVerdict {
-  const forecastBytes = forecastCoordinationStateBytes(forecast, teamCount);
-  const maxTeams = maxTeamsForCoordinationBudget(forecast, budget);
+  const forecastBytes = forecastCoordinationStateBytes(forecast, teamCount, teamIds);
+  const maxTeams = maxTeamsForCoordinationBudget(forecast, budget, teamIds);
   if (forecastBytes > budget.maxBytes) return { kind: "over", forecastBytes, maxTeams, budget };
   if (forecastBytes >= budget.warnBytes) return { kind: "tight", forecastBytes, maxTeams, budget };
   return { kind: "fits", forecastBytes };

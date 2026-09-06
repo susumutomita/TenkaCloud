@@ -82,14 +82,7 @@ export async function requestTeardown(
   }
 
   const updatedAt = new Date(nowMs).toISOString();
-  const transition = await transitionTeardownToDeleting(
-    shared,
-    tenantId,
-    jobId,
-    updatedAt,
-    nowMs,
-    item,
-  );
+  const transition = await transitionTeardownToDeleting(shared, tenantId, jobId, updatedAt, nowMs);
   if (transition) return transition;
 
   // Phase 2.2 (Issue #459): delete も cross-account 化。verified=true 行が見つかった
@@ -117,6 +110,7 @@ export async function requestTeardown(
     externalIdParameterName: verified?.externalIdParameterName,
   };
   await publishTeardown(shared, tenantId, nowMs, detail);
+  await cleanupCoordinationStateAfterTeardown(shared, tenantId, item);
 
   return { kind: "accepted", previousStatus: status };
 }
@@ -137,14 +131,7 @@ async function teardownViaAdapter(
   nowMs: number,
 ): Promise<TeardownOutcome> {
   const updatedAt = new Date(nowMs).toISOString();
-  const transition = await transitionTeardownToDeleting(
-    shared,
-    tenantId,
-    jobId,
-    updatedAt,
-    nowMs,
-    item,
-  );
+  const transition = await transitionTeardownToDeleting(shared, tenantId, jobId, updatedAt, nowMs);
   if (transition) return transition;
 
   const teamSlug = slugify(String(item.teamName ?? ""));
@@ -177,6 +164,7 @@ async function teardownViaAdapter(
     engine: runtime.engine,
     namePrefix: String(item.namePrefix ?? ""),
   });
+  await cleanupCoordinationStateAfterTeardown(shared, tenantId, item);
   return { kind: "accepted", previousStatus };
 }
 
@@ -196,8 +184,6 @@ async function transitionTeardownToDeleting(
   jobId: string,
   updatedAt: string,
   nowMs: number,
-  /** [Issue #3149] The row being torn down, for the coordination cleanup below. */
-  item: Partial<DeploymentItem>,
 ): Promise<Extract<TeardownOutcome, { kind: "race" }> | undefined> {
   // Issue #1200: DELETING に遷移したタイミングで expiresAt を 7 日 retention に refresh する
   // (= teardown が成功して DELETED に最終遷移するまでに competition session TTL (8h) が
@@ -216,21 +202,13 @@ async function transitionTeardownToDeleting(
   if (outcome.outcome === "conflict") {
     return { kind: "race", reason: "tenant_or_status_mismatch" };
   }
-  // [Issue #3149] The row now carries `teardownRequestedAt`, so it can no longer
-  // submit coordination operations. If it was the last one that could, this
-  // problem's coordination state is garbage from here on and nothing else would
-  // ever remove it while the event keeps running.
-  //
-  // Placed inside this helper rather than at its two call sites so both the CFn
-  // path and the non-AWS adapter path are covered by construction — a third
-  // teardown path added later gets it without anyone remembering to.
-  await cleanupCoordinationStateAfterTeardown(shared, tenantId, item);
   return undefined;
 }
 
 /**
  * [Issue #3149] Best-effort coordination cleanup after a deployment enters
- * teardown.
+ * teardown. Run only after cloud deletion was dispatched, so a slow cleanup
+ * backend cannot strand resources behind a deployment already marked DELETING.
  *
  * Best-effort in the same sense as event teardown's own cleanup
  * (`bulk-delete.ts`): the teardown itself has already been accepted and a

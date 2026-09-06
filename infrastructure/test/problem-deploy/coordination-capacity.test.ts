@@ -37,9 +37,12 @@ const sqlBackend: Parameters<typeof coordinationStateBudget>[0] = { kind: "sql",
 const turso = coordinationStateBudget(sqlBackend);
 
 describe("forecasting a coordination row before the event runs", () => {
-  it("should extrapolate linearly from the problem's declaration", () => {
-    expect(forecastCoordinationStateBytes(forecast, 0)).toBe(AC26_BASE);
-    expect(forecastCoordinationStateBytes(forecast, 99)).toBe(AC26_BASE + AC26_PER_TEAM * 99);
+  it("should add a linear host reserve to the problem's measured declaration", () => {
+    const base = forecastCoordinationStateBytes(forecast, 0);
+    const perTeam = forecastCoordinationStateBytes(forecast, 1) - base;
+    expect(base).toBeGreaterThan(AC26_BASE);
+    expect(perTeam).toBeGreaterThan(AC26_PER_TEAM);
+    expect(forecastCoordinationStateBytes(forecast, 99)).toBe(base + perTeam * 99);
   });
 
   it("should report the team count that fits rather than only that one does not", () => {
@@ -210,6 +213,28 @@ describe("the event-creation warning", () => {
 describe("bulkDeployEvent refusing an event that cannot fit", () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it("should use stored roster IDs even when only one team is being deployed", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const nearLimit = { baseBytes: dynamodb.maxBytes - 5000, bytesPerTeam: 1000 };
+    expect(checkCoordinationCapacity(nearLimit, 4, dynamodb).kind).toBe("tight");
+    const teams = sampleTeams(4).map((team, index) => ({
+      ...team,
+      teamId: `${'旧\\"\n'.repeat(60)}${index}`,
+    }));
+    const { shared, ddbSend, eventsSend } = buildShared({
+      problemsCoordination: { "hello-world": { stateBudget: nearLimit } },
+      runtime: { ...makeTestControlDataRuntime(), coordinationStateBudget: () => dynamodb },
+    });
+    ddbSend.mockResolvedValueOnce({ Item: sampleEvent() });
+    ddbSend.mockResolvedValueOnce({ Items: teams });
+    const out = await bulkDeployEvent(shared, "tenant-acme", "EV1", NOW_MS, {
+      teamIds: [teams[0].teamId],
+    });
+    expect(out.kind).toBe("capacity_exceeded");
+    expect(eventsSend).not.toHaveBeenCalled();
+    expect(ddbSend).toHaveBeenCalledTimes(2);
+  });
+
   it("should refuse before writing a row or publishing any work", async () => {
     // The reason the check lives here and not only in the write path: a refusal
     // at this point costs nothing to recover from. Anything published would
@@ -341,13 +366,14 @@ describe("reading the declaration out of the Lambda environment", () => {
 });
 
 describe("budget arithmetic at its edges", () => {
-  it("should treat a problem that grows by nothing as fitting any event", () => {
+  it("should still reserve each team's delivery when the plugin state does not grow", () => {
     // Not reachable from a valid declaration (`bytesPerTeam` must be positive),
-    // but the function is exported and the answer has to be the safe one rather
-    // than a division by zero.
-    expect(maxTeamsForCoordinationBudget({ bytesPerTeam: 0, baseBytes: 0 }, dynamodb)).toBe(
-      Number.POSITIVE_INFINITY,
-    );
+    // but the exported helper must still account for the roster-wide host data.
+    const fixed = { bytesPerTeam: 0, baseBytes: 0 };
+    const max = maxTeamsForCoordinationBudget(fixed, dynamodb);
+    expect(Number.isFinite(max)).toBe(true);
+    expect(checkCoordinationCapacity(fixed, max, dynamodb).kind).not.toBe("over");
+    expect(checkCoordinationCapacity(fixed, max + 1, dynamodb).kind).toBe("over");
   });
 
   it("should fit zero teams when the base alone exceeds the ceiling", () => {

@@ -264,20 +264,20 @@ describe("SqlDeploymentsLifecycle error paths", () => {
     ).rejects.toThrow("database is locked");
   });
 
-  it("should fold a lost UPDATE race in markDeleted into not_found", async () => {
+  it("should report conflict when markDeleted exhausts its payload CAS attempts", async () => {
     const core = new SqlDeploymentsCore(
       scriptedExecutor({ row: payloadRow(deployment()), runChanges: 0 }),
     );
     const outcome = await new SqlDeploymentsLifecycle(core).markDeleted("j1", AT);
-    expect(outcome).toEqual({ outcome: "not_found" });
+    expect(outcome).toEqual({ outcome: "conflict" });
   });
 
-  it("should fold a lost UPDATE race in markCreateInProgress into not_found", async () => {
+  it("should report conflict when markCreateInProgress exhausts its payload CAS attempts", async () => {
     const core = new SqlDeploymentsCore(
       scriptedExecutor({ row: payloadRow(deployment()), runChanges: 0 }),
     );
     const outcome = await new SqlDeploymentsLifecycle(core).markCreateInProgress("j1", AT);
-    expect(outcome).toEqual({ outcome: "not_found" });
+    expect(outcome).toEqual({ outcome: "conflict" });
   });
 
   it("should fold a lost guarded-UPDATE race in transitionRuntimeStatus into conflict", async () => {
@@ -594,6 +594,13 @@ describe("SqlDeploymentsCoordination", () => {
       { ...COORD_SCOPE, problemId: "problem-a", runId: "run-2" },
     ];
     for (const [index, target] of targets.entries()) {
+      const currentRun = (await repo.readCoordinationRun(target))?.runId ?? "default";
+      await repo.rotateCoordinationRun(
+        target,
+        currentRun,
+        { runId: target.runId, startedAt: AT, history: [] },
+        0,
+      );
       expect(await repo.writeCoordinationState(target, { phase: index }, 0, AT, 0)).toEqual({
         outcome: "updated",
       });
@@ -724,7 +731,7 @@ describe("SqlDeploymentsCore engine branches", () => {
     ).rejects.toThrow("database is locked");
   });
 
-  it("should fold a lost withPostImage race into the onMiss outcome", async () => {
+  it("should report conflict after repeated withPostImage races", async () => {
     const core = new SqlDeploymentsCore(
       scriptedExecutor({ row: payloadRow(deployment()), allRows: [] }),
     );
@@ -735,7 +742,7 @@ describe("SqlDeploymentsCore engine branches", () => {
       onMiss: "not_found",
       withPostImage: true,
     });
-    expect(outcome).toEqual({ outcome: "not_found" });
+    expect(outcome).toEqual({ outcome: "conflict" });
   });
 });
 

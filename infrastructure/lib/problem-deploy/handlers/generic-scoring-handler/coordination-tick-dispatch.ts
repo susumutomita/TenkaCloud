@@ -23,12 +23,23 @@ export type CoordinationTickInvoker = (
 export function createLambdaTickInvoker(): CoordinationTickInvoker {
   const client = new LambdaClient({});
   return async (functionName, batch) => {
-    await client.send(
-      new InvokeCommand({
-        FunctionName: functionName,
-        InvocationType: "Event",
-        Payload: Buffer.from(JSON.stringify(batch)),
-      }),
-    );
+    // Each scope gets the dispatcher's full invocation lifetime. Bound outbound fan-out;
+    // failures remain visible and the next scoring pass retries the same scoped targets.
+    let failure: unknown;
+    for (let offset = 0; offset < batch.targets.length; offset += 4) {
+      const results = await Promise.allSettled(
+        batch.targets.slice(offset, offset + 4).map((target) =>
+          client.send(
+            new InvokeCommand({
+              FunctionName: functionName,
+              InvocationType: "Event",
+              Payload: Buffer.from(JSON.stringify({ ...batch, targets: [target] })),
+            }),
+          ),
+        ),
+      );
+      failure ??= results.find((result) => result.status === "rejected")?.reason;
+    }
+    if (failure !== undefined) throw failure;
   };
 }

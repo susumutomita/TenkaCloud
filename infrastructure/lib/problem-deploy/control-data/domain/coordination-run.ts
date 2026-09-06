@@ -59,6 +59,10 @@ export interface CoordinationRunPointer {
    * scopes.
    */
   readonly history: readonly string[];
+  /** Accepted reset still owes one durable initial state and its initial scores. */
+  readonly pendingInitialization?: true;
+  /** Teardown fenced this namespace. Only an explicit reset may start a new run. */
+  readonly closed?: true;
 }
 
 /**
@@ -142,7 +146,7 @@ export function rotateCoordinationRunPointer(
   // exist at all, so a limit of 3 keeps the new run plus the two before it.
   const kept = history.slice(0, Math.max(historyLimit - 1, 0));
   return {
-    pointer: { runId: nextRunId, startedAt, history: kept },
+    pointer: { runId: nextRunId, startedAt, history: kept, pendingInitialization: true },
     retired: history.slice(kept.length),
   };
 }

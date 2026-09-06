@@ -9,6 +9,7 @@ import {
   initialCoordinationRunPointer,
   rotateCoordinationRunPointer,
 } from "../../control-data/domain/coordination-run.js";
+import { isCoordinationStateEnvelope } from "../../control-data/domain/coordination-state-envelope.js";
 import { logDeployTrace } from "./trace-log.js";
 
 /**
@@ -25,7 +26,7 @@ import { logDeployTrace } from "./trace-log.js";
  * A TTL cannot be made safe by being longer, only by being refreshed, and
  * refreshing on read means a write on every request. So the pointer's lifecycle
  * is explicit instead: event teardown and the last-deployment cleanup (#3149)
- * both delete it, and the number of pointers is bounded by the number of
+ * both close it, and the number of pointers is bounded by the number of
  * `(event, problem)` pairs ever deployed rather than growing with play.
  *
  * Zero is the "never expires" value both backends already understand — the
@@ -76,6 +77,15 @@ export async function resolveCurrentCoordinationRunId(
   return pointer?.runId ?? initialCoordinationRunPointer("").runId;
 }
 
+/** Read the current run for work that must not enter a torn-down namespace. */
+export async function resolvePlayableCoordinationRunId(
+  repository: DeploymentsCoordinationPort,
+  key: CoordinationRunKey,
+): Promise<string | undefined> {
+  const pointer = (await repository.readCoordinationRun(key)) ?? initialCoordinationRunPointer("");
+  return pointer.closed ? undefined : pointer.runId;
+}
+
 export type StartCoordinationRunOutcome =
   | {
       readonly kind: "started";
@@ -85,8 +95,8 @@ export type StartCoordinationRunOutcome =
       readonly retired: readonly string[];
     }
   /**
-   * Another rotation won. The caller re-reads to see which run is current
-   * rather than assuming its own.
+   * Another rotation won, or the current run still has score deliveries to
+   * finish. The caller retries after delivery recovery and re-reading the run.
    */
   | { readonly kind: "conflict" };
 
@@ -96,8 +106,8 @@ export type StartCoordinationRunOutcome =
  * ## Order of operations, and why
  *
  *   1. read the current pointer
- *   2. compute the next pointer and what the retention window pushes out
- *   3. write the pointer, conditional on the run it replaces
+ *   2. reject a current run whose saved score delivery is still pending
+ *   3. write the next pointer, conditional on the run it replaces and no pending scores
  *   4. only then delete the runs that fell out of the window
  *
  * Step 4 comes last because a rotation that loses its race must delete nothing.
@@ -105,11 +115,9 @@ export type StartCoordinationRunOutcome =
  * winner is still keeping, and the loser would have done it while being told it
  * did not start a run at all.
  *
- * The new run's namespace is not created here. It does not need to be: an
- * absent state row IS an uninitialized match, and the first operation
- * materializes it from `plugin.initialState` exactly as the old delete-based
- * reset did. What has changed is that the previous match's state and artifacts
- * are still there afterwards, under a namespace nothing writes to any more.
+ * The pointer durably reserves initialization by the dispatcher, even when
+ * the event ends before the next tick. The first state write consumes that
+ * obligation atomically; an absent state after TTL is not another reset.
  */
 export async function startCoordinationRun(
   deps: CoordinationRunDeps,
@@ -119,6 +127,17 @@ export async function startCoordinationRun(
 ): Promise<StartCoordinationRunOutcome> {
   const current: CoordinationRunPointer =
     (await deps.repository.readCoordinationRun(key)) ?? initialCoordinationRunPointer(nowIso);
+  if (current.pendingInitialization) return { kind: "conflict" };
+  const existing = await deps.repository.readCoordinationState(
+    coordinationScopeForRun(key, current.runId),
+  );
+  // Moving the pointer would leave this delivery outside the op/tick recovery
+  // path. Keep the old run current until its saved scores and history finish.
+  // The adapter repeats this check atomically with the rotation to cover an op
+  // saving a new delivery after this read.
+  if (isCoordinationStateEnvelope(existing?.state) && existing.state.pendingScores != null) {
+    return { kind: "conflict" };
+  }
   const rotation = rotateCoordinationRunPointer(
     current,
     newRunId,
@@ -183,27 +202,53 @@ async function retireCoordinationRuns(
 }
 
 /**
- * Removes every run of a problem — current, history, and the pointer itself.
+ * Removes every run of a problem, leaving a non-expiring closed pointer.
  *
  * For when the problem goes rather than the match: event teardown, or the last
- * deployment being torn down. The pointer is deleted LAST so a failure part way
- * through leaves a pointer naming runs that still exist, rather than orphaned
- * runs nothing names. Retrying then converges; the other order would strand
- * data no path could reach.
+ * deployment being torn down. Closure and the absence of retained score
+ * deliveries are checked atomically BEFORE any state or artifact is deleted.
+ * A queued tick either saves its delivery first (closure conflicts), or loses
+ * its active-run write guard. Keeping the pointer prevents default-run fallback
+ * after deletion. A partial artifact failure can retry the same closed scope.
  */
+export class CoordinationRunCloseConflict extends Error {
+  constructor() {
+    super("Coordination run closure conflicted or score delivery is pending");
+    this.name = "CoordinationRunCloseConflict";
+  }
+}
+
 export async function deleteAllCoordinationRuns(
   deps: CoordinationRunDeps,
   key: CoordinationRunKey,
+  expectedCurrent?: { readonly runId: string; readonly version?: number },
 ): Promise<readonly string[]> {
-  const pointer = await deps.repository.readCoordinationRun(key);
-  const runs = pointer
-    ? [pointer.runId, ...pointer.history]
-    : [initialCoordinationRunPointer("").runId];
+  const pointer =
+    (await deps.repository.readCoordinationRun(key)) ?? initialCoordinationRunPointer("");
+  if (expectedCurrent && expectedCurrent.runId !== pointer.runId) {
+    throw new CoordinationRunCloseConflict();
+  }
+  if (pointer.pendingInitialization) {
+    throw new Error("Coordination run initialization is pending");
+  }
+  const runs = [pointer.runId, ...pointer.history];
+  // Teardown may release cloud resources immediately, but the saved score/history
+  // obligation must stay reachable until delivery succeeds. Inspect all retained
+  // runs before deleting any; the adapters repeat this guard at the delete itself.
+  for (const runId of runs) {
+    const existing = await deps.repository.readCoordinationState(
+      coordinationScopeForRun(key, runId),
+    );
+    if (isCoordinationStateEnvelope(existing?.state) && existing.state.pendingScores != null) {
+      throw new Error("Coordination score delivery is pending");
+    }
+  }
+  const closed = await deps.repository.closeCoordinationRun(key, pointer, expectedCurrent?.version);
+  if (closed.outcome !== "updated") throw new CoordinationRunCloseConflict();
   for (const runId of runs) {
     const scope = coordinationScopeForRun(key, runId);
     await deps.repository.deleteCoordinationState(scope);
     await deps.artifacts?.deleteScope(scope);
   }
-  await deps.repository.deleteCoordinationRun(key);
   return runs;
 }

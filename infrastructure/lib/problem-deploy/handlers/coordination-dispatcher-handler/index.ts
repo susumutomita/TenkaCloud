@@ -15,7 +15,6 @@ import {
   handleCoordinationOp,
   handleCoordinationProjection,
   makeCoordinationScopeResolver,
-  makeCoordinationScorePublisher,
   parseCoordinationConfig,
 } from "../participant-handler/coordination-handler.js";
 import type { PluginImporter } from "../participant-handler/coordination-plugin-loader.js";
@@ -29,6 +28,10 @@ import { CoordinationOpBodySchema } from "../participant-handler/schemas.js";
 import { buildParticipantSharedResources } from "../participant-handler/shared.js";
 import { RATE_LIMITS } from "../shared/rate-limiter.js";
 import { secureApiHeaders } from "../shared/secure-headers.js";
+import {
+  createScoreDeliveryControlDataRuntime,
+  createScoreDeliveryDdbClient,
+} from "./coordination-backends.js";
 import { defaultS3PluginImporter } from "./s3-plugin-importer.js";
 
 /**
@@ -45,7 +48,7 @@ import { defaultS3PluginImporter } from "./s3-plugin-importer.js";
  * synth-bundle 済み .mjs を materialize → `import()` する。未配線
  * (= bucket env 空) なら reject し、 load 不可 → `unavailable` / fallback で participant API を壊さない。
  */
-// One control-data runtime is shared for the Lambda instance lifetime (#2527).
+// Scope lookup and participant state reads/writes retain their normal backend settings.
 const shared = buildParticipantSharedResources(createDefaultControlDataRuntime());
 
 const pluginBucket = process.env.COORDINATION_PLUGIN_BUCKET ?? "";
@@ -71,13 +74,24 @@ const coordinationArtifacts: CoordinationArtifactStore = artifactBucket
 
 const coordinationDeps: CoordinationHandlerDeps = {
   importer: coordinationImporter,
-  store: { runtime: shared.runtime, ddb: shared.ddb, tableName: shared.tableName },
+  store: {
+    runtime: shared.runtime,
+    ddb: shared.ddb,
+    tableName: shared.tableName,
+    // Only this saved, idempotent delivery can safely time out and retry next tick.
+    scoreDelivery: {
+      runtime: createScoreDeliveryControlDataRuntime(),
+      ddb: createScoreDeliveryDdbClient(),
+      tableName: shared.tableName,
+    },
+    coordinationScoreModes: Object.fromEntries(
+      Object.entries(coordinationConfig).map(([id, entry]) => [
+        id,
+        entry.scoreMode === "exclusive" ? "exclusive" : "additive",
+      ]),
+    ),
+  },
   resolveScope: makeCoordinationScopeResolver(shared, coordinationConfig),
-  // [Issue #659] A coordination Battle judges its own scoring, and nothing used
-  // to carry that figure to the scoreboard — the portal showed 0 for a team an
-  // hour into a match. The dispatcher already has write access to this table,
-  // so it copies the plugin's scores across without new IAM or a new path.
-  publishScores: makeCoordinationScorePublisher(shared),
   artifacts: coordinationArtifacts,
 };
 

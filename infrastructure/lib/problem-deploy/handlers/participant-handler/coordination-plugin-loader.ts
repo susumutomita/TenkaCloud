@@ -263,6 +263,7 @@ export async function loadAndProjectCoordinationForTeam(
     readonly scope: CoordinationStateScope;
     readonly teamId: string;
     readonly ctx: CoordinationContext;
+    readonly rosterIncomplete?: true;
     readonly fallbackProjection: unknown;
   },
 ): Promise<CoordinationProjectionOutcome> {

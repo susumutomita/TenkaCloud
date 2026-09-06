@@ -74,24 +74,27 @@ export class SqlDeploymentsLifecycle implements DeploymentsLifecyclePort {
 
   /**
    * [Issue #2441 / Phase B PR-6] DeployDelete SFN `MarkDeleted`. Unlike
-   * {@link mutateCreateStatusWrite} (which only touches status/updated_at/payload),
+   * {@link mutateCreateStatusWrite} (which preserves the credential),
    * this also clears `login_key_hash` — the SQL equivalent of DDB's `REMOVE
    * GSI2PK, GSI2SK` — by deleting `teamLoginKey` from the in-memory record before
    * a full-row rewrite (`DEPLOYMENT_UPDATE_SET`), so a deleted deployment no
    * longer resolves via `listByTeamLoginKey`.
    */
   async markDeleted(jobId: string, at: string): Promise<DeploymentMutationOutcome> {
-    const row = await this.core.getDeploymentRow(jobId);
-    if (!row) return { outcome: "not_found" };
-    const record = deploymentFromPayload(row.payload) as MutableDeploymentRecord;
-    record.status = "DELETED";
-    record.updatedAt = at;
-    delete (record as Record<string, unknown>).teamLoginKey;
-    const result = await this.core.sql.run(
-      `UPDATE deployments SET ${DEPLOYMENT_UPDATE_SET} WHERE job_id = ?`,
-      [...deploymentUpdateParams(record), jobId],
-    );
-    return Number(result.changes) > 0 ? { outcome: "updated" } : { outcome: "not_found" };
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const row = await this.core.getDeploymentRow(jobId);
+      if (!row) return { outcome: "not_found" };
+      const record = deploymentFromPayload(row.payload) as MutableDeploymentRecord;
+      record.status = "DELETED";
+      record.updatedAt = at;
+      delete (record as Record<string, unknown>).teamLoginKey;
+      const result = await this.core.sql.run(
+        `UPDATE deployments SET ${DEPLOYMENT_UPDATE_SET} WHERE job_id = ? AND payload = ?`,
+        [...deploymentUpdateParams(record), jobId, String(row.payload)],
+      );
+      if (Number(result.changes) > 0) return { outcome: "updated" };
+    }
+    return { outcome: "conflict" };
   }
 
   async markFailedIfPending(

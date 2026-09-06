@@ -1,5 +1,11 @@
 import { ConditionalCheckFailedException } from "@aws-sdk/client-dynamodb";
-import { GetCommand, PutCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import {
+  GetCommand,
+  PutCommand,
+  QueryCommand,
+  TransactWriteCommand,
+  UpdateCommand,
+} from "@aws-sdk/lib-dynamodb";
 import type { CoordinationPlugin } from "@tenkacloud/coordination-plugin-sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { coordinationStateExpiresAt } from "../../lib/problem-deploy/control-data/domain/coordination-scope.js";
@@ -13,6 +19,7 @@ import {
   parseCoordinationTickBatch,
 } from "../../lib/problem-deploy/handlers/participant-handler/coordination-tick.js";
 import type { CoordinationTickBatch } from "../../lib/problem-deploy/handlers/shared/coordination-tick-contract.js";
+import { evalConditionExpression } from "./control-data/control-data-write.test-helpers.js";
 import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers.js";
 
 /**
@@ -156,6 +163,36 @@ function fakeDdb(opts: {
     return {};
   };
 
+  const handleTransaction = (cmd: TransactWriteCommand) => {
+    const entries = cmd.input.TransactItems ?? [];
+    const reasons = entries.map((entry) => {
+      const operation = entry.ConditionCheck ?? entry.Put;
+      if (!operation) throw new Error("unexpected transaction operation");
+      const stored = entry.ConditionCheck ? opts.runPointer : opts.getItem;
+      const valid =
+        !(entry.Put && opts.conflict) &&
+        evalConditionExpression(
+          operation.ConditionExpression ?? "",
+          stored ?? {},
+          operation.ExpressionAttributeNames,
+          operation.ExpressionAttributeValues,
+        );
+      return { Code: valid ? "None" : "ConditionalCheckFailed" };
+    });
+    // Validate every condition before recording any Put, like DynamoDB's
+    // all-or-nothing active-run and state-version transaction.
+    if (reasons.some((reason) => reason.Code === "ConditionalCheckFailed")) {
+      throw Object.assign(new Error("transaction conflict"), {
+        name: "TransactionCanceledException",
+        CancellationReasons: reasons,
+      });
+    }
+    for (const entry of entries) {
+      if (entry.Put) handlePut(new PutCommand(entry.Put));
+    }
+    return {};
+  };
+
   // [Issue #3123] The TTL refresh. Recorded rather than folded into `puts`:
   // the distinction the tests care about is exactly that it is not a write of
   // `state`/`version`.
@@ -176,6 +213,7 @@ function fakeDdb(opts: {
   const send = vi.fn(async (cmd: unknown) => {
     if (cmd instanceof GetCommand) return handleGet(cmd);
     if (cmd instanceof PutCommand) return handlePut(cmd);
+    if (cmd instanceof TransactWriteCommand) return handleTransaction(cmd);
     if (cmd instanceof UpdateCommand) return handleUpdate(cmd);
     if (cmd instanceof QueryCommand) return handleQuery(cmd);
     throw new Error("unexpected command");
@@ -396,23 +434,17 @@ describe("handleCoordinationTickBatch", () => {
   });
 
   it("should isolate a per-target failure and keep ticking the rest", async () => {
-    const puts: string[] = [];
+    const ddb = fakeDdb({ getItem: { state: { phase: "open" }, version: 1 } });
     const send = vi.fn(async (cmd: unknown) => {
       if (cmd instanceof GetCommand) {
         const key = (cmd.input as { Key: { PK: string } }).Key.PK;
         if (key === "COORD#t1#e1#cap#default") throw new Error("get boom");
-        return { Item: { state: { phase: "open" }, version: 0 } };
       }
-      if (cmd instanceof PutCommand) {
-        puts.push((cmd.input as { Item: { PK: string } }).Item.PK);
-        return {};
-      }
-      throw new Error("unexpected");
+      return ddb.send(cmd);
     });
     const store: CoordinationStoreDeps = {
-      runtime: makeTestControlDataRuntime(),
+      ...ddb.store,
       ddb: { send } as never,
-      tableName: "Deployments",
     };
     const res = await handleCoordinationTickBatch(
       depsWith(importerOf(windowPlugin), store),
@@ -420,7 +452,7 @@ describe("handleCoordinationTickBatch", () => {
     );
     expect(res.ticked).toBe(2);
     expect(res.written).toBe(1);
-    expect(puts).toEqual(["COORD#t1#e2#cap#default"]);
+    expect(ddb.puts.map((put) => put.PK)).toEqual(["COORD#t1#e2#cap#default"]);
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining("tick failed event=e1"),
       expect.anything(),
@@ -820,7 +852,7 @@ describe("the tick materialises the roster the op path would (#3187)", () => {
     });
   });
 
-  it("should still initialise from the scoring pass's ids, unnamed, when the roster query fails", async () => {
+  it("should defer initialization when the full roster query fails", async () => {
     const ddb = fakeDdb({ getItem: undefined, rosterThrows: true });
 
     const res = await handleCoordinationTickBatch(
@@ -828,17 +860,12 @@ describe("the tick materialises the roster the op path would (#3187)", () => {
       batch([capTarget({ teamIds: ["team-b", "team-a"] })]),
     );
 
-    // Same degradation as the op path: the match starts on what the host
-    // already knew rather than not starting. Not silently, though -- ids
-    // alone is exactly what the live symptom looked like.
-    expect(res).toEqual({ ticked: 1, written: 1 });
-    expect(persistedTeams(ddb)).toEqual([
-      { id: "team-a", name: undefined },
-      { id: "team-b", name: undefined },
-    ]);
+    expect(res).toEqual({ ticked: 1, written: 0 });
+    expect(ddb.puts).toHaveLength(0);
+    expect(persistedTeams(ddb)).toBeUndefined();
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining("roster query failed"),
-      expect.objectContaining({ eventId: "e1", problemId: "cap", message: "roster boom" }),
+      expect.stringContaining("tick failed event=e1"),
+      expect.objectContaining({ message: "roster boom" }),
     );
   });
 

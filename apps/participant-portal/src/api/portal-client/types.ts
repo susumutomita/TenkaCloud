@@ -64,7 +64,8 @@ export type AssumeRoleStage = "competitor" | "participant_viewer";
 export interface ScoreEventView {
   readonly jobId: string;
   readonly problemId: string;
-  readonly source: "uptime" | "flag" | "flag-wrong" | "hint" | "gate-bonus";
+  readonly source: "uptime" | "flag" | "flag-wrong" | "hint" | "gate-bonus" | "coordination";
+  readonly reason?: string;
   readonly points: number;
   readonly result: "ok" | "wrong";
   readonly occurredAt: string;
@@ -85,7 +86,8 @@ export interface ScoreEventsResponse {
 export interface TeamScoreEventView {
   readonly jobId: string;
   readonly problemId: string;
-  readonly source: "uptime" | "flag" | "flag-wrong" | "hint" | "gate-bonus";
+  readonly source: "uptime" | "flag" | "flag-wrong" | "hint" | "gate-bonus" | "coordination";
+  readonly reason?: string;
   readonly points: number;
   readonly result: "ok" | "wrong";
   readonly occurredAt: string;

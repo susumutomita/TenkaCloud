@@ -6,6 +6,8 @@ import {
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { SqlDeploymentsRepository } from "../../lib/problem-deploy/control-data/sql-deployments-repository.js";
+import { makeSqliteExecutor } from "./control-data/control-data-write.test-helpers.js";
 import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 /**
@@ -37,6 +39,7 @@ const mocks = vi.hoisted(() => ({
   runPhasedPollingKind: vi.fn(),
   runAttackDetectionKind: vi.fn(),
   coordinationCollect: vi.fn(),
+  coordinationCollectRecovery: vi.fn(),
   coordinationRun: vi.fn(),
   createCoordinationTickPass: vi.fn(),
 }));
@@ -216,6 +219,7 @@ beforeEach(() => {
   mocks.coordinationCollect.mockReturnValue(undefined);
   mocks.createCoordinationTickPass.mockReturnValue({
     collect: mocks.coordinationCollect,
+    collectRecovery: mocks.coordinationCollectRecovery,
     run: mocks.coordinationRun,
   });
   shared = {
@@ -235,6 +239,78 @@ afterEach(() => {
 });
 
 describe("handler scan loop", () => {
+  it("runs already-collected coordination targets while preserving a SQL recovery query rejection", async () => {
+    const sql = makeSqliteExecutor();
+    const repository = new SqlDeploymentsRepository(sql);
+    const complete = {
+      ...baseItem(),
+      teamName: "Team 1",
+      teamLoginKey: "fixture-key",
+      namePrefix: "fixture-team",
+      awsAccountId: "123456789012",
+      region: "ap-northeast-1",
+      createdAt: "2026-09-06T00:00:00Z",
+      updatedAt: "2026-09-06T00:00:00Z",
+    };
+    await repository.putDeployment(complete);
+    const failure = new Error("SQL recovery query unavailable");
+    const all = sql.all.bind(sql);
+    const select = vi.spyOn(sql, "all").mockImplementation((query, params) => {
+      // Leave the COMPLETE query and its actual callback intact; fail only the added recovery query.
+      if (query.includes("FROM coordination_state_scoped")) return Promise.reject(failure);
+      return all(query, params);
+    });
+    shared.runtime = {
+      ...makeTestControlDataRuntime(),
+      resolveDeploymentsRepository: async () => repository,
+    };
+    try {
+      await expect(handler()).rejects.toBe(failure);
+      expect(mocks.coordinationCollect).toHaveBeenCalledWith(
+        [expect.objectContaining({ jobId: complete.jobId, status: "COMPLETE" })],
+        expect.any(String),
+      );
+      expect(
+        select.mock.calls.some(([query]) => query.includes("FROM coordination_state_scoped")),
+      ).toBe(true);
+      expect(mocks.coordinationCollectRecovery).not.toHaveBeenCalled();
+      expect(mocks.coordinationRun).toHaveBeenCalledOnce();
+      expect(mocks.coordinationRun.mock.invocationCallOrder[0]).toBeGreaterThan(
+        mocks.coordinationCollect.mock.invocationCallOrder[0] ?? 0,
+      );
+      expect(mocks.reconcileEventStatuses).toHaveBeenCalledOnce();
+      expect(mocks.reconcileRuntimeStatuses).toHaveBeenCalledOnce();
+    } finally {
+      select.mockRestore();
+    }
+  });
+
+  it("routes pending host scopes separately from COMPLETE deployments in the same scan", async () => {
+    const scope = { tenantId: "t1", eventId: "ev1", problemId: "p1", runId: "run1" };
+    cfg.scanPages = [
+      {
+        Items: [
+          baseItem(),
+          {
+            PK: "COORD#t1#ev1#p1#run1",
+            SK: "STATE",
+            coordinationScoresPending: true,
+            coordinationRecoveryScope: scope,
+            state: { secret: "must-not-be-dispatched" },
+          },
+        ],
+      },
+    ];
+    await handler();
+    expect(mocks.coordinationCollect).toHaveBeenCalledWith(
+      [expect.objectContaining({ jobId: baseItem().jobId })],
+      expect.any(String),
+    );
+    expect(mocks.coordinationCollectRecovery).toHaveBeenCalledWith([scope]);
+    expect(mocks.coordinationRun).toHaveBeenCalledOnce();
+    expect(ddb.send.mock.calls.filter((c) => c[0] instanceof ScanCommand)).toHaveLength(1);
+  });
+
   it("should page through the scan until LastEvaluatedKey is empty and await reconcile", async () => {
     cfg.scanPages = [
       { Items: [], LastEvaluatedKey: { PK: "x" } },

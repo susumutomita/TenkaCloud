@@ -1,3 +1,4 @@
+import type { CoordinationScoreUpdate } from "./coordination-score.js";
 /**
  * [Issue #2527 Slice 1] Deployments aggregate — the repository port.
  *
@@ -46,7 +47,10 @@ export interface DeploymentsQueryPort {
    * Sites: `deploy-handler/{retry,delete,list,stack-progress}` + composite
    * `getRawRow`. The tenant / status guards stay in the caller (raw read).
    */
-  getDeployment(jobId: string): Promise<DeploymentRecord | undefined>;
+  getDeployment(
+    jobId: string,
+    options?: { readonly consistentRead?: boolean },
+  ): Promise<DeploymentRecord | undefined>;
 
   /**
    * META read via `Query` (`PK = :pk AND SK = :sk`) — the ONE site
@@ -187,15 +191,14 @@ export interface DeploymentsQueryPort {
   // relocation of the named pre-seam site.
 
   /**
-   * Every `status=COMPLETE` deployment, optionally scoped to one `eventId`
-   * (`FilterExpression` `#status = :complete [AND eventId = :eventId]`,
-   * `Limit=200`). Site: `generic-scoring-handler/index.ts` (the scoring-tick
-   * dispatch scan). `eventId === undefined` runs the unscoped (global tick)
-   * variant; the caller's own `eventId` equality re-check (confused-deputy
-   * guard for mocks / malformed rows) stays in the caller.
+   * Every `status=COMPLETE` deployment. Scoring may also request the scopes of
+   * unfinished coordination score deliveries / run initializations, even after
+   * cloud teardown. Recovery scopes are delivered separately: host state and
+   * secrets never enter the deployment scorer. DynamoDB uses the same scan.
    */
   forEachCompleteDeploymentPage(
     onPage: (items: readonly DeploymentRecord[]) => Promise<void>,
+    onCoordinationRecoveryPage?: (scopes: readonly CoordinationStateScope[]) => Promise<void>,
   ): Promise<void>;
 
   /**
@@ -572,6 +575,20 @@ export interface DeploymentsCoordinationPort {
    * same event happened to read first. See {@link
    * PRE_SCOPE_COORDINATION_NAMESPACE}.
    */
+  /** Atomically publishes one team's score and history; stale deliveries cannot overwrite newer runs/versions. */
+  publishCoordinationScore(
+    scope: CoordinationStateScope,
+    version: number,
+    update: CoordinationScoreUpdate,
+  ): Promise<DeploymentMutationOutcome>;
+  /** Clear the durable delivery only after every team has committed; preserves the state version. */
+  acknowledgeCoordinationScores(
+    scope: CoordinationStateScope,
+    version: number,
+    completedTeamIds?: readonly string[],
+    resumeAfterTeamId?: string,
+  ): Promise<void>;
+
   readCoordinationState(
     scope: CoordinationStateScope,
   ): Promise<CoordinationStateRecord | undefined>;
@@ -588,6 +605,9 @@ export interface DeploymentsCoordinationPort {
    * coordinationStateExpiresAt}) — a retention backstop for a cleanup that
    * never ran, refreshed by every write so it only starts counting once a
    * match stops being played.
+   * The initial write consumes a reset's pending initialization atomically.
+   * `requirePendingInitialization` additionally requires that intent in the
+   * transaction, preventing ended recovery from recreating expired state.
    */
   writeCoordinationState(
     scope: CoordinationStateScope,
@@ -595,6 +615,7 @@ export interface DeploymentsCoordinationPort {
     expectedVersion: number,
     at: string,
     expiresAt: number,
+    requirePendingInitialization?: boolean,
   ): Promise<DeploymentMutationOutcome>;
 
   /**
@@ -744,13 +765,20 @@ export interface DeploymentsCoordinationPort {
   ): Promise<DeploymentMutationOutcome>;
 
   /**
-   * [Issue #3153] Removes the run pointer for a `(tenant, event, problem)`.
-   *
-   * Called when the problem itself goes — event teardown, or the last
-   * deployment being torn down. Leaving it would make a re-deployed problem
-   * resume the retired match's run id, and with it that run's tombstoned
-   * artifact prefix.
+   * Fence every state write before teardown. Atomically checks the expected
+   * current run, no pending initialization, and no pending score deliveries
+   * in any retained run, then leaves a non-expiring closed pointer. An optional
+   * current state version preserves last-deployment cleanup's lost-update guard
+   * (zero requires state absence).
+   * A conflict must delete nothing. Re-closing the same run is idempotent.
    */
+  closeCoordinationRun(
+    key: CoordinationRunKey,
+    expected: CoordinationRunPointer,
+    expectedStateVersion?: number,
+  ): Promise<DeploymentMutationOutcome>;
+
+  /** Legacy pointer removal also preserves the closed fence against default-run fallback. */
   deleteCoordinationRun(key: CoordinationRunKey): Promise<void>;
 
   /**

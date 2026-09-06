@@ -1,6 +1,6 @@
-import { runTick } from "@tenkacloud/coordination-plugin-sdk";
+import { type CoordinationPlugin, runTick } from "@tenkacloud/coordination-plugin-sdk";
 import { z } from "zod";
-import { resolveCurrentCoordinationRunId } from "../shared/coordination-run.js";
+import { resolvePlayableCoordinationRunId } from "../shared/coordination-run.js";
 import {
   COORDINATION_TICK_ACTION,
   type CoordinationTickBatch,
@@ -9,6 +9,12 @@ import {
 import type { CoordinationConfig } from "./coordination-handler.js";
 import { loadCoordinationPlugin, type PluginImporter } from "./coordination-plugin-loader.js";
 import { resolveEventRoster } from "./coordination-roster.js";
+import {
+  COORDINATION_SCORE_DELIVERY_BUDGET_MS,
+  coordinationScoreDelivery,
+  deliverCoordinationScores,
+  tryDeliverCoordinationScores,
+} from "./coordination-scoring.js";
 import { pluginStateSchemaVersion, reconcileStateSchema } from "./coordination-state-schema.js";
 import {
   type CoordinationStateScope,
@@ -28,7 +34,7 @@ import { resolveDeploymentsRepository } from "./shared.js";
  * 資格情報分離を守るため、 pack-author 由来の plugin の `runTick` 実行は op 経路
  * (`applyOp`) と同じ最小 IAM の dispatcher 内に閉じる (= 採点 Lambda の ssm/kms と同居させない)。
  * dispatcher は既に (a) plugin bundle の importer (materialize) と (b) coordination
- * shared row への Get/Put grant を持つので、 tick はそれらを **そのまま再利用** する (= 追加 IAM ゼロ)。
+ * shared row の権限を持つ。得点配信の GSI1 Query / transaction の権限は dispatcher construct で限定する。
  *
  * 副作用 (DDB read/write) は {@link CoordinationTickDeps} 越しに注入し、 意味論 (initialState / tick) は
  * 問題同梱 plugin に委譲する。 op 経路 {@link dispatchCoordinationOp} と同じ「read → 純関数 → 楽観 write」
@@ -58,6 +64,8 @@ const TickTargetSchema = z.object({
   moduleRef: z.string().min(1),
   eventNowMs: z.number().finite(),
   teamIds: z.array(z.string()).default([]),
+  drainOnly: z.boolean().optional(),
+  initializeRunId: z.string().min(1).optional(),
 });
 const TickBatchSchema = z.object({
   action: z.literal(COORDINATION_TICK_ACTION),
@@ -83,8 +91,17 @@ export async function handleCoordinationTickBatch(
   batch: CoordinationTickBatch,
 ): Promise<CoordinationTickBatchResult> {
   let written = 0;
+  const scoreBudgetMs = COORDINATION_SCORE_DELIVERY_BUDGET_MS;
   for (const target of batch.targets) {
-    const didWrite = await tickCoordinationEvent(deps, target, batch.nowIso).catch((err) => {
+    let work: Promise<boolean>;
+    if (target.initializeRunId) {
+      work = initializeAcceptedCoordinationReset(deps, target, batch.nowIso);
+    } else if (target.drainOnly) {
+      work = drainSavedCoordinationScores(deps, target).then(() => false);
+    } else {
+      work = tickCoordinationEvent(deps, target, batch.nowIso, scoreBudgetMs);
+    }
+    const didWrite = await work.catch((err) => {
       console.warn(`[coordination-dispatcher] tick failed event=${target.eventId}`, {
         message: err instanceof Error ? err.message : String(err),
       });
@@ -95,6 +112,95 @@ export async function handleCoordinationTickBatch(
   return { ticked: batch.targets.length, written };
 }
 
+/** Only an explicit, still-pending reset may materialize a state after event end. */
+async function initializeAcceptedCoordinationReset(
+  deps: CoordinationTickDeps,
+  target: CoordinationTickTarget,
+  nowIso: string,
+): Promise<boolean> {
+  if (!deps.config[target.moduleRef]) return false;
+  const repository = await resolveDeploymentsRepository(deps.store);
+  const key = { tenantId: target.tenantId, eventId: target.eventId, problemId: target.moduleRef };
+  const pointer = await repository.readCoordinationRun(key);
+  if (
+    pointer?.closed ||
+    !pointer?.pendingInitialization ||
+    pointer.runId !== target.initializeRunId
+  )
+    return false;
+  const scope = { ...key, runId: pointer.runId };
+  if (await readCoordinationState(deps.store, scope)) {
+    // A normal first writer may have won since the pointer read. Never replace its state.
+    return false;
+  }
+  const load = await loadCoordinationPlugin(deps.importer, target.moduleRef);
+  if (load.kind !== "ok") throw new Error(`Reset initialization plugin ${load.kind}`);
+  const roster = await resolveEventRoster(deps.store, {
+    ...key,
+    knownTeamIds: target.teamIds,
+    requireComplete: true,
+  });
+  if (!roster.teamIds.length) throw new Error("Reset initialization has no deployment roster");
+  const state = load.plugin.initialState({
+    eventId: target.eventId,
+    teamIds: roster.teamIds,
+    teamNames: roster.teamNames,
+    matchSecret: await ensureCoordinationMatchSecret(deps.store, scope, nowIso),
+  });
+  const pendingScores = coordinationScoreDelivery(
+    load.plugin,
+    state,
+    state,
+    { kind: "tick" },
+    pointer.startedAt,
+    true,
+  );
+  // Even plugins without teamScores need a durable state to consume the intent.
+  // The same transaction checks the intent, creates version 1, and clears it.
+  const written = await writeCoordinationState(
+    deps.store,
+    scope,
+    state,
+    0,
+    nowIso,
+    pluginStateSchemaVersion(load.schema),
+    pendingScores,
+    true,
+  );
+  if (written.kind !== "ok") {
+    console.warn(`[coordination-dispatcher] reset initialization ${written.kind}`, key);
+    return false;
+  }
+  await tryDeliverCoordinationScores(deps.store, scope, { state, version: 1, pendingScores });
+  return true;
+}
+
+/** A finished event may flush durable scoring, but must not load/advance the plugin or extend TTL. */
+async function drainSavedCoordinationScores(
+  deps: CoordinationTickDeps,
+  target: CoordinationTickTarget,
+): Promise<void> {
+  if (!deps.config[target.moduleRef]) return;
+  const repository = await resolveDeploymentsRepository(deps.store);
+  const key = { tenantId: target.tenantId, eventId: target.eventId, problemId: target.moduleRef };
+  const runId = await resolvePlayableCoordinationRunId(repository, key);
+  if (runId === undefined) return;
+  const scope = { ...key, runId };
+  const row = await readCoordinationState(deps.store, scope);
+  if (row) await tryDeliverCoordinationScores(deps.store, scope, row);
+}
+
+function warnTickSchemaMismatch(
+  target: CoordinationTickTarget,
+  reason: string,
+  detail?: string,
+): void {
+  console.warn(
+    `[coordination-dispatcher] tick schema mismatch event=${target.eventId} problem=${target.moduleRef} reason=${reason}` +
+      (detail ? ` detail=${JSON.stringify(detail)}` : ""),
+  );
+}
+
 /**
  * 1 event の tick: 宣言 gate → plugin load → shared row read → `runTick` → 変化時のみ optimistic write。
  * 実際に write したら `true`。 no-op / 未宣言 / load 不可 / conflict は `false` (= 書き込みなし)。
@@ -103,6 +209,7 @@ async function tickCoordinationEvent(
   deps: CoordinationTickDeps,
   target: CoordinationTickTarget,
   nowIso: string,
+  scoreBudgetMs: number,
 ): Promise<boolean> {
   // 宣言 gate: coordination を宣言していない problemId は tick しない (= 未宣言 ref を load させない)。
   if (!deps.config[target.moduleRef]) return false;
@@ -127,14 +234,23 @@ async function tickCoordinationEvent(
     eventId: target.eventId,
     problemId: target.moduleRef,
   };
+  const repository = await resolveDeploymentsRepository(deps.store);
+  const runId = await resolvePlayableCoordinationRunId(repository, runKey);
+  if (runId === undefined) return false;
   const scope: CoordinationStateScope = {
     ...runKey,
-    runId: await resolveCurrentCoordinationRunId(
-      await resolveDeploymentsRepository(deps.store),
-      runKey,
-    ),
+    runId,
   };
   const existing = await readCoordinationState(deps.store, scope);
+  // A stalled delivery must not age out a live match. Refresh before delivery:
+  // both a partial result and a thrown backend error defer this tick.
+  await refreshCoordinationTtl(deps, target, scope, existing, nowIso);
+  // Cold plugin loading and namespace resolution must not consume every retry's delivery slice.
+  const scoreDeadlineMs = Date.now() + scoreBudgetMs;
+  if (
+    !(await deliverCoordinationScores(deps.store, scope, existing, { deadlineMs: scoreDeadlineMs }))
+  )
+    return false;
   if (load.kind === "invalid_schema") {
     // [Issue #3150] Codex review: 版宣言が壊れた plugin を bundle 不在と同じ早期 return にすると、
     // scope も導出されず TTL も延びないまま retention (7 日) が来て **進行中の行が消える**。
@@ -143,7 +259,6 @@ async function tickCoordinationEvent(
     console.warn(
       `[coordination-dispatcher] tick invalid plugin schema event=${target.eventId} problem=${target.moduleRef} detail=${JSON.stringify(load.detail)}`,
     );
-    await refreshCoordinationTtl(deps, target, scope, existing, nowIso);
     return false;
   }
   const { plugin, schema } = load; // [Issue #3150] 版宣言は load 時に検証した値を使う (再読しない)
@@ -161,11 +276,7 @@ async function tickCoordinationEvent(
     // 一切進めず、 TTL だけ延ばして試合を消さない (= write が要らないので version 条件も張らない)。
     const reconciled = reconcileStateSchema(schema, existing);
     if (reconciled.kind === "mismatch") {
-      console.warn(
-        `[coordination-dispatcher] tick schema mismatch event=${target.eventId} problem=${target.moduleRef} reason=${reconciled.reason}` +
-          (reconciled.detail ? ` detail=${JSON.stringify(reconciled.detail)}` : ""),
-      );
-      await refreshCoordinationTtl(deps, target, scope, existing, nowIso);
+      warnTickSchemaMismatch(target, reconciled.reason, reconciled.detail);
       return false;
     }
     currentState = reconciled.state;
@@ -180,13 +291,13 @@ async function tickCoordinationEvent(
     // names -- and on live every team was a ULID for the rest of the match,
     // even after #3172 had wired names into the op path. The roster is resolved
     // exactly as the op path resolves it (same rows, same rule, same sort),
-    // seeded with the ids the scoring pass observed so a failed query degrades
-    // to what the tick already knew rather than failing it.
+    // A failed full-roster query must defer initialization until the next tick.
     const roster = await resolveEventRoster(deps.store, {
       tenantId: target.tenantId,
       eventId: target.eventId,
       problemId: target.moduleRef,
       knownTeamIds: target.teamIds,
+      requireComplete: true,
     });
     currentState = plugin.initialState({
       eventId: target.eventId,
@@ -198,12 +309,17 @@ async function tickCoordinationEvent(
   }
   // eventNowMs は採点 pass が算出した event 相対経過 (= plugin の tick 契約、 参照 Battle は
   // CAPTURE_WINDOW_MS と比較)。 dispatcher は clock を持たず、 渡された値だけで純関数を回す。
-  const nextState = runTick(plugin, currentState, target.eventNowMs);
-  if (!coordinationStateChanged(currentState, nextState)) {
+  const { nextState, pendingScores, stateChanged } = prepareTickTransition(
+    plugin,
+    currentState,
+    target.eventNowMs,
+    nowIso,
+    !existing,
+  );
+  if (!stateChanged) {
     // [Issue #3150] migration だけが起きて tick 自体は no-op だった行はここに来る。 write が無い
     // ので封筒は書き換わらず、 行は旧版のまま残る (= lazy upgrade。 migration は次に呼ばれるときも
     // 冪等に走るので害はない)。 TTL の延長だけは行う -- 試合を消さないのはここでも同じ。
-    await refreshCoordinationTtl(deps, target, scope, existing, nowIso);
     return false;
   }
   const written = await writeCoordinationState(
@@ -213,6 +329,7 @@ async function tickCoordinationEvent(
     version,
     nowIso,
     pluginStateSchemaVersion(schema),
+    pendingScores,
   );
   if (written.kind === "conflict") {
     // 並行 op が version race に勝った (= applyOp が先に書いた)。 lost-update を作らず次 tick で
@@ -235,10 +352,43 @@ async function tickCoordinationEvent(
     );
     // TTL は延ばす。 書けないことと「試合が終わった」ことは別で、 ここで retention の時計を
     // 進ませると、 運営が対処する前に行そのものが消える。
-    await refreshCoordinationTtl(deps, target, scope, existing, nowIso);
     return false;
   }
+  await tryDeliverCoordinationScores(
+    deps.store,
+    scope,
+    {
+      state: nextState,
+      version: version + 1,
+      pendingScores,
+    },
+    { deadlineMs: scoreDeadlineMs },
+  );
   return true;
+}
+
+/** Initial materialization also synchronizes every team, even when the plugin tick is a no-op. */
+function prepareTickTransition(
+  plugin: CoordinationPlugin<unknown, unknown>,
+  currentState: unknown,
+  eventNowMs: number,
+  nowIso: string,
+  initializing: boolean,
+) {
+  const nextState = runTick(plugin, currentState, eventNowMs);
+  const pendingScores = coordinationScoreDelivery(
+    plugin,
+    currentState,
+    nextState,
+    { kind: "tick" },
+    nowIso,
+    initializing,
+  );
+  return {
+    nextState,
+    pendingScores,
+    stateChanged: !!pendingScores || coordinationStateChanged(currentState, nextState),
+  };
 }
 
 /**

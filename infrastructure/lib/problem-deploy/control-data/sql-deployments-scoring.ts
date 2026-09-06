@@ -236,41 +236,54 @@ export class SqlDeploymentsScoring implements DeploymentsScoringPort {
     bonus: number,
     at: string,
   ): Promise<DeploymentMutationOutcome> {
-    const row = await this.core.getDeploymentRow(parent.jobId);
-    if (!row) return { outcome: "conflict" };
-    const record = deploymentFromPayload(row.payload) as MutableDeploymentRecord;
-    if (record.gateBonusAwardedAt !== undefined) return { outcome: "conflict" };
-    record.score = ensureNumber(record.score) + bonus;
-    record.gateBonusAwardedAt = at;
-    record.updatedAt = at;
-    const scoreEvent = buildScoreEventRecord(parent, "gate-bonus", bonus, at);
-    const statements: SqlStatement[] = [
-      {
-        // [#2672] Rebuilt from payload (credential-stripped), so preserve login_key_hash.
-        sql: `UPDATE deployments SET ${DEPLOYMENT_MUTATE_SET} WHERE job_id = ?`,
-        params: [...deploymentMutateParams(record), parent.jobId],
-      },
-      {
-        sql:
-          "INSERT INTO deployment_score_events " +
-          "(job_id, sk, record_type, occurred_at, expires_at, payload) VALUES (?, ?, ?, ?, ?, ?)",
-        params: [
-          parent.jobId,
-          `${SCORE_EVENT_SK_PREFIX}${at}#${ulid()}`,
-          "score",
-          at,
-          Number(parent.expiresAt ?? 0),
-          JSON.stringify(normalizeJsonValue(scoreEvent)),
-        ],
-      },
-    ];
-    try {
-      await this.core.sql.batch(statements);
-      return { outcome: "updated" };
-    } catch (err) {
-      if (isUniqueConstraintViolation(err)) return { outcome: "conflict" };
-      throw err;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const row = await this.core.getDeploymentRow(parent.jobId);
+      if (!row) return { outcome: "conflict" };
+      const record = deploymentFromPayload(row.payload) as MutableDeploymentRecord;
+      if (record.gateBonusAwardedAt !== undefined) return { outcome: "conflict" };
+      record.score = ensureNumber(record.score) + bonus;
+      record.gateBonusAwardedAt = at;
+      record.updatedAt = at;
+      const scoreEvent = buildScoreEventRecord(parent, "gate-bonus", bonus, at);
+      const statements: SqlStatement[] = [
+        {
+          // [#2672] Rebuilt from payload (credential-stripped), so preserve login_key_hash.
+          sql: `UPDATE deployments SET ${DEPLOYMENT_MUTATE_SET} WHERE job_id = ? AND payload = ?`,
+          params: [...deploymentMutateParams(record), parent.jobId, String(row.payload)],
+        },
+        {
+          // A missed UPDATE must abort the batch before its score event can be
+          // inserted. Use the existing NOT NULL constraint, as coordination does.
+          sql: "INSERT INTO deployment_score_events (job_id, sk, record_type, payload) SELECT 'gate-bonus-cas', '', 'score', NULL WHERE changes() <> 1",
+        },
+        {
+          sql:
+            "INSERT INTO deployment_score_events " +
+            "(job_id, sk, record_type, occurred_at, expires_at, payload) VALUES (?, ?, ?, ?, ?, ?)",
+          params: [
+            parent.jobId,
+            `${SCORE_EVENT_SK_PREFIX}${at}#${ulid()}`,
+            "score",
+            at,
+            Number(parent.expiresAt ?? 0),
+            JSON.stringify(normalizeJsonValue(scoreEvent)),
+          ],
+        },
+      ];
+      try {
+        await this.core.sql.batch(statements);
+        return { outcome: "updated" };
+      } catch (err) {
+        if (
+          err instanceof Error &&
+          /NOT NULL constraint failed: deployment_score_events.payload/.test(err.message)
+        )
+          continue;
+        if (isUniqueConstraintViolation(err)) return { outcome: "conflict" };
+        throw err;
+      }
     }
+    return { outcome: "conflict" };
   }
 
   async setScoringState(

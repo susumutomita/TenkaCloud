@@ -374,10 +374,10 @@ describe("cleanup takes the artifacts and the runs with the state (#3152 / #3153
         eventId: EVENT,
         problemId: PROBLEM,
       }),
-    ).toBeUndefined();
+    ).toMatchObject({ closed: true });
   });
 
-  it("should still report the state deleted when the artifact sweep fails", async () => {
+  it("should retain a closed retry scope and propagate an artifact sweep failure", async () => {
     const repository = await makeRepository();
     const artifacts = {
       ...fakeArtifactStore(),
@@ -388,15 +388,12 @@ describe("cleanup takes the artifacts and the runs with the state (#3152 / #3153
       deployment({ jobId: "a", teardownRequestedAt: "2026-07-02T00:00:00.000Z" }),
     );
 
-    const outcome = await cleanupCoordinationStateIfLastDeployment(
-      { repository, artifacts },
-      { tenantId: TENANT, eventId: EVENT, problemId: PROBLEM },
-    );
-
-    // The row — the thing that makes the match reachable — is already gone.
-    // Failing the whole cleanup here would report that nothing was cleaned when
-    // most of it was, and the bucket's expiry is still the backstop.
-    expect(outcome).toMatchObject({ kind: "deleted" });
+    await expect(
+      cleanupCoordinationStateIfLastDeployment(
+        { repository, artifacts },
+        { tenantId: TENANT, eventId: EVENT, problemId: PROBLEM },
+      ),
+    ).rejects.toThrow("s3 unavailable");
     expect(await repository.readCoordinationState(SCOPE)).toBeUndefined();
   });
 
@@ -425,14 +422,13 @@ describe("cleanup takes the artifacts and the runs with the state (#3152 / #3153
 
     expect(outcome).toMatchObject({ kind: "deleted" });
     expect(await repository.readCoordinationState({ ...SCOPE, runId })).toBeUndefined();
-    // The pointer goes too: leaving it would make a re-deployed problem resume
-    // a retired run id, and with it that run's tombstoned artifact prefix.
-    expect(await repository.readCoordinationRun(key)).toBeUndefined();
+    // The closed pointer rejects queued writes into this retired namespace.
+    expect(await repository.readCoordinationRun(key)).toMatchObject({ runId, closed: true });
   });
 });
 
 describe("cleanup failures that must not be silent (#3153)", () => {
-  it("should still report the state deleted when the run sweep fails", async () => {
+  it("should propagate a closure failure without deleting the state", async () => {
     const repository = await makeRepository();
     await seedState(repository);
     await repository.putDeployment(
@@ -440,22 +436,20 @@ describe("cleanup failures that must not be silent (#3153)", () => {
     );
     const failing = new Proxy(repository, {
       get(target, prop, receiver) {
-        if (prop === "deleteCoordinationRun") {
+        if (prop === "closeCoordinationRun") {
           return () => Promise.reject(new Error("control data unavailable"));
         }
         return Reflect.get(target, prop, receiver) as unknown;
       },
     });
 
-    const outcome = await cleanupCoordinationStateIfLastDeployment(
-      { repository: failing },
-      { tenantId: TENANT, eventId: EVENT, problemId: PROBLEM },
-    );
-
-    // The state row is already gone, so the match is unreachable either way.
-    // Reporting nothing was cleaned would be the less accurate answer.
-    expect(outcome).toMatchObject({ kind: "deleted" });
-    expect(await repository.readCoordinationState(SCOPE)).toBeUndefined();
+    await expect(
+      cleanupCoordinationStateIfLastDeployment(
+        { repository: failing },
+        { tenantId: TENANT, eventId: EVENT, problemId: PROBLEM },
+      ),
+    ).rejects.toThrow("control data unavailable");
+    expect(await repository.readCoordinationState(SCOPE)).toBeDefined();
   });
 
   it("should leave everything alone when the conditional delete is refused", async () => {
@@ -466,7 +460,7 @@ describe("cleanup failures that must not be silent (#3153)", () => {
     );
     const raced = new Proxy(repository, {
       get(target, prop, receiver) {
-        if (prop === "deleteCoordinationStateIfUnchanged") {
+        if (prop === "closeCoordinationRun") {
           return () => Promise.resolve({ outcome: "conflict" as const });
         }
         return Reflect.get(target, prop, receiver) as unknown;

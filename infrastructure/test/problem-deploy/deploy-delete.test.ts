@@ -1,5 +1,11 @@
 import { PutEventsCommand } from "@aws-sdk/client-eventbridge";
-import { DeleteCommand, GetCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import {
+  DeleteCommand,
+  GetCommand,
+  QueryCommand,
+  TransactWriteCommand,
+  UpdateCommand,
+} from "@aws-sdk/lib-dynamodb";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { requestTeardown } from "../../lib/problem-deploy/handlers/deploy-handler/delete";
 import type { DeploySharedResources } from "../../lib/problem-deploy/handlers/deploy-handler/deploy";
@@ -470,10 +476,30 @@ describe("requestTeardown coordination cleanup (#3149)", () => {
     const deletes = ddbSend.mock.calls
       .map(([cmd]) => cmd)
       .filter((cmd): cmd is DeleteCommand => cmd instanceof DeleteCommand);
-    // Conditional on the version that was read, not a bare delete: between the
-    // listing and this call a new deployment could have started playing.
-    expect(deletes[0]?.input.ConditionExpression).toBe("version = :expected");
-    expect(deletes[0]?.input.ExpressionAttributeValues).toMatchObject({ ":expected": 4 });
+    // The version guard and closure now precede deletion in one transaction.
+    const commands = ddbSend.mock.calls.map(([cmd]) => cmd);
+    const closure = commands.find(
+      (cmd): cmd is TransactWriteCommand => cmd instanceof TransactWriteCommand,
+    );
+    expect(closure?.input.TransactItems).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          ConditionCheck: expect.objectContaining({
+            Key: { PK: "COORD#tenant-acme#ev-1#crypto-battle#default", SK: "STATE" },
+            ConditionExpression:
+              "attribute_not_exists(coordinationScoresPending) AND version = :version",
+            ExpressionAttributeValues: { ":version": 4 },
+          }),
+        }),
+        expect.objectContaining({
+          Put: expect.objectContaining({ Item: expect.objectContaining({ closed: true }) }),
+        }),
+      ]),
+    );
+    expect(commands.indexOf(closure)).toBeLessThan(commands.indexOf(deletes[0]));
+    expect(deletes[0]?.input.ConditionExpression).toBe(
+      "attribute_not_exists(coordinationScoresPending)",
+    );
   });
 
   it("should leave the state alone while another team is still deployed", async () => {

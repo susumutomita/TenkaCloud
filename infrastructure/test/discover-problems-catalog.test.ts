@@ -335,7 +335,19 @@ describe("discoverProblemsCoordination (#1420)", () => {
       interTeamCoordination: { plugin: "coordination/router.ts", name: "Router" },
     });
     expect(discoverProblemsCoordination(workspace)).toEqual({
-      "router-battle": { plugin: "coordination/router.ts" },
+      "router-battle": { plugin: "coordination/router.ts", scoreMode: "exclusive" },
+    });
+  });
+
+  it("preserves ordinary scoring when coordination is also declared", () => {
+    writeProblem("battles", "mixed", {
+      id: "mixed",
+      scoring: { schedule: "rate(1 minute)" },
+      interTeamCoordination: { plugin: "coordination/mixed.ts" },
+    });
+    expect(discoverProblemsCoordination(workspace).mixed).toEqual({
+      plugin: "coordination/mixed.ts",
+      scoreMode: "additive",
     });
   });
 
@@ -367,6 +379,7 @@ describe("discoverProblemsCoordination (#1420)", () => {
     });
     expect(discoverProblemsCoordination(workspace)["sized-battle"]).toEqual({
       plugin: "coordination/sized.ts",
+      scoreMode: "exclusive",
       stateBudget: { bytesPerTeam: 17001, baseBytes: 1152 },
     });
   });
@@ -389,6 +402,7 @@ describe("discoverProblemsCoordination (#1420)", () => {
     // same outcome as a problem that never declared a budget at all.
     expect(discoverProblemsCoordination(workspace)["half-declared"]).toEqual({
       plugin: "coordination/half.ts",
+      scoreMode: "exclusive",
     });
   });
 });

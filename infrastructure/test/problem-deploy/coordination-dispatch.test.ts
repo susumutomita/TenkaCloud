@@ -1,5 +1,8 @@
-import { ConditionalCheckFailedException } from "@aws-sdk/client-dynamodb";
-import { DeleteCommand, GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import {
+  ConditionalCheckFailedException,
+  TransactionCanceledException,
+} from "@aws-sdk/client-dynamodb";
+import { DeleteCommand, GetCommand, PutCommand, TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
 import type { CoordinationContext, CoordinationPlugin } from "@tenkacloud/coordination-plugin-sdk";
 import { describe, expect, it, vi } from "vitest";
 import { SqlDeploymentsRepository } from "../../lib/problem-deploy/control-data/deployments-repository.js";
@@ -80,7 +83,37 @@ function storeOver(
   // Bound before the assertion, not asserted in place: `consistent-type-assertions`
   // wants a declaration it can annotate, and the DocumentClient surface is far
   // wider than the one method these doubles answer.
-  const partial = { send };
+  const partial = {
+    send: async (cmd: unknown) => {
+      if (!(cmd instanceof TransactWriteCommand)) return send(cmd);
+      // These orchestration doubles inject a state-row outcome. The real condition
+      // evaluation (including reset races) runs in coordination-scoring/reset suites.
+      const entries = cmd.input.TransactItems;
+      expect(entries).toHaveLength(2);
+      expect(entries?.[0].ConditionCheck ?? entries?.[0].Update).toMatchObject({
+        Key: { SK: "CURRENT" },
+        ExpressionAttributeValues: { ":run": expect.any(String) },
+      });
+      if (entries?.[0].Update)
+        expect(entries[0].Update).toMatchObject({
+          UpdateExpression: "REMOVE pendingInitialization, coordinationRecoveryScope",
+          ConditionExpression: "runId = :run AND attribute_not_exists(closed)",
+        });
+      expect(entries?.[1].Put?.Item?.SK).toBe("STATE");
+      const put = entries?.[1].Put;
+      if (!put) throw new Error("missing state put");
+      try {
+        return await send(new PutCommand(put));
+      } catch (error) {
+        if (!(error instanceof ConditionalCheckFailedException)) throw error;
+        throw new TransactionCanceledException({
+          message: "state CAS lost",
+          $metadata: {},
+          CancellationReasons: [{ Code: "None" }, { Code: "ConditionalCheckFailed" }],
+        });
+      }
+    },
+  };
   const ddb = partial as never;
   const store: CoordinationStoreDeps = {
     runtime: makeTestControlDataRuntime(env),
@@ -326,7 +359,7 @@ describe("coordination-store", () => {
  * uses) exercises the exact same repository code against a real SQLite
  * database instead; only the runtime-selection plumbing around it differs.
  */
-const rtScope = { tenantId: "tn-rt", eventId: "ev-rt", problemId: "problem-rt", runId: "run-rt" };
+const rtScope = { tenantId: "tn-rt", eventId: "ev-rt", problemId: "problem-rt", runId: "default" };
 /** The SQL-backed store never touches DynamoDB; any `send` is a test bug, not a fallback. */
 const sqlBackendDdb = { send: () => Promise.reject(new Error("sql backend does not use ddb")) };
 const backendStores: readonly (readonly [string, () => CoordinationStoreDeps])[] = [
@@ -522,36 +555,25 @@ describe("dispatchCoordinationOp", () => {
     expect(statePuts).toEqual([]);
   });
 
-  /**
-   * [Issue #659] `teamScores` is a plugin's own code running on the accepted-op
-   * path. The op is already committed when it runs, so a plugin bug there must
-   * cost at most one scoreboard update — never the move the participant made.
-   */
-  // A plugin is third-party code and JavaScript lets it throw anything, so the
-  // string case is not hypothetical — and a log line reading "undefined" is
-  // useless in the middle of a match.
-  it.each([
-    ["an Error", new Error("plugin bug"), "plugin bug"],
-    ["a bare string", "plugin bug", "plugin bug"],
-  ])("should keep the op when the plugin's teamScores throws %s", async (_label, thrown, msg) => {
-    const { store } = fakeStore({ getItem: undefined });
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    const out = await dispatchCoordinationOp(
-      store,
-      {
-        ...counter,
-        teamScores: () => {
-          throw thrown;
+  it("refuses the transition before saving when the score hook fails", async () => {
+    const { store, send } = fakeStore({ getItem: undefined });
+    await expect(
+      dispatchCoordinationOp(
+        store,
+        {
+          ...counter,
+          teamScores: () => {
+            throw new Error("plugin bug");
+          },
         },
-      },
-      { ...base, op: { kind: "inc" }, nowIso: "2026-06-01T00:00:00Z" },
-    );
-    expect(out).toEqual({ kind: "ok", projection: { count: 1 } });
-    expect(warn).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({ message: msg }),
-    );
-    warn.mockRestore();
+        { ...base, op: { kind: "inc" }, nowIso: "2026-06-01T00:00:00Z" },
+      ),
+    ).rejects.toThrow("plugin bug");
+    expect(
+      send.mock.calls.some(
+        ([command]) => command instanceof PutCommand && command.input.Item?.SK === "STATE",
+      ),
+    ).toBe(false);
   });
 
   it("should report no scores when the op moved nobody", async () => {
@@ -574,7 +596,7 @@ describe("dispatchCoordinationOp", () => {
       { ...base, op: { kind: "inc" }, nowIso: "2026-06-01T00:00:00Z" },
     );
     // teamB sat still, so it is absent: an unchanged row is not rewritten.
-    expect(out).toEqual({ kind: "ok", projection: { count: 1 }, changedScores: { teamA: 10 } });
+    expect(out).toEqual({ kind: "ok", projection: { count: 1 } });
   });
 
   it("should surface a write conflict once it has run out of attempts", async () => {

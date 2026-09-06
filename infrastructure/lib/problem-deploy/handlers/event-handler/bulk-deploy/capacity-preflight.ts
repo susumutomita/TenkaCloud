@@ -58,6 +58,8 @@ export function checkBulkDeployCoordinationCapacity(args: {
   readonly problems: readonly { readonly problemId: string }[];
   /** Every team in the event, not only the teams this deploy covers. */
   readonly eventTeamCount: number;
+  /** Actual whole roster, to include long or escaped legacy IDs in the host reserve. */
+  readonly eventTeamIds?: readonly string[];
   /**
    * Per-problem `interTeamCoordination`. Optional, and an absent map is read as
    * "nothing declared" rather than as an error: that is the same outcome as a
@@ -74,7 +76,12 @@ export function checkBulkDeployCoordinationCapacity(args: {
   for (const problem of args.problems) {
     const forecast = parseCoordinationStateForecast(args.problemsCoordination?.[problem.problemId]);
     if (!forecast) continue;
-    const verdict = checkCoordinationCapacity(forecast, args.eventTeamCount, args.budget);
+    const verdict = checkCoordinationCapacity(
+      forecast,
+      args.eventTeamCount,
+      args.budget,
+      args.eventTeamIds,
+    );
     if (verdict.kind === "fits") continue;
     const entry: CoordinationCapacityRefusal = {
       problemId: problem.problemId,

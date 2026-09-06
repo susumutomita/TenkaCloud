@@ -125,12 +125,20 @@ export interface CoordinationPlugin<State, Op, Projection = unknown> {
    * 「試合中の得点はすべて plugin が判定する」と説明しながら、portal の点数は 0 のままだった。
    *
    * 差分ではなく**絶対値**を返す。 plugin 側が権威で、platform は「今いくつか」を写すだけ
-   * (= 差分だと再送 / conflict 再試行で二重加算しうる)。 op が通った直後に呼ばれ、
-   * 前後で変わった team の行だけが更新される。
+   * (= 差分だと再送 / conflict 再試行で二重加算しうる)。 op / tick の遷移前後に呼ばれ、
+   * 前後で変わった team の得点と履歴を、state と同時に保存する配信待ちデータから反映する。
    *
    * optional: 宣言しない plugin は従来どおり scoreboard に何も書かない。
    */
   teamScores?(state: State): Readonly<Record<string, number>>;
+  /** Public reason codes only: never copy input, proof, secret or another team's private state. */
+  scoreReasons?(
+    before: State,
+    after: State,
+    cause:
+      | { readonly kind: "op"; readonly teamId: string; readonly op: Op }
+      | { readonly kind: "tick" },
+  ): Readonly<Record<string, string>>;
 }
 
 /** {@link dispatchOp} の結果。 受理時は次 state、 拒否時は validateOp の error。 */

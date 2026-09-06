@@ -68,6 +68,7 @@ export async function bulkDeployEvent(
   const capacity = checkBulkDeployCoordinationCapacity({
     problems: selected.problems,
     eventTeamCount: loaded.allTeams.length,
+    eventTeamIds: loaded.allTeams.map((team) => team.teamId),
     problemsCoordination: shared.problemsCoordination,
     budget: shared.runtime.coordinationStateBudget(),
   });

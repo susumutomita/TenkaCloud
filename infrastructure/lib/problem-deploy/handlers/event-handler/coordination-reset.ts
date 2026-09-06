@@ -1,11 +1,13 @@
-import type { DeploymentsCoordinationPort } from "../../control-data/deployments-repository.js";
+import { isRoundTerminated } from "../generic-scoring-handler/round-liveness.js";
 import { resolveCoordinationArtifactStore } from "../shared/coordination-artifact-store.js";
+import { isCoordinationDeploymentPlayable } from "../shared/coordination-liveness.js";
 import { startCoordinationRun } from "../shared/coordination-run.js";
 import { logDeployTrace } from "../shared/trace-log.js";
 import {
   type EventSharedResources,
   queryDeploymentsByEvent,
   resolveDeploymentsRepository,
+  resolveEventsRepository,
 } from "./shared.js";
 
 /**
@@ -30,22 +32,30 @@ import {
  *
  * It starts a new run rather than deleting the namespace. The previous match's
  * state, ledger, scores and artifacts stay readable under the run id they were
- * written against, and the next operation materializes the new run from
- * `plugin.initialState` exactly as the delete-based reset did.
+ * written against. The dispatcher materializes the new run from `plugin.initialState`;
+ * a durable pointer flag guarantees recovery even if the event ends before its next tick.
  *
  * That difference matters most in the case a reset is actually used for. An
  * operator resets because something went wrong; the old reset destroyed the
  * evidence of what went wrong as its first act. Runs beyond the retention
  * window are still removed — history is a debrief, not an archive.
+ *
+ * [Issue #3194] A saved score delivery must finish before the run can end.
+ * Pending delivery returns the existing conflict outcome; the current run
+ * stays reachable by normal op/tick recovery, then the operator can retry.
+ * New reset requests are refused after end. A reset accepted before that
+ * boundary still completes its saved initialization and initial-score delivery.
  */
 export type CoordinationResetOutcome =
   | { readonly kind: "ok"; readonly result: CoordinationResetResult }
   /** The event has no deployment of this problem, so there is no match to reset. */
   | { readonly kind: "not_found" }
+  /** Ended events cannot accept another reset. */
+  | { readonly kind: "event_ended" }
   /**
-   * [Issue #3153] Another rotation started a run first. Reported rather than
-   * retried: two operators resetting at once should not silently end up with
-   * two runs started and one discarded.
+   * Another rotation started a run first, or saved score delivery is pending.
+   * Reported rather than retried: the caller must re-read the current run and
+   * allow its delivery recovery before deciding to reset again.
    */
   | { readonly kind: "conflict" };
 
@@ -80,15 +90,42 @@ export async function resetCoordinationRun(
   eventId: string,
   problemId: string,
 ): Promise<CoordinationResetOutcome> {
+  // Ordinary problems have no dispatcher that can complete an initialization.
+  // Do not create a durable reset obligation for an undeclared coordination scope.
+  if (!Object.hasOwn(shared.problemsCoordination ?? {}, problemId)) return { kind: "not_found" };
+  const events = await resolveEventsRepository(shared);
+  const event = await events.getEvent(tenantId, eventId);
+  if (!event) return { kind: "not_found" };
+  const nowIso = new Date().toISOString();
+  if (
+    ["ENDED", "TEARDOWN", "ARCHIVED"].includes(event.status) ||
+    isRoundTerminated({ eventStartsAt: event.startsAt, eventEndsAt: event.endsAt }, nowIso)
+  )
+    return { kind: "event_ended" };
   const deployments = await queryDeploymentsByEvent(shared, tenantId, eventId);
-  const deployed = deployments.some((item) => item.problemId === problemId);
+  const repository = await resolveDeploymentsRepository(shared);
+  let deployed = false;
+  // GSI1 is discovery only: a just-retired deployment can still appear playable.
+  // Re-read the candidate's authoritative META row before admitting this reset.
+  for (const item of deployments) {
+    if (item.problemId !== problemId || !item.jobId) continue;
+    const current = await repository.getDeployment(item.jobId, { consistentRead: true });
+    if (
+      current?.tenantId === tenantId &&
+      current.eventId === eventId &&
+      current.problemId === problemId &&
+      isCoordinationDeploymentPlayable(current)
+    ) {
+      deployed = true;
+      break;
+    }
+  }
   if (!deployed) return { kind: "not_found" };
 
-  const repository: DeploymentsCoordinationPort = await resolveDeploymentsRepository(shared);
   const outcome = await startCoordinationRun(
     { repository, artifacts: resolveCoordinationArtifactStore() },
     { tenantId, eventId, problemId },
-    new Date().toISOString(),
+    nowIso,
   );
   if (outcome.kind === "conflict") return { kind: "conflict" };
   logDeployTrace("coordination.run-reset", {

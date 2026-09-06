@@ -203,7 +203,11 @@ export function discoverProblemsCoordination(
     const plugin = (coord as { plugin?: unknown }).plugin;
     if (typeof plugin === "string" && plugin.length > 0) {
       const stateBudget = parseStateBudget((coord as { stateBudget?: unknown }).stateBudget);
-      result[meta.id] = stateBudget ? { plugin, stateBudget } : { plugin };
+      result[meta.id] = {
+        plugin,
+        ...(stateBudget ? { stateBudget } : {}),
+        scoreMode: meta.scoring == null ? "exclusive" : "additive",
+      };
     }
   }
   return result;
@@ -223,6 +227,8 @@ export interface CoordinationStateBudgetDeclaration {
 
 export interface CoordinationCatalogEntry {
   readonly plugin: string;
+  /** Derived from the existing ordinary-scoring declaration, never from plugin input. */
+  readonly scoreMode?: "exclusive" | "additive";
   readonly stateBudget?: CoordinationStateBudgetDeclaration;
 }
 

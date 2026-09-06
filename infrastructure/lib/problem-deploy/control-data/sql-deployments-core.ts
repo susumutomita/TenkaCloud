@@ -154,6 +154,8 @@ export const DEPLOYMENTS_SCHEMA_STATEMENTS = [
   run_id     TEXT    NOT NULL,
   started_at TEXT    NOT NULL,
   history    TEXT    NOT NULL DEFAULT '[]',
+  pending_initialization INTEGER NOT NULL DEFAULT 0,
+  closed INTEGER NOT NULL DEFAULT 0,
   expires_at INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (tenant_id, event_id, problem_id)
 )`,
@@ -426,58 +428,53 @@ export class SqlDeploymentsCore {
     readonly jobId: string;
     readonly whereSql?: string;
     readonly whereParams?: readonly SqlParam[];
+    /** Re-evaluated after a lost CAS; must not perform external side effects. */
     readonly predicate: (record: DeploymentRecord, row: SqlRow) => boolean;
+    /** Mutates this attempt's private record only; may run again after a lost CAS. */
     readonly mutate: (record: MutableDeploymentRecord) => void;
     readonly onMiss: "conflict" | "not_found" | { readonly probeTenantId: string };
     readonly withPostImage?: boolean;
   }): Promise<DeploymentMutationOutcome> {
-    const row = await this.getDeploymentRow(args.jobId);
-    if (!row) return this.handleMiss(args.jobId, args.onMiss);
-    const record = deploymentFromPayload(row.payload) as MutableDeploymentRecord;
-    if (!args.predicate(record, row)) return this.handleMiss(args.jobId, args.onMiss);
-    args.mutate(record);
-    // [#2672] A generic mutation rebuilds `record` from `payload`, which omits the
-    // credential (#2290), so it must not touch `login_key_hash`; use the mutate SET.
-    const params = [...deploymentMutateParams(record), args.jobId, ...(args.whereParams ?? [])];
-    const where = args.whereSql ? ` AND (${args.whereSql})` : "";
-    if (args.withPostImage) {
-      const rows = await this.sql.all(
-        `UPDATE deployments SET ${DEPLOYMENT_MUTATE_SET} WHERE job_id = ?${where} RETURNING payload`,
-        params,
-      );
-      const updated = rows[0];
-      if (!updated) return this.handleMiss(args.jobId, args.onMiss);
-      return {
-        outcome: "updated",
-        record: deploymentFromPayload(updated.payload),
-      };
+    // [#3194] A full payload rewrite must not erase a score/subtotal or another
+    // field committed after our read. Retry from the winner's record, including
+    // its predicate, rather than applying the mutation computed from stale data.
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const row = await this.getDeploymentRow(args.jobId);
+      if (!row) return this.handleMiss(args.jobId, args.onMiss);
+      const record = deploymentFromPayload(row.payload) as MutableDeploymentRecord;
+      if (!args.predicate(record, row)) return this.handleMiss(args.jobId, args.onMiss);
+      args.mutate(record);
+      // [#2672] Payload omits the credential, so keep login_key_hash untouched.
+      const params = [
+        ...deploymentMutateParams(record),
+        args.jobId,
+        String(row.payload),
+        ...(args.whereParams ?? []),
+      ];
+      const where = args.whereSql ? ` AND (${args.whereSql})` : "";
+      const update = `UPDATE deployments SET ${DEPLOYMENT_MUTATE_SET} WHERE job_id = ? AND payload = ?${where}`;
+      if (args.withPostImage) {
+        const rows = await this.sql.all(`${update} RETURNING payload`, params);
+        const updated = rows[0];
+        if (!updated) continue;
+        return {
+          outcome: "updated",
+          record: deploymentFromPayload(updated.payload),
+        };
+      }
+      const result = await this.sql.run(update, params);
+      if (Number(result.changes) > 0) return { outcome: "updated" };
     }
-    const result = await this.sql.run(
-      `UPDATE deployments SET ${DEPLOYMENT_MUTATE_SET} WHERE job_id = ?${where}`,
-      params,
-    );
-    if (Number(result.changes) === 0) return this.handleMiss(args.jobId, args.onMiss);
-    return { outcome: "updated" };
+    return { outcome: "conflict" };
   }
 
   async mutateCreateStatusWrite(
     jobId: string,
     mutate: (record: MutableDeploymentRecord) => void,
   ): Promise<DeploymentMutationOutcome> {
-    const row = await this.getDeploymentRow(jobId);
-    if (!row) return { outcome: "not_found" };
-    const record = deploymentFromPayload(row.payload) as MutableDeploymentRecord;
-    mutate(record);
-    const result = await this.sql.run(
-      "UPDATE deployments SET status = ?, updated_at = ?, payload = ? WHERE job_id = ?",
-      [
-        optionalString(record.status),
-        optionalString(record.updatedAt),
-        payloadWithoutLoginKey(record),
-        jobId,
-      ],
-    );
-    return Number(result.changes) > 0 ? { outcome: "updated" } : { outcome: "not_found" };
+    // SFN may redeliver completion after the team has started scoring. Use the
+    // same payload CAS so its status write cannot restore an earlier score.
+    return this.mutateExisting({ jobId, predicate: () => true, mutate, onMiss: "not_found" });
   }
 
   async conditionalInsert(

@@ -1,20 +1,26 @@
+import type { DeploymentsCoordinationPort } from "../../control-data/deployments-repository.js";
+import {
+  type CoordinationStateScope,
+  DEFAULT_COORDINATION_RUN_ID,
+} from "../../control-data/domain/coordination-scope.js";
+import { isCoordinationStateEnvelope } from "../../control-data/domain/coordination-state-envelope.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 import {
   COORDINATION_TICK_ACTION,
   type CoordinationTickBatch,
 } from "../shared/coordination-tick-contract.js";
 import type { CoordinationTickInvoker } from "./coordination-tick-dispatch.js";
-import { isScoringActive } from "./scoring-active.js";
+import { isRoundTerminated } from "./round-liveness.js";
 
 /**
  * scoring-driven tick (#2324) の **採点 pass 側**。 coordination を宣言した event を per-minute
- * pass で見つけ、 tick 対象を batch にまとめて CoordinationDispatcher Lambda を 1 回 async Invoke する。
+ * pass で見つけ、各 scope を CoordinationDispatcher Lambda へ async Invoke する。
  *
  * 資格情報分離: 採点 Lambda は ssm:GetParameter / kms:Decrypt を持つため、 pack-author
  * 由来の plugin を **ここでは load / 実行しない**。 「どの event が coordination を宣言しているか」だけを
  * `PROBLEM_COORDINATION` config (= problemId 集合、 plugin code ではない純 metadata) で判定し、 実 tick
- * (plugin の runTick) は最小 IAM の dispatcher に委ねる (= op 経路と同じ場所)。 event 数によらず invoke は
- * 1 回/分。 coordination event が 0 なら invoke しない (= 既存挙動に対し完全な no-op)。
+ * (plugin の runTick) は最小 IAM の dispatcher に委ねる (= op 経路と同じ場所)。終了済みの scope は
+ * 保存済みの得点が残る間だけ配送する。対象が 0 なら invoke しない。
  */
 
 /** scan で集めた 1 event 分の tick 対象 (= wire 送出前の内部形。 eventNowMs は送出時に算出)。 */
@@ -25,13 +31,17 @@ export interface CollectedTickTarget {
   /** event 開始時刻 (epoch ms)。 送出時に `eventNowMs = nowMs - eventStartMs` へ変換する。 */
   readonly eventStartMs: number;
   readonly teamIds: string[];
+  readonly drainOnly?: boolean;
+  readonly initializeRunId?: string;
 }
 
-/** per-minute pass に差し込む driver (= scan で集めて、 scan 後に dispatcher を 1 回 invoke する)。 */
+/** per-minute pass に差し込む driver (= scan 後に active と保存済み pending を配送する)。 */
 export interface CoordinationTickPass {
   /** scan 1 ページから tick 対象を集約する (= per-page で呼ぶ)。 */
   collect(items: readonly Partial<DeploymentItem>[], nowIso: string): void;
-  /** 集めた対象を batch にして dispatcher を 1 回 async Invoke する (= scan 後に 1 回)。 */
+  /** Saved obligations remain discoverable after all deployment rows leave COMPLETE. */
+  collectRecovery(scopes: readonly CoordinationStateScope[]): void;
+  /** active を先に送り、終了済みは保存済み pending を見つけた場合だけ送る。 */
   run(nowMs: number, nowIso: string): Promise<void>;
 }
 
@@ -75,25 +85,29 @@ export function collectCoordinationTickTargets(
   items: readonly Partial<DeploymentItem>[],
   out: Map<string, CollectedTickTarget>,
   nowIso: string,
+  ended?: Map<string, CollectedTickTarget>,
 ): void {
   if (coordinationProblemIds.size === 0) return;
   for (const item of items) {
     const candidate = toTickCandidate(coordinationProblemIds, item, nowIso);
     if (!candidate) continue;
+    const destination = candidate.drainOnly ? ended : out;
+    if (!destination) continue;
     // JSON 配列 key: `#` 連結だと、 `#` を含む id (= 現状の validation では起きないが、 key builder
     // 側と同じ理由で不変条件に依存しない) が別 namespace と衝突しうる。
     const key = JSON.stringify([candidate.tenantId, candidate.eventId, candidate.moduleRef]);
-    const existing = out.get(key);
+    const existing = destination.get(key);
     if (existing) {
       if (!existing.teamIds.includes(candidate.teamId)) existing.teamIds.push(candidate.teamId);
       continue;
     }
-    out.set(key, {
+    destination.set(key, {
       tenantId: candidate.tenantId,
       eventId: candidate.eventId,
       moduleRef: candidate.moduleRef,
       eventStartMs: candidate.eventStartMs,
       teamIds: [candidate.teamId],
+      ...(candidate.drainOnly ? { drainOnly: true } : {}),
     });
   }
 }
@@ -105,6 +119,7 @@ interface TickCandidate {
   readonly moduleRef: string;
   readonly eventStartMs: number;
   readonly teamId: string;
+  readonly drainOnly?: boolean;
 }
 function toTickCandidate(
   coordinationProblemIds: ReadonlySet<string>,
@@ -115,7 +130,7 @@ function toTickCandidate(
   if (!tenantId || !eventId || !problemId || !teamId) return null;
   if (!coordinationProblemIds.has(problemId)) return null;
   // typeof は下の Date.parse 用の narrowing (gate 本体は isScoringActive が持つ)。
-  if (typeof eventStartsAt !== "string") return null;
+  if (typeof eventStartsAt !== "string" || nowIso < eventStartsAt) return null;
   // [Issue #3123] 採点 pass (`index.ts` の `isScoringActive`) と同じ gate を使う。 start だけを
   // 見ていた頃は、 終了済み event の deployment 行が teardown まで `COMPLETE` のまま残るため、
   // 終わった試合を tick し続けていた:
@@ -126,10 +141,18 @@ function toTickCandidate(
   //
   // `isRoundTerminated` は `eventEndsAt` 明示が無くても `eventStartsAt + 30 日` で必ず終端を
   // 返す (#1421 liveness invariant) ので、 endsAt を持たない event も有限で止まる。
-  if (!isScoringActive(item, nowIso)) return null;
+  // The start checks above plus this shared terminal rule are the isScoringActive gates.
+  const drainOnly = isRoundTerminated(item, nowIso);
   const eventStartMs = Date.parse(eventStartsAt);
   if (Number.isNaN(eventStartMs)) return null;
-  return { tenantId, eventId, moduleRef: problemId, eventStartMs, teamId };
+  return {
+    tenantId,
+    eventId,
+    moduleRef: problemId,
+    eventStartMs,
+    teamId,
+    ...(drainOnly ? { drainOnly: true } : {}),
+  };
 }
 
 /**
@@ -150,35 +173,101 @@ export function buildCoordinationTickBatch(
       moduleRef: t.moduleRef,
       eventNowMs: nowMs - t.eventStartMs,
       teamIds: t.teamIds,
+      ...(t.drainOnly ? { drainOnly: true } : {}),
+      ...(t.initializeRunId ? { initializeRunId: t.initializeRunId } : {}),
     })),
   };
 }
 
 /**
  * per-minute pass 用の driver を組む。 scan で集めた event が 1 つ以上あり、 dispatcher function name が
- * 配線されている場合にのみ、 batch を 1 回 async Invoke する。 coordination event が 0 / dispatcher 未配線
+ * 配線されている場合にのみ、 invoker が scope ごとに async Invoke する。対象が 0 / dispatcher 未配線
  * なら invoke しない (= 既存挙動に対し完全な no-op)。 invoke の失敗は握り潰し次 tick に委ねる。
  */
 export function createCoordinationTickPass(
   invoke: CoordinationTickInvoker,
   dispatcherFunctionName: string,
   coordinationProblemIds: ReadonlySet<string>,
+  repository?: DeploymentsCoordinationPort,
 ): CoordinationTickPass {
   const targets = new Map<string, CollectedTickTarget>();
+  const ended = new Map<string, CollectedTickTarget>();
   return {
     collect: (items, nowIso) =>
-      collectCoordinationTickTargets(coordinationProblemIds, items, targets, nowIso),
+      collectCoordinationTickTargets(coordinationProblemIds, items, targets, nowIso, ended),
+    collectRecovery: (scopes) => {
+      for (const scope of scopes) {
+        if (!coordinationProblemIds.has(scope.problemId)) continue;
+        const key = JSON.stringify([scope.tenantId, scope.eventId, scope.problemId]);
+        if (!ended.has(key))
+          ended.set(key, {
+            tenantId: scope.tenantId,
+            eventId: scope.eventId,
+            moduleRef: scope.problemId,
+            eventStartMs: 0,
+            teamIds: [],
+            drainOnly: true,
+          });
+      }
+    },
     run: async (nowMs, nowIso) => {
-      if (targets.size === 0 || !dispatcherFunctionName) return;
-      const batch = buildCoordinationTickBatch(targets.values(), nowMs, nowIso);
-      try {
-        await invoke(dispatcherFunctionName, batch);
-      } catch (err) {
-        // dispatcher invoke 失敗 (= throttle / not found 等) は次 tick に委ねる (= 採点を巻き込まない)。
-        console.warn("[generic-scoring] coordination tick dispatch failed", {
-          message: err instanceof Error ? err.message : String(err),
-        });
+      if (!dispatcherFunctionName) return;
+      // Recovery reads for old events must never delay dispatch of live matches.
+      await dispatchTargets([...targets.values()]);
+      await dispatchTargets(
+        await pendingEndedTargets(
+          repository,
+          [...ended.entries()].filter(([key]) => !targets.has(key)).map(([, target]) => target),
+        ),
+      );
+      async function dispatchTargets(selected: readonly CollectedTickTarget[]) {
+        if (!selected.length) return;
+        try {
+          await invoke(dispatcherFunctionName, buildCoordinationTickBatch(selected, nowMs, nowIso));
+        } catch (err) {
+          console.warn("[generic-scoring] coordination tick dispatch failed", {
+            message: err instanceof Error ? err.message : String(err),
+          });
+        }
       }
     },
   };
+}
+
+/** Discovery errors in one ended scope must not suppress ticks for healthy active events. */
+async function pendingEndedTargets(
+  repository: DeploymentsCoordinationPort | undefined,
+  targets: readonly CollectedTickTarget[],
+): Promise<CollectedTickTarget[]> {
+  if (!repository) return [];
+  const pending: CollectedTickTarget[] = [];
+  for (let offset = 0; offset < targets.length; offset += 4) {
+    const results = await Promise.allSettled(
+      targets.slice(offset, offset + 4).map((target) => pendingEndedTarget(repository, target)),
+    );
+    for (const result of results) {
+      if (result.status === "rejected") {
+        console.warn("[generic-scoring] ended coordination score discovery failed", {
+          message: String(result.reason),
+        });
+        continue;
+      }
+      if (result.value) pending.push(result.value);
+    }
+  }
+  return pending;
+}
+
+async function pendingEndedTarget(
+  repository: DeploymentsCoordinationPort,
+  target: CollectedTickTarget,
+): Promise<CollectedTickTarget | undefined> {
+  const key = { tenantId: target.tenantId, eventId: target.eventId, problemId: target.moduleRef };
+  const pointer = await repository.readCoordinationRun(key);
+  if (pointer?.pendingInitialization) return { ...target, initializeRunId: pointer.runId };
+  const runId = pointer?.runId ?? DEFAULT_COORDINATION_RUN_ID;
+  const row = await repository.readCoordinationState({ ...key, runId });
+  return row && isCoordinationStateEnvelope(row.state) && row.state.pendingScores
+    ? target
+    : undefined;
 }

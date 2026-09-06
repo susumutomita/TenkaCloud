@@ -789,6 +789,7 @@ describe("ActivationStore coordination activation (#2323)", () => {
     // The pack's declaration reaches `coordination` (→ dispatcher scope resolver) ...
     expect((bundle.coordination as Record<string, unknown>)[COORD_PROBLEM_ID]).toEqual({
       plugin: COORD_PLUGIN_REL,
+      scoreMode: "additive",
     });
     // ... and the synth-bundled `.mjs` reaches `coordinationBundles` (→ CoordinationPluginBundle S3).
     const bundles = bundle.coordinationBundles as Record<string, string>;

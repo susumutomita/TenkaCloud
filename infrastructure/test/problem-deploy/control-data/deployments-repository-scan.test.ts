@@ -1,12 +1,21 @@
-import { type DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
-import { describe, expect, it } from "vitest";
-import { DynamoDbDeploymentsRepository } from "../../../lib/problem-deploy/control-data/deployments-repository";
+import {
+  type DynamoDBDocumentClient,
+  PutCommand,
+  TransactWriteCommand,
+} from "@aws-sdk/lib-dynamodb";
+import { describe, expect, it, vi } from "vitest";
+import {
+  DynamoDbDeploymentsRepository,
+  SqlDeploymentsRepository,
+} from "../../../lib/problem-deploy/control-data/deployments-repository";
+import type { CoordinationStateScope } from "../../../lib/problem-deploy/control-data/domain/coordination-scope";
 import type {
   DeploymentRecord,
   InboxEventRecord,
   ScoreEventRecord,
 } from "../../../lib/problem-deploy/control-data/types";
-import { makeFakeDdb } from "./control-data-write.test-helpers";
+import { startCoordinationRun } from "../../../lib/problem-deploy/handlers/shared/coordination-run";
+import { makeFakeDdb, makeSqliteExecutor } from "./control-data-write.test-helpers";
 
 /**
  * [Issue #2441 / Phase B3] Deployment Scan + sub-aggregate-write seam source map:
@@ -20,6 +29,48 @@ import { makeFakeDdb } from "./control-data-write.test-helpers";
  */
 
 const TABLE = "Deployments";
+
+describe("SQLite coordination recovery discovery", () => {
+  it("returns only scopes of canonical pending envelopes and uninitialized resets", async () => {
+    const sql = makeSqliteExecutor();
+    const repo = new SqlDeploymentsRepository(sql);
+    const scope = { tenantId: "tenant", eventId: "event", problemId: "battle", runId: "default" };
+    const at = "2026-09-06T00:00:00.000Z";
+    const pending = {
+      __tenkacloudCoordinationEnvelope: 1,
+      stateSchemaVersion: 1,
+      state: { secret: "never-returned" },
+      pendingScores: { occurredAt: at, teams: {} },
+    };
+    expect(await repo.writeCoordinationState(scope, pending, 0, at, 0)).toEqual({
+      outcome: "updated",
+    });
+    const initializing = { ...scope, problemId: "second", runId: "reset" };
+    expect(
+      await startCoordinationRun({ repository: repo }, initializing, at, "reset"),
+    ).toMatchObject({ kind: "started" });
+    // An opaque legacy plugin payload with similarly named keys is not a host obligation.
+    await repo.writeCoordinationState(
+      { ...scope, problemId: "legacy" },
+      { pendingScores: {}, __tenkacloudCoordinationEnvelope: 1 },
+      0,
+      at,
+      0,
+    );
+    const onPage = vi.fn(async (_items: readonly DeploymentRecord[]) => undefined);
+    const recovery = vi.fn(async (_scopes: readonly CoordinationStateScope[]) => undefined);
+    const select = vi.spyOn(sql, "all");
+    await repo.forEachCompleteDeploymentPage(onPage, recovery);
+    expect(onPage).toHaveBeenCalledWith([]);
+    expect(recovery).toHaveBeenCalledWith([scope, initializing]);
+    const query = select.mock.calls.find(([query]) => query.includes("coordination_state_scoped"));
+    expect(query?.[0]).toContain("SELECT tenant_id, event_id, problem_id, run_id");
+    expect(query?.[0]).not.toContain("SELECT state");
+    select.mockClear();
+    await repo.forEachCompleteDeploymentPage(onPage);
+    expect(select.mock.calls.some(([query]) => query.includes("coordination_"))).toBe(false);
+  });
+});
 // biome-ignore lint/suspicious/noExplicitAny: raw DDB item fixtures.
 type Item = Record<string, any>;
 
@@ -85,6 +136,58 @@ async function drain<T>(
 
 describe("DynamoDbDeploymentsRepository — Scan (per-page callback)", () => {
   describe("forEachCompleteDeploymentPage", () => {
+    it("discovers unfinished scores and reset initialization without COMPLETE deployments", async () => {
+      const { repo, seed, commands, reset } = makeRepo(2);
+      const scope = { tenantId: "tenant-a", eventId: "ev", problemId: "p1", runId: "r1" };
+      await seed([
+        metaItem({ jobId: "retired", status: "DELETED" }),
+        {
+          PK: "COORD#tenant-a#ev#p1#r1",
+          SK: "STATE",
+          coordinationScoresPending: true,
+          coordinationRecoveryScope: scope,
+          state: { secret: "private" },
+        },
+        {
+          PK: "COORDRUN#tenant-a#ev#p2",
+          SK: "CURRENT",
+          runId: "r2",
+          pendingInitialization: true,
+          coordinationRecoveryScope: { ...scope, problemId: "p2", runId: "r2" },
+        },
+        {
+          PK: "COORD#tenant-b#ev#p1#r1",
+          SK: "STATE",
+          coordinationScoresPending: true,
+          coordinationRecoveryScope: scope,
+        },
+        { PK: "ZZZ", SK: "STATE", coordinationScoresPending: true },
+      ]);
+      const warning = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+      reset();
+      const complete: DeploymentRecord[] = [];
+      const recovery: CoordinationStateScope[] = [];
+      try {
+        await repo.forEachCompleteDeploymentPage(
+          async (page) => {
+            complete.push(...page);
+          },
+          async (page) => {
+            recovery.push(...page);
+          },
+        );
+        expect(complete).toEqual([]);
+        expect(recovery).toEqual([scope, { ...scope, problemId: "p2", runId: "r2" }]);
+        expect(warning).toHaveBeenCalledTimes(2);
+        expect(commands).toHaveLength(2);
+        expect(commands.every((cmd) => cmd.constructor.name === "ScanCommand")).toBe(true);
+        expect(commands[0].input.ExclusiveStartKey).toBeUndefined();
+        expect(commands.slice(1).every((cmd) => cmd.input.ExclusiveStartKey)).toBe(true);
+      } finally {
+        warning.mockRestore();
+      }
+    });
+
     it("should return only COMPLETE rows across the whole table when eventId is omitted", async () => {
       const { repo, seed, commands, reset } = makeRepo();
       await seed([
@@ -292,7 +395,14 @@ describe("DynamoDbDeploymentsRepository — sub-aggregate writes (Phase B3)", ()
       );
       expect(outcome).toEqual({ outcome: "updated" });
 
-      const put = commands.find((c) => c instanceof PutCommand);
+      const transaction = commands.find((c) => c instanceof TransactWriteCommand);
+      expect(transaction.input.TransactItems[0].ConditionCheck).toMatchObject({
+        Key: { PK: "COORDRUN#tn1#ev-1#problem-a", SK: "CURRENT" },
+        ConditionExpression:
+          "(attribute_not_exists(runId) OR runId = :run) AND attribute_not_exists(closed)",
+        ExpressionAttributeValues: { ":run": "default" },
+      });
+      const put = { input: transaction.input.TransactItems[1].Put };
       // [Issue #3126] A first write may only CREATE. The permissive
       // `attribute_not_exists(version) OR version = :expected` this replaced let
       // a stale op (holding a version read before a run reset) resurrect the
