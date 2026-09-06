@@ -2,7 +2,7 @@
   "$schema": "./tenkacloud-release.schema.json",
   "schemaVersion": 2,
   "release": {
-    "version": "1.5.0",
+    "version": "1.6.0",
     "status": "candidate"
   },
   "sources": {
@@ -11,7 +11,7 @@
     },
     "catalog": {
       "repository": "https://github.com/susumutomita/TenkaCloudChallenge.git",
-      "commit": "6c0a2bd1bb8ccc2b34313f400584e4076de2d2e4"
+      "commit": "acc9cfe72c86ec9e6abf9689f52687b8561212d5"
     }
   },
   "artifacts": {
@@ -49,7 +49,7 @@
   "knownLimitations": [
     "No fresh-environment Golden Path run is attached, so this release is not certified for third-party production use.",
     "No deployment mode or AWS region is certified by this manifest.",
-    "The platform commit of this release is derived from its v1.5.0 tag at publish time (#3024); the manifest lives inside that tree and cannot record it.",
+    "The platform commit of this release is derived from its v1.6.0 tag at publish time (#3024); the manifest lives inside that tree and cannot record it.",
     "The Lite launcher default RepoRef/ProblemsRepoRef pair is generated from release/launcher-defaults.json but still points at the previously released identity; it advances to this release's pair only after the published Release is verified (#3024 PR 5).",
     "The Lite launcher uses Node.js 22 because its managed CodeBuild image does not provide Node.js 24; repository development requires Node.js 24."
   ]
