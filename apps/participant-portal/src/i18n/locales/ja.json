@@ -237,6 +237,7 @@
     "reason_gate_bonus": "Gate 問題完了ボーナスで加点 (1 回限り)"
   },
   "problem_detail": {
+    "reference_header": "問題情報と環境の状態",
     "back_button": "問題一覧へ戻る",
     "video_header": "動画でわかる操作の流れ",
     "video_note": "音声なし・字幕入りです。動画を見られない環境でも、下の問題文とヒントだけで進められます。",

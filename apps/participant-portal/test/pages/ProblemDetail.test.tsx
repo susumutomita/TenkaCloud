@@ -77,7 +77,16 @@ vi.mock("../../src/components/EndpointOverrideForm", () => ({
 vi.mock("../../src/plugins/PortalPluginSlots", () => ({
   PortalPluginSlots: (props: unknown) => {
     mockPortalPluginSlots(props);
-    return <div data-testid="plugin-slots" />;
+    const [draft, setDraft] = useState("");
+    return (
+      <div data-testid="plugin-slots">
+        <input
+          aria-label="live answer draft"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+        />
+      </div>
+    );
   },
 }));
 
@@ -165,6 +174,81 @@ describe("visibility helpers", () => {
 });
 
 describe("ProblemDetailPage", () => {
+  it("puts an active interaction-only Battle first and preserves its answer while reference opens", async () => {
+    const user = userEvent.setup();
+    mockTeamView.mockReturnValue(
+      teamView({ view: viewWith({ problems: [problem({ status: "COMPLETE" })] }) }),
+    );
+    mockFindMeta.mockReturnValue(
+      meta({
+        endpoints: [],
+        dashboardSlots: { StatusPanel: "portal/StatusPanel.tsx" },
+        interTeamCoordination: {},
+      }),
+    );
+    const { rerender } = renderPage();
+    const live = screen.getByTestId("plugin-slots");
+    const reference = screen.getByRole("button", { name: "problem_detail.reference_header" });
+    expect(live.compareDocumentPosition(reference) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(reference).toHaveAttribute("aria-expanded", "false");
+    await user.type(screen.getByRole("textbox", { name: "live answer draft" }), "123");
+    await user.click(reference);
+    expect(screen.getByText("problem_detail.info_header")).toBeVisible();
+    expect(screen.getByRole("textbox", { name: "live answer draft" })).toHaveValue("123");
+    // A normal team poll does not remount the running plugin.
+    mockTeamView.mockReturnValue(
+      teamView({ view: viewWith({ problems: [problem({ status: "COMPLETE", score: 30 })] }) }),
+    );
+    rerender(<ProblemDetailPage config={config} />);
+    expect(screen.getByTestId("plugin-slots")).toBe(live);
+    expect(screen.getByRole("textbox", { name: "live answer draft" })).toHaveValue("123");
+    await user.click(reference);
+    expect(screen.getByRole("textbox", { name: "live answer draft" })).toHaveValue("123");
+  });
+
+  it("keeps an endpoint-registration Battle instruction-first", () => {
+    mockTeamView.mockReturnValue(
+      teamView({ view: viewWith({ problems: [problem({ status: "COMPLETE" })] }) }),
+    );
+    mockFindMeta.mockReturnValue(
+      meta({
+        dashboardSlots: { StatusPanel: "portal/StatusPanel.tsx" },
+        interTeamCoordination: {},
+      }),
+    );
+    renderPage();
+    expect(
+      screen.queryByRole("button", { name: "problem_detail.reference_header" }),
+    ).not.toBeInTheDocument();
+    const instructions = screen.getByText("problem_detail.info_header");
+    expect(
+      instructions.compareDocumentPosition(screen.getByTestId("plugin-slots")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.getByTestId("endpoint-form")).toBeVisible();
+  });
+
+  it("does not mount game plugins while the event is locked", () => {
+    mockTeamView.mockReturnValue(
+      teamView({
+        view: viewWith({
+          eventGate: { kind: "scoring_not_started" },
+          problems: [problem({ status: "COMPLETE" })],
+        }),
+      }),
+    );
+    mockFindMeta.mockReturnValue(
+      meta({
+        endpoints: [],
+        dashboardSlots: { StatusPanel: "portal/StatusPanel.tsx" },
+        interTeamCoordination: {},
+      }),
+    );
+    renderPage();
+    expect(screen.queryByTestId("plugin-slots")).not.toBeInTheDocument();
+    expect(mockPortalPluginSlots).not.toHaveBeenCalled();
+  });
+
   it("should redirect to /problems when jobId is missing", () => {
     mockParams.mockReturnValue({});
     renderPage();
