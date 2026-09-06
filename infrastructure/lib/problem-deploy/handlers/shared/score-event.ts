@@ -1,4 +1,5 @@
 import { ulid } from "ulid";
+import { publicCoordinationScoreReason } from "../../control-data/domain/coordination-score.js";
 import type { ScoreEventRecord } from "../../control-data/domain/deployments.js";
 import type { DeploymentItem } from "../deploy-handler/types.js";
 
@@ -80,8 +81,8 @@ export function buildScoreEventItem(
  * ドリフト事故 (#2283: gate-bonus を片側だけ除外すると operator 画面と leaderboard の
  * 合計がズレる) の温床だったため、 値集合と mapping をここに 1 本化した。
  *
- * 公開 source は 5 種のみ: scoring に影響する uptime / flag / flag-wrong / hint /
- * gate-bonus。 marker 用 `attack-detected` (= result=down) は累計 score に影響しない
+ * 公開 source は scoring に影響する uptime / flag / flag-wrong / hint /
+ * gate-bonus / coordination。 marker 用 `attack-detected` (= result=down) は累計 score に影響しない
  * ので通さない (= chart に並べない)。
  */
 export const PUBLIC_SCORE_EVENT_SOURCES = [
@@ -90,6 +91,7 @@ export const PUBLIC_SCORE_EVENT_SOURCES = [
   "flag-wrong",
   "hint",
   "gate-bonus",
+  "coordination",
 ] as const;
 export const PUBLIC_SCORE_EVENT_RESULTS = ["ok", "wrong"] as const;
 
@@ -100,6 +102,7 @@ export interface PublicScoreEventView {
   readonly points: number;
   readonly result: (typeof PUBLIC_SCORE_EVENT_RESULTS)[number];
   readonly occurredAt: string;
+  readonly reason?: string;
 }
 
 const PUBLIC_SOURCE_SET = new Set<string>(PUBLIC_SCORE_EVENT_SOURCES);
@@ -127,5 +130,8 @@ export function toPublicScoreEventView(
     points: Number(item.points ?? 0),
     result: item.result as PublicScoreEventView["result"],
     occurredAt: item.occurredAt,
+    ...(item.source === "coordination"
+      ? { reason: publicCoordinationScoreReason(item.reason) }
+      : {}),
   };
 }

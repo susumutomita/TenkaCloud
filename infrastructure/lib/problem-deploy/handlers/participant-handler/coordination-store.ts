@@ -11,6 +11,7 @@ import {
   coordinationStateExpiresAt,
   createCoordinationMatchSecret,
 } from "../../control-data/domain/coordination-scope.js";
+import type { CoordinationScoreDelivery } from "../../control-data/domain/coordination-score.js";
 import type { ControlDataRuntime } from "../../control-data/runtime-repositories.js";
 import { warnDeployTrace } from "../shared/trace-log.js";
 import { resolveDeploymentsRepository } from "./shared.js";
@@ -39,9 +40,10 @@ import { resolveDeploymentsRepository } from "./shared.js";
  * `WriteCoordinationOutcome` shape so callers are unchanged.
  *
  * [Issue #3150] This module is also the ONLY place that wraps / unwraps the
- * platform's schema-version envelope around the plugin's opaque `state`. The
- * repository (DynamoDB item / SQL row) never sees it -- it stores and returns
- * `state: unknown` verbatim, so neither backend nor the DDL needed a change.
+ * platform's schema-version envelope around the plugin's opaque `state`.
+ * [Issue #3194] The envelope also carries a durable pendingScores delivery. The
+ * repositories preserve the plugin state while guarding and acknowledging this
+ * platform-owned field; the existing table and SQL schema stay unchanged.
  * `writeCoordinationState` wraps the plugin's state before handing it to the
  * repository; `readCoordinationState` unwraps it back out. A row written
  * before this issue (or through the repository directly) carries no
@@ -66,12 +68,13 @@ export interface CoordinationStateRow {
    * 書かれた行) では undefined -- `coordination-state-schema.ts` はこれを版 1 として扱う。
    */
   readonly stateSchemaVersion?: number;
+  readonly pendingScores?: CoordinationScoreDelivery;
 }
 
 /**
- * [Issue #3150] platform が `state` に被せる封筒。 repository はこれを opaque な
- * `state: unknown` としてそのまま保存・返却するだけで、 DDB item / SQL row のどちらも
- * 形を変えない (= DDL 変更ゼロ)。
+ * [Issue #3150] platform が `state` に被せる封筒。
+ * [Issue #3194] repository は plugin state を解釈せず、platform の pendingScores だけを
+ * 配信の条件・acknowledgement に使う。既存 DDB item / SQL row に保存し、DDL は変えない。
  *
  * [Issue #3150] Codex review: マーカー 1 つでの判定は不十分。 plugin の State は `unknown` なので
  * どんな形もあり得る -- たまたま同じ key を持つ旧 state を封筒と誤認すると、 `state.state` が
@@ -81,6 +84,7 @@ export interface CoordinationStateRow {
 interface CoordinationStateEnvelope {
   readonly __tenkacloudCoordinationEnvelope: 1;
   readonly stateSchemaVersion: number;
+  readonly pendingScores?: CoordinationScoreDelivery;
   readonly state: unknown;
 }
 
@@ -129,6 +133,7 @@ export async function readCoordinationState(
       version: record.version,
       expiresAt: record.expiresAt,
       stateSchemaVersion: record.state.stateSchemaVersion,
+      pendingScores: record.state.pendingScores,
     };
   }
   return { state: record.state, version: record.version, expiresAt: record.expiresAt };
@@ -200,6 +205,10 @@ export const COORDINATION_BUDGET_EXCEEDED_EVENT = "coordination.state.budget-exc
  * 1 枚剥いで元の値に戻り、 版も 1 のままで一致する。 この 1 ケースだけ rollback 互換を失うが、
  * 「rollback したときだけ壊れる」は「毎回壊れる」より厳密に良い。 形の検査を増やしても曖昧さは
  * 消せない (それが指摘の主旨) ので、 曖昧になる値の側を封で退避させる。
+ *
+ * [Issue #3194] 採点を伴う遷移は schema 1 でも封筒に pendingScores を保存する。
+ * これは state と得点配信の分裂を防ぐためで、封筒対応前の dispatcher への rollback は
+ * 対象外。現在の dispatcher は従来の生 state と採点付き封筒の両方を読める。
  */
 export async function writeCoordinationState(
   deps: CoordinationStoreDeps,
@@ -208,14 +217,16 @@ export async function writeCoordinationState(
   expectedVersion: number,
   nowIso: string,
   stateSchemaVersion = 1,
+  pendingScores?: CoordinationScoreDelivery,
 ): Promise<WriteCoordinationOutcome> {
   const repository: DeploymentsCoordinationPort = await resolveDeploymentsRepository(deps);
   const payload: unknown =
-    stateSchemaVersion >= 2 || isCoordinationStateEnvelope(state)
+    stateSchemaVersion >= 2 || isCoordinationStateEnvelope(state) || pendingScores !== undefined
       ? ({
           __tenkacloudCoordinationEnvelope: COORDINATION_ENVELOPE_MARKER,
           stateSchemaVersion,
           state,
+          ...(pendingScores ? { pendingScores } : {}),
         } satisfies CoordinationStateEnvelope)
       : state;
   // [Issue #3151] Measured on `payload` -- the bytes that actually reach the

@@ -49,8 +49,20 @@ function resolveName(token: string, names: Names): string {
   return token.startsWith("#") ? (names?.[token] ?? token) : token;
 }
 
+function readDocumentPath(item: Item, token: string, names: Names): unknown {
+  return token
+    .split(".")
+    .reduce<unknown>(
+      (value, segment) =>
+        value && typeof value === "object"
+          ? (value as Item)[resolveName(segment, names)]
+          : undefined,
+      item,
+    );
+}
+
 function tokenize(expr: string): string[] {
-  return expr.match(/[#:]?[A-Za-z0-9_.]+|<>|=|\(|\)|,/g) ?? [];
+  return expr.match(/[#:]?[A-Za-z0-9_.]+|<>|<|=|\(|\)|,/g) ?? [];
 }
 
 function deepEqual(a: unknown, b: unknown): boolean {
@@ -90,7 +102,7 @@ export function evalConditionExpression(
     if (got !== want) throw new Error(`FakeDdb: expected "${want}" but got "${got}" in: ${expr}`);
   };
   const operandValue = (token: string): unknown =>
-    token.startsWith(":") ? values?.[token] : item[resolveName(token, names)];
+    token.startsWith(":") ? values?.[token] : readDocumentPath(item, token, names);
 
   function parseAttributeFunction(): boolean | undefined {
     const fn = peek();
@@ -99,14 +111,14 @@ export function evalConditionExpression(
       expect("(");
       const attr = next();
       expect(")");
-      return item[resolveName(attr, names)] === undefined;
+      return readDocumentPath(item, attr, names) === undefined;
     }
     if (fn === "attribute_exists") {
       next();
       expect("(");
       const attr = next();
       expect(")");
-      return item[resolveName(attr, names)] !== undefined;
+      return readDocumentPath(item, attr, names) !== undefined;
     }
     if (fn === "contains") {
       next();
@@ -115,7 +127,7 @@ export function evalConditionExpression(
       expect(",");
       const value = next();
       expect(")");
-      return containsValue(item[resolveName(attr, names)], operandValue(value));
+      return containsValue(readDocumentPath(item, attr, names), operandValue(value));
     }
     return undefined;
   }
@@ -125,6 +137,7 @@ export function evalConditionExpression(
     const op = next();
     if (op === "=") return operandValue(left) === operandValue(next());
     if (op === "<>") return operandValue(left) !== operandValue(next());
+    if (op === "<") return Number(operandValue(left)) < Number(operandValue(next()));
     if (op === "IN") {
       expect("(");
       const list: unknown[] = [operandValue(next())];
@@ -256,7 +269,11 @@ function applySetClause(item: Item, body: string, names: Names, values: Values):
 
 function applyRemoveClause(item: Item, body: string, names: Names): void {
   for (const rawAttr of splitTopLevelCommas(body)) {
-    delete item[resolveName(rawAttr.trim(), names)];
+    const segments = rawAttr.trim().split(".");
+    const last = segments.pop();
+    const parent = segments.length ? readDocumentPath(item, segments.join("."), names) : item;
+    if (last && parent && typeof parent === "object")
+      delete (parent as Item)[resolveName(last, names)];
   }
 }
 
@@ -623,7 +640,9 @@ export function makeFakeDdb(options: { readonly pageSize?: number } = {}): Dynam
     return conditionCode(ok);
   };
 
-  const transactUpdateConditionCode = (updateEntry: NonNullable<TransactItem["Update"]>) => {
+  const transactUpdateConditionCode = (
+    updateEntry: NonNullable<TransactItem["Update"]> | NonNullable<TransactItem["ConditionCheck"]>,
+  ) => {
     const key = updateEntry.Key as Item;
     const existing = tableFor(updateEntry.TableName).get(keyOf(key.PK, key.SK)) ?? {};
     const ok = updateEntry.ConditionExpression
@@ -654,6 +673,7 @@ export function makeFakeDdb(options: { readonly pageSize?: number } = {}): Dynam
   const transactConditionCode = (entry: TransactItem): "None" | "ConditionalCheckFailed" => {
     if (entry.Put) return transactPutConditionCode(entry.Put);
     if (entry.Update) return transactUpdateConditionCode(entry.Update);
+    if (entry.ConditionCheck) return transactUpdateConditionCode(entry.ConditionCheck);
     if (entry.Delete) return transactDeleteConditionCode(entry.Delete);
     throw new Error("FakeDdb: unsupported transact item");
   };

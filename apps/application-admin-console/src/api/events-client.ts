@@ -80,7 +80,8 @@ export interface TeamScoreEventView {
   jobId: string;
   problemId: string;
   /** Issue #2283: "gate-bonus" = Progression Gate 完了時に 1 度だけ付与される固定ボーナス。 */
-  source: "uptime" | "flag" | "flag-wrong" | "hint" | "gate-bonus";
+  source: "uptime" | "flag" | "flag-wrong" | "hint" | "gate-bonus" | "coordination";
+  readonly reason?: string;
   points: number;
   result: "ok" | "wrong";
   occurredAt: string;

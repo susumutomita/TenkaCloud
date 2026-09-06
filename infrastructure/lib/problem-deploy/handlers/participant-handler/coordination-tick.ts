@@ -9,6 +9,11 @@ import {
 import type { CoordinationConfig } from "./coordination-handler.js";
 import { loadCoordinationPlugin, type PluginImporter } from "./coordination-plugin-loader.js";
 import { resolveEventRoster } from "./coordination-roster.js";
+import {
+  coordinationScoreDelivery,
+  deliverCoordinationScores,
+  tryDeliverCoordinationScores,
+} from "./coordination-scoring.js";
 import { pluginStateSchemaVersion, reconcileStateSchema } from "./coordination-state-schema.js";
 import {
   type CoordinationStateScope,
@@ -135,6 +140,7 @@ async function tickCoordinationEvent(
     ),
   };
   const existing = await readCoordinationState(deps.store, scope);
+  await deliverCoordinationScores(deps.store, scope, existing);
   if (load.kind === "invalid_schema") {
     // [Issue #3150] Codex review: 版宣言が壊れた plugin を bundle 不在と同じ早期 return にすると、
     // scope も導出されず TTL も延びないまま retention (7 日) が来て **進行中の行が消える**。
@@ -206,6 +212,13 @@ async function tickCoordinationEvent(
     await refreshCoordinationTtl(deps, target, scope, existing, nowIso);
     return false;
   }
+  const pendingScores = coordinationScoreDelivery(
+    plugin,
+    currentState,
+    nextState,
+    { kind: "tick" },
+    nowIso,
+  );
   const written = await writeCoordinationState(
     deps.store,
     scope,
@@ -213,6 +226,7 @@ async function tickCoordinationEvent(
     version,
     nowIso,
     pluginStateSchemaVersion(schema),
+    pendingScores,
   );
   if (written.kind === "conflict") {
     // 並行 op が version race に勝った (= applyOp が先に書いた)。 lost-update を作らず次 tick で
@@ -238,6 +252,11 @@ async function tickCoordinationEvent(
     await refreshCoordinationTtl(deps, target, scope, existing, nowIso);
     return false;
   }
+  await tryDeliverCoordinationScores(deps.store, scope, {
+    state: nextState,
+    version: version + 1,
+    pendingScores,
+  });
   return true;
 }
 

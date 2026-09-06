@@ -1,10 +1,12 @@
 import { DeleteCommand, GetCommand, PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import { ulid } from "ulid";
 import type { CoordinationRunKey, CoordinationRunPointer } from "./domain/coordination-run.js";
 import {
   assertConditionableVersion,
   type CoordinationStateScope,
   DEFAULT_COORDINATION_RUN_ID,
 } from "./domain/coordination-scope.js";
+import type { CoordinationScoreUpdate } from "./domain/coordination-score.js";
 import {
   COORD_RUN_SK,
   COORD_SECRET_SK,
@@ -34,6 +36,94 @@ import type {
  */
 export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationPort {
   constructor(private readonly core: DynamoDbDeploymentsCore) {}
+
+  async publishCoordinationScore(
+    scope: CoordinationStateScope,
+    version: number,
+    update: CoordinationScoreUpdate,
+  ): Promise<DeploymentMutationOutcome> {
+    return this.core.transactWrite({
+      TransactItems: [
+        {
+          ConditionCheck: {
+            TableName: this.core.tableName,
+            Key: { PK: coordinationRunPk(scope), SK: COORD_RUN_SK },
+            ConditionExpression:
+              scope.runId === DEFAULT_COORDINATION_RUN_ID
+                ? "attribute_not_exists(runId) OR runId = :run"
+                : "runId = :run",
+            ExpressionAttributeValues: { ":run": scope.runId },
+          },
+        },
+        {
+          ConditionCheck: {
+            TableName: this.core.tableName,
+            Key: { PK: coordinationPk(scope), SK: COORD_STATE_SK },
+            ConditionExpression: "version = :version AND attribute_exists(#state.pendingScores)",
+            ExpressionAttributeNames: { "#state": "state" },
+            ExpressionAttributeValues: { ":version": version },
+          },
+        },
+        {
+          Update: {
+            TableName: this.core.tableName,
+            Key: this.core.deploymentKey(update.jobId),
+            UpdateExpression:
+              "SET score = :score, coordinationScoreRunId = :run, coordinationScoreVersion = :version, updatedAt = :at",
+            ConditionExpression:
+              "tenantId = :tenant AND eventId = :event AND problemId = :problem AND teamId = :team AND #status = :status AND attribute_not_exists(teardownRequestedAt) AND " +
+              (update.expectedScore === undefined
+                ? "attribute_not_exists(score)"
+                : "score = :expected") +
+              " AND (attribute_not_exists(coordinationScoreRunId) OR coordinationScoreRunId <> :run OR coordinationScoreVersion < :version)",
+            ExpressionAttributeNames: { "#status": "status" },
+            ExpressionAttributeValues: {
+              ":tenant": scope.tenantId,
+              ":event": scope.eventId,
+              ":problem": scope.problemId,
+              ":team": update.teamId,
+              ":status": update.expectedStatus,
+              ":score": update.score,
+              ":run": scope.runId,
+              ":version": version,
+              ":at": update.events[0]?.occurredAt,
+              ...(update.expectedScore === undefined ? {} : { ":expected": update.expectedScore }),
+            },
+          },
+        },
+        ...update.events.map((event) => ({
+          Put: {
+            TableName: this.core.tableName,
+            Item: {
+              ...event,
+              PK: `DEPLOYMENT#${update.jobId}`,
+              SK: `EVENT#${event.occurredAt}#${ulid()}`,
+            },
+          },
+        })),
+      ],
+    });
+  }
+
+  async acknowledgeCoordinationScores(
+    scope: CoordinationStateScope,
+    version: number,
+  ): Promise<void> {
+    try {
+      await this.core.ddb.send(
+        new UpdateCommand({
+          TableName: this.core.tableName,
+          Key: { PK: coordinationPk(scope), SK: COORD_STATE_SK },
+          UpdateExpression: "REMOVE #state.pendingScores",
+          ConditionExpression: "version = :version",
+          ExpressionAttributeNames: { "#state": "state" },
+          ExpressionAttributeValues: { ":version": version },
+        }),
+      );
+    } catch (error) {
+      if (!isConditionalCheckFailed(error)) throw error;
+    }
+  }
 
   // -- COORD#: coordination state -----------------------------------------
 
@@ -153,7 +243,9 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
           ...(expectedVersion === 0
             ? { ConditionExpression: "attribute_not_exists(version)" }
             : {
-                ConditionExpression: "version = :expected",
+                ConditionExpression:
+                  "version = :expected AND (attribute_not_exists(#state.__tenkacloudCoordinationEnvelope) OR attribute_not_exists(#state.pendingScores))",
+                ExpressionAttributeNames: { "#state": "state" },
                 ExpressionAttributeValues: { ":expected": expectedVersion },
               }),
         }),

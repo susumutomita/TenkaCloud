@@ -8,6 +8,11 @@ import {
 import type { CoordinationStateBudget } from "../../control-data/domain/coordination-budget.js";
 import type { CoordinationStateScope } from "../../control-data/domain/coordination-scope.js";
 import {
+  coordinationScoreDelivery,
+  deliverCoordinationScores,
+  tryDeliverCoordinationScores,
+} from "./coordination-scoring.js";
+import {
   pluginStateSchemaVersion,
   reconcileStateSchema,
   type StateSchemaMismatchReason,
@@ -50,17 +55,6 @@ export type CoordinationDispatchOutcome =
   | {
       readonly kind: "ok";
       readonly projection: unknown;
-      /**
-       * [Issue #659] Team scores the op CHANGED, absolute, keyed by teamId.
-       *
-       * Only present when the plugin declares `teamScores`, and only carrying
-       * the teams whose figure actually moved — usually the acting team, two
-       * for a hunt. The platform copies these onto the deployment rows so the
-       * scoreboard shows the match; before this, a coordination problem's score
-       * could not reach it at all (`scoring` is undeclared for such problems and
-       * no builtin kind reads plugin state).
-       */
-      readonly changedScores?: Readonly<Record<string, number>>;
     }
   | { readonly kind: "rejected"; readonly error: string }
   | { readonly kind: "conflict" }
@@ -233,6 +227,7 @@ async function attemptDispatch<State, Op, Projection>(
   schema: CoordinationSchemaDeclaration<State>,
 ): Promise<CoordinationDispatchOutcome> {
   const existing = await readCoordinationState(store, input.scope);
+  await deliverCoordinationScores(store, input.scope, existing);
   // [Issue #3133] 秘密が要るのは `initialState` を呼ぶときだけ — ctx を受け取る hook は
   // それ 1 つで、 validateOp / applyOp / projectForTeam は (state, teamId, op) しか見ない。
   // だから既存 state があるときは秘密に一切触らない: 全 op に read/write を足さずに済む。
@@ -255,6 +250,13 @@ async function attemptDispatch<State, Op, Projection>(
   const verdict = dispatchOp(plugin, state, input.teamId, input.op);
   if (!verdict.ok) return { kind: "rejected", error: verdict.error };
 
+  const pendingScores = coordinationScoreDelivery(
+    plugin,
+    state,
+    verdict.state,
+    { kind: "op", teamId: input.teamId, op: input.op },
+    input.nowIso,
+  );
   const written = await writeCoordinationState(
     store,
     input.scope,
@@ -264,6 +266,7 @@ async function attemptDispatch<State, Op, Projection>(
     // [Issue #3150] write は常に plugin の「現在の」版で封筒に刻む -- migrated 経路 (旧行を
     // 持ち上げた) でも、 未初期化からの初回 write でも同じ。 旧版のまま書く理由が無い。
     pluginStateSchemaVersion(schema),
+    pendingScores,
   );
   if (written.kind === "conflict") return { kind: "conflict" };
   if (written.kind === "too_large") {
@@ -276,35 +279,12 @@ async function attemptDispatch<State, Op, Projection>(
     input.teamId,
     input.fallbackProjection as Projection,
   );
-  // [Issue #659] Compare before and after so only the rows that moved are
-  // written. A plugin that throws here must not lose the op: the state is
-  // already committed, and a missing scoreboard update is repaired by the next
-  // op, while a thrown error would report a rejection that did not happen.
-  return { kind: "ok", projection, changedScores: diffTeamScores(plugin, state, verdict.state) };
-}
-
-function diffTeamScores<State, Op, Projection>(
-  plugin: CoordinationPlugin<State, Op, Projection>,
-  before: State,
-  after: State,
-): Readonly<Record<string, number>> | undefined {
-  if (!plugin.teamScores) return undefined;
-  try {
-    const previous = plugin.teamScores(before);
-    const current = plugin.teamScores(after);
-    const changed: Record<string, number> = {};
-    for (const [teamId, score] of Object.entries(current)) {
-      if (typeof score === "number" && Number.isFinite(score) && previous[teamId] !== score) {
-        changed[teamId] = score;
-      }
-    }
-    return Object.keys(changed).length > 0 ? changed : undefined;
-  } catch (err) {
-    console.warn("[coordination] teamScores threw; scoreboard not updated for this op", {
-      message: err instanceof Error ? err.message : String(err),
-    });
-    return undefined;
-  }
+  await tryDeliverCoordinationScores(store, input.scope, {
+    state: verdict.state,
+    version: version + 1,
+    pendingScores,
+  });
+  return { kind: "ok", projection };
 }
 
 /** {@link projectCoordinationForTeam} の結果。 */
@@ -323,7 +303,7 @@ export type CoordinationProjectionOutcome =
     };
 
 /**
- * 当該 team の現在 projection を読む (= 書き込みなし、 portal の polling 用)。 state 未初期化なら
+ * 当該 team の現在 projection を読む。未配信の採点は再試行するが、試合状態は進めない。 state 未初期化なら
  * plugin.initialState を投影する。 plugin が throw しても `fallbackProjection` を返す (fail-safe)。
  */
 export async function projectCoordinationForTeam<State, Op, Projection>(
@@ -340,6 +320,9 @@ export async function projectCoordinationForTeam<State, Op, Projection>(
   // ctx 不整合 (= 別 event 用 ctx / team が event 外) は fail-closed で fallback を返す (= 機密非漏洩)。
   if (!isContextConsistent(input)) return { kind: "ok", projection: input.fallbackProjection };
   const existing = await readCoordinationState(store, input.scope);
+  // Recovery must remain possible after the event window closes and scheduled ticks stop.
+  // This only delivers an already committed transition; it does not advance the game or TTL.
+  if (existing?.pendingScores) await tryDeliverCoordinationScores(store, input.scope, existing);
   if (existing) {
     // [Issue #3150] read 経路なので write はしない -- mismatch はそのまま返し、 ok (migrated
     // でも) はその state を投影するだけで版を書き戻さない。

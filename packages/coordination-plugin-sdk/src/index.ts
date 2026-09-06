@@ -131,6 +131,14 @@ export interface CoordinationPlugin<State, Op, Projection = unknown> {
    * optional: 宣言しない plugin は従来どおり scoreboard に何も書かない。
    */
   teamScores?(state: State): Readonly<Record<string, number>>;
+  /** Public reason codes only: never copy input, proof, secret or another team's private state. */
+  scoreReasons?(
+    before: State,
+    after: State,
+    cause:
+      | { readonly kind: "op"; readonly teamId: string; readonly op: Op }
+      | { readonly kind: "tick" },
+  ): Readonly<Record<string, string>>;
 }
 
 /** {@link dispatchOp} の結果。 受理時は次 state、 拒否時は validateOp の error。 */

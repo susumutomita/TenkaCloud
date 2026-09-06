@@ -1,10 +1,13 @@
+import { ulid } from "ulid";
 import type { CoordinationRunKey, CoordinationRunPointer } from "./domain/coordination-run.js";
 import {
   assertConditionableVersion,
   type CoordinationStateScope,
   DEFAULT_COORDINATION_RUN_ID,
 } from "./domain/coordination-scope.js";
+import type { CoordinationScoreUpdate } from "./domain/coordination-score.js";
 import { normalizeJsonValue, type SqlDeploymentsCore } from "./sql-deployments-core.js";
+import type { SqlStatement } from "./sql-port.js";
 import type {
   CoordinationStateRecord,
   DeploymentMutationOutcome,
@@ -23,6 +26,90 @@ import type {
  */
 export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
   constructor(private readonly core: SqlDeploymentsCore) {}
+
+  async publishCoordinationScore(
+    scope: CoordinationStateScope,
+    version: number,
+    update: CoordinationScoreUpdate,
+  ): Promise<DeploymentMutationOutcome> {
+    const at = update.events[0]?.occurredAt ?? "";
+    const statements: SqlStatement[] = [
+      {
+        sql: `UPDATE deployments SET score = ?, updated_at = ?,
+          payload = json_set(payload, '$.score', ?, '$.updatedAt', ?, '$.coordinationScoreRunId', ?, '$.coordinationScoreVersion', ?)
+          WHERE job_id = ? AND tenant_id = ? AND event_id = ? AND problem_id = ? AND team_id = ? AND status = ?
+          AND json_extract(payload, '$.teardownRequestedAt') IS NULL AND score IS ?
+          AND (json_extract(payload, '$.coordinationScoreRunId') IS NOT ? OR json_extract(payload, '$.coordinationScoreVersion') < ?)
+          AND COALESCE((SELECT run_id FROM coordination_run WHERE tenant_id = ? AND event_id = ? AND problem_id = ?), ?) = ?
+          AND EXISTS (SELECT 1 FROM coordination_state_scoped WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ?
+            AND version = ? AND json_extract(state, '$.pendingScores') IS NOT NULL)`,
+        params: [
+          update.score,
+          at,
+          update.score,
+          at,
+          scope.runId,
+          version,
+          update.jobId,
+          scope.tenantId,
+          scope.eventId,
+          scope.problemId,
+          update.teamId,
+          update.expectedStatus,
+          update.expectedScore ?? null,
+          scope.runId,
+          version,
+          scope.tenantId,
+          scope.eventId,
+          scope.problemId,
+          DEFAULT_COORDINATION_RUN_ID,
+          scope.runId,
+          scope.tenantId,
+          scope.eventId,
+          scope.problemId,
+          scope.runId,
+          version,
+        ],
+      },
+      // The existing score-event NOT NULL constraint turns a missed CAS into a rollback.
+      // A batch is atomic but UPDATE matching zero rows does not itself abort SQLite.
+      {
+        sql: "INSERT INTO deployment_score_events (job_id, sk, record_type, payload) SELECT 'coordination-score-cas', '', 'score', NULL WHERE changes() <> 1",
+      },
+      ...update.events.map((event) => ({
+        sql: "INSERT INTO deployment_score_events (job_id, sk, record_type, occurred_at, expires_at, payload) VALUES (?, ?, ?, ?, ?, ?)",
+        params: [
+          update.jobId,
+          `EVENT#${event.occurredAt}#${ulid()}`,
+          "score",
+          event.occurredAt,
+          event.expiresAt,
+          JSON.stringify(event),
+        ],
+      })),
+    ];
+    try {
+      await this.core.sql.batch(statements);
+      return { outcome: "updated" };
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        /NOT NULL constraint failed: deployment_score_events.payload/.test(error.message)
+      )
+        return { outcome: "conflict" };
+      throw error;
+    }
+  }
+
+  async acknowledgeCoordinationScores(
+    scope: CoordinationStateScope,
+    version: number,
+  ): Promise<void> {
+    await this.core.sql.run(
+      "UPDATE coordination_state_scoped SET state = json_remove(state, '$.pendingScores') WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ? AND version = ?",
+      [scope.tenantId, scope.eventId, scope.problemId, scope.runId, version],
+    );
+  }
 
   async readCoordinationState(
     scope: CoordinationStateScope,
@@ -95,7 +182,7 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
         : await this.core.sql.run(
             `UPDATE coordination_state_scoped
          SET state = ?, version = ?, updated_at = ?, expires_at = ?
-       WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ? AND version = ?`,
+       WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ? AND version = ? AND (json_extract(state, '$.__tenkacloudCoordinationEnvelope') IS NOT 1 OR json_extract(state, '$.pendingScores') IS NULL)`,
             [
               JSON.stringify(normalizeJsonValue(state)),
               expectedVersion + 1,

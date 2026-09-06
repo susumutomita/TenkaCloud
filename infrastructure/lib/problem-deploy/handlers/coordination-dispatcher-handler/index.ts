@@ -15,7 +15,6 @@ import {
   handleCoordinationOp,
   handleCoordinationProjection,
   makeCoordinationScopeResolver,
-  makeCoordinationScorePublisher,
   parseCoordinationConfig,
 } from "../participant-handler/coordination-handler.js";
 import type { PluginImporter } from "../participant-handler/coordination-plugin-loader.js";
@@ -77,7 +76,6 @@ const coordinationDeps: CoordinationHandlerDeps = {
   // to carry that figure to the scoreboard — the portal showed 0 for a team an
   // hour into a match. The dispatcher already has write access to this table,
   // so it copies the plugin's scores across without new IAM or a new path.
-  publishScores: makeCoordinationScorePublisher(shared),
   artifacts: coordinationArtifacts,
 };
 

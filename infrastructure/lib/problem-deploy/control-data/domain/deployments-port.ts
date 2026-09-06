@@ -1,3 +1,4 @@
+import type { CoordinationScoreUpdate } from "./coordination-score.js";
 /**
  * [Issue #2527 Slice 1] Deployments aggregate — the repository port.
  *
@@ -572,6 +573,15 @@ export interface DeploymentsCoordinationPort {
    * same event happened to read first. See {@link
    * PRE_SCOPE_COORDINATION_NAMESPACE}.
    */
+  /** Atomically publishes one team's score and history; stale deliveries cannot overwrite newer runs/versions. */
+  publishCoordinationScore(
+    scope: CoordinationStateScope,
+    version: number,
+    update: CoordinationScoreUpdate,
+  ): Promise<DeploymentMutationOutcome>;
+  /** Clear the durable delivery only after every team has committed; preserves the state version. */
+  acknowledgeCoordinationScores(scope: CoordinationStateScope, version: number): Promise<void>;
+
   readCoordinationState(
     scope: CoordinationStateScope,
   ): Promise<CoordinationStateRecord | undefined>;

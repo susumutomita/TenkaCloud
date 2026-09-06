@@ -522,36 +522,25 @@ describe("dispatchCoordinationOp", () => {
     expect(statePuts).toEqual([]);
   });
 
-  /**
-   * [Issue #659] `teamScores` is a plugin's own code running on the accepted-op
-   * path. The op is already committed when it runs, so a plugin bug there must
-   * cost at most one scoreboard update — never the move the participant made.
-   */
-  // A plugin is third-party code and JavaScript lets it throw anything, so the
-  // string case is not hypothetical — and a log line reading "undefined" is
-  // useless in the middle of a match.
-  it.each([
-    ["an Error", new Error("plugin bug"), "plugin bug"],
-    ["a bare string", "plugin bug", "plugin bug"],
-  ])("should keep the op when the plugin's teamScores throws %s", async (_label, thrown, msg) => {
-    const { store } = fakeStore({ getItem: undefined });
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    const out = await dispatchCoordinationOp(
-      store,
-      {
-        ...counter,
-        teamScores: () => {
-          throw thrown;
+  it("refuses the transition before saving when the score hook fails", async () => {
+    const { store, send } = fakeStore({ getItem: undefined });
+    await expect(
+      dispatchCoordinationOp(
+        store,
+        {
+          ...counter,
+          teamScores: () => {
+            throw new Error("plugin bug");
+          },
         },
-      },
-      { ...base, op: { kind: "inc" }, nowIso: "2026-06-01T00:00:00Z" },
-    );
-    expect(out).toEqual({ kind: "ok", projection: { count: 1 } });
-    expect(warn).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({ message: msg }),
-    );
-    warn.mockRestore();
+        { ...base, op: { kind: "inc" }, nowIso: "2026-06-01T00:00:00Z" },
+      ),
+    ).rejects.toThrow("plugin bug");
+    expect(
+      send.mock.calls.some(
+        ([command]) => command instanceof PutCommand && command.input.Item?.SK === "STATE",
+      ),
+    ).toBe(false);
   });
 
   it("should report no scores when the op moved nobody", async () => {
@@ -574,7 +563,7 @@ describe("dispatchCoordinationOp", () => {
       { ...base, op: { kind: "inc" }, nowIso: "2026-06-01T00:00:00Z" },
     );
     // teamB sat still, so it is absent: an unchanged row is not rewritten.
-    expect(out).toEqual({ kind: "ok", projection: { count: 1 }, changedScores: { teamA: 10 } });
+    expect(out).toEqual({ kind: "ok", projection: { count: 1 } });
   });
 
   it("should surface a write conflict once it has run out of attempts", async () => {
