@@ -271,6 +271,7 @@ async function attemptDispatch<State, Op, Projection>(
     verdict.state,
     { kind: "op", teamId: input.teamId, op: input.op },
     input.nowIso,
+    !existing,
   );
   const written = await writeCoordinationState(
     store,

@@ -37,15 +37,19 @@ import {
  * operator resets because something went wrong; the old reset destroyed the
  * evidence of what went wrong as its first act. Runs beyond the retention
  * window are still removed — history is a debrief, not an archive.
+ *
+ * [Issue #3194] A saved score delivery must finish before the run can end.
+ * Pending delivery returns the existing conflict outcome; the current run
+ * stays reachable by normal op/tick recovery, then the operator can retry.
  */
 export type CoordinationResetOutcome =
   | { readonly kind: "ok"; readonly result: CoordinationResetResult }
   /** The event has no deployment of this problem, so there is no match to reset. */
   | { readonly kind: "not_found" }
   /**
-   * [Issue #3153] Another rotation started a run first. Reported rather than
-   * retried: two operators resetting at once should not silently end up with
-   * two runs started and one discarded.
+   * Another rotation started a run first, or saved score delivery is pending.
+   * Reported rather than retried: the caller must re-read the current run and
+   * allow its delivery recovery before deciding to reset again.
    */
   | { readonly kind: "conflict" };
 

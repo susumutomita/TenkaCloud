@@ -76,7 +76,17 @@ const coordinationArtifacts: CoordinationArtifactStore = artifactBucket
 
 const coordinationDeps: CoordinationHandlerDeps = {
   importer: coordinationImporter,
-  store: { runtime: shared.runtime, ddb: shared.ddb, tableName: shared.tableName },
+  store: {
+    runtime: shared.runtime,
+    ddb: shared.ddb,
+    tableName: shared.tableName,
+    coordinationScoreModes: Object.fromEntries(
+      Object.entries(coordinationConfig).map(([id, entry]) => [
+        id,
+        entry.scoreMode === "exclusive" ? "exclusive" : "additive",
+      ]),
+    ),
+  },
   resolveScope: makeCoordinationScopeResolver(shared, coordinationConfig),
   artifacts: coordinationArtifacts,
 };

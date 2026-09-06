@@ -2,6 +2,7 @@ import { DeleteCommand, GetCommand, PutCommand, QueryCommand } from "@aws-sdk/li
 import { describe, expect, it, vi } from "vitest";
 import { resetCoordinationRun } from "../../lib/problem-deploy/handlers/event-handler/coordination-reset";
 import type { EventSharedResources } from "../../lib/problem-deploy/handlers/event-handler/shared";
+import { makeFakeDdb } from "./control-data/control-data-write.test-helpers";
 import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers";
 
 /**
@@ -30,30 +31,13 @@ import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers"
 function buildShared(deployments: readonly Record<string, unknown>[]): {
   shared: EventSharedResources;
   ddbSend: ReturnType<typeof vi.fn>;
-  items: Map<string, Record<string, unknown>>;
+  getItem: (key: { PK: string; SK: string }) => Promise<Record<string, unknown> | undefined>;
+  putItem: (item: Record<string, unknown>) => Promise<void>;
 } {
-  const items = new Map<string, Record<string, unknown>>();
-  const keyOf = (key: Record<string, unknown> | undefined) => `${key?.PK}/${key?.SK}`;
+  const ddb = makeFakeDdb();
   const ddbSend = vi.fn(async (cmd: unknown) => {
     if (cmd instanceof QueryCommand) return { Items: [...deployments] };
-    if (cmd instanceof GetCommand) return { Item: items.get(keyOf(cmd.input.Key)) };
-    if (cmd instanceof PutCommand) {
-      const item = cmd.input.Item as Record<string, unknown>;
-      const stored = items.get(`${item.PK}/${item.SK}`);
-      // Mimic the conditional the adapter relies on, so a rotation that should
-      // lose actually loses.
-      const expected = cmd.input.ExpressionAttributeValues?.[":expected"];
-      if (expected !== undefined && stored && stored.runId !== expected) {
-        throw Object.assign(new Error("conditional"), { name: "ConditionalCheckFailedException" });
-      }
-      items.set(`${item.PK}/${item.SK}`, item);
-      return {};
-    }
-    if (cmd instanceof DeleteCommand) {
-      items.delete(keyOf(cmd.input.Key));
-      return {};
-    }
-    return {};
+    return ddb.send(cmd as never);
   });
   const shared: EventSharedResources = {
     runtime: makeTestControlDataRuntime(),
@@ -67,7 +51,15 @@ function buildShared(deployments: readonly Record<string, unknown>[]): {
     events: { send: vi.fn() } as unknown as EventSharedResources["events"],
     problemsCatalog: {},
   };
-  return { shared, ddbSend, items };
+  return {
+    shared,
+    ddbSend,
+    getItem: async (key) =>
+      (await ddb.send(new GetCommand({ TableName: "TestDeployments", Key: key }))).Item,
+    putItem: async (item) => {
+      await ddb.send(new PutCommand({ TableName: "TestDeployments", Item: item }));
+    },
+  };
 }
 
 const deployment = (problemId: string, teamId: string) => ({
@@ -86,6 +78,36 @@ const deleteKeys = (ddbSend: ReturnType<typeof vi.fn>) =>
     .map((cmd) => `${cmd.input.Key?.PK}/${cmd.input.Key?.SK}`);
 
 describe("resetCoordinationRun (#3153)", () => {
+  it("should keep the current run and return conflict while score delivery is pending", async () => {
+    const { shared, ddbSend, getItem, putItem } = buildShared([deployment("battle-a", "team-1")]);
+    const stateKey = { PK: "COORD#tenant-acme#EV1#battle-a#default", SK: "STATE" };
+    const saved = {
+      ...stateKey,
+      version: 1,
+      coordinationScoresPending: true,
+      state: {
+        __tenkacloudCoordinationEnvelope: 1,
+        stateSchemaVersion: 1,
+        state: { scores: { "team-1": 30 } },
+        pendingScores: {
+          occurredAt: "2026-09-06T01:00:00.000Z",
+          teams: { "team-1": { before: 0, score: 30, reason: "cipher" } },
+        },
+      },
+    };
+    await putItem(saved);
+
+    expect(await resetCoordinationRun(shared, "tenant-acme", "EV1", "battle-a")).toEqual({
+      kind: "conflict",
+    });
+
+    expect(await getItem(stateKey)).toEqual(saved);
+    expect(
+      await getItem({ PK: "COORDRUN#tenant-acme#EV1#battle-a", SK: "CURRENT" }),
+    ).toBeUndefined();
+    expect(deleteKeys(ddbSend)).toEqual([]);
+  });
+
   it("should start a new run and report which run it replaced", async () => {
     const { shared } = buildShared([
       deployment("battle-a", "team-1"),
@@ -117,11 +139,11 @@ describe("resetCoordinationRun (#3153)", () => {
   });
 
   it("should point participants at the new run afterwards", async () => {
-    const { shared, items } = buildShared([deployment("battle-a", "team-1")]);
+    const { shared, getItem } = buildShared([deployment("battle-a", "team-1")]);
 
     const outcome = await resetCoordinationRun(shared, "tenant-acme", "EV1", "battle-a");
 
-    const pointer = items.get("COORDRUN#tenant-acme#EV1#battle-a/CURRENT");
+    const pointer = await getItem({ PK: "COORDRUN#tenant-acme#EV1#battle-a", SK: "CURRENT" });
     expect(pointer?.runId).toBe(outcome.kind === "ok" ? outcome.result.runId : undefined);
     expect(pointer?.history).toEqual(["default"]);
   });
@@ -161,14 +183,16 @@ describe("resetCoordinationRun (#3153)", () => {
   });
 
   it("should reset only the named problem, leaving other matches in the event alone", async () => {
-    const { shared, items } = buildShared([
+    const { shared, getItem } = buildShared([
       deployment("battle-a", "team-1"),
       deployment("battle-b", "team-1"),
     ]);
 
     await resetCoordinationRun(shared, "tenant-acme", "EV1", "battle-a");
 
-    expect(items.has("COORDRUN#tenant-acme#EV1#battle-b/CURRENT")).toBe(false);
+    expect(
+      await getItem({ PK: "COORDRUN#tenant-acme#EV1#battle-b", SK: "CURRENT" }),
+    ).toBeUndefined();
   });
 
   it("should report not_found when the event never deployed that problem", async () => {
@@ -183,23 +207,27 @@ describe("resetCoordinationRun (#3153)", () => {
   });
 
   it("should report a conflict rather than silently discarding a concurrent reset", async () => {
-    const { shared, items } = buildShared([deployment("battle-a", "team-1")]);
+    const { shared, getItem, putItem } = buildShared([deployment("battle-a", "team-1")]);
     await resetCoordinationRun(shared, "tenant-acme", "EV1", "battle-a");
 
     // Another operator's rotation lands between this one's read and its write.
-    const pointerKey = "COORDRUN#tenant-acme#EV1#battle-a/CURRENT";
-    const stored = items.get(pointerKey);
+    const pointerKey = { PK: "COORDRUN#tenant-acme#EV1#battle-a", SK: "CURRENT" };
+    const stored = await getItem(pointerKey);
     const raced = { ...stored, runId: "rSOMEONEELSE" };
     const original = shared.ddb.send.bind(shared.ddb);
     let reads = 0;
     (shared.ddb as { send: (cmd: unknown) => Promise<unknown> }).send = async (cmd: unknown) => {
-      if (cmd instanceof GetCommand && `${cmd.input.Key?.PK}/${cmd.input.Key?.SK}` === pointerKey) {
+      if (
+        cmd instanceof GetCommand &&
+        cmd.input.Key?.PK === pointerKey.PK &&
+        cmd.input.Key?.SK === pointerKey.SK
+      ) {
         reads += 1;
         // The first read sees the old pointer; the winner writes before this
         // caller gets to its own write.
         if (reads === 1) {
           const result = await original(cmd as never);
-          items.set(pointerKey, raced);
+          await putItem(raced);
           return result;
         }
       }
@@ -211,6 +239,6 @@ describe("resetCoordinationRun (#3153)", () => {
     // Two operators resetting at once must not end up with two runs started and
     // one silently discarded.
     expect(outcome).toEqual({ kind: "conflict" });
-    expect(items.get(pointerKey)?.runId).toBe("rSOMEONEELSE");
+    expect((await getItem(pointerKey))?.runId).toBe("rSOMEONEELSE");
   });
 });

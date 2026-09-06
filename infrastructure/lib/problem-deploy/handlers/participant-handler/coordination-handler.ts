@@ -315,7 +315,9 @@ function warnSchemaMismatch(
 }
 
 /** `{ [problemId]: { plugin } }`。 問題が宣言する coordination plugin の module path を引く。 */
-export type CoordinationConfig = Readonly<Record<string, { readonly plugin: string }>>;
+export type CoordinationConfig = Readonly<
+  Record<string, { readonly plugin: string; readonly scoreMode?: "exclusive" | "additive" }>
+>;
 
 /**
  * `PROBLEM_COORDINATION` env (JSON) を parse する。 未設定 / 不正 JSON / 非 object は `{}` (=

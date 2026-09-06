@@ -1,5 +1,8 @@
 import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
-import type { DeploymentsQueryPort } from "../../control-data/deployments-repository.js";
+import type {
+  DeploymentsCoordinationPort,
+  DeploymentsQueryPort,
+} from "../../control-data/deployments-repository.js";
 import type { EventScoringMeta } from "../../control-data/events-repository.js";
 import {
   type ControlDataRuntime,
@@ -146,16 +149,18 @@ export async function handler(): Promise<void> {
 
   // [#2324] scoring-driven coordination tick。資格情報分離のため採点 Lambda は
   // plugin を実行せず、 tick 対象を集めて最小 IAM の CoordinationDispatcher を 1 回 async Invoke するだけ。
+  const deploymentsRepository: DeploymentsQueryPort & DeploymentsCoordinationPort =
+    await resolveDeploymentsRepository(shared);
   const coordinationTick = createCoordinationTickPass(
     createLambdaTickInvoker(),
     process.env.COORDINATION_DISPATCHER_FUNCTION_NAME ?? "",
     parseCoordinationProblemIds(process.env.PROBLEM_COORDINATION),
+    deploymentsRepository,
   );
 
   // [Issue #2441 / Phase B3] `forEachCompleteDeploymentPage` absorbs the
   // 200-per-page Scan + `LastEvaluatedKey` drain into the Deployments seam;
   // per-page BatchGet / parallel processing below stays unchanged.
-  const deploymentsRepository: DeploymentsQueryPort = await resolveDeploymentsRepository(shared);
   await deploymentsRepository.forEachCompleteDeploymentPage(async (page) => {
     const items = page as Partial<DeploymentItem>[];
 

@@ -82,6 +82,8 @@ export interface CoordinationStoreDeps {
   readonly runtime: ControlDataRuntime;
   readonly ddb: Pick<DynamoDBDocumentClient, "send">;
   readonly tableName: string;
+  /** Catalog-derived ownership; missing legacy config must preserve unrelated points. */
+  readonly coordinationScoreModes?: Readonly<Record<string, "exclusive" | "additive">>;
 }
 
 /**

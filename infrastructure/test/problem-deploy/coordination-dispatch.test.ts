@@ -1,5 +1,8 @@
-import { ConditionalCheckFailedException } from "@aws-sdk/client-dynamodb";
-import { DeleteCommand, GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import {
+  ConditionalCheckFailedException,
+  TransactionCanceledException,
+} from "@aws-sdk/client-dynamodb";
+import { DeleteCommand, GetCommand, PutCommand, TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
 import type { CoordinationContext, CoordinationPlugin } from "@tenkacloud/coordination-plugin-sdk";
 import { describe, expect, it, vi } from "vitest";
 import { SqlDeploymentsRepository } from "../../lib/problem-deploy/control-data/deployments-repository.js";
@@ -80,7 +83,32 @@ function storeOver(
   // Bound before the assertion, not asserted in place: `consistent-type-assertions`
   // wants a declaration it can annotate, and the DocumentClient surface is far
   // wider than the one method these doubles answer.
-  const partial = { send };
+  const partial = {
+    send: async (cmd: unknown) => {
+      if (!(cmd instanceof TransactWriteCommand)) return send(cmd);
+      // These orchestration doubles inject a state-row outcome. The real condition
+      // evaluation (including reset races) runs in coordination-scoring/reset suites.
+      const entries = cmd.input.TransactItems;
+      expect(entries).toHaveLength(2);
+      expect(entries?.[0].ConditionCheck).toMatchObject({
+        Key: { SK: "CURRENT" },
+        ExpressionAttributeValues: { ":run": expect.any(String) },
+      });
+      expect(entries?.[1].Put?.Item?.SK).toBe("STATE");
+      const put = entries?.[1].Put;
+      if (!put) throw new Error("missing state put");
+      try {
+        return await send(new PutCommand(put));
+      } catch (error) {
+        if (!(error instanceof ConditionalCheckFailedException)) throw error;
+        throw new TransactionCanceledException({
+          message: "state CAS lost",
+          $metadata: {},
+          CancellationReasons: [{ Code: "None" }, { Code: "ConditionalCheckFailed" }],
+        });
+      }
+    },
+  };
   const ddb = partial as never;
   const store: CoordinationStoreDeps = {
     runtime: makeTestControlDataRuntime(env),
@@ -326,7 +354,7 @@ describe("coordination-store", () => {
  * uses) exercises the exact same repository code against a real SQLite
  * database instead; only the runtime-selection plumbing around it differs.
  */
-const rtScope = { tenantId: "tn-rt", eventId: "ev-rt", problemId: "problem-rt", runId: "run-rt" };
+const rtScope = { tenantId: "tn-rt", eventId: "ev-rt", problemId: "problem-rt", runId: "default" };
 /** The SQL-backed store never touches DynamoDB; any `send` is a test bug, not a fallback. */
 const sqlBackendDdb = { send: () => Promise.reject(new Error("sql backend does not use ddb")) };
 const backendStores: readonly (readonly [string, () => CoordinationStoreDeps])[] = [

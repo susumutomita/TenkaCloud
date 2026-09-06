@@ -44,11 +44,11 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
     version: number,
     update: CoordinationScoreUpdate,
   ): Promise<DeploymentMutationOutcome> {
-    const at = update.events[0]?.occurredAt ?? "";
+    const at = update.occurredAt;
     const statements: SqlStatement[] = [
       {
         sql: `UPDATE deployments SET score = ?, updated_at = ?,
-          payload = json_set(payload, '$.score', ?, '$.updatedAt', ?, '$.lastScoredAt', ?, '$.coordinationScoreRunId', ?, '$.coordinationScoreVersion', ?)
+          payload = json_set(payload, '$.score', ?, '$.updatedAt', ?, '$.lastScoredAt', ?, '$.coordinationScoreRunId', ?, '$.coordinationScoreVersion', ?, '$.coordinationSubtotal', ?)
           WHERE job_id = ? AND tenant_id = ? AND event_id = ? AND problem_id = ? AND team_id = ? AND status = ?
           AND json_extract(payload, '$.teardownRequestedAt') IS NULL AND score IS ?
           AND (json_extract(payload, '$.coordinationScoreRunId') IS NOT ? OR json_extract(payload, '$.coordinationScoreVersion') < ?)
@@ -63,6 +63,7 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
           at,
           scope.runId,
           version,
+          update.coordinationSubtotal,
           update.jobId,
           scope.tenantId,
           scope.eventId,
@@ -183,35 +184,36 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
     at: string,
     expiresAt: number,
   ): Promise<DeploymentMutationOutcome> {
-    const params = [
+    const activeRun = `COALESCE((SELECT run_id FROM coordination_run WHERE tenant_id = ? AND event_id = ? AND problem_id = ?), ?) = ?`;
+    const activeParams = [
       scope.tenantId,
       scope.eventId,
       scope.problemId,
+      DEFAULT_COORDINATION_RUN_ID,
       scope.runId,
-      JSON.stringify(normalizeJsonValue(state)),
-      expectedVersion + 1,
-      at,
-      expiresAt,
     ];
-    // [Issue #3126] Only a first write (expectedVersion 0) may insert. A write
-    // carrying a version read earlier must find that row still present — see
-    // the DynamoDB adapter for the run-reset race this closes. The plain upsert
-    // this replaced inserted whenever the row was absent, whatever version the
-    // caller expected, so a pre-reset op could resurrect the deleted match.
-    // The SQL predicate matches isCoordinationStateEnvelope (including numeric type
-    // and integer checks), so similarly named fields in a raw plugin state remain opaque.
     const result =
       expectedVersion === 0
         ? await this.core.sql.run(
             `INSERT INTO coordination_state_scoped (tenant_id, event_id, problem_id, run_id, state, version, updated_at, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(tenant_id, event_id, problem_id, run_id) DO NOTHING`,
-            params,
+         SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE ${activeRun}
+         ON CONFLICT(tenant_id, event_id, problem_id, run_id) DO NOTHING`,
+            [
+              scope.tenantId,
+              scope.eventId,
+              scope.problemId,
+              scope.runId,
+              JSON.stringify(normalizeJsonValue(state)),
+              expectedVersion + 1,
+              at,
+              expiresAt,
+              ...activeParams,
+            ],
           )
         : await this.core.sql.run(
-            `UPDATE coordination_state_scoped
-         SET state = ?, version = ?, updated_at = ?, expires_at = ?
-       WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ? AND version = ? AND NOT ${HAS_PENDING_COORDINATION_SCORES_SQL}`,
+            `UPDATE coordination_state_scoped SET state = ?, version = ?, updated_at = ?, expires_at = ?
+         WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ? AND version = ?
+         AND NOT ${HAS_PENDING_COORDINATION_SCORES_SQL} AND ${activeRun}`,
             [
               JSON.stringify(normalizeJsonValue(state)),
               expectedVersion + 1,
@@ -222,6 +224,7 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
               scope.problemId,
               scope.runId,
               expectedVersion,
+              ...activeParams,
             ],
           );
     return Number(result.changes) > 0 ? { outcome: "updated" } : { outcome: "conflict" };
@@ -348,10 +351,11 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
     pointer: CoordinationRunPointer,
     expiresAt: number,
   ): Promise<DeploymentMutationOutcome> {
+    const noPending = `NOT EXISTS (SELECT 1 FROM coordination_state_scoped WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ? AND ${HAS_PENDING_COORDINATION_SCORES_SQL})`;
+    const pendingParams = [key.tenantId, key.eventId, key.problemId, expectedRunId];
     const updated = await this.core.sql.run(
-      `UPDATE coordination_run
-         SET run_id = ?, started_at = ?, history = ?, expires_at = ?
-       WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ?`,
+      `UPDATE coordination_run SET run_id = ?, started_at = ?, history = ?, expires_at = ?
+       WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ? AND ${noPending}`,
       [
         pointer.runId,
         pointer.startedAt,
@@ -361,13 +365,14 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
         key.eventId,
         key.problemId,
         expectedRunId,
+        ...pendingParams,
       ],
     );
     if (Number(updated.changes) > 0) return { outcome: "updated" };
     if (expectedRunId !== DEFAULT_COORDINATION_RUN_ID) return { outcome: "conflict" };
     const inserted = await this.core.sql.run(
       `INSERT INTO coordination_run (tenant_id, event_id, problem_id, run_id, started_at, history, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
+       SELECT ?, ?, ?, ?, ?, ?, ? WHERE ${noPending}
        ON CONFLICT(tenant_id, event_id, problem_id) DO NOTHING`,
       [
         key.tenantId,
@@ -377,6 +382,7 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
         pointer.startedAt,
         JSON.stringify(pointer.history),
         expiresAt,
+        ...pendingParams,
       ],
     );
     return Number(inserted.changes) > 0 ? { outcome: "updated" } : { outcome: "conflict" };

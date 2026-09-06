@@ -1,4 +1,4 @@
-import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { GetCommand, PutCommand, TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
 import type { CoordinationPlugin } from "@tenkacloud/coordination-plugin-sdk";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DeploymentItem } from "../../lib/problem-deploy/handlers/deploy-handler/types.js";
@@ -56,7 +56,7 @@ const scope: CoordinationScope = {
 function fakeStore(getItem?: Record<string, unknown>): CoordinationStoreDeps {
   const send = vi.fn(async (cmd: unknown) => {
     if (cmd instanceof GetCommand) return { Item: getItem };
-    if (cmd instanceof PutCommand) return {};
+    if (cmd instanceof PutCommand || cmd instanceof TransactWriteCommand) return {};
     throw new Error("unexpected command");
   });
   return fakeParticipantShared(send);

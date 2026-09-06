@@ -150,6 +150,30 @@ describe("ScoreEventsPage", () => {
     expect(screen.getByText("score_events.reason_uptime_down")).toBeInTheDocument();
   });
 
+  it("renders the battle gain and floored penalty with their public reasons", async () => {
+    mockGet.mockResolvedValue({
+      entries: [
+        ev({
+          source: "coordination",
+          points: -30,
+          reason: "deadline",
+          occurredAt: "2026-05-22T13:01:00Z",
+        }),
+        ev({ source: "coordination", points: 30, reason: "cipher" }),
+        ev({ source: "coordination", points: 0, reason: undefined, problemId: "legacy" }),
+      ],
+    });
+    renderPage();
+    expect(await screen.findByText('score_events.history_header|{"count":3}')).toBeInTheDocument();
+    expect(screen.getAllByText("score_events.source_coordination")).toHaveLength(3);
+    expect(screen.getByText("score_events.coordination_cipher")).toBeInTheDocument();
+    expect(screen.getByText("score_events.coordination_deadline")).toBeInTheDocument();
+    expect(screen.getByText("score_events.reason_coordination")).toBeInTheDocument();
+    expect(screen.getByText("+30 pt")).toBeInTheDocument();
+    expect(screen.getByText("-30 pt")).toBeInTheDocument();
+    expect(screen.getByText("score_events.cumulative_header")).toBeInTheDocument();
+  });
+
   it("should paginate the history table at 20 rows per page (#履歴多すぎ)", async () => {
     // 25 件 → page 1 に 20 行、 残り 5 行は page 2。 uptime Battle の毎分加点で履歴が膨らむため。
     const entries = Array.from({ length: 25 }, (_, i) =>

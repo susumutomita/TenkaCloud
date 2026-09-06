@@ -72,7 +72,7 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
             TableName: this.core.tableName,
             Key: this.core.deploymentKey(update.jobId),
             UpdateExpression:
-              "SET score = :score, coordinationScoreRunId = :run, coordinationScoreVersion = :version, lastScoredAt = :at, updatedAt = :at",
+              "SET score = :score, coordinationScoreRunId = :run, coordinationScoreVersion = :version, coordinationSubtotal = :subtotal, lastScoredAt = :at, updatedAt = :at",
             ConditionExpression:
               "tenantId = :tenant AND eventId = :event AND problemId = :problem AND teamId = :team AND #status = :status AND attribute_not_exists(teardownRequestedAt) AND " +
               (update.expectedScore === undefined
@@ -87,9 +87,10 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
               ":team": update.teamId,
               ":status": update.expectedStatus,
               ":score": update.score,
+              ":subtotal": update.coordinationSubtotal,
               ":run": scope.runId,
               ":version": version,
-              ":at": update.events[0]?.occurredAt,
+              ":at": update.occurredAt,
               ...(update.expectedScore === undefined ? {} : { ":expected": update.expectedScore }),
             },
           },
@@ -238,49 +239,44 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
     at: string,
     expiresAt: number,
   ): Promise<DeploymentMutationOutcome> {
-    try {
-      await this.core.ddb.send(
-        new PutCommand({
-          TableName: this.core.tableName,
-          Item: {
-            PK: coordinationPk(scope),
-            SK: COORD_STATE_SK,
-            state,
-            // Keep the write guard outside opaque plugin state; only the shared full
-            // envelope predicate may reserve a pending delivery.
-            ...(isCoordinationStateEnvelope(state) && state.pendingScores != null
-              ? { coordinationScoresPending: true }
-              : {}),
-            version: expectedVersion + 1,
-            updatedAt: at,
-            expiresAt,
+    return this.core.transactWrite({
+      TransactItems: [
+        {
+          ConditionCheck: {
+            TableName: this.core.tableName,
+            Key: { PK: coordinationRunPk(scope), SK: COORD_RUN_SK },
+            ConditionExpression:
+              scope.runId === DEFAULT_COORDINATION_RUN_ID
+                ? "attribute_not_exists(runId) OR runId = :run"
+                : "runId = :run",
+            ExpressionAttributeValues: { ":run": scope.runId },
           },
-          // [Issue #3126] The condition is split on `expectedVersion`, not the
-          // permissive `attribute_not_exists(version) OR version = :expected`
-          // it used to be. Only a first write (expectedVersion 0) may create the
-          // row; a write carrying a version read earlier must match a row that
-          // still exists.
-          //
-          // Without the split, a run reset races: an op reads state at version
-          // 3, the operator resets (deleting the row), and the op's write then
-          // satisfies `attribute_not_exists(version)` and resurrects the match
-          // the reset just ended — with the reset still reporting success. Now
-          // that write conflicts, the participant retries, and the retry
-          // re-initializes cleanly from `plugin.initialState`.
-          ...(expectedVersion === 0
-            ? { ConditionExpression: "attribute_not_exists(version)" }
-            : {
-                ConditionExpression:
-                  "version = :expected AND attribute_not_exists(coordinationScoresPending)",
-                ExpressionAttributeValues: { ":expected": expectedVersion },
-              }),
-        }),
-      );
-      return { outcome: "updated" };
-    } catch (err) {
-      if (isConditionalCheckFailed(err)) return { outcome: "conflict" };
-      throw err;
-    }
+        },
+        {
+          Put: {
+            TableName: this.core.tableName,
+            Item: {
+              PK: coordinationPk(scope),
+              SK: COORD_STATE_SK,
+              state,
+              ...(isCoordinationStateEnvelope(state) && state.pendingScores != null
+                ? { coordinationScoresPending: true }
+                : {}),
+              version: expectedVersion + 1,
+              updatedAt: at,
+              expiresAt,
+            },
+            ...(expectedVersion === 0
+              ? { ConditionExpression: "attribute_not_exists(version)" }
+              : {
+                  ConditionExpression:
+                    "version = :expected AND attribute_not_exists(coordinationScoresPending)",
+                  ExpressionAttributeValues: { ":expected": expectedVersion },
+                }),
+          },
+        },
+      ],
+    });
   }
 
   /**
@@ -452,29 +448,34 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
     expiresAt: number,
   ): Promise<DeploymentMutationOutcome> {
     const fromInitial = expectedRunId === DEFAULT_COORDINATION_RUN_ID;
-    try {
-      await this.core.ddb.send(
-        new PutCommand({
-          TableName: this.core.tableName,
-          Item: {
-            PK: coordinationRunPk(key),
-            SK: COORD_RUN_SK,
-            runId: pointer.runId,
-            startedAt: pointer.startedAt,
-            history: [...pointer.history],
-            expiresAt,
+    return this.core.transactWrite({
+      TransactItems: [
+        {
+          ConditionCheck: {
+            TableName: this.core.tableName,
+            Key: { PK: coordinationPk({ ...key, runId: expectedRunId }), SK: COORD_STATE_SK },
+            ConditionExpression: "attribute_not_exists(coordinationScoresPending)",
           },
-          ConditionExpression: fromInitial
-            ? "attribute_not_exists(runId) OR runId = :expected"
-            : "runId = :expected",
-          ExpressionAttributeValues: { ":expected": expectedRunId },
-        }),
-      );
-      return { outcome: "updated" };
-    } catch (err) {
-      if (isConditionalCheckFailed(err)) return { outcome: "conflict" };
-      throw err;
-    }
+        },
+        {
+          Put: {
+            TableName: this.core.tableName,
+            Item: {
+              PK: coordinationRunPk(key),
+              SK: COORD_RUN_SK,
+              runId: pointer.runId,
+              startedAt: pointer.startedAt,
+              history: [...pointer.history],
+              expiresAt,
+            },
+            ConditionExpression: fromInitial
+              ? "attribute_not_exists(runId) OR runId = :expected"
+              : "runId = :expected",
+            ExpressionAttributeValues: { ":expected": expectedRunId },
+          },
+        },
+      ],
+    });
   }
 
   /** [Issue #3153] See `DeploymentsCoordinationPort.deleteCoordinationRun`. */

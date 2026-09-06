@@ -19,6 +19,7 @@ export function coordinationScoreDelivery<State, Op, Projection>(
     | { readonly kind: "op"; readonly teamId: string; readonly op: Op }
     | { readonly kind: "tick" },
   occurredAt: string,
+  includeUnchangedTeams = false,
 ): CoordinationScoreDelivery | undefined {
   if (!plugin.teamScores) return undefined;
   const previous = plugin.teamScores(before);
@@ -29,14 +30,16 @@ export function coordinationScoreDelivery<State, Op, Projection>(
     const oldScore = previous[teamId] ?? 0;
     if (!Number.isFinite(score) || !Number.isFinite(oldScore))
       throw new Error("Invalid coordination score");
-    if (score === oldScore) continue;
+    if (score === oldScore && !includeUnchangedTeams) continue;
     teams[teamId] = {
       before: oldScore,
       score,
-      reason: publicCoordinationScoreReason(reasons?.[teamId]),
+      reason: score === oldScore ? "sync" : publicCoordinationScoreReason(reasons?.[teamId]),
     };
   }
-  return Object.keys(teams).length ? { occurredAt, teams } : undefined;
+  return Object.keys(teams).length
+    ? { occurredAt, teams, ...(includeUnchangedTeams ? { initializing: true as const } : {}) }
+    : undefined;
 }
 
 /**
@@ -94,6 +97,8 @@ export async function deliverCoordinationScores(
             change,
             version: row.version,
             occurredAt: delivery.occurredAt,
+            initializing: delivery.initializing === true,
+            scoreMode: store.coordinationScoreModes?.[scope.problemId],
           });
         }
         return teamId;
@@ -143,6 +148,8 @@ async function publishJobScore(
     readonly change: CoordinationScoreDelivery["teams"][string];
     readonly version: number;
     readonly occurredAt: string;
+    readonly initializing: boolean;
+    readonly scoreMode?: "exclusive" | "additive";
   },
 ): Promise<void> {
   const { scope, teamId, change } = input;
@@ -157,38 +164,69 @@ async function publishJobScore(
   )
     return;
   const current = typeof deployment.score === "number" ? deployment.score : undefined;
-  const event = {
-    ...buildScoreEventRecord(
-      deployment,
-      "coordination",
-      change.score - change.before,
-      input.occurredAt,
-    ),
-    reason: change.reason,
-  };
-  // A legacy scoreboard may already disagree with game state. Explain that repair separately
-  // instead of labelling it as points earned by this operation.
-  const repair = change.before - (current ?? 0);
-  const events =
-    repair === 0
-      ? [event]
+  const previousSubtotal = previousCoordinationSubtotal(
+    deployment,
+    input.scoreMode,
+    change.before,
+    input.initializing,
+  );
+  const repair = change.before - previousSubtotal;
+  const delta = change.score - change.before;
+  const events = [
+    ...(repair === 0
+      ? []
       : [
           {
             ...buildScoreEventRecord(deployment, "coordination", repair, input.occurredAt),
             reason: "sync",
           },
-          event,
-        ];
+        ]),
+    ...(delta === 0
+      ? []
+      : [
+          {
+            ...buildScoreEventRecord(deployment, "coordination", delta, input.occurredAt),
+            reason: change.reason,
+          },
+        ]),
+  ];
   const result = await repository.publishCoordinationScore(scope, input.version, {
     jobId: deployment.jobId,
     teamId,
     expectedScore: current,
     expectedStatus: deployment.status,
-    score: change.score,
+    score: (current ?? 0) - previousSubtotal + change.score,
+    coordinationSubtotal: change.score,
+    occurredAt: input.occurredAt,
     events,
   });
   if (result.outcome !== "updated")
     throw new Error("Coordination score delivery conflicted; retry the saved batch");
+}
+
+/** Legacy rows have no subtotal. Evidence of any ordinary scorer takes precedence over today's catalog. */
+function previousCoordinationSubtotal(
+  deployment: DeploymentRecord,
+  scoreMode: "exclusive" | "additive" | undefined,
+  beforePluginScore: number,
+  initializing: boolean,
+): number {
+  if (typeof deployment.coordinationSubtotal === "number") return deployment.coordinationSubtotal;
+  const ordinaryScoringSeen = [
+    deployment.gateBonusAwardedAt,
+    deployment.hintsRevealed,
+    deployment.flagSubmitted,
+    deployment.solvedFlagIds,
+    deployment.wrongAnswerCount,
+    deployment.scoringState,
+    deployment.lastResult,
+    deployment.endpointsHealth,
+    deployment.attackProbes,
+    deployment.posture,
+    deployment.platform,
+  ].some((value) => value !== undefined);
+  if (scoreMode !== "exclusive" || ordinaryScoringSeen) return initializing ? 0 : beforePluginScore;
+  return deployment.score ?? 0;
 }
 
 /** A committed move stays committed even when delivery needs the next tick to retry it. */

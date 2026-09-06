@@ -214,6 +214,8 @@ export type DeploymentRecord = {
   /** Last durable coordination transition delivered to this deployment. */
   coordinationScoreRunId?: string;
   coordinationScoreVersion?: number;
+  /** Coordination contribution to score; ordinary scoring owns the remainder. */
+  coordinationSubtotal?: number;
   /** 最後に scoring が走った時刻 (ISO 8601)。 */
   lastScoredAt?: string;
   /** Battle (uptime) で最後の health check が成功したか。 */

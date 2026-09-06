@@ -32,7 +32,11 @@ vi.mock("../../lib/problem-deploy/handlers/participant-handler/coordination-hand
   // [Issue #659] The dispatcher wires a score publisher so a coordination
   // Battle's own scoring reaches the scoreboard.
   makeCoordinationScorePublisher: () => async () => undefined,
-  parseCoordinationConfig: () => ({}),
+  parseCoordinationConfig: () => ({
+    pure: { plugin: "pure", scoreMode: "exclusive" },
+    mixed: { plugin: "mixed", scoreMode: "additive" },
+    legacy: { plugin: "legacy" },
+  }),
 }));
 
 const { app, handler } = await import(
@@ -75,6 +79,15 @@ describe("POST /portal/me/coordination/op", () => {
     const res = await send("POST", OP, { op: { kind: "inc" } });
     expect(res.status).toBe(StatusCodes.OK);
     expect(await res.json()).toEqual({ projection: { count: 1 } });
+  });
+  it("passes catalog score ownership into the operation and projection store", async () => {
+    mocks.handleCoordinationOp.mockResolvedValueOnce({ kind: "ok", projection: {} });
+    await send("POST", OP, { op: {} });
+    expect(mocks.handleCoordinationOp.mock.calls[0]?.[0].store.coordinationScoreModes).toEqual({
+      pure: "exclusive",
+      mixed: "additive",
+      legacy: "additive",
+    });
   });
   it("should 422 with the error on a plugin rejection", async () => {
     mocks.handleCoordinationOp.mockResolvedValueOnce({ kind: "rejected", error: "bad_op" });

@@ -459,6 +459,19 @@ describe("ProblemDeployBackendStack — EventApi Lambda audit log read grant (#1
     expect(allActions.has("dynamodb:GetItem")).toBe(true);
     expect(allActions.has("dynamodb:PutItem")).toBe(true);
     expect(allActions.has("dynamodb:UpdateItem")).toBe(true);
+    // #3194: reset atomically checks the old run's pending delivery before
+    // rotating its pointer. CDK's existing read/write grant includes this
+    // transaction permission on the Deployments table; no new grant is needed.
+    const deploymentsTable = Object.keys(tpl.findResources("AWS::DynamoDB::Table")).find((id) =>
+      id.startsWith("Deployments"),
+    );
+    expect(deploymentsTable).toBeDefined();
+    expect(stmt).toContainEqual(
+      expect.objectContaining({
+        Action: expect.arrayContaining(["dynamodb:ConditionCheckItem"]),
+        Resource: expect.arrayContaining([{ "Fn::GetAtt": [deploymentsTable, "Arn"] }]),
+      }),
+    );
   });
 
   it("EventApi Role should grant scheduler:DeleteSchedule scoped to tc-recur-*", () => {

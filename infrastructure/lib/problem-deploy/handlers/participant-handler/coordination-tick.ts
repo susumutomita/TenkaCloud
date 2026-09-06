@@ -1,4 +1,4 @@
-import { runTick } from "@tenkacloud/coordination-plugin-sdk";
+import { type CoordinationPlugin, runTick } from "@tenkacloud/coordination-plugin-sdk";
 import { z } from "zod";
 import { resolveCurrentCoordinationRunId } from "../shared/coordination-run.js";
 import {
@@ -64,6 +64,7 @@ const TickTargetSchema = z.object({
   moduleRef: z.string().min(1),
   eventNowMs: z.number().finite(),
   teamIds: z.array(z.string()).default([]),
+  drainOnly: z.boolean().optional(),
 });
 const TickBatchSchema = z.object({
   action: z.literal(COORDINATION_TICK_ACTION),
@@ -91,17 +92,31 @@ export async function handleCoordinationTickBatch(
   let written = 0;
   const scoreBudgetMs = COORDINATION_SCORE_DELIVERY_BUDGET_MS;
   for (const target of batch.targets) {
-    const didWrite = await tickCoordinationEvent(deps, target, batch.nowIso, scoreBudgetMs).catch(
-      (err) => {
-        console.warn(`[coordination-dispatcher] tick failed event=${target.eventId}`, {
-          message: err instanceof Error ? err.message : String(err),
-        });
-        return false;
-      },
-    );
+    const work = target.drainOnly
+      ? drainSavedCoordinationScores(deps, target).then(() => false)
+      : tickCoordinationEvent(deps, target, batch.nowIso, scoreBudgetMs);
+    const didWrite = await work.catch((err) => {
+      console.warn(`[coordination-dispatcher] tick failed event=${target.eventId}`, {
+        message: err instanceof Error ? err.message : String(err),
+      });
+      return false;
+    });
     if (didWrite) written += 1;
   }
   return { ticked: batch.targets.length, written };
+}
+
+/** A finished event may flush durable scoring, but must not load/advance the plugin or extend TTL. */
+async function drainSavedCoordinationScores(
+  deps: CoordinationTickDeps,
+  target: CoordinationTickTarget,
+): Promise<void> {
+  if (!deps.config[target.moduleRef]) return;
+  const repository = await resolveDeploymentsRepository(deps.store);
+  const key = { tenantId: target.tenantId, eventId: target.eventId, problemId: target.moduleRef };
+  const scope = { ...key, runId: await resolveCurrentCoordinationRunId(repository, key) };
+  const row = await readCoordinationState(deps.store, scope);
+  if (row) await tryDeliverCoordinationScores(deps.store, scope, row);
 }
 
 /**
@@ -214,21 +229,20 @@ async function tickCoordinationEvent(
   }
   // eventNowMs は採点 pass が算出した event 相対経過 (= plugin の tick 契約、 参照 Battle は
   // CAPTURE_WINDOW_MS と比較)。 dispatcher は clock を持たず、 渡された値だけで純関数を回す。
-  const nextState = runTick(plugin, currentState, target.eventNowMs);
-  if (!coordinationStateChanged(currentState, nextState)) {
+  const { nextState, pendingScores, stateChanged } = prepareTickTransition(
+    plugin,
+    currentState,
+    target.eventNowMs,
+    nowIso,
+    !existing,
+  );
+  if (!stateChanged) {
     // [Issue #3150] migration だけが起きて tick 自体は no-op だった行はここに来る。 write が無い
     // ので封筒は書き換わらず、 行は旧版のまま残る (= lazy upgrade。 migration は次に呼ばれるときも
     // 冪等に走るので害はない)。 TTL の延長だけは行う -- 試合を消さないのはここでも同じ。
     await refreshCoordinationTtl(deps, target, scope, existing, nowIso);
     return false;
   }
-  const pendingScores = coordinationScoreDelivery(
-    plugin,
-    currentState,
-    nextState,
-    { kind: "tick" },
-    nowIso,
-  );
   const written = await writeCoordinationState(
     deps.store,
     scope,
@@ -273,6 +287,30 @@ async function tickCoordinationEvent(
     { deadlineMs: scoreDeadlineMs },
   );
   return true;
+}
+
+/** Initial materialization also synchronizes every team, even when the plugin tick is a no-op. */
+function prepareTickTransition(
+  plugin: CoordinationPlugin<unknown, unknown>,
+  currentState: unknown,
+  eventNowMs: number,
+  nowIso: string,
+  initializing: boolean,
+) {
+  const nextState = runTick(plugin, currentState, eventNowMs);
+  const pendingScores = coordinationScoreDelivery(
+    plugin,
+    currentState,
+    nextState,
+    { kind: "tick" },
+    nowIso,
+    initializing,
+  );
+  return {
+    nextState,
+    pendingScores,
+    stateChanged: !!pendingScores || coordinationStateChanged(currentState, nextState),
+  };
 }
 
 /**

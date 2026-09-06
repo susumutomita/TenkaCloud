@@ -1,4 +1,8 @@
-import { type DynamoDBDocumentClient, PutCommand } from "@aws-sdk/lib-dynamodb";
+import {
+  type DynamoDBDocumentClient,
+  PutCommand,
+  TransactWriteCommand,
+} from "@aws-sdk/lib-dynamodb";
 import { describe, expect, it } from "vitest";
 import { DynamoDbDeploymentsRepository } from "../../../lib/problem-deploy/control-data/deployments-repository";
 import type {
@@ -292,7 +296,13 @@ describe("DynamoDbDeploymentsRepository — sub-aggregate writes (Phase B3)", ()
       );
       expect(outcome).toEqual({ outcome: "updated" });
 
-      const put = commands.find((c) => c instanceof PutCommand);
+      const transaction = commands.find((c) => c instanceof TransactWriteCommand);
+      expect(transaction.input.TransactItems[0].ConditionCheck).toMatchObject({
+        Key: { PK: "COORDRUN#tn1#ev-1#problem-a", SK: "CURRENT" },
+        ConditionExpression: "attribute_not_exists(runId) OR runId = :run",
+        ExpressionAttributeValues: { ":run": "default" },
+      });
+      const put = { input: transaction.input.TransactItems[1].Put };
       // [Issue #3126] A first write may only CREATE. The permissive
       // `attribute_not_exists(version) OR version = :expected` this replaced let
       // a stale op (holding a version read before a run reset) resurrect the

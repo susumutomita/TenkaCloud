@@ -9,6 +9,7 @@ import {
   initialCoordinationRunPointer,
   rotateCoordinationRunPointer,
 } from "../../control-data/domain/coordination-run.js";
+import { isCoordinationStateEnvelope } from "../../control-data/domain/coordination-state-envelope.js";
 import { logDeployTrace } from "./trace-log.js";
 
 /**
@@ -85,8 +86,8 @@ export type StartCoordinationRunOutcome =
       readonly retired: readonly string[];
     }
   /**
-   * Another rotation won. The caller re-reads to see which run is current
-   * rather than assuming its own.
+   * Another rotation won, or the current run still has score deliveries to
+   * finish. The caller retries after delivery recovery and re-reading the run.
    */
   | { readonly kind: "conflict" };
 
@@ -96,8 +97,8 @@ export type StartCoordinationRunOutcome =
  * ## Order of operations, and why
  *
  *   1. read the current pointer
- *   2. compute the next pointer and what the retention window pushes out
- *   3. write the pointer, conditional on the run it replaces
+ *   2. reject a current run whose saved score delivery is still pending
+ *   3. write the next pointer, conditional on the run it replaces and no pending scores
  *   4. only then delete the runs that fell out of the window
  *
  * Step 4 comes last because a rotation that loses its race must delete nothing.
@@ -119,6 +120,16 @@ export async function startCoordinationRun(
 ): Promise<StartCoordinationRunOutcome> {
   const current: CoordinationRunPointer =
     (await deps.repository.readCoordinationRun(key)) ?? initialCoordinationRunPointer(nowIso);
+  const existing = await deps.repository.readCoordinationState(
+    coordinationScopeForRun(key, current.runId),
+  );
+  // Moving the pointer would leave this delivery outside the op/tick recovery
+  // path. Keep the old run current until its saved scores and history finish.
+  // The adapter repeats this check atomically with the rotation to cover an op
+  // saving a new delivery after this read.
+  if (isCoordinationStateEnvelope(existing?.state) && existing.state.pendingScores != null) {
+    return { kind: "conflict" };
+  }
   const rotation = rotateCoordinationRunPointer(
     current,
     newRunId,

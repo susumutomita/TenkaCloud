@@ -23,6 +23,8 @@ export interface CoordinationTickTarget {
   readonly eventNowMs: number;
   /** row 未初期化時の `initialState(ctx)` に渡す参加チーム一覧 (= 採点 pass が scan で観測)。 */
   readonly teamIds: readonly string[];
+  /** Completed event: publish only already-saved scores, without loading or advancing the game. */
+  readonly drainOnly?: boolean;
 }
 
 /** 採点 pass が dispatcher に渡す 1 tick 分の batch (= 1 invoke/分、 event 数によらず 1 回)。 */

@@ -28,6 +28,8 @@ export function publicCoordinationScoreReason(value: unknown): CoordinationScore
 /** One transition's durable delivery, stored in the existing state envelope. */
 export interface CoordinationScoreDelivery {
   readonly occurredAt: string;
+  /** Initial scores have not yet contributed to a deployment with no saved subtotal. */
+  readonly initializing?: true;
   /** Rotate retries past attempted teams, including failures, so a bad prefix cannot starve peers. */
   readonly resumeAfterTeamId?: string;
   readonly teams: Readonly<
@@ -49,5 +51,7 @@ export interface CoordinationScoreUpdate {
   readonly expectedScore: number | undefined;
   readonly expectedStatus: DeploymentStatus;
   readonly score: number;
+  readonly coordinationSubtotal: number;
+  readonly occurredAt: string;
   readonly events: readonly ScoreEventRecord[];
 }
