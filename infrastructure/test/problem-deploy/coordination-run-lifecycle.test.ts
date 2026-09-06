@@ -346,7 +346,7 @@ describe("2 problems x 2 runs stay completely isolated (#3153)", () => {
 });
 
 describe("removing a problem removes every run it had (#3153)", () => {
-  it("should delete the current run, the history, and the pointer", async () => {
+  it("should delete the current run and history while retaining a closed pointer", async () => {
     const repository = makeRepository();
     const artifacts = makeArtifactSpy();
     await seedState(repository, KEY, DEFAULT_COORDINATION_RUN_ID, { turn: 1 });
@@ -366,9 +366,8 @@ describe("removing a problem removes every run it had (#3153)", () => {
       ).toBeUndefined();
       expect(artifacts.deleted).toContain(`${KEY.problemId}/${runId}`);
     }
-    // The pointer goes last, so a failure part way through leaves a pointer
-    // naming runs that still exist rather than runs nothing names.
-    expect(await repository.readCoordinationRun(KEY)).toBeUndefined();
+    // The tombstone fences late first writes and preserves retry scopes.
+    expect(await repository.readCoordinationRun(KEY)).toMatchObject({ closed: true });
   });
 
   it("should still clear the initial run for a problem that was never reset", async () => {
@@ -470,6 +469,7 @@ describe("failures while retiring or removing runs (#3153)", () => {
     const broken = {
       readCoordinationRun: () => Promise.resolve(undefined),
       readCoordinationState: repository.readCoordinationState.bind(repository),
+      closeCoordinationRun: repository.closeCoordinationRun.bind(repository),
       deleteCoordinationState: () => Promise.reject(new Error("control data unavailable")),
     } as unknown as SqlDeploymentsRepository;
 

@@ -1,5 +1,9 @@
 import { ulid } from "ulid";
-import type { CoordinationRunKey, CoordinationRunPointer } from "./domain/coordination-run.js";
+import {
+  type CoordinationRunKey,
+  type CoordinationRunPointer,
+  initialCoordinationRunPointer,
+} from "./domain/coordination-run.js";
 import {
   assertConditionableVersion,
   type CoordinationStateScope,
@@ -55,7 +59,7 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
           WHERE job_id = ? AND tenant_id = ? AND event_id = ? AND problem_id = ? AND team_id = ? AND status = ?
           AND score IS ?
           AND (json_extract(payload, '$.coordinationScoreRunId') IS NOT ? OR json_extract(payload, '$.coordinationScoreVersion') < ?)
-          AND COALESCE((SELECT run_id FROM coordination_run WHERE tenant_id = ? AND event_id = ? AND problem_id = ?), ?) = ?
+          AND COALESCE((SELECT CASE WHEN closed = 0 THEN run_id ELSE '' END FROM coordination_run WHERE tenant_id = ? AND event_id = ? AND problem_id = ?), ?) = ?
           AND EXISTS (SELECT 1 FROM coordination_state_scoped WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ?
             AND version = ? AND ${HAS_PENDING_COORDINATION_SCORES_SQL})`,
         params: [
@@ -188,7 +192,7 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
     expiresAt: number,
     requirePendingInitialization = false,
   ): Promise<DeploymentMutationOutcome> {
-    const activeRun = `COALESCE((SELECT run_id FROM coordination_run WHERE tenant_id = ? AND event_id = ? AND problem_id = ? ${requirePendingInitialization ? "AND pending_initialization = 1" : ""}), ?) = ?`;
+    const activeRun = `COALESCE((SELECT CASE WHEN closed = 0 ${requirePendingInitialization ? "AND pending_initialization = 1" : ""} THEN run_id ELSE '' END FROM coordination_run WHERE tenant_id = ? AND event_id = ? AND problem_id = ?), ?) = ?`;
     const activeParams = [
       scope.tenantId,
       scope.eventId,
@@ -345,7 +349,7 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
   /** [Issue #3153] See `DeploymentsCoordinationPort.readCoordinationRun`. */
   async readCoordinationRun(key: CoordinationRunKey): Promise<CoordinationRunPointer | undefined> {
     const row = await this.core.sql.get(
-      "SELECT run_id, started_at, history, pending_initialization FROM coordination_run WHERE tenant_id = ? AND event_id = ? AND problem_id = ?",
+      "SELECT run_id, started_at, history, pending_initialization, closed FROM coordination_run WHERE tenant_id = ? AND event_id = ? AND problem_id = ?",
       [key.tenantId, key.eventId, key.problemId],
     );
     if (!row) return undefined;
@@ -354,6 +358,7 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
       startedAt: String(row.started_at ?? ""),
       history: parseRunHistory(row.history),
       ...(Number(row.pending_initialization) === 1 ? { pendingInitialization: true } : {}),
+      ...(Number(row.closed) === 1 ? { closed: true } : {}),
     };
   }
 
@@ -376,7 +381,7 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
     const noPending = `NOT EXISTS (SELECT 1 FROM coordination_state_scoped WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ? AND ${HAS_PENDING_COORDINATION_SCORES_SQL})`;
     const pendingParams = [key.tenantId, key.eventId, key.problemId, expectedRunId];
     const updated = await this.core.sql.run(
-      `UPDATE coordination_run SET run_id = ?, started_at = ?, history = ?, expires_at = ?, pending_initialization = ?
+      `UPDATE coordination_run SET run_id = ?, started_at = ?, history = ?, expires_at = ?, pending_initialization = ?, closed = 0
        WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ? AND pending_initialization = 0 AND ${noPending}`,
       [
         pointer.runId,
@@ -412,12 +417,67 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
     return Number(inserted.changes) > 0 ? { outcome: "updated" } : { outcome: "conflict" };
   }
 
-  /** [Issue #3153] See `DeploymentsCoordinationPort.deleteCoordinationRun`. */
-  async deleteCoordinationRun(key: CoordinationRunKey): Promise<void> {
-    await this.core.sql.run(
-      "DELETE FROM coordination_run WHERE tenant_id = ? AND event_id = ? AND problem_id = ?",
-      [key.tenantId, key.eventId, key.problemId],
+  async closeCoordinationRun(
+    key: CoordinationRunKey,
+    expected: CoordinationRunPointer,
+    expectedStateVersion?: number,
+  ): Promise<DeploymentMutationOutcome> {
+    if (expectedStateVersion !== undefined && expectedStateVersion !== 0)
+      assertConditionableVersion(expectedStateVersion);
+    const runs = [...new Set([expected.runId, ...expected.history])];
+    let versionCondition = "";
+    const versionParams: (string | number)[] = [];
+    if (expectedStateVersion !== undefined) {
+      versionParams.push(key.tenantId, key.eventId, key.problemId, expected.runId);
+      if (expectedStateVersion === 0) {
+        versionCondition =
+          "AND NOT EXISTS (SELECT 1 FROM coordination_state_scoped WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ?)";
+      } else {
+        versionCondition =
+          "AND EXISTS (SELECT 1 FROM coordination_state_scoped WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ? AND version = ?)";
+        versionParams.push(expectedStateVersion);
+      }
+    }
+    // One statement: the pointer compare, every retained delivery, and the
+    // optional state version are tested in the same write transaction as closure.
+    const result = await this.core.sql.run(
+      `INSERT INTO coordination_run (tenant_id, event_id, problem_id, run_id, started_at, history, pending_initialization, closed, expires_at)
+       SELECT ?, ?, ?, ?, ?, ?, 0, 1, 0
+       WHERE COALESCE((SELECT run_id FROM coordination_run WHERE tenant_id = ? AND event_id = ? AND problem_id = ?), ?) = ?
+       AND COALESCE((SELECT pending_initialization FROM coordination_run WHERE tenant_id = ? AND event_id = ? AND problem_id = ?), 0) = 0
+       AND NOT EXISTS (SELECT 1 FROM coordination_state_scoped WHERE tenant_id = ? AND event_id = ? AND problem_id = ?
+         AND run_id IN (${runs.map(() => "?").join(", ")}) AND ${HAS_PENDING_COORDINATION_SCORES_SQL})
+       ${versionCondition}
+       ON CONFLICT(tenant_id, event_id, problem_id) DO UPDATE SET closed = 1, expires_at = 0`,
+      [
+        key.tenantId,
+        key.eventId,
+        key.problemId,
+        expected.runId,
+        expected.startedAt,
+        JSON.stringify(expected.history),
+        key.tenantId,
+        key.eventId,
+        key.problemId,
+        DEFAULT_COORDINATION_RUN_ID,
+        expected.runId,
+        key.tenantId,
+        key.eventId,
+        key.problemId,
+        key.tenantId,
+        key.eventId,
+        key.problemId,
+        ...runs,
+        ...versionParams,
+      ],
     );
+    return Number(result.changes) > 0 ? { outcome: "updated" } : { outcome: "conflict" };
+  }
+
+  async deleteCoordinationRun(key: CoordinationRunKey): Promise<void> {
+    const expected = (await this.readCoordinationRun(key)) ?? initialCoordinationRunPointer("");
+    const result = await this.closeCoordinationRun(key, expected);
+    if (result.outcome !== "updated") throw new Error("Coordination run closure conflicted");
   }
 
   /**

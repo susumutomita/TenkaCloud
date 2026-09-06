@@ -232,7 +232,10 @@ describe.each(["DynamoDB", "SQL"])("teardown retains committed score history: %s
       await cleanupCoordinationStateIfLastDeployment({ repository, artifacts }, key),
     ).toMatchObject({ kind: "deleted" });
     expect(await readCoordinationState(store, scope)).toBeUndefined();
-    expect(await repository.readCoordinationRun(key)).toBeUndefined();
+    expect(await repository.readCoordinationRun(key)).toMatchObject({
+      runId: scope.runId,
+      closed: true,
+    });
     expect(await repository.readCoordinationMatchSecret(scope)).toBeUndefined();
   });
 
@@ -295,16 +298,15 @@ describe.each(["DynamoDB", "SQL"])("teardown retains committed score history: %s
 
   it("preserves a delivery committed after the delete-all preflight read", async () => {
     const { repository, store, scope, artifacts, deleteArtifacts } = await setup(backend);
-    const original = repository.deleteCoordinationState.bind(repository);
-    vi.spyOn(repository, "deleteCoordinationState").mockImplementationOnce(async (target) => {
-      expect(target).toEqual(scope);
+    const original = repository.closeCoordinationRun.bind(repository);
+    vi.spyOn(repository, "closeCoordinationRun").mockImplementationOnce(async (...args) => {
       expect(
         await writeCoordinationState(store, scope, 30, 1, at, 1, {
           occurredAt: at,
           teams: { red: { before: 0, score: 30, reason: "cipher" } },
         }),
       ).toEqual({ kind: "ok" });
-      await original(target);
+      return original(...args);
     });
     await expect(deleteAllCoordinationRuns({ repository, artifacts }, key)).rejects.toThrow();
     expect((await readCoordinationState(store, scope))?.pendingScores).toBeDefined();

@@ -61,6 +61,8 @@ export interface CoordinationRunPointer {
   readonly history: readonly string[];
   /** Accepted reset still owes one durable initial state and its initial scores. */
   readonly pendingInitialization?: true;
+  /** Teardown fenced this namespace. Only an explicit reset may start a new run. */
+  readonly closed?: true;
 }
 
 /**

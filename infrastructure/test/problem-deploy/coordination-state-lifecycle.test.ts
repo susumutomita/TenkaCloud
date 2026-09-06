@@ -1,5 +1,10 @@
 import { DatabaseSync } from "node:sqlite";
-import { DeleteCommand, ScanCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+import {
+  DeleteCommand,
+  ScanCommand,
+  TransactWriteCommand,
+  UpdateCommand,
+} from "@aws-sdk/lib-dynamodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   coordinationStateExpiresAt,
@@ -330,12 +335,16 @@ describe("event teardown cleans up coordination state (#3123)", () => {
         // The pre-scope row for this event goes too — it predates `expiresAt`,
         // so nothing else would ever reap it.
         "COORD#tenant-acme#EV1",
-        // [Issue #3153] The run pointer goes with the problem it names. Leaving
-        // it would make a re-deployed problem resume the retired run id, and
-        // with it that run's tombstoned artifact prefix.
-        "COORDRUN#tenant-acme#EV1#problem-a",
-        "COORDRUN#tenant-acme#EV1#problem-b",
       ]),
+    );
+    const closed = ddbSend.mock.calls
+      .map(([command]) => command)
+      .filter((command): command is TransactWriteCommand => command instanceof TransactWriteCommand)
+      .flatMap((command) => command.input.TransactItems ?? [])
+      .filter((entry) => entry.Put?.Item?.closed === true)
+      .map((entry) => entry.Put?.Item?.PK);
+    expect(new Set(closed)).toEqual(
+      new Set(["COORDRUN#tenant-acme#EV1#problem-a", "COORDRUN#tenant-acme#EV1#problem-b"]),
     );
   });
 

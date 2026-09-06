@@ -1,6 +1,7 @@
 import type { DeploymentsCoordinationPort } from "../../control-data/deployments-repository.js";
 import { isRoundTerminated } from "../generic-scoring-handler/round-liveness.js";
 import { resolveCoordinationArtifactStore } from "../shared/coordination-artifact-store.js";
+import { isCoordinationDeploymentPlayable } from "../shared/coordination-liveness.js";
 import { startCoordinationRun } from "../shared/coordination-run.js";
 import { logDeployTrace } from "../shared/trace-log.js";
 import {
@@ -100,7 +101,9 @@ export async function resetCoordinationRun(
   )
     return { kind: "event_ended" };
   const deployments = await queryDeploymentsByEvent(shared, tenantId, eventId);
-  const deployed = deployments.some((item) => item.problemId === problemId);
+  const deployed = deployments.some(
+    (item) => item.problemId === problemId && isCoordinationDeploymentPlayable(item),
+  );
   if (!deployed) return { kind: "not_found" };
 
   const repository: DeploymentsCoordinationPort = await resolveDeploymentsRepository(shared);

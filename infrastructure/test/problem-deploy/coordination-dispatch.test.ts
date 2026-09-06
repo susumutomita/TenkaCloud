@@ -97,7 +97,7 @@ function storeOver(
       if (entries?.[0].Update)
         expect(entries[0].Update).toMatchObject({
           UpdateExpression: "REMOVE pendingInitialization, coordinationRecoveryScope",
-          ConditionExpression: "runId = :run",
+          ConditionExpression: "runId = :run AND attribute_not_exists(closed)",
         });
       expect(entries?.[1].Put?.Item?.SK).toBe("STATE");
       const put = entries?.[1].Put;

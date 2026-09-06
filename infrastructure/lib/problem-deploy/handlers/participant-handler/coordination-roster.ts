@@ -27,7 +27,7 @@ import {
  *
  * `knownTeamIds` are always on the roster: the requester on the op path, the
  * teams the scoring pass observed on the tick path. A failed roster query
- * degrades to those rather than failing the route or the tick.
+ * may degrade for an existing match; a new state must wait for the full query.
  *
  * Known limit: the state is materialised once. A team that deploys after that
  * does not appear in `state.teams` (the SDK has no roster re-resolution hook)
@@ -40,11 +40,13 @@ export interface EventRosterTarget {
   readonly problemId: string;
   /** Team ids the caller already knows; on the roster whether or not the query succeeds. */
   readonly knownTeamIds: readonly string[];
-  /** A durable reset cannot commit an incomplete roster after a failed query. */
+  /** Durable initialization cannot commit an incomplete roster after a failed query. */
   readonly requireComplete?: boolean;
 }
 
 export interface EventRoster {
+  /** Existing matches remain usable, but this roster must never initialize durable state. */
+  readonly rosterIncomplete?: true;
   /** teamId 昇順 (= どの host が先に materialize しても `initialState(ctx)` の入力が同一)。 */
   readonly teamIds: readonly string[];
   /**
@@ -61,6 +63,7 @@ export async function resolveEventRoster(
 ): Promise<EventRoster> {
   const roster = new Set<string>(target.knownTeamIds);
   const teamNames: Record<string, string> = {};
+  let rosterIncomplete: true | undefined;
   try {
     const repository = await resolveDeploymentsRepository(shared);
     const rows = await repository.listByTenantAndEvent(target.tenantId, target.eventId);
@@ -75,18 +78,20 @@ export async function resolveEventRoster(
     }
   } catch (err) {
     if (target.requireComplete) throw err;
-    // Neither host fails over this: the op path keeps serving the requester
-    // and the tick keeps the batch moving. It is not silent either -- a match
-    // that starts on the known ids alone is exactly what #3187 looked like on
-    // live, and the warn is how an operator tells that apart from a real
-    // roster of one.
-    console.warn("[coordination] roster query failed; materialising with the known team ids only", {
+    rosterIncomplete = true;
+    // Existing state does not use ctx. Preserve reads and existing operations,
+    // while the dispatcher refuses to initialize from this partial result.
+    console.warn("[coordination] roster query failed; new match initialization deferred", {
       eventId: target.eventId,
       problemId: target.problemId,
       message: err instanceof Error ? err.message : String(err),
     });
   }
-  return { teamIds: [...roster].sort(), teamNames };
+  return {
+    teamIds: [...roster].sort(),
+    teamNames,
+    ...(rosterIncomplete ? { rosterIncomplete } : {}),
+  };
 }
 
 function trimmedString(value: unknown): string | undefined {

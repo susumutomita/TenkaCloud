@@ -1,6 +1,6 @@
 import { type CoordinationPlugin, runTick } from "@tenkacloud/coordination-plugin-sdk";
 import { z } from "zod";
-import { resolveCurrentCoordinationRunId } from "../shared/coordination-run.js";
+import { resolvePlayableCoordinationRunId } from "../shared/coordination-run.js";
 import {
   COORDINATION_TICK_ACTION,
   type CoordinationTickBatch,
@@ -122,7 +122,12 @@ async function initializeAcceptedCoordinationReset(
   const repository = await resolveDeploymentsRepository(deps.store);
   const key = { tenantId: target.tenantId, eventId: target.eventId, problemId: target.moduleRef };
   const pointer = await repository.readCoordinationRun(key);
-  if (!pointer?.pendingInitialization || pointer.runId !== target.initializeRunId) return false;
+  if (
+    pointer?.closed ||
+    !pointer?.pendingInitialization ||
+    pointer.runId !== target.initializeRunId
+  )
+    return false;
   const scope = { ...key, runId: pointer.runId };
   if (await readCoordinationState(deps.store, scope)) {
     // A normal first writer may have won since the pointer read. Never replace its state.
@@ -178,9 +183,22 @@ async function drainSavedCoordinationScores(
   if (!deps.config[target.moduleRef]) return;
   const repository = await resolveDeploymentsRepository(deps.store);
   const key = { tenantId: target.tenantId, eventId: target.eventId, problemId: target.moduleRef };
-  const scope = { ...key, runId: await resolveCurrentCoordinationRunId(repository, key) };
+  const runId = await resolvePlayableCoordinationRunId(repository, key);
+  if (runId === undefined) return;
+  const scope = { ...key, runId };
   const row = await readCoordinationState(deps.store, scope);
   if (row) await tryDeliverCoordinationScores(deps.store, scope, row);
+}
+
+function warnTickSchemaMismatch(
+  target: CoordinationTickTarget,
+  reason: string,
+  detail?: string,
+): void {
+  console.warn(
+    `[coordination-dispatcher] tick schema mismatch event=${target.eventId} problem=${target.moduleRef} reason=${reason}` +
+      (detail ? ` detail=${JSON.stringify(detail)}` : ""),
+  );
 }
 
 /**
@@ -216,12 +234,12 @@ async function tickCoordinationEvent(
     eventId: target.eventId,
     problemId: target.moduleRef,
   };
+  const repository = await resolveDeploymentsRepository(deps.store);
+  const runId = await resolvePlayableCoordinationRunId(repository, runKey);
+  if (runId === undefined) return false;
   const scope: CoordinationStateScope = {
     ...runKey,
-    runId: await resolveCurrentCoordinationRunId(
-      await resolveDeploymentsRepository(deps.store),
-      runKey,
-    ),
+    runId,
   };
   const existing = await readCoordinationState(deps.store, scope);
   // A stalled delivery must not age out a live match. Refresh before delivery:
@@ -258,10 +276,7 @@ async function tickCoordinationEvent(
     // 一切進めず、 TTL だけ延ばして試合を消さない (= write が要らないので version 条件も張らない)。
     const reconciled = reconcileStateSchema(schema, existing);
     if (reconciled.kind === "mismatch") {
-      console.warn(
-        `[coordination-dispatcher] tick schema mismatch event=${target.eventId} problem=${target.moduleRef} reason=${reconciled.reason}` +
-          (reconciled.detail ? ` detail=${JSON.stringify(reconciled.detail)}` : ""),
-      );
+      warnTickSchemaMismatch(target, reconciled.reason, reconciled.detail);
       return false;
     }
     currentState = reconciled.state;
@@ -276,13 +291,13 @@ async function tickCoordinationEvent(
     // names -- and on live every team was a ULID for the rest of the match,
     // even after #3172 had wired names into the op path. The roster is resolved
     // exactly as the op path resolves it (same rows, same rule, same sort),
-    // seeded with the ids the scoring pass observed so a failed query degrades
-    // to what the tick already knew rather than failing it.
+    // A failed full-roster query must defer initialization until the next tick.
     const roster = await resolveEventRoster(deps.store, {
       tenantId: target.tenantId,
       eventId: target.eventId,
       problemId: target.moduleRef,
       knownTeamIds: target.teamIds,
+      requireComplete: true,
     });
     currentState = plugin.initialState({
       eventId: target.eventId,

@@ -47,6 +47,8 @@ export interface CoordinationDispatchInput<Op> {
   readonly op: Op;
   /** plugin が初期化に使う event 文脈 (= 参加チーム一覧)。 */
   readonly ctx: CoordinationContext;
+  /** Host-only marker: ctx is incomplete and cannot initialize a match. */
+  readonly rosterIncomplete?: true;
   /** projection が失敗 / 未初期化のときに返す安全な既定値 (= 機密を出さない)。 */
   readonly fallbackProjection: unknown;
   readonly nowIso: string;
@@ -258,6 +260,7 @@ async function attemptDispatch<State, Op, Projection>(
     state = reconciled.state;
     version = existing.version;
   } else {
+    if (input.rosterIncomplete) return { kind: "unavailable" };
     state = plugin.initialState(await withMatchSecret(store, input.scope, input.ctx, input.nowIso));
     version = 0;
   }

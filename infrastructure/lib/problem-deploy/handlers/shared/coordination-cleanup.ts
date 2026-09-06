@@ -3,12 +3,14 @@ import type {
   DeploymentsCoordinationPort,
   DeploymentsQueryPort,
 } from "../../control-data/deployments-repository.js";
-import { coordinationScopeForRun } from "../../control-data/domain/coordination-run.js";
+import {
+  coordinationScopeForRun,
+  initialCoordinationRunPointer,
+} from "../../control-data/domain/coordination-run.js";
 import type { CoordinationStateScope } from "../../control-data/domain/coordination-scope.js";
 import { isCoordinationStateEnvelope } from "../../control-data/domain/coordination-state-envelope.js";
-import type { DeploymentStatus } from "../deploy-handler/types.js";
-import { DELETED_LIKE_STATUSES } from "./constants.js";
-import { deleteAllCoordinationRuns, resolveCurrentCoordinationRunId } from "./coordination-run.js";
+import { isCoordinationDeploymentPlayable } from "./coordination-liveness.js";
+import { CoordinationRunCloseConflict, deleteAllCoordinationRuns } from "./coordination-run.js";
 import { logDeployTrace } from "./trace-log.js";
 
 /**
@@ -84,21 +86,6 @@ export interface CoordinationCleanupDeps {
 }
 
 /**
- * Whether this deployment row could still submit a coordination operation.
- *
- * Mirrors `coordination-handler.ts`'s `canSubmitCoordination` exactly, and for
- * the same reason: if the two ever disagree, one of them is wrong about whether
- * a match is alive. The direction of the disagreement decides which failure you
- * get — cleanup deleting a playable match, or a match nobody can play keeping
- * its row forever.
- */
-function canStillAct(item: CoordinationCleanupCandidate): boolean {
-  if (item.teardownRequestedAt) return false;
-  const status = (item.status ?? "PENDING") as DeploymentStatus;
-  return !DELETED_LIKE_STATUSES.has(status);
-}
-
-/**
  * Deletes this problem's coordination state if the deployment just torn down
  * was the last one that could act on it.
  *
@@ -108,14 +95,14 @@ function canStillAct(item: CoordinationCleanupCandidate): boolean {
  *
  *   1. read the state (and its `version`)
  *   2. count the deployments that can still act
- *   3. delete, conditional on that same `version`
+ *   3. close the run, conditional on that same `version`, then delete
  *
  * Reading the version BEFORE the count is what makes the condition meaningful.
  * A new deployment arriving after step 2 can only endanger a live match by
  * being played, and being played moves the version, so step 3 is refused. A new
  * deployment that has not been played is not a match in progress: its first
- * operation re-materializes the namespace from `plugin.initialState`, exactly
- * as it would have done had it arrived a moment later.
+ * operation must follow an explicit reset to a fresh run; the closed namespace
+ * can never be materialized again by a queued request.
  *
  * Reading the version after the count would leave a window where a whole
  * match — write included — happens between the two reads and is then deleted at
@@ -145,78 +132,44 @@ export async function cleanupCoordinationStateIfLastDeployment(
   // cleanup that always looked at the initial run would leave every reset
   // match's state behind while reporting that it had cleaned up.
   const runKey = { tenantId, eventId, problemId };
-  const scope: CoordinationStateScope = coordinationScopeForRun(
-    runKey,
-    await resolveCurrentCoordinationRunId(deps.repository, runKey),
-  );
+  const pointer =
+    (await deps.repository.readCoordinationRun(runKey)) ?? initialCoordinationRunPointer("");
+  const scope = coordinationScopeForRun(runKey, pointer.runId);
 
   const existing = await deps.repository.readCoordinationState(scope);
-  // Nothing to reclaim. The match never started, or event teardown / a reset
-  // already removed it. Deliberately NOT falling through to an unconditional
-  // delete of the leftover match secret: that row carries its own TTL, and
-  // deleting it here would race a match that is starting right now — the
-  // secret would vanish from under shares already derived from it.
-  if (!existing) return { kind: "absent" };
-
+  // Even an unmaterialized initial run needs a fence: a queued first tick
+  // may still hold the default scope. Closed scopes also retry artifact cleanup.
   const deployments = await deps.repository.listByTenantAndEvent(tenantId, eventId);
   const live = deployments.filter(
-    (row) => row.problemId === problemId && canStillAct(row as CoordinationCleanupCandidate),
+    (row) => row.problemId === problemId && isCoordinationDeploymentPlayable(row),
   );
   if (live.length > 0) return { kind: "retained", liveDeployments: live.length };
-  if (isCoordinationStateEnvelope(existing.state) && existing.state.pendingScores != null) {
+  if (pointer.pendingInitialization) return { kind: "pending_scores" };
+  if (isCoordinationStateEnvelope(existing?.state) && existing.state.pendingScores != null) {
     return { kind: "pending_scores" };
   }
 
-  const outcome = await deps.repository.deleteCoordinationStateIfUnchanged(scope, existing.version);
-  if (outcome.outcome !== "updated") {
+  try {
+    await deleteAllCoordinationRuns(deps, runKey, {
+      runId: scope.runId,
+      version: existing?.version ?? 0,
+    });
+  } catch (error) {
+    if (!(error instanceof CoordinationRunCloseConflict)) throw error;
     logDeployTrace("coordination.cleanup.raced", {
       tenantId,
       eventId,
       problemIds: problemId,
-      expectedVersion: existing.version,
+      expectedVersion: existing?.version,
     });
     return { kind: "raced" };
   }
-  // [Issue #3153] The current run's state is gone, so the retained history and
-  // the pointer go too: nothing names them any more, and a pointer left behind
-  // would make a re-deployed problem resume a retired run id — and with it that
-  // run's tombstoned artifact prefix.
-  //
-  // After the conditional delete, never before it: a cleanup that lost its race
-  // must leave every run exactly as it found it.
-  await deleteAllCoordinationRuns(deps, runKey).catch((err: unknown) => {
-    logDeployTrace("coordination.cleanup.runs-failed", {
-      tenantId,
-      eventId,
-      problemIds: problemId,
-      reason: err instanceof Error ? err.message : String(err),
-    });
-    return [];
-  });
-
-  // [Issue #3152] The artifacts go only after the state delete was accepted.
-  // On a conflict the match is live and its projections still reference these
-  // bodies; removing them would leave a playable board pointing at nothing.
-  const removedArtifacts = await deps.artifacts?.deleteScope(scope).catch((err: unknown) => {
-    // Best-effort, and logged rather than swallowed: the state row — the thing
-    // that makes the match reachable — is already gone, so failing the whole
-    // cleanup here would report that nothing was cleaned when most of it was.
-    // The bucket's own expiry is the backstop.
-    logDeployTrace("coordination.cleanup.artifacts-failed", {
-      tenantId,
-      eventId,
-      problemIds: problemId,
-      reason: err instanceof Error ? err.message : String(err),
-    });
-    return undefined;
-  });
   logDeployTrace("coordination.cleanup.deleted", {
     tenantId,
     eventId,
     problemIds: problemId,
     runId: scope.runId,
-    version: existing.version,
-    removedArtifacts,
+    version: existing?.version ?? 0,
   });
-  return { kind: "deleted", scope };
+  return existing ? { kind: "deleted", scope } : { kind: "absent" };
 }

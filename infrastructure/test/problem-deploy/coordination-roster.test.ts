@@ -74,9 +74,8 @@ describe("resolveEventRoster", () => {
       fakeParticipantShared(vi.fn(async () => Promise.reject(new Error("roster query failed")))),
       { ...target, knownTeamIds: ["t2", "t1"] },
     );
-    // Neither host fails over this -- but a match that starts on the known
-    // ids alone is what the live symptom looked like, so it is not silent.
-    expect(roster).toEqual({ teamIds: ["t1", "t2"], teamNames: {} });
+    // The caller can serve an existing match, but cannot persist this partial roster.
+    expect(roster).toEqual({ teamIds: ["t1", "t2"], teamNames: {}, rosterIncomplete: true });
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining("roster query failed"),
       expect.objectContaining({ eventId: "e1", problemId: "p1", message: "roster query failed" }),

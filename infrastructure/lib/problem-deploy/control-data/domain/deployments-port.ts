@@ -762,13 +762,20 @@ export interface DeploymentsCoordinationPort {
   ): Promise<DeploymentMutationOutcome>;
 
   /**
-   * [Issue #3153] Removes the run pointer for a `(tenant, event, problem)`.
-   *
-   * Called when the problem itself goes — event teardown, or the last
-   * deployment being torn down. Leaving it would make a re-deployed problem
-   * resume the retired match's run id, and with it that run's tombstoned
-   * artifact prefix.
+   * Fence every state write before teardown. Atomically checks the expected
+   * current run, no pending initialization, and no pending score deliveries
+   * in any retained run, then leaves a non-expiring closed pointer. An optional
+   * current state version preserves last-deployment cleanup's lost-update guard
+   * (zero requires state absence).
+   * A conflict must delete nothing. Re-closing the same run is idempotent.
    */
+  closeCoordinationRun(
+    key: CoordinationRunKey,
+    expected: CoordinationRunPointer,
+    expectedStateVersion?: number,
+  ): Promise<DeploymentMutationOutcome>;
+
+  /** Legacy pointer removal also preserves the closed fence against default-run fallback. */
   deleteCoordinationRun(key: CoordinationRunKey): Promise<void>;
 
   /**

@@ -3,11 +3,10 @@ import type { CoordinationArtifactStore } from "../../control-data/coordination-
 import type { CoordinationArtifactRef } from "../../control-data/domain/coordination-artifact.js";
 import type { CoordinationStateBudget } from "../../control-data/domain/coordination-budget.js";
 import type { CoordinationStateScope } from "../../control-data/domain/coordination-scope.js";
-import type { DeploymentStatus } from "../deploy-handler/types.js";
 import type { RoundWindow } from "../generic-scoring-handler/round-liveness.js";
 import { isScoringActive } from "../generic-scoring-handler/scoring-active.js";
-import { DELETED_LIKE_STATUSES } from "../shared/constants.js";
-import { resolveCurrentCoordinationRunId } from "../shared/coordination-run.js";
+import { isCoordinationDeploymentPlayable } from "../shared/coordination-liveness.js";
+import { resolvePlayableCoordinationRunId } from "../shared/coordination-run.js";
 import { getPrerequisiteBlockByEventId } from "./challenge-access.js";
 import {
   type ArtifactFetchOutcome,
@@ -52,6 +51,8 @@ export interface CoordinationScope {
   readonly teamId: string;
   /** plugin の initialState に渡す event 文脈 (= 参加チーム一覧)。 */
   readonly ctx: CoordinationContext;
+  /** Do not initialize durable state from a failed roster lookup. */
+  readonly rosterIncomplete?: true;
   /** 問題が宣言する plugin module path (= interTeamCoordination.plugin)。 */
   readonly moduleRef: string;
   /** projection 失敗 / 未初期化時に返す安全な既定 (= 他 team の機密を出さない)。 */
@@ -195,6 +196,7 @@ export async function handleCoordinationOp(
     teamId: scope.teamId,
     op: withArtifactRefs(op, stored.refs),
     ctx: scope.ctx,
+    rosterIncomplete: scope.rosterIncomplete,
     fallbackProjection: scope.fallbackProjection,
     nowIso,
   });
@@ -335,53 +337,6 @@ export function parseCoordinationConfig(raw: string | undefined): CoordinationCo
 }
 
 /**
- * [Issue #3123] Whether this deployment row may still submit coordination ops.
- *
- * A torn-down deployment stays queryable through the participant login index
- * (GSI2 is keyed by `teamLoginKey`, not by status) while it sits in `DELETING`,
- * and terminal rows are retained for seven days for audit. Without this guard a
- * participant could keep submitting after their deployment — or their whole
- * event — was torn down, and because event cleanup now DELETES the coordination
- * namespace, the next op would re-materialize it from `plugin.initialState`,
- * recreating exactly the row teardown had just removed.
- *
- * Every other participant write path already applies this same filter with this
- * same constant (`battle-attacks.ts`, `cast-event.ts`, `sso.ts`, `lookup.ts`,
- * `update.ts`, `score-events.ts`, `leaderboard*.ts`, `challenge-access.ts`).
- * Coordination was the one that did not.
- *
- * Note this guards the REQUESTER's own row only. `resolveEventRoster`
- * (`coordination-roster.ts`) deliberately does not filter by status, for an
- * unrelated and still-valid reason: dropping mid-deploy teams from the roster
- * would make `initialState(ctx)` depend on deploy timing (#3053).
- *
- * [Issue #3128] Status alone is not enough, because a torn-down row does not
- * stay in a deleted-like status. `bulkTeardownEvent` moves rows to `DELETING`
- * and — once nothing is uncommitted — DELETES the coordination namespace. The
- * delete state machine then runs asynchronously, and on `DELETE_FAILED` (or a
- * task failure) `markFailed` moves the row to `FAILED`, which is
- * indistinguishable from a failed DEPLOY and is therefore NOT deleted-like. The
- * event window is usually still open at that point, so the row passed both
- * gates and the next op re-materialized the namespace teardown had just
- * removed — the participant kept playing a match the operator had ended.
- *
- * `teardownRequestedAt` closes that: it is stamped once when the row first
- * transitions to `DELETING` and never cleared, so "was teardown requested" no
- * longer depends on where the row happened to land afterwards. Rows written
- * before this marker existed do not carry it and keep the previous
- * status-only behaviour; the field's absence means "unknown", not "not torn
- * down".
- */
-function canSubmitCoordination(item: {
-  readonly status?: string;
-  readonly teardownRequestedAt?: string;
-}): boolean {
-  if (item.teardownRequestedAt) return false;
-  const status = (item.status ?? "PENDING") as DeploymentStatus;
-  return !DELETED_LIKE_STATUSES.has(status);
-}
-
-/**
  * team-login-key → {@link CoordinationScope}。 active な代表 deployment 行から tenant/event/team を
  * 引き、 その問題が coordination を宣言していれば moduleRef を確定する。 認証不可 / 未宣言は
  * `not_configured`。
@@ -408,7 +363,7 @@ export function makeCoordinationScopeResolver(
         item.eventId &&
         item.teamId &&
         config[item.problemId]?.plugin &&
-        canSubmitCoordination(item),
+        isCoordinationDeploymentPlayable(item),
     );
     const wanted = problemId
       ? candidates.filter((item) => item.problemId === problemId)
@@ -416,12 +371,9 @@ export function makeCoordinationScopeResolver(
     // problemId 指定で該当なし = その team にその問題は無い。 存在する別問題を代わりに
     // 返すと、 参加者は指定した問題を操作したつもりで別の試合を動かすことになる。
     if (wanted.length === 0) return { kind: "not_configured" };
-    if (wanted.length > 1) {
-      const problemIds = [...new Set(wanted.map((item) => String(item.problemId)))].sort();
-      // 1 問しか無いのに重複行がある場合 (= 同一 problem の複数 deployment 行) は曖昧では
-      // ないので、 そのまま解決する。
-      if (problemIds.length > 1) return { kind: "ambiguous", problemIds };
-    }
+    const problemIds = [...new Set(wanted.map((item) => String(item.problemId)))].sort();
+    // Duplicate deployment rows for the same problem do not make the choice ambiguous.
+    if (problemIds.length > 1) return { kind: "ambiguous", problemIds };
     const item = wanted[0];
     if (!item?.problemId || !item.tenantId || !item.eventId || !item.teamId) {
       return { kind: "not_configured" };
@@ -451,6 +403,12 @@ export function makeCoordinationScopeResolver(
     if (prerequisite) {
       return { kind: "locked", gateProblemId: prerequisite.gateProblemId };
     }
+    const runKey = { tenantId: item.tenantId, eventId: item.eventId, problemId: resolvedProblemId };
+    const runId = await resolvePlayableCoordinationRunId(
+      await resolveDeploymentsRepository(shared),
+      runKey,
+    );
+    if (runId === undefined) return { kind: "not_configured" };
     const roster = await resolveEventRoster(shared, {
       tenantId: item.tenantId,
       eventId: item.eventId,
@@ -472,13 +430,10 @@ export function makeCoordinationScopeResolver(
           tenantId: item.tenantId,
           eventId: item.eventId,
           problemId: resolvedProblemId,
-          runId: await resolveCurrentCoordinationRunId(await resolveDeploymentsRepository(shared), {
-            tenantId: item.tenantId,
-            eventId: item.eventId,
-            problemId: resolvedProblemId,
-          }),
+          runId,
         },
         teamId: item.teamId,
+        rosterIncomplete: roster.rosterIncomplete,
         ctx: {
           eventId: item.eventId,
           teamIds: roster.teamIds,

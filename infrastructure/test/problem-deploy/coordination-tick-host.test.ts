@@ -852,7 +852,7 @@ describe("the tick materialises the roster the op path would (#3187)", () => {
     });
   });
 
-  it("should still initialise from the scoring pass's ids, unnamed, when the roster query fails", async () => {
+  it("should defer initialization when the full roster query fails", async () => {
     const ddb = fakeDdb({ getItem: undefined, rosterThrows: true });
 
     const res = await handleCoordinationTickBatch(
@@ -860,17 +860,12 @@ describe("the tick materialises the roster the op path would (#3187)", () => {
       batch([capTarget({ teamIds: ["team-b", "team-a"] })]),
     );
 
-    // Same degradation as the op path: the match starts on what the host
-    // already knew rather than not starting. Not silently, though -- ids
-    // alone is exactly what the live symptom looked like.
-    expect(res).toEqual({ ticked: 1, written: 1 });
-    expect(persistedTeams(ddb)).toEqual([
-      { id: "team-a", name: undefined },
-      { id: "team-b", name: undefined },
-    ]);
+    expect(res).toEqual({ ticked: 1, written: 0 });
+    expect(ddb.puts).toHaveLength(0);
+    expect(persistedTeams(ddb)).toBeUndefined();
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining("roster query failed"),
-      expect.objectContaining({ eventId: "e1", problemId: "cap", message: "roster boom" }),
+      expect.stringContaining("tick failed event=e1"),
+      expect.objectContaining({ message: "roster boom" }),
     );
   });
 

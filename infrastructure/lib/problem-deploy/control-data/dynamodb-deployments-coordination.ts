@@ -1,6 +1,10 @@
 import { DeleteCommand, GetCommand, PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { ulid } from "ulid";
-import type { CoordinationRunKey, CoordinationRunPointer } from "./domain/coordination-run.js";
+import {
+  type CoordinationRunKey,
+  type CoordinationRunPointer,
+  initialCoordinationRunPointer,
+} from "./domain/coordination-run.js";
 import {
   assertConditionableVersion,
   type CoordinationStateScope,
@@ -59,8 +63,8 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
             Key: { PK: coordinationRunPk(scope), SK: COORD_RUN_SK },
             ConditionExpression:
               scope.runId === DEFAULT_COORDINATION_RUN_ID
-                ? "attribute_not_exists(runId) OR runId = :run"
-                : "runId = :run",
+                ? "(attribute_not_exists(runId) OR runId = :run) AND attribute_not_exists(closed)"
+                : "runId = :run AND attribute_not_exists(closed)",
             ExpressionAttributeValues: { ":run": scope.runId },
           },
         },
@@ -266,8 +270,8 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
                 Key: { PK: coordinationRunPk(scope), SK: COORD_RUN_SK },
                 UpdateExpression: "REMOVE pendingInitialization, coordinationRecoveryScope",
                 ConditionExpression: requirePendingInitialization
-                  ? "runId = :run AND pendingInitialization = :initializing"
-                  : "runId = :run",
+                  ? "runId = :run AND pendingInitialization = :initializing AND attribute_not_exists(closed)"
+                  : "runId = :run AND attribute_not_exists(closed)",
                 ExpressionAttributeValues: {
                   ":run": scope.runId,
                   ...(requirePendingInitialization ? { ":initializing": true } : {}),
@@ -280,8 +284,8 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
                 Key: { PK: coordinationRunPk(scope), SK: COORD_RUN_SK },
                 ConditionExpression:
                   scope.runId === DEFAULT_COORDINATION_RUN_ID
-                    ? "attribute_not_exists(runId) OR runId = :run"
-                    : "runId = :run",
+                    ? "(attribute_not_exists(runId) OR runId = :run) AND attribute_not_exists(closed)"
+                    : "runId = :run AND attribute_not_exists(closed)",
                 ExpressionAttributeValues: { ":run": scope.runId },
               },
             },
@@ -465,6 +469,7 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
         ? item.history.filter((entry): entry is string => typeof entry === "string")
         : [],
       ...(item.pendingInitialization === true ? { pendingInitialization: true } : {}),
+      ...(item.closed === true ? { closed: true } : {}),
     };
   }
 
@@ -519,14 +524,55 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
     });
   }
 
-  /** [Issue #3153] See `DeploymentsCoordinationPort.deleteCoordinationRun`. */
+  async closeCoordinationRun(
+    key: CoordinationRunKey,
+    expected: CoordinationRunPointer,
+    expectedStateVersion?: number,
+  ): Promise<DeploymentMutationOutcome> {
+    if (expectedStateVersion !== undefined && expectedStateVersion !== 0)
+      assertConditionableVersion(expectedStateVersion);
+    const runs = [...new Set([expected.runId, ...expected.history])];
+    let versionCondition = "";
+    if (expectedStateVersion === 0) versionCondition = " AND attribute_not_exists(version)";
+    else if (expectedStateVersion !== undefined) versionCondition = " AND version = :version";
+    return this.core.transactWrite({
+      TransactItems: [
+        ...runs.map((runId) => ({
+          ConditionCheck: {
+            TableName: this.core.tableName,
+            Key: { PK: coordinationPk({ ...key, runId }), SK: COORD_STATE_SK },
+            ConditionExpression: `attribute_not_exists(coordinationScoresPending)${runId === expected.runId ? versionCondition : ""}`,
+            ...(runId === expected.runId &&
+            expectedStateVersion !== undefined &&
+            expectedStateVersion !== 0
+              ? { ExpressionAttributeValues: { ":version": expectedStateVersion } }
+              : {}),
+          },
+        })),
+        {
+          Put: {
+            TableName: this.core.tableName,
+            Item: {
+              PK: coordinationRunPk(key),
+              SK: COORD_RUN_SK,
+              runId: expected.runId,
+              startedAt: expected.startedAt,
+              history: [...expected.history],
+              closed: true,
+              expiresAt: 0,
+            },
+            ConditionExpression: `${expected.runId === DEFAULT_COORDINATION_RUN_ID ? "(attribute_not_exists(runId) OR runId = :expected)" : "runId = :expected"} AND attribute_not_exists(pendingInitialization)`,
+            ExpressionAttributeValues: { ":expected": expected.runId },
+          },
+        },
+      ],
+    });
+  }
+
   async deleteCoordinationRun(key: CoordinationRunKey): Promise<void> {
-    await this.core.ddb.send(
-      new DeleteCommand({
-        TableName: this.core.tableName,
-        Key: { PK: coordinationRunPk(key), SK: COORD_RUN_SK },
-      }),
-    );
+    const expected = (await this.readCoordinationRun(key)) ?? initialCoordinationRunPointer("");
+    const result = await this.closeCoordinationRun(key, expected);
+    if (result.outcome !== "updated") throw new Error("Coordination run closure conflicted");
   }
 
   /**

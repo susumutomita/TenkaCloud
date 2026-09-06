@@ -155,6 +155,7 @@ export const DEPLOYMENTS_SCHEMA_STATEMENTS = [
   started_at TEXT    NOT NULL,
   history    TEXT    NOT NULL DEFAULT '[]',
   pending_initialization INTEGER NOT NULL DEFAULT 0,
+  closed INTEGER NOT NULL DEFAULT 0,
   expires_at INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (tenant_id, event_id, problem_id)
 )`,

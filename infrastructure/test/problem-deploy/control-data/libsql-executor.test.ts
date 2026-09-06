@@ -74,7 +74,9 @@ describe("LibsqlExecutor", () => {
 
   it("should bootstrap all schema statements in one non-interactive write batch", async () => {
     const batch = vi.fn().mockResolvedValue([]);
-    const execute = vi.fn().mockResolvedValue(result([{ name: "pending_initialization" }]));
+    const execute = vi
+      .fn()
+      .mockResolvedValue(result([{ name: "pending_initialization" }, { name: "closed" }]));
     const client = { batch, execute } as unknown as Client;
 
     await initializeControlDataSchema(client);
@@ -164,13 +166,16 @@ describe("LibsqlExecutor", () => {
     await initializeControlDataSchema(client);
     await initializeControlDataSchema(client);
     expect(
-      db.prepare("SELECT run_id, history, pending_initialization FROM coordination_run").get(),
+      db
+        .prepare("SELECT run_id, history, pending_initialization, closed FROM coordination_run")
+        .get(),
     ).toEqual({
       run_id: "r-old",
       history: '["default"]',
       pending_initialization: 0,
+      closed: 0,
     });
-    expect(execute.mock.calls.filter(([input]) => input.sql.startsWith("ALTER"))).toHaveLength(1);
+    expect(execute.mock.calls.filter(([input]) => input.sql.startsWith("ALTER"))).toHaveLength(2);
     db.close();
   });
 
@@ -179,14 +184,14 @@ describe("LibsqlExecutor", () => {
       .fn()
       .mockResolvedValueOnce(result([{ name: "run_id" }]))
       .mockRejectedValueOnce(new Error("duplicate column name: pending_initialization"))
-      .mockResolvedValueOnce(result([{ name: "pending_initialization" }]));
+      .mockResolvedValue(result([{ name: "pending_initialization" }, { name: "closed" }]));
     await expect(
       initializeControlDataSchema({
         batch: vi.fn().mockResolvedValue([]),
         execute,
       } as unknown as Client),
     ).resolves.toBeUndefined();
-    expect(execute).toHaveBeenCalledTimes(3);
+    expect(execute).toHaveBeenCalledTimes(4);
   });
 
   it("propagates migration errors when the column is still absent", async () => {

@@ -398,7 +398,8 @@ describe("DynamoDbDeploymentsRepository — sub-aggregate writes (Phase B3)", ()
       const transaction = commands.find((c) => c instanceof TransactWriteCommand);
       expect(transaction.input.TransactItems[0].ConditionCheck).toMatchObject({
         Key: { PK: "COORDRUN#tn1#ev-1#problem-a", SK: "CURRENT" },
-        ConditionExpression: "attribute_not_exists(runId) OR runId = :run",
+        ConditionExpression:
+          "(attribute_not_exists(runId) OR runId = :run) AND attribute_not_exists(closed)",
         ExpressionAttributeValues: { ":run": "default" },
       });
       const put = { input: transaction.input.TransactItems[1].Put };

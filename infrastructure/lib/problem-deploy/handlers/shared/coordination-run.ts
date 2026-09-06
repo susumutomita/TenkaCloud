@@ -26,7 +26,7 @@ import { logDeployTrace } from "./trace-log.js";
  * A TTL cannot be made safe by being longer, only by being refreshed, and
  * refreshing on read means a write on every request. So the pointer's lifecycle
  * is explicit instead: event teardown and the last-deployment cleanup (#3149)
- * both delete it, and the number of pointers is bounded by the number of
+ * both close it, and the number of pointers is bounded by the number of
  * `(event, problem)` pairs ever deployed rather than growing with play.
  *
  * Zero is the "never expires" value both backends already understand — the
@@ -75,6 +75,15 @@ export async function resolveCurrentCoordinationRunId(
 ): Promise<string> {
   const pointer = await repository.readCoordinationRun(key);
   return pointer?.runId ?? initialCoordinationRunPointer("").runId;
+}
+
+/** Read the current run for work that must not enter a torn-down namespace. */
+export async function resolvePlayableCoordinationRunId(
+  repository: DeploymentsCoordinationPort,
+  key: CoordinationRunKey,
+): Promise<string | undefined> {
+  const pointer = (await repository.readCoordinationRun(key)) ?? initialCoordinationRunPointer("");
+  return pointer.closed ? undefined : pointer.runId;
 }
 
 export type StartCoordinationRunOutcome =
@@ -193,25 +202,36 @@ async function retireCoordinationRuns(
 }
 
 /**
- * Removes every run of a problem — current, history, and the pointer itself.
+ * Removes every run of a problem, leaving a non-expiring closed pointer.
  *
  * For when the problem goes rather than the match: event teardown, or the last
- * deployment being torn down. The pointer is deleted LAST so a failure part way
- * through leaves a pointer naming runs that still exist, rather than orphaned
- * runs nothing names. Retrying then converges; the other order would strand
- * data no path could reach.
+ * deployment being torn down. Closure and the absence of retained score
+ * deliveries are checked atomically BEFORE any state or artifact is deleted.
+ * A queued tick either saves its delivery first (closure conflicts), or loses
+ * its active-run write guard. Keeping the pointer prevents default-run fallback
+ * after deletion. A partial artifact failure can retry the same closed scope.
  */
+export class CoordinationRunCloseConflict extends Error {
+  constructor() {
+    super("Coordination run closure conflicted or score delivery is pending");
+    this.name = "CoordinationRunCloseConflict";
+  }
+}
+
 export async function deleteAllCoordinationRuns(
   deps: CoordinationRunDeps,
   key: CoordinationRunKey,
+  expectedCurrent?: { readonly runId: string; readonly version?: number },
 ): Promise<readonly string[]> {
-  const pointer = await deps.repository.readCoordinationRun(key);
-  if (pointer?.pendingInitialization) {
+  const pointer =
+    (await deps.repository.readCoordinationRun(key)) ?? initialCoordinationRunPointer("");
+  if (expectedCurrent && expectedCurrent.runId !== pointer.runId) {
+    throw new CoordinationRunCloseConflict();
+  }
+  if (pointer.pendingInitialization) {
     throw new Error("Coordination run initialization is pending");
   }
-  const runs = pointer
-    ? [pointer.runId, ...pointer.history]
-    : [initialCoordinationRunPointer("").runId];
+  const runs = [pointer.runId, ...pointer.history];
   // Teardown may release cloud resources immediately, but the saved score/history
   // obligation must stay reachable until delivery succeeds. Inspect all retained
   // runs before deleting any; the adapters repeat this guard at the delete itself.
@@ -223,11 +243,12 @@ export async function deleteAllCoordinationRuns(
       throw new Error("Coordination score delivery is pending");
     }
   }
+  const closed = await deps.repository.closeCoordinationRun(key, pointer, expectedCurrent?.version);
+  if (closed.outcome !== "updated") throw new CoordinationRunCloseConflict();
   for (const runId of runs) {
     const scope = coordinationScopeForRun(key, runId);
     await deps.repository.deleteCoordinationState(scope);
     await deps.artifacts?.deleteScope(scope);
   }
-  await deps.repository.deleteCoordinationRun(key);
   return runs;
 }
