@@ -3,6 +3,7 @@ import {
   type CoordinationContext,
   type CoordinationPlugin,
   dispatchOp,
+  runTick,
   safeProjectForTeam,
 } from "@tenkacloud/coordination-plugin-sdk";
 import type { CoordinationStateBudget } from "../../control-data/domain/coordination-budget.js";
@@ -13,6 +14,7 @@ import {
   deliverCoordinationScores,
   tryDeliverCoordinationScores,
 } from "./coordination-scoring.js";
+import { coordinationStateChanged } from "./coordination-state-changed.js";
 import {
   pluginStateSchemaVersion,
   reconcileStateSchema,
@@ -52,6 +54,8 @@ export interface CoordinationDispatchInput<Op> {
   /** projection が失敗 / 未初期化のときに返す安全な既定値 (= 機密を出さない)。 */
   readonly fallbackProjection: unknown;
   readonly nowIso: string;
+  /** Set only by the host from the authenticated event window. */
+  readonly requestTick?: { readonly eventNowMs: number; readonly nowIso: string };
 }
 
 export type CoordinationDispatchOutcome =
@@ -127,6 +131,8 @@ export async function dispatchCoordinationOp<State, Op, Projection>(
   // retry can change.
   if (!isContextConsistent(input)) return { kind: "rejected", error: "context_mismatch" };
 
+  const clockResult = await advanceRequestTick(store, plugin, input, options.schema ?? plugin);
+  if (clockResult) return clockResult;
   const scoreDeadlineMs = Date.now() + COORDINATION_SCORE_DELIVERY_BUDGET_MS;
   const attempts = options.attempts ?? DEFAULT_WRITE_ATTEMPTS;
   const backoff = options.backoff ?? jitteredBackoff;
@@ -262,6 +268,8 @@ async function attemptDispatch<State, Op, Projection>(
   } else {
     if (input.rosterIncomplete) return { kind: "unavailable" };
     state = plugin.initialState(await withMatchSecret(store, input.scope, input.ctx, input.nowIso));
+    if (plugin.tickOnRequest === true && input.requestTick)
+      state = runTick(plugin, state, input.requestTick.eventNowMs);
     version = 0;
   }
 
@@ -314,7 +322,7 @@ async function attemptDispatch<State, Op, Projection>(
 /** {@link projectCoordinationForTeam} の結果。 */
 export type CoordinationProjectionOutcome =
   | { readonly kind: "ok"; readonly projection: unknown }
-  | { readonly kind: "unavailable" }
+  | Exclude<CoordinationDispatchOutcome, { readonly kind: "ok" } | { readonly kind: "rejected" }>
   /**
    * [Issue #3150] projection は participant portal がいちばんポーリングする経路。
    * mismatch を fallback で飲み込んで 200 を返すと、 空の板が正常応答のふりをして返る --
@@ -340,11 +348,14 @@ export async function projectCoordinationForTeam<State, Op, Projection>(
     readonly ctx: CoordinationContext;
     readonly rosterIncomplete?: true;
     readonly fallbackProjection: unknown;
+    readonly requestTick?: { readonly eventNowMs: number; readonly nowIso: string };
   },
   schema: CoordinationSchemaDeclaration<State> = plugin,
 ): Promise<CoordinationProjectionOutcome> {
   // ctx 不整合 (= 別 event 用 ctx / team が event 外) は fail-closed で fallback を返す (= 機密非漏洩)。
   if (!isContextConsistent(input)) return { kind: "ok", projection: input.fallbackProjection };
+  const clockResult = await advanceRequestTick(store, plugin, input, schema);
+  if (clockResult) return clockResult;
   const existing = await readCoordinationState(store, input.scope);
   // Recovery must remain possible after the event window closes and scheduled ticks stop.
   // This only delivers an already committed transition; it does not advance the game or TTL.
@@ -397,4 +408,80 @@ async function withMatchSecret(
   nowIso: string,
 ): Promise<CoordinationContext> {
   return { ...ctx, matchSecret: await ensureCoordinationMatchSecret(store, scope, nowIso) };
+}
+
+/** A separate committed tick preserves tick attribution even when the move is rejected. */
+async function advanceRequestTick<State, Op, Projection>(
+  store: CoordinationStoreDeps,
+  plugin: CoordinationPlugin<State, Op, Projection>,
+  input: {
+    readonly scope: CoordinationStateScope;
+    readonly requestTick?: { readonly eventNowMs: number; readonly nowIso: string };
+  },
+  schema: CoordinationSchemaDeclaration<State>,
+): Promise<
+  | Exclude<CoordinationDispatchOutcome, { readonly kind: "ok" } | { readonly kind: "rejected" }>
+  | undefined
+> {
+  const clock = input.requestTick;
+  if (plugin.tickOnRequest !== true || !clock) return undefined;
+  if (!Number.isFinite(clock.eventNowMs) || clock.eventNowMs < 0) return { kind: "unavailable" };
+  const deadlineMs = Date.now() + COORDINATION_SCORE_DELIVERY_BUDGET_MS;
+  for (let attempt = 0; attempt < DEFAULT_WRITE_ATTEMPTS; attempt++) {
+    const outcome = await attemptRequestTick(store, plugin, input.scope, clock, schema, deadlineMs);
+    if (outcome?.kind !== "conflict") return outcome;
+    await jitteredBackoff(attempt);
+  }
+  return { kind: "conflict" };
+}
+
+async function attemptRequestTick<State, Op, Projection>(
+  store: CoordinationStoreDeps,
+  plugin: CoordinationPlugin<State, Op, Projection>,
+  scope: CoordinationStateScope,
+  clock: { readonly eventNowMs: number; readonly nowIso: string },
+  schema: CoordinationSchemaDeclaration<State>,
+  deadlineMs: number,
+): Promise<
+  | Exclude<CoordinationDispatchOutcome, { readonly kind: "ok" } | { readonly kind: "rejected" }>
+  | undefined
+> {
+  const existing = await readCoordinationState(store, scope);
+  // A read must not initialize or reopen a match.
+  if (!existing) return undefined;
+  if (!(await deliverCoordinationScores(store, scope, existing, { deadlineMs })))
+    return { kind: "unavailable" };
+  const reconciled = reconcileStateSchema<State>(schema, existing);
+  if (reconciled.kind === "mismatch")
+    return { kind: "schema_mismatch", reason: reconciled.reason, detail: reconciled.detail };
+  const next = runTick(plugin, reconciled.state, clock.eventNowMs);
+  const pendingScores = coordinationScoreDelivery(
+    plugin,
+    reconciled.state,
+    next,
+    { kind: "tick" },
+    clock.nowIso,
+    false,
+  );
+  if (!pendingScores && !coordinationStateChanged(reconciled.state, next)) return undefined;
+  const result = await writeCoordinationState(
+    store,
+    scope,
+    next,
+    existing.version,
+    clock.nowIso,
+    pluginStateSchemaVersion(schema),
+    pendingScores,
+  );
+  if (result.kind !== "ok") return result;
+  if (
+    !(await deliverCoordinationScores(
+      store,
+      scope,
+      { state: next, version: existing.version + 1, pendingScores },
+      { deadlineMs },
+    ))
+  )
+    return { kind: "unavailable" };
+  return undefined;
 }

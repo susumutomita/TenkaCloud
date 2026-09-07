@@ -1170,3 +1170,125 @@ describe("dispatch schema reconciliation (Issue #3150)", () => {
     expect(out).not.toEqual({ kind: "ok", projection: { count: -1, bonus: -1 } });
   });
 });
+
+for (const [backend, createStore] of backendStores) {
+  describe(`request-clock advancement on ${backend}`, () => {
+    const request = {
+      scope: rtScope,
+      teamId: "t1",
+      ctx: { eventId: rtScope.eventId, teamIds: ["t1"] },
+      fallbackProjection: { count: -1 },
+    };
+    const clock = { eventNowMs: 100, nowIso: "2026-06-01T00:00:01Z" };
+    const timed: typeof counter = {
+      ...counter,
+      tickOnRequest: true,
+      tick: (s, ms) => (ms >= 100 && s.count < 10 ? { count: 10 } : s),
+      validateOp: (s) => (s.count >= 10 ? { ok: false, error: "deadline" } : { ok: true }),
+    };
+    it("advances before projecting, persists once under concurrent reads, rejects an expired move", async () => {
+      const store = createStore();
+      await writeCoordinationState(store, rtScope, { count: 1 }, 0, clock.nowIso);
+      const results = await Promise.all(
+        [0, 1].map(() =>
+          projectCoordinationForTeam(store, timed, { ...request, requestTick: clock }),
+        ),
+      );
+      for (const result of results)
+        expect(result).toEqual({ kind: "ok", projection: { count: 10 } });
+      const before = await readCoordinationState(store, rtScope);
+      expect(before?.version).toBe(2);
+      expect(
+        await dispatchCoordinationOp(store, timed, {
+          ...request,
+          nowIso: clock.nowIso,
+          requestTick: clock,
+          op: { kind: "inc" },
+        }),
+      ).toEqual({ kind: "rejected", error: "deadline" });
+      expect((await readCoordinationState(store, rtScope))?.version).toBe(2);
+    });
+    it("does not initialize a GET, and does not change non-opted-in plugins", async () => {
+      const store = createStore();
+      await projectCoordinationForTeam(store, timed, { ...request, requestTick: clock });
+      expect(await readCoordinationState(store, rtScope)).toBeUndefined();
+      await writeCoordinationState(store, rtScope, { count: 1 }, 0, clock.nowIso);
+      expect(
+        await projectCoordinationForTeam(
+          store,
+          { ...timed, tickOnRequest: false },
+          { ...request, requestTick: clock },
+        ),
+      ).toEqual({ kind: "ok", projection: { count: 1 } });
+      expect((await readCoordinationState(store, rtScope))?.version).toBe(1);
+    });
+    it("does not advance without a host clock, as on an ended-event read", async () => {
+      const store = createStore();
+      await writeCoordinationState(store, rtScope, { count: 1 }, 0, clock.nowIso);
+      expect(await projectCoordinationForTeam(store, timed, request)).toEqual({
+        kind: "ok",
+        projection: { count: 1 },
+      });
+    });
+  });
+}
+
+describe("request tick failure boundaries", () => {
+  const request = { scope, teamId: "t1", ctx, fallbackProjection: { count: -1 } };
+  const clock = { eventNowMs: 100, nowIso: "2026-06-01T00:00:01Z" };
+  const timed = { ...counter, tickOnRequest: true, tick: () => ({ count: 10 }) };
+  const row = { state: { count: 1 }, version: 1, stateSchemaVersion: 1 };
+  it("refuses invalid host time before a read or operation", async () => {
+    const { store } = fakeStore({ getItem: row });
+    const requestTick = { ...clock, eventNowMs: Number.NaN };
+    expect(await projectCoordinationForTeam(store, timed, { ...request, requestTick })).toEqual({
+      kind: "unavailable",
+    });
+    expect(
+      await dispatchCoordinationOp(store, timed, {
+        ...request,
+        requestTick,
+        nowIso: clock.nowIso,
+        op: { kind: "inc" },
+      }),
+    ).toEqual({ kind: "unavailable" });
+  });
+  it("does not overwrite a state from a newer schema during tick", async () => {
+    const { store } = fakeStore({
+      getItem: {
+        ...row,
+        state: { __tenkacloudCoordinationEnvelope: 1, stateSchemaVersion: 99, state: { count: 1 } },
+      },
+    });
+    expect(
+      (await projectCoordinationForTeam(store, timed, { ...request, requestTick: clock })).kind,
+    ).toBe("schema_mismatch");
+  });
+  it("returns conflict after bounded CAS retries without applying a move", async () => {
+    const { store } = fakeStore({ getItem: row, conflict: true });
+    expect(
+      await projectCoordinationForTeam(store, timed, { ...request, requestTick: clock }),
+    ).toEqual({ kind: "conflict" });
+  });
+  it("refuses an oversized tick result rather than projecting unsaved state", async () => {
+    const { store } = fakeStore({ getItem: row });
+    const large = { ...timed, tick: () => ({ count: 10, padding: "x".repeat(500_000) }) };
+    expect(
+      (await projectCoordinationForTeam(store, large, { ...request, requestTick: clock })).kind,
+    ).toBe("too_large");
+  });
+});
+
+it("initializes the first opted-in move at the host time before validation", async () => {
+  const { store } = fakeStore({ getItem: undefined });
+  const timed = { ...counter, tickOnRequest: true, tick: () => ({ count: 5 }) };
+  const result = await dispatchCoordinationOp(store, timed, {
+    scope,
+    ctx,
+    teamId: "t1",
+    op: { kind: "inc" },
+    nowIso: "2026-06-01T00:00:01Z",
+    requestTick: { eventNowMs: 1000, nowIso: "2026-06-01T00:00:01Z" },
+  });
+  expect(result).toEqual({ kind: "ok", projection: { count: 6 } });
+});
