@@ -17,7 +17,7 @@
   "dependencies": {
     "@tenkacloud/auth-client": "workspace:*",
     "dompurify": "^3.4.4",
-    "marked": "^18.0.6"
+    "marked": "^18.0.11"
   },
   "peerDependencies": {
     "@cloudscape-design/components": "^3.0.1355",
