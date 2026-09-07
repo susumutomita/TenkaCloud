@@ -46,6 +46,8 @@ export function isCoordinationPlugin(
     typeof p.initialState === "function" &&
     typeof p.validateOp === "function" &&
     typeof p.applyOp === "function" &&
+    (p.tickOnRequest === undefined || typeof p.tickOnRequest === "boolean") &&
+    (p.tickOnRequest !== true || typeof p.tick === "function") &&
     typeof p.projectForTeam === "function"
   );
 }
@@ -265,6 +267,7 @@ export async function loadAndProjectCoordinationForTeam(
     readonly ctx: CoordinationContext;
     readonly rosterIncomplete?: true;
     readonly fallbackProjection: unknown;
+    readonly requestTick?: { readonly eventNowMs: number; readonly nowIso: string };
   },
 ): Promise<CoordinationProjectionOutcome> {
   const load = await loadCoordinationPlugin(importer, moduleRef);

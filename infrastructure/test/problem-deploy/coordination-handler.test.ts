@@ -1010,3 +1010,14 @@ describe("handleCoordinationArtifactFetch (#3152)", () => {
     expect(out).toMatchObject({ kind: "schema_mismatch" });
   });
 });
+
+it("request clocks are relative to the server's active event window, never supplied by the player", async () => {
+  const { requestClock } = await import(
+    "../../lib/problem-deploy/handlers/participant-handler/coordination-handler.js"
+  );
+  const window = { eventStartsAt: "2026-06-01T00:00:00Z", eventEndsAt: "2026-06-01T01:00:00Z" };
+  expect(requestClock(window, "2026-06-01T00:00:07Z", 5000)?.eventNowMs).toBe(5000);
+  expect(requestClock(window, "2026-06-01T00:00:07Z")?.eventNowMs).toBe(7000);
+  expect(requestClock(window, "2026-06-01T01:00:00Z")).toBeUndefined();
+  expect(requestClock(window, "2026-05-31T23:59:59Z")).toBeUndefined();
+});

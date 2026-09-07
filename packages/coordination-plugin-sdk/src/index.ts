@@ -82,6 +82,10 @@ export interface CoordinationPlugin<State, Op, Projection = unknown> {
   applyOp(state: State, teamId: string, op: Op): State;
   /** scoring engine が tick ごとに呼ぶ optional hook (= 経過時間で alliance 解消等)。 */
   tick?(state: State, eventNowMs: number): State;
+  /** Opt in to host-clock advancement before authenticated reads and moves.
+   * tick must ignore older clocks: concurrent requests can arrive out of order.
+   */
+  readonly tickOnRequest?: boolean;
   /** その team の portal に渡す projection (= 他 team の機密を漏らさない投影)。 */
   projectForTeam(state: State, teamId: string): Projection;
   /**

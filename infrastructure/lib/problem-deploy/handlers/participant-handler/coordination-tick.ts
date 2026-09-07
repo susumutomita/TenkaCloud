@@ -1,3 +1,7 @@
+import { coordinationStateChanged } from "./coordination-state-changed.js";
+
+export { coordinationStateChanged } from "./coordination-state-changed.js";
+
 import { type CoordinationPlugin, runTick } from "@tenkacloud/coordination-plugin-sdk";
 import { z } from "zod";
 import { resolvePlayableCoordinationRunId } from "../shared/coordination-run.js";
@@ -431,7 +435,3 @@ async function refreshCoordinationTtl(
  * tick 前後の state が実質変わったか。 `runTick` は no-op 時に同一参照を返す契約なので、 まず参照で
  * 弾き (= 最頻ケースを 0 コスト)、 万一 clone を返す plugin 向けに JSON 構造比較で fallback する。
  */
-export function coordinationStateChanged(prev: unknown, next: unknown): boolean {
-  if (prev === next) return false;
-  return JSON.stringify(prev) !== JSON.stringify(next);
-}

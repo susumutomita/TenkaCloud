@@ -199,6 +199,7 @@ export async function handleCoordinationOp(
     rosterIncomplete: scope.rosterIncomplete,
     fallbackProjection: scope.fallbackProjection,
     nowIso,
+    requestTick: requestClock(scope.window, nowIso),
   });
   // Anything other than a committed op leaves the bodies unreferenced.
   if (outcome.kind !== "ok" && storedRefs.length > 0) {
@@ -222,6 +223,7 @@ export async function handleCoordinationProjection(
   deps: CoordinationHandlerDeps,
   teamLoginKey: string,
   problemId?: string,
+  nowIso = new Date().toISOString(),
 ): Promise<CoordinationHandlerOutcome> {
   const resolution = await deps.resolveScope(teamLoginKey, problemId);
   if (resolution.kind !== "scope") return resolution;
@@ -236,6 +238,7 @@ export async function handleCoordinationProjection(
       ctx: scope.ctx,
       rosterIncomplete: scope.rosterIncomplete,
       fallbackProjection: scope.fallbackProjection,
+      requestTick: requestClock(scope.window, nowIso, 5_000),
     },
   );
   // [Issue #3150] mismatch を 200 に丸めない -- 呼び出し側 (dispatcher-handler) が 503 に写す。
@@ -299,7 +302,7 @@ export async function handleCoordinationArtifactFetch(
     warnSchemaMismatch("projection", scope.state, projected);
     return projected;
   }
-  if (projected.kind === "unavailable") return projected;
+  if (projected.kind !== "ok") return { kind: "unavailable" };
   return fetchAuthorizedArtifact(deps.artifacts, scope.state, projected.projection, artifactId);
 }
 
@@ -452,4 +455,12 @@ export function makeCoordinationScopeResolver(
       },
     };
   };
+}
+
+/** Never accepts a participant timestamp; ended events remain read-only. */
+export function requestClock(window: RoundWindow, nowIso: string, quantumMs = 1) {
+  if (!isScoringActive(window, nowIso) || !window.eventStartsAt) return undefined;
+  const elapsed = Date.parse(nowIso) - Date.parse(window.eventStartsAt);
+  if (!Number.isFinite(elapsed) || elapsed < 0) return undefined;
+  return { eventNowMs: Math.floor(elapsed / quantumMs) * quantumMs, nowIso };
 }
