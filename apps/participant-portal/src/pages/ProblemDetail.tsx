@@ -4,12 +4,11 @@ import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
 import ColumnLayout from "@cloudscape-design/components/column-layout";
 import Container from "@cloudscape-design/components/container";
-import ExpandableSection from "@cloudscape-design/components/expandable-section";
 import Header from "@cloudscape-design/components/header";
 import Link from "@cloudscape-design/components/link";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import { Markdown } from "@tenkacloud/web-kit";
-import { type ReactNode, useMemo } from "react";
+import { useMemo } from "react";
 import { Navigate, useNavigate, useParams } from "react-router";
 import type { ParticipantProblemView, ParticipantTeamView } from "../api/portal-client";
 import { useAuth } from "../auth/AuthProvider";
@@ -89,23 +88,6 @@ export function canRenderEndpointOverride(state: EndpointOverrideVisibilityState
   return canRenderProblemDetailBody(state) && state.hasMetadata && state.endpointCount > 0;
 }
 
-/** Only ready Battles with an in-page game and no endpoint setup become play-first. */
-function isInteractiveBattleReady(
-  problem: ParticipantProblemView | undefined,
-  metadata: ProblemCatalogEntry | undefined,
-  locked: boolean,
-): boolean {
-  return (
-    !locked &&
-    problem?.status === "COMPLETE" &&
-    metadata?.category === "Battle" &&
-    !!metadata.interTeamCoordination &&
-    !!metadata.dashboardSlots?.StatusPanel &&
-    metadata.endpoints.length === 0 &&
-    (!problem.lifecycle || problem.lifecycle.status === "running")
-  );
-}
-
 function getScoringNotStartedStartsAt(
   eventGate: ParticipantTeamView["eventGate"] | undefined,
 ): string | undefined {
@@ -180,7 +162,6 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
     return findProblemMetadata(problemId)?.localPlayable === false;
   }, [problem, config.cloudMode, jobId]);
 
-  const gameFirst = isInteractiveBattleReady(problem, metadata, anyLocked);
   const supportContent = (
     <>
       {/* #2707 P0-1: 冒頭の短い operation 動画。 videoUrl を持つ問題のみ。
@@ -256,7 +237,7 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
     <SpaceBetween size="l">
       <Header
         variant="h1"
-        description={gameFirst ? undefined : narrative?.shortDescription}
+        description={narrative?.shortDescription}
         actions={
           <Button onClick={() => navigate("/problems")}>{t("problem_detail.back_button")}</Button>
         }
@@ -287,38 +268,9 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
         view={view}
       />
 
-      <ProblemDetailContent
-        gameFirst={gameFirst}
-        primary={pluginContent}
-        reference={supportContent}
-        referenceLabel={t("problem_detail.reference_header")}
-      />
+      {supportContent}
+      {pluginContent}
     </SpaceBetween>
-  );
-}
-
-function ProblemDetailContent({
-  gameFirst,
-  primary,
-  reference,
-  referenceLabel,
-}: {
-  readonly gameFirst: boolean;
-  readonly primary: ReactNode;
-  readonly reference: ReactNode;
-  readonly referenceLabel: string;
-}) {
-  return (
-    <>
-      {!gameFirst && reference}
-      {/* Keep the game at the same sibling position while lifecycle changes reorder reference. */}
-      {primary}
-      {gameFirst && (
-        <ExpandableSection headerText={referenceLabel}>
-          <SpaceBetween size="l">{reference}</SpaceBetween>
-        </ExpandableSection>
-      )}
-    </>
   );
 }
 
