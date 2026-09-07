@@ -1232,3 +1232,63 @@ for (const [backend, createStore] of backendStores) {
     });
   });
 }
+
+describe("request tick failure boundaries", () => {
+  const request = { scope, teamId: "t1", ctx, fallbackProjection: { count: -1 } };
+  const clock = { eventNowMs: 100, nowIso: "2026-06-01T00:00:01Z" };
+  const timed = { ...counter, tickOnRequest: true, tick: () => ({ count: 10 }) };
+  const row = { state: { count: 1 }, version: 1, stateSchemaVersion: 1 };
+  it("refuses invalid host time before a read or operation", async () => {
+    const { store } = fakeStore({ getItem: row });
+    const requestTick = { ...clock, eventNowMs: Number.NaN };
+    expect(await projectCoordinationForTeam(store, timed, { ...request, requestTick })).toEqual({
+      kind: "unavailable",
+    });
+    expect(
+      await dispatchCoordinationOp(store, timed, {
+        ...request,
+        requestTick,
+        nowIso: clock.nowIso,
+        op: { kind: "inc" },
+      }),
+    ).toEqual({ kind: "unavailable" });
+  });
+  it("does not overwrite a state from a newer schema during tick", async () => {
+    const { store } = fakeStore({
+      getItem: {
+        ...row,
+        state: { __tenkacloudCoordinationEnvelope: 1, stateSchemaVersion: 99, state: { count: 1 } },
+      },
+    });
+    expect(
+      (await projectCoordinationForTeam(store, timed, { ...request, requestTick: clock })).kind,
+    ).toBe("schema_mismatch");
+  });
+  it("returns conflict after bounded CAS retries without applying a move", async () => {
+    const { store } = fakeStore({ getItem: row, conflict: true });
+    expect(
+      await projectCoordinationForTeam(store, timed, { ...request, requestTick: clock }),
+    ).toEqual({ kind: "conflict" });
+  });
+  it("refuses an oversized tick result rather than projecting unsaved state", async () => {
+    const { store } = fakeStore({ getItem: row });
+    const large = { ...timed, tick: () => ({ count: 10, padding: "x".repeat(500_000) }) };
+    expect(
+      (await projectCoordinationForTeam(store, large, { ...request, requestTick: clock })).kind,
+    ).toBe("too_large");
+  });
+});
+
+it("initializes the first opted-in move at the host time before validation", async () => {
+  const { store } = fakeStore({ getItem: undefined });
+  const timed = { ...counter, tickOnRequest: true, tick: () => ({ count: 5 }) };
+  const result = await dispatchCoordinationOp(store, timed, {
+    scope,
+    ctx,
+    teamId: "t1",
+    op: { kind: "inc" },
+    nowIso: "2026-06-01T00:00:01Z",
+    requestTick: { eventNowMs: 1000, nowIso: "2026-06-01T00:00:01Z" },
+  });
+  expect(result).toEqual({ kind: "ok", projection: { count: 6 } });
+});
