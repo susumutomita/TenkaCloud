@@ -8,11 +8,12 @@
  *
  * 判定: PR が submodule pin を **実際に変更したときだけ** enforce する (= merge-base と比べて
  * 動かしていない PR は、 stale base でも誤判定しない)。 変更している場合、 PR の pin が
- * origin/main の現 pin と同一か、 その子孫 (= 前進) であることを要求する。
+ * origin/main の現 pin と同一か、 子孫またはsquash取り込みによって修正を保持していることを要求する。
  *   - PR の pin == main の pin                   → OK (unchanged)
  *   - PR の pin == merge-base の pin (= 触れてない) → OK (untouched、 merge は main の新 pin を保つ)
  *   - main の pin が PR の pin の祖先 (= 前進)      → OK (ahead)
- *   - それ以外 (後退 / 分岐)                       → FAIL
+ *   - 分岐でも通常マージが競合せず候補treeと一致  → OK (squash取り込み済み)
+ *   - それ以外 (後退 / 修正欠落 / 競合)             → FAIL
  *
  * Usage: `bun run scripts/quality/check-submodule-not-behind.ts [baseRef]` (default baseRef=origin/main)。
  * git I/O は injectable なので unit test から純粋に判定ロジックを観測できる。
@@ -23,7 +24,7 @@ import { execFileSync } from "node:child_process";
 const SUBMODULE_PATH = "problems";
 const DEFAULT_BASE_REF = "origin/main";
 
-export type PinVerdict = "unchanged" | "untouched" | "ahead" | "behind-or-diverged";
+export type PinVerdict = "unchanged" | "untouched" | "ahead" | "integrated" | "behind-or-diverged";
 
 /**
  * main pin / PR pin / merge-base pin の関係から verdict を出す純関数。 submodule の ancestry
@@ -34,6 +35,7 @@ export function classifyPinChange(
   prPin: string,
   mergeBasePin: string | undefined,
   isAncestor: (maybeAncestor: string, descendant: string) => boolean,
+  containsChanges: (existing: string, proposed: string) => boolean = () => false,
 ): PinVerdict {
   // 既に main と同じ pin (= 何も変えていない / main の最新に追従済み)。
   if (prPin === mainPin) return "unchanged";
@@ -42,6 +44,9 @@ export function classifyPinChange(
   if (mergeBasePin !== undefined && prPin === mergeBasePin) return "untouched";
   // PR が pin を能動的に変えた → main の現 pin の子孫 (= 前進) であることを要求する。
   if (isAncestor(mainPin, prPin)) return "ahead";
+  // Reverts can leave an older commit with the same tree; never move history backwards.
+  if (isAncestor(prPin, mainPin)) return "behind-or-diverged";
+  if (containsChanges(mainPin, prPin)) return "integrated";
   return "behind-or-diverged";
 }
 
@@ -54,6 +59,7 @@ export interface GitIO {
   readonly fetchSubmodule: (...pins: readonly string[]) => void;
   /** submodule 内で `git merge-base --is-ancestor a b` 相当。 */
   readonly isAncestor: (maybeAncestor: string, descendant: string) => boolean;
+  readonly containsChanges: (existing: string, proposed: string) => boolean;
   readonly log: (message: string) => void;
 }
 
@@ -80,7 +86,13 @@ export function checkSubmoduleNotBehind(baseRef: string, io: GitIO): boolean {
 
   // pin が main と違い、 かつ merge-base から動かしている可能性があるときだけ history を揃える。
   io.fetchSubmodule(mainPin, prPin, ...(mergeBasePin ? [mergeBasePin] : []));
-  const verdict = classifyPinChange(mainPin, prPin, mergeBasePin, io.isAncestor);
+  const verdict = classifyPinChange(
+    mainPin,
+    prPin,
+    mergeBasePin,
+    io.isAncestor,
+    io.containsChanges,
+  );
 
   if (verdict === "untouched") {
     io.log(
@@ -95,6 +107,12 @@ export function checkSubmoduleNotBehind(baseRef: string, io: GitIO): boolean {
     );
     return true;
   }
+  if (verdict === "integrated") {
+    io.log(
+      `[submodule-guard] OK ${SUBMODULE_PATH} contains all pinned changes after squash integration ${mainPin.slice(0, 7)} -> ${prPin.slice(0, 7)}.`,
+    );
+    return true;
+  }
   io.log(
     `[submodule-guard] FAIL ${SUBMODULE_PATH} pin would roll back / diverge: ` +
       `origin/main is at ${mainPin.slice(0, 7)} but this PR pins ${prPin.slice(0, 7)} ` +
@@ -103,6 +121,30 @@ export function checkSubmoduleNotBehind(baseRef: string, io: GitIO): boolean {
       `commit at or ahead of the current pin (run \`make submodule-latest\`).`,
   );
   return false;
+}
+
+/** A clean default merge must leave the proposed tree unchanged; conflicts fail closed. */
+export function containsPinnedChanges(
+  repository: string,
+  existing: string,
+  proposed: string,
+): boolean {
+  try {
+    const merged = execFileSync(
+      // eslint-disable-next-line sonarjs/no-os-command-from-path -- git supplies the guard's tree evidence
+      "git",
+      ["-C", repository, "merge-tree", "--write-tree", proposed, existing],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+    ).trim();
+    // eslint-disable-next-line sonarjs/no-os-command-from-path -- git supplies the guard's tree evidence
+    const tree = execFileSync("git", ["-C", repository, "rev-parse", `${proposed}^{tree}`], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    return merged === tree;
+  } catch {
+    return false;
+  }
 }
 
 /** 実 git を叩く GitIO 実装。 */
@@ -157,6 +199,8 @@ function realGitIO(): GitIO {
         return false; // exit 1 = not ancestor (= 後退 / 分岐)
       }
     },
+    containsChanges: (existing, proposed) =>
+      containsPinnedChanges(SUBMODULE_PATH, existing, proposed),
     log: (message) => console.log(message),
   };
 }
