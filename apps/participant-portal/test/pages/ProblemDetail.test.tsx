@@ -740,7 +740,7 @@ describe("ProblemDetailPage", () => {
     mockFindDiagram.mockReturnValue("/assets/diagram.svg");
     mockTeamView.mockReturnValue(teamView({ view: viewWith() }));
     renderPage();
-    const img = screen.getByRole("img", { name: "problem_detail.info_diagram_label" });
+    const img = screen.getByRole("img", { name: "problem_detail.info_diagram_alt" });
     expect(img).toHaveAttribute("src", "/assets/diagram.svg");
   });
 

@@ -14,6 +14,7 @@ import type { ParticipantProblemView, ParticipantTeamView } from "../api/portal-
 import { useAuth } from "../auth/AuthProvider";
 import { useTeamView } from "../auth/TeamViewProvider";
 import { EndpointOverrideForm } from "../components/EndpointOverrideForm";
+import { ProblemDiagram } from "../components/ProblemDiagram";
 import { ProblemPanel } from "../components/ProblemPanel";
 import { localizeProblem } from "../components/ProblemPanel.helpers";
 import { ProblemVideoSection } from "../components/ProblemVideoSection";
@@ -454,16 +455,7 @@ function ProblemInfoSection({
           <Box variant="p">{narrative.shortDescription}</Box>
         </div>
         {/* Issue #1929: per-problem architecture diagram (bundled diagram.svg). */}
-        {diagramUrl && (
-          <div>
-            <Box variant="awsui-key-label">{t("problem_detail.info_diagram_label")}</Box>
-            <img
-              src={diagramUrl}
-              alt={t("problem_detail.info_diagram_label")}
-              style={{ maxWidth: "100%", height: "auto" }}
-            />
-          </div>
-        )}
+        {diagramUrl && <ProblemDiagram key={diagramUrl} src={diagramUrl} t={t} />}
         {/* Issue #1929: player-facing getting-started guidance (Markdown, images allowed
          *   via the web-kit allowlist). Non-spoiler by contract -- scoring numbers /
          *   hardened state / surprise mechanics stay in description / hints. */}
