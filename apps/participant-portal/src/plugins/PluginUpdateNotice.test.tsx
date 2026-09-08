@@ -7,6 +7,8 @@ afterEach(() => {
     node.remove();
   });
   vi.unstubAllGlobals();
+  vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 function entry() {
@@ -82,10 +84,62 @@ it("reloads only after the explicit discard action", () => {
 
 it("aborts an outstanding check when the plugin screen unmounts", () => {
   entry();
-  const fetcher = vi.fn().mockReturnValue(Promise.withResolvers<Response>().promise);
+  const fetcher = vi.fn().mockReturnValue(
+    new Promise<Response>(() => {
+      // Keep this request outstanding until the component cancels it.
+    }),
+  );
   vi.stubGlobal("fetch", fetcher);
   const view = render(<PluginUpdateNotice locale="ja" />);
   const signal = fetcher.mock.calls[0]?.[1].signal as AbortSignal;
   view.unmount();
   expect(signal.aborted).toBe(true);
+});
+
+it("times out a stalled check and retries on the next minute", async () => {
+  vi.useFakeTimers();
+  entry();
+  const fetcher = vi
+    .fn()
+    .mockImplementationOnce(
+      (_url: string, options: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          options.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+        }),
+    )
+    .mockResolvedValueOnce(
+      new Response('<script type="module" src="/assets/index-new.js"></script>'),
+    );
+  vi.stubGlobal("fetch", fetcher);
+  const view = render(<PluginUpdateNotice locale="en" />);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(10_000);
+  });
+  expect(view.container).toBeEmptyDOMElement();
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(50_000);
+  });
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(screen.getByText("An updated problem screen is available")).toBeInTheDocument();
+  view.unmount();
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(60_000);
+  });
+  expect(fetcher).toHaveBeenCalledTimes(2);
+});
+
+it("skips background tabs and checks again when they regain focus", async () => {
+  entry();
+  const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+  const fetcher = vi
+    .fn()
+    .mockResolvedValue(new Response('<script type="module" src="/assets/index-new.js"></script>'));
+  vi.stubGlobal("fetch", fetcher);
+  render(<PluginUpdateNotice locale="en" />);
+  expect(fetcher).not.toHaveBeenCalled();
+  visibility.mockReturnValue("visible");
+  await act(async () => {
+    window.dispatchEvent(new Event("focus"));
+  });
+  expect(screen.getByText("An updated problem screen is available")).toBeInTheDocument();
 });
