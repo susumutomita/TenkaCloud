@@ -1,14 +1,8 @@
+import versions from "virtual:portal-plugin-versions";
 import Alert from "@cloudscape-design/components/alert";
 import Button from "@cloudscape-design/components/button";
 import type { PortalLocale } from "@tenkacloud/portal-plugin-sdk";
 import { useEffect, useState } from "react";
-
-/** Compare Vite's content-addressed entry URLs, not runtime config or problem data. */
-export function moduleEntries(doc: Document, base: string): string[] {
-  return Array.from(doc.querySelectorAll<HTMLScriptElement>('script[type="module"][src]'))
-    .map((script) => new URL(script.getAttribute("src") ?? "", base).href)
-    .sort();
-}
 
 export function ReloadPortal({
   locale,
@@ -31,13 +25,18 @@ export function ReloadPortal({
   );
 }
 
-export function PluginUpdateNotice({ locale }: { locale: PortalLocale }) {
-  const [updated, setUpdated] = useState(false);
+export function PluginUpdateNotice({
+  locale,
+  problemId,
+}: {
+  locale: PortalLocale;
+  problemId: string;
+}) {
+  const [updatedProblem, setUpdatedProblem] = useState<string>();
   useEffect(() => {
     const base = new URL(import.meta.env.BASE_URL, window.location.origin).href;
-    const loaded = moduleEntries(document, base);
-    // Development/test pages without an entry cannot establish a version.
-    if (!loaded.length) return;
+    const loaded = versions[problemId];
+    if (!loaded) return;
     let disposed = false;
     let pending: AbortController | undefined;
     const check = async () => {
@@ -46,15 +45,22 @@ export function PluginUpdateNotice({ locale }: { locale: PortalLocale }) {
       pending = controller;
       const timeout = window.setTimeout(() => controller.abort(), 10_000);
       try {
-        const response = await fetch(base, { cache: "no-store", signal: controller.signal });
+        const response = await fetch(new URL("plugin-versions.json", base).href, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
         if (!response.ok) return;
-        const latest = moduleEntries(
-          new DOMParser().parseFromString(await response.text(), "text/html"),
-          base,
-        );
-        // An error page or a login redirect is not evidence of a new build.
-        if (!disposed && latest.length && JSON.stringify(latest) !== JSON.stringify(loaded))
-          setUpdated(true);
+        const latest: unknown = await response.json();
+        if (
+          !disposed &&
+          latest &&
+          typeof latest === "object" &&
+          problemId in latest &&
+          typeof (latest as Record<string, unknown>)[problemId] === "string" &&
+          /^[a-f0-9]{64}$/.test((latest as Record<string, string>)[problemId]) &&
+          (latest as Record<string, string>)[problemId] !== loaded
+        )
+          setUpdatedProblem(problemId);
       } catch {
         // Offline checks are retried. They must neither reload nor erase a form.
       } finally {
@@ -72,8 +78,8 @@ export function PluginUpdateNotice({ locale }: { locale: PortalLocale }) {
       window.clearInterval(interval);
       window.removeEventListener("focus", onFocus);
     };
-  }, []);
-  if (!updated) return null;
+  }, [problemId]);
+  if (updatedProblem !== problemId) return null;
   return (
     <Alert
       type="warning"

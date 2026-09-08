@@ -143,7 +143,7 @@ export function PortalPluginSlots({
 
   return (
     <Box>
-      <PluginUpdateNotice locale={locale} />
+      <PluginUpdateNotice locale={locale} problemId={problemId} />
       {slotsToRender.map(({ slotName, Comp }) => (
         <PluginErrorBoundary
           key={`${problemId}:${jobId}:${slotName}`}

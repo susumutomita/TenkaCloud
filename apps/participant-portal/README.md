@@ -20,15 +20,16 @@ i18n: Japanese and English.
 
 ## Plugin updates during a competition
 
-While a problem plugin is open, the portal checks its static entry URLs on mount,
-every minute, and when the window regains focus. A changed build shows a reload
+While a problem plugin is open, the portal checks its problem-specific dependency fingerprint on mount,
+every minute, and when the window regains focus. A changed problem or shared dependency shows a reload
 notice without remounting the form or discarding unfinished answers. The reload
 button explicitly discards unsent input. Plugin render errors also offer this
 recovery action; they remain visible and logged rather than becoming success.
 
-The check uses the existing HTML build output and does not change coordination
-data, scoring, or individual problem rules. A failed network check is retried;
-it is not treated as evidence of an update. Serve the updated entry HTML through
+The build embeds a baseline map and emits `plugin-versions.json` from each problem's
+module graph. Changes confined to another problem do not trigger a notice. This
+does not change coordination data, scoring, or individual problem rules. A failed network check is retried;
+it is not treated as evidence of an update. Serve the updated version manifest through
 the normal deployment cache invalidation. Tabs running a build from before this
 feature must be manually reloaded once to acquire the update checker.
 

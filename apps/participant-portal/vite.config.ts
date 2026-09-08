@@ -1,6 +1,7 @@
 import react from "@vitejs/plugin-react-swc";
 import { createLogger, defineConfig, type Plugin } from "vite";
 import { codespacesForwardedOrigin } from "../../scripts/local-play/codespaces-origin";
+import { pluginVersionsPlugin } from "./build/plugin-versions";
 import { stripProblemWriteupsPlugin } from "./build/strip-problem-writeups";
 import { createLocalApiProxyMiddleware } from "./local-play-proxy";
 
@@ -23,7 +24,7 @@ function localApiProxyPlugin(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [stripProblemWriteupsPlugin(), localApiProxyPlugin(), react()],
+  plugins: [stripProblemWriteupsPlugin(), localApiProxyPlugin(), react(), pluginVersionsPlugin()],
   customLogger: logger,
   // admin-console (5173) / application-admin-console (5174) と並走できるよう別ポート。
   server: {

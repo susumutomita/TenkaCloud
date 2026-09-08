@@ -1,47 +1,25 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { moduleEntries, PluginUpdateNotice, ReloadPortal } from "./PluginUpdateNotice";
+import { PluginUpdateNotice, ReloadPortal } from "./PluginUpdateNotice";
+
+vi.mock("virtual:portal-plugin-versions", () => ({ default: { a: "a".repeat(64) } }));
 
 afterEach(() => {
-  document.querySelectorAll("script[data-update-test]").forEach((node) => {
-    node.remove();
-  });
   vi.unstubAllGlobals();
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
-function entry() {
-  const script = document.createElement("script");
-  script.type = "module";
-  script.src = "/assets/index-old.js";
-  script.dataset.updateTest = "true";
-  document.head.appendChild(script);
-}
-
-it("compares normalized entry URLs without executing fetched scripts", () => {
-  const doc = new DOMParser().parseFromString(
-    '<script type="module" src="./assets/main.js"></script><script src="config.js"></script>',
-    "text/html",
-  );
-  expect(moduleEntries(doc, "https://example.com/portal/")).toEqual([
-    "https://example.com/portal/assets/main.js",
-  ]);
-});
-
 it("detects a deployed build on focus and preserves the typed answer", async () => {
-  entry();
   const fetcher = vi
     .fn()
-    .mockResolvedValueOnce(
-      new Response('<script type="module" src="/assets/index-old.js"></script>'),
-    )
-    .mockResolvedValue(new Response('<script type="module" src="/assets/index-new.js"></script>'));
+    .mockResolvedValueOnce(Response.json({ a: "a".repeat(64), b: "c".repeat(64) }))
+    .mockResolvedValue(Response.json({ a: "b".repeat(64) }));
   vi.stubGlobal("fetch", fetcher);
   render(
     <>
       <input aria-label="answer" />
-      <PluginUpdateNotice locale="ja" />
+      <PluginUpdateNotice problemId="a" locale="ja" />
     </>,
   );
   fireEvent.change(screen.getByRole("textbox"), { target: { value: "my unfinished answer" } });
@@ -57,7 +35,6 @@ it("detects a deployed build on focus and preserves the typed answer", async () 
 });
 
 it.each(["offline", "error", "no-entry"])("does not announce a deployment on %s", async (mode) => {
-  entry();
   const fetcher =
     mode === "offline"
       ? vi.fn().mockRejectedValue(new Error("offline"))
@@ -67,7 +44,7 @@ it.each(["offline", "error", "no-entry"])("does not announce a deployment on %s"
             new Response("<h1>Unavailable</h1>", { status: mode === "error" ? 503 : 200 }),
           );
   vi.stubGlobal("fetch", fetcher);
-  const view = render(<PluginUpdateNotice locale="en" />);
+  const view = render(<PluginUpdateNotice problemId="a" locale="en" />);
   await act(async () => {
     await Promise.resolve();
   });
@@ -83,14 +60,13 @@ it("reloads only after the explicit discard action", () => {
 });
 
 it("aborts an outstanding check when the plugin screen unmounts", () => {
-  entry();
   const fetcher = vi.fn().mockReturnValue(
     new Promise<Response>(() => {
       // Keep this request outstanding until the component cancels it.
     }),
   );
   vi.stubGlobal("fetch", fetcher);
-  const view = render(<PluginUpdateNotice locale="ja" />);
+  const view = render(<PluginUpdateNotice problemId="a" locale="ja" />);
   const signal = fetcher.mock.calls[0]?.[1].signal as AbortSignal;
   view.unmount();
   expect(signal.aborted).toBe(true);
@@ -98,7 +74,6 @@ it("aborts an outstanding check when the plugin screen unmounts", () => {
 
 it("times out a stalled check and retries on the next minute", async () => {
   vi.useFakeTimers();
-  entry();
   const fetcher = vi
     .fn()
     .mockImplementationOnce(
@@ -107,11 +82,9 @@ it("times out a stalled check and retries on the next minute", async () => {
           options.signal?.addEventListener("abort", () => reject(new Error("aborted")));
         }),
     )
-    .mockResolvedValueOnce(
-      new Response('<script type="module" src="/assets/index-new.js"></script>'),
-    );
+    .mockResolvedValueOnce(Response.json({ a: "b".repeat(64) }));
   vi.stubGlobal("fetch", fetcher);
-  const view = render(<PluginUpdateNotice locale="en" />);
+  const view = render(<PluginUpdateNotice problemId="a" locale="en" />);
   await act(async () => {
     await vi.advanceTimersByTimeAsync(10_000);
   });
@@ -129,17 +102,39 @@ it("times out a stalled check and retries on the next minute", async () => {
 });
 
 it("skips background tabs and checks again when they regain focus", async () => {
-  entry();
   const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
-  const fetcher = vi
-    .fn()
-    .mockResolvedValue(new Response('<script type="module" src="/assets/index-new.js"></script>'));
+  const fetcher = vi.fn().mockResolvedValue(Response.json({ a: "b".repeat(64) }));
   vi.stubGlobal("fetch", fetcher);
-  render(<PluginUpdateNotice locale="en" />);
+  render(<PluginUpdateNotice problemId="a" locale="en" />);
   expect(fetcher).not.toHaveBeenCalled();
   visibility.mockReturnValue("visible");
   await act(async () => {
     window.dispatchEvent(new Event("focus"));
   });
   expect(screen.getByText("An updated problem screen is available")).toBeInTheDocument();
+});
+
+it("ignores another problem's update and a missing current problem", async () => {
+  const fetcher = vi
+    .fn()
+    .mockResolvedValue(Response.json({ a: "a".repeat(64), b: "b".repeat(64) }));
+  vi.stubGlobal("fetch", fetcher);
+  const view = render(<PluginUpdateNotice problemId="a" locale="ja" />);
+  await act(async () => {
+    await Promise.resolve();
+  });
+  expect(view.container).toBeEmptyDOMElement();
+  fetcher.mockResolvedValue(Response.json({ b: "c".repeat(64) }));
+  await act(async () => {
+    window.dispatchEvent(new Event("focus"));
+  });
+  expect(view.container).toBeEmptyDOMElement();
+});
+
+it("clears the displayed warning when navigating to another problem", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ a: "b".repeat(64) })));
+  const view = render(<PluginUpdateNotice problemId="a" locale="ja" />);
+  expect(await screen.findByText("問題画面の更新があります")).toBeInTheDocument();
+  view.rerender(<PluginUpdateNotice problemId="unknown" locale="ja" />);
+  expect(view.container).toBeEmptyDOMElement();
 });
