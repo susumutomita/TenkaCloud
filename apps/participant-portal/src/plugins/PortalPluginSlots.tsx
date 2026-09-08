@@ -25,6 +25,7 @@ import { Component, type ErrorInfo, type ReactNode, Suspense, useMemo } from "re
 import { getCoordinationProjection, submitCoordinationOp } from "../api/coordination-client";
 import type { ParticipantEndpointView } from "../api/portal-client";
 import { loadPluginSlot } from "./loader";
+import { PluginUpdateNotice, ReloadPortal } from "./PluginUpdateNotice";
 import {
   buildPortalCoordination,
   buildPortalDisruptions,
@@ -142,8 +143,13 @@ export function PortalPluginSlots({
 
   return (
     <Box>
+      <PluginUpdateNotice locale={locale} />
       {slotsToRender.map(({ slotName, Comp }) => (
-        <PluginErrorBoundary key={slotName} slotName={slotName}>
+        <PluginErrorBoundary
+          key={`${problemId}:${jobId}:${slotName}`}
+          slotName={slotName}
+          locale={locale}
+        >
           <Suspense fallback={<PluginLoadingFallback slotName={slotName} />}>
             <Comp {...slotProps} />
           </Suspense>
@@ -167,7 +173,7 @@ interface ErrorBoundaryState {
 }
 
 class PluginErrorBoundary extends Component<
-  { slotName: string; children: ReactNode },
+  { slotName: string; children: ReactNode; locale: PortalLocale },
   ErrorBoundaryState
 > {
   state: ErrorBoundaryState = { hasError: false };
@@ -198,6 +204,7 @@ class PluginErrorBoundary extends Component<
       return (
         <Alert type="warning" header={`Plugin "${this.props.slotName}" failed to render`}>
           {message}
+          <ReloadPortal locale={this.props.locale} />
         </Alert>
       );
     }

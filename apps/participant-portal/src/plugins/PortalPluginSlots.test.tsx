@@ -210,6 +210,9 @@ describe("PortalPluginSlots", () => {
       await waitFor(() => {
         // Alert header text (Cloudscape Alert は header を visible に出す)
         expect(screen.getByText(/Plugin "StatusPanel" failed to render/)).toBeInTheDocument();
+        expect(
+          screen.getByRole("button", { name: "入力を破棄して再読み込み" }),
+        ).toBeInTheDocument();
       });
       // ErrorBoundary の componentDidCatch は console.error で発火する (= operator が見える)
       expect(errorSpy).toHaveBeenCalledWith(
