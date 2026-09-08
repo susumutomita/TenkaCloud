@@ -1,10 +1,17 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { PluginUpdateNotice, ReloadPortal } from "./PluginUpdateNotice";
+import { detectedPluginUpdates, PluginUpdateNotice, ReloadPortal } from "./PluginUpdateNotice";
 
-vi.mock("virtual:portal-plugin-versions", () => ({ default: { a: "a".repeat(64) } }));
+vi.mock("virtual:portal-plugin-versions", () => ({
+  default: { a: "a".repeat(64), b: "b".repeat(64) },
+}));
+
+function manifest(problems: Record<string, string>) {
+  return Response.json({ schemaVersion: 1, problems });
+}
 
 afterEach(() => {
+  detectedPluginUpdates.clear();
   vi.unstubAllGlobals();
   vi.useRealTimers();
   vi.restoreAllMocks();
@@ -13,8 +20,8 @@ afterEach(() => {
 it("detects a deployed build on focus and preserves the typed answer", async () => {
   const fetcher = vi
     .fn()
-    .mockResolvedValueOnce(Response.json({ a: "a".repeat(64), b: "c".repeat(64) }))
-    .mockResolvedValue(Response.json({ a: "b".repeat(64) }));
+    .mockResolvedValueOnce(manifest({ a: "a".repeat(64), b: "c".repeat(64) }))
+    .mockResolvedValue(manifest({ a: "b".repeat(64) }));
   vi.stubGlobal("fetch", fetcher);
   render(
     <>
@@ -82,7 +89,7 @@ it("times out a stalled check and retries on the next minute", async () => {
           options.signal?.addEventListener("abort", () => reject(new Error("aborted")));
         }),
     )
-    .mockResolvedValueOnce(Response.json({ a: "b".repeat(64) }));
+    .mockResolvedValueOnce(manifest({ a: "b".repeat(64) }));
   vi.stubGlobal("fetch", fetcher);
   const view = render(<PluginUpdateNotice problemId="a" locale="en" />);
   await act(async () => {
@@ -103,7 +110,7 @@ it("times out a stalled check and retries on the next minute", async () => {
 
 it("skips background tabs and checks again when they regain focus", async () => {
   const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
-  const fetcher = vi.fn().mockResolvedValue(Response.json({ a: "b".repeat(64) }));
+  const fetcher = vi.fn().mockResolvedValue(manifest({ a: "b".repeat(64) }));
   vi.stubGlobal("fetch", fetcher);
   render(<PluginUpdateNotice problemId="a" locale="en" />);
   expect(fetcher).not.toHaveBeenCalled();
@@ -114,27 +121,54 @@ it("skips background tabs and checks again when they regain focus", async () => 
   expect(screen.getByText("An updated problem screen is available")).toBeInTheDocument();
 });
 
-it("ignores another problem's update and a missing current problem", async () => {
-  const fetcher = vi
-    .fn()
-    .mockResolvedValue(Response.json({ a: "a".repeat(64), b: "b".repeat(64) }));
+it("ignores another problem's update and detects removal of the current problem", async () => {
+  const fetcher = vi.fn().mockResolvedValue(manifest({ a: "a".repeat(64), b: "b".repeat(64) }));
   vi.stubGlobal("fetch", fetcher);
   const view = render(<PluginUpdateNotice problemId="a" locale="ja" />);
   await act(async () => {
     await Promise.resolve();
   });
   expect(view.container).toBeEmptyDOMElement();
-  fetcher.mockResolvedValue(Response.json({ b: "c".repeat(64) }));
+  fetcher.mockResolvedValue(manifest({ b: "c".repeat(64) }));
   await act(async () => {
     window.dispatchEvent(new Event("focus"));
   });
-  expect(view.container).toBeEmptyDOMElement();
+  expect(screen.getByText("問題画面の更新があります")).toBeInTheDocument();
 });
 
 it("clears the displayed warning when navigating to another problem", async () => {
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ a: "b".repeat(64) })));
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(manifest({ a: "b".repeat(64) })));
   const view = render(<PluginUpdateNotice problemId="a" locale="ja" />);
   expect(await screen.findByText("問題画面の更新があります")).toBeInTheDocument();
   view.rerender(<PluginUpdateNotice problemId="unknown" locale="ja" />);
+  expect(view.container).toBeEmptyDOMElement();
+});
+
+it("retains both detected updates across navigation and remount while offline", async () => {
+  const fetcher = vi
+    .fn()
+    .mockImplementation(() => Promise.resolve(manifest({ a: "c".repeat(64), b: "d".repeat(64) })));
+  vi.stubGlobal("fetch", fetcher);
+  const view = render(<PluginUpdateNotice problemId="a" locale="ja" />);
+  expect(await screen.findByText("問題画面の更新があります")).toBeInTheDocument();
+  view.rerender(<PluginUpdateNotice problemId="b" locale="ja" />);
+  await waitFor(() => expect(detectedPluginUpdates.has("b")).toBe(true));
+  fetcher.mockRejectedValue(new Error("offline"));
+  view.unmount();
+  render(<PluginUpdateNotice problemId="a" locale="ja" />);
+  expect(screen.getByText("問題画面の更新があります")).toBeInTheDocument();
+});
+
+it.each([
+  {},
+  { schemaVersion: 1 },
+  { schemaVersion: 1, problems: [] },
+  { schemaVersion: 1, problems: { a: "bad" } },
+])("ignores an invalid manifest %j", async (value) => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(value)));
+  const view = render(<PluginUpdateNotice problemId="a" locale="ja" />);
+  await act(async () => {
+    await Promise.resolve();
+  });
   expect(view.container).toBeEmptyDOMElement();
 });

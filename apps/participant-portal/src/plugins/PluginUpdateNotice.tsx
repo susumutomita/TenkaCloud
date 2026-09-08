@@ -4,6 +4,29 @@ import Button from "@cloudscape-design/components/button";
 import type { PortalLocale } from "@tenkacloud/portal-plugin-sdk";
 import { useEffect, useState } from "react";
 
+// Keep established evidence for the lifetime of this loaded build, including route remounts.
+export const detectedPluginUpdates = new Set<string>();
+
+function manifestVersions(value: unknown): Record<string, string> | undefined {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    !("schemaVersion" in value) ||
+    value.schemaVersion !== 1 ||
+    !("problems" in value)
+  )
+    return;
+  const problems = value.problems;
+  if (!problems || typeof problems !== "object" || Array.isArray(problems)) return;
+  if (
+    !Object.values(problems).every(
+      (version) => typeof version === "string" && /^[a-f0-9]{64}$/.test(version),
+    )
+  )
+    return;
+  return problems as Record<string, string>;
+}
+
 export function ReloadPortal({
   locale,
   reload = () => window.location.reload(),
@@ -32,7 +55,7 @@ export function PluginUpdateNotice({
   locale: PortalLocale;
   problemId: string;
 }) {
-  const [updatedProblem, setUpdatedProblem] = useState<string>();
+  const [updatedProblems, setUpdatedProblems] = useState(() => new Set(detectedPluginUpdates));
   useEffect(() => {
     const base = new URL(import.meta.env.BASE_URL, window.location.origin).href;
     const loaded = versions[problemId];
@@ -50,17 +73,12 @@ export function PluginUpdateNotice({
           signal: controller.signal,
         });
         if (!response.ok) return;
-        const latest: unknown = await response.json();
-        if (
-          !disposed &&
-          latest &&
-          typeof latest === "object" &&
-          problemId in latest &&
-          typeof (latest as Record<string, unknown>)[problemId] === "string" &&
-          /^[a-f0-9]{64}$/.test((latest as Record<string, string>)[problemId]) &&
-          (latest as Record<string, string>)[problemId] !== loaded
-        )
-          setUpdatedProblem(problemId);
+        const latest = manifestVersions(await response.json());
+        // A valid complete manifest also reports removal by omitting the old problem.
+        if (!disposed && latest && latest[problemId] !== loaded) {
+          detectedPluginUpdates.add(problemId);
+          setUpdatedProblems(new Set(detectedPluginUpdates));
+        }
       } catch {
         // Offline checks are retried. They must neither reload nor erase a form.
       } finally {
@@ -79,7 +97,7 @@ export function PluginUpdateNotice({
       window.removeEventListener("focus", onFocus);
     };
   }, [problemId]);
-  if (updatedProblem !== problemId) return null;
+  if (!updatedProblems.has(problemId)) return null;
   return (
     <Alert
       type="warning"

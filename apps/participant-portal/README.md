@@ -27,7 +27,9 @@ button explicitly discards unsent input. Plugin render errors also offer this
 recovery action; they remain visible and logged rather than becoming success.
 
 The build embeds a baseline map and emits `plugin-versions.json` from each problem's
-module graph. Changes confined to another problem do not trigger a notice. This
+module graph, stylesheet contents, and configured slot mapping. Removal of a
+previously loaded plugin also triggers the notice. Detected updates are retained
+across problem navigation and offline checks. Changes confined to another problem do not trigger a notice. This
 does not change coordination data, scoring, or individual problem rules. A failed network check is retried;
 it is not treated as evidence of an update. Serve the updated version manifest through
 the normal deployment cache invalidation. Tabs running a build from before this

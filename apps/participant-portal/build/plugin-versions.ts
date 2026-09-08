@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { resolve } from "node:path";
+import { readFileSync, existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import type { Plugin } from "vite";
 
 const virtualId = "virtual:portal-plugin-versions";
@@ -14,7 +15,6 @@ export function pluginVersionsPlugin(): Plugin {
   const sources = new Map<string, string>();
   return {
     name: "tenkacloud-plugin-versions",
-    enforce: "post",
     configResolved(config) {
       root = config.root;
       building = config.command === "build";
@@ -33,8 +33,14 @@ export function pluginVersionsPlugin(): Plugin {
       return null;
     },
     transform(code, id) {
-      // Retain CSS and assets too: their final module code may only contain a placeholder.
-      sources.set(id, code);
+      // Run after CSS preprocessing and before extraction in Vite's normal phase.
+      // Preserve source bytes as well as compiled CSS, including @import dependencies.
+      const file = id.split("?")[0];
+      const css =
+        /\.(css|scss|sass|less|styl|stylus)$/.test(file) && existsSync(file)
+          ? readFileSync(file, "utf8")
+          : "";
+      sources.set(id, code + css);
     },
     renderChunk(code) {
       if (!versions) {
@@ -66,7 +72,14 @@ export function pluginVersionsPlugin(): Plugin {
               ];
             })
             .sort(([a], [b]) => a.localeCompare(b));
-          versions[problem] = createHash("sha256").update(JSON.stringify(modules)).digest("hex");
+          const metadataPath = join(dirname(dirname(entries[0])), "metadata.json");
+          const metadata = existsSync(metadataPath)
+            ? JSON.parse(readFileSync(metadataPath, "utf8"))
+            : {};
+          const slots = metadata.dashboard?.slots ?? {};
+          versions[problem] = createHash("sha256")
+            .update(JSON.stringify({ modules, slots }))
+            .digest("hex");
         }
       }
       // Replacement happens before output hashes are finalized, including the embedded baseline.
@@ -81,7 +94,7 @@ export function pluginVersionsPlugin(): Plugin {
       this.emitFile({
         type: "asset",
         fileName: "plugin-versions.json",
-        source: JSON.stringify(versions ?? {}),
+        source: JSON.stringify({ schemaVersion: 1, problems: versions ?? {} }),
       });
     },
   };
