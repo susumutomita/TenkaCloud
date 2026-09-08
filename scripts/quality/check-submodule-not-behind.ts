@@ -44,6 +44,8 @@ export function classifyPinChange(
   if (mergeBasePin !== undefined && prPin === mergeBasePin) return "untouched";
   // PR が pin を能動的に変えた → main の現 pin の子孫 (= 前進) であることを要求する。
   if (isAncestor(mainPin, prPin)) return "ahead";
+  // Reverts can leave an older commit with the same tree; never move history backwards.
+  if (isAncestor(prPin, mainPin)) return "behind-or-diverged";
   if (containsChanges(mainPin, prPin)) return "integrated";
   return "behind-or-diverged";
 }

@@ -124,3 +124,17 @@ it("uses content integration only for a changed divergent pin", () => {
     ),
   ).toBe("untouched");
 });
+
+it("rejects an older commit even when a revert made its tree identical", () => {
+  expect(
+    classifyPinChange(
+      "current",
+      "older",
+      "base",
+      (ancestor, descendant) => ancestor === "older" && descendant === "current",
+      () => {
+        throw new Error("a rollback must not use content equivalence");
+      },
+    ),
+  ).toBe("behind-or-diverged");
+});
