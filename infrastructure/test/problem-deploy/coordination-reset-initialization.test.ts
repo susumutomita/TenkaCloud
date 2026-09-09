@@ -119,6 +119,32 @@ async function setup(backend: string, scores = true) {
 }
 
 describe.each(["DynamoDB", "SQL"])("accepted reset initialization: %s", (backend) => {
+  it("captures current deployment inputs once when recovering an accepted reset", async () => {
+    const ctx = await setup(backend);
+    await ctx.repository.putDeployment({
+      ...deployment,
+      stackOutputs: JSON.stringify({
+        CoordinationPrivateMaterial: "current-fixture",
+        CoordinationSetting: "on",
+        FrontendUrl: "https://example.test",
+      }),
+    });
+    expect((await handleCoordinationTickBatch(ctx.deps, ctx.batch)).written).toBe(1);
+    expect(ctx.initialState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        deploymentInputs: {
+          red: { CoordinationPrivateMaterial: "current-fixture", CoordinationSetting: "on" },
+        },
+      }),
+    );
+    await ctx.repository.putDeployment({
+      ...deployment,
+      stackOutputs: JSON.stringify({ CoordinationPrivateMaterial: "later-fixture" }),
+    });
+    await handleCoordinationTickBatch(ctx.deps, ctx.batch);
+    expect(ctx.initialState).toHaveBeenCalledTimes(1);
+  });
+
   it.each([
     "COMPLETE",
     "DELETED",

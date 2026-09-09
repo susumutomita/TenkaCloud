@@ -80,6 +80,18 @@ describe("resolveEventRoster", () => {
     expect(roster.deploymentInputs).toBeUndefined();
   });
 
+  it("refuses to initialize from an indexed deployment with no job ID", async () => {
+    const send = vi.fn(async () => ({ Items: [row({ teamId: "t1" })] }));
+    await expect(
+      resolveEventRoster(fakeParticipantShared(send), {
+        ...target,
+        knownTeamIds: ["t1"],
+        requireComplete: true,
+      }),
+    ).rejects.toThrow("no job ID");
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
   it("refreshes stale index values from a strongly consistent META read", async () => {
     const current = row({
       teamId: "t1",
