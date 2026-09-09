@@ -155,6 +155,27 @@ async function setup(
 }
 
 describe.each(["DynamoDB", "SQL"])("durable coordination scoring: %s", (backend) => {
+  it("does not award an illegal first move when materializing the board", async () => {
+    const { repository, store, input } = await setup(backend);
+    const refuse: typeof plugin = {
+      ...plugin,
+      validateOp: () => ({ ok: false, error: "illegal_move" }),
+    };
+    for (let i = 0; i < 3; i += 1) {
+      expect(await dispatchCoordinationOp(store, refuse, input)).toEqual({
+        kind: "rejected",
+        error: "illegal_move",
+      });
+    }
+    expect(await readCoordinationState(store, scope)).toMatchObject({
+      version: 1,
+      state: { scores: { red: 0 }, solved: false },
+    });
+    expect((await repository.getDeployment("red"))?.score).toBe(0);
+    expect((await dispatchCoordinationOp(store, plugin, input)).kind).toBe("ok");
+    expect((await repository.getDeployment("red"))?.score).toBe(30);
+  });
+
   it("persists a once-only two-team transfer and both score events under competing requests", async () => {
     const { repository, store, input } = await setup(backend, ["red", "blue", "green"]);
     interface TransferState {

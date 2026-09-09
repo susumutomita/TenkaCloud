@@ -30,6 +30,15 @@ export async function releaseCoordinationInitialization(
   store: CoordinationStoreDeps,
   lease: CoordinationInitializationLease,
 ): Promise<void> {
-  const repository = await resolveDeploymentsRepository(store);
-  await repository.releaseCoordinationInitialization(lease.scope, lease.owner);
+  try {
+    const repository = await resolveDeploymentsRepository(store);
+    await repository.releaseCoordinationInitialization(lease.scope, lease.owner);
+  } catch {
+    // A committed move must not look failed just because cleanup is unavailable.
+    // Preserve the business outcome and leave the bounded lease to expire.
+    console.warn(
+      "[coordination-dispatcher] initialization lease release failed; expires automatically",
+      lease.scope,
+    );
+  }
 }

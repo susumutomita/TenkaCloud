@@ -30,7 +30,9 @@ inputs independently. A shared, 30-second initialization lease admits one writer
 per tenant/event/problem/run before these META reads. Operations, scheduled ticks
 and reset initialization share it across dispatcher instances; concurrent operations
 return the existing retryable conflict response, while a tick retries on its next pass.
-The owner releases the lease on completion or error. Expiry permits takeover after
+The owner releases the lease on completion or error. A failed cleanup is logged
+without replacing the operation's result: an already committed move must not
+look failed and prompt a duplicate submission. Expiry permits takeover after
 a crashed invocation, and the first state write atomically checks the owner token
 so an old owner cannot overwrite its successor. Teardown revokes the lease, and
 the existing retention sweep also removes expired leases. This uses one temporary
@@ -50,6 +52,13 @@ consistent: wait for all deployments to be discoverable.
 Present malformed output JSON or invalid output entries defer initialization;
 valid empty maps/arrays and absent outputs remain compatible. Corrupt outputs
 must not silently become a durable context with missing/default inputs.
+
+If the first move is rejected, the dispatcher still persists only the
+server-derived initial board (and its baseline scores), never that move's
+effects. Later attempts reuse this state instead of reloading the roster after
+every invalid move. A rejected move against existing state does not write it.
+Initialization failures, such as malformed deployment outputs or an unavailable
+plugin, still prevent materialization and remain retryable after repair.
 
 `initialState` consumes the inputs once. Existing saved matches do not change
 when a stack is redeployed. Finish all team deployments before creating a match;

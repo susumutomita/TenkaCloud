@@ -277,23 +277,40 @@ describe.each(["DynamoDB", "SQL"])("roster failure before materialization: %s", 
     expect((await readCoordinationState(ctx.store, scope))?.state).toMatchObject({ moves: 2 });
   });
 
-  it("releases initialization after rejected operations and failed plugin loads", async () => {
+  it("materializes the initial board once across sequential rejected first moves", async () => {
+    const ctx = await setup(backend);
+    ctx.tick.mockImplementation((state) => state);
+    for (let i = 0; i < 97; i += 1) await ctx.repository.putDeployment(deployment(`team-${i}`));
+    const metaReads = vi.spyOn(ctx.repository, "getDeployment");
+    for (let i = 0; i < 10; i += 1) {
+      expect(
+        await handleCoordinationOp(
+          ctx.deps,
+          "login-alpha",
+          { ...op, targetTeamId: "absent" },
+          at,
+          key.problemId,
+        ),
+      ).toEqual({ kind: "rejected", error: "unknown_team" });
+    }
+    expect(metaReads).toHaveBeenCalledTimes(99);
+    expect(ctx.initialState).toHaveBeenCalledTimes(1);
+    expect(ctx.write).toHaveBeenCalledTimes(1);
+    expect((await readCoordinationState(ctx.store, scope))?.state).toMatchObject({
+      moves: 0,
+      ticks: 0,
+    });
+    expect((await ctx.apply()).kind).toBe("ok");
+    expect(metaReads).toHaveBeenCalledTimes(99);
+    expect((await readCoordinationState(ctx.store, scope))?.state).toMatchObject({ moves: 1 });
+  });
+
+  it("releases ownership after a failed plugin load and can initialize on retry", async () => {
     const ctx = await setup(backend);
     expect(
       await handleCoordinationOp(
-        ctx.deps,
-        "login-alpha",
-        { ...op, targetTeamId: "absent" },
-        at,
-        key.problemId,
-      ),
-    ).toEqual({ kind: "rejected", error: "unknown_team" });
-    expect(await ctx.repository.readCoordinationState(scope)).toBeUndefined();
-    const peer = ctx.peer();
-    expect(
-      await handleCoordinationOp(
         {
-          ...peer.deps,
+          ...ctx.deps,
           importer: async () => {
             throw new Error("fixture unavailable");
           },
@@ -306,6 +323,40 @@ describe.each(["DynamoDB", "SQL"])("roster failure before materialization: %s", 
     ).toEqual({ kind: "unavailable" });
     expect(await ctx.repository.readCoordinationState(scope)).toBeUndefined();
     expect((await ctx.apply()).kind).toBe("ok");
+  });
+
+  it.each([
+    "operation",
+    "tick",
+    "rejected",
+  ])("preserves a committed %s result if lease cleanup fails", async (kind) => {
+    const ctx = await setup(backend);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    vi.spyOn(ctx.repository, "releaseCoordinationInitialization").mockRejectedValueOnce(
+      new Error("cleanup store unavailable"),
+    );
+    if (kind === "tick") expect(await ctx.runTick()).toEqual({ ticked: 1, written: 1 });
+    else if (kind === "rejected")
+      expect(
+        await handleCoordinationOp(
+          ctx.deps,
+          "login-alpha",
+          { ...op, targetTeamId: "absent" },
+          at,
+          key.problemId,
+        ),
+      ).toEqual({ kind: "rejected", error: "unknown_team" });
+    else expect((await ctx.apply()).kind).toBe("ok");
+    expect((await readCoordinationState(ctx.store, scope))?.state).toMatchObject({
+      moves: kind === "operation" ? 1 : 0,
+    });
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("lease release failed"), scope);
+    // Stored state remains immediately playable even before the failed lease expires.
+    expect((await ctx.apply()).kind).toBe("ok");
+    expect((await readCoordinationState(ctx.store, scope))?.state).toMatchObject({
+      moves: kind === "operation" ? 2 : 1,
+    });
+    expect(ctx.initialState).toHaveBeenCalledTimes(1);
   });
 
   it("refuses a request snapshot from any different scope", async () => {

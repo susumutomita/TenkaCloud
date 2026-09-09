@@ -281,20 +281,27 @@ async function attemptDispatch<State, Op, Projection>(
   }
 
   const verdict = dispatchOp(plugin, state, input.teamId, input.op);
-  if (!verdict.ok) return { kind: "rejected", error: verdict.error };
+  if (!verdict.ok && existing) return { kind: "rejected", error: verdict.error };
+  // Keep the server-derived initial state even when the first move is illegal.
+  // The move itself is never applied, but later attempts can validate against
+  // this same roster/secret instead of reloading every deployment's META row.
+  const transition = verdict.ok
+    ? { state: verdict.state, cause: { kind: "op" as const, teamId: input.teamId, op: input.op } }
+    : { state, cause: { kind: "tick" as const } };
+  const nextState = transition.state;
 
   const pendingScores = coordinationScoreDelivery(
     plugin,
     state,
-    verdict.state,
-    { kind: "op", teamId: input.teamId, op: input.op },
+    nextState,
+    transition.cause,
     input.nowIso,
     !existing,
   );
   const written = await writeCoordinationState(
     store,
     input.scope,
-    verdict.state,
+    nextState,
     version,
     input.nowIso,
     // [Issue #3150] write は常に plugin の「現在の」版で封筒に刻む -- migrated 経路 (旧行を
@@ -304,26 +311,24 @@ async function attemptDispatch<State, Op, Projection>(
     false,
     input.initializationOwner,
   );
-  if (written.kind === "conflict") return { kind: "conflict" };
-  if (written.kind === "too_large") {
-    return { kind: "too_large", bytes: written.bytes, budget: written.budget };
-  }
+  if (written.kind !== "ok") return written;
 
-  const projection = safeProjectForTeam(
-    plugin,
-    verdict.state,
-    input.teamId,
-    input.fallbackProjection as Projection,
-  );
   await tryDeliverCoordinationScores(
     store,
     input.scope,
     {
-      state: verdict.state,
+      state: nextState,
       version: version + 1,
       pendingScores,
     },
     { deadlineMs: scoreDeadlineMs },
+  );
+  if (!verdict.ok) return { kind: "rejected", error: verdict.error };
+  const projection = safeProjectForTeam(
+    plugin,
+    nextState,
+    input.teamId,
+    input.fallbackProjection as Projection,
   );
   return { kind: "ok", projection };
 }
