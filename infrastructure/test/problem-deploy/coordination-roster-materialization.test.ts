@@ -183,6 +183,61 @@ async function setup(backend: string) {
 afterEach(() => vi.restoreAllMocks());
 
 describe.each(["DynamoDB", "SQL"])("roster failure before materialization: %s", (backend) => {
+  it.each([
+    "2026-09-05T23:59:00.000Z",
+    "2026-09-06T01:00:00.000Z",
+  ])("rejects inactive operations before any roster reads at %s", async (nowIso) => {
+    const ctx = await setup(backend);
+    for (let i = 0; i < 97; i += 1) await ctx.repository.putDeployment(deployment(`team-${i}`));
+    const metaReads = vi.spyOn(ctx.repository, "getDeployment");
+    const results = await Promise.all(
+      Array.from({ length: 10 }, () =>
+        handleCoordinationOp(ctx.deps, "login-alpha", op, nowIso, key.problemId),
+      ),
+    );
+    expect(results).toEqual(
+      Array.from({ length: 10 }, () => ({ kind: "rejected", error: "event_ended" })),
+    );
+    expect(ctx.roster).not.toHaveBeenCalled();
+    expect(metaReads).not.toHaveBeenCalled();
+    expect(ctx.initialState).not.toHaveBeenCalled();
+    expect(ctx.write).not.toHaveBeenCalled();
+    expect(ctx.mint).not.toHaveBeenCalled();
+    // The refusal must not persist a minimal roster: an active operation still gets all teams.
+    expect((await ctx.apply()).kind).toBe("ok");
+    expect(metaReads).toHaveBeenCalledTimes(99);
+    expect(ctx.initialState.mock.lastCall?.[0].teamIds).toHaveLength(99);
+  });
+
+  it("serves absent-run projections and artifacts despite malformed superseded history", async () => {
+    const ctx = await setup(backend);
+    await ctx.repository.putDeployment(
+      deployment("alpha", {
+        jobId: "alpha-old",
+        teamLoginKey: "login-old-alpha",
+        createdAt: "2026-09-01T00:00:00.000Z",
+        stackOutputs: "{broken",
+      }),
+    );
+    await ctx.repository.putDeployment(
+      deployment("alpha", {
+        stackOutputs: JSON.stringify({ CoordinationSetting: "current" }),
+      }),
+    );
+    const metaReads = vi.spyOn(ctx.repository, "getDeployment");
+    expect((await ctx.project()).kind).toBe("ok");
+    expect((await ctx.fetchArtifact()).kind).not.toBe("unavailable");
+    expect(ctx.initialState).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        teamIds: expectedTeams,
+        deploymentInputs: { alpha: { CoordinationSetting: "current" } },
+      }),
+    );
+    expect(metaReads).not.toHaveBeenCalled();
+    expect(ctx.write).not.toHaveBeenCalled();
+    expect(ctx.mint).not.toHaveBeenCalled();
+  });
+
   it("keeps actual composite parent/target records outside the event roster and login path", async () => {
     const ctx = await setup(backend);
     await createCompositeParent(ctx.store, {

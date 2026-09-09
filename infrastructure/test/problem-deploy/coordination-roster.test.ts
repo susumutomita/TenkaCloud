@@ -60,6 +60,36 @@ describe("resolveEventRoster", () => {
     expect(roster.deploymentInputs).toBeUndefined();
   });
 
+  it.each([
+    false,
+    true,
+  ])("previews only the newest outputs, including malformed history (reversed: %s)", async (reversed) => {
+    const rows = [
+      row({ teamId: "t1", jobId: "old", createdAt: "2026-09-01", stackOutputs: "{broken" }),
+      row({
+        teamId: "t1",
+        jobId: "new",
+        createdAt: "2026-09-02",
+        stackOutputs: '{"CoordinationSetting":"current"}',
+      }),
+    ];
+    const args = { ...target, knownTeamIds: ["t1"], readOnlyPreview: true };
+    const shared = fakeParticipantSharedWithItems(reversed ? [...rows].reverse() : rows);
+    expect(await resolveEventRoster(shared, args)).toEqual({
+      teamIds: ["t1"],
+      teamNames: {},
+      deploymentInputs: { t1: { CoordinationSetting: "current" } },
+    });
+    // A corrupt current row must still fail closed instead of reviving old values.
+    const corruptCurrent = fakeParticipantSharedWithItems([
+      ...rows,
+      row({ teamId: "t1", jobId: "newest", createdAt: "2026-09-03", stackOutputs: "{broken" }),
+    ]);
+    expect(await resolveEventRoster(corruptCurrent, args)).toMatchObject({
+      rosterIncomplete: true,
+    });
+  });
+
   it("accepts the CloudFormation output array format", async () => {
     const roster = await resolveEventRoster(
       fakeParticipantSharedWithItems([

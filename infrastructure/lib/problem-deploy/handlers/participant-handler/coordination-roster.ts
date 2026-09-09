@@ -80,7 +80,10 @@ export async function resolveEventRoster(
     // A preview is not persisted, even when a no-op tick leaves the run absent.
     // Defer per-deployment strong reads until an operation/tick initializes it.
     const orderedRows = target.readOnlyPreview
-      ? [...(await repository.listByTenantAndEvent(target.tenantId, target.eventId))]
+      ? latestDeploymentRows(
+          await repository.listByTenantAndEvent(target.tenantId, target.eventId),
+          target.problemId,
+        )
       : await readAuthoritativeRoster(repository, target);
     // Deployment history can contain several jobs per team. Use the newest
     // creation deterministically; repository iteration order is not a contract.
@@ -156,19 +159,11 @@ async function readAuthoritativeRoster(
   repository: DeploymentsQueryPort,
   target: EventRosterTarget,
 ) {
-  const rows = await repository.listByTenantAndEvent(target.tenantId, target.eventId);
-  // GSI1 is discovery only: its output values may still be pre-deploy values.
-  // Only the latest deployment per team can supply immutable inputs. Reading
-  // every historical job adds latency and can fail on an already-deleted job.
-  const latest = new Map<string, DeploymentRecord>();
-  for (const candidate of rows) {
-    if (candidate.problemId !== target.problemId || !candidate.teamId) continue;
-    const previous = latest.get(candidate.teamId);
-    if (!previous || compareDeploymentCreation(previous, candidate) < 0) {
-      latest.set(candidate.teamId, candidate);
-    }
-  }
-  const candidates = [...latest.values()];
+  // GSI1 discovers current deployments; only META provides durable inputs.
+  const candidates = latestDeploymentRows(
+    await repository.listByTenantAndEvent(target.tenantId, target.eventId),
+    target.problemId,
+  );
   const orderedRows: DeploymentRecord[] = [];
   for (let offset = 0; offset < candidates.length; offset += INITIALIZATION_READ_CONCURRENCY) {
     const batch = candidates.slice(offset, offset + INITIALIZATION_READ_CONCURRENCY);
@@ -178,6 +173,22 @@ async function readAuthoritativeRoster(
     orderedRows.push(...current);
   }
   return orderedRows;
+}
+
+/** Ignore superseded history in both ephemeral previews and durable initialization. */
+function latestDeploymentRows(
+  rows: readonly DeploymentRecord[],
+  problemId: string,
+): DeploymentRecord[] {
+  const latest = new Map<string, DeploymentRecord>();
+  for (const candidate of rows) {
+    if (candidate.problemId !== problemId || !candidate.teamId) continue;
+    const previous = latest.get(candidate.teamId);
+    if (!previous || compareDeploymentCreation(previous, candidate) < 0) {
+      latest.set(candidate.teamId, candidate);
+    }
+  }
+  return [...latest.values()];
 }
 
 function compareDeploymentCreation(a: DeploymentRecord, b: DeploymentRecord): number {

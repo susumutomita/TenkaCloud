@@ -59,8 +59,8 @@ export interface CoordinationScope {
   readonly fallbackProjection: unknown;
   /**
    * [Issue #3123] deployment 行に denormalize された event の開始 / 終了。 op 経路が
-   * `isScoringActive` で終端を判定するために持つ (= 追加 read 無し。 resolver は clock を
-   * 持たないので、 判定は nowIso を持つ handler 側で行う)。
+   * `isScoringActive` で終端を判定するために持つ。handler のサーバー時刻を resolver に
+   * 渡して時間外の初期化読み取りを省き、handler でも操作の可否を確認する。
    */
   readonly window: RoundWindow;
 }
@@ -77,6 +77,8 @@ export interface CoordinationHandlerDeps {
     teamLoginKey: string,
     problemId?: string,
     purpose?: "initialize" | "preview",
+    /** Server operation timestamp; never taken from the submitted operation. */
+    nowIso?: string,
   ) => Promise<CoordinationScopeResolution>;
   /**
    * [Issue #3152] Where immutable submission bodies live.
@@ -167,7 +169,7 @@ export async function handleCoordinationOp(
    */
   rawArtifacts?: unknown,
 ): Promise<CoordinationHandlerOutcome> {
-  const resolution = await deps.resolveScope(teamLoginKey, problemId);
+  const resolution = await deps.resolveScope(teamLoginKey, problemId, "initialize", nowIso);
   if (resolution.kind !== "scope") return resolution;
   const scope = resolution.scope;
   // [Issue #3123] 終了した event の試合は書き換えられない。 status だけを見ていると、
@@ -360,7 +362,7 @@ export function makeCoordinationScopeResolver(
   shared: ParticipantSharedResources,
   config: CoordinationConfig,
 ): CoordinationHandlerDeps["resolveScope"] {
-  return async (teamLoginKey, problemId, purpose = "initialize") => {
+  return async (teamLoginKey, problemId, purpose = "initialize", nowIso) => {
     const items = await queryTeamItems(shared, teamLoginKey);
     // [Issue #3125] 候補を**全部**集める。 以前はループ内で最初の 1 件を return していたため、
     // 同じ team に 2 つ目の coordination problem が deploy されていても到達できなかった。
@@ -416,7 +418,11 @@ export function makeCoordinationScopeResolver(
     const runId = await resolvePlayableCoordinationRunId(repository, runKey);
     if (runId === undefined) return { kind: "not_configured" };
     const stateScope = { ...runKey, runId };
-    const roster = await resolveInitializationRoster(shared, stateScope, item.teamId, purpose);
+    const window = { eventStartsAt: item.eventStartsAt, eventEndsAt: item.eventEndsAt };
+    const roster = await resolveInitializationRoster(shared, stateScope, item.teamId, purpose, {
+      window,
+      nowIso,
+    });
     return {
       kind: "scope",
       scope: {
@@ -438,7 +444,7 @@ export function makeCoordinationScopeResolver(
           teamNames: roster.teamNames,
           ...(roster.deploymentInputs ? { deploymentInputs: roster.deploymentInputs } : {}),
         },
-        window: { eventStartsAt: item.eventStartsAt, eventEndsAt: item.eventEndsAt },
+        window,
         // moduleRef は problemId (importer の key `coordination/<id>.mjs`)。
         // plugin path は宣言の有無判定にのみ使い、 実 load は problemId-keyed bundle を引く。
         moduleRef: resolvedProblemId,
@@ -461,13 +467,19 @@ async function resolveInitializationRoster(
   stateScope: CoordinationStateScope,
   teamId: string,
   purpose: "initialize" | "preview",
+  clock: { window: RoundWindow; nowIso: string | undefined },
 ): Promise<EventRoster> {
   // Stored runs never use initialization inputs. One scope read avoids an
   // event-wide index scan plus N strong META reads on every participant poll.
   // Mark the minimal context incomplete: if teardown removes the state after
   // this probe, the dispatcher must defer instead of initializing one team.
   const repository = await resolveDeploymentsRepository(shared);
-  if (await repository.readCoordinationState(stateScope)) {
+  // Rejected time-window operations cannot initialize state or need roster inputs.
+  const inactive =
+    purpose === "initialize" &&
+    clock.nowIso !== undefined &&
+    !isScoringActive(clock.window, clock.nowIso);
+  if (inactive || (await repository.readCoordinationState(stateScope))) {
     return { teamIds: [teamId], teamNames: {}, rosterIncomplete: true };
   }
   return resolveEventRoster(shared, {
