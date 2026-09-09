@@ -1,6 +1,6 @@
 {
   "name": "@tenkacloud/coordination-plugin-sdk",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Inter-team coordination plugin (state machine + 5 hooks) shared by problems and the platform dispatcher (Issue #1420)",
   "private": true,
   "type": "module",

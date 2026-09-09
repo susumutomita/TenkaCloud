@@ -451,7 +451,7 @@ describe("makeCoordinationScopeResolver", () => {
    * `01M1J5VK3N6KX5G3MYW190S9Q8` — which is exactly what the exposure lane did
    * on live. The display name is on the same rows the roster already reads.
    */
-  it("should carry each team's display name into the plugin context", async () => {
+  it("should carry each team's display name and reserved deployment inputs into the plugin context", async () => {
     const resolve = makeCoordinationScopeResolver(
       fakeShared([
         {
@@ -462,6 +462,10 @@ describe("makeCoordinationScopeResolver", () => {
           status: "COMPLETE",
           displayTeamName: "かけら隊",
           teamName: "team-1",
+          stackOutputs: JSON.stringify({
+            CoordinationPrivateMaterial: "fixture-t1",
+            PublicUrl: "https://example.test",
+          }),
         },
         {
           problemId: "p1",
@@ -483,6 +487,7 @@ describe("makeCoordinationScopeResolver", () => {
       eventId: "e1",
       teamIds: ["t1", "t2", "t3"],
       teamNames: { t1: "かけら隊", t2: "team-2" },
+      deploymentInputs: { t1: { CoordinationPrivateMaterial: "fixture-t1" } },
     });
   });
 

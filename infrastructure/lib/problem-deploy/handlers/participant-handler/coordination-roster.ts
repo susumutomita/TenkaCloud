@@ -1,3 +1,4 @@
+import { parseStackOutputs } from "../shared/cfn-status.js";
 import {
   type ParticipantDeploymentsTableSharedResources,
   resolveDeploymentsRepository,
@@ -45,6 +46,7 @@ export interface EventRosterTarget {
 }
 
 export interface EventRoster {
+  readonly deploymentInputs?: Readonly<Record<string, Readonly<Record<string, string>>>>;
   /** Existing matches remain usable, but this roster must never initialize durable state. */
   readonly rosterIncomplete?: true;
   /** teamId 昇順 (= どの host が先に materialize しても `initialState(ctx)` の入力が同一)。 */
@@ -63,15 +65,30 @@ export async function resolveEventRoster(
 ): Promise<EventRoster> {
   const roster = new Set<string>(target.knownTeamIds);
   const teamNames: Record<string, string> = {};
+  const deploymentInputs: Record<string, Record<string, string>> = {};
   let rosterIncomplete: true | undefined;
   try {
     const repository = await resolveDeploymentsRepository(shared);
     const rows = await repository.listByTenantAndEvent(target.tenantId, target.eventId);
-    for (const row of rows) {
+    // Deployment history can contain several jobs per team. Read the newest
+    // creation deterministically; repository iteration order is not a contract.
+    const orderedRows = [...rows];
+    orderedRows.sort(
+      (a, b) =>
+        (a.createdAt ?? "").localeCompare(b.createdAt ?? "") ||
+        (a.jobId ?? "").localeCompare(b.jobId ?? ""),
+    );
+    for (const row of orderedRows) {
       if (row.problemId !== target.problemId || typeof row.teamId !== "string" || !row.teamId) {
         continue;
       }
       roster.add(row.teamId);
+      const inputs = Object.fromEntries(
+        Object.entries(parseStackOutputs(row.stackOutputs)).filter(([key]) =>
+          /^Coordination[A-Z]/.test(key),
+        ),
+      );
+      deploymentInputs[row.teamId] = inputs;
       // `displayTeamName ?? teamName`, the order the leaderboard resolves.
       const name = trimmedString(row.displayTeamName) || trimmedString(row.teamName);
       if (name) teamNames[row.teamId] = name;
@@ -87,9 +104,13 @@ export async function resolveEventRoster(
       message: err instanceof Error ? err.message : String(err),
     });
   }
+  const populatedInputs = Object.fromEntries(
+    Object.entries(deploymentInputs).filter(([, outputs]) => Object.keys(outputs).length > 0),
+  );
   return {
     teamIds: [...roster].sort(),
     teamNames,
+    ...(Object.keys(populatedInputs).length ? { deploymentInputs: populatedInputs } : {}),
     ...(rosterIncomplete ? { rosterIncomplete } : {}),
   };
 }

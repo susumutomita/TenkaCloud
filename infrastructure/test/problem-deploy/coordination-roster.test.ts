@@ -24,6 +24,61 @@ describe("resolveEventRoster", () => {
   });
   afterEach(() => warnSpy.mockRestore());
 
+  it("only passes reserved outputs from the same tenant, event and problem to the plugin", async () => {
+    const roster = await resolveEventRoster(
+      fakeParticipantSharedWithItems([
+        row({
+          teamId: "t1",
+          stackOutputs: JSON.stringify({
+            CoordinationPrivateMaterial: "fixture",
+            CoordinationSetting: "on",
+            PublicUrl: "https://example.test",
+          }),
+        }),
+        row({
+          teamId: "t2",
+          problemId: "other",
+          stackOutputs: JSON.stringify({ CoordinationPrivateMaterial: "other" }),
+        }),
+      ]),
+      { ...target, knownTeamIds: ["t1"] },
+    );
+    expect(roster.deploymentInputs).toEqual({
+      t1: { CoordinationPrivateMaterial: "fixture", CoordinationSetting: "on" },
+    });
+  });
+
+  it("uses the newest deployment inputs regardless of repository iteration order", async () => {
+    const old = row({
+      teamId: "t1",
+      jobId: "old",
+      createdAt: "2026-09-01",
+      stackOutputs: JSON.stringify({ CoordinationPrivateMaterial: "old" }),
+    });
+    const current = row({
+      teamId: "t1",
+      jobId: "new",
+      createdAt: "2026-09-02",
+      stackOutputs: JSON.stringify({ CoordinationPrivateMaterial: "current" }),
+    });
+    for (const rows of [
+      [old, current],
+      [current, old],
+    ]) {
+      const roster = await resolveEventRoster(fakeParticipantSharedWithItems(rows), {
+        ...target,
+        knownTeamIds: ["t1"],
+      });
+      expect(roster.deploymentInputs?.t1).toEqual({ CoordinationPrivateMaterial: "current" });
+    }
+    const pending = { ...current, stackOutputs: undefined };
+    const roster = await resolveEventRoster(fakeParticipantSharedWithItems([pending, old]), {
+      ...target,
+      knownTeamIds: ["t1"],
+    });
+    expect(roster.deploymentInputs).toBeUndefined();
+  });
+
   it("should union the rows' teams with the known ids, sorted, whatever their status", async () => {
     const roster = await resolveEventRoster(
       fakeParticipantSharedWithItems([

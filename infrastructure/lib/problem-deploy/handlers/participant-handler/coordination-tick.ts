@@ -149,6 +149,7 @@ async function initializeAcceptedCoordinationReset(
     eventId: target.eventId,
     teamIds: roster.teamIds,
     teamNames: roster.teamNames,
+    ...(roster.deploymentInputs ? { deploymentInputs: roster.deploymentInputs } : {}),
     matchSecret: await ensureCoordinationMatchSecret(deps.store, scope, nowIso),
   });
   const pendingScores = coordinationScoreDelivery(
@@ -307,6 +308,7 @@ async function tickCoordinationEvent(
       eventId: target.eventId,
       teamIds: roster.teamIds,
       teamNames: roster.teamNames,
+      ...(roster.deploymentInputs ? { deploymentInputs: roster.deploymentInputs } : {}),
       matchSecret: await ensureCoordinationMatchSecret(deps.store, scope, nowIso),
     });
     version = 0;

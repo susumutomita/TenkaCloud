@@ -337,6 +337,29 @@ describe("getParticipantDeployLogs", () => {
     expect(out.response.entries[0]?.message).toBe("[redacted sensitive output]");
   });
 
+  it("redacts server-only coordination inputs and detached receipt value lines", async () => {
+    process.env.DEPLOY_JOB_LOG_GROUP = "/tenkacloud/deploy-jobs";
+    vi.mocked(queryTeamItems).mockResolvedValueOnce([
+      { jobId: JOB_ID, status: "COMPLETE", problemId: "battle" },
+    ]);
+    const deps = buildDeps();
+    deps.logs.send.mockResolvedValueOnce({
+      events: [
+        { message: "CoordinationPrivateInput: sensitive-value", timestamp: 1 },
+        { message: '{"key":3,"receipt":"private-receipt-value"}', timestamp: 2 },
+        { message: "Deployment complete", timestamp: 3 },
+      ],
+    });
+    const out = await getParticipantDeployLogs(shared, deps, TEAM_KEY, { jobId: JOB_ID });
+    expect(out.kind).toBe("ok");
+    if (out.kind !== "ok") return;
+    expect(out.response.entries.map((entry) => entry.message)).toEqual([
+      "[redacted coordination output]",
+      "[redacted sensitive output]",
+      "Deployment complete",
+    ]);
+  });
+
   it("should keep the empty-fallback (no CloudWatch read) when DEPLOY_JOB_LOG_GROUP is unset", async () => {
     // Default-safe: with the flag OFF the env is absent and the Lambda-path branch never runs.
     vi.mocked(queryTeamItems).mockResolvedValueOnce([

@@ -22,6 +22,10 @@
  * を使う)。
  */
 export interface CoordinationContext {
+  /** Trusted, per-team deployment outputs whose names begin with Coordination.
+   * CoordinationPrivate* outputs are server-only: never project them to participants.
+   * Captured once for this run; participant input cannot populate this map. */
+  readonly deploymentInputs?: Readonly<Record<string, Readonly<Record<string, string>>>>;
   readonly eventId: string;
   /** 参加チームの teamId 一覧 (= 初期 state を teams 数に応じて組むため)。 */
   readonly teamIds: readonly string[];

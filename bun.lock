@@ -239,7 +239,7 @@
     },
     "packages/coordination-plugin-sdk": {
       "name": "@tenkacloud/coordination-plugin-sdk",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "devDependencies": {
         "typescript": "^6.0.3",
         "vitest": "^5.0.0",

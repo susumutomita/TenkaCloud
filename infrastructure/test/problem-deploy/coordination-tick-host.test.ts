@@ -804,6 +804,33 @@ describe("the tick materialises the roster the op path would (#3187)", () => {
   });
   const persistedTeams = (ddb: FakeDdb) => (ddb.puts[0]?.state as RosterState | undefined)?.teams;
 
+  it("passes reserved deployment inputs when the scheduled tick initializes the match", async () => {
+    const initialState = vi.fn(rosterPlugin.initialState);
+    const ddb = fakeDdb({
+      getItem: undefined,
+      rosterItems: [
+        deploymentRow({
+          teamId: "team-a",
+          status: "COMPLETE",
+          stackOutputs: JSON.stringify({
+            CoordinationPrivateMaterial: "fixture-a",
+            PublicUrl: "https://example.test",
+          }),
+        }),
+      ],
+    });
+    const result = await handleCoordinationTickBatch(
+      depsWith(importerOf({ ...rosterPlugin, initialState }), ddb.store),
+      batch([capTarget()]),
+    );
+    expect(result).toEqual({ ticked: 1, written: 1 });
+    expect(initialState).toHaveBeenCalledWith(
+      expect.objectContaining({
+        deploymentInputs: { "team-a": { CoordinationPrivateMaterial: "fixture-a" } },
+      }),
+    );
+  });
+
   it("should hand initialState the full roster with display names, not the scoring pass's ids alone", async () => {
     const ddb = fakeDdb({
       getItem: undefined,

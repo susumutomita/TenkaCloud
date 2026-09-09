@@ -446,6 +446,7 @@ export function makeCoordinationScopeResolver(
           teamIds: roster.teamIds,
           // [Issue #3172] So a plugin can name an opponent instead of printing its ULID.
           teamNames: roster.teamNames,
+          ...(roster.deploymentInputs ? { deploymentInputs: roster.deploymentInputs } : {}),
         },
         window: { eventStartsAt: item.eventStartsAt, eventEndsAt: item.eventEndsAt },
         // moduleRef は problemId (importer の key `coordination/<id>.mjs`)。

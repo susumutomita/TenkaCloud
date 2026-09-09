@@ -44,6 +44,28 @@ const sampleRow = (over: Record<string, unknown> = {}) => ({
 describe("lookupTeamByLoginKey (Phase 2c team scope)", () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it("never publishes private coordination outputs, including composite-prefixed keys", async () => {
+    const { shared, ddbSend } = buildShared();
+    ddbSend.mockResolvedValueOnce({
+      Items: [
+        sampleRow({
+          stackOutputs: JSON.stringify({
+            CoordinationPrivateItem: "fixture-secret",
+            "child.CoordinationPrivateMaterial": "other-secret",
+            CoordinationParameterName: "/tc-demo/key",
+            FrontendUrl: "https://example.test",
+          }),
+        }),
+      ],
+    });
+    const view = await lookupTeamByLoginKey(shared, "KEY1");
+    expect(view?.problems[0]?.stackOutputs).toEqual({
+      CoordinationParameterName: "/tc-demo/key",
+      FrontendUrl: "https://example.test",
+    });
+    expect(JSON.stringify(view)).not.toContain("fixture-secret");
+  });
+
   it("should Query GSI2 with TEAMKEY#<key> (no Limit; fetch all rows in team scope)", async () => {
     const { shared, ddbSend } = buildShared();
     ddbSend.mockResolvedValueOnce({ Items: [sampleRow()] });
