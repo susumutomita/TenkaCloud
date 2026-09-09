@@ -9,6 +9,18 @@ import { makeFakeDdb, makeSqliteExecutor } from "./control-data-write.test-helpe
 const scope = { tenantId: "tenant", eventId: "event", problemId: "battle", runId: "default" };
 const at = "2026-09-09T00:00:00.000Z";
 
+it("propagates backend failures instead of reporting a busy or released lease", async () => {
+  const ddb = makeFakeDdb();
+  const repository = new DynamoDbDeploymentsRepository(ddb, "Deployments");
+  vi.spyOn(ddb, "send").mockRejectedValue(new Error("store unavailable"));
+  await expect(
+    repository.acquireCoordinationInitialization(scope, "owner", 1000, 31000),
+  ).rejects.toThrow("store unavailable");
+  await expect(repository.releaseCoordinationInitialization(scope, "owner")).rejects.toThrow(
+    "store unavailable",
+  );
+});
+
 it("acquires and releases with the dispatcher's existing permissions, without DeleteItem", async () => {
   const ddb = makeFakeDdb();
   const send = ddb.send.bind(ddb);

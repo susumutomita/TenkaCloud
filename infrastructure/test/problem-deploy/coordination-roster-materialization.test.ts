@@ -203,6 +203,38 @@ async function setup(backend: string, tickOnRequest = false) {
 afterEach(() => vi.restoreAllMocks());
 
 describe.each(["DynamoDB", "SQL"])("roster failure before materialization: %s", (backend) => {
+  it("uses committed state when another host finishes before this host acquires initialization", async () => {
+    const ctx = await setup(backend);
+    const peer = ctx.peer();
+    const acquire = ctx.repository.acquireCoordinationInitialization.bind(ctx.repository);
+    vi.spyOn(ctx.repository, "acquireCoordinationInitialization").mockImplementationOnce(
+      async (...args) => {
+        expect(
+          (await handleCoordinationOp(peer.deps, "login-bravo", op, at, key.problemId)).kind,
+        ).toBe("ok");
+        return acquire(...args);
+      },
+    );
+    const reads = vi.spyOn(ctx.repository, "getDeployment");
+    expect((await ctx.apply()).kind).toBe("ok");
+    expect(reads).not.toHaveBeenCalled();
+    expect(ctx.initialState).toHaveBeenCalledTimes(1);
+    expect((await readCoordinationState(ctx.store, scope))?.state).toMatchObject({ moves: 2 });
+  });
+
+  it("propagates a state-read failure after admission and releases ownership for a retry", async () => {
+    const ctx = await setup(backend);
+    const read = ctx.repository.readCoordinationState.bind(ctx.repository);
+    const reads = vi
+      .spyOn(ctx.repository, "readCoordinationState")
+      .mockImplementationOnce(read)
+      .mockRejectedValueOnce(new Error("state store unavailable"));
+    await expect(ctx.apply()).rejects.toThrow("state store unavailable");
+    reads.mockRestore();
+    expect(ctx.initialState).not.toHaveBeenCalled();
+    expect((await ctx.apply()).kind).toBe("ok");
+  });
+
   it("shares one 99-team initialization across independent operation and tick hosts", async () => {
     const ctx = await setup(backend);
     for (let i = 0; i < 97; i += 1) await ctx.repository.putDeployment(deployment(`team-${i}`));
