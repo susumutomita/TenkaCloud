@@ -1,3 +1,4 @@
+import { GetCommand } from "@aws-sdk/lib-dynamodb";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resolveEventRoster } from "../../lib/problem-deploy/handlers/participant-handler/coordination-roster.js";
 import {
@@ -77,6 +78,60 @@ describe("resolveEventRoster", () => {
       knownTeamIds: ["t1"],
     });
     expect(roster.deploymentInputs).toBeUndefined();
+  });
+
+  it("refreshes stale index values from a strongly consistent META read", async () => {
+    const current = row({
+      teamId: "t1",
+      jobId: "job1",
+      stackOutputs: JSON.stringify({ CoordinationPrivateMaterial: "current" }),
+    });
+    const send = vi.fn(async (cmd: unknown) => {
+      if (cmd instanceof GetCommand) return { Item: current };
+      return { Items: [{ ...current, stackOutputs: undefined }] };
+    });
+    const roster = await resolveEventRoster(fakeParticipantShared(send), {
+      ...target,
+      knownTeamIds: ["t1"],
+      requireComplete: true,
+    });
+    expect(roster.deploymentInputs).toEqual({ t1: { CoordinationPrivateMaterial: "current" } });
+    const reads = send.mock.calls
+      .map(([cmd]) => cmd)
+      .filter((cmd): cmd is GetCommand => cmd instanceof GetCommand);
+    expect(reads.map((cmd) => cmd.input)).toEqual([
+      {
+        TableName: "Deployments",
+        Key: { PK: "DEPLOYMENT#job1", SK: "META" },
+        ConsistentRead: true,
+      },
+    ]);
+  });
+
+  it.each([
+    undefined,
+    { tenantId: "another-tenant" },
+    { eventId: "another-event" },
+    { problemId: "another-problem" },
+    { teamId: "another-team" },
+  ])("defers initialization if the authoritative deployment is missing or mismatched: %j", async (overrides) => {
+    const indexed = row({
+      teamId: "t1",
+      jobId: "job1",
+      stackOutputs: JSON.stringify({ CoordinationPrivateMaterial: "stale" }),
+    });
+    const send = vi.fn(async (cmd: unknown) =>
+      cmd instanceof GetCommand
+        ? { Item: overrides ? { ...indexed, ...overrides } : undefined }
+        : { Items: [indexed] },
+    );
+    const shared = fakeParticipantShared(send);
+    await expect(
+      resolveEventRoster(shared, { ...target, knownTeamIds: ["t1"], requireComplete: true }),
+    ).rejects.toThrow("missing or no longer belongs");
+    const existing = await resolveEventRoster(shared, { ...target, knownTeamIds: ["t1"] });
+    expect(existing.rosterIncomplete).toBe(true);
+    expect(existing.deploymentInputs).toBeUndefined();
   });
 
   it("should union the rows' teams with the known ids, sorted, whatever their status", async () => {

@@ -1,3 +1,4 @@
+import { isPrivateCoordinationOutputKey } from "@tenkacloud/coordination-plugin-sdk";
 import type {
   ApplicationStatus,
   ApplicationStatusOverall,
@@ -85,8 +86,7 @@ function stripAnswerOutputs(
   }
   return Object.fromEntries(
     Object.entries(stackOutputs).filter(
-      ([key]) =>
-        !hidden.has(key) && !key.split(".").some((part) => part.startsWith("CoordinationPrivate")),
+      ([key]) => !hidden.has(key) && !isPrivateCoordinationOutputKey(key),
     ),
   );
 }

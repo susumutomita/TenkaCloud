@@ -16,6 +16,7 @@ import * as sdk from "../src/index.js";
 const EXPECTED_VALUE_EXPORTS = [
   "defineCoordinationPlugin",
   "dispatchOp",
+  "isPrivateCoordinationOutputKey",
   "runTick",
   "safeProjectForTeam",
 ].sort();
@@ -31,5 +32,25 @@ describe("@tenkacloud/coordination-plugin-sdk public API surface", () => {
     expect(typeof sdk.runTick).toBe("function");
     expect(typeof sdk.defineCoordinationPlugin).toBe("function");
     expect(typeof sdk.safeProjectForTeam).toBe("function");
+  });
+});
+
+describe("server-only deployment output names", () => {
+  it.each([
+    "CoordinationPrivate",
+    "CoordinationPrivateMaterial",
+    "stack.CoordinationPrivateMaterial",
+    "a.b.CoordinationPrivateValue",
+  ])("hides %s", (key) => {
+    expect(sdk.isPrivateCoordinationOutputKey(key)).toBe(true);
+  });
+  it.each([
+    "FrontendUrl",
+    "CoordinationSetting",
+    "stack.CoordinationSetting",
+    "OtherCoordinationPrivate",
+    "",
+  ])("preserves %s", (key) => {
+    expect(sdk.isPrivateCoordinationOutputKey(key)).toBe(false);
   });
 });

@@ -361,27 +361,37 @@ describe("makeCoordinationScopeResolver", () => {
       items: Partial<DeploymentItem>[],
       opts: { flagOn?: boolean; teamOverrides?: Record<string, unknown> } = {},
     ): ParticipantSharedResources {
+      const deploymentRows = items.map((item, index) => ({
+        ...item,
+        jobId: item.jobId ?? `fixture-${index}`,
+      }));
+      const eventItem = {
+        tenantId: "tn1",
+        status: "READY",
+        startsAt: "2026-01-01T00:00:00.000Z",
+        progressionGate: {
+          gateProblemId: "hello-world",
+          unlockTargetIds: ["p1"],
+          defaultPolicy: "required",
+          ...(opts.teamOverrides ? { teamOverrides: opts.teamOverrides } : {}),
+        },
+      };
+      const flagItem = { flags: { challengePrerequisiteGate: opts.flagOn !== false } };
       const send = vi.fn(async (cmd: unknown) => {
-        const key = (cmd as { input?: { Key?: Record<string, unknown> } }).input?.Key;
-        if (cmd instanceof GetCommand && key?.SK === "FLAGS") {
-          return { Item: { flags: { challengePrerequisiteGate: opts.flagOn !== false } } };
+        if (!(cmd instanceof GetCommand)) return { Items: deploymentRows };
+        const key = cmd.input.Key;
+        switch (key?.SK) {
+          case "FLAGS":
+            return { Item: flagItem };
+          case "META":
+            return {
+              Item: String(key.PK).startsWith("DEPLOYMENT#")
+                ? deploymentRows.find((item) => key.PK === `DEPLOYMENT#${item.jobId}`)
+                : eventItem,
+            };
+          default:
+            return { Item: undefined };
         }
-        if (cmd instanceof GetCommand && key?.SK === "META") {
-          return {
-            Item: {
-              tenantId: "tn1",
-              status: "READY",
-              startsAt: "2026-01-01T00:00:00.000Z",
-              progressionGate: {
-                gateProblemId: "hello-world",
-                unlockTargetIds: ["p1"],
-                defaultPolicy: "required",
-                ...(opts.teamOverrides ? { teamOverrides: opts.teamOverrides } : {}),
-              },
-            },
-          };
-        }
-        return { Items: items };
       });
       // Bound before the assertion: `consistent-type-assertions` wants a
       // declaration it can annotate, and the DocumentClient surface is far

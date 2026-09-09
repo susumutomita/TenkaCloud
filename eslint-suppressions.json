@@ -2660,11 +2660,6 @@
       "count": 1
     }
   },
-  "infrastructure/test/scripts/deploy-stack-recovery.test.ts": {
-    "sonarjs/no-os-command-from-path": {
-      "count": 1
-    }
-  },
   "infrastructure/test/scripts/docker-launcher-project-name.test.ts": {
     "sonarjs/no-os-command-from-path": {
       "count": 1

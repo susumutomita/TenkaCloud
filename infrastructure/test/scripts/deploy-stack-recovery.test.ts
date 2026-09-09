@@ -54,7 +54,7 @@ exit 0
 source "$BATTLES_COMMON"
 delete_unrecoverable_stack_if_present "tc-demo-team" "us-east-1"
 `;
-  const result = spawnSync("bash", ["-c", driver], {
+  const result = spawnSync("/bin/bash", ["-c", driver], {
     encoding: "utf8",
     env: {
       ...process.env,
@@ -105,5 +105,68 @@ describe("delete_unrecoverable_stack_if_present", { timeout: 30_000 }, () => {
   it("should do nothing when the stack does not exist", () => {
     const { awsCalls } = runRecovery("");
     expect(awsCalls).not.toContain("delete-stack");
+  });
+});
+
+// Exercise the exact producer function with structured fake AWS output. Opaque
+// values carry no sensitive keyword, so downstream line redaction cannot help.
+describe("print_public_stack_outputs", { timeout: 30_000 }, () => {
+  function printOutputs(output: string, exitCode = "0") {
+    const dir = mkdtempSync(join(tmpdir(), "tenkacloud-public-outputs-"));
+    tempDirs.push(dir);
+    writeFileSync(
+      join(dir, "aws"),
+      `#!/usr/bin/env bash
+printf '%s\\n' "$FAKE_OUTPUTS"
+exit "$FAKE_EXIT"
+`,
+      { mode: 0o755 },
+    );
+    return spawnSync(
+      "/bin/bash",
+      [
+        "-c",
+        `set -euo pipefail
+source "$BATTLES_COMMON"
+print_public_stack_outputs "tc-demo-team" "us-east-1"
+`,
+      ],
+      {
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          PATH: `${dir}:${process.env.PATH ?? ""}`,
+          BATTLES_COMMON: COMMON_SCRIPT,
+          FAKE_OUTPUTS: output,
+          FAKE_EXIT: exitCode,
+        },
+      },
+    );
+  }
+
+  it("prints public outputs while removing the entire private output entry", () => {
+    const outputs = [
+      { OutputKey: "FrontendUrl", OutputValue: "https://example.test" },
+      {
+        OutputKey: "CoordinationPrivateMaterial",
+        OutputValue: "aB7cD9",
+        Description: "hidden description",
+      },
+      { OutputKey: "nested.CoordinationPrivateMaterial", OutputValue: "eF1gH3" },
+      { OutputKey: "CoordinationSetting", OutputValue: "enabled" },
+    ];
+    const result = printOutputs(JSON.stringify(outputs, null, 2));
+    expect(result.status, result.stderr).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual([outputs[0], outputs[3]]);
+    expect(result.stdout).not.toMatch(/aB7cD9|eF1gH3|hidden description/);
+  });
+
+  it("preserves AWS read errors instead of printing a successful empty result", () => {
+    expect(printOutputs("", "42").status).toBe(42);
+  });
+
+  it("supports stacks without outputs and rejects malformed responses", () => {
+    expect(JSON.parse(printOutputs("null").stdout)).toEqual([]);
+    expect(printOutputs("invalid-json").status).not.toBe(0);
   });
 });

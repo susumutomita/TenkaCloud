@@ -1,3 +1,4 @@
+import type { DeploymentsQueryPort } from "../../control-data/domain/deployments-port.js";
 import { parseStackOutputs } from "../shared/cfn-status.js";
 import {
   type ParticipantDeploymentsTableSharedResources,
@@ -69,10 +70,9 @@ export async function resolveEventRoster(
   let rosterIncomplete: true | undefined;
   try {
     const repository = await resolveDeploymentsRepository(shared);
-    const rows = await repository.listByTenantAndEvent(target.tenantId, target.eventId);
-    // Deployment history can contain several jobs per team. Read the newest
+    const orderedRows = await readAuthoritativeRoster(repository, target);
+    // Deployment history can contain several jobs per team. Use the newest
     // creation deterministically; repository iteration order is not a contract.
-    const orderedRows = [...rows];
     orderedRows.sort(
       (a, b) =>
         (a.createdAt ?? "").localeCompare(b.createdAt ?? "") ||
@@ -117,4 +117,30 @@ export async function resolveEventRoster(
 
 function trimmedString(value: unknown): string | undefined {
   return typeof value === "string" ? value.trim() : undefined;
+}
+
+async function readAuthoritativeRoster(
+  repository: DeploymentsQueryPort,
+  target: EventRosterTarget,
+) {
+  const rows = await repository.listByTenantAndEvent(target.tenantId, target.eventId);
+  // GSI1 is discovery only: its output values may still be pre-deploy values.
+  // Refresh the authoritative META rows before capturing immutable run inputs.
+  const orderedRows = [];
+  for (const candidate of rows) {
+    if (candidate.problemId !== target.problemId || !candidate.teamId) continue;
+    if (!candidate.jobId) throw new Error("Roster deployment has no job ID");
+    const current = await repository.getDeployment(candidate.jobId, { consistentRead: true });
+    if (
+      !current ||
+      current.tenantId !== target.tenantId ||
+      current.eventId !== target.eventId ||
+      current.problemId !== target.problemId ||
+      current.teamId !== candidate.teamId
+    ) {
+      throw new Error("Roster deployment is missing or no longer belongs to this scope");
+    }
+    orderedRows.push(current);
+  }
+  return orderedRows;
 }

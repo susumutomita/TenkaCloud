@@ -110,6 +110,10 @@ function fakeDdb(opts: {
   const secretPuts: PutCommand[] = [];
   const updates: UpdateCommand[] = [];
   const queries: QueryCommand[] = [];
+  const rosterRows = (opts.rosterItems ?? []).map((item, index) => ({
+    ...item,
+    jobId: item.jobId ?? `fixture-${index}`,
+  }));
 
   // [Issue #3133] The coordination partition now holds two rows — `SK=STATE`
   // and `SK=MATCHSECRET` — so each command handler branches on the sort key
@@ -119,6 +123,9 @@ function fakeDdb(opts: {
   const handleGet = (cmd: GetCommand) => {
     if (opts.getThrows) throw new Error("get boom");
     const key = (cmd.input as { Key?: { PK?: string; SK?: string } }).Key;
+    if (key?.SK === "META" && key.PK?.startsWith("DEPLOYMENT#")) {
+      return { Item: rosterRows.find((item) => key.PK === `DEPLOYMENT#${item.jobId}`) };
+    }
     if (isSecret(key?.SK)) {
       return { Item: opts.matchSecret ? { matchSecret: opts.matchSecret } : undefined };
     }
@@ -207,7 +214,7 @@ function fakeDdb(opts: {
   const handleQuery = (cmd: QueryCommand) => {
     if (opts.rosterThrows) throw new Error("roster boom");
     queries.push(cmd);
-    return { Items: opts.rosterItems ?? [] };
+    return { Items: rosterRows };
   };
 
   const send = vi.fn(async (cmd: unknown) => {

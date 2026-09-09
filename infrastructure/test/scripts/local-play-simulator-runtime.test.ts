@@ -1782,6 +1782,9 @@ describe("provider-neutral local runtime", () => {
         StaleAlbUrl: "https://abc123.elb.us-east-1.amazonaws.com/",
         StaleFunctionUrl: "https://fn123.lambda-url.us-east-1.on.aws/",
         ExternalDocsUrl: "https://example.com/local-play-guide",
+        CoordinationPrivateMaterial: "opaque-fixture-one",
+        "nested.CoordinationPrivateMaterial": "opaque-fixture-two",
+        CoordinationSetting: "visible-setting",
       },
     };
 
@@ -1810,6 +1813,12 @@ describe("provider-neutral local runtime", () => {
     expect(view.stackOutputs).not.toHaveProperty("ParameterConsoleUrl");
     expect(view.stackOutputs).not.toHaveProperty("StaleAlbUrl");
     expect(view.stackOutputs).not.toHaveProperty("StaleFunctionUrl");
+    expect(view.stackOutputs).not.toHaveProperty("CoordinationPrivateMaterial");
+    expect(view.stackOutputs).not.toHaveProperty("nested.CoordinationPrivateMaterial");
+    expect(view.stackOutputs.CoordinationSetting).toBe("visible-setting");
+    expect(simulatedRuntime.deployment.outputs.CoordinationPrivateMaterial).toBe(
+      "opaque-fixture-one",
+    );
     expect(view.stackOutputs.ExternalDocsUrl).toBe("https://example.com/local-play-guide");
     expect(simulatedRuntime.deployment.outputs.ParameterConsoleUrl).toContain(
       "console.aws.amazon.com",

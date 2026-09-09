@@ -14,6 +14,11 @@
  * `packs/reference-coordination-battle`。public API の変更時は本 SDK の version も更新する。
  */
 
+/** Reserved server-only outputs, including namespaced composite stack outputs. */
+export function isPrivateCoordinationOutputKey(key: string): boolean {
+  return key.split(".").some((part) => part.startsWith("CoordinationPrivate"));
+}
+
 /**
  * event 開始時に `initialState` へ渡る文脈。
  *

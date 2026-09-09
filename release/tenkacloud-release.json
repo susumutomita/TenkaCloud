@@ -11,7 +11,7 @@
     },
     "catalog": {
       "repository": "https://github.com/susumutomita/TenkaCloudChallenge.git",
-      "commit": "ae530dccf71f8613ce0522b27668187b61bfddae"
+      "commit": "8bcdbd66ad0e4ae7c43bd089b01bdfc404d075d0"
     }
   },
   "artifacts": {

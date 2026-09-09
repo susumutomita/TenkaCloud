@@ -6,12 +6,18 @@ resolve the same tenant/event/problem roster. The platform passes output names
 matching `Coordination[A-Z]`; unrelated outputs and other problems are excluded.
 The client operation body cannot supply or override this context.
 
-Names beginning with `CoordinationPrivate` are server-only. The participant
-problem lookup removes these outputs, including stack-prefixed output names.
-Deployment log lines naming these outputs are redacted. Do not log their values
-separately. A problem plugin must also exclude them from `projectForTeam`, hints,
+Names beginning with `CoordinationPrivate` are server-only. Both hosted and
+simulated participant views use `isPrivateCoordinationOutputKey` to remove them,
+including stack-prefixed output names. The deployment
+script filters structured outputs before logging; downstream log redaction also
+removes lines naming private outputs. Do not log private values separately.
+A problem plugin must also exclude them from `projectForTeam`, hints,
 errors and public artifacts. CloudFormation outputs themselves are not a secret
 vault: keep participant IAM scoped to the intended resource, not stack inspection.
+
+The index discovers deployments; strongly consistent META reads provide the
+values. A missing or mismatched row defers initialization. This does not make
+index discovery strongly consistent: wait for all deployments to be discoverable.
 
 `initialState` consumes the inputs once. Existing saved matches do not change
 when a stack is redeployed. Finish all team deployments before creating a match;
