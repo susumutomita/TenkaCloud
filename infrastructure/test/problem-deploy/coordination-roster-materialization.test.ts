@@ -132,8 +132,8 @@ async function setup(backend: string) {
     config,
     importer: async () => ({ default: plugin }),
     artifacts: fakeArtifactStore(),
-    resolveScope: async (login: string, problemId?: string) => {
-      const resolution = await resolve(login, problemId);
+    resolveScope: async (...args: Parameters<typeof resolve>) => {
+      const resolution = await resolve(...args);
       resolutions.push(resolution);
       return resolution;
     },
@@ -179,6 +179,55 @@ async function setup(backend: string) {
 afterEach(() => vi.restoreAllMocks());
 
 describe.each(["DynamoDB", "SQL"])("roster failure before materialization: %s", (backend) => {
+  it("uses index-only previews for 99 teams without persisting stale inputs on the first operation", async () => {
+    const ctx = await setup(backend);
+    ctx.tick.mockImplementation((state) => state);
+    const teamIds = ["alpha", "bravo", ...Array.from({ length: 97 }, (_, i) => `team-${i}`)].sort();
+    for (const id of teamIds.filter((id) => !expectedTeams.includes(id))) {
+      await ctx.repository.putDeployment(deployment(id));
+    }
+    const indexedRows = await ctx.repository.listByTenantAndEvent(key.tenantId, key.eventId);
+    ctx.roster.mockResolvedValue(indexedRows);
+    await ctx.repository.putDeployment(
+      deployment("alpha", {
+        stackOutputs: JSON.stringify({ CoordinationPrivateMaterial: "current-fixture" }),
+      }),
+    );
+    // This supported plugin has no teamScores and a no-op tick: state remains absent.
+    expect(await ctx.runTick()).toEqual({ ticked: 1, written: 0 });
+    ctx.initialState.mockClear();
+    ctx.mint.mockClear();
+    const metaReads = vi.spyOn(ctx.repository, "getDeployment");
+    for (let round = 0; round < 2; round += 1) {
+      const results = await Promise.all(
+        teamIds.map((id) =>
+          handleCoordinationProjection(ctx.deps, `login-${id}`, key.problemId, at),
+        ),
+      );
+      expect(results.every((result) => result.kind === "ok")).toBe(true);
+    }
+    await ctx.fetchArtifact();
+    expect(metaReads).not.toHaveBeenCalled();
+    expect(ctx.write).not.toHaveBeenCalled();
+    expect(ctx.mint).not.toHaveBeenCalled();
+    expect(await ctx.repository.readCoordinationState(scope)).toBeUndefined();
+    expect(ctx.initialState).toHaveBeenLastCalledWith(
+      expect.objectContaining({ teamIds, teamNames: expect.any(Object) }),
+    );
+    expect(ctx.initialState.mock.lastCall?.[0].deploymentInputs).toBeUndefined();
+
+    ctx.initialState.mockClear();
+    expect((await ctx.apply()).kind).toBe("ok");
+    expect(metaReads).toHaveBeenCalledTimes(99);
+    expect(ctx.initialState).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        teamIds,
+        deploymentInputs: { alpha: { CoordinationPrivateMaterial: "current-fixture" } },
+      }),
+    );
+    expect(ctx.write).toHaveBeenCalledTimes(1);
+  });
+
   it("does not reread deployment rosters when 99 teams poll an initialized run", async () => {
     const ctx = await setup(backend);
     const teamIds = ["alpha", "bravo", ...Array.from({ length: 97 }, (_, i) => `team-${i}`)];

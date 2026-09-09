@@ -76,6 +76,7 @@ export interface CoordinationHandlerDeps {
   readonly resolveScope: (
     teamLoginKey: string,
     problemId?: string,
+    purpose?: "initialize" | "preview",
   ) => Promise<CoordinationScopeResolution>;
   /**
    * [Issue #3152] Where immutable submission bodies live.
@@ -225,7 +226,7 @@ export async function handleCoordinationProjection(
   problemId?: string,
   nowIso = new Date().toISOString(),
 ): Promise<CoordinationHandlerOutcome> {
-  const resolution = await deps.resolveScope(teamLoginKey, problemId);
+  const resolution = await deps.resolveScope(teamLoginKey, problemId, "preview");
   if (resolution.kind !== "scope") return resolution;
   const scope = resolution.scope;
   const outcome = await loadAndProjectCoordinationForTeam(
@@ -275,7 +276,7 @@ export async function handleCoordinationArtifactFetch(
       | { kind: "unavailable" }
     >
 > {
-  const resolution = await deps.resolveScope(teamLoginKey, problemId);
+  const resolution = await deps.resolveScope(teamLoginKey, problemId, "preview");
   if (resolution.kind !== "scope") return resolution;
   const scope = resolution.scope;
   const projected = await loadAndProjectCoordinationForTeam(
@@ -358,8 +359,8 @@ export function parseCoordinationConfig(raw: string | undefined): CoordinationCo
 export function makeCoordinationScopeResolver(
   shared: ParticipantSharedResources,
   config: CoordinationConfig,
-): (teamLoginKey: string, problemId?: string) => Promise<CoordinationScopeResolution> {
-  return async (teamLoginKey, problemId) => {
+): CoordinationHandlerDeps["resolveScope"] {
+  return async (teamLoginKey, problemId, purpose = "initialize") => {
     const items = await queryTeamItems(shared, teamLoginKey);
     // [Issue #3125] 候補を**全部**集める。 以前はループ内で最初の 1 件を return していたため、
     // 同じ team に 2 つ目の coordination problem が deploy されていても到達できなかった。
@@ -415,7 +416,7 @@ export function makeCoordinationScopeResolver(
     const runId = await resolvePlayableCoordinationRunId(repository, runKey);
     if (runId === undefined) return { kind: "not_configured" };
     const stateScope = { ...runKey, runId };
-    const roster = await resolveInitializationRoster(shared, stateScope, item.teamId);
+    const roster = await resolveInitializationRoster(shared, stateScope, item.teamId, purpose);
     return {
       kind: "scope",
       scope: {
@@ -459,6 +460,7 @@ async function resolveInitializationRoster(
   shared: ParticipantSharedResources,
   stateScope: CoordinationStateScope,
   teamId: string,
+  purpose: "initialize" | "preview",
 ): Promise<EventRoster> {
   // Stored runs never use initialization inputs. One scope read avoids an
   // event-wide index scan plus N strong META reads on every participant poll.
@@ -468,5 +470,9 @@ async function resolveInitializationRoster(
   if (await repository.readCoordinationState(stateScope)) {
     return { teamIds: [teamId], teamNames: {}, rosterIncomplete: true };
   }
-  return resolveEventRoster(shared, { ...stateScope, knownTeamIds: [teamId] });
+  return resolveEventRoster(shared, {
+    ...stateScope,
+    knownTeamIds: [teamId],
+    readOnlyPreview: purpose === "preview",
+  });
 }

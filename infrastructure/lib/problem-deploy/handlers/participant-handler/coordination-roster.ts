@@ -8,7 +8,7 @@ import {
 /**
  * The event roster a coordination plugin's `initialState(ctx)` is built from.
  *
- * Two hosts materialise a namespace: the participant op / projection path
+ * Two hosts materialise a namespace: the participant operation path
  * (`makeCoordinationScopeResolver`) and the scoring-driven tick
  * (`coordination-tick.ts`). `initialState` is the only hook that receives
  * `ctx`, so whichever host runs first decides what the plugin knows about the
@@ -23,7 +23,8 @@ import {
  * The roster is every team with a deployment row for the SAME problem in the
  * same (tenant, event), sorted by teamId. Sorting is the race defence itself
  * (Issue #3053): whichever request materialises the state, `initialState(ctx)`
- * gets the same input. Status is deliberately not filtered -- dropping a
+ * gets the same input. Read-only projections of an absent run use a provisional
+ * index snapshot, which never materialises the namespace. Status is deliberately not filtered -- dropping a
  * mid-deploy team would make the roster depend on deploy timing, which is the
  * same race again.
  *
@@ -44,6 +45,8 @@ export interface EventRosterTarget {
   readonly knownTeamIds: readonly string[];
   /** Durable initialization cannot commit an incomplete roster after a failed query. */
   readonly requireComplete?: boolean;
+  /** Index snapshot for an ephemeral projection only; never use for a durable initializer. */
+  readonly readOnlyPreview?: boolean;
 }
 
 export interface EventRoster {
@@ -70,7 +73,11 @@ export async function resolveEventRoster(
   let rosterIncomplete: true | undefined;
   try {
     const repository = await resolveDeploymentsRepository(shared);
-    const orderedRows = await readAuthoritativeRoster(repository, target);
+    // A preview is not persisted, even when a no-op tick leaves the run absent.
+    // Defer per-deployment strong reads until an operation/tick initializes it.
+    const orderedRows = target.readOnlyPreview
+      ? [...(await repository.listByTenantAndEvent(target.tenantId, target.eventId))]
+      : await readAuthoritativeRoster(repository, target);
     // Deployment history can contain several jobs per team. Use the newest
     // creation deterministically; repository iteration order is not a contract.
     orderedRows.sort(
