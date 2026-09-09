@@ -315,9 +315,11 @@ describe("coordination-store", () => {
     expect(deleted).toEqual([
       "COORD#tn1#e1#problem-1#run-1/STATE",
       "COORD#tn1#e1/STATE",
+      "COORD#tn1#e1#problem-1#run-1/INITIALIZATION",
       "COORD#tn1#e1#problem-1#run-1/MATCHSECRET",
       "COORD#tn1#e1#problem-1#run-1/STATE",
       "COORD#tn1#e1/STATE",
+      "COORD#tn1#e1#problem-1#run-1/INITIALIZATION",
       "COORD#tn1#e1#problem-1#run-1/MATCHSECRET",
     ]);
   });

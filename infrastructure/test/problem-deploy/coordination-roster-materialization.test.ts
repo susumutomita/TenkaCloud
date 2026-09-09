@@ -62,7 +62,7 @@ function deployment(teamId: string, overrides: Partial<DeploymentRecord> = {}): 
   };
 }
 
-async function setup(backend: string) {
+async function setup(backend: string, tickOnRequest = false) {
   const ddb = makeFakeDdb();
   const sql = makeSqliteExecutor();
   const repository =
@@ -121,6 +121,7 @@ async function setup(backend: string) {
   const tick = vi.fn((state: State): State => ({ ...state, ticks: state.ticks + 1 }));
   const plugin: CoordinationPlugin<State, typeof op, State> = {
     initialState,
+    tickOnRequest,
     validateOp: (state, _teamId, action) =>
       state.teamIds.includes(action.targetTeamId)
         ? { ok: true }
@@ -163,6 +164,24 @@ async function setup(backend: string) {
         },
       ],
     });
+  const peer = () => {
+    const peerRepository =
+      backend === "DynamoDB"
+        ? new DynamoDbDeploymentsRepository(ddb, "Deployments")
+        : new SqlDeploymentsRepository(sql);
+    const peerStore = {
+      ...store,
+      runtime: { ...runtime, resolveDeploymentsRepository: async () => peerRepository },
+    };
+    return {
+      repository: peerRepository,
+      deps: {
+        ...deps,
+        store: peerStore,
+        resolveScope: makeCoordinationScopeResolver(peerStore, config),
+      },
+    };
+  };
   return {
     repository,
     deps,
@@ -177,12 +196,100 @@ async function setup(backend: string) {
     project,
     fetchArtifact,
     runTick,
+    peer,
   };
 }
 
 afterEach(() => vi.restoreAllMocks());
 
 describe.each(["DynamoDB", "SQL"])("roster failure before materialization: %s", (backend) => {
+  it("shares one 99-team initialization across independent operation and tick hosts", async () => {
+    const ctx = await setup(backend);
+    for (let i = 0; i < 97; i += 1) await ctx.repository.putDeployment(deployment(`team-${i}`));
+    const peer = ctx.peer();
+    const peerReads = vi.spyOn(peer.repository, "getDeployment");
+    const getMeta = ctx.repository.getDeployment.bind(ctx.repository);
+    const entered = Promise.withResolvers<undefined>();
+    const gate = Promise.withResolvers<undefined>();
+    const reads = vi.spyOn(ctx.repository, "getDeployment").mockImplementation(async (...args) => {
+      entered.resolve(undefined);
+      await gate.promise;
+      return getMeta(...args);
+    });
+    const winner = ctx.apply();
+    await entered.promise;
+    const others = await Promise.all(
+      Array.from({ length: 10 }, () =>
+        handleCoordinationOp(peer.deps, "login-bravo", op, at, key.problemId),
+      ),
+    );
+    expect(others).toEqual(Array.from({ length: 10 }, () => ({ kind: "conflict" })));
+    expect(
+      await handleCoordinationTickBatch(peer.deps, {
+        action: COORDINATION_TICK_ACTION,
+        nowIso: at,
+        targets: [{ ...key, moduleRef: key.problemId, eventNowMs: 60_000, teamIds: expectedTeams }],
+      }),
+    ).toEqual({ ticked: 1, written: 0 });
+    expect(peerReads).not.toHaveBeenCalled();
+    expect(ctx.initialState).not.toHaveBeenCalled();
+    gate.resolve(undefined);
+    expect((await winner).kind).toBe("ok");
+    expect(reads).toHaveBeenCalledTimes(99);
+    // A losing client retries against committed state without rediscovering the roster.
+    expect((await handleCoordinationOp(peer.deps, "login-bravo", op, at, key.problemId)).kind).toBe(
+      "ok",
+    );
+    expect(peerReads).not.toHaveBeenCalled();
+    expect(ctx.initialState).toHaveBeenCalledTimes(1);
+    expect((await readCoordinationState(ctx.store, scope))?.state).toMatchObject({ moves: 2 });
+  });
+
+  it("releases initialization after rejected operations and failed plugin loads", async () => {
+    const ctx = await setup(backend);
+    expect(
+      await handleCoordinationOp(
+        ctx.deps,
+        "login-alpha",
+        { ...op, targetTeamId: "absent" },
+        at,
+        key.problemId,
+      ),
+    ).toEqual({ kind: "rejected", error: "unknown_team" });
+    expect(await ctx.repository.readCoordinationState(scope)).toBeUndefined();
+    const peer = ctx.peer();
+    expect(
+      await handleCoordinationOp(
+        {
+          ...peer.deps,
+          importer: async () => {
+            throw new Error("fixture unavailable");
+          },
+        },
+        "login-alpha",
+        op,
+        at,
+        key.problemId,
+      ),
+    ).toEqual({ kind: "unavailable" });
+    expect(await ctx.repository.readCoordinationState(scope)).toBeUndefined();
+    expect((await ctx.apply()).kind).toBe("ok");
+  });
+
+  it("refuses a request snapshot from any different scope", async () => {
+    const ctx = await setup(backend);
+    await ctx.apply();
+    const row = await readCoordinationState(ctx.store, scope);
+    for (const dimension of ["tenantId", "eventId", "problemId", "runId"] as const) {
+      await expect(
+        readCoordinationState(ctx.store, scope, {
+          scope: { ...scope, [dimension]: "different" },
+          row,
+        }),
+      ).rejects.toThrow("Coordination snapshot scope mismatch");
+    }
+  });
+
   it.each([
     "2026-09-05T23:59:00.000Z",
     "2026-09-06T01:00:00.000Z",
@@ -360,27 +467,55 @@ describe.each(["DynamoDB", "SQL"])("roster failure before materialization: %s", 
     expect((await ctx.apply()).kind).toBe("ok");
     ctx.roster.mockClear();
     const metaReads = vi.spyOn(ctx.repository, "getDeployment");
+    const stateReads = vi.spyOn(ctx.repository, "readCoordinationState");
     const results = await Promise.all(
       teamIds.map((id) => handleCoordinationProjection(ctx.deps, `login-${id}`, key.problemId)),
     );
+    expect(stateReads).toHaveBeenCalledTimes(99);
+    await ctx.fetchArtifact();
+    expect(stateReads).toHaveBeenCalledTimes(100);
     expect(results.every((result) => result.kind === "ok")).toBe(true);
     expect(ctx.roster).not.toHaveBeenCalled();
     expect(metaReads).not.toHaveBeenCalled();
     expect(ctx.initialState).toHaveBeenCalledTimes(1);
   });
 
-  it("does not initialize a partial roster if state disappears after the scope probe", async () => {
+  it("does not recreate deleted state after a snapshot-based operation loses its write race", async () => {
     const ctx = await setup(backend);
     await ctx.apply();
-    const current = await ctx.repository.readCoordinationState(scope);
-    vi.spyOn(ctx.repository, "readCoordinationState")
-      .mockResolvedValueOnce(current)
-      .mockResolvedValueOnce(undefined);
+    const resolve = ctx.deps.resolveScope;
+    ctx.deps.resolveScope = async (...args) => {
+      const result = await resolve(...args);
+      await ctx.repository.deleteCoordinationState(scope);
+      return result;
+    };
     ctx.roster.mockClear();
-    expect(await ctx.project()).toEqual({ kind: "unavailable" });
+    expect(await ctx.apply()).toEqual({ kind: "unavailable" });
     expect(ctx.roster).not.toHaveBeenCalled();
     expect(ctx.initialState).toHaveBeenCalledTimes(1);
-    expect(ctx.write).toHaveBeenCalledTimes(1);
+    expect(await ctx.repository.readCoordinationState(scope)).toBeUndefined();
+  });
+
+  it("uses the snapshot for request ticks and reloads before projecting the updated state", async () => {
+    const ctx = await setup(backend, true);
+    await ctx.apply();
+    const reads = vi.spyOn(ctx.repository, "readCoordinationState");
+    expect(
+      (await handleCoordinationProjection(ctx.deps, "login-alpha", key.problemId, at)).kind,
+    ).toBe("ok");
+    expect(reads).toHaveBeenCalledTimes(2);
+    const state = await readCoordinationState(ctx.store, scope);
+    expect(state?.state).toMatchObject({ ticks: 2 });
+  });
+
+  it("reloads state on conflicting operations instead of replaying their initial snapshots", async () => {
+    const ctx = await setup(backend);
+    await ctx.apply();
+    expect((await Promise.all([ctx.apply(), ctx.apply()])).map((result) => result.kind)).toEqual([
+      "ok",
+      "ok",
+    ]);
+    expect((await readCoordinationState(ctx.store, scope))?.state).toMatchObject({ moves: 3 });
   });
 
   it("refuses an absent-state projection during roster failure, then shows the complete board", async () => {

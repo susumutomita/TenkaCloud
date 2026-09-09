@@ -1,3 +1,7 @@
+import {
+  acquireCoordinationInitialization,
+  releaseCoordinationInitialization,
+} from "./coordination-initialization.js";
 import { coordinationStateChanged } from "./coordination-state-changed.js";
 
 export { coordinationStateChanged } from "./coordination-state-changed.js";
@@ -11,7 +15,11 @@ import {
   type CoordinationTickTarget,
 } from "../shared/coordination-tick-contract.js";
 import type { CoordinationConfig } from "./coordination-handler.js";
-import { loadCoordinationPlugin, type PluginImporter } from "./coordination-plugin-loader.js";
+import {
+  type CoordinationPluginLoad,
+  loadCoordinationPlugin,
+  type PluginImporter,
+} from "./coordination-plugin-loader.js";
 import { resolveEventRoster } from "./coordination-roster.js";
 import {
   COORDINATION_SCORE_DELIVERY_BUDGET_MS,
@@ -21,6 +29,7 @@ import {
 } from "./coordination-scoring.js";
 import { pluginStateSchemaVersion, reconcileStateSchema } from "./coordination-state-schema.js";
 import {
+  type CoordinationStateRow,
   type CoordinationStateScope,
   type CoordinationStoreDeps,
   ensureCoordinationMatchSecret,
@@ -137,47 +146,55 @@ async function initializeAcceptedCoordinationReset(
     // A normal first writer may have won since the pointer read. Never replace its state.
     return false;
   }
-  const load = await loadCoordinationPlugin(deps.importer, target.moduleRef);
-  if (load.kind !== "ok") throw new Error(`Reset initialization plugin ${load.kind}`);
-  const roster = await resolveEventRoster(deps.store, {
-    ...key,
-    knownTeamIds: target.teamIds,
-    requireComplete: true,
-  });
-  if (!roster.teamIds.length) throw new Error("Reset initialization has no deployment roster");
-  const state = load.plugin.initialState({
-    eventId: target.eventId,
-    teamIds: roster.teamIds,
-    teamNames: roster.teamNames,
-    ...(roster.deploymentInputs ? { deploymentInputs: roster.deploymentInputs } : {}),
-    matchSecret: await ensureCoordinationMatchSecret(deps.store, scope, nowIso),
-  });
-  const pendingScores = coordinationScoreDelivery(
-    load.plugin,
-    state,
-    state,
-    { kind: "tick" },
-    pointer.startedAt,
-    true,
-  );
-  // Even plugins without teamScores need a durable state to consume the intent.
-  // The same transaction checks the intent, creates version 1, and clears it.
-  const written = await writeCoordinationState(
-    deps.store,
-    scope,
-    state,
-    0,
-    nowIso,
-    pluginStateSchemaVersion(load.schema),
-    pendingScores,
-    true,
-  );
-  if (written.kind !== "ok") {
-    console.warn(`[coordination-dispatcher] reset initialization ${written.kind}`, key);
-    return false;
+  const lease = await acquireCoordinationInitialization(deps.store, scope);
+  if (!lease) return false;
+  try {
+    if (await readCoordinationState(deps.store, scope)) return false;
+    const load = await loadCoordinationPlugin(deps.importer, target.moduleRef);
+    if (load.kind !== "ok") throw new Error(`Reset initialization plugin ${load.kind}`);
+    const roster = await resolveEventRoster(deps.store, {
+      ...key,
+      knownTeamIds: target.teamIds,
+      requireComplete: true,
+    });
+    if (!roster.teamIds.length) throw new Error("Reset initialization has no deployment roster");
+    const state = load.plugin.initialState({
+      eventId: target.eventId,
+      teamIds: roster.teamIds,
+      teamNames: roster.teamNames,
+      ...(roster.deploymentInputs ? { deploymentInputs: roster.deploymentInputs } : {}),
+      matchSecret: await ensureCoordinationMatchSecret(deps.store, scope, nowIso),
+    });
+    const pendingScores = coordinationScoreDelivery(
+      load.plugin,
+      state,
+      state,
+      { kind: "tick" },
+      pointer.startedAt,
+      true,
+    );
+    // Even plugins without teamScores need a durable state to consume the intent.
+    // The same transaction checks the intent, creates version 1, and clears it.
+    const written = await writeCoordinationState(
+      deps.store,
+      scope,
+      state,
+      0,
+      nowIso,
+      pluginStateSchemaVersion(load.schema),
+      pendingScores,
+      true,
+      lease.owner,
+    );
+    if (written.kind !== "ok") {
+      console.warn(`[coordination-dispatcher] reset initialization ${written.kind}`, key);
+      return false;
+    }
+    await tryDeliverCoordinationScores(deps.store, scope, { state, version: 1, pendingScores });
+    return true;
+  } finally {
+    await releaseCoordinationInitialization(deps.store, lease);
   }
-  await tryDeliverCoordinationScores(deps.store, scope, { state, version: 1, pendingScores });
-  return true;
 }
 
 /** A finished event may flush durable scoring, but must not load/advance the plugin or extend TTL. */
@@ -246,14 +263,45 @@ async function tickCoordinationEvent(
     ...runKey,
     runId,
   };
-  const existing = await readCoordinationState(deps.store, scope);
+  let existing = await readCoordinationState(deps.store, scope);
+  const lease = existing ? undefined : await acquireCoordinationInitialization(deps.store, scope);
+  if (!existing && !lease) return false;
+  try {
+    if (lease) existing = await readCoordinationState(deps.store, scope);
+    return await applyLoadedCoordinationTick(deps, target, nowIso, {
+      scope,
+      existing,
+      load,
+      scoreBudgetMs,
+      initializationOwner: lease?.owner,
+    });
+  } finally {
+    if (lease) await releaseCoordinationInitialization(deps.store, lease);
+  }
+}
+
+async function applyLoadedCoordinationTick(
+  deps: CoordinationTickDeps,
+  target: CoordinationTickTarget,
+  nowIso: string,
+  work: {
+    scope: CoordinationStateScope;
+    existing: CoordinationStateRow | undefined;
+    load: Exclude<CoordinationPluginLoad, { kind: "unavailable" }>;
+    scoreBudgetMs: number;
+    initializationOwner?: string;
+  },
+): Promise<boolean> {
+  const { scope, existing, load, scoreBudgetMs, initializationOwner } = work;
   // A stalled delivery must not age out a live match. Refresh before delivery:
   // both a partial result and a thrown backend error defer this tick.
   await refreshCoordinationTtl(deps, target, scope, existing, nowIso);
   // Cold plugin loading and namespace resolution must not consume every retry's delivery slice.
   const scoreDeadlineMs = Date.now() + scoreBudgetMs;
   if (
-    !(await deliverCoordinationScores(deps.store, scope, existing, { deadlineMs: scoreDeadlineMs }))
+    !(await deliverCoordinationScores(deps.store, scope, existing, {
+      deadlineMs: scoreDeadlineMs,
+    }))
   )
     return false;
   if (load.kind === "invalid_schema") {
@@ -336,6 +384,8 @@ async function tickCoordinationEvent(
     nowIso,
     pluginStateSchemaVersion(schema),
     pendingScores,
+    false,
+    initializationOwner,
   );
   if (written.kind === "conflict") {
     // 並行 op が version race に勝った (= applyOp が先に書いた)。 lost-update を作らず次 tick で

@@ -105,6 +105,7 @@ function fakeDdb(opts: {
    */
   budget?: { backend: "dynamodb" | "pure"; maxBytes: number; warnBytes: number };
 }): FakeDdb {
+  const leases = new Map<string, Record<string, unknown>>();
   const puts: FakePut[] = [];
   const envelopePuts: FakeEnvelopePut[] = [];
   const secretPuts: PutCommand[] = [];
@@ -156,6 +157,21 @@ function fakeDdb(opts: {
   };
 
   const handlePut = (cmd: PutCommand) => {
+    const item = cmd.input.Item;
+    if (item?.SK === "INITIALIZATION") {
+      if (
+        !evalConditionExpression(
+          cmd.input.ConditionExpression ?? "",
+          leases.get(String(item.PK)) ?? {},
+          cmd.input.ExpressionAttributeNames,
+          cmd.input.ExpressionAttributeValues,
+        )
+      ) {
+        throw new ConditionalCheckFailedException({ $metadata: {}, message: "lease conflict" });
+      }
+      leases.set(String(item.PK), item);
+      return {};
+    }
     // A `conflict` fixture models a STATE version race and must not also
     // reject the mint, which is a different row.
     if (isSecret((cmd.input as { Item?: { SK?: string } }).Item?.SK)) {
@@ -170,12 +186,19 @@ function fakeDdb(opts: {
     return {};
   };
 
+  const conditionRow = (
+    entry: NonNullable<TransactWriteCommand["input"]["TransactItems"]>[number],
+  ) => {
+    if (entry.ConditionCheck?.Key?.SK === "INITIALIZATION")
+      return leases.get(String(entry.ConditionCheck.Key.PK));
+    return entry.ConditionCheck ? opts.runPointer : opts.getItem;
+  };
   const handleTransaction = (cmd: TransactWriteCommand) => {
     const entries = cmd.input.TransactItems ?? [];
     const reasons = entries.map((entry) => {
       const operation = entry.ConditionCheck ?? entry.Put;
       if (!operation) throw new Error("unexpected transaction operation");
-      const stored = entry.ConditionCheck ? opts.runPointer : opts.getItem;
+      const stored = conditionRow(entry);
       const valid =
         !(entry.Put && opts.conflict) &&
         evalConditionExpression(
@@ -203,7 +226,31 @@ function fakeDdb(opts: {
   // [Issue #3123] The TTL refresh. Recorded rather than folded into `puts`:
   // the distinction the tests care about is exactly that it is not a write of
   // `state`/`version`.
+  const releaseLease = (cmd: UpdateCommand) => {
+    if (cmd.input.Key?.SK === "INITIALIZATION") {
+      const key = String(cmd.input.Key.PK);
+      if (
+        !evalConditionExpression(
+          cmd.input.ConditionExpression ?? "",
+          leases.get(key) ?? {},
+          cmd.input.ExpressionAttributeNames,
+          cmd.input.ExpressionAttributeValues,
+        )
+      ) {
+        throw new ConditionalCheckFailedException({ $metadata: {}, message: "wrong lease owner" });
+      }
+      const item = leases.get(key);
+      if (item) {
+        delete item.ownerToken;
+        delete item.leaseUntilMs;
+      }
+      return {};
+    }
+    throw new Error("unexpected lease update");
+  };
+
   const handleUpdate = (cmd: UpdateCommand) => {
+    if (cmd.input.Key?.SK === "INITIALIZATION") return releaseLease(cmd);
     if (opts.updateThrows !== undefined) throw opts.updateThrows;
     updates.push(cmd);
     return {};

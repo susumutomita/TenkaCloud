@@ -79,6 +79,12 @@ export interface CoordinationStateRow {
   readonly pendingScores?: CoordinationScoreDelivery;
 }
 
+/** A request-local read, bound to exactly one namespace. Never reused on write retries. */
+export interface CoordinationStateSnapshot {
+  readonly scope: CoordinationStateScope;
+  readonly row: CoordinationStateRow | undefined;
+}
+
 /** store が必要とする DDB client の最小 shape (= test で容易に mock)。 */
 export interface CoordinationStoreDeps {
   /** [#2527 Slice 4] Injected control-data runtime (from the Lambda entrypoint's instance). */
@@ -102,7 +108,15 @@ export interface CoordinationStoreDeps {
 export async function readCoordinationState(
   deps: CoordinationStoreDeps,
   scope: CoordinationStateScope,
+  snapshot?: CoordinationStateSnapshot,
 ): Promise<CoordinationStateRow | undefined> {
+  if (snapshot) {
+    for (const key of ["tenantId", "eventId", "problemId", "runId"] as const) {
+      if (snapshot.scope[key] !== scope[key])
+        throw new Error("Coordination snapshot scope mismatch");
+    }
+    return snapshot.row;
+  }
   const repository: DeploymentsCoordinationPort = await resolveDeploymentsRepository(deps);
   const record = await repository.readCoordinationState(scope);
   if (!record) return undefined;
@@ -198,6 +212,7 @@ export async function writeCoordinationState(
   stateSchemaVersion = 1,
   pendingScores?: CoordinationScoreDelivery,
   requirePendingInitialization = false,
+  initializationOwner?: string,
 ): Promise<WriteCoordinationOutcome> {
   const repository: DeploymentsCoordinationPort = await resolveDeploymentsRepository(deps);
   const payload: unknown =
@@ -225,6 +240,7 @@ export async function writeCoordinationState(
     nowIso,
     coordinationStateExpiresAt(parseNowMs(nowIso)),
     requirePendingInitialization,
+    initializationOwner,
   );
   return outcome.outcome === "updated" ? { kind: "ok" } : { kind: "conflict" };
 }

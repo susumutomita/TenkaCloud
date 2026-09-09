@@ -62,7 +62,7 @@ function readDocumentPath(item: Item, token: string, names: Names): unknown {
 }
 
 function tokenize(expr: string): string[] {
-  return expr.match(/[#:]?[A-Za-z0-9_.]+|<>|<|=|\(|\)|,/g) ?? [];
+  return expr.match(/[#:]?[A-Za-z0-9_.]+|<>|<=|<|=|\(|\)|,/g) ?? [];
 }
 
 function deepEqual(a: unknown, b: unknown): boolean {
@@ -137,6 +137,7 @@ export function evalConditionExpression(
     const op = next();
     if (op === "=") return operandValue(left) === operandValue(next());
     if (op === "<>") return operandValue(left) !== operandValue(next());
+    if (op === "<=") return Number(operandValue(left)) <= Number(operandValue(next()));
     if (op === "<") return Number(operandValue(left)) < Number(operandValue(next()));
     if (op === "IN") {
       expect("(");

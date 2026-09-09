@@ -21,6 +21,7 @@ import {
   type StateSchemaMismatchReason,
 } from "./coordination-state-schema.js";
 import {
+  type CoordinationStateSnapshot,
   type CoordinationStoreDeps,
   ensureCoordinationMatchSecret,
   readCoordinationMatchSecret,
@@ -51,6 +52,8 @@ export interface CoordinationDispatchInput<Op> {
   readonly ctx: CoordinationContext;
   /** Host-only marker: ctx is incomplete and cannot initialize a match. */
   readonly rosterIncomplete?: true;
+  readonly stateSnapshot?: CoordinationStateSnapshot;
+  readonly initializationOwner?: string;
   /** projection が失敗 / 未初期化のときに返す安全な既定値 (= 機密を出さない)。 */
   readonly fallbackProjection: unknown;
   readonly nowIso: string;
@@ -143,6 +146,9 @@ export async function dispatchCoordinationOp<State, Op, Projection>(
       input,
       options.schema ?? plugin,
       scoreDeadlineMs,
+      attempt === 0 && !(plugin.tickOnRequest === true && input.requestTick)
+        ? input.stateSnapshot
+        : undefined,
     );
     if (outcome.kind !== "conflict") return outcome;
     if (attempt + 1 >= attempts) return outcome;
@@ -243,8 +249,9 @@ async function attemptDispatch<State, Op, Projection>(
   input: CoordinationDispatchInput<Op>,
   schema: CoordinationSchemaDeclaration<State>,
   scoreDeadlineMs: number,
+  snapshot?: CoordinationStateSnapshot,
 ): Promise<CoordinationDispatchOutcome> {
-  const existing = await readCoordinationState(store, input.scope);
+  const existing = await readCoordinationState(store, input.scope, snapshot);
   if (
     !(await deliverCoordinationScores(store, input.scope, existing, {
       deadlineMs: scoreDeadlineMs,
@@ -294,6 +301,8 @@ async function attemptDispatch<State, Op, Projection>(
     // 持ち上げた) でも、 未初期化からの初回 write でも同じ。 旧版のまま書く理由が無い。
     pluginStateSchemaVersion(schema),
     pendingScores,
+    false,
+    input.initializationOwner,
   );
   if (written.kind === "conflict") return { kind: "conflict" };
   if (written.kind === "too_large") {
@@ -347,6 +356,7 @@ export async function projectCoordinationForTeam<State, Op, Projection>(
     readonly teamId: string;
     readonly ctx: CoordinationContext;
     readonly rosterIncomplete?: true;
+    readonly stateSnapshot?: CoordinationStateSnapshot;
     readonly fallbackProjection: unknown;
     readonly requestTick?: { readonly eventNowMs: number; readonly nowIso: string };
   },
@@ -356,7 +366,11 @@ export async function projectCoordinationForTeam<State, Op, Projection>(
   if (!isContextConsistent(input)) return { kind: "ok", projection: input.fallbackProjection };
   const clockResult = await advanceRequestTick(store, plugin, input, schema);
   if (clockResult) return clockResult;
-  const existing = await readCoordinationState(store, input.scope);
+  const existing = await readCoordinationState(
+    store,
+    input.scope,
+    !(plugin.tickOnRequest === true && input.requestTick) ? input.stateSnapshot : undefined,
+  );
   // Recovery must remain possible after the event window closes and scheduled ticks stop.
   // This only delivers an already committed transition; it does not advance the game or TTL.
   if (existing?.pendingScores) await tryDeliverCoordinationScores(store, input.scope, existing);
@@ -416,6 +430,7 @@ async function advanceRequestTick<State, Op, Projection>(
   plugin: CoordinationPlugin<State, Op, Projection>,
   input: {
     readonly scope: CoordinationStateScope;
+    readonly stateSnapshot?: CoordinationStateSnapshot;
     readonly requestTick?: { readonly eventNowMs: number; readonly nowIso: string };
   },
   schema: CoordinationSchemaDeclaration<State>,
@@ -428,7 +443,15 @@ async function advanceRequestTick<State, Op, Projection>(
   if (!Number.isFinite(clock.eventNowMs) || clock.eventNowMs < 0) return { kind: "unavailable" };
   const deadlineMs = Date.now() + COORDINATION_SCORE_DELIVERY_BUDGET_MS;
   for (let attempt = 0; attempt < DEFAULT_WRITE_ATTEMPTS; attempt++) {
-    const outcome = await attemptRequestTick(store, plugin, input.scope, clock, schema, deadlineMs);
+    const outcome = await attemptRequestTick(
+      store,
+      plugin,
+      input.scope,
+      clock,
+      schema,
+      deadlineMs,
+      attempt === 0 ? input.stateSnapshot : undefined,
+    );
     if (outcome?.kind !== "conflict") return outcome;
     await jitteredBackoff(attempt);
   }
@@ -442,11 +465,12 @@ async function attemptRequestTick<State, Op, Projection>(
   clock: { readonly eventNowMs: number; readonly nowIso: string },
   schema: CoordinationSchemaDeclaration<State>,
   deadlineMs: number,
+  snapshot?: CoordinationStateSnapshot,
 ): Promise<
   | Exclude<CoordinationDispatchOutcome, { readonly kind: "ok" } | { readonly kind: "rejected" }>
   | undefined
 > {
-  const existing = await readCoordinationState(store, scope);
+  const existing = await readCoordinationState(store, scope, snapshot);
   // A read must not initialize or reopen a match.
   if (!existing) return undefined;
   if (!(await deliverCoordinationScores(store, scope, existing, { deadlineMs })))

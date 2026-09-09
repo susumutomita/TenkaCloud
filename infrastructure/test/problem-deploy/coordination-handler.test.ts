@@ -518,6 +518,10 @@ describe("makeCoordinationScopeResolver", () => {
     expect(await resolve("key")).toEqual({
       kind: "scope",
       scope: {
+        stateSnapshot: {
+          scope: { tenantId: "tn1", eventId: "e1", problemId: "p1", runId: "default" },
+          row: undefined,
+        },
         // [Issue #3123] `runId` is NOT an alias of `problemId`: aliasing them
         // would make the two key dimensions indistinguishable, and would collide
         // the moment a real run id ever equalled a problem id. The platform

@@ -169,6 +169,10 @@ export abstract class DeploymentsRepositoryFacade implements DeploymentsReposito
     (...args) => this.parts.composite.forEachCompositeTeardownPendingPage(...args);
 
   // ── DeploymentsCoordinationPort ─────────────────────────────────
+  readonly acquireCoordinationInitialization: DeploymentsCoordinationPort["acquireCoordinationInitialization"] =
+    (...args) => this.parts.coordination.acquireCoordinationInitialization(...args);
+  readonly releaseCoordinationInitialization: DeploymentsCoordinationPort["releaseCoordinationInitialization"] =
+    (...args) => this.parts.coordination.releaseCoordinationInitialization(...args);
   readonly publishCoordinationScore: DeploymentsCoordinationPort["publishCoordinationScore"] = (
     ...args
   ) => this.parts.coordination.publishCoordinationScore(...args);

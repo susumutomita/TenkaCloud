@@ -84,7 +84,7 @@ describe("LibsqlExecutor", () => {
     expect(batch).toHaveBeenCalledTimes(1);
     const [statements, mode] = batch.mock.calls[0] ?? [];
     expect(mode).toBe("write");
-    expect(statements).toHaveLength(37);
+    expect(statements).toHaveLength(38);
     expect(statements.map((entry: { sql: string }) => entry.sql)).toEqual(
       expect.arrayContaining([
         expect.stringContaining("CREATE TABLE IF NOT EXISTS events"),
@@ -103,6 +103,7 @@ describe("LibsqlExecutor", () => {
         // keyed by (tenant, event, problem) with no run column, because it is
         // what says which run is current.
         expect.stringContaining("CREATE TABLE IF NOT EXISTS coordination_run"),
+        expect.stringContaining("CREATE TABLE IF NOT EXISTS coordination_initialization_lease"),
         // [Issue #3123] The coordination table is now keyed by
         // tenant x event x problem x run. The legacy table is still created and
         // copied from in the same batch, so the migration is idempotent on
@@ -164,7 +165,13 @@ describe("LibsqlExecutor", () => {
       },
     } as unknown as Client;
     await initializeControlDataSchema(client);
+    db.exec(
+      "INSERT INTO coordination_initialization_lease VALUES ('tenant','event','battle','r-new','owner',30000,30)",
+    );
     await initializeControlDataSchema(client);
+    expect(
+      db.prepare("SELECT owner_token, lease_until FROM coordination_initialization_lease").get(),
+    ).toEqual({ owner_token: "owner", lease_until: 30000 });
     expect(
       db
         .prepare("SELECT run_id, history, pending_initialization, closed FROM coordination_run")

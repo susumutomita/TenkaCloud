@@ -26,9 +26,23 @@ newest deployment per team is read, with at most eight reads in flight; duplicat
 index entries and superseded deployment history do not add reads. Read-only
 previews of an absent run use only the newest index row per team, without per-deployment reads;
 that snapshot can lag and is never persisted. The first write resolves fresh
-inputs independently. Operations outside the active event window skip roster reads
+inputs independently. A shared, 30-second initialization lease admits one writer
+per tenant/event/problem/run before these META reads. Operations, scheduled ticks
+and reset initialization share it across dispatcher instances; concurrent operations
+return the existing retryable conflict response, while a tick retries on its next pass.
+The owner releases the lease on completion or error. Expiry permits takeover after
+a crashed invocation, and the first state write atomically checks the owner token
+so an old owner cannot overwrite its successor. Teardown revokes the lease, and
+the existing retention sweep also removes expired leases. This uses one temporary
+row in the existing DynamoDB table, or the idempotently created
+`coordination_initialization_lease` SQL table; no AWS resource or permission is added.
+
+Operations outside the active event window skip roster reads
 and are rejected using the server clock. Existing-run requests check the scoped state and skip
-roster discovery and per-deployment reads. If state disappears after that check,
+roster discovery and per-deployment reads. The dispatcher reuses that request's
+scope-checked state snapshot for the first read/tick, and reloads after a tick or
+write conflict; ordinary projection polling therefore reads state only once.
+If state disappears after that check,
 initialization waits for a request that loads the complete roster. A missing or
 mismatched row defers initialization. This does not make index discovery strongly
 consistent: wait for all deployments to be discoverable.
