@@ -1221,9 +1221,6 @@
   "infrastructure/lib/problem-deploy/handlers/participant-handler/lookup.ts": {
     "@typescript-eslint/consistent-type-assertions": {
       "count": 1
-    },
-    "@typescript-eslint/no-dynamic-delete": {
-      "count": 2
     }
   },
   "infrastructure/lib/problem-deploy/handlers/participant-handler/score-events.ts": {
@@ -2659,11 +2656,6 @@
     }
   },
   "infrastructure/test/scripts/delete-battles-account-check.test.ts": {
-    "sonarjs/no-os-command-from-path": {
-      "count": 1
-    }
-  },
-  "infrastructure/test/scripts/deploy-stack-recovery.test.ts": {
     "sonarjs/no-os-command-from-path": {
       "count": 1
     }

@@ -42,6 +42,55 @@ import type {
 export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationPort {
   constructor(private readonly core: DynamoDbDeploymentsCore) {}
 
+  async acquireCoordinationInitialization(
+    scope: CoordinationStateScope,
+    owner: string,
+    nowMs: number,
+    untilMs: number,
+  ): Promise<DeploymentMutationOutcome> {
+    try {
+      await this.core.ddb.send(
+        new PutCommand({
+          TableName: this.core.tableName,
+          Item: {
+            PK: coordinationPk(scope),
+            SK: "INITIALIZATION",
+            ownerToken: owner,
+            leaseUntilMs: untilMs,
+            expiresAt: Math.ceil(untilMs / 1000),
+          },
+          ConditionExpression: "attribute_not_exists(ownerToken) OR leaseUntilMs <= :now",
+          ExpressionAttributeValues: { ":now": nowMs },
+        }),
+      );
+      return { outcome: "updated" };
+    } catch (error) {
+      if (isConditionalCheckFailed(error)) return { outcome: "conflict" };
+      throw error;
+    }
+  }
+
+  async releaseCoordinationInitialization(
+    scope: CoordinationStateScope,
+    owner: string,
+  ): Promise<void> {
+    try {
+      await this.core.ddb.send(
+        new UpdateCommand({
+          TableName: this.core.tableName,
+          Key: { PK: coordinationPk(scope), SK: "INITIALIZATION" },
+          // The dispatcher has UpdateItem, deliberately not DeleteItem. Leave
+          // the TTL row for the sweep while making it immediately acquirable.
+          UpdateExpression: "REMOVE ownerToken, leaseUntilMs",
+          ConditionExpression: "ownerToken = :owner",
+          ExpressionAttributeValues: { ":owner": owner },
+        }),
+      );
+    } catch (error) {
+      if (!isConditionalCheckFailed(error)) throw error;
+    }
+  }
+
   async publishCoordinationScore(
     scope: CoordinationStateScope,
     version: number,
@@ -259,9 +308,22 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
     at: string,
     expiresAt: number,
     requirePendingInitialization = false,
+    initializationOwner?: string,
   ): Promise<DeploymentMutationOutcome> {
     return this.core.transactWrite({
       TransactItems: [
+        ...(expectedVersion === 0 && initializationOwner
+          ? [
+              {
+                ConditionCheck: {
+                  TableName: this.core.tableName,
+                  Key: { PK: coordinationPk(scope), SK: "INITIALIZATION" },
+                  ConditionExpression: "ownerToken = :owner",
+                  ExpressionAttributeValues: { ":owner": initializationOwner },
+                },
+              },
+            ]
+          : []),
         expectedVersion === 0 &&
         (scope.runId !== DEFAULT_COORDINATION_RUN_ID || requirePendingInitialization)
           ? {
@@ -398,6 +460,12 @@ export class DynamoDbDeploymentsCoordination implements DeploymentsCoordinationP
       new DeleteCommand({
         TableName: this.core.tableName,
         Key: { PK: preScopeCoordinationPk(scope.tenantId, scope.eventId), SK: COORD_STATE_SK },
+      }),
+    );
+    await this.core.ddb.send(
+      new DeleteCommand({
+        TableName: this.core.tableName,
+        Key: { PK: coordinationPk(scope), SK: "INITIALIZATION" },
       }),
     );
     // [Issue #3133] The secret goes with the match it belongs to. Leaving it

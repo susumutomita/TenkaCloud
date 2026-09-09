@@ -1,3 +1,4 @@
+import { GetCommand } from "@aws-sdk/lib-dynamodb";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resolveEventRoster } from "../../lib/problem-deploy/handlers/participant-handler/coordination-roster.js";
 import {
@@ -23,6 +24,258 @@ describe("resolveEventRoster", () => {
     warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
   });
   afterEach(() => warnSpy.mockRestore());
+
+  it.each([
+    "{broken",
+    "null",
+    "42",
+    '"text"',
+    "false",
+    " ",
+    '{"CoordinationPrivateMaterial":42}',
+    "[null]",
+    '[{"OutputKey":"CoordinationPrivateMaterial"}]',
+    '[{"OutputKey":42,"OutputValue":"value"}]',
+  ])("defers initialization for present malformed outputs: %s", async (stackOutputs) => {
+    const shared = fakeParticipantSharedWithItems([row({ teamId: "t1", stackOutputs })]);
+    await expect(
+      resolveEventRoster(shared, { ...target, knownTeamIds: ["t1"], requireComplete: true }),
+    ).rejects.toThrow("Malformed deployment outputs");
+    expect(await resolveEventRoster(shared, { ...target, knownTeamIds: ["t1"] })).toMatchObject({
+      rosterIncomplete: true,
+    });
+  });
+
+  it.each([
+    undefined,
+    "",
+    "{}",
+    "[]",
+  ])("preserves valid absent or empty outputs: %s", async (stackOutputs) => {
+    const roster = await resolveEventRoster(
+      fakeParticipantSharedWithItems([row({ teamId: "t1", stackOutputs })]),
+      { ...target, knownTeamIds: ["t1"], requireComplete: true },
+    );
+    expect(roster.rosterIncomplete).toBeUndefined();
+    expect(roster.deploymentInputs).toBeUndefined();
+  });
+
+  it.each([
+    false,
+    true,
+  ])("previews only the newest outputs, including malformed history (reversed: %s)", async (reversed) => {
+    const rows = [
+      row({ teamId: "t1", jobId: "old", createdAt: "2026-09-01", stackOutputs: "{broken" }),
+      row({
+        teamId: "t1",
+        jobId: "new",
+        createdAt: "2026-09-02",
+        stackOutputs: '{"CoordinationSetting":"current"}',
+      }),
+    ];
+    const args = { ...target, knownTeamIds: ["t1"], readOnlyPreview: true };
+    const shared = fakeParticipantSharedWithItems(reversed ? [...rows].reverse() : rows);
+    expect(await resolveEventRoster(shared, args)).toEqual({
+      teamIds: ["t1"],
+      teamNames: {},
+      deploymentInputs: { t1: { CoordinationSetting: "current" } },
+    });
+    // A corrupt current row must still fail closed instead of reviving old values.
+    const corruptCurrent = fakeParticipantSharedWithItems([
+      ...rows,
+      row({ teamId: "t1", jobId: "newest", createdAt: "2026-09-03", stackOutputs: "{broken" }),
+    ]);
+    expect(await resolveEventRoster(corruptCurrent, args)).toMatchObject({
+      rosterIncomplete: true,
+    });
+  });
+
+  it("accepts the CloudFormation output array format", async () => {
+    const roster = await resolveEventRoster(
+      fakeParticipantSharedWithItems([
+        row({
+          teamId: "t1",
+          stackOutputs: JSON.stringify([
+            { OutputKey: "CoordinationSetting", OutputValue: "on", Description: "fixture" },
+          ]),
+        }),
+      ]),
+      { ...target, knownTeamIds: ["t1"], requireComplete: true },
+    );
+    expect(roster.deploymentInputs).toEqual({ t1: { CoordinationSetting: "on" } });
+  });
+
+  it("only passes reserved outputs from the same tenant, event and problem to the plugin", async () => {
+    const roster = await resolveEventRoster(
+      fakeParticipantSharedWithItems([
+        row({
+          teamId: "t1",
+          stackOutputs: JSON.stringify({
+            CoordinationPrivateMaterial: "fixture",
+            CoordinationSetting: "on",
+            PublicUrl: "https://example.test",
+          }),
+        }),
+        row({
+          teamId: "t2",
+          problemId: "other",
+          stackOutputs: JSON.stringify({ CoordinationPrivateMaterial: "other" }),
+        }),
+      ]),
+      { ...target, knownTeamIds: ["t1"] },
+    );
+    expect(roster.deploymentInputs).toEqual({
+      t1: { CoordinationPrivateMaterial: "fixture", CoordinationSetting: "on" },
+    });
+  });
+
+  it("uses the newest deployment inputs regardless of repository iteration order", async () => {
+    const old = row({
+      teamId: "t1",
+      jobId: "old",
+      createdAt: "2026-09-01",
+      stackOutputs: JSON.stringify({ CoordinationPrivateMaterial: "old" }),
+    });
+    const current = row({
+      teamId: "t1",
+      jobId: "new",
+      createdAt: "2026-09-02",
+      stackOutputs: JSON.stringify({ CoordinationPrivateMaterial: "current" }),
+    });
+    for (const rows of [
+      [old, current],
+      [current, old],
+    ]) {
+      const roster = await resolveEventRoster(fakeParticipantSharedWithItems(rows), {
+        ...target,
+        knownTeamIds: ["t1"],
+      });
+      expect(roster.deploymentInputs?.t1).toEqual({ CoordinationPrivateMaterial: "current" });
+    }
+    const pending = { ...current, stackOutputs: undefined };
+    const roster = await resolveEventRoster(fakeParticipantSharedWithItems([pending, old]), {
+      ...target,
+      knownTeamIds: ["t1"],
+    });
+    expect(roster.deploymentInputs).toBeUndefined();
+  });
+
+  it("refuses to initialize from an indexed deployment with no job ID", async () => {
+    const send = vi.fn(async () => ({ Items: [row({ teamId: "t1" })] }));
+    await expect(
+      resolveEventRoster(fakeParticipantShared(send), {
+        ...target,
+        knownTeamIds: ["t1"],
+        requireComplete: true,
+      }),
+    ).rejects.toThrow("no job ID");
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it("refreshes stale index values from a strongly consistent META read", async () => {
+    const current = row({
+      teamId: "t1",
+      jobId: "job1",
+      stackOutputs: JSON.stringify({ CoordinationPrivateMaterial: "current" }),
+    });
+    const send = vi.fn(async (cmd: unknown) => {
+      if (cmd instanceof GetCommand) return { Item: current };
+      return { Items: [{ ...current, stackOutputs: undefined }] };
+    });
+    const roster = await resolveEventRoster(fakeParticipantShared(send), {
+      ...target,
+      knownTeamIds: ["t1"],
+      requireComplete: true,
+    });
+    expect(roster.deploymentInputs).toEqual({ t1: { CoordinationPrivateMaterial: "current" } });
+    const reads = send.mock.calls
+      .map(([cmd]) => cmd)
+      .filter((cmd): cmd is GetCommand => cmd instanceof GetCommand);
+    expect(reads.map((cmd) => cmd.input)).toEqual([
+      {
+        TableName: "Deployments",
+        Key: { PK: "DEPLOYMENT#job1", SK: "META" },
+        ConsistentRead: true,
+      },
+    ]);
+  });
+
+  it("reads only 99 current deployments with bounded parallelism despite duplicate history", async () => {
+    vi.useFakeTimers();
+    try {
+      const current = Array.from({ length: 99 }, (_, i) =>
+        row({
+          teamId: `team-${i}`,
+          jobId: `current-${i}`,
+          createdAt: "2026-09-03",
+          stackOutputs: JSON.stringify({ CoordinationPrivateMaterial: `fixture-${i}` }),
+        }),
+      );
+      const indexed = current
+        .flatMap((entry, i) => [
+          entry,
+          { ...entry, jobId: `old-${i}`, createdAt: "2026-09-01" },
+          entry,
+          { ...entry, jobId: `older-${i}`, createdAt: "2026-08-01" },
+        ])
+        .reverse();
+      let active = 0;
+      let peak = 0;
+      const send = vi.fn(async (cmd: unknown) => {
+        if (!(cmd instanceof GetCommand)) return { Items: indexed };
+        active += 1;
+        peak = Math.max(peak, active);
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        active -= 1;
+        // Old META rows are gone. Attempting to refresh history would fail.
+        return { Item: current.find((entry) => cmd.input.Key?.PK === `DEPLOYMENT#${entry.jobId}`) };
+      });
+      const started = Date.now();
+      const result = resolveEventRoster(fakeParticipantShared(send), {
+        ...target,
+        knownTeamIds: [],
+        requireComplete: true,
+      });
+      await vi.runAllTimersAsync();
+      const roster = await result;
+      expect(roster.teamIds).toHaveLength(99);
+      expect(Object.keys(roster.deploymentInputs ?? {})).toHaveLength(99);
+      const reads = send.mock.calls.map(([cmd]) => cmd).filter((cmd) => cmd instanceof GetCommand);
+      expect(reads).toHaveLength(99);
+      expect(reads.every((cmd) => cmd.input.ConsistentRead === true)).toBe(true);
+      expect(peak).toBe(8);
+      expect(Date.now() - started).toBe(1_300);
+      expect(active).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    undefined,
+    { tenantId: "another-tenant" },
+    { eventId: "another-event" },
+    { problemId: "another-problem" },
+    { teamId: "another-team" },
+  ])("defers initialization if the authoritative deployment is missing or mismatched: %j", async (overrides) => {
+    const indexed = row({
+      teamId: "t1",
+      jobId: "job1",
+      stackOutputs: JSON.stringify({ CoordinationPrivateMaterial: "stale" }),
+    });
+    const send = vi.fn(async (cmd: unknown) =>
+      cmd instanceof GetCommand
+        ? { Item: overrides ? { ...indexed, ...overrides } : undefined }
+        : { Items: [indexed] },
+    );
+    const shared = fakeParticipantShared(send);
+    await expect(
+      resolveEventRoster(shared, { ...target, knownTeamIds: ["t1"], requireComplete: true }),
+    ).rejects.toThrow("missing or no longer belongs");
+    const existing = await resolveEventRoster(shared, { ...target, knownTeamIds: ["t1"] });
+    expect(existing.rosterIncomplete).toBe(true);
+    expect(existing.deploymentInputs).toBeUndefined();
+  });
 
   it("should union the rows' teams with the known ids, sorted, whatever their status", async () => {
     const roster = await resolveEventRoster(

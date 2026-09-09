@@ -44,6 +44,42 @@ export const HAS_PENDING_COORDINATION_SCORES_SQL = `COALESCE(
 export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
   constructor(private readonly core: SqlDeploymentsCore) {}
 
+  async acquireCoordinationInitialization(
+    scope: CoordinationStateScope,
+    owner: string,
+    nowMs: number,
+    untilMs: number,
+  ): Promise<DeploymentMutationOutcome> {
+    const result = await this.core.sql.run(
+      `INSERT INTO coordination_initialization_lease
+      (tenant_id, event_id, problem_id, run_id, owner_token, lease_until, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(tenant_id, event_id, problem_id, run_id) DO UPDATE SET
+      owner_token = excluded.owner_token, lease_until = excluded.lease_until, expires_at = excluded.expires_at
+      WHERE coordination_initialization_lease.lease_until <= ?`,
+      [
+        scope.tenantId,
+        scope.eventId,
+        scope.problemId,
+        scope.runId,
+        owner,
+        untilMs,
+        Math.ceil(untilMs / 1000),
+        nowMs,
+      ],
+    );
+    return Number(result.changes) > 0 ? { outcome: "updated" } : { outcome: "conflict" };
+  }
+
+  async releaseCoordinationInitialization(
+    scope: CoordinationStateScope,
+    owner: string,
+  ): Promise<void> {
+    await this.core.sql.run(
+      "DELETE FROM coordination_initialization_lease WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ? AND owner_token = ?",
+      [scope.tenantId, scope.eventId, scope.problemId, scope.runId, owner],
+    );
+  }
+
   async publishCoordinationScore(
     scope: CoordinationStateScope,
     version: number,
@@ -191,6 +227,7 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
     at: string,
     expiresAt: number,
     requirePendingInitialization = false,
+    initializationOwner?: string,
   ): Promise<DeploymentMutationOutcome> {
     const activeRun = `COALESCE((SELECT CASE WHEN closed = 0 ${requirePendingInitialization ? "AND pending_initialization = 1" : ""} THEN run_id ELSE '' END FROM coordination_run WHERE tenant_id = ? AND event_id = ? AND problem_id = ?), ?) = ?`;
     const activeParams = [
@@ -200,13 +237,19 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
       requirePendingInitialization ? null : DEFAULT_COORDINATION_RUN_ID,
       scope.runId,
     ];
+    const leaseCondition = initializationOwner
+      ? " AND EXISTS(SELECT 1 FROM coordination_initialization_lease WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ? AND owner_token = ?)"
+      : "";
+    const leaseParams = initializationOwner
+      ? [scope.tenantId, scope.eventId, scope.problemId, scope.runId, initializationOwner]
+      : [];
     const result =
       expectedVersion === 0
         ? (
             await this.core.sql.batch([
               {
                 sql: `INSERT INTO coordination_state_scoped (tenant_id, event_id, problem_id, run_id, state, version, updated_at, expires_at)
-         SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE ${activeRun}
+         SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE ${activeRun}${leaseCondition}
          ON CONFLICT(tenant_id, event_id, problem_id, run_id) DO NOTHING`,
                 params: [
                   scope.tenantId,
@@ -218,6 +261,7 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
                   at,
                   expiresAt,
                   ...activeParams,
+                  ...leaseParams,
                 ],
               },
               {
@@ -310,6 +354,10 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
         throw new Error("Coordination score delivery is pending");
       }
     }
+    await this.core.sql.run(
+      "DELETE FROM coordination_initialization_lease WHERE tenant_id = ? AND event_id = ? AND problem_id = ? AND run_id = ?",
+      [scope.tenantId, scope.eventId, scope.problemId, scope.runId],
+    );
     // [Issue #3133] The secret goes with the match it belongs to, so a
     // re-created scope cannot inherit the deleted match's hidden material.
     await this.core.sql.run(
@@ -503,6 +551,9 @@ export class SqlDeploymentsCoordination implements DeploymentsCoordinationPort {
       "DELETE FROM coordination_match_secret WHERE expires_at > 0 AND expires_at <= ?",
       [nowEpochSeconds],
     );
+    await this.core.sql.run("DELETE FROM coordination_initialization_lease WHERE expires_at <= ?", [
+      nowEpochSeconds,
+    ]);
     return Number(result.changes);
   }
 }

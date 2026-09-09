@@ -1,8 +1,10 @@
-import type { DynamoDBDocumentClient } from "@aws-sdk/lib-dynamodb";
+import { type DynamoDBDocumentClient, GetCommand } from "@aws-sdk/lib-dynamodb";
 import { vi } from "vitest";
 import type { CoordinationArtifactStore } from "../../lib/problem-deploy/control-data/coordination-artifact-store.js";
 import type { CoordinationArtifactBody } from "../../lib/problem-deploy/control-data/domain/coordination-artifact.js";
 import type { CoordinationStateScope } from "../../lib/problem-deploy/control-data/domain/coordination-scope.js";
+import { deploymentPk } from "../../lib/problem-deploy/control-data/dynamodb-deployments-core.js";
+import type { DeploymentItem } from "../../lib/problem-deploy/handlers/deploy-handler/types.js";
 import type { ParticipantSharedResources } from "../../lib/problem-deploy/handlers/participant-handler/shared.js";
 import { makeTestControlDataRuntime } from "./control-data/runtime.test-helpers.js";
 
@@ -28,11 +30,24 @@ export function fakeParticipantShared(
   };
 }
 
-/** 何度呼ばれても同じ `Items` を返す {@link fakeParticipantShared}。 */
+/** Query discovery and authoritative META reads over the same fixture rows. */
 export function fakeParticipantSharedWithItems(
-  items: readonly unknown[],
+  items: readonly Partial<DeploymentItem>[],
 ): ParticipantSharedResources {
-  return fakeParticipantShared(vi.fn(async () => ({ Items: items })));
+  const rows = items.map((item, index) => ({ ...item, jobId: item.jobId ?? `fixture-${index}` }));
+  return fakeParticipantShared(
+    vi.fn(async (cmd: unknown) => {
+      if (cmd instanceof GetCommand) {
+        return {
+          Item: rows.find(
+            (item) =>
+              cmd.input.Key?.PK === deploymentPk(item.jobId) && cmd.input.Key?.SK === "META",
+          ),
+        };
+      }
+      return { Items: rows };
+    }),
+  );
 }
 
 /**

@@ -68,6 +68,36 @@ beforeEach(() => {
 });
 
 describe("listProblemEndpoints", () => {
+  it.each([
+    "CoordinationPrivateMaterial",
+    "api.CoordinationPrivateMaterial",
+  ])("never exposes a private output through an endpoint default: %s", async (key) => {
+    mockedQueryTeamItems.mockResolvedValueOnce([
+      {
+        ...teamRow,
+        stackOutputs: JSON.stringify({
+          [key]: "private-fixture-canary",
+          FrontendUrl: "https://front.example.com/",
+        }),
+      },
+    ]);
+    const shared = buildShared({
+      problemsEndpoints: {
+        "battle-1": [
+          { slot: "private", default: { from: "cfn-output", key }, overridable: false },
+          SLOT_FRONTEND,
+        ],
+      },
+      ddbSend: vi.fn().mockResolvedValueOnce({ Items: [] }),
+    });
+    const result = await listProblemEndpoints(shared, "key", "battle-1");
+    expect(result.kind).toBe("ok");
+    if (result.kind !== "ok") throw new Error("Expected endpoint response");
+    expect(result.endpoints[0]?.defaultUrl).toBeUndefined();
+    expect(result.endpoints[0]?.effectiveUrl).toBeUndefined();
+    expect(result.endpoints[1]?.effectiveUrl).toBe("https://front.example.com/");
+    expect(JSON.stringify(result)).not.toContain("private-fixture-canary");
+  });
   it("should return unauthorized when the team has no deployments", async () => {
     mockedQueryTeamItems.mockResolvedValueOnce([]);
     const shared = buildShared({ problemsEndpoints: { "battle-1": [SLOT_FRONTEND] } });

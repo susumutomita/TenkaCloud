@@ -562,6 +562,16 @@ export interface DeploymentsCompositePort {
  * per-event opaque plugin state with optimistic-lock versioning.
  */
 export interface DeploymentsCoordinationPort {
+  /** Only one process may load a run's authoritative initialization inputs at a time. */
+  acquireCoordinationInitialization(
+    scope: CoordinationStateScope,
+    owner: string,
+    nowMs: number,
+    untilMs: number,
+  ): Promise<DeploymentMutationOutcome>;
+  /** Owner-conditional release cannot unlock a successor's lease. */
+  releaseCoordinationInitialization(scope: CoordinationStateScope, owner: string): Promise<void>;
+
   /**
    * The inter-team coordination state for one {@link CoordinationStateScope}
    * (`GetItem` `PK = COORD#<tenantId>#<eventId>#<problemId>#<runId>`,
@@ -616,6 +626,7 @@ export interface DeploymentsCoordinationPort {
     at: string,
     expiresAt: number,
     requirePendingInitialization?: boolean,
+    initializationOwner?: string,
   ): Promise<DeploymentMutationOutcome>;
 
   /**

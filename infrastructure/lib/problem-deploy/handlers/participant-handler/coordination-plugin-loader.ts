@@ -8,7 +8,7 @@ import {
   dispatchCoordinationOp,
   projectCoordinationForTeam,
 } from "./coordination-dispatch.js";
-import type { CoordinationStoreDeps } from "./coordination-store.js";
+import type { CoordinationStateSnapshot, CoordinationStoreDeps } from "./coordination-store.js";
 
 /**
  * Issue #1420: 問題が同梱する coordination plugin の **動的 import loader**。
@@ -266,6 +266,7 @@ export async function loadAndProjectCoordinationForTeam(
     readonly teamId: string;
     readonly ctx: CoordinationContext;
     readonly rosterIncomplete?: true;
+    readonly stateSnapshot?: CoordinationStateSnapshot;
     readonly fallbackProjection: unknown;
     readonly requestTick?: { readonly eventNowMs: number; readonly nowIso: string };
   },

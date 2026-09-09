@@ -1,12 +1,18 @@
+import type { DeploymentsQueryPort } from "../../control-data/domain/deployments-port.js";
+import type { DeploymentRecord } from "../../control-data/types.js";
+import { parseStackOutputs } from "../shared/cfn-status.js";
 import {
   type ParticipantDeploymentsTableSharedResources,
   resolveDeploymentsRepository,
 } from "./shared.js";
 
+// Keep initialization within the dispatcher budget without an unbounded fan-out.
+const INITIALIZATION_READ_CONCURRENCY = 8;
+
 /**
  * The event roster a coordination plugin's `initialState(ctx)` is built from.
  *
- * Two hosts materialise a namespace: the participant op / projection path
+ * Two hosts materialise a namespace: the participant operation path
  * (`makeCoordinationScopeResolver`) and the scoring-driven tick
  * (`coordination-tick.ts`). `initialState` is the only hook that receives
  * `ctx`, so whichever host runs first decides what the plugin knows about the
@@ -21,7 +27,8 @@ import {
  * The roster is every team with a deployment row for the SAME problem in the
  * same (tenant, event), sorted by teamId. Sorting is the race defence itself
  * (Issue #3053): whichever request materialises the state, `initialState(ctx)`
- * gets the same input. Status is deliberately not filtered -- dropping a
+ * gets the same input. Read-only projections of an absent run use a provisional
+ * index snapshot, which never materialises the namespace. Status is deliberately not filtered -- dropping a
  * mid-deploy team would make the roster depend on deploy timing, which is the
  * same race again.
  *
@@ -42,9 +49,12 @@ export interface EventRosterTarget {
   readonly knownTeamIds: readonly string[];
   /** Durable initialization cannot commit an incomplete roster after a failed query. */
   readonly requireComplete?: boolean;
+  /** Index snapshot for an ephemeral projection only; never use for a durable initializer. */
+  readonly readOnlyPreview?: boolean;
 }
 
 export interface EventRoster {
+  readonly deploymentInputs?: Readonly<Record<string, Readonly<Record<string, string>>>>;
   /** Existing matches remain usable, but this roster must never initialize durable state. */
   readonly rosterIncomplete?: true;
   /** teamId 昇順 (= どの host が先に materialize しても `initialState(ctx)` の入力が同一)。 */
@@ -63,15 +73,32 @@ export async function resolveEventRoster(
 ): Promise<EventRoster> {
   const roster = new Set<string>(target.knownTeamIds);
   const teamNames: Record<string, string> = {};
+  const deploymentInputs: Record<string, Record<string, string>> = {};
   let rosterIncomplete: true | undefined;
   try {
     const repository = await resolveDeploymentsRepository(shared);
-    const rows = await repository.listByTenantAndEvent(target.tenantId, target.eventId);
-    for (const row of rows) {
+    // A preview is not persisted, even when a no-op tick leaves the run absent.
+    // Defer per-deployment strong reads until an operation/tick initializes it.
+    const orderedRows = target.readOnlyPreview
+      ? latestDeploymentRows(
+          await repository.listByTenantAndEvent(target.tenantId, target.eventId),
+          target.problemId,
+        )
+      : await readAuthoritativeRoster(repository, target);
+    // Deployment history can contain several jobs per team. Use the newest
+    // creation deterministically; repository iteration order is not a contract.
+    orderedRows.sort(compareDeploymentCreation);
+    for (const row of orderedRows) {
       if (row.problemId !== target.problemId || typeof row.teamId !== "string" || !row.teamId) {
         continue;
       }
       roster.add(row.teamId);
+      const inputs = Object.fromEntries(
+        Object.entries(parseInitializationOutputs(row.stackOutputs)).filter(([key]) =>
+          /^Coordination[A-Z]/.test(key),
+        ),
+      );
+      deploymentInputs[row.teamId] = inputs;
       // `displayTeamName ?? teamName`, the order the leaderboard resolves.
       const name = trimmedString(row.displayTeamName) || trimmedString(row.teamName);
       if (name) teamNames[row.teamId] = name;
@@ -87,13 +114,105 @@ export async function resolveEventRoster(
       message: err instanceof Error ? err.message : String(err),
     });
   }
+  const populatedInputs = Object.fromEntries(
+    Object.entries(deploymentInputs).filter(([, outputs]) => Object.keys(outputs).length > 0),
+  );
   return {
     teamIds: [...roster].sort(),
     teamNames,
+    ...(Object.keys(populatedInputs).length ? { deploymentInputs: populatedInputs } : {}),
     ...(rosterIncomplete ? { rosterIncomplete } : {}),
   };
 }
 
 function trimmedString(value: unknown): string | undefined {
   return typeof value === "string" ? value.trim() : undefined;
+}
+
+/** Present corrupt outputs must not become an immutable empty/default context. */
+function parseInitializationOutputs(raw: string | undefined): Record<string, string> {
+  if (raw === undefined || raw === "") return {};
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("Malformed deployment outputs");
+  }
+  const valid = Array.isArray(parsed)
+    ? parsed.every(
+        (entry: unknown) =>
+          entry !== null &&
+          typeof entry === "object" &&
+          "OutputKey" in entry &&
+          typeof entry.OutputKey === "string" &&
+          "OutputValue" in entry &&
+          typeof entry.OutputValue === "string",
+      )
+    : parsed !== null &&
+      typeof parsed === "object" &&
+      Object.values(parsed).every((value: unknown) => typeof value === "string");
+  if (!valid) throw new Error("Malformed deployment outputs");
+  return parseStackOutputs(raw);
+}
+
+async function readAuthoritativeRoster(
+  repository: DeploymentsQueryPort,
+  target: EventRosterTarget,
+) {
+  // GSI1 discovers current deployments; only META provides durable inputs.
+  const candidates = latestDeploymentRows(
+    await repository.listByTenantAndEvent(target.tenantId, target.eventId),
+    target.problemId,
+  );
+  const orderedRows: DeploymentRecord[] = [];
+  for (let offset = 0; offset < candidates.length; offset += INITIALIZATION_READ_CONCURRENCY) {
+    const batch = candidates.slice(offset, offset + INITIALIZATION_READ_CONCURRENCY);
+    const current = await Promise.all(
+      batch.map((candidate) => readScopedDeployment(repository, target, candidate)),
+    );
+    orderedRows.push(...current);
+  }
+  return orderedRows;
+}
+
+/** Ignore superseded history in both ephemeral previews and durable initialization. */
+function latestDeploymentRows(
+  rows: readonly DeploymentRecord[],
+  problemId: string,
+): DeploymentRecord[] {
+  const latest = new Map<string, DeploymentRecord>();
+  for (const candidate of rows) {
+    if (candidate.problemId !== problemId || !candidate.teamId) continue;
+    const previous = latest.get(candidate.teamId);
+    if (!previous || compareDeploymentCreation(previous, candidate) < 0) {
+      latest.set(candidate.teamId, candidate);
+    }
+  }
+  return [...latest.values()];
+}
+
+function compareDeploymentCreation(a: DeploymentRecord, b: DeploymentRecord): number {
+  return (
+    (a.createdAt ?? "").localeCompare(b.createdAt ?? "") ||
+    (a.jobId ?? "").localeCompare(b.jobId ?? "")
+  );
+}
+
+async function readScopedDeployment(
+  repository: DeploymentsQueryPort,
+  target: EventRosterTarget,
+  candidate: DeploymentRecord,
+): Promise<DeploymentRecord> {
+  if (!candidate.jobId) throw new Error("Roster deployment has no job ID");
+  const current = await repository.getDeployment(candidate.jobId, { consistentRead: true });
+  if (
+    !current ||
+    current.tenantId !== target.tenantId ||
+    current.eventId !== target.eventId ||
+    current.problemId !== target.problemId ||
+    current.teamId !== candidate.teamId
+  ) {
+    throw new Error("Roster deployment is missing or no longer belongs to this scope");
+  }
+  return current;
 }

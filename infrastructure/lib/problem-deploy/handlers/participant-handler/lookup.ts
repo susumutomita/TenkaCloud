@@ -1,3 +1,4 @@
+import { isPrivateCoordinationOutputKey } from "@tenkacloud/coordination-plugin-sdk";
 import type {
   ApplicationStatus,
   ApplicationStatusOverall,
@@ -72,20 +73,22 @@ export type ParticipantProblemView = PortalParticipantProblemView & {
  * stackOutputs から「答え」になる flagOutputKey を strip する (= 競技者に出さない)。
  *   - flag       : 単一 flagOutputKey を削除
  *   - multi-flag : 全 sub-flag の flagOutputKey を削除 (Issue #1796。 1 つでも露出させない)
- *   - その他     : 何もしない (= uptime 系等は flagOutputKey を持たない)
+ *   - 全方式     : CoordinationPrivate* の内部出力は除外
  */
 function stripAnswerOutputs(
   stackOutputs: Record<string, string>,
   scoring: ProblemScoringMetadata | undefined,
 ): Record<string, string> {
-  if (scoring?.kind === "flag") {
-    delete stackOutputs[scoring.flagOutputKey];
-  } else if (scoring?.kind === "multi-flag") {
-    for (const f of scoring.flags) {
-      delete stackOutputs[f.flagOutputKey];
-    }
+  const hidden = new Set<string>();
+  if (scoring?.kind === "flag") hidden.add(scoring.flagOutputKey);
+  else if (scoring?.kind === "multi-flag") {
+    for (const flag of scoring.flags) hidden.add(flag.flagOutputKey);
   }
-  return stackOutputs;
+  return Object.fromEntries(
+    Object.entries(stackOutputs).filter(
+      ([key]) => !hidden.has(key) && !isPrivateCoordinationOutputKey(key),
+    ),
+  );
 }
 
 /**

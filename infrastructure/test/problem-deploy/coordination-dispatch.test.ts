@@ -315,9 +315,11 @@ describe("coordination-store", () => {
     expect(deleted).toEqual([
       "COORD#tn1#e1#problem-1#run-1/STATE",
       "COORD#tn1#e1/STATE",
+      "COORD#tn1#e1#problem-1#run-1/INITIALIZATION",
       "COORD#tn1#e1#problem-1#run-1/MATCHSECRET",
       "COORD#tn1#e1#problem-1#run-1/STATE",
       "COORD#tn1#e1/STATE",
+      "COORD#tn1#e1#problem-1#run-1/INITIALIZATION",
       "COORD#tn1#e1#problem-1#run-1/MATCHSECRET",
     ]);
   });
@@ -547,12 +549,13 @@ describe("dispatchCoordinationOp", () => {
       nowIso: "2026-06-01T00:00:00Z",
     });
     expect(out).toEqual({ kind: "rejected", error: "bad_op" });
-    // 拒否された op は state を書かない。 [Issue #3133] 未初期化の試合では秘密だけは発行される
-    // (`initialState` に渡すため) が、 それは孤児ではなく次に成功する op がそのまま採用する値。
+    // The rejected move is not applied. Persist only the server's initial
+    // state so the next attempt reuses the same roster and secret.
     const statePuts = send.mock.calls
       .map((c) => c[0])
       .filter((c) => c instanceof PutCommand && c.input.Item?.SK === "STATE");
-    expect(statePuts).toEqual([]);
+    expect(statePuts).toHaveLength(1);
+    expect(statePuts[0]?.input.Item?.state).toEqual({ count: 0 });
   });
 
   it("refuses the transition before saving when the score hook fails", async () => {
@@ -717,7 +720,7 @@ describe("dispatchCoordinationOp write contention", () => {
       sleeps,
     );
     expect(out).toEqual({ kind: "rejected", error: "bad_op" });
-    expect(writes()).toBe(0);
+    expect(writes()).toBe(1); // Only the server-derived initial state; no move or retry.
     expect(sleeps.delays).toEqual([]);
   });
 

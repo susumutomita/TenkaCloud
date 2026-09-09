@@ -159,6 +159,17 @@ export const DEPLOYMENTS_SCHEMA_STATEMENTS = [
   expires_at INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (tenant_id, event_id, problem_id)
 )`,
+  // Shared initialization ownership; expiry recovers crashed dispatchers.
+  `CREATE TABLE IF NOT EXISTS coordination_initialization_lease (
+  tenant_id TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  problem_id TEXT NOT NULL,
+  run_id TEXT NOT NULL,
+  owner_token TEXT NOT NULL,
+  lease_until INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  PRIMARY KEY (tenant_id, event_id, problem_id, run_id)
+)`,
   // [Issue #3133] The match secret lives in its OWN table, not as a column on
   // `coordination_state_scoped`. Two reasons, and the second is why a column
   // was rejected even though it would have been less code:

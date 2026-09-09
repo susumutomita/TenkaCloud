@@ -361,27 +361,37 @@ describe("makeCoordinationScopeResolver", () => {
       items: Partial<DeploymentItem>[],
       opts: { flagOn?: boolean; teamOverrides?: Record<string, unknown> } = {},
     ): ParticipantSharedResources {
+      const deploymentRows = items.map((item, index) => ({
+        ...item,
+        jobId: item.jobId ?? `fixture-${index}`,
+      }));
+      const eventItem = {
+        tenantId: "tn1",
+        status: "READY",
+        startsAt: "2026-01-01T00:00:00.000Z",
+        progressionGate: {
+          gateProblemId: "hello-world",
+          unlockTargetIds: ["p1"],
+          defaultPolicy: "required",
+          ...(opts.teamOverrides ? { teamOverrides: opts.teamOverrides } : {}),
+        },
+      };
+      const flagItem = { flags: { challengePrerequisiteGate: opts.flagOn !== false } };
       const send = vi.fn(async (cmd: unknown) => {
-        const key = (cmd as { input?: { Key?: Record<string, unknown> } }).input?.Key;
-        if (cmd instanceof GetCommand && key?.SK === "FLAGS") {
-          return { Item: { flags: { challengePrerequisiteGate: opts.flagOn !== false } } };
+        if (!(cmd instanceof GetCommand)) return { Items: deploymentRows };
+        const key = cmd.input.Key;
+        switch (key?.SK) {
+          case "FLAGS":
+            return { Item: flagItem };
+          case "META":
+            return {
+              Item: String(key.PK).startsWith("DEPLOYMENT#")
+                ? deploymentRows.find((item) => key.PK === `DEPLOYMENT#${item.jobId}`)
+                : eventItem,
+            };
+          default:
+            return { Item: undefined };
         }
-        if (cmd instanceof GetCommand && key?.SK === "META") {
-          return {
-            Item: {
-              tenantId: "tn1",
-              status: "READY",
-              startsAt: "2026-01-01T00:00:00.000Z",
-              progressionGate: {
-                gateProblemId: "hello-world",
-                unlockTargetIds: ["p1"],
-                defaultPolicy: "required",
-                ...(opts.teamOverrides ? { teamOverrides: opts.teamOverrides } : {}),
-              },
-            },
-          };
-        }
-        return { Items: items };
       });
       // Bound before the assertion: `consistent-type-assertions` wants a
       // declaration it can annotate, and the DocumentClient surface is far
@@ -451,7 +461,7 @@ describe("makeCoordinationScopeResolver", () => {
    * `01M1J5VK3N6KX5G3MYW190S9Q8` — which is exactly what the exposure lane did
    * on live. The display name is on the same rows the roster already reads.
    */
-  it("should carry each team's display name into the plugin context", async () => {
+  it("should carry each team's display name and reserved deployment inputs into the plugin context", async () => {
     const resolve = makeCoordinationScopeResolver(
       fakeShared([
         {
@@ -462,6 +472,10 @@ describe("makeCoordinationScopeResolver", () => {
           status: "COMPLETE",
           displayTeamName: "かけら隊",
           teamName: "team-1",
+          stackOutputs: JSON.stringify({
+            CoordinationPrivateMaterial: "fixture-t1",
+            PublicUrl: "https://example.test",
+          }),
         },
         {
           problemId: "p1",
@@ -483,6 +497,7 @@ describe("makeCoordinationScopeResolver", () => {
       eventId: "e1",
       teamIds: ["t1", "t2", "t3"],
       teamNames: { t1: "かけら隊", t2: "team-2" },
+      deploymentInputs: { t1: { CoordinationPrivateMaterial: "fixture-t1" } },
     });
   });
 
@@ -503,6 +518,10 @@ describe("makeCoordinationScopeResolver", () => {
     expect(await resolve("key")).toEqual({
       kind: "scope",
       scope: {
+        stateSnapshot: {
+          scope: { tenantId: "tn1", eventId: "e1", problemId: "p1", runId: "default" },
+          row: undefined,
+        },
         // [Issue #3123] `runId` is NOT an alias of `problemId`: aliasing them
         // would make the two key dimensions indistinguishable, and would collide
         // the moment a real run id ever equalled a problem id. The platform

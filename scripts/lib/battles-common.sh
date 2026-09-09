@@ -58,6 +58,16 @@ delete_unrecoverable_stack_if_present() {
   esac
 }
 
+# Filter structured outputs BEFORE printing. Table formatting can put a private
+# key and its value on separate log lines, defeating downstream line redaction.
+print_public_stack_outputs() {
+  local outputs
+  outputs="$(aws cloudformation describe-stacks \
+    --region "$2" --stack-name "$1" \
+    --query 'Stacks[0].Outputs' --output json)" || return $?
+  jq '(. // []) | map(select(.OutputKey | split(".") | any(startswith("CoordinationPrivate")) | not))' <<<"${outputs}"
+}
+
 json_escape() {
   local value="$1"
   value="${value//\\/\\\\}"

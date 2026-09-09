@@ -155,6 +155,85 @@ async function setup(
 }
 
 describe.each(["DynamoDB", "SQL"])("durable coordination scoring: %s", (backend) => {
+  it("does not award an illegal first move when materializing the board", async () => {
+    const { repository, store, input } = await setup(backend);
+    const refuse: typeof plugin = {
+      ...plugin,
+      validateOp: () => ({ ok: false, error: "illegal_move" }),
+    };
+    for (let i = 0; i < 3; i += 1) {
+      expect(await dispatchCoordinationOp(store, refuse, input)).toEqual({
+        kind: "rejected",
+        error: "illegal_move",
+      });
+    }
+    expect(await readCoordinationState(store, scope)).toMatchObject({
+      version: 1,
+      state: { scores: { red: 0 }, solved: false },
+    });
+    expect((await repository.getDeployment("red"))?.score).toBe(0);
+    expect((await dispatchCoordinationOp(store, plugin, input)).kind).toBe("ok");
+    expect((await repository.getDeployment("red"))?.score).toBe(30);
+  });
+
+  it("persists a once-only two-team transfer and both score events under competing requests", async () => {
+    const { repository, store, input } = await setup(backend, ["red", "blue", "green"]);
+    interface TransferState {
+      scores: Record<string, number>;
+      used: boolean;
+    }
+    interface TransferOp {
+      kind: "fund" | "transfer";
+    }
+    const transfer: CoordinationPlugin<TransferState, TransferOp, TransferState> = {
+      initialState: () => ({ scores: { red: 0, blue: 0, green: 0 }, used: false }),
+      validateOp: (state, _id, op) =>
+        op.kind === "transfer" && (state.used || state.scores.blue === 0)
+          ? { ok: false, error: "unavailable" }
+          : { ok: true },
+      applyOp: (state, id, op) =>
+        op.kind === "fund"
+          ? { ...state, scores: { ...state.scores, blue: 8 } }
+          : { used: true, scores: { ...state.scores, blue: 0, [id]: state.scores[id] + 8 } },
+      projectForTeam: (state) => state,
+      teamScores: (state) => state.scores,
+      scoreReasons: (_before, _after, cause) =>
+        cause.kind === "op" && cause.op.kind === "transfer"
+          ? { [cause.teamId]: "transfer-in", blue: "transfer-out" }
+          : { blue: "fund" },
+    };
+    await dispatchCoordinationOp(store, transfer, { ...input, op: { kind: "fund" } });
+    const outcomes = await Promise.all(
+      ["red", "green"].map((teamId) =>
+        dispatchCoordinationOp(
+          store,
+          transfer,
+          { ...input, teamId, op: { kind: "transfer" } },
+          { backoff: async () => undefined },
+        ),
+      ),
+    );
+    expect(outcomes.filter((out) => out.kind === "ok")).toHaveLength(1);
+    const scores = await Promise.all(
+      ["red", "blue", "green"].map(async (id) => (await repository.getDeployment(id))?.score ?? 0),
+    );
+    expect(scores[1]).toBe(0);
+    expect(scores.reduce((sum, value) => sum + value, 0)).toBe(8);
+    const winner = scores[0] === 8 ? "red" : "green";
+    expect(
+      await dispatchCoordinationOp(store, transfer, {
+        ...input,
+        teamId: winner,
+        op: { kind: "transfer" },
+      }),
+    ).toMatchObject({ kind: "rejected" });
+    const gained = await repository.listScoreEvents(winner, { pageSize: 100 });
+    const lost = await repository.listScoreEvents("blue", { pageSize: 100 });
+    expect(gained).toHaveLength(1);
+    expect(lost).toHaveLength(2);
+    expect((await readCoordinationState(store, scope))?.pendingScores).toBeUndefined();
+  });
+
   it.each(
     [
       null,

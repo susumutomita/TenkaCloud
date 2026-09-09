@@ -241,11 +241,7 @@ deploy_one() {
   # outputs を表示 (FrontendUrl 等が見える)
   echo ""
   echo "Outputs for ${name_prefix}:"
-  aws cloudformation describe-stacks \
-    --region "${AWS_REGION}" \
-    --stack-name "${name_prefix}" \
-    --query "Stacks[0].Outputs" \
-    --output table
+  print_public_stack_outputs "${name_prefix}" "${AWS_REGION}"
 }
 
 failures=()

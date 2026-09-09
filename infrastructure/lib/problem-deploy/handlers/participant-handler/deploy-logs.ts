@@ -249,11 +249,12 @@ function redactLogMessage(
   problemId: string,
   scoringMap: Record<string, ProblemScoringMetadata>,
 ): string {
+  if (message.includes("CoordinationPrivate")) return "[redacted coordination output]";
   const scoring = scoringMap[problemId];
   if (scoring?.kind === "flag" && message.includes(scoring.flagOutputKey)) {
     return "[redacted scoring output]";
   }
-  if (/\b(password|secret|token|externalid)\b/i.test(message)) {
+  if (/\b(password|secret|token|receipt|externalid)\b/i.test(message)) {
     return "[redacted sensitive output]";
   }
   return message;

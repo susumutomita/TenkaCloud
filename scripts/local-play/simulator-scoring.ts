@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import { isPrivateCoordinationOutputKey } from "@tenkacloud/coordination-plugin-sdk";
 import {
   type ProblemDisruptionEntry,
   type ProblemEndpointSlot,
@@ -161,6 +162,7 @@ export function participantSimulatorOutputs(
     Object.entries(outputs).filter(
       ([key, value]) =>
         isParticipantSimulatorOutputKey(key) &&
+        !isPrivateCoordinationOutputKey(key) &&
         ![...hidden].some((outputKey) => key === outputKey || key.endsWith(`.${outputKey}`)) &&
         !isUnroutableSimulatorAwsUrl(value),
     ),
