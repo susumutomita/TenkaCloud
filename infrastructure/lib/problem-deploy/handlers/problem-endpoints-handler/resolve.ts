@@ -1,3 +1,4 @@
+import { isPrivateCoordinationOutputKey } from "@tenkacloud/coordination-plugin-sdk";
 import { type ProblemEndpointSlot, resolveDefaultUrl } from "../../../utils/endpoints-metadata.js";
 import { parseStackOutputs } from "../shared/cfn-status.js";
 import type { EndpointOverrideItem } from "./store.js";
@@ -41,7 +42,11 @@ export function resolveEndpoints(args: {
   stackOutputs: string | undefined;
   overrides: readonly EndpointOverrideItem[];
 }): ResolvedEndpoint[] {
-  const outputs = parseStackOutputs(args.stackOutputs);
+  const outputs = Object.fromEntries(
+    Object.entries(parseStackOutputs(args.stackOutputs)).filter(
+      ([key]) => !isPrivateCoordinationOutputKey(key),
+    ),
+  );
   const overrideMap = new Map<string, EndpointOverrideItem>();
   for (const o of args.overrides) overrideMap.set(o.slot, o);
 

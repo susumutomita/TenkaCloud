@@ -91,7 +91,7 @@ export async function resolveEventRoster(
       }
       roster.add(row.teamId);
       const inputs = Object.fromEntries(
-        Object.entries(parseStackOutputs(row.stackOutputs)).filter(([key]) =>
+        Object.entries(parseInitializationOutputs(row.stackOutputs)).filter(([key]) =>
           /^Coordination[A-Z]/.test(key),
         ),
       );
@@ -124,6 +124,32 @@ export async function resolveEventRoster(
 
 function trimmedString(value: unknown): string | undefined {
   return typeof value === "string" ? value.trim() : undefined;
+}
+
+/** Present corrupt outputs must not become an immutable empty/default context. */
+function parseInitializationOutputs(raw: string | undefined): Record<string, string> {
+  if (raw === undefined || raw === "") return {};
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("Malformed deployment outputs");
+  }
+  const valid = Array.isArray(parsed)
+    ? parsed.every(
+        (entry: unknown) =>
+          entry !== null &&
+          typeof entry === "object" &&
+          "OutputKey" in entry &&
+          typeof entry.OutputKey === "string" &&
+          "OutputValue" in entry &&
+          typeof entry.OutputValue === "string",
+      )
+    : parsed !== null &&
+      typeof parsed === "object" &&
+      Object.values(parsed).every((value: unknown) => typeof value === "string");
+  if (!valid) throw new Error("Malformed deployment outputs");
+  return parseStackOutputs(raw);
 }
 
 async function readAuthoritativeRoster(

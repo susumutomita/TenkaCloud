@@ -6,8 +6,13 @@ resolve the same tenant/event/problem roster. The platform passes output names
 matching `Coordination[A-Z]`; unrelated outputs and other problems are excluded.
 The client operation body cannot supply or override this context.
 
-Names beginning with `CoordinationPrivate` are server-only. Both hosted and
-simulated participant views use `isPrivateCoordinationOutputKey` to remove them,
+This contract uses event-scoped regular deployment rows. Composite parents are
+not indexed for event roster or participant login queries; their targets are
+indexed only by parent. The current coordination host does not admit these
+composite deployments, so this field does not transport composite target outputs.
+
+Names beginning with `CoordinationPrivate` are server-only. Hosted problem views,
+endpoint responses and simulated participant views use `isPrivateCoordinationOutputKey` to remove them,
 including stack-prefixed output names. The deployment
 script filters structured outputs before logging; downstream log redaction also
 removes lines naming private outputs. Do not log private values separately.
@@ -26,6 +31,10 @@ roster discovery and per-deployment reads. If state disappears after that check,
 initialization waits for a request that loads the complete roster. A missing or
 mismatched row defers initialization. This does not make index discovery strongly
 consistent: wait for all deployments to be discoverable.
+
+Present malformed output JSON or invalid output entries defer initialization;
+valid empty maps/arrays and absent outputs remain compatible. Corrupt outputs
+must not silently become a durable context with missing/default inputs.
 
 `initialState` consumes the inputs once. Existing saved matches do not change
 when a stack is redeployed. Finish all team deployments before creating a match;

@@ -25,6 +25,56 @@ describe("resolveEventRoster", () => {
   });
   afterEach(() => warnSpy.mockRestore());
 
+  it.each([
+    "{broken",
+    "null",
+    "42",
+    '"text"',
+    "false",
+    " ",
+    '{"CoordinationPrivateMaterial":42}',
+    "[null]",
+    '[{"OutputKey":"CoordinationPrivateMaterial"}]',
+    '[{"OutputKey":42,"OutputValue":"value"}]',
+  ])("defers initialization for present malformed outputs: %s", async (stackOutputs) => {
+    const shared = fakeParticipantSharedWithItems([row({ teamId: "t1", stackOutputs })]);
+    await expect(
+      resolveEventRoster(shared, { ...target, knownTeamIds: ["t1"], requireComplete: true }),
+    ).rejects.toThrow("Malformed deployment outputs");
+    expect(await resolveEventRoster(shared, { ...target, knownTeamIds: ["t1"] })).toMatchObject({
+      rosterIncomplete: true,
+    });
+  });
+
+  it.each([
+    undefined,
+    "",
+    "{}",
+    "[]",
+  ])("preserves valid absent or empty outputs: %s", async (stackOutputs) => {
+    const roster = await resolveEventRoster(
+      fakeParticipantSharedWithItems([row({ teamId: "t1", stackOutputs })]),
+      { ...target, knownTeamIds: ["t1"], requireComplete: true },
+    );
+    expect(roster.rosterIncomplete).toBeUndefined();
+    expect(roster.deploymentInputs).toBeUndefined();
+  });
+
+  it("accepts the CloudFormation output array format", async () => {
+    const roster = await resolveEventRoster(
+      fakeParticipantSharedWithItems([
+        row({
+          teamId: "t1",
+          stackOutputs: JSON.stringify([
+            { OutputKey: "CoordinationSetting", OutputValue: "on", Description: "fixture" },
+          ]),
+        }),
+      ]),
+      { ...target, knownTeamIds: ["t1"], requireComplete: true },
+    );
+    expect(roster.deploymentInputs).toEqual({ t1: { CoordinationSetting: "on" } });
+  });
+
   it("only passes reserved outputs from the same tenant, event and problem to the plugin", async () => {
     const roster = await resolveEventRoster(
       fakeParticipantSharedWithItems([

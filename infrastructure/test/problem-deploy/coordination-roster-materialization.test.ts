@@ -10,6 +10,10 @@ import {
 } from "../../lib/problem-deploy/control-data/events-repository.js";
 import type { DeploymentRecord } from "../../lib/problem-deploy/control-data/types.js";
 import {
+  createCompositeParent,
+  createCompositeTarget,
+} from "../../lib/problem-deploy/handlers/deploy-handler/composite-repository.js";
+import {
   type CoordinationScopeResolution,
   handleCoordinationArtifactFetch,
   handleCoordinationOp,
@@ -179,6 +183,72 @@ async function setup(backend: string) {
 afterEach(() => vi.restoreAllMocks());
 
 describe.each(["DynamoDB", "SQL"])("roster failure before materialization: %s", (backend) => {
+  it("keeps actual composite parent/target records outside the event roster and login path", async () => {
+    const ctx = await setup(backend);
+    await createCompositeParent(ctx.store, {
+      parentDeploymentId: "composite-parent",
+      tenantId: key.tenantId,
+      problemId: key.problemId,
+      targetCount: 2,
+      teamName: "Composite",
+      teamLoginKey: "login-composite",
+      createdAt: at,
+      expiresAt: 0,
+      status: "COMPLETE",
+    });
+    for (let ordinal = 0; ordinal < 2; ordinal += 1) {
+      await createCompositeTarget(ctx.store, {
+        targetDeploymentId: `composite-target-${ordinal}`,
+        parentDeploymentId: "composite-parent",
+        targetId: `target-${ordinal}`,
+        targetOrdinal: ordinal,
+        tenantId: key.tenantId,
+        problemId: key.problemId,
+        provider: "aws",
+        engine: "cloudformation",
+        entry: "template.yaml",
+        awsAccountId: "123456789012",
+        region: "ap-northeast-1",
+        teamName: "Composite",
+        teamLoginKey: "login-composite",
+        namePrefix: `composite-${ordinal}`,
+        createdAt: at,
+        expiresAt: 0,
+        status: "COMPLETE",
+      });
+    }
+    expect(await ctx.repository.listCompositeTargets("composite-parent")).toHaveLength(2);
+    const discovered = await ctx.repository.listByTenantAndEvent(key.tenantId, key.eventId);
+    expect(discovered.some((record) => record.jobId.startsWith("composite-"))).toBe(false);
+    expect(await ctx.deps.resolveScope("login-composite", key.problemId)).toEqual({
+      kind: "not_configured",
+    });
+    expect(ctx.initialState).not.toHaveBeenCalled();
+    expect((await ctx.apply()).kind).toBe("ok");
+    expect(ctx.initialState).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ teamIds: expectedTeams }),
+    );
+  });
+
+  it("does not persist a run from malformed authoritative outputs, and recovers after repair", async () => {
+    const ctx = await setup(backend);
+    await ctx.repository.putDeployment(deployment("alpha", { stackOutputs: "{broken" }));
+    expect(await ctx.apply()).toEqual({ kind: "unavailable" });
+    expect(await ctx.runTick()).toEqual({ ticked: 1, written: 0 });
+    expect(ctx.initialState).not.toHaveBeenCalled();
+    expect(ctx.write).not.toHaveBeenCalled();
+    expect(ctx.mint).not.toHaveBeenCalled();
+    await ctx.repository.putDeployment(
+      deployment("alpha", {
+        stackOutputs: JSON.stringify({ CoordinationSetting: "on" }),
+      }),
+    );
+    expect((await ctx.apply()).kind).toBe("ok");
+    expect(ctx.initialState).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ deploymentInputs: { alpha: { CoordinationSetting: "on" } } }),
+    );
+  });
+
   it("uses index-only previews for 99 teams without persisting stale inputs on the first operation", async () => {
     const ctx = await setup(backend);
     ctx.tick.mockImplementation((state) => state);
