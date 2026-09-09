@@ -21,7 +21,7 @@ import {
   loadAndProjectCoordinationForTeam,
   type PluginImporter,
 } from "./coordination-plugin-loader.js";
-import { resolveEventRoster } from "./coordination-roster.js";
+import { type EventRoster, resolveEventRoster } from "./coordination-roster.js";
 import type { StateSchemaMismatchReason } from "./coordination-state-schema.js";
 import type { CoordinationStoreDeps } from "./coordination-store.js";
 import {
@@ -411,17 +411,11 @@ export function makeCoordinationScopeResolver(
       return { kind: "locked", gateProblemId: prerequisite.gateProblemId };
     }
     const runKey = { tenantId: item.tenantId, eventId: item.eventId, problemId: resolvedProblemId };
-    const runId = await resolvePlayableCoordinationRunId(
-      await resolveDeploymentsRepository(shared),
-      runKey,
-    );
+    const repository = await resolveDeploymentsRepository(shared);
+    const runId = await resolvePlayableCoordinationRunId(repository, runKey);
     if (runId === undefined) return { kind: "not_configured" };
-    const roster = await resolveEventRoster(shared, {
-      tenantId: item.tenantId,
-      eventId: item.eventId,
-      problemId: resolvedProblemId,
-      knownTeamIds: [item.teamId],
-    });
+    const stateScope = { ...runKey, runId };
+    const roster = await resolveInitializationRoster(shared, stateScope, item.teamId);
     return {
       kind: "scope",
       scope: {
@@ -433,12 +427,7 @@ export function makeCoordinationScopeResolver(
         // 「この namespace を消す」でしか表現できず、 直前の試合は残らなかった。 pointer が
         // 無い (= 一度も reset されていない) 問題は初期 run に解決するので、 この変更の前から
         // 進行中の試合はそのまま続く。
-        state: {
-          tenantId: item.tenantId,
-          eventId: item.eventId,
-          problemId: resolvedProblemId,
-          runId,
-        },
+        state: stateScope,
         teamId: item.teamId,
         rosterIncomplete: roster.rosterIncomplete,
         ctx: {
@@ -464,4 +453,20 @@ export function requestClock(window: RoundWindow, nowIso: string, quantumMs = 1)
   const elapsed = Date.parse(nowIso) - Date.parse(window.eventStartsAt);
   if (!Number.isFinite(elapsed) || elapsed < 0) return undefined;
   return { eventNowMs: Math.floor(elapsed / quantumMs) * quantumMs, nowIso };
+}
+
+async function resolveInitializationRoster(
+  shared: ParticipantSharedResources,
+  stateScope: CoordinationStateScope,
+  teamId: string,
+): Promise<EventRoster> {
+  // Stored runs never use initialization inputs. One scope read avoids an
+  // event-wide index scan plus N strong META reads on every participant poll.
+  // Mark the minimal context incomplete: if teardown removes the state after
+  // this probe, the dispatcher must defer instead of initializing one team.
+  const repository = await resolveDeploymentsRepository(shared);
+  if (await repository.readCoordinationState(stateScope)) {
+    return { teamIds: [teamId], teamNames: {}, rosterIncomplete: true };
+  }
+  return resolveEventRoster(shared, { ...stateScope, knownTeamIds: [teamId] });
 }

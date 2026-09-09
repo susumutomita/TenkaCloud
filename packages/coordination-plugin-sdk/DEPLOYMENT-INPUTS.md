@@ -15,8 +15,10 @@ A problem plugin must also exclude them from `projectForTeam`, hints,
 errors and public artifacts. CloudFormation outputs themselves are not a secret
 vault: keep participant IAM scoped to the intended resource, not stack inspection.
 
-The index discovers deployments; strongly consistent META reads provide the
-values. A missing or mismatched row defers initialization. This does not make
+For a run without durable state, the index discovers deployments and strongly
+consistent META reads provide the values. Existing-run requests check the scoped
+state and skip roster discovery and per-deployment reads. If state disappears
+after that check, initialization waits for a request that loads the complete roster. A missing or mismatched row defers initialization. This does not make
 index discovery strongly consistent: wait for all deployments to be discoverable.
 
 `initialState` consumes the inputs once. Existing saved matches do not change

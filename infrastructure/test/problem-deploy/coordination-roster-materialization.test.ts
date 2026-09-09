@@ -161,6 +161,7 @@ async function setup(backend: string) {
     });
   return {
     repository,
+    deps,
     store,
     initialState,
     tick,
@@ -178,6 +179,36 @@ async function setup(backend: string) {
 afterEach(() => vi.restoreAllMocks());
 
 describe.each(["DynamoDB", "SQL"])("roster failure before materialization: %s", (backend) => {
+  it("does not reread deployment rosters when 99 teams poll an initialized run", async () => {
+    const ctx = await setup(backend);
+    const teamIds = ["alpha", "bravo", ...Array.from({ length: 97 }, (_, i) => `team-${i}`)];
+    for (const id of teamIds.slice(2)) await ctx.repository.putDeployment(deployment(id));
+    expect((await ctx.apply()).kind).toBe("ok");
+    ctx.roster.mockClear();
+    const metaReads = vi.spyOn(ctx.repository, "getDeployment");
+    const results = await Promise.all(
+      teamIds.map((id) => handleCoordinationProjection(ctx.deps, `login-${id}`, key.problemId)),
+    );
+    expect(results.every((result) => result.kind === "ok")).toBe(true);
+    expect(ctx.roster).not.toHaveBeenCalled();
+    expect(metaReads).not.toHaveBeenCalled();
+    expect(ctx.initialState).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not initialize a partial roster if state disappears after the scope probe", async () => {
+    const ctx = await setup(backend);
+    await ctx.apply();
+    const current = await ctx.repository.readCoordinationState(scope);
+    vi.spyOn(ctx.repository, "readCoordinationState")
+      .mockResolvedValueOnce(current)
+      .mockResolvedValueOnce(undefined);
+    ctx.roster.mockClear();
+    expect(await ctx.project()).toEqual({ kind: "unavailable" });
+    expect(ctx.roster).not.toHaveBeenCalled();
+    expect(ctx.initialState).toHaveBeenCalledTimes(1);
+    expect(ctx.write).toHaveBeenCalledTimes(1);
+  });
+
   it("refuses an absent-state projection during roster failure, then shows the complete board", async () => {
     const ctx = await setup(backend);
     ctx.roster.mockRejectedValueOnce(new Error("roster index unavailable"));
