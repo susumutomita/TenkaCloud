@@ -120,6 +120,57 @@ describe("resolveEventRoster", () => {
     ]);
   });
 
+  it("reads only 99 current deployments with bounded parallelism despite duplicate history", async () => {
+    vi.useFakeTimers();
+    try {
+      const current = Array.from({ length: 99 }, (_, i) =>
+        row({
+          teamId: `team-${i}`,
+          jobId: `current-${i}`,
+          createdAt: "2026-09-03",
+          stackOutputs: JSON.stringify({ CoordinationPrivateMaterial: `fixture-${i}` }),
+        }),
+      );
+      const indexed = current
+        .flatMap((entry, i) => [
+          entry,
+          { ...entry, jobId: `old-${i}`, createdAt: "2026-09-01" },
+          entry,
+          { ...entry, jobId: `older-${i}`, createdAt: "2026-08-01" },
+        ])
+        .reverse();
+      let active = 0;
+      let peak = 0;
+      const send = vi.fn(async (cmd: unknown) => {
+        if (!(cmd instanceof GetCommand)) return { Items: indexed };
+        active += 1;
+        peak = Math.max(peak, active);
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        active -= 1;
+        // Old META rows are gone. Attempting to refresh history would fail.
+        return { Item: current.find((entry) => cmd.input.Key?.PK === `DEPLOYMENT#${entry.jobId}`) };
+      });
+      const started = Date.now();
+      const result = resolveEventRoster(fakeParticipantShared(send), {
+        ...target,
+        knownTeamIds: [],
+        requireComplete: true,
+      });
+      await vi.runAllTimersAsync();
+      const roster = await result;
+      expect(roster.teamIds).toHaveLength(99);
+      expect(Object.keys(roster.deploymentInputs ?? {})).toHaveLength(99);
+      const reads = send.mock.calls.map(([cmd]) => cmd).filter((cmd) => cmd instanceof GetCommand);
+      expect(reads).toHaveLength(99);
+      expect(reads.every((cmd) => cmd.input.ConsistentRead === true)).toBe(true);
+      expect(peak).toBe(8);
+      expect(Date.now() - started).toBe(1_300);
+      expect(active).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it.each([
     undefined,
     { tenantId: "another-tenant" },

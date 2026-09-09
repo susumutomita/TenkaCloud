@@ -1,9 +1,13 @@
 import type { DeploymentsQueryPort } from "../../control-data/domain/deployments-port.js";
+import type { DeploymentRecord } from "../../control-data/types.js";
 import { parseStackOutputs } from "../shared/cfn-status.js";
 import {
   type ParticipantDeploymentsTableSharedResources,
   resolveDeploymentsRepository,
 } from "./shared.js";
+
+// Keep initialization within the dispatcher budget without an unbounded fan-out.
+const INITIALIZATION_READ_CONCURRENCY = 8;
 
 /**
  * The event roster a coordination plugin's `initialState(ctx)` is built from.
@@ -80,11 +84,7 @@ export async function resolveEventRoster(
       : await readAuthoritativeRoster(repository, target);
     // Deployment history can contain several jobs per team. Use the newest
     // creation deterministically; repository iteration order is not a contract.
-    orderedRows.sort(
-      (a, b) =>
-        (a.createdAt ?? "").localeCompare(b.createdAt ?? "") ||
-        (a.jobId ?? "").localeCompare(b.jobId ?? ""),
-    );
+    orderedRows.sort(compareDeploymentCreation);
     for (const row of orderedRows) {
       if (row.problemId !== target.problemId || typeof row.teamId !== "string" || !row.teamId) {
         continue;
@@ -132,22 +132,50 @@ async function readAuthoritativeRoster(
 ) {
   const rows = await repository.listByTenantAndEvent(target.tenantId, target.eventId);
   // GSI1 is discovery only: its output values may still be pre-deploy values.
-  // Refresh the authoritative META rows before capturing immutable run inputs.
-  const orderedRows = [];
+  // Only the latest deployment per team can supply immutable inputs. Reading
+  // every historical job adds latency and can fail on an already-deleted job.
+  const latest = new Map<string, DeploymentRecord>();
   for (const candidate of rows) {
     if (candidate.problemId !== target.problemId || !candidate.teamId) continue;
-    if (!candidate.jobId) throw new Error("Roster deployment has no job ID");
-    const current = await repository.getDeployment(candidate.jobId, { consistentRead: true });
-    if (
-      !current ||
-      current.tenantId !== target.tenantId ||
-      current.eventId !== target.eventId ||
-      current.problemId !== target.problemId ||
-      current.teamId !== candidate.teamId
-    ) {
-      throw new Error("Roster deployment is missing or no longer belongs to this scope");
+    const previous = latest.get(candidate.teamId);
+    if (!previous || compareDeploymentCreation(previous, candidate) < 0) {
+      latest.set(candidate.teamId, candidate);
     }
-    orderedRows.push(current);
+  }
+  const candidates = [...latest.values()];
+  const orderedRows: DeploymentRecord[] = [];
+  for (let offset = 0; offset < candidates.length; offset += INITIALIZATION_READ_CONCURRENCY) {
+    const batch = candidates.slice(offset, offset + INITIALIZATION_READ_CONCURRENCY);
+    const current = await Promise.all(
+      batch.map((candidate) => readScopedDeployment(repository, target, candidate)),
+    );
+    orderedRows.push(...current);
   }
   return orderedRows;
+}
+
+function compareDeploymentCreation(a: DeploymentRecord, b: DeploymentRecord): number {
+  return (
+    (a.createdAt ?? "").localeCompare(b.createdAt ?? "") ||
+    (a.jobId ?? "").localeCompare(b.jobId ?? "")
+  );
+}
+
+async function readScopedDeployment(
+  repository: DeploymentsQueryPort,
+  target: EventRosterTarget,
+  candidate: DeploymentRecord,
+): Promise<DeploymentRecord> {
+  if (!candidate.jobId) throw new Error("Roster deployment has no job ID");
+  const current = await repository.getDeployment(candidate.jobId, { consistentRead: true });
+  if (
+    !current ||
+    current.tenantId !== target.tenantId ||
+    current.eventId !== target.eventId ||
+    current.problemId !== target.problemId ||
+    current.teamId !== candidate.teamId
+  ) {
+    throw new Error("Roster deployment is missing or no longer belongs to this scope");
+  }
+  return current;
 }

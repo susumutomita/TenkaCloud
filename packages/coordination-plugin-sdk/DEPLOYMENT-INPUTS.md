@@ -16,7 +16,9 @@ errors and public artifacts. CloudFormation outputs themselves are not a secret
 vault: keep participant IAM scoped to the intended resource, not stack inspection.
 
 When an operation or scheduled tick initializes durable state, the index discovers
-deployments and strongly consistent META reads provide the values. Read-only
+deployments and strongly consistent META reads provide the values. Only the
+newest deployment per team is read, with at most eight reads in flight; duplicate
+index entries and superseded deployment history do not add reads. Read-only
 previews of an absent run use an index snapshot without per-deployment reads;
 that snapshot can lag and is never persisted. The first write resolves fresh
 inputs independently. Existing-run requests check the scoped state and skip
