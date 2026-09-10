@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import englishDiagram from "../../../../problems/battles/ac26-crypto-battle/diagram.en.svg?url";
+import defaultDiagram from "../../../../problems/battles/ac26-crypto-battle/diagram.svg?url";
 import {
   buildDiagramMap,
   findProblemDiagramUrl,
@@ -220,6 +222,14 @@ describe("problem architecture diagram (#1929 Phase 1c)", () => {
     expect(m.get("foo")).toBe("/assets/foo.svg");
     expect(m.get("bar")).toBe("/assets/bar.svg");
     expect(m.get("")).toBe("/assets/edge.svg");
+  });
+
+  it("selects the English diagram and preserves fallback for existing diagrams", () => {
+    expect(findProblemDiagramUrl("ac26-crypto-battle", "en")).toBe(englishDiagram);
+    expect(findProblemDiagramUrl("ac26-crypto-battle", "ja")).toBe(defaultDiagram);
+    expect(findProblemDiagramUrl("hello-world", "en")).toBe(
+      findProblemDiagramUrl("hello-world", "ja"),
+    );
   });
 
   it("should return undefined for a problem without a bundled diagram", () => {

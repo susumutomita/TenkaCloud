@@ -42,6 +42,12 @@ const diagramModules = import.meta.glob<string>("../../../../problems/*/*/diagra
   import: "default",
 });
 
+const englishDiagramModules = import.meta.glob<string>("../../../../problems/*/*/diagram.en.svg", {
+  eager: true,
+  query: "?url",
+  import: "default",
+});
+
 const BUILD_TIME_CATALOG: readonly ProblemCatalogEntry[] = Object.values(metadataModules)
   .map((mod) => metadataToEntry(mod.default))
   .sort((a, b) => a.id.localeCompare(b.id));
@@ -96,6 +102,7 @@ export function buildDiagramMap(
   );
 }
 const DIAGRAM_URL_BY_ID = buildDiagramMap(diagramModules);
+const ENGLISH_DIAGRAM_URL_BY_ID = buildDiagramMap(englishDiagramModules);
 
 /**
  * `problemId` の architecture diagram (`diagram.svg`) URL。無ければ undefined。
@@ -103,8 +110,14 @@ const DIAGRAM_URL_BY_ID = buildDiagramMap(diagramModules);
  * 注: diagram は Vite の asset pipeline が bundle する build-time 資産なので、 local mode の
  * runtime hydration では埋まらない (図の無い問題と同じ扱いになる)。 画面は元から optional 前提。
  */
-export function findProblemDiagramUrl(problemId: string): string | undefined {
-  return DIAGRAM_URL_BY_ID.get(problemId);
+export function findProblemDiagramUrl(
+  problemId: string,
+  locale: "ja" | "en" = "ja",
+): string | undefined {
+  return (
+    (locale === "en" ? ENGLISH_DIAGRAM_URL_BY_ID.get(problemId) : undefined) ??
+    DIAGRAM_URL_BY_ID.get(problemId)
+  );
 }
 
 /**

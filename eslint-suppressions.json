@@ -766,9 +766,6 @@
     },
     "@typescript-eslint/no-explicit-any": {
       "count": 4
-    },
-    "sonarjs/no-extra-arguments": {
-      "count": 2
     }
   },
   "apps/participant-portal/test/auth/team-view-diff.test.ts": {

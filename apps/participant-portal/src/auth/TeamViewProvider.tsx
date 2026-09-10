@@ -60,6 +60,7 @@ interface TeamViewState {
   readonly unreadNotificationCount: number;
   /** Home の flag 提出後に呼ばれて即時再フェッチする経路。 */
   readonly refresh: () => Promise<void>;
+  readonly refreshAfterMutation: () => Promise<void>;
   /** 手動更新中 / 初回更新中なら true。重複 refresh は同じ in-flight promise を共有する。 */
   readonly isRefreshing: boolean;
   /** 30 秒 status polling。コスト抑制のため default false。 */
@@ -83,6 +84,9 @@ const Ctx = createContext<TeamViewState>({
   notificationsNoEvent: false,
   unreadNotificationCount: 0,
   refresh: async () => {
+    /* default no-op */
+  },
+  refreshAfterMutation: async () => {
     /* default no-op */
   },
   isRefreshing: false,
@@ -207,6 +211,13 @@ export function TeamViewProvider({ config, children }: { config: AppConfig; chil
     return run;
   }, [isMock, sessionToken, config.apiBaseUrl, applyPortalMeDecision, applyLeaderboardDecision]);
 
+  // A refresh started before the mutation may still contain the old score.
+  // Wait for it, then request a fresh snapshot without changing polling preferences.
+  const refreshAfterMutation = useCallback(async () => {
+    if (refreshInFlightRef.current) await refreshInFlightRef.current;
+    await refresh();
+  }, [refresh]);
+
   /** 60 秒 tick: `/portal/me/notifications` 専用。Events table の RCU を守る。 */
   const refreshNotifications = useCallback(async () => {
     // 呼び出し元の useEffect が同条件を gate 済み (refresh と違い context に露出しない) ため
@@ -300,6 +311,7 @@ export function TeamViewProvider({ config, children }: { config: AppConfig; chil
         notificationsNoEvent,
         unreadNotificationCount,
         refresh,
+        refreshAfterMutation,
         isRefreshing,
         autoRefreshEnabled,
         setAutoRefreshEnabled,
