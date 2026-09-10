@@ -7,8 +7,9 @@ import type { AppConfig } from "../../src/config";
  * (endsAt 有無) / 通常 table (自チーム強調 cell)。 共有 hook (useTeamView / useIsMock / useT)
  * を mock して各 state を駆動する。 専用 polling は持たない page なので state は注入で完結。
  */
-const { mockTeamView, mockIsMock } = vi.hoisted(() => ({
+const { mockTeamView, mockIsMock, mockRefresh } = vi.hoisted(() => ({
   mockTeamView: vi.fn(),
+  mockRefresh: vi.fn().mockResolvedValue(undefined),
   mockIsMock: vi.fn(),
 }));
 vi.mock("../../src/i18n", () => ({
@@ -17,7 +18,9 @@ vi.mock("../../src/i18n", () => ({
     params ? `${key}|${JSON.stringify(params)}` : key,
 }));
 vi.mock("../../src/config-context", () => ({ useIsMock: mockIsMock }));
-vi.mock("../../src/auth/TeamViewProvider", () => ({ useTeamView: mockTeamView }));
+vi.mock("../../src/auth/TeamViewProvider", () => ({
+  useTeamView: () => ({ refresh: mockRefresh, ...mockTeamView() }),
+}));
 
 const { ScoreboardPage } = await import("../../src/pages/Scoreboard");
 

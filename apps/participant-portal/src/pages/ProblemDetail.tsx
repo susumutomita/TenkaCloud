@@ -418,7 +418,8 @@ function ProblemInfoSection({
   // Audit table #1/#2: 想定プレイ時間 / 学習目的 / タグ は competition では出さない
   // (= timing 漏洩 + 出題意図メタの暴露)。 残すのは カテゴリ + 難易度 + 問題説明 のみ。
   // Phase 1c (#1929): per-problem architecture diagram (bundled diagram.svg), if any.
-  const diagramUrl = findProblemDiagramUrl(metadata.id);
+  const { locale } = useI18n();
+  const diagramUrl = findProblemDiagramUrl(metadata.id, locale);
   return (
     <Container header={<Header variant="h2">{t("problem_detail.info_header")}</Header>}>
       <SpaceBetween size="m">

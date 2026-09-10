@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   checkSubmoduleNotBehind,
   type GitIO,
@@ -36,6 +36,11 @@ import {
 } from "../../../scripts/quality/check-submodule-not-behind";
 
 it("accepts squashed content but rejects rollback, missing changes, conflicts, and invalid revisions", () => {
+  // Git hooks export repository-local variables. Never let fixture commands
+  // initialize or reconfigure the caller's repository.
+  for (const key of Object.keys(process.env)) {
+    if (key.startsWith("GIT_")) vi.stubEnv(key, undefined);
+  }
   const repository = mkdtempSync(join(tmpdir(), "submodule-pin-"));
   const git = (...args: string[]) =>
     // eslint-disable-next-line sonarjs/no-os-command-from-path -- real git is the regression fixture
@@ -89,6 +94,7 @@ it("accepts squashed content but rejects rollback, missing changes, conflicts, a
     ).toBe("behind-or-diverged");
   } finally {
     rmSync(repository, { recursive: true, force: true });
+    vi.unstubAllEnvs();
   }
 });
 

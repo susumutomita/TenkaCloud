@@ -24,6 +24,7 @@ import { toErrorMessage } from "@tenkacloud/web-kit";
 import { Component, type ErrorInfo, type ReactNode, Suspense, useMemo } from "react";
 import { getCoordinationProjection, submitCoordinationOp } from "../api/coordination-client";
 import type { ParticipantEndpointView } from "../api/portal-client";
+import { useTeamView } from "../auth/TeamViewProvider";
 import { loadPluginSlot } from "./loader";
 import { PluginUpdateNotice, ReloadPortal } from "./PluginUpdateNotice";
 import {
@@ -69,6 +70,7 @@ export function PortalPluginSlots({
   coordinationApiUrl,
   sessionToken,
 }: PortalPluginSlotsProps) {
+  const { refreshAfterMutation } = useTeamView();
   // problemId が変わらない限り phases / disruptions / slot 検索結果は不変 (= build-time catalog
   // から narrowed)。 endpoints は stackOutputs 依存なので別 memo に切る。
   const phases = useMemo(() => buildPortalPhases(problemId), [problemId]);
@@ -87,10 +89,15 @@ export function PortalPluginSlots({
   const coordinationClient = useMemo<PortalCoordinationClient | undefined>(() => {
     if (!coordinationApiUrl || !sessionToken) return undefined;
     return {
-      submitOp: (op: unknown) => submitCoordinationOp(coordinationApiUrl, sessionToken, op),
+      submitOp: async (op: unknown) => {
+        const result = await submitCoordinationOp(coordinationApiUrl, sessionToken, op);
+        // A rejected move can still incur a penalty; always refresh the official totals.
+        void refreshAfterMutation();
+        return result;
+      },
       getProjection: () => getCoordinationProjection(coordinationApiUrl, sessionToken),
     };
-  }, [coordinationApiUrl, sessionToken]);
+  }, [coordinationApiUrl, sessionToken, refreshAfterMutation]);
   // mount 時刻を pin (= 5s polling 由来の re-render で plugin が clock change を見ない方が
   // surprise が少ない、 「nowIso が動く」 ことに依存した plugin は plugin 内で自前
   // setInterval を持つべき)。 [] で intentional mount-pin。 problemId / jobId が変われば

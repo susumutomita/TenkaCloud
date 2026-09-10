@@ -5,6 +5,7 @@ import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import Spinner from "@cloudscape-design/components/spinner";
 import Table from "@cloudscape-design/components/table";
+import { useEffect } from "react";
 import type { LeaderboardEntry } from "../api/portal-client";
 import { useTeamView } from "../auth/TeamViewProvider";
 import { ResultCard } from "../components/ResultCard";
@@ -23,7 +24,10 @@ import { useT } from "../i18n";
 export function ScoreboardPage({ config }: { config: AppConfig }) {
   const t = useT();
   const isMock = useIsMock();
-  const { leaderboard, leaderboardError, leaderboardNoEvent } = useTeamView();
+  const { leaderboard, leaderboardError, leaderboardNoEvent, refresh } = useTeamView();
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
   return (
     <SpaceBetween size="l">

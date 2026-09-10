@@ -36,6 +36,11 @@ vi.mock("../api/coordination-client", () => ({
   getCoordinationProjection: vi.fn().mockResolvedValue({ kind: "ok", projection: {} }),
 }));
 
+const mockRefresh = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+vi.mock("../auth/TeamViewProvider", () => ({
+  useTeamView: () => ({ refreshAfterMutation: mockRefresh }),
+}));
+
 const { loadPluginSlot } = await import("./loader");
 const { buildPortalCoordination } = await import("./props-builder");
 const { submitCoordinationOp, getCoordinationProjection } = await import(
@@ -178,6 +183,7 @@ describe("PortalPluginSlots", () => {
       kind: "register-route",
       url: "https://svc",
     });
+    expect(mockRefresh).toHaveBeenCalled();
     expect(mockGetProjection).toHaveBeenCalledWith("https://coord.example", "key-1");
   });
 

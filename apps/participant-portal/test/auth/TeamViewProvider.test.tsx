@@ -321,6 +321,7 @@ describe("TeamViewProvider polling", () => {
     const { result } = renderHook(() => useTeamView());
     await act(async () => {
       await result.current.refresh();
+      await result.current.refreshAfterMutation();
       result.current.setAutoRefreshEnabled(true);
       result.current.markNotificationsSeen("2026-05-20T00:00:00Z");
     });
@@ -379,8 +380,8 @@ describe("TeamViewProvider polling", () => {
   });
 
   it("should share an in-flight status refresh instead of issuing duplicate reads", async () => {
-    let resolveMe: (value: ParticipantTeamView) => void = () => undefined;
-    let resolveLeaderboard: (value: LeaderboardResponse) => void = () => undefined;
+    let resolveMe: (value: ParticipantTeamView) => void = (_value) => undefined;
+    let resolveLeaderboard: (value: LeaderboardResponse) => void = (_value) => undefined;
     mockGetMe.mockReturnValue(new Promise((resolve) => (resolveMe = resolve)));
     mockGetLeaderboard.mockReturnValue(new Promise((resolve) => (resolveLeaderboard = resolve)));
 
@@ -408,6 +409,69 @@ describe("TeamViewProvider polling", () => {
     expect(result.current.isRefreshing).toBe(false);
     expect(result.current.view).toEqual(view());
     expect(result.current.leaderboard).toEqual(lb());
+  });
+
+  it("refreshes the official score after a mutation even when an older read is in flight", async () => {
+    let resolveOld: (value: LeaderboardResponse) => void = (_value) => undefined;
+    mockGetLeaderboard.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveOld = resolve;
+      }),
+    );
+    const { result } = renderHook(() => useTeamView(), { wrapper });
+    await flush();
+    mockGetLeaderboard.mockResolvedValue(lb({ entries: [lbEntry({ score: 30, rank: 2 })] }));
+    let updated: Promise<void>;
+    await act(async () => {
+      updated = result.current.refreshAfterMutation();
+      resolveOld(lb({ entries: [lbEntry({ score: 0, rank: 1 })] }));
+      await updated;
+    });
+    expect(mockGetLeaderboard).toHaveBeenCalledTimes(2);
+    expect(result.current.leaderboard?.entries[0]).toMatchObject({ score: 30, rank: 2 });
+    expect(result.current.autoRefreshEnabled).toBe(false);
+  });
+
+  it("retries delayed official scores with auto-refresh off and stops after the bounded window", async () => {
+    mockGetLeaderboard.mockResolvedValue(lb({ entries: [lbEntry({ score: 0 })] }));
+    const { result, unmount } = renderHook(() => useTeamView(), { wrapper });
+    await flush();
+    await act(async () => {
+      await result.current.refreshAfterMutation();
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(result.current.leaderboard?.entries[0]?.score).toBe(0);
+    mockGetLeaderboard.mockResolvedValue(lb({ entries: [lbEntry({ score: 30, rank: 2 })] }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30000);
+    });
+    expect(result.current.leaderboard?.entries[0]).toMatchObject({ score: 30, rank: 2 });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30000);
+    });
+    const calls = mockGetLeaderboard.mock.calls.length;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(120000);
+    });
+    expect(mockGetLeaderboard).toHaveBeenCalledTimes(calls);
+    expect(result.current.autoRefreshEnabled).toBe(false);
+    unmount();
+  });
+
+  it("cancels score retries when the provider is unmounted", async () => {
+    const { result, unmount } = renderHook(() => useTeamView(), { wrapper });
+    await flush();
+    await act(async () => {
+      await result.current.refreshAfterMutation();
+    });
+    const calls = mockGetLeaderboard.mock.calls.length;
+    unmount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(70000);
+    });
+    expect(mockGetLeaderboard).toHaveBeenCalledTimes(calls);
   });
 
   it("should keep the same references on an unchanged second tick", async () => {

@@ -25,7 +25,13 @@ const teamView: {
   leaderboard: LeaderboardResponse | null;
   leaderboardError: string | null;
   leaderboardNoEvent: boolean;
-} = { leaderboard: null, leaderboardError: null, leaderboardNoEvent: false };
+  refresh: () => Promise<void>;
+} = {
+  leaderboard: null,
+  leaderboardError: null,
+  leaderboardNoEvent: false,
+  refresh: vi.fn().mockResolvedValue(undefined),
+};
 
 vi.mock("../auth/TeamViewProvider", () => ({
   useTeamView: () => teamView,
@@ -44,6 +50,7 @@ describe("ScoreboardPage no_event state (#1793)", () => {
     teamView.leaderboardNoEvent = true;
     render(<ScoreboardPage config={config} />);
 
+    expect(teamView.refresh).toHaveBeenCalled();
     expect(screen.getByText("scoreboard.no_event_header")).toBeDefined();
     expect(screen.getByText("scoreboard.no_event_body")).toBeDefined();
     // no_event が確定したら loading spinner は出さない。
