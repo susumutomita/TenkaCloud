@@ -179,7 +179,7 @@ export const DOC_PAGES: readonly DocPage[] = [
     href: "/developers/docs/operate/run-an-event/",
     title: "Run an event end to end",
     description:
-      "Run the current Lite event flow; SaaS tenant and multi-cloud sections are architecture reference.",
+      "Plan staffing, quantities and deadlines, practise as a local problem, then rehearse the Lite event flow.",
     maturity: "preview",
     section: "Operate",
     headings: [
@@ -188,7 +188,7 @@ export const DOC_PAGES: readonly DocPage[] = [
       { id: "deploy-a-problem", text: "Deploy a problem" },
       { id: "enable-multi-cloud", text: "Enable multi-cloud" },
     ],
-    body: "Run an event end to end. For the current Lite path, sign in to the Application Admin Console, connect a test competitor account with competitor-bootstrap.yaml and the same 16-128 character ExternalId, create an event, start a problem, submit a real flag, reset, stop, and verify teardown. SaaS tenant creation and multi-cloud sections describe repository architecture only; they are not recently live-verified organizer procedures. イベント運営。現在のLite経路でテスト競技者アカウント接続、問題起動、flag提出、リセット、停止、削除まで確認する。SaaSテナントとマルチクラウドは構成参考であり最近のライブ検証済み手順ではない。",
+    body: "開催準備、協力者、会場確保、参加者属性、必要数量、司会台本、振り返り。Timeline, staffing, equipment quantities, facilitator script, incident decisions and local event-host-rehearsal problem. Run an event end to end. For the current Lite path, sign in to the Application Admin Console, connect a test competitor account with competitor-bootstrap.yaml and the same 16-128 character ExternalId, create an event, start a problem, submit a real flag, reset, stop, and verify teardown. SaaS tenant creation and multi-cloud sections describe repository architecture only; they are not recently live-verified organizer procedures. イベント運営。現在のLite経路でテスト競技者アカウント接続、問題起動、flag提出、リセット、停止、削除まで確認する。SaaSテナントとマルチクラウドは構成参考であり最近のライブ検証済み手順ではない。",
   },
   {
     slug: "operate/use-existing-pack",

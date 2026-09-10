@@ -2,6 +2,8 @@
 
 Issue #2407。TenkaCloud で 1 回のイベント (Battle / Challenge) を運営する運営者向けの手順書。作問者でなくても、この文書だけで前日準備から撤収まで通せることを目標にする。キャパシティ運用の詳細は [dynamodb-event-capacity.md](./dynamodb-event-capacity.md)、管理者 SSO は [cognito-saml-idp-playbook.md](./cognito-saml-idp-playbook.md)、デプロイ手順の詳細は [DEPLOYMENT_GUIDE.md](../../DEPLOYMENT_GUIDE.md)、問題ごとの当日運用は各問題の `OPERATOR.md` (catalog repo) に委ねる。
 
+開催の企画・協力者・会場・必要数量・司会台本は、[LPの開催ランブック](https://tenkacloud.com/docs/operate/run-an-event/)を入口にしてください。本文は技術運用の詳細です。練習用の[event-host-rehearsal](https://github.com/susumutomita/TenkaCloudChallenge/tree/main/challenges/event-host-rehearsal)で仮想イベントの準備と判断を体験できます。
+
 ## 前提: どのモードで動かすか
 
 イベント規模で運用モードを決める。デプロイ手順そのものは DEPLOYMENT_GUIDE.md にあるので、ここでは「どれを選ぶか」だけ確認する。
