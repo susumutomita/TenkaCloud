@@ -432,6 +432,48 @@ describe("TeamViewProvider polling", () => {
     expect(result.current.autoRefreshEnabled).toBe(false);
   });
 
+  it("retries delayed official scores with auto-refresh off and stops after the bounded window", async () => {
+    mockGetLeaderboard.mockResolvedValue(lb({ entries: [lbEntry({ score: 0 })] }));
+    const { result, unmount } = renderHook(() => useTeamView(), { wrapper });
+    await flush();
+    await act(async () => {
+      await result.current.refreshAfterMutation();
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(result.current.leaderboard?.entries[0]?.score).toBe(0);
+    mockGetLeaderboard.mockResolvedValue(lb({ entries: [lbEntry({ score: 30, rank: 2 })] }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30000);
+    });
+    expect(result.current.leaderboard?.entries[0]).toMatchObject({ score: 30, rank: 2 });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30000);
+    });
+    const calls = mockGetLeaderboard.mock.calls.length;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(120000);
+    });
+    expect(mockGetLeaderboard).toHaveBeenCalledTimes(calls);
+    expect(result.current.autoRefreshEnabled).toBe(false);
+    unmount();
+  });
+
+  it("cancels score retries when the provider is unmounted", async () => {
+    const { result, unmount } = renderHook(() => useTeamView(), { wrapper });
+    await flush();
+    await act(async () => {
+      await result.current.refreshAfterMutation();
+    });
+    const calls = mockGetLeaderboard.mock.calls.length;
+    unmount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(70000);
+    });
+    expect(mockGetLeaderboard).toHaveBeenCalledTimes(calls);
+  });
+
   it("should keep the same references on an unchanged second tick", async () => {
     const { result } = renderHook(() => useTeamView(), { wrapper });
     await flush();

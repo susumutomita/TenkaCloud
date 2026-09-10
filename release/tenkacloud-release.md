@@ -13,7 +13,7 @@ The machine-readable source of truth is [`tenkacloud-release.json`](./tenkacloud
 | Component | Authoritative reference | Display tag |
 | --- | --- | --- |
 | Platform | [https://github.com/susumutomita/TenkaCloud](https://github.com/susumutomita/TenkaCloud) — the commit tagged `v1.8.0` | — |
-| Problem catalog | [`9ca86c6e56f93d1a0af5d0eb00dd7ae5bf10b663`](https://github.com/susumutomita/TenkaCloudChallenge/commit/9ca86c6e56f93d1a0af5d0eb00dd7ae5bf10b663) | — |
+| Problem catalog | [`9c3c27db26f0d13239dcc45d81158861f8fa63ab`](https://github.com/susumutomita/TenkaCloudChallenge/commit/9c3c27db26f0d13239dcc45d81158861f8fa63ab) | — |
 | Simulator | `ghcr.io/susumutomita/tenkacloud-simulator@sha256:049c6c165f9947b386b2c5864983aebefba26e996ec62859dae0e9814c52d505` | — |
 
 The platform commit is derived from the release tag at publish time (`scripts/release/verify-release-identity.ts`, #3024): this manifest is part of the tagged tree, so it cannot record the SHA of the commit that contains it. Until the tag exists, the platform identity of this manifest is the in-progress branch it ships on.

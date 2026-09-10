@@ -213,10 +213,25 @@ export function TeamViewProvider({ config, children }: { config: AppConfig; chil
 
   // A refresh started before the mutation may still contain the old score.
   // Wait for it, then request a fresh snapshot without changing polling preferences.
+  const scoreRetryTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const clearScoreRetries = useCallback(() => {
+    for (const timer of scoreRetryTimers.current) clearTimeout(timer);
+    scoreRetryTimers.current = [];
+  }, []);
+  useEffect(() => {
+    if (!sessionToken || !config.apiBaseUrl) clearScoreRetries();
+    return clearScoreRetries;
+  }, [sessionToken, config.apiBaseUrl, clearScoreRetries]);
   const refreshAfterMutation = useCallback(async () => {
+    // Delivery can wait for the next backend tick; the leaderboard index is
+    // eventually consistent. Coalesce bursts into one bounded retry window.
+    clearScoreRetries();
+    scoreRetryTimers.current = [1000, 5000, 35000, 65000].map((delay) =>
+      setTimeout(() => void refresh(), delay),
+    );
     if (refreshInFlightRef.current) await refreshInFlightRef.current;
     await refresh();
-  }, [refresh]);
+  }, [refresh, clearScoreRetries]);
 
   /** 60 秒 tick: `/portal/me/notifications` 専用。Events table の RCU を守る。 */
   const refreshNotifications = useCallback(async () => {
