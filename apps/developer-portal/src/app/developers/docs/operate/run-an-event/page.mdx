@@ -7,6 +7,87 @@ export const metadata = { title: "Run an event end to end" };
 This operator walkthrough presents Lite as the current event procedure. SaaS
 tenant creation and multi-cloud are separated as architecture reference.
 
+## From an idea to a hosted event
+
+Start with a willing owner and helpers, even if nobody has hosted before. The lead times and effort below are **initial estimates**, not measured promises. Move them earlier for venue booking or internal approval; update them after each event.
+
+**Plan → people and venue → environment → rehearsal → event → teardown and review**
+
+[Practise as a problem: First-time event host](https://github.com/susumutomita/TenkaCloudChallenge/tree/main/challenges/event-host-rehearsal). This Docker-based exercise runs locally and is not listed in the AWS problem picker. Complete four checkpoints for a fictional event. Passing does not certify a real event or AWS environment.
+
+### Timeline, ownership and quantities
+
+| Target time | Owner and estimated effort | Deliverable and quantity | Completion / fallback |
+| --- | --- | --- | --- |
+| 4 weeks before | Owner + helpers, 60 min | One brief: purpose, audience, date, budget limit | Assign an accountable owner before recruiting participants |
+| 3 weeks before | Venue + recruitment leads, 60–120 min each | One venue or online meeting, capacity, power/network check, invitation | Confirm location and capacity; change date or size if unavailable |
+| 2 weeks before | Technical + facilitation leads, 60–120 min each | Team plan, problem list, version, equipment and role lists | Match problems to participants; reduce scope if necessary |
+| 1 week before | All event staff, competition duration + 60 min | Test teams, actual settings, script, incident contacts | Rehearse login, practice, answers, scoring, ending and teardown; unresolved scoring/connectivity prevents sign-off |
+| Day before | Technical + reception leads, 30–60 min | Final roster, team handouts, spares, contacts, pinned commit IDs | Verify distribution and appoint backups |
+| 60 min before | Technical + venue leads, 30 min | Check network, power, screens and help channel | Owner decides whether unresolved failures require a delay |
+| 30 min before | Reception + facilitator, 30 min | Check-in, team login details, practice time | Confirm every team's connection before announcing the start |
+| During play | Facilitator + support + technical staff, event duration | Time announcements, questions, incident log | Give consistent information; one owner decides interruptions/resumption |
+| After play | Owner + technical lead, 30–60 min | Reconciled scores, results, survey, teardown record | Confirm deletion results and cost status, not merely deletion requests |
+| Following week | All staff, 30 min | Actual effort, questions, incidents, improvements | Update the next event's estimates, quantities and responsibilities |
+
+### One-page plan and helper roster
+
+Copy this table into the organizer's private workspace. Do not put personal contacts or login keys in public issues or documents.
+
+| Field | Fill in for this event |
+| --- | --- |
+| Purpose and audience | Intended experience; cryptography/AWS background; accessibility needs |
+| Date, format, venue | Check-in, practice, competition, presentation and teardown times; online or in person |
+| Capacity and teams | Participants, people per team, team count, absence/reallocation policy |
+| Owner and backup | Who decides start, interruption, resumption and final scores |
+| Recruitment, venue, reception | Lead, availability, backup and private contact method |
+| Facilitation, support, technical operations | Lead, availability, backup and simultaneous workload |
+| Budget and environment | Limit, environment, cost reviewer, teardown owner and deadline |
+| Content and version | Problems, duration, settings and rehearsed commit IDs |
+
+People may hold multiple roles, but reception and incident response can happen simultaneously. Choose staffing from your scope and rehearsal evidence.
+
+### Quantities: 23 participants, four per team
+
+Divide participants by four and round up: 23 people need six teams. This is planning arithmetic, not a platform capacity guarantee.
+
+| Item | Rule | Example |
+| --- | --- | --- |
+| Team login details and recipients | One per team; name a redistribution owner instead of publishing a key list | 6 sets |
+| Computers | One per participant plus spares if everyone operates; announce shared-device arrangements beforehand | 23 + 2 spares = 25 for this example |
+| Power and network | Participant and staff computers; check outlets, connectivity and venue rules on site | Give the actual device count to the venue lead |
+| Paper and pens | One set per person doing hand calculations, plus spares | 23 sets plus spares |
+| Script and incident contacts | One current source accessible by all staff | 1 shared master |
+
+AWS account requirements depend on the chosen problem and event mode. Consult the deployment steps and problem README rather than inferring them from team count alone.
+
+### Facilitator script
+
+1. **Check-in:** “Confirm your team and login URL. Do not share keys across teams. Tell reception if you cannot connect.”
+2. **Practice:** “Use the first problem to find the answer field and score display. We will explain how practice time and points differ from this event's competition settings.”
+3. **Before starting:** “Confirm correct-answer, wrong-answer and deadline rules. This is the help channel. We start after checking every team's readiness.”
+4. **During play:** “Check remaining time on screen. Common changes and incident updates will be announced to all teams here.”
+5. **Finish:** “Answer collection has ended. We will reconcile the records before confirming scores and rankings. Raise discrepancies with the help desk.”
+
+### Incident decisions
+
+| Situation | First check | Owner and action |
+| --- | --- | --- |
+| Lead absent | Backup's contacts, permissions and runbook | Owner reallocates roles or changes scope/start time |
+| One team cannot connect | URL, team login details, device, network | Reception escalates to technical lead; never broadcast the key |
+| All teams disconnected | Shared network, Portal, environment status | Technical lead investigates; owner delays start and announces the next update time |
+| Score mismatch | Order ID, time, screen and scoring records | Technical lead reconciles before repeated submissions or manual score changes |
+| Interruption needed | Impact, records, current time and scores | Owner informs all teams; do not assume pause support exists—use the procedure verified for the selected mode |
+| Teardown failed | Remaining resources and deletion failure | Technical lead records owner/deadline for remaining work and continues cost checks |
+
+### Improve the template after each event
+
+| Stage | Estimated / actual effort | Participants / teams | Staffing gaps and common questions | Incidents and response | Next change, owner and deadline |
+| --- | --- | --- | --- | --- | --- |
+| Event record | Fill in | Fill in | Fill in | Fill in | Fill in |
+
+Mark unmeasured stages explicitly. See the [technical event runbook](https://github.com/susumutomita/TenkaCloud/blob/main/docs/operations/event-runbook.md) for operational troubleshooting and teardown, and the [crypto-battle README](https://github.com/susumutomita/TenkaCloudChallenge/blob/main/battles/ac26-crypto-battle/README.md) for problem-specific settings.
+
 ## Run an event with Lite
 
 1. Sign in to Lite's Application Admin Console.
