@@ -12,6 +12,9 @@ reference/
 reference/**
 .claude/
 .claude/**
+# .gitignore 済みの作業用 clone 置き場 (eslint.config.js と同じく対象外)
+tmp/
+tmp/**
 **/cdk.out/**
 **/cdk.out.test/**
 infrastructure/cloudformation/
