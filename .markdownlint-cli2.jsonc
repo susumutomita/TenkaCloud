@@ -11,5 +11,7 @@
     "MD041": false,
     "MD003": false
   },
-  "ignores": [".claude/**"]
+  // .claude/ (agent worktree) と tmp/ (.gitignore 済みの作業用 clone 置き場) は
+  // repo の Markdown ではないので対象外。
+  "ignores": [".claude/**", "tmp/**"]
 }
