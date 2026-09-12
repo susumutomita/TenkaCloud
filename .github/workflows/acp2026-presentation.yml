@@ -96,7 +96,7 @@ jobs:
               await call('Page.navigate', { url: target.href });
               for (let i = 0; i < 200; i++) {
                 try {
-                  const ready = await evaluate(`document.readyState === 'complete' && document.body?.classList.contains('presenting') && location.pathname.replace(/\/$/, '') === '/acp2026' && location.search === ${JSON.stringify(target.search)} && location.hash === ${JSON.stringify(target.hash)}`);
+                  const ready = await evaluate(`document.readyState === 'complete' && document.body?.classList.contains('presenting') && ['/acp2026', '/acp2026/'].includes(location.pathname) && location.search === ${JSON.stringify(target.search)} && location.hash === ${JSON.stringify(target.hash)}`);
                   if (ready) return;
                 } catch (error) {
                   if (!/context.*destroyed|Cannot find context/i.test(error.message)) throw error;
