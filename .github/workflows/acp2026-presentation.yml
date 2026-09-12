@@ -1,0 +1,148 @@
+name: ACP2026 presentation
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    paths:
+      - 'landing/acp2026/**'
+      - 'landing/landing/acp2026/**'
+      - '.github/workflows/acp2026-presentation.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'landing/acp2026/**'
+      - 'landing/landing/acp2026/**'
+      - '.github/workflows/acp2026-presentation.yml'
+  workflow_dispatch:
+
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - name: Verify the deployed file layout and real browser rendering
+        shell: bash
+        run: |
+          set -euo pipefail
+          export CHROME_BIN="$(command -v google-chrome || command -v chromium || command -v chromium-browser)"
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import { createServer } from 'node:http';
+          import { readFile, stat, mkdtemp, rm } from 'node:fs/promises';
+          import { spawn } from 'node:child_process';
+          import { resolve, sep, extname, join } from 'node:path';
+          import { tmpdir } from 'node:os';
+
+          const root = resolve('landing');
+          const mime = { '.html': 'text/html; charset=utf-8', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.png': 'image/png' };
+          const server = createServer(async (req, res) => {
+            try {
+              const pathname = decodeURIComponent(new URL(req.url, 'http://127.0.0.1').pathname);
+              let file = resolve(root, '.' + pathname);
+              if (file !== root && !file.startsWith(root + sep)) { res.writeHead(403); res.end(); return; }
+              if ((await stat(file)).isDirectory()) file = join(file, 'index.html');
+              const data = await readFile(file);
+              res.writeHead(200, { 'Content-Type': mime[extname(file)] || 'application/octet-stream' });
+              res.end(data);
+            } catch { res.writeHead(404); res.end('Not found'); }
+          });
+          await new Promise(done => server.listen(0, '127.0.0.1', done));
+          const origin = `http://127.0.0.1:${server.address().port}`;
+          const profile = await mkdtemp(join(tmpdir(), 'acp2026-browser-'));
+          const chrome = spawn(process.env.CHROME_BIN, ['--headless=new', '--no-sandbox', '--disable-gpu', '--no-first-run', '--no-default-browser-check', '--no-proxy-server', '--remote-debugging-port=0', `--user-data-dir=${profile}`, 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
+          const sleep = ms => new Promise(done => setTimeout(done, ms));
+          let socket;
+          let serial = 0;
+          const pending = new Map();
+          const errors = [];
+          try {
+            let debuggingPort;
+            for (let i = 0; i < 100; i++) {
+              try { debuggingPort = Number((await readFile(join(profile, 'DevToolsActivePort'), 'utf8')).split('\n')[0]); break; } catch { await sleep(100); }
+            }
+            assert.ok(debuggingPort, 'Chrome did not start');
+            const targets = await (await fetch(`http://127.0.0.1:${debuggingPort}/json/list`)).json();
+            socket = new WebSocket(targets.find(target => target.type === 'page').webSocketDebuggerUrl);
+            await new Promise((done, reject) => { socket.addEventListener('open', done, { once: true }); socket.addEventListener('error', reject, { once: true }); });
+            socket.addEventListener('message', event => {
+              const message = JSON.parse(event.data);
+              if (message.method === 'Runtime.exceptionThrown') errors.push(message.params.exceptionDetails.text);
+              if (message.id && pending.has(message.id)) {
+                const item = pending.get(message.id); pending.delete(message.id); clearTimeout(item.timer);
+                if (message.error) item.reject(new Error(JSON.stringify(message.error))); else item.resolve(message.result);
+              }
+            });
+            const call = (method, params = {}) => new Promise((resolve, reject) => {
+              const id = ++serial;
+              const timer = setTimeout(() => { pending.delete(id); reject(new Error(`CDP timeout: ${method}`)); }, 20000);
+              pending.set(id, { resolve, reject, timer });
+              socket.send(JSON.stringify({ id, method, params }));
+            });
+            const evaluate = async expression => {
+              const result = await call('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
+              if (result.exceptionDetails) throw new Error(JSON.stringify(result.exceptionDetails));
+              return result.result.value;
+            };
+            const navigate = async path => {
+              await call('Page.navigate', { url: origin + path });
+              for (let i = 0; i < 100; i++) {
+                if (await evaluate("document.readyState === 'complete' && document.body.classList.contains('presenting')")) return;
+                await sleep(100);
+              }
+              throw new Error('Presentation did not initialize: ' + path);
+            };
+            await call('Page.enable');
+            await call('Runtime.enable');
+            await call('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+            await navigate('/acp2026/');
+            const broken = await evaluate("Promise.all(Array.from(document.images, async image => { try { await image.decode(); return image.naturalWidth > 0 ? null : image.src; } catch { return image.src; } })).then(values => values.filter(Boolean))");
+            assert.deepEqual(broken, [], 'All screenshots and the QR code must decode');
+            assert.equal(await evaluate("document.querySelectorAll('.slide').length"), 12);
+            assert.equal(await evaluate("document.querySelectorAll('.slide:not([hidden])').length"), 1);
+            const displayed = () => evaluate("document.querySelector('.slide:not([hidden])').id");
+            assert.equal(await displayed(), 'slide-1');
+            await evaluate("document.getElementById('next').click()");
+            assert.equal(await displayed(), 'slide-2');
+            await evaluate("window.dispatchEvent(new KeyboardEvent('keydown', {key: 'ArrowRight'}))");
+            assert.equal(await displayed(), 'slide-3');
+            await evaluate("window.dispatchEvent(new KeyboardEvent('keydown', {key: 'End'}))");
+            assert.equal(await displayed(), 'slide-8');
+            assert.equal(await evaluate("document.getElementById('next').disabled"), true);
+            await evaluate("document.getElementById('appendix').click()");
+            assert.equal(await displayed(), 'slide-9');
+            await evaluate("document.getElementById('notes-button').click()");
+            assert.ok(await evaluate("document.getElementById('notes-panel').textContent.includes('RSA')"));
+            await evaluate("document.getElementById('notes-button').click()");
+            await evaluate("document.getElementById('appendix').click()");
+            for (const position of [0, 2, 3, 4, 5, 6, 7]) {
+              await evaluate(`document.getElementById('jump').value='${position}';document.getElementById('jump').dispatchEvent(new Event('change'))`);
+              const overflow = await evaluate("(() => { const slide = document.querySelector('.slide:not([hidden])'); const bottom = slide.querySelector('.footer').getBoundingClientRect().top; return Array.from(slide.children).filter(child => !child.matches('.footer,.notes')).filter(child => child.getBoundingClientRect().bottom > bottom + 1).map(child => child.tagName + '.' + child.className); })()");
+              assert.deepEqual(overflow, [], `Slide ${position + 1} overlaps its footer`);
+            }
+            await call('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 1, mobile: false });
+            await sleep(150);
+            assert.ok(await evaluate('document.documentElement.scrollWidth <= innerWidth'), 'No horizontal overflow on mobile');
+            await call('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
+            await navigate('/landing/acp2026/index.html?source=compatibility#slide-3');
+            assert.equal(await evaluate('location.pathname'), '/acp2026/');
+            assert.equal(await evaluate('location.search'), '?source=compatibility');
+            assert.equal(await displayed(), 'slide-3');
+            const pdf = await call('Page.printToPDF', { printBackground: true, preferCSSPageSize: true });
+            const pageCount = (Buffer.from(pdf.data, 'base64').toString('latin1').match(/\/Type\s*\/Page\b/g) || []).length;
+            assert.equal(pageCount, 8, 'Default print contains the eight main slides');
+            assert.deepEqual(errors, [], 'No uncaught browser errors');
+            console.log('PASS: 12 slides, four decoded screenshots and QR, navigation, appendix, notes, mobile layout, compatibility URL, eight-page PDF.');
+          } finally {
+            socket?.close();
+            for (const entry of pending.values()) clearTimeout(entry.timer);
+            chrome.kill('SIGTERM');
+            await new Promise(done => server.close(done));
+            await sleep(300);
+            await rm(profile, { recursive: true, force: true }).catch(() => {});
+          }
+          JS

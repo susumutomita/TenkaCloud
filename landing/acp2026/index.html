@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="ACP2026最終成果発表。暗号バトルのLEAKとHUNTを同じ数字でつなぎ、準同型加算・Schnorr・秘密分散を実装画面で紹介する5分のHTMLスライド。">
+<meta name="theme-color" content="#142439">
+<meta property="og:type" content="website">
+<meta property="og:title" content="暗号を「知る」から、暗号で「判断する」へ。 | ACP2026">
+<meta property="og:description" content="暗号バトル / Cryptography Drills & GameDay with TenkaCloud — 冨田進">
+<meta property="og:url" content="https://www.tenkacloud.com/acp2026/">
+<link rel="canonical" href="https://www.tenkacloud.com/acp2026/">
+<link rel="icon" href="../assets/favicon.svg">
+<title>ACP2026 最終成果発表 — 暗号バトル | TenkaCloud</title>
+<style>
+:root{--navy:#142439;--ink:#183047;--muted:#52667c;--blue:#2f6fe5;--gold:#f5cc5b;--green:#087f62;--purple:#7657a4;--paper:#f5f8fc;--line:#d7e0eb;--scale:1;font-family:"Noto Sans JP","Hiragino Sans","Yu Gothic",system-ui,sans-serif;color-scheme:light}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:#0c1726;color:var(--ink)}button,a,select{touch-action:manipulation}button,select{font:inherit}button{cursor:pointer}a{color:inherit;text-underline-offset:4px}button:focus-visible,a:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid var(--gold);outline-offset:3px}h1,h2,h3,p,figure{margin:0}h1{font-size:60px;line-height:1.45;letter-spacing:-.025em}h2{font-size:38px;line-height:1.4;letter-spacing:-.025em}h3{font-size:24px;line-height:1.4}p{line-height:1.7}.slide{position:relative;width:1280px;height:720px;padding:44px 54px 50px;background:var(--paper);overflow:hidden;margin:28px auto;color:var(--ink)}.slide[hidden]{display:none}.dark{background:var(--navy);color:#fff}.kicker{display:inline-block;background:#e9f0ff;color:#245ed0;font-size:14px;font-weight:800;letter-spacing:.04em;padding:8px 13px;margin-bottom:23px}.dark .kicker{background:var(--gold);color:var(--navy)}.lead{font-size:21px;color:var(--muted);margin-top:12px}.dark .lead{color:#c7d3e1}.body{margin-top:28px}.grid{display:grid;gap:22px}.three{grid-template-columns:repeat(3,minmax(0,1fr))}.two{grid-template-columns:1.4fr 1fr}.demo{grid-template-columns:minmax(0,1.75fr) minmax(0,1fr);align-items:center;gap:36px}.card{border:1px solid var(--line);border-radius:14px;padding:24px;background:#fff}.card p{font-size:19px;margin-top:16px}.card .label{font-size:16px;margin-bottom:12px;display:block;color:var(--muted);font-weight:700}.card .number{font-size:44px;font-weight:800;color:var(--blue);display:block;margin:12px 0}.card.green .number{color:var(--green)}.card.purple .number{color:var(--purple)}.caption{font-size:13px;color:var(--muted);margin-top:8px;line-height:1.6}.math{font-size:32px;font-weight:800;line-height:1.7}.large{font-size:50px;font-weight:800;color:var(--blue);line-height:1.4}.green-text{color:var(--green)}.band{padding:15px 19px;background:#e8f0fb;margin-top:23px;font-size:22px;font-weight:750;line-height:1.5}.dark .band{background:#253c57;color:var(--gold)}.shot{display:block;width:100%;height:auto;border-radius:9px;border:1px solid var(--line);background:white}.proof-shot{margin-top:9px}.flow{display:flex;align-items:center;gap:14px}.flow>span{flex:1;background:#e9f0ff;padding:12px;text-align:center;font-size:20px;font-weight:750;color:#245ed0}.flow>b{font-size:28px;color:var(--blue)}.footer{position:absolute;left:54px;right:54px;bottom:18px;display:flex;align-items:center;justify-content:space-between;gap:20px;border-top:1px solid var(--line);padding-top:10px;font-size:12px;color:var(--muted)}.dark .footer{border-color:#40546b;color:#c7d3e1}.footer a{white-space:nowrap}.hero{display:grid;grid-template-columns:1.55fr 1fr;gap:40px;align-items:center;margin-top:30px}.hero-side{border:1px solid #40546b;border-radius:18px;padding:28px;background:#1b3049}.hero-side .name{color:var(--gold);font-size:34px;font-weight:800;margin-bottom:16px}.hero-side p{font-size:21px}.byline{font-size:21px;margin-top:42px;font-weight:700}.tagline{font-size:28px;color:var(--gold);margin-top:20px}.principles{display:flex;gap:12px;margin-top:24px;flex-wrap:wrap}.pill{padding:9px 14px;border:1px solid #50627a;border-radius:6px;font-size:18px}.qr{background:#fff;padding:18px;border-radius:12px;width:230px;height:230px;display:block}.links a{display:block;font-size:22px;margin:18px 0;overflow-wrap:anywhere}.table{width:100%;border-collapse:collapse;font-size:17px;line-height:1.6}.table th,.table td{border-bottom:1px solid var(--line);padding:10px 12px;text-align:left;vertical-align:top}.table thead{background:#e8f0fb}.table th:first-child{width:145px}.small p{font-size:17px}.source-list{font-size:18px;line-height:1.9;display:grid;gap:12px}.source-list a{color:#245ed0}.notes{font-size:17px;margin:18px 0;padding:16px;background:#fff;color:var(--ink);border:1px solid var(--line);border-radius:8px}.notes summary{cursor:pointer;font-weight:700}.notes p{margin-top:10px}
+/* JS enhances the printable/readable document into a fixed-aspect presentation. */
+body.presenting{overflow:hidden}body.presenting #deck{height:100dvh;display:grid;place-items:center;padding-bottom:64px}body.presenting .slide{position:absolute;top:50%;left:50%;margin:0;transform:translate(-50%,calc(-50% - 25px)) scale(var(--scale));transform-origin:center}body.presenting .notes{display:none}#toolbar{display:none}body.presenting #toolbar{position:fixed;bottom:0;left:0;right:0;z-index:10;display:flex;gap:10px;align-items:center;justify-content:center;padding:8px 16px;min-height:58px;background:#0c1726;color:#fff;font-size:14px;border-top:1px solid #334963}#toolbar button,#toolbar select{height:40px;border:1px solid #51637a;border-radius:7px;background:#20354d;color:#fff;padding:0 12px}#toolbar button:disabled{opacity:.35;cursor:default}#toolbar a{font-size:13px;color:#c7d3e1}#jump{max-width:280px}#status{min-width:95px;text-align:center;font-variant-numeric:tabular-nums}#notes-panel{display:none;position:fixed;bottom:65px;left:50%;transform:translateX(-50%);width:min(920px,94vw);max-height:50vh;overflow:auto;background:#fff;color:var(--ink);padding:20px;z-index:20;border:2px solid #8ba0b7;border-radius:10px;box-shadow:0 8px 40px #0005;line-height:1.8}#notes-panel.open{display:block}#notes-panel h3{font-size:18px;margin-bottom:10px}#notice{position:fixed;top:10px;left:50%;transform:translateX(-50%);padding:8px 16px;border-radius:8px;background:#fff;color:var(--ink);z-index:30;max-width:90vw}#notice:empty{display:none}.sr-only{position:absolute;clip-path:inset(50%);width:1px;height:1px;overflow:hidden;white-space:nowrap}.load-warning{background:#fff2d8;border:1px solid #946300;padding:12px;font-size:16px;color:#6b4900}
+@media(max-width:650px){#toolbar{gap:5px!important;padding:6px!important;font-size:12px!important}#toolbar button,#toolbar select{padding:0 8px;height:44px}#toolbar .optional,#jump{display:none}#status{min-width:72px}body:not(.presenting) .slide{width:100%;height:auto;min-height:80vh;padding:28px 20px;margin:0 0 20px}body:not(.presenting) .footer{position:static;margin-top:24px}body:not(.presenting) .grid,body:not(.presenting) .hero{grid-template-columns:1fr}body:not(.presenting) h1{font-size:36px}body:not(.presenting) h2{font-size:28px}body:not(.presenting) .three{gap:14px}}
+@media print{@page{size:1280px 720px;margin:0}html,body,body.presenting{background:#fff;height:auto;overflow:visible!important}body.presenting #deck,#deck{display:block;height:auto;padding:0}body.presenting .slide,.slide{position:relative;top:auto;left:auto;transform:none;margin:0;width:1280px;height:720px;break-after:page;page-break-after:always;print-color-adjust:exact;-webkit-print-color-adjust:exact}body.presenting .slide[hidden],.slide[hidden]{display:block}.slide:last-child{break-after:auto;page-break-after:auto}body:not(.print-appendix) .appendix{display:none!important}#toolbar,#notes-panel,#notice,.notes{display:none!important}a{color:inherit;text-decoration:none}}
+</style>
+</head>
+<body>
+<main id="deck" aria-label="ACP2026 暗号バトル 発表スライド">
+<section class="slide dark" id="slide-1" data-title="暗号で判断する" data-time="00:00–00:20">
+<div class="kicker">ACP2026 / FINAL DEMO</div>
+<div class="hero"><div><h1>暗号を「知る」から、<br>暗号で「判断する」へ。</h1><p class="tagline">暗号バトル</p><p class="lead">Cryptography Drills / GameDay<br>with TenkaCloud</p></div><div class="hero-side"><div class="name">LEAK → HUNT</div><p>秘密を守る。<br>公開する。<br>相手の情報を読む。</p><div class="principles"><span class="pill">手計算</span><span class="pill">公開判断</span><span class="pill">チーム対戦</span></div></div></div>
+<p class="byline">冨田進 / susumutomita</p>
+<div class="footer"><span>ACP2026 · Session 2 · Issue #101</span><span>発表 5分 + Q&amp;A 2分</span><span>01 / 08</span></div>
+<details class="notes"><summary>発表者ノート</summary><p>冨田です。講座で学んだ暗号を、小さな数で手を動かして使う「暗号バトル」を作りました。単に早く問題を解くだけでなく、情報を公開して急ぐか、計算して守るか、相手の公開情報を使うかを選ぶゲームです。</p></details>
+</section>
+<section class="slide" id="slide-2" data-title="学習から対戦へ" data-time="00:20–00:40">
+<div class="kicker">WHY / 学習体験</div><h2>学んだ理論を、自分で選ぶ体験に。</h2><p class="lead">講座の一度きりの学習を、繰り返し使える練習場へ。</p>
+<div class="grid three body"><article class="card"><span class="number">01</span><h3>講座で知る</h3><p>秘密分散・秘密計算・<br>ゼロ知識証明などの<br>考え方に触れる。</p></article><article class="card"><span class="number">02</span><h3>小さな数で試す</h3><p>式を追い、手で計算する。<br>まずは時間制限なしで。</p></article><article class="card"><span class="number">03</span><h3>対戦で判断する</h3><p>締切と公開リスクを見て、<br>次の一手を自分で選ぶ。</p></article></div>
+<div class="band">知識を答えるだけでなく、使う場面と公開のリスクまで試す。</div>
+<div class="footer"><span>ACP2026 / 暗号バトル</span><a href="https://github.com/zk-tokyo/advanced-cryptography-2026/issues/101" target="_blank" rel="noopener">企画：Issue #101</a><span>02 / 08</span></div>
+<details class="notes"><summary>発表者ノート</summary><p>講座で知った原理を、まず時間制限のない練習で試し、それを対戦での判断につなげます。目標は、専門用語を答えられることではなく、何を公開すると何が分かってしまうのかを、自分の計算で理解することです。</p></details>
+</section>
+<section class="slide" id="slide-3" data-title="LEAKから鍵のHUNTへ" data-time="00:40–01:40">
+<div class="kicker">GAME / LEAK → 公開記録 → HUNT</div><h2>平文は見えている。HUNTで答えるのは「鍵」。</h2><p class="lead">シーザー暗号の固定例：0〜6の数字を使い、7で割った余りを取る。</p>
+<div class="grid three body"><article class="card"><span class="label">1 / チームAの手元</span><h3>守るもの：鍵 3</h3><span class="number">2 + 3 = 5</span><p>平文2を、鍵で暗号化する。<br>自分で計算して<br>非公開提出する方法もある。</p></article><article class="card purple"><span class="label">2 / AがLEAKする</span><h3>全チームに見える対応</h3><span class="number" style="font-size:30px">平文 2 → 暗号文 5</span><p>鍵3そのものは公開しない。<br>計算を省く代わりに、<br>相手へ材料を渡す。</p></article><article class="card green"><span class="label">3 / チームBがHUNT</span><h3>答えるもの：鍵 3</h3><span class="number">5 − 2 = 3</span><p>鍵の回答欄に3を入力。<br><strong>平文2や暗号文5ではない。</strong><br>正しい鍵なら攻撃成功。</p></article></div>
+<div class="band">公開された値を転記するのではなく、そこから未公開の値を計算する。</div>
+<p class="caption">説明用の固定値。実戦の文字数・必要な材料・得点は、お題とHUNT画面に従います。</p>
+<div class="footer"><span>ACP2026 / 暗号バトル</span><span>reducer.ts / ladder.ts · 公開 → 計算 → 提出</span><span>03 / 08</span></div>
+<details class="notes"><summary>発表者ノート</summary><p>まず、LEAKとHUNTを同じ数字で説明します。チームAは秘密の鍵3を持ち、平文2を暗号化します。この例では7で割った余りを使うので、答えは5です。自分で計算する代わりにLEAKを選ぶと、システムが答え、その「平文2から暗号文5」という対応が全チームに公開されます。鍵3を直接渡すわけではありません。ですが、チームBは5引く2で、鍵は3と計算できます。HUNTに入力するのは、この鍵3です。すでに見えている平文2や暗号文5ではありません。つまりLEAKは計算時間を省く代わりに、相手が鍵を求める材料を渡す操作です。</p></details>
+</section>
+<section class="slide" id="slide-4" data-title="準同型加算の練習" data-time="01:40–02:10">
+<div class="kicker">DEMO 01 / 準同型加算</div><h2>開けずに、合計を届ける。</h2><p class="lead">「まず1問体験」は、時間制限・得点・減点なし。</p>
+<div class="grid demo body"><figure><p class="math" style="margin-bottom:22px">暗号文 (2, 4) ＋ (3, 5)</p><img class="shot" src="assets/first-mission.webp" width="800" height="177" alt="実コンポーネントの練習画面の入力部分。左の2+3、右の4+5の計算欄に、7で割った余りの5と2を入力した状態。"><figcaption class="caption">FirstMission / EncryptedCargo のローカル表示・入力部分の抜粋。</figcaption></figure><div><p class="math">左：2 + 3 = 5<br>右：4 + 5 = 9</p><p class="lead">7で割った余りは2</p><p class="large" style="margin-top:18px">(5, 2)</p><p style="font-size:24px;margin-top:15px;font-weight:700">中身の合計ではなく、<br>合計を隠した暗号文。</p></div></div>
+<div class="footer"><span>教材UIの実スクリーンショット / 本番接続なし</span><span>加算の模型。完全準同型暗号全体の実装ではない。</span><span>04 / 08</span></div>
+<details class="notes"><summary>発表者ノート</summary><p>暗号文を開けずに計算する練習もあります。これは実際の「まず1問体験」の画面です。左の2と3を足して5。右の4と5を足して9、7で割った余りは2。答えは5と2の組です。中身の合計ではなく、合計を隠した暗号文を作っています。完全準同型暗号全体ではなく、加算の性質を追う模型です。</p></details>
+</section>
+<section class="slide" id="slide-5" data-title="SchnorrのPROVE" data-time="02:10–02:45">
+<div class="kicker">DEMO 02 / PROVE</div><h2>秘密を送らずに、式を確かめる。</h2><p class="lead">Schnorrの固定例：秘密 x = 7、今回だけの乱数 r = 3。</p>
+<div class="flow body"><span>a = 8 を先に固定</span><b>→</b><span>e = 5 を受け取る</span><b>→</b><span>z = 5 を返す</span></div>
+<div class="grid demo body"><figure><img class="shot proof-shot" src="assets/schnorr.webp" width="712" height="159" alt="Schnorr解説の実画面の計算部分。z=(3+5×7)を11で割った余りとして5と計算する。"><figcaption class="caption">SchnorrLesson のローカル表示・応答計算の抜粋。</figcaption></figure><div><p class="lead">送らないもの</p><h3 style="margin:12px 0 24px">秘密 x・乱数 r</h3><p class="lead">検証式の左右は</p><p class="large">9 = 9</p></div></div>
+<p class="caption" style="font-size:17px;margin-top:23px"><strong>xは証明用の別の秘密。シェアの値を知る証明ではありません。</strong><br>秘密候補は最大11通りの教育模型で、実用の本人認証としての安全性はありません。</p>
+<div class="footer"><span>教材UIの実スクリーンショット / 本番接続なし</span><span>SchnorrLesson / SchnorrModelNotice</span><span>05 / 08</span></div>
+<details class="notes"><summary>発表者ノート</summary><p>PROVEでは、Schnorrの会話を手計算します。最初にaを固定し、相手からeを受け取り、応答zを返します。秘密xと乱数rは送らず、公開された式で検査できます。ただし、このxは証明用の別の数で、秘密分散のかけらを知っていることの証明ではありません。また、小さい数の教育模型なので、実用の本人認証としての安全性は主張しません。</p></details>
+</section>
+<section class="slide" id="slide-6" data-title="かけらから秘密のHUNTへ" data-time="02:45–03:45">
+<div class="kicker">DEMO 03 / 秘密分散の LEAK → HUNT</div><h2>かけらを公開し、相手は「元の秘密」を答える。</h2><p class="lead">同じチーム・同じ組の異なる番号。この例は5個中3個で復元し、2個では決まらない。</p>
+<div class="grid demo body"><figure><img class="shot" src="assets/hunt.webp" width="874" height="199" alt="HuntGuideの実画面。公開シェアは#1=2、#2=5、#3=3。掛ける係数3、−3、1を一覧にした表の抜粋。"><figcaption class="caption">実際のHuntGuide：公開された値と、掛ける係数を表示。</figcaption></figure><div><p style="color:var(--purple);font-size:20px;font-weight:700">チームAのLEAKで見える</p><p class="math">#1 = 2<br>#2 = 5<br>#3 = 3</p><p class="green-text" style="font-size:20px;font-weight:700;margin-top:16px">チームBがHUNTで答える</p><p class="large green-text" style="font-size:42px">元の秘密 1</p></div></div>
+<div class="band">3 × 2 − 3 × 5 + 3 = −6 → 7を足して1 → 秘密の回答欄へ</div>
+<div class="footer"><span>教材UI / 固定の説明データ / 採点API未接続</span><span>係数は番号1・2・3専用。実戦の係数・割る数は画面に従う。</span><span>06 / 08</span></div>
+<details class="notes"><summary>発表者ノート</summary><p>秘密分散のHUNTでは、答えるものが鍵から「元の秘密」に変わります。この例では、チームAの秘密1を5個のかけらに分けています。LEAKで公開されるのは、かけらの番号と値です。同じ組の異なる3個、番号1が2、番号2が5、番号3が3まで公開されたとします。チームBは画面の係数を使って、3かける2、引く3かける5、足す3を計算します。結果はマイナス6。7を足した1が元の秘密です。HUNTの回答欄に入れるのは、その1です。同じ番号を繰り返し公開しても3個には数えません。公開するものと、そこから復元して答えるものは、違うということです。</p></details>
+</section>
+<section class="slide" id="slide-7" data-title="ルールを操作の場所に" data-time="03:45–04:30">
+<div class="kicker">IMPLEMENTATION / ルールを画面につなぐ</div><h2>「何を公開し、何を答えるか」を、操作の場所に。</h2><p class="lead">攻略ヒントを買わなくても、基本ルールが分かるように。</p>
+<figure class="body"><img class="shot" style="min-height:200px;max-height:250px;object-fit:contain;padding:16px" src="assets/rules.webp" width="1087" height="116" alt="修正した無料ルールの実画面。チームAが守る鍵3、LEAKで公開する平文2と暗号文5、チームBが計算してHUNTに入力する鍵3を一続きに説明している。"><figcaption class="caption">LeakHuntRulesの実コンポーネントを独立表示して撮影した、説明カードの抜粋。本番ポータル全体ではありません。</figcaption></figure>
+<div class="grid three body small"><div><h3 style="color:var(--blue);font-size:21px">LEAKボタンの説明</h3><p style="margin-top:9px">守る対象 → 公開する対象</p></div><div><h3 style="color:var(--blue);font-size:21px">HUNTの無料ルール</h3><p style="margin-top:9px">公開材料 → 求める答え</p></div><div><h3 style="color:var(--blue);font-size:21px">同じ数字で一度通す</h3><p style="margin-top:9px">平文2 → 暗号文5 → 鍵3</p></div></div>
+<div class="footer"><span>ACP2026 / 暗号バトル</span><a href="https://github.com/susumutomita/TenkaCloudChallenge/pull/877" target="_blank" rel="noopener">PR #877：マージ済み / 本番反映の確認とは別</a><span>07 / 08</span></div>
+<details class="notes"><summary>発表者ノート</summary><p>プレー中のフィードバックで、このつながりを理解する前にHUNTを求めていたことが分かりました。そこで、LEAKの説明を「守る対象、公開する対象、相手が答える対象」の順に修正しました。HUNTの入口には、いま説明した同じ数字の例を無料で表示します。基本ルールを有料ヒントに隠しません。日本語と英語で、読んだら閉じられ、計算欄を作り直さない構成です。この画面は修正した実コンポーネントの単体表示です。修正PRはマージ済みですが、本番対戦への反映確認とは区別しています。</p></details>
+</section>
+<section class="slide dark" id="slide-8" data-title="繰り返し使える教材に" data-time="04:30–05:00">
+<div class="kicker">NEXT / 繰り返し使える教材へ</div><div class="grid two body"><div><h1 style="font-size:54px">講座を、その後も<br>遊べる教材に。</h1><p class="lead" style="margin-top:26px">暗号の計算・証明・公開情報からの復元を、<br>一つの対戦型教材につないだ。</p><div class="band" style="margin-top:30px">次は、初学者の試遊で確かめる。</div><p class="lead">最初の1問 / 公開リスクの理解 / 対戦の楽しさ</p><p style="font-size:20px;margin-top:18px">来年以降の講座でも、繰り返し使える形を目指す。</p></div><div class="links" style="padding:8px 0 0 38px"><img class="qr" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAZoAAAGaAQAAAAAefbjOAAADLUlEQVR4nO2bUW6kMAyGPy9I+xikOUCPEm7QI63mSHuDcJQeYCXyOBLI++CEMn3rzhboYB6mMOHTOKrl/LEdUT59DT8+z4BDDjnkkEMOOfSckJSrBXKLSAcMHTDYd/WFfhfzHNoQau1PTAD5gsQ0oQAS39pJoinPZgJAtjbPod2gvAQAZoEsoilMNUYAJYLsZJ5DO0K5ukCfWyBMSP81v+TQEaH2w7OSm0nib4AwAcytkv/DLzn0vaCgquluRK8ioolGpQdUddrPPIc2g0qMGEwzNpTwQDNJHC+TxLd2wrTFHuY5tDlkHrFOZYebKNwEwk3K0hHuc90Hn5NDj0PSA1VUNioiP1WvHQCz6FVaGETkDtrOPIc2hFC7RiCqKoQJTYCm5U5VFWjKu+ngc3LoEWjtEcv/vAyF4gf2Ecf6snvEM0MlAMSxBgDzjVDcoozaNsNjxJmgcJOiFBZnSO/Jqdza7rM8fpM5OfQvUF0IKBkHSztEixaNmpjQEVMUNuAx4pmhtWxMy5exuoUtJ8nEhOuIU0GzlMRlUNVrV10gMYv0oegI6fcyz6GNoaiq8uttyTgwi147kN7CwyxVXu5inkP76IgUVE1MJIA4gqUnTFHgq8YZoFU+wuRCXD2WDQfRvKSOukc8M1Sr4UEp/VK5Q4ceJOrcShxRBmlUVuWug8/JoUeguhBU7Vhy16EGCh2bmtkOk+8+TwBZjBACQBgRQtlmMLxOpTI6vLIeOPqcHHoEustijzURRSjyola/quR0ZXkaKNxE5GVRkdaIO4slsFNurQdX+p3Mc2gzaOmhalTIPxXyRcXWD6C0zVj+6k+VoQefk0OPQHX3qe/LRC1uWCriLp/tyvIs0PuZLk2Uxnxrul3OeQGLyvgWc3Lo4Sy2tUYMXW2RWWrg1mw5dLOf8jsBVKVB7qC0Yc8tpZAxi5IvKtapHcbtzXNoc2jZfULdgpbyd+2mqjFiqZC7jjglNAvDy2Tlrg9He45gnkNfBq3qGpCB4fUmRAXiOAP5UlOY4jnLM0BLDxWwarkeoRbClzvPWZ4C+nimS+2hHOLS9R0eIxxyyCGHHHLIofX1F4ZCRJ2JcZeCAAAAAElFTkSuQmCC" alt="コードと教材のGitHubリポジトリを開くQRコード"><a href="https://github.com/susumutomita/TenkaCloudChallenge/tree/main/battles/ac26-crypto-battle" target="_blank" rel="noopener">コードと教材 ↗</a><a href="https://www.tenkacloud.com/acp2026/">この発表：/acp2026/</a></div></div>
+<div class="footer"><a href="../">TenkaCloud LPへ</a><span>本編終了。Q&amp;Aは下の「補足」から。</span><span>08 / 08</span></div>
+<details class="notes"><summary>発表者ノート</summary><p>暗号の計算、証明、公開情報からの復元を、繰り返し使える教材として残したいと考えています。次は初学者に試してもらい、何を公開し、何をHUNTで答えるのかを、説明を探さず理解できるか確認します。学習効果や勝率の改善は、実装できたこととは分けて測定します。コードは公開しています。ありがとうございました。ここで本編を終了します。</p></details>
+</section>
+<section class="slide appendix" id="slide-9" data-title="方式ごとのHUNT回答" data-time="Q&A">
+<div class="kicker">Q&amp;A 01 / 公開材料と回答対象</div><h2>HUNTで入力するものは、方式によって違う。</h2>
+<table class="table body"><thead><tr><th>方式</th><th>相手に見える材料</th><th>HUNTで提出するもの</th></tr></thead><tbody>
+<tr><th>秘密分散</th><td>同じ組の、異なる番号のかけら</td><td>復元した元の秘密</td></tr><tr><th>シーザー</th><td>平文と暗号文の対応</td><td>ずらす数＝鍵</td></tr><tr><th>Vigenère</th><td>各鍵位置の平文と暗号文の対応</td><td>3個の鍵を位置1・2・3の順で</td></tr><tr><th>Rotor</th><td>元の4文字と暗号の4文字</td><td>車輪の初期位置 a・b</td></tr><tr><th>RSA</th><td>公開鍵 n / e。LEAK不要</td><td>nを作る異なる素数2個</td></tr><tr><th>じゃんけん</th><td>過去の同じ r の開封と、今回の封じた数</td><td>今回の手の予測。開封後に採点</td></tr><tr><th>旧数独模型</th><td>同じ印の証明で公開されたマス</td><td>元の数独の解（旧試合のみ）</td></tr>
+</tbody></table><p class="caption">じゃんけんは「今回も r を使い回した」という仮定。過去の再利用だけで成功は保証されません。</p>
+<div class="footer"><span>補足 / 本編5分には含めない</span><span>HuntPanelCore / reducer / LeakHuntRules</span><span>Q&amp;A 01 / 04</span></div>
+<details class="notes"><summary>発表者ノート</summary><p>RSAで入力するのは秘密指数d、平文m、暗号文cではなく、nの異なる素因数2個です。じゃんけんは過去の再利用を根拠にした予測で、今回の再利用まで確定しているわけではありません。HUNTを「すべてLEAKで発生する攻撃」と説明しないでください。</p></details>
+</section>
+<section class="slide appendix" id="slide-10" data-title="ゲームの進め方と得点" data-time="Q&A">
+<div class="kicker">Q&amp;A 02 / 得点と期限</div><h2>計算する時間と、公開するリスクを選ぶ。</h2><p class="lead">新規試合のお題の回答期限は3分。最終得点を競います。</p>
+<div class="grid three body"><article class="card"><span class="label">計算して正解</span><span class="number">+30点</span><p>通常のお題の例。<br>お題に合う計算をして提出。</p></article><article class="card purple"><span class="label">LEAKして即答</span><span class="number">+10点</span><p>通常のお題の例。<br>公開した情報は相手の材料に。</p></article><article class="card"><span class="label">締切までに未完了</span><span class="number">−15点</span><p>通常の期限切れ減点。<br>合計得点の下限は0点。</p></article></div>
+<div class="band">公開必須のお題など例外があります。使える方法と点数はカードの表示を優先。</div><p class="caption">練習問題には得点・減点・期限がありません。ただし、開始済みの本戦の時計は練習中も進みます。</p>
+<div class="footer"><span>補足 / 本編5分には含めない</span><span>README.ja.md / BattleHelp</span><span>Q&amp;A 02 / 04</span></div>
+<details class="notes"><summary>発表者ノート</summary><p>正解30点・LEAK10点・期限切れ15点の減点は通常例です。公開そのものが条件のお題では、LEAKにも満額が付きます。何でもPROVEで代替できるわけではなく、お題に表示される方法がルールです。</p></details>
+</section>
+<section class="slide appendix" id="slide-11" data-title="教育模型と検証範囲" data-time="Q&A">
+<div class="kicker">Q&amp;A 03 / 実装と検証の境界</div><h2>体験できることと、主張しないこと。</h2>
+<div class="grid two body small"><article class="card"><h3>教材で体験する</h3><p>暗号文の加算と、復号後の合計の対応。</p><p>Schnorrの公開検証、模擬会話、乱数再利用時の秘密抽出。</p><p>公開されたかけらからの秘密復元。</p><p>LEAKの公開対象とHUNTの回答対象をつなぐ。</p></article><article class="card"><h3>分けて考える</h3><p>加算の模型 ≠ 完全準同型暗号全体。</p><p>秘密を送らない ≠ 小さい群で安全な本人認証。</p><p>Schnorrのx ≠ シェアの値。</p><p>CI成功・単体画面の確認 ≠ 本番対戦・学習効果の検証。</p></article></div>
+<p class="caption" style="font-size:17px;margin-top:20px">PR #877はCI成功を確認してマージ。スクリーンショットは教材コンポーネントの独立表示です。<br>本番AWS・認証・オンライン対戦の確認や、初心者の勝率・学習効果の測定は別途必要です。</p>
+<div class="footer"><span>補足 / 本編5分には含めない</span><span>ソースと検証記録を区別する</span><span>Q&amp;A 03 / 04</span></div>
+<details class="notes"><summary>発表者ノート</summary><p>画面は実コンポーネントを説明用の固定データで表示したものです。本番画面全体の撮影や、掲載した数字でオンライン採点APIを通した証拠ではありません。UI改善の実装と、学習効果の実証を分けて説明します。</p></details>
+</section>
+<section class="slide appendix" id="slide-12" data-title="ソースと出典" data-time="Q&A">
+<div class="kicker">Q&amp;A 04 / SOURCE</div><h2>ソースと、公開・採点の実装を確認する。</h2>
+<div class="source-list body"><a href="https://github.com/zk-tokyo/advanced-cryptography-2026/issues/101" target="_blank" rel="noopener">企画：ACP2026 Issue #101 ↗</a><a href="https://github.com/susumutomita/TenkaCloudChallenge/tree/6f8a53f850a9cd5f8c0e34e69a3b5ca311d09cf8/battles/ac26-crypto-battle" target="_blank" rel="noopener">暗号バトルのソース一式（PR #877 マージ時点）↗</a><a href="https://github.com/susumutomita/TenkaCloudChallenge/blob/6f8a53f850a9cd5f8c0e34e69a3b5ca311d09cf8/battles/ac26-crypto-battle/game/src/reducer.ts" target="_blank" rel="noopener">LEAKの公開内容と、HUNTの正解判定：reducer.ts ↗</a><a href="https://github.com/susumutomita/TenkaCloudChallenge/blob/6f8a53f850a9cd5f8c0e34e69a3b5ca311d09cf8/battles/ac26-crypto-battle/portal/LeakHuntRules.tsx" target="_blank" rel="noopener">無料の基本ルール：LeakHuntRules.tsx ↗</a><a href="https://github.com/susumutomita/TenkaCloudChallenge/pull/877" target="_blank" rel="noopener">修正内容・CI・確認範囲：PR #877 ↗</a></div>
+<p class="caption" style="margin-top:24px;font-size:17px">画面素材：ACP2026発表資料v2に掲載した、実コンポーネントのローカル表示を再利用。<br>Web掲載では表示領域の抜粋とサイズ最適化のみ行い、画像中の数字や文字は書き換えていません。</p>
+<div class="footer"><a href="../">TenkaCloud LPへ</a><a href="#slide-1">発表の先頭へ</a><span>Q&amp;A 04 / 04</span></div>
+<details class="notes"><summary>発表者ノート</summary><p>出典リンクは、マージしたコミット6f8a53fに固定しています。新規試合と旧試合の違い、教材模型と実用方式の違いはソースで確認できます。</p></details>
+</section>
+</main>
+<nav id="toolbar" aria-label="プレゼン操作"><a class="optional" href="../">TenkaCloud</a><button id="previous" type="button" aria-label="前のスライド">←</button><output id="status" aria-live="polite"></output><button id="next" type="button" aria-label="次のスライド">→</button><select id="jump" aria-label="スライドを選ぶ"></select><button id="appendix" type="button" aria-pressed="false">補足</button><button id="notes-button" type="button" aria-expanded="false" aria-controls="notes-panel">原稿</button><button id="fullscreen" class="optional" type="button">全画面</button><button id="print" class="optional" type="button">PDF保存</button></nav>
+<aside id="notes-panel" aria-label="発表者ノート"></aside><div id="notice" role="status"></div>
+<script>
+(() => {
+  'use strict';
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const mainCount = slides.filter(slide => !slide.classList.contains('appendix')).length;
+  const get = id => document.getElementById(id);
+  const hashIndex = () => { const match = /^#slide-(\d+)$/.exec(location.hash); return match ? Math.max(0, Math.min(slides.length - 1, Number(match[1]) - 1)) : 0; };
+  let index = hashIndex();
+  let extras = index >= mainCount || new URLSearchParams(location.search).get('appendix') === '1';
+  let notesOpen = false;
+  let touchStart = null;
+  let noticeTimer;
+  const count = () => extras ? slides.length : mainCount;
+  const tell = text => { get('notice').textContent = text; clearTimeout(noticeTimer); noticeTimer = setTimeout(() => { get('notice').textContent = ''; }, 4000); };
+  const fit = () => { const toolbar = get('toolbar').getBoundingClientRect().height || 64; document.documentElement.style.setProperty('--scale', String(Math.min(innerWidth / 1280, Math.max(1, innerHeight - toolbar - 18) / 720))); };
+  const notes = () => { const panel = get('notes-panel'); panel.replaceChildren(); const heading = document.createElement('h3'); heading.textContent = `${slides[index].dataset.time} / ${slides[index].dataset.title}`; panel.append(heading); const text = document.createElement('p'); text.textContent = slides[index].querySelector('.notes p')?.textContent || ''; panel.append(text); };
+  const options = () => { get('jump').replaceChildren(...slides.slice(0, count()).map((slide, position) => { const option = document.createElement('option'); option.value = String(position); option.textContent = `${position < mainCount ? position + 1 : 'Q' + (position - mainCount + 1)} ${slide.dataset.title}`; return option; })); };
+  const show = (position, updateHash = true) => {
+    index = Math.max(0, Math.min(count() - 1, position));
+    slides.forEach((slide, position) => { slide.hidden = position !== index; slide.setAttribute('aria-hidden', String(position !== index)); });
+    get('status').textContent = index < mainCount ? `${String(index + 1).padStart(2, '0')} / ${mainCount}` : `補足 ${index - mainCount + 1} / ${slides.length - mainCount}`;
+    get('jump').value = String(index); get('previous').disabled = index === 0; get('next').disabled = index === count() - 1;
+    get('appendix').setAttribute('aria-pressed', String(extras)); document.body.classList.toggle('print-appendix', extras);
+    document.title = `${index + 1}. ${slides[index].dataset.title} | ACP2026 暗号バトル`;
+    if (updateHash) { try { history.replaceState(null, '', '#slide-' + (index + 1)); } catch { /* file previews can disallow history changes; navigation still works. */ } }
+    notes();
+  };
+  const toggleNotes = () => { notesOpen = !notesOpen; get('notes-panel').classList.toggle('open', notesOpen); get('notes-button').setAttribute('aria-expanded', String(notesOpen)); if (notesOpen) notes(); };
+  const toggleExtras = () => { extras = !extras; options(); show(extras ? mainCount : Math.min(index, mainCount - 1)); };
+  const full = async () => { try { if (document.fullscreenElement) await document.exitFullscreen(); else if (document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen(); else tell('このブラウザでは全画面表示を利用できません。'); } catch { tell('全画面表示が許可されませんでした。ブラウザの全画面操作をご利用ください。'); } };
+  const print = () => { if (!slides.every(slide => Array.from(slide.querySelectorAll('img')).every(img => img.complete && img.naturalWidth > 0))) { tell('画像を読み込み中です。完了後にPDF保存を再実行してください。'); return; } window.print(); };
+  const interactive = target => target instanceof Element && Boolean(target.closest('button,a,input,textarea,select,summary,[contenteditable="true"]'));
+  get('previous').addEventListener('click', () => show(index - 1)); get('next').addEventListener('click', () => show(index + 1));
+  get('jump').addEventListener('change', event => show(Number(event.target.value))); get('appendix').addEventListener('click', toggleExtras);
+  get('notes-button').addEventListener('click', toggleNotes); get('fullscreen').addEventListener('click', full); get('print').addEventListener('click', print);
+  addEventListener('keydown', event => {
+    if (event.altKey || event.ctrlKey || event.metaKey || interactive(event.target)) return;
+    if (['ArrowRight','ArrowDown','PageDown',' '].includes(event.key)) { event.preventDefault(); show(index + 1); }
+    else if (['ArrowLeft','ArrowUp','PageUp'].includes(event.key)) { event.preventDefault(); show(index - 1); }
+    else if (event.key === 'Home') { event.preventDefault(); show(0); }
+    else if (event.key === 'End') { event.preventDefault(); show(count() - 1); }
+    else if (event.key.toLowerCase() === 'f') { event.preventDefault(); void full(); }
+    else if (event.key.toLowerCase() === 'n') { event.preventDefault(); toggleNotes(); }
+    else if (event.key.toLowerCase() === 'q') { event.preventDefault(); toggleExtras(); }
+    else if (event.key === 'Escape' && notesOpen) toggleNotes();
+    else if (event.key === '?') tell('← →：移動 / N：原稿 / Q：補足 / F：全画面 / Home：先頭');
+  });
+  get('deck').addEventListener('touchstart', event => { if (event.touches.length === 1 && !interactive(event.target)) touchStart = [event.touches[0].clientX, event.touches[0].clientY]; }, { passive:true });
+  get('deck').addEventListener('touchend', event => { if (!touchStart || event.changedTouches.length !== 1) return; const dx = event.changedTouches[0].clientX - touchStart[0]; const dy = event.changedTouches[0].clientY - touchStart[1]; touchStart = null; if (Math.abs(dx) > 60 && Math.abs(dx) > 1.5 * Math.abs(dy)) show(index + (dx < 0 ? 1 : -1)); }, { passive:true });
+  addEventListener('hashchange', () => { const next = hashIndex(); if (next >= mainCount && !extras) { extras = true; options(); } show(next, false); });
+  document.querySelectorAll('.shot').forEach(image => image.addEventListener('error', () => { const warning = document.createElement('p'); warning.className = 'load-warning'; warning.textContent = '画面画像を読み込めませんでした。接続を確認して再読み込みしてください。'; image.after(warning); }));
+  document.body.classList.add('presenting'); options(); show(index, false); fit(); addEventListener('resize', fit); addEventListener('fullscreenchange', fit);
+})();
+</script>
+</body>
+</html>
