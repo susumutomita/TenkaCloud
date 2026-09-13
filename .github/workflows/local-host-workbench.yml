@@ -1,0 +1,39 @@
+name: local-host-workbench
+
+on:
+  push:
+    branches: [feat/local-event-host-3226]
+    paths: [.github/workflows/local-host-workbench.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          submodules: true
+          persist-credentials: false
+      - uses: ./.github/actions/bun-install
+      - name: Prepare source and toolchain without repository credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/local-host-workbench/repository /tmp/local-host-workbench/bin
+          git archive HEAD | tar -x -C /tmp/local-host-workbench/repository
+          mkdir -p /tmp/local-host-workbench/repository/problems
+          git -C problems archive HEAD | tar -x -C /tmp/local-host-workbench/repository/problems
+          find . -type d -name node_modules -prune -print0 | tar --null -T - -cf - | tar -xf - -C /tmp/local-host-workbench/repository
+          cp "$(command -v bun)" /tmp/local-host-workbench/bin/bun
+          git rev-parse HEAD > /tmp/local-host-workbench/commit.txt
+          tar -C /tmp/local-host-workbench -czf /tmp/local-host-workbench.tar.gz .
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: local-host-workbench
+          path: /tmp/local-host-workbench.tar.gz
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
