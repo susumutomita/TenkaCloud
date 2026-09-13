@@ -57,7 +57,7 @@
   "dependencies": {
     "@libsql/client": "^0.17.4",
     "@tenkacloud/coordination-plugin-sdk": "workspace:*",
-    "js-yaml": "3.15.1",
+    "js-yaml": "5.4.1",
     "ws": "^8.21.1"
   },
   "devDependencies": {
