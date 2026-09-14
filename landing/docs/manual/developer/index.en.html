@@ -75,7 +75,7 @@ without changing platform code is an organizer task.</p>
 <p>Make one focused, reviewable change that preserves the platform contracts and
 passes the relevant repository checks.</p>
 <h2>Prepare the repository</h2>
-<pre><code class="language-bash">bun install
+<pre><code class="language-bash">make install
 git submodule update --init problems
 make doctor-dev
 </code></pre>
@@ -122,7 +122,7 @@ the plane boundaries and cross-plane events.</p>
 <li>Identify the narrowest owning module and its existing tests.</li>
 <li>Change the implementation and user-facing documentation together.</li>
 <li>Run focused tests while iterating.</li>
-<li>Run <code>make harness</code> and <code>make before-commit</code> before opening a pull request.</li>
+<li>Pass <code>make before-commit</code> before committing; the pre-commit hook runs it automatically.</li>
 <li>Inspect the final diff and stage only the intended files.</li>
 </ol>
 <p>Do not commit <code>.env</code>, credentials, generated secrets, or unrelated changes.

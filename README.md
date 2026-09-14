@@ -247,8 +247,8 @@ record of the reasoning, not an API reference.
 ## Contributing
 
 1. Read [CONTRIBUTING.md](./CONTRIBUTING.md) and [AGENTS.md](./AGENTS.md).
-2. Keep infrastructure / template changes separate from application-code changes.
-3. Run `make harness` and `make before-commit` before opening a PR.
+2. Keep the changes needed for one working behavior together, including its producers and consumers.
+3. Pass `make before-commit` before committing; the pre-commit hook runs it automatically.
 
 ## License
 

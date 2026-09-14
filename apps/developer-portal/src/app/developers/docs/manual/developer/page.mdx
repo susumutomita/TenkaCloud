@@ -16,7 +16,7 @@ passes the relevant repository checks.
 ## Prepare the repository
 
 ```bash
-bun install
+make install
 git submodule update --init problems
 make doctor-dev
 ```
@@ -47,7 +47,7 @@ the plane boundaries and cross-plane events.
 2. Identify the narrowest owning module and its existing tests.
 3. Change the implementation and user-facing documentation together.
 4. Run focused tests while iterating.
-5. Run `make harness` and `make before-commit` before opening a pull request.
+5. Pass `make before-commit` before committing; the pre-commit hook runs it automatically.
 6. Inspect the final diff and stage only the intended files.
 
 Do not commit `.env`, credentials, generated secrets, or unrelated changes.
