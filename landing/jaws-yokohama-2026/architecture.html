@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TenkaCloudの構成図 | JAWS-UG横浜 2026</title>
+<meta name="description" content="TenkaCloud LiteのAWS構成図と、クラウド非依存からAWS-nativeへの設計転換。拡大・移動できるSVGと編集可能なDraw.io原本。">
+<link rel="canonical" href="https://tenkacloud.com/jaws-yokohama-2026/architecture.html">
+<link rel="stylesheet" href="talk.css">
+<link rel="icon" href="../assets/favicon.svg">
+<script src="architecture.js" defer></script>
+</head>
+<body>
+<nav class="topbar" aria-label="関連資料"><a href="./#7">← 発表資料へ戻る</a><a href="../presentations/">プレゼン資料一覧</a><a href="../">TenkaCloud</a></nav>
+<main class="diagram-page">
+<p class="kicker">TENKACLOUD / ARCHITECTURE</p>
+<h1>構成図を、細部まで。</h1>
+<p>画面内で拡大し、スクロールまたはマウスでドラッグして読めます。表示に外部ビューアやログインは必要ありません。</p>
+<div class="diagram-toolbar" aria-label="構成図の操作">
+<button type="button" data-view="aws" data-src="assets/architecture-overview.svg" aria-pressed="true">現行AWS構成</button><button type="button" data-view="evolution" data-src="assets/architecture-evolution.svg" aria-pressed="false">設計転換</button>
+<button type="button" id="zoom-out" aria-label="構成図を縮小">−</button><output id="zoom-value" aria-live="polite">100%</output><button type="button" id="zoom-in" aria-label="構成図を拡大">＋</button><button type="button" id="fit">全体表示</button>
+<a id="open-svg" href="assets/architecture-overview.svg" target="_blank" rel="noopener">SVGを開く ↗</a><a href="assets/architecture.drawio" download>Draw.io原本</a>
+</div>
+<p id="diagram-error" role="alert" hidden>構成図を読み込めませんでした。再読み込みするか、上の「SVGを開く」「Draw.io原本」を使用してください。</p>
+<div class="diagram-frame" id="diagram-frame" tabindex="0" aria-label="スクロール可能な構成図"><img id="diagram-image" src="assets/architecture-overview.svg" alt="TenkaCloud Liteの運営AWSアカウントとチーム別AWSアカウント、管理・配置・競技・認証経路" draggable="false"></div>
+<div class="diagram-caption" data-caption="aws">
+<h2>AWS上のLite構成</h2>
+<p>左が運営基盤、右がチーム別の演習環境です。管理者はCognitoで認証し、API Gateway経由でイベントを操作します。問題の配置・削除はEventBridge → Step Functions → Lambda → AssumeRole → CloudFormationで進めます。</p>
+<p>参加者APIとCoordination Dispatcherは別々のLambda Function URLです。参加者画面はそれぞれを呼び分け、管理者向けの認証とは別にチームキーを使います。競技状態も「認証 / データ / 監視」内のDynamoDBに保存します。下段にはDynamoDBを再掲せず、読み書きの詳細配線は省略しています。</p>
+<p>主要経路をまとめた論理構成です。すべてのLambda・API・スタックを列挙した配線台帳や、実AWS環境の稼働証跡ではありません。権限設計・チーム分離・採点・削除完了の確認は基盤側に残ります。</p>
+</div>
+<div class="diagram-caption" data-caption="evolution" hidden><h2>共通化する境界を変えた</h2><p>初期側は当時の方針を示す概念図で、全クラウドで稼働していたという意味ではありません。AWS-native側ではサービスの実行や保存をAWSへ委ね、問題を追加する契約と競技体験に集中します。</p></div>
+<p class="fine">原本：同梱のarchitecture.drawio。AWSアイコン：Amazon.com, Inc. or its affiliates（<a href="https://github.com/awslabs/aws-icons-for-plantuml/blob/main/LICENSE" target="_blank" rel="noopener">AWS Icons for PlantUML / CC BY-ND 2.0</a>）。</p>
+<noscript><p style="color:#142a40">JavaScriptが無効でも上のSVGを閲覧できます。設計転換は<a href="assets/architecture-evolution.svg">こちらのSVG</a>を開いてください。</p></noscript>
+</main>
+</body>
+</html>

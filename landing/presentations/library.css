@@ -1,0 +1,31 @@
+/* Scoped to the presentation collection; does not restyle the product LP. */
+.presentation-library{background:#f4f6f8;color:#172b43;padding:80px 24px;font-family:system-ui,-apple-system,"Hiragino Sans","Noto Sans CJK JP",sans-serif;line-height:1.7}
+.presentation-library *, .presentation-library *::before,.presentation-library *::after{box-sizing:border-box}
+.presentation-library .presentation-wrap{max-width:1180px;margin:0 auto}
+.presentation-library .presentation-kicker{font-size:13px;letter-spacing:.14em;font-weight:700;color:#087f8c;margin:0 0 16px}
+.presentation-library h1,.presentation-library h2{font-weight:700;line-height:1.4;letter-spacing:-.03em;font-size:clamp(28px,3.5vw,44px);margin:0 0 18px}
+.presentation-library .presentation-intro{font-size:18px;max-width:760px;color:#52667b;margin:0 0 36px}
+.presentation-library .talk-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px}
+.presentation-library .talk-card{min-width:0;background:white;border:1px solid #d7e0e8;border-radius:16px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 24px #172b4307}
+.presentation-library .talk-preview{height:174px;background:#15273e;color:#d9e6ee;padding:28px;display:flex;flex-direction:column;justify-content:center;gap:20px}
+.presentation-library .talk-preview strong{font-size:clamp(22px,2.5vw,29px);letter-spacing:.02em;color:#b6e7de}
+.presentation-library .talk-preview span{font-size:12px;letter-spacing:.04em}
+.presentation-library .diagram-preview{position:relative;background:#edf3f8;padding:14px 22px}
+.presentation-library .diagram-preview img{width:100%;height:135px;object-fit:cover;object-position:top;background:white}
+.presentation-library .diagram-preview span{position:absolute;bottom:12px;left:20px;color:#172b43;background:#fff;padding:3px 8px;border-radius:4px}
+.presentation-library .talk-card-body{padding:24px;display:flex;flex-direction:column;gap:16px;flex:1}
+.presentation-library .talk-meta{font-size:12px;color:#627589;margin:0}
+.presentation-library h3{font-size:21px;line-height:1.55;letter-spacing:-.02em;margin:0;font-weight:700}
+.presentation-library h3 a{color:inherit;text-decoration:none}
+.presentation-library h3 a:hover{text-decoration:underline;text-underline-offset:.2em}
+.presentation-library .talk-description{font-size:15px;color:#52667b;margin:0}
+.presentation-library .talk-open{min-height:44px;display:flex;align-items:center;justify-content:space-between;margin-top:auto;padding-top:10px;text-decoration:none;font-weight:700;color:#076b79}
+.presentation-library a:focus-visible,.library-nav a:focus-visible{outline:3px solid #cb9020;outline-offset:5px;border-radius:3px}
+.presentation-library .presentation-more{display:inline-flex;min-height:44px;align-items:center;margin-top:30px;color:#076b79;font-weight:700;text-underline-offset:.25em}
+.presentation-library .presentation-resources{border-top:1px solid #d7e0e8;margin-top:48px;padding-top:24px;display:flex;flex-wrap:wrap;gap:16px 32px}
+.presentation-library .presentation-resources a{color:#076b79;display:inline-flex;align-items:center;min-height:44px;text-underline-offset:.2em}
+body.library-page{margin:0;background:#f4f6f8;color:#172b43;font-family:system-ui,-apple-system,"Hiragino Sans",sans-serif}
+.library-nav{max-width:1228px;margin:auto;padding:20px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:1px solid #d7e0e8;font-size:14px}
+.library-nav a{display:inline-flex;align-items:center;min-height:44px;color:#172b43;text-decoration:none}
+.library-footer{max-width:1228px;margin:auto;padding:30px 24px;color:#627589;font-size:13px}
+@media(max-width:900px){.presentation-library .talk-grid{grid-template-columns:1fr}.presentation-library{padding:48px 20px}.presentation-library .talk-preview{height:150px}.presentation-library .diagram-preview img{height:120px}.presentation-library .presentation-intro{font-size:16px}.presentation-library .talk-card-body{padding:22px}}

@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="3300" height="1500" viewBox="0 0 3300 1500" role="img" aria-labelledby="title desc">
+<title id="title">02 設計転換 — AWS-nativeへ</title>
+<desc id="desc">TenkaCloudのDraw.io構成図の閲覧用表示。初期側は方針の概念図。AWSアイコンは公開されたモノクロsprite、文字と線はSVG。</desc>
+<metadata>Source: architecture.drawio; AWS Icons for PlantUML, Amazon.com Inc. or its affiliates, CC BY-ND 2.0.</metadata>
+<defs>
+<image id="i-cloudformation" width="64" height="64" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAAAAACPAi4CAAABj0lEQVR42u2XrXuDMBDG3241yLPIs5WxlbGVVE6WP4HJSWrnhp0btjK2MnYydvIscqK0D9AktOXZFDGQD37cvbm7wCLDtPaEGTADZgAALGOTSimCWOMiaxbhbOQdt3emlgcAqgCMdURaQfbubgCXsNXpxVxQmPC88o/TW3J+HnJcperY3AfYKPd+cbyxa0qT7GXNrrkVkPJnx+jmW6cqTYg37udGgDv0Vgox6sMxSddWgnHA7AO1dtQwDrCFyvZBQOk1ZduaUJ04iknCkWivgwH99QIqKxsE7K8AX4O+1BkVlZmQTHVusNORZFIhZy42VJJlna0YAoqedN5mNCkTBLhot9Vhp8OA12j3TKVRDa6bhTprIzFAEQLkUgDIZaykRarXZYq7q0Y08E7p7i4v7y7DpFUMwH2DGa4zBoBYE6qIC2U/C0vkMkxTqU1ERF/97o6J2H5JGQJy3w7+69HGrYAcj4kREbenay4PAKRzlUcsyG8Rbv7E+ctAoqmAj2kueA8TNxZNi/mfaQbMAADAL3TSgvvgbgzoAAAAAElFTkSuQmCC"/>
+<image id="i-cognito" width="64" height="64" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAAAAACPAi4CAAACEUlEQVR42u1XLZrjMAx93V0SKFooulB0oOnCXMGFA9MjtEdY04W5gq9gOlBXEC0ckCZ10jg/s2y+hqRJrWfpSXpyDh7/d/3AC+AF8C0AfmW/pabV9Zba8Yuf8rD31fqGFR9TyQOH2K4CcCOsBQ4Ycd0DVVCRA9h4ce2e7K9qE4ClLMjzK1rMAmY2HD16wU6AO7tMmnRDHRSuhgF2bdwA8HduRc0WVVytCsB/wQOHoFA4F9Y9OI3/uxAAhimA5BgA2jglcrWZDHTHmamUTQAKT+AaaVMWBhrP/V5k4AuAEsCaB3LpY764LR6cpvYeGo1hVvO8WiynkTxiCyiAq6vdfgCfSUSEBNtI4rmhnsWsgGP8AonR9ojqg8TzIEBPBmFfL3TNExLAIgRYmvq0BJBclg7u7s6lsQ8HnxF4KmsxEJMC7AR2tRKJpblCDfTcKgANV6OmMFh+Ez7mAd5Jr7dhNAlVH7MhiC8Iq/hHb3XxZI9ZCClYSd7boTcbgmou+HkWUioBpId9HRC9xD3jnQDrCKaGtAVG023T+cAAuTCoIe3CpH2DBQQImtb19jtPKAYwQkLd20sub1tCSBAgJPT7S95jW0KI4qIh9AcL4b0eaIKnobWpfpTFuJQXEOQoejfid9J/2AlwS0JvR9yq6q3+U2m4zbfzYiLdoA2Tk9hh6zcTOWaYpTSphMPro+sF8D0APgH7Hbd69hCCJQAAAABJRU5ErkJggg=="/>
+<image id="i-dynamodb" width="64" height="64" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAAAAACPAi4CAAACc0lEQVR42u1XIZLbQBBsJyGBTQOHHhx6cL6w9KC+YD/h/ITsF/yFpYFLDw4NHHowQJYsW+vTXiUgwEayq7rdM9O9O9oN+LvPFzwIHgT/gOBb81cRIUggIhDu8SkCNZmfSQCAl9pNYEYg3CMCQRIUoWg3waCIUifJMT5QvbcEU+T1n0Xp7oE18MOlJfC8QUCsxKoux7PdxP0xbkXNI7BGL1cEfC0lriyB+buig6CqmfvFO4Z6wYdvE2QxFQEQCOSg4jR3A6XHiZ6hIiRBMAyzFrYqaBDQSq3AiIctBbQysSYws1zHCgBblG3gHoCfNrJQl8ZdCJiixQ2CVDJnpcq4lH0kmIi8XUKpfq26lnOyBuLoGwQOMYN7RDhkNC/LHNVbfMMHISYUAeKAgwDQqSct/JpAqmdQhAwgKoB0Hn8TvyYYcgWi1mXr6xmfvccHg5crw+gFX3vOxJPJAHeP0UkTwT38mqAUU5Hp4PAjBRVI9/CtLMQRKhTwIiDZPXzTSMiLHioqkiH7gNx1tanH8lykwJMh10E7FQyng8TVDMyQfS84dZaQrCwkKITI9ScQnQqqMiE8PBAICohcUSFMuYsgU1U4FhwHBZArkMFX7VMgXgpEKBwrmObH3tt5nyvgPt9EZ7wM3fvBsFwGjmM/lyvDZhbSlIUA4BSOxi7WSVCqLrIwRcJL9BIgvFBEzssNIvyTO5KlOGeBd93z4RgvE7tCJ7TXnK/X9vguz7/y77d1xl+ekaOD4O2J+uTv7zeq0ssP5Lemgt2wagEwXguBIEiKAvB8px0rAlBV1rO9u+ftWhbltB8AEeHuH0xh93hrexD8FwR/APQsIOnfguK/AAAAAElFTkSuQmCC"/>
+<image id="i-iam" width="64" height="64" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAAAAACPAi4CAAABDUlEQVR42u2XXRGDMBCEFwYDsXAWYgELsUAkUAuVECxgIRawcBZioS8t/4UkUKbDhKdMyH3c7e1lhqzCsSdHAiRAAtwEUAzLmryj+LmWgX/8+Ggx3tee8eZfRRwqLAXBcdfFAURFACCkdA1HAEQtYDsHQaWoHy4coAQ3DoBjW0nVhIso0Xw+20JGdcEtFpe38avxNGDmdr0kA701LjNATdNRMaPB9RKRNgbXswS91M/0L8yyiB+JWCq0thdDb904qxmQAhQdyIDQQRLriQZ+bXxfupAAH8iAW4WWVzTwHiYL2BOsrKflBwF0vA9MoJHyuf7Y2djJ4Bls5XNnwUQA8oByV49m6YcjARLgLoAX8Lo9HJL7PAsAAAAASUVORK5CYII="/>
+<image id="i-lambda" width="64" height="64" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAAAAACPAi4CAAABnklEQVR42u2XwZWEIBBEa3gm0CmQQqdALKZgCrspTAqbAimQAil0CnsYGUFpkHEPe9AT+h6forpL9PGFa5fBDbgBfwCYjo8cF7c/cVSB3fGGFQBP2cYL2XjJgwDGRYClSwAJbRf6ZexI6AMkNl040Ui+CaiWcX4t/UwSrPMjClLZic9UsqLAv5Zjx2ElCqXhiAcBZE9IMC3zUgMEIfsBoJDgPinjpjxjjQHePai7oAFmV8RA72cFwMSUT9MjpQAc4IoYqBLqAIbAEuDB1ImUUQT4CC6m+REAQ+Jr8c19iXUXFEBYF4+CTqRqAEsIaf+b8ozVAzj4t21ROqk2moA0IevnaqSMJgCIAtePlFEFpP37dqRMtQS5bZ1IHQBk3wAQpFBe62dzdCBI1k/oRco0BKybaUdqOjgQZe+mn3lVJdHOAOKPqoAYfl/OMlL7T5CpLwAIlhPrG8Cie5AL2MqpxaACyAXYjZUdEV1AqAybEsz+RVIp5/nXustLEKR+SjUAuoCGC1MBoCXfdnFKOVrGjjbfuM+/PB/3X9sN+BeAX+rIqQEJsiCKAAAAAElFTkSuQmCC"/>
+<image id="i-step" width="64" height="64" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAAAAACPAi4CAAABMUlEQVR42u1XIXLDMBDcJCaGooZHC/2FfiF+gvMEGwYmtDBPUL+QL4gGHjUULSzIeJJJpLNybuwCm3l03tm9W0nr1RbjnjUWgAXgDwAycZW2BP5mqWTzISyW+yLPi0/ulBJMg/Nud0ZjlAAEPnl/YpAeAAD0AP76JcErARyoNqYmOKFoJR0oZQMAODrtGDtnCrivC7QMAFhUckEA4BBvOrcpTSRpsGl7oYrqee9uvGm3McEyA0rvRawH1YDgavoTKWaMu/ZkQ2MKNoOCDPihkKPibVhCm2r/f2akLMlIdpyR+HmMr/mgne5utHj9fFsHhQXfBxnMb6T0XgwwELTzGy4W8WoD1QWo82MiDjBnxCn7iFNqGfQRR8uA+4jDeoBrxOE5I07+cxkXcZYfjgVgGoBfkfJaFVFLV2kAAAAASUVORK5CYII="/>
+</defs>
+<rect width="100%" height="100%" fill="white"/>
+<g font-family="Noto Sans CJK JP,Hiragino Sans,Arial,sans-serif">
+<rect x="70" y="180" width="1440" height="1130" fill="#fafbfc" stroke="#405a78" stroke-width="2"/>
+<path d="M70 245H1510" stroke="#405a78" fill="none"/>
+<rect x="1780" y="180" width="1440" height="1130" fill="#f9fcff" stroke="#147eba" stroke-width="2"/>
+<path d="M1780 245H3220" stroke="#147eba" fill="none"/>
+<g fill="#ffffff" stroke="#cfdbe6" stroke-width="1.5">
+<rect x="120" y="290" width="1340" height="150" rx="9"/>
+<rect x="120" y="490" width="1340" height="150" rx="9"/>
+<rect x="120" y="690" width="1340" height="150" rx="9"/>
+<rect x="120" y="890" width="1340" height="150" rx="9"/>
+<rect x="120" y="1110" width="1340" height="145" fill="#fff1f2" rx="9"/>
+<rect x="1840" y="300" width="620" height="150" stroke="#7652b6" rx="9"/>
+<rect x="2520" y="300" width="630" height="150" stroke="#147eba" rx="9"/>
+<rect x="1840" y="525" width="620" height="150" stroke="#c4425e" rx="9"/>
+<rect x="2520" y="525" width="630" height="150" stroke="#01a88d" rx="9"/>
+<rect x="1840" y="750" width="620" height="150" stroke="#2e7b50" rx="9"/>
+<rect x="2520" y="750" width="630" height="150" stroke="#2e7b50" rx="9"/>
+<rect x="1840" y="1000" width="1310" height="230" fill="#effcf4" rx="9"/>
+</g>
+<use href="#i-cognito" transform="translate(1870 335) scale(1.25)"/>
+<use href="#i-lambda" transform="translate(2550 335) scale(1.25)"/>
+<use href="#i-step" transform="translate(1870 560) scale(1.25)"/>
+<use href="#i-dynamodb" transform="translate(2550 560) scale(1.25)"/>
+<use href="#i-cloudformation" transform="translate(1870 785) scale(1.25)"/>
+<use href="#i-iam" transform="translate(2550 785) scale(1.25)"/>
+<g fill="#172333" font-weight="700">
+<text x="60" y="92" font-size="44">共通化する境界を変えた。</text>
+<text x="95" y="223" font-size="32">Before / cloud agnostic first</text>
+<text x="1805" y="223" font-size="32">After / AWS-native</text>
+<text x="1560" y="778" font-size="110" fill="#147eba">→</text>
+<g font-size="28">
+<text><tspan x="1970" y="365">Cognito</tspan><tspan x="1970" y="403">管理者認証を任せる</tspan></text>
+<text><tspan x="2650" y="365">Lambda</tspan><tspan x="2650" y="403">API・競技処理の実行</tspan></text>
+<text><tspan x="1970" y="590">Step Functions</tspan><tspan x="1970" y="628">配置・削除の進行</tspan></text>
+<text><tspan x="2650" y="590">DynamoDB</tspan><tspan x="2650" y="628">イベント・状態保存</tspan></text>
+<text><tspan x="1970" y="815">CloudFormation</tspan><tspan x="1970" y="853">チーム専用スタック</tspan></text>
+<text><tspan x="2650" y="815">IAM</tspan><tspan x="2650" y="853">AssumeRole + ExternalId</tspan></text>
+</g></g>
+<g fill="#52667b" font-size="30">
+<text><tspan x="148" y="355">どのクラウドでも動く基盤を目指した。</tspan><tspan x="148" y="397">AWS / Azure / Google Cloudへの移植性。</tspan></text>
+<text><tspan x="148" y="555">認証も自分で持つ / Keycloak</tspan><tspan x="148" y="597">更新・可用性・監視・障害対応。</tspan></text>
+<text><tspan x="148" y="755">実行方式を共通化すると</tspan><tspan x="148" y="797">runner・権限・途中失敗からの復旧も基盤の責任。</tspan></text>
+<text><tspan x="148" y="955">Terraformを共通方式にした場合</tspan><tspan x="148" y="997">state・ロック・整合性・後片付けも設計対象。</tspan></text>
+<text x="148" y="1192" fill="#991b1b" font-weight="700">「動かせる」と「運用し続けられる」は違った。</text>
+<text fill="#166534" font-weight="700"><tspan x="1868" y="1105">自分たちが設計するもの</tspan><tspan x="1868" y="1147">問題の契約・採点・チーム分離・削除確認・競技の面白さ。</tspan></text>
+</g>
+<text x="80" y="1394" font-size="34" font-weight="700" fill="#087f8c">共通化するのは、すべてのインフラではなく「問題を追加できる境界」。</text>
+<text x="80" y="1462" font-size="22" fill="#52667b">初期側は方針の概念図。全クラウドで稼働済み、あるいはTerraformを実運用していたという主張ではありません。</text>
+</g></svg>

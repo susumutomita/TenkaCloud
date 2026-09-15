@@ -1,0 +1,130 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="3300" height="2210" viewBox="0 0 3300 2210" role="img" aria-labelledby="title desc">
+<title id="title">TenkaCloud Lite — AWS構成と主要経路</title>
+<desc id="desc">左が運営AWSアカウント、右がチーム別の演習AWSアカウント。管理者API、配置・削除、参加者の専用Function URL、定期採点、認証を分離した論理構成。</desc>
+<metadata>Source: architecture.drawio. AWS Icons for PlantUML, Amazon.com Inc. or its affiliates, CC BY-ND 2.0. Published monochrome sprites are embedded; text and connections are SVG.</metadata>
+<defs>
+<image id="i-api" width="64" height="64" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAAAAACPAi4CAAABcklEQVR42u2X7W2EMAyG36tYwCtkBa/gFVghK3AjwApZgRW8gldgBa/QH3eVOM5cgKuqViUS+RHhR/54bcKlw3vrAyfgBHwDoAlPU4thcdRBbSuA2hQcok3qmwAisbPOrFrPAfcCu0aAYpCOKx4kSZh0ij0YNVMrxV8AWgZGW824DyzU2UMqmkXwQZTzZSbCyTQEdIRp9Frd1YSFhwhAKNMG5fg4tbRShWmb+KyuRAA9rugx2362FwBc78/X1v/ngUJvAlKXjwJIAIDhEDoCoCwCgKEimfYDKJMbwHA3p3XCKiCTFwcYCi9O+WASKdU6bBVQnDIhYXJQJi+7AV6cGAID+BbNzmaCF1YiGKAw39+NgOvNAUAPK5Fgh+fBLZPkbzaT/4F5cE7lBYC32fBKCE6tqNXNhebymAEGljqCheDzd5qH20MN8WS+rMJrRGD+XMY7IrLvAvNIB2YcfwfII8+a8CbFEvRlHNjl/Gs7Ab8C8Ak0ZJJTuMJJuwAAAABJRU5ErkJggg=="/>
+<image id="i-cloudfront" width="64" height="64" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAAAAACPAi4CAAAC00lEQVR42u1XL5/iMBQc7tYgn618FhmLjEXGnqxd2a9wfIVaZC0yFhmLfBY5Fnmif0igXdjfmRXUNW2m8yYzyeuqwf9dv/AGeAP8BICP5UeiqhCApBm/DeC8jEACB6Y4/95qPkzeAwCsA6WnAsRZiN/bua//2YDHYyWySddqw5RSJVB34WsMggM7A6ABXRCArXcAgNS9AlDrja3UQlNh51OC97D2eQlNhTaNN9WW+/PJSYoXwMyJOz3zQS3c23SnMAAG7TXdU+onAEHRZlL1U3sYAGyh4csSdIf2ki3H2YmrdsLjMHA1V5WmugOo1zFlcjjGjVRrttdxiFAXlwH8hodsvjDyZIzH9WaiZW4NW9TAoyvkbAlYNDRBpuEOflFEB7uBu0zOhJt0ZnBLAB6ZAAHdpFaE6vQgFRRyAJERQL2izeRkzCYliMzHeVxuqQVgm4udvMrEx1TTLIMRoBamO8sxL3w05mMJMIg6Fe67PUVzhFgALJQgqAEw9f53mi+3QaYamAOUDACzdPN/7TDHm0sMgD0BgNKYCk1Vw7QzpFy5RSf2JFuKE7awzuD/uikEOdNZBhzK5F7VDEBK6jW4jqVyAi4xGN4RxkFAaztoo3cHRg6Qp7Gq2M/bBU7pu6RKHC8AjEOoN2rnWQaT0Jp/gm1CECimjUTzPH/MAUiReHQGNAJwSGcBkDMge7vJ/VKllLvbgUsiJrh8ObOU5O52eehLgCL2eIjZYFFFXDRSRLi36sPuHor5DwAS5hgYpQmN0AAvXwGghdPCtuP44G5ose8+nguUSs/XyVHTdT0Z47GifOKu07g/XM9abe1SCt3reL40W/uEHZ4cri1Ry0MJ0FDDUD+e749d2t4QUGz9w+KL4KX+AEkqYF3WIAHYCdLhpR7pbLoWRXZKY6sQ8HD6XpdmZiQgX3Zpq6V/Ju8KOzKmb/WJQ6cq8rRTXb3/2t4APwLgH24XTUEUHdUWAAAAAElFTkSuQmCC"/>
+<image id="i-cloudwatch" width="64" height="64" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAAAAACPAi4CAAACpElEQVR42u2WrXvbMBDG324lhkcFRQ2PBooWiha6sGMJXFlMx+p/QTRQ1PCooajhUcMBN42/6sQb2bMnZpIf//T67r07PXj83fMNd8Ad8F8AHpe3idkSkFJMVwAPS8VE7rKbqrQZQHsLjaKAZQeEsBFAe4sqnhfeQcoVwPd89n2R64/mvOpE2aDZAnhyeGsH65R2eWpvB1CRleMDW+R5vfNPnKVb0ugoyWQrOnoHAHalXlfwmoXpQV2WQ0+nNifTdNcUEEFmp0RGqZD4zhyvWdlC5zL1cFAAWoFvqAX9OmUCpnXA0MMLjyreC7sSRNo7Qljxfmcz6yh1X1iZjoRKdLV2yDukYTaHCn6adJjnaaJBhI2pF2PAFpVe7yCpBNtFBc8m1MuyjTUZPqUp2YFXHocWkKXPre+TL/H8WhwvOpGWLEDeAaogYpaPP0ygqz3xUpuMGFNvET4edK0alWj23jNKsd5CY5A97UudSh0AEtuph9jhkFwBAC6Gw9G6AMAiLaZR4KdO9wjJF5BQRbhCK3gCyA2jPVAgSm7cgK1FtL7vsPHILibLEd6qLCrQCn5cSwxRjxj7+QAPAYPdyG/DLEjw3g5GkRISGPH8h0QJBLkYYpbGoAVfPHLQPtx6rmXqQ1Su9IP4MpqFCoLCfjY7XWg3EyNpNaobWIhzvWKHpDwHrI53AVMAFwTAewTiebnMJ9OoAZmsVra7fPfMCPGJcdItALTOahQmYzL9FbkAuNEtAFVmNLFpm1NI7hXSGTeZk+sAJOT5ThtpOi4c8FYbsxsTHq5d9/sQfhhLS/Xucnm4QQHQ1i0MoG2oYm5cHZGzpg0Khs2K9haleK8vGxT0+ew+eroxO21cFrYCPkFNZtlB6j8FoBO1mVTd1hjcb+t3wD8P+A3uNSQFrjQ9SwAAAABJRU5ErkJggg=="/>
+<image id="i-eventbridge" width="64" height="64" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAAAAACPAi4CAAACsklEQVR42u1XLZjbMAx9tx0pFDUUDTQNNC0MPZiDgy0cbOmxhR6b6UHTQtFC0UDRwIFe89u0WbdjDernOM9P0rOe+lTg355veAA8AP4DwPOlxRDYtLJFAE9TKVPpAQB7WQLwPZssrQOq6kAuOzT35SBgn0wrJX9fDoigAEyYAQBFG2SMf1UFwjiLBS9iYMpFBXCADs/d+M3WliRRA3vKS8iI8TGnlSwBMPOUMfA2Oq6pc/ZlyGq7AQBNtUnjOI3Wa0+ElQumNwDQqByPaxpsBODXiG8HsBe7AQAADTIeKenFxdiYsIMsKWMyCsMVPn2YwFfK6OkcucWy1ZBtDYARTQUyYkBF2QrP95cBQFEQQAV0noFnOzPwHtvPnbwLSYEYeCMIpGm2CvQT78fzpabURkPMCWg0c1m2wr6eBXhhjZ+Zz4O9tUXQU03rQ21Kq34RhgBcotIJl15NGxWpc+7rYJDEAiLtT5XLNRVBMVMF71GduQTEfrGs6i5zBe8vA5TdRz0uk3MtovwiX6hQ0Ll7DWiewoudqqrLACItN00d2EkViNpGKnOXqXduBPcpBOorNM7pwIizvAxOGzTme7eZNhcVOk1iBDEo/PKAKBU9gbT69zwgMAIIQPW6FZQEiwjcqaLqtgxN83lsSgKrdsQCEb/r2mR7g/de5o2FCALABAwMTuoyasmuGgt1r+21y0FRbm2BuZoioGdKV/rjTD+wPGOXl0gfE0/JUrMAoDbvMkavlZxfsMsoJ2tuWZum2pRXx3q8rw6UsV+PvWZqLI2KEE+Hk9IhSeMGpjTvjTm5w6hbF9im4+HUXG9Oabbf+d/DqYSRFEAMTLZgQtF4e1y5OidOpyGFTwYwbEkOLkWVO1cj/4GP4+1B8+LjN6emVd3JAHVyq5XG9wZ3Mnj84XgAfC3AH1WrNRDi6JzWAAAAAElFTkSuQmCC"/>
+<image id="i-cfn" width="64" height="64" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAAAAACPAi4CAAABj0lEQVR42u2XrXuDMBDG3241yLPIs5WxlbGVVE6WP4HJSWrnhp0btjK2MnYydvIscqK0D9AktOXZFDGQD37cvbm7wCLDtPaEGTADZgAALGOTSimCWOMiaxbhbOQdt3emlgcAqgCMdURaQfbubgCXsNXpxVxQmPC88o/TW3J+HnJcperY3AfYKPd+cbyxa0qT7GXNrrkVkPJnx+jmW6cqTYg37udGgDv0Vgox6sMxSddWgnHA7AO1dtQwDrCFyvZBQOk1ZduaUJ04iknCkWivgwH99QIqKxsE7K8AX4O+1BkVlZmQTHVusNORZFIhZy42VJJlna0YAoqedN5mNCkTBLhot9Vhp8OA12j3TKVRDa6bhTprIzFAEQLkUgDIZaykRarXZYq7q0Y08E7p7i4v7y7DpFUMwH2DGa4zBoBYE6qIC2U/C0vkMkxTqU1ERF/97o6J2H5JGQJy3w7+69HGrYAcj4kREbenay4PAKRzlUcsyG8Rbv7E+ctAoqmAj2kueA8TNxZNi/mfaQbMAADAL3TSgvvgbgzoAAAAAElFTkSuQmCC"/>
+<image id="i-cognito" width="64" height="64" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAAAAACPAi4CAAACEUlEQVR42u1XLZrjMAx93V0SKFooulB0oOnCXMGFA9MjtEdY04W5gq9gOlBXEC0ckCZ10jg/s2y+hqRJrWfpSXpyDh7/d/3AC+AF8C0AfmW/pabV9Zba8Yuf8rD31fqGFR9TyQOH2K4CcCOsBQ4Ycd0DVVCRA9h4ce2e7K9qE4ClLMjzK1rMAmY2HD16wU6AO7tMmnRDHRSuhgF2bdwA8HduRc0WVVytCsB/wQOHoFA4F9Y9OI3/uxAAhimA5BgA2jglcrWZDHTHmamUTQAKT+AaaVMWBhrP/V5k4AuAEsCaB3LpY764LR6cpvYeGo1hVvO8WiynkTxiCyiAq6vdfgCfSUSEBNtI4rmhnsWsgGP8AonR9ojqg8TzIEBPBmFfL3TNExLAIgRYmvq0BJBclg7u7s6lsQ8HnxF4KmsxEJMC7AR2tRKJpblCDfTcKgANV6OmMFh+Ez7mAd5Jr7dhNAlVH7MhiC8Iq/hHb3XxZI9ZCClYSd7boTcbgmou+HkWUioBpId9HRC9xD3jnQDrCKaGtAVG023T+cAAuTCoIe3CpH2DBQQImtb19jtPKAYwQkLd20sub1tCSBAgJPT7S95jW0KI4qIh9AcL4b0eaIKnobWpfpTFuJQXEOQoejfid9J/2AlwS0JvR9yq6q3+U2m4zbfzYiLdoA2Tk9hh6zcTOWaYpTSphMPro+sF8D0APgH7Hbd69hCCJQAAAABJRU5ErkJggg=="/>
+<image id="i-ddb" width="64" height="64" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAAAAACPAi4CAAACc0lEQVR42u1XIZLbQBBsJyGBTQOHHhx6cL6w9KC+YD/h/ITsF/yFpYFLDw4NHHowQJYsW+vTXiUgwEayq7rdM9O9O9oN+LvPFzwIHgT/gOBb81cRIUggIhDu8SkCNZmfSQCAl9pNYEYg3CMCQRIUoWg3waCIUifJMT5QvbcEU+T1n0Xp7oE18MOlJfC8QUCsxKoux7PdxP0xbkXNI7BGL1cEfC0lriyB+buig6CqmfvFO4Z6wYdvE2QxFQEQCOSg4jR3A6XHiZ6hIiRBMAyzFrYqaBDQSq3AiIctBbQysSYws1zHCgBblG3gHoCfNrJQl8ZdCJiixQ2CVDJnpcq4lH0kmIi8XUKpfq26lnOyBuLoGwQOMYN7RDhkNC/LHNVbfMMHISYUAeKAgwDQqSct/JpAqmdQhAwgKoB0Hn8TvyYYcgWi1mXr6xmfvccHg5crw+gFX3vOxJPJAHeP0UkTwT38mqAUU5Hp4PAjBRVI9/CtLMQRKhTwIiDZPXzTSMiLHioqkiH7gNx1tanH8lykwJMh10E7FQyng8TVDMyQfS84dZaQrCwkKITI9ScQnQqqMiE8PBAICohcUSFMuYsgU1U4FhwHBZArkMFX7VMgXgpEKBwrmObH3tt5nyvgPt9EZ7wM3fvBsFwGjmM/lyvDZhbSlIUA4BSOxi7WSVCqLrIwRcJL9BIgvFBEzssNIvyTO5KlOGeBd93z4RgvE7tCJ7TXnK/X9vguz7/y77d1xl+ekaOD4O2J+uTv7zeq0ssP5Lemgt2wagEwXguBIEiKAvB8px0rAlBV1rO9u+ftWhbltB8AEeHuH0xh93hrexD8FwR/APQsIOnfguK/AAAAAElFTkSuQmCC"/>
+<image id="i-iam" width="64" height="64" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAAAAACPAi4CAAABDUlEQVR42u2XXRGDMBCEFwYDsXAWYgELsUAkUAuVECxgIRawcBZioS8t/4UkUKbDhKdMyH3c7e1lhqzCsSdHAiRAAtwEUAzLmryj+LmWgX/8+Ggx3tee8eZfRRwqLAXBcdfFAURFACCkdA1HAEQtYDsHQaWoHy4coAQ3DoBjW0nVhIso0Xw+20JGdcEtFpe38avxNGDmdr0kA701LjNATdNRMaPB9RKRNgbXswS91M/0L8yyiB+JWCq0thdDb904qxmQAhQdyIDQQRLriQZ+bXxfupAAH8iAW4WWVzTwHiYL2BOsrKflBwF0vA9MoJHyuf7Y2djJ4Bls5XNnwUQA8oByV49m6YcjARLgLoAX8Lo9HJL7PAsAAAAASUVORK5CYII="/>
+<image id="i-lambda" width="64" height="64" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAAAAACPAi4CAAABnklEQVR42u2XwZWEIBBEa3gm0CmQQqdALKZgCrspTAqbAimQAil0CnsYGUFpkHEPe9AT+h6forpL9PGFa5fBDbgBfwCYjo8cF7c/cVSB3fGGFQBP2cYL2XjJgwDGRYClSwAJbRf6ZexI6AMkNl040Ui+CaiWcX4t/UwSrPMjClLZic9UsqLAv5Zjx2ElCqXhiAcBZE9IMC3zUgMEIfsBoJDgPinjpjxjjQHePai7oAFmV8RA72cFwMSUT9MjpQAc4IoYqBLqAIbAEuDB1ImUUQT4CC6m+REAQ+Jr8c19iXUXFEBYF4+CTqRqAEsIaf+b8ozVAzj4t21ROqk2moA0IevnaqSMJgCIAtePlFEFpP37dqRMtQS5bZ1IHQBk3wAQpFBe62dzdCBI1k/oRco0BKybaUdqOjgQZe+mn3lVJdHOAOKPqoAYfl/OMlL7T5CpLwAIlhPrG8Cie5AL2MqpxaACyAXYjZUdEV1AqAybEsz+RVIp5/nXustLEKR+SjUAuoCGC1MBoCXfdnFKOVrGjjbfuM+/PB/3X9sN+BeAX+rIqQEJsiCKAAAAAElFTkSuQmCC"/>
+<image id="i-step" width="64" height="64" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAAAAACPAi4CAAABMUlEQVR42u1XIXLDMBDcJCaGooZHC/2FfiF+gvMEGwYmtDBPUL+QL4gGHjUULSzIeJJJpLNybuwCm3l03tm9W0nr1RbjnjUWgAXgDwAycZW2BP5mqWTzISyW+yLPi0/ulBJMg/Nud0ZjlAAEPnl/YpAeAAD0AP76JcErARyoNqYmOKFoJR0oZQMAODrtGDtnCrivC7QMAFhUckEA4BBvOrcpTSRpsGl7oYrqee9uvGm3McEyA0rvRawH1YDgavoTKWaMu/ZkQ2MKNoOCDPihkKPibVhCm2r/f2akLMlIdpyR+HmMr/mgne5utHj9fFsHhQXfBxnMb6T0XgwwELTzGy4W8WoD1QWo82MiDjBnxCn7iFNqGfQRR8uA+4jDeoBrxOE5I07+cxkXcZYfjgVgGoBfkfJaFVFLV2kAAAAASUVORK5CYII="/>
+<marker id="blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="21" markerHeight="21" orient="auto" markerUnits="userSpaceOnUse" stroke="none"><path d="M0 0L10 5L0 10Z" fill="#147eba"/></marker>
+<marker id="green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="21" markerHeight="21" orient="auto" markerUnits="userSpaceOnUse" stroke="none"><path d="M0 0L10 5L0 10Z" fill="#2e7b50"/></marker>
+<marker id="red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="21" markerHeight="21" orient="auto" markerUnits="userSpaceOnUse" stroke="none"><path d="M0 0L10 5L0 10Z" fill="#c4425e"/></marker>
+<marker id="purple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="21" markerHeight="21" orient="auto" markerUnits="userSpaceOnUse" stroke="none"><path d="M0 0L10 5L0 10Z" fill="#7652b6"/></marker>
+<marker id="gold" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="21" markerHeight="21" orient="auto" markerUnits="userSpaceOnUse" stroke="none"><path d="M0 0L10 5L0 10Z" fill="#8a6200"/></marker>
+</defs>
+<rect width="100%" height="100%" fill="white"/>
+<g font-family="Noto Sans CJK JP,Hiragino Sans,Arial,sans-serif">
+<g stroke-width="2">
+<rect x="40" y="260" width="3210" height="1770" fill="#ffffff" stroke="#232f3e"/>
+<rect x="80" y="330" width="1970" height="1660" fill="#f9fcff" stroke="#147eba"/>
+<rect x="110" y="405" width="1900" height="240" fill="#fbf9ff" stroke="#7652b6"/>
+<rect x="110" y="700" width="1030" height="680" fill="#ffffff" stroke="#147eba"/>
+<rect x="1170" y="700" width="840" height="680" fill="#f4fbfa" stroke="#01a88d"/>
+<rect x="110" y="1440" width="1900" height="490" fill="#ffffff" stroke="#2e7b50"/>
+<rect x="2160" y="420" width="1040" height="570" fill="#fafdfc" stroke="#2e7b50"/>
+<rect x="2160" y="1350" width="1040" height="570" fill="#fafdfc" stroke="#2e7b50"/>
+</g>
+<g fill="none" stroke-width="1.5">
+<path d="M40 310H3250" stroke="#232f3e"/><path d="M80 380H2050" stroke="#147eba"/>
+<path d="M110 447H2010" stroke="#7652b6"/><path d="M110 742H1140" stroke="#147eba"/>
+<path d="M1170 742H2010" stroke="#01a88d"/><path d="M110 1482H2010" stroke="#2e7b50"/>
+<path d="M2160 462H3200M2160 1392H3200" stroke="#2e7b50"/>
+</g>
+<g fill="#fff3d6" stroke="#b7791f" stroke-width="1.5"><rect x="100" y="155" width="600" height="70" rx="10"/><rect x="850" y="155" width="700" height="70" rx="10"/></g>
+<g fill="#ffffff" stroke-width="1.5">
+<g stroke="#7652b6"><rect x="145" y="485" width="450" height="115" rx="10"/><rect x="850" y="485" width="450" height="115" rx="10"/><rect x="1210" y="790" width="740" height="120" rx="10"/></g>
+<g stroke="#147eba"><rect x="145" y="790" width="420" height="120" rx="10"/><rect x="650" y="790" width="440" height="120" rx="10"/></g>
+<g stroke="#c4425e"><rect x="145" y="1030" width="420" height="120" rx="10"/><rect x="650" y="1030" width="440" height="120" rx="10"/><rect x="650" y="1220" width="440" height="120" rx="10"/></g>
+<g stroke="#01a88d"><rect x="1210" y="990" width="740" height="120" rx="10"/><rect x="1210" y="1210" width="740" height="120" rx="10"/></g>
+<g stroke="#2e7b50"><rect x="145" y="1550" width="410" height="150" rx="10"/><rect x="625" y="1550" width="410" height="150" rx="10"/><rect x="1105" y="1550" width="410" height="150" rx="10"/><rect x="1585" y="1550" width="390" height="150" rx="10"/>
+<rect x="2200" y="530" width="410" height="120" rx="10"/><rect x="2710" y="530" width="440" height="120" rx="10"/>
+<rect x="2200" y="1460" width="410" height="120" rx="10"/><rect x="2710" y="1460" width="440" height="120" rx="10"/></g>
+<g stroke="#cfdbe6"><rect x="145" y="1770" width="1830" height="115" fill="#f5f7fa" rx="10"/><rect x="2200" y="785" width="950" height="140" rx="10"/><rect x="2200" y="1715" width="950" height="140" rx="10"/></g>
+</g>
+<g fill="none" stroke-width="6">
+<g stroke="#8a6200" marker-end="url(#gold)"><path data-route-halo="e1" d="M400 225H370V485" fill="none" stroke="#ffffff" stroke-width="12" stroke-opacity="1" stroke-linecap="round" stroke-linejoin="round" marker-start="none" marker-mid="none" marker-end="none" pointer-events="none" aria-hidden="true"/>
+<path d="M400 225H370V485" id="route-e1" stroke-linecap="round" stroke-linejoin="round"/><path data-route-halo="e2" d="M1200 225H1075V485" fill="none" stroke="#ffffff" stroke-width="12" stroke-opacity="1" stroke-linecap="round" stroke-linejoin="round" marker-start="none" marker-mid="none" marker-end="none" pointer-events="none" aria-hidden="true"/>
+<path d="M1200 225H1075V485" id="route-e2" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g stroke="#147eba" marker-end="url(#blue)"><path data-route-halo="e3" d="M370 600V685H355V790" fill="none" stroke="#ffffff" stroke-width="12" stroke-opacity="1" stroke-linecap="round" stroke-linejoin="round" marker-start="none" marker-mid="none" marker-end="none" pointer-events="none" aria-hidden="true"/>
+<path d="M370 600V685H355V790" id="route-e3" stroke-linecap="round" stroke-linejoin="round"/><path data-route-halo="e5" d="M565 850H650" fill="none" stroke="#ffffff" stroke-width="12" stroke-opacity="1" stroke-linecap="round" stroke-linejoin="round" marker-start="none" marker-mid="none" marker-end="none" pointer-events="none" aria-hidden="true"/>
+<path d="M565 850H650" id="route-e5" stroke-linecap="round" stroke-linejoin="round"/></g>
+<path data-route-halo="e4" d="M595 542H730V675H1580V790" fill="none" stroke="#ffffff" stroke-width="12" stroke-opacity="1" stroke-linecap="round" stroke-linejoin="round" marker-start="none" marker-mid="none" marker-end="none" pointer-events="none" aria-hidden="true"/>
+<path d="M595 542H730V675H1580V790" stroke="#7652b6" marker-end="url(#purple)" id="route-e4" stroke-linecap="round" stroke-linejoin="round"/>
+<g stroke="#c4425e" marker-end="url(#red)"><path data-route-halo="e6" d="M870 910V960H355V1030" fill="none" stroke="#ffffff" stroke-width="12" stroke-opacity="1" stroke-linecap="round" stroke-linejoin="round" marker-start="none" marker-mid="none" marker-end="none" pointer-events="none" aria-hidden="true"/>
+<path d="M870 910V960H355V1030" id="route-e6" stroke-linecap="round" stroke-linejoin="round"/><path data-route-halo="e7" d="M565 1090H650" fill="none" stroke="#ffffff" stroke-width="12" stroke-opacity="1" stroke-linecap="round" stroke-linejoin="round" marker-start="none" marker-mid="none" marker-end="none" pointer-events="none" aria-hidden="true"/>
+<path d="M565 1090H650" id="route-e7" stroke-linecap="round" stroke-linejoin="round"/><path data-route-halo="e8" d="M870 1150V1220" fill="none" stroke="#ffffff" stroke-width="12" stroke-opacity="1" stroke-linecap="round" stroke-linejoin="round" marker-start="none" marker-mid="none" marker-end="none" pointer-events="none" aria-hidden="true"/>
+<path d="M870 1150V1220" id="route-e8" stroke-linecap="round" stroke-linejoin="round"/>
+<path data-route-halo="e9" d="M1090 1280H1155V1390H2110V590H2200" fill="none" stroke="#ffffff" stroke-width="12" stroke-opacity="1" stroke-linecap="round" stroke-linejoin="round" marker-start="none" marker-mid="none" marker-end="none" pointer-events="none" aria-hidden="true"/>
+<path d="M1090 1280H1155V1390H2110V590H2200" id="route-e9" stroke-linecap="round" stroke-linejoin="round"/><path data-route-halo="e10" d="M1090 1316H1130V1400H2080V1520H2200" fill="none" stroke="#ffffff" stroke-width="12" stroke-opacity="1" stroke-linecap="round" stroke-linejoin="round" marker-start="none" marker-mid="none" marker-end="none" pointer-events="none" aria-hidden="true"/>
+<path d="M1090 1316H1130V1400H2080V1520H2200" id="route-e10" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g stroke="#2e7b50" marker-end="url(#green)">
+<path data-route-halo="e11" d="M2610 590H2710" fill="none" stroke="#ffffff" stroke-width="12" stroke-opacity="1" stroke-linecap="round" stroke-linejoin="round" marker-start="none" marker-mid="none" marker-end="none" pointer-events="none" aria-hidden="true"/>
+<path d="M2610 590H2710" id="route-e11" stroke-linecap="round" stroke-linejoin="round"/><path data-route-halo="e12" d="M2930 650V725H2960V785" fill="none" stroke="#ffffff" stroke-width="12" stroke-opacity="1" stroke-linecap="round" stroke-linejoin="round" marker-start="none" marker-mid="none" marker-end="none" pointer-events="none" aria-hidden="true"/>
+<path d="M2930 650V725H2960V785" id="route-e12" stroke-linecap="round" stroke-linejoin="round"/>
+<path data-route-halo="e13" d="M2610 1520H2710" fill="none" stroke="#ffffff" stroke-width="12" stroke-opacity="1" stroke-linecap="round" stroke-linejoin="round" marker-start="none" marker-mid="none" marker-end="none" pointer-events="none" aria-hidden="true"/>
+<path d="M2610 1520H2710" id="route-e13" stroke-linecap="round" stroke-linejoin="round"/><path data-route-halo="e14" d="M2930 1580V1660H2960V1715" fill="none" stroke="#ffffff" stroke-width="12" stroke-opacity="1" stroke-linecap="round" stroke-linejoin="round" marker-start="none" marker-mid="none" marker-end="none" pointer-events="none" aria-hidden="true"/>
+<path d="M2930 1580V1660H2960V1715" id="route-e14" stroke-linecap="round" stroke-linejoin="round"/>
+<path data-route-halo="e15" d="M850 565H790V665H95V1500H350V1550" fill="none" stroke="#ffffff" stroke-width="12" stroke-opacity="1" stroke-linecap="round" stroke-linejoin="round" marker-start="none" marker-mid="none" marker-end="none" pointer-events="none" aria-hidden="true"/>
+<path d="M850 565H790V665H95V1500H350V1550" id="route-e15" stroke-linecap="round" stroke-linejoin="round"/>
+<path data-route-halo="e16" d="M1300 542H2030V1410H830V1550" fill="none" stroke="#ffffff" stroke-width="12" stroke-opacity="1" stroke-linecap="round" stroke-linejoin="round" marker-start="none" marker-mid="none" marker-end="none" pointer-events="none" aria-hidden="true"/>
+<path d="M1300 542H2030V1410H830V1550" id="route-e16" stroke-linecap="round" stroke-linejoin="round"/>
+<path data-route-halo="e17" d="M1585 1625H1515" fill="none" stroke="#ffffff" stroke-width="12" stroke-opacity="1" stroke-linecap="round" stroke-linejoin="round" marker-start="none" marker-mid="none" marker-end="none" pointer-events="none" aria-hidden="true"/>
+<path d="M1585 1625H1515" id="route-e17" stroke-linecap="round" stroke-linejoin="round"/><path data-route-halo="e18" d="M1105 1625H1035" fill="none" stroke="#ffffff" stroke-width="12" stroke-opacity="1" stroke-linecap="round" stroke-linejoin="round" marker-start="none" marker-mid="none" marker-end="none" pointer-events="none" aria-hidden="true"/>
+<path d="M1105 1625H1035" id="route-e18" stroke-linecap="round" stroke-linejoin="round"/>
+</g></g>
+<use href="#i-cloudfront" x="165" y="510"/><use href="#i-cloudfront" x="870" y="510"/>
+<use href="#i-api" x="165" y="818"/><use href="#i-lambda" x="670" y="818"/>
+<use href="#i-eventbridge" x="165" y="1058"/><use href="#i-step" x="670" y="1058"/><use href="#i-lambda" x="670" y="1248"/>
+<use href="#i-cognito" x="1230" y="818"/><use href="#i-ddb" x="1230" y="1018"/><use href="#i-cloudwatch" x="1230" y="1238"/>
+<use href="#i-lambda" x="165" y="1592"/><use href="#i-lambda" x="645" y="1592"/><use href="#i-lambda" x="1125" y="1592"/><use href="#i-eventbridge" x="1605" y="1592"/>
+<use href="#i-iam" x="2220" y="558"/><use href="#i-cfn" x="2730" y="558"/>
+<use href="#i-iam" x="2220" y="1488"/><use href="#i-cfn" x="2730" y="1488"/>
+<g fill="#172333" font-weight="700">
+<text x="40" y="66" font-size="32">TenkaCloud — AWS構成と主要経路</text>
+<text x="40" y="119" font-size="22">Liteモード / 青=管理API　赤=配置・削除　緑=競技中通信　紫=管理者認証</text>
+<g font-size="24"><text x="58" y="294">AWS Cloud — 運営基盤と演習環境の責任分界</text><text x="98" y="364">運営用AWSアカウント / TenkaCloud Lite</text><text x="2178" y="450">チームAのAWSアカウント</text><text x="2178" y="1380">チームBのAWSアカウント</text></g>
+<g font-size="22"><text x="128" y="435">配信 / Global Edge（CloudFrontはグローバルサービス）</text><text x="128" y="730">運営API / 問題の配置・削除</text><text x="1188" y="730">認証 / データ / 監視</text><text x="128" y="1470">競技中の経路 / 参加者はteamLoginKeyで認証（Cognitoとは別）</text></g>
+<g font-size="21">
+<text><tspan x="245" y="534">CloudFront + S3</tspan><tspan x="245" y="566">管理者向けSPA</tspan></text>
+<text><tspan x="950" y="534">CloudFront + S3</tspan><tspan x="950" y="566">参加者向けSPA</tspan></text>
+<text><tspan x="245" y="837">API Gateway</tspan><tspan x="245" y="870">管理者向けTenant API</tspan></text>
+<text><tspan x="750" y="837">Lambda / 管理API群</tspan><tspan x="750" y="870">イベント作成・配置要求</tspan></text>
+<text><tspan x="245" y="1077">EventBridge</tspan><tspan x="245" y="1110">配置・削除要求イベント</tspan></text>
+<text><tspan x="750" y="1077">Step Functions</tspan><tspan x="750" y="1110">配置・削除 / 結果確認</tspan></text>
+<text><tspan x="750" y="1267">Lambda / CfnDeploy</tspan><tspan x="750" y="1300">CloudFormation APIを実行</tspan></text>
+<text><tspan x="1310" y="837">Cognito</tspan><tspan x="1310" y="870">管理者認証 / MFA</tspan></text>
+<text><tspan x="1310" y="1037">DynamoDB</tspan><tspan x="1310" y="1070">イベント・チーム・配置状況・監査・競技状態</tspan></text>
+<text><tspan x="1310" y="1257">CloudWatch</tspan><tspan x="1310" y="1290">各Lambdaのログ / アラームは設定時に追加</tspan></text>
+<text><tspan x="2300" y="577">IAM Role</tspan><tspan x="2300" y="610">AssumeRoleの受け口</tspan></text>
+<text><tspan x="2810" y="577">CloudFormation</tspan><tspan x="2810" y="610">チーム専用スタック</tspan></text>
+<text><tspan x="2300" y="1507">IAM Role</tspan><tspan x="2300" y="1540">AssumeRoleの受け口</tspan></text>
+<text><tspan x="2810" y="1507">CloudFormation</tspan><tspan x="2810" y="1540">チーム専用スタック</tspan></text>
+</g>
+<g font-size="20">
+<text><tspan x="245" y="1595">Lambda / Portal API</tspan><tspan x="245" y="1626">専用Function URL</tspan><tspan x="245" y="1657">自チーム向けの表示データ</tspan></text>
+<text><tspan x="725" y="1595">Lambda / Dispatcher</tspan><tspan x="725" y="1626">別のFunction URL</tspan><tspan x="725" y="1657">問題pluginの審判処理</tspan></text>
+<text><tspan x="1205" y="1595">Lambda / GenericScoring</tspan><tspan x="1205" y="1626">定期採点・状態遷移</tspan><tspan x="1205" y="1657">Dispatcherへtickを委譲</tspan></text>
+<text><tspan x="1685" y="1595">EventBridge Rule</tspan><tspan x="1685" y="1626">rate(1 minute)</tspan><tspan x="1685" y="1657">毎分のスケジュール</tspan></text>
+</g></g>
+<g font-size="24" fill="#52667b">
+<text x="120" y="201" fill="#744210">運営者 / Application Admin Console</text><text x="870" y="201" fill="#744210">参加者 / Participant Portal</text>
+<text><tspan x="2224" y="842">演習用リソース / EC2・Lambda・S3など</tspan><tspan x="2224" y="880">問題ごとの構成。壊してよい範囲を隔離する。</tspan></text>
+<text><tspan x="2224" y="1772">演習用リソース / EC2・Lambda・S3など</tspan><tspan x="2224" y="1810">チームAとは別のスタックとアカウント。</tspan></text>
+<text font-size="22"><tspan x="165" y="1818">共通契約: metadata.json / template.yaml / portal/（任意）</tspan><tspan x="165" y="1853">競技状態も上段のDynamoDBを利用。読み書き・ログの詳細配線は省略。</tspan></text>
+<text><tspan x="50" y="2119">主要経路の論理構成です。全リソースの配線台帳・実AWSの稼働証跡ではありません。</tspan><tspan x="50" y="2160">AWSに任せても、権限設計・チーム分離・採点・削除完了の確認は基盤側の責任です。</tspan></text>
+</g>
+<g font-size="18" text-anchor="middle">
+<g fill="#ffffff"><rect x="125" y="642" width="380" height="24" rx="3"/><rect x="400" y="665" width="155" height="23" rx="3"/><rect x="1120" y="651" width="185" height="24" rx="3"/><rect x="550" y="924" width="175" height="24" rx="3"/><rect x="575" y="1061" width="100" height="24" rx="3"/><rect x="818" y="1170" width="104" height="26" rx="3"/><rect x="1325" y="1358" width="600" height="28" rx="3"/></g>
+<text x="315" y="660" fill="#2e7b50">Function URL / teamLoginKey</text><text x="477" y="683" fill="#147eba">JWT / 管理者API</text><text x="1212" y="670" fill="#7652b6">管理者サインイン</text>
+<text x="607" y="838" fill="#147eba">invoke</text><text x="637" y="943" fill="#c4425e">配置・削除要求</text><text x="625" y="1080" fill="#c4425e">非同期開始</text><text x="870" y="1190" fill="#c4425e">実行・確認</text>
+<text x="1625" y="1380" fill="#c4425e">AssumeRole + ExternalId（チームごとのIAM Roleへ）</text>
+<text x="1450" y="1436" fill="#2e7b50">別のFunction URL</text><text x="1070" y="1610" fill="#2e7b50" font-size="16">async tick</text>
+<text x="2960" y="712" fill="#2e7b50">作成・更新・削除</text><text x="2960" y="1647" fill="#2e7b50">作成・更新・削除</text>
+</g></g></svg>

@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameDayみたいなクラウド演習を自分で作ってみた | TenkaCloud</title>
+<meta name="description" content="JAWS-UG横浜 #103 × SRE支部向け10分の発表資料。暗号バトルのデモと、クラウド非依存からAWS-nativeへ転換した設計・運用の判断を、Draw.io構成図で紹介します。" />
+<link rel="canonical" href="https://tenkacloud.com/jaws-yokohama-2026/" />
+<meta property="og:title" content="GameDayみたいなクラウド演習を自分で作ってみた" /><meta property="og:type" content="article" /><meta property="og:url" content="https://tenkacloud.com/jaws-yokohama-2026/" />
+<link rel="icon" href="../assets/favicon.svg" /><link rel="stylesheet" href="./talk.css" /><script defer src="./talk.js"></script>
+</head>
+<body>
+<header class="topbar"><a href="../presentations/">← 発表資料一覧</a><span>TenkaCloud · JAWS-UG横浜</span><a href="./architecture.html">構成図を開く ↗</a></header>
+<nav class="controls" aria-label="発表資料の操作">
+<button id="previous" type="button" aria-label="前のスライド">← 前へ</button><output id="position" aria-live="polite">1 / 13</output><button id="next" type="button" aria-label="次のスライド">次へ →</button>
+<button id="fullscreen" type="button">全画面</button><button id="reading" type="button" aria-pressed="false">一覧表示</button><button id="notes-button" type="button" aria-expanded="false" aria-controls="notes">発表原稿</button><button id="print" type="button">印刷 / PDF保存</button>
+<output id="timer" aria-label="経過時間">00:00</output><button id="timer-button" type="button">タイマー開始</button><button id="reset-timer" type="button">リセット</button>
+</nav><noscript><p class="noscript">すべてのスライドを順に表示しています。印刷にはブラウザの印刷機能を使ってください。</p></noscript>
+<main id="deck">
+<section class="slide cover" id="slide-1" aria-labelledby="title-1" data-seconds="25">
+<p class="kicker">DEMO + ARCHITECTURE / 10 MINUTES</p><h1 id="title-1">GameDayみたいなクラウド演習を<br>自分で作ってみた</h1>
+<p class="lead">クラウドアグノスティックに作り始めて、<br>AWSに任せるところを決めるまで。</p>
+<p class="byline">冨田 進 / susumutomita<br>合同会社BULL / TenkaCloud</p>
+<p>JAWS-UG横浜 #103 × SRE支部 · 2026年9月18日</p>
+<p class="fine">AWSの公式教材ではない、独立したOSSプロジェクトです。</p>
+<div class="slide-foot"><span>JAWS-UG横浜 #103 × SRE · TenkaCloud</span><span>01 / 10</span></div>
+<div class="speaker-notes">本編 01/10 | 目安 25秒
+
+冨田です。GameDayのようなクラウド演習を、自分たちでも作って開催できる仕組みを作っています。今日は、暗号バトルを少しお見せしてから、クラウド非依存を目指した基盤を、なぜAWSのマネージドサービスへ寄せたのかを話します。
+
+【出典】
+https://jawsug-yokohama.connpass.com/event/403362/
+https://github.com/susumutomita/TenkaCloud/blob/main/README.md</div>
+</section>
+<section class="slide " id="slide-2" aria-labelledby="title-2" data-seconds="50">
+<p class="kicker">01 / WHY</p><h2 id="title-2">欲しかったのは、何度でも開催できる仕組み。</h2>
+<p class="lead">問題を作るだけでは、チームで遊べる演習にならない。</p><div class="grid four"><div class="card"><div class="number">01</div><h3>問題を用意</h3><p>問題文・勝利条件<br>ヒント・採点基準</p></div><div class="card"><div class="number">02</div><h3>環境を配る</h3><p>チームごとのAWS環境<br>作成から削除まで</p></div><div class="card"><div class="number">03</div><h3>進行をそろえる</h3><p>開始・締切・提出<br>自動採点・スコア</p></div><div class="card"><div class="number">04</div><h3>もう一度開く</h3><p>同じ問題を再利用<br>別のチーム・別の会で</p></div></div><p class="callout">「問題づくり」と「開催する仕組み」を分ける。</p>
+<div class="slide-foot"><span>JAWS-UG横浜 #103 × SRE · TenkaCloud</span><span>02 / 10</span></div>
+<div class="speaker-notes">本編 02/10 | 目安 50秒
+
+きっかけは、演習を一度きりで終わらせず、自分の題材で何度も開催したかったことです。でも、問題を用意するだけでは足りません。チームごとに環境を配り、誰がどこまでできたかを採点し、参加者に画面を用意する必要があります。毎回これを作り直すのではなく、開催に共通する部分を基盤にしたい。この考えからTenkaCloudを作りました。
+
+【出典】
+https://github.com/susumutomita/TenkaCloud/blob/main/README.md
+https://zenn.dev/bull/books/cloud-competition</div>
+</section>
+<section class="slide " id="slide-3" aria-labelledby="title-3" data-seconds="45">
+<p class="kicker">02 / DEMO INTRO</p><h2 id="title-3">その基盤に載せた題材の一つが、暗号バトル。</h2>
+<p class="lead">小さな数で計算し、公開するか、守るか、相手の情報を読むかを選ぶ。</p>
+<img class="demo-image" src="../acp2026/assets/first-mission.webp" width="800" height="177" alt="暗号バトルの「まず1問体験」。暗号文の組を足し合わせる教材画面" />
+<div class="grid three"><div class="card"><h3>解く</h3><p>小さな数で手を動かす</p></div><div class="card"><h3>公開する</h3><p>時間と情報リスクを選ぶ</p></div><div class="card"><h3>読み解く</h3><p>公開材料から相手の秘密へ</p></div></div><p class="fine">ACP2026資料の教材UI。オンライン対戦やAWS環境の稼働証跡とは別です。</p>
+<div class="slide-foot"><span>JAWS-UG横浜 #103 × SRE · TenkaCloud</span><span>03 / 10</span></div>
+<div class="speaker-notes">本編 03/10 | 目安 45秒
+
+まず、何ができるかを見てください。これは暗号を題材にしたバトルです。計算して回答するだけではなく、急いで処理する代わりに情報を公開するか、相手の公開情報から秘密を求めるかを選びます。今日は暗号理論の説明ではなく、一つの題材を練習や対戦として載せられることをお見せします。ここに載せている画像は前回資料のローカル教材UIで、AWS環境の稼働証明とは別です。
+
+【出典】
+https://www.tenkacloud.com/acp2026/
+https://github.com/susumutomita/TenkaCloudChallenge/tree/main/battles/ac26-crypto-battle</div>
+</section>
+<section class="slide " id="slide-4" aria-labelledby="title-4" data-seconds="90">
+<p class="kicker">03 / DEMO — 90 SEC</p><h2 id="title-4">計算を省くと、相手に材料を渡す。</h2>
+<figure class="demo-video">
+<video id="crypto-demo" controls playsinline preload="metadata" poster="./assets/crypto-battle-demo.png" aria-label="暗号バトルのローカル実演。回答、得点、公開、HUNTの操作録画" aria-describedby="demo-caption">
+<source src="./assets/crypto-battle-demo.mp4" type="video/mp4" />
+<track kind="captions" src="./assets/crypto-battle-demo.ja.vtt" srclang="ja" label="日本語" default />
+<a href="./assets/crypto-battle-demo.mp4">実演動画をMP4で開く</a>
+</video>
+<img class="demo-print" src="./assets/crypto-battle-demo.png" width="1440" height="900" alt="実演で使用したHUNT画面。公開された平文1と暗号文5から、鍵4を計算して入力する" />
+<figcaption id="demo-caption">74秒 / 実ゲームロジックと参加者UIを使ったローカル実演。音声なし・日本語字幕付き。</figcaption>
+</figure>
+<p class="demo-summary">回答で +30点 → LEAKで +10点 → 相手が鍵を計算してHUNT（+8点、対象 −12点）。</p>
+<div class="actions"><a href="./assets/crypto-battle-demo.mp4" target="_blank" rel="noopener noreferrer">動画を大きく開く ↗</a><a href="../acp2026/" target="_blank" rel="noopener noreferrer">暗号バトルの解説資料 ↗</a></div>
+<p class="fine">同じローカル試合で実際に操作・判定。開発用の時計を1分進め、席をalphaからbravoへ切り替えています。AWS上の認証・永続化・公式スコアの実証は含みません。</p>
+<p class="demo-print-summary">動画の流れ：数独の置き換え表で4マスを埋めて30点。次のお題で元の数と暗号文を公開して10点。相手は公開された1 → 5から鍵4を計算し、HUNTが成功して8点、対象は12点減点。動画は発表ページから再生できます。</p>
+<div class="slide-foot"><span>JAWS-UG横浜 #103 × SRE · TenkaCloud</span><span>04 / 10</span></div>
+<div class="speaker-notes">本編 04/10 | 目安 90秒
+
+ここで約74秒の実演動画を再生します。実ゲームロジックと参加者UIを動かしたローカル開発環境です。
+【0〜25秒】チームalphaがお題を開き、置き換え表を見て4マスを回答します。正解で30点が加算されます。
+【25〜55秒】開発用の時計を1分進め、次のお題で「公開して答える」を選びます。計算を省いて10点を得る代わりに、元の数と暗号文の対応が公開されます。
+【55〜80秒】bravo側に切り替え、公開材料の1から5への対応を読みます。5引く1で鍵4を求め、HUNTに入力します。正解で8点、攻撃されたalphaは12点減ります。
+【80〜90秒】「問題・操作・判定を載せ、情報公開を判断に結びつけられる基盤です」と締めます。
+動画が再生できない場合は、直下の得点の流れと補足の固定例で説明を続けます。この録画はAWS上の認証、永続化、公式スコアの実証ではありません。ゲーム内の小さい数や鍵は教材用で、認証情報ではありません。
+
+【出典】
+https://www.tenkacloud.com/acp2026/
+https://github.com/susumutomita/TenkaCloudChallenge/tree/main/battles/ac26-crypto-battle</div>
+</section>
+<section class="slide diagram-slide" id="slide-5" aria-labelledby="title-5" data-seconds="50">
+<p class="kicker">04 / BEFORE → AFTER</p><h2 id="title-5">最初は、どのクラウドでも動かしたかった。</h2>
+<p class="lead">持ち運べる基盤を目指すほど、自分が運用する範囲も増えていった。</p><a class="figure-link" href="./architecture.html?view=evolution" target="_blank" rel="noopener noreferrer"><img src="./assets/architecture-evolution.svg" alt="初期のクラウド非依存方針と、AWSマネージドサービスを活用する現在の設計を左右で比較した図" width="1600" height="900" /><span class="caption">構成図を拡大する ↗</span></a><p class="fine">左は当初の方針を示す概念図です。すべてのクラウドで同一基盤が稼働していたという意味ではありません。</p>
+<div class="slide-foot"><span>JAWS-UG横浜 #103 × SRE · TenkaCloud</span><span>05 / 10</span></div>
+<div class="speaker-notes">本編 05/10 | 目安 50秒
+
+最初は、AWSに限らず、いろいろなクラウドで動く基盤にしたいと考えていました。そこで、画面や競技APIだけではなく、認証やデータ、実行環境まで、自分で組み合わせて持つ方向へ進みます。初期の認証にはKeycloakを使った記録があります。この図はそのときの方針を説明する概念図で、全クラウドで実際に稼働していたという意味ではありません。動かす場所を自由にしたいという考えは自然ですが、その自由を支える運用も、自分で引き受けることになりました。
+
+【出典】
+https://github.com/susumutomita/TenkaCloud/issues/12
+https://github.com/susumutomita/TenkaCloud/issues/1265
+https://github.com/susumutomita/TenkaCloud/issues/1266</div>
+</section>
+<section class="slide " id="slide-6" aria-labelledby="title-6" data-seconds="60">
+<p class="kicker">05 / THE TURN</p><h2 id="title-6">「動かせる」と「運用し続けられる」は違った。</h2>
+<p class="lead">作りたいのはクラウド演習。増えていたのは、演習以外の運用対象。</p><div class="grid three"><div class="card"><h3>認証を持つ</h3><p>認証基盤の運用<br>更新・可用性<br>監視・障害対応</p></div><div class="card"><h3>実行を共通化する</h3><p>実行環境の運用<br>runner・権限<br>失敗時の復旧</p></div><div class="card"><h3>状態を持つ</h3><p>stateの運用<br>保存・ロック<br>整合性・後片付け</p></div></div><p class="callout">移植性を最大化するより、<br>自分が運用する範囲を小さくする。</p><p class="fine">Terraformの一般的な優劣ではなく、この演習基盤が引き受ける責任の選択です。</p>
+<div class="slide-foot"><span>JAWS-UG横浜 #103 × SRE · TenkaCloud</span><span>06 / 10</span></div>
+<div class="speaker-notes">本編 06/10 | 目安 60秒
+
+途中で、どこでも動くことと、運用し続けられることは別だと気づきました。認証を持てば更新や可用性を考えます。共通の実行基盤を持てば、その基盤の障害対応が必要になります。例えばTerraformを問題実行の共通方式にすると、実行するrunnerだけでなく、stateの保存、ロック、途中失敗の回復、後片付けまで基盤の責任です。これはTerraformが悪いという話ではありません。この演習基盤で、どこまでを自分が引き受けたいかという話です。そこで、基盤のために使う運用労力を減らし、問題や競技体験へ戻す方針にしました。
+
+【出典】
+https://github.com/susumutomita/TenkaCloud/pull/400
+https://github.com/susumutomita/TenkaCloud/issues/1265
+https://github.com/susumutomita/TenkaCloud/issues/1266</div>
+</section>
+<section class="slide diagram-slide" id="slide-7" aria-labelledby="title-7" data-seconds="100">
+<p class="kicker">06 / AFTER — AWS-NATIVE</p><h2 id="title-7">運用の土台はAWSへ。競技の設計は自分で。</h2>
+<p class="lead">運営基盤とチーム別AWSアカウントを分離。同じ図を拡大し、3つの経路を順に見る。</p><div class="diagram-focus" role="group" aria-label="同じ構成図の表示範囲">
+<button type="button" data-view-box="90 695 1070 715" aria-pressed="true">① 管理・配置API</button>
+<button type="button" data-view-box="2140 400 1080 610" aria-pressed="false">② チーム別AWS（Aの例）</button>
+<button type="button" data-view-box="90 1400 1960 550" aria-pressed="false">③ 参加者API</button>
+<button type="button" data-view-box="0 0 3300 2210" aria-pressed="false">全体図</button>
+</div>
+<a class="figure-link" href="./architecture.html?view=aws" target="_blank" rel="noopener noreferrer"><svg id="slide-architecture-svg" viewBox="90 695 1070 715" role="img" aria-label="TenkaCloud Lite構成図の選択範囲。上のボタンで管理API・チーム別AWS・参加者API・全体を切り替えられます"><defs><clipPath id="slide-architecture-clip"><rect id="slide-architecture-clip-rect" x="90" y="695" width="1070" height="715" /></clipPath></defs><g clip-path="url(#slide-architecture-clip)"><image href="./assets/architecture-overview.svg" width="3300" height="2210" /></g></svg><span class="caption">別ページで構成図全体を拡大する ↗</span></a><p class="fine">管理者はCognitoとAPI Gateway、参加者はチームキーと専用Lambda Function URL。問題配置はEventBridge → Step Functions → Lambda → AssumeRole → CloudFormation。</p>
+<div class="slide-foot"><span>JAWS-UG横浜 #103 × SRE · TenkaCloud</span><span>07 / 10</span></div>
+<div class="speaker-notes">本編 07/10 | 目安 100秒
+
+現在のAWS構成です。今日は単一の開催主体で使うLiteモードに絞っています。左が参加者や運営者に提供する画面とAPIで、右が実際の演習を行うチーム別のAWSアカウントです。管理者の認証はCognitoを使い、参加者は別のチームキーで入ります。配置処理はStep FunctionsとLambdaで進め、STSのAssumeRoleとExternalIdを使って、対象チームのアカウントへアクセスします。実際のリソースの作成と削除はCloudFormationのスタックとして扱います。基盤側にはイベントやチーム、配置状況などを保存し、既定のAWS-native構成ではDynamoDBを使います。
+ここで任せたのは、認証サービス、関数の実行、ワークフロー、データの保存、スタックのライフサイクルです。一方で、誰に何を許すか、何を正解とするか、チームを混ぜないかは自分たちの設計として残ります。図は役割をまとめた論理構成で、すべてのAPIや全リソースを並べた詳細配線図ではありません。LiteのtenantIdはlocalですが、ローカルPC実行とは別物です。
+
+【出典】
+https://github.com/susumutomita/TenkaCloud/blob/main/README.md
+https://github.com/susumutomita/TenkaCloud/blob/main/DEPLOYMENT_GUIDE.md
+https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/lib/tenkacloud-lite/tenkacloud-lite-stack.ts
+https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/lib/admin-console-hosting.ts
+https://github.com/susumutomita/TenkaCloud/blob/main/docs/running-costs.md
+管理・配置API、チームAの演習環境、参加者APIを順に拡大します。管理者APIと参加者用の2つのFunction URLは別経路です。DynamoDBは「認証 / データ / 監視」内の1か所にまとめて表示しており、競技状態もここへ保存します。読み書きの詳細配線は省略しています。「全体図」でアカウント間の関係に戻ります。</div>
+</section>
+<section class="slide " id="slide-8" aria-labelledby="title-8" data-seconds="60">
+<p class="kicker">07 / THE BOUNDARY</p><h2 id="title-8">全部を共通化しない。問題の「契約」をそろえる。</h2>
+<p class="lead">クラウド固有の機能は、固有のまま使う。</p><div class="grid three"><div class="card"><div class="number">共通の情報</div><h3>metadata.json</h3><p>問題の説明・表示<br>採点ルール<br>画面の接続</p></div><div class="card"><div class="number">AWS固有の実体</div><h3>template.yaml</h3><p>CloudFormation<br>チームの環境を<br>作成・削除</p></div><div class="card"><div class="number">題材に固有のUI</div><h3>portal/</h3><p>任意のReactコンポーネント<br>暗号バトルなどの<br>題材固有の操作画面</p></div></div><p class="callout">共通化するのは、すべてのインフラではなく<br>問題を追加できる境界。</p>
+<div class="slide-foot"><span>JAWS-UG横浜 #103 × SRE · TenkaCloud</span><span>08 / 10</span></div>
+<div class="speaker-notes">本編 08/10 | 目安 60秒
+
+クラウドごとの違いを、無理に全部隠す必要はありませんでした。共通にするのは、基盤が問題をどう受け取り、どう表示し、どう採点するかという境界です。現在のAWS問題は、metadata.jsonに表示や採点の情報、template.yamlにCloudFormationの構成を持ち、必要ならportalディレクトリにReactの画面を追加します。問題作者は、基盤を毎回作り直さずに題材を足せます。将来ほかのクラウドへ広げる場合も、そのクラウドのネイティブな実行方式を使う方針です。AWS、Azure、Google Cloudで同じ問題が既に動くという意味ではありません。
+
+【出典】
+https://github.com/susumutomita/TenkaCloud/blob/main/README.md
+https://github.com/susumutomita/TenkaCloud/issues/1265
+https://github.com/susumutomita/TenkaCloud/issues/1266</div>
+</section>
+<section class="slide " id="slide-9" aria-labelledby="title-9" data-seconds="75">
+<p class="kicker">08 / SRE TAKEAWAYS</p><h2 id="title-9">マネージドでも、演習の安全設計は任せられない。</h2>
+<p class="lead">減らすのは基盤の運用。手放さないのは、競技と参加者に対する責任。</p><div class="grid three"><div class="card"><div class="number">01 / 境界</div><h3>壊してよい範囲</h3><p>チーム別AWSアカウント<br>必要なIAM権限<br>AssumeRole + ExternalId</p></div><div class="card"><div class="number">02 / 終わり方</div><h3>失敗と削除を追う</h3><p>配置状況を記録<br>失敗時の対応を決める<br>削除完了まで確認</p></div><div class="card"><div class="number">03 / 正しさ</div><h3>判定を信用できる場所へ</h3><p>採点・状態更新はサーバー<br>返す情報をチーム別に制限<br>監査に使う記録</p></div></div><p class="callout">「運用しない」ではなく、「運用する場所を選ぶ」。</p>
+<div class="slide-foot"><span>JAWS-UG横浜 #103 × SRE · TenkaCloud</span><span>09 / 10</span></div>
+<div class="speaker-notes">本編 09/10 | 目安 75秒
+
+マネージドサービスへ寄せたから、運用がなくなったわけではありません。壊すことを含む演習だからこそ、まず壊してよい範囲を決めます。チームごとにAWSアカウントを分け、クロスアカウントのアクセスには必要な権限とExternalIdを使う。次に、開始できたことと、最後まで片付いたことを分けて確認します。失敗した配置や削除を見落とさない状態表示と記録が必要です。そして、得点を決めるのはサーバー側です。参加者の画面を信用して採点したり、他チームの秘密を配ったりしない。AWSに実行や保存を任せた分、こうした演習の安全性と体験に集中したい、という整理です。
+
+【出典】
+https://github.com/susumutomita/TenkaCloud/blob/main/README.md
+https://github.com/susumutomita/TenkaCloud/blob/main/DEPLOYMENT_GUIDE.md
+https://github.com/susumutomita/TenkaCloud/issues/1265
+https://github.com/susumutomita/TenkaCloudChallenge/tree/main/battles/ac26-crypto-battle</div>
+</section>
+<section class="slide cover" id="slide-10" aria-labelledby="title-10" data-seconds="45">
+<p class="kicker">09 / TAKE HOME</p><h2 id="title-10">作りたいのは、<br>クラウドで学ぶ体験。</h2>
+<p class="lead">基盤は任せる。問題と、競技の面白さを作る。</p><p class="byline">あなたの現場の障害を、次の問題に。</p><div class="actions"><a class="action" href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer">コードを見る ↗</a><a class="action" href="https://zenn.dev/bull/books/cloud-competition" target="_blank" rel="noopener noreferrer">書籍「自分で作るクラウド競技」↗</a><a class="action" href="../presentations/">ほかの発表資料</a></div><p>Apache-2.0 / 独立OSSプロジェクト</p>
+<div class="slide-foot"><span>JAWS-UG横浜 #103 × SRE · TenkaCloud</span><span>10 / 10</span></div>
+<div class="speaker-notes">本編 10/10 | 目安 45秒
+
+まとめです。最初は、クラウドに依存しない基盤を作ろうとしました。しかし、持ち運べることを追うほど、自分が運用するものも増えました。いまは土台をAWSへ任せて、共通化するところを問題の追加と競技の体験に絞っています。作りたかったのは、クラウドそのものではなく、クラウドで学ぶ場でした。TenkaCloudはOSSで公開しています。みなさんの現場の障害や学びを、次の問題として一緒に作れたらうれしいです。ありがとうございました。
+
+【出典】
+https://github.com/susumutomita/TenkaCloud/blob/main/README.md
+https://github.com/susumutomita/TenkaCloud
+https://zenn.dev/bull/books/cloud-competition</div>
+</section>
+<section class="slide " id="slide-11" aria-labelledby="title-11">
+<p class="kicker">APPENDIX / MODE BOUNDARIES</p><h2 id="title-11">Lite と SaaS と ローカルは、別の実行形態。</h2>
+<div class="grid three"><div class="card"><h3>AWS / Lite</h3><p>開催主体は1テナント<br>運営画面・参加者ポータル<br>チーム別AWS環境へ配置</p></div><div class="card"><h3>AWS / SaaS</h3><p>複数組織への提供<br>オンボーディング・pooled / silo<br>SBT Control Planeを追加</p></div><div class="card"><h3>ローカル</h3><p>AWS不要のドリル<br>ローカル採点・進捗保存<br>AWS配置とは別の経路</p></div></div><p class="callout">tenantId=local は、ローカルPC実行ではない。</p><p class="fine">本編の図はAWS-nativeのLite構成に絞っています。実行モードや認証方式を混ぜないための補足です。</p>
+<div class="slide-foot"><span>JAWS-UG横浜 #103 × SRE · TenkaCloud</span><span>A1</span></div>
+<div class="speaker-notes">本編終了後の補足・Q&amp;A用
+
+Q&amp;A用。LiteはAWS上の単一テナント構成で、SaaS Control Planeを持ち込まない。SaaSモードではテナントのオンボーディング、pooled / siloなどを加える。ローカル練習はAWSを使わない別経路。デモ教材の画面が表示されたことと、AWS配置・オンライン対戦の検証結果を混ぜない。Tursoは選択可能だが、現行文書でlive verification未完了のため、本編のAWS-native代表図には入れていない。
+
+【出典】
+https://github.com/susumutomita/TenkaCloud/blob/main/README.md
+https://github.com/susumutomita/TenkaCloud/blob/main/DEPLOYMENT_GUIDE.md
+https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/lib/tenkacloud-lite/tenkacloud-lite-stack.ts
+https://github.com/susumutomita/TenkaCloud/blob/main/docs/running-costs.md</div>
+</section>
+<section class="slide " id="slide-12" aria-labelledby="title-12">
+<p class="kicker">APPENDIX / DEMO FALLBACK</p><h2 id="title-12">デモに戻れないときは、この実画面で続ける。</h2>
+<p class="lead">公開されるのはかけらの番号と値。HUNTで答えるのは、元の秘密。</p><img class="demo-image" src="../acp2026/assets/hunt.webp" width="874" height="199" alt="秘密分散HUNTの教材UI。同じ組のかけらから元の秘密を復元する" /><p class="callout">3 × 2 − 3 × 5 + 3 = −6 ≡ 1（mod 7）</p><p class="fine">番号1・2・3の値が2・5・3という固定の説明例。ACP2026資料の教材UIで、ライブ対戦の稼働証跡ではありません。</p>
+<div class="slide-foot"><span>JAWS-UG横浜 #103 × SRE · TenkaCloud</span><span>A2</span></div>
+<div class="speaker-notes">本編終了後の補足・Q&amp;A用
+
+HUNTの固定例。同じチームの同じ秘密を分けた、異なる番号のかけらが必要。番号1が2、番号2が5、番号3が3なら、係数を使って3×2−3×5+3=-6、法7で1を得る。提出するのは公開されたかけらではなく元の秘密1。採点APIには接続していない前回教材画面。JAWS本編ではこの数式まで説明しなくてよい。
+
+【出典】
+https://www.tenkacloud.com/acp2026/
+https://github.com/susumutomita/TenkaCloudChallenge/tree/main/battles/ac26-crypto-battle</div>
+</section>
+<section class="slide " id="slide-13" aria-labelledby="title-13">
+<p class="kicker">APPENDIX / REFERENCES</p><h2 id="title-13">実装・設計判断の出典</h2>
+<div class="sources">
+<p><a href="https://jawsug-yokohama.connpass.com/event/403362/" target="_blank" rel="noopener noreferrer">JAWS-UG横浜 #103 × SRE支部：イベント案内</a></p>
+<p><a href="https://github.com/susumutomita/TenkaCloud/blob/main/README.md" target="_blank" rel="noopener noreferrer">TenkaCloud README</a> / <a href="https://github.com/susumutomita/TenkaCloud/blob/main/DEPLOYMENT_GUIDE.md" target="_blank" rel="noopener noreferrer">Deployment guide</a></p>
+<p>認証の変遷：<a href="https://github.com/susumutomita/TenkaCloud/issues/12" target="_blank" rel="noopener noreferrer">初期Keycloak方針</a> / <a href="https://github.com/susumutomita/TenkaCloud/pull/400" target="_blank" rel="noopener noreferrer">Cognito統合</a></p>
+<p>問題ランタイムの設計：<a href="https://github.com/susumutomita/TenkaCloud/issues/1265" target="_blank" rel="noopener noreferrer">cloud-native runtime requirements</a> / <a href="https://github.com/susumutomita/TenkaCloud/issues/1266" target="_blank" rel="noopener noreferrer">provider-specific runtime model</a></p>
+<p><a href="https://github.com/susumutomita/TenkaCloudChallenge/tree/main/battles/ac26-crypto-battle" target="_blank" rel="noopener noreferrer">暗号バトルのソース</a> / <a href="./architecture.html">拡大できる構成図</a> / <a href="./assets/architecture.drawio" download>Draw.io原本</a></p>
+</div><p class="fine">スナップショットとしての発表資料です。最新の動作・設定はリポジトリを確認してください。</p>
+<div class="slide-foot"><span>JAWS-UG横浜 #103 × SRE · TenkaCloud</span><span>A3</span></div>
+<div class="speaker-notes">本編終了後の補足・Q&amp;A用
+
+確認基準。採用理由の大枠は登壇者本人の今回の説明。Keycloakの初期利用はIssue #12、Cognito対応はPR #400、Terraformを共通実行基盤にしない判断はIssue #1265と#1266で確認。本文では「特定の障害が何回起きた」「工数が何%削減された」「Azure/GCPで稼働済み」など、裏付けのない成果を主張していない。現在の本番リソース一覧を取得したわけではなく、現行コード・公開ドキュメントに基づく論理構成。
+
+【出典】
+https://jawsug-yokohama.connpass.com/event/403362/
+https://github.com/susumutomita/TenkaCloud/blob/main/README.md
+https://github.com/susumutomita/TenkaCloud/blob/main/DEPLOYMENT_GUIDE.md
+https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/lib/tenkacloud-lite/tenkacloud-lite-stack.ts
+https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/lib/admin-console-hosting.ts
+https://github.com/susumutomita/TenkaCloud/blob/main/docs/running-costs.md
+https://github.com/susumutomita/TenkaCloud/issues/12
+https://github.com/susumutomita/TenkaCloud/pull/400
+https://github.com/susumutomita/TenkaCloud/issues/1265
+https://github.com/susumutomita/TenkaCloud/issues/1266
+https://zenn.dev/bull/books/cloud-competition
+https://www.tenkacloud.com/acp2026/
+https://github.com/susumutomita/TenkaCloudChallenge/tree/main/battles/ac26-crypto-battle
+https://github.com/susumutomita/TenkaCloud</div>
+</section>
+</main><aside id="notes" class="speaker-notes-panel" hidden aria-label="現在のスライドの発表原稿"></aside>
+<footer class="topbar"><span>← → / PageUp・PageDownで移動 · Nで原稿 · 本編10分＋補足3枚</span><a href="../">TenkaCloudへ戻る</a></footer>
+</body></html>

@@ -124,6 +124,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" />
 <link rel="stylesheet" href="./styles/main.css?v=cf08a52993" />
+<link rel="stylesheet" href="./presentations/library.css" />
 </head>
 <body>
 
@@ -620,6 +621,29 @@
   </div>
 </section>
 
+<section id="presentations" class="presentation-library" aria-labelledby="presentations-title">
+  <div class="presentation-wrap">
+    <p class="presentation-kicker" data-i18n="presentations.kicker">PRESENTATIONS / 設計と実践の記録</p>
+    <h2 id="presentations-title" data-i18n="presentations.title">発表でたどる、TenkaCloudの設計。</h2>
+    <p class="presentation-intro" data-i18n="presentations.intro">クラウド演習の作り方、運用を任せる境界、暗号を使って学ぶ体験。発表資料と構成図をまとめました。</p>
+    <div class="talk-grid">
+      <article class="talk-card" data-presentation-id="jaws-yokohama-2026">
+        <div class="talk-preview diagram-preview"><img src="./jaws-yokohama-2026/assets/architecture-overview.svg" width="3300" height="2210" loading="lazy" alt="" /><span data-i18n="presentations.jaws.preview">AWS構成 / 開発の試行錯誤</span></div>
+        <div class="talk-card-body"><p class="talk-meta" data-i18n="presentations.jaws.meta">JAWS-UG横浜 #103 × SRE · 10分 · 日本語</p><h3><a href="./jaws-yokohama-2026/" data-i18n="presentations.jaws.title">GameDayみたいなクラウド演習を自分で作ってみた</a></h3><p class="talk-description" data-i18n="presentations.jaws.description">暗号バトルのデモと、クラウド非依存からAWS-nativeへ転換した設計・運用の判断。</p><a class="talk-open" href="./jaws-yokohama-2026/"><span data-i18n="presentations.open">スライドを見る</span> <span aria-hidden="true">→</span></a></div>
+      </article>
+      <article class="talk-card" data-presentation-id="acp2026">
+        <div class="talk-preview"><span data-i18n="presentations.acp.preview">暗号バトル / 教材設計</span><strong>LEAK → HUNT</strong></div>
+        <div class="talk-card-body"><p class="talk-meta" data-i18n="presentations.acp.meta">ACP2026 / FINAL DEMO · 5分 · 日本語</p><h3><a href="./acp2026/" data-i18n="presentations.acp.title">暗号を「知る」から、暗号で「判断する」へ。</a></h3><p class="talk-description" data-i18n="presentations.acp.description">秘密を守るか、公開するか。手計算と対戦をつなぐ暗号バトルのデモ・解説。</p><a class="talk-open" href="./acp2026/"><span data-i18n="presentations.open">スライドを見る</span> <span aria-hidden="true">→</span></a></div>
+      </article>
+      <article class="talk-card" data-presentation-id="ccoe-lt">
+        <div class="talk-preview"><span data-i18n="presentations.ccoe.preview">CCoE / クラウド人材育成</span><strong>BUILD → SHIP</strong></div>
+        <div class="talk-card-body"><p class="talk-meta" data-i18n="presentations.ccoe.meta">CCoE実践者コミュニティ関西LT · 15分 · 日本語</p><h3><a href="./ccoe-lt/" data-i18n="presentations.ccoe.title">生成AI時代のCCoEと「作れる」と「出せる」の間にある詰まり</a></h3><p class="talk-description" data-i18n="presentations.ccoe.description">TenkaCloud・StackStack・ローカル演習から、CCoEが作る学習導線を考える。</p><a class="talk-open" href="./ccoe-lt/"><span data-i18n="presentations.open">スライドを見る</span> <span aria-hidden="true">→</span></a></div>
+      </article>
+    </div>
+    <a class="presentation-more" href="./presentations/" data-i18n="presentations.more">発表資料の一覧・構成図を見る →</a>
+  </div>
+</section>
+
 <section id="contact">
   <div class="wrap">
     <div class="ent-cta">
@@ -695,6 +719,7 @@
     <div>
       <h5>Resources</h5>
       <a href="./docs/" data-i18n="footer.r0">ドキュメント</a>
+      <a href="./presentations/" data-i18n="footer.presentations">発表資料・構成図</a>
       <a href="https://github.com/susumutomita/TenkaCloud/releases" target="_blank" rel="noopener noreferrer" data-i18n="footer.r2">Changelog</a>
       <a href="https://zenn.dev/bull/books/cloud-competition" target="_blank" rel="noopener noreferrer" data-i18n="footer.r3" data-i18n-href="footer.r3Href">書籍『自分で作るクラウド競技』</a>
     </div>
@@ -731,7 +756,7 @@
 
 <script src="./ink-bg.js" defer></script>
 <script src="./contact-form.js?v=7301ba7ae8" defer></script>
-<script src="./app.js?v=72dc9b5703" defer></script>
+<script src="./app.js?v=ec2fc9ba16" defer></script>
 
 </body>
 </html>
