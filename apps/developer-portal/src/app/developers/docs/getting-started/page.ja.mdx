@@ -99,13 +99,22 @@ Participant Portal、問題デプロイバックエンドを、固定の単一�
 プロジェクトを作成し、それがリポジトリをクローンしてデプロイを実行して
 くれます。
 
+**Start build** の権限は、デプロイ先の管理を任せられる担当者だけに付与してください。
+ソースやコマンドを上書きして、デプロイ用ロールの AWS 権限で実行できます。
+**Turso** を使う場合は、DB の URL と読み書きできる DB 用トークンを用意し、
+**Start build の前に**、デプロイ先と同じ AWS アカウント・リージョンの SSM に
+**SecureString** としてトークンを保存します。launcher はこれを作成しません。
+[ダッシュボードと AWS コンソールでの手順](https://github.com/susumutomita/TenkaCloud/blob/main/DEPLOYMENT_GUIDE.md#turso-setup-for-the-console-launcher)。
+
 1. [`infrastructure/templates/lite-pipeline.yaml`](https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/lite-pipeline.yaml)
    をダウンロードします。
 2. CloudFormation の **Create stack** ページを開き（カタログのデフォルトは
    `ap-northeast-1` を対象としています）、**Upload a template file** で
    アップロードして、スタック名を `tenkacloud-lite-launcher` にします。
-3. **`TenantAdminEmail`**（唯一の必須パラメータ）に、Admin Console の招待
-   メールを受け取るメールアドレスを設定します。
+3. **`TenantAdminEmail`** に、Admin Console の招待メールを受け取るメールアドレスを
+   設定します。Turso を使う場合は **`ControlDataBackend=turso`**、
+   **`TursoDatabaseUrl`**、作成済みの SSM 名を入れる **`TursoAuthTokenParameterName`**
+   も設定します。デフォルトは DynamoDB です。
 4. IAM ケーパビリティのチェックボックスを承認し、スタックを作成します。
 5. スタックの **`StartBuildConsoleUrl`** 出力から CodeBuild プロジェクトを
    開き、**Start build** を押します。
@@ -135,8 +144,9 @@ CLI 経路を選んでください。どちらも、構築した AWS リソー�
 モード 3 と同じ 2 つのスタックを、手元でビルドしてデプロイします。CodeBuild の
 ビルド費用を抑えたい場合や、プラットフォーム自体を開発する場合に選んでください。
 
-**前提条件:** Git・Make・Bash・zip・AWS CLI v2・Bun 1.3.11・Node.js 24 と、
+**前提条件:** Git・Make・Bash・zip・rsync・Python 3(`python3`)・AWS CLI v2・Bun 1.3.11・Node.js 24 と、
 対象アカウントの AWS 認証情報（プロファイルまたは SSO）が必要です。
+ソースの梱包に rsync と Python 3 を使います。
 [必要な権限](https://github.com/susumutomita/TenkaCloud/blob/main/DEPLOYMENT_GUIDE.md#aws-permissions)を確認し、
 `aws sts get-caller-identity` でデプロイ先のアカウントを照合してください。`cdk bootstrap` を別のステップ
 として実行する必要は**ありません** — デプロイが冪等に実行します。また

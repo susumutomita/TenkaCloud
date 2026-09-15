@@ -58,7 +58,8 @@ Do not print credentials or ask the user to paste them into chat.
   recorded; full real-Turso deployment and billing verification is not recorded.
 
 Prefer the local path when the user can install tools and wants to avoid CodeBuild
-build charges: Git, Make, Bash, zip, AWS CLI v2, and the repo's Bun/Node.js versions;
+build charges: Git, Make, Bash, zip, rsync, Python 3 (`python3`), AWS CLI v2,
+and the repo's Bun/Node.js versions (rsync/Python 3 package the source);
 select an AWS profile, verify `aws sts get-caller-identity`, run `make install` and
 `make env-init`, check the generated account/region/admin values and Turso settings,
 then run `make deploy` after deployment is authorized. This builds the current
@@ -70,7 +71,14 @@ Do not distribute administrator access to participants.
 The alternative AWS console path uploads `infrastructure/templates/lite-pipeline.yaml`, creates
 `tenkacloud-lite-launcher`, and explicitly starts its CodeBuild build. The launcher
 alone does not deploy the platform. CodeBuild has build-duration charges; neither
-path removes the cost of the AWS resources. After deployment, check both portal URLs and
+path removes the cost of the AWS resources. StartBuild permits source/command
+overrides with the deployment role's access, so grant it only to trusted deployment
+administrators. For Turso, obtain a database URL and full-access database token,
+then save the token as an SSM SecureString in the deployment account and region
+before Start build. The launcher only forwards the existing parameter's name;
+it does not create the secret. Follow the
+[console Turso setup](https://github.com/susumutomita/TenkaCloud/blob/main/DEPLOYMENT_GUIDE.md#turso-setup-for-the-console-launcher).
+After deployment, check both portal URLs and
 rehearse scoring with a test team; a successful build alone is not that rehearsal.
 Use the [event runbook](https://tenkacloud.com/docs/operate/run-an-event/index.en.html)
 for team preparation and timing, and the

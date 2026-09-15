@@ -115,7 +115,7 @@ Bun と Vite を使う開発用の経路です。[詳しい準備とコマンド
 
 #### A. 手元からデプロイする
 
-Git・Make・Bash・zip・AWS CLI v2 と、[mise.toml](./mise.toml) の Bun・Node.js を用意します。AWS CLI のプロファイルまたは SSO で、デプロイ先のアカウントにログインしてください。
+Git・Make・Bash・zip・rsync・Python 3(`python3`)・AWS CLI v2 と、[mise.toml](./mise.toml) の Bun・Node.js を用意します。ソースの梱包に rsync と Python 3 を使います。AWS CLI のプロファイルまたは SSO で、デプロイ先のアカウントにログインしてください。
 
 ```bash
 git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
@@ -137,9 +137,11 @@ make deploy
 
 **Start build** の権限は、デプロイ先アカウントの管理を任せられる担当者だけに付与してください。ソースやコマンドを上書きして、デプロイ用ロールの AWS 権限で実行できます。[必要な権限と信頼範囲](./DEPLOYMENT_GUIDE.md#aws-permissions)。
 
+**Turso を使う場合は、Start build の前にシークレットを作成します。** DB の URL と読み書きできる DB 用トークンを用意し、デプロイ先と同じ AWS アカウント・リージョンの SSM に **SecureString** としてトークンを保存してください。launcher はこのパラメータを作成しません。[ダッシュボードと AWS コンソールでの手順](./DEPLOYMENT_GUIDE.md#turso-setup-for-the-console-launcher)。
+
 1. [lite-pipeline.yaml](./infrastructure/templates/lite-pipeline.yaml) をダウンロードする。
 2. [CloudFormation](https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-1#/stacks/create/template) で **Upload a template file** を選び、スタック名を `tenkacloud-lite-launcher` にする。
-3. **TenantAdminEmail** を入力する。DB 費用を抑えるなら **ControlDataBackend=turso** を選び、[Turso の接続設定](./docs/running-costs.md)も入力する。設定と IAM 権限を確認し、スタックを作成する。
+3. **TenantAdminEmail** を入力する。Turso を使う場合は **ControlDataBackend=turso** を選び、**TursoDatabaseUrl** に DB の URL、**TursoAuthTokenParameterName** に作成済みの SSM パラメータ名を入力する。設定と IAM 権限を確認し、スタックを作成する。
 4. 出力の **StartBuildConsoleUrl** を開き、**Start build** を押す。ここでデプロイが始まる。launcher の作成だけでは始まらない。
 5. ビルド成功後、ログの末尾にある **Application Admin Console** を開く。[開催者マニュアル](./apps/developer-portal/src/app/developers/docs/manual/organizer/page.ja.mdx)に沿ってイベントとチームを作り、問題を選ぶ。
 

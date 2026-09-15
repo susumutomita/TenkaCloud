@@ -34,7 +34,9 @@ not Cognito or SAML accounts.
 ## Lite mode — local terminal
 
 Use this to build on your computer and avoid CodeBuild build charges. You need Git,
-Make, Bash, zip, AWS CLI v2, and the Bun/Node.js versions in [mise.toml](./mise.toml).
+Make, Bash, zip, rsync, Python 3 (`python3`), AWS CLI v2, and the Bun/Node.js versions
+in [mise.toml](./mise.toml). Source packaging uses both rsync and Python 3; install
+them before deployment, including on minimal Linux/WSL installations.
 CDK comes from the repository dependencies. On macOS, Linux, or WSL2, install the
 tools before running these commands. If using
 [mise](https://mise.jdx.dev/getting-started.html), review `mise.toml` in your checkout,
@@ -95,6 +97,34 @@ Use `make destroy` to tear down the AWS deployment. Cleanup depends on the backe
   external database separately if it is no longer needed.
 
 See the [cleanup guide](./infrastructure/templates/README.md#撤去-teardown).
+
+## Turso setup for the console launcher
+
+Skip this section when using the default DynamoDB backend. For a **fresh** Turso
+deployment, complete these steps **before Start build**. The launcher forwards the
+SSM parameter name; it does **not** create the parameter or its secret value.
+
+1. In the [Turso dashboard](https://app.turso.tech/), create a database and obtain
+   its database URL and a full-access database auth token. Schema initialization
+   and application writes require write access. Use a database token, not an
+   organization API token. Turso supports [database and token management in its
+   dashboard](https://turso.tech/blog/we-built-a-brand-new-turso-web-app).
+2. In the deployment AWS account and **the same region** as the launcher, open
+   **Systems Manager → Parameter Store → Create parameter**. Use the name
+   `/TenkaCloud/development/turso/auth-token`, **Standard** tier, **SecureString**
+   type, and the default AWS-managed key `alias/aws/ssm`. Put the database token
+   in **Value** and create the parameter. No new customer-managed key is needed.
+   See [AWS console steps](https://docs.aws.amazon.com/systems-manager/latest/userguide/parameter-create-console.html).
+3. When creating the launcher stack, set `ControlDataBackend=turso`, put the
+   database URL in `TursoDatabaseUrl`, and the **exact existing parameter name**
+   in `TursoAuthTokenParameterName`. Never put the token itself into CloudFormation
+   parameters or the repository. Then start the build.
+
+The parameter is managed separately from the launcher. Keep it available while the
+platform runs and during Turso cleanup. If the token expires, replace its value
+before expiry to avoid runtime authentication failures. See the
+[cost and token operations guide](./docs/running-costs.md) for rotation, cleanup,
+and migrating an existing deployment.
 
 ## AWS permissions
 

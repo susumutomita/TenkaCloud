@@ -181,14 +181,22 @@ and the problem-deploy backend, deployed as two CloudFormation stacks with a
 fixed single tenant. This path stands it up <strong>entirely from the AWS Console</strong> —
 a launcher stack creates a CodeBuild project that clones the repo and runs the
 deploy for you.</p>
+<p>Grant <strong>Start build</strong> only to trusted deployment administrators: build overrides
+can run different source and commands with the deployment role&#39;s AWS access.
+If choosing <strong>Turso</strong>, first obtain a database URL and full-access database token.
+Save the token as an SSM <strong>SecureString</strong> in the deployment account and region
+<strong>before Start build</strong>. The launcher does not create it.
+<a href="https://github.com/susumutomita/TenkaCloud/blob/main/DEPLOYMENT_GUIDE.md#turso-setup-for-the-console-launcher">Dashboard and AWS console setup</a>.</p>
 <ol>
 <li>Download
 <a href="https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/lite-pipeline.yaml"><code>infrastructure/templates/lite-pipeline.yaml</code></a>.</li>
 <li>Open the CloudFormation <strong>Create stack</strong> page (the catalog defaults target
 <code>ap-northeast-1</code>) → <strong>Upload a template file</strong> → upload it → stack name
 <code>tenkacloud-lite-launcher</code>.</li>
-<li>Set <strong><code>TenantAdminEmail</code></strong> (the only required parameter) to the email that
-should receive the Admin Console invitation.</li>
+<li>Set <strong><code>TenantAdminEmail</code></strong> to the email that should receive the Admin Console
+invitation. For Turso, also set <strong><code>ControlDataBackend=turso</code></strong>,
+<strong><code>TursoDatabaseUrl</code></strong>, and the existing SSM name as
+<strong><code>TursoAuthTokenParameterName</code></strong>. DynamoDB is the default.</li>
 <li>Acknowledge the IAM capability checkbox and create the stack.</li>
 <li>Open the CodeBuild project from the stack&#39;s <strong><code>StartBuildConsoleUrl</code></strong>
 output and press <strong>Start build</strong>.</li>
@@ -213,8 +221,10 @@ See <a href="https://aws.amazon.com/codebuild/pricing/">CodeBuild pricing</a> an
 <h2>4. Lite mode on AWS — CLI</h2>
 <p>The same two stacks as mode 3, built on your computer and deployed from your shell.
 Use this path to avoid CodeBuild build charges, or when developing on the platform.</p>
-<p><strong>Prerequisites:</strong> Git, Make, Bash, zip, AWS CLI v2, Bun 1.3.11, Node.js 24,
+<p><strong>Prerequisites:</strong> Git, Make, Bash, zip, rsync, Python 3 (<code>python3</code>), AWS CLI v2,
+Bun 1.3.11, Node.js 24,
 and AWS credentials in your shell (profile or SSO) for the target account.
+Source packaging uses rsync and Python 3.
 <a href="https://github.com/susumutomita/TenkaCloud/blob/main/DEPLOYMENT_GUIDE.md#aws-permissions">Check the role&#39;s permissions</a>
 and run <code>aws sts get-caller-identity</code> to confirm the account. <code>cdk bootstrap</code> is <strong>not</strong> a separate step — the
 deploy runs it idempotently, and Lambda bundling uses local esbuild (no Docker
