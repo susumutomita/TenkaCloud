@@ -27,7 +27,7 @@ bun run dev
 
 ## 配信ファイル
 
-- `crypto-battle-demo.mp4`: 同一対戦の連続操作、73.7 秒、1440×900、H.264、音声なし、約 1.3 MB。WebM 録画を CRF 23 で圧縮し、faststart を設定。メタデータを除去した。
+- `crypto-battle-demo.mp4`: 同一対戦の連続操作、73.7 秒、1140×900、H.264、音声なし、約 1.35 MB。左右の黒い余白を除き、CRF 23 で圧縮し、faststart を設定。メタデータを除去した。
 - `crypto-battle-demo.png`: 同じ録画の 60 秒地点の静止画。動画ポスターと印刷に使用。
 - `crypto-battle-demo.ja.vtt`: 操作と得点の日本語字幕 6 件。
 
