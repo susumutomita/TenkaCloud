@@ -981,7 +981,7 @@ body>.topbar>span {
   width:auto;
   max-width:100%;
   height:480px;
-  aspect-ratio:19/15;
+  aspect-ratio:8/5;
   background:white;
   margin:auto
 }
@@ -992,7 +992,7 @@ body>.topbar>span {
 }
 @media screen and (max-width:900px) {
   .demo-video video {
-  aspect-ratio:19/15
+  aspect-ratio:8/5
 }
 .video-story .actions {
   font-size:14px
@@ -1168,8 +1168,6 @@ body>.topbar>span {
 
 }
 
-
-#host-demo { aspect-ratio:8/5; }
 
 .diagram-summary { font-size:26px; font-weight:600; }
 @media screen and (max-width:900px) { .diagram-summary { font-size:20px; } }

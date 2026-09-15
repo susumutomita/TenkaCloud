@@ -144,44 +144,43 @@ https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/lib/problem-
 https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/lib/problem-deploy/handlers/event-handler/create.ts
 https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/lib/problem-deploy/handlers/participant-handler/sso.ts</div>
 </section>
-<section class="slide video-slide" id="slide-11" aria-labelledby="title-11" data-seconds="50">
-<p class="kicker">使ってみる · 開催者</p><h2 id="title-11">イベントを作って、始める。</h2>
+<section class="slide video-slide" id="slide-11" aria-labelledby="title-11" data-seconds="35">
+<p class="kicker">使ってみる · 開催者</p><h2 id="title-11">準備ができたら、イベントを始める。</h2>
 <div class="video-layout"><figure class="demo-video">
-<video id="host-demo" controls playsinline preload="metadata" poster="./assets/local-host-demo.png" aria-label="実際のローカル開催。イベント作成、Docker環境準備、競技開始、参加者の問題画面" aria-describedby="host-caption">
-<source src="./assets/local-host-demo.mp4" type="video/mp4" />
-<track kind="captions" src="./assets/local-host-demo.ja.vtt" srclang="ja" label="日本語" default />
-<a href="./assets/local-host-demo.mp4">開催動画をMP4で開く</a></video>
-<img class="demo-print" src="./assets/local-host-demo.png" width="1440" height="900" alt="2チームのDocker環境が準備でき、競技を開始した管理画面" />
-<figcaption id="host-caption">開発中のローカル開催 · Bun / SQLite / 実Docker · 約41秒</figcaption>
-</figure><div class="video-story"><p><strong>イベントを作る</strong>問題とチームを登録。</p><p><strong>環境を準備する</strong>チームごとに<br>Dockerを起動。</p><p><strong>競技を始める</strong>参加者がログインし、<br>問題を開く。</p><div class="actions"><a href="./assets/local-host-demo.mp4" target="_blank" rel="noopener noreferrer">動画を大きく開く ↗</a></div><p class="fine">開発中のPR #3234を使用。AWSへの配置・フェデレーションはこの動画に含みません。キー入力と待ち時間は省略しています。</p></div></div>
+<video id="host-demo" controls playsinline preload="metadata" poster="./assets/event-host-demo.png" aria-label="AWS上の実操作。開催時刻の設定、参加者への案内、問題を開くまで" aria-describedby="host-caption">
+<source src="./assets/event-host-demo.mp4" type="video/mp4" />
+<track kind="captions" src="./assets/event-host-demo.ja.vtt" srclang="ja" label="日本語" default />
+<a href="./assets/event-host-demo.mp4">開催動画をMP4で開く</a></video>
+<img class="demo-print" src="./assets/event-host-demo.png" width="1440" height="900" alt="開催時刻を設定する管理画面" />
+<figcaption id="host-caption">AWS上の実操作 · 20秒 · 音声：VOICEVOX:ずんだもん</figcaption>
+</figure><div class="video-story"><p><strong>開催時刻を決める</strong>開始と終了を設定。</p><p><strong>参加者へ案内する</strong>お知らせをまとめて送信。</p><p><strong>問題を開く</strong>参加者の画面で<br>競技を始める。</p><div class="actions"><a href="./assets/event-host-demo.mp4" target="_blank" rel="noopener noreferrer">動画を大きく開く ↗</a></div><p class="fine">問題とチームを登録した後の操作です。キー配布と待ち時間を省略。時刻の入力は2倍速です。</p></div></div>
 <div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>11 / 13</span></div>
-<div class="speaker-notes">11/13 · 目安 50秒
+<div class="speaker-notes">11/13 · 目安 35秒（動画20秒）
 
-開催する流れをお見せします。これは開発中のローカル開催です。イベントに問題とチームを登録し、各チームのDocker環境を準備します。準備ができたら競技を開始。参加者は配布されたキーで入り、問題を開きます。保存先はSQLiteで、画面もコンテナも実際に動かしています。次に、別に作ったオリジナル問題の暗号バトルを紹介します。
+ここからは実際にAWSへデプロイしたTenkaCloudです。問題とチームの登録が済んだところから始めます。開催時刻を設定し、参加者へ開始の案内を送ります。参加者側にも届いています。そのまま問題を開いてみます。
 
-【確認範囲】
-PR #3234のf1b2faafで実行。初回対応のsqli-demoを使用。AWS開催と暗号バトル専用ハーネスは別経路です。
-https://github.com/susumutomita/TenkaCloud/pull/3234
+【補足・読み上げない】
+提供された実操作録画を編集。動画の合計は次の暗号バトルと合わせて60秒。音声はVOICEVOX:ずんだもん。イベント作成、AWSリソースの配置処理、キー配布、フェデレーションの操作はこの抜粋に含みません。
+編集範囲・字幕・音声の出典：./assets/recorded-demo.md
 </div></section>
-<section class="slide video-slide" id="slide-12" aria-labelledby="title-12" data-seconds="90">
+<section class="slide video-slide" id="slide-12" aria-labelledby="title-12" data-seconds="60">
 <p class="kicker">使ってみる · オリジナル問題の例</p><h2 id="title-12">暗号バトル：相手にヒントを渡して、点を取る？</h2>
 <div class="video-layout"><figure class="demo-video">
-<video id="crypto-demo" controls playsinline preload="metadata" poster="./assets/crypto-battle-demo.png" aria-label="暗号バトルのローカル実演。回答、得点、公開、HUNTの操作録画" aria-describedby="demo-caption">
-<source src="./assets/crypto-battle-demo.mp4" type="video/mp4" />
-<track kind="captions" src="./assets/crypto-battle-demo.ja.vtt" srclang="ja" label="日本語" default />
-<a href="./assets/crypto-battle-demo.mp4">実演動画をMP4で開く</a>
+<video id="crypto-demo" controls playsinline preload="metadata" poster="./assets/crypto-battle-live-demo.png" aria-label="AWS上の暗号バトル。暗号の回答、正解の加点、時間切れの減点、順位への反映" aria-describedby="demo-caption">
+<source src="./assets/crypto-battle-live-demo.mp4" type="video/mp4" />
+<track kind="captions" src="./assets/crypto-battle-live-demo.ja.vtt" srclang="ja" label="日本語" default />
+<a href="./assets/crypto-battle-live-demo.mp4">実演動画をMP4で開く</a>
 </video>
-<img class="demo-print" src="./assets/crypto-battle-demo.png" width="1140" height="900" alt="実演で使用したHUNT画面。公開された平文1と暗号文5から、鍵4を計算して入力する" />
-<figcaption id="demo-caption">実際のゲームロジックを動かしたローカル実演 · 字幕付き</figcaption>
-</figure><div class="video-story"><p><strong>まず、自分で解く</strong>回答が合えば得点。</p><p><strong>公開して、楽をする</strong>得点できるけれど、<br>相手にも材料が見える。</p><p><strong>相手の秘密を探す</strong>公開情報を読んで<br>HUNTする。</p><div class="actions"><a href="./assets/crypto-battle-demo.mp4" target="_blank" rel="noopener noreferrer">動画を大きく開く ↗</a><a href="../acp2026/">暗号バトルの解説</a><a href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer">TenkaCloudのコード ↗</a></div><p class="fine">ローカルで時計を進め、2チームの席を切り替えています。AWSでの開催・認証・永続化は含みません。</p></div></div><div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>12 / 13</span></div>
-<div class="speaker-notes">12/13 · 目安 90秒
+<img class="demo-print" src="./assets/crypto-battle-live-demo.png" width="1440" height="900" alt="ずらし暗号に正解し、30点を獲得した参加者の画面" />
+<figcaption id="demo-caption">AWS上の実操作 · 40秒 · 音声：VOICEVOX:ずんだもん</figcaption>
+</figure><div class="video-story"><p><strong>まず、自分で解く</strong>正解で30点。<br>時間切れには減点も。</p><p><strong>公開して、点を取る</strong>計算を省けるけれど、<br>相手にも材料が見える。</p><p><strong>相手の秘密を探す</strong>公開情報を読んで<br>HUNTする。</p><div class="actions"><a href="./assets/crypto-battle-live-demo.mp4" target="_blank" rel="noopener noreferrer">動画を大きく開く ↗</a><a href="../acp2026/">暗号バトルの解説</a><a href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer">TenkaCloudのコード ↗</a></div><p class="fine">録画では回答と得点反映を実演。公開・HUNTはルールの紹介です。</p></div></div><div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>12 / 13</span></div>
+<div class="speaker-notes">12/13 · 目安 60秒（動画40秒）
 
-最後に、自分で作ったオリジナル問題の例として、暗号バトルをお見せします。約74秒の動画です。
-最初は自分で計算して回答し、30点を取ります。次のお題は「公開して答える」を選びます。計算を省いて10点を取れますが、元の数と暗号文の組が公開されます。
-相手の席に切り替えてみます。公開された1と5の対応から、鍵は4だとわかります。その鍵をHUNTに入力すると、8点を取り、相手は12点減ります。
-こんなふうに、自分で考えた問題を載せて遊べるようにしました。この問題も、TenkaCloudの問題集で公開しています。
+自分で作った問題の一つが、暗号バトルです。自分で計算して答えるか、情報を公開して点を取るかを選びます。
+動画ではずらし暗号に答えて30点。別のお題は時間切れになり、15点減っています。公開された情報から相手の秘密を当てるHUNTもあります。得点の増減は、主催者のグラフと参加者の順位にも反映されます。
+こんなふうに、自分で考えた問題を載せて遊べるようにしました。
 【補足・読み上げない】
-動画は本物のゲームロジックと参加者UIを使っていますが、ローカル環境です。開発用の時計を1分進め、alphaからbravoへ席を切り替えています。AWSの認証・永続化・公式スコアを示す動画ではありません。
+2026年9月15日に提供されたAWS上の実操作録画。同じ録画の回答・得点表示・管理画面・参加者画面を抜粋しています。公開操作やHUNTの成功を実演した映像ではありません。音声はVOICEVOX:ずんだもん。
 【出典】
 https://github.com/susumutomita/TenkaCloudChallenge/tree/main/battles/ac26-crypto-battle
 https://tenkacloud.com/acp2026/</div>
