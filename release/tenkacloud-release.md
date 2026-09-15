@@ -25,7 +25,7 @@ The platform commit is derived from the release tag at publish time (`scripts/re
 | Bun | `1.3.11` |
 | Node.js (development) | `24` |
 | Node.js (Lite launcher) | `22` |
-| AWS CDK CLI | `2.1133.0` |
+| AWS CDK CLI | `2.1141.0` |
 | AWS CDK library | `2.262.1` |
 
 ## Qualification targets
