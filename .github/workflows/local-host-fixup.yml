@@ -34,9 +34,29 @@ jobs:
           fetch-depth: 0
           submodules: true
       - uses: ./.github/actions/bun-install
-      - name: Apply reviewed source repairs and repository formatting
+      - name: Apply reviewed repairs and repository formatting
         run: |
-          python3 .github/local-host-repair.py
+          python3 - <<'PY'
+          from pathlib import Path
+          script=Path('.github/local-host-repair.py')
+          source=script.read_text()
+          old="workspace=workspaces['apps/'+app]"
+          assert old in source
+          source=source.replace(old, old+"\n    workspace.setdefault('entry', ['src/main.tsx', 'test/**/*.test.{ts,tsx}', 'src/**/*.test.{ts,tsx}'])")
+          script.write_text(source)
+          PY
+          if ! grep -q 'private readonly statements' scripts/local-host/store.ts; then
+            python3 .github/local-host-repair.py
+          fi
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('scripts/local-play/simulator.ts');s=p.read_text()
+          old='artifacts.length === 1 &&'
+          new='artifacts.length === 1 && artifacts[0] !== undefined &&'
+          if new not in s:
+            assert s.count(old)==1
+            p.write_text(s.replace(old,new))
+          PY
           set +e
           bun run biome check --write scripts/local-host scripts/local-play/api-scoring.ts scripts/local-play/api-views.ts scripts/local-play/state-store.ts scripts/local-play/verify-client.ts scripts/local-play/compose-policy.ts scripts/local-play/manifest.ts scripts/local-play/process-identity.ts scripts/local-play/simulator-client.ts scripts/local-play/simulator-data-plane-proxy.ts scripts/local-play/simulator-launch-state.ts scripts/local-play/simulator-launcher.ts scripts/local-play/simulator-runtime-lifecycle.ts scripts/local-play/simulator-runtime.ts scripts/local-play/simulator-scoring.ts scripts/local-play/simulator.ts infrastructure/lib/problem-deploy/runtime-clients/ssrf-guard.ts packages/saml-utils/src/metadata.ts apps/application-admin-console/src/local-host apps/participant-portal/src/local-host apps/application-admin-console/vite.host.config.ts apps/participant-portal/vite.host.config.ts tsconfig.host.json knip.json package.json >/tmp/format.log 2>&1
           tail -8 /tmp/format.log
