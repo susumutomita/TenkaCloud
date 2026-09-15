@@ -20,18 +20,25 @@ To run a single SPA locally, start its dev server from the app directory, e.g.
 For first-time contributors:
 
 1. Read the [Quickstart](./README.md#quickstart) and run Lite mode once.
-2. Skim [CLAUDE.md](./CLAUDE.md) and [AGENTS.md](./AGENTS.md) for the architecture (the four planes), the directory map, and the project rules.
+2. Read [AGENTS.md](./AGENTS.md) for the working contract and platform boundaries.
 
 ## Development flow
 
 1. Pick an issue labeled [`good first issue`](https://github.com/susumutomita/TenkaCloud/issues?q=is%3Aissue%20state%3Aopen%20label%3A%22good%20first%20issue%22) or [`help wanted`](https://github.com/susumutomita/TenkaCloud/issues?q=is%3Aissue%20state%3Aopen%20label%3A%22help%20wanted%22).
 2. Create a branch: `git checkout -b feat/your-feature`
-3. Write tests first (TDD). Test titles use the English `should ...` pattern — match this style for consistency with the existing suite.
-4. Run `make before-commit` (lint / test) — a fast local sanity check, not a full
-   CI mirror. Run `make ci-local` before opening a PR if you want the full CI
-   mirror (audit-deps / submodule guard / lint / typecheck / coverage-gate / build)
-   locally.
-5. Open a PR (title under 70 characters, Conventional Commits)
+3. Implement one working change and verify the affected behavior with relevant tests.
+   Choose the implementation and test order to fit the task; use focused checks while iterating.
+4. Inspect the diff and stage only intended files. Commit with `make before-commit`
+   passing (lint, dead-code checks, and tests); the pre-commit hook runs it automatically.
+   Run relevant type/build checks too. `make ci-local` is available when you need the
+   complete local CI sequence, including dependency audit and coverage.
+5. Open a PR with the problem, resulting behavior, verification, and any material risk
+   (title under 70 characters, Conventional Commits).
+
+The hook checks that `problems/` matches its staged commit; it never updates or
+switches the catalog checkout. On a fresh clone, initialize it with
+`git submodule update --init --recursive problems`. If you have catalog work in
+progress, preserve it before aligning the checkout or staging an intentional pin update.
 
 ## Comment attachments
 
@@ -51,7 +58,7 @@ We follow [Conventional Commits](https://www.conventionalcommits.org/): `feat:`,
 
 ## Rules and constraints
 
-See [CLAUDE.md](./CLAUDE.md) for project rules, architecture invariants, and prohibited patterns. The same rules apply whether the change is made by a human or by an AI agent.
+See [AGENTS.md](./AGENTS.md) for project rules and platform boundaries. The same rules apply whether the change is made by a human or by an AI agent.
 
 ## Project provenance
 

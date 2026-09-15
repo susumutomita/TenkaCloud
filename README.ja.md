@@ -241,9 +241,9 @@ TenkaCloud をエンタープライズや社内研修の用途 — ハンズオ�
 
 ## コントリビューション
 
-1. [CONTRIBUTING.md](./CONTRIBUTING.md) と [AGENTS.md](./AGENTS.md) を読む(いずれも英語)。
-2. インフラ / テンプレートの変更と、アプリケーションコードの変更は分けて PR にする。
-3. PR を開く前に `make harness` と `make before-commit` を実行する。
+1. [CONTRIBUTING.md](./CONTRIBUTING.md) と [AGENTS.md](./AGENTS.md) を読む。
+2. 1 つの動作に必要な変更は、送信側・受信側も含めて同じ PR にまとめる。
+3. commit 前に `make before-commit` を通す。pre-commit hook が自動で実行する。
 
 ## ライセンス
 

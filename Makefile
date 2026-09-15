@@ -32,7 +32,7 @@ install_ci: ## Install locked CI dependencies without lifecycle scripts | lockfi
 	bun install --frozen-lockfile --ignore-scripts
 # Bumps the problems/ pin to its tracked branch tip and leaves it STAGED for review. Run this to
 # open the bump as its own PR (there is no scheduled workflow that does this automatically);
-# pre-commit only syncs the worktree to the pin.
+# pre-commit only checks that the checkout matches the staged pin; it never updates it.
 submodule-latest: ## Update and stage the problem catalog submodule | 問題カタログsubmoduleを最新版へ更新してstage
 	git submodule update --remote --recursive problems
 	@git diff --quiet -- problems \
@@ -116,7 +116,7 @@ GATE_CHECKS := lint dead-code test
 
 before-commit: $(GATE_CHECKS) ## Run lint and all tests before committing | commit前のlintと全テストを実行
 
-# `before-commit` は速い pre-push sanity check であって CI の完全な写しではない
+# `before-commit` は lint・dead-code・test を実行する。CI 全体の再現には ci-local を使う。
 # (CI は audit-deps / submodule pin guard / build も走らせる)。`ci-local` は CI が走らせるものを
 # CI と同じ順で全部走らせる (Codecov upload だけ除く)。
 # Issue #2513: CI は同じ workspace 集合を 3 shard の matrix で並列に走らせる。ここでは 3 shard を

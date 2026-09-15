@@ -58,19 +58,29 @@ https://www.tenkacloud.com/acp2026/
 https://github.com/susumutomita/TenkaCloudChallenge/tree/main/battles/ac26-crypto-battle</div>
 </section>
 <section class="slide " id="slide-4" aria-labelledby="title-4" data-seconds="90">
-<p class="kicker">03 / LIVE DEMO — 90 SEC</p><h2 id="title-4">計算を省くと、相手に材料を渡す。</h2>
-<div class="grid three"><div class="card"><div class="number">TEAM A</div><h3>チームA</h3><p>秘密の鍵は3。平文2を暗号化。<br><span class="equation">2 + 3 = 5</span></p></div><div class="card"><div class="number">PUBLIC</div><h3>LEAK</h3><p>平文2 → 暗号文5の対応を公開。<br>鍵そのものは公開しない。</p></div><div class="card"><div class="number">TEAM B</div><h3>HUNT</h3><p>相手が求めるのは鍵。<br><span class="equation">5 − 2 = 3</span></p></div></div><p class="callout">速さを取るか、情報を守るか。</p>
-<p class="lead">練習1問 → 公開とHUNTの例 → 資料へ戻る。</p><div class="actions"><a class="action" href="../acp2026/" target="_blank" rel="noopener noreferrer">暗号バトルの解説資料 ↗</a></div>
-<p class="fine">ライブは事前に起動した演習環境で行います。上のリンクは解説資料で、対戦の起動ボタンではありません。止まったらこの固定例で説明を続けます。</p>
-<p class="fine">0〜6の数を使う教材用の例（mod 7）。実用暗号としての安全性は主張しません。</p>
+<p class="kicker">03 / DEMO — 90 SEC</p><h2 id="title-4">計算を省くと、相手に材料を渡す。</h2>
+<figure class="demo-video">
+<video id="crypto-demo" controls playsinline preload="metadata" poster="./assets/crypto-battle-demo.png" aria-label="暗号バトルのローカル実演。回答、得点、公開、HUNTの操作録画" aria-describedby="demo-caption">
+<source src="./assets/crypto-battle-demo.mp4" type="video/mp4" />
+<track kind="captions" src="./assets/crypto-battle-demo.ja.vtt" srclang="ja" label="日本語" default />
+<a href="./assets/crypto-battle-demo.mp4">実演動画をMP4で開く</a>
+</video>
+<img class="demo-print" src="./assets/crypto-battle-demo.png" width="1440" height="900" alt="実演で使用したHUNT画面。公開された平文1と暗号文5から、鍵4を計算して入力する" />
+<figcaption id="demo-caption">74秒 / 実ゲームロジックと参加者UIを使ったローカル実演。音声なし・日本語字幕付き。</figcaption>
+</figure>
+<p class="demo-summary">回答で +30点 → LEAKで +10点 → 相手が鍵を計算してHUNT（+8点、対象 −12点）。</p>
+<div class="actions"><a href="./assets/crypto-battle-demo.mp4" target="_blank" rel="noopener noreferrer">動画を大きく開く ↗</a><a href="../acp2026/" target="_blank" rel="noopener noreferrer">暗号バトルの解説資料 ↗</a></div>
+<p class="fine">同じローカル試合で実際に操作・判定。開発用の時計を1分進め、席をalphaからbravoへ切り替えています。AWS上の認証・永続化・公式スコアの実証は含みません。</p>
+<p class="demo-print-summary">動画の流れ：数独の置き換え表で4マスを埋めて30点。次のお題で元の数と暗号文を公開して10点。相手は公開された1 → 5から鍵4を計算し、HUNTが成功して8点、対象は12点減点。動画は発表ページから再生できます。</p>
 <div class="slide-foot"><span>JAWS-UG横浜 #103 × SRE · TenkaCloud</span><span>04 / 10</span></div>
 <div class="speaker-notes">本編 04/10 | 目安 90秒
 
-ここで、起動済みの暗号バトル画面へ切り替えます。
-【0〜30秒】「まず1問体験」を開きます。暗号文の左どうし、右どうしを足し、7で割った余りを入れます。固定例は左が5、右が2。これは準同型加算の教材模型であり、完全準同型暗号全体ではありません。
-【30〜70秒】公開とHUNTの説明へ進みます。チームAの秘密の鍵が3で、平文2を暗号化すると5になります。LEAKすると2から5への対応が公開されます。相手チームは5引く2で鍵3を計算し、HUNTで答えます。公開値を転記するのではなく、その先の秘密を求める操作です。
-【70〜90秒】「このように、問題・操作・判定を載せられる基盤です」と締め、資料に戻ります。
-操作が止まったら10秒以上待たず、この固定図と前の実画面で続行します。ライブの実装状態・得点・対戦接続は当日の起動環境で事前確認してください。
+ここで約74秒の実演動画を再生します。実ゲームロジックと参加者UIを動かしたローカル開発環境です。
+【0〜25秒】チームalphaがお題を開き、置き換え表を見て4マスを回答します。正解で30点が加算されます。
+【25〜55秒】開発用の時計を1分進め、次のお題で「公開して答える」を選びます。計算を省いて10点を得る代わりに、元の数と暗号文の対応が公開されます。
+【55〜80秒】bravo側に切り替え、公開材料の1から5への対応を読みます。5引く1で鍵4を求め、HUNTに入力します。正解で8点、攻撃されたalphaは12点減ります。
+【80〜90秒】「問題・操作・判定を載せ、情報公開を判断に結びつけられる基盤です」と締めます。
+動画が再生できない場合は、直下の得点の流れと補足の固定例で説明を続けます。この録画はAWS上の認証、永続化、公式スコアの実証ではありません。ゲーム内の小さい数や鍵は教材用で、認証情報ではありません。
 
 【出典】
 https://www.tenkacloud.com/acp2026/
@@ -105,12 +115,12 @@ https://github.com/susumutomita/TenkaCloud/issues/1266</div>
 <section class="slide diagram-slide" id="slide-7" aria-labelledby="title-7" data-seconds="100">
 <p class="kicker">06 / AFTER — AWS-NATIVE</p><h2 id="title-7">運用の土台はAWSへ。競技の設計は自分で。</h2>
 <p class="lead">運営基盤とチーム別AWSアカウントを分離。同じ図を拡大し、3つの経路を順に見る。</p><div class="diagram-focus" role="group" aria-label="同じ構成図の表示範囲">
-<button type="button" data-view-box="145 645 620 250" aria-pressed="true">① 管理・配置API</button>
-<button type="button" data-view-box="2140 420 620 140" aria-pressed="false">② チーム別AWS</button>
-<button type="button" data-view-box="145 1230 670 160" aria-pressed="false">③ 参加者API</button>
+<button type="button" data-view-box="90 695 1070 715" aria-pressed="true">① 管理・配置API</button>
+<button type="button" data-view-box="2140 400 1080 610" aria-pressed="false">② チーム別AWS（Aの例）</button>
+<button type="button" data-view-box="90 1400 1960 550" aria-pressed="false">③ 参加者API</button>
 <button type="button" data-view-box="0 0 3300 2210" aria-pressed="false">全体図</button>
 </div>
-<a class="figure-link" href="./architecture.html?view=aws" target="_blank" rel="noopener noreferrer"><svg id="slide-architecture-svg" viewBox="145 645 620 250" role="img" aria-label="TenkaCloud Lite構成図の選択範囲。上のボタンで管理API・チーム別AWS・参加者API・全体を切り替えられます"><defs><clipPath id="slide-architecture-clip"><rect id="slide-architecture-clip-rect" x="145" y="645" width="620" height="250" /></clipPath></defs><g clip-path="url(#slide-architecture-clip)"><image href="./assets/architecture-overview.svg" width="3300" height="2210" /></g></svg><span class="caption">別ページで構成図全体を拡大する ↗</span></a><p class="fine">管理者はCognitoとAPI Gateway、参加者はチームキーと専用Lambda Function URL。問題配置はEventBridge → Step Functions → Lambda → AssumeRole → CloudFormation。</p>
+<a class="figure-link" href="./architecture.html?view=aws" target="_blank" rel="noopener noreferrer"><svg id="slide-architecture-svg" viewBox="90 695 1070 715" role="img" aria-label="TenkaCloud Lite構成図の選択範囲。上のボタンで管理API・チーム別AWS・参加者API・全体を切り替えられます"><defs><clipPath id="slide-architecture-clip"><rect id="slide-architecture-clip-rect" x="90" y="695" width="1070" height="715" /></clipPath></defs><g clip-path="url(#slide-architecture-clip)"><image href="./assets/architecture-overview.svg" width="3300" height="2210" /></g></svg><span class="caption">別ページで構成図全体を拡大する ↗</span></a><p class="fine">管理者はCognitoとAPI Gateway、参加者はチームキーと専用Lambda Function URL。問題配置はEventBridge → Step Functions → Lambda → AssumeRole → CloudFormation。</p>
 <div class="slide-foot"><span>JAWS-UG横浜 #103 × SRE · TenkaCloud</span><span>07 / 10</span></div>
 <div class="speaker-notes">本編 07/10 | 目安 100秒
 
@@ -123,7 +133,7 @@ https://github.com/susumutomita/TenkaCloud/blob/main/DEPLOYMENT_GUIDE.md
 https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/lib/tenkacloud-lite/tenkacloud-lite-stack.ts
 https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/lib/admin-console-hosting.ts
 https://github.com/susumutomita/TenkaCloud/blob/main/docs/running-costs.md
-図では参加者用の2つのFunction URLと管理者APIを分けて指します。DynamoDBは図の上下で再掲しており、複製経路を表すものではありません。全体を映した後、必要な箇所だけ拡大します。</div>
+管理・配置API、チームAの演習環境、参加者APIを順に拡大します。管理者APIと参加者用の2つのFunction URLは別経路です。DynamoDBは「認証 / データ / 監視」内の1か所にまとめて表示しており、競技状態もここへ保存します。読み書きの詳細配線は省略しています。「全体図」でアカウント間の関係に戻ります。</div>
 </section>
 <section class="slide " id="slide-8" aria-labelledby="title-8" data-seconds="60">
 <p class="kicker">07 / THE BOUNDARY</p><h2 id="title-8">全部を共通化しない。問題の「契約」をそろえる。</h2>

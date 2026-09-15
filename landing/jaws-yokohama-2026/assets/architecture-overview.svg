@@ -13,11 +13,11 @@
 <image id="i-iam" width="64" height="64" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAAAAACPAi4CAAABDUlEQVR42u2XXRGDMBCEFwYDsXAWYgELsUAkUAuVECxgIRawcBZioS8t/4UkUKbDhKdMyH3c7e1lhqzCsSdHAiRAAtwEUAzLmryj+LmWgX/8+Ggx3tee8eZfRRwqLAXBcdfFAURFACCkdA1HAEQtYDsHQaWoHy4coAQ3DoBjW0nVhIso0Xw+20JGdcEtFpe38avxNGDmdr0kA701LjNATdNRMaPB9RKRNgbXswS91M/0L8yyiB+JWCq0thdDb904qxmQAhQdyIDQQRLriQZ+bXxfupAAH8iAW4WWVzTwHiYL2BOsrKflBwF0vA9MoJHyuf7Y2djJ4Bls5XNnwUQA8oByV49m6YcjARLgLoAX8Lo9HJL7PAsAAAAASUVORK5CYII="/>
 <image id="i-lambda" width="64" height="64" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAAAAACPAi4CAAABnklEQVR42u2XwZWEIBBEa3gm0CmQQqdALKZgCrspTAqbAimQAil0CnsYGUFpkHEPe9AT+h6forpL9PGFa5fBDbgBfwCYjo8cF7c/cVSB3fGGFQBP2cYL2XjJgwDGRYClSwAJbRf6ZexI6AMkNl040Ui+CaiWcX4t/UwSrPMjClLZic9UsqLAv5Zjx2ElCqXhiAcBZE9IMC3zUgMEIfsBoJDgPinjpjxjjQHePai7oAFmV8RA72cFwMSUT9MjpQAc4IoYqBLqAIbAEuDB1ImUUQT4CC6m+REAQ+Jr8c19iXUXFEBYF4+CTqRqAEsIaf+b8ozVAzj4t21ROqk2moA0IevnaqSMJgCIAtePlFEFpP37dqRMtQS5bZ1IHQBk3wAQpFBe62dzdCBI1k/oRco0BKybaUdqOjgQZe+mn3lVJdHOAOKPqoAYfl/OMlL7T5CpLwAIlhPrG8Cie5AL2MqpxaACyAXYjZUdEV1AqAybEsz+RVIp5/nXustLEKR+SjUAuoCGC1MBoCXfdnFKOVrGjjbfuM+/PB/3X9sN+BeAX+rIqQEJsiCKAAAAAElFTkSuQmCC"/>
 <image id="i-step" width="64" height="64" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAAAAACPAi4CAAABMUlEQVR42u1XIXLDMBDcJCaGooZHC/2FfiF+gvMEGwYmtDBPUL+QL4gGHjUULSzIeJJJpLNybuwCm3l03tm9W0nr1RbjnjUWgAXgDwAycZW2BP5mqWTzISyW+yLPi0/ulBJMg/Nud0ZjlAAEPnl/YpAeAAD0AP76JcErARyoNqYmOKFoJR0oZQMAODrtGDtnCrivC7QMAFhUckEA4BBvOrcpTSRpsGl7oYrqee9uvGm3McEyA0rvRawH1YDgavoTKWaMu/ZkQ2MKNoOCDPihkKPibVhCm2r/f2akLMlIdpyR+HmMr/mgne5utHj9fFsHhQXfBxnMb6T0XgwwELTzGy4W8WoD1QWo82MiDjBnxCn7iFNqGfQRR8uA+4jDeoBrxOE5I07+cxkXcZYfjgVgGoBfkfJaFVFLV2kAAAAASUVORK5CYII="/>
-<marker id="blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#147eba"/></marker>
-<marker id="green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#2e7b50"/></marker>
-<marker id="red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#c4425e"/></marker>
-<marker id="purple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#7652b6"/></marker>
-<marker id="gold" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#8a6200"/></marker>
+<marker id="blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="21" markerHeight="21" orient="auto" markerUnits="userSpaceOnUse" stroke="none"><path d="M0 0L10 5L0 10Z" fill="#147eba"/></marker>
+<marker id="green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="21" markerHeight="21" orient="auto" markerUnits="userSpaceOnUse" stroke="none"><path d="M0 0L10 5L0 10Z" fill="#2e7b50"/></marker>
+<marker id="red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="21" markerHeight="21" orient="auto" markerUnits="userSpaceOnUse" stroke="none"><path d="M0 0L10 5L0 10Z" fill="#c4425e"/></marker>
+<marker id="purple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="21" markerHeight="21" orient="auto" markerUnits="userSpaceOnUse" stroke="none"><path d="M0 0L10 5L0 10Z" fill="#7652b6"/></marker>
+<marker id="gold" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="21" markerHeight="21" orient="auto" markerUnits="userSpaceOnUse" stroke="none"><path d="M0 0L10 5L0 10Z" fill="#8a6200"/></marker>
 </defs>
 <rect width="100%" height="100%" fill="white"/>
 <g font-family="Noto Sans CJK JP,Hiragino Sans,Arial,sans-serif">
@@ -48,18 +48,36 @@
 <rect x="2200" y="1460" width="410" height="120" rx="10"/><rect x="2710" y="1460" width="440" height="120" rx="10"/></g>
 <g stroke="#cfdbe6"><rect x="145" y="1770" width="1830" height="115" fill="#f5f7fa" rx="10"/><rect x="2200" y="785" width="950" height="140" rx="10"/><rect x="2200" y="1715" width="950" height="140" rx="10"/></g>
 </g>
-<g fill="none" stroke-width="3">
-<g stroke="#8a6200" marker-end="url(#gold)"><path d="M400 225H370V485"/><path d="M1200 225H1075V485"/></g>
-<g stroke="#147eba" marker-end="url(#blue)"><path d="M370 600V685H355V790"/><path d="M565 850H650"/></g>
-<path d="M595 542H730V675H1580V790" stroke="#7652b6" marker-end="url(#purple)"/>
-<g stroke="#c4425e" marker-end="url(#red)"><path d="M870 910V960H355V1030"/><path d="M565 1090H650"/><path d="M870 1150V1220"/>
-<path d="M1090 1280H1155V1390H2110V590H2200"/><path d="M1090 1316H1130V1405H2080V1520H2200"/></g>
+<g fill="none" stroke-width="6">
+<g stroke="#8a6200" marker-end="url(#gold)"><path data-route-halo="e1" d="M400 225H370V485" fill="none" stroke="#ffffff" stroke-width="12" stroke-opacity="1" stroke-linecap="round" stroke-linejoin="round" marker-start="none" marker-mid="none" marker-end="none" pointer-events="none" aria-hidden="true"/>
+<path d="M400 225H370V485" id="route-e1" stroke-linecap="round" stroke-linejoin="round"/><path data-route-halo="e2" d="M1200 225H1075V485" fill="none" stroke="#ffffff" stroke-width="12" stroke-opacity="1" stroke-linecap="round" stroke-linejoin="round" marker-start="none" marker-mid="none" marker-end="none" pointer-events="none" aria-hidden="true"/>
+<path d="M1200 225H1075V485" id="route-e2" stroke-linecap="round" stroke-linejoin="round"/></g>
+<g stroke="#147eba" marker-end="url(#blue)"><path data-route-halo="e3" d="M370 600V685H355V790" fill="none" stroke="#ffffff" stroke-width="12" stroke-opacity="1" stroke-linecap="round" stroke-linejoin="round" marker-start="none" marker-mid="none" marker-end="none" pointer-events="none" aria-hidden="true"/>
+<path d="M370 600V685H355V790" id="route-e3" stroke-linecap="round" stroke-linejoin="round"/><path data-route-halo="e5" d="M565 850H650" fill="none" stroke="#ffffff" stroke-width="12" stroke-opacity="1" stroke-linecap="round" stroke-linejoin="round" marker-start="none" marker-mid="none" marker-end="none" pointer-events="none" aria-hidden="true"/>
+<path d="M565 850H650" id="route-e5" stroke-linecap="round" stroke-linejoin="round"/></g>
+<path data-route-halo="e4" d="M595 542H730V675H1580V790" fill="none" stroke="#ffffff" stroke-width="12" stroke-opacity="1" stroke-linecap="round" stroke-linejoin="round" marker-start="none" marker-mid="none" marker-end="none" pointer-events="none" aria-hidden="true"/>
+<path d="M595 542H730V675H1580V790" stroke="#7652b6" marker-end="url(#purple)" id="route-e4" stroke-linecap="round" stroke-linejoin="round"/>
+<g stroke="#c4425e" marker-end="url(#red)"><path data-route-halo="e6" d="M870 910V960H355V1030" fill="none" stroke="#ffffff" stroke-width="12" stroke-opacity="1" stroke-linecap="round" stroke-linejoin="round" marker-start="none" marker-mid="none" marker-end="none" pointer-events="none" aria-hidden="true"/>
+<path d="M870 910V960H355V1030" id="route-e6" stroke-linecap="round" stroke-linejoin="round"/><path data-route-halo="e7" d="M565 1090H650" fill="none" stroke="#ffffff" stroke-width="12" stroke-opacity="1" stroke-linecap="round" stroke-linejoin="round" marker-start="none" marker-mid="none" marker-end="none" pointer-events="none" aria-hidden="true"/>
+<path d="M565 1090H650" id="route-e7" stroke-linecap="round" stroke-linejoin="round"/><path data-route-halo="e8" d="M870 1150V1220" fill="none" stroke="#ffffff" stroke-width="12" stroke-opacity="1" stroke-linecap="round" stroke-linejoin="round" marker-start="none" marker-mid="none" marker-end="none" pointer-events="none" aria-hidden="true"/>
+<path d="M870 1150V1220" id="route-e8" stroke-linecap="round" stroke-linejoin="round"/>
+<path data-route-halo="e9" d="M1090 1280H1155V1390H2110V590H2200" fill="none" stroke="#ffffff" stroke-width="12" stroke-opacity="1" stroke-linecap="round" stroke-linejoin="round" marker-start="none" marker-mid="none" marker-end="none" pointer-events="none" aria-hidden="true"/>
+<path d="M1090 1280H1155V1390H2110V590H2200" id="route-e9" stroke-linecap="round" stroke-linejoin="round"/><path data-route-halo="e10" d="M1090 1316H1130V1400H2080V1520H2200" fill="none" stroke="#ffffff" stroke-width="12" stroke-opacity="1" stroke-linecap="round" stroke-linejoin="round" marker-start="none" marker-mid="none" marker-end="none" pointer-events="none" aria-hidden="true"/>
+<path d="M1090 1316H1130V1400H2080V1520H2200" id="route-e10" stroke-linecap="round" stroke-linejoin="round"/></g>
 <g stroke="#2e7b50" marker-end="url(#green)">
-<path d="M2610 590H2710"/><path d="M2930 650V725H2960V785"/>
-<path d="M2610 1520H2710"/><path d="M2930 1580V1660H2960V1715"/>
-<path d="M850 565H790V665H95V1500H350V1550"/>
-<path d="M1300 542H2030V1410H830V1550"/>
-<path d="M1585 1625H1515"/><path d="M1105 1625H1035"/>
+<path data-route-halo="e11" d="M2610 590H2710" fill="none" stroke="#ffffff" stroke-width="12" stroke-opacity="1" stroke-linecap="round" stroke-linejoin="round" marker-start="none" marker-mid="none" marker-end="none" pointer-events="none" aria-hidden="true"/>
+<path d="M2610 590H2710" id="route-e11" stroke-linecap="round" stroke-linejoin="round"/><path data-route-halo="e12" d="M2930 650V725H2960V785" fill="none" stroke="#ffffff" stroke-width="12" stroke-opacity="1" stroke-linecap="round" stroke-linejoin="round" marker-start="none" marker-mid="none" marker-end="none" pointer-events="none" aria-hidden="true"/>
+<path d="M2930 650V725H2960V785" id="route-e12" stroke-linecap="round" stroke-linejoin="round"/>
+<path data-route-halo="e13" d="M2610 1520H2710" fill="none" stroke="#ffffff" stroke-width="12" stroke-opacity="1" stroke-linecap="round" stroke-linejoin="round" marker-start="none" marker-mid="none" marker-end="none" pointer-events="none" aria-hidden="true"/>
+<path d="M2610 1520H2710" id="route-e13" stroke-linecap="round" stroke-linejoin="round"/><path data-route-halo="e14" d="M2930 1580V1660H2960V1715" fill="none" stroke="#ffffff" stroke-width="12" stroke-opacity="1" stroke-linecap="round" stroke-linejoin="round" marker-start="none" marker-mid="none" marker-end="none" pointer-events="none" aria-hidden="true"/>
+<path d="M2930 1580V1660H2960V1715" id="route-e14" stroke-linecap="round" stroke-linejoin="round"/>
+<path data-route-halo="e15" d="M850 565H790V665H95V1500H350V1550" fill="none" stroke="#ffffff" stroke-width="12" stroke-opacity="1" stroke-linecap="round" stroke-linejoin="round" marker-start="none" marker-mid="none" marker-end="none" pointer-events="none" aria-hidden="true"/>
+<path d="M850 565H790V665H95V1500H350V1550" id="route-e15" stroke-linecap="round" stroke-linejoin="round"/>
+<path data-route-halo="e16" d="M1300 542H2030V1410H830V1550" fill="none" stroke="#ffffff" stroke-width="12" stroke-opacity="1" stroke-linecap="round" stroke-linejoin="round" marker-start="none" marker-mid="none" marker-end="none" pointer-events="none" aria-hidden="true"/>
+<path d="M1300 542H2030V1410H830V1550" id="route-e16" stroke-linecap="round" stroke-linejoin="round"/>
+<path data-route-halo="e17" d="M1585 1625H1515" fill="none" stroke="#ffffff" stroke-width="12" stroke-opacity="1" stroke-linecap="round" stroke-linejoin="round" marker-start="none" marker-mid="none" marker-end="none" pointer-events="none" aria-hidden="true"/>
+<path d="M1585 1625H1515" id="route-e17" stroke-linecap="round" stroke-linejoin="round"/><path data-route-halo="e18" d="M1105 1625H1035" fill="none" stroke="#ffffff" stroke-width="12" stroke-opacity="1" stroke-linecap="round" stroke-linejoin="round" marker-start="none" marker-mid="none" marker-end="none" pointer-events="none" aria-hidden="true"/>
+<path d="M1105 1625H1035" id="route-e18" stroke-linecap="round" stroke-linejoin="round"/>
 </g></g>
 <use href="#i-cloudfront" x="165" y="510"/><use href="#i-cloudfront" x="870" y="510"/>
 <use href="#i-api" x="165" y="818"/><use href="#i-lambda" x="670" y="818"/>

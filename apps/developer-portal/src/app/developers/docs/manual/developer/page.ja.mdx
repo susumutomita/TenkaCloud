@@ -16,7 +16,7 @@ TenkaCloud本体、インフラコード、共通パッケージ、各Portal、�
 ## リポジトリを準備する
 
 ```bash
-bun install
+make install
 git submodule update --init problems
 make doctor-dev
 ```
@@ -46,7 +46,7 @@ Docker 経路を診断します。[Getting started](/developers/docs/getting-sta
 2. 最小の担当moduleと既存テストを見つける。
 3. 実装と利用者向け文書を同時に更新する。
 4. 作業中は範囲を絞ったテストを実行する。
-5. Pull Request前に`make harness`と`make before-commit`を実行する。
+5. commit前に`make before-commit`を通す。pre-commit hookが自動で実行する。
 6. 最終差分を確認し、対象ファイルだけをstageする。
 
 `.env`、認証情報、生成されたsecret、無関係な変更をcommitしません。単体テストが
