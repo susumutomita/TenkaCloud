@@ -44,7 +44,6 @@ Phase 2 (Issue 2955) で決めた通り、route を machine に開くときは *
 
 ## 検証
 
-- [ ] `make harness`
 - [ ] `make before-commit`
 - [ ] `make check-synth` と `Template.fromStack` assertion (infra を触った場合)
 - [ ] `make openapi` を実行し、生成物の差分を commit した

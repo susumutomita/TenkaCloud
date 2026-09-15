@@ -1,10 +1,13 @@
 #!/usr/bin/env sh
-# [submodule] problems/ の checkout を記録済 pin に揃える (= stale な checkout が commit に紛れない)。
-# pin の *bump* はここではやらない: catalog の更新を feature commit に混ぜると conflict の元なので、
-# bump は単独 PR として `make submodule-latest` で手動で行う (自動 bump workflow は無い)。
-# problems/ が staged のとき (= 意図的な pin 変更) は触らない。 非致命的なので submodule が無くても commit は通す。
-if git diff --cached --quiet -- problems 2>/dev/null; then
-  git submodule update --init --recursive problems >/dev/null 2>&1 || true
-fi
+# Check the staged catalog pin without fetching, changing branches, or hiding failures.
+catalog_status=$(git submodule status -- problems) || exit 1
+case "$catalog_status" in
+  " "*) ;;
+  *)
+    echo "problems/ is uninitialized or differs from its staged commit." >&2
+    echo "Align the checkout deliberately, or stage an intended catalog update. No checkout was changed." >&2
+    exit 1
+    ;;
+esac
 
 mise exec -- make before-commit

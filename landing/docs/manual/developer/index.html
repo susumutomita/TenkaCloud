@@ -75,7 +75,7 @@
 <p>プラットフォームの契約を壊さず、必要なリポジトリ検査に通る、範囲の明確な変更を
 1つ作ります。</p>
 <h2>リポジトリを準備する</h2>
-<pre><code class="language-bash">bun install
+<pre><code class="language-bash">make install
 git submodule update --init problems
 make doctor-dev
 </code></pre>
@@ -121,7 +121,7 @@ Docker 経路を診断します。<a href="/docs/getting-started/">Getting start
 <li>最小の担当moduleと既存テストを見つける。</li>
 <li>実装と利用者向け文書を同時に更新する。</li>
 <li>作業中は範囲を絞ったテストを実行する。</li>
-<li>Pull Request前に<code>make harness</code>と<code>make before-commit</code>を実行する。</li>
+<li>commit前に<code>make before-commit</code>を通す。pre-commit hookが自動で実行する。</li>
 <li>最終差分を確認し、対象ファイルだけをstageする。</li>
 </ol>
 <p><code>.env</code>、認証情報、生成されたsecret、無関係な変更をcommitしません。単体テストが
