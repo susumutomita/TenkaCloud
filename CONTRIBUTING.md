@@ -1,82 +1,56 @@
 # Contributing
 
-Contributions to TenkaCloud are welcome.
+Use the [README](./README.md) to try TenkaCloud locally or host an event on AWS.
+This guide is for changes to the platform. Problem content belongs in
+[TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge) or a
+[private Problem Pack](./README.md#add-your-own-problems).
 
-## Setup
+## Prepare for code changes
+
+Install Git and [mise](https://mise.jdx.dev/), then use the repository's pinned tools:
 
 ```bash
 git clone --recurse-submodules https://github.com/<your-username>/TenkaCloud.git
 cd TenkaCloud
-make install
-make build   # verify the toolchain compiles
+mise install
+mise exec -- make install
+mise exec -- make doctor-dev
 ```
 
-To run a single SPA locally, start its dev server from the app directory, e.g.
-`cd apps/application-admin-console && make dev`. To deploy into AWS, follow the
-[Quickstart](./README.md#quickstart).
+Read [AGENTS.md](./AGENTS.md) for platform boundaries. Use the
+[developer manual](./apps/developer-portal/src/app/developers/docs/manual/developer/page.mdx)
+for code ownership, or the [LLM task guide](./landing/llms-full.txt) to locate code
+by symptom. An AWS deployment is needed only when your change requires one.
 
-## Where to start (under 15 minutes)
+For participant UI development, run `make local-onboard`, then `make local-dev`.
+For a single SPA, use its dev server, for example
+`cd apps/application-admin-console && make dev`. See [Local play](./docs/local-play.md)
+for required services and ports.
 
-For first-time contributors:
+## Make one reviewable change
 
-1. Read the [Quickstart](./README.md#quickstart) and run Lite mode once.
-2. Read [AGENTS.md](./AGENTS.md) for the working contract and platform boundaries.
+1. Start from a request or [open issue](https://github.com/susumutomita/TenkaCloud/issues).
+   Define what a user should be able to do after the change.
+2. Create a branch, inspect the owning code and nearby tests, and implement the change.
+3. Run relevant tests, type checks, and builds. Update English and Japanese docs together.
+4. Inspect the diff and stage only intended files. A normal commit runs
+   `make before-commit`: lint, dead-code checks, and tests. Use `make ci-local`
+   when you also need the full local CI sequence, including coverage and dependency audit.
+5. Open a PR describing the problem, resulting behavior, verification, and material risks.
+   Use a [Conventional Commit](https://www.conventionalcommits.org/) title under 70 characters.
 
-## Development flow
+The hook checks that `problems/` matches its staged commit and never switches its
+checkout. Initialize a fresh clone with `git submodule update --init --recursive problems`.
+Preserve catalog work before aligning a checkout or staging a deliberate pin update.
+Report any live AWS or browser checks that were not run.
 
-1. Pick an issue labeled [`good first issue`](https://github.com/susumutomita/TenkaCloud/issues?q=is%3Aissue%20state%3Aopen%20label%3A%22good%20first%20issue%22) or [`help wanted`](https://github.com/susumutomita/TenkaCloud/issues?q=is%3Aissue%20state%3Aopen%20label%3A%22help%20wanted%22).
-2. Create a branch: `git checkout -b feat/your-feature`
-3. Implement one working change and verify the affected behavior with relevant tests.
-   Choose the implementation and test order to fit the task; use focused checks while iterating.
-4. Inspect the diff and stage only intended files. Commit with `make before-commit`
-   passing (lint, dead-code checks, and tests); the pre-commit hook runs it automatically.
-   Run relevant type/build checks too. `make ci-local` is available when you need the
-   complete local CI sequence, including dependency audit and coverage.
-5. Open a PR with the problem, resulting behavior, verification, and any material risk
-   (title under 70 characters, Conventional Commits).
+## Share work and ask for help
 
-The hook checks that `problems/` matches its staged commit; it never updates or
-switches the catalog checkout. On a fresh clone, initialize it with
-`git submodule update --init --recursive problems`. If you have catalog work in
-progress, preserve it before aligning the checkout or staging an intentional pin update.
-
-## Comment attachments
-
-Do not submit zip archives, binaries, installer files, shell scripts, or patch
-files through Issue / PR comments. TenkaCloud reviews code changes through normal
-pull requests so maintainers can inspect the diff and CI result before running or
-downloading anything.
-
-## Starter tasks
-
-- [`problems/CATALOG.md`](./problems/CATALOG.md) lists the available problems and bundles.
-- Starter tasks should stay small enough for one focused PR.
-
-## Commit messages
-
-We follow [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `chore:`.
-
-## Rules and constraints
-
-See [AGENTS.md](./AGENTS.md) for project rules and platform boundaries. The same rules apply whether the change is made by a human or by an AI agent.
-
-## Project provenance
-
-TenkaCloud is an independent open-source project. Do not contribute an employer's
-source code, confidential documents, customer data, private competition content, or
-other proprietary assets — contribute only original or compatibly licensed work.
-
-## Join the community
-
-TenkaCloud's moat is its problem catalog, and that catalog grows through community contribution. The simplest first contribution is to play-test a problem (run `make deploy` in Lite mode, register a team, solve and score it) and file a `problem-feedback` issue, or to author a new problem in the [TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge) catalog repo.
-
-Problems that should stay private — internal-only drills, a one-off event problem — do not need a catalog contribution at all: see [Add your own problems / Option B](./README.md#add-your-own-problems) for the offline Problem Pack CLI (`make pack-init` / `pack-validate` / `pack-install` / `pack-activate`).
-
-Coordination model: **GitHub is the durable source of truth**; Discord (when available) is for live coordination only — every decision and bug must end up as a GitHub issue or PR comment. GitHub-only contributors are first-class.
-
-## Questions
-
-- [GitHub Discussions](https://github.com/susumutomita/TenkaCloud/discussions)
-- [GitHub Issues](https://github.com/susumutomita/TenkaCloud/issues)
+- File reproduction steps and expected/actual behavior in an Issue; propose code in a PR.
+  Do not attach archives, binaries, installers, scripts, or patches to comments.
+- Contribute original or compatibly licensed work. Do not include employer code,
+  confidential documents, customer data, credentials, or private competition content.
+- Keep decisions and bug reports on GitHub so contributors can follow them asynchronously.
+  Ask questions in [Discussions](https://github.com/susumutomita/TenkaCloud/discussions).
 
 Contributions are released under the [Apache License 2.0](./LICENSE).

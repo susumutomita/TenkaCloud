@@ -75,7 +75,7 @@ export const DOC_PAGES: readonly DocPage[] = [
       { id: "change-workflow", text: "Change workflow" },
       { id: "code-change-or-environment-setting", text: "Code change or environment setting" },
     ],
-    body: "Developer manual for changing TenkaCloud platform code in apps, infrastructure, packages, and scripts. Repository setup, make doctor-dev, make before-commit, architecture ownership, environment parameter boundaries, and honest verification. 開発者マニュアル。コード変更、担当module、検査、環境設定との境界。",
+    body: "Developer manual for changing TenkaCloud platform code in apps, infrastructure, packages, and scripts. Repository setup, make doctor-dev, make before-commit, architecture ownership, environment parameter boundaries, LLM task routing and source-code map, and honest verification. 開発者マニュアル。コード変更、担当module、検査、環境設定との境界、LLM向けの目的別ガイド。",
   },
   {
     slug: "manual/organizer",
@@ -94,14 +94,14 @@ export const DOC_PAGES: readonly DocPage[] = [
       { id: "before-participants-arrive", text: "Before participants arrive" },
       { id: "saas-operating-status", text: "SaaS operating status" },
     ],
-    body: "Competition organizer manual with an executable Lite procedure and a separate SaaS status section. Choose by use case; deploy Lite through the CloudFormation plus CodeBuild launcher or make deploy; rehearse start, scoring, reset, stop, and teardown. The linked Lite setting and message references define database parameters, format, range, default, invalid-input behavior, displayed text, cause, system action, and operator action. Control data can use DynamoDB or an explicitly unverified Turso path. SaaS code exists but has no recent recorded fresh-environment end-to-end verification and is not presented as a current organizer procedure. 競技開催者マニュアル。Liteの実行手順とSaaSの未検証状態を分離し、用途比較、導入パイプライン、データベース、パラメータ、設定値、エラー文言、採点と料金の警告条件を説明する。",
+    body: "Competition organizer manual with an executable Lite procedure and a separate SaaS status section. Choose by use case; deploy Lite through the CloudFormation plus CodeBuild launcher or make deploy; rehearse start, scoring, reset, stop, and teardown. The linked Lite setting and message references define database parameters, format, range, default, invalid-input behavior, displayed text, cause, system action, and operator action. Choose DynamoDB to keep control data in AWS, or Turso to reduce DB cost. Turso setup has unit/synth coverage; full live deployment and billing verification is not recorded. SaaS code exists but has no recent recorded fresh-environment end-to-end verification and is not presented as a current organizer procedure. 競技開催者マニュアル。Liteの実行手順とSaaSの未検証状態を分離し、用途比較、導入パイプライン、データベース、TursoによるDB費用削減、パラメータ、設定値、エラー文言、採点と料金の警告条件を説明する。",
   },
   {
     slug: "manual/participant",
     href: "/developers/docs/manual/participant/",
     title: "Competition participant manual",
     description:
-      "Start a real problem environment, investigate it, submit a flag, reset, and stop.",
+      "Start a problem, follow its answer or game controls, confirm the result, and stop.",
     maturity: "stable",
     section: "Role manuals",
     headings: [
@@ -111,7 +111,7 @@ export const DOC_PAGES: readonly DocPage[] = [
       { id: "words-you-will-see", text: "Words you will see" },
       { id: "when-something-goes-wrong", text: "When something goes wrong" },
     ],
-    body: "Competition participant manual for the real TenkaCloud flow: choose a problem, read the goal and first action, start an isolated environment, open its endpoint, investigate or repair it, submit the full TC flag, reset, and stop. Local practice uses the public make local and make local-down commands. Plain-language glossary for server, cloud, Docker, problem environment, endpoint, flag, hint, and reset. 競技参加者マニュアル。実問題の開始、接続、調査、flag提出、採点、リセット、停止、make localとmake local-down、サーバー・クラウド・Dockerのやさしい説明。",
+    body: "Competition participant manual for the real TenkaCloud flow: choose a problem, read the goal and first action, start an isolated environment, open its endpoint, use its answer or game controls, confirm the result, reset, and stop. For flag-based problems, submit the full TC flag. Local practice uses the public make local and make local-down commands. Plain-language glossary for server, cloud, Docker, problem environment, endpoint, flag, hint, and reset. 競技参加者マニュアル。実問題の開始、接続、調査、回答・ゲーム操作、flag形式の問題ではflag提出、採点、リセット、停止、make localとmake local-down、サーバー・クラウド・Dockerのやさしい説明。",
   },
   {
     slug: "manual/problem-author",
