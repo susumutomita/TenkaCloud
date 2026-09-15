@@ -23,7 +23,8 @@ export function sameSecret(left: string, right: string): boolean {
 }
 
 export function issueSession(store: HostStore, masterKey: string, provided: unknown, now: number) {
-  if (typeof provided !== "string" || !sameSecret(masterKey, provided)) throw new HostError(401, "Invalid host key.");
+  if (typeof provided !== "string" || !sameSecret(masterKey, provided))
+    throw new HostError(401, "Invalid host key.");
   const expiresAt = now + 15 * 60 * 1000;
   const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
   const payload = `${encode({ alg: "HS256", typ: "JWT" })}.${encode({
@@ -45,7 +46,7 @@ export function issueSession(store: HostStore, masterKey: string, provided: unkn
     idToken,
     accessToken: idToken,
     refreshToken,
-    expiresAt
+    expiresAt,
   };
 }
 /** Per-key queue protects read/verify/write across asynchronous external verifiers. */
@@ -54,7 +55,10 @@ export class SerialQueue {
   run<T>(key: string, operation: () => Promise<T>): Promise<T> {
     const previous = this.tails.get(key) ?? Promise.resolve();
     const next = previous.then(operation, operation);
-    const tail = next.then(() => undefined, () => undefined);
+    const tail = next.then(
+      () => undefined,
+      () => undefined,
+    );
     this.tails.set(key, tail);
     void tail.then(() => {
       if (this.tails.get(key) === tail) this.tails.delete(key);

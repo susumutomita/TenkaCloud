@@ -1,19 +1,23 @@
 /** Test-only runtime adapter. Real HTTP and real SQLite, but NOT the Docker
  * adapter or the repository's shared scoring implementation. Used to isolate
  * authentication, durable state, event gates and proxy boundaries. */
-import { createServer } from "node:http";
+
 import { createHash } from "node:crypto";
+import { createServer } from "node:http";
 import { closeServer, json, listen, readBody } from "../http";
 import {
-  object,
   type Context,
   type EngineResult,
   type Job,
+  object,
   type RuntimeEngine,
-  type SqlDatabase
+  type SqlDatabase,
 } from "../model";
 
-interface Exercise { origin: string; close(): Promise<void> }
+interface Exercise {
+  origin: string;
+  close(): Promise<void>;
+}
 
 export class ExerciseFixture implements RuntimeEngine {
   readonly running = new Map<string, Exercise>();
@@ -22,14 +26,14 @@ export class ExerciseFixture implements RuntimeEngine {
   failStart = false;
   failStop = false;
   verifyDelay = 0;
-  constructor(private readonly openDatabase: (path: string) => SqlDatabase) { }
+  constructor(private readonly openDatabase: (path: string) => SqlDatabase) {}
   catalog() {
     return [
       {
         problemId: "sqli-demo",
         name: "SQL injection exercise fixture",
-        definition: "private-fixture-descriptor"
-      }
+        definition: "private-fixture-descriptor",
+      },
     ];
   }
   async start(job: Job, retain: (unit: string | null) => void): Promise<void> {
@@ -38,13 +42,20 @@ export class ExerciseFixture implements RuntimeEngine {
     this.starts.push(job.jobId);
     const db = this.openDatabase(":memory:");
     db.exec("CREATE TABLE users (username TEXT, password TEXT, role TEXT)");
-    db.prepare("INSERT INTO users VALUES (?,?,?)").run("admin", createHash("sha256").update(job.jobId).digest("hex"), "admin");
-    const flag = `TC{${createHash("sha256").update(`flag:${job.jobId}`).digest("hex").slice(0, 20)}}`;
+    db.prepare("INSERT INTO users VALUES (?,?,?)").run(
+      "admin",
+      createHash("sha256").update(job.jobId).digest("hex"),
+      "admin",
+    );
+    const flagHash = createHash("sha256").update(`flag:${job.jobId}`).digest("hex").slice(0, 20);
+    const flag = `TC{${flagHash}}`;
     const server = createServer((request, response) => {
       void (async () => {
         if (request.url === "/" && request.method === "GET") {
           response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-          response.end('<!doctype html><form action="/login" method="post"><label>User <input name="username"></label><label>Password <input name="password"></label><button>Sign in</button></form>');
+          response.end(
+            '<!doctype html><form action="/login" method="post"><label>User <input name="username"></label><label>Password <input name="password"></label><button>Sign in</button></form>',
+          );
           return;
         }
         if (request.url === "/healthz") {
@@ -53,7 +64,7 @@ export class ExerciseFixture implements RuntimeEngine {
         }
         const body = await readBody(request);
         if (request.url === "/verify") {
-          if (this.verifyDelay) await new Promise(accept => setTimeout(accept, this.verifyDelay));
+          if (this.verifyDelay) await new Promise((accept) => setTimeout(accept, this.verifyDelay));
           json(response, 200, { correct: object(JSON.parse(body)).submission === flag });
           return;
         }
@@ -64,7 +75,11 @@ export class ExerciseFixture implements RuntimeEngine {
           const password = params.get("password") ?? "";
           let row: unknown;
           try {
-            row = db.prepare(`SELECT role FROM users WHERE username='${username}' AND password='${password}'`).get();
+            row = db
+              .prepare(
+                `SELECT role FROM users WHERE username='${username}' AND password='${password}'`,
+              )
+              .get();
           } catch {
             row = undefined;
           }
@@ -76,10 +91,11 @@ export class ExerciseFixture implements RuntimeEngine {
     });
     const origin = await listen(server, "127.0.0.1", 0);
     this.running.set(job.jobId, {
-      origin, close: async () => {
+      origin,
+      close: async () => {
         await closeServer(server);
         db.close();
-      }
+      },
     });
   }
   async recover(job: Job): Promise<void> {
@@ -104,7 +120,7 @@ export class ExerciseFixture implements RuntimeEngine {
   async view(context: Context) {
     const snapshot = context.team.snapshot ? object(JSON.parse(context.team.snapshot)) : {};
     return {
-      problems: context.event.problems.map(problem => ({
+      problems: context.event.problems.map((problem) => ({
         problemId: problem.problemId,
         jobId: `local-${problem.problemId}`,
         name: problem.name,
@@ -116,27 +132,29 @@ export class ExerciseFixture implements RuntimeEngine {
         scoring: {
           kind: "flag",
           points: 100,
-          flagSubmitted: snapshot.solved === true
+          flagSubmitted: snapshot.solved === true,
         },
-      }))
+      })),
     };
   }
   async submit(context: Context, body: Record<string, unknown>): Promise<EngineResult> {
     const snapshot = context.team.snapshot ? object(JSON.parse(context.team.snapshot)) : {};
     if (snapshot.solved) return this.result(context, snapshot, "already_scored", 0);
-    const job = context.jobs.find(candidate => candidate.problemId === body.problemId);
+    const job = context.jobs.find((candidate) => candidate.problemId === body.problemId);
     if (!job) throw new Error("Unknown fixture problem.");
-    const response = await fetch(
-      `${this.surface(job)}/verify`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ submission: body.flag })
-      }
-    );
+    const response = await fetch(`${this.surface(job)}/verify`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ submission: body.flag }),
+    });
     const verdict = object(await response.json());
     if (verdict.correct) snapshot.solved = true;
-    return this.result(context, snapshot, verdict.correct ? "ok" : "wrong", verdict.correct ? 100 : -5);
+    return this.result(
+      context,
+      snapshot,
+      verdict.correct ? "ok" : "wrong",
+      verdict.correct ? 100 : -5,
+    );
   }
   async hint(context: Context, _problemId: string, hintId: string): Promise<EngineResult> {
     const snapshot = context.team.snapshot ? object(JSON.parse(context.team.snapshot)) : {};
@@ -152,32 +170,33 @@ export class ExerciseFixture implements RuntimeEngine {
     snapshot: Record<string, unknown>,
     kind: string,
     delta: number,
-    source = "flag"
+    source = "flag",
   ): EngineResult {
     const entries = [...context.team.scoreEvents];
-    if (kind !== "already_scored" && kind !== "already_revealed") entries.unshift({
-      jobId: context.jobs[0]?.jobId ?? "",
-      problemId: "sqli-demo",
-      source: kind === "wrong" ? "flag-wrong" : source,
-      points: delta,
-      result: kind === "wrong" ? "wrong" : "ok",
-      occurredAt: new Date(context.now).toISOString()
-    });
+    if (kind !== "already_scored" && kind !== "already_revealed")
+      entries.unshift({
+        jobId: context.jobs[0]?.jobId ?? "",
+        problemId: "sqli-demo",
+        source: kind === "wrong" ? "flag-wrong" : source,
+        points: delta,
+        result: kind === "wrong" ? "wrong" : "ok",
+        occurredAt: new Date(context.now).toISOString(),
+      });
     return {
       status: 200,
       body: {
         kind,
         scoreDelta: delta,
-        totalScore: context.team.score + delta
+        totalScore: context.team.score + delta,
       },
       snapshot: JSON.stringify(snapshot),
       score: context.team.score + delta,
       completedProblems: snapshot.solved ? 1 : 0,
-      scoreEvents: entries
+      scoreEvents: entries,
     };
   }
   async close(): Promise<void> {
-    await Promise.all([...this.running.values()].map(exercise => exercise.close()));
+    await Promise.all([...this.running.values()].map((exercise) => exercise.close()));
     this.running.clear();
   }
 }

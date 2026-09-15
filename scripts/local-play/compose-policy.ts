@@ -65,15 +65,16 @@ export function resolveContainedPath(
   if (!lexicallyContained) {
     throw new Error(`${label} escapes its allowed directory: "${candidate}"`);
   }
-  if (!fs.realpathSync || !fs.existsSync(lexical)) {
+  const resolveRealPath = fs.realpathSync;
+  if (!resolveRealPath || !fs.existsSync(lexical)) {
     // Nothing on disk yet (or the fs fake cannot resolve symlinks) — a path that does not exist
     // cannot itself be a symlink escape, and lexical containment above already rejected `..`.
     return lexical;
   }
-  const real = fs.realpathSync(lexical);
+  const real = resolveRealPath(lexical);
   const reallyContained = allowedRoots.some((root) => {
     if (!fs.existsSync(root)) return false;
-    const realRoot = fs.realpathSync(root);
+    const realRoot = resolveRealPath(root);
     return real === realRoot || real.startsWith(realRoot + sep);
   });
   if (!reallyContained) {

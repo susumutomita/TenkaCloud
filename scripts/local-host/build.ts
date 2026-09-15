@@ -14,16 +14,22 @@ export async function buildHosting(repositoryRoot: string): Promise<void> {
           "vite",
           "build",
           "--config",
-          "vite.host.config.ts"
+          "vite.host.config.ts",
         ],
         {
-          cwd: repositoryRoot, stdio: "inherit",
-        }
+          cwd: repositoryRoot,
+          stdio: "inherit",
+        },
       );
       child.once("error", reject);
-      child.once(
-        "close",
-        code => code === 0 ? accept() : reject(new Error(`Local-host ${app} build failed with exit ${String(code)}. Run bun install first.`))
+      child.once("close", (code) =>
+        code === 0
+          ? accept()
+          : reject(
+              new Error(
+                `Local-host ${app} build failed with exit ${String(code)}. Run bun install first.`,
+              ),
+            ),
       );
     });
   }

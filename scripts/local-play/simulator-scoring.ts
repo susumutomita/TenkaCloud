@@ -117,7 +117,8 @@ export function simulatorOutput(
   if (keys.length > 1) {
     throw new Error(`Simulator output ${outputKey} is ambiguous across targets`);
   }
-  return keys.length === 1 ? outputs[keys[0]] : undefined;
+  const key = keys[0];
+  return key === undefined ? undefined : outputs[key];
 }
 
 /** Reserve every namespaced Simulator* segment for runtime control material. */
@@ -155,9 +156,6 @@ export function participantSimulatorOutputs(
   const { scoring } = simulatorScoringContract(problem);
   const hidden = new Set<string>();
   if (scoring.kind === "flag") hidden.add(scoring.flagOutputKey);
-  if (scoring.kind === "multi-flag") {
-    for (const flag of scoring.flags) hidden.add(flag.flagOutputKey);
-  }
   return Object.fromEntries(
     Object.entries(outputs).filter(
       ([key, value]) =>
@@ -356,7 +354,10 @@ export async function runSimulatorScoreCycle(input: SimulatorScoreCycleInput): P
     // managed provider tier. Use the production hostname verifier unchanged.
     return runPhasedPollingKind({ ...genericInput, scoring: contract.scoring });
   }
-  return runAttackDetectionKind({ ...genericInput, scoring: contract.scoring });
+  if (contract.scoring.kind === "attack-detection") {
+    return runAttackDetectionKind({ ...genericInput, scoring: contract.scoring });
+  }
+  throw new Error("Unsupported simulator scoring kind");
 }
 
 export interface SimulatorDisruptionCommand {

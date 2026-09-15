@@ -6,20 +6,26 @@ import { AuthProvider } from "../auth/AuthProvider";
 import type { AppConfig } from "../config";
 import { I18nProvider } from "../i18n";
 import { HostApp } from "./HostApp";
+
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing root element.");
 
 async function boot(root: HTMLElement): Promise<void> {
   const response = await fetch("/runtime-config.json", { cache: "no-store" });
   if (!response.ok) throw new Error("Host configuration is unavailable.");
-  const runtime = await response.json() as {
+  const runtime = (await response.json()) as {
     mode?: string;
     role?: string;
     apiBaseUrl?: string;
-    participantPortalUrl?: string
+    participantPortalUrl?: string;
   };
   const origin = window.location.origin;
-  if (runtime.mode !== "local-host" || runtime.role !== "admin" || runtime.apiBaseUrl !== `${origin}/api`) throw new Error("Invalid local-host configuration. No demo fallback is permitted.");
+  if (
+    runtime.mode !== "local-host" ||
+    runtime.role !== "admin" ||
+    runtime.apiBaseUrl !== `${origin}/api`
+  )
+    throw new Error("Invalid local-host configuration. No demo fallback is permitted.");
   const config: AppConfig = {
     apiBaseUrl: runtime.apiBaseUrl,
     tenantId: "local-host",
@@ -33,6 +39,16 @@ async function boot(root: HTMLElement): Promise<void> {
     scope: "",
     participantPortalUrl: runtime.participantPortalUrl,
   };
-  createRoot(root).render(<StrictMode><I18nProvider><BrowserRouter><AuthProvider config={config}><HostApp config={config} /></AuthProvider></BrowserRouter></I18nProvider></StrictMode>);
+  createRoot(root).render(
+    <StrictMode>
+      <I18nProvider>
+        <BrowserRouter>
+          <AuthProvider config={config}>
+            <HostApp config={config} />
+          </AuthProvider>
+        </BrowserRouter>
+      </I18nProvider>
+    </StrictMode>,
+  );
 }
-void boot(root).catch(error => renderBootError(root, error));
+void boot(root).catch((error) => renderBootError(root, error));

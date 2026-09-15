@@ -309,7 +309,7 @@ async function fetchDataPlaneResponse(
     headers,
     redirect: "manual",
     signal: closeSignal ? AbortSignal.any([timeoutSignal, closeSignal]) : timeoutSignal,
-    ...(body ? { body } : {}),
+    ...(body ? { body: new Uint8Array(body) } : {}),
   });
   return [upstream, await responseBody(upstream)];
 }

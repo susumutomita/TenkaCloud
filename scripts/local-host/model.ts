@@ -1,8 +1,11 @@
 /** Local hosting's durable records. Private runtime descriptors never enter browser responses. */
+type SqlBinding = string | number | null;
+
 export interface SqlStatement {
-  get(...values: (string | number | null)[]): unknown;
-  all(...values: (string | number | null)[]): unknown[];
-  run(...values: (string | number | null)[]): unknown;
+  finalize?(): void;
+  get(...values: SqlBinding[]): unknown;
+  all(...values: SqlBinding[]): unknown[];
+  run(...values: SqlBinding[]): unknown;
 }
 
 export interface SqlDatabase {
@@ -94,7 +97,11 @@ export interface RuntimeEngine {
 }
 
 export class HostError extends Error {
-  constructor(readonly status: number, message: string, readonly kind = "request_failed") {
+  constructor(
+    readonly status: number,
+    message: string,
+    readonly kind = "request_failed",
+  ) {
     super(message);
     this.name = "HostError";
   }
@@ -108,7 +115,12 @@ export function object(value: unknown): Record<string, unknown> {
 }
 
 export function text(value: unknown, label: string, max = 120): string {
-  if (typeof value !== "string" || !value.trim() || value.length > max || /[\u0000-\u001f]/u.test(value)) {
+  if (
+    typeof value !== "string" ||
+    !value.trim() ||
+    value.length > max ||
+    [...value].some((character) => character < " ")
+  ) {
     throw new HostError(400, `${label} must be a nonempty string of at most ${max} characters.`);
   }
   return value.trim();
@@ -117,17 +129,20 @@ export function text(value: unknown, label: string, max = 120): string {
 export type Gate =
   | { kind: "ok" }
   | {
-    kind: "scoring_not_started";
-    startsAt?: string
-  }
+      kind: "scoring_not_started";
+      startsAt?: string;
+    }
   | {
-    kind: "scoring_ended";
-    endsAt?: string
-  }
+      kind: "scoring_ended";
+      endsAt?: string;
+    }
   | { kind: "scoring_locked" };
 
 export function gate(event: HostedEvent, now: number): Gate {
-  if (["ENDED", "TEARDOWN", "ARCHIVED"].includes(event.status) || (event.endsAt && Date.parse(event.endsAt) <= now)) {
+  if (
+    ["ENDED", "TEARDOWN", "ARCHIVED"].includes(event.status) ||
+    (event.endsAt && Date.parse(event.endsAt) <= now)
+  ) {
     return { kind: "scoring_ended", endsAt: event.endsAt };
   }
   if (event.status !== "READY" || !event.startsAt || Date.parse(event.startsAt) > now) {
