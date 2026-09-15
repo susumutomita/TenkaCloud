@@ -252,9 +252,13 @@ make deploy
 <p>The command prints the Admin Console and Participant Portal URLs when it
 finishes. Switch environments with <code>make deploy ENV=production</code> (each
 environment has its own <code>infrastructure/environments/&lt;env&gt;/.env</code>). Use
-<code>make destroy-all</code> for complete removal. Under the default policy, both
+<code>make destroy-all</code> to remove the Lite stacks and their retained control data. Under the default policy, both
 <code>make destroy</code> and <code>make destroy-all</code> delete DynamoDB data. Tables survive only
 if the deployment previously set <code>CDK_PARAM_RETAIN_DATA_TABLES=true</code>.</p>
+<p>Neither command deletes the source-bundle S3 bucket. The current bundle and
+retained versions remain billable. Check the exact bucket and its other users
+before deleting all versions and the bucket; see the
+<a href="https://github.com/susumutomita/TenkaCloud/blob/main/DEPLOYMENT_GUIDE.md#source-storage-after-teardown">source storage cleanup steps</a>.</p>
 <h3>Choosing the control-data backend: DynamoDB or Turso</h3>
 <p>Lite mode stores control data (events, teams, deployments, scores) in one of
 two backends, selected by <code>CDK_PARAM_CONTROL_DATA_BACKEND</code> in your <code>.env</code>:</p>

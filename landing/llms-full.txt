@@ -90,6 +90,11 @@ for team preparation and timing, and the
 [launcher guide](https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/README.md)
 for settings and teardown. Console cleanup uses `ACTION=destroy-all`; follow the guide's data-retention instructions.
 Deleting only the launcher leaves event resources running.
+Local `make destroy` and `make destroy-all` also retain the source-bundle S3
+bucket: its current bundle and retained versions keep incurring storage charges.
+Identify the exact bucket from the deploy log, check that no other environment
+uses it, and follow the deployment guide to empty all versions and delete markers
+before removing an unused bucket. Shared CDK bootstrap resources are separate.
 Do not promise zero cost or use teardown as a generic response to a deploy failure.
 
 SaaS has a separate multi-tenant implementation. It is not the current first-event

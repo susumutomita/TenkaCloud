@@ -160,6 +160,8 @@ make deploy
 - **DynamoDB:** テーブルはデフォルトで削除される。保持する場合はデプロイ時に `CDK_PARAM_RETAIN_DATA_TABLES=true`(パイプラインは `RetainDataTables=true`)を設定する。
 - **Turso:** `make destroy` ではデータの行が残る。管理データも消すなら、代わりに `make destroy-all` を使うか、SSM のトークンが使える撤去前に `make turso-reset` を実行する。どちらも DB 本体とスキーマは残るため、不要なら外部 DB も別途削除する。
 
+**ソース用S3バケットは残ります。** どちらのコマンドも削除しないため、現在のファイルと保持された旧バージョンの保管料が続きます。[不要なソースを確認して削除する手順](./DEPLOYMENT_GUIDE.md#source-storage-after-teardown)。
+
 ## 運用コスト
 
 | データベース | 選ぶ場面 | 費用への影響 |

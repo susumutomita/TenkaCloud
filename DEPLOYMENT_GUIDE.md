@@ -87,7 +87,7 @@ runs `cdk bootstrap`, deploys the two Lite stacks, and creates the initial Cogni
 administrator. The command prints the portal URLs. Sign in, create a test event/team,
 and check that a problem submission is reflected in the score before inviting users.
 
-Use `make destroy` to tear down the AWS deployment. Cleanup depends on the backend:
+Use `make destroy` to remove the two Lite stacks. Cleanup depends on the backend:
 
 - **DynamoDB:** tables are deleted by default. Retention must have been selected
   during deployment with `CDK_PARAM_RETAIN_DATA_TABLES=true`.
@@ -96,7 +96,24 @@ Use `make destroy` to tear down the AWS deployment. Cleanup depends on the backe
   the SSM token is still available. Both keep the database and schema; delete the
   external database separately if it is no longer needed.
 
-See the [cleanup guide](./infrastructure/templates/README.md#撤去-teardown).
+### Source storage after teardown
+
+The source bucket remains after both `make destroy` and `make destroy-all`.
+Source preparation creates a versioned `tenkacloud-source-*` bucket outside CDK
+(or uses your explicit `CDK_PARAM_S3_BUCKET_NAME`). Its lifecycle rule expires
+older noncurrent versions, but keeps the current bundle and recent versions;
+their S3 storage charges continue after the Lite stacks are gone.
+
+To remove this storage, identify the exact bucket from the deployment log's
+`source bucket = ...` line. Check the account, region, and whether another
+environment still uses it. If it is no longer needed, empty **all object versions
+and delete markers** in the S3 console, then delete the bucket. Removing only the
+current objects does not empty a versioned bucket. Do not run the SaaS cleanup
+script for a Lite deployment. Shared CDK bootstrap resources are separate too;
+retain them while other CDK applications use them.
+
+See the [cleanup guide](./infrastructure/templates/README.md#撤去-teardown) for the
+stack and backend steps.
 
 ## Deploy your own problem catalog
 

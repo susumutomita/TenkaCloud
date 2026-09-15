@@ -158,6 +158,8 @@ Only trusted deployment administrators should have this launcher's **Start build
 - **DynamoDB:** tables are deleted by default. To retain them, deploy with `CDK_PARAM_RETAIN_DATA_TABLES=true` (pipeline: `RetainDataTables=true`).
 - **Turso:** rows remain after `make destroy`. To erase control data too, use `make destroy-all` instead, or run `make turso-reset` before teardown while the SSM token is available. These commands keep the database and schema; delete the external database separately if no longer needed.
 
+**Source storage remains:** neither command deletes the source-bundle S3 bucket. Its current bundle and retained versions continue to incur storage charges. [Check and remove unused source storage](./DEPLOYMENT_GUIDE.md#source-storage-after-teardown).
+
 ## Running costs
 
 | Database | Choose it when | Effect |
