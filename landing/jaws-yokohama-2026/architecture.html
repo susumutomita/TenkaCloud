@@ -26,7 +26,7 @@
 <div class="diagram-caption" data-caption="aws">
 <h2>AWS上のLite構成</h2>
 <p>左が運営基盤、右がチーム別の演習環境です。管理者はCognitoで認証し、API Gateway経由でイベントを操作します。問題の配置・削除はEventBridge → Step Functions → Lambda → AssumeRole → CloudFormationで進めます。</p>
-<p>参加者APIとCoordination Dispatcherは別々のLambda Function URLです。参加者画面はそれぞれを呼び分け、管理者向けの認証とは別にチームキーを使います。下段のDynamoDBは上段の同じデータストアを再掲したもので、レプリケーションではありません。</p>
+<p>参加者APIとCoordination Dispatcherは別々のLambda Function URLです。参加者画面はそれぞれを呼び分け、管理者向けの認証とは別にチームキーを使います。競技状態も「認証 / データ / 監視」内のDynamoDBに保存します。下段にはDynamoDBを再掲せず、読み書きの詳細配線は省略しています。</p>
 <p>主要経路をまとめた論理構成です。すべてのLambda・API・スタックを列挙した配線台帳や、実AWS環境の稼働証跡ではありません。権限設計・チーム分離・採点・削除完了の確認は基盤側に残ります。</p>
 </div>
 <div class="diagram-caption" data-caption="evolution" hidden><h2>共通化する境界を変えた</h2><p>初期側は当時の方針を示す概念図で、全クラウドで稼働していたという意味ではありません。AWS-native側ではサービスの実行や保存をAWSへ委ね、問題を追加する契約と競技体験に集中します。</p></div>
