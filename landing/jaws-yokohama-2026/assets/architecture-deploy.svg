@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="470" viewBox="0 0 1280 470" role="img" aria-labelledby="title desc"><title id="title">04 問題を配置して遊ぶまで</title><desc id="desc">開催者の配置操作から管理API、EventBridge、Step FunctionsとLambda、AssumeRoleとExternalId、チーム別AWSのCloudFormationへ進む。参加者は競技者コンソールから問題を開く。</desc><metadata>Source: architecture.drawio / problem-deploy-flow. Geometry and labels match the editable source.</metadata><defs><marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0 L12 6 L0 12 Z" fill="#34475a"/></marker></defs><rect width="1280" height="470" fill="white"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="470" viewBox="0 0 1280 470" role="img" aria-labelledby="title desc"><title id="title">04 問題をデプロイして遊ぶまで</title><desc id="desc">開催者のデプロイ操作から管理API、EventBridge、Step FunctionsとLambda、AssumeRoleとExternalId、チーム別AWSのCloudFormationへ進む。参加者は競技者コンソールから問題を開く。</desc><metadata>Source: architecture.drawio / problem-deploy-flow. Geometry and labels match the editable source.</metadata><defs><marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0 L12 6 L0 12 Z" fill="#34475a"/></marker></defs><rect width="1280" height="470" fill="white"/>
 <text x="20" y="31" fill="#202a35" font-size="22" font-weight="700" font-family="system-ui,Hiragino Sans,sans-serif">1</text>
 <text x="300" y="31" fill="#202a35" font-size="22" font-weight="700" font-family="system-ui,Hiragino Sans,sans-serif">2</text>
 <text x="580" y="31" fill="#202a35" font-size="22" font-weight="700" font-family="system-ui,Hiragino Sans,sans-serif">3</text>
@@ -6,10 +6,10 @@
 <rect x="20" y="50" width="220" height="150" fill="#f7fafc" stroke="#3f719c" stroke-width="3"/>
 <text x="40" y="92" fill="#202a35" font-size="28" font-weight="700" font-family="system-ui,Hiragino Sans,sans-serif">開催者</text>
 <text x="40" y="135" fill="#202a35" font-size="20" font-weight="400" font-family="system-ui,Hiragino Sans,sans-serif">問題・チームを選ぶ</text>
-<text x="40" y="174" fill="#202a35" font-size="22" font-weight="400" font-family="system-ui,Hiragino Sans,sans-serif">「配置」を押す</text>
+<text x="40" y="174" fill="#202a35" font-size="20" font-weight="400" font-family="system-ui,Hiragino Sans,sans-serif">「デプロイ」を押す</text>
 <rect x="300" y="50" width="220" height="150" fill="#f7fafc" stroke="#3f719c" stroke-width="3"/>
 <text x="320" y="92" fill="#202a35" font-size="28" font-weight="700" font-family="system-ui,Hiragino Sans,sans-serif">管理API</text>
-<text x="320" y="135" fill="#202a35" font-size="22" font-weight="400" font-family="system-ui,Hiragino Sans,sans-serif">配置要求を記録</text>
+<text x="320" y="135" fill="#202a35" font-size="20" font-weight="400" font-family="system-ui,Hiragino Sans,sans-serif">デプロイ要求を記録</text>
 <text x="320" y="174" fill="#202a35" font-size="22" font-weight="400" font-family="system-ui,Hiragino Sans,sans-serif">イベントを送信</text>
 <rect x="580" y="50" width="350" height="150" fill="#fffcf5" stroke="#b57a20" stroke-width="3"/>
 <text x="600" y="92" fill="#202a35" font-size="28" font-weight="700" font-family="system-ui,Hiragino Sans,sans-serif">デプロイエンジン</text>

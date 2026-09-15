@@ -48,9 +48,6 @@ button:disabled {
   font-variant-numeric:tabular-nums;
   text-align:center
 }
-.controls #timer.over {
-  color:#ad3c18
-}
 
 .slide {
   display:flex;
@@ -107,20 +104,6 @@ button:disabled {
   align-items:center;
   flex-wrap:wrap
 }
-.speaker-notes {
-  display:none
-}
-.speaker-notes-panel {
-  max-width:1440px;
-  padding:24px 40px;
-  color:var(--ink);
-  line-height:1.8;
-  white-space:pre-wrap;
-  overflow-wrap:anywhere
-}
-.speaker-notes-panel[hidden] {
-  display:none
-}
 .demo-video {
   margin:0
 }
@@ -129,10 +112,6 @@ button:disabled {
 }
 .demo-print,.demo-print-summary {
   display:none
-}
-.reading .slide {
-  display:flex!important;
-  margin-bottom:24px
 }
 .sources {
   overflow-wrap:anywhere
@@ -186,12 +165,12 @@ button:disabled {
 }
 
 @media screen and (min-width:901px) {
-  .js body:not(.reading) #deck {
+  .js body #deck {
   position:relative;
   min-height:0;
   overflow:hidden
 }
-.js body:not(.reading) #deck .slide {
+.js body #deck .slide {
   position:absolute;
   left:50%;
   top:0;
@@ -215,9 +194,6 @@ button:disabled {
 .diagram-page h1 {
   font-size:24px
 }
-.speaker-notes-panel {
-  padding:20px
-}
 
 }
 
@@ -229,7 +205,7 @@ button:disabled {
 body {
   background:white
 }
-.topbar,.controls,.speaker-notes-panel,.actions,.diagram-toolbar,noscript {
+.topbar,.controls,.actions,.diagram-toolbar,noscript {
   display:none!important
 }
 #deck {
@@ -332,31 +308,7 @@ body>footer.topbar {
   font-size:13px
 }
 
-.presenter-tools {
-  position:relative
-}
-.presenter-tools summary {
-  cursor:pointer;
-  padding:12px;
-  font-size:13px;
-  min-height:44px
-}
 
-.presenter-menu {
-  position:absolute;
-  right:0;
-  top:100%;
-  z-index:5;
-  width:420px;
-  display:flex;
-  align-items:center;
-  gap:8px;
-  flex-wrap:wrap;
-  background:white;
-  padding:16px;
-  border:1px solid var(--line);
-  box-shadow:0 4px 12px #0002
-}
 
 .slide {
   padding:46px 64px;
@@ -649,10 +601,6 @@ body>footer.topbar {
   margin:18px 0
 }
 
-.speaker-notes-panel {
-  background:#fff6db;
-  margin:0 auto 24px
-}
 .diagram-page {
   background:white;
   min-height:calc(100dvh - 36px)
@@ -674,19 +622,14 @@ body>footer.topbar {
 }
 
 @media screen and (min-width:901px) {
-  .js body:not(.reading) #deck .slide h2 {
+  .js body #deck .slide h2 {
   font-size:50px
 }
-.js body:not(.reading) #deck .statement h2 {
+.js body #deck .statement h2 {
   font-size:62px
 }
-.js body:not(.reading) #deck .diagram-slide h2,.js body:not(.reading) #deck .video-slide h2 {
+.js body #deck .diagram-slide h2,.js body #deck .video-slide h2 {
   font-size:44px
-}
-.reading .slide {
-  height:auto;
-  min-height:810px;
-  max-width:1440px
 }
 
 }
@@ -706,16 +649,6 @@ body>.topbar>span {
 }
 .controls button {
   padding:6px 8px
-}
-.controls #timer {
-  display:none
-}
-.presenter-menu {
-  position:fixed;
-  width:auto;
-  left:12px;
-  right:12px;
-  top:90px
 }
 .slide,.js .slide {
   padding:28px 24px;
@@ -849,7 +782,7 @@ body>.topbar>span {
 }
 
 @media print {
-  .presenter-tools,.diagram-focus {
+  .diagram-focus {
   display:none!important
 }
 .slide,.js .slide,.slide[hidden] {
