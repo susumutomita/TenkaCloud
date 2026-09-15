@@ -75,8 +75,8 @@ https://github.com/susumutomita/TenkaCloud/pull/378</div>
 </section>
 <section class="slide diagram-slide" id="slide-6" aria-labelledby="title-6" data-seconds="55">
 <p class="kicker">作り直した構成</p><h2 id="title-6">SBTを土台に、AWSのサービスで組み直した。</h2>
-<div class="diagram-focus" role="group" aria-label="物理構成図の表示範囲"><button type="button" data-view-box="0 0 6000 3300" data-summary="SBTの2層に、問題デプロイエンジン・競技者コンソールを追加。" aria-pressed="true">全体</button><button type="button" data-view-box="90 450 1800 430" data-summary="① Control Plane：利用する組織を登録・管理する。" aria-pressed="false">① SBT / 組織管理</button><button type="button" data-view-box="90 1620 1800 640" data-summary="② Application Plane：開催者がイベントを準備する。" aria-pressed="false">② 開催者のアプリ</button><button type="button" data-view-box="2370 460 2590 1190" data-summary="③ 追加した部分：問題環境を作り、参加者が競技する。" aria-pressed="false">③ 問題配置・競技者</button></div>
-<a class="figure-link" href="./architecture.html?view=saas" target="_blank" rel="noopener noreferrer"><svg id="slide-architecture-svg" viewBox="0 0 6000 3300" data-full-view-box="0 0 6000 3300" role="img" aria-label="既存Draw.ioのSaaS物理構成図。全体からSBT、開催者アプリ、問題配置・競技者の範囲へ切り替えられます"><defs><clipPath id="slide-architecture-clip"><rect id="slide-architecture-clip-rect" x="0" y="0" width="6000" height="3300" /></clipPath></defs><g clip-path="url(#slide-architecture-clip)"><image href="./assets/architecture-saas.svg" width="6000" height="3300" /></g></svg><span class="caption">物理構成図を大きく開く ↗</span></a><p id="diagram-summary" class="diagram-summary" aria-live="polite">SBTの2層に、問題デプロイエンジン・競技者コンソールを追加。</p>
+<div class="diagram-focus" role="group" aria-label="物理構成図の表示範囲"><button type="button" data-view-box="0 0 6000 3300" data-summary="SBTの2層に、問題デプロイエンジン・競技者コンソールを追加。" aria-pressed="true">全体</button><button type="button" data-view-box="90 450 1800 430" data-diagram-src="./assets/architecture-control-plane.svg" data-summary="① Control Plane：利用する組織を登録・管理する。" aria-pressed="false">① SBT / 組織管理</button><button type="button" data-view-box="90 1600 1800 760" data-diagram-src="./assets/architecture-application.svg" data-summary="② Application Plane：開催者がイベントを準備する。" aria-pressed="false">② 開催者のアプリ</button><button type="button" data-view-box="2460 450 2500 1370" data-diagram-src="./assets/architecture-problem-runtime.svg" data-summary="③ 追加した部分：問題環境を作り、参加者が競技する。" aria-pressed="false">③ 問題配置・競技者</button></div>
+<a class="figure-link" href="./architecture.html?view=saas" target="_blank" rel="noopener noreferrer"><svg id="slide-architecture-svg" viewBox="0 0 6000 3300" data-full-view-box="0 0 6000 3300" role="img" aria-label="既存Draw.ioのSaaS物理構成図。全体からSBT、開催者アプリ、問題配置・競技者の範囲へ切り替えられます"><defs><clipPath id="slide-architecture-clip"><rect id="slide-architecture-clip-rect" x="0" y="0" width="6000" height="3300" /></clipPath></defs><g clip-path="url(#slide-architecture-clip)"><image href="./assets/architecture-saas.svg" width="6000" height="3300" /></g></svg><span class="caption">部分表示は範囲内の接続のみ · 全体図を大きく開く ↗</span></a><p id="diagram-summary" class="diagram-summary" aria-live="polite">SBTの2層に、問題デプロイエンジン・競技者コンソールを追加。</p>
 <div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>6 / 13</span></div>
 <div class="speaker-notes">6/13 · 目安 55秒
 
@@ -147,13 +147,12 @@ https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/lib/problem-
 <section class="slide video-slide" id="slide-11" aria-labelledby="title-11" data-seconds="35">
 <p class="kicker">使ってみる · 開催者</p><h2 id="title-11">準備ができたら、イベントを始める。</h2>
 <div class="video-layout"><figure class="demo-video">
-<video id="host-demo" controls playsinline preload="metadata" poster="./assets/event-host-demo.png" aria-label="AWS上の実操作。開催時刻の設定、参加者への案内、問題を開くまで" aria-describedby="host-caption">
-<source src="./assets/event-host-demo.mp4" type="video/mp4" />
-<track kind="captions" src="./assets/event-host-demo.ja.vtt" srclang="ja" label="日本語" default />
-<a href="./assets/event-host-demo.mp4">開催動画をMP4で開く</a></video>
+<div class="demo-player" id="host-demo" data-youtube-start="0" data-youtube-end="20">
+<button class="demo-play" type="button" aria-label="AWS上の開催操作：時刻設定・参加者への案内・問題を開くをYouTubeで再生"><img src="./assets/event-host-demo.png" width="1440" height="900" alt="" /><span>▶ 開催の流れを見る（20秒）</span></button>
+</div>
 <img class="demo-print" src="./assets/event-host-demo.png" width="1440" height="900" alt="開催時刻を設定する管理画面" />
 <figcaption id="host-caption">AWS上の実操作 · 20秒 · 音声：VOICEVOX:ずんだもん</figcaption>
-</figure><div class="video-story"><p><strong>開催時刻を決める</strong>開始と終了を設定。</p><p><strong>参加者へ案内する</strong>お知らせをまとめて送信。</p><p><strong>問題を開く</strong>参加者の画面で<br>競技を始める。</p><div class="actions"><a href="./assets/event-host-demo.mp4" target="_blank" rel="noopener noreferrer">動画を大きく開く ↗</a></div><p class="fine">問題とチームを登録した後の操作です。キー配布と待ち時間を省略。時刻の入力は2倍速です。</p></div></div>
+</figure><div class="video-story"><p><strong>開催時刻を決める</strong>開始と終了を設定。</p><p><strong>参加者へ案内する</strong>お知らせをまとめて送信。</p><p><strong>問題を開く</strong>参加者の画面で<br>競技を始める。</p><div class="actions"><a href="https://www.youtube.com/watch?v=o39ZWxEbrzA&amp;t=0s" target="_blank" rel="noopener noreferrer">YouTubeで見る ↗</a></div><p class="fine">問題とチームを登録した後の操作です。キー配布と待ち時間を省略。時刻の入力は2倍速です。</p></div></div>
 <div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>11 / 13</span></div>
 <div class="speaker-notes">11/13 · 目安 35秒（動画20秒）
 
@@ -164,22 +163,19 @@ https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/lib/problem-
 編集範囲・字幕・音声の出典：./assets/recorded-demo.md
 </div></section>
 <section class="slide video-slide" id="slide-12" aria-labelledby="title-12" data-seconds="60">
-<p class="kicker">使ってみる · オリジナル問題の例</p><h2 id="title-12">暗号バトル：相手にヒントを渡して、点を取る？</h2>
+<p class="kicker">作った問題 · 暗号バトル</p><h2 id="title-12">中学生の知識から、暗号の仕組みを遊んで学ぶ。</h2>
 <div class="video-layout"><figure class="demo-video">
-<video id="crypto-demo" controls playsinline preload="metadata" poster="./assets/crypto-battle-live-demo.png" aria-label="AWS上の暗号バトル。暗号の回答、正解の加点、時間切れの減点、順位への反映" aria-describedby="demo-caption">
-<source src="./assets/crypto-battle-live-demo.mp4" type="video/mp4" />
-<track kind="captions" src="./assets/crypto-battle-live-demo.ja.vtt" srclang="ja" label="日本語" default />
-<a href="./assets/crypto-battle-live-demo.mp4">実演動画をMP4で開く</a>
-</video>
+<div class="demo-player" id="crypto-demo" data-youtube-start="20" data-youtube-end="60">
+<button class="demo-play" type="button" aria-label="AWS上の暗号バトル：回答・加点・減点・順位への反映をYouTubeで再生"><img src="./assets/crypto-battle-live-demo.png" width="1440" height="900" alt="" /><span>▶ 暗号バトルを見る（40秒）</span></button>
+</div>
 <img class="demo-print" src="./assets/crypto-battle-live-demo.png" width="1440" height="900" alt="ずらし暗号に正解し、30点を獲得した参加者の画面" />
 <figcaption id="demo-caption">AWS上の実操作 · 40秒 · 音声：VOICEVOX:ずんだもん</figcaption>
-</figure><div class="video-story"><p><strong>まず、自分で解く</strong>正解で30点。<br>時間切れには減点も。</p><p><strong>公開して、点を取る</strong>計算を省けるけれど、<br>相手にも材料が見える。</p><p><strong>相手の秘密を探す</strong>公開情報を読んで<br>HUNTする。</p><div class="actions"><a href="./assets/crypto-battle-live-demo.mp4" target="_blank" rel="noopener noreferrer">動画を大きく開く ↗</a><a href="../acp2026/">暗号バトルの解説</a><a href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer">TenkaCloudのコード ↗</a></div><p class="fine">録画では回答と得点反映を実演。公開・HUNTはルールの紹介です。</p></div></div><div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>12 / 13</span></div>
+</figure><div class="video-story"><p><strong>小さな数で計算</strong>暗号化・復号・証明を解き、<br>仕組みをつかむ。</p><p><strong>シーザー暗号から先端まで</strong><span class="crypto-topics">完全準同型暗号・ゼロ知識証明<br>iO・アナモルフィック暗号</span></p><p><strong>対戦しながら理解する</strong>正解で得点。<br>公開情報から相手の秘密を探す。</p><div class="actions"><a href="https://www.youtube.com/watch?v=o39ZWxEbrzA&amp;t=20s" target="_blank" rel="noopener noreferrer">YouTubeで見る ↗</a><a href="../acp2026/">暗号バトルの解説</a></div><p class="fine">小さな数の学習モデルで体験します。録画は回答と得点反映の例。公開・HUNTはルール紹介です。</p></div></div><div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>12 / 13</span></div>
 <div class="speaker-notes">12/13 · 目安 60秒（動画40秒）
 
-自分で作った問題の一つが、暗号バトルです。自分で計算して答えるか、情報を公開して点を取るかを選びます。
-動画ではずらし暗号に答えて30点。別のお題は時間切れになり、15点減っています。公開された情報から相手の秘密を当てるHUNTもあります。得点の増減は、主催者のグラフと参加者の順位にも反映されます。
-こんなふうに、自分で考えた問題を載せて遊べるようにしました。
+暗号バトルは、中学生程度の知識から遊べるように作りました。小さな数で暗号化や復号、証明を計算し、対戦しながら仕組みを学びます。シーザー暗号から完全準同型暗号、ゼロ知識証明、iO、アナモルフィック暗号まで扱います。それでは、回答と得点反映を見てください。
 【補足・読み上げない】
+iOは識別不可能性難読化。実用暗号の安全性を小さい数で再現するのではなく、仕組みを手計算できる学習モデルです。FHEでは暗号文の加算を体験します。
 2026年9月15日に提供されたAWS上の実操作録画。同じ録画の回答・得点表示・管理画面・参加者画面を抜粋しています。公開操作やHUNTの成功を実演した映像ではありません。音声はVOICEVOX:ずんだもん。
 【出典】
 https://github.com/susumutomita/TenkaCloudChallenge/tree/main/battles/ac26-crypto-battle
@@ -187,15 +183,15 @@ https://tenkacloud.com/acp2026/</div>
 </section>
 <section class="slide closing-slide" id="slide-13" aria-labelledby="title-13" data-seconds="15">
 <p class="kicker">作っているメンバー</p><h2 id="title-13">GameDayが好きなメンバーで、作っています。</h2>
-<div class="closing-layout"><div class="members"><p><strong>amedama</strong><span>冨田 進 / Susumu Tomita</span></p><p><strong>チャーリー</strong><span>JAWS-UG 名古屋</span></p><p><strong>きせのん</strong></p><p class="closing-invite">問題も、コードもOSSです。<br>一緒に作って、遊びましょう。</p></div><figure class="repository-link"><a href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer"><img src="./assets/repository-qr.png" width="300" height="300" alt="TenkaCloudのGitHubリポジトリへ移動するQRコード" /><figcaption>github.com/susumutomita/TenkaCloud</figcaption></a></figure></div><div class="actions"><a href="https://github.com/susumutomita/TenkaCloudChallenge" target="_blank" rel="noopener noreferrer">問題集</a><a href="./architecture.html">構成図</a><a href="../presentations/">過去の発表</a></div>
+<div class="closing-layout"><div class="members"><p><strong>amedama <small>冨田 進</small></strong><span>JAWS DAYS 2024 AWS GameDay 優勝<br>2026 準優勝</span></p><p><strong>チャーリー</strong><span>JAWS 名古屋運営メンバー<br>GameDayの熱量を広げたい人</span></p><p><strong>きせのん</strong><span>JAWS DAYS 2024 GameDay 優勝<br>AWS 認定全冠 · CCoE はじめました</span></p><p class="closing-invite">一緒に作って、遊びましょう。</p></div><figure class="repository-link"><a href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer"><img src="./assets/repository-qr.png" width="300" height="300" alt="TenkaCloudのGitHubリポジトリへ移動するQRコード" /><figcaption>github.com/susumutomita/TenkaCloud</figcaption></a></figure></div><div class="actions"><a href="https://github.com/susumutomita/TenkaCloudChallenge" target="_blank" rel="noopener noreferrer">問題集</a><a href="./architecture.html">構成図</a><a href="../presentations/">過去の発表</a></div>
 <div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>13 / 13</span></div>
 <div class="speaker-notes">13/13 · 目安 15秒
 
 TenkaCloudは、amedamaこと冨田、チャーリー、きせのんのメンバーで作っています。コードも問題もOSSです。QRコードからリポジトリを見てみてください。ありがとうございました。
 【補足・読み上げない】
-メンバー表記とQRコードは既存のCCoE発表資料に基づきます。
+メンバー紹介はシンギュラリティ・ソサエティの発表資料に基づきます。紹介文は発表時点の記載です。QRコードはTenkaCloudのOSSリポジトリへ移動します。
 【参考】
-https://tenkacloud.com/ccoe-lt/
+https://tenkacloud.com/pitch/
 https://github.com/susumutomita/TenkaCloud
 https://github.com/susumutomita/TenkaCloudChallenge</div>
 </section>

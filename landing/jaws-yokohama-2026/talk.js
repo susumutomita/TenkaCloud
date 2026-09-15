@@ -36,10 +36,31 @@
   for (const image of document.querySelectorAll("img")) {
     image.addEventListener("load", fitSlide);
   }
-  for (const video of document.querySelectorAll("video")) {
-    video.addEventListener("loadedmetadata", fitSlide);
-  }
   document.fonts?.ready.then(fitSlide);
+
+  for (const player of document.querySelectorAll(".demo-player")) {
+    const button = player.querySelector(".demo-play");
+    button.addEventListener("click", () => {
+      const iframe = document.createElement("iframe");
+      const url = new URL("https://www.youtube-nocookie.com/embed/o39ZWxEbrzA");
+      url.search = new URLSearchParams({
+        start: player.dataset.youtubeStart,
+        end: player.dataset.youtubeEnd,
+        autoplay: "1",
+        rel: "0",
+        cc_lang_pref: "ja",
+        cc_load_policy: "1",
+      }).toString();
+      iframe.src = url.href;
+      iframe.title = button.getAttribute("aria-label");
+      iframe.allow = "autoplay; encrypted-media; picture-in-picture; fullscreen";
+      iframe.allowFullscreen = true;
+      iframe.referrerPolicy = "strict-origin-when-cross-origin";
+      iframe.addEventListener("load", fitSlide);
+      button.hidden = true;
+      player.append(iframe);
+    });
+  }
 
   function syncVisibility() {
     const reading = document.body.classList.contains("reading");
@@ -48,8 +69,9 @@
       slide.hidden = hidden;
       slide.setAttribute("aria-hidden", String(hidden));
       if (hidden) {
-        for (const video of slide.querySelectorAll("video")) {
-          if (!video.paused) video.pause();
+        for (const player of slide.querySelectorAll(".demo-player")) {
+          player.querySelector("iframe")?.remove();
+          player.querySelector(".demo-play").hidden = false;
         }
       }
     });
@@ -129,6 +151,9 @@
       (button) => button.dataset.viewBox === box,
     );
     document.querySelector("#diagram-summary").textContent = selected.dataset.summary;
+    diagram
+      .querySelector("image")
+      .setAttribute("href", selected.dataset.diagramSrc || "./assets/architecture-saas.svg");
     const rect = document.querySelector("#slide-architecture-clip-rect");
     const values = box.split(" ");
     ["x", "y", "width", "height"].forEach((name, valueIndex) => {
