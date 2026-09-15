@@ -1,0 +1,76 @@
+name: Local host branch diagnostics
+
+# Temporary development workflow. Remove before merging this feature.
+# Never runs against forks or writes to main; formatting is limited to this PR.
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/local-host-fixup.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostics:
+    if: >-
+      github.repository == 'susumutomita/TenkaCloud' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'codex/local-hosting-3226' &&
+      github.actor == 'susumutomita'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: write
+      packages: read
+      actions: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          submodules: true
+      - uses: ./.github/actions/bun-install
+      - name: Apply repository formatter only to hosting additions
+        run: |
+          set +e
+          bun run biome check --write scripts/local-host apps/application-admin-console/src/local-host apps/participant-portal/src/local-host apps/application-admin-console/vite.host.config.ts apps/participant-portal/vite.host.config.ts tsconfig.host.json package.json > /tmp/host-biome.txt 2>&1
+          cat /tmp/host-biome.txt
+          exit 0
+      - name: Verify boundary tests before recording formatting
+        run: bun run test:host
+      - name: Record formatting on this feature branch only
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          test "$(git ls-remote origin refs/heads/codex/local-hosting-3226 | cut -f1)" = "$EXPECTED_HEAD"
+          git add -- scripts/local-host apps/application-admin-console/src/local-host apps/participant-portal/src/local-host apps/application-admin-console/vite.host.config.ts apps/participant-portal/vite.host.config.ts tsconfig.host.json package.json
+          if ! git diff --cached --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'style(host): apply repository formatter to local hosting implementation'
+            git push origin HEAD:refs/heads/codex/local-hosting-3226
+          fi
+          echo "FORMATTED_HEAD=$(git rev-parse HEAD)"
+      - name: Independent diagnostic commands (not substitutes for required CI)
+        if: always()
+        run: |
+          set +e
+          failed=0
+          for command in \
+            'bun run typecheck:host' \
+            'bun run --filter @TenkaCloud/application-admin-console typecheck' \
+            'bun run --filter @TenkaCloud/participant-portal typecheck' \
+            'bun run build:host' \
+            'bun run test:host:docker' \
+            'bun run dead-code' \
+            'bun run textlint docs/local-hosting.md' \
+            'bun run biome check scripts/local-host apps/application-admin-console/src/local-host apps/participant-portal/src/local-host' \
+            'bun run eslint scripts/local-host apps/application-admin-console/src/local-host apps/participant-portal/src/local-host apps/application-admin-console/vite.host.config.ts apps/participant-portal/vite.host.config.ts'; do
+            echo "::group::DIAGNOSTIC $command"
+            bash -c "$command"
+            status=$?
+            echo "DIAGNOSTIC_EXIT=$status"
+            if [ "$status" -ne 0 ]; then failed=1; fi
+            echo '::endgroup::'
+          done
+          exit "$failed"
