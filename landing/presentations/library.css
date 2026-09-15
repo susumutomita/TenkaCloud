@@ -5,7 +5,7 @@
 .presentation-library .presentation-kicker{font-size:13px;letter-spacing:.14em;font-weight:700;color:#087f8c;margin:0 0 16px}
 .presentation-library h1,.presentation-library h2{font-weight:700;line-height:1.4;letter-spacing:-.03em;font-size:clamp(28px,3.5vw,44px);margin:0 0 18px}
 .presentation-library .presentation-intro{font-size:18px;max-width:760px;color:#52667b;margin:0 0 36px}
-.presentation-library .talk-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px}
+.presentation-library .talk-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}
 .presentation-library .talk-card{min-width:0;background:white;border:1px solid #d7e0e8;border-radius:16px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 8px 24px #172b4307}
 .presentation-library .talk-preview{height:174px;background:#15273e;color:#d9e6ee;padding:28px;display:flex;flex-direction:column;justify-content:center;gap:20px}
 .presentation-library .talk-preview strong{font-size:clamp(22px,2.5vw,29px);letter-spacing:.02em;color:#b6e7de}

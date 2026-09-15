@@ -1,5 +1,7 @@
 # ローカル開催の操作動画
 
+この旧動画は現在のスライドでは使用していない。MP4 は Git 管理から削除済み。現行の [YouTube 動画](https://www.youtube.com/watch?v=o39ZWxEbrzA)と編集の記録は `recorded-demo.md` を参照。
+
 - 録画日: 2026-09-15
 - 実装: [PR #3234](https://github.com/susumutomita/TenkaCloud/pull/3234)、commit `f1b2faafb136facd7e4b311b2e8f5b3748d99241`。録画時点で開発中。
 - 問題: TenkaCloudChallenge `6f8a53f850a9cd5f8c0e34e69a3b5ca311d09cf8` の `sqli-demo`。

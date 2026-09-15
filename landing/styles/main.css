@@ -53,7 +53,7 @@ body {
   font-weight: 800; font-size: 20px; letter-spacing: -0.03em;
   color: var(--ink);
 }
-.nav-links { display: flex; gap: 42px; font-size: 12px; font-weight: 700; }
+.nav-links { display: flex; gap: clamp(12px, 1.8vw, 28px); font-size: 12px; font-weight: 700; }
 .nav-links a { color: var(--ink-2); text-decoration: none; cursor: pointer; }
 .nav-links a:hover { color: var(--ink); }
 .nav-right { display: flex; align-items: center; gap: 18px; font-size: 12px; font-weight: 700; }
@@ -953,7 +953,11 @@ footer .footer-legal-links { display: inline-flex; flex-wrap: wrap; gap: 0 6px; 
 
 /* ============== RESPONSIVE ============== */
 @media (max-width: 980px) {
-  .nav-links { display: none; }
+  .nav { height: auto; }
+  .nav .wrap { flex-wrap: wrap; }
+  .nav .brand, .nav-right { min-height: 56px; }
+  .nav-links { order: 3; width: 100%; overflow-x: auto; gap: 24px; }
+  .nav-links a { display: inline-flex; align-items: center; min-height: 44px; flex-shrink: 0; }
   .hero-grid, .twoup, .onboard-layout, .trust, .stats, .pricing-grid { grid-template-columns: 1fr; }
   .hero { padding-top: 44px; }
   .hero-grid { gap: 40px; }

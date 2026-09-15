@@ -1,5 +1,7 @@
 # 暗号バトル録画の出典
 
+この旧動画は現在のスライドでは使用していない。MP4 は Git 管理から削除済み。現行の [YouTube 動画](https://www.youtube.com/watch?v=o39ZWxEbrzA)と編集の記録は `recorded-demo.md` を参照。
+
 2026-09-15 に、`problems` のコミット
 `6f8a53f850a9cd5f8c0e34e69a3b5ca311d09cf8` にある
 `battles/ac26-crypto-battle/dev` で録画しました。

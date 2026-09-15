@@ -124,7 +124,7 @@ button:disabled {
 .demo-video {
   margin:0
 }
-.demo-video video {
+.demo-player {
   display:block
 }
 .demo-print,.demo-print-summary {
@@ -253,7 +253,7 @@ body {
   color:inherit;
   text-decoration:none
 }
-.demo-video video {
+.demo-player {
   display:none
 }
 .demo-print {
@@ -603,7 +603,7 @@ body>footer.topbar {
   border-radius:0;
   background:white
 }
-.demo-video video {
+.demo-player {
   height:auto;
   width:100%;
   aspect-ratio:8/5;
@@ -941,7 +941,7 @@ body>.topbar>span {
   gap:36px;
   align-items:start
 }
-.demo-video video {
+.demo-player {
   height:480px;
   object-fit:contain
 }
@@ -977,7 +977,7 @@ body>.topbar>span {
 
 
 @media screen and (min-width:901px) {
-  .demo-video video {
+  .demo-player {
   width:auto;
   max-width:100%;
   height:480px;
@@ -991,7 +991,7 @@ body>.topbar>span {
 
 }
 @media screen and (max-width:900px) {
-  .demo-video video {
+  .demo-player {
   aspect-ratio:8/5
 }
 .video-story .actions {
@@ -1171,3 +1171,21 @@ body>.topbar>span {
 
 .diagram-summary { font-size:26px; font-weight:600; }
 @media screen and (max-width:900px) { .diagram-summary { font-size:20px; } }
+
+.demo-player { position: relative; overflow: hidden; }
+.demo-play { display: block; position: relative; width: 100%; height: 100%; padding: 0; border: 0; cursor: pointer; background: #111; color: white; }
+.demo-play[hidden] { display: none; }
+.demo-play img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.demo-play span { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: max-content; max-width: 90%; padding: 14px 20px; border-radius: 6px; background: #102a43; color: white; font: 700 18px/1.5 system-ui, sans-serif; }
+.demo-play:focus-visible { outline: 4px solid #087f8c; outline-offset: -4px; }
+.demo-player iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+
+.crypto-topics { font-size: 19px; }
+.members strong small { font-size: 20px; font-weight: 400; }
+.members span { font-size: 21px; line-height: 1.5; }
+@media screen and (max-width:900px) { .members span { font-size: 16px; } }
+
+@media screen and (min-width:901px) {
+  #slide-12 .video-story { font-size:22px; line-height:1.5; }
+  #slide-12 .video-story strong { font-size:24px; }
+}
