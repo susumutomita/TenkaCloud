@@ -237,6 +237,7 @@ TenkaCloud をエンタープライズや社内研修の用途 — ハンズオ�
 - [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md)(英語)— ローカル端末からのデプロイと SaaS mode
 - [docs/local-play.md](./docs/local-play.md)(英語)— ローカルドリルの内部実装、コンテナ問題の作り方、`/verify` の契約
 - [docs/running-costs.md](./docs/running-costs.md)(英語)— 2 つのコストプロファイル、ゼロコストへのオプトイン手順、実測コスト
+- [アーキテクチャの読み方](./docs/architecture/README.md) — 図を読む順番、クラウドと Docker の処理担当、操作別のシーケンスと実装への導線
 - [docs/architecture/diagrams/system-architecture.drawio](./docs/architecture/diagrams/system-architecture.drawio) — システム構成図 (draw.io / diagrams.net で開く)
 
 ## コントリビューション

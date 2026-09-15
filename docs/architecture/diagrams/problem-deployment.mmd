@@ -5,7 +5,9 @@ sequenceDiagram
   participant Bus as EventBridge
   participant SFN as DeployCreateStateMachine
   participant Worker as CfnDeploy / DescribeStack Lambda
-  participant CFN as 対象アカウントのCloudFormation
+  participant SSM as SSM SecureString
+  participant STS as STS
+  participant CFN as 競技アカウントのCloudFormation
 
   Host->>API: POST /events/:eventId/deploy
   API->>Store: イベント・チーム・既存配置を取得
@@ -16,10 +18,19 @@ sequenceDiagram
   Bus->>SFN: 各配置ジョブを開始
   SFN->>Store: IN_PROGRESS
   SFN->>Worker: 配置要求
-  Worker->>CFN: 対象権限でCreateStack / UpdateStack等
+  Note over Worker,CFN: クロスアカウント配置では ExternalId 必須
+  Worker->>SSM: GetParameter（復号あり）
+  SSM-->>Worker: ExternalId
+  Worker->>STS: AssumeRole（CompetitorDeployRole + ExternalId）
+  STS-->>Worker: 一時認証情報
+  Worker->>CFN: 一時認証情報でCreateStack / UpdateStack等
   loop 終端状態またはタイムアウトまで
     SFN->>Worker: 状態確認
-    Worker->>CFN: DescribeStacks
+    Worker->>SSM: GetParameter（復号あり）
+    SSM-->>Worker: ExternalId
+    Worker->>STS: AssumeRole（CompetitorDeployRole + ExternalId）
+    STS-->>Worker: 一時認証情報
+    Worker->>CFN: 一時認証情報でDescribeStacks
     CFN-->>Worker: スタック状態・Outputs
     Worker-->>SFN: 確認結果
   end

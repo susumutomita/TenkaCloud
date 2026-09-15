@@ -78,6 +78,10 @@ CodeBuild を起動しただけでは Complete ではなく、SBT への結果�
 
 対象は SaaS / Lite の AWS Lambda 配置経路です。
 `bulkDeployEvent()` が対象・権限・容量・重複を確認し、配置計画を保存してから非同期処理へ渡します。
+クロスアカウントの配置と状態確認は、各 Lambda 呼び出しで SSM SecureString から ExternalId を取得し、必須の ExternalId を付けて STS `AssumeRole` で競技用ロールを引き受けます。その一時認証情報で CloudFormation を呼びます。
+同一アカウントの開発経路ではロール ARN と ExternalId パラメーターを両方省略できます。片方だけの指定はエラーであり、クロスアカウント時に ExternalId を省略する例外ではありません。
+共通処理は [assume-competitor-role.ts](../../infrastructure/lib/problem-deploy/handlers/shared/assume-competitor-role.ts) を参照してください。
+
 HTTP の受付件数は配置成功件数ではありません。チーム・問題別の COMPLETE / FAILED を確認します。
 
 `useBulkDistributedMap` が有効なら S3 の計画から子実行を開始し、無効なら個別イベントを発行します。CodeBuild の配置経路は図から省略しています。

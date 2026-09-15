@@ -70,45 +70,38 @@
 <h1>プラットフォームアーキテクチャ <span class="doc-badge doc-badge--stable">Stable</span></h1>
 <p>TenkaCloud の構造を、利用者、責務、実行担当、操作順の順に説明します。
 図はコードに基づく設計の説明です。実 AWS のリソース一覧や稼働確認とは異なります。</p>
-<h2>読む順番</h2>
-<p><a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/architecture/diagrams/system-architecture.drawio">Draw.io 原本</a>の
+<h2 id="reading-order">読む順番</h2><p><a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/architecture/diagrams/system-architecture.drawio">Draw.io 原本</a>の
 <strong>05 システムコンテキスト → 04 ユースケース</strong>で、利用者と外部システムを確認してください。
 次にこのページの責務・操作順を読み、最後に原本の <strong>01 SaaS / 02 Lite / 03 Local</strong> で配置と配線を確認します。</p>
 <p><a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/architecture/README.md">開発者向けガイド</a>には、
 各図の対象モード、主要ファイル、完了条件、失敗時の確認先をまとめています。</p>
-<h2>クラウド開催の責務</h2>
-<p><a href="/docs/assets/architecture/logical.svg"><img src="/docs/assets/architecture/logical.svg" alt="クラウド開催の論理アーキテクチャ"></a></p>
+<h2 id="cloud-responsibilities">クラウド開催の責務</h2><p><a href="/docs/assets/architecture/logical.svg"><img src="/docs/assets/architecture/logical.svg" alt="クラウド開催の論理アーキテクチャ"></a></p>
 <p>SaaS は SBT で利用組織を管理します。Lite にはこの組織管理を置きません。
 pooled / silo は開催管理環境の配置方法であり、図の箱の数はスタック数ではありません。</p>
-<h2>クラウドのコンポーネント</h2>
-<p><a href="/docs/assets/architecture/cloud-components.svg"><img src="/docs/assets/architecture/cloud-components.svg" alt="クラウド側の処理担当"></a></p>
+<h2 id="cloud-components">クラウドのコンポーネント</h2><p><a href="/docs/assets/architecture/cloud-components.svg"><img src="/docs/assets/architecture/cloud-components.svg" alt="クラウド側の処理担当"></a></p>
 <p>開催 API、配置ワークフロー、参加者 API、独自競技の Dispatcher、定期採点は担当が異なります。
 テナント分離は、API の認証・scope 検証、保存先のキー設計、スタック境界を組み合わせます。
 対応する Turso 構成では StatusWriter Lambda を経由して配置状態を更新します。</p>
-<h2>Local play の Docker 構成</h2>
-<p><a href="/docs/assets/architecture/local-components.svg"><img src="/docs/assets/architecture/local-components.svg" alt="Local play のコンポーネント"></a></p>
+<h2 id="local-play-and-docker">Local play の Docker 構成</h2><p><a href="/docs/assets/architecture/local-components.svg"><img src="/docs/assets/architecture/local-components.svg" alt="Local play のコンポーネント"></a></p>
 <p><code>make local</code> は個人練習用です。制御用コンテナと問題コンテナは同じ Docker daemon 上で動きます。
 問題の正誤判定は HTTP の <code>/verify</code>、進捗保存は SQLite、起動・停止は Docker ソケットを使います。
 ソケットの <code>:ro</code> マウントは Docker API の操作権限を読み取り専用にはしません。</p>
 <p>開発中の複数チーム向け local-host と暗号バトル専用ハーネスは、この経路に含めません。
 <code>make local-dev</code> の Simulator は明示的に有効化したときだけ使います。</p>
-<h2>SaaS のテナント登録</h2>
-<p><a href="/docs/assets/architecture/tenant-onboarding.svg"><img src="/docs/assets/architecture/tenant-onboarding.svg" alt="テナント登録のシーケンス"></a></p>
+<h2 id="saas-tenant-onboarding">SaaS のテナント登録</h2><p><a href="/docs/assets/architecture/tenant-onboarding.svg"><img src="/docs/assets/architecture/tenant-onboarding.svg" alt="テナント登録のシーケンス"></a></p>
 <p>登録 API の受付と利用準備の完了は別です。SBT のライフサイクル結果まで確認します。</p>
-<h2>問題の配置</h2>
-<p><a href="/docs/assets/architecture/problem-deployment.svg"><img src="/docs/assets/architecture/problem-deployment.svg" alt="AWS Lambda 経路の問題配置"></a></p>
+<h2 id="problem-deployment">問題の配置</h2><p><a href="/docs/assets/architecture/problem-deployment.svg"><img src="/docs/assets/architecture/problem-deployment.svg" alt="AWS Lambda 経路の問題配置"></a></p>
 <p>対象はクラウド問題の Lambda 配置経路です。HTTP の受付件数ではなく、配置ジョブの COMPLETE / FAILED を確認します。
+クロスアカウントの配置と状態確認では、各 Lambda 呼び出しで SSM SecureString から ExternalId を取得します。必須の ExternalId を付けた STS AssumeRole で競技用ロールを引き受け、一時認証情報で CloudFormation を呼びます。
+同一アカウントの開発経路ではロール ARN と ExternalId パラメーターを両方省略できますが、片方だけの指定はエラーです。
 Distributed Map と CodeBuild の詳細経路は開発者向けガイドで補足しています。</p>
-<h2>クラウドでの回答と採点</h2>
-<p><a href="/docs/assets/architecture/participant-scoring.svg"><img src="/docs/assets/architecture/participant-scoring.svg" alt="クラウド参加者の回答と採点"></a></p>
+<h2 id="cloud-answers-and-scoring">クラウドでの回答と採点</h2><p><a href="/docs/assets/architecture/participant-scoring.svg"><img src="/docs/assets/architecture/participant-scoring.svg" alt="クラウド参加者の回答と採点"></a></p>
 <p>flag 提出と独自競技の操作は別経路です。独自競技の状態保存と得点反映も別で、未反映の得点を保存して再試行します。
 定期採点は、参加者の回答とは別に起動します。</p>
-<h2>Local play の開始と採点</h2>
-<p><a href="/docs/assets/architecture/local-play-sequence.svg"><img src="/docs/assets/architecture/local-play-sequence.svg" alt="Docker 問題の開始・回答・保存"></a></p>
+<h2 id="local-play-startup-and-scoring">Local play の開始と採点</h2><p><a href="/docs/assets/architecture/local-play-sequence.svg"><img src="/docs/assets/architecture/local-play-sequence.svg" alt="Docker 問題の開始・回答・保存"></a></p>
 <p>開始要求は 202 で受け付け、起動結果を後から取得します。回答時には正誤照会後に進捗を保存します。
 検証器への接続失敗を、不正解や成功に置き換えません。</p>
-<h2>次に読む</h2>
-<ul>
+<h2 id="next-steps">次に読む</h2><ul>
 <li><a href="/docs/operate/run-an-event/">イベントを開催する</a></li>
 <li><a href="/docs/operate/deploy-paths/">起動・デプロイ経路</a></li>
 <li><a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/running-costs.md">費用と検証範囲</a></li>

@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
+import { JSDOM } from "jsdom";
 
 const root = join(import.meta.dir, "../..");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
@@ -379,7 +380,6 @@ describe("landing contact form behaviour", () => {
    * 評価する。 設定の取得だけを差し替え、 それ以外は本番と同じ経路を通す。
    */
   async function mount(config: unknown) {
-    const { JSDOM } = (await import("jsdom")) as typeof import("jsdom");
     // 言語は URL で固定する。 既定は navigator.language 依存なので、 実行環境の
     // ロケールでテストの期待文言が変わってしまう。
     const dom = new JSDOM(read("landing/index.html"), {

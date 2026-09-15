@@ -2045,3 +2045,13 @@ main {
   max-width: 100%;
   height: auto;
 }
+
+.docs-content h2[id] {
+  scroll-margin-top: 6rem;
+}
+
+@media (max-width: 760px) {
+  .docs-content h2[id] {
+    scroll-margin-top: 12rem;
+  }
+}

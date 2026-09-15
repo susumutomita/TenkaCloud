@@ -7,7 +7,7 @@ export const metadata = { title: "Platform architecture" };
 Read the platform through its users, responsibilities, components, and operation sequences.
 These diagrams describe the implementation, not an inventory of deployed AWS resources.
 
-## Reading order
+<h2 id="reading-order">Reading order</h2>
 
 Start with **05 System context → 04 Use cases** in the
 [Draw.io source](https://github.com/susumutomita/TenkaCloud/blob/main/docs/architecture/diagrams/system-architecture.drawio).
@@ -17,7 +17,7 @@ The [developer architecture guide](https://github.com/susumutomita/TenkaCloud/bl
 links each operation to its source files, completion criteria, and failure diagnostics.
 The shared diagrams use Japanese labels alongside implementation names.
 
-## Cloud responsibilities
+<h2 id="cloud-responsibilities">Cloud responsibilities</h2>
 
 [![Logical architecture](/docs/assets/architecture/logical.svg)](/docs/assets/architecture/logical.svg)
 
@@ -25,7 +25,7 @@ SaaS uses SBT to manage tenants. Lite omits that tenant-management layer.
 Pooled and silo describe where organizer applications are placed, not additional logical responsibilities.
 The boxes do not correspond one-to-one to CDK stacks or AWS accounts.
 
-## Cloud components
+<h2 id="cloud-components">Cloud components</h2>
 
 [![Cloud components](/docs/assets/architecture/cloud-components.svg)](/docs/assets/architecture/cloud-components.svg)
 
@@ -33,7 +33,7 @@ Event APIs, deployment workflows, participant APIs, the coordination dispatcher,
 Tenant isolation combines request authentication and scope checks with storage keys and stack boundaries.
 Supported Turso configurations update deployment state through the StatusWriter Lambda; Step Functions does not connect directly to SQL.
 
-## Local play and Docker
+<h2 id="local-play-and-docker">Local play and Docker</h2>
 
 [![Local Docker components](/docs/assets/architecture/local-components.svg)](/docs/assets/architecture/local-components.svg)
 
@@ -46,22 +46,24 @@ A read-only socket mount does not make Docker API operations read-only.
 The in-development multi-team local host and the crypto-battle development harness are separate paths.
 The `make local-dev` Simulator is enabled only by explicit opt-in; Docker problems do not require it.
 
-## SaaS tenant onboarding
+<h2 id="saas-tenant-onboarding">SaaS tenant onboarding</h2>
 
 [![Tenant onboarding sequence](/docs/assets/architecture/tenant-onboarding.svg)](/docs/assets/architecture/tenant-onboarding.svg)
 
 Registration acceptance is separate from tenant readiness. Check the SBT lifecycle result.
 PLATINUM deploys a dedicated stack; other tiers use the existing pooled stack.
 
-## Problem deployment
+<h2 id="problem-deployment">Problem deployment</h2>
 
 [![Cloud problem deployment sequence](/docs/assets/architecture/problem-deployment.svg)](/docs/assets/architecture/problem-deployment.svg)
 
 This shows the AWS Lambda deployment path. HTTP acceptance counts are not successful deployment counts.
 Check each deployment job's COMPLETE or FAILED result.
+For cross-account deployment and status polling, each worker invocation retrieves the mandatory ExternalId from SSM SecureString and calls STS AssumeRole for the competitor role before calling CloudFormation with temporary credentials.
+The same-account development path may omit both role and ExternalId parameter; configuring only one is an error.
 The guide describes the Distributed Map alternative and the omitted CodeBuild path.
 
-## Cloud answers and scoring
+<h2 id="cloud-answers-and-scoring">Cloud answers and scoring</h2>
 
 [![Cloud participant scoring sequence](/docs/assets/architecture/participant-scoring.svg)](/docs/assets/architecture/participant-scoring.svg)
 
@@ -69,7 +71,7 @@ Flag submission and coordination operations use separate paths.
 Coordination state persistence and score delivery are also separate: pending scores are saved and delivery is retried.
 Scheduled scoring is triggered independently of participant submissions.
 
-## Local play startup and scoring
+<h2 id="local-play-startup-and-scoring">Local play startup and scoring</h2>
 
 [![Local startup and scoring sequence](/docs/assets/architecture/local-play-sequence.svg)](/docs/assets/architecture/local-play-sequence.svg)
 
@@ -77,7 +79,7 @@ Starting a problem returns 202 before the actual Docker startup completes.
 Answers are checked by the problem verifier, then progress is persisted before the response.
 Verifier connection failures remain errors; they are not converted to incorrect answers or success.
 
-## Next steps
+<h2 id="next-steps">Next steps</h2>
 
 - [Run an event](/developers/docs/operate/run-an-event/)
 - [Deployment and launch paths](/developers/docs/operate/deploy-paths/)

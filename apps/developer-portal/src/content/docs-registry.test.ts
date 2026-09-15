@@ -285,6 +285,25 @@ describe("docs registry — operator + architecture pages (#2169)", () => {
     expect(USE_EXISTING_PACK_SOURCE).toContain("pending live batch verification");
   });
 
+  it("should keep architecture search headings aligned with the actual page", () => {
+    const source = readFileSync("src/app/developers/docs/concepts/architecture/page.mdx", "utf8");
+    const headings = [...source.matchAll(/^<h2 id="([^"]+)">(.+)<\/h2>$/gm)].map((match) => ({
+      id: match[1],
+      text: match[2],
+    }));
+    const page = findDocBySlug("concepts/architecture");
+    expect(page?.headings).toEqual(headings);
+    expect(source).not.toMatch(/^## /m);
+    for (const [term, anchor] of [
+      ["Cloud components", "cloud-components"],
+      ["Local play and Docker", "local-play-and-docker"],
+    ]) {
+      expect(
+        searchIndex(term).some((result) => result.href === `${ARCHITECTURE_HREF}#${anchor}`),
+      ).toBe(true);
+    }
+  });
+
   it("should find the architecture page by a Japanese search term", () => {
     const results = searchIndex("アーキテクチャ プレーン");
     expect(results.some((r) => r.href === ARCHITECTURE_HREF)).toBe(true);
