@@ -75,7 +75,7 @@ cp infrastructure/environments/development/.env.example \
 ```
 
 For lower DB cost, set up [Turso](./docs/running-costs.md) before deployment. Put its
-token in SSM Parameter Store, never in `.env`; the file holds only the database URL
+token in SSM Parameter Store, never in `.env`; the file holds only the HTTPS database URL
 and parameter name. When the configuration is ready:
 
 ```bash
@@ -133,7 +133,10 @@ deployment, complete these steps **before Start build**. The launcher forwards t
 SSM parameter name; it does **not** create the parameter or its secret value.
 
 1. In the [Turso dashboard](https://app.turso.tech/), create a database and obtain
-   its database URL and a full-access database auth token. Schema initialization
+   its **HTTPS database URL** (`https://…`) and a full-access database auth token.
+   Use the HTTP endpoint, equivalent to `turso db show <db> --http-url`, rather than
+   the `libsql://` URL mentioned in the launcher parameter description. The runtime
+   uses the HTTP client, and the preflight/cleanup tools require HTTPS. Schema initialization
    and application writes require write access. Use a database token, not an
    organization API token. Turso supports [database and token management in its
    dashboard](https://turso.tech/blog/we-built-a-brand-new-turso-web-app).
@@ -144,7 +147,7 @@ SSM parameter name; it does **not** create the parameter or its secret value.
    in **Value** and create the parameter. No new customer-managed key is needed.
    See [AWS console steps](https://docs.aws.amazon.com/systems-manager/latest/userguide/parameter-create-console.html).
 3. When creating the launcher stack, set `ControlDataBackend=turso`, put the
-   database URL in `TursoDatabaseUrl`, and the **exact existing parameter name**
+   HTTPS database URL in `TursoDatabaseUrl`, and the **exact existing parameter name**
    in `TursoAuthTokenParameterName`. Never put the token itself into CloudFormation
    parameters or the repository. Then start the build.
 
@@ -166,7 +169,7 @@ selected account/region and the roles or resources created there.
 | Publish source and assets | The caller needs S3 bucket creation/configuration and object upload on its `tenkacloud-source-<account>-<region>*` bucket. CDK assumes the account's bootstrap publishing/deployment roles with `sts:AssumeRole`; their trust policies must also admit the caller. |
 | Deploy Lite stacks | The CDK deployment role uses CloudFormation and `iam:PassRole` for its CloudFormation execution role. The execution role must be able to create/update the services in the selected Lite templates: IAM, Lambda, API Gateway, Cognito, S3, CloudFront, Step Functions, EventBridge, SNS/SQS, Logs, and the chosen data backend (DynamoDB or SSM/Turso wiring). |
 | Create the first administrator | The caller needs `cloudformation:DescribeStacks`, `cognito-idp:DescribeUserPoolDomain`, `cognito-idp:AdminGetUser`, and `cognito-idp:AdminCreateUser` for the Lite user pool. These run after CDK, using the caller's credentials. |
-| Store a Turso token, if selected | The setup operator needs `ssm:PutParameter` on the chosen `/TenkaCloud/...` parameter. The preflight needs `ssm:DescribeParameters`. Runtime token reads belong to the Lambda role. For a customer-managed KMS key, its key policy and encrypt/decrypt permissions must also allow the relevant identities. |
+| Store and check a Turso token, if selected | The setup operator needs `ssm:PutParameter` on the chosen `/TenkaCloud/...` parameter. The preflight caller needs `ssm:DescribeParameters` (metadata listing, `Resource: "*"`) and `ssm:GetParameter` scoped to the chosen parameter to check token expiry with decryption; it does not print the token. The Lambda role separately needs runtime token-read access. For a customer-managed KMS key, allow setup encryption and `kms:Decrypt` for the preflight caller and runtime readers in IAM and the key policy. |
 | Console launcher, if selected | The launcher creator needs CloudFormation, creation of its CodeBuild IAM service role/policy, CodeBuild project and Logs configuration, and `iam:PassRole` limited to that role for CodeBuild. Grant `codebuild:StartBuild` only to trusted deployment administrators, scoped to this project, with project/build and log read access. |
 
 **Starting a launcher build is deployment-admin access.**

@@ -103,7 +103,8 @@ before using it for an event.
 
 Grant **Start build** only to trusted deployment administrators: build overrides
 can run different source and commands with the deployment role's AWS access.
-If choosing **Turso**, first obtain a database URL and full-access database token.
+If choosing **Turso**, first obtain an **HTTPS database URL** (`https://…`)
+and full-access database token.
 Save the token as an SSM **SecureString** in the deployment account and region
 **before Start build**. The launcher does not create it.
 [Dashboard and AWS console setup](https://github.com/susumutomita/TenkaCloud/blob/main/DEPLOYMENT_GUIDE.md#turso-setup-for-the-console-launcher).
@@ -115,7 +116,7 @@ Save the token as an SSM **SecureString** in the deployment account and region
    `tenkacloud-lite-launcher`.
 3. Set **`TenantAdminEmail`** to the email that should receive the Admin Console
    invitation. For Turso, also set **`ControlDataBackend=turso`**,
-   **`TursoDatabaseUrl`**, and the existing SSM name as
+   the HTTPS endpoint as **`TursoDatabaseUrl`**, and the existing SSM name as
    **`TursoAuthTokenParameterName`**. DynamoDB is the default.
 4. Acknowledge the IAM capability checkbox and create the stack.
 5. Open the CodeBuild project from the stack's **`StartBuildConsoleUrl`**

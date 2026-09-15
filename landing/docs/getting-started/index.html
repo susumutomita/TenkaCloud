@@ -189,7 +189,7 @@ Participant Portal、問題デプロイバックエンドを、固定の単一�
 モード・AWS リージョンはありません。開催前に<a href="https://github.com/susumutomita/TenkaCloud/blob/main/release/tenkacloud-release.md">参照先と検証状況</a>を確認してください。</p>
 <p><strong>Start build</strong> の権限は、デプロイ先の管理を任せられる担当者だけに付与してください。
 ソースやコマンドを上書きして、デプロイ用ロールの AWS 権限で実行できます。
-<strong>Turso</strong> を使う場合は、DB の URL と読み書きできる DB 用トークンを用意し、
+<strong>Turso</strong> を使う場合は、DB の <strong>HTTPS URL</strong>(<code>https://…</code>)と読み書きできる DB 用トークンを用意し、
 <strong>Start build の前に</strong>、デプロイ先と同じ AWS アカウント・リージョンの SSM に
 <strong>SecureString</strong> としてトークンを保存します。launcher はこれを作成しません。
 <a href="https://github.com/susumutomita/TenkaCloud/blob/main/DEPLOYMENT_GUIDE.md#turso-setup-for-the-console-launcher">ダッシュボードと AWS コンソールでの手順</a>。</p>
@@ -201,7 +201,7 @@ Participant Portal、問題デプロイバックエンドを、固定の単一�
 アップロードして、スタック名を <code>tenkacloud-lite-launcher</code> にします。</li>
 <li><strong><code>TenantAdminEmail</code></strong> に、Admin Console の招待メールを受け取るメールアドレスを
 設定します。Turso を使う場合は <strong><code>ControlDataBackend=turso</code></strong>、
-<strong><code>TursoDatabaseUrl</code></strong>、作成済みの SSM 名を入れる <strong><code>TursoAuthTokenParameterName</code></strong>
+HTTPS URL を入れる <strong><code>TursoDatabaseUrl</code></strong>、作成済みの SSM 名を入れる <strong><code>TursoAuthTokenParameterName</code></strong>
 も設定します。デフォルトは DynamoDB です。</li>
 <li>IAM ケーパビリティのチェックボックスを承認し、スタックを作成します。</li>
 <li>スタックの <strong><code>StartBuildConsoleUrl</code></strong> 出力から CodeBuild プロジェクトを

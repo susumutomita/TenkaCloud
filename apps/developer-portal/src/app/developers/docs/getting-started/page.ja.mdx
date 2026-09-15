@@ -105,7 +105,7 @@ Participant Portal、問題デプロイバックエンドを、固定の単一�
 
 **Start build** の権限は、デプロイ先の管理を任せられる担当者だけに付与してください。
 ソースやコマンドを上書きして、デプロイ用ロールの AWS 権限で実行できます。
-**Turso** を使う場合は、DB の URL と読み書きできる DB 用トークンを用意し、
+**Turso** を使う場合は、DB の **HTTPS URL**(`https://…`)と読み書きできる DB 用トークンを用意し、
 **Start build の前に**、デプロイ先と同じ AWS アカウント・リージョンの SSM に
 **SecureString** としてトークンを保存します。launcher はこれを作成しません。
 [ダッシュボードと AWS コンソールでの手順](https://github.com/susumutomita/TenkaCloud/blob/main/DEPLOYMENT_GUIDE.md#turso-setup-for-the-console-launcher)。
@@ -117,7 +117,7 @@ Participant Portal、問題デプロイバックエンドを、固定の単一�
    アップロードして、スタック名を `tenkacloud-lite-launcher` にします。
 3. **`TenantAdminEmail`** に、Admin Console の招待メールを受け取るメールアドレスを
    設定します。Turso を使う場合は **`ControlDataBackend=turso`**、
-   **`TursoDatabaseUrl`**、作成済みの SSM 名を入れる **`TursoAuthTokenParameterName`**
+   HTTPS URL を入れる **`TursoDatabaseUrl`**、作成済みの SSM 名を入れる **`TursoAuthTokenParameterName`**
    も設定します。デフォルトは DynamoDB です。
 4. IAM ケーパビリティのチェックボックスを承認し、スタックを作成します。
 5. スタックの **`StartBuildConsoleUrl`** 出力から CodeBuild プロジェクトを

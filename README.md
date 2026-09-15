@@ -135,11 +135,11 @@ This builds the UI, bootstraps CDK, deploys the AWS resources, invites the admin
 
 Only trusted deployment administrators should have this launcher's **Start build** permission. It can run overridden source and commands with the deployment role's AWS access. See [AWS permissions](./DEPLOYMENT_GUIDE.md#aws-permissions).
 
-**Using Turso? Prepare its secret before Start build.** Obtain a database URL and full-access database token, then store the token as an SSM **SecureString** in the deployment account and region. The launcher does not create this parameter. [Dashboard and AWS console setup](./DEPLOYMENT_GUIDE.md#turso-setup-for-the-console-launcher).
+**Using Turso? Prepare its secret before Start build.** Obtain an **HTTPS database URL** (`https://…`) and full-access database token, then store the token as an SSM **SecureString** in the deployment account and region. The launcher does not create this parameter. [Dashboard and AWS console setup](./DEPLOYMENT_GUIDE.md#turso-setup-for-the-console-launcher).
 
 1. Download [lite-pipeline.yaml](./infrastructure/templates/lite-pipeline.yaml).
 2. In [CloudFormation](https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-1#/stacks/create/template), choose **Upload a template file** and name the stack `tenkacloud-lite-launcher`.
-3. Set **TenantAdminEmail**. For Turso, select **ControlDataBackend=turso**, enter the database URL as **TursoDatabaseUrl** and the existing SSM parameter name as **TursoAuthTokenParameterName**. Review the settings and IAM permissions, then create the stack.
+3. Set **TenantAdminEmail**. For Turso, select **ControlDataBackend=turso**, enter the HTTPS database URL as **TursoDatabaseUrl** and the existing SSM parameter name as **TursoAuthTokenParameterName**. Review the settings and IAM permissions, then create the stack.
 4. Open **StartBuildConsoleUrl** from its outputs and press **Start build**. This starts the deployment; creating the launcher alone does not.
 5. When the build succeeds, open the **Application Admin Console** URL printed at the end of the log. Follow the [organizer manual](./apps/developer-portal/src/app/developers/docs/manual/organizer/page.mdx) to create an event, register teams, and select problems.
 
