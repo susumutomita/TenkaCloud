@@ -12,10 +12,13 @@ Install Git and [mise](https://mise.jdx.dev/), then use the repository's pinned 
 ```bash
 git clone --recurse-submodules https://github.com/<your-username>/TenkaCloud.git
 cd TenkaCloud
+mise trust
 mise install
 mise exec -- make install
 mise exec -- make doctor-dev
 ```
+
+Review `mise.toml` before trusting it; this allows mise to load the checkout's configuration.
 
 Read [AGENTS.md](./AGENTS.md) for platform boundaries. Use the
 [developer manual](./apps/developer-portal/src/app/developers/docs/manual/developer/page.mdx)

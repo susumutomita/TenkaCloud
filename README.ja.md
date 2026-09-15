@@ -151,7 +151,10 @@ make deploy
 - **初回の CDK 準備:** `make deploy` が `CDKToolkit` の作成・更新も行う。実行ロールの権限を AWS 管理者と確認する。[操作ごとの権限と対象リソース](./DEPLOYMENT_GUIDE.md#aws-permissions)。
 - **イベント参加者:** 本体の構築権限は不要。AWS 問題を使うチームのアカウント連携は、別の[競技者用 bootstrap](./infrastructure/templates/README.md#competitor-bootstrapyaml)で設定する。
 
-**イベント終了後:** 手元からは `make destroy`、パイプラインからは[撤去手順](./infrastructure/templates/README.md#撤去-teardown)を使います。launcher だけ消しても利用料は止まりません。データはデフォルトで削除されます。保持する場合はデプロイ時に `CDK_PARAM_RETAIN_DATA_TABLES=true`(パイプラインは `RetainDataTables=true`)を設定します。
+**イベント終了後:** 手元からは `make destroy`、パイプラインからは[撤去手順](./infrastructure/templates/README.md#撤去-teardown)を使います。launcher だけ消しても利用料は止まりません。
+
+- **DynamoDB:** テーブルはデフォルトで削除される。保持する場合はデプロイ時に `CDK_PARAM_RETAIN_DATA_TABLES=true`(パイプラインは `RetainDataTables=true`)を設定する。
+- **Turso:** `make destroy` ではデータの行が残る。管理データも消すなら、代わりに `make destroy-all` を使うか、SSM のトークンが使える撤去前に `make turso-reset` を実行する。どちらも DB 本体とスキーマは残るため、不要なら外部 DB も別途削除する。
 
 ## 運用コスト
 

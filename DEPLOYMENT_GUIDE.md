@@ -36,8 +36,10 @@ not Cognito or SAML accounts.
 Use this to build on your computer and avoid CodeBuild build charges. You need Git,
 Make, Bash, zip, AWS CLI v2, and the Bun/Node.js versions in [mise.toml](./mise.toml).
 CDK comes from the repository dependencies. On macOS, Linux, or WSL2, install the
-tools before running these commands; [mise](https://mise.jdx.dev/getting-started.html)
-can install the pinned Bun/Node.js versions with `mise install bun node`.
+tools before running these commands. If using
+[mise](https://mise.jdx.dev/getting-started.html), review `mise.toml` in your checkout,
+then run `mise trust` before `mise install bun node`. Prefix Make commands below
+with `mise exec --` if the installed tools are not on your shell's PATH.
 
 Configure your AWS CLI profile first. For an IAM Identity Center profile:
 
@@ -83,9 +85,16 @@ runs `cdk bootstrap`, deploys the two Lite stacks, and creates the initial Cogni
 administrator. The command prints the portal URLs. Sign in, create a test event/team,
 and check that a problem submission is reflected in the score before inviting users.
 
-Use `make destroy` to tear down the local deployment. Data is deleted by default;
-retention must have been selected during deployment with
-`CDK_PARAM_RETAIN_DATA_TABLES=true`. See the [cleanup guide](./infrastructure/templates/README.md#撤去-teardown).
+Use `make destroy` to tear down the AWS deployment. Cleanup depends on the backend:
+
+- **DynamoDB:** tables are deleted by default. Retention must have been selected
+  during deployment with `CDK_PARAM_RETAIN_DATA_TABLES=true`.
+- **Turso:** control-data rows remain after `make destroy`. To erase those rows too,
+  use `make destroy-all` instead, or run `make turso-reset` before teardown while
+  the SSM token is still available. Both keep the database and schema; delete the
+  external database separately if it is no longer needed.
+
+See the [cleanup guide](./infrastructure/templates/README.md#撤去-teardown).
 
 ## AWS permissions
 

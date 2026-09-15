@@ -149,7 +149,10 @@ The pipeline defaults to a pinned release; local `make deploy` uses your current
 - **First CDK setup:** `make deploy` also creates/updates `CDKToolkit`. Have your AWS administrator review its execution-role permissions. [Actions and resource scopes](./DEPLOYMENT_GUIDE.md#aws-permissions).
 - **Event participants:** do not need platform deployment permissions. AWS problem accounts use a separate [competitor bootstrap](./infrastructure/templates/README.md#competitor-bootstrapyaml).
 
-**After the event:** use `make destroy` locally or the pipeline [teardown procedure](./infrastructure/templates/README.md#撤去-teardown). Deleting only the launcher leaves resources running. Data is deleted by default. To retain it, deploy with `CDK_PARAM_RETAIN_DATA_TABLES=true` (pipeline: `RetainDataTables=true`).
+**After the event:** use `make destroy` locally or the pipeline [teardown procedure](./infrastructure/templates/README.md#撤去-teardown). Deleting only the launcher leaves resources running.
+
+- **DynamoDB:** tables are deleted by default. To retain them, deploy with `CDK_PARAM_RETAIN_DATA_TABLES=true` (pipeline: `RetainDataTables=true`).
+- **Turso:** rows remain after `make destroy`. To erase control data too, use `make destroy-all` instead, or run `make turso-reset` before teardown while the SSM token is available. These commands keep the database and schema; delete the external database separately if no longer needed.
 
 ## Running costs
 
