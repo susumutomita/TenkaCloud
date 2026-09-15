@@ -1,22 +1,17 @@
 name: Local host branch diagnostics
 
-# Temporary read-only development workflow. Remove before merging this feature.
-# Export only repository content, installed packages and the public Bun executable.
-# Never export .git authentication, runner HOME, environment files or credentials.
+# Temporary read-only diagnostic workflow; removed before merge.
 on:
   pull_request:
     paths:
       - '.github/workflows/local-host-fixup.yml'
-
 permissions:
   contents: read
   packages: read
   actions: read
-
 concurrency:
   group: local-host-diagnostics-${{ github.event.pull_request.number }}
   cancel-in-progress: true
-
 jobs:
   diagnostics:
     if: >-
@@ -34,42 +29,72 @@ jobs:
           submodules: true
           persist-credentials: false
       - uses: ./.github/actions/bun-install
-      - name: Package credential-free source and public build dependencies
+      - name: Diagnose actual Bun request and shutdown boundaries without credentials
         run: |
-          mkdir -p /tmp/tenkacloud-validation-env
-          tar --exclude='.git' --exclude='node_modules' --exclude='.env' --exclude='.env.*' -czf /tmp/tenkacloud-validation-env/source.tar.gz .
-          find . -type d -name node_modules -prune -print0 | tar --null -T - -czf /tmp/tenkacloud-validation-env/dependencies.tar.gz
-          gzip -c "$HOME/.bun/bin/bun" > /tmp/tenkacloud-validation-env/bun.gz
-          git rev-parse HEAD > /tmp/tenkacloud-validation-env/source-commit.txt
-          sha256sum /tmp/tenkacloud-validation-env/*.gz > /tmp/tenkacloud-validation-env/SHA256SUMS
-          du -h /tmp/tenkacloud-validation-env/*
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: local-host-validation-environment
-          path: /tmp/tenkacloud-validation-env/
-          compression-level: 0
-          retention-days: 1
-          if-no-files-found: error
-      - name: Independent diagnostic commands (not substitutes for required CI)
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('scripts/local-host/http.ts')
+          s=p.read_text()
+          for old,new in [
+            ('validOrigin(request, origin);','console.log("TRACE request", request.method, new URL(request.url ?? "/", "http://localhost").pathname); validOrigin(request, origin);'),
+            ('const raw = await readBody(request);','console.log("TRACE body before"); const raw = await readBody(request); console.log("TRACE body after");'),
+            ('server.closeIdleConnections();','console.log("TRACE close begin", server.address()); server.closeIdleConnections(); console.log("TRACE idle closed");'),
+            ('error => error ? reject(error) : accept()','error => { console.log("TRACE close callback", !!error); return error ? reject(error) : accept(); }'),
+            ('server.listen(port, hostname, () => {','console.log("TRACE listen begin", hostname, port); server.listen(port, hostname, () => { console.log("TRACE listening");'),
+            ('json(response, result.status, result.body);','console.log("TRACE result", result.status); json(response, result.status, result.body);')
+          ]:
+            assert old in s,old
+            s=s.replace(old,new)
+          p.write_text(s)
+          p=Path('scripts/local-host/tests/run.ts');s=p.read_text()
+          for old,new in [
+            ('await entry.run();','console.log("TRACE test", entry.name); await entry.run();'),
+            ('const environment = await createFixture();','console.log("TRACE fixture begin"); const environment = await createFixture(); console.log("TRACE fixture ready");'),
+            ('await operation(environment);','await operation(environment); console.log("TRACE test operation done");'),
+            ('await environment.close();','console.log("TRACE fixture close"); await environment.close(); console.log("TRACE fixture closed");'),
+            ('for (const entry of testCases) {','for (const entry of testCases.slice(0, 2)) {')
+          ]:
+            assert old in s,old
+            s=s.replace(old,new)
+          p.write_text(s)
+          PY
+          set +e
+          timeout -k 5 30 bun run test:host >/tmp/host-trace.log 2>&1
+          echo "TRACE_EXIT=$?"
+          cut -c1-500 /tmp/host-trace.log | head -150
+          git restore -- scripts/local-host/http.ts scripts/local-host/tests/run.ts
+      - name: Compact real-Docker and type diagnostics
         run: |
           set +e
-          failed=0
-          for command in \
-            'timeout -k 10 90 bun run test:host' \
-            'bun run typecheck:host' \
-            'bun run --filter @TenkaCloud/application-admin-console typecheck' \
-            'bun run --filter @TenkaCloud/participant-portal typecheck' \
-            'bun run build:host' \
-            'timeout -k 10 180 bun run test:host:docker' \
-            'bun run dead-code' \
-            'bun run textlint docs/local-hosting.md' \
-            'bun run biome check scripts/local-host apps/application-admin-console/src/local-host apps/participant-portal/src/local-host' \
-            'bun run eslint scripts/local-host apps/application-admin-console/src/local-host apps/participant-portal/src/local-host apps/application-admin-console/vite.host.config.ts apps/participant-portal/vite.host.config.ts'; do
-            echo "::group::DIAGNOSTIC $command"
-            bash -c "$command"
-            status=$?
-            echo "DIAGNOSTIC_EXIT=$status"
-            if [ "$status" -ne 0 ]; then failed=1; fi
-            echo '::endgroup::'
-          done
-          exit "$failed"
+          timeout -k 10 150 bun run test:host:docker >/tmp/host-docker.log 2>&1
+          echo "DOCKER_EXIT=$?"
+          python3 - <<'PY'
+          from pathlib import Path
+          lines=Path('/tmp/host-docker.log').read_text(errors='replace').splitlines()
+          print('LOG_LINES',len(lines))
+          for line in lines:
+            if len(line)<1000 and line.strip():print(line)
+          PY
+          bun run typecheck:host 2>&1 | cut -c1-600
+      - name: Collect precise lint categories and format code only in runner scratch
+        run: |
+          set +e
+          bun run biome check --write scripts/local-host apps/application-admin-console/src/local-host apps/participant-portal/src/local-host apps/application-admin-console/vite.host.config.ts apps/participant-portal/vite.host.config.ts tsconfig.host.json package.json >/tmp/host-biome.log 2>&1
+          bun run eslint scripts/local-host apps/application-admin-console/src/local-host apps/participant-portal/src/local-host apps/application-admin-console/vite.host.config.ts apps/participant-portal/vite.host.config.ts -f json >/tmp/host-eslint.json 2>/tmp/host-eslint.err
+          python3 - <<'PY'
+          import json,collections
+          from pathlib import Path
+          print('BIOME REMAINING')
+          for line in Path('/tmp/host-biome.log').read_text(errors='replace').splitlines():
+            if len(line)<700: print(line)
+          try: reports=json.loads(Path('/tmp/host-eslint.json').read_text())
+          except Exception:
+            print(Path('/tmp/host-eslint.err').read_text());raise
+          rules=collections.defaultdict(list)
+          for f in reports:
+            for m in f['messages']:
+              rules[m.get('ruleId')].append((f['filePath'].split('/TenkaCloud/TenkaCloud/')[-1],m['line'],m['column'],m['message']))
+          for rule,items in sorted(rules.items(),key=lambda x:-len(x[1])):
+            print('RULE',rule,'COUNT',len(items))
+            for item in items[:6]:print(' ',item)
+          PY
