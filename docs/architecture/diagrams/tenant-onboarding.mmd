@@ -1,0 +1,26 @@
+sequenceDiagram
+  actor Admin as サービス管理者
+  participant UI as Admin Console
+  participant CP as SBT Control Plane
+  participant Bus as EventBridge
+  participant Job as ProvisioningScriptJob
+  participant Build as CodeBuild / provision-tenant.sh
+  participant AWS as CloudFormation・Cognito
+
+  Admin->>UI: 利用組織・管理者メール・tierを登録
+  UI->>CP: createTenant / POST tenant-registrations
+  CP-->>UI: tenantId・tenantRegistrationId / In progress
+  CP->>Bus: sbt_aws_onboardingRequest
+  Bus->>Job: 登録内容を渡して非同期開始
+  Job->>Build: provision-tenant.shを実行
+  alt PLATINUM
+    Build->>AWS: 専用TenantTemplateStackを配置
+  else pooledを利用
+    Build->>AWS: 既存pooledスタックのOutputsを取得
+  end
+  Build->>AWS: 必須Outputs確認・管理者とグループの設定
+  Build-->>Job: tenantConfig・処理結果
+  Job->>Bus: 完了または失敗の通知
+  Bus->>CP: 登録結果の反映
+  UI->>CP: 利用組織の状態を再取得
+  CP-->>UI: CompleteまたはFailed

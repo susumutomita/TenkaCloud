@@ -4,66 +4,76 @@ export const metadata = { title: "プラットフォームアーキテクチャ"
 
 # プラットフォームアーキテクチャ <MaturityBadge level="stable" />
 
-TenkaCloud は、競技問題を各競技者自身のクラウドアカウントへ直接デプロイする
-マルチテナント SaaS プラットフォームです。システムは、責務境界を厳格に分離した
-4 つのプレーンに分割され、単一の EventBridge バスとデプロイごとの
-`runtime-config.json` によって相互に接続されます。
+TenkaCloud の構造を、利用者、責務、実行担当、操作順の順に説明します。
+図はコードに基づく設計の説明です。実 AWS のリソース一覧や稼働確認とは異なります。
 
-## 4 つのプレーン
+## 読む順番
 
-- **コントロールプレーン**（`ControlPlaneStack`）— テナントマネージャーです。
-  `@cdklabs/sbt-aws` の ControlPlane コンストラクトの上に構築され、Cognito
-  ユーザープール、System Admin 向けテナント CRUD API、EventBridge バスで
-  構成されます。`admin-console` SPA がそのフロントエンドです。テナントランタイムを
-  ホストすることは決してありません。
-- **アプリケーションプレーン（pooled）** — 共有される 1 つの
-  `tenkacloud-tenant-template-pooled` スタックです。BASIC と ADVANCED のテナントは、
-  CloudFront 配下の単一の `application-admin-console` URL を共有します。
-- **アプリケーションプレーン（silo）** — PLATINUM テナント専用にのみ
-  プロビジョニングされる `tenkacloud-tenant-template-<tenantId>` スタックです。
-- **問題デプロイバックエンド**（`ProblemDeployBackendStack`）— Deployments テーブル、
-  Cognito 認証付き HTTP API、そして競技者アカウントへロールを引き受け（AssumeRole）、
-  そこで CloudFormation を実行するワーカーで構成されます。Participant Portal の
-  ホスティングも担います。
+[Draw.io 原本](https://github.com/susumutomita/TenkaCloud/blob/main/docs/architecture/diagrams/system-architecture.drawio)の
+**05 システムコンテキスト → 04 ユースケース**で、利用者と外部システムを確認してください。
+次にこのページの責務・操作順を読み、最後に原本の **01 SaaS / 02 Lite / 03 Local** で配置と配線を確認します。
 
-テナント分離は、`TenantId` パーティションキーまたはスタック分離という形で、
-すべてインフラストラクチャレイヤーに存在します — アプリケーションコードには
-決して置きません。3 つの SPA は 1 つの共有 `dist/` を出荷し、テナントごとの差分は
-`runtime-config.json` のみを通じて流れます。
+[開発者向けガイド](https://github.com/susumutomita/TenkaCloud/blob/main/docs/architecture/README.md)には、
+各図の対象モード、主要ファイル、完了条件、失敗時の確認先をまとめています。
 
-## プレーン間コントラクト
+## クラウド開催の責務
 
-すべてのプレーンは、コントロールプレーンがプロビジョニングする
-**EventBridge バス**を介して通信します。`bin/infrastructure.ts` がその ARN を
-他のすべてのスタックへ渡します。壊してはならない 3 つのコントラクトは次のとおりです。
+[![クラウド開催の論理アーキテクチャ](/docs/assets/architecture/logical.svg)](/docs/assets/architecture/logical.svg)
 
-- `onboardingRequest` — テナント作成です。SBT のジョブランナーが受け取り、
-  テナントスタック（既定では pooled、PLATINUM の場合は silo スタック）を
-  プロビジョニングします。
-- `DeployCreateRequested` — 問題デプロイです。バックエンドのワーカーが、
-  そのテナントの **ExternalId**（常に必須）を使って競技者アカウントへロールを
-  引き受け、CloudFormation の `CreateStack` を実行します。
-- `DeployDeleteRequested` — デプロイ済み問題の破棄です。
+SaaS は SBT で利用組織を管理します。Lite にはこの組織管理を置きません。
+pooled / silo は開催管理環境の配置方法であり、図の箱の数はスタック数ではありません。
 
-フロントエンドの URL とフィーチャーフラグは、`runtime-config.json`
-（CloudFront 配下で配信され、`apps/*/src/config.ts` の `loadConfig()` が読み取ります）
-を通じて各 SPA に届きます。URL を追加する場合は、ホスティングスタックの環境と
-`config.ts` のインターフェースの両方を更新することになります — ビルド時の
-テナント別分岐は存在しません。
+## クラウドのコンポーネント
 
-## コストゼロ原則
+[![クラウド側の処理担当](/docs/assets/architecture/cloud-components.svg)](/docs/assets/architecture/cloud-components.svg)
 
-このプラットフォームは AWS 無料利用枠に収まるように設計されており、以下のルールは
-アーキテクチャハーネスによって機械的にチェックされます。
+開催 API、配置ワークフロー、参加者 API、独自競技の Dispatcher、定期採点は担当が異なります。
+テナント分離は、API の認証・scope 検証、保存先のキー設計、スタック境界を組み合わせます。
+対応する Turso 構成では StatusWriter Lambda を経由して配置状態を更新します。
 
-- **シークレット**は SSM Parameter Store の SecureString を使用します。
-  `@aws-sdk/client-secrets-manager` は禁止です。
-- **DynamoDB** テーブルは、`DynamoDbLowCapacity` CDK アスペクトによって
-  PROVISIONED 1 RCU / 1 WCU に強制されます。オンデマンド（`PAY_PER_REQUEST`）は
-  拒否されます。
-- **SSE / WebSocket は使いません** — フロントエンドはポーリングを行い、これは
-  Lambda の運用モデルに整合します。EventBridge 駆動のリコンサイルにより、
-  ポーリングポリシーを変えることなくポーリング圧力を低減します。
+## Local play の Docker 構成
 
-関連: [イベントをエンドツーエンドで運営する](/developers/docs/operate/run-an-event/)、
-および[デプロイモードと起動パス](/developers/docs/operate/deploy-paths/)。
+[![Local play のコンポーネント](/docs/assets/architecture/local-components.svg)](/docs/assets/architecture/local-components.svg)
+
+`make local` は個人練習用です。制御用コンテナと問題コンテナは同じ Docker daemon 上で動きます。
+問題の正誤判定は HTTP の `/verify`、進捗保存は SQLite、起動・停止は Docker ソケットを使います。
+ソケットの `:ro` マウントは Docker API の操作権限を読み取り専用にはしません。
+
+開発中の複数チーム向け local-host と暗号バトル専用ハーネスは、この経路に含めません。
+`make local-dev` の Simulator は明示的に有効化したときだけ使います。
+
+## SaaS のテナント登録
+
+[![テナント登録のシーケンス](/docs/assets/architecture/tenant-onboarding.svg)](/docs/assets/architecture/tenant-onboarding.svg)
+
+登録 API の受付と利用準備の完了は別です。SBT のライフサイクル結果まで確認します。
+
+## 問題の配置
+
+[![AWS Lambda 経路の問題配置](/docs/assets/architecture/problem-deployment.svg)](/docs/assets/architecture/problem-deployment.svg)
+
+対象はクラウド問題の Lambda 配置経路です。HTTP の受付件数ではなく、配置ジョブの COMPLETE / FAILED を確認します。
+Distributed Map と CodeBuild の詳細経路は開発者向けガイドで補足しています。
+
+## クラウドでの回答と採点
+
+[![クラウド参加者の回答と採点](/docs/assets/architecture/participant-scoring.svg)](/docs/assets/architecture/participant-scoring.svg)
+
+flag 提出と独自競技の操作は別経路です。独自競技の状態保存と得点反映も別で、未反映の得点を保存して再試行します。
+定期採点は、参加者の回答とは別に起動します。
+
+## Local play の開始と採点
+
+[![Docker 問題の開始・回答・保存](/docs/assets/architecture/local-play-sequence.svg)](/docs/assets/architecture/local-play-sequence.svg)
+
+開始要求は 202 で受け付け、起動結果を後から取得します。回答時には正誤照会後に進捗を保存します。
+検証器への接続失敗を、不正解や成功に置き換えません。
+
+## 次に読む
+
+- [イベントを開催する](/developers/docs/operate/run-an-event/)
+- [起動・デプロイ経路](/developers/docs/operate/deploy-paths/)
+- [費用と検証範囲](https://github.com/susumutomita/TenkaCloud/blob/main/docs/running-costs.md)
+
+Turso 対応のテスト成功は、実開催や請求確認の代わりではありません。
+SaaS の SBT 用 DynamoDB と Lite の制御データ構成も区別してください。

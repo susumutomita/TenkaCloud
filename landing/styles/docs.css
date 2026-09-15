@@ -112,6 +112,7 @@ a:hover { text-decoration: underline; }
 .docs-nav a[aria-current="page"] { color: var(--blue); background: var(--paper-3); font-weight: 600; }
 
 .doc { min-width: 0; max-width: 780px; }
+.doc img { max-width: 100%; height: auto; }
 .doc h1 { color: var(--ink); font-size: 32px; line-height: 1.3; letter-spacing: -0.02em; margin: 0 0 18px; }
 .doc h2 {
   color: var(--ink); font-size: 21px; letter-spacing: -0.01em;

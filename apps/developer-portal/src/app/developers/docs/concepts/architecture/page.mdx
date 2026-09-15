@@ -4,61 +4,84 @@ export const metadata = { title: "Platform architecture" };
 
 # Platform architecture <MaturityBadge level="stable" />
 
-TenkaCloud is a multi-tenant SaaS platform that deploys competition problems
-straight into each competitor's own cloud account. The system is split into four
-planes with hard responsibility boundaries, wired together by a single EventBridge
-bus and a per-deployment `runtime-config.json`.
+Read the platform through its users, responsibilities, components, and operation sequences.
+These diagrams describe the implementation, not an inventory of deployed AWS resources.
 
-## The four planes
+## Reading order
 
-- **Control plane** (`ControlPlaneStack`) — the tenant manager, built on the
-  `@cdklabs/sbt-aws` ControlPlane construct: a Cognito user pool, the System Admin
-  tenant CRUD API, and the EventBridge bus. The `admin-console` SPA is its front
-  end. It never hosts tenant runtime.
-- **Application plane (pooled)** — one shared `tenkacloud-tenant-template-pooled`
-  stack. BASIC and ADVANCED tenants share a single `application-admin-console` URL
-  behind CloudFront.
-- **Application plane (silo)** — a dedicated `tenkacloud-tenant-template-<tenantId>`
-  stack provisioned only for a PLATINUM tenant.
-- **Problem-deploy backend** (`ProblemDeployBackendStack`) — the Deployments table,
-  a Cognito-authenticated HTTP API, and the worker that assumes a role into the
-  competitor account and runs CloudFormation there. It also hosts the participant
-  portal.
+Start with **05 System context → 04 Use cases** in the
+[Draw.io source](https://github.com/susumutomita/TenkaCloud/blob/main/docs/architecture/diagrams/system-architecture.drawio).
+Then read the views below. Use **01 SaaS / 02 Lite / 03 Local** for physical placement and wiring.
 
-Tenant isolation lives entirely in the infrastructure layer — a `TenantId`
-partition key or stack separation — never in application code. The three SPAs ship
-one shared `dist/`; per-tenant differences flow only through `runtime-config.json`.
+The [developer architecture guide](https://github.com/susumutomita/TenkaCloud/blob/main/docs/architecture/README.md)
+links each operation to its source files, completion criteria, and failure diagnostics.
+The shared diagrams use Japanese labels alongside implementation names.
 
-## Cross-plane contracts
+## Cloud responsibilities
 
-Every plane talks over the **EventBridge bus** the control plane provisions;
-`bin/infrastructure.ts` hands its ARN to every other stack. The three contracts
-that must not break:
+[![Logical architecture](/docs/assets/architecture/logical.svg)](/docs/assets/architecture/logical.svg)
 
-- `onboardingRequest` — tenant creation. Picked up by the SBT job runner, which
-  provisions the tenant stack (pooled by default, a silo stack for PLATINUM).
-- `DeployCreateRequested` — a problem deploy. The backend worker assumes a role
-  into the competitor account using that tenant's **ExternalId** (always required)
-  and runs a CloudFormation `CreateStack`.
-- `DeployDeleteRequested` — teardown of a deployed problem.
+SaaS uses SBT to manage tenants. Lite omits that tenant-management layer.
+Pooled and silo describe where organizer applications are placed, not additional logical responsibilities.
+The boxes do not correspond one-to-one to CDK stacks or AWS accounts.
 
-Frontend URLs and feature flags reach each SPA through `runtime-config.json`
-(served under CloudFront, read by `loadConfig()` in `apps/*/src/config.ts`). Adding
-a URL means updating both the hosting stack's environment and the `config.ts`
-interface — there is no build-time per-tenant branching.
+## Cloud components
 
-## Cost-zero principles
+[![Cloud components](/docs/assets/architecture/cloud-components.svg)](/docs/assets/architecture/cloud-components.svg)
 
-The platform is engineered to fit inside the AWS Free Tier, and these rules are
-machine-checked by the architecture harness:
+Event APIs, deployment workflows, participant APIs, the coordination dispatcher, and scheduled scoring have different owners.
+Tenant isolation combines request authentication and scope checks with storage keys and stack boundaries.
+Supported Turso configurations update deployment state through the StatusWriter Lambda; Step Functions does not connect directly to SQL.
 
-- **Secrets** use SSM Parameter Store SecureString; `@aws-sdk/client-secrets-manager`
-  is forbidden.
-- **DynamoDB** tables are forced to PROVISIONED 1 RCU / 1 WCU by the
-  `DynamoDbLowCapacity` CDK aspect; on-demand (`PAY_PER_REQUEST`) is rejected.
-- **No SSE / WebSocket** — the frontend polls, which matches the Lambda operational
-  model. EventBridge-driven reconciliation reduces polling pressure without
-  changing the polling policy.
+## Local play and Docker
 
-Related: [run an event end to end](/developers/docs/operate/run-an-event/) and the
-[deploy modes and launch paths](/developers/docs/operate/deploy-paths/).
+[![Local Docker components](/docs/assets/architecture/local-components.svg)](/docs/assets/architecture/local-components.svg)
+
+`make local` is a personal-practice path with a fixed local event and team.
+The control container and problem containers run under the same Docker daemon.
+Problem correctness is checked through HTTP `/verify`, progress is saved in SQLite,
+and containers are started and stopped through the Docker socket.
+A read-only socket mount does not make Docker API operations read-only.
+
+The in-development multi-team local host and the crypto-battle development harness are separate paths.
+The `make local-dev` Simulator is enabled only by explicit opt-in; Docker problems do not require it.
+
+## SaaS tenant onboarding
+
+[![Tenant onboarding sequence](/docs/assets/architecture/tenant-onboarding.svg)](/docs/assets/architecture/tenant-onboarding.svg)
+
+Registration acceptance is separate from tenant readiness. Check the SBT lifecycle result.
+PLATINUM deploys a dedicated stack; other tiers use the existing pooled stack.
+
+## Problem deployment
+
+[![Cloud problem deployment sequence](/docs/assets/architecture/problem-deployment.svg)](/docs/assets/architecture/problem-deployment.svg)
+
+This shows the AWS Lambda deployment path. HTTP acceptance counts are not successful deployment counts.
+Check each deployment job's COMPLETE or FAILED result.
+The guide describes the Distributed Map alternative and the omitted CodeBuild path.
+
+## Cloud answers and scoring
+
+[![Cloud participant scoring sequence](/docs/assets/architecture/participant-scoring.svg)](/docs/assets/architecture/participant-scoring.svg)
+
+Flag submission and coordination operations use separate paths.
+Coordination state persistence and score delivery are also separate: pending scores are saved and delivery is retried.
+Scheduled scoring is triggered independently of participant submissions.
+
+## Local play startup and scoring
+
+[![Local startup and scoring sequence](/docs/assets/architecture/local-play-sequence.svg)](/docs/assets/architecture/local-play-sequence.svg)
+
+Starting a problem returns 202 before the actual Docker startup completes.
+Answers are checked by the problem verifier, then progress is persisted before the response.
+Verifier connection failures remain errors; they are not converted to incorrect answers or success.
+
+## Next steps
+
+- [Run an event](/developers/docs/operate/run-an-event/)
+- [Deployment and launch paths](/developers/docs/operate/deploy-paths/)
+- [Costs and verification boundaries](https://github.com/susumutomita/TenkaCloud/blob/main/docs/running-costs.md)
+
+Passing Turso tests does not verify a live event or its bill.
+SaaS's SBT DynamoDB resources and Lite's control-data configuration have different boundaries.

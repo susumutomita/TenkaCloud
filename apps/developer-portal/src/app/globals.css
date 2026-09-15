@@ -212,6 +212,15 @@ a:hover {
 }
 
 @media (max-width: 760px) {
+  .site-header__inner {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding-inline: 16px;
+  }
+  .site-header__brand,
+  .site-header .lang-switch {
+    flex-shrink: 0;
+  }
   .site-header__nav {
     display: none;
   }
@@ -2030,4 +2039,9 @@ main {
   .landing .ent-cta {
     padding: 28px 22px;
   }
+}
+
+.docs-content img {
+  max-width: 100%;
+  height: auto;
 }

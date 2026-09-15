@@ -1,0 +1,25 @@
+flowchart TB
+  SystemAdmin["サービス管理者"]
+  Organizer["開催者"]
+  Player["参加者"]
+  Catalog["問題カタログ<br/>対応するProblem Pack"]
+
+  subgraph Platform["TenkaCloud：クラウド開催の論理責務"]
+    Tenant["利用組織の管理<br/>登録・プロビジョニング・停止<br/>SaaSのみ：SBT"]
+    Event["開催管理<br/>イベント・問題・チーム・開催時間<br/>チームキーの発行"]
+    Deploy["問題環境の管理<br/>配置・状態確認・削除"]
+    Play["競技実行<br/>参加者認証・回答受付・判定・得点表示"]
+  end
+
+  SystemAdmin --> Tenant
+  Tenant -->|"開催環境と管理者を用意"| Event
+  Organizer --> Event
+  Catalog -->|"開催する問題を選択"| Event
+  Event -->|"対象チーム・配置用の定義"| Deploy
+  Event -->|"開催ルール・競技の定義"| Play
+  Player --> Play
+
+  Runtime["問題ごとの実行環境<br/>競技用AWSアカウント等"]
+  Deploy -->|"作成・更新・削除"| Runtime
+  Player -->|"問題の操作"| Runtime
+  Play -->|"対応する問題の状態を検査"| Runtime
