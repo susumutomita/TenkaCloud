@@ -465,7 +465,7 @@ export function resolveProblemDir(
   const matches = roots
     .map((root) => join(root, problemId))
     .filter((directory) => fs.existsSync(join(directory, "metadata.json")));
-  if (matches.length === 0) {
+  if (matches[0] === undefined) {
     throw new Error(`problem "${problemId}" was not found under: ${roots.join(", ")}`);
   }
   if (matches.length > 1) {

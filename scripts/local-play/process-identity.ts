@@ -7,8 +7,10 @@ export function processIdentityFromStartTime(pid: number, startTime: string): st
 
 export function parseProcessObservation(value: string): string | undefined {
   const match = /^(?<state>\S+)\s+(?<startTime>\S.*)$/.exec(value.trim());
-  if (!match?.groups || match.groups.state.startsWith("Z")) return undefined;
-  return match.groups.startTime.trim();
+  const state = match?.groups?.state;
+  const startTime = match?.groups?.startTime;
+  if (!state || !startTime || state.startsWith("Z")) return undefined;
+  return startTime.trim();
 }
 
 export function observeProcessStartTime(pid: number): string | undefined {

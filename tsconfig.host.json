@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.scripts.json",
+  "compilerOptions": {
+    "noUncheckedIndexedAccess": true
+  },
+  "include": ["scripts/local-host/**/*.ts", "scripts/local-play/js-yaml.d.ts"]
+}

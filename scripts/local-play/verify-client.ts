@@ -40,7 +40,7 @@ const MAX_RESPONSE_BYTES = 64 * 1_024;
 export interface VerifyOptions {
   readonly timeoutMs?: number;
   /** Injectable for tests; defaults to the global fetch. */
-  readonly fetchImpl?: typeof fetch;
+  readonly fetchImpl?: (url: string, init: RequestInit) => Promise<Response>;
   /**
    * [#2252] multi-verify: which checkpoint this submission targets. Sent as a
    * top-level `checkpointId` field; the container MUST echo it back and the

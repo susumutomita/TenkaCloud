@@ -1,0 +1,106 @@
+name: Local host branch diagnostics
+
+# Temporary feature-branch development job; removed before merge.
+# Never runs for forks or writes to main. Required PR CI remains unchanged.
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/local-host-fixup.yml'
+      - '.github/local-host-repair.py'
+permissions:
+  contents: read
+  packages: read
+  actions: read
+concurrency:
+  group: local-host-diagnostics-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  diagnostics:
+    if: >-
+      github.repository == 'susumutomita/TenkaCloud' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'codex/local-hosting-3226' &&
+      github.actor == 'susumutomita'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      packages: read
+      actions: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          submodules: true
+      - uses: ./.github/actions/bun-install
+      - name: Apply reviewed repairs and repository formatting
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          script=Path('.github/local-host-repair.py')
+          source=script.read_text()
+          old="workspace=workspaces['apps/'+app]"
+          assert old in source
+          source=source.replace(old, old+"\n    workspace.setdefault('entry', ['src/main.tsx', 'test/**/*.test.{ts,tsx}', 'src/**/*.test.{ts,tsx}'])")
+          script.write_text(source)
+          PY
+          if ! grep -q 'private readonly statements' scripts/local-host/store.ts; then
+            python3 .github/local-host-repair.py
+          fi
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('scripts/local-play/simulator.ts');s=p.read_text()
+          old='artifacts.length === 1 &&'
+          new='artifacts.length === 1 && artifacts[0] !== undefined &&'
+          if new not in s:
+            assert s.count(old)==1
+            p.write_text(s.replace(old,new))
+          PY
+          set +e
+          bun run biome check --write scripts/local-host scripts/local-play/api-scoring.ts scripts/local-play/api-views.ts scripts/local-play/state-store.ts scripts/local-play/verify-client.ts scripts/local-play/compose-policy.ts scripts/local-play/manifest.ts scripts/local-play/process-identity.ts scripts/local-play/simulator-client.ts scripts/local-play/simulator-data-plane-proxy.ts scripts/local-play/simulator-launch-state.ts scripts/local-play/simulator-launcher.ts scripts/local-play/simulator-runtime-lifecycle.ts scripts/local-play/simulator-runtime.ts scripts/local-play/simulator-scoring.ts scripts/local-play/simulator.ts infrastructure/lib/problem-deploy/runtime-clients/ssrf-guard.ts packages/saml-utils/src/metadata.ts apps/application-admin-console/src/local-host apps/participant-portal/src/local-host apps/application-admin-console/vite.host.config.ts apps/participant-portal/vite.host.config.ts tsconfig.host.json knip.json package.json >/tmp/format.log 2>&1
+          tail -8 /tmp/format.log
+          exit 0
+      - name: Record source corrections only on the expected feature head
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          test "$(git ls-remote origin refs/heads/codex/local-hosting-3226 | cut -f1)" = "$EXPECTED_HEAD"
+          git add -- scripts/local-host scripts/local-play infrastructure/lib/problem-deploy/runtime-clients/ssrf-guard.ts packages/saml-utils/src/metadata.ts apps/application-admin-console/src/local-host apps/participant-portal/src/local-host apps/application-admin-console/vite.host.config.ts apps/participant-portal/vite.host.config.ts tsconfig.host.json knip.json package.json
+          git diff --cached --stat
+          if ! git diff --cached --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'fix(host): finalize SQLite statements, repair strict types and valid catalog globs'
+            git push origin HEAD:refs/heads/codex/local-hosting-3226
+          fi
+          echo "REPAIRED_HEAD=$(git rev-parse HEAD)"
+      - name: Run independent diagnostics and retain all failures
+        run: |
+          set +e
+          failed=0
+          for label in tests types admin-types portal-types build docker deadcode; do
+            case "$label" in
+              tests) command='timeout -k 5 90 bun run test:host';;
+              types) command='bun run typecheck:host';;
+              admin-types) command='bun run --filter @TenkaCloud/application-admin-console typecheck';;
+              portal-types) command='bun run --filter @TenkaCloud/participant-portal typecheck';;
+              build) command='bun run build:host';;
+              docker) command='timeout -k 10 150 bun run test:host:docker';;
+              deadcode) command='bun run dead-code';;
+            esac
+            echo "::group::$label"
+            bash -c "$command" >"/tmp/host-$label.log" 2>&1
+            status=$?
+            echo "EXIT=$status"
+            python3 - "$label" <<'PY'
+          import sys
+          from pathlib import Path
+          lines=Path('/tmp/host-'+sys.argv[1]+'.log').read_text(errors='replace').splitlines()
+          for line in lines:
+            if len(line)<1500 and line.strip():print(line)
+          PY
+            if [ "$status" -ne 0 ]; then failed=1; fi
+            echo '::endgroup::'
+          done
+          exit "$failed"

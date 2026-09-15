@@ -32,6 +32,14 @@ import type {
   SimulatorPendingWorldRecord,
 } from "./simulator-session-record";
 
+type SimulatorClient = ReturnType<typeof createSimulatorClient>;
+
+interface PreparedWorldStart {
+  readonly launcher: SimulatorLauncherRecord;
+  readonly pending: SimulatorPendingWorldRecord;
+  readonly client: SimulatorClient;
+}
+
 export abstract class SimulatorRuntimeLifecycle extends SimulatorRuntimeCore {
   protected async _preflight(
     problem: SimulatedCloudProblem,

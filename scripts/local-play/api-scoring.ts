@@ -476,10 +476,10 @@ export function revealHint(
 ): LocalPlayResponse {
   const runtime = state.runtimes.get(problemId);
   const simulatedRuntime = state.simulatedRuntimes.get(problemId);
-  if (!runtime && !simulatedRuntime) {
+  if (simulatedRuntime) return revealSimulatorHint(simulatedRuntime, state, iso, hintId);
+  if (!runtime) {
     return { status: StatusCodes.NOT_FOUND, body: { error: "unknown_hint" } };
   }
-  if (simulatedRuntime) return revealSimulatorHint(simulatedRuntime, state, iso, hintId);
   // [#2392 Phase 2] Hints are part of playing the problem — gate on a running
   // container and bump its LRU recency, matching submit.
   if (state.lifecycle.statusOf(problemId) !== "running") {

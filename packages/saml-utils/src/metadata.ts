@@ -69,7 +69,7 @@ export function validateSamlMetadata(xml: unknown): SamlMetadataValidationResult
     return { ok: false, reason: "missing_entity_descriptor" };
   }
   const entityIdMatch = trimmed.match(/\bentityID\s*=\s*"([^"]+)"/);
-  if (!entityIdMatch || entityIdMatch[1].trim().length === 0) {
+  if (entityIdMatch?.[1] === undefined || entityIdMatch[1].trim().length === 0) {
     return { ok: false, reason: "missing_entity_id" };
   }
   if (!/<(?:[A-Za-z0-9_-]+:)?IDPSSODescriptor\b/.test(trimmed)) {
