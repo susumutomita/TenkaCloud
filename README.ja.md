@@ -135,6 +135,8 @@ make deploy
 
 #### B. AWS コンソールからデプロイする
 
+**Start build** の権限は、デプロイ先アカウントの管理を任せられる担当者だけに付与してください。ソースやコマンドを上書きして、デプロイ用ロールの AWS 権限で実行できます。[必要な権限と信頼範囲](./DEPLOYMENT_GUIDE.md#aws-permissions)。
+
 1. [lite-pipeline.yaml](./infrastructure/templates/lite-pipeline.yaml) をダウンロードする。
 2. [CloudFormation](https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-1#/stacks/create/template) で **Upload a template file** を選び、スタック名を `tenkacloud-lite-launcher` にする。
 3. **TenantAdminEmail** を入力する。DB 費用を抑えるなら **ControlDataBackend=turso** を選び、[Turso の接続設定](./docs/running-costs.md)も入力する。設定と IAM 権限を確認し、スタックを作成する。

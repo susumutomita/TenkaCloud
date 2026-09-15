@@ -133,6 +133,8 @@ This builds the UI, bootstraps CDK, deploys the AWS resources, invites the admin
 
 #### B. Deploy from the AWS console
 
+Only trusted deployment administrators should have this launcher's **Start build** permission. It can run overridden source and commands with the deployment role's AWS access. See [AWS permissions](./DEPLOYMENT_GUIDE.md#aws-permissions).
+
 1. Download [lite-pipeline.yaml](./infrastructure/templates/lite-pipeline.yaml).
 2. In [CloudFormation](https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-1#/stacks/create/template), choose **Upload a template file** and name the stack `tenkacloud-lite-launcher`.
 3. Set **TenantAdminEmail**. To reduce DB cost, select **ControlDataBackend=turso** and enter the [Turso connection settings](./docs/running-costs.md). Review the settings and IAM permissions, then create the stack.

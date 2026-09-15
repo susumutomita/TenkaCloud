@@ -109,7 +109,15 @@ selected account/region and the roles or resources created there.
 | Deploy Lite stacks | The CDK deployment role uses CloudFormation and `iam:PassRole` for its CloudFormation execution role. The execution role must be able to create/update the services in the selected Lite templates: IAM, Lambda, API Gateway, Cognito, S3, CloudFront, Step Functions, EventBridge, SNS/SQS, Logs, and the chosen data backend (DynamoDB or SSM/Turso wiring). |
 | Create the first administrator | The caller needs `cloudformation:DescribeStacks`, `cognito-idp:DescribeUserPoolDomain`, `cognito-idp:AdminGetUser`, and `cognito-idp:AdminCreateUser` for the Lite user pool. These run after CDK, using the caller's credentials. |
 | Store a Turso token, if selected | The setup operator needs `ssm:PutParameter` on the chosen `/TenkaCloud/...` parameter. The preflight needs `ssm:DescribeParameters`. Runtime token reads belong to the Lambda role. For a customer-managed KMS key, its key policy and encrypt/decrypt permissions must also allow the relevant identities. |
-| Console launcher, if selected | The launcher creator needs CloudFormation, creation of its CodeBuild IAM service role/policy, CodeBuild project and Logs configuration, and `iam:PassRole` limited to that role for CodeBuild. The person starting builds needs `codebuild:StartBuild`, project/build read access, and log read access. |
+| Console launcher, if selected | The launcher creator needs CloudFormation, creation of its CodeBuild IAM service role/policy, CodeBuild project and Logs configuration, and `iam:PassRole` limited to that role for CodeBuild. Grant `codebuild:StartBuild` only to trusted deployment administrators, scoped to this project, with project/build and log read access. |
+
+**Starting a launcher build is deployment-admin access.**
+[`StartBuild` permits per-build overrides](https://docs.aws.amazon.com/codebuild/latest/APIReference/API_StartBuild.html),
+including environment variables and build commands. This launcher reads `REPO_URL`,
+`REPO_REF`, and `ACTION`, then runs code from that checkout under its broad deployment
+role, including `iam:*` and `cloudformation:*`. Restricting `StartBuild` to this
+project does not make it a build-only permission. Do not delegate it to participants
+or operators who are not trusted to administer the deployment account.
 
 These are the access boundaries to review, not a tested minimal IAM policy for
 every optional configuration. See the actual calls in
