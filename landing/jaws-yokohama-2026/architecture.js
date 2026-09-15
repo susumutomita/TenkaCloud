@@ -7,22 +7,29 @@
   let scale = 1;
 
   function zoom(value) {
-    scale = Math.max(0.5, Math.min(4, value));
+    scale = Math.max(0.5, Math.min(12, value));
     image.style.width = `${scale * 100}%`;
     output.textContent = `${Math.round(scale * 100)}%`;
     document.querySelector("#zoom-out").disabled = scale <= 0.5;
-    document.querySelector("#zoom-in").disabled = scale >= 4;
+    document.querySelector("#zoom-in").disabled = scale >= 12;
   }
 
   function select(view) {
-    const selected = view === "evolution" ? "evolution" : "aws";
+    const selected = buttons.some((item) => item.dataset.view === view) ? view : "saas";
     const button = buttons.find((item) => item.dataset.view === selected);
     image.src = button.dataset.src;
-    image.alt =
-      selected === "evolution"
-        ? "クラウド非依存を目指した初期方針とAWS-nativeへの設計転換"
-        : "TenkaCloud Liteの運営AWSアカウントとチーム別AWSアカウント、管理・配置・競技・認証経路";
+    const descriptions = {
+      saas: "既存Draw.io原本のSaaS物理構成図。AWSサービスとスタックの配置・配線",
+      sbt: "SBTの2層とTenkaCloudが追加した問題デプロイエンジン・競技者コンソール",
+      deploy:
+        "開催者の配置操作からEventBridge、Step Functions、Lambda、チーム別AWSのCloudFormationへ進む流れ",
+      aws: "TenkaCloud Liteの運営AWSアカウントとチーム別AWSアカウント、管理・配置・競技・認証経路",
+      evolution: "クラウド非依存を目指した初期方針とAWS-nativeへの設計転換",
+    };
+    image.alt = descriptions[selected];
     original.href = image.getAttribute("src");
+    document.querySelector("#open-source").href =
+      button.dataset.source || "assets/architecture.drawio";
     for (const item of buttons) {
       item.setAttribute("aria-pressed", String(item === button));
     }

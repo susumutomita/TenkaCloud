@@ -93,7 +93,8 @@
   });
 
   document.addEventListener("keydown", (event) => {
-    const interactive = "button,a,input,select,textarea,video,audio,iframe,[contenteditable]";
+    const interactive =
+      "button,a,summary,input,select,textarea,video,audio,iframe,[contenteditable]";
     if (
       event.altKey ||
       event.ctrlKey ||
@@ -124,6 +125,10 @@
   const diagram = document.querySelector("#slide-architecture-svg");
   function setDiagramView(box) {
     diagram.setAttribute("viewBox", box);
+    const selected = [...document.querySelectorAll("[data-view-box]")].find(
+      (button) => button.dataset.viewBox === box,
+    );
+    document.querySelector("#diagram-summary").textContent = selected.dataset.summary;
     const rect = document.querySelector("#slide-architecture-clip-rect");
     const values = box.split(" ");
     ["x", "y", "width", "height"].forEach((name, valueIndex) => {
@@ -174,7 +179,7 @@
   window.addEventListener("beforeprint", () => {
     for (const slide of slides) slide.setAttribute("aria-hidden", "false");
     diagramViewBeforePrint = diagram.getAttribute("viewBox");
-    setDiagramView("0 0 3300 2210");
+    setDiagramView(diagram.dataset.fullViewBox);
   });
   window.addEventListener("afterprint", () => {
     if (diagramViewBeforePrint) setDiagramView(diagramViewBeforePrint);
