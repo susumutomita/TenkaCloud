@@ -37,6 +37,13 @@ const SITE_ORIGIN = "https://tenkacloud.com";
 const DOC_ASSETS = [
   "assets/problem-author-flow.ja.svg",
   "assets/problem-author-flow.en.svg",
+  "assets/architecture/cloud-components.svg",
+  "assets/architecture/local-components.svg",
+  "assets/architecture/local-play-sequence.svg",
+  "assets/architecture/logical.svg",
+  "assets/architecture/participant-scoring.svg",
+  "assets/architecture/problem-deployment.svg",
+  "assets/architecture/tenant-onboarding.svg",
 ] as const;
 
 /**

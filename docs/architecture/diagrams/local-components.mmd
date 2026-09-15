@@ -1,0 +1,31 @@
+flowchart TB
+  Browser["参加者のブラウザ"]
+  Launcher["make local<br/>docker-launcher.sh"]
+
+  subgraph DockerHost["同じDocker daemonが管理する環境"]
+    Permissions["local-data-permissions<br/>初回・互換用の所有者調整"]
+    subgraph Controller["tenkacloud-local：制御用コンテナ"]
+      HTTP["HTTPサーバー<br/>Portal配信・runtime-config・Bearer検証"]
+      API["handleLocalPlayRequest"]
+      Lifecycle["ProblemLifecycle<br/>問題の開始・停止・状態管理"]
+      Runner["ContainerRunner<br/>Compose検査・ポート調整・準備完了確認"]
+      Score["submitFlag / submitContainerFlag<br/>加減点・解答済み状態・履歴"]
+    end
+    Daemon["Docker API<br/>マウントされたdocker.sock"]
+    Problem["問題ごとの兄弟コンテナ群<br/>問題画面・POST /verify"]
+    Volume["名前付きvolume<br/>SQLiteの学習進捗"]
+  end
+
+  Launcher --> Permissions
+  Permissions -->|"正常終了後に開始"| HTTP
+  Browser -->|"通常はloopbackの5175番"| HTTP
+  HTTP --> API
+  API --> Lifecycle
+  Lifecycle --> Runner
+  Runner -->|"compose up / down"| Daemon
+  Daemon --> Problem
+  API --> Score
+  Score -->|"loopback HTTP：回答を照会"| Problem
+  Problem -->|"正誤判定"| Score
+  HTTP -->|"変更後の状態を保存"| Volume
+  Browser -->|"配布された問題URLを開く"| Problem

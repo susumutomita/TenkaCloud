@@ -1,0 +1,32 @@
+sequenceDiagram
+  actor Player as 参加者
+  participant UI as Local Participant Portal
+  participant API as Local HTTP API
+  participant Runner as ProblemLifecycle / ContainerRunner
+  participant Docker as Docker daemon
+  participant Problem as 問題コンテナ
+  participant DB as SQLite
+
+  Player->>UI: 問題を開始
+  UI->>API: POST /portal/me/problems/:id/start
+  API->>Runner: ensureRunning
+  API-->>UI: 202 / 起動処理受付
+  Runner->>Runner: Compose検査・ポート調整・所有情報の記録
+  Runner->>Docker: compose up -d --build
+  Docker->>Problem: 問題環境を起動
+  Runner->>Problem: verifierと必要なURLの準備完了確認
+  UI->>API: 起動状態を再取得
+  API-->>UI: runningまたは起動エラー
+
+  Player->>UI: 解答を提出
+  UI->>API: POST /portal/me/submit-flag / Bearer
+  API->>API: 稼働中・対象問題・既提出を確認
+  API->>Problem: POST /verify
+  alt 正常に正誤判定を取得
+    Problem-->>API: correct等の判定情報
+    API->>API: 加減点・解答済み状態・履歴を更新
+    API->>DB: persist / 状態スナップショット保存
+    API-->>UI: 判定結果・得点
+  else 接続失敗または不正な応答
+    API-->>UI: 502 verify_unavailable
+  end

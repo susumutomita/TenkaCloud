@@ -1,0 +1,40 @@
+sequenceDiagram
+  actor Host as 開催者
+  participant API as 開催API / bulkDeployEvent
+  participant Store as イベント・配置Repository
+  participant Bus as EventBridge
+  participant SFN as DeployCreateStateMachine
+  participant Worker as CfnDeploy / DescribeStack Lambda
+  participant SSM as SSM SecureString
+  participant STS as STS
+  participant CFN as 競技アカウントのCloudFormation
+
+  Host->>API: POST /events/:eventId/deploy
+  API->>Store: イベント・チーム・既存配置を取得
+  API->>API: 対象・権限・容量・重複を検査
+  API->>Store: 配置計画をPENDINGで保存
+  API->>Bus: 配置要求を発行
+  API-->>Host: 受付件数・スキップ結果
+  Bus->>SFN: 各配置ジョブを開始
+  SFN->>Store: IN_PROGRESS
+  SFN->>Worker: 配置要求
+  Note over Worker,CFN: クロスアカウント配置では ExternalId 必須
+  Worker->>SSM: GetParameter（復号あり）
+  SSM-->>Worker: ExternalId
+  Worker->>STS: AssumeRole（CompetitorDeployRole + ExternalId）
+  STS-->>Worker: 一時認証情報
+  Worker->>CFN: 一時認証情報でCreateStack / UpdateStack等
+  loop 終端状態またはタイムアウトまで
+    SFN->>Worker: 状態確認
+    Worker->>SSM: GetParameter（復号あり）
+    SSM-->>Worker: ExternalId
+    Worker->>STS: AssumeRole（CompetitorDeployRole + ExternalId）
+    STS-->>Worker: 一時認証情報
+    Worker->>CFN: 一時認証情報でDescribeStacks
+    CFN-->>Worker: スタック状態・Outputs
+    Worker-->>SFN: 確認結果
+  end
+  SFN->>Store: COMPLETEまたはFAILED・配置結果
+  Host->>API: 配置状況を再取得
+  API->>Store: 保存済み結果を取得
+  API-->>Host: チーム・問題別の進捗
