@@ -1,30 +1,26 @@
-# AGENTS.md — TenkaCloud
+# TenkaCloud の作業ルール
 
-TenkaCloud の AI エージェント向け作業契約です。実装方法を固定せず、platform boundary、安全、検証可能な完了条件を共有します。
+本体はこのリポジトリ、問題は `problems/` (TenkaCloudChallenge) が正本です。
+構成と担当コードは[開発者マニュアル](./apps/developer-portal/src/app/developers/docs/manual/developer/page.ja.mdx)を、必要な範囲だけ参照してください。
 
-## Repository
+## 進め方
 
-TenkaCloud は AWS 上の multi-tenant cloud competition platform です。Control Plane、Application Plane、problem deployment、participant / admin UI、problem pack tooling を所有します。problem content は `problems/` submodule の TenkaCloudChallenge が正本です。
+- 依頼・Issue と既存コード・テストから、何ができれば完了かを確認する。履歴で分かることは調べる。
+- 新しい処理・テーブル・権限・設定を足す前に、使える既存実装を探す。
+- 手順は作業に合わせる。専用計画書、固定の役割分担・人数、TDD の順序は必須ではない。複雑な境界や移行だけ、独立した検証を検討する。
+- 1 つの動作に必要な画面・API・基盤の変更をまとめ、利用者が結果を確認できる状態にする。
 
-## Working contract
+## 守ること
 
-- 依頼、Issue、関連 stack、handler、UI、test から受け入れ条件を把握する。既存コードと履歴から解決できる曖昧さはリポジトリ内で確認する。
-- 新しい helper、table、event、IAM permission、runtime config を足す前に既存実装と shared utility を検索する。
-- 方法はタスクに合わせて選ぶ。専用 plan file、Skill、固定 role、固定人数の subagent、TDD の順序は必須ではない。
-- apps、packages、scripts、infrastructure を必要な範囲で end-to-end に変更し、利用者から観測できる working increment を作る。
-- 単純な修正を ceremony や multi-agent 化で膨らませない。trust boundary、migration、cross-plane、cost、physical impact が複雑な場合だけ独立探索や反証を使う。
+- テナント分離、Cognito/JWT 認証、必須の `ExternalId`、必要最小限の IAM 権限を保つ。
+- `competitor-bootstrap.yaml` の `AdministratorAccess` は競技者アカウントの初期設定だけの例外。他のロールへ広げない。
+- EventBridge、テナント作成、`DeployCreateRequested`、`runtime-config.json` の契約を変えるときは、送信側と受信側を同じ PR で確認する。
+- Lite/SaaS、DynamoDB/Turso の違いと継続費用を確認する。保存先の切り替えでデータが自動移行されると考えない。
+- 破壊的操作、リリース、共有環境の変更、秘密情報へのアクセスは明示的な承認の範囲内で行う。
+- テスト・型・lint・coverage・設定を、通すためだけに弱めない。規則自体が原因なら、根拠と回帰確認を伴って直す。
+- エラーを空値・mock・黙った代替処理・偽の成功で隠さない。
 
-## Platform guardrails
-
-- tenant isolation、Cognito / JWT auth、mandatory `ExternalId`、IAM least privilege を維持する。
-- `infrastructure/templates/competitor-bootstrap.yaml` の `AdministratorAccess` は competitor account bootstrap だけの明示的例外であり、他の role へ一般化しない。
-- EventBridge bus、tenant onboarding、`DeployCreateRequested`、`runtime-config.json` の cross-plane contract を変更する場合は、producer と consumer を同じ PR で確認する。
-- DynamoDB の capacity、Turso backend、Lite、SaaS の mode 差分と running cost を意識する。
-- 破壊的操作、release、shared environment への変更、secret access は明示的な承認なしに行わない。
-- test、type、lint、coverage、config を通すためだけに弱めない。rule または config が根本原因なら、証拠、test、regression analysis を伴って修正してよい。
-- failure を空値、mock、silent fallback、偽の成功へ変換して隠さない。
-
-## Verification
+## 完了の確認
 
 - commit 前に `make before-commit` を通す。
-- 実 AWS、実機、第三者、外部の account / service でしか行えない確認は merge gate にしない。必要なら特定イベントの任意リハーサルとして runbook へ記録し、未実施だけを理由に開発 Issue を残さない。
+- 変更点、実行した検証、未確認事項を報告する。実 AWS・実機・外部サービスでしかできない確認は merge の必須条件にせず、任意のイベントリハーサルとして記録する。未実施だけで開発 Issue を残さない。
