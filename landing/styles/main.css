@@ -21,6 +21,7 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
+html { scroll-padding-top: 72px; }
 body {
   font-family: var(--font-sans);
   color: var(--ink);
@@ -953,6 +954,7 @@ footer .footer-legal-links { display: inline-flex; flex-wrap: wrap; gap: 0 6px; 
 
 /* ============== RESPONSIVE ============== */
 @media (max-width: 980px) {
+  html { scroll-padding-top: 116px; }
   .nav { height: auto; }
   .nav .wrap { flex-wrap: wrap; }
   .nav .brand, .nav-right { min-height: 56px; }
