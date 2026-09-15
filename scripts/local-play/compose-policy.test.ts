@@ -571,3 +571,46 @@ describe("compose-policy: the real catalog (problems/ submodule)", () => {
     });
   }
 });
+
+describe("compose-policy: YAML merge keys resolve the way Compose does", () => {
+  // js-yaml 5's default schema drops `!!merge`; the checker opts back in so a `<<: *anchor`
+  // is seen as the merged mapping Compose runs, not as an opaque `<<` key.
+  it("merge-key-injected privileged: privileged denied through `<<`", () => {
+    const rules = rulesFor(`
+x-base: &base
+  image: alpine
+  privileged: true
+services:
+  app:
+    <<: *base
+`);
+    expect(rules).toContain("privileged");
+    expect(rules).not.toContain("unknown-compose-feature");
+  });
+
+  it("accepts an `x-` anchor merged into a service and its healthcheck", () => {
+    expect(
+      rulesFor(`
+name: hello-merge
+x-service-defaults: &service-defaults
+  read_only: true
+  cap_drop: [ALL]
+  security_opt:
+    - "no-new-privileges:true"
+x-healthcheck: &healthcheck
+  interval: "3s"
+  timeout: "3s"
+  retries: 10
+services:
+  app:
+    <<: *service-defaults
+    image: alpine
+    ports:
+      - "127.0.0.1:18080:8080"
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD", "true"]
+`),
+    ).toEqual([]);
+  });
+});
