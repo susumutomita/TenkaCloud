@@ -1,5 +1,4 @@
 (() => {
-  "use strict";
   const slides = [...document.querySelectorAll(".slide")];
   if (!slides.length) return;
   document.documentElement.classList.add("js");
@@ -9,34 +8,65 @@
   const notes = document.querySelector("#notes");
   const notesButton = document.querySelector("#notes-button");
   let index = 0;
+
   function hashIndex() {
     const raw = location.hash.slice(1);
     return /^\d+$/.test(raw) ? Math.min(slides.length - 1, Math.max(0, Number(raw) - 1)) : 0;
   }
-  // Measure after fonts/images/layout changes so the complete slide stays in view.
+
+  // Measure the unscaled slide after layout changes, including loaded media.
   function fitSlide() {
     const deck = document.querySelector("#deck");
-    if (innerWidth <= 900 || document.body.classList.contains("reading")) { deck.style.height = ""; return; }
+    if (innerWidth <= 900 || document.body.classList.contains("reading")) {
+      deck.style.height = "";
+      return;
+    }
     const height = Math.max(810, slides[index].offsetHeight);
     const footer = document.querySelector("body > footer");
-    const available = Math.max(320, innerHeight - deck.getBoundingClientRect().top - footer.offsetHeight);
+    const available = Math.max(
+      320,
+      innerHeight - deck.getBoundingClientRect().top - footer.offsetHeight,
+    );
     const scale = Math.min(innerWidth / 1440, available / height, 1);
     deck.style.setProperty("--deck-scale", String(scale));
     deck.style.height = `${height * scale}px`;
   }
+
   window.addEventListener("resize", () => requestAnimationFrame(fitSlide));
-  document.querySelectorAll("img").forEach(image => image.addEventListener("load", fitSlide));
+  for (const image of document.querySelectorAll("img")) {
+    image.addEventListener("load", fitSlide);
+  }
+  for (const video of document.querySelectorAll("video")) {
+    video.addEventListener("loadedmetadata", fitSlide);
+  }
   document.fonts?.ready.then(fitSlide);
+
+  function syncVisibility() {
+    const reading = document.body.classList.contains("reading");
+    slides.forEach((slide, slideIndex) => {
+      const hidden = !reading && slideIndex !== index;
+      slide.hidden = hidden;
+      slide.setAttribute("aria-hidden", String(hidden));
+      if (hidden) {
+        for (const video of slide.querySelectorAll("video")) {
+          if (!video.paused) video.pause();
+        }
+      }
+    });
+  }
+
   function show(value, changeHash = true) {
     index = Math.max(0, Math.min(slides.length - 1, value));
-    slides.forEach((slide, i) => { slide.hidden = i !== index; slide.setAttribute("aria-hidden", String(!document.body.classList.contains("reading") && i !== index)); });
+    syncVisibility();
     previous.disabled = index === 0;
     next.disabled = index === slides.length - 1;
     position.textContent = `${index + 1} / ${slides.length}`;
-    notes.textContent = slides[index].querySelector(".speaker-notes")?.textContent.trim() || "補足スライドです。";
+    notes.textContent =
+      slides[index].querySelector(".speaker-notes")?.textContent.trim() || "補足スライドです。";
     if (changeHash) history.replaceState(null, "", `#${index + 1}`);
     requestAnimationFrame(fitSlide);
   }
+
   previous.addEventListener("click", () => show(index - 1));
   next.addEventListener("click", () => show(index + 1));
   window.addEventListener("hashchange", () => show(hashIndex(), false));
@@ -48,57 +78,101 @@
   document.querySelector("#reading").addEventListener("click", (event) => {
     const reading = document.body.classList.toggle("reading");
     event.currentTarget.setAttribute("aria-pressed", String(reading));
-    slides.forEach((slide, i) => slide.setAttribute("aria-hidden", String(!reading && i !== index)));
+    syncVisibility();
     requestAnimationFrame(fitSlide);
   });
   document.querySelector("#fullscreen").addEventListener("click", async () => {
     try {
       if (document.fullscreenElement) await document.exitFullscreen();
-      else if (document.documentElement.requestFullscreen) await document.documentElement.requestFullscreen();
+      else if (document.documentElement.requestFullscreen)
+        await document.documentElement.requestFullscreen();
       else position.textContent = "全画面はブラウザの機能を使用してください";
-    } catch { position.textContent = "全画面を開始できませんでした"; }
+    } catch {
+      position.textContent = "全画面を開始できませんでした";
+    }
   });
+
   document.addEventListener("keydown", (event) => {
-    if (event.altKey || event.ctrlKey || event.metaKey || event.target.closest("button,a,input,select,textarea,[contenteditable]")) return;
-    if (document.body.classList.contains("reading")) return;
-    if (["ArrowRight", "PageDown", " "].includes(event.key)) { event.preventDefault(); show(index + 1); }
-    if (["ArrowLeft", "PageUp"].includes(event.key)) { event.preventDefault(); show(index - 1); }
-    if (event.key === "Home") { event.preventDefault(); show(0); }
-    if (event.key === "End") { event.preventDefault(); show(slides.length - 1); }
+    const interactive = "button,a,input,select,textarea,video,audio,iframe,[contenteditable]";
+    if (
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.target.closest?.(interactive) ||
+      document.body.classList.contains("reading")
+    )
+      return;
+    if (["ArrowRight", "PageDown", " "].includes(event.key)) {
+      event.preventDefault();
+      show(index + 1);
+    }
+    if (["ArrowLeft", "PageUp"].includes(event.key)) {
+      event.preventDefault();
+      show(index - 1);
+    }
+    if (event.key === "Home") {
+      event.preventDefault();
+      show(0);
+    }
+    if (event.key === "End") {
+      event.preventDefault();
+      show(slides.length - 1);
+    }
     if (event.key.toLowerCase() === "n") notesButton.click();
   });
+
   const diagram = document.querySelector("#slide-architecture-svg");
   function setDiagramView(box) {
     diagram.setAttribute("viewBox", box);
     const rect = document.querySelector("#slide-architecture-clip-rect");
     const values = box.split(" ");
-    ["x", "y", "width", "height"].forEach((name, i) => rect.setAttribute(name, values[i]));
+    ["x", "y", "width", "height"].forEach((name, valueIndex) => {
+      rect.setAttribute(name, values[valueIndex]);
+    });
   }
-  document.querySelectorAll("[data-view-box]").forEach(button => {
+  for (const button of document.querySelectorAll("[data-view-box]")) {
     button.addEventListener("click", () => {
       setDiagramView(button.dataset.viewBox);
-      document.querySelectorAll("[data-view-box]").forEach(other => {
+      for (const other of document.querySelectorAll("[data-view-box]")) {
         other.setAttribute("aria-pressed", String(other === button));
-      });
+      }
     });
-  });
+  }
+
   const timer = document.querySelector("#timer");
   const timerButton = document.querySelector("#timer-button");
-  let interval = null, elapsed = 0, start = 0;
+  let interval = null;
+  let elapsed = 0;
+  let start = 0;
   function updateTimer() {
-    const seconds = Math.floor((elapsed + (interval === null ? 0 : performance.now() - start)) / 1000);
+    const seconds = Math.floor(
+      (elapsed + (interval === null ? 0 : performance.now() - start)) / 1000,
+    );
     timer.textContent = `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
     timer.classList.toggle("over", seconds >= 600);
   }
   timerButton.addEventListener("click", () => {
-    if (interval === null) { start = performance.now(); interval = setInterval(updateTimer, 250); timerButton.textContent = "タイマー停止"; }
-    else { elapsed += performance.now() - start; clearInterval(interval); interval = null; timerButton.textContent = "タイマー再開"; }
+    if (interval === null) {
+      start = performance.now();
+      interval = setInterval(updateTimer, 250);
+      timerButton.textContent = "タイマー停止";
+    } else {
+      elapsed += performance.now() - start;
+      clearInterval(interval);
+      interval = null;
+      timerButton.textContent = "タイマー再開";
+    }
     updateTimer();
   });
-  document.querySelector("#reset-timer").addEventListener("click", () => { elapsed = 0; start = performance.now(); updateTimer(); });
+  document.querySelector("#reset-timer").addEventListener("click", () => {
+    elapsed = 0;
+    start = performance.now();
+    updateTimer();
+  });
+
   let diagramViewBeforePrint = null;
   window.addEventListener("beforeprint", () => {
-    slides.forEach(slide => slide.setAttribute("aria-hidden", "false"));
+    for (const slide of slides) slide.setAttribute("aria-hidden", "false");
     diagramViewBeforePrint = diagram.getAttribute("viewBox");
     setDiagramView("0 0 3300 2210");
   });
