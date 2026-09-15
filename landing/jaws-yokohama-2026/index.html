@@ -6,145 +6,67 @@
 <meta name="description" content="JAWS-UG横浜 #103 × SRE支部向け10分の発表資料。GameDayをいつでも開催したくてTenkaCloudを自作。OSSでのマルチクラウド構想からSBTを使ったサーバーレス構成への作り直しと、開催手順・オリジナル問題を紹介します。" />
 <link rel="canonical" href="https://tenkacloud.com/jaws-yokohama-2026/" />
 <meta property="og:title" content="GameDayみたいなクラウド演習を自分で作ってみた" /><meta property="og:type" content="article" /><meta property="og:url" content="https://tenkacloud.com/jaws-yokohama-2026/" />
-<link rel="icon" href="../assets/favicon.svg" /><link rel="stylesheet" href="./talk.css?v=3fb984e6d8" /><script defer src="./talk.js"></script>
+<link rel="icon" href="../assets/favicon.svg" /><link rel="stylesheet" href="./talk.css?v=23f670b86d" /><script defer src="./talk.js?v=4ef9a961fc"></script>
 </head>
 <body>
 <header class="topbar"><a href="../presentations/">← 発表資料一覧</a><span>JAWS-UG横浜 #103 × SRE支部</span><a href="./architecture.html">構成図を開く ↗</a></header>
-<nav class="controls" aria-label="発表資料の操作">
+<nav class="controls" aria-label="スライドの操作">
 <button id="previous" type="button" aria-label="前のスライド">← 前へ</button><output id="position" aria-live="polite">1 / 13</output><button id="next" type="button" aria-label="次のスライド">次へ →</button>
-<output id="timer" aria-label="経過時間">00:00</output>
-<details class="presenter-tools"><summary>発表ツール</summary><div class="presenter-menu">
-<button id="fullscreen" type="button">全画面</button><button id="reading" type="button" aria-pressed="false">一覧表示</button><button id="notes-button" type="button" aria-expanded="false" aria-controls="notes">発表原稿</button><button id="print" type="button">印刷 / PDF保存</button>
-<button id="timer-button" type="button">タイマー開始</button><button id="reset-timer" type="button">リセット</button>
-</div></details></nav>
+</nav>
 <noscript><p class="noscript">すべてのスライドを順に表示しています。</p></noscript>
 <main id="deck">
-<section class="slide cover" id="slide-1" aria-labelledby="title-1" data-seconds="15">
+<section class="slide cover" id="slide-1" aria-labelledby="title-1">
 <p class="kicker">JAWS-UG横浜 #103 × SRE支部 · 2026年9月18日</p><h1 id="title-1">GameDayみたいなクラウド演習を<br>自分で作ってみた</h1>
 <p class="lead">GameDayが好きで、いつでも開催したかった。</p><p class="byline">冨田 進 / susumutomita<br>合同会社BULL</p>
 <div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>1 / 13</span></div>
-<div class="speaker-notes">1/13 · 目安 15秒
-
-冨田です。AWS GameDayが好きで、自分でもいつでも開催したいと思い、TenkaCloudを作りました。作る途中で困ったことと、作り直した構成、実際の動きを紹介します。</div>
 </section>
-<section class="slide " id="slide-2" aria-labelledby="title-2" data-seconds="30">
+<section class="slide " id="slide-2" aria-labelledby="title-2">
 <p class="kicker">きっかけ</p><h2 id="title-2">GameDay、いつでも開催したくないですか？</h2>
 <p class="lead">僕はGameDayが大好きです。</p><ul class="speaking-points"><li>自分で考えたオリジナル問題で遊びたい</li><li>現場で起きた障害を、再現問題にしたい</li><li>勉強会でも、社内でも開催したい</li></ul>
 <div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>2 / 13</span></div>
-<div class="speaker-notes">2/13 · 目安 30秒
-
-皆さんはAWS GameDayに参加したことがありますか。僕は大好きです。チームで相談して、ログを見て、設定を直して、うまくいったら点数が増える。あの体験をもっとやりたくなりました。
-自分の考えたオリジナル問題で遊んだり、仕事で経験した障害を再現したり。それを勉強会や社内で、やりたいときに開催できたらいいなと思いました。
-【参考にした過去資料】
-https://tenkacloud.com/ccoe-lt/</div>
 </section>
-<section class="slide " id="slide-3" aria-labelledby="title-3" data-seconds="25">
+<section class="slide " id="slide-3" aria-labelledby="title-3">
 <p class="kicker">きっかけ</p><h2 id="title-3">探してみたけれど、欲しいものがなかった。</h2>
 <p class="lead">見つかったのは、主にCTFのプラットフォーム。</p><ul class="speaking-points"><li>問題を出して、回答を採点する仕組みはある</li><li>チームごとのクラウド環境を配る仕組みがほしい</li></ul><p class="emphasis">それなら自分で作ろう。→ TenkaCloud</p>
 <div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>3 / 13</span></div>
-<div class="speaker-notes">3/13 · 目安 25秒
-
-まず既存のものを探しました。自分でGameDayのようなイベントを開催できるプラットフォームがあれば、それを使いたかったからです。
-僕が探した範囲では、見つかったのは主にCTFのプラットフォームでした。問題を出して回答を採点するところは近い。でも、チームごとにクラウドへ環境を作る仕組みまで欲しかった。その用途に合うものを見つけられなかったので、自分でプラットフォームを作ることにしました。それがTenkaCloudです。
-【補足・読み上げない】
-CTF全体に機能がないと断定する話ではなく、登壇者本人が探したときの経験として話します。</div>
 </section>
-<section class="slide " id="slide-4" aria-labelledby="title-4" data-seconds="30">
+<section class="slide " id="slide-4" aria-labelledby="title-4">
 <p class="kicker">作ってみる</p><h2 id="title-4">最初は、マルチクラウドを目指した。</h2>
 <p class="lead">特定のクラウドに依存しないよう、OSSを中心に組んでいった。</p><dl class="plain-list"><div><dt>Keycloak</dt><dd>認証を自分で持つ</dd></div><div><dt>Kubernetes</dt><dd>アプリを動かす共通基盤を持つ</dd></div><div><dt>Kumo</dt><dd>手元でAWS APIを動かす<br><small>AWS向けの開発過程で使ったエミュレータ</small></dd></div></dl>
 <div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>4 / 13</span></div>
-<div class="speaker-notes">4/13 · 目安 30秒
-
-せっかく自分で作るなら、AWSだけでなく複数のクラウドに対応したいと考えました。認証にはKeycloak、アプリを動かす土台にはKubernetes。なるべくOSSを中心に組み、特定のクラウドに依存しないようにしていました。
-開発を進める中では、手元でAWS APIを動かすKumoも使いました。KumoはAWSのエミュレータで、KeycloakやKubernetesと同じ役割のものではありません。この3つは開発中に使ったものとして紹介しています。
-【履歴】
-https://github.com/susumutomita/TenkaCloud/issues/12
-https://github.com/susumutomita/TenkaCloud/pull/118
-https://github.com/susumutomita/TenkaCloud/pull/207
-https://github.com/susumutomita/TenkaCloud/pull/378</div>
 </section>
-<section class="slide " id="slide-5" aria-labelledby="title-5" data-seconds="20">
+<section class="slide " id="slide-5" aria-labelledby="title-5">
 <p class="kicker">作っていて気づいた</p><h2 id="title-5">作ったはいいけど、<br>これ、運用難しくない？</h2>
 <ul class="speaking-points"><li>認証基盤を更新する</li><li>クラスタを維持する</li><li>壊れたときに、自分で直す</li></ul><p class="lead">イベントを開きたいだけなのに、面倒を見るものが増えていた。</p>
 <div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>5 / 13</span></div>
-<div class="speaker-notes">5/13 · 目安 20秒
-
-作っている途中で気づきました。これ、作ったはいいけど、運用が難しくないかと。
-認証を自分で持てば、更新も障害対応も自分の仕事です。Kubernetesを持てば、アプリだけでなくクラスタも見ていく必要があります。最初は自由に組めるのが楽しかったんですが、イベントを開催するまでに面倒を見るものが増えていました。
-やりたかったのはGameDayのような演習を開くことです。このまま全部を持ち続けるのは大変そうだと考え、方針を変えました。</div>
 </section>
-<section class="slide diagram-slide" id="slide-6" aria-labelledby="title-6" data-seconds="55">
+<section class="slide diagram-slide" id="slide-6" aria-labelledby="title-6">
 <p class="kicker">作り直した構成</p><h2 id="title-6">SBTを土台に、AWSのサービスで組み直した。</h2>
-<div class="diagram-focus" role="group" aria-label="物理構成図の表示範囲"><button type="button" data-view-box="0 0 6000 3300" data-summary="SBTの2層に、問題デプロイエンジン・競技者コンソールを追加。" aria-pressed="true">全体</button><button type="button" data-view-box="90 450 1800 430" data-diagram-src="./assets/architecture-control-plane.svg" data-summary="① Control Plane：利用する組織を登録・管理する。" aria-pressed="false">① SBT / 組織管理</button><button type="button" data-view-box="90 1600 1800 760" data-diagram-src="./assets/architecture-application.svg" data-summary="② Application Plane：開催者がイベントを準備する。" aria-pressed="false">② 開催者のアプリ</button><button type="button" data-view-box="2460 450 2500 1370" data-diagram-src="./assets/architecture-problem-runtime.svg" data-summary="③ 追加した部分：問題環境を作り、参加者が競技する。" aria-pressed="false">③ 問題配置・競技者</button></div>
-<a class="figure-link" href="./architecture.html?view=saas" target="_blank" rel="noopener noreferrer"><svg id="slide-architecture-svg" viewBox="0 0 6000 3300" data-full-view-box="0 0 6000 3300" role="img" aria-label="既存Draw.ioのSaaS物理構成図。全体からSBT、開催者アプリ、問題配置・競技者の範囲へ切り替えられます"><defs><clipPath id="slide-architecture-clip"><rect id="slide-architecture-clip-rect" x="0" y="0" width="6000" height="3300" /></clipPath></defs><g clip-path="url(#slide-architecture-clip)"><image href="./assets/architecture-saas.svg" width="6000" height="3300" /></g></svg><span class="caption">部分表示は範囲内の接続のみ · 全体図を大きく開く ↗</span></a><p id="diagram-summary" class="diagram-summary" aria-live="polite">SBTの2層に、問題デプロイエンジン・競技者コンソールを追加。</p>
+<div class="diagram-focus" role="group" aria-label="物理構成図の表示範囲"><button type="button" data-view-box="0 0 6000 3300" data-summary="SBTの2層に、問題デプロイエンジン・競技者コンソールを追加。" aria-pressed="true">全体</button><button type="button" data-view-box="90 450 1800 430" data-diagram-src="./assets/architecture-control-plane.svg" data-summary="① Control Plane：利用する組織を登録・管理する。" aria-pressed="false">① SBT / 組織管理</button><button type="button" data-view-box="90 1600 1800 760" data-diagram-src="./assets/architecture-application.svg" data-summary="② Application Plane：開催者がイベントを準備する。" aria-pressed="false">② 開催者のアプリ</button><button type="button" data-view-box="2460 450 2500 1370" data-diagram-src="./assets/architecture-problem-runtime.svg" data-summary="③ 追加した部分：問題環境を作り、参加者が競技する。" aria-pressed="false">③ 問題デプロイ・競技者</button></div>
+<a class="figure-link" href="./architecture.html?view=saas" target="_blank" rel="noopener noreferrer"><svg id="slide-architecture-svg" viewBox="0 0 6000 3300" data-full-view-box="0 0 6000 3300" role="img" aria-label="既存Draw.ioのSaaS物理構成図。全体からSBT、開催者アプリ、問題デプロイ・競技者の範囲へ切り替えられます"><defs><clipPath id="slide-architecture-clip"><rect id="slide-architecture-clip-rect" x="0" y="0" width="6000" height="3300" /></clipPath></defs><g clip-path="url(#slide-architecture-clip)"><image href="./assets/architecture-saas.svg" width="6000" height="3300" /></g></svg><span class="caption">部分表示は範囲内の接続のみ · 全体図を大きく開く ↗</span></a><p id="diagram-summary" class="diagram-summary" aria-live="polite">SBTの2層に、問題デプロイエンジン・競技者コンソールを追加。</p>
 <div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>6 / 13</span></div>
-<div class="speaker-notes">6/13 · 目安 55秒
-
-ここでSaaS版の物理構成図を、まず全体で見せます。SBT、SaaS Builder Toolkit for AWSを土台に作り直しました。
-①を押します。Control Planeが利用する組織の登録と管理です。②がApplication Plane、各組織の開催者が使うアプリです。SBTがイベント機能を提供するわけではなく、開催画面はTenkaCloudで作っています。
-③を押します。さらに、問題をデプロイするエンジンと、参加者が使う競技者コンソールを追加しました。認証はCognito、処理はLambda、保存はDynamoDBへ寄せています。【補足・読み上げない】
-実装上はpooled / siloなどが分かれ、スタック数は3ではありません。
-全体で位置関係を示してから、必要な部分だけ拡大します。全サービス名の説明はしません。
-【原本・根拠】
-https://github.com/susumutomita/TenkaCloud/blob/main/docs/architecture/diagrams/system-architecture.drawio
-https://github.com/awslabs/sbt-aws</div>
 </section>
-<section class="slide diagram-slide" id="slide-7" aria-labelledby="title-7" data-seconds="45">
-<p class="kicker">仕組みを見る</p><h2 id="title-7">「配置」を押すと、チームのAWSに環境ができる。</h2>
-<a class="figure-link" href="./architecture.html?view=deploy" target="_blank" rel="noopener noreferrer"><img src="./assets/architecture-deploy.svg" width="1280" height="470" alt="開催者の配置操作をAPIが受け付け、EventBridgeからStep FunctionsとLambdaを起動する。チーム別のAWSアカウントへAssumeRoleしCloudFormationで問題環境を作る。参加者は競技者コンソールから問題を開く。" /><span class="caption">図を拡大する ↗</span></a><p class="fine">クラウド環境を使う問題の配置経路です。暗号バトルは、共有の競技APIで状態と得点を更新するタイプの問題です。</p>
+<section class="slide diagram-slide" id="slide-7" aria-labelledby="title-7">
+<p class="kicker">仕組みを見る</p><h2 id="title-7">「デプロイ」を押すと、チームのAWSに環境ができる。</h2>
+<a class="figure-link" href="./architecture.html?view=deploy" target="_blank" rel="noopener noreferrer"><img src="./assets/architecture-deploy.svg?v=314d52713b" width="1280" height="470" alt="開催者のデプロイ操作をAPIが受け付け、EventBridgeからStep FunctionsとLambdaを起動する。チーム別のAWSアカウントへAssumeRoleしCloudFormationで問題環境を作る。参加者は競技者コンソールから問題を開く。" /><span class="caption">図を拡大する ↗</span></a><p class="fine">クラウド環境を使う問題のデプロイ経路です。暗号バトルは、共有の競技APIで状態と得点を更新するタイプの問題です。</p>
 <div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>7 / 13</span></div>
-<div class="speaker-notes">7/13 · 目安 45秒
-
-例えば、AWSの設定を直す問題を開くときです。開催者が問題とチームを選んで配置を押すと、APIが受け付け、EventBridgeにイベントを送ります。Step FunctionsとLambdaが配置を進め、チームのAWSアカウントにAssumeRoleして、CloudFormationで問題環境を作ります。終了後の削除も、この問題環境を単位に扱います。
-参加者は競技者コンソールから問題を開き、用意された環境で作業します。正解かどうかはサーバー側で判定します。
-すべての問題がチームごとのAWS環境を必要とするわけではありません。最後に見せる暗号バトルは、共有の競技APIに操作を送り、状態と得点を更新する問題です。
-【出典】
-https://tenkacloud.com/docs/concepts/architecture/
-https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/lib/problem-deploy-backend-stack.ts</div>
 </section>
-<section class="slide " id="slide-8" aria-labelledby="title-8" data-seconds="40">
+<section class="slide " id="slide-8" aria-labelledby="title-8">
 <p class="kicker">開催する問題</p><h2 id="title-8">Challengeで解く。Battleで競う。</h2>
 <dl class="plain-list"><div><dt>Challenge</dt><dd>問題を解き、回答やflagを提出する。<br><small>例：設定ミスの修正、脆弱性の調査</small></dd></div><div><dt>Battle</dt><dd>稼働状態や競技中の操作を判定し、得点を競う。<br><small>例：サービスの復旧、攻撃・防御、暗号バトル</small></dd></div></dl><p class="lead">同じ開催画面から、問題に合った採点方法を使う。</p>
 <div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>8 / 13</span></div>
-<div class="speaker-notes">8/13 · 目安 40秒
-
-問題にはChallengeとBattleがあります。Challengeは問題を解いて回答を提出する形式。Battleはサービスを維持したり、競技中の操作で得点が動く形式です。別々の開催基盤を作ったのではなく、問題と採点方法を変えて同じ基盤で開けるようにしています。暗号バトルもBattleの一例です。
-【補足・読み上げない】
-Battleがすべて毎分採点という意味ではありません。Challengeにもイベントの制限時間があります。
-【実装】
-https://github.com/susumutomita/TenkaCloud/blob/main/apps/participant-portal/src/lib/category.ts</div>
 </section>
-<section class="slide " id="slide-9" aria-labelledby="title-9" data-seconds="45">
+<section class="slide " id="slide-9" aria-labelledby="title-9">
 <p class="kicker">もう一つ困ったこと</p><h2 id="title-9">開催していない間の、データベース代。</h2>
 <ol class="cost-history"><li><strong>DynamoDBをプロビジョンド容量に</strong><span>アクセス増による料金の急増を避けたかった。</span></li><li><strong>使っていなくても、確保した容量の費用が残る</strong><span>イベントを開かない日もある。</span></li><li><strong>SQLite / Tursoも選べるようにした</strong><span>ローカルはSQLite。AWS上の処理からはTursoへ。</span></li></ol><p class="fine">Turso対応は実装・テスト済み。実AWS＋Tursoでの開催と請求確認は未実施。SaaSのSBT用DynamoDBまでなくなるわけではありません。</p>
 <div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>9 / 13</span></div>
-<div class="speaker-notes">9/13 · 目安 45秒
-
-コストでも困りました。DynamoDBは、アクセスが増えたときの料金が怖くて、オンデマンドではなく確保する容量を決めるプロビジョンドにしていました。でも、それだと開催していない間も容量分の費用が残ります。
-そこで、手元ではSQLiteを使い、AWSのLambdaからはTursoを使えるようにしました。データの保存先を選べる実装です。Tursoについては実装とテストまでで、実際の開催や請求確認はまだ残っています。
-【補足・読み上げない】
-プロビジョンド容量はAWS全体の請求上限ではありません。低容量を超えればスロットリングも起きるため、イベントに合わせた容量設定が必要です。Liteの制御データ用DynamoDBを生成しない構成と、SBT用テーブルが残るSaaS構成を区別します。
-【実装・検証範囲】
-https://github.com/susumutomita/TenkaCloud/blob/main/docs/running-costs.md
-https://github.com/susumutomita/TenkaCloud/blob/main/docs/local-play.md</div>
 </section>
-<section class="slide " id="slide-10" aria-labelledby="title-10" data-seconds="40">
+<section class="slide " id="slide-10" aria-labelledby="title-10">
 <p class="kicker">開催を楽にする工夫</p><h2 id="title-10">問題を置いた後の、運営機能も作った。</h2>
-<dl class="feature-list"><div><dt>ゲート・障害注入</dt><dd>前の問題を通過したら次を解放。問題に用意した障害を発火。</dd></div><div><dt>ダッシュボード</dt><dd>チームの得点と、問題の配置状況を追う。</dd></div><div><dt>ログインキー</dt><dd>イベント作成時に、チームごとのキーを自動発行。</dd></div><div><dt>AWSフェデレーション</dt><dd>参加者画面 → 一時的な権限 → チームのAWSコンソール。</dd></div></dl>
+<dl class="feature-list"><div><dt>ゲート・障害注入</dt><dd>前の問題を通過したら次を解放。問題に用意した障害を発火。</dd></div><div><dt>ダッシュボード</dt><dd>チームの得点と、問題のデプロイ状況を追う。</dd></div><div><dt>ログインキー</dt><dd>イベント作成時に、チームごとのキーを自動発行。</dd></div><div><dt>AWSフェデレーション</dt><dd>参加者画面 → 一時的な権限 → チームのAWSコンソール。</dd></div></dl>
 <div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>10 / 13</span></div>
-<div class="speaker-notes">10/13 · 目安 40秒
-
-開催者向けの工夫も入れました。最初の問題を通ったら次を開けるゲート、問題側が用意した障害を入れる操作、得点や配置状況を見るダッシュボードです。
-イベントを作るとチームごとのログインキーを自動発行します。AWSの問題なら、参加者画面から一時的な権限でAWSコンソールを開けます。ここから開催の流れを見せます。
-【補足・読み上げない】
-ゲートはfeature flagが既定OFFです。障害注入は問題定義内の操作に限定します。AWSコンソールはチームキーと配置の照合後に2段階のAssumeRoleを行い、signin tokenを取得します。任意のAWSアカウントへ自由に入れる機能ではありません。
-【実装】
-https://github.com/susumutomita/TenkaCloud/blob/main/apps/application-admin-console/src/components/event-detail/EventProgressionGatePanel.tsx
-https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/lib/problem-deploy/handlers/event-handler/disruption-fire.ts
-https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/lib/problem-deploy/handlers/event-handler/create.ts
-https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/lib/problem-deploy/handlers/participant-handler/sso.ts</div>
 </section>
-<section class="slide video-slide" id="slide-11" aria-labelledby="title-11" data-seconds="35">
+<section class="slide video-slide" id="slide-11" aria-labelledby="title-11">
 <p class="kicker">使ってみる · 開催者</p><h2 id="title-11">準備ができたら、イベントを始める。</h2>
 <div class="video-layout"><figure class="demo-video">
 <div class="demo-player" id="host-demo" data-youtube-start="0" data-youtube-end="20">
@@ -154,15 +76,8 @@ https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/lib/problem-
 <figcaption id="host-caption">AWS上の実操作 · 20秒 · 音声：VOICEVOX:ずんだもん</figcaption>
 </figure><div class="video-story"><p><strong>開催時刻を決める</strong>開始と終了を設定。</p><p><strong>参加者へ案内する</strong>お知らせをまとめて送信。</p><p><strong>問題を開く</strong>参加者の画面で<br>競技を始める。</p><div class="actions"><a href="https://www.youtube.com/watch?v=o39ZWxEbrzA&amp;t=0s" target="_blank" rel="noopener noreferrer">YouTubeで見る ↗</a></div><p class="fine">問題とチームを登録した後の操作です。キー配布と待ち時間を省略。時刻の入力は2倍速です。</p></div></div>
 <div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>11 / 13</span></div>
-<div class="speaker-notes">11/13 · 目安 35秒（動画20秒）
-
-ここからは実際にAWSへデプロイしたTenkaCloudです。問題とチームの登録が済んだところから始めます。開催時刻を設定し、参加者へ開始の案内を送ります。参加者側にも届いています。そのまま問題を開いてみます。
-
-【補足・読み上げない】
-提供された実操作録画を編集。動画の合計は次の暗号バトルと合わせて60秒。音声はVOICEVOX:ずんだもん。イベント作成、AWSリソースの配置処理、キー配布、フェデレーションの操作はこの抜粋に含みません。
-編集範囲・字幕・音声の出典：./assets/recorded-demo.md
-</div></section>
-<section class="slide video-slide" id="slide-12" aria-labelledby="title-12" data-seconds="60">
+</section>
+<section class="slide video-slide" id="slide-12" aria-labelledby="title-12">
 <p class="kicker">作った問題 · 暗号バトル</p><h2 id="title-12">中学生の知識から、暗号の仕組みを遊んで学ぶ。</h2>
 <div class="video-layout"><figure class="demo-video">
 <div class="demo-player" id="crypto-demo" data-youtube-start="20" data-youtube-end="60">
@@ -171,17 +86,8 @@ https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/lib/problem-
 <img class="demo-print" src="./assets/crypto-battle-live-demo.png" width="1440" height="900" alt="ずらし暗号に正解し、30点を獲得した参加者の画面" />
 <figcaption id="demo-caption">AWS上の実操作 · 40秒 · 音声：VOICEVOX:ずんだもん</figcaption>
 </figure><div class="video-story"><p><strong>小さな数で計算</strong>暗号化・復号・証明を解き、<br>仕組みをつかむ。</p><p><strong>シーザー暗号から先端まで</strong><span class="crypto-topics">完全準同型暗号・ゼロ知識証明<br>iO・アナモルフィック暗号</span></p><p><strong>対戦しながら理解する</strong>正解で得点。<br>公開情報から相手の秘密を探す。</p><div class="actions"><a href="https://www.youtube.com/watch?v=o39ZWxEbrzA&amp;t=20s" target="_blank" rel="noopener noreferrer">YouTubeで見る ↗</a><a href="../acp2026/">暗号バトルの解説</a></div><p class="fine">小さな数の学習モデルで体験します。録画は回答と得点反映の例。公開・HUNTはルール紹介です。</p></div></div><div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>12 / 13</span></div>
-<div class="speaker-notes">12/13 · 目安 60秒（動画40秒）
-
-暗号バトルは、中学生程度の知識から遊べるように作りました。小さな数で暗号化や復号、証明を計算し、対戦しながら仕組みを学びます。シーザー暗号から完全準同型暗号、ゼロ知識証明、iO、アナモルフィック暗号まで扱います。それでは、回答と得点反映を見てください。
-【補足・読み上げない】
-iOは識別不可能性難読化。実用暗号の安全性を小さい数で再現するのではなく、仕組みを手計算できる学習モデルです。FHEでは暗号文の加算を体験します。
-2026年9月15日に提供されたAWS上の実操作録画。同じ録画の回答・得点表示・管理画面・参加者画面を抜粋しています。公開操作やHUNTの成功を実演した映像ではありません。音声はVOICEVOX:ずんだもん。
-【出典】
-https://github.com/susumutomita/TenkaCloudChallenge/tree/main/battles/ac26-crypto-battle
-https://tenkacloud.com/acp2026/</div>
 </section>
-<section class="slide closing-slide" id="slide-13" aria-labelledby="title-13" data-seconds="15">
+<section class="slide closing-slide" id="slide-13" aria-labelledby="title-13">
 <p class="kicker">作っているメンバー</p><h2 id="title-13">一緒に作って、遊びましょう。</h2>
 <div class="closing-members">
 <article class="member"><h3>amedama <small>冨田 進</small></h3><p>JAWS DAYS 2024 AWS GameDay 優勝<br>2026 準優勝</p><div class="profile-links" aria-label="amedamaのプロフィール">
@@ -198,16 +104,7 @@ https://tenkacloud.com/acp2026/</div>
 <a href="https://tenkacloud.com/" target="_blank" rel="noopener noreferrer"><img src="./assets/landing-qr.png" width="300" height="300" alt="LPへ移動するQRコード" /><span><strong>LP</strong><small>tenkacloud.com</small></span></a>
 </div>
 <div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>13 / 13</span></div>
-<div class="speaker-notes">13/13 · 目安 15秒
-
-TenkaCloudは、amedamaこと冨田、チャーリー、きせのんのメンバーで作っています。コードも問題もOSSです。QRコードからコードや問題を見て、遊んでみてください。ありがとうございました。
-【補足・読み上げない】
-メンバー紹介はシンギュラリティ・ソサエティの発表資料に基づきます。紹介文は発表時点の記載です。下段はTenkaCloudのリポジトリ、問題集、LPへのQRコードです。amedamaの紹介にはPortfolio、LinkedIn、GitHubのQRコードを掲載しています。個人の3つのQR画像は既存の紹介資料から引き継ぎ、リンク先を読み取って確認しています。
-【参考】
-https://tenkacloud.com/pitch/
-https://github.com/susumutomita/TenkaCloud
-https://github.com/susumutomita/TenkaCloudChallenge</div>
 </section>
-</main><aside id="notes" class="speaker-notes-panel" hidden aria-label="現在のスライドの発表原稿"></aside>
-<footer class="topbar"><span>← → で移動 · Nで原稿 · 全13枚 · 10分</span><a href="../">TenkaCloudへ戻る</a></footer>
+</main>
+<footer class="topbar"><span>← → で移動 · 全13枚 · 10分</span><a href="../">TenkaCloudへ戻る</a></footer>
 </body></html>

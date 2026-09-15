@@ -44,7 +44,7 @@
 <g font-size="28">
 <text><tspan x="1970" y="365">Cognito</tspan><tspan x="1970" y="403">管理者認証を任せる</tspan></text>
 <text><tspan x="2650" y="365">Lambda</tspan><tspan x="2650" y="403">API・競技処理の実行</tspan></text>
-<text><tspan x="1970" y="590">Step Functions</tspan><tspan x="1970" y="628">配置・削除の進行</tspan></text>
+<text><tspan x="1970" y="590">Step Functions</tspan><tspan x="1970" y="628">デプロイ・削除の進行</tspan></text>
 <text><tspan x="2650" y="590">DynamoDB</tspan><tspan x="2650" y="628">イベント・状態保存</tspan></text>
 <text><tspan x="1970" y="815">CloudFormation</tspan><tspan x="1970" y="853">チーム専用スタック</tspan></text>
 <text><tspan x="2650" y="815">IAM</tspan><tspan x="2650" y="853">AssumeRole + ExternalId</tspan></text>

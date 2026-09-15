@@ -22,8 +22,8 @@
       saas: "既存Draw.io原本のSaaS物理構成図。AWSサービスとスタックの配置・配線",
       sbt: "SBTの2層とTenkaCloudが追加した問題デプロイエンジン・競技者コンソール",
       deploy:
-        "開催者の配置操作からEventBridge、Step Functions、Lambda、チーム別AWSのCloudFormationへ進む流れ",
-      aws: "TenkaCloud Liteの運営AWSアカウントとチーム別AWSアカウント、管理・配置・競技・認証経路",
+        "開催者のデプロイ操作からEventBridge、Step Functions、Lambda、チーム別AWSのCloudFormationへ進む流れ",
+      aws: "TenkaCloud Liteの運営AWSアカウントとチーム別AWSアカウント、管理・デプロイ・競技・認証経路",
       evolution: "クラウド非依存を目指した初期方針とAWS-nativeへの設計転換",
     };
     image.alt = descriptions[selected];

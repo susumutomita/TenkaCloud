@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="3300" height="2210" viewBox="0 0 3300 2210" role="img" aria-labelledby="title desc">
 <title id="title">TenkaCloud Lite — AWS構成と主要経路</title>
-<desc id="desc">左が運営AWSアカウント、右がチーム別の演習AWSアカウント。管理者API、配置・削除、参加者の専用Function URL、定期採点、認証を分離した論理構成。</desc>
+<desc id="desc">左が運営AWSアカウント、右がチーム別の演習AWSアカウント。管理者API、デプロイ・削除、参加者の専用Function URL、定期採点、認証を分離した論理構成。</desc>
 <metadata>Source: architecture.drawio. AWS Icons for PlantUML, Amazon.com Inc. or its affiliates, CC BY-ND 2.0. Published monochrome sprites are embedded; text and connections are SVG.</metadata>
 <defs>
 <image id="i-api" width="64" height="64" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAAAAACPAi4CAAABcklEQVR42u2X7W2EMAyG36tYwCtkBa/gFVghK3AjwApZgRW8gldgBa/QH3eVOM5cgKuqViUS+RHhR/54bcKlw3vrAyfgBHwDoAlPU4thcdRBbSuA2hQcok3qmwAisbPOrFrPAfcCu0aAYpCOKx4kSZh0ij0YNVMrxV8AWgZGW824DyzU2UMqmkXwQZTzZSbCyTQEdIRp9Frd1YSFhwhAKNMG5fg4tbRShWmb+KyuRAA9rugx2362FwBc78/X1v/ngUJvAlKXjwJIAIDhEDoCoCwCgKEimfYDKJMbwHA3p3XCKiCTFwcYCi9O+WASKdU6bBVQnDIhYXJQJi+7AV6cGAID+BbNzmaCF1YiGKAw39+NgOvNAUAPK5Fgh+fBLZPkbzaT/4F5cE7lBYC32fBKCE6tqNXNhebymAEGljqCheDzd5qH20MN8WS+rMJrRGD+XMY7IrLvAvNIB2YcfwfII8+a8CbFEvRlHNjl/Gs7Ab8C8Ak0ZJJTuMJJuwAAAABJRU5ErkJggg=="/>
@@ -88,19 +88,19 @@
 <use href="#i-iam" x="2220" y="1488"/><use href="#i-cfn" x="2730" y="1488"/>
 <g fill="#172333" font-weight="700">
 <text x="40" y="66" font-size="32">TenkaCloud — AWS構成と主要経路</text>
-<text x="40" y="119" font-size="22">Liteモード / 青=管理API　赤=配置・削除　緑=競技中通信　紫=管理者認証</text>
+<text x="40" y="119" font-size="22">Liteモード / 青=管理API　赤=デプロイ・削除　緑=競技中通信　紫=管理者認証</text>
 <g font-size="24"><text x="58" y="294">AWS Cloud — 運営基盤と演習環境の責任分界</text><text x="98" y="364">運営用AWSアカウント / TenkaCloud Lite</text><text x="2178" y="450">チームAのAWSアカウント</text><text x="2178" y="1380">チームBのAWSアカウント</text></g>
-<g font-size="22"><text x="128" y="435">配信 / Global Edge（CloudFrontはグローバルサービス）</text><text x="128" y="730">運営API / 問題の配置・削除</text><text x="1188" y="730">認証 / データ / 監視</text><text x="128" y="1470">競技中の経路 / 参加者はteamLoginKeyで認証（Cognitoとは別）</text></g>
+<g font-size="22"><text x="128" y="435">配信 / Global Edge（CloudFrontはグローバルサービス）</text><text x="128" y="730">運営API / 問題のデプロイ・削除</text><text x="1188" y="730">認証 / データ / 監視</text><text x="128" y="1470">競技中の経路 / 参加者はteamLoginKeyで認証（Cognitoとは別）</text></g>
 <g font-size="21">
 <text><tspan x="245" y="534">CloudFront + S3</tspan><tspan x="245" y="566">管理者向けSPA</tspan></text>
 <text><tspan x="950" y="534">CloudFront + S3</tspan><tspan x="950" y="566">参加者向けSPA</tspan></text>
 <text><tspan x="245" y="837">API Gateway</tspan><tspan x="245" y="870">管理者向けTenant API</tspan></text>
-<text><tspan x="750" y="837">Lambda / 管理API群</tspan><tspan x="750" y="870">イベント作成・配置要求</tspan></text>
-<text><tspan x="245" y="1077">EventBridge</tspan><tspan x="245" y="1110">配置・削除要求イベント</tspan></text>
-<text><tspan x="750" y="1077">Step Functions</tspan><tspan x="750" y="1110">配置・削除 / 結果確認</tspan></text>
+<text><tspan x="750" y="837">Lambda / 管理API群</tspan><tspan x="750" y="870">イベント作成・デプロイ要求</tspan></text>
+<text><tspan x="245" y="1077">EventBridge</tspan><tspan x="245" y="1110">デプロイ・削除要求イベント</tspan></text>
+<text><tspan x="750" y="1077">Step Functions</tspan><tspan x="750" y="1110">デプロイ・削除 / 結果確認</tspan></text>
 <text><tspan x="750" y="1267">Lambda / CfnDeploy</tspan><tspan x="750" y="1300">CloudFormation APIを実行</tspan></text>
 <text><tspan x="1310" y="837">Cognito</tspan><tspan x="1310" y="870">管理者認証 / MFA</tspan></text>
-<text><tspan x="1310" y="1037">DynamoDB</tspan><tspan x="1310" y="1070">イベント・チーム・配置状況・監査・競技状態</tspan></text>
+<text><tspan x="1310" y="1037">DynamoDB</tspan><tspan x="1310" y="1070">イベント・チーム・デプロイ状況・監査・競技状態</tspan></text>
 <text><tspan x="1310" y="1257">CloudWatch</tspan><tspan x="1310" y="1290">各Lambdaのログ / アラームは設定時に追加</tspan></text>
 <text><tspan x="2300" y="577">IAM Role</tspan><tspan x="2300" y="610">AssumeRoleの受け口</tspan></text>
 <text><tspan x="2810" y="577">CloudFormation</tspan><tspan x="2810" y="610">チーム専用スタック</tspan></text>
@@ -123,7 +123,7 @@
 <g font-size="18" text-anchor="middle">
 <g fill="#ffffff"><rect x="125" y="642" width="380" height="24" rx="3"/><rect x="400" y="665" width="155" height="23" rx="3"/><rect x="1120" y="651" width="185" height="24" rx="3"/><rect x="550" y="924" width="175" height="24" rx="3"/><rect x="575" y="1061" width="100" height="24" rx="3"/><rect x="818" y="1170" width="104" height="26" rx="3"/><rect x="1325" y="1358" width="600" height="28" rx="3"/></g>
 <text x="315" y="660" fill="#2e7b50">Function URL / teamLoginKey</text><text x="477" y="683" fill="#147eba">JWT / 管理者API</text><text x="1212" y="670" fill="#7652b6">管理者サインイン</text>
-<text x="607" y="838" fill="#147eba">invoke</text><text x="637" y="943" fill="#c4425e">配置・削除要求</text><text x="625" y="1080" fill="#c4425e">非同期開始</text><text x="870" y="1190" fill="#c4425e">実行・確認</text>
+<text x="607" y="838" fill="#147eba">invoke</text><text x="637" y="943" fill="#c4425e">デプロイ・削除要求</text><text x="625" y="1080" fill="#c4425e">非同期開始</text><text x="870" y="1190" fill="#c4425e">実行・確認</text>
 <text x="1625" y="1380" fill="#c4425e">AssumeRole + ExternalId（チームごとのIAM Roleへ）</text>
 <text x="1450" y="1436" fill="#2e7b50">別のFunction URL</text><text x="1070" y="1610" fill="#2e7b50" font-size="16">async tick</text>
 <text x="2960" y="712" fill="#2e7b50">作成・更新・削除</text><text x="2960" y="1647" fill="#2e7b50">作成・更新・削除</text>
