@@ -147,7 +147,7 @@ make deploy
 
 **最初のゴールは、テストチームで問題を開き、回答の得点が反映されることです。** 参加者を招待する前に確認してください。
 
-パイプラインは初期設定の固定リリース、手元の `make deploy` は現在のチェックアウトを使います。[リリースの確認状況](./release/tenkacloud-release.md)([manifest](./release/tenkacloud-release.json))で、使う版を確認してください。[パイプラインの設定項目](./infrastructure/templates/README.md#cloudformation-console-lite-mode-deployment-pipeline)。
+**リリースの状態は candidate/unverified(候補・未検証)です。** launcher の初期設定は前のリリースの本体・問題カタログを参照し、[現在の manifest](./release/tenkacloud-release.json)でも認証済みのモード・AWS リージョンはありません。commit の固定は使うコードを特定するものです。手元の `make deploy` は現在のチェックアウトを使います。開催前に[検証状況と参照先の違い](./release/tenkacloud-release.md)を確認してください。[パイプラインの設定項目](./infrastructure/templates/README.md#cloudformation-console-lite-mode-deployment-pipeline)。
 
 #### 必要な AWS 権限
 
@@ -177,8 +177,13 @@ make deploy
 
 | やりたいこと | 入口 |
 | --- | --- |
-| 問題を公開して共有する | [TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge)で作問・検証し、デプロイ時の `ProblemsRepoUrl` に自分の fork を指定する |
+| 問題を公開して共有する | [TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge)で作問・検証し、[配信するカタログを選ぶ](./DEPLOYMENT_GUIDE.md#deploy-your-own-problem-catalog) |
 | 問題を非公開で使う | [Problem Pack のチュートリアル](./apps/developer-portal/src/app/developers/docs/tutorials/first-pack/page.ja.mdx)に沿って、自分のテナントへ追加する |
+
+**コンソールの launcher** は `ProblemsRepoUrl` と `ProblemsRepoRef` を使います。
+手元の **`make deploy`** は、本体が固定した `problems/` submodule を使います。
+問題を commit してその commit をチェックアウトし、URL と参照先を本体側にも記録してから
+デプロイしてください。デプロイは submodule を強制的に固定値へ戻すため、先に手元の編集を保存します。
 
 <details>
 <summary>非公開 pack: 作成・検証・インストール・有効化</summary>

@@ -145,7 +145,7 @@ Only trusted deployment administrators should have this launcher's **Start build
 
 **Your first success: a test team can open a problem, submit an answer, and see its score.** Check this before inviting participants.
 
-The pipeline defaults to a pinned release; local `make deploy` uses your current checkout. Review the [release status](./release/tenkacloud-release.md) ([manifest](./release/tenkacloud-release.json)) for the version you choose. [All launcher settings](./infrastructure/templates/README.md#cloudformation-console-lite-mode-deployment-pipeline).
+**Release status: candidate/unverified.** The launcher's default platform/catalog pair still points to the previous release identity; the [current release manifest](./release/tenkacloud-release.json) certifies no deployment mode or AWS region. Pins identify the code being deployed. Local `make deploy` uses your current checkout. Read the [verification status and identity difference](./release/tenkacloud-release.md) before an event. [All launcher settings](./infrastructure/templates/README.md#cloudformation-console-lite-mode-deployment-pipeline).
 
 #### Required AWS permissions
 
@@ -175,8 +175,13 @@ The platform and its problems are separate. You do not need to fork TenkaCloud t
 
 | Goal | Start here |
 | --- | --- |
-| Share problems with the community | [TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge) — author and validate in the catalog; set `ProblemsRepoUrl` to your fork when deploying |
+| Share problems with the community | [TenkaCloudChallenge](https://github.com/susumutomita/TenkaCloudChallenge) — author and validate in the catalog, then [select your catalog for deployment](./DEPLOYMENT_GUIDE.md#deploy-your-own-problem-catalog) |
 | Keep problems private | [Problem Pack tutorial](./apps/developer-portal/src/app/developers/docs/tutorials/first-pack/page.mdx) — install for your own tenant |
+
+The **console launcher** uses `ProblemsRepoUrl` and `ProblemsRepoRef`. Local
+**`make deploy`** uses the parent's pinned `problems/` submodule: commit your
+catalog changes, check out that commit, and record its URL and pin in the parent
+before deployment. Preserve local edits first; deployment force-aligns the submodule.
 
 <details>
 <summary>Private pack: create, validate, install, activate</summary>

@@ -96,6 +96,11 @@ fixed single tenant. This path stands it up **entirely from the AWS Console** â€
 a launcher stack creates a CodeBuild project that clones the repo and runs the
 deploy for you.
 
+**Release status: candidate/unverified.** The launcher's default platform/catalog
+pair still uses the previous release identity. The current manifest certifies no
+deployment mode or AWS region. Check the [identity and verification report](https://github.com/susumutomita/TenkaCloud/blob/main/release/tenkacloud-release.md)
+before using it for an event.
+
 Grant **Start build** only to trusted deployment administrators: build overrides
 can run different source and commands with the deployment role's AWS access.
 If choosing **Turso**, first obtain a database URL and full-access database token.

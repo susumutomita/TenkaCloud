@@ -15,15 +15,17 @@ TenkaCloud本体、インフラコード、共通パッケージ、各Portal、�
 
 ## リポジトリを準備する
 
+[Contributing](https://github.com/susumutomita/TenkaCloud/blob/main/CONTRIBUTING.md)に沿って固定バージョンのツールを用意してから実行します。
+
 ```bash
-make install
-git submodule update --init problems
-make doctor-dev
+mise exec -- make install
+git submodule update --init --recursive problems
 ```
 
-`make doctor-dev`は不足している Bun / mise の開発者向け要件を表示しますが、
-自動インストールや設定変更は行いません。別の`make doctor`は Bun 不要の参加者向け
-Docker 経路を診断します。[Getting started](/developers/docs/getting-started/)から
+ローカルプレイの開発では `mise exec -- make doctor-dev` で Bun・Docker CLI・Compose・
+daemon を診断できます。設定変更は行いません。ローカルプレイを使わない文書・API・
+インフラの変更では、この Docker 診断は不要です。別の `make doctor` は Bun 不要の
+参加者向け Docker 経路を診断します。[Getting started](/developers/docs/getting-started/)から
 必要な実行経路だけを選びます。
 
 ## 変更前に担当場所を見つける

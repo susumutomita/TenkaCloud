@@ -98,6 +98,34 @@ Use `make destroy` to tear down the AWS deployment. Cleanup depends on the backe
 
 See the [cleanup guide](./infrastructure/templates/README.md#撤去-teardown).
 
+## Deploy your own problem catalog
+
+For the **console launcher**, set `ProblemsRepoUrl` to your public catalog fork
+and `ProblemsRepoRef` to its reviewed commit. Both parameters belong to
+`lite-pipeline.yaml`; they do not configure local `make deploy`.
+
+For **local `make deploy`**, preserve any existing changes in `problems/` first.
+Commit and publish your catalog changes to your fork. From the TenkaCloud root,
+replace the two example values below with your fork URL and its full commit SHA:
+
+```bash
+CATALOG_URL='https://github.com/<your-username>/TenkaCloudChallenge.git'
+CATALOG_COMMIT='<full-40-character-commit>'
+git submodule set-url problems "$CATALOG_URL"
+git -C problems fetch origin "$CATALOG_COMMIT"
+git -C problems checkout --detach "$CATALOG_COMMIT"
+git add .gitmodules problems
+git diff --cached --submodule=log
+git commit -m "chore: select reviewed problem catalog"
+```
+
+Review and commit only the intended catalog URL/pin change, with repository checks
+passing, then run `make deploy`. This needs a local parent commit, not a GitHub
+fork of the platform. The source preparation script runs
+`git submodule update --init --recursive --force problems`; merely editing files
+or switching the catalog checkout without recording its parent pin will not
+preserve that selection during deployment.
+
 ## Turso setup for the console launcher
 
 Skip this section when using the default DynamoDB backend. For a **fresh** Turso

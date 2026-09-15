@@ -99,6 +99,10 @@ Participant Portal、問題デプロイバックエンドを、固定の単一�
 プロジェクトを作成し、それがリポジトリをクローンしてデプロイを実行して
 くれます。
 
+**リリースの状態は candidate/unverified(候補・未検証)です。** launcher の初期設定は
+前のリリースの本体・問題カタログを参照しています。現在の manifest でも認証済みの
+モード・AWS リージョンはありません。開催前に[参照先と検証状況](https://github.com/susumutomita/TenkaCloud/blob/main/release/tenkacloud-release.md)を確認してください。
+
 **Start build** の権限は、デプロイ先の管理を任せられる担当者だけに付与してください。
 ソースやコマンドを上書きして、デプロイ用ロールの AWS 権限で実行できます。
 **Turso** を使う場合は、DB の URL と読み書きできる DB 用トークンを用意し、

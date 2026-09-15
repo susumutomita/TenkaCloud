@@ -15,7 +15,6 @@ cd TenkaCloud
 mise trust
 mise install
 mise exec -- make install
-mise exec -- make doctor-dev
 ```
 
 Review `mise.toml` before trusting it; this allows mise to load the checkout's configuration.
@@ -25,7 +24,10 @@ Read [AGENTS.md](./AGENTS.md) for platform boundaries. Use the
 for code ownership, or the [LLM task guide](./landing/llms-full.txt) to locate code
 by symptom. An AWS deployment is needed only when your change requires one.
 
-For participant UI development, run `make local-onboard`, then `make local-dev`.
+For the participant local-play environment, run `mise exec -- make doctor-dev`
+to check Bun, Docker CLI, Compose, and the daemon; then use `make local-onboard`
+and `make local-dev`. This Docker diagnosis is not required for docs, API, or
+infrastructure changes that do not run local-play services.
 For a single SPA, use its dev server, for example
 `cd apps/application-admin-console && make dev`. See [Local play](./docs/local-play.md)
 for required services and ports.
