@@ -181,8 +181,8 @@ and the problem-deploy backend, deployed as two CloudFormation stacks with a
 fixed single tenant. This path stands it up <strong>entirely from the AWS Console</strong> —
 a launcher stack creates a CodeBuild project that clones the repo and runs the
 deploy for you.</p>
-<p><strong>Release status: candidate/unverified.</strong> The launcher&#39;s default platform/catalog
-pair still uses the previous release identity. The current manifest certifies no
+<p><strong>Deployment status: candidate/unverified.</strong> The launcher pins the platform/catalog
+pair from the published v1.9.2 release. The current manifest certifies no
 deployment mode or AWS region. Check the <a href="https://github.com/susumutomita/TenkaCloud/blob/main/release/tenkacloud-release.md">identity and verification report</a>
 before using it for an event.</p>
 <p>Grant <strong>Start build</strong> only to trusted deployment administrators: build overrides

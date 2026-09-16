@@ -70,8 +70,8 @@ Do not distribute administrator access to participants.
 
 The alternative AWS console path uploads `infrastructure/templates/lite-pipeline.yaml`, creates
 `tenkacloud-lite-launcher`, and explicitly starts its CodeBuild build. The launcher
-default is candidate/unverified and still uses the previous platform/catalog release
-identity; the current manifest certifies no mode or AWS region. Check the
+default pins the platform/catalog identity from the published v1.9.2 release.
+Deployment status remains candidate/unverified: the current manifest certifies no mode or AWS region. Check the
 [release report](https://github.com/susumutomita/TenkaCloud/blob/main/release/tenkacloud-release.md).
 The launcher
 alone does not deploy the platform. CodeBuild has build-duration charges; neither

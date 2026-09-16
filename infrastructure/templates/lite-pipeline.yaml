@@ -114,7 +114,7 @@ Parameters:
 
   RepoRef:
     Type: String
-    Default: a34d1e79f55177ab9c472ebd18a5f72b6e8d2110
+    Default: aaf9684f5bc32c37017d7d48dd7c37b7c8cd0b0d
     Description: >-
       Full 40-hex commit SHA, branch, or tag of the platform repo to deploy. The exact
       default platform/catalog pair is candidate/unverified; selecting main in either
@@ -129,7 +129,7 @@ Parameters:
 
   ProblemsRepoRef:
     Type: String
-    Default: 97079e4bb42487dbda23fbafe75ce0d8ae837e86
+    Default: 811db0266eb9b761855e0a60f95783d4c7d2c326
     Description: >-
       Full 40-hex commit SHA, branch, or tag of the problem-catalog repo to ship. The
       exact default platform/catalog pair is candidate/unverified; selecting main in
@@ -237,8 +237,8 @@ Conditions:
     - !Equals [!Ref RepoRef, main]
     - !Equals [!Ref ProblemsRepoRef, main]
   UsesCandidateReleasePair: !And
-    - !Equals [!Ref RepoRef, a34d1e79f55177ab9c472ebd18a5f72b6e8d2110]
-    - !Equals [!Ref ProblemsRepoRef, 97079e4bb42487dbda23fbafe75ce0d8ae837e86]
+    - !Equals [!Ref RepoRef, aaf9684f5bc32c37017d7d48dd7c37b7c8cd0b0d]
+    - !Equals [!Ref ProblemsRepoRef, 811db0266eb9b761855e0a60f95783d4c7d2c326]
 
 Resources:
   LauncherLogGroup:
@@ -334,10 +334,10 @@ Resources:
                 nodejs: 22
               commands:
                 - |
-                  echo "Release manifest version: 1.4.2 (baseline for the exact candidate ref pair)"
+                  echo "Release manifest version: 1.9.2 (baseline for the exact candidate ref pair)"
                   if [ "${REPO_REF}" = "main" ] || [ "${PROBLEMS_REPO_REF}" = "main" ]; then
                     release_classification="development/unreleased"
-                  elif [ "${REPO_REF}" = "a34d1e79f55177ab9c472ebd18a5f72b6e8d2110" ] && [ "${PROBLEMS_REPO_REF}" = "97079e4bb42487dbda23fbafe75ce0d8ae837e86" ]; then
+                  elif [ "${REPO_REF}" = "aaf9684f5bc32c37017d7d48dd7c37b7c8cd0b0d" ] && [ "${PROBLEMS_REPO_REF}" = "811db0266eb9b761855e0a60f95783d4c7d2c326" ]; then
                     release_classification="candidate/unverified"
                   else
                     release_classification="custom/unverified"
@@ -564,7 +564,7 @@ Outputs:
     Description: >-
       Baseline manifest version for the exact default ref pair. main or custom overrides are
       classified separately and are not represented by this manifest version.
-    Value: 1.4.2
+    Value: 1.9.2
 
   ReleaseClassification:
     Description: >-
