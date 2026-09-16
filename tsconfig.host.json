@@ -3,5 +3,5 @@
   "compilerOptions": {
     "noUncheckedIndexedAccess": true
   },
-  "include": ["scripts/local-host/**/*.ts", "scripts/local-play/js-yaml.d.ts"]
+  "include": ["scripts/local-host/**/*.ts"]
 }
