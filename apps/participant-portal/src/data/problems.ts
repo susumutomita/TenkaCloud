@@ -121,6 +121,19 @@ export function findProblemDiagramUrl(
 }
 
 /**
+ * ローカル大会 (#3226) の bundle は開始前に問題文を読めないよう catalog 投影から
+ * `instructions` を落としており、開始後は認証済み team view が gate 済みの本文を返す。
+ * catalog に instructions がある場合 (cloud / 個人練習) はこれまでどおり catalog が正本で、
+ * team view の値は使わない。
+ */
+export function withGatedInstructions<
+  T extends { readonly shortDescription: string; readonly instructions?: string },
+>(narrative: T, gatedInstructions: string | undefined): T {
+  if (narrative.instructions || !gatedInstructions?.trim()) return narrative;
+  return { ...narrative, instructions: gatedInstructions };
+}
+
+/**
  * Issue #583 Phase 5 / #1108: locale を適用した narrative view を返す。 fallback chain:
  *   1. 指定 locale (= en) の override
  *   2. top-level (= ja の正本)

@@ -24,6 +24,7 @@ import {
   findProblemMetadata,
   type ProblemCatalogEntry,
   resolveLocalizedNarrative,
+  withGatedInstructions,
 } from "../data/problems";
 import { providerLabel } from "../data/providers";
 import { useProblemEndpoints } from "../hooks/useProblemEndpoints";
@@ -122,16 +123,18 @@ export function ProblemDetailPage({ config }: { config: AppConfig }) {
   // catalog 不在 (= 旧 problem 等) は undefined。
   const metadata = problem ? findProblemMetadata(problem.problemId) : undefined;
   // ja / metadata.i18n 不在 / 該当 field 不在は元の ja narrative にフォールバック (helper 側で処理)。
-  // ローカル大会 (#3226) の bundle は開始前に問題文を読めないよう catalog 投影から
-  // `instructions` を落としており、開始後は認証済み team view が gate 済みの本文を返す。
-  // catalog に instructions がある場合 (cloud / 個人練習) はこれまでどおり catalog が正本。
-  const narrative = useMemo(() => {
-    if (!metadata) return undefined;
-    const resolved = resolveLocalizedNarrative(metadata, locale);
-    const gated = localizedProblem?.instructions;
-    if (resolved.instructions || !gated?.trim()) return resolved;
-    return { ...resolved, instructions: gated };
-  }, [metadata, locale, localizedProblem]);
+  // ローカル大会 (#3226) では catalog 投影に instructions が無く、認証済み team view の
+  // gate 済み本文で補う (withGatedInstructions)。
+  const narrative = useMemo(
+    () =>
+      metadata
+        ? withGatedInstructions(
+            resolveLocalizedNarrative(metadata, locale),
+            localizedProblem?.instructions,
+          )
+        : undefined,
+    [metadata, locale, localizedProblem],
+  );
   const locked = isProblemDetailLocked(view?.eventGate);
   // Issue #2283: Progression Gate。 event gate (scoring_not_started) と同じ方針で
   // prerequisite-locked 問題も body / flag 提出 / endpoint form を render しない。
