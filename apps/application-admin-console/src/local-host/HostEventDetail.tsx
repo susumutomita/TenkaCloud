@@ -7,13 +7,16 @@ import Input from "@cloudscape-design/components/input";
 import Modal from "@cloudscape-design/components/modal";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
+import { usePolling } from "@tenkacloud/web-kit";
 import { useState } from "react";
 import { Navigate, useParams } from "react-router";
-import { canMutateTenant, useApiClient } from "../api/client";
+import { type ApiClient, canMutateTenant, useApiClient } from "../api/client";
 import {
   bulkDeployEvent,
   bulkTeardownEvent,
   EVENT_ID_RE,
+  type EventDeploymentSummary,
+  type EventDetail,
   endEvent,
   lockEventScoring,
   setEventSchedule,
@@ -27,6 +30,165 @@ import type { AppConfig } from "../config";
 import { useEventDetail } from "../hooks/useEventDetail";
 import { useT } from "../i18n";
 
+/** Environment operations take seconds to minutes; 3s keeps the job table live without load. */
+const JOB_POLL_INTERVAL_MS = 3_000;
+const IN_FLIGHT_STATUSES = new Set(["PENDING", "IN_PROGRESS", "DELETING"]);
+
+type Confirmation = "end" | "teardown";
+type Operation = () => Promise<unknown>;
+
+function jobsOf(detail: EventDetail | null): readonly EventDeploymentSummary[] {
+  return Object.values(detail?.deploymentsByProblem ?? {}).flat();
+}
+
+function isDurationValid(minutes: string): boolean {
+  return /^\d+$/u.test(minutes) && Number(minutes) >= 1 && Number(minutes) <= 360;
+}
+
+function EventTimes({ detail }: { detail: EventDetail }) {
+  if (!detail.startsAt) return null;
+  const endsAt = detail.endsAt ? new Date(detail.endsAt).toLocaleString() : "未設定";
+  return (
+    <p>
+      開始: {new Date(detail.startsAt).toLocaleString()} / 終了: {endsAt}
+    </p>
+  );
+}
+
+function OperationButtons(props: {
+  api: ApiClient;
+  eventId: string;
+  detail: EventDetail;
+  jobs: readonly EventDeploymentSummary[];
+  minutes: string;
+  busy: boolean;
+  blocked: boolean;
+  operate: (operation: Operation) => void;
+  confirm: (confirmation: Confirmation) => void;
+}) {
+  const { api, eventId, detail, jobs, minutes, busy, blocked, operate, confirm } = props;
+  const running = detail.status === "READY" && !!detail.startsAt;
+  const deployable = detail.status === "DRAFT" || detail.status === "DEPLOYING";
+  const lockable = detail.status === "READY" || detail.status === "ENDED";
+  const nothingToTearDown = jobs.length === 0 || jobs.every((job) => job.status === "DELETED");
+  const start = () =>
+    setEventSchedule(api, eventId, {
+      startNow: true,
+      endsAt: new Date(Date.now() + Number(minutes) * 60_000).toISOString(),
+    });
+  const toggleLock = () =>
+    detail.scoringLocked ? unlockEventScoring(api, eventId) : lockEventScoring(api, eventId);
+  return (
+    <SpaceBetween direction="horizontal" size="s">
+      <Button
+        disabled={blocked || !deployable}
+        loading={busy}
+        onClick={() => operate(() => bulkDeployEvent(api, eventId))}
+      >
+        問題環境を準備・再試行
+      </Button>
+      <Button
+        variant="primary"
+        disabled={blocked || detail.status !== "READY" || running || !isDurationValid(minutes)}
+        onClick={() => operate(start)}
+      >
+        競技開始
+      </Button>
+      <Button disabled={blocked || !running} onClick={() => confirm("end")}>
+        競技終了
+      </Button>
+      <Button disabled={blocked || !lockable} onClick={() => operate(toggleLock)}>
+        {detail.scoringLocked ? "採点ロック解除" : "採点をロック"}
+      </Button>
+      <Button disabled={blocked || nothingToTearDown} onClick={() => confirm("teardown")}>
+        問題環境を撤収
+      </Button>
+    </SpaceBetween>
+  );
+}
+
+function ConfirmationModal(props: {
+  confirmation: Confirmation | null;
+  onDismiss: () => void;
+  onConfirm: (confirmation: Confirmation) => void;
+}) {
+  const { confirmation, onDismiss, onConfirm } = props;
+  return (
+    <Modal
+      visible={confirmation !== null}
+      onDismiss={onDismiss}
+      header={confirmation === "end" ? "競技を終了しますか" : "問題環境を撤収しますか"}
+      footer={
+        <SpaceBetween direction="horizontal" size="s">
+          <Button onClick={onDismiss}>キャンセル</Button>
+          <Button variant="primary" onClick={() => confirmation && onConfirm(confirmation)}>
+            実行
+          </Button>
+        </SpaceBetween>
+      }
+    >
+      {confirmation === "end"
+        ? "以降の回答提出とヒント利用を停止します。得点・結果は保存されます。"
+        : "このイベントのチーム別Docker環境を削除します。保存済みのイベント・提出結果・得点は残ります。"}
+    </Modal>
+  );
+}
+
+function EventOperations(props: {
+  api: ApiClient;
+  eventId: string;
+  detail: EventDetail;
+  jobs: readonly EventDeploymentSummary[];
+  busy: boolean;
+  canMutate: boolean;
+  operate: (operation: Operation) => void;
+  confirm: (confirmation: Confirmation) => void;
+}) {
+  const { api, eventId, detail, jobs, busy, canMutate, operate, confirm } = props;
+  const [minutes, setMinutes] = useState("60");
+  const failed = jobs.filter((job) => job.status === "FAILED").length;
+  const ready = jobs.filter((job) => job.status === "COMPLETE").length;
+  const running = detail.status === "READY" && !!detail.startsAt;
+  return (
+    <>
+      {failed > 0 && (
+        <Alert type="error">
+          {failed}
+          件の環境処理に失敗しました。Dockerの起動状態を確認し、再試行または撤収してください。問題環境が動いていない状態を成功として扱うことはありません。
+        </Alert>
+      )}
+      <Container header={<Header variant="h3">開催操作</Header>}>
+        <SpaceBetween size="l">
+          <p>
+            準備完了 {ready} / {detail.teamCount * detail.problemCount}
+            。環境準備後に参加キーを配布し、「競技開始」で採点を有効にします。
+          </p>
+          <FormField label="競技時間（分、1〜360）">
+            <Input
+              value={minutes}
+              type="number"
+              disabled={running}
+              onChange={({ detail: change }) => setMinutes(change.value)}
+            />
+          </FormField>
+          <OperationButtons
+            api={api}
+            eventId={eventId}
+            detail={detail}
+            jobs={jobs}
+            minutes={minutes}
+            busy={busy}
+            blocked={busy || !canMutate}
+            operate={operate}
+            confirm={confirm}
+          />
+          <EventTimes detail={detail} />
+        </SpaceBetween>
+      </Container>
+    </>
+  );
+}
+
 export function HostEventDetail({ config }: { config: AppConfig }) {
   const { eventId } = useParams<{ eventId: string }>();
   const api = useApiClient(config);
@@ -39,11 +201,15 @@ export function HostEventDetail({ config }: { config: AppConfig }) {
     eventIdValid: valid,
     withTeamLoginKeys: canMutate,
   });
-  const [minutes, setMinutes] = useState("60");
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState("");
-  const [confirmation, setConfirmation] = useState<"end" | "teardown" | null>(null);
-  async function operate(operation: () => Promise<unknown>): Promise<void> {
+  const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
+  const jobs = jobsOf(detail);
+  // Deploy and teardown answer 202 and finish in the background; the shared hook only polls
+  // while the event is running, so follow nonterminal jobs here until they settle.
+  const jobsInFlight = jobs.some((job) => IN_FLIGHT_STATUSES.has(job.status));
+  usePolling(refresh, JOB_POLL_INTERVAL_MS, { immediate: false, enabled: jobsInFlight && !!api });
+  async function operate(operation: Operation): Promise<void> {
     setBusy(true);
     setFailure("");
     try {
@@ -56,17 +222,17 @@ export function HostEventDetail({ config }: { config: AppConfig }) {
     }
   }
   if (!valid || !eventId) return <Navigate to="/events" replace />;
-  if (!detail || !api)
-    return error ? (
-      <Alert type="error">{error}</Alert>
-    ) : (
-      <StatusIndicator type="loading">イベントを読み込んでいます</StatusIndicator>
+  if (!detail || !api) {
+    if (error) return <Alert type="error">{error}</Alert>;
+    return <StatusIndicator type="loading">イベントを読み込んでいます</StatusIndicator>;
+  }
+  const confirmed = (action: Confirmation) => {
+    setConfirmation(null);
+    void operate(() =>
+      action === "end" ? endEvent(api, eventId) : bulkTeardownEvent(api, eventId),
     );
-  const jobs = Object.values(detail.deploymentsByProblem).flat();
-  const failed = jobs.filter((job) => job.status === "FAILED");
-  const durationValid = /^\d+$/u.test(minutes) && Number(minutes) >= 1 && Number(minutes) <= 360;
-  const running = detail.status === "READY" && !!detail.startsAt;
-  const blocked = busy || !canMutate;
+  };
+  const message = failure || error;
   return (
     <SpaceBetween size="l">
       <Header
@@ -80,82 +246,17 @@ export function HostEventDetail({ config }: { config: AppConfig }) {
       >
         {detail.name}
       </Header>
-      {(failure || error) && <Alert type="error">{failure || error}</Alert>}
-      {failed.length > 0 && (
-        <Alert type="error">
-          {failed.length}
-          件の環境処理に失敗しました。Dockerの起動状態を確認し、再試行または撤収してください。問題環境が動いていない状態を成功として扱うことはありません。
-        </Alert>
-      )}
-      <Container header={<Header variant="h3">開催操作</Header>}>
-        <SpaceBetween size="l">
-          <p>
-            準備完了 {jobs.filter((job) => job.status === "COMPLETE").length} /{" "}
-            {detail.teamCount * detail.problemCount}
-            。環境準備後に参加キーを配布し、「競技開始」で採点を有効にします。
-          </p>
-          <FormField label="競技時間（分、1〜360）">
-            <Input
-              value={minutes}
-              type="number"
-              disabled={running}
-              onChange={({ detail: change }) => setMinutes(change.value)}
-            />
-          </FormField>
-          <SpaceBetween direction="horizontal" size="s">
-            <Button
-              disabled={blocked || !["DRAFT", "DEPLOYING"].includes(detail.status)}
-              loading={busy}
-              onClick={() => void operate(() => bulkDeployEvent(api, eventId))}
-            >
-              問題環境を準備・再試行
-            </Button>
-            <Button
-              variant="primary"
-              disabled={blocked || detail.status !== "READY" || running || !durationValid}
-              onClick={() =>
-                void operate(() =>
-                  setEventSchedule(api, eventId, {
-                    startNow: true,
-                    endsAt: new Date(Date.now() + Number(minutes) * 60_000).toISOString(),
-                  }),
-                )
-              }
-            >
-              競技開始
-            </Button>
-            <Button disabled={blocked || !running} onClick={() => setConfirmation("end")}>
-              競技終了
-            </Button>
-            <Button
-              disabled={blocked || !["READY", "ENDED"].includes(detail.status)}
-              onClick={() =>
-                void operate(() =>
-                  detail.scoringLocked
-                    ? unlockEventScoring(api, eventId)
-                    : lockEventScoring(api, eventId),
-                )
-              }
-            >
-              {detail.scoringLocked ? "採点ロック解除" : "採点をロック"}
-            </Button>
-            <Button
-              disabled={
-                blocked || jobs.length === 0 || jobs.every((job) => job.status === "DELETED")
-              }
-              onClick={() => setConfirmation("teardown")}
-            >
-              問題環境を撤収
-            </Button>
-          </SpaceBetween>
-          {detail.startsAt && (
-            <p>
-              開始: {new Date(detail.startsAt).toLocaleString()} / 終了:{" "}
-              {detail.endsAt ? new Date(detail.endsAt).toLocaleString() : "未設定"}
-            </p>
-          )}
-        </SpaceBetween>
-      </Container>
+      {message && <Alert type="error">{message}</Alert>}
+      <EventOperations
+        api={api}
+        eventId={eventId}
+        detail={detail}
+        jobs={jobs}
+        busy={busy}
+        canMutate={canMutate}
+        operate={(operation) => void operate(operation)}
+        confirm={setConfirmation}
+      />
       <EventParticipantsPanel config={config} detail={detail} t={t} />
       <EventTeamsPanel
         apiClient={api}
@@ -168,33 +269,11 @@ export function HostEventDetail({ config }: { config: AppConfig }) {
       {detail.scoreEventsByTeam && (
         <TeamScoreEventsPanel teams={detail.scoreEventsByTeam} startsAt={detail.startsAt} />
       )}
-      <Modal
-        visible={confirmation !== null}
+      <ConfirmationModal
+        confirmation={confirmation}
         onDismiss={() => setConfirmation(null)}
-        header={confirmation === "end" ? "競技を終了しますか" : "問題環境を撤収しますか"}
-        footer={
-          <SpaceBetween direction="horizontal" size="s">
-            <Button onClick={() => setConfirmation(null)}>キャンセル</Button>
-            <Button
-              variant="primary"
-              onClick={() => {
-                const action = confirmation;
-                setConfirmation(null);
-                if (action)
-                  void operate(() =>
-                    action === "end" ? endEvent(api, eventId) : bulkTeardownEvent(api, eventId),
-                  );
-              }}
-            >
-              実行
-            </Button>
-          </SpaceBetween>
-        }
-      >
-        {confirmation === "end"
-          ? "以降の回答提出とヒント利用を停止します。得点・結果は保存されます。"
-          : "このイベントのチーム別Docker環境を削除します。保存済みのイベント・提出結果・得点は残ります。"}
-      </Modal>
+        onConfirm={confirmed}
+      />
     </SpaceBetween>
   );
 }

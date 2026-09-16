@@ -1,12 +1,9 @@
-// eslint-disable-next-line sonarjs/no-hardcoded-ip -- RFC1918 parser test vector; no connection is made.
-const TEST_PRIVATE_ADDRESS = "192.168.1.2";
-
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { id, secret } from "../auth";
+import { id, randomToken } from "../auth";
 import { assertHostingModule, narrowCatalog, publicMetadata } from "../browser-metadata";
 import { persistentKey, prepareDatabase, privateDirectory } from "../files";
 import { SurfaceGateways } from "../gateways";
@@ -16,6 +13,9 @@ import { parseOptions } from "../options";
 import { HostingService } from "../service";
 import { HostStore } from "../store";
 import { ExerciseFixture } from "./exercise-fixture";
+
+// eslint-disable-next-line sonarjs/no-hardcoded-ip -- RFC1918 parser test vector; no connection is made.
+const TEST_PRIVATE_ADDRESS = "192.168.1.2";
 
 interface ResponseData<Body = Record<string, unknown>> {
   status: number;
@@ -204,7 +204,7 @@ async function createFixture() {
         cookie,
         origin,
       },
-      body: new URLSearchParams({ username: "admin' --", password: secret() }),
+      body: new URLSearchParams({ username: "admin' --", password: randomToken() }),
     });
     const body = (await attacked.json()) as { flag?: string };
     assert.equal(attacked.status, 200);
@@ -544,6 +544,12 @@ test("Challenge handoffs are one-use, private, route-limited and revoked by team
     const verifier = await fetch(`${ca.origin}/verify`, { headers: { cookie: ca.cookie } });
     assert.equal(verifier.status, 404);
     await verifier.text();
+    // A `no-referrer` document makes browsers send `Origin: null` on the exercise's own form
+    // POST, which the same-origin gate would refuse (found by the browser rehearsal).
+    const exercisePage = await fetch(`${ca.origin}/`, { headers: { cookie: ca.cookie } });
+    assert.equal(exercisePage.status, 200);
+    assert.equal(exercisePage.headers.get("referrer-policy"), "same-origin");
+    await exercisePage.text();
     const csrf = await fetch(`${ca.origin}/login`, {
       method: "POST",
       headers: { cookie: ca.cookie, origin: f.participant.origin },
@@ -766,7 +772,7 @@ test("Input validation, metadata allowlist, safe LAN opt-in and stable identifie
   const ids = Array.from({ length: 100 }, () => id());
   assert.equal(new Set(ids).size, 100);
   assert.ok(ids.every((value) => /^[0-9A-HJKMNP-TV-Z]{26}$/u.test(value)));
-  assert.equal(secret().length, 43);
+  assert.equal(randomToken().length, 43);
   await fixture(async (f) => {
     assert.equal(
       (

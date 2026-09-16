@@ -156,6 +156,10 @@ export class DockerHostingEngine implements RuntimeEngine {
   catalog(): readonly Problem[] {
     return this.problems;
   }
+  hostPorts(definition: string, offset: number): readonly number[] {
+    const { composeText } = JSON.parse(definition) as Definition;
+    return [...remapComposeHostPorts(composeText, offset).portMap.values()];
+  }
   private plan(
     job: Job,
     verifySources = true,

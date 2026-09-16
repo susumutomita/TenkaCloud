@@ -94,6 +94,8 @@ export interface RuntimeEngine {
   submit(context: Context, body: Record<string, unknown>): Promise<EngineResult>;
   hint(context: Context, problemId: string, hintId: string): Promise<EngineResult>;
   surface(job: Job): string;
+  /** Host ports the problem would publish at `offset`, so a slot can be probed before use. */
+  hostPorts?(definition: string, offset: number): readonly number[];
 }
 
 export class HostError extends Error {
@@ -138,11 +140,18 @@ export type Gate =
     }
   | { kind: "scoring_locked" };
 
+/** Scoring is over for good once an event ends, is torn down or is archived. */
+export function scoringEnded(event: HostedEvent): boolean {
+  return event.status === "ENDED" || event.status === "TEARDOWN" || event.status === "ARCHIVED";
+}
+
+/** True once the organizer actually started the event; a never-started event has no play. */
+export function hasStarted(event: HostedEvent, now: number): boolean {
+  return event.startsAt !== undefined && Date.parse(event.startsAt) <= now;
+}
+
 export function gate(event: HostedEvent, now: number): Gate {
-  if (
-    ["ENDED", "TEARDOWN", "ARCHIVED"].includes(event.status) ||
-    (event.endsAt && Date.parse(event.endsAt) <= now)
-  ) {
+  if (scoringEnded(event) || (event.endsAt && Date.parse(event.endsAt) <= now)) {
     return { kind: "scoring_ended", endsAt: event.endsAt };
   }
   if (event.status !== "READY" || !event.startsAt || Date.parse(event.startsAt) > now) {

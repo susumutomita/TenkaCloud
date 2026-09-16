@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { secret } from "../auth";
+import { randomToken } from "../auth";
 import { DockerHostingEngine } from "../docker-engine";
 import { persistentKey, prepareDatabase, privateDirectory } from "../files";
 import { SurfaceGateways } from "../gateways";
@@ -32,8 +32,10 @@ interface TeamView {
 
 async function main(): Promise<void> {
   const root = fileURLToPath(new URL("../../../", import.meta.url));
-  const parent = privateDirectory(join(root, ".tenkacloud"));
-  const directory = mkdtempSync(join(parent, "host-docker-smoke-"));
+  const parent = join(root, ".tenkacloud");
+  mkdirSync(parent, { recursive: true });
+  // mkdtemp creates the directory with mode 0700; privateDirectory only verifies it.
+  const directory = privateDirectory(mkdtempSync(join(parent, "host-docker-smoke-")));
   const databasePath = join(directory, "hosting.sqlite");
   prepareDatabase(databasePath);
   const masterKey = persistentKey(join(directory, "host-key"));
@@ -123,7 +125,7 @@ async function main(): Promise<void> {
         origin,
         "content-type": "application/x-www-form-urlencoded",
       },
-      body: new URLSearchParams({ username: "admin' --", password: secret() }),
+      body: new URLSearchParams({ username: "admin' --", password: randomToken() }),
     });
     assert.equal(response.status, 200);
     const result = object(await response.json());
