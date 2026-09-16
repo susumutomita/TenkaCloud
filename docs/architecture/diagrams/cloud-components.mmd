@@ -1,0 +1,30 @@
+flowchart LR
+  AdminUI["Application Admin Console"]
+  PortalUI["Participant Portal"]
+
+  EventAPI["開催API<br/>event-handler"]
+  DeployFlow["配置ワークフロー<br/>DeployCreateStateMachine"]
+  Worker["配置担当<br/>CfnDeploy / DescribeStack"]
+  PortalAPI["参加者API<br/>participant-handler"]
+  Dispatcher["独自競技の実行担当<br/>coordination-dispatcher-handler"]
+  Plugin["問題同梱のプラグイン<br/>validateOp / applyOp / projectForTeam"]
+  Scorer["定期採点・状態調整<br/>GenericScoring"]
+  Timer["EventBridgeの定期実行"]
+  Store["保存用Repository<br/>DynamoDB / 対応するTurso構成"]
+  Runtime["競技用AWS環境"]
+
+  AdminUI -->|"管理者JWT・開催API"| EventAPI
+  EventAPI -->|"配置要求イベント"| DeployFlow
+  DeployFlow --> Worker
+  Worker -->|"対象権限でCloudFormation操作"| Runtime
+  PortalUI -->|"チームキー"| PortalAPI
+  PortalUI -->|"チームキー・独自競技の操作"| Dispatcher
+  Dispatcher --> Plugin
+  Timer --> Scorer
+  Scorer -->|"稼働確認など"| Runtime
+  Scorer -->|"coordinationのtickを委譲"| Dispatcher
+  EventAPI --> Store
+  DeployFlow -->|"直接またはStatusWriter経由"| Store
+  PortalAPI --> Store
+  Dispatcher --> Store
+  Scorer --> Store

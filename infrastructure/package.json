@@ -20,7 +20,7 @@
     "_synth-app": "tsx bin/infrastructure.ts"
   },
   "devDependencies": {
-    "@aws-cdk/cloud-assembly-schema": "54.14.0",
+    "@aws-cdk/cloud-assembly-schema": "54.23.0",
     "@aws-sdk/client-cloudformation": "^3.1120.0",
     "@aws-sdk/client-cloudwatch": "^3.1085.0",
     "@aws-sdk/client-cognito-identity-provider": "^3.1105.0",
@@ -35,7 +35,7 @@
     "@biomejs/biome": "^2.5.3",
     "@types/aws-lambda": "^8.10.162",
     "@types/node": "^26.1.0",
-    "aws-cdk": "2.1133.0",
+    "aws-cdk": "2.1141.0",
     "cdk-nag": "^3.0.2",
     "hono": "^4.13.3",
     "ts-node": "^10.9.2",

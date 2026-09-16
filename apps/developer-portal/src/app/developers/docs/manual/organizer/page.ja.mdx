@@ -69,11 +69,11 @@ make deploy ENV=development
 ## Lite競技開催の流れ
 
 1. Application Admin Consoleへ開催者としてログインする。
-2. 使用する問題パックを有効化する。
+2. カタログから問題を選ぶ。非公開のProblem Packを使う場合だけ、デプロイ前にインストール・有効化する。
 3. 競技、チーム、使用する問題を作る。
 4. テスト用の競技者AWSアカウントを登録する。
 5. テストチームで問題を開始し、接続先を開く。
-6. 本物の`TC{...}`を提出し、得点が増えることを確認する。
+6. 問題が指定する回答やゲーム操作を行い、得点の反映を確認する。flagの問題では`TC{...}`を提出する。
 7. 問題をリセットし、もう一度開始できることを確認する。
 8. 問題を停止し、競技者AWSアカウントのスタックが削除されたことを確認する。
 9. 参加者へParticipant PortalのURL、team key、開始時刻、
@@ -89,11 +89,17 @@ make deploy ENV=development
 
 | 選択 | 保存先 | 使う場面 |
 | --- | --- | --- |
-| `dynamodb`（既定） | AWS DynamoDB | まず競技を開く。AWS内で完結させる |
-| `turso` | Turso/libSQL | DynamoDBテーブルを作らない構成を、自分でライブ検証できる |
+| `dynamodb`（既定） | AWS DynamoDB | 管理データをAWS内に保存したい |
+| `turso` | Turso/libSQL | DB費用を抑えたい。LiteはDynamoDBのテーブルと索引を作らない |
 
-Turso経路は単体テストとCDK synthでは確認されていますが、実Turso、新規AWSデプロイ、
-請求までを組み合わせたライブ検証は未実施です。最初の本番競技では`dynamodb`を推奨します。
+**DB費用を抑える場合は、[Tursoの設定手順](https://github.com/susumutomita/TenkaCloud/blob/main/docs/running-costs.md)へ進みます。**
+launcherでは`ControlDataBackend=turso`、`TursoDatabaseUrl`、
+`TursoAuthTokenParameterName`を設定します。最後の値はトークン自体ではなく、
+保管先のSSMパラメータ名です。手元では`make turso-live ENV=development`で準備を進められます。
+
+ほかのAWS費用とTursoの利用枠は別途確認してください。Turso経路は単体テストとCDK synthで
+確認されていますが、実Turso、新規AWSデプロイ、請求を通したライブ検証は未実施です。
+選んだ構成でイベント前にリハーサルしてください。
 
 保存先を後から切り替えてもデータは自動移行されません。DynamoDBとTursoは同期されず、
 DynamoDBのテーブルは保持されて料金が続く場合があります。
@@ -130,7 +136,7 @@ DynamoDBのテーブルは保持されて料金が続く場合があります。
 
 - 参加者と同じ権限・リージョンのテストチームを使った。
 - 想定ネットワークからすべての接続先を開けた。
-- 本物のflagを提出し、得点が変わった。
+- 選んだ各問題の採点方法で、テストチームの得点が変わった。
 - リセット後に新しい問題環境が起動した。
 - 停止後に競技者AWSの問題スタックが削除された。
 - 競技時刻、team keyの配布方法、問い合わせ先を決めた。

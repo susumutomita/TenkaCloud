@@ -75,13 +75,14 @@ without changing platform code is an organizer task.</p>
 <p>Make one focused, reviewable change that preserves the platform contracts and
 passes the relevant repository checks.</p>
 <h2>Prepare the repository</h2>
-<pre><code class="language-bash">make install
-git submodule update --init problems
-make doctor-dev
+<p>Install the pinned tools using <a href="https://github.com/susumutomita/TenkaCloud/blob/main/CONTRIBUTING.md">Contributing</a>, then:</p>
+<pre><code class="language-bash">mise exec -- make install
+git submodule update --init --recursive problems
 </code></pre>
-<p><code>make doctor-dev</code> reports missing Bun/mise developer prerequisites without
-installing or changing them. The separate <code>make doctor</code> target checks the
-Bun-free Docker participant path. Use
+<p>For local-play development, <code>mise exec -- make doctor-dev</code> checks Bun, Docker CLI,
+Compose, and the daemon without changing them. Skip this Docker diagnosis for
+docs, API, or infrastructure changes that do not use local-play services.
+The separate <code>make doctor</code> checks the Bun-free Docker participant path. Use
 <a href="/docs/getting-started/index.en.html">Getting started</a> only for the runtime path
 you need.</p>
 <h2>Find the owner before editing</h2>
@@ -116,9 +117,12 @@ you need.</p>
 <p>Read the nearest tests and repository instructions before changing a contract.
 The <a href="/docs/concepts/architecture/index.en.html">platform architecture</a> explains
 the plane boundaries and cross-plane events.</p>
+<p>For LLM-assisted work, use the <a href="https://tenkacloud.com/llms-full.txt">task guide and code map</a>
+to locate the relevant entry point. Trace one symptom from UI input through its
+handler, stored state, and displayed result. Load only the documents that apply.</p>
 <h2>Change workflow</h2>
 <ol>
-<li>Start from a GitHub Issue with a testable completion condition.</li>
+<li>Start from the request or Issue and define an observable completion condition.</li>
 <li>Identify the narrowest owning module and its existing tests.</li>
 <li>Change the implementation and user-facing documentation together.</li>
 <li>Run focused tests while iterating.</li>

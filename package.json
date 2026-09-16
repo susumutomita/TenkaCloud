@@ -62,7 +62,7 @@
   "dependencies": {
     "@libsql/client": "^0.17.4",
     "@tenkacloud/coordination-plugin-sdk": "workspace:*",
-    "js-yaml": "3.15.1",
+    "js-yaml": "5.4.1",
     "ws": "^8.21.1"
   },
   "devDependencies": {
@@ -80,12 +80,12 @@
     "jsdom": "^30.0.1",
     "knip": "^6.27.0",
     "markdownlint-cli2": "^0.22.1",
-    "marked": "^18.0.11",
+    "marked": "^18.0.12",
     "textlint": "^15.7.1",
     "textlint-filter-rule-comments": "^1.3.0",
     "textlint-rule-no-mixed-zenkaku-and-hankaku-alphabet": "^1.0.1",
     "textlint-rule-no-mixed-zenkaku-and-hankaku-number": "^1.0.0",
-    "textlint-rule-preset-ja-spacing": "^2.4.3",
+    "textlint-rule-preset-ja-spacing": "^3.0.3",
     "textlint-rule-preset-ja-technical-writing": "^12.0.2",
     "textlint-rule-spellcheck-tech-word": "^5.0.0",
     "typescript": "~6.0.3",
@@ -104,7 +104,6 @@
     "fast-uri": "4.1.1",
     "hono": "4.13.3",
     "ip-address": "10.1.1",
-    "js-yaml": "3.15.1",
     "linkify-it": "6.1.0",
     "markdown-it": "14.2.0",
     "postcss": "8.5.25",

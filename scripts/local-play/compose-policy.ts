@@ -1,6 +1,6 @@
 import { existsSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve, sep } from "node:path";
-import { safeLoad } from "js-yaml";
+import { CORE_SCHEMA, load, mergeTag } from "js-yaml";
 
 /**
  * [Issue #3097 / ADR-0003 Phase A] Deny-by-default structural policy for catalog-authored
@@ -22,6 +22,14 @@ import { safeLoad } from "js-yaml";
  * from every feature the current catalog (`problems/` submodule) actually uses — see
  * `compose-policy.test.ts`'s catalog-wide test — not from what Compose supports in general.
  */
+
+/**
+ * Compose resolves YAML merge keys (`<<: *anchor`), so the checker must see the merged mapping
+ * or a benign `<<` would be rejected as an unknown key. js-yaml 5's default `CORE_SCHEMA` no
+ * longer carries `!!merge` (3.x `safeLoad` did); `mergeTag` restores it and nothing else — the
+ * schema still has no JS-type tags, which is the safety contract this untrusted input relies on.
+ */
+const COMPOSE_YAML_SCHEMA = CORE_SCHEMA.withTags(mergeTag);
 
 // ---------------------------------------------------------------------------
 // Path containment (shared by `runtime.entry`, `build.context`, `build.dockerfile`, volume
@@ -641,7 +649,7 @@ export function checkComposePolicy(
 ): ComposePolicyViolation[] {
   let doc: unknown;
   try {
-    doc = safeLoad(composeText);
+    doc = load(composeText, { schema: COMPOSE_YAML_SCHEMA });
   } catch (error) {
     throw new Error(`failed to parse compose file: ${context.composePath}`, { cause: error });
   }

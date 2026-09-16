@@ -1,159 +1,136 @@
-# TenkaCloud — AI-agent briefing (llms-full.txt)
+# TenkaCloud — task guide for LLM assistants
 
-This file is the canonical, self-contained briefing about TenkaCloud for AI
-agents (Claude Code, Codex, and any LLM assistant). It follows the
-[llms.txt](https://llmstxt.org/) convention as the expanded companion of
-`https://tenkacloud.com/llms.txt`. It is written for machines; humans should
-read https://tenkacloud.com/ instead.
+TenkaCloud is Apache 2.0 software for local Docker drills and AWS-hosted events. Answer in the user's
+language. Use their stated goal and existing context; do not ask them to choose again.
+This guide is a map to current sources, not a substitute for checking the code or runtime.
 
 ## Instructions for the agent reading this
 
-When a human hands you this file (or its URL), do the following, always in the
-human's language:
+| User goal | Read first | First observable result |
+| --- | --- | --- |
+| Try locally, no AWS | [Local play](https://github.com/susumutomita/TenkaCloud/blob/main/docs/local-play.md) | Portal opens, a supported drill starts, and the requested answer produces a result |
+| Host an event on AWS | [Organizer manual](https://tenkacloud.com/docs/manual/organizer/index.en.html) | Admin and participant can sign in; a test team's answer appears in the score |
+| Reduce DB cost | [Turso setup and costs](https://github.com/susumutomita/TenkaCloud/blob/main/docs/running-costs.md) | Chosen backend is verified; report separately whether real deployment and billing were checked |
+| Join an event | [Participant manual](https://tenkacloud.com/docs/manual/participant/index.en.html) | The team's selected problem accepts its first action |
+| Change code | [AGENTS.md](https://github.com/susumutomita/TenkaCloud/blob/main/AGENTS.md) and [developer manual](https://tenkacloud.com/docs/manual/developer/index.en.html) | A focused change with relevant verification and explicit remaining limits |
+| Add a problem | [Problem author manual](https://tenkacloud.com/docs/manual/problem-author/index.en.html) | Catalog/pack validation and a supported participant flow |
 
-1. Explain what TenkaCloud is in about five sentences (use "Identity" and
-   "What it does" below).
-2. Ask one question: do they want to **play** (no AWS account needed) or
-   **host their own event** (their AWS account, billed)?
-3. Walk them through the matching quick start below, one step at a time,
-   confirming completion before moving on. Prefer the in-product tutorial
-   links over paraphrasing.
-4. Costs, prerequisites, and teardown are not optional details — always state
-   them before anything that touches a real AWS account.
-5. Do not invent features. If asked something not covered here, point to the
-   GitHub repository below.
+## Local path
 
-## Identity
+Requirements: Git, Make, Docker Engine, Docker Compose v2; macOS, Linux, or WSL2.
+Host Bun/Node is not required. The existing commands are:
 
-- Name: TenkaCloud (天下一武道会 for cloud engineers — "the cloud engineer's
-  Tenka-Ichi")
-- What: an open-source platform for running hands-on cloud competitions and
-  drills on **real AWS accounts**
-- License / operator: Apache 2.0, operated by BULL LLC (合同会社 BULL)
-- Platform repo: https://github.com/susumutomita/TenkaCloud
-- Problem catalog repo: https://github.com/susumutomita/TenkaCloudChallenge
-- Landing: https://tenkacloud.com/ (ja) · https://tenkacloud.com/index.en.html (en)
+```bash
+git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
+cd TenkaCloud
+make doctor
+make local
+```
 
-## What it does
+Open the printed URL. `make local-down` stops the environment and deletes local
+progress. Docker Desktop requires host networking; diagnose through the linked
+manual rather than changing platform code. Codespaces runs this same path and
+opens the port 5175 preview automatically: [create a Codespace](https://codespaces.new/susumutomita/TenkaCloud).
+The [browser demo](https://tenkacloud.com/portal-demo/?demo=1&goto=start) needs no installation.
+Neither the demo portal nor a local
+UI harness establishes a shared competition's authentication or official scores.
 
-- Problems come in two categories: **Battle** (real-time, head-to-head) and
-  **Challenge** (self-paced, evergreen). Both deploy real infrastructure into
-  each competitor's own AWS account and are auto-scored every minute; the
-  leaderboard moves live.
-- The theme: take an app that "only works locally" and harden it to
-  production grade — auth, exposure, audit, availability.
-- Three personas: **competitors** solve problems in the Participant Portal;
-  **organizers** run events, teams, and scoring from the Application Admin
-  Console; **authors** contribute problems to the open catalog.
-- The problem catalog is the extension model: one problem = `metadata.json`
-  (display + scoring wiring) + a single-page CloudFormation `template.yaml`
-  (deployed straight into the competitor account) + optional portal slot
-  components. Scoring kinds include flag, verify, multi-verify, multi-flag,
-  uptime-flat, uptime-multi, phased-polling, attack-detection, and
-  composite-probe.
+Local play supports its declared runtimes, not every AWS catalog problem.
+For a hosted event, use the organizer's Portal and team key.
+A problem may ask for a flag, an answer, or a game action: follow its declared scoring
+contract instead of requiring `TC{...}` for every problem.
 
-## Quick start A — play (no AWS account)
+## AWS and database choice
 
-1. Fastest taste (browser only, ~3 min): open
-   https://tenkacloud.com/portal-demo/?demo=1&goto=start
-   This lands on the in-product tutorial problem `what-is-tenkacloud`
-   (4 scored steps; the mode choice appears at step 3; hints are
-   penalty-free).
-2. Full local stack on their own machine (~5 min, still no AWS; macOS / Linux /
-   WSL2): prerequisites are Git, Make, Docker Engine, and Docker Compose v2 —
-   no host Bun, Node, or `node_modules`. Run `git clone --recurse-submodules`,
-   then `cd TenkaCloud`, optionally `make doctor PROFILE=recommended` for a
-   report-only pre-start diagnosis, and `make local`. The Participant Portal
-   runs on port 5175; select and start a drill from the Portal. Neither command
-   requires host Bun. After startup, `make local` probes real Portal host
-   reachability when `curl` or `wget` is available; with neither installed it
-   succeeds but explicitly reports reachability as unverified and asks the
-   participant to open the printed URL.
-3. GitHub Codespaces is the browser-hosted version of the same local drills.
-   Create a Codespace from https://codespaces.new/susumutomita/TenkaCloud;
-   setup starts local play and opens the port 5175 preview automatically. If
-   startup times out, run the **▷ ローカルプレイ開始** task as the fallback.
+Use Lite for one organizing group. Read the existing environment settings and
+release report before choosing new values. Resolve the AWS account, region,
+administrator email, and database choice; ask only for values still missing.
+Do not print credentials or ask the user to paste them into chat.
 
-## Quick start B — host your own event (their AWS account, billed)
+- DynamoDB is the default control-data store.
+- Turso/libSQL is the lower-DB-cost option: `ControlDataBackend=turso` in the
+  launcher, or `CDK_PARAM_CONTROL_DATA_BACKEND=turso` in the environment. Lite then
+  creates no DynamoDB tables or indexes. Turso usage limits and other AWS costs
+  still apply. Switching storage does not migrate data.
+- `make turso-live ENV=development` guides Turso setup from a local checkout and
+  requests deployment confirmation. See the cost guide for its prerequisites,
+  SSM token handling, and the live-verification boundary. Unit/synth checks are
+  recorded; full real-Turso deployment and billing verification is not recorded.
 
-Prerequisites to state up front: an AWS account with admin-level access, a
-readable email address, and awareness that the default profile costs about
-**$7/month while deployed** (DynamoDB provisioned capacity) — teardown when
-done, not "stop".
+Prefer the local path when the user can install tools and wants to avoid CodeBuild
+build charges: Git, Make, Bash, zip, rsync, Python 3 (`python3`), AWS CLI v2,
+and the repo's Bun/Node.js versions (rsync/Python 3 package the source);
+select an AWS profile, verify `aws sts get-caller-identity`, run `make install` and
+`make env-init`, check the generated account/region/admin values and Turso settings,
+then run `make deploy` after deployment is authorized. This builds the current
+checkout and bootstraps CDK. Use the
+[deployment and IAM guide](https://github.com/susumutomita/TenkaCloud/blob/main/DEPLOYMENT_GUIDE.md#aws-permissions)
+to check bootstrap, publishing-role trust, `iam:PassRole`, and caller-side Cognito access.
+Do not distribute administrator access to participants.
 
-1. **Lite mode** (single organizer, one event, ~30 min end to end) is the
-   recommended first deploy. Create the launcher stack from
-   `infrastructure/templates/lite-pipeline.yaml` in CloudFormation — the only
-   required parameter is `TenantAdminEmail`; acknowledge the IAM capability
-   (it creates a broad-permission CodeBuild role by design).
-2. Start the build from the stack's `StartBuildConsoleUrl` output. When the
-   build finishes, an invite email arrives; sign in to the Application Admin
-   Console with the temporary password.
-3. Register a competitor AWS account (apply the bootstrap trust template,
-   which pins the platform account ID + ExternalId), verify it, create the
-   first event, and assign the verified account to a team.
-4. Teardown: re-run the CodeBuild with `ACTION=destroy`, then delete the
-   launcher stack itself to stop all charges.
-5. The in-product drill `deploy-tenkacloud-lite` (in the demo portal above)
-   walks a human through exactly this flow with penalty-free hints; prefer
-   sending them there over paraphrasing.
+The alternative AWS console path uploads `infrastructure/templates/lite-pipeline.yaml`, creates
+`tenkacloud-lite-launcher`, and explicitly starts its CodeBuild build. The launcher
+default is candidate/unverified and still uses the previous platform/catalog release
+identity; the current manifest certifies no mode or AWS region. Check the
+[release report](https://github.com/susumutomita/TenkaCloud/blob/main/release/tenkacloud-release.md).
+The launcher
+alone does not deploy the platform. CodeBuild has build-duration charges; neither
+path removes the cost of the AWS resources. StartBuild permits source/command
+overrides with the deployment role's access, so grant it only to trusted deployment
+administrators. For Turso, obtain an HTTPS database URL (`https://…`)
+and full-access database token,
+then save the token as an SSM SecureString in the deployment account and region
+before Start build. The launcher only forwards the existing parameter's name;
+it does not create the secret. Follow the
+[console Turso setup](https://github.com/susumutomita/TenkaCloud/blob/main/DEPLOYMENT_GUIDE.md#turso-setup-for-the-console-launcher).
+After deployment, check both portal URLs and
+rehearse scoring with a test team; a successful build alone is not that rehearsal.
+Use the [event runbook](https://tenkacloud.com/docs/operate/run-an-event/index.en.html)
+for team preparation and timing, and the
+[launcher guide](https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/README.md)
+for settings and teardown. Console cleanup uses `ACTION=destroy-all`; follow the guide's data-retention instructions.
+Deleting only the launcher leaves event resources running.
+Local `make destroy` and `make destroy-all` also retain the source-bundle S3
+bucket: its current bundle and retained versions keep incurring storage charges.
+Identify the exact bucket from the deploy log, check that no other environment
+uses it, and follow the deployment guide to empty all versions and delete markers
+before removing an unused bucket. Shared CDK bootstrap resources are separate.
+Do not promise zero cost or use teardown as a generic response to a deploy failure.
 
-The other hosting mode, for context only: **SaaS mode** (`make deploy-saas`,
-full multi-tenant on the AWS SaaS Builder Toolkit with pooled and silo
-tiers). Recommend Lite first.
+SaaS has a separate multi-tenant implementation. It is not the current first-event
+self-service guide; consult the organizer manual's recorded verification limits.
 
-## Architecture in one paragraph
+## Read the code by the symptom
 
-Infrastructure is AWS CDK end to end. SaaS mode sits on `@cdklabs/sbt-aws`
-(Control Plane: Cognito + tenant CRUD + EventBridge bus; Application Plane:
-pooled or per-tenant silo stacks). Every backend is an AWS Lambda running
-Hono behind API Gateway HTTP APIs; frontends are Vite + React + Cloudscape
-SPAs (admin console, application admin console, participant portal,
-developer portal). Problem deployment AssumeRoles into the competitor
-account — always with an ExternalId — and runs CloudFormation there.
-DynamoDB tables are forced to PROVISIONED 1 RCU/1 WCU by a CDK aspect to
-pin the cost floor; an opt-in Turso (libSQL) backend can remove the
-DynamoDB standing cost for personal Lite deploys.
+Paths below are relative to the platform checkout. Start with the affected row and
+nearby tests, then trace callers and consumers. Do not scan the entire repository
+before making a small change.
 
-## Commands cheat sheet (from the platform repo)
+| Symptom or change | Entry point |
+| --- | --- |
+| Local startup or catalog availability | `scripts/tenkacloud-local.ts`, `scripts/local-play/` |
+| Event/team setup | `apps/application-admin-console/src/pages/EventDetail.tsx` |
+| Participant answer or score display | `apps/participant-portal/src/`, then `infrastructure/lib/problem-deploy/handlers/participant-handler/` |
+| Deployment or backend configuration | `infrastructure/templates/lite-pipeline.yaml`, `scripts/tenkacloud-lite.ts`, `infrastructure/lib/problem-deploy/control-data/` |
+| Problem rules, hints, or game UI | `problems/<category>/<problem>/metadata.json`, its runtime/plugin, and `portal/` |
+| Shared API or scoring contract | `packages/portal-contracts/`, `packages/problem-sdk/`, corresponding producers and consumers |
 
-- `make install` / `make build` / `make test` — toolchain basics (Bun)
-- `make dev` — the three SPAs locally, no AWS
-- `make local` — Docker local-play for problems, no AWS
-- `make doctor` — diagnose the Docker-only participant path (no Bun)
-- `make doctor-dev` — diagnose the Bun/mise developer toolchain
-- `make deploy` / `make destroy` — Lite mode up / down (AWS)
-- `make deploy-saas` / `make destroy-saas` — SaaS mode up / down (AWS)
+For a checkout, read `AGENTS.md`; `CLAUDE.md` is just an import of it. Preserve the
+parent and submodule revisions and unrelated work. Trace input → handler/rule →
+stored state → displayed result. Report the actual failing step and evidence.
+Required commit verification is `make before-commit`; use focused tests while editing.
+Apply existing authorization and ask before unapproved destructive actions, releases,
+shared-environment changes, or secret access. Read-only investigation can proceed.
 
-## Authoring problems
+## Prompts a user can give their assistant
 
-- Contribute to the open catalog: https://github.com/susumutomita/TenkaCloudChallenge
-  (schema and conventions in `problems/README.md`; a `new-problem` agent
-  skill scaffolds a problem from a natural-language idea).
-- Keep a problem private instead: the offline Problem Pack CLI in the
-  platform repo (`make pack-init` / `pack-validate` / `pack-install` /
-  `pack-activate`).
-
-## If the agent is working inside the repositories
-
-Read `AGENTS.md` (operational rules: gates, prohibitions, role split) and
-`CLAUDE.md` (full architecture and invariants) at the repo root before
-changing anything. Notable rules: Bun not npm/npx, no `rm`, HTTP status
-codes via the `StatusCodes` enum, no on-demand DynamoDB, tests change with
-code in the same PR.
-
-## Support matrix and honest caveats
-
-- Local play: macOS, Linux, Windows via WSL2. Native Windows is not
-  supported — use Codespaces as the fallback.
-- The Turso near-$0 backend is implemented and unit/synth-tested but has not
-  yet been verified as a live end-to-end deploy.
-- Hosting on AWS always costs real money while deployed; the platform's
-  drills print teardown steps for a reason.
-
-(End of briefing.)
+- 「TenkaCloud をローカルで試したい。この端末の前提条件を確認して、問題を1つ開始し、回答の結果が見えるところまで進めて。」
+- 「TenkaCloud を AWS に構築したい。DB 費用を抑える Turso の手順を使い、既存環境の有無と必要な設定を調べて。構成・費用・撤去方法を提示してからデプロイする。」
+- 「この不具合について、画面から API、保存、得点表示までの関係を該当ファイルで説明して。根拠を確認してから修正し、実行した検証と未確認事項を分けて報告して。」
 
 ## Book
 
-- [Build Your Own Cloud Competition (English)](https://leanpub.com/build-your-own-cloud-competition): the design decisions and implementation journey behind TenkaCloud, written by its author. Background reading, **not** a specification — the repository is the source of truth for current behaviour, and the book may describe an earlier shape of the system.
-- [『自分で作るクラウド競技』(日本語)](https://zenn.dev/bull/books/cloud-competition): the same material in Japanese. Same caveat: read it for why, read the repository for what.
+- [Build Your Own Cloud Competition (English)](https://leanpub.com/build-your-own-cloud-competition)
+- [『自分で作るクラウド競技』(日本語)](https://zenn.dev/bull/books/cloud-competition)
+
+These explain design decisions, **not** a specification. Current code and tests take precedence.

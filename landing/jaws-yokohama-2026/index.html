@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GameDayみたいなクラウド演習を自分で作ってみた | TenkaCloud</title>
+<meta name="description" content="JAWS-UG横浜 #103 × SRE支部向け10分の発表資料。GameDayをいつでも開催したくてTenkaCloudを自作。OSSでのマルチクラウド構想からSBTを使ったサーバーレス構成への作り直しと、開催手順・オリジナル問題を紹介します。" />
+<link rel="canonical" href="https://tenkacloud.com/jaws-yokohama-2026/" />
+<meta property="og:title" content="GameDayみたいなクラウド演習を自分で作ってみた" /><meta property="og:type" content="article" /><meta property="og:url" content="https://tenkacloud.com/jaws-yokohama-2026/" />
+<link rel="icon" href="../assets/favicon.svg" /><link rel="stylesheet" href="./talk.css?v=23f670b86d" /><script defer src="./talk.js?v=4ef9a961fc"></script>
+</head>
+<body>
+<header class="topbar"><a href="../presentations/">← 発表資料一覧</a><span>JAWS-UG横浜 #103 × SRE支部</span><a href="./architecture.html">構成図を開く ↗</a></header>
+<nav class="controls" aria-label="スライドの操作">
+<button id="previous" type="button" aria-label="前のスライド">← 前へ</button><output id="position" aria-live="polite">1 / 13</output><button id="next" type="button" aria-label="次のスライド">次へ →</button>
+</nav>
+<noscript><p class="noscript">すべてのスライドを順に表示しています。</p></noscript>
+<main id="deck">
+<section class="slide cover" id="slide-1" aria-labelledby="title-1">
+<p class="kicker">JAWS-UG横浜 #103 × SRE支部 · 2026年9月18日</p><h1 id="title-1">GameDayみたいなクラウド演習を<br>自分で作ってみた</h1>
+<p class="lead">GameDayが好きで、いつでも開催したかった。</p><p class="byline">冨田 進 / susumutomita<br>合同会社BULL</p>
+<div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>1 / 13</span></div>
+</section>
+<section class="slide " id="slide-2" aria-labelledby="title-2">
+<p class="kicker">きっかけ</p><h2 id="title-2">GameDay、いつでも開催したくないですか？</h2>
+<p class="lead">僕はGameDayが大好きです。</p><ul class="speaking-points"><li>自分で考えたオリジナル問題で遊びたい</li><li>現場で起きた障害を、再現問題にしたい</li><li>勉強会でも、社内でも開催したい</li></ul>
+<div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>2 / 13</span></div>
+</section>
+<section class="slide " id="slide-3" aria-labelledby="title-3">
+<p class="kicker">きっかけ</p><h2 id="title-3">探してみたけれど、欲しいものがなかった。</h2>
+<p class="lead">見つかったのは、主にCTFのプラットフォーム。</p><ul class="speaking-points"><li>問題を出して、回答を採点する仕組みはある</li><li>チームごとのクラウド環境を配る仕組みがほしい</li></ul><p class="emphasis">それなら自分で作ろう。→ TenkaCloud</p>
+<div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>3 / 13</span></div>
+</section>
+<section class="slide " id="slide-4" aria-labelledby="title-4">
+<p class="kicker">作ってみる</p><h2 id="title-4">最初は、マルチクラウドを目指した。</h2>
+<p class="lead">特定のクラウドに依存しないよう、OSSを中心に組んでいった。</p><dl class="plain-list"><div><dt>Keycloak</dt><dd>認証を自分で持つ</dd></div><div><dt>Kubernetes</dt><dd>アプリを動かす共通基盤を持つ</dd></div><div><dt>Kumo</dt><dd>手元でAWS APIを動かす<br><small>AWS向けの開発過程で使ったエミュレータ</small></dd></div></dl>
+<div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>4 / 13</span></div>
+</section>
+<section class="slide " id="slide-5" aria-labelledby="title-5">
+<p class="kicker">作っていて気づいた</p><h2 id="title-5">作ったはいいけど、<br>これ、運用難しくない？</h2>
+<ul class="speaking-points"><li>認証基盤を更新する</li><li>クラスタを維持する</li><li>壊れたときに、自分で直す</li></ul><p class="lead">イベントを開きたいだけなのに、面倒を見るものが増えていた。</p>
+<div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>5 / 13</span></div>
+</section>
+<section class="slide diagram-slide" id="slide-6" aria-labelledby="title-6">
+<p class="kicker">作り直した構成</p><h2 id="title-6">SBTを土台に、AWSのサービスで組み直した。</h2>
+<div class="diagram-focus" role="group" aria-label="物理構成図の表示範囲"><button type="button" data-view-box="0 0 6000 3300" data-summary="SBTの2層に、問題デプロイエンジン・競技者コンソールを追加。" aria-pressed="true">全体</button><button type="button" data-view-box="90 450 1800 430" data-diagram-src="./assets/architecture-control-plane.svg" data-summary="① Control Plane：利用する組織を登録・管理する。" aria-pressed="false">① SBT / 組織管理</button><button type="button" data-view-box="90 1600 1800 760" data-diagram-src="./assets/architecture-application.svg" data-summary="② Application Plane：開催者がイベントを準備する。" aria-pressed="false">② 開催者のアプリ</button><button type="button" data-view-box="2460 450 2500 1370" data-diagram-src="./assets/architecture-problem-runtime.svg" data-summary="③ 追加した部分：問題環境を作り、参加者が競技する。" aria-pressed="false">③ 問題デプロイ・競技者</button></div>
+<a class="figure-link" href="./architecture.html?view=saas" target="_blank" rel="noopener noreferrer"><svg id="slide-architecture-svg" viewBox="0 0 6000 3300" data-full-view-box="0 0 6000 3300" role="img" aria-label="既存Draw.ioのSaaS物理構成図。全体からSBT、開催者アプリ、問題デプロイ・競技者の範囲へ切り替えられます"><defs><clipPath id="slide-architecture-clip"><rect id="slide-architecture-clip-rect" x="0" y="0" width="6000" height="3300" /></clipPath></defs><g clip-path="url(#slide-architecture-clip)"><image href="./assets/architecture-saas.svg" width="6000" height="3300" /></g></svg><span class="caption">部分表示は範囲内の接続のみ · 全体図を大きく開く ↗</span></a><p id="diagram-summary" class="diagram-summary" aria-live="polite">SBTの2層に、問題デプロイエンジン・競技者コンソールを追加。</p>
+<div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>6 / 13</span></div>
+</section>
+<section class="slide diagram-slide" id="slide-7" aria-labelledby="title-7">
+<p class="kicker">仕組みを見る</p><h2 id="title-7">「デプロイ」を押すと、チームのAWSに環境ができる。</h2>
+<a class="figure-link" href="./architecture.html?view=deploy" target="_blank" rel="noopener noreferrer"><img src="./assets/architecture-deploy.svg?v=314d52713b" width="1280" height="470" alt="開催者のデプロイ操作をAPIが受け付け、EventBridgeからStep FunctionsとLambdaを起動する。チーム別のAWSアカウントへAssumeRoleしCloudFormationで問題環境を作る。参加者は競技者コンソールから問題を開く。" /><span class="caption">図を拡大する ↗</span></a><p class="fine">クラウド環境を使う問題のデプロイ経路です。暗号バトルは、共有の競技APIで状態と得点を更新するタイプの問題です。</p>
+<div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>7 / 13</span></div>
+</section>
+<section class="slide " id="slide-8" aria-labelledby="title-8">
+<p class="kicker">開催する問題</p><h2 id="title-8">Challengeで解く。Battleで競う。</h2>
+<dl class="plain-list"><div><dt>Challenge</dt><dd>問題を解き、回答やflagを提出する。<br><small>例：設定ミスの修正、脆弱性の調査</small></dd></div><div><dt>Battle</dt><dd>稼働状態や競技中の操作を判定し、得点を競う。<br><small>例：サービスの復旧、攻撃・防御、暗号バトル</small></dd></div></dl><p class="lead">同じ開催画面から、問題に合った採点方法を使う。</p>
+<div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>8 / 13</span></div>
+</section>
+<section class="slide " id="slide-9" aria-labelledby="title-9">
+<p class="kicker">もう一つ困ったこと</p><h2 id="title-9">開催していない間の、データベース代。</h2>
+<ol class="cost-history"><li><strong>DynamoDBをプロビジョンド容量に</strong><span>アクセス増による料金の急増を避けたかった。</span></li><li><strong>使っていなくても、確保した容量の費用が残る</strong><span>イベントを開かない日もある。</span></li><li><strong>SQLite / Tursoも選べるようにした</strong><span>ローカルはSQLite。AWS上の処理からはTursoへ。</span></li></ol><p class="fine">Turso対応は実装・テスト済み。実AWS＋Tursoでの開催と請求確認は未実施。SaaSのSBT用DynamoDBまでなくなるわけではありません。</p>
+<div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>9 / 13</span></div>
+</section>
+<section class="slide " id="slide-10" aria-labelledby="title-10">
+<p class="kicker">開催を楽にする工夫</p><h2 id="title-10">問題を置いた後の、運営機能も作った。</h2>
+<dl class="feature-list"><div><dt>ゲート・障害注入</dt><dd>前の問題を通過したら次を解放。問題に用意した障害を発火。</dd></div><div><dt>ダッシュボード</dt><dd>チームの得点と、問題のデプロイ状況を追う。</dd></div><div><dt>ログインキー</dt><dd>イベント作成時に、チームごとのキーを自動発行。</dd></div><div><dt>AWSフェデレーション</dt><dd>参加者画面 → 一時的な権限 → チームのAWSコンソール。</dd></div></dl>
+<div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>10 / 13</span></div>
+</section>
+<section class="slide video-slide" id="slide-11" aria-labelledby="title-11">
+<p class="kicker">使ってみる · 開催者</p><h2 id="title-11">準備ができたら、イベントを始める。</h2>
+<div class="video-layout"><figure class="demo-video">
+<div class="demo-player" id="host-demo" data-youtube-start="0" data-youtube-end="20">
+<button class="demo-play" type="button" aria-label="AWS上の開催操作：時刻設定・参加者への案内・問題を開くをYouTubeで再生"><img src="./assets/event-host-demo.png" width="1440" height="900" alt="" /><span>▶ 開催の流れを見る（20秒）</span></button>
+</div>
+<img class="demo-print" src="./assets/event-host-demo.png" width="1440" height="900" alt="開催時刻を設定する管理画面" />
+<figcaption id="host-caption">AWS上の実操作 · 20秒 · 音声：VOICEVOX:ずんだもん</figcaption>
+</figure><div class="video-story"><p><strong>開催時刻を決める</strong>開始と終了を設定。</p><p><strong>参加者へ案内する</strong>お知らせをまとめて送信。</p><p><strong>問題を開く</strong>参加者の画面で<br>競技を始める。</p><div class="actions"><a href="https://www.youtube.com/watch?v=o39ZWxEbrzA&amp;t=0s" target="_blank" rel="noopener noreferrer">YouTubeで見る ↗</a></div><p class="fine">問題とチームを登録した後の操作です。キー配布と待ち時間を省略。時刻の入力は2倍速です。</p></div></div>
+<div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>11 / 13</span></div>
+</section>
+<section class="slide video-slide" id="slide-12" aria-labelledby="title-12">
+<p class="kicker">作った問題 · 暗号バトル</p><h2 id="title-12">中学生の知識から、暗号の仕組みを遊んで学ぶ。</h2>
+<div class="video-layout"><figure class="demo-video">
+<div class="demo-player" id="crypto-demo" data-youtube-start="20" data-youtube-end="60">
+<button class="demo-play" type="button" aria-label="AWS上の暗号バトル：回答・加点・減点・順位への反映をYouTubeで再生"><img src="./assets/crypto-battle-live-demo.png" width="1440" height="900" alt="" /><span>▶ 暗号バトルを見る（40秒）</span></button>
+</div>
+<img class="demo-print" src="./assets/crypto-battle-live-demo.png" width="1440" height="900" alt="ずらし暗号に正解し、30点を獲得した参加者の画面" />
+<figcaption id="demo-caption">AWS上の実操作 · 40秒 · 音声：VOICEVOX:ずんだもん</figcaption>
+</figure><div class="video-story"><p><strong>小さな数で計算</strong>暗号化・復号・証明を解き、<br>仕組みをつかむ。</p><p><strong>シーザー暗号から先端まで</strong><span class="crypto-topics">完全準同型暗号・ゼロ知識証明<br>iO・アナモルフィック暗号</span></p><p><strong>対戦しながら理解する</strong>正解で得点。<br>公開情報から相手の秘密を探す。</p><div class="actions"><a href="https://www.youtube.com/watch?v=o39ZWxEbrzA&amp;t=20s" target="_blank" rel="noopener noreferrer">YouTubeで見る ↗</a><a href="../acp2026/">暗号バトルの解説</a></div><p class="fine">小さな数の学習モデルで体験します。録画は回答と得点反映の例。公開・HUNTはルール紹介です。</p></div></div><div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>12 / 13</span></div>
+</section>
+<section class="slide closing-slide" id="slide-13" aria-labelledby="title-13">
+<p class="kicker">作っているメンバー</p><h2 id="title-13">一緒に作って、遊びましょう。</h2>
+<div class="closing-members">
+<article class="member"><h3>amedama <small>冨田 進</small></h3><p>JAWS DAYS 2024 AWS GameDay 優勝<br>2026 準優勝</p><div class="profile-links" aria-label="amedamaのプロフィール">
+<a href="https://susumutomita.netlify.app/" target="_blank" rel="noopener noreferrer"><img src="./assets/amedama-portfolio-qr.png" width="300" height="300" alt="amedamaのPortfolioへ移動するQRコード" /><span>Portfolio</span></a>
+<a href="https://www.linkedin.com/in/susumutomita/" target="_blank" rel="noopener noreferrer"><img src="./assets/amedama-linkedin-qr.png" width="300" height="300" alt="amedamaのLinkedInへ移動するQRコード" /><span>LinkedIn</span></a>
+<a href="https://github.com/susumutomita" target="_blank" rel="noopener noreferrer"><img src="./assets/amedama-github-qr.png" width="300" height="300" alt="amedamaのGitHubへ移動するQRコード" /><span>GitHub</span></a>
+</div></article>
+<article class="member"><h3>チャーリー</h3><p>JAWS 名古屋運営メンバー<br>GameDayの熱量を広げたい人</p></article>
+<article class="member"><h3>きせのん</h3><p>JAWS DAYS 2024 GameDay 優勝<br>AWS 認定全冠 · CCoE はじめました</p></article>
+</div>
+<div class="resource-links" aria-label="TenkaCloudを見に行く">
+<a href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer"><img src="./assets/repository-qr.png" width="300" height="300" alt="リポジトリへ移動するQRコード" /><span><strong>リポジトリ</strong><small>TenkaCloud</small></span></a>
+<a href="https://github.com/susumutomita/TenkaCloudChallenge" target="_blank" rel="noopener noreferrer"><img src="./assets/problems-qr.png" width="300" height="300" alt="問題集へ移動するQRコード" /><span><strong>問題集</strong><small>TenkaCloudChallenge</small></span></a>
+<a href="https://tenkacloud.com/" target="_blank" rel="noopener noreferrer"><img src="./assets/landing-qr.png" width="300" height="300" alt="LPへ移動するQRコード" /><span><strong>LP</strong><small>tenkacloud.com</small></span></a>
+</div>
+<div class="slide-foot"><span>冨田 進 · TenkaCloud</span><span>13 / 13</span></div>
+</section>
+</main>
+<footer class="topbar"><span>← → で移動 · 全13枚 · 10分</span><a href="../">TenkaCloudへ戻る</a></footer>
+</body></html>
