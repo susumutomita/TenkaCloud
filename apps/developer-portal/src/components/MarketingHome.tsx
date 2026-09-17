@@ -74,7 +74,10 @@ export function MarketingHome({ locale }: { locale: Locale }) {
                 {business.hero.tertiaryCta}
               </a>
             </div>
-            <ul className={styles.proofList} aria-label={locale === "ja" ? "導入条件" : "Adoption facts"}>
+            <ul
+              className={styles.proofList}
+              aria-label={locale === "ja" ? "導入条件" : "Adoption facts"}
+            >
               {business.hero.proof.map((item) => (
                 <li key={item}>{item}</li>
               ))}
@@ -114,7 +117,9 @@ export function MarketingHome({ locale }: { locale: Locale }) {
           </div>
           <div className={styles.transformationGrid}>
             <article className={styles.transformationCard}>
-              <span className={styles.transformationLabel}>{business.transformation.before.label}</span>
+              <span className={styles.transformationLabel}>
+                {business.transformation.before.label}
+              </span>
               <h3>{business.transformation.before.title}</h3>
               <ul className={styles.transformationList}>
                 {business.transformation.before.items.map((item) => (
@@ -126,7 +131,9 @@ export function MarketingHome({ locale }: { locale: Locale }) {
               →
             </div>
             <article className={`${styles.transformationCard} ${styles.transformationCardAfter}`}>
-              <span className={styles.transformationLabel}>{business.transformation.after.label}</span>
+              <span className={styles.transformationLabel}>
+                {business.transformation.after.label}
+              </span>
               <h3>{business.transformation.after.title}</h3>
               <ul className={styles.transformationList}>
                 {business.transformation.after.items.map((item) => (
