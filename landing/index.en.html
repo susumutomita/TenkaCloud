@@ -124,7 +124,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" />
-<link rel="stylesheet" href="./styles/main.css?v=cf08a52993" />
+<link rel="stylesheet" href="./styles/main.css?v=3de33d57c7" />
+<link rel="stylesheet" href="./presentations/library.css" />
 </head>
 <body>
 
@@ -139,11 +140,9 @@
     </div>
     <div class="nav-links">
       <a href="#modes" data-i18n="nav.product">Product</a>
-      <a href="#onboard" data-i18n="nav.problems">Problems</a>
-      <a href="#extend" data-i18n="nav.extend">Author problems</a>
       <a href="./docs/index.en.html" data-i18n="nav.docs">Docs</a>
-      <a href="#offerings" data-i18n="nav.offerings">Commercial</a>
       <a href="#pricing" data-i18n="nav.pricing">Pricing</a>
+      <a href="./presentations/" data-i18n="nav.presentations">Presentations</a>
       <a href="#contact" data-i18n="nav.contact">Contact</a>
       <a href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer" data-i18n="nav.github">GitHub</a>
     </div>
@@ -621,6 +620,33 @@
   </div>
 </section>
 
+<section id="presentations" class="presentation-library" aria-labelledby="presentations-title">
+  <div class="presentation-wrap">
+    <p class="presentation-kicker" data-i18n="presentations.kicker">PRESENTATIONS / DESIGN AND PRACTICE</p>
+    <h2 id="presentations-title" data-i18n="presentations.title">Explore TenkaCloud's design through talks.</h2>
+    <p class="presentation-intro" data-i18n="presentations.intro">Cloud drills, operational boundaries, and learning through cryptography. Browse the slides and architecture diagrams.</p>
+    <div class="talk-grid">
+      <article class="talk-card" data-presentation-id="jaws-yokohama-2026">
+        <div class="talk-preview diagram-preview"><img src="./jaws-yokohama-2026/assets/architecture-overview.svg" width="3300" height="2210" loading="lazy" alt="" /><span data-i18n="presentations.jaws.preview">AWS architecture / Development lessons</span></div>
+        <div class="talk-card-body"><p class="talk-meta" data-i18n="presentations.jaws.meta">JAWS-UG Yokohama #103 × SRE · 10 min · Japanese</p><h3><a href="./jaws-yokohama-2026/" data-i18n="presentations.jaws.title">Building my own GameDay-style cloud exercises</a></h3><p class="talk-description" data-i18n="presentations.jaws.description">A cryptography battle demo and the decisions behind moving from cloud-agnostic infrastructure to AWS-native services.</p><a class="talk-open" href="./jaws-yokohama-2026/"><span data-i18n="presentations.open">View slides</span> <span aria-hidden="true">→</span></a></div>
+      </article>
+      <article class="talk-card" data-presentation-id="acp2026">
+        <div class="talk-preview"><span data-i18n="presentations.acp.preview">Cryptography battle / Learning design</span><strong>LEAK → HUNT</strong></div>
+        <div class="talk-card-body"><p class="talk-meta" data-i18n="presentations.acp.meta">ACP2026 / FINAL DEMO · 5 min · Japanese</p><h3><a href="./acp2026/" data-i18n="presentations.acp.title">From knowing cryptography to making decisions with it.</a></h3><p class="talk-description" data-i18n="presentations.acp.description">Protect a secret or reveal it? A battle demo connecting hand calculations with competition.</p><a class="talk-open" href="./acp2026/"><span data-i18n="presentations.open">View slides</span> <span aria-hidden="true">→</span></a></div>
+      </article>
+      <article class="talk-card" data-presentation-id="ccoe-lt">
+        <div class="talk-preview"><span data-i18n="presentations.ccoe.preview">CCoE / Cloud skills</span><strong>BUILD → SHIP</strong></div>
+        <div class="talk-card-body"><p class="talk-meta" data-i18n="presentations.ccoe.meta">CCoE Practitioners Community Kansai LT · 15 min · Japanese</p><h3><a href="./ccoe-lt/" data-i18n="presentations.ccoe.title">CCoE in the AI era: the gap between building and shipping</a></h3><p class="talk-description" data-i18n="presentations.ccoe.description">Designing learning paths with TenkaCloud, StackStack, and local exercises.</p><a class="talk-open" href="./ccoe-lt/"><span data-i18n="presentations.open">View slides</span> <span aria-hidden="true">→</span></a></div>
+      </article>
+      <article class="talk-card" data-presentation-id="pitch">
+      <div class="talk-preview"><span data-i18n="presentations.pitch.preview">StackStack / Product introduction</span><strong>StackStack on TenkaCloud</strong></div>
+      <div class="talk-card-body"><p class="talk-meta" data-i18n="presentations.pitch.meta">Singularity Society · 10 min · Japanese</p><h3><a href="./pitch/" data-i18n="presentations.pitch.title">A tournament for cloud engineers</a></h3><p class="talk-description" data-i18n="presentations.pitch.description">Deploy an app built with AI and respond to failures. An introduction to StackStack, how a match works, and the TenkaCloud team.</p><a class="talk-open" href="./pitch/"><span data-i18n="presentations.open">View slides</span> <span aria-hidden="true">→</span></a></div>
+    </article>
+  </div>
+    <a class="presentation-more" href="./presentations/" data-i18n="presentations.more">Browse all presentations and diagrams →</a>
+  </div>
+</section>
+
 <section id="contact">
   <div class="wrap">
     <div class="ent-cta">
@@ -696,6 +722,7 @@
     <div>
       <h5>Resources</h5>
       <a href="./docs/index.en.html" data-i18n="footer.r0">Docs</a>
+      <a href="./presentations/" data-i18n="footer.presentations">Presentations and diagrams</a>
       <a href="https://github.com/susumutomita/TenkaCloud/releases" target="_blank" rel="noopener noreferrer" data-i18n="footer.r2">Changelog</a>
       <a href="https://leanpub.com/build-your-own-cloud-competition" target="_blank" rel="noopener noreferrer" data-i18n="footer.r3" data-i18n-href="footer.r3Href">Book: Build Your Own Cloud Competition</a>
     </div>
@@ -732,7 +759,7 @@
 
 <script src="./ink-bg.js" defer></script>
 <script src="./contact-form.js?v=7301ba7ae8" defer></script>
-<script src="./app.js?v=72dc9b5703" defer></script>
+<script src="./app.js?v=d762443b57" defer></script>
 
 </body>
 </html>

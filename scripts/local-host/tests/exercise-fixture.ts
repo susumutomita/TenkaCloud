@@ -3,7 +3,7 @@
  * authentication, durable state, event gates and proxy boundaries. */
 
 import { createHash } from "node:crypto";
-import { createServer } from "node:http";
+import { createServer, type IncomingMessage } from "node:http";
 import { closeServer, json, listen, readBody } from "../http";
 import {
   type Context,
@@ -49,45 +49,43 @@ export class ExerciseFixture implements RuntimeEngine {
     );
     const flagHash = createHash("sha256").update(`flag:${job.jobId}`).digest("hex").slice(0, 20);
     const flag = `TC{${flagHash}}`;
+    const login = (body: string): { status: number; body: unknown } => {
+      const params = new URLSearchParams(body);
+      // Intentional training vulnerability confined to the test fixture process.
+      const username = params.get("username") ?? "";
+      const password = params.get("password") ?? "";
+      let row: unknown;
+      try {
+        row = db
+          .prepare(`SELECT role FROM users WHERE username='${username}' AND password='${password}'`)
+          .get();
+      } catch {
+        row = undefined;
+      }
+      return row ? { status: 200, body: { flag } } : { status: 401, body: { ok: false } };
+    };
+    const verify = async (body: string): Promise<{ status: number; body: unknown }> => {
+      if (this.verifyDelay) await new Promise((accept) => setTimeout(accept, this.verifyDelay));
+      return { status: 200, body: { correct: object(JSON.parse(body)).submission === flag } };
+    };
+    const route = async (request: IncomingMessage): Promise<{ status: number; body: unknown }> => {
+      const key = `${request.method ?? "GET"} ${request.url ?? "/"}`;
+      if (key === "GET /healthz") return { status: 200, body: { status: "ok" } };
+      if (key === "POST /verify") return verify(await readBody(request));
+      if (key === "POST /login") return login(await readBody(request));
+      return { status: 404, body: { error: "not_found" } };
+    };
     const server = createServer((request, response) => {
-      void (async () => {
-        if (request.url === "/" && request.method === "GET") {
-          response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-          response.end(
-            '<!doctype html><form action="/login" method="post"><label>User <input name="username"></label><label>Password <input name="password"></label><button>Sign in</button></form>',
-          );
-          return;
-        }
-        if (request.url === "/healthz") {
-          json(response, 200, { status: "ok" });
-          return;
-        }
-        const body = await readBody(request);
-        if (request.url === "/verify") {
-          if (this.verifyDelay) await new Promise((accept) => setTimeout(accept, this.verifyDelay));
-          json(response, 200, { correct: object(JSON.parse(body)).submission === flag });
-          return;
-        }
-        if (request.url === "/login" && request.method === "POST") {
-          const params = new URLSearchParams(body);
-          // Intentional training vulnerability confined to the test fixture process.
-          const username = params.get("username") ?? "";
-          const password = params.get("password") ?? "";
-          let row: unknown;
-          try {
-            row = db
-              .prepare(
-                `SELECT role FROM users WHERE username='${username}' AND password='${password}'`,
-              )
-              .get();
-          } catch {
-            row = undefined;
-          }
-          json(response, row ? 200 : 401, row ? { flag } : { ok: false });
-          return;
-        }
-        json(response, 404, { error: "not_found" });
-      })().catch(() => json(response, 500, { error: "fixture_error" }));
+      if (request.url === "/" && request.method === "GET") {
+        response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        response.end(
+          '<!doctype html><form action="/login" method="post"><label>User <input name="username"></label><label>Password <input name="password"></label><button>Sign in</button></form>',
+        );
+        return;
+      }
+      route(request)
+        .then((result) => json(response, result.status, result.body))
+        .catch(() => json(response, 500, { error: "fixture_error" }));
     });
     const origin = await listen(server, "127.0.0.1", 0);
     this.running.set(job.jobId, {

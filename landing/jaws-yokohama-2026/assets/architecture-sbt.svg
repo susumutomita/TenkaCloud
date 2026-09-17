@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="470" viewBox="0 0 1280 470" role="img" aria-labelledby="title desc"><title id="title">03 SBTとTenkaCloudの役割</title><desc id="desc">SBTのControl PlaneとApplication Planeを土台に、TenkaCloudが問題デプロイエンジンと競技者コンソールを追加。SaaS構成の役割を整理しており物理スタック数は示していない。</desc><metadata>Source: architecture.drawio / sbt-roles. Geometry and labels match the editable source.</metadata><defs><marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="userSpaceOnUse"><path d="M0 0 L12 6 L0 12 Z" fill="#34475a"/></marker></defs><rect width="1280" height="470" fill="white"/>
+<text x="12" y="60" fill="#202a35" font-size="26" font-weight="700" font-family="system-ui,Hiragino Sans,sans-serif">SBTの2層</text>
+<text x="12" y="96" fill="#202a35" font-size="22" font-weight="400" font-family="system-ui,Hiragino Sans,sans-serif">を土台にする</text>
+<rect x="220" y="15" width="1040" height="120" fill="#faf8fd" stroke="#7655a1" stroke-width="3"/>
+<text x="248" y="58" fill="#202a35" font-size="30" font-weight="700" font-family="system-ui,Hiragino Sans,sans-serif">Control Plane</text>
+<text x="720" y="58" fill="#202a35" font-size="30" font-weight="700" font-family="system-ui,Hiragino Sans,sans-serif">利用する組織を管理</text>
+<text x="248" y="104" fill="#202a35" font-size="23" font-weight="400" font-family="system-ui,Hiragino Sans,sans-serif">組織の登録・利用環境の準備</text>
+<text x="720" y="104" fill="#202a35" font-size="23" font-weight="400" font-family="system-ui,Hiragino Sans,sans-serif">プラットフォーム管理者の画面</text>
+<rect x="220" y="165" width="1040" height="120" fill="#f7fafc" stroke="#3f719c" stroke-width="3"/>
+<text x="248" y="208" fill="#202a35" font-size="30" font-weight="700" font-family="system-ui,Hiragino Sans,sans-serif">Application Plane</text>
+<text x="720" y="208" fill="#202a35" font-size="30" font-weight="700" font-family="system-ui,Hiragino Sans,sans-serif">組織ごとのアプリを提供</text>
+<text x="248" y="254" fill="#202a35" font-size="23" font-weight="400" font-family="system-ui,Hiragino Sans,sans-serif">TenkaCloudの開催者用管理画面</text>
+<text x="720" y="254" fill="#202a35" font-size="23" font-weight="400" font-family="system-ui,Hiragino Sans,sans-serif">イベント・問題・チームを管理</text>
+<text x="12" y="362" fill="#202a35" font-size="26" font-weight="700" font-family="system-ui,Hiragino Sans,sans-serif">TenkaCloud</text>
+<text x="12" y="400" fill="#202a35" font-size="26" font-weight="700" font-family="system-ui,Hiragino Sans,sans-serif">で追加</text>
+<rect x="220" y="325" width="1040" height="125" fill="#fffcf5" stroke="#b57a20" stroke-width="3"/>
+<text x="248" y="369" fill="#202a35" font-size="30" font-weight="700" font-family="system-ui,Hiragino Sans,sans-serif">問題デプロイエンジン</text>
+<text x="248" y="416" fill="#202a35" font-size="23" font-weight="400" font-family="system-ui,Hiragino Sans,sans-serif">チームのAWSに問題環境を作る</text>
+<text x="780" y="369" fill="#202a35" font-size="30" font-weight="700" font-family="system-ui,Hiragino Sans,sans-serif">競技者コンソール</text>
+<text x="780" y="416" fill="#202a35" font-size="23" font-weight="400" font-family="system-ui,Hiragino Sans,sans-serif">問題を開く・回答する・得点を見る</text>
+</svg>

@@ -2,7 +2,7 @@ import { readFile, realpath } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { extname, resolve, sep } from "node:path";
 import { HostError } from "./model";
-import type { HostingService } from "./service";
+import type { ApiRequest, ApiResponse, HostingService } from "./service";
 export const MAX_BODY = 64 * 1024;
 
 export function json(response: ServerResponse, status: number, body: unknown): void {
@@ -80,36 +80,45 @@ const contentTypes: Readonly<Record<string, string>> = {
   ".woff2": "font/woff2",
 };
 
+interface StaticFile {
+  file: string;
+  contentType: string;
+}
+
+async function resolveAsset(safeRoot: string, pathname: string): Promise<StaticFile> {
+  const decoded = decodeURIComponent(pathname);
+  if (decoded.includes("\\") || decoded.split("/").some((part) => part.startsWith(".")))
+    throw new HostError(404, "Asset not found.");
+  const contentType = contentTypes[extname(decoded)] ?? "";
+  if (!contentType) throw new HostError(404, "Asset type is not served.");
+  let file: string;
+  try {
+    file = await realpath(resolve(safeRoot, `.${decoded}`));
+  } catch {
+    throw new HostError(404, "Asset not found.");
+  }
+  if (!file.startsWith(`${safeRoot}${sep}`)) throw new HostError(404, "Asset not found.");
+  return { file, contentType };
+}
+
+async function resolveStatic(safeRoot: string, pathname: string): Promise<StaticFile> {
+  if (pathname.startsWith("/assets/")) return resolveAsset(safeRoot, pathname);
+  if (pathname === "/plugin-versions.json") {
+    const file = await realpath(resolve(safeRoot, "plugin-versions.json"));
+    if (!file.startsWith(`${safeRoot}${sep}`)) throw new HostError(404, "File not served.");
+    return { file, contentType: "application/json; charset=utf-8" };
+  }
+  // No state directory, JSON metadata, sourcemap or repository file is ever served.
+  if (/\.[a-zA-Z0-9]+$/u.test(pathname)) throw new HostError(404, "File not served.");
+  return { file: resolve(safeRoot, "host.html"), contentType: "text/html; charset=utf-8" };
+}
+
 async function serveStatic(
   response: ServerResponse,
   pathname: string,
   root: string,
 ): Promise<void> {
-  const safeRoot = await realpath(root);
-  let file: string;
-  let contentType: string;
-  if (pathname.startsWith("/assets/")) {
-    const decoded = decodeURIComponent(pathname);
-    if (decoded.includes("\\") || decoded.split("/").some((part) => part.startsWith(".")))
-      throw new HostError(404, "Asset not found.");
-    contentType = contentTypes[extname(decoded)] ?? "";
-    if (!contentType) throw new HostError(404, "Asset type is not served.");
-    try {
-      file = await realpath(resolve(safeRoot, `.${decoded}`));
-    } catch {
-      throw new HostError(404, "Asset not found.");
-    }
-    if (!file.startsWith(`${safeRoot}${sep}`)) throw new HostError(404, "Asset not found.");
-  } else if (pathname === "/plugin-versions.json") {
-    file = await realpath(resolve(safeRoot, "plugin-versions.json"));
-    if (!file.startsWith(`${safeRoot}${sep}`)) throw new HostError(404, "File not served.");
-    contentType = "application/json; charset=utf-8";
-  } else {
-    // No state directory, JSON metadata, sourcemap or repository file is ever served.
-    if (/\.[a-zA-Z0-9]+$/u.test(pathname)) throw new HostError(404, "File not served.");
-    file = resolve(safeRoot, "host.html");
-    contentType = "text/html; charset=utf-8";
-  }
+  const { file, contentType } = await resolveStatic(await realpath(root), pathname);
   response.writeHead(200, {
     "content-type": contentType,
     "cache-control": "no-store",
@@ -125,6 +134,62 @@ export interface HttpHost {
   origin: string;
   close(): Promise<void>;
 }
+
+/** Ten invalid credentials per remote address per minute; the map itself is bounded too. */
+class InvalidCredentialLimiter {
+  private readonly failures = new Map<string, { count: number; reset: number }>();
+  constructor(private readonly now: () => number) {}
+  assertAllowed(remote: string): void {
+    const now = this.now();
+    for (const [key, value] of this.failures) if (value.reset <= now) this.failures.delete(key);
+    if ((this.failures.get(remote)?.count ?? 0) >= 10)
+      throw new HostError(429, "Too many invalid credentials; retry in one minute.");
+  }
+  record(remote: string): void {
+    const current = this.failures.get(remote) ?? { count: 0, reset: this.now() + 60_000 };
+    current.count += 1;
+    // Only a LAN address can reach this listener; still cap the map, not just the rate.
+    if (this.failures.size < 4096 || this.failures.has(remote)) this.failures.set(remote, current);
+  }
+}
+
+function requestTarget(request: IncomingMessage, origin: string): URL {
+  const url = new URL(request.url ?? "/", origin);
+  try {
+    decodeURIComponent(url.pathname);
+  } catch {
+    throw new HostError(400, "Malformed URL encoding.");
+  }
+  if (url.origin !== origin)
+    throw new HostError(403, "Absolute cross-origin request target is forbidden.");
+  return url;
+}
+
+async function jsonBody(request: IncomingMessage): Promise<unknown> {
+  if (!["POST", "PATCH", "PUT", "DELETE"].includes(request.method ?? "")) return {};
+  const raw = await readBody(request);
+  if (!raw) return {};
+  if (!request.headers["content-type"]?.toLowerCase().startsWith("application/json"))
+    throw new HostError(415, "Use application/json.");
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    throw new HostError(400, "Malformed JSON.");
+  }
+}
+
+function bearerToken(request: IncomingMessage): string {
+  const auth = request.headers.authorization ?? "";
+  if (auth.length > 4096) throw new HostError(401, "Invalid credential.");
+  return auth.startsWith("Bearer ") ? auth.slice(7) : "";
+}
+
+function idempotencyKey(request: IncomingMessage): string | undefined {
+  const nonce = request.headers["idempotency-key"];
+  if (Array.isArray(nonce)) throw new HostError(400, "Only one Idempotency-Key is allowed.");
+  return nonce;
+}
+
 /** Distinct origins: the admin listener is loopback-only and has no participant routes. */
 export async function startHttpHost(options: {
   kind: "admin" | "participant";
@@ -138,13 +203,7 @@ export async function startHttpHost(options: {
   if (options.kind === "admin" && options.hostname !== "127.0.0.1")
     throw new Error("The host console must bind to IPv4 loopback.");
   let origin = "";
-  const failures = new Map<
-    string,
-    {
-      count: number;
-      reset: number;
-    }
-  >();
+  const limiter = new InvalidCredentialLimiter(options.service.now);
   const server = createServer((request, response) => {
     void handle(request, response).catch((error) => {
       if (!(error instanceof HostError)) (options.log ?? console.error)(error);
@@ -157,20 +216,9 @@ export async function startHttpHost(options: {
   server.setTimeout(15_000, (socket) => socket.destroy());
   async function handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
     validOrigin(request, origin);
-    const url = new URL(request.url ?? "/", origin);
-    try {
-      decodeURIComponent(url.pathname);
-    } catch {
-      throw new HostError(400, "Malformed URL encoding.");
-    }
-    if (url.origin !== origin)
-      throw new HostError(403, "Absolute cross-origin request target is forbidden.");
+    const url = requestTarget(request, origin);
     if (url.pathname === "/healthz" && request.method === "GET") {
-      json(response, 200, {
-        status: "ok",
-        mode: "local-host",
-        role: options.kind,
-      });
+      json(response, 200, { status: "ok", mode: "local-host", role: options.kind });
       return;
     }
     if (url.pathname === "/runtime-config.json" && request.method === "GET") {
@@ -188,70 +236,66 @@ export async function startHttpHost(options: {
       await serveStatic(response, url.pathname, options.staticRoot);
       return;
     }
-    const path = url.pathname.slice(4);
-    // Compatibility with the existing memory-only AuthProvider's revocation flow.
-    // This is a local endpoint, not a call to Cognito; redirect destinations are fixed.
-    if (options.kind === "admin" && path === "/host/oauth2/revoke" && request.method === "POST") {
+    await handleApi(request, response, url.pathname.slice(4), url.searchParams);
+  }
+  // Compatibility with the existing memory-only AuthProvider's revocation flow. These are
+  // local endpoints, not calls to Cognito; redirect destinations are fixed.
+  async function handleSessionCompat(
+    request: IncomingMessage,
+    response: ServerResponse,
+    path: string,
+  ): Promise<boolean> {
+    if (options.kind !== "admin") return false;
+    if (path === "/host/oauth2/revoke" && request.method === "POST") {
       if (!request.headers["content-type"]?.startsWith("application/x-www-form-urlencoded"))
         throw new HostError(415, "Use form-encoded token revocation.");
       const token = new URLSearchParams(await readBody(request)).get("token") ?? "";
       options.service.store.revokeSession(token);
       json(response, 200, { revoked: true });
-      return;
+      return true;
     }
-    if (options.kind === "admin" && path === "/host/logout" && request.method === "GET") {
+    if (path === "/host/logout" && request.method === "GET") {
       response.writeHead(303, { location: "/login", "cache-control": "no-store" });
       response.end();
-      return;
+      return true;
     }
-    if (options.kind === "participant" && !path.startsWith("/portal/"))
+    return false;
+  }
+  function assertRoleRoute(path: string): void {
+    const participantRoute = path.startsWith("/portal/");
+    if (options.kind === "participant" && !participantRoute)
       throw new HostError(404, "Unknown participant endpoint.");
-    if (options.kind === "admin" && path.startsWith("/portal/"))
+    if (options.kind === "admin" && participantRoute)
       throw new HostError(404, "Unknown host endpoint.");
+  }
+  async function dispatch(apiRequest: ApiRequest): Promise<ApiResponse> {
+    return options.kind === "admin"
+      ? options.service.admin(apiRequest)
+      : options.service.participant(apiRequest);
+  }
+  async function handleApi(
+    request: IncomingMessage,
+    response: ServerResponse,
+    path: string,
+    query: URLSearchParams,
+  ): Promise<void> {
+    if (await handleSessionCompat(request, response, path)) return;
+    assertRoleRoute(path);
     const remote = request.socket.remoteAddress ?? "unknown";
-    const now = options.service.now();
-    for (const [key, value] of failures) if (value.reset <= now) failures.delete(key);
-    if ((failures.get(remote)?.count ?? 0) >= 10)
-      throw new HostError(429, "Too many invalid credentials; retry in one minute.");
-    let body: unknown = {};
-    if (["POST", "PATCH", "PUT", "DELETE"].includes(request.method ?? "")) {
-      const raw = await readBody(request);
-      if (raw) {
-        if (!request.headers["content-type"]?.toLowerCase().startsWith("application/json"))
-          throw new HostError(415, "Use application/json.");
-        try {
-          body = JSON.parse(raw) as unknown;
-        } catch {
-          throw new HostError(400, "Malformed JSON.");
-        }
-      }
-    }
-    const auth = request.headers.authorization ?? "";
-    if (auth.length > 4096) throw new HostError(401, "Invalid credential.");
-    const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-    const nonce = request.headers["idempotency-key"];
-    if (Array.isArray(nonce)) throw new HostError(400, "Only one Idempotency-Key is allowed.");
+    limiter.assertAllowed(remote);
+    const apiRequest: ApiRequest = {
+      method: request.method ?? "GET",
+      path,
+      query,
+      body: await jsonBody(request),
+      token: bearerToken(request),
+      nonce: idempotencyKey(request),
+    };
     try {
-      const apiRequest = {
-        method: request.method ?? "GET",
-        path,
-        query: url.searchParams,
-        body,
-        token,
-        nonce,
-      };
-      const result =
-        options.kind === "admin"
-          ? await options.service.admin(apiRequest)
-          : await options.service.participant(apiRequest);
+      const result = await dispatch(apiRequest);
       json(response, result.status, result.body);
     } catch (error) {
-      if (error instanceof HostError && error.status === 401) {
-        const current = failures.get(remote) ?? { count: 0, reset: now + 60_000 };
-        current.count += 1;
-        // Bound the map as well as the rate. Only a LAN address can reach this listener.
-        if (failures.size < 4096 || failures.has(remote)) failures.set(remote, current);
-      }
+      if (error instanceof HostError && error.status === 401) limiter.record(remote);
       throw error;
     }
   }

@@ -1,16 +1,20 @@
-import { id, issueSession, SerialQueue, secret } from "./auth";
+import { id, issueSession, randomToken, SerialQueue } from "./auth";
 import {
   assertPlaying,
   type Context,
+  type Gate,
   gate,
   HostError,
   type HostedEvent,
+  hasStarted,
   type Job,
   object,
   type RuntimeEngine,
+  scoringEnded,
   type Team,
   text,
 } from "./model";
+import { portsFree } from "./ports";
 import { digest, type HostStore } from "./store";
 
 export interface ApiRequest {
@@ -30,6 +34,57 @@ const ok = (body: unknown, status = 200): ApiResponse => ({ status, body });
 const eventPattern = /^[0-9A-HJKMNP-TV-Z]{26}$/u;
 const slugPattern = /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/u;
 const MAX_JOBS = 40;
+const SLOT_STRIDE = 1000;
+const SLOT_QUEUE = "runtime-slots";
+const NONTERMINAL_STATUSES: readonly Job["status"][] = ["PENDING", "IN_PROGRESS"];
+
+function failureMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message.slice(0, 2000) : fallback;
+}
+
+const NOTICE_JA =
+  "> 競技モードでは、問題環境の起動・停止は主催者が行います。問題文の「起動」操作は不要です。競技中は「アクセス先 URL」の Web を開いてください。\n\n";
+const NOTICE_EN =
+  "> In competition mode, the organizer starts and stops your environment. Skip the problem's Start instruction and open Web under Access URLs during the event.\n\n";
+
+function withEnglish(
+  problem: Record<string, unknown>,
+  edit: (english: Record<string, unknown>) => void,
+): void {
+  if (!problem.i18n) return;
+  const english = { ...object(object(problem.i18n).en) };
+  edit(english);
+  problem.i18n = { en: english };
+}
+
+/** Strip organizer-only and not-yet-earned content from a scorer problem view. */
+function participantProblem(
+  raw: Record<string, unknown>,
+  gateKind: Gate["kind"],
+  ended: boolean,
+): Record<string, unknown> {
+  const problem = { ...raw };
+  delete problem.lifecycle; // Competition environments are host-owned, never participant-resettable.
+  delete problem.recommended;
+  if (typeof problem.instructions === "string")
+    problem.instructions = NOTICE_JA + problem.instructions;
+  withEnglish(problem, (english) => {
+    if (typeof english.instructions === "string")
+      english.instructions = NOTICE_EN + english.instructions;
+  });
+  if (!ended) {
+    delete problem.writeup;
+    withEnglish(problem, (english) => {
+      delete english.writeup;
+    });
+  }
+  if (gateKind === "scoring_not_started") {
+    problem.instructions = "";
+    delete problem.i18n;
+  }
+  return problem;
+}
+
 /** The local adapter retains the existing admin/participant HTTP contracts. */
 export class HostingService {
   private readonly queue = new SerialQueue();
@@ -101,6 +156,21 @@ export class HostingService {
     };
   }
   async admin(request: ApiRequest): Promise<ApiResponse> {
+    const unauthenticated = this.adminLogin(request);
+    if (unauthenticated) return unauthenticated;
+    this.store.authenticateAdmin(request.token, this.now());
+    const fixed = this.adminFixedRoute(request);
+    if (fixed) return fixed;
+    const parts = request.path.split("/").filter(Boolean).map(decodeURIComponent);
+    const eventId = parts[0] === "events" ? parts[1] : undefined;
+    if (!eventId || !eventPattern.test(eventId)) throw new HostError(404, "Unknown host endpoint.");
+    if (parts.length === 2 && request.method === "GET")
+      return ok(this.detail(this.currentEvent(eventId), request.query));
+    return this.queue.run(eventId, async () =>
+      this.mutateEvent(this.currentEvent(eventId), parts.slice(2), request),
+    );
+  }
+  private adminLogin(request: ApiRequest): ApiResponse | undefined {
     if (request.path === "/host/login" && request.method === "POST") {
       return ok(issueSession(this.store, this.masterKey, object(request.body).key, this.now()));
     }
@@ -110,7 +180,9 @@ export class HostingService {
       this.store.revokeSession(text(body.refreshToken, "refreshToken", 128));
       return ok({ revoked: true });
     }
-    this.store.authenticateAdmin(request.token, this.now());
+    return undefined;
+  }
+  private adminFixedRoute(request: ApiRequest): ApiResponse | undefined {
     if (request.path === "/host/catalog" && request.method === "GET") {
       return ok({
         items: this.engine.catalog().map((problem) => ({
@@ -121,22 +193,14 @@ export class HostingService {
       });
     }
     if (request.path === "/feature-flags" && request.method === "GET") return ok({ flags: {} });
-    if (request.path === "/events") {
-      if (request.method === "GET")
-        return ok({
-          items: this.store.events().map((event) => this.summary(this.currentEvent(event.eventId))),
-        });
-      if (request.method === "POST") return this.createEvent(object(request.body));
+    if (request.path === "/events" && request.method === "GET") {
+      return ok({
+        items: this.store.events().map((event) => this.summary(this.currentEvent(event.eventId))),
+      });
     }
-    const parts = request.path.split("/").filter(Boolean).map(decodeURIComponent);
-    if (parts[0] !== "events" || !parts[1] || !eventPattern.test(parts[1]))
-      throw new HostError(404, "Unknown host endpoint.");
-    const eventId = parts[1];
-    if (parts.length === 2 && request.method === "GET")
-      return ok(this.detail(this.currentEvent(eventId), request.query));
-    return this.queue.run(eventId, async () =>
-      this.mutateEvent(this.currentEvent(eventId), parts.slice(2), request),
-    );
+    if (request.path === "/events" && request.method === "POST")
+      return this.createEvent(object(request.body));
+    return undefined;
   }
   private createEvent(body: Record<string, unknown>): ApiResponse {
     const name = text(body.name, "name");
@@ -174,7 +238,7 @@ export class HostingService {
         eventId,
         internalSlug,
         displayName: internalSlug,
-        loginKey: secret(),
+        loginKey: randomToken(),
         snapshot: null,
         score: 0,
         completedProblems: 0,
@@ -219,79 +283,87 @@ export class HostingService {
     parts: string[],
     request: ApiRequest,
   ): Promise<ApiResponse> {
-    const command = parts.join("/");
     if (this.busyEvents.has(event.eventId))
       throw new HostError(409, "An environment operation is already in progress.");
-    if (request.method === "POST" && command === "deploy")
-      return this.deploy(event, object(request.body));
-    if (request.method === "DELETE" && command === "") return this.teardown(event);
-    if (request.method === "PATCH" && command === "schedule")
-      return this.schedule(event, object(request.body));
-    if (request.method === "POST" && command === "end") {
-      if (event.status !== "READY") throw new HostError(409, "Only a ready event can end.");
-      event.status = "ENDED";
-      event.endsAt = new Date(this.now()).toISOString();
-      this.saveEvent(event);
-      return ok({
-        endsAt: event.endsAt,
-        updatedDeployments: this.store.jobs(event.eventId).length,
-      });
-    }
-    if (command === "lock-scoring" && ["POST", "DELETE"].includes(request.method)) {
-      if (!["READY", "ENDED"].includes(event.status))
-        throw new HostError(409, "Event is not lockable.");
-      event.scoringLocked = request.method === "POST";
-      event.scoringLockedAt = event.scoringLocked ? new Date(this.now()).toISOString() : undefined;
-      this.saveEvent(event);
-      return ok({ scoringLocked: event.scoringLocked, scoringLockedAt: event.scoringLockedAt });
-    }
-    if (command === "archive" && request.method === "POST") {
-      if (!["DRAFT", "ENDED", "TEARDOWN"].includes(event.status))
-        throw new HostError(409, "Event is not archivable.");
-      if (this.store.jobs(event.eventId).some((job) => job.unit))
-        throw new HostError(409, "Tear down all environments before archiving.");
-      event.status = "ARCHIVED";
-      this.saveEvent(event);
-      return ok({ archivedAt: event.updatedAt });
-    }
-    if (command === "notifications" && request.method === "POST") {
-      const body = object(request.body);
-      const severity = body.severity ?? "info";
-      if (severity !== "info" && severity !== "warning")
-        throw new HostError(400, "Invalid notification severity.");
-      const notificationId = id(this.now());
-      const occurredAt = new Date(this.now()).toISOString();
-      this.store.notify(event.eventId, notificationId, {
-        notificationId,
-        occurredAt,
-        title: text(body.title, "title"),
-        body: text(body.body, "body", 2000),
-        severity,
-      });
-      return ok({ notificationId, occurredAt });
-    }
+    const body = () => object(request.body);
+    const commands: Record<string, () => ApiResponse | Promise<ApiResponse>> = {
+      "POST deploy": () => this.deploy(event, body()),
+      "DELETE ": () => this.teardown(event),
+      "PATCH schedule": () => this.schedule(event, body()),
+      "POST end": () => this.end(event),
+      "POST lock-scoring": () => this.lockScoring(event, true),
+      "DELETE lock-scoring": () => this.lockScoring(event, false),
+      "POST archive": () => this.archive(event),
+      "POST notifications": () => this.notify(event, body()),
+    };
+    const command = commands[`${request.method} ${parts.join("/")}`];
+    if (command) return command();
     if (
       parts.length === 3 &&
       parts[0] === "teams" &&
       parts[2] === "rotate-login-key" &&
       request.method === "POST"
-    ) {
-      const team = this.store.team(parts[1] ?? "");
-      if (team.eventId !== event.eventId) throw new HostError(404, "Team not found in this event.");
-      team.loginKey = secret();
-      this.store.putTeam(team);
-      return ok({
-        kind: "ok",
-        teamId: team.teamId,
-        teamLoginKey: team.loginKey,
-        rotatedAt: new Date(this.now()).toISOString(),
-      });
-    }
+    )
+      return this.rotateTeamKey(event, parts[1] ?? "");
     throw new HostError(404, "This operation is not available in local hosting.");
   }
   private saveEvent(event: HostedEvent): void {
     event.updatedAt = new Date(this.now()).toISOString();
     this.store.putEvent(event);
+  }
+  private end(event: HostedEvent): ApiResponse {
+    if (event.status !== "READY") throw new HostError(409, "Only a ready event can end.");
+    event.status = "ENDED";
+    event.endsAt = new Date(this.now()).toISOString();
+    this.saveEvent(event);
+    return ok({
+      endsAt: event.endsAt,
+      updatedDeployments: this.store.jobs(event.eventId).length,
+    });
+  }
+  private lockScoring(event: HostedEvent, locked: boolean): ApiResponse {
+    if (!["READY", "ENDED"].includes(event.status))
+      throw new HostError(409, "Event is not lockable.");
+    event.scoringLocked = locked;
+    event.scoringLockedAt = locked ? new Date(this.now()).toISOString() : undefined;
+    this.saveEvent(event);
+    return ok({ scoringLocked: event.scoringLocked, scoringLockedAt: event.scoringLockedAt });
+  }
+  private archive(event: HostedEvent): ApiResponse {
+    if (!["DRAFT", "ENDED", "TEARDOWN"].includes(event.status))
+      throw new HostError(409, "Event is not archivable.");
+    if (this.store.jobs(event.eventId).some((job) => job.unit))
+      throw new HostError(409, "Tear down all environments before archiving.");
+    event.status = "ARCHIVED";
+    this.saveEvent(event);
+    return ok({ archivedAt: event.updatedAt });
+  }
+  private notify(event: HostedEvent, body: Record<string, unknown>): ApiResponse {
+    const severity = body.severity ?? "info";
+    if (severity !== "info" && severity !== "warning")
+      throw new HostError(400, "Invalid notification severity.");
+    const notificationId = id(this.now());
+    const occurredAt = new Date(this.now()).toISOString();
+    this.store.notify(event.eventId, notificationId, {
+      notificationId,
+      occurredAt,
+      title: text(body.title, "title"),
+      body: text(body.body, "body", 2000),
+      severity,
+    });
+    return ok({ notificationId, occurredAt });
+  }
+  private rotateTeamKey(event: HostedEvent, teamId: string): ApiResponse {
+    const team = this.store.team(teamId);
+    if (team.eventId !== event.eventId) throw new HostError(404, "Team not found in this event.");
+    team.loginKey = randomToken();
+    this.store.putTeam(team);
+    return ok({
+      kind: "ok",
+      teamId: team.teamId,
+      teamLoginKey: team.loginKey,
+      rotatedAt: new Date(this.now()).toISOString(),
+    });
   }
   private schedule(event: HostedEvent, body: Record<string, unknown>): ApiResponse {
     if (event.status !== "READY")
@@ -334,7 +406,35 @@ export class HostingService {
       updatedDeployments: this.store.jobs(event.eventId).length,
     });
   }
-  private deploy(event: HostedEvent, body: Record<string, unknown>): ApiResponse {
+  /** Offsets recorded for live jobs in this database, optionally ignoring one job. */
+  private recordedOffsets(except?: string): Set<number> {
+    return new Set(
+      this.store
+        .jobs()
+        .filter((job) => job.status !== "DELETED" && job.jobId !== except)
+        .map((job) => job.offset),
+    );
+  }
+  /**
+   * The lowest free port block whose host ports are actually unbound. SQLite only knows this
+   * host's own jobs; an unrelated process, another data directory's containers or a lazily
+   * allocated exercise gateway can hold a block that no recorded job owns.
+   */
+  private async freeSlot(definition: string, occupied: Set<number>): Promise<number> {
+    for (let index = 1; index <= MAX_JOBS; index += 1) {
+      const offset = index * SLOT_STRIDE;
+      if (occupied.has(offset)) continue;
+      if (await portsFree(this.engine.hostPorts?.(definition, offset) ?? [])) {
+        occupied.add(offset);
+        return offset;
+      }
+    }
+    throw new HostError(
+      422,
+      "No free runtime port blocks. Tear down another event or stop the processes holding the local ports.",
+    );
+  }
+  private async deploy(event: HostedEvent, body: Record<string, unknown>): Promise<ApiResponse> {
     if (!["DRAFT", "DEPLOYING"].includes(event.status))
       throw new HostError(409, "This event has already been deployed.");
     if (
@@ -347,69 +447,40 @@ export class HostingService {
       );
     const teams = this.store.teams(event.eventId);
     const existing = this.store.jobs(event.eventId);
-    const occupied = new Set(
-      this.store
-        .jobs()
-        .filter((job) => job.status !== "DELETED")
-        .map((job) => job.offset),
-    );
-    const targets: Job[] = [];
-    for (const team of teams)
-      for (const problem of event.problems) {
-        const previous = existing.find(
-          (job) => job.teamId === team.teamId && job.problemId === problem.problemId,
-        );
-        if (previous?.status === "COMPLETE") continue;
-        if (previous) {
-          targets.push(previous);
-          continue;
+    // Slot allocation reads every event's jobs, so serialize it across events too.
+    const targets = await this.queue.run(SLOT_QUEUE, async () => {
+      const occupied = this.recordedOffsets();
+      const planned: Job[] = [];
+      for (const team of teams)
+        for (const problem of event.problems) {
+          const previous = existing.find(
+            (job) => job.teamId === team.teamId && job.problemId === problem.problemId,
+          );
+          if (previous?.status === "COMPLETE") continue;
+          if (previous) {
+            planned.push(previous);
+            continue;
+          }
+          planned.push({
+            jobId: id(this.now()),
+            eventId: event.eventId,
+            teamId: team.teamId,
+            problemId: problem.problemId,
+            definition: problem.definition,
+            offset: await this.freeSlot(problem.definition, occupied),
+            status: "PENDING",
+            unit: null,
+          });
         }
-        const slot = Array.from({ length: MAX_JOBS }, (_, index) => (index + 1) * 1000).find(
-          (offset) => !occupied.has(offset),
-        );
-        if (slot === undefined)
-          throw new HostError(422, "No free runtime slots. Tear down another event first.");
-        occupied.add(slot);
-        targets.push({
-          jobId: id(this.now()),
-          eventId: event.eventId,
-          teamId: team.teamId,
-          problemId: problem.problemId,
-          definition: problem.definition,
-          offset: slot,
-          status: "PENDING",
-          unit: null,
-        });
-      }
-    event.status = "DEPLOYING";
-    this.store.transaction(() => {
-      this.saveEvent(event);
-      for (const job of targets) this.store.putJob(job);
+      event.status = "DEPLOYING";
+      this.store.transaction(() => {
+        this.saveEvent(event);
+        for (const job of planned) this.store.putJob(job);
+      });
+      return planned;
     });
     this.launch(event.eventId, async () => {
-      for (const original of targets) {
-        const job = this.store.job(original.jobId);
-        try {
-          if (job.unit) {
-            await this.closeSurface?.(job.jobId);
-            await this.engine.stop(job);
-            job.unit = null;
-            this.store.putJob(job);
-          }
-          job.status = "IN_PROGRESS";
-          job.error = undefined;
-          this.store.putJob(job);
-          await this.engine.start(job, (unit) => {
-            job.unit = unit;
-            this.store.putJob(job);
-          });
-          job.status = "COMPLETE";
-        } catch (error) {
-          job.status = "FAILED";
-          job.error = error instanceof Error ? error.message.slice(0, 2000) : "Runtime failed.";
-        }
-        this.store.putJob(job);
-      }
+      for (const original of targets) await this.startJob(original.jobId);
       const latest = this.store.event(event.eventId);
       if (this.store.jobs(event.eventId).every((job) => job.status === "COMPLETE"))
         latest.status = "READY";
@@ -425,6 +496,36 @@ export class HostingService {
       },
       202,
     );
+  }
+  private async startJob(jobId: string): Promise<void> {
+    const job = this.store.job(jobId);
+    try {
+      if (job.unit) {
+        await this.closeSurface?.(job.jobId);
+        await this.engine.stop(job);
+        job.unit = null;
+        this.store.putJob(job);
+      }
+      // A retry keeps its block unless something else took the ports in the meantime.
+      const ports = this.engine.hostPorts?.(job.definition, job.offset) ?? [];
+      if (!(await portsFree(ports))) {
+        job.offset = await this.queue.run(SLOT_QUEUE, () =>
+          this.freeSlot(job.definition, this.recordedOffsets(job.jobId)),
+        );
+      }
+      job.status = "IN_PROGRESS";
+      job.error = undefined;
+      this.store.putJob(job);
+      await this.engine.start(job, (unit) => {
+        job.unit = unit;
+        this.store.putJob(job);
+      });
+      job.status = "COMPLETE";
+    } catch (error) {
+      job.status = "FAILED";
+      job.error = failureMessage(error, "Runtime failed.");
+    }
+    this.store.putJob(job);
   }
   private teardown(event: HostedEvent): ApiResponse {
     event.status = "TEARDOWN";
@@ -444,10 +545,7 @@ export class HostingService {
           job.status = "DELETED";
         } catch (error) {
           job.status = "FAILED";
-          job.error =
-            error instanceof Error
-              ? error.message.slice(0, 2000)
-              : "Cleanup failed; ownership retained.";
+          job.error = failureMessage(error, "Cleanup failed; ownership retained.");
         }
         this.store.putJob(job);
       }
@@ -479,45 +577,49 @@ export class HostingService {
   async drain(): Promise<void> {
     await Promise.all([...this.tasks]);
   }
+  /**
+   * Re-adopt recorded runtimes before the listeners open. Jobs recover concurrently: each
+   * unreachable environment costs one readiness timeout, not one per job, so an outage
+   * affecting every environment delays the consoles by minutes rather than the better part
+   * of an hour.
+   */
   async recover(): Promise<void> {
-    for (const job of this.store.jobs()) {
-      if (job.status === "DELETED") continue;
-      if (!job.unit) {
-        if (["PENDING", "IN_PROGRESS"].includes(job.status)) {
-          job.status = "FAILED";
-          job.error =
-            "Startup was interrupted before runtime ownership was acquired. Retry deployment.";
-          this.store.putJob(job);
-        }
-        continue;
-      }
-      try {
-        if (job.status === "DELETING") {
-          await this.engine.stop(job);
-          job.status = "DELETED";
-          job.unit = null;
-        } else {
-          await this.engine.recover(job);
-          job.status = "COMPLETE";
-          job.error = undefined;
-        }
-      } catch (error) {
-        job.status = "FAILED";
-        job.error =
-          error instanceof Error ? error.message.slice(0, 2000) : "Runtime recovery failed.";
-      }
-      this.store.putJob(job);
-    }
+    await Promise.all(this.store.jobs().map((job) => this.recoverJob(job)));
     for (const event of this.store.events()) {
+      if (!["DEPLOYING", "READY"].includes(event.status)) continue;
       const jobs = this.store.jobs(event.eventId);
-      if (["DEPLOYING", "READY"].includes(event.status)) {
-        const recovered =
-          jobs.length === event.problems.length * this.store.teams(event.eventId).length &&
-          jobs.every((job) => job.status === "COMPLETE");
-        event.status = recovered ? "READY" : "DEPLOYING";
-        this.saveEvent(event);
-      }
+      const recovered =
+        jobs.length === event.problems.length * this.store.teams(event.eventId).length &&
+        jobs.every((job) => job.status === "COMPLETE");
+      event.status = recovered ? "READY" : "DEPLOYING";
+      this.saveEvent(event);
     }
+  }
+  private async recoverJob(job: Job): Promise<void> {
+    if (job.status === "DELETED") return;
+    if (!job.unit) {
+      if (!NONTERMINAL_STATUSES.includes(job.status)) return;
+      job.status = "FAILED";
+      job.error =
+        "Startup was interrupted before runtime ownership was acquired. Retry deployment.";
+      this.store.putJob(job);
+      return;
+    }
+    try {
+      if (job.status === "DELETING") {
+        await this.engine.stop(job);
+        job.status = "DELETED";
+        job.unit = null;
+      } else {
+        await this.engine.recover(job);
+        job.status = "COMPLETE";
+        job.error = undefined;
+      }
+    } catch (error) {
+      job.status = "FAILED";
+      job.error = failureMessage(error, "Runtime recovery failed.");
+    }
+    this.store.putJob(job);
   }
   private context(team: Team): Context {
     return {
@@ -561,52 +663,61 @@ export class HostingService {
         400,
         "Team and event identity come from authentication, not the request body.",
       );
-    return this.queue.run(team.eventId, async () => {
-      const fresh = this.store.authenticateTeam(request.token);
-      const current = this.context(fresh);
-      const fingerprint = digest(JSON.stringify({ path: request.path, body }));
-      if (request.nonce) {
-        if (!/^[A-Za-z0-9_-]{8,128}$/u.test(request.nonce))
-          throw new HostError(400, "Invalid Idempotency-Key.");
-        const receipt = this.store.receipt(fresh.teamId, request.nonce, fingerprint);
-        if (receipt) return receipt;
-      }
-      assertPlaying(current.event, this.now());
-      const problemId = hintMatch ? decodeURIComponent(hintMatch[1] ?? "") : String(body.problemId);
-      if (!current.jobs.some((job) => job.problemId === problemId && job.status === "COMPLETE"))
-        throw new HostError(409, "This team's problem environment is not running.");
-      const result = hintMatch
-        ? await this.engine.hint(current, problemId, decodeURIComponent(hintMatch[2] ?? ""))
-        : await this.engine.submit(current, body);
-      if (result.status >= 400) return ok(result.body, result.status);
-      // A verifier finishing after the server deadline must not award points. The
-      // engine works on a disposable snapshot, so rejecting here discards its mutation.
-      assertPlaying(this.currentEvent(fresh.eventId), this.now());
-      this.store.transaction(() => {
-        this.store.putTeam({
-          ...fresh,
-          snapshot: result.snapshot,
-          score: result.score,
-          completedProblems: result.completedProblems,
-          scoreEvents: result.scoreEvents,
-        });
-        if (request.nonce)
-          this.store.putReceipt(
-            fresh.teamId,
-            request.nonce,
-            fingerprint,
-            result.status,
-            result.body,
-          );
+    const action = hintMatch
+      ? {
+          problemId: decodeURIComponent(hintMatch[1] ?? ""),
+          hintId: decodeURIComponent(hintMatch[2] ?? ""),
+        }
+      : { problemId: String(body.problemId) };
+    return this.queue.run(team.eventId, () => this.score(request, body, action));
+  }
+  /** Runs inside the event's serial queue: one submission or hint reveal, awarded at most once. */
+  private async score(
+    request: ApiRequest,
+    body: Record<string, unknown>,
+    action: { problemId: string; hintId?: string },
+  ): Promise<ApiResponse> {
+    const fresh = this.store.authenticateTeam(request.token);
+    const current = this.context(fresh);
+    const fingerprint = digest(JSON.stringify({ path: request.path, body }));
+    if (request.nonce) {
+      if (!/^[A-Za-z0-9_-]{8,128}$/u.test(request.nonce))
+        throw new HostError(400, "Invalid Idempotency-Key.");
+      const receipt = this.store.receipt(fresh.teamId, request.nonce, fingerprint);
+      if (receipt) return receipt;
+    }
+    assertPlaying(current.event, this.now());
+    const deployed = current.jobs.some(
+      (job) => job.problemId === action.problemId && job.status === "COMPLETE",
+    );
+    if (!deployed) throw new HostError(409, "This team's problem environment is not running.");
+    const result =
+      action.hintId === undefined
+        ? await this.engine.submit(current, body)
+        : await this.engine.hint(current, action.problemId, action.hintId);
+    if (result.status >= 400) return ok(result.body, result.status);
+    // A verifier finishing after the server deadline must not award points. The
+    // engine works on a disposable snapshot, so rejecting here discards its mutation.
+    assertPlaying(this.currentEvent(fresh.eventId), this.now());
+    this.store.transaction(() => {
+      this.store.putTeam({
+        ...fresh,
+        snapshot: result.snapshot,
+        score: result.score,
+        completedProblems: result.completedProblems,
+        scoreEvents: result.scoreEvents,
       });
-      return ok(result.body, result.status);
+      if (request.nonce)
+        this.store.putReceipt(fresh.teamId, request.nonce, fingerprint, result.status, result.body);
     });
+    return ok(result.body, result.status);
   }
   private async participantRead(context: Context, path: string): Promise<ApiResponse> {
     switch (path) {
       case "/portal/me":
         return ok(await this.teamView(context));
       case "/portal/me/score-events":
+        // Newest first, like the cloud endpoint.
         return ok({ entries: context.team.scoreEvents.slice(0, 100) });
       case "/portal/me/notifications":
         return ok({
@@ -617,27 +728,38 @@ export class HostingService {
         return ok({ entries: [], cursor: "" });
       case "/portal/leaderboard":
         return ok(this.leaderboard(context));
-      case "/portal/leaderboard/score-events": {
-        const cutoff = this.freezeCutoff(context.event);
-        return ok({
-          eventId: context.event.eventId,
-          teams: this.store.teams(context.event.eventId).map((team) => ({
-            teamId: team.teamId,
-            teamName: team.displayName,
-            isMyTeam: team.teamId === context.team.teamId,
-            events: team.scoreEvents.filter(
-              (event) => cutoff === null || Date.parse(event.occurredAt) < cutoff,
-            ),
-          })),
-        });
-      }
+      case "/portal/leaderboard/score-events":
+        return ok(this.leaderboardScoreEvents(context));
       default:
         throw new HostError(404, "Unknown participant endpoint.");
     }
   }
+  /** Oldest first per team, teams by cumulative score: the shape the timeline chart consumes. */
+  private leaderboardScoreEvents(context: Context) {
+    const cutoff = this.freezeCutoff(context.event);
+    const teams = this.store.teams(context.event.eventId).map((team) => {
+      const events = [...team.scoreEvents]
+        .reverse()
+        .filter((event) => cutoff === null || Date.parse(event.occurredAt) < cutoff);
+      return {
+        teamId: team.teamId,
+        teamName: team.displayName,
+        isMyTeam: team.teamId === context.team.teamId,
+        events,
+        total: events.reduce((sum, event) => sum + event.points, 0),
+      };
+    });
+    teams.sort(
+      (left, right) => right.total - left.total || left.teamName.localeCompare(right.teamName),
+    );
+    return {
+      eventId: context.event.eventId,
+      teams: teams.map(({ total: _total, ...team }) => team),
+    };
+  }
   private freezeCutoff(event: HostedEvent): number | null {
-    if (!event.endsAt || event.scoreboardFreezeMinutes === 0 || event.status === "ENDED")
-      return null;
+    // Ending, teardown and archival all publish the final board; only a live freeze window hides it.
+    if (!event.endsAt || event.scoreboardFreezeMinutes === 0 || scoringEnded(event)) return null;
     const cutoff = Date.parse(event.endsAt) - event.scoreboardFreezeMinutes * 60_000;
     return this.now() >= cutoff ? cutoff : null;
   }
@@ -671,6 +793,8 @@ export class HostingService {
     return {
       eventId: context.event.eventId,
       scoreboardFrozen: cutoff !== null,
+      // The portal's countdown, freeze-end timestamp and final/live result labels read this.
+      ...(context.event.endsAt ? { endsAt: context.event.endsAt } : {}),
       entries: entries.map((entry, index) => {
         if (index > 0 && entry.score !== entries[index - 1]?.score) rank = index + 1;
         return { ...entry, rank };
@@ -680,39 +804,13 @@ export class HostingService {
   private async teamView(context: Context): Promise<Record<string, unknown>> {
     const result = await this.engine.view(context);
     const eventGate = gate(context.event, context.now);
-    const ended = eventGate.kind === "scoring_ended";
+    // A canceled or never-started event has nothing to reveal: writeups need a real start.
+    const ended = eventGate.kind === "scoring_ended" && hasStarted(context.event, context.now);
     const problems = Array.isArray(result.problems) ? result.problems : [];
     const safeProblems = await Promise.all(
       problems.map(async (raw) => {
-        const problem = { ...object(raw) };
+        const problem = participantProblem(object(raw), eventGate.kind, ended);
         const job = context.jobs.find((candidate) => candidate.problemId === problem.problemId);
-        delete problem.lifecycle; // Competition environments are host-owned, never participant-resettable.
-        delete problem.recommended;
-        const notice =
-          "> 競技モードでは、問題環境の起動・停止は主催者が行います。問題文の「起動」操作は不要です。競技中は「アクセス先 URL」の Web を開いてください。\n\n";
-        if (typeof problem.instructions === "string")
-          problem.instructions = notice + problem.instructions;
-        if (problem.i18n) {
-          const english = { ...object(object(problem.i18n).en) };
-          if (typeof english.instructions === "string") {
-            english.instructions =
-              "> In competition mode, the organizer starts and stops your environment. Skip the problem's Start instruction and open Web under Access URLs during the event.\n\n" +
-              english.instructions;
-          }
-          problem.i18n = { en: english };
-        }
-        if (!ended) {
-          delete problem.writeup;
-          if (problem.i18n) {
-            const english = { ...object(object(problem.i18n).en) };
-            delete english.writeup;
-            problem.i18n = { en: english };
-          }
-        }
-        if (eventGate.kind === "scoring_not_started") {
-          problem.instructions = "";
-          delete problem.i18n;
-        }
         problem.provider = "docker";
         problem.jobId = job?.jobId ?? problem.jobId;
         problem.eventStartsAt = context.event.startsAt;

@@ -1,7 +1,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { HostError } from "./model";
 import { digest, type HostStore } from "./store";
-export const secret = (): string => randomBytes(32).toString("base64url");
+export const randomToken = (): string => randomBytes(32).toString("base64url");
 const alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 /** Existing event routes use ULID wire identifiers. */
 export function id(now = Date.now()): string {
@@ -29,7 +29,7 @@ export function issueSession(store: HostStore, masterKey: string, provided: unkn
   const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
   const payload = `${encode({ alg: "HS256", typ: "JWT" })}.${encode({
     sub: "local-host",
-    jti: secret(),
+    jti: randomToken(),
     iss: "tenkacloud-local-host",
     aud: "host-console",
     "custom:userRole": "TenantAdmin",
@@ -39,7 +39,7 @@ export function issueSession(store: HostStore, masterKey: string, provided: unkn
     exp: Math.floor(expiresAt / 1000),
   })}`;
   const idToken = `${payload}.${createHmac("sha256", masterKey).update(payload).digest("base64url")}`;
-  const refreshToken = secret();
+  const refreshToken = randomToken();
   // Exact issued-token membership is the authority; accepting arbitrary client JWT claims is not.
   store.addSession(idToken, refreshToken, expiresAt, now);
   return {

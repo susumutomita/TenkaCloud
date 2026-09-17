@@ -1,0 +1,29 @@
+sequenceDiagram
+  actor Player as 参加者
+  participant UI as Participant Portal
+  participant API as Participant API
+  participant Coord as Coordination Dispatcher
+  participant Plugin as 問題プラグイン
+  participant Store as 保存用Repository
+
+  Player->>UI: 回答または競技操作
+  alt 通常のflag問題
+    UI->>API: submit-flag / チームキー・問題ID・回答
+    API->>Store: チームの配置・開催条件を取得
+    API->>API: 開催時間・ゲート・既提出を確認してflag照合
+    API->>Store: 条件付き加点または誤答処理・履歴記録
+    API-->>UI: 判定結果
+  else 独自競技の操作
+    UI->>Coord: submitCoordinationOp / チームキー・問題ID・操作
+    Coord->>Store: 認証scope・試合状態・版を取得
+    Coord->>Plugin: validateOp → applyOp
+    Plugin-->>Coord: 判定・次の試合状態
+    Coord->>Store: version条件付きで状態と未反映採点を保存
+    Coord->>Store: 採点の反映を試行
+    Coord->>Plugin: projectForTeam
+    Plugin-->>Coord: 自チームに見せる情報
+    Coord-->>UI: projectionまたは明示的なエラー
+  end
+  UI->>API: 得点・順位・履歴を再取得
+  API->>Store: 保存済みの得点を取得
+  API-->>UI: 得点表示を更新

@@ -72,11 +72,11 @@ a running environment; run `make deploy` after reviewing the change.
 ## The Lite event flow
 
 1. Sign in to the Application Admin Console as the organizer.
-2. Activate the problem pack you will use.
+2. Choose catalog problems. If you use a private Problem Pack, install and activate it before deployment.
 3. Create the event, teams, and problem selection.
 4. Register a test competitor AWS account.
 5. Start a problem for the test team and open its endpoint.
-6. Submit a real `TC{...}` value and confirm the score changes.
+6. Perform the scored action requested by the problem (a flag, answer, or game action) and confirm the score changes.
 7. Reset the problem and confirm a new environment can start.
 8. Stop the problem and confirm its stack is gone from the competitor account.
 9. Give participants only the Participant Portal URL, team key, start time, and
@@ -93,12 +93,17 @@ environment.
 
 | Choice | Storage | Use it when |
 | --- | --- | --- |
-| `dynamodb` (default) | AWS DynamoDB | You are preparing your first event and want an AWS-native path |
-| `turso` | Turso/libSQL | You deliberately want no DynamoDB tables and can live-verify the path yourself |
+| `dynamodb` (default) | AWS DynamoDB | You want control data stored within AWS |
+| `turso` | Turso/libSQL | You want to reduce database cost; Lite creates no DynamoDB tables or indexes |
 
-The Turso path is covered by unit tests and CDK synth, but it has not been
-live-verified as a complete real-Turso, fresh-AWS, and billing flow. Use
-`dynamodb` for the first real event.
+**To reduce DB cost, follow the [Turso setup guide](https://github.com/susumutomita/TenkaCloud/blob/main/docs/running-costs.md).**
+In the launcher, set `ControlDataBackend=turso`, `TursoDatabaseUrl`, and
+`TursoAuthTokenParameterName`. The last value is the SSM parameter name, not the
+token itself. From a checkout, `make turso-live ENV=development` guides setup.
+
+Other AWS costs and Turso usage limits still apply. The Turso path is covered by
+unit tests and CDK synth, but it has not been live-verified as a complete
+real-Turso, fresh-AWS, and billing flow. Rehearse your chosen setup before the event.
 
 Changing the backend later does not migrate data. DynamoDB and Turso do not
 synchronize, and retained DynamoDB tables can continue to incur cost.
@@ -135,7 +140,7 @@ email setting is absent, these three warnings are not sent.
 
 - A test team used the same permissions and Region as participants.
 - Every endpoint opened from the expected network.
-- A real flag changed the score.
+- Each selected problem's scoring method changed the test team's score.
 - Reset created a fresh problem environment.
 - Stop removed the problem stack from the competitor account.
 - The event time, team-key delivery, and support contact are decided.

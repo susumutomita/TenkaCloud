@@ -181,14 +181,27 @@ and the problem-deploy backend, deployed as two CloudFormation stacks with a
 fixed single tenant. This path stands it up <strong>entirely from the AWS Console</strong> —
 a launcher stack creates a CodeBuild project that clones the repo and runs the
 deploy for you.</p>
+<p><strong>Release status: candidate/unverified.</strong> The launcher&#39;s default platform/catalog
+pair still uses the previous release identity. The current manifest certifies no
+deployment mode or AWS region. Check the <a href="https://github.com/susumutomita/TenkaCloud/blob/main/release/tenkacloud-release.md">identity and verification report</a>
+before using it for an event.</p>
+<p>Grant <strong>Start build</strong> only to trusted deployment administrators: build overrides
+can run different source and commands with the deployment role&#39;s AWS access.
+If choosing <strong>Turso</strong>, first obtain an <strong>HTTPS database URL</strong> (<code>https://…</code>)
+and full-access database token.
+Save the token as an SSM <strong>SecureString</strong> in the deployment account and region
+<strong>before Start build</strong>. The launcher does not create it.
+<a href="https://github.com/susumutomita/TenkaCloud/blob/main/DEPLOYMENT_GUIDE.md#turso-setup-for-the-console-launcher">Dashboard and AWS console setup</a>.</p>
 <ol>
 <li>Download
 <a href="https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/lite-pipeline.yaml"><code>infrastructure/templates/lite-pipeline.yaml</code></a>.</li>
 <li>Open the CloudFormation <strong>Create stack</strong> page (the catalog defaults target
 <code>ap-northeast-1</code>) → <strong>Upload a template file</strong> → upload it → stack name
 <code>tenkacloud-lite-launcher</code>.</li>
-<li>Set <strong><code>TenantAdminEmail</code></strong> (the only required parameter) to the email that
-should receive the Admin Console invitation.</li>
+<li>Set <strong><code>TenantAdminEmail</code></strong> to the email that should receive the Admin Console
+invitation. For Turso, also set <strong><code>ControlDataBackend=turso</code></strong>,
+the HTTPS endpoint as <strong><code>TursoDatabaseUrl</code></strong>, and the existing SSM name as
+<strong><code>TursoAuthTokenParameterName</code></strong>. DynamoDB is the default.</li>
 <li>Acknowledge the IAM capability checkbox and create the stack.</li>
 <li>Open the CodeBuild project from the stack&#39;s <strong><code>StartBuildConsoleUrl</code></strong>
 output and press <strong>Start build</strong>.</li>
@@ -206,11 +219,19 @@ deploy with <code>RetainDataTables=true</code> before running <code>ACTION=destr
 If the launcher predates <code>destroy-all</code>, update its CloudFormation stack with the
 latest template first. Never pass <code>destroy-all</code> to the older buildspec because
 it treats unknown actions as deploy.</p>
+<p>CodeBuild charges for build duration. To build on your own computer instead, use
+the CLI path below. Both paths incur costs for the deployed AWS resources.
+See <a href="https://aws.amazon.com/codebuild/pricing/">CodeBuild pricing</a> and the
+<a href="https://github.com/susumutomita/TenkaCloud/blob/main/DEPLOYMENT_GUIDE.md#aws-permissions">AWS permission guide</a>.</p>
 <h2>4. Lite mode on AWS — CLI</h2>
-<p>The same two stacks as mode 3, deployed from your shell — the path you want
-when you also develop on the platform.</p>
-<p><strong>Prerequisites:</strong> Bun 1.3.11 and AWS credentials in your shell (profile or
-SSO) for the target account. <code>cdk bootstrap</code> is <strong>not</strong> a separate step — the
+<p>The same two stacks as mode 3, built on your computer and deployed from your shell.
+Use this path to avoid CodeBuild build charges, or when developing on the platform.</p>
+<p><strong>Prerequisites:</strong> Git, Make, Bash, zip, rsync, Python 3 (<code>python3</code>), AWS CLI v2,
+Bun 1.3.11, Node.js 24,
+and AWS credentials in your shell (profile or SSO) for the target account.
+Source packaging uses rsync and Python 3.
+<a href="https://github.com/susumutomita/TenkaCloud/blob/main/DEPLOYMENT_GUIDE.md#aws-permissions">Check the role&#39;s permissions</a>
+and run <code>aws sts get-caller-identity</code> to confirm the account. <code>cdk bootstrap</code> is <strong>not</strong> a separate step — the
 deploy runs it idempotently, and Lambda bundling uses local esbuild (no Docker
 needed).</p>
 <pre><code class="language-bash">git clone https://github.com/susumutomita/TenkaCloud.git
@@ -224,14 +245,20 @@ make env-init
 #   cp infrastructure/environments/development/.env.example \
 #      infrastructure/environments/development/.env
 
+# Check AWS_ACCOUNT_ID, AWS_REGION, TENANT_ADMIN_EMAIL, and your backend settings in .env.
 # 2. Deploy (builds the SPAs, bootstraps CDK if needed, deploys both stacks)
 make deploy
 </code></pre>
 <p>The command prints the Admin Console and Participant Portal URLs when it
 finishes. Switch environments with <code>make deploy ENV=production</code> (each
 environment has its own <code>infrastructure/environments/&lt;env&gt;/.env</code>). Use
-<code>make destroy-all</code> for complete removal, or <code>make destroy</code> to remove the stacks
-while preserving DynamoDB history.</p>
+<code>make destroy-all</code> to remove the Lite stacks and their retained control data. Under the default policy, both
+<code>make destroy</code> and <code>make destroy-all</code> delete DynamoDB data. Tables survive only
+if the deployment previously set <code>CDK_PARAM_RETAIN_DATA_TABLES=true</code>.</p>
+<p>Neither command deletes the source-bundle S3 bucket. The current bundle and
+retained versions remain billable. Check the exact bucket and its other users
+before deleting all versions and the bucket; see the
+<a href="https://github.com/susumutomita/TenkaCloud/blob/main/DEPLOYMENT_GUIDE.md#source-storage-after-teardown">source storage cleanup steps</a>.</p>
 <h3>Choosing the control-data backend: DynamoDB or Turso</h3>
 <p>Lite mode stores control data (events, teams, deployments, scores) in one of
 two backends, selected by <code>CDK_PARAM_CONTROL_DATA_BACKEND</code> in your <code>.env</code>:</p>
@@ -247,13 +274,13 @@ two backends, selected by <code>CDK_PARAM_CONTROL_DATA_BACKEND</code> in your <c
 <tbody><tr>
 <td><strong>DynamoDB</strong> (default)</td>
 <td>unset, or <code>dynamodb</code></td>
-<td>Provisioned 1 RCU/1 WCU on every table — small but nonzero, and new-style AWS Free Tier accounts have no always-free DynamoDB allowance</td>
+<td>Provisioned capacity for each table and index; charges depend on usage and account allowances</td>
 <td>Teams that want everything inside AWS</td>
 </tr>
 <tr>
 <td><strong>Turso (libSQL)</strong></td>
 <td><code>turso</code></td>
-<td>None on this path — the Lite synth creates <strong>zero</strong> DynamoDB tables</td>
+<td>No DynamoDB tables or indexes; Turso usage limits and other AWS charges still apply</td>
 <td>Individuals, trials, personal events</td>
 </tr>
 </tbody></table>
@@ -262,7 +289,8 @@ first real event (the two stores never sync, so a later switch is a data
 migration, not a flag flip).</p>
 <p>The Turso path has unit-test and CDK-synth coverage, but no recorded live run
 combines a real Turso database, a fresh AWS deployment, and billing behavior.
-Use DynamoDB for a first production event.</p>
+Choose Turso when reducing DB cost is a priority, then rehearse the selected setup
+before the event. Turso usage limits and other AWS charges still apply.</p>
 <p>Opting in to Turso is four steps: create a Turso database, store its auth token
 in SSM as a <code>SecureString</code>, add three lines to your <code>.env</code>
 (<code>CDK_PARAM_CONTROL_DATA_BACKEND=turso</code> plus <code>CDK_PARAM_TURSO_DATABASE_URL</code> and

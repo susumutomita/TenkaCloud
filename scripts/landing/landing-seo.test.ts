@@ -6,6 +6,15 @@ import { currentVersions, STAMPED_ASSETS, stampHtml } from "./stamp-asset-versio
 const root = join(import.meta.dir, "../..");
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 
+describe("public JAWS presentation", () => {
+  it("should not distribute rehearsal notes or presenter controls in the HTML source", () => {
+    const html = read("landing/jaws-yokohama-2026/index.html");
+    expect(html).not.toMatch(
+      /speaker-notes|presenter-tools|発表原稿|読み上げない|目安 \d+秒|Nで原稿/,
+    );
+  });
+});
+
 describe("landing page SEO", () => {
   const index = read("landing/index.html");
   const app = read("landing/app.js");

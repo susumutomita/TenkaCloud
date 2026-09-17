@@ -51,7 +51,9 @@ vi.mock("../../src/i18n", () => ({
     params ? `${key}|${JSON.stringify(params)}` : key,
   useI18n: () => ({ locale: mockLocale.value, setLocale: vi.fn(), t: (k: string) => k }),
 }));
-vi.mock("../../src/data/problems", () => ({
+vi.mock("../../src/data/problems", async (importOriginal) => ({
+  // withGatedInstructions stays real: it is pure and the local-hosting test below exercises it.
+  ...(await importOriginal<typeof import("../../src/data/problems")>()),
   findProblemMetadata: mockFindMeta,
   resolveLocalizedNarrative: mockNarrative,
   findProblemDiagramUrl: mockFindDiagram,
@@ -733,6 +735,23 @@ describe("ProblemDetailPage", () => {
     renderPage();
     expect(screen.getByText("problem_detail.info_instructions_label")).toBeInTheDocument();
     expect(screen.getByText("First move: read the briefing")).toBeInTheDocument();
+  });
+
+  it("should fall back to the team view's gated instructions when the catalog has none (#3226)", () => {
+    // Local hosting ships a catalog projection without instructions; the authenticated view
+    // carries the statement once the event has started.
+    mockFindMeta.mockReturnValue(meta());
+    mockNarrative.mockReturnValue({ name: "Hello World", shortDescription: "Solve it" });
+    mockTeamView.mockReturnValue(
+      teamView({
+        view: viewWith({
+          problems: [{ ...problem(), instructions: "Gated: open Web under Access URLs" }],
+        }),
+      }),
+    );
+    renderPage();
+    expect(screen.getByText("problem_detail.info_instructions_label")).toBeInTheDocument();
+    expect(screen.getByText("Gated: open Web under Access URLs")).toBeInTheDocument();
   });
 
   it("should render the architecture diagram when a diagram.svg exists (#1929 Phase 1c)", () => {

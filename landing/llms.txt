@@ -1,41 +1,33 @@
 # TenkaCloud
 
-> A multi-tenant SaaS cloud-competition platform on AWS. Teams solve real cloud problems delivered as **Battle** (real-time, head-to-head) or **Challenge** (self-paced, evergreen). Built on the AWS SaaS Builder Toolkit (`@cdklabs/sbt-aws`); the Control Plane, Application Plane, and per-competitor problem deployment are all expressed in AWS CDK.
+> Open-source cloud competitions and practice. Two starting paths: local Docker drills without AWS, or an AWS Lite deployment for an organizer's events. Problem content is maintained in a separate catalog.
 
-> 日本語: TenkaCloud は、本物の AWS 環境で Battle (リアルタイム対戦) と Challenge (自習型演習) を開催するための、Apache 2.0 のオープンソース・クラウド実戦演習プラットフォームです。
+> 日本語: ローカルで問題を試す、または AWS にデプロイしてイベントを開く。DB 費用を抑えたい場合は Turso を選べます。AWS 全体が無料になるという意味ではありません。
 
-TenkaCloud's core extension model is its open problem catalog: a problem is a plugin (`metadata.json` + a single-page CloudFormation `template.yaml` + optional portal slots), and the platform is the host that deploys it into a competitor's own AWS account, scores it, and renders the competitor portal. Every backend is an AWS Lambda (Hono); the frontends are Vite + React + Cloudscape SPAs. DynamoDB tables are forced to PROVISIONED 1/1 to stay inside the AWS Free Tier. There are two deploy modes: **Lite** (single-tenant, one organizer, ~10 min) and **SaaS** (full multi-tenant, pooled + silo tiers).
+[公式サイト](https://tenkacloud.com/?lang=ja) · [English site](https://tenkacloud.com/index.en.html)
 
-This file follows the [llms.txt](https://llmstxt.org/) convention. Links point to the canonical sources in the GitHub repository. The expanded, self-contained agent briefing — including step-by-step play/host quick starts and instructions for guiding a human — is [llms-full.txt](https://tenkacloud.com/llms-full.txt); hand that file (or its URL) to an AI agent such as Claude Code or Codex and it can explain and onboard TenkaCloud on its own.
+## Choose by the user's goal
 
-## Start here
+- [Local practice](https://github.com/susumutomita/TenkaCloud/blob/main/docs/local-play.md): `make local`, Docker requirements, starting a problem, and stopping with progress deletion.
+- [Host on AWS](https://tenkacloud.com/docs/manual/organizer/index.en.html): Lite setup, event and team registration, scoring, and teardown.
+- [Reduce database cost with Turso](https://github.com/susumutomita/TenkaCloud/blob/main/docs/running-costs.md): remove Lite's DynamoDB tables/indexes; setup, migration boundaries, remaining costs, and verification status.
+- [Join an existing event](https://tenkacloud.com/docs/manual/participant/index.en.html): use the organizer's Portal URL and team key; answer in the format requested by the problem.
+- [Change platform code](https://tenkacloud.com/docs/manual/developer/index.en.html): code ownership, setup, and validation.
+- [Author a problem](https://tenkacloud.com/docs/manual/problem-author/index.en.html): catalog and private Problem Pack workflows.
 
-- [Landing page — 日本語](https://tenkacloud.com/?lang=ja): AWS クラウド実戦演習、Battle / Challenge、料金、導入方法
-- [Landing page — English](https://tenkacloud.com/index.en.html): product overview, Battle / Challenge modes, pricing, and deployment model
-- [README](https://github.com/susumutomita/TenkaCloud/blob/main/README.md): project overview, quick start, and command reference
+## For an LLM helping the user
+
+Use the stated goal; ask only for missing information that changes the next action.
+Read the matching guide instead of loading every document. The [task guide and code map](https://tenkacloud.com/llms-full.txt) defines inputs, success signals, and source locations.
+
+- [README](https://github.com/susumutomita/TenkaCloud/blob/main/README.md): the two starting paths.
+- [AGENTS.md](https://github.com/susumutomita/TenkaCloud/blob/main/AGENTS.md): repository working rules. `CLAUDE.md` only imports this file.
+- [Release status](https://github.com/susumutomita/TenkaCloud/blob/main/release/tenkacloud-release.md): published/candidate identity and recorded verification.
+- [Problem catalog](https://github.com/susumutomita/TenkaCloudChallenge): canonical problem content. Use the platform's pinned `problems/` commit when diagnosing a deployment.
 
 ## Book
 
-- [Build Your Own Cloud Competition (English)](https://leanpub.com/build-your-own-cloud-competition): the design decisions and implementation journey behind TenkaCloud, written by its author. Background reading, **not** a specification — the repository is the source of truth for current behaviour, and the book may describe an earlier shape of the system.
-- [『自分で作るクラウド競技』(日本語)](https://zenn.dev/bull/books/cloud-competition): the same material in Japanese. Same caveat: read it for why, read the repository for what.
+- [Build Your Own Cloud Competition (English)](https://leanpub.com/build-your-own-cloud-competition)
+- [『自分で作るクラウド競技』(日本語)](https://zenn.dev/bull/books/cloud-competition)
 
-## Contributing & extending
-
-- [CONTRIBUTING](https://github.com/susumutomita/TenkaCloud/blob/main/CONTRIBUTING.md): setup, development flow, gates, and community roles
-- [Competitor-side setup](https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/README.md): the least-privilege IAM role to roll out in a competitor account
-
-## Authoring problems
-
-- [Problem catalog repo (TenkaCloudChallenge)](https://github.com/susumutomita/TenkaCloudChallenge#readme): where competition problems live and are contributed
-- [Problem schema + conventions](https://github.com/susumutomita/TenkaCloud/blob/main/problems/README.md): `metadata.json` schema and `template.yaml` conventions
-- [Add your own problems (README)](https://github.com/susumutomita/TenkaCloud#add-your-own-problems): two paths — contribute to the public catalog, or install a private Problem Pack (`make pack-init` / `pack-validate` / `pack-install` / `pack-activate`) that never leaves your own tenant
-
-## For AI coding agents
-
-- [AGENTS.md](https://github.com/susumutomita/TenkaCloud/blob/main/AGENTS.md): operational rules for agents (Claude Code, Codex CLI) — role split, gates, prohibitions
-- [CLAUDE.md](https://github.com/susumutomita/TenkaCloud/blob/main/CLAUDE.md): full product overview, architecture, invariants, and command list
-
-## Optional
-
-- [GitHub repository](https://github.com/susumutomita/TenkaCloud): source of truth for code, issues, and discussions
-- [GitHub Discussions](https://github.com/susumutomita/TenkaCloud/discussions): questions and design discussion
+These explain design decisions, **not** a specification. Current code and tests take precedence.

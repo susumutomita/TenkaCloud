@@ -11,25 +11,47 @@ import {
   writeFileSync,
 } from "node:fs";
 import { resolve } from "node:path";
-import { secret } from "./auth";
+import { randomToken } from "./auth";
 
 function assertOwner(uid: number): void {
   if (process.getuid && process.getuid() !== uid)
     throw new Error("Local-host files must belong to the current user.");
 }
 
+/**
+ * Create the private state directory, or accept an existing one only when it is already
+ * private. The mode of an existing directory is never changed: `--data` may point at any
+ * directory the organizer owns, and silently applying 0700 to a shared project directory or a
+ * home directory would lock other users and services out of unrelated files.
+ */
 export function privateDirectory(path: string): string {
   const absolute = resolve(path);
-  mkdirSync(absolute, { recursive: true, mode: 0o700 });
+  let created = false;
+  try {
+    mkdirSync(absolute, { mode: 0o700 });
+    created = true;
+  } catch (error) {
+    if (!(error instanceof Error) || !("code" in error) || error.code !== "EEXIST") {
+      mkdirSync(absolute, { recursive: true, mode: 0o700 });
+      created = true;
+    }
+  }
   const stat = lstatSync(absolute);
   if (!stat.isDirectory() || stat.isSymbolicLink())
     throw new Error("Local-host state directory must not be a symlink.");
   assertOwner(stat.uid);
-  const descriptor = openSync(absolute, constants.O_RDONLY | constants.O_NOFOLLOW);
-  try {
-    fchmodSync(descriptor, 0o700);
-  } finally {
-    closeSync(descriptor);
+  if (created) {
+    // Our own fresh directory: pin the mode regardless of the process umask.
+    const descriptor = openSync(absolute, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      fchmodSync(descriptor, 0o700);
+    } finally {
+      closeSync(descriptor);
+    }
+  } else if ((stat.mode & 0o077) !== 0) {
+    throw new Error(
+      `Refusing to use ${absolute}: it is readable by other users. Run chmod 700 on it, or pass a dedicated --data directory.`,
+    );
   }
   return absolute;
 }
@@ -64,7 +86,7 @@ export function persistentKey(path: string): string {
     descriptor = openPrivate(path, constants.O_RDONLY);
   }
   try {
-    const value = created ? secret() : readFileSync(descriptor, "utf8").trim();
+    const value = created ? randomToken() : readFileSync(descriptor, "utf8").trim();
     if (!/^[A-Za-z0-9_-]{43}$/u.test(value))
       throw new Error("Invalid host-key file; refusing to replace it.");
     if (created) {

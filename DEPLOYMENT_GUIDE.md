@@ -1,7 +1,8 @@
 # TenkaCloud — Deployment guide
 
-The recommended path is in the [README Quickstart](./README.md#quickstart): deploy Lite
-mode from the AWS Console, no local install. This guide covers the other paths.
+Start with the [README Quickstart](./README.md#quickstart). For AWS Lite, choose
+local `make deploy` to build without CodeBuild, or the console launcher to avoid
+installing local tools. Both create the same platform and incur AWS resource costs.
 
 ## What gets deployed (Lite mode)
 
@@ -32,17 +33,40 @@ not Cognito or SAML accounts.
 
 ## Lite mode — local terminal
 
-Use this when you can install the repo toolchain (Bun / CDK) locally.
+Use this to build on your computer and avoid CodeBuild build charges. You need Git,
+Make, Bash, zip, rsync, Python 3 (`python3`), AWS CLI v2, and the Bun/Node.js versions
+in [mise.toml](./mise.toml). Source packaging uses both rsync and Python 3; install
+them before deployment, including on minimal Linux/WSL installations.
+CDK comes from the repository dependencies. On macOS, Linux, or WSL2, install the
+tools before running these commands. If using
+[mise](https://mise.jdx.dev/getting-started.html), review `mise.toml` in your checkout,
+then run `mise trust` before `mise install bun node`. Prefix Make commands below
+with `mise exec --` if the installed tools are not on your shell's PATH.
+
+Configure your AWS CLI profile first. For an IAM Identity Center profile:
+
+```bash
+aws configure sso --profile tenkacloud
+aws sso login --profile tenkacloud
+export AWS_PROFILE=tenkacloud
+aws sts get-caller-identity
+```
+
+For an existing profile, select that profile instead. Check that the returned
+account is your intended deployment account and that the role has the
+[permissions below](#aws-permissions).
 
 ```bash
 git clone --recurse-submodules https://github.com/susumutomita/TenkaCloud.git
 cd TenkaCloud
 make install
 make env-init    # creates infrastructure/environments/development/.env
-make deploy
 ```
 
-`make env-init` prompts for the required Lite-mode values. To set them by hand instead:
+`make env-init` asks for the administrator email, region, and competitor ExternalId.
+Check `AWS_ACCOUNT_ID`, `AWS_REGION`, and `TENANT_ADMIN_EMAIL` in the generated file;
+the account must match the identity above. It does not overwrite an existing file.
+To set the values by hand instead:
 
 ```bash
 cp infrastructure/environments/development/.env.example \
@@ -50,7 +74,147 @@ cp infrastructure/environments/development/.env.example \
 # edit AWS_ACCOUNT_ID, AWS_REGION, and TENANT_ADMIN_EMAIL
 ```
 
-Tear down with `make destroy`.
+For lower DB cost, set up [Turso](./docs/running-costs.md) before deployment. Put its
+token in SSM Parameter Store, never in `.env`; the file holds only the HTTPS database URL
+and parameter name. When the configuration is ready:
+
+```bash
+make deploy
+```
+
+This builds from the current checkout, prepares and uploads the source bundle,
+runs `cdk bootstrap`, deploys the two Lite stacks, and creates the initial Cognito
+administrator. The command prints the portal URLs. Sign in, create a test event/team,
+and check that a problem submission is reflected in the score before inviting users.
+
+Use `make destroy` to remove the two Lite stacks. Cleanup depends on the backend:
+
+- **DynamoDB:** tables are deleted by default. Retention must have been selected
+  during deployment with `CDK_PARAM_RETAIN_DATA_TABLES=true`.
+- **Turso:** control-data rows remain after `make destroy`. To erase those rows too,
+  use `make destroy-all` instead, or run `make turso-reset` before teardown while
+  the SSM token is still available. Both keep the database and schema; delete the
+  external database separately if it is no longer needed.
+
+### Source storage after teardown
+
+The source bucket remains after both `make destroy` and `make destroy-all`.
+Source preparation creates a versioned `tenkacloud-source-*` bucket outside CDK
+(or uses your explicit `CDK_PARAM_S3_BUCKET_NAME`). Its lifecycle rule expires
+older noncurrent versions, but keeps the current bundle and recent versions;
+their S3 storage charges continue after the Lite stacks are gone.
+
+To remove this storage, identify the exact bucket from the deployment log's
+`source bucket = ...` line. Check the account, region, and whether another
+environment still uses it. If it is no longer needed, empty **all object versions
+and delete markers** in the S3 console, then delete the bucket. Removing only the
+current objects does not empty a versioned bucket. Do not run the SaaS cleanup
+script for a Lite deployment. Shared CDK bootstrap resources are separate too;
+retain them while other CDK applications use them.
+
+See the [cleanup guide](./infrastructure/templates/README.md#撤去-teardown) for the
+stack and backend steps.
+
+## Deploy your own problem catalog
+
+For the **console launcher**, set `ProblemsRepoUrl` to your public catalog fork
+and `ProblemsRepoRef` to its reviewed commit. Both parameters belong to
+`lite-pipeline.yaml`; they do not configure local `make deploy`.
+
+For **local `make deploy`**, preserve any existing changes in `problems/` first.
+Commit and publish your catalog changes to your fork. From the TenkaCloud root,
+replace the two example values below with your fork URL and its full commit SHA:
+
+```bash
+CATALOG_URL='https://github.com/<your-username>/TenkaCloudChallenge.git'
+CATALOG_COMMIT='<full-40-character-commit>'
+git submodule set-url problems "$CATALOG_URL"
+git -C problems fetch origin "$CATALOG_COMMIT"
+git -C problems checkout --detach "$CATALOG_COMMIT"
+git add .gitmodules problems
+git diff --cached --submodule=log
+git commit -m "chore: select reviewed problem catalog"
+```
+
+Review and commit only the intended catalog URL/pin change, with repository checks
+passing, then run `make deploy`. This needs a local parent commit, not a GitHub
+fork of the platform. The source preparation script runs
+`git submodule update --init --recursive --force problems`; merely editing files
+or switching the catalog checkout without recording its parent pin will not
+preserve that selection during deployment.
+
+## Turso setup for the console launcher
+
+Skip this section when using the default DynamoDB backend. For a **fresh** Turso
+deployment, complete these steps **before Start build**. The launcher forwards the
+SSM parameter name; it does **not** create the parameter or its secret value.
+
+1. In the [Turso dashboard](https://app.turso.tech/), create a database and obtain
+   its **HTTPS database URL** (`https://…`) and a full-access database auth token.
+   Use the HTTP endpoint, equivalent to `turso db show <db> --http-url`, rather than
+   the `libsql://` URL mentioned in the launcher parameter description. The runtime
+   uses the HTTP client, and the preflight/cleanup tools require HTTPS. Schema initialization
+   and application writes require write access. Use a database token, not an
+   organization API token. Turso supports [database and token management in its
+   dashboard](https://turso.tech/blog/we-built-a-brand-new-turso-web-app).
+2. In the deployment AWS account and **the same region** as the launcher, open
+   **Systems Manager → Parameter Store → Create parameter**. Use the name
+   `/TenkaCloud/development/turso/auth-token`, **Standard** tier, **SecureString**
+   type, and the default AWS-managed key `alias/aws/ssm`. Put the database token
+   in **Value** and create the parameter. No new customer-managed key is needed.
+   See [AWS console steps](https://docs.aws.amazon.com/systems-manager/latest/userguide/parameter-create-console.html).
+3. When creating the launcher stack, set `ControlDataBackend=turso`, put the
+   HTTPS database URL in `TursoDatabaseUrl`, and the **exact existing parameter name**
+   in `TursoAuthTokenParameterName`. Never put the token itself into CloudFormation
+   parameters or the repository. Then start the build.
+
+The parameter is managed separately from the launcher. Keep it available while the
+platform runs and during Turso cleanup. If the token expires, replace its value
+before expiry to avoid runtime authentication failures. See the
+[cost and token operations guide](./docs/running-costs.md) for rotation, cleanup,
+and migrating an existing deployment.
+
+## AWS permissions
+
+Use a deployment role agreed with your AWS administrator. A participant team key
+or read-only AWS role is not a deployment credential. Permissions apply to the
+selected account/region and the roles or resources created there.
+
+| Stage | Identity and access needed |
+| --- | --- |
+| First CDK setup / upgrades | The caller creates or updates `CDKToolkit`: CloudFormation, IAM roles/policies, S3, ECR, and SSM bootstrap parameters. `make deploy` invokes bootstrap on every run; an existing stack is not a reason to assume all bootstrap access can be removed. |
+| Publish source and assets | The caller needs S3 bucket creation/configuration and object upload on its `tenkacloud-source-<account>-<region>*` bucket. CDK assumes the account's bootstrap publishing/deployment roles with `sts:AssumeRole`; their trust policies must also admit the caller. |
+| Deploy Lite stacks | The CDK deployment role uses CloudFormation and `iam:PassRole` for its CloudFormation execution role. The execution role must be able to create/update the services in the selected Lite templates: IAM, Lambda, API Gateway, Cognito, S3, CloudFront, Step Functions, EventBridge, SNS/SQS, Logs, and the chosen data backend (DynamoDB or SSM/Turso wiring). |
+| Create the first administrator | The caller needs `cloudformation:DescribeStacks`, `cognito-idp:DescribeUserPoolDomain`, `cognito-idp:AdminGetUser`, and `cognito-idp:AdminCreateUser` for the Lite user pool. These run after CDK, using the caller's credentials. |
+| Store and check a Turso token, if selected | The setup operator needs `ssm:PutParameter` on the chosen `/TenkaCloud/...` parameter. The preflight caller needs `ssm:DescribeParameters` (metadata listing, `Resource: "*"`) and `ssm:GetParameter` scoped to the chosen parameter to check token expiry with decryption; it does not print the token. The Lambda role separately needs runtime token-read access. For a customer-managed KMS key, allow setup encryption and `kms:Decrypt` for the preflight caller and runtime readers in IAM and the key policy. |
+| Console launcher, if selected | The launcher creator needs CloudFormation, creation of its CodeBuild IAM service role/policy, CodeBuild project and Logs configuration, and `iam:PassRole` limited to that role for CodeBuild. Grant `codebuild:StartBuild` only to trusted deployment administrators, scoped to this project, with project/build and log read access. |
+
+**Starting a launcher build is deployment-admin access.**
+[`StartBuild` permits per-build overrides](https://docs.aws.amazon.com/codebuild/latest/APIReference/API_StartBuild.html),
+including environment variables and build commands. This launcher reads `REPO_URL`,
+`REPO_REF`, and `ACTION`, then runs code from that checkout under its broad deployment
+role, including `iam:*` and `cloudformation:*`. Restricting `StartBuild` to this
+project does not make it a build-only permission. Do not delegate it to participants
+or operators who are not trusted to administer the deployment account.
+
+These are the access boundaries to review, not a tested minimal IAM policy for
+every optional configuration. See the actual calls in
+[tenkacloud-lite.ts](./scripts/tenkacloud-lite.ts),
+[prepare-source-bundle.sh](./scripts/prepare-source-bundle.sh), and the service-role
+policy in [lite-pipeline.yaml](./infrastructure/templates/lite-pipeline.yaml).
+The launcher policy is broad; do not copy it as a general participant policy.
+
+AWS documents the [bootstrap permissions](https://docs.aws.amazon.com/cdk/v2/guide/bootstrapping-env.html#bootstrapping-env-permissions).
+The standard CDK CloudFormation execution role defaults to `AdministratorAccess`;
+that is a powerful deployment role, not a recommendation to grant it to all users.
+Have the account administrator review execution policies, permissions boundaries,
+and organizational SCPs. See [CDK security guidance](https://docs.aws.amazon.com/cdk/v2/guide/best-practices-security.html).
+
+Competitor-account setup is separate. Its existing
+[`competitor-bootstrap.yaml`](./infrastructure/templates/README.md#competitor-bootstrapyaml)
+uses an explicit `AdministratorAccess` exception for problem deployment into a
+dedicated competitor account, with the platform principal and required `ExternalId`
+constraining trust. Event participants do not need the platform deployment role.
 
 ## SaaS mode (multi-tenant)
 

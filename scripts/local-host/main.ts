@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildHosting } from "./build";
+import { buildHosting, hostBuildDirectory } from "./build";
 import { DockerHostingEngine } from "./docker-engine";
 import { persistentKey, prepareDatabase, privateDirectory } from "./files";
 import { SurfaceGateways } from "./gateways";
@@ -43,14 +43,14 @@ async function main(): Promise<void> {
       kind: "participant",
       hostname: options.hostname,
       port: options.participantPort,
-      staticRoot: join(root, ".tenkacloud/host-build/participant-portal"),
+      staticRoot: hostBuildDirectory(root, "participant-portal"),
       service,
     });
     admin = await startHttpHost({
       kind: "admin",
       hostname: "127.0.0.1",
       port: options.adminPort,
-      staticRoot: join(root, ".tenkacloud/host-build/application-admin-console"),
+      staticRoot: hostBuildDirectory(root, "application-admin-console"),
       service,
       participantOrigin: participant.origin,
     });
@@ -73,6 +73,12 @@ async function main(): Promise<void> {
       process.once("SIGINT", stop);
       process.once("SIGTERM", stop);
     });
+    // Stop accepting requests first: a deployment or teardown accepted after the drain
+    // snapshot would otherwise keep writing SQLite/Docker state past store.close().
+    await Promise.all([admin.close(), participant.close()]);
+    admin = undefined;
+    participant = undefined;
+    console.log("Listeners closed; waiting for in-flight environment operations to finish.");
     await service.drain();
   } finally {
     await Promise.all([admin?.close(), participant?.close()]);

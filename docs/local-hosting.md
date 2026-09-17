@@ -41,18 +41,27 @@ base. Startup builds the host and participant interfaces and creates
 are separate from the regular application builds, under
 `.tenkacloud/host-build/`.
 
+A custom `--data` directory must either not exist yet or already be private to
+your user (mode `700`). The application creates a missing directory with that
+mode and refuses to change the permissions of an existing one, so pointing
+`--data` at a shared project or home directory fails instead of locking other
+users and services out of unrelated files.
+
 The terminal prints the two URLs and the host login key. The defaults are the
 host console at `http://127.0.0.1:5174` and the participant portal at
 `http://127.0.0.1:5175`. Use the printed URLs exactly; arbitrary Host aliases are
 not accepted. The host key is not included in public browser configuration.
 
 In the host console, sign in, create an event, choose its exercise and teams,
-then prepare the problem environments. Copy each team's key or invitation link
+then prepare the problem environments. Each team/problem environment gets its
+own block of host ports; the application skips blocks whose ports are already
+bound by another process, and a retried environment moves to a free block when
+its previous ports were taken in the meantime. Copy each team's key or invitation link
 from the existing team panel. When all environments are ready, set the duration
 and start the competition. Participants use the normal Participant Portal and
 its actual backend login, not the practice-mode or demo login.
 
-The initial host session has a 15-minute absolute lifetime, in addition to the
+The initial host sign-in has a 15-minute absolute lifetime, in addition to the
 existing idle logout. Sign in again with the terminal key after expiration;
 this does not stop the event or discard its results.
 
@@ -91,15 +100,19 @@ verifier ports remain loopback-only; do not expose them or rewrite their Compose
 bindings to `0.0.0.0`.
 
 Gateway access is issued from an authenticated team view. Links are short-lived
-and single-use, and each browser receives its own HttpOnly session. Different
+and single-use, and each browser receives its own HttpOnly Cookie. Different
 teammates can open independent links concurrently. Team-key rotation revokes
 old team access, including existing exercise-gateway sessions.
 
 ## Stop, restart and teardown
 
-Ctrl+C stops the host's HTTP listeners but preserves SQLite state and running
-problem environments. Restart using the same data directory to recover event
-state, team credentials, score history and environment ownership.
+Ctrl+C closes the host's HTTP listeners first, waits for environment
+operations that are already in flight, and then closes SQLite. It preserves
+SQLite state and running problem environments. Restart using the same data
+directory to recover event state, team credentials, score history and
+environment ownership; recorded environments are re-adopted concurrently, so an
+unreachable environment delays startup by one readiness timeout, not one per
+environment.
 
 If an environment disappeared or recovery fails, the event returns to a
 retryable deployment state. The host console can retry failed environments.
@@ -124,7 +137,7 @@ JSON file. Back up the entire data directory after stopping the application;
 when using a custom backup process, include SQLite's WAL state correctly.
 
 The host console, participant portal and exercise pages use separate origins.
-Host APIs require an issued host session. Participant identity is derived from
+Host APIs require a host sign-in token issued by the application. Participant identity is derived from
 the authenticated team key, never from a submitted `teamId`. The exercise
 proxy does not forward portal credentials, cookies or the verifier endpoint.
 Submitted answers, hint fees and score updates are serialized per event and

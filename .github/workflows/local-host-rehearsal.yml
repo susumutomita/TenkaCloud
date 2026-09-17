@@ -1,11 +1,15 @@
 name: Local hosting rehearsal
 
-# Exercise the real Docker adapter when the hosting implementation changes.
+# Exercise the real Docker adapter when the hosting implementation or any runtime contract it
+# imports changes: the shared local-play scorer, Compose policy, Docker adapter, manifest, port
+# remapper, state store and verifier, plus the pinned problems catalog it reads sqli-demo from.
 on:
   workflow_dispatch:
   pull_request:
     paths:
       - 'scripts/local-host/**'
+      - 'scripts/local-play/**'
+      - 'problems'
       - 'apps/**/local-host/**'
       - 'apps/**/vite.host.config.ts'
       - 'apps/**/host.html'

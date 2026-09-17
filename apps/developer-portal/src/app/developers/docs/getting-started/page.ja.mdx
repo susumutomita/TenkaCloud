@@ -99,13 +99,26 @@ Participant Portal、問題デプロイバックエンドを、固定の単一�
 プロジェクトを作成し、それがリポジトリをクローンしてデプロイを実行して
 くれます。
 
+**リリースの状態は candidate/unverified(候補・未検証)です。** launcher の初期設定は
+前のリリースの本体・問題カタログを参照しています。現在の manifest でも認証済みの
+モード・AWS リージョンはありません。開催前に[参照先と検証状況](https://github.com/susumutomita/TenkaCloud/blob/main/release/tenkacloud-release.md)を確認してください。
+
+**Start build** の権限は、デプロイ先の管理を任せられる担当者だけに付与してください。
+ソースやコマンドを上書きして、デプロイ用ロールの AWS 権限で実行できます。
+**Turso** を使う場合は、DB の **HTTPS URL**(`https://…`)と読み書きできる DB 用トークンを用意し、
+**Start build の前に**、デプロイ先と同じ AWS アカウント・リージョンの SSM に
+**SecureString** としてトークンを保存します。launcher はこれを作成しません。
+[ダッシュボードと AWS コンソールでの手順](https://github.com/susumutomita/TenkaCloud/blob/main/DEPLOYMENT_GUIDE.md#turso-setup-for-the-console-launcher)。
+
 1. [`infrastructure/templates/lite-pipeline.yaml`](https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/lite-pipeline.yaml)
    をダウンロードします。
 2. CloudFormation の **Create stack** ページを開き（カタログのデフォルトは
    `ap-northeast-1` を対象としています）、**Upload a template file** で
    アップロードして、スタック名を `tenkacloud-lite-launcher` にします。
-3. **`TenantAdminEmail`**（唯一の必須パラメータ）に、Admin Console の招待
-   メールを受け取るメールアドレスを設定します。
+3. **`TenantAdminEmail`** に、Admin Console の招待メールを受け取るメールアドレスを
+   設定します。Turso を使う場合は **`ControlDataBackend=turso`**、
+   HTTPS URL を入れる **`TursoDatabaseUrl`**、作成済みの SSM 名を入れる **`TursoAuthTokenParameterName`**
+   も設定します。デフォルトは DynamoDB です。
 4. IAM ケーパビリティのチェックボックスを承認し、スタックを作成します。
 5. スタックの **`StartBuildConsoleUrl`** 出力から CodeBuild プロジェクトを
    開き、**Start build** を押します。
@@ -119,18 +132,27 @@ Participant Portal、問題デプロイバックエンドを、固定の単一�
 `ACTION=destroy-all` を指定して **Start build with overrides** を実行します。
 これにより Lite スタックが所有する DynamoDB テーブルと問題デプロイ用ログも
 削除されます。成功後に `tenkacloud-lite-launcher` スタック自体を削除して
-ください。DynamoDB 履歴を残す場合だけ `ACTION=destroy` を使います。
+ください。`ACTION=destroy` も既定では DynamoDB データを削除します。保持する場合は、
+削除前のデプロイで `RetainDataTables=true` を設定しておく必要があります。
 `destroy-all` 追加前の launcher は、先に CloudFormation のスタック更新で
 最新版のテンプレートを適用してください。旧 buildspec は未知の ACTION を
 deploy として扱うため、旧 launcher に `destroy-all` を直接指定してはいけません。
 
+CodeBuild の実行時間に応じて料金がかかります。手元でビルドしたい場合は、次の
+CLI 経路を選んでください。どちらも、構築した AWS リソースには利用料がかかります。
+[CodeBuild の料金](https://aws.amazon.com/codebuild/pricing/)と
+[必要な AWS 権限](https://github.com/susumutomita/TenkaCloud/blob/main/DEPLOYMENT_GUIDE.md#aws-permissions)を確認してください。
+
 ## 4. AWS 上の Lite モード — CLI
 
-モード 3 と同じ 2 つのスタックを、シェルからデプロイします。プラットフォーム
-自体の開発も行う場合はこちらを選んでください。
+モード 3 と同じ 2 つのスタックを、手元でビルドしてデプロイします。CodeBuild の
+ビルド費用を抑えたい場合や、プラットフォーム自体を開発する場合に選んでください。
 
-**前提条件:** Bun 1.3.11 と、対象アカウント向けの AWS 認証情報（プロファイル
-または SSO）がシェルに設定されていること。`cdk bootstrap` を別のステップ
+**前提条件:** Git・Make・Bash・zip・rsync・Python 3(`python3`)・AWS CLI v2・Bun 1.3.11・Node.js 24 と、
+対象アカウントの AWS 認証情報（プロファイルまたは SSO）が必要です。
+ソースの梱包に rsync と Python 3 を使います。
+[必要な権限](https://github.com/susumutomita/TenkaCloud/blob/main/DEPLOYMENT_GUIDE.md#aws-permissions)を確認し、
+`aws sts get-caller-identity` でデプロイ先のアカウントを照合してください。`cdk bootstrap` を別のステップ
 として実行する必要は**ありません** — デプロイが冪等に実行します。また
 Lambda のバンドルにはローカルの esbuild を使うため、Docker は不要です。
 
@@ -146,16 +168,22 @@ make env-init
 #   cp infrastructure/environments/development/.env.example \
 #      infrastructure/environments/development/.env
 
+# .env の AWS_ACCOUNT_ID・AWS_REGION・TENANT_ADMIN_EMAIL と DB 設定を確認します。
 # 2. デプロイ（SPA のビルド、必要なら CDK bootstrap、2 スタックのデプロイ）
 make deploy
 ```
 
 コマンドが完了すると、Admin Console と Participant Portal の URL が表示
 されます。環境の切り替えは `make deploy ENV=production` で行い（環境ごとに
-専用の `infrastructure/environments/<env>/.env` があります）。完全削除は
+専用の `infrastructure/environments/<env>/.env` があります）。Liteスタックと保持された管理データの削除は
 `make destroy-all` で行います。通常の `make destroy` でも DynamoDB テーブルは
 デフォルトで削除されます。履歴を残す場合は、先に
 `CDK_PARAM_RETAIN_DATA_TABLES=true` でデプロイしてから `make destroy` を実行してください。
+
+どちらのコマンドでも、ソース用S3バケットは残ります。現在のファイルと保持された
+旧バージョンの保管料が続くため、対象バケットと他の環境で使っていないことを確認し、
+不要なら全バージョンとバケットを削除します。
+[ソース保管場所の撤去手順](https://github.com/susumutomita/TenkaCloud/blob/main/DEPLOYMENT_GUIDE.md#source-storage-after-teardown)を参照してください。
 
 ### コントロールデータのバックエンドを選ぶ: DynamoDB か Turso か
 
@@ -165,15 +193,16 @@ Lite モードはコントロールデータ（イベント、チーム、デプ
 
 | バックエンド | 設定値 | 常時コスト | 向いている用途 |
 | --- | --- | --- | --- |
-| **DynamoDB**（デフォルト） | 未設定、または `dynamodb` | 全テーブルにプロビジョンド 1 RCU/1 WCU — 少額ですがゼロではなく、新方式の AWS 無料利用枠アカウントには常時無料の DynamoDB 枠がありません | すべてを AWS 内に収めたいチーム |
-| **Turso (libSQL)** | `turso` | このパスでは発生しません — Lite の synth は DynamoDB テーブルを**一切**作成しません | 個人、お試し利用、個人イベント |
+| **DynamoDB**（デフォルト） | 未設定、または `dynamodb` | テーブルと索引の確保容量。料金は使用量とアカウントの利用枠による | すべてを AWS 内に収めたいチーム |
+| **Turso (libSQL)** | `turso` | DynamoDBのテーブルと索引を作らない。Tursoの利用枠と、ほかのAWS費用は別途確認 | 個人、お試し利用、個人イベント |
 
 設定値はこの 2 つだけです。2 つのストアが同期することはないため、最初の本番
 イベントの前に環境ごとにバックエンドを決めてください（後からの切り替えは
 フラグの変更ではなくデータ移行になります）。
 
 Turso経路は単体テストとCDK synthでは確認されていますが、実Turso、新規AWSデプロイ、
-請求までを組み合わせたライブ検証は未実施です。最初の本番競技ではDynamoDBを選んでください。
+請求までを組み合わせたライブ検証は未実施です。DB費用を抑えたい場合はTursoを選び、
+イベント前に構成をリハーサルしてください。Tursoの利用枠と、ほかのAWS費用は別途確認が必要です。
 
 Turso へのオプトインは 4 ステップです。Turso データベースを作成し、その認証
 トークンを `SecureString` として SSM に保存し、`.env` に 3 行

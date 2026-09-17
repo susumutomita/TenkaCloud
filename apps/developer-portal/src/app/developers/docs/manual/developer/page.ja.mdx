@@ -15,15 +15,17 @@ TenkaCloud本体、インフラコード、共通パッケージ、各Portal、�
 
 ## リポジトリを準備する
 
+[Contributing](https://github.com/susumutomita/TenkaCloud/blob/main/CONTRIBUTING.md)に沿って固定バージョンのツールを用意してから実行します。
+
 ```bash
-make install
-git submodule update --init problems
-make doctor-dev
+mise exec -- make install
+git submodule update --init --recursive problems
 ```
 
-`make doctor-dev`は不足している Bun / mise の開発者向け要件を表示しますが、
-自動インストールや設定変更は行いません。別の`make doctor`は Bun 不要の参加者向け
-Docker 経路を診断します。[Getting started](/developers/docs/getting-started/)から
+ローカルプレイの開発では `mise exec -- make doctor-dev` で Bun・Docker CLI・Compose・
+daemon を診断できます。設定変更は行いません。ローカルプレイを使わない文書・API・
+インフラの変更では、この Docker 診断は不要です。別の `make doctor` は Bun 不要の
+参加者向け Docker 経路を診断します。[Getting started](/developers/docs/getting-started/)から
 必要な実行経路だけを選びます。
 
 ## 変更前に担当場所を見つける
@@ -40,9 +42,13 @@ Docker 経路を診断します。[Getting started](/developers/docs/getting-sta
 [プラットフォーム構成](/developers/docs/concepts/architecture/)はplane間の責務とevent
 契約を説明しています。
 
+LLMに調査や修正を頼むときは、[目的別ガイドとコードの見取り図](https://tenkacloud.com/llms-full.txt)
+から担当ファイルを探します。画面の入力→処理→保存→結果表示の順に、1つの症状を追います。
+必要な文書だけを読みます。
+
 ## 変更の流れ
 
-1. テスト可能な完了条件を持つGitHub Issueから始める。
+1. 依頼やIssueから、何を確認できれば完了かを決める。
 2. 最小の担当moduleと既存テストを見つける。
 3. 実装と利用者向け文書を同時に更新する。
 4. 作業中は範囲を絞ったテストを実行する。
