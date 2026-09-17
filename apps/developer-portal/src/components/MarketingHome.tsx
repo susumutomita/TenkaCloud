@@ -1,5 +1,5 @@
 import Script from "next/script";
-import type { ReactNode } from "react";
+import { BUSINESS_HOME_COPY } from "@/content/home-business-copy";
 import { HOME_COPY } from "@/content/site-copy";
 import { catalogCounts } from "@/lib/catalog";
 import { htmlLang, type Locale } from "@/lib/i18n";
@@ -13,112 +13,72 @@ import {
   termsPath,
 } from "@/lib/links";
 import { LanguageSwitch } from "./LanguageSwitch";
+import styles from "./MarketingHome.module.css";
 import { BattlePreview, ChallengePreview, HeroDashboard, SsoPreview } from "./MarketingPreviews";
 
-// The static marketing home renders Japanese at "/",
-// English at "/en/". Both render from HOME_COPY[locale] so the two language versions
-// are structurally identical. The visual design reproduces the legacy landing
-// (landing/index.html) — ink palette, Inter/Noto type, the 墨流し ink-bg hero, and the
-// section rhythm — while the copy stays the new bilingual content model. External
-// links (OSS repo, contact form) carry a data-cta so navigation measurement can tell
-// them apart without reading any content.
-
-// Decorative step icons ported from the legacy landing onboarding section. Purely
-// presentational (aria-hidden), one per onboarding step, matched by index.
-const STEP_ICONS: readonly ReactNode[] = [
-  <svg key="deploy" viewBox="0 0 64 64" width="64" height="64" aria-hidden="true">
-    <path
-      d="M21 43H17a10 10 0 0 1 0-20 15 15 0 0 1 28-5 12 12 0 0 1 2 24h-5"
-      fill="none"
-      stroke="#a855f7"
-      strokeWidth="3"
-    />
-    <path
-      d="M32 48V29m0 0-8 8m8-8 8 8"
-      fill="none"
-      stroke="#22c55e"
-      strokeWidth="3"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>,
-  <svg key="lock" viewBox="0 0 64 64" width="64" height="64" aria-hidden="true">
-    <circle cx="32" cy="23" r="10" fill="none" stroke="#22c55e" strokeWidth="4" />
-    <path
-      d="M15 53c3-11 10-17 17-17s14 6 17 17"
-      fill="none"
-      stroke="#07111f"
-      strokeWidth="3"
-      strokeLinecap="round"
-    />
-    <circle cx="32" cy="23" r="16" fill="none" stroke="#a855f7" strokeWidth="2" opacity=".45" />
-  </svg>,
-  <svg key="portal" viewBox="0 0 64 64" width="64" height="64" aria-hidden="true">
-    <rect
-      x="12"
-      y="14"
-      width="40"
-      height="31"
-      rx="3"
-      fill="none"
-      stroke="#07111f"
-      strokeWidth="3"
-    />
-    <path d="M20 50h24" stroke="#07111f" strokeWidth="3" strokeLinecap="round" />
-    <circle cx="32" cy="30" r="8" fill="none" stroke="#2563eb" strokeWidth="3" />
-  </svg>,
-];
-
+// The home page follows the order in which an enterprise buyer evaluates a new
+// platform: problem -> value -> economics -> stakeholders -> use cases -> product
+// experience -> operating model -> security -> commercial model. Technical details
+// remain available, but they prove the business proposition instead of leading it.
 export function MarketingHome({ locale }: { locale: Locale }) {
-  const copy = HOME_COPY[locale];
+  const business = BUSINESS_HOME_COPY[locale];
+  const product = HOME_COPY[locale];
   const counts = catalogCounts();
 
-  const catalogLead = copy.catalog.lead
+  const catalogLead = product.catalog.lead
     .replace("{total}", String(counts.total))
     .replace("{battle}", String(counts.readyBattle))
     .replace("{challenge}", String(counts.readyChallenge));
 
-  const [privacyLabel, termsLabel, legalLabel] = copy.legalLine.split(" / ");
+  const [privacyLabel, termsLabel, legalLabel] = product.legalLine.split(" / ");
 
   return (
     <div className="landing" lang={htmlLang(locale)}>
       <section className="hero">
-        {/* Decorative 墨流し ink-marbling backdrop, painted by public/ink-bg.js
-            (queries the `.ink-bg` canvas). The aria-hidden wrapper keeps the
-            purely-decorative canvas out of the accessibility tree. */}
         <div className="ink-bg-layer" aria-hidden="true">
           <canvas className="ink-bg" />
         </div>
         <div className="wrap hero-grid">
           <div className="hero-copy">
             <div className="hero-topline">
-              <span className="pill">{copy.hero.badge}</span>
+              <span className="pill">{business.hero.badge}</span>
               <LanguageSwitch
-                ariaLabel={copy.langSwitch.ariaLabel}
+                ariaLabel={product.langSwitch.ariaLabel}
                 otherHref={locale === "ja" ? "/en/" : "/"}
-                otherLabel={copy.langSwitch.toOther}
+                otherLabel={product.langSwitch.toOther}
               />
             </div>
             <h1>
-              {copy.hero.titleLead}
-              <em>{copy.hero.titleEm}</em>
+              {business.hero.titleLead}
+              <em>{business.hero.titleEm}</em>
             </h1>
-            <p className="sub">{copy.hero.sub}</p>
-            <div className="cta-row">
-              <a className="cta-primary" data-cta="home-catalog" href={catalogPath(locale)}>
-                {copy.hero.ctaCatalog}
+            <p className="sub">{business.hero.sub}</p>
+            <div className={styles.heroActions}>
+              <a
+                className={styles.heroActionPrimary}
+                data-cta="home-enterprise-contact"
+                href={CONTACT_FORM}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {business.hero.primaryCta}
               </a>
-              <a data-cta="home-demo" href="/product/">
-                {copy.hero.ctaDemo}
+              <a className={styles.heroActionSecondary} data-cta="home-demo" href="/product/">
+                {business.hero.secondaryCta}
               </a>
-              <a data-cta="home-developers" href="/developers/">
-                {copy.hero.ctaDevelopers}
-              </a>
-              <a data-cta="home-oss" href={GITHUB_REPO} target="_blank" rel="noopener noreferrer">
-                {copy.hero.ctaOss}
+              <a
+                className={styles.heroActionText}
+                data-cta="home-catalog"
+                href={catalogPath(locale)}
+              >
+                {business.hero.tertiaryCta}
               </a>
             </div>
-            <p className="hero-trust">{copy.hero.trust}</p>
+            <ul className={styles.proofList} aria-label={locale === "ja" ? "導入条件" : "Adoption facts"}>
+              {business.hero.proof.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
           </div>
           <div className="hero-visual">
             <HeroDashboard locale={locale} />
@@ -126,22 +86,135 @@ export function MarketingHome({ locale }: { locale: Locale }) {
         </div>
       </section>
 
+      <section id="problem">
+        <div className="wrap">
+          <div className={styles.sectionIntro}>
+            <div className="eyebrow">{business.problems.eyebrow}</div>
+            <h2>{business.problems.heading}</h2>
+            <p className={styles.sectionLead}>{business.problems.lead}</p>
+          </div>
+          <div className={styles.problemGrid}>
+            {business.problems.items.map((item) => (
+              <article className={styles.problemCard} key={item.label}>
+                <span className={styles.cardLabel}>{item.label}</span>
+                <h3>{item.title}</h3>
+                <p>{item.body}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="alt" id="value">
+        <div className="wrap">
+          <div className={styles.sectionIntroCentered}>
+            <div className="eyebrow">{business.transformation.eyebrow}</div>
+            <h2>{business.transformation.heading}</h2>
+            <p className={styles.sectionLead}>{business.transformation.lead}</p>
+          </div>
+          <div className={styles.transformationGrid}>
+            <article className={styles.transformationCard}>
+              <span className={styles.transformationLabel}>{business.transformation.before.label}</span>
+              <h3>{business.transformation.before.title}</h3>
+              <ul className={styles.transformationList}>
+                {business.transformation.before.items.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </article>
+            <div className={styles.transformationArrow} aria-hidden="true">
+              →
+            </div>
+            <article className={`${styles.transformationCard} ${styles.transformationCardAfter}`}>
+              <span className={styles.transformationLabel}>{business.transformation.after.label}</span>
+              <h3>{business.transformation.after.title}</h3>
+              <ul className={styles.transformationList}>
+                {business.transformation.after.items.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </article>
+          </div>
+          <p className={styles.transformationOutcome}>{business.transformation.outcome}</p>
+        </div>
+      </section>
+
+      <section id="economics">
+        <div className="wrap">
+          <div className={styles.sectionIntroCentered}>
+            <div className="eyebrow">{business.economics.eyebrow}</div>
+            <h2>{business.economics.heading}</h2>
+            <p className={styles.sectionLead}>{business.economics.lead}</p>
+          </div>
+          <div className={styles.metricGrid}>
+            {business.economics.items.map((item) => (
+              <article className={styles.metricCard} key={item.code}>
+                <span className={styles.metricCode}>{item.code}</span>
+                <h3>{item.label}</h3>
+                <p>{item.body}</p>
+              </article>
+            ))}
+          </div>
+          <p className={styles.economicsNote}>{business.economics.note}</p>
+        </div>
+      </section>
+
+      <section className="alt" id="stakeholders">
+        <div className="wrap">
+          <div className={styles.sectionIntroCentered}>
+            <div className="eyebrow">{business.stakeholders.eyebrow}</div>
+            <h2>{business.stakeholders.heading}</h2>
+            <p className={styles.sectionLead}>{business.stakeholders.lead}</p>
+          </div>
+          <div className={styles.stakeholderGrid}>
+            {business.stakeholders.items.map((item) => (
+              <article className={styles.stakeholderCard} key={item.role}>
+                <span className={styles.stakeholderRole}>{item.role}</span>
+                <div>
+                  <h3>{item.title}</h3>
+                  <p>{item.body}</p>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="use-cases">
+        <div className="wrap">
+          <div className={styles.sectionIntroCentered}>
+            <div className="eyebrow">{business.useCases.eyebrow}</div>
+            <h2>{business.useCases.heading}</h2>
+            <p className={styles.sectionLead}>{business.useCases.lead}</p>
+          </div>
+          <div className={styles.useCaseGrid}>
+            {business.useCases.items.map((item) => (
+              <article className={styles.useCaseCard} key={item.label}>
+                <span className={styles.cardLabel}>{item.label}</span>
+                <h3>{item.title}</h3>
+                <p>{item.body}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
       <section className="alt" id="modes">
         <div className="wrap">
-          <div className="eyebrow">{copy.modes.eyebrow}</div>
-          <h2>{copy.modes.heading}</h2>
-          <p className="lead">{copy.modes.lead}</p>
+          <div className="eyebrow">{product.modes.eyebrow}</div>
+          <h2>{product.modes.heading}</h2>
+          <p className="lead">{product.modes.lead}</p>
           <div className="twoup">
             <article className="tile">
-              <h3 className="kicker">{copy.modes.battle.kicker}</h3>
-              <p>{copy.modes.battle.body}</p>
+              <h3 className="kicker">{product.modes.battle.kicker}</h3>
+              <p>{product.modes.battle.body}</p>
               <div className="demo">
                 <BattlePreview locale={locale} />
               </div>
             </article>
             <article className="tile">
-              <h3 className="kicker">{copy.modes.challenge.kicker}</h3>
-              <p>{copy.modes.challenge.body}</p>
+              <h3 className="kicker">{product.modes.challenge.kicker}</h3>
+              <p>{product.modes.challenge.body}</p>
               <div className="demo">
                 <ChallengePreview locale={locale} />
               </div>
@@ -150,53 +223,33 @@ export function MarketingHome({ locale }: { locale: Locale }) {
         </div>
       </section>
 
-      <section>
-        <div className="wrap audience-intro">
-          <div className="eyebrow">{copy.audiences.eyebrow}</div>
-          <h2>{copy.audiences.heading}</h2>
-          <p className="lead">{copy.audiences.lead}</p>
-        </div>
-        <div className="aud">
-          {copy.audiences.items.map((item) => (
-            <div className="col" key={item.role}>
-              <div className="role">{item.role}</div>
-              <h3>{item.title}</h3>
-              <p>{item.body}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="alt" id="onboard">
+      <section id="operations">
         <div className="wrap">
-          <div className="onboard-layout">
-            <div>
-              <div className="eyebrow">{copy.onboarding.eyebrow}</div>
-              <h2>{copy.onboarding.heading}</h2>
-              <p className="lead">{copy.onboarding.lead}</p>
-            </div>
-            <div className="steps">
-              {copy.onboarding.steps.map((step, index) => (
-                <div className="step" key={step.title}>
-                  <div className="n">{String(index + 1).padStart(2, "0")}</div>
-                  <h4>{step.title}</h4>
-                  <p>{step.body}</p>
-                  <div className="step-icon">{STEP_ICONS[index]}</div>
-                </div>
-              ))}
-            </div>
+          <div className={styles.sectionIntroCentered}>
+            <div className="eyebrow">{business.operations.eyebrow}</div>
+            <h2>{business.operations.heading}</h2>
+            <p className={styles.sectionLead}>{business.operations.lead}</p>
+          </div>
+          <div className={styles.operationGrid}>
+            {business.operations.steps.map((step, index) => (
+              <article className={styles.operationStep} key={step.title}>
+                <div className={styles.operationNumber}>{String(index + 1).padStart(2, "0")}</div>
+                <h3>{step.title}</h3>
+                <p>{step.body}</p>
+              </article>
+            ))}
           </div>
         </div>
       </section>
 
-      <section>
+      <section className="alt" id="security">
         <div className="wrap">
           <div className="trust">
             <div className="copy">
-              <div className="eyebrow">{copy.security.eyebrow}</div>
-              <h2>{copy.security.heading}</h2>
+              <div className="eyebrow">{product.security.eyebrow}</div>
+              <h2>{product.security.heading}</h2>
               <ul>
-                {copy.security.bullets.map((bullet) => (
+                {product.security.bullets.map((bullet) => (
                   <li key={bullet}>
                     <span>{bullet}</span>
                   </li>
@@ -208,29 +261,38 @@ export function MarketingHome({ locale }: { locale: Locale }) {
         </div>
       </section>
 
-      <section className="alt">
+      <section id="catalog">
         <div className="wrap audience-intro">
-          <div className="eyebrow">{copy.catalog.eyebrow}</div>
-          <h2>{copy.catalog.heading}</h2>
+          <div className="eyebrow">{product.catalog.eyebrow}</div>
+          <h2>{product.catalog.heading}</h2>
           <p className="lead">{catalogLead}</p>
           <div className="extend-cta">
             <a className="cta-primary" data-cta="home-catalog-section" href={catalogPath(locale)}>
-              {copy.catalog.cta}
+              {product.catalog.cta}
+            </a>
+            <a
+              className="cta-primary"
+              data-cta="home-oss"
+              href={GITHUB_REPO}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {product.hero.ctaOss}
             </a>
           </div>
         </div>
       </section>
 
-      <section id="offerings">
+      <section className="alt" id="offerings">
         <div className="wrap">
           <div className="pricing-head">
-            <div className="eyebrow">{copy.offerings.eyebrow}</div>
-            <h2>{copy.offerings.heading}</h2>
-            <p>{copy.offerings.lead}</p>
+            <div className="eyebrow">{product.offerings.eyebrow}</div>
+            <h2>{product.offerings.heading}</h2>
+            <p>{product.offerings.lead}</p>
           </div>
           <div className="pricing-grid">
-            {copy.offerings.tiers.map((tier, index) => (
-              <div
+            {product.offerings.tiers.map((tier, index) => (
+              <article
                 className={index === 1 ? "pricing-card featured" : "pricing-card"}
                 key={tier.tier}
               >
@@ -256,7 +318,7 @@ export function MarketingHome({ locale }: { locale: Locale }) {
                 >
                   {tier.cta}
                 </a>
-              </div>
+              </article>
             ))}
           </div>
         </div>
@@ -265,9 +327,9 @@ export function MarketingHome({ locale }: { locale: Locale }) {
       <section id="contact">
         <div className="wrap">
           <div className="ent-cta">
-            <div className="eyebrow">{copy.contact.eyebrow}</div>
-            <h2>{copy.contact.heading}</h2>
-            <p>{copy.contact.body}</p>
+            <div className="eyebrow">{product.contact.eyebrow}</div>
+            <h2>{product.contact.heading}</h2>
+            <p>{product.contact.body}</p>
             <div className="btns">
               <a
                 className="btn-primary"
@@ -276,7 +338,7 @@ export function MarketingHome({ locale }: { locale: Locale }) {
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                {copy.contact.formCta}
+                {product.contact.formCta}
               </a>
               <a
                 className="btn-ghost"
@@ -285,10 +347,10 @@ export function MarketingHome({ locale }: { locale: Locale }) {
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                {copy.contact.discussionsCta}
+                {product.contact.discussionsCta}
               </a>
             </div>
-            <p className="contact-fineprint">{copy.contact.fineprint}</p>
+            <p className="contact-fineprint">{product.contact.fineprint}</p>
             <p className="contact-legal">
               <a href={privacyPath(locale)}>{privacyLabel}</a>
               {" / "}
