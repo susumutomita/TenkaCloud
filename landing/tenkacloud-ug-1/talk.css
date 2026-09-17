@@ -1,0 +1,104 @@
+@import url("../jaws-yokohama-2026/talk.css");
+
+.steps {
+  margin: 0;
+  padding-left: 1.45em;
+  font-size: 28px;
+  line-height: 1.8;
+}
+.steps.big {
+  font-size: 31px;
+}
+.steps li + li {
+  margin-top: .32em;
+}
+
+.flow {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto 1fr auto 1fr;
+  gap: 16px;
+  align-items: center;
+  margin: 12px 0 8px;
+}
+.flow.compact {
+  grid-template-columns: 1fr auto 1fr auto 1fr;
+}
+.flow > div {
+  min-height: 170px;
+  border: 1px solid var(--line);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+  background: #fff;
+}
+.flow strong {
+  font-size: 26px;
+  line-height: 1.4;
+}
+.flow span {
+  font-size: 20px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+.flow b {
+  font-size: 34px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.terminal {
+  margin: 8px 0;
+  padding: 28px 32px;
+  border: 1px solid var(--line);
+  background: #f7f8f9;
+  color: var(--ink);
+  font: 24px/1.65 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+}
+
+.checklist {
+  columns: 2;
+  column-gap: 44px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 27px;
+  line-height: 1.65;
+}
+.checklist li {
+  break-inside: avoid;
+  margin-bottom: .35em;
+}
+
+.warning {
+  border-left: 5px solid #b7791f;
+  padding-left: 18px;
+}
+
+.slide code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .9em;
+  background: #f2f3f4;
+  padding: .08em .28em;
+  border-radius: 3px;
+}
+
+@media screen and (max-width: 900px) {
+  .flow,
+  .flow.compact {
+    grid-template-columns: 1fr;
+  }
+  .flow b {
+    text-align: center;
+    transform: rotate(90deg);
+  }
+  .checklist {
+    columns: 1;
+  }
+  .steps,
+  .steps.big {
+    font-size: 22px;
+  }
+}

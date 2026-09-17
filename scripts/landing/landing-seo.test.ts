@@ -379,6 +379,34 @@ describe("AI-agent briefing and paste-able prompt", () => {
 });
 
 /**
+ * 発表資料は LP 本文で扱う話題ではない。 トークのカード一覧は /presentations/ を正本にし、
+ * LP には nav と footer のリンクだけを残す。 LP 本文へカードを戻すと、 製品の導線
+ * (hero → modes → pricing → contact) の間に別の話題が挟まるので、 その再発を機械検出する。
+ */
+describe("presentations stay off the landing page body", () => {
+  for (const page of ["landing/index.html", "landing/index.en.html"]) {
+    it(`should keep the talk library out of ${page}`, () => {
+      const html = read(page);
+      expect(html).not.toContain('id="presentations"');
+      expect(html).not.toContain("talk-card");
+      // カード専用の stylesheet も LP からは外す (読み込むのは一覧ページだけ)。
+      expect(html).not.toContain("presentations/library.css");
+      // 一覧ページ自体は残し、 nav と footer から到達できる。
+      expect(html).toContain('<a href="./presentations/" data-i18n="nav.presentations">');
+      expect(html).toContain('<a href="./presentations/" data-i18n="footer.presentations">');
+    });
+  }
+
+  it("should still publish the standalone presentations page with its talks", () => {
+    const talks = read("landing/presentations/index.html");
+    // 枚数は登壇が増えるたびに変わるので pin しない (= このテストの主題ではない)。
+    // 「LP から外した結果、一覧ページ側まで空になっていない」ことだけを担保する。
+    expect([...talks.matchAll(/class="talk-card"/g)].length).toBeGreaterThan(0);
+    expect(talks).toContain('<link rel="stylesheet" href="./library.css" />');
+  });
+});
+
+/**
  * #2696 P1: 30 秒 LP 動画。 hero の secondary 行と両 README の CTA 付近から
  * 参照され、 自ホスト mp4 (16:9 / 9:16) + README 用 preview GIF が実在する。
  */

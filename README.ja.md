@@ -147,7 +147,7 @@ make deploy
 
 **最初のゴールは、テストチームで問題を開き、回答の得点が反映されることです。** 参加者を招待する前に確認してください。
 
-**リリースの状態は candidate/unverified(候補・未検証)です。** launcher の初期設定は前のリリースの本体・問題カタログを参照し、[現在の manifest](./release/tenkacloud-release.json)でも認証済みのモード・AWS リージョンはありません。commit の固定は使うコードを特定するものです。手元の `make deploy` は現在のチェックアウトを使います。開催前に[検証状況と参照先の違い](./release/tenkacloud-release.md)を確認してください。[パイプラインの設定項目](./infrastructure/templates/README.md#cloudformation-console-lite-mode-deployment-pipeline)。
+**実環境での検証状態は candidate/unverified(候補・未検証)です。** launcher の初期設定は公開済み v1.9.2 の本体・問題カタログを参照し、[現在の manifest](./release/tenkacloud-release.json)でも認証済みのモード・AWS リージョンはありません。commit の固定は使うコードを特定するものです。手元の `make deploy` は現在のチェックアウトを使います。開催前に[検証状況と固定した参照先](./release/tenkacloud-release.md)を確認してください。[パイプラインの設定項目](./infrastructure/templates/README.md#cloudformation-console-lite-mode-deployment-pipeline)。
 
 #### 必要な AWS 権限
 

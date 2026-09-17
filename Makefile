@@ -326,6 +326,7 @@ env-init: ## Create the Lite .env file interactively | Lite用.envを対話wizar
 
 # ===== Turso live verification | Turso live 検証 =====
 .PHONY: turso-live turso-live-guide turso-live-preflight turso-live-verify-cfn turso-reset \
+	turso-deploy-preflight \
 	turso-token-rotate
 
 # Issue #2617: Turso pure-SQL profile の初回 live E2E を 1 本の discoverable な導線へまとめる。
@@ -337,6 +338,11 @@ turso-live-guide: ## Show the Turso live-verification guide only | Turso live検
 	@ENV=$(ENV) bun run tenkacloud turso-live guide
 turso-live-preflight: env-check-lite ## Validate Turso, AWS, and SSM settings read-only | Turso/AWS/SSM設定をread-only検証
 	@ENV=$(ENV) bun run tenkacloud turso-live preflight
+# `deploy` の直前ゲート。 turso 以外では何も検査せず即 exit 0 なので、 dynamodb の deploy は
+# 従来どおり。 turso-live-preflight と違い Turso CLI も samlSso も要求しないため、 pipeline の
+# CodeBuild からも実行できる (= lite-pipeline.yaml が `make deploy` を呼ぶ経路で効く)。
+turso-deploy-preflight: ## Validate Turso settings before deploy | deploy前にTurso設定を検証
+	@bun run scripts/ops/turso-deploy-preflight.ts
 turso-live-verify-cfn: ## Verify deployed stacks contain no DynamoDB tables | deploy済みstackとDynamoDB 0件を検証
 	@ENV=$(ENV) bun run tenkacloud turso-live verify-cloudformation
 turso-reset: ## Delete all Turso control-data rows, keep schema | Tursoのcontrol-data全行を削除(スキーマ維持)
@@ -353,7 +359,7 @@ turso-token-rotate: ## Reissue the Turso DB token into SSM without printing it |
 # `build` を必ず先に走らせる: 問題カタログは SPA build 時に `import.meta.glob` で
 # problems/**/metadata.json を取り込むため、 submodule を最新化しても SPA を再 build しないと
 # dist が古いカタログのまま deploy される。
-deploy: env-check-lite build ## Deploy Lite mode to AWS | Lite modeをAWSへdeploy
+deploy: env-check-lite turso-deploy-preflight build ## Deploy Lite mode to AWS | Lite modeをAWSへdeploy
 	bun run scripts/tenkacloud-lite.ts up
 # ref の install.sh 準拠の orchestration (= SaaS mode、 SBT ControlPlane を立てる):
 #   1. S3 source bucket を作成 2. infrastructure/ を source.zip にして upload

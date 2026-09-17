@@ -2949,6 +2949,11 @@
       "count": 1
     }
   },
+  "infrastructure/test/scripts/turso-deploy-preflight.test.ts": {
+    "sonarjs/no-os-command-from-path": {
+      "count": 1
+    }
+  },
   "infrastructure/test/security/cloudfront-headers.test.ts": {
     "@typescript-eslint/array-type": {
       "count": 1

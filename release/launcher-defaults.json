@@ -1,6 +1,6 @@
 {
   "$comment": "The launcher default pair last published for infrastructure/templates/lite-pipeline.yaml. Single authoring point (#3024 PR 2): scripts/release/generate-launcher-defaults.ts stamps every template literal from these values and release:check rejects drift. Advance it with 'bun run release:launcher-defaults --from-tag v<major>.<minor>.<patch>' once that tag's published Release passes release:verify-published (#3024 PR 5), which derives all three values from the tag's resolved identity. Never edit these values or the template literals by hand.",
-  "manifestVersion": "1.4.2",
-  "platformCommit": "a34d1e79f55177ab9c472ebd18a5f72b6e8d2110",
-  "catalogCommit": "97079e4bb42487dbda23fbafe75ce0d8ae837e86"
+  "manifestVersion": "1.9.2",
+  "platformCommit": "aaf9684f5bc32c37017d7d48dd7c37b7c8cd0b0d",
+  "catalogCommit": "811db0266eb9b761855e0a60f95783d4c7d2c326"
 }
