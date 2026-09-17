@@ -15,12 +15,19 @@ function isResolvable(href: string): boolean {
 // These tests pin that the front door routes into real, resolvable portal pages
 // (a dead CTA fails here, not in the browser) and that both languages ship.
 describe("HomePage (Japanese, /)", () => {
-  it("should render the Japanese marketing hero", () => {
+  it("should render the business-first Japanese marketing hero", () => {
     render(<HomePage />);
-    expect(screen.getByRole("heading", { level: 1 }).textContent).toContain("天下一");
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toContain("クラウド実戦力");
   });
 
-  it("should land the primary CTA on the public catalog", () => {
+  it("should make enterprise consultation the primary CTA", () => {
+    render(<HomePage />);
+    const cta = screen.getByRole("link", { name: "企業導入を相談する" });
+    expect(cta.getAttribute("href")).toMatch(/^https:\/\/forms\.gle\//);
+    expect(cta).toHaveAttribute("data-cta", "home-enterprise-contact");
+  });
+
+  it("should retain a direct path to the public catalog", () => {
     render(<HomePage />);
     const cta = screen
       .getAllByRole("link", { name: "問題カタログを見る" })
@@ -57,9 +64,9 @@ describe("HomePage (Japanese, /)", () => {
 });
 
 describe("EnglishHomePage (/en/)", () => {
-  it("should render the English marketing hero", () => {
+  it("should render the business-first English marketing hero", () => {
     render(<EnglishHomePage />);
-    expect(screen.getByRole("heading", { level: 1 }).textContent).toContain("arena");
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toContain("cloud skills");
   });
 
   it("should point the catalog CTA and language switch at the English mirrors", () => {
