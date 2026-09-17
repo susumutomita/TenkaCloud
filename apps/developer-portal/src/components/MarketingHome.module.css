@@ -1,0 +1,501 @@
+.heroActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 30px;
+}
+
+.heroActionPrimary,
+.heroActionSecondary,
+.heroActionText {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 999px;
+  padding: 0 20px;
+  font-size: 14px;
+  font-weight: 800;
+  text-decoration: none;
+  transition:
+    transform 160ms ease,
+    box-shadow 160ms ease,
+    background 160ms ease;
+}
+
+.heroActionPrimary {
+  background: var(--ink);
+  color: var(--paper);
+  box-shadow: 0 10px 28px rgba(7, 17, 31, 0.18);
+}
+
+.heroActionSecondary {
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.86);
+  color: var(--ink);
+}
+
+.heroActionText {
+  min-height: auto;
+  padding: 8px 2px;
+  border-radius: 0;
+  color: var(--blue);
+}
+
+.heroActionPrimary::after,
+.heroActionSecondary::after,
+.heroActionText::after {
+  content: "→";
+}
+
+.heroActionPrimary:hover,
+.heroActionSecondary:hover {
+  text-decoration: none;
+  transform: translateY(-1px);
+}
+
+.heroActionPrimary:hover {
+  box-shadow: 0 14px 34px rgba(7, 17, 31, 0.22);
+}
+
+.heroActionText:hover {
+  text-decoration: underline;
+}
+
+.proofList {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 22px 0 0;
+  padding: 0;
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.proofList li {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.proofList li::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--green);
+  box-shadow: 0 0 0 3px rgba(0, 138, 85, 0.1);
+}
+
+.sectionIntro {
+  max-width: 760px;
+  margin-bottom: 36px;
+}
+
+.sectionIntroCentered {
+  max-width: 760px;
+  margin: 0 auto 38px;
+  text-align: center;
+}
+
+.sectionIntroCentered :global(.eyebrow),
+.sectionIntroCentered h2,
+.sectionIntroCentered p {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.sectionLead {
+  max-width: 680px;
+  color: var(--ink-2);
+  font-size: 15px;
+  line-height: 1.72;
+}
+
+.problemGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.problemCard {
+  position: relative;
+  overflow: hidden;
+  min-height: 250px;
+  padding: 30px 28px;
+  border: 1px solid var(--line-soft);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #fff 0%, #fbfcfe 100%);
+  box-shadow: 0 12px 38px rgba(8, 20, 37, 0.045);
+}
+
+.problemCard::after {
+  content: "";
+  position: absolute;
+  right: -38px;
+  bottom: -48px;
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(9, 105, 218, 0.11), rgba(9, 105, 218, 0));
+}
+
+.cardLabel {
+  display: block;
+  margin-bottom: 26px;
+  color: var(--ink-3);
+  font-family: var(--brand-font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.problemCard h3,
+.useCaseCard h3,
+.stakeholderCard h3 {
+  margin: 0 0 12px;
+  font-size: 22px;
+  line-height: 1.22;
+  letter-spacing: -0.025em;
+}
+
+.problemCard p,
+.useCaseCard p,
+.stakeholderCard p {
+  position: relative;
+  z-index: 1;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.72;
+}
+
+.transformationGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 54px minmax(0, 1fr);
+  align-items: stretch;
+  gap: 18px;
+}
+
+.transformationCard {
+  padding: 30px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--paper);
+}
+
+.transformationCardAfter {
+  border-color: rgba(0, 138, 85, 0.34);
+  background:
+    linear-gradient(145deg, rgba(0, 138, 85, 0.07), rgba(255, 255, 255, 0) 58%),
+    var(--paper);
+}
+
+.transformationLabel {
+  display: inline-flex;
+  margin-bottom: 16px;
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: var(--paper-3);
+  color: var(--ink-3);
+  font-family: var(--brand-font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.transformationCardAfter .transformationLabel {
+  background: rgba(0, 138, 85, 0.1);
+  color: var(--green);
+}
+
+.transformationCard h3 {
+  margin: 0 0 20px;
+  font-size: 24px;
+  letter-spacing: -0.025em;
+}
+
+.transformationList {
+  list-style: none;
+  display: grid;
+  gap: 11px;
+  margin: 0;
+  padding: 0;
+}
+
+.transformationList li {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 10px;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.transformationList li::before {
+  content: "—";
+  color: var(--ink-4);
+  font-weight: 800;
+}
+
+.transformationCardAfter .transformationList li::before {
+  content: "✓";
+  color: var(--green);
+}
+
+.transformationArrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--blue);
+  font-size: 30px;
+  font-weight: 500;
+}
+
+.transformationOutcome {
+  max-width: 820px;
+  margin: 28px auto 0;
+  padding: 17px 22px;
+  border-left: 3px solid var(--blue);
+  background: rgba(9, 105, 218, 0.055);
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.55;
+  text-align: center;
+}
+
+.metricGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.metricCard {
+  min-height: 190px;
+  padding: 24px 22px;
+  border-top: 2px solid var(--ink);
+  background: var(--paper-3);
+}
+
+.metricCode {
+  display: block;
+  margin-bottom: 32px;
+  color: var(--blue);
+  font-family: var(--brand-font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.metricCard h3 {
+  margin: 0 0 9px;
+  font-size: 18px;
+  letter-spacing: -0.02em;
+}
+
+.metricCard p {
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.economicsNote {
+  margin-top: 22px;
+  color: var(--ink-3);
+  font-size: 12px;
+  line-height: 1.7;
+  text-align: center;
+}
+
+.stakeholderGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.stakeholderCard {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 22px;
+  align-items: start;
+  padding: 26px;
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  background: var(--paper);
+}
+
+.stakeholderRole {
+  color: var(--ink-3);
+  font-family: var(--brand-font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.055em;
+  line-height: 1.6;
+}
+
+.useCaseGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.useCaseCard {
+  min-height: 240px;
+  padding: 26px 24px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--paper);
+}
+
+.useCaseCard:nth-child(2),
+.useCaseCard:nth-child(4) {
+  transform: translateY(18px);
+}
+
+.operationGrid {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.operationGrid::before {
+  content: "";
+  position: absolute;
+  top: 27px;
+  left: 7%;
+  right: 7%;
+  height: 1px;
+  background: var(--line);
+}
+
+.operationStep {
+  position: relative;
+  z-index: 1;
+  padding: 0 12px 22px;
+  background: var(--paper);
+}
+
+.operationNumber {
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 22px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--paper);
+  color: var(--blue);
+  font-family: var(--brand-font-mono);
+  font-size: 12px;
+  font-weight: 800;
+  box-shadow: 0 0 0 8px var(--paper);
+}
+
+.operationStep h3 {
+  margin: 0 0 9px;
+  font-size: 17px;
+  line-height: 1.35;
+  letter-spacing: -0.02em;
+}
+
+.operationStep p {
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 1.68;
+}
+
+@media (max-width: 980px) {
+  .problemGrid,
+  .metricGrid,
+  .useCaseGrid,
+  .operationGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .stakeholderGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .transformationGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .transformationArrow {
+    transform: rotate(90deg);
+    min-height: 34px;
+  }
+
+  .useCaseCard:nth-child(2),
+  .useCaseCard:nth-child(4) {
+    transform: none;
+  }
+
+  .operationGrid::before {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .heroActions {
+    align-items: stretch;
+  }
+
+  .heroActionPrimary,
+  .heroActionSecondary {
+    width: 100%;
+  }
+
+  .problemGrid,
+  .metricGrid,
+  .useCaseGrid,
+  .operationGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .problemCard,
+  .useCaseCard {
+    min-height: 0;
+  }
+
+  .stakeholderCard {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .transformationCard {
+    padding: 24px 20px;
+  }
+
+  .operationStep {
+    display: grid;
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: 0 14px;
+    padding-inline: 0;
+  }
+
+  .operationNumber {
+    width: 44px;
+    height: 44px;
+    grid-row: 1 / span 2;
+    margin-bottom: 0;
+    box-shadow: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .heroActionPrimary,
+  .heroActionSecondary,
+  .heroActionText {
+    transition: none;
+  }
+
+  .heroActionPrimary:hover,
+  .heroActionSecondary:hover {
+    transform: none;
+  }
+}
