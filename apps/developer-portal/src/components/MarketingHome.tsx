@@ -277,6 +277,9 @@ export function MarketingHome({ locale }: { locale: Locale }) {
             <a className="cta-primary" data-cta="home-catalog-section" href={catalogPath(locale)}>
               {product.catalog.cta}
             </a>
+            <a className="cta-primary" data-cta="home-docs" href="/developers/">
+              {product.hero.ctaDevelopers}
+            </a>
             <a
               className="cta-primary"
               data-cta="home-oss"
