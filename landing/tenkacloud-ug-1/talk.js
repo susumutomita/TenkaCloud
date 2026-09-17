@@ -11,9 +11,7 @@
 
   function hashIndex() {
     const raw = location.hash.slice(1);
-    return /^\d+$/.test(raw)
-      ? Math.min(slides.length - 1, Math.max(0, Number(raw) - 1))
-      : 0;
+    return /^\d+$/.test(raw) ? Math.min(slides.length - 1, Math.max(0, Number(raw) - 1)) : 0;
   }
 
   function fitSlide() {
@@ -58,8 +56,10 @@
   for (const image of document.querySelectorAll("img")) image.addEventListener("load", fitSlide);
 
   document.addEventListener("keydown", (event) => {
-    const interactive = "button,a,summary,input,select,textarea,video,audio,iframe,[contenteditable]";
-    if (event.altKey || event.ctrlKey || event.metaKey || event.target.closest?.(interactive)) return;
+    const interactive =
+      "button,a,summary,input,select,textarea,video,audio,iframe,[contenteditable]";
+    if (event.altKey || event.ctrlKey || event.metaKey || event.target.closest?.(interactive))
+      return;
     if (["ArrowRight", "PageDown", " "].includes(event.key)) {
       event.preventDefault();
       show(index + 1);
