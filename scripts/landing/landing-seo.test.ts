@@ -397,9 +397,11 @@ describe("presentations stay off the landing page body", () => {
     });
   }
 
-  it("should still publish the standalone presentations page with every talk", () => {
+  it("should still publish the standalone presentations page with its talks", () => {
     const talks = read("landing/presentations/index.html");
-    expect([...talks.matchAll(/class="talk-card"/g)]).toHaveLength(4);
+    // 枚数は登壇が増えるたびに変わるので pin しない (= このテストの主題ではない)。
+    // 「LP から外した結果、一覧ページ側まで空になっていない」ことだけを担保する。
+    expect([...talks.matchAll(/class="talk-card"/g)].length).toBeGreaterThan(0);
     expect(talks).toContain('<link rel="stylesheet" href="./library.css" />');
   });
 });
