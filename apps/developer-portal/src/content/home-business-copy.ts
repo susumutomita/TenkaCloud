@@ -123,7 +123,7 @@ export const BUSINESS_HOME_COPY: Record<Locale, HomeBusinessCopy> = {
       badge: "クラウド人材育成 · 実環境演習",
       titleLead: "座学では測れないクラウド実戦力を、",
       titleEm: "組織で育てる。",
-      sub: "TenkaCloudは、AWSの実環境を使った演習・競技を、環境払い出し、ログイン、自動採点、進捗管理、振り返りまで標準化します。年に一度の特別なGameDayではなく、組織が繰り返せる育成プログラムへ変えます。",
+      sub: "TenkaCloudは、AWSの実環境を使った演習・競技を、環境払い出し、ログイン、自動採点、進捗管理、振り返りまで標準化します。年に一度の特別な実践演習ではなく、組織が繰り返せる育成プログラムへ変えます。",
       primaryCta: "企業導入を相談する",
       secondaryCta: "3分で体験する",
       tertiaryCta: "問題カタログを見る",
@@ -353,7 +353,8 @@ export const BUSINESS_HOME_COPY: Record<Locale, HomeBusinessCopy> = {
           "Run the next event on the same foundation",
         ],
       },
-      outcome: "Move hands-on training from a special event to an organizational capability that can be repeated.",
+      outcome:
+        "Move hands-on training from a special event to an organizational capability that can be repeated.",
     },
     economics: {
       eyebrow: "BUSINESS CASE",
