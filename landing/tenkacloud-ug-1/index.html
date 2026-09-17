@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TenkaCloud #1｜AWSにデプロイしてイベントを開催してみよう</title>
+<meta name="description" content="TenkaCloud UG #1向けのハンズオン資料。TenkaCloud LiteをAWSへデプロイし、競技アカウント接続、イベント・チーム・問題の設定、参加者ログイン、撤収までを順に進めます。" />
+<link rel="canonical" href="https://tenkacloud.com/tenkacloud-ug-1/" />
+<meta property="og:title" content="TenkaCloud #1｜AWSにデプロイしてイベントを開催してみよう" />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://tenkacloud.com/tenkacloud-ug-1/" />
+<link rel="icon" href="../assets/favicon.svg" />
+<link rel="stylesheet" href="./talk.css" />
+<script defer src="./talk.js"></script>
+</head>
+<body>
+<header class="topbar"><a href="../presentations/">← 発表資料一覧</a><span>TenkaCloud UG #1 · 2026年9月17日</span><a href="https://tenkacloudug.connpass.com/event/405132/" target="_blank" rel="noopener noreferrer">connpass ↗</a></header>
+<nav class="controls" aria-label="スライドの操作"><button id="previous" type="button" aria-label="前のスライド">← 前へ</button><output id="position" aria-live="polite">1 / 14</output><button id="next" type="button" aria-label="次のスライド">次へ →</button></nav>
+<noscript><p class="noscript">すべてのスライドを順に表示しています。</p></noscript>
+<main id="deck">
+<section class="slide cover" id="slide-1" aria-labelledby="title-1">
+<p class="kicker">TenkaCloud UG #1 · 2026年9月17日 · Online</p>
+<h1 id="title-1">AWSにデプロイして<br>イベントを開催してみよう</h1>
+<p class="lead">TenkaCloud Liteを立てて、参加者が問題を解けるところまで。</p>
+<p class="byline">冨田 進 / susumutomita<br>合同会社BULL / TenkaCloud</p>
+<div class="slide-foot"><span>TenkaCloud UG #1</span><span>1 / 14</span></div>
+</section>
+
+<section class="slide" id="slide-2" aria-labelledby="title-2">
+<p class="kicker">今日やること</p><h2 id="title-2">「自分でイベントを開ける」ところまで進めます。</h2>
+<ol class="steps big"><li>AWSにTenkaCloud Liteをデプロイする</li><li>競技に使うAWSアカウントを接続する</li><li>イベント・チーム・問題を作る</li><li>参加者としてログインし、問題を開く</li><li>最後に環境を撤収する</li></ol>
+<p class="fine">本番運用の認定会ではなく、現在のOSSを実際に触るハンズオンです。</p>
+<div class="slide-foot"><span>ゴール</span><span>2 / 14</span></div>
+</section>
+
+<section class="slide" id="slide-3" aria-labelledby="title-3">
+<p class="kicker">全体の流れ</p><h2 id="title-3">開催者と参加者では、触る画面が違います。</h2>
+<div class="flow" aria-label="TenkaCloudでイベントを開催する流れ">
+<div><strong>開催基盤を作る</strong><span>CloudFormation / CodeBuild</span></div><b>→</b><div><strong>開催者が準備する</strong><span>Application Admin Console</span></div><b>→</b><div><strong>問題環境を配る</strong><span>各チームのAWS</span></div><b>→</b><div><strong>参加者が解く</strong><span>Participant Portal</span></div>
+</div>
+<p class="lead">今日は、この一連の流れを1回通します。</p>
+<div class="slide-foot"><span>全体像</span><span>3 / 14</span></div>
+</section>
+
+<section class="slide" id="slide-4" aria-labelledby="title-4">
+<p class="kicker">始める前に</p><h2 id="title-4">AWSの課金が発生する操作です。</h2>
+<ul class="speaking-points"><li>今回は<strong>Lite mode</strong>を使います</li><li>デプロイ用AWSアカウントと、管理者メールアドレスを用意します</li><li>問題を別AWSアカウントへ配る場合は、競技用アカウントも用意します</li><li>終わったら<strong>撤収まで</strong>行います</li></ul>
+<p class="fine warning">現行READMEではデプロイ経路を candidate / unverified としています。イベント前に使うcommitと検証結果を固定してください。</p>
+<div class="slide-foot"><span>前提</span><span>4 / 14</span></div>
+</section>
+
+<section class="slide" id="slide-5" aria-labelledby="title-5">
+<p class="kicker">1. TenkaCloud Liteを作る</p><h2 id="title-5">AWSコンソールから、Launcherを1つ作ります。</h2>
+<ol class="steps"><li><code>infrastructure/templates/lite-pipeline.yaml</code> を取得</li><li>CloudFormationでテンプレートをアップロード</li><li>スタック名を <code>tenkacloud-lite-launcher</code> にする</li><li><code>TenantAdminEmail</code> を設定して作成</li><li>Outputsの <code>StartBuildConsoleUrl</code> を開く</li></ol>
+<div class="actions"><a href="https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/lite-pipeline.yaml" target="_blank" rel="noopener noreferrer">lite-pipeline.yaml ↗</a><a href="https://console.aws.amazon.com/cloudformation/home?region=ap-northeast-1#/stacks/create/template" target="_blank" rel="noopener noreferrer">CloudFormation ↗</a></div>
+<div class="slide-foot"><span>Platform deploy</span><span>5 / 14</span></div>
+</section>
+
+<section class="slide" id="slide-6" aria-labelledby="title-6">
+<p class="kicker">2. デプロイを開始する</p><h2 id="title-6">Launcherを作っただけでは、本体はまだ立ちません。</h2>
+<p class="lead">CodeBuildの画面で <strong>Start build</strong> を押します。</p>
+<pre class="terminal"><code>CloudFormation launcher
+        ↓
+CodeBuild: Start build
+        ↓
+TenkaCloud Lite stacks
+        ↓
+Application Admin Console / Participant Portal</code></pre>
+<p class="fine">課金が発生する処理を明示的な操作の先に置くため、Start buildは手動です。</p>
+<div class="slide-foot"><span>Platform deploy</span><span>6 / 14</span></div>
+</section>
+
+<section class="slide" id="slide-7" aria-labelledby="title-7">
+<p class="kicker">3. 開催者画面へ入る</p><h2 id="title-7">ビルドの最後に出るURLを開きます。</h2>
+<dl class="plain-list"><div><dt>Application Admin Console</dt><dd>イベント、チーム、問題、競技アカウントを管理する</dd></div><div><dt>Participant Portal</dt><dd>参加者が問題・得点・ヒントを見る</dd></div></dl>
+<p class="lead">まず開催者としてAdmin Consoleへログインします。</p>
+<p class="fine">同じURLはCloudFormation Outputsからも確認できます。</p>
+<div class="slide-foot"><span>Organizer</span><span>7 / 14</span></div>
+</section>
+
+<section class="slide" id="slide-8" aria-labelledby="title-8">
+<p class="kicker">4. 競技アカウントを接続する</p><h2 id="title-8">問題を置くAWSアカウントに、1度だけ受け口を作ります。</h2>
+<ol class="steps"><li><strong>Competitor Accounts</strong> → <strong>Add account</strong></li><li>発行されたExternalIdとLaunch Stack URLを保存</li><li>競技用AWSアカウントでbootstrap stackを作成</li><li>TenkaCloudへ戻り <strong>Verify</strong></li></ol>
+<p class="lead">TenkaCloud側はExternalId付きAssumeRoleで接続します。</p>
+<p class="fine">ExternalIdやチームキーは画面共有・録画・チャットへ貼らないでください。</p>
+<div class="slide-foot"><span>Competitor account</span><span>8 / 14</span></div>
+</section>
+
+<section class="slide diagram-slide" id="slide-9" aria-labelledby="title-9">
+<p class="kicker">問題をデプロイすると何が起きる？</p><h2 id="title-9">チームのAWSへCloudFormation stackを作ります。</h2>
+<a class="figure-link" href="../jaws-yokohama-2026/architecture.html?view=deploy" target="_blank" rel="noopener noreferrer"><img src="../jaws-yokohama-2026/assets/architecture-deploy.svg" width="1280" height="470" alt="開催者のデプロイ操作をAPIが受け、EventBridge、Step Functions、Lambdaを経由して競技用AWSアカウントへAssumeRoleし、CloudFormationで問題環境を作る図" /><span class="caption">構成図を大きく開く ↗</span></a>
+<p class="fine">問題ごとの <code>template.yaml</code> を、チーム単位で配置します。</p>
+<div class="slide-foot"><span>Problem deploy</span><span>9 / 14</span></div>
+</section>
+
+<section class="slide" id="slide-10" aria-labelledby="title-10">
+<p class="kicker">5. イベントを作る</p><h2 id="title-10">名前・チーム・問題を決めます。</h2>
+<ol class="steps"><li><strong>Events</strong> → 新しいイベントを作成</li><li>チームを追加し、使う競技アカウントを割り当てる</li><li>問題カタログから出題する問題を選ぶ</li><li>イベントの開始・終了時刻を設定</li><li><strong>Deploy</strong> して各チームの環境を作る</li></ol>
+<p class="fine">イベント作成時にチームごとの参加用ログインキーが発行されます。</p>
+<div class="slide-foot"><span>Event setup</span><span>10 / 14</span></div>
+</section>
+
+<section class="slide" id="slide-11" aria-labelledby="title-11">
+<p class="kicker">6. 参加者へ渡す</p><h2 id="title-11">参加者に必要なのは、Portal URLとチームキーです。</h2>
+<div class="flow compact"><div><strong>Participant Portal</strong><span>開催者がURLを案内</span></div><b>＋</b><div><strong>Team login key</strong><span>チーム単位のBearer credential</span></div><b>→</b><div><strong>自チームの問題</strong><span>他チームの状態は見えない</span></div></div>
+<ul class="speaking-points"><li>AWS問題ではPortalから一時的なAWS Consoleログインも発行できる</li><li>解答・得点・ヒントはPortalへ戻って確認する</li></ul>
+<div class="slide-foot"><span>Participant</span><span>11 / 14</span></div>
+</section>
+
+<section class="slide" id="slide-12" aria-labelledby="title-12">
+<p class="kicker">開催中</p><h2 id="title-12">開催者は、問題環境と得点の動きを見ます。</h2>
+<dl class="plain-list"><div><dt>Deploy progress</dt><dd>チーム × 問題ごとの配置状態を確認</dd></div><div><dt>Scoreboard / score events</dt><dd>順位と、いつ加点・減点したかを確認</dd></div><div><dt>Progression gate</dt><dd>前提問題の通過後に次の問題を開放できる</dd></div><div><dt>Disruptions</dt><dd>問題に定義された障害を対象チームへ発火できる</dd></div></dl>
+<p class="fine">使える機能は問題の定義と有効なfeature flagによって変わります。</p>
+<div class="slide-foot"><span>Operate</span><span>12 / 14</span></div>
+</section>
+
+<section class="slide" id="slide-13" aria-labelledby="title-13">
+<p class="kicker">7. 終わったら撤収</p><h2 id="title-13">Launcherだけ消しても、本体は残ります。</h2>
+<ol class="steps"><li>CodeBuildで <code>ACTION=destroy-all</code> を実行</li><li>TenkaCloud Liteの本体スタックが消えたことを確認</li><li><code>tenkacloud-lite-launcher</code> を削除</li><li>不要なsource-bundle S3の保存物も確認</li></ol>
+<p class="fine warning">Tursoを使った場合、外部DB自体は別管理です。DynamoDB/Tursoのデータ保持設定も確認してください。</p>
+<div class="slide-foot"><span>Teardown</span><span>13 / 14</span></div>
+</section>
+
+<section class="slide cover" id="slide-14" aria-labelledby="title-14">
+<p class="kicker">Hands-on checklist</p><h2 id="title-14">ここから、実際にやります。</h2>
+<ul class="checklist"><li>□ Launcher stackを作った</li><li>□ Start buildが成功した</li><li>□ Admin Consoleへ入れた</li><li>□ Competitor AccountのVerifyが通った</li><li>□ Event / Team / Problemを作った</li><li>□ Participant Portalへチームキーで入れた</li><li>□ 問題を開けた</li><li>□ 終了後の撤収手順を確認した</li></ul>
+<div class="actions"><a href="https://github.com/susumutomita/TenkaCloud" target="_blank" rel="noopener noreferrer">GitHub ↗</a><a href="../docs/manual/organizer/">開催者マニュアル →</a><a href="../presentations/">発表資料一覧 →</a></div>
+<div class="slide-foot"><span>TenkaCloud UG #1</span><span>14 / 14</span></div>
+</section>
+</main>
+<footer class="topbar"><span>TenkaCloud is an independent open-source project.</span><span>Apache-2.0</span></footer>
+</body>
+</html>
