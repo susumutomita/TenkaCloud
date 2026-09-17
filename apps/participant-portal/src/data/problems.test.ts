@@ -8,6 +8,7 @@ import {
   listProblemCatalog,
   type ProblemCatalogEntry,
   resolveLocalizedNarrative,
+  withGatedInstructions,
 } from "./problems";
 
 /**
@@ -245,5 +246,28 @@ describe("listProblemCatalog (#2786)", () => {
     expect(catalog.length).toBeGreaterThan(0);
     expect(catalog.map((p) => p.id)).toEqual([...catalog.map((p) => p.id)].sort());
     for (const entry of catalog) expect(findProblemMetadata(entry.id)).toBe(entry);
+  });
+});
+
+// #3226: ローカル大会の catalog 投影は instructions を持たず、認証済み team view が補う。
+describe("withGatedInstructions (local hosting #3226)", () => {
+  const withoutInstructions = { name: "n", shortDescription: "s", learningGoals: [] as const };
+
+  it("should keep the catalog instructions when the catalog has them", () => {
+    const narrative = { ...withoutInstructions, instructions: "catalog text" };
+    expect(withGatedInstructions(narrative, "gated text")).toBe(narrative);
+  });
+
+  it("should fill in the gated team-view instructions when the catalog has none", () => {
+    expect(withGatedInstructions(withoutInstructions, "gated text")).toEqual({
+      ...withoutInstructions,
+      instructions: "gated text",
+    });
+  });
+
+  it("should leave the narrative untouched before the event starts (empty gated text)", () => {
+    expect(withGatedInstructions(withoutInstructions, "")).toBe(withoutInstructions);
+    expect(withGatedInstructions(withoutInstructions, "   ")).toBe(withoutInstructions);
+    expect(withGatedInstructions(withoutInstructions, undefined)).toBe(withoutInstructions);
   });
 });

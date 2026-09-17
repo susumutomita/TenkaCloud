@@ -223,7 +223,7 @@ async function boundedFetch(
         response.status === StatusCodes.NO_CONTENT ||
         response.status === StatusCodes.RESET_CONTENT ||
         response.status === StatusCodes.NOT_MODIFIED;
-      return new Response(bodyForbidden ? null : body, {
+      return new Response(bodyForbidden ? null : new Uint8Array(body), {
         status: response.status,
         statusText: response.statusText,
         headers: response.headers,

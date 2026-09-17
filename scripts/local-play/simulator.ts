@@ -409,6 +409,7 @@ export function simulatorTemplateBody(
     if (
       extraEntries.length === 0 &&
       artifacts.length === 1 &&
+      artifacts[0] !== undefined &&
       statSync(safeEntryPath(problemDir, runtime.entry)).isFile()
     ) {
       return artifacts[0].content;

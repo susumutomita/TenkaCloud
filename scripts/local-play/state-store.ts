@@ -41,7 +41,9 @@ export interface LocalPlayStateStore {
   readonly close: () => Promise<void>;
 }
 
-function snapshotProgress(runtime: ProblemRuntime): ProblemProgressSnapshot {
+type ProgressRuntime = Pick<ProblemRuntime, "solved" | "revealedHints" | "wrongCounts" | "score">;
+
+function snapshotProgress(runtime: ProgressRuntime): ProblemProgressSnapshot {
   return {
     solved: [...runtime.solved],
     revealedHints: [...runtime.revealedHints],
@@ -233,7 +235,7 @@ export function parseLocalPlaySnapshot(serialized: string): LocalPlaySnapshot {
   };
 }
 
-function restoreProgress(runtime: ProblemRuntime, progress: ProblemProgressSnapshot): void {
+function restoreProgress(runtime: ProgressRuntime, progress: ProblemProgressSnapshot): void {
   runtime.solved.clear();
   for (const item of progress.solved) runtime.solved.add(item);
   runtime.revealedHints.clear();
