@@ -22,7 +22,9 @@ function assertNoEmptyStrings(value: unknown, path: string): void {
     return;
   }
   if (Array.isArray(value)) {
-    value.forEach((item, index) => assertNoEmptyStrings(item, `${path}[${index}]`));
+    value.forEach((item, index) => {
+      assertNoEmptyStrings(item, `${path}[${index}]`);
+    });
     return;
   }
   if (value !== null && typeof value === "object") {
