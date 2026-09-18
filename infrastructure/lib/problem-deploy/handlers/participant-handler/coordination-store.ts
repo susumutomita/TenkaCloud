@@ -4,7 +4,7 @@ import type { DeploymentsCoordinationPort } from "../../control-data/deployments
 import {
   budgetUsedPercent,
   type CoordinationStateBudget,
-  checkCoordinationStateSize,
+  classifyCoordinationStateSize,
 } from "../../control-data/domain/coordination-budget.js";
 import {
   type CoordinationStateScope,
@@ -231,11 +231,16 @@ export async function writeCoordinationState(
   // under-report the enveloped case by exactly those bytes, which is the case
   // closest to the ceiling, and measuring a synthetic envelope would over-report
   // every row that is stored raw.
-  const refusal = enforceCoordinationStateBudget(deps, scope, payload);
+  //
+  // The normalization below is what makes that sentence true on BOTH backends:
+  // what is measured is now literally what is written.
+  const normalized = normalizeCoordinationPayload(payload);
+  if (!normalized) return refuseUnmeasurableCoordinationState(deps, scope);
+  const refusal = enforceCoordinationStateBudget(deps, scope, normalized.bytes);
   if (refusal) return refusal;
   const outcome = await repository.writeCoordinationState(
     scope,
-    payload,
+    normalized.value,
     expectedVersion,
     nowIso,
     coordinationStateExpiresAt(parseNowMs(nowIso)),
@@ -271,11 +276,10 @@ export async function writeCoordinationState(
 function enforceCoordinationStateBudget(
   deps: CoordinationStoreDeps,
   scope: CoordinationStateScope,
-  stored: unknown,
+  bytes: number,
 ): Extract<WriteCoordinationOutcome, { kind: "too_large" }> | undefined {
   const budget = deps.runtime.coordinationStateBudget();
-  const verdict = checkCoordinationStateSize(stored, budget);
-  if (verdict.kind === "ok") return undefined;
+  const verdict = classifyCoordinationStateSize(bytes, budget);
   if (verdict.kind === "warn") {
     warnDeployTrace(COORDINATION_BUDGET_WARNING_EVENT, {
       ...budgetLogFields(scope, budget),
@@ -292,13 +296,75 @@ function enforceCoordinationStateBudget(
     });
     return { kind: "too_large", bytes: verdict.bytes, budget };
   }
-  // `unmeasurable`: the state could not be serialized at all (a cycle, a
-  // BigInt). The backend would reject it too, later and less legibly.
+  return undefined;
+}
+
+/**
+ * The refusal for a payload that could not be serialized at all (a cycle, a
+ * `BigInt`). Unchanged in meaning from when {@link enforceCoordinationStateBudget}
+ * owned this branch: the platform declines to write something it cannot
+ * account for, and the backend would have rejected it too, later and less
+ * legibly.
+ */
+function refuseUnmeasurableCoordinationState(
+  deps: CoordinationStoreDeps,
+  scope: CoordinationStateScope,
+): Extract<WriteCoordinationOutcome, { kind: "too_large" }> {
+  const budget = deps.runtime.coordinationStateBudget();
   warnDeployTrace(COORDINATION_BUDGET_EXCEEDED_EVENT, {
     ...budgetLogFields(scope, budget),
     reason: "state_not_serializable",
   });
   return { kind: "too_large", budget };
+}
+
+/**
+ * The JSON projection of a row about to be written, plus its UTF-8 size.
+ *
+ * ## Why the platform normalizes instead of handing the object to the backend
+ *
+ * Coordination state is JSON and nothing else. `coordination-budget.ts` already
+ * says so structurally -- it weighs `JSON.stringify` output and refuses a state
+ * that cannot be stringified at all -- and the SQL backend already stores
+ * exactly that text. DynamoDB did not: the Deployments `DynamoDBDocumentClient`
+ * is built with default `marshallOptions`, and that marshaller does not accept
+ * an explicit `undefined` property anywhere in the item. It does not drop it
+ * and it does not store a null -- it THROWS
+ * (`Pass options.removeUndefinedValues=true ...`), out of the middleware,
+ * before any request leaves the Lambda.
+ *
+ * A plugin state with an optional field is therefore unwritable on DynamoDB
+ * while being perfectly writable on Turso, and `ac26-crypto-battle` is that
+ * state from its very first row: `initialState` leaves `startedAtMs`,
+ * `nextContractAtMs` and every team's `lastRotateAtMs` as explicit `undefined`
+ * until the match starts. Every READY/START on the DynamoDB backend threw in
+ * the marshaller, so the row was never created and the match could not begin --
+ * the same problem played fine on Turso, which is what made it look like a
+ * problem bug rather than a host one.
+ *
+ * Normalizing here rather than passing `removeUndefinedValues` to the client
+ * keeps the fix where the invariant lives: this module owns the envelope and is
+ * the only place that hands plugin state to a repository. A client-wide
+ * marshalling flag would also silently change every unrelated write through the
+ * shared participant DocumentClient, where a thrown `undefined` may well be
+ * catching a real bug.
+ *
+ * `undefined` when the payload cannot be serialized at all, which the caller
+ * refuses -- the same values, and the same verdict, as before this existed.
+ */
+function normalizeCoordinationPayload(
+  payload: unknown,
+): { readonly value: unknown; readonly bytes: number } | undefined {
+  let json: string | undefined;
+  try {
+    json = JSON.stringify(payload);
+  } catch {
+    return undefined;
+  }
+  // `undefined` for a top-level value JSON drops entirely (`undefined`, a
+  // function, a symbol). There is no row to write for it.
+  if (json === undefined) return undefined;
+  return { value: JSON.parse(json) as unknown, bytes: Buffer.byteLength(json, "utf8") };
 }
 
 /**
