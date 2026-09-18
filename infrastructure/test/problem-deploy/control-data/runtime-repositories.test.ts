@@ -310,6 +310,25 @@ describe("control-data runtime repository resolver", () => {
     expect(failure).toContain("HTTP 400");
   });
 
+  it("should still describe a rejection that is not an Error", async () => {
+    // A rejected promise can carry anything. Falling over on a non-Error here
+    // would lose the diagnostic in exactly the case where the failure is
+    // already unusual, so the stage is still named and the value still shown.
+    const runtime = createControlDataRuntime({
+      env: {
+        CONTROL_DATA_BACKEND: "turso",
+        TURSO_DATABASE_URL: "libsql://example.turso.io",
+        TURSO_AUTH_TOKEN_PARAMETER_NAME: "/tenkacloud/dev/turso-token",
+      },
+      ssm: { send: vi.fn().mockRejectedValue("socket hang up") },
+      createClient: vi.fn(),
+    });
+
+    const failure = await runtime.resolveTeamsRepository({}).catch((err: Error) => err.message);
+    expect(failure).toContain("/tenkacloud/dev/turso-token");
+    expect(failure).toContain("socket hang up");
+  });
+
   it("should name the token as the suspect when the database rejects it", async () => {
     const unauthorized = Object.assign(new Error("Unauthorized"), {
       name: "LibsqlError",
