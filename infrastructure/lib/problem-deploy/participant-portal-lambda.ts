@@ -14,7 +14,7 @@ import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import type { ILogGroup } from "aws-cdk-lib/aws-logs";
 import { Construct } from "constructs";
 import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
-import { controlDataBackendEnv } from "./control-data-backend-env.js";
+import { controlDataBackendEnv, grantTursoAuthTokenRead } from "./control-data-backend-env.js";
 import { buildExternalIdParameterArnPattern } from "./handlers/shared/external-id-store.js";
 
 export interface ParticipantPortalLambdaProps {
@@ -331,18 +331,7 @@ export class ParticipantPortalLambda extends Construct {
 
     // [Issue #2440]: turso backend が Turso auth token を読むための SSM SecureString
     // read 権限。 未配線 (= dynamodb default) なら付与しない (`EventApiLambda` と同型)。
-    if (props.tursoAuthTokenParameterName) {
-      this.fn.addToRolePolicy(
-        new PolicyStatement({
-          actions: ["ssm:GetParameter"],
-          resources: [
-            `arn:${stack.partition}:ssm:${stack.region}:${
-              stack.account
-            }:parameter/${props.tursoAuthTokenParameterName.replace(/^\/+/, "")}`,
-          ],
-        }),
-      );
-    }
+    grantTursoAuthTokenRead(this.fn, props.tursoAuthTokenParameterName);
 
     this.url = this.fn.addFunctionUrl({
       authType: FunctionUrlAuthType.NONE,

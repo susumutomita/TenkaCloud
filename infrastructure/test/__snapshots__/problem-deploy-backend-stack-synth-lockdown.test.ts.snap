@@ -12390,6 +12390,35 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — pure-sql t
           },
         },
         {
+          "Action": "kms:Decrypt",
+          "Condition": {
+            "StringEquals": {
+              "kms:EncryptionContext:PARAMETER_ARN": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:",
+                    {
+                      "Ref": "AWS::Partition",
+                    },
+                    ":ssm:",
+                    {
+                      "Ref": "AWS::Region",
+                    },
+                    ":",
+                    {
+                      "Ref": "AWS::AccountId",
+                    },
+                    ":parameter/tenkacloud/development/turso-token",
+                  ],
+                ],
+              },
+            },
+          },
+          "Effect": "Allow",
+          "Resource": "*",
+        },
+        {
           "Action": "sts:AssumeRole",
           "Effect": "Allow",
           "Resource": "arn:aws:iam::*:role/TenkaCloud-*",
@@ -12831,6 +12860,35 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — pure-sql t
               ],
             ],
           },
+        },
+        {
+          "Action": "kms:Decrypt",
+          "Condition": {
+            "StringEquals": {
+              "kms:EncryptionContext:PARAMETER_ARN": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:",
+                    {
+                      "Ref": "AWS::Partition",
+                    },
+                    ":ssm:",
+                    {
+                      "Ref": "AWS::Region",
+                    },
+                    ":",
+                    {
+                      "Ref": "AWS::AccountId",
+                    },
+                    ":parameter/tenkacloud/development/turso-token",
+                  ],
+                ],
+              },
+            },
+          },
+          "Effect": "Allow",
+          "Resource": "*",
         },
       ],
       "Version": "2012-10-17",
@@ -13527,6 +13585,35 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — pure-sql t
             ],
           },
         },
+        {
+          "Action": "kms:Decrypt",
+          "Condition": {
+            "StringEquals": {
+              "kms:EncryptionContext:PARAMETER_ARN": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:",
+                    {
+                      "Ref": "AWS::Partition",
+                    },
+                    ":ssm:",
+                    {
+                      "Ref": "AWS::Region",
+                    },
+                    ":",
+                    {
+                      "Ref": "AWS::AccountId",
+                    },
+                    ":parameter/tenkacloud/development/turso-token",
+                  ],
+                ],
+              },
+            },
+          },
+          "Effect": "Allow",
+          "Resource": "*",
+        },
       ],
       "Version": "2012-10-17",
     },
@@ -13734,6 +13821,35 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — pure-sql t
           },
         },
         {
+          "Action": "kms:Decrypt",
+          "Condition": {
+            "StringEquals": {
+              "kms:EncryptionContext:PARAMETER_ARN": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:",
+                    {
+                      "Ref": "AWS::Partition",
+                    },
+                    ":ssm:",
+                    {
+                      "Ref": "AWS::Region",
+                    },
+                    ":",
+                    {
+                      "Ref": "AWS::AccountId",
+                    },
+                    ":parameter/tenkacloud/development/turso-token",
+                  ],
+                ],
+              },
+            },
+          },
+          "Effect": "Allow",
+          "Resource": "*",
+        },
+        {
           "Action": "sts:AssumeRole",
           "Effect": "Allow",
           "Resource": "arn:aws:iam::*:role/TenkaCloud-*",
@@ -13907,6 +14023,35 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — pure-sql t
               ],
             ],
           },
+        },
+        {
+          "Action": "kms:Decrypt",
+          "Condition": {
+            "StringEquals": {
+              "kms:EncryptionContext:PARAMETER_ARN": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:",
+                    {
+                      "Ref": "AWS::Partition",
+                    },
+                    ":ssm:",
+                    {
+                      "Ref": "AWS::Region",
+                    },
+                    ":",
+                    {
+                      "Ref": "AWS::AccountId",
+                    },
+                    ":parameter/tenkacloud/development/turso-token",
+                  ],
+                ],
+              },
+            },
+          },
+          "Effect": "Allow",
+          "Resource": "*",
         },
         {
           "Action": [
@@ -14141,6 +14286,35 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — pure-sql t
             ],
           },
         },
+        {
+          "Action": "kms:Decrypt",
+          "Condition": {
+            "StringEquals": {
+              "kms:EncryptionContext:PARAMETER_ARN": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:",
+                    {
+                      "Ref": "AWS::Partition",
+                    },
+                    ":ssm:",
+                    {
+                      "Ref": "AWS::Region",
+                    },
+                    ":",
+                    {
+                      "Ref": "AWS::AccountId",
+                    },
+                    ":parameter/tenkacloud/development/turso-token",
+                  ],
+                ],
+              },
+            },
+          },
+          "Effect": "Allow",
+          "Resource": "*",
+        },
       ],
       "Version": "2012-10-17",
     },
@@ -14210,6 +14384,35 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — pure-sql t
               ],
             ],
           },
+        },
+        {
+          "Action": "kms:Decrypt",
+          "Condition": {
+            "StringEquals": {
+              "kms:EncryptionContext:PARAMETER_ARN": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:",
+                    {
+                      "Ref": "AWS::Partition",
+                    },
+                    ":ssm:",
+                    {
+                      "Ref": "AWS::Region",
+                    },
+                    ":",
+                    {
+                      "Ref": "AWS::AccountId",
+                    },
+                    ":parameter/tenkacloud/development/turso-token",
+                  ],
+                ],
+              },
+            },
+          },
+          "Effect": "Allow",
+          "Resource": "*",
         },
         {
           "Action": "ssm:GetParameter",
@@ -14359,6 +14562,35 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — pure-sql t
               ],
             ],
           },
+        },
+        {
+          "Action": "kms:Decrypt",
+          "Condition": {
+            "StringEquals": {
+              "kms:EncryptionContext:PARAMETER_ARN": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:",
+                    {
+                      "Ref": "AWS::Partition",
+                    },
+                    ":ssm:",
+                    {
+                      "Ref": "AWS::Region",
+                    },
+                    ":",
+                    {
+                      "Ref": "AWS::AccountId",
+                    },
+                    ":parameter/tenkacloud/development/turso-token",
+                  ],
+                ],
+              },
+            },
+          },
+          "Effect": "Allow",
+          "Resource": "*",
         },
       ],
       "Version": "2012-10-17",

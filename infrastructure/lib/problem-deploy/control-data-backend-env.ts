@@ -70,18 +70,44 @@ export function controlDataRuntimeEnv(props: ControlDataRuntimeEnvProps): Record
  * `parameterName` 未指定 (= dynamodb profile) では**何も付与しない**ので、既存テンプレートと
  * byte 互換のまま呼び出せる。 Resource は parameter 1 本に限定する (`parameter/*` にしない)。
  *
- * 既存 construct 群はまだ inline のまま。 `controlDataRuntimeEnv` の doc と同じ方針で、
- * 各 construct を触る PR で 1 つずつ寄せる。
+ * ## `ssm:GetParameter` だけでは読めない
+ *
+ * token は SecureString なので、`sql-executor-cache.ts` は必ず
+ * `GetParameter(WithDecryption: true)` で読む。 SecureString は AWS managed key
+ * (`alias/aws/ssm`) の envelope encryption なので、この呼び出しは `ssm:GetParameter` に加えて
+ * **その key に対する `kms:Decrypt`** を要求する。 同じ Lambda が ExternalId / sakura / azure /
+ * gcp の SecureString を読むために持っている `kms:Decrypt` は
+ * `kms:EncryptionContext:PARAMETER_ARN` をそれら credential path へ絞った条件付きなので、
+ * Turso の parameter には**一致しない**。
+ *
+ * その結果 cold start の `GetParameter` が `AccessDeniedException` になり、
+ * `createSqlExecutorCache` の promise が reject して、route は理由の分からない 500 を返す
+ * (Competitor Accounts 画面の `internal_error` はこれ)。 backend が dynamodb のときは token を
+ * 一切読まないので、症状は turso でだけ出る。
+ *
+ * AWS managed key の ARN は synth 時に定まらないので `Resource: "*"` になるが、
+ * `kms:EncryptionContext:PARAMETER_ARN` をこの parameter 1 本へ固定することで、この Lambda が
+ * 復号できるのは実質この parameter だけになる。 condition が `StringEquals` で足りるのは、
+ * credential 側と違って parameter 名に wildcard が無く、SSM が渡してくる ARN が完全に確定して
+ * いるため。
  */
 export function grantTursoAuthTokenRead(fn: IFunction, parameterName?: string): void {
   if (!parameterName) return;
   const stack = Stack.of(fn);
+  const parameterArn = `arn:${stack.partition}:ssm:${stack.region}:${stack.account}:parameter/${parameterName.replace(/^\/+/, "")}`;
   fn.addToRolePolicy(
     new PolicyStatement({
       actions: ["ssm:GetParameter"],
-      resources: [
-        `arn:${stack.partition}:ssm:${stack.region}:${stack.account}:parameter/${parameterName.replace(/^\/+/, "")}`,
-      ],
+      resources: [parameterArn],
+    }),
+  );
+  fn.addToRolePolicy(
+    new PolicyStatement({
+      actions: ["kms:Decrypt"],
+      resources: ["*"],
+      conditions: {
+        StringEquals: { "kms:EncryptionContext:PARAMETER_ARN": parameterArn },
+      },
     }),
   );
 }
