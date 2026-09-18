@@ -343,7 +343,7 @@ async function startProcess(
   const identity = registration
     ? processIdentityFromStartTime(registration.pid, registration.startTime)
     : undefined;
-  if (!identity || observeProcessIdentity(child.pid) !== identity) {
+  if (!registration || !identity || observeProcessIdentity(child.pid) !== identity) {
     try {
       process.kill(child.pid, "SIGTERM");
     } catch {

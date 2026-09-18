@@ -7,6 +7,7 @@ import type {
 } from "../../infrastructure/lib/problem-deploy/handlers/generic-scoring-handler/shared";
 import { parseLoopbackUrl } from "./loopback";
 import {
+  type createSimulatorClient,
   type SimulatedCloudProblem,
   type SimulatorClockAdvanceResponse,
   SimulatorHttpError,
@@ -16,7 +17,11 @@ import {
   type SimulatorLauncherRecord,
   stopSimulatorLauncher,
 } from "./simulator-launcher";
-import { nativeTargets, type SimulatorNativeRoute } from "./simulator-native-environment";
+import {
+  type NativeTarget,
+  nativeTargets,
+  type SimulatorNativeRoute,
+} from "./simulator-native-environment";
 import type {
   LocalSimulatorDeployment,
   LocalSimulatorRuntimePort,
@@ -38,6 +43,8 @@ export type {
 } from "./simulator-runtime-contract";
 export { cleanupRecordedSimulatorSession } from "./simulator-session-cleanup";
 export type { SimulatorSessionRecord } from "./simulator-session-record";
+
+type SimulatorClient = ReturnType<typeof createSimulatorClient>;
 
 export class SimulatorLocalRuntime
   extends SimulatorRuntimeLifecycle
@@ -116,7 +123,7 @@ export class SimulatorLocalRuntime
     client: SimulatorClient,
     launcher: SimulatorLauncherRecord,
     deployment: LocalSimulatorDeployment,
-    target: SimulatorNativeTarget,
+    target: NativeTarget,
     allowedPlatforms: ReadonlySet<string>,
     slot: string,
   ): Promise<AuthoritativeEndpointPlacement | undefined> {

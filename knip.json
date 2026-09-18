@@ -50,7 +50,11 @@
         "scripts/security/*.ts",
         "scripts/workspace/*.ts",
         "scripts/**/*.test.ts",
-        "scripts/**/*.test-helpers.ts"
+        "scripts/**/*.test-helpers.ts",
+        "scripts/local-host/main.ts",
+        "scripts/local-host/build-main.ts",
+        "scripts/local-host/tests/run.ts",
+        "scripts/local-host/tests/docker-smoke.ts"
       ],
       "project": ["scripts/**/*.ts"]
     },
@@ -69,10 +73,24 @@
       "project": ["src/**"]
     },
     "apps/application-admin-console": {
-      "project": ["src/**"]
+      "project": ["src/**"],
+      "entry": [
+        "src/main.tsx",
+        "test/**/*.test.{ts,tsx}",
+        "src/**/*.test.{ts,tsx}",
+        "src/local-host/main.tsx",
+        "vite.host.config.ts"
+      ]
     },
     "apps/participant-portal": {
-      "project": ["src/**"]
+      "project": ["src/**"],
+      "entry": [
+        "src/main.tsx",
+        "test/**/*.test.{ts,tsx}",
+        "src/**/*.test.{ts,tsx}",
+        "src/local-host/main.tsx",
+        "vite.host.config.ts"
+      ]
     },
     "apps/developer-portal": {
       "entry": ["scripts/**/*.ts"],

@@ -80,9 +80,6 @@ function isSimulatedProblemComplete(runtime: SimulatedProblemRuntime): boolean {
   if (scoring.kind === "flag" || scoring.kind === "composite-probe") {
     return runtime.solved.has(runtime.problem.problemId);
   }
-  if (scoring.kind === "multi-flag") {
-    return scoring.flags.every((flag) => runtime.solved.has(flag.id));
-  }
   return false;
 }
 

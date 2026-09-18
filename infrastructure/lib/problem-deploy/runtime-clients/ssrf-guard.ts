@@ -41,10 +41,10 @@ export const SSRF_BLOCKED_HOSTS: ReadonlySet<string> = new Set([
 export function unwrapIPv6MappedIPv4(host: string): string {
   const lower = host.toLowerCase();
   const dotted = lower.match(/^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
-  if (dotted) return dotted[1];
+  if (dotted?.[1] !== undefined) return dotted[1];
 
   const hex = lower.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
-  if (hex) {
+  if (hex?.[1] !== undefined && hex[2] !== undefined) {
     const high = parseInt(hex[1], 16);
     const low = parseInt(hex[2], 16);
     if (high <= 0xffff && low <= 0xffff) {

@@ -162,7 +162,7 @@ function parseOwnedLaunchIntent(value: unknown, sessionPath: string): SimulatorO
     stateDir: String(stateDir),
     workloadImages: workloadImages as readonly string[],
     launchIntentPath: String(value.launchIntentPath),
-  };
+  } as const;
   if (value.launchIntentPath !== simulatorLaunchIntentPath(sessionPath)) {
     throw new Error("Simulator launch intent path is invalid");
   }
@@ -285,7 +285,11 @@ export function externalNativeCredentials(env: NodeJS.ProcessEnv): SimulatorNati
     throw new Error("TENKACLOUD_SIMULATOR_GCP_CREDENTIAL is required and invalid");
   }
   const sakuraParts = sakuraCredential?.split(":") ?? [];
-  if (sakuraParts.length !== 2 || sakuraParts.some((part) => !providerCredential.test(part))) {
+  if (
+    !sakuraCredential ||
+    sakuraParts.length !== 2 ||
+    sakuraParts.some((part) => !providerCredential.test(part))
+  ) {
     throw new Error("TENKACLOUD_SIMULATOR_SAKURA_CREDENTIAL is required and invalid");
   }
   return {

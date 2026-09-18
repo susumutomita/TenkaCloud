@@ -37,6 +37,10 @@ export default [
       "**/next-env.d.ts",
       "landing/**",
       "problems/**",
+      // Local-only state (`.gitignore:174`): local-play sessions and the local-host UI bundles
+      // that `bun start` / `bun run build:host` emit under `.tenkacloud/host-build/`. Minified
+      // output, never tracked source; CI never has it at lint time.
+      ".tenkacloud/**",
     ],
   },
   ...tseslint.configs.strict,
