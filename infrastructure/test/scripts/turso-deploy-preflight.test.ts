@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   type CommandResult,
   runTursoDeployPreflight,
+  type TokenProbe,
   tursoBackendSelected,
   validateTursoDeployConfig,
 } from "../../../scripts/ops/turso-deploy-preflight";
@@ -41,6 +42,19 @@ function tokenExpiringAt(epochSeconds: number): string {
   return `header.${payload}.signature`;
 }
 
+/**
+ * `select 1` の seam。 既定は成功で、 「token は読めるが Turso に拒否される」 分岐だけ
+ * 明示的に失敗させる。 network へは出ない。
+ */
+function prober(result: { ok: boolean; detail?: string } = { ok: true }) {
+  const seen: { databaseUrl: string; token: string }[] = [];
+  const probe: TokenProbe = (databaseUrl, token) => {
+    seen.push({ databaseUrl, token });
+    return Promise.resolve(result);
+  };
+  return { probe, seen };
+}
+
 function runner(responses: { describe?: CommandResult; get?: CommandResult }) {
   const calls: string[][] = [];
   const run = (command: string, args: readonly string[]): CommandResult => {
@@ -53,24 +67,28 @@ function runner(responses: { describe?: CommandResult; get?: CommandResult }) {
 }
 
 describe("turso deploy preflight — backend gate", () => {
-  it("should do nothing when the backend is dynamodb", () => {
+  it("should do nothing when the backend is dynamodb", async () => {
     const { run, calls } = runner({});
-    const result = runTursoDeployPreflight({ CDK_PARAM_CONTROL_DATA_BACKEND: "dynamodb" }, run);
+    const result = await runTursoDeployPreflight(
+      { CDK_PARAM_CONTROL_DATA_BACKEND: "dynamodb" },
+      run,
+      prober().probe,
+    );
     expect(result.ok).toBe(true);
     expect(result.output).toBe("");
     expect(calls).toHaveLength(0);
   });
 
-  it("should do nothing when no backend is selected at all", () => {
+  it("should do nothing when no backend is selected at all", async () => {
     const { run, calls } = runner({});
-    expect(runTursoDeployPreflight({}, run).ok).toBe(true);
+    expect((await runTursoDeployPreflight({}, run, prober().probe)).ok).toBe(true);
     expect(calls).toHaveLength(0);
     expect(tursoBackendSelected({})).toBe(false);
   });
 });
 
 describe("turso deploy preflight — config validation", () => {
-  it("should accept the libsql:// URL the pipeline parameter tells operators to use", () => {
+  it("should accept the libsql:// URL the pipeline parameter tells operators to use", async () => {
     // turso-live preflight は https:// しか受けないが、runtime の @libsql/client/http は
     // libsql: を受ける。deploy ゲートが実際に動く設定を拒否してはいけない。
     expect(validateTursoDeployConfig(baseEnv())).toEqual([]);
@@ -79,30 +97,30 @@ describe("turso deploy preflight — config validation", () => {
     ).toEqual([]);
   });
 
-  it("should reject a URL scheme the runtime client cannot use", () => {
+  it("should reject a URL scheme the runtime client cannot use", async () => {
     const errors = validateTursoDeployConfig(
       baseEnv({ CDK_PARAM_TURSO_DATABASE_URL: "wss://example.turso.io" }),
     );
     expect(errors.join()).toContain("libsql:// か https://");
   });
 
-  it("should reject a parameter name that is not an absolute SSM path", () => {
+  it("should reject a parameter name that is not an absolute SSM path", async () => {
     const errors = validateTursoDeployConfig(
       baseEnv({ CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME: "TenkaCloud/turso/auth-token" }),
     );
     expect(errors.join()).toContain("/ で始まる絶対パス");
   });
 
-  it("should require a region to resolve the parameter against", () => {
+  it("should require a region to resolve the parameter against", async () => {
     const errors = validateTursoDeployConfig(
       baseEnv({ AWS_REGION: "", AWS_DEFAULT_REGION: undefined }),
     );
     expect(errors.join()).toContain("AWS_REGION");
   });
 
-  it("should fail the run before calling AWS when the config is invalid", () => {
+  it("should fail the run before calling AWS when the config is invalid", async () => {
     const { run, calls } = runner({});
-    const result = runTursoDeployPreflight(
+    const result = await runTursoDeployPreflight(
       baseEnv({ CDK_PARAM_TURSO_AUTH_TOKEN_PARAMETER_NAME: "no-leading-slash" }),
       run,
     );
@@ -112,71 +130,124 @@ describe("turso deploy preflight — config validation", () => {
 });
 
 describe("turso deploy preflight — SSM parameter", () => {
-  it("should fail when the parameter does not exist in the deploy region", () => {
+  it("should fail when the parameter does not exist in the deploy region", async () => {
     const { run } = runner({ describe: ok("None") });
-    const result = runTursoDeployPreflight(baseEnv(), run);
+    const result = await runTursoDeployPreflight(baseEnv(), run, prober().probe);
     expect(result.ok).toBe(false);
     expect(result.output).toContain("存在しません");
     expect(result.output).toContain("put-parameter");
   });
 
-  it("should fail when the parameter is a plain String rather than SecureString", () => {
+  it("should fail when the parameter is a plain String rather than SecureString", async () => {
     const { run } = runner({ describe: ok("String") });
-    const result = runTursoDeployPreflight(baseEnv(), run);
+    const result = await runTursoDeployPreflight(baseEnv(), run, prober().probe);
     expect(result.ok).toBe(false);
     expect(result.output).toContain("SecureString が必要");
   });
 
-  it("should fail when describe-parameters itself is denied", () => {
+  it("should fail when describe-parameters itself is denied", async () => {
     const { run } = runner({ describe: fail("AccessDeniedException") });
-    const result = runTursoDeployPreflight(baseEnv(), run);
+    const result = await runTursoDeployPreflight(baseEnv(), run, prober().probe);
     expect(result.ok).toBe(false);
     expect(result.output).toContain("AccessDeniedException");
   });
 });
 
+/**
+ * 実運用で起きた形: token は SSM にあり `exp` も切れていないのに、rotate がうまく通って
+ * おらず Turso 側が受け付けない。metadata だけの検査は全部通過し、CodeBuild は緑で終わる。
+ */
+describe("turso deploy preflight — stored token actually works", () => {
+  it("should fail when the stored token is rejected by the database", async () => {
+    const later = Math.floor(Date.now() / 1000) + 90 * 24 * 60 * 60;
+    const { run } = runner({ get: ok(tokenExpiringAt(later)) });
+    const result = await runTursoDeployPreflight(
+      baseEnv(),
+      run,
+      prober({ ok: false, detail: "HTTP 401" }).probe,
+    );
+    expect(result.ok).toBe(false);
+    expect(result.output).toContain("接続できません");
+    expect(result.output).toContain("HTTP 401");
+    // 期限が有効なことは表示されたうえで落ちる。「exp は通ったのに使えない」が読み取れる形。
+    expect(result.output).toContain("まで有効");
+    expect(result.output).toContain("turso-token-rotate");
+    expect(result.output).toContain("500");
+  });
+
+  it("should probe the configured database with the stored token", async () => {
+    const { run } = runner({ get: ok("opaque-token") });
+    const { probe, seen } = prober();
+    const result = await runTursoDeployPreflight(baseEnv(), run, probe);
+    expect(result.ok).toBe(true);
+    expect(seen).toEqual([{ databaseUrl: "libsql://example.turso.io", token: "opaque-token" }]);
+    // token は検査に使うだけで、出力には出さない。
+    expect(result.output).not.toContain("opaque-token");
+    expect(result.output).toContain("select 1 が成功");
+  });
+
+  it("should redact the token if the failure detail echoes it back", async () => {
+    const { run } = runner({ get: ok("secret-token") });
+    const result = await runTursoDeployPreflight(
+      baseEnv(),
+      run,
+      prober({ ok: false, detail: "rejected token secret-token" }).probe,
+    );
+    expect(result.ok).toBe(false);
+    expect(result.output).not.toContain("secret-token");
+    expect(result.output).toContain("***");
+  });
+
+  it("should not probe at all on the dynamodb backend", async () => {
+    const { run } = runner({});
+    const { probe, seen } = prober();
+    await runTursoDeployPreflight({ CDK_PARAM_CONTROL_DATA_BACKEND: "dynamodb" }, run, probe);
+    expect(seen).toHaveLength(0);
+  });
+});
+
 describe("turso deploy preflight — token expiry", () => {
-  it("should fail on an expired token, naming the 401/500 consequence", () => {
+  it("should fail on an expired token, naming the 401/500 consequence", async () => {
     const { run } = runner({ get: ok(tokenExpiringAt(Math.floor(Date.now() / 1000) - 60)) });
-    const result = runTursoDeployPreflight(baseEnv(), run);
+    const result = await runTursoDeployPreflight(baseEnv(), run, prober().probe);
     expect(result.ok).toBe(false);
     expect(result.output).toContain("期限切れ");
     expect(result.output).toContain("500");
   });
 
-  it("should pass but warn when the token expires within a week", () => {
+  it("should pass but warn when the token expires within a week", async () => {
     const soon = Math.floor(Date.now() / 1000) + 2 * 24 * 60 * 60;
     const { run } = runner({ get: ok(tokenExpiringAt(soon)) });
-    const result = runTursoDeployPreflight(baseEnv(), run);
+    const result = await runTursoDeployPreflight(baseEnv(), run, prober().probe);
     expect(result.ok).toBe(true);
     expect(result.output).toContain("7日以内");
   });
 
-  it("should pass on a long-lived token", () => {
+  it("should pass on a long-lived token", async () => {
     const later = Math.floor(Date.now() / 1000) + 90 * 24 * 60 * 60;
     const { run } = runner({ get: ok(tokenExpiringAt(later)) });
-    const result = runTursoDeployPreflight(baseEnv(), run);
+    const result = await runTursoDeployPreflight(baseEnv(), run, prober().probe);
     expect(result.ok).toBe(true);
     expect(result.output).toContain("Turso preflight passed");
   });
 
-  it("should pass on a non-JWT token without claiming an expiry it cannot read", () => {
+  it("should pass on a non-JWT token without claiming an expiry it cannot read", async () => {
     const { run } = runner({ get: ok("opaque-token") });
-    const result = runTursoDeployPreflight(baseEnv(), run);
+    const result = await runTursoDeployPreflight(baseEnv(), run, prober().probe);
     expect(result.ok).toBe(true);
     expect(result.output).toContain("期限は未確認");
   });
 
-  it("should never echo the decrypted token value into its output", () => {
+  it("should never echo the decrypted token value into its output", async () => {
     const secret = "super-secret-turso-token-value";
     const { run } = runner({ get: ok(secret) });
-    const result = runTursoDeployPreflight(baseEnv(), run);
+    const result = await runTursoDeployPreflight(baseEnv(), run, prober().probe);
     expect(result.output).not.toContain(secret);
   });
 
-  it("should fail when the token cannot be decrypted", () => {
+  it("should fail when the token cannot be decrypted", async () => {
     const { run } = runner({ get: fail("AccessDeniedException: kms:Decrypt") });
-    const result = runTursoDeployPreflight(baseEnv(), run);
+    const result = await runTursoDeployPreflight(baseEnv(), run, prober().probe);
     expect(result.ok).toBe(false);
     expect(result.output).toContain("復号できません");
   });
@@ -226,12 +297,12 @@ describe("make deploy wiring", () => {
     rmSync(FIXTURE_DIR, { recursive: true, force: true });
   });
 
-  it("should be a prerequisite of `make deploy`", () => {
+  it("should be a prerequisite of `make deploy`", async () => {
     const makefile = readFileSync(join(REPO_ROOT, "Makefile"), "utf8");
     expect(makefile).toMatch(/^deploy: env-check-lite turso-deploy-preflight build/m);
   });
 
-  it("should stay silent and succeed for a dynamodb .env", () => {
+  it("should stay silent and succeed for a dynamodb .env", async () => {
     const { status, output } = runMakeTarget(
       "TENANT_ADMIN_EMAIL=test@example.com\nCDK_PARAM_CONTROL_DATA_BACKEND=dynamodb\n",
     );
@@ -239,7 +310,7 @@ describe("make deploy wiring", () => {
     expect(output).not.toContain("Turso deploy preflight");
   });
 
-  it("should read CDK_PARAM_* out of the .env and reject a bad Turso URL before deploying", () => {
+  it("should read CDK_PARAM_* out of the .env and reject a bad Turso URL before deploying", async () => {
     const { status, output } = runMakeTarget(
       [
         "TENANT_ADMIN_EMAIL=test@example.com",
