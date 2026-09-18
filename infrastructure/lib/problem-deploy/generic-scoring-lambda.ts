@@ -7,7 +7,7 @@ import * as iam from "aws-cdk-lib/aws-iam";
 import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
 import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
-import { controlDataBackendEnv } from "./control-data-backend-env.js";
+import { controlDataBackendEnv, grantTursoAuthTokenRead } from "./control-data-backend-env.js";
 import { buildAzureCredentialParameterArnPattern } from "./handlers/shared/azure-credential-store.js";
 import { buildGcpCredentialParameterArnPattern } from "./handlers/shared/gcp-credential-store.js";
 import { buildSakuraCredentialParameterArnPattern } from "./handlers/shared/sakura-credential-store.js";
@@ -282,18 +282,7 @@ export class GenericScoringLambda extends Construct {
     props.eventBus.grantPutEventsTo(this.fn);
     // [Issue #2440]: turso backend が Turso auth token を読むための SSM SecureString
     // read 権限。 未配線 (= dynamodb default) なら付与しない (`EventApiLambda` と同型)。
-    if (props.tursoAuthTokenParameterName) {
-      this.fn.addToRolePolicy(
-        new iam.PolicyStatement({
-          actions: ["ssm:GetParameter"],
-          resources: [
-            `arn:${Stack.of(this).partition}:ssm:${Stack.of(this).region}:${
-              Stack.of(this).account
-            }:parameter/${props.tursoAuthTokenParameterName.replace(/^\/+/, "")}`,
-          ],
-        }),
-      );
-    }
+    grantTursoAuthTokenRead(this.fn, props.tursoAuthTokenParameterName);
 
     // [#1410-1412] 非 AWS runtime status reconciler が per-team credential
     // (sakura/azure/gcp SecureString) を decrypt 取得する。 deploy-api-lambda と同じ prefix-scope。

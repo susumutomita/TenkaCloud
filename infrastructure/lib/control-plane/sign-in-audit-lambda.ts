@@ -1,13 +1,15 @@
 import * as path from "node:path";
-import { Duration, Stack } from "aws-cdk-lib";
+import { Duration } from "aws-cdk-lib";
 import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import { Rule } from "aws-cdk-lib/aws-events";
 import { LambdaFunction } from "aws-cdk-lib/aws-events-targets";
-import { PolicyStatement } from "aws-cdk-lib/aws-iam";
 import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
 import { auditLogEnabledEnv } from "../problem-deploy/audit-log-env.js";
-import { controlDataBackendEnv } from "../problem-deploy/control-data-backend-env.js";
+import {
+  controlDataBackendEnv,
+  grantTursoAuthTokenRead,
+} from "../problem-deploy/control-data-backend-env.js";
 import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
 
 export interface SignInAuditLambdaProps {
@@ -114,18 +116,7 @@ export class SignInAuditLambda extends Construct {
 
     // [Issue #2442]: turso backend が Turso auth token を読むための SSM SecureString
     // read 権限。 未配線 (= dynamodb default) なら付与しない (`SystemAuditWriterLambda` と同型)。
-    if (props.tursoAuthTokenParameterName) {
-      this.fn.addToRolePolicy(
-        new PolicyStatement({
-          actions: ["ssm:GetParameter"],
-          resources: [
-            `arn:${Stack.of(this).partition}:ssm:${Stack.of(this).region}:${
-              Stack.of(this).account
-            }:parameter/${props.tursoAuthTokenParameterName.replace(/^\/+/, "")}`,
-          ],
-        }),
-      );
-    }
+    grantTursoAuthTokenRead(this.fn, props.tursoAuthTokenParameterName);
 
     // CloudTrail Cognito events は default event bus に流れる (= aws.cognito-idp source)。
     // Cognito sign-in (= managed login / Hosted UI) は CloudTrail event Name = "InitiateAuth"

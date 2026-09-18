@@ -1,14 +1,13 @@
 import * as path from "node:path";
-import { Duration, Stack } from "aws-cdk-lib";
+import { Duration } from "aws-cdk-lib";
 import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import { type IEventBus, Rule } from "aws-cdk-lib/aws-events";
 import { LambdaFunction } from "aws-cdk-lib/aws-events-targets";
-import { PolicyStatement } from "aws-cdk-lib/aws-iam";
 import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
 import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
 import { auditLogEnabledEnv } from "./audit-log-env.js";
-import { controlDataBackendEnv } from "./control-data-backend-env.js";
+import { controlDataBackendEnv, grantTursoAuthTokenRead } from "./control-data-backend-env.js";
 import { SBT_ONBOARDING_DETAIL_TYPES } from "./handlers/system-audit-writer/sbt-detail-types.js";
 
 export interface SystemAuditWriterLambdaProps {
@@ -115,18 +114,7 @@ export class SystemAuditWriterLambda extends Construct {
 
     // [Issue #2442]: turso backend が Turso auth token を読むための SSM SecureString
     // read 権限。 未配線 (= dynamodb default) なら付与しない (`ExternalIdAuditLambda` と同型)。
-    if (props.tursoAuthTokenParameterName) {
-      this.fn.addToRolePolicy(
-        new PolicyStatement({
-          actions: ["ssm:GetParameter"],
-          resources: [
-            `arn:${Stack.of(this).partition}:ssm:${Stack.of(this).region}:${
-              Stack.of(this).account
-            }:parameter/${props.tursoAuthTokenParameterName.replace(/^\/+/, "")}`,
-          ],
-        }),
-      );
-    }
+    grantTursoAuthTokenRead(this.fn, props.tursoAuthTokenParameterName);
 
     // SBT 0.9.5 `EventManager.events` のうち audit に意味があるものを listen。
     // user / api-key 系の SBT events は別 issue で扱う (本 issue は tenant CRUD に絞る)。

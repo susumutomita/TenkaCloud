@@ -1,5 +1,5 @@
 import * as path from "node:path";
-import { Duration, Stack } from "aws-cdk-lib";
+import { Duration } from "aws-cdk-lib";
 import type { ITable } from "aws-cdk-lib/aws-dynamodb";
 import { Rule, Schedule } from "aws-cdk-lib/aws-events";
 import { LambdaFunction } from "aws-cdk-lib/aws-events-targets";
@@ -7,7 +7,7 @@ import * as iam from "aws-cdk-lib/aws-iam";
 import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
 import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
-import { controlDataBackendEnv } from "./control-data-backend-env.js";
+import { controlDataBackendEnv, grantTursoAuthTokenRead } from "./control-data-backend-env.js";
 
 export interface ExternalIdAuditLambdaProps {
   /**
@@ -106,18 +106,7 @@ export class ExternalIdAuditLambda extends Construct {
 
     // [Issue #2442]: turso backend が Turso auth token を読むための SSM SecureString
     // read 権限。 未配線 (= dynamodb default) なら付与しない (`EventApiLambda` と同型)。
-    if (props.tursoAuthTokenParameterName) {
-      this.fn.addToRolePolicy(
-        new iam.PolicyStatement({
-          actions: ["ssm:GetParameter"],
-          resources: [
-            `arn:${Stack.of(this).partition}:ssm:${Stack.of(this).region}:${
-              Stack.of(this).account
-            }:parameter/${props.tursoAuthTokenParameterName.replace(/^\/+/, "")}`,
-          ],
-        }),
-      );
-    }
+    grantTursoAuthTokenRead(this.fn, props.tursoAuthTokenParameterName);
 
     // 1 日 1 回起動。`Duration.days(1)` は EventBridge では `rate(1 day)` に展開される。
     new Rule(this, "Schedule", {
