@@ -31,6 +31,8 @@ describe("CompetitorAccountsTable", () => {
         items={items}
         verifyInFlight={null}
         canMutateTenant={true}
+        verifyAllProgress={null}
+        onVerifyAll={vi.fn()}
         onVerify={onVerify}
         onRequestDelete={onRequestDelete}
         onAdd={vi.fn()}
@@ -56,6 +58,8 @@ describe("CompetitorAccountsTable", () => {
         items={items}
         verifyInFlight="acct-1"
         canMutateTenant={true}
+        verifyAllProgress={null}
+        onVerifyAll={vi.fn()}
         onVerify={vi.fn()}
         onRequestDelete={vi.fn()}
         onAdd={vi.fn()}
@@ -72,6 +76,8 @@ describe("CompetitorAccountsTable", () => {
         items={[]}
         verifyInFlight={null}
         canMutateTenant={true}
+        verifyAllProgress={null}
+        onVerifyAll={vi.fn()}
         onVerify={vi.fn()}
         onRequestDelete={vi.fn()}
         onAdd={onAdd}
@@ -89,6 +95,8 @@ describe("CompetitorAccountsTable", () => {
         items={items}
         verifyInFlight={null}
         canMutateTenant={false}
+        verifyAllProgress={null}
+        onVerifyAll={vi.fn()}
         onVerify={vi.fn()}
         onRequestDelete={vi.fn()}
         onAdd={vi.fn()}
@@ -96,5 +104,63 @@ describe("CompetitorAccountsTable", () => {
     );
     expect(screen.getByRole("button", { name: "competitor_accounts.verify_again" })).toBeDisabled();
     expect(screen.getAllByRole("button", { name: "competitor_accounts.delete" })[0]).toBeDisabled();
+  });
+});
+
+/**
+ * Bulk verify's entry point only appears while something is unverified, and
+ * while it runs it has to say how far along it is — a row-by-row pass over a
+ * screenful of accounts is long enough that a bare spinner reads as a hang.
+ */
+describe("CompetitorAccountsTable bulk verify", () => {
+  it("should offer bulk verify with the unverified count and fire the callback", () => {
+    const onVerifyAll = vi.fn();
+    render(
+      <CompetitorAccountsTable
+        items={items}
+        verifyInFlight={null}
+        verifyAllProgress={null}
+        canMutateTenant
+        onVerify={vi.fn()}
+        onVerifyAll={onVerifyAll}
+        onRequestDelete={vi.fn()}
+        onAdd={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByText("competitor_accounts.verify_all"));
+    expect(onVerifyAll).toHaveBeenCalledTimes(1);
+  });
+
+  it("should show progress instead of the count while it runs", () => {
+    render(
+      <CompetitorAccountsTable
+        items={items}
+        verifyInFlight={null}
+        verifyAllProgress={{ done: 1, total: 3 }}
+        canMutateTenant
+        onVerify={vi.fn()}
+        onVerifyAll={vi.fn()}
+        onRequestDelete={vi.fn()}
+        onAdd={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("competitor_accounts.verify_all_progress")).toBeTruthy();
+    expect(screen.queryByText("competitor_accounts.verify_all")).toBeNull();
+  });
+
+  it("should not offer bulk verify when every account is already verified", () => {
+    render(
+      <CompetitorAccountsTable
+        items={[account({ awsAccountId: "acct-1", verified: true })]}
+        verifyInFlight={null}
+        verifyAllProgress={null}
+        canMutateTenant
+        onVerify={vi.fn()}
+        onVerifyAll={vi.fn()}
+        onRequestDelete={vi.fn()}
+        onAdd={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText("competitor_accounts.verify_all")).toBeNull();
   });
 });

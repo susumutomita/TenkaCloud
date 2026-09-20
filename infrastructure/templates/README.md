@@ -101,9 +101,29 @@ TenkaCloud 側はこの ARN と ExternalId を用いて AssumeRole し、問題 
      --query 'Summaries[?Status==`CURRENT`].Account' --output text
    ```
 
-4. **TenkaCloud 側に登録する。** 集めたアカウント ID を Competitor Accounts に登録し、
-   各行の **検証** (STS AssumeRole の疎通確認) を通す。 登録は現状 1 アカウントずつで、
-   JSON 等による一括登録は未対応。 一括登録が要る規模なら Issue で扱う。
+4. **TenkaCloud 側に登録する。** `application-admin-console` の Competitor Accounts で
+   **「JSON で一括登録」** を開き、 手順 3 で集めたアカウント ID をそのまま貼り付ける
+   (改行・空白・カンマ区切りのどれでも読める)。 region と IAM Role 名は画面の 2 つの
+   入力が全行のデフォルト値になるので、 StackSet に渡した `RoleName` と揃える。
+
+   alias や行ごとの region を付けたい場合は JSON でも貼れる。
+
+   ```json
+   {
+     "defaults": { "region": "ap-northeast-1", "competitorRoleName": "TenkaCloud-CompetitorDeploy-Role" },
+     "accounts": [
+       { "awsAccountId": "111111111111", "alias": "Team Alpha" },
+       { "awsAccountId": "222222222222", "alias": "Team Bravo" }
+     ]
+   }
+   ```
+
+   結果は**行ごと**に出る (登録 / 登録済み / 入力エラー / 失敗)。 1 行が登録済みでも
+   他の行は登録されるので、 差分だけを貼り直せる。 1 回に登録できるのは 100 件まで。
+
+5. **まとめて検証する。** 登録後、 一覧の **「未検証 N 件をまとめて Verify」** で
+   STS AssumeRole の疎通確認を全行に対して順に実行する。 失敗した行は未検証のまま
+   残るので、 その行だけ個別に追える。
 
 #### 撤回
 

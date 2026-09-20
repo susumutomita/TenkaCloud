@@ -1,6 +1,7 @@
 import { LITE_DRILL_CHECKPOINTS } from "@tenkacloud/portal-contracts";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { BulkCreateCompetitorAccountsResponse } from "../../src/api/competitor-accounts-client";
 import type { AppConfig } from "../../src/config";
 
 /**
@@ -23,8 +24,11 @@ vi.mock("../../src/pages/competitor-accounts/TeamCloudCredentialsPanel", () => (
 }));
 vi.mock("../../src/pages/competitor-accounts/CompetitorAccountsTable", () => ({
   // biome-ignore lint/suspicious/noExplicitAny: stub props。
-  CompetitorAccountsTable: ({ onVerify, onRequestDelete, onAdd }: any) => (
+  CompetitorAccountsTable: ({ onVerify, onVerifyAll, onRequestDelete, onAdd }: any) => (
     <div data-testid="accounts-table">
+      <button type="button" onClick={onVerifyAll}>
+        stub-verify-all
+      </button>
       <button type="button" onClick={() => onVerify("acct-1")}>
         stub-verify
       </button>
@@ -51,6 +55,67 @@ vi.mock("../../src/pages/competitor-accounts/AddAccountModal", () => ({
       </div>
     ) : null,
 }));
+/**
+ * Typed rather than `any`: the repo's eslint ceiling caps this file's
+ * `no-explicit-any` count, and the props this stub needs are few enough to name.
+ */
+interface BulkImportModalStubProps {
+  readonly visible: boolean;
+  readonly onCompleted: (
+    response: BulkCreateCompetitorAccountsResponse,
+    competitorRoleName: string,
+  ) => void;
+  readonly onDismiss: () => void;
+}
+
+vi.mock("../../src/pages/competitor-accounts/BulkImportModal", () => ({
+  BulkImportModal: ({ visible, onCompleted, onDismiss }: BulkImportModalStubProps) =>
+    visible ? (
+      <div data-testid="bulk-modal">
+        <button
+          type="button"
+          onClick={() =>
+            onCompleted(
+              {
+                created: 2,
+                duplicate: 0,
+                invalid: 0,
+                failed: 0,
+                results: [],
+                externalId: "ext-1",
+                tenkaCloudAccountId: "111111111111",
+              },
+              "TenkaCloud-acme-deploy-Role",
+            )
+          }
+        >
+          stub-bulk-success
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            onCompleted(
+              {
+                created: 0,
+                duplicate: 1,
+                invalid: 0,
+                failed: 0,
+                results: [],
+                tenkaCloudAccountId: "111111111111",
+              },
+              "TenkaCloud-acme-deploy-Role",
+            )
+          }
+        >
+          stub-bulk-nothing-created
+        </button>
+        <button type="button" onClick={onDismiss}>
+          stub-bulk-dismiss
+        </button>
+      </div>
+    ) : null,
+}));
+
 vi.mock("../../src/pages/competitor-accounts/SecretRevealModal", () => ({
   // biome-ignore lint/suspicious/noExplicitAny: stub props。
   SecretRevealModal: ({ secret, onDismiss }: any) =>
@@ -81,6 +146,7 @@ const { CompetitorAccountsPage } = await import("../../src/pages/CompetitorAccou
 
 const remove = vi.fn().mockResolvedValue(undefined);
 const verify = vi.fn();
+const verifyAll = vi.fn();
 const reload = vi.fn().mockResolvedValue(undefined);
 const clearLastVerified = vi.fn();
 const hookState = (over: Record<string, unknown> = {}) => ({
@@ -91,8 +157,10 @@ const hookState = (over: Record<string, unknown> = {}) => ({
   canMutateTenant: true,
   lastVerified: null,
   clearLastVerified,
+  verifyAllProgress: null,
   reload,
   verify,
+  verifyAll,
   remove,
   ...over,
 });
@@ -251,5 +319,47 @@ describe("CompetitorAccountsPage", () => {
     expect(dismiss).not.toBeNull();
     fireEvent.click(dismiss as HTMLElement);
     expect(clearLastVerified).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * Bulk import hands out one ExternalId for the whole request, so the page shows
+ * the shared values **after** the result table is dismissed rather than stacking
+ * a second modal over it — and shows nothing when no row was created, since
+ * there is then no new bootstrap to hand anyone.
+ */
+describe("CompetitorAccountsPage bulk import", () => {
+  it("should open the bulk modal from the header button", () => {
+    renderPage();
+    expect(screen.queryByTestId("bulk-modal")).toBeNull();
+    fireEvent.click(screen.getByText("competitor_accounts.bulk_button"));
+    expect(screen.getByTestId("bulk-modal")).toBeTruthy();
+  });
+
+  it("should reveal the shared values only once the result table is dismissed", async () => {
+    renderPage();
+    fireEvent.click(screen.getByText("competitor_accounts.bulk_button"));
+    fireEvent.click(screen.getByText("stub-bulk-success"));
+
+    // Still on the result table: the two modals never stack.
+    expect(screen.queryByTestId("secret-modal")).toBeNull();
+    await waitFor(() => expect(reload).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByText("stub-bulk-dismiss"));
+    expect(screen.getByTestId("secret-modal")).toBeTruthy();
+  });
+
+  it("should reveal nothing when the import created no account", () => {
+    renderPage();
+    fireEvent.click(screen.getByText("competitor_accounts.bulk_button"));
+    fireEvent.click(screen.getByText("stub-bulk-nothing-created"));
+    fireEvent.click(screen.getByText("stub-bulk-dismiss"));
+    expect(screen.queryByTestId("secret-modal")).toBeNull();
+  });
+
+  it("should drive bulk verify from the table", () => {
+    renderPage();
+    fireEvent.click(screen.getByText("stub-verify-all"));
+    expect(verifyAll).toHaveBeenCalledTimes(1);
   });
 });

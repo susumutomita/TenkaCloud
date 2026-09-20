@@ -22,8 +22,14 @@ export interface UseCompetitorAccountsResult {
    */
   lastVerified: CompetitorAccountSummary | null;
   clearLastVerified: () => void;
+  /**
+   * 一括 verify の進捗 (`{done, total}`)。 実行中でなければ null。
+   * 一括登録した直後は未検証行がまとめて並ぶので、 1 行ずつ押させない。
+   */
+  verifyAllProgress: { readonly done: number; readonly total: number } | null;
   reload: () => Promise<void>;
   verify: (awsAccountId: string) => Promise<void>;
+  verifyAll: () => Promise<void>;
   remove: (awsAccountId: string) => Promise<void>;
 }
 
@@ -35,6 +41,10 @@ export function useCompetitorAccounts(config: AppConfig): UseCompetitorAccountsR
   const [verifyInFlight, setVerifyInFlight] = useState<string | null>(null);
   const [deleteInFlight, setDeleteInFlight] = useState(false);
   const [lastVerified, setLastVerified] = useState<CompetitorAccountSummary | null>(null);
+  const [verifyAllProgress, setVerifyAllProgress] = useState<{
+    readonly done: number;
+    readonly total: number;
+  } | null>(null);
 
   const reload = useCallback(async () => {
     if (!apiClient) return;
@@ -73,6 +83,41 @@ export function useCompetitorAccounts(config: AppConfig): UseCompetitorAccountsR
 
   const clearLastVerified = useCallback(() => setLastVerified(null), []);
 
+  /**
+   * 未検証の account をまとめて verify する。
+   *
+   * 専用の一括 endpoint は作らない。 verify は 1 件ごとに STS AssumeRole を 1 回投げる
+   * 実 API 呼び出しで、 それを Lambda 側で N 件ぶん回すと実行時間が件数に比例して
+   * 伸び、 途中で timeout したとき 「どこまで検証したか」 が応答に残らない。 既存の
+   * 1 件用 endpoint を**逐次**呼ぶと、 進捗を画面に出せて、 途中で失敗しても残りが続く。
+   *
+   * 逐次なのは STS を同時に叩いて throttle させないため。 失敗した行は verified=false の
+   * まま残るので、 個別の Verify button で追える。
+   */
+  const verifyAll = useCallback(async () => {
+    if (!apiClient || !canMutate) return;
+    const targets = (items ?? []).filter((item) => !item.verified);
+    if (targets.length === 0) return;
+    setVerifyAllProgress({ done: 0, total: targets.length });
+    let lastError: unknown;
+    let done = 0;
+    for (const target of targets) {
+      try {
+        await verifyCompetitorAccount(apiClient, target.awsAccountId);
+      } catch (err) {
+        // 1 件の失敗で残りを止めない。 最後の理由だけ表示し、 詳細は行の状態が持つ。
+        lastError = err;
+      }
+      done += 1;
+      setVerifyAllProgress({ done, total: targets.length });
+    }
+    setVerifyAllProgress(null);
+    // reload() は成功すると setError(null) するので、 失敗の表示は **その後** に置く。
+    // 逆順だと 「1 行落ちたのに画面は何も言わない」 になる。
+    await reload();
+    if (lastError !== undefined) setError(toFriendlyError(lastError));
+  }, [apiClient, canMutate, items, reload]);
+
   const remove = useCallback(
     async (awsAccountId: string) => {
       if (!apiClient || !canMutate) return;
@@ -97,8 +142,10 @@ export function useCompetitorAccounts(config: AppConfig): UseCompetitorAccountsR
     canMutateTenant: canMutate,
     lastVerified,
     clearLastVerified,
+    verifyAllProgress,
     reload,
     verify,
+    verifyAll,
     remove,
   };
 }

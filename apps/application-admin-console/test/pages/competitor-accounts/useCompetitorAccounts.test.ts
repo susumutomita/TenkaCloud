@@ -197,3 +197,105 @@ describe("useCompetitorAccounts", () => {
     expect(result.current.deleteInFlight).toBe(false);
   });
 });
+
+/**
+ * Bulk verify exists because a bulk import leaves a screenful of unverified
+ * rows behind. It drives the existing one-account endpoint rather than a new
+ * bulk one: a Lambda looping N AssumeRole calls grows with N and, on timeout,
+ * leaves no record of how far it got, while driving it here shows progress and
+ * survives a row that fails.
+ */
+describe("useCompetitorAccounts verifyAll", () => {
+  const unverified = [
+    { awsAccountId: "111111111111", verified: false },
+    { awsAccountId: "222222222222", verified: true },
+    { awsAccountId: "333333333333", verified: false },
+  ];
+
+  it("should verify only the unverified rows, one at a time", async () => {
+    mockUseApiClient.mockReturnValue(FAKE_CLIENT);
+    mockList.mockResolvedValue({ items: unverified });
+    mockVerify.mockResolvedValue({ awsAccountId: "111111111111", verified: true });
+
+    const { result } = renderHook(() => useCompetitorAccounts(config));
+    await waitFor(() => expect(result.current.items).not.toBeNull());
+    await act(async () => {
+      await result.current.verifyAll();
+    });
+
+    expect(mockVerify.mock.calls.map(([, id]) => id)).toEqual(["111111111111", "333333333333"]);
+    expect(result.current.verifyAllProgress).toBeNull();
+  });
+
+  it("should keep going when one row fails and surface the failure", async () => {
+    mockUseApiClient.mockReturnValue(FAKE_CLIENT);
+    mockList.mockResolvedValue({ items: unverified });
+    mockVerify
+      .mockRejectedValueOnce(new Error("AssumeRole denied"))
+      .mockResolvedValueOnce({ awsAccountId: "333333333333", verified: true });
+
+    const { result } = renderHook(() => useCompetitorAccounts(config));
+    await waitFor(() => expect(result.current.items).not.toBeNull());
+    await act(async () => {
+      await result.current.verifyAll();
+    });
+
+    // The second unverified row was still attempted after the first threw.
+    expect(mockVerify.mock.calls.length).toBe(2);
+    expect(result.current.error).not.toBeNull();
+  });
+
+  it("should clear a previous error when every row verified", async () => {
+    mockUseApiClient.mockReturnValue(FAKE_CLIENT);
+    mockList.mockResolvedValue({ items: unverified });
+    mockVerify.mockResolvedValue({ awsAccountId: "111111111111", verified: true });
+
+    const { result } = renderHook(() => useCompetitorAccounts(config));
+    await waitFor(() => expect(result.current.items).not.toBeNull());
+    await act(async () => {
+      await result.current.verifyAll();
+    });
+    expect(result.current.error).toBeNull();
+  });
+
+  it("should do nothing when there is nothing left to verify", async () => {
+    mockUseApiClient.mockReturnValue(FAKE_CLIENT);
+    mockList.mockResolvedValue({ items: [{ awsAccountId: "222222222222", verified: true }] });
+
+    const { result } = renderHook(() => useCompetitorAccounts(config));
+    await waitFor(() => expect(result.current.items).not.toBeNull());
+    await act(async () => {
+      await result.current.verifyAll();
+    });
+
+    expect(mockVerify).not.toHaveBeenCalled();
+    expect(result.current.verifyAllProgress).toBeNull();
+  });
+
+  it("should do nothing before the list has loaded", async () => {
+    // `items` is null until the first reload resolves; verifyAll must not treat
+    // that as "nothing to verify happened to succeed".
+    mockUseApiClient.mockReturnValue(FAKE_CLIENT);
+    mockList.mockReturnValue(new Promise(() => undefined));
+
+    const { result } = renderHook(() => useCompetitorAccounts(config));
+    await act(async () => {
+      await result.current.verifyAll();
+    });
+
+    expect(mockVerify).not.toHaveBeenCalled();
+  });
+
+  it("should not verify anything for a read-only operator", async () => {
+    mockUseApiClient.mockReturnValue(READ_ONLY_CLIENT);
+    mockList.mockResolvedValue({ items: unverified });
+
+    const { result } = renderHook(() => useCompetitorAccounts(config));
+    await waitFor(() => expect(result.current.items).not.toBeNull());
+    await act(async () => {
+      await result.current.verifyAll();
+    });
+
+    expect(mockVerify).not.toHaveBeenCalled();
+  });
+});

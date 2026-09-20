@@ -6,6 +6,7 @@ import SpaceBetween from "@cloudscape-design/components/space-between";
 import Spinner from "@cloudscape-design/components/spinner";
 import { useEffect, useState } from "react";
 import type {
+  BulkCreateCompetitorAccountsResponse,
   CompetitorAccountSummary,
   CreateCompetitorAccountResponse,
 } from "../api/competitor-accounts-client";
@@ -16,6 +17,7 @@ import { useT } from "../i18n";
 import { isBootstrapUrlMissing } from "../lib/competitor-bootstrap";
 import { liteDrillCheckpointCode, markLiteDrillCheckpointShown } from "../lib/lite-drill";
 import { AddAccountModal } from "./competitor-accounts/AddAccountModal";
+import { BulkImportModal } from "./competitor-accounts/BulkImportModal";
 import { CompetitorAccountDeleteModal } from "./competitor-accounts/CompetitorAccountDeleteModal";
 import { CompetitorAccountsTable } from "./competitor-accounts/CompetitorAccountsTable";
 import { SecretRevealModal } from "./competitor-accounts/SecretRevealModal";
@@ -32,8 +34,10 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
     canMutateTenant,
     lastVerified,
     clearLastVerified,
+    verifyAllProgress,
     reload,
     verify,
+    verifyAll,
     remove,
   } = useCompetitorAccounts(config);
   // Issue #2696: Lite mode (tenantId="local") でだけ、 検証成功直後にオンボーディング
@@ -45,6 +49,11 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
   // effect 内で行い、 結果を local state に固定することでこの race を避ける。
   const [revealedDrillCode, setRevealedDrillCode] = useState<string | undefined>(undefined);
   const [addModalVisible, setAddModalVisible] = useState(false);
+  const [bulkModalVisible, setBulkModalVisible] = useState(false);
+  // 一括登録が 1 件でも作ったときに操作者へ渡す 3 値。 結果表を読み終えて modal を
+  // 閉じた時点で出す (= 2 枚の modal を重ねない)。
+  const [pendingBulkSecret, setPendingBulkSecret] =
+    useState<CreateCompetitorAccountResponse | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<CompetitorAccountSummary | null>(null);
   const [showSecret, setShowSecret] = useState<CreateCompetitorAccountResponse | null>(null);
 
@@ -78,13 +87,18 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
         variant="h1"
         description={t("competitor_accounts.description")}
         actions={
-          <Button
-            variant="primary"
-            disabled={!canMutateTenant}
-            onClick={() => setAddModalVisible(true)}
-          >
-            {t("competitor_accounts.add_button")}
-          </Button>
+          <SpaceBetween direction="horizontal" size="xs">
+            <Button disabled={!canMutateTenant} onClick={() => setBulkModalVisible(true)}>
+              {t("competitor_accounts.bulk_button")}
+            </Button>
+            <Button
+              variant="primary"
+              disabled={!canMutateTenant}
+              onClick={() => setAddModalVisible(true)}
+            >
+              {t("competitor_accounts.add_button")}
+            </Button>
+          </SpaceBetween>
         }
       >
         {t("competitor_accounts.title")}
@@ -111,8 +125,10 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
       <CompetitorAccountsTable
         items={items ?? []}
         verifyInFlight={verifyInFlight}
+        verifyAllProgress={verifyAllProgress}
         canMutateTenant={canMutateTenant}
         onVerify={(awsAccountId) => void verify(awsAccountId)}
+        onVerifyAll={() => void verifyAll()}
         onRequestDelete={setDeleteTarget}
         onAdd={() => setAddModalVisible(true)}
       />
@@ -129,6 +145,37 @@ export function CompetitorAccountsPage({ config }: { config: AppConfig }) {
           setAddModalVisible(false);
           setShowSecret(res);
           void reload();
+        }}
+      />
+
+      <BulkImportModal
+        config={config}
+        visible={bulkModalVisible}
+        onDismiss={() => {
+          setBulkModalVisible(false);
+          // 結果表を閉じたあとで、 競技者に渡す 3 値を既存の共有 modal で出す。
+          // ExternalId / TenkaCloudAccountId / RoleName は tenant 単位の値なので、
+          // 何件登録しても配る内容は 1 組で足りる。
+          if (pendingBulkSecret) {
+            setShowSecret(pendingBulkSecret);
+            setPendingBulkSecret(null);
+          }
+        }}
+        onCompleted={(res: BulkCreateCompetitorAccountsResponse, competitorRoleName: string) => {
+          // modal は結果表を出したまま残す (= どの行が入ったかを閉じる前に読ませる)。
+          // 一覧だけ先に更新しておく。
+          void reload();
+          if (!res.externalId) return;
+          setPendingBulkSecret({
+            awsAccountId: "",
+            region: "",
+            competitorRoleName,
+            verified: false,
+            createdAt: "",
+            updatedAt: "",
+            externalId: res.externalId,
+            tenkaCloudAccountId: res.tenkaCloudAccountId,
+          });
         }}
       />
 

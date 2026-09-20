@@ -7,6 +7,10 @@ import type {
 import { deleteExternalId, ensureExternalId } from "../shared/external-id-store.js";
 import type { CompetitorAccountsSharedResources } from "./shared.js";
 import type {
+  BulkCompetitorAccountEntry,
+  BulkCompetitorAccountResult,
+  BulkCreateCompetitorAccountsRequest,
+  BulkCreateCompetitorAccountsResponse,
   CompetitorAccountSummary,
   CreateCompetitorAccountRequest,
   CreateCompetitorAccountResponse,
@@ -117,6 +121,153 @@ export async function createCompetitorAccount(
   return {
     ...toSummary(record),
     externalId,
+    tenkaCloudAccountId: shared.tenkaCloudAccountId,
+  };
+}
+
+/**
+ * 送る前に弾ける行を判定する。 repository へ行かせないのは、 「JSON の中に同じ行が
+ * 2 回ある」 「Role 名がどこにも無い」 が書き込みの失敗ではなく入力の誤りだから。
+ */
+function rejectBulkEntry(
+  entry: BulkCompetitorAccountEntry,
+  req: BulkCreateCompetitorAccountsRequest,
+  seen: ReadonlySet<string>,
+): BulkCompetitorAccountResult | undefined {
+  const awsAccountId = entry.awsAccountId;
+  if (seen.has(awsAccountId)) {
+    return {
+      outcome: "invalid",
+      awsAccountId,
+      message: "duplicate entry within this request",
+    };
+  }
+  if (!(entry.competitorRoleName ?? req.defaults?.competitorRoleName)) {
+    // 単体 create が zod default を持たないのと同じ理由 (= 暗黙の名前衝突を作らない)。
+    return {
+      outcome: "invalid",
+      awsAccountId,
+      message: "competitorRoleName is required on the entry or in defaults",
+    };
+  }
+  return undefined;
+}
+
+interface BulkEntryWriteContext {
+  readonly entry: BulkCompetitorAccountEntry;
+  readonly defaults: BulkCreateCompetitorAccountsRequest["defaults"];
+  readonly tenantId: string;
+  readonly createdBy: string;
+  readonly nowIso: string;
+}
+
+/** 1 行を書く。 書き込みの失敗はその行の結果にして、 呼び出し側の loop は止めない。 */
+async function writeBulkEntry(
+  repository: CompetitorAccountsRepository,
+  ctx: BulkEntryWriteContext,
+): Promise<BulkCompetitorAccountResult> {
+  const { entry, defaults } = ctx;
+  const awsAccountId = entry.awsAccountId;
+  const record: CompetitorAccountRecord = {
+    tenantId: ctx.tenantId,
+    awsAccountId,
+    region: entry.region ?? defaults?.region ?? "ap-northeast-1",
+    // rejectBulkEntry が先に弾いているのでここでは必ず値がある。
+    competitorRoleName: (entry.competitorRoleName ?? defaults?.competitorRoleName) as string,
+    ...(entry.alias !== undefined ? { alias: entry.alias } : {}),
+    verified: false,
+    createdAt: ctx.nowIso,
+    updatedAt: ctx.nowIso,
+    createdBy: ctx.createdBy,
+  };
+
+  try {
+    const outcome = await repository.createAccount(record);
+    if (outcome.outcome === "conflict") {
+      return {
+        outcome: "duplicate",
+        awsAccountId,
+        message: "already registered for this tenant",
+      };
+    }
+    return { outcome: "created", awsAccountId };
+  } catch (err) {
+    // 1 行の write 失敗で残りを捨てない。 理由は行に載せ、 全体は 200 で返す
+    // (= どの行が入ってどの行が入らなかったかを operator が読める)。
+    const message = err instanceof Error ? `${err.name}: ${err.message}` : "unknown error";
+    console.error("[competitor-accounts] bulk row failed", { awsAccountId, message });
+    return { outcome: "failed", awsAccountId, message };
+  }
+}
+
+/**
+ * 複数 account の一括登録 (Issue: Organizations 規模の登録が 1 件ずつで大変というフィードバック)。
+ *
+ * 単体 create との違いは 2 点で、どちらも「多数行」という前提から来ている。
+ *
+ * 1. **ExternalId を request ごとに 1 度だけ確保する。** 単体 create は行ごとに
+ *    {@link ensureExternalId} を呼ぶが、 tenant 初回の一括登録でこれを行ごとに並列で
+ *    呼ぶと `PutParameter(Overwrite: false)` が互いに衝突する。 ここでは先に 1 度だけ
+ *    確保し、 全行がその値を共有する (ExternalId は元々 tenant 単位なので意味は同じ)。
+ * 2. **1 行の失敗で全体を落とさない。** 40 行中 1 行が登録済みだからといって残り 39 行を
+ *    捨てるのは運用上まず正しくない。 行ごとに outcome を返し、 caller (route) が
+ *    それぞれ audit を書く。
+ *
+ * 行は**逐次**処理する。 DDB の書き込みを同時に多数投げると、 容量を絞った table では
+ * throttle して「一部だけ入った」状態になりうる。 100 行上限 (schema 側) なら逐次でも
+ * Lambda の実行時間には収まる。
+ */
+export async function bulkCreateCompetitorAccounts(
+  shared: CompetitorAccountsSharedResources,
+  ctx: CreateCompetitorAccountContext,
+  req: BulkCreateCompetitorAccountsRequest,
+  onCreated?: (awsAccountId: string) => void,
+  onRejected?: (awsAccountId: string, outcome: BulkCompetitorAccountResult["outcome"]) => void,
+): Promise<BulkCreateCompetitorAccountsResponse> {
+  const { externalId } = await ensureExternalId(
+    { ssm: shared.ssm as SSMClient, env: shared.env },
+    ctx.tenantId,
+  );
+
+  const nowIso = new Date(ctx.nowMs).toISOString();
+  const repository = await resolveRepository(shared);
+  const results: BulkCompetitorAccountResult[] = [];
+  const seen = new Set<string>();
+
+  for (const entry of req.accounts) {
+    const awsAccountId = entry.awsAccountId;
+    const rejection = rejectBulkEntry(entry, req, seen);
+    if (rejection) {
+      results.push(rejection);
+      onRejected?.(awsAccountId, rejection.outcome);
+      continue;
+    }
+    seen.add(awsAccountId);
+
+    const result = await writeBulkEntry(repository, {
+      entry,
+      defaults: req.defaults,
+      tenantId: ctx.tenantId,
+      createdBy: ctx.createdBy,
+      nowIso,
+    });
+    results.push(result);
+    if (result.outcome === "created") onCreated?.(awsAccountId);
+    else onRejected?.(awsAccountId, result.outcome);
+  }
+
+  const count = (outcome: BulkCompetitorAccountResult["outcome"]): number =>
+    results.filter((result) => result.outcome === outcome).length;
+  const created = count("created");
+
+  return {
+    results,
+    created,
+    duplicate: count("duplicate"),
+    invalid: count("invalid"),
+    failed: count("failed"),
+    // 1 件も作れていないなら配る bootstrap が無いので、 secret を載せない。
+    ...(created > 0 ? { externalId } : {}),
     tenkaCloudAccountId: shared.tenkaCloudAccountId,
   };
 }
