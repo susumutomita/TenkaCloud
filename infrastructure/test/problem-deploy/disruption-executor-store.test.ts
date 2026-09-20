@@ -164,7 +164,7 @@ describe("resolveDeployment (#1419)", () => {
       Items: [
         {
           ...completeRow,
-          competitorRoleArn: "arn:aws:iam::672726205532:role/TenkaCloud-local-deploy-Role",
+          competitorRoleArn: "arn:aws:iam::123456789012:role/TenkaCloud-local-deploy-Role",
           externalIdParameterName: undefined,
         },
       ],

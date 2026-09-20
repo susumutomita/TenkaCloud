@@ -90,7 +90,7 @@ const COGNITO_DOMAIN_PREFIX_MAX_LENGTH = 63;
  *
  * 目的は **pooled の既存 domain を絶対に動かさないこと**。 `buildCognitoDomainPrefix` は
  * pooled と silo で共有されており、 書式を無条件に変えると
- * `tenkacloud-development-pooled-672726205532` (42 字、 稼働中) が別名になり
+ * `tenkacloud-development-pooled-<accountId>` (42 字、 稼働中) が別名になり
  * `AWS::Cognito::UserPoolDomain` が **REPLACE** されて、 pooled tenant の Hosted UI ログイン
  * URL が変わってしまう。 だから「収まるならそのまま」を厳守する。
  *

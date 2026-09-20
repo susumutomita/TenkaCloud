@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { buildCognitoDomainPrefix } from "../../lib/tenant-template/identity-provider";
 
 const COGNITO_LIMIT = 63;
-const ACCOUNT_ID = "672726205532";
+// 実アカウント ID ではなくダミー。 pin したいのは書式と長さ (12 桁) であって値ではない。
+const ACCOUNT_ID = "123456789012";
 
 /**
  * Cognito の `domain` は 63 字上限で、 超えると `CreateUserPoolDomain` が
@@ -16,7 +17,7 @@ describe("buildCognitoDomainPrefix", () => {
     // AWS::Cognito::UserPoolDomain が REPLACE され、 pooled tenant の Hosted UI ログイン URL が
     // 変わってしまう。 silo を直すために format を触るとき、 pooled を巻き込まないための番人。
     expect(buildCognitoDomainPrefix("development", "pooled", ACCOUNT_ID)).toBe(
-      "tenkacloud-development-pooled-672726205532",
+      "tenkacloud-development-pooled-123456789012",
     );
   });
 
