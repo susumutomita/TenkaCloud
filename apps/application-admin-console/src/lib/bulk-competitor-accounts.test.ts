@@ -71,6 +71,21 @@ describe("parseBulkAccountsInput", () => {
     expect(res.accounts[1]).toEqual({ awsAccountId: "333333333333", region: "us-east-1" });
   });
 
+  it("should keep a per-entry role name alongside the defaults", () => {
+    const res = parseBulkAccountsInput(
+      JSON.stringify({
+        defaults: { competitorRoleName: "Default-Role" },
+        accounts: [{ awsAccountId: "222222222222", competitorRoleName: "Row-Role" }],
+      }),
+    );
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.accounts[0]).toEqual({
+      awsAccountId: "222222222222",
+      competitorRoleName: "Row-Role",
+    });
+  });
+
   it("should read a bare array, including plain ID strings inside it", () => {
     const res = parseBulkAccountsInput(
       JSON.stringify(["222222222222", { awsAccountId: "333333333333", alias: "Team B" }]),
@@ -107,6 +122,22 @@ describe("parseBulkAccountsInput", () => {
 
   it("should reject empty input", () => {
     expect(parseBulkAccountsInput("   ").ok).toBe(false);
+  });
+
+  it("should reject input that is only separators", () => {
+    // Splitting leaves no tokens at all, which is a different path from a
+    // string that was already blank before splitting.
+    const res = parseBulkAccountsInput(",,, \n ,");
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.errors.join("\n")).toContain("空");
+  });
+
+  it("should reject a bad ID given as a bare string inside the array", () => {
+    const res = parseBulkAccountsInput(JSON.stringify({ accounts: ["12345"] }));
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.errors.join("\n")).toContain("12345");
   });
 
   it("should reject JSON whose accounts field is not an array", () => {

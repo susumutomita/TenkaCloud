@@ -135,9 +135,16 @@ function parseEntry(
   };
 }
 
-/** `[...]` をそのまま、 `{accounts: [...]}` はその field を accounts の候補として返す。 */
+/**
+ * `[...]` をそのまま、 `{accounts: [...]}` はその field を accounts の候補として返す。
+ *
+ * 呼ばれるのは入力が `{` / `[` で始まり、かつ `JSON.parse` が成功したときだけなので、
+ * `json` は配列かオブジェクトのどちらかにしかならない。 `isRecord` の false 側は型を
+ * 絞るために要るが実行時には到達しない。
+ */
 function resolveRawAccounts(json: unknown): unknown {
   if (Array.isArray(json)) return json;
+  /* v8 ignore next */
   return isRecord(json) ? json.accounts : undefined;
 }
 

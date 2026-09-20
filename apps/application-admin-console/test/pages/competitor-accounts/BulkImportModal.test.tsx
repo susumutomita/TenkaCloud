@@ -156,6 +156,80 @@ describe("BulkImportModal", () => {
     expect(mocks.bulkCreateCompetitorAccounts).not.toHaveBeenCalled();
   });
 
+  it("should clear the pasted input when the modal is dismissed", () => {
+    // Reopening after a cancel should not show the previous operator's paste.
+    const { onDismiss } = renderModal();
+    typeAccounts("222222222222");
+    fireEvent.click(screen.getByRole("button", { name: "competitor_accounts.bulk_modal_cancel" }));
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+    expect((screen.getByPlaceholderText(/222222222222/) as HTMLTextAreaElement).value).toBe("");
+  });
+
+  it("should offer close rather than submit once a result is showing", async () => {
+    mocks.bulkCreateCompetitorAccounts.mockResolvedValueOnce(response());
+    const { onDismiss } = renderModal();
+    typeAccounts("222222222222");
+    submit();
+
+    await screen.findByText("competitor_accounts.bulk_outcome_created");
+    expect(
+      screen.queryByRole("button", { name: "competitor_accounts.bulk_modal_submit" }),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "competitor_accounts.bulk_modal_close" }));
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it("should warn rather than celebrate when the import created nothing", async () => {
+    mocks.bulkCreateCompetitorAccounts.mockResolvedValueOnce(
+      response({ created: 0, duplicate: 1, externalId: undefined }),
+    );
+    renderModal();
+    typeAccounts("222222222222");
+    submit();
+
+    await screen.findByText("competitor_accounts.bulk_result_header");
+    expect(screen.getByText("competitor_accounts.bulk_outcome_duplicate")).toBeTruthy();
+  });
+
+  it("should send the operator's edited region and role name", async () => {
+    mocks.bulkCreateCompetitorAccounts.mockResolvedValueOnce(response());
+    renderModal();
+    typeAccounts("222222222222");
+    const inputs = screen.getAllByRole("textbox").filter((el) => el.tagName === "INPUT");
+    fireEvent.change(inputs[0] as HTMLInputElement, { target: { value: "us-west-2" } });
+    fireEvent.change(inputs[1] as HTMLInputElement, { target: { value: "Edited-Role" } });
+    submit();
+
+    await waitFor(() => expect(mocks.bulkCreateCompetitorAccounts).toHaveBeenCalledTimes(1));
+    const [, body] = mocks.bulkCreateCompetitorAccounts.mock.calls[0] as [
+      unknown,
+      { defaults: { region: string; competitorRoleName: string } },
+    ];
+    expect(body.defaults).toEqual({ region: "us-west-2", competitorRoleName: "Edited-Role" });
+  });
+
+  it("should render an invalid and a failed row distinctly", async () => {
+    mocks.bulkCreateCompetitorAccounts.mockResolvedValueOnce(
+      response({
+        results: [
+          { awsAccountId: "222222222222", outcome: "invalid", message: "bad row" },
+          { awsAccountId: "333333333333", outcome: "failed", message: "write failed" },
+        ],
+        created: 0,
+        duplicate: 0,
+        invalid: 1,
+        failed: 1,
+        externalId: undefined,
+      }),
+    );
+    renderModal();
+    typeAccounts("222222222222");
+    submit();
+
+    await screen.findByText("competitor_accounts.bulk_outcome_invalid");
+    expect(screen.getByText("competitor_accounts.bulk_outcome_failed")).toBeTruthy();
+  });
+
   it("should surface a request failure instead of reporting a silent success", async () => {
     mocks.bulkCreateCompetitorAccounts.mockRejectedValueOnce(new Error("boom"));
     const { onCompleted } = renderModal();

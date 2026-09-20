@@ -74,6 +74,9 @@ export function BulkImportModal({ config, visible, onDismiss, onCompleted }: Bul
   };
 
   const handleDismiss = () => {
+    // cancel / close button は disabled={inFlight} なので inFlight 中は呼ばれない
+    // (= 防御的不到達、 AddAccountModal と同じ)。
+    /* v8 ignore next */
     if (inFlight) return;
     reset();
     onDismiss();
@@ -82,6 +85,9 @@ export function BulkImportModal({ config, visible, onDismiss, onCompleted }: Bul
   const submitDisabled = !apiClient || !canMutate || inFlight || !parsed?.ok;
 
   const handleSubmit = async () => {
+    // submit button は disabled={submitDisabled} なので、 client 未取得や未 parse の
+    // 状態では呼ばれない (= 防御的不到達)。
+    /* v8 ignore next */
     if (!apiClient || !parsed?.ok) return;
     setInFlight(true);
     setError(null);

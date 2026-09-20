@@ -272,6 +272,20 @@ describe("useCompetitorAccounts verifyAll", () => {
     expect(result.current.verifyAllProgress).toBeNull();
   });
 
+  it("should do nothing before the list has loaded", async () => {
+    // `items` is null until the first reload resolves; verifyAll must not treat
+    // that as "nothing to verify happened to succeed".
+    mockUseApiClient.mockReturnValue(FAKE_CLIENT);
+    mockList.mockReturnValue(new Promise(() => undefined));
+
+    const { result } = renderHook(() => useCompetitorAccounts(config));
+    await act(async () => {
+      await result.current.verifyAll();
+    });
+
+    expect(mockVerify).not.toHaveBeenCalled();
+  });
+
   it("should not verify anything for a read-only operator", async () => {
     mockUseApiClient.mockReturnValue(READ_ONLY_CLIENT);
     mockList.mockResolvedValue({ items: unverified });

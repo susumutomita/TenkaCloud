@@ -101,7 +101,23 @@ describe("POST /admin/competitor-accounts/bulk", () => {
     // A mixed result is the normal case at Organizations scale, not an error:
     // the operator needs to see which rows landed, so this is 200 with a body,
     // never a 4xx that throws the successful rows away.
-    mocks.bulkCreateCompetitorAccounts.mockResolvedValueOnce(okResponse);
+    //
+    // The double drives the audit callbacks the way the real store does, so the
+    // route's own per-row audit path is exercised rather than merely passed in.
+    mocks.bulkCreateCompetitorAccounts.mockImplementationOnce(
+      async (
+        _shared: unknown,
+        _ctx: unknown,
+        _req: unknown,
+        onCreated?: (awsAccountId: string) => void,
+        onRejected?: (awsAccountId: string, outcome: string) => void,
+      ) => {
+        onCreated?.("222222222222");
+        onRejected?.("333333333333", "duplicate");
+        onRejected?.("444444444444", "failed");
+        return okResponse;
+      },
+    );
     const res = await app.request("/admin/competitor-accounts/bulk", {
       method: "POST",
       headers: { "content-type": "application/json" },
