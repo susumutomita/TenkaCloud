@@ -71,8 +71,13 @@ export type BulkCompetitorAccountEntry = z.infer<typeof BulkCompetitorAccountEnt
 /**
  * 1 request の上限。 Lambda の実行時間と payload を有界にするためのもので、 超えたら
  * 400 で全体を拒否する (= 途中まで書いて切れるより、 operator が分割する方が読める)。
+ *
+ * 値は handler Lambda の timeout (60s) から逆算している。 行は逐次に書かれ、 turso backend
+ * では 1 write = remote HTTP 1 往復なので、 悲観値 500ms/行 でも 50 行で 25s に収まる。
+ * 上限を上げるときは `competitor-accounts-api-lambda.ts` の timeout も一緒に見直すこと
+ * (timeout に届くと、 書けた行は残るのに応答が返らない = どこまで入ったか分からなくなる)。
  */
-export const BULK_COMPETITOR_ACCOUNTS_MAX_ENTRIES = 100;
+export const BULK_COMPETITOR_ACCOUNTS_MAX_ENTRIES = 50;
 
 export const BulkCreateCompetitorAccountsRequestSchema = z
   .object({
