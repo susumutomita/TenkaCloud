@@ -333,4 +333,34 @@ describe("tenant ApiGateway", () => {
       expect(JSON.stringify(permission.Properties?.SourceArn)).toContain("execute-api");
     }
   });
+
+  /**
+   * The REST API enumerates every route; there is no `{proxy+}`. A handler
+   * route with no matching API Gateway resource is answered with 403 before
+   * Hono ever runs, so the feature is absent in a deployed tenant however well
+   * the handler is tested. `/admin/competitor-accounts/bulk` shipped that way
+   * once (#3252) — it matched `{awsAccountId}`, which carries only DELETE.
+   */
+  it("should expose POST on /admin/competitor-accounts/bulk as its own resource", () => {
+    const resources = tpl.findResources("AWS::ApiGateway::Resource", {
+      Properties: { PathPart: "bulk" },
+    });
+    const bulkId = Object.keys(resources)[0];
+    expect(bulkId, "/admin/competitor-accounts/bulk resource is missing").toBeDefined();
+
+    const accounts = tpl.findResources("AWS::ApiGateway::Resource", {
+      Properties: { PathPart: "competitor-accounts" },
+    });
+    const accountsId = Object.keys(accounts)[0];
+    // A sibling of `{awsAccountId}`, not a child of it: API Gateway prefers the
+    // literal segment over the path parameter at the same level.
+    expect(
+      (resources[bulkId as string]?.Properties as { ParentId?: { Ref?: string } })?.ParentId?.Ref,
+    ).toBe(accountsId);
+
+    tpl.hasResourceProperties("AWS::ApiGateway::Method", {
+      HttpMethod: "POST",
+      ResourceId: { Ref: bulkId },
+    });
+  });
 });

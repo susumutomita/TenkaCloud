@@ -257,6 +257,7 @@ export class ApiGateway extends Construct {
 
     // Issue #459: Competitor Accounts CRUD + verify
     //   /admin/competitor-accounts                                     POST=register, GET=list
+    //   /admin/competitor-accounts/bulk                                POST=一括登録 (行ごとに結果)
     //   /admin/competitor-accounts/{awsAccountId}                      DELETE=remove (last row なら SSM 鍵も掃除)
     //   /admin/competitor-accounts/{awsAccountId}/verify               POST=STS AssumeRole sanity check
     //   /admin/competitor-accounts/{awsAccountId}/rotate-external-id   POST=ExternalId rotation (Issue #596 / Phase 3.1)
@@ -268,6 +269,16 @@ export class ApiGateway extends Construct {
     const competitorAccounts = admin.addResource("competitor-accounts");
     competitorAccounts.addMethod("GET", competitorAccountsIntegration, deployMethodOptions);
     competitorAccounts.addMethod("POST", competitorAccountsIntegration, deployMethodOptions);
+    // `bulk` は `{awsAccountId}` の**兄弟**として明示的に生やす。 この REST API は route を
+    // 1 本ずつ列挙していて `{proxy+}` を使っていないので、 資源を足さない限り `/bulk` は
+    // `{awsAccountId}` にしか一致せず、 そこには DELETE しか無い。 結果として POST /bulk は
+    // Hono に届く前に API Gateway が 403 を返す (= handler が幾らテストで通っていても、
+    // deploy した tenant では機能そのものが存在しない)。
+    // API Gateway は同階層で literal segment を path parameter より優先するので、
+    // 既存の `/{awsAccountId}` 系の経路には影響しない。
+    competitorAccounts
+      .addResource("bulk")
+      .addMethod("POST", competitorAccountsIntegration, deployMethodOptions);
     const competitorAccount = competitorAccounts.addResource("{awsAccountId}");
     competitorAccount.addMethod("DELETE", competitorAccountsIntegration, deployMethodOptions);
     competitorAccount

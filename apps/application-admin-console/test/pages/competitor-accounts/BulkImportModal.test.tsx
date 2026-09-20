@@ -230,6 +230,44 @@ describe("BulkImportModal", () => {
     expect(screen.getByText("competitor_accounts.bulk_outcome_failed")).toBeTruthy();
   });
 
+  it("should block a paste whose rows would need different IAM Role names", async () => {
+    // Only one set of values is revealed after the import, so a mixed paste
+    // would hand the wrong RoleName to the rows that differ and their
+    // verification would fail later.
+    renderModal();
+    typeAccounts(
+      JSON.stringify({
+        defaults: { competitorRoleName: "Default-Role" },
+        accounts: [
+          { awsAccountId: "222222222222" },
+          { awsAccountId: "333333333333", competitorRoleName: "Other-Role" },
+        ],
+      }),
+    );
+
+    expect(screen.getByText(/IAM Role 名が行ごとに異なります/)).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: "competitor_accounts.bulk_modal_submit" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+    expect(mocks.bulkCreateCompetitorAccounts).not.toHaveBeenCalled();
+  });
+
+  it("should reveal the role the rows actually used, not the screen's default", async () => {
+    mocks.bulkCreateCompetitorAccounts.mockResolvedValueOnce(response());
+    const { onCompleted } = renderModal();
+    typeAccounts(
+      JSON.stringify({
+        accounts: [{ awsAccountId: "222222222222", competitorRoleName: "Row-Role" }],
+      }),
+    );
+    submit();
+
+    await waitFor(() => expect(onCompleted).toHaveBeenCalledTimes(1));
+    expect(onCompleted.mock.calls[0]?.[1]).toBe("Row-Role");
+  });
+
   it("should surface a request failure instead of reporting a silent success", async () => {
     mocks.bulkCreateCompetitorAccounts.mockRejectedValueOnce(new Error("boom"));
     const { onCompleted } = renderModal();

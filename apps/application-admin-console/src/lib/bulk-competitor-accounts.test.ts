@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { BULK_MAX_ENTRIES, parseBulkAccountsInput } from "./bulk-competitor-accounts";
+import {
+  BULK_MAX_ENTRIES,
+  deriveBulkInputState,
+  effectiveRoleNames,
+  parseBulkAccountsInput,
+} from "./bulk-competitor-accounts";
 
 /**
  * The input this parser has to accept is whatever the operator already has in
@@ -96,6 +101,31 @@ describe("parseBulkAccountsInput", () => {
       { awsAccountId: "222222222222" },
       { awsAccountId: "333333333333", alias: "Team B" },
     ]);
+  });
+
+  it("should reject a misspelled entry key instead of dropping it", () => {
+    // parseEntry rebuilds the entry from the keys it recognises, so a typo that
+    // slips through here never reaches the backend's strict schema either: the
+    // import would "succeed" under the screen's default role or without the
+    // intended alias.
+    const res = parseBulkAccountsInput(
+      JSON.stringify({ accounts: [{ awsAccountId: "222222222222", roleName: "typo" }] }),
+    );
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.errors.join("\n")).toContain("roleName");
+  });
+
+  it("should reject a misspelled defaults key instead of dropping it", () => {
+    const res = parseBulkAccountsInput(
+      JSON.stringify({
+        defaults: { regoin: "ap-northeast-1" },
+        accounts: [{ awsAccountId: "222222222222" }],
+      }),
+    );
+    expect(res.ok).toBe(false);
+    if (res.ok) return;
+    expect(res.errors.join("\n")).toContain("regoin");
   });
 
   it("should reject a duplicate ID before the request is sent", () => {
@@ -199,5 +229,134 @@ describe("parseBulkAccountsInput", () => {
     expect(res.ok).toBe(true);
     if (!res.ok) return;
     expect(res.defaults).toBeUndefined();
+  });
+});
+
+/**
+ * The screen reveals one set of values to hand competitors, so one IAM Role
+ * name. A paste where rows resolve to different roles would hand the wrong
+ * RoleName to every row that differs, and their bootstrap would then fail
+ * verification — so the resolved set has to be computed exactly the way the
+ * backend resolves it (`entry ?? defaults`), screen default included.
+ */
+describe("effectiveRoleNames", () => {
+  it("should fall back to the screen default when nothing else sets a role", () => {
+    expect(
+      effectiveRoleNames([{ awsAccountId: "222222222222" }], undefined, "Screen-Role"),
+    ).toEqual(["Screen-Role"]);
+  });
+
+  it("should prefer the pasted defaults over the screen default", () => {
+    expect(
+      effectiveRoleNames([{ awsAccountId: "222222222222" }], "Pasted-Role", "Screen-Role"),
+    ).toEqual(["Pasted-Role"]);
+  });
+
+  it("should prefer a per-entry role over both defaults", () => {
+    expect(
+      effectiveRoleNames(
+        [{ awsAccountId: "222222222222", competitorRoleName: "Row-Role" }],
+        "Pasted-Role",
+        "Screen-Role",
+      ),
+    ).toEqual(["Row-Role"]);
+  });
+
+  it("should report both names when one row overrides the pasted default", () => {
+    // The case a per-entry-only check would miss: the set is mixed even though
+    // every explicit per-entry value is identical.
+    expect(
+      effectiveRoleNames(
+        [
+          { awsAccountId: "222222222222" },
+          { awsAccountId: "333333333333", competitorRoleName: "Row-Role" },
+        ],
+        "Pasted-Role",
+        "Screen-Role",
+      ),
+    ).toEqual(["Pasted-Role", "Row-Role"]);
+  });
+
+  it("should report both names when one row overrides the screen default", () => {
+    expect(
+      effectiveRoleNames(
+        [
+          { awsAccountId: "222222222222" },
+          { awsAccountId: "333333333333", competitorRoleName: "Row-Role" },
+        ],
+        undefined,
+        "Screen-Role",
+      ),
+    ).toEqual(["Screen-Role", "Row-Role"]);
+  });
+
+  it("should collapse rows that all name the same role", () => {
+    expect(
+      effectiveRoleNames(
+        [
+          { awsAccountId: "222222222222", competitorRoleName: "Same" },
+          { awsAccountId: "333333333333", competitorRoleName: "Same" },
+        ],
+        undefined,
+        "Screen-Role",
+      ),
+    ).toEqual(["Same"]);
+  });
+});
+
+describe("deriveBulkInputState", () => {
+  it("should offer nothing to submit for empty input", () => {
+    const state = deriveBulkInputState("   ", "Screen-Role");
+    expect(state.canSubmit).toBe(false);
+    expect(state.errors).toEqual([]);
+    expect(state.accounts).toEqual([]);
+  });
+
+  it("should carry the parse errors through and refuse submission", () => {
+    const state = deriveBulkInputState("222222222222 oops", "Screen-Role");
+    expect(state.canSubmit).toBe(false);
+    expect(state.errors.join("\n")).toContain("oops");
+  });
+
+  it("should resolve the single role name for a plain ID paste", () => {
+    const state = deriveBulkInputState("222222222222\n333333333333", "Screen-Role");
+    expect(state.canSubmit).toBe(true);
+    expect(state.accounts.length).toBe(2);
+    expect(state.canSubmit && state.roleName).toBe("Screen-Role");
+    expect(state.canSubmit && state.pastedDefaults).toBeUndefined();
+  });
+
+  it("should keep the pasted defaults for the request", () => {
+    const state = deriveBulkInputState(
+      JSON.stringify({
+        defaults: { region: "us-east-1", competitorRoleName: "Pasted-Role" },
+        accounts: [{ awsAccountId: "222222222222" }],
+      }),
+      "Screen-Role",
+    );
+    expect(state.canSubmit).toBe(true);
+    if (!state.canSubmit) return;
+    expect(state.pastedDefaults).toEqual({
+      region: "us-east-1",
+      competitorRoleName: "Pasted-Role",
+    });
+    expect(state.roleName).toBe("Pasted-Role");
+  });
+
+  it("should refuse a paste whose rows resolve to different roles", () => {
+    const state = deriveBulkInputState(
+      JSON.stringify({
+        defaults: { competitorRoleName: "Default-Role" },
+        accounts: [
+          { awsAccountId: "222222222222" },
+          { awsAccountId: "333333333333", competitorRoleName: "Other-Role" },
+        ],
+      }),
+      "Screen-Role",
+    );
+    expect(state.canSubmit).toBe(false);
+    expect(state.errors.join("\n")).toContain("IAM Role 名が行ごとに異なります");
+    // The rows still parsed; only submission is blocked.
+    expect(state.accounts.length).toBe(2);
   });
 });

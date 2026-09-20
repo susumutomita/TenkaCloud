@@ -76,8 +76,14 @@ export class CompetitorAccountsApiLambda extends Construct {
 
     this.fn = defineNodejsFunction(this, {
       entry: path.resolve(import.meta.dirname, "handlers/competitor-accounts-handler/index.ts"),
-      // verify endpoint は STS AssumeRole 1 回 (= ~1s) + DDB Update なので 10s で十分。
-      timeout: Duration.seconds(15),
+      // verify endpoint は STS AssumeRole 1 回 (= ~1s) + DDB Update なので 10s で十分だが、
+      // bulk 登録 (`POST /admin/competitor-accounts/bulk`) は行ごとに 1 write を**逐次**発行する。
+      // turso backend では 1 write が remote HTTP の往復 1 回なので、1 行 150ms でも
+      // 上限 50 行で 7.5s、遅い日に 500ms/行なら 25s かかる。15s のままだと途中で timeout し、
+      // 先に書けた行は残るのに応答は何も返らない (= operator がどこまで入ったか分からない)
+      // という最悪の壊れ方をするため、上限 (BULK_COMPETITOR_ACCOUNTS_MAX_ENTRIES=50) の
+      // 悲観値が収まる 60s にする。他 route は早く終わるので実質の課金は変わらない。
+      timeout: Duration.seconds(60),
       // 256MB では init 中に Runtime.OutOfMemory で落ち、API Gateway が CORS ヘッダ無しの 502 を
       // 返すため、ブラウザには "Failed to fetch" としてしか見えなかった (競技者アカウント画面)。
       // 本番実測で init peak は ~676MB (Cognito SAML / STS / 複数 SDK client を eager load)。

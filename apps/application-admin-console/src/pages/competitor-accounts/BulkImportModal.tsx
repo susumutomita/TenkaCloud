@@ -18,7 +18,7 @@ import {
 import { FriendlyErrorAlert } from "../../components/FriendlyErrorAlert";
 import type { AppConfig } from "../../config";
 import { useT } from "../../i18n";
-import { parseBulkAccountsInput } from "../../lib/bulk-competitor-accounts";
+import { deriveBulkInputState } from "../../lib/bulk-competitor-accounts";
 import { type FriendlyError, toFriendlyError } from "../../lib/friendly-error";
 import { defaultCompetitorRoleName } from "../../lib/resource-naming";
 
@@ -61,9 +61,7 @@ export function BulkImportModal({ config, visible, onDismiss, onCompleted }: Bul
   const [error, setError] = useState<FriendlyError | null>(null);
   const [response, setResponse] = useState<BulkCreateCompetitorAccountsResponse | null>(null);
 
-  const parsed = text.trim().length > 0 ? parseBulkAccountsInput(text) : null;
-  const parseErrors = parsed && !parsed.ok ? parsed.errors : [];
-  const entryCount = parsed?.ok ? parsed.accounts.length : 0;
+  const input = deriveBulkInputState(text, competitorRoleName);
 
   const reset = () => {
     setText("");
@@ -82,25 +80,27 @@ export function BulkImportModal({ config, visible, onDismiss, onCompleted }: Bul
     onDismiss();
   };
 
-  const submitDisabled = !apiClient || !canMutate || inFlight || !parsed?.ok;
+  const submitDisabled = !apiClient || !canMutate || inFlight || !input.canSubmit;
 
   const handleSubmit = async () => {
     // submit button は disabled={submitDisabled} なので、 client 未取得や未 parse の
     // 状態では呼ばれない (= 防御的不到達)。
     /* v8 ignore next */
-    if (!apiClient || !parsed?.ok) return;
+    if (!apiClient || !input.canSubmit) return;
     setInFlight(true);
     setError(null);
     try {
-      const effectiveRoleName = parsed.defaults?.competitorRoleName ?? competitorRoleName;
+      // canSubmit の arm では roleName が 1 つに定まっている = 全行に実際に適用される
+      // Role 名 = 競技者へ渡すべき値。
+      const effectiveRoleName = input.roleName;
       const res = await bulkCreateCompetitorAccounts(apiClient, {
         // 画面の 2 つの入力を request の defaults にする。 貼り付けた JSON が行ごとに
         // 持っている値はそちらが優先される (backend 側で entry ?? defaults)。
         defaults: {
-          region: parsed.defaults?.region ?? region,
+          region: input.pastedDefaults?.region ?? region,
           competitorRoleName: effectiveRoleName,
         },
-        accounts: parsed.accounts,
+        accounts: input.accounts,
       });
       setResponse(res);
       onCompleted(res, effectiveRoleName);
@@ -184,17 +184,19 @@ export function BulkImportModal({ config, visible, onDismiss, onCompleted }: Bul
             <FormField
               label={t("competitor_accounts.bulk_modal_input_label")}
               description={t("competitor_accounts.bulk_modal_input_description")}
-              errorText={parseErrors.length > 0 ? parseErrors.join(" / ") : undefined}
+              errorText={input.errors.length > 0 ? input.errors.join(" / ") : undefined}
               constraintText={
-                parsed?.ok
-                  ? t("competitor_accounts.bulk_modal_parsed", { count: String(entryCount) })
+                input.canSubmit && input.accounts.length > 0
+                  ? t("competitor_accounts.bulk_modal_parsed", {
+                      count: String(input.accounts.length),
+                    })
                   : undefined
               }
             >
               <Textarea
                 value={text}
                 onChange={(e) => setText(e.detail.value)}
-                invalid={parseErrors.length > 0}
+                invalid={input.errors.length > 0}
                 rows={10}
                 disabled={inFlight}
                 placeholder={"222222222222\n333333333333\n444444444444"}

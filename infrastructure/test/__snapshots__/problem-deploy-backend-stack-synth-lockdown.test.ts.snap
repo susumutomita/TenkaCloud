@@ -3591,7 +3591,7 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — codebuild 
       ],
     },
     "Runtime": "nodejs22.x",
-    "Timeout": 15,
+    "Timeout": 60,
   },
   "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756C81C01536": {
     "Handler": "index.handler",
@@ -7594,7 +7594,7 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — lambda-dep
       ],
     },
     "Runtime": "nodejs22.x",
-    "Timeout": 15,
+    "Timeout": 60,
   },
   "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756C256MiB5F7BD223": {
     "Handler": "index.handler",
@@ -11592,7 +11592,7 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — lite mode 
       ],
     },
     "Runtime": "nodejs22.x",
-    "Timeout": 15,
+    "Timeout": 60,
   },
   "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756C81C01536": {
     "Handler": "index.handler",
@@ -14531,7 +14531,7 @@ exports[`ProblemDeployBackendStack synth lockdown (#2527 Slice 0) — pure-sql t
       ],
     },
     "Runtime": "nodejs22.x",
-    "Timeout": 15,
+    "Timeout": 60,
   },
   "CustomCDKBucketDeployment8693BB64968944B69AAFB0CC9EB8756C81C01536": {
     "Handler": "index.handler",

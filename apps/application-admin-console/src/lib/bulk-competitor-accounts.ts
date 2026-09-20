@@ -18,12 +18,18 @@ import type {
  */
 
 const ACCOUNT_ID_RE = /^\d{12}$/;
+/** 1 行が持ってよい key。 backend schema が `.strict()` なのでこちらも閉じる。 */
+const ENTRY_KEYS = new Set(["awsAccountId", "region", "competitorRoleName", "alias"]);
+const DEFAULTS_KEYS = new Set(["region", "competitorRoleName"]);
 const REGION_RE = /^[a-z]{2}-[a-z]+-\d+$/;
 const ROLE_NAME_RE = /^[A-Za-z0-9_+=,.@-]{1,64}$/;
 const ALIAS_MAX = 120;
 
-/** backend (`BULK_COMPETITOR_ACCOUNTS_MAX_ENTRIES`) と同じ 1 request の上限。 */
-export const BULK_MAX_ENTRIES = 100;
+/**
+ * backend (`BULK_COMPETITOR_ACCOUNTS_MAX_ENTRIES`) と同じ 1 request の上限。
+ * backend 側は handler Lambda の timeout から逆算しているので、 動かすときは両方見る。
+ */
+export const BULK_MAX_ENTRIES = 50;
 
 export interface BulkParseSuccess {
   readonly ok: true;
@@ -96,6 +102,16 @@ function parseEntry(
     return undefined;
   }
 
+  // 知らない key は黙って捨てない。 この関数は認識した field だけで entry を組み直すので、
+  // `roleName` / `alais` のような綴り違いをここで見逃すと、 backend の `.strict()` にも
+  // 届かないまま「画面の既定値で登録成功」になる (= 間違った IAM Role 名で登録され、
+  // あとで Verify が失敗する)。
+  const unknown = Object.keys(raw).filter((key) => !ENTRY_KEYS.has(key));
+  if (unknown.length > 0) {
+    errors.push(`${label}: 知らない項目があります: ${unknown.join(", ")}`);
+    return undefined;
+  }
+
   const awsAccountId = raw.awsAccountId;
   if (typeof awsAccountId !== "string" || !ACCOUNT_ID_RE.test(awsAccountId)) {
     errors.push(`${label}: awsAccountId は 12 桁の数字です`);
@@ -155,6 +171,11 @@ function parseDefaults(
   if (raw === undefined) return undefined;
   if (!isRecord(raw)) {
     errors.push("defaults はオブジェクトである必要があります");
+    return undefined;
+  }
+  const unknown = Object.keys(raw).filter((key) => !DEFAULTS_KEYS.has(key));
+  if (unknown.length > 0) {
+    errors.push(`defaults に知らない項目があります: ${unknown.join(", ")}`);
     return undefined;
   }
   const defaults: { region?: string; competitorRoleName?: string } = {};
@@ -247,5 +268,84 @@ function finalize(result: BulkParseResult): BulkParseResult {
     }
     seen.add(entry.awsAccountId);
   }
+
   return errors.length > 0 ? { ok: false, errors } : result;
+}
+
+/**
+ * 各行が実際に使う IAM Role 名の集合。
+ *
+ * 行に `competitorRoleName` があればそれ、 無ければ pasted JSON の `defaults`、 それも
+ * 無ければ画面の入力、 の順で決まる (backend の `entry ?? defaults` と同じ)。
+ *
+ * これが 2 つ以上になる貼り付けは受けない。 登録後に画面が出す「競技者へ渡す 3 値」は
+ * 1 組しか無く、 そこに載る RoleName も 1 つなので、 混ざっていると既定と違う行には
+ * **間違った RoleName** を配ることになり、 競技者が bootstrap を流したあとの Verify が
+ * 失敗する。 backend は行ごとの Role 名を保存できるが、 この画面では配れない。
+ */
+export function effectiveRoleNames(
+  accounts: readonly BulkCompetitorAccountEntry[],
+  pastedDefault: string | undefined,
+  screenDefault: string,
+): readonly string[] {
+  return [
+    ...new Set(accounts.map((entry) => entry.competitorRoleName ?? pastedDefault ?? screenDefault)),
+  ];
+}
+
+interface BulkInputCommon {
+  /** 解釈できた行。 読めていなければ空。 */
+  readonly accounts: readonly BulkCompetitorAccountEntry[];
+  /** 表示する理由。 空なら入力途中か、 送信できる状態。 */
+  readonly errors: readonly string[];
+}
+
+/**
+ * 画面が入力から導く状態。 **送信できるときだけ** `roleName` が 1 つに定まる union に
+ * してあるので、 呼び出し側に 「1 つのはずだが undefined かもしれない」 という到達しない
+ * 分岐が残らない。
+ */
+export type BulkInputState =
+  | (BulkInputCommon & { readonly canSubmit: false })
+  | (BulkInputCommon & {
+      readonly canSubmit: true;
+      /** 貼り付けた JSON 側の defaults (あれば)。 */
+      readonly pastedDefaults: BulkCreateCompetitorAccountsRequest["defaults"];
+      /** 全行に実際に適用される IAM Role 名。 */
+      readonly roleName: string;
+    });
+
+export function deriveBulkInputState(text: string, screenRoleName: string): BulkInputState {
+  if (text.trim().length === 0) {
+    return { accounts: [], errors: [], canSubmit: false };
+  }
+
+  const parsed = parseBulkAccountsInput(text);
+  if (!parsed.ok) {
+    return { accounts: [], errors: parsed.errors, canSubmit: false };
+  }
+
+  const roleNames = effectiveRoleNames(
+    parsed.accounts,
+    parsed.defaults?.competitorRoleName,
+    screenRoleName,
+  );
+  const [roleName] = roleNames;
+  if (roleNames.length !== 1 || roleName === undefined) {
+    return {
+      accounts: parsed.accounts,
+      errors: [
+        `IAM Role 名が行ごとに異なります (${roleNames.join(", ")})。 競技者へ渡す値は 1 組しか出せないため、 Role 名ごとに分けて登録してください`,
+      ],
+      canSubmit: false,
+    };
+  }
+
+  return {
+    accounts: parsed.accounts,
+    pastedDefaults: parsed.defaults,
+    roleName,
+    errors: [],
+    canSubmit: true,
+  };
 }
