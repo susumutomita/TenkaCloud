@@ -13,7 +13,7 @@ import {
   TENANT_ADMIN_ROLE,
   TENANT_ROLES,
 } from "../deploy-handler/auth.js";
-import { extractAuditContext, writeAuditEvent } from "../shared/audit-log.js";
+import { type AuditOutcome, extractAuditContext, writeAuditEvent } from "../shared/audit-log.js";
 import { respondMachineRouteDenied } from "../shared/auth-wiring.js";
 import { parseJsonBody } from "../shared/http-parse.js";
 import {
@@ -24,6 +24,7 @@ import { secureApiHeaders } from "../shared/secure-headers.js";
 import { routeDelete, routeGet, routePut } from "./saml-routes.js";
 import { buildCompetitorAccountsSharedResources } from "./shared.js";
 import {
+  bulkCreateCompetitorAccounts,
   CompetitorAccountNotFoundError,
   createCompetitorAccount,
   DuplicateCompetitorAccountError,
@@ -36,7 +37,10 @@ import {
   handleRegisterTeamCredential,
   isTeamCredentialProvider,
 } from "./team-credentials-routes.js";
-import { CreateCompetitorAccountRequestSchema } from "./types.js";
+import {
+  BulkCreateCompetitorAccountsRequestSchema,
+  CreateCompetitorAccountRequestSchema,
+} from "./types.js";
 import {
   routeChangeUserRole,
   routeCreateUser,
@@ -54,6 +58,7 @@ import {
  *
  * routes (すべて tenant API + Cognito JWT authorizer 経由):
  *   POST   /admin/competitor-accounts                                    — register (= SSM Put + DDB Put)
+ *   POST   /admin/competitor-accounts/bulk                               — bulk register (行ごとに結果を返す)
  *   GET    /admin/competitor-accounts                                    — list (verified / unverified 両方)
  *   POST   /admin/competitor-accounts/{awsAccountId}/verify              — STS AssumeRole sanity check
  *   DELETE /admin/competitor-accounts/{awsAccountId}                     — remove (last row なら SSM 鍵も削除)
@@ -268,6 +273,59 @@ app.post("/admin/competitor-accounts", async (c) => {
     }
     const message = err instanceof Error ? err.message : "unknown error";
     console.error("[competitor-accounts] create failed", { message });
+    return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
+  }
+});
+
+/**
+ * 一括登録。 Organizations 配下へ StackSet で bootstrap を配ったあと、 その OU の
+ * アカウント ID を JSON でまとめて登録するための経路。
+ *
+ * **全体で 1 つの transaction にはしない。** 1 行が登録済みだからといって残りを捨てると、
+ * operator は「どこまで入ったか」を自分で突き合わせる羽目になる。 行ごとの outcome を
+ * 返し、 作成できた行だけ audit に残す。 body 自体が壊れている (= schema 違反、 0 件、
+ * 上限超過) ときだけ 400 で全体を拒否する。
+ */
+app.post("/admin/competitor-accounts/bulk", async (c) => {
+  requireRole(c, [TENANT_ADMIN_ROLE]);
+  const parsed = await parseJsonBody(c, BulkCreateCompetitorAccountsRequestSchema);
+  if (!parsed.ok) return parsed.response;
+  const tenantIdForBulk = resolveTenantId(c);
+  const auditBulk = extractAuditContext(c);
+  const writeBulkAudit = (target: string, outcome: AuditOutcome) => {
+    void writeAuditEvent({
+      tenantId: tenantIdForBulk,
+      actor: auditBulk.actor,
+      actorUsername: auditBulk.actorUsername,
+      action: "create_competitor_account",
+      outcome,
+      target,
+      ipAddress: auditBulk.ipAddress,
+      userAgent: auditBulk.userAgent,
+      occurredAtMs: Date.now(),
+    });
+  };
+  try {
+    const response = await bulkCreateCompetitorAccounts(
+      shared,
+      {
+        tenantId: tenantIdForBulk,
+        nowMs: Date.now(),
+        createdBy: resolveCognitoSub(c),
+      },
+      parsed.data,
+      // audit は行ごとに書く。 単体 create と同じ action / target なので、 監査ログ側は
+      // 「1 件ずつ登録したか一括で登録したか」 に関係なく account 単位で追える。
+      (awsAccountId) => writeBulkAudit(awsAccountId, "success"),
+      (awsAccountId, outcome) =>
+        writeBulkAudit(awsAccountId, outcome === "duplicate" ? "conflict" : "error"),
+    );
+    return c.json(response, StatusCodes.OK);
+  } catch (err) {
+    // ここに来るのは ExternalId の確保など「全行に共通の前段」が落ちた場合だけ
+    // (行ごとの失敗は response の `failed` に載る)。
+    const message = err instanceof Error ? err.message : "unknown error";
+    console.error("[competitor-accounts] bulk create failed", { message });
     return c.json({ error: "internal_error" }, StatusCodes.INTERNAL_SERVER_ERROR);
   }
 });

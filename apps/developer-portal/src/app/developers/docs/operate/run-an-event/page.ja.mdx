@@ -129,7 +129,7 @@ SaaS モードでは、System Admin が `admin-console`からテナントを作�
 `_ = , . @ : / -`を使います。作成されたロールARNを開催者へ共有します。秘密鍵や
 AWS管理者認証情報は共有しません。詳細は[競技者セットアップガイド](https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/README.md)にあります。
 
-参加アカウントがAWS Organizationsの1つのOUにまとまっている場合は、同じテンプレートをStackSetでOU全体へ一括配布できます。3つのパラメータはテナント内で共通です。手順はセットアップガイドの[一括bootstrap](https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/README.md#複数アカウントを一括で-bootstrap-する-aws-organizations--stacksets)を参照してください。TenkaCloud側への登録は1アカウントずつ行います。
+参加アカウントがAWS Organizationsの1つのOUにまとまっている場合は、同じテンプレートをStackSetでOU全体へ一括配布できます。3つのパラメータはテナント内で共通です。手順はセットアップガイドの[一括bootstrap](https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/README.md#複数アカウントを一括で-bootstrap-する-aws-organizations--stacksets)を参照してください。TenkaCloud側へは、Competitor Accountsの「JSONで一括登録」でアカウントIDをまとめて貼り付けて登録し、「未検証N件をまとめてVerify」で疎通確認します。
 
 ## 問題をデプロイする
 

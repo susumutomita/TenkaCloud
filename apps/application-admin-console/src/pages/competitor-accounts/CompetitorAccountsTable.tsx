@@ -1,5 +1,6 @@
 import Box from "@cloudscape-design/components/box";
 import Button from "@cloudscape-design/components/button";
+import Header from "@cloudscape-design/components/header";
 import SpaceBetween from "@cloudscape-design/components/space-between";
 import StatusIndicator from "@cloudscape-design/components/status-indicator";
 import Table, { type TableProps } from "@cloudscape-design/components/table";
@@ -11,8 +12,11 @@ import { useT } from "../../i18n";
 interface CompetitorAccountsTableProps {
   items: readonly CompetitorAccountSummary[];
   verifyInFlight: string | null;
+  /** 一括 verify の進捗。 実行中でなければ null。 */
+  verifyAllProgress: { readonly done: number; readonly total: number } | null;
   canMutateTenant: boolean;
   onVerify: (awsAccountId: string) => void;
+  onVerifyAll: () => void;
   onRequestDelete: (item: CompetitorAccountSummary) => void;
   /** Empty-state primary action — opens the add-account modal (same as the header button). */
   onAdd: () => void;
@@ -21,12 +25,17 @@ interface CompetitorAccountsTableProps {
 export function CompetitorAccountsTable({
   items,
   verifyInFlight,
+  verifyAllProgress,
   canMutateTenant,
   onVerify,
+  onVerifyAll,
   onRequestDelete,
   onAdd,
 }: CompetitorAccountsTableProps) {
   const t = useT();
+  // 一括登録の直後は未検証行がまとめて並ぶ。 1 行ずつ押させないための入口。
+  const unverifiedCount = items.filter((item) => !item.verified).length;
+  const verifyingAll = verifyAllProgress !== null;
 
   const columnDefinitions = useMemo<TableProps.ColumnDefinition<CompetitorAccountSummary>[]>(
     () => [
@@ -74,7 +83,7 @@ export function CompetitorAccountsTable({
             <Button
               variant="normal"
               loading={verifyInFlight === item.awsAccountId}
-              disabled={!canMutateTenant || verifyInFlight !== null}
+              disabled={!canMutateTenant || verifyInFlight !== null || verifyingAll}
               onClick={() => onVerify(item.awsAccountId)}
             >
               {item.verified
@@ -83,7 +92,7 @@ export function CompetitorAccountsTable({
             </Button>
             <Button
               variant="link"
-              disabled={!canMutateTenant}
+              disabled={!canMutateTenant || verifyingAll}
               onClick={() => onRequestDelete(item)}
             >
               {t("competitor_accounts.delete")}
@@ -92,13 +101,36 @@ export function CompetitorAccountsTable({
         ),
       },
     ],
-    [onRequestDelete, onVerify, verifyInFlight, canMutateTenant, t],
+    [onRequestDelete, onVerify, verifyInFlight, verifyingAll, canMutateTenant, t],
   );
 
   return (
     <Table
       items={items}
       columnDefinitions={columnDefinitions}
+      header={
+        unverifiedCount > 0 ? (
+          <Header
+            counter={`(${items.length})`}
+            actions={
+              <Button
+                loading={verifyingAll}
+                disabled={!canMutateTenant || verifyInFlight !== null}
+                onClick={onVerifyAll}
+              >
+                {verifyAllProgress
+                  ? t("competitor_accounts.verify_all_progress", {
+                      done: String(verifyAllProgress.done),
+                      total: String(verifyAllProgress.total),
+                    })
+                  : t("competitor_accounts.verify_all", { count: String(unverifiedCount) })}
+              </Button>
+            }
+          >
+            {t("competitor_accounts.title")}
+          </Header>
+        ) : undefined
+      }
       // Issue #1362 / empty-state UX: 空表示は説明 + 実際に押せる primary action を出す
       // (= 装飾 icon ではなく、 ここから直接 account を追加できる)。
       empty={

@@ -329,7 +329,7 @@ SaaSのテナント作成とマルチクラウドは末尾に分離し、コー�
 1回デプロイします。<code>ExternalId</code>は開催者が設定した値と同じ、16〜128文字の半角英数字と
 <code>_ = , . @ : / -</code>を使います。作成されたロールARNを開催者へ共有します。秘密鍵や
 AWS管理者認証情報は共有しません。詳細は<a href="https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/README.md">競技者セットアップガイド</a>にあります。</p>
-<p>参加アカウントがAWS Organizationsの1つのOUにまとまっている場合は、同じテンプレートをStackSetでOU全体へ一括配布できます。3つのパラメータはテナント内で共通です。手順はセットアップガイドの<a href="https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/README.md#%E8%A4%87%E6%95%B0%E3%82%A2%E3%82%AB%E3%82%A6%E3%83%B3%E3%83%88%E3%82%92%E4%B8%80%E6%8B%AC%E3%81%A7-bootstrap-%E3%81%99%E3%82%8B-aws-organizations--stacksets">一括bootstrap</a>を参照してください。TenkaCloud側への登録は1アカウントずつ行います。</p>
+<p>参加アカウントがAWS Organizationsの1つのOUにまとまっている場合は、同じテンプレートをStackSetでOU全体へ一括配布できます。3つのパラメータはテナント内で共通です。手順はセットアップガイドの<a href="https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/README.md#%E8%A4%87%E6%95%B0%E3%82%A2%E3%82%AB%E3%82%A6%E3%83%B3%E3%83%88%E3%82%92%E4%B8%80%E6%8B%AC%E3%81%A7-bootstrap-%E3%81%99%E3%82%8B-aws-organizations--stacksets">一括bootstrap</a>を参照してください。TenkaCloud側へは、Competitor Accountsの「JSONで一括登録」でアカウントIDをまとめて貼り付けて登録し、「未検証N件をまとめてVerify」で疎通確認します。</p>
 <h2>問題をデプロイする</h2>
 <p><code>application-admin-console</code> でイベントを作成し、カタログから問題を選び（ピッカーに表示されるのはクラウドにデプロイ可能な問題だけです。ローカル専用のコンテナ問題は除外され、非 AWS の問題はマルチクラウドを有効にすると表示されます）、各チームのアカウントとリージョンを割り当てて、デプロイします。各デプロイは ExternalId を使ってチームのロールを AssumeRole し、チームのアカウントで CloudFormation を実行します。デプロイメントが終了状態に達するまでポーリングでステータスを見守り、イベントが終わったら同じコンソールから撤収します。</p>
 <h2>マルチクラウドを有効にする（構成参考）</h2>

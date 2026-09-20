@@ -44,6 +44,85 @@ export const CreateCompetitorAccountRequestSchema = z
   .strict();
 export type CreateCompetitorAccountRequest = z.infer<typeof CreateCompetitorAccountRequestSchema>;
 
+/**
+ * Issue: AWS Organizations 規模の一括登録 (`POST /admin/competitor-accounts/bulk`)。
+ *
+ * 1 行ごとの `competitorRoleName` / `region` は `defaults` で代表させられる。 StackSet で
+ * OU 全体へ bootstrap を配ると 3 パラメータは全アカウント共通になるので、 実運用の JSON は
+ * `awsAccountId` (+ 任意の `alias`) の列と `defaults` 1 つになる。
+ *
+ * `competitorRoleName` に zod default を置かないのは単体 create と同じ理由で、 **caller が
+ * tenantId を落としたときに暗黙の名前衝突を起こさない**ため。 row にも `defaults` にも無い
+ * 行は `invalid` として個別に弾き、 他の行は通す。
+ */
+const BulkCompetitorAccountEntrySchema = z
+  .object({
+    awsAccountId: z.string().regex(AWS_ACCOUNT_ID_RE, "AWS Account ID は 12 桁の数字"),
+    region: z.string().regex(AWS_REGION_RE, "AWS region 形式が不正です").optional(),
+    competitorRoleName: z
+      .string()
+      .regex(IAM_ROLE_NAME_RE, "IAM Role 名の形式が不正です")
+      .optional(),
+    alias: z.string().min(1).max(120).optional(),
+  })
+  .strict();
+export type BulkCompetitorAccountEntry = z.infer<typeof BulkCompetitorAccountEntrySchema>;
+
+/**
+ * 1 request の上限。 Lambda の実行時間と payload を有界にするためのもので、 超えたら
+ * 400 で全体を拒否する (= 途中まで書いて切れるより、 operator が分割する方が読める)。
+ */
+export const BULK_COMPETITOR_ACCOUNTS_MAX_ENTRIES = 100;
+
+export const BulkCreateCompetitorAccountsRequestSchema = z
+  .object({
+    defaults: z
+      .object({
+        region: z.string().regex(AWS_REGION_RE, "AWS region 形式が不正です").optional(),
+        competitorRoleName: z
+          .string()
+          .regex(IAM_ROLE_NAME_RE, "IAM Role 名の形式が不正です")
+          .optional(),
+      })
+      .strict()
+      .optional(),
+    accounts: z
+      .array(BulkCompetitorAccountEntrySchema)
+      .min(1, "accounts が空です")
+      .max(
+        BULK_COMPETITOR_ACCOUNTS_MAX_ENTRIES,
+        `accounts は 1 request あたり ${BULK_COMPETITOR_ACCOUNTS_MAX_ENTRIES} 件までです`,
+      ),
+  })
+  .strict();
+export type BulkCreateCompetitorAccountsRequest = z.infer<
+  typeof BulkCreateCompetitorAccountsRequestSchema
+>;
+
+/** 1 行の結果。 `created` 以外は他の行の成否に影響しない。 */
+export type BulkCompetitorAccountOutcome = "created" | "duplicate" | "invalid" | "failed";
+
+export interface BulkCompetitorAccountResult {
+  readonly awsAccountId: string;
+  readonly outcome: BulkCompetitorAccountOutcome;
+  /** `created` 以外のときだけ、 その行が通らなかった理由 (operator 向け、秘密を含まない)。 */
+  readonly message?: string;
+}
+
+export interface BulkCreateCompetitorAccountsResponse {
+  readonly results: readonly BulkCompetitorAccountResult[];
+  readonly created: number;
+  readonly duplicate: number;
+  readonly invalid: number;
+  readonly failed: number;
+  /**
+   * 競技者へ渡す tenant の ExternalId。 **1 件でも作成できたときだけ**載せる
+   * (= 全行が duplicate なら新しく配る bootstrap は無いので、 secret を露出しない)。
+   */
+  readonly externalId?: string;
+  readonly tenkaCloudAccountId: string;
+}
+
 export interface CompetitorAccountSummary {
   awsAccountId: string;
   region: string;

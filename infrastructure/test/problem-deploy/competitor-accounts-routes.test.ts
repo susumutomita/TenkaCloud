@@ -12,6 +12,7 @@ beforeAll(() => {
 
 const mocks = vi.hoisted(() => ({
   createCompetitorAccount: vi.fn(),
+  bulkCreateCompetitorAccounts: vi.fn(),
   listCompetitorAccounts: vi.fn(),
   deleteCompetitorAccount: vi.fn(),
   verifyCompetitorAccount: vi.fn(),
@@ -64,6 +65,7 @@ vi.mock("../../lib/problem-deploy/handlers/competitor-accounts-handler/shared", 
 
 vi.mock("../../lib/problem-deploy/handlers/competitor-accounts-handler/store", () => ({
   createCompetitorAccount: mocks.createCompetitorAccount,
+  bulkCreateCompetitorAccounts: mocks.bulkCreateCompetitorAccounts,
   listCompetitorAccounts: mocks.listCompetitorAccounts,
   deleteCompetitorAccount: mocks.deleteCompetitorAccount,
   DuplicateCompetitorAccountError: mocks.DuplicateCompetitorAccountError,
@@ -78,6 +80,102 @@ vi.mock("../../lib/problem-deploy/handlers/competitor-accounts-handler/verify", 
 }));
 
 const { app } = await import("../../lib/problem-deploy/handlers/competitor-accounts-handler/index");
+
+describe("POST /admin/competitor-accounts/bulk", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const okResponse = {
+    results: [
+      { awsAccountId: "222222222222", outcome: "created" },
+      { awsAccountId: "333333333333", outcome: "duplicate", message: "already registered" },
+    ],
+    created: 1,
+    duplicate: 1,
+    invalid: 0,
+    failed: 0,
+    externalId: "abc123",
+    tenkaCloudAccountId: "111111111111",
+  };
+
+  it("should answer 200 with the per-row outcomes when some rows did not register", async () => {
+    // A mixed result is the normal case at Organizations scale, not an error:
+    // the operator needs to see which rows landed, so this is 200 with a body,
+    // never a 4xx that throws the successful rows away.
+    mocks.bulkCreateCompetitorAccounts.mockResolvedValueOnce(okResponse);
+    const res = await app.request("/admin/competitor-accounts/bulk", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        defaults: { competitorRoleName: "TenkaCloud-acme-deploy-Role" },
+        accounts: [{ awsAccountId: "222222222222" }, { awsAccountId: "333333333333" }],
+      }),
+    });
+
+    expect(res.status).toBe(StatusCodes.OK);
+    const body = (await res.json()) as typeof okResponse;
+    expect(body.created).toBe(1);
+    expect(body.duplicate).toBe(1);
+    expect(body.results.map((r) => r.outcome)).toEqual(["created", "duplicate"]);
+    expect(body.externalId).toBe("abc123");
+  });
+
+  it("should return 400 without touching the store when the body is malformed", async () => {
+    const res = await app.request("/admin/competitor-accounts/bulk", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ accounts: [{ awsAccountId: "abc" }] }),
+    });
+    expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    expect(mocks.bulkCreateCompetitorAccounts).not.toHaveBeenCalled();
+  });
+
+  it("should return 400 on an empty account list", async () => {
+    const res = await app.request("/admin/competitor-accounts/bulk", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ accounts: [] }),
+    });
+    expect(res.status).toBe(StatusCodes.BAD_REQUEST);
+    expect(mocks.bulkCreateCompetitorAccounts).not.toHaveBeenCalled();
+  });
+
+  it("should return 500 when the shared pre-step (ExternalId) fails for every row", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    mocks.bulkCreateCompetitorAccounts.mockRejectedValueOnce(new Error("ssm down"));
+    const res = await app.request("/admin/competitor-accounts/bulk", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        defaults: { competitorRoleName: "TenkaCloud-acme-deploy-Role" },
+        accounts: [{ awsAccountId: "222222222222" }],
+      }),
+    });
+    expect(res.status).toBe(StatusCodes.INTERNAL_SERVER_ERROR);
+    expect((await res.json()) as Record<string, unknown>).toEqual({ error: "internal_error" });
+    consoleError.mockRestore();
+  });
+
+  it("should not reveal the ExternalId when the store created nothing", async () => {
+    mocks.bulkCreateCompetitorAccounts.mockResolvedValueOnce({
+      results: [{ awsAccountId: "222222222222", outcome: "duplicate" }],
+      created: 0,
+      duplicate: 1,
+      invalid: 0,
+      failed: 0,
+      tenkaCloudAccountId: "111111111111",
+    });
+    const res = await app.request("/admin/competitor-accounts/bulk", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        defaults: { competitorRoleName: "TenkaCloud-acme-deploy-Role" },
+        accounts: [{ awsAccountId: "222222222222" }],
+      }),
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.externalId).toBeUndefined();
+  });
+});
 
 describe("POST /admin/competitor-accounts", () => {
   beforeEach(() => vi.clearAllMocks());
