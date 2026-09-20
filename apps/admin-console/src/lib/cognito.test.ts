@@ -7,7 +7,7 @@ import { cognitoOrigin, spEntityId, userPoolIdFromIssuer } from "./cognito";
  * most once and produce a valid base for `new URL(path, origin)`.
  */
 describe("cognitoOrigin", () => {
-  const DOMAIN = "tenkacloud-development-local-672726205532.auth.ap-northeast-1.amazoncognito.com";
+  const DOMAIN = "tenkacloud-development-local-123456789012.auth.ap-northeast-1.amazoncognito.com";
 
   it("should add https:// to a scheme-less domain", () => {
     expect(cognitoOrigin(DOMAIN)).toBe(`https://${DOMAIN}`);

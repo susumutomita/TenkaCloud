@@ -75,6 +75,7 @@ launcher stack 削除
 - このロールの信頼ポリシーは「`arn:aws:iam::<TenkaCloud アカウント>:root` からの `sts:AssumeRole`」を **`sts:ExternalId` 一致を条件に** 許可している (アカウント + ExternalId の 2 要素、Confused Deputy 対策)。
 - 運営側の ExternalId は SSM SecureString に置き、`CDK_PARAM_DEPLOY_EXTERNAL_ID` で配線する。**ExternalId は常に必須** (省略した AssumeRole は禁止)。
 - 前日に、テスト用に 1 アカウントぶんデプロイを流して AssumeRole が通ることを確認する。ここが通らないと当日の一括デプロイが全チーム落ちる。
+- 競技アカウントが AWS Organizations の 1 つの OU にまとまっているなら、bootstrap は StackSet で OU 全体へ一括配布できる (3 パラメータはテナント内で共通)。手順と撤回は [`infrastructure/templates/README.md`](../../infrastructure/templates/README.md#複数アカウントを一括で-bootstrap-する-aws-organizations--stacksets) を参照。TenkaCloud 側への登録は 1 アカウントずつ。
 
 ### 3. 問題ごとの smoke test
 

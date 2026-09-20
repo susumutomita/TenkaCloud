@@ -280,4 +280,77 @@ describe("control-data runtime repository resolver", () => {
 
     await expect(runtime.resolveTeamsRepository({})).resolves.toBeInstanceOf(SqlTeamsRepository);
   });
+  /**
+   * A route in front of this cache answers any failure with a bare
+   * `internal_error`, so the CloudWatch line built from `err.message` is the
+   * only thing an operator ever gets. These two pin that it names the stage
+   * and the underlying AWS error rather than leaving a 500 with no cause.
+   */
+  it("should name the IAM requirement when the SSM read is denied", async () => {
+    const denied = Object.assign(new Error("User is not authorized to perform: ssm:GetParameter"), {
+      name: "AccessDeniedException",
+      $metadata: { httpStatusCode: 400 },
+    });
+    const runtime = createControlDataRuntime({
+      env: {
+        CONTROL_DATA_BACKEND: "turso",
+        TURSO_DATABASE_URL: "libsql://example.turso.io",
+        TURSO_AUTH_TOKEN_PARAMETER_NAME: "/tenkacloud/dev/turso-token",
+      },
+      ssm: { send: vi.fn().mockRejectedValue(denied) },
+      createClient: vi.fn(),
+    });
+
+    const failure = await runtime.resolveTeamsRepository({}).catch((err: Error) => err.message);
+    expect(failure).toContain("/tenkacloud/dev/turso-token");
+    expect(failure).toContain("needs ssm:GetParameter on that parameter");
+    // The AWS error's own name and status survive: "denied" and "not found"
+    // need different fixes and must not look the same in the log.
+    expect(failure).toContain("AccessDeniedException");
+    expect(failure).toContain("HTTP 400");
+  });
+
+  it("should still describe a rejection that is not an Error", async () => {
+    // A rejected promise can carry anything. Falling over on a non-Error here
+    // would lose the diagnostic in exactly the case where the failure is
+    // already unusual, so the stage is still named and the value still shown.
+    const runtime = createControlDataRuntime({
+      env: {
+        CONTROL_DATA_BACKEND: "turso",
+        TURSO_DATABASE_URL: "libsql://example.turso.io",
+        TURSO_AUTH_TOKEN_PARAMETER_NAME: "/tenkacloud/dev/turso-token",
+      },
+      ssm: { send: vi.fn().mockRejectedValue("socket hang up") },
+      createClient: vi.fn(),
+    });
+
+    const failure = await runtime.resolveTeamsRepository({}).catch((err: Error) => err.message);
+    expect(failure).toContain("/tenkacloud/dev/turso-token");
+    expect(failure).toContain("socket hang up");
+  });
+
+  it("should name the token as the suspect when the database rejects it", async () => {
+    const unauthorized = Object.assign(new Error("Unauthorized"), {
+      name: "LibsqlError",
+      $metadata: { httpStatusCode: 401 },
+    });
+    const { client } = mockLibsqlClient();
+    (client.batch as unknown as ReturnType<typeof vi.fn>).mockRejectedValue(unauthorized);
+    const runtime = createControlDataRuntime({
+      env: {
+        CONTROL_DATA_BACKEND: "turso",
+        TURSO_DATABASE_URL: "libsql://example.turso.io",
+        TURSO_AUTH_TOKEN_PARAMETER_NAME: "/tenkacloud/dev/turso-token",
+      },
+      ssm: { send: vi.fn().mockResolvedValue({ Parameter: { Value: "secret-token" } }) },
+      createClient: vi.fn().mockReturnValue(client),
+    });
+
+    const failure = await runtime.resolveTeamsRepository({}).catch((err: Error) => err.message);
+    expect(failure).toContain("libsql://example.turso.io");
+    expect(failure).toContain("401");
+    expect(failure).toContain("LibsqlError");
+    // The token itself never reaches a log line.
+    expect(failure).not.toContain("secret-token");
+  });
 });

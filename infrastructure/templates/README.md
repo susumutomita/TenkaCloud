@@ -42,6 +42,86 @@ deploy 完了後、CFn Outputs に表示される `RoleArn` を TenkaCloud 運�
 TenkaCloud 側はこの ARN と ExternalId を用いて AssumeRole し、問題 CFn を本アカウントへ
 展開できるようになる。
 
+### 複数アカウントを一括で bootstrap する (AWS Organizations + StackSets)
+
+競技者アカウントが数十単位で AWS Organizations 配下にある環境では、アカウントごとに
+このテンプレートを流す必要はない。 テンプレートの 3 つのパラメータは **1 テナント内で
+全アカウント共通** なので、 1 つの StackSet で OU 全体へ同じ値を配れる。
+
+| パラメータ           | 値の由来                                                                |
+| -------------------- | ----------------------------------------------------------------------- |
+| `TenkaCloudAccountId` | 運営側 (TenkaCloud control-plane) のアカウント ID。 テナント内で 1 つ   |
+| `ExternalId`          | テナント単位で 1 つ払い出される secret。 アカウントごとには変わらない    |
+| `RoleName`            | デフォルト値 `TenkaCloud-CompetitorDeploy-Role`。 変えないのが前提           |
+
+#### 前提
+
+- Organizations の management account (または委任された StackSets 管理アカウント) で
+  CloudFormation StackSets の **信頼されたアクセス** が有効になっていること。
+- 競技者アカウントだけを入れた **専用の OU** を用意すること。 StackSet の配布先を OU にすると
+  その OU に後から入ったアカウントにも自動で配られる (`auto-deployment`) ので、 無関係な
+  アカウントが混ざる OU を配布先にしない。
+- IAM Role は **グローバル** リソースなので、 配布リージョンは **1 つだけ** にする。
+  複数リージョンへ配ると 2 つ目以降が同名 Role の作成で `CREATE_FAILED` になる。
+
+#### 手順
+
+1. **ExternalId を払い出す。** `application-admin-console` の Competitor Accounts で
+   最初の 1 アカウントを登録すると、 `TenkaCloudAccountId` と `ExternalId` が表示される。
+   ExternalId はテナント単位なので、 2 アカウント目以降も同じ値が使われる。
+2. **management account から StackSet を作る。**
+
+   ```bash
+   aws cloudformation create-stack-set \
+     --stack-set-name tenkacloud-competitor-bootstrap \
+     --template-body file://infrastructure/templates/competitor-bootstrap.yaml \
+     --permission-model SERVICE_MANAGED \
+     --auto-deployment Enabled=true,RetainStacksOnAccountRemoval=false \
+     --capabilities CAPABILITY_NAMED_IAM \
+     --parameters \
+         ParameterKey=TenkaCloudAccountId,ParameterValue=123456789012 \
+         ParameterKey=ExternalId,ParameterValue=share-this-secret-with-tenkacloud
+
+   aws cloudformation create-stack-instances \
+     --stack-set-name tenkacloud-competitor-bootstrap \
+     --deployment-targets OrganizationalUnitIds=ou-xxxx-competitors \
+     --regions ap-northeast-1 \
+     --operation-preferences FailureToleranceCount=0,MaxConcurrentCount=10
+   ```
+
+   `ExternalId` は `NoEcho` だが、 StackSet のパラメータは management account の
+   StackSets 管理者から参照できる。 その管理者は運営側と同じ組織に属する前提で扱い、
+   外部の組織のアカウントへ配るときはこの手順ではなくアカウントごとの deploy を使う。
+
+3. **配布結果からアカウント ID を集める。**
+
+   ```bash
+   aws cloudformation list-stack-instances \
+     --stack-set-name tenkacloud-competitor-bootstrap \
+     --query 'Summaries[?Status==`CURRENT`].Account' --output text
+   ```
+
+4. **TenkaCloud 側に登録する。** 集めたアカウント ID を Competitor Accounts に登録し、
+   各行の **検証** (STS AssumeRole の疎通確認) を通す。 登録は現状 1 アカウントずつで、
+   JSON 等による一括登録は未対応。 一括登録が要る規模なら Issue で扱う。
+
+#### 撤回
+
+StackSet からインスタンスを消せば全アカウントの Role が同時に消え、 TenkaCloud からの
+AssumeRole は即時に拒否される。
+
+```bash
+aws cloudformation delete-stack-instances \
+  --stack-set-name tenkacloud-competitor-bootstrap \
+  --deployment-targets OrganizationalUnitIds=ou-xxxx-competitors \
+  --regions ap-northeast-1 --no-retain-stacks
+aws cloudformation delete-stack-set --stack-set-name tenkacloud-competitor-bootstrap
+```
+
+TenkaCloud 側の登録行は残るので、 Competitor Accounts からも削除する。 最後の行を削除すると
+テナントの ExternalId も破棄され、 次に登録するときは新しい値が払い出される (= StackSet を
+再配布するときはパラメータも更新する)。
+
 ### 付与される権限
 
 作成される Role には AWS managed policy **`AdministratorAccess`** を付与します。

@@ -8,7 +8,7 @@ import type { IBucket } from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
 import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
 import { auditLogEnabledEnv } from "./audit-log-env.js";
-import { controlDataBackendEnv } from "./control-data-backend-env.js";
+import { controlDataBackendEnv, grantTursoAuthTokenRead } from "./control-data-backend-env.js";
 import { buildAzureCredentialParameterArnPattern } from "./handlers/shared/azure-credential-store.js";
 import { buildGcpCredentialParameterArnPattern } from "./handlers/shared/gcp-credential-store.js";
 import { buildSakuraCredentialParameterArnPattern } from "./handlers/shared/sakura-credential-store.js";
@@ -359,18 +359,7 @@ export class EventApiLambda extends Construct {
     // のため、 read 権限も必須。 旧 `grantWriteData` だけだと AccessDenied で 5xx になり、
     // UI が "Failed to fetch" を表示する (PR review で `[USER-REVIEW]` として残っていた配線完了)。
     props.adminAuditLogTable?.grantReadWriteData(this.fn);
-    if (props.tursoAuthTokenParameterName) {
-      this.fn.addToRolePolicy(
-        new PolicyStatement({
-          actions: ["ssm:GetParameter"],
-          resources: [
-            `arn:${Stack.of(this).partition}:ssm:${Stack.of(this).region}:${
-              Stack.of(this).account
-            }:parameter/${props.tursoAuthTokenParameterName.replace(/^\/+/, "")}`,
-          ],
-        }),
-      );
-    }
+    grantTursoAuthTokenRead(this.fn, props.tursoAuthTokenParameterName);
     // Issue #910 (#895 Phase 2.C.2.b): bulk payload bucket への PutObject 権限。 bucket が
     // 渡されたときのみ grant (= 未配線時の余分な IAM を避ける)。 useBulkDistributedMap が
     // false でも grant を入れておくと、 flag を flip するだけで切替できる (= 段階移行)。

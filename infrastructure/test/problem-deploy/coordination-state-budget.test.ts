@@ -344,6 +344,25 @@ describe("writeCoordinationState budget enforcement (#3151)", () => {
     expect(writes).toHaveLength(0);
   });
 
+  it("should refuse a state JSON drops entirely rather than writing an empty row", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const { deps, writes } = makeStore();
+    // `JSON.stringify` returns `undefined` -- not `"null"` -- for a top-level
+    // value it cannot represent at all. A plugin whose `applyOp` returned one
+    // would otherwise reach the backend as a row with no state in it, which is
+    // indistinguishable from a match that was never initialized.
+    const outcome = await writeCoordinationState(
+      deps,
+      SCOPE,
+      undefined,
+      0,
+      "2026-06-01T00:00:00.000Z",
+    );
+    expect(outcome.kind).toBe("too_large");
+    expect(outcome.kind === "too_large" && outcome.bytes).toBeUndefined();
+    expect(writes).toHaveLength(0);
+  });
+
   /**
    * These two pin the same rule from both sides: the budget measures the bytes
    * that actually reach the backend.

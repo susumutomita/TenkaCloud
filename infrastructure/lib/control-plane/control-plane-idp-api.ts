@@ -7,7 +7,10 @@ import type { Table } from "aws-cdk-lib/aws-dynamodb";
 import * as iam from "aws-cdk-lib/aws-iam";
 import type { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Construct } from "constructs";
-import { controlDataRuntimeEnv } from "../problem-deploy/control-data-backend-env.js";
+import {
+  controlDataRuntimeEnv,
+  grantTursoAuthTokenRead,
+} from "../problem-deploy/control-data-backend-env.js";
 import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
 
 export interface ControlPlaneIdpApiProps {
@@ -62,7 +65,7 @@ export interface ControlPlaneIdpApiProps {
  *   - env 名が違う (`CONTROL_PLANE_USER_POOL_ID` vs `TENANT_USER_POOL_ID`)
  *   - Control Plane は system scope 固定で `IDP_TIER_GUARD` を持たない
  *   - Lite の synth 出力を変えないため、共有 construct にはしない
- * IAM statement の重複だけは {@link samlIdpCognitoCrudStatement} / {@link tursoSsmReadStatement}
+ * IAM statement の重複だけは {@link samlIdpCognitoCrudStatement} / {@link grantTursoAuthTokenRead}
  * に集約して drift を防ぐ (= `controlDataBackendEnv` と同じ集約方針)。
  *
  * route は `features.samlSso` で gate **しない**。 gate すると feature flag は
@@ -94,9 +97,7 @@ export class ControlPlaneIdpApi extends Construct {
     // DDB: 全 CRUD 経路 (list / get / put / delete) で R+W が必要。純 SQL backend では grant なし。
     props.samlIdpsTable?.grantReadWriteData(this.fn);
 
-    if (props.tursoAuthTokenParameterName) {
-      this.fn.addToRolePolicy(tursoSsmReadStatement(stack, props.tursoAuthTokenParameterName));
-    }
+    grantTursoAuthTokenRead(this.fn, props.tursoAuthTokenParameterName);
 
     this.fn.addToRolePolicy(samlIdpCognitoCrudStatement(stack));
 
@@ -138,16 +139,5 @@ export function samlIdpCognitoCrudStatement(stack: Stack): iam.PolicyStatement {
       "cognito-idp:ListIdentityProviders",
     ],
     resources: [`arn:aws:cognito-idp:${stack.region}:${stack.account}:userpool/*`],
-  });
-}
-
-/** turso backend が auth token を読むための SSM SecureString read 権限 (未配線なら付与しない)。 */
-export function tursoSsmReadStatement(stack: Stack, parameterName: string): iam.PolicyStatement {
-  return new iam.PolicyStatement({
-    effect: iam.Effect.ALLOW,
-    actions: ["ssm:GetParameter"],
-    resources: [
-      `arn:${stack.partition}:ssm:${stack.region}:${stack.account}:parameter/${parameterName.replace(/^\/+/, "")}`,
-    ],
   });
 }

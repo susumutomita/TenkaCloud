@@ -70,18 +70,27 @@ export function controlDataRuntimeEnv(props: ControlDataRuntimeEnvProps): Record
  * `parameterName` 未指定 (= dynamodb profile) では**何も付与しない**ので、既存テンプレートと
  * byte 互換のまま呼び出せる。 Resource は parameter 1 本に限定する (`parameter/*` にしない)。
  *
- * 既存 construct 群はまだ inline のまま。 `controlDataRuntimeEnv` の doc と同じ方針で、
- * 各 construct を触る PR で 1 つずつ寄せる。
+ * ## `kms:Decrypt` は意図的に付与しない
+ *
+ * token は SecureString なので、`sql-executor-cache.ts` は `GetParameter(WithDecryption: true)`
+ * で読む。 SecureString は AWS managed key (`alias/aws/ssm`) で暗号化されているが、
+ * AWS managed key の key policy が「SSM 経由 (`kms:ViaService`) の呼び出し元」に復号を許可して
+ * いるため、Lambda の role に `kms:Decrypt` を書かなくても読める。 実際に稼働中の turso
+ * deployment はこの grant 無しで token を読めていた。
+ *
+ * つまりここに `kms:Decrypt` を足しても実際の権限は 1 つも増えず、宣言だけが増える。
+ * 「必要最小限の IAM 権限」を保つため、実際の API 呼び出しが要求する `ssm:GetParameter`
+ * だけを付与する。 将来 token を customer managed key で暗号化するなら、その key の policy か
+ * この helper のどちらかで `kms:Decrypt` を扱う必要があるが、それはその変更の責任。
  */
 export function grantTursoAuthTokenRead(fn: IFunction, parameterName?: string): void {
   if (!parameterName) return;
   const stack = Stack.of(fn);
+  const parameterArn = `arn:${stack.partition}:ssm:${stack.region}:${stack.account}:parameter/${parameterName.replace(/^\/+/, "")}`;
   fn.addToRolePolicy(
     new PolicyStatement({
       actions: ["ssm:GetParameter"],
-      resources: [
-        `arn:${stack.partition}:ssm:${stack.region}:${stack.account}:parameter/${parameterName.replace(/^\/+/, "")}`,
-      ],
+      resources: [parameterArn],
     }),
   );
 }

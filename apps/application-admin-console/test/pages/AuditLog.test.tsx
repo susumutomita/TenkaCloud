@@ -63,8 +63,8 @@ describe("AuditLog helpers", () => {
     expect(describeTarget("lock_scoring", "EV1")).toBe("Event EV1");
     expect(describeTarget("bulk_deploy", "EV1")).toBe("Event EV1");
     expect(describeTarget("create_notification", "EV1")).toBe("Event EV1");
-    expect(describeTarget("create_competitor_account", "672726205532")).toBe(
-      "AWS account 672726205532",
+    expect(describeTarget("create_competitor_account", "123456789012")).toBe(
+      "AWS account 123456789012",
     );
     expect(describeTarget("register_team_cloud_credential", "team-1")).toBe(
       "Team credential team-1",

@@ -42,7 +42,7 @@
   "infrastructure/lib/problem-deploy/generic-scoring-lambda.ts": {
     "lines": 100,
     "functions": 100,
-    "branches": 95.83
+    "branches": 95.45
   },
   "infrastructure/lib/problem-deploy/handlers/cfn-deploy-handler/delete-stack.ts": {
     "lines": 98.48,

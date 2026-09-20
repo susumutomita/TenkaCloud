@@ -8,7 +8,7 @@ import { Construct } from "constructs";
 import { defineNodejsFunction } from "../utils/define-nodejs-function.js";
 import { grantChallengePayloadRead } from "../utils/iam-helpers.js";
 import { auditLogEnabledEnv } from "./audit-log-env.js";
-import { controlDataBackendEnv } from "./control-data-backend-env.js";
+import { controlDataBackendEnv, grantTursoAuthTokenRead } from "./control-data-backend-env.js";
 import { buildAzureCredentialParameterArnPattern } from "./handlers/shared/azure-credential-store.js";
 import { buildExternalIdParameterArnPattern } from "./handlers/shared/external-id-store.js";
 import { buildGcpCredentialParameterArnPattern } from "./handlers/shared/gcp-credential-store.js";
@@ -319,16 +319,6 @@ export class DeployApiLambda extends Construct {
 
     // [Issue #2560] Turso SecureString read — EventApiLambda と同じ pattern。
     // `tursoAuthTokenParameterName` 未配線 (= dynamodb backend) なら no-op。
-    if (props.tursoAuthTokenParameterName) {
-      this.fn.addToRolePolicy(
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: ["ssm:GetParameter"],
-          resources: [
-            `arn:${stack.partition}:ssm:${stack.region}:${stack.account}:parameter/${props.tursoAuthTokenParameterName.replace(/^\/+/, "")}`,
-          ],
-        }),
-      );
-    }
+    grantTursoAuthTokenRead(this.fn, props.tursoAuthTokenParameterName);
   }
 }
