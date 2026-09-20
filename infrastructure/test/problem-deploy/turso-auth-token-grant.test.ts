@@ -6,30 +6,23 @@ import {
 } from "../problem-deploy-backend-stack.test-helpers";
 
 /**
- * Reading the Turso auth token needs TWO permissions, and the platform only
- * ever granted one.
+ * Every Lambda that carries the Turso token's env must also be able to read
+ * it — and must not carry more than that.
  *
  * `sql-executor-cache.ts` opens the libSQL client on cold start by calling
- * `GetParameter(WithDecryption: true)` on an SSM **SecureString**. A
- * SecureString is envelope-encrypted under the AWS managed key
- * `alias/aws/ssm`, so that call needs `ssm:GetParameter` *and* `kms:Decrypt`
- * on that key for this parameter's encryption context. Every construct granted
- * the first and none granted the second: the `kms:Decrypt` those Lambdas
- * already carry is conditioned on `kms:EncryptionContext:PARAMETER_ARN`
- * matching the ExternalId / sakura / azure / gcp credential paths, which the
- * Turso parameter is not one of.
+ * `GetParameter(WithDecryption: true)` on an SSM **SecureString**. That call
+ * needs `ssm:GetParameter` on the parameter. The decrypt under the AWS managed
+ * key `alias/aws/ssm` is authorised by that key's own policy (calls made via
+ * SSM), so the Lambda role needs no `kms:Decrypt` for it, and the platform
+ * deliberately grants none: an extra `kms:Decrypt` on `Resource: "*"` would
+ * add a declared permission without adding a real one.
  *
- * The result is an `AccessDeniedException` inside the executor cache's promise
- * on the first control-data read, surfacing to the operator as a bare 500
- * `internal_error` — the Competitor Accounts screen's symptom. It is invisible
- * on the DynamoDB backend, which never reads the token.
- *
- * This test is written over EVERY Lambda that carries the token's env rather
- * than over a list of construct names, so a newly Turso-wired Lambda cannot
- * ship the env without the pair of grants that makes it usable. Thirteen
- * constructs each hand-rolled the `ssm:GetParameter` statement, which is
- * exactly why one missing companion statement stayed invisible thirteen times;
- * they now share `grantTursoAuthTokenRead`.
+ * Thirteen constructs each hand-rolled the `ssm:GetParameter` statement, so
+ * the same statement could drift thirteen ways; they now share
+ * `grantTursoAuthTokenRead`. This test is written over EVERY Lambda that
+ * carries the token's env rather than over a list of construct names, so a
+ * newly Turso-wired Lambda cannot ship the env without the grant that makes
+ * it usable, nor with a grant the helper decided against.
  */
 
 const TOKEN_PARAMETER_PATH = "parameter/tenkacloud/development/turso-token";
@@ -124,7 +117,7 @@ describe("Turso auth token grants (turso backend)", () => {
   );
 
   it(
-    "gives every token-reading Lambda kms:Decrypt scoped to that parameter's encryption context",
+    "does not grant kms:Decrypt for the token (the AWS managed key policy already covers it)",
     () => {
       const tpl = synthWithControlDataBackendTurso();
       for (const [id, fn] of tursoWiredLambdas(tpl)) {
@@ -135,21 +128,9 @@ describe("Turso auth token grants (turso backend)", () => {
             actionsOf(statement).includes("kms:Decrypt") && mentionsTokenParameter(statement),
         );
         expect(
-          decrypt.length,
-          `${id} can read the SecureString but cannot decrypt it — GetParameter(WithDecryption) will be denied`,
-        ).toBeGreaterThan(0);
-        // Scoped, not blanket: `Resource: "*"` is unavoidable (the AWS managed
-        // key's ARN is not known at synth time), so the encryption-context
-        // condition is what keeps this to one parameter.
-        for (const statement of decrypt) {
-          const condition = statement.Condition as
-            | { StringEquals?: Record<string, unknown> }
-            | undefined;
-          expect(
-            condition?.StringEquals?.["kms:EncryptionContext:PARAMETER_ARN"],
-            `${id}'s kms:Decrypt must be pinned to the token parameter's encryption context`,
-          ).toBeDefined();
-        }
+          decrypt,
+          `${id} carries a kms:Decrypt for the Turso token that alias/aws/ssm does not need`,
+        ).toEqual([]);
       }
     },
     SYNTH_TIMEOUT_MS,

@@ -287,7 +287,7 @@ describe("control-data runtime repository resolver", () => {
    * and the underlying AWS error rather than leaving a 500 with no cause.
    */
   it("should name the IAM requirement when the SSM read is denied", async () => {
-    const denied = Object.assign(new Error("User is not authorized to perform: kms:Decrypt"), {
+    const denied = Object.assign(new Error("User is not authorized to perform: ssm:GetParameter"), {
       name: "AccessDeniedException",
       $metadata: { httpStatusCode: 400 },
     });
@@ -303,7 +303,7 @@ describe("control-data runtime repository resolver", () => {
 
     const failure = await runtime.resolveTeamsRepository({}).catch((err: Error) => err.message);
     expect(failure).toContain("/tenkacloud/dev/turso-token");
-    expect(failure).toContain("kms:Decrypt on alias/aws/ssm");
+    expect(failure).toContain("needs ssm:GetParameter on that parameter");
     // The AWS error's own name and status survive: "denied" and "not found"
     // need different fixes and must not look the same in the log.
     expect(failure).toContain("AccessDeniedException");

@@ -61,8 +61,8 @@ export function createSqlExecutorCache(deps: RuntimeDependencies): () => Promise
         .catch((err: unknown) => {
           throw new Error(
             `Turso auth token could not be read from SSM SecureString ${parameterName}. ` +
-              "GetParameter(WithDecryption) needs both ssm:GetParameter on that parameter and " +
-              "kms:Decrypt on alias/aws/ssm for its encryption context. " +
+              "GetParameter(WithDecryption) needs ssm:GetParameter on that parameter; the " +
+              "decrypt under alias/aws/ssm is authorised by the AWS managed key itself. " +
               `Underlying: ${describeCause(err)}`,
           );
         });

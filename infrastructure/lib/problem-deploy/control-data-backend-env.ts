@@ -70,26 +70,18 @@ export function controlDataRuntimeEnv(props: ControlDataRuntimeEnvProps): Record
  * `parameterName` 未指定 (= dynamodb profile) では**何も付与しない**ので、既存テンプレートと
  * byte 互換のまま呼び出せる。 Resource は parameter 1 本に限定する (`parameter/*` にしない)。
  *
- * ## `ssm:GetParameter` だけでは読めない
+ * ## `kms:Decrypt` は意図的に付与しない
  *
- * token は SecureString なので、`sql-executor-cache.ts` は必ず
- * `GetParameter(WithDecryption: true)` で読む。 SecureString は AWS managed key
- * (`alias/aws/ssm`) の envelope encryption なので、この呼び出しは `ssm:GetParameter` に加えて
- * **その key に対する `kms:Decrypt`** を要求する。 同じ Lambda が ExternalId / sakura / azure /
- * gcp の SecureString を読むために持っている `kms:Decrypt` は
- * `kms:EncryptionContext:PARAMETER_ARN` をそれら credential path へ絞った条件付きなので、
- * Turso の parameter には**一致しない**。
+ * token は SecureString なので、`sql-executor-cache.ts` は `GetParameter(WithDecryption: true)`
+ * で読む。 SecureString は AWS managed key (`alias/aws/ssm`) で暗号化されているが、
+ * AWS managed key の key policy が「SSM 経由 (`kms:ViaService`) の呼び出し元」に復号を許可して
+ * いるため、Lambda の role に `kms:Decrypt` を書かなくても読める。 実際に稼働中の turso
+ * deployment はこの grant 無しで token を読めていた。
  *
- * その結果 cold start の `GetParameter` が `AccessDeniedException` になり、
- * `createSqlExecutorCache` の promise が reject して、route は理由の分からない 500 を返す
- * (Competitor Accounts 画面の `internal_error` はこれ)。 backend が dynamodb のときは token を
- * 一切読まないので、症状は turso でだけ出る。
- *
- * AWS managed key の ARN は synth 時に定まらないので `Resource: "*"` になるが、
- * `kms:EncryptionContext:PARAMETER_ARN` をこの parameter 1 本へ固定することで、この Lambda が
- * 復号できるのは実質この parameter だけになる。 condition が `StringEquals` で足りるのは、
- * credential 側と違って parameter 名に wildcard が無く、SSM が渡してくる ARN が完全に確定して
- * いるため。
+ * つまりここに `kms:Decrypt` を足しても実際の権限は 1 つも増えず、宣言だけが増える。
+ * 「必要最小限の IAM 権限」を保つため、実際の API 呼び出しが要求する `ssm:GetParameter`
+ * だけを付与する。 将来 token を customer managed key で暗号化するなら、その key の policy か
+ * この helper のどちらかで `kms:Decrypt` を扱う必要があるが、それはその変更の責任。
  */
 export function grantTursoAuthTokenRead(fn: IFunction, parameterName?: string): void {
   if (!parameterName) return;
@@ -99,15 +91,6 @@ export function grantTursoAuthTokenRead(fn: IFunction, parameterName?: string): 
     new PolicyStatement({
       actions: ["ssm:GetParameter"],
       resources: [parameterArn],
-    }),
-  );
-  fn.addToRolePolicy(
-    new PolicyStatement({
-      actions: ["kms:Decrypt"],
-      resources: ["*"],
-      conditions: {
-        StringEquals: { "kms:EncryptionContext:PARAMETER_ARN": parameterArn },
-      },
     }),
   );
 }
