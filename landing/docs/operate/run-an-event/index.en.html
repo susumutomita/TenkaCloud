@@ -330,6 +330,11 @@ its AWS account. Use the same ExternalId configured by the organizer: 16–128
 ASCII letters, digits, and <code>_ = , . @ : / -</code>. Share the resulting role ARN,
 never an administrator credential or secret key. The full competitor-side steps live in the
 <a href="https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/README.md">competitor setup guide</a>.</p>
+<p>When the participating accounts sit in one AWS Organizations OU, the same template
+can be rolled out to the whole OU with a StackSet — all three parameters are
+constant within a tenant. The steps are in the setup guide under
+<a href="https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/README.md#%E8%A4%87%E6%95%B0%E3%82%A2%E3%82%AB%E3%82%A6%E3%83%B3%E3%83%88%E3%82%92%E4%B8%80%E6%8B%AC%E3%81%A7-bootstrap-%E3%81%99%E3%82%8B-aws-organizations--stacksets">bulk bootstrap</a>.
+Registration on the TenkaCloud side is still one account at a time.</p>
 <h2>Deploy a problem</h2>
 <p>In the <code>application-admin-console</code>, create an event, pick problems from the catalog
 (the picker only offers cloud-deployable problems — local-only container problems

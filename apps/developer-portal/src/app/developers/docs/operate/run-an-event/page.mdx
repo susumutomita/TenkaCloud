@@ -130,6 +130,12 @@ ASCII letters, digits, and `_ = , . @ : / -`. Share the resulting role ARN,
 never an administrator credential or secret key. The full competitor-side steps live in the
 [competitor setup guide](https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/README.md).
 
+When the participating accounts sit in one AWS Organizations OU, the same template
+can be rolled out to the whole OU with a StackSet — all three parameters are
+constant within a tenant. The steps are in the setup guide under
+[bulk bootstrap](https://github.com/susumutomita/TenkaCloud/blob/main/infrastructure/templates/README.md#複数アカウントを一括で-bootstrap-する-aws-organizations--stacksets).
+Registration on the TenkaCloud side is still one account at a time.
+
 ## Deploy a problem
 
 In the `application-admin-console`, create an event, pick problems from the catalog
