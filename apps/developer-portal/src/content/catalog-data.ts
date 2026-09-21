@@ -150,14 +150,14 @@ export const CATALOG_DATA: CatalogData = {
       },
     },
     {
-      id: "office-link-gameday",
+      id: "office-link-battle",
       category: "Challenge",
       status: "ready",
       difficulty: 1,
-      tags: ["beginner", "teamwork", "gameday", "communication"],
+      tags: ["beginner", "teamwork", "battle", "communication"],
       name: {
-        ja: "つながるオフィス — 相談してひらくGameDay",
-        en: "Office Link — a GameDay built on conversation",
+        ja: "つながるオフィス — 相談してひらくBattle",
+        en: "Office Link — a Battle built on conversation",
       },
     },
     {
@@ -165,7 +165,7 @@ export const CATALOG_DATA: CatalogData = {
       category: "Challenge",
       status: "ready",
       difficulty: 1,
-      tags: ["beginner", "teamwork", "gameday", "communication"],
+      tags: ["beginner", "teamwork", "battle", "communication"],
       name: {
         ja: "つながるオフィスの準備 — 4人で学ぶGate",
         en: "Office Link Preparation — a four-person learning Gate",

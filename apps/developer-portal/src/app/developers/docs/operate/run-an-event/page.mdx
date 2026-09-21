@@ -9,17 +9,17 @@ tenant creation and multi-cloud are separated as architecture reference.
 
 ## Hosting a beginner social event
 
-Use [Office Link](https://github.com/susumutomita/TenkaCloudChallenge/tree/main/challenges/office-link-gameday) with **four people per team: Preparation Challenge → Gate completion → GameDay**. One unfinished task is available at a time. Rotate explaining, reading the example, operating and checking before applying the concepts in the competition.
+Use [Office Link](https://github.com/susumutomita/TenkaCloudChallenge/tree/main/challenges/office-link-battle) with **four people per team: Preparation Challenge → Gate completion → Battle**. One unfinished task is available at a time. Rotate explaining, reading the example, operating and checking before applying the concepts in the competition.
 
 | Stage | Team activity | Scoring and progression |
 | --- | --- | --- |
-| Preparation | Learn location, permissions, recovery and outcome checks, one at a time | Complete all four, then submit one passphrase for 100 points and unlock GameDay |
-| GameDay | Deliver an invitation → share only the invitation → recover it | Repairs and explanations score separately; both must succeed before the next mission. 100 points total |
+| Preparation | Learn location, permissions, recovery and outcome checks, one at a time | Complete all four, then submit one passphrase for 100 points and unlock Battle |
+| Battle | Deliver an invitation → share only the invitation → recover it | Repairs and explanations score separately; both must succeed before the next mission. 100 points total |
 | Reflection | Each person shares one helpful teammate comment | Speaking frequency is not graded |
 
-Allow 60 minutes: introduction 5 → Preparation 20 → GameDay 25 → results/reflection 10. Teams enter GameDay as soon as Preparation is complete; everyone has the same deadline. Workshop attempts and hints are free. A wrong portal passphrase costs 5 points, so copy it into the matching field. Event total: 200 points; celebrate tied scores as ties.
+Allow 60 minutes: introduction 5 → Preparation 20 → Battle 25 → results/reflection 10. Teams enter Battle as soon as Preparation is complete; everyone has the same deadline. Workshop attempts and hints are free. A wrong portal passphrase costs 5 points, so copy it into the matching field. Event total: 200 points; celebrate tied scores as ties.
 
-Add **only office-link-gate and office-link-gameday** to the event. In its Gate panel, a TenantAdmin enables the feature (default OFF), selects Preparation as Gate challenge and only GameDay as the unlock target, sets policy to required, bonus to 0 and team overrides to inherit. Save and verify GameDay is locked in the participant portal. Use the [configuration and host runbook](https://github.com/susumutomita/TenkaCloudChallenge/blob/main/challenges/office-link-gameday/OPERATOR.md).
+Add **only office-link-gate and office-link-battle** to the event. In its Gate panel, a TenantAdmin enables the feature (default OFF), selects Preparation as Gate challenge and only Battle as the unlock target, sets policy to required, bonus to 0 and team overrides to inherit. Save and verify Battle is locked in the participant portal. Use the [configuration and host runbook](https://github.com/susumutomita/TenkaCloudChallenge/blob/main/challenges/office-link-battle/OPERATOR.md).
 
 This is a model of cloud concepts, not actual AWS console operations. Official scoring and the Gate use the existing AWS edition. Local previews only exercise problem screens and verdicts. Start with a rehearsal of 2–4 teams, measure time and conversation, and listen to all four explanations to assess understanding.
 
@@ -29,7 +29,7 @@ The public platform and standard problems are available for self-hosting. Event 
 
 The Lite launcher default `ProblemsRepoRef` points to the last published release and may not contain this new set. Read `sources.catalog.commit` from `release/tenkacloud-release.json` in the platform checkout selected for rehearsal and supply it as **ProblemsRepoRef**. Pin **RepoRef** to the platform commit being rehearsed too. Until included in a published release, this is a candidate for event preparation.
 
-For local `make deploy`, align `problems` with that checkout's gitlink. Before deploying, confirm both `challenges/office-link-gate/metadata.json` and `challenges/office-link-gameday/metadata.json` exist. Updating the version does not automatically register these problems or configure a Gate in an existing event.
+For local `make deploy`, align `problems` with that checkout's gitlink. Before deploying, confirm both `challenges/office-link-gate/metadata.json` and `challenges/office-link-battle/metadata.json` exist. Updating the version does not automatically register these problems or configure a Gate in an existing event.
 
 ## From an idea to a hosted event
 
