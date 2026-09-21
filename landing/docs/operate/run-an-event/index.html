@@ -71,34 +71,38 @@
 <p>これは運営者向けのウォークスルーです。現在開催手順として案内するのはLiteです。
 SaaSのテナント作成とマルチクラウドは末尾に分離し、コード構成の参考として説明します。</p>
 <h2>初心者同士の交流を目的にするなら</h2>
-<p>AWSの前提知識がない参加者には、<a href="https://github.com/susumutomita/TenkaCloudChallenge/tree/main/challenges/office-link-gameday">つながるオフィス</a>を使えます。3〜4人で手がかりを読み合い、ブラウザで操作し、直った理由を仲間に説明します。<strong>操作の成功と解説の成功は別々に得点</strong>になります。説明を聞くだけで終わらず、次の場面へ応用する問題に答えます。</p>
+<p>4人1チームで、<strong>準備Challenge → Gate修了 → GameDay</strong> と進む<a href="https://github.com/susumutomita/TenkaCloudChallenge/tree/main/challenges/office-link-gameday">つながるオフィス</a>を使えます。一度に取り組む未完了の課題は1つ。説明・例を読む・操作・確認の担当を交代し、必要な知識を確かめてから本戦へ進みます。</p>
 <table>
 <thead>
 <tr>
-<th>ミッション</th>
-<th>操作して競う</th>
-<th>解説も問題にする</th>
+<th>段階</th>
+<th>チームですること</th>
+<th>得点・次への条件</th>
 </tr>
 </thead>
 <tbody><tr>
-<td>招待状を届ける</td>
-<td>メモと地図から宛先を選ぶ</td>
-<td>同じ設定が見つからないとき、何を確認する？</td>
+<td>準備Challenge</td>
+<td>場所・権限・復旧・結果の確認を、例と相談問題で1つずつ学ぶ</td>
+<td>全4段階の修了後に合言葉を1つ提出。100点で本戦解放</td>
 </tr>
 <tr>
-<td>案内だけを共有</td>
-<td>読める資料と許可する操作を決める</td>
-<td>必要な権限だけになったと、どう確かめる？</td>
+<td>GameDay</td>
+<td>招待状を届ける → 案内だけ共有 → 消えた案内を復旧</td>
+<td>操作と解説に別々の得点。両方の成功で次のミッションへ。合計100点</td>
 </tr>
 <tr>
-<td>消えた案内を復旧</td>
-<td>時系列と控えを見比べて戻す</td>
-<td>画面が戻っても、最新の予約がないときは？</td>
+<td>振り返り</td>
+<td>仲間の一言で分かったことを1人ずつ伝える</td>
+<td>発言量は採点しない</td>
 </tr>
 </tbody></table>
-<p>60分の目安は、説明5分 → 練習5分 → 競技40分 → 結果・振り返り10分。問題画面のヒント・試行・未完了による減点はありません。ポータルへ間違った合言葉を提出すると5点減点なので、コピーして対応する回答欄へ貼り付けます。得点は合計100点で競い、同点は同順位で表彰します。読む人・操作する人・確認する人をミッションごとに交代してください。</p>
-<p>これはクラウドの考え方を学ぶ模型です。参加者が実際のAWS設定を変更する問題ではありません。開催は既存のAWS版ポータルの採点を使います。ローカルプレビューは画面確認用で、複数チームの公式採点は行いません。<a href="https://github.com/susumutomita/TenkaCloudChallenge/blob/main/challenges/office-link-gameday/OPERATOR.ja.md">準備数量・役割カード・司会台本・開催前の確認</a>を使い、初回は2〜4チームを目安に、所要時間と相談の生まれ方をリハーサルで確認します。</p>
+<p>60分の目安は、導入5分 → 準備20分 → 本戦25分 → 結果・振り返り10分。準備を終えたチームから本戦へ進み、全員同じ終了時刻です。問題画面での試行・ヒントは無料。公式の合言葉の誤提出は5点減点なので、コピーして対応する欄へ提出します。イベント合計200点、同点は同順位で表彰します。</p>
+<p>イベントには <strong>office-link-gate / office-link-gameday の2問だけ</strong>を登録します。イベント詳細の「進行 / Gate」でTenantAdminが機能をONにし、Gate challengeに準備、アンロック対象に本戦だけを指定。デフォルトpolicyはrequired、追加ボーナス0、チーム上書きは継承です。Gateは既定OFFなので、保存後に必ず参加者画面で本戦のロックを確認します。設定と台本は<a href="https://github.com/susumutomita/TenkaCloudChallenge/blob/main/challenges/office-link-gameday/OPERATOR.ja.md">開催ランブック</a>にまとめています。</p>
+<p>これはクラウドの考え方を学ぶ模型で、実際のAWS設定を操作する問題ではありません。公式採点とGateは既存AWS版を使います。ローカルプレビューは問題画面と判定の確認用です。初回は2〜4チームで時間と相談の生まれ方をリハーサルし、4人それぞれの理解は説明を聞いて確かめます。</p>
 <p>公開コードと標準問題を使って自社開催できます。設計・準備・当日運営の支援は有償、企業固有の問題は個別見積もりです。交流用の得点だけで採用や社内認定の判定を行わず、評価目的の場合は別に基準を設計します。</p>
+<h3>デプロイする問題の版を固定する</h3>
+<p>Liteランチャーの既定 <code>ProblemsRepoRef</code> は最後に公開したリリースを指すため、この新しいセットを含むとは限りません。リハーサルで使う本体チェックアウトの <code>release/tenkacloud-release.json</code> にある <code>sources.catalog.commit</code> を控え、ランチャーの <strong>ProblemsRepoRef</strong> へ指定します。本体の <strong>RepoRef</strong> もリハーサルするコミットへ固定してください。公開済みリリースに収録されるまでは候補版での開催準備です。</p>
+<p>ローカルから <code>make deploy</code> する場合も、本体の <code>problems</code> をそのgitlinkへ合わせます。デプロイ前に <code>challenges/office-link-gate/metadata.json</code> と <code>challenges/office-link-gameday/metadata.json</code> の両方が存在することを確認します。版を変えても既存イベントに問題やGate設定が自動登録されるわけではありません。</p>
 <h2>開催までの道のり</h2>
 <p>「開催したい人はいるが、運営経験がない」状態から使える準備表です。まず、責任者と協力者で開催計画を1枚にまとめます。以下の時期と作業時間は<strong>初回開催の見積り</strong>です。会場の予約期限や社内承認に合わせて前倒しし、開催後に実績で更新してください。</p>
 <p><strong>企画 → 人と場所 → 環境 → リハーサル → 開催 → 撤収・振り返り</strong></p>

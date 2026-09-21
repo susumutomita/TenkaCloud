@@ -564,7 +564,13 @@ describe("release source parity and generated report", () => {
     // true, the prose has to agree with it: a stale "still points at the previously released
     // identity" is the same drift this manifest exists to eliminate, and a missing one hides
     // that the launcher default deploys something other than the release being described.
-    const lags = readLauncherDefaults().manifestVersion !== manifest.release.version;
+    // A catalog-only update can keep the same candidate version. Schema v2 derives
+    // the platform commit from the release tag, but the catalog SHA is available now
+    // and must also match before claiming that launcher defaults contain this content.
+    const defaults = readLauncherDefaults();
+    const lags =
+      defaults.manifestVersion !== manifest.release.version ||
+      defaults.catalogCommit !== manifest.sources.catalog.commit;
     expect(manifest.knownLimitations.includes(LAUNCHER_LAG_LIMITATION)).toBe(lags);
   });
 

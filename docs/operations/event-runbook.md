@@ -6,7 +6,7 @@ Issue #2407。TenkaCloud で 1 回のイベント (Battle / Challenge) を運営
 
 ## 前提: どのモードで動かすか
 
-AWS 未経験者の交流会には、[つながるオフィスの60分ランブック](https://github.com/susumutomita/TenkaCloudChallenge/blob/main/challenges/office-link-gameday/OPERATOR.ja.md)を使えます。操作と解説の 6 項目を別々に採点し、3〜4 人で役割を交代します。採点付き開催は AWS 版を使い、ローカルプレビューは画面確認に限ります。
+AWS 未経験者の交流会には、[つながるオフィスの60分ランブック](https://github.com/susumutomita/TenkaCloudChallenge/blob/main/challenges/office-link-gameday/OPERATOR.ja.md)を使えます。4 人で準備 Challenge を修了して Gate から本戦へ進み、1 問ずつ取り組みます。準備と本戦の 2 問だけをイベントへ登録し、Gate の有効化・required 設定はリンク先の台本に従います。採点付き開催は AWS 版を使い、ローカルプレビューは画面確認に限ります。
 
 イベント規模で運用モードを決める。デプロイ手順そのものは DEPLOYMENT_GUIDE.md にあるので、ここでは「どれを選ぶか」だけ確認する。
 

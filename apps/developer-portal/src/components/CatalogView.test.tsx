@@ -11,13 +11,15 @@ describe("CatalogView", () => {
     expect(screen.getByRole("heading", { level: 1, name: "問題カタログ" })).toBeInTheDocument();
     // Every generated problem id is rendered as a card subtitle.
     const anId = CATALOG_DATA.problems[0]?.id ?? "";
-    expect(screen.getByText(anId)).toBeInTheDocument();
+    expect(screen.getByText(anId, { selector: "code" })).toBeInTheDocument();
   });
 
   it("should render a card for every public problem", () => {
     render(<CatalogView locale="ja" />);
+    expect(screen.getAllByRole("article")).toHaveLength(CATALOG_DATA.problems.length);
     for (const problem of CATALOG_DATA.problems) {
-      expect(screen.getByText(problem.id)).toBeInTheDocument();
+      // Tags may share an ID's text; only the card's ID is its identity.
+      expect(screen.getByText(problem.id, { selector: "code" })).toBeInTheDocument();
     }
   });
 

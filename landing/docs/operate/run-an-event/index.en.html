@@ -71,34 +71,38 @@
 <p>This operator walkthrough presents Lite as the current event procedure. SaaS
 tenant creation and multi-cloud are separated as architecture reference.</p>
 <h2>Hosting a beginner social event</h2>
-<p>Use <a href="https://github.com/susumutomita/TenkaCloudChallenge/tree/main/challenges/office-link-gameday">Office Link</a> for participants with no AWS background. Teams of 3–4 share clues, try browser actions, then explain the result to a teammate. <strong>Repairs and explanations earn separate points.</strong> Each explanation is another mission that applies the idea to a new situation.</p>
+<p>Use <a href="https://github.com/susumutomita/TenkaCloudChallenge/tree/main/challenges/office-link-gameday">Office Link</a> with <strong>four people per team: Preparation Challenge → Gate completion → GameDay</strong>. One unfinished task is available at a time. Rotate explaining, reading the example, operating and checking before applying the concepts in the competition.</p>
 <table>
 <thead>
 <tr>
-<th>Mission</th>
-<th>Compete by doing</th>
-<th>Explain through another problem</th>
+<th>Stage</th>
+<th>Team activity</th>
+<th>Scoring and progression</th>
 </tr>
 </thead>
 <tbody><tr>
-<td>Deliver an invitation</td>
-<td>Match a reception note to a destination map</td>
-<td>Where should you look when a named setting is missing?</td>
+<td>Preparation</td>
+<td>Learn location, permissions, recovery and outcome checks, one at a time</td>
+<td>Complete all four, then submit one passphrase for 100 points and unlock GameDay</td>
 </tr>
 <tr>
-<td>Share just the invitation</td>
-<td>Choose the document and permitted action</td>
-<td>How do you check that access is limited to what is needed?</td>
+<td>GameDay</td>
+<td>Deliver an invitation → share only the invitation → recover it</td>
+<td>Repairs and explanations score separately; both must succeed before the next mission. 100 points total</td>
 </tr>
 <tr>
-<td>Recover a missing invitation</td>
-<td>Compare a timeline with saved copies</td>
-<td>What if the page works but the latest booking is missing?</td>
+<td>Reflection</td>
+<td>Each person shares one helpful teammate comment</td>
+<td>Speaking frequency is not graded</td>
 </tr>
 </tbody></table>
-<p>Plan 60 minutes: 5 for the introduction, 5 for practice, 40 for competition and 10 for results and reflection. Workshop hints, retries and unfinished missions cost no points. A wrong portal passphrase costs 5 points; copy it into the matching answer field. Compete for 100 points; award equal ranks for ties. Rotate readers, operator and checker between missions.</p>
-<p>This is a model of cloud concepts, not an exercise that changes real AWS settings. Scored events use the existing AWS portal. The local preview is for checking the experience, not official multiplayer scoring. The <a href="https://github.com/susumutomita/TenkaCloudChallenge/blob/main/challenges/office-link-gameday/OPERATOR.md">host runbook</a> includes preparation quantities, role cards, a script and rehearsal checks. Start with 2–4 teams and measure completion time and participation in a rehearsal.</p>
-<p>The public platform and standard problems are available for self-hosting. Event design, preparation and facilitation are paid services; company-specific problems are quoted separately. Social-event scores alone are not a validated hiring or internal certification assessment: design separate criteria for those uses.</p>
+<p>Allow 60 minutes: introduction 5 → Preparation 20 → GameDay 25 → results/reflection 10. Teams enter GameDay as soon as Preparation is complete; everyone has the same deadline. Workshop attempts and hints are free. A wrong portal passphrase costs 5 points, so copy it into the matching field. Event total: 200 points; celebrate tied scores as ties.</p>
+<p>Add <strong>only office-link-gate and office-link-gameday</strong> to the event. In its Gate panel, a TenantAdmin enables the feature (default OFF), selects Preparation as Gate challenge and only GameDay as the unlock target, sets policy to required, bonus to 0 and team overrides to inherit. Save and verify GameDay is locked in the participant portal. Use the <a href="https://github.com/susumutomita/TenkaCloudChallenge/blob/main/challenges/office-link-gameday/OPERATOR.md">configuration and host runbook</a>.</p>
+<p>This is a model of cloud concepts, not actual AWS console operations. Official scoring and the Gate use the existing AWS edition. Local previews only exercise problem screens and verdicts. Start with a rehearsal of 2–4 teams, measure time and conversation, and listen to all four explanations to assess understanding.</p>
+<p>The public platform and standard problems are available for self-hosting. Event design, preparation and facilitation can be provided as paid support; organization-specific problems are quoted separately. Social-event scores alone are not a hiring or certification rubric: design separate criteria for those uses.</p>
+<h3>Pin the catalog version being deployed</h3>
+<p>The Lite launcher default <code>ProblemsRepoRef</code> points to the last published release and may not contain this new set. Read <code>sources.catalog.commit</code> from <code>release/tenkacloud-release.json</code> in the platform checkout selected for rehearsal and supply it as <strong>ProblemsRepoRef</strong>. Pin <strong>RepoRef</strong> to the platform commit being rehearsed too. Until included in a published release, this is a candidate for event preparation.</p>
+<p>For local <code>make deploy</code>, align <code>problems</code> with that checkout&#39;s gitlink. Before deploying, confirm both <code>challenges/office-link-gate/metadata.json</code> and <code>challenges/office-link-gameday/metadata.json</code> exist. Updating the version does not automatically register these problems or configure a Gate in an existing event.</p>
 <h2>From an idea to a hosted event</h2>
 <p>Start with a willing owner and helpers, even if nobody has hosted before. The lead times and effort below are <strong>initial estimates</strong>, not measured promises. Move them earlier for venue booking or internal approval; update them after each event.</p>
 <p><strong>Plan → people and venue → environment → rehearsal → event → teardown and review</strong></p>

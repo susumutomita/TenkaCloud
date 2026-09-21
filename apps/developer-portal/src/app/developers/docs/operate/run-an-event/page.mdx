@@ -9,19 +9,27 @@ tenant creation and multi-cloud are separated as architecture reference.
 
 ## Hosting a beginner social event
 
-Use [Office Link](https://github.com/susumutomita/TenkaCloudChallenge/tree/main/challenges/office-link-gameday) for participants with no AWS background. Teams of 3–4 share clues, try browser actions, then explain the result to a teammate. **Repairs and explanations earn separate points.** Each explanation is another mission that applies the idea to a new situation.
+Use [Office Link](https://github.com/susumutomita/TenkaCloudChallenge/tree/main/challenges/office-link-gameday) with **four people per team: Preparation Challenge → Gate completion → GameDay**. One unfinished task is available at a time. Rotate explaining, reading the example, operating and checking before applying the concepts in the competition.
 
-| Mission | Compete by doing | Explain through another problem |
+| Stage | Team activity | Scoring and progression |
 | --- | --- | --- |
-| Deliver an invitation | Match a reception note to a destination map | Where should you look when a named setting is missing? |
-| Share just the invitation | Choose the document and permitted action | How do you check that access is limited to what is needed? |
-| Recover a missing invitation | Compare a timeline with saved copies | What if the page works but the latest booking is missing? |
+| Preparation | Learn location, permissions, recovery and outcome checks, one at a time | Complete all four, then submit one passphrase for 100 points and unlock GameDay |
+| GameDay | Deliver an invitation → share only the invitation → recover it | Repairs and explanations score separately; both must succeed before the next mission. 100 points total |
+| Reflection | Each person shares one helpful teammate comment | Speaking frequency is not graded |
 
-Plan 60 minutes: 5 for the introduction, 5 for practice, 40 for competition and 10 for results and reflection. Workshop hints, retries and unfinished missions cost no points. A wrong portal passphrase costs 5 points; copy it into the matching answer field. Compete for 100 points; award equal ranks for ties. Rotate readers, operator and checker between missions.
+Allow 60 minutes: introduction 5 → Preparation 20 → GameDay 25 → results/reflection 10. Teams enter GameDay as soon as Preparation is complete; everyone has the same deadline. Workshop attempts and hints are free. A wrong portal passphrase costs 5 points, so copy it into the matching field. Event total: 200 points; celebrate tied scores as ties.
 
-This is a model of cloud concepts, not an exercise that changes real AWS settings. Scored events use the existing AWS portal. The local preview is for checking the experience, not official multiplayer scoring. The [host runbook](https://github.com/susumutomita/TenkaCloudChallenge/blob/main/challenges/office-link-gameday/OPERATOR.md) includes preparation quantities, role cards, a script and rehearsal checks. Start with 2–4 teams and measure completion time and participation in a rehearsal.
+Add **only office-link-gate and office-link-gameday** to the event. In its Gate panel, a TenantAdmin enables the feature (default OFF), selects Preparation as Gate challenge and only GameDay as the unlock target, sets policy to required, bonus to 0 and team overrides to inherit. Save and verify GameDay is locked in the participant portal. Use the [configuration and host runbook](https://github.com/susumutomita/TenkaCloudChallenge/blob/main/challenges/office-link-gameday/OPERATOR.md).
 
-The public platform and standard problems are available for self-hosting. Event design, preparation and facilitation are paid services; company-specific problems are quoted separately. Social-event scores alone are not a validated hiring or internal certification assessment: design separate criteria for those uses.
+This is a model of cloud concepts, not actual AWS console operations. Official scoring and the Gate use the existing AWS edition. Local previews only exercise problem screens and verdicts. Start with a rehearsal of 2–4 teams, measure time and conversation, and listen to all four explanations to assess understanding.
+
+The public platform and standard problems are available for self-hosting. Event design, preparation and facilitation can be provided as paid support; organization-specific problems are quoted separately. Social-event scores alone are not a hiring or certification rubric: design separate criteria for those uses.
+
+### Pin the catalog version being deployed
+
+The Lite launcher default `ProblemsRepoRef` points to the last published release and may not contain this new set. Read `sources.catalog.commit` from `release/tenkacloud-release.json` in the platform checkout selected for rehearsal and supply it as **ProblemsRepoRef**. Pin **RepoRef** to the platform commit being rehearsed too. Until included in a published release, this is a candidate for event preparation.
+
+For local `make deploy`, align `problems` with that checkout's gitlink. Before deploying, confirm both `challenges/office-link-gate/metadata.json` and `challenges/office-link-gameday/metadata.json` exist. Updating the version does not automatically register these problems or configure a Gate in an existing event.
 
 ## From an idea to a hosted event
 

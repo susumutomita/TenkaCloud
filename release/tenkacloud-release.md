@@ -13,7 +13,7 @@ The machine-readable source of truth is [`tenkacloud-release.json`](./tenkacloud
 | Component | Authoritative reference | Display tag |
 | --- | --- | --- |
 | Platform | [https://github.com/susumutomita/TenkaCloud](https://github.com/susumutomita/TenkaCloud) — the commit tagged `v1.9.2` | — |
-| Problem catalog | [`4c402d66e71c57e2395cd57f66fb88e7777eb437`](https://github.com/susumutomita/TenkaCloudChallenge/commit/4c402d66e71c57e2395cd57f66fb88e7777eb437) | — |
+| Problem catalog | [`66a4c0c678d73f5bdf4a375a8a23ecddf96b92b8`](https://github.com/susumutomita/TenkaCloudChallenge/commit/66a4c0c678d73f5bdf4a375a8a23ecddf96b92b8) | — |
 | Simulator | `ghcr.io/susumutomita/tenkacloud-simulator@sha256:049c6c165f9947b386b2c5864983aebefba26e996ec62859dae0e9814c52d505` | — |
 
 The platform commit is derived from the release tag at publish time (`scripts/release/verify-release-identity.ts`, #3024): this manifest is part of the tagged tree, so it cannot record the SHA of the commit that contains it. Until the tag exists, the platform identity of this manifest is the in-progress branch it ships on.
@@ -54,6 +54,7 @@ No Golden Path run is attached. Three consecutive runs bound to this exact BOM m
 
 ## Known limitations
 
+- The Lite launcher default RepoRef/ProblemsRepoRef pair is generated from release/launcher-defaults.json but still points at the previously released identity; it advances to this release's pair only after the published Release is verified (#3024 PR 5).
 - No fresh-environment Golden Path run is attached, so this release is not certified for third-party production use.
 - No deployment mode or AWS region is certified by this manifest.
 - The platform commit of this release is derived from its v1.9.2 tag at publish time (#3024); the manifest lives inside that tree and cannot record it.
