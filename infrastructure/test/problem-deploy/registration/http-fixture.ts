@@ -81,5 +81,5 @@ export async function registrationHttpFixture() {
   const app = new Hono();
   app.use("*", secureApiHeaders());
   registerPublicRegistrationRoutes(app, shared);
-  return { app, deps, shared, invitation: opened.invitation };
+  return { app, deps, shared, sql, invitation: opened.invitation };
 }

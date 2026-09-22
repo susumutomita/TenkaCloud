@@ -108,7 +108,7 @@ export function EventRegistrationPanel({
   }, [refresh]);
 
   async function save(enabled: boolean) {
-    if (!apiClient || !config.participantPortalUrl || busy) return;
+    if (!apiClient || (enabled && !config.participantPortalUrl) || busy) return;
     setBusy(true);
     setError("");
     setCopied(false);
@@ -125,7 +125,7 @@ export function EventRegistrationPanel({
       );
       setSummary(response);
       setLink(
-        response.invitation
+        response.invitation && config.participantPortalUrl
           ? buildRegistrationLink(
               config.participantPortalUrl,
               response.tenantId,

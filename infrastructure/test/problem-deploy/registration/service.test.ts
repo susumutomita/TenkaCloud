@@ -300,4 +300,142 @@ describe("self-registration with real SQLite repositories", () => {
     vi.spyOn(events, "updateRegistration").mockRejectedValue(new Error("storage offline"));
     await expect(claim(1)).rejects.toThrow("storage offline");
   });
+
+  it("shows an unopened event as empty and closing it does not create an invitation", async () => {
+    await events.putEvent(event);
+    const write = vi.spyOn(events, "updateRegistration");
+    const empty = {
+      tenantId: event.tenantId,
+      enabled: false,
+      capacity: 0,
+      claimed: 0,
+      claimedTeamIds: [],
+      teamIds: [],
+    };
+    expect(registrationSummary(event, now)).toMatchObject(empty);
+    expect(
+      await configureRegistration(deps, event.tenantId, event.eventId, { enabled: false }, now),
+    ).toMatchObject(empty);
+    expect(write).not.toHaveBeenCalled();
+    await expect(claim(1)).rejects.toThrow("not_found");
+  });
+
+  it("does not configure an unknown or expired event", async () => {
+    await expect(
+      configureRegistration(deps, "tenant-b", event.eventId, { enabled: false }, now),
+    ).rejects.toThrow("not_found");
+    await events.putEvent({ ...event, expiresAt: Math.floor(now / 1000) });
+    await expect(open()).rejects.toThrow("closed");
+  });
+
+  it("reports concurrent configuration changes and bounds allocation retries", async () => {
+    const update = vi.spyOn(events, "updateRegistration").mockResolvedValue("conflict");
+    await expect(open()).rejects.toThrow("conflict");
+    update.mockClear();
+    vi.useFakeTimers();
+    try {
+      const failure = expect(claim(1)).rejects.toThrow("conflict");
+      await vi.runAllTimersAsync();
+      await failure;
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(update).toHaveBeenCalledTimes(12);
+    expect(
+      (await events.getEvent(event.tenantId, event.eventId))?.registration?.claims,
+    ).toHaveLength(0);
+  });
+
+  it("fails closed if the allocated team disappears or its credential expires", async () => {
+    await claim(1);
+    const first = present(await teams.getTeam(event.tenantId, event.eventId, "team-1"));
+    vi.spyOn(teams, "getTeam").mockResolvedValueOnce(undefined);
+    await expect(status(1)).rejects.toThrow("not_found");
+    await teams.putTeam({ ...first, expiresAt: Math.floor(now / 1000) });
+    await expect(status(1)).rejects.toThrow("closed");
+  });
+
+  it("uses the later job id for simultaneous retries and notices removed deployments", async () => {
+    await claim(1);
+    jobs.push({ ...present(jobs[0]), jobId: "z-retry", status: "FAILED" });
+    expect(await status(1)).toMatchObject({ state: "failed", ready: 0 });
+    expect(await status(1)).not.toHaveProperty("teamLoginKey");
+    jobs = [];
+    expect(await status(1)).toMatchObject({ state: "unprepared", ready: 0, total: 1 });
+    expect(await status(1)).not.toHaveProperty("teamLoginKey");
+  });
+
+  it("allocates all 99 slots after every claimant initially reads the same version", async () => {
+    const first = present(await teams.getTeam(event.tenantId, event.eventId, "team-1"));
+    for (let n = 3; n <= 99; n++) {
+      const teamId = `team-${n}`;
+      const awsAccountId = String(n).padStart(12, "0");
+      const teamLoginKey = String(n).padStart(43, "k");
+      await teams.putTeam({ ...first, teamId, internalSlug: teamId, awsAccountId, teamLoginKey });
+      jobs.push({
+        ...present(jobs[0]),
+        jobId: `job-${n}`,
+        teamId,
+        teamName: teamId,
+        awsAccountId,
+        teamLoginKey,
+      });
+    }
+    invite = await open(Array.from({ length: 99 }, (_, i) => `team-${i + 1}`));
+    const read = events.getEvent.bind(events);
+    let reads = 0;
+    const { promise: burst, resolve: release } = Promise.withResolvers<undefined>();
+    const lookup = vi.spyOn(events, "getEvent").mockImplementation(async (...args) => {
+      const snapshot = await read(...args);
+      if (reads < 99) {
+        reads++;
+        if (reads === 99) release(undefined);
+        await burst;
+      }
+      // Preserve read latency so retrying claims can collide too, as with remote storage.
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      return snapshot;
+    });
+    vi.useFakeTimers();
+    try {
+      const allocations = Promise.all(Array.from({ length: 99 }, (_, i) => claim(i + 1)));
+      await vi.runAllTimersAsync();
+      const results = await allocations;
+      lookup.mockRestore();
+      expect(new Set(results.map((result) => result.teamId)).size).toBe(99);
+      expect(results.every((result) => result.state === "ready")).toBe(true);
+      expect(
+        (await events.getEvent(event.tenantId, event.eventId))?.registration?.claims,
+      ).toHaveLength(99);
+      await expect(claim(100)).rejects.toThrow("full");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("rechecks the invitation deadline after waiting for a competing claim", async () => {
+    const opened = await configureRegistration(
+      deps,
+      event.tenantId,
+      event.eventId,
+      {
+        enabled: true,
+        teamIds: ["team-1", "team-2"],
+        closesAt: new Date(now + 1).toISOString(),
+      },
+      now,
+    );
+    if (!("invitation" in opened) || !opened.invitation) throw new Error("missing invitation");
+    invite = opened.invitation;
+    const update = vi.spyOn(events, "updateRegistration").mockResolvedValue("conflict");
+    vi.useFakeTimers();
+    try {
+      const failure = expect(claim(1)).rejects.toThrow("closed");
+      await vi.runAllTimersAsync();
+      await failure;
+      expect(update).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

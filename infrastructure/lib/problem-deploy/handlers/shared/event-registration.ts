@@ -1,4 +1,4 @@
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import type { DeploymentsRepository } from "../../control-data/deployments-repository.js";
 import type { EventRegistration } from "../../control-data/domain/event-registration.js";
 import type { EventRecord, EventsRepository } from "../../control-data/domain/events.js";
@@ -175,15 +175,17 @@ export async function claimRegistration(
   now = Date.now(),
 ) {
   const receiptHash = registrationDigest(receipt);
-  for (let attempt = 0; attempt < 6; attempt++) {
+  const startedAt = Date.now();
+  for (let attempt = 0; attempt < 12; attempt++) {
     const { event, registration } = await authorizedInvitation(deps, tenantId, eventId, invitation);
+    const attemptTime = now + Math.max(0, Date.now() - startedAt);
     if (registration.claims.some((claim) => claim.receiptHash === receiptHash)) {
-      return registrationStatus(deps, tenantId, eventId, receipt, now);
+      return registrationStatus(deps, tenantId, eventId, receipt, attemptTime);
     }
     if (
-      !activeEvent(event, now) ||
+      !activeEvent(event, attemptTime) ||
       !registration.enabled ||
-      Date.parse(registration.closesAt) <= now
+      Date.parse(registration.closesAt) <= attemptTime
     ) {
       throw new RegistrationError("closed");
     }
@@ -194,17 +196,25 @@ export async function claimRegistration(
       tenantId,
       eventId,
       expectedVersion: registration.version,
-      now: new Date(now).toISOString(),
+      now: new Date(attemptTime).toISOString(),
       registration: {
         ...registration,
         version: registration.version + 1,
         claims: [
           ...registration.claims,
-          { receiptHash, teamId, claimedAt: new Date(now).toISOString() },
+          { receiptHash, teamId, claimedAt: new Date(attemptTime).toISOString() },
         ],
       },
     });
-    if (updated === "updated") return registrationStatus(deps, tenantId, eventId, receipt, now);
+    if (updated === "updated")
+      return registrationStatus(deps, tenantId, eventId, receipt, attemptTime);
+    // A shared invitation can produce up to 99 simultaneous claims. Jitter separates
+    // competing writers instead of making them collide again in synchronized rounds.
+    // Keep retries bounded (at most about 3 seconds of waiting) and recheck deadlines.
+    if (attempt < 11) {
+      const delay = randomInt(10, Math.min(400, 20 * 2 ** attempt) + 1);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
   }
   throw new RegistrationError("conflict");
 }

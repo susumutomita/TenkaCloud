@@ -52,11 +52,12 @@ export function registerRegistrationAdminRoutes(app: Hono, shared: EventSharedRe
         const parsed = z.string().regex(ULID_RE).safeParse(c.req.param("eventId"));
         if (!parsed.success) return c.json({ error: "invalid_event_id" }, 400);
         const eventId = parsed.data;
+        const tenantId = resolveTenantId(c);
         try {
           const repositories = await resolveEventRepositories(shared);
           const result = await configureRegistration(
             { ...repositories, deployments: await resolveDeploymentsRepository(shared) },
-            resolveTenantId(c),
+            tenantId,
             eventId,
             body,
           );
