@@ -40,6 +40,17 @@ export const CATALOG_DATA: CatalogData = {
       },
     },
     {
+      id: "office-link-battle",
+      category: "Battle",
+      status: "ready",
+      difficulty: 1,
+      tags: ["beginner", "aws", "teamwork", "battle"],
+      name: {
+        ja: "つながるオフィス — AWS復旧Battle",
+        en: "Office Link — AWS Recovery Battle",
+      },
+    },
+    {
       id: "microservice-migration-battle",
       category: "Battle",
       status: "ready",
@@ -150,14 +161,58 @@ export const CATALOG_DATA: CatalogData = {
       },
     },
     {
-      id: "office-link-battle",
+      id: "office-file-delivery",
       category: "Challenge",
       status: "ready",
       difficulty: 1,
-      tags: ["beginner", "teamwork", "battle", "communication"],
+      tags: ["beginner", "aws", "s3", "teamwork"],
       name: {
-        ja: "つながるオフィス — 相談してひらくBattle",
-        en: "Office Link — a Battle built on conversation",
+        ja: "拠点へ資料を届けよう — S3入門",
+        en: "Deliver a handover note — S3 basics",
+      },
+    },
+    {
+      id: "office-file-recovery",
+      category: "Challenge",
+      status: "ready",
+      difficulty: 1,
+      tags: ["beginner", "aws", "s3", "teamwork"],
+      name: {
+        ja: "消えた案内を取り戻そう — S3の過去版",
+        en: "Recover the handover note — S3 versions",
+      },
+    },
+    {
+      id: "office-handover-record",
+      category: "Challenge",
+      status: "ready",
+      difficulty: 1,
+      tags: ["beginner", "aws", "dynamodb", "teamwork"],
+      name: {
+        ja: "引き継ぎ台帳を作ろう — DynamoDB入門",
+        en: "Keep a team handover record — DynamoDB basics",
+      },
+    },
+    {
+      id: "office-job-queue",
+      category: "Challenge",
+      status: "ready",
+      difficulty: 1,
+      tags: ["beginner", "aws", "sqs", "teamwork"],
+      name: {
+        ja: "拠点をまたぐ仕事のバトン — SQS入門",
+        en: "Pass jobs between sites — SQS basics",
+      },
+    },
+    {
+      id: "office-lambda-delivery",
+      category: "Challenge",
+      status: "ready",
+      difficulty: 1,
+      tags: ["beginner", "aws", "lambda", "cloudwatch"],
+      name: {
+        ja: "3個の荷物を受け付けよう — Lambda入門",
+        en: "Accept three parcels — Lambda basics",
       },
     },
     {
@@ -165,10 +220,32 @@ export const CATALOG_DATA: CatalogData = {
       category: "Challenge",
       status: "ready",
       difficulty: 1,
-      tags: ["beginner", "teamwork", "battle", "communication"],
+      tags: ["beginner", "teamwork", "aws", "ec2"],
       name: {
-        ja: "つながるオフィスの準備 — 4人で学ぶGate",
-        en: "Office Link Preparation — a four-person learning Gate",
+        ja: "つながるオフィスの準備 — AWS入門Challenge",
+        en: "Office Link Preparation — AWS Intro Challenge",
+      },
+    },
+    {
+      id: "office-log-investigation",
+      category: "Challenge",
+      status: "ready",
+      difficulty: 1,
+      tags: ["beginner", "aws", "lambda", "cloudwatch"],
+      name: {
+        ja: "荷物の行き先を追え — CloudWatch Logs入門",
+        en: "Trace the parcel destination — CloudWatch Logs basics",
+      },
+    },
+    {
+      id: "office-server-watch",
+      category: "Challenge",
+      status: "ready",
+      difficulty: 1,
+      tags: ["beginner", "aws", "cpu-alarm", "teamwork"],
+      name: {
+        ja: "サーバーの見張り役 — CloudWatch入門",
+        en: "Watch the team server — CloudWatch basics",
       },
     },
     {

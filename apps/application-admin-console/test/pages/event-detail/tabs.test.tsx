@@ -64,6 +64,9 @@ vi.mock("../../../src/components/event-detail/EventProblemSetPanel", () => ({
 vi.mock("../../../src/components/event-detail/EventParticipantsPanel", () => ({
   EventParticipantsPanel: () => <div data-testid="participants-panel" />,
 }));
+vi.mock("../../../src/components/event-detail/EventRegistrationPanel", () => ({
+  EventRegistrationPanel: () => <div data-testid="registration-panel" />,
+}));
 vi.mock("../../../src/components/event-detail/EventTeamsPanel", () => ({
   EventTeamsPanel: () => <div data-testid="teams-panel" />,
 }));
@@ -185,6 +188,7 @@ describe("tab wrappers", () => {
     expect(screen.getByTestId("problemset-panel")).toBeInTheDocument();
     render(<TeamsTab {...props()} />);
     expect(screen.getByTestId("participants-panel")).toBeInTheDocument();
+    expect(screen.getByTestId("registration-panel")).toBeInTheDocument();
     expect(screen.getByTestId("teams-panel")).toBeInTheDocument();
   });
 

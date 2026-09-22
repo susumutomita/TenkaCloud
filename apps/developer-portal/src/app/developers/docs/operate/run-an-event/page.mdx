@@ -7,21 +7,27 @@ export const metadata = { title: "Run an event end to end" };
 This operator walkthrough presents Lite as the current event procedure. SaaS
 tenant creation and multi-cloud are separated as architecture reference.
 
-## Hosting a beginner social event
+## Learning and meeting teammates at one venue
 
-Use [Office Link](https://github.com/susumutomita/TenkaCloudChallenge/tree/main/challenges/office-link-battle) with **four people per team: Preparation Challenge → Gate completion → Battle**. One unfinished task is available at a time. Rotate explaining, reading the example, operating and checking before applying the concepts in the competition.
+Engineers who usually work at different offices meet at one venue to learn AWS and get to know each other. Mix offices and AWS experience in teams of four. [Office Link](https://github.com/susumutomita/TenkaCloudChallenge/tree/main/battles/office-link-battle) follows **real-AWS Preparation Challenge → Gate completion → Recovery Battle**. Teammates share a table, discuss what they see and take turns operating and explaining; the shared work creates a reason to talk.
 
 | Stage | Team activity | Scoring and progression |
 | --- | --- | --- |
-| Preparation | Learn location, permissions, recovery and outcome checks, one at a time | Complete all four, then submit one passphrase for 100 points and unlock Battle |
-| Battle | Deliver an invitation → share only the invitation → recover it | Repairs and explanations score separately; both must succeed before the next mission. 100 points total |
-| Reflection | Each person shares one helpful teammate comment | Speaking frequency is not graded |
+| Preparation | Launch EC2 → attach internet gateway → route → Session Manager → permit HTTP; one operation and short explanation at a time | All five completed: submit one 100-point flag to unlock Battle. No interim scoring |
+| Recovery Battle | Repair gateway, route, management-role and HTTP faults one at a time on a separate Battle EC2 | Register the endpoint first. Healthy ticks earn +100; unreachable or missing management access costs 100. Explanation gates the next round |
+| Reflection | Share one thing a teammate helped explain | Speaking frequency is not graded |
 
-Allow 60 minutes: introduction 5 → Preparation 20 → Battle 25 → results/reflection 10. Teams enter Battle as soon as Preparation is complete; everyone has the same deadline. Workshop attempts and hints are free. A wrong portal passphrase costs 5 points, so copy it into the matching field. Event total: 200 points; celebrate tied scores as ties.
+For Battle, the host gives **one private A–D card to each person**. Combine clues and confirm from all four cards; the assigned operator checks recovery and a different teammate answers the explanation. Roles rotate each round. Clues change from a sum to a network route and paired pieces. AI may solve a clue, but individual card confirmations and role handoffs still apply. The host can assist absent members; card possession is not proof of a person's identity.
 
-Add **only office-link-gate and office-link-battle** to the event. In its Gate panel, a TenantAdmin enables the feature (default OFF), selects Preparation as Gate challenge and only Battle as the unlock target, sets policy to required, bonus to 0 and team overrides to inherit. Save and verify Battle is locked in the participant portal. Use the [configuration and host runbook](https://github.com/susumutomita/TenkaCloudChallenge/blob/main/challenges/office-link-battle/OPERATOR.md).
+Teams can also exchange private codes. Both teams must submit the other's code to receive **20 points each, up to three different partners and 60 points total**. Waiting or declining costs nothing. A team that reached the limit can still help a late arrival exchange.
 
-This is a model of cloud concepts, not actual AWS console operations. Official scoring and the Gate use the existing AWS edition. Local previews only exercise problem screens and verdicts. Start with a rehearsal of 2–4 teams, measure time and conversation, and listen to all four explanations to assess understanding.
+Initially reserve **90–120 minutes**: intro 5, Preparation about 40, Battle about 30–45, reflection 10; adjust from rehearsal. Battle scoring normally runs each minute. Early Preparation finishers explain the architecture; the host aligns Battle registration and start. Board checks and hints are free. A wrong Preparation flag costs 5 points. Battle points depend on uptime, so this is not a fixed 200-point event.
+
+Add **only office-link-gate and office-link-battle**. A TenantAdmin enables the Gate feature (default OFF), selects Preparation as Gate and only Battle as unlock target, required policy, zero bonus and inherited team policies. Save and verify the lock from an unfinished team. Each problem also advances one internal stage at a time, leaving one unfinished task. The [host runbook](https://github.com/susumutomita/TenkaCloudChallenge/blob/main/battles/office-link-battle/OPERATOR.md) covers operator fault introduction, recovery and teardown.
+
+Seven optional, independent difficulty1 Challenges cover **S3 save, S3 restore, Lambda execution, log investigation, DynamoDB handover, SQS handover and CloudWatch alarms**. Choose suitable topics for separate events; do not add all to the first event.
+
+These exercises operate real AWS. Budget competitor accounts, EC2, EBS, public IPv4, functions, logs and teardown ownership. Battle state also uses a problem-owned DynamoDB table. Choosing Turso for the platform does not remove problem-side AWS costs. Local previews use labelled UI fixtures and do not verify AWS permissions, connectivity or official scores. Start with a real-AWS rehearsal of 2–4 teams, measuring propagation delays and role rotation.
 
 The public platform and standard problems are available for self-hosting. Event design, preparation and facilitation can be provided as paid support; organization-specific problems are quoted separately. Social-event scores alone are not a hiring or certification rubric: design separate criteria for those uses.
 
@@ -29,13 +35,15 @@ The public platform and standard problems are available for self-hosting. Event 
 
 The Lite launcher default `ProblemsRepoRef` points to the last published release and may not contain this new set. Read `sources.catalog.commit` from `release/tenkacloud-release.json` in the platform checkout selected for rehearsal and supply it as **ProblemsRepoRef**. Pin **RepoRef** to the platform commit being rehearsed too. Until included in a published release, this is a candidate for event preparation.
 
-For local `make deploy`, align `problems` with that checkout's gitlink. Before deploying, confirm both `challenges/office-link-gate/metadata.json` and `challenges/office-link-battle/metadata.json` exist. Updating the version does not automatically register these problems or configure a Gate in an existing event.
+For local `make deploy`, align `problems` with that checkout's gitlink. Before deploying, confirm both `challenges/office-link-gate/metadata.json` and `battles/office-link-battle/metadata.json` exist. Updating the version does not automatically register these problems or configure a Gate in an existing event.
 
 ## From an idea to a hosted event
 
 Start with a willing owner and helpers, even if nobody has hosted before. The lead times and effort below are **initial estimates**, not measured promises. Move them earlier for venue booking or internal approval; update them after each event.
 
 **Plan → people and venue → environment → rehearsal → event → teardown and review**
+
+Configure signup under **Let participants claim their environment** in the event's Teams tab. Select organizer-prepared AWS team slots, set a deadline and issue an invitation link. One representative claims one slot; after all problem deployments are ready, they continue to the existing team setup. Register once per team. This does not create AWS accounts or automatically issue Free Projects. Follow the [signup, resume and closing procedure](https://github.com/susumutomita/TenkaCloud/blob/main/docs/operations/participant-self-registration.en.md).
 
 [Practise as a problem: First-time event host](https://github.com/susumutomita/TenkaCloudChallenge/tree/main/challenges/event-host-rehearsal). This Docker-based exercise runs locally and is not listed in the AWS problem picker. Complete four checkpoints for a fictional event. Passing does not certify a real event or AWS environment.
 

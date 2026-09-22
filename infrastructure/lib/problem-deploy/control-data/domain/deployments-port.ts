@@ -175,9 +175,9 @@ export interface DeploymentsQueryPort {
 
   /**
    * Participant bearer lookup by `teamLoginKey` (GSI2 `TEAMKEY#<key>`, sparse,
-   * single page). Sites: `participant-handler/shared.ts` `queryTeamItems` (the
+   * all pages). Sites: `participant-handler/shared.ts` `queryTeamItems` (the
    * participant-login source of truth) + `generic-scoring-handler/gate-completion-bonus.ts`.
-   * Byte-compat is the top priority here — this is the participant login path.
+   * Registration readiness needs the complete history to find each problem's latest retry.
    */
   listByTeamLoginKey(teamLoginKey: string): Promise<readonly DeploymentRecord[]>;
 

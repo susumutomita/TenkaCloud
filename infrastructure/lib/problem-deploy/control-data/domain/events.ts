@@ -6,6 +6,7 @@
  * module as a temporary compatibility barrel while consumers migrate to direct imports.
  */
 
+import type { EventRegistration, RegistrationUpdate } from "./event-registration.js";
 import type { TeamRecord } from "./teams.js";
 
 /**
@@ -96,6 +97,8 @@ export type ProgressionGateConfig = {
  * the handler layer, never the reverse.
  */
 export type EventRecord = {
+  /** Never project invitation/receipt hashes into public event or leaderboard responses. */
+  registration?: EventRegistration;
   eventId: string;
   tenantId: string;
   name: string;
@@ -297,12 +300,18 @@ export interface EventScoringMeta {
  * TransactWrite).
  */
 export interface EventsRepository {
+  /** Compare-and-swap the allocation ledger; closing registration competes with claims. */
+  updateRegistration(input: RegistrationUpdate): Promise<"updated" | "conflict">;
   /**
    * Tenant-scoped point read. Returns `undefined` when the event is absent or
    * belongs to a different tenant (404-equivalent, never leaks another tenant's
    * row).
    */
-  getEvent(tenantId: string, eventId: string): Promise<EventRecord | undefined>;
+  getEvent(
+    tenantId: string,
+    eventId: string,
+    consistentRead?: boolean,
+  ): Promise<EventRecord | undefined>;
   /** Upsert one event row. */
   putEvent(record: EventRecord): Promise<void>;
   /** Delete one event row by its domain identifier. */

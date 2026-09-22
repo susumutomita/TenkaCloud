@@ -142,6 +142,23 @@ describe("tenant ApiGateway", () => {
     });
   });
 
+  it("binds registration GET and PUT with Cognito authorization", () => {
+    const id = Object.keys(
+      tpl.findResources("AWS::ApiGateway::Resource", { Properties: { PathPart: "registration" } }),
+    )[0];
+    expect(id).toBeDefined();
+    for (const method of ["GET", "PUT"])
+      tpl.hasResourceProperties("AWS::ApiGateway::Method", {
+        HttpMethod: method,
+        ResourceId: { Ref: id },
+        AuthorizationType: "COGNITO_USER_POOLS",
+      });
+    tpl.hasResourceProperties("AWS::ApiGateway::Method", {
+      HttpMethod: "OPTIONS",
+      ResourceId: { Ref: id },
+    });
+  });
+
   it("should bind PUT, DELETE, and OPTIONS on /events/{eventId}/progression-gate (#2283)", () => {
     // Lambda 内に route だけ追加すると API Gateway が CORS header 無しの 403 を返し、
     // admin console では保存時に `Failed to fetch` としか見えないため CDK 配線まで pin する。

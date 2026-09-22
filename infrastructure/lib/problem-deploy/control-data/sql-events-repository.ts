@@ -2,6 +2,7 @@ import {
   type ProgressionGateConfig,
   parseProgressionGate,
 } from "../handlers/shared/progression-gate.js";
+import type { RegistrationUpdate } from "./domain/event-registration.js";
 import { TEAM_INSERT_SQL, teamRowParams } from "./sql-teams-repository.js";
 import type {
   ClearProgressionGateOutcome,
@@ -99,6 +100,25 @@ function eventRowParams(record: EventRecord): SqlParam[] {
 }
 
 export class SqlEventsRepository implements EventsRepository {
+  async updateRegistration(input: RegistrationUpdate): Promise<"updated" | "conflict"> {
+    const row = await this.sql.get(
+      "UPDATE events SET payload = json_set(payload, '$.registration', json(?), '$.updatedAt', ?) " +
+        "WHERE tenant_id = ? AND event_id = ? AND expires_at > ? " +
+        "AND status IN ('DRAFT', 'DEPLOYING', 'READY') " +
+        "AND (json_extract(payload, '$.endsAt') IS NULL OR json_extract(payload, '$.endsAt') > ?) " +
+        "AND COALESCE(json_extract(payload, '$.registration.version'), 0) = ? RETURNING event_id",
+      [
+        JSON.stringify(input.registration),
+        input.now,
+        input.tenantId,
+        input.eventId,
+        Math.floor(Date.parse(input.now) / 1000),
+        input.now,
+        input.expectedVersion,
+      ],
+    );
+    return row ? "updated" : "conflict";
+  }
   constructor(private readonly sql: SqlExecutor) {}
 
   async getEvent(tenantId: string, eventId: string): Promise<EventRecord | undefined> {

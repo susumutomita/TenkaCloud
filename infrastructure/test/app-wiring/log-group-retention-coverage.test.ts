@@ -33,7 +33,9 @@ import { buildTenkaCloudApp } from "../../lib/app-wiring/wire";
 
 const BIN_DIR = path.resolve(__dirname, "..", "..", "bin");
 const REPO_ROOT = path.resolve(__dirname, "..", "..", "..");
-const APP_BUILD_TIMEOUT_MS = 30_000;
+// Match the infrastructure runner budget: this hook synthesizes every stack and stages
+// real site assets. It is setup for retention assertions, not a 30-second latency contract.
+const APP_BUILD_TIMEOUT_MS = 120_000;
 
 function ensurePlaceholderDist(appName: string): void {
   const distDir = path.join(REPO_ROOT, "apps", appName, "dist");
@@ -105,7 +107,7 @@ const NO_EXPLICIT_LOG_GROUP: readonly { readonly match: RegExp; readonly reason:
   },
 ];
 
-function allLogGroups(): LogGroupRow[] {
+function allResources(): { functions: FunctionRow[]; logGroups: LogGroupRow[] } {
   const config = resolveAppConfig({
     env: {
       CDK_PARAM_SYSTEM_ADMIN_EMAIL: "admin@example.com",
@@ -123,65 +125,49 @@ function allLogGroups(): LogGroupRow[] {
   const app = new cdk.App({ autoSynth: false, context: { "aws:cdk:bundling-stacks": [] } });
   buildTenkaCloudApp(app, config);
 
-  const rows: LogGroupRow[] = [];
+  const functions: FunctionRow[] = [];
+  const logGroups: LogGroupRow[] = [];
+  // Both checks inspect the same real assembly. Do not rebuild and fingerprint every
+  // site asset a second time merely to query a different CloudFormation resource type.
   for (const stack of app.node.children.filter(cdk.Stack.isStack)) {
-    const resources = Template.fromStack(stack).findResources("AWS::Logs::LogGroup");
-    for (const [logicalId, resource] of Object.entries(resources)) {
-      rows.push({
+    const template = Template.fromStack(stack);
+    for (const [logicalId, resource] of Object.entries(
+      template.findResources("AWS::Logs::LogGroup"),
+    )) {
+      logGroups.push({
         stack: stack.node.id,
         logicalId,
         retention: (resource as { Properties?: Record<string, unknown> }).Properties
           ?.RetentionInDays,
       });
     }
-  }
-  return rows;
-}
-
-function allFunctions(): FunctionRow[] {
-  const config = resolveAppConfig({
-    env: {
-      CDK_PARAM_SYSTEM_ADMIN_EMAIL: "admin@example.com",
-      CDK_PARAM_S3_BUCKET_NAME: "test-bucket",
-      CDK_SOURCE_NAME: "source.zip",
-      CDK_PARAM_COMMIT_ID: "abcdef",
-      CDK_PARAM_AWS_REGION: "ap-northeast-1",
-      CDK_PARAM_AWS_ACCOUNT_ID: "123456789012",
-    },
-    binDir: BIN_DIR,
-    fs: { existsSync: () => false },
-    dotenvConfig: () => undefined,
-    discoverProblems: stubProblems,
-  });
-  const app = new cdk.App({ autoSynth: false, context: { "aws:cdk:bundling-stacks": [] } });
-  buildTenkaCloudApp(app, config);
-
-  const rows: FunctionRow[] = [];
-  for (const stack of app.node.children.filter(cdk.Stack.isStack)) {
-    const resources = Template.fromStack(stack).findResources("AWS::Lambda::Function");
-    for (const [logicalId, resource] of Object.entries(resources)) {
+    for (const [logicalId, resource] of Object.entries(
+      template.findResources("AWS::Lambda::Function"),
+    )) {
       const properties = (resource as { Properties?: Record<string, unknown> }).Properties ?? {};
       const logging = properties.LoggingConfig as { LogGroup?: unknown } | undefined;
-      rows.push({
+      functions.push({
         stack: stack.node.id,
         logicalId,
         hasExplicitLogGroup: logging?.LogGroup !== undefined,
       });
     }
   }
-  return rows;
+  return { functions, logGroups };
 }
 
+let functions: FunctionRow[];
+let rows: LogGroupRow[];
+beforeAll(() => {
+  ensurePlaceholderDist("admin-console");
+  ensurePlaceholderDist("application-admin-console");
+  ensurePlaceholderDist("participant-portal");
+  const resources = allResources();
+  functions = resources.functions;
+  rows = resources.logGroups;
+}, APP_BUILD_TIMEOUT_MS);
+
 describe("#2960: every Lambda either has an explicit log group or a recorded reason", () => {
-  let functions: FunctionRow[];
-
-  beforeAll(() => {
-    ensurePlaceholderDist("admin-console");
-    ensurePlaceholderDist("application-admin-console");
-    ensurePlaceholderDist("participant-portal");
-    functions = allFunctions();
-  }, APP_BUILD_TIMEOUT_MS);
-
   it("should actually find Lambdas to inspect", () => {
     expect(functions.length).toBeGreaterThan(0);
   });
@@ -221,15 +207,6 @@ describe("#2960: every Lambda either has an explicit log group or a recorded rea
 });
 
 describe("#2960: every synthesized log group carries a retention", () => {
-  let rows: LogGroupRow[];
-
-  beforeAll(() => {
-    ensurePlaceholderDist("admin-console");
-    ensurePlaceholderDist("application-admin-console");
-    ensurePlaceholderDist("participant-portal");
-    rows = allLogGroups();
-  }, APP_BUILD_TIMEOUT_MS);
-
   it("should actually find log groups to inspect", () => {
     // 0 件を「違反なし」と読むと、この test は走査が壊れた瞬間から永遠に緑になる。
     expect(rows.length, "log group が 1 つも見つからないのは走査が壊れている兆候").toBeGreaterThan(

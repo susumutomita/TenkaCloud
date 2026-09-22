@@ -32,6 +32,7 @@ export interface ParticipantSharedResources {
    * (物理キー導出は seam の実装詳細)。CDK 側で IAM `dynamodb:Query` を Events table にも付与する。
    */
   readonly eventsTableName: string;
+  readonly teamsTableName?: string;
   /**
    * Endpoint registry table 名 (ProblemEndpoints)。
    * `/portal/me/problems/:problemId/endpoints` 系 route が読み書きする。
@@ -71,6 +72,7 @@ export function buildParticipantSharedResources(
     // が落ちる。空文字 default に緩和し、dynamodb backend の誤設定は runtime resolver
     // (`runtime-repositories.ts`) が fail loud に受ける (= silent fallback にはならない)。
     eventsTableName: process.env.EVENTS_TABLE_NAME ?? "",
+    teamsTableName: process.env.TEAMS_TABLE_NAME ?? "",
     // 未配線時 (= legacy stack) でも import が落ちないよう env 必須にしない (= 空文字)。
     // route 側で空チェックして 503 を返す経路にする。
     endpointsTableName: process.env.PROBLEM_ENDPOINTS_TABLE_NAME ?? "",

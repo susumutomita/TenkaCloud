@@ -1037,5 +1037,32 @@
     "scale_cancel": "Cancel",
     "scale_submit": "Apply change",
     "scale_accepted": "Change accepted (execution {executionId}). It may take a few minutes to apply."
+  },
+  "registration": {
+    "title": "Let participants claim their environment",
+    "description": "Select undistributed team slots and issue a shared registration link. First assign a separate AWS account to each team and start deploying their environments.",
+    "open": "Open: {claimed} / {capacity} team environments assigned",
+    "closed": "Closed: {claimed} / {capacity} team environments assigned",
+    "teams": "Team slots to allocate",
+    "allocated": "Claimed through the invitation",
+    "unallocated": "Not claimed through the invitation",
+    "teams_help": "Select slots that have not been distributed to participants. Claimed slots cannot be removed.",
+    "select": "Select team slots",
+    "deadline": "Registration deadline (this device’s time)",
+    "confirm": "These environments may be assigned to people registering through this link.",
+    "open_button": "Open registration and issue link",
+    "reissue": "Save and reissue link",
+    "close_button": "Close registration",
+    "link": "Registration link",
+    "link_help": "Share with team representatives. Reissuing invalidates the old invitation. Existing assignments are kept.",
+    "copy": "Copy link",
+    "copied": "Copied",
+    "copy_failed": "Could not copy. Select and copy the displayed link.",
+    "error_invalid_pool": "Check the slots and deadline. Each slot needs a separate AWS account. Registration must close within the event’s lifetime.",
+    "error_not_ready": "Start deploying every problem for the selected teams before opening registration.",
+    "error_closed": "Registration is unavailable for ended, expired, or removed events.",
+    "error_conflict": "Another operation changed the event. Refresh and try again.",
+    "error_unavailable": "Could not load or save registration settings. Check the connection and backend version.",
+    "refresh": "Refresh allocations"
   }
 }

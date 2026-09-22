@@ -27,6 +27,7 @@ import { getLeaderboard } from "./leaderboard.js";
 import { getLeaderboardScoreEvents } from "./leaderboard-score-events.js";
 import { lookupTeamByLoginKey } from "./lookup.js";
 import { listNotifications, NOTIFICATIONS_DEFAULT_LIMIT } from "./notifications.js";
+import { registerPublicRegistrationRoutes } from "./registration.js";
 import { revealHint } from "./reveal-hint.js";
 import {
   parseJsonBody,
@@ -112,6 +113,7 @@ function respondPrerequisiteBlock(c: Context, block: PrerequisiteBlock) {
 }
 
 app.get("/portal/healthz", (c) => c.json({ ok: true }));
+registerPublicRegistrationRoutes(app, shared);
 
 app.get("/portal/me", (c) =>
   withBearerAuth(c, "lookup", async (token) => {
