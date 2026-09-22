@@ -66,6 +66,41 @@ describe("public registration API with persistent repositories", () => {
     ).toHaveLength(0);
   });
 
+  it("withholds a stale indexed credential until the primary replacement completes", async () => {
+    const { app, invitation, deps, sql } = await registrationHttpFixture();
+    const rows = await deps.deployments.listByTenantAndEvent(fixtureTenantId, fixtureEventId);
+    const first = rows.find((row) => row.jobId === "job-1");
+    if (!first) throw new Error("fixture deployment missing");
+    const stale = { ...first, teamLoginKey: "1".repeat(43), status: "COMPLETE" as const };
+    await deps.deployments.putDeployment(stale);
+    const index = vi.spyOn(deps.deployments, "listByTeamLoginKey").mockResolvedValue([stale]);
+    await sql.run("DELETE FROM deployments WHERE job_id = ?", [first.jobId]);
+    const replacement = {
+      ...stale,
+      jobId: "replacement",
+      status: "PENDING" as const,
+      createdAt: new Date(Date.now() + 1000).toISOString(),
+    };
+    await deps.deployments.putDeployment(replacement);
+    const allocated = await app.request(`${base}/claim`, request(invitation, { receipt }));
+    expect(allocated.status).toBe(200);
+    expect(await allocated.json()).toMatchObject({ state: "preparing", ready: 0 });
+    const pending = await app.request(`${base}/status`, request(receipt));
+    expect(await pending.json()).not.toHaveProperty("teamLoginKey");
+
+    const complete = { ...replacement, status: "COMPLETE" as const };
+    index.mockResolvedValue([complete]);
+    await deps.deployments.putDeployment({ ...replacement, status: "FAILED" });
+    const failed = await (await app.request(`${base}/status`, request(receipt))).json();
+    expect(failed).toMatchObject({ state: "failed", ready: 0 });
+    expect(failed).not.toHaveProperty("teamLoginKey");
+    await deps.deployments.putDeployment(complete);
+    expect(await (await app.request(`${base}/status`, request(receipt))).json()).toMatchObject({
+      state: "ready",
+      teamLoginKey: stale.teamLoginKey,
+    });
+  });
+
   it.each([
     `/portal/registration/_invalid/${fixtureEventId}/info`,
     `/portal/registration/${"a".repeat(129)}/${fixtureEventId}/info`,

@@ -179,6 +179,12 @@ export class ParticipantPortalLambda extends Construct {
                       `${deploymentsTable.tableArn}/index/GSI2`,
                     ],
                   }),
+                  // Registration confirms current primary rows before releasing
+                  // a team key; GetItem never needs an index ARN.
+                  new PolicyStatement({
+                    actions: ["dynamodb:GetItem"],
+                    resources: [deploymentsTable.tableArn],
+                  }),
                   // 競技者の表示名 (`displayTeamName`) 更新のみ。テーブル全体に対する
                   // UpdateItem だが、Lambda コードは GSI2 経由で取得した自分の行しか
                   // 触らないので、実質的な書き込み対象は teamLoginKey 所有者の 1 行に限られる。

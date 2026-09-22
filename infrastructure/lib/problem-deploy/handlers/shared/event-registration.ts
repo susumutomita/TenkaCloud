@@ -1,5 +1,6 @@
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import type { DeploymentsRepository } from "../../control-data/deployments-repository.js";
+import type { DeploymentRecord } from "../../control-data/domain/deployments.js";
 import type { EventRegistration } from "../../control-data/domain/event-registration.js";
 import type { EventRecord, EventsRepository } from "../../control-data/domain/events.js";
 import type { TeamsRepository } from "../../control-data/domain/teams.js";
@@ -7,7 +8,10 @@ import type { TeamsRepository } from "../../control-data/domain/teams.js";
 export interface RegistrationDeps {
   events: Pick<EventsRepository, "getEvent" | "updateRegistration">;
   teams: Pick<TeamsRepository, "getTeam">;
-  deployments: Pick<DeploymentsRepository, "listByTenantAndEvent" | "listByTeamLoginKey">;
+  deployments: Pick<
+    DeploymentsRepository,
+    "listByTenantAndEvent" | "listByTeamLoginKey" | "getDeployment"
+  >;
 }
 
 export class RegistrationError extends Error {
@@ -128,7 +132,14 @@ async function validatePool(
   // verified-account, ExternalId and quota checks in the existing deploy pipeline.
   const deployments = await deps.deployments.listByTenantAndEvent(event.tenantId, event.eventId);
   const checks = teamIds.map((teamId, index) =>
-    summarizeDeployments(deployments, event, teamId, now, teams[index]?.awsAccountId),
+    summarizeDeployments(
+      deployments,
+      event,
+      teamId,
+      now,
+      teams[index]?.awsAccountId,
+      teams[index]?.teamLoginKey,
+    ),
   );
   if (checks.some((state) => state.state === "unprepared"))
     throw new RegistrationError("not_ready");
@@ -219,14 +230,12 @@ export async function claimRegistration(
   throw new RegistrationError("conflict");
 }
 
-function summarizeDeployments(
-  deployments: Awaited<ReturnType<RegistrationDeps["deployments"]["listByTenantAndEvent"]>>,
+function latestDeployments(
+  deployments: readonly DeploymentRecord[],
   event: EventRecord,
   teamId: string,
-  now: number,
-  awsAccountId: string | undefined,
 ) {
-  const jobs = event.problems.map(
+  return event.problems.map(
     (problem) =>
       deployments
         .filter(
@@ -240,13 +249,32 @@ function summarizeDeployments(
           (a, b) => b.createdAt.localeCompare(a.createdAt) || b.jobId.localeCompare(a.jobId),
         )[0],
   );
+}
+
+function summarizeDeployments(
+  deployments: readonly DeploymentRecord[],
+  event: EventRecord,
+  teamId: string,
+  now: number,
+  awsAccountId: string | undefined,
+  teamLoginKey: string | undefined,
+) {
+  const jobs = latestDeployments(deployments, event, teamId);
   const usable = (job: (typeof jobs)[number]) =>
     !!job &&
     !!awsAccountId &&
     job.awsAccountId === awsAccountId &&
+    !!teamLoginKey &&
+    job.teamLoginKey === teamLoginKey &&
     !job.teardownRequestedAt &&
     job.expiresAt > Math.floor(now / 1000);
-  const ready = jobs.filter((job) => usable(job) && job?.status === "COMPLETE").length;
+  // During force redeploy, the eventually consistent team index can still expose
+  // the previous COMPLETE rows. The strongly read event must leave DEPLOYING
+  // before those rows can count as ready or release a participant credential.
+  const ready =
+    event.status === "DEPLOYING"
+      ? 0
+      : jobs.filter((job) => usable(job) && job?.status === "COMPLETE").length;
   let state = ready === jobs.length ? "ready" : "preparing";
   if (
     jobs.some(
@@ -279,7 +307,42 @@ export async function registrationStatus(
   // Poll only the reserved team's existing index; do not read the entire event
   // once per waiting participant. summarizeDeployments still checks tenant/event/team.
   const jobs = await deps.deployments.listByTeamLoginKey(team.teamLoginKey);
-  const progress = summarizeDeployments(jobs, event, claim.teamId, now, team.awsAccountId);
+  let progress = summarizeDeployments(
+    jobs,
+    event,
+    claim.teamId,
+    now,
+    team.awsAccountId,
+    team.teamLoginKey,
+  );
+  if (progress.state === "ready") {
+    // READY is reconciled from another eventually consistent index. Confirm only
+    // each problem's latest candidate against its primary row before releasing
+    // the key; force redeploy deletes the old row when it creates its replacement.
+    const candidates = latestDeployments(jobs, event, claim.teamId).filter((job) => !!job);
+    const confirmed = await Promise.all(
+      candidates.map(async (candidate) => {
+        const current = await deps.deployments.getDeployment(candidate.jobId, {
+          consistentRead: true,
+          expectedTeamLoginKey: team.teamLoginKey,
+        });
+        return current?.jobId === candidate.jobId && current.problemId === candidate.problemId
+          ? current
+          : undefined;
+      }),
+    );
+    progress = summarizeDeployments(
+      confirmed.filter((job) => !!job),
+      event,
+      claim.teamId,
+      now,
+      team.awsAccountId,
+      team.teamLoginKey,
+    );
+    // A deleted index candidate can precede visibility of its replacement. Keep
+    // polling for the new row instead of treating this transient gap as terminal.
+    if (progress.state === "unprepared") progress.state = "preparing";
+  }
   return {
     eventName: event.name,
     teamId: claim.teamId,

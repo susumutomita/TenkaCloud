@@ -103,6 +103,7 @@ beforeEach(async () => {
     deployments: {
       listByTenantAndEvent: vi.fn(async () => jobs),
       listByTeamLoginKey: vi.fn(async (key) => jobs.filter((job) => job.teamLoginKey === key)),
+      getDeployment: vi.fn(async (jobId) => jobs.find((job) => job.jobId === jobId)),
     },
   };
   invite = await open();
@@ -179,6 +180,164 @@ describe("self-registration with real SQLite repositories", () => {
       total: 1,
     });
     expect(progress).not.toHaveProperty("teamLoginKey");
+  });
+
+  it("accepts claims during redeployment but withholds credentials from stale completed rows", async () => {
+    await events.putEvent({
+      ...present(await events.getEvent(event.tenantId, event.eventId)),
+      status: "DEPLOYING",
+    });
+    expect(
+      await inspectRegistration(deps, event.tenantId, event.eventId, invite, now),
+    ).toMatchObject({ state: "open", remaining: 2 });
+    // Model GSI2 lag: only the previous generation's COMPLETE row is visible.
+    const allocated = await claim(1);
+    expect(allocated).toMatchObject({ state: "preparing", ready: 0, total: 1 });
+    expect(allocated).not.toHaveProperty("teamLoginKey");
+    expect(await status(1)).toEqual(allocated);
+    expect(
+      (await events.getEvent(event.tenantId, event.eventId))?.registration?.claims,
+    ).toHaveLength(1);
+
+    const replacement = {
+      ...present(jobs[0]),
+      jobId: "replacement",
+      status: "IN_PROGRESS" as const,
+      createdAt: "2026-09-22T09:01:00.000Z",
+    };
+    jobs.push(replacement);
+    expect(await status(1)).toEqual(allocated);
+    jobs[jobs.length - 1] = { ...replacement, status: "COMPLETE" };
+    expect(await status(1)).toEqual(allocated);
+
+    await events.putEvent({
+      ...present(await events.getEvent(event.tenantId, event.eventId)),
+      status: "READY",
+    });
+    expect(await status(1)).toMatchObject({
+      state: "ready",
+      ready: 1,
+      total: 1,
+      teamLoginKey: "1".repeat(43),
+    });
+  });
+
+  it.each([
+    "FAILED",
+    "missing",
+  ] as const)("preserves %s deployment evidence while the event is deploying", async (deploymentState) => {
+    await events.putEvent({
+      ...present(await events.getEvent(event.tenantId, event.eventId)),
+      status: "DEPLOYING",
+    });
+    await claim(1);
+    if (deploymentState === "missing") jobs = [];
+    else jobs[0] = { ...present(jobs[0]), status: deploymentState };
+    const progress = await status(1);
+    expect(progress).toMatchObject({
+      state: deploymentState === "missing" ? "unprepared" : "failed",
+      ready: 0,
+      total: 1,
+    });
+    expect(progress).not.toHaveProperty("teamLoginKey");
+  });
+
+  it("waits for a replacement when READY and GSI2 still expose a deleted COMPLETE row", async () => {
+    const stale = present(jobs[0]);
+    const replacement = {
+      ...stale,
+      jobId: "replacement",
+      status: "PENDING" as const,
+      createdAt: "2026-09-22T09:01:00.000Z",
+    };
+    jobs[0] = replacement;
+    const index = vi.mocked(deps.deployments.listByTeamLoginKey).mockResolvedValue([stale]);
+    const waiting = await claim(1);
+    expect(waiting).toMatchObject({ state: "preparing", ready: 0, total: 1 });
+    expect(waiting).not.toHaveProperty("teamLoginKey");
+    expect(deps.deployments.getDeployment).toHaveBeenCalledWith(stale.jobId, {
+      consistentRead: true,
+      expectedTeamLoginKey: "1".repeat(43),
+    });
+
+    index.mockResolvedValue([replacement]);
+    expect(await status(1)).toEqual(waiting);
+    jobs[0] = { ...replacement, status: "COMPLETE" };
+    index.mockResolvedValue(jobs);
+    expect(await status(1)).toMatchObject({ state: "ready", teamLoginKey: "1".repeat(43) });
+    expect(deps.deployments.getDeployment).toHaveBeenLastCalledWith(replacement.jobId, {
+      consistentRead: true,
+      expectedTeamLoginKey: "1".repeat(43),
+    });
+  });
+
+  it.each([
+    "PENDING",
+    "IN_PROGRESS",
+    "FAILED",
+  ] as const)("uses the primary %s status when the team index still reports COMPLETE", async (primaryStatus) => {
+    const stale = present(jobs[0]);
+    jobs[0] = { ...stale, status: primaryStatus };
+    vi.mocked(deps.deployments.listByTeamLoginKey).mockResolvedValue([stale]);
+    const progress = await claim(1);
+    expect(progress).toMatchObject({
+      state: primaryStatus === "FAILED" ? "failed" : "preparing",
+      ready: 0,
+      total: 1,
+    });
+    expect(progress).not.toHaveProperty("teamLoginKey");
+  });
+
+  it.each([
+    { tenantId: "other-tenant" },
+    { eventId: "other-event" },
+    { teamId: "other-team" },
+    { problemId: "other-problem" },
+    { awsAccountId: "3".repeat(12) },
+    { teamLoginKey: "3".repeat(43) },
+    { expiresAt: Math.floor(now / 1000) },
+    { teardownRequestedAt: new Date(now).toISOString() },
+  ])("revalidates primary deployment scope and eligibility %j", async (patch) => {
+    const stale = present(jobs[0]);
+    jobs[0] = { ...stale, ...patch };
+    vi.mocked(deps.deployments.listByTeamLoginKey).mockResolvedValue([stale]);
+    const progress = await claim(1);
+    expect(progress.state).not.toBe("ready");
+    expect(progress.ready).toBe(0);
+    expect(progress).not.toHaveProperty("teamLoginKey");
+  });
+
+  it("strongly reads only the latest candidate per required problem", async () => {
+    const first = present(jobs[0]);
+    await events.putEvent({
+      ...present(await events.getEvent(event.tenantId, event.eventId)),
+      problems: [...event.problems, { problemId: "p2", defaultRegion: "ap-northeast-1" }],
+    });
+    jobs.push(
+      { ...first, jobId: "latest-p1", createdAt: "2026-09-22T09:01:00.000Z" },
+      { ...first, jobId: "p2-job", problemId: "p2" },
+    );
+    // Even an overbroad index response must not trigger primary reads for another team.
+    vi.mocked(deps.deployments.listByTeamLoginKey).mockResolvedValue(jobs);
+    const progress = await claim(1);
+    expect(progress).toMatchObject({ state: "ready", ready: 2, total: 2 });
+    expect(deps.deployments.getDeployment).toHaveBeenCalledTimes(2);
+    expect(deps.deployments.getDeployment).toHaveBeenCalledWith("latest-p1", {
+      consistentRead: true,
+      expectedTeamLoginKey: "1".repeat(43),
+    });
+    expect(deps.deployments.getDeployment).toHaveBeenCalledWith("p2-job", {
+      consistentRead: true,
+      expectedTeamLoginKey: "1".repeat(43),
+    });
+  });
+
+  it("propagates primary verification failures instead of releasing an indexed credential", async () => {
+    vi.mocked(deps.deployments.getDeployment).mockRejectedValueOnce(new Error("primary offline"));
+    await expect(claim(1)).rejects.toThrow("primary offline");
+    expect(
+      (await events.getEvent(event.tenantId, event.eventId))?.registration?.claims,
+    ).toHaveLength(1);
   });
 
   it("stops new claims on closing or link rotation but existing receipts resume", async () => {

@@ -283,6 +283,48 @@ describe("event invitation settings", () => {
     expect(await screen.findByRole("button", { name: "registration.copied" })).toBeEnabled();
   });
 
+  it.each([
+    ["reissues the invitation", true],
+    ["closes registration", false],
+  ])("removes the previous link after refreshing when another operator %s", async (_action, enabled) => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    const api = fixture();
+    const link = await issue();
+    fireEvent.click(screen.getByRole("button", { name: "registration.copy" }));
+    await screen.findByRole("button", { name: "registration.copied" });
+    // GET never returns the one-time invitation, including after another operator reissues it.
+    api.get.mockResolvedValueOnce({ ...summary, enabled });
+
+    fireEvent.click(screen.getByRole("button", { name: "registration.refresh" }));
+
+    await waitFor(() => expect(link).not.toBeInTheDocument());
+    expect(
+      screen.getByText(`registration.${enabled ? "open" : "closed"}:{"claimed":0,"capacity":1}`),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "registration.copy" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "registration.copied" })).not.toBeInTheDocument();
+    expect(api.put).toHaveBeenCalledTimes(1);
+    expect(writeText).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the issued link and copy result when refreshing fails", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    const api = fixture();
+    const link = await issue();
+    fireEvent.click(screen.getByRole("button", { name: "registration.copy" }));
+    await screen.findByRole("button", { name: "registration.copied" });
+    api.get.mockRejectedValueOnce(new Error("connection lost"));
+
+    fireEvent.click(screen.getByRole("button", { name: "registration.refresh" }));
+
+    expect(await screen.findByText("registration.error_unavailable")).toBeInTheDocument();
+    expect(link).toHaveValue("https://portal.example.test/join/tenant/e1#invite=test-invitation");
+    expect(screen.getByRole("button", { name: "registration.copied" })).toBeEnabled();
+    expect(api.put).toHaveBeenCalledTimes(1);
+  });
+
   it("retains the open state if closing fails and allows a retry", async () => {
     const api = fixture();
     const link = await issue();

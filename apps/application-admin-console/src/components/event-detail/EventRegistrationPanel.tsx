@@ -94,6 +94,8 @@ export function EventRegistrationPanel({
         if (request.signal.aborted) return;
         setError("");
         setSummary(value);
+        setLink("");
+        setCopied(false);
         setTeamIds(value.teamIds);
         if (value.closesAt) setClosesAt(localDateTime(value.closesAt));
       })

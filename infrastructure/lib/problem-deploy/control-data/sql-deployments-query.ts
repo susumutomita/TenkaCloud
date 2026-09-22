@@ -12,8 +12,8 @@ export class SqlDeploymentsQuery implements DeploymentsQueryPort {
   constructor(private readonly core: SqlDeploymentsCore) {}
 
   /** Point read — implemented on the core engine because the write-side conflict probes reuse it. */
-  readonly getDeployment: DeploymentsQueryPort["getDeployment"] = (jobId) =>
-    this.core.getDeployment(jobId);
+  readonly getDeployment: DeploymentsQueryPort["getDeployment"] = (jobId, options) =>
+    this.core.getDeployment(jobId, options);
 
   async queryDeploymentMeta(jobId: string): Promise<DeploymentRecord | undefined> {
     return this.core.getDeployment(jobId);

@@ -392,7 +392,10 @@ export class DynamoDbDeploymentsCore {
 
   async getDeployment(
     jobId: string,
-    options?: { readonly consistentRead?: boolean },
+    options?: {
+      readonly consistentRead?: boolean;
+      readonly expectedTeamLoginKey?: string;
+    },
   ): Promise<DeploymentRecord | undefined> {
     const out = await this.ddb.send(
       new GetCommand({
@@ -403,6 +406,11 @@ export class DynamoDbDeploymentsCore {
     );
     const item = out.Item as Record<string, unknown> | undefined;
     if (!item) return undefined;
+    if (
+      options?.expectedTeamLoginKey !== undefined &&
+      item.teamLoginKey !== options.expectedTeamLoginKey
+    )
+      return undefined;
     return itemToRecord(item);
   }
 

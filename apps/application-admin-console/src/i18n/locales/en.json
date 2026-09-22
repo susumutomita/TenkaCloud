@@ -1040,7 +1040,7 @@
   },
   "registration": {
     "title": "Let participants claim their environment",
-    "description": "Select undistributed team slots and issue a shared registration link. First assign a separate AWS account to each team and start deploying their environments.",
+    "description": "Select undistributed team slots and issue a shared registration link. First assign a separate AWS account to each team and start deploying their environments. DynamoDB defaults of 1 RCU / 1 WCU are for idle operation. Before large registration sessions, ask a TenantAdmin to check and adjust Events and its GSI under Advanced operations → DynamoDB capacity. Increasing capacity costs money; restore it after registration closes.",
     "open": "Open: {claimed} / {capacity} team environments assigned",
     "closed": "Closed: {claimed} / {capacity} team environments assigned",
     "teams": "Team slots to allocate",
@@ -1049,7 +1049,7 @@
     "teams_help": "Select slots that have not been distributed to participants. Claimed slots cannot be removed.",
     "select": "Select team slots",
     "deadline": "Registration deadline (this device’s time)",
-    "confirm": "These environments may be assigned to people registering through this link.",
+    "confirm": "These environments may be assigned, and I have checked registration capacity and costs for the storage backend.",
     "open_button": "Open registration and issue link",
     "reissue": "Save and reissue link",
     "close_button": "Close registration",

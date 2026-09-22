@@ -31,7 +31,7 @@ runbook の `TableName` は以下の 5 テーブルに `allowedValues` + IAM res
 | テーブル | 役割 | GSI 数 | 課金倍率 | イベント中の負荷源 |
 | --- | --- | --- | --- | --- |
 | Deployments | deploy ジョブ state | 3 | x4 | bulk deploy、参加者 portal の polling |
-| Events | イベント定義 | 1 | x2 | 管理画面 / 採点 tick の read |
+| Events | イベント定義・参加受付票 | 1 | x2 | 管理画面 / 採点 tick / 参加状況の read、参加受付の条件付き write |
 | Teams | チーム定義 | 2 | x3 | 参加者 login、採点 tick の read |
 | ProblemEndpoints | endpoint registry | 0 | x1 | 参加者 portal の endpoint 解決 |
 | Disruptions | Red Team 障害の audit | 1 | x2 | disruption fire / 採点 tick |
@@ -55,6 +55,8 @@ runbook は base table と全 GSI を**同じ値**に揃える (base だけ上�
 ## 規模 → 目安
 
 チーム数を N とした初期値の目安。迷ったら小さめに設定し、panel を見ながら上げる。
+
+**下表は通常の競技中の目安であり、セルフサインアップの集中受付には適用しない。**受付票が Events 項目に増えるため、1 申込みが 1 WCU とは限らない。[参加リンクの受付容量](participant-self-registration.md)にある項目サイズからの見積もり、Events/GSI の事前増強、少人数ずつ案内し、受付後に容量を戻す。99 枠の場合の初期見積もりは Events 200 RCU / 200 WCU（GSI 込み 400/400）であり、一斉 99 件の成功保証ではない。デフォルト値は変更せず、運営が費用と他イベントへの影響を確認して実行する。
 
 | 規模 | Deployments | Events | Teams | ProblemEndpoints | Disruptions |
 | --- | --- | --- | --- | --- | --- |

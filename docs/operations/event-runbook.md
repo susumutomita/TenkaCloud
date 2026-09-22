@@ -1,6 +1,6 @@
 # イベント運用 Runbook
 
-参加リンクで環境を配る場合は、[セルフサインアップの準備と受付](participant-self-registration.md)を使います。AWS アカウントは事前に用意します。
+参加リンクで環境を配る場合は、[セルフサインアップの準備と受付](participant-self-registration.md)を使います。AWS アカウントは事前に用意します。DynamoDB のデフォルト 1 RCU / 1 WCU は待機用です。リンク配布前に同手順の受付容量を見積もり、必要な一時増強と受付後の復元を担当者が確認します。
 
 Issue #2407。TenkaCloud で 1 回のイベント (Battle / Challenge) を運営する運営者向けの手順書。作問者でなくても、この文書だけで前日準備から撤収まで通せることを目標にする。キャパシティ運用の詳細は [dynamodb-event-capacity.md](./dynamodb-event-capacity.md)、管理者 SSO は [cognito-saml-idp-playbook.md](./cognito-saml-idp-playbook.md)、デプロイ手順の詳細は [DEPLOYMENT_GUIDE.md](../../DEPLOYMENT_GUIDE.md)、問題ごとの当日運用は各問題の `OPERATOR.md` (catalog repo) に委ねる。
 

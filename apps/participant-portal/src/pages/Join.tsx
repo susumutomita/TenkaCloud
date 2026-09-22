@@ -51,6 +51,7 @@ function JoinSession({
   const [info, setInfo] = useState<RegistrationInfo | null>(null);
   const [progress, setProgress] = useState<RegistrationProgress | null>(null);
   const [busy, setBusy] = useState(false);
+  const [refreshStatus, setRefreshStatus] = useState({ pending: false });
   const [error, setError] = useState("");
   const pending = useRef<AbortController | null>(null);
   const fail = useCallback(
@@ -72,6 +73,7 @@ function JoinSession({
       setError("unsupported");
       return;
     }
+    setRefreshStatus({ pending: true });
     void loadRegistration(config.apiBaseUrl, tenantId, eventId, request.signal)
       .then((value) => {
         if (request.signal.aborted) return;
@@ -81,6 +83,10 @@ function JoinSession({
       })
       .catch((cause: unknown) => {
         if (!request.signal.aborted) fail(cause);
+      })
+      .finally(() => {
+        // A new completion value reschedules polling even after consecutive identical errors.
+        if (!request.signal.aborted) setRefreshStatus({ pending: false });
       });
   }, [config.apiBaseUrl, config.mode, config.cloudMode, tenantId, eventId, fail]);
 
@@ -90,10 +96,11 @@ function JoinSession({
   }, [refresh]);
 
   useEffect(() => {
-    if (progress?.state !== "preparing") return;
+    if (progress?.state !== "preparing" || refreshStatus.pending) return;
+    if (error && error !== "registration_unavailable" && error !== "rate_limited") return;
     const timer = window.setTimeout(refresh, 5000);
     return () => window.clearTimeout(timer);
-  }, [progress, refresh]);
+  }, [progress, refreshStatus, error, refresh]);
 
   async function claim() {
     if (!invitation || busy) return;

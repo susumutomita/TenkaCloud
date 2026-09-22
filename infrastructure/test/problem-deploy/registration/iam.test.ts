@@ -6,6 +6,37 @@ import {
 } from "../../problem-deploy-backend-stack.test-helpers";
 
 it(
+  "allows registration primary verification to GetItem only on the deployments table",
+  () => {
+    const template = synthParticipantPortalLambdaOnly();
+    const env = Object.values(template.findResources("AWS::Lambda::Function"))
+      .map((resource) => resource.Properties.Environment?.Variables)
+      .find((variables) => variables?.DEPLOYMENTS_TABLE_NAME);
+    const tableId = env?.DEPLOYMENTS_TABLE_NAME?.Ref;
+    expect(tableId).toEqual(expect.any(String));
+    const policies = Object.values(template.findResources("AWS::IAM::Role")).flatMap(
+      (role) => role.Properties.Policies ?? [],
+    );
+    const deploymentsRead = policies.find((policy) => policy.PolicyName === "DeploymentsRead");
+    expect(deploymentsRead).toBeDefined();
+    const primaryReads = deploymentsRead.PolicyDocument.Statement.filter(
+      (statement: { Action: string | string[] }) =>
+        (Array.isArray(statement.Action) ? statement.Action : [statement.Action]).includes(
+          "dynamodb:GetItem",
+        ),
+    );
+    expect(primaryReads).toEqual([
+      {
+        Action: "dynamodb:GetItem",
+        Effect: "Allow",
+        Resource: { "Fn::GetAtt": [tableId, "Arn"] },
+      },
+    ]);
+  },
+  SYNTH_TIMEOUT_MS,
+);
+
+it(
   "limits claims to event attributes and reads team keys without team mutation",
   () => {
     const template = synthParticipantPortalLambdaOnly();

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   DynamoDbDeploymentsRepository,
   SqlDeploymentsRepository,
@@ -136,6 +136,26 @@ async function drain<T>(
 }
 
 describe.each(backends)("DeploymentsRepository parity: %s", (_label, makeBackend) => {
+  it("confirms the current credential on point reads without exposing its stored hash", async () => {
+    const { repo } = makeBackend();
+    const record = deployment({ jobId: "credential-check", teamLoginKey: "KEY-A" });
+    await repo.putDeployment(record);
+    const options = { consistentRead: true, expectedTeamLoginKey: "KEY-A" };
+    const confirmed = await repo.getDeployment(record.jobId, options);
+    expect(confirmed).toMatchObject({ jobId: record.jobId, teamLoginKey: "KEY-A" });
+    expect(confirmed).not.toHaveProperty("teamLoginKeyHash");
+    expect(await repo.getDeployment("missing", options)).toBeUndefined();
+    expect(
+      await repo.getDeployment(record.jobId, { ...options, expectedTeamLoginKey: "wrong-key" }),
+    ).toBeUndefined();
+
+    await repo.putDeployment({ ...record, teamLoginKey: "KEY-B" });
+    expect(await repo.getDeployment(record.jobId, options)).toBeUndefined();
+    expect(
+      await repo.getDeployment(record.jobId, { ...options, expectedTeamLoginKey: "KEY-B" }),
+    ).toMatchObject({ teamLoginKey: "KEY-B" });
+  });
+
   it("should round-trip every read method through the repository contract", async () => {
     const { repo } = makeBackend();
     await repo.putDeployment(
@@ -840,6 +860,29 @@ describe.each(backends)("DeploymentsRepository parity: %s", (_label, makeBackend
   });
 });
 
+describe("DynamoDbDeploymentsRepository credential confirmation", () => {
+  it("requests a strongly consistent primary read when verifying the current credential", async () => {
+    const ddb = makeFakeDdb();
+    const repo = new DynamoDbDeploymentsRepository(ddb, TABLE);
+    await repo.putDeployment(deployment({ jobId: "current", teamLoginKey: "KEY-A" }));
+    const send = vi.spyOn(ddb, "send");
+    const record = await repo.getDeployment("current", {
+      consistentRead: true,
+      expectedTeamLoginKey: "KEY-A",
+    });
+    expect(record).toMatchObject({ jobId: "current", teamLoginKey: "KEY-A" });
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: {
+          TableName: TABLE,
+          Key: { PK: "DEPLOYMENT#current", SK: "META" },
+          ConsistentRead: true,
+        },
+      }),
+    );
+  });
+});
+
 describe("SqlDeploymentsRepository login-key storage", () => {
   it("should store only the SHA-256 login-key hash and scrub plaintext payloads", async () => {
     const sql = makeSqliteExecutor();
@@ -855,6 +898,9 @@ describe("SqlDeploymentsRepository login-key storage", () => {
     expect(String(row?.payload)).not.toContain(plaintext);
     expect(JSON.parse(String(row?.payload))).not.toHaveProperty("teamLoginKey");
     expect((await repo.listByTeamLoginKey(plaintext))[0]?.teamLoginKey).toBe(plaintext);
+    const defaultRead = await repo.getDeployment("secret");
+    expect(defaultRead).not.toHaveProperty("teamLoginKey");
+    expect(defaultRead).not.toHaveProperty("teamLoginKeyHash");
   });
 
   it("should preserve a pre-hashed team credential without ever receiving plaintext", async () => {
@@ -875,6 +921,12 @@ describe("SqlDeploymentsRepository login-key storage", () => {
     expect(String(row?.payload)).not.toContain(prehashed);
     expect(JSON.parse(String(row?.payload))).not.toHaveProperty("teamLoginKeyHash");
     expect((await repo.listByTeamLoginKey(plaintext))[0]?.jobId).toBe("prehashed");
+    const confirmed = await repo.getDeployment("prehashed", {
+      consistentRead: true,
+      expectedTeamLoginKey: plaintext,
+    });
+    expect(confirmed).toMatchObject({ jobId: "prehashed", teamLoginKey: plaintext });
+    expect(confirmed).not.toHaveProperty("teamLoginKeyHash");
   });
 
   it("should reject ambiguous plaintext and pre-hashed credentials", async () => {
