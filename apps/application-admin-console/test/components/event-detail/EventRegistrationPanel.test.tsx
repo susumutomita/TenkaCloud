@@ -15,7 +15,7 @@ const summary = {
   enabled: true,
   capacity: 1,
   claimed: 0,
-  claimedTeamIds: [],
+  claimedTeamIds: [] as string[],
   teamIds: ["t1"],
   closesAt: "2027-01-01T00:00:00.000Z",
 };
