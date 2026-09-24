@@ -510,8 +510,17 @@ export class SqlDeploymentsCore {
     return rows.map((row) => deploymentFromPayload(row.payload, restoreLoginKey));
   }
 
-  async getDeployment(jobId: string): Promise<DeploymentRecord | undefined> {
-    const row = await this.sql.get("SELECT payload FROM deployments WHERE job_id = ?", [jobId]);
-    return row ? deploymentFromPayload(row.payload) : undefined;
+  async getDeployment(
+    jobId: string,
+    options?: { readonly expectedTeamLoginKey?: string },
+  ): Promise<DeploymentRecord | undefined> {
+    const key = options?.expectedTeamLoginKey;
+    const row = await this.sql.get(
+      key === undefined
+        ? "SELECT payload FROM deployments WHERE job_id = ?"
+        : "SELECT payload FROM deployments WHERE job_id = ? AND login_key_hash = ?",
+      key === undefined ? [jobId] : [jobId, hashLoginKey(key)],
+    );
+    return row ? deploymentFromPayload(row.payload, key) : undefined;
   }
 }

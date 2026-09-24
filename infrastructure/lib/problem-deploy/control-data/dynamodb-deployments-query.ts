@@ -241,17 +241,13 @@ export class DynamoDbDeploymentsQuery implements DeploymentsQueryPort {
   // -- GSI2: participant login --------------------------------------------
 
   async listByTeamLoginKey(teamLoginKey: string): Promise<readonly DeploymentRecord[]> {
-    // Single page (no drain) — verbatim `participant-handler/shared.ts`
-    // `queryTeamItems` (the participant-login path).
-    const out = await this.core.ddb.send(
-      new QueryCommand({
-        TableName: this.core.tableName,
-        IndexName: "GSI2",
-        KeyConditionExpression: "GSI2PK = :pk",
-        ExpressionAttributeValues: { ":pk": `TEAMKEY#${teamLoginKey}` },
-      }),
-    );
-    return (out.Items ?? []).map((item) => itemToRecord(item as Record<string, unknown>));
+    // Later pages can contain newer retries; readiness must consider the whole team history.
+    const items = await this.core.queryAllPages({
+      IndexName: "GSI2",
+      KeyConditionExpression: "GSI2PK = :pk",
+      ExpressionAttributeValues: { ":pk": `TEAMKEY#${teamLoginKey}` },
+    });
+    return items.map(itemToRecord);
   }
 
   // -- Full-table Scans (per-page callback) --------------------------------

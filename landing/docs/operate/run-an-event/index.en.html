@@ -70,9 +70,46 @@
 <h1>Run an event end to end <span class="doc-badge doc-badge--preview">Preview</span></h1>
 <p>This operator walkthrough presents Lite as the current event procedure. SaaS
 tenant creation and multi-cloud are separated as architecture reference.</p>
+<h2>Learning and meeting teammates at one venue</h2>
+<p>Engineers who usually work at different offices meet at one venue to learn AWS and get to know each other. Mix offices and AWS experience in teams of four. <a href="https://github.com/susumutomita/TenkaCloudChallenge/tree/main/battles/office-link-battle">Office Link</a> follows <strong>real-AWS Preparation Challenge → Gate completion → Recovery Battle</strong>. Teammates share a table, discuss what they see and take turns operating and explaining; the shared work creates a reason to talk.</p>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>Team activity</th>
+<th>Scoring and progression</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Preparation</td>
+<td>Launch EC2 → attach internet gateway → route → Session Manager → permit HTTP; one operation and short explanation at a time</td>
+<td>All five completed: submit one 100-point flag to unlock Battle. No interim scoring</td>
+</tr>
+<tr>
+<td>Recovery Battle</td>
+<td>Repair gateway, route, management-role and HTTP faults one at a time on a separate Battle EC2</td>
+<td>Register the endpoint first. Healthy ticks earn +100; unreachable or missing management access costs 100. Explanation gates the next round</td>
+</tr>
+<tr>
+<td>Reflection</td>
+<td>Share one thing a teammate helped explain</td>
+<td>Speaking frequency is not graded</td>
+</tr>
+</tbody></table>
+<p>For Battle, the host gives <strong>one private A–D card to each person</strong>. Combine clues and confirm from all four cards; the assigned operator checks recovery and a different teammate answers the explanation. Roles rotate each round. Clues change from a sum to a network route and paired pieces. AI may solve a clue, but individual card confirmations and role handoffs still apply. The host can assist absent members; card possession is not proof of a person&#39;s identity.</p>
+<p>Teams can also exchange private codes. Both teams must submit the other&#39;s code to receive <strong>20 points each, up to three different partners and 60 points total</strong>. Waiting or declining costs nothing. A team that reached the limit can still help a late arrival exchange.</p>
+<p>Initially reserve <strong>90–120 minutes</strong>: intro 5, Preparation about 40, Battle about 30–45, reflection 10; adjust from rehearsal. Battle scoring normally runs each minute. Early Preparation finishers explain the architecture; the host aligns Battle registration and start. Board checks and hints are free. A wrong Preparation flag costs 5 points. Battle points depend on uptime, so this is not a fixed 200-point event.</p>
+<p>Add <strong>only office-link-gate and office-link-battle</strong>. A TenantAdmin enables the Gate feature (default OFF), selects Preparation as Gate and only Battle as unlock target, required policy, zero bonus and inherited team policies. Save and verify the lock from an unfinished team. Each problem also advances one internal stage at a time, leaving one unfinished task. The <a href="https://github.com/susumutomita/TenkaCloudChallenge/blob/main/battles/office-link-battle/OPERATOR.md">host runbook</a> covers operator fault introduction, recovery and teardown.</p>
+<p>Seven optional, independent difficulty1 Challenges cover <strong>S3 save, S3 restore, Lambda execution, log investigation, DynamoDB handover, SQS handover and CloudWatch alarms</strong>. Choose suitable topics for separate events; do not add all to the first event.</p>
+<p>These exercises operate real AWS. Budget competitor accounts, EC2, EBS, public IPv4, functions, logs and teardown ownership. Battle state also uses a problem-owned DynamoDB table. Choosing Turso for the platform does not remove problem-side AWS costs. Local previews use labelled UI fixtures and do not verify AWS permissions, connectivity or official scores. Start with a real-AWS rehearsal of 2–4 teams, measuring propagation delays and role rotation.</p>
+<p>The public platform and standard problems are available for self-hosting. Event design, preparation and facilitation can be provided as paid support; organization-specific problems are quoted separately. Social-event scores alone are not a hiring or certification rubric: design separate criteria for those uses.</p>
+<h3>Pin the catalog version being deployed</h3>
+<p>The Lite launcher default <code>ProblemsRepoRef</code> points to the last published release and may not contain this new set. Read <code>sources.catalog.commit</code> from <code>release/tenkacloud-release.json</code> in the platform checkout selected for rehearsal and supply it as <strong>ProblemsRepoRef</strong>. Pin <strong>RepoRef</strong> to the platform commit being rehearsed too. Until included in a published release, this is a candidate for event preparation.</p>
+<p>For local <code>make deploy</code>, align <code>problems</code> with that checkout&#39;s gitlink. Before deploying, confirm both <code>challenges/office-link-gate/metadata.json</code> and <code>battles/office-link-battle/metadata.json</code> exist. Updating the version does not automatically register these problems or configure a Gate in an existing event.</p>
 <h2>From an idea to a hosted event</h2>
 <p>Start with a willing owner and helpers, even if nobody has hosted before. The lead times and effort below are <strong>initial estimates</strong>, not measured promises. Move them earlier for venue booking or internal approval; update them after each event.</p>
 <p><strong>Plan → people and venue → environment → rehearsal → event → teardown and review</strong></p>
+<p>Configure signup under <strong>Let participants claim their environment</strong> in the event&#39;s Teams tab. Select organizer-prepared AWS team slots, set a deadline and issue an invitation link. One representative claims one slot; after all problem deployments are ready, they continue to the existing team setup. Register once per team. This does not create AWS accounts or automatically issue Free Projects. Follow the <a href="https://github.com/susumutomita/TenkaCloud/blob/main/docs/operations/participant-self-registration.en.md">signup, resume and closing procedure</a>.</p>
 <p><a href="https://github.com/susumutomita/TenkaCloudChallenge/tree/main/challenges/event-host-rehearsal">Practise as a problem: First-time event host</a>. This Docker-based exercise runs locally and is not listed in the AWS problem picker. Complete four checkpoints for a fictional event. Passing does not certify a real event or AWS environment.</p>
 <h3>Timeline, ownership and quantities</h3>
 <table>

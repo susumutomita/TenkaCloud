@@ -5,6 +5,7 @@ import { RequireAuth } from "./auth/RequireAuth";
 import { ShellLayout } from "./components/AppLayout";
 import { type AppConfig, showsCourseTracks } from "./config";
 import { CourseTracksPage } from "./pages/CourseTracks";
+import { JoinPage } from "./pages/Join";
 import { LoginPage } from "./pages/Login";
 import { NotificationsPage } from "./pages/Notifications";
 import { ProblemDetailPage } from "./pages/ProblemDetail";
@@ -29,6 +30,7 @@ export function App({ config }: { config: AppConfig }) {
     <AuthProvider config={config}>
       <Routes>
         <Route path="/login" element={<LoginPage config={config} />} />
+        <Route path="/join/:tenantId/:eventId" element={<JoinPage config={config} />} />
         <Route
           path="/setup"
           element={

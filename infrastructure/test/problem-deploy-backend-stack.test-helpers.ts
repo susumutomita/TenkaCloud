@@ -279,7 +279,12 @@ export const synthParticipantPortalLambdaOnly = memoizeTemplate((): Template => 
     partitionKey: { name: "PK", type: cdk.aws_dynamodb.AttributeType.STRING },
     sortKey: { name: "SK", type: cdk.aws_dynamodb.AttributeType.STRING },
   });
+  const teams = new cdk.aws_dynamodb.Table(stack, "Teams", {
+    partitionKey: { name: "PK", type: cdk.aws_dynamodb.AttributeType.STRING },
+    sortKey: { name: "SK", type: cdk.aws_dynamodb.AttributeType.STRING },
+  });
   new ParticipantPortalLambda(stack, "ParticipantPortal", {
+    teamsTable: teams,
     deploymentsTable: deployments,
     eventsTable: events,
     endpointsTable: endpoints,

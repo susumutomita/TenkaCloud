@@ -1,0 +1,633 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { DeploymentRecord } from "../../../lib/problem-deploy/control-data/domain/deployments";
+import type { EventRecord } from "../../../lib/problem-deploy/control-data/domain/events";
+import { SqlEventsRepository } from "../../../lib/problem-deploy/control-data/sql-events-repository";
+import { SqlTeamsRepository } from "../../../lib/problem-deploy/control-data/sql-teams-repository";
+import {
+  claimRegistration,
+  configureRegistration,
+  inspectRegistration,
+  type RegistrationDeps,
+  registrationDigest,
+  registrationStatus,
+  registrationSummary,
+} from "../../../lib/problem-deploy/handlers/shared/event-registration";
+import { makeSqliteExecutor } from "../control-data/control-data-write.test-helpers";
+
+function present<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error("Required fixture is missing");
+  return value;
+}
+
+const now = Date.parse("2026-09-22T09:00:00.000Z");
+const event: EventRecord = {
+  eventId: "01EVENTAAAAAAAAAAAAAAAAAAA",
+  tenantId: "tenant-a",
+  name: "Beginner Battle",
+  status: "READY",
+  problems: [{ problemId: "p1", defaultRegion: "ap-northeast-1" }],
+  teamCount: 2,
+  createdAt: new Date(now).toISOString(),
+  updatedAt: new Date(now).toISOString(),
+  endsAt: "2026-09-23T00:00:00.000Z",
+  expiresAt: Math.floor(now / 1000) + 172800,
+};
+const receipt = (n: number) => `${n}`.padStart(43, "r");
+let deps: RegistrationDeps;
+let events: SqlEventsRepository;
+let teams: SqlTeamsRepository;
+let jobs: DeploymentRecord[];
+let invite: string;
+
+async function open(teamIds = ["team-1", "team-2"]) {
+  const result = await configureRegistration(
+    deps,
+    event.tenantId,
+    event.eventId,
+    {
+      enabled: true,
+      teamIds,
+      closesAt: "2026-09-22T23:00:00.000Z",
+    },
+    now,
+  );
+  if (!("invitation" in result) || !result.invitation) throw new Error("missing invitation");
+  return result.invitation;
+}
+async function claim(n: number) {
+  return claimRegistration(deps, event.tenantId, event.eventId, invite, receipt(n), now);
+}
+async function status(n: number) {
+  return registrationStatus(deps, event.tenantId, event.eventId, receipt(n), now);
+}
+
+beforeEach(async () => {
+  const sql = makeSqliteExecutor();
+  events = new SqlEventsRepository(sql);
+  teams = new SqlTeamsRepository(sql);
+  await events.putEvent(event);
+  jobs = [];
+  for (let n = 1; n <= 2; n++) {
+    const teamId = `team-${n}`;
+    await teams.putTeam({
+      tenantId: event.tenantId,
+      eventId: event.eventId,
+      teamId,
+      internalSlug: teamId,
+      teamLoginKey: `${n}`.repeat(43),
+      awsAccountId: `${n}`.repeat(12),
+      createdAt: event.createdAt,
+      updatedAt: event.updatedAt,
+      expiresAt: event.expiresAt,
+    });
+    jobs.push({
+      tenantId: event.tenantId,
+      eventId: event.eventId,
+      teamId,
+      problemId: "p1",
+      jobId: `job-${n}`,
+      status: "COMPLETE",
+      createdAt: event.createdAt,
+      updatedAt: event.updatedAt,
+      expiresAt: event.expiresAt,
+      awsAccountId: `${n}`.repeat(12),
+      region: "ap-northeast-1",
+      teamName: teamId,
+      teamLoginKey: `${n}`.repeat(43),
+      namePrefix: teamId,
+    });
+  }
+  deps = {
+    events,
+    teams,
+    deployments: {
+      listByTenantAndEvent: vi.fn(async () => jobs),
+      listByTeamLoginKey: vi.fn(async (key) => jobs.filter((job) => job.teamLoginKey === key)),
+      getDeployment: vi.fn(async (jobId) => jobs.find((job) => job.jobId === jobId)),
+    },
+  };
+  invite = await open();
+});
+
+describe("self-registration with real SQLite repositories", () => {
+  it("atomically allocates different slots, caps capacity and resumes the same receipt", async () => {
+    vi.mocked(deps.deployments.listByTenantAndEvent).mockClear();
+    const [a, b] = await Promise.all([claim(1), claim(2)]);
+    expect(new Set([a.teamId, b.teamId]).size).toBe(2);
+    expect(await claim(1)).toEqual(a);
+    await expect(claim(3)).rejects.toThrow("full");
+    expect(
+      await inspectRegistration(deps, event.tenantId, event.eventId, invite, now),
+    ).toMatchObject({ state: "full", remaining: 0 });
+    const stored = await events.getEvent(event.tenantId, event.eventId);
+    expect(stored?.registration?.claims).toHaveLength(2);
+    expect(JSON.stringify(stored)).not.toContain(receipt(1));
+    expect(JSON.stringify(stored)).not.toContain(invite);
+    expect(stored?.registration?.invitationHash).toBe(registrationDigest(invite));
+    if (!stored) throw new Error("Event missing after claims");
+    const summary = registrationSummary(stored, now);
+    expect(new Set(summary.claimedTeamIds)).toEqual(new Set([a.teamId, b.teamId]));
+    expect(JSON.stringify(summary)).not.toMatch(/invitation|receipt|Hash/);
+    expect(deps.deployments.listByTenantAndEvent).not.toHaveBeenCalled();
+    expect(deps.deployments.listByTeamLoginKey).toHaveBeenCalledWith("1".repeat(43));
+    expect(deps.deployments.listByTeamLoginKey).toHaveBeenCalledWith("2".repeat(43));
+  });
+
+  it("simultaneous retries with one receipt reserve only one slot", async () => {
+    const results = await Promise.all(Array.from({ length: 5 }, () => claim(1)));
+    expect(new Set(results.map((result) => result.teamId)).size).toBe(1);
+    expect(
+      (await events.getEvent(event.tenantId, event.eventId))?.registration?.claims,
+    ).toHaveLength(1);
+  });
+
+  it("returns no login credential while preparing or failed, and honors the newest retry", async () => {
+    jobs[0] = { ...present(jobs[0]), status: "IN_PROGRESS" };
+    expect(await claim(1)).toEqual({
+      eventName: event.name,
+      teamId: "team-1",
+      state: "preparing",
+      ready: 0,
+      total: 1,
+    });
+    jobs[0] = { ...present(jobs[0]), status: "FAILED" };
+    expect(await status(1)).toMatchObject({ state: "failed" });
+    expect(await status(1)).not.toHaveProperty("teamLoginKey");
+    jobs.push({
+      ...present(jobs[0]),
+      jobId: "retry",
+      status: "COMPLETE",
+      createdAt: "2026-09-22T09:01:00.000Z",
+    });
+    expect(await status(1)).toMatchObject({ state: "ready", teamLoginKey: "1".repeat(43) });
+  });
+
+  it.each([
+    "IN_PROGRESS",
+    "FAILED",
+  ] as const)("withholds the login key when a newer %s retry follows a completed deployment", async (retryStatus) => {
+    expect(await claim(1)).toHaveProperty("teamLoginKey");
+    jobs.push({
+      ...present(jobs[0]),
+      jobId: "newer-retry",
+      status: retryStatus,
+      createdAt: "2026-09-22T09:01:00.000Z",
+    });
+    const progress = await status(1);
+    expect(progress).toMatchObject({
+      state: retryStatus === "FAILED" ? "failed" : "preparing",
+      ready: 0,
+      total: 1,
+    });
+    expect(progress).not.toHaveProperty("teamLoginKey");
+  });
+
+  it("accepts claims during redeployment but withholds credentials from stale completed rows", async () => {
+    await events.putEvent({
+      ...present(await events.getEvent(event.tenantId, event.eventId)),
+      status: "DEPLOYING",
+    });
+    expect(
+      await inspectRegistration(deps, event.tenantId, event.eventId, invite, now),
+    ).toMatchObject({ state: "open", remaining: 2 });
+    // Model GSI2 lag: only the previous generation's COMPLETE row is visible.
+    const allocated = await claim(1);
+    expect(allocated).toMatchObject({ state: "preparing", ready: 0, total: 1 });
+    expect(allocated).not.toHaveProperty("teamLoginKey");
+    expect(await status(1)).toEqual(allocated);
+    expect(
+      (await events.getEvent(event.tenantId, event.eventId))?.registration?.claims,
+    ).toHaveLength(1);
+
+    const replacement = {
+      ...present(jobs[0]),
+      jobId: "replacement",
+      status: "IN_PROGRESS" as const,
+      createdAt: "2026-09-22T09:01:00.000Z",
+    };
+    jobs.push(replacement);
+    expect(await status(1)).toEqual(allocated);
+    jobs[jobs.length - 1] = { ...replacement, status: "COMPLETE" };
+    expect(await status(1)).toEqual(allocated);
+
+    await events.putEvent({
+      ...present(await events.getEvent(event.tenantId, event.eventId)),
+      status: "READY",
+    });
+    expect(await status(1)).toMatchObject({
+      state: "ready",
+      ready: 1,
+      total: 1,
+      teamLoginKey: "1".repeat(43),
+    });
+  });
+
+  it.each([
+    "FAILED",
+    "missing",
+  ] as const)("preserves %s deployment evidence while the event is deploying", async (deploymentState) => {
+    await events.putEvent({
+      ...present(await events.getEvent(event.tenantId, event.eventId)),
+      status: "DEPLOYING",
+    });
+    await claim(1);
+    if (deploymentState === "missing") jobs = [];
+    else jobs[0] = { ...present(jobs[0]), status: deploymentState };
+    const progress = await status(1);
+    expect(progress).toMatchObject({
+      state: deploymentState === "missing" ? "unprepared" : "failed",
+      ready: 0,
+      total: 1,
+    });
+    expect(progress).not.toHaveProperty("teamLoginKey");
+  });
+
+  it("waits for a replacement when READY and GSI2 still expose a deleted COMPLETE row", async () => {
+    const stale = present(jobs[0]);
+    const replacement = {
+      ...stale,
+      jobId: "replacement",
+      status: "PENDING" as const,
+      createdAt: "2026-09-22T09:01:00.000Z",
+    };
+    jobs[0] = replacement;
+    const index = vi.mocked(deps.deployments.listByTeamLoginKey).mockResolvedValue([stale]);
+    const waiting = await claim(1);
+    expect(waiting).toMatchObject({ state: "preparing", ready: 0, total: 1 });
+    expect(waiting).not.toHaveProperty("teamLoginKey");
+    expect(deps.deployments.getDeployment).toHaveBeenCalledWith(stale.jobId, {
+      consistentRead: true,
+      expectedTeamLoginKey: "1".repeat(43),
+    });
+
+    index.mockResolvedValue([replacement]);
+    expect(await status(1)).toEqual(waiting);
+    jobs[0] = { ...replacement, status: "COMPLETE" };
+    index.mockResolvedValue(jobs);
+    expect(await status(1)).toMatchObject({ state: "ready", teamLoginKey: "1".repeat(43) });
+    expect(deps.deployments.getDeployment).toHaveBeenLastCalledWith(replacement.jobId, {
+      consistentRead: true,
+      expectedTeamLoginKey: "1".repeat(43),
+    });
+  });
+
+  it.each([
+    "PENDING",
+    "IN_PROGRESS",
+    "FAILED",
+  ] as const)("uses the primary %s status when the team index still reports COMPLETE", async (primaryStatus) => {
+    const stale = present(jobs[0]);
+    jobs[0] = { ...stale, status: primaryStatus };
+    vi.mocked(deps.deployments.listByTeamLoginKey).mockResolvedValue([stale]);
+    const progress = await claim(1);
+    expect(progress).toMatchObject({
+      state: primaryStatus === "FAILED" ? "failed" : "preparing",
+      ready: 0,
+      total: 1,
+    });
+    expect(progress).not.toHaveProperty("teamLoginKey");
+  });
+
+  it.each([
+    { tenantId: "other-tenant" },
+    { eventId: "other-event" },
+    { teamId: "other-team" },
+    { problemId: "other-problem" },
+    { awsAccountId: "3".repeat(12) },
+    { teamLoginKey: "3".repeat(43) },
+    { expiresAt: Math.floor(now / 1000) },
+    { teardownRequestedAt: new Date(now).toISOString() },
+  ])("revalidates primary deployment scope and eligibility %j", async (patch) => {
+    const stale = present(jobs[0]);
+    jobs[0] = { ...stale, ...patch };
+    vi.mocked(deps.deployments.listByTeamLoginKey).mockResolvedValue([stale]);
+    const progress = await claim(1);
+    expect(progress.state).not.toBe("ready");
+    expect(progress.ready).toBe(0);
+    expect(progress).not.toHaveProperty("teamLoginKey");
+  });
+
+  it("strongly reads only the latest candidate per required problem", async () => {
+    const first = present(jobs[0]);
+    await events.putEvent({
+      ...present(await events.getEvent(event.tenantId, event.eventId)),
+      problems: [...event.problems, { problemId: "p2", defaultRegion: "ap-northeast-1" }],
+    });
+    jobs.push(
+      { ...first, jobId: "latest-p1", createdAt: "2026-09-22T09:01:00.000Z" },
+      { ...first, jobId: "p2-job", problemId: "p2" },
+    );
+    // Even an overbroad index response must not trigger primary reads for another team.
+    vi.mocked(deps.deployments.listByTeamLoginKey).mockResolvedValue(jobs);
+    const progress = await claim(1);
+    expect(progress).toMatchObject({ state: "ready", ready: 2, total: 2 });
+    expect(deps.deployments.getDeployment).toHaveBeenCalledTimes(2);
+    expect(deps.deployments.getDeployment).toHaveBeenCalledWith("latest-p1", {
+      consistentRead: true,
+      expectedTeamLoginKey: "1".repeat(43),
+    });
+    expect(deps.deployments.getDeployment).toHaveBeenCalledWith("p2-job", {
+      consistentRead: true,
+      expectedTeamLoginKey: "1".repeat(43),
+    });
+  });
+
+  it("propagates primary verification failures instead of releasing an indexed credential", async () => {
+    vi.mocked(deps.deployments.getDeployment).mockRejectedValueOnce(new Error("primary offline"));
+    await expect(claim(1)).rejects.toThrow("primary offline");
+    expect(
+      (await events.getEvent(event.tenantId, event.eventId))?.registration?.claims,
+    ).toHaveLength(1);
+  });
+
+  it("stops new claims on closing or link rotation but existing receipts resume", async () => {
+    const allocated = await claim(1);
+    await configureRegistration(deps, event.tenantId, event.eventId, { enabled: false }, now);
+    await expect(claim(2)).rejects.toThrow("closed");
+    expect(await status(1)).toEqual(allocated);
+    const rotated = await open();
+    expect(rotated).not.toBe(invite);
+    await expect(claim(2)).rejects.toThrow("not_found");
+    expect(await status(1)).toEqual(allocated);
+    invite = rotated;
+    expect((await claim(2)).teamId).toBe("team-2");
+  });
+
+  it("does not release credentials for a deployment in the team's former account", async () => {
+    await claim(1);
+    const first = present(await teams.getTeam(event.tenantId, event.eventId, "team-1"));
+    await teams.putTeam({ ...first, awsAccountId: "3".repeat(12) });
+    const pending = await status(1);
+    expect(pending).toMatchObject({ state: "failed", ready: 0 });
+    expect(pending).not.toHaveProperty("teamLoginKey");
+  });
+
+  it("rejects unknown invitations, receipts and other tenants without disclosing event data", async () => {
+    await expect(
+      inspectRegistration(deps, event.tenantId, event.eventId, receipt(4), now),
+    ).rejects.toThrow("not_found");
+    await expect(inspectRegistration(deps, "tenant-b", event.eventId, invite, now)).rejects.toThrow(
+      "not_found",
+    );
+    await expect(status(5)).rejects.toThrow("not_found");
+    expect(
+      (await events.getEvent(event.tenantId, event.eventId))?.registration?.claims,
+    ).toHaveLength(0);
+  });
+
+  it("does not allocate or release credentials after event end or expiry", async () => {
+    await claim(1);
+    await events.putEvent({
+      ...present(await events.getEvent(event.tenantId, event.eventId)),
+      status: "ENDED",
+    });
+    await expect(claim(2)).rejects.toThrow("closed");
+    await expect(status(1)).rejects.toThrow("closed");
+  });
+
+  it("requires an explicit prepared pool with distinct accounts", async () => {
+    await expect(open([])).rejects.toThrow("invalid_pool");
+    await expect(open(["team-1", "team-1"])).rejects.toThrow("invalid_pool");
+    await expect(open(["missing"])).rejects.toThrow("invalid_pool");
+    const second = present(await teams.getTeam(event.tenantId, event.eventId, "team-2"));
+    await teams.putTeam({ ...second, awsAccountId: "1".repeat(12) });
+    await expect(open()).rejects.toThrow("invalid_pool");
+    await teams.putTeam(second);
+    jobs = [];
+    await expect(open()).rejects.toThrow("not_ready");
+  });
+
+  it("names a slot whose plaintext key was scrubbed instead of reporting a generic invalid pool", async () => {
+    // Turso rows created before the 2026-07-04 key-retention change had `teamLoginKey`
+    // removed. Rejecting them is correct (the link hands that key out), but the operator
+    // needs to know the fix is to regenerate the key, not to fix the pool.
+    const first = present(await teams.getTeam(event.tenantId, event.eventId, "team-1"));
+    const legacy = { ...first, teamLoginKey: undefined };
+    await teams.putTeam(legacy);
+    await expect(open()).rejects.toThrow("login_key_missing");
+    // Pool problems win: regenerating a key revokes it, so the operator must not be sent to
+    // do that for an expired row or a pool the next attempt would reject anyway.
+    await teams.putTeam({ ...legacy, expiresAt: 1 });
+    await expect(open()).rejects.toThrow("invalid_pool");
+    const second = present(await teams.getTeam(event.tenantId, event.eventId, "team-2"));
+    await teams.putTeam(legacy);
+    await teams.putTeam({ ...second, awsAccountId: first.awsAccountId });
+    await expect(open()).rejects.toThrow("invalid_pool");
+    await teams.putTeam(second);
+
+    // The advised remediation works: once the key is regenerated the slot opens again.
+    expect(
+      await teams.rotateLoginKey({
+        tenantId: event.tenantId,
+        eventId: event.eventId,
+        teamId: "team-1",
+        newLoginKey: "r".repeat(43),
+        expectedUpdatedAt: legacy.updatedAt,
+        updatedAt: "2026-09-21T00:00:00.000Z",
+        deployments: [],
+      }),
+    ).toMatchObject({ outcome: "updated" });
+    await expect(open()).resolves.toEqual(expect.any(String));
+  });
+
+  it("cannot remove an allocated slot or open beyond event end", async () => {
+    await claim(1);
+    await expect(open(["team-2"])).rejects.toThrow("invalid_pool");
+    await expect(
+      configureRegistration(
+        deps,
+        event.tenantId,
+        event.eventId,
+        {
+          enabled: true,
+          teamIds: ["team-1"],
+          closesAt: "2026-09-24T00:00:00.000Z",
+        },
+        now,
+      ),
+    ).rejects.toThrow("invalid_pool");
+  });
+
+  it("closes at the advertised deadline while keeping an allocated receipt usable", async () => {
+    await claim(1);
+    const deadline = Date.parse("2026-09-22T23:00:00.000Z");
+    const current = present(await events.getEvent(event.tenantId, event.eventId));
+    expect(registrationSummary(current, deadline - 1).enabled).toBe(true);
+    expect(registrationSummary(current, deadline).enabled).toBe(false);
+    expect(
+      await inspectRegistration(deps, event.tenantId, event.eventId, invite, deadline),
+    ).toMatchObject({ state: "closed" });
+    await expect(
+      claimRegistration(deps, event.tenantId, event.eventId, invite, receipt(2), deadline),
+    ).rejects.toThrow("closed");
+    expect(
+      await registrationStatus(deps, event.tenantId, event.eventId, receipt(1), deadline),
+    ).toMatchObject({ state: "ready" });
+  });
+
+  it("does not offer expired team credentials in a new pool", async () => {
+    const first = present(await teams.getTeam(event.tenantId, event.eventId, "team-1"));
+    await teams.putTeam({ ...first, expiresAt: Math.floor(now / 1000) });
+    await expect(open()).rejects.toThrow("invalid_pool");
+  });
+
+  it("CAS refuses a stale version, a different tenant, and a concurrently ended event", async () => {
+    const current = present(await events.getEvent(event.tenantId, event.eventId));
+    const input = {
+      tenantId: event.tenantId,
+      eventId: event.eventId,
+      expectedVersion: 0,
+      registration: present(current.registration),
+      now: new Date(now).toISOString(),
+    };
+    expect(await events.updateRegistration(input)).toBe("conflict");
+    expect(
+      await events.updateRegistration({ ...input, expectedVersion: 1, tenantId: "tenant-b" }),
+    ).toBe("conflict");
+    await events.putEvent({ ...current, endsAt: new Date(now - 1).toISOString() });
+    expect(await events.updateRegistration({ ...input, expectedVersion: 1 })).toBe("conflict");
+  });
+
+  it("surfaces persistence failure without an empty or successful allocation", async () => {
+    vi.spyOn(events, "updateRegistration").mockRejectedValue(new Error("storage offline"));
+    await expect(claim(1)).rejects.toThrow("storage offline");
+  });
+
+  it("shows an unopened event as empty and closing it does not create an invitation", async () => {
+    await events.putEvent(event);
+    const write = vi.spyOn(events, "updateRegistration");
+    const empty = {
+      tenantId: event.tenantId,
+      enabled: false,
+      capacity: 0,
+      claimed: 0,
+      claimedTeamIds: [],
+      teamIds: [],
+    };
+    expect(registrationSummary(event, now)).toMatchObject(empty);
+    expect(
+      await configureRegistration(deps, event.tenantId, event.eventId, { enabled: false }, now),
+    ).toMatchObject(empty);
+    expect(write).not.toHaveBeenCalled();
+    await expect(claim(1)).rejects.toThrow("not_found");
+  });
+
+  it("does not configure an unknown or expired event", async () => {
+    await expect(
+      configureRegistration(deps, "tenant-b", event.eventId, { enabled: false }, now),
+    ).rejects.toThrow("not_found");
+    await events.putEvent({ ...event, expiresAt: Math.floor(now / 1000) });
+    await expect(open()).rejects.toThrow("closed");
+  });
+
+  it("reports concurrent configuration changes and bounds allocation retries", async () => {
+    const update = vi.spyOn(events, "updateRegistration").mockResolvedValue("conflict");
+    await expect(open()).rejects.toThrow("conflict");
+    update.mockClear();
+    vi.useFakeTimers();
+    try {
+      const failure = expect(claim(1)).rejects.toThrow("conflict");
+      await vi.runAllTimersAsync();
+      await failure;
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(update).toHaveBeenCalledTimes(12);
+    expect(
+      (await events.getEvent(event.tenantId, event.eventId))?.registration?.claims,
+    ).toHaveLength(0);
+  });
+
+  it("fails closed if the allocated team disappears or its credential expires", async () => {
+    await claim(1);
+    const first = present(await teams.getTeam(event.tenantId, event.eventId, "team-1"));
+    vi.spyOn(teams, "getTeam").mockResolvedValueOnce(undefined);
+    await expect(status(1)).rejects.toThrow("not_found");
+    await teams.putTeam({ ...first, expiresAt: Math.floor(now / 1000) });
+    await expect(status(1)).rejects.toThrow("closed");
+  });
+
+  it("uses the later job id for simultaneous retries and notices removed deployments", async () => {
+    await claim(1);
+    jobs.push({ ...present(jobs[0]), jobId: "z-retry", status: "FAILED" });
+    expect(await status(1)).toMatchObject({ state: "failed", ready: 0 });
+    expect(await status(1)).not.toHaveProperty("teamLoginKey");
+    jobs = [];
+    expect(await status(1)).toMatchObject({ state: "unprepared", ready: 0, total: 1 });
+    expect(await status(1)).not.toHaveProperty("teamLoginKey");
+  });
+
+  it("allocates all 99 slots after every claimant initially reads the same version", async () => {
+    const first = present(await teams.getTeam(event.tenantId, event.eventId, "team-1"));
+    for (let n = 3; n <= 99; n++) {
+      const teamId = `team-${n}`;
+      const awsAccountId = String(n).padStart(12, "0");
+      const teamLoginKey = String(n).padStart(43, "k");
+      await teams.putTeam({ ...first, teamId, internalSlug: teamId, awsAccountId, teamLoginKey });
+      jobs.push({
+        ...present(jobs[0]),
+        jobId: `job-${n}`,
+        teamId,
+        teamName: teamId,
+        awsAccountId,
+        teamLoginKey,
+      });
+    }
+    invite = await open(Array.from({ length: 99 }, (_, i) => `team-${i + 1}`));
+    const read = events.getEvent.bind(events);
+    let reads = 0;
+    const { promise: burst, resolve: release } = Promise.withResolvers<undefined>();
+    const lookup = vi.spyOn(events, "getEvent").mockImplementation(async (...args) => {
+      const snapshot = await read(...args);
+      if (reads < 99) {
+        reads++;
+        if (reads === 99) release(undefined);
+        await burst;
+      }
+      // Preserve read latency so retrying claims can collide too, as with remote storage.
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      return snapshot;
+    });
+    vi.useFakeTimers();
+    try {
+      const allocations = Promise.all(Array.from({ length: 99 }, (_, i) => claim(i + 1)));
+      await vi.runAllTimersAsync();
+      const results = await allocations;
+      lookup.mockRestore();
+      expect(new Set(results.map((result) => result.teamId)).size).toBe(99);
+      expect(results.every((result) => result.state === "ready")).toBe(true);
+      expect(
+        (await events.getEvent(event.tenantId, event.eventId))?.registration?.claims,
+      ).toHaveLength(99);
+      await expect(claim(100)).rejects.toThrow("full");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("rechecks the invitation deadline after waiting for a competing claim", async () => {
+    const opened = await configureRegistration(
+      deps,
+      event.tenantId,
+      event.eventId,
+      {
+        enabled: true,
+        teamIds: ["team-1", "team-2"],
+        closesAt: new Date(now + 1).toISOString(),
+      },
+      now,
+    );
+    if (!("invitation" in opened) || !opened.invitation) throw new Error("missing invitation");
+    invite = opened.invitation;
+    const update = vi.spyOn(events, "updateRegistration").mockResolvedValue("conflict");
+    vi.useFakeTimers();
+    try {
+      const failure = expect(claim(1)).rejects.toThrow("closed");
+      await vi.runAllTimersAsync();
+      await failure;
+      expect(update).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

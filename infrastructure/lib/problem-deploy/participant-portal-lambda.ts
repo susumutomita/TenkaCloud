@@ -18,6 +18,7 @@ import { controlDataBackendEnv, grantTursoAuthTokenRead } from "./control-data-b
 import { buildExternalIdParameterArnPattern } from "./handlers/shared/external-id-store.js";
 
 export interface ParticipantPortalLambdaProps {
+  readonly teamsTable?: ITable;
   /**
    * [Issue #2441 / Phase B PR-6] `controlDataBackend` が純 SQL (`turso`) のとき
    * `ProblemDeployBackendStack` は本 table を synth しない (= `undefined`)。その場合 env も
@@ -95,6 +96,49 @@ export interface ParticipantPortalLambdaProps {
   readonly tursoAuthTokenParameterName?: string;
 }
 
+function registrationPolicies(props: ParticipantPortalLambdaProps): Record<string, PolicyDocument> {
+  return {
+    ...(props.teamsTable
+      ? {
+          RegistrationTeamsRead: new PolicyDocument({
+            statements: [
+              new PolicyStatement({
+                actions: ["dynamodb:GetItem"],
+                resources: [props.teamsTable.tableArn],
+              }),
+            ],
+          }),
+        }
+      : {}),
+    ...(props.teamsTable && props.eventsTable
+      ? {
+          RegistrationClaims: new PolicyDocument({
+            statements: [
+              new PolicyStatement({
+                actions: ["dynamodb:UpdateItem"],
+                resources: [props.eventsTable.tableArn],
+                conditions: {
+                  "ForAllValues:StringEquals": {
+                    "dynamodb:Attributes": [
+                      "PK",
+                      "SK",
+                      "tenantId",
+                      "expiresAt",
+                      "endsAt",
+                      "status",
+                      "registration",
+                      "updatedAt",
+                    ],
+                  },
+                },
+              }),
+            ],
+          }),
+        }
+      : {}),
+  };
+}
+
 /**
  * Participant Portal backend Lambda。Function URL (AuthType=NONE) で公開し、
  * `Authorization: Bearer <teamLoginKey>` を Lambda 内で検証する。
@@ -120,6 +164,7 @@ export class ParticipantPortalLambda extends Construct {
     const role = new Role(this, "Role", {
       assumedBy: new ServicePrincipal("lambda.amazonaws.com"),
       inlinePolicies: {
+        ...registrationPolicies(props),
         // Issue #2441: 純 SQL backend では table 自体が無いので policy を足さない (repository
         // seam が SQL executor 直結で処理する。`eventsTable`/`EventsRead` と同じ pattern)。
         ...(deploymentsTable
@@ -133,6 +178,12 @@ export class ParticipantPortalLambda extends Construct {
                       `${deploymentsTable.tableArn}/index/GSI1`,
                       `${deploymentsTable.tableArn}/index/GSI2`,
                     ],
+                  }),
+                  // Registration confirms current primary rows before releasing
+                  // a team key; GetItem never needs an index ARN.
+                  new PolicyStatement({
+                    actions: ["dynamodb:GetItem"],
+                    resources: [deploymentsTable.tableArn],
                   }),
                   // 競技者の表示名 (`displayTeamName`) 更新のみ。テーブル全体に対する
                   // UpdateItem だが、Lambda コードは GSI2 経由で取得した自分の行しか
@@ -159,7 +210,7 @@ export class ParticipantPortalLambda extends Construct {
         // 引くために必要。 grant が漏れていると AccessDenied で getEventGate が undefined を
         // 返し、 fail-closed で `scoring_not_started` に倒れて Event は採点中なのに flag 提出
         // が「競技はまだ開始していません」 で reject されていた。
-        // 書き込みは event-handler / health-check 側に閉じる (= participant は read-only)。
+        // RegistrationClaims grants only the separate, attribute-limited reservation write.
         // Issue #2440: 純 SQL backend では table 自体が無いので policy を足さない。
         ...(props.eventsTable
           ? {
@@ -295,6 +346,7 @@ export class ParticipantPortalLambda extends Construct {
         ...(deploymentsTable ? { DEPLOYMENTS_TABLE_NAME: deploymentsTable.tableName } : {}),
         // Issue #2440: 純 SQL backend では table が無いので env も足さない。
         ...(props.eventsTable ? { EVENTS_TABLE_NAME: props.eventsTable.tableName } : {}),
+        ...(props.teamsTable ? { TEAMS_TABLE_NAME: props.teamsTable.tableName } : {}),
         // Issue #2442: 純 SQL backend では table が無いので env も足さない。
         ...(props.endpointsTable
           ? { PROBLEM_ENDPOINTS_TABLE_NAME: props.endpointsTable.tableName }

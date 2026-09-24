@@ -466,6 +466,7 @@ export class ProblemDeployBackendStack extends cdk.Stack {
     // build-participant-portal-subsystem.ts. Same `if (props.participantPortal)` guard as before.
     if (props.participantPortal) {
       const portalSubsystem = buildParticipantPortalSubsystem(this, {
+        teamsTable: tables.teams?.table,
         deploymentsTable: tables.deployments?.table,
         eventsTable: tables.events?.table,
         // Issue #2442: 純 SQL backend では table 自体が無いので undefined を渡す (env/grant/IAM を

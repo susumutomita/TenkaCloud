@@ -18,6 +18,7 @@ import { EventNotificationsPanel } from "../../components/event-detail/EventNoti
 import { EventParticipantsPanel } from "../../components/event-detail/EventParticipantsPanel";
 import { EventProblemSetPanel } from "../../components/event-detail/EventProblemSetPanel";
 import { EventProgressionGatePanel } from "../../components/event-detail/EventProgressionGatePanel";
+import { EventRegistrationPanel } from "../../components/event-detail/EventRegistrationPanel";
 import { EventSchedulePanel } from "../../components/event-detail/EventSchedulePanel";
 import { EventTeamsPanel } from "../../components/event-detail/EventTeamsPanel";
 import { TeamRankingPanel } from "../../components/TeamRankingPanel";
@@ -118,6 +119,13 @@ export function TeamsTab({
   return (
     <>
       <EventParticipantsPanel config={config} detail={detail} t={t} />
+      <EventRegistrationPanel
+        key={detail.eventId}
+        apiClient={apiClient}
+        config={config}
+        detail={detail}
+        canMutateTenant={canMutateTenant}
+      />
       <EventTeamsPanel
         apiClient={apiClient}
         canMutateTenant={canMutateTenant}

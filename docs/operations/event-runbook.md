@@ -1,10 +1,14 @@
 # イベント運用 Runbook
 
+参加リンクで環境を配る場合は、[セルフサインアップの準備と受付](participant-self-registration.md)を使います。AWS アカウントは事前に用意します。DynamoDB のデフォルト 1 RCU / 1 WCU は待機用です。リンク配布前に同手順の受付容量を見積もり、必要な一時増強と受付後の復元を担当者が確認します。
+
 Issue #2407。TenkaCloud で 1 回のイベント (Battle / Challenge) を運営する運営者向けの手順書。作問者でなくても、この文書だけで前日準備から撤収まで通せることを目標にする。キャパシティ運用の詳細は [dynamodb-event-capacity.md](./dynamodb-event-capacity.md)、管理者 SSO は [cognito-saml-idp-playbook.md](./cognito-saml-idp-playbook.md)、デプロイ手順の詳細は [DEPLOYMENT_GUIDE.md](../../DEPLOYMENT_GUIDE.md)、問題ごとの当日運用は各問題の `OPERATOR.md` (catalog repo) に委ねる。
 
 開催の企画・協力者・会場・必要数量・司会台本は、[LPの開催ランブック](https://tenkacloud.com/docs/operate/run-an-event/)を入口にしてください。本文は技術運用の詳細です。練習用の[event-host-rehearsal](https://github.com/susumutomita/TenkaCloudChallenge/tree/main/challenges/event-host-rehearsal)で仮想イベントの準備と判断を体験できます。
 
 ## 前提: どのモードで動かすか
+
+異なる拠点のエンジニアが同じ会場に集まる、AWS 未経験者も参加できる交流会には、[つながるオフィスの開催ランブック](https://github.com/susumutomita/TenkaCloudChallenge/blob/main/battles/office-link-battle/OPERATOR.ja.md)を使えます。拠点・経験を混ぜた 4 人が同じ机で相談し、操作と説明を交代して学びます。実 AWS の準備 Challenge（EC2 起動・出口・経路・管理接続・HTTP 許可）を修了して、Gate から復旧 Battle へ進みます。準備と本戦の 2 問だけをイベントへ登録し、Gate の有効化・required 設定はリンク先の台本に従います。初回は 90〜120 分を仮確保し、リハーサルで調整します。本戦は実際の疎通と管理ロールを既存の稼働採点で確認します。ローカルプレビューは画面確認に限り、AWS の接続・採点・撤収の確認とは区別します。
 
 イベント規模で運用モードを決める。デプロイ手順そのものは DEPLOYMENT_GUIDE.md にあるので、ここでは「どれを選ぶか」だけ確認する。
 

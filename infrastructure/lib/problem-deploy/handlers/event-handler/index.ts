@@ -17,6 +17,7 @@ import { registerFeatureFlagsRoutes } from "./routes/feature-flags.js";
 import { registerLifecycleRoutes } from "./routes/lifecycle.js";
 import { registerNotificationRoutes } from "./routes/notifications.js";
 import { registerProgressionGateRoutes } from "./routes/progression-gate.js";
+import { registerRegistrationAdminRoutes } from "./routes/registration.js";
 import { registerScoringRoutes } from "./routes/scoring.js";
 import { buildEventSharedResources } from "./shared.js";
 
@@ -114,6 +115,7 @@ app.use(
 app.get("/events/healthz", (c) => c.json({ ok: true }));
 
 registerEventRoutes(app, shared);
+registerRegistrationAdminRoutes(app, shared);
 registerLifecycleRoutes(app, shared);
 registerScoringRoutes(app, shared);
 // Issue #2283: Progression Gate (問題アンロック / チーム別ハンデ) 設定 routes。

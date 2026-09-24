@@ -235,6 +235,9 @@ export class ApiGateway extends Construct {
     lockScoring.addMethod("POST", eventIntegration, deployMethodOptions);
     lockScoring.addMethod("DELETE", eventIntegration, deployMethodOptions);
     const progressionGate = event.addResource("progression-gate");
+    const registration = event.addResource("registration");
+    registration.addMethod("GET", eventIntegration, deployMethodOptions);
+    registration.addMethod("PUT", eventIntegration, deployMethodOptions);
     progressionGate.addMethod("PUT", eventIntegration, deployMethodOptions);
     progressionGate.addMethod("DELETE", eventIntegration, deployMethodOptions);
 

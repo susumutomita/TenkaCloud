@@ -46,10 +46,16 @@ export interface DeploymentsQueryPort {
    * META point read via `GetItem` (`PK = DEPLOYMENT#<jobId>`, `SK = META`).
    * Sites: `deploy-handler/{retry,delete,list,stack-progress}` + composite
    * `getRawRow`. The tenant / status guards stay in the caller (raw read).
+   * With expectedTeamLoginKey, return only a row still bound to that credential.
+   * SQL restores this caller-known key after matching its stored hash; stored
+   * credential hashes are never returned.
    */
   getDeployment(
     jobId: string,
-    options?: { readonly consistentRead?: boolean },
+    options?: {
+      readonly consistentRead?: boolean;
+      readonly expectedTeamLoginKey?: string;
+    },
   ): Promise<DeploymentRecord | undefined>;
 
   /**
@@ -175,9 +181,9 @@ export interface DeploymentsQueryPort {
 
   /**
    * Participant bearer lookup by `teamLoginKey` (GSI2 `TEAMKEY#<key>`, sparse,
-   * single page). Sites: `participant-handler/shared.ts` `queryTeamItems` (the
+   * all pages). Sites: `participant-handler/shared.ts` `queryTeamItems` (the
    * participant-login source of truth) + `generic-scoring-handler/gate-completion-bonus.ts`.
-   * Byte-compat is the top priority here — this is the participant login path.
+   * Registration readiness needs the complete history to find each problem's latest retry.
    */
   listByTeamLoginKey(teamLoginKey: string): Promise<readonly DeploymentRecord[]>;
 

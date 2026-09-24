@@ -1,0 +1,18 @@
+.join-page { min-height: 100vh; background: #f1f5fb; color: #18263b; padding: 32px 20px; box-sizing: border-box; }
+.join-brand { max-width: 680px; margin: 0 auto 24px; font-size: 22px; font-weight: 800; }
+.join-card { max-width: 680px; margin: auto; padding: 36px; border: 1px solid #cbd5e1; border-radius: 20px; background: white; box-shadow: 0 12px 36px #13243a0a; }
+.join-eyebrow { font-weight: 700; color: #315f91; }
+.join-card h1 { font-size: clamp(26px, 4vw, 36px); line-height: 1.35; margin: 12px 0 24px; }
+.join-steps { display: flex; flex-wrap: wrap; padding: 0; gap: 16px; list-style: none; }
+.join-steps li { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.join-steps span { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; color: white; background: #315f91; }
+.join-card p { line-height: 1.75; }
+.join-status { padding: 16px; background: #eaf3ff; border-radius: 10px; }
+.join-primary, .join-secondary { display: block; min-height: 48px; border: 2px solid #315f91; border-radius: 10px; padding: 12px 24px; font-size: 17px; font-weight: 700; cursor: pointer; margin: 20px 0; }
+.join-primary { color: white; background: #315f91; }
+.join-secondary { color: #315f91; background: white; }
+.join-primary:disabled, .join-secondary:disabled { background: #d8e2ed; border-color: #a9b9ca; color: #465466; cursor: not-allowed; }
+.join-primary:focus-visible, .join-secondary:focus-visible { outline: 3px solid #126bd3; outline-offset: 3px; }
+.join-alert { padding: 16px; background: #fff3ea; border: 1px solid #bf5f18; border-radius: 10px; }
+.join-footnote { font-size: 14px; color: #536378; margin-top: 28px; }
+@media (max-width: 540px) { .join-page { padding: 20px 12px; } .join-card { padding: 24px 18px; } .join-steps { flex-direction: column; } .join-primary, .join-secondary { width: 100%; } }
