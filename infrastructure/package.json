@@ -61,7 +61,7 @@
     "@libsql/client": "^0.17.4",
     "@smithy/protocol-http": "^5.5.10",
     "@smithy/signature-v4": "^5.4.3",
-    "@smithy/types": "^4.14.2",
+    "@smithy/types": "^4.19.0",
     "@tenkacloud/coordination-plugin-sdk": "workspace:*",
     "@tenkacloud/portal-contracts": "workspace:*",
     "@tenkacloud/problem-runtime": "workspace:*",
