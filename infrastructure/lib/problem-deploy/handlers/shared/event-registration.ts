@@ -16,7 +16,14 @@ export interface RegistrationDeps {
 
 export class RegistrationError extends Error {
   constructor(
-    readonly code: "not_found" | "closed" | "full" | "conflict" | "invalid_pool" | "not_ready",
+    readonly code:
+      | "not_found"
+      | "closed"
+      | "full"
+      | "conflict"
+      | "invalid_pool"
+      | "not_ready"
+      | "login_key_missing",
   ) {
     super(code);
   }
@@ -119,10 +126,22 @@ async function validatePool(
   const teams = await Promise.all(
     teamIds.map((id) => deps.teams.getTeam(event.tenantId, event.eventId, id)),
   );
+  const nowSeconds = Math.floor(now / 1000);
+  // A slot that is otherwise valid but has no retained plaintext key cannot be handed out by
+  // the link (the participant receives that key once the slot is ready). Turso rows created
+  // before the 2026-07-04 key-retention change had it scrubbed (`TEAM_LOGIN_KEY_SCRUB_SQL`).
+  // Name this case on its own: the operator's fix is to regenerate each such team's key, which
+  // a generic "invalid pool" would never tell them.
   if (
     teams.some(
-      (team) =>
-        !team?.teamLoginKey || !team.awsAccountId || team.expiresAt <= Math.floor(now / 1000),
+      (team) => team && !team.teamLoginKey && team.awsAccountId && team.expiresAt > nowSeconds,
+    )
+  ) {
+    throw new RegistrationError("login_key_missing");
+  }
+  if (
+    teams.some(
+      (team) => !team?.teamLoginKey || !team.awsAccountId || team.expiresAt <= nowSeconds,
     ) ||
     new Set(teams.map((team) => team?.awsAccountId)).size !== teams.length
   ) {

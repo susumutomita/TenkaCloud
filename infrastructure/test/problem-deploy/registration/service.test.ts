@@ -397,6 +397,19 @@ describe("self-registration with real SQLite repositories", () => {
     await expect(open()).rejects.toThrow("not_ready");
   });
 
+  it("names a slot whose plaintext key was scrubbed instead of reporting a generic invalid pool", async () => {
+    // Turso rows created before the 2026-07-04 key-retention change had `teamLoginKey`
+    // removed. Rejecting them is correct (the link hands that key out), but the operator
+    // needs to know the fix is to regenerate the key, not to fix the pool.
+    const first = present(await teams.getTeam(event.tenantId, event.eventId, "team-1"));
+    const legacy = { ...first, teamLoginKey: undefined };
+    await teams.putTeam(legacy);
+    await expect(open()).rejects.toThrow("login_key_missing");
+    // An expired legacy row stays a pool problem: regenerating its key would not help.
+    await teams.putTeam({ ...legacy, expiresAt: 1 });
+    await expect(open()).rejects.toThrow("invalid_pool");
+  });
+
   it("cannot remove an allocated slot or open beyond event end", async () => {
     await claim(1);
     await expect(open(["team-2"])).rejects.toThrow("invalid_pool");

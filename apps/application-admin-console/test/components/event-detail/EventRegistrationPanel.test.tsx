@@ -87,6 +87,38 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 describe("event invitation settings", () => {
+  it("keeps a just-issued link when an earlier refresh resolves after the save", async () => {
+    // The invitation is returned only by the PUT. A refresh GET that was already in flight
+    // and resolves afterwards used to clear the one-time link and restore the older summary,
+    // so the operator had to reissue (revoking the link they had just been shown).
+    const api = fixture();
+    await screen.findByRole("button", { name: "registration.reissue" });
+    const slowRefresh = deferred<typeof summary>();
+    api.get.mockReturnValueOnce(slowRefresh.promise);
+    fireEvent.click(screen.getByRole("button", { name: "registration.refresh" }));
+
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "registration.reissue" }));
+    const link = "https://portal.example.test/join/tenant/e1#invite=test-invitation";
+    expect(await screen.findByDisplayValue(link)).toBeInTheDocument();
+
+    await act(async () => {
+      slowRefresh.resolve(summary);
+      await slowRefresh.promise;
+    });
+    expect(screen.getByDisplayValue(link)).toBeInTheDocument();
+  });
+
+  it("tells the operator to regenerate keys when a slot has none stored", async () => {
+    const api = fixture();
+    api.put.mockRejectedValueOnce(
+      new ApiError(409, JSON.stringify({ error: "login_key_missing" })),
+    );
+    fireEvent.click(await screen.findByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "registration.reissue" }));
+    expect(await screen.findByText("registration.error_login_key_missing")).toBeInTheDocument();
+  });
+
   it("requires explicit confirmation, opens selected capacity with a fragment link, and closes", async () => {
     const api = fixture();
     const save = await screen.findByRole("button", { name: "registration.reissue" });

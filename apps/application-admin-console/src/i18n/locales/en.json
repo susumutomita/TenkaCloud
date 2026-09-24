@@ -1063,6 +1063,7 @@
     "error_closed": "Registration is unavailable for ended, expired, or removed events.",
     "error_conflict": "Another operation changed the event. Refresh and try again.",
     "error_unavailable": "Could not load or save registration settings. Check the connection and backend version.",
-    "refresh": "Refresh allocations"
+    "refresh": "Refresh allocations",
+    "error_login_key_missing": "Some selected teams have no stored login key (Turso teams created before July 4, 2026). Use “Regenerate key” for those teams on the event detail page, then open registration."
   }
 }
