@@ -127,25 +127,21 @@ async function validatePool(
     teamIds.map((id) => deps.teams.getTeam(event.tenantId, event.eventId, id)),
   );
   const nowSeconds = Math.floor(now / 1000);
+  if (
+    teams.some((team) => !team?.awsAccountId || team.expiresAt <= nowSeconds) ||
+    new Set(teams.map((team) => team?.awsAccountId)).size !== teams.length
+  ) {
+    throw new RegistrationError("invalid_pool");
+  }
   // A slot that is otherwise valid but has no retained plaintext key cannot be handed out by
   // the link (the participant receives that key once the slot is ready). Turso rows created
   // before the 2026-07-04 key-retention change had it scrubbed (`TEAM_LOGIN_KEY_SCRUB_SQL`).
   // Name this case on its own: the operator's fix is to regenerate each such team's key, which
-  // a generic "invalid pool" would never tell them.
-  if (
-    teams.some(
-      (team) => team && !team.teamLoginKey && team.awsAccountId && team.expiresAt > nowSeconds,
-    )
-  ) {
+  // a generic "invalid pool" would never tell them. It is checked only after the pool itself is
+  // valid, so the operator is never sent to regenerate a key (revoking it) for a pool that the
+  // next attempt would reject anyway.
+  if (teams.some((team) => !team?.teamLoginKey)) {
     throw new RegistrationError("login_key_missing");
-  }
-  if (
-    teams.some(
-      (team) => !team?.teamLoginKey || !team.awsAccountId || team.expiresAt <= nowSeconds,
-    ) ||
-    new Set(teams.map((team) => team?.awsAccountId)).size !== teams.length
-  ) {
-    throw new RegistrationError("invalid_pool");
   }
   // Each slot must already have a deployment request for every problem. This reuses
   // verified-account, ExternalId and quota checks in the existing deploy pipeline.

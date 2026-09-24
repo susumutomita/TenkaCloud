@@ -405,9 +405,29 @@ describe("self-registration with real SQLite repositories", () => {
     const legacy = { ...first, teamLoginKey: undefined };
     await teams.putTeam(legacy);
     await expect(open()).rejects.toThrow("login_key_missing");
-    // An expired legacy row stays a pool problem: regenerating its key would not help.
+    // Pool problems win: regenerating a key revokes it, so the operator must not be sent to
+    // do that for an expired row or a pool the next attempt would reject anyway.
     await teams.putTeam({ ...legacy, expiresAt: 1 });
     await expect(open()).rejects.toThrow("invalid_pool");
+    const second = present(await teams.getTeam(event.tenantId, event.eventId, "team-2"));
+    await teams.putTeam(legacy);
+    await teams.putTeam({ ...second, awsAccountId: first.awsAccountId });
+    await expect(open()).rejects.toThrow("invalid_pool");
+    await teams.putTeam(second);
+
+    // The advised remediation works: once the key is regenerated the slot opens again.
+    expect(
+      await teams.rotateLoginKey({
+        tenantId: event.tenantId,
+        eventId: event.eventId,
+        teamId: "team-1",
+        newLoginKey: "r".repeat(43),
+        expectedUpdatedAt: legacy.updatedAt,
+        updatedAt: "2026-09-21T00:00:00.000Z",
+        deployments: [],
+      }),
+    ).toMatchObject({ outcome: "updated" });
+    await expect(open()).resolves.toEqual(expect.any(String));
   });
 
   it("cannot remove an allocated slot or open beyond event end", async () => {

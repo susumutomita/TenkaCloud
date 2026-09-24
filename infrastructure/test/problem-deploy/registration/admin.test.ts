@@ -178,6 +178,7 @@ describe("registration admin tenant and role boundaries", () => {
     "closed",
     "invalid_pool",
     "not_ready",
+    "login_key_missing",
     "conflict",
   ] as const)("returns the business error %s without changing registration settings", async (code) => {
     const f = await fixture();
@@ -190,6 +191,8 @@ describe("registration admin tenant and role boundaries", () => {
       teamIds = [teamIds[0], teamIds[0]];
     } else if (code === "not_ready") {
       await f.sql.run("DELETE FROM deployments");
+    } else if (code === "login_key_missing") {
+      await f.sql.run("UPDATE teams SET payload = json_remove(payload, '$.teamLoginKey')");
     } else {
       await f.sql.run(
         "CREATE TRIGGER reject_registration BEFORE UPDATE ON events BEGIN SELECT RAISE(IGNORE); END",

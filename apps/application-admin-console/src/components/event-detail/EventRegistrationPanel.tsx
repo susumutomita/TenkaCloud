@@ -111,10 +111,6 @@ export function EventRegistrationPanel({
 
   async function save(enabled: boolean) {
     if (!apiClient || (enabled && !config.participantPortalUrl) || busy) return;
-    // The invitation is returned only by this PUT. A refresh GET still in flight would land
-    // afterwards, clear the one-time link and restore the older summary, leaving the operator
-    // no way to recover the link short of reissuing (and so revoking) it again.
-    pending.current?.abort();
     setBusy(true);
     setError("");
     setCopied(false);
@@ -129,6 +125,11 @@ export function EventRegistrationPanel({
             }
           : { enabled },
       );
+      // The invitation is returned only by this PUT. A refresh GET still in flight would land
+      // afterwards, clear the one-time link and restore the older summary, leaving the operator
+      // no way to recover the link short of reissuing (and so revoking) it again. Supersede it
+      // only on success: after a failed PUT that GET is still the best state to show.
+      pending.current?.abort();
       setSummary(response);
       setLink(
         response.invitation && config.participantPortalUrl

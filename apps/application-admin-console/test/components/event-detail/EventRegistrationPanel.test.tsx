@@ -103,10 +103,37 @@ describe("event invitation settings", () => {
     expect(await screen.findByDisplayValue(link)).toBeInTheDocument();
 
     await act(async () => {
-      slowRefresh.resolve(summary);
+      slowRefresh.resolve({ ...summary, claimed: 1, claimedTeamIds: ["t1"] });
       await slowRefresh.promise;
     });
     expect(screen.getByDisplayValue(link)).toBeInTheDocument();
+    expect(screen.getByText('registration.open:{"claimed":0,"capacity":1}')).toBeInTheDocument();
+    expect(
+      screen.queryByText('registration.open:{"claimed":1,"capacity":1}'),
+    ).not.toBeInTheDocument();
+  });
+
+  it("still shows the first load when a save fails before that load finishes", async () => {
+    const slowLoad = deferred<typeof summary>();
+    const api = makeApi();
+    api.get.mockReturnValue(slowLoad.promise);
+    api.put.mockRejectedValueOnce(new ApiError(409, JSON.stringify({ error: "invalid_pool" })));
+    fixture({ api });
+    const multiselect = createWrapper(document.body).findMultiselect();
+    if (!multiselect) throw new Error("Missing pool selector");
+    multiselect.openDropdown();
+    multiselect.selectOptionByValue("t1");
+    multiselect.closeDropdown();
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "registration.open_button" }));
+    expect(await screen.findByText("registration.error_invalid_pool")).toBeInTheDocument();
+
+    await act(async () => {
+      slowLoad.resolve(summary);
+      await slowLoad.promise;
+    });
+    expect(screen.getByText('registration.open:{"claimed":0,"capacity":1}')).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "registration.close_button" })).toBeEnabled();
   });
 
   it("tells the operator to regenerate keys when a slot has none stored", async () => {
