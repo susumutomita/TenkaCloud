@@ -64,12 +64,23 @@ export type EventDeploymentStatus =
   | "DELETING"
   | "DELETED"
   | "EXPIRED"
-  | "AUTO_DELETED";
+  | "AUTO_DELETED"
+  /** Issue #3226 (local competition host only): the organizer stopped this environment. */
+  | "STOPPED";
+
+/** Issue #3226: an organizer operation on one local environment that is still running. */
+export type LocalEnvironmentOperation = "stop" | "restart" | "teardown";
 
 export interface EventDeploymentSummary {
   jobId: string;
   teamId: string;
   status: EventDeploymentStatus;
+  /** Why the last deployment or environment operation failed (local competition host). */
+  readonly error?: string;
+  /** Issue #3226: an in-flight single-environment operation (local competition host). */
+  readonly operation?: LocalEnvironmentOperation;
+  /** Issue #3226: the fixed exercise-gateway port of this environment (local competition host). */
+  readonly gatewayPort?: number;
 }
 
 /**
@@ -268,6 +279,29 @@ export async function bulkDeployEvent(
   body: BulkDeployBody = {},
 ): Promise<BulkResult> {
   return api.post<BulkResult>(`events/${encodeURIComponent(eventId)}/deploy`, body);
+}
+
+export interface LocalEnvironmentOperationResult {
+  readonly eventId: string;
+  readonly jobId: string;
+  readonly operation: LocalEnvironmentOperation;
+}
+
+/**
+ * Issue #3226 (local competition host): stop, restart or remove exactly one team/problem
+ * environment. The host answers 202 and finishes in the background; other teams' environments,
+ * gateways and scores are not touched.
+ */
+export function operateLocalEnvironment(
+  api: ApiClient,
+  eventId: string,
+  jobId: string,
+  operation: LocalEnvironmentOperation,
+): Promise<LocalEnvironmentOperationResult> {
+  const base = `events/${encodeURIComponent(eventId)}/deployments/${encodeURIComponent(jobId)}`;
+  return operation === "teardown"
+    ? api.delJson<LocalEnvironmentOperationResult>(base)
+    : api.post<LocalEnvironmentOperationResult>(`${base}/${operation}`, {});
 }
 
 export async function bulkTeardownEvent(api: ApiClient, eventId: string): Promise<BulkResult> {

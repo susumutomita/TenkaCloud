@@ -151,6 +151,8 @@ const packInputs = buildPackInputs(packMetadataModules, packTemplateModules, pac
 export const PROBLEM_CATALOG: readonly ProblemDetail[] = buildEffectiveCatalog({
   core: coreInputs,
   packs: packInputs,
+  // Issue #3226: set only by vite.host.config.ts (the local competition host build).
+  includeLocalOnly: import.meta.env.VITE_LOCAL_HOST === "1",
 });
 
 export function findProblem(id: string): ProblemDetail | undefined {

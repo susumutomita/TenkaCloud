@@ -21,8 +21,10 @@ import { EventProgressionGatePanel } from "../../components/event-detail/EventPr
 import { EventRegistrationPanel } from "../../components/event-detail/EventRegistrationPanel";
 import { EventSchedulePanel } from "../../components/event-detail/EventSchedulePanel";
 import { EventTeamsPanel } from "../../components/event-detail/EventTeamsPanel";
+import { LocalEnvironmentsPanel } from "../../components/event-detail/LocalEnvironmentsPanel";
 import { TeamRankingPanel } from "../../components/TeamRankingPanel";
 import { TeamScoreEventsPanel } from "../../components/TeamScoreEventsPanel";
+import { isLocalHost } from "../../config";
 import { DisruptionsPanel } from "./DisruptionsPanel";
 import type { EventTabContentProps } from "./tab-content-props";
 
@@ -68,6 +70,7 @@ export function readTabFromHash(hash: string): EventTabId {
 export function ScheduleTab({
   apiClient,
   canMutateTenant,
+  config,
   counts,
   detail,
   operations,
@@ -85,6 +88,7 @@ export function ScheduleTab({
       endsAtInFlight={operations.endsAtInFlight}
       freezeMinutesInFlight={operations.freezeMinutesInFlight}
       freezeMinutesInput={operations.freezeMinutesInput}
+      localHost={isLocalHost(config)}
       onBulkDeploy={(b) => void operations.handleBulkDeploy(b)}
       onConfirmTeardown={() => operations.setConfirmTeardown(true)}
       onEndNowSchedule={() => void operations.handleEndNowSchedule()}
@@ -104,8 +108,8 @@ export function ScheduleTab({
   );
 }
 
-export function ProblemsTab({ detail, t }: EventTabContentProps) {
-  return <EventProblemSetPanel detail={detail} t={t} />;
+export function ProblemsTab({ config, detail, t }: EventTabContentProps) {
+  return <EventProblemSetPanel detail={detail} localHost={isLocalHost(config)} t={t} />;
 }
 
 export function TeamsTab({
@@ -116,21 +120,35 @@ export function TeamsTab({
   manualRefresh,
   t,
 }: EventTabContentProps) {
+  // Issue #3226: the local host has no self-registration pool; each team's own environment
+  // is operated from this tab instead.
+  const localHost = isLocalHost(config);
   return (
     <>
       <EventParticipantsPanel config={config} detail={detail} t={t} />
-      <EventRegistrationPanel
-        key={detail.eventId}
-        apiClient={apiClient}
-        config={config}
-        detail={detail}
-        canMutateTenant={canMutateTenant}
-      />
+      {localHost ? (
+        <LocalEnvironmentsPanel
+          apiClient={apiClient}
+          canMutateTenant={canMutateTenant}
+          detail={detail}
+          onRefresh={manualRefresh}
+          t={t}
+        />
+      ) : (
+        <EventRegistrationPanel
+          key={detail.eventId}
+          apiClient={apiClient}
+          config={config}
+          detail={detail}
+          canMutateTenant={canMutateTenant}
+        />
+      )}
       <EventTeamsPanel
         apiClient={apiClient}
         canMutateTenant={canMutateTenant}
         detail={detail}
         onRefresh={manualRefresh}
+        showAccount={!localHost}
         t={t}
       />
     </>

@@ -26,6 +26,7 @@ const DEPLOY_STATUS_COLOR: Record<EventDeploymentStatus, "blue" | "green" | "gre
   DELETED: "grey",
   EXPIRED: "red",
   AUTO_DELETED: "grey",
+  STOPPED: "grey",
 };
 
 export const STATUS_COLOR: Record<EventStatus, "blue" | "green" | "grey" | "red"> = {

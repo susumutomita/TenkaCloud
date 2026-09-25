@@ -1,10 +1,11 @@
 import "@cloudscape-design/global-styles/index.css";
+import { useEffect } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router";
 import { AuthProvider, useAuth } from "./auth/AuthProvider";
 import { DemoSessionBootstrap } from "./auth/demo-session";
 import { buildLoginReturnPath, readLoginReturnPathState } from "./auth/login-return-path";
 import { ShellLayout } from "./components/AppLayout";
-import type { AppConfig } from "./config";
+import { type AppConfig, isLocalHost } from "./config";
 import { useEffectiveFeatures } from "./hooks/useEffectiveFeatures";
 import { AuditLogPage } from "./pages/AuditLog";
 import { CallbackPage } from "./pages/Callback";
@@ -17,6 +18,8 @@ import { EventListPage } from "./pages/EventList";
 import { EventReportPage } from "./pages/EventReport";
 import { HomePage } from "./pages/Home";
 import { IdentityProvidersPage } from "./pages/IdentityProviders";
+import { LocalHostLoginPage } from "./pages/LocalHostLogin";
+import { LocalHostUnavailablePage } from "./pages/LocalHostUnavailable";
 import { LoginPage } from "./pages/Login";
 import { ProblemDetailPage } from "./pages/ProblemDetail";
 import { ProblemsPage } from "./pages/Problems";
@@ -39,6 +42,7 @@ function guarded(element: React.ReactNode, config: AppConfig) {
       <ShellLayout
         samlSsoEnabled={config.features?.samlSso}
         demoMode={config.mode === "demo"}
+        localHost={isLocalHost(config)}
         // The banner only renders the link when demoMode is true, so passing the URL
         // unconditionally is safe (and avoids an untested non-demo ternary branch).
         demoParticipantUrl={config.participantPortalUrl}
@@ -51,7 +55,30 @@ function guarded(element: React.ReactNode, config: AppConfig) {
 
 function LoginRoute({ config }: { config: AppConfig }) {
   const location = useLocation();
-  return <LoginPage config={config} returnPath={readLoginReturnPathState(location.state)} />;
+  const returnPath = readLoginReturnPathState(location.state);
+  // Issue #3226: the local competition host signs in with its host key, not Cognito.
+  return isLocalHost(config) ? (
+    <LocalHostLoginPage config={config} returnPath={returnPath} />
+  ) : (
+    <LoginPage config={config} returnPath={returnPath} />
+  );
+}
+
+/**
+ * Issue #3226: a local host session has an absolute lifetime (the host issues 15 minutes) in
+ * addition to the shared idle logout. Sign out when it ends instead of letting every later
+ * request fail with 401; the event and its results are unaffected.
+ */
+function LocalHostSessionExpiry() {
+  const auth = useAuth();
+  const expiresAt = auth.tokens?.expiresAt;
+  const { logout } = auth;
+  useEffect(() => {
+    if (expiresAt === undefined) return;
+    const timer = setTimeout(logout, Math.max(0, expiresAt - Date.now()));
+    return () => clearTimeout(timer);
+  }, [expiresAt, logout]);
+  return null;
 }
 
 export function App({ config }: { config: AppConfig }) {
@@ -59,6 +86,7 @@ export function App({ config }: { config: AppConfig }) {
     <AuthProvider config={config}>
       {/* Issue #1954: demo mode は Cognito をスキップして mock session を注入する。 */}
       <DemoSessionBootstrap config={config} />
+      {isLocalHost(config) && <LocalHostSessionExpiry />}
       <AppRoutes baseConfig={config} />
     </AuthProvider>
   );
@@ -74,6 +102,7 @@ function AppRoutes({ baseConfig }: { baseConfig: AppConfig }) {
   const features = useEffectiveFeatures(baseConfig);
   const config: AppConfig = { ...baseConfig, features };
 
+  if (isLocalHost(config)) return <LocalHostRoutes config={config} />;
   return (
     <Routes>
       <Route path="/login" element={<LoginRoute config={config} />} />
@@ -115,6 +144,31 @@ function AppRoutes({ baseConfig }: { baseConfig: AppConfig }) {
         element={guarded(<IdentityProvidersPage config={config} />, config)}
       />
       <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
+
+/**
+ * Issue #3226: the local competition host serves the normal event pages against its own API.
+ * Screens that need cloud infrastructure (AWS accounts, Cognito users, audit log, SAML, the
+ * catalog's cloud deployments) explain that instead of calling an API that does not exist.
+ */
+function LocalHostRoutes({ config }: { config: AppConfig }) {
+  return (
+    <Routes>
+      <Route path="/login" element={<LoginRoute config={config} />} />
+      <Route path="/" element={<Navigate to="/events" replace />} />
+      <Route path="/events" element={guarded(<EventListPage config={config} />, config)} />
+      <Route path="/events/new" element={guarded(<EventCreatePage config={config} />, config)} />
+      <Route
+        path="/events/:eventId"
+        element={guarded(<EventDetailPage config={config} />, config)}
+      />
+      <Route
+        path="/events/:eventId/report"
+        element={guarded(<EventReportPage config={config} />, config)}
+      />
+      <Route path="*" element={guarded(<LocalHostUnavailablePage />, config)} />
     </Routes>
   );
 }
