@@ -39,13 +39,17 @@ async function exchangeHostKey(
     body: JSON.stringify({ key }),
   });
   if (response.status === 401) throw new Error(t("local_host.login_invalid_key"));
-  let value: SessionResponse;
+  let parsed: unknown;
   try {
-    value = (await response.json()) as SessionResponse;
+    parsed = await response.json();
   } catch {
     // A proxy or crash page is not the host's JSON API; never show the parser's error.
     throw new Error(t("local_host.login_failed"));
   }
+  // `null`, arrays and scalars are valid JSON but not a session or an error object.
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+    throw new Error(t("local_host.login_failed"));
+  const value = parsed as SessionResponse;
   if (!response.ok || !isSession(value))
     throw new Error(
       typeof value.message === "string" ? value.message : t("local_host.login_failed"),

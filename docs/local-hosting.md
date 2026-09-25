@@ -100,10 +100,15 @@ scores are not touched:
 While an operation runs, the environment is not handed out and its gateway stops
 forwarding. A gateway also refuses to forward once its environment was rebuilt in
 another slot. A deliberately stopped or removed environment does not demote a ready
-event when the host restarts, and an event that already started stays ready even if
-one environment was lost; restart that environment from the **Teams** tab. The
+event when the host restarts, and an event that has a start time (already started, or scheduled to start) stays ready
+even if one environment was lost, so the scoring gate is not closed, or kept from
+opening at the scheduled time, for every team; restart that environment from the
+**Teams** tab. Only an event without a start time returns to its deployment state. The
 event-level deploy never redeploys a stopped environment (redeploying discards its
-data), and **Retry failed** redeploys failed environments only.
+data), and **Retry failed** redeploys failed environments only. A consequence: an
+event that is still being prepared does not become ready while one of its
+environments is stopped; the **Schedule** tab says so, and restarting that
+environment from the **Teams** tab completes the preparation.
 
 The initial host sign-in has a 15-minute absolute lifetime, in addition to the
 existing idle logout. Sign in again with the terminal key after expiration;

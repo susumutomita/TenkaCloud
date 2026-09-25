@@ -531,6 +531,12 @@ export class HostingService {
     const [runtimeFree, gatewayFree] = await Promise.all([runtime, gateway]);
     return runtimeFree && gatewayFree;
   }
+  /** False when the host restarted with a narrower --gateway-ports range than this slot needs. */
+  private slotInRange(offset: number): boolean {
+    const slot = offset / SLOT_STRIDE;
+    const slots = this.gatewayPorts ? gatewaySlots(this.gatewayPorts) : MAX_JOBS;
+    return Number.isInteger(slot) && slot >= 1 && slot <= slots;
+  }
   /** Environments the gateway range can serve; named in the refusal so it can be widened. */
   private assertGatewayCapacity(environments: number): void {
     if (this.gatewayPorts && environments > gatewaySlots(this.gatewayPorts))
@@ -672,6 +678,7 @@ export class HostingService {
       // A retry keeps its block unless something else took the ports in the meantime, or a
       // removed environment's block was recorded for another environment since.
       if (
+        !this.slotInRange(job.offset) ||
         !(await this.slotFree(job.definition, job.offset)) ||
         this.recordedOffsets(job.jobId).has(job.offset)
       ) {
@@ -779,8 +786,10 @@ export class HostingService {
             job.status === "COMPLETE" ||
             (event.status === "READY" && INTENDED_IDLE_STATUSES.includes(job.status)),
         );
-      // A started event keeps running: one lost environment is repaired by its own restart
-      // instead of closing the scoring gate for every team.
+      // An event with a start time (already started or scheduled) stays ready: one lost
+      // environment is repaired by its own restart instead of closing, or at the scheduled
+      // time never opening, the scoring gate for every team. Only an event without a start
+      // time returns to deployment, where the event-level retry is available.
       event.status =
         recovered || (event.status === "READY" && event.startsAt) ? "READY" : "DEPLOYING";
       this.saveEvent(event);
@@ -1016,17 +1025,18 @@ export class HostingService {
         // The participant contract has no organizer-stop state; "DELETED" renders as stopped.
         problem.status = job?.status === "STOPPED" ? "DELETED" : (job?.status ?? "PENDING");
         problem.stackOutputs = {};
-        if (job && linkable(job) && eventGate.kind === "ok" && this.surfaceLink) {
+        // The context was read before the engine view was awaited; decide on the stored job.
+        const current = job && this.store.job(job.jobId);
+        if (current && linkable(current) && eventGate.kind === "ok" && this.surfaceLink) {
           try {
-            problem.stackOutputs = { Web: await this.surfaceLink(job, context.team) };
+            problem.stackOutputs = { Web: await this.surfaceLink(current, context.team) };
           } catch (error) {
             // One environment's gateway must not take the whole team view down. The host
-            // keeps the reason; the participant gets a neutral instruction.
+            // keeps the reason; the portal shows a translated, detail-free explanation.
             this.log(
-              `Exercise link for job ${job.jobId} failed: ${failureMessage(error, "unknown")}`,
+              `Exercise link for job ${current.jobId} failed: ${failureMessage(error, "unknown")}`,
             );
-            problem.failureReason =
-              "This environment's link is temporarily unavailable. Ask the organizer.";
+            problem.accessError = "link_unavailable";
           }
         }
         return problem;

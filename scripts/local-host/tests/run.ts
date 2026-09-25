@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomInt } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { request as httpRequest } from "node:http";
-import { createServer as createNetServer } from "node:net";
+import { createConnection, createServer as createNetServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,6 +15,7 @@ import { SurfaceGateways } from "../gateways";
 import { type HttpHost, startHttpHost } from "../http";
 import { HostError, object, type SqlDatabase } from "../model";
 import { parseOptions } from "../options";
+import { portsFree } from "../ports";
 import { HostingService } from "../service";
 import { HostStore } from "../store";
 import { ExerciseFixture } from "./exercise-fixture";
@@ -1303,18 +1304,15 @@ test("One environment's unavailable link does not fail the whole team view", () 
     const a = required(event.teams[0]);
     f.service.surfaceLink = () =>
       Promise.reject(new HostError(503, "Exercise gateway port 5200 is used by another process."));
-    const view = await f.request<{ problems: { stackOutputs: object; failureReason?: string }[] }>(
-      "participant",
-      "/api/portal/me",
-      "GET",
-      undefined,
-      a.teamLoginKey,
-    );
+    const view = await f.request<{
+      problems: { stackOutputs: object; failureReason?: string; accessError?: string }[];
+    }>("participant", "/api/portal/me", "GET", undefined, a.teamLoginKey);
     assert.equal(view.status, 200);
     const problem = required(view.body.problems[0]);
     assert.deepEqual(problem.stackOutputs, {});
-    assert.ok(problem.failureReason);
-    assert.ok(!problem.failureReason.includes("5200"), "Host details stay on the host.");
+    // A code the portal translates; no host detail (or English-only text) reaches the team.
+    assert.equal(problem.accessError, "link_unavailable");
+    assert.equal(problem.failureReason, undefined);
   }));
 test("Rebuilding a removed environment stays marked as in progress until it finishes", () =>
   fixture(async (f) => {
@@ -1366,6 +1364,125 @@ test("The gateway range must fit the event and stay clear of problem ports", () 
     );
     assert.doesNotThrow(() => f.service.assertGatewayRange({ start: 5200, end: 5239 }));
   }));
+
+test("A gateway for an environment that moved slot is replaced, not reused", () =>
+  fixture(async (f) => {
+    const event = await f.create();
+    await f.deploy(event.eventId);
+    await f.begin(event.eventId);
+    const a = required(event.teams[0]);
+    const before = await f.challenge(a.teamLoginKey);
+    const job = required(f.store.jobs(event.eventId, a.teamId)[0]);
+    job.offset = 20 * 1000; // a free in-range slot no other environment records
+    f.store.putJob(job);
+    const after = await f.challenge(a.teamLoginKey);
+    assert.equal(Number(new URL(after.origin).port), f.gatewayPorts.start + 19);
+    await assert.rejects(fetch(`${before.origin}/`), "The old slot's gateway is closed.");
+  }));
+test("A gateway whose first authorization fails is closed, and closing a failed one succeeds", () =>
+  fixture(async (f) => {
+    const event = await f.create();
+    await f.deploy(event.eventId);
+    await f.begin(event.eventId);
+    const a = required(event.teams[0]);
+    const job = required(f.store.jobs(event.eventId, a.teamId)[0]);
+    const port = f.gatewayPorts.start + job.offset / 1000 - 1;
+    const gateways = new SurfaceGateways("127.0.0.1", f.service, f.gatewayPorts);
+    try {
+      const revoked = { ...f.store.team(a.teamId), loginKey: "revoked-key" };
+      await assert.rejects(gateways.link(job, revoked), /revoked/u);
+      assert.ok(await portsFree([port], "127.0.0.1"), "No orphan gateway keeps the port.");
+      // A creation that fails (port held elsewhere) leaves nothing to close.
+      const blocker = createNetServer();
+      await new Promise<void>((accept) => blocker.listen(port, "127.0.0.1", accept));
+      try {
+        const pending = gateways.link(job, f.store.team(a.teamId));
+        await gateways.closeJob(job.jobId);
+        await assert.rejects(pending, /used by another process/u);
+      } finally {
+        await new Promise<void>((accept) => blocker.close(() => accept()));
+      }
+    } finally {
+      await gateways.close();
+    }
+  }));
+test("The gateway re-authorizes after reading the request body", () =>
+  fixture(async (f) => {
+    const event = await f.create();
+    await f.deploy(event.eventId);
+    await f.begin(event.eventId);
+    const a = required(event.teams[0]);
+    const opened = await f.challenge(a.teamLoginKey);
+    const target = new URL(opened.origin);
+    const first = "username=admin%27+--";
+    const rest = `&${new URLSearchParams({ password: randomToken() }).toString()}`;
+    // A raw socket, so the headers and the first body bytes really arrive before the rest.
+    const socket = createConnection(Number(target.port), target.hostname);
+    const response = new Promise<string>((accept, reject) => {
+      let text = "";
+      socket.on("data", (chunk) => {
+        text += String(chunk);
+      });
+      socket.once("end", () => accept(text));
+      socket.once("error", reject);
+    });
+    socket.write(
+      `POST /login HTTP/1.1\r\nHost: ${target.host}\r\nCookie: ${opened.cookie}\r\nOrigin: ${opened.origin}\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: ${String(first.length + rest.length)}\r\nConnection: close\r\n\r\n${first}`,
+    );
+    await new Promise((accept) => setTimeout(accept, 150));
+    // The team key is rotated while the body is still arriving.
+    const rotated = await f.request(
+      "admin",
+      `/api/events/${event.eventId}/teams/${a.teamId}/rotate-login-key`,
+      "POST",
+      {},
+    );
+    assert.equal(rotated.status, 200);
+    socket.write(rest);
+    const status = Number(/^HTTP\/1\.1 (\d{3})/u.exec(await response)?.[1]);
+    assert.equal(status, 401);
+  }));
+test("Restarting an environment outside a narrowed gateway range moves it into the range", () =>
+  fixture(async (f) => {
+    const event = await f.create();
+    await f.deploy(event.eventId);
+    const job = required(f.store.jobs(event.eventId)[0]);
+    const path = `/api/events/${event.eventId}/deployments/${job.jobId}`;
+    await f.request("admin", path, "DELETE");
+    await f.service.drain();
+    const moved = f.store.job(job.jobId);
+    moved.offset = 30 * 1000;
+    f.store.putJob(moved);
+    // The host restarted with a narrower --gateway-ports range.
+    f.service.gatewayPorts = { start: f.gatewayPorts.start, end: f.gatewayPorts.start + 4 };
+    assert.equal((await f.request("admin", `${path}/restart`, "POST", {})).status, 202);
+    await f.service.drain();
+    const restarted = f.store.job(job.jobId);
+    assert.equal(restarted.status, "COMPLETE", restarted.error ?? "");
+    assert.ok(restarted.offset <= 5000);
+  }));
+test("A scheduled (not yet started) event with a lost environment also stays ready", () =>
+  fixture(async (f) => {
+    const event = await f.create();
+    await f.deploy(event.eventId);
+    const scheduled = await f.request("admin", `/api/events/${event.eventId}/schedule`, "PATCH", {
+      startsAt: new Date(Date.parse("2026-09-15T00:00:00Z") + 3_600_000).toISOString(),
+    });
+    assert.equal(scheduled.status, 200);
+    await f.engine.stop(required(f.store.jobs(event.eventId)[0]));
+    await f.restart();
+    assert.equal(f.store.event(event.eventId).status, "READY");
+  }));
+test("The local hosting build alone defines the private local-host constant", async () => {
+  const app = "../../../apps/application-admin-console/";
+  const host = (await import(`${app}vite.host.config.ts`)) as { default: { define?: object } };
+  const cloud = (await import(`${app}vite.config.ts`)) as { default: { define?: object } };
+  assert.equal(
+    (host.default.define as Record<string, unknown> | undefined)?.__TENKACLOUD_LOCAL_HOST_BUILD__,
+    "true",
+  );
+  assert.ok(!("__TENKACLOUD_LOCAL_HOST_BUILD__" in (cloud.default.define ?? {})));
+});
 
 async function main(): Promise<void> {
   const hasBun = "Bun" in globalThis;

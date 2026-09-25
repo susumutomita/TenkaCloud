@@ -153,6 +153,21 @@ describe("LocalHostLoginPage error bodies", () => {
   });
 });
 
+describe("LocalHostLoginPage null bodies", () => {
+  it("shows the sign-in failure message for a JSON null error body", async () => {
+    const config = await localConfig();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("null", { status: 500 })));
+    renderLogin(config);
+    fireEvent.change(document.getElementById("local-host-key") as HTMLInputElement, {
+      target: { value: "host-key" },
+    });
+    fireEvent.submit(document.querySelector("form") as HTMLFormElement);
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/Sign-in failed|サインインできませんでした/u);
+    expect(alert.textContent).not.toMatch(/null|TypeError/u);
+  });
+});
+
 describe("local-host routes", () => {
   it("sends an unauthenticated organizer to the host-key sign-in, not Cognito", async () => {
     const config = await localConfig();

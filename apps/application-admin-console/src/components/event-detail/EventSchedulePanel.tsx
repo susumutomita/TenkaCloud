@@ -224,6 +224,13 @@ function LocalDeployTeardownFields({
             <Box variant="small" color="text-status-inactive">
               {t(deployable ? "local_host.deploy_hint" : "local_host.deploy_done_hint")}
             </Box>
+            {detail.status === "DEPLOYING" && hasStoppedEnvironment(detail) && (
+              // Deploy never redeploys a stopped environment (that would discard its data), so
+              // the event only becomes ready once that environment is restarted.
+              <Box variant="small" color="text-status-warning">
+                {t("local_host.deploy_stopped_hint")}
+              </Box>
+            )}
             <Button
               variant={wizard?.primary === "deploy" ? "primary" : "normal"}
               loading={bulkInFlight === "deploy"}
@@ -259,6 +266,12 @@ function LocalDeployTeardownFields({
  * The local host refuses teardown for an archived event and for a torn-down event whose
  * environments are all removed; a torn-down event with a failed cleanup can retry.
  */
+function hasStoppedEnvironment(detail: EventDetail): boolean {
+  return Object.values(detail.deploymentsByProblem ?? {}).some((deployments) =>
+    deployments.some((deployment) => deployment.status === "STOPPED"),
+  );
+}
+
 function localTeardownOwed(detail: EventDetail): boolean {
   if (detail.status === "ARCHIVED") return false;
   if (detail.status !== "TEARDOWN") return true;

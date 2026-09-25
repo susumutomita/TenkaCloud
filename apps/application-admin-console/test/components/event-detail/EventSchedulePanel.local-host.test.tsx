@@ -64,6 +64,18 @@ function teardownButton(detail: Partial<EventDetail>) {
 }
 
 describe("EventSchedulePanel on the local host", () => {
+  it("explains that a stopped environment keeps a deploying event from becoming ready", () => {
+    render(
+      <EventSchedulePanel
+        {...props({
+          status: "DEPLOYING",
+          deploymentsByProblem: { p: [{ jobId: "J", teamId: "A", status: "STOPPED" }] },
+        })}
+      />,
+    );
+    expect(screen.getByText("local_host.deploy_stopped_hint")).toBeInTheDocument();
+  });
+
   it("offers teardown while environments are owned", () => {
     expect(
       teardownButton({

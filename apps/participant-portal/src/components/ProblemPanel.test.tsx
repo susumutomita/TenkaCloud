@@ -401,6 +401,13 @@ describe("ProblemPanel render branches", () => {
       ),
     );
 
+  it("should explain a running environment whose access link is unavailable (#3226)", () => {
+    renderPanel({ status: "COMPLETE", stackOutputs: {}, accessError: "link_unavailable" });
+    expect(
+      screen.getByText(/temporarily unavailable|リンクを現在発行できません/u),
+    ).toBeInTheDocument();
+  });
+
   it("should show the failure reason for FAILED deploys", () => {
     renderPanel({ status: "FAILED", failureReason: "stack rollback" });
     expect(screen.getByText("stack rollback")).toBeInTheDocument();
